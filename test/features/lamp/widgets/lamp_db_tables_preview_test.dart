@@ -1,4 +1,4 @@
-import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/database_table_inspection.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_db_tables_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

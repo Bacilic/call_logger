@@ -45,7 +45,7 @@ class _EquipmentSettingsDialogState
   }
 
   Future<void> _load() async {
-    final raw = await _settings.getEquipmentTypesRaw();
+    final raw = await _settings.catalogs.getEquipmentTypesRaw();
     if (!mounted) return;
     setState(() {
       _controller.text = raw;
@@ -58,7 +58,7 @@ class _EquipmentSettingsDialogState
 
   Future<void> _save() async {
     try {
-      await _settings.setEquipmentTypes(_controller.text);
+      await _settings.catalogs.setEquipmentTypes(_controller.text);
     } catch (e) {
       if (mounted) {
         showDialogSnackBar(

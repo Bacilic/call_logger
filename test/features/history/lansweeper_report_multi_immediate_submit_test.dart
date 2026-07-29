@@ -3,6 +3,7 @@
 // Ολόκληρο αρχείο:
 //   flutter test test/features/history/lansweeper_report_multi_immediate_submit_test.dart
 
+import 'package:call_logger/core/database/calls_lansweeper_repository.dart';
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
@@ -57,7 +58,7 @@ class _RecordingLansweeperSyncNotifier extends LansweeperSyncNotifier {
     submitFinished = false;
     submittedCallIds.add(callId);
     final db = await DatabaseHelper.instance.database;
-    final repo = CallsRepository(db);
+    final repo = CallsLansweeperRepository(db);
     await repo.markLansweeperSynced(
       callId: callId,
       ticketId: _kFakeLansweeperTicketId,

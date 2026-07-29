@@ -1,8 +1,18 @@
-part of 'calls_repository.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-mixin CallsRepositorySearchIndexMixin on CallsRepositoryCore {
-  /// Συγκεντρώνει κείμενα κλήσης + συσχετισμένου χρήστη/εξοπλισμού για `search_index` (σχήμα v1).
-  Future<String> _buildCallSearchIndex(
+import '../utils/search_text_normalizer.dart';
+
+/// Χτίστης και επαναδομητής του `search_index` κλήσεων (σχήμα v1).
+///
+/// Ανεξάρτητο συστατικό: το χρησιμοποιούν οι εγγραφές κλήσεων, η διαγραφή και
+/// τα integrity fixes — καθένας με δικό του στιγμιότυπο, χωρίς κοινό state.
+class CallsSearchIndex {
+  const CallsSearchIndex(this.db);
+
+  final Database db;
+
+  /// Συγκεντρώνει κείμενα κλήσης + συσχετισμένου χρήστη/εξοπλισμού.
+  Future<String> buildCallSearchIndex(
     DatabaseExecutor executor,
     Map<String, dynamic> callMap,
   ) async {
@@ -76,7 +86,7 @@ mixin CallsRepositorySearchIndexMixin on CallsRepositoryCore {
   ) async {
     for (final row in rows) {
       final map = Map<String, dynamic>.from(row);
-      final si = await _buildCallSearchIndex(executor, map);
+      final si = await buildCallSearchIndex(executor, map);
       await executor.update(
         'calls',
         {'search_index': si},

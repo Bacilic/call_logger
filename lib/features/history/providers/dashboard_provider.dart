@@ -5,7 +5,7 @@
 // Ρυθμίσεις Gemini: gemini_settings_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/database/calls_repository.dart';
+import '../../../core/database/calls_dashboard_repository.dart';
 
 import '../../../core/database/database_helper.dart';
 
@@ -52,7 +52,7 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
   Future<void> _hydrateFromSettings() async {
     final settings = SettingsService();
 
-    final rawPreset = await settings.getDashboardDatePreset();
+    final rawPreset = await settings.analyticsFilters.getDashboardDatePreset();
 
     final preset =
         DashboardDatePreset.fromStorage(rawPreset) ??
@@ -63,9 +63,9 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
     DateTime? customTo;
 
     if (preset == DashboardDatePreset.custom) {
-      customFrom = await settings.getDashboardCustomDateFrom();
+      customFrom = await settings.analyticsFilters.getDashboardCustomDateFrom();
 
-      customTo = await settings.getDashboardCustomDateTo();
+      customTo = await settings.analyticsFilters.getDashboardCustomDateTo();
 
       if (customFrom == null || customTo == null) {
         await _applyPreset(DashboardDatePreset.defaultPreset, persist: false);
@@ -100,7 +100,7 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
 
     DateTime? customTo,
   }) async {
-    await SettingsService().setDashboardDateFilter(
+    await SettingsService().analyticsFilters.setDashboardDateFilter(
       preset: preset.storageValue,
 
       customFrom: customFrom,
@@ -221,7 +221,7 @@ class DashboardExcludeCallsWithoutCategoryNotifier extends Notifier<bool> {
 
   Future<void> _hydrateFromSettings() async {
     final value = await SettingsService()
-        .getDashboardExcludeCallsWithoutCategory();
+        .analyticsFilters.getDashboardExcludeCallsWithoutCategory();
 
     if (!ref.mounted) return;
 
@@ -233,7 +233,7 @@ class DashboardExcludeCallsWithoutCategoryNotifier extends Notifier<bool> {
 
     state = value;
 
-    await SettingsService().setDashboardExcludeCallsWithoutCategory(value);
+    await SettingsService().analyticsFilters.setDashboardExcludeCallsWithoutCategory(value);
   }
 }
 
@@ -270,7 +270,7 @@ final dashboardStatsProvider =
 
       final db = await DatabaseHelper.instance.database;
 
-      return CallsRepository(db).getDashboardStatistics(filter);
+      return CallsDashboardRepository(db).getDashboardStatistics(filter);
     });
 
 /// Κλήσεις dashboard με τα τρέχοντα φίλτρα, για αναφορά Lansweeper.
@@ -281,7 +281,7 @@ final dashboardCallsForReportProvider =
 
       final db = await DatabaseHelper.instance.database;
 
-      return CallsRepository(db).getDashboardCalls(filter);
+      return CallsDashboardRepository(db).getDashboardCalls(filter);
     });
 
 /// Ονόματα τμημάτων για dropdown φίλτρου (ταξινόμηση όπως στη βάση).

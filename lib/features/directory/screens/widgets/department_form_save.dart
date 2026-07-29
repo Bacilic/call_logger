@@ -1,25 +1,45 @@
-part of 'department_form_dialog.dart';
+import 'package:flutter/material.dart';
 
-mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
-  @override
-  Future<void> _save() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    final name = _nameController.text.trim();
+import '../../../../core/database/audit_service.dart';
+import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/errors/department_exists_exception.dart';
+import '../../../../core/services/save_confirmation_summary.dart';
+import '../../../../core/widgets/audit_summary_rich_text.dart';
+import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../building_map/widgets/building_map_floor_menu_button.dart';
+import '../../models/department_model.dart';
+import '../../../floor_map/services/floor_color_assignment_service.dart';
+import 'department_color_palette.dart';
+import 'department_form_dialog.dart';
+
+/// Ροή αποθήκευσης της φόρμας τμήματος: μοντέλο, συγκρούσεις κοινόχρηστων,
+/// εγγραφή, επαναφορά διαγραμμένου και μηνύματα επιβεβαίωσης.
+///
+/// Συνεργάτης του [DepartmentFormDialogState] (Σύνθεση).
+class DepartmentFormSave {
+  DepartmentFormSave(this.host);
+
+  final DepartmentFormDialogState host;
+
+  Future<void> save() async {
+    if (!(host.formKey.currentState?.validate() ?? false)) return;
+    final name = host.nameController.text.trim();
     if (name.isEmpty) return;
 
-    final building = _buildingController.text.trim();
-    final parsedHex = tryParseDepartmentHex(_hexController.text.trim());
-    final color = colorToDepartmentHex(parsedHex ?? _selectedColor);
-    final notes = _notesController.text.trim();
+    final building = host.buildingController.text.trim();
+    final parsedHex = tryParseDepartmentHex(host.hexController.text.trim());
+    final color = colorToDepartmentHex(parsedHex ?? host.selectedColor);
+    final notes = host.notesController.text.trim();
     var sharedPhones =
-        _sharedPhones
+        host.sharedPhones
             .map((v) => v.trim())
             .where((v) => v.isNotEmpty)
             .toSet()
             .toList()
           ..sort((a, b) => a.compareTo(b));
     var sharedEquipmentCodes =
-        _sharedEquipmentCodes
+        host.sharedEquipmentCodes
             .map((v) => v.trim())
             .where((v) => v.isNotEmpty)
             .toSet()
@@ -28,22 +48,22 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
     var phonesToMoveFromUsers = <String>{};
     var equipmentToMoveFromUsers = <String>{};
 
-    final ini = widget.initialDepartment;
+    final ini = host.widget.initialDepartment;
     final clearBuildingMapPlacement =
-        _isEdit &&
-        _selectedFloorId == null &&
-        (_snapFloorId != null || ini?.floorId != null);
+        host.isEdit &&
+        host.selectedFloorId == null &&
+        (host.snapFloorId != null || ini?.floorId != null);
 
     final model = DepartmentModel(
-      id: _isEdit ? ini?.id : null,
+      id: host.isEdit ? ini?.id : null,
       name: name,
       building: building.isEmpty ? null : building,
       color: color,
       notes: notes.isEmpty ? null : notes,
-      floorId: _selectedFloorId,
+      floorId: host.selectedFloorId,
       groupName: ini?.groupName,
-      mapFloor: _selectedFloorId != null
-          ? _selectedFloorId!.toString()
+      mapFloor: host.selectedFloorId != null
+          ? host.selectedFloorId!.toString()
           : (clearBuildingMapPlacement ? null : ini?.mapFloor),
       mapX: clearBuildingMapPlacement ? null : ini?.mapX,
       mapY: clearBuildingMapPlacement ? null : ini?.mapY,
@@ -65,10 +85,10 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
     );
 
     try {
-      if (_isEdit) {
+      if (host.isEdit) {
         final did = model.id;
         if (did != null) {
-          final resolved = await _resolveCrossUsageConflicts(
+          final resolved = await host.sharedLinks.resolveCrossUsageConflicts(
             did,
             name,
             sharedPhones,
@@ -80,18 +100,19 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
           phonesToMoveFromUsers = resolved.phonesToMoveFromUsers;
           equipmentToMoveFromUsers = resolved.equipmentToMoveFromUsers;
 
-          if (!mounted) return;
-          final confirmed = await _applySharedOnlyRemovalConfirmations(
-            departmentId: did,
-            departmentName: name,
-            sharedPhones: sharedPhones,
-            sharedEquipmentCodes: sharedEquipmentCodes,
-          );
-          if (confirmed == null || !mounted) return;
+          if (!host.mounted) return;
+          final confirmed = await host.sharedLinks
+              .applySharedOnlyRemovalConfirmations(
+                departmentId: did,
+                departmentName: name,
+                sharedPhones: sharedPhones,
+                sharedEquipmentCodes: sharedEquipmentCodes,
+              );
+          if (confirmed == null || !host.mounted) return;
           sharedPhones = confirmed.sharedPhones;
           sharedEquipmentCodes = confirmed.sharedEquipmentCodes;
 
-          await widget.notifier.updateDepartmentSharedAssets(
+          await host.widget.notifier.updateDepartmentSharedAssets(
             did,
             sharedPhones: sharedPhones,
             sharedEquipmentCodes: sharedEquipmentCodes,
@@ -103,7 +124,7 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
             equipmentToSoftDelete: confirmed.equipmentToDelete,
           );
         }
-        await widget.notifier.updateDepartment(
+        await host.widget.notifier.updateDepartment(
           model,
           clearBuildingMapPlacement: clearBuildingMapPlacement,
         );
@@ -118,7 +139,7 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
           }
         }
       } else {
-        final resolved = await _resolveCrossUsageConflicts(
+        final resolved = await host.sharedLinks.resolveCrossUsageConflicts(
           null,
           name,
           sharedPhones,
@@ -129,7 +150,7 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
         sharedEquipmentCodes = resolved.acceptedEquipmentCodes;
         phonesToMoveFromUsers = resolved.phonesToMoveFromUsers;
         equipmentToMoveFromUsers = resolved.equipmentToMoveFromUsers;
-        await widget.notifier.addDepartment(
+        await host.widget.notifier.addDepartment(
           DepartmentModel(
             id: null,
             name: name,
@@ -157,18 +178,19 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
           dbDid,
         ).getOrCreateDepartmentIdByName(name);
         if (did != null) {
-          if (!mounted) return;
-          final confirmed = await _applySharedOnlyRemovalConfirmations(
-            departmentId: did,
-            departmentName: name,
-            sharedPhones: sharedPhones,
-            sharedEquipmentCodes: sharedEquipmentCodes,
-          );
-          if (confirmed == null || !mounted) return;
+          if (!host.mounted) return;
+          final confirmed = await host.sharedLinks
+              .applySharedOnlyRemovalConfirmations(
+                departmentId: did,
+                departmentName: name,
+                sharedPhones: sharedPhones,
+                sharedEquipmentCodes: sharedEquipmentCodes,
+              );
+          if (confirmed == null || !host.mounted) return;
           sharedPhones = confirmed.sharedPhones;
           sharedEquipmentCodes = confirmed.sharedEquipmentCodes;
 
-          await widget.notifier.updateDepartmentSharedAssets(
+          await host.widget.notifier.updateDepartmentSharedAssets(
             did,
             sharedPhones: sharedPhones,
             sharedEquipmentCodes: sharedEquipmentCodes,
@@ -181,8 +203,8 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
           );
         }
       }
-      if (!mounted) return;
-      final saveMessage = _isEdit
+      if (!host.mounted) return;
+      final saveMessage = host.isEdit
           ? buildSaveConfirmationMessage(
               entityType: AuditEntityTypes.department,
               entityLabel: name,
@@ -197,14 +219,14 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
               newMap: _departmentMapsForSaveConfirmation(model.toMap()),
               isNew: true,
             );
-      widget.onSaved?.call();
-      Navigator.of(context).pop(true);
-      showSaveConfirmationSnackBar(context, saveMessage);
+      host.widget.onSaved?.call();
+      Navigator.of(host.context).pop(true);
+      showSaveConfirmationSnackBar(host.context, saveMessage);
     } on DepartmentExistsException catch (e) {
-      if (!mounted) return;
+      if (!host.mounted) return;
       if (e.isDeleted) {
         final restore = await showDialog<bool>(
-          context: context,
+          context: host.context,
           builder: (ctx) => AlertDialog(
             title: const Text('Τμήμα ως διαγραμμένο'),
             content: const Text(
@@ -225,33 +247,33 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
             ],
           ),
         );
-        if (!mounted) return;
+        if (!host.mounted) return;
         if (restore == true) {
           try {
-            await widget.notifier.restoreDepartmentByName(
+            await host.widget.notifier.restoreDepartmentByName(
               name,
               building: building.isEmpty ? null : building,
               color: color,
               notes: notes.isEmpty ? null : notes,
             );
-            if (!mounted) return;
-            widget.onSaved?.call();
-            Navigator.of(context).pop(true);
+            if (!host.mounted) return;
+            host.widget.onSaved?.call();
+            Navigator.of(host.context).pop(true);
             final restoreMessage = 'Επαναφέρθηκε το τμήμα «$name»';
-            ScaffoldMessenger.of(context).showSnackBar(
+            ScaffoldMessenger.of(host.context).showSnackBar(
               SnackBar(
                 content: Text(restoreMessage),
                 duration: saveConfirmationSnackBarDuration(restoreMessage),
               ),
             );
           } catch (err, st) {
-            if (!mounted) return;
-            showDatabasePersistenceErrorSnackBar(context, err, st);
+            if (!host.mounted) return;
+            showDatabasePersistenceErrorSnackBar(host.context, err, st);
           }
         }
       } else {
         await showDialog<void>(
-          context: context,
+          context: host.context,
           builder: (ctx) {
             final example = suggestDistinctDepartmentNameExample(name);
             final bodyStyle = Theme.of(ctx).textTheme.bodyMedium;
@@ -283,13 +305,13 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
         );
       }
     } on StateError catch (e) {
-      if (!mounted) return;
+      if (!host.mounted) return;
       ScaffoldMessenger.of(
-        context,
+        host.context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e, st) {
-      if (!mounted) return;
-      showDatabasePersistenceErrorSnackBar(context, e, st);
+      if (!host.mounted) return;
+      showDatabasePersistenceErrorSnackBar(host.context, e, st);
     }
   }
 
@@ -307,7 +329,7 @@ mixin DepartmentFormSaveMixin on DepartmentFormDialogStateHost {
 
   String? _floorLabelForSaveConfirmation(int? floorId) {
     if (floorId == null) return null;
-    for (final f in _floors) {
+    for (final f in host.floors) {
       if (f.id == floorId) {
         return buildingMapFloorDisplayLabel(f);
       }

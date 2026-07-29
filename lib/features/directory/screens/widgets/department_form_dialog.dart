@@ -1,16 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/errors/department_exists_exception.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lookup_service.dart';
-import '../../../../core/database/audit_service.dart';
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/services/save_confirmation_summary.dart';
-import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/database/building_map_repository.dart';
-import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/directory_support.dart';
-import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
@@ -19,17 +13,14 @@ import '../../../../core/widgets/spell_check_controller.dart';
 import '../../building_map/widgets/building_map_floor_menu_button.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
-import '../../../floor_map/services/floor_color_assignment_service.dart';
 import 'department_color_palette.dart';
 import 'department_color_picker_dialog.dart';
+import 'department_form_dismiss_guard.dart';
+import 'department_form_save.dart';
+import 'department_form_shared_links.dart';
 import 'department_palette_actions.dart';
 import 'department_palette_host.dart';
 import 'department_palette_store.dart';
-import 'shared_asset_disconnect_dialog.dart';
-
-part 'department_form_dismiss_guard.dart';
-part 'department_form_shared_links.dart';
-part 'department_form_save.dart';
 
 const _kDepartmentDistinctSuffixLetters = <String>[
   'Α',
@@ -96,166 +87,78 @@ class DepartmentFormDialog extends StatefulWidget {
   final VoidCallback? onSaved;
 
   @override
-  State<DepartmentFormDialog> createState() => _DepartmentFormDialogState();
+  State<DepartmentFormDialog> createState() => DepartmentFormDialogState();
 }
 
-mixin DepartmentFormDialogStateHost on State<DepartmentFormDialog> {
-  GlobalKey<FormState> get _formKey;
-  SpellCheckController get _nameController;
-  TextEditingController get _buildingController;
-  SpellCheckController get _notesController;
-  TextEditingController get _hexController;
-  TextEditingController get _sharedPhoneInputController;
-  TextEditingController get _sharedEquipmentInputController;
+/// Δημόσιο State: τα πεδία της φόρμας είναι ορατά στους συνεργάτες της
+/// (φρουρός κλεισίματος, κοινόχρηστα στοιχεία, αποθήκευση).
+class DepartmentFormDialogState extends State<DepartmentFormDialog> {
+  /// Φρουρός κλεισίματος (dirty έλεγχος + διάλογος αλλαγών).
+  late final DepartmentFormDismissGuard dismissGuard =
+      DepartmentFormDismissGuard(this);
 
-  // ignore: unused_element — απαιτείται από part mixins· ο analyzer δεν το ανιχνεύει.
-  Color get _selectedColor;
-  // ignore: unused_element
-  set _selectedColor(Color value);
-
-  FocusNode get _sharedPhoneInputFocus;
-  FocusNode get _sharedEquipmentInputFocus;
-
-  bool get _isNormalizingDelimitedInput;
-  set _isNormalizingDelimitedInput(bool value);
-
-  List<String> get _sharedPhones;
-  set _sharedPhones(List<String> value);
-
-  List<String> get _sharedEquipmentCodes;
-  set _sharedEquipmentCodes(List<String> value);
-
-  String get _snapName;
-  String get _snapBuilding;
-  String get _snapNotes;
-  String get _snapColorHex;
-  List<String> get _snapSharedPhones;
-  List<String> get _snapSharedEquipmentCodes;
-
-  // ignore: unused_element — απαιτείται από part mixins· ο analyzer δεν το ανιχνεύει.
-  int? get _selectedFloorId;
-  // ignore: unused_element
-  set _selectedFloorId(int? value);
-
-  int? get _snapFloorId;
-
-  List<BuildingMapFloor> get _floors;
-
-  bool get _isEdit;
-
-  Future<void> _save();
-
-  Future<
-    ({
-      List<String> acceptedPhones,
-      List<String> acceptedEquipmentCodes,
-      Set<String> phonesToMoveFromUsers,
-      Set<String> equipmentToMoveFromUsers,
-    })?
-  >
-  _resolveCrossUsageConflicts(
-    int? departmentId,
-    String targetDepartmentName,
-    List<String> sharedPhones,
-    List<String> sharedEquipmentCodes,
+  /// Κοινόχρηστα τηλέφωνα/εξοπλισμοί (είσοδος, συγκρούσεις, αφαιρέσεις).
+  late final DepartmentFormSharedLinks sharedLinks = DepartmentFormSharedLinks(
+    this,
   );
 
-  Future<
-    ({
-      List<String> sharedPhones,
-      List<String> sharedEquipmentCodes,
-      Map<String, int> phoneTransfers,
-      Map<String, int> equipmentTransfers,
-      List<String> phonesToDelete,
-      List<String> equipmentToDelete,
-    })?
-  >
-  _applySharedOnlyRemovalConfirmations({
-    required int departmentId,
-    required String departmentName,
-    required List<String> sharedPhones,
-    required List<String> sharedEquipmentCodes,
-  });
-}
+  /// Ροή αποθήκευσης (μοντέλο, εγγραφή, επαναφορά, μηνύματα).
+  late final DepartmentFormSave saveFlow = DepartmentFormSave(this);
 
-class _DepartmentFormDialogState extends State<DepartmentFormDialog>
-    with
-        DepartmentFormDialogStateHost,
-        DepartmentFormDismissGuardMixin,
-        DepartmentFormSharedLinksMixin,
-        DepartmentFormSaveMixin {
-  @override
-  final _formKey = GlobalKey<FormState>();
-  @override
-  late final SpellCheckController _nameController;
-  @override
-  late final TextEditingController _buildingController;
-  @override
-  late final SpellCheckController _notesController;
-  @override
-  late final TextEditingController _hexController;
-  @override
-  late final TextEditingController _sharedPhoneInputController;
-  @override
-  late final TextEditingController _sharedEquipmentInputController;
+  final formKey = GlobalKey<FormState>();
+  late final SpellCheckController nameController;
+  late final TextEditingController buildingController;
+  late final SpellCheckController notesController;
+  late final TextEditingController hexController;
+  late final TextEditingController sharedPhoneInputController;
+  late final TextEditingController sharedEquipmentInputController;
 
-  @override
-  late Color _selectedColor;
+  late Color selectedColor;
 
   final FocusNode _nameFocus = FocusNode();
   final FocusNode _buildingFocus = FocusNode();
   final FocusNode _colorFocus = FocusNode();
   final FocusNode _notesFocus = FocusNode();
-  @override
-  final FocusNode _sharedPhoneInputFocus = FocusNode();
-  @override
-  final FocusNode _sharedEquipmentInputFocus = FocusNode();
-  @override
-  bool _isNormalizingDelimitedInput = false;
+  final FocusNode sharedPhoneInputFocus = FocusNode();
+  final FocusNode sharedEquipmentInputFocus = FocusNode();
+  bool isNormalizingDelimitedInput = false;
 
-  @override
-  List<String> _sharedPhones = [];
-  @override
-  List<String> _sharedEquipmentCodes = [];
+  List<String> sharedPhones = [];
+  List<String> sharedEquipmentCodes = [];
   final Set<String> _sharedPhonesPendingRemoval = {};
   final Set<String> _sharedEquipmentPendingRemoval = {};
-  @override
-  late final String _snapName;
-  @override
-  late final String _snapBuilding;
-  @override
-  late final String _snapNotes;
-  @override
-  late final String _snapColorHex;
-  @override
-  late final List<String> _snapSharedPhones;
-  @override
-  late final List<String> _snapSharedEquipmentCodes;
+  late final String snapName;
+  late final String snapBuilding;
+  late final String snapNotes;
+  late final String snapColorHex;
+  late final List<String> snapSharedPhones;
+  late final List<String> snapSharedEquipmentCodes;
 
-  @override
-  List<BuildingMapFloor> _floors = const [];
-  @override
-  int? _selectedFloorId;
-  @override
-  int? _snapFloorId;
+  List<BuildingMapFloor> floors = const [];
+  int? selectedFloorId;
+  int? snapFloorId;
 
   /// True μετά την πρώτη ολοκλήρωση `_loadFloors` (ώστε το dropdown να μη δέχεται `value` πριν υπάρχουν items).
   bool _floorListLoadCompleted = false;
 
-  @override
-  bool get _isEdit => widget.initialDepartment != null && !widget.isClone;
+  bool get isEdit => widget.initialDepartment != null && !widget.isClone;
+
+  /// Σηματοδοτεί αλλαγή φόρμας (rebuild) — χρησιμοποιείται και από συνεργάτες.
+  void notifyFormChanged() {
+    if (mounted) setState(() {});
+  }
 
   /// Τιμή που επιτρέπεται στο `DropdownButtonFormField` χωρίς να σπάει το invariant των items.
   int? _effectiveFloorDropdownValue() {
-    final sel = _selectedFloorId;
+    final sel = selectedFloorId;
     if (sel == null) return null;
     if (!_floorListLoadCompleted) return null;
-    if (_floors.any((f) => f.id == sel)) return sel;
+    if (floors.any((f) => f.id == sel)) return sel;
     return sel;
   }
 
   List<DropdownMenuItem<int?>> _floorDropdownItems() {
-    final sortedFloors = buildingMapFloorsSortedByDisplayLabel(_floors);
+    final sortedFloors = buildingMapFloorsSortedByDisplayLabel(floors);
     final items = <DropdownMenuItem<int?>>[
       const DropdownMenuItem<int?>(value: null, child: Text('— χωρίς —')),
       for (final f in sortedFloors)
@@ -267,10 +170,10 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
           ),
         ),
     ];
-    final sel = _selectedFloorId;
+    final sel = selectedFloorId;
     if (_floorListLoadCompleted &&
         sel != null &&
-        !_floors.any((f) => f.id == sel)) {
+        !floors.any((f) => f.id == sel)) {
       items.add(
         DropdownMenuItem<int?>(
           value: sel,
@@ -288,50 +191,52 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
   void initState() {
     super.initState();
     final d = widget.initialDepartment;
-    _nameController = SpellCheckController()..text = d?.name ?? '';
-    _buildingController = TextEditingController(text: d?.building ?? '');
-    _notesController = SpellCheckController()..text = (d?.notes ?? '');
-    _selectedColor = tryParseDepartmentHex(d?.color) ?? const Color(0xFF1976D2);
-    _hexController = TextEditingController(
-      text: colorToDepartmentHex(_selectedColor),
+    nameController = SpellCheckController()..text = d?.name ?? '';
+    buildingController = TextEditingController(text: d?.building ?? '');
+    notesController = SpellCheckController()..text = (d?.notes ?? '');
+    selectedColor = tryParseDepartmentHex(d?.color) ?? const Color(0xFF1976D2);
+    hexController = TextEditingController(
+      text: colorToDepartmentHex(selectedColor),
     );
-    _sharedPhoneInputController = TextEditingController();
-    _sharedEquipmentInputController = TextEditingController();
+    sharedPhoneInputController = TextEditingController();
+    sharedEquipmentInputController = TextEditingController();
     final did = d?.id;
     if (did != null) {
-      _sharedPhones = LookupService.instance.getDirectPhonesByDepartment(did);
-      _sharedEquipmentCodes = LookupService.instance
+      sharedPhones = LookupService.instance.getDirectPhonesByDepartment(did);
+      sharedEquipmentCodes = LookupService.instance
           .getSharedEquipmentCodesByDepartment(did);
     }
-    _snapName = _nameController.text.trim();
-    _snapBuilding = _buildingController.text.trim();
-    _snapNotes = _notesController.text.trim();
-    _snapColorHex = colorToDepartmentHex(_selectedColor);
-    _snapSharedPhones =
-        _sharedPhones
+    snapName = nameController.text.trim();
+    snapBuilding = buildingController.text.trim();
+    snapNotes = notesController.text.trim();
+    snapColorHex = colorToDepartmentHex(selectedColor);
+    snapSharedPhones =
+        sharedPhones
             .map((v) => v.trim())
             .where((v) => v.isNotEmpty)
             .toSet()
             .toList()
           ..sort((a, b) => a.compareTo(b));
-    _snapSharedEquipmentCodes =
-        _sharedEquipmentCodes
+    snapSharedEquipmentCodes =
+        sharedEquipmentCodes
             .map((v) => v.trim())
             .where((v) => v.isNotEmpty)
             .toSet()
             .toList()
           ..sort((a, b) => a.compareTo(b));
     final initDept = widget.initialDepartment;
-    _selectedFloorId = initDept?.floorId;
-    _snapFloorId = initDept?.floorId;
-    _nameController.addListener(_onFieldChanged);
-    _buildingController.addListener(_onFieldChanged);
-    _notesController.addListener(_onFieldChanged);
-    _hexController.addListener(_onFieldChanged);
-    _sharedPhoneInputFocus.addListener(_onSharedPhoneFocusChanged);
-    _sharedEquipmentInputFocus.addListener(_onSharedEquipmentFocusChanged);
+    selectedFloorId = initDept?.floorId;
+    snapFloorId = initDept?.floorId;
+    nameController.addListener(notifyFormChanged);
+    buildingController.addListener(notifyFormChanged);
+    notesController.addListener(notifyFormChanged);
+    hexController.addListener(notifyFormChanged);
+    sharedPhoneInputFocus.addListener(sharedLinks.onSharedPhoneFocusChanged);
+    sharedEquipmentInputFocus.addListener(
+      sharedLinks.onSharedEquipmentFocusChanged,
+    );
     if (widget.isClone) {
-      _nameController.text = '${d?.name ?? ''} (αντίγραφο)'.trim();
+      nameController.text = '${d?.name ?? ''} (αντίγραφο)'.trim();
     }
     DepartmentPaletteStore.instance.ensureLoaded();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -346,10 +251,10 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
           _colorFocus.requestFocus();
           break;
         case 'phones':
-          _sharedPhoneInputFocus.requestFocus();
+          sharedPhoneInputFocus.requestFocus();
           break;
         case 'equipment':
-          _sharedEquipmentInputFocus.requestFocus();
+          sharedEquipmentInputFocus.requestFocus();
           break;
         case 'notes':
           _notesFocus.requestFocus();
@@ -363,29 +268,27 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
 
   @override
   void dispose() {
-    _nameController.removeListener(_onFieldChanged);
-    _buildingController.removeListener(_onFieldChanged);
-    _notesController.removeListener(_onFieldChanged);
-    _hexController.removeListener(_onFieldChanged);
-    _sharedPhoneInputFocus.removeListener(_onSharedPhoneFocusChanged);
-    _sharedEquipmentInputFocus.removeListener(_onSharedEquipmentFocusChanged);
-    _nameController.dispose();
-    _buildingController.dispose();
-    _hexController.dispose();
-    _sharedPhoneInputController.dispose();
-    _sharedEquipmentInputController.dispose();
-    _notesController.dispose();
+    nameController.removeListener(notifyFormChanged);
+    buildingController.removeListener(notifyFormChanged);
+    notesController.removeListener(notifyFormChanged);
+    hexController.removeListener(notifyFormChanged);
+    sharedPhoneInputFocus.removeListener(sharedLinks.onSharedPhoneFocusChanged);
+    sharedEquipmentInputFocus.removeListener(
+      sharedLinks.onSharedEquipmentFocusChanged,
+    );
+    nameController.dispose();
+    buildingController.dispose();
+    hexController.dispose();
+    sharedPhoneInputController.dispose();
+    sharedEquipmentInputController.dispose();
+    notesController.dispose();
     _nameFocus.dispose();
     _buildingFocus.dispose();
     _colorFocus.dispose();
     _notesFocus.dispose();
-    _sharedPhoneInputFocus.dispose();
-    _sharedEquipmentInputFocus.dispose();
+    sharedPhoneInputFocus.dispose();
+    sharedEquipmentInputFocus.dispose();
     super.dispose();
-  }
-
-  void _onFieldChanged() {
-    if (mounted) setState(() {});
   }
 
   Future<void> _loadFloors() async {
@@ -397,23 +300,23 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
       ).listBuildingMapFloors();
       if (!mounted) return;
       setState(() {
-        _floors = list;
+        floors = list;
         _floorListLoadCompleted = true;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _floors = const [];
+        floors = const [];
         _floorListLoadCompleted = true;
       });
     }
   }
 
   String? _floorSubtitleText() {
-    final sel = _selectedFloorId;
+    final sel = selectedFloorId;
     if (sel != null) {
       BuildingMapFloor? hit;
-      for (final f in _floors) {
+      for (final f in floors) {
         if (f.id == sel) {
           hit = f;
           break;
@@ -423,7 +326,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
     }
     final d = widget.initialDepartment;
     if (d == null) return null;
-    final byId = {for (final f in _floors) f.id: f};
+    final byId = {for (final f in floors) f.id: f};
     final mapSheetId = int.tryParse(d.mapFloor?.trim() ?? '');
     if (mapSheetId != null && byId.containsKey(mapSheetId)) {
       return 'Θέση στον χάρτη: ${buildingMapFloorDisplayLabel(byId[mapSheetId]!)}';
@@ -432,8 +335,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
   }
 
   Future<void> _onFloorDropdownChanged(int? value) async {
-    setState(() => _selectedFloorId = value);
-    if (!_isEdit || widget.initialDepartment?.id == null) return;
+    setState(() => selectedFloorId = value);
+    if (!isEdit || widget.initialDepartment?.id == null) return;
     final manualFromMap = int.tryParse(
       widget.initialDepartment?.mapFloor?.trim() ?? '',
     );
@@ -458,15 +361,15 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
       final c = tryParseDepartmentHex(hex);
       if (c == null) return;
       setState(() {
-        _selectedColor = c;
-        _hexController.text = hex;
+        selectedColor = c;
+        hexController.text = hex;
       });
     },
   );
 
   Future<void> _openColorPickerFromPreview() async {
     final initial =
-        tryParseDepartmentHex(_hexController.text.trim()) ?? _selectedColor;
+        tryParseDepartmentHex(hexController.text.trim()) ?? selectedColor;
     final picked = await showDepartmentColorPickerDialog(
       context,
       initialColor: initial,
@@ -480,8 +383,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
     );
     if (applied == null || !mounted) return;
     setState(() {
-      _selectedColor = applied;
-      _hexController.text = colorToDepartmentHex(applied);
+      selectedColor = applied;
+      hexController.text = colorToDepartmentHex(applied);
     });
   }
 
@@ -549,7 +452,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
   }
 
   Iterable<String> _departmentNameAutocompleteOptions(String query) {
-    final excludeId = _isEdit ? widget.initialDepartment?.id : null;
+    final excludeId = isEdit ? widget.initialDepartment?.id : null;
     final departments = LookupService.instance.searchDepartments(query);
     final names =
         departments
@@ -563,7 +466,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
 
   @override
   Widget build(BuildContext context) {
-    final title = _isEdit
+    final title = isEdit
         ? 'Επεξεργασία τμήματος'
         : widget.isClone
         ? 'Νέο τμήμα (αντίγραφο)'
@@ -572,7 +475,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        await _requestClose();
+        await dismissGuard.requestClose();
       },
       child: DraggableDialogShell(
         title: Text(title),
@@ -581,7 +484,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
           content: SizedBox(
             width: 420,
             child: Form(
-              key: _formKey,
+              key: formKey,
               child: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.only(top: 6),
@@ -590,18 +493,18 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       RawAutocomplete<String>(
-                        textEditingController: _nameController,
+                        textEditingController: nameController,
                         focusNode: _nameFocus,
                         optionsBuilder: (value) =>
                             _departmentNameAutocompleteOptions(value.text),
                         displayStringForOption: (v) => v,
                         onSelected: (selection) {
-                          _nameController.text = selection;
-                          _onFieldChanged();
+                          nameController.text = selection;
+                          notifyFormChanged();
                         },
                         fieldViewBuilder: (context, controller, focusNode, _) {
                           return LexiconSpellTextFormField(
-                            controller: _nameController,
+                            controller: nameController,
                             focusNode: focusNode,
                             decoration: const InputDecoration(
                               labelText: 'Όνομα',
@@ -614,7 +517,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                               }
                               return null;
                             },
-                            onChanged: (_) => _onFieldChanged(),
+                            onChanged: (_) => notifyFormChanged(),
                           );
                         },
                         optionsViewBuilder: (context, onSelected, options) {
@@ -632,8 +535,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                       ),
                       const SizedBox(height: 6),
                       RawAutocomplete<String>(
-                        textEditingController: _sharedPhoneInputController,
-                        focusNode: _sharedPhoneInputFocus,
+                        textEditingController: sharedPhoneInputController,
+                        focusNode: sharedPhoneInputFocus,
                         optionsBuilder: (value) {
                           final q = SearchTextNormalizer.normalizeForSearch(
                             value.text,
@@ -649,7 +552,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                           );
                         },
                         displayStringForOption: (v) => v,
-                        onSelected: (v) => _addSharedPhonesFromInput(v),
+                        onSelected: (v) =>
+                            sharedLinks.addSharedPhonesFromInput(v),
                         fieldViewBuilder: (context, controller, focusNode, _) {
                           return TextField(
                             controller: controller,
@@ -658,12 +562,12 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                               labelText: 'Προσθήκη τηλεφώνων (με κόμμα)',
                               border: OutlineInputBorder(),
                             ),
-                            onChanged: (_) => _commitDelimitedInput(
-                              controller: _sharedPhoneInputController,
-                              target: _sharedPhones,
+                            onChanged: (_) => sharedLinks.commitDelimitedInput(
+                              controller: sharedPhoneInputController,
+                              target: sharedPhones,
                               keepLastIncomplete: true,
                             ),
-                            onSubmitted: _addSharedPhonesFromInput,
+                            onSubmitted: sharedLinks.addSharedPhonesFromInput,
                           );
                         },
                         optionsViewBuilder: (context, onSelected, options) {
@@ -698,30 +602,30 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          for (final p in _sharedPhones)
+                          for (final p in sharedPhones)
                             RemovableSharedChip(
                               label: p,
-                              isNewlyAdded: !_snapSharedPhones.contains(p),
+                              isNewlyAdded: !snapSharedPhones.contains(p),
                               isPendingRemoval: false,
                               onToggle: () => setState(() {
-                                _sharedPhones.remove(p);
-                                if (_snapSharedPhones.contains(p)) {
+                                sharedPhones.remove(p);
+                                if (snapSharedPhones.contains(p)) {
                                   _sharedPhonesPendingRemoval.add(p);
                                 }
                               }),
                             ),
                           for (final p
                               in (_sharedPhonesPendingRemoval.toList()..sort())
-                                  .where((x) => !_sharedPhones.contains(x)))
+                                  .where((x) => !sharedPhones.contains(x)))
                             RemovableSharedChip(
                               label: p,
                               isNewlyAdded: false,
                               isPendingRemoval: true,
                               onToggle: () => setState(() {
                                 _sharedPhonesPendingRemoval.remove(p);
-                                if (!_sharedPhones.contains(p)) {
-                                  _sharedPhones.add(p);
-                                  _sharedPhones.sort();
+                                if (!sharedPhones.contains(p)) {
+                                  sharedPhones.add(p);
+                                  sharedPhones.sort();
                                 }
                               }),
                             ),
@@ -746,8 +650,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                       ),
                       const SizedBox(height: 6),
                       RawAutocomplete<String>(
-                        textEditingController: _sharedEquipmentInputController,
-                        focusNode: _sharedEquipmentInputFocus,
+                        textEditingController: sharedEquipmentInputController,
+                        focusNode: sharedEquipmentInputFocus,
                         optionsBuilder: (value) {
                           final q = SearchTextNormalizer.normalizeForSearch(
                             value.text,
@@ -763,7 +667,8 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                           );
                         },
                         displayStringForOption: (v) => v,
-                        onSelected: (v) => _addSharedEquipmentFromInput(v),
+                        onSelected: (v) =>
+                            sharedLinks.addSharedEquipmentFromInput(v),
                         fieldViewBuilder: (context, controller, focusNode, _) {
                           return TextField(
                             controller: controller,
@@ -772,12 +677,13 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                               labelText: 'Προσθήκη εξοπλισμού (με κόμμα)',
                               border: OutlineInputBorder(),
                             ),
-                            onChanged: (_) => _commitDelimitedInput(
-                              controller: _sharedEquipmentInputController,
-                              target: _sharedEquipmentCodes,
+                            onChanged: (_) => sharedLinks.commitDelimitedInput(
+                              controller: sharedEquipmentInputController,
+                              target: sharedEquipmentCodes,
                               keepLastIncomplete: true,
                             ),
-                            onSubmitted: _addSharedEquipmentFromInput,
+                            onSubmitted:
+                                sharedLinks.addSharedEquipmentFromInput,
                           );
                         },
                         optionsViewBuilder: (context, onSelected, options) {
@@ -812,16 +718,16 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          for (final code in _sharedEquipmentCodes)
+                          for (final code in sharedEquipmentCodes)
                             RemovableSharedChip(
                               label: code,
-                              isNewlyAdded: !_snapSharedEquipmentCodes.contains(
+                              isNewlyAdded: !snapSharedEquipmentCodes.contains(
                                 code,
                               ),
                               isPendingRemoval: false,
                               onToggle: () => setState(() {
-                                _sharedEquipmentCodes.remove(code);
-                                if (_snapSharedEquipmentCodes.contains(code)) {
+                                sharedEquipmentCodes.remove(code);
+                                if (snapSharedEquipmentCodes.contains(code)) {
                                   _sharedEquipmentPendingRemoval.add(code);
                                 }
                               }),
@@ -830,7 +736,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                               in (_sharedEquipmentPendingRemoval.toList()
                                     ..sort())
                                   .where(
-                                    (x) => !_sharedEquipmentCodes.contains(x),
+                                    (x) => !sharedEquipmentCodes.contains(x),
                                   ))
                             RemovableSharedChip(
                               label: code,
@@ -838,9 +744,9 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                               isPendingRemoval: true,
                               onToggle: () => setState(() {
                                 _sharedEquipmentPendingRemoval.remove(code);
-                                if (!_sharedEquipmentCodes.contains(code)) {
-                                  _sharedEquipmentCodes.add(code);
-                                  _sharedEquipmentCodes.sort();
+                                if (!sharedEquipmentCodes.contains(code)) {
+                                  sharedEquipmentCodes.add(code);
+                                  sharedEquipmentCodes.sort();
                                 }
                               }),
                             ),
@@ -864,7 +770,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                         children: [
                           Expanded(
                             child: TextFormField(
-                              controller: _buildingController,
+                              controller: buildingController,
                               focusNode: _buildingFocus,
                               decoration: const InputDecoration(
                                 labelText: 'Κτίριο',
@@ -919,11 +825,11 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                               compact: true,
                               showHeading: false,
                               host: _paletteHost,
-                              selected: _selectedColor,
+                              selected: selectedColor,
                               onColorSelected: (c) {
                                 setState(() {
-                                  _selectedColor = c;
-                                  _hexController.text = colorToDepartmentHex(c);
+                                  selectedColor = c;
+                                  hexController.text = colorToDepartmentHex(c);
                                 });
                               },
                             ),
@@ -933,7 +839,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                             width: 156,
                             child: Builder(
                               builder: (context) {
-                                final rawHex = _hexController.text.trim();
+                                final rawHex = hexController.text.trim();
                                 final parsedHex = tryParseDepartmentHex(rawHex);
                                 final hasInvalidHex =
                                     rawHex.isNotEmpty && parsedHex == null;
@@ -942,7 +848,7 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                                       CrossAxisAlignment.stretch,
                                   children: [
                                     TextFormField(
-                                      controller: _hexController,
+                                      controller: hexController,
                                       focusNode: _colorFocus,
                                       decoration: const InputDecoration(
                                         labelText: 'Δεκαεξαδικός (Hex)',
@@ -1034,14 +940,14 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
                       ),
                       const SizedBox(height: 12),
                       LexiconSpellTextFormField(
-                        controller: _notesController,
+                        controller: notesController,
                         focusNode: _notesFocus,
                         decoration: const InputDecoration(
                           labelText: 'Σημειώσεις',
                           border: OutlineInputBorder(),
                         ),
                         maxLines: 3,
-                        onChanged: (_) => _onFieldChanged(),
+                        onChanged: (_) => notifyFormChanged(),
                       ),
                     ],
                   ),
@@ -1051,12 +957,14 @@ class _DepartmentFormDialogState extends State<DepartmentFormDialog>
           ),
           actions: [
             TextButton(
-              onPressed: _cancelAndClose,
+              onPressed: dismissGuard.cancelAndClose,
               child: const Text('Ακύρωση'),
             ),
             FilledButton(
-              onPressed: (_isEdit && !_isDirty) ? null : _save,
-              child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
+              onPressed: (isEdit && !dismissGuard.isDirty)
+                  ? null
+                  : saveFlow.save,
+              child: Text(isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
             ),
           ],
         ),

@@ -73,9 +73,9 @@ class _DictionarySettingsDialogState
   }
 
   Future<void> _loadPaths() async {
-    final s = await _settings.getDictionarySourcePath();
-    final e = await _settings.getDictionaryExportPath();
-    final c = await _settings.getLexiconCategoriesRaw();
+    final s = await _settings.catalogs.getDictionarySourcePath();
+    final e = await _settings.catalogs.getDictionaryExportPath();
+    final c = await _settings.catalogs.getLexiconCategoriesRaw();
     if (!mounted) return;
     _sourcePathCtrl.text = s ?? '';
     _exportPathCtrl.text = e ?? '';
@@ -149,7 +149,7 @@ class _DictionarySettingsDialogState
   Future<void> _saveSourcePath() async {
     final t = _sourcePathCtrl.text.trim();
     if (t.isEmpty) {
-      await _settings.setDictionarySourcePath(null);
+      await _settings.catalogs.setDictionarySourcePath(null);
       ref.read(coreLexiconProvider.notifier).unload();
       if (mounted) {
         _markSourcePathSaved('');
@@ -188,7 +188,7 @@ class _DictionarySettingsDialogState
 
   Future<void> _saveExportPath() async {
     final t = _exportPathCtrl.text.trim();
-    await _settings.setDictionaryExportPath(t.isEmpty ? null : t);
+    await _settings.catalogs.setDictionaryExportPath(t.isEmpty ? null : t);
     if (mounted) {
       showDialogSnackBar(
         const SnackBar(content: Text('Αποθηκεύτηκε διαδρομή εξαγωγής')),
@@ -210,7 +210,7 @@ class _DictionarySettingsDialogState
       }
       return;
     }
-    await _settings.setLexiconCategories(t);
+    await _settings.catalogs.setLexiconCategories(t);
     ref.invalidate(lexiconCategoriesProvider);
     if (mounted) {
       _markLexiconCategoriesSaved(t);

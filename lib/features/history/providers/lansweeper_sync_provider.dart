@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/calls_lansweeper_repository.dart';
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
@@ -140,7 +141,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       // αποστολής. (Ο φρουρός εναλλαγής μπλοκάρει ήδη το σενάριο· αυτό εδώ κλείνει
       // τη ρίζα, ώστε να μην εξαρτάται η ορθότητα από τον φρουρό.)
       final writeDb = await DatabaseHelper.instance.database;
-      final writeRepo = CallsRepository(writeDb);
+      final writeRepo = CallsLansweeperRepository(writeDb);
 
       if (result.success && (result.ticketId?.trim().isNotEmpty ?? false)) {
         final ticketId = result.ticketId!.trim();
@@ -229,7 +230,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     } catch (e, st) {
       state = AsyncError(e, st);
       final db = await DatabaseHelper.instance.database;
-      await CallsRepository(db).updateLansweeperState(
+      await CallsLansweeperRepository(db).updateLansweeperState(
         callId: callId,
         state: LansweeperSyncState.failed,
       );
@@ -272,7 +273,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     state = const AsyncLoading();
     try {
       final db = await DatabaseHelper.instance.database;
-      await CallsRepository(db).markManualPassed(
+      await CallsLansweeperRepository(db).markManualPassed(
         callId: callId,
         ticketId: ticketId.trim(),
         comment: comment,
@@ -291,7 +292,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
 
   Future<void> setUnsent(int callId, {bool retainTicketId = false}) async {
     final db = await DatabaseHelper.instance.database;
-    await CallsRepository(db).updateLansweeperState(
+    await CallsLansweeperRepository(db).updateLansweeperState(
       callId: callId,
       state: LansweeperSyncState.unsent,
       clearTicketId: !retainTicketId,
@@ -304,7 +305,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     required int excludeCallId,
   }) async {
     final db = await DatabaseHelper.instance.database;
-    return CallsRepository(db).countCallsWithLansweeperTicketId(
+    return CallsLansweeperRepository(db).countCallsWithLansweeperTicketId(
       ticketId,
       excludeCallId: excludeCallId,
       registeredOnly: true,
@@ -313,7 +314,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
 
   Future<String?> suggestedNextLansweeperTicketId() async {
     final db = await DatabaseHelper.instance.database;
-    return CallsRepository(db).suggestedNextLansweeperTicketId();
+    return CallsLansweeperRepository(db).suggestedNextLansweeperTicketId();
   }
 
   Future<void> setSent(int callId, {String? ticketId}) async {
@@ -323,7 +324,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       return;
     }
     final db = await DatabaseHelper.instance.database;
-    await CallsRepository(db).updateLansweeperState(
+    await CallsLansweeperRepository(db).updateLansweeperState(
       callId: callId,
       state: LansweeperSyncState.sent,
       ticketId: normalized,
@@ -344,7 +345,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     try {
       final normalized = ticketId?.trim() ?? '';
       final db = await DatabaseHelper.instance.database;
-      final repo = CallsRepository(db);
+      final repo = CallsLansweeperRepository(db);
       if (normalized.isEmpty) {
         await repo.updateLansweeperState(
           callId: callId,
@@ -368,7 +369,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
 
   Future<void> _setState(int callId, String nextState) async {
     final db = await DatabaseHelper.instance.database;
-    await CallsRepository(
+    await CallsLansweeperRepository(
       db,
     ).updateLansweeperState(callId: callId, state: nextState);
     _refreshAfterLansweeperMutation();
@@ -424,7 +425,7 @@ final lansweeperSyncProvider =
 final callExternalLinksProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, int>((ref, callId) async {
       final db = await DatabaseHelper.instance.database;
-      return CallsRepository(
+      return CallsLansweeperRepository(
         db,
       ).getCallExternalLinks(callId, provider: 'lansweeper');
     });

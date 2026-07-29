@@ -1,28 +1,34 @@
-import 'dart:convert';
-
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
-import '../config/audit_retention_config.dart';
-import '../models/calls_screen_cards_visibility.dart';
-import '../models/window_placement_mode.dart';
 import '../utils/database_path_identity.dart';
-import '../../features/database/debug/publish_cli.dart';
 
-part 'settings_service_window_ui.dart';
-part 'settings_service_analytics_filters.dart';
-part 'settings_service_remote_lansweeper.dart';
-part 'settings_service_catalogs.dart';
+import 'settings_service_analytics_filters.dart';
+import 'settings_service_catalogs.dart';
+import 'settings_service_remote_lansweeper.dart';
+import 'settings_service_window_ui.dart';
 
 /// Υπηρεσία αποθήκευσης και ανάκτησης ρυθμίσεων (key-value) τοπικά.
-class SettingsService
-    with
-        SettingsServiceWindowUiMixin,
-        SettingsServiceAnalyticsFiltersMixin,
-        SettingsServiceRemoteLansweeperMixin,
-        SettingsServiceCatalogsMixin {
+///
+/// Οι θεματικές ομάδες ρυθμίσεων ζουν σε συνεργάτες (Σύνθεση):
+/// [windowUi], [analyticsFilters], [remoteLansweeper], [catalogs].
+class SettingsService {
+  /// Ρυθμίσεις παραθύρου, πλοήγησης και ορατότητας UI.
+  final SettingsServiceWindowUi windowUi = const SettingsServiceWindowUi();
+
+  /// Φίλτρα ημερομηνιών για στατιστικά κλήσεων και εκκρεμοτήτων.
+  final SettingsServiceAnalyticsFilters analyticsFilters =
+      const SettingsServiceAnalyticsFilters();
+
+  /// Ρυθμίσεις απομακρυσμένης σύνδεσης, Lansweeper και προτεραιότητας εργαλείων.
+  final SettingsServiceRemoteLansweeper remoteLansweeper =
+      const SettingsServiceRemoteLansweeper();
+
+  /// Κατάλογοι, λεξικό, audit retention και timeout ανοίγματος βάσης.
+  final SettingsServiceCatalogs catalogs = const SettingsServiceCatalogs();
+
   static const String _keyDatabasePath = 'database_path';
   static const String _keyDatabaseSetupState = 'database_setup_state_v1';
   static const String _keyApplicationResetPending =
@@ -39,12 +45,12 @@ class SettingsService
   /// Τιμή [database_setup_state_v1] όταν η εφαρμογή περιμένει επιλογή/δημιουργία βάσης.
   static const String databaseSetupStateUnconfigured = 'unconfigured';
 
-  /// Προώθηση στατικών προεπιλογών κατηγοριών λεξικού από [SettingsServiceCatalogsMixin].
+  /// Προώθηση στατικών προεπιλογών κατηγοριών λεξικού από [SettingsServiceCatalogs].
   static const String defaultLexiconCategoriesCsv =
-      SettingsServiceCatalogsMixin.defaultLexiconCategoriesCsv;
+      SettingsServiceCatalogs.defaultLexiconCategoriesCsv;
 
   static List<String> get defaultLexiconCategoriesList =>
-      SettingsServiceCatalogsMixin.defaultLexiconCategoriesList;
+      SettingsServiceCatalogs.defaultLexiconCategoriesList;
 
   /// Πρόσβαση σε ρυθμίσεις από πίνακα app_settings (ορίζεται μετά το άνοιγμα βάσης).
   static Future<String?> Function(String key)? _getAppSetting;
@@ -59,21 +65,29 @@ class SettingsService
     _setAppSetting = set;
   }
 
+  /// Ανάγνωση ρύθμισης app_settings — για τους συνεργάτες ([remoteLansweeper], [catalogs]).
+  static Future<String?> Function(String key)? get appSettingReader =>
+      _getAppSetting;
+
+  /// Εγγραφή ρύθμισης app_settings — για τους συνεργάτες ([remoteLansweeper], [catalogs]).
+  static Future<void> Function(String key, String value)? get appSettingWriter =>
+      _setAppSetting;
+
   static const int defaultCrashLogRetentionCount =
-      SettingsServiceCatalogsMixin.defaultCrashLogRetentionCount;
+      SettingsServiceCatalogs.defaultCrashLogRetentionCount;
   static const int minCrashLogRetentionCount =
-      SettingsServiceCatalogsMixin.minCrashLogRetentionCount;
+      SettingsServiceCatalogs.minCrashLogRetentionCount;
   static const int maxCrashLogRetentionCount =
-      SettingsServiceCatalogsMixin.maxCrashLogRetentionCount;
+      SettingsServiceCatalogs.maxCrashLogRetentionCount;
 
   static const bool defaultShutdownTraceEnabled =
-      SettingsServiceCatalogsMixin.defaultShutdownTraceEnabled;
+      SettingsServiceCatalogs.defaultShutdownTraceEnabled;
   static const int defaultShutdownTraceRetentionCount =
-      SettingsServiceCatalogsMixin.defaultShutdownTraceRetentionCount;
+      SettingsServiceCatalogs.defaultShutdownTraceRetentionCount;
   static const int minShutdownTraceRetentionCount =
-      SettingsServiceCatalogsMixin.minShutdownTraceRetentionCount;
+      SettingsServiceCatalogs.minShutdownTraceRetentionCount;
   static const int maxShutdownTraceRetentionCount =
-      SettingsServiceCatalogsMixin.maxShutdownTraceRetentionCount;
+      SettingsServiceCatalogs.maxShutdownTraceRetentionCount;
 
   /// Κλειδί αποθήκευσης SharedPreferences (με πρόθεμα προφίλ όταν υπάρχει CLI `--profile`).
   static String _prefKey(String baseKey) =>

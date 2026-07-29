@@ -82,7 +82,8 @@ class DatabaseStatsService {
       }
     } catch (_) {}
 
-    final tableNames = await DatabaseHelper.instance.getTableNames();
+    final tableNames = await DatabaseHelper.instance.tableInspection
+        .getTableNames();
     final statsRepo = DatabaseStatsRepository(db);
     final rowCounts = await statsRepo.countRowsForTables(tableNames);
 

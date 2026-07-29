@@ -43,8 +43,8 @@ void main() {
 
     final settings = SettingsService();
     await settings.setDatabasePath(dbPath);
-    await settings.setDatabaseOpenTimeoutSeconds(2);
-    await settings.setDatabaseOpenMaxAttempts(2);
+    await settings.catalogs.setDatabaseOpenTimeoutSeconds(2);
+    await settings.catalogs.setDatabaseOpenMaxAttempts(2);
   });
 
   tearDown(() async {

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:call_logger/core/database/calls_repository.dart';
+import 'package:call_logger/core/database/calls_search_index.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/features/database/models/database_integrity_finding.dart';
@@ -345,7 +345,7 @@ void main() {
       expect(mine, hasLength(1));
 
       final lockingService = DatabaseIntegrityFixService(
-        callsFactory: (database) => _LockingCallsRepository(database),
+        searchIndexFactory: (database) => _LockingCallsSearchIndex(database),
       );
       final result = await lockingService.applyFix(
         mine.first,
@@ -562,8 +562,8 @@ void main() {
   });
 }
 
-class _LockingCallsRepository extends CallsRepository {
-  _LockingCallsRepository(super.db);
+class _LockingCallsSearchIndex extends CallsSearchIndex {
+  const _LockingCallsSearchIndex(super.db);
 
   @override
   Future<void> rebuildSearchIndexForCallId(int callId) async {

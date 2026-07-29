@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/calls_deletion_repository.dart';
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../calls/models/call_model.dart';
@@ -21,19 +22,24 @@ class HistoryCallActionsService {
     return CallsRepository(db);
   }
 
+  Future<CallsDeletionRepository> _deletion() async {
+    final db = await DatabaseHelper.instance.database;
+    return CallsDeletionRepository(db);
+  }
+
   Future<CallModel?> getCallById(int callId) async {
     final repo = await _repo();
     return repo.getCallById(callId);
   }
 
   Future<int> countLinkedTasks(int callId) async {
-    final repo = await _repo();
-    return repo.getTasksCountLinkedToCall(callId);
+    final deletion = await _deletion();
+    return deletion.getTasksCountLinkedToCall(callId);
   }
 
   Future<int> countLinkedTasksForCalls(List<int> callIds) async {
-    final repo = await _repo();
-    return repo.getTasksCountLinkedToCalls(callIds);
+    final deletion = await _deletion();
+    return deletion.getTasksCountLinkedToCalls(callIds);
   }
 
   Future<void> saveEditedCall(CallModel call) async {
@@ -52,8 +58,8 @@ class HistoryCallActionsService {
     int? callerId,
     String? equipmentCode,
   }) async {
-    final repo = await _repo();
-    await repo.deleteCallWithTasksAction(callId, taskAction, hard: hard);
+    final deletion = await _deletion();
+    await deletion.deleteCallWithTasksAction(callId, taskAction, hard: hard);
     await refreshAfterMutation(
       callerId: callerId,
       equipmentCode: equipmentCode,
@@ -65,8 +71,8 @@ class HistoryCallActionsService {
     int? callerId,
     String? equipmentCode,
   }) async {
-    final repo = await _repo();
-    await repo.hardDeleteCall(callId);
+    final deletion = await _deletion();
+    await deletion.hardDeleteCall(callId);
     await refreshAfterMutation(
       callerId: callerId,
       equipmentCode: equipmentCode,
@@ -74,8 +80,8 @@ class HistoryCallActionsService {
   }
 
   Future<void> bulkSoftDelete(List<int> callIds, {String? taskAction}) async {
-    final repo = await _repo();
-    await repo.bulkSoftDeleteCalls(callIds, taskAction: taskAction);
+    final deletion = await _deletion();
+    await deletion.bulkSoftDeleteCalls(callIds, taskAction: taskAction);
     await refreshAfterMutation();
   }
 

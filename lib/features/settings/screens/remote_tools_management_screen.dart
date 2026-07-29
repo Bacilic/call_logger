@@ -715,8 +715,8 @@ class _CallsRemoteUiPanelState extends ConsumerState<_CallsRemoteUiPanel> {
 
   Future<void> _load() async {
     final s = SettingsService();
-    final p = await s.getCallsPrimaryToolId();
-    final o = await s.getCallsShowSecondaryRemoteActions();
+    final p = await s.remoteLansweeper.getCallsPrimaryToolId();
+    final o = await s.remoteLansweeper.getCallsShowSecondaryRemoteActions();
     if (mounted) {
       setState(() {
         _primaryId = p;
@@ -730,7 +730,7 @@ class _CallsRemoteUiPanelState extends ConsumerState<_CallsRemoteUiPanel> {
     final previous = _primaryId;
     setState(() => _primaryId = v);
     try {
-      await SettingsService().setCallsPrimaryToolId(v);
+      await SettingsService().remoteLansweeper.setCallsPrimaryToolId(v);
       ref.invalidate(callsRemoteUiConfigProvider);
     } catch (e) {
       if (!mounted) return;
@@ -748,7 +748,7 @@ class _CallsRemoteUiPanelState extends ConsumerState<_CallsRemoteUiPanel> {
     final previous = _overflow;
     setState(() => _overflow = v);
     try {
-      await SettingsService().setCallsShowSecondaryRemoteActions(v);
+      await SettingsService().remoteLansweeper.setCallsShowSecondaryRemoteActions(v);
       ref.invalidate(callsRemoteUiConfigProvider);
     } catch (e) {
       if (!mounted) return;

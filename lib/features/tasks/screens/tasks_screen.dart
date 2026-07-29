@@ -1,35 +1,13 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
-import '../../../core/errors/task_save_exception.dart';
 import '../../../core/providers/task_focus_intent_provider.dart';
-import '../../../core/services/save_confirmation_summary.dart';
-import '../../calls/provider/lookup_provider.dart';
-import '../../directory/providers/department_directory_provider.dart';
-import '../../directory/providers/directory_provider.dart';
-import '../../directory/providers/equipment_directory_provider.dart';
-import '../../directory/screens/widgets/department_form_dialog.dart';
-import '../../directory/screens/widgets/equipment_form_dialog.dart';
-import '../../directory/screens/widgets/user_form_dialog.dart';
-import '../models/task.dart';
-import '../models/task_settings_config.dart';
-import '../providers/pending_task_delete_provider.dart';
-import '../providers/task_service_provider.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
-import '../ui/task_due_option_tooltips.dart';
-import '../utils/task_duration_format.dart';
 import 'task_card.dart';
-import 'task_close_dialog.dart';
 import 'task_filter_bar.dart';
-import 'task_form_dialog.dart';
-import 'task_settings_dialog.dart';
-
-part 'tasks_screen_actions.dart';
-part 'tasks_screen_support_widgets.dart';
+import 'tasks_screen_actions.dart';
+import 'tasks_screen_support_widgets.dart';
 
 class TasksScreen extends ConsumerStatefulWidget {
   const TasksScreen({super.key});
@@ -76,12 +54,12 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
           IconButton(
             icon: const Icon(Icons.schedule),
             tooltip: 'Ρυθμίσεις εκκρεμοτήτων',
-            onPressed: () => _openTaskSettings(context, ref),
+            onPressed: () => openTaskSettings(context, ref),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: canCreateTask ? () => _openNewTaskForm(context, ref) : null,
+        onPressed: canCreateTask ? () => openNewTaskForm(context, ref) : null,
         child: const Icon(Icons.add),
       ),
       body: Column(
@@ -129,8 +107,8 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _OrphanCallsBanner(
-                      onCreateTasks: () => _createTasksForOrphans(context, ref),
+                    OrphanCallsBanner(
+                      onCreateTasks: () => createTasksForOrphans(context, ref),
                     ),
                     Expanded(
                       child: tasks.isEmpty
@@ -181,19 +159,27 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                                     key: scrollKey,
                                     child: TaskCard(
                                       task: task,
-                                      onEdit: () => _onEdit(context, ref, task),
+                                      onEdit: () =>
+                                          editTask(context, ref, task),
                                       onSnooze: () =>
-                                          _onSnooze(context, ref, task),
-                                      onDelete: () =>
-                                          _onDelete(context, ref, task),
+                                          snoozeTask(context, ref, task),
+                                      onDelete: () => deleteTaskWithCountdown(
+                                        context,
+                                        ref,
+                                        task,
+                                      ),
                                       onComplete: () =>
-                                          _onComplete(context, ref, task),
+                                          completeTask(context, ref, task),
                                       onEditCaller: () =>
-                                          _onEditCaller(context, ref, task),
+                                          editTaskCaller(context, ref, task),
                                       onEditDepartment: () =>
-                                          _onEditDepartment(context, ref, task),
+                                          editTaskDepartment(
+                                            context,
+                                            ref,
+                                            task,
+                                          ),
                                       onEditEquipment: () =>
-                                          _onEditEquipment(context, ref, task),
+                                          editTaskEquipment(context, ref, task),
                                     ),
                                   );
                                 },

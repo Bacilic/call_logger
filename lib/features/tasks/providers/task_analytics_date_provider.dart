@@ -37,15 +37,15 @@ class TaskAnalyticsDateNotifier extends AsyncNotifier<TaskAnalyticsDateState> {
   Future<TaskAnalyticsDateState> _resolveFromSettings() async {
     final creationSpan = await _loadCreationSpan();
     final settings = SettingsService();
-    final rawPreset = await settings.getTaskAnalyticsDatePreset();
+    final rawPreset = await settings.analyticsFilters.getTaskAnalyticsDatePreset();
     var preset =
         TaskAnalyticsDatePreset.fromStorage(rawPreset) ??
         TaskAnalyticsDatePreset.defaultPreset;
     DateTime? customFrom;
     DateTime? customTo;
     if (preset == TaskAnalyticsDatePreset.custom) {
-      customFrom = await settings.getTaskAnalyticsCustomDateFrom();
-      customTo = await settings.getTaskAnalyticsCustomDateTo();
+      customFrom = await settings.analyticsFilters.getTaskAnalyticsCustomDateFrom();
+      customTo = await settings.analyticsFilters.getTaskAnalyticsCustomDateTo();
       if (customFrom == null || customTo == null) {
         preset = TaskAnalyticsDatePreset.defaultPreset;
       } else {
@@ -72,7 +72,7 @@ class TaskAnalyticsDateNotifier extends AsyncNotifier<TaskAnalyticsDateState> {
     DateTime? customFrom,
     DateTime? customTo,
   }) async {
-    await SettingsService().setTaskAnalyticsDateFilter(
+    await SettingsService().analyticsFilters.setTaskAnalyticsDateFilter(
       preset: preset.storageValue,
       customFrom: customFrom,
       customTo: customTo,

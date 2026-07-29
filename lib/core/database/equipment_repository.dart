@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'audit_service.dart';
-import 'calls_repository.dart';
+import 'calls_search_index.dart';
 import 'database_helper.dart';
 import 'directory_support.dart';
 
@@ -801,7 +801,7 @@ class EquipmentRepository {
         newValues: diff.newDiff,
       );
     }
-    await CallsRepository(db).rebuildSearchIndexForCallsByEquipmentId(e, id);
+    await CallsSearchIndex(db).rebuildSearchIndexForCallsByEquipmentId(e, id);
     return n;
   }
 

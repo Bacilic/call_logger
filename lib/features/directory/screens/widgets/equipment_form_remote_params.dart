@@ -1,12 +1,32 @@
-part of 'equipment_form_dialog.dart';
+import 'package:flutter/material.dart';
 
-mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
-  void _initRemoteParamsFromEquipment(EquipmentModel? e) {
-    _remoteParamValues.clear();
-    _expandedRemoteKeys.clear();
-    _exclusiveRemoteToolId = null;
+import '../../../../core/models/remote_tool.dart';
+import '../../../../core/models/remote_tool_role.dart';
+import '../../../../core/widgets/info_hint_icon.dart';
+import '../../../../core/widgets/remote_tool_icon.dart';
+import '../../../calls/models/equipment_model.dart';
+import '../../../calls/provider/remote_paths_provider.dart';
+import '../../../calls/utils/equipment_remote_param_key.dart';
+import '../../../calls/utils/remote_param_validator.dart';
+import '../../../calls/utils/vnc_remote_target.dart';
+import 'equipment_form_dialog.dart';
+import 'remote_param_help_text.dart';
+
+/// Παράμετροι απομακρυσμένης σύνδεσης της φόρμας εξοπλισμού: αρχικοποίηση από
+/// `remote_params`, εκκαθάριση άγνωστων κλειδιών, Ζώνες Α/Β του UI.
+///
+/// Συνεργάτης του [EquipmentFormDialogState] (Σύνθεση).
+class EquipmentFormRemoteParams {
+  EquipmentFormRemoteParams(this.host);
+
+  final EquipmentFormDialogState host;
+
+  void initFromEquipment(EquipmentModel? e) {
+    host.remoteParamValues.clear();
+    host.expandedRemoteKeys.clear();
+    host.exclusiveRemoteToolId = null;
     if (e == null) return;
-    _exclusiveRemoteToolId = EquipmentRemoteParamKey.exclusiveToolIdFrom(
+    host.exclusiveRemoteToolId = EquipmentRemoteParamKey.exclusiveToolIdFrom(
       e.remoteParams,
     );
     // Φόρτωσε όλες τις τιμές (και τις ιστορικές `__stash_`) κάτω από το πραγματικό
@@ -18,10 +38,10 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
       );
       final realKey = stashReal ?? entry.key;
       if (int.tryParse(realKey) == null) continue;
-      if (stashReal != null && _remoteParamValues.containsKey(realKey)) {
+      if (stashReal != null && host.remoteParamValues.containsKey(realKey)) {
         continue;
       }
-      _remoteParamValues[realKey] = entry.value;
+      host.remoteParamValues[realKey] = entry.value;
     }
   }
 
@@ -34,7 +54,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     return null;
   }
 
-  bool _isHostAddressParamKey(
+  bool isHostAddressParamKey(
     String key,
     List<RemoteTool> catalog,
     List<RemoteToolFormPair> pairs,
@@ -48,67 +68,63 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     return false;
   }
 
-  Future<void> _pruneRemoteParamsAfterCatalogLoad() async {
-    if (!mounted || _didPruneUnknownRemoteKeys) return;
-    final pairs = await widget.ref.read(remoteToolFormPairsProvider.future);
-    if (!mounted || _didPruneUnknownRemoteKeys) return;
-    _didPruneUnknownRemoteKeys = true;
-    setState(() {
-      _syncRemoteParamsToForm(pairs);
-      _tryCaptureFormBaseline();
-    });
+  Future<void> pruneAfterCatalogLoad() async {
+    if (!host.mounted || host.didPruneUnknownRemoteKeys) return;
+    final pairs = await host.widget.ref.read(remoteToolFormPairsProvider.future);
+    if (!host.mounted || host.didPruneUnknownRemoteKeys) return;
+    host.didPruneUnknownRemoteKeys = true;
+    _syncRemoteParamsToForm(pairs);
+    host.dismissGuard.tryCaptureFormBaseline();
+    host.markFormChanged();
   }
 
   /// Κάθε εργαλείο της φόρμας έχει πεδίο (κλειδί = `<tool_id>`). Καθαρίζει τιμές
   /// που δεν αντιστοιχούν σε εργαλείο της φόρμας και ακυρώνει άκυρο αποκλειστικό.
   void _syncRemoteParamsToForm(List<RemoteToolFormPair> pairs) {
     final formKeys = {for (final p in pairs) p.key};
-    for (final k in _remoteParamValues.keys.toList()) {
+    for (final k in host.remoteParamValues.keys.toList()) {
       if (!formKeys.contains(k)) {
-        _remoteParamValues.remove(k);
+        host.remoteParamValues.remove(k);
         _disposeRemoteController(k);
       }
     }
-    _expandedRemoteKeys
+    host.expandedRemoteKeys
       ..clear()
       ..addAll(formKeys);
-    for (final k in _expandedRemoteKeys) {
+    for (final k in host.expandedRemoteKeys) {
       _ensureRemoteController(k);
     }
-    if (_exclusiveRemoteToolId != null &&
-        !formKeys.contains('$_exclusiveRemoteToolId')) {
-      _exclusiveRemoteToolId = null;
+    if (host.exclusiveRemoteToolId != null &&
+        !formKeys.contains('${host.exclusiveRemoteToolId}')) {
+      host.exclusiveRemoteToolId = null;
     }
   }
 
   void _ensureRemoteController(String key) {
-    if (_remoteParamControllers.containsKey(key)) return;
-    _remoteParamControllers[key] = TextEditingController(
-      text: _remoteParamValues[key] ?? '',
+    if (host.remoteParamControllers.containsKey(key)) return;
+    host.remoteParamControllers[key] = TextEditingController(
+      text: host.remoteParamValues[key] ?? '',
     );
   }
 
   void _disposeRemoteController(String key) {
-    final c = _remoteParamControllers.remove(key);
+    final c = host.remoteParamControllers.remove(key);
     c?.dispose();
   }
 
-  void _syncRemoteValueFromController(String key) {
-    final c = _remoteParamControllers[key];
+  void syncValueFromController(String key) {
+    final c = host.remoteParamControllers[key];
     if (c == null) return;
     final t = c.text.trim();
     if (t.isEmpty) {
-      _remoteParamValues.remove(key);
+      host.remoteParamValues.remove(key);
     } else {
-      _remoteParamValues[key] = c.text;
+      host.remoteParamValues[key] = c.text;
     }
   }
 
-  Widget _buildRemoteParamsSection(
-    List<RemoteToolFormPair> pairs,
-    List<RemoteTool> catalog,
-  ) {
-    final theme = Theme.of(context);
+  Widget buildSection(List<RemoteToolFormPair> pairs, List<RemoteTool> catalog) {
+    final theme = Theme.of(host.context);
     if (pairs.isEmpty) {
       return Text(
         'Δεν υπάρχουν ενεργά εργαλεία απομακρυσμένης σύνδεσης.',
@@ -119,7 +135,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     }
     // Σειρά προτεραιότητας: τα `pairs` έρχονται ήδη ταξινομημένα (sort_order).
     // Αποδίδουμε απευθείας από τα `pairs` ώστε τα πεδία/επιλογές να υπάρχουν και
-    // πριν ολοκληρωθεί το async prune (που συγχρονίζει το `_expandedRemoteKeys`).
+    // πριν ολοκληρωθεί το async prune (που συγχρονίζει το `expandedRemoteKeys`).
     final orderedKeys = <String>[];
     final seen = <String>{};
     for (final p in pairs) {
@@ -143,15 +159,15 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     }
 
     final exclusiveValid =
-        _exclusiveRemoteToolId != null &&
-        toolForId(_exclusiveRemoteToolId!) != null;
-    final int? zoneAValue = exclusiveValid ? _exclusiveRemoteToolId : null;
+        host.exclusiveRemoteToolId != null &&
+        toolForId(host.exclusiveRemoteToolId!) != null;
+    final int? zoneAValue = exclusiveValid ? host.exclusiveRemoteToolId : null;
 
     // Ζώνη Α — προειδοποίηση όταν το «μόνο» εργαλείο χρειάζεται παράμετρο και είναι κενή.
     String? warning;
     if (zoneAValue != null) {
       final selTool = toolForId(zoneAValue);
-      final selParam = (_remoteParamControllers['$zoneAValue']?.text ?? '')
+      final selParam = (host.remoteParamControllers['$zoneAValue']?.text ?? '')
           .trim();
       if (selTool != null &&
           selParam.isEmpty &&
@@ -166,7 +182,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     for (final key in orderedKeys) {
       final isSelectedOnly = zoneAValue != null && key == '$zoneAValue';
       if (zoneAValue != null && !isSelectedOnly) {
-        final hasValue = (_remoteParamValues[key] ?? '').trim().isNotEmpty;
+        final hasValue = (host.remoteParamValues[key] ?? '').trim().isNotEmpty;
         if (!hasValue) continue; // κενή παράμετρος άλλου εργαλείου → κρύψε
         rows.add(
           _buildRemoteParamField(
@@ -206,8 +222,9 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
               ),
           ],
           onChanged: (v) {
-            setState(() => _exclusiveRemoteToolId = v);
-            _tryCaptureFormBaseline();
+            host.exclusiveRemoteToolId = v;
+            host.markFormChanged();
+            host.dismissGuard.tryCaptureFormBaseline();
           },
         ),
         if (warning != null) ...[
@@ -269,10 +286,10 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
     bool disabled = false,
     bool historical = false,
   }) {
-    final c = _remoteParamControllers[paramKey];
+    final c = host.remoteParamControllers[paramKey];
     if (c == null) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final isHostAddress = _isHostAddressParamKey(paramKey, catalog, pairs);
+    final theme = Theme.of(host.context);
+    final isHostAddress = isHostAddressParamKey(paramKey, catalog, pairs);
     final acceptsFileParam = _toolAcceptsFileParam(paramKey, pairs);
     final tool = _toolForParamKey(paramKey, catalog);
     final hasIcon = tool?.iconAssetKey?.trim().isNotEmpty ?? false;
@@ -288,7 +305,7 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
       acceptsFileParam: acceptsFileParam,
     );
     final vncDefault = VncRemoteTarget.resolveValidVncHost(
-      _codeController.text.trim(),
+      host.codeController.text.trim(),
       prefix: 'PC',
     );
     return Opacity(
@@ -356,8 +373,8 @@ mixin EquipmentFormRemoteParamsMixin on EquipmentFormDialogStateHost {
             ? [CommaToDotDecimalSeparatorFormatter()]
             : null,
         onChanged: (_) {
-          _syncRemoteValueFromController(paramKey);
-          setState(() {});
+          syncValueFromController(paramKey);
+          host.markFormChanged();
         },
       ),
     );

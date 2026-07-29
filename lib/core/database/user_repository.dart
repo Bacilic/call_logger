@@ -7,7 +7,7 @@ import '../utils/phone_list_parser.dart';
 import 'user_delete_equipment_policy.dart';
 import 'user_delete_phone_policy.dart';
 import 'audit_service.dart';
-import 'calls_repository.dart';
+import 'calls_search_index.dart';
 import 'database_helper.dart';
 import 'directory_audit_helpers.dart';
 import 'department_repository.dart';
@@ -332,7 +332,7 @@ class UserRepository {
       await _support.replaceUserPhonesInTxn(txn, id, phones);
     }
     if (map.isNotEmpty || phonesRaw != null) {
-      await CallsRepository(db).rebuildSearchIndexForCallsByCallerId(txn, id);
+      await CallsSearchIndex(db).rebuildSearchIndexForCallsByCallerId(txn, id);
     }
     if (!recordAudit) return n;
 

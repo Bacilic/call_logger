@@ -15,16 +15,16 @@ void main() {
 
   test('getShowUpdateOnStartup προεπιλογή true', () async {
     final settings = SettingsService();
-    expect(await settings.getShowUpdateOnStartup(), isTrue);
+    expect(await settings.catalogs.getShowUpdateOnStartup(), isTrue);
   });
 
   test('setShowUpdateOnStartup αποθηκεύει false και true', () async {
     final settings = SettingsService();
-    await settings.setShowUpdateOnStartup(false);
-    expect(await settings.getShowUpdateOnStartup(), isFalse);
+    await settings.catalogs.setShowUpdateOnStartup(false);
+    expect(await settings.catalogs.getShowUpdateOnStartup(), isFalse);
 
-    await settings.setShowUpdateOnStartup(true);
-    expect(await settings.getShowUpdateOnStartup(), isTrue);
+    await settings.catalogs.setShowUpdateOnStartup(true);
+    expect(await settings.catalogs.getShowUpdateOnStartup(), isTrue);
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('show_update_on_startup'), isTrue);

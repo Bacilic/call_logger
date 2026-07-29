@@ -48,7 +48,7 @@ class _UpdateStartupPromptListenerState
 
     final show =
         await (widget.getShowUpdateOnStartup ??
-            () => SettingsService().getShowUpdateOnStartup())();
+            () => SettingsService().catalogs.getShowUpdateOnStartup())();
     if (!show || !mounted) return;
     if (_updateStartupPromptShownThisSession) return;
 

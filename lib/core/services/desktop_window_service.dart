@@ -21,7 +21,7 @@ class DesktopWindowService {
     required double minWidth,
     required double minHeight,
   }) async {
-    final savedSize = await _settings.getSavedWindowSize();
+    final savedSize = await _settings.windowUi.getSavedWindowSize();
     final bounds = await windowManager.getBounds();
     final targetW = savedSize?.width ?? bounds.width;
     final targetH = savedSize?.height ?? bounds.height;
@@ -33,13 +33,13 @@ class DesktopWindowService {
       await windowManager.setSize(Size(width, height));
     }
 
-    final mode = await _settings.getWindowPlacementMode();
+    final mode = await _settings.windowUi.getWindowPlacementMode();
     if (mode == WindowPlacementMode.alwaysCenter) {
       await windowManager.center();
       return;
     }
 
-    final savedPosition = await _settings.getSavedWindowPosition();
+    final savedPosition = await _settings.windowUi.getSavedWindowPosition();
     if (savedPosition != null) {
       final clamped = _clampPosition(
         x: savedPosition.x,
@@ -62,13 +62,13 @@ class DesktopWindowService {
   Future<void> persistWindowBounds(WindowManager windowManager) async {
     if (await windowManager.isMaximized()) return;
     final bounds = await windowManager.getBounds();
-    await _settings.setSavedWindowSize(
+    await _settings.windowUi.setSavedWindowSize(
       width: bounds.width,
       height: bounds.height,
     );
-    final mode = await _settings.getWindowPlacementMode();
+    final mode = await _settings.windowUi.getWindowPlacementMode();
     if (mode == WindowPlacementMode.lastPosition) {
-      await _settings.setSavedWindowPosition(x: bounds.left, y: bounds.top);
+      await _settings.windowUi.setSavedWindowPosition(x: bounds.left, y: bounds.top);
     }
   }
 

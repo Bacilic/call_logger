@@ -1,4 +1,10 @@
-part of 'department_form_dialog.dart';
+import 'package:flutter/material.dart';
+
+import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/services/lookup_service.dart';
+import 'department_form_dialog.dart';
+import 'shared_asset_disconnect_dialog.dart';
 
 enum _ConflictResolutionChoice { moveToDepartment, keepCurrentOwnership }
 
@@ -84,33 +90,41 @@ Widget _sharedConflictKeepLabel(_SharedConflictItem item) {
   );
 }
 
-mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
-  void _onSharedPhoneFocusChanged() {
-    if (!_sharedPhoneInputFocus.hasFocus) {
-      _commitDelimitedInput(
-        controller: _sharedPhoneInputController,
-        target: _sharedPhones,
+/// Κοινόχρηστα τηλέφωνα/εξοπλισμοί της φόρμας τμήματος: είσοδος με
+/// διαχωριστικά, συγκρούσεις χρήσης και επιβεβαιώσεις αφαίρεσης.
+///
+/// Συνεργάτης του [DepartmentFormDialogState] (Σύνθεση).
+class DepartmentFormSharedLinks {
+  DepartmentFormSharedLinks(this.host);
+
+  final DepartmentFormDialogState host;
+
+  void onSharedPhoneFocusChanged() {
+    if (!host.sharedPhoneInputFocus.hasFocus) {
+      commitDelimitedInput(
+        controller: host.sharedPhoneInputController,
+        target: host.sharedPhones,
         keepLastIncomplete: false,
       );
     }
   }
 
-  void _onSharedEquipmentFocusChanged() {
-    if (!_sharedEquipmentInputFocus.hasFocus) {
-      _commitDelimitedInput(
-        controller: _sharedEquipmentInputController,
-        target: _sharedEquipmentCodes,
+  void onSharedEquipmentFocusChanged() {
+    if (!host.sharedEquipmentInputFocus.hasFocus) {
+      commitDelimitedInput(
+        controller: host.sharedEquipmentInputController,
+        target: host.sharedEquipmentCodes,
         keepLastIncomplete: false,
       );
     }
   }
 
-  void _commitDelimitedInput({
+  void commitDelimitedInput({
     required TextEditingController controller,
     required List<String> target,
     required bool keepLastIncomplete,
   }) {
-    if (_isNormalizingDelimitedInput) return;
+    if (host.isNormalizingDelimitedInput) return;
     final raw = controller.text;
     if (raw.trim().isEmpty) return;
     final hasDelimiter = raw.contains(',') || raw.contains(RegExp(r'\s'));
@@ -133,16 +147,15 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
         ? pieces.last
         : '';
 
-    _isNormalizingDelimitedInput = true;
-    setState(() {
-      final set = target.toSet()..addAll(toCommit);
-      target
-        ..clear()
-        ..addAll(set.toList()..sort((a, b) => a.compareTo(b)));
-      controller.text = remainder;
-      controller.selection = TextSelection.collapsed(offset: remainder.length);
-    });
-    _isNormalizingDelimitedInput = false;
+    host.isNormalizingDelimitedInput = true;
+    final set = target.toSet()..addAll(toCommit);
+    target
+      ..clear()
+      ..addAll(set.toList()..sort((a, b) => a.compareTo(b)));
+    controller.text = remainder;
+    controller.selection = TextSelection.collapsed(offset: remainder.length);
+    host.notifyFormChanged();
+    host.isNormalizingDelimitedInput = false;
   }
 
   List<String> _splitCommaSeparated(String raw) {
@@ -153,7 +166,6 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
         .toList();
   }
 
-  @override
   Future<
     ({
       List<String> acceptedPhones,
@@ -162,7 +174,7 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
       Set<String> equipmentToMoveFromUsers,
     })?
   >
-  _resolveCrossUsageConflicts(
+  resolveCrossUsageConflicts(
     int? departmentId,
     String targetDepartmentName,
     List<String> sharedPhones,
@@ -272,7 +284,7 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
 
     final decisions = <String, _ConflictResolutionChoice>{};
     final result = await showDialog<Map<String, _ConflictResolutionChoice>>(
-      context: context,
+      context: host.context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
@@ -304,7 +316,9 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
                               children: [
                                 Text(
                                   '${item.isPhone ? 'Τηλέφωνο' : 'Εξοπλισμός'}: ${item.value}',
-                                  style: Theme.of(context).textTheme.titleSmall,
+                                  style: Theme.of(
+                                    host.context,
+                                  ).textTheme.titleSmall,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(item.ownerDetails),
@@ -404,7 +418,6 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
     );
   }
 
-  @override
   Future<
     ({
       List<String> sharedPhones,
@@ -415,7 +428,7 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
       List<String> equipmentToDelete,
     })?
   >
-  _applySharedOnlyRemovalConfirmations({
+  applySharedOnlyRemovalConfirmations({
     required int departmentId,
     required String departmentName,
     required List<String> sharedPhones,
@@ -455,7 +468,7 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
       );
     }
 
-    if (!mounted) return null;
+    if (!host.mounted) return null;
 
     final otherDepartments = lookup.departments
         .where(
@@ -475,7 +488,7 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
 
     if (sharedOnlyPhonesRemoved.isNotEmpty) {
       final phoneBatch = await showSharedAssetDisconnectFlow(
-        context: context,
+        context: host.context,
         sourceDepartmentId: departmentId,
         sourceDepartmentName: departmentName,
         phones: sharedOnlyPhonesRemoved,
@@ -483,7 +496,7 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
         mode: SharedAssetDisconnectMode.sharedAsset,
         allowKeepInDepartment: true,
       );
-      if (!mounted || phoneBatch == null) return null;
+      if (!host.mounted || phoneBatch == null) return null;
       phones = (phones.toSet()..addAll(phoneBatch.phonesToKeep)).toList()
         ..sort();
       phonesToDelete = phoneBatch.phonesToDelete;
@@ -498,7 +511,7 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
     if (sharedOnlyEqRemoved.isNotEmpty) {
       // Εξοπλισμός χωρίς κάτοχο: ποτέ «κράτηση» — μόνο μεταφορά ή διαγραφή.
       final equipmentBatch = await showSharedAssetDisconnectFlow(
-        context: context,
+        context: host.context,
         sourceDepartmentId: departmentId,
         sourceDepartmentName: departmentName,
         equipmentCodes: sharedOnlyEqRemoved,
@@ -506,7 +519,7 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
         mode: SharedAssetDisconnectMode.sharedAsset,
         allowKeepInDepartment: false,
       );
-      if (!mounted || equipmentBatch == null) return null;
+      if (!host.mounted || equipmentBatch == null) return null;
       // Χωρίς keep: δεν επαναφέρουμε κωδικούς στη λίστα κοινόχρηστων.
       equipmentToDelete = equipmentBatch.equipmentToDelete;
       equipmentTransferTargets.addAll(equipmentBatch.equipmentTransfers);
@@ -546,7 +559,7 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
     if (newDeptNames.isNotEmpty) {
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
-      await widget.notifier.loadDepartments();
+      await host.widget.notifier.loadDepartments();
     }
 
     return (
@@ -559,29 +572,27 @@ mixin DepartmentFormSharedLinksMixin on DepartmentFormDialogStateHost {
     );
   }
 
-  void _addSharedPhonesFromInput(String raw) {
+  void addSharedPhonesFromInput(String raw) {
     final incoming = _splitCommaSeparated(raw);
     if (incoming.isEmpty) return;
-    setState(() {
-      final set = _sharedPhones.toSet();
-      for (final v in incoming) {
-        set.add(v);
-      }
-      _sharedPhones = set.toList()..sort((a, b) => a.compareTo(b));
-      _sharedPhoneInputController.clear();
-    });
+    final set = host.sharedPhones.toSet();
+    for (final v in incoming) {
+      set.add(v);
+    }
+    host.sharedPhones = set.toList()..sort((a, b) => a.compareTo(b));
+    host.sharedPhoneInputController.clear();
+    host.notifyFormChanged();
   }
 
-  void _addSharedEquipmentFromInput(String raw) {
+  void addSharedEquipmentFromInput(String raw) {
     final incoming = _splitCommaSeparated(raw);
     if (incoming.isEmpty) return;
-    setState(() {
-      final set = _sharedEquipmentCodes.toSet();
-      for (final v in incoming) {
-        set.add(v);
-      }
-      _sharedEquipmentCodes = set.toList()..sort((a, b) => a.compareTo(b));
-      _sharedEquipmentInputController.clear();
-    });
+    final set = host.sharedEquipmentCodes.toSet();
+    for (final v in incoming) {
+      set.add(v);
+    }
+    host.sharedEquipmentCodes = set.toList()..sort((a, b) => a.compareTo(b));
+    host.sharedEquipmentInputController.clear();
+    host.notifyFormChanged();
   }
 }

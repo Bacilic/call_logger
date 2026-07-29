@@ -2,6 +2,7 @@
 //
 //   flutter test test/features/calls/call_double_submit_test.dart
 
+import 'package:call_logger/core/database/calls_deletion_repository.dart';
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
@@ -102,7 +103,7 @@ Future<int> _countCallsWithMarker(String marker) async {
 
 Future<int> _countTasksForMarker(String marker) async {
   final db = await DatabaseHelper.instance.database;
-  final repo = CallsRepository(db);
+  final deletion = CallsDeletionRepository(db);
   final calls = await db.query(
     'calls',
     where: 'issue LIKE ? AND COALESCE(is_deleted, 0) = 0',
@@ -110,7 +111,7 @@ Future<int> _countTasksForMarker(String marker) async {
   );
   var total = 0;
   for (final call in calls) {
-    total += await repo.getTasksCountLinkedToCall(call['id'] as int);
+    total += await deletion.getTasksCountLinkedToCall(call['id'] as int);
   }
   return total;
 }

@@ -1,21 +1,28 @@
-part of 'user_form_dialog.dart';
+import 'package:flutter/material.dart';
+
+import 'user_form_dialog.dart';
 
 enum _UserFormDismissChoice { keep, discard, continueEditing }
 
-mixin UserFormDismissGuardMixin on UserFormDialogStateHost {
-  @override
-  void _onFieldChanged() {
-    if (mounted) setState(() {});
-  }
+/// Φρουρός κλεισίματος της φόρμας υπαλλήλου: dirty έλεγχος + διάλογος
+/// «Μη αποθηκευμένες αλλαγές».
+///
+/// Συνεργάτης του [UserFormDialogState] (Σύνθεση) — δουλεύει πάνω στα πεδία
+/// της φόρμας μέσω του host, χωρίς δική του κατάσταση.
+class UserFormDismissGuard {
+  UserFormDismissGuard(this.host);
 
-  @override
-  bool get _isDirty {
-    if (_lastNameController.text.trim() != _snapLastName) return true;
-    if (_firstNameController.text.trim() != _snapFirstName) return true;
-    if (_phoneController.text.trim() != _snapPhone) return true;
-    if (_notesController.text.trim() != _snapNotes) return true;
+  final UserFormDialogState host;
+
+  bool get isDirty {
+    if (host.lastNameController.text.trim() != host.snapLastName) return true;
+    if (host.firstNameController.text.trim() != host.snapFirstName) {
+      return true;
+    }
+    if (host.phoneController.text.trim() != host.snapPhone) return true;
+    if (host.notesController.text.trim() != host.snapNotes) return true;
     // Εμφανιζόμενο κείμενο (όχι μόνο κανονικοποίηση): τόνοι/κεφαλαία μετράνε ως αλλαγή.
-    if (_departmentController.text.trim() != _initialDepartmentText) {
+    if (host.departmentController.text.trim() != host.initialDepartmentText) {
       return true;
     }
     return false;
@@ -23,27 +30,27 @@ mixin UserFormDismissGuardMixin on UserFormDialogStateHost {
 
   /// Νέος/αντίγραφο χρήστη: υποχρεωτικά όνομα και επώνυμο πριν εμφανιστεί προειδοποίηση.
   bool get _createHasRequiredFields =>
-      _lastNameController.text.trim().isNotEmpty &&
-      _firstNameController.text.trim().isNotEmpty;
+      host.lastNameController.text.trim().isNotEmpty &&
+      host.firstNameController.text.trim().isNotEmpty;
 
   bool get _shouldConfirmDismiss =>
-      _isEdit ? _isDirty : _createHasRequiredFields;
+      host.isEdit ? isDirty : _createHasRequiredFields;
 
   List<String> _changedFieldLabels() {
     final changes = <String>[];
-    if (_lastNameController.text.trim() != _snapLastName) {
+    if (host.lastNameController.text.trim() != host.snapLastName) {
       changes.add('Επώνυμο');
     }
-    if (_firstNameController.text.trim() != _snapFirstName) {
+    if (host.firstNameController.text.trim() != host.snapFirstName) {
       changes.add('Όνομα');
     }
-    if (_phoneController.text.trim() != _snapPhone) {
+    if (host.phoneController.text.trim() != host.snapPhone) {
       changes.add('Τηλέφωνο');
     }
-    if (_departmentController.text.trim() != _initialDepartmentText) {
+    if (host.departmentController.text.trim() != host.initialDepartmentText) {
       changes.add('Τμήμα');
     }
-    if (_notesController.text.trim() != _snapNotes) {
+    if (host.notesController.text.trim() != host.snapNotes) {
       changes.add('Σημειώσεις');
     }
     return changes;
@@ -52,7 +59,7 @@ mixin UserFormDismissGuardMixin on UserFormDialogStateHost {
   Future<_UserFormDismissChoice?> _showDismissConfirmationDialog() async {
     final changes = _changedFieldLabels();
     return showDialog<_UserFormDismissChoice>(
-      context: context,
+      context: host.context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Μη αποθηκευμένες αλλαγές'),
@@ -92,26 +99,26 @@ mixin UserFormDismissGuardMixin on UserFormDialogStateHost {
     );
   }
 
-  Future<void> _requestClose() async {
+  Future<void> requestClose() async {
     if (!_shouldConfirmDismiss) {
-      if (mounted) Navigator.of(context).pop();
+      if (host.mounted) Navigator.of(host.context).pop();
       return;
     }
     final choice = await _showDismissConfirmationDialog();
-    if (!mounted ||
+    if (!host.mounted ||
         choice == null ||
         choice == _UserFormDismissChoice.continueEditing) {
       return;
     }
     if (choice == _UserFormDismissChoice.discard) {
-      Navigator.of(context).pop();
+      Navigator.of(host.context).pop();
       return;
     }
-    await _save();
+    await host.saveFlow.save();
   }
 
   /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
-  void _cancelAndClose() {
-    if (mounted) Navigator.of(context).pop();
+  void cancelAndClose() {
+    if (host.mounted) Navigator.of(host.context).pop();
   }
 }

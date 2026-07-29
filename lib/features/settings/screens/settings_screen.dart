@@ -102,33 +102,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _isLoadingSettings = true;
     });
     try {
-      final showActiveTimer = await _settings.getShowActiveTimer();
+      final showActiveTimer = await _settings.windowUi.getShowActiveTimer();
       final showEmptyRemoteLaunchers = await _settings
-          .getCallsShowEmptyRemoteLaunchers();
-      final enableSpellCheck = await _settings.getEnableSpellCheck();
-      final showDatabaseNav = await _settings.getShowDatabaseNav();
-      final showLampNav = await _settings.getShowLampNav();
-      final showDictionaryNav = await _settings.getShowDictionaryNav();
-      final showQuickCallFab = await _settings.getShowQuickCallFab();
-      final dbOpenTimeout = await _settings.getDatabaseOpenTimeoutSeconds();
-      final dbOpenMaxAttempts = await _settings.getDatabaseOpenMaxAttempts();
+          .remoteLansweeper.getCallsShowEmptyRemoteLaunchers();
+      final enableSpellCheck = await _settings.windowUi.getEnableSpellCheck();
+      final showDatabaseNav = await _settings.windowUi.getShowDatabaseNav();
+      final showLampNav = await _settings.windowUi.getShowLampNav();
+      final showDictionaryNav = await _settings.windowUi.getShowDictionaryNav();
+      final showQuickCallFab = await _settings.windowUi.getShowQuickCallFab();
+      final dbOpenTimeout = await _settings.catalogs.getDatabaseOpenTimeoutSeconds();
+      final dbOpenMaxAttempts = await _settings.catalogs.getDatabaseOpenMaxAttempts();
       final callsCardsVisibility = await _settings
-          .getCallsScreenCardsVisibility();
+          .windowUi.getCallsScreenCardsVisibility();
       final windowPlacementMode = Platform.isWindows
-          ? await _settings.getWindowPlacementMode()
+          ? await _settings.windowUi.getWindowPlacementMode()
           : WindowPlacementMode.alwaysCenter;
-      final crashLogRetention = await _settings.getCrashLogRetentionCount();
-      final shutdownTraceEnabled = await _settings.getShutdownTraceEnabled();
+      final crashLogRetention = await _settings.catalogs.getCrashLogRetentionCount();
+      final shutdownTraceEnabled = await _settings.catalogs.getShutdownTraceEnabled();
       final shutdownTraceRetention = await _settings
-          .getShutdownTraceRetentionCount();
-      final showUpdateOnStartup = await _settings.getShowUpdateOnStartup();
+          .catalogs.getShutdownTraceRetentionCount();
+      final showUpdateOnStartup = await _settings.catalogs.getShowUpdateOnStartup();
       final databasePath = await _settings.getDatabasePath();
       final logsDirectoryPath = databasePath.trim().isEmpty
           ? ''
           : CrashLogService.logsDirectoryForDatabasePath(databasePath);
       var dictionaryNavVisible = showDictionaryNav;
       if (!enableSpellCheck && dictionaryNavVisible) {
-        await _settings.setShowDictionaryNav(false);
+        await _settings.windowUi.setShowDictionaryNav(false);
         dictionaryNavVisible = false;
       }
       if (mounted) {
@@ -179,8 +179,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     final n = int.tryParse(raw);
     if (n == null) return;
-    await _settings.setCrashLogRetentionCount(n);
-    final normalized = await _settings.getCrashLogRetentionCount();
+    await _settings.catalogs.setCrashLogRetentionCount(n);
+    final normalized = await _settings.catalogs.getCrashLogRetentionCount();
     if (!mounted) return;
     setState(() => _crashLogRetentionCount = normalized);
     _crashLogRetentionController.text = normalized.toString();
@@ -195,8 +195,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     final n = int.tryParse(raw);
     if (n == null) return;
-    await _settings.setShutdownTraceRetentionCount(n);
-    final normalized = await _settings.getShutdownTraceRetentionCount();
+    await _settings.catalogs.setShutdownTraceRetentionCount(n);
+    final normalized = await _settings.catalogs.getShutdownTraceRetentionCount();
     if (!mounted) return;
     setState(() => _shutdownTraceRetentionCount = normalized);
     _shutdownTraceRetentionController.text = normalized.toString();
@@ -263,10 +263,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             actions: [
               TextButton(
                 onPressed: () async {
-                  await _settings.setDatabaseOpenTimeoutSeconds(
+                  await _settings.catalogs.setDatabaseOpenTimeoutSeconds(
                     AppConfig.databaseOpenTimeoutSeconds,
                   );
-                  await _settings.setDatabaseOpenMaxAttempts(
+                  await _settings.catalogs.setDatabaseOpenMaxAttempts(
                     AppConfig.databaseOpenMaxAttempts,
                   );
                   if (!mounted) return;
@@ -306,8 +306,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   }
                   final timeoutValue = timeout!;
                   final attemptsValue = attempts!;
-                  await _settings.setDatabaseOpenTimeoutSeconds(timeoutValue);
-                  await _settings.setDatabaseOpenMaxAttempts(attemptsValue);
+                  await _settings.catalogs.setDatabaseOpenTimeoutSeconds(timeoutValue);
+                  await _settings.catalogs.setDatabaseOpenMaxAttempts(attemptsValue);
                   if (!mounted) return;
                   setState(() {
                     _databaseOpenTimeoutSeconds = timeoutValue;
@@ -344,7 +344,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _setWindowPlacementMode(WindowPlacementMode mode) async {
-    await _settings.setWindowPlacementMode(mode);
+    await _settings.windowUi.setWindowPlacementMode(mode);
     if (!mounted) return;
     setState(() => _windowPlacementMode = mode);
   }
@@ -361,7 +361,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _CallsScreenCardsEditorDialog(initial: _callsCardsVisibility),
     );
     if (result == null || !mounted) return;
-    await _settings.setCallsScreenCardsVisibility(result);
+    await _settings.windowUi.setCallsScreenCardsVisibility(result);
     setState(() => _callsCardsVisibility = result);
     ref.invalidate(callsScreenCardsVisibilityProvider);
   }
@@ -384,9 +384,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _onEnableSpellCheckChanged(bool value) async {
-    await _settings.setEnableSpellCheck(value);
+    await _settings.windowUi.setEnableSpellCheck(value);
     if (!value) {
-      await _settings.setShowDictionaryNav(false);
+      await _settings.windowUi.setShowDictionaryNav(false);
       if (!mounted) return;
       setState(() {
         _enableSpellCheck = false;
@@ -406,7 +406,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
     final show = !hideDictionary;
-    await _settings.setShowDictionaryNav(show);
+    await _settings.windowUi.setShowDictionaryNav(show);
     if (!mounted) return;
     setState(() => _showDictionaryNav = show);
     ref.invalidate(showDictionaryNavProvider);
@@ -463,7 +463,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onChanged: _isLoadingSettings
                   ? null
                   : (value) async {
-                      await _settings.setShowUpdateOnStartup(value);
+                      await _settings.catalogs.setShowUpdateOnStartup(value);
                       if (mounted) {
                         setState(() => _showUpdateOnStartup = value);
                       }
@@ -572,7 +572,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 contentPadding: EdgeInsets.zero,
                 value: _shutdownTraceEnabled,
                 onChanged: (value) async {
-                  await _settings.setShutdownTraceEnabled(value);
+                  await _settings.catalogs.setShutdownTraceEnabled(value);
                   if (mounted) {
                     setState(() => _shutdownTraceEnabled = value);
                   }
@@ -716,7 +716,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onChanged: _isLoadingSettings
                   ? null
                   : (value) async {
-                      await _settings.setShowQuickCallFab(value);
+                      await _settings.windowUi.setShowQuickCallFab(value);
                       if (mounted) setState(() => _showQuickCallFab = value);
                       ref.invalidate(showQuickCallFabProvider);
                     },
@@ -730,7 +730,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             SwitchListTile(
               value: _showActiveTimer,
               onChanged: (value) async {
-                await _settings.setShowActiveTimer(value);
+                await _settings.windowUi.setShowActiveTimer(value);
                 if (mounted) setState(() => _showActiveTimer = value);
                 ref.invalidate(showActiveTimerProvider);
               },
@@ -742,7 +742,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             SwitchListTile(
               value: _showEmptyRemoteLaunchers,
               onChanged: (value) async {
-                await _settings.setCallsShowEmptyRemoteLaunchers(value);
+                await _settings.remoteLansweeper.setCallsShowEmptyRemoteLaunchers(value);
                 if (mounted) setState(() => _showEmptyRemoteLaunchers = value);
                 ref.invalidate(callsRemoteUiConfigProvider);
               },
@@ -788,7 +788,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               value: !_showDatabaseNav,
               onChanged: (value) async {
                 final show = !value;
-                await _settings.setShowDatabaseNav(show);
+                await _settings.windowUi.setShowDatabaseNav(show);
                 if (mounted) setState(() => _showDatabaseNav = show);
                 ref.invalidate(showDatabaseNavProvider);
               },
@@ -801,7 +801,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               value: !_showLampNav,
               onChanged: (value) async {
                 final show = !value;
-                await _settings.setShowLampNav(show);
+                await _settings.windowUi.setShowLampNav(show);
                 if (mounted) setState(() => _showLampNav = show);
                 ref.invalidate(showLampNavProvider);
               },

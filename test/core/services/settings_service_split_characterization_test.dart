@@ -22,16 +22,16 @@ void main() {
   group('SettingsService split characterization', () {
     test('window_ui: get/set showActiveTimer', () async {
       final settings = SettingsService();
-      expect(await settings.getShowActiveTimer(), isTrue);
-      await settings.setShowActiveTimer(false);
-      expect(await settings.getShowActiveTimer(), isFalse);
+      expect(await settings.windowUi.getShowActiveTimer(), isTrue);
+      await settings.windowUi.setShowActiveTimer(false);
+      expect(await settings.windowUi.getShowActiveTimer(), isFalse);
     });
 
     test('analytics_filters: get/set dashboard date preset', () async {
       final settings = SettingsService();
-      expect(await settings.getDashboardDatePreset(), 'today');
-      await settings.setDashboardDateFilter(preset: 'week');
-      expect(await settings.getDashboardDatePreset(), 'week');
+      expect(await settings.analyticsFilters.getDashboardDatePreset(), 'today');
+      await settings.analyticsFilters.setDashboardDateFilter(preset: 'week');
+      expect(await settings.analyticsFilters.getDashboardDatePreset(), 'week');
     });
 
     test('remote_lansweeper: get/set calls primary tool id', () async {
@@ -43,17 +43,17 @@ void main() {
         store[key] = value;
       });
       final settings = SettingsService();
-      expect(await settings.getCallsPrimaryToolId(), isNull);
-      await settings.setCallsPrimaryToolId(42);
-      expect(await settings.getCallsPrimaryToolId(), 42);
+      expect(await settings.remoteLansweeper.getCallsPrimaryToolId(), isNull);
+      await settings.remoteLansweeper.setCallsPrimaryToolId(42);
+      expect(await settings.remoteLansweeper.getCallsPrimaryToolId(), 42);
     });
 
     test('catalogs: get/set database open timeout seconds', () async {
       final settings = SettingsService();
       final defaultTimeout = AppConfig.databaseOpenTimeoutSeconds;
-      expect(await settings.getDatabaseOpenTimeoutSeconds(), defaultTimeout);
-      await settings.setDatabaseOpenTimeoutSeconds(15);
-      expect(await settings.getDatabaseOpenTimeoutSeconds(), 15);
+      expect(await settings.catalogs.getDatabaseOpenTimeoutSeconds(), defaultTimeout);
+      await settings.catalogs.setDatabaseOpenTimeoutSeconds(15);
+      expect(await settings.catalogs.getDatabaseOpenTimeoutSeconds(), 15);
     });
 
     test(
@@ -105,7 +105,7 @@ void main() {
       });
       final settings = SettingsService();
       expect(
-        await settings.getLansweeperApiUrl(),
+        await settings.remoteLansweeper.getLansweeperApiUrl(),
         'https://example.com/api.aspx',
       );
     });
@@ -122,7 +122,7 @@ void main() {
         store[key] = value;
       });
       final settings = SettingsService();
-      expect(await settings.getLansweeperApiUrl(), isNull);
+      expect(await settings.remoteLansweeper.getLansweeperApiUrl(), isNull);
     });
 
     test('getEquipmentTypesList: CSV με κενά και άδειες τιμές', () async {
@@ -134,7 +134,7 @@ void main() {
         store[key] = value;
       });
       final settings = SettingsService();
-      expect(await settings.getEquipmentTypesList(), ['PC', 'Laptop']);
+      expect(await settings.catalogs.getEquipmentTypesList(), ['PC', 'Laptop']);
     });
   });
 }

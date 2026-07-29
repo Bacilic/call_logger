@@ -73,7 +73,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   }
 
   Future<void> _loadFolder() async {
-    final path = await SettingsService().getUpdateFolderPath();
+    final path = await SettingsService().catalogs.getUpdateFolderPath();
     if (!mounted) return;
     if (path != null && path.isNotEmpty) {
       _folderController.text = path;
@@ -241,7 +241,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
         _folderError = null;
         _folderValid = true;
       });
-      await SettingsService().setUpdateFolderPath(trimmed);
+      await SettingsService().catalogs.setUpdateFolderPath(trimmed);
     } else {
       setState(() {
         _folderError = result.errorMessage;
@@ -282,7 +282,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     });
     _startActionTimer();
 
-    await SettingsService().setUpdateFolderPath(folder);
+    await SettingsService().catalogs.setUpdateFolderPath(folder);
 
     final service = _createService(folder);
 
@@ -324,7 +324,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     });
     _startActionTimer();
 
-    await SettingsService().setUpdateFolderPath(folder);
+    await SettingsService().catalogs.setUpdateFolderPath(folder);
     final service = _createService(folder);
     final result = await service.writeInstallerOnly();
 
@@ -503,7 +503,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
       });
       return;
     }
-    final template = await SettingsService().getPublishCliCommandTemplate();
+    final template = await SettingsService().catalogs.getPublishCliCommandTemplate();
     final command = buildPublishCliCommand(template, preview.bumpKind, folder);
     await Clipboard.setData(ClipboardData(text: command));
     if (!mounted) return;
@@ -514,7 +514,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   }
 
   Future<void> _openCliSettingsDialog() async {
-    final initial = await SettingsService().getPublishCliCommandTemplate();
+    final initial = await SettingsService().catalogs.getPublishCliCommandTemplate();
     if (!mounted) return;
     final saved = await showDialog<String>(
       context: context,
@@ -522,7 +522,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     );
     if (saved == null || !mounted) return;
     final text = saved.trim();
-    await SettingsService().setPublishCliCommandTemplate(
+    await SettingsService().catalogs.setPublishCliCommandTemplate(
       text.isEmpty ? null : text,
     );
   }

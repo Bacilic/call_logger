@@ -2,10 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
@@ -13,235 +11,93 @@ import '../../../core/widgets/dialog_snackbar_scope.dart';
 import '../../../core/widgets/app_asset_image.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/services/ai_prompt_template_controller.dart';
-import '../../../core/services/ai_ticket_suggestion_service.dart';
-import '../../../core/services/lansweeper_sync_service.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../models/lansweeper_connection_status.dart';
 import '../models/lansweeper_sync_state.dart';
-import '../providers/ai_ticket_suggestion_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/gemini_settings_provider.dart';
 import '../providers/lansweeper_connection_probe_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
-import 'lansweeper/lansweeper_ai_prompt_preview_dialog.dart';
-import 'lansweeper/ai_prompt_template_editor_dialog.dart';
-import 'lansweeper/lansweeper_connection_settings_dialog.dart';
-import 'lansweeper/lansweeper_registration_dialogs.dart';
-import 'lansweeper/lansweeper_ai_presenter.dart';
-import 'lansweeper/lansweeper_settings_persistence.dart';
 import 'lansweeper/lansweeper_report_call_list.dart';
-import 'lansweeper/lansweeper_browser_launcher.dart';
 import 'lansweeper/lansweeper_report_filter.dart';
 import 'lansweeper/lansweeper_report_filter_bar.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
 import 'lansweeper/lansweeper_sync_form.dart';
 import 'lansweeper/sync_history_list.dart';
-
-part 'lansweeper_report_settings.dart';
-part 'lansweeper_report_items.dart';
-part 'lansweeper_report_browser.dart';
-part 'lansweeper_report_ai.dart';
-part 'lansweeper_report_registration.dart';
+import 'lansweeper_report_ai.dart';
+import 'lansweeper_report_browser.dart';
+import 'lansweeper_report_items.dart';
+import 'lansweeper_report_registration.dart';
+import 'lansweeper_report_settings.dart';
 
 class LansweeperReportDialog extends ConsumerStatefulWidget {
   const LansweeperReportDialog({super.key});
 
   @override
   ConsumerState<LansweeperReportDialog> createState() =>
-      _LansweeperReportDialogState();
+      LansweeperReportDialogState();
 }
 
-mixin LansweeperReportDialogStateHost on ConsumerState<LansweeperReportDialog> {
-  // ignore: unused_element — απαιτείται από part mixins· ο analyzer δεν το ανιχνεύει.
-  Set<String> get _selectedKeys;
-  // ignore: unused_element
-  SpellCheckController get _titleController;
-  // ignore: unused_element
-  SpellCheckController get _notesController;
-  // ignore: unused_element
-  SpellCheckController get _solutionController;
-  // ignore: unused_element
-  TextEditingController get _lansweeperAgentUsernameController;
-  // ignore: unused_element
-  TextEditingController get _lansweeperApiUrlController;
-  // ignore: unused_element
-  TextEditingController get _lansweeperTicketFormUrlController;
-  // ignore: unused_element
-  TextEditingController get _lansweeperTicketViewUrlController;
-  // ignore: unused_element
-  TextEditingController get _lansweeperApiKeyController;
-  // ignore: unused_element
-  TextEditingController get _lansweeperLoginUrlController;
-  // ignore: unused_element
-  TextEditingController get _lansweeperHelpdeskUsernameController;
-  // ignore: unused_element
-  TextEditingController get _lansweeperHelpdeskPasswordController;
-  // ignore: unused_element
-  TextEditingController get _geminiApiKeyController;
-  // ignore: unused_element
-  AiPromptTemplateTextEditingController get _aiPromptTemplateController;
-  // ignore: unused_element
-  TextEditingController get _geminiEndpointController;
-  // ignore: unused_element
-  TextEditingController get _geminiPrimaryModelController;
-  // ignore: unused_element
-  TextEditingController get _geminiFallbackModelController;
-  // ignore: unused_element
-  Map<String, String> get _customFieldValues;
-  // ignore: unused_element
-  String? get _selectedTicketState;
+/// Δημόσιο State: τα κοινά πεδία της αναφοράς είναι ορατά στους συνεργάτες
+/// (ρυθμίσεις, επιλογή, περιηγητής, AI, καταχώρηση) — Σύνθεση.
+class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
+    with DialogSnackbarHost {
+  /// Ρυθμίσεις σύνδεσης Lansweeper/Gemini (διάλογοι, αποθήκευση).
+  late final LansweeperReportSettings settingsFlow = LansweeperReportSettings(
+    this,
+  );
 
-  // ignore: unused_element
-  Timer? get _lansweeperSettingsDebounceTimer;
-  // ignore: unused_element
-  set _lansweeperSettingsDebounceTimer(Timer? value);
+  /// Επιλογή/φιλτράρισμα στοιχείων αναφοράς.
+  late final LansweeperReportSelection selectionFlow =
+      LansweeperReportSelection(this);
 
-  // ignore: unused_element
-  String? get _lastPrefilledKey;
-  // ignore: unused_element
-  set _lastPrefilledKey(String? value);
+  /// Άνοιγμα σελίδων Lansweeper στον περιηγητή.
+  late final LansweeperReportBrowser browserFlow = LansweeperReportBrowser(
+    this,
+  );
 
-  // ignore: unused_element
-  bool get _aiSuggestRunning;
-  // ignore: unused_element
-  set _aiSuggestRunning(bool value);
+  /// Προσυμπλήρωση φόρμας και προτάσεις AI.
+  late final LansweeperReportAi aiFlow = LansweeperReportAi(this);
 
-  // ignore: unused_element
-  Timer? get _aiSuggestTicker;
-  // ignore: unused_element
-  set _aiSuggestTicker(Timer? value);
+  /// Καταχώρηση κλήσεων (API, χειροκίνητη, μαζική).
+  late final LansweeperReportRegistration registrationFlow =
+      LansweeperReportRegistration(this);
 
-  // ignore: unused_element
-  Stopwatch get _aiSuggestStopwatch;
-
-  // ignore: unused_element
-  double get _aiSuggestElapsedSeconds;
-  // ignore: unused_element
-  set _aiSuggestElapsedSeconds(double value);
-
-  // ignore: unused_element
-  String? get _aiCurrentModel;
-  // ignore: unused_element
-  set _aiCurrentModel(String? value);
-
-  // ignore: unused_element
-  http.Client? get _aiSuggestClient;
-  // ignore: unused_element
-  set _aiSuggestClient(http.Client? value);
-
-  // ignore: unused_element
-  DateTime? get _aiCooldownUntil;
-  // ignore: unused_element
-  set _aiCooldownUntil(DateTime? value);
-
-  // ignore: unused_element
-  String? get _aiCooldownModel;
-  // ignore: unused_element
-  set _aiCooldownModel(String? value);
-
-  // ignore: unused_element
-  Timer? get _aiCooldownTicker;
-  // ignore: unused_element
-  set _aiCooldownTicker(Timer? value);
-
-  // ignore: unused_element
-  bool get _aiAutoResubmitArmed;
-  // ignore: unused_element
-  set _aiAutoResubmitArmed(bool value);
-
-  // ignore: unused_element
-  List<ReportCallItem>? get _aiLastSuggestSelection;
-  // ignore: unused_element
-  set _aiLastSuggestSelection(List<ReportCallItem>? value);
-
-  // ignore: unused_element
-  LansweeperReportFilter get _reportFilter;
-  // ignore: unused_element
-  set _reportFilter(LansweeperReportFilter value);
-
-  void showDialogSnackBar(SnackBar snackBar, {String? copyText});
-
-  // ignore: unused_element — απαιτείται από part mixins· ο analyzer δεν το ανιχνεύει.
-  Future<void> _openTicketViewInBrowser(String ticketId);
-
-  // ignore: unused_element
-  Future<void> _hydrateTicketSubmitFormPrefs();
-  // ignore: unused_element
-  Future<void> _persistTicketSubmitFormPrefs();
-
-  // ignore: unused_element
-  void _toggleGroup(List<ReportCallItem> items, bool? checked);
-  // ignore: unused_element
-  void _toggleItem(ReportCallItem item, bool? checked);
-  // ignore: unused_element
-  ReportCallItem? _primarySelectedItem(List<ReportCallItem> allItems);
-  // ignore: unused_element
-  List<ReportCallItem> _filterReportItems(List<ReportCallItem> items);
-}
-
-class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
-    with
-        DialogSnackbarHost,
-        LansweeperReportDialogStateHost,
-        LansweeperReportSettingsMixin,
-        LansweeperReportItemsMixin,
-        LansweeperReportBrowserMixin,
-        LansweeperReportAiMixin,
-        LansweeperReportRegistrationMixin {
-  @override
-  final Set<String> _selectedKeys = <String>{};
-  @override
-  final SpellCheckController _titleController = SpellCheckController();
-  @override
-  final SpellCheckController _notesController = SpellCheckController();
-  @override
-  final SpellCheckController _solutionController = SpellCheckController();
-  @override
-  final TextEditingController _lansweeperAgentUsernameController =
+  final Set<String> selectedKeys = <String>{};
+  final SpellCheckController titleController = SpellCheckController();
+  final SpellCheckController notesController = SpellCheckController();
+  final SpellCheckController solutionController = SpellCheckController();
+  final TextEditingController lansweeperAgentUsernameController =
       TextEditingController();
-  @override
-  final TextEditingController _lansweeperApiUrlController =
+  final TextEditingController lansweeperApiUrlController =
       TextEditingController();
-  @override
-  final TextEditingController _lansweeperTicketFormUrlController =
+  final TextEditingController lansweeperTicketFormUrlController =
       TextEditingController();
-  @override
-  final TextEditingController _lansweeperTicketViewUrlController =
+  final TextEditingController lansweeperTicketViewUrlController =
       TextEditingController();
-  @override
-  final TextEditingController _lansweeperApiKeyController =
+  final TextEditingController lansweeperApiKeyController =
       TextEditingController();
-  @override
-  final TextEditingController _lansweeperLoginUrlController =
+  final TextEditingController lansweeperLoginUrlController =
       TextEditingController();
-  @override
-  final TextEditingController _lansweeperHelpdeskUsernameController =
+  final TextEditingController lansweeperHelpdeskUsernameController =
       TextEditingController();
-  @override
-  final TextEditingController _lansweeperHelpdeskPasswordController =
+  final TextEditingController lansweeperHelpdeskPasswordController =
       TextEditingController();
-  @override
-  final TextEditingController _geminiApiKeyController = TextEditingController();
-  @override
-  final AiPromptTemplateTextEditingController _aiPromptTemplateController =
+  final TextEditingController geminiApiKeyController = TextEditingController();
+  final AiPromptTemplateTextEditingController aiPromptTemplateController =
       AiPromptTemplateTextEditingController();
-  @override
-  final TextEditingController _geminiEndpointController =
+  final TextEditingController geminiEndpointController =
       TextEditingController();
-  @override
-  final TextEditingController _geminiPrimaryModelController =
+  final TextEditingController geminiPrimaryModelController =
       TextEditingController();
-  @override
-  final TextEditingController _geminiFallbackModelController =
+  final TextEditingController geminiFallbackModelController =
       TextEditingController();
-  @override
-  final Map<String, String> _customFieldValues = <String, String>{};
-  @override
-  String? _selectedTicketState;
+  final Map<String, String> customFieldValues = <String, String>{};
+  String? selectedTicketState;
   ProviderSubscription<String>? _lansweeperApiUrlSub;
   ProviderSubscription<String>? _lansweeperTicketFormUrlSub;
   ProviderSubscription<String>? _lansweeperTicketViewUrlSub;
@@ -255,163 +111,154 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   ProviderSubscription<String>? _geminiEndpointSub;
   ProviderSubscription<String>? _geminiPrimaryModelSub;
   ProviderSubscription<String>? _geminiFallbackModelSub;
-  @override
-  Timer? _lansweeperSettingsDebounceTimer;
-  @override
-  String? _lastPrefilledKey;
-  @override
-  bool _aiSuggestRunning = false;
-  @override
-  Timer? _aiSuggestTicker;
-  @override
-  final Stopwatch _aiSuggestStopwatch = Stopwatch();
-  @override
-  double _aiSuggestElapsedSeconds = 0;
-  @override
-  http.Client? _aiSuggestClient;
-  @override
-  String? _aiCurrentModel;
-  @override
-  DateTime? _aiCooldownUntil;
-  @override
-  String? _aiCooldownModel;
-  @override
-  Timer? _aiCooldownTicker;
-  @override
-  bool _aiAutoResubmitArmed = false;
-  @override
-  List<ReportCallItem>? _aiLastSuggestSelection;
+  Timer? lansweeperSettingsDebounceTimer;
+  String? lastPrefilledKey;
+  bool aiSuggestRunning = false;
+  Timer? aiSuggestTicker;
+  final Stopwatch aiSuggestStopwatch = Stopwatch();
+  double aiSuggestElapsedSeconds = 0;
+  http.Client? aiSuggestClient;
+  String? aiCurrentModel;
+  DateTime? aiCooldownUntil;
+  String? aiCooldownModel;
+  Timer? aiCooldownTicker;
+  bool aiAutoResubmitArmed = false;
+  List<ReportCallItem>? aiLastSuggestSelection;
 
-  @override
-  LansweeperReportFilter _reportFilter = LansweeperReportFilter.unsentOnly;
+  LansweeperReportFilter reportFilter = LansweeperReportFilter.unsentOnly;
+
+  /// Σηματοδοτεί ανανέωση της αναφοράς (rebuild) — χρήση και από συνεργάτες.
+  void notifyReportChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _lansweeperApiUrlController.text = ref.read(lansweeperApiUrlProvider);
-      _lansweeperTicketFormUrlController.text = ref.read(
+      lansweeperApiUrlController.text = ref.read(lansweeperApiUrlProvider);
+      lansweeperTicketFormUrlController.text = ref.read(
         lansweeperTicketFormUrlProvider,
       );
-      _lansweeperTicketViewUrlController.text = ref.read(
+      lansweeperTicketViewUrlController.text = ref.read(
         lansweeperTicketViewUrlProvider,
       );
-      _lansweeperApiKeyController.text = ref.read(lansweeperApiKeyProvider);
-      _lansweeperAgentUsernameController.text = ref.read(
+      lansweeperApiKeyController.text = ref.read(lansweeperApiKeyProvider);
+      lansweeperAgentUsernameController.text = ref.read(
         lansweeperAgentUsernameProvider,
       );
-      _lansweeperLoginUrlController.text = ref.read(
+      lansweeperLoginUrlController.text = ref.read(
         lansweeperHelpdeskLoginUrlProvider,
       );
-      _lansweeperHelpdeskUsernameController.text = ref.read(
+      lansweeperHelpdeskUsernameController.text = ref.read(
         lansweeperHelpdeskWebUsernameProvider,
       );
-      _lansweeperHelpdeskPasswordController.text = ref.read(
+      lansweeperHelpdeskPasswordController.text = ref.read(
         lansweeperHelpdeskWebPasswordProvider,
       );
-      _geminiApiKeyController.text = ref.read(geminiApiKeyProvider);
-      _aiPromptTemplateController.text = ref.read(geminiPromptTemplateProvider);
-      _geminiEndpointController.text = ref.read(geminiEndpointProvider);
-      _geminiPrimaryModelController.text = ref.read(geminiPrimaryModelProvider);
-      _geminiFallbackModelController.text = ref.read(
+      geminiApiKeyController.text = ref.read(geminiApiKeyProvider);
+      aiPromptTemplateController.text = ref.read(geminiPromptTemplateProvider);
+      geminiEndpointController.text = ref.read(geminiEndpointProvider);
+      geminiPrimaryModelController.text = ref.read(geminiPrimaryModelProvider);
+      geminiFallbackModelController.text = ref.read(
         geminiFallbackModelProvider,
       );
       if (!mounted) return;
       unawaited(
         ref.read(lansweeperConnectionProbeProvider.notifier).ensureCheck(),
       );
-      unawaited(_hydrateTicketSubmitFormPrefs());
+      unawaited(hydrateTicketSubmitFormPrefs());
     });
     _lansweeperApiUrlSub = ref.listenManual<String>(lansweeperApiUrlProvider, (
       _,
       next,
     ) {
-      if (_lansweeperApiUrlController.text == next) return;
-      _lansweeperApiUrlController.text = next;
+      if (lansweeperApiUrlController.text == next) return;
+      lansweeperApiUrlController.text = next;
     });
     _lansweeperTicketFormUrlSub = ref.listenManual<String>(
       lansweeperTicketFormUrlProvider,
       (_, next) {
-        if (_lansweeperTicketFormUrlController.text == next) return;
-        _lansweeperTicketFormUrlController.text = next;
+        if (lansweeperTicketFormUrlController.text == next) return;
+        lansweeperTicketFormUrlController.text = next;
       },
     );
     _lansweeperTicketViewUrlSub = ref.listenManual<String>(
       lansweeperTicketViewUrlProvider,
       (_, next) {
-        if (_lansweeperTicketViewUrlController.text == next) return;
-        _lansweeperTicketViewUrlController.text = next;
+        if (lansweeperTicketViewUrlController.text == next) return;
+        lansweeperTicketViewUrlController.text = next;
       },
     );
     _lansweeperApiKeySub = ref.listenManual<String>(lansweeperApiKeyProvider, (
       _,
       next,
     ) {
-      if (_lansweeperApiKeyController.text == next) return;
-      _lansweeperApiKeyController.text = next;
+      if (lansweeperApiKeyController.text == next) return;
+      lansweeperApiKeyController.text = next;
     });
     _lansweeperAgentUsernameSub = ref.listenManual<String>(
       lansweeperAgentUsernameProvider,
       (_, next) {
-        if (_lansweeperAgentUsernameController.text == next) return;
-        _lansweeperAgentUsernameController.text = next;
+        if (lansweeperAgentUsernameController.text == next) return;
+        lansweeperAgentUsernameController.text = next;
       },
     );
     _lansweeperLoginUrlSub = ref.listenManual<String>(
       lansweeperHelpdeskLoginUrlProvider,
       (_, next) {
-        if (_lansweeperLoginUrlController.text == next) return;
-        _lansweeperLoginUrlController.text = next;
+        if (lansweeperLoginUrlController.text == next) return;
+        lansweeperLoginUrlController.text = next;
       },
     );
     _lansweeperHelpdeskUsernameSub = ref.listenManual<String>(
       lansweeperHelpdeskWebUsernameProvider,
       (_, next) {
-        if (_lansweeperHelpdeskUsernameController.text == next) return;
-        _lansweeperHelpdeskUsernameController.text = next;
+        if (lansweeperHelpdeskUsernameController.text == next) return;
+        lansweeperHelpdeskUsernameController.text = next;
       },
     );
     _lansweeperHelpdeskPasswordSub = ref.listenManual<String>(
       lansweeperHelpdeskWebPasswordProvider,
       (_, next) {
-        if (_lansweeperHelpdeskPasswordController.text == next) return;
-        _lansweeperHelpdeskPasswordController.text = next;
+        if (lansweeperHelpdeskPasswordController.text == next) return;
+        lansweeperHelpdeskPasswordController.text = next;
       },
     );
     _geminiApiKeySub = ref.listenManual<String>(geminiApiKeyProvider, (
       _,
       next,
     ) {
-      if (_geminiApiKeyController.text == next) return;
-      _geminiApiKeyController.text = next;
+      if (geminiApiKeyController.text == next) return;
+      geminiApiKeyController.text = next;
     });
     _geminiPromptTemplateSub = ref.listenManual<String>(
       geminiPromptTemplateProvider,
       (_, next) {
-        if (_aiPromptTemplateController.text == next) return;
-        _aiPromptTemplateController.text = next;
+        if (aiPromptTemplateController.text == next) return;
+        aiPromptTemplateController.text = next;
       },
     );
     _geminiEndpointSub = ref.listenManual<String>(geminiEndpointProvider, (
       _,
       next,
     ) {
-      if (_geminiEndpointController.text == next) return;
-      _geminiEndpointController.text = next;
+      if (geminiEndpointController.text == next) return;
+      geminiEndpointController.text = next;
     });
     _geminiPrimaryModelSub = ref.listenManual<String>(
       geminiPrimaryModelProvider,
       (_, next) {
-        if (_geminiPrimaryModelController.text == next) return;
-        _geminiPrimaryModelController.text = next;
+        if (geminiPrimaryModelController.text == next) return;
+        geminiPrimaryModelController.text = next;
       },
     );
     _geminiFallbackModelSub = ref.listenManual<String>(
       geminiFallbackModelProvider,
       (_, next) {
-        if (_geminiFallbackModelController.text == next) return;
-        _geminiFallbackModelController.text = next;
+        if (geminiFallbackModelController.text == next) return;
+        geminiFallbackModelController.text = next;
       },
     );
   }
@@ -444,8 +291,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     return Icon(icon);
   }
 
-  @override
-  Future<void> _hydrateTicketSubmitFormPrefs() async {
+  Future<void> hydrateTicketSubmitFormPrefs() async {
     try {
       await ref
           .read(lansweeperTicketSubmitConfigProvider.notifier)
@@ -477,23 +323,22 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       }
       final ticketState = map['ticketState']?.toString();
       setState(() {
-        _customFieldValues
+        customFieldValues
           ..clear()
           ..addAll(nextValues);
         if (ticketState != null && ticketState.trim().isNotEmpty) {
-          _selectedTicketState = ticketState.trim();
+          selectedTicketState = ticketState.trim();
         }
       });
     } catch (_) {}
   }
 
-  @override
-  Future<void> _persistTicketSubmitFormPrefs() async {
+  Future<void> persistTicketSubmitFormPrefs() async {
     final config = ref.read(lansweeperTicketSubmitConfigProvider);
     if (!config.rememberFormSelections) return;
     final payload = <String, dynamic>{
-      'customFieldValues': Map<String, String>.from(_customFieldValues),
-      'ticketState': _selectedTicketState ?? config.defaultTicketState,
+      'customFieldValues': Map<String, String>.from(customFieldValues),
+      'ticketState': selectedTicketState ?? config.defaultTicketState,
     };
     final db = await DatabaseHelper.instance.database;
     if (!mounted) return;
@@ -505,11 +350,11 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
 
   @override
   void dispose() {
-    _aiSuggestTicker?.cancel();
-    _aiCooldownTicker?.cancel();
-    _aiSuggestStopwatch.stop();
-    _aiSuggestClient?.close();
-    _lansweeperSettingsDebounceTimer?.cancel();
+    aiSuggestTicker?.cancel();
+    aiCooldownTicker?.cancel();
+    aiSuggestStopwatch.stop();
+    aiSuggestClient?.close();
+    lansweeperSettingsDebounceTimer?.cancel();
     _lansweeperApiUrlSub?.close();
     _lansweeperTicketFormUrlSub?.close();
     _lansweeperTicketViewUrlSub?.close();
@@ -523,22 +368,22 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     _geminiEndpointSub?.close();
     _geminiPrimaryModelSub?.close();
     _geminiFallbackModelSub?.close();
-    _lansweeperApiUrlController.dispose();
-    _lansweeperTicketFormUrlController.dispose();
-    _lansweeperTicketViewUrlController.dispose();
-    _lansweeperApiKeyController.dispose();
-    _lansweeperLoginUrlController.dispose();
-    _lansweeperHelpdeskUsernameController.dispose();
-    _lansweeperHelpdeskPasswordController.dispose();
-    _lansweeperAgentUsernameController.dispose();
-    _geminiApiKeyController.dispose();
-    _aiPromptTemplateController.dispose();
-    _geminiEndpointController.dispose();
-    _geminiPrimaryModelController.dispose();
-    _geminiFallbackModelController.dispose();
-    _titleController.dispose();
-    _notesController.dispose();
-    _solutionController.dispose();
+    lansweeperApiUrlController.dispose();
+    lansweeperTicketFormUrlController.dispose();
+    lansweeperTicketViewUrlController.dispose();
+    lansweeperApiKeyController.dispose();
+    lansweeperLoginUrlController.dispose();
+    lansweeperHelpdeskUsernameController.dispose();
+    lansweeperHelpdeskPasswordController.dispose();
+    lansweeperAgentUsernameController.dispose();
+    geminiApiKeyController.dispose();
+    aiPromptTemplateController.dispose();
+    geminiEndpointController.dispose();
+    geminiPrimaryModelController.dispose();
+    geminiFallbackModelController.dispose();
+    titleController.dispose();
+    notesController.dispose();
+    solutionController.dispose();
     super.dispose();
   }
 
@@ -695,16 +540,16 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       next.whenData((calls) {
         if (!mounted) return;
         if (calls.isEmpty) {
-          if (_reportFilter == LansweeperReportFilter.all) return;
-          setState(() => _reportFilter = LansweeperReportFilter.all);
+          if (reportFilter == LansweeperReportFilter.all) return;
+          setState(() => reportFilter = LansweeperReportFilter.all);
           return;
         }
-        if (_reportFilter != LansweeperReportFilter.all &&
+        if (reportFilter != LansweeperReportFilter.all &&
             lansweeperReportCategoryCounts(
                   calls.map((call) => call.lansweeperState),
-                ).forFilter(_reportFilter) ==
+                ).forFilter(reportFilter) ==
                 0) {
-          setState(() => _reportFilter = LansweeperReportFilter.all);
+          setState(() => reportFilter = LansweeperReportFilter.all);
         }
       });
     });
@@ -735,7 +580,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                       minHeight: 40,
                     ),
                     onPressed: () {
-                      unawaited(_openLansweeperConnectionSettingsDialog());
+                      unawaited(settingsFlow.openConnectionSettingsDialog());
                     },
                     icon: AppAssetImage(
                       assetPath: 'assets/lansweeper_settings.png',
@@ -754,12 +599,12 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     LansweeperReportFilterBar(
-                      selected: _reportFilter,
+                      selected: reportFilter,
                       counts: reportCounts,
                       hasAnyCallsInRange: hasAnyCallsInRange,
                       reportRangeTitle: reportRangeTitle,
                       onSelect: (filter) =>
-                          setState(() => _reportFilter = filter),
+                          setState(() => reportFilter = filter),
                     ),
                     const SizedBox(height: 6),
                     Expanded(
@@ -775,7 +620,9 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                           final allItems = LansweeperReportItemMapper.toItems(
                             calls,
                           );
-                          final items = _filterReportItems(allItems);
+                          final items = selectionFlow.filterReportItems(
+                            allItems,
+                          );
                           final grouped =
                               LansweeperReportItemMapper.groupByCaller(items);
                           final groupedRows =
@@ -786,9 +633,10 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                             for (final item in items) item.key: item,
                           };
                           final selected = items
-                              .where((e) => _selectedKeys.contains(e.key))
+                              .where((e) => selectedKeys.contains(e.key))
                               .toList();
-                          final primarySelected = _primarySelectedItem(items);
+                          final primarySelected = selectionFlow
+                              .primarySelectedItem(items);
                           final isPrimaryRegistered =
                               primarySelected != null &&
                               LansweeperReportItemMapper.isRegisteredCall(
@@ -808,7 +656,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                           final canResubmitApi =
                               canImmediateApiSubmit && isPrimaryFailed;
                           if (primarySelected != null && selected.isNotEmpty) {
-                            _prefillForm(primarySelected, selected);
+                            aiFlow.prefillForm(primarySelected, selected);
                           }
                           final totalSelectedSeconds = selected.fold<int>(
                             0,
@@ -816,12 +664,13 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                           );
                           final selectedCallId = primarySelected?.call.id;
                           final geminiKeyReady = geminiApiKey.trim().isNotEmpty;
-                          final aiCooldownActive = _isAiCooldownActive;
-                          final aiCooldownSeconds = _aiCooldownRemainingSeconds;
+                          final aiCooldownActive = aiFlow.isAiCooldownActive;
+                          final aiCooldownSeconds =
+                              aiFlow.aiCooldownRemainingSeconds;
                           final aiSuggestEnabled =
                               selected.isNotEmpty &&
                               geminiKeyReady &&
-                              !_aiSuggestRunning &&
+                              !aiSuggestRunning &&
                               !aiCooldownActive;
                           final aiSuggestTooltip = selected.isEmpty
                               ? 'Επιλέξτε κλήση'
@@ -832,11 +681,11 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                               : null;
                           final promptPreviewEnabled =
                               selected.isNotEmpty &&
-                              !_aiSuggestRunning &&
+                              !aiSuggestRunning &&
                               !aiCooldownActive;
                           final promptPreviewTooltip = selected.isEmpty
                               ? 'Επιλέξτε κλήση'
-                              : _aiSuggestRunning
+                              : aiSuggestRunning
                               ? 'Περιμένετε την ολοκλήρωση της πρότασης'
                               : null;
                           final linksAsync = selectedCallId != null
@@ -896,7 +745,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                     Expanded(
                                       child: LansweeperReportCallList(
                                         grouped: groupedRows,
-                                        selectedKeys: _selectedKeys,
+                                        selectedKeys: selectedKeys,
                                         totalDurationLabel:
                                             LansweeperReportItemMapper
                                                 .totalDurationLabel,
@@ -905,7 +754,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                         isSyncLoading: syncState.isLoading,
                                         ticketLinkEnabled: connectionReady,
                                         onToggleGroup: (groupItems, checked) {
-                                          _toggleGroup(
+                                          selectionFlow.toggleGroup(
                                             groupItems
                                                 .map(
                                                   (row) => itemByKey[row.key]!,
@@ -915,16 +764,17 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                           );
                                         },
                                         onToggleItem: (row, checked) {
-                                          _toggleItem(
+                                          selectionFlow.toggleItem(
                                             itemByKey[row.key]!,
                                             checked,
                                           );
                                         },
                                         onBadgePressed: (row) {
                                           unawaited(
-                                            _toggleRegistrationFromBadge(
-                                              itemByKey[row.key]!,
-                                            ),
+                                            registrationFlow
+                                                .toggleRegistrationFromBadge(
+                                                  itemByKey[row.key]!,
+                                                ),
                                           );
                                         },
                                       ),
@@ -941,30 +791,29 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                         CrossAxisAlignment.stretch,
                                     children: [
                                       LansweeperSyncForm(
-                                        titleController: _titleController,
-                                        notesController: _notesController,
-                                        solutionController: _solutionController,
+                                        titleController: titleController,
+                                        notesController: notesController,
+                                        solutionController: solutionController,
                                         config: ticketConfig,
-                                        customFieldValues: _customFieldValues,
+                                        customFieldValues: customFieldValues,
                                         onCustomFieldChanged: (id, value) =>
                                             setState(
-                                              () => _customFieldValues[id] =
-                                                  value,
+                                              () =>
+                                                  customFieldValues[id] = value,
                                             ),
                                         ticketState:
-                                            _selectedTicketState ??
+                                            selectedTicketState ??
                                             ticketConfig.defaultTicketState,
                                         onTicketStateChanged: (value) =>
                                             setState(
-                                              () =>
-                                                  _selectedTicketState = value,
+                                              () => selectedTicketState = value,
                                             ),
-                                        isSuggesting: _aiSuggestRunning,
-                                        suggestModelLabel: _aiSuggestRunning
-                                            ? _aiCurrentModel
+                                        isSuggesting: aiSuggestRunning,
+                                        suggestModelLabel: aiSuggestRunning
+                                            ? aiCurrentModel
                                             : null,
-                                        suggestElapsedLabel: _aiSuggestRunning
-                                            ? _aiSuggestElapsedSeconds
+                                        suggestElapsedLabel: aiSuggestRunning
+                                            ? aiSuggestElapsedSeconds
                                                   .toStringAsFixed(2)
                                             : null,
                                         cooldownRemainingSeconds:
@@ -972,29 +821,32 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                             ? aiCooldownSeconds
                                             : null,
                                         cooldownModelLabel: aiCooldownActive
-                                            ? _aiCooldownModel
+                                            ? aiCooldownModel
                                             : null,
                                         onCancelAutoResubmit:
                                             aiCooldownActive &&
-                                                _aiAutoResubmitArmed
-                                            ? _cancelAiAutoResubmit
+                                                aiAutoResubmitArmed
+                                            ? aiFlow.cancelAiAutoResubmit
                                             : null,
                                         suggestDisabledTooltip:
                                             aiSuggestTooltip,
                                         onSuggest: aiSuggestEnabled
                                             ? () => unawaited(
-                                                _suggestWithAi(selected),
+                                                aiFlow.suggestWithAi(selected),
                                               )
                                             : null,
                                         previewDisabledTooltip:
                                             promptPreviewTooltip,
                                         onPreviewPrompt: promptPreviewEnabled
                                             ? () => unawaited(
-                                                _showAiPromptPreview(selected),
+                                                aiFlow.showAiPromptPreview(
+                                                  selected,
+                                                ),
                                               )
                                             : null,
                                         onEditPromptTemplate: () => unawaited(
-                                          _openAiPromptTemplateEditorDialog(),
+                                          settingsFlow
+                                              .openAiPromptTemplateEditorDialog(),
                                         ),
                                       ),
                                       const SizedBox(height: 10),
@@ -1015,11 +867,13 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                     onPressed:
                                                         canImmediateApiSubmit
                                                         ? () => unawaited(
-                                                            _submitSelected(
-                                                              primarySelected,
-                                                              selected,
-                                                              resubmit: false,
-                                                            ),
+                                                            registrationFlow
+                                                                .submitSelected(
+                                                                  primarySelected,
+                                                                  selected,
+                                                                  resubmit:
+                                                                      false,
+                                                                ),
                                                           )
                                                         : null,
                                                     icon: _connectionAwareIcon(
@@ -1039,11 +893,13 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                   child: OutlinedButton.icon(
                                                     onPressed: canResubmitApi
                                                         ? () => unawaited(
-                                                            _submitSelected(
-                                                              primarySelected,
-                                                              selected,
-                                                              resubmit: true,
-                                                            ),
+                                                            registrationFlow
+                                                                .submitSelected(
+                                                                  primarySelected,
+                                                                  selected,
+                                                                  resubmit:
+                                                                      true,
+                                                                ),
                                                           )
                                                         : null,
                                                     icon: _connectionAwareIcon(
@@ -1060,9 +916,10 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                 onPressed:
                                                     (primarySelected != null &&
                                                         !syncState.isLoading)
-                                                    ? () => _manualMark(
-                                                        primarySelected,
-                                                      )
+                                                    ? () => registrationFlow
+                                                          .manualMark(
+                                                            primarySelected,
+                                                          )
                                                     : null,
                                                 icon: const Icon(
                                                   Icons.edit_note_rounded,
@@ -1081,11 +938,12 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                 blockedTooltip:
                                                     'Η κλήση είναι ήδη καταχωρημένη',
                                                 onPressed: () =>
-                                                    _setStateForAllSelected(
-                                                      selected,
-                                                      LansweeperSyncState
-                                                          .excluded,
-                                                    ),
+                                                    registrationFlow
+                                                        .setStateForAllSelected(
+                                                          selected,
+                                                          LansweeperSyncState
+                                                              .excluded,
+                                                        ),
                                               ),
                                               _buildLansweeperStateButton(
                                                 selected: selected,
@@ -1094,11 +952,12 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                     LansweeperSyncState.unsent,
                                                 label: 'Ακαταχώρητη',
                                                 onPressed: () =>
-                                                    _setStateForAllSelected(
-                                                      selected,
-                                                      LansweeperSyncState
-                                                          .unsent,
-                                                    ),
+                                                    registrationFlow
+                                                        .setStateForAllSelected(
+                                                          selected,
+                                                          LansweeperSyncState
+                                                              .unsent,
+                                                        ),
                                               ),
                                               _buildLansweeperStateButton(
                                                 selected: selected,
@@ -1107,10 +966,12 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                     LansweeperSyncState.sent,
                                                 label: 'Καταχωρημένη',
                                                 onPressed: () =>
-                                                    _setStateForAllSelected(
-                                                      selected,
-                                                      LansweeperSyncState.sent,
-                                                    ),
+                                                    registrationFlow
+                                                        .setStateForAllSelected(
+                                                          selected,
+                                                          LansweeperSyncState
+                                                              .sent,
+                                                        ),
                                               ),
                                             ],
                                           ),
@@ -1160,7 +1021,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                     if (calls.isEmpty) return const SizedBox.shrink();
                     final items = LansweeperReportItemMapper.toItems(calls);
                     final selected = items
-                        .where((e) => _selectedKeys.contains(e.key))
+                        .where((e) => selectedKeys.contains(e.key))
                         .toList();
                     final totalSelectedSeconds = selected.fold<int>(
                       0,
@@ -1168,9 +1029,9 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                     );
                     final hasSelection = selected.isNotEmpty;
                     final hasFormText =
-                        _titleController.text.trim().isNotEmpty ||
-                        _notesController.text.trim().isNotEmpty ||
-                        _solutionController.text.trim().isNotEmpty;
+                        titleController.text.trim().isNotEmpty ||
+                        notesController.text.trim().isNotEmpty ||
+                        solutionController.text.trim().isNotEmpty;
                     return _wrapLansweeperConnectionTooltip(
                       status: connectionStatus,
                       child: FilledButton.icon(
@@ -1178,7 +1039,7 @@ class _LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                             (hasSelection || hasFormText) &&
                                 canOpenTicketForm &&
                                 connectionReady
-                            ? () => _copyAndOpen(
+                            ? () => browserFlow.copyAndOpen(
                                 ticketFormUrl: lansweeperTicketFormUrl,
                                 durationSeconds: hasSelection
                                     ? totalSelectedSeconds

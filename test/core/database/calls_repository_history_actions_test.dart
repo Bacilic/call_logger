@@ -1,3 +1,5 @@
+import 'package:call_logger/core/database/calls_deletion_repository.dart';
+import 'package:call_logger/core/database/calls_lansweeper_repository.dart';
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,8 @@ import '../../test_setup.dart';
 void main() {
   group('CallsRepository history actions', () {
     late CallsRepository repo;
+    late CallsDeletionRepository deletion;
+    late CallsLansweeperRepository lansweeper;
 
     Future<int> insertCall({
       String? issue,
@@ -62,6 +66,8 @@ void main() {
       await bindCallLoggerIsolatedTestDatabase();
       final db = await DatabaseHelper.instance.database;
       repo = CallsRepository(db);
+      deletion = CallsDeletionRepository(db);
+      lansweeper = CallsLansweeperRepository(db);
     });
 
     setUp(() async {
@@ -69,6 +75,8 @@ void main() {
       final db = await DatabaseHelper.instance.database;
       await db.delete('audit_log');
       repo = CallsRepository(db);
+      deletion = CallsDeletionRepository(db);
+      lansweeper = CallsLansweeperRepository(db);
     });
 
     tearDownAll(() async {
@@ -82,10 +90,10 @@ void main() {
       await insertTask(callId: call1, isDeleted: true, title: 'deleted');
       await insertTask(callId: call2, title: 'open-2');
 
-      expect(await repo.getTasksCountLinkedToCall(call1), 1);
-      expect(await repo.getTasksCountLinkedToCall(call2), 1);
-      expect(await repo.getTasksCountLinkedToCalls([call1, call2]), 2);
-      expect(await repo.getTasksCountLinkedToCalls(const []), 0);
+      expect(await deletion.getTasksCountLinkedToCall(call1), 1);
+      expect(await deletion.getTasksCountLinkedToCall(call2), 1);
+      expect(await deletion.getTasksCountLinkedToCalls([call1, call2]), 2);
+      expect(await deletion.getTasksCountLinkedToCalls(const []), 0);
     });
 
     test(
@@ -95,7 +103,7 @@ void main() {
         await insertTask(callId: callId, title: 'task-a');
         await insertTask(callId: callId, title: 'task-b');
 
-        await repo.deleteCallWithTasksAction(callId, 'cascade');
+        await deletion.deleteCallWithTasksAction(callId, 'cascade');
 
         final db = await DatabaseHelper.instance.database;
         final callRows = await db.query(
@@ -119,7 +127,7 @@ void main() {
       final callId = await insertCall(issue: 'nullify');
       await insertTask(callId: callId, title: 'task-nullify');
 
-      await repo.deleteCallWithTasksAction(callId, 'nullify');
+      await deletion.deleteCallWithTasksAction(callId, 'nullify');
 
       final db = await DatabaseHelper.instance.database;
       final callRows = await db.query(
@@ -140,13 +148,13 @@ void main() {
         lansweeperState: 'sent',
         ticketId: '123',
       );
-      await repo.addExternalLink(
+      await lansweeper.addExternalLink(
         callId: callId,
         externalId: '123',
         provider: 'lansweeper',
       );
 
-      await repo.hardDeleteCall(callId);
+      await deletion.hardDeleteCall(callId);
 
       final db = await DatabaseHelper.instance.database;
       final callRows = await db.query(
@@ -175,7 +183,7 @@ void main() {
       await insertTask(callId: call1, title: 'task-1');
       await insertTask(callId: call2, title: 'task-2');
 
-      await repo.bulkSoftDeleteCalls([call1, call2], taskAction: 'cascade');
+      await deletion.bulkSoftDeleteCalls([call1, call2], taskAction: 'cascade');
 
       final db = await DatabaseHelper.instance.database;
       final callRows = await db.query(

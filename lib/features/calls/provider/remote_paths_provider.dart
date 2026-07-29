@@ -129,8 +129,8 @@ final callsRemoteUiConfigProvider =
     >((ref) async {
       final s = SettingsService();
       return (
-        primaryToolId: await s.getCallsPrimaryToolId(),
-        showSecondaryInOverflow: await s.getCallsShowSecondaryRemoteActions(),
-        showEmptyRemoteLaunchers: await s.getCallsShowEmptyRemoteLaunchers(),
+        primaryToolId: await s.remoteLansweeper.getCallsPrimaryToolId(),
+        showSecondaryInOverflow: await s.remoteLansweeper.getCallsShowSecondaryRemoteActions(),
+        showEmptyRemoteLaunchers: await s.remoteLansweeper.getCallsShowEmptyRemoteLaunchers(),
       );
     });

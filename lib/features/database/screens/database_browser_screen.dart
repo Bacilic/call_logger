@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/database_table_inspection.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/database/database_init_result.dart';
 import '../../../core/services/settings_service.dart';
@@ -197,14 +198,14 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
   }
 
   Future<void> _loadStatsCardExpandedPref() async {
-    final v = await SettingsService().getDatabaseBrowserStatsCardExpanded();
+    final v = await SettingsService().windowUi.getDatabaseBrowserStatsCardExpanded();
     if (mounted) setState(() => _statsCardExpanded = v);
   }
 
   Future<void> _toggleStatsCardExpanded() async {
     final next = !_statsCardExpanded;
     setState(() => _statsCardExpanded = next);
-    await SettingsService().setDatabaseBrowserStatsCardExpanded(next);
+    await SettingsService().windowUi.setDatabaseBrowserStatsCardExpanded(next);
   }
 
   Future<void> _loadTables() async {
@@ -218,7 +219,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     });
     try {
       final results = await Future.wait<dynamic>([
-        DatabaseHelper.instance.getTableNames(),
+        DatabaseHelper.instance.tableInspection.getTableNames(),
         ref.read(databaseBrowserZoomByTableProvider.notifier).load(),
       ]);
       final names = results[0] as List<String>;
@@ -249,8 +250,8 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     });
     try {
       final results = await Future.wait([
-        DatabaseHelper.instance.getTablePreview(tableName),
-        DatabaseHelper.instance.getTableSchema(tableName),
+        DatabaseHelper.instance.tableInspection.getTablePreview(tableName),
+        DatabaseHelper.instance.tableInspection.getTableSchema(tableName),
       ]);
       if (!mounted) return;
       final preview = results[0] as TablePreviewResult;

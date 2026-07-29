@@ -1,47 +1,50 @@
-part of 'lansweeper_report_dialog.dart';
+import 'lansweeper/lansweeper_report_filter.dart';
+import 'lansweeper/lansweeper_report_item_mapper.dart';
+import 'lansweeper_report_dialog.dart';
 
-mixin LansweeperReportItemsMixin on LansweeperReportDialogStateHost {
-  @override
-  void _toggleGroup(List<ReportCallItem> items, bool? checked) {
-    setState(() {
-      if (checked == true) {
-        for (final item in items) {
-          _selectedKeys.add(item.key);
-        }
-      } else {
-        for (final item in items) {
-          _selectedKeys.remove(item.key);
-        }
+/// Επιλογή και φιλτράρισμα στοιχείων της αναφοράς (κλήσεις ανά καλούντα).
+///
+/// Συνεργάτης του [LansweeperReportDialogState] (Σύνθεση).
+class LansweeperReportSelection {
+  LansweeperReportSelection(this.host);
+
+  final LansweeperReportDialogState host;
+
+  void toggleGroup(List<ReportCallItem> items, bool? checked) {
+    if (checked == true) {
+      for (final item in items) {
+        host.selectedKeys.add(item.key);
       }
-    });
+    } else {
+      for (final item in items) {
+        host.selectedKeys.remove(item.key);
+      }
+    }
+    host.notifyReportChanged();
   }
 
-  @override
-  void _toggleItem(ReportCallItem item, bool? checked) {
-    setState(() {
-      if (checked == true) {
-        _selectedKeys.add(item.key);
-      } else {
-        _selectedKeys.remove(item.key);
-      }
-    });
+  void toggleItem(ReportCallItem item, bool? checked) {
+    if (checked == true) {
+      host.selectedKeys.add(item.key);
+    } else {
+      host.selectedKeys.remove(item.key);
+    }
+    host.notifyReportChanged();
   }
 
-  @override
-  ReportCallItem? _primarySelectedItem(List<ReportCallItem> allItems) {
+  ReportCallItem? primarySelectedItem(List<ReportCallItem> allItems) {
     for (final item in allItems) {
-      if (_selectedKeys.contains(item.key)) return item;
+      if (host.selectedKeys.contains(item.key)) return item;
     }
 
     return null;
   }
 
   bool _matchesReportFilter(String state) {
-    return lansweeperReportStateMatches(_reportFilter, state);
+    return lansweeperReportStateMatches(host.reportFilter, state);
   }
 
-  @override
-  List<ReportCallItem> _filterReportItems(List<ReportCallItem> items) {
+  List<ReportCallItem> filterReportItems(List<ReportCallItem> items) {
     return items
         .where((item) => _matchesReportFilter(item.call.lansweeperState ?? ''))
         .toList();

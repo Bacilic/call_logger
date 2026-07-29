@@ -1,6 +1,13 @@
-﻿part of 'calls_repository.dart';
+import 'dart:convert';
 
-mixin CallsRepositoryLansweeperMixin on CallsRepositoryCore {
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+/// Κατάσταση Lansweeper κλήσεων + ιστορικό εξωτερικών links (tickets).
+class CallsLansweeperRepository {
+  const CallsLansweeperRepository(this.db);
+
+  final Database db;
+
   /// Μέγιστο αριθμητικό Lansweeper ticket id από κλήσεις και ιστορικό links.
   Future<int?> maxNumericLansweeperTicketId() async {
     final rows = await db.rawQuery('''

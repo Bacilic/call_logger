@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:path/path.dart' as p;
 
-import '../../../core/database/database_helper.dart' show TablePreviewResult;
+import '../../../core/database/database_table_inspection.dart'
+    show TablePreviewResult;
 import '../../../core/database/old_database/lamp_table_browser_api.dart';
 import '../../../core/database/old_database/lamp_table_greek_names.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';

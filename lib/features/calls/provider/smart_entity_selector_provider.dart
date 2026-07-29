@@ -1,5 +1,3 @@
-import 'dart:developer' as developer;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Μόνο για τον τύπο [DatabaseExecutor] στις υπογραφές — καμία εκτέλεση SQL εδώ.
@@ -7,45 +5,67 @@ import 'package:sqflite_common/sqflite.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/directory_support.dart';
-import '../../../core/database/department_repository.dart';
-import '../../../core/database/equipment_repository.dart';
-import '../../../core/database/phone_repository.dart';
-import '../../../core/database/user_repository.dart';
-import '../../../core/directory/phone_department_policy.dart';
 import '../../../core/services/lookup_service.dart';
-import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
-import '../../../core/utils/user_facing_error_messages.dart';
 import 'conflict_engine.dart';
 import 'lookup_provider.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
 import '../../directory/models/department_model.dart';
-import '../../directory/providers/directory_cache_refresh.dart';
-import '../../directory/screens/widgets/user_phone_department_conflict_dialog.dart';
 import '../../tasks/models/task.dart';
-import '../../tasks/providers/task_service_provider.dart';
-import 'call_mutation_refresh.dart';
+import 'smart_entity_selector_association.dart';
+import 'smart_entity_selector_lookups.dart';
 import '../models/call_model.dart';
 import 'smart_entity_selector_state.dart';
 
 export 'smart_entity_selector_state.dart';
 
-part 'smart_entity_selector_lookups.dart';
-part 'smart_entity_selector_conflicts.dart';
-part 'smart_entity_selector_association.dart';
-
 /// Notifier για τον έξυπνο επιλογέα: update/clear, recentPhones, clearAfterSubmit.
 /// Focus και controllers ανήκουν στο widget· το notifier δουλεύει μόνο με state.
-class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
-    with
-        SmartEntitySelectorLookupsMixin,
-        SmartEntitySelectorConflictsMixin,
-        SmartEntitySelectorAssociationMixin {
+///
+/// Σύνθεση: τα lookups/autofill ζουν στο [SmartEntitySelectorLookups] και οι
+/// συσχετίσεις/γρήγορες εκκρεμότητες στο [SmartEntitySelectorAssociation] —
+/// ανεξάρτητες κλάσεις που δουλεύουν πάνω στην κατάσταση μέσω των γεφυρών.
+class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
+  /// Συνεργάτης lookups/autofill (τηλέφωνο, καλών, εξοπλισμός, τμήμα).
+  late final SmartEntitySelectorLookups lookups = SmartEntitySelectorLookups(
+    this,
+  );
+
+  /// Συνεργάτης συσχετίσεων / quick-add / γρήγορων εκκρεμοτήτων.
+  late final SmartEntitySelectorAssociation association =
+      SmartEntitySelectorAssociation(this);
+
+  // ─── Γέφυρες για τους συνεργάτες (state/ref του Notifier είναι protected) ───
+
+  /// Πρόσβαση κατάστασης για τους συνεργάτες του επιλογέα — όχι για widgets.
+  SmartEntitySelectorState get selectorState => state;
+  set selectorState(SmartEntitySelectorState value) => state = value;
+
+  /// Ref για τους συνεργάτες του επιλογέα — όχι για widgets.
+  Ref get selectorRef => ref;
+
   /// Φρουρός επανεισόδου για τα entity lookups. **Ποτέ δεν τίθεται χειροκίνητα**
   /// — μόνο μέσα από την [runExclusiveLookup], που κρατά η ίδια το ζευγάρωμα.
   bool _isFillingFromLookup = false;
+
+  bool get isFillingFromLookup => _isFillingFromLookup;
+
+  int _phoneLookupGeneration = 0;
+
+  int get phoneLookupGeneration => _phoneLookupGeneration;
+  int bumpPhoneLookupGeneration() => ++_phoneLookupGeneration;
+
+  static const int criticalTaskPriority = 2;
+  static const int _maxRecentPhones = 20;
+
+  /// Έως ένα quick task ανά κύκλο φόρμας· set μόνο μετά επιτυχή insert.
+  int? associationQuickTaskId;
+
+  /// True μετά πράσινο (+) που δημιούργησε καλόντα χωρίς τηλέφωνο — το πρώτο
+  /// πληκτρολόγημα τηλεφώνου συμπληρώνει, όχι νέο lookup.
+  bool callerAwaitingPhoneAssociation = false;
 
   /// Εκτελεί ένα entity lookup ως **αποκλειστική** ενέργεια και εγγυάται τον
   /// επανυπολογισμό των δεικτών στο τέλος — ακόμη και σε σφάλμα.
@@ -81,19 +101,6 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
     }
     return true;
   }
-
-  int _phoneLookupGeneration = 0;
-  static const int _criticalTaskPriority = 2;
-  static const int _maxRecentPhones = 20;
-
-  /// Ένα συμπληρωμένο πεδίο εξοπλισμού (isFilled) προστατεύεται και δεν
-
-  /// Έως ένα quick task ανά κύκλο φόρμας· set μόνο μετά επιτυχή insert.
-  int? _associationQuickTaskId;
-
-  /// True μετά πράσινο (+) που δημιούργησε καλόντα χωρίς τηλέφωνο — το πρώτο
-  /// πληκτρολόγημα τηλεφώνου συμπληρώνει, όχι νέο lookup.
-  bool _callerAwaitingPhoneAssociation = false;
 
   /// Παράγωγες εγγραφές audit πριν το id κλήσης/εκκρεμότητας (καλωδίωση Φάσης 3).
   final PendingAuditOriginRows _pendingAuditOriginRows =
@@ -150,7 +157,108 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
 
   void clearPendingAuditOrigins() => _pendingAuditOriginRows.clear();
 
-  bool _computeHasAnyContent({
+  // ─── Δείκτες σύγκρουσης: μετάφραση state → ConflictEngine → state ───
+  // Εδώ **δεν** ζει κανένας κανόνας σύγκρουσης — οι κανόνες ζουν στη μηχανή,
+  // ώστε να είναι τεστάριστοι χωρίς provider.
+
+  /// Τα ψηφία του πεδίου τηλεφώνου — κανονικοποιημένη μορφή για κάθε σύγκριση.
+  String _phoneDigitsOfState() =>
+      state.selectedPhone?.replaceAll(RegExp(r'[^0-9]'), '').trim() ?? '';
+
+  ConflictSnapshot _snapshotOfState() => ConflictSnapshot(
+    phoneDigits: _phoneDigitsOfState(),
+    caller: state.selectedCaller,
+    callerText: state.callerDisplayText,
+    departmentId: state.selectedDepartmentId,
+    departmentText: state.departmentText,
+    equipment: state.selectedEquipment,
+    equipmentText: state.equipmentText,
+  );
+
+  /// Νέα σειρά επικύρωσης: κρατά όσα πεδία παραμένουν **συμπληρωμένα**
+  /// με την αρχική τους σειρά και προσθέτει στο τέλος το [committed] — το πεδίο
+  /// που μόλις επικύρωσε ο χρήστης.
+  ///
+  /// Δεν απαιτείται το πεδίο να υπάρχει στη βάση. Πεδία που γέμισαν με autofill
+  /// δεν φτάνουν ποτέ εδώ ως [committed], άρα δεν γίνονται ποτέ άγκυρα.
+  List<SelectorField> _nextCommitOrder(
+    SelectorField? committed,
+    Set<SelectorField> filled,
+  ) {
+    final next = state.identificationOrder
+        .where(filled.contains)
+        .toList(growable: true);
+    if (committed != null &&
+        filled.contains(committed) &&
+        !next.contains(committed)) {
+      next.add(committed);
+    }
+    return next;
+  }
+
+  /// Επανυπολογισμός **όλων** των δεικτών εξ αρχής.
+  ///
+  /// Το [committed] δεν συμμετέχει στον υπολογισμό των σχέσεων — χρησιμεύει
+  /// **μόνο** ως υποψήφια άγκυρα (§Α.6). Ίδιο state ⇒ ίδιοι δείκτες, όποιο κι
+  /// αν είναι το [committed] (§Α.3, κανόνας ανεξαρτησίας από την εστίαση).
+  void _recomputeConflicts(SelectorField? committed, LookupService? lookup) {
+    if (lookup == null) {
+      if (state.conflicts.isNotEmpty) {
+        state = state.copyWith(clearConflicts: true);
+      }
+      return;
+    }
+    final result = ConflictEngine(
+      snapshot: _snapshotOfState(),
+      lookup: lookup,
+    ).run();
+    final order = _nextCommitOrder(committed, result.filledFields);
+    state = state.copyWith(
+      conflicts: result.conflicts,
+      clearConflicts: result.conflicts.isEmpty,
+      identificationOrder: order,
+      clearIdentificationOrder: order.isEmpty,
+    );
+  }
+
+  /// Επανυπολογισμός χωρίς νέα υποψήφια άγκυρα — για φόρτωση έτοιμης φόρμας
+  /// (Ιστορικό/Εκκρεμότητες, §Α.6) όπου κανένα πεδίο δεν επικυρώθηκε.
+  void _refreshConflictsWithoutAnchor() {
+    _recomputeConflicts(null, ref.read(lookupServiceProvider).value?.service);
+  }
+
+  // ─── Αντιπρόσωποι προς τους συνεργάτες (σταθερό API για τα widgets) ───
+
+  void performPhoneLookup(String phone) => lookups.performPhoneLookup(phone);
+
+  /// Lookup εξοπλισμού για userId: 0 → no match hint, 1 → setEquipment, >1 → dropdown candidates.
+  void performEquipmentLookup(int userId) =>
+      lookups.performEquipmentLookup(userId);
+
+  void performCallerLookup(String nameOrQuery, {String? phoneFieldDigits}) =>
+      lookups.performCallerLookup(
+        nameOrQuery,
+        phoneFieldDigits: phoneFieldDigits,
+      );
+
+  void performEquipmentLookupByCode(String code) =>
+      lookups.performEquipmentLookupByCode(code);
+
+  Future<OrphanQuickAddResult?> quickAddOrphanToDepartment({
+    bool forceSharedOnConflict = false,
+  }) => association.quickAddOrphanToDepartment(
+    forceSharedOnConflict: forceSharedOnConflict,
+  );
+
+  Future<String?> associateCurrentIfNeeded({
+    bool updatePrimaryDepartment = false,
+    BuildContext? context,
+  }) => association.associateCurrentIfNeeded(
+    updatePrimaryDepartment: updatePrimaryDepartment,
+    context: context,
+  );
+
+  bool computeHasAnyContent({
     String? phoneText,
     String? callerText,
     String? equipmentText,
@@ -205,7 +313,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       state.departmentText,
     );
     state = state.copyWith(
-      hasAnyContent: _computeHasAnyContent(
+      hasAnyContent: computeHasAnyContent(
         phoneText: phoneText,
         callerText: callerText,
         equipmentText: equipmentText,
@@ -355,7 +463,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
     final phoneFieldWasEmpty =
         state.selectedPhone == null || state.selectedPhone!.trim().isEmpty;
     if (committedCallerId != null &&
-        _callerAwaitingPhoneAssociation &&
+        callerAwaitingPhoneAssociation &&
         phoneFieldWasEmpty &&
         value != null &&
         value.trim().isNotEmpty) {
@@ -366,10 +474,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
         clearPhoneCandidates: true,
         isPhoneAmbiguous: false,
       );
-      _callerAwaitingPhoneAssociation = false;
+      callerAwaitingPhoneAssociation = false;
       return;
     }
-    final preserveEquipment = _hasManualEquipmentSelection;
+    final preserveEquipment = lookups.hasManualEquipmentSelection;
     state = state.copyWith(
       selectedPhone: value,
       clearSelectedPhone: value == null,
@@ -393,10 +501,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       // υποψήφιους του τμήματος — και ο καλών, του οποίου η λίστα μόλις
       // καθαρίστηκε παραπάνω.
       final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
-      _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
-      _restoreDepartmentCallerCandidatesIfNeeded(lookupForRestore);
+      lookups.restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+      lookups.restoreDepartmentCallerCandidatesIfNeeded(lookupForRestore);
       if (!preserveEquipment) {
-        _restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);
+        lookups.restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);
       }
       _refreshConflictsWithoutAnchor();
     }
@@ -455,14 +563,14 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
   }
 
   void clearPhone() {
-    _resetAssociationQuickTaskCycle();
+    association.resetQuickTaskCycle();
     state = state.copyWithClearSelections();
   }
 
   /// Μηδενίζει selectedPhone, selectedCaller, selectedEquipment, phoneError, candidates.
   /// Ο καθαρισμός των πεδίων κειμένου γίνεται από το UI.
   void clearAll() {
-    _resetAssociationQuickTaskCycle();
+    association.resetQuickTaskCycle();
     state = state.copyWithClearSelections();
   }
 
@@ -488,7 +596,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
     final shouldAutofillDepartment = !departmentAlreadyFilled && value != null;
 
     if (shouldAutofillDepartment) {
-      final deptText = _departmentTextForUser(value);
+      final deptText = lookups.departmentTextForUser(value);
       state = state.copyWith(
         selectedCaller: value,
         clearPhoneCandidates: true,
@@ -516,7 +624,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       if (pool.isNotEmpty &&
           sp.isNotEmpty &&
           sp == pool &&
-          _splitPhones(sp).length > 1) {
+          PhoneListParser.splitPhones(sp).length > 1) {
         state = state.copyWith(clearSelectedPhone: true, clearPhoneError: true);
       }
     }
@@ -549,7 +657,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
     state = state.copyWith(callerDisplayText: text);
     if (text.trim().isEmpty) {
       // Άδειασμα με backspace: ίδια συμπεριφορά με το κουμπί «×».
-      _restoreDepartmentCallerCandidatesIfNeeded(
+      lookups.restoreDepartmentCallerCandidatesIfNeeded(
         ref.read(lookupServiceProvider).value?.service,
       );
       _refreshConflictsWithoutAnchor();
@@ -569,8 +677,8 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
     // Επαναφέρεται και η λίστα τηλεφώνων που καθαρίστηκε παραπάνω (ο βοηθός
     // δεν αγγίζει συμπληρωμένο τηλέφωνο).
     final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
-    _restoreDepartmentCallerCandidatesIfNeeded(lookupForRestore);
-    _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+    lookups.restoreDepartmentCallerCandidatesIfNeeded(lookupForRestore);
+    lookups.restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
     _refreshConflictsWithoutAnchor();
   }
 
@@ -615,7 +723,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       isEquipmentAmbiguous: clearDeptId && !hasEquipmentInput
           ? false
           : state.isEquipmentAmbiguous,
-      hasAnyContent: _computeHasAnyContent(departmentText: text),
+      hasAnyContent: computeHasAnyContent(departmentText: text),
     );
     // Η πληκτρολόγηση δεν αγγίζει δείκτες· το άδειασμα ναι.
     if (trimmed.isEmpty) _refreshConflictsWithoutAnchor();
@@ -669,13 +777,13 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
     // Πεδίο που ο χρήστης έχει ήδη γεμίσει μένει ανέγγιχτο (η αντίστοιχη
     // μεταβλητή είναι `null`).
     if (callerCandidates != null) {
-      _applyCallerCandidatesFromLookup(callerCandidates);
+      lookups.applyCallerCandidatesFromLookup(callerCandidates);
     }
     if (equipmentCandidates != null) {
-      _applyEquipmentCandidatesFromLookup(equipmentCandidates);
+      lookups.applyEquipmentCandidatesFromLookup(equipmentCandidates);
     }
     if (phoneCandidates != null) {
-      _applyPhoneCandidatesFromLookup(phoneCandidates);
+      lookups.applyPhoneCandidatesFromLookup(phoneCandidates);
     }
     _recomputeConflicts(SelectorField.department, lookup);
   }
@@ -703,12 +811,12 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
       isEquipmentAmbiguous: false,
       equipmentNoMatch: false,
       equipmentText: '',
-      hasAnyContent: _computeHasAnyContent(equipmentText: ''),
+      hasAnyContent: computeHasAnyContent(equipmentText: ''),
     );
     final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
-    _restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);
+    lookups.restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);
     if (state.selectedPhone?.trim().isEmpty ?? true) {
-      _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+      lookups.restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
     }
     _refreshConflictsWithoutAnchor();
   }
@@ -731,7 +839,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState>
   }
 
   void clearAfterSubmit() {
-    _resetAssociationQuickTaskCycle();
+    association.resetQuickTaskCycle();
     state = state.copyWithClearSelections();
   }
 

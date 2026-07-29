@@ -239,7 +239,7 @@ Future<void> _bootstrapAndRunApp() async {
     await CrashLogService.initialize(
       databasePath: await settings.getDatabasePath(),
       appVersion: appVersion,
-      retentionCount: await settings.getCrashLogRetentionCount(),
+      retentionCount: await settings.catalogs.getCrashLogRetentionCount(),
     );
   } catch (e, st) {
     recordStartupNotice('Ημερολόγιο καταρρεύσεων', e, st);

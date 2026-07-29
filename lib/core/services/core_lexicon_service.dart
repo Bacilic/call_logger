@@ -38,7 +38,7 @@ class CoreLexiconService {
 
   /// Σιωπηλή φόρτωση από αποθηκευμένη διαδρομή (εκκίνηση / μετά rollback).
   Future<bool> bootstrapFromSavedPath() async {
-    final saved = await SettingsService().getDictionarySourcePath();
+    final saved = await SettingsService().catalogs.getDictionarySourcePath();
     if (saved == null || saved.trim().isEmpty) {
       _clearMemory();
       return false;
@@ -62,7 +62,7 @@ class CoreLexiconService {
       return false;
     }
     if (persistPath) {
-      await SettingsService().setDictionarySourcePath(path);
+      await SettingsService().catalogs.setDictionarySourcePath(path);
     }
     dictionaryService = dict;
     state = CoreLexiconState(

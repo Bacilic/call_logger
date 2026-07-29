@@ -1,65 +1,86 @@
-part of 'lansweeper_report_dialog.dart';
+import 'dart:async';
 
-mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
-  void _prefillForm(ReportCallItem primary, List<ReportCallItem> selected) {
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import '../../../core/services/ai_ticket_suggestion_service.dart';
+import '../providers/ai_ticket_suggestion_provider.dart';
+import '../providers/gemini_settings_provider.dart';
+import 'lansweeper/lansweeper_ai_presenter.dart';
+import 'lansweeper/lansweeper_ai_prompt_preview_dialog.dart';
+import 'lansweeper/lansweeper_report_item_mapper.dart';
+import 'lansweeper_report_dialog.dart';
+
+/// Προσυμπλήρωση φόρμας και προτάσεις AI (Gemini) με cooldown/αυτόματη επανυποβολή.
+///
+/// Συνεργάτης του [LansweeperReportDialogState] (Σύνθεση).
+class LansweeperReportAi {
+  LansweeperReportAi(this.host);
+
+  final LansweeperReportDialogState host;
+
+  void prefillForm(ReportCallItem primary, List<ReportCallItem> selected) {
     final signature = LansweeperReportItemMapper.selectedKeysSignature(
       selected,
     );
-    if (_lastPrefilledKey == signature) return;
-    _lastPrefilledKey = signature;
+    if (host.lastPrefilledKey == signature) return;
+    host.lastPrefilledKey = signature;
     final category = (primary.call.category ?? '').trim();
     final id = primary.call.id;
-    _titleController.text = LansweeperAiPresenter.prefillTitle(
+    host.titleController.text = LansweeperAiPresenter.prefillTitle(
       category: category,
       id: id,
     );
-    _notesController.text = LansweeperReportItemMapper.combinedSelectedNotes(
-      selected,
-    );
-    _solutionController.text = '';
+    host.notesController.text =
+        LansweeperReportItemMapper.combinedSelectedNotes(selected);
+    host.solutionController.text = '';
   }
 
   String _buildAiPromptForSelected(List<ReportCallItem> selected) {
-    final service = ref.read(aiTicketSuggestionServiceProvider);
+    final service = host.ref.read(aiTicketSuggestionServiceProvider);
     return service.buildPrompt(_aiPromptInputs(selected));
   }
 
   AiTicketSuggestionRequest _aiPromptInputs(List<ReportCallItem> selected) {
     return LansweeperAiPresenter.buildRequest(
       selected: selected,
-      titleText: _titleController.text,
-      notesText: _notesController.text,
-      solutionText: _solutionController.text,
+      titleText: host.titleController.text,
+      notesText: host.notesController.text,
+      solutionText: host.solutionController.text,
     );
   }
 
-  Future<void> _showAiPromptPreview(List<ReportCallItem> selected) async {
-    if (selected.isEmpty || _aiSuggestRunning || _isAiCooldownActive) return;
+  Future<void> showAiPromptPreview(List<ReportCallItem> selected) async {
+    if (selected.isEmpty || host.aiSuggestRunning || isAiCooldownActive) {
+      return;
+    }
     final prompt = _buildAiPromptForSelected(selected);
-    await showLansweeperAiPromptPreviewDialog(context, promptText: prompt);
+    await showLansweeperAiPromptPreviewDialog(host.context, promptText: prompt);
   }
 
-  bool get _isAiCooldownActive =>
-      LansweeperAiPresenter.isCooldownActive(_aiCooldownUntil, DateTime.now());
+  bool get isAiCooldownActive => LansweeperAiPresenter.isCooldownActive(
+    host.aiCooldownUntil,
+    DateTime.now(),
+  );
 
-  int? get _aiCooldownRemainingSeconds =>
+  int? get aiCooldownRemainingSeconds =>
       LansweeperAiPresenter.cooldownRemainingSeconds(
-        _aiCooldownUntil,
+        host.aiCooldownUntil,
         DateTime.now(),
       );
 
-  void _cancelAiAutoResubmit() {
-    _aiAutoResubmitArmed = false;
+  void cancelAiAutoResubmit() {
+    host.aiAutoResubmitArmed = false;
     _stopAiCooldownTicker(clearState: true);
-    if (mounted) setState(() {});
+    host.notifyReportChanged();
   }
 
   void _stopAiCooldownTicker({bool clearState = false}) {
-    _aiCooldownTicker?.cancel();
-    _aiCooldownTicker = null;
+    host.aiCooldownTicker?.cancel();
+    host.aiCooldownTicker = null;
     if (clearState) {
-      _aiCooldownUntil = null;
-      _aiCooldownModel = null;
+      host.aiCooldownUntil = null;
+      host.aiCooldownModel = null;
     }
   }
 
@@ -69,64 +90,67 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
     required List<ReportCallItem> selected,
   }) {
     _stopAiCooldownTicker();
-    _aiCooldownUntil = until;
-    _aiCooldownModel = model;
-    _aiLastSuggestSelection = selected;
-    _aiAutoResubmitArmed = ref.read(geminiAutoResubmitEnabledProvider);
+    host.aiCooldownUntil = until;
+    host.aiCooldownModel = model;
+    host.aiLastSuggestSelection = selected;
+    host.aiAutoResubmitArmed = host.ref.read(geminiAutoResubmitEnabledProvider);
 
     void tick() {
-      if (!mounted) return;
-      if (!_isAiCooldownActive) {
+      if (!host.mounted) return;
+      if (!isAiCooldownActive) {
         _stopAiCooldownTicker(clearState: true);
         final shouldResubmit =
-            _aiAutoResubmitArmed && _aiLastSuggestSelection != null;
-        _aiAutoResubmitArmed = false;
-        setState(() {});
-        if (shouldResubmit && mounted) {
-          unawaited(_suggestWithAi(_aiLastSuggestSelection!));
+            host.aiAutoResubmitArmed && host.aiLastSuggestSelection != null;
+        host.aiAutoResubmitArmed = false;
+        host.notifyReportChanged();
+        if (shouldResubmit && host.mounted) {
+          unawaited(suggestWithAi(host.aiLastSuggestSelection!));
         }
         return;
       }
-      setState(() {});
+      host.notifyReportChanged();
     }
 
     tick();
-    _aiCooldownTicker = Timer.periodic(
+    host.aiCooldownTicker = Timer.periodic(
       const Duration(seconds: 1),
       (_) => tick(),
     );
   }
 
-  Future<void> _suggestWithAi(List<ReportCallItem> selected) async {
-    if (_aiSuggestRunning || selected.isEmpty || _isAiCooldownActive) return;
+  Future<void> suggestWithAi(List<ReportCallItem> selected) async {
+    if (host.aiSuggestRunning || selected.isEmpty || isAiCooldownActive) {
+      return;
+    }
 
-    final service = ref.read(aiTicketSuggestionServiceProvider);
+    final service = host.ref.read(aiTicketSuggestionServiceProvider);
     final configError = service.validateConfiguration();
     if (configError != null) {
-      if (!mounted) return;
-      showDialogSnackBar(SnackBar(content: Text(configError)));
+      if (!host.mounted) return;
+      host.showDialogSnackBar(SnackBar(content: Text(configError)));
       return;
     }
 
     final request = _aiPromptInputs(selected);
-    _aiLastSuggestSelection = selected;
-    _aiAutoResubmitArmed = false;
+    host.aiLastSuggestSelection = selected;
+    host.aiAutoResubmitArmed = false;
 
-    setState(() => _aiSuggestRunning = true);
+    host.aiSuggestRunning = true;
+    host.notifyReportChanged();
     final client = http.Client();
-    _aiSuggestClient = client;
+    host.aiSuggestClient = client;
     try {
       final result = await service.suggest(
         request,
         client: client,
         onModelAttempt: (model) {
-          if (!mounted) return;
+          if (!host.mounted) return;
           _stopAiSuggestTicker();
           _startAiSuggestTicker(model: model);
         },
         onFallback: (fromModel, toModel, reason) {
-          if (!mounted) return;
-          showDialogSnackBar(
+          if (!host.mounted) return;
+          host.showDialogSnackBar(
             SnackBar(
               content: Text(
                 LansweeperAiPresenter.fallbackMessage(
@@ -141,19 +165,18 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
         },
       );
 
-      if (!mounted) return;
-      _aiAutoResubmitArmed = false;
-      setState(() {
-        _titleController.text = result.title;
-        _notesController.text = result.description;
-        _solutionController.text = result.solution;
-      });
+      if (!host.mounted) return;
+      host.aiAutoResubmitArmed = false;
+      host.titleController.text = result.title;
+      host.notesController.text = result.description;
+      host.solutionController.text = result.solution;
+      host.notifyReportChanged();
     } on AiSuggestionException catch (e) {
-      if (!mounted) return;
-      _aiAutoResubmitArmed = false;
+      if (!host.mounted) return;
+      host.aiAutoResubmitArmed = false;
 
       if (e.scope == AiSuggestionFailureScope.infrastructure) {
-        showDialogSnackBar(
+        host.showDialogSnackBar(
           SnackBar(
             content: Text(e.message),
             duration: const Duration(seconds: 8),
@@ -163,7 +186,7 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
         return;
       }
 
-      showDialogSnackBar(
+      host.showDialogSnackBar(
         SnackBar(
           content: Text(e.message),
           duration: const Duration(seconds: 8),
@@ -174,15 +197,15 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
       if (e.retryAvailableAt != null) {
         _startAiCooldownTicker(
           until: e.retryAvailableAt!,
-          model: e.waitingModel ?? _aiCurrentModel ?? '',
+          model: e.waitingModel ?? host.aiCurrentModel ?? '',
           selected: selected,
         );
       }
     } catch (e) {
-      if (!mounted) return;
-      _aiAutoResubmitArmed = false;
+      if (!host.mounted) return;
+      host.aiAutoResubmitArmed = false;
       final errorMessage = e.toString().replaceFirst('Exception: ', '');
-      showDialogSnackBar(
+      host.showDialogSnackBar(
         SnackBar(
           content: Text(errorMessage),
           duration: const Duration(seconds: 8),
@@ -190,36 +213,37 @@ mixin LansweeperReportAiMixin on LansweeperReportDialogStateHost {
         copyText: errorMessage,
       );
     } finally {
-      _aiSuggestClient = null;
+      host.aiSuggestClient = null;
       client.close();
       _stopAiSuggestTicker();
-      if (mounted) {
-        setState(() => _aiSuggestRunning = false);
+      if (host.mounted) {
+        host.aiSuggestRunning = false;
+        host.notifyReportChanged();
       }
     }
   }
 
   void _startAiSuggestTicker({required String model}) {
-    _aiSuggestStopwatch
+    host.aiSuggestStopwatch
       ..reset()
       ..start();
-    setState(() {
-      _aiSuggestRunning = true;
-      _aiSuggestElapsedSeconds = 0;
-      _aiCurrentModel = model;
-    });
-    _aiSuggestTicker = Timer.periodic(const Duration(milliseconds: 33), (_) {
-      if (!mounted) return;
-      setState(() {
-        _aiSuggestElapsedSeconds =
-            _aiSuggestStopwatch.elapsedMilliseconds / 1000;
-      });
+    host.aiSuggestRunning = true;
+    host.aiSuggestElapsedSeconds = 0;
+    host.aiCurrentModel = model;
+    host.notifyReportChanged();
+    host.aiSuggestTicker = Timer.periodic(const Duration(milliseconds: 33), (
+      _,
+    ) {
+      if (!host.mounted) return;
+      host.aiSuggestElapsedSeconds =
+          host.aiSuggestStopwatch.elapsedMilliseconds / 1000;
+      host.notifyReportChanged();
     });
   }
 
   void _stopAiSuggestTicker() {
-    _aiSuggestTicker?.cancel();
-    _aiSuggestTicker = null;
-    _aiSuggestStopwatch.stop();
+    host.aiSuggestTicker?.cancel();
+    host.aiSuggestTicker = null;
+    host.aiSuggestStopwatch.stop();
   }
 }

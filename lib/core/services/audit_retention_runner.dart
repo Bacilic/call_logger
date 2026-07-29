@@ -9,7 +9,7 @@ class AuditRetentionRunner {
 
   /// Αν [config.purgeOnAppStart] και [config.enabled], εκτελεί εκκαθάριση.
   static Future<void> applyIfConfiguredOnStartup() async {
-    final config = await SettingsService().getAuditRetentionConfig();
+    final config = await SettingsService().catalogs.getAuditRetentionConfig();
     if (!config.enabled || !config.purgeOnAppStart) return;
     await applyWithConfig(config);
   }

@@ -1,23 +1,39 @@
-part of 'user_form_dialog.dart';
+import '../../../../core/directory/phone_department_policy.dart';
+import '../../../../core/services/lookup_service.dart';
+import '../../../../core/utils/phone_list_parser.dart';
+import '../../../../core/utils/search_text_normalizer.dart';
+import 'shared_asset_disconnect_dialog.dart';
+import 'user_form_dialog.dart';
+import 'user_phone_department_conflict_dialog.dart';
 
-mixin UserFormPhonePolicyMixin on UserFormDialogStateHost {
+/// Πολιτική τηλεφώνων της φόρμας υπαλλήλου: συγκρούσεις τμήματος και
+/// αποσύνδεση αποκλειστικών αριθμών που αφαιρέθηκαν.
+///
+/// Συνεργάτης του [UserFormDialogState] (Σύνθεση).
+class UserFormPhonePolicy {
+  UserFormPhonePolicy(this.host);
+
+  final UserFormDialogState host;
+
   List<String> _removedPhonesFromField() {
-    final before = PhoneListParser.splitPhones(_snapPhone);
-    final after = PhoneListParser.splitPhones(_phoneController.text).toSet();
+    final before = PhoneListParser.splitPhones(host.snapPhone);
+    final after = PhoneListParser.splitPhones(
+      host.phoneController.text,
+    ).toSet();
     return before.where((p) => !after.contains(p)).toList();
   }
 
   /// Τηλέφωνα που αφαιρούνται από το πεδίο και συνδέονται μόνο με τον τρέχοντα χρήστη.
   List<String> _exclusiveRemovedPhones() {
-    final editingId = widget.initialUser?.id;
-    if (!_isEdit || editingId == null) return const [];
+    final editingId = host.widget.initialUser?.id;
+    if (!host.isEdit || editingId == null) return const [];
 
     final removed = _removedPhonesFromField();
     if (removed.isEmpty) return const [];
 
     final exclusive = <String>[];
     for (final phone in removed) {
-      final owners = widget.notifier.allUsersForUi.where((u) {
+      final owners = host.widget.notifier.allUsersForUi.where((u) {
         if (u.isDeleted) return false;
         return u.phones.any((p) => p.trim() == phone.trim());
       }).toList();
@@ -28,9 +44,8 @@ mixin UserFormPhonePolicyMixin on UserFormDialogStateHost {
     return exclusive;
   }
 
-  @override
-  ({int? id, String? name}) _resolveSourceDepartmentForDisconnect() {
-    final typed = _departmentController.text.trim();
+  ({int? id, String? name}) resolveSourceDepartmentForDisconnect() {
+    final typed = host.departmentController.text.trim();
     if (typed.isEmpty) return (id: null, name: null);
 
     final key = SearchTextNormalizer.normalizeForSearch(typed);
@@ -46,26 +61,27 @@ mixin UserFormPhonePolicyMixin on UserFormDialogStateHost {
   }
 
   List<String> _phonesToValidateForPolicy() {
-    final current = PhoneListParser.splitPhones(_phoneController.text);
-    if (!_isEdit || widget.isClone) return current;
+    final current = PhoneListParser.splitPhones(host.phoneController.text);
+    if (!host.isEdit || host.widget.isClone) return current;
     final deptChanged =
-        SearchTextNormalizer.normalizeForSearch(_departmentController.text) !=
-        _snapDepartmentNorm;
+        SearchTextNormalizer.normalizeForSearch(
+          host.departmentController.text,
+        ) !=
+        host.snapDepartmentNorm;
     if (deptChanged) return current;
     return PhoneDepartmentPolicy.addedPhones(
-      beforePhones: PhoneListParser.splitPhones(_snapPhone),
+      beforePhones: PhoneListParser.splitPhones(host.snapPhone),
       afterPhones: current,
     );
   }
 
-  @override
-  Future<UserPhoneConflictBatchResult?> _confirmUserPhoneAssignmentConflicts({
+  Future<UserPhoneConflictBatchResult?> confirmUserPhoneAssignmentConflicts({
     required int? editingUserId,
   }) async {
     final phones = _phonesToValidateForPolicy();
     if (phones.isEmpty) return const UserPhoneConflictBatchResult();
 
-    final target = await _resolveTargetDepartmentForSave();
+    final target = await host.saveFlow.resolveTargetDepartmentForSave();
     final conflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
       phones: phones,
       targetDepartmentId: target.id,
@@ -73,37 +89,36 @@ mixin UserFormPhonePolicyMixin on UserFormDialogStateHost {
     );
     if (conflicts.isEmpty) return const UserPhoneConflictBatchResult();
 
-    if (!mounted) return null;
+    if (!host.mounted) return null;
     return showUserPhoneDepartmentConflictDialog(
-      context,
+      host.context,
       conflicts: conflicts,
-      userDisplayName: _buildUserDisplayName(),
+      userDisplayName: host.buildUserDisplayName(),
       targetDepartmentName: target.name,
       targetDepartmentId: target.id,
     );
   }
 
-  @override
   Future<SharedAssetDisconnectBatchResult?>
-  _confirmExclusiveRemovedPhonesDisconnect() async {
+  confirmExclusiveRemovedPhonesDisconnect() async {
     final phones = _exclusiveRemovedPhones();
     if (phones.isEmpty) return const SharedAssetDisconnectBatchResult();
 
     final lookup = LookupService.instance;
-    final source = _resolveSourceDepartmentForDisconnect();
+    final source = resolveSourceDepartmentForDisconnect();
     final departments = lookup.departments
         .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
         .toList();
 
-    if (!mounted) return null;
+    if (!host.mounted) return null;
     return showSharedAssetDisconnectFlow(
-      context: context,
+      context: host.context,
       sourceDepartmentId: source.id,
       sourceDepartmentName: source.name,
       phones: phones,
       availableDepartments: departments,
       mode: SharedAssetDisconnectMode.personalPhone,
-      personalPhoneUserDisplayName: _buildUserDisplayName(),
+      personalPhoneUserDisplayName: host.buildUserDisplayName(),
     );
   }
 }

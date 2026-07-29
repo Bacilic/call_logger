@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -15,7 +15,7 @@ import 'update_source_config.dart';
 
 final updateSourceConfigProvider = Provider<UpdateSourceConfig>((ref) {
   return UpdateSourceConfig(
-    getUserUpdateFolderPath: () => SettingsService().getUpdateFolderPath(),
+    getUserUpdateFolderPath: () => SettingsService().catalogs.getUpdateFolderPath(),
   );
 });
 
@@ -77,7 +77,7 @@ final pendingUpdateProvider = FutureProvider<bool>((ref) async {
 /// Κατασκευή του πραγματικού installer service (κοινή για provider + startup).
 UpdateInstallerService buildDefaultUpdateInstallerService() {
   final config = UpdateSourceConfig(
-    getUserUpdateFolderPath: () => SettingsService().getUpdateFolderPath(),
+    getUserUpdateFolderPath: () => SettingsService().catalogs.getUpdateFolderPath(),
   );
   return UpdateInstallerService(
     installDirectory: AppConfig.applicationExecutableDirectory,

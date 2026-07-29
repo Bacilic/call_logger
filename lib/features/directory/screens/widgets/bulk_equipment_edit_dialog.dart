@@ -381,7 +381,7 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog>
                             : _fieldKeys[i] == 'type'
                             ? FutureBuilder<List<String>>(
                                 future: SettingsService()
-                                    .getEquipmentTypesList(),
+                                    .catalogs.getEquipmentTypesList(),
                                 builder: (context, snapshot) {
                                   var options =
                                       snapshot.data ??

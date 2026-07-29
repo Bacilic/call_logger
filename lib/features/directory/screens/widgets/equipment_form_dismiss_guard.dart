@@ -1,35 +1,52 @@
-part of 'equipment_form_dialog.dart';
+import 'package:flutter/material.dart';
+
+import '../../../calls/utils/equipment_remote_param_key.dart';
+import 'equipment_form_dialog.dart';
 
 enum _EditDismissAction { save, discard, keepEditing }
 
-mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
-  bool get _createHasRequiredFields => _codeController.text.trim().isNotEmpty;
+/// Φρουρός κλεισίματος της φόρμας εξοπλισμού: υπογραφή κατάστασης, dirty
+/// έλεγχος και διάλογοι «Μη αποθηκευμένες αλλαγές».
+///
+/// Συνεργάτης του [EquipmentFormDialogState] (Σύνθεση).
+class EquipmentFormDismissGuard {
+  EquipmentFormDismissGuard(this.host);
+
+  final EquipmentFormDialogState host;
+
+  bool get createHasRequiredFields =>
+      host.codeController.text.trim().isNotEmpty;
+
+  bool get isDirty =>
+      host.formBaselineCaptured &&
+      formStateSignature() != host.initialFormSignature;
+
   bool get _shouldConfirmDismissOnClose {
-    if (!_formBaselineCaptured) return false;
-    if (_isEdit) return _isDirty;
-    return _createHasRequiredFields && _isDirty;
+    if (!host.formBaselineCaptured) return false;
+    if (host.isEdit) return isDirty;
+    return createHasRequiredFields && isDirty;
   }
 
-  String _formStateSignature() {
+  String formStateSignature() {
     final sb = StringBuffer()
-      ..write(_codeController.text)
+      ..write(host.codeController.text)
       ..write('\u001e')
-      ..write(_selectedType ?? '')
+      ..write(host.selectedType ?? '')
       ..write('\u001e')
-      ..write(_notesController.text)
+      ..write(host.notesController.text)
       ..write('\u001e')
-      ..write(_selectedUserId ?? '')
+      ..write(host.selectedUserId ?? '')
       ..write('\u001e')
-      ..write(_ownerController.text)
+      ..write(host.ownerController.text)
       ..write('\u001e')
-      ..write(_departmentController.text)
+      ..write(host.departmentController.text)
       ..write('\u001e')
-      ..write(_locationController.text)
+      ..write(host.locationController.text)
       ..write('\u001e')
-      ..write(_defaultRemoteToolId ?? '');
+      ..write(host.defaultRemoteToolId ?? '');
     final remoteKeys = <String>{
-      ..._expandedRemoteKeys,
-      ..._remoteParamValues.keys,
+      ...host.expandedRemoteKeys,
+      ...host.remoteParamValues.keys,
     }.toList()..sort();
     for (final k in remoteKeys) {
       if (EquipmentRemoteParamKey.isReservedKey(k)) continue;
@@ -37,13 +54,13 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
         ..write('\u001e')
         ..write(k)
         ..write('\u001f')
-        ..write(_remoteParamValues[k] ?? '')
+        ..write(host.remoteParamValues[k] ?? '')
         ..write('\u001f')
-        ..write(_expandedRemoteKeys.contains(k));
+        ..write(host.expandedRemoteKeys.contains(k));
     }
     sb
       ..write('\u001e')
-      ..write(_exclusiveRemoteToolId ?? '');
+      ..write(host.exclusiveRemoteToolId ?? '');
     return sb.toString();
   }
 
@@ -55,37 +72,38 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
     return parts.sublist(8, parts.length - 1).join('\u001e');
   }
 
-  @override
-  void _tryCaptureFormBaseline() {
-    if (_formBaselineCaptured) return;
-    if (widget.initialOwner?.id != null && !_ownerTextInitialized) return;
-    if (!_equipmentDepartmentTextInitialized) return;
-    if (!_didPruneUnknownRemoteKeys) {
+  void tryCaptureFormBaseline() {
+    if (host.formBaselineCaptured) return;
+    if (host.widget.initialOwner?.id != null && !host.ownerTextInitialized) {
       return;
     }
-    _initialFormSignature = _formStateSignature();
-    _formBaselineCaptured = true;
+    if (!host.equipmentDepartmentTextInitialized) return;
+    if (!host.didPruneUnknownRemoteKeys) {
+      return;
+    }
+    host.initialFormSignature = formStateSignature();
+    host.formBaselineCaptured = true;
   }
 
   List<String> _buildChangedFieldLabels() {
-    if (!_formBaselineCaptured) return const [];
-    final init = _initialFormSignature.split('\u001e');
+    if (!host.formBaselineCaptured) return const [];
+    final init = host.initialFormSignature.split('\u001e');
     String initAt(int i) => i < init.length ? init[i] : '';
 
     final labels = <String>[];
-    if (_codeController.text != initAt(0)) labels.add('Κωδικός');
-    if ((_selectedType ?? '') != initAt(1)) labels.add('Τύπος');
-    if (_notesController.text != initAt(2)) labels.add('Σημειώσεις');
-    if ('${_selectedUserId ?? ''}' != initAt(3) ||
-        _ownerController.text != initAt(4)) {
+    if (host.codeController.text != initAt(0)) labels.add('Κωδικός');
+    if ((host.selectedType ?? '') != initAt(1)) labels.add('Τύπος');
+    if (host.notesController.text != initAt(2)) labels.add('Σημειώσεις');
+    if ('${host.selectedUserId ?? ''}' != initAt(3) ||
+        host.ownerController.text != initAt(4)) {
       labels.add('Κάτοχος');
     }
-    if (_departmentController.text != initAt(5)) labels.add('Τμήμα');
-    if (_locationController.text != initAt(6)) labels.add('Τοποθεσία');
-    if ('${_defaultRemoteToolId ?? ''}' != initAt(7)) {
+    if (host.departmentController.text != initAt(5)) labels.add('Τμήμα');
+    if (host.locationController.text != initAt(6)) labels.add('Τοποθεσία');
+    if ('${host.defaultRemoteToolId ?? ''}' != initAt(7)) {
       labels.add('Προεπιλεγμένο εργαλείο');
     }
-    final curParts = _formStateSignature().split('\u001e');
+    final curParts = formStateSignature().split('\u001e');
     if (_signatureExclusiveSegment(init) !=
         _signatureExclusiveSegment(curParts)) {
       labels.add('Αποκλειστικό εργαλείο');
@@ -100,7 +118,7 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
     List<String> changedLabels,
   ) {
     return showDialog<_EditDismissAction>(
-      context: context,
+      context: host.context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Μη αποθηκευμένες αλλαγές'),
@@ -141,7 +159,7 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
 
   Future<bool?> _showNewDismissDialog() {
     return showDialog<bool>(
-      context: context,
+      context: host.context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Μη αποθηκευμένα στοιχεία'),
@@ -163,27 +181,28 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
     );
   }
 
-  Future<void> _requestClose() async {
-    if (widget.initialEquipment != null && !_didPruneUnknownRemoteKeys) {
+  Future<void> requestClose() async {
+    if (host.widget.initialEquipment != null &&
+        !host.didPruneUnknownRemoteKeys) {
       return;
     }
     if (!_shouldConfirmDismissOnClose) {
-      if (mounted) Navigator.of(context).pop();
+      if (host.mounted) Navigator.of(host.context).pop();
       return;
     }
 
-    if (_isEdit) {
+    if (host.isEdit) {
       final labels = _buildChangedFieldLabels();
       if (labels.isEmpty) {
-        if (mounted) Navigator.of(context).pop();
+        if (host.mounted) Navigator.of(host.context).pop();
         return;
       }
       final action = await _showEditDismissDialog(labels);
       switch (action) {
         case _EditDismissAction.save:
-          await _save();
+          await host.save();
         case _EditDismissAction.discard:
-          if (mounted) Navigator.of(context).pop();
+          if (host.mounted) Navigator.of(host.context).pop();
         case _EditDismissAction.keepEditing:
         case null:
           break;
@@ -192,13 +211,13 @@ mixin EquipmentFormDismissGuardMixin on EquipmentFormDialogStateHost {
     }
 
     final discard = await _showNewDismissDialog();
-    if (discard == true && mounted) {
-      Navigator.of(context).pop();
+    if (discard == true && host.mounted) {
+      Navigator.of(host.context).pop();
     }
   }
 
   /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
-  void _cancelAndClose() {
-    if (mounted) Navigator.of(context).pop();
+  void cancelAndClose() {
+    if (host.mounted) Navigator.of(host.context).pop();
   }
 }

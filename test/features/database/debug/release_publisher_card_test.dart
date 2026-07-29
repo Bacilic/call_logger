@@ -587,7 +587,7 @@ void main() {
     await tester.tap(find.byKey(const Key('release_cli_save_button')));
     await tester.pumpAndSettle();
 
-    expect(await SettingsService().getPublishCliCommandTemplate(), custom);
+    expect(await SettingsService().catalogs.getPublishCliCommandTemplate(), custom);
 
     await tester.tap(find.byKey(const Key('release_cli_settings_button')));
     await tester.pumpAndSettle();
@@ -597,7 +597,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      await SettingsService().getPublishCliCommandTemplate(),
+      await SettingsService().catalogs.getPublishCliCommandTemplate(),
       kDefaultPublishCliCommandTemplate,
     );
   });

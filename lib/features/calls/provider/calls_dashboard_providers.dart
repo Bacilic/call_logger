@@ -57,7 +57,7 @@ class ShowGlobalCallsToggleNotifier extends Notifier<bool> {
   }
 
   Future<void> _hydrateFromStorage() async {
-    final value = await SettingsService().getShowGlobalCalls();
+    final value = await SettingsService().windowUi.getShowGlobalCalls();
     if (ref.mounted) {
       state = value;
     }
@@ -66,7 +66,7 @@ class ShowGlobalCallsToggleNotifier extends Notifier<bool> {
   Future<void> setVisible(bool value) async {
     if (state == value) return;
     state = value;
-    await SettingsService().setShowGlobalCalls(value);
+    await SettingsService().windowUi.setShowGlobalCalls(value);
   }
 
   Future<void> toggle() async => setVisible(!state);

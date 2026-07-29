@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/department_repository.dart';
-import '../../../../core/database/phone_repository.dart';
-import '../../../../core/directory/phone_department_policy.dart';
-import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/providers/spell_check_provider.dart';
@@ -15,25 +10,14 @@ import '../../../../core/utils/user_identity_normalizer.dart';
 import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
-import '../../../../core/database/audit_service.dart';
 import '../../../../core/services/lookup_service.dart';
-import '../../../../core/services/save_confirmation_summary.dart';
-import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
-import '../../services/shared_asset_disconnect_apply.dart';
-import 'department_transfer_confirm_dialog.dart';
-import 'similar_department_suggestion_dialog.dart';
-import 'similar_users_dialog.dart';
-import 'shared_asset_disconnect_dialog.dart';
-import 'user_name_change_confirm_dialog.dart';
-import 'user_phone_department_conflict_dialog.dart';
+import 'user_form_dismiss_guard.dart';
+import 'user_form_phone_policy.dart';
+import 'user_form_save.dart';
 import 'user_form_smart_text_field.dart';
-
-part 'user_form_dismiss_guard.dart';
-part 'user_form_phone_policy.dart';
-part 'user_form_save.dart';
 
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο χρήστη.
 class UserFormDialog extends ConsumerStatefulWidget {
@@ -55,85 +39,37 @@ class UserFormDialog extends ConsumerStatefulWidget {
   final VoidCallback? onSaved;
 
   @override
-  ConsumerState<UserFormDialog> createState() => _UserFormDialogState();
+  ConsumerState<UserFormDialog> createState() => UserFormDialogState();
 }
 
-mixin UserFormDialogStateHost on ConsumerState<UserFormDialog> {
-  GlobalKey<FormState> get _formKey;
-  TextEditingController get _lastNameController;
-  SpellCheckController get _firstNameController;
-  TextEditingController get _phoneController;
-  SpellCheckController get _departmentController;
-  SpellCheckController get _notesController;
+/// Δημόσιο State: τα πεδία/στιγμιότυπα της φόρμας είναι ορατά στους
+/// συνεργάτες της (φρουρός κλεισίματος, πολιτική τηλεφώνων, αποθήκευση).
+class UserFormDialogState extends ConsumerState<UserFormDialog> {
+  /// Φρουρός κλεισίματος (dirty έλεγχος + διάλογος αλλαγών).
+  late final UserFormDismissGuard dismissGuard = UserFormDismissGuard(this);
 
-  String get _initialDepartmentText;
-  String get _snapDepartmentNorm;
-  String get _snapLastName;
-  String get _snapFirstName;
-  String get _snapPhone;
-  String get _snapNotes;
+  /// Πολιτική τηλεφώνων (συγκρούσεις τμήματος, αποκλειστικοί αριθμοί).
+  late final UserFormPhonePolicy phonePolicy = UserFormPhonePolicy(this);
 
-  bool get _isEdit;
+  /// Ροή αποθήκευσης (επιβεβαιώσεις + εγγραφή).
+  late final UserFormSave saveFlow = UserFormSave(this);
 
-  // ignore: unused_element — απαιτείται από part mixins· ο analyzer δεν το ανιχνεύει.
-  void _onFieldChanged();
-
-  // ignore: unused_element
-  bool get _isDirty;
-
-  String _buildUserDisplayName();
-  String _snapDisplayName();
-  bool _nameIdentityChanged();
-  List<UserSimilarityMatch> _findSimilarUsers();
-
-  Future<void> _save();
-
-  ({int? id, String? name}) _resolveSourceDepartmentForDisconnect();
-
-  Future<({int? id, String name})> _resolveTargetDepartmentForSave();
-
-  Future<UserPhoneConflictBatchResult?> _confirmUserPhoneAssignmentConflicts({
-    required int? editingUserId,
-  });
-
-  Future<SharedAssetDisconnectBatchResult?>
-  _confirmExclusiveRemovedPhonesDisconnect();
-}
-
-class _UserFormDialogState extends ConsumerState<UserFormDialog>
-    with
-        UserFormDialogStateHost,
-        UserFormDismissGuardMixin,
-        UserFormPhonePolicyMixin,
-        UserFormSaveMixin {
-  @override
-  final _formKey = GlobalKey<FormState>();
+  final formKey = GlobalKey<FormState>();
 
   /// Αρχικό κείμενο τμήματος όπως στη βάση (εμφάνιση· επαναφορά στον διάλογο μεταφοράς).
-  @override
-  late final String _initialDepartmentText;
+  late final String initialDepartmentText;
 
   /// Κανονικοποιημένο κλειδί αρχικού τμήματος μόνο για σύγκριση dirty / διάλογο.
-  @override
-  late final String _snapDepartmentNorm;
-  @override
-  late final String _snapLastName;
-  @override
-  late final String _snapFirstName;
-  @override
-  late final String _snapPhone;
-  @override
-  late final String _snapNotes;
-  @override
-  late final TextEditingController _lastNameController;
-  @override
-  late final SpellCheckController _firstNameController;
-  @override
-  late final TextEditingController _phoneController;
-  @override
-  late final SpellCheckController _departmentController;
-  @override
-  late final SpellCheckController _notesController;
+  late final String snapDepartmentNorm;
+  late final String snapLastName;
+  late final String snapFirstName;
+  late final String snapPhone;
+  late final String snapNotes;
+  late final TextEditingController lastNameController;
+  late final SpellCheckController firstNameController;
+  late final TextEditingController phoneController;
+  late final SpellCheckController departmentController;
+  late final SpellCheckController notesController;
 
   final FocusNode _lastNameFocusNode = FocusNode();
   final FocusNode _firstNameFocusNode = FocusNode();
@@ -141,8 +77,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
   final FocusNode _departmentFocusNode = FocusNode();
   final FocusNode _notesFocusNode = FocusNode();
 
-  @override
-  bool get _isEdit => widget.initialUser != null && !widget.isClone;
+  bool get isEdit => widget.initialUser != null && !widget.isClone;
 
   void _selectAll(TextEditingController c) {
     c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
@@ -152,53 +87,53 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
   void initState() {
     super.initState();
     final u = widget.initialUser;
-    _snapLastName = (u?.lastName ?? '').trim();
-    _snapFirstName = (u?.firstName ?? '').trim();
-    _snapPhone = PhoneListParser.joinPhones(u?.phones ?? const []);
-    _snapNotes = (u?.notes ?? '').trim();
-    _initialDepartmentText = (u?.departmentName ?? '').trim();
-    _snapDepartmentNorm = SearchTextNormalizer.normalizeForSearch(
-      _initialDepartmentText,
+    snapLastName = (u?.lastName ?? '').trim();
+    snapFirstName = (u?.firstName ?? '').trim();
+    snapPhone = PhoneListParser.joinPhones(u?.phones ?? const []);
+    snapNotes = (u?.notes ?? '').trim();
+    initialDepartmentText = (u?.departmentName ?? '').trim();
+    snapDepartmentNorm = SearchTextNormalizer.normalizeForSearch(
+      initialDepartmentText,
     );
 
-    _lastNameController = TextEditingController(text: u?.lastName ?? '');
-    _firstNameController = SpellCheckController()..text = u?.firstName ?? '';
-    _phoneController = TextEditingController(
+    lastNameController = TextEditingController(text: u?.lastName ?? '');
+    firstNameController = SpellCheckController()..text = u?.firstName ?? '';
+    phoneController = TextEditingController(
       text: PhoneListParser.joinPhones(u?.phones ?? const []),
     );
-    _departmentController = SpellCheckController()
-      ..text = _initialDepartmentText;
-    _notesController = SpellCheckController()..text = (u?.notes ?? '');
+    departmentController = SpellCheckController()
+      ..text = initialDepartmentText;
+    notesController = SpellCheckController()..text = (u?.notes ?? '');
 
-    _lastNameController.addListener(_onFieldChanged);
-    _firstNameController.addListener(_onFieldChanged);
-    _phoneController.addListener(_onFieldChanged);
-    _departmentController.addListener(_onFieldChanged);
-    _notesController.addListener(_onFieldChanged);
+    lastNameController.addListener(_onFieldChanged);
+    firstNameController.addListener(_onFieldChanged);
+    phoneController.addListener(_onFieldChanged);
+    departmentController.addListener(_onFieldChanged);
+    notesController.addListener(_onFieldChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       switch (widget.focusedField) {
         case 'lastName':
           _lastNameFocusNode.requestFocus();
-          _selectAll(_lastNameController);
+          _selectAll(lastNameController);
           break;
         case 'phone':
           _phoneFocusNode.requestFocus();
-          _selectAll(_phoneController);
+          _selectAll(phoneController);
           break;
         case 'department':
           _departmentFocusNode.requestFocus();
-          _selectAll(_departmentController);
+          _selectAll(departmentController);
           break;
         case 'notes':
           _notesFocusNode.requestFocus();
-          _selectAll(_notesController);
+          _selectAll(notesController);
           break;
         case 'firstName':
         default:
           _firstNameFocusNode.requestFocus();
-          _selectAll(_firstNameController);
+          _selectAll(firstNameController);
           break;
       }
     });
@@ -206,11 +141,11 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
 
   @override
   void dispose() {
-    _lastNameController.removeListener(_onFieldChanged);
-    _firstNameController.removeListener(_onFieldChanged);
-    _phoneController.removeListener(_onFieldChanged);
-    _departmentController.removeListener(_onFieldChanged);
-    _notesController.removeListener(_onFieldChanged);
+    lastNameController.removeListener(_onFieldChanged);
+    firstNameController.removeListener(_onFieldChanged);
+    phoneController.removeListener(_onFieldChanged);
+    departmentController.removeListener(_onFieldChanged);
+    notesController.removeListener(_onFieldChanged);
 
     _lastNameFocusNode.dispose();
     _firstNameFocusNode.dispose();
@@ -218,63 +153,63 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
     _departmentFocusNode.dispose();
     _notesFocusNode.dispose();
 
-    _lastNameController.dispose();
-    _firstNameController.dispose();
-    _phoneController.dispose();
-    _departmentController.dispose();
-    _notesController.dispose();
+    lastNameController.dispose();
+    firstNameController.dispose();
+    phoneController.dispose();
+    departmentController.dispose();
+    notesController.dispose();
     super.dispose();
+  }
+
+  void _onFieldChanged() {
+    if (mounted) setState(() {});
   }
 
   String? _requiredValidator(String? v) =>
       (v?.trim().isEmpty ?? true) ? 'Υποχρεωτικό' : null;
 
-  @override
-  String _buildUserDisplayName() {
-    final f = _firstNameController.text.trim();
-    final l = _lastNameController.text.trim();
+  String buildUserDisplayName() {
+    final f = firstNameController.text.trim();
+    final l = lastNameController.text.trim();
     if (f.isEmpty && l.isEmpty) return '—';
     return '$f $l'.trim();
   }
 
-  @override
-  String _snapDisplayName() {
-    final f = _snapFirstName.trim();
-    final l = _snapLastName.trim();
+  String snapDisplayName() {
+    final f = snapFirstName.trim();
+    final l = snapLastName.trim();
     if (f.isEmpty && l.isEmpty) return '—';
     return '$f $l'.trim();
   }
 
-  @override
-  bool _nameIdentityChanged() {
+  bool nameIdentityChanged() {
     return UserIdentityNormalizer.identityKeyForPerson(
-          _snapFirstName,
-          _snapLastName,
+          snapFirstName,
+          snapLastName,
         ) !=
         UserIdentityNormalizer.identityKeyForPerson(
-          _firstNameController.text,
-          _lastNameController.text,
+          firstNameController.text,
+          lastNameController.text,
         );
   }
 
   /// Υπάρχουσες εγγραφές καταλόγου με ίδιο ή παρόμοιο ονοματεπώνυμο,
   /// εκτός τρέχουσας/πηγής αντίγραφου.
-  @override
-  List<UserSimilarityMatch> _findSimilarUsers() {
+  List<UserSimilarityMatch> findSimilarUsers() {
     final int? excludeId =
-        widget.initialUser != null && (_isEdit || widget.isClone)
+        widget.initialUser != null && (isEdit || widget.isClone)
         ? widget.initialUser!.id
         : null;
     return UserSimilarityFinder.findSimilarUsers(
       users: widget.notifier.allUsersForUi,
-      firstName: _firstNameController.text,
-      lastName: _lastNameController.text,
+      firstName: firstNameController.text,
+      lastName: lastNameController.text,
       excludeUserId: excludeId,
     );
   }
 
   String get _title {
-    if (_isEdit) return 'Επεξεργασία Υπαλλήλου';
+    if (isEdit) return 'Επεξεργασία Υπαλλήλου';
     if (widget.isClone) return 'Αντίγραφο Υπαλλήλου';
     return 'Νέος Υπάλληλος';
   }
@@ -396,9 +331,9 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
   }
 
   String _phoneDisplayStringForAutocompleteOption(String option) {
-    final text = _phoneController.text;
-    final offset = _phoneController.selection.isValid
-        ? _phoneController.selection.extentOffset
+    final text = phoneController.text;
+    final offset = phoneController.selection.isValid
+        ? phoneController.selection.extentOffset
         : text.length;
     return PhoneListParser.replaceActiveSegment(
       text: text,
@@ -425,16 +360,16 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
   Widget build(BuildContext context) {
     ref
         .watch(spellCheckServiceProvider)
-        .whenData(_firstNameController.attachSpellService);
+        .whenData(firstNameController.attachSpellService);
     ref
         .watch(enableSpellCheckProvider)
-        .whenData(_firstNameController.setSpellCheckEnabled);
+        .whenData(firstNameController.setSpellCheckEnabled);
     ref
         .watch(spellCheckServiceProvider)
-        .whenData(_departmentController.attachSpellService);
+        .whenData(departmentController.attachSpellService);
     ref
         .watch(enableSpellCheckProvider)
-        .whenData(_departmentController.setSpellCheckEnabled);
+        .whenData(departmentController.setSpellCheckEnabled);
 
     final lookupAsync = ref.watch(lookupServiceProvider);
     final departmentNames = lookupAsync.maybeWhen(
@@ -446,26 +381,26 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
     );
     final lastNameOptions = _catalogLastNameOptionsSorted();
     final firstNameOptions = _catalogFirstNameOptionsSortedForLast(
-      _lastNameController.text,
+      lastNameController.text,
     );
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        await _requestClose();
+        await dismissGuard.requestClose();
       },
       child: DraggableDialogShell(
         title: Text(_title),
         builder: (titleHandle) => AlertDialog(
           title: titleHandle,
           content: Form(
-            key: _formKey,
+            key: formKey,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   RawAutocomplete<String>(
-                    textEditingController: _lastNameController,
+                    textEditingController: lastNameController,
                     focusNode: _lastNameFocusNode,
                     optionsBuilder: (textEditingValue) {
                       final q = SearchTextNormalizer.normalizeForSearch(
@@ -481,7 +416,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
                     },
                     displayStringForOption: (option) => option,
                     onSelected: (selection) {
-                      _lastNameController.text = selection;
+                      lastNameController.text = selection;
                       _onFieldChanged();
                     },
                     fieldViewBuilder: (context, controller, focusNode, _) {
@@ -506,7 +441,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
                   ),
                   const SizedBox(height: 12),
                   RawAutocomplete<String>(
-                    textEditingController: _firstNameController,
+                    textEditingController: firstNameController,
                     focusNode: _firstNameFocusNode,
                     optionsBuilder: (textEditingValue) {
                       if (firstNameOptions.isEmpty) {
@@ -525,7 +460,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
                     },
                     displayStringForOption: (option) => option,
                     onSelected: (selection) {
-                      _firstNameController.text = selection;
+                      firstNameController.text = selection;
                       _onFieldChanged();
                     },
                     fieldViewBuilder: (context, controller, focusNode, _) {
@@ -552,27 +487,27 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
                   ),
                   const SizedBox(height: 12),
                   RawAutocomplete<String>(
-                    textEditingController: _phoneController,
+                    textEditingController: phoneController,
                     focusNode: _phoneFocusNode,
                     optionsBuilder: _phoneAutocompleteOptions,
                     displayStringForOption:
                         _phoneDisplayStringForAutocompleteOption,
                     onSelected: (option) {
-                      final offset = _phoneController.selection.isValid
-                          ? _phoneController.selection.extentOffset
-                          : _phoneController.text.length;
+                      final offset = phoneController.selection.isValid
+                          ? phoneController.selection.extentOffset
+                          : phoneController.text.length;
                       final updated = PhoneListParser.replaceActiveSegment(
-                        text: _phoneController.text,
+                        text: phoneController.text,
                         cursor: offset,
                         replacement: option,
                       );
                       final cursorPos = updated.cursor;
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (!mounted) return;
-                        _phoneController.selection = TextSelection.collapsed(
+                        phoneController.selection = TextSelection.collapsed(
                           offset: cursorPos.clamp(
                             0,
-                            _phoneController.text.length,
+                            phoneController.text.length,
                           ),
                         );
                       });
@@ -623,7 +558,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
                   ),
                   const SizedBox(height: 12),
                   RawAutocomplete<String>(
-                    textEditingController: _departmentController,
+                    textEditingController: departmentController,
                     focusNode: _departmentFocusNode,
                     optionsBuilder: (textEditingValue) {
                       final q = SearchTextNormalizer.normalizeForSearch(
@@ -639,7 +574,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
                     },
                     displayStringForOption: (option) => option,
                     onSelected: (selection) {
-                      _departmentController.text = selection;
+                      departmentController.text = selection;
                       _onFieldChanged();
                     },
                     fieldViewBuilder: (context, controller, focusNode, _) {
@@ -665,7 +600,7 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
                   ),
                   const SizedBox(height: 12),
                   LexiconSpellTextFormField(
-                    controller: _notesController,
+                    controller: notesController,
                     focusNode: _notesFocusNode,
                     decoration: const InputDecoration(
                       labelText: 'Σημειώσεις',
@@ -681,12 +616,12 @@ class _UserFormDialogState extends ConsumerState<UserFormDialog>
           ),
           actions: [
             TextButton(
-              onPressed: _cancelAndClose,
+              onPressed: dismissGuard.cancelAndClose,
               child: const Text('Ακύρωση'),
             ),
             FilledButton(
-              onPressed: _isDirty ? _save : null,
-              child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
+              onPressed: dismissGuard.isDirty ? saveFlow.save : null,
+              child: Text(isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
             ),
           ],
         ),

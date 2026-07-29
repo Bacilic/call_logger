@@ -17,25 +17,18 @@ import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/utils/spell_check.dart';
-import '../../../../core/widgets/info_hint_icon.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
-import '../../../../core/widgets/remote_tool_icon.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
-import 'remote_param_help_text.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../../calls/provider/smart_entity_selector_provider.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
 import '../../../../core/models/remote_tool.dart';
-import '../../../../core/models/remote_tool_role.dart';
 import '../../../calls/utils/equipment_remote_param_key.dart';
-import '../../../calls/utils/remote_param_validator.dart';
-import '../../../calls/utils/vnc_remote_target.dart';
 import '../../providers/equipment_directory_provider.dart';
-
-part 'equipment_form_dismiss_guard.dart';
-part 'equipment_form_remote_params.dart';
+import 'equipment_form_dismiss_guard.dart';
+import 'equipment_form_remote_params.dart';
 
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο εξοπλισμού.
 class EquipmentFormDialog extends StatefulWidget {
@@ -61,143 +54,104 @@ class EquipmentFormDialog extends StatefulWidget {
   final VoidCallback? onSaved;
 
   @override
-  State<EquipmentFormDialog> createState() => _EquipmentFormDialogState();
+  State<EquipmentFormDialog> createState() => EquipmentFormDialogState();
 }
 
-/// Δηλώσεις πεδίων/μεθόδων του [_EquipmentFormDialogState] για τα θεματικά mixins.
-mixin EquipmentFormDialogStateHost on State<EquipmentFormDialog> {
-  TextEditingController get _codeController;
-  SpellCheckController get _notesController;
-  TextEditingController get _ownerController;
-  TextEditingController get _departmentController;
-  TextEditingController get _locationController;
-  String? get _selectedType;
-  int? get _selectedUserId;
-  int? get _defaultRemoteToolId;
-  int? get _exclusiveRemoteToolId;
-  set _exclusiveRemoteToolId(int? value);
-  Map<String, String> get _remoteParamValues;
-  Set<String> get _expandedRemoteKeys;
-  Map<String, TextEditingController> get _remoteParamControllers;
-  bool get _ownerTextInitialized;
-  bool get _equipmentDepartmentTextInitialized;
-  bool get _didPruneUnknownRemoteKeys;
-  set _didPruneUnknownRemoteKeys(bool value);
-  bool get _formBaselineCaptured;
-  set _formBaselineCaptured(bool value);
-  String get _initialFormSignature;
-  set _initialFormSignature(String value);
-  bool get _isEdit;
-  bool get _isDirty;
-  Future<void> _save();
-  void _tryCaptureFormBaseline();
-}
+/// Δημόσιο State: τα πεδία της φόρμας είναι ορατά στους συνεργάτες της
+/// (φρουρός κλεισίματος, παράμετροι απομακρυσμένης σύνδεσης).
+class EquipmentFormDialogState extends State<EquipmentFormDialog>
+    with DialogSnackbarHost {
+  /// Φρουρός κλεισίματος (υπογραφή/dirty + διάλογοι αλλαγών).
+  late final EquipmentFormDismissGuard dismissGuard = EquipmentFormDismissGuard(
+    this,
+  );
 
-class _EquipmentFormDialogState extends State<EquipmentFormDialog>
-    with
-        DialogSnackbarHost,
-        EquipmentFormDialogStateHost,
-        EquipmentFormDismissGuardMixin,
-        EquipmentFormRemoteParamsMixin {
+  /// Παράμετροι απομακρυσμένης σύνδεσης (Ζώνες Α/Β).
+  late final EquipmentFormRemoteParams remoteParams = EquipmentFormRemoteParams(
+    this,
+  );
+
   final _formKey = GlobalKey<FormState>();
-  @override
-  late final TextEditingController _codeController;
-  @override
-  late final SpellCheckController _notesController;
-  @override
-  late final TextEditingController _ownerController;
+  late final TextEditingController codeController;
+  late final SpellCheckController notesController;
+  late final TextEditingController ownerController;
   late final FocusNode _ownerFocusNode;
-  @override
-  bool _ownerTextInitialized = false;
+  bool ownerTextInitialized = false;
 
-  @override
-  late final TextEditingController _departmentController;
+  late final TextEditingController departmentController;
   late final FocusNode _departmentFocusNode;
-  @override
-  bool _equipmentDepartmentTextInitialized = false;
+  bool equipmentDepartmentTextInitialized = false;
 
-  @override
-  late final TextEditingController _locationController;
+  late final TextEditingController locationController;
 
-  @override
-  int? _selectedUserId;
+  int? selectedUserId;
 
   /// Αποφυγή επανάληψης postFrame για συγχρονισμό τμήματος/τοποθεσίας από κάτοχο.
   int? _deptLocScheduledForUserId;
 
   /// Επιλογή τύπου εξοπλισμού· null = Κανένας.
-  @override
-  String? _selectedType;
+  String? selectedType;
 
   /// Προεπιλεγμένο εργαλείο (id)· υπολογίζεται από τα επιλεγμένα chips κατά `sort_order`.
-  @override
-  int? _defaultRemoteToolId;
+  int? defaultRemoteToolId;
 
   /// Αποκλειστικό εργαλείο για κλήση (id)· αποθηκεύεται στο `remote_params`.
-  @override
-  int? _exclusiveRemoteToolId;
+  int? exclusiveRemoteToolId;
 
   /// Τιμές παραμέτρων ανά κλειδί εργαλείου (συγχρονίζεται με `remote_params`).
-  @override
-  final Map<String, String> _remoteParamValues = {};
+  final Map<String, String> remoteParamValues = {};
 
   /// Εργαλεία με ανοιχτό πεδίο επεξεργασίας (επιλεγμένο FilterChip).
-  @override
-  final Set<String> _expandedRemoteKeys = {};
-  @override
-  final Map<String, TextEditingController> _remoteParamControllers = {};
+  final Set<String> expandedRemoteKeys = {};
+  final Map<String, TextEditingController> remoteParamControllers = {};
 
   /// Μία φορά μετά φόρτωση καταλόγου: αφαίρεση κλειδιών που δεν αντιστοιχούν σε ενεργό εργαλείο.
-  @override
-  bool _didPruneUnknownRemoteKeys = false;
+  bool didPruneUnknownRemoteKeys = false;
 
-  @override
-  bool get _isEdit => widget.initialEquipment != null && !widget.isClone;
+  bool get isEdit => widget.initialEquipment != null && !widget.isClone;
 
   /// Στιγμιότυπο αρχικής κατάστασης μετά ολοκλήρωση bootstrap (prefill/async).
-  @override
-  late String _initialFormSignature;
-  @override
-  bool _formBaselineCaptured = false;
-
-  @override
-  bool get _isDirty =>
-      _formBaselineCaptured && _formStateSignature() != _initialFormSignature;
+  late String initialFormSignature;
+  bool formBaselineCaptured = false;
 
   bool get _canSubmitSave =>
-      _isDirty && (_isEdit ? true : _createHasRequiredFields);
+      dismissGuard.isDirty &&
+      (isEdit ? true : dismissGuard.createHasRequiredFields);
 
-  void _markFormChanged() => setState(() {});
+  /// Σηματοδοτεί αλλαγή φόρμας (rebuild) — χρησιμοποιείται και από συνεργάτες.
+  void markFormChanged() => setState(() {});
+
   Map<String, String> _remoteParamsForSave(
     List<RemoteToolFormPair> pairs,
     List<RemoteTool> catalog,
   ) {
-    for (final k in _expandedRemoteKeys.toList()) {
-      _syncRemoteValueFromController(k);
+    for (final k in expandedRemoteKeys.toList()) {
+      remoteParams.syncValueFromController(k);
     }
     final out = <String, String>{};
-    for (final k in _expandedRemoteKeys) {
-      final v = (_remoteParamValues[k] ?? '').trim();
+    for (final k in expandedRemoteKeys) {
+      final v = (remoteParamValues[k] ?? '').trim();
       if (v.isEmpty) continue;
-      final norm = _isHostAddressParamKey(k, catalog, pairs)
+      final norm = remoteParams.isHostAddressParamKey(k, catalog, pairs)
           ? v.replaceAll(',', '.')
           : v;
       out[k] = norm;
     }
-    for (final entry in _remoteParamValues.entries) {
-      if (_expandedRemoteKeys.contains(entry.key)) continue;
+    for (final entry in remoteParamValues.entries) {
+      if (expandedRemoteKeys.contains(entry.key)) continue;
       if (EquipmentRemoteParamKey.isReservedKey(entry.key)) continue;
       final v = entry.value.trim();
       if (v.isEmpty) continue;
-      final norm = _isHostAddressParamKey(entry.key, catalog, pairs)
+      final norm =
+          remoteParams.isHostAddressParamKey(entry.key, catalog, pairs)
           ? v.replaceAll(',', '.')
           : v;
       out[EquipmentRemoteParamKey.remoteParamStashKeyFor(entry.key)] = norm;
     }
     final effectiveId =
-        (_exclusiveRemoteToolId != null &&
-            _expandedRemoteKeys.contains('$_exclusiveRemoteToolId'))
-        ? _exclusiveRemoteToolId
+        (exclusiveRemoteToolId != null &&
+            expandedRemoteKeys.contains('$exclusiveRemoteToolId'))
+        ? exclusiveRemoteToolId
         : null;
     return EquipmentRemoteParamKey.withExclusiveToolId(out, effectiveId);
   }
@@ -206,85 +160,85 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
   void initState() {
     super.initState();
     final e = widget.initialEquipment;
-    _initRemoteParamsFromEquipment(e);
-    _codeController = TextEditingController(text: e?.code ?? '');
-    _notesController = SpellCheckController()..text = (e?.notes ?? '');
-    _ownerController = TextEditingController();
+    remoteParams.initFromEquipment(e);
+    codeController = TextEditingController(text: e?.code ?? '');
+    notesController = SpellCheckController()..text = (e?.notes ?? '');
+    ownerController = TextEditingController();
     _ownerFocusNode = FocusNode();
-    _departmentController = TextEditingController();
+    departmentController = TextEditingController();
     _departmentFocusNode = FocusNode();
     final hasInitialOwner = widget.initialOwner?.id != null;
-    _locationController = TextEditingController(
+    locationController = TextEditingController(
       text: hasInitialOwner ? '' : (e?.location ?? '').trim(),
     );
-    _selectedUserId = widget.initialOwner?.id;
+    selectedUserId = widget.initialOwner?.id;
     final typeRaw = e?.type?.trim() ?? '';
-    _selectedType = typeRaw.isEmpty ? null : typeRaw;
+    selectedType = typeRaw.isEmpty ? null : typeRaw;
     // Το «κύριο» εργαλείο είναι πλέον υπολογιζόμενο (σειρά προτεραιότητας) — δεν
     // αποθηκεύεται. Κρατιέται null ώστε το `default_remote_tool` να καθαρίζει.
-    _defaultRemoteToolId = null;
+    defaultRemoteToolId = null;
     // Πάντα (και σε νέο εξοπλισμό): γεμίζει τα πεδία παραμέτρων ανά εργαλείο από
     // τον κατάλογο ώστε να αποδοθούν όλες οι Ζώνες.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _pruneRemoteParamsAfterCatalogLoad();
+      remoteParams.pruneAfterCatalogLoad();
     });
-    if (_selectedUserId == null) {
-      _ownerTextInitialized = true;
+    if (selectedUserId == null) {
+      ownerTextInitialized = true;
     }
     for (final c in [
-      _codeController,
-      _ownerController,
-      _departmentController,
-      _locationController,
+      codeController,
+      ownerController,
+      departmentController,
+      locationController,
     ]) {
-      c.addListener(_markFormChanged);
+      c.addListener(markFormChanged);
     }
-    _notesController.addListener(_markFormChanged);
+    notesController.addListener(markFormChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _tryCaptureFormBaseline();
+      dismissGuard.tryCaptureFormBaseline();
     });
   }
 
   @override
   void dispose() {
     for (final c in [
-      _codeController,
-      _ownerController,
-      _departmentController,
-      _locationController,
+      codeController,
+      ownerController,
+      departmentController,
+      locationController,
     ]) {
-      c.removeListener(_markFormChanged);
+      c.removeListener(markFormChanged);
     }
-    _notesController.removeListener(_markFormChanged);
-    _codeController.dispose();
-    _notesController.dispose();
-    for (final c in _remoteParamControllers.values) {
+    notesController.removeListener(markFormChanged);
+    codeController.dispose();
+    notesController.dispose();
+    for (final c in remoteParamControllers.values) {
       c.dispose();
     }
-    _remoteParamControllers.clear();
-    _ownerController.dispose();
+    remoteParamControllers.clear();
+    ownerController.dispose();
     _ownerFocusNode.dispose();
-    _departmentController.dispose();
+    departmentController.dispose();
     _departmentFocusNode.dispose();
-    _locationController.dispose();
+    locationController.dispose();
     super.dispose();
   }
 
   void _applyDepartmentLocationFromUser(UserModel u) {
-    _departmentController.text = u.departmentName?.trim() ?? '';
-    _locationController.text = (u.location ?? '').trim();
+    departmentController.text = u.departmentName?.trim() ?? '';
+    locationController.text = (u.location ?? '').trim();
   }
 
   void _applyDepartmentLocationFromEquipment(EquipmentModel? e) {
     final did = e?.departmentId;
     if (did != null) {
-      _departmentController.text =
+      departmentController.text =
           LookupService.instance.getDepartmentName(did)?.trim() ?? '';
     } else {
-      _departmentController.text = '';
+      departmentController.text = '';
     }
-    _locationController.text = (e?.location ?? '').trim();
+    locationController.text = (e?.location ?? '').trim();
   }
 
   Widget _departmentAutocompleteOptionsView(
@@ -349,11 +303,10 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
   String? _requiredValidator(String? v) =>
       (v?.trim().isEmpty ?? true) ? 'Υποχρεωτικό' : null;
 
-  @override
-  Future<void> _save() async {
+  Future<void> save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    for (final k in _expandedRemoteKeys.toList()) {
-      _syncRemoteValueFromController(k);
+    for (final k in expandedRemoteKeys.toList()) {
+      remoteParams.syncValueFromController(k);
     }
     try {
       await _savePersist();
@@ -366,11 +319,11 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
   Future<void> _savePersist() async {
     final asyncLookup = widget.ref.read(lookupServiceProvider);
     final lookup = asyncLookup.value?.service;
-    final ownerText = _ownerController.text.trim();
+    final ownerText = ownerController.text.trim();
     final userId = await _resolveOwnerToUserId(ownerText, lookup);
-    final code = _codeController.text.trim();
-    final typeVal = _selectedType?.trim() ?? '';
-    final deptText = _departmentController.text.trim();
+    final code = codeController.text.trim();
+    final typeVal = selectedType?.trim() ?? '';
+    final deptText = departmentController.text.trim();
     final int? equipmentDepartmentId;
     if (deptText.isEmpty) {
       equipmentDepartmentId = null;
@@ -380,23 +333,23 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
         dbDept,
       ).getOrCreateDepartmentIdByName(deptText);
     }
-    final locTrim = _locationController.text.trim();
+    final locTrim = locationController.text.trim();
     final pairs = await widget.ref.read(remoteToolFormPairsProvider.future);
     final catalog = await widget.ref.read(remoteToolsCatalogProvider.future);
-    final remoteParams = _remoteParamsForSave(pairs, catalog);
+    final remoteParamsMap = _remoteParamsForSave(pairs, catalog);
     final equipment = EquipmentModel(
-      id: _isEdit ? widget.initialEquipment?.id : null,
+      id: isEdit ? widget.initialEquipment?.id : null,
       code: code.isEmpty ? null : code,
       type: typeVal.isEmpty ? null : typeVal,
-      notes: _notesController.text.trim().isEmpty
+      notes: notesController.text.trim().isEmpty
           ? null
-          : _notesController.text.trim(),
-      remoteParams: remoteParams,
+          : notesController.text.trim(),
+      remoteParams: remoteParamsMap,
       defaultRemoteTool: null,
       departmentId: equipmentDepartmentId,
       location: locTrim.isEmpty ? null : locTrim,
     );
-    if (_isEdit) {
+    if (isEdit) {
       if (equipment.id != null &&
           widget.notifier.hasDuplicateCode(code, excludeId: equipment.id)) {
         if (!mounted) return;
@@ -415,7 +368,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
       final savedMessage = await _buildEditSaveConfirmationMessage(
         equipment: equipment,
         catalog: catalog,
-        newRemoteParams: remoteParams,
+        newRemoteParams: remoteParamsMap,
       );
       try {
         widget.ref.invalidate(lookupServiceProvider);
@@ -513,7 +466,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
   }
 
   String get _title {
-    if (_isEdit) return 'Επεξεργασία εξοπλισμού';
+    if (isEdit) return 'Επεξεργασία εξοπλισμού';
     if (widget.isClone) return 'Αντίγραφο εξοπλισμού';
     return 'Νέος εξοπλισμός';
   }
@@ -526,7 +479,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
         canPop: false,
         onPopInvokedWithResult: (didPop, _) async {
           if (didPop) return;
-          await _requestClose();
+          await dismissGuard.requestClose();
         },
         child: DraggableDialogShell(
           title: Text(_title),
@@ -545,7 +498,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                         children: [
                           Expanded(
                             child: TextFormField(
-                              controller: _codeController,
+                              controller: codeController,
                               decoration: const InputDecoration(
                                 labelText: 'Κωδικός',
                                 border: OutlineInputBorder(),
@@ -556,18 +509,18 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                           const SizedBox(width: 12),
                           Expanded(
                             child: FutureBuilder<List<String>>(
-                              future: SettingsService().getEquipmentTypesList(),
+                              future: SettingsService().catalogs.getEquipmentTypesList(),
                               builder: (context, snapshot) {
                                 var options =
                                     snapshot.data ??
                                     ['Υπολογιστής', 'Εκτυπωτής'];
-                                if (_selectedType != null &&
-                                    _selectedType!.trim().isNotEmpty &&
-                                    !options.contains(_selectedType)) {
-                                  options = [_selectedType!, ...options];
+                                if (selectedType != null &&
+                                    selectedType!.trim().isNotEmpty &&
+                                    !options.contains(selectedType)) {
+                                  options = [selectedType!, ...options];
                                 }
                                 return DropdownButtonFormField<String?>(
-                                  initialValue: _selectedType,
+                                  initialValue: selectedType,
                                   decoration: const InputDecoration(
                                     labelText: 'Τύπος',
                                     border: OutlineInputBorder(),
@@ -585,7 +538,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                     ),
                                   ],
                                   onChanged: (v) =>
-                                      setState(() => _selectedType = v),
+                                      setState(() => selectedType = v),
                                 );
                               },
                             ),
@@ -594,7 +547,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                       ),
                       const SizedBox(height: 12),
                       LexiconSpellTextFormField(
-                        controller: _notesController,
+                        controller: notesController,
                         focusNode: null,
                         decoration: const InputDecoration(
                           labelText: 'Σημειώσεις',
@@ -617,7 +570,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                           return pairsAsync.when(
                             data: (pairs) => catalogAsync.when(
                               data: (catalog) =>
-                                  _buildRemoteParamsSection(pairs, catalog),
+                                  remoteParams.buildSection(pairs, catalog),
                               loading: () => const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 8),
                                 child: LinearProgressIndicator(minHeight: 2),
@@ -662,11 +615,11 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                   .map((d) => d.name.trim())
                                   .where((name) => name.isNotEmpty)
                                   .toList();
-                              if (!_equipmentDepartmentTextInitialized) {
+                              if (!equipmentDepartmentTextInitialized) {
                                 final hasInitialHolder =
                                     widget.initialOwner?.id != null;
                                 if (hasInitialHolder) {
-                                  _equipmentDepartmentTextInitialized = true;
+                                  equipmentDepartmentTextInitialized = true;
                                 } else {
                                   final did =
                                       widget.initialEquipment?.departmentId;
@@ -680,24 +633,23 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                                 ?.trim() ??
                                             '';
                                         if (name.isNotEmpty) {
-                                          _departmentController.text = name;
+                                          departmentController.text = name;
                                         }
                                         setState(() {
-                                          _equipmentDepartmentTextInitialized =
+                                          equipmentDepartmentTextInitialized =
                                               true;
                                         });
-                                        _tryCaptureFormBaseline();
+                                        dismissGuard.tryCaptureFormBaseline();
                                       },
                                     );
                                   } else {
-                                    _equipmentDepartmentTextInitialized = true;
+                                    equipmentDepartmentTextInitialized = true;
                                   }
                                 }
                               }
-                              final holderLocksDeptLoc =
-                                  _selectedUserId != null;
+                              final holderLocksDeptLoc = selectedUserId != null;
                               if (holderLocksDeptLoc) {
-                                final uid = _selectedUserId!;
+                                final uid = selectedUserId!;
                                 if (_deptLocScheduledForUserId != uid) {
                                   final u = service.findUserById(uid);
                                   if (u != null) {
@@ -705,7 +657,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                     WidgetsBinding.instance
                                         .addPostFrameCallback((_) {
                                           if (!mounted ||
-                                              _selectedUserId != uid) {
+                                              selectedUserId != uid) {
                                             return;
                                           }
                                           _applyDepartmentLocationFromUser(u);
@@ -722,7 +674,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                   Expanded(
                                     child: RawAutocomplete<String>(
                                       textEditingController:
-                                          _departmentController,
+                                          departmentController,
                                       focusNode: _departmentFocusNode,
                                       optionsBuilder: (textEditingValue) {
                                         if (holderLocksDeptLoc) {
@@ -747,8 +699,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                           option,
                                       onSelected: (selection) {
                                         if (!holderLocksDeptLoc) {
-                                          _departmentController.text =
-                                              selection;
+                                          departmentController.text = selection;
                                         }
                                       },
                                       fieldViewBuilder:
@@ -780,7 +731,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: TextFormField(
-                                      controller: _locationController,
+                                      controller: locationController,
                                       enabled: !holderLocksDeptLoc,
                                       decoration: InputDecoration(
                                         labelText: 'Τοποθεσία',
@@ -844,27 +795,27 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                           return async.when(
                             data: (bundle) {
                               final service = bundle.service;
-                              if (_selectedUserId != null &&
-                                  !_ownerTextInitialized) {
+                              if (selectedUserId != null &&
+                                  !ownerTextInitialized) {
                                 final u = service.users
-                                    .where((u) => u.id == _selectedUserId)
+                                    .where((u) => u.id == selectedUserId)
                                     .firstOrNull;
                                 if (u != null) {
                                   WidgetsBinding.instance.addPostFrameCallback((
                                     _,
                                   ) {
                                     if (mounted) {
-                                      _ownerController.text =
+                                      ownerController.text =
                                           u.fullNameWithDepartment;
                                       setState(
-                                        () => _ownerTextInitialized = true,
+                                        () => ownerTextInitialized = true,
                                       );
-                                      _tryCaptureFormBaseline();
+                                      dismissGuard.tryCaptureFormBaseline();
                                     }
                                   });
                                 } else {
-                                  _ownerTextInitialized = true;
-                                  _tryCaptureFormBaseline();
+                                  ownerTextInitialized = true;
+                                  dismissGuard.tryCaptureFormBaseline();
                                 }
                               }
                               final theme = Theme.of(context);
@@ -872,7 +823,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                 displayStringForOption: (String option) =>
                                     option,
                                 focusNode: _ownerFocusNode,
-                                textEditingController: _ownerController,
+                                textEditingController: ownerController,
                                 optionsBuilder: (TextEditingValue value) {
                                   final q =
                                       SearchTextNormalizer.normalizeForSearch(
@@ -905,9 +856,9 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                       .firstOrNull;
                                   if (u != null && u.id != null) {
                                     setState(() {
-                                      _selectedUserId = u.id;
+                                      selectedUserId = u.id;
                                       _deptLocScheduledForUserId = u.id;
-                                      _ownerController.text =
+                                      ownerController.text =
                                           u.name ?? u.fullNameWithDepartment;
                                       _applyDepartmentLocationFromUser(u);
                                     });
@@ -945,7 +896,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                               onPressed: () {
                                                 textController.clear();
                                                 setState(() {
-                                                  _selectedUserId = null;
+                                                  selectedUserId = null;
                                                   _deptLocScheduledForUserId =
                                                       null;
                                                   _applyDepartmentLocationFromEquipment(
@@ -960,7 +911,7 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
                                         onChanged: (value) {
                                           if (value.trim().isEmpty) {
                                             setState(() {
-                                              _selectedUserId = null;
+                                              selectedUserId = null;
                                               _deptLocScheduledForUserId = null;
                                               _applyDepartmentLocationFromEquipment(
                                                 widget.initialEquipment,
@@ -996,12 +947,12 @@ class _EquipmentFormDialogState extends State<EquipmentFormDialog>
             ),
             actions: [
               TextButton(
-                onPressed: _cancelAndClose,
+                onPressed: dismissGuard.cancelAndClose,
                 child: const Text('Ακύρωση'),
               ),
               FilledButton(
-                onPressed: _canSubmitSave ? _save : null,
-                child: Text(_isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
+                onPressed: _canSubmitSave ? save : null,
+                child: Text(isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
               ),
             ],
           ),

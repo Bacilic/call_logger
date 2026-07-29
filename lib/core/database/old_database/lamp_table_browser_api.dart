@@ -1,4 +1,4 @@
-import '../database_helper.dart' show TablePreviewResult;
+import '../database_table_inspection.dart' show TablePreviewResult;
 import 'lamp_database_provider.dart';
 import 'lamp_table_greek_names.dart';
 

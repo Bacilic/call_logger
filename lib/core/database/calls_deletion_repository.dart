@@ -1,6 +1,20 @@
-﻿part of 'calls_repository.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-mixin CallsRepositoryDeletionMixin on CallsRepositorySearchIndexMixin {
+import 'audit_service.dart';
+import 'calls_audit_line.dart';
+import 'calls_search_index.dart';
+import 'database_helper.dart';
+
+/// Διαγραφή κλήσεων (soft/hard/μαζική) με τα συνδεδεμένα tasks και audit.
+class CallsDeletionRepository {
+  CallsDeletionRepository(this.db)
+    : _searchIndex = CallsSearchIndex(db),
+      _auditLine = CallsAuditLine(db);
+
+  final Database db;
+  final CallsSearchIndex _searchIndex;
+  final CallsAuditLine _auditLine;
+
   Future<int> getTasksCountLinkedToCall(int callId) async {
     final rows = await db.rawQuery(
       '''
@@ -91,7 +105,7 @@ mixin CallsRepositoryDeletionMixin on CallsRepositorySearchIndexMixin {
     if (rows.isEmpty) return;
     final row = Map<String, dynamic>.from(rows.first);
     row['is_deleted'] = 1;
-    final si = await _buildCallSearchIndex(txn, row);
+    final si = await _searchIndex.buildCallSearchIndex(txn, row);
     await txn.update(
       'calls',
       {'is_deleted': 1, 'search_index': si},
@@ -99,7 +113,7 @@ mixin CallsRepositoryDeletionMixin on CallsRepositorySearchIndexMixin {
       whereArgs: [callId],
     );
     if (!logAudit) return;
-    final entityName = (await buildCallAuditDisplayLine(
+    final entityName = (await _auditLine.buildCallAuditDisplayLine(
       callId,
       executor: txn,
     )).trim();
@@ -130,12 +144,12 @@ mixin CallsRepositoryDeletionMixin on CallsRepositorySearchIndexMixin {
     if (rows.isEmpty) return;
     final oldRow = Map<String, dynamic>.from(rows.first);
     final oldValues = <String, dynamic>{};
-    for (final field in CallsRepository._kCallAuditFields) {
+    for (final field in kCallAuditFields) {
       if (oldRow.containsKey(field)) {
         oldValues[field] = oldRow[field];
       }
     }
-    final entityName = (await buildCallAuditDisplayLine(
+    final entityName = (await _auditLine.buildCallAuditDisplayLine(
       callId,
       executor: txn,
     )).trim();

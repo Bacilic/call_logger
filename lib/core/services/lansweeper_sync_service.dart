@@ -376,8 +376,8 @@ class LansweeperSyncService {
     String action,
     Map<String, String> fields,
   ) async {
-    final apiUrl = (await settingsService.getLansweeperApiUrl())?.trim() ?? '';
-    final apiKey = (await settingsService.getLansweeperApiKey())?.trim() ?? '';
+    final apiUrl = (await settingsService.remoteLansweeper.getLansweeperApiUrl())?.trim() ?? '';
+    final apiKey = (await settingsService.remoteLansweeper.getLansweeperApiKey())?.trim() ?? '';
     if (apiUrl.isEmpty) {
       throw const LansweeperSyncException(
         'Δεν έχει οριστεί Lansweeper API URL.',

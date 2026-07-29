@@ -1,8 +1,12 @@
-part of 'main_shell.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../features/calls/provider/call_entry_provider.dart';
+import 'nav_rail_attention_badge.dart';
 
 /// Εικονίδιο πλοήγησης «Κλήσεις» — ίδιο στυλ μπάλωματος με τις εκκρεμότητες.
-class _CallsNavigationIcon extends ConsumerWidget {
-  const _CallsNavigationIcon({required this.isOnCallsScreen});
+class CallsNavigationIcon extends ConsumerWidget {
+  const CallsNavigationIcon({super.key, required this.isOnCallsScreen});
 
   final bool isOnCallsScreen;
 
@@ -33,8 +37,10 @@ class _CallsNavigationIcon extends ConsumerWidget {
   }
 }
 
-class _TasksNavigationIcon extends StatelessWidget {
-  const _TasksNavigationIcon({
+/// Εικονίδιο πλοήγησης «Εκκρεμότητες» με μετρητή ανοιχτών εργασιών.
+class TasksNavigationIcon extends StatelessWidget {
+  const TasksNavigationIcon({
+    super.key,
     required this.showBadge,
     required this.pendingCount,
   });
@@ -59,8 +65,9 @@ class _TasksNavigationIcon extends StatelessWidget {
   }
 }
 
-class _DictionaryNavigationIcon extends StatelessWidget {
-  const _DictionaryNavigationIcon({required this.showWarning});
+/// Εικονίδιο πλοήγησης «Λεξικό» με προειδοποίηση όταν λείπει λεξικό-πυρήνας.
+class DictionaryNavigationIcon extends StatelessWidget {
+  const DictionaryNavigationIcon({super.key, required this.showWarning});
 
   final bool showWarning;
 
@@ -91,8 +98,9 @@ class _DictionaryNavigationIcon extends StatelessWidget {
   }
 }
 
-class _LampNavigationIcon extends StatelessWidget {
-  const _LampNavigationIcon({required this.showWarning});
+/// Εικονίδιο πλοήγησης «Λάμπα» με προειδοποίηση μη προσπελάσιμης παλιάς βάσης.
+class LampNavigationIcon extends StatelessWidget {
+  const LampNavigationIcon({super.key, required this.showWarning});
 
   final bool showWarning;
 

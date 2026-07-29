@@ -265,7 +265,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   Future<ShutdownTraceService?> _createTraceServiceIfEnabled() async {
     try {
       final settings = SettingsService();
-      final enabled = await settings.getShutdownTraceEnabled();
+      final enabled = await settings.catalogs.getShutdownTraceEnabled();
       if (!enabled) return null;
       final dbPath = await settings.getDatabasePath();
       if (dbPath.trim().isEmpty) return null;
@@ -274,7 +274,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
           dbPath,
         ),
         enabled: true,
-        retentionCount: await settings.getShutdownTraceRetentionCount(),
+        retentionCount: await settings.catalogs.getShutdownTraceRetentionCount(),
       );
     } catch (_) {
       return null;

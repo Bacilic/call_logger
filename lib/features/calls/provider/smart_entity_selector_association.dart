@@ -1,9 +1,41 @@
-part of 'smart_entity_selector_provider.dart';
+import 'dart:developer' as developer;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/database/database_helper.dart';
+import '../../../core/database/department_repository.dart';
+import '../../../core/database/equipment_repository.dart';
+import '../../../core/database/phone_repository.dart';
+import '../../../core/database/user_repository.dart';
+import '../../../core/directory/phone_department_policy.dart';
+import '../../../core/utils/name_parser.dart';
+import '../../../core/utils/phone_list_parser.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
+import '../../directory/models/department_model.dart';
+import '../../directory/providers/directory_cache_refresh.dart';
+import '../../directory/screens/widgets/user_phone_department_conflict_dialog.dart';
+import '../../tasks/models/task.dart';
+import '../../tasks/providers/task_service_provider.dart';
+import '../models/equipment_model.dart';
+import '../models/user_model.dart';
+import 'call_mutation_refresh.dart';
+import 'lookup_provider.dart';
+import 'smart_entity_selector_provider.dart';
 
 /// Συσχετίσεις, quick-add orphan και γρήγορες εκκρεμότητες.
-mixin SmartEntitySelectorAssociationMixin
-    on Notifier<SmartEntitySelectorState> {
-  SmartEntitySelectorNotifier get _host => this as SmartEntitySelectorNotifier;
+///
+/// Συνεργάτης του [SmartEntitySelectorNotifier] (Σύνθεση): δουλεύει πάνω στην
+/// κατάσταση του host μέσω των δημόσιων γεφυρών του — δεν κρατά δική του.
+class SmartEntitySelectorAssociation {
+  SmartEntitySelectorAssociation(this.host);
+
+  final SmartEntitySelectorNotifier host;
+
+  SmartEntitySelectorState get state => host.selectorState;
+  set state(SmartEntitySelectorState value) => host.selectorState = value;
+
+  Ref get ref => host.selectorRef;
 
   /// Εμφανίζει τον υπάρχοντα διάλογο σύγκρουσης αν χρειάζεται· επιστρέφει το
   /// τηλέφωνο προς σύνδεση ή null αν ο χρήστης ακύρωσε / δεν υπάρχει context.
@@ -49,10 +81,11 @@ mixin SmartEntitySelectorAssociationMixin
     return trimmed;
   }
 
-  void _resetAssociationQuickTaskCycle() {
-    _host._associationQuickTaskId = null;
-    _host._callerAwaitingPhoneAssociation = false;
-    _host.clearPendingAuditOrigins();
+  /// Μηδενίζει τον κύκλο γρήγορης εκκρεμότητας (νέα φόρμα/καθαρισμός/submit).
+  void resetQuickTaskCycle() {
+    host.associationQuickTaskId = null;
+    host.callerAwaitingPhoneAssociation = false;
+    host.clearPendingAuditOrigins();
   }
 
   Future<OrphanQuickAddResult?> quickAddOrphanToDepartment({
@@ -228,7 +261,7 @@ mixin SmartEntitySelectorAssociationMixin
         ? equipResolved.first.id
         : null;
 
-    if (newEntityEligible || _host._associationQuickTaskId != null) {
+    if (newEntityEligible || host.associationQuickTaskId != null) {
       try {
         await _syncAssociationQuickTask(
           newEntityEligible: newEntityEligible,
@@ -271,7 +304,7 @@ mixin SmartEntitySelectorAssociationMixin
 
     final msg = state.associationTooltip(lookupForAssoc);
     final dbAssoc = await DatabaseHelper.instance.database;
-    final auditSince = await _host.maxAuditLogId(dbAssoc);
+    final auditSince = await host.maxAuditLogId(dbAssoc);
     final departments = DepartmentRepository(dbAssoc);
     final phones = PhoneRepository(dbAssoc);
     final equipmentRepo = EquipmentRepository(dbAssoc);
@@ -382,7 +415,7 @@ mixin SmartEntitySelectorAssociationMixin
               : name,
           departmentText: s.departmentText,
         );
-        _host._callerAwaitingPhoneAssociation = parsedPhones.isEmpty;
+        host.callerAwaitingPhoneAssociation = parsedPhones.isEmpty;
         await refreshDirectoryCaches(
           ref,
           users: true,
@@ -463,7 +496,7 @@ mixin SmartEntitySelectorAssociationMixin
         if (summary != null && summary.isNotEmpty) {
           lines.add(summary);
         }
-        await _host.trackDerivativeAuditsSince(auditSince);
+        await host.trackDerivativeAuditsSince(auditSince);
         return lines.join('\n');
       } catch (e) {
         await refreshDirectoryCaches(
@@ -661,7 +694,7 @@ mixin SmartEntitySelectorAssociationMixin
             ? null
             : s.departmentText.trim(),
       );
-      await _host.trackDerivativeAuditsSince(auditSince);
+      await host.trackDerivativeAuditsSince(auditSince);
       return (hadPhoneWork || hadEqWork || primaryDepartmentChanged)
           ? (msg ?? 'Προστέθηκε.')
           : null;
@@ -687,7 +720,7 @@ mixin SmartEntitySelectorAssociationMixin
     final taskService = ref.read(taskServiceProvider);
     final summary = summaryText?.trim();
     final hasSummary = summary != null && summary.isNotEmpty;
-    final existingId = _host._associationQuickTaskId;
+    final existingId = host.associationQuickTaskId;
     if (existingId != null) {
       var touched = false;
       if (hasSummary && (newEntityEligible || associationWorkDone)) {
@@ -725,7 +758,7 @@ mixin SmartEntitySelectorAssociationMixin
       equipmentText: equipmentText,
       departmentText: departmentText,
     );
-    _host._associationQuickTaskId = id;
+    host.associationQuickTaskId = id;
     invalidateTaskListProviders(ref);
   }
 
@@ -765,7 +798,7 @@ mixin SmartEntitySelectorAssociationMixin
           departmentText: departmentText?.isEmpty == true
               ? null
               : departmentText,
-          priority: SmartEntitySelectorNotifier._criticalTaskPriority,
+          priority: SmartEntitySelectorNotifier.criticalTaskPriority,
           categoryName: Task.quickAddCategoryEl,
         );
   }

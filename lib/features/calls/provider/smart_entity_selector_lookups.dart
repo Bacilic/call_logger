@@ -1,15 +1,31 @@
-part of 'smart_entity_selector_provider.dart';
+import 'dart:developer' as developer;
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/services/lookup_service.dart';
+import '../../../core/utils/name_parser.dart';
+import '../../../core/utils/phone_list_parser.dart';
+import '../../../core/utils/search_text_normalizer.dart';
+import '../models/equipment_model.dart';
+import '../models/user_model.dart';
+import 'lookup_provider.dart';
+import 'smart_entity_selector_provider.dart';
 
 /// Lookup τηλεφώνου, καλούντα, εξοπλισμού και βοηθητικές autofill ρουτίνες.
-mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
-  SmartEntitySelectorNotifier get _host => this as SmartEntitySelectorNotifier;
+///
+/// Συνεργάτης του [SmartEntitySelectorNotifier] (Σύνθεση): δουλεύει πάνω στην
+/// κατάσταση του host μέσω των δημόσιων γεφυρών του — δεν κρατά δική του.
+class SmartEntitySelectorLookups {
+  SmartEntitySelectorLookups(this.host);
 
-  bool get _hasManualEquipmentSelection =>
-      state.equipmentText.trim().isNotEmpty;
+  final SmartEntitySelectorNotifier host;
 
-  List<String> _splitPhones(String? rawPhone) {
-    return PhoneListParser.splitPhones(rawPhone);
-  }
+  SmartEntitySelectorState get state => host.selectorState;
+  set state(SmartEntitySelectorState value) => host.selectorState = value;
+
+  Ref get ref => host.selectorRef;
+
+  bool get hasManualEquipmentSelection => state.equipmentText.trim().isNotEmpty;
 
   void _setPhoneValueFromLookup(String phone) {
     final trimmed = phone.trim();
@@ -21,7 +37,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
       clearPhoneCandidates: true,
       isPhoneAmbiguous: false,
     );
-    _host.markPhoneUsed(trimmed);
+    host.markPhoneUsed(trimmed);
   }
 
   /// **Μοναδικό** σημείο επιβολής του συμβολαίου των υποψήφιων τηλεφώνων:
@@ -31,7 +47,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   /// Κάθε ροή που παράγει υποψήφια τηλέφωνα περνά από εδώ — έτσι καμία δεν
   /// μπορεί να ξεχάσει ότι το μοναδικό/ακριβές ταίριασμα κερδίζει.
   /// Προϋπόθεση κάθε καλούντος: το πεδίο τηλεφώνου είναι **κενό**.
-  void _applyPhoneCandidatesFromLookup(List<String> phones) {
+  void applyPhoneCandidatesFromLookup(List<String> phones) {
     final sorted =
         phones
             .map((phone) => phone.trim())
@@ -86,13 +102,13 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     if (previous.isNotEmpty) {
       return;
     }
-    _applyPhoneCandidatesFromLookup(phones);
+    applyPhoneCandidatesFromLookup(phones);
   }
 
   /// **Μοναδικό** σημείο επιβολής του συμβολαίου για τον καλούντα:
   /// ακριβώς ένας υπάλληλος = απόφαση, δύο και πάνω = λίστα, κανένας = καθαρό
   /// πεδίο. Προϋπόθεση κάθε καλούντος: το πεδίο καλούντα είναι **κενό**.
-  void _applyCallerCandidatesFromLookup(List<UserModel> users) {
+  void applyCallerCandidatesFromLookup(List<UserModel> users) {
     if (users.length == 1) {
       final user = users.first;
       state = state.copyWith(
@@ -118,7 +134,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   /// Το `equipmentCandidates` σημαίνει **μόνο** «δεν αποφασίστηκε ακόμα»: όταν
   /// υπάρχει απόφαση, αδειάζει. Οι προτάσεις του overlay για ένα επιλεγμένο
   /// τμήμα χτίζονται χωριστά, στο `departmentEquipmentsForSuggestions`.
-  void _applyEquipmentCandidatesFromLookup(List<EquipmentModel> equipment) {
+  void applyEquipmentCandidatesFromLookup(List<EquipmentModel> equipment) {
     if (equipment.length == 1) {
       final only = equipment.first;
       final text = _equipmentAutofillText(only);
@@ -128,7 +144,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         equipmentCandidates: [],
         isEquipmentAmbiguous: false,
         equipmentNoMatch: false,
-        hasAnyContent: _host._computeHasAnyContent(equipmentText: text),
+        hasAnyContent: host.computeHasAnyContent(equipmentText: text),
       );
       return;
     }
@@ -157,7 +173,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   /// Η στενότερη πηγή κερδίζει: οι αριθμοί του κατόχου/καλούντα δεν
   /// αντικαθίστανται από τους αριθμούς ολόκληρου του τμήματος, γιατί η ευρύτερη
   /// λίστα περιέχει αριθμούς άλλων ανθρώπων και οδηγεί σε λάθος επιλογή.
-  void _restoreDepartmentPhoneCandidatesIfNeeded(LookupService? lookup) {
+  void restoreDepartmentPhoneCandidatesIfNeeded(LookupService? lookup) {
     final deptId = state.selectedDepartmentId;
     if (lookup == null || deptId == null) return;
     if (state.selectedPhone?.trim().isNotEmpty == true) return;
@@ -182,7 +198,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     if (state.selectedPhone?.trim().isNotEmpty == true) return;
     final phones = lookup.getPhonesByDepartment(departmentId);
     if (phones.isEmpty) return;
-    _applyPhoneCandidatesFromLookup(phones);
+    applyPhoneCandidatesFromLookup(phones);
   }
 
   /// Υπόδειξη τηλεφώνου για **επικυρωμένο υπάλληλο**: πρώτα τα δικά του νούμερα.
@@ -209,7 +225,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   ///
   /// Κενό ορατό πεδίο σημαίνει «κανένας καλών», οπότε λύνεται και η τυχόν
   /// ταυτοποίηση που είχε μείνει από προηγούμενη επιλογή.
-  void _restoreDepartmentCallerCandidatesIfNeeded(LookupService? lookup) {
+  void restoreDepartmentCallerCandidatesIfNeeded(LookupService? lookup) {
     final deptId = state.selectedDepartmentId;
     if (lookup == null || deptId == null) return;
     if (state.callerDisplayText.trim().isNotEmpty) return;
@@ -223,7 +239,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   }
 
   /// Μετά καθαρισμό εξοπλισμού, επαναφέρει τους υποψήφιους εξοπλισμούς του τμήματος.
-  void _restoreDepartmentEquipmentCandidatesIfNeeded(LookupService? lookup) {
+  void restoreDepartmentEquipmentCandidatesIfNeeded(LookupService? lookup) {
     final deptId = state.selectedDepartmentId;
     if (lookup == null || deptId == null) return;
     if (state.equipmentText.trim().isNotEmpty) return;
@@ -264,7 +280,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         SearchTextNormalizer.normalizeForSearch(strippedName);
   }
 
-  String _departmentTextForUser(UserModel user) {
+  String departmentTextForUser(UserModel user) {
     if (user.departmentId == null) return '';
     final asyncLookup = ref.read(lookupServiceProvider);
     final lookup = asyncLookup.value?.service;
@@ -273,20 +289,20 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   }
 
   void performPhoneLookup(String phone) {
-    if (_host._isFillingFromLookup) return;
+    if (host.isFillingFromLookup) return;
 
     final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    final generation = ++_host._phoneLookupGeneration;
+    final generation = host.bumpPhoneLookupGeneration();
     if (digits.length < 3) {
       // Κάτω από 3 ψηφία το τηλέφωνο αγνοείται σαν κενό — οι σχέσεις
       // των υπόλοιπων πεδίων ξαναχτίζονται κανονικά χωρίς αυτό.
-      _host.runExclusiveLookup(null, () {
+      host.runExclusiveLookup(null, () {
         state = state.copyWith(
           clearPhoneCandidates: true,
           clearCallerCandidates: true,
           clearSelectedCaller: true,
           clearEquipmentCandidates: true,
-          clearSelectedEquipment: !_hasManualEquipmentSelection,
+          clearSelectedEquipment: !hasManualEquipmentSelection,
           isPhoneAmbiguous: false,
           isEquipmentAmbiguous: false,
           callerNoMatch: false,
@@ -298,7 +314,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
 
     final snap = ref.read(lookupServiceProvider);
     if (snap.hasValue) {
-      if (generation == _host._phoneLookupGeneration) {
+      if (generation == host.phoneLookupGeneration) {
         _applyPhoneLookupWithCatalog(digits, snap.requireValue.service);
       }
       return;
@@ -308,7 +324,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         .read(lookupServiceProvider.future)
         .then((bundle) {
           if (!ref.mounted) return;
-          if (generation != _host._phoneLookupGeneration) return;
+          if (generation != host.phoneLookupGeneration) return;
           final currentDigits = (state.selectedPhone ?? '').replaceAll(
             RegExp(r'[^0-9]'),
             '',
@@ -327,7 +343,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   }
 
   void _applyPhoneLookupWithCatalog(String digits, LookupService lookup) {
-    _host.runExclusiveLookup(SelectorField.phone, () {
+    host.runExclusiveLookup(SelectorField.phone, () {
       final users = lookup.findUsersByPhone(digits);
       if (users.isEmpty) {
         final orphanDept = lookup.getDepartmentByPhone(digits);
@@ -339,7 +355,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
           callerCandidates: [],
           clearSelectedCaller: true,
           equipmentCandidates: [],
-          clearSelectedEquipment: !_hasManualEquipmentSelection,
+          clearSelectedEquipment: !hasManualEquipmentSelection,
           isPhoneAmbiguous: false,
           isEquipmentAmbiguous: false,
           callerNoMatch: true,
@@ -371,7 +387,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
             callerNoMatch: false,
             callerDisplayText: name,
             departmentText: shouldAutofillDepartment
-                ? _departmentTextForUser(user)
+                ? departmentTextForUser(user)
                 : state.departmentText,
             selectedDepartmentId: shouldAutofillDepartment
                 ? user.departmentId
@@ -383,7 +399,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
             callerCandidates: [],
             isPhoneAmbiguous: false,
             callerNoMatch: false,
-            departmentText: _departmentTextForUser(user),
+            departmentText: departmentTextForUser(user),
             selectedDepartmentId: user.departmentId,
           );
         } else {
@@ -394,7 +410,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
             callerNoMatch: false,
           );
         }
-        _host.markPhoneUsed(digits);
+        host.markPhoneUsed(digits);
         if (users.first.id != null) {
           _performEquipmentLookupForUser(users.first.id!);
         }
@@ -445,7 +461,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         callerCandidates: users,
         clearSelectedCaller: true,
         equipmentCandidates: [],
-        clearSelectedEquipment: !_hasManualEquipmentSelection,
+        clearSelectedEquipment: !hasManualEquipmentSelection,
         isPhoneAmbiguous: true,
         isEquipmentAmbiguous: false,
         callerNoMatch: false,
@@ -463,7 +479,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
 
   /// Lookup εξοπλισμού για userId: 0 → no match hint, 1 → setEquipment, >1 → dropdown candidates.
   void performEquipmentLookup(int userId) {
-    _host.runExclusiveLookup(null, () {
+    host.runExclusiveLookup(null, () {
       _performEquipmentLookupForUser(userId);
     });
   }
@@ -491,7 +507,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
       }
       state = state.copyWith(
         equipmentCandidates: [],
-        clearSelectedEquipment: !_hasManualEquipmentSelection,
+        clearSelectedEquipment: !hasManualEquipmentSelection,
         isEquipmentAmbiguous: false,
         equipmentNoMatch: true,
       );
@@ -508,7 +524,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
           equipmentCandidates: [],
           isEquipmentAmbiguous: false,
           equipmentNoMatch: false,
-          hasAnyContent: _host._computeHasAnyContent(equipmentText: text),
+          hasAnyContent: host.computeHasAnyContent(equipmentText: text),
         );
       } else {
         state = state.copyWith(
@@ -521,7 +537,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     }
     state = state.copyWith(
       equipmentCandidates: list,
-      clearSelectedEquipment: !_hasManualEquipmentSelection,
+      clearSelectedEquipment: !hasManualEquipmentSelection,
       isEquipmentAmbiguous: true,
       equipmentNoMatch: false,
     );
@@ -537,7 +553,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     if (state.selectedCaller != null) return;
     final users = lookup.getUsersByDepartment(departmentId);
     if (users.length != 1) return;
-    _applyCallerCandidatesFromLookup(users);
+    applyCallerCandidatesFromLookup(users);
   }
 
   /// Εξοπλισμός τμήματος μετά από lookup ορφανού τηλεφώνου (χωρίς καλούντα).
@@ -551,17 +567,17 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
     if (list.isEmpty) {
       state = state.copyWith(
         equipmentCandidates: [],
-        clearSelectedEquipment: !_hasManualEquipmentSelection,
+        clearSelectedEquipment: !hasManualEquipmentSelection,
         isEquipmentAmbiguous: false,
         equipmentNoMatch: true,
       );
       return;
     }
-    _applyEquipmentCandidatesFromLookup(list);
+    applyEquipmentCandidatesFromLookup(list);
   }
 
   void performCallerLookup(String nameOrQuery, {String? phoneFieldDigits}) {
-    _host.runExclusiveLookup(SelectorField.caller, () {
+    host.runExclusiveLookup(SelectorField.caller, () {
       final query = nameOrQuery.trim();
       if (query.isEmpty || query == 'Άγνωστος') return;
       final asyncLookup = ref.read(lookupServiceProvider);
@@ -612,7 +628,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
         isPhoneAmbiguous: false,
         callerDisplayText: displayName,
         departmentText: shouldAutofillDepartment
-            ? _departmentTextForUser(user)
+            ? departmentTextForUser(user)
             : state.departmentText,
         selectedDepartmentId: shouldAutofillDepartment
             ? user.departmentId
@@ -639,7 +655,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
   }
 
   void performEquipmentLookupByCode(String code) {
-    _host.runExclusiveLookup(
+    host.runExclusiveLookup(
       SelectorField.equipment,
       () {
         final query = code.trim();
@@ -749,7 +765,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
             callerNoMatch: false,
             callerDisplayText: user.name ?? user.fullNameWithDepartment,
             departmentText: shouldAutofillDepartment
-                ? _departmentTextForUser(user)
+                ? departmentTextForUser(user)
                 : state.departmentText,
             selectedDepartmentId: shouldAutofillDepartment
                 ? user.departmentId
@@ -757,7 +773,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
           );
         } else if (shouldAutofillDepartment) {
           state = state.copyWith(
-            departmentText: _departmentTextForUser(user),
+            departmentText: departmentTextForUser(user),
             selectedDepartmentId: user.departmentId,
           );
         }
@@ -774,7 +790,7 @@ mixin SmartEntitySelectorLookupsMixin on Notifier<SmartEntitySelectorState> {
       onBeforeRecompute: () {
         final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
         if (state.selectedDepartmentId != null) {
-          _restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
+          restoreDepartmentPhoneCandidatesIfNeeded(lookupForRestore);
         }
       },
     );

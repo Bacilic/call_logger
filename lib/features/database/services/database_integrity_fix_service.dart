@@ -1,6 +1,7 @@
 import 'package:sqflite_common/sqflite.dart';
 
 import '../../../core/database/calls_repository.dart';
+import '../../../core/database/calls_search_index.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/integrity_service.dart';
 import '../../../core/database/audit_service.dart';
@@ -14,15 +15,19 @@ class DatabaseIntegrityFixService {
   DatabaseIntegrityFixService({
     IntegrityService Function(Database db)? integrityFactory,
     CallsRepository Function(Database db)? callsFactory,
+    CallsSearchIndex Function(Database db)? searchIndexFactory,
     TaskService Function()? taskServiceFactory,
     IntegrityAuditDetailsBuilder? auditBuilder,
   }) : _integrityFactory = integrityFactory ?? ((db) => IntegrityService(db)),
        _callsFactory = callsFactory ?? ((db) => CallsRepository(db)),
+       _searchIndexFactory =
+           searchIndexFactory ?? ((db) => CallsSearchIndex(db)),
        _taskServiceFactory = taskServiceFactory ?? TaskService.new,
        _audit = auditBuilder ?? const IntegrityAuditDetailsBuilder();
 
   final IntegrityService Function(Database db) _integrityFactory;
   final CallsRepository Function(Database db) _callsFactory;
+  final CallsSearchIndex Function(Database db) _searchIndexFactory;
   final TaskService Function() _taskServiceFactory;
   final IntegrityAuditDetailsBuilder _audit;
 
@@ -90,7 +95,7 @@ class DatabaseIntegrityFixService {
       case IntegrityCheckType.phoneInvalidDepartment:
         await _fixPhoneInvalidDepartment(dir, finding, decision);
       case IntegrityCheckType.callsMissingSearchIndex:
-        await _fixCallSearchIndex(db, calls, dir, finding);
+        await _fixCallSearchIndex(db, _searchIndexFactory(db), dir, finding);
       case IntegrityCheckType.tasksMissingSearchIndex:
         await _fixTaskSearchIndex(db, tasks, dir, finding);
       case IntegrityCheckType.usersWithoutDepartment:
@@ -256,7 +261,7 @@ class DatabaseIntegrityFixService {
 
   Future<void> _fixCallSearchIndex(
     Database db,
-    CallsRepository calls,
+    CallsSearchIndex searchIndex,
     IntegrityService dir,
     DatabaseIntegrityFinding finding,
   ) async {
@@ -270,7 +275,7 @@ class DatabaseIntegrityFixService {
     );
     if (rows.isEmpty) return;
     final oldIndex = rows.first['search_index'];
-    await calls.rebuildSearchIndexForCallId(callId);
+    await searchIndex.rebuildSearchIndexForCallId(callId);
     await db.transaction((txn) async {
       final ap = await AuditService.performingUser(txn);
       final pack = _audit.simpleAction(

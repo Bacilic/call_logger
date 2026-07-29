@@ -4,6 +4,7 @@
 
 import 'dart:convert';
 
+import 'package:call_logger/core/database/calls_lansweeper_repository.dart';
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lansweeper_sync_service.dart';
@@ -132,7 +133,7 @@ void main() {
             .submitCall(callId: callId, input: _kDefaultSubmitInput);
 
         final db = await DatabaseHelper.instance.database;
-        final links = await CallsRepository(
+        final links = await CallsLansweeperRepository(
           db,
         ).getCallExternalLinks(callId, provider: 'lansweeper');
         expect(links, isNotEmpty);

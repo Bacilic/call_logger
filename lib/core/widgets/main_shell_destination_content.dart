@@ -1,21 +1,46 @@
-part of 'main_shell.dart';
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+
+import '../database/database_state_notice.dart';
+import '../database/database_switch_success_notice.dart';
+import '../services/settings_service.dart';
+import '../../features/calls/screens/calls_screen.dart';
+import '../../features/database/debug/error_scenarios_screen.dart';
+import '../../features/database/screens/database_browser_screen.dart';
+import '../../features/database/widgets/database_settings_panel.dart';
+import '../../features/dictionary/screens/dictionary_manager_screen.dart';
+import '../../features/directory/screens/directory_screen.dart';
+import '../../features/history/screens/history_screen.dart';
+import '../../features/lamp/screens/lamp_screen.dart';
+import '../../features/tasks/screens/tasks_screen.dart';
+import 'main_nav_destination.dart';
+import 'main_shell.dart';
 
 /// Περιεχόμενο προορισμού πλοήγησης και στήλη κύριου panel.
-mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
+///
+/// Συνεργάτης του [MainShellState] (Σύνθεση) — κρατά και την κατάσταση της
+/// λωρίδας ειδοποίησης παλιάς/κενής βάσης.
+class MainShellDestinationContent {
+  MainShellDestinationContent(this.host);
+
+  final MainShellState host;
+
   /// Η λωρίδα παλιάς/κενής βάσης έκλεισε σε αυτή τη συνεδρία.
   bool _databaseNoticeDismissedThisSession = false;
   bool _acknowledgedNoticeLoaded = false;
   String? _acknowledgedNoticeIdentity;
   late DatabaseStateNotice _databaseStateNotice;
 
-  void _initDatabaseStateNotice() {
+  void initDatabaseStateNotice() {
     _databaseStateNotice = _evaluateCurrentDatabaseNotice();
     unawaited(_loadAcknowledgedDatabaseNoticeIdentity());
   }
 
-  void _syncDatabaseStateNotice(MainShell oldWidget) {
-    if (oldWidget.databaseProfile != widget.databaseProfile ||
-        oldWidget.databaseResult.path != widget.databaseResult.path) {
+  void syncDatabaseStateNotice(MainShell oldWidget) {
+    if (oldWidget.databaseProfile != host.widget.databaseProfile ||
+        oldWidget.databaseResult.path != host.widget.databaseResult.path) {
       final next = _evaluateCurrentDatabaseNotice();
       if (next.identity != _databaseStateNotice.identity) {
         _databaseNoticeDismissedThisSession = false;
@@ -25,7 +50,7 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
   }
 
   DatabaseStateNotice _evaluateCurrentDatabaseNotice() {
-    final path = widget.databaseResult.path?.trim() ?? '';
+    final path = host.widget.databaseResult.path?.trim() ?? '';
     var modifiedAt = DateTime.fromMillisecondsSinceEpoch(0);
     if (path.isNotEmpty) {
       try {
@@ -33,7 +58,7 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
       } catch (_) {}
     }
     return evaluateDatabaseStateNotice(
-      profile: widget.databaseProfile,
+      profile: host.widget.databaseProfile,
       dbPath: path,
       fileModifiedAt: modifiedAt,
       now: DateTime.now(),
@@ -43,19 +68,17 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
   Future<void> _loadAcknowledgedDatabaseNoticeIdentity() async {
     final value = await SettingsService()
         .getAcknowledgedDatabaseNoticeIdentity();
-    if (!mounted) return;
-    setState(() {
-      _acknowledgedNoticeIdentity = value;
-      _acknowledgedNoticeLoaded = true;
-    });
+    if (!host.mounted) return;
+    _acknowledgedNoticeIdentity = value;
+    _acknowledgedNoticeLoaded = true;
+    host.notifyShellChanged();
   }
 
   Future<void> _dismissDatabaseStateNotice() async {
     final identity = _databaseStateNotice.identity;
-    setState(() {
-      _databaseNoticeDismissedThisSession = true;
-      _acknowledgedNoticeIdentity = identity;
-    });
+    _databaseNoticeDismissedThisSession = true;
+    _acknowledgedNoticeIdentity = identity;
+    host.notifyShellChanged();
     await SettingsService().setAcknowledgedDatabaseNoticeIdentity(identity);
   }
 
@@ -67,9 +90,9 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
   }
 
   Future<void> _openDatabaseSettingsDialog() async {
-    if (!mounted) return;
+    if (!host.mounted) return;
     await showDialog<void>(
-      context: context,
+      context: host.context,
       builder: (dialogContext) {
         return Dialog(
           child: ConstrainedBox(
@@ -78,7 +101,7 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
               padding: const EdgeInsets.all(8),
               child: DatabaseSettingsPanel(
                 onDatabaseLifecycleChanged:
-                    widget.onDatabaseReopened ?? () async {},
+                    host.widget.onDatabaseReopened ?? () async {},
               ),
             ),
           ),
@@ -99,12 +122,14 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
         return const HistoryScreen();
       case MainNavDestination.database:
         return DatabaseBrowserScreen(
-          databaseResult: widget.databaseResult,
+          databaseResult: host.widget.databaseResult,
           onOpenDatabaseSettings: _openDatabaseSettingsDialog,
-          onDatabaseReopened: widget.onDatabaseReopened,
+          onDatabaseReopened: host.widget.onDatabaseReopened,
         );
       case MainNavDestination.dictionary:
-        return DictionaryManagerScreen(databaseResult: widget.databaseResult);
+        return DictionaryManagerScreen(
+          databaseResult: host.widget.databaseResult,
+        );
       case MainNavDestination.lamp:
         return const LampScreen();
       case MainNavDestination.debugScenarios:
@@ -114,7 +139,7 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
 
   /// Απορροφά scroll notifications από εκκρεμότητες ώστε το εξωτερικό AppBar
   /// να μην ενεργοποιεί Material 3 scrolled-under tint.
-  Widget _absorbTasksScrollForOuterAppBar(
+  Widget absorbTasksScrollForOuterAppBar(
     MainNavDestination dest,
     Widget child,
   ) {
@@ -125,8 +150,11 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
     );
   }
 
-  Widget _destinationContentColumn(MainNavDestination dest) {
-    final switchSuccessMessage = ref.watch(databaseSwitchSuccessNoticeProvider);
+  Widget destinationContentColumn(MainNavDestination dest) {
+    final context = host.context;
+    final switchSuccessMessage = host.ref.watch(
+      databaseSwitchSuccessNoticeProvider,
+    );
     final topBanner = topDatabaseBanner(
       showStateNotice: _showDatabaseStateNotice,
       hasSwitchSuccess: switchSuccessMessage != null,
@@ -134,7 +162,7 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.isLocalDevMode)
+        if (host.widget.isLocalDevMode)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 6),
@@ -210,7 +238,7 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
                       color: Colors.black87,
                     ),
                     onPressed: () {
-                      ref
+                      host.ref
                           .read(databaseSwitchSuccessNoticeProvider.notifier)
                           .clear();
                     },
@@ -221,7 +249,7 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
             ),
           ),
         if (dest == MainNavDestination.database &&
-            !widget.databaseResult.isSuccess)
+            !host.widget.databaseResult.isSuccess)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Row(
@@ -233,18 +261,18 @@ mixin MainShellDestinationContentMixin on ConsumerState<MainShell> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        widget.databaseResult.message ??
+                        host.widget.databaseResult.message ??
                             'Άγνωστο σφάλμα με τη βάση δεδομένων.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.red.shade700,
                         ),
                       ),
-                      if (widget.databaseResult.details != null) ...[
+                      if (host.widget.databaseResult.details != null) ...[
                         const SizedBox(height: 4),
                         Tooltip(
-                          message: widget.databaseResult.details!,
+                          message: host.widget.databaseResult.details!,
                           child: Text(
-                            widget.databaseResult.details!,
+                            host.widget.databaseResult.details!,
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: Colors.red.shade300,

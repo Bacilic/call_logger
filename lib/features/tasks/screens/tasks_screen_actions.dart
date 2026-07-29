@@ -1,8 +1,31 @@
-part of 'tasks_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../../../core/errors/task_save_exception.dart';
+import '../../../core/services/save_confirmation_summary.dart';
+import '../../calls/provider/lookup_provider.dart';
+import '../../directory/providers/department_directory_provider.dart';
+import '../../directory/providers/directory_provider.dart';
+import '../../directory/providers/equipment_directory_provider.dart';
+import '../../directory/screens/widgets/department_form_dialog.dart';
+import '../../directory/screens/widgets/equipment_form_dialog.dart';
+import '../../directory/screens/widgets/user_form_dialog.dart';
+import '../models/task.dart';
+import '../models/task_settings_config.dart';
+import '../providers/pending_task_delete_provider.dart';
+import '../providers/task_service_provider.dart';
+import '../providers/task_settings_config_provider.dart';
+import '../providers/tasks_provider.dart';
+import '../utils/task_duration_format.dart';
+import 'task_close_dialog.dart';
+import 'task_form_dialog.dart';
+import 'task_settings_dialog.dart';
+import 'tasks_screen_support_widgets.dart';
 
 enum _ClosedEditMode { recreate, reopen, snooze }
 
-Future<void> _createTasksForOrphans(BuildContext context, WidgetRef ref) async {
+Future<void> createTasksForOrphans(BuildContext context, WidgetRef ref) async {
   final service = ref.read(taskServiceProvider);
   final created = await service.createTasksForOrphanCalls();
   if (!context.mounted) return;
@@ -26,7 +49,7 @@ void _showTaskSaveError(BuildContext context, TaskSaveException e) {
   ).showSnackBar(SnackBar(content: Text(e.message)));
 }
 
-Future<void> _openNewTaskForm(BuildContext context, WidgetRef ref) async {
+Future<void> openNewTaskForm(BuildContext context, WidgetRef ref) async {
   final result = await showTaskFormDialog(context, task: null);
   if (!context.mounted || result == null) return;
   try {
@@ -53,14 +76,14 @@ Future<void> _openNewTaskForm(BuildContext context, WidgetRef ref) async {
   }
 }
 
-Future<void> _openTaskSettings(BuildContext context, WidgetRef ref) async {
+Future<void> openTaskSettings(BuildContext context, WidgetRef ref) async {
   await showDialog<void>(
     context: context,
     builder: (context) => const TaskSettingsDialog(),
   );
 }
 
-Future<void> _onEdit(BuildContext context, WidgetRef ref, Task task) async {
+Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
   _ClosedEditMode? closedMode;
   if (TaskStatusX.fromString(task.status) == TaskStatus.closed) {
     closedMode = await _pickClosedEditMode(context, task);
@@ -273,7 +296,7 @@ Future<_ClosedEditMode?> _pickClosedEditMode(
   );
 }
 
-Future<void> _onSnooze(BuildContext context, WidgetRef ref, Task task) async {
+Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
   final service = ref.read(taskServiceProvider);
   final config =
       ref
@@ -287,7 +310,7 @@ Future<void> _onSnooze(BuildContext context, WidgetRef ref, Task task) async {
   final result = await showDialog<({String choice, String? note})>(
     context: context,
     builder: (ctx) =>
-        _SnoozeChoiceDialog(config: config, maxRangeText: maxRangeText),
+        SnoozeChoiceDialog(config: config, maxRangeText: maxRangeText),
   );
 
   if (!context.mounted || result == null) return;
@@ -377,7 +400,11 @@ Future<void> _onSnooze(BuildContext context, WidgetRef ref, Task task) async {
   }
 }
 
-Future<void> _onDelete(BuildContext context, WidgetRef ref, Task task) async {
+Future<void> deleteTaskWithCountdown(
+  BuildContext context,
+  WidgetRef ref,
+  Task task,
+) async {
   if (task.id == null) return;
   final created = task.createdAtDateTime;
   final createdLabel = created != null
@@ -415,7 +442,7 @@ Future<void> _onDelete(BuildContext context, WidgetRef ref, Task task) async {
     SnackBar(
       behavior: SnackBarBehavior.floating,
       duration: const Duration(days: 1),
-      content: _TaskDeleteCountdownSnackContent(
+      content: TaskDeleteCountdownSnackContent(
         taskTitle: task.title,
         onUndo: () {
           pendingDelete.clear();
@@ -438,7 +465,11 @@ Future<void> _onDelete(BuildContext context, WidgetRef ref, Task task) async {
   );
 }
 
-Future<void> _onComplete(BuildContext context, WidgetRef ref, Task task) async {
+Future<void> completeTask(
+  BuildContext context,
+  WidgetRef ref,
+  Task task,
+) async {
   final solutionNotes = await showTaskCloseDialog(
     context,
     initialSolutionNotes: task.solutionNotes,
@@ -458,7 +489,7 @@ Future<void> _onComplete(BuildContext context, WidgetRef ref, Task task) async {
   }
 }
 
-Future<bool> _onEditCaller(
+Future<bool> editTaskCaller(
   BuildContext context,
   WidgetRef ref,
   Task task,
@@ -485,7 +516,7 @@ Future<bool> _onEditCaller(
   return saved;
 }
 
-Future<bool> _onEditDepartment(
+Future<bool> editTaskDepartment(
   BuildContext context,
   WidgetRef ref,
   Task task,
@@ -517,7 +548,7 @@ Future<bool> _onEditDepartment(
   return saved;
 }
 
-Future<bool> _onEditEquipment(
+Future<bool> editTaskEquipment(
   BuildContext context,
   WidgetRef ref,
   Task task,

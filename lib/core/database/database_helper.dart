@@ -17,8 +17,7 @@ import 'database_schema_migrations.dart';
 import 'database_state_notice.dart';
 import 'lock_diagnostic_service.dart';
 import 'database_path_resolution.dart';
-
-part 'database_table_inspection.dart';
+import 'database_table_inspection.dart';
 
 class DatabaseOpeningAbortedException implements Exception {
   const DatabaseOpeningAbortedException([
@@ -43,18 +42,15 @@ class ConnectionCheckResult {
   final bool isLocalDev;
 }
 
-/// Αποτέλεσμα προεπισκόπησης πίνακα: ονόματα στηλών και γραμμές (List<Map>).
-class TablePreviewResult {
-  const TablePreviewResult({required this.columns, required this.rows});
-
-  final List<String> columns;
-  final List<Map<String, dynamic>> rows;
-}
-
 /// Singleton helper για πρόσβαση στη SQLite βάση δεδομένων (sqflite_common_ffi).
 /// Υποστηρίζει δυναμική διαδρομή, WAL και έξυπνο fallback σε τοπική βάση.
-class DatabaseHelper with DatabaseTableInspectionMixin {
+class DatabaseHelper {
   DatabaseHelper._();
+
+  /// Εργαλεία επιθεώρησης πινάκων (ονόματα, σχήμα, προεπισκόπηση).
+  late final DatabaseTableInspection tableInspection = DatabaseTableInspection(
+    this,
+  );
 
   /// Κλειδί `app_settings` για το όνομα χρήστη στις εγγραφές audit (προαιρετικό).
   static const String auditUserPerformingSettingsKey = 'audit_user_performing';
@@ -638,7 +634,7 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
 
   Future<int> _resolveDatabaseOpenTimeoutSeconds() async {
     try {
-      final value = await SettingsService().getDatabaseOpenTimeoutSeconds();
+      final value = await SettingsService().catalogs.getDatabaseOpenTimeoutSeconds();
       if (value <= 0) return AppConfig.databaseOpenTimeoutSeconds;
       return value;
     } catch (_) {
@@ -648,7 +644,7 @@ class DatabaseHelper with DatabaseTableInspectionMixin {
 
   Future<int> _resolveDatabaseOpenMaxAttempts() async {
     try {
-      final value = await SettingsService().getDatabaseOpenMaxAttempts();
+      final value = await SettingsService().catalogs.getDatabaseOpenMaxAttempts();
       if (value <= 0) return AppConfig.databaseOpenMaxAttempts;
       return value;
     } catch (_) {

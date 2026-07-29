@@ -1,78 +1,97 @@
-part of 'department_form_dialog.dart';
+import 'package:flutter/material.dart';
+
+import 'department_color_palette.dart';
+import 'department_form_dialog.dart';
 
 enum _UnsavedChangesAction { save, discard, continueEditing }
 
-mixin DepartmentFormDismissGuardMixin on DepartmentFormDialogStateHost {
-  bool get _isDirty {
-    if (_nameController.text.trim() != _snapName) return true;
-    if (_buildingController.text.trim() != _snapBuilding) return true;
-    if (_notesController.text.trim() != _snapNotes) return true;
-    final parsedHex = tryParseDepartmentHex(_hexController.text.trim());
-    final effectiveHex = colorToDepartmentHex(parsedHex ?? _selectedColor);
-    if (effectiveHex != _snapColorHex) return true;
+/// Φρουρός κλεισίματος της φόρμας τμήματος: dirty έλεγχος + διάλογος
+/// «Μη αποθηκευμένες αλλαγές».
+///
+/// Συνεργάτης του [DepartmentFormDialogState] (Σύνθεση).
+class DepartmentFormDismissGuard {
+  DepartmentFormDismissGuard(this.host);
+
+  final DepartmentFormDialogState host;
+
+  bool get isDirty {
+    if (host.nameController.text.trim() != host.snapName) return true;
+    if (host.buildingController.text.trim() != host.snapBuilding) return true;
+    if (host.notesController.text.trim() != host.snapNotes) return true;
+    final parsedHex = tryParseDepartmentHex(host.hexController.text.trim());
+    final effectiveHex = colorToDepartmentHex(parsedHex ?? host.selectedColor);
+    if (effectiveHex != host.snapColorHex) return true;
 
     final currentPhones =
-        _sharedPhones
+        host.sharedPhones
             .map((v) => v.trim())
             .where((v) => v.isNotEmpty)
             .toSet()
             .toList()
           ..sort((a, b) => a.compareTo(b));
     final currentEquipment =
-        _sharedEquipmentCodes
+        host.sharedEquipmentCodes
             .map((v) => v.trim())
             .where((v) => v.isNotEmpty)
             .toSet()
             .toList()
           ..sort((a, b) => a.compareTo(b));
-    if (currentPhones.join('|') != _snapSharedPhones.join('|')) return true;
-    if (currentEquipment.join('|') != _snapSharedEquipmentCodes.join('|')) {
+    if (currentPhones.join('|') != host.snapSharedPhones.join('|')) {
       return true;
     }
-    if (_selectedFloorId != _snapFloorId) return true;
+    if (currentEquipment.join('|') != host.snapSharedEquipmentCodes.join('|')) {
+      return true;
+    }
+    if (host.selectedFloorId != host.snapFloorId) return true;
     return false;
   }
 
   bool _needsDismissConfirmation() {
-    if (_isEdit) return _isDirty;
-    return _nameController.text.trim().isNotEmpty;
+    if (host.isEdit) return isDirty;
+    return host.nameController.text.trim().isNotEmpty;
   }
 
   List<String> _buildChangedFieldLabels() {
     final labels = <String>[];
-    if (_nameController.text.trim() != _snapName) labels.add('Όνομα');
-    if (_buildingController.text.trim() != _snapBuilding) labels.add('Κτίριο');
-    if (_notesController.text.trim() != _snapNotes) labels.add('Σημειώσεις');
-    final parsedHex = tryParseDepartmentHex(_hexController.text.trim());
-    final effectiveHex = colorToDepartmentHex(parsedHex ?? _selectedColor);
-    if (effectiveHex != _snapColorHex) labels.add('Χρώμα');
+    if (host.nameController.text.trim() != host.snapName) labels.add('Όνομα');
+    if (host.buildingController.text.trim() != host.snapBuilding) {
+      labels.add('Κτίριο');
+    }
+    if (host.notesController.text.trim() != host.snapNotes) {
+      labels.add('Σημειώσεις');
+    }
+    final parsedHex = tryParseDepartmentHex(host.hexController.text.trim());
+    final effectiveHex = colorToDepartmentHex(parsedHex ?? host.selectedColor);
+    if (effectiveHex != host.snapColorHex) labels.add('Χρώμα');
 
     final currentPhones =
-        _sharedPhones
+        host.sharedPhones
             .map((v) => v.trim())
             .where((v) => v.isNotEmpty)
             .toSet()
             .toList()
           ..sort((a, b) => a.compareTo(b));
     final currentEquipment =
-        _sharedEquipmentCodes
+        host.sharedEquipmentCodes
             .map((v) => v.trim())
             .where((v) => v.isNotEmpty)
             .toSet()
             .toList()
           ..sort((a, b) => a.compareTo(b));
-    if (currentPhones.join('|') != _snapSharedPhones.join('|')) {
+    if (currentPhones.join('|') != host.snapSharedPhones.join('|')) {
       labels.add('Κοινόχρηστα τηλέφωνα');
     }
-    if (currentEquipment.join('|') != _snapSharedEquipmentCodes.join('|')) {
+    if (currentEquipment.join('|') != host.snapSharedEquipmentCodes.join('|')) {
       labels.add('Κοινόχρηστος εξοπλισμός');
     }
-    if (_selectedFloorId != _snapFloorId) labels.add('Όροφος (κατόψη)');
+    if (host.selectedFloorId != host.snapFloorId) {
+      labels.add('Όροφος (κατόψη)');
+    }
     return labels;
   }
 
   String _unsavedChangesDialogMessage() {
-    if (_isEdit) {
+    if (host.isEdit) {
       final labels = _buildChangedFieldLabels();
       final buf = StringBuffer('Έχουν γίνει αλλαγές:');
       for (final label in labels) {
@@ -86,7 +105,7 @@ mixin DepartmentFormDismissGuardMixin on DepartmentFormDialogStateHost {
 
   Future<_UnsavedChangesAction?> _showUnsavedChangesDialog() {
     return showDialog<_UnsavedChangesAction>(
-      context: context,
+      context: host.context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         content: Text(_unsavedChangesDialogMessage()),
@@ -110,18 +129,18 @@ mixin DepartmentFormDismissGuardMixin on DepartmentFormDialogStateHost {
     );
   }
 
-  Future<void> _requestClose() async {
+  Future<void> requestClose() async {
     if (!_needsDismissConfirmation()) {
-      if (mounted) Navigator.of(context).pop();
+      if (host.mounted) Navigator.of(host.context).pop();
       return;
     }
     final action = await _showUnsavedChangesDialog();
-    if (!mounted) return;
+    if (!host.mounted) return;
     switch (action) {
       case _UnsavedChangesAction.save:
-        await _save();
+        await host.saveFlow.save();
       case _UnsavedChangesAction.discard:
-        Navigator.of(context).pop();
+        Navigator.of(host.context).pop();
       case _UnsavedChangesAction.continueEditing:
       case null:
         break;
@@ -129,7 +148,7 @@ mixin DepartmentFormDismissGuardMixin on DepartmentFormDialogStateHost {
   }
 
   /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
-  void _cancelAndClose() {
-    if (mounted) Navigator.of(context).pop();
+  void cancelAndClose() {
+    if (host.mounted) Navigator.of(host.context).pop();
   }
 }

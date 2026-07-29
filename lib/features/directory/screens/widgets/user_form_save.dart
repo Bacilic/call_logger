@@ -1,4 +1,25 @@
-part of 'user_form_dialog.dart';
+import 'package:flutter/material.dart';
+
+import '../../../../core/database/audit_service.dart';
+import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/department_repository.dart';
+import '../../../../core/database/phone_repository.dart';
+import '../../../../core/directory/phone_department_policy.dart';
+import '../../../../core/services/lookup_service.dart';
+import '../../../../core/services/save_confirmation_summary.dart';
+import '../../../../core/utils/phone_list_parser.dart';
+import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../../core/widgets/audit_summary_rich_text.dart';
+import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../../calls/models/user_model.dart';
+import '../../../calls/provider/lookup_provider.dart';
+import '../../services/shared_asset_disconnect_apply.dart';
+import 'department_transfer_confirm_dialog.dart';
+import 'shared_asset_disconnect_dialog.dart';
+import 'similar_department_suggestion_dialog.dart';
+import 'similar_users_dialog.dart';
+import 'user_form_dialog.dart';
+import 'user_name_change_confirm_dialog.dart';
 
 const _kUserFormDuplicateSnack = SnackBar(
   content: Text(
@@ -7,10 +28,17 @@ const _kUserFormDuplicateSnack = SnackBar(
   backgroundColor: Colors.orange,
 );
 
-mixin UserFormSaveMixin on UserFormDialogStateHost {
-  @override
-  Future<({int? id, String name})> _resolveTargetDepartmentForSave() async {
-    final name = _departmentController.text.trim();
+/// Ροή αποθήκευσης της φόρμας υπαλλήλου: επιβεβαιώσεις (παρόμοιοι χρήστες,
+/// αλλαγή ονόματος, μεταφορά τμήματος, πολιτική τηλεφώνων) και εγγραφή.
+///
+/// Συνεργάτης του [UserFormDialogState] (Σύνθεση).
+class UserFormSave {
+  UserFormSave(this.host);
+
+  final UserFormDialogState host;
+
+  Future<({int? id, String name})> resolveTargetDepartmentForSave() async {
+    final name = host.departmentController.text.trim();
     if (name.isEmpty) return (id: null, name: '');
 
     final id = await _resolveDepartmentIdForSave(
@@ -22,10 +50,10 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
   /// Αν το πεδίο τμήματος δείχνει σε υπάρχον τμήμα (ίδιο name_key), επιστρέφει το id του·
   /// όταν αλλάζει μόνο η εμφάνιση (τόνοι/κεφαλαία), ενημερώνει και το `departments.name`.
   Future<int?> _resolveDepartmentIdForSave(DepartmentRepository dir) async {
-    final typed = _departmentController.text.trim();
+    final typed = host.departmentController.text.trim();
     if (typed.isEmpty) return null;
 
-    final matched = _resolveSourceDepartmentForDisconnect();
+    final matched = host.phonePolicy.resolveSourceDepartmentForDisconnect();
     if (matched.id != null) {
       final stored = (matched.name ?? '').trim();
       if (stored != typed) {
@@ -37,34 +65,33 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
     return dir.getOrCreateDepartmentIdByName(typed);
   }
 
-  @override
-  Future<void> _save() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (!_isDirty) return;
+  Future<void> save() async {
+    if (!(host.formKey.currentState?.validate() ?? false)) return;
+    if (!host.dismissGuard.isDirty) return;
 
-    final similar = _findSimilarUsers();
+    final similar = host.findSimilarUsers();
     if (similar.isNotEmpty) {
-      if (!mounted) return;
+      if (!host.mounted) return;
       final result = await showDialog<SimilarUsersDialogResult>(
-        context: context,
+        context: host.context,
         barrierDismissible: true,
         builder: (ctx) =>
             SimilarUsersDialog(matches: similar, allowPickExisting: false),
       );
-      if (!mounted) return;
+      if (!host.mounted) return;
       if (result == null || !result.continuedAsNew) return;
     }
 
     var cloneAsNewEmployee = false;
 
-    if (_isEdit && _nameIdentityChanged()) {
-      if (!mounted) return;
+    if (host.isEdit && host.nameIdentityChanged()) {
+      if (!host.mounted) return;
       final nameChoice = await showUserNameChangeConfirmDialog(
-        context: context,
-        oldDisplayName: _snapDisplayName(),
-        newDisplayName: _buildUserDisplayName(),
+        context: host.context,
+        oldDisplayName: host.snapDisplayName(),
+        newDisplayName: host.buildUserDisplayName(),
       );
-      if (!mounted) return;
+      if (!host.mounted) return;
       if (nameChoice == null) return;
       if (nameChoice == UserNameChangeDialogChoice.newEmployee) {
         cloneAsNewEmployee = true;
@@ -73,71 +100,74 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
 
     try {
       final initialDeptNorm = SearchTextNormalizer.normalizeForSearch(
-        _initialDepartmentText,
+        host.initialDepartmentText,
       );
       final currentDeptNorm = SearchTextNormalizer.normalizeForSearch(
-        _departmentController.text,
+        host.departmentController.text,
       );
       if (initialDeptNorm != currentDeptNorm) {
         var existsInOrg = currentDeptNorm.isEmpty
             ? true
             : await DepartmentRepository(
                 await DatabaseHelper.instance.database,
-              ).departmentNameExists(_departmentController.text);
-        if (!mounted) return;
+              ).departmentNameExists(host.departmentController.text);
+        if (!host.mounted) return;
 
         if (!existsInOrg) {
           final suggestion = await showSimilarDepartmentSuggestionIfNeeded(
-            context: context,
+            context: host.context,
             departments: LookupService.instance.departments,
-            typedName: _departmentController.text,
+            typedName: host.departmentController.text,
           );
-          if (!mounted) return;
+          if (!host.mounted) return;
           if (suggestion != null) {
             if (suggestion.isCancelled) {
-              _departmentController.text = _initialDepartmentText;
+              host.departmentController.text = host.initialDepartmentText;
               return;
             }
             final picked = suggestion.selectedDepartment;
             if (picked != null) {
-              _departmentController.text = picked.name;
+              host.departmentController.text = picked.name;
               existsInOrg = true;
             }
           }
         }
 
         final useAddToDepartmentMessage =
-            !_isEdit || widget.isClone || _initialDepartmentText.trim().isEmpty;
+            !host.isEdit ||
+            host.widget.isClone ||
+            host.initialDepartmentText.trim().isEmpty;
         final result = await showDepartmentTransferConfirmDialog(
-          context: context,
-          userDisplayName: _buildUserDisplayName(),
-          oldDepartment: _initialDepartmentText,
-          newDepartment: _departmentController.text,
+          context: host.context,
+          userDisplayName: host.buildUserDisplayName(),
+          oldDepartment: host.initialDepartmentText,
+          newDepartment: host.departmentController.text,
           newDepartmentExistsInOrg: existsInOrg,
           useAddToDepartmentMessage: useAddToDepartmentMessage,
         );
         final effective =
             result ?? DepartmentTransferDialogResult.cancelTransfer;
         if (effective == DepartmentTransferDialogResult.cancelTransfer) {
-          _departmentController.text = _initialDepartmentText;
+          host.departmentController.text = host.initialDepartmentText;
           return;
         }
       }
 
       SharedAssetDisconnectBatchResult? phoneDisconnectBatch;
-      if (_isEdit && !cloneAsNewEmployee) {
-        phoneDisconnectBatch = await _confirmExclusiveRemovedPhonesDisconnect();
-        if (!mounted) return;
+      if (host.isEdit && !cloneAsNewEmployee) {
+        phoneDisconnectBatch = await host.phonePolicy
+            .confirmExclusiveRemovedPhonesDisconnect();
+        if (!host.mounted) return;
         if (phoneDisconnectBatch == null) return;
       }
 
-      final editingUserId = _isEdit && !cloneAsNewEmployee && !widget.isClone
-          ? widget.initialUser?.id
+      final editingUserId =
+          host.isEdit && !cloneAsNewEmployee && !host.widget.isClone
+          ? host.widget.initialUser?.id
           : null;
-      final phoneConflictBatch = await _confirmUserPhoneAssignmentConflicts(
-        editingUserId: editingUserId,
-      );
-      if (!mounted) return;
+      final phoneConflictBatch = await host.phonePolicy
+          .confirmUserPhoneAssignmentConflicts(editingUserId: editingUserId);
+      if (!host.mounted) return;
       if (phoneConflictBatch == null) return;
 
       await _persistUser(
@@ -146,8 +176,8 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
         phoneConflictBatch: phoneConflictBatch,
       );
     } on PhoneDepartmentPolicyException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!host.mounted) return;
+      ScaffoldMessenger.of(host.context).showSnackBar(
         SnackBar(
           content: Text(
             'Απορρίφθηκε η αποθήκευση: το(α) τηλέφωνο(α) '
@@ -158,8 +188,8 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
         ),
       );
     } catch (e, st) {
-      if (!mounted) return;
-      showDatabasePersistenceErrorSnackBar(context, e, st);
+      if (!host.mounted) return;
+      showDatabasePersistenceErrorSnackBar(host.context, e, st);
     }
   }
 
@@ -183,34 +213,38 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
     }
 
     final user = UserModel(
-      id: (_isEdit && !cloneAsNewEmployee) ? widget.initialUser?.id : null,
-      lastName: _lastNameController.text.trim(),
-      firstName: _firstNameController.text.trim(),
-      phones: PhoneListParser.splitPhones(_phoneController.text),
+      id: (host.isEdit && !cloneAsNewEmployee)
+          ? host.widget.initialUser?.id
+          : null,
+      lastName: host.lastNameController.text.trim(),
+      firstName: host.firstNameController.text.trim(),
+      phones: PhoneListParser.splitPhones(host.phoneController.text),
       departmentId: departmentId,
-      notes: _notesController.text.trim().isEmpty
+      notes: host.notesController.text.trim().isEmpty
           ? null
-          : _notesController.text.trim(),
+          : host.notesController.text.trim(),
     );
 
-    if (_isEdit && cloneAsNewEmployee) {
-      final sourceId = widget.initialUser?.id;
+    if (host.isEdit && cloneAsNewEmployee) {
+      final sourceId = host.widget.initialUser?.id;
       if (sourceId == null) return;
-      if (await widget.notifier.hasDuplicateUserFresh(
+      if (await host.widget.notifier.hasDuplicateUserFresh(
         user,
         mirrorEquipmentFromUserId: sourceId,
       )) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(_kUserFormDuplicateSnack);
+        if (!host.mounted) return;
+        ScaffoldMessenger.of(
+          host.context,
+        ).showSnackBar(_kUserFormDuplicateSnack);
         return;
       }
-      await widget.notifier.addUserCloningEquipmentFrom(user, sourceId);
-      ref.invalidate(lookupServiceProvider);
-      await ref.read(lookupServiceProvider.future);
-      if (!mounted) return;
-      widget.onSaved?.call();
-      Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
+      await host.widget.notifier.addUserCloningEquipmentFrom(user, sourceId);
+      host.ref.invalidate(lookupServiceProvider);
+      await host.ref.read(lookupServiceProvider.future);
+      if (!host.mounted) return;
+      host.widget.onSaved?.call();
+      Navigator.of(host.context).pop(true);
+      ScaffoldMessenger.of(host.context).showSnackBar(
         const SnackBar(
           content: Text(
             'Δημιουργήθηκε νέος υπάλληλος· αντιγράφηκαν οι συνδέσεις εξοπλισμού.',
@@ -220,17 +254,19 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
       return;
     }
 
-    if (_isEdit) {
+    if (host.isEdit) {
       if (user.id != null &&
-          await widget.notifier.hasDuplicateUserFresh(
+          await host.widget.notifier.hasDuplicateUserFresh(
             user,
             excludeId: user.id,
           )) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(_kUserFormDuplicateSnack);
+        if (!host.mounted) return;
+        ScaffoldMessenger.of(
+          host.context,
+        ).showSnackBar(_kUserFormDuplicateSnack);
         return;
       }
-      await widget.notifier.updateUser(user);
+      await host.widget.notifier.updateUser(user);
       if (phoneDisconnectBatch != null) {
         final db = await DatabaseHelper.instance.database;
         await applyPersonalPhoneDisconnectBatch(
@@ -238,50 +274,50 @@ mixin UserFormSaveMixin on UserFormDialogStateHost {
           phoneDisconnectBatch,
           sourceDepartmentId: departmentId,
         );
-        await widget.notifier.loadUsers();
+        await host.widget.notifier.loadUsers();
       }
-      ref.invalidate(lookupServiceProvider);
-      await ref.read(lookupServiceProvider.future);
-      if (!mounted) return;
+      host.ref.invalidate(lookupServiceProvider);
+      await host.ref.read(lookupServiceProvider.future);
+      if (!host.mounted) return;
       final saveMessage = buildSaveConfirmationMessage(
         entityType: AuditEntityTypes.user,
-        entityLabel: _buildUserDisplayName(),
+        entityLabel: host.buildUserDisplayName(),
         oldMap: _userMapForSaveConfirmation(
-          widget.initialUser!.toMap(),
+          host.widget.initialUser!.toMap(),
           departmentDisplayName:
-              widget.initialUser!.departmentName?.trim() ??
-              _initialDepartmentText.trim(),
+              host.widget.initialUser!.departmentName?.trim() ??
+              host.initialDepartmentText.trim(),
         ),
         newMap: _userMapForSaveConfirmation(
           user.toMap(),
-          departmentDisplayName: _departmentController.text.trim(),
+          departmentDisplayName: host.departmentController.text.trim(),
         ),
         isNew: false,
       );
-      widget.onSaved?.call();
-      Navigator.of(context).pop(true);
-      showSaveConfirmationSnackBar(context, saveMessage);
+      host.widget.onSaved?.call();
+      Navigator.of(host.context).pop(true);
+      showSaveConfirmationSnackBar(host.context, saveMessage);
       return;
     }
-    if (await widget.notifier.hasDuplicateUserFresh(user)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(_kUserFormDuplicateSnack);
+    if (await host.widget.notifier.hasDuplicateUserFresh(user)) {
+      if (!host.mounted) return;
+      ScaffoldMessenger.of(host.context).showSnackBar(_kUserFormDuplicateSnack);
       return;
     }
-    await widget.notifier.addUser(user);
-    ref.invalidate(lookupServiceProvider);
-    await ref.read(lookupServiceProvider.future);
-    if (!mounted) return;
+    await host.widget.notifier.addUser(user);
+    host.ref.invalidate(lookupServiceProvider);
+    await host.ref.read(lookupServiceProvider.future);
+    if (!host.mounted) return;
     final saveMessage = buildSaveConfirmationMessage(
       entityType: AuditEntityTypes.user,
-      entityLabel: _buildUserDisplayName(),
+      entityLabel: host.buildUserDisplayName(),
       oldMap: const {},
       newMap: user.toMap(),
       isNew: true,
     );
-    widget.onSaved?.call();
-    Navigator.of(context).pop(true);
-    showSaveConfirmationSnackBar(context, saveMessage);
+    host.widget.onSaved?.call();
+    Navigator.of(host.context).pop(true);
+    showSaveConfirmationSnackBar(host.context, saveMessage);
   }
 
   Map<String, dynamic> _userMapForSaveConfirmation(

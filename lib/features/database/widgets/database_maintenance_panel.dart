@@ -71,7 +71,7 @@ class _DatabaseMaintenancePanelState
   }
 
   Future<void> _loadRetentionConfig() async {
-    final c = await SettingsService().getAuditRetentionConfig();
+    final c = await SettingsService().catalogs.getAuditRetentionConfig();
     if (!mounted) return;
     setState(() {
       _retentionCfg = c;
@@ -99,7 +99,7 @@ class _DatabaseMaintenancePanelState
     final next = _retentionFromForm();
     await _runGuarded(() async {
       try {
-        await SettingsService().setAuditRetentionConfig(next);
+        await SettingsService().catalogs.setAuditRetentionConfig(next);
         if (mounted) {
           setState(() => _retentionCfg = next);
         }

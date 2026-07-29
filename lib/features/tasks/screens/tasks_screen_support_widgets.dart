@@ -1,8 +1,16 @@
-part of 'tasks_screen.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../models/task_settings_config.dart';
+import '../providers/tasks_provider.dart';
+import '../ui/task_due_option_tooltips.dart';
 
 /// Αντίστροφη μέτρηση πριν την οριστική διαγραφή· «Αναίρεση» κλείνει το SnackBar.
-class _TaskDeleteCountdownSnackContent extends StatefulWidget {
-  const _TaskDeleteCountdownSnackContent({
+class TaskDeleteCountdownSnackContent extends StatefulWidget {
+  const TaskDeleteCountdownSnackContent({
+    super.key,
     required this.taskTitle,
     required this.onUndo,
     required this.onExpired,
@@ -17,12 +25,12 @@ class _TaskDeleteCountdownSnackContent extends StatefulWidget {
   final VoidCallback? onAbortedExternally;
 
   @override
-  State<_TaskDeleteCountdownSnackContent> createState() =>
+  State<TaskDeleteCountdownSnackContent> createState() =>
       _TaskDeleteCountdownSnackContentState();
 }
 
 class _TaskDeleteCountdownSnackContentState
-    extends State<_TaskDeleteCountdownSnackContent> {
+    extends State<TaskDeleteCountdownSnackContent> {
   static const int _initialSeconds = 5;
   int _remaining = _initialSeconds;
   Timer? _timer;
@@ -100,8 +108,9 @@ class _TaskDeleteCountdownSnackContentState
   }
 }
 
-class _OrphanCallsBanner extends ConsumerWidget {
-  const _OrphanCallsBanner({required this.onCreateTasks});
+/// Λωρίδα «κλήσεις χωρίς εκκρεμότητα» με κουμπί μαζικής δημιουργίας.
+class OrphanCallsBanner extends ConsumerWidget {
+  const OrphanCallsBanner({super.key, required this.onCreateTasks});
 
   final VoidCallback onCreateTasks;
 
@@ -152,17 +161,22 @@ class _OrphanCallsBanner extends ConsumerWidget {
   }
 }
 
-class _SnoozeChoiceDialog extends StatefulWidget {
-  const _SnoozeChoiceDialog({required this.config, required this.maxRangeText});
+/// Διάλογος επιλογής αναβολής: γρήγορες επιλογές, προσαρμοσμένη ημερομηνία, λόγος.
+class SnoozeChoiceDialog extends StatefulWidget {
+  const SnoozeChoiceDialog({
+    super.key,
+    required this.config,
+    required this.maxRangeText,
+  });
 
   final TaskSettingsConfig config;
   final String maxRangeText;
 
   @override
-  State<_SnoozeChoiceDialog> createState() => _SnoozeChoiceDialogState();
+  State<SnoozeChoiceDialog> createState() => _SnoozeChoiceDialogState();
 }
 
-class _SnoozeChoiceDialogState extends State<_SnoozeChoiceDialog> {
+class _SnoozeChoiceDialogState extends State<SnoozeChoiceDialog> {
   final _noteController = TextEditingController();
 
   @override

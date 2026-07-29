@@ -131,10 +131,8 @@ void main() {
         'issue': 'Θέμα Β',
       });
 
-      final preview = await DatabaseHelper.instance.getTablePreview(
-        'calls',
-        rowLimit: 1,
-      );
+      final preview = await DatabaseHelper.instance.tableInspection
+          .getTablePreview('calls', rowLimit: 1);
 
       expect(preview.columns, isNotEmpty);
       expect(preview.columns, contains('caller_text'));

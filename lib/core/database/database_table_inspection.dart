@@ -1,12 +1,25 @@
-part of 'database_helper.dart';
+import 'database_helper.dart';
+
+/// Αποτέλεσμα προεπισκόπησης πίνακα: ονόματα στηλών και γραμμές (List<Map>).
+class TablePreviewResult {
+  const TablePreviewResult({required this.columns, required this.rows});
+
+  final List<String> columns;
+  final List<Map<String, dynamic>> rows;
+}
 
 /// Εργαλεία επιθεώρησης πινάκων (ονόματα, σχήμα, προεπισκόπηση).
-mixin DatabaseTableInspectionMixin {
-  DatabaseHelper get _inspectionHost => this as DatabaseHelper;
+///
+/// Συνεργάτης του [DatabaseHelper] (Σύνθεση) — πρόσβαση μέσω
+/// `DatabaseHelper.instance.tableInspection`.
+class DatabaseTableInspection {
+  const DatabaseTableInspection(this.helper);
+
+  final DatabaseHelper helper;
 
   /// Λίστα ονομάτων πινάκων (χωρίς εσωτερικά sqlite_*). Για προβολή Βάσης Δεδομένων.
   Future<List<String>> getTableNames() async {
-    final db = await _inspectionHost.database;
+    final db = await helper.database;
     final r = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     );
@@ -15,7 +28,7 @@ mixin DatabaseTableInspectionMixin {
 
   /// Επιστρέφει συμβολοσειρά σχήματος πίνακα: `όνομα ΤΥΠΟΣ, ...` (από PRAGMA table_info).
   Future<String> getTableSchema(String tableName) async {
-    final db = await _inspectionHost.database;
+    final db = await helper.database;
     final quoted = _sqliteQuoteIdentifier(tableName);
     final info = await db.rawQuery('PRAGMA table_info($quoted)');
     if (info.isEmpty) return '';
@@ -36,7 +49,7 @@ mixin DatabaseTableInspectionMixin {
     String tableName, {
     int rowLimit = 500,
   }) async {
-    final db = await _inspectionHost.database;
+    final db = await helper.database;
     final quoted = _sqliteQuoteIdentifier(tableName);
     final info = await db.rawQuery('PRAGMA table_info($quoted)');
     final columns = (info

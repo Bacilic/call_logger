@@ -1,7 +1,10 @@
-// Τεστ χαρακτηρισμού πριν τη διάσπαση του calls_repository.dart.
+// Τεστ χαρακτηρισμού της διάσπασης του calls_repository.dart: η συμπεριφορά
+// παραμένει ίδια με τις θεματικές κλάσεις (Σύνθεση) στη θέση των mixins.
 //
 //   flutter test test/core/database/calls_repository_split_characterization_test.dart
 
+import 'package:call_logger/core/database/calls_dashboard_repository.dart';
+import 'package:call_logger/core/database/calls_deletion_repository.dart';
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
@@ -14,6 +17,8 @@ import '../../test_setup.dart';
 void main() {
   group('CallsRepository split characterization', () {
     late CallsRepository repo;
+    late CallsDeletionRepository deletion;
+    late CallsDashboardRepository dashboard;
 
     Future<void> insertTask({
       required int callId,
@@ -40,6 +45,8 @@ void main() {
       final db = await DatabaseHelper.instance.database;
       await db.delete('audit_log');
       repo = CallsRepository(db);
+      deletion = CallsDeletionRepository(db);
+      dashboard = CallsDashboardRepository(db);
     });
 
     tearDownAll(() async {
@@ -81,8 +88,8 @@ void main() {
         );
         await insertTask(callId: callId);
 
-        expect(await repo.getTasksCountLinkedToCall(callId), 1);
-        await repo.deleteCallWithTasksAction(callId, 'cascade');
+        expect(await deletion.getTasksCountLinkedToCall(callId), 1);
+        await deletion.deleteCallWithTasksAction(callId, 'cascade');
 
         final db = await DatabaseHelper.instance.database;
         final callRows = await db.query(
@@ -130,7 +137,7 @@ void main() {
           ),
         );
 
-        final stats = await repo.getDashboardStatistics(
+        final stats = await dashboard.getDashboardStatistics(
           DashboardFilterModel(
             dateFrom: DateTime(2025, 6, 1),
             dateTo: DateTime(2025, 6, 1),
@@ -157,7 +164,7 @@ void main() {
           ),
         );
 
-        final stats = await repo.getDashboardStatistics(
+        final stats = await dashboard.getDashboardStatistics(
           DashboardFilterModel(
             dateFrom: DateTime(2025, 8, 1),
             dateTo: DateTime(2025, 8, 1),

@@ -1,6 +1,17 @@
-part of 'calls_repository.dart';
+import 'package:intl/intl.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-mixin CallsRepositoryDashboardMixin on CallsRepositoryCore {
+import '../../features/calls/models/call_model.dart';
+import '../../features/history/models/dashboard_filter_model.dart';
+import '../../features/history/models/dashboard_summary_model.dart';
+import '../utils/search_text_normalizer.dart';
+
+/// Στατιστικά και λίστες κλήσεων για τον πίνακα ελέγχου (μόνο αναγνώσεις).
+class CallsDashboardRepository {
+  const CallsDashboardRepository(this.db);
+
+  final Database db;
+
   void _appendDashboardUserFilter(
     List<String> whereClauses,
     List<dynamic> args,

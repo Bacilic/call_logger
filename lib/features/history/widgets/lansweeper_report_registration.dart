@@ -1,7 +1,24 @@
-part of 'lansweeper_report_dialog.dart';
+import 'package:flutter/material.dart';
 
-mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
-  Future<void> _submitSelected(
+import '../models/lansweeper_sync_state.dart';
+import '../providers/lansweeper_settings_provider.dart';
+import '../providers/lansweeper_sync_provider.dart';
+import '../providers/lansweeper_ticket_submit_config_provider.dart';
+import 'lansweeper/lansweeper_registration_dialogs.dart';
+import 'lansweeper/lansweeper_report_item_mapper.dart';
+import 'lansweeper/lansweeper_url_rules.dart';
+import 'lansweeper_report_dialog.dart';
+
+/// Καταχώρηση κλήσεων στο Lansweeper: υποβολή API, χειροκίνητη σήμανση,
+/// μαζικές αλλαγές κατάστασης.
+///
+/// Συνεργάτης του [LansweeperReportDialogState] (Σύνθεση).
+class LansweeperReportRegistration {
+  LansweeperReportRegistration(this.host);
+
+  final LansweeperReportDialogState host;
+
+  Future<void> submitSelected(
     ReportCallItem primary,
     List<ReportCallItem> selected, {
     required bool resubmit,
@@ -9,17 +26,17 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     final item = primary;
     final callId = item.call.id;
     if (callId == null) return;
-    if (_titleController.text.trim().isEmpty) {
-      if (!mounted) return;
-      showDialogSnackBar(
+    if (host.titleController.text.trim().isEmpty) {
+      if (!host.mounted) return;
+      host.showDialogSnackBar(
         const SnackBar(content: Text('Ο τίτλος είναι υποχρεωτικός.')),
       );
       return;
     }
 
-    if (_lansweeperAgentUsernameController.text.trim().isEmpty) {
-      if (!mounted) return;
-      showDialogSnackBar(
+    if (host.lansweeperAgentUsernameController.text.trim().isEmpty) {
+      if (!host.mounted) return;
+      host.showDialogSnackBar(
         const SnackBar(
           content: Text(
             'Ορίστε τον πράκτορα API (username) στις ρυθμίσεις Lansweeper.',
@@ -29,10 +46,10 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
       return;
     }
 
-    final apiUrl = ref.read(lansweeperApiUrlProvider);
+    final apiUrl = host.ref.read(lansweeperApiUrlProvider);
     if (!LansweeperUrlRules.isApiEndpointUrl(apiUrl)) {
-      if (!mounted) return;
-      showDialogSnackBar(
+      if (!host.mounted) return;
+      host.showDialogSnackBar(
         const SnackBar(
           content: Text(
             'Ορίστε έγκυρο URL API (…/api.aspx) στις ρυθμίσεις Lansweeper για καταχώρηση.',
@@ -44,30 +61,30 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
 
     if (resubmit &&
         (item.call.lansweeperMainTicketId ?? '').trim().isNotEmpty) {
-      final confirmed = await showLansweeperResubmitConfirmDialog(context);
+      final confirmed = await showLansweeperResubmitConfirmDialog(host.context);
       if (confirmed != true) return;
     }
 
-    final notifier = ref.read(lansweeperSyncProvider.notifier);
+    final notifier = host.ref.read(lansweeperSyncProvider.notifier);
     final durationSeconds = selected.fold<int>(
       0,
       (sum, item) => sum + item.durationSeconds,
     );
-    final ticketConfig = ref.read(lansweeperTicketSubmitConfigProvider);
+    final ticketConfig = host.ref.read(lansweeperTicketSubmitConfigProvider);
     final resolvedCustomFields = <String, String>{
       for (final field in ticketConfig.customFields)
-        field.id: (_customFieldValues[field.id] ?? field.defaultValue),
+        field.id: (host.customFieldValues[field.id] ?? field.defaultValue),
     };
     final input = LansweeperSubmitInput(
-      title: _titleController.text,
-      notes: _notesController.text,
-      solution: _solutionController.text,
-      agentUsername: _lansweeperAgentUsernameController.text,
+      title: host.titleController.text,
+      notes: host.notesController.text,
+      solution: host.solutionController.text,
+      agentUsername: host.lansweeperAgentUsernameController.text,
       durationSeconds: durationSeconds,
       config: ticketConfig,
       customFieldValues: resolvedCustomFields,
       targetTicketState:
-          _selectedTicketState ?? ticketConfig.defaultTicketState,
+          host.selectedTicketState ?? ticketConfig.defaultTicketState,
     );
     final companionCallIds = selected
         .map((entry) => entry.call.id)
@@ -85,17 +102,16 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
             input: input,
             companionCallIds: companionCallIds,
           );
-    if (!mounted) return;
+    if (!host.mounted) return;
     if (result.success) {
-      await _persistTicketSubmitFormPrefs();
-      if (!mounted) return;
+      await host.persistTicketSubmitFormPrefs();
+      if (!host.mounted) return;
       // Οι κλήσεις πέρασαν στις Καταχωρημένες — παραμένοντας επιλεγμένες εκεί
       // δεν εξυπηρετούν τίποτα και μπερδεύουν την επόμενη ενέργεια.
-      setState(() {
-        for (final entry in selected) {
-          _selectedKeys.remove(entry.key);
-        }
-      });
+      for (final entry in selected) {
+        host.selectedKeys.remove(entry.key);
+      }
+      host.notifyReportChanged();
       final ticketId = (result.ticketId ?? '').trim();
       final totalMarked = 1 + companionCallIds.length;
       final baseMessage = totalMarked == 1
@@ -106,25 +122,27 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
       final warningsText = result.warnings.isEmpty
           ? ''
           : '\n${result.warnings.join('\n')}';
-      showDialogSnackBar(SnackBar(content: Text('$baseMessage$warningsText')));
+      host.showDialogSnackBar(
+        SnackBar(content: Text('$baseMessage$warningsText')),
+      );
       if (!resubmit && ticketId.isNotEmpty) {
         final openTicketAfterSubmit =
             await readLansweeperOpenTicketAfterApiSubmitSetting();
         if (openTicketAfterSubmit) {
-          await _openTicketViewInBrowser(ticketId);
+          await host.browserFlow.openTicketViewInBrowser(ticketId);
         }
       }
       return;
     }
 
-    await _persistTicketSubmitFormPrefs();
-    if (!mounted) return;
+    await host.persistTicketSubmitFormPrefs();
+    if (!host.mounted) return;
 
     final failedStep = (result.failedStep ?? '').trim();
     final failureMessage = failedStep.isEmpty
         ? 'Αποτυχία καταχώρησης: ${result.message}'
         : 'Αποτυχία καταχώρησης ($failedStep): ${result.message}';
-    showDialogSnackBar(
+    host.showDialogSnackBar(
       SnackBar(
         content: Text(failureMessage),
         duration: const Duration(seconds: 8),
@@ -137,9 +155,9 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
         ? reportBase
         : 'failedStep: $failedStep\n$reportBase';
     await showLansweeperFailureReportDialog(
-      context,
+      host.context,
       reportText: reportText,
-      onCopied: () => showDialogSnackBar(
+      onCopied: () => host.showDialogSnackBar(
         const SnackBar(content: Text('Η αναφορά αντιγράφηκε στο πρόχειρο.')),
       ),
     );
@@ -149,13 +167,13 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     final callId = item.call.id;
     if (callId == null) return false;
     final storedTicket = (item.call.lansweeperMainTicketId ?? '').trim();
-    final notifier = ref.read(lansweeperSyncProvider.notifier);
+    final notifier = host.ref.read(lansweeperSyncProvider.notifier);
     if (storedTicket.isEmpty) {
       await notifier.setUnsent(callId);
       return true;
     }
     final choice = await showLansweeperUnsentTicketChoiceDialog(
-      context,
+      host.context,
       storedTicket: storedTicket,
     );
     if (choice == null || choice == UnsentTicketChoice.cancel) return false;
@@ -170,13 +188,13 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     required String ticketId,
     required int callId,
   }) async {
-    final count = await ref
+    final count = await host.ref
         .read(lansweeperSyncProvider.notifier)
         .countRegisteredCallsWithTicketId(ticketId, excludeCallId: callId);
     if (count <= 0) return DuplicateTicketAction.proceed;
-    if (!mounted) return DuplicateTicketAction.cancel;
+    if (!host.mounted) return DuplicateTicketAction.cancel;
     return showLansweeperDuplicateTicketDialog(
-      context,
+      host.context,
       count: count,
       ticketId: ticketId,
     );
@@ -191,7 +209,7 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     final callId = item.call.id;
     if (callId == null) return;
     var initialTicket = (item.call.lansweeperMainTicketId ?? '').trim();
-    while (mounted) {
+    while (host.mounted) {
       final ticketId = await _promptOptionalTicketId(
         initialTicketId: initialTicket.isEmpty ? null : initialTicket,
         title: title,
@@ -214,15 +232,15 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
           continue;
         }
       }
-      await ref
+      await host.ref
           .read(lansweeperSyncProvider.notifier)
           .markRegistered(
             callId: callId,
             ticketId: ticketId.isEmpty ? null : ticketId,
             comment: comment,
           );
-      if (!mounted) return;
-      showDialogSnackBar(
+      if (!host.mounted) return;
+      host.showDialogSnackBar(
         SnackBar(
           content: Text(
             ticketId.isEmpty
@@ -241,9 +259,9 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     String? subtitle,
   }) async {
     final prefilled = await _resolveSuggestedTicketId(initialTicketId);
-    if (!mounted) return null;
+    if (!host.mounted) return null;
     return showLansweeperOptionalTicketIdDialog(
-      context,
+      host.context,
       prefilled: prefilled,
       title: title,
       subtitle: subtitle,
@@ -253,27 +271,27 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
   Future<String> _resolveSuggestedTicketId(String? existingTicketId) async {
     final trimmed = (existingTicketId ?? '').trim();
     if (trimmed.isNotEmpty) return trimmed;
-    return await ref
+    return await host.ref
             .read(lansweeperSyncProvider.notifier)
             .suggestedNextLansweeperTicketId() ??
         '';
   }
 
-  Future<void> _manualMark(ReportCallItem item) async {
+  Future<void> manualMark(ReportCallItem item) async {
     final callId = item.call.id;
     if (callId == null) return;
     final initialTicket = await _resolveSuggestedTicketId(
       item.call.lansweeperMainTicketId,
     );
-    if (!mounted) return;
+    if (!host.mounted) return;
     final input = await showLansweeperManualMarkDialog(
-      context,
+      host.context,
       initialTicket: initialTicket,
     );
     if (input == null) return;
     var ticketId = input.ticketId;
     final comment = input.comment;
-    while (mounted) {
+    while (host.mounted) {
       if (ticketId.isNotEmpty) {
         final duplicateAction = await _promptDuplicateTicketWarning(
           ticketId: ticketId,
@@ -290,15 +308,15 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
           continue;
         }
       }
-      await ref
+      await host.ref
           .read(lansweeperSyncProvider.notifier)
           .markRegistered(
             callId: callId,
             ticketId: ticketId.isEmpty ? null : ticketId,
             comment: comment,
           );
-      if (!mounted) return;
-      showDialogSnackBar(
+      if (!host.mounted) return;
+      host.showDialogSnackBar(
         SnackBar(
           content: Text(
             ticketId.isEmpty
@@ -311,13 +329,13 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     }
   }
 
-  Future<void> _toggleRegistrationFromBadge(ReportCallItem item) async {
+  Future<void> toggleRegistrationFromBadge(ReportCallItem item) async {
     final state = (item.call.lansweeperState ?? LansweeperSyncState.unsent)
         .trim();
     if (state == LansweeperSyncState.sent) {
       final changed = await _markAsUnsentWithTicketPrompt(item);
-      if (!changed || !mounted) return;
-      showDialogSnackBar(
+      if (!changed || !host.mounted) return;
+      host.showDialogSnackBar(
         const SnackBar(content: Text('Η κλήση σημειώθηκε ως ακαταχώρητη.')),
       );
       return;
@@ -340,9 +358,9 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     initialTicket = await _resolveSuggestedTicketId(
       initialTicket.isEmpty ? null : initialTicket,
     );
-    if (!mounted) return;
+    if (!host.mounted) return;
 
-    while (mounted) {
+    while (host.mounted) {
       final ticketId = await _promptOptionalTicketId(
         initialTicketId: initialTicket.isEmpty ? null : initialTicket,
         title: count == 1 ? 'Καταχώρηση κλήσης' : 'Καταχώρηση $count κλήσεων',
@@ -368,15 +386,15 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
         }
       }
 
-      final notifier = ref.read(lansweeperSyncProvider.notifier);
+      final notifier = host.ref.read(lansweeperSyncProvider.notifier);
       for (final item in validItems) {
         await notifier.markRegistered(
           callId: item.call.id!,
           ticketId: ticketId.isEmpty ? null : ticketId,
         );
       }
-      if (!mounted) return;
-      showDialogSnackBar(
+      if (!host.mounted) return;
+      host.showDialogSnackBar(
         SnackBar(
           content: Text(
             count == 1
@@ -393,7 +411,7 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     }
   }
 
-  Future<void> _setStateForAllSelected(
+  Future<void> setStateForAllSelected(
     List<ReportCallItem> selected,
     String nextState,
   ) async {
@@ -407,7 +425,7 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
     if (toUpdate.isEmpty) return;
 
     if (nextState == LansweeperSyncState.excluded) {
-      final notifier = ref.read(lansweeperSyncProvider.notifier);
+      final notifier = host.ref.read(lansweeperSyncProvider.notifier);
       var count = 0;
       for (final item in toUpdate) {
         final callId = item.call.id;
@@ -415,8 +433,8 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
         await notifier.setExcluded(callId);
         count++;
       }
-      if (!mounted || count == 0) return;
-      showDialogSnackBar(
+      if (!host.mounted || count == 0) return;
+      host.showDialogSnackBar(
         SnackBar(
           content: Text(
             count == 1
@@ -435,8 +453,8 @@ mixin LansweeperReportRegistrationMixin on LansweeperReportDialogStateHost {
         if (!changed) break;
         count++;
       }
-      if (!mounted || count == 0) return;
-      showDialogSnackBar(
+      if (!host.mounted || count == 0) return;
+      host.showDialogSnackBar(
         SnackBar(
           content: Text(
             count == 1

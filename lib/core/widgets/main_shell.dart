@@ -1,23 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_file_classifier.dart';
 import '../database/database_init_result.dart';
-import '../database/database_state_notice.dart';
-import '../database/database_switch_success_notice.dart';
-import '../../features/calls/screens/calls_screen.dart';
-import '../../features/database/debug/error_scenarios_screen.dart';
-import '../../features/database/screens/database_browser_screen.dart';
-import '../../features/dictionary/screens/dictionary_manager_screen.dart';
-import '../../features/lamp/screens/lamp_screen.dart';
-
-import '../../features/database/widgets/database_settings_panel.dart';
-import '../../features/tasks/screens/tasks_screen.dart';
-import '../../features/directory/screens/directory_screen.dart';
-import '../../features/history/screens/history_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../providers/core_lexicon_provider.dart';
 import '../../features/dictionary/widgets/core_lexicon_setup_dialog.dart';
@@ -35,16 +22,13 @@ import '../providers/shell_navigation_intent_provider.dart';
 import '../providers/task_focus_intent_provider.dart';
 import '../providers/quick_call_providers.dart';
 import 'main_nav_destination.dart';
+import 'main_shell_destination_content.dart';
+import 'main_shell_nav_icons.dart';
 import 'quick_call_fab.dart';
 import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
 import '../updates/update_startup_prompt.dart';
-import 'nav_rail_attention_badge.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
-import '../../features/calls/provider/call_entry_provider.dart';
-
-part 'main_shell_nav_icons.dart';
-part 'main_shell_destination_content.dart';
 
 /// Κύριο κέλυφος εφαρμογής: πλευρική πλοήγηση και περιοχή περιεχομένου.
 class MainShell extends ConsumerStatefulWidget {
@@ -68,11 +52,15 @@ class MainShell extends ConsumerStatefulWidget {
   final Future<void> Function()? onDatabaseReopened;
 
   @override
-  ConsumerState<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => MainShellState();
 }
 
-class _MainShellState extends ConsumerState<MainShell>
-    with MainShellDestinationContentMixin {
+/// Δημόσιο State: ορατό στον συνεργάτη περιεχομένου προορισμών (Σύνθεση).
+class MainShellState extends ConsumerState<MainShell> {
+  /// Περιεχόμενο προορισμών + λωρίδες ειδοποίησης βάσης.
+  late final MainShellDestinationContent destinationContent =
+      MainShellDestinationContent(this);
+
   MainNavDestination _selectedDestination = MainNavDestination.calls;
 
   /// Λεζάντες πλευρικής μπάρας (όταν το πλάτος παραθύρου επιτρέπει extended rail).
@@ -80,21 +68,26 @@ class _MainShellState extends ConsumerState<MainShell>
 
   static const double _kNavRailWideBreakpoint = 760;
 
+  /// Σηματοδοτεί ανανέωση του κελύφους — χρησιμοποιείται από τον συνεργάτη.
+  void notifyShellChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
-    _initDatabaseStateNotice();
+    destinationContent.initDatabaseStateNotice();
     _loadNavRailShowLabels();
   }
 
   @override
   void didUpdateWidget(covariant MainShell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _syncDatabaseStateNotice(oldWidget);
+    destinationContent.syncDatabaseStateNotice(oldWidget);
   }
 
   Future<void> _loadNavRailShowLabels() async {
-    final value = await SettingsService().getNavRailShowLabels();
+    final value = await SettingsService().windowUi.getNavRailShowLabels();
     if (mounted) setState(() => _navRailShowLabels = value);
   }
 
@@ -195,16 +188,14 @@ class _MainShellState extends ConsumerState<MainShell>
   }) {
     switch (dest) {
       case MainNavDestination.calls:
-        final callsIcon = _CallsNavigationIcon(
-          isOnCallsScreen: isOnCallsScreen,
-        );
+        final callsIcon = CallsNavigationIcon(isOnCallsScreen: isOnCallsScreen);
         return NavigationRailDestination(
           icon: callsIcon,
           selectedIcon: callsIcon,
           label: const Text('Κλήσεις'),
         );
       case MainNavDestination.tasks:
-        final tasksIcon = _TasksNavigationIcon(
+        final tasksIcon = TasksNavigationIcon(
           showBadge: showBadge,
           pendingCount: pendingCount,
         );
@@ -254,12 +245,12 @@ class _MainShellState extends ConsumerState<MainShell>
         );
       case MainNavDestination.dictionary:
         return NavigationRailDestination(
-          icon: _DictionaryNavigationIcon(showWarning: showCoreLexiconWarning),
+          icon: DictionaryNavigationIcon(showWarning: showCoreLexiconWarning),
           label: const Text('Λεξικό'),
         );
       case MainNavDestination.lamp:
         return NavigationRailDestination(
-          icon: _LampNavigationIcon(showWarning: showLampReadPathWarning),
+          icon: LampNavigationIcon(showWarning: showLampReadPathWarning),
           label: const Text('Λάμπα'),
         );
       case MainNavDestination.debugScenarios:
@@ -423,7 +414,7 @@ class _MainShellState extends ConsumerState<MainShell>
             appBar: null,
             floatingActionButton: const QuickCallFloatingButton(),
             body: SafeArea(
-              child: _destinationContentColumn(
+              child: destinationContent.destinationContentColumn(
                 dictionaryImmersive
                     ? MainNavDestination.dictionary
                     : MainNavDestination.history,
@@ -501,9 +492,8 @@ class _MainShellState extends ConsumerState<MainShell>
                               onPressed: () async {
                                 final next = !_navRailShowLabels;
                                 setState(() => _navRailShowLabels = next);
-                                await SettingsService().setNavRailShowLabels(
-                                  next,
-                                );
+                                await SettingsService().windowUi
+                                    .setNavRailShowLabels(next);
                               },
                             )
                           : null,
@@ -567,9 +557,11 @@ class _MainShellState extends ConsumerState<MainShell>
               ),
               const VerticalDivider(thickness: 1, width: 1),
               Expanded(
-                child: _absorbTasksScrollForOuterAppBar(
+                child: destinationContent.absorbTasksScrollForOuterAppBar(
                   effectiveDestination,
-                  _destinationContentColumn(effectiveDestination),
+                  destinationContent.destinationContentColumn(
+                    effectiveDestination,
+                  ),
                 ),
               ),
             ],

@@ -184,20 +184,20 @@ void main() {
   group('SettingsService · shutdown trace', () {
     test('προεπιλογές και αποθήκευση των δύο νέων ρυθμίσεων', () async {
       final settings = SettingsService();
-      expect(await settings.getShutdownTraceEnabled(), isTrue);
+      expect(await settings.catalogs.getShutdownTraceEnabled(), isTrue);
       expect(
-        await settings.getShutdownTraceRetentionCount(),
+        await settings.catalogs.getShutdownTraceRetentionCount(),
         SettingsService.defaultCrashLogRetentionCount,
       );
 
-      await settings.setShutdownTraceEnabled(false);
-      await settings.setShutdownTraceRetentionCount(5);
-      expect(await settings.getShutdownTraceEnabled(), isFalse);
-      expect(await settings.getShutdownTraceRetentionCount(), 5);
+      await settings.catalogs.setShutdownTraceEnabled(false);
+      await settings.catalogs.setShutdownTraceRetentionCount(5);
+      expect(await settings.catalogs.getShutdownTraceEnabled(), isFalse);
+      expect(await settings.catalogs.getShutdownTraceRetentionCount(), 5);
 
-      await settings.setShutdownTraceRetentionCount(1);
+      await settings.catalogs.setShutdownTraceRetentionCount(1);
       expect(
-        await settings.getShutdownTraceRetentionCount(),
+        await settings.catalogs.getShutdownTraceRetentionCount(),
         SettingsService.minShutdownTraceRetentionCount,
       );
     });

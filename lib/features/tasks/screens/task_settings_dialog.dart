@@ -434,7 +434,7 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
                       ),
                       value: ref.watch(showTasksBadgeProvider).value ?? true,
                       onChanged: (value) async {
-                        await _settings.setShowTasksBadge(value);
+                        await _settings.windowUi.setShowTasksBadge(value);
                         if (!mounted) return;
                         ref.invalidate(showTasksBadgeProvider);
                         setState(() {});

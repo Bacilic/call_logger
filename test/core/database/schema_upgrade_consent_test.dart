@@ -66,8 +66,8 @@ void main() {
       final before = await _bytes(dbPath);
       final settings = SettingsService();
       await settings.setDatabasePath(dbPath);
-      await settings.setDatabaseOpenTimeoutSeconds(2);
-      await settings.setDatabaseOpenMaxAttempts(1);
+      await settings.catalogs.setDatabaseOpenTimeoutSeconds(2);
+      await settings.catalogs.setDatabaseOpenMaxAttempts(1);
 
       final runner = await runDatabaseInitChecks(closeConnectionFirst: true);
       final after = await _bytes(dbPath);
@@ -103,8 +103,8 @@ void main() {
 
       final settings = SettingsService();
       await settings.setDatabasePath(dbPath);
-      await settings.setDatabaseOpenTimeoutSeconds(2);
-      await settings.setDatabaseOpenMaxAttempts(1);
+      await settings.catalogs.setDatabaseOpenTimeoutSeconds(2);
+      await settings.catalogs.setDatabaseOpenMaxAttempts(1);
 
       final runner = await runDatabaseInitChecks(closeConnectionFirst: true);
       expect(runner.result.isSuccess, isTrue);
@@ -131,8 +131,8 @@ void main() {
 
       final settings = SettingsService();
       await settings.setDatabasePath(dbPath);
-      await settings.setDatabaseOpenTimeoutSeconds(2);
-      await settings.setDatabaseOpenMaxAttempts(1);
+      await settings.catalogs.setDatabaseOpenTimeoutSeconds(2);
+      await settings.catalogs.setDatabaseOpenMaxAttempts(1);
 
       final runner = await runDatabaseInitChecks(closeConnectionFirst: true);
       expect(runner.result.isSuccess, isTrue);

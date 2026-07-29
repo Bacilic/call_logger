@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/category_repository.dart';
-import '../../../../core/database/calls_repository.dart';
+import '../../../../core/database/calls_search_index.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../../../core/utils/user_facing_error_messages.dart';
@@ -102,10 +102,11 @@ class _CategoryAutocompleteFieldState
     try {
       final db = await DatabaseHelper.instance.database;
       final categories = CategoryRepository(db);
-      final calls = CallsRepository(db);
+      final searchIndex = CallsSearchIndex(db);
       final insert = await categories.insertCategoryAndGetId(
         value,
-        rebuildSearchIndexInTxn: calls.rebuildSearchIndexForCallsByCategoryId,
+        rebuildSearchIndexInTxn:
+            searchIndex.rebuildSearchIndexForCallsByCategoryId,
       );
       final newId = insert.id;
       if (!mounted) return;

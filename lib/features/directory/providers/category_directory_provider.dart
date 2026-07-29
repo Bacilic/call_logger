@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/database/calls_repository.dart';
+import '../../../core/database/calls_search_index.dart';
 import '../../../core/database/category_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
@@ -351,10 +351,11 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   Future<bool> addCategory(String name) async {
     final db = await DatabaseHelper.instance.database;
     final categories = CategoryRepository(db);
-    final calls = CallsRepository(db);
+    final searchIndex = CallsSearchIndex(db);
     final r = await categories.insertCategoryAndGetId(
       name,
-      rebuildSearchIndexInTxn: calls.rebuildSearchIndexForCallsByCategoryId,
+      rebuildSearchIndexInTxn:
+          searchIndex.rebuildSearchIndexForCallsByCategoryId,
     );
     _invalidateCategoryLists();
     await loadCategories();
@@ -364,11 +365,12 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   Future<void> renameCategory(int id, String newCanonicalName) async {
     final db = await DatabaseHelper.instance.database;
     final categories = CategoryRepository(db);
-    final calls = CallsRepository(db);
+    final searchIndex = CallsSearchIndex(db);
     await categories.updateCategoryNameAndSyncCalls(
       id: id,
       newCanonicalName: newCanonicalName,
-      rebuildSearchIndexInTxn: calls.rebuildSearchIndexForCallsByCategoryId,
+      rebuildSearchIndexInTxn:
+          searchIndex.rebuildSearchIndexForCallsByCategoryId,
     );
     _invalidateCategoryLists();
     await loadCategories();

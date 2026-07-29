@@ -52,7 +52,7 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
   UpdateSourceConfig get _sourceConfig =>
       widget.updateSourceConfig ??
       UpdateSourceConfig(
-        getUserUpdateFolderPath: () => _settings.getUpdateFolderPath(),
+        getUserUpdateFolderPath: () => _settings.catalogs.getUpdateFolderPath(),
       );
 
   @override
@@ -104,7 +104,7 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
 
   Future<void> _persistFromField() async {
     final trimmed = _controller.text.trim();
-    await _settings.setUpdateFolderPath(trimmed.isEmpty ? null : trimmed);
+    await _settings.catalogs.setUpdateFolderPath(trimmed.isEmpty ? null : trimmed);
   }
 
   Future<void> _pickFolder() async {

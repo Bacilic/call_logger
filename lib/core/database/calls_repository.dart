@@ -1,69 +1,28 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:intl/intl.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../features/calls/models/call_model.dart';
-import '../../features/history/models/dashboard_filter_model.dart';
-import '../../features/history/models/dashboard_summary_model.dart';
-import 'database_helper.dart';
 import '../errors/call_save_exception.dart';
 import 'audit_service.dart';
+import 'calls_audit_line.dart';
+import 'calls_search_index.dart';
 import 'directory_support.dart';
-import '../utils/history_entity_display_utils.dart';
-import '../utils/search_text_normalizer.dart';
 
-part 'calls_repository_search_index.dart';
-part 'calls_repository_deletion.dart';
-part 'calls_repository_dashboard.dart';
-part 'calls_repository_lansweeper.dart';
-
-/// Κοινά μέλη [CallsRepository] προσβάσιμα από θεματικά mixins (χωρίς κυκλική εξάρτηση).
-abstract mixin class CallsRepositoryCore {
-  Database get db;
-
-  Future<String> buildCallAuditDisplayLine(
-    int callId, {
-    DatabaseExecutor? executor,
-  });
-}
-
-/// Πρόσβαση σε πίνακα `calls` και επαναδόμηση `search_index`.
+/// Εγγραφές και αναγνώσεις του πίνακα `calls` (δημιουργία, ενημέρωση,
+/// κλωνοποίηση, ιστορικό, μετρήσεις).
 ///
-/// Δεν εξαρτάται από repositories καταλόγου ούτε από [DictionaryRepository].
-class CallsRepository
-    with
-        CallsRepositoryCore,
-        CallsRepositorySearchIndexMixin,
-        CallsRepositoryDeletionMixin,
-        CallsRepositoryDashboardMixin,
-        CallsRepositoryLansweeperMixin {
-  CallsRepository(this.db);
+/// Θεματικά αδέλφια με δικές τους κλάσεις: [CallsDeletionRepository] για
+/// διαγραφές, [CallsDashboardRepository] για στατιστικά,
+/// [CallsLansweeperRepository] για κατάσταση/links Lansweeper και
+/// [CallsSearchIndex] για την επαναδόμηση του `search_index`.
+class CallsRepository {
+  CallsRepository(this.db)
+    : _searchIndex = CallsSearchIndex(db),
+      _auditLine = CallsAuditLine(db);
 
-  @override
   final Database db;
-
-  static const List<String> _kCallAuditFields = [
-    'date',
-    'time',
-    'caller_id',
-    'equipment_id',
-    'caller_text',
-    'phone_text',
-    'department_text',
-    'equipment_text',
-    'issue',
-    'category_text',
-    'category_id',
-    'status',
-    'duration',
-    'is_priority',
-    'lansweeper_state',
-    'lansweeper_main_ticket_id',
-    'lansweeper_last_sync_at',
-    'is_deleted',
-  ];
+  final CallsSearchIndex _searchIndex;
+  final CallsAuditLine _auditLine;
 
   /// Ενημέρωση ενός FK πεδίου κλήσης (integrity fix — χωρίς audit, το κάνει ο caller).
   Future<Map<String, dynamic>?> integrityUpdateCallFk(
@@ -138,16 +97,19 @@ class CallsRepository
     afterCallInserted,
   }) async {
     final map = _callInsertMap(call);
-    map['search_index'] = await _buildCallSearchIndex(executor, map);
+    map['search_index'] = await _searchIndex.buildCallSearchIndex(
+      executor,
+      map,
+    );
     final id = await executor.insert('calls', map);
     final user = await AuditService.performingUser(executor);
     final nv = <String, dynamic>{};
-    for (final k in _kCallAuditFields) {
+    for (final k in kCallAuditFields) {
       if (map.containsKey(k) && map[k] != null) {
         nv[k] = map[k];
       }
     }
-    final entityName = (await buildCallAuditDisplayLine(
+    final entityName = (await _auditLine.buildCallAuditDisplayLine(
       id,
       executor: executor,
     )).trim();
@@ -209,7 +171,7 @@ class CallsRepository
         final oldRow = oldRows.isEmpty
             ? null
             : Map<String, dynamic>.from(oldRows.first);
-        map['search_index'] = await _buildCallSearchIndex(txn, map);
+        map['search_index'] = await _searchIndex.buildCallSearchIndex(txn, map);
         final n = await txn.update(
           'calls',
           map,
@@ -219,7 +181,7 @@ class CallsRepository
         if (oldRow != null && n > 0) {
           final oldDiff = <String, dynamic>{};
           final newDiff = <String, dynamic>{};
-          for (final k in _kCallAuditFields) {
+          for (final k in kCallAuditFields) {
             final a = oldRow[k];
             final b = map[k];
             final sa = a?.toString() ?? '';
@@ -231,7 +193,7 @@ class CallsRepository
           }
           if (newDiff.isNotEmpty) {
             final user = await AuditService.performingUser(txn);
-            final entityName = (await buildCallAuditDisplayLine(
+            final entityName = (await _auditLine.buildCallAuditDisplayLine(
               id,
               executor: txn,
             )).trim();
@@ -286,15 +248,15 @@ class CallsRepository
 
     try {
       return await db.transaction((txn) async {
-        map['search_index'] = await _buildCallSearchIndex(txn, map);
+        map['search_index'] = await _searchIndex.buildCallSearchIndex(txn, map);
         final id = await txn.insert('calls', map);
         final nv = <String, dynamic>{};
-        for (final k in _kCallAuditFields) {
+        for (final k in kCallAuditFields) {
           if (map.containsKey(k) && map[k] != null) {
             nv[k] = map[k];
           }
         }
-        final entityName = (await buildCallAuditDisplayLine(
+        final entityName = (await _auditLine.buildCallAuditDisplayLine(
           id,
           executor: txn,
         )).trim();
@@ -526,74 +488,13 @@ class CallsRepository
 
   /// Γραμμή «τηλέφωνο - καλούντας - τμήμα - εξοπλισμός» όπως στο ιστορικό κλήσεων
   /// ([getHistoryCalls]): κενά παραλείπονται, χωρίς placeholder `-`.
-  static String formatCallAuditLineFromHistoryQueryRow(Map<String, Object?> r) {
-    String nz(dynamic v) {
-      final t = v?.toString().trim() ?? '';
-      if (t.isEmpty || t == '-') return '';
-      return t;
-    }
-
-    final phone = nz(r['user_phone']);
-    final first = (r['user_first_name'] as String?)?.trim() ?? '';
-    final last = (r['user_last_name'] as String?)?.trim() ?? '';
-    var caller = '$first $last'.trim();
-    if (caller.isNotEmpty && historyEntityIsDeleted(r['caller_is_deleted'])) {
-      caller = historyDeletedDisplayLabel(
-        caller,
-        isDeleted: true,
-        deletedSuffix: kHistoryUserDeletedSuffix,
-      );
-    }
-    final dept = nz(r['user_department']);
-    var equip = nz(r['equipment_code']);
-    if (equip.isNotEmpty && historyEntityIsDeleted(r['equipment_is_deleted'])) {
-      equip = historyDeletedDisplayLabel(
-        equip,
-        isDeleted: true,
-        deletedSuffix: kHistoryEquipmentDeletedSuffix,
-      );
-    }
-    return [phone, caller, dept, equip].where((s) => s.isNotEmpty).join(' - ');
-  }
+  static String formatCallAuditLineFromHistoryQueryRow(
+    Map<String, Object?> r,
+  ) => CallsAuditLine.formatCallAuditLineFromHistoryQueryRow(r);
 
   /// Ίδια JOIN/COALESCE με [getHistoryCalls], για μία εγγραφή (π.χ. audit `entity_name`).
-  @override
   Future<String> buildCallAuditDisplayLine(
     int callId, {
     DatabaseExecutor? executor,
-  }) async {
-    const userPhoneExpr =
-        "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
-    final ex = executor ?? db;
-    final rows = await ex.rawQuery(
-      '''
-      SELECT COALESCE(users.first_name, calls.caller_text, '') AS user_first_name,
-             COALESCE(users.last_name, '') AS user_last_name,
-             COALESCE(users.is_deleted, 0) AS caller_is_deleted,
-             COALESCE(cat.is_deleted, 0) AS category_is_deleted,
-             COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted,
-             COALESCE(cat.name, calls.category_text, '') AS category,
-             $userPhoneExpr AS user_phone,
-             COALESCE(departments.name, calls.department_text, '-') AS user_department,
-             COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code
-      FROM calls
-      LEFT JOIN categories cat ON cat.id = calls.category_id
-      LEFT JOIN users ON calls.caller_id = users.id
-      LEFT JOIN (
-        SELECT up.user_id AS uid,
-               GROUP_CONCAT(p.number, ', ') AS phone_list
-        FROM user_phones up
-        JOIN phones p ON p.id = up.phone_id
-        GROUP BY up.user_id
-      ) upl ON upl.uid = users.id
-      LEFT JOIN equipment ON calls.equipment_id = equipment.id
-      LEFT JOIN departments ON users.department_id = departments.id
-      WHERE calls.id = ?
-      LIMIT 1
-      ''',
-      [callId],
-    );
-    if (rows.isEmpty) return '';
-    return formatCallAuditLineFromHistoryQueryRow(rows.first);
-  }
+  }) => _auditLine.buildCallAuditDisplayLine(callId, executor: executor);
 }

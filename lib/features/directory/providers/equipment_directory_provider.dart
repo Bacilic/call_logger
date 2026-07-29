@@ -396,7 +396,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     if (!ref.mounted) return;
 
     final showBuildingInLocation = await SettingsService()
-        .getEquipmentLocationShowBuilding();
+        .windowUi.getEquipmentLocationShowBuilding();
     if (!ref.mounted) return;
 
     final equipmentRows = await getEquipmentRows();
@@ -460,7 +460,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   Future<void> setEquipmentLocationShowBuilding(bool value) async {
-    await SettingsService().setEquipmentLocationShowBuilding(value);
+    await SettingsService().windowUi.setEquipmentLocationShowBuilding(value);
     state = state.copyWith(showBuildingInLocationColumn: value);
     filterAndSort();
   }
