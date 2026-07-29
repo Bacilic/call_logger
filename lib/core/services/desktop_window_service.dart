@@ -68,7 +68,10 @@ class DesktopWindowService {
     );
     final mode = await _settings.windowUi.getWindowPlacementMode();
     if (mode == WindowPlacementMode.lastPosition) {
-      await _settings.windowUi.setSavedWindowPosition(x: bounds.left, y: bounds.top);
+      await _settings.windowUi.setSavedWindowPosition(
+        x: bounds.left,
+        y: bounds.top,
+      );
     }
   }
 

@@ -16,10 +16,7 @@ void main() {
     });
 
     test('containment → containmentScore', () {
-      expect(
-        TextSimilarity.score('Παπαδόπουλος', 'Γιώργος Παπαδόπουλος'),
-        72,
-      );
+      expect(TextSimilarity.score('Παπαδόπουλος', 'Γιώργος Παπαδόπουλος'), 72);
       expect(
         TextSimilarity.score(
           'Παπαδόπουλος',
@@ -31,10 +28,7 @@ void main() {
     });
 
     test('ανάστροφη σειρά λέξεων → υψηλό score κάτω από 100', () {
-      final score = TextSimilarity.score(
-        'Βασίλης Δρόσος',
-        'Δρόσος Βασίλης',
-      );
+      final score = TextSimilarity.score('Βασίλης Δρόσος', 'Δρόσος Βασίλης');
       expect(score, greaterThanOrEqualTo(90));
       expect(score, lessThan(100));
     });

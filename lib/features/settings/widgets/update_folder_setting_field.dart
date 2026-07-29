@@ -104,7 +104,9 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
 
   Future<void> _persistFromField() async {
     final trimmed = _controller.text.trim();
-    await _settings.catalogs.setUpdateFolderPath(trimmed.isEmpty ? null : trimmed);
+    await _settings.catalogs.setUpdateFolderPath(
+      trimmed.isEmpty ? null : trimmed,
+    );
   }
 
   Future<void> _pickFolder() async {

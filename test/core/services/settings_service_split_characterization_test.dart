@@ -51,7 +51,10 @@ void main() {
     test('catalogs: get/set database open timeout seconds', () async {
       final settings = SettingsService();
       final defaultTimeout = AppConfig.databaseOpenTimeoutSeconds;
-      expect(await settings.catalogs.getDatabaseOpenTimeoutSeconds(), defaultTimeout);
+      expect(
+        await settings.catalogs.getDatabaseOpenTimeoutSeconds(),
+        defaultTimeout,
+      );
       await settings.catalogs.setDatabaseOpenTimeoutSeconds(15);
       expect(await settings.catalogs.getDatabaseOpenTimeoutSeconds(), 15);
     });

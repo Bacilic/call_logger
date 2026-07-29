@@ -136,10 +136,7 @@ class SettingsServiceWindowUi {
 
   Future<void> setWindowPlacementMode(WindowPlacementMode mode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _prefKey(_keyWindowPlacementMode),
-      mode.storageValue,
-    );
+    await prefs.setString(_prefKey(_keyWindowPlacementMode), mode.storageValue);
   }
 
   /// Κάρτα «Στατιστικά Βάσης Δεδομένων» στην οθόνη περιήγησης βάσης — ανοιχτή/κλειστή.
@@ -152,10 +149,7 @@ class SettingsServiceWindowUi {
 
   Future<void> setDatabaseBrowserStatsCardExpanded(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(
-      _prefKey(_keyDatabaseBrowserStatsCardExpanded),
-      value,
-    );
+    await prefs.setBool(_prefKey(_keyDatabaseBrowserStatsCardExpanded), value);
   }
 
   /// Εμφάνιση κωδικού κτιρίου `[...]` στη στήλη Τοποθεσία (πίνακας εξοπλισμού). Προεπιλογή: true.

@@ -103,25 +103,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
     try {
       final showActiveTimer = await _settings.windowUi.getShowActiveTimer();
-      final showEmptyRemoteLaunchers = await _settings
-          .remoteLansweeper.getCallsShowEmptyRemoteLaunchers();
+      final showEmptyRemoteLaunchers = await _settings.remoteLansweeper
+          .getCallsShowEmptyRemoteLaunchers();
       final enableSpellCheck = await _settings.windowUi.getEnableSpellCheck();
       final showDatabaseNav = await _settings.windowUi.getShowDatabaseNav();
       final showLampNav = await _settings.windowUi.getShowLampNav();
       final showDictionaryNav = await _settings.windowUi.getShowDictionaryNav();
       final showQuickCallFab = await _settings.windowUi.getShowQuickCallFab();
-      final dbOpenTimeout = await _settings.catalogs.getDatabaseOpenTimeoutSeconds();
-      final dbOpenMaxAttempts = await _settings.catalogs.getDatabaseOpenMaxAttempts();
-      final callsCardsVisibility = await _settings
-          .windowUi.getCallsScreenCardsVisibility();
+      final dbOpenTimeout = await _settings.catalogs
+          .getDatabaseOpenTimeoutSeconds();
+      final dbOpenMaxAttempts = await _settings.catalogs
+          .getDatabaseOpenMaxAttempts();
+      final callsCardsVisibility = await _settings.windowUi
+          .getCallsScreenCardsVisibility();
       final windowPlacementMode = Platform.isWindows
           ? await _settings.windowUi.getWindowPlacementMode()
           : WindowPlacementMode.alwaysCenter;
-      final crashLogRetention = await _settings.catalogs.getCrashLogRetentionCount();
-      final shutdownTraceEnabled = await _settings.catalogs.getShutdownTraceEnabled();
-      final shutdownTraceRetention = await _settings
-          .catalogs.getShutdownTraceRetentionCount();
-      final showUpdateOnStartup = await _settings.catalogs.getShowUpdateOnStartup();
+      final crashLogRetention = await _settings.catalogs
+          .getCrashLogRetentionCount();
+      final shutdownTraceEnabled = await _settings.catalogs
+          .getShutdownTraceEnabled();
+      final shutdownTraceRetention = await _settings.catalogs
+          .getShutdownTraceRetentionCount();
+      final showUpdateOnStartup = await _settings.catalogs
+          .getShowUpdateOnStartup();
       final databasePath = await _settings.getDatabasePath();
       final logsDirectoryPath = databasePath.trim().isEmpty
           ? ''
@@ -196,7 +201,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final n = int.tryParse(raw);
     if (n == null) return;
     await _settings.catalogs.setShutdownTraceRetentionCount(n);
-    final normalized = await _settings.catalogs.getShutdownTraceRetentionCount();
+    final normalized = await _settings.catalogs
+        .getShutdownTraceRetentionCount();
     if (!mounted) return;
     setState(() => _shutdownTraceRetentionCount = normalized);
     _shutdownTraceRetentionController.text = normalized.toString();
@@ -306,8 +312,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   }
                   final timeoutValue = timeout!;
                   final attemptsValue = attempts!;
-                  await _settings.catalogs.setDatabaseOpenTimeoutSeconds(timeoutValue);
-                  await _settings.catalogs.setDatabaseOpenMaxAttempts(attemptsValue);
+                  await _settings.catalogs.setDatabaseOpenTimeoutSeconds(
+                    timeoutValue,
+                  );
+                  await _settings.catalogs.setDatabaseOpenMaxAttempts(
+                    attemptsValue,
+                  );
                   if (!mounted) return;
                   setState(() {
                     _databaseOpenTimeoutSeconds = timeoutValue;
@@ -742,7 +752,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             SwitchListTile(
               value: _showEmptyRemoteLaunchers,
               onChanged: (value) async {
-                await _settings.remoteLansweeper.setCallsShowEmptyRemoteLaunchers(value);
+                await _settings.remoteLansweeper
+                    .setCallsShowEmptyRemoteLaunchers(value);
                 if (mounted) setState(() => _showEmptyRemoteLaunchers = value);
                 ref.invalidate(callsRemoteUiConfigProvider);
               },

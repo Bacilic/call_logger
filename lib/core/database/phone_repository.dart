@@ -217,6 +217,32 @@ class PhoneRepository {
       if (name.isNotEmpty) out.add(name);
     }
 
+    final history = await phoneHistoryLinkCounts(phoneId, phoneNumber);
+    if (history.tasks > 0) {
+      out.add(
+        history.tasks == 1 ? '1 εκκρεμότητα' : '${history.tasks} εκκρεμότητες',
+      );
+    }
+    if (history.calls > 0) {
+      out.add(
+        history.calls == 1
+            ? '1 κλήση ιστορικού'
+            : '${history.calls} κλήσεις ιστορικού',
+      );
+    }
+
+    return out;
+  }
+
+  /// Μόνο οι **ιστορικές** συνδέσεις ενός τηλεφώνου — εκκρεμότητες και κλήσεις.
+  ///
+  /// Ο κάτοχος και το τμήμα ΔΕΝ μετρώνται εδώ: τα έχει σχεδόν κάθε τηλέφωνο,
+  /// οπότε μια προειδοποίηση που τα περιλαμβάνει ισχύει πάντα και δεν
+  /// προειδοποιεί για τίποτα.
+  Future<({int tasks, int calls})> phoneHistoryLinkCounts(
+    int phoneId,
+    String phoneNumber,
+  ) async {
     final taskLinks = await db.rawQuery(
       '''
       SELECT COUNT(*) AS c FROM tasks
@@ -224,10 +250,6 @@ class PhoneRepository {
       ''',
       [phoneId],
     );
-    final taskCount = _readCount(taskLinks);
-    if (taskCount > 0) {
-      out.add(taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες');
-    }
 
     final digits = DirectorySupport.phoneDigitsOnly(phoneNumber.trim());
     final callLinks = await db.rawQuery(
@@ -246,14 +268,8 @@ class PhoneRepository {
       ''',
       [phoneNumber.trim(), digits, digits],
     );
-    final callCount = _readCount(callLinks);
-    if (callCount > 0) {
-      out.add(
-        callCount == 1 ? '1 κλήση ιστορικού' : '$callCount κλήσεις ιστορικού',
-      );
-    }
 
-    return out;
+    return (tasks: _readCount(taskLinks), calls: _readCount(callLinks));
   }
 
   static String? _personDisplayName(Map<String, dynamic> row) {

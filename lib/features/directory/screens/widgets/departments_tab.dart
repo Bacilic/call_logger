@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/user_delete_equipment_policy.dart';
+import '../../../../core/database/user_delete_phone_policy.dart';
 import '../../../../core/database/user_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/database/settings_repository.dart';
@@ -9,6 +11,7 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../services/department_deletion_inventory.dart';
+import '../../services/department_deletion_messages.dart';
 import '../../services/department_deletion_orchestrator.dart';
 import '../../services/department_deletion_undo_policy.dart';
 import '../../services/department_deletion_undo_record.dart';
@@ -21,9 +24,11 @@ import 'department_rename_guard_dialog.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_model.dart';
 import '../../building_map/providers/building_map_providers.dart';
+import '../../providers/bulk_action_undo_provider.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../providers/directory_provider.dart';
 import 'bulk_department_edit_dialog.dart';
+import 'bulk_undo_bar.dart';
 import 'catalog_column_selector_shell.dart';
 import 'department_form_dialog.dart';
 import 'departments_data_table.dart';
@@ -130,6 +135,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             ],
           ),
         ),
+        const BulkUndoBar(scope: BulkUndoScope.departments),
         Expanded(
           child: DepartmentsDataTable(
             floorsById: floorsById,
@@ -282,9 +288,24 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
 
     // Φάση συλλογής: μόνο διάλογοι — χωρίς εγγραφές στη βάση.
     if (choice == DepartmentDeletionChoice.detailed) {
+      final dbEx = await DatabaseHelper.instance.database;
+      final userRepo = UserRepository(dbEx);
+      var departmentIndex = 0;
+
       for (final dept in toDelete) {
         final deptId = dept.id;
         if (deptId == null) continue;
+        departmentIndex++;
+
+        final availableDepartments = lookup.departments
+            .where(
+              (d) =>
+                  d.id != null &&
+                  !d.isDeleted &&
+                  !deletingIds.contains(d.id) &&
+                  d.name.trim().isNotEmpty,
+            )
+            .toList();
 
         var employeeBatch = const DepartmentEmployeeReassignBatch(
           transfers: {},
@@ -301,17 +322,12 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
                     : (u.name ?? '').trim(),
               ),
         ];
-        if (employees.isNotEmpty) {
-          final availableDepartments = lookup.departments
-              .where(
-                (d) =>
-                    d.id != null &&
-                    !d.isDeleted &&
-                    !deletingIds.contains(d.id) &&
-                    d.name.trim().isNotEmpty,
-              )
-              .toList();
 
+        var userIdsToDelete = const <int>[];
+        var exclusivePhones = const <ExclusivePhoneForUserDelete>[];
+        var exclusiveEquipment = const <ExclusiveEquipmentForUserDelete>[];
+
+        if (employees.isNotEmpty) {
           if (!context.mounted) return;
           final collected = await showDepartmentEmployeeReassignFlow(
             context: context,
@@ -323,73 +339,128 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
           if (!context.mounted || collected == null) return;
           employeeBatch = collected;
           movedEmployeeCount += employeeBatch.transfers.length;
+          userIdsToDelete = collected.toDelete.toList();
 
-          for (final userId in collected.toDelete) {
-            final dbEx = await DatabaseHelper.instance.database;
-            final userRepo = UserRepository(dbEx);
-
-            var phoneBatch = const SharedAssetDisconnectBatchResult();
-            final exPhones = await userRepo.findExclusivePhonesForUserDelete([
-              userId,
-            ]);
-            if (exPhones.isNotEmpty) {
-              if (!context.mounted) return;
-              final b = await showSharedAssetDisconnectFlow(
-                context: context,
-                sourceDepartmentId: deptId,
-                sourceDepartmentName: dept.name,
-                phones: exPhones.map((e) => e.number).toList(),
-                availableDepartments: availableDepartments,
-                mode: SharedAssetDisconnectMode.personalPhone,
-                allowKeepInDepartment: false,
-              );
-              if (!context.mounted || b == null) return;
-              phoneBatch = b;
-            }
-
-            var equipmentBatch = const SharedAssetDisconnectBatchResult();
-            final exEquip = await userRepo.findExclusiveEquipmentForUserDelete([
-              userId,
-            ]);
-            if (exEquip.isNotEmpty) {
-              if (!context.mounted) return;
-              final b = await showSharedAssetDisconnectFlow(
-                context: context,
-                sourceDepartmentId: deptId,
-                sourceDepartmentName: dept.name,
-                equipmentCodes: exEquip.map((e) => e.codeEquipment).toList(),
-                availableDepartments: availableDepartments,
-                mode: SharedAssetDisconnectMode.personalEquipment,
-                allowKeepInDepartment: false,
-              );
-              if (!context.mounted || b == null) return;
-              equipmentBatch = b;
-            }
-
-            deletedEmployees.add(
-              DepartmentEmployeeDeletion(
-                userId: userId,
-                phoneBatch: phoneBatch,
-                equipmentBatch: equipmentBatch,
-              ),
+          if (userIdsToDelete.isNotEmpty) {
+            // ΕΝΑ ερώτημα για όλους μαζί: το κριτήριο «μένει ορφανό»
+            // εξαιρεί τους διαγραφόμενους, οπότε με ερώτημα ανά υπάλληλο
+            // ένας εξοπλισμός που τον μοιράζονται δύο διαγραφόμενοι δεν
+            // εμφανιζόταν σε καμία κλήση και έμενε χωρίς κάτοχο.
+            exclusivePhones = await userRepo.findExclusivePhonesForUserDelete(
+              userIdsToDelete,
             );
+            exclusiveEquipment = await userRepo
+                .findExclusiveEquipmentForUserDelete(userIdsToDelete);
           }
         }
 
-        var sharedBatch = const SharedAssetDisconnectBatchResult();
         final phones = lookup.getDirectPhonesByDepartment(deptId);
         final equipment = lookup.getSharedEquipmentCodesByDepartment(deptId);
-        if (phones.isNotEmpty || equipment.isNotEmpty) {
-          final availableDepartments = lookup.departments
-              .where(
-                (d) =>
-                    d.id != null &&
-                    !d.isDeleted &&
-                    !deletingIds.contains(d.id) &&
-                    d.name.trim().isNotEmpty,
-              )
-              .toList();
 
+        // Σταθερός μετρητής: το σύνολο των ερωτήσεων αυτού του τμήματος είναι
+        // πλέον γνωστό πριν ανοίξει ο πρώτος διάλογος, οπότε το «X από Y» δεν
+        // μεγαλώνει στη μέση. Με τη σειρά που θα καταναλωθούν.
+        final nameByUserId = <int, String>{
+          for (final e in employees) e.id: e.name,
+        };
+
+        final disconnectSession = AssetDisconnectSession(
+          items: <AssetDisconnectItem>[
+            for (final userId in userIdsToDelete) ...[
+              for (final p in exclusivePhones)
+                if (p.userId == userId)
+                  AssetDisconnectItem.phone(
+                    p.number,
+                    ownerName: nameByUserId[userId],
+                    departmentId: deptId,
+                    departmentName: dept.name,
+                  ),
+              for (final e in exclusiveEquipment)
+                if (e.userId == userId)
+                  AssetDisconnectItem.equipment(
+                    e.codeEquipment,
+                    ownerName: nameByUserId[userId],
+                    departmentId: deptId,
+                    departmentName: dept.name,
+                  ),
+            ],
+            for (final p in phones)
+              AssetDisconnectItem.phone(
+                p,
+                departmentId: deptId,
+                departmentName: dept.name,
+              ),
+            for (final c in equipment)
+              AssetDisconnectItem.equipment(
+                c,
+                departmentId: deptId,
+                departmentName: dept.name,
+              ),
+          ],
+          contextLabel: departmentDeletionContextLabel(
+            departmentIndex: departmentIndex,
+            departmentCount: toDelete.length,
+          ),
+          cancelScopeDescription: departmentDeletionCancelScopeDescription(
+            toDelete.length,
+          ),
+        );
+
+        for (final userId in userIdsToDelete) {
+          final phonesForUser = <String>[
+            for (final p in exclusivePhones)
+              if (p.userId == userId) p.number,
+          ];
+          final equipmentForUser = <String>[
+            for (final e in exclusiveEquipment)
+              if (e.userId == userId) e.codeEquipment,
+          ];
+
+          var phoneBatch = const SharedAssetDisconnectBatchResult();
+          if (phonesForUser.isNotEmpty) {
+            if (!context.mounted) return;
+            final b = await showSharedAssetDisconnectFlow(
+              context: context,
+              sourceDepartmentId: deptId,
+              sourceDepartmentName: dept.name,
+              phones: phonesForUser,
+              availableDepartments: availableDepartments,
+              mode: SharedAssetDisconnectMode.personalPhone,
+              allowKeepInDepartment: false,
+              session: disconnectSession,
+            );
+            if (!context.mounted || b == null) return;
+            phoneBatch = b;
+          }
+
+          var equipmentBatch = const SharedAssetDisconnectBatchResult();
+          if (equipmentForUser.isNotEmpty) {
+            if (!context.mounted) return;
+            final b = await showSharedAssetDisconnectFlow(
+              context: context,
+              sourceDepartmentId: deptId,
+              sourceDepartmentName: dept.name,
+              equipmentCodes: equipmentForUser,
+              availableDepartments: availableDepartments,
+              mode: SharedAssetDisconnectMode.personalEquipment,
+              allowKeepInDepartment: false,
+              session: disconnectSession,
+            );
+            if (!context.mounted || b == null) return;
+            equipmentBatch = b;
+          }
+
+          deletedEmployees.add(
+            DepartmentEmployeeDeletion(
+              userId: userId,
+              phoneBatch: phoneBatch,
+              equipmentBatch: equipmentBatch,
+            ),
+          );
+        }
+
+        var sharedBatch = const SharedAssetDisconnectBatchResult();
+        if (phones.isNotEmpty || equipment.isNotEmpty) {
           if (!context.mounted) return;
           final collected = await showSharedAssetDisconnectFlow(
             context: context,
@@ -399,6 +470,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             equipmentCodes: equipment,
             availableDepartments: availableDepartments,
             allowKeepInDepartment: false,
+            session: disconnectSession,
           );
           if (!context.mounted || collected == null) return;
           sharedBatch = collected;
@@ -498,10 +570,9 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
 
         var sharedBatch = const SharedAssetDisconnectBatchResult();
         if (phones.isNotEmpty || equipment.isNotEmpty) {
-          final newDeptNames = <String, Set<String>>{};
-          if (dominantTargetIsNew) {
-            newDeptNames[proposedNewName] = {...phones};
-          }
+          final newDeptNames = <String>{
+            if (dominantTargetIsNew) proposedNewName,
+          };
           sharedBatch = SharedAssetDisconnectBatchResult(
             phoneTransfers: {for (final p in phones) p: target},
             equipmentTransfers: {for (final c in equipment) c: target},

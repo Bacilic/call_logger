@@ -73,16 +73,13 @@ void main() {
       );
       await tester.pump();
 
-      expect(
-        debugDatabaseSwitchCompletionSteps,
-        [
-          'onSessionStateUpdated',
-          'onLifecycleChanged',
-          'invalidateCaches',
-          'invalidateAppInit',
-          'successNotice',
-        ],
-      );
+      expect(debugDatabaseSwitchCompletionSteps, [
+        'onSessionStateUpdated',
+        'onLifecycleChanged',
+        'invalidateCaches',
+        'invalidateAppInit',
+        'successNotice',
+      ]);
       expect(
         container.read(databaseSwitchSuccessNoticeProvider),
         databaseSwitchSuccessMessage(path),
@@ -90,36 +87,35 @@ void main() {
     },
   );
 
-  testWidgets(
-    'η εκκαθάριση caches ΔΕΝ προηγείται του onLifecycleChanged',
-    (tester) async {
-      final container = _containerWithFastLookup();
-      addTearDown(container.dispose);
-      final ref = await _pumpWidgetRef(tester, container);
+  testWidgets('η εκκαθάριση caches ΔΕΝ προηγείται του onLifecycleChanged', (
+    tester,
+  ) async {
+    final container = _containerWithFastLookup();
+    addTearDown(container.dispose);
+    final ref = await _pumpWidgetRef(tester, container);
 
-      await completeDatabaseSwitch(
-        ref: ref,
-        path: path,
-        hooks: DatabaseSwitchCompletionHooks(
-          onSessionStateUpdated: (_) async {},
-          onLifecycleChanged: () async {},
-        ),
-      );
-      await tester.pump();
+    await completeDatabaseSwitch(
+      ref: ref,
+      path: path,
+      hooks: DatabaseSwitchCompletionHooks(
+        onSessionStateUpdated: (_) async {},
+        onLifecycleChanged: () async {},
+      ),
+    );
+    await tester.pump();
 
-      final steps = debugDatabaseSwitchCompletionSteps!;
-      final lifecycleIndex = steps.indexOf('onLifecycleChanged');
-      final cachesIndex = steps.indexOf('invalidateCaches');
-      expect(lifecycleIndex, isNonNegative);
-      expect(cachesIndex, isNonNegative);
-      expect(
-        cachesIndex,
-        greaterThan(lifecycleIndex),
-        reason:
-            'Η αντιστροφή caches→lifecycle ήταν το σφάλμα της δημιουργίας νέας βάσης',
-      );
-    },
-  );
+    final steps = debugDatabaseSwitchCompletionSteps!;
+    final lifecycleIndex = steps.indexOf('onLifecycleChanged');
+    final cachesIndex = steps.indexOf('invalidateCaches');
+    expect(lifecycleIndex, isNonNegative);
+    expect(cachesIndex, isNonNegative);
+    expect(
+      cachesIndex,
+      greaterThan(lifecycleIndex),
+      reason:
+          'Η αντιστροφή caches→lifecycle ήταν το σφάλμα της δημιουργίας νέας βάσης',
+    );
+  });
 
   testWidgets(
     'showSuccessNotice: false — χωρίς ειδοποίηση, τα υπόλοιπα βήματα τρέχουν',
@@ -139,47 +135,36 @@ void main() {
       );
       await tester.pump();
 
-      expect(
-        debugDatabaseSwitchCompletionSteps,
-        [
-          'onSessionStateUpdated',
-          'onLifecycleChanged',
-          'invalidateCaches',
-          'invalidateAppInit',
-        ],
-      );
+      expect(debugDatabaseSwitchCompletionSteps, [
+        'onSessionStateUpdated',
+        'onLifecycleChanged',
+        'invalidateCaches',
+        'invalidateAppInit',
+      ]);
       expect(container.read(databaseSwitchSuccessNoticeProvider), isNull);
     },
   );
 
-  testWidgets(
-    'hooks: null — το συμβόλαιο τηρείται χωρίς υποχρεωτική οθόνη',
-    (tester) async {
-      final container = _containerWithFastLookup();
-      addTearDown(container.dispose);
-      final ref = await _pumpWidgetRef(tester, container);
+  testWidgets('hooks: null — το συμβόλαιο τηρείται χωρίς υποχρεωτική οθόνη', (
+    tester,
+  ) async {
+    final container = _containerWithFastLookup();
+    addTearDown(container.dispose);
+    final ref = await _pumpWidgetRef(tester, container);
 
-      await completeDatabaseSwitch(
-        ref: ref,
-        path: path,
-        hooks: null,
-      );
-      await tester.pump();
+    await completeDatabaseSwitch(ref: ref, path: path, hooks: null);
+    await tester.pump();
 
-      expect(
-        debugDatabaseSwitchCompletionSteps,
-        [
-          'onSessionStateUpdated',
-          'onLifecycleChanged',
-          'invalidateCaches',
-          'invalidateAppInit',
-          'successNotice',
-        ],
-      );
-      expect(
-        container.read(databaseSwitchSuccessNoticeProvider),
-        databaseSwitchSuccessMessage(path),
-      );
-    },
-  );
+    expect(debugDatabaseSwitchCompletionSteps, [
+      'onSessionStateUpdated',
+      'onLifecycleChanged',
+      'invalidateCaches',
+      'invalidateAppInit',
+      'successNotice',
+    ]);
+    expect(
+      container.read(databaseSwitchSuccessNoticeProvider),
+      databaseSwitchSuccessMessage(path),
+    );
+  });
 }

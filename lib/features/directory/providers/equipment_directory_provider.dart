@@ -13,7 +13,11 @@ import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../calls/models/user_model.dart';
+import '../../../core/database/sqlite_types.dart';
 import '../models/equipment_column.dart';
+import '../services/bulk_action_undo_record.dart';
+import '../services/bulk_equipment_actions.dart';
+import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
 
 const _catalogEquipmentLayoutKey = 'catalog_equipment_columns';
@@ -109,7 +113,6 @@ class EquipmentDirectoryState {
     this.sortAscending = true,
     this.selectedIds = const {},
     this.lastDeleted,
-    this.lastBulkUpdated,
     this.focusedRowIndex,
     this.showBuildingInLocationColumn = true,
     List<EquipmentColumn>? columnOrder,
@@ -152,7 +155,6 @@ class EquipmentDirectoryState {
   final bool sortAscending;
   final Set<int> selectedIds;
   final List<EquipmentDeleteUndoEntry>? lastDeleted;
-  final List<EquipmentRow>? lastBulkUpdated;
   final int? focusedRowIndex;
 
   /// Πλήρης σειρά όλων των στηλών (κρυφές παραμένουν στη λίστα).
@@ -179,7 +181,6 @@ class EquipmentDirectoryState {
     Set<int>? selectedIds,
     bool clearLastDeleted = false,
     List<EquipmentDeleteUndoEntry>? lastDeleted,
-    List<EquipmentRow>? lastBulkUpdated,
     int? focusedRowIndex,
     bool? showBuildingInLocationColumn,
     List<EquipmentColumn>? columnOrder,
@@ -195,7 +196,6 @@ class EquipmentDirectoryState {
       sortAscending: sortAscending ?? this.sortAscending,
       selectedIds: selectedIds ?? this.selectedIds,
       lastDeleted: clearLastDeleted ? null : (lastDeleted ?? this.lastDeleted),
-      lastBulkUpdated: lastBulkUpdated ?? this.lastBulkUpdated,
       focusedRowIndex: focusedRowIndex ?? this.focusedRowIndex,
       showBuildingInLocationColumn:
           showBuildingInLocationColumn ?? this.showBuildingInLocationColumn,
@@ -395,8 +395,8 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     }
     if (!ref.mounted) return;
 
-    final showBuildingInLocation = await SettingsService()
-        .windowUi.getEquipmentLocationShowBuilding();
+    final showBuildingInLocation = await SettingsService().windowUi
+        .getEquipmentLocationShowBuilding();
     if (!ref.mounted) return;
 
     final equipmentRows = await getEquipmentRows();
@@ -639,6 +639,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   Future<void> addEquipment(EquipmentModel eq, {int? ownerUserId}) async {
+    _settlePendingBulkUndo();
     final dbEq = await DatabaseHelper.instance.database;
     final equipment = EquipmentRepository(dbEq);
     final id = await equipment.insertEquipmentFromMap(eq.toMap());
@@ -649,6 +650,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   Future<void> updateEquipment(EquipmentModel eq, {int? ownerUserId}) async {
+    _settlePendingBulkUndo();
     if (eq.id == null) {
       throw ArgumentError.value(eq.id, 'eq.id', 'updateEquipment requires id');
     }
@@ -664,6 +666,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
   Future<void> deleteSelected() async {
     if (state.selectedIds.isEmpty) return;
+    _settlePendingBulkUndo();
     final toProcess = state.allItems
         .where(
           (row) => row.$1.id != null && state.selectedIds.contains(row.$1.id),
@@ -754,6 +757,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   Future<void> undoLastDelete() async {
+    _settlePendingBulkUndo();
     final list = state.lastDeleted;
     if (list == null || list.isEmpty) return;
     final dbUndo = await DatabaseHelper.instance.database;
@@ -769,52 +773,101 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     await _afterEquipmentMutation();
   }
 
-  Future<void> bulkUpdate(List<int> ids, Map<String, dynamic> changes) async {
-    if (ids.isEmpty || changes.isEmpty) return;
-    final toUpdate = state.allItems
-        .where((row) => row.$1.id != null && ids.contains(row.$1.id))
-        .toList();
-    if (toUpdate.isEmpty) return;
-    final map = Map<String, dynamic>.from(changes);
-    final ownerUpdate = map.containsKey('user_id');
-    final ownerId = map.remove('user_id') as int?;
-    final dbBulk = await DatabaseHelper.instance.database;
-    final equipment = EquipmentRepository(dbBulk);
-    if (map.isNotEmpty) {
-      await equipment.bulkUpdateEquipments(ids, map);
-    }
-    if (ownerUpdate) {
-      for (final id in ids) {
-        await equipment.replaceEquipmentUsers(
-          id,
-          ownerId != null ? [ownerId] : [],
-        );
-      }
-    }
-    state = state.copyWith(lastBulkUpdated: toUpdate);
-    await _afterEquipmentMutation();
+  /// Νέα μεταβολή καταλόγου = σιωπηλή οριστικοποίηση της εκκρεμούς προσφοράς
+  /// αναίρεσης (αναίρεση πάνω από νεότερες αλλαγές θα τις πατούσε).
+  void _settlePendingBulkUndo() {
+    ref.read(pendingBulkUndoProvider.notifier).settleSilently();
   }
 
-  Future<void> undoLastBulkUpdate() async {
-    final list = state.lastBulkUpdated;
-    if (list == null || list.isEmpty) return;
-    final dbUb = await DatabaseHelper.instance.database;
-    final equipment = EquipmentRepository(dbUb);
-    try {
-      for (final row in list) {
-        final eid = row.$1.id;
-        if (eid == null) continue;
-        await equipment.updateEquipment(eid, row.$1.toMap());
-        final uid = row.$2?.id;
-        await equipment.replaceEquipmentUsers(eid, uid != null ? [uid] : []);
-        if (!ref.mounted) break;
-      }
-    } finally {
-      state = state.copyWith(lastBulkUpdated: null);
-      if (ref.mounted) {
-        await _afterEquipmentMutation();
-      }
-    }
+  /// Κοινό φινάλε μαζικής ενέργειας: η πράξη έχει ήδη ολοκληρωθεί ατομικά·
+  /// εδώ ανανεώνονται τα caches και δημοσιεύεται η προσφορά αναίρεσης.
+  Future<void> _finishBulkAction(
+    String message,
+    BulkActionUndoRecord record,
+  ) async {
+    state = state.copyWith(selectedIds: {});
+    await _afterEquipmentMutation(refreshDepartments: true);
+    if (!ref.mounted) return;
+    ref
+        .read(pendingBulkUndoProvider.notifier)
+        .offer(
+          scope: BulkUndoScope.equipment,
+          message: message,
+          record: record,
+        );
+  }
+
+  Future<void> _runBulkAction(
+    String message,
+    Future<BulkActionUndoRecord> Function(DatabaseExecutor txn, Database db)
+    apply,
+  ) async {
+    _settlePendingBulkUndo();
+    final db = await DatabaseHelper.instance.database;
+    late BulkActionUndoRecord record;
+    await db.transaction((txn) async {
+      record = await apply(txn, db);
+    });
+    await _finishBulkAction(message, record);
+  }
+
+  /// Μαζική μεταφορά εξοπλισμού σε τμήμα (μία ατομική συναλλαγή).
+  Future<void> applyBulkTransfer(BulkEquipmentTransferPlan plan) async {
+    if (!plan.hasWork) return;
+    await _runBulkAction(
+      bulkEquipmentTransferResultMessage(plan),
+      (txn, db) => applyBulkEquipmentTransferInTxn(txn, db, plan),
+    );
+  }
+
+  /// Μαζική ανάθεση κατόχου· το τμήμα ακολουθεί τον νέο κάτοχο.
+  Future<void> applyBulkOwner(BulkEquipmentOwnerPlan plan) async {
+    if (!plan.hasWork) return;
+    await _runBulkAction(
+      bulkEquipmentOwnerResultMessage(plan),
+      (txn, db) => applyBulkEquipmentOwnerInTxn(txn, db, plan),
+    );
+  }
+
+  /// Μαζική εγγραφή απλής στήλης (τύπος, τοποθεσία, σημειώσεις, κύριο εργαλείο).
+  Future<void> applyBulkField({
+    required List<EquipmentRow> rows,
+    required String column,
+    required Object? value,
+    required String message,
+    BulkEquipmentNotesMode? notesMode,
+  }) async {
+    if (rows.isEmpty) return;
+    await _runBulkAction(
+      message,
+      (txn, db) => applyBulkEquipmentFieldInTxn(
+        txn,
+        db,
+        rows: rows,
+        column: column,
+        value: value,
+        notesMode: notesMode,
+      ),
+    );
+  }
+
+  /// Μαζικός καθαρισμός πεδίου εξοπλισμού.
+  Future<void> applyBulkClear(BulkEquipmentClearPlan plan) async {
+    if (!plan.hasWork) return;
+    await _runBulkAction(
+      bulkEquipmentClearResultMessage(plan),
+      (txn, db) => applyBulkEquipmentClearInTxn(txn, db, plan),
+    );
+  }
+
+  /// Εκτελεί την εκκρεμή αναίρεση μαζικής ενέργειας (πλήρης επαναφορά).
+  Future<void> undoPendingBulkAction() async {
+    final record = ref.read(pendingBulkUndoProvider.notifier).takeForUndo();
+    if (record == null) return;
+    final db = await DatabaseHelper.instance.database;
+    await applyBulkActionUndo(db, record);
+    if (!ref.mounted) return;
+    await _afterEquipmentMutation(refreshDepartments: true);
   }
 }
 

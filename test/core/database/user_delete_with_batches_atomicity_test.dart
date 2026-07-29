@@ -44,57 +44,65 @@ void main() {
       );
     }
 
-    test('διακοπή μετά τις διαθέσεις αναιρεί ΚΑΙ τη διαγραφή ΚΑΙ τις διαθέσεις',
-        () async {
-      final db = await DatabaseHelper.instance.database;
-      final seeded = await seededUserAndDept();
-      final batch = const SharedAssetDisconnectBatchResult(
-        phonesToDelete: [kTestPhoneDigits],
-      );
+    test(
+      'διακοπή μετά τις διαθέσεις αναιρεί ΚΑΙ τη διαγραφή ΚΑΙ τις διαθέσεις',
+      () async {
+        final db = await DatabaseHelper.instance.database;
+        final seeded = await seededUserAndDept();
+        final batch = const SharedAssetDisconnectBatchResult(
+          phonesToDelete: [kTestPhoneDigits],
+        );
 
-      await expectLater(
-        db.transaction((txn) async {
-          await UserRepository(db).deleteUsers([seeded.userId], executor: txn);
-          await applyPersonalPhoneDisconnectBatch(
-            db,
-            batch,
-            sourceDepartmentId: seeded.deptId,
-            executor: txn,
-          );
-          throw StateError('προσομοίωση διακοπής');
-        }),
-        throwsA(isA<StateError>()),
-      );
+        await expectLater(
+          db.transaction((txn) async {
+            await UserRepository(
+              db,
+            ).deleteUsers([seeded.userId], executor: txn);
+            await applyPersonalPhoneDisconnectBatch(
+              db,
+              batch,
+              sourceDepartmentId: seeded.deptId,
+              executor: txn,
+            );
+            throw StateError('προσομοίωση διακοπής');
+          }),
+          throwsA(isA<StateError>()),
+        );
 
-      final userRow = (await db.query(
-        'users',
-        where: 'id = ?',
-        whereArgs: [seeded.userId],
-      )).first;
-      expect(userRow['is_deleted'], 0, reason: 'η διαγραφή πρέπει να αναιρεθεί');
+        final userRow = (await db.query(
+          'users',
+          where: 'id = ?',
+          whereArgs: [seeded.userId],
+        )).first;
+        expect(
+          userRow['is_deleted'],
+          0,
+          reason: 'η διαγραφή πρέπει να αναιρεθεί',
+        );
 
-      final linkRows = await db.query(
-        'user_phones',
-        where: 'user_id = ?',
-        whereArgs: [seeded.userId],
-      );
-      expect(
-        linkRows,
-        isNotEmpty,
-        reason: 'η σύνδεση τηλεφώνου πρέπει να επανέλθει με το rollback',
-      );
+        final linkRows = await db.query(
+          'user_phones',
+          where: 'user_id = ?',
+          whereArgs: [seeded.userId],
+        );
+        expect(
+          linkRows,
+          isNotEmpty,
+          reason: 'η σύνδεση τηλεφώνου πρέπει να επανέλθει με το rollback',
+        );
 
-      final phoneRow = (await db.query(
-        'phones',
-        where: 'number = ?',
-        whereArgs: [kTestPhoneDigits],
-      )).first;
-      expect(
-        phoneRow['is_deleted'] ?? 0,
-        0,
-        reason: 'το τηλέφωνο δεν πρέπει να μείνει διαγραμμένο',
-      );
-    });
+        final phoneRow = (await db.query(
+          'phones',
+          where: 'number = ?',
+          whereArgs: [kTestPhoneDigits],
+        )).first;
+        expect(
+          phoneRow['is_deleted'] ?? 0,
+          0,
+          reason: 'το τηλέφωνο δεν πρέπει να μείνει διαγραμμένο',
+        );
+      },
+    );
 
     test('χωρίς διακοπή: διαγραφή και διαθέσεις εφαρμόζονται μαζί', () async {
       final db = await DatabaseHelper.instance.database;
@@ -125,7 +133,11 @@ void main() {
         where: 'number = ?',
         whereArgs: [kTestPhoneDigits],
       )).first;
-      expect(phoneRow['is_deleted'], 1, reason: 'η διάθεση «διαγραφή» εφαρμόστηκε');
+      expect(
+        phoneRow['is_deleted'],
+        1,
+        reason: 'η διάθεση «διαγραφή» εφαρμόστηκε',
+      );
     });
   });
 }

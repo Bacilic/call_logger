@@ -748,7 +748,8 @@ class _CallsRemoteUiPanelState extends ConsumerState<_CallsRemoteUiPanel> {
     final previous = _overflow;
     setState(() => _overflow = v);
     try {
-      await SettingsService().remoteLansweeper.setCallsShowSecondaryRemoteActions(v);
+      await SettingsService().remoteLansweeper
+          .setCallsShowSecondaryRemoteActions(v);
       ref.invalidate(callsRemoteUiConfigProvider);
     } catch (e) {
       if (!mounted) return;

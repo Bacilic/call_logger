@@ -1,16 +1,23 @@
-import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/directory/phone_department_policy.dart';
 import '../../../../core/services/lookup_service.dart';
-import '../../../../core/utils/phone_list_parser.dart';
-import '../../../../core/utils/spell_check.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
+import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
+import '../../models/department_model.dart';
 import '../../providers/directory_provider.dart';
-import 'user_phone_department_conflict_dialog.dart';
+import '../../services/bulk_user_actions.dart';
+import 'bulk_user_action_call_guard.dart';
+import 'bulk_user_action_pickers.dart';
+import 'shared_asset_disconnect_dialog.dart';
 
-/// Διάλογος μαζικής επεξεργασίας: εφαρμογή τιμών σε επιλεγμένους χρήστες.
-class BulkUserEditDialog extends StatefulWidget {
+/// Μαζικές ενέργειες υπαλλήλων: μεταφορά σε τμήμα, σημειώσεις, καθαρισμός.
+///
+/// Καμία φόρμα πεδίων και κανένα κουτάκι επιλογής — μία ενέργεια τη φορά, με
+/// ρητή σύνοψη «τι θα συμβεί σε ποιους» πριν από κάθε εκτέλεση. Η πράξη
+/// γράφεται ατομικά και αφήνει προσφορά πλήρους αναίρεσης στην καρτέλα.
+class BulkUserEditDialog extends ConsumerStatefulWidget {
   const BulkUserEditDialog({
     super.key,
     required this.selectedUsers,
@@ -21,264 +28,389 @@ class BulkUserEditDialog extends StatefulWidget {
   final DirectoryNotifier notifier;
 
   @override
-  State<BulkUserEditDialog> createState() => _BulkUserEditDialogState();
+  ConsumerState<BulkUserEditDialog> createState() => _BulkUserEditDialogState();
 }
 
-class _BulkUserEditDialogState extends State<BulkUserEditDialog>
-    with DialogSnackbarHost {
-  static const _fieldKeys = ['lastName', 'firstName', 'phone', 'notes'];
-  static const _dbKeys = ['last_name', 'first_name', 'phone', 'notes'];
+class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
+  bool _busy = false;
 
-  final Map<String, bool> _applyField = {
-    'lastName': false,
-    'firstName': false,
-    'phone': false,
-    'notes': false,
+  List<UserModel> get _users => widget.selectedUsers;
+
+  Set<int> get _selectedIds => {
+    for (final u in _users)
+      if (u.id != null) u.id!,
   };
-  final Map<String, TextEditingController> _controllers = {};
 
-  @override
-  void initState() {
-    super.initState();
-    for (final key in _fieldKeys) {
-      _controllers[key] = TextEditingController(text: _commonValue(key));
-    }
+  // ─────────────────── Δεδομένα κοινοχρησίας από τον κατάλογο ───────────────────
+
+  Map<int, List<EquipmentModel>> _equipmentByUserId() {
+    final lookup = LookupService.instance;
+    return {
+      for (final u in _users)
+        if (u.id != null) u.id!: lookup.findEquipmentsForUser(u.id!),
+    };
   }
 
-  /// Κανονικοποίηση για σύγκριση: null και κενό string ως ίσα, trim κενά.
-  static String _normalized(String? v) => v?.trim() ?? '';
+  BulkAssetSharingInfo _sharingInfo(
+    Map<int, List<EquipmentModel>> equipmentByUser,
+  ) {
+    final lookup = LookupService.instance;
+    final selectedIds = _selectedIds;
+    final phoneOthers = <String, List<String>>{};
+    final phoneDeptNames = <String, String>{};
+    final equipmentOthers = <int, List<String>>{};
 
-  String _commonValue(String fieldKey) {
-    final users = widget.selectedUsers;
-    if (users.isEmpty) return '';
-    final getter = _getterFor(fieldKey);
-    final firstNorm = _normalized(getter(users.first));
-    final allSame = users.every((u) => _normalized(getter(u)) == firstNorm);
-    if (allSame) return firstNorm;
-    return '';
-  }
-
-  String? Function(UserModel) _getterFor(String fieldKey) {
-    switch (fieldKey) {
-      case 'lastName':
-        return (u) => u.lastName;
-      case 'firstName':
-        return (u) => u.firstName;
-      case 'phone':
-        return (u) => u.phoneJoined;
-      case 'notes':
-        return (u) => u.notes;
-      default:
-        return (u) => null;
-    }
-  }
-
-  bool _hasDifferentValues(String fieldKey) {
-    final users = widget.selectedUsers;
-    if (users.length <= 1) return false;
-    final getter = _getterFor(fieldKey);
-    final firstNorm = _normalized(getter(users.first));
-    return !users.every((u) => _normalized(getter(u)) == firstNorm);
-  }
-
-  @override
-  void dispose() {
-    for (final c in _controllers.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<UserPhoneConflictBatchResult?> _confirmBulkPhoneConflicts(
-    List<String> phones,
-  ) async {
-    final byPhone = <String, PhoneDepartmentConflict>{};
-    for (final u in widget.selectedUsers) {
-      final conflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
-        phones: phones,
-        targetDepartmentId: u.departmentId,
-        editingUserId: u.id,
-      );
-      for (final c in conflicts) {
-        byPhone.putIfAbsent(c.phone, () => c);
+    for (final u in _users) {
+      for (final raw in u.phones) {
+        final n = raw.trim();
+        if (n.isEmpty || phoneOthers.containsKey(n)) continue;
+        final others = [
+          for (final other in lookup.findUsersByPhone(n))
+            if (other.id != null && !selectedIds.contains(other.id))
+              bulkUserDisplayName(other),
+        ];
+        if (others.isNotEmpty) phoneOthers[n] = others;
+        final dept = lookup.getDepartmentByPhone(n);
+        final deptName = dept?.name.trim() ?? '';
+        if (deptName.isNotEmpty) phoneDeptNames[n] = deptName;
       }
     }
-    if (byPhone.isEmpty) return const UserPhoneConflictBatchResult();
-
-    final deptIds = widget.selectedUsers
-        .map((u) => u.departmentId)
-        .whereType<int>()
-        .toSet();
-    if (deptIds.length > 1) {
-      if (!mounted) return null;
-      showDialogSnackBar(
-        const SnackBar(
-          content: Text(
-            'Η μαζική ανάθεση συγκρουόμενου τηλέφωνου απαιτεί '
-            'το ίδιο τμήμα για όλους τους επιλεγμένους υπαλλήλους.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return null;
+    for (final list in equipmentByUser.values) {
+      for (final e in list) {
+        final eqId = e.id;
+        if (eqId == null || equipmentOthers.containsKey(eqId)) continue;
+        final owners = [
+          for (final owner in lookup.findUsersForEquipment(eqId))
+            if (owner.id != null && !selectedIds.contains(owner.id))
+              bulkUserDisplayName(owner),
+        ];
+        if (owners.isNotEmpty) equipmentOthers[eqId] = owners;
+      }
     }
-
-    final targetId = deptIds.isEmpty ? null : deptIds.first;
-    final targetName = targetId == null
-        ? ''
-        : (LookupService.instance.getDepartmentName(targetId) ?? '');
-
-    final userDisplayName = widget.selectedUsers.length == 1
-        ? ((widget.selectedUsers.first.name ?? '').trim().isEmpty
-              ? '—'
-              : widget.selectedUsers.first.name!.trim())
-        : '${widget.selectedUsers.length} επιλεγμένους υπαλλήλους';
-
-    if (!mounted) return null;
-    return showUserPhoneDepartmentConflictDialog(
-      context,
-      conflicts: byPhone.values.toList(),
-      userDisplayName: userDisplayName,
-      targetDepartmentName: targetName,
-      targetDepartmentId: targetId,
+    return BulkAssetSharingInfo(
+      phoneOtherUserNames: phoneOthers,
+      phoneSharedDepartmentNames: phoneDeptNames,
+      equipmentOtherUserNames: equipmentOthers,
     );
   }
 
-  Future<void> _save() async {
-    final ids = widget.selectedUsers.map((u) => u.id).whereType<int>().toList();
-    if (ids.isEmpty) {
-      if (mounted) Navigator.of(context).pop();
-      return;
-    }
-    final changes = <String, dynamic>{};
-    for (var i = 0; i < _fieldKeys.length; i++) {
-      final fieldKey = _fieldKeys[i];
-      if (_applyField[fieldKey] != true) continue;
-      final dbKey = _dbKeys[i];
-      final value = _controllers[fieldKey]!.text.trim();
-      changes[dbKey] = value.isEmpty ? null : value;
-    }
-    if (changes.isEmpty) {
-      if (mounted) Navigator.of(context).pop();
-      return;
-    }
+  // ─────────────────────────── Κοινά βοηθητικά ροών ───────────────────────────
 
-    UserPhoneConflictBatchResult? phoneResolutions;
-    if (_applyField['phone'] == true) {
-      final phones = PhoneListParser.splitPhones(_controllers['phone']!.text);
-      if (phones.isNotEmpty) {
-        phoneResolutions = await _confirmBulkPhoneConflicts(phones);
-        if (!mounted) return;
-        if (phoneResolutions == null) return;
-      }
-    }
+  List<DepartmentModel> _activeDepartments() {
+    return LookupService.instance.departments
+        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
+        .toList();
+  }
 
+  String _targetDisplayName(SharedAssetTransferTarget target) {
+    final id = target.departmentId;
+    if (id != null) {
+      return LookupService.instance.getDepartmentName(id) ?? '';
+    }
+    return target.newDepartmentName?.trim() ?? '';
+  }
+
+  Future<void> _runGuarded(Future<void> Function() flow) async {
+    if (_busy) return;
+    setState(() => _busy = true);
     try {
-      await widget.notifier.bulkUpdate(
-        ids,
-        changes,
-        phoneConflictResolutions: phoneResolutions,
-      );
-    } on PhoneDepartmentPolicyException catch (e) {
-      if (!mounted) return;
-      showDialogSnackBar(
-        SnackBar(
-          content: Text(
-            'Απορρίφθηκε η μαζική ενημέρωση: '
-            '${e.conflicts.map((c) => c.phone).join(', ')}.',
-          ),
-          backgroundColor: Colors.orange,
+      final allowed = await ensureBulkUserActionAllowed(context, ref, _users);
+      if (!allowed || !mounted) return;
+      await flow();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  // ─────────────────────────── Μεταφορά σε τμήμα ───────────────────────────
+
+  Future<void> _runTransferFlow() async {
+    final target = await showAssetTransferTargetPicker(
+      context: context,
+      headerLabel: _users.length == 1
+          ? 'Μεταφορά 1 υπαλλήλου σε τμήμα'
+          : 'Μεταφορά ${_users.length} υπαλλήλων σε τμήμα',
+      availableDepartments: _activeDepartments(),
+    );
+    if (target == null || !mounted) return;
+
+    final phoneFate = await showBulkOptionDialog<BulkTransferAssetFate>(
+      context,
+      title: 'Τηλέφωνα των υπαλλήλων',
+      message: 'Τι θα γίνουν τα προσωπικά τηλέφωνα των μεταφερόμενων;',
+      options: [
+        (
+          'Μένουν στο παλιό τμήμα',
+          'Αποδεσμεύονται από τον υπάλληλο και γίνονται κοινόχρηστα '
+              'του τμήματος που αφήνει.',
+          BulkTransferAssetFate.stayInOldDepartment,
         ),
+        (
+          'Ακολουθούν τους υπαλλήλους',
+          'Παραμένουν προσωπικά τηλέφωνα των υπαλλήλων στο νέο τμήμα.',
+          BulkTransferAssetFate.follow,
+        ),
+      ],
+    );
+    if (phoneFate == null || !mounted) return;
+
+    final equipmentFate = await showBulkOptionDialog<BulkTransferAssetFate>(
+      context,
+      title: 'Εξοπλισμός των υπαλλήλων',
+      message: 'Τι θα γίνει ο εξοπλισμός των μεταφερόμενων;',
+      options: [
+        (
+          'Ακολουθεί στο νέο τμήμα',
+          'Ο εξοπλισμός αλλάζει τμήμα μαζί με τον κάτοχό του.',
+          BulkTransferAssetFate.follow,
+        ),
+        (
+          'Μένει στο παλιό τμήμα',
+          'Αποδεσμεύεται από τον υπάλληλο και παραμένει στο τμήμα που αφήνει.',
+          BulkTransferAssetFate.stayInOldDepartment,
+        ),
+      ],
+    );
+    if (equipmentFate == null || !mounted) return;
+
+    final equipmentByUser = _equipmentByUserId();
+    final plan = buildBulkUserTransferPlan(
+      selectedUsers: _users,
+      target: target,
+      targetDisplayName: _targetDisplayName(target),
+      phoneFate: phoneFate,
+      equipmentFate: equipmentFate,
+      equipmentByUserId: equipmentByUser,
+      sharing: _sharingInfo(equipmentByUser),
+    );
+    if (!plan.hasWork) {
+      await showBulkInfoDialog(
+        context,
+        title: 'Καμία μεταφορά',
+        message:
+            'Όλοι οι επιλεγμένοι υπάλληλοι βρίσκονται ήδη στο '
+            '«${plan.targetDisplayName}».',
       );
       return;
     }
 
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ids.length == 1
-              ? 'Ενημερώθηκε 1 υπάλληλος.'
-              : 'Ενημερώθηκαν ${ids.length} υπάλληλοι.',
-        ),
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: 'Αναίρεση',
-          onPressed: () async {
-            await widget.notifier.undoLastBulkUpdate();
-          },
-        ),
-      ),
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση μεταφοράς',
+      message: bulkTransferConfirmationText(plan),
+      confirmLabel: 'Μεταφορά',
     );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkTransfer(plan);
+    if (mounted) Navigator.of(context).pop();
   }
+
+  // ─────────────────────────── Σημειώσεις ───────────────────────────
+
+  Future<void> _runNotesFlow() async {
+    final result = await showBulkNotesDialog(
+      context,
+      title: 'Σημειώσεις σε ${_users.length} υπαλλήλους',
+    );
+    if (result == null || !mounted) return;
+    final (append, text) = result;
+    final mode = append ? BulkNotesMode.append : BulkNotesMode.replace;
+
+    final message = mode == BulkNotesMode.append
+        ? 'Θα προστεθεί η σημείωση «$text» στο τέλος των σημειώσεων '
+              '${_users.length} υπαλλήλων: ${bulkUserNamesPreview(_users)}.'
+        : 'Θα ΑΝΤΙΚΑΤΑΣΤΑΘΟΥΝ οι σημειώσεις ${_users.length} υπαλλήλων '
+              'με το κείμενο «$text»: ${bulkUserNamesPreview(_users)}.';
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση σημειώσεων',
+      message: message,
+    );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkNotes(
+      users: _users,
+      text: text,
+      mode: mode,
+      message:
+          'Ενημερώθηκαν οι σημειώσεις ${_users.length} υπαλλήλων '
+          '(${mode == BulkNotesMode.append ? 'προσθήκη' : 'αντικατάσταση'}).',
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // ─────────────────────────── Καθαρισμός πεδίου ───────────────────────────
+
+  Future<void> _runClearFlow() async {
+    final field = await showBulkOptionDialog<BulkClearField>(
+      context,
+      title: 'Καθαρισμός πεδίου',
+      message: 'Ποιο πεδίο θα καθαριστεί από τους επιλεγμένους υπαλλήλους;',
+      options: const [
+        ('Τηλέφωνα', null, BulkClearField.phones),
+        ('Εξοπλισμός', null, BulkClearField.equipment),
+        ('Σημειώσεις', null, BulkClearField.notes),
+      ],
+    );
+    if (field == null || !mounted) return;
+
+    var fate = BulkClearFate.deleteOutright;
+    SharedAssetTransferTarget? transferTarget;
+    String? transferTargetName;
+
+    if (field != BulkClearField.notes) {
+      final what = field == BulkClearField.phones
+          ? 'τα τηλέφωνα'
+          : 'οι εξοπλισμοί';
+      final picked = await showBulkOptionDialog<BulkClearFate>(
+        context,
+        title: 'Τύχη των στοιχείων',
+        message:
+            'Μία απάντηση για όλους τους επιλεγμένους: τι θα γίνουν $what;',
+        options: const [
+          (
+            'Αποδέσμευση — κοινόχρηστο στο τμήμα',
+            'Το στοιχείο μένει κοινόχρηστο στο τμήμα του κάθε υπαλλήλου.',
+            BulkClearFate.shareInOwnDepartment,
+          ),
+          (
+            'Αποδέσμευση και μεταφορά…',
+            'Το στοιχείο μεταφέρεται σε τμήμα που θα επιλέξετε.',
+            BulkClearFate.transfer,
+          ),
+          (
+            'Οριστική διαγραφή',
+            'Το στοιχείο διαγράφεται από τη βάση (με δυνατότητα αναίρεσης).',
+            BulkClearFate.deleteOutright,
+          ),
+        ],
+      );
+      if (picked == null || !mounted) return;
+      fate = picked;
+      if (fate == BulkClearFate.transfer) {
+        final target = await showAssetTransferTargetPicker(
+          context: context,
+          headerLabel: field == BulkClearField.phones
+              ? 'Μεταφορά τηλεφώνων σε τμήμα'
+              : 'Μεταφορά εξοπλισμών σε τμήμα',
+          availableDepartments: _activeDepartments(),
+        );
+        if (target == null || !mounted) return;
+        transferTarget = target;
+        transferTargetName = _targetDisplayName(target);
+      }
+    }
+
+    final equipmentByUser = _equipmentByUserId();
+    final plan = buildBulkUserClearPlan(
+      selectedUsers: _users,
+      field: field,
+      fate: fate,
+      transferTarget: transferTarget,
+      transferTargetDisplayName: transferTargetName,
+      equipmentByUserId: equipmentByUser,
+      sharing: _sharingInfo(equipmentByUser),
+    );
+    if (!plan.hasWork) {
+      final reasons = plan.exclusions.isEmpty
+          ? 'Δεν υπάρχει τίποτα προς καθαρισμό στους επιλεγμένους.'
+          : plan.exclusions.map((e) => '• ${e.reason}').join('\n');
+      await showBulkInfoDialog(
+        context,
+        title: 'Κανένας καθαρισμός',
+        message: reasons,
+      );
+      return;
+    }
+
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση καθαρισμού',
+      message: bulkClearConfirmationText(plan),
+      confirmLabel: 'Καθαρισμός',
+    );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkClear(plan);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // ─────────────────────────── Δόμηση ───────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final labels = {
-      'lastName': 'Επώνυμο',
-      'firstName': 'Όνομα',
-      'phone': 'Τηλέφωνο',
-      'notes': 'Σημειώσεις',
-    };
-    return DialogSnackbarScope(
-      messengerKey: dialogMessengerKey,
-      child: Center(
-        child: AlertDialog(
-          title: Text(
-            widget.selectedUsers.length == 1
-                ? 'Μαζική επεξεργασία (1 υπάλληλος)'
-                : 'Μαζική επεξεργασία (${widget.selectedUsers.length} υπάλληλοι)',
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < _fieldKeys.length; i++) ...[
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 200,
-                        child: CheckboxListTile(
-                          value: _applyField[_fieldKeys[i]]!,
-                          onChanged: (v) => setState(
-                            () => _applyField[_fieldKeys[i]] = v ?? false,
-                          ),
-                          title: Text(labels[_fieldKeys[i]]!),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _controllers[_fieldKeys[i]],
-                          decoration: InputDecoration(
-                            hintText: _hasDifferentValues(_fieldKeys[i])
-                                ? '(Διαφορετικές τιμές)'
-                                : null,
-                            border: const OutlineInputBorder(),
-                          ),
-                          spellCheckConfiguration:
-                              platformSpellCheckConfiguration,
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                    ],
+    final theme = Theme.of(context);
+    final title = _users.length == 1
+        ? 'Μαζικές ενέργειες — 1 υπάλληλος'
+        : 'Μαζικές ενέργειες — ${_users.length} υπάλληλοι';
+    return DraggableDialogShell(
+      title: Text(title),
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                bulkUserNamesPreview(_users),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  leading: const Icon(Icons.drive_file_move_outline),
+                  title: const Text('Μεταφορά σε τμήμα…'),
+                  subtitle: const Text(
+                    'Υπάρχον ή νέο τμήμα · αποφασίζετε χωριστά για '
+                    'τηλέφωνα και εξοπλισμό.',
                   ),
-                  const SizedBox(height: 8),
-                ],
-              ],
-            ),
+                  enabled: !_busy,
+                  onTap: () => _runGuarded(_runTransferFlow),
+                ),
+              ),
+              Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  leading: const Icon(Icons.note_add_outlined),
+                  title: const Text('Σημειώσεις…'),
+                  subtitle: const Text(
+                    'Προσθήκη στις υπάρχουσες (προεπιλογή) ή αντικατάσταση.',
+                  ),
+                  enabled: !_busy,
+                  onTap: () => _runGuarded(_runNotesFlow),
+                ),
+              ),
+              Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  leading: Icon(
+                    Icons.cleaning_services_outlined,
+                    color: theme.colorScheme.error,
+                  ),
+                  title: const Text('Καθαρισμός πεδίου…'),
+                  subtitle: const Text(
+                    'Τηλέφωνα, εξοπλισμός ή σημειώσεις — με ρητή '
+                    'επιβεβαίωση πριν συμβεί οτιδήποτε.',
+                  ),
+                  enabled: !_busy,
+                  onTap: () => _runGuarded(_runClearFlow),
+                ),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Ακύρωση'),
-            ),
-            FilledButton(onPressed: _save, child: const Text('Αποθήκευση')),
-          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(),
+            child: const Text('Κλείσιμο'),
+          ),
+        ],
       ),
     );
   }

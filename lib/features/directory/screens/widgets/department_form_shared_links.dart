@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/services/lookup_service.dart';
+import '../../services/department_deletion_messages.dart';
 import 'department_form_dialog.dart';
 import 'shared_asset_disconnect_dialog.dart';
 
@@ -484,7 +485,29 @@ class DepartmentFormSharedLinks {
     var equipmentToDelete = <String>[];
     final phoneTransferTargets = <String, SharedAssetTransferTarget>{};
     final equipmentTransferTargets = <String, SharedAssetTransferTarget>{};
-    final newDeptNames = <String, Set<String>>{};
+    final newDeptNames = <String>{};
+
+    // Τηλέφωνα και εξοπλισμός είναι γνωστά και τα δύο από τώρα, οπότε ο
+    // μετρητής μετρά και τις δύο ερωτήσεις μαζί αντί για «1 από 1» δύο φορές.
+    final disconnectSession = AssetDisconnectSession(
+      items: <AssetDisconnectItem>[
+        for (final phone in sharedOnlyPhonesRemoved)
+          AssetDisconnectItem.phone(
+            phone,
+            departmentId: departmentId,
+            departmentName: departmentName,
+          ),
+        for (final code in sharedOnlyEqRemoved)
+          AssetDisconnectItem.equipment(
+            code,
+            departmentId: departmentId,
+            departmentName: departmentName,
+          ),
+      ],
+      cancelScopeDescription: departmentFormSaveCancelScopeDescription(
+        departmentName,
+      ),
+    );
 
     if (sharedOnlyPhonesRemoved.isNotEmpty) {
       final phoneBatch = await showSharedAssetDisconnectFlow(
@@ -495,17 +518,14 @@ class DepartmentFormSharedLinks {
         availableDepartments: otherDepartments,
         mode: SharedAssetDisconnectMode.sharedAsset,
         allowKeepInDepartment: true,
+        session: disconnectSession,
       );
       if (!host.mounted || phoneBatch == null) return null;
       phones = (phones.toSet()..addAll(phoneBatch.phonesToKeep)).toList()
         ..sort();
       phonesToDelete = phoneBatch.phonesToDelete;
       phoneTransferTargets.addAll(phoneBatch.phoneTransfers);
-      for (final entry in phoneBatch.newDepartmentNamesToCreate.entries) {
-        newDeptNames
-            .putIfAbsent(entry.key, () => <String>{})
-            .addAll(entry.value);
-      }
+      newDeptNames.addAll(phoneBatch.newDepartmentNamesToCreate);
     }
 
     if (sharedOnlyEqRemoved.isNotEmpty) {
@@ -518,14 +538,13 @@ class DepartmentFormSharedLinks {
         availableDepartments: otherDepartments,
         mode: SharedAssetDisconnectMode.sharedAsset,
         allowKeepInDepartment: false,
+        session: disconnectSession,
       );
       if (!host.mounted || equipmentBatch == null) return null;
       // Χωρίς keep: δεν επαναφέρουμε κωδικούς στη λίστα κοινόχρηστων.
       equipmentToDelete = equipmentBatch.equipmentToDelete;
       equipmentTransferTargets.addAll(equipmentBatch.equipmentTransfers);
-      for (final entry in equipmentBatch.newDepartmentNamesToCreate.entries) {
-        newDeptNames.putIfAbsent(entry.key, () => <String>{});
-      }
+      newDeptNames.addAll(equipmentBatch.newDepartmentNamesToCreate);
     }
 
     final db = await DatabaseHelper.instance.database;
@@ -533,7 +552,7 @@ class DepartmentFormSharedLinks {
     final phoneTransfers = <String, int>{};
     final equipmentTransfers = <String, int>{};
 
-    for (final newName in newDeptNames.keys) {
+    for (final newName in newDeptNames) {
       final deptId = await dir.getOrCreateDepartmentIdByName(newName);
       if (deptId == null) continue;
       for (final entry in phoneTransferTargets.entries) {

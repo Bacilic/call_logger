@@ -34,6 +34,22 @@ String userDeletionConfirmMessage(List<String> labels) {
   return 'Διαγραφή $count υπαλλήλων;';
 }
 
+/// Τι ακυρώνεται συνολικά αν ο χρήστης πατήσει «Ακύρωση» στη μέση της ροής.
+///
+/// Μπαίνει στο μήνυμα του διαλόγου ακύρωσης: «Θα ακυρωθεί <αυτό>.»
+String userDeletionCancelScopeDescription(int userCount) {
+  if (userCount <= 1) return 'η διαγραφή του υπαλλήλου';
+  return 'η διαγραφή $userCount υπαλλήλων';
+}
+
+/// Επιβεβαίωση ότι όντως δεν έγινε τίποτα — η ακύρωση δεν μένει σιωπηλή.
+String userDeletionCancelledMessage(int userCount) {
+  if (userCount <= 1) {
+    return 'Η διαγραφή ακυρώθηκε. Δεν άλλαξε τίποτα.';
+  }
+  return 'Η διαγραφή $userCount υπαλλήλων ακυρώθηκε. Δεν άλλαξε τίποτα.';
+}
+
 /// Μία ενέργεια αποδέσμευσης στοιχείου για το snackbar σύνοψης.
 enum UserDeletionAssetActionKind { keep, transfer, delete }
 

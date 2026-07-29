@@ -198,7 +198,8 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
   }
 
   Future<void> _loadStatsCardExpandedPref() async {
-    final v = await SettingsService().windowUi.getDatabaseBrowserStatsCardExpanded();
+    final v = await SettingsService().windowUi
+        .getDatabaseBrowserStatsCardExpanded();
     if (mounted) setState(() => _statsCardExpanded = v);
   }
 

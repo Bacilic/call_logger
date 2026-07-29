@@ -17,8 +17,10 @@ import '../../../calls/models/user_model.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/directory_provider.dart';
 import '../../providers/equipment_directory_provider.dart';
+import '../../providers/bulk_action_undo_provider.dart';
 import '../../services/equipment_deletion_summary.dart';
 import 'bulk_equipment_edit_dialog.dart';
+import 'bulk_undo_bar.dart';
 import 'catalog_column_selector_shell.dart';
 import 'equipment_data_table.dart';
 import 'equipment_delete_countdown_snackbar.dart';
@@ -217,6 +219,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
             ],
           ),
         ),
+        const BulkUndoBar(scope: BulkUndoScope.equipment),
         Expanded(
           child: EquipmentDataTable(
             items: state.filteredItems,
@@ -311,7 +314,6 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
       builder: (ctx) => BulkEquipmentEditDialog(
         selectedRows: selectedRows,
         notifier: ref.read(equipmentDirectoryProvider.notifier),
-        ref: ref,
       ),
     );
   }

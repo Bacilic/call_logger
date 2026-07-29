@@ -92,9 +92,7 @@ void main() {
             phoneTransfer: SharedAssetTransferTarget.createNew(newDeptName),
           },
           phonesToDelete: [phoneDelete],
-          newDepartmentNamesToCreate: {
-            newDeptName: {phoneTransfer},
-          },
+          newDepartmentNamesToCreate: {newDeptName},
         );
 
         await applyPersonalPhoneDisconnectBatch(
@@ -196,7 +194,7 @@ void main() {
           },
           phonesToDelete: [phoneDelete],
           equipmentToDelete: [eqDelete],
-          newDepartmentNamesToCreate: {newEqDeptName: <String>{}},
+          newDepartmentNamesToCreate: {newEqDeptName},
         );
 
         await applyDepartmentSharedAssetDisconnectBatch(

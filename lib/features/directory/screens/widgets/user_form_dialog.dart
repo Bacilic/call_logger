@@ -101,8 +101,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     phoneController = TextEditingController(
       text: PhoneListParser.joinPhones(u?.phones ?? const []),
     );
-    departmentController = SpellCheckController()
-      ..text = initialDepartmentText;
+    departmentController = SpellCheckController()..text = initialDepartmentText;
     notesController = SpellCheckController()..text = (u?.notes ?? '');
 
     lastNameController.addListener(_onFieldChanged);

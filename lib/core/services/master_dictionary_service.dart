@@ -83,7 +83,8 @@ class MasterDictionaryService {
 
   /// Write-ahead Compile: γράφει `.tmp`, μετά transaction merge user→full + clear user, τέλος rename.
   Future<void> compileExportToTxt() async {
-    final exportPath = await SettingsService().catalogs.getDictionaryExportPath();
+    final exportPath = await SettingsService().catalogs
+        .getDictionaryExportPath();
     if (exportPath == null || exportPath.trim().isEmpty) {
       throw DictionaryExportPathMissingException();
     }

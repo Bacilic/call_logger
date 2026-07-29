@@ -167,6 +167,30 @@ class EquipmentRepository {
       if (name.isNotEmpty) out.add(name);
     }
 
+    final history = await equipmentHistoryLinkCounts(equipmentId);
+    final taskCount = history.tasks;
+    if (taskCount > 0) {
+      out.add(taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες');
+    }
+
+    final callCount = history.calls;
+    if (callCount > 0) {
+      out.add(
+        callCount == 1 ? '1 κλήση ιστορικού' : '$callCount κλήσεις ιστορικού',
+      );
+    }
+
+    return out;
+  }
+
+  /// Μόνο οι **ιστορικές** συνδέσεις ενός εξοπλισμού — εκκρεμότητες και κλήσεις
+  /// (μαζί με κλήσεις που τον αναφέρουν μόνο ως κείμενο).
+  ///
+  /// Ο κάτοχος ΔΕΝ μετράει εδώ: τον έχει σχεδόν κάθε εξοπλισμός, οπότε μια
+  /// προειδοποίηση που τον περιλαμβάνει ισχύει πάντα.
+  Future<({int tasks, int calls})> equipmentHistoryLinkCounts(
+    int equipmentId,
+  ) async {
     final taskLinks = await db.rawQuery(
       '''
       SELECT COUNT(*) AS c FROM tasks
@@ -174,10 +198,6 @@ class EquipmentRepository {
       ''',
       [equipmentId],
     );
-    final taskCount = _readCount(taskLinks);
-    if (taskCount > 0) {
-      out.add(taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες');
-    }
 
     final callLinks = await db.rawQuery(
       '''
@@ -211,13 +231,7 @@ class EquipmentRepository {
       }
     }
 
-    if (callCount > 0) {
-      out.add(
-        callCount == 1 ? '1 κλήση ιστορικού' : '$callCount κλήσεις ιστορικού',
-      );
-    }
-
-    return out;
+    return (tasks: _readCount(taskLinks), calls: callCount);
   }
 
   Future<bool> equipmentCodeExists(String equipmentCode) async {

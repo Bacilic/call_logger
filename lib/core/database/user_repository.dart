@@ -528,12 +528,23 @@ class UserRepository {
     });
   }
 
+  /// Τηλέφωνα που μένουν χωρίς κάτοχο όταν διαγραφούν οι [userIds].
+  ///
+  /// Το κριτήριο είναι «δεν μένει κανένας ενεργός κάτοχος **εκτός** των
+  /// διαγραφόμενων» — όχι «ανήκει σε ακριβώς έναν χρήστη». Η παλιά διατύπωση
+  /// άφηνε ορφανό κάθε τηλέφωνο που το μοιράζονταν δύο υπάλληλοι οι οποίοι
+  /// διαγράφονταν μαζί: ο καθένας «κάλυπτε» τον άλλον ως δήθεν εναπομείναντα
+  /// κάτοχο. Ίδιο κριτήριο με το [findExclusiveEquipmentForUserDelete].
+  ///
+  /// Όταν το τηλέφωνο το μοιράζονται πολλοί διαγραφόμενοι, επιστρέφεται μία
+  /// φορά, χρεωμένο στον πρώτο (μικρότερο `user_id`) — μία ερώτηση, όχι Ν.
   Future<List<ExclusivePhoneForUserDelete>> findExclusivePhonesForUserDelete(
     List<int> userIds,
   ) async {
     if (userIds.isEmpty) return const [];
     final placeholders = _support.sqlPlaceholders(userIds.length);
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT up.user_id AS user_id,
              up.phone_id AS phone_id,
              p.number AS number,
@@ -544,23 +555,37 @@ class UserRepository {
       JOIN users u ON u.id = up.user_id
       LEFT JOIN departments d ON d.id = u.department_id
       WHERE up.user_id IN ($placeholders)
-        AND up.phone_id IN (
-          SELECT phone_id FROM user_phones GROUP BY phone_id HAVING COUNT(*) = 1
+        AND NOT EXISTS (
+          SELECT 1
+          FROM user_phones up2
+          JOIN users u2 ON u2.id = up2.user_id
+          WHERE up2.phone_id = up.phone_id
+            AND up2.user_id NOT IN ($placeholders)
+            AND COALESCE(u2.is_deleted, 0) = 0
         )
-      ORDER BY p.number COLLATE NOCASE ASC
-      ''', userIds);
-    return rows
-        .map(
-          (r) => ExclusivePhoneForUserDelete(
-            phoneId: r['phone_id'] as int,
-            number: (r['number'] as String?)?.trim() ?? '',
-            userId: r['user_id'] as int,
-            departmentId: r['department_id'] as int?,
-            departmentName: (r['department_name'] as String?)?.trim(),
-          ),
-        )
-        .where((e) => e.number.isNotEmpty)
-        .toList();
+      ORDER BY p.number COLLATE NOCASE ASC, up.user_id ASC
+      ''',
+      [...userIds, ...userIds],
+    );
+
+    final seenPhoneIds = <int>{};
+    final out = <ExclusivePhoneForUserDelete>[];
+    for (final r in rows) {
+      final phoneId = r['phone_id'] as int;
+      if (!seenPhoneIds.add(phoneId)) continue;
+      final number = (r['number'] as String?)?.trim() ?? '';
+      if (number.isEmpty) continue;
+      out.add(
+        ExclusivePhoneForUserDelete(
+          phoneId: phoneId,
+          number: number,
+          userId: r['user_id'] as int,
+          departmentId: r['department_id'] as int?,
+          departmentName: (r['department_name'] as String?)?.trim(),
+        ),
+      );
+    }
+    return out;
   }
 
   /// Εξοπλισμός σε κίνδυνο ορφανοποίησης τμήματος κατά τη διαγραφή χρηστών.

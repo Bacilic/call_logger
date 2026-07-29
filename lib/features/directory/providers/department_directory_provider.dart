@@ -15,7 +15,11 @@ import '../../../core/utils/department_floor_sync.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/department_directory_column.dart';
 import '../models/department_model.dart';
+import '../../../core/database/sqlite_types.dart';
+import '../services/bulk_action_undo_record.dart';
+import '../services/bulk_department_actions.dart';
 import '../services/department_deletion_undo_record.dart';
+import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
 
 const _catalogDepartmentsVisibleColumnsKey =
@@ -44,7 +48,6 @@ class DepartmentDirectoryState {
     this.selectedIds = const {},
     this.lastDeleted,
     this.lastDepartmentDeletionUndo,
-    this.lastBulkUpdatedDepartments,
     this.focusedRowIndex,
     List<DepartmentDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
@@ -67,7 +70,6 @@ class DepartmentDirectoryState {
 
   /// Φάκελος πλήρους αναίρεσης διαγραφής τμήματος.
   final DepartmentDeletionUndoRecord? lastDepartmentDeletionUndo;
-  final List<DepartmentModel>? lastBulkUpdatedDepartments;
   final int? focusedRowIndex;
   final List<DepartmentDirectoryColumn> columnOrder;
   final Set<String> visibleColumnKeys;
@@ -200,7 +202,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       selectedIds: state.selectedIds,
       lastDeleted: state.lastDeleted,
       lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
-      lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: state.focusedRowIndex,
       columnOrder: parsed != null
           ? List<DepartmentDirectoryColumn>.from(parsed.order)
@@ -318,7 +319,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       selectedIds: state.selectedIds,
       lastDeleted: state.lastDeleted,
       lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
-      lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: clamped,
       columnOrder: state.columnOrder,
       visibleColumnKeys: state.visibleColumnKeys,
@@ -350,7 +350,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     Set<int>? selectedIds,
     Object? lastDeleted = _kPatchKeep,
     Object? lastDepartmentDeletionUndo = _kPatchKeep,
-    Object? lastBulkUpdatedDepartments = _kPatchKeep,
     int? focusedRow,
     bool keepFocusedRow = true,
     List<DepartmentDirectoryColumn>? columnOrder,
@@ -370,10 +369,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
           identical(lastDepartmentDeletionUndo, _kPatchKeep)
           ? state.lastDepartmentDeletionUndo
           : lastDepartmentDeletionUndo as DepartmentDeletionUndoRecord?,
-      lastBulkUpdatedDepartments:
-          identical(lastBulkUpdatedDepartments, _kPatchKeep)
-          ? state.lastBulkUpdatedDepartments
-          : lastBulkUpdatedDepartments as List<DepartmentModel>?,
       focusedRowIndex: keepFocusedRow ? state.focusedRowIndex : focusedRow,
       columnOrder: columnOrder ?? state.columnOrder,
       visibleColumnKeys: visibleColumnKeys ?? state.visibleColumnKeys,
@@ -435,7 +430,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       selectedIds: selectedIds,
       lastDeleted: state.lastDeleted,
       lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
-      lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: state.focusedRowIndex,
       columnOrder: DepartmentDirectoryColumn.pinSelectionFirst(
         List<DepartmentDirectoryColumn>.from(state.columnOrder),
@@ -448,6 +442,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
 
   /// Εισαγωγή νέου τμήματος. Προωθεί [DepartmentExistsException] στο UI (δεν καταπίνεται).
   Future<void> addDepartment(DepartmentModel d) async {
+    _settlePendingBulkUndo();
     try {
       final dbAdd = await DatabaseHelper.instance.database;
       await DepartmentRepository(dbAdd).insertDepartment(d.toMap());
@@ -482,6 +477,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     DepartmentModel d, {
     bool clearBuildingMapPlacement = false,
   }) async {
+    _settlePendingBulkUndo();
     if (d.id == null) {
       throw ArgumentError.value(d.id, 'd.id', 'updateDepartment requires id');
     }
@@ -528,6 +524,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     List<String> phonesToSoftDelete = const [],
     List<String> equipmentToSoftDelete = const [],
   }) async {
+    _settlePendingBulkUndo();
     final lookup = LookupService.instance;
     final existingPhones = lookup
         .getDirectPhonesByDepartment(departmentId)
@@ -625,7 +622,11 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
           departmentId,
           executor: txn,
         );
-        await equipment.updateEquipmentDepartment(code, targetId, executor: txn);
+        await equipment.updateEquipmentDepartment(
+          code,
+          targetId,
+          executor: txn,
+        );
       }
 
       if (phonesToSoftDelete.isNotEmpty) {
@@ -656,6 +657,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   }
 
   Future<void> deleteSelected() async {
+    _settlePendingBulkUndo();
     if (state.selectedIds.isEmpty) return;
     final toDelete = state.allDepartments
         .where(
@@ -678,7 +680,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       selectedIds: {},
       lastDeleted: toDelete,
       lastDepartmentDeletionUndo: null,
-      lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: state.focusedRowIndex,
       columnOrder: state.columnOrder,
       visibleColumnKeys: state.visibleColumnKeys,
@@ -690,6 +691,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   /// Μετά από ατομική soft-delete εκτός notifier: ενημερώνει μόνο UI/cache,
   /// χωρίς νέο γράψιμο στη βάση.
   Future<void> finalizeExternalDeletion(List<DepartmentModel> toDelete) async {
+    _settlePendingBulkUndo();
     if (toDelete.isEmpty) return;
     await _refreshLookupCache();
     if (!ref.mounted) return;
@@ -702,7 +704,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       selectedIds: {},
       lastDeleted: toDelete,
       lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
-      lastBulkUpdatedDepartments: state.lastBulkUpdatedDepartments,
       focusedRowIndex: state.focusedRowIndex,
       columnOrder: state.columnOrder,
       visibleColumnKeys: state.visibleColumnKeys,
@@ -717,6 +718,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   }
 
   Future<void> undoLastDelete() async {
+    _settlePendingBulkUndo();
     final undoRecord = state.lastDepartmentDeletionUndo;
     final list = state.lastDeleted;
     if (undoRecord != null) {
@@ -735,54 +737,78 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
-  Future<void> bulkUpdate(List<int> ids, Map<String, dynamic> changes) async {
-    if (ids.isEmpty || changes.isEmpty) return;
-    final toUpdate = state.allDepartments
-        .where((d) => d.id != null && ids.contains(d.id))
-        .toList();
-    if (toUpdate.isEmpty) return;
-    final dbBulk = await DatabaseHelper.instance.database;
-    await DepartmentRepository(dbBulk).bulkUpdateDepartments(ids, changes);
-    await _refreshLookupCache();
-    if (!ref.mounted) return;
-    state = DepartmentDirectoryState(
-      allDepartments: state.allDepartments,
-      filteredDepartments: state.filteredDepartments,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: state.selectedIds,
-      lastDeleted: state.lastDeleted,
-      lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
-      lastBulkUpdatedDepartments: toUpdate,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
-    await loadDepartments();
-    await refreshDirectoryCaches(ref, users: true, equipment: true);
+  /// Νέα μεταβολή καταλόγου = σιωπηλή οριστικοποίηση της εκκρεμούς προσφοράς
+  /// αναίρεσης (αναίρεση πάνω από νεότερες αλλαγές θα τις πατούσε).
+  void _settlePendingBulkUndo() {
+    ref.read(pendingBulkUndoProvider.notifier).settleSilently();
   }
 
-  Future<void> undoLastBulkUpdate() async {
-    final list = state.lastBulkUpdatedDepartments;
-    if (list == null || list.isEmpty) return;
-    final dbUndoBulk = await DatabaseHelper.instance.database;
-    final departments = DepartmentRepository(dbUndoBulk);
-    try {
-      for (final d in list) {
-        if (d.id != null) {
-          await departments.updateDepartment(d.id!, d.toMap());
-          if (!ref.mounted) break;
-        }
-      }
-    } finally {
-      _patch(lastBulkUpdatedDepartments: null);
-      await _refreshLookupCache();
-      if (ref.mounted) {
-        await loadDepartments();
-        await refreshDirectoryCaches(ref, users: true, equipment: true);
-      }
-    }
+  Future<void> _runBulkAction(
+    String message,
+    Future<BulkActionUndoRecord> Function(DatabaseExecutor txn) apply,
+  ) async {
+    _settlePendingBulkUndo();
+    final db = await DatabaseHelper.instance.database;
+    late BulkActionUndoRecord record;
+    await db.transaction((txn) async {
+      record = await apply(txn);
+    });
+    await _refreshLookupCache();
+    if (!ref.mounted) return;
+    _patch(selectedIds: {});
+    await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
+    if (!ref.mounted) return;
+    ref
+        .read(pendingBulkUndoProvider.notifier)
+        .offer(
+          scope: BulkUndoScope.departments,
+          message: message,
+          record: record,
+        );
+  }
+
+  /// Μαζική εγγραφή απλής στήλης τμήματος (κτίριο, χρώμα, ομάδα, σημειώσεις,
+  /// απόκρυψη χάρτη) σε μία ατομική συναλλαγή.
+  Future<void> applyBulkField({
+    required List<DepartmentModel> departments,
+    required String column,
+    required Object? value,
+    required String message,
+    BulkDepartmentNotesMode? notesMode,
+  }) async {
+    if (departments.isEmpty) return;
+    await _runBulkAction(
+      message,
+      (txn) => applyBulkDepartmentFieldInTxn(
+        txn,
+        departments: departments,
+        column: column,
+        value: value,
+        notesMode: notesMode,
+      ),
+    );
+  }
+
+  /// Μαζικός καθαρισμός πεδίου τμήματος (μόνο δικά του πεδία).
+  Future<void> applyBulkClear(BulkDepartmentClearPlan plan) async {
+    if (!plan.hasWork) return;
+    await _runBulkAction(
+      bulkDepartmentClearResultMessage(plan),
+      (txn) => applyBulkDepartmentClearInTxn(txn, plan),
+    );
+  }
+
+  /// Εκτελεί την εκκρεμή αναίρεση μαζικής ενέργειας (πλήρης επαναφορά).
+  Future<void> undoPendingBulkAction() async {
+    final record = ref.read(pendingBulkUndoProvider.notifier).takeForUndo();
+    if (record == null) return;
+    final db = await DatabaseHelper.instance.database;
+    await applyBulkActionUndo(db, record);
+    await _refreshLookupCache();
+    if (!ref.mounted) return;
+    await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 }
 

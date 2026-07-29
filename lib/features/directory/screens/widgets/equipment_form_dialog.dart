@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
-import '../../../../core/database/user_repository.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/services/lookup_service.dart';
@@ -16,7 +15,6 @@ import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
-import '../../../../core/utils/spell_check.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../calls/models/equipment_model.dart';
@@ -82,7 +80,7 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
   late final FocusNode _departmentFocusNode;
   bool equipmentDepartmentTextInitialized = false;
 
-  late final TextEditingController locationController;
+  late final SpellCheckController locationController;
 
   int? selectedUserId;
 
@@ -142,8 +140,7 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
       if (EquipmentRemoteParamKey.isReservedKey(entry.key)) continue;
       final v = entry.value.trim();
       if (v.isEmpty) continue;
-      final norm =
-          remoteParams.isHostAddressParamKey(entry.key, catalog, pairs)
+      final norm = remoteParams.isHostAddressParamKey(entry.key, catalog, pairs)
           ? v.replaceAll(',', '.')
           : v;
       out[EquipmentRemoteParamKey.remoteParamStashKeyFor(entry.key)] = norm;
@@ -168,9 +165,8 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
     departmentController = TextEditingController();
     _departmentFocusNode = FocusNode();
     final hasInitialOwner = widget.initialOwner?.id != null;
-    locationController = TextEditingController(
-      text: hasInitialOwner ? '' : (e?.location ?? '').trim(),
-    );
+    locationController = SpellCheckController()
+      ..text = hasInitialOwner ? '' : (e?.location ?? '').trim();
     selectedUserId = widget.initialOwner?.id;
     final typeRaw = e?.type?.trim() ?? '';
     selectedType = typeRaw.isEmpty ? null : typeRaw;
@@ -270,33 +266,64 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
     );
   }
 
-  /// Επιλύει κείμενο κατόχου σε userId: κενό → null, match → id, αλλιώς insert νέο χρήστη.
-  Future<int?> _resolveOwnerToUserId(
+  /// Κανονικοποιημένο πλήρες όνομα, χωρίς το «(Τμήμα)» που προστίθεται για
+  /// εμφάνιση σε λίστες.
+  static String _ownerNameKey(String raw) {
+    return SearchTextNormalizer.normalizeForSearch(
+      NameParserUtility.stripParentheticalSuffix(raw),
+    );
+  }
+
+  /// Δένει τον κάτοχο ΜΟΝΟ σε υπαρκτό υπάλληλο: επιλογή από τη λίστα ή
+  /// μονοσήμαντη ακριβής αντιστοίχιση ονόματος.
+  ///
+  /// Ποτέ δεν δημιουργεί υπάλληλο και ποτέ δεν μαντεύει «το πρώτο αποτέλεσμα
+  /// της αναζήτησης» — ένα τυπογραφικό λάθος πρέπει να σταματά την αποθήκευση,
+  /// όχι να γεννά οντότητα-φάντασμα ή να αναθέτει τον εξοπλισμό σε άλλον.
+  ///
+  /// Επιστρέφει `error != null` όταν το κείμενο δεν δένει σε κανέναν.
+  ({int? userId, String? error}) resolveOwnerBinding(
     String ownerText,
     LookupService? lookupService,
-  ) async {
+  ) {
     final text = ownerText.trim();
-    if (text.isEmpty) return null;
-    if (lookupService == null) return null;
-    final textForSearch = NameParserUtility.stripParentheticalSuffix(text);
-    final users = lookupService.searchUsersByQuery(textForSearch);
-    if (users.isNotEmpty) {
-      final exact = users
-          .where(
-            (u) =>
-                (u.fullNameWithDepartment == text) ||
-                (u.name?.trim() == textForSearch),
-          )
-          .toList();
-      if (exact.isNotEmpty && exact.first.id != null) return exact.first.id;
-      if (users.first.id != null) return users.first.id;
+    if (text.isEmpty) return (userId: null, error: null);
+    if (lookupService == null) {
+      return (
+        userId: null,
+        error: 'Ο κατάλογος υπαλλήλων δεν έχει φορτώσει ακόμη.',
+      );
     }
-    final parsed = NameParserUtility.parse(textForSearch);
-    final dbOwn = await DatabaseHelper.instance.database;
-    final newId = await UserRepository(
-      dbOwn,
-    ).insertUser(firstName: parsed.firstName, lastName: parsed.lastName);
-    return newId;
+
+    final key = _ownerNameKey(text);
+    final matches = lookupService.users
+        .where(
+          (u) =>
+              u.id != null &&
+              _ownerNameKey(u.name ?? u.fullNameWithDepartment) == key,
+        )
+        .toList();
+
+    if (matches.isEmpty) {
+      return (
+        userId: null,
+        error:
+            'Δεν υπάρχει υπάλληλος «$text». Επιλέξτε υπάλληλο από τη λίστα ή '
+            'δημιουργήστε τον πρώτα στην καρτέλα Υπάλληλοι.',
+      );
+    }
+    if (matches.length > 1) {
+      // Συνωνυμία: μόνο η ρητή επιλογή από τη λίστα ξεχωρίζει ποιον εννοεί.
+      final picked = matches.where((u) => u.id == selectedUserId).firstOrNull;
+      if (picked != null) return (userId: picked.id, error: null);
+      return (
+        userId: null,
+        error:
+            'Υπάρχουν ${matches.length} υπάλληλοι με το όνομα «$text». '
+            'Επιλέξτε τον σωστό από τη λίστα.',
+      );
+    }
+    return (userId: matches.first.id, error: null);
   }
 
   /// null, κενό ή "Κανένα" → null· αλλιώς επιστρέφει το trim string.
@@ -320,7 +347,19 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
     final asyncLookup = widget.ref.read(lookupServiceProvider);
     final lookup = asyncLookup.value?.service;
     final ownerText = ownerController.text.trim();
-    final userId = await _resolveOwnerToUserId(ownerText, lookup);
+    final ownerBinding = resolveOwnerBinding(ownerText, lookup);
+    if (ownerBinding.error != null) {
+      if (!mounted) return;
+      showDialogSnackBar(
+        SnackBar(
+          content: Text(ownerBinding.error!),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+      return;
+    }
+    final userId = ownerBinding.userId;
     final code = codeController.text.trim();
     final typeVal = selectedType?.trim() ?? '';
     final deptText = departmentController.text.trim();
@@ -509,7 +548,8 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
                           const SizedBox(width: 12),
                           Expanded(
                             child: FutureBuilder<List<String>>(
-                              future: SettingsService().catalogs.getEquipmentTypesList(),
+                              future: SettingsService().catalogs
+                                  .getEquipmentTypesList(),
                               builder: (context, snapshot) {
                                 var options =
                                     snapshot.data ??
@@ -624,24 +664,23 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
                                   final did =
                                       widget.initialEquipment?.departmentId;
                                   if (did != null) {
-                                    WidgetsBinding.instance.addPostFrameCallback(
-                                      (_) {
-                                        if (!mounted) return;
-                                        final name =
-                                            LookupService.instance
-                                                .getDepartmentName(did)
-                                                ?.trim() ??
-                                            '';
-                                        if (name.isNotEmpty) {
-                                          departmentController.text = name;
-                                        }
-                                        setState(() {
-                                          equipmentDepartmentTextInitialized =
-                                              true;
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          if (!mounted) return;
+                                          final name =
+                                              LookupService.instance
+                                                  .getDepartmentName(did)
+                                                  ?.trim() ??
+                                              '';
+                                          if (name.isNotEmpty) {
+                                            departmentController.text = name;
+                                          }
+                                          setState(() {
+                                            equipmentDepartmentTextInitialized =
+                                                true;
+                                          });
+                                          dismissGuard.tryCaptureFormBaseline();
                                         });
-                                        dismissGuard.tryCaptureFormBaseline();
-                                      },
-                                    );
                                   } else {
                                     equipmentDepartmentTextInitialized = true;
                                   }
@@ -730,7 +769,7 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: TextFormField(
+                                    child: LexiconSpellTextFormField(
                                       controller: locationController,
                                       enabled: !holderLocksDeptLoc,
                                       decoration: InputDecoration(
@@ -740,8 +779,6 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
                                             ? 'Καθορίζεται από τον κάτοχο'
                                             : null,
                                       ),
-                                      spellCheckConfiguration:
-                                          platformSpellCheckConfiguration,
                                     ),
                                   ),
                                 ],
@@ -877,7 +914,7 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
                                         decoration: InputDecoration(
                                           labelText: 'Κάτοχος',
                                           hintText:
-                                              'Πληκτρολόγησε όνομα ή άφησε κενό (Άγνωστος κάτοχος)',
+                                              'Επίλεξε υπάλληλο από τη λίστα ή άφησε κενό (Άγνωστος κάτοχος)',
                                           hintStyle: theme.textTheme.bodyMedium
                                               ?.copyWith(
                                                 color: theme
@@ -916,6 +953,29 @@ class EquipmentFormDialogState extends State<EquipmentFormDialog>
                                               _applyDepartmentLocationFromEquipment(
                                                 widget.initialEquipment,
                                               );
+                                            });
+                                            return;
+                                          }
+                                          // Πληκτρολόγηση πάνω σε επιλεγμένο
+                                          // υπάλληλο σπάει το δέσιμο: αλλιώς
+                                          // το τμήμα/τοποθεσία θα έμεναν
+                                          // κλειδωμένα σε άσχετο πρόσωπο.
+                                          final bound = selectedUserId;
+                                          if (bound == null) return;
+                                          final u = service.users
+                                              .where((x) => x.id == bound)
+                                              .firstOrNull;
+                                          if (u == null) return;
+                                          final stillMatches =
+                                              _ownerNameKey(value) ==
+                                              _ownerNameKey(
+                                                u.name ??
+                                                    u.fullNameWithDepartment,
+                                              );
+                                          if (!stillMatches) {
+                                            setState(() {
+                                              selectedUserId = null;
+                                              _deptLocScheduledForUserId = null;
                                             });
                                           }
                                         },

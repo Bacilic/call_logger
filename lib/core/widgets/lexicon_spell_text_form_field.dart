@@ -19,6 +19,7 @@ class LexiconSpellTextFormField extends ConsumerStatefulWidget {
     this.minLines,
     this.onChanged,
     this.focusNode,
+    this.enabled,
   });
 
   final SpellCheckController controller;
@@ -29,6 +30,9 @@ class LexiconSpellTextFormField extends ConsumerStatefulWidget {
   final int? minLines;
   final ValueChanged<String>? onChanged;
   final FocusNode? focusNode;
+
+  /// `null` = ενεργό (προεπιλογή του [TextFormField]).
+  final bool? enabled;
 
   @override
   ConsumerState<LexiconSpellTextFormField> createState() =>
@@ -174,6 +178,7 @@ class _LexiconSpellTextFormFieldState
         textCapitalization: widget.textCapitalization,
         maxLines: widget.maxLines,
         minLines: widget.minLines,
+        enabled: widget.enabled,
         spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
         contextMenuBuilder: _contextMenuBuilder,
         onChanged: widget.onChanged,

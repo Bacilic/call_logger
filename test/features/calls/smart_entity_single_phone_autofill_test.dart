@@ -309,43 +309,46 @@ void main() {
   });
 
   group('Κοινόχρηστο τηλέφωνο τμήματος — ο μοναδικός υπάλληλος κερδίζει', () {
-    test('τμήμα με ΕΝΑΝ υπάλληλο → γεμίζουν καλών, τμήμα και εξοπλισμός', () async {
-      final container = await _containerSharedDepartmentPhone(
-        secondEmployee: false,
-      );
-      addTearDown(container.dispose);
-      final n = container.read(callSmartEntityProvider.notifier);
+    test(
+      'τμήμα με ΕΝΑΝ υπάλληλο → γεμίζουν καλών, τμήμα και εξοπλισμός',
+      () async {
+        final container = await _containerSharedDepartmentPhone(
+          secondEmployee: false,
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
 
-      n.updatePhone(_kBiochemSharedPhone);
-      n.performPhoneLookup(_kBiochemSharedPhone);
-      final s = container.read(callSmartEntityProvider);
+        n.updatePhone(_kBiochemSharedPhone);
+        n.performPhoneLookup(_kBiochemSharedPhone);
+        final s = container.read(callSmartEntityProvider);
 
-      expect(
-        s.selectedDepartmentId,
-        _kBiochemId,
-        reason: greekExpectMsg('Το κοινόχρηστο τηλέφωνο δίνει το τμήμα'),
-      );
-      expect(
-        s.selectedCaller?.id,
-        _kGeorgiaId,
-        reason: greekExpectMsg(
-          'Ένας μόνο υπάλληλος στο τμήμα = απόφαση, όχι λίστα προς επιλογή',
-        ),
-      );
-      expect(s.callerDisplayText.trim(), isNotEmpty);
-      expect(
-        s.callerNoMatch,
-        isFalse,
-        reason: greekExpectMsg(
-          'Δεν λέμε «Καμία αντιστοιχία» αφού βρήκαμε τον καλούντα',
-        ),
-      );
-      expect(
-        s.equipmentText,
-        _kGeorgiaEquipmentCode,
-        reason: greekExpectMsg('Ο μοναδικός εξοπλισμός του τμήματος γεμίζει'),
-      );
-    });
+        expect(
+          s.selectedDepartmentId,
+          _kBiochemId,
+          reason: greekExpectMsg('Το κοινόχρηστο τηλέφωνο δίνει το τμήμα'),
+        );
+        expect(
+          s.selectedCaller?.id,
+          _kGeorgiaId,
+          reason: greekExpectMsg(
+            'Ένας μόνο υπάλληλος στο τμήμα = απόφαση, όχι λίστα προς επιλογή',
+          ),
+        );
+        expect(s.callerDisplayText.trim(), isNotEmpty);
+        expect(
+          s.callerNoMatch,
+          isFalse,
+          reason: greekExpectMsg(
+            'Δεν λέμε «Καμία αντιστοιχία» αφού βρήκαμε τον καλούντα',
+          ),
+        );
+        expect(
+          s.equipmentText,
+          _kGeorgiaEquipmentCode,
+          reason: greekExpectMsg('Ο μοναδικός εξοπλισμός του τμήματος γεμίζει'),
+        );
+      },
+    );
 
     test('τμήμα με ΔΥΟ υπαλλήλους → ο καλών μένει κενός', () async {
       final container = await _containerSharedDepartmentPhone(

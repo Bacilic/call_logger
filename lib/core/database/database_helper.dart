@@ -88,6 +88,7 @@ class DatabaseHelper {
   /// Αφαιρεί τη δέσμευση διαδρομής δοκιμών (επόμενη σύνδεση = κανονική λογική εφαρμογής).
   static void releaseTestDatabaseBinding() {
     _testOverrideDatabasePath = null;
+    instance._connectionGeneration++;
   }
 
   Database? _database;
@@ -104,6 +105,16 @@ class DatabaseHelper {
 
   /// True όταν εκτελείται προσπάθεια ανοίγματος βάσης.
   bool get isOpening => _databaseInitializingFuture != null;
+
+  int _connectionGeneration = 0;
+
+  /// Αυξάνεται σε ΚΑΘΕ κλείσιμο σύνδεσης.
+  ///
+  /// Όποιος θυμάται αποτέλεσμα ελέγχου αρχικοποίησης κρατά μαζί και τη γενιά
+  /// για την οποία ισχύει· αν δεν ταιριάζει, το αποτέλεσμα είναι μπαγιάτικο.
+  /// Η αύξηση γίνεται μέσα στο [closeConnection], ώστε κανένας καλών να μην
+  /// μπορεί να κλείσει τη σύνδεση ξεχνώντας να ακυρώσει τη μνήμη.
+  int get connectionGeneration => _connectionGeneration;
 
   /// Ζητά άμεση διακοπή της τρέχουσας προσπάθειας ανοίγματος.
   void requestOpeningAbort() {
@@ -173,6 +184,9 @@ class DatabaseHelper {
     _userAbortCompleter = null;
     _isUsingLocalDb = false;
     _lastDatabaseProfile = null;
+    // Πάντα, ακόμα κι όταν δεν υπήρχε ανοιχτή σύνδεση: προτιμότερο ένα
+    // περιττό ξαναέλεγχο από ένα «όλα καλά» πάνω σε κλειστή βάση.
+    _connectionGeneration++;
   }
 
   Future<Database> _openTestOverrideDatabase(
@@ -634,7 +648,8 @@ class DatabaseHelper {
 
   Future<int> _resolveDatabaseOpenTimeoutSeconds() async {
     try {
-      final value = await SettingsService().catalogs.getDatabaseOpenTimeoutSeconds();
+      final value = await SettingsService().catalogs
+          .getDatabaseOpenTimeoutSeconds();
       if (value <= 0) return AppConfig.databaseOpenTimeoutSeconds;
       return value;
     } catch (_) {
@@ -644,7 +659,8 @@ class DatabaseHelper {
 
   Future<int> _resolveDatabaseOpenMaxAttempts() async {
     try {
-      final value = await SettingsService().catalogs.getDatabaseOpenMaxAttempts();
+      final value = await SettingsService().catalogs
+          .getDatabaseOpenMaxAttempts();
       if (value <= 0) return AppConfig.databaseOpenMaxAttempts;
       return value;
     } catch (_) {

@@ -56,25 +56,27 @@ void main() {
       expect(outcome.osMessage, isNull);
     });
 
-    test('ανύπαρκτη διαδρομή με γρήγορη απάντηση παραμένει pathNotFound',
-        () async {
-      final opener = LinkableTargetOpener(
-        fileExists: (_) async => false,
-        directoryExists: (_) async => false,
-        revealFileInExplorer: (_) async =>
-            fail('δεν πρέπει να ανοίξει Explorer'),
-        openFolderInExplorer: (_) async =>
-            fail('δεν πρέπει να ανοίξει Explorer'),
-        launchUrl: (_) async => fail('δεν πρέπει να κληθεί browser'),
-      );
+    test(
+      'ανύπαρκτη διαδρομή με γρήγορη απάντηση παραμένει pathNotFound',
+      () async {
+        final opener = LinkableTargetOpener(
+          fileExists: (_) async => false,
+          directoryExists: (_) async => false,
+          revealFileInExplorer: (_) async =>
+              fail('δεν πρέπει να ανοίξει Explorer'),
+          openFolderInExplorer: (_) async =>
+              fail('δεν πρέπει να ανοίξει Explorer'),
+          launchUrl: (_) async => fail('δεν πρέπει να κληθεί browser'),
+        );
 
-      final outcome = await opener.open(
-        target: r'C:\anyparkto\arxeio.txt',
-        kind: LinkableTextKind.localPath,
-      );
+        final outcome = await opener.open(
+          target: r'C:\anyparkto\arxeio.txt',
+          kind: LinkableTextKind.localPath,
+        );
 
-      expect(outcome.result, LinkOpenResult.pathNotFound);
-    });
+        expect(outcome.result, LinkOpenResult.pathNotFound);
+      },
+    );
   });
 
   group('LinkableTargetOpener — επιτυχές άνοιγμα', () {
@@ -119,43 +121,42 @@ void main() {
 
   group('LinkableTargetOpener.messageFor', () {
     test('το μήνυμα των Windows προτιμάται όταν υπάρχει', () {
-      final message = LinkableTargetOpener.messageFor(
-        (
-          result: LinkOpenResult.pathUnreachable,
-          osMessage: 'Η διαδρομή του δικτύου δεν εντοπίστηκε',
-        ),
-        uncTarget,
-      );
+      final message = LinkableTargetOpener.messageFor((
+        result: LinkOpenResult.pathUnreachable,
+        osMessage: 'Η διαδρομή του δικτύου δεν εντοπίστηκε',
+      ), uncTarget);
 
       expect(message, contains(uncTarget));
       expect(message, contains('Η διαδρομή του δικτύου δεν εντοπίστηκε'));
     });
 
-    test('χωρίς μήνυμα λειτουργικού δίνεται ειλικρινής εξήγηση μη απόκρισης',
-        () {
-      final message = LinkableTargetOpener.messageFor(
-        (result: LinkOpenResult.pathUnreachable, osMessage: null),
-        uncTarget,
-      );
+    test(
+      'χωρίς μήνυμα λειτουργικού δίνεται ειλικρινής εξήγηση μη απόκρισης',
+      () {
+        final message = LinkableTargetOpener.messageFor((
+          result: LinkOpenResult.pathUnreachable,
+          osMessage: null,
+        ), uncTarget);
 
-      expect(message, contains('δεν αποκρίνεται'));
-      expect(message, isNot(contains('δεν βρέθηκε')));
-    });
+        expect(message, contains('δεν αποκρίνεται'));
+        expect(message, isNot(contains('δεν βρέθηκε')));
+      },
+    );
 
     test('το «δεν βρέθηκε» μένει μόνο για σίγουρα ανύπαρκτες διαδρομές', () {
-      final message = LinkableTargetOpener.messageFor(
-        (result: LinkOpenResult.pathNotFound, osMessage: null),
-        uncTarget,
-      );
+      final message = LinkableTargetOpener.messageFor((
+        result: LinkOpenResult.pathNotFound,
+        osMessage: null,
+      ), uncTarget);
 
       expect(message, 'Η διαδρομή δεν βρέθηκε: $uncTarget');
     });
 
     test('επιτυχία δεν παράγει μήνυμα', () {
-      final message = LinkableTargetOpener.messageFor(
-        (result: LinkOpenResult.opened, osMessage: null),
-        uncTarget,
-      );
+      final message = LinkableTargetOpener.messageFor((
+        result: LinkOpenResult.opened,
+        osMessage: null,
+      ), uncTarget);
 
       expect(message, isNull);
     });

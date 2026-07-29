@@ -216,25 +216,22 @@ void main() {
       );
     });
 
-    test(
-      'δικλείδα: ονόματα κάτω των 5 χαρακτήρων δεν παράγουν πρόταση',
-      () {
-        final existing = user(id: 1, firstName: 'Άννα', lastName: '');
-        final found = UserSimilarityFinder.findSimilarUsers(
-          users: [existing],
-          firstName: 'Άννη',
-          lastName: '',
-        );
-        expect(found, isEmpty);
+    test('δικλείδα: ονόματα κάτω των 5 χαρακτήρων δεν παράγουν πρόταση', () {
+      final existing = user(id: 1, firstName: 'Άννα', lastName: '');
+      final found = UserSimilarityFinder.findSimilarUsers(
+        users: [existing],
+        firstName: 'Άννη',
+        lastName: '',
+      );
+      expect(found, isEmpty);
 
-        final exact = UserSimilarityFinder.findSimilarUsers(
-          users: [existing],
-          firstName: 'Αννα',
-          lastName: '',
-        );
-        expect(exact, hasLength(1));
-        expect(exact.single.score, UserSimilarityFinder.kIdenticalScore);
-      },
-    );
+      final exact = UserSimilarityFinder.findSimilarUsers(
+        users: [existing],
+        firstName: 'Αννα',
+        lastName: '',
+      );
+      expect(exact, hasLength(1));
+      expect(exact.single.score, UserSimilarityFinder.kIdenticalScore);
+    });
   });
 }

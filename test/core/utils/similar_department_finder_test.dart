@@ -51,26 +51,23 @@ void main() {
       expect(found, isEmpty);
     });
 
-    test(
-      'ανορθογραφία: Βιοχημκο Τμημα προτείνει Βιοχημικό Τμήμα '
-      '(όταν δεν ταυτίζονται μετά κανονικοποίηση)',
-      () {
-        final existing = dept('Βιοχημικό Τμήμα', id: 1);
-        final found = SimilarDepartmentFinder.findSimilarDepartments(
-          departments: [existing],
-          typedName: 'Βιοχημκο Τμημα',
-        );
-        expect(found, hasLength(1));
-        expect(found.single.department.name, 'Βιοχημικό Τμήμα');
-        expect(found.single.score, lessThan(100));
-        expect(
-          found.single.score,
-          greaterThanOrEqualTo(
-            SimilarDepartmentFinder.kDepartmentSuggestionMinScore,
-          ),
-        );
-      },
-    );
+    test('ανορθογραφία: Βιοχημκο Τμημα προτείνει Βιοχημικό Τμήμα '
+        '(όταν δεν ταυτίζονται μετά κανονικοποίηση)', () {
+      final existing = dept('Βιοχημικό Τμήμα', id: 1);
+      final found = SimilarDepartmentFinder.findSimilarDepartments(
+        departments: [existing],
+        typedName: 'Βιοχημκο Τμημα',
+      );
+      expect(found, hasLength(1));
+      expect(found.single.department.name, 'Βιοχημικό Τμήμα');
+      expect(found.single.score, lessThan(100));
+      expect(
+        found.single.score,
+        greaterThanOrEqualTo(
+          SimilarDepartmentFinder.kDepartmentSuggestionMinScore,
+        ),
+      );
+    });
 
     test('αποτελέσματα ταξινομημένα φθίνουσα κατά score', () {
       final departments = [
@@ -90,9 +87,7 @@ void main() {
 
     test('παραλείπει διαγραμμένα τμήματα', () {
       final found = SimilarDepartmentFinder.findSimilarDepartments(
-        departments: [
-          dept('Γραφείο Προσωπικού', id: 1, isDeleted: true),
-        ],
+        departments: [dept('Γραφείο Προσωπικού', id: 1, isDeleted: true)],
         typedName: 'Προσωπικού',
       );
       expect(found, isEmpty);

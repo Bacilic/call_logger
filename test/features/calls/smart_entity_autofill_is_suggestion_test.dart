@@ -108,9 +108,7 @@ Future<ProviderContainer> _containerTwoEmployees() async {
       ),
     ],
     equipment: const [],
-    departmentRows: [
-      DepartmentModel(id: _kAimodosiaId, name: _kAimodosiaName),
-    ],
+    departmentRows: [DepartmentModel(id: _kAimodosiaId, name: _kAimodosiaName)],
     departmentDirectPhones: {
       _kAimodosiaId: [_kSofiaPhone],
     },
@@ -216,7 +214,9 @@ void main() {
       expect(
         s.phoneCandidates.toSet(),
         {_kSofiaPhone, '2520'},
-        reason: greekExpectMsg('Το πεδίο τηλεφώνου δεν μένει χωρίς καμία λίστα'),
+        reason: greekExpectMsg(
+          'Το πεδίο τηλεφώνου δεν μένει χωρίς καμία λίστα',
+        ),
       );
     });
 
@@ -247,28 +247,33 @@ void main() {
       },
     );
 
-    test('αντιπαράδειγμα: η Σοφία με δικά της → η στενή πηγή κερδίζει', () async {
-      final container = await _containerChristinaNoAssets(
-        sharedPhones: [_kSofiaPhone, '2520'],
-      );
-      addTearDown(container.dispose);
-      final n = container.read(callSmartEntityProvider.notifier);
+    test(
+      'αντιπαράδειγμα: η Σοφία με δικά της → η στενή πηγή κερδίζει',
+      () async {
+        final container = await _containerChristinaNoAssets(
+          sharedPhones: [_kSofiaPhone, '2520'],
+        );
+        addTearDown(container.dispose);
+        final n = container.read(callSmartEntityProvider.notifier);
 
-      n.updateCallerDisplayText(_kSofiaName);
-      n.performCallerLookup(_kSofiaName);
-      final s = container.read(callSmartEntityProvider);
+        n.updateCallerDisplayText(_kSofiaName);
+        n.performCallerLookup(_kSofiaName);
+        final s = container.read(callSmartEntityProvider);
 
-      expect(
-        s.selectedPhone,
-        _kSofiaPhone,
-        reason: greekExpectMsg('Ο δικός της αριθμός, όχι λίστα του τμήματος'),
-      );
-      expect(
-        s.equipmentText,
-        '1002',
-        reason: greekExpectMsg('Το δικό της μηχάνημα, όχι λίστα του τμήματος'),
-      );
-    });
+        expect(
+          s.selectedPhone,
+          _kSofiaPhone,
+          reason: greekExpectMsg('Ο δικός της αριθμός, όχι λίστα του τμήματος'),
+        );
+        expect(
+          s.equipmentText,
+          '1002',
+          reason: greekExpectMsg(
+            'Το δικό της μηχάνημα, όχι λίστα του τμήματος',
+          ),
+        );
+      },
+    );
 
     test('ΕΝΑ μόνο μηχάνημα στο τμήμα → γεμίζει για τη Χριστίνα', () async {
       final svc = LookupService.instance;
@@ -427,9 +432,10 @@ void main() {
         DepartmentModel(id: _kAimodosiaId, name: _kAimodosiaName),
       );
       n.setCaller(
-        container.read(callSmartEntityProvider).callerCandidates.firstWhere(
-          (u) => (u.name ?? '').contains('Χριστίνα'),
-        ),
+        container
+            .read(callSmartEntityProvider)
+            .callerCandidates
+            .firstWhere((u) => (u.name ?? '').contains('Χριστίνα')),
       );
 
       n.updateCallerDisplayText('');
@@ -527,9 +533,10 @@ void main() {
       // Αδειάζουμε το τηλέφωνο ώστε να ζει από τη λίστα υποψηφίων του.
       n.updatePhone(null);
       n.setCaller(
-        container.read(callSmartEntityProvider).callerCandidates.firstWhere(
-          (u) => (u.name ?? '').contains('Χριστίνα'),
-        ),
+        container
+            .read(callSmartEntityProvider)
+            .callerCandidates
+            .firstWhere((u) => (u.name ?? '').contains('Χριστίνα')),
       );
 
       n.clearCaller();
@@ -607,52 +614,46 @@ void main() {
       );
     });
 
-    test(
-      'σβήνω ψηφίο-ψηφίο μέχρι το κενό → καμία αυτόματη επαναφορά',
-      () async {
-        final container = await _container();
-        addTearDown(container.dispose);
-        final n = container.read(callSmartEntityProvider.notifier);
+    test('σβήνω ψηφίο-ψηφίο μέχρι το κενό → καμία αυτόματη επαναφορά', () async {
+      final container = await _container();
+      addTearDown(container.dispose);
+      final n = container.read(callSmartEntityProvider.notifier);
 
-        _commitSofia(n);
-        for (final partial in ['251', '25', '2', '']) {
-          n.updatePhone(partial.isEmpty ? null : partial);
-          n.performPhoneLookup(partial);
-          expect(
-            container.read(callSmartEntityProvider).selectedPhone ?? '',
-            partial,
-            reason: greekExpectMsg(
-              'Μετά το backspace το πεδίο δείχνει «$partial», όχι τον παλιό αριθμό',
-            ),
-          );
-        }
-      },
-    );
+      _commitSofia(n);
+      for (final partial in ['251', '25', '2', '']) {
+        n.updatePhone(partial.isEmpty ? null : partial);
+        n.performPhoneLookup(partial);
+        expect(
+          container.read(callSmartEntityProvider).selectedPhone ?? '',
+          partial,
+          reason: greekExpectMsg(
+            'Μετά το backspace το πεδίο δείχνει «$partial», όχι τον παλιό αριθμό',
+          ),
+        );
+      }
+    });
   });
 
   group('Το σενάριο του Χειρουργείου — παρατυπία με ευθύνη του χρήστη', () {
-    test(
-      'Σοφία (Αιμοδοσία) + τηλέφωνο Χειρουργείου → επιτρέπεται',
-      () async {
-        final container = await _container();
-        addTearDown(container.dispose);
-        final n = container.read(callSmartEntityProvider.notifier);
+    test('Σοφία (Αιμοδοσία) + τηλέφωνο Χειρουργείου → επιτρέπεται', () async {
+      final container = await _container();
+      addTearDown(container.dispose);
+      final n = container.read(callSmartEntityProvider.notifier);
 
-        _commitSofia(n);
-        n.updatePhone(null);
-        n.updatePhone(_kCheirourgeioPhone);
-        n.performPhoneLookup(_kCheirourgeioPhone);
-        final s = container.read(callSmartEntityProvider);
+      _commitSofia(n);
+      n.updatePhone(null);
+      n.updatePhone(_kCheirourgeioPhone);
+      n.performPhoneLookup(_kCheirourgeioPhone);
+      final s = container.read(callSmartEntityProvider);
 
-        expect(
-          s.selectedPhone,
-          _kCheirourgeioPhone,
-          reason: greekExpectMsg(
-            'Η Σοφία μπορεί να τηλεφωνεί από άλλο τμήμα — το καταγράφουμε',
-          ),
-        );
-      },
-    );
+      expect(
+        s.selectedPhone,
+        _kCheirourgeioPhone,
+        reason: greekExpectMsg(
+          'Η Σοφία μπορεί να τηλεφωνεί από άλλο τμήμα — το καταγράφουμε',
+        ),
+      );
+    });
   });
 
   group('Επανεπικύρωση οντότητας — η υπόδειξη ξαναδίνεται', () {
@@ -666,7 +667,11 @@ void main() {
         _commitSofia(n);
         n.updatePhone(null);
         expect(
-          container.read(callSmartEntityProvider).selectedPhone?.trim().isEmpty ??
+          container
+                  .read(callSmartEntityProvider)
+                  .selectedPhone
+                  ?.trim()
+                  .isEmpty ??
               true,
           isTrue,
           reason: greekExpectMsg('Προϋπόθεση: το πεδίο άδειασε'),

@@ -220,8 +220,8 @@ class DashboardExcludeCallsWithoutCategoryNotifier extends Notifier<bool> {
   }
 
   Future<void> _hydrateFromSettings() async {
-    final value = await SettingsService()
-        .analyticsFilters.getDashboardExcludeCallsWithoutCategory();
+    final value = await SettingsService().analyticsFilters
+        .getDashboardExcludeCallsWithoutCategory();
 
     if (!ref.mounted) return;
 
@@ -233,7 +233,8 @@ class DashboardExcludeCallsWithoutCategoryNotifier extends Notifier<bool> {
 
     state = value;
 
-    await SettingsService().analyticsFilters.setDashboardExcludeCallsWithoutCategory(value);
+    await SettingsService().analyticsFilters
+        .setDashboardExcludeCallsWithoutCategory(value);
   }
 }
 

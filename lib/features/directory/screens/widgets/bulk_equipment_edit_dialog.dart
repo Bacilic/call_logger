@@ -1,198 +1,466 @@
-import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/user_repository.dart';
+import '../../../../core/models/remote_tool.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/settings_service.dart';
-import '../../../../core/utils/name_parser.dart';
-import '../../../../core/utils/search_text_normalizer.dart';
-import '../../../../core/utils/spell_check.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
+import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
-import '../../../calls/provider/smart_entity_selector_provider.dart';
+import '../../../calls/provider/remote_paths_provider.dart';
+import '../../models/department_model.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/equipment_directory_provider.dart';
+import '../../services/bulk_equipment_actions.dart';
+import 'bulk_equipment_action_call_guard.dart';
+import 'bulk_user_action_pickers.dart';
+import 'shared_asset_disconnect_dialog.dart';
 
-/// Διάλογος μαζικής επεξεργασίας: εφαρμογή τιμών σε επιλεγμένο εξοπλισμό.
-class BulkEquipmentEditDialog extends StatefulWidget {
+/// Μαζικές ενέργειες εξοπλισμού σε τρεις ομάδες: Οργάνωση, Χαρακτηριστικά,
+/// Καθαρισμός.
+///
+/// Καμία φόρμα πεδίων και κανένα κουτάκι επιλογής — μία ενέργεια τη φορά, με
+/// ρητή σύνοψη «τι θα συμβεί σε ποιους» πριν από κάθε εκτέλεση. Ο **Κωδικός**
+/// δεν αλλάζει ποτέ μαζικά (είναι ταυτότητα) και ο κάτοχος δένεται ΜΟΝΟ από τη
+/// λίστα — ποτέ δεν δημιουργείται υπάλληλος στα κρυφά.
+class BulkEquipmentEditDialog extends ConsumerStatefulWidget {
   const BulkEquipmentEditDialog({
     super.key,
     required this.selectedRows,
     required this.notifier,
-    required this.ref,
   });
 
   final List<EquipmentRow> selectedRows;
   final EquipmentDirectoryNotifier notifier;
-  final WidgetRef ref;
 
   @override
-  State<BulkEquipmentEditDialog> createState() =>
+  ConsumerState<BulkEquipmentEditDialog> createState() =>
       _BulkEquipmentEditDialogState();
 }
 
-class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog>
-    with DialogSnackbarHost {
-  static const _fieldKeys = ['type', 'notes', 'owner'];
-  static const _dbKeys = ['type', 'notes', 'user_id'];
+class _BulkEquipmentEditDialogState
+    extends ConsumerState<BulkEquipmentEditDialog> {
+  bool _busy = false;
 
-  final Map<String, bool> _applyField = {
-    'type': false,
-    'notes': false,
-    'owner': false,
-  };
-  final Map<String, TextEditingController> _controllers = {};
-  late final TextEditingController _ownerController;
-  late final FocusNode _ownerFocusNode;
-  bool _ownerTextInitialized = false;
-  int? _selectedUserId;
-  String? _selectedType;
+  List<EquipmentRow> get _rows => widget.selectedRows;
 
-  @override
-  void initState() {
-    super.initState();
-    for (final key in _fieldKeys) {
-      if (key == 'owner' || key == 'type') {
-        continue;
-      }
-      _controllers[key] = TextEditingController(text: _commonValue(key));
-    }
-    _ownerController = TextEditingController();
-    _ownerFocusNode = FocusNode();
-    _selectedUserId = _commonOwnerId();
-    final typeRaw = _commonValue('type').trim();
-    _selectedType = typeRaw.isEmpty ? null : typeRaw;
+  // ───────────────────────── Δεδομένα από τον κατάλογο ─────────────────────────
+
+  Map<int, List<UserModel>> _ownersByEquipmentId() {
+    final lookup = LookupService.instance;
+    return {
+      for (final row in _rows)
+        if (row.$1.id != null)
+          row.$1.id!: lookup.findUsersForEquipment(row.$1.id!),
+    };
   }
 
-  Future<int?> _resolveOwnerToUserId(
-    String ownerText,
-    LookupService? lookupService,
-  ) async {
-    final text = ownerText.trim();
-    if (text.isEmpty) return null;
-    if (lookupService == null) return null;
-    final textForSearch = NameParserUtility.stripParentheticalSuffix(text);
-    final users = lookupService.searchUsersByQuery(textForSearch);
-    if (users.isNotEmpty) {
-      final exact = users
-          .where(
-            (u) =>
-                (u.fullNameWithDepartment == text) ||
-                (u.name?.trim() == textForSearch),
-          )
-          .toList();
-      if (exact.isNotEmpty && exact.first.id != null) return exact.first.id;
-      if (users.first.id != null) return users.first.id;
-    }
-    final parsed = NameParserUtility.parse(textForSearch);
-    final dbIns = await DatabaseHelper.instance.database;
-    return UserRepository(
-      dbIns,
-    ).insertUser(firstName: parsed.firstName, lastName: parsed.lastName);
-  }
-
-  static String _normalized(String? v) => v?.trim() ?? '';
-
-  String _commonValue(String fieldKey) {
-    final rows = widget.selectedRows;
-    if (rows.isEmpty) return '';
-    final getter = _getterFor(fieldKey);
-    final firstNorm = _normalized(getter(rows.first));
-    final allSame = rows.every((r) => _normalized(getter(r)) == firstNorm);
-    if (allSame) return firstNorm;
-    return '';
-  }
-
-  String? Function(EquipmentRow) _getterFor(String fieldKey) {
-    switch (fieldKey) {
-      case 'type':
-        return (r) => r.$1.type;
-      case 'notes':
-        return (r) => r.$1.notes;
-      default:
-        return (r) => null;
-    }
-  }
-
-  int? _commonOwnerId() {
-    final rows = widget.selectedRows;
-    if (rows.isEmpty) return null;
-    final first = rows.first.$2?.id;
-    final allSame = rows.every((r) => r.$2?.id == first);
-    return allSame ? first : null;
-  }
-
-  bool _hasDifferentValues(String fieldKey) {
-    final rows = widget.selectedRows;
-    if (rows.length <= 1) return false;
-    if (fieldKey == 'owner') {
-      final first = rows.first.$2?.id;
-      return !rows.every((r) => r.$2?.id == first);
-    }
-    final getter = _getterFor(fieldKey);
-    final firstNorm = _normalized(getter(rows.first));
-    return !rows.every((r) => _normalized(getter(r)) == firstNorm);
-  }
-
-  @override
-  void dispose() {
-    _ownerController.dispose();
-    _ownerFocusNode.dispose();
-    for (final c in _controllers.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final ids = widget.selectedRows
-        .map((r) => r.$1.id)
-        .whereType<int>()
+  List<DepartmentModel> _activeDepartments() {
+    return LookupService.instance.departments
+        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
         .toList();
-    if (ids.isEmpty) {
-      if (mounted) Navigator.of(context).pop();
+  }
+
+  String _targetDisplayName(SharedAssetTransferTarget target) {
+    final id = target.departmentId;
+    if (id != null) {
+      return LookupService.instance.getDepartmentName(id) ?? '';
+    }
+    return target.newDepartmentName?.trim() ?? '';
+  }
+
+  Future<void> _runGuarded(Future<void> Function() flow) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final allowed = await ensureBulkEquipmentActionAllowed(
+        context,
+        ref,
+        _rows,
+      );
+      if (!allowed || !mounted) return;
+      await flow();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  // ─────────────────────────── Μεταφορά σε τμήμα ───────────────────────────
+
+  Future<void> _runTransferFlow() async {
+    final target = await showAssetTransferTargetPicker(
+      context: context,
+      headerLabel: _rows.length == 1
+          ? 'Μεταφορά 1 εξοπλισμού σε τμήμα'
+          : 'Μεταφορά ${_rows.length} εξοπλισμών σε τμήμα',
+      availableDepartments: _activeDepartments(),
+    );
+    if (target == null || !mounted) return;
+
+    final plan = buildBulkEquipmentTransferPlan(
+      selectedRows: _rows,
+      target: target,
+      targetDisplayName: _targetDisplayName(target),
+      ownersByEquipmentId: _ownersByEquipmentId(),
+    );
+    if (!plan.hasWork) {
+      await showBulkInfoDialog(
+        context,
+        title: 'Καμία μεταφορά',
+        message:
+            'Όλοι οι επιλεγμένοι εξοπλισμοί βρίσκονται ήδη στο '
+            '«${plan.targetDisplayName}».',
+      );
       return;
     }
-    final changes = <String, dynamic>{};
-    final asyncLookup = widget.ref.read(lookupServiceProvider);
-    final lookup = asyncLookup.value?.service;
-    for (var i = 0; i < _fieldKeys.length; i++) {
-      final fieldKey = _fieldKeys[i];
-      if (_applyField[fieldKey] != true) continue;
-      final dbKey = _dbKeys[i];
-      if (fieldKey == 'owner') {
-        changes[dbKey] = await _resolveOwnerToUserId(
-          _ownerController.text.trim(),
-          lookup,
+
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση μεταφοράς',
+      message: bulkEquipmentTransferConfirmationText(plan),
+      confirmLabel: 'Μεταφορά',
+    );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkTransfer(plan);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // ─────────────────────────── Αλλαγή κατόχου ───────────────────────────
+
+  Future<void> _runOwnerFlow() async {
+    final owner = await showDialog<UserModel>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const _OwnerPickerDialog(),
+    );
+    if (owner == null || !mounted) return;
+
+    final plan = buildBulkEquipmentOwnerPlan(
+      selectedRows: _rows,
+      newOwner: owner,
+      ownersByEquipmentId: _ownersByEquipmentId(),
+    );
+    if (!plan.hasWork) {
+      await showBulkInfoDialog(
+        context,
+        title: 'Καμία ανάθεση',
+        message: plan.exclusions.isEmpty
+            ? 'Δεν υπάρχει εξοπλισμός προς ανάθεση.'
+            : plan.exclusions.map((e) => '• ${e.reason}').join('\n'),
+      );
+      return;
+    }
+
+    final deptId = owner.departmentId;
+    final deptName = deptId == null
+        ? null
+        : LookupService.instance.getDepartmentName(deptId);
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση κατόχου',
+      message: bulkEquipmentOwnerConfirmationText(
+        plan,
+        newOwnerDepartmentName: deptName,
+      ),
+      confirmLabel: 'Ανάθεση',
+    );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkOwner(plan);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // ─────────────────────────── Τοποθεσία ───────────────────────────
+
+  Future<void> _runLocationFlow() async {
+    final text = await showBulkTextInputDialog(
+      context,
+      title: 'Τοποθεσία σε ${_rows.length} εξοπλισμούς',
+      label: 'Τοποθεσία',
+      helper:
+          'Το κενό κείμενο δεν αποθηκεύεται — για διαγραφή χρησιμοποιήστε '
+          'τον «Καθαρισμό πεδίου».',
+    );
+    if (text == null || !mounted) return;
+
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση τοποθεσίας',
+      message:
+          'Η τοποθεσία «$text» θα γραφτεί σε ${_rows.length} εξοπλισμούς: '
+          '${bulkEquipmentCodesPreview(_rows)}.',
+    );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkField(
+      rows: _rows,
+      column: 'location',
+      value: text,
+      message: 'Ενημερώθηκε η τοποθεσία ${_rows.length} εξοπλισμών.',
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // ─────────────────────────── Αλλαγή τύπου ───────────────────────────
+
+  Future<void> _runTypeFlow() async {
+    final types = await SettingsService().catalogs.getEquipmentTypesList();
+    if (!mounted) return;
+    final options = types.where((t) => t.trim().isNotEmpty).toList();
+    if (options.isEmpty) {
+      await showBulkInfoDialog(
+        context,
+        title: 'Χωρίς τύπους',
+        message:
+            'Δεν υπάρχουν καταχωρημένοι τύποι εξοπλισμού στις ρυθμίσεις '
+            'καταλόγου.',
+      );
+      return;
+    }
+
+    final picked = await showBulkOptionDialog<String>(
+      context,
+      title: 'Τύπος εξοπλισμού',
+      message: 'Ο τύπος θα γραφτεί σε ${_rows.length} εξοπλισμούς.',
+      options: [for (final t in options) (t, null, t)],
+    );
+    if (picked == null || !mounted) return;
+
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση τύπου',
+      message:
+          'Ο τύπος «$picked» θα γραφτεί σε ${_rows.length} εξοπλισμούς: '
+          '${bulkEquipmentCodesPreview(_rows)}.',
+    );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkField(
+      rows: _rows,
+      column: 'type',
+      value: picked,
+      message: 'Ενημερώθηκε ο τύπος ${_rows.length} εξοπλισμών.',
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // ───────────────── Κύριο εργαλείο απομακρυσμένης ─────────────────
+
+  Future<void> _runPrimaryToolFlow() async {
+    final tools = ref.read(remoteToolsCatalogProvider).value ?? const [];
+    if (!mounted) return;
+    if (tools.isEmpty) {
+      await showBulkInfoDialog(
+        context,
+        title: 'Χωρίς εργαλεία',
+        message: 'Δεν υπάρχουν ρυθμισμένα εργαλεία απομακρυσμένης σύνδεσης.',
+      );
+      return;
+    }
+
+    final tool = await showBulkOptionDialog<RemoteTool>(
+      context,
+      title: 'Κύριο εργαλείο απομακρυσμένης',
+      message:
+          'Θα οριστεί ως κύριο μόνο σε όσους έχουν ήδη παράμετρο για αυτό '
+          'το εργαλείο.',
+      options: [for (final t in tools) (t.name, null, t)],
+    );
+    if (tool == null || !mounted) return;
+
+    final plan = buildBulkEquipmentPrimaryToolPlan(
+      selectedRows: _rows,
+      tool: tool,
+    );
+    if (!plan.hasWork) {
+      await showBulkInfoDialog(
+        context,
+        title: 'Καμία αλλαγή',
+        message: plan.exclusions.isEmpty
+            ? 'Όλοι οι επιλεγμένοι έχουν ήδη το ${tool.name} ως κύριο εργαλείο.'
+            : plan.exclusions.map((e) => '• ${e.reason}').join('\n'),
+      );
+      return;
+    }
+
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση κύριου εργαλείου',
+      message: bulkEquipmentPrimaryToolConfirmationText(plan),
+    );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkField(
+      rows: plan.rowsToApply,
+      column: 'default_remote_tool',
+      value: tool.id.toString(),
+      message:
+          'Το ${tool.name} έγινε κύριο εργαλείο σε '
+          '${plan.rowsToApply.length} εξοπλισμούς.',
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // ─────────────────────────── Σημειώσεις ───────────────────────────
+
+  Future<void> _runNotesFlow() async {
+    final result = await showBulkNotesDialog(
+      context,
+      title: 'Σημειώσεις σε ${_rows.length} εξοπλισμούς',
+    );
+    if (result == null || !mounted) return;
+    final (append, text) = result;
+
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση σημειώσεων',
+      message: append
+          ? 'Θα προστεθεί η σημείωση «$text» στο τέλος των σημειώσεων '
+                '${_rows.length} εξοπλισμών: '
+                '${bulkEquipmentCodesPreview(_rows)}.'
+          : 'Θα ΑΝΤΙΚΑΤΑΣΤΑΘΟΥΝ οι σημειώσεις ${_rows.length} εξοπλισμών '
+                'με το κείμενο «$text»: ${bulkEquipmentCodesPreview(_rows)}.',
+    );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkField(
+      rows: _rows,
+      column: 'notes',
+      value: text,
+      notesMode: append
+          ? BulkEquipmentNotesMode.append
+          : BulkEquipmentNotesMode.replace,
+      message:
+          'Ενημερώθηκαν οι σημειώσεις ${_rows.length} εξοπλισμών '
+          '(${append ? 'προσθήκη' : 'αντικατάσταση'}).',
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // ─────────────────────────── Καθαρισμός πεδίου ───────────────────────────
+
+  Future<void> _runClearFlow() async {
+    final field = await showBulkOptionDialog<BulkEquipmentClearField>(
+      context,
+      title: 'Καθαρισμός πεδίου',
+      message: 'Ποιο πεδίο θα καθαριστεί από τους επιλεγμένους εξοπλισμούς;',
+      options: const [
+        (
+          'Κάτοχος',
+          'Αποδέσμευση από τον κάτοχο — ο εξοπλισμός γίνεται κοινόχρηστος '
+              'τμήματος, ποτέ ορφανός.',
+          BulkEquipmentClearField.owner,
+        ),
+        ('Σημειώσεις', null, BulkEquipmentClearField.notes),
+        ('Τοποθεσία', null, BulkEquipmentClearField.location),
+        (
+          'Παράμετροι απομακρυσμένης',
+          'AnyDesk id, VNC host κ.λπ. — μοναδικά ανά μηχάνημα.',
+          BulkEquipmentClearField.remoteParams,
+        ),
+      ],
+    );
+    if (field == null || !mounted) return;
+
+    var ownerFate = BulkEquipmentOwnerClearFate.shareInFormerOwnerDepartment;
+    SharedAssetTransferTarget? transferTarget;
+    String? transferTargetName;
+
+    if (field == BulkEquipmentClearField.owner) {
+      final picked = await showBulkOptionDialog<BulkEquipmentOwnerClearFate>(
+        context,
+        title: 'Πού πάει ο εξοπλισμός',
+        message:
+            'Μία απάντηση για όλους: μετά την αποδέσμευση, σε ποιο τμήμα '
+            'ανήκει ο εξοπλισμός;',
+        options: const [
+          (
+            'Κοινόχρηστος στο τμήμα του πρώην κατόχου',
+            'Η φυσική επιλογή — ο εξοπλισμός μένει εκεί που ήταν.',
+            BulkEquipmentOwnerClearFate.shareInFormerOwnerDepartment,
+          ),
+          (
+            'Μεταφορά σε άλλο τμήμα…',
+            'Επιλέγετε τμήμα προορισμού.',
+            BulkEquipmentOwnerClearFate.transfer,
+          ),
+        ],
+      );
+      if (picked == null || !mounted) return;
+      ownerFate = picked;
+      if (ownerFate == BulkEquipmentOwnerClearFate.transfer) {
+        final target = await showAssetTransferTargetPicker(
+          context: context,
+          headerLabel: 'Μεταφορά εξοπλισμών σε τμήμα',
+          availableDepartments: _activeDepartments(),
         );
-      } else if (fieldKey == 'type') {
-        final v = _selectedType?.trim() ?? '';
-        changes[dbKey] = v.isEmpty ? null : v;
-      } else {
-        final value = _controllers[fieldKey]!.text.trim();
-        changes[dbKey] = value.isEmpty ? null : value;
+        if (target == null || !mounted) return;
+        transferTarget = target;
+        transferTargetName = _targetDisplayName(target);
       }
     }
-    if (changes.isEmpty) {
-      if (mounted) Navigator.of(context).pop();
+
+    final plan = buildBulkEquipmentClearPlan(
+      selectedRows: _rows,
+      field: field,
+      ownerFate: ownerFate,
+      transferTarget: transferTarget,
+      transferTargetDisplayName: transferTargetName,
+      ownersByEquipmentId: _ownersByEquipmentId(),
+    );
+    if (!plan.hasWork) {
+      await showBulkInfoDialog(
+        context,
+        title: 'Κανένας καθαρισμός',
+        message: plan.exclusions.isEmpty
+            ? 'Δεν υπάρχει τίποτα προς καθαρισμό στους επιλεγμένους.'
+            : plan.exclusions.map((e) => '• ${e.reason}').join('\n'),
+      );
       return;
     }
-    await widget.notifier.bulkUpdate(ids, changes);
-    if (!mounted) return;
-    widget.ref.invalidate(lookupServiceProvider);
-    await refreshSelectedEquipmentInAllSelectors(widget.ref);
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Ενημερώθηκαν ${ids.length} εγγραφές εξοπλισμού.'),
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: 'Αναίρεση',
-          onPressed: () async {
-            await widget.notifier.undoLastBulkUpdate();
-          },
+
+    final confirmed = await showBulkConfirmDialog(
+      context,
+      title: 'Επιβεβαίωση καθαρισμού',
+      message: bulkEquipmentClearConfirmationText(plan),
+      confirmLabel: 'Καθαρισμός',
+    );
+    if (!confirmed || !mounted) return;
+
+    await widget.notifier.applyBulkClear(plan);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  // ─────────────────────────── Δόμηση ───────────────────────────
+
+  Widget _actionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Future<void> Function() flow,
+    Color? iconColor,
+  }) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      child: ListTile(
+        leading: Icon(icon, color: iconColor),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        enabled: !_busy,
+        onTap: () => _runGuarded(flow),
+      ),
+    );
+  }
+
+  Widget _groupLabel(String text) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 2),
+      child: Text(
+        text,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: theme.colorScheme.primary,
         ),
       ),
     );
@@ -200,250 +468,199 @@ class _BulkEquipmentEditDialogState extends State<BulkEquipmentEditDialog>
 
   @override
   Widget build(BuildContext context) {
-    final labels = {'type': 'Τύπος', 'notes': 'Σημειώσεις', 'owner': 'Κάτοχος'};
-    return DialogSnackbarScope(
-      messengerKey: dialogMessengerKey,
-      child: Center(
-        child: AlertDialog(
-          title: Text(
-            'Μαζική επεξεργασία (${widget.selectedRows.length} εξοπλισμός)',
-          ),
-          content: SingleChildScrollView(
+    final theme = Theme.of(context);
+    final title = _rows.length == 1
+        ? 'Μαζικές ενέργειες — 1 εξοπλισμός'
+        : 'Μαζικές ενέργειες — ${_rows.length} εξοπλισμοί';
+    return DraggableDialogShell(
+      title: Text(title),
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: SizedBox(
+          width: 540,
+          child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (var i = 0; i < _fieldKeys.length; i++) ...[
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 200,
-                        child: CheckboxListTile(
-                          value: _applyField[_fieldKeys[i]]!,
-                          onChanged: (v) => setState(
-                            () => _applyField[_fieldKeys[i]] = v ?? false,
-                          ),
-                          title: Text(labels[_fieldKeys[i]]!),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      Expanded(
-                        child: _fieldKeys[i] == 'owner'
-                            ? Consumer(
-                                builder: (context, ref, _) {
-                                  final async = ref.watch(
-                                    lookupServiceProvider,
-                                  );
-                                  return async.when(
-                                    data: (bundle) {
-                                      final service = bundle.service;
-                                      if (_selectedUserId != null &&
-                                          !_ownerTextInitialized) {
-                                        final u = service.users
-                                            .where(
-                                              (u) => u.id == _selectedUserId,
-                                            )
-                                            .firstOrNull;
-                                        if (u != null) {
-                                          WidgetsBinding.instance
-                                              .addPostFrameCallback((_) {
-                                                if (mounted) {
-                                                  _ownerController.text =
-                                                      u.fullNameWithDepartment;
-                                                  setState(
-                                                    () =>
-                                                        _ownerTextInitialized =
-                                                            true,
-                                                  );
-                                                }
-                                              });
-                                        } else {
-                                          _ownerTextInitialized = true;
-                                        }
-                                      }
-                                      final theme = Theme.of(context);
-                                      return Autocomplete<String>(
-                                        displayStringForOption: (String o) => o,
-                                        focusNode: _ownerFocusNode,
-                                        textEditingController: _ownerController,
-                                        optionsBuilder: (TextEditingValue value) {
-                                          final q =
-                                              SearchTextNormalizer.normalizeForSearch(
-                                                value.text,
-                                              );
-                                          final users = q.isEmpty
-                                              ? service.users
-                                              : service.searchUsersByQuery(
-                                                  value.text.trim(),
-                                                );
-                                          return users
-                                              .where((u) => u.id != null)
-                                              .map(
-                                                (u) => u.fullNameWithDepartment,
-                                              )
-                                              .where(
-                                                (option) =>
-                                                    SearchTextNormalizer.matchesNormalizedQuery(
-                                                      option,
-                                                      q,
-                                                    ),
-                                              )
-                                              .toList();
-                                        },
-                                        onSelected: (String selection) {
-                                          final u = service.users
-                                              .where(
-                                                (user) =>
-                                                    user.fullNameWithDepartment ==
-                                                    selection,
-                                              )
-                                              .firstOrNull;
-                                          if (u != null && u.id != null) {
-                                            setState(() {
-                                              _selectedUserId = u.id;
-                                              _ownerController.text =
-                                                  u.name ??
-                                                  u.fullNameWithDepartment;
-                                            });
-                                          }
-                                        },
-                                        fieldViewBuilder:
-                                            (
-                                              context,
-                                              textController,
-                                              focusNode,
-                                              onFieldSubmitted,
-                                            ) {
-                                              return TextField(
-                                                controller: textController,
-                                                focusNode: focusNode,
-                                                decoration: InputDecoration(
-                                                  hintText:
-                                                      _hasDifferentValues(
-                                                        'owner',
-                                                      )
-                                                      ? '(Διαφορετικές τιμές)'
-                                                      : 'Πληκτρολόγησε όνομα ή άφησε κενό (Άγνωστος κάτοχος)',
-                                                  hintStyle: theme
-                                                      .textTheme
-                                                      .bodyMedium
-                                                      ?.copyWith(
-                                                        color: theme
-                                                            .colorScheme
-                                                            .onSurfaceVariant
-                                                            .withValues(
-                                                              alpha: 0.7,
-                                                            ),
-                                                      ),
-                                                  border:
-                                                      const OutlineInputBorder(),
-                                                  suffixIcon: Semantics(
-                                                    label: 'Καθαρισμός Κατόχου',
-                                                    child: IconButton(
-                                                      icon: const Icon(
-                                                        Icons.close,
-                                                        size: 20,
-                                                      ),
-                                                      onPressed: () {
-                                                        textController.clear();
-                                                        setState(
-                                                          () =>
-                                                              _selectedUserId =
-                                                                  null,
-                                                        );
-                                                      },
-                                                      tooltip:
-                                                          'Καθαρισμός Κατόχου',
-                                                    ),
-                                                  ),
-                                                ),
-                                                onChanged: (value) {
-                                                  if (value.trim().isEmpty) {
-                                                    setState(
-                                                      () => _selectedUserId =
-                                                          null,
-                                                    );
-                                                  }
-                                                },
-                                              );
-                                            },
-                                      );
-                                    },
-                                    loading: () => const SizedBox(
-                                      height: 48,
-                                      child: Center(child: Text('Φόρτωση...')),
-                                    ),
-                                    error: (_, e) => const Text('Σφάλμα'),
-                                  );
-                                },
-                              )
-                            : _fieldKeys[i] == 'type'
-                            ? FutureBuilder<List<String>>(
-                                future: SettingsService()
-                                    .catalogs.getEquipmentTypesList(),
-                                builder: (context, snapshot) {
-                                  var options =
-                                      snapshot.data ??
-                                      ['Υπολογιστής', 'Εκτυπωτής'];
-                                  if (_selectedType != null &&
-                                      _selectedType!.trim().isNotEmpty &&
-                                      !options.contains(_selectedType)) {
-                                    options = [_selectedType!, ...options];
-                                  }
-                                  return DropdownButtonFormField<String?>(
-                                    initialValue: _selectedType,
-                                    decoration: InputDecoration(
-                                      hintText: _hasDifferentValues('type')
-                                          ? '(Διαφορετικές τιμές)'
-                                          : null,
-                                      border: const OutlineInputBorder(),
-                                    ),
-                                    items: [
-                                      ...options.map(
-                                        (o) => DropdownMenuItem<String?>(
-                                          value: o,
-                                          child: Text(o),
-                                        ),
-                                      ),
-                                      const DropdownMenuItem<String?>(
-                                        value: null,
-                                        child: Text('Κανένας'),
-                                      ),
-                                    ],
-                                    onChanged: (v) =>
-                                        setState(() => _selectedType = v),
-                                  );
-                                },
-                              )
-                            : TextFormField(
-                                controller: _controllers[_fieldKeys[i]],
-                                decoration: InputDecoration(
-                                  hintText: _hasDifferentValues(_fieldKeys[i])
-                                      ? '(Διαφορετικές τιμές)'
-                                      : null,
-                                  border: const OutlineInputBorder(),
-                                ),
-                                spellCheckConfiguration:
-                                    platformSpellCheckConfiguration,
-                                onChanged: (_) => setState(() {}),
-                              ),
-                      ),
-                    ],
+                Text(
+                  bulkEquipmentCodesPreview(_rows),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 8),
-                ],
+                ),
+                _groupLabel('Οργάνωση'),
+                _actionCard(
+                  icon: Icons.drive_file_move_outline,
+                  title: 'Μεταφορά σε τμήμα…',
+                  subtitle:
+                      'Υπάρχον ή νέο τμήμα · ο εξοπλισμός με κάτοχο '
+                      'αποδεσμεύεται και γίνεται κοινόχρηστος.',
+                  flow: _runTransferFlow,
+                ),
+                _actionCard(
+                  icon: Icons.person_outline,
+                  title: 'Αλλαγή κατόχου…',
+                  subtitle:
+                      'Μόνο υπάρχων υπάλληλος από τη λίστα · το τμήμα '
+                      'ακολουθεί τον νέο κάτοχο.',
+                  flow: _runOwnerFlow,
+                ),
+                _actionCard(
+                  icon: Icons.place_outlined,
+                  title: 'Τοποθεσία…',
+                  subtitle: 'Π.χ. «Γραφείο 3» — το τμήμα δεν θίγεται.',
+                  flow: _runLocationFlow,
+                ),
+                _groupLabel('Χαρακτηριστικά'),
+                _actionCard(
+                  icon: Icons.category_outlined,
+                  title: 'Αλλαγή τύπου…',
+                  subtitle: 'Από τους καταχωρημένους τύπους του καταλόγου.',
+                  flow: _runTypeFlow,
+                ),
+                _actionCard(
+                  icon: Icons.desktop_windows_outlined,
+                  title: 'Κύριο εργαλείο απομακρυσμένης…',
+                  subtitle:
+                      'Μόνο όπου υπάρχει ήδη παράμετρος · οι παράμετροι '
+                      'του καθενός δεν αλλάζουν.',
+                  flow: _runPrimaryToolFlow,
+                ),
+                _actionCard(
+                  icon: Icons.note_add_outlined,
+                  title: 'Σημειώσεις…',
+                  subtitle:
+                      'Προσθήκη στις υπάρχουσες (προεπιλογή) ή αντικατάσταση.',
+                  flow: _runNotesFlow,
+                ),
+                _groupLabel('Καθαρισμός'),
+                _actionCard(
+                  icon: Icons.cleaning_services_outlined,
+                  iconColor: theme.colorScheme.error,
+                  title: 'Καθαρισμός πεδίου…',
+                  subtitle:
+                      'Κάτοχος, σημειώσεις, τοποθεσία ή παράμετροι '
+                      'απομακρυσμένης — με ρητή επιβεβαίωση.',
+                  flow: _runClearFlow,
+                ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Ακύρωση'),
-            ),
-            FilledButton(onPressed: _save, child: const Text('Αποθήκευση')),
-          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(),
+            child: const Text('Κλείσιμο'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Επιλογή νέου κατόχου **αποκλειστικά** από τον κατάλογο υπαλλήλων.
+///
+/// Δεν υπάρχει διαδρομή δημιουργίας υπαλλήλου: παλαιότερα ένα τυπογραφικό
+/// λάθος γεννούσε οντότητα-φάντασμα χωρίς τμήμα.
+class _OwnerPickerDialog extends ConsumerStatefulWidget {
+  const _OwnerPickerDialog();
+
+  @override
+  ConsumerState<_OwnerPickerDialog> createState() => _OwnerPickerDialogState();
+}
+
+class _OwnerPickerDialogState extends ConsumerState<_OwnerPickerDialog> {
+  final _controller = TextEditingController();
+  UserModel? _selected;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final lookupAsync = ref.watch(lookupServiceProvider);
+    final users = lookupAsync.value?.service.users ?? const <UserModel>[];
+    final query = _controller.text.trim();
+    final matches = query.isEmpty
+        ? users.take(40).toList()
+        : (lookupAsync.value?.service.searchUsersByQuery(query) ??
+                  const <UserModel>[])
+              .take(40)
+              .toList();
+
+    return DraggableDialogShell(
+      title: const Text('Νέος κάτοχος'),
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: SizedBox(
+          width: 460,
+          height: 420,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Αναζήτηση υπαλλήλου',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: matches.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Κανένας υπάλληλος δεν ταιριάζει.\nΝέος υπάλληλος '
+                          'δημιουργείται μόνο από την καρτέλα Υπάλληλοι.',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : RadioGroup<int?>(
+                        groupValue: _selected?.id,
+                        onChanged: (id) => setState(() {
+                          _selected = matches
+                              .where((u) => u.id == id)
+                              .firstOrNull;
+                        }),
+                        child: ListView.builder(
+                          itemCount: matches.length,
+                          itemBuilder: (context, i) {
+                            final u = matches[i];
+                            return RadioListTile<int?>(
+                              value: u.id,
+                              title: Text(u.fullNameWithDepartment),
+                              dense: true,
+                            );
+                          },
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Ακύρωση'),
+          ),
+          FilledButton(
+            onPressed: _selected == null
+                ? null
+                : () => Navigator.of(context).pop(_selected),
+            child: const Text('Συνέχεια'),
+          ),
+        ],
       ),
     );
   }

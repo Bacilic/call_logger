@@ -7,7 +7,6 @@ import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/directory_support.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
-import '../../../../core/utils/spell_check.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../building_map/widgets/building_map_floor_menu_button.dart';
@@ -107,7 +106,7 @@ class DepartmentFormDialogState extends State<DepartmentFormDialog> {
 
   final formKey = GlobalKey<FormState>();
   late final SpellCheckController nameController;
-  late final TextEditingController buildingController;
+  late final SpellCheckController buildingController;
   late final SpellCheckController notesController;
   late final TextEditingController hexController;
   late final TextEditingController sharedPhoneInputController;
@@ -192,7 +191,7 @@ class DepartmentFormDialogState extends State<DepartmentFormDialog> {
     super.initState();
     final d = widget.initialDepartment;
     nameController = SpellCheckController()..text = d?.name ?? '';
-    buildingController = TextEditingController(text: d?.building ?? '');
+    buildingController = SpellCheckController()..text = d?.building ?? '';
     notesController = SpellCheckController()..text = (d?.notes ?? '');
     selectedColor = tryParseDepartmentHex(d?.color) ?? const Color(0xFF1976D2);
     hexController = TextEditingController(
@@ -769,15 +768,13 @@ class DepartmentFormDialogState extends State<DepartmentFormDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: TextFormField(
+                            child: LexiconSpellTextFormField(
                               controller: buildingController,
                               focusNode: _buildingFocus,
                               decoration: const InputDecoration(
                                 labelText: 'Κτίριο',
                                 border: OutlineInputBorder(),
                               ),
-                              spellCheckConfiguration:
-                                  platformSpellCheckConfiguration,
                             ),
                           ),
                           const SizedBox(width: 12),

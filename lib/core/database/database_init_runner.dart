@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../init/startup_engine_failure.dart';
 import '../services/settings_service.dart';
 import 'database_file_classifier.dart';
@@ -25,6 +27,33 @@ Future<void> _appSettingsSet(String key, String value) async {
 /// Αλυσίδα σειριοποίησης: νέες κλήσεις περιμένουν την προηγούμενη να τελειώσει.
 Future<void> _runDatabaseInitChecksGate = Future<void>.value();
 
+/// Το τελευταίο **επιτυχές** αποτέλεσμα, μαζί με το πότε ισχύει.
+class _RememberedInitResult {
+  const _RememberedInitResult({
+    required this.result,
+    required this.path,
+    required this.generation,
+  });
+
+  final DatabaseInitRunnerResult result;
+  final String path;
+  final int generation;
+}
+
+_RememberedInitResult? _rememberedInitResult;
+
+/// Ξεχνά το τελευταίο αποτέλεσμα, ώστε ο επόμενος έλεγχος να τρέξει από την αρχή.
+///
+/// Χρειάζεται μόνο για ρητή επαναδοκιμή· το κλείσιμο σύνδεσης και η αλλαγή
+/// διαδρομής ακυρώνουν τη μνήμη μόνα τους.
+void forgetDatabaseInitResult() {
+  _rememberedInitResult = null;
+}
+
+/// Μόνο για τεστ — πόσες φορές έτρεξαν όντως οι έλεγχοι (χωρίς επαναχρήση).
+@visibleForTesting
+int debugDatabaseInitChecksRunCount = 0;
+
 /// Αποτέλεσμα ελέγχου αρχικοποίησης (αποτέλεσμα + τρόπος λειτουργίας).
 class DatabaseInitRunnerResult {
   const DatabaseInitRunnerResult({
@@ -44,8 +73,16 @@ class DatabaseInitRunnerResult {
 /// χρησιμοποιηθεί η τρέχουσα διαδρομή από ρυθμίσεις (π.χ. μετά αλλαγή path).
 ///
 /// Οι κλήσεις σειριοποιούνται: αν τρέχει ήδη άλλη, η νέα περιμένει να ολοκληρωθεί.
+///
+/// Με [reuseIfFresh] η κλήση επιστρέφει το ήδη επαληθευμένο αποτέλεσμα, εφόσον
+/// αφορά την ίδια διαδρομή και η σύνδεση δεν έχει κλείσει στο μεταξύ. Έτσι μία
+/// αλλαγή διαδρομής ανοίγει τη βάση **μία** φορά αντί για τρεις: ο κρίκος που
+/// επαληθεύει τη νέα διαδρομή παράγει ήδη ό,τι χρειάζονται οι επόμενοι.
+/// Όταν είναι `true`, υπερισχύει του [closeConnectionFirst] — δεν έχει νόημα να
+/// κλείσουμε μια σύνδεση που μόλις ανοίξαμε και επαληθεύσαμε.
 Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
   bool closeConnectionFirst = false,
+  bool reuseIfFresh = false,
   DatabaseInitProgressNotifier? progressNotifier,
 }) async {
   final previous = _runDatabaseInitChecksGate;
@@ -53,24 +90,65 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
   _runDatabaseInitChecksGate = gate.future;
   try {
     await previous;
-    return await _runDatabaseInitChecksUnlocked(
+
+    progressNotifier?.setStep('Έλεγχος διαδρομής', clearDiagnosticInfo: true);
+    final configured = await SettingsService().getDatabasePath();
+    final resolved = await resolveEffectiveDatabasePath(configured);
+    final dbPath = resolved.path;
+
+    if (reuseIfFresh) {
+      final remembered = _rememberedResultFor(dbPath);
+      if (remembered != null) {
+        progressNotifier?.setStep(
+          'Η αρχικοποίηση ολοκληρώθηκε',
+          clearSecondsRemaining: true,
+        );
+        return remembered;
+      }
+    }
+
+    debugDatabaseInitChecksRunCount++;
+    final result = await _runDatabaseInitChecksUnlocked(
+      dbPath: dbPath,
       closeConnectionFirst: closeConnectionFirst,
       progressNotifier: progressNotifier,
     );
+    _rememberResult(result, dbPath);
+    return result;
   } finally {
     gate.complete();
   }
 }
 
+/// Το αποθηκευμένο αποτέλεσμα, μόνο αν αφορά ακόμα την τρέχουσα κατάσταση.
+DatabaseInitRunnerResult? _rememberedResultFor(String dbPath) {
+  final remembered = _rememberedInitResult;
+  if (remembered == null) return null;
+  if (remembered.path != dbPath) return null;
+  if (remembered.generation != DatabaseHelper.instance.connectionGeneration) {
+    return null;
+  }
+  return remembered.result;
+}
+
+/// Θυμάται μόνο επιτυχίες: μια αποτυχία πρέπει να ξαναδοκιμάζεται πάντα.
+void _rememberResult(DatabaseInitRunnerResult result, String dbPath) {
+  if (!result.result.isSuccess) {
+    _rememberedInitResult = null;
+    return;
+  }
+  _rememberedInitResult = _RememberedInitResult(
+    result: result,
+    path: dbPath,
+    generation: DatabaseHelper.instance.connectionGeneration,
+  );
+}
+
 Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
+  required String dbPath,
   required bool closeConnectionFirst,
   DatabaseInitProgressNotifier? progressNotifier,
 }) async {
-  progressNotifier?.setStep('Έλεγχος διαδρομής', clearDiagnosticInfo: true);
-  final configured = await SettingsService().getDatabasePath();
-  final resolved = await resolveEffectiveDatabasePath(configured);
-  String dbPath = resolved.path;
-
   // Αν η μηχανή SQLite δεν φορτώθηκε στην εκκίνηση (π.χ. λείπει το sqlite3.dll),
   // κανένας έλεγχος βάσης δεν έχει νόημα: τα file probes πετυχαίνουν και κρύβουν
   // την πραγματική αιτία πίσω από «databaseFactory not initialized».

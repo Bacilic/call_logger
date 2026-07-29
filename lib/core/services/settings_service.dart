@@ -70,8 +70,8 @@ class SettingsService {
       _getAppSetting;
 
   /// Εγγραφή ρύθμισης app_settings — για τους συνεργάτες ([remoteLansweeper], [catalogs]).
-  static Future<void> Function(String key, String value)? get appSettingWriter =>
-      _setAppSetting;
+  static Future<void> Function(String key, String value)?
+  get appSettingWriter => _setAppSetting;
 
   static const int defaultCrashLogRetentionCount =
       SettingsServiceCatalogs.defaultCrashLogRetentionCount;

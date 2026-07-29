@@ -8,6 +8,7 @@
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
+import 'package:call_logger/core/widgets/lexicon_spell_text_form_field.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
@@ -712,6 +713,52 @@ void main() {
         expect(find.text(_kDepartmentFormTitle), findsOneWidget);
       },
     );
+  });
+
+  group('Φόρμα τμήματος — ορθογραφικός έλεγχος', () {
+    // Ο εγγενής ορθογραφικός έλεγχος είναι απενεργοποιημένος στα Windows· το
+    // πεδίο πρέπει να χρησιμοποιεί το πεδίο-συστατικό του Λεξικού.
+    //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "Κτίριο"
+    testWidgets('το «Κτίριο» έχει ορθογραφικό έλεγχο Λεξικού', (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await seedIsolatedTestDatabase();
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          notifier: notifier,
+        );
+      });
+
+      final buildingField = find.ancestor(
+        of: find.text('Κτίριο'),
+        matching: find.byType(LexiconSpellTextFormField),
+      );
+      expect(
+        buildingField,
+        findsOneWidget,
+        reason:
+            'Το «Κτίριο» πρέπει να χρησιμοποιεί LexiconSpellTextFormField — ο '
+            'εγγενής έλεγχος των Windows δεν λειτουργεί ποτέ',
+      );
+
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
   });
 
   group('Φόρμα τμήματος — χαρακτηρισμός split', () {

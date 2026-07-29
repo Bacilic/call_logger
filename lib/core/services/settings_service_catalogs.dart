@@ -146,11 +146,8 @@ class SettingsServiceCatalogs {
 
   Future<void> setAuditRetentionConfig(AuditRetentionConfig config) async {
     final prefs = await SharedPreferences.getInstance();
-    // ΠΡΟΣΟΧΗ: εδώ το κλειδί γράφεται χωρίς πρόθεμα προφίλ ενώ η ανάγνωση
-    // το περιμένει με πρόθεμα — διατηρήθηκε ως έχει στη μετατροπή
-    // (καταγεγραμμένο εύρημα, εκκρεμεί ξεχωριστή διόρθωση).
     await prefs.setString(
-      _keyAuditRetentionConfig,
+      _prefKey(_keyAuditRetentionConfig),
       jsonEncode(config.toJson()),
     );
   }

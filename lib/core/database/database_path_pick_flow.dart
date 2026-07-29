@@ -89,21 +89,46 @@ typedef DatabaseInitChecksRunner =
       DatabaseInitProgressNotifier? progressNotifier,
     });
 
+/// Κλείσιμο της τρέχουσας σύνδεσης (προεπιλογή: [DatabaseHelper.closeConnection]).
+typedef DatabaseConnectionCloser = Future<void> Function();
+
+Future<void> _closeCurrentConnection() =>
+    DatabaseHelper.instance.closeConnection();
+
 /// Ορίζει διαδρομή, τρέχει ελέγχους αρχικοποίησης· σε αποτυχία επαναφέρει την προηγούμενη.
+///
+/// Η προηγούμενη σύνδεση κλείνει **εδώ**, πριν αλλάξει η ρύθμιση διαδρομής, και
+/// ο εκτελεστής των ελέγχων δεν ξανακλείνει. Το κλείσιμο πρέπει να γίνει
+/// οπωσδήποτε: το [DatabaseHelper.initializeDatabase] επιστρέφει την ήδη
+/// ανοιχτή σύνδεση, οπότε μια σύνδεση που έμεινε ανοιχτή θα οδηγούσε σε
+/// επαλήθευση της ΠΑΛΙΑΣ βάσης με αναφορά επιτυχίας για τη νέα διαδρομή.
 Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
   String trimmed, {
   DatabaseInitChecksRunner runInitChecks = runDatabaseInitChecks,
+  DatabaseConnectionCloser closeConnection = _closeCurrentConnection,
 }) async {
   final settings = SettingsService();
   final wasUnconfigured = await settings.isDatabaseUnconfigured();
   final previous = wasUnconfigured ? null : await settings.getDatabasePath();
+
+  try {
+    await closeConnection();
+  } catch (e, st) {
+    // Έξοδος πριν γραφτεί η νέα διαδρομή: η ρύθμιση μένει άθικτη, οπότε δεν
+    // χρειάζεται επαναφορά.
+    return (
+      ok: false,
+      runner: DatabaseInitRunnerResult(
+        result: DatabaseInitResult.fromException(e, trimmed, st),
+        isLocalDevMode: false,
+      ),
+    );
+  }
+
   late DatabaseInitRunnerResult runner;
   try {
-    try {
-      await DatabaseHelper.instance.closeConnection();
-    } catch (_) {}
     await settings.setDatabasePath(trimmed);
-    runner = await runInitChecks(closeConnectionFirst: true);
+    runner = await runInitChecks();
   } catch (e, st) {
     runner = DatabaseInitRunnerResult(
       result: DatabaseInitResult.fromException(e, trimmed, st),

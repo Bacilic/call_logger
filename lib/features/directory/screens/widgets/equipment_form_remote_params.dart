@@ -70,7 +70,9 @@ class EquipmentFormRemoteParams {
 
   Future<void> pruneAfterCatalogLoad() async {
     if (!host.mounted || host.didPruneUnknownRemoteKeys) return;
-    final pairs = await host.widget.ref.read(remoteToolFormPairsProvider.future);
+    final pairs = await host.widget.ref.read(
+      remoteToolFormPairsProvider.future,
+    );
     if (!host.mounted || host.didPruneUnknownRemoteKeys) return;
     host.didPruneUnknownRemoteKeys = true;
     _syncRemoteParamsToForm(pairs);
@@ -123,7 +125,10 @@ class EquipmentFormRemoteParams {
     }
   }
 
-  Widget buildSection(List<RemoteToolFormPair> pairs, List<RemoteTool> catalog) {
+  Widget buildSection(
+    List<RemoteToolFormPair> pairs,
+    List<RemoteTool> catalog,
+  ) {
     final theme = Theme.of(host.context);
     if (pairs.isEmpty) {
       return Text(

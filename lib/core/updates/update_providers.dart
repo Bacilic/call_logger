@@ -15,7 +15,8 @@ import 'update_source_config.dart';
 
 final updateSourceConfigProvider = Provider<UpdateSourceConfig>((ref) {
   return UpdateSourceConfig(
-    getUserUpdateFolderPath: () => SettingsService().catalogs.getUpdateFolderPath(),
+    getUserUpdateFolderPath: () =>
+        SettingsService().catalogs.getUpdateFolderPath(),
   );
 });
 
@@ -77,7 +78,8 @@ final pendingUpdateProvider = FutureProvider<bool>((ref) async {
 /// Κατασκευή του πραγματικού installer service (κοινή για provider + startup).
 UpdateInstallerService buildDefaultUpdateInstallerService() {
   final config = UpdateSourceConfig(
-    getUserUpdateFolderPath: () => SettingsService().catalogs.getUpdateFolderPath(),
+    getUserUpdateFolderPath: () =>
+        SettingsService().catalogs.getUpdateFolderPath(),
   );
   return UpdateInstallerService(
     installDirectory: AppConfig.applicationExecutableDirectory,

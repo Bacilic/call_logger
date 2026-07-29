@@ -67,8 +67,12 @@ class AppInitializer {
     DatabaseInitProgressNotifier? progressNotifier,
   }) async {
     try {
+      // Στην εκκίνηση δεν υπάρχει τίποτα αποθηκευμένο και οι έλεγχοι τρέχουν
+      // κανονικά. Μετά από εναλλαγή βάσης όμως η βάση μόλις επαληθεύτηκε —
+      // τρίτο άνοιγμα στη σειρά δεν προσθέτει καμία βεβαιότητα.
       final runnerResult = await runDatabaseInitChecks(
         closeConnectionFirst: false,
+        reuseIfFresh: true,
         progressNotifier: progressNotifier,
       );
       var spellCheckReady = false;

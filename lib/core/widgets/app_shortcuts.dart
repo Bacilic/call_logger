@@ -274,7 +274,8 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
           dbPath,
         ),
         enabled: true,
-        retentionCount: await settings.catalogs.getShutdownTraceRetentionCount(),
+        retentionCount: await settings.catalogs
+            .getShutdownTraceRetentionCount(),
       );
     } catch (_) {
       return null;
@@ -304,8 +305,12 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   Future<void> _recheckDatabase() async {
     try {
+      // Μετά από εναλλαγή βάσης η νέα διαδρομή έχει ήδη επαληθευτεί και η
+      // σύνδεση είναι ανοιχτή: κλείνουμε και ξανανοίγουμε μόνο αν κάτι όντως
+      // άλλαξε από τότε.
       final runnerResult = await runDatabaseInitChecks(
         closeConnectionFirst: true,
+        reuseIfFresh: true,
       );
       if (mounted) {
         setState(() {

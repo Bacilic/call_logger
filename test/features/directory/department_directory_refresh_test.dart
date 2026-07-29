@@ -3,8 +3,8 @@
 //   flutter test test/features/directory/department_directory_refresh_test.dart
 
 import 'package:call_logger/core/database/database_helper.dart';
-import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
+import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
 import 'package:call_logger/features/directory/providers/directory_provider.dart';
 import 'package:call_logger/features/directory/providers/equipment_directory_provider.dart';
@@ -91,21 +91,13 @@ void main() {
 
         await container
             .read(departmentDirectoryProvider.notifier)
-            .bulkUpdate(
-              [deptId],
-              {
-                'name': renamedDept,
-                'name_key': SearchTextNormalizer.normalizeForSearch(
-                  renamedDept,
-                ),
-              },
-            );
+            .updateDepartment(DepartmentModel(id: deptId, name: renamedDept));
 
         expect(
           _orphanPhoneDeptLabel(container, orphanPhone),
           contains(renamedDept),
           reason:
-              'Μετά bulkUpdate το directoryProvider πρέπει να δείχνει το νέο όνομα τμήματος χωρίς loadUsers()',
+              'Μετά τη μετονομασία το directoryProvider πρέπει να δείχνει το νέο όνομα τμήματος χωρίς loadUsers()',
         );
 
         container.dispose();
@@ -182,38 +174,42 @@ void main() {
       },
     );
 
-    test('undoLastBulkUpdate — επαναφορά παλιού ονόματος τμήματος', () async {
+    test('αναίρεση μαζικής ενέργειας — επαναφορά πεδίου τμήματος', () async {
       final container = await _container();
       final deptId = await _seedDepartmentId();
       const orphanPhone = '5554';
-      const renamedDept = 'Τμήμα Προσωρινό';
 
       await _insertOrphanPhone(orphanPhone, deptId);
       await _preloadSiblingCatalogs(container);
 
-      await container
-          .read(departmentDirectoryProvider.notifier)
-          .bulkUpdate(
-            [deptId],
-            {
-              'name': renamedDept,
-              'name_key': SearchTextNormalizer.normalizeForSearch(renamedDept),
-            },
-          );
-      expect(
-        _orphanPhoneDeptLabel(container, orphanPhone),
-        contains(renamedDept),
+      final notifier = container.read(departmentDirectoryProvider.notifier);
+      final target = container
+          .read(departmentDirectoryProvider)
+          .allDepartments
+          .firstWhere((d) => d.id == deptId);
+
+      await notifier.applyBulkField(
+        departments: [target],
+        column: 'building',
+        value: 'Κτίριο Ζ',
+        message: 'δοκιμή',
       );
+      final db = await DatabaseHelper.instance.database;
+      Future<Object?> building() async => (await db.query(
+        'departments',
+        columns: ['building'],
+        where: 'id = ?',
+        whereArgs: [deptId],
+        limit: 1,
+      )).first['building'];
+      expect(await building(), 'Κτίριο Ζ');
 
-      await container
-          .read(departmentDirectoryProvider.notifier)
-          .undoLastBulkUpdate();
+      await notifier.undoPendingBulkAction();
 
       expect(
-        _orphanPhoneDeptLabel(container, orphanPhone),
-        contains(kTestDepartmentName),
-        reason:
-            'Μετά undoLastBulkUpdate το directoryProvider πρέπει να επαναφέρει το αρχικό όνομα χωρίς loadUsers()',
+        await building(),
+        isNot('Κτίριο Ζ'),
+        reason: 'Η αναίρεση επαναφέρει το πεδίο στην προηγούμενη τιμή του',
       );
 
       container.dispose();

@@ -7,7 +7,6 @@ import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/database/user_repository.dart';
-import '../../../core/directory/phone_department_policy.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
@@ -18,7 +17,10 @@ import '../../calls/provider/lookup_provider.dart';
 import '../models/non_user_phone_entry.dart';
 import '../models/user_catalog_mode.dart';
 import '../models/user_directory_column.dart';
+import '../services/bulk_action_undo_record.dart';
+import '../services/bulk_user_actions.dart';
 import '../services/user_deletion_undo_record.dart';
+import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
 
 const _catalogUsersVisibleColumnsKey = 'catalog_users_visible_columns';
@@ -61,7 +63,6 @@ class DirectoryState {
     this.selectedIds = const {},
     this.lastDeleted,
     this.lastUserDeletionUndo,
-    this.lastBulkUpdatedUsers,
     this.focusedRowIndex,
     List<UserDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
@@ -87,9 +88,6 @@ class DirectoryState {
 
   /// Φάκελος πλήρους αναίρεσης διαγραφής υπαλλήλου (τηλέφωνα/εξοπλισμός).
   final UserDeletionUndoRecord? lastUserDeletionUndo;
-
-  /// Πριν την τελευταία μαζική επεξεργασία (για undo).
-  final List<UserModel>? lastBulkUpdatedUsers;
 
   /// Ευρετήριο στη [filteredUsers] για keyboard navigation (πάνω/κάτω, Enter).
   final int? focusedRowIndex;
@@ -120,7 +118,6 @@ class DirectoryState {
     Set<int>? selectedIds,
     Object? lastDeleted = _kUnsetLastDeleted,
     Object? lastUserDeletionUndo = _kUnsetDeletionUndo,
-    List<UserModel>? lastBulkUpdatedUsers,
     Object? focusedRowIndex = _kUnsetFocus,
     List<UserDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
@@ -147,7 +144,6 @@ class DirectoryState {
       selectedIds: selectedIds ?? this.selectedIds,
       lastDeleted: nextLastDeleted,
       lastUserDeletionUndo: nextUndo,
-      lastBulkUpdatedUsers: lastBulkUpdatedUsers ?? this.lastBulkUpdatedUsers,
       focusedRowIndex: nextFocus,
       columnOrder: columnOrder ?? this.columnOrder,
       visibleColumnKeys: visibleColumnKeys ?? this.visibleColumnKeys,
@@ -173,6 +169,13 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     ref.invalidate(lookupServiceProvider);
     await ref.read(lookupServiceProvider.future);
     if (!ref.mounted) return;
+  }
+
+  /// Νέα μεταβολή καταλόγου = σιωπηλή οριστικοποίηση της εκκρεμούς προσφοράς
+  /// αναίρεσης μαζικής ενέργειας (αναίρεση πάνω από νεότερες αλλαγές θα τις
+  /// πατούσε).
+  void _settlePendingBulkUndo() {
+    ref.read(pendingBulkUndoProvider.notifier).settleSilently();
   }
 
   _UserColumnLayout? _parseColumnLayoutFromJson(String raw) {
@@ -305,7 +308,6 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       selectedIds: state.selectedIds,
       lastDeleted: state.lastDeleted,
       lastUserDeletionUndo: state.lastUserDeletionUndo,
-      lastBulkUpdatedUsers: state.lastBulkUpdatedUsers,
       focusedRowIndex: state.focusedRowIndex,
       catalogMode: state.catalogMode,
       columnOrder: parsed != null
@@ -605,6 +607,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 
   Future<void> addUser(UserModel u) async {
+    _settlePendingBulkUndo();
     final db = await DatabaseHelper.instance.database;
     await UserRepository(db).insertUserFromMap(u.toMap());
     await _refreshLookupCache();
@@ -618,6 +621,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     UserModel u,
     int sourceUserId,
   ) async {
+    _settlePendingBulkUndo();
     final dbClone = await DatabaseHelper.instance.database;
     final users = UserRepository(dbClone);
     final newId = await users.insertUserFromMap(u.toMap());
@@ -632,6 +636,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
 
   Future<void> updateUser(UserModel u) async {
     if (u.id == null) return;
+    _settlePendingBulkUndo();
     final dbUp = await DatabaseHelper.instance.database;
     await UserRepository(dbUp).updateUser(u.id!, u.toMap());
     await _refreshLookupCache();
@@ -641,6 +646,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
 
   Future<void> deleteSelected() async {
     if (state.selectedIds.isEmpty) return;
+    _settlePendingBulkUndo();
     final toDelete = state.allUsers
         .where((u) => u.id != null && state.selectedIds.contains(u.id))
         .toList();
@@ -662,6 +668,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   /// γράψιμο στη βάση.
   Future<void> finalizeExternalDeletion(List<UserModel> toDelete) async {
     if (toDelete.isEmpty) return;
+    _settlePendingBulkUndo();
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = state.copyWith(
@@ -679,6 +686,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 
   Future<void> undoLastDelete() async {
+    _settlePendingBulkUndo();
     final undoRecord = state.lastUserDeletionUndo;
     final list = state.lastDeleted;
     if (undoRecord != null) {
@@ -697,69 +705,80 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await refreshDirectoryCaches(ref, equipment: true);
   }
 
-  /// Μαζική ενημέρωση: εφαρμόζει [changes] σε όλα τα [ids]. Αποθηκεύει παλιές τιμές για undo.
-  Future<void> bulkUpdate(
-    List<int> ids,
-    Map<String, dynamic> changes, {
-    UserPhoneConflictBatchResult? phoneConflictResolutions,
-  }) async {
-    final hasPhoneResolutions =
-        phoneConflictResolutions != null && !phoneConflictResolutions.isEmpty;
-    if (ids.isEmpty || (changes.isEmpty && !hasPhoneResolutions)) return;
-    final toUpdate = state.allUsers
-        .where((u) => u.id != null && ids.contains(u.id))
-        .toList();
-    if (toUpdate.isEmpty) return;
-
-    if (phoneConflictResolutions != null && !phoneConflictResolutions.isEmpty) {
-      final deptIds = toUpdate
-          .map((u) => u.departmentId)
-          .whereType<int>()
-          .toSet();
-      final targetDepartmentId = deptIds.length == 1 ? deptIds.first : null;
-      final db = await DatabaseHelper.instance.database;
-      await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
-        phones: PhoneRepository(db),
-        resolutions: phoneConflictResolutions,
-        targetDepartmentId: targetDepartmentId,
-      );
-      await _refreshLookupCache();
-    }
-
-    final dbBulk = await DatabaseHelper.instance.database;
-    await UserRepository(dbBulk).bulkUpdateUsers(ids, changes);
+  /// Κοινό φινάλε μαζικής ενέργειας: ανανέωση caches/λίστας και δημοσίευση
+  /// της προσφοράς αναίρεσης (η πράξη έχει ήδη ολοκληρωθεί ατομικά).
+  Future<void> _finishBulkAction(
+    String message,
+    BulkActionUndoRecord record,
+  ) async {
     await _refreshLookupCache();
     if (!ref.mounted) return;
-    state = state.copyWith(lastBulkUpdatedUsers: toUpdate);
+    state = state.copyWith(selectedIds: {});
     await loadUsers();
-    await refreshDirectoryCaches(
-      ref,
-      equipment: true,
-      departments: hasPhoneResolutions,
-    );
+    await refreshDirectoryCaches(ref, equipment: true, departments: true);
+    if (!ref.mounted) return;
+    ref
+        .read(pendingBulkUndoProvider.notifier)
+        .offer(scope: BulkUndoScope.users, message: message, record: record);
   }
 
-  /// Αναίρεση τελευταίας μαζικής επεξεργασίας (επαναφορά παλιών τιμών).
-  Future<void> undoLastBulkUpdate() async {
-    final list = state.lastBulkUpdatedUsers;
-    if (list == null || list.isEmpty) return;
-    final dbUndo = await DatabaseHelper.instance.database;
-    final users = UserRepository(dbUndo);
-    try {
-      for (final u in list) {
-        if (u.id != null) {
-          await users.updateUser(u.id!, u.toMap(), recordAudit: false);
-          if (!ref.mounted) break;
-        }
-      }
-    } finally {
-      state = state.copyWith(lastBulkUpdatedUsers: null);
-      await _refreshLookupCache();
-      if (ref.mounted) {
-        await loadUsers();
-        await refreshDirectoryCaches(ref, equipment: true);
-      }
-    }
+  /// Μαζική μεταφορά υπαλλήλων σε τμήμα (μία ατομική συναλλαγή).
+  Future<void> applyBulkTransfer(BulkUserTransferPlan plan) async {
+    if (!plan.hasWork) return;
+    _settlePendingBulkUndo();
+    final db = await DatabaseHelper.instance.database;
+    late BulkActionUndoRecord record;
+    await db.transaction((txn) async {
+      record = await applyBulkUserTransferInTxn(txn, db, plan);
+    });
+    await _finishBulkAction(bulkTransferResultMessage(plan), record);
+  }
+
+  /// Μαζικές σημειώσεις (προσθήκη ή αντικατάσταση) σε μία συναλλαγή.
+  Future<void> applyBulkNotes({
+    required List<UserModel> users,
+    required String text,
+    required BulkNotesMode mode,
+    required String message,
+  }) async {
+    if (users.isEmpty) return;
+    _settlePendingBulkUndo();
+    final db = await DatabaseHelper.instance.database;
+    late BulkActionUndoRecord record;
+    await db.transaction((txn) async {
+      record = await applyBulkUserNotesInTxn(
+        txn,
+        db,
+        users: users,
+        text: text,
+        mode: mode,
+      );
+    });
+    await _finishBulkAction(message, record);
+  }
+
+  /// Μαζικός καθαρισμός πεδίου (τηλέφωνα/εξοπλισμός/σημειώσεις) σε μία συναλλαγή.
+  Future<void> applyBulkClear(BulkUserClearPlan plan) async {
+    if (!plan.hasWork) return;
+    _settlePendingBulkUndo();
+    final db = await DatabaseHelper.instance.database;
+    late BulkActionUndoRecord record;
+    await db.transaction((txn) async {
+      record = await applyBulkUserClearInTxn(txn, db, plan);
+    });
+    await _finishBulkAction(bulkClearResultMessage(plan), record);
+  }
+
+  /// Εκτελεί την εκκρεμή αναίρεση μαζικής ενέργειας (πλήρης επαναφορά).
+  Future<void> undoPendingBulkAction() async {
+    final record = ref.read(pendingBulkUndoProvider.notifier).takeForUndo();
+    if (record == null) return;
+    final db = await DatabaseHelper.instance.database;
+    await applyBulkActionUndo(db, record);
+    await _refreshLookupCache();
+    if (!ref.mounted) return;
+    await loadUsers();
+    await refreshDirectoryCaches(ref, equipment: true, departments: true);
   }
 }
 

@@ -4,12 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/user_form_edit_intent_provider.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
-import '../../../../core/database/equipment_repository.dart';
 import '../../../../core/database/settings_repository.dart';
 import '../../../../core/database/user_delete_equipment_policy.dart';
 import '../../../../core/database/user_delete_phone_policy.dart';
-import '../../../../core/database/user_repository.dart';
-import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
@@ -18,11 +15,12 @@ import '../../models/department_model.dart';
 import '../../models/non_user_phone_entry.dart';
 import '../../models/user_catalog_mode.dart';
 import '../../models/user_directory_column.dart';
+import '../../providers/bulk_action_undo_provider.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../providers/directory_provider.dart';
-import '../../services/shared_asset_disconnect_apply.dart';
+import '../../services/user_bulk_deletion_runner.dart';
 import '../../services/user_deletion_messages.dart';
-import '../../services/user_deletion_undo_record.dart';
+import 'bulk_undo_bar.dart';
 import 'bulk_user_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
 import 'department_form_dialog.dart';
@@ -153,6 +151,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
             ],
           ),
         ),
+        const BulkUndoBar(scope: BulkUndoScope.users),
         Expanded(
           child: personal
               ? UsersDataTable(
@@ -319,240 +318,77 @@ class _UsersTabState extends ConsumerState<UsersTab>
     );
     if (ok != true || !context.mounted) return;
 
-    final ids = state.selectedIds.toList();
     final db = await DatabaseHelper.instance.database;
-    final userRepo = UserRepository(db);
-    final exclusivePhones = await userRepo.findExclusivePhonesForUserDelete(
-      ids,
-    );
-    final exclusiveEquipment = await userRepo
-        .findExclusiveEquipmentForUserDelete(ids);
-    final usersToDelete = selectedUsers;
+    final plan = await prepareUserBulkDeletion(db: db, users: selectedUsers);
+    final disconnectSession = plan.createDisconnectSession();
 
-    final originalUserPhones = <int, List<String>>{};
-    final originalUserEquipmentIds = <int, List<int>>{};
-    for (final u in usersToDelete) {
-      final uid = u.id;
-      if (uid == null) continue;
-      originalUserPhones[uid] = await userRepo.userPhoneNumbersOrdered(db, uid);
-      originalUserEquipmentIds[uid] = (await userRepo.equipmentIdsForUser(
-        uid,
-      )).toList();
-    }
-
-    final pendingPhoneBatches =
-        <({SharedAssetDisconnectBatchResult batch, int? sourceDepartmentId})>[];
-    if (exclusivePhones.isNotEmpty) {
+    final phoneBatches = <UserDisconnectBatch>[];
+    if (plan.exclusivePhones.isNotEmpty) {
       if (!context.mounted) return;
       final confirmed = await _collectExclusivePhoneDisconnectBatches(
         context,
-        exclusivePhones: exclusivePhones,
-        usersToDelete: usersToDelete,
-        onBatch: (batch, sourceDepartmentId) {
-          pendingPhoneBatches.add((
-            batch: batch,
-            sourceDepartmentId: sourceDepartmentId,
-          ));
-        },
+        exclusivePhones: plan.exclusivePhones,
+        usersToDelete: selectedUsers,
+        session: disconnectSession,
+        onBatch: (batch, sourceDepartmentId) => phoneBatches.add((
+          batch: batch,
+          sourceDepartmentId: sourceDepartmentId,
+        )),
       );
-      if (!context.mounted || !confirmed) return;
+      if (!context.mounted) return;
+      if (!confirmed) {
+        _showDeletionCancelledSnackBar(context, selectedUsers.length);
+        return;
+      }
     }
 
-    final pendingEquipmentBatches =
-        <({SharedAssetDisconnectBatchResult batch, int? sourceDepartmentId})>[];
-    if (exclusiveEquipment.isNotEmpty) {
+    final equipmentBatches = <UserDisconnectBatch>[];
+    if (plan.exclusiveEquipment.isNotEmpty) {
       if (!context.mounted) return;
       final confirmed = await _collectExclusiveEquipmentDisconnectBatches(
         context,
-        exclusiveEquipment: exclusiveEquipment,
-        usersToDelete: usersToDelete,
-        onBatch: (batch, sourceDepartmentId) {
-          pendingEquipmentBatches.add((
-            batch: batch,
-            sourceDepartmentId: sourceDepartmentId,
-          ));
-        },
+        exclusiveEquipment: plan.exclusiveEquipment,
+        usersToDelete: selectedUsers,
+        session: disconnectSession,
+        onBatch: (batch, sourceDepartmentId) => equipmentBatches.add((
+          batch: batch,
+          sourceDepartmentId: sourceDepartmentId,
+        )),
       );
-      if (!context.mounted || !confirmed) return;
+      if (!context.mounted) return;
+      if (!confirmed) {
+        _showDeletionCancelledSnackBar(context, selectedUsers.length);
+        return;
+      }
     }
 
     final notifier = ref.read(directoryProvider.notifier);
-    // Διαγραφή υπαλλήλων + διαθέσεις τηλεφώνων/εξοπλισμού σε ΜΙΑ συναλλαγή:
-    // διακοπή στη μέση δεν αφήνει διαγραμμένους υπαλλήλους με τα τηλέφωνά
-    // τους σε ενδιάμεση κατάσταση.
-    await db.transaction((txn) async {
-      await userRepo.deleteUsers(ids, executor: txn);
-      for (final pending in pendingPhoneBatches) {
-        await applyPersonalPhoneDisconnectBatch(
-          db,
-          pending.batch,
-          sourceDepartmentId: pending.sourceDepartmentId,
-          executor: txn,
-        );
-      }
-      for (final pending in pendingEquipmentBatches) {
-        await applyPersonalEquipmentDisconnectBatch(
-          db,
-          pending.batch,
-          sourceDepartmentId: pending.sourceDepartmentId,
-          executor: txn,
-        );
-      }
-    });
-    await notifier.finalizeExternalDeletion(usersToDelete);
-
-    final phoneDeptAdds = <PhoneDeptAdd>[];
-    final equipmentDeptSets = <EquipmentDeptSet>[];
-    final softDeletedPhoneNumbers = <String>[];
-    final softDeletedEquipmentCodes = <String>[];
-    final equipmentRepo = EquipmentRepository(db);
-
-    Future<int?> resolveTransferDeptId(SharedAssetTransferTarget target) async {
-      if (target.departmentId != null) return target.departmentId;
-      final name = target.newDepartmentName?.trim();
-      if (name == null || name.isEmpty) return null;
-      final key = SearchTextNormalizer.normalizeForSearch(name);
-      final rows = await db.query(
-        'departments',
-        columns: ['id'],
-        where: 'name_key = ? AND COALESCE(is_deleted, 0) = 0',
-        whereArgs: [key],
-        limit: 1,
-      );
-      if (rows.isEmpty) return null;
-      return rows.first['id'] as int?;
-    }
-
-    for (final pending in pendingPhoneBatches) {
-      final sourceDeptId = pending.sourceDepartmentId;
-      for (final phone in pending.batch.phonesToKeep) {
-        if (sourceDeptId != null) {
-          phoneDeptAdds.add(
-            PhoneDeptAdd(departmentId: sourceDeptId, phoneNumber: phone),
-          );
-        }
-      }
-      for (final entry in pending.batch.phoneTransfers.entries) {
-        final deptId = await resolveTransferDeptId(entry.value);
-        if (deptId != null) {
-          phoneDeptAdds.add(
-            PhoneDeptAdd(departmentId: deptId, phoneNumber: entry.key),
-          );
-        }
-      }
-      softDeletedPhoneNumbers.addAll(pending.batch.phonesToDelete);
-    }
-
-    for (final pending in pendingEquipmentBatches) {
-      final sourceDeptId = pending.sourceDepartmentId;
-      for (final code in pending.batch.equipmentToKeep) {
-        if (sourceDeptId == null) continue;
-        final eid = await equipmentRepo.getEquipmentIdByCode(code);
-        if (eid != null) {
-          equipmentDeptSets.add(
-            EquipmentDeptSet(equipmentId: eid, departmentId: sourceDeptId),
-          );
-        }
-      }
-      for (final entry in pending.batch.equipmentTransfers.entries) {
-        final deptId = await resolveTransferDeptId(entry.value);
-        if (deptId == null) continue;
-        final eid = await equipmentRepo.getEquipmentIdByCode(entry.key);
-        if (eid != null) {
-          equipmentDeptSets.add(
-            EquipmentDeptSet(equipmentId: eid, departmentId: deptId),
-          );
-        }
-      }
-      softDeletedEquipmentCodes.addAll(pending.batch.equipmentToDelete);
-    }
-
-    notifier.rememberUserDeletionUndo(
-      UserDeletionUndoRecord(
-        deletedUserIds: ids,
-        originalUserPhones: originalUserPhones,
-        originalUserEquipmentIds: originalUserEquipmentIds,
-        phoneDeptAdds: phoneDeptAdds,
-        equipmentDeptSets: equipmentDeptSets,
-        softDeletedPhoneNumbers: softDeletedPhoneNumbers,
-        softDeletedEquipmentCodes: softDeletedEquipmentCodes,
-      ),
+    final undoRecord = await applyUserBulkDeletion(
+      db: db,
+      plan: plan,
+      phoneBatches: phoneBatches,
+      equipmentBatches: equipmentBatches,
     );
+    await notifier.finalizeExternalDeletion(selectedUsers);
+    notifier.rememberUserDeletionUndo(undoRecord);
 
-    if (pendingPhoneBatches.isNotEmpty || pendingEquipmentBatches.isNotEmpty) {
+    if (phoneBatches.isNotEmpty || equipmentBatches.isNotEmpty) {
       await notifier.loadUsers();
       ref.invalidate(lookupServiceProvider);
       await ref.read(lookupServiceProvider.future);
     }
     if (!context.mounted) return;
+
     final deleted = ref.read(directoryProvider).lastDeleted ?? [];
     final names = deleted
         .map((u) => u.name?.trim().isEmpty ?? true ? '?' : u.name!)
         .toList();
-    final assetActions = <UserDeletionAssetAction>[];
-    for (final pending in pendingPhoneBatches) {
-      final batch = pending.batch;
-      for (final phone in batch.phoneTransfers.keys) {
-        assetActions.add(
-          UserDeletionAssetAction(
-            kind: UserDeletionAssetActionKind.transfer,
-            identifier: phone,
-            isPhone: true,
-          ),
-        );
-      }
-      for (final phone in batch.phonesToDelete) {
-        assetActions.add(
-          UserDeletionAssetAction(
-            kind: UserDeletionAssetActionKind.delete,
-            identifier: phone,
-            isPhone: true,
-          ),
-        );
-      }
-      for (final phone in batch.phonesToKeep) {
-        assetActions.add(
-          UserDeletionAssetAction(
-            kind: UserDeletionAssetActionKind.keep,
-            identifier: phone,
-            isPhone: true,
-          ),
-        );
-      }
-    }
-    for (final pending in pendingEquipmentBatches) {
-      final batch = pending.batch;
-      for (final code in batch.equipmentTransfers.keys) {
-        assetActions.add(
-          UserDeletionAssetAction(
-            kind: UserDeletionAssetActionKind.transfer,
-            identifier: code,
-            isPhone: false,
-          ),
-        );
-      }
-      for (final code in batch.equipmentToDelete) {
-        assetActions.add(
-          UserDeletionAssetAction(
-            kind: UserDeletionAssetActionKind.delete,
-            identifier: code,
-            isPhone: false,
-          ),
-        );
-      }
-      for (final code in batch.equipmentToKeep) {
-        assetActions.add(
-          UserDeletionAssetAction(
-            kind: UserDeletionAssetActionKind.keep,
-            identifier: code,
-            isPhone: false,
-          ),
-        );
-      }
-    }
     final message = userDeletionSummaryMessage(
       employeeNames: names,
-      assetActions: assetActions,
+      assetActions: userDeletionAssetActions(
+        phoneBatches: phoneBatches,
+        equipmentBatches: equipmentBatches,
+      ),
     );
     final tooltipAllNames = names.isEmpty ? null : names.join(', ');
 
@@ -628,10 +464,17 @@ class _UsersTabState extends ConsumerState<UsersTab>
     await ref.read(directoryProvider.notifier).loadUsers();
   }
 
+  void _showDeletionCancelledSnackBar(BuildContext context, int userCount) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(userDeletionCancelledMessage(userCount))),
+    );
+  }
+
   Future<bool> _collectExclusivePhoneDisconnectBatches(
     BuildContext context, {
     required List<ExclusivePhoneForUserDelete> exclusivePhones,
     required List<UserModel> usersToDelete,
+    required AssetDisconnectSession session,
     required void Function(
       SharedAssetDisconnectBatchResult batch,
       int? sourceDepartmentId,
@@ -676,6 +519,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
         availableDepartments: departments,
         mode: SharedAssetDisconnectMode.personalPhone,
         personalPhoneUserDisplayName: displayName,
+        session: session,
       );
       if (!context.mounted || batch == null) return false;
       onBatch(batch, first.departmentId);
@@ -687,6 +531,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
     BuildContext context, {
     required List<ExclusiveEquipmentForUserDelete> exclusiveEquipment,
     required List<UserModel> usersToDelete,
+    required AssetDisconnectSession session,
     required void Function(
       SharedAssetDisconnectBatchResult batch,
       int? sourceDepartmentId,
@@ -732,6 +577,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
         mode: SharedAssetDisconnectMode.personalEquipment,
         personalPhoneUserDisplayName: displayName,
         allowKeepInDepartment: true,
+        session: session,
       );
       if (!context.mounted || batch == null) return false;
       onBatch(batch, first.departmentId);

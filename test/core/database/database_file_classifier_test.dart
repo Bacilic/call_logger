@@ -104,31 +104,18 @@ void main() {
       expect(await classifyDatabaseFile(dbPath), DatabaseFileKind.empty);
     });
 
-    test(
-      'δ2) υπογραφή Λάμπας μόνο ως όψεις (views) → όχι empty',
-      () async {
-        final dbPath = await _createTempDb(tempDir, 'lamp_views.db', (
-          db,
-        ) async {
-          await db.execute(
-            'CREATE VIEW owners AS SELECT 1 AS owner WHERE 0',
-          );
-          await db.execute(
-            'CREATE VIEW offices AS SELECT 1 AS office WHERE 0',
-          );
-          await db.execute(
-            'CREATE VIEW data_issues AS SELECT 1 AS id WHERE 0',
-          );
-          await db.execute(
-            'CREATE VIEW equipment AS SELECT 1 AS code WHERE 0',
-          );
-        });
+    test('δ2) υπογραφή Λάμπας μόνο ως όψεις (views) → όχι empty', () async {
+      final dbPath = await _createTempDb(tempDir, 'lamp_views.db', (db) async {
+        await db.execute('CREATE VIEW owners AS SELECT 1 AS owner WHERE 0');
+        await db.execute('CREATE VIEW offices AS SELECT 1 AS office WHERE 0');
+        await db.execute('CREATE VIEW data_issues AS SELECT 1 AS id WHERE 0');
+        await db.execute('CREATE VIEW equipment AS SELECT 1 AS code WHERE 0');
+      });
 
-        final kind = await classifyDatabaseFile(dbPath);
-        expect(kind, isNot(DatabaseFileKind.empty));
-        expect(kind, DatabaseFileKind.lamp);
-      },
-    );
+      final kind = await classifyDatabaseFile(dbPath);
+      expect(kind, isNot(DatabaseFileKind.empty));
+      expect(kind, DatabaseFileKind.lamp);
+    });
 
     test('ι) υβρίδιο calls + υπογραφή Λάμπας → hybrid', () async {
       final dbPath = await _createTempDb(tempDir, 'hybrid.db', (db) async {

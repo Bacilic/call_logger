@@ -91,7 +91,11 @@ void main() {
   group('Επιλογείς άλματος', () {
     testWidgets('επιλογή υπαλλήλου: fallback «Χωρίς όνομα» και επιστροφή '
         'του επιλεγμένου', (tester) async {
-      final withName = UserModel(id: 1, firstName: 'Βαρβάρα', lastName: 'Ψαρρά');
+      final withName = UserModel(
+        id: 1,
+        firstName: 'Βαρβάρα',
+        lastName: 'Ψαρρά',
+      );
       final nameless = UserModel(id: 2);
       UserModel? result;
       await _pumpHost(tester, (context) async {

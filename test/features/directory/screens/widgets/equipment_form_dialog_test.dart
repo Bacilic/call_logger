@@ -9,6 +9,7 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/models/remote_tool_role.dart';
 import 'package:call_logger/core/widgets/info_hint_icon.dart';
+import 'package:call_logger/core/widgets/lexicon_spell_text_form_field.dart';
 import 'package:call_logger/core/widgets/remote_tool_icon.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
@@ -240,6 +241,43 @@ void main() {
   registerCallLoggerIsolatedDatabaseHooks();
 
   group('Φόρμα εξοπλισμού — χαρακτηρισμός (widget)', () {
+    // Ο εγγενής ορθογραφικός έλεγχος είναι απενεργοποιημένος στα Windows· το
+    // πεδίο πρέπει να χρησιμοποιεί το πεδίο-συστατικό του Λεξικού.
+    //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "Τοποθεσία"
+    testWidgets('η «Τοποθεσία» έχει ορθογραφικό έλεγχο Λεξικού', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late EquipmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
+        await _openEquipmentFormInDialog(tester, container, notifier: notifier);
+      });
+
+      expect(find.text(_kNewEquipmentTitle), findsOneWidget);
+
+      final locationField = find.ancestor(
+        of: find.text('Τοποθεσία'),
+        matching: find.byType(LexiconSpellTextFormField),
+      );
+      expect(
+        locationField,
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Η «Τοποθεσία» πρέπει να χρησιμοποιεί LexiconSpellTextFormField — ο '
+          'εγγενής έλεγχος των Windows δεν λειτουργεί ποτέ',
+        ),
+      );
+
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+
     testWidgets(
       'δημιουργία: διάλογος αποδίδεται και η αποθήκευση μπλοκάρεται χωρίς κωδικό',
       (tester) async {

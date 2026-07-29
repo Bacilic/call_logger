@@ -87,28 +87,30 @@ void main() {
       );
     });
 
-    test('closeTask: κλείσιμο και audit μαζί, με το πραγματικό παλιό status',
-        () async {
-      final id = await insertOpenTask();
-      await db.delete('audit_log');
+    test(
+      'closeTask: κλείσιμο και audit μαζί, με το πραγματικό παλιό status',
+      () async {
+        final id = await insertOpenTask();
+        await db.delete('audit_log');
 
-      await tasks.closeTask(id, 'η λύση');
+        await tasks.closeTask(id, 'η λύση');
 
-      final row = (await db.query(
-        'tasks',
-        where: 'id = ?',
-        whereArgs: [id],
-      )).first;
-      expect(row['status'], 'closed');
-      expect(row['solution_notes'], 'η λύση');
+        final row = (await db.query(
+          'tasks',
+          where: 'id = ?',
+          whereArgs: [id],
+        )).first;
+        expect(row['status'], 'closed');
+        expect(row['solution_notes'], 'η λύση');
 
-      final audits = await db.query(
-        'audit_log',
-        where: "action = 'ΚΛΕΙΣΙΜΟ ΕΚΚΡΕΜΟΤΗΤΑΣ'",
-      );
-      expect(audits, hasLength(1));
-      expect(decodeOldValues(audits.single)['status'], 'open');
-    });
+        final audits = await db.query(
+          'audit_log',
+          where: "action = 'ΚΛΕΙΣΙΜΟ ΕΚΚΡΕΜΟΤΗΤΑΣ'",
+        );
+        expect(audits, hasLength(1));
+        expect(decodeOldValues(audits.single)['status'], 'open');
+      },
+    );
 
     test('updateTask: το «πριν» του audit είναι η τρέχουσα εγγραφή της βάσης, '
         'όχι το αντικείμενο του καλούντα', () async {
@@ -135,42 +137,44 @@ void main() {
       expect(decodeOldValues(audits.single)['status'], 'snoozed');
     });
 
-    test('updateCall: το «πριν» του audit είναι η τρέχουσα εγγραφή της βάσης',
-        () async {
-      final calls = CallsRepository(db);
-      final id = await calls.insertCall(
-        CallModel(
-          date: '2026-07-28',
-          time: '10:00',
-          issue: 'αρχικό θέμα',
-          status: 'pending',
-        ),
-      );
-      await db.update(
-        'calls',
-        {'issue': 'αλλαγμένο από συνάδελφο'},
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-      await db.delete('audit_log');
+    test(
+      'updateCall: το «πριν» του audit είναι η τρέχουσα εγγραφή της βάσης',
+      () async {
+        final calls = CallsRepository(db);
+        final id = await calls.insertCall(
+          CallModel(
+            date: '2026-07-28',
+            time: '10:00',
+            issue: 'αρχικό θέμα',
+            status: 'pending',
+          ),
+        );
+        await db.update(
+          'calls',
+          {'issue': 'αλλαγμένο από συνάδελφο'},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        await db.delete('audit_log');
 
-      await calls.updateCall(
-        CallModel(
-          id: id,
-          date: '2026-07-28',
-          time: '10:00',
-          issue: 'τελικό θέμα',
-          status: 'pending',
-          lansweeperState: 'unsent',
-        ),
-      );
+        await calls.updateCall(
+          CallModel(
+            id: id,
+            date: '2026-07-28',
+            time: '10:00',
+            issue: 'τελικό θέμα',
+            status: 'pending',
+            lansweeperState: 'unsent',
+          ),
+        );
 
-      final audits = await db.query('audit_log');
-      expect(audits, hasLength(1));
-      expect(
-        decodeOldValues(audits.single)['issue'],
-        'αλλαγμένο από συνάδελφο',
-      );
-    });
+        final audits = await db.query('audit_log');
+        expect(audits, hasLength(1));
+        expect(
+          decodeOldValues(audits.single)['issue'],
+          'αλλαγμένο από συνάδελφο',
+        );
+      },
+    );
   });
 }

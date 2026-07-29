@@ -212,7 +212,9 @@ void main() {
       );
     });
 
-    testWidgets('η αντιγραφή του σφάλματος παραμένει διαθέσιμη', (tester) async {
+    testWidgets('η αντιγραφή του σφάλματος παραμένει διαθέσιμη', (
+      tester,
+    ) async {
       await _pumpErrorScreen(tester, missingFileResult());
 
       expect(_findTonalByLabel('Αντιγραφή πλήρους σφάλματος'), findsOneWidget);
@@ -237,46 +239,38 @@ void main() {
       },
     );
 
-    testWidgets(
-      'με διαθέσιμο installer: εμφανίζεται το κουμπί Επιδιόρθωση',
-      (tester) async {
-        await _pumpErrorScreen(
-          tester,
-          missingFileResult(),
-          probeAvailableInstaller: () async => _testInstallerManifest,
-        );
+    testWidgets('με διαθέσιμο installer: εμφανίζεται το κουμπί Επιδιόρθωση', (
+      tester,
+    ) async {
+      await _pumpErrorScreen(
+        tester,
+        missingFileResult(),
+        probeAvailableInstaller: () async => _testInstallerManifest,
+      );
 
-        expect(
-          find.textContaining('Επιδιόρθωση εγκατάστασης'),
-          findsOneWidget,
-        );
-        expect(find.textContaining('0.21.3'), findsWidgets);
-      },
-    );
+      expect(find.textContaining('Επιδιόρθωση εγκατάστασης'), findsOneWidget);
+      expect(find.textContaining('0.21.3'), findsWidgets);
+    });
 
-    testWidgets(
-      'καθησυχαστικό κείμενο μόνο στο missingApplicationFile',
-      (tester) async {
-        await _pumpErrorScreen(tester, missingFileResult());
-        expect(
-          find.textContaining('Τα δεδομένα σας είναι ασφαλή'),
-          findsOneWidget,
-        );
+    testWidgets('καθησυχαστικό κείμενο μόνο στο missingApplicationFile', (
+      tester,
+    ) async {
+      await _pumpErrorScreen(tester, missingFileResult());
+      expect(
+        find.textContaining('Τα δεδομένα σας είναι ασφαλή'),
+        findsOneWidget,
+      );
 
-        await _pumpErrorScreen(
-          tester,
-          const DatabaseInitResult(
-            status: DatabaseStatus.applicationError,
-            message: 'μετανάστευση σχήματος',
-            recoveryKind: DatabaseInitRecoveryKind.corruptedOrMigration,
-          ),
-        );
-        expect(
-          find.textContaining('Τα δεδομένα σας είναι ασφαλή'),
-          findsNothing,
-        );
-      },
-    );
+      await _pumpErrorScreen(
+        tester,
+        const DatabaseInitResult(
+          status: DatabaseStatus.applicationError,
+          message: 'μετανάστευση σχήματος',
+          recoveryKind: DatabaseInitRecoveryKind.corruptedOrMigration,
+        ),
+      );
+      expect(find.textContaining('Τα δεδομένα σας είναι ασφαλή'), findsNothing);
+    });
   });
 
   group('κουμπί Επαναφοράς από αντίγραφο', () {

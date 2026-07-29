@@ -104,15 +104,12 @@ class SettingsServiceAnalyticsFilters {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKey(_keyTaskAnalyticsDatePreset), preset);
     if (preset == 'custom' && customFrom != null && customTo != null) {
-      // ΠΡΟΣΟΧΗ: εδώ το κλειδί γράφεται χωρίς πρόθεμα προφίλ ενώ η ανάγνωση
-      // το περιμένει με πρόθεμα — διατηρήθηκε ως έχει στη μετατροπή
-      // (καταγεγραμμένο εύρημα, εκκρεμεί ξεχωριστή διόρθωση).
       await prefs.setString(
-        _keyTaskAnalyticsDateFrom,
+        _prefKey(_keyTaskAnalyticsDateFrom),
         _formatStoredDate(customFrom),
       );
       await prefs.setString(
-        _keyTaskAnalyticsDateTo,
+        _prefKey(_keyTaskAnalyticsDateTo),
         _formatStoredDate(customTo),
       );
     } else {

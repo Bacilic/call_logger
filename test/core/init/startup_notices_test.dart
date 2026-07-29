@@ -38,48 +38,50 @@ void main() {
     'The specified module could not be found. (error code: 126)',
   );
 
-  test('Α: CrashLogService.initialize δεν καταπίνει όταν το logs είναι αρχείο', () async {
-    final logsFile = File(p.join(tempRoot.path, 'logs'));
-    await logsFile.writeAsString('not a directory');
+  test(
+    'Α: CrashLogService.initialize δεν καταπίνει όταν το logs είναι αρχείο',
+    () async {
+      final logsFile = File(p.join(tempRoot.path, 'logs'));
+      await logsFile.writeAsString('not a directory');
 
-    final databasePath = p.join(tempRoot.path, 'engine.db');
+      final databasePath = p.join(tempRoot.path, 'engine.db');
 
-    await expectLater(
-      () => CrashLogService.initialize(
+      await expectLater(
+        () => CrashLogService.initialize(
+          databasePath: databasePath,
+          appVersion: '0.0.0-test',
+          retentionCount: 3,
+        ),
+        throwsA(isA<Exception>()),
+      );
+    },
+  );
+
+  test(
+    'Β: end-to-end — recordStartupNotice + flush γράφει στο ημερήσιο log',
+    () async {
+      final databasePath = p.join(tempRoot.path, 'engine.db');
+      await CrashLogService.initialize(
         databasePath: databasePath,
         appVersion: '0.0.0-test',
         retentionCount: 3,
-      ),
-      throwsA(isA<Exception>()),
-    );
-  });
+      );
 
-  test('Β: end-to-end — recordStartupNotice + flush γράφει στο ημερήσιο log', () async {
-    final databasePath = p.join(tempRoot.path, 'engine.db');
-    await CrashLogService.initialize(
-      databasePath: databasePath,
-      appVersion: '0.0.0-test',
-      retentionCount: 3,
-    );
+      recordStartupNotice('Δοκιμή φάσης', StateError('σκόπιμη αποτυχία'));
+      flushStartupNoticesToCrashLog();
 
-    recordStartupNotice(
-      'Δοκιμή φάσης',
-      StateError('σκόπιμη αποτυχία'),
-    );
-    flushStartupNoticesToCrashLog();
+      final logsDir = CrashLogService.logsDirectoryForDatabasePath(
+        databasePath,
+      );
+      final todayLog = File(
+        p.join(logsDir, CrashLogService.dailyLogFileName(DateTime.now())),
+      );
 
-    final logsDir = CrashLogService.logsDirectoryForDatabasePath(databasePath);
-    final todayLog = File(
-      p.join(
-        logsDir,
-        CrashLogService.dailyLogFileName(DateTime.now()),
-      ),
-    );
-
-    final content = await todayLog.readAsString();
-    expect(content, contains('Δοκιμή φάσης'));
-    expect(content, contains('σκόπιμη αποτυχία'));
-  });
+      final content = await todayLog.readAsString();
+      expect(content, contains('Δοκιμή φάσης'));
+      expect(content, contains('σκόπιμη αποτυχία'));
+    },
+  );
 
   test('Γ: χωρίς διαθέσιμο ημερολόγιο, flush δεν αδειάζει την ουρά', () async {
     recordStartupNotice(
@@ -94,53 +96,52 @@ void main() {
     expect(report, contains('Φάση χωρίς ημερολόγιο'));
   });
 
-  test('Δ: end-to-end — το AppInitializer ενσωματώνει startupNotices στο details', () async {
-    clearStartupNotices();
-    clearStartupEngineFailure();
+  test(
+    'Δ: end-to-end — το AppInitializer ενσωματώνει startupNotices στο details',
+    () async {
+      clearStartupNotices();
+      clearStartupEngineFailure();
 
-    initSqfliteFfiForTests();
-    SharedPreferences.setMockInitialValues({});
+      initSqfliteFfiForTests();
+      SharedPreferences.setMockInitialValues({});
 
-    await DatabaseHelper.instance.closeConnection();
-    DatabaseHelper.releaseTestDatabaseBinding();
+      await DatabaseHelper.instance.closeConnection();
+      DatabaseHelper.releaseTestDatabaseBinding();
 
-    final dbPath = p.join(tempRoot.path, 'engine_failure.db');
-    await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
-    await SettingsService().setDatabasePath(dbPath);
+      final dbPath = p.join(tempRoot.path, 'engine_failure.db');
+      await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
+      await SettingsService().setDatabasePath(dbPath);
 
-    recordStartupEngineFailure(missingSqliteDllError, StackTrace.current);
-    recordStartupNotice(
-      'Δοκιμή φάσης',
-      StateError('σκόπιμη αποτυχία'),
-    );
+      recordStartupEngineFailure(missingSqliteDllError, StackTrace.current);
+      recordStartupNotice('Δοκιμή φάσης', StateError('σκόπιμη αποτυχία'));
 
-    final result = await AppInitializer.initialize();
-    expect(result.success, isFalse);
-    expect(result.details, contains('Δοκιμή φάσης'));
-  });
+      final result = await AppInitializer.initialize();
+      expect(result.success, isFalse);
+      expect(result.details, contains('Δοκιμή φάσης'));
+    },
+  );
 
-  test('Ε: end-to-end — σε επιτυχία, τα startup notices δεν μολύνουν το details', () async {
-    clearStartupNotices();
-    clearStartupEngineFailure();
+  test(
+    'Ε: end-to-end — σε επιτυχία, τα startup notices δεν μολύνουν το details',
+    () async {
+      clearStartupNotices();
+      clearStartupEngineFailure();
 
-    initSqfliteFfiForTests();
-    SharedPreferences.setMockInitialValues({});
+      initSqfliteFfiForTests();
+      SharedPreferences.setMockInitialValues({});
 
-    await DatabaseHelper.instance.closeConnection();
-    DatabaseHelper.releaseTestDatabaseBinding();
+      await DatabaseHelper.instance.closeConnection();
+      DatabaseHelper.releaseTestDatabaseBinding();
 
-    final dbPath = p.join(tempRoot.path, 'success.db');
-    await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
-    await SettingsService().setDatabasePath(dbPath);
+      final dbPath = p.join(tempRoot.path, 'success.db');
+      await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
+      await SettingsService().setDatabasePath(dbPath);
 
-    recordStartupNotice(
-      'Μηχανή δεν απέτυχε',
-      StateError('σκόπιμη αποτυχία'),
-    );
+      recordStartupNotice('Μηχανή δεν απέτυχε', StateError('σκόπιμη αποτυχία'));
 
-    final result = await AppInitializer.initialize();
-    expect(result.success, isTrue);
-    expect(result.details ?? '', isNot(contains('Μηχανή δεν απέτυχε')));
-  });
+      final result = await AppInitializer.initialize();
+      expect(result.success, isTrue);
+      expect(result.details ?? '', isNot(contains('Μηχανή δεν απέτυχε')));
+    },
+  );
 }
-

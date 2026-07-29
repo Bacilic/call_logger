@@ -503,7 +503,8 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
       });
       return;
     }
-    final template = await SettingsService().catalogs.getPublishCliCommandTemplate();
+    final template = await SettingsService().catalogs
+        .getPublishCliCommandTemplate();
     final command = buildPublishCliCommand(template, preview.bumpKind, folder);
     await Clipboard.setData(ClipboardData(text: command));
     if (!mounted) return;
@@ -514,7 +515,8 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   }
 
   Future<void> _openCliSettingsDialog() async {
-    final initial = await SettingsService().catalogs.getPublishCliCommandTemplate();
+    final initial = await SettingsService().catalogs
+        .getPublishCliCommandTemplate();
     if (!mounted) return;
     final saved = await showDialog<String>(
       context: context,

@@ -33,17 +33,19 @@ void main() {
       expect(dir, p.normalize(tempDir.path));
     });
 
-    test('χωρίς hint επιστρέφεται ο αποθηκευμένος φάκελος αν υπάρχει',
-        () async {
-      const memory = PickerLocationMemory('demo');
-      final picked = File(p.join(tempDir.path, 'κάτοψη.png'));
-      await picked.writeAsString('x');
-      await memory.remember(picked.path);
+    test(
+      'χωρίς hint επιστρέφεται ο αποθηκευμένος φάκελος αν υπάρχει',
+      () async {
+        const memory = PickerLocationMemory('demo');
+        final picked = File(p.join(tempDir.path, 'κάτοψη.png'));
+        await picked.writeAsString('x');
+        await memory.remember(picked.path);
 
-      final dir = await memory.initialDirectory();
+        final dir = await memory.initialDirectory();
 
-      expect(dir, p.normalize(tempDir.path));
-    });
+        expect(dir, p.normalize(tempDir.path));
+      },
+    );
 
     test('αποθηκευμένος φάκελος που δεν υπάρχει πια δίνει null '
         '(προεπιλογή Windows)', () async {
@@ -61,17 +63,19 @@ void main() {
       expect(await memory.initialDirectory(), isNull);
     });
 
-    test('κάθε λειτουργία έχει δική της μνήμη — δεν μολύνει τις άλλες',
-        () async {
-      const imageMemory = PickerLocationMemory('building_map_image');
-      const lexiconMemory = PickerLocationMemory('lexicon_txt');
-      final picked = File(p.join(tempDir.path, 'κάτοψη.png'));
-      await picked.writeAsString('x');
-      await imageMemory.remember(picked.path);
+    test(
+      'κάθε λειτουργία έχει δική της μνήμη — δεν μολύνει τις άλλες',
+      () async {
+        const imageMemory = PickerLocationMemory('building_map_image');
+        const lexiconMemory = PickerLocationMemory('lexicon_txt');
+        final picked = File(p.join(tempDir.path, 'κάτοψη.png'));
+        await picked.writeAsString('x');
+        await imageMemory.remember(picked.path);
 
-      expect(await imageMemory.initialDirectory(), p.normalize(tempDir.path));
-      expect(await lexiconMemory.initialDirectory(), isNull);
-    });
+        expect(await imageMemory.initialDirectory(), p.normalize(tempDir.path));
+        expect(await lexiconMemory.initialDirectory(), isNull);
+      },
+    );
   });
 
   group('PickerLocationMemory.remember', () {

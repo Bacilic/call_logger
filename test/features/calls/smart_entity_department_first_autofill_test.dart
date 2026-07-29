@@ -141,9 +141,7 @@ Future<ProviderContainer> _containerShared({
           departmentId: deptId,
         ),
     ],
-    departmentRows: [
-      DepartmentModel(id: deptId, name: 'Γραμματεία Κίνησης'),
-    ],
+    departmentRows: [DepartmentModel(id: deptId, name: 'Γραμματεία Κίνησης')],
     userToEquipmentIds: {
       if (personalEquipment) userId: [95],
     },
@@ -169,32 +167,35 @@ SmartEntitySelectorState _selectKinisis(ProviderContainer container) {
 
 void main() {
   group('Μονοπρόσωπο τμήμα με ΚΟΙΝΟΧΡΗΣΤΑ στοιχεία', () {
-    test('κοινόχρηστο τηλέφωνο + κοινόχρηστος εξοπλισμός → όλα γεμίζουν', () async {
-      final container = await _containerShared(
-        personalPhone: false,
-        departmentPhones: ['2565'],
-        personalEquipment: false,
-        departmentEquipment: true,
-      );
-      addTearDown(container.dispose);
-      final s = _selectKinisis(container);
+    test(
+      'κοινόχρηστο τηλέφωνο + κοινόχρηστος εξοπλισμός → όλα γεμίζουν',
+      () async {
+        final container = await _containerShared(
+          personalPhone: false,
+          departmentPhones: ['2565'],
+          personalEquipment: false,
+          departmentEquipment: true,
+        );
+        addTearDown(container.dispose);
+        final s = _selectKinisis(container);
 
-      expect(s.selectedCaller?.id, 85);
-      expect(
-        s.selectedPhone,
-        '2565',
-        reason: greekExpectMsg(
-          'Το κοινόχρηστο τηλέφωνο μετράει σαν τηλέφωνο του τμήματος',
-        ),
-      );
-      expect(
-        s.equipmentText,
-        '5002',
-        reason: greekExpectMsg(
-          'Ο κοινόχρηστος εξοπλισμός μετράει σαν εξοπλισμός του τμήματος',
-        ),
-      );
-    });
+        expect(s.selectedCaller?.id, 85);
+        expect(
+          s.selectedPhone,
+          '2565',
+          reason: greekExpectMsg(
+            'Το κοινόχρηστο τηλέφωνο μετράει σαν τηλέφωνο του τμήματος',
+          ),
+        );
+        expect(
+          s.equipmentText,
+          '5002',
+          reason: greekExpectMsg(
+            'Ο κοινόχρηστος εξοπλισμός μετράει σαν εξοπλισμός του τμήματος',
+          ),
+        );
+      },
+    );
 
     test('μεικτό: εξοπλισμός του υπαλλήλου + κοινόχρηστο τηλέφωνο', () async {
       final container = await _containerShared(
@@ -211,7 +212,9 @@ void main() {
       expect(
         s.equipmentText,
         '5001',
-        reason: greekExpectMsg('Ο προσωπικός εξοπλισμός του μοναδικού υπαλλήλου'),
+        reason: greekExpectMsg(
+          'Ο προσωπικός εξοπλισμός του μοναδικού υπαλλήλου',
+        ),
       );
     });
 
@@ -273,9 +276,7 @@ void main() {
       addTearDown(container.dispose);
       final n = container.read(callSmartEntityProvider.notifier);
 
-      n.selectDepartment(
-        DepartmentModel(id: _kBiochemId, name: _kBiochemName),
-      );
+      n.selectDepartment(DepartmentModel(id: _kBiochemId, name: _kBiochemName));
       final s = container.read(callSmartEntityProvider);
 
       expect(
@@ -342,9 +343,7 @@ void main() {
       addTearDown(container.dispose);
       final n = container.read(callSmartEntityProvider.notifier);
 
-      n.selectDepartment(
-        DepartmentModel(id: _kCrowdedId, name: _kCrowdedName),
-      );
+      n.selectDepartment(DepartmentModel(id: _kCrowdedId, name: _kCrowdedName));
       final s = container.read(callSmartEntityProvider);
 
       expect(
@@ -387,9 +386,7 @@ void main() {
       addTearDown(container.dispose);
       final n = container.read(callSmartEntityProvider.notifier);
 
-      n.selectDepartment(
-        DepartmentModel(id: _kBiochemId, name: _kBiochemName),
-      );
+      n.selectDepartment(DepartmentModel(id: _kBiochemId, name: _kBiochemName));
       n.updateDepartmentText('');
       final s = container.read(callSmartEntityProvider);
 
@@ -423,9 +420,7 @@ void main() {
       addTearDown(container.dispose);
       final n = container.read(callSmartEntityProvider.notifier);
 
-      n.selectDepartment(
-        DepartmentModel(id: _kBiochemId, name: _kBiochemName),
-      );
+      n.selectDepartment(DepartmentModel(id: _kBiochemId, name: _kBiochemName));
       n.updatePhone(null);
       final s = container.read(callSmartEntityProvider);
 
@@ -459,9 +454,7 @@ void main() {
       final n = container.read(callSmartEntityProvider.notifier);
 
       n.updateCallerDisplayText('Κάποιος Άλλος');
-      n.selectDepartment(
-        DepartmentModel(id: _kBiochemId, name: _kBiochemName),
-      );
+      n.selectDepartment(DepartmentModel(id: _kBiochemId, name: _kBiochemName));
       final s = container.read(callSmartEntityProvider);
 
       expect(
