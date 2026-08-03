@@ -118,12 +118,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   /// Καταγράφει νέες παράγωγες εγγραφές audit μετά από associate (όχι κύριες κλήσης/εκκρεμότητας).
   Future<void> trackDerivativeAuditsSince(int sinceId) async {
     final db = await DatabaseHelper.instance.database;
-    final rows = await db.query(
-      'audit_log',
-      columns: ['id', 'action'],
-      where: 'id > ?',
-      whereArgs: [sinceId],
-    );
+    final rows = await PendingAuditOriginRows.auditRowsSince(db, sinceId);
     for (final row in rows) {
       final action = (row['action'] as String?)?.trim() ?? '';
       if (_kMainAuditActionsWithoutOrigin.contains(action)) continue;

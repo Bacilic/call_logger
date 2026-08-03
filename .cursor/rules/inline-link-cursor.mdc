@@ -1,0 +1,64 @@
+---
+description: Σύνδεσμος μέσα σε παράγραφο = TextSpan με recognizer· ποτέ WidgetSpan με πατήσιμο widget
+alwaysApply: true
+---
+
+# Σύνδεσμοι μέσα σε κείμενο (inline links)
+
+## Ο κανόνας
+
+Όταν ένα κομμάτι κειμένου μέσα σε `Text.rich` / `RichText` πρέπει να **πατιέται**,
+γράφεται ως **`TextSpan` με `TapGestureRecognizer`**.
+
+**ΠΟΤΕ** ως `WidgetSpan` που περιέχει `InkWell`, `GestureDetector` ή `MouseRegion`.
+
+```dart
+// ΣΩΣΤΟ — ο δείκτης γίνεται χεράκι μόνος του
+TextSpan(
+  text: label,
+  style: linkStyle,
+  recognizer: TapGestureRecognizer()..onTap = onTap,
+)
+
+// ΛΑΘΟΣ — ο δείκτης μένει βέλος στα Windows
+WidgetSpan(child: InkWell(onTap: onTap, child: Text(label)))
+```
+
+## Γιατί
+
+Το Flutter δίνει **αυτόματα** `SystemMouseCursors.click` σε κάθε `TextSpan` που έχει
+recognizer. Σε `WidgetSpan` μέσα σε παράγραφο το hover **φτάνει** στο παιδί — το
+`Tooltip` εμφανίζεται κανονικά — αλλά ο δείκτης δεν αλλάζει: μένει βέλος.
+
+Αυτό κόστισε λάθος διάγνωση (30/07/2026): φάνηκε σαν να μην υποστηρίζουν τα Windows
+τον δείκτη συνδέσμου, ενώ το `SystemMouseCursors.click` δουλεύει μια χαρά — το
+αποδεικνύουν οι σύνδεσμοι των σημειώσεων και των εκκρεμοτήτων.
+
+**Διαγνωστικό σημάδι:** αν το tooltip εμφανίζεται αλλά ο δείκτης μένει βέλος, το
+πρόβλημα είναι το `WidgetSpan`, όχι το λειτουργικό.
+
+**Μπόνους:** το `TextSpan` στοιχίζεται σωστά μέσα στη γραμμή· το `WidgetSpan`
+μπαίνει ως ξεχωριστό κουτί με δικό του padding και φαίνεται μετατοπισμένο.
+
+## Κύκλος ζωής του recognizer
+
+Ο `TapGestureRecognizer` θέλει `dispose`. Ο κάτοχος είναι `StatefulWidget` που τον
+απελευθερώνει στο δικό του `dispose` και πριν φτιάξει νέον σε επόμενο build.
+
+Υπάρχοντα παραδείγματα στο έργο:
+- `lib/core/widgets/linkable_span_engine.dart` — σύνδεσμοι σημειώσεων/εκκρεμοτήτων
+  (κρατά λίστα recognizers, ο κάτοχος καλεί `dispose`).
+- `lib/features/history/widgets/lansweeper/lansweeper_ticket_link.dart` —
+  `LansweeperTicketRichText` (ένας recognizer, dispose στο State).
+
+## Πού ΔΕΝ ισχύει
+
+Σε **αυτόνομα widgets** του δέντρου (όχι μέσα σε παράγραφο) το `InkWell` ή το
+`MouseRegion(cursor: SystemMouseCursors.click)` δουλεύουν κανονικά — π.χ.
+`version_chip.dart`, η διαδρομή φακέλου logs στις Ρυθμίσεις.
+
+## Τι ΔΕΝ ελέγχεται με τεστ
+
+Το σχήμα του δείκτη είναι native και **δεν το βλέπει κανένα widget test**. Ελέγχεται
+ότι ο σύνδεσμος **πατιέται** (υπάρχει recognizer στο span) — όχι τι ζωγραφίζουν τα
+Windows. Το ίδιο το σχήμα επαληθεύεται μόνο οπτικά.

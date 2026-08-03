@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/calls/provider/call_entry_provider.dart';
 import 'nav_rail_attention_badge.dart';
+import 'compact_tooltip.dart';
 
 /// Εικονίδιο πλοήγησης «Κλήσεις» — ίδιο στυλ μπάλωματος με τις εκκρεμότητες.
 class CallsNavigationIcon extends ConsumerWidget {
@@ -22,7 +23,7 @@ class CallsNavigationIcon extends ConsumerWidget {
     );
     final showBadge = hasActiveCall && !isOnCallsScreen;
 
-    final core = Tooltip(
+    final core = CompactTooltip(
       waitDuration: const Duration(milliseconds: 600),
       showDuration: const Duration(seconds: 4),
       message:
@@ -50,7 +51,7 @@ class TasksNavigationIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final core = Tooltip(
+    final core = CompactTooltip(
       waitDuration: const Duration(milliseconds: 600),
       showDuration: const Duration(seconds: 4),
       message:
@@ -87,7 +88,7 @@ class DictionaryNavigationIcon extends StatelessWidget {
             ],
           )
         : book;
-    return Tooltip(
+    return CompactTooltip(
       waitDuration: const Duration(milliseconds: 600),
       showDuration: const Duration(seconds: 4),
       message: showWarning
@@ -120,7 +121,7 @@ class LampNavigationIcon extends StatelessWidget {
             ],
           )
         : lamp;
-    return Tooltip(
+    return CompactTooltip(
       waitDuration: const Duration(milliseconds: 600),
       showDuration: const Duration(seconds: 4),
       message: showWarning

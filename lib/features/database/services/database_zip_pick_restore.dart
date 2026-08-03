@@ -23,7 +23,7 @@ class DatabaseZipPickRestore {
     bool Function(String absolutePath)? fileExists,
   }) {
     final dir = p.dirname(zipPath);
-    final usable = _usableDatabaseFileName(preferredDatabaseFileName);
+    final usable = usableDatabaseFileName(preferredDatabaseFileName);
     final fileName = usable ?? restoredDatabaseFileName;
 
     bool exists(String absolutePath) {
@@ -50,7 +50,9 @@ class DatabaseZipPickRestore {
     return p.join(dir, uniqueName);
   }
 
-  static String? _usableDatabaseFileName(String? raw) {
+  /// Καθαρό όνομα αρχείου βάσης από ελεύθερο κείμενο (basename, κατάληξη
+  /// `.db`), ή `null` όταν δεν προκύπτει αξιοποιήσιμο όνομα.
+  static String? usableDatabaseFileName(String? raw) {
     final trimmed = raw?.trim() ?? '';
     if (trimmed.isEmpty) return null;
     final base = p.basename(trimmed.replaceAll('\\', '/'));

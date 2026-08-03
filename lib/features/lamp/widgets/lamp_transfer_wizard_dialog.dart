@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/lamp_migration_service.dart';
+import '../services/lamp_owner_conflict_messages.dart';
 import '../services/lamp_transfer_preview.dart';
 import 'lamp_transfer_operations_preview_panel.dart';
 
@@ -106,6 +107,10 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
 
     setState(() => _saving = true);
     try {
+      final conflictTargetLabel = lampConflictAssignTargetLabel(
+        target: draft.target,
+        formValues: formValues,
+      );
       List<LampOwnerConflictDecision>? ownerConflictDecisions;
       if (draft.target == LampTransferTarget.owner) {
         final conflicts = await widget.service.detectOwnerConflicts(
@@ -113,7 +118,10 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
           selectedCandidateId: _selectedCandidateId,
         );
         if (conflicts.isNotEmpty) {
-          ownerConflictDecisions = await _showOwnerConflictsDialog(conflicts);
+          ownerConflictDecisions = await _showOwnerConflictsDialog(
+            conflicts,
+            conflictTargetLabel,
+          );
           if (ownerConflictDecisions == null) {
             if (!mounted) return;
             setState(() => _saving = false);
@@ -126,7 +134,10 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
           selectedCandidateId: _selectedCandidateId,
         );
         if (conflicts.isNotEmpty) {
-          ownerConflictDecisions = await _showOwnerConflictsDialog(conflicts);
+          ownerConflictDecisions = await _showOwnerConflictsDialog(
+            conflicts,
+            conflictTargetLabel,
+          );
           if (ownerConflictDecisions == null) {
             if (!mounted) return;
             setState(() => _saving = false);
@@ -139,7 +150,10 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
           selectedCandidateId: _selectedCandidateId,
         );
         if (conflicts.isNotEmpty) {
-          ownerConflictDecisions = await _showOwnerConflictsDialog(conflicts);
+          ownerConflictDecisions = await _showOwnerConflictsDialog(
+            conflicts,
+            conflictTargetLabel,
+          );
           if (ownerConflictDecisions == null) {
             if (!mounted) return;
             setState(() => _saving = false);
@@ -480,6 +494,7 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
 
   Future<List<LampOwnerConflictDecision>?> _showOwnerConflictsDialog(
     List<LampOwnerConflict> conflicts,
+    String targetLabel,
   ) {
     final selections = <String, LampOwnerConflictAction>{
       for (final conflict in conflicts)
@@ -505,7 +520,7 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
                       const SizedBox(height: 12),
                       for (final conflict in conflicts) ...[
                         Text(
-                          _conflictTitle(conflict),
+                          lampConflictTitle(conflict),
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: 4),
@@ -524,14 +539,19 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
                                     .transferToSelectedOwner,
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
-                                title: Text(_transferOptionLabel(conflict)),
+                                title: Text(
+                                  lampConflictTransferLabel(
+                                    conflict,
+                                    targetLabel: targetLabel,
+                                  ),
+                                ),
                               ),
                               RadioListTile<LampOwnerConflictAction>(
                                 value: LampOwnerConflictAction
                                     .keepWithoutAssignment,
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
-                                title: Text(_skipOptionLabel(conflict)),
+                                title: Text(lampConflictSkipLabel(conflict)),
                               ),
                             ],
                           ),
@@ -666,33 +686,6 @@ class _LampTransferWizardDialogState extends State<LampTransferWizardDialog> {
         'Θα δημιουργηθεί νέος χρήστης: ${item.label} χωρίς τηλέφωνα',
       LampPendingEntityKind.equipment =>
         'Θα δημιουργηθεί νέος εξοπλισμός: ${item.label} χωρίς τμήμα/τύπο',
-    };
-  }
-
-  String _conflictTitle(LampOwnerConflict conflict) {
-    final ownersText = conflict.currentOwners.join(', ');
-    return switch (conflict.kind) {
-      LampOwnerConflictKind.equipment =>
-        'Ο εξοπλισμός ${conflict.value} ανήκει στον/στην: $ownersText',
-      LampOwnerConflictKind.phone =>
-        'Το τηλέφωνο ${conflict.value} ανήκει στον/στην: $ownersText',
-    };
-  }
-
-  String _transferOptionLabel(LampOwnerConflict conflict) {
-    return switch (conflict.kind) {
-      LampOwnerConflictKind.equipment =>
-        'Αφαίρεση από τωρινούς κατόχους και προσθήκη στον επιλεγμένο χρήστη',
-      LampOwnerConflictKind.phone =>
-        'Αφαίρεση από τωρινούς κατόχους και προσθήκη στον επιλεγμένο χρήστη',
-    };
-  }
-
-  String _skipOptionLabel(LampOwnerConflict conflict) {
-    return switch (conflict.kind) {
-      LampOwnerConflictKind.equipment =>
-        'Καταχώρηση χρήστη χωρίς αυτόν τον εξοπλισμό',
-      LampOwnerConflictKind.phone => 'Καταχώρηση χρήστη χωρίς αυτό το τηλέφωνο',
     };
   }
 

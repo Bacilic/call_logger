@@ -12,7 +12,7 @@ import 'smart_entity_selector_conflict_badge.dart';
 import 'smart_entity_selector_overlay_utils.dart';
 import 'smart_entity_selector_phone_suggestion_list.dart';
 import 'smart_entity_selector_phone_utils.dart';
-import 'text_layout_utils.dart';
+import 'inline_field_clear_button.dart';
 
 /// Πεδίο Τηλέφωνο με overlay λίστα πολλαπλών candidates και Autocomplete για prefix αναζήτηση.
 class SmartEntityPhoneField extends StatefulWidget {

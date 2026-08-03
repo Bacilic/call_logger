@@ -122,6 +122,22 @@ class AssetDisconnectStandingDecision {
   }
 }
 
+/// Δουλειά που έχει ήδη ολοκληρωθεί έξω από αυτή τη ροή, όταν η διακοπή
+/// μπορεί να την κρατήσει.
+///
+/// [summary] λέει τι ολοκληρώθηκε («Ολοκληρώσατε 4 υπαλλήλους από τους 9.»)
+/// και [applyHint] τι ακριβώς θα συμβεί αν ο χρήστης το κρατήσει.
+typedef AssetDisconnectCompletedWork = ({String summary, String applyHint});
+
+/// Πώς τελείωσε μια ροή που διακόπηκε.
+enum AssetDisconnectStopKind {
+  /// Τίποτα δεν κρατιέται — η προεπιλογή για κάθε διακοπή.
+  cancelAll,
+
+  /// Σταματά εδώ, αλλά ό,τι έχει ήδη ολοκληρωθεί εφαρμόζεται.
+  applyCompleted,
+}
+
 /// Κρατά τον λογαριασμό μιας ολόκληρης ροής αποδέσμευσης.
 ///
 /// [cancelScopeDescription] περιγράφει τι ακυρώνεται συνολικά (π.χ. «η
@@ -130,17 +146,32 @@ class AssetDisconnectStandingDecision {
 /// [contextLabel] μπαίνει μπροστά από τον μετρητή όταν η ενέργεια έχει
 /// περισσότερες από μία συνεδρίες (π.χ. «Τμήμα 2 από 3»). Χωρίς αυτό, ο
 /// μετρητής θα φαινόταν να μηδενίζεται ανεξήγητα στο επόμενο τμήμα.
+///
+/// [completedWork] δίνεται **μόνο** από ροές που έχουν διέξοδο (μαζική
+/// διαγραφή). Επιστρέφει `null` όταν εκείνη τη στιγμή δεν υπάρχει τίποτα
+/// ολοκληρωμένο, οπότε η επιβεβαίωση διακοπής μένει με δύο επιλογές.
 class AssetDisconnectSession {
   AssetDisconnectSession({
     Iterable<AssetDisconnectItem> items = const [],
     this.cancelScopeDescription,
     this.contextLabel,
+    this.completedWork,
   }) {
     registerItems(items);
   }
 
   final String? cancelScopeDescription;
   final String? contextLabel;
+  final AssetDisconnectCompletedWork? Function()? completedWork;
+
+  AssetDisconnectStopKind _stopKind = AssetDisconnectStopKind.cancelAll;
+
+  /// Τι ζήτησε ο χρήστης στη διακοπή. Έχει νόημα μόνο αφού η ροή επιστρέψει
+  /// `null`· κάθε άλλη έξοδος (π.χ. αποσυναρμολόγηση οθόνης) μένει στο
+  /// ασφαλές `cancelAll`.
+  AssetDisconnectStopKind get stopKind => _stopKind;
+
+  void markStop(AssetDisconnectStopKind kind) => _stopKind = kind;
 
   final List<AssetDisconnectItem> _pending = <AssetDisconnectItem>[];
   int _totalSteps = 0;
@@ -404,3 +435,14 @@ String assetDisconnectCancelMessage({
   buf.write('\n\nΤίποτα δεν έχει γραφτεί ακόμα στη βάση.');
   return buf.toString();
 }
+
+/// Υποδείξεις των κουμπιών διακοπής, όταν υπάρχει δουλειά που κρατιέται.
+///
+/// Το τι κάνει ένα κουμπί ανήκει στην **υπόδειξή** του, όχι στο σώμα του
+/// διαλόγου: μια λίστα επεξηγήσεων μέσα στο κείμενο φούσκωνε τον διάλογο σε
+/// όλο το πλάτος της οθόνης και επαναλάμβανε τις ετικέτες.
+const String assetDisconnectContinueHint =
+    'Επιστροφή στο βήμα που ρωτούσε, για να συνεχίσετε τις απαντήσεις.';
+
+const String assetDisconnectCancelAllHint =
+    'Τίποτα δεν γράφεται στη βάση. Όλες οι απαντήσεις που δώσατε πετιούνται.';

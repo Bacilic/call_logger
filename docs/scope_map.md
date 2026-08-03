@@ -118,7 +118,7 @@ flutter test
 
 | Στοιχείο | Σημειώσεις |
 |----------|------------|
-| `integration_test/` | Υπάρχει `call_logger_integration_test.dart` — ξεχωριστό από `test/` αλλά όχι ανά feature |
+| `integration_test/` | **Καταργήθηκε 01/08/2026** — δεν εκτελούνταν ποτέ από το `flutter test` και φύλαγε UI που είχε ανασχεδιαστεί |
 | End-to-end ροές | Πλήρης καταγραφή κλήσης &lt; 2 s, global hotkeys, custom titlebar — χωρίς dedicated tests |
 
 ---

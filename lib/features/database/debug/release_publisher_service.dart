@@ -66,12 +66,10 @@ typedef ZipVerificationReader = Future<Uint8List> Function(String zipPath);
 class _ProjectFileSnapshot {
   const _ProjectFileSnapshot({
     required this.changelogJson,
-    required this.changelogMd,
     required this.pubspec,
   });
 
   final Uint8List changelogJson;
-  final Uint8List changelogMd;
   final Uint8List pubspec;
 }
 
@@ -96,13 +94,6 @@ class ReleasePublisherService {
   final ZipVerificationReader verificationReader;
 
   static const _categoryKeys = ['added', 'improvements', 'changed', 'fixed'];
-
-  static const _mdSectionTitles = {
-    'added': 'Προστέθηκε',
-    'improvements': 'Μικροβελτιώσεις',
-    'changed': 'Άλλαξε',
-    'fixed': 'Διορθώθηκε',
-  };
 
   static Future<Uint8List> _defaultVerificationReader(String zipPath) =>
       File(zipPath).readAsBytes();
@@ -209,12 +200,10 @@ class ReleasePublisherService {
       final releasedDate = _formatDate(clock());
 
       _progress('Σφράγιση changelog…');
+      // Μοναδική πηγή αλήθειας το assets/changelog.json — δεν συντηρείται
+      // πλέον CHANGELOG.md (απόφαση 03/08/2026, η παράλληλη συντήρηση
+      // δημιουργούσε μόνιμη ασυμφωνία).
       await _sealChangelogJson(
-        bumpKind: bumpKind,
-        version: bumped.version,
-        date: releasedDate,
-      );
-      await _sealChangelogMarkdown(
         bumpKind: bumpKind,
         version: bumped.version,
         date: releasedDate,
@@ -371,20 +360,17 @@ class ReleasePublisherService {
 
   File get _changelogJsonFile =>
       File(p.join(projectRoot, 'assets', 'changelog.json'));
-  File get _changelogMdFile => File(p.join(projectRoot, 'CHANGELOG.md'));
   File get _pubspecFile => File(p.join(projectRoot, 'pubspec.yaml'));
 
   Future<_ProjectFileSnapshot> _snapshotProjectFiles() async {
     return _ProjectFileSnapshot(
       changelogJson: await _changelogJsonFile.readAsBytes(),
-      changelogMd: await _changelogMdFile.readAsBytes(),
       pubspec: await _pubspecFile.readAsBytes(),
     );
   }
 
   Future<void> _restoreProjectFiles(_ProjectFileSnapshot snapshot) async {
     await _changelogJsonFile.writeAsBytes(snapshot.changelogJson, flush: true);
-    await _changelogMdFile.writeAsBytes(snapshot.changelogMd, flush: true);
     await _pubspecFile.writeAsBytes(snapshot.pubspec, flush: true);
   }
 
@@ -491,113 +477,6 @@ class ReleasePublisherService {
       const JsonEncoder.withIndent('  ').convert(list),
       flush: true,
     );
-  }
-
-  Future<void> _sealChangelogMarkdown({
-    required VersionBumpKind bumpKind,
-    required String version,
-    required String date,
-  }) async {
-    final content = await _changelogMdFile.readAsString();
-    const marker = '## [Unreleased]';
-    final idx = content.indexOf(marker);
-    if (idx < 0) {
-      throw StateError('Δεν βρέθηκε ## [Unreleased] στο CHANGELOG.md.');
-    }
-
-    if (bumpKind == VersionBumpKind.minor) {
-      final sealedHeader = '## [$version] - $date';
-      final updated = content.replaceFirst(marker, sealedHeader);
-      final insertAt = updated.indexOf(sealedHeader);
-      final withNewUnreleased = updated.replaceRange(
-        insertAt,
-        insertAt,
-        '## [Unreleased]\n\n',
-      );
-      await _changelogMdFile.writeAsString(withNewUnreleased, flush: true);
-      return;
-    }
-
-    final nextHeader = RegExp(r'^## \[', multiLine: true);
-    final afterUnreleased = idx + marker.length;
-    final nextMatch = nextHeader.firstMatch(content.substring(afterUnreleased));
-    if (nextMatch == null) {
-      throw StateError(
-        'Δεν βρέθηκε δημοσιευμένη ενότητα στο CHANGELOG.md για patch.',
-      );
-    }
-    final topStart = afterUnreleased + nextMatch.start;
-    final unreleasedBody = content.substring(afterUnreleased, topStart).trim();
-    final afterTopHeaderLine = content.indexOf('\n', topStart);
-    final topHeaderEnd = afterTopHeaderLine < 0
-        ? content.length
-        : afterTopHeaderLine + 1;
-    final restMatch = nextHeader.firstMatch(content.substring(topHeaderEnd));
-    final topEnd = restMatch == null
-        ? content.length
-        : topHeaderEnd + restMatch.start;
-    final topBody = content.substring(topHeaderEnd, topEnd).trimRight();
-
-    final incoming = _parseMdSections(unreleasedBody);
-    final mergedBody = _mergeMdSections(topBody, incoming);
-    final prefix = content.substring(0, idx);
-    final suffix = content.substring(topEnd);
-    final rebuilt = StringBuffer()
-      ..write(prefix)
-      ..writeln('## [Unreleased]')
-      ..writeln()
-      ..writeln('## [$version] - $date')
-      ..writeln()
-      ..write(mergedBody.trimRight())
-      ..writeln()
-      ..writeln()
-      ..write(suffix.trimLeft());
-
-    await _changelogMdFile.writeAsString(rebuilt.toString(), flush: true);
-  }
-
-  static Map<String, List<String>> _parseMdSections(String body) {
-    final result = {for (final key in _categoryKeys) key: <String>[]};
-    final titleToKey = {
-      for (final e in _mdSectionTitles.entries) e.value: e.key,
-    };
-    String? currentKey;
-    for (final rawLine in body.split('\n')) {
-      final line = rawLine.trimRight();
-      final header = RegExp(r'^###\s+(.+)$').firstMatch(line.trim());
-      if (header != null) {
-        currentKey = titleToKey[header.group(1)!.trim()];
-        continue;
-      }
-      if (currentKey == null) continue;
-      final bullet = RegExp(r'^-\s+(.+)$').firstMatch(line.trim());
-      if (bullet != null) {
-        final text = bullet.group(1)!.trim();
-        if (text.isNotEmpty) result[currentKey]!.add(text);
-      }
-    }
-    return result;
-  }
-
-  static String _mergeMdSections(
-    String existingBody,
-    Map<String, List<String>> incoming,
-  ) {
-    final existing = _parseMdSections(existingBody);
-    final buffer = StringBuffer();
-    var first = true;
-    for (final key in _categoryKeys) {
-      final items = [...existing[key]!, ...incoming[key]!];
-      if (items.isEmpty) continue;
-      if (!first) buffer.writeln();
-      first = false;
-      buffer.writeln('### ${_mdSectionTitles[key]}');
-      buffer.writeln();
-      for (final item in items) {
-        buffer.writeln('- $item');
-      }
-    }
-    return buffer.toString();
   }
 
   Future<({String version, int build})> _readPubspecVersion() async {

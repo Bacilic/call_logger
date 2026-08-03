@@ -70,8 +70,10 @@ class _FakePrompts implements CallerQuickAddPrompts {
 
   @override
   Future<SimilarUsersDialogResult?> resolveSimilarCallers(
-    List<UserSimilarityMatch> matches,
-  ) async {
+    List<UserSimilarityMatch> matches, {
+    required String typedDisplayName,
+    required String typedDepartmentName,
+  }) async {
     askedUserMatches = matches;
     return usersAnswer;
   }

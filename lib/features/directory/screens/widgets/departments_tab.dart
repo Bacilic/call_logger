@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/user_delete_equipment_policy.dart';
 import '../../../../core/database/user_delete_phone_policy.dart';
 import '../../../../core/database/user_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/database/settings_repository.dart';
 import '../../../../core/services/lookup_service.dart';
-import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../../calls/layout/call_form_clear.dart';
 import '../../services/department_deletion_inventory.dart';
 import '../../services/department_deletion_messages.dart';
 import '../../services/department_deletion_orchestrator.dart';
@@ -18,6 +19,8 @@ import '../../services/department_deletion_undo_record.dart';
 import '../../services/department_rename_heuristic.dart';
 import '../../services/user_deletion_undo_record.dart';
 import 'shared_asset_disconnect_dialog.dart';
+import 'bulk_deletion_partial_dialog.dart';
+import 'department_deletion_partial_dialog.dart';
 import 'department_deletion_preview_dialog.dart';
 import 'department_employee_reassign_dialog.dart';
 import 'department_rename_guard_dialog.dart';
@@ -251,40 +254,97 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
     );
   }
 
+  /// Ξαναδείχνει την προεπισκόπηση όσες φορές χρειαστεί.
+  ///
+  /// Η «Ακύρωση» σε διάλογο της συλλογής, πριν ολοκληρωθεί οτιδήποτε, ακυρώνει
+  /// **μόνο εκείνο το βήμα**: ο χρήστης γυρίζει στη λίστα, αφαιρεί τμήματα και
+  /// ξαναπροσπαθεί, αντί να χάσει τη ροή και να ξαναρχίσει από το κουμπί.
   Future<void> _confirmAndDeleteSelected(
     BuildContext context,
     WidgetRef ref,
   ) async {
-    final state = ref.read(departmentDirectoryProvider);
-    if (state.selectedIds.isEmpty) return;
+    while (true) {
+      if (!context.mounted) return;
+      final retry = await _runDepartmentDeletionRound(context, ref);
+      if (!retry) return;
+    }
+  }
 
-    final toDelete = state.allDepartments
+  /// Ένας γύρος προεπισκόπησης + συλλογής + εκτέλεσης.
+  ///
+  /// Επιστρέφει `true` όταν πρέπει να ξαναδειχθεί η προεπισκόπηση.
+  Future<bool> _runDepartmentDeletionRound(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final state = ref.read(departmentDirectoryProvider);
+    if (state.selectedIds.isEmpty) return false;
+
+    final selected = state.allDepartments
         .where(
           (d) =>
               d.id != null && !d.isDeleted && state.selectedIds.contains(d.id),
         )
         .toList();
-    if (toDelete.isEmpty) return;
+    if (selected.isEmpty) return false;
 
     final inventories = [
-      for (final d in toDelete)
+      for (final d in selected)
         DepartmentDeletionInventory.fromLookup(d.id!, d.name),
     ];
-    final choice = await showDepartmentDeletionPreviewDialog(
+    final preview = await showDepartmentDeletionPreviewDialog(
       context: context,
       inventories: inventories,
     );
-    if (choice == null ||
-        choice == DepartmentDeletionChoice.cancel ||
+    if (preview == null ||
+        preview.choice == DepartmentDeletionChoice.cancel ||
         !context.mounted) {
-      return;
+      return false;
     }
+    final choice = preview.choice;
+
+    // Ο χρήστης μπορεί να αφαίρεσε τμήματα μέσα στον διάλογο· από εδώ και πέρα
+    // μετράει μόνο ό,τι έμεινε — και για τη διαγραφή, και για το ποια τμήματα
+    // είναι έγκυροι προορισμοί μεταφοράς.
+    final keptIds = preview.keptDepartmentIds.toSet();
+    final toDelete = selected.where((d) => keptIds.contains(d.id)).toList();
+    if (toDelete.isEmpty) return false;
 
     final lookup = LookupService.instance;
-    final deletingIds = state.selectedIds.toSet();
+    final deletingIds = keptIds;
+    // Δεν αρκεί να λείπουν από τον κατάλογο προορισμών: αν ο χρήστης γράψει το
+    // όνομα με το χέρι, ο επιλυτής βρίσκει το ζωντανό ακόμα τμήμα και στέλνει
+    // εκεί τα στοιχεία — λίγο πριν αυτό διαγραφεί.
+    final deletingNames = [for (final d in toDelete) d.name];
     var movedEmployeeCount = 0;
     var movedOrDeletedAssetCount = 0;
     final plans = <DepartmentDeletionPlan>[];
+
+    // Ο χρήστης ακύρωσε διάλογο μέσα στη συλλογή. Επιστρέφει `null` όταν η ροή
+    // πρέπει να συνεχίσει με ό,τι μαζεύτηκε· αλλιώς την τιμή που επιστρέφει ο
+    // γύρος (`true` = ξανά από την προεπισκόπηση, `false` = τέλος).
+    /// [alreadyAnswered] = ο χρήστης απάντησε ήδη μέσα στη ροή αποδέσμευσης,
+    /// στον ίδιο διάλογο με την ακύρωση· δεν ξαναρωτιέται εδώ.
+    Future<bool?> handleAbort({
+      AssetDisconnectStopKind? alreadyAnswered,
+    }) async {
+      if (!context.mounted) return false;
+      // Τίποτα ολοκληρωμένο: δεν υπάρχει δουλειά να χαθεί, οπότε γυρνάμε στην
+      // προεπισκόπηση αντί να κλείσουμε τη ροή. Έτσι η «Ακύρωση» εδώ ακυρώνει
+      // μόνο αυτό το βήμα, και ο χρήστης μπορεί να αφαιρέσει τμήματα.
+      if (plans.isEmpty) return true;
+      if (alreadyAnswered != null) {
+        return alreadyAnswered == AssetDisconnectStopKind.applyCompleted
+            ? null
+            : false;
+      }
+      final partial = await showDepartmentDeletionPartialDialog(
+        context: context,
+        completed: plans.length,
+        total: toDelete.length,
+      );
+      return partial == BulkDeletionPartialChoice.applyCompleted ? null : false;
+    }
 
     // Φάση συλλογής: μόνο διάλογοι — χωρίς εγγραφές στη βάση.
     if (choice == DepartmentDeletionChoice.detailed) {
@@ -292,6 +352,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
       final userRepo = UserRepository(dbEx);
       var departmentIndex = 0;
 
+      collectLoop:
       for (final dept in toDelete) {
         final deptId = dept.id;
         if (deptId == null) continue;
@@ -328,15 +389,21 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
         var exclusiveEquipment = const <ExclusiveEquipmentForUserDelete>[];
 
         if (employees.isNotEmpty) {
-          if (!context.mounted) return;
+          if (!context.mounted) return false;
           final collected = await showDepartmentEmployeeReassignFlow(
             context: context,
             sourceDepartmentName: dept.name,
             employees: employees,
             availableDepartments: availableDepartments,
             sourceDepartmentId: deptId,
+            blockedDepartmentNames: deletingNames,
           );
-          if (!context.mounted || collected == null) return;
+          if (!context.mounted) return false;
+          if (collected == null) {
+            final r = await handleAbort();
+            if (r != null) return r;
+            break collectLoop;
+          }
           employeeBatch = collected;
           movedEmployeeCount += employeeBatch.transfers.length;
           userIdsToDelete = collected.toDelete.toList();
@@ -404,6 +471,19 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
           cancelScopeDescription: departmentDeletionCancelScopeDescription(
             toDelete.length,
           ),
+          // Η διέξοδος προσφέρεται μέσα στον ίδιο διάλογο με την «Ακύρωση
+          // όλων»: το «Συνέχεια» μπορεί να επιστρέψει στο βήμα ΜΟΝΟ όσο η ροή
+          // είναι ανοιχτή.
+          completedWork: () {
+            if (plans.isEmpty) return null;
+            return (
+              summary: departmentDeletionCompletedSummary(
+                completed: plans.length,
+                total: toDelete.length,
+              ),
+              applyHint: departmentDeletionApplyCompletedHint(plans.length),
+            );
+          },
         );
 
         for (final userId in userIdsToDelete) {
@@ -418,35 +498,51 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
 
           var phoneBatch = const SharedAssetDisconnectBatchResult();
           if (phonesForUser.isNotEmpty) {
-            if (!context.mounted) return;
+            if (!context.mounted) return false;
             final b = await showSharedAssetDisconnectFlow(
               context: context,
               sourceDepartmentId: deptId,
               sourceDepartmentName: dept.name,
               phones: phonesForUser,
               availableDepartments: availableDepartments,
+              blockedDepartmentNames: deletingNames,
               mode: SharedAssetDisconnectMode.personalPhone,
               allowKeepInDepartment: false,
               session: disconnectSession,
             );
-            if (!context.mounted || b == null) return;
+            if (!context.mounted) return false;
+            if (b == null) {
+              final r = await handleAbort(
+                alreadyAnswered: disconnectSession.stopKind,
+              );
+              if (r != null) return r;
+              break collectLoop;
+            }
             phoneBatch = b;
           }
 
           var equipmentBatch = const SharedAssetDisconnectBatchResult();
           if (equipmentForUser.isNotEmpty) {
-            if (!context.mounted) return;
+            if (!context.mounted) return false;
             final b = await showSharedAssetDisconnectFlow(
               context: context,
               sourceDepartmentId: deptId,
               sourceDepartmentName: dept.name,
               equipmentCodes: equipmentForUser,
               availableDepartments: availableDepartments,
+              blockedDepartmentNames: deletingNames,
               mode: SharedAssetDisconnectMode.personalEquipment,
               allowKeepInDepartment: false,
               session: disconnectSession,
             );
-            if (!context.mounted || b == null) return;
+            if (!context.mounted) return false;
+            if (b == null) {
+              final r = await handleAbort(
+                alreadyAnswered: disconnectSession.stopKind,
+              );
+              if (r != null) return r;
+              break collectLoop;
+            }
             equipmentBatch = b;
           }
 
@@ -461,7 +557,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
 
         var sharedBatch = const SharedAssetDisconnectBatchResult();
         if (phones.isNotEmpty || equipment.isNotEmpty) {
-          if (!context.mounted) return;
+          if (!context.mounted) return false;
           final collected = await showSharedAssetDisconnectFlow(
             context: context,
             sourceDepartmentId: deptId,
@@ -469,10 +565,18 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             phones: phones,
             equipmentCodes: equipment,
             availableDepartments: availableDepartments,
+            blockedDepartmentNames: deletingNames,
             allowKeepInDepartment: false,
             session: disconnectSession,
           );
-          if (!context.mounted || collected == null) return;
+          if (!context.mounted) return false;
+          if (collected == null) {
+            final r = await handleAbort(
+              alreadyAnswered: disconnectSession.stopKind,
+            );
+            if (r != null) return r;
+            break collectLoop;
+          }
           sharedBatch = collected;
           movedOrDeletedAssetCount +=
               sharedBatch.phoneTransfers.length +
@@ -491,29 +595,80 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
         );
       }
     } else {
+      // ΜΙΑ ερώτηση για όλα — το κουμπί υπόσχεται «μεταφορά όλων σε ένα τμήμα».
+      // Ο επιλογέας ήταν μέσα στον βρόχο, οπότε με εφτά επιλεγμένα τμήματα ο
+      // χρήστης απαντούσε εφτά φορές και μπορούσε να φτιάξει εφτά νέα τμήματα.
+      final availableDepartments = lookup.departments
+          .where(
+            (d) =>
+                d.id != null &&
+                !d.isDeleted &&
+                !deletingIds.contains(d.id) &&
+                d.name.trim().isNotEmpty,
+          )
+          .toList();
+
+      if (!context.mounted) return false;
+      final target = await showAssetTransferTargetPicker(
+        context: context,
+        headerLabel: departmentQuickTransferHeader(deletingNames),
+        availableDepartments: availableDepartments,
+        // Κανένα τμήμα-πηγή: όλα τα διαγραφόμενα λείπουν ήδη από τον κατάλογο
+        // και είναι απαγορευμένα και στην πληκτρολόγηση.
+        blockedDepartmentNames: deletingNames,
+      );
+      if (!context.mounted) return false;
+      if (target == null) {
+        final r = await handleAbort();
+        if (r != null) return r;
+        return false;
+      }
+
+      // Ο φρουρός μετονομασίας έχει νόημα μόνο για ΕΝΑ τμήμα: «όλα από το Χ
+      // σε νέο τμήμα Ψ» μοιάζει με μετονομασία. Με πολλά τμήματα σε κοινό νέο
+      // προορισμό δεν είναι μετονομασία — είναι συγχώνευση.
+      if (toDelete.length == 1) {
+        final only = toDelete.first;
+        final onlyId = only.id;
+        if (onlyId != null) {
+          final movedTotal =
+              lookup.getUsersByDepartment(onlyId).length +
+              lookup.getDirectPhonesByDepartment(onlyId).length +
+              lookup.getSharedEquipmentCodesByDepartment(onlyId).length;
+          final proposedNewName = target.newDepartmentName?.trim() ?? '';
+          if (looksLikeDepartmentRename(
+            movedTotal: movedTotal,
+            movedToDominantTarget: movedTotal,
+            dominantTargetIsNew: proposedNewName.isNotEmpty,
+          )) {
+            if (!context.mounted) return false;
+            final guard = await showDepartmentRenameGuardDialog(
+              context: context,
+              sourceDepartmentName: only.name,
+              proposedNewName: proposedNewName,
+            );
+            if (!context.mounted) return false;
+            if (guard == null || guard == DepartmentRenameGuardChoice.cancel) {
+              final r = await handleAbort();
+              if (r != null) return r;
+              return false;
+            }
+            if (guard == DepartmentRenameGuardChoice.renameInstead) {
+              await _openForm(
+                context,
+                ref,
+                only.copyWith(name: proposedNewName),
+                focusedField: 'name',
+              );
+              return false;
+            }
+          }
+        }
+      }
+
       for (final dept in toDelete) {
         final deptId = dept.id;
         if (deptId == null) continue;
-
-        final availableDepartments = lookup.departments
-            .where(
-              (d) =>
-                  d.id != null &&
-                  !d.isDeleted &&
-                  !deletingIds.contains(d.id) &&
-                  d.name.trim().isNotEmpty,
-            )
-            .toList();
-
-        if (!context.mounted) return;
-        final target = await showAssetTransferTargetPicker(
-          context: context,
-          headerLabel:
-              'Πού μεταφέρονται όλα από «${dept.name.trim().isEmpty ? '—' : dept.name.trim()}»;',
-          availableDepartments: availableDepartments,
-          sourceDepartmentId: deptId,
-        );
-        if (!context.mounted || target == null) return;
 
         final users = lookup.getUsersByDepartment(deptId);
         final phones = lookup.getDirectPhonesByDepartment(deptId);
@@ -528,35 +683,8 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
                     : (u.name ?? '').trim(),
               ),
         ];
-        final movedTotal = employees.length + phones.length + equipment.length;
         final proposedNewName = target.newDepartmentName?.trim() ?? '';
         final dominantTargetIsNew = proposedNewName.isNotEmpty;
-
-        if (looksLikeDepartmentRename(
-          movedTotal: movedTotal,
-          movedToDominantTarget: movedTotal,
-          dominantTargetIsNew: dominantTargetIsNew,
-        )) {
-          if (!context.mounted) return;
-          final guard = await showDepartmentRenameGuardDialog(
-            context: context,
-            sourceDepartmentName: dept.name,
-            proposedNewName: proposedNewName,
-          );
-          if (!context.mounted) return;
-          if (guard == null || guard == DepartmentRenameGuardChoice.cancel) {
-            return;
-          }
-          if (guard == DepartmentRenameGuardChoice.renameInstead) {
-            await _openForm(
-              context,
-              ref,
-              dept.copyWith(name: proposedNewName),
-              focusedField: 'name',
-            );
-            return;
-          }
-        }
 
         var employeeBatch = const DepartmentEmployeeReassignBatch(
           transfers: {},
@@ -592,7 +720,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
     }
 
     // Φάση εκτέλεσης: ένα ατομικό transaction για όλα τα plans.
-    if (plans.isEmpty) return;
+    if (plans.isEmpty) return false;
 
     final db = await DatabaseHelper.instance.database;
 
@@ -632,17 +760,13 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
       }
     }
 
+    final departmentsRepo = DepartmentRepository(db);
     final namesTrulyCreated = <String>[];
     for (final name in candidateNewNames) {
-      final key = SearchTextNormalizer.normalizeForSearch(name);
-      final rows = await db.query(
-        'departments',
-        columns: ['id'],
-        where: 'name_key = ? AND COALESCE(is_deleted, 0) = 0',
-        whereArgs: [key],
-        limit: 1,
+      final existingId = await departmentsRepo.findActiveDepartmentIdByName(
+        name,
       );
-      if (rows.isEmpty) namesTrulyCreated.add(name);
+      if (existingId == null) namesTrulyCreated.add(name);
     }
 
     final UserDeletionUndoRecord deletedEmployeesUndo;
@@ -652,44 +776,26 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
         plans,
       );
     } catch (e, st) {
-      if (!context.mounted) return;
+      if (!context.mounted) return false;
       showDatabasePersistenceErrorSnackBar(
         context,
         Exception('Η διαγραφή τμήματος απέτυχε και καμία αλλαγή δεν έγινε. $e'),
         st,
       );
-      return;
+      return false;
     }
 
     final createdDepartmentIds = <int>[];
     for (final name in namesTrulyCreated) {
-      final key = SearchTextNormalizer.normalizeForSearch(name);
-      final rows = await db.query(
-        'departments',
-        columns: ['id'],
-        where: 'name_key = ? AND COALESCE(is_deleted, 0) = 0',
-        whereArgs: [key],
-        limit: 1,
-      );
-      if (rows.isEmpty) continue;
-      final id = rows.first['id'] as int?;
+      final id = await departmentsRepo.findActiveDepartmentIdByName(name);
       if (id != null) createdDepartmentIds.add(id);
     }
 
     Future<int?> resolveTransferDeptId(SharedAssetTransferTarget target) async {
       if (target.departmentId != null) return target.departmentId;
-      final name = target.newDepartmentName?.trim();
-      if (name == null || name.isEmpty) return null;
-      final key = SearchTextNormalizer.normalizeForSearch(name);
-      final rows = await db.query(
-        'departments',
-        columns: ['id'],
-        where: 'name_key = ? AND COALESCE(is_deleted, 0) = 0',
-        whereArgs: [key],
-        limit: 1,
+      return departmentsRepo.findActiveDepartmentIdByName(
+        target.newDepartmentName,
       );
-      if (rows.isEmpty) return null;
-      return rows.first['id'] as int?;
     }
 
     final reassignedEmployees = <DepartmentDeletionReassignedEmployee>[];
@@ -761,10 +867,28 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
       createdDepartmentIds: createdDepartmentIds,
     );
 
+    // ΜΟΝΟ όσα πραγματικά εκτελέστηκαν: με τη διέξοδο της διακοπής τα `plans`
+    // μπορεί να είναι λιγότερα από τα `toDelete`, και το μήνυμα επιτυχίας
+    // διαβάζει από εδώ — αλλιώς ονομάζει τμήματα που δεν διαγράφηκαν.
+    final executedIds = {for (final p in plans) p.departmentId};
+    final executed = toDelete.where((d) => executedIds.contains(d.id)).toList();
+
+    // Ό,τι επέλεξε ο χρήστης και ΔΕΝ διαγράφηκε μένει επιλεγμένο: το «✕» της
+    // προεπισκόπησης σημαίνει «αυτά αργότερα», όχι «αυτά ποτέ».
+    final survivingSelection = state.selectedIds
+        .where((id) => !executedIds.contains(id))
+        .toSet();
+
     final notifier = ref.read(departmentDirectoryProvider.notifier);
-    await notifier.finalizeExternalDeletion(toDelete);
+    await notifier.finalizeExternalDeletion(
+      executed,
+      keepSelectedIds: survivingSelection,
+    );
+    // Η μετάλλαξη ακύρωσε το lookup· η αλυσίδα των Κλήσεων δεν έχει listeners
+    // όσο είμαστε στον Κατάλογο και πρέπει να ξεπλυθεί εκτός φάσης build.
+    flushCallsChainAfterDirectoryMutation(ref);
     notifier.rememberDepartmentDeletionUndo(undoRecord);
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     final deleted = ref.read(departmentDirectoryProvider).lastDeleted ?? [];
     final deletedCount = deleted.length;
     final names = deleted
@@ -886,6 +1010,8 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             : null,
       ),
     );
+    // Η διαγραφή έγινε — η προεπισκόπηση δεν ξαναδείχνεται.
+    return false;
   }
 }
 

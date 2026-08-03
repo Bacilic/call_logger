@@ -14,6 +14,7 @@ import '../services/core_lexicon_service.dart';
 import '../services/settings_service.dart';
 import 'startup_engine_failure.dart';
 import 'startup_notices.dart';
+import 'startup_structural_check.dart';
 
 DatabaseInitResult _appendStartupNoticesToFailureDetails(
   DatabaseInitResult base,
@@ -35,10 +36,14 @@ class AppInitResult {
     required this.isLocalDevMode,
     this.spellCheckReady = false,
     this.databaseProfile,
+    this.missingApplicationFiles = const <String>[],
   });
 
   final DatabaseInitResult result;
   final bool isLocalDevMode;
+
+  /// Ελλείποντα κρίσιμα αρχεία εφαρμογής από τον δομικό έλεγχο της εκκίνησης.
+  final List<String> missingApplicationFiles;
 
   /// True αν φορτώθηκε λεξικό-πυρήνας από αποθηκευμένη διαδρομή.
   final bool spellCheckReady;
@@ -93,8 +98,13 @@ class AppInitializer {
         isLocalDevMode: runnerResult.isLocalDevMode,
         spellCheckReady: spellCheckReady,
         databaseProfile: runnerResult.databaseProfile,
+        missingApplicationFiles: runnerResult.missingApplicationFiles,
       );
     } catch (e, st) {
+      // Ο runner δεν πρόλαβε να επιστρέψει· ο δομικός έλεγχος οφείλει να
+      // προηγηθεί και εδώ, αλλιώς η μοναδική διαδρομή που τον παρακάμπτει
+      // είναι ακριβώς αυτή που δείχνει το πιο ακατανόητο σφάλμα.
+      final missingApplicationFiles = detectMissingApplicationFiles();
       var result = resolveStartupFailureResult(
         fallbackError: e,
         fallbackStack: st,
@@ -117,10 +127,13 @@ class AppInitializer {
         } catch (_) {}
       }
       return AppInitResult(
-        result: _appendStartupNoticesToFailureDetails(result),
+        result: _appendStartupNoticesToFailureDetails(
+          withMissingApplicationFilesFirst(result, missingApplicationFiles),
+        ),
         isLocalDevMode: false,
         spellCheckReady: false,
         databaseProfile: null,
+        missingApplicationFiles: missingApplicationFiles,
       );
     }
   }

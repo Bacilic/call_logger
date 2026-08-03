@@ -4,25 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/models/remote_tool.dart';
-import '../../../core/models/remote_tool_arg.dart';
 import '../../../core/models/remote_tool_role.dart';
+import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../core/widgets/info_hint_icon.dart';
 import '../../../core/widgets/remote_tool_icon.dart';
 import '../../../core/widgets/app_asset_image.dart';
 import '../../../core/widgets/reorder_grab_handle.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../../../core/services/settings_service.dart';
+import '../services/remote_tool_management_texts.dart';
 import '../widgets/remote_tool_form/remote_tool_form_dialog.dart';
 import 'primary_tool_help_text.dart';
-
-/// Μετατροπή δεικτών [ReorderableListView] σε θέση 1-based για [reorderToolToPosition].
-int reorderedPositionOneBased(int oldIndex, int newIndex) {
-  var adjusted = newIndex;
-  if (newIndex > oldIndex) {
-    adjusted -= 1;
-  }
-  return adjusted + 1;
-}
 
 /// Προεπισκόπηση εικονιδίου στη λίστα — συμβατό με `iconAssetKey`.
 Widget _remoteToolListIcon(RemoteTool t, {double size = 22}) {
@@ -56,20 +48,6 @@ Widget _roleTypeCell(BuildContext context, RemoteTool t) {
     mainAxisSize: MainAxisSize.min,
     children: [_roleTypeBadge(context, t.role.shortLabel)],
   );
-}
-
-/// Σύνοψη ενεργών ορισμάτων για τη λίστα εργαλείων (με απόκρυψη κωδικών).
-String remoteToolArgumentsSummary(RemoteTool t) {
-  final active = t.arguments.where((a) => a.isActive).toList();
-  if (active.isEmpty) return '—';
-  final parts = active
-      .take(2)
-      .map((a) => RemoteToolArg.maskSecretValues(a.value))
-      .toList();
-  var s = parts.join(', ');
-  if (active.length > 2) s = '$s…';
-  if (s.length > 80) s = '${s.substring(0, 77)}…';
-  return s;
 }
 
 /// CRUD ορισμών `remote_tools` + ρυθμίσεις κύριου εργαλείου / overflow στην οθόνη κλήσεων.
@@ -106,21 +84,29 @@ class _RemoteToolsManagementScreenState
     return EquipmentRepository(db).getEquipmentDefaultRemoteToolUsageCounts();
   }
 
+  Future<List<({String code, String target})>> _fetchManualTargets(
+    int? toolId,
+  ) async {
+    if (toolId == null) return const [];
+    final db = await DatabaseHelper.instance.database;
+    return EquipmentRepository(db).getEquipmentManualTargetsForTool(toolId);
+  }
+
   void _refreshEquipmentUsage() {
     setState(() {
       _equipmentUsageFuture = _fetchEquipmentUsage();
     });
   }
 
-  /// Κείμενο tooltip στήλης ονόματος: πόσοι εξοπλισμοί έχουν προεπιλογή αυτού του id.
-  String _tooltipForToolUsage(int n) {
-    if (n <= 0) {
-      return 'Δεν είναι ορισμένο ως προεπιλογή σε κανέναν εξοπλισμό.';
-    }
-    if (n == 1) {
-      return 'Ενεργοποιημένο σε 1 εξοπλισμό.';
-    }
-    return 'Ενεργοποιημένο σε $n εξοπλισμούς.';
+  /// Κοινό φινάλε αποτυχίας για κάθε μετάλλαξη εργαλείου.
+  void _showActionError(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$error'),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
   }
 
   void _invalidateRemoteCatalog() {
@@ -132,8 +118,6 @@ class _RemoteToolsManagementScreenState
     ref.invalidate(remoteLauncherStatusesByIdProvider);
   }
 
-  String _argumentsSummary(RemoteTool t) => remoteToolArgumentsSummary(t);
-
   Future<void> _setToolActive(RemoteTool t, bool value) async {
     if (!value && t.isActive) {
       final counts = await _fetchEquipmentUsage();
@@ -143,60 +127,58 @@ class _RemoteToolsManagementScreenState
         final confirm = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
+          builder: (ctx) => DraggableDialogShell(
             title: const Text('Απενεργοποίηση εργαλείου'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if ((t.iconAssetKey?.trim() ?? '').isNotEmpty) ...[
-                        _remoteToolListIcon(t, size: 32),
-                        const SizedBox(width: 10),
-                      ],
-                      Expanded(
-                        child: Text(
-                          '«${t.name}»',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
+            builder: (titleHandle) => AlertDialog(
+              title: titleHandle,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if ((t.iconAssetKey?.trim() ?? '').isNotEmpty) ...[
+                          _remoteToolListIcon(t, size: 32),
+                          const SizedBox(width: 10),
+                        ],
+                        Expanded(
+                          child: Text(
+                            '«${t.name}»',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    n == 1
-                        ? 'Το παραπάνω εργαλείο είναι ενεργοποιημένο σε 1 εξοπλισμό. '
-                              'Να απενεργοποιηθεί;'
-                        : 'Το παραπάνω εργαλείο είναι ενεργοποιημένο σε $n εξοπλισμούς. '
-                              'Να απενεργοποιηθεί;',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Οι ρυθμίσεις δεν θα χαθούν· θα επανέλθουν με την ενεργοποίηση του '
-                    'εργαλείου «${t.name}».',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    Text(
+                      remoteToolDeactivationQuestion(n),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      remoteToolDeactivationReassurance(t.name),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Ακύρωση'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Απενεργοποίηση'),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Ακύρωση'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Απενεργοποίηση'),
-              ),
-            ],
           ),
         );
         if (confirm != true || !mounted) {
@@ -209,14 +191,7 @@ class _RemoteToolsManagementScreenState
       await repo.updateTool(t.copyWith(isActive: value));
       _invalidateRemoteCatalog();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
+      _showActionError(e);
     }
   }
 
@@ -228,27 +203,11 @@ class _RemoteToolsManagementScreenState
     }
   }
 
-  static const String _cloneNameSuffix = ' (αντίγραφο)';
-
-  /// Μοναδικό όνομα «… (αντίγραφο)» ή «… (αντίγραφο 2)» κ.λπ.
-  String _uniqueCloneName(String baseName, List<RemoteTool> nonDeleted) {
-    final taken = nonDeleted.map((e) => e.name.trim().toLowerCase()).toSet();
-    final trimmed = baseName.trim();
-    var candidate = '$trimmed$_cloneNameSuffix';
-    if (!taken.contains(candidate.toLowerCase())) return candidate;
-    var i = 2;
-    while (true) {
-      candidate = '$trimmed$_cloneNameSuffix $i';
-      if (!taken.contains(candidate.toLowerCase())) return candidate;
-      i++;
-    }
-  }
-
   Future<void> _cloneTool(RemoteTool t) async {
     try {
       final repo = ref.read(remoteToolsRepositoryProvider);
       final existing = await repo.getAllNonDeletedTools();
-      final name = _uniqueCloneName(t.name, existing);
+      final name = uniqueRemoteToolCloneName(t.name, existing);
       final n = existing.length;
       final clone = t.copyWith(id: 0, name: name, clearDeletedAt: true);
       final newId = await repo.insertTool(clone);
@@ -261,64 +220,66 @@ class _RemoteToolsManagementScreenState
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
+      _showActionError(e);
     }
   }
 
   Future<void> _softDeleteTool(RemoteTool t) async {
     final counts = await _fetchEquipmentUsage();
     final n = counts[t.id] ?? 0;
+    final manualTargets = await _fetchManualTargets(t.id);
     if (!mounted) return;
     final theme = Theme.of(context);
+    final manualLine = remoteToolManualTargetsLine([
+      for (final e in manualTargets)
+        equipmentManualTargetLabel(e.code, e.target),
+    ]);
     final confirm = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => DraggableDialogShell(
         title: const Text('Απομάκρυνση εργαλείου'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              n == 0
-                  ? 'Να απομακρυνθεί από τη λίστα το εργαλείο «${t.name}»;'
-                  : n == 1
-                  ? 'Το εργαλείο «${t.name}» είναι ορισμένο ως προεπιλογή σε 1 εξοπλισμό. '
-                        'Να απομακρυνθεί από τη λίστα;'
-                  : 'Το εργαλείο «${t.name}» είναι ορισμένο ως προεπιλογή σε $n εξοπλισμούς. '
-                        'Να απομακρυνθεί από τη λίστα;',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Η εγγραφή δεν διαγράφεται οριστικά· οι αναφορές εξοπλισμού (id) παραμένουν για συμβατότητα.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+        builder: (titleHandle) => AlertDialog(
+          title: titleHandle,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                remoteToolRemovalDefaultUsageLine(
+                  toolName: t.name,
+                  defaultUsageCount: n,
+                ),
+                style: theme.textTheme.bodyMedium,
               ),
+              if (manualLine != null) ...[
+                const SizedBox(height: 12),
+                Text(manualLine, style: theme.textTheme.bodyMedium),
+              ],
+              const SizedBox(height: 12),
+              Text(
+                'Η εγγραφή δεν διαγράφεται οριστικά· οι αναφορές εξοπλισμού (id) παραμένουν για συμβατότητα.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.error,
+                foregroundColor: theme.colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Απομάκρυνση'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Ακύρωση'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
-              foregroundColor: theme.colorScheme.onError,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Απομάκρυνση'),
-          ),
-        ],
       ),
     );
     if (confirm != true || !mounted) return;
@@ -333,14 +294,7 @@ class _RemoteToolsManagementScreenState
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
+      _showActionError(e);
     }
   }
 
@@ -360,14 +314,7 @@ class _RemoteToolsManagementScreenState
       _invalidateRemoteCatalog();
       _refreshEquipmentUsage();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
+      _showActionError(e);
     }
   }
 
@@ -401,7 +348,7 @@ class _RemoteToolsManagementScreenState
                 child: Tooltip(
                   message: usage == null
                       ? 'Φόρτωση…'
-                      : _tooltipForToolUsage(usage[t.id] ?? 0),
+                      : remoteToolUsageTooltip(usage[t.id] ?? 0),
                   waitDuration: const Duration(milliseconds: 400),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -449,7 +396,7 @@ class _RemoteToolsManagementScreenState
                   behavior: HitTestBehavior.opaque,
                   onDoubleTap: () => _openToolEditor(t),
                   child: Text(
-                    _argumentsSummary(t),
+                    remoteToolArgumentsSummary(t),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 2,
                   ),
@@ -465,7 +412,7 @@ class _RemoteToolsManagementScreenState
                   ),
                   IconButton(
                     tooltip:
-                        'Αντίγραφο (ίδιες ρυθμίσεις, νέο όνομα με «$_cloneNameSuffix»)',
+                        'Αντίγραφο (ίδιες ρυθμίσεις, νέο όνομα με «$kRemoteToolCloneSuffix»)',
                     icon: const Icon(Icons.copy_outlined),
                     onPressed: () => _cloneTool(t),
                   ),

@@ -68,9 +68,16 @@ set /p "CONFIRM=Πατήστε Enter (ή Y) για συνέχεια, ή N για
 if /I "%CONFIRM%"=="N" goto user_cancel
 
 rem Αντιγραφή χωρίς διαγραφή υπαρχόντων φακέλων δεδομένων χρήστη.
+rem Η έξοδος πάει σε log και τυπώνεται με κομμένο το αριστερό περιθώριο του
+rem robocopy (tokens=*), αλλιώς η αναδίπλωση της κονσόλας την κάνει δυσανάγνωστη.
+rem Το RC διαβάζεται ΑΜΕΣΩΣ μετά το robocopy — μετά τον βρόχο echo θα έπαιρνε
+rem τον κωδικό του echo και αποτυχία αντιγραφής θα περνούσε για επιτυχία.
+set "COPY_LOG=%TEMP%\call_logger_install_copy.log"
 echo Αντιγραφή αρχείων...
-robocopy "%APP_SOURCE%" "%INSTALL_DIR%" /E /R:2 /W:2 /NDL /NJH /nc /ns /np
+robocopy "%APP_SOURCE%" "%INSTALL_DIR%" /E /R:2 /W:2 /NDL /NJH /nc /ns /np > "%COPY_LOG%"
 set "RC=%ERRORLEVEL%"
+for /f "usebackq tokens=*" %%F in ("%COPY_LOG%") do echo %%F
+del "%COPY_LOG%" 2>nul
 if %RC% GEQ 8 goto copy_failed
 
 (

@@ -21,6 +21,8 @@ import '../models/dashboard_filter_model.dart';
 
 import '../models/dashboard_summary_model.dart';
 
+import '../utils/issue_distribution.dart';
+
 /// Notifier για τα κριτήρια φίλτρου του dashboard στατιστικών.
 
 class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
@@ -244,6 +246,83 @@ final dashboardExcludeCallsWithoutCategoryProvider =
 
       bool
     >(DashboardExcludeCallsWithoutCategoryNotifier.new);
+
+/// Απόκρυψη του συγκεντρωτικού «Άγνωστου» στην όψη «χρόνος ανά άτομο» —
+/// τοπική εμφάνιση, δεν επηρεάζει τα δεδομένα του [dashboardStatsProvider].
+class DashboardHideUnknownCallerNotifier extends Notifier<bool> {
+  bool _hydrated = false;
+
+  @override
+  bool build() {
+    if (!_hydrated) {
+      _hydrated = true;
+      Future<void>(_hydrateFromSettings);
+    }
+    return false;
+  }
+
+  Future<void> _hydrateFromSettings() async {
+    final value = await SettingsService().analyticsFilters
+        .getDashboardHideUnknownCaller();
+    if (!ref.mounted) return;
+    state = value;
+  }
+
+  Future<void> set(bool value) async {
+    if (state == value) return;
+    state = value;
+    await SettingsService().analyticsFilters.setDashboardHideUnknownCaller(
+      value,
+    );
+  }
+}
+
+final dashboardHideUnknownCallerProvider =
+    NotifierProvider.autoDispose<DashboardHideUnknownCallerNotifier, bool>(
+      DashboardHideUnknownCallerNotifier.new,
+    );
+
+/// Ποια όψη δείχνει η κάρτα χρόνου — μεμονωμένες κλήσεις ή σύνολο ανά άτομο.
+class DashboardLongestCallsModeNotifier extends Notifier<LongestCallsMode> {
+  @override
+  LongestCallsMode build() => LongestCallsMode.perCall;
+
+  void set(LongestCallsMode value) => state = value;
+}
+
+final dashboardLongestCallsModeProvider =
+    NotifierProvider.autoDispose<
+      DashboardLongestCallsModeNotifier,
+      LongestCallsMode
+    >(DashboardLongestCallsModeNotifier.new);
+
+/// Τι μετράει η «Κατανομή Βλαβών» — πλήθος κλήσεων ή συνολικός χρόνος.
+class DashboardIssueMetricNotifier extends Notifier<IssueDistributionMetric> {
+  @override
+  IssueDistributionMetric build() => IssueDistributionMetric.count;
+
+  void set(IssueDistributionMetric value) => state = value;
+}
+
+final dashboardIssueMetricProvider =
+    NotifierProvider.autoDispose<
+      DashboardIssueMetricNotifier,
+      IssueDistributionMetric
+    >(DashboardIssueMetricNotifier.new);
+
+/// Κριτήριο ταξινόμησης της όψης «χρόνος ανά άτομο» (κλικ στις κεφαλίδες).
+class DashboardCallerTimeSortNotifier extends Notifier<CallerTimeSort> {
+  @override
+  CallerTimeSort build() => CallerTimeSort.total;
+
+  void set(CallerTimeSort value) => state = value;
+}
+
+final dashboardCallerTimeSortProvider =
+    NotifierProvider.autoDispose<
+      DashboardCallerTimeSortNotifier,
+      CallerTimeSort
+    >(DashboardCallerTimeSortNotifier.new);
 
 /// Στατιστικά κλήσεων με βάση το τρέχον [DashboardFilterModel].
 

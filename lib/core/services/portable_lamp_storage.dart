@@ -11,25 +11,50 @@ class PortableLampStorage {
 
   static const String backupZipLampDbFolderName = 'lamp_db';
 
+  /// Πλήρης διαδρομή προορισμού μέσα στο portable `Data Base/`.
+  static String portableDestinationFor(
+    String pickedPath, {
+    String? destinationFileName,
+  }) {
+    final name = destinationFileName?.trim();
+    return p.normalize(
+      p.join(
+        AppConfig.portableDataBaseDirectory,
+        (name == null || name.isEmpty)
+            ? p.basename(p.normalize(p.absolute(pickedPath.trim())))
+            : name,
+      ),
+    );
+  }
+
   /// Αντιγραφή επιλεγμένου `.db` στο portable `Data Base/`.
   ///
-  /// Αν υπάρχει ήδη αρχείο στον προορισμό και [allowOverwrite] είναι false,
-  /// επιστρέφει την αρχική διαδρομή χωρίς εγγραφή. Σε αποτυχία αντιγραφής
-  /// προωθεί το πραγματικό σφάλμα στον καλούντα (δεν το καταπίνει).
+  /// Ο καλών έχει ήδη αποφασίσει τη σύγκρουση: είτε δίνει [destinationFileName]
+  /// (διατήρηση και των δύο) είτε [allowOverwrite]. Αν ο προορισμός υπάρχει και
+  /// δεν ισχύει κανένα από τα δύο, ρίχνει σφάλμα αντί να αντιγράψει σιωπηλά ή
+  /// να επιστρέψει άλλη διαδρομή από αυτήν που ζητήθηκε.
+  ///
+  /// Σε αποτυχία αντιγραφής προωθεί το πραγματικό σφάλμα (δεν το καταπίνει).
   static Future<String> tryCopyLampDbToPortableDataBase(
     String pickedPath, {
+    String? destinationFileName,
     bool allowOverwrite = false,
   }) async {
     final src = p.normalize(p.absolute(pickedPath.trim()));
+    // Ανύπαρκτη πηγή = διαδρομή αποθήκευσης που δεν δημιουργήθηκε ακόμα.
     if (!await File(src).exists()) return pickedPath;
 
     await AppConfig.ensureDirectoryExists(AppConfig.portableDataBaseDirectory);
-    final dest = p.normalize(
-      p.join(AppConfig.portableDataBaseDirectory, p.basename(src)),
+    final dest = portableDestinationFor(
+      src,
+      destinationFileName: destinationFileName,
     );
     if (src == dest) return dest;
     if (await File(dest).exists() && !allowOverwrite) {
-      return pickedPath;
+      throw StateError(
+        'Ο προορισμός «$dest» υπάρχει ήδη και δεν δόθηκε άδεια αντικατάστασης '
+        'ούτε εναλλακτικό όνομα.',
+      );
     }
     await File(src).copy(dest);
     return dest;

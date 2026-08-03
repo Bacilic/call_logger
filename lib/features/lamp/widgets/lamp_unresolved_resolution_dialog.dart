@@ -6,6 +6,7 @@ import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import 'lamp_entity_code_autocomplete.dart';
 import 'lamp_issue_row_context.dart';
+import '../../../core/widgets/compact_tooltip.dart';
 
 /// Αποτέλεσμα διαλόγου για πρόταση με [LampIssueResolutionAction.unresolved].
 sealed class LampUnresolvedResolutionOutcome {
@@ -406,7 +407,7 @@ class _LampUnresolvedResolutionDialogState
       ),
       actionsAlignment: MainAxisAlignment.spaceBetween,
       actions: [
-        Tooltip(
+        CompactTooltip(
           message:
               'Διακόπτεται όλη η διαδικασία επίλυσης — καμία αλλαγή στις '
               'ανεπίλυτες εγγραφές.',
@@ -419,7 +420,7 @@ class _LampUnresolvedResolutionDialogState
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Tooltip(
+            CompactTooltip(
               message: _applyToAll
                   ? 'Όλες οι υπόλοιπες ανεπίλυτες εγγραφές μένουν ανοιχτές· '
                         'θα ξαναρωτηθείς στον επόμενο έλεγχο.'
@@ -435,7 +436,7 @@ class _LampUnresolvedResolutionDialogState
               ),
             ),
             const SizedBox(width: 8),
-            Tooltip(
+            CompactTooltip(
               message: _applyToAll
                   ? 'Όλες οι υπόλοιπες ανεπίλυτες εγγραφές καταχωρούνται ως '
                         'αναβληθείσες και φεύγουν από τις ροές επίλυσης.'

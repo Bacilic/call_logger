@@ -159,7 +159,7 @@ class DatabaseMaintenanceService {
       );
     }
     final db = await DatabaseHelper.instance.database;
-    final n = await db.delete(tableName);
+    final n = await DatabaseMaintenanceRepository(db).deleteAllRows(tableName);
     if (tableName != 'audit_log') {
       try {
         final user = await AuditService.performingUser(db);
@@ -183,11 +183,9 @@ class DatabaseMaintenanceService {
     }
     final db = await DatabaseHelper.instance.database;
     final iso = cutoff.toIso8601String();
-    final n = await db.delete(
-      'audit_log',
-      where: 'timestamp < ?',
-      whereArgs: [iso],
-    );
+    final n = await DatabaseMaintenanceRepository(
+      db,
+    ).deleteAuditLogRowsBefore(iso);
     try {
       final user = await AuditService.performingUser(db);
       await AuditService.log(
@@ -210,13 +208,9 @@ class DatabaseMaintenanceService {
     final db = await DatabaseHelper.instance.database;
     final closed = TaskStatus.closed.toDbValue;
     final iso = cutoff.toIso8601String();
-    final n = await db.delete(
-      'tasks',
-      where:
-          'status = ? AND COALESCE(is_deleted, 0) = 0 AND COALESCE(updated_at, created_at) IS NOT NULL '
-          'AND COALESCE(updated_at, created_at) < ?',
-      whereArgs: [closed, iso],
-    );
+    final n = await DatabaseMaintenanceRepository(
+      db,
+    ).deleteClosedTasksBefore(closedStatus: closed, isoCutoff: iso);
     if (n > 0) {
       try {
         final user = await AuditService.performingUser(db);
@@ -261,16 +255,10 @@ class DatabaseMaintenanceService {
       deleteClosedTasksOlderThan(subtractCalendarMonths(DateTime.now(), 6));
 
   /// Π.χ. `call_logger.db` → `call_logger_old_25-07-2026.db` (μοναδικό στον φάκελο).
-  String _desiredOldDatabaseBackupName(String currentDbPath) {
-    final stem = p.basenameWithoutExtension(currentDbPath);
-    final ext = p.extension(currentDbPath);
-    return resolveUniqueTimestampedFileName(
-      directory: p.dirname(currentDbPath),
-      baseName: stem,
-      suffix: '_old_',
-      extension: ext.isEmpty ? '.db' : ext,
-    );
-  }
+  ///
+  /// Ίδια συνάρτηση με αυτήν που ανακοινώνει το όνομα στο UI πριν την πράξη.
+  String _desiredOldDatabaseBackupName(String currentDbPath) =>
+      resolveRenamedOldDatabaseFileName(currentDatabasePath: currentDbPath);
 
   Future<void> _renameSqliteBundle(String dbPath, String newMainFileName) =>
       renameDatabaseBundle(dbPath, newMainFileName);

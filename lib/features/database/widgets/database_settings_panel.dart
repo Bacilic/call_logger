@@ -12,6 +12,7 @@ import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
+import '../../../core/database/database_file_bundle.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_init_result.dart';
 import '../../../core/database/database_init_runner.dart';
@@ -21,11 +22,14 @@ import '../../../core/init/database_switch_completion.dart';
 import '../../../core/init/database_switch_guard.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/utils/new_database_suggested_file_name.dart';
+import '../../../core/widgets/compact_tooltip.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
 import '../models/database_backup_settings.dart';
 import '../providers/backup_scheduler_provider.dart';
 import '../providers/database_backup_settings_provider.dart';
 import '../providers/database_integrity_provider.dart';
+import '../services/create_new_database_texts.dart';
 import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
 import '../services/database_path_switch_runner.dart';
@@ -40,6 +44,7 @@ import '../utils/backup_schedule_utils.dart';
 import '../utils/backup_restore_tooltip.dart';
 import '../utils/portable_backup_availability.dart';
 import 'database_integrity_panel.dart';
+import 'database_rename_notice_text.dart';
 import 'schema_upgrade_consent_dialog.dart';
 
 String _weekdayChipLabel(int weekday) {
@@ -508,20 +513,36 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
         ),
       ),
       const SizedBox(height: 4),
-      Text(
-        'Η τρέχουσα βάση μετονομάζεται πάντα ως «όνομα_old_ημερομηνία» στον φάκελό της (χωρίς διαγραφή). '
-        'Δημιουργείται νέο κενό αρχείο και ορίζεται ενεργό· επανασύνδεση χωρίς επανεκκίνηση.',
+      DatabaseRenameNoticeText(
+        // Το όνομα ξαναϋπολογίζεται σε κάθε χτίσιμο: μετά από αλλαγή βάσης η
+        // οδηγία πρέπει να μιλά για τη ΝΕΑ ενεργή βάση, όχι για την παλιά.
+        parts: currentDatabaseRenameNotice(
+          renamedFileName: _currentDbPath.trim().isEmpty
+              ? ''
+              : resolveRenamedOldDatabaseFileName(
+                  currentDatabasePath: _currentDbPath.trim(),
+                ),
+        ),
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
       const SizedBox(height: 8),
-      FilledButton.tonalIcon(
-        onPressed: _currentDbPath.trim().isEmpty
-            ? null
-            : _runCreateNewDatabaseFlow,
-        icon: const Icon(Icons.add_circle_outline),
-        label: const Text('Δημιουργία νέου αρχείου βάσης'),
+      CompactTooltip(
+        message: createNewDatabaseButtonTooltip(
+          suggestedFileName: suggestNewCallLoggerDatabaseFileName(
+            directory: _currentDbPath.trim().isEmpty
+                ? ''
+                : p.dirname(_currentDbPath.trim()),
+          ),
+        ),
+        child: FilledButton.tonalIcon(
+          onPressed: _currentDbPath.trim().isEmpty
+              ? null
+              : _runCreateNewDatabaseFlow,
+          icon: const Icon(Icons.add_circle_outline),
+          label: const Text('Δημιουργία νέου αρχείου βάσης'),
+        ),
       ),
       const SizedBox(height: 16),
       const Divider(height: 1),
@@ -923,12 +944,6 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
       final toOpen = result.pathToOpen?.trim();
       if (toOpen != null && toOpen.isNotEmpty) {
         await runDatabasePathSwitch(path: toOpen, hooks: this);
-      } else if (result.restoredPath != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Η βάση επαναφέρθηκε στο:\n${result.restoredPath}'),
-          ),
-        );
       }
     });
   }

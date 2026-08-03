@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/errors/call_save_exception.dart';
 import '../../../../core/errors/task_save_exception.dart';
 import '../../../../core/models/remote_tool.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 import '../../../../core/widgets/dialog_outside_tap_hint.dart';
 import '../../layout/calls_field_groups_provider.dart';
 import '../../provider/call_entry_provider.dart';
@@ -329,7 +330,7 @@ class _SubmitButton extends StatelessWidget {
     );
     return canSubmit
         ? button
-        : Tooltip(
+        : CompactTooltip(
             message:
                 'Συμπληρώστε τουλάχιστον ένα τηλέφωνο ή έναν καλούντα και περιγραφή θέματος',
             child: button,

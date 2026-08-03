@@ -178,9 +178,12 @@ class LampIssueDecisionApplier {
             where: 'code = ?',
             whereArgs: <Object?>[code],
           );
+          final targetDisplay = proposedId == null
+              ? '(κενό)'
+              : await _support.fkTargetDisplay(txn, fkColumn, proposedId);
           emit(
             ResolutionLogEntry.success(
-              'Ενημερώθηκε η στήλη $fkColumn του εξοπλισμού $code σε $proposedId.',
+              'Ενημερώθηκε η στήλη $fkColumn του εξοπλισμού $code σε $targetDisplay.',
             ),
           );
         }
@@ -492,9 +495,14 @@ class LampIssueDecisionApplier {
             where: 'code = ?',
             whereArgs: <Object?>[manualCode],
           );
+          final manualTargetDisplay = await _support.fkTargetDisplay(
+            txn,
+            manualFkColumn,
+            manualTargetId,
+          );
           emit(
             ResolutionLogEntry.success(
-              'Ενημερώθηκε η στήλη $manualFkColumn του εξοπλισμού $manualCode σε $manualTargetId.',
+              'Ενημερώθηκε η στήλη $manualFkColumn του εξοπλισμού $manualCode σε $manualTargetDisplay.',
             ),
           );
         }
@@ -569,9 +577,12 @@ class LampIssueDecisionApplier {
                 where: 'code = ?',
                 whereArgs: <Object?>[rowCode],
               );
+              final targetDisplay = pid == null
+                  ? '(κενό)'
+                  : await _support.fkTargetDisplay(txn, fkColumn, pid);
               emit(
                 ResolutionLogEntry.success(
-                  'Ενημερώθηκε η στήλη $fkColumn του εξοπλισμού $rowCode σε $pid.',
+                  'Ενημερώθηκε η στήλη $fkColumn του εξοπλισμού $rowCode σε $targetDisplay.',
                 ),
               );
             }
@@ -970,9 +981,10 @@ class LampIssueDecisionApplier {
       where: 'code = ?',
       whereArgs: <Object?>[code],
     );
+    final ownerDisplay = await _support.fkTargetDisplay(txn, 'owner', ownerId);
     emit(
       ResolutionLogEntry.success(
-        'Ενημερώθηκε ο υπάλληλος του εξοπλισμού $code σε $ownerId.',
+        'Ενημερώθηκε ο υπάλληλος του εξοπλισμού $code σε $ownerDisplay.',
       ),
     );
   }

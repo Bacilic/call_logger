@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/services/gemini_ticket_service.dart';
 import '../../providers/gemini_settings_provider.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 
 enum _GeminiModelSlot { primary, fallback }
 
@@ -865,7 +866,7 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            Tooltip(
+            CompactTooltip(
               message: _probing
                   ? 'Ολοκληρώστε πρώτα τον έλεγχο μοντέλων'
                   : 'Ανανέωση λίστας μοντέλων από το API',
@@ -888,7 +889,7 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
                 ),
               ),
             ),
-            Tooltip(
+            CompactTooltip(
               message: _loadingModels
                   ? 'Ολοκληρώστε πρώτα την ανανέωση λίστας'
                   : 'Έλεγχος ποσόστωσης όλων των μοντέλων κειμένου',

@@ -13,7 +13,7 @@ import '../../models/call_model.dart';
 import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
-import 'text_layout_utils.dart';
+import '../../../../core/utils/text_layout_utils.dart';
 
 DateTime? _equipmentRecentParseSqlDateOnly(String? raw) {
   final s = raw?.trim();

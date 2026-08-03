@@ -14,6 +14,8 @@ class SettingsServiceAnalyticsFilters {
   static const String _keyDashboardDateTo = 'dashboard_date_to';
   static const String _keyDashboardExcludeCallsWithoutCategory =
       'dashboard_exclude_calls_without_category';
+  static const String _keyDashboardHideUnknownCaller =
+      'dashboard_hide_unknown_caller';
   static const String _keyTaskAnalyticsDatePreset =
       'task_analytics_date_preset_v1';
   static const String _keyTaskAnalyticsDateFrom = 'task_analytics_date_from_v1';
@@ -75,6 +77,18 @@ class SettingsServiceAnalyticsFilters {
       _prefKey(_keyDashboardExcludeCallsWithoutCategory),
       value,
     );
+  }
+
+  /// Απόκρυψη του συγκεντρωτικού «Άγνωστου» στην όψη «χρόνος ανά άτομο».
+  /// Προεπιλογή: false.
+  Future<bool> getDashboardHideUnknownCaller() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefKey(_keyDashboardHideUnknownCaller)) ?? false;
+  }
+
+  Future<void> setDashboardHideUnknownCaller(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKey(_keyDashboardHideUnknownCaller), value);
   }
 
   /// Τελευταία επιλογή εύρους ημερομηνιών στις αναφορές εκκρεμοτήτων.

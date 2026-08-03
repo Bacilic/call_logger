@@ -7,6 +7,7 @@ import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../models/department_model.dart';
 import 'building_map_floor_edit_preview.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 
 /// Αποτέλεσμα του διαλόγου «Επεξεργασία κατόψης».
 class BuildingMapFloorSheetEditResult {
@@ -165,7 +166,7 @@ class _BuildingMapFloorSheetEditDialogState
               showDepartments: _showDepartmentsOnPreview,
               departments: widget.previewDepartments,
             ),
-            Tooltip(
+            CompactTooltip(
               message:
                   'Η προβολή τμημάτων είναι μόνο για την εκκαθάριση της '
                   'μικρογραφίας. ΔΕΝ επιρεάζει τη βασική σχεδίαση του ορόφου.',

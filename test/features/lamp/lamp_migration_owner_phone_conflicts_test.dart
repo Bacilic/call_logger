@@ -7,6 +7,7 @@ import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/lamp/services/lamp_migration_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../test_reporter.dart';
 import '../../test_setup.dart';
 
 void main() {
@@ -119,29 +120,22 @@ void main() {
           );
       final expected = <LampOwnerConflict>[];
       for (final c in policyConflicts) {
-        if (c.hasOtherUserOwners) {
-          expected.add(
-            LampOwnerConflict(
-              conflictId:
-                  'phone:${SearchTextNormalizer.normalizeForSearch(c.phone)}',
-              kind: LampOwnerConflictKind.phone,
-              value: c.phone,
-              currentOwners: c.otherUserOwnerLabels,
-            ),
-          );
-        } else if (c.hasDepartmentLocationConflict) {
-          expected.add(
-            LampOwnerConflict(
-              conflictId:
-                  'phone:${SearchTextNormalizer.normalizeForSearch(c.phone)}',
-              kind: LampOwnerConflictKind.phone,
-              value: c.phone,
-              currentOwners: [
-                'Κοινόχρηστο: ${c.existingDepartmentName ?? c.existingDepartmentId}',
-              ],
-            ),
-          );
-        }
+        if (!c.hasOtherUserOwners && !c.hasDepartmentLocationConflict) continue;
+        expected.add(
+          LampOwnerConflict(
+            conflictId:
+                'phone:${SearchTextNormalizer.normalizeForSearch(c.phone)}',
+            kind: LampOwnerConflictKind.phone,
+            value: c.phone,
+            currentOwners: c.hasOtherUserOwners
+                ? c.otherUserOwnerLabels
+                : const <String>[],
+            sharedDepartmentName: c.hasDepartmentLocationConflict
+                ? (c.existingDepartmentName ??
+                      c.existingDepartmentId?.toString())
+                : null,
+          ),
+        );
       }
       return expected;
     }
@@ -193,7 +187,7 @@ void main() {
       },
     );
 
-    test('κοινόχρηστο τηλέφωνο τμήματος → «Κοινόχρηστο: <τμήμα>»', () async {
+    test('κοινόχρηστο τηλέφωνο τμήματος → ρητό πεδίο τμήματος', () async {
       const phone = '2105552002';
       final deptA = await insertDepartment('Φαρμακείο');
       await insertDepartment('Γραμματεία');
@@ -208,11 +202,13 @@ void main() {
       final phoneConflict = conflicts.singleWhere(
         (c) => c.kind == LampOwnerConflictKind.phone,
       );
-      expect(phoneConflict.currentOwners, ['Κοινόχρηστο: Φαρμακείο']);
+      expect(phoneConflict.sharedDepartmentName, 'Φαρμακείο');
+      expect(phoneConflict.currentOwners, isEmpty);
+      expect(phoneConflict.hasUserOwners, isFalse);
     });
 
     test(
-      'τηλέφωνο άλλου χρήστη ΚΑΙ κοινόχρηστο → προτεραιότητα στον κάτοχο',
+      'τηλέφωνο άλλου χρήστη ΚΑΙ κοινόχρηστο → δηλώνονται και τα δύο',
       () async {
         const phone = '2105553003';
         final deptA = await insertDepartment('Τμήμα Α');
@@ -237,8 +233,12 @@ void main() {
         expect(phoneConflicts, hasLength(1));
         expect(phoneConflicts.first.currentOwners.first, contains('Μαρία'));
         expect(
-          phoneConflicts.first.currentOwners.first,
-          isNot(startsWith('Κοινόχρηστο:')),
+          phoneConflicts.first.sharedDepartmentName,
+          'Τμήμα Β',
+          reason: greekExpectMsg(
+            'Ο κάτοχος δεν κρύβει το κοινόχρηστο τμήμα: η μεταφορά αφαιρεί '
+            'και τα δύο, άρα πρέπει να δηλώνονται και τα δύο',
+          ),
         );
       },
     );

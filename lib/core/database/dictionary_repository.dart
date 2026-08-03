@@ -271,6 +271,22 @@ class DictionaryRepository {
     }
   }
 
+  /// Η εγγραφή του πλήρους λεξικού με αυτό το κανονικοποιημένο κλειδί
+  /// (id/source/language) — π.χ. για να βρεθεί πού κατέληξε μια προαγωγή
+  /// πρόχειρης λέξης. `null` όταν δεν υπάρχει.
+  Future<Map<String, dynamic>?> findFullDictionaryEntryByNormalizedWord(
+    String normalizedWord,
+  ) async {
+    final rows = await db.query(
+      AppConfig.fullDictionaryTable,
+      columns: ['id', 'source', 'language'],
+      where: 'normalized_word = ?',
+      whereArgs: [normalizedWord],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   Future<void> upsertFullDictionaryCategory({
     required int id,
     required String category,

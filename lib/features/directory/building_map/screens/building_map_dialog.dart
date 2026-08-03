@@ -21,7 +21,6 @@ Future<void> showBuildingMapDialog(
   ref.read(buildingMapUndoProvider.notifier).clear();
   ref.read(buildingMapUiEditModeProvider.notifier).setEditing(false);
   ref.read(buildingMapDecodedImageSizeProvider.notifier).setSize(null);
-  ref.read(buildingMapFloorReloadSeqProvider.notifier).reset();
   ref
       .read(buildingMapDeptSelectionHudVisibleProvider.notifier)
       .setVisible(false);

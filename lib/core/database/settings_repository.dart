@@ -31,6 +31,13 @@ const String kGeminiFallbackModelSettingKey = 'gemini_fallback_model';
 const String kGeminiAutoResubmitSettingKey = 'gemini_auto_resubmit';
 const String kGeminiModelsProbeCacheSettingKey = 'gemini_models_probe_cache';
 
+/// Υπογραφή του σπορέα «Σενάρια σφαλμάτων» ΜΕΣΑ στη δοκιμαστική βάση.
+///
+/// Το είδος μιας βάσης το λέει το περιεχόμενό της, ποτέ το όνομα του αρχείου:
+/// η μετονομασία δεν κρύβει τη δοκιμαστική, και η επαναφορά αληθινών δεδομένων
+/// πάνω στο ίδιο αρχείο σβήνει την υπογραφή μαζί με το παλιό περιεχόμενο.
+const String kDebugScenarioSignatureSettingKey = 'debug_scenario_signature';
+
 /// Προεπιλεγμένο URL φόρμας νέου αιτήματος Lansweeper (web).
 const String kDefaultLansweeperUrl =
     'http://10.10.201.22:81/helpdesk/NewTicket.aspx?tid=-7';

@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../calls/layout/call_form_clear.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
 import '../../../../core/database/database_helper.dart';
@@ -11,18 +12,18 @@ import '../../../../core/models/remote_tool.dart';
 import '../../../../core/providers/equipment_focus_intent_provider.dart';
 import '../../../../core/services/default_remote_tool_display.dart';
 import '../../../../core/utils/user_facing_error_messages.dart';
-import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/widgets/app_asset_image.dart';
 import '../../../calls/models/user_model.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/directory_provider.dart';
 import '../../providers/equipment_directory_provider.dart';
 import '../../providers/bulk_action_undo_provider.dart';
-import '../../services/equipment_deletion_summary.dart';
+import '../../../../core/database/equipment_deletion_summary_repository.dart';
 import 'bulk_equipment_edit_dialog.dart';
 import 'bulk_undo_bar.dart';
 import 'catalog_column_selector_shell.dart';
 import 'equipment_data_table.dart';
+import 'equipment_deletion_preview_dialog.dart';
 import 'equipment_delete_countdown_snackbar.dart';
 import 'equipment_form_dialog.dart';
 import 'catalog_tab_lookup_reload_mixin.dart';
@@ -360,41 +361,26 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
   ) async {
     final state = ref.read(equipmentDirectoryProvider);
     if (state.selectedIds.isEmpty) return;
-    final count = state.selectedIds.length;
-    final String contentText;
-    if (count <= 5) {
-      final db = await DatabaseHelper.instance.database;
-      final summaries = await deletionSummaries(db, state.selectedIds.toList());
-      final lines = formatEquipmentDeletionLines(summaries);
-      contentText = ['Διαγραφή εξοπλισμού;', ...lines].join('\n');
-    } else {
-      contentText = 'Διαγραφή $count εγγραφών εξοπλισμού;';
-    }
+    final ids = state.selectedIds.toList();
+
+    // Χωρίς σκληρό όριο πλέον: τα ερωτήματα είναι σταθερά σε πλήθος, οπότε ο
+    // χρήστης βλέπει ΤΙ διαγράφει ακόμα και με δεκάδες επιλεγμένα — πριν, πάνω
+    // από πέντε έβλεπε σκέτο «Διαγραφή Ν εγγραφών;».
+    final db = await DatabaseHelper.instance.database;
+    final summaries = await deletionSummaries(db, ids);
     if (!context.mounted) return;
-    final ok = await showDialog<bool>(
+
+    final preview = await showEquipmentDeletionPreviewDialog(
       context: context,
-      builder: (ctx) => DraggableDialogShell(
-        title: const Text('Διαγραφή εξοπλισμού'),
-        builder: (titleHandle) => AlertDialog(
-          title: titleHandle,
-          content: Text(contentText),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Ακύρωση'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Διαγραφή'),
-            ),
-          ],
-        ),
-      ),
+      summaries: summaries,
     );
-    if (ok != true || !context.mounted) return;
+    if (preview == null || !preview.confirmed || !context.mounted) return;
+    final keptIds = preview.keptEquipmentIds.toSet();
+    if (keptIds.isEmpty) return;
+
     final notifier = ref.read(equipmentDirectoryProvider.notifier);
     try {
-      await notifier.deleteSelected();
+      await notifier.deleteSelected(onlyIds: keptIds);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -406,6 +392,9 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
       return;
     }
     if (!context.mounted) return;
+    // Η μετάλλαξη ακύρωσε το lookup· η αλυσίδα των Κλήσεων δεν έχει listeners
+    // όσο είμαστε στον Κατάλογο και πρέπει να ξεπλυθεί εκτός φάσης build.
+    flushCallsChainAfterDirectoryMutation(ref);
     final entries = ref.read(equipmentDirectoryProvider).lastDeleted;
     final bodyText = entries == null || entries.isEmpty
         ? 'Η διαγραφή ολοκληρώθηκε.'

@@ -9,6 +9,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/provider/lookup_provider.dart';
@@ -466,12 +467,15 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   void filterAndSort() {
-    final q = SearchTextNormalizer.normalizeForSearch(state.searchQuery);
+    final idQuery = IdSearchQuery.parse(state.searchQuery);
+    final q = SearchTextNormalizer.normalizeForSearch(idQuery.text);
     var list = state.allItems;
     final visibleCols = state.orderedVisibleColumns;
 
-    if (q.isNotEmpty) {
+    if (!idQuery.isEmpty) {
       list = list.where((row) {
+        if (!idQuery.matchesEntityId(row.$1.id)) return false;
+        if (q.isEmpty) return true;
         for (final col in visibleCols) {
           final text = _cellTextForColumn(row, col);
           if (text.isEmpty) continue;
@@ -664,13 +668,18 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     await _afterEquipmentMutation();
   }
 
-  Future<void> deleteSelected() async {
+  /// Διαγράφει την επιλογή, ή μόνο τα [onlyIds] όταν δίνονται.
+  ///
+  /// Το [onlyIds] υπάρχει επειδή ο χρήστης μπορεί να αφαίρεσε στοιχεία μέσα
+  /// στην προεπισκόπηση: αυτά **δεν** διαγράφονται αλλά μένουν επιλεγμένα, για
+  /// να τα χειριστεί αμέσως μετά.
+  Future<void> deleteSelected({Set<int>? onlyIds}) async {
     if (state.selectedIds.isEmpty) return;
+    final targetIds = onlyIds ?? state.selectedIds;
+    if (targetIds.isEmpty) return;
     _settlePendingBulkUndo();
     final toProcess = state.allItems
-        .where(
-          (row) => row.$1.id != null && state.selectedIds.contains(row.$1.id),
-        )
+        .where((row) => row.$1.id != null && targetIds.contains(row.$1.id))
         .toList();
     final undo = <EquipmentDeleteUndoEntry>[];
 
@@ -752,7 +761,11 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       }
     });
 
-    state = state.copyWith(selectedIds: {}, lastDeleted: undo);
+    // Ό,τι επέλεξε ο χρήστης και ΔΕΝ διαγράφηκε μένει επιλεγμένο.
+    final survivingSelection = state.selectedIds
+        .where((id) => !targetIds.contains(id))
+        .toSet();
+    state = state.copyWith(selectedIds: survivingSelection, lastDeleted: undo);
     await _afterEquipmentMutation();
   }
 

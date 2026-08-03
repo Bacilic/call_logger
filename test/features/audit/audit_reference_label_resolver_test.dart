@@ -25,4 +25,27 @@ void main() {
       expect(ids, {5});
     });
   });
+
+  group('AuditReferenceLabelResolver.collectUserIds', () {
+    test('συλλέγει linked_user_id από old/new JSON', () {
+      final row = AuditLogModel(
+        id: 3,
+        oldValuesJson: '{"linked_user_id":243}',
+        newValuesJson: '{"linked_user_id":7}',
+      );
+      final ids = <int>{};
+      AuditReferenceLabelResolver.collectUserIds(row, ids);
+      expect(ids, {243, 7});
+    });
+
+    test('συλλέγει linked_user_id από bulk fields JSON', () {
+      final row = AuditLogModel(
+        id: 4,
+        newValuesJson: '{"fields":{"linked_user_id":9},"affected_ids":[1]}',
+      );
+      final ids = <int>{};
+      AuditReferenceLabelResolver.collectUserIds(row, ids);
+      expect(ids, {9});
+    });
+  });
 }

@@ -6,11 +6,9 @@ import '../database/database_init_result.dart';
 import '../database/database_init_progress_provider.dart';
 import '../database/database_helper.dart';
 import '../init/app_init_provider.dart';
-import '../init/database_switch_completion.dart';
+import '../init/app_init_retry_runner.dart';
 import '../providers/application_reset_provider.dart';
 import '../services/application_reset_service.dart';
-import '../services/settings_service.dart';
-import '../utils/user_facing_error_messages.dart';
 import '../../features/settings/widgets/pending_reset_database_screen.dart';
 import 'app_shortcuts.dart';
 import 'database_error_screen.dart';
@@ -25,59 +23,18 @@ class AppInitWrapper extends ConsumerStatefulWidget {
 
 class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   Future<void> _retryAppInitialization() async {
-    Object? closeFailure;
-    try {
-      await DatabaseHelper.instance.closeConnection();
-    } catch (e) {
-      closeFailure = e;
-    }
-    if (!mounted) return;
+    // Η επαναδοκιμή τρέχει ολόκληρη ακόμη κι αν το widget φύγει στο μεταξύ:
+    // διακοπή στη μέση θα άφηνε τη βάση κλειστή. Το `mounted` φυλάει μόνο την
+    // προβολή του μηνύματος.
+    final outcome = await runAppInitRetry(ref: ref);
+    if (outcome.succeeded || !mounted) return;
 
-    late final String path;
-    try {
-      path = await SettingsService().getDatabasePath();
-    } catch (e) {
-      final base = 'Αποτυχία επαναδοκιμής: ${humanizeUserFacingError(e)}';
-      final message = closeFailure == null
-          ? base
-          : '$base\n\n'
-                'Το κλείσιμο της τρέχουσας σύνδεσης απέτυχε: '
-                '${humanizeUserFacingError(closeFailure)}\n'
-                'Αν το αρχείο είναι κλειδωμένο, κλείστε τυχόν άλλο ανοιχτό αντίγραφο '
-                'της εφαρμογής και δοκιμάστε ξανά.';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-      return;
-    }
-
-    ref.invalidate(applicationResetPendingProvider);
-
-    try {
-      await completeDatabaseSwitch(ref: ref, path: path);
-    } catch (e) {
-      final base = humanizeUserFacingError(e);
-      final message = closeFailure == null
-          ? base
-          : '$base\n\n'
-                'Το κλείσιμο της τρέχουσας σύνδεσης απέτυχε: '
-                '${humanizeUserFacingError(closeFailure)}\n'
-                'Αν το αρχείο είναι κλειδωμένο, κλείστε τυχόν άλλο ανοιχτό αντίγραφο '
-                'της εφαρμογής και δοκιμάστε ξανά.';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(outcome.errorMessage!),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
   }
 
   Widget _buildInitFailureScreen({
@@ -126,6 +83,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
             initialDatabaseResult: initResult.result,
             initialIsLocalDevMode: initResult.isLocalDevMode,
             initialDatabaseProfile: initResult.databaseProfile,
+            missingApplicationFiles: initResult.missingApplicationFiles,
           );
         }
         return _buildInitFailureScreen(

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../features/lamp/controllers/lamp_search_query_parser.dart';
+import '../../utils/id_search_query.dart';
 import '../../utils/search_text_normalizer.dart';
 import '../../utils/user_identity_normalizer.dart';
 import 'lamp_database_provider.dart';
@@ -345,32 +346,14 @@ class OldEquipmentRepository {
     List<LampScopedSearchTerm>? scopedTerms,
     String? freeText,
   }) async {
-    if (scopedTerms == null && freeText == null) {
-      final normalizedQuery = _normalizeMaybe(query);
-      if (normalizedQuery == null) {
-        return const OldEquipmentSearchResult(
-          rows: <Map<String, Object?>>[],
-          totalCount: 0,
-        );
-      }
-      final cap = maxDisplay.clamp(1, 1000000);
-      final cache = await _ensureCache(databasePath);
-      var totalCount = 0;
-      final displayed = <Map<String, Object?>>[];
-      for (final row in cache.rows) {
-        if (!_containsAllTokens(row.normalizedText, normalizedQuery)) continue;
-        totalCount++;
-        if (displayed.length < cap) {
-          displayed.add(row.dto);
-        }
-      }
-      return OldEquipmentSearchResult(rows: displayed, totalCount: totalCount);
-    }
-
-    final effectiveFreeText = freeText ?? '';
-    final normalizedQuery = _normalizeMaybe(effectiveFreeText);
+    final effectiveFreeText = scopedTerms == null && freeText == null
+        ? query
+        : (freeText ?? '');
+    // Όροι «#id» στο ελεύθερο κείμενο = ακριβές αναγνωριστικό, όχι substring.
+    final idQuery = IdSearchQuery.parse(effectiveFreeText);
+    final normalizedQuery = _normalizeMaybe(idQuery.text);
     final terms = scopedTerms ?? const <LampScopedSearchTerm>[];
-    if (normalizedQuery == null && terms.isEmpty) {
+    if (normalizedQuery == null && terms.isEmpty && !idQuery.hasIdTokens) {
       return const OldEquipmentSearchResult(
         rows: <Map<String, Object?>>[],
         totalCount: 0,
@@ -381,6 +364,7 @@ class OldEquipmentRepository {
     var totalCount = 0;
     final displayed = <Map<String, Object?>>[];
     for (final row in cache.rows) {
+      if (!_rowMatchesGlobalIdTokens(row, idQuery)) continue;
       if (normalizedQuery != null &&
           !_containsAllTokens(row.normalizedText, normalizedQuery)) {
         continue;
@@ -392,6 +376,35 @@ class OldEquipmentRepository {
       }
     }
     return OldEquipmentSearchResult(rows: displayed, totalCount: totalCount);
+  }
+
+  /// Στήλες αναγνωριστικών που δέχονται καθολικούς όρους «#id».
+  static const List<String> _globalIdLookupColumns = <String>[
+    'code',
+    'owner_id',
+    'office_id',
+    'model_id',
+    'contract_id',
+    'supplier_id',
+  ];
+
+  bool _rowMatchesGlobalIdTokens(
+    _IndexedEquipmentRow row,
+    IdSearchQuery idQuery,
+  ) {
+    if (!idQuery.hasIdTokens) return true;
+    if (idQuery.hasInvalidIdToken) return false;
+    for (final id in idQuery.ids) {
+      var matched = false;
+      for (final column in _globalIdLookupColumns) {
+        if (_toInt(row.dto[column]) == id) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) return false;
+    }
+    return true;
   }
 
   Future<List<Map<String, Object?>>> relatedEquipment(
@@ -435,6 +448,11 @@ class OldEquipmentRepository {
 
     final path = databasePath.trim();
     try {
+      // Παλιές βάσεις χωρίς στήλες δικτύου: η προσθήκη γίνεται εδώ (γραπτό
+      // μονοπάτι) — το φόρτωμα της αναζήτησης δεν γράφει πλέον τίποτα (Δ17).
+      if (sectionType == OldEquipmentSectionType.network) {
+        await _ensureNetworkColumns(path);
+      }
       final db = await _databaseProvider.open(
         path,
         mode: LampDatabaseMode.write,
@@ -1164,20 +1182,37 @@ class OldEquipmentRepository {
     String createdAt,
     OldIntegrityCancellationToken token,
   ) async {
+    // Το όνομα μοντέλου έρχεται με JOIN στο ίδιο query: το αποθηκευμένο μήνυμα
+    // δεν ξαναγράφεται ποτέ, οπότε πρέπει να γεννηθεί ήδη αναγνώσιμο.
     final rows = await db.rawQuery('''
-      SELECT model, serial_no, COUNT(*) AS cnt
-      FROM equipment
-      WHERE model IS NOT NULL AND serial_no IS NOT NULL AND TRIM(serial_no) <> ''
-      GROUP BY model, serial_no
+      SELECT e.model, m.model_name, e.serial_no, COUNT(*) AS cnt
+      FROM equipment e
+      LEFT JOIN model m ON m.model = e.model
+      WHERE e.model IS NOT NULL
+        AND e.serial_no IS NOT NULL
+        AND TRIM(e.serial_no) <> ''
+      GROUP BY e.model, e.serial_no
       HAVING COUNT(*) > 1
       ''');
     if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+
+    final modelLabelById = <int, String>{};
+    for (final row in rows) {
+      final id = _toInt(row['model']);
+      final name = _normalizeText(row['model_name']);
+      if (id != null && name != null) modelLabelById[id] = name;
+    }
+
     return <Map<String, Object?>>[
       for (final row in rows)
         _scanIssue(
           issueType: 'duplicate_model_serial',
           message:
-              'Διπλότυπο (model, serial_no): (${row['model']}, ${row['serial_no']}) σε ${row['cnt']} εγγραφές.',
+              'Διπλότυπος συνδυασμός μοντέλου και σειριακού — '
+              '${lampDataIssueColumnDisplayLabel('model')}='
+              '${lampLabelledId(modelLabelById, row['model'])} · '
+              '${lampDataIssueColumnDisplayLabel('serial_no')}='
+              '${row['serial_no']} · σε ${row['cnt']} εγγραφές.',
           columnName: 'serial_no',
           rawValue: row['serial_no'],
           createdAt: createdAt,
@@ -1876,11 +1911,13 @@ class OldEquipmentRepository {
     return cache;
   }
 
+  /// Χτίσιμο cache αναζήτησης: ΜΟΝΟ ανάγνωση (Δ17).
+  ///
+  /// Κανένα γράψιμο εδώ — τα σχήματα/artifacts εξασφαλίζονται στα γραπτά
+  /// μονοπάτια ([updateSection], applier, [rebuildLampSearchIndex]). Έτσι το
+  /// άνοιγμα της Λάμπας δεν πληρώνει αναδόμηση πίνακα που δεν διαβάζει κανείς,
+  /// ούτε σαρώσεις antivirus από εγγραφές στο αρχείο.
   Future<_SearchCacheEntry> _buildCache(String databasePath) async {
-    await _ensureNetworkColumns(databasePath);
-    await _ensureSearchIndexTable(databasePath);
-    await _ensureLampIntegrityArtifacts(databasePath);
-    await _rebuildSearchIndex(databasePath);
     final db = await _databaseProvider.open(databasePath);
     final rows = await _loadSourceRows(db);
     final indexedRows = rows.map(_mapToIndexedRow).toList(growable: false);
@@ -1935,48 +1972,6 @@ class OldEquipmentRepository {
       );
     } catch (_) {
       // Αν η βάση είναι μόνο-ανάγνωση, συνεχίζουμε με in-memory cache χωρίς persisted index.
-    }
-  }
-
-  /// Idempotent εφαρμογή indexes + triggers ακεραιότητας σε υπάρχουσα βάση ανάγνωσης.
-  /// Σε read-only βάση αποτυγχάνει αθόρυβα. Κάθε statement τρέχει σε δικό του
-  /// try/catch ώστε αποτυχία ενός (π.χ. UNIQUE με υπάρχοντα διπλότυπα) να μην
-  /// εμποδίζει τα υπόλοιπα artifacts.
-  Future<void> _ensureLampIntegrityArtifacts(String databasePath) async {
-    try {
-      final db = await _databaseProvider.open(
-        databasePath,
-        mode: LampDatabaseMode.write,
-      );
-      for (final statement in oldDatabaseIndexStatements) {
-        try {
-          await db.execute(statement);
-        } catch (_) {
-          // Ένα αποτυχημένο index δεν μπλοκάρει τα υπόλοιπα.
-        }
-      }
-      for (final statement in oldDatabaseIntegrityStatements) {
-        try {
-          await db.execute(statement);
-        } catch (_) {
-          // Ένα αποτυχημένο integrity statement δεν μπλοκάρει τα υπόλοιπα.
-        }
-      }
-    } catch (_) {
-      // Προαιρετική αναβάθμιση σχήματος — η αναζήτηση λειτουργεί και χωρίς αυτήν.
-    }
-  }
-
-  Future<void> _rebuildSearchIndex(String databasePath) async {
-    try {
-      final db = await _databaseProvider.open(
-        databasePath,
-        mode: LampDatabaseMode.write,
-      );
-      await _applyLampSearchIndexRebuild(db);
-    } catch (_) {
-      // persisted search_index είναι βελτιστοποίηση. Η κύρια λειτουργία
-      // συνεχίζει μέσω in-memory κανονικοποιημένου cache.
     }
   }
 
@@ -2168,16 +2163,96 @@ class OldEquipmentRepository {
     OldEquipmentSearchFilters filters,
   ) {
     final dto = row.dto;
-    return _matchesField(_fieldTextForCode(dto), filters.code) &&
-        _matchesField(_fieldTextForDescription(dto), filters.description) &&
-        _matchesField(_fieldTextForSerialNo(dto), filters.serialNo) &&
-        _matchesField(_fieldTextForAssetNo(dto), filters.assetNo) &&
-        _matchesField(_fieldTextForOwner(dto), filters.owner) &&
-        _matchesField(_fieldTextForOffice(dto), filters.office) &&
-        _matchesField(_fieldTextForPhone(dto), filters.phone) &&
-        _matchesField(_fieldTextForModel(dto), filters.model) &&
-        _matchesField(_fieldTextForContract(dto), filters.contract) &&
-        _matchesField(_fieldTextForState(dto), filters.state);
+    return _fieldQueryMatches(
+          dto,
+          filters.code,
+          fieldText: _fieldTextForCode(dto),
+          idColumns: const <String>['code'],
+        ) &&
+        _fieldQueryMatches(
+          dto,
+          filters.description,
+          fieldText: _fieldTextForDescription(dto),
+        ) &&
+        _fieldQueryMatches(
+          dto,
+          filters.serialNo,
+          fieldText: _fieldTextForSerialNo(dto),
+        ) &&
+        _fieldQueryMatches(
+          dto,
+          filters.assetNo,
+          fieldText: _fieldTextForAssetNo(dto),
+        ) &&
+        _fieldQueryMatches(
+          dto,
+          filters.owner,
+          fieldText: _fieldTextForOwner(dto),
+          idColumns: const <String>['owner_id'],
+        ) &&
+        _fieldQueryMatches(
+          dto,
+          filters.office,
+          fieldText: _fieldTextForOffice(dto),
+          idColumns: const <String>['office_id'],
+        ) &&
+        _fieldQueryMatches(
+          dto,
+          filters.phone,
+          fieldText: _fieldTextForPhone(dto),
+        ) &&
+        _fieldQueryMatches(
+          dto,
+          filters.model,
+          fieldText: _fieldTextForModel(dto),
+          idColumns: const <String>['model_id'],
+        ) &&
+        _fieldQueryMatches(
+          dto,
+          filters.contract,
+          fieldText: _fieldTextForContract(dto),
+          idColumns: const <String>['contract_id'],
+        ) &&
+        _fieldQueryMatches(
+          dto,
+          filters.state,
+          fieldText: _fieldTextForState(dto),
+          idColumns: const <String>['state_id'],
+        );
+  }
+
+  /// Ταίριασμα πεδίου με υποστήριξη «#»: σε πεδία με αναγνωριστικό το «#243»
+  /// σημαίνει ακριβές id· σε πεδία χωρίς αναγνωριστικό (τηλέφωνο, σειριακός)
+  /// σημαίνει ακριβή τιμή αντί για substring.
+  bool _fieldQueryMatches(
+    Map<String, Object?> dto,
+    String? queryRaw, {
+    required String fieldText,
+    List<String> idColumns = const <String>[],
+  }) {
+    final raw = queryRaw?.trim() ?? '';
+    if (raw.isEmpty) return true;
+    if (IdSearchQuery.isIdToken(raw)) {
+      if (idColumns.isNotEmpty) {
+        final id = IdSearchQuery.parseIdToken(raw);
+        if (id == null) return false;
+        return idColumns.any((column) => _toInt(dto[column]) == id);
+      }
+      final target = SearchTextNormalizer.normalizeForSearch(raw.substring(1));
+      if (target.isEmpty) return false;
+      return _exactValueMatch(fieldText, target);
+    }
+    return _matchesField(fieldText, queryRaw);
+  }
+
+  /// «#τιμή»: η τιμή ισούται με ολόκληρο το πεδίο ή με αυτοτελές τεκμήριό του
+  /// (π.χ. ένα τηλέφωνο μέσα σε λίστα «2534, 2540»).
+  bool _exactValueMatch(String fieldText, String normalizedTarget) {
+    final normalized = SearchTextNormalizer.normalizeForSearch(fieldText);
+    if (normalized == normalizedTarget) return true;
+    return normalized
+        .split(RegExp(r'[\s,;/·]+'))
+        .any((token) => token == normalizedTarget);
   }
 
   bool _matchesField(String fieldText, String? queryRaw) {
@@ -2229,6 +2304,10 @@ class OldEquipmentRepository {
     List<LampScopedSearchTerm> terms,
   ) {
     for (final term in terms) {
+      if (IdSearchQuery.isIdToken(term.value)) {
+        if (!_matchesScopedIdTerm(row, term)) return false;
+        continue;
+      }
       final normalizedValue = SearchTextNormalizer.normalizeForSearch(
         term.value,
       );
@@ -2244,6 +2323,27 @@ class OldEquipmentRepository {
       if (!matched) return false;
     }
     return true;
+  }
+
+  /// Στοχευμένος όρος «κλειδί:#τιμή»: ακριβές id όπου το κλειδί έχει
+  /// αναγνωριστικό, αλλιώς ακριβής τιμή στις στήλες του κλειδιού.
+  bool _matchesScopedIdTerm(
+    _IndexedEquipmentRow row,
+    LampScopedSearchTerm term,
+  ) {
+    if (term.idColumns.isNotEmpty) {
+      final id = IdSearchQuery.parseIdToken(term.value);
+      if (id == null) return false;
+      return term.idColumns.any((column) => _toInt(row.dto[column]) == id);
+    }
+    final target = SearchTextNormalizer.normalizeForSearch(
+      term.value.trim().substring(1),
+    );
+    if (target.isEmpty) return false;
+    for (final column in term.columns) {
+      if (_exactValueMatch(_toText(row.dto[column]), target)) return true;
+    }
+    return false;
   }
 
   Map<String, Object?> _scanIssue({

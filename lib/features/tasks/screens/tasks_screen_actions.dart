@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/errors/task_save_exception.dart';
 import '../../../core/services/save_confirmation_summary.dart';
+import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../directory/providers/department_directory_provider.dart';
 import '../../directory/providers/directory_provider.dart';
@@ -18,6 +19,7 @@ import '../providers/task_service_provider.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../utils/task_duration_format.dart';
+import '../widgets/snooze_choice_dialog.dart';
 import 'task_close_dialog.dart';
 import 'task_form_dialog.dart';
 import 'task_settings_dialog.dart';
@@ -239,58 +241,63 @@ Future<_ClosedEditMode?> _pickClosedEditMode(
   return showDialog<_ClosedEditMode>(
     context: context,
     builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setState) => AlertDialog(
+      builder: (ctx, setState) => DraggableDialogShell(
         title: const Text('Επεξεργασία Εκκρεμότητας'),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                _buildClosedInfoText(task),
-                style: Theme.of(ctx).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Θέλετε να την επαναφέρετε ως:',
-                style: Theme.of(ctx).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<_ClosedEditMode>(
-                initialValue: selected,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-                items: const [
-                  DropdownMenuItem(
-                    value: _ClosedEditMode.recreate,
-                    child: Text('Εκ νέου'),
+        builder: (titleHandle) => AlertDialog(
+          title: titleHandle,
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  _buildClosedInfoText(task),
+                  style: Theme.of(ctx).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Θέλετε να την επαναφέρετε ως:',
+                  style: Theme.of(ctx).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<_ClosedEditMode>(
+                  initialValue: selected,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
                   ),
-                  DropdownMenuItem(
-                    value: _ClosedEditMode.reopen,
-                    child: Text('Αναίρεση ολοκλήρωσης'),
-                  ),
-                  DropdownMenuItem(
-                    value: _ClosedEditMode.snooze,
-                    child: Text('Αναβολή'),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v != null) setState(() => selected = v);
-                },
-              ),
-            ],
+                  items: const [
+                    DropdownMenuItem(
+                      value: _ClosedEditMode.recreate,
+                      child: Text('Εκ νέου'),
+                    ),
+                    DropdownMenuItem(
+                      value: _ClosedEditMode.reopen,
+                      child: Text('Αναίρεση ολοκλήρωσης'),
+                    ),
+                    DropdownMenuItem(
+                      value: _ClosedEditMode.snooze,
+                      child: Text('Αναβολή'),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => selected = v);
+                  },
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(selected),
+              child: const Text('Συνέχεια'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Ακύρωση'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(selected),
-            child: const Text('Συνέχεια'),
-          ),
-        ],
       ),
     ),
   );
@@ -304,13 +311,19 @@ Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
           .maybeWhen(data: (c) => c, orElse: () => null) ??
       TaskSettingsConfig.defaultConfig();
   final maxRangeText = config.maxSnoozeDays == 1
-      ? 'Μέγιστο εύρος: 1 ημέρα'
-      : 'Μέγιστο εύρος: ${config.maxSnoozeDays} ημέρες';
+      ? 'έως 1 ημέρα'
+      : 'έως ${config.maxSnoozeDays} ημέρες';
 
-  final result = await showDialog<({String choice, String? note})>(
+  final result = await showDialog<SnoozeChoiceResult>(
     context: context,
-    builder: (ctx) =>
-        SnoozeChoiceDialog(config: config, maxRangeText: maxRangeText),
+    builder: (ctx) => SnoozeChoiceDialog(
+      config: config,
+      maxRangeText: maxRangeText,
+      taskTitle: task.title,
+      currentDue: task.dueDateTime,
+      calculateDue: (option, from) =>
+          service.calculateNextDueDate(config, option: option, fromDate: from),
+    ),
   );
 
   if (!context.mounted || result == null) return;
@@ -318,12 +331,16 @@ Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
   final choice = result.choice;
   final snoozeNote = result.note;
 
-  if (choice != 'custom') {
-    final newDue = service.calculateNextDueDate(
-      config,
-      option: choice,
-      fromDate: DateTime.now(),
-    );
+  if (choice != SnoozeChoiceDialog.customChoice) {
+    // Η στιγμή που έδειξε το chip είναι αυτή που εφαρμόζεται — χωρίς νέο
+    // υπολογισμό που θα διέφερε από όσα είδε ο χρήστης.
+    final newDue =
+        result.due ??
+        service.calculateNextDueDate(
+          config,
+          option: choice,
+          fromDate: DateTime.now(),
+        );
     final updatedTask = task
         .copyWith(
           dueDate: newDue.toIso8601String(),
@@ -412,22 +429,25 @@ Future<void> deleteTaskWithCountdown(
       : 'άγνωστη ημερομηνία';
   final confirm = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => DraggableDialogShell(
       title: const Text('Διαγραφή εκκρεμότητας'),
-      content: Text(
-        'Να διαγραφεί η εκκρεμότητα: ${task.title} από τη $createdLabel.\n\n'
-        'Αυτή η πράξη δεν μπορεί να αναιρεθεί.',
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: Text(
+          'Να διαγραφεί η εκκρεμότητα: ${task.title} από τη $createdLabel.\n\n'
+          'Αυτή η πράξη δεν μπορεί να αναιρεθεί.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Όχι'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Ναι'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Όχι'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Ναι'),
-        ),
-      ],
     ),
   );
   if (confirm != true || !context.mounted) return;

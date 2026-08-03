@@ -506,6 +506,42 @@ void main() {
     );
 
     test(
+      'η αρχική τιμή διπλότυπου δείχνει όνομα μοντέλου, όχι ωμό id',
+      () async {
+        await _seedBaseReferenceData(dbPath);
+        await _insertModel(dbPath, model: 31, name: 'Model ThirtyOne');
+        await _insertEquipment(
+          dbPath,
+          code: 9001,
+          model: 31,
+          serialNo: 'DUP-SN-31',
+        );
+        await _insertEquipment(
+          dbPath,
+          code: 9002,
+          model: 31,
+          serialNo: 'DUP-SN-31',
+        );
+        await _insertIssue(
+          dbPath,
+          issueType: 'duplicate_model_serial',
+          rawValue: 'DUP-SN-31',
+          columnName: 'serial_no',
+        );
+
+        final proposals = await service.analyzeIssues(
+          databasePath: dbPath,
+          issueType: LampIssueType.duplicateModelSerial,
+        );
+        final proposal = proposals.singleWhere(
+          (p) => p.metadata['serialNo'] == 'DUP-SN-31',
+        );
+
+        expect(proposal.originalValue, 'Model ThirtyOne (31) / DUP-SN-31');
+      },
+    );
+
+    test(
       'reassign serial σε τιμή που υπάρχει σε άλλο μοντέλο επιτρέπεται',
       () async {
         await _seedBaseReferenceData(dbPath);

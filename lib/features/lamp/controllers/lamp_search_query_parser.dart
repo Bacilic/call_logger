@@ -6,11 +6,15 @@ class LampScopedSearchTerm {
     required this.normalizedKey,
     required this.columns,
     required this.value,
+    this.idColumns = const <String>[],
   });
 
   final String normalizedKey;
   final List<String> columns;
   final String value;
+
+  /// Στήλες αναγνωριστικού για τιμές «#id» (κενό όταν το κλειδί δεν έχει id).
+  final List<String> idColumns;
 }
 
 /// Αποτέλεσμα ανάλυσης καθολικής αναζήτησης.
@@ -70,6 +74,35 @@ class LampSearchQueryParser {
 
   static final Map<String, List<String>> _columnsByNormalizedKey =
       _buildKeyColumnMap();
+
+  /// Στήλες αναγνωριστικού ανά κλειδί για τιμές «#id» (ακριβές ταίριασμα).
+  static final Map<String, List<String>> _idColumnsByNormalizedKey =
+      _buildKeyIdColumnMap();
+
+  static Map<String, List<String>> _buildKeyIdColumnMap() {
+    final map = <String, List<String>>{};
+    void register(List<String> aliases, List<String> idColumns) {
+      for (final alias in aliases) {
+        map[SearchTextNormalizer.normalizeDictionaryForm(alias)] = idColumns;
+      }
+    }
+
+    register(<String>['κωδικός', 'κωδικος'], <String>['code']);
+    register(<String>[
+      'υπάλληλος',
+      'υπαλληλος',
+      'όνομα',
+      'ονομα',
+      'ιδιοκτήτης',
+      'ιδιοκτητης',
+    ], <String>['owner_id']);
+    register(<String>['τμήμα', 'τμημα'], <String>['office_id']);
+    register(<String>['μοντέλο', 'μοντελο'], <String>['model_id']);
+    register(<String>['σύμβαση', 'συμβαση'], <String>['contract_id']);
+    register(<String>['προμηθευτής', 'προμηθευτης'], <String>['supplier_id']);
+    register(<String>['κατάσταση', 'κατασταση'], <String>['state_id']);
+    return map;
+  }
 
   /// Πεδία φίλτρων UI που καθρεφτίζονται από στοχευμένους όρους.
   static const Map<String, String> _mirrorFieldIdsByNormalizedKey =
@@ -235,6 +268,8 @@ class LampSearchQueryParser {
             normalizedKey: normalizedKey,
             columns: columns,
             value: rawValue,
+            idColumns:
+                _idColumnsByNormalizedKey[normalizedKey] ?? const <String>[],
           ),
         );
       }

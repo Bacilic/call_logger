@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../utils/user_identity_normalizer.dart';
+import 'lamp_data_issue_type_labels.dart';
 import 'lamp_issue_matching_engine.dart';
 import 'lamp_issue_resolution_models.dart';
 
@@ -20,23 +21,6 @@ class LampFkLabelMaps {
     officeLabelById: <int, String>{},
     ownerLabelById: <int, String>{},
   );
-}
-
-/// Ετικέτα FK ως «Όνομα (id)» ή σκέτο id αν λείπει όνομα.
-String lampLabelledId(Map<int, String> labels, Object? id) {
-  if (id == null) return '-';
-  int? asInt;
-  if (id is int) {
-    asInt = id;
-  } else if (id is num) {
-    asInt = id.toInt();
-  } else {
-    asInt = int.tryParse(id.toString().trim());
-  }
-  if (asInt == null) return '-';
-  final label = labels[asInt];
-  if (label != null && label.isNotEmpty) return '$label ($asInt)';
-  return asInt.toString();
 }
 
 class LampIssueResolutionSupport {
@@ -165,7 +149,7 @@ class LampIssueResolutionSupport {
 
   String equipmentSummary(
     Map<String, Object?> row, {
-    LampFkLabelMaps labels = LampFkLabelMaps.empty,
+    required LampFkLabelMaps labels,
   }) {
     return 'κωδικός=${row['code']} · ${text(row['description']) ?? '-'} · '
         'μοντέλο=${lampLabelledId(labels.modelLabelById, row['model'])} · '
@@ -221,6 +205,62 @@ class LampIssueResolutionSupport {
       officeLabelById: officeLabelById,
       ownerLabelById: ownerLabelById,
     );
+  }
+
+  /// Εμφάνιση στόχου FK ως «Όνομα (id)» με ένα στοχευμένο query στη γραμμή
+  /// του στόχου· σκέτο id όταν δεν βρεθεί όνομα ή η στήλη δεν έχει ετικέτα.
+  Future<String> fkTargetDisplay(
+    DatabaseExecutor db,
+    String fkColumn,
+    int id,
+  ) async {
+    String? label;
+    switch (fkColumn) {
+      case 'owner':
+        final rows = await db.query(
+          'owners',
+          columns: <String>['last_name', 'first_name'],
+          where: 'owner = ?',
+          whereArgs: <Object?>[id],
+          limit: 1,
+        );
+        if (rows.isNotEmpty) label = ownerLabel(rows.first);
+      case 'office':
+        final rows = await db.query(
+          'offices',
+          columns: <String>['office_name', 'department_name'],
+          where: 'office = ?',
+          whereArgs: <Object?>[id],
+          limit: 1,
+        );
+        if (rows.isNotEmpty) {
+          final officeName = text(rows.first['office_name']) ?? '';
+          final departmentName = text(rows.first['department_name']) ?? '';
+          label = departmentName.isNotEmpty
+              ? '$officeName $departmentName'.trim()
+              : officeName;
+        }
+      case 'model':
+        final rows = await db.query(
+          'model',
+          columns: <String>['model_name'],
+          where: 'model = ?',
+          whereArgs: <Object?>[id],
+          limit: 1,
+        );
+        if (rows.isNotEmpty) label = text(rows.first['model_name']);
+      case 'contract':
+        final rows = await db.query(
+          'contracts',
+          columns: <String>['contract_name'],
+          where: 'contract = ?',
+          whereArgs: <Object?>[id],
+          limit: 1,
+        );
+        if (rows.isNotEmpty) label = text(rows.first['contract_name']);
+    }
+    if (label == null || label.trim().isEmpty) return '$id';
+    return '${label.trim()} ($id)';
   }
 
   Future<Map<String, Object?>?> equipmentByCode(Database db, int code) async {

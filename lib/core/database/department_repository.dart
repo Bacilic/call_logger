@@ -44,6 +44,23 @@ class DepartmentRepository {
     return rows.isNotEmpty;
   }
 
+  /// Id ενεργού τμήματος με αυτό το όνομα (μέσω `name_key`) — χωρίς δημιουργία.
+  Future<int?> findActiveDepartmentIdByName(String? name) async {
+    final trimmed = stripDepartmentDeletedDisplaySuffix(name).trim();
+    if (trimmed.isEmpty) return null;
+    final key = SearchTextNormalizer.normalizeForSearch(trimmed);
+    if (key.isEmpty) return null;
+    final rows = await db.query(
+      'departments',
+      columns: ['id'],
+      where: '${DirectorySupport.notDeletedClause} AND name_key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['id'] as int?;
+  }
+
   Future<int?> getOrCreateDepartmentIdByName(
     String? name, {
     bool recordAudit = true,

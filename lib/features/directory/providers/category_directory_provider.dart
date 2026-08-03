@@ -6,6 +6,7 @@ import '../../../core/database/calls_search_index.dart';
 import '../../../core/database/category_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
+import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../history/providers/history_provider.dart';
 import '../models/category_directory_column.dart';
@@ -188,15 +189,18 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   }
 
   void filterAndSort() {
-    final q = SearchTextNormalizer.normalizeForSearch(state.searchQuery);
+    final idQuery = IdSearchQuery.parse(state.searchQuery);
     var list = state.allCategories;
-    if (q.isNotEmpty) {
+    if (!idQuery.isEmpty) {
       list = list
           .where(
-            (c) => SearchTextNormalizer.containsAllTokens(
-              c.name,
-              state.searchQuery,
-            ),
+            (c) =>
+                idQuery.matchesEntityId(c.id) &&
+                (idQuery.text.isEmpty ||
+                    SearchTextNormalizer.containsAllTokens(
+                      c.name,
+                      idQuery.text,
+                    )),
           )
           .toList();
     }

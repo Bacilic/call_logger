@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
-import 'package:call_logger/features/directory/services/equipment_deletion_summary.dart';
+import 'package:call_logger/core/database/equipment_deletion_summary_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -99,7 +99,7 @@ void main() {
       expect(s.code, '2113');
       expect(s.ownerName, 'Αναστασία Φούφα');
       expect(s.phone, '2898');
-      expect(s.historyCount, 3);
+      expect(s.callCount, 3);
     });
 
     test('εξοπλισμός χωρίς κάτοχο/τηλέφωνο και χωρίς ιστορικό', () async {
@@ -114,7 +114,7 @@ void main() {
       expect(s.code, '3974');
       expect(s.ownerName, isNull);
       expect(s.phone, isNull);
-      expect(s.historyCount, 0);
+      expect(s.callCount, 0);
     });
   });
 }

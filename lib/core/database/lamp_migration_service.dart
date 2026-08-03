@@ -403,12 +403,25 @@ class LampOwnerConflict {
     required this.kind,
     required this.value,
     required this.currentOwners,
+    this.sharedDepartmentName,
   });
 
   final String conflictId;
   final LampOwnerConflictKind kind;
   final String value;
+
+  /// Ονόματα υπαλλήλων-κατόχων, «Όνομα (τμήμα)». Ποτέ κοινόχρηστο τμήματος.
   final List<String> currentOwners;
+
+  /// Τμήμα που κρατά τον αριθμό ως κοινόχρηστο, αν υπάρχει. Ρητό πεδίο και όχι
+  /// ειδικό πρόθεμα μέσα στα ονόματα: το κείμενο είναι παρουσίαση, η διάκριση
+  /// κατόχου/τμήματος είναι δεδομένο.
+  final String? sharedDepartmentName;
+
+  bool get hasUserOwners => currentOwners.any((o) => o.trim().isNotEmpty);
+
+  bool get hasSharedDepartment =>
+      (sharedDepartmentName?.trim().isNotEmpty ?? false);
 }
 
 class LampOwnerConflictDecision {
@@ -619,27 +632,8 @@ class LampMigrationService {
             editingUserId: selectedCandidateId,
           );
       for (final c in policyConflicts) {
-        if (c.hasOtherUserOwners) {
-          conflicts.add(
-            LampOwnerConflict(
-              conflictId: 'phone:${_norm(c.phone)}',
-              kind: LampOwnerConflictKind.phone,
-              value: c.phone,
-              currentOwners: c.otherUserOwnerLabels,
-            ),
-          );
-        } else if (c.hasDepartmentLocationConflict) {
-          conflicts.add(
-            LampOwnerConflict(
-              conflictId: 'phone:${_norm(c.phone)}',
-              kind: LampOwnerConflictKind.phone,
-              value: c.phone,
-              currentOwners: [
-                'Κοινόχρηστο: ${c.existingDepartmentName ?? c.existingDepartmentId}',
-              ],
-            ),
-          );
-        }
+        final conflict = _phoneConflictFrom(c);
+        if (conflict != null) conflicts.add(conflict);
       }
     }
 
@@ -703,29 +697,27 @@ class LampMigrationService {
         );
     final conflicts = <LampOwnerConflict>[];
     for (final c in policyConflicts) {
-      if (c.hasOtherUserOwners) {
-        conflicts.add(
-          LampOwnerConflict(
-            conflictId: 'phone:${_norm(c.phone)}',
-            kind: LampOwnerConflictKind.phone,
-            value: c.phone,
-            currentOwners: c.otherUserOwnerLabels,
-          ),
-        );
-      } else if (c.hasDepartmentLocationConflict) {
-        conflicts.add(
-          LampOwnerConflict(
-            conflictId: 'phone:${_norm(c.phone)}',
-            kind: LampOwnerConflictKind.phone,
-            value: c.phone,
-            currentOwners: [
-              'Κοινόχρηστο: ${c.existingDepartmentName ?? c.existingDepartmentId}',
-            ],
-          ),
-        );
-      }
+      final conflict = _phoneConflictFrom(c);
+      if (conflict != null) conflicts.add(conflict);
     }
     return conflicts;
+  }
+
+  /// Μετάφραση σύγκρουσης πολιτικής σε διένεξη οδηγού. Κοινή για τις ροές
+  /// υπαλλήλου και τμήματος, ώστε να μη διαφέρουν σε αυτό που δηλώνουν.
+  LampOwnerConflict? _phoneConflictFrom(PhoneDepartmentConflict c) {
+    if (!c.hasOtherUserOwners && !c.hasDepartmentLocationConflict) return null;
+    return LampOwnerConflict(
+      conflictId: 'phone:${_norm(c.phone)}',
+      kind: LampOwnerConflictKind.phone,
+      value: c.phone,
+      currentOwners: c.hasOtherUserOwners
+          ? c.otherUserOwnerLabels
+          : const <String>[],
+      sharedDepartmentName: c.hasDepartmentLocationConflict
+          ? (c.existingDepartmentName ?? c.existingDepartmentId?.toString())
+          : null,
+    );
   }
 
   Future<List<LampOwnerConflict>> detectEquipmentConflicts({
@@ -1558,10 +1550,7 @@ class LampMigrationService {
       if (sourceDeptId != null) {
         transfers[conflict.value] = sourceDeptId;
       }
-      final hasOtherUserOwners = conflict.currentOwners.any(
-        (label) => !label.startsWith('Κοινόχρηστο:'),
-      );
-      if (hasOtherUserOwners) {
+      if (conflict.hasUserOwners) {
         removeFromOthers.add(conflict.value);
       }
     }

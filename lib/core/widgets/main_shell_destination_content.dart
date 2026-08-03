@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../providers/app_instances_provider.dart';
+import '../providers/main_nav_request_provider.dart';
+import '../services/app_instance_registry.dart';
 import '../database/database_state_notice.dart';
 import '../database/database_switch_success_notice.dart';
 import '../services/settings_service.dart';
@@ -159,6 +163,7 @@ class MainShellDestinationContent {
       showStateNotice: _showDatabaseStateNotice,
       hasSwitchSuccess: switchSuccessMessage != null,
     );
+    final instances = host.ref.watch(appInstancesProvider).value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -175,6 +180,43 @@ class MainShellDestinationContent {
                 fontWeight: FontWeight.w600,
               ),
             ),
+          ),
+        // Ξεχωριστή λωρίδα από την «τοπική βάση» από πάνω: εκείνη σημαίνει
+        // «η δικτυακή διαδρομή δεν ήταν προσβάσιμη», αυτή «τα δεδομένα που
+        // βλέπεις είναι κατασκευασμένα». Δύο διαφορετικά πράγματα που κάποτε
+        // μοιράζονταν το ίδιο σήμα. Η αναγνώριση γίνεται από την υπογραφή του
+        // σπορέα ΜΕΣΑ στη βάση — το όνομα του αρχείου δεν λέει τίποτα.
+        if (host.widget.databaseProfile?.hasDebugScenarioSignature ?? false)
+          Container(
+            key: const ValueKey('debug_scenario_database_banner'),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            color: Colors.deepOrange.shade300,
+            child: Text(
+              'ΔΟΚΙΜΑΣΤΙΚΗ ΒΑΣΗ ΣΕΝΑΡΙΩΝ - Τα δεδομένα είναι τεχνητά',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        // Δύο αντίγραφα της εφαρμογής μοιράζονται τις ίδιες ρυθμίσεις. Δεν
+        // είναι κίνδυνος — είναι πληροφορία που εξηγεί γιατί μια ρύθμιση
+        // «άλλαξε μόνη της». Ο σύνδεσμος οδηγεί στη μόνιμη λίστα.
+        if (instances != null && instances.shouldNotify)
+          _SharedInstancesBanner(
+            otherLabel: AppInstanceRegistry.shortFolderLabel(
+              instances.others.first.executablePath,
+            ),
+            onOpenList: () => host.ref
+                .read(mainNavRequestProvider.notifier)
+                .request(
+                  const MainNavRequest(
+                    destination: MainNavDestination.database,
+                  ),
+                ),
+            onDismiss: () => unawaited(dismissAppInstancesNotice(host.ref)),
           ),
         if (topBanner == TopDatabaseBanner.warning)
           Material(
@@ -296,6 +338,77 @@ class MainShellDestinationContent {
           ),
         Expanded(child: _contentForDestination(dest)),
       ],
+    );
+  }
+}
+
+/// Λωρίδα «οι ρυθμίσεις μοιράζονται με άλλο αντίγραφο».
+///
+/// Διακριτική και κλειστή: πληροφορία, όχι προειδοποίηση κινδύνου. Ο σύνδεσμος
+/// οδηγεί στη μόνιμη λίστα αντιγράφων (οθόνη Βάσης Δεδομένων).
+class _SharedInstancesBanner extends StatelessWidget {
+  const _SharedInstancesBanner({
+    required this.otherLabel,
+    required this.onOpenList,
+    required this.onDismiss,
+  });
+
+  /// Σύντομη ετικέτα φακέλου — η πλήρης διαδρομή ζει στην κάρτα, όπου
+  /// διαβάζεται και επιλέγεται· εδώ θα έσπαγε σε άσχημο σημείο.
+  final String otherLabel;
+  final VoidCallback onOpenList;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final baseStyle = theme.textTheme.labelLarge?.copyWith(
+      color: Colors.black87,
+    );
+
+    return Material(
+      color: Colors.blueGrey.shade100,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: RichText(
+                key: const ValueKey('shared_instances_banner'),
+                textAlign: TextAlign.center,
+                text: TextSpan(
+                  style: baseStyle,
+                  children: [
+                    TextSpan(
+                      text:
+                          'Οι ρυθμίσεις χρησιμοποιούνται και από άλλο αντίγραφο '
+                          'της εφαρμογής ($otherLabel). Δείτε τα ',
+                    ),
+                    TextSpan(
+                      text: 'αντίγραφα',
+                      style: baseStyle?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline,
+                      ),
+                      recognizer: TapGestureRecognizer()..onTap = onOpenList,
+                    ),
+                    const TextSpan(
+                      text: ' ή εκτελέστε με --profile για ανεξάρτητη λειτουργία.',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            IconButton(
+              key: const ValueKey('shared_instances_banner_dismiss'),
+              tooltip: 'Κλείσιμο',
+              icon: const Icon(Icons.close, size: 20, color: Colors.black87),
+              onPressed: onDismiss,
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

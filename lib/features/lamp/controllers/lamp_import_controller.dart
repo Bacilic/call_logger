@@ -9,6 +9,7 @@ import '../../../core/database/old_database/lamp_excel_validator.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
 import '../../../core/providers/lamp_db_comparison_provider.dart';
+import '../../../core/widgets/compact_tooltip.dart';
 import '../widgets/lamp_import_report_dialog.dart';
 import 'lamp_path_management.dart';
 import 'lamp_screen_host.dart';
@@ -118,7 +119,7 @@ class LampImportController {
     if (enabled || tooltipMessage == null) {
       return button;
     }
-    return Tooltip(
+    return CompactTooltip(
       waitDuration: const Duration(milliseconds: 400),
       showDuration: const Duration(seconds: 5),
       message: tooltipMessage,

@@ -14,7 +14,8 @@ import 'smart_entity_selector_anchor_frame.dart';
 import 'smart_entity_selector_caller_presentational.dart' as caller_ui;
 import 'smart_entity_selector_conflict_badge.dart';
 import 'smart_entity_selector_overlay_utils.dart';
-import 'text_layout_utils.dart';
+import '../../../../core/utils/text_layout_utils.dart';
+import 'inline_field_clear_button.dart';
 
 class SmartEntityCallerField extends StatefulWidget {
   const SmartEntityCallerField({

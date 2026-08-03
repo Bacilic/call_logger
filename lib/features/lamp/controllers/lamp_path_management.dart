@@ -18,8 +18,10 @@ import '../../../core/providers/lamp_read_path_health_provider.dart';
 import '../../../core/services/portable_lamp_storage.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
+import '../../../core/widgets/compact_tooltip.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
 import '../services/lamp_db_adoption_guard.dart';
+import '../widgets/lamp_db_adoption_dialogs.dart';
 import 'lamp_screen_host.dart';
 
 /// Κατάσταση κουμπιού «ίδια διαδρομή εξόδου» (βελάκι) στον διάλογο ρυθμίσεων.
@@ -141,6 +143,9 @@ class LampPathController {
     host.lampSettingsDialogSetState?.call(() {});
   }
 
+  /// Φορτώνει μόνο τα πεδία διαδρομών από τις ρυθμίσεις — κανένας έλεγχος
+  /// αρχείων εδώ (Δ17): Excel/έξοδος/σύγκριση τροφοδοτούν μόνο τον διάλογο
+  /// ρυθμίσεων και ελέγχονται όταν ανοίξει.
   Future<void> loadPathsFromSettings() async {
     final settings = host.shared.settings;
     final excelPath = await settings.getExcelPath();
@@ -154,15 +159,6 @@ class LampPathController {
       readDbController.text = outRaw ?? '';
     }
     outputDbController.text = outRaw ?? '';
-    await host.ref
-        .read(lampExcelPathHealthProvider.notifier)
-        .refresh(pathOverride: excelController.text.trim());
-    await host.ref
-        .read(lampDbComparisonProvider.notifier)
-        .refresh(
-          readPathOverride: readDbController.text.trim(),
-          outputPathOverride: outputDbController.text.trim(),
-        );
   }
 
   Future<void> applyPersistedReadAndValidate({
@@ -187,15 +183,20 @@ class LampPathController {
           outputPathOverride: output,
           excelPathOverride: excelController.text.trim(),
         );
-    await host.ref
-        .read(lampOutputPathHealthProvider.notifier)
-        .refresh(pathOverride: output);
-    await host.ref
-        .read(lampExcelPathHealthProvider.notifier)
-        .refresh(pathOverride: excelController.text.trim());
-    await host.ref
-        .read(lampDbComparisonProvider.notifier)
-        .refresh(readPathOverride: read, outputPathOverride: output);
+    // Έξοδος/Excel/σύγκριση τροφοδοτούν μόνο τον διάλογο ρυθμίσεων — ο έλεγχος
+    // αρχείων τους γίνεται μόνο όταν είναι ανοιχτός, όχι στο άνοιγμα της Λάμπας
+    // (Δ17: κάθε άνοιγμα αρχείου κοστίζει, ειδικά με antivirus).
+    if (host.lampSettingsDialogOpen) {
+      await host.ref
+          .read(lampOutputPathHealthProvider.notifier)
+          .refresh(pathOverride: output);
+      await host.ref
+          .read(lampExcelPathHealthProvider.notifier)
+          .refresh(pathOverride: excelController.text.trim());
+      await host.ref
+          .read(lampDbComparisonProvider.notifier)
+          .refresh(readPathOverride: read, outputPathOverride: output);
+    }
     if (!host.mounted) return;
     final result = host.readPathCheck;
     if (result == null) return;
@@ -274,18 +275,44 @@ class LampPathController {
     }
   }
 
-  /// Κοινή ακολουθία: απόφαση υιοθέτησης → (επιβεβαίωση) → αντιγραφή στον φορητό φάκελο.
-  /// Επιστρέφει τη διαδρομή προορισμού ή `null` αν ακυρώθηκε/απορρίφθηκε/απέτυχε.
-  Future<String?> _adoptPickedLampDbIntoPortable(String pickedPath) async {
-    final destinationPath = p.normalize(
-      p.join(
-        AppConfig.portableDataBaseDirectory,
-        p.basename(pickedPath.trim()),
-      ),
+  /// Αποτέλεσμα τοποθέτησης: διαδρομή που θα χρησιμοποιηθεί + αν έγινε αντιγραφή.
+  ///
+  /// [path] `null` σημαίνει ακύρωση ή απόρριψη — ο καλών σταματά χωρίς αλλαγή.
+  Future<({String? path, bool copied})> _placePickedLampDb(
+    String pickedPath, {
+    required bool askWhereToPlace,
+  }) async {
+    if (askWhereToPlace) {
+      final dialogContext = host.context;
+      if (!dialogContext.mounted) return (path: null, copied: false);
+      final placement = await askLampDbPlacement(
+        dialogContext,
+        pickedPath: pickedPath,
+        appFolderPath: AppConfig.portableDataBaseDirectory,
+      );
+      switch (placement) {
+        case LampDbPlacementChoice.cancel:
+          return (path: null, copied: false);
+        case LampDbPlacementChoice.readInPlace:
+          return (path: p.normalize(p.absolute(pickedPath.trim())), copied: false);
+        case LampDbPlacementChoice.copyToAppFolder:
+          break;
+      }
+    }
+    return _copyPickedLampDbIntoPortable(pickedPath);
+  }
+
+  /// Αντιγραφή στον φορητό φάκελο: φρουρός → (επίλυση σύγκρουσης) → αντιγραφή.
+  Future<({String? path, bool copied})> _copyPickedLampDbIntoPortable(
+    String pickedPath,
+  ) async {
+    final destinationPath = PortableLampStorage.portableDestinationFor(
+      pickedPath,
     );
     final decision = await decideLampDbAdoption(
       pickedPath: pickedPath,
       destinationPath: destinationPath,
+      configuredOutputPath: outputDbController.text,
     );
     if (!decision.allowed) {
       if (host.mounted) {
@@ -295,47 +322,46 @@ class LampPathController {
           isError: true,
         );
       }
-      return null;
+      return (path: null, copied: false);
     }
 
+    String? destinationFileName;
     var allowOverwrite = false;
-    if (decision.requiresOverwriteConfirmation) {
-      final dialogContext = host.context;
-      if (!dialogContext.mounted) return null;
-      final confirmed = await showDialog<bool>(
-        context: dialogContext,
-        builder: (ctx) {
-          final fileName = p.basename(destinationPath);
-          final folder = AppConfig.portableDataBaseDirectory;
-          return AlertDialog(
-            title: const Text('Αντικατάσταση υπάρχοντος αρχείου'),
-            content: Text(
-              'Στον φάκελο της Λάμπας υπάρχει ήδη το αρχείο «$fileName» '
-              '($folder).\n\n'
-              'Θέλετε να αντικατασταθεί από το αρχείο που επιλέξατε;',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Ακύρωση'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Αντικατάσταση'),
-              ),
-            ],
-          );
-        },
+    if (decision.destinationExists) {
+      final keepBothName = lampAdoptionKeepBothFileName(
+        directory: AppConfig.portableDataBaseDirectory,
+        pickedPath: pickedPath,
       );
-      if (confirmed != true) return null;
-      allowOverwrite = true;
+      final dialogContext = host.context;
+      if (!dialogContext.mounted) return (path: null, copied: false);
+      final choice = await askLampDbCopyConflict(
+        dialogContext,
+        sourcePath: p.normalize(p.absolute(pickedPath.trim())),
+        destinationPath: destinationPath,
+        keepBothPath: p.join(
+          AppConfig.portableDataBaseDirectory,
+          keepBothName,
+        ),
+        destinationIsConfiguredOutput: decision.destinationIsConfiguredOutput,
+      );
+      switch (choice) {
+        case LampDbConflictChoice.cancel:
+          return (path: null, copied: false);
+        case LampDbConflictChoice.keepBoth:
+          destinationFileName = keepBothName;
+        case LampDbConflictChoice.replace:
+          allowOverwrite = true;
+      }
     }
 
     try {
-      return await PortableLampStorage.tryCopyLampDbToPortableDataBase(
-        pickedPath,
-        allowOverwrite: allowOverwrite,
-      );
+      final copiedPath =
+          await PortableLampStorage.tryCopyLampDbToPortableDataBase(
+            pickedPath,
+            destinationFileName: destinationFileName,
+            allowOverwrite: allowOverwrite,
+          );
+      return (path: copiedPath, copied: true);
     } catch (e) {
       if (host.mounted) {
         host.showSnack(
@@ -344,7 +370,7 @@ class LampPathController {
           isError: true,
         );
       }
-      return null;
+      return (path: null, copied: false);
     }
   }
 
@@ -367,13 +393,27 @@ class LampPathController {
     final path = session.value;
     // Ακύρωση επιλογέα = έγκυρη πράξη· κανένα μήνυμα.
     if (path == null) return;
-    final portablePath = await _adoptPickedLampDbIntoPortable(path);
-    if (portablePath == null) return;
-    readDbController.text = portablePath;
-    await host.shared.settings.setReadPath(portablePath);
+    // Αν το αρχείο είναι ήδη στον φάκελο της εφαρμογής, δεν υπάρχει τι να
+    // αποφασιστεί — καμία αντιγραφή, καμία ερώτηση.
+    final alreadyInAppFolder = LampOldDbValidator.pathsReferToSameFile(
+      path,
+      PortableLampStorage.portableDestinationFor(path),
+    );
+    final placed = await _placePickedLampDb(
+      path,
+      askWhereToPlace: !alreadyInAppFolder,
+    );
+    final resolvedPath = placed.path;
+    if (resolvedPath == null) return;
+    readDbController.text = resolvedPath;
+    await host.shared.settings.setReadPath(resolvedPath);
     if (!host.mounted) return;
     host.lampSettingsDialogSetState?.call(() {});
-    host.showSnack('Θα γίνει έλεγχος της βάσης προς ανάγνωση…');
+    host.showSnack(
+      placed.copied
+          ? 'Δημιουργήθηκε αντίγραφο: $resolvedPath'
+          : 'Ανάγνωση από: $resolvedPath',
+    );
     await onPathChanged(source: 'επιλογή αρχείου ανάγνωσης');
   }
 
@@ -396,7 +436,10 @@ class LampPathController {
       }
       return;
     }
-    final portablePath = await _adoptPickedLampDbIntoPortable(path);
+    // Στόχος αποθήκευσης: δεν ρωτάμε «πού θα ζει» — αν όμως γίνει αντιγραφή
+    // (επιλογή υπαρκτού αρχείου), το μήνυμα το λέει με πλήρη διαδρομή.
+    final placed = await _placePickedLampDb(path, askWhereToPlace: false);
+    final portablePath = placed.path;
     if (portablePath == null) return;
     outputDbController.text = portablePath;
     await host.shared.settings.setOutputPath(portablePath);
@@ -406,7 +449,8 @@ class LampPathController {
       await host.shared.settings.setReadPath(portablePath);
       if (host.mounted) {
         host.showSnack(
-          'Η διαδρομή εξόδου ενημερώθηκε. Η «ανάγνωση» συγχρονίστηκε (ίδιο αρχείο).',
+          'Η διαδρομή εξόδου ορίστηκε σε: $portablePath\n'
+          'Η «ανάγνωση» συγχρονίστηκε (ίδιο αρχείο).',
         );
         host.lampSettingsDialogSetState?.call(() {});
       }
@@ -420,7 +464,8 @@ class LampPathController {
           .refresh(readPathOverride: readT, outputPathOverride: portablePath);
       if (host.mounted) {
         host.showSnack(
-          'Η διαδρομή εξόδου (δημιουργίας) ενημερώθηκε. Η βάση προς «ανάγνωση» παρέμεινε ξεχωριστή.',
+          'Η διαδρομή εξόδου (δημιουργίας) ορίστηκε σε: $portablePath\n'
+          'Η βάση προς «ανάγνωση» παρέμεινε ξεχωριστή.',
         );
         host.lampSettingsDialogSetState?.call(() {});
       }
@@ -585,10 +630,10 @@ class LampPathRow extends StatelessWidget {
         if (infoTooltip != null) ...[
           Padding(
             padding: const EdgeInsets.only(top: 12, right: 4),
-            child: Tooltip(
+            child: CompactTooltip(
               waitDuration: const Duration(milliseconds: 300),
               showDuration: const Duration(seconds: 8),
-              message: infoTooltip,
+              message: infoTooltip!,
               child: Icon(
                 Icons.info_outline,
                 size: 20,

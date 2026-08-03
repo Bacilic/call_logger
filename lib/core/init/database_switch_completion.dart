@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../database/database_helper.dart';
 import '../database/database_switch_success_notice.dart';
 import 'app_init_provider.dart';
 import 'database_reopen_cache_reset.dart';
@@ -42,6 +43,13 @@ Future<void> completeDatabaseSwitch({
   DatabaseSwitchCompletionHooks? hooks,
   bool showSuccessNotice = true,
 }) async {
+  // ΠΡΩΤΟ βήμα, πριν από κάθε άνοιγμα: μια ροή αποσφαλμάτωσης μπορεί να έχει
+  // δεσμεύσει τη δοκιμαστική βάση. Όσο η δέσμευση ζει, κάθε άνοιγμα αγνοεί τη
+  // ρυθμισμένη διαδρομή — η εφαρμογή θα ανακοίνωνε αλλαγή βάσης ενώ διαβάζει
+  // ακόμα τη δοκιμαστική, με το κίτρινο «ΛΕΙΤΟΥΡΓΙΑ ΑΝΑΠΤΥΞΗΣ» κολλημένο.
+  await DatabaseHelper.restoreConfiguredDatabasePath();
+  _recordSwitchStep('restoreConfiguredPath');
+
   await hooks?.onSessionStateUpdated?.call(path);
   _recordSwitchStep('onSessionStateUpdated');
 

@@ -175,6 +175,7 @@ class LansweeperReportRegistration {
     final choice = await showLansweeperUnsentTicketChoiceDialog(
       host.context,
       storedTicket: storedTicket,
+      ticketViewUrlTemplate: host.ref.read(lansweeperTicketViewUrlProvider),
     );
     if (choice == null || choice == UnsentTicketChoice.cancel) return false;
     await notifier.setUnsent(
@@ -197,6 +198,7 @@ class LansweeperReportRegistration {
       host.context,
       count: count,
       ticketId: ticketId,
+      ticketViewUrlTemplate: host.ref.read(lansweeperTicketViewUrlProvider),
     );
   }
 

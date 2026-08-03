@@ -105,6 +105,19 @@ void main() {
 
       expect(find.text('Διαγραφή'), findsOneWidget);
       await tester.tap(find.text('Διαγραφή'));
+
+      // Η σύνοψη του διαλόγου χρειάζεται πρώτα τα πλήθη από τη βάση, οπότε ο
+      // διάλογος δεν εμφανίζεται στο ίδιο καρέ με το πάτημα.
+      for (
+        var i = 0;
+        i < 60 && find.byType(AlertDialog).evaluate().isEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
       await tester.pumpAndSettle();
 
       await tester.tap(

@@ -32,17 +32,15 @@ void main() {
     }
   });
 
+  // Μοναδική πηγή αλήθειας ιστορικού το assets/changelog.json — το CHANGELOG.md
+  // καταργήθηκε 03/08/2026 (η παράλληλη συντήρηση δημιουργούσε ασυμφωνία).
   Future<void> writeProjectFiles({
     required String changelogJson,
-    required String changelogMd,
     required String pubspec,
   }) async {
     await File(
       p.join(projectRoot.path, 'assets', 'changelog.json'),
     ).writeAsString(changelogJson);
-    await File(
-      p.join(projectRoot.path, 'CHANGELOG.md'),
-    ).writeAsString(changelogMd);
     await File(p.join(projectRoot.path, 'pubspec.yaml')).writeAsString(pubspec);
   }
 
@@ -108,50 +106,6 @@ void main() {
     ]);
   }
 
-  const sampleChangelogMdMinor = '''
-# Ιστορικό Αλλαγών
-
-## [Unreleased]
-
-### Προστέθηκε
-
-- Νέο feature δοκιμής
-
-## [0.23.1] - 2026-07-12
-
-### Μικροβελτιώσεις
-
-- Παλιά μικροβελτίωση
-
-### Διορθώθηκε
-
-- Παλιά διόρθωση
-''';
-
-  const sampleChangelogMdPatch = '''
-# Ιστορικό Αλλαγών
-
-## [Unreleased]
-
-### Μικροβελτιώσεις
-
-- Νέα μικροβελτίωση
-
-### Διορθώθηκε
-
-- Νέα διόρθωση
-
-## [0.23.1] - 2026-07-12
-
-### Μικροβελτιώσεις
-
-- Παλιά μικροβελτίωση
-
-### Διορθώθηκε
-
-- Παλιά διόρθωση
-''';
-
   const samplePubspec = '''
 name: call_logger
 version: 0.23.1+31
@@ -185,10 +139,6 @@ environment:
   test('empty Unreleased returns warning and does not change files', () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(emptyUnreleased: true),
-      changelogMd: sampleChangelogMdMinor.replaceAll(
-        '- Νέο feature δοκιμής',
-        '',
-      ),
       pubspec: samplePubspec,
     );
 
@@ -209,7 +159,6 @@ environment:
   test('added → minor: creates new card and resets Unreleased', () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
     await seedReleaseArtifacts();
@@ -243,16 +192,6 @@ environment:
     expect(jsonList[1]['added'], contains('Νέο feature δοκιμής'));
     expect(jsonList[2]['version'], '0.23.1');
 
-    final md = await File(
-      p.join(projectRoot.path, 'CHANGELOG.md'),
-    ).readAsString();
-    expect(md, contains('## [Unreleased]'));
-    expect(md, contains('## [0.24.0] - 2026-07-19'));
-    expect(
-      md.indexOf('## [Unreleased]'),
-      lessThan(md.indexOf('## [0.24.0] - 2026-07-19')),
-    );
-
     final pubspec = await File(
       p.join(projectRoot.path, 'pubspec.yaml'),
     ).readAsString();
@@ -273,7 +212,6 @@ environment:
           improvements: ['Νέα μικροβελτίωση'],
           fixed: ['Νέα διόρθωση'],
         ),
-        changelogMd: sampleChangelogMdPatch,
         pubspec: samplePubspec,
       );
       await seedReleaseArtifacts();
@@ -310,17 +248,6 @@ environment:
         containsAll(['Παλιά διόρθωση', 'Νέα διόρθωση']),
       );
 
-      final md = await File(
-        p.join(projectRoot.path, 'CHANGELOG.md'),
-      ).readAsString();
-      expect(md, contains('## [Unreleased]'));
-      expect(md, contains('## [0.23.2] - 2026-07-19'));
-      expect(md, isNot(contains('## [0.23.1]')));
-      expect(md, contains('### Μικροβελτιώσεις'));
-      expect(md, contains('- Νέα μικροβελτίωση'));
-      expect(md, contains('- Παλιά μικροβελτίωση'));
-      expect(md, contains('- Νέα διόρθωση'));
-
       final pubspec = await File(
         p.join(projectRoot.path, 'pubspec.yaml'),
       ).readAsString();
@@ -331,7 +258,6 @@ environment:
   test('correct step order: seal+bump before flutter build', () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
     await seedReleaseArtifacts();
@@ -372,7 +298,6 @@ environment:
   test('build failure stops without writing to update folder', () async {
     await writeProjectFiles(
       changelogJson: sampleChangelogJson(),
-      changelogMd: sampleChangelogMdMinor,
       pubspec: samplePubspec,
     );
 
@@ -400,14 +325,10 @@ environment:
     () async {
       await writeProjectFiles(
         changelogJson: sampleChangelogJson(),
-        changelogMd: sampleChangelogMdMinor,
         pubspec: samplePubspec,
       );
       final jsonBefore = await File(
         p.join(projectRoot.path, 'assets', 'changelog.json'),
-      ).readAsBytes();
-      final mdBefore = await File(
-        p.join(projectRoot.path, 'CHANGELOG.md'),
       ).readAsBytes();
       final pubBefore = await File(
         p.join(projectRoot.path, 'pubspec.yaml'),
@@ -427,10 +348,6 @@ environment:
         jsonBefore,
       );
       expect(
-        await File(p.join(projectRoot.path, 'CHANGELOG.md')).readAsBytes(),
-        mdBefore,
-      );
-      expect(
         await File(p.join(projectRoot.path, 'pubspec.yaml')).readAsBytes(),
         pubBefore,
       );
@@ -448,7 +365,6 @@ environment:
     () async {
       await writeProjectFiles(
         changelogJson: sampleChangelogJson(),
-        changelogMd: sampleChangelogMdMinor,
         pubspec: samplePubspec,
       );
 
@@ -471,7 +387,6 @@ environment:
     () async {
       await writeProjectFiles(
         changelogJson: sampleChangelogJson(),
-        changelogMd: sampleChangelogMdMinor,
         pubspec: samplePubspec,
       );
       await seedReleaseArtifacts();
@@ -523,7 +438,6 @@ environment:
     () async {
       await writeProjectFiles(
         changelogJson: sampleChangelogJson(),
-        changelogMd: sampleChangelogMdMinor,
         pubspec: samplePubspec,
       );
       await seedReleaseArtifacts();
@@ -575,14 +489,10 @@ environment:
     () async {
       await writeProjectFiles(
         changelogJson: sampleChangelogJson(),
-        changelogMd: sampleChangelogMdMinor,
         pubspec: samplePubspec,
       );
       final jsonBefore = await File(
         p.join(projectRoot.path, 'assets', 'changelog.json'),
-      ).readAsBytes();
-      final mdBefore = await File(
-        p.join(projectRoot.path, 'CHANGELOG.md'),
       ).readAsBytes();
       final pubBefore = await File(
         p.join(projectRoot.path, 'pubspec.yaml'),
@@ -609,10 +519,6 @@ environment:
         jsonBefore,
       );
       expect(
-        await File(p.join(projectRoot.path, 'CHANGELOG.md')).readAsBytes(),
-        mdBefore,
-      );
-      expect(
         await File(p.join(projectRoot.path, 'pubspec.yaml')).readAsBytes(),
         pubBefore,
       );
@@ -626,7 +532,6 @@ environment:
         improvements: ['μ'],
         fixed: ['δ'],
       ),
-      changelogMd: sampleChangelogMdPatch,
       pubspec: samplePubspec,
     );
 
@@ -646,14 +551,10 @@ environment:
     () async {
       await writeProjectFiles(
         changelogJson: sampleChangelogJson(),
-        changelogMd: sampleChangelogMdMinor,
         pubspec: samplePubspec,
       );
       final jsonBefore = await File(
         p.join(projectRoot.path, 'assets', 'changelog.json'),
-      ).readAsBytes();
-      final mdBefore = await File(
-        p.join(projectRoot.path, 'CHANGELOG.md'),
       ).readAsBytes();
       final pubBefore = await File(
         p.join(projectRoot.path, 'pubspec.yaml'),
@@ -689,10 +590,6 @@ environment:
         jsonBefore,
       );
       expect(
-        await File(p.join(projectRoot.path, 'CHANGELOG.md')).readAsBytes(),
-        mdBefore,
-      );
-      expect(
         await File(p.join(projectRoot.path, 'pubspec.yaml')).readAsBytes(),
         pubBefore,
       );
@@ -720,7 +617,6 @@ environment:
     () async {
       await writeProjectFiles(
         changelogJson: sampleChangelogJson(),
-        changelogMd: sampleChangelogMdMinor,
         pubspec: samplePubspec,
       );
       await seedReleaseArtifacts();

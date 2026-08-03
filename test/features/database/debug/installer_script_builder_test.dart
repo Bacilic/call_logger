@@ -70,7 +70,7 @@ void main() {
     test('robocopy without /MIR and without /PURGE', () {
       final robocopyLine = script
           .split(RegExp(r'\r?\n'))
-          .firstWhere((l) => l.toLowerCase().contains('robocopy'));
+          .firstWhere((l) => l.trimLeft().toLowerCase().startsWith('robocopy '));
       expect(robocopyLine.toUpperCase(), isNot(contains('/MIR')));
       expect(robocopyLine.toUpperCase(), isNot(contains('/PURGE')));
       expect(
@@ -81,17 +81,53 @@ void main() {
       );
     });
 
+    test('ο κωδικός εξόδου πιάνεται από το robocopy, ΟΧΙ από τον βρόχο εμφάνισης', () {
+      // Η λίστα αρχείων τυπώνεται αριστερά-στοιχισμένη από log αρχείο· αν το
+      // RC διαβαζόταν μετά τον βρόχο echo, θα έπαιρνε τον κωδικό του echo και
+      // μια αποτυχημένη αντιγραφή θα περνούσε για επιτυχία.
+      final lines = script.split(RegExp(r'\r?\n'));
+      final robocopyIndex = lines.indexWhere(
+        (l) => l.trimLeft().toLowerCase().startsWith('robocopy '),
+      );
+      expect(
+        lines[robocopyIndex],
+        contains('> "%COPY_LOG%"'),
+        reason: 'Η έξοδος του robocopy πάει σε log για αριστερή στοίχιση',
+      );
+      expect(
+        lines[robocopyIndex + 1].trim(),
+        'set "RC=%ERRORLEVEL%"',
+        reason: 'Το RC αμέσως μετά το robocopy, πριν από κάθε άλλη εντολή',
+      );
+
+      final forIndex = lines.indexWhere((l) => l.contains('for /f'));
+      expect(forIndex, greaterThan(robocopyIndex + 1));
+      expect(
+        lines[forIndex],
+        contains('"usebackq tokens=*"'),
+        reason: 'Το tokens=* κόβει το αριστερό περιθώριο του robocopy',
+      );
+      expect(lines[forIndex], contains('"%COPY_LOG%"'));
+
+      final delIndex = lines.indexWhere((l) => l.contains('del "%COPY_LOG%"'));
+      expect(
+        delIndex,
+        greaterThan(forIndex),
+        reason: 'Το προσωρινό log δεν μένει σκουπίδι στον δίσκο',
+      );
+    });
+
     test('robocopy line does not silence file names with /NFL', () {
       final robocopyLine = script
           .split(RegExp(r'\r?\n'))
-          .firstWhere((l) => l.toLowerCase().contains('robocopy'));
+          .firstWhere((l) => l.trimLeft().toLowerCase().startsWith('robocopy '));
       expect(robocopyLine.toUpperCase(), isNot(contains('/NFL')));
     });
 
     test('echo progress message immediately precedes robocopy', () {
       final lines = script.split(RegExp(r'\r?\n'));
       final robocopyIndex = lines.indexWhere(
-        (l) => l.toLowerCase().contains('robocopy'),
+        (l) => l.trimLeft().toLowerCase().startsWith('robocopy '),
       );
       expect(robocopyIndex, greaterThan(0));
       expect(lines[robocopyIndex - 1].trim(), 'echo Αντιγραφή αρχείων...');
@@ -100,7 +136,7 @@ void main() {
     test('robocopy keeps summary flags but drops /NJS', () {
       final robocopyLine = script
           .split(RegExp(r'\r?\n'))
-          .firstWhere((l) => l.toLowerCase().contains('robocopy'));
+          .firstWhere((l) => l.trimLeft().toLowerCase().startsWith('robocopy '));
       expect(robocopyLine.toUpperCase(), isNot(contains('/NJS')));
       expect(robocopyLine, contains('/NDL'));
       expect(robocopyLine, contains('/NJH'));

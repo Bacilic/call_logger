@@ -220,7 +220,10 @@ Future<void> releaseCallLoggerTestDatabase() async {
 
 /// Κοινά overrides Riverpod για τεστ με πραγματική απομονωμένη βάση.
 /// Επιστρέφει λίστα overrides για [ProviderScope].
-List<Override> callLoggerTestProviderOverrides() {
+///
+/// Το [showDatabaseNav] επιτρέπει σε τεστ πλοήγησης να κρύψουν το κουμπί της
+/// βάσης· διπλό override του ίδιου provider στο ίδιο container πετάει σφάλμα.
+List<Override> callLoggerTestProviderOverrides({bool showDatabaseNav = true}) {
   return <Override>[
     appInitProvider.overrideWith(
       (ref) async => AppInitResult(
@@ -237,7 +240,7 @@ List<Override> callLoggerTestProviderOverrides() {
     }),
     showActiveTimerProvider.overrideWith((ref) async => true),
     showTasksBadgeProvider.overrideWith((ref) async => true),
-    showDatabaseNavProvider.overrideWith((ref) async => true),
+    showDatabaseNavProvider.overrideWith((ref) async => showDatabaseNav),
     showDictionaryNavProvider.overrideWith((ref) async => true),
     coreLexiconProvider.overrideWith(() => _TestCoreLexiconNotifier()),
     // Αποφυγή επιπλέον async queries στο `remote_tools` κατά widget tests (locks / timers).
@@ -280,17 +283,6 @@ void registerCallLoggerIsolatedDatabaseHooks() {
     if (binding.inTest) {
       await binding.pump(const Duration(seconds: 11));
     }
-  });
-  tearDownAll(() async {
-    await releaseCallLoggerTestDatabase();
-  });
-}
-
-/// Όπως [registerCallLoggerIsolatedDatabaseHooks] χωρίς `TestWidgetsFlutterBinding` —
-/// καλέστε πρώτα `IntegrationTestWidgetsFlutterBinding.ensureInitialized()`.
-void registerCallLoggerIsolatedDatabaseHooksIntegration() {
-  setUpAll(() async {
-    await bindCallLoggerIsolatedTestDatabase();
   });
   tearDownAll(() async {
     await releaseCallLoggerTestDatabase();

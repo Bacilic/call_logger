@@ -111,6 +111,115 @@ void main() {
     expect(result.rows.single['code'], 100);
   });
 
+  Future<void> seedOwnersForIdSearch() async {
+    final db = await openDatabase(dbPath, singleInstance: false);
+    try {
+      await createOldDatabaseSchema(db);
+      await db.insert('owners', <String, Object?>{
+        'owner': 243,
+        'last_name': 'Ψαρρά',
+        'first_name': 'Βαρβάρα',
+        'phones': '2534',
+      });
+      await db.insert('owners', <String, Object?>{
+        'owner': 1243,
+        'last_name': 'Παπαδόπουλος',
+        'first_name': 'Νίκος',
+        'phones': '25341',
+      });
+      await db.insert('equipment', <String, Object?>{
+        'code': 100,
+        'description': 'PC Γραφείου',
+        'owner': 243,
+      });
+      await db.insert('equipment', <String, Object?>{
+        'code': 200,
+        'description': 'Εκτυπωτής Α4',
+        'owner': 1243,
+        'serial_no': '99243',
+      });
+    } finally {
+      await db.close();
+    }
+  }
+
+  test('καθολική «#243» — μόνο ο εξοπλισμός του υπαλλήλου 243', () async {
+    await seedOwnersForIdSearch();
+
+    final result = await repository.globalSearch(dbPath, '#243', maxDisplay: 10);
+
+    expect(result.totalCount, 1);
+    expect(result.rows.single['code'], 100);
+  });
+
+  test('καθολική «243» χωρίς # — πιάνει και τον θόρυβο (substring)', () async {
+    await seedOwnersForIdSearch();
+
+    final result = await repository.globalSearch(dbPath, '243', maxDisplay: 10);
+
+    expect(result.totalCount, 2);
+  });
+
+  test('στοχευμένο «υπαλληλος:#243» — ακριβές id, όχι το 1243', () async {
+    await seedOwnersForIdSearch();
+    final parsed = LampSearchQueryParser.parse('υπαλληλος:#243');
+
+    final result = await repository.globalSearch(
+      dbPath,
+      'υπαλληλος:#243',
+      maxDisplay: 10,
+      scopedTerms: parsed.scopedTerms,
+      freeText: parsed.freeText,
+    );
+
+    expect(result.totalCount, 1);
+    expect(result.rows.single['code'], 100);
+  });
+
+  test('πεδίο Υπάλληλος «#243» — ακριβές id μέσω searchByFields', () async {
+    await seedOwnersForIdSearch();
+
+    final result = await repository.searchByFields(
+      dbPath,
+      const OldEquipmentSearchFilters(owner: '#243'),
+      maxDisplay: 10,
+    );
+
+    expect(result.totalCount, 1);
+    expect(result.rows.single['code'], 100);
+  });
+
+  test('πεδίο Τηλέφωνο «#2534» — ακριβής τιμή, όχι το 25341', () async {
+    await seedOwnersForIdSearch();
+
+    final exact = await repository.searchByFields(
+      dbPath,
+      const OldEquipmentSearchFilters(phone: '#2534'),
+      maxDisplay: 10,
+    );
+    final loose = await repository.searchByFields(
+      dbPath,
+      const OldEquipmentSearchFilters(phone: '2534'),
+      maxDisplay: 10,
+    );
+
+    expect(exact.totalCount, 1);
+    expect(exact.rows.single['code'], 100);
+    expect(loose.totalCount, 2);
+  });
+
+  test('καθολική «#αβγ» — άκυρο id δεν ταιριάζει τίποτα', () async {
+    await seedOwnersForIdSearch();
+
+    final result = await repository.globalSearch(
+      dbPath,
+      '#αβγ',
+      maxDisplay: 10,
+    );
+
+    expect(result.totalCount, 0);
+  });
+
   test(
     'απλό κείμενο χωρίς κλειδιά — ίδια συμπεριφορά με παλιά globalSearch',
     () async {

@@ -20,6 +20,58 @@ void main() {
     });
   });
 
+  // Το debug build απομονώνεται μόνο του· το release μένει ρητό.
+  group('AppConfig.resolveProfileName', () {
+    test('χωρίς προεπιλογή, η εκτέλεση μένει στα κοινά δεδομένα', () {
+      expect(
+        AppConfig.resolveProfileName(const []),
+        isNull,
+        reason: 'Το release build δεν απομονώνεται από μόνο του',
+      );
+    });
+
+    test('η προεπιλογή εφαρμόζεται μόνο απουσία ρητού ορίσματος', () {
+      expect(
+        AppConfig.resolveProfileName(
+          const [],
+          defaultProfileWhenAbsent: AppConfig.debugDefaultProfileName,
+        ),
+        'dev',
+      );
+    });
+
+    test('το ρητό --profile υπερισχύει της προεπιλογής', () {
+      expect(
+        AppConfig.resolveProfileName(
+          const ['--profile', 'Test1'],
+          defaultProfileWhenAbsent: AppConfig.debugDefaultProfileName,
+        ),
+        'Test1',
+        reason: 'Ό,τι ζητά ρητά ο χρήστης δεν το παρακάμπτει η προεπιλογή',
+      );
+    });
+
+    test('άκυρο όνομα προεπιλογής αγνοείται αντί να σπάσει την εκκίνηση', () {
+      expect(
+        AppConfig.resolveProfileName(
+          const [],
+          defaultProfileWhenAbsent: '../evil',
+        ),
+        isNull,
+      );
+    });
+
+    test('η ίδια η δοκιμαστική ονομασία «dev» είναι έγκυρο όνομα προφίλ', () {
+      expect(
+        AppConfig.parseCliProfile([
+          '--profile',
+          AppConfig.debugDefaultProfileName,
+        ]),
+        'dev',
+      );
+    });
+  });
+
   group('AppConfig.validateCliArguments', () {
     test('accepts empty arguments', () {
       final result = AppConfig.validateCliArguments(const []);

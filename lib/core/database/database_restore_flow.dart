@@ -16,8 +16,10 @@ import '../../features/database/services/backup_zip_staging.dart';
 import '../../features/database/services/database_backup_service.dart';
 import '../../features/database/services/database_file_replacement.dart';
 import '../../features/database/services/restore_plan.dart';
+import '../../features/database/services/restore_report.dart';
 import '../../features/database/widgets/backup_zip_database_choice_dialog.dart';
 import '../../features/database/widgets/restore_from_backup_dialog.dart';
+import '../../features/database/widgets/restore_report_dialog.dart';
 
 /// Αποτέλεσμα της ενορχηστρωμένης ροής επαναφοράς από `.zip`.
 class RestoreFromBackupZipFlowResult {
@@ -55,7 +57,7 @@ class RestoreFromBackupZipFlowResult {
   final String? restoredPath;
 
   /// Διαδρομή που πρέπει να ανοίξει ο καλών μέσω του κοινού εκτελεστή.
-  /// Κενή/`null` όταν ο χρήστης δεν ζήτησε άνοιγμα.
+  /// Σε επιτυχία είναι πάντα ο προορισμός — η βάση που επαναφέρθηκε ανοίγει.
   final String? pathToOpen;
   final String? errorMessage;
   final String? summaryMessage;
@@ -112,19 +114,14 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     progressLabel.dispose();
   }
 
-  if (inventory.cleanupWarnings.isNotEmpty && context.mounted) {
-    // Μη φραγή ροής — εμφανίζονται στο τέλος αν συνεχίσουμε.
-  }
-
   final selection = decideBackupZipCandidateSelection(inventory);
   if (selection.kind == BackupZipCandidateSelectionKind.none) {
     final message = selection.failureMessage ?? inventory.summarySentence;
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
+      await _showRestoreMessageDialog(
+        context,
+        title: 'Η επαναφορά δεν είναι δυνατή',
+        message: message,
       );
     }
     return RestoreFromBackupZipFlowResult.failed(message);
@@ -171,17 +168,16 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
   }
 
   if (!extraction.success) {
+    final message =
+        extraction.errorMessage ?? 'Αποτυχία εξαγωγής βάσης από το αντίγραφο.';
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(extraction.errorMessage ?? 'Αποτυχία εξαγωγής'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
+      await _showRestoreMessageDialog(
+        context,
+        title: 'Η επαναφορά απέτυχε',
+        message: message,
       );
     }
-    return RestoreFromBackupZipFlowResult.failed(
-      extraction.errorMessage ?? 'Αποτυχία εξαγωγής βάσης από το αντίγραφο.',
-    );
+    return RestoreFromBackupZipFlowResult.failed(message);
   }
 
   final extractedPath = extraction.extractedDatabasePath!;
@@ -198,13 +194,19 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     }
   }
 
-  final originalWritable = await _isOriginalDirectoryWritable(manifest);
   final available = availableRestoreDestinations(
     currentDatabasePath: currentPath,
-    zipPath: zipPath,
-    manifest: manifest,
-    originalDirectoryWritable: originalWritable,
+    backupDatabaseFileName: preferredName,
   );
+  var backupNameTargetExists = false;
+  if (available.contains(RestoreDestinationChoice.backupName)) {
+    final backupNameTarget = resolveRestoreTargetPath(
+      choice: RestoreDestinationChoice.backupName,
+      currentDatabasePath: currentPath,
+      backupDatabaseFileName: preferredName,
+    );
+    backupNameTargetExists = await File(backupNameTarget).exists();
+  }
 
   if (!context.mounted) {
     await cleanupStagedDatabase(extractedPath);
@@ -217,10 +219,10 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     backupProfile: backupProfile,
     manifest: manifest,
     currentDatabasePath: currentPath,
-    zipPath: zipPath,
     availableDestinations: available,
     initialDestination: initialDestination,
     preferredDatabaseFileName: preferredName,
+    backupNameTargetExists: backupNameTargetExists,
     isFullBackupArchive: inventory.isFullBackupArchive,
     fullBackupPortablesDescription: inventory.portablePresence
         .describeFoundPortables(),
@@ -229,19 +231,19 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
   if (decision == null) {
     final cleanupMsg = await cleanupStagedDatabase(extractedPath);
     if (cleanupMsg != null && context.mounted) {
-      ScaffoldMessenger.of(
+      await _showRestoreMessageDialog(
         context,
-      ).showSnackBar(SnackBar(content: Text(cleanupMsg)));
+        title: 'Προειδοποίηση',
+        message: cleanupMsg,
+      );
     }
     return const RestoreFromBackupZipFlowResult.cancelled();
   }
 
   final targetPath = resolveRestoreTargetPath(
-    choice: decision.destination,
+    choice: decision,
     currentDatabasePath: currentPath,
-    zipPath: zipPath,
-    manifest: manifest,
-    preferredDatabaseFileName: preferredName,
+    backupDatabaseFileName: preferredName,
   );
 
   if (!context.mounted) {
@@ -254,6 +256,7 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
   String? preRestorePath;
   final warnings = <String>[...inventory.cleanupWarnings];
   String? summary;
+  var reportItems = const <RestoreReportItem>[];
   String? failureMessage;
   try {
     Object? closeFailure;
@@ -290,11 +293,7 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
           );
       warnings.addAll(portables.warnings);
       summary = portables.message;
-      if (preRestorePath != null) {
-        summary =
-            '${summary ?? 'Η επαναφορά ολοκληρώθηκε.'}\n'
-            'προηγούμενη βάση: ${p.basename(preRestorePath)}';
-      }
+      reportItems = portables.reportItems;
     }
   } finally {
     if (context.mounted) {
@@ -312,20 +311,20 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
 
   if (failureMessage != null) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(failureMessage),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
+      await _showRestoreMessageDialog(
+        context,
+        title: 'Η επαναφορά απέτυχε',
+        message: failureMessage,
       );
     }
     return RestoreFromBackupZipFlowResult.failed(failureMessage);
   }
 
   if (context.mounted) {
-    await _showRestoreSuccessFeedback(
+    await showRestoreReportDialog(
       context: context,
-      summaryMessage: summary,
+      items: reportItems,
+      fallbackText: summary ?? 'Η επαναφορά ολοκληρώθηκε.',
       preRestoreBackupPath: preRestorePath,
       warnings: warnings,
     );
@@ -333,7 +332,7 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
 
   return RestoreFromBackupZipFlowResult.completed(
     restoredPath: targetPath,
-    pathToOpen: decision.openRestoredDatabase ? targetPath : null,
+    pathToOpen: targetPath,
     summaryMessage: summary,
     warnings: warnings,
     preRestoreBackupPath: preRestorePath,
@@ -397,78 +396,27 @@ void _showBusyDialog(BuildContext context, ValueNotifier<String> label) {
   );
 }
 
-Future<bool> _isOriginalDirectoryWritable(BackupZipManifest? manifest) async {
-  final original = manifest?.originalDatabasePath?.trim() ?? '';
-  if (original.isEmpty) return false;
-  final dirPath = p.dirname(original);
-  try {
-    final dir = Directory(dirPath);
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    final probe = File(
-      p.join(
-        dirPath,
-        '.restore_write_probe_${DateTime.now().microsecondsSinceEpoch}',
-      ),
-    );
-    await probe.writeAsString('ok', flush: true);
-    await probe.delete();
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-Future<void> _showRestoreSuccessFeedback({
-  required BuildContext context,
-  required String? summaryMessage,
-  required String? preRestoreBackupPath,
-  required List<String> warnings,
+/// Κεντρικό σημείο ενημέρωσης της ροής επαναφοράς: πάντα κανονικό παράθυρο.
+///
+/// Snackbar εδώ θα εμφανιζόταν πίσω από τους ανοιχτούς διαλόγους ρυθμίσεων
+/// και θα ήταν μη αναγνώσιμο.
+Future<void> _showRestoreMessageDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
 }) async {
-  final buffer = StringBuffer(
-    summaryMessage?.trim().isNotEmpty == true
-        ? summaryMessage!.trim()
-        : 'Η επαναφορά ολοκληρώθηκε.',
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: SingleChildScrollView(child: Text(message)),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Εντάξει'),
+        ),
+      ],
+    ),
   );
-  final preserved = preRestoreBackupPath?.trim();
-  if (preserved != null && preserved.isNotEmpty) {
-    buffer.writeln();
-    buffer.writeln();
-    buffer.write('Η προηγούμενη βάση φυλάχτηκε στο:\n$preserved');
-  }
-
-  final cleanWarnings = warnings
-      .map((w) => w.trim())
-      .where((w) => w.isNotEmpty)
-      .toList(growable: false);
-
-  if (cleanWarnings.isNotEmpty) {
-    buffer.writeln();
-    buffer.writeln();
-    buffer.writeln('Προειδοποιήσεις:');
-    for (final w in cleanWarnings) {
-      buffer.writeln('• $w');
-    }
-    if (!context.mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Επαναφορά ολοκληρώθηκε'),
-        content: SingleChildScrollView(child: Text(buffer.toString())),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Εντάξει'),
-          ),
-        ],
-      ),
-    );
-    return;
-  }
-
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(buffer.toString())));
 }
+

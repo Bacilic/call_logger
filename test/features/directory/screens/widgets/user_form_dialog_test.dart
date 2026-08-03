@@ -195,6 +195,18 @@ void main() {
 
       await tester.tap(addButton);
       await pumpUntilSettled(tester);
+
+      // Νέος υπάλληλος χωρίς τμήμα: ο φρουρός ρωτά πριν την αποθήκευση.
+      expect(
+        find.text('Συνέχεια χωρίς τμήμα'),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Ο υπάλληλος αποθηκεύεται χωρίς τμήμα μόνο μετά από ρητή επιλογή',
+        ),
+      );
+      await tester.tap(find.text('Συνέχεια χωρίς τμήμα'));
+      await pumpUntilSettled(tester);
+
       await _pumpUntilUserSaveCompletes(tester);
 
       final exists = await tester.runAsync(

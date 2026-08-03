@@ -78,6 +78,29 @@ String resolveUniqueTimestampedFileName({
   }
 }
 
+/// Το όνομα που θα πάρει η **τρέχουσα** βάση όταν παραμεριστεί για νέα.
+///
+/// Μία πηγή αλήθειας: την καλεί και η μετονομασία και το UI που την ανακοινώνει
+/// από πριν. Δύο χωριστοί υπολογισμοί θα μπορούσαν να αποκλίνουν, και το μήνυμα
+/// θα υποσχόταν όνομα διαφορετικό από το πραγματικό.
+String resolveRenamedOldDatabaseFileName({
+  required String currentDatabasePath,
+  DateTime? now,
+  bool Function(String absolutePath)? fileExists,
+}) {
+  final trimmed = currentDatabasePath.trim();
+  if (trimmed.isEmpty) return '';
+  final ext = p.extension(trimmed);
+  return resolveUniqueTimestampedFileName(
+    directory: p.dirname(trimmed),
+    baseName: p.basenameWithoutExtension(trimmed),
+    suffix: '_old_',
+    extension: ext.isEmpty ? '.db' : ext,
+    now: now,
+    fileExists: fileExists,
+  );
+}
+
 String _dateStamp(DateTime value) {
   final d = value.day.toString().padLeft(2, '0');
   final m = value.month.toString().padLeft(2, '0');

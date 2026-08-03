@@ -5,10 +5,30 @@ import 'package:path/path.dart' as p;
 import '../../../core/database/sqlite_types.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_path_resolution.dart';
+import '../../../core/database/settings_repository.dart';
 import '../../../core/database/audit_service.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
+
+/// Χρονοσήμανση κλήσης «πριν από [daysAgo] ημέρες», σε μορφή βάσης.
+///
+/// Ο σπορέας γεννούσε τις κλήσεις **άχρονες** — μόνο οι εκκρεμότητες έπαιρναν
+/// ημερομηνία — και έτσι παντού στην εφαρμογή εμφανίζονταν χωρίς «τελευταία
+/// χρήση», ενώ η πραγματική καταχώρηση γεμίζει πάντα το πεδίο. Δεν αγγίζει
+/// κανένα από τα σκόπιμα ευρήματα: καμία διαγνωστική δεν κοιτάζει το `date`.
+Map<String, String> _callTimestamp(
+  int daysAgo, {
+  int hour = 9,
+  int minute = 30,
+}) {
+  final at = DateTime.now().subtract(Duration(days: daysAgo));
+  String two(int v) => v.toString().padLeft(2, '0');
+  return {
+    'date': '${at.year}-${two(at.month)}-${two(at.day)}',
+    'time': '${two(hour)}:${two(minute)}',
+  };
+}
 
 /// Αποτέλεσμα δημιουργίας/ενεργοποίησης της βάσης δοκιμών ακεραιότητας.
 class IntegrityDebugSeedResult {
@@ -103,6 +123,22 @@ class IntegrityDebugSeederService {
   }
 
   /// Δημιουργεί/αντικαθιστά την debug βάση, την ενεργοποιεί και ανανεώνει lookup.
+  ///
+  /// Η ενεργοποίηση γίνεται με **κανονική αλλαγή διαδρομής**, όχι με δέσμευση
+  /// αρχείου: έτσι οι Ρυθμίσεις δείχνουν τη βάση που είναι όντως ανοιχτή και
+  /// κάθε επόμενη επιλογή άλλης βάσης είναι πραγματική αλλαγή. Με δέσμευση, η
+  /// ρύθμιση έμενε στην παλιά βάση, το πεδίο διαδρομής έλεγε ψέματα και η
+  /// επανεπιλογή της «τρέχουσας» δεν έκανε τίποτα — ο χρήστης εγκλωβιζόταν.
+  ///
+  /// Η προηγούμενη διαδρομή καταγράφεται στις πρόσφατες πριν την αλλαγή, ώστε
+  /// να υπάρχει πάντα δρόμος επιστροφής από το dropdown.
+  ///
+  /// Η ίδια η δοκιμαστική βάση **δεν** καταγράφεται στις πρόσφατες: η λίστα
+  /// γεμίζει μόνο από διαδρομές που επέλεξε και επαλήθευσε ο χρήστης, ενώ αυτή
+  /// φτιάχνεται και σβήνεται προγραμματιστικά — θα ήταν σκέτος θόρυβος. Στο
+  /// πεδίο διαδρομής φαίνεται κανονικά, γιατί η **ενεργή** βάση μπαίνει πάντα
+  /// στις επιλογές. Αν κάποτε τη διαλέξει ο χρήστης από τον επιλογέα αρχείου,
+  /// η κανονική ροή επαλήθευσης θα την καταγράψει ως συνειδητή επιλογή.
   Future<IntegrityDebugSeedResult> seedAndActivate() async {
     if (!isEnabled) {
       return const IntegrityDebugSeedResult.failure(
@@ -111,13 +147,20 @@ class IntegrityDebugSeederService {
     }
 
     final debugPath = p.normalize(p.absolute(await resolveDebugDatabasePath()));
+    final settings = SettingsService();
 
     try {
+      final previousPath = await settings.getDatabasePath();
+      if (previousPath.trim().isNotEmpty &&
+          !p.equals(previousPath, debugPath)) {
+        await settings.recordVerifiedDatabasePath(previousPath);
+      }
+
       await DatabaseHelper.instance.closeConnection();
       await _deleteSqliteBundle(debugPath);
       await DatabaseHelper.instance.createNewDatabaseFile(debugPath);
       await _seedIntegrityErrors(debugPath);
-      await DatabaseHelper.bindTestDatabaseFile(debugPath);
+      await settings.setDatabasePath(debugPath);
       await DatabaseHelper.instance.initializeDatabase();
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
@@ -140,6 +183,13 @@ class IntegrityDebugSeederService {
     final db = await openDatabase(dbPath, singleInstance: false);
     try {
       await db.transaction((txn) async {
+        // Υπογραφή ΜΕΣΑ στα δεδομένα, στην ίδια συναλλαγή με τα σενάρια: το
+        // είδος της βάσης το λέει το περιεχόμενο, ποτέ το όνομα του αρχείου.
+        await SettingsRepository(db).saveSetting(
+          kDebugScenarioSignatureSettingKey,
+          DateTime.now().toIso8601String(),
+          executor: txn,
+        );
         await _insertBaseCatalog(txn);
         await _insertOrphanPhone(txn);
         await _insertPhoneInvalidDepartment(txn);
@@ -206,6 +256,7 @@ class IntegrityDebugSeederService {
     });
 
     await txn.insert('calls', {
+      ..._callTimestamp(12, hour: 10, minute: 15),
       'phone_text': 'debug-valid-call',
       'status': 'completed',
       'search_index': 'debug valid call index',
@@ -254,6 +305,7 @@ class IntegrityDebugSeederService {
 
   Future<void> _insertCallsMissingSearchIndex(Transaction txn) async {
     await txn.insert('calls', {
+      ..._callTimestamp(40, hour: 13, minute: 5),
       'phone_text': 'debug-call-no-index',
       'status': 'completed',
       'search_index': '',
@@ -301,6 +353,7 @@ class IntegrityDebugSeederService {
 
   Future<void> _insertTasksInvalidCall(Transaction txn) async {
     final deletedCallId = await txn.insert('calls', {
+      ..._callTimestamp(95, hour: 8, minute: 45),
       'phone_text': 'debug-deleted-call',
       'status': 'completed',
       'search_index': 'deleted call',
@@ -433,6 +486,7 @@ class IntegrityDebugSeederService {
   /// Σημ.: soft-deleted αναφορές δεν είναι εύρημα — είναι «ιστορική αλήθεια».
   Future<void> _insertCallsDeletedLinkedEntities(Transaction txn) async {
     await txn.insert('calls', {
+      ..._callTimestamp(25, hour: 11, minute: 20),
       'phone_text': 'debug-call-missing-fks',
       'caller_text': 'Snapshot Καλών (ανύπαρκτος)',
       'equipment_text': 'SNAPSHOT-EQ',
@@ -453,6 +507,7 @@ class IntegrityDebugSeederService {
       'is_deleted': 1,
     });
     await txn.insert('calls', {
+      ..._callTimestamp(60, hour: 15, minute: 40),
       'phone_text': 'debug-call-softdeleted-fk',
       'caller_text': 'Soft Διαγραμμένος',
       'status': 'completed',
@@ -617,6 +672,7 @@ class IntegrityDebugSeederService {
     }
     for (var i = 0; i < 5; i++) {
       await txn.insert('calls', {
+        ..._callTimestamp(3 + i * 17, hour: 9 + i, minute: 10),
         'phone_text': '2854',
         'status': 'completed',
         'search_index': 'debug drosos phone call ${i + 1}',
@@ -639,6 +695,7 @@ class IntegrityDebugSeederService {
     }
     for (var i = 0; i < 4; i++) {
       await txn.insert('calls', {
+        ..._callTimestamp(6 + i * 23, hour: 12 + i, minute: 25),
         'equipment_id': drososEquipmentId,
         'equipment_text': '3604',
         'status': 'completed',
@@ -664,6 +721,7 @@ class IntegrityDebugSeederService {
     });
     for (var i = 0; i < 2; i++) {
       await txn.insert('calls', {
+        ..._callTimestamp(9 + i * 31, hour: 10 + i, minute: 50),
         'phone_text': '2852',
         'status': 'completed',
         'search_index': 'debug vlasis phone call ${i + 1}',
@@ -683,6 +741,7 @@ class IntegrityDebugSeederService {
       'is_deleted': 0,
     });
     await txn.insert('calls', {
+      ..._callTimestamp(14, hour: 16, minute: 5),
       'equipment_id': vlasisEquipmentId,
       'equipment_text': '3602',
       'status': 'completed',

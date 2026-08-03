@@ -4,7 +4,9 @@
 
 - **Βάση:** δοκιμές providers / λογικής (`test/features/...`), χωρίς πλήρες UI.
 - **Μέση / widget:** ροές φόρμας, εκκρεμότητα, αναζήτηση (`test/features/calls/call_form_test.dart`, `test/features/tasks/pending_task_test.dart`, `test/features/history/history_search_test.dart`, `test/features/directory/directory_user_search_test.dart`) με **απομονωμένη βάση SQLite** (βλ. `test/test_setup.dart`).
-- **Κορυφή:** `integration_test/call_logger_integration_test.dart` για εκκίνηση εφαρμογής και βασική πλοήγηση.
+- **Κορυφή:** εκκίνηση εφαρμογής και βασική πλοήγηση καλύπτονται από `test/widget_test.dart` και `test/core/widgets/main_shell_nav_rail_layout_test.dart`, τα οποία φορτώνουν το πλήρες `MyApp` μέσα στη σουίτα.
+
+> Ο φάκελος `integration_test/` **καταργήθηκε (01/08/2026)**. Επειδή το `flutter test` σαρώνει μόνο το `test/`, το μοναδικό του αρχείο δεν εκτελούνταν ποτέ και γέρασε σιωπηλά μαζί με τον ανασχεδιασμό UI του Ιουλίου 2026 — φύλαγε μπάρα κορυφής και κουμπί Ρυθμίσεων που δεν υπάρχουν πια. Αν χρειαστεί ξανά πραγματικό end-to-end, μπαίνει **μαζί με σταθερό σημείο εκτέλεσης** (π.χ. πριν από κάθε δημοσίευση), αλλιώς ξαναγερνάει.
 
 ## Απαιτήσεις (Windows desktop)
 
@@ -36,14 +38,8 @@ flutter test
 flutter test test/features/calls/call_form_test.dart
 flutter test test/features/calls/
 
-# Integration (χρειάζεται συσκευή / εκτελέσιμο — π.χ. Windows)
-flutter test integration_test/call_logger_integration_test.dart
-```
-
-Για integration σε Windows desktop συχνά:
-
-```bash
-flutter test integration_test/call_logger_integration_test.dart -d windows
+# Συγκεκριμένη δοκιμή με το όνομά της
+flutter test --plain-name "Η εφαρμογή εμφανίζει το κύριο κέλυφος και τα πεδία εισαγωγής κλήσης"
 ```
 
 ## Σταθεροποίηση UI στα widget tests
@@ -54,8 +50,7 @@ flutter test integration_test/call_logger_integration_test.dart -d windows
 ## Αναφορές στα ελληνικά
 
 - Βοηθητικά μηνύματα και συγκεντρωτική αναφορά: `test/test_reporter.dart` (`GreekTestReportCollector`, `greekExpectMsg`, `logStep`).
-- Στο τέλος του αρχείου `integration_test/call_logger_integration_test.dart` καλείται `printFinalSummary` με ελληνικό τίτλο.
 
 ## Απομόνωση δεδομένων
 
-Όλα τα τεστ που χρησιμοποιούν `registerCallLoggerIsolatedDatabaseHooks()` (ή `registerCallLoggerIsolatedDatabaseHooksIntegration()`) δεσμεύουν **προσωρινό αρχείο βάσης**, όχι τη βάση παραγωγής/χρήστη. Τα **Riverpod overrides** βρίσκονται στη `callLoggerTestProviderOverrides()`.
+Όλα τα τεστ που χρησιμοποιούν `registerCallLoggerIsolatedDatabaseHooks()` δεσμεύουν **προσωρινό αρχείο βάσης**, όχι τη βάση παραγωγής/χρήστη. Τα **Riverpod overrides** βρίσκονται στη `callLoggerTestProviderOverrides()`.

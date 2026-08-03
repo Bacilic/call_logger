@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../init/startup_engine_failure.dart';
+import '../init/startup_structural_check.dart';
 import '../services/settings_service.dart';
+import '../services/startup_asset_integrity_service.dart';
 import 'database_file_classifier.dart';
 import 'database_helper.dart';
 import 'remote_tools_repository.dart';
@@ -60,11 +62,16 @@ class DatabaseInitRunnerResult {
     required this.result,
     required this.isLocalDevMode,
     this.databaseProfile,
+    this.missingApplicationFiles = const <String>[],
   });
 
   final DatabaseInitResult result;
   final bool isLocalDevMode;
   final DatabaseFileProfile? databaseProfile;
+
+  /// Ελλείποντα κρίσιμα αρχεία της εφαρμογής, από τον δομικό έλεγχο που
+  /// προηγήθηκε των ελέγχων βάσης. Κενή λίστα όταν όλα είναι στη θέση τους.
+  final List<String> missingApplicationFiles;
 }
 
 /// Εκτελεί τους ελέγχους βάσης (ύπαρξη αρχείου, δικαιώματα, σύνδεση, υγεία).
@@ -80,10 +87,14 @@ class DatabaseInitRunnerResult {
 /// επαληθεύει τη νέα διαδρομή παράγει ήδη ό,τι χρειάζονται οι επόμενοι.
 /// Όταν είναι `true`, υπερισχύει του [closeConnectionFirst] — δεν έχει νόημα να
 /// κλείσουμε μια σύνδεση που μόλις ανοίξαμε και επαληθεύσαμε.
+///
+/// Το [assetIntegrity] είναι εγχύσιμο για τεστ· στην παραγωγή χρησιμοποιείται ο
+/// φάκελος `flutter_assets` δίπλα στο εκτελέσιμο.
 Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
   bool closeConnectionFirst = false,
   bool reuseIfFresh = false,
   DatabaseInitProgressNotifier? progressNotifier,
+  StartupAssetIntegrityService? assetIntegrity,
 }) async {
   final previous = _runDatabaseInitChecksGate;
   final gate = Completer<void>();
@@ -112,6 +123,7 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
       dbPath: dbPath,
       closeConnectionFirst: closeConnectionFirst,
       progressNotifier: progressNotifier,
+      assetIntegrity: assetIntegrity,
     );
     _rememberResult(result, dbPath);
     return result;
@@ -148,20 +160,31 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
   required String dbPath,
   required bool closeConnectionFirst,
   DatabaseInitProgressNotifier? progressNotifier,
+  StartupAssetIntegrityService? assetIntegrity,
 }) async {
+  // Ο δομικός έλεγχος αρχείων προηγείται κάθε ελέγχου βάσης: κοστίζει λίγους
+  // ελέγχους ύπαρξης αρχείου, ενώ οι έλεγχοι βάσης κοστίζουν δευτερόλεπτα.
+  progressNotifier?.setStep('Έλεγχος αρχείων εφαρμογής');
+  final missingApplicationFiles = detectMissingApplicationFiles(assetIntegrity);
+
   // Αν η μηχανή SQLite δεν φορτώθηκε στην εκκίνηση (π.χ. λείπει το sqlite3.dll),
   // κανένας έλεγχος βάσης δεν έχει νόημα: τα file probes πετυχαίνουν και κρύβουν
   // την πραγματική αιτία πίσω από «databaseFactory not initialized».
   final engineFailure = startupEngineFailureResultOrNull(pathHint: dbPath);
   if (engineFailure != null) {
+    final ranked = withMissingApplicationFilesFirst(
+      engineFailure,
+      missingApplicationFiles,
+    );
     progressNotifier?.setStep(
       'Αποτυχία αρχικοποίησης',
       clearSecondsRemaining: true,
-      diagnosticInfo: engineFailure.details,
+      diagnosticInfo: ranked.details,
     );
     return DatabaseInitRunnerResult(
-      result: engineFailure,
+      result: ranked,
       isLocalDevMode: false,
+      missingApplicationFiles: missingApplicationFiles,
     );
   }
 
@@ -228,7 +251,10 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
     );
   }
 
-  final finalResult = result;
+  final finalResult = withMissingApplicationFilesFirst(
+    result,
+    missingApplicationFiles,
+  );
 
   progressNotifier?.setStep(
     finalResult.isSuccess
@@ -242,6 +268,7 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
     result: finalResult,
     isLocalDevMode: isLocalDevMode,
     databaseProfile: DatabaseHelper.instance.lastDatabaseProfile,
+    missingApplicationFiles: missingApplicationFiles,
   );
 }
 

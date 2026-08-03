@@ -1,7 +1,6 @@
-import 'dart:math' as math;
-
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/call_duration_format.dart';
 import 'dashboard_filter_model.dart';
 
 /// Ετικέτα για κλήσεις χωρίς κατηγορία προβλήματος — συμφωνεί με το SQL του dashboard.
@@ -68,6 +67,68 @@ class CallerStat {
 
   final String name;
   final int count;
+}
+
+/// Συγκεντρωτικός χρόνος ενός καλούντα στο επιλεγμένο διάστημα.
+///
+/// Απαντά σε άλλο ερώτημα από το [CallerStat] (πλήθος κλήσεων): «πόση ώρα μου
+/// τρώει συνολικά αυτό το άτομο» — λίγες μεγάλες κλήσεις ζυγίζουν διαφορετικά
+/// από πολλές σύντομες.
+class CallerTimeStat {
+  const CallerTimeStat({
+    required this.name,
+    required this.callCount,
+    required this.totalDurationSeconds,
+  });
+
+  final String name;
+  final int callCount;
+  final int totalDurationSeconds;
+
+  /// Μέση διάρκεια ανά κλήση· 0 όταν δεν υπάρχουν κλήσεις.
+  int get avgDurationSeconds =>
+      callCount <= 0 ? 0 : (totalDurationSeconds / callCount).round();
+}
+
+/// Οι δύο όψεις της κάρτας χρόνου: μεμονωμένες κλήσεις ή σύνολο ανά άτομο.
+enum LongestCallsMode { perCall, perPerson }
+
+/// Κριτήριο ταξινόμησης της όψης «ανά άτομο».
+enum CallerTimeSort { total, count, average }
+
+/// Ταξινόμηση φθίνουσα κατά το επιλεγμένο κριτήριο, με σταθερό δεύτερο κριτήριο
+/// (όνομα) ώστε η σειρά να μην αλλάζει τυχαία σε ισοπαλίες.
+List<CallerTimeStat> sortedCallerTimeStats(
+  List<CallerTimeStat> stats,
+  CallerTimeSort sort,
+) {
+  int key(CallerTimeStat s) => switch (sort) {
+    CallerTimeSort.total => s.totalDurationSeconds,
+    CallerTimeSort.count => s.callCount,
+    CallerTimeSort.average => s.avgDurationSeconds,
+  };
+  final sorted = List<CallerTimeStat>.from(stats)
+    ..sort((a, b) {
+      final byKey = key(b).compareTo(key(a));
+      if (byKey != 0) return byKey;
+      return a.name.compareTo(b.name);
+    });
+  return sorted;
+}
+
+/// Οι καλούντες που εμφανίζονται, με ή χωρίς τον συγκεντρωτικό «Άγνωστο».
+///
+/// Ο «Άγνωστος» δεν είναι πρόσωπο αλλά «δεν καταγράφηκε ποιος»· όσο η βάση
+/// συμπληρώνεται θα σβήσει μόνος του, ώς τότε ο διακόπτης τον κρύβει για να
+/// φαίνονται οι πραγματικοί άνθρωποι.
+List<CallerTimeStat> visibleCallerTimeStats(
+  List<CallerTimeStat> stats, {
+  required bool hideUnknownCaller,
+}) {
+  if (!hideUnknownCaller) return stats;
+  return stats
+      .where((s) => s.name != kDashboardUnknownCallerLabel)
+      .toList(growable: false);
 }
 
 /// Εγγραφή χρονοβόρας κλήσης.
@@ -152,40 +213,16 @@ String formatKpiCallCountLabel(num count) {
   return '$rounded $unit';
 }
 
-String formatKpiCallDurationSeconds(num seconds) {
-  final safeSeconds = seconds.isNaN ? 0 : seconds.round();
-  final absSeconds = math.max(0, safeSeconds);
-  final m = absSeconds ~/ 60;
-  final s = absSeconds % 60;
-  if (m > 0) {
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
-  return '00:${s.toString().padLeft(2, '0')}';
-}
+String formatKpiCallDurationSeconds(num seconds) =>
+    formatCallDurationSeconds(seconds, ifMissing: '00:00');
 
-String formatKpiAggregateDurationSeconds(num seconds) {
-  final safeSeconds = seconds.isNaN ? 0 : seconds.round();
-  final absSeconds = math.max(0, safeSeconds);
-  final h = absSeconds ~/ 3600;
-  final m = (absSeconds % 3600) ~/ 60;
-  final s = absSeconds % 60;
-  if (h > 0) {
-    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
-  }
-  return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-}
+/// Σύνολο διάρκειας στις υποδείξεις των γραφημάτων — με μονάδες, όπως οι κάρτες.
+String formatKpiAggregateDurationSeconds(num seconds) =>
+    formatAggregateDurationSeconds(seconds, ifMissing: '0δ');
 
-/// Συνολική διάρκεια στη λεζάντα «Κατανομή Βλαβών» — `ωω:λλ:δδ`.
-String formatIssueChartDurationSeconds(num seconds) {
-  final safeSeconds = seconds.isNaN ? 0 : seconds.round();
-  final absSeconds = math.max(0, safeSeconds);
-  final h = absSeconds ~/ 3600;
-  final m = (absSeconds % 3600) ~/ 60;
-  final s = absSeconds % 60;
-  return '${h.toString().padLeft(2, '0')}:'
-      '${m.toString().padLeft(2, '0')}:'
-      '${s.toString().padLeft(2, '0')}';
-}
+/// Συνολική διάρκεια στη λεζάντα «Κατανομή Βλαβών» — ίδια μορφή με τα σύνολα.
+String formatIssueChartDurationSeconds(num seconds) =>
+    formatAggregateDurationSeconds(seconds, ifMissing: '0δ');
 
 String formatKpiMonthCallsTooltip(String monthKey, num count) {
   final parsed = DateTime.tryParse('$monthKey-01');
@@ -334,6 +371,7 @@ class DashboardSummaryModel {
     required this.sparklineLast7Days,
     required this.topCallers,
     required this.longestCalls,
+    this.callerTimeTotals = const <CallerTimeStat>[],
     required this.hourlyDistribution,
     required this.byDepartment,
     required this.byIssue,
@@ -406,6 +444,9 @@ class DashboardSummaryModel {
 
   /// Πιο χρονοβόρες κλήσεις.
   final List<LongestCallEntry> longestCalls;
+
+  /// Συγκεντρωτικός χρόνος ανά καλούντα — η δεύτερη όψη της ίδιας κάρτας.
+  final List<CallerTimeStat> callerTimeTotals;
 
   /// Κατανομή κλήσεων ανά ώρα (0-23).
   final List<HourlyBucket> hourlyDistribution;

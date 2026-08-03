@@ -12,11 +12,13 @@ import '../../../core/database/old_database/lamp_table_greek_names.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../database/services/database_stats_service.dart';
+import '../../database/widgets/table_preview_grid.dart';
 
 final _kLampFileDateFmt = DateFormat.yMMMd('el').add_Hm();
 
-/// Καρτέλα «Πίνακες»: στατιστικά αρχείου + κατάλογος πινάκων με αριθμό εγγραφών, απλή προεπισκόπηση
-/// (χωρίς schema, zoom, resize). Απαιτεί ήδη έγκυρη βάνα ανάγνωσης.
+/// Καρτέλα «Πίνακες»: στατιστικά αρχείου + κατάλογος πινάκων με αριθμό εγγραφών,
+/// προεπισκόπηση με το κοινό εικονικοποιημένο [TablePreviewGrid] (χωρίς εμφάνιση
+/// schema/zoom). Απαιτεί ήδη έγκυρη βάνα ανάγνωσης.
 class LampDbTablesTab extends StatefulWidget {
   const LampDbTablesTab({
     super.key,
@@ -53,6 +55,10 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
   bool _previewLoading = false;
   String? _previewError;
   TablePreviewResult? _preview;
+
+  /// Συνολικές εγγραφές του επιλεγμένου πίνακα (για «Χ από Ψ» + σελιδοποίηση).
+  int? _previewTotalRowCount;
+  bool _loadingMoreRows = false;
   double _tablesPaneWidth = _kDefaultTablesPaneWidth;
   CustomMouseCursor? _splitterCursor;
 
@@ -141,6 +147,7 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
         _selected = null;
         _preview = null;
         _previewError = null;
+        _previewTotalRowCount = null;
         _loading = false;
       });
     } catch (e) {
@@ -159,13 +166,18 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
       _previewLoading = true;
       _preview = null;
       _previewError = null;
+      _previewTotalRowCount = null;
     });
     final p = widget.databasePath.trim();
     try {
-      final preview = await _api.getTablePreview(p, name);
-      if (!mounted) return;
+      final results = await Future.wait<dynamic>([
+        _api.getTablePreview(p, name),
+        _api.getTableRowCount(p, name),
+      ]);
+      if (!mounted || _selected != name) return;
       setState(() {
-        _preview = preview;
+        _preview = results[0] as TablePreviewResult;
+        _previewTotalRowCount = results[1] as int;
         _previewLoading = false;
       });
     } catch (e) {
@@ -175,6 +187,41 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
           _previewError = e.toString();
         });
       }
+    }
+  }
+
+  bool get _hasMorePreviewRows {
+    final total = _previewTotalRowCount;
+    final preview = _preview;
+    return total != null && preview != null && preview.rows.length < total;
+  }
+
+  /// Φόρτωση επόμενης σελίδας εγγραφών όταν η κύλιση φτάνει προς το τέλος.
+  Future<void> _loadMorePreviewRows() async {
+    if (_loadingMoreRows || !_hasMorePreviewRows) return;
+    final name = _selected;
+    final current = _preview;
+    if (name == null || current == null) return;
+    _loadingMoreRows = true;
+    try {
+      final page = await _api.getTablePreview(
+        widget.databasePath.trim(),
+        name,
+        offset: current.rows.length,
+      );
+      if (!mounted || _selected != name) return;
+      setState(() {
+        _preview = TablePreviewResult(
+          columns: current.columns,
+          rows: [...current.rows, ...page.rows],
+        );
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _previewError = e.toString());
+      }
+    } finally {
+      _loadingMoreRows = false;
     }
   }
 
@@ -553,7 +600,15 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
         child: Text('Δεν υπάρχουν στήλες ή σειρές προς εμφάνιση.'),
       );
     }
-    return LampSimpleDataPreview(result: pre);
+    return TablePreviewGrid(
+      tableKey: _selected!,
+      columns: pre.columns,
+      rows: pre.rows,
+      zoom: 1.0,
+      totalRowCount: _previewTotalRowCount,
+      hasMoreRows: _hasMorePreviewRows,
+      onLoadMoreRows: _loadMorePreviewRows,
+    );
   }
 }
 
@@ -682,106 +737,6 @@ class _LampFileStatsCardState extends State<_LampFileStatsCard> {
           Expanded(child: SelectableText(value, style: t.textTheme.bodySmall)),
         ],
       ),
-    );
-  }
-}
-
-/// Απλό grid: οριζόντιο + κάθετο scroll, **χωρίς** zoom, χωρίς resize, χωρίς εμφάνιση schema.
-///
-/// [Scrollbar] δένει ρητά `ScrollController` (ίδιο με το κάθετο [SingleChildScrollView]) ώστε
-/// να μην σπάει το paint σε αλλαγή μεγέθους παραθύρου / Windows (χωρίς `PrimaryScrollController`).
-class LampSimpleDataPreview extends StatefulWidget {
-  const LampSimpleDataPreview({super.key, required this.result});
-
-  final TablePreviewResult result;
-
-  @override
-  State<LampSimpleDataPreview> createState() => _LampSimpleDataPreviewState();
-}
-
-class _LampSimpleDataPreviewState extends State<LampSimpleDataPreview> {
-  final ScrollController _verticalScroll = ScrollController();
-  final ScrollController _horizontalScroll = ScrollController();
-
-  @override
-  void dispose() {
-    _verticalScroll.dispose();
-    _horizontalScroll.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Scrollbar(
-          controller: _horizontalScroll,
-          thumbVisibility: true,
-          notificationPredicate: (notification) => notification.depth == 1,
-          child: Scrollbar(
-            controller: _verticalScroll,
-            thumbVisibility: true,
-            notificationPredicate: (notification) => notification.depth == 0,
-            child: SingleChildScrollView(
-              controller: _verticalScroll,
-              primary: false,
-              child: SingleChildScrollView(
-                controller: _horizontalScroll,
-                primary: false,
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                  child: DataTable(
-                    showCheckboxColumn: false,
-                    columnSpacing: 8,
-                    horizontalMargin: 8,
-                    headingRowHeight: 40,
-                    dataRowMaxHeight: 64,
-                    columns: widget.result.columns
-                        .map(
-                          (c) => DataColumn(
-                            label: ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minWidth: 64,
-                                maxWidth: 180,
-                              ),
-                              child: Text(
-                                c,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    rows: widget.result.rows.map((r) {
-                      return DataRow(
-                        cells: widget.result.columns.map((c) {
-                          final v = r[c];
-                          final s = v?.toString() ?? '';
-                          return DataCell(
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minWidth: 64,
-                                maxWidth: 220,
-                              ),
-                              child: Text(
-                                s,
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

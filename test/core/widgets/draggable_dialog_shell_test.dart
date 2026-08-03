@@ -154,22 +154,8 @@ void main() {
       },
     );
 
-    testWidgets('MouseRegion με SystemMouseCursors.move πάνω από τον τίτλο', (
-      tester,
-    ) async {
-      await _pumpCenteredDialog(tester);
-
-      final regions = tester.widgetList<MouseRegion>(find.byType(MouseRegion));
-      final moveRegion = regions.where(
-        (r) => r.cursor == SystemMouseCursors.move,
-      );
-      expect(
-        moveRegion,
-        isNotEmpty,
-        reason: greekExpectMsg(
-          'Πρέπει να υπάρχει MouseRegion με SystemMouseCursors.move στον τίτλο',
-        ),
-      );
-    });
+    // Σημείωση Πολιτικής Ελέγχων (Κ2): δεν ελέγχουμε σχήμα δείκτη ποντικιού —
+    // widget test δεν αποδεικνύει τι δείχνει ο κέρσορας στα Windows· η
+    // επαλήθευση του δείκτη «μετακίνησης» πάνω από τον τίτλο είναι οπτική.
   });
 }

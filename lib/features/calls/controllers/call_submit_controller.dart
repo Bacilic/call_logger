@@ -20,10 +20,14 @@ enum CallSubmitOutcome {
 abstract class CallSubmitPrompts {
   /// Το όνομα που γράφτηκε μοιάζει με υπάρχοντες υπαλλήλους· τι κάνουμε;
   ///
+  /// Το [typedDisplayName] είναι το όνομα όπως το πληκτρολόγησε ο χρήστης —
+  /// ο διάλογος το δείχνει δίπλα στα υπάρχοντα για σύγκριση.
+  ///
   /// `null` σημαίνει «δεν ρωτήθηκε» και η αποθήκευση συνεχίζει ανενόχλητη.
   Future<SimilarUsersDialogResult?> resolveSimilarCallers(
-    List<UserSimilarityMatch> matches,
-  );
+    List<UserSimilarityMatch> matches, {
+    required String typedDisplayName,
+  });
 }
 
 /// Ενέργειες υποβολής κλήσης.
@@ -72,7 +76,10 @@ class CallSubmitController {
     );
     if (matches.isEmpty) return true;
 
-    final result = await prompts.resolveSimilarCallers(matches);
+    final result = await prompts.resolveSimilarCallers(
+      matches,
+      typedDisplayName: header.normalizedCallerDisplayText,
+    );
     if (result == null) return true;
     if (result.isCancelled) return false;
 

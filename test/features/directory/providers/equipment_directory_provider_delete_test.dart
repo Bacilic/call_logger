@@ -56,5 +56,55 @@ void main() {
         expect(rows.single['is_deleted'], 1);
       },
     );
+
+    test(
+      'με onlyIds διαγράφονται μόνο αυτά — τα υπόλοιπα μένουν επιλεγμένα',
+      () async {
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        await container.read(lookupServiceProvider.future);
+
+        final db = await DatabaseHelper.instance.database;
+        final deletedId = await db.insert('equipment', {
+          'code_equipment': 'PC-GOES',
+          'type': 'Desktop',
+          'is_deleted': 0,
+        });
+        final keptId = await db.insert('equipment', {
+          'code_equipment': 'PC-STAYS',
+          'type': 'Desktop',
+          'is_deleted': 0,
+        });
+
+        final notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
+        notifier.toggleSelection(deletedId);
+        notifier.toggleSelection(keptId);
+
+        await notifier
+            .deleteSelected(onlyIds: {deletedId})
+            .timeout(const Duration(seconds: 10));
+
+        final rows = await db.query(
+          'equipment',
+          columns: ['id', 'is_deleted'],
+          where: 'id IN (?, ?)',
+          whereArgs: [deletedId, keptId],
+        );
+        final deletedById = {
+          for (final r in rows) r['id'] as int: r['is_deleted'],
+        };
+        expect(deletedById[deletedId], 1);
+        expect(deletedById[keptId], 0);
+
+        // Το ✕ της προεπισκόπησης σημαίνει «αυτόν αργότερα», όχι «αυτόν ποτέ».
+        expect(container.read(equipmentDirectoryProvider).selectedIds, {
+          keptId,
+        });
+      },
+    );
   });
 }

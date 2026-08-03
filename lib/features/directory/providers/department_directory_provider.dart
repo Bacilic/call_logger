@@ -10,6 +10,7 @@ import '../../../core/database/phone_repository.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/errors/department_exists_exception.dart';
 import '../../../core/services/lookup_service.dart';
+import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../../core/utils/department_floor_sync.dart';
 import '../../calls/provider/lookup_provider.dart';
@@ -214,10 +215,12 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   }
 
   void filterAndSort() {
-    final q = SearchTextNormalizer.normalizeForSearch(state.searchQuery);
+    final idQuery = IdSearchQuery.parse(state.searchQuery);
     var list = state.allDepartments;
-    if (q.isNotEmpty) {
+    if (!idQuery.isEmpty) {
       list = list.where((d) {
+        if (!idQuery.matchesEntityId(d.id)) return false;
+        if (idQuery.text.isEmpty) return true;
         final did = d.id;
         final phonesText = did == null
             ? ''
@@ -244,7 +247,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
           equipmentText,
           '${d.id ?? ''}',
         ].join(' ');
-        return SearchTextNormalizer.containsAllTokens(blob, state.searchQuery);
+        return SearchTextNormalizer.containsAllTokens(blob, idQuery.text);
       }).toList();
     }
     final col = state.sortColumn;
@@ -690,7 +693,13 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
 
   /// Μετά από ατομική soft-delete εκτός notifier: ενημερώνει μόνο UI/cache,
   /// χωρίς νέο γράψιμο στη βάση.
-  Future<void> finalizeExternalDeletion(List<DepartmentModel> toDelete) async {
+  /// Το [keepSelectedIds] κρατά επιλεγμένα όσα τμήματα **δεν** διαγράφηκαν:
+  /// ο χρήστης μπορεί να τα αφαίρεσε από τη λίστα για να τα χειριστεί μετά, και
+  /// το σβήσιμο της επιλογής θα τον ανάγκαζε να τα ξαναδιαλέξει ένα-ένα.
+  Future<void> finalizeExternalDeletion(
+    List<DepartmentModel> toDelete, {
+    Set<int> keepSelectedIds = const {},
+  }) async {
     _settlePendingBulkUndo();
     if (toDelete.isEmpty) return;
     await _refreshLookupCache();
@@ -701,7 +710,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       searchQuery: state.searchQuery,
       sortColumn: state.sortColumn,
       sortAscending: state.sortAscending,
-      selectedIds: {},
+      selectedIds: Set<int>.from(keepSelectedIds),
       lastDeleted: toDelete,
       lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
       focusedRowIndex: state.focusedRowIndex,

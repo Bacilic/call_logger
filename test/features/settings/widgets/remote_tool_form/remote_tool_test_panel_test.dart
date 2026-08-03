@@ -1,6 +1,6 @@
 import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/models/remote_tool_role.dart';
-import 'package:call_logger/features/settings/screens/remote_tools_management_screen.dart';
+import 'package:call_logger/features/settings/services/remote_tool_management_texts.dart';
 import 'package:call_logger/features/settings/widgets/remote_tool_form/remote_tool_form_controller.dart';
 import 'package:call_logger/features/settings/widgets/remote_tool_form/remote_tool_test_panel.dart';
 import 'package:flutter/material.dart';

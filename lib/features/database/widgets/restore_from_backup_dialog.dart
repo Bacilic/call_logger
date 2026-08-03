@@ -6,31 +6,22 @@ import '../services/backup_zip_manifest.dart';
 import '../services/database_file_replacement.dart';
 import '../services/restore_plan.dart';
 
-/// Απόφαση χρήστη από τον διάλογο επαναφοράς (χωρίς εργασίες αρχείων/βάσης).
-class RestoreFromBackupDialogResult {
-  const RestoreFromBackupDialogResult({
-    required this.destination,
-    required this.openRestoredDatabase,
-  });
-
-  final RestoreDestinationChoice destination;
-  final bool openRestoredDatabase;
-}
-
-/// Διεπαφή επιβεβαίωσης επαναφοράς: σύγκριση, προέλευση, προορισμός, άνοιγμα.
+/// Διεπαφή επιβεβαίωσης επαναφοράς: σύγκριση, προέλευση, όνομα προορισμού.
 ///
-/// Δεν διαβάζει βάση και δεν γράφει αρχεία — δέχεται έτοιμα δεδομένα.
-Future<RestoreFromBackupDialogResult?> showRestoreFromBackupDialog({
+/// Η επαναφορά γίνεται πάντα στον φάκελο της τρέχουσας βάσης — ο χρήστης
+/// επιλέγει μόνο το όνομα. Δεν διαβάζει βάση και δεν γράφει αρχεία — δέχεται
+/// έτοιμα δεδομένα. Επιστρέφει την επιλογή ονόματος ή `null` σε ακύρωση.
+Future<RestoreDestinationChoice?> showRestoreFromBackupDialog({
   required BuildContext context,
   required DatabaseFileProfile? currentProfile,
   required DatabaseFileProfile backupProfile,
   required BackupZipManifest manifest,
   required String currentDatabasePath,
-  required String zipPath,
   required List<RestoreDestinationChoice> availableDestinations,
   RestoreDestinationChoice initialDestination =
       RestoreDestinationChoice.defaultChoice,
   String? preferredDatabaseFileName,
+  bool backupNameTargetExists = false,
   bool isFullBackupArchive = false,
   String? fullBackupPortablesDescription,
 }) {
@@ -39,7 +30,7 @@ Future<RestoreFromBackupDialogResult?> showRestoreFromBackupDialog({
       ? initialDestination
       : availableDestinations.first;
 
-  return showDialog<RestoreFromBackupDialogResult>(
+  return showDialog<RestoreDestinationChoice>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) => _RestoreFromBackupDialog(
@@ -47,10 +38,10 @@ Future<RestoreFromBackupDialogResult?> showRestoreFromBackupDialog({
       backupProfile: backupProfile,
       manifest: manifest,
       currentDatabasePath: currentDatabasePath,
-      zipPath: zipPath,
       availableDestinations: availableDestinations,
       initialDestination: initial,
       preferredDatabaseFileName: preferredDatabaseFileName,
+      backupNameTargetExists: backupNameTargetExists,
       isFullBackupArchive: isFullBackupArchive,
       fullBackupPortablesDescription: fullBackupPortablesDescription,
     ),
@@ -63,10 +54,10 @@ class _RestoreFromBackupDialog extends StatefulWidget {
     required this.backupProfile,
     required this.manifest,
     required this.currentDatabasePath,
-    required this.zipPath,
     required this.availableDestinations,
     required this.initialDestination,
     this.preferredDatabaseFileName,
+    this.backupNameTargetExists = false,
     this.isFullBackupArchive = false,
     this.fullBackupPortablesDescription,
   });
@@ -75,10 +66,10 @@ class _RestoreFromBackupDialog extends StatefulWidget {
   final DatabaseFileProfile backupProfile;
   final BackupZipManifest manifest;
   final String currentDatabasePath;
-  final String zipPath;
   final List<RestoreDestinationChoice> availableDestinations;
   final RestoreDestinationChoice initialDestination;
   final String? preferredDatabaseFileName;
+  final bool backupNameTargetExists;
   final bool isFullBackupArchive;
   final String? fullBackupPortablesDescription;
 
@@ -89,32 +80,16 @@ class _RestoreFromBackupDialog extends StatefulWidget {
 
 class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
   late RestoreDestinationChoice _destination;
-  late bool _openRestored;
 
   @override
   void initState() {
     super.initState();
     _destination = widget.initialDestination;
-    _openRestored = true;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final targetPath = resolveRestoreTargetPath(
-      choice: _destination,
-      currentDatabasePath: widget.currentDatabasePath,
-      zipPath: widget.zipPath,
-      manifest: widget.manifest,
-      preferredDatabaseFileName: widget.preferredDatabaseFileName,
-    );
-    final showOpenSwitch = restoreOpenSwitchMeaningful(_destination);
-    final preRestoreName =
-        _destination == RestoreDestinationChoice.currentDatabase
-        ? DatabaseFileReplacement.previewPreRestoreFileName(
-            widget.currentDatabasePath,
-          )
-        : DatabaseFileReplacement.previewPreRestoreFileName(targetPath);
 
     return AlertDialog(
       title: const Text('Επαναφορά από αντίγραφο'),
@@ -149,7 +124,7 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
               Text(_originText()),
               const SizedBox(height: 16),
               Text(
-                'Πού να γίνει η επαναφορά;',
+                'Με ποιο όνομα να γίνει η επαναφορά;',
                 style: theme.textTheme.titleSmall,
               ),
               const SizedBox(height: 8),
@@ -167,7 +142,7 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
                         contentPadding: EdgeInsets.zero,
                         title: Text(_destinationLabel(choice)),
                         subtitle: Text(
-                          _destinationSubtitle(choice),
+                          _targetPathFor(choice),
                           style: theme.textTheme.bodySmall,
                         ),
                         value: choice,
@@ -177,29 +152,9 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Η τρέχουσα βάση στον προορισμό θα φυλαχτεί ως:\n$preRestoreName',
+                _preservationText(),
                 style: theme.textTheme.bodySmall,
               ),
-              if (_destination == RestoreDestinationChoice.besideZip) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Προσοχή: η εφαρμογή θα λειτουργεί με βάση μέσα στον φάκελο '
-                  'αντιγράφων ασφαλείας.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ],
-              if (showOpenSwitch) ...[
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: const Text('Άνοιγμα της βάσης που επαναφέρθηκε'),
-                  value: _openRestored,
-                  onChanged: (v) => setState(() => _openRestored = v),
-                ),
-              ],
             ],
           ),
         ),
@@ -210,13 +165,7 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
           child: const Text('Άκυρο'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            RestoreFromBackupDialogResult(
-              destination: _destination,
-              openRestoredDatabase: showOpenSwitch ? _openRestored : true,
-            ),
-          ),
+          onPressed: () => Navigator.pop(context, _destination),
           child: const Text('Επαναφορά'),
         ),
       ],
@@ -255,22 +204,42 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
   String _destinationLabel(RestoreDestinationChoice choice) {
     switch (choice) {
       case RestoreDestinationChoice.currentDatabase:
-        return 'Τρέχουσα βάση';
-      case RestoreDestinationChoice.besideZip:
-        return 'Νέο αρχείο δίπλα στο αντίγραφο';
-      case RestoreDestinationChoice.originalPathFromManifest:
-        return 'Αρχική διαδρομή του αντιγράφου';
+        return 'Με το τρέχον όνομα '
+            '(${p.basename(widget.currentDatabasePath)})';
+      case RestoreDestinationChoice.backupName:
+        return 'Με το όνομα του αντιγράφου '
+            '(${p.basename(_targetPathFor(choice))})';
     }
   }
 
-  String _destinationSubtitle(RestoreDestinationChoice choice) {
+  String _targetPathFor(RestoreDestinationChoice choice) {
     return resolveRestoreTargetPath(
       choice: choice,
       currentDatabasePath: widget.currentDatabasePath,
-      zipPath: widget.zipPath,
-      manifest: widget.manifest,
-      preferredDatabaseFileName: widget.preferredDatabaseFileName,
+      backupDatabaseFileName: widget.preferredDatabaseFileName,
     );
+  }
+
+  String _preservationText() {
+    switch (_destination) {
+      case RestoreDestinationChoice.currentDatabase:
+        final preRestoreName = DatabaseFileReplacement.previewPreRestoreFileName(
+          widget.currentDatabasePath,
+        );
+        return 'Η τρέχουσα βάση θα φυλαχτεί ως:\n$preRestoreName';
+      case RestoreDestinationChoice.backupName:
+        final currentName = p.basename(widget.currentDatabasePath);
+        final target = _targetPathFor(RestoreDestinationChoice.backupName);
+        if (!widget.backupNameTargetExists) {
+          return 'Η τρέχουσα βάση ($currentName) παραμένει στη θέση της.';
+        }
+        final preRestoreName = DatabaseFileReplacement.previewPreRestoreFileName(
+          target,
+        );
+        return 'Η τρέχουσα βάση ($currentName) παραμένει στη θέση της.\n'
+            'Το υπάρχον αρχείο «${p.basename(target)}» θα φυλαχτεί ως:\n'
+            '$preRestoreName';
+    }
   }
 }
 

@@ -9,7 +9,7 @@ import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
-import '../../building_map/widgets/building_map_floor_menu_button.dart';
+import '../../building_map/services/building_map_floor_ordering.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
 import 'department_color_palette.dart';
@@ -157,7 +157,7 @@ class DepartmentFormDialogState extends State<DepartmentFormDialog> {
   }
 
   List<DropdownMenuItem<int?>> _floorDropdownItems() {
-    final sortedFloors = buildingMapFloorsSortedByDisplayLabel(floors);
+    final sortedFloors = buildingMapFloorsSortedForDisplay(floors);
     final items = <DropdownMenuItem<int?>>[
       const DropdownMenuItem<int?>(value: null, child: Text('— χωρίς —')),
       for (final f in sortedFloors)

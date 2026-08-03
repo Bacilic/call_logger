@@ -5,6 +5,7 @@ void main() {
   group('DepartmentDeletionInventory (primary constructor)', () {
     test('κενό inventory → isEmpty και κενή περίληψη', () {
       const inventory = DepartmentDeletionInventory(
+        departmentId: 1,
         departmentName: 'Τμήμα Α',
         employeeNames: [],
         employeeOwnedPhoneCount: 0,
@@ -21,6 +22,7 @@ void main() {
 
     test('μόνο υπάλληλοι → hasEmployees και ενικός/πληθυντικός', () {
       const one = DepartmentDeletionInventory(
+        departmentId: 1,
         departmentName: 'Τμήμα Α',
         employeeNames: ['Άλφα'],
         employeeOwnedPhoneCount: 0,
@@ -33,6 +35,7 @@ void main() {
       expect(one.buildSummaryLines(), ['1 υπάλληλος']);
 
       const many = DepartmentDeletionInventory(
+        departmentId: 1,
         departmentName: 'Τμήμα Α',
         employeeNames: ['Άλφα', 'Βήτα', 'Γάμμα', 'Δέλτα'],
         employeeOwnedPhoneCount: 0,
@@ -45,6 +48,7 @@ void main() {
 
     test('φράση «θα τους ακολουθήσουν» μόνο με employee-owned στοιχεία', () {
       const withoutOwned = DepartmentDeletionInventory(
+        departmentId: 1,
         departmentName: 'Τμήμα Α',
         employeeNames: ['Άλφα', 'Βήτα'],
         employeeOwnedPhoneCount: 0,
@@ -57,6 +61,7 @@ void main() {
       expect(withoutLines.single, isNot(contains('θα τους ακολουθήσουν')));
 
       const withPhones = DepartmentDeletionInventory(
+        departmentId: 1,
         departmentName: 'Τμήμα Α',
         employeeNames: ['Άλφα'],
         employeeOwnedPhoneCount: 2,
@@ -70,6 +75,7 @@ void main() {
       );
 
       const withEquipment = DepartmentDeletionInventory(
+        departmentId: 1,
         departmentName: 'Τμήμα Α',
         employeeNames: ['Άλφα'],
         employeeOwnedPhoneCount: 0,
@@ -85,6 +91,7 @@ void main() {
 
     test('κοινόχρηστα → hasSharedAssets και σωστός πληθυντικός', () {
       const inventory = DepartmentDeletionInventory(
+        departmentId: 1,
         departmentName: 'Τμήμα Α',
         employeeNames: [],
         employeeOwnedPhoneCount: 0,
@@ -101,6 +108,7 @@ void main() {
       ]);
 
       const manyPhones = DepartmentDeletionInventory(
+        departmentId: 1,
         departmentName: 'Τμήμα Α',
         employeeNames: [],
         employeeOwnedPhoneCount: 0,

@@ -11,6 +11,7 @@ import '../../../core/widgets/calendar_range_picker.dart';
 import '../../../core/widgets/ellipsis_tooltip_text.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/widgets/main_nav_destination.dart';
+import '../../../core/utils/call_duration_format.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
 import '../providers/history_application_audit_view_provider.dart';
 import '../providers/history_provider.dart';
@@ -788,17 +789,8 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     return raw.isEmpty ? '—' : raw;
   }
 
-  /// Μορφοποίηση διάρκειας (δευτερόλεπτα) ως "λλ:δδ". Null → "—".
-  String _formatDuration(dynamic duration) {
-    if (duration == null) return '—';
-    final sec = duration is int
-        ? duration
-        : int.tryParse(duration?.toString() ?? '');
-    if (sec == null) return '—';
-    final minutes = sec ~/ 60;
-    final seconds = sec % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
+  String _formatDuration(dynamic duration) =>
+      formatCallDurationSeconds(duration);
 
   /// Τιμή για σύγκριση ταξινόμησης ανά ευρετήριο στήλης (0..7).
   Comparable<Object> _valueForSort(Map<String, dynamic> row, int columnIndex) {

@@ -1,5 +1,7 @@
 // Καθαρή λογική μηνυμάτων διαγραφής υπαλλήλου (χωρίς widgets/βάση).
 
+import 'bulk_deletion_summary.dart';
+
 /// Εμφάνιση ονόματος με προαιρετικό τμήμα: `Όνομα (Τμήμα)` ή μόνο `Όνομα`.
 String employeeDisplayLabel(String name, String? departmentName) {
   final n = name.trim();
@@ -34,12 +36,77 @@ String userDeletionConfirmMessage(List<String> labels) {
   return 'Διαγραφή $count υπαλλήλων;';
 }
 
+/// Σύνοψη της πράξης: πόσοι υπάλληλοι και πόσα στοιχεία θα ζητήσουν απόφαση.
+///
+/// Με λίγους υπαλλήλους ο κατάλογος ονομάτων αρκεί· με πολλούς ο χρήστης
+/// χρειάζεται να ξέρει και **πόσες ερωτήσεις** τον περιμένουν, γιατί η ροή
+/// συνεχίζεται με έναν διάλογο ανά τηλέφωνο και ανά εξοπλισμό.
+String userDeletionHeadline({
+  required int userCount,
+  required int exclusivePhoneCount,
+  required int exclusiveEquipmentCount,
+  int? initiallySelected,
+}) {
+  return buildBulkDeletionHeadline(
+    subject: SummaryCount(userCount, 'υπάλληλος', 'υπάλληλοι'),
+    initiallySelected: initiallySelected,
+    details: [
+      SummaryCount(
+        exclusivePhoneCount,
+        'προσωπικό τηλέφωνο',
+        'προσωπικά τηλέφωνα',
+      ),
+      SummaryCount(
+        exclusiveEquipmentCount,
+        'προσωπικός εξοπλισμός',
+        'προσωπικοί εξοπλισμοί',
+      ),
+    ],
+  );
+}
+
+/// Προειδοποίηση ότι η ροή δεν τελειώνει με το κουμπί «Διαγραφή».
+///
+/// Επιστρέφει `null` όταν δεν υπάρχει τίποτα να ρωτηθεί — τότε η διαγραφή είναι
+/// όντως ένα κλικ και η προειδοποίηση θα ήταν ψέμα.
+String? userDeletionPendingQuestionsNotice(int assetCount) {
+  if (assetCount <= 0) return null;
+  if (assetCount == 1) {
+    return 'Θα σας ζητηθεί απόφαση για 1 στοιχείο πριν ολοκληρωθεί η διαγραφή.';
+  }
+  return 'Θα σας ζητηθεί απόφαση για $assetCount στοιχεία πριν ολοκληρωθεί '
+      'η διαγραφή.';
+}
+
 /// Τι ακυρώνεται συνολικά αν ο χρήστης πατήσει «Ακύρωση» στη μέση της ροής.
 ///
 /// Μπαίνει στο μήνυμα του διαλόγου ακύρωσης: «Θα ακυρωθεί <αυτό>.»
 String userDeletionCancelScopeDescription(int userCount) {
   if (userCount <= 1) return 'η διαγραφή του υπαλλήλου';
   return 'η διαγραφή $userCount υπαλλήλων';
+}
+
+/// Τι έχει ολοκληρωθεί μέχρι στιγμής — πρώτη γραμμή του διαλόγου διακοπής.
+///
+/// «Ολοκληρωμένος» είναι ο υπάλληλος που έχει απαντηθεί **και** για τα
+/// τηλέφωνά του **και** για τον εξοπλισμό του — γι' αυτό η συλλογή τρέχει έναν
+/// γύρο ανά υπάλληλο και όχι έναν γύρο ανά είδος στοιχείου.
+String userDeletionCompletedSummary({
+  required int completed,
+  required int total,
+}) {
+  return completed == 1
+      ? 'Ολοκληρώσατε 1 υπάλληλο από τους $total.'
+      : 'Ολοκληρώσατε $completed υπαλλήλους από τους $total.';
+}
+
+/// Υπόδειξη του κουμπιού «Εφαρμογή απαντήσεων» — αυτοτελής πρόταση.
+String userDeletionApplyCompletedHint(int completed) {
+  return completed == 1
+      ? 'Κλείνει ο οδηγός και διαγράφεται ο 1 υπάλληλος που ολοκληρώσατε. Οι '
+            'υπόλοιποι μένουν ανέγγιχτοι και επιλεγμένοι.'
+      : 'Κλείνει ο οδηγός και διαγράφονται οι $completed υπάλληλοι που '
+            'ολοκληρώσατε. Οι υπόλοιποι μένουν ανέγγιχτοι και επιλεγμένοι.';
 }
 
 /// Επιβεβαίωση ότι όντως δεν έγινε τίποτα — η ακύρωση δεν μένει σιωπηλή.

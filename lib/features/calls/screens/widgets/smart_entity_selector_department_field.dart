@@ -8,7 +8,8 @@ import '../../../../features/directory/models/department_model.dart';
 import '../../provider/smart_entity_selector_provider.dart';
 import 'smart_entity_selector_anchor_frame.dart';
 import 'smart_entity_selector_conflict_badge.dart';
-import 'text_layout_utils.dart';
+import '../../../../core/utils/text_layout_utils.dart';
+import 'inline_field_clear_button.dart';
 
 class SmartEntityDepartmentField extends StatefulWidget {
   const SmartEntityDepartmentField({

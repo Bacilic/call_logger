@@ -7,7 +7,7 @@ import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/settings_repository.dart';
 import '../../../../core/database/user_delete_equipment_policy.dart';
 import '../../../../core/database/user_delete_phone_policy.dart';
-import '../../../../core/widgets/draggable_dialog_shell.dart';
+import '../../../calls/layout/call_form_clear.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../../../core/services/lookup_service.dart';
@@ -20,6 +20,8 @@ import '../../providers/department_directory_provider.dart';
 import '../../providers/directory_provider.dart';
 import '../../services/user_bulk_deletion_runner.dart';
 import '../../services/user_deletion_messages.dart';
+import '../../services/user_deletion_zones.dart';
+import 'user_deletion_preview_dialog.dart';
 import 'bulk_undo_bar.dart';
 import 'bulk_user_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
@@ -30,6 +32,7 @@ import 'user_form_dialog.dart';
 import 'catalog_tab_lookup_reload_mixin.dart';
 import 'catalog_search_field_sync.dart';
 import 'users_data_table.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 
 /// Καρτέλα χρηστών: αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη.
 class UsersTab extends ConsumerStatefulWidget {
@@ -296,81 +299,192 @@ class _UsersTabState extends ConsumerState<UsersTab>
           ),
         )
         .toList();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => DraggableDialogShell(
-        title: Text(userDeletionConfirmTitle(confirmLabels.length)),
-        builder: (titleHandle) => AlertDialog(
-          title: titleHandle,
-          content: Text(userDeletionConfirmMessage(confirmLabels)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Ακύρωση'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Διαγραφή'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-
+    // Η προετοιμασία τρέχει ΠΡΙΝ τον διάλογο: μόνο έτσι η σύνοψη ξέρει πόσα
+    // τηλέφωνα και εξοπλισμοί θα ζητήσουν απόφαση. Είναι μόνο αναγνώσεις —
+    // αν ο χρήστης ακυρώσει, δεν έχει γραφτεί τίποτα.
     final db = await DatabaseHelper.instance.database;
-    final plan = await prepareUserBulkDeletion(db: db, users: selectedUsers);
-    final disconnectSession = plan.createDisconnectSession();
+    final fullPlan = await prepareUserBulkDeletion(
+      db: db,
+      users: selectedUsers,
+    );
+    if (!context.mounted) return;
+
+    // Απογραφή ανά υπάλληλο: πόσα δικά του στοιχεία θα ζητήσουν απόφαση.
+    final phonesByUser = <int, int>{};
+    for (final p in fullPlan.exclusivePhones) {
+      phonesByUser[p.userId] = (phonesByUser[p.userId] ?? 0) + 1;
+    }
+    final equipmentByUser = <int, int>{};
+    for (final e in fullPlan.exclusiveEquipment) {
+      equipmentByUser[e.userId] = (equipmentByUser[e.userId] ?? 0) + 1;
+    }
+    final inventories = [
+      for (var i = 0; i < selectedUsers.length; i++)
+        if (selectedUsers[i].id case final id?)
+          UserDeletionInventory(
+            userId: id,
+            displayLabel: confirmLabels[i],
+            exclusivePhoneCount: phonesByUser[id] ?? 0,
+            exclusiveEquipmentCount: equipmentByUser[id] ?? 0,
+          ),
+    ];
+
+    final preview = await showUserDeletionPreviewDialog(
+      context: context,
+      inventories: inventories,
+    );
+    if (preview == null || !preview.confirmed || !context.mounted) return;
+
+    // Ο χρήστης μπορεί να αφαίρεσε υπαλλήλους μέσα στον διάλογο· από εδώ και
+    // πέρα μετράει μόνο ό,τι έμεινε.
+    final keptIds = preview.keptUserIds.toSet();
+    final usersToDelete = selectedUsers
+        .where((u) => keptIds.contains(u.id))
+        .toList();
+    if (usersToDelete.isEmpty) return;
+
+    // Το σχέδιο ξαναχτίζεται για όσους έμειναν: αλλιώς η διαγραφή θα έπαιρνε
+    // μαζί και τα στοιχεία όσων αφαιρέθηκαν.
+    final plan = keptIds.length == selectedUsers.length
+        ? fullPlan
+        : await prepareUserBulkDeletion(db: db, users: usersToDelete);
+    if (!context.mounted) return;
+
+    final completedUsers = <UserModel>[];
+    // Η διέξοδος προσφέρεται μέσα στον ίδιο διάλογο με την «Ακύρωση όλων»: το
+    // «Συνέχεια» μπορεί να επιστρέψει στο βήμα ΜΟΝΟ όσο η ροή είναι ανοιχτή.
+    final disconnectSession = plan.createDisconnectSession(
+      completedWork: () {
+        if (completedUsers.isEmpty) return null;
+        return (
+          summary: userDeletionCompletedSummary(
+            completed: completedUsers.length,
+            total: usersToDelete.length,
+          ),
+          applyHint: userDeletionApplyCompletedHint(completedUsers.length),
+        );
+      },
+    );
+
+    final phonesByUserId = <int, List<ExclusivePhoneForUserDelete>>{};
+    for (final p in plan.exclusivePhones) {
+      phonesByUserId.putIfAbsent(p.userId, () => []).add(p);
+    }
+    final equipmentByUserId = <int, List<ExclusiveEquipmentForUserDelete>>{};
+    for (final e in plan.exclusiveEquipment) {
+      equipmentByUserId.putIfAbsent(e.userId, () => []).add(e);
+    }
+
+    final availableDepartments = LookupService.instance.departments
+        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
+        .toList();
 
     final phoneBatches = <UserDisconnectBatch>[];
-    if (plan.exclusivePhones.isNotEmpty) {
-      if (!context.mounted) return;
-      final confirmed = await _collectExclusivePhoneDisconnectBatches(
-        context,
-        exclusivePhones: plan.exclusivePhones,
-        usersToDelete: selectedUsers,
-        session: disconnectSession,
-        onBatch: (batch, sourceDepartmentId) => phoneBatches.add((
+    final equipmentBatches = <UserDisconnectBatch>[];
+    var aborted = false;
+
+    // Ένας γύρος ανά υπάλληλο, με τα τηλέφωνα και τον εξοπλισμό του μαζί.
+    //
+    // Πριν, η συλλογή έτρεχε έναν γύρο ανά **είδος** (πρώτα όλα τα τηλέφωνα
+    // όλων, μετά όλος ο εξοπλισμός), οπότε στη μέση της ροής κανένας υπάλληλος
+    // δεν ήταν βέβαιο ότι είχε απαντηθεί πλήρως — και η ακύρωση δεν είχε τι να
+    // κρατήσει. Εδώ ο υπάλληλος μπαίνει στους ολοκληρωμένους μόνο αφού
+    // απαντηθούν **και** τα δύο είδη.
+    for (final user in usersToDelete) {
+      final id = user.id;
+      if (id == null) continue;
+      final phones = phonesByUserId[id] ?? const [];
+      final equipment = equipmentByUserId[id] ?? const [];
+
+      final ownPhoneBatches = <UserDisconnectBatch>[];
+      final ownEquipmentBatches = <UserDisconnectBatch>[];
+
+      if (phones.isNotEmpty) {
+        if (!context.mounted) return;
+        final batch = await _askUserPersonalPhones(
+          context,
+          user: user,
+          phones: phones,
+          availableDepartments: availableDepartments,
+          session: disconnectSession,
+        );
+        if (batch == null) {
+          aborted = true;
+          break;
+        }
+        ownPhoneBatches.add((
           batch: batch,
-          sourceDepartmentId: sourceDepartmentId,
-        )),
-      );
-      if (!context.mounted) return;
-      if (!confirmed) {
-        _showDeletionCancelledSnackBar(context, selectedUsers.length);
+          sourceDepartmentId: phones.first.departmentId,
+        ));
+      }
+
+      if (equipment.isNotEmpty) {
+        if (!context.mounted) return;
+        final batch = await _askUserPersonalEquipment(
+          context,
+          user: user,
+          equipment: equipment,
+          availableDepartments: availableDepartments,
+          session: disconnectSession,
+        );
+        if (batch == null) {
+          aborted = true;
+          break;
+        }
+        ownEquipmentBatches.add((
+          batch: batch,
+          sourceDepartmentId: equipment.first.departmentId,
+        ));
+      }
+
+      // Οι αποφάσεις κρατιούνται μόνο ολόκληρες: μισοαπαντημένος υπάλληλος δεν
+      // αφήνει ίχνος.
+      phoneBatches.addAll(ownPhoneBatches);
+      equipmentBatches.addAll(ownEquipmentBatches);
+      completedUsers.add(user);
+    }
+
+    if (!context.mounted) return;
+    if (aborted) {
+      // Η απόφαση πάρθηκε ήδη μέσα στη ροή, στον ίδιο διάλογο με την ακύρωση.
+      if (disconnectSession.stopKind !=
+          AssetDisconnectStopKind.applyCompleted) {
+        _showDeletionCancelledSnackBar(context, usersToDelete.length);
         return;
       }
     }
 
-    final equipmentBatches = <UserDisconnectBatch>[];
-    if (plan.exclusiveEquipment.isNotEmpty) {
-      if (!context.mounted) return;
-      final confirmed = await _collectExclusiveEquipmentDisconnectBatches(
-        context,
-        exclusiveEquipment: plan.exclusiveEquipment,
-        usersToDelete: selectedUsers,
-        session: disconnectSession,
-        onBatch: (batch, sourceDepartmentId) => equipmentBatches.add((
-          batch: batch,
-          sourceDepartmentId: sourceDepartmentId,
-        )),
-      );
-      if (!context.mounted) return;
-      if (!confirmed) {
-        _showDeletionCancelledSnackBar(context, selectedUsers.length);
-        return;
-      }
-    }
+    // Με τη διέξοδο διαγράφονται ΜΟΝΟ οι ολοκληρωμένοι, οπότε το σχέδιο
+    // ξαναχτίζεται γι' αυτούς — αλλιώς θα έπαιρνε μαζί και τα στοιχεία όσων
+    // έμειναν αναπάντητοι.
+    final executedUsers = aborted ? completedUsers : usersToDelete;
+    final executionPlan = aborted
+        ? await prepareUserBulkDeletion(db: db, users: executedUsers)
+        : plan;
+    if (!context.mounted) return;
 
     final notifier = ref.read(directoryProvider.notifier);
     final undoRecord = await applyUserBulkDeletion(
       db: db,
-      plan: plan,
+      plan: executionPlan,
       phoneBatches: phoneBatches,
       equipmentBatches: equipmentBatches,
     );
-    await notifier.finalizeExternalDeletion(selectedUsers);
+    // Ό,τι επέλεξε ο χρήστης και ΔΕΝ διαγράφηκε μένει επιλεγμένο: το «✕» της
+    // προεπισκόπησης σημαίνει «αυτούς αργότερα», όχι «αυτούς ποτέ».
+    final deletedIds = {for (final u in executedUsers) u.id};
+    final survivingSelection = state.selectedIds
+        .where((id) => !deletedIds.contains(id))
+        .toSet();
+
+    await notifier.finalizeExternalDeletion(
+      executedUsers,
+      keepSelectedIds: survivingSelection,
+    );
     notifier.rememberUserDeletionUndo(undoRecord);
+    // Η μετάλλαξη ακύρωσε το lookup· η αλυσίδα των Κλήσεων δεν έχει listeners
+    // όσο είμαστε στον Κατάλογο και πρέπει να ξεπλυθεί εκτός φάσης build.
+    flushCallsChainAfterDirectoryMutation(ref);
 
     if (phoneBatches.isNotEmpty || equipmentBatches.isNotEmpty) {
       await notifier.loadUsers();
@@ -470,119 +584,59 @@ class _UsersTabState extends ConsumerState<UsersTab>
     );
   }
 
-  Future<bool> _collectExclusivePhoneDisconnectBatches(
+  /// Τα προσωπικά τηλέφωνα **ενός** υπαλλήλου. `null` = ο χρήστης διέκοψε.
+  Future<SharedAssetDisconnectBatchResult?> _askUserPersonalPhones(
     BuildContext context, {
-    required List<ExclusivePhoneForUserDelete> exclusivePhones,
-    required List<UserModel> usersToDelete,
+    required UserModel user,
+    required List<ExclusivePhoneForUserDelete> phones,
+    required List<DepartmentModel> availableDepartments,
     required AssetDisconnectSession session,
-    required void Function(
-      SharedAssetDisconnectBatchResult batch,
-      int? sourceDepartmentId,
-    )
-    onBatch,
   }) async {
-    final lookup = LookupService.instance;
-    final departments = lookup.departments
-        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
+    final numbers = phones
+        .map((p) => p.number)
+        .where((n) => n.isNotEmpty)
         .toList();
+    if (numbers.isEmpty) return const SharedAssetDisconnectBatchResult();
 
-    final byUser = <int, List<ExclusivePhoneForUserDelete>>{};
-    for (final phone in exclusivePhones) {
-      byUser.putIfAbsent(phone.userId, () => []).add(phone);
-    }
-
-    for (final entry in byUser.entries) {
-      final phones = entry.value
-          .map((p) => p.number)
-          .where((n) => n.isNotEmpty)
-          .toList();
-      if (phones.isEmpty) continue;
-
-      final first = entry.value.first;
-      UserModel? user;
-      for (final u in usersToDelete) {
-        if (u.id == entry.key) {
-          user = u;
-          break;
-        }
-      }
-      final displayName = user == null
-          ? null
-          : '${user.firstName} ${user.lastName}'.trim();
-
-      if (!context.mounted) return false;
-      final batch = await showSharedAssetDisconnectFlow(
-        context: context,
-        sourceDepartmentId: first.departmentId,
-        sourceDepartmentName: first.departmentName,
-        phones: phones,
-        availableDepartments: departments,
-        mode: SharedAssetDisconnectMode.personalPhone,
-        personalPhoneUserDisplayName: displayName,
-        session: session,
-      );
-      if (!context.mounted || batch == null) return false;
-      onBatch(batch, first.departmentId);
-    }
-    return true;
+    final first = phones.first;
+    return showSharedAssetDisconnectFlow(
+      context: context,
+      sourceDepartmentId: first.departmentId,
+      sourceDepartmentName: first.departmentName,
+      phones: numbers,
+      availableDepartments: availableDepartments,
+      mode: SharedAssetDisconnectMode.personalPhone,
+      personalPhoneUserDisplayName: '${user.firstName} ${user.lastName}'.trim(),
+      session: session,
+    );
   }
 
-  Future<bool> _collectExclusiveEquipmentDisconnectBatches(
+  /// Ο προσωπικός εξοπλισμός **ενός** υπαλλήλου. `null` = ο χρήστης διέκοψε.
+  Future<SharedAssetDisconnectBatchResult?> _askUserPersonalEquipment(
     BuildContext context, {
-    required List<ExclusiveEquipmentForUserDelete> exclusiveEquipment,
-    required List<UserModel> usersToDelete,
+    required UserModel user,
+    required List<ExclusiveEquipmentForUserDelete> equipment,
+    required List<DepartmentModel> availableDepartments,
     required AssetDisconnectSession session,
-    required void Function(
-      SharedAssetDisconnectBatchResult batch,
-      int? sourceDepartmentId,
-    )
-    onBatch,
   }) async {
-    final lookup = LookupService.instance;
-    final departments = lookup.departments
-        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
+    final codes = equipment
+        .map((e) => e.codeEquipment)
+        .where((c) => c.isNotEmpty)
         .toList();
+    if (codes.isEmpty) return const SharedAssetDisconnectBatchResult();
 
-    final byUser = <int, List<ExclusiveEquipmentForUserDelete>>{};
-    for (final item in exclusiveEquipment) {
-      byUser.putIfAbsent(item.userId, () => []).add(item);
-    }
-
-    for (final entry in byUser.entries) {
-      final codes = entry.value
-          .map((e) => e.codeEquipment)
-          .where((c) => c.isNotEmpty)
-          .toList();
-      if (codes.isEmpty) continue;
-
-      final first = entry.value.first;
-      UserModel? user;
-      for (final u in usersToDelete) {
-        if (u.id == entry.key) {
-          user = u;
-          break;
-        }
-      }
-      final displayName = user == null
-          ? null
-          : '${user.firstName} ${user.lastName}'.trim();
-
-      if (!context.mounted) return false;
-      final batch = await showSharedAssetDisconnectFlow(
-        context: context,
-        sourceDepartmentId: first.departmentId,
-        sourceDepartmentName: first.departmentName,
-        equipmentCodes: codes,
-        availableDepartments: departments,
-        mode: SharedAssetDisconnectMode.personalEquipment,
-        personalPhoneUserDisplayName: displayName,
-        allowKeepInDepartment: true,
-        session: session,
-      );
-      if (!context.mounted || batch == null) return false;
-      onBatch(batch, first.departmentId);
-    }
-    return true;
+    final first = equipment.first;
+    return showSharedAssetDisconnectFlow(
+      context: context,
+      sourceDepartmentId: first.departmentId,
+      sourceDepartmentName: first.departmentName,
+      equipmentCodes: codes,
+      availableDepartments: availableDepartments,
+      mode: SharedAssetDisconnectMode.personalEquipment,
+      personalPhoneUserDisplayName: '${user.firstName} ${user.lastName}'.trim(),
+      allowKeepInDepartment: true,
+      session: session,
+    );
   }
 }
 
@@ -626,7 +680,7 @@ class _CatalogModeToggle extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 4),
-        Tooltip(
+        CompactTooltip(
           message:
               'Κοινόχρηστα τηλέφωνα (τηλέφωνα που δεν σχετίζονται με υπαλλήλους)',
           child: _modeButton(

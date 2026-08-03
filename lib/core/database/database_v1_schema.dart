@@ -36,7 +36,8 @@ import '../utils/search_text_normalizer.dart';
 /// v33: ανακατασκευή audit_log.search_text (μόνο δεδομένα — καθαρισμός ευρετηρίου).
 /// v34: μετονομασία γενικών ενεργειών audit «ΤΡΟΠΟΠΟΙΗΣΗ» σε ενέργειες ανά οντότητα (μόνο δεδομένα).
 /// v35: αναδρομικός καθαρισμός ιστορικού audit (συγχώνευση διπλών εγγραφών, μόνο δεδομένα).
-const int databaseSchemaVersionV1 = 36;
+/// v37: `calls.search_index` με τον αριθμό ticket Lansweeper (μόνο δεδομένα).
+const int databaseSchemaVersionV1 = 37;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =

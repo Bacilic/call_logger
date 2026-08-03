@@ -1,24 +1,16 @@
 // Καθαρή λογική σχεδίου επαναφοράς — χωρίς αρχεία και χωρίς UI.
 //
+// Συμβόλαιο: η επαναφορά γράφει πάντα στον φάκελο της τρέχουσας βάσης·
+// η επιλογή του χρήστη αφορά μόνο το όνομα του αρχείου (τρέχον ή του αντιγράφου).
+//
 //   flutter test test/features/database/services/restore_plan_test.dart
 
-import 'package:call_logger/features/database/services/backup_zip_manifest.dart';
-import 'package:call_logger/features/database/services/database_zip_pick_restore.dart';
 import 'package:call_logger/features/database/services/restore_plan.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
-  const current = r'C:\app\data\call_logger.db';
-  const zipPath = r'E:\backups\call_logger_2026-07-25.zip';
-  const original = r'D:\old\call_logger.db';
-
-  final knownManifest = BackupZipManifest(
-    originalDatabasePath: original,
-    databaseFileName: 'call_logger.db',
-    createdAt: DateTime.utc(2026, 7, 20),
-    appVersion: '0.21.3',
-    schemaVersion: 40,
-  );
+  const current = r'C:\app\data\integrity_debug.db';
 
   test('προεπιλογή είναι η τρέχουσα βάση', () {
     expect(
@@ -27,107 +19,82 @@ void main() {
     );
   });
 
-  test('τελική διαδρομή ανά επιλογή προορισμού', () {
+  test('η τρέχουσα βάση επιστρέφει την ίδια διαδρομή', () {
     expect(
       resolveRestoreTargetPath(
         choice: RestoreDestinationChoice.currentDatabase,
         currentDatabasePath: current,
-        zipPath: zipPath,
-        manifest: knownManifest,
+        backupDatabaseFileName: 'call_logger.db',
       ),
       current,
     );
-    expect(
-      resolveRestoreTargetPath(
-        choice: RestoreDestinationChoice.besideZip,
-        currentDatabasePath: current,
-        zipPath: zipPath,
-        manifest: knownManifest,
-      ),
-      DatabaseZipPickRestore.targetDatabasePathFor(zipPath),
-    );
-    expect(
-      resolveRestoreTargetPath(
-        choice: RestoreDestinationChoice.originalPathFromManifest,
-        currentDatabasePath: current,
-        zipPath: zipPath,
-        manifest: knownManifest,
-      ),
-      original,
-    );
   });
 
-  test(
-    'αρχική διαδρομή διαθέσιμη μόνο με manifest, διαφορετική και εγγράψιμη',
-    () {
-      expect(
-        availableRestoreDestinations(
-          currentDatabasePath: current,
-          zipPath: zipPath,
-          manifest: knownManifest,
-          originalDirectoryWritable: true,
-        ),
-        contains(RestoreDestinationChoice.originalPathFromManifest),
-      );
-
-      expect(
-        availableRestoreDestinations(
-          currentDatabasePath: current,
-          zipPath: zipPath,
-          manifest: BackupZipManifest.unknown(),
-          originalDirectoryWritable: true,
-        ),
-        isNot(contains(RestoreDestinationChoice.originalPathFromManifest)),
-      );
-
-      expect(
-        availableRestoreDestinations(
-          currentDatabasePath: original,
-          zipPath: zipPath,
-          manifest: knownManifest,
-          originalDirectoryWritable: true,
-        ),
-        isNot(contains(RestoreDestinationChoice.originalPathFromManifest)),
-        reason: 'ίδια με την τρέχουσα → δεν έχει νόημα ως ξεχωριστή επιλογή',
-      );
-
-      expect(
-        availableRestoreDestinations(
-          currentDatabasePath: current,
-          zipPath: zipPath,
-          manifest: knownManifest,
-          originalDirectoryWritable: false,
-        ),
-        isNot(contains(RestoreDestinationChoice.originalPathFromManifest)),
-      );
-    },
-  );
-
-  test('τρέχουσα και δίπλα στο zip είναι πάντα διαθέσιμες', () {
-    final choices = availableRestoreDestinations(
+  test('το όνομα του αντιγράφου πάει ΠΑΝΤΑ στον φάκελο της τρέχουσας βάσης', () {
+    final target = resolveRestoreTargetPath(
+      choice: RestoreDestinationChoice.backupName,
       currentDatabasePath: current,
-      zipPath: zipPath,
-      manifest: BackupZipManifest.unknown(),
-      originalDirectoryWritable: false,
+      backupDatabaseFileName: 'call_logger.db',
     );
-    expect(choices, contains(RestoreDestinationChoice.currentDatabase));
-    expect(choices, contains(RestoreDestinationChoice.besideZip));
+    expect(p.dirname(target), p.dirname(current));
+    expect(p.basename(target), 'call_logger.db');
   });
 
-  test('ο διακόπτης ανοίγματος έχει νόημα μόνο εκτός τρέχουσας βάσης', () {
-    expect(
-      restoreOpenSwitchMeaningful(RestoreDestinationChoice.currentDatabase),
-      isFalse,
+  test('όνομα αντιγράφου χωρίς .db συμπληρώνεται και καθαρίζεται από φακέλους', () {
+    final target = resolveRestoreTargetPath(
+      choice: RestoreDestinationChoice.backupName,
+      currentDatabasePath: current,
+      backupDatabaseFileName: r'backups\call_logger_old',
     );
+    expect(p.dirname(target), p.dirname(current));
+    expect(p.basename(target), 'call_logger_old.db');
+  });
+
+  test('χωρίς αξιοποιήσιμο όνομα αντιγράφου μένει μόνο η τρέχουσα βάση', () {
     expect(
-      restoreOpenSwitchMeaningful(RestoreDestinationChoice.besideZip),
-      isTrue,
-    );
-    expect(
-      restoreOpenSwitchMeaningful(
-        RestoreDestinationChoice.originalPathFromManifest,
+      availableRestoreDestinations(
+        currentDatabasePath: current,
+        backupDatabaseFileName: null,
       ),
-      isTrue,
+      [RestoreDestinationChoice.currentDatabase],
+    );
+    expect(
+      availableRestoreDestinations(
+        currentDatabasePath: current,
+        backupDatabaseFileName: '  ',
+      ),
+      [RestoreDestinationChoice.currentDatabase],
+    );
+  });
+
+  test('ίδιο όνομα με την τρέχουσα → οι επιλογές ταυτίζονται, μένει μία', () {
+    expect(
+      availableRestoreDestinations(
+        currentDatabasePath: current,
+        backupDatabaseFileName: 'integrity_debug.db',
+      ),
+      [RestoreDestinationChoice.currentDatabase],
+    );
+    expect(
+      availableRestoreDestinations(
+        currentDatabasePath: current,
+        backupDatabaseFileName: 'INTEGRITY_DEBUG.DB',
+      ),
+      [RestoreDestinationChoice.currentDatabase],
+      reason: 'τα ονόματα αρχείων στα Windows δεν διακρίνουν πεζά/κεφαλαία',
+    );
+  });
+
+  test('διαφορετικό όνομα → και οι δύο επιλογές, με πρώτη την τρέχουσα', () {
+    expect(
+      availableRestoreDestinations(
+        currentDatabasePath: current,
+        backupDatabaseFileName: 'call_logger.db',
+      ),
+      [
+        RestoreDestinationChoice.currentDatabase,
+        RestoreDestinationChoice.backupName,
+      ],
     );
   });
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../utils/date_parser_util.dart';
+import 'compact_tooltip.dart';
 
 /// Custom desktop-style date/range picker με επεξεργάσιμο πεδίο και popup ημερολόγιο.
 /// Η αρχή εβδομάδας είναι σταθερή στη Δευτέρα και δεν αλλάζει από τον χρήστη.
@@ -274,7 +275,7 @@ class CalendarRangePickerState extends State<CalendarRangePicker> {
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Tooltip(
+                        CompactTooltip(
                           message:
                               'Οδηγός Εισαγωγής\n'
                               '• "7" -> Ημέρα τρέχοντος μηνός\n'
@@ -282,7 +283,6 @@ class CalendarRangePickerState extends State<CalendarRangePicker> {
                               '• "1/2\\26" -> Έτος 2026 (1, 2 ή 4 ψηφία)\n'
                               '• "1/1 έως 5/1" -> Εύρος (οποιοδήποτε γράμμα ανάμεσα)\n'
                               '• "+" -> Σημερινή ημερομηνία',
-                          preferBelow: false,
                           child: Icon(
                             Icons.info_outline,
                             size: 18,
@@ -313,9 +313,8 @@ class CalendarRangePickerState extends State<CalendarRangePicker> {
                         ],
                         if (_errorText != null) ...[
                           const SizedBox(width: 4),
-                          Tooltip(
+                          CompactTooltip(
                             message: _errorText!,
-                            preferBelow: false,
                             child: Icon(
                               Icons.error_outline,
                               size: 18,

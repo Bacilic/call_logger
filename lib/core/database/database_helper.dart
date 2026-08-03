@@ -86,9 +86,31 @@ class DatabaseHelper {
   }
 
   /// Αφαιρεί τη δέσμευση διαδρομής δοκιμών (επόμενη σύνδεση = κανονική λογική εφαρμογής).
+  ///
+  /// ΔΕΝ κλείνει την ανοιχτή σύνδεση — τα τεστ την κλείνουν μόνα τους πριν την
+  /// κλήση. Στην παραγωγή χρησιμοποιείται η [restoreConfiguredDatabasePath],
+  /// που κάνει και τα δύο.
   static void releaseTestDatabaseBinding() {
     _testOverrideDatabasePath = null;
     instance._connectionGeneration++;
+  }
+
+  /// Επαναφέρει το κανονικό άνοιγμα βάσης μετά από ροή αποσφαλμάτωσης που είχε
+  /// δεσμεύσει συγκεκριμένο αρχείο με [bindTestDatabaseFile].
+  ///
+  /// Κλείνει **και** τη σύνδεση: χωρίς αυτό το επόμενο [initializeDatabase]
+  /// επιστρέφει την ήδη ανοιχτή σύνδεση της δεσμευμένης βάσης, οπότε η επιλογή
+  /// του χρήστη μένει στα χαρτιά — η εφαρμογή δείχνει «άλλαξε βάση» ενώ
+  /// διαβάζει ακόμα τη δοκιμαστική.
+  ///
+  /// Χωρίς ενεργή δέσμευση δεν κάνει τίποτα, ώστε η κανονική αλλαγή βάσης να
+  /// μην πληρώνει ένα περιττό κλείσιμο σύνδεσης.
+  static Future<void> restoreConfiguredDatabasePath() async {
+    if (_testOverrideDatabasePath == null) return;
+    _testOverrideDatabasePath = null;
+    // Το closeConnection αυξάνει το connectionGeneration, οπότε ακυρώνεται και
+    // το θυμημένο αποτέλεσμα των ελέγχων αρχικοποίησης.
+    await instance.closeConnection();
   }
 
   Database? _database;

@@ -2,11 +2,106 @@ import 'dart:convert';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'audit_service.dart';
+import 'calls_audit_line.dart';
+import 'calls_search_index.dart';
+
+/// Πώς ονομάζεται στο Ιστορικό Εφαρμογής η αλλαγή κατάστασης Lansweeper.
+///
+/// Ξεχωριστή ενέργεια ανά γεγονός και όχι σκέτη «ΤΡΟΠΟΠΟΙΗΣΗ ΚΛΗΣΗΣ»: το
+/// ερώτημα που κάνει κανείς είναι «πότε στάλθηκε αυτή η κλήση και ποιος την
+/// έστειλε», και ως διακριτή ενέργεια φιλτράρεται στο Ιστορικό αντί να
+/// θάβεται ανάμεσα στις καθημερινές επεξεργασίες.
+String lansweeperAuditAction(String state) => switch (state.trim()) {
+  'sent' => 'ΚΑΤΑΧΩΡΗΣΗ ΣΤΟ LANSWEEPER',
+  'unsent' => 'ΑΠΟΣΥΡΣΗ ΑΠΟ LANSWEEPER',
+  'excluded' => 'ΕΞΑΙΡΕΣΗ ΑΠΟ LANSWEEPER',
+  'failed' => 'ΑΠΟΤΥΧΙΑ ΚΑΤΑΧΩΡΗΣΗΣ LANSWEEPER',
+  _ => 'ΑΛΛΑΓΗ ΚΑΤΑΣΤΑΣΗΣ LANSWEEPER',
+};
+
 /// Κατάσταση Lansweeper κλήσεων + ιστορικό εξωτερικών links (tickets).
 class CallsLansweeperRepository {
   const CallsLansweeperRepository(this.db);
 
   final Database db;
+
+  /// Τα πεδία που αξίζουν καταγραφή. Το `lansweeper_last_sync_at` αλλάζει σε
+  /// κάθε εγγραφή και θα γέμιζε το ιστορικό με θόρυβο.
+  static const List<String> _auditedFields = [
+    'lansweeper_state',
+    'lansweeper_main_ticket_id',
+  ];
+
+  Future<Map<String, Object?>> _readAuditedFields(
+    DatabaseExecutor e,
+    int callId,
+  ) async {
+    final rows = await e.query(
+      'calls',
+      columns: _auditedFields,
+      where: 'id = ?',
+      whereArgs: [callId],
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? const <String, Object?>{}
+        : Map<String, Object?>.from(rows.first);
+  }
+
+  /// Γράφει την αλλαγή στα `calls` **και** την καταγράφει στο Ιστορικό.
+  ///
+  /// ΜΟΝΑΔΙΚΟ σημείο εγγραφής για τις τέσσερις ροές κατάστασης Lansweeper: αν
+  /// κάποια έγραφε μόνη της, θα ξανάνοιγε η τρύπα που άφηνε κάθε καταχώρηση
+  /// αόρατη στο Ιστορικό — η κλήση φαινόταν για πάντα «Μη αποσταλμένη».
+  Future<void> _applyAndLog(
+    DatabaseExecutor e, {
+    required int callId,
+    required Map<String, Object?> payload,
+    required String action,
+    Map<String, dynamic>? extraNewValues,
+  }) async {
+    final before = await _readAuditedFields(e, callId);
+    await e.update('calls', payload, where: 'id = ?', whereArgs: [callId]);
+    // Το ticket συμμετέχει στο ευρετήριο αναζήτησης: κάθε ροή που το αλλάζει
+    // ξαναχτίζει το ευρετήριο στην ΙΔΙΑ συναλλαγή, αλλιώς η κλήση δεν βρίσκεται
+    // από τον αριθμό της (ή βρίσκεται από ticket που δεν έχει πια).
+    if (payload.containsKey('lansweeper_main_ticket_id')) {
+      await CallsSearchIndex(db).rebuildSearchIndexForCallIdInTxn(e, callId);
+    }
+    final after = await _readAuditedFields(e, callId);
+
+    final oldValues = <String, dynamic>{};
+    final newValues = <String, dynamic>{};
+    for (final field in _auditedFields) {
+      final a = before[field];
+      final b = after[field];
+      if (a?.toString() != b?.toString()) {
+        oldValues[field] = a;
+        newValues[field] = b;
+      }
+    }
+    if (extraNewValues != null) newValues.addAll(extraNewValues);
+    // Καμία ουσιαστική αλλαγή (π.χ. επανακαταχώρηση στο ίδιο ticket): δεν
+    // γεμίζουμε το ιστορικό με εγγραφές που δεν λένε τίποτα.
+    if (newValues.isEmpty) return;
+
+    final user = await AuditService.performingUser(e);
+    final entityName = (await CallsAuditLine(
+      db,
+    ).buildCallAuditDisplayLine(callId, executor: e)).trim();
+    await AuditService.log(
+      e,
+      action: action,
+      userPerforming: user,
+      details: 'calls id=$callId',
+      entityType: AuditEntityTypes.call,
+      entityId: callId,
+      entityName: entityName.isEmpty ? null : entityName,
+      oldValues: oldValues.isEmpty ? null : oldValues,
+      newValues: newValues,
+    );
+  }
 
   /// Μέγιστο αριθμητικό Lansweeper ticket id από κλήσεις και ιστορικό links.
   Future<int?> maxNumericLansweeperTicketId() async {
@@ -88,7 +183,14 @@ class CallsLansweeperRepository {
     if (updateTicketId || clearTicketId) {
       payload['lansweeper_main_ticket_id'] = clearTicketId ? null : ticketId;
     }
-    await db.update('calls', payload, where: 'id = ?', whereArgs: [callId]);
+    await db.transaction(
+      (txn) => _applyAndLog(
+        txn,
+        callId: callId,
+        payload: payload,
+        action: lansweeperAuditAction(state),
+      ),
+    );
   }
 
   /// Ορίζει/ενημερώνει το κύριο ticket Lansweeper μιας κλήσης.
@@ -97,14 +199,17 @@ class CallsLansweeperRepository {
     required String? ticketId,
     String? syncedAt,
   }) async {
-    await db.update(
-      'calls',
-      {
-        'lansweeper_main_ticket_id': ticketId,
-        'lansweeper_last_sync_at': syncedAt ?? DateTime.now().toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [callId],
+    await db.transaction(
+      (txn) => _applyAndLog(
+        txn,
+        callId: callId,
+        payload: {
+          'lansweeper_main_ticket_id': ticketId,
+          'lansweeper_last_sync_at':
+              syncedAt ?? DateTime.now().toIso8601String(),
+        },
+        action: 'ΑΛΛΑΓΗ TICKET LANSWEEPER',
+      ),
     );
   }
 
@@ -154,16 +259,20 @@ class CallsLansweeperRepository {
     String? comment,
   }) async {
     final nowIso = DateTime.now().toIso8601String();
+    final trimmedComment = comment?.trim() ?? '';
     await db.transaction((txn) async {
-      await txn.update(
-        'calls',
-        {
+      await _applyAndLog(
+        txn,
+        callId: callId,
+        payload: {
           'lansweeper_state': 'sent',
           'lansweeper_main_ticket_id': ticketId,
           'lansweeper_last_sync_at': nowIso,
         },
-        where: 'id = ?',
-        whereArgs: [callId],
+        action: 'ΧΕΙΡΟΚΙΝΗΤΗ ΚΑΤΑΧΩΡΗΣΗ ΣΤΟ LANSWEEPER',
+        extraNewValues: trimmedComment.isEmpty
+            ? null
+            : <String, dynamic>{'comment': trimmedComment},
       );
       await addExternalLink(
         callId: callId,
@@ -172,8 +281,7 @@ class CallsLansweeperRepository {
         createdAt: nowIso,
         metadata: <String, dynamic>{
           'mode': 'manual',
-          if (comment != null && comment.trim().isNotEmpty)
-            'comment': comment.trim(),
+          if (trimmedComment.isNotEmpty) 'comment': trimmedComment,
         },
         executor: txn,
       );
@@ -189,15 +297,15 @@ class CallsLansweeperRepository {
   }) async {
     final nowIso = DateTime.now().toIso8601String();
     await db.transaction((txn) async {
-      await txn.update(
-        'calls',
-        {
+      await _applyAndLog(
+        txn,
+        callId: callId,
+        payload: {
           'lansweeper_state': 'sent',
           'lansweeper_main_ticket_id': ticketId,
           'lansweeper_last_sync_at': nowIso,
         },
-        where: 'id = ?',
-        whereArgs: [callId],
+        action: 'ΚΑΤΑΧΩΡΗΣΗ ΣΤΟ LANSWEEPER',
       );
       await addExternalLink(
         callId: callId,

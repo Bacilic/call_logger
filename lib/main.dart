@@ -114,7 +114,14 @@ Future<void> main(List<String> arguments) async {
   await runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-      await AppConfig.configureFromCliArguments(arguments);
+      // Το debug build απομονώνεται αυτόματα στο προφίλ «dev»: τρέχει από τον
+      // επεξεργαστή κώδικα, όπου δεν υπάρχει συντόμευση για να περαστεί όρισμα.
+      await AppConfig.configureFromCliArguments(
+        arguments,
+        defaultProfileWhenAbsent: kDebugMode
+            ? AppConfig.debugDefaultProfileName
+            : null,
+      );
 
       // Εκκρεμής ενημέρωση: αν υπάρχει έτοιμο πακέτο από προηγούμενη «Αναμονή»,
       // εφάρμοσέ το τώρα (εκκίνηση updater + κλείσιμο) πριν φορτώσει η εφαρμογή.

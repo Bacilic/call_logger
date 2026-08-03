@@ -1,4 +1,24 @@
-﻿/// Ελληνική ετικέτα πεδίου (στήλης) για οδηγούς επίλυσης προβλημάτων ETL.
+﻿/// Ετικέτα αναφοράς ως «Όνομα (id)» ή σκέτο id αν λείπει όνομα.
+///
+/// Μοναδικός μορφοποιητής για κάθε id που φτάνει στο μάτι του χρήστη:
+/// περιλήψεις εξοπλισμού, μηνύματα εφαρμογής αποφάσεων και μηνύματα σάρωσης.
+String lampLabelledId(Map<int, String> labels, Object? id) {
+  if (id == null) return '-';
+  int? asInt;
+  if (id is int) {
+    asInt = id;
+  } else if (id is num) {
+    asInt = id.toInt();
+  } else {
+    asInt = int.tryParse(id.toString().trim());
+  }
+  if (asInt == null) return '-';
+  final label = labels[asInt];
+  if (label != null && label.isNotEmpty) return '$label ($asInt)';
+  return asInt.toString();
+}
+
+/// Ελληνική ετικέτα πεδίου (στήλης) για οδηγούς επίλυσης προβλημάτων ETL.
 String lampDataIssueColumnDisplayLabel(String? column) {
   if (column == null || column.trim().isEmpty) return '-';
   switch (column.trim().toLowerCase()) {
@@ -25,25 +45,46 @@ String lampDataIssueColumnDisplayLabel(String? column) {
   }
 }
 
+/// Στήλες που ο μεταφραστής εμφάνισης εξελληνίζει σε παλιά μηνύματα.
+const List<String> _lampMessageColumnKeys = <String>[
+  // Μακρύτερα κλειδιά πρώτα, ώστε π.χ. set_master να μην «σπάει».
+  'set_master',
+  'asset_no',
+  'serial_no',
+  'network_name',
+  'ip_address',
+  'contract',
+  'office',
+  'owner',
+  'model',
+];
+
+/// True όταν το μήνυμα γράφτηκε ήδη σε αναγνώσιμη μορφή «ετικέτα=τιμή».
+///
+/// Τα νεότερα σκαναρίσματα ενσωματώνουν ονόματα δεδομένων (π.χ. μοντέλο
+/// «Microsoft Office»), τα οποία ο μεταφραστής θα αλλοίωνε αν τα περνούσε
+/// για ονόματα στηλών.
+bool _isAlreadyDisplayReady(String message) {
+  for (final key in _lampMessageColumnKeys) {
+    final label = lampDataIssueColumnDisplayLabel(key);
+    if (label == key) continue;
+    if (message.contains('$label=')) return true;
+  }
+  return false;
+}
+
 /// Εξελληνίζει αποθηκευμένα μηνύματα `data_issues` που περιέχουν αγγλικά
 /// ονόματα στηλών (παλιά σκανάρισματα), χωρίς να αλλάζει τη βάση.
+///
+/// Μηνύματα που είναι ήδη σε μορφή «ετικέτα=τιμή» επιστρέφονται αυτούσια:
+/// περιέχουν δεδομένα του χρήστη που δεν επιτρέπεται να μεταφραστούν.
 String lampDataIssueMessageDisplayText(String? message) {
   if (message == null) return '-';
   final trimmed = message.trim();
   if (trimmed.isEmpty) return '-';
+  if (_isAlreadyDisplayReady(trimmed)) return trimmed;
 
-  // Μακρύτερα κλειδιά πρώτα, ώστε π.χ. set_master να μην «σπάει».
-  const keys = <String>[
-    'set_master',
-    'asset_no',
-    'serial_no',
-    'network_name',
-    'ip_address',
-    'contract',
-    'office',
-    'owner',
-    'model',
-  ];
+  const keys = _lampMessageColumnKeys;
 
   var text = trimmed;
   for (final key in keys) {

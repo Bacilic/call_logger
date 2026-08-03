@@ -30,6 +30,9 @@ class CallsSearchIndex {
     addNonEmpty(parts, callMap['phone_text']);
     addNonEmpty(parts, callMap['department_text']);
     addNonEmpty(parts, callMap['equipment_text']);
+    // Αριθμός εισιτηρίου Lansweeper: το ερώτημα «ποια κλήση είναι το ticket
+    // 17438;» ξεκινά από το ίδιο πεδίο αναζήτησης με όλα τα υπόλοιπα.
+    addNonEmpty(parts, callMap['lansweeper_main_ticket_id']);
 
     final callerId = callMap['caller_id'] as int?;
     if (callerId != null) {

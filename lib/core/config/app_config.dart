@@ -57,6 +57,14 @@ class AppConfig {
   /// Όνομα CLI προφίλ (`--profile test1`). Null = κανονική παραγωγική λειτουργία.
   static String? activeProfile;
 
+  /// Προφίλ που παίρνει αυτόματα το debug build όταν δεν δοθεί `--profile`.
+  ///
+  /// Μόνο το debug build: είναι η μόνη εκτέλεση που δεν ξεκινά ποτέ από
+  /// συντόμευση (τρέχει από τον επεξεργαστή κώδικα), οπότε δεν υπάρχει βολικό
+  /// σημείο να περαστεί όρισμα. Τα release builds μένουν ρητά — ό,τι δεν
+  /// ζητηθεί με `--profile`, δουλεύει στα κοινά δεδομένα.
+  static const String debugDefaultProfileName = 'dev';
+
   /// True όταν εκτελείται με `--profile <όνομα>`.
   static bool get hasActiveProfile {
     final name = activeProfile?.trim();
@@ -137,6 +145,22 @@ class AppConfig {
     );
   }
 
+  /// Ποιο προφίλ ισχύει τελικά: το ρητό `--profile`, αλλιώς το
+  /// [defaultProfileWhenAbsent] (αν είναι έγκυρο όνομα).
+  ///
+  /// Καθαρή απόφαση, χωρίς εργασίες δίσκου — το [configureFromCliArguments]
+  /// τη χρησιμοποιεί και μετά στήνει τον φάκελο.
+  static String? resolveProfileName(
+    List<String> arguments, {
+    String? defaultProfileWhenAbsent,
+  }) {
+    final result = validateCliArguments(arguments);
+    if (!result.isValid) return null;
+    final explicit = result.profile;
+    if (explicit != null) return explicit;
+    return _sanitizeProfileName(defaultProfileWhenAbsent ?? '');
+  }
+
   /// Αναλύει `--profile <name>` ή `--profile=<name>` από CLI arguments.
   static String? parseCliProfile(List<String> arguments) {
     final result = validateCliArguments(arguments);
@@ -145,14 +169,25 @@ class AppConfig {
   }
 
   /// Ορίζει [activeProfile] από CLI και προετοιμάζει φάκελο/προεπιλογή βάσης αν χρειάζεται.
-  static Future<void> configureFromCliArguments(List<String> arguments) async {
+  ///
+  /// Το [defaultProfileWhenAbsent] ισχύει **μόνο** όταν δεν δόθηκε `--profile`·
+  /// το ρητό όρισμα υπερισχύει πάντα. Δίνεται από το σημείο εισόδου (main),
+  /// ώστε η απόφαση «ποιο build παίρνει προεπιλογή» να μένει εκεί και αυτή η
+  /// συνάρτηση να παραμένει ελέγξιμη.
+  static Future<void> configureFromCliArguments(
+    List<String> arguments, {
+    String? defaultProfileWhenAbsent,
+  }) async {
     final result = validateCliArguments(arguments);
     assert(
       result.isValid,
       'Τα CLI ορίσματα πρέπει να έχουν επικυρωθεί πριν την εκκίνηση.',
     );
     wasRestartedAfterCrash = result.restartedAfterCrash;
-    final profile = result.profile;
+    final profile = resolveProfileName(
+      arguments,
+      defaultProfileWhenAbsent: defaultProfileWhenAbsent,
+    );
     if (profile == null) {
       activeProfile = null;
       _profileDefaultDbPath = null;

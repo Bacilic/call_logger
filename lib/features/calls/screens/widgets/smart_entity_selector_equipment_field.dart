@@ -16,7 +16,7 @@ import 'smart_entity_selector_equipment_models.dart';
 import 'smart_entity_selector_equipment_suggestion_list.dart';
 import 'smart_entity_selector_conflict_badge.dart';
 import 'smart_entity_selector_overlay_utils.dart';
-import 'text_layout_utils.dart';
+import 'inline_field_clear_button.dart';
 
 /// Πεδίο κωδικού εξοπλισμού με overlay αρχικών προτάσεων και Autocomplete αναζήτησης.
 class SmartEntityEquipmentField extends StatefulWidget {

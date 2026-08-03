@@ -174,5 +174,30 @@ void main() {
         );
       },
     );
+
+    test(
+      'κάθε κλήση του σεναρίου φέρει ημερομηνία, σε διαφορετικές ημέρες',
+      () async {
+        await db.delete('calls');
+        await db.transaction((txn) async {
+          await seeder.insertInformatikiDeletionScenario(txn);
+        });
+
+        final calls = await db.query('calls', columns: ['id', 'date']);
+        expect(calls, isNotEmpty);
+        // Άχρονη κλήση εμφανίζεται παντού χωρίς «τελευταία χρήση» και κάνει τη
+        // δοκιμαστική βάση να μοιάζει με σφάλμα της εφαρμογής.
+        for (final row in calls) {
+          final raw = (row['date'] as String?)?.trim() ?? '';
+          expect(
+            DateTime.tryParse(raw),
+            isNotNull,
+            reason: 'κλήση ${row['id']}: «$raw»',
+          );
+        }
+        final distinctDates = calls.map((r) => r['date']).toSet();
+        expect(distinctDates.length, greaterThan(1));
+      },
+    );
   });
 }

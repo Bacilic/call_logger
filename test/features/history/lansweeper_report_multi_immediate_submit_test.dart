@@ -301,6 +301,14 @@ void main() {
             await Future<void>.delayed(const Duration(milliseconds: 20));
             await tester.pump(const Duration(milliseconds: 20));
           }
+          // Η σημαία του mock ανάβει ΜΕΣΑ στο submitCall· ο διάλογος συνεχίζει
+          // μετά με πραγματικό async (αποθήκευση προτιμήσεων) που ο εικονικός
+          // χρόνος δεν προωθεί. Περιμένουμε το ίδιο το αποτέλεσμα.
+          while (find.textContaining('Επιλεγμένες: 0').evaluate().isEmpty &&
+              DateTime.now().isBefore(deadline)) {
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            await tester.pump(const Duration(milliseconds: 20));
+          }
         });
         expect(
           syncNotifier.submitFinished,

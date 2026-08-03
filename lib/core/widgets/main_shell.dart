@@ -22,6 +22,8 @@ import '../providers/shell_navigation_intent_provider.dart';
 import '../providers/task_focus_intent_provider.dart';
 import '../providers/quick_call_providers.dart';
 import 'main_nav_destination.dart';
+import 'main_nav_rail_metrics.dart';
+import 'main_nav_rail_toggle_button.dart';
 import 'main_shell_destination_content.dart';
 import 'main_shell_nav_icons.dart';
 import 'quick_call_fab.dart';
@@ -29,6 +31,7 @@ import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
 import '../updates/update_startup_prompt.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
+import 'compact_tooltip.dart';
 
 /// Κύριο κέλυφος εφαρμογής: πλευρική πλοήγηση και περιοχή περιεχομένου.
 class MainShell extends ConsumerStatefulWidget {
@@ -89,6 +92,12 @@ class MainShellState extends ConsumerState<MainShell> {
   Future<void> _loadNavRailShowLabels() async {
     final value = await SettingsService().windowUi.getNavRailShowLabels();
     if (mounted) setState(() => _navRailShowLabels = value);
+  }
+
+  Future<void> _toggleNavRailLabels() async {
+    final next = !_navRailShowLabels;
+    setState(() => _navRailShowLabels = next);
+    await SettingsService().windowUi.setNavRailShowLabels(next);
   }
 
   /// Ίδια λογική με [NavigationRail.onDestinationSelected] (λεξικό, ιστορικό immersive).
@@ -192,7 +201,7 @@ class MainShellState extends ConsumerState<MainShell> {
         return NavigationRailDestination(
           icon: callsIcon,
           selectedIcon: callsIcon,
-          label: const Text('Κλήσεις'),
+          label: Text(dest.label),
         );
       case MainNavDestination.tasks:
         final tasksIcon = TasksNavigationIcon(
@@ -202,11 +211,11 @@ class MainShellState extends ConsumerState<MainShell> {
         return NavigationRailDestination(
           icon: tasksIcon,
           selectedIcon: tasksIcon,
-          label: const Text('Εκκρεμότητες'),
+          label: Text(dest.label),
         );
       case MainNavDestination.directory:
         return NavigationRailDestination(
-          icon: Tooltip(
+          icon: CompactTooltip(
             waitDuration: const Duration(milliseconds: 600),
             showDuration: const Duration(seconds: 4),
             message:
@@ -216,22 +225,22 @@ class MainShellState extends ConsumerState<MainShell> {
               key: ValueKey('nav_rail_directory'),
             ),
           ),
-          label: const Text('Κατάλογος'),
+          label: Text(dest.label),
         );
       case MainNavDestination.history:
         return NavigationRailDestination(
-          icon: Tooltip(
+          icon: CompactTooltip(
             waitDuration: const Duration(milliseconds: 600),
             showDuration: const Duration(seconds: 4),
             message:
                 'Προηγούμενες κλήσεις & αναζήτηση\nΕμφάνιση, τροποποίηση ή διαγραφή παλιών καταγραφών',
             child: const Icon(Icons.history, key: ValueKey('nav_rail_history')),
           ),
-          label: const Text('Ιστορικό'),
+          label: Text(dest.label),
         );
       case MainNavDestination.database:
         return NavigationRailDestination(
-          icon: Tooltip(
+          icon: CompactTooltip(
             waitDuration: const Duration(milliseconds: 600),
             showDuration: const Duration(seconds: 4),
             message:
@@ -241,25 +250,41 @@ class MainShellState extends ConsumerState<MainShell> {
               key: ValueKey('nav_rail_database'),
             ),
           ),
-          label: const Text('Βάση Δεδομένων'),
+          label: Text(dest.label),
         );
       case MainNavDestination.dictionary:
         return NavigationRailDestination(
           icon: DictionaryNavigationIcon(showWarning: showCoreLexiconWarning),
-          label: const Text('Λεξικό'),
+          label: Text(dest.label),
         );
       case MainNavDestination.lamp:
         return NavigationRailDestination(
           icon: LampNavigationIcon(showWarning: showLampReadPathWarning),
-          label: const Text('Λάμπα'),
+          label: Text(dest.label),
         );
       case MainNavDestination.debugScenarios:
         // Δεν εμφανίζεται στο rail — πρόσβαση μόνο από κουμπί πάνω από την έκδοση.
-        return const NavigationRailDestination(
-          icon: Icon(Icons.bug_report_outlined),
-          label: Text('Σενάρια'),
+        return NavigationRailDestination(
+          icon: const Icon(Icons.bug_report_outlined),
+          label: Text(dest.label),
         );
     }
+  }
+
+  /// Οι Ρυθμίσεις ως κανονικό κουμπί της μπάρας — ίδιο widget με τους
+  /// προορισμούς, άρα ίδιο σημάδι στο πέρασμα του ποντικιού, ίδιο ύψος και
+  /// λεζάντα αγκυρωμένη στο εικονίδιο. Δεν επιλέγεται ποτέ: το `selectedIndex`
+  /// δείχνει πάντα σε πραγματικό προορισμό.
+  NavigationRailDestination _settingsRailDestination() {
+    return NavigationRailDestination(
+      icon: Tooltip(
+        waitDuration: const Duration(milliseconds: 600),
+        showDuration: const Duration(seconds: 4),
+        message: 'Γενικές ρυθμίσεις της εφαρμογής',
+        child: const Icon(Icons.settings, key: ValueKey('nav_rail_settings')),
+      ),
+      label: const Text(kMainNavSettingsLabel),
+    );
   }
 
   Future<void> _openSettingsScreen() async {
@@ -393,7 +418,19 @@ class MainShellState extends ConsumerState<MainShell> {
     final railExtended = wideEnoughForExtendedRail && _navRailShowLabels;
     final railLabelStyle =
         NavigationRailTheme.of(context).unselectedLabelTextStyle ??
-        Theme.of(context).textTheme.labelMedium;
+        Theme.of(context).textTheme.labelMedium ??
+        const TextStyle();
+
+    // Το πλάτος της μπάρας ακολουθεί την πιο μακριά λεζάντα που είναι όντως
+    // ορατή — άρα προσαρμόζεται μόνο του όταν κρύβονται/εμφανίζονται κουμπιά.
+    final railExtendedWidth = mainNavRailExtendedWidth(
+      labels: [
+        for (final d in visibleDestinations) d.label,
+        kMainNavSettingsLabel,
+      ],
+      style: railLabelStyle,
+      textScaler: MediaQuery.textScalerOf(context),
+    );
 
     final currentNavForQuickCall = ref.watch(
       mainShellEffectiveDestinationProvider,
@@ -470,66 +507,29 @@ class MainShellState extends ConsumerState<MainShell> {
                   Expanded(
                     child: NavigationRail(
                       extended: railExtended,
+                      minExtendedWidth: railExtendedWidth,
                       selectedIndex: selectedRailIndex < 0
                           ? 0
                           : selectedRailIndex,
                       onDestinationSelected: (index) {
+                        // Οι Ρυθμίσεις είναι το τελευταίο κουμπί της λίστας αλλά
+                        // δεν είναι προορισμός: ανοίγουν δική τους οθόνη και δεν
+                        // μένουν ποτέ επιλεγμένες.
+                        if (index >= visibleDestinations.length) {
+                          unawaited(_openSettingsScreen());
+                          return;
+                        }
                         unawaited(
                           _selectDestination(visibleDestinations[index]),
                         );
                       },
                       leading: wideEnoughForExtendedRail
-                          ? IconButton(
-                              key: const ValueKey('nav_rail_toggle'),
-                              icon: Icon(
-                                railExtended
-                                    ? Icons.chevron_left
-                                    : Icons.chevron_right,
-                              ),
-                              tooltip: railExtended
-                                  ? 'Σύμπτυξη πλοήγησης'
-                                  : 'Επέκταση πλοήγησης',
-                              onPressed: () async {
-                                final next = !_navRailShowLabels;
-                                setState(() => _navRailShowLabels = next);
-                                await SettingsService().windowUi
-                                    .setNavRailShowLabels(next);
-                              },
+                          ? MainNavRailToggleButton(
+                              extended: railExtended,
+                              extendedWidth: railExtendedWidth,
+                              onToggle: _toggleNavRailLabels,
                             )
                           : null,
-                      trailing: Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: 8,
-                          left: 8,
-                          right: 8,
-                        ),
-                        child: Tooltip(
-                          waitDuration: const Duration(milliseconds: 600),
-                          showDuration: const Duration(seconds: 4),
-                          message: 'Γενικές ρυθμίσεις της εφαρμογής',
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: _openSettingsScreen,
-                            child: SizedBox(
-                              height: 48,
-                              width: railExtended ? 220 : 56,
-                              child: Row(
-                                mainAxisAlignment: railExtended
-                                    ? MainAxisAlignment.start
-                                    : MainAxisAlignment.center,
-                                children: [
-                                  if (railExtended) const SizedBox(width: 12),
-                                  const Icon(Icons.settings),
-                                  if (railExtended) ...[
-                                    const SizedBox(width: 16),
-                                    Text('Ρυθμίσεις', style: railLabelStyle),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                       destinations: [
                         for (final d in visibleDestinations)
                           _railDestination(
@@ -546,6 +546,7 @@ class MainShellState extends ConsumerState<MainShell> {
                                 d == MainNavDestination.lamp &&
                                 showLampReadPathWarning,
                           ),
+                        _settingsRailDestination(),
                       ],
                     ),
                   ),

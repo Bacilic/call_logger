@@ -369,6 +369,11 @@ class BuildingMapDecodedImageSizeNotifier extends Notifier<Size?> {
 }
 
 /// Ανανέωση της λίστας ορόφων ([FutureBuilder] key).
+///
+/// **Μονότονος** — δεν μηδενίζεται ποτέ, ώστε να είναι αξιόπιστο σήμα «οι
+/// κατόψεις άλλαξαν» και για ακροατές εκτός του διαλόγου χάρτη (π.χ. ο μικρός
+/// χάρτης της κλήσης). Μηδενισμός ανά συνεδρία θα έκρυβε αλλαγές από όποιον
+/// κρατά την προηγούμενη τιμή.
 final buildingMapFloorReloadSeqProvider =
     NotifierProvider<BuildingMapFloorReloadSeqNotifier, int>(
       BuildingMapFloorReloadSeqNotifier.new,
@@ -380,10 +385,6 @@ class BuildingMapFloorReloadSeqNotifier extends Notifier<int> {
 
   void bump() {
     state = state + 1;
-  }
-
-  void reset() {
-    state = 0;
   }
 }
 

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/similar_department_finder.dart';
+import '../../../../core/utils/text_similarity.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../directory/models/department_model.dart';
+import 'suggestion_comparison_card.dart';
 
 /// Αποτέλεσμα διαλόγου πρότασης παρόμοιου τμήματος.
 class SimilarDepartmentDialogResult {
@@ -30,6 +33,10 @@ class SimilarDepartmentDialogResult {
 }
 
 /// Διάλογος πρότασης όταν το πληκτρολογημένο τμήμα μοιάζει με ΥΠΑΡΧΟΝτα του καταλόγου.
+///
+/// Δείχνει δίπλα-δίπλα τι πληκτρολόγησε ο χρήστης και τι υπάρχει ήδη, με
+/// μαρκαρισμένο το κοινό μέρος των ονομάτων. Μετακινήσιμος, για να φαίνεται η
+/// φόρμα από πίσω.
 class SimilarDepartmentSuggestionDialog extends StatelessWidget {
   const SimilarDepartmentSuggestionDialog({
     super.key,
@@ -43,75 +50,91 @@ class SimilarDepartmentSuggestionDialog extends StatelessWidget {
   /// Υπάρχοντα τμήματα με παρόμοιο όνομα.
   final List<SimilarDepartmentMatch> matches;
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  /// Η κάρτα σύγκρισης: «Πληκτρολογήσατε» πάνω, «Υπάρχει ήδη» από κάτω.
+  Widget _buildComparisonCard(BuildContext context) {
     final typed = typedName.trim();
+    var typedHighlight = (start: 0, length: 0);
+    for (final m in matches) {
+      final span = TextSimilarity.matchedSpan(typed, m.department.name.trim());
+      if (span.length > typedHighlight.length) typedHighlight = span;
+    }
 
-    return AlertDialog(
-      title: const Text('Μήπως εννοείτε υπάρχον τμήμα;'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Το τμήμα «$typed» θα δημιουργηθεί ως νέο, ενώ υπάρχουν ήδη τμήματα με παρόμοιο όνομα:',
-              style: theme.textTheme.bodyLarge,
+    return SuggestionComparisonCard(
+      rows: [
+        SuggestionComparisonRow(
+          label: 'Πληκτρολογήσατε',
+          icon: Icons.edit_outlined,
+          name: typed,
+          highlight: typedHighlight,
+        ),
+        for (final (index, m) in matches.indexed)
+          SuggestionComparisonRow(
+            label: index != 0
+                ? ''
+                : (matches.length == 1 ? 'Υπάρχει ήδη' : 'Υπάρχουν ήδη'),
+            icon: Icons.apartment_outlined,
+            name: m.department.name.trim(),
+            highlight: TextSimilarity.matchedSpan(
+              m.department.name.trim(),
+              typed,
             ),
-            const SizedBox(height: 12),
-            ...matches.map((m) => _buildMatchRow(context, m)),
-            const SizedBox(height: 8),
-            Text(
-              'Επιλέξτε υπάρχον τμήμα ή συνεχίστε με δημιουργία νέου.',
-              style: theme.textTheme.bodyMedium,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(
-            context,
-          ).pop(const SimilarDepartmentDialogResult.cancelled()),
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(
-            context,
-          ).pop(const SimilarDepartmentDialogResult.createNew()),
-          child: const Text('Όχι, δημιουργία νέου τμήματος'),
-        ),
+            emphasized: true,
+            onTap: () => Navigator.of(
+              context,
+            ).pop(SimilarDepartmentDialogResult.pickExisting(m.department)),
+          ),
       ],
     );
   }
 
-  Widget _buildMatchRow(BuildContext context, SimilarDepartmentMatch match) {
-    final name = match.department.name.trim();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: InkWell(
-        onTap: () => Navigator.of(
-          context,
-        ).pop(SimilarDepartmentDialogResult.pickExisting(match.department)),
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '«$name»',
-                  style: Theme.of(context).textTheme.bodyLarge,
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DraggableDialogShell(
+      title: const Text('Μήπως εννοείτε υπάρχον τμήμα;'),
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  matches.length == 1
+                      ? 'Το τμήμα που πληκτρολογήσατε θα δημιουργηθεί ως νέο, '
+                            'ενώ υπάρχει ήδη τμήμα με παρόμοιο όνομα:'
+                      : 'Το τμήμα που πληκτρολογήσατε θα δημιουργηθεί ως νέο, '
+                            'ενώ υπάρχουν ήδη τμήματα με παρόμοιο όνομα:',
+                  style: theme.textTheme.bodyLarge,
                 ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ],
+                const SizedBox(height: 12),
+                _buildComparisonCard(context),
+                const SizedBox(height: 12),
+                Text(
+                  'Επιλέξτε υπάρχον τμήμα ή συνεχίστε με δημιουργία νέου.',
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(
+              context,
+            ).pop(const SimilarDepartmentDialogResult.cancelled()),
+            child: const Text('Ακύρωση'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(
+              context,
+            ).pop(const SimilarDepartmentDialogResult.createNew()),
+            child: const Text('Όχι, δημιουργία νέου τμήματος'),
+          ),
+        ],
       ),
     );
   }

@@ -1,9 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../features/calls/provider/lookup_provider.dart';
-import '../../../features/tasks/providers/task_service_provider.dart';
-import '../../../features/tasks/providers/tasks_provider.dart';
-import '../providers/database_browser_stats_provider.dart';
+import '../../../core/init/database_switch_completion.dart';
 import '../providers/database_integrity_provider.dart';
 import 'integrity_debug_seeder_service.dart';
 
@@ -13,15 +10,23 @@ final integrityDebugSeederServiceProvider =
       (ref) => IntegrityDebugSeederService(),
     );
 
-/// Ανανέωση Riverpod state μετά την ενεργοποίηση της `integrity_debug.db`.
-Future<void> refreshProvidersAfterIntegrityDebugSwitch(WidgetRef ref) async {
+/// Ανανέωση κατάστασης μετά την ενεργοποίηση της δοκιμαστικής βάσης.
+///
+/// Η ενεργοποίηση ΕΙΝΑΙ αλλαγή βάσης, οπότε περνά ολόκληρη από την
+/// [completeDatabaseSwitch] — όχι μόνο από την εκκαθάριση caches.
+///
+/// Δύο πράγματα ξεχάστηκαν διαδοχικά εδώ και φαίνονταν στην οθόνη ως ψέματα:
+/// πρώτα ένας δικός της, μικρότερος κατάλογος providers (έλειπαν οι καρτέλες
+/// Καταλόγου και οι φόρμες κλήσης), και μετά το `invalidate(appInitProvider)`
+/// — που είναι το ΜΟΝΟ σημείο απ' όπου ανανεώνονται το `DatabaseInitResult`
+/// και το προφίλ αρχείου. Χωρίς αυτό, η λωρίδα κατάστασης και το μήνυμα
+/// σύνδεσης έμεναν παγωμένα στην προηγούμενη βάση, ενώ διαδρομή και στατιστικά
+/// έδειχναν τη νέα.
+Future<void> refreshProvidersAfterIntegrityDebugSwitch(
+  WidgetRef ref, {
+  required String activatedPath,
+}) async {
   ref.read(databaseIntegrityProvider.notifier).reset();
-  ref.invalidate(databaseBrowserStatsProvider);
-  ref.invalidate(lookupServiceProvider);
-  await ref.read(lookupServiceProvider.future);
-  ref.invalidate(tasksProvider);
-  ref.invalidate(totalTasksCountProvider);
-  ref.invalidate(orphanCallsProvider);
-  ref.read(taskServiceProvider).resetSnoozeHistoryColumnCache();
+  await completeDatabaseSwitch(ref: ref, path: activatedPath);
   await ref.read(databaseIntegrityProvider.notifier).runCheck(force: true);
 }

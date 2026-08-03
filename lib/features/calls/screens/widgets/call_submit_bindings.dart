@@ -16,8 +16,9 @@ class CallSubmitDialogPrompts implements CallSubmitPrompts {
 
   @override
   Future<SimilarUsersDialogResult?> resolveSimilarCallers(
-    List<UserSimilarityMatch> matches,
-  ) async {
+    List<UserSimilarityMatch> matches, {
+    required String typedDisplayName,
+  }) async {
     if (!context.mounted) return const SimilarUsersDialogResult.cancelled();
     final result = await showDialog<SimilarUsersDialogResult>(
       context: context,
@@ -25,6 +26,7 @@ class CallSubmitDialogPrompts implements CallSubmitPrompts {
       builder: (_) => SimilarUsersDialog(
         matches: matches,
         allowPickExisting: true,
+        typedDisplayName: typedDisplayName,
         purpose: SimilarUsersDialogPurpose.callRecord,
       ),
     );

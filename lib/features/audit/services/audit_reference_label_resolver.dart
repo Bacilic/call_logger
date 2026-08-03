@@ -1,9 +1,11 @@
 import '../../../core/database/department_repository.dart';
+import '../../../core/database/remote_tools_repository.dart';
 import '../../../core/database/sqlite_types.dart';
+import '../../../core/database/user_repository.dart';
 import '../models/audit_log_model.dart';
 import '../models/audit_reference_labels.dart';
 
-/// Batch επίλυση id τμημάτων σε ονόματα για εμφάνιση audit.
+/// Batch επίλυση id αναφορών (τμήματα, χρήστες, εργαλεία) σε ονόματα για εμφάνιση audit.
 class AuditReferenceLabelResolver {
   AuditReferenceLabelResolver(this._departments);
 
@@ -17,37 +19,33 @@ class AuditReferenceLabelResolver {
     Iterable<AuditLogModel> rows,
   ) async {
     final deptIds = <int>{};
+    final userIds = <int>{};
     for (final row in rows) {
       collectDepartmentIds(row, deptIds);
+      collectUserIds(row, userIds);
     }
     final departmentNames = deptIds.isEmpty
         ? const <int, String>{}
         : await _departments.getDepartmentNamesByIds(deptIds);
+    final userNames = await _loadUserNames(userIds);
     final remoteToolNames = await _loadRemoteToolNames();
-    if (departmentNames.isEmpty && remoteToolNames.isEmpty) {
+    if (departmentNames.isEmpty &&
+        remoteToolNames.isEmpty &&
+        userNames.isEmpty) {
       return AuditReferenceLabels.empty;
     }
     return AuditReferenceLabels(
       departmentNames: departmentNames,
       remoteToolNames: remoteToolNames,
+      userNames: userNames,
     );
   }
 
-  Future<Map<int, String>> _loadRemoteToolNames() async {
-    final rows = await _departments.db.query(
-      'remote_tools',
-      columns: ['id', 'name'],
-    );
-    final out = <int, String>{};
-    for (final row in rows) {
-      final idRaw = row['id'];
-      final id = idRaw is int ? idRaw : int.tryParse('$idRaw');
-      if (id == null) continue;
-      final name = (row['name'] as String?)?.trim() ?? '';
-      if (name.isNotEmpty) out[id] = name;
-    }
-    return out;
-  }
+  Future<Map<int, String>> _loadRemoteToolNames() =>
+      loadRemoteToolNamesById(_departments.db);
+
+  Future<Map<int, String>> _loadUserNames(Set<int> ids) =>
+      UserRepository(_departments.db).getUserDisplayNamesByIds(ids);
 
   Future<AuditReferenceLabels> resolveForRow(AuditLogModel row) =>
       resolveForRows([row]);
@@ -55,19 +53,30 @@ class AuditReferenceLabelResolver {
   static void collectDepartmentIds(AuditLogModel row, Set<int> ids) {
     for (final map in [row.oldValuesMap, row.newValuesMap]) {
       if (map == null) continue;
-      _collectFromMap(map, ids);
+      _collectIdsFromMap(map, 'department_id', ids);
     }
   }
 
-  static void _collectFromMap(Map<String, dynamic> map, Set<int> ids) {
-    _maybeAddDepartmentId(map['department_id'], ids);
+  static void collectUserIds(AuditLogModel row, Set<int> ids) {
+    for (final map in [row.oldValuesMap, row.newValuesMap]) {
+      if (map == null) continue;
+      _collectIdsFromMap(map, 'linked_user_id', ids);
+    }
+  }
+
+  static void _collectIdsFromMap(
+    Map<String, dynamic> map,
+    String key,
+    Set<int> ids,
+  ) {
+    _maybeAddId(map[key], ids);
     final fields = map['fields'];
     if (fields is Map) {
-      _maybeAddDepartmentId(fields['department_id'], ids);
+      _maybeAddId(fields[key], ids);
     }
   }
 
-  static void _maybeAddDepartmentId(dynamic value, Set<int> ids) {
+  static void _maybeAddId(dynamic value, Set<int> ids) {
     if (value == null) return;
     if (value is int) {
       ids.add(value);

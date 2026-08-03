@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:call_logger/core/database/old_database/lamp_data_issue_type_labels.dart';
 import 'package:call_logger/core/database/old_database/lamp_issue_matching_engine.dart';
 import 'package:call_logger/core/database/old_database/lamp_issue_resolution_support.dart';
 import 'package:call_logger/core/database/old_database/old_database_schema.dart';
@@ -61,7 +62,7 @@ void main() {
 
     test('χωρίς labels (empty) κρατά γυμνά ids', () {
       expect(
-        support.equipmentSummary(row),
+        support.equipmentSummary(row, labels: LampFkLabelMaps.empty),
         'κωδικός=2667 · PC Test · '
         'μοντέλο=410 · σειριακός=SN-001 · '
         'γραφείο=73 · υπάλληλος=243',

@@ -210,10 +210,11 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _lookupErrorLeadText(
-                              context,
+                            Text(
                               lookupLoadError,
-                              lookupLoadErrorDetails,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onErrorContainer,
+                              ),
                             ),
                             if (lookupLoadErrorDetails != null &&
                                 lookupLoadErrorDetails.isNotEmpty) ...[
@@ -336,54 +337,6 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
 
         return formCore;
       },
-    );
-  }
-
-  /// Κείμενο σφάλματος· στη λέξη «λεπτομέρειες» εμφανίζεται tooltip με τεχνικές λεπτομέρειες.
-  Widget _lookupErrorLeadText(
-    BuildContext context,
-    String message,
-    String? details,
-  ) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.bodyMedium?.copyWith(
-      color: theme.colorScheme.onErrorContainer,
-    );
-    const key = 'λεπτομέρειες';
-    final i = message.indexOf(key);
-    if (details == null || details.isEmpty || i < 0) {
-      return Text(message, style: style);
-    }
-    final before = message.substring(0, i);
-    final after = message.substring(i + key.length);
-    final tip = details.length > 2500
-        ? '${details.substring(0, 2500)}…'
-        : details;
-    return Text.rich(
-      TextSpan(
-        style: style,
-        children: [
-          TextSpan(text: before),
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Tooltip(
-              message: tip,
-              textStyle: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onInverseSurface,
-              ),
-              child: Text(
-                key,
-                style: style?.copyWith(
-                  decoration: TextDecoration.underline,
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-          TextSpan(text: after),
-        ],
-      ),
     );
   }
 }

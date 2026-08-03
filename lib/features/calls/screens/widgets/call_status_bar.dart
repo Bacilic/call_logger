@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/settings_provider.dart';
+import '../../../../core/utils/call_duration_format.dart';
 import '../../provider/call_entry_provider.dart';
 import '../../provider/notes_field_hint_provider.dart';
 
@@ -19,11 +20,8 @@ class CallStatusBar extends ConsumerWidget {
   final bool showPendingToggle;
   final CallStatusBarAxis axis;
 
-  static String _formatDuration(int seconds) {
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
+  static String _formatDuration(int seconds) =>
+      formatCallDurationSeconds(seconds, ifMissing: '00:00');
 
   static Color _durationColor(int seconds) {
     if (seconds < 60) return Colors.green;

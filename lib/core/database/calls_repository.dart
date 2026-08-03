@@ -24,6 +24,17 @@ class CallsRepository {
   final CallsSearchIndex _searchIndex;
   final CallsAuditLine _auditLine;
 
+  /// Η ωμή γραμμή της κλήσης [callId], ή `null` αν δεν υπάρχει.
+  Future<Map<String, dynamic>?> getCallRowById(int callId) async {
+    final rows = await db.query(
+      'calls',
+      where: 'id = ?',
+      whereArgs: [callId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   /// Ενημέρωση ενός FK πεδίου κλήσης (integrity fix — χωρίς audit, το κάνει ο caller).
   Future<Map<String, dynamic>?> integrityUpdateCallFk(
     DatabaseExecutor executor,

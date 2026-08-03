@@ -8,11 +8,15 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_table_inspection.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/database/database_init_result.dart';
+import '../../../core/providers/app_instances_provider.dart';
+import '../../../core/services/app_instance_registry.dart';
+import '../../../core/services/crash_log_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../models/database_stats.dart';
 import '../providers/database_browser_stats_provider.dart';
 import '../services/database_stats_service.dart';
 import '../widgets/database_maintenance_panel.dart';
+import '../widgets/table_preview_grid.dart';
 
 /// Κλειδί `app_settings` για JSON `{ "όνομα_πίνακα": zoom, ... }` (zoom 0.5–2.0).
 const String _kDatabaseBrowserZoomByTableSettingsKey =
@@ -51,7 +55,10 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
         }
       }
       state = out;
-    } catch (_) {
+    } catch (e, stack) {
+      // Το zoom είναι προαιρετική άνεση — η οθόνη συνεχίζει με 100%,
+      // αλλά το σφάλμα (π.χ. χαλασμένο JSON) αφήνει ίχνος στο ημερολόγιο.
+      CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
       state = {};
     }
   }
@@ -76,7 +83,10 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
     state = next;
     try {
       await _persist();
-    } catch (_) {}
+    } catch (e, stack) {
+      // Η προβολή έχει ήδη το νέο zoom — μόνο η αποθήκευση απέτυχε.
+      CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
+    }
   }
 
   Future<void> zoomOutFor(String tableName) {
@@ -187,6 +197,10 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
   String _tableSchema = '';
   bool _previewLoading = false;
 
+  /// Συνολικές εγγραφές του επιλεγμένου πίνακα (για «Χ από Ψ» + σελιδοποίηση).
+  int? _totalRowCount;
+  bool _loadingMoreRows = false;
+
   /// Κάρτα στατιστικών: false = συμπτυγμένη (προεπιλογή μέχρι φόρτωση ρύθμισης).
   bool _statsCardExpanded = false;
 
@@ -247,19 +261,21 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
       _preview = null;
       _tableSchema = '';
       _previewLoading = true;
+      _totalRowCount = null;
       _error = null;
     });
     try {
-      final results = await Future.wait([
-        DatabaseHelper.instance.tableInspection.getTablePreview(tableName),
-        DatabaseHelper.instance.tableInspection.getTableSchema(tableName),
+      final inspection = DatabaseHelper.instance.tableInspection;
+      final results = await Future.wait<dynamic>([
+        inspection.getTablePreview(tableName),
+        inspection.getTableSchema(tableName),
+        inspection.getTableRowCount(tableName),
       ]);
-      if (!mounted) return;
-      final preview = results[0] as TablePreviewResult;
-      final schema = results[1] as String;
+      if (!mounted || _selectedTable != tableName) return;
       setState(() {
-        _preview = preview;
-        _tableSchema = schema;
+        _preview = results[0] as TablePreviewResult;
+        _tableSchema = results[1] as String;
+        _totalRowCount = results[2] as int;
         _previewLoading = false;
       });
     } catch (e) {
@@ -272,11 +288,44 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     }
   }
 
+  bool get _hasMorePreviewRows {
+    final total = _totalRowCount;
+    final preview = _preview;
+    return total != null && preview != null && preview.rows.length < total;
+  }
+
+  /// Φόρτωση επόμενης σελίδας εγγραφών όταν η κύλιση φτάνει προς το τέλος.
+  Future<void> _loadMorePreviewRows() async {
+    if (_loadingMoreRows || !_hasMorePreviewRows) return;
+    final tableName = _selectedTable;
+    final current = _preview;
+    if (tableName == null || current == null) return;
+    _loadingMoreRows = true;
+    try {
+      final page = await DatabaseHelper.instance.tableInspection
+          .getTablePreview(tableName, offset: current.rows.length);
+      if (!mounted || _selectedTable != tableName) return;
+      setState(() {
+        _preview = TablePreviewResult(
+          columns: current.columns,
+          rows: [...current.rows, ...page.rows],
+        );
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = e.toString());
+      }
+    } finally {
+      _loadingMoreRows = false;
+    }
+  }
+
   void _clearSelection() {
     setState(() {
       _selectedTable = null;
       _preview = null;
       _tableSchema = '';
+      _totalRowCount = null;
     });
   }
 
@@ -353,6 +402,115 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Μόνιμη λίστα των αντιγράφων της εφαρμογής που μοιράζονται αυτές τις
+  /// ρυθμίσεις — εδώ οδηγεί ο σύνδεσμος της λωρίδας.
+  ///
+  /// Εμφανίζεται μόνο όταν υπάρχει δεύτερο αντίγραφο: σε υπολογιστή με μία
+  /// εγκατάσταση δεν έχει τίποτα να πει.
+  Widget _buildAppInstancesCard(ThemeData theme) {
+    final status = ref.watch(appInstancesProvider).value;
+    if (status == null || !status.isSharedWithOthers) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Card(
+        key: const ValueKey('app_instances_card'),
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Αντίγραφα της εφαρμογής',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Αυτά τα εκτελέσιμα μοιράζονται τις ίδιες ρυθμίσεις και την ίδια '
+                'επιλογή βάσης. Για ανεξάρτητη λειτουργία, εκτελέστε με '
+                '--profile <όνομα>. Ενεργό προφίλ: ${activeProfileLabel()}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              for (final record in status.all)
+                _appInstanceRow(theme, record, status.isCurrent(record)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _appInstanceRow(
+    ThemeData theme,
+    AppInstanceRecord record,
+    bool isCurrent,
+  ) {
+    final seen = record.lastSeen;
+    final stamp =
+        '${seen.day.toString().padLeft(2, '0')}/'
+        '${seen.month.toString().padLeft(2, '0')}/${seen.year} '
+        '${seen.hour.toString().padLeft(2, '0')}:'
+        '${seen.minute.toString().padLeft(2, '0')}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isCurrent ? Icons.play_circle_outline : Icons.circle_outlined,
+            size: 18,
+            color: isCurrent
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  record.executablePath,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                    fontFamilyFallback: const ['Consolas', 'monospace'],
+                    fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+                Text(
+                  [
+                    if (isCurrent) 'εκτελείται τώρα',
+                    if (record.version.isNotEmpty) 'έκδοση ${record.version}',
+                    'τελευταία εκκίνηση $stamp',
+                  ].join(' · '),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -734,7 +892,15 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                       style: theme.textTheme.bodyLarge,
                     ),
                   )
-                : _TablePreviewGrid(preview: _preview!, zoom: tableZoom),
+                : TablePreviewGrid(
+                    tableKey: selected,
+                    columns: _preview!.columns,
+                    rows: _preview!.rows,
+                    zoom: tableZoom,
+                    totalRowCount: _totalRowCount,
+                    hasMoreRows: _hasMorePreviewRows,
+                    onLoadMoreRows: _loadMorePreviewRows,
+                  ),
           ),
         ],
       );
@@ -761,6 +927,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
               _databaseToolbarActions(),
             ],
           ),
+          _buildAppInstancesCard(theme),
           const SizedBox(height: 16),
           Expanded(
             child: Row(
@@ -826,300 +993,6 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
       onTap: () => _selectTable(name),
       dense: true,
       visualDensity: VisualDensity.compact,
-    );
-  }
-}
-
-/// Πλέγμα προεπισκόπησης πίνακα (Excel-like): πλάτη από περιεχόμενο, ονόματα στηλών ολόκληρα, ευμετάβλητα πλάτη (resize).
-class _TablePreviewGrid extends StatefulWidget {
-  const _TablePreviewGrid({required this.preview, required this.zoom});
-
-  final TablePreviewResult preview;
-  final double zoom;
-
-  @override
-  State<_TablePreviewGrid> createState() => _TablePreviewGridState();
-}
-
-class _TablePreviewGridState extends State<_TablePreviewGrid> {
-  static const double _minColWidth = 60.0;
-  static const double _maxColWidth = 500.0;
-  static const double _cellPadding = 12.0;
-  static const double _resizeHandleWidth = 8.0;
-
-  /// Επιπλέον πλάτος ώστε το όνομα της στήλης να μην κόβεται (SelectableText + font metrics).
-  static const double _headerWidthBuffer = 20.0;
-  static const double _rowHeight = 40.0;
-  static const double _headerHeight = 44.0;
-
-  final ScrollController _verticalScrollController = ScrollController();
-
-  /// Οδηγεί το οριζόντιο scroll του **πραγματικού** πίνακα.
-  final ScrollController _horizontalScrollController = ScrollController();
-
-  /// «Φάντασμα» controller για την ορατή οριζόντια μπάρα (κάτω του viewport).
-  final ScrollController _ghostHScrollController = ScrollController();
-  bool _hSyncing = false;
-
-  List<double> _columnWidths = [];
-  bool _widthsInitialized = false;
-
-  TablePreviewResult get preview => widget.preview;
-
-  /// Συνολικό πλάτος διάταξης πίνακα (στήλη + χερούλι resize ανά στήλη) — ίδιο με `FixedColumnWidth`.
-  double get _totalTableLayoutWidth {
-    if (_columnWidths.isEmpty) return 0;
-    var sum = 0.0;
-    for (final w in _columnWidths) {
-      sum += w + _resizeHandleWidth;
-    }
-    return sum;
-  }
-
-  void _ensureColumnWidths(BuildContext context) {
-    if (_widthsInitialized && _columnWidths.length == preview.columns.length) {
-      return;
-    }
-    final theme = Theme.of(context);
-    final headerStyle =
-        theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600) ??
-        const TextStyle(fontWeight: FontWeight.w600);
-    final cellStyle = theme.textTheme.bodySmall ?? const TextStyle();
-
-    final widths = <double>[];
-    for (var c = 0; c < preview.columns.length; c++) {
-      final colName = preview.columns[c];
-      double w =
-          _textWidth(colName, headerStyle) +
-          _cellPadding * 2 +
-          _headerWidthBuffer;
-      for (final row in preview.rows) {
-        final cellStr = _cellText(row[colName]);
-        final cellW = _textWidth(cellStr, cellStyle) + _cellPadding * 2;
-        if (cellW > w) w = cellW;
-      }
-      widths.add(w.clamp(_minColWidth, _maxColWidth));
-    }
-    _columnWidths = widths;
-    _widthsInitialized = true;
-  }
-
-  double _textWidth(String text, TextStyle style) {
-    if (text.isEmpty) return 0;
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout(minWidth: 0, maxWidth: double.infinity);
-    return painter.width;
-  }
-
-  String _cellText(dynamic value) {
-    if (value == null) return '';
-    if (value is DateTime) return value.toIso8601String();
-    return value.toString();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _horizontalScrollController.addListener(_onTableHScroll);
-    _ghostHScrollController.addListener(_onGhostHScroll);
-  }
-
-  void _onTableHScroll() {
-    if (_hSyncing || !_ghostHScrollController.hasClients) return;
-    _hSyncing = true;
-    final target = _horizontalScrollController.offset;
-    if ((_ghostHScrollController.offset - target).abs() > 0.5) {
-      _ghostHScrollController.jumpTo(target);
-    }
-    _hSyncing = false;
-  }
-
-  void _onGhostHScroll() {
-    if (_hSyncing || !_horizontalScrollController.hasClients) return;
-    _hSyncing = true;
-    final target = _ghostHScrollController.offset;
-    if ((_horizontalScrollController.offset - target).abs() > 0.5) {
-      _horizontalScrollController.jumpTo(target);
-    }
-    _hSyncing = false;
-  }
-
-  @override
-  void didUpdateWidget(covariant _TablePreviewGrid oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.preview != widget.preview) {
-      _widthsInitialized = false;
-    }
-  }
-
-  @override
-  void dispose() {
-    _horizontalScrollController.removeListener(_onTableHScroll);
-    _ghostHScrollController.removeListener(_onGhostHScroll);
-    _verticalScrollController.dispose();
-    _horizontalScrollController.dispose();
-    _ghostHScrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _ensureColumnWidths(context);
-    final theme = Theme.of(context);
-    final headerStyle = theme.textTheme.titleSmall?.copyWith(
-      fontWeight: FontWeight.w600,
-    );
-    final cellStyle = theme.textTheme.bodySmall;
-    final borderSide = BorderSide(
-      color: theme.dividerColor.withValues(alpha: 0.5),
-      width: 1,
-    );
-
-    final table = Table(
-      columnWidths: {
-        for (var i = 0; i < _columnWidths.length; i++)
-          i: FixedColumnWidth(_columnWidths[i] + _resizeHandleWidth),
-      },
-      border: TableBorder(
-        horizontalInside: borderSide,
-        verticalInside: borderSide,
-        top: borderSide,
-        left: borderSide,
-        right: borderSide,
-        bottom: borderSide,
-      ),
-      children: [
-        TableRow(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest.withValues(
-              alpha: 0.5,
-            ),
-          ),
-          children: List.generate(preview.columns.length, (c) {
-            return SizedBox(
-              height: _headerHeight,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: _cellPadding,
-                        vertical: 8,
-                      ),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: SelectableText(
-                          preview.columns[c],
-                          style: headerStyle,
-                        ),
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onHorizontalDragUpdate: (details) {
-                      setState(() {
-                        final newW = (_columnWidths[c] + details.delta.dx)
-                            .clamp(_minColWidth, _maxColWidth);
-                        _columnWidths[c] = newW;
-                      });
-                    },
-                    behavior: HitTestBehavior.opaque,
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.resizeColumn,
-                      child: SizedBox(
-                        width: _resizeHandleWidth,
-                        child: Container(
-                          color: theme.colorScheme.outline.withValues(
-                            alpha: 0.2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ),
-        ...preview.rows.map((row) {
-          return TableRow(
-            children: preview.columns.map((col) {
-              final text = _cellText(row[col]);
-              return SizedBox(
-                height: _rowHeight,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: _cellPadding,
-                    vertical: 6,
-                  ),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: SelectableText(text, style: cellStyle, maxLines: 1),
-                  ),
-                ),
-              );
-            }).toList(),
-          );
-        }),
-      ],
-    );
-
-    // Διάταξη: Column
-    //  ├ Expanded → κάθετη μπάρα δεξιά viewport + οριζόντιο scroll εσωτερικά (χωρίς μπάρα)
-    //  └ ghost οριζόντια μπάρα σταθερά κάτω στο viewport, συγχρονισμένη μέσω _ghostHScrollController
-    final layoutWidth = _totalTableLayoutWidth;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Column(
-          children: [
-            Expanded(
-              child: Scrollbar(
-                controller: _verticalScrollController,
-                thumbVisibility: true,
-                trackVisibility: true,
-                child: SingleChildScrollView(
-                  controller: _verticalScrollController,
-                  scrollDirection: Axis.vertical,
-                  primary: false,
-                  child: SingleChildScrollView(
-                    controller: _horizontalScrollController,
-                    scrollDirection: Axis.horizontal,
-                    primary: false,
-                    child: Transform.scale(
-                      scale: widget.zoom,
-                      alignment: Alignment.topLeft,
-                      filterQuality: FilterQuality.medium,
-                      child: SizedBox(width: layoutWidth, child: table),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // Ghost οριζόντια μπάρα: σταθερή θέση κάτω, συγχρονισμένη μέσω _ghostHScrollController.
-            // Ύψος 14px ώστε το hit-test να καλύπτει ολόκληρη τη μπάρα (παλαιό height:1 → 1px hit area).
-            if (layoutWidth > constraints.maxWidth)
-              SizedBox(
-                height: 14,
-                child: Scrollbar(
-                  controller: _ghostHScrollController,
-                  thumbVisibility: true,
-                  trackVisibility: true,
-                  scrollbarOrientation: ScrollbarOrientation.bottom,
-                  child: SingleChildScrollView(
-                    controller: _ghostHScrollController,
-                    scrollDirection: Axis.horizontal,
-                    primary: false,
-                    child: SizedBox(height: 14, width: layoutWidth),
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
     );
   }
 }

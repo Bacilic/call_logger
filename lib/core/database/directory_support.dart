@@ -3,6 +3,15 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'audit_service.dart';
 import 'database_helper.dart';
 
+/// Οι ιστορικές συνδέσεις ενός τηλεφώνου ή εξοπλισμού: πόσες είναι και πότε
+/// ήταν η τελευταία της κάθε κατηγορίας.
+typedef AssetHistoryLinkCounts = ({
+  int tasks,
+  int calls,
+  DateTime? lastTaskAt,
+  DateTime? lastCallAt,
+});
+
 /// Κοινοί βοηθοί persistence καταλόγου — κοινό υπόβαθρο των repositories καταλόγου.
 class DirectorySupport {
   DirectorySupport(this.db);
@@ -50,6 +59,21 @@ class DirectorySupport {
 
   static String phoneDigitsOnly(String s) =>
       s.replaceAll(RegExp(r'[^0-9]'), '');
+
+  /// Η τιμή μιας στήλης χρονοσήμανσης ως [DateTime] — τυπικά αποτέλεσμα `MAX(...)`.
+  ///
+  /// Δέχεται και σκέτη ημερομηνία («2026-06-12», όπως γράφεται το `calls.date`)
+  /// και πλήρες ISO8601 («2026-06-12T09:41:00.000», όπως το `tasks.created_at`).
+  /// Κενή ή μη αναγνωρίσιμη τιμή επιστρέφει null.
+  static DateTime? readTimestamp(
+    List<Map<String, dynamic>> rows,
+    String column,
+  ) {
+    if (rows.isEmpty) return null;
+    final raw = rows.first[column]?.toString().trim() ?? '';
+    if (raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
 
   Future<String> auditPerformingUser({DatabaseExecutor? executor}) async {
     final v = await getSetting(
@@ -503,6 +527,20 @@ class PendingAuditOriginRows {
   static Future<int> maxAuditLogId(DatabaseExecutor executor) async {
     final rows = await executor.rawQuery('SELECT MAX(id) AS m FROM audit_log');
     return (rows.first['m'] as int?) ?? 0;
+  }
+
+  /// Οι εγγραφές audit μετά το [sinceId] — id και action, για το φιλτράρισμα
+  /// των παράγωγων από τις κύριες. Ίδιος κάτοχος με το [maxAuditLogId].
+  static Future<List<Map<String, dynamic>>> auditRowsSince(
+    DatabaseExecutor executor,
+    int sinceId,
+  ) {
+    return executor.query(
+      'audit_log',
+      columns: ['id', 'action'],
+      where: 'id > ?',
+      whereArgs: [sinceId],
+    );
   }
 
   void track(int? auditLogId) {

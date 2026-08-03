@@ -267,14 +267,9 @@ class DatabaseIntegrityFixService {
   ) async {
     final callId = _ctxInt(finding, 'call_id') ?? finding.affectedId;
     if (callId == null) return;
-    final rows = await db.query(
-      'calls',
-      where: 'id = ?',
-      whereArgs: [callId],
-      limit: 1,
-    );
-    if (rows.isEmpty) return;
-    final oldIndex = rows.first['search_index'];
+    final row = await CallsRepository(db).getCallRowById(callId);
+    if (row == null) return;
+    final oldIndex = row['search_index'];
     await searchIndex.rebuildSearchIndexForCallId(callId);
     await db.transaction((txn) async {
       final ap = await AuditService.performingUser(txn);
@@ -304,15 +299,10 @@ class DatabaseIntegrityFixService {
   ) async {
     final taskId = _ctxInt(finding, 'task_id') ?? finding.affectedId;
     if (taskId == null) return;
-    final rows = await db.query(
-      'tasks',
-      where: 'id = ?',
-      whereArgs: [taskId],
-      limit: 1,
-    );
-    if (rows.isEmpty) return;
-    final oldIndex = rows.first['search_index'];
-    final title = rows.first['title']?.toString();
+    final row = await TasksRepository().getTaskRowById(taskId);
+    if (row == null) return;
+    final oldIndex = row['search_index'];
+    final title = row['title']?.toString();
     await tasks.rebuildSearchIndexForTaskId(taskId);
     await db.transaction((txn) async {
       final ap = await AuditService.performingUser(txn);

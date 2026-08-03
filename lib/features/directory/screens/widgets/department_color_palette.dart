@@ -4,6 +4,7 @@ import 'department_color_picker_dialog.dart';
 import 'department_palette_actions.dart';
 import 'department_palette_host.dart';
 import 'department_palette_store.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 
 /// Μετατροπή αποθηκευμένου hex (π.χ. `#1976D2`) σε [Color].
 Color? tryParseDepartmentHex(String? s) {
@@ -296,7 +297,7 @@ class _SquareCustomSlot extends StatelessWidget {
         onTap: filled ? () => onTapFilled(color!) : onTapEmpty,
         onLongPress: filled ? () => _showDeleteColorMenu(context) : null,
         borderRadius: BorderRadius.circular(4),
-        child: Tooltip(
+        child: CompactTooltip(
           message: filled
               ? '${colorToDepartmentHex(color!)}\n'
                     'Κλικ: επιλογή · Παρατεταμένο: διαγραφή'

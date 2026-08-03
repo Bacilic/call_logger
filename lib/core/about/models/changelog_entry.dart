@@ -30,6 +30,10 @@ class ChangelogEntry {
       changed.isNotEmpty ||
       fixed.isNotEmpty;
 
+  /// Συνολικό πλήθος γραμμών ιστορικού σε όλες τις κατηγορίες.
+  int get entryCount =>
+      added.length + improvements.length + changed.length + fixed.length;
+
   factory ChangelogEntry.fromJson(Map<String, dynamic> json) {
     List<String> strings(String key) {
       final raw = json[key];

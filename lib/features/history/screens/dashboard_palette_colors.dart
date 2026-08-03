@@ -46,7 +46,7 @@ class DashboardPaletteColors {
     required this.tableRowHover,
     required this.progressTrackBg,
     required this.progressTrackDataRowBg,
-    required this.pieColors,
+    required this.categoryColors,
     required this.chartCardFill,
     required this.chartCardBorder,
     required this.chartGridLine,
@@ -78,7 +78,7 @@ class DashboardPaletteColors {
   final Color tableRowHover;
   final Color progressTrackBg;
   final Color progressTrackDataRowBg;
-  final List<Color> pieColors;
+  final List<Color> categoryColors;
   final Color chartCardFill;
   final Color chartCardBorder;
   final Color chartGridLine;
@@ -147,7 +147,7 @@ class DashboardPaletteColors {
           tableRowHover: Color(0xFFF1F6FF),
           progressTrackBg: Color(0xFFE6EBF7),
           progressTrackDataRowBg: Color(0xFFE5EDFF),
-          pieColors: [
+          categoryColors: [
             Color(0xFF3B82F6),
             Color(0xFF10B981),
             Color(0xFFF59E0B),
@@ -218,7 +218,7 @@ class DashboardPaletteColors {
           tableRowHover: Color(0xFFE4F6FB),
           progressTrackBg: Color(0xFFD4EBF5),
           progressTrackDataRowBg: Color(0xFFCFE4F7),
-          pieColors: [
+          categoryColors: [
             Color(0xFF0EA5E9),
             Color(0xFF14B8A6),
             Color(0xFFF59E0B),
@@ -289,7 +289,7 @@ class DashboardPaletteColors {
           tableRowHover: Color(0xFFFFEDE5),
           progressTrackBg: Color(0xFFF5E6DE),
           progressTrackDataRowBg: Color(0xFFF5E1F0),
-          pieColors: [
+          categoryColors: [
             Color(0xFF1D4ED8),
             Color(0xFFEC4899),
             Color(0xFFF59E0B),
@@ -360,7 +360,7 @@ class DashboardPaletteColors {
           tableRowHover: Color(0xFFE0F0E6),
           progressTrackBg: Color(0xFFD5E8DD),
           progressTrackDataRowBg: Color(0xFFC9E2D4),
-          pieColors: [
+          categoryColors: [
             Color(0xFF059669),
             Color(0xFF0D9488),
             Color(0xFFCA8A04),
@@ -431,7 +431,7 @@ class DashboardPaletteColors {
           tableRowHover: Color(0xFFE4E4F9),
           progressTrackBg: Color(0xFFDADBF0),
           progressTrackDataRowBg: Color(0xFFD8DAF2),
-          pieColors: [
+          categoryColors: [
             Color(0xFF4F46E5),
             Color(0xFF10B981),
             Color(0xFFF97316),

@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../config/app_config.dart';
 import 'audit_diff_helper.dart';
 import 'audit_service.dart';
+import 'calls_search_index.dart';
 import '../utils/lexicon_word_metrics.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_file_classifier.dart';
@@ -179,6 +180,31 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 36 && newVersion >= 36) {
     await migrateDatabaseToV36(db);
   }
+  if (oldVersion < 37 && newVersion >= 37) {
+    await migrateDatabaseToV37(db);
+  }
+}
+
+/// v37: προσθήκη του Lansweeper ticket στο `calls.search_index` (μόνο δεδομένα).
+///
+/// Ξαναχτίζει το ευρετήριο ΜΟΝΟ των κλήσεων που έχουν ticket — οι υπόλοιπες
+/// δεν αλλάζουν, οπότε η μετάπτωση κοστίζει όσο το πλήθος των περασμένων.
+Future<void> migrateDatabaseToV37(Database db) async {
+  await db.transaction((txn) async {
+    final rows = await txn.query(
+      'calls',
+      columns: ['id'],
+      where:
+          "lansweeper_main_ticket_id IS NOT NULL "
+          "AND TRIM(lansweeper_main_ticket_id) <> ''",
+    );
+    final index = CallsSearchIndex(db);
+    for (final row in rows) {
+      final id = row['id'];
+      if (id is! int) continue;
+      await index.rebuildSearchIndexForCallIdInTxn(txn, id);
+    }
+  });
 }
 
 /// v36: ανακατασκευή search_text με ελληνικές ετικέτες audit (idempotent).

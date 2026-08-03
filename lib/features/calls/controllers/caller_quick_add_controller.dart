@@ -24,10 +24,16 @@ abstract class CallerQuickAddPrompts {
 
   /// Υπάρχουν ίδιες ή παρόμοιες εγγραφές καταλόγου· τι κάνουμε;
   ///
+  /// Το [typedDisplayName] είναι το όνομα όπως το πληκτρολόγησε ο χρήστης και
+  /// το [typedDepartmentName] το τμήμα της νέας εγγραφής (κενό = χωρίς τμήμα) —
+  /// ο διάλογος τα δείχνει δίπλα στα υπάρχοντα για σύγκριση.
+  ///
   /// `null` σημαίνει «δεν ρωτήθηκε» και η ροή συνεχίζει ανενόχλητη.
   Future<SimilarUsersDialogResult?> resolveSimilarCallers(
-    List<UserSimilarityMatch> matches,
-  );
+    List<UserSimilarityMatch> matches, {
+    required String typedDisplayName,
+    required String typedDepartmentName,
+  });
 
   /// Το τμήμα θα δημιουργηθεί ως νέο ενώ υπάρχουν παρόμοια· τι κάνουμε;
   ///
@@ -180,7 +186,11 @@ class CallerQuickAddController {
     );
     if (matches.isEmpty) return true;
 
-    final result = await prompts.resolveSimilarCallers(matches);
+    final result = await prompts.resolveSimilarCallers(
+      matches,
+      typedDisplayName: actions.header.normalizedCallerDisplayText,
+      typedDepartmentName: actions.header.departmentText.trim(),
+    );
     if (result == null) return true;
     if (result.isCancelled) return false;
 

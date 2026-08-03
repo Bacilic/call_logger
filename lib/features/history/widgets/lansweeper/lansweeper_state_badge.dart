@@ -1,9 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/lansweeper_sync_state.dart';
+import 'lansweeper_ticket_link.dart';
 import 'lansweeper_url_rules.dart';
 
 /// Στήλη κατάστασης Lansweeper: chip κατάστασης και προαιρετικός σύνδεσμος ticket.
@@ -83,7 +81,7 @@ class LansweeperStateBadge extends StatelessWidget {
           statusChip,
           if (ticketUrl != null) ...[
             const SizedBox(width: 4),
-            _TicketIdLink(
+            LansweeperTicketLink(
               ticketId: normalizedTicket,
               url: ticketUrl,
               enabled: ticketLinkEnabled,
@@ -100,68 +98,13 @@ class LansweeperStateBadge extends StatelessWidget {
         statusChip,
         if (ticketUrl != null) ...[
           const SizedBox(height: 2),
-          _TicketIdLink(
+          LansweeperTicketLink(
             ticketId: normalizedTicket,
             url: ticketUrl,
             enabled: ticketLinkEnabled,
           ),
         ],
       ],
-    );
-  }
-}
-
-class _TicketIdLink extends StatelessWidget {
-  const _TicketIdLink({
-    required this.ticketId,
-    required this.url,
-    this.enabled = true,
-  });
-
-  final String ticketId;
-  final String url;
-  final bool enabled;
-
-  static const String _disabledTooltip =
-      'Δεν είναι εφυκτή η σύνδεση με το Lansweeper.';
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final linkColor = enabled
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurface.withValues(alpha: 0.45);
-    final tooltip = enabled
-        ? 'Άνοιγμα ticket #$ticketId στον περιηγητή'
-        : _disabledTooltip;
-
-    return Tooltip(
-      message: tooltip,
-      child: MouseRegion(
-        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        child: InkWell(
-          onTap: enabled
-              ? () => unawaited(
-                  launchUrl(
-                    Uri.parse(url),
-                    mode: LaunchMode.externalApplication,
-                  ),
-                )
-              : null,
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-            child: Text(
-              '#$ticketId',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: linkColor,
-                decoration: enabled ? TextDecoration.underline : null,
-                decorationColor: linkColor,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

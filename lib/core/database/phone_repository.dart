@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../utils/asset_history_labels.dart';
 import 'audit_service.dart';
 import 'database_helper.dart';
 import 'directory_support.dart';
@@ -219,16 +220,10 @@ class PhoneRepository {
 
     final history = await phoneHistoryLinkCounts(phoneId, phoneNumber);
     if (history.tasks > 0) {
-      out.add(
-        history.tasks == 1 ? '1 εκκρεμότητα' : '${history.tasks} εκκρεμότητες',
-      );
+      out.add(taskHistoryLabel(history.tasks, lastUsedAt: history.lastTaskAt));
     }
     if (history.calls > 0) {
-      out.add(
-        history.calls == 1
-            ? '1 κλήση ιστορικού'
-            : '${history.calls} κλήσεις ιστορικού',
-      );
+      out.add(callHistoryLabel(history.calls, lastUsedAt: history.lastCallAt));
     }
 
     return out;
@@ -239,13 +234,14 @@ class PhoneRepository {
   /// Ο κάτοχος και το τμήμα ΔΕΝ μετρώνται εδώ: τα έχει σχεδόν κάθε τηλέφωνο,
   /// οπότε μια προειδοποίηση που τα περιλαμβάνει ισχύει πάντα και δεν
   /// προειδοποιεί για τίποτα.
-  Future<({int tasks, int calls})> phoneHistoryLinkCounts(
+  Future<AssetHistoryLinkCounts> phoneHistoryLinkCounts(
     int phoneId,
     String phoneNumber,
   ) async {
     final taskLinks = await db.rawQuery(
       '''
-      SELECT COUNT(*) AS c FROM tasks
+      SELECT COUNT(*) AS c, MAX(COALESCE(updated_at, created_at)) AS last_at
+      FROM tasks
       WHERE phone_id = ? AND ${DirectorySupport.notDeletedClause}
       ''',
       [phoneId],
@@ -254,7 +250,7 @@ class PhoneRepository {
     final digits = DirectorySupport.phoneDigitsOnly(phoneNumber.trim());
     final callLinks = await db.rawQuery(
       '''
-      SELECT COUNT(*) AS c FROM calls
+      SELECT COUNT(*) AS c, MAX(date) AS last_at FROM calls
       WHERE ${DirectorySupport.notDeletedClause}
         AND (
           TRIM(phone_text) = ?
@@ -269,7 +265,12 @@ class PhoneRepository {
       [phoneNumber.trim(), digits, digits],
     );
 
-    return (tasks: _readCount(taskLinks), calls: _readCount(callLinks));
+    return (
+      tasks: _readCount(taskLinks),
+      calls: _readCount(callLinks),
+      lastTaskAt: DirectorySupport.readTimestamp(taskLinks, 'last_at'),
+      lastCallAt: DirectorySupport.readTimestamp(callLinks, 'last_at'),
+    );
   }
 
   static String? _personDisplayName(Map<String, dynamic> row) {

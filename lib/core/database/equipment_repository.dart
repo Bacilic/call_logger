@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../utils/asset_history_labels.dart';
 import 'audit_service.dart';
 import 'calls_search_index.dart';
 import 'database_helper.dart';
@@ -168,16 +169,11 @@ class EquipmentRepository {
     }
 
     final history = await equipmentHistoryLinkCounts(equipmentId);
-    final taskCount = history.tasks;
-    if (taskCount > 0) {
-      out.add(taskCount == 1 ? '1 εκκρεμότητα' : '$taskCount εκκρεμότητες');
+    if (history.tasks > 0) {
+      out.add(taskHistoryLabel(history.tasks, lastUsedAt: history.lastTaskAt));
     }
-
-    final callCount = history.calls;
-    if (callCount > 0) {
-      out.add(
-        callCount == 1 ? '1 κλήση ιστορικού' : '$callCount κλήσεις ιστορικού',
-      );
+    if (history.calls > 0) {
+      out.add(callHistoryLabel(history.calls, lastUsedAt: history.lastCallAt));
     }
 
     return out;
@@ -188,12 +184,13 @@ class EquipmentRepository {
   ///
   /// Ο κάτοχος ΔΕΝ μετράει εδώ: τον έχει σχεδόν κάθε εξοπλισμός, οπότε μια
   /// προειδοποίηση που τον περιλαμβάνει ισχύει πάντα.
-  Future<({int tasks, int calls})> equipmentHistoryLinkCounts(
+  Future<AssetHistoryLinkCounts> equipmentHistoryLinkCounts(
     int equipmentId,
   ) async {
     final taskLinks = await db.rawQuery(
       '''
-      SELECT COUNT(*) AS c FROM tasks
+      SELECT COUNT(*) AS c, MAX(COALESCE(updated_at, created_at)) AS last_at
+      FROM tasks
       WHERE equipment_id = ? AND ${DirectorySupport.notDeletedClause}
       ''',
       [equipmentId],
@@ -201,12 +198,13 @@ class EquipmentRepository {
 
     final callLinks = await db.rawQuery(
       '''
-      SELECT COUNT(*) AS c FROM calls
+      SELECT COUNT(*) AS c, MAX(date) AS last_at FROM calls
       WHERE equipment_id = ? AND ${DirectorySupport.notDeletedClause}
       ''',
       [equipmentId],
     );
     var callCount = _readCount(callLinks);
+    var lastCallAt = DirectorySupport.readTimestamp(callLinks, 'last_at');
 
     final codeRows = await db.query(
       'equipment',
@@ -220,7 +218,7 @@ class EquipmentRepository {
       if (code.isNotEmpty) {
         final textRows = await db.rawQuery(
           '''
-          SELECT COUNT(*) AS c FROM calls
+          SELECT COUNT(*) AS c, MAX(date) AS last_at FROM calls
           WHERE ${DirectorySupport.notDeletedClause}
             AND equipment_id IS NULL
             AND TRIM(COALESCE(equipment_text, '')) = ?
@@ -228,10 +226,27 @@ class EquipmentRepository {
           [code],
         );
         callCount += _readCount(textRows);
+        // Οι κλήσεις που αναφέρουν τον κωδικό μόνο ως κείμενο μετράνε εξίσου
+        // ως χρήση, οπότε η «τελευταία» είναι η πιο πρόσφατη των δύο πηγών.
+        lastCallAt = _laterOf(
+          lastCallAt,
+          DirectorySupport.readTimestamp(textRows, 'last_at'),
+        );
       }
     }
 
-    return (tasks: _readCount(taskLinks), calls: callCount);
+    return (
+      tasks: _readCount(taskLinks),
+      calls: callCount,
+      lastTaskAt: DirectorySupport.readTimestamp(taskLinks, 'last_at'),
+      lastCallAt: lastCallAt,
+    );
+  }
+
+  static DateTime? _laterOf(DateTime? a, DateTime? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a.isAfter(b) ? a : b;
   }
 
   Future<bool> equipmentCodeExists(String equipmentCode) async {
@@ -264,6 +279,52 @@ class EquipmentRepository {
       out[id] = c is int ? c : (c as num).toInt();
     }
     return out;
+  }
+
+  /// Εξοπλισμοί με **χειροκίνητο στόχο** για το εργαλείο [toolId].
+  ///
+  /// Ο στόχος ζει ως τιμή στο JSON `remote_params` με κλειδί το id του
+  /// εργαλείου. Είναι διαφορετικό σύνολο από τη
+  /// [getEquipmentDefaultRemoteToolUsageCounts]: εκεί μετριέται ποιοι έχουν το
+  /// εργαλείο ως **προεπιλογή**, εδώ ποιοι έχουν γράψει δική τους παράμετρο —
+  /// αυτοί χάνουν πραγματική δουλειά αν το εργαλείο απομακρυνθεί.
+  ///
+  /// Το φιλτράρισμα γίνεται σε Dart (όχι SQL) γιατί η στήλη είναι JSON· η
+  /// επιλογή περιορίζεται πρώτα στις γραμμές που έχουν καθόλου παραμέτρους.
+  Future<List<({String code, String target})>> getEquipmentManualTargetsForTool(
+    int toolId,
+  ) async {
+    final rows = await db.query(
+      'equipment',
+      columns: ['code_equipment', 'remote_params'],
+      where:
+          '${DirectorySupport.notDeletedClause} '
+          "AND remote_params IS NOT NULL AND TRIM(COALESCE(remote_params, '')) != ''",
+    );
+    final key = '$toolId';
+    final out = <({String code, String target})>[];
+    for (final row in rows) {
+      final params = _decodeRemoteParams(row['remote_params']);
+      final target = params[key]?.trim();
+      if (target == null || target.isEmpty) continue;
+      final code = (row['code_equipment'] ?? '').toString().trim();
+      out.add((code: code.isEmpty ? '—' : code, target: target));
+    }
+    out.sort((a, b) => a.code.compareTo(b.code));
+    return out;
+  }
+
+  static Map<String, String> _decodeRemoteParams(Object? raw) {
+    final text = (raw ?? '').toString().trim();
+    if (text.isEmpty) return const <String, String>{};
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is! Map) return const <String, String>{};
+      return {for (final e in decoded.entries) '${e.key}': '${e.value ?? ''}'};
+    } on FormatException {
+      // Χαλασμένο JSON σε μία γραμμή δεν πρέπει να ρίξει ολόκληρη τη λίστα.
+      return const <String, String>{};
+    }
   }
 
   Future<void> updateEquipmentDepartment(

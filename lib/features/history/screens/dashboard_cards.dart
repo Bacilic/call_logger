@@ -8,11 +8,24 @@ import '../../../core/widgets/ellipsis_tooltip_text.dart';
 import '../../../core/widgets/app_asset_image.dart';
 import '../models/dashboard_summary_model.dart';
 import '../providers/dashboard_provider.dart';
+import '../utils/issue_distribution.dart';
 import 'dashboard_charts.dart';
 import 'dashboard_palette_colors.dart';
 
 const _kLansweeperReportBadgeAsset = 'assets/lansweeper tickets.png';
 const _kLansweeperReportBadgeTooltip = 'Αναφορές Lansweeper';
+
+/// Μέγιστο πλάτος της κάρτας χρόνου.
+///
+/// Οι στήλες της έχουν σταθερό πλάτος: αύξων + όνομα (210) + αριθμητικές +
+/// μπάρα (220) + αποστάσεις + padding κάρτας ≈ 715. Χωρίς όριο, η κάρτα θα
+/// τεντωνόταν με την οθόνη και τα κουμπιά της κεφαλίδας θα έφευγαν δεκάδες
+/// εκατοστά δεξιά από την τελευταία στήλη — το ίδιο max-width container που
+/// χρησιμοποιεί κάθε σοβαρή εφαρμογή για να μη διαλύεται σε φαρδιές οθόνες.
+///
+/// Κοινό και για τις δύο όψεις, ώστε η κάρτα να μην αλλάζει μέγεθος στην
+/// εναλλαγή «ανά κλήση» / «ανά άτομο».
+const double kLongestCallsCardMaxWidth = 760;
 
 class KpiTopEntity {
   const KpiTopEntity({
@@ -383,13 +396,14 @@ class TopCallersCard extends StatelessWidget {
   }
 }
 
-class LongestCallsCard extends StatelessWidget {
+class LongestCallsCard extends ConsumerWidget {
   const LongestCallsCard({
     super.key,
     required this.data,
     required this.topN,
     required this.colors,
     required this.formatDuration,
+    required this.formatAggregateDuration,
     required this.onTopNChanged,
     required this.onOpenReport,
   });
@@ -397,17 +411,38 @@ class LongestCallsCard extends StatelessWidget {
   final DashboardSummaryModel data;
   final int topN;
   final DashboardPaletteColors colors;
+
+  /// Διάρκεια μίας κλήσης — «02:00:00».
   final String Function(num) formatDuration;
+
+  /// Σύνολο χρόνου — «3ω:58λ».
+  final String Function(num) formatAggregateDuration;
+
   final ValueChanged<int> onTopNChanged;
   final VoidCallback onOpenReport;
 
   @override
-  Widget build(BuildContext context) {
-    final rows = data.longestCalls.take(topN).toList();
-    final maxDur = rows.isEmpty
-        ? 1
-        : rows.map((e) => e.durationSeconds).reduce(math.max).toDouble();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(dashboardLongestCallsModeProvider);
+    final isPerPerson = mode == LongestCallsMode.perPerson;
 
+    // Στοίχιση αριστερά: σε φαρδιά οθόνη η κάρτα σταματά στο δεξί άκρο των
+    // στηλών της αντί να τεντώνεται και να ξεκρεμά τα κουμπιά της κεφαλίδας.
+    return Align(
+      alignment: Alignment.topLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: kLongestCallsCardMaxWidth),
+        child: _buildCard(context, ref, isPerPerson: isPerPerson, mode: mode),
+      ),
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool isPerPerson,
+    required LongestCallsMode mode,
+  }) {
     return GlassCard(
       fill: colors.glassFill,
       border: colors.glassBorder,
@@ -418,12 +453,38 @@ class LongestCallsCard extends StatelessWidget {
             children: [
               Expanded(
                 child: SectionHeader(
-                  icon: Icons.schedule_outlined,
-                  title: 'Πιο Χρονοβόρες Κλήσεις',
+                  icon: isPerPerson
+                      ? Icons.person_search_outlined
+                      : Icons.schedule_outlined,
+                  title: isPerPerson
+                      ? 'Χρόνος ανά Άτομο'
+                      : 'Πιο Χρονοβόρες Κλήσεις',
                   iconColor: colors.sectionDurationIcon,
                   iconBg: colors.sectionDurationBg,
                 ),
               ),
+              SegmentedButton<LongestCallsMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: LongestCallsMode.perCall,
+                    label: Text('Ανά κλήση'),
+                  ),
+                  ButtonSegment(
+                    value: LongestCallsMode.perPerson,
+                    label: Text('Ανά άτομο'),
+                  ),
+                ],
+                selected: {mode},
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onSelectionChanged: (selection) => ref
+                    .read(dashboardLongestCallsModeProvider.notifier)
+                    .set(selection.first),
+              ),
+              const SizedBox(width: 8),
               DropdownButton<int>(
                 value: topN,
                 items: const [
@@ -438,86 +499,277 @@ class LongestCallsCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStatePropertyAll(
-                colors.tableHeaderBg.withValues(alpha: 0.95),
-              ),
-              columnSpacing: 16,
-              columns: const [
-                DataColumn(label: Text('#')),
-                DataColumn(label: Text('Καλών')),
-                DataColumn(label: Text('Τμήμα')),
-                DataColumn(label: Text('Διάρκεια')),
-              ],
-              rows: rows.indexed.map((entry) {
-                final idx = entry.$1;
-                final r = entry.$2;
-                final pct = maxDur == 0 ? 0.0 : r.durationSeconds / maxDur;
-                return DataRow(
-                  color: WidgetStateProperty.resolveWith<Color?>((states) {
-                    if (states.contains(WidgetState.hovered)) {
-                      return colors.tableRowHover;
-                    }
-                    return null;
-                  }),
-                  cells: [
-                    DataCell(Text('${idx + 1}')),
-                    DataCell(
-                      SizedBox(
-                        width: 210,
-                        child: Text(
-                          r.callerName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    DataCell(DepartmentPill(name: r.department)),
-                    DataCell(
-                      SizedBox(
-                        width: 220,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(999),
-                                child: TweenAnimationBuilder<double>(
-                                  tween: Tween<double>(begin: 0, end: pct),
-                                  duration: Duration(
-                                    milliseconds: 300 + (idx * 70),
-                                  ),
-                                  curve: Curves.easeOutCubic,
-                                  builder: (context, value, _) {
-                                    return LinearProgressIndicator(
-                                      value: value,
-                                      minHeight: 6,
-                                      backgroundColor:
-                                          colors.progressTrackDataRowBg,
-                                      color: colors.actionBlue,
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Text(formatDuration(r.durationSeconds)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
+          if (isPerPerson)
+            _buildPerPersonTable(context, ref)
+          else
+            _buildPerCallTable(context),
           TextButton(
             onPressed: onOpenReport,
             child: const Text('Προβολή αναφοράς >'),
           ),
         ],
       ),
+    );
+  }
+
+  /// Όψη «ανά άτομο»: σύνολο, πλήθος και μέσος όρος, με ταξινόμηση από τις
+  /// κεφαλίδες. Το βέλος του [DataTable] δείχνει ποιο κριτήριο ισχύει.
+  Widget _buildPerPersonTable(BuildContext context, WidgetRef ref) {
+    final hideUnknown = ref.watch(dashboardHideUnknownCallerProvider);
+    final sort = ref.watch(dashboardCallerTimeSortProvider);
+
+    final visible = visibleCallerTimeStats(
+      data.callerTimeTotals,
+      hideUnknownCaller: hideUnknown,
+    );
+    final rows = sortedCallerTimeStats(visible, sort).take(topN).toList();
+    final hiddenUnknown = data.callerTimeTotals
+        .where((s) => s.name == kDashboardUnknownCallerLabel)
+        .firstOrNull;
+    final maxValue = rows.isEmpty
+        ? 1.0
+        : rows
+              .map((e) => _sortValue(e, sort))
+              .reduce(math.max)
+              .toDouble()
+              .clamp(1.0, double.infinity);
+
+    const sortColumnIndex = {
+      CallerTimeSort.count: 2,
+      CallerTimeSort.average: 3,
+      CallerTimeSort.total: 4,
+    };
+
+    void setSort(CallerTimeSort value) =>
+        ref.read(dashboardCallerTimeSortProvider.notifier).set(value);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: WidgetStatePropertyAll(
+              colors.tableHeaderBg.withValues(alpha: 0.95),
+            ),
+            columnSpacing: 16,
+            sortColumnIndex: sortColumnIndex[sort],
+            sortAscending: false,
+            columns: [
+              const DataColumn(label: Text('#')),
+              const DataColumn(label: Text('Καλών')),
+              DataColumn(
+                label: const Text('Κλήσεις'),
+                numeric: true,
+                onSort: (_, _) => setSort(CallerTimeSort.count),
+              ),
+              DataColumn(
+                label: const Text('Μ.Ο.'),
+                numeric: true,
+                onSort: (_, _) => setSort(CallerTimeSort.average),
+              ),
+              DataColumn(
+                label: const Text('Σύνολο'),
+                onSort: (_, _) => setSort(CallerTimeSort.total),
+              ),
+            ],
+            rows: rows.indexed.map((entry) {
+              final idx = entry.$1;
+              final r = entry.$2;
+              final pct = _sortValue(r, sort) / maxValue;
+              return DataRow(
+                color: WidgetStateProperty.resolveWith<Color?>((states) {
+                  if (states.contains(WidgetState.hovered)) {
+                    return colors.tableRowHover;
+                  }
+                  return null;
+                }),
+                cells: [
+                  DataCell(Text('${idx + 1}')),
+                  DataCell(
+                    SizedBox(
+                      width: 210,
+                      child: Text(
+                        r.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(Text('${r.callCount}')),
+                  DataCell(Text(formatDuration(r.avgDurationSeconds))),
+                  DataCell(
+                    SizedBox(
+                      width: 220,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween<double>(begin: 0, end: pct),
+                                duration: Duration(
+                                  milliseconds: 300 + (idx * 70),
+                                ),
+                                curve: Curves.easeOutCubic,
+                                builder: (context, value, _) {
+                                  return LinearProgressIndicator(
+                                    value: value,
+                                    minHeight: 6,
+                                    backgroundColor:
+                                        colors.progressTrackDataRowBg,
+                                    color: colors.actionBlue,
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(formatAggregateDuration(r.totalDurationSeconds)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              Tooltip(
+                message: 'Απόκρυψη κλήσεων χωρίς καταγεγραμμένο καλούντα',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Απόκρυψη «Άγνωστου»',
+                      style: TextStyle(fontSize: 11, color: colors.kpiSubtitle),
+                    ),
+                    const SizedBox(width: 4),
+                    Transform.scale(
+                      scale: 0.82,
+                      child: Switch(
+                        value: hideUnknown,
+                        onChanged: (value) => ref
+                            .read(dashboardHideUnknownCallerProvider.notifier)
+                            .set(value),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (hideUnknown && hiddenUnknown != null)
+                Expanded(
+                  child: Text(
+                    '+ ${formatAggregateDuration(hiddenUnknown.totalDurationSeconds)} '
+                    'σε ${hiddenUnknown.callCount} κλήσεις χωρίς καταγεγραμμένο καλούντα',
+                    style: TextStyle(fontSize: 11, color: colors.kpiSubtitle),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static int _sortValue(CallerTimeStat s, CallerTimeSort sort) =>
+      switch (sort) {
+        CallerTimeSort.total => s.totalDurationSeconds,
+        CallerTimeSort.count => s.callCount,
+        CallerTimeSort.average => s.avgDurationSeconds,
+      };
+
+  Widget _buildPerCallTable(BuildContext context) {
+    final rows = data.longestCalls.take(topN).toList();
+    final maxDur = rows.isEmpty
+        ? 1
+        : rows.map((e) => e.durationSeconds).reduce(math.max).toDouble();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: WidgetStatePropertyAll(
+              colors.tableHeaderBg.withValues(alpha: 0.95),
+            ),
+            columnSpacing: 16,
+            columns: const [
+              DataColumn(label: Text('#')),
+              DataColumn(label: Text('Καλών')),
+              DataColumn(label: Text('Τμήμα')),
+              DataColumn(label: Text('Διάρκεια')),
+            ],
+            rows: rows.indexed.map((entry) {
+              final idx = entry.$1;
+              final r = entry.$2;
+              final pct = maxDur == 0 ? 0.0 : r.durationSeconds / maxDur;
+              return DataRow(
+                color: WidgetStateProperty.resolveWith<Color?>((states) {
+                  if (states.contains(WidgetState.hovered)) {
+                    return colors.tableRowHover;
+                  }
+                  return null;
+                }),
+                cells: [
+                  DataCell(Text('${idx + 1}')),
+                  DataCell(
+                    SizedBox(
+                      width: 210,
+                      child: Text(
+                        r.callerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(DepartmentPill(name: r.department)),
+                  DataCell(
+                    SizedBox(
+                      width: 220,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: TweenAnimationBuilder<double>(
+                                tween: Tween<double>(begin: 0, end: pct),
+                                duration: Duration(
+                                  milliseconds: 300 + (idx * 70),
+                                ),
+                                curve: Curves.easeOutCubic,
+                                builder: (context, value, _) {
+                                  return LinearProgressIndicator(
+                                    value: value,
+                                    minHeight: 6,
+                                    backgroundColor:
+                                        colors.progressTrackDataRowBg,
+                                    color: colors.actionBlue,
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(formatDuration(r.durationSeconds)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -542,36 +794,66 @@ class CategoryDistributionChartCard extends ConsumerWidget {
       excludeCallsWithoutCategory: excludeCallsWithoutCategory,
     );
 
+    final metric = ref.watch(dashboardIssueMetricProvider);
+
     return ChartCard(
       title: 'Κατανομή Βλαβών',
       fill: colors.chartCardFill,
       border: colors.chartCardBorder,
-      titleTrailing: Tooltip(
-        message: 'Αγνόηση κλήσεων χωρίς κατηγορία',
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Χωρίς Κατηγορία',
-              style: TextStyle(fontSize: 11, color: colors.kpiSubtitle),
-            ),
-            const SizedBox(width: 4),
-            Transform.scale(
-              scale: 0.82,
-              child: Switch(
-                value: excludeCallsWithoutCategory,
-                onChanged: (value) {
-                  ref
-                      .read(
-                        dashboardExcludeCallsWithoutCategoryProvider.notifier,
-                      )
-                      .set(value);
-                },
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      titleTrailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SegmentedButton<IssueDistributionMetric>(
+            segments: const [
+              ButtonSegment(
+                value: IssueDistributionMetric.count,
+                label: Text('Πλήθος'),
               ),
+              ButtonSegment(
+                value: IssueDistributionMetric.duration,
+                label: Text('Διάρκεια'),
+              ),
+            ],
+            selected: {metric},
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-          ],
-        ),
+            onSelectionChanged: (selection) => ref
+                .read(dashboardIssueMetricProvider.notifier)
+                .set(selection.first),
+          ),
+          const SizedBox(width: 12),
+          Tooltip(
+            message: 'Αγνόηση κλήσεων χωρίς κατηγορία',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Χωρίς Κατηγορία',
+                  style: TextStyle(fontSize: 11, color: colors.kpiSubtitle),
+                ),
+                const SizedBox(width: 4),
+                Transform.scale(
+                  scale: 0.82,
+                  child: Switch(
+                    value: excludeCallsWithoutCategory,
+                    onChanged: (value) {
+                      ref
+                          .read(
+                            dashboardExcludeCallsWithoutCategoryProvider
+                                .notifier,
+                          )
+                          .set(value);
+                    },
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 220),
@@ -581,11 +863,12 @@ class CategoryDistributionChartCard extends ConsumerWidget {
             currentChild ?? const SizedBox.shrink(),
         transitionBuilder: (child, animation) =>
             FadeTransition(opacity: animation, child: child),
-        child: IssuePieChart(
-          key: ValueKey<bool>(excludeCallsWithoutCategory),
+        child: IssueDistributionList(
+          key: ValueKey<String>('$excludeCallsWithoutCategory-${metric.name}'),
           issues: visibleIssues,
-          pieColors: colors.pieColors,
-          legendMutedColor: colors.kpiSubtitle,
+          metric: metric,
+          barColors: colors.categoryColors,
+          mutedColor: colors.kpiSubtitle,
         ),
       ),
     );

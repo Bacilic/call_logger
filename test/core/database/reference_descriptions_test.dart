@@ -50,10 +50,11 @@ void main() {
       int? equipmentId,
       String? phoneText,
       String? equipmentText,
+      String? date,
     }) async {
       final now = DateTime.now();
       return db.insert('calls', {
-        'date': '${now.year.toString().padLeft(4, '0')}-01-01',
+        'date': date ?? '${now.year.toString().padLeft(4, '0')}-01-01',
         'time': '10:00',
         'caller_id': null,
         'equipment_id': equipmentId,
@@ -100,20 +101,71 @@ void main() {
       expect(descriptions, contains('Άννα Πατσαρίκα'));
     });
 
-    test('τηλέφωνο με 3 κλήσεις → «3 κλήσεις ιστορικού»', () async {
+    test('τηλέφωνο με 3 κλήσεις → πλήθος και η ΠΙΟ ΠΡΟΣΦΑΤΗ ημερομηνία', () async {
       final phoneId = await db.insert('phones', {
         'number': '2851',
         'is_deleted': 0,
       });
-      await insertCall(phoneText: '2851');
-      await insertCall(phoneText: '2851');
-      await insertCall(phoneText: '2851');
+      await insertCall(phoneText: '2851', date: '2021-03-04');
+      await insertCall(phoneText: '2851', date: '2026-06-12');
+      await insertCall(phoneText: '2851', date: '2024-11-30');
 
       final descriptions = await phones.phoneReferenceDescriptions(
         phoneId,
         '2851',
       );
-      expect(descriptions, contains('3 κλήσεις ιστορικού'));
+      expect(descriptions, contains('3 κλήσεις ιστορικού (τελευταία 12/06/2026)'));
+    });
+
+    test('τηλέφωνο με εκκρεμότητα → ημερομηνία τελευταίας κίνησης', () async {
+      final phoneId = await db.insert('phones', {
+        'number': '2851',
+        'is_deleted': 0,
+      });
+      await db.insert('tasks', {
+        'title': 'Παλιά',
+        'phone_id': phoneId,
+        'status': 'open',
+        'created_at': '2023-02-01T08:00:00.000',
+        'updated_at': '2023-02-01T08:00:00.000',
+        'is_deleted': 0,
+      });
+      await db.insert('tasks', {
+        'title': 'Πρόσφατη',
+        'phone_id': phoneId,
+        'status': 'open',
+        'created_at': '2026-05-20T09:00:00.000',
+        'updated_at': '2026-07-18T15:30:00.000',
+        'is_deleted': 0,
+      });
+
+      final descriptions = await phones.phoneReferenceDescriptions(
+        phoneId,
+        '2851',
+      );
+      expect(descriptions, contains('2 εκκρεμότητες (τελευταία 18/07/2026)'));
+    });
+
+    test('τηλέφωνο χωρίς ιστορικό → καμία φράση με ημερομηνία', () async {
+      final deptId = await db.insert('departments', {
+        'name': 'Πληροφορική',
+        'name_key': SearchTextNormalizer.normalizeForSearch('Πληροφορική'),
+        'is_deleted': 0,
+      });
+      final phoneId = await db.insert('phones', {
+        'number': '2851',
+        'is_deleted': 0,
+      });
+      await db.insert('department_phones', {
+        'department_id': deptId,
+        'phone_id': phoneId,
+      });
+
+      final descriptions = await phones.phoneReferenceDescriptions(
+        phoneId,
+        '2851',
+      );
+      expect(descriptions, ['Πληροφορική']);
     });
 
     test('εξοπλισμός με κάτοχο → περιέχει το όνομα κατόχου', () async {
@@ -142,5 +194,26 @@ void main() {
       );
       expect(descriptions, contains('Βλάσης Οικονόμου'));
     });
+
+    test(
+      'εξοπλισμός: η κλήση που τον αναφέρει μόνο ως κείμενο μετράει στην τελευταία χρήση',
+      () async {
+        final equipmentId = await db.insert('equipment', {
+          'code_equipment': '3601',
+          'is_deleted': 0,
+        });
+        // Συνδεδεμένη κλήση: παλιά. Κλήση μόνο με κείμενο: πρόσφατη.
+        await insertCall(equipmentId: equipmentId, date: '2022-04-05');
+        await insertCall(equipmentText: '3601', date: '2026-06-12');
+
+        final descriptions = await equipment.equipmentReferenceDescriptions(
+          equipmentId,
+        );
+        expect(
+          descriptions,
+          contains('2 κλήσεις ιστορικού (τελευταία 12/06/2026)'),
+        );
+      },
+    );
   });
 }

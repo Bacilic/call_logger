@@ -4,6 +4,23 @@ import '../models/remote_tool.dart';
 import '../models/remote_tool_role.dart';
 import 'database_helper.dart';
 
+/// Ονόματα όλων των εργαλείων ανά id — και των διαγραμμένων: οι εγγραφές audit
+/// αναφέρουν εργαλεία που μπορεί να μην υπάρχουν πια.
+///
+/// Δέχεται executor ώστε να δουλεύει και με ήδη ανοιχτή σύνδεση (οθόνη audit).
+Future<Map<int, String>> loadRemoteToolNamesById(DatabaseExecutor db) async {
+  final rows = await db.query('remote_tools', columns: ['id', 'name']);
+  final out = <int, String>{};
+  for (final row in rows) {
+    final idRaw = row['id'];
+    final id = idRaw is int ? idRaw : int.tryParse('$idRaw');
+    if (id == null) continue;
+    final name = (row['name'] as String?)?.trim() ?? '';
+    if (name.isNotEmpty) out[id] = name;
+  }
+  return out;
+}
+
 /// Ανάγνωση/ενημέρωση `remote_tools` + επίλυση τιμών από `remote_params` εξοπλισμού.
 class RemoteToolsRepository {
   RemoteToolsRepository(this._db);

@@ -1175,6 +1175,18 @@ class TasksRepository {
     });
   }
 
+  /// Η ωμή γραμμή της εκκρεμότητας [taskId], ή `null` αν δεν υπάρχει.
+  Future<Map<String, dynamic>?> getTaskRowById(int taskId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [taskId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
   /// Συγχρονισμός updated_at = created_at (integrity fix — χωρίς audit).
   Future<Map<String, dynamic>?> integritySyncTaskTimestamps(int taskId) async {
     final db = await _db;

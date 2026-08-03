@@ -1,85 +1,62 @@
 import 'package:path/path.dart' as p;
 
-import 'backup_zip_manifest.dart';
 import 'database_zip_pick_restore.dart';
 
-/// Επιλογές προορισμού επαναφοράς από αντίγραφο `.zip`.
+/// Επιλογές ονόματος στην επαναφορά από αντίγραφο `.zip`.
+///
+/// Συμβόλαιο: η επαναφορά γράφει πάντα στον φάκελο της τρέχουσας βάσης —
+/// το αντίγραφο δεν γίνεται ποτέ χώρος λειτουργίας. Ο χρήστης επιλέγει μόνο
+/// το όνομα του αρχείου προορισμού.
 enum RestoreDestinationChoice {
-  /// Αντικατάσταση της τρέχουσας ανοιχτής βάσης.
+  /// Αντικατάσταση της τρέχουσας ανοιχτής βάσης (κρατά το τρέχον όνομα).
   currentDatabase,
 
-  /// Νέο αρχείο δίπλα στο `.zip` (μη καταστροφικό ως προς την τρέχουσα).
-  besideZip,
-
-  /// Αρχική διαδρομή όπως καταγράφηκε στο manifest του αντιγράφου.
-  originalPathFromManifest;
+  /// Νέο αρχείο στον φάκελο της τρέχουσας βάσης, με το όνομα του αντιγράφου.
+  backupName;
 
   /// Προεπιλογή: η λέξη «επαναφορά» σημαίνει αντικατάσταση της τρέχουσας.
   static const defaultChoice = RestoreDestinationChoice.currentDatabase;
 }
 
-/// Τελική απόλυτη διαδρομή για την επιλογή προορισμού.
+/// Τελική απόλυτη διαδρομή για την επιλογή ονόματος.
 String resolveRestoreTargetPath({
   required RestoreDestinationChoice choice,
   required String currentDatabasePath,
-  required String zipPath,
-  BackupZipManifest? manifest,
-  String? preferredDatabaseFileName,
+  String? backupDatabaseFileName,
 }) {
   switch (choice) {
     case RestoreDestinationChoice.currentDatabase:
       return currentDatabasePath;
-    case RestoreDestinationChoice.besideZip:
-      return DatabaseZipPickRestore.targetDatabasePathFor(
-        zipPath,
-        preferredDatabaseFileName: preferredDatabaseFileName,
-      );
-    case RestoreDestinationChoice.originalPathFromManifest:
-      final original = manifest?.originalDatabasePath?.trim() ?? '';
-      if (original.isEmpty) {
-        return currentDatabasePath;
-      }
-      return p.normalize(original);
+    case RestoreDestinationChoice.backupName:
+      final name =
+          DatabaseZipPickRestore.usableDatabaseFileName(
+            backupDatabaseFileName,
+          ) ??
+          DatabaseZipPickRestore.restoredDatabaseFileName;
+      return p.join(p.dirname(currentDatabasePath), name);
   }
 }
 
-/// Ποιες επιλογές προορισμού είναι διαθέσιμες.
+/// Ποιες επιλογές ονόματος είναι διαθέσιμες.
 ///
-/// Η «αρχική διαδρομή» απαιτεί γνωστό manifest, διαφορετική διαδρομή από την
-/// τρέχουσα, και εγγράψιμο φάκελο ([originalDirectoryWritable] υπολογίζεται
-/// από τον καλούντα — αυτό το module δεν κάνει εργασίες δίσκου).
+/// Το όνομα του αντιγράφου προσφέρεται μόνο όταν είναι αξιοποιήσιμο και
+/// διαφέρει από το τρέχον — αλλιώς οι δύο επιλογές ταυτίζονται.
 List<RestoreDestinationChoice> availableRestoreDestinations({
   required String currentDatabasePath,
-  required String zipPath,
-  required BackupZipManifest? manifest,
-  required bool originalDirectoryWritable,
+  String? backupDatabaseFileName,
 }) {
-  final choices = <RestoreDestinationChoice>[
-    RestoreDestinationChoice.currentDatabase,
-    RestoreDestinationChoice.besideZip,
-  ];
-
-  final original = manifest?.originalDatabasePath?.trim() ?? '';
-  if (manifest != null &&
-      manifest.isKnown &&
-      original.isNotEmpty &&
-      originalDirectoryWritable) {
-    final currentNorm = p.normalize(currentDatabasePath);
-    final originalNorm = p.normalize(original);
-    if (!_samePath(currentNorm, originalNorm)) {
-      choices.add(RestoreDestinationChoice.originalPathFromManifest);
-    }
+  final name = DatabaseZipPickRestore.usableDatabaseFileName(
+    backupDatabaseFileName,
+  );
+  if (name == null) {
+    return const [RestoreDestinationChoice.currentDatabase];
   }
-  return choices;
-}
-
-/// Ο διακόπτης «Άνοιγμα της βάσης που επαναφέρθηκε» έχει νόημα μόνο όταν
-/// ο προορισμός δεν είναι ήδη η τρέχουσα βάση.
-bool restoreOpenSwitchMeaningful(RestoreDestinationChoice choice) =>
-    choice != RestoreDestinationChoice.currentDatabase;
-
-bool _samePath(String a, String b) {
-  final na = p.normalize(a).replaceAll('/', '\\').toLowerCase();
-  final nb = p.normalize(b).replaceAll('/', '\\').toLowerCase();
-  return na == nb;
+  final currentName = p.basename(currentDatabasePath);
+  if (name.toLowerCase() == currentName.toLowerCase()) {
+    return const [RestoreDestinationChoice.currentDatabase];
+  }
+  return const [
+    RestoreDestinationChoice.currentDatabase,
+    RestoreDestinationChoice.backupName,
+  ];
 }

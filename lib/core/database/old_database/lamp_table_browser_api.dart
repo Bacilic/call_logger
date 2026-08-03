@@ -1,3 +1,5 @@
+import 'package:sqflite_common/sqlite_api.dart' show DatabaseException;
+
 import '../database_table_inspection.dart' show TablePreviewResult;
 import 'lamp_database_provider.dart';
 import 'lamp_table_greek_names.dart';
@@ -54,11 +56,12 @@ class LampTableBrowserApi {
     );
   }
 
-  /// Προεπισκόπηση: στήλες + σειρές, χωρίς zoom/resize (απεικονίζει το widget).
+  /// Προεπισκόπηση: στήλες + μία σελίδα σειρών ([rowLimit] από [offset]).
   Future<TablePreviewResult> getTablePreview(
     String path,
     String tableName, {
     int rowLimit = 200,
+    int offset = 0,
   }) async {
     final db = await _provider.open(path.trim(), mode: LampDatabaseMode.read);
     final quoted = lampSqliteQuoteIdentifier(tableName);
@@ -70,7 +73,19 @@ class LampTableBrowserApi {
     if (columns.isEmpty) {
       return const TablePreviewResult(columns: [], rows: []);
     }
-    final rows = await db.rawQuery('SELECT * FROM $quoted LIMIT $rowLimit');
+    // ORDER BY rowid: χωρίς ρητή σειρά η SQLite δεν εγγυάται σταθερότητα
+    // μεταξύ σελίδων (κίνδυνος κενών/διπλοτύπων στη σελιδοποίηση).
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await db.rawQuery(
+        'SELECT * FROM $quoted ORDER BY rowid LIMIT $rowLimit OFFSET $offset',
+      );
+    } on DatabaseException {
+      // Πίνακες WITHOUT ROWID δεν έχουν στήλη rowid.
+      rows = await db.rawQuery(
+        'SELECT * FROM $quoted LIMIT $rowLimit OFFSET $offset',
+      );
+    }
     return TablePreviewResult(columns: columns, rows: rows);
   }
 }

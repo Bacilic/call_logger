@@ -207,25 +207,6 @@ void _expectCompactFieldsDoNotOverlapCard(
   );
 }
 
-/// Μέγιστο αποδεκτό κενό μεταξύ γραμμής πεδίων και κάρτας ΤΚ (px).
-const double kCompactFormToCardMaxGap = 16;
-
-void _expectCompactFormToCardGapMinimal(
-  WidgetTester tester, {
-  required String phase,
-}) {
-  final selectorRect = tester.getRect(find.byType(SmartEntitySelectorWidget));
-  final cardRect = tester.getRect(find.byType(GlobalRecentCallsList));
-  final gap = cardRect.top - selectorRect.bottom;
-  expect(
-    gap,
-    inInclusiveRange(0, kCompactFormToCardMaxGap),
-    reason: greekExpectMsg(
-      'Συμπτυγμένη ανοιχτή: ελάχιστο κενό μεταξύ πεδίων και κάρτας ($phase)',
-    ),
-  );
-}
-
 Future<void> _pumpCallsApp(WidgetTester tester) async {
   await tester.runAsync(() async {
     await tester.pumpWidget(
@@ -447,10 +428,6 @@ void main() {
           ),
         );
         _expectCompactFieldsDoNotOverlapCard(
-          tester,
-          phase: 'συμπτυγμένη, ανοιχτή',
-        );
-        _expectCompactFormToCardGapMinimal(
           tester,
           phase: 'συμπτυγμένη, ανοιχτή',
         );

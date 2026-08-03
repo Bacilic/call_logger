@@ -6,7 +6,9 @@ import 'package:call_logger/features/history/widgets/lansweeper/lansweeper_regis
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../test_reporter.dart';
 import '../../test_setup.dart';
+import 'lansweeper_ticket_link_finders.dart';
 
 Future<void> _pumpDialogHost(
   WidgetTester tester, {
@@ -81,6 +83,98 @@ void main() {
       await pumpUntilSettled(tester);
 
       expect(result, isFalse);
+    });
+  });
+
+  group('σύνδεσμος ticket στους διαλόγους απόφασης', () {
+    // Και στους δύο ο χρήστης καλείται να αποφασίσει ΓΙΑ αυτό το ticket, οπότε
+    // ο αριθμός πρέπει να το ανοίγει: αλλιώς αποφασίζει στα τυφλά.
+    const template = 'https://lansweeper.local/ticket.aspx?tid={tid}';
+
+    testWidgets('«Ακαταχώρητη κλήση»: ο αριθμός ανοίγει το ticket', (
+      tester,
+    ) async {
+      await _pumpDialogHost(
+        tester,
+        onOpen: (context) async {
+          await showLansweeperUnsentTicketChoiceDialog(
+            context,
+            storedTicket: '17132',
+            ticketViewUrlTemplate: template,
+          );
+        },
+      );
+      await _openDialog(tester);
+
+      expect(
+        ticketRendersAsTappableLink(tester, '#17132'),
+        isTrue,
+        reason: greekExpectMsg(
+          'Ο χρήστης αποφασίζει ΓΙΑ αυτό το ticket — πρέπει να το ανοίγει',
+        ),
+      );
+      expect(find.textContaining('#17132'), findsOneWidget);
+
+      await _closeDialogAction(tester, 'Άκυρο');
+    });
+
+    testWidgets('«Ίδιο Ticket ID»: ο αριθμός ανοίγει το ticket', (
+      tester,
+    ) async {
+      await _pumpDialogHost(
+        tester,
+        onOpen: (context) async {
+          await showLansweeperDuplicateTicketDialog(
+            context,
+            count: 2,
+            ticketId: '17132',
+            ticketViewUrlTemplate: template,
+          );
+        },
+      );
+      await _openDialog(tester);
+
+      expect(
+        ticketRendersAsTappableLink(tester, '#17132'),
+        isTrue,
+        reason: greekExpectMsg(
+          'Ο χρήστης αποφασίζει ΓΙΑ αυτό το ticket — πρέπει να το ανοίγει',
+        ),
+      );
+      expect(
+        find.textContaining('Υπάρχουν 2 άλλες κλήσεις'),
+        findsOneWidget,
+        reason: greekExpectMsg('Το υπόλοιπο κείμενο μένει ανέπαφο'),
+      );
+
+      await _closeDialogAction(tester, 'Άκυρο');
+    });
+
+    testWidgets('χωρίς ρυθμισμένο URL, ο αριθμός μένει ορατός χωρίς σύνδεσμο', (
+      tester,
+    ) async {
+      await _pumpDialogHost(
+        tester,
+        onOpen: (context) async {
+          await showLansweeperDuplicateTicketDialog(
+            context,
+            count: 1,
+            ticketId: '17132',
+          );
+        },
+      );
+      await _openDialog(tester);
+
+      expect(ticketRendersAsTappableLink(tester, '#17132'), isFalse);
+      expect(
+        find.textContaining('#17132'),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Χωρίς ρύθμιση URL ο αριθμός παραμένει η χρήσιμη πληροφορία',
+        ),
+      );
+
+      await _closeDialogAction(tester, 'Άκυρο');
     });
   });
 

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/text_similarity.dart';
 import '../../../../core/utils/user_similarity_finder.dart';
+import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../calls/models/user_model.dart';
+import 'suggestion_comparison_card.dart';
 
 /// Αποτέλεσμα διαλόγου παρόμοιων / ίδιων υπαλλήλων καταλόγου.
 class SimilarUsersDialogResult {
@@ -39,19 +42,32 @@ enum SimilarUsersDialogPurpose {
 }
 
 /// Διάλογος όταν το ονοματεπώνυμο ταυτίζεται ή μοιάζει με ΥΠΑΡΧΟΥΣΕΣ εγγραφές του καταλόγου.
+///
+/// Δείχνει δίπλα-δίπλα τι πληκτρολόγησε ο χρήστης και τι υπάρχει ήδη, με
+/// μαρκαρισμένο το κοινό μέρος των ονομάτων ώστε η σχέση να φαίνεται με μια
+/// ματιά. Μετακινήσιμος, για να φαίνεται η φόρμα από πίσω.
 class SimilarUsersDialog extends StatelessWidget {
   const SimilarUsersDialog({
     super.key,
     required this.matches,
     required this.allowPickExisting,
+    required this.typedDisplayName,
+    this.typedDepartmentName,
     this.purpose = SimilarUsersDialogPurpose.directoryEntry,
   });
 
-  /// Υπάρχουσες εγγραφές καταλόγου (ποτέ το κείμενο που πληκτρολόγησε ο χρήστης).
+  /// Υπάρχουσες εγγραφές καταλόγου με παρόμοιο όνομα.
   final List<UserSimilarityMatch> matches;
 
   /// Αν true, κάθε γραμμή είναι πατήσιμη για επιλογή υπάρχοντος χρήστη.
   final bool allowPickExisting;
+
+  /// Το ονοματεπώνυμο όπως το πληκτρολόγησε ο χρήστης.
+  final String typedDisplayName;
+
+  /// Τμήμα της νέας εγγραφής: null = δεν αφορά τη ροή (δεν εμφανίζεται),
+  /// κενό = ρητά «(χωρίς τμήμα)», αλλιώς το όνομα του τμήματος.
+  final String? typedDepartmentName;
 
   final SimilarUsersDialogPurpose purpose;
 
@@ -61,54 +77,76 @@ class SimilarUsersDialog extends StatelessWidget {
       matches.isNotEmpty &&
       matches.every((m) => m.score == UserSimilarityFinder.kIdenticalScore);
 
+  String _matchName(UserSimilarityMatch m) =>
+      UserSimilarityFinder.displayNameFor(m.user.firstName, m.user.lastName);
+
+  /// Το κοινό τμήμα του πληκτρολογημένου με το ΚΑΛΥΤΕΡΟ ταίριασμα.
+  ({int start, int length}) get _typedHighlight {
+    var best = (start: 0, length: 0);
+    for (final m in matches) {
+      final span = TextSimilarity.matchedSpan(
+        typedDisplayName.trim(),
+        _matchName(m),
+      );
+      if (span.length > best.length) best = span;
+    }
+    return best;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final identical = _allIdentical;
 
-    return AlertDialog(
+    return DraggableDialogShell(
       title: Text(
         identical && !_isCallRecord ? 'Ίδιο ονοματεπώνυμο' : 'Μήπως εννοείτε;',
       ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              identical
-                  ? (matches.length == 1
-                        ? 'Υπάρχει ήδη ο παρακάτω χρήστης στον κατάλογο:'
-                        : 'Υπάρχουν ήδη οι παρακάτω χρήστες στον κατάλογο:')
-                  : (matches.length == 1
-                        ? 'Βρέθηκε παρόμοιος υπάλληλος στον κατάλογο:'
-                        : 'Βρέθηκαν παρόμοιοι υπάλληλοι στον κατάλογο:'),
-              style: theme.textTheme.bodyLarge,
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  identical
+                      ? (matches.length == 1
+                            ? 'Υπάρχει ήδη ο παρακάτω χρήστης στον κατάλογο:'
+                            : 'Υπάρχουν ήδη οι παρακάτω χρήστες στον κατάλογο:')
+                      : (matches.length == 1
+                            ? 'Βρέθηκε παρόμοιος υπάλληλος στον κατάλογο:'
+                            : 'Βρέθηκαν παρόμοιοι υπάλληλοι στον κατάλογο:'),
+                  style: theme.textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 12),
+                _buildComparisonCard(context),
+                const SizedBox(height: 12),
+                Text(
+                  _closingQuestion(identical),
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            ...matches.map((m) => _buildMatchRow(context, m)),
-            const SizedBox(height: 12),
-            Text(
-              _closingQuestion(identical),
-              style: theme.textTheme.bodyMedium,
-            ),
-          ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(
+              context,
+            ).pop(const SimilarUsersDialogResult.cancelled()),
+            child: const Text('Ακύρωση'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(
+              context,
+            ).pop(const SimilarUsersDialogResult.continueAsNew()),
+            child: Text(_continueLabel(identical)),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(
-            context,
-          ).pop(const SimilarUsersDialogResult.cancelled()),
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(
-            context,
-          ).pop(const SimilarUsersDialogResult.continueAsNew()),
-          child: Text(_continueLabel(identical)),
-        ),
-      ],
     );
   }
 
@@ -131,39 +169,42 @@ class SimilarUsersDialog extends StatelessWidget {
     return identical ? 'Συνέχεια ως Συνωνυμία' : 'Όχι, είναι νέα εγγραφή';
   }
 
-  Widget _buildMatchRow(BuildContext context, UserSimilarityMatch match) {
-    final u = match.user;
-    final name = UserSimilarityFinder.displayNameFor(u.firstName, u.lastName);
-    final deptRaw = u.departmentName?.trim() ?? '';
-    final dept = deptRaw.isEmpty ? '—' : deptRaw;
-    final line = Text(
-      '«$name» στο τμήμα «$dept»',
-      style: Theme.of(context).textTheme.bodyLarge,
-    );
+  /// «(τμήμα)» / «(χωρίς τμήμα)» — null όταν η ροή δεν έχει τμήμα να δείξει.
+  String? _departmentSuffix(String? departmentName) {
+    final dept = departmentName?.trim();
+    if (dept == null) return null;
+    return dept.isEmpty ? '(χωρίς τμήμα)' : '($dept)';
+  }
 
-    if (!allowPickExisting) {
-      return Padding(padding: const EdgeInsets.only(bottom: 6), child: line);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: InkWell(
-        onTap: () =>
-            Navigator.of(context).pop(SimilarUsersDialogResult.pickExisting(u)),
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-          child: Row(
-            children: [
-              Expanded(child: line),
-              Icon(
-                Icons.chevron_right,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ],
-          ),
+  /// Η κάρτα σύγκρισης: «Πληκτρολογήσατε» πάνω, «Υπάρχει ήδη» από κάτω.
+  Widget _buildComparisonCard(BuildContext context) {
+    final typed = typedDisplayName.trim();
+    return SuggestionComparisonCard(
+      rows: [
+        SuggestionComparisonRow(
+          label: 'Πληκτρολογήσατε',
+          icon: Icons.edit_outlined,
+          name: typed,
+          highlight: _typedHighlight,
+          suffix: _departmentSuffix(typedDepartmentName),
         ),
-      ),
+        for (final (index, m) in matches.indexed)
+          SuggestionComparisonRow(
+            label: index != 0
+                ? ''
+                : (matches.length == 1 ? 'Υπάρχει ήδη' : 'Υπάρχουν ήδη'),
+            icon: Icons.person_outline,
+            name: _matchName(m),
+            highlight: TextSimilarity.matchedSpan(_matchName(m), typed),
+            suffix: _departmentSuffix(m.user.departmentName ?? ''),
+            emphasized: true,
+            onTap: !allowPickExisting
+                ? null
+                : () => Navigator.of(
+                    context,
+                  ).pop(SimilarUsersDialogResult.pickExisting(m.user)),
+          ),
+      ],
     );
   }
 }

@@ -8,9 +8,6 @@ import 'package:call_logger/features/history/widgets/lansweeper/ai_prompt_templa
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _kPlaceholderGreen = Color(0xFF16A34A);
-const _kBlockBlue = Color(0xFF2563EB);
-
 /// Πολυγραμμικό template που ξεπερνά το ορατό ύψος (maxLines: 10) — regression scroll/ύψους.
 String _multiLineOverflowTemplate() {
   return '''
@@ -69,20 +66,33 @@ void main() {
         ),
       );
 
+      // Η συμπεριφορά: οι δείκτες επισημαίνονται (ξεχωρίζουν από το βασικό
+      // κείμενο) και τα δύο είδη ξεχωρίζουν μεταξύ τους. Οι συγκεκριμένες
+      // αποχρώσεις είναι αισθητική επιλογή — δεν καρφώνονται σε τεστ (Κ2).
+      final placeholderColor = _firstMatchingColor(span, '{Υπάλληλος}');
+      final blockOpenColor = _firstMatchingColor(span, '{@Τμήμα}');
+      final blockCloseColor = _firstMatchingColor(span, '{@/Τμήμα}');
+      final baseColor = baseStyle.color;
+
       expect(
-        _firstMatchingColor(span, '{Υπάλληλος}'),
-        _kPlaceholderGreen,
-        reason: 'Το γνωστό placeholder πρέπει να είναι πράσινο',
+        placeholderColor,
+        allOf(isNotNull, isNot(baseColor)),
+        reason: 'Το γνωστό placeholder πρέπει να επισημαίνεται',
       );
       expect(
-        _firstMatchingColor(span, '{@Τμήμα}'),
-        _kBlockBlue,
-        reason: 'Το άνοιγμα block πρέπει να είναι μπλε',
+        blockOpenColor,
+        allOf(isNotNull, isNot(baseColor)),
+        reason: 'Το άνοιγμα block πρέπει να επισημαίνεται',
       );
       expect(
-        _firstMatchingColor(span, '{@/Τμήμα}'),
-        _kBlockBlue,
-        reason: 'Το κλείσιμο block πρέπει να είναι μπλε',
+        blockCloseColor,
+        blockOpenColor,
+        reason: 'Άνοιγμα και κλείσιμο block: ίδια επισήμανση',
+      );
+      expect(
+        blockOpenColor,
+        isNot(placeholderColor),
+        reason: 'Placeholder και block: διακριτά είδη, διακριτή επισήμανση',
       );
     });
   });

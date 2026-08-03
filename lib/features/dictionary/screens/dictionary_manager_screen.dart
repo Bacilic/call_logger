@@ -969,18 +969,13 @@ class _DictionaryManagerScreenState
       String? promotedSrc;
       String? promotedLang;
       if (isDraft) {
-        final db = await DatabaseHelper.instance.database;
-        final promoted = await db.query(
-          AppConfig.fullDictionaryTable,
-          columns: ['id', 'source', 'language'],
-          where: 'normalized_word = ?',
-          whereArgs: [newKey],
-          limit: 1,
-        );
-        if (promoted.isNotEmpty) {
-          promotedEntryId = promoted.first['id'] as int?;
-          promotedSrc = promoted.first['source'] as String? ?? 'user';
-          promotedLang = promoted.first['language'] as String?;
+        final promoted = await DictionaryRepository(
+          await DatabaseHelper.instance.database,
+        ).findFullDictionaryEntryByNormalizedWord(newKey);
+        if (promoted != null) {
+          promotedEntryId = promoted['id'] as int?;
+          promotedSrc = promoted['source'] as String? ?? 'user';
+          promotedLang = promoted['language'] as String?;
         }
       }
 

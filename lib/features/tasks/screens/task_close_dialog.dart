@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../models/task.dart';
@@ -89,56 +90,59 @@ class _TaskCloseDialogState extends ConsumerState<_TaskCloseDialog> {
       snoozeEntries: widget.task?.snoozeEntries ?? const [],
     );
 
-    return AlertDialog(
+    return DraggableDialogShell(
       title: const Text('Ολοκλήρωση εκκρεμότητας'),
-      content: SizedBox(
-        width: 420,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (timingLines.isNotEmpty) ...[
-                Text(
-                  timingLines.join('\n'),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: SizedBox(
+          width: 420,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (timingLines.isNotEmpty) ...[
+                  Text(
+                    timingLines.join('\n'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
+                  const SizedBox(height: 12),
+                ],
+                LexiconSpellTextFormField(
+                  controller: _controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Λύση / Σημειώσεις Κλεισίματος',
+                    hintText: 'Περιγράψτε τη λύση ή σημειώσεις...',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 4,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Το πεδίο είναι υποχρεωτικό για το κλείσιμο.';
+                    }
+                    return null;
+                  },
+                  textCapitalization: TextCapitalization.sentences,
                 ),
-                const SizedBox(height: 12),
               ],
-              LexiconSpellTextFormField(
-                controller: _controller,
-                decoration: const InputDecoration(
-                  labelText: 'Λύση / Σημειώσεις Κλεισίματος',
-                  hintText: 'Περιγράψτε τη λύση ή σημειώσεις...',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-                maxLines: 4,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'Το πεδίο είναι υποχρεωτικό για το κλείσιμο.';
-                  }
-                  return null;
-                },
-                textCapitalization: TextCapitalization.sentences,
-              ),
-            ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Ακύρωση'),
+          ),
+          FilledButton(
+            onPressed: _confirm,
+            child: const Text('Κλείσιμο εκκρεμότητας'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Ακύρωση'),
-        ),
-        FilledButton(
-          onPressed: _confirm,
-          child: const Text('Κλείσιμο εκκρεμότητας'),
-        ),
-      ],
     );
   }
 }

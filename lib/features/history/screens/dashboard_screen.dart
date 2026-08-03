@@ -127,33 +127,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     await ref.read(dashboardFilterProvider.notifier).setDatePreset(preset);
   }
 
-  /// Διάρκεια ανά κλήση — λεπτά:δευτερόλεπτα (π.χ. `03:15`).
-  String _formatCallDurationSeconds(num seconds) {
-    final safeSeconds = seconds.isNaN ? 0 : seconds.round();
-    final absSeconds = math.max(0, safeSeconds);
-    final m = absSeconds ~/ 60;
-    final s = absSeconds % 60;
-    if (m > 0) {
-      return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-    }
-    return '00:${s.toString().padLeft(2, '0')}';
-  }
+  /// Διάρκεια ανά κλήση — ίδια μορφή με ιστορικό και χρονόμετρο.
+  String _formatCallDurationSeconds(num seconds) =>
+      formatKpiCallDurationSeconds(seconds);
 
-  /// Συνολικές / ημερήσιες διάρκειες — `ώρ:λεπ` ή `λεπ:δευτ` (π.χ. `10ω:23λ`).
-  String _formatAggregateDurationSeconds(num seconds) {
-    final safeSeconds = seconds.isNaN ? 0 : seconds.round();
-    final absSeconds = math.max(0, safeSeconds);
-    final h = absSeconds ~/ 3600;
-    final m = (absSeconds % 3600) ~/ 60;
-    final s = absSeconds % 60;
-    if (h > 0) {
-      return '$hω:${m.toString().padLeft(2, '0')}λ';
-    }
-    if (m > 0) {
-      return '$mλ:${s.toString().padLeft(2, '0')}δ';
-    }
-    return '$sδ';
-  }
+  /// Συνολικές / ημερήσιες διάρκειες — ίδια μορφή με τις υποδείξεις.
+  String _formatAggregateDurationSeconds(num seconds) =>
+      formatKpiAggregateDurationSeconds(seconds);
 
   String _formatDeltaPercent(num current, num previous) {
     if (previous == 0) {
@@ -398,7 +378,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       colors: colors.kpiGreen,
                                     ),
                                     KpiCardData(
-                                      title: 'Μέσος Όρος ανά Κλήση (λεπ:δευτ)',
+                                      title: 'Μέσος Όρος ανά Κλήση',
                                       value: _formatCallDurationSeconds(
                                         data.avgDurationSeconds,
                                       ),
@@ -551,6 +531,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                           colors: colors,
                                           formatDuration:
                                               _formatCallDurationSeconds,
+                                          formatAggregateDuration:
+                                              _formatAggregateDurationSeconds,
                                           onTopNChanged: (v) {
                                             ref
                                                 .read(
@@ -591,6 +573,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     topN: filter.topN,
                                     colors: colors,
                                     formatDuration: _formatCallDurationSeconds,
+                                    formatAggregateDuration:
+                                        _formatAggregateDurationSeconds,
                                     onTopNChanged: (v) {
                                       ref
                                           .read(

@@ -48,6 +48,30 @@ class UserRepository {
     await updateUser(userId, {'phones': numbers});
   }
 
+  /// Ονόματα εμφάνισης («Επώνυμο Όνομα») για τα δοσμένα ids — και διαγραμμένων:
+  /// οι εγγραφές audit αναφέρουν χρήστες που μπορεί να μην υπάρχουν πια.
+  Future<Map<int, String>> getUserDisplayNamesByIds(Iterable<int> ids) async {
+    final idList = ids.toSet().toList();
+    if (idList.isEmpty) return const <int, String>{};
+    final placeholders = List.filled(idList.length, '?').join(',');
+    final rows = await db.query(
+      'users',
+      columns: ['id', 'last_name', 'first_name'],
+      where: 'id IN ($placeholders)',
+      whereArgs: idList,
+    );
+    final out = <int, String>{};
+    for (final row in rows) {
+      final id = row['id'] as int?;
+      if (id == null) continue;
+      final lastName = (row['last_name'] as String?)?.trim() ?? '';
+      final firstName = (row['first_name'] as String?)?.trim() ?? '';
+      final name = '$lastName $firstName'.trim();
+      if (name.isNotEmpty) out[id] = name;
+    }
+    return out;
+  }
+
   Future<List<Map<String, dynamic>>> getAllUsers() async {
     final users = await db.query(
       'users',

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:call_logger/core/about/providers/app_version_provider.dart';
 import 'package:call_logger/core/services/settings_service.dart';
 import 'package:call_logger/core/updates/network_folder_classifier.dart';
+import 'package:call_logger/core/widgets/draggable_dialog_shell.dart';
 import 'package:call_logger/features/database/debug/publish_cli.dart';
 import 'package:call_logger/features/database/debug/release_publisher_card.dart';
 import 'package:call_logger/features/database/debug/release_publisher_service.dart';
@@ -13,6 +14,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../test_reporter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -105,12 +108,16 @@ void main() {
     );
   }
 
+  Finder tooltipContaining(String text) => find.byWidgetPredicate(
+    (w) => w is Tooltip && (w.message ?? '').contains(text),
+  );
+
   testWidgets('empty folder disables publish with tooltip', (tester) async {
     await pumpCard(tester);
 
     expect(findPublishButton(tester).onPressed, isNull);
     expect(
-      find.byTooltip('Ορίστε έγκυρο εγγράψιμο φάκελο ενημερώσεων'),
+      tooltipContaining('Ορίστε έγκυρο εγγράψιμο φάκελο ενημερώσεων'),
       findsNWidgets(2),
     );
   });
@@ -126,8 +133,37 @@ void main() {
 
     expect(findPublishButton(tester).onPressed, isNull);
     expect(
-      find.byTooltip('Ορίστε έγκυρο εγγράψιμο φάκελο ενημερώσεων'),
+      tooltipContaining('Ορίστε έγκυρο εγγράψιμο φάκελο ενημερώσεων'),
       findsNWidgets(2),
+    );
+  });
+
+  // Τα δύο κουμπιά κάνουν πολύ διαφορετικά πράγματα: το ένα χτίζει ολόκληρη
+  // την εφαρμογή, το άλλο γράφει ένα αρχείο. Η υπόδειξη πρέπει να το λέει
+  // ΠΑΝΤΑ, όχι μόνο όταν το κουμπί είναι ανενεργό.
+  testWidgets('κάθε κουμπί εξηγεί τι κάνει, και όταν είναι ενεργό', (
+    tester,
+  ) async {
+    await pumpCard(tester, initialFolder: tempDir.path);
+    await tester.enterText(
+      find.byKey(const Key('release_update_folder_field')),
+      tempDir.path,
+    );
+    await tester.pumpAndSettle();
+
+    expect(findPublishButton(tester).onPressed, isNotNull);
+
+    expect(tooltipContaining('χτίζει την εφαρμογή από την αρχή'), findsOneWidget);
+    expect(
+      tooltipContaining('Γράφει ΜΟΝΟ το αρχείο εγκατάστασης'),
+      findsOneWidget,
+    );
+    expect(
+      tooltipContaining('Ορίστε έγκυρο εγγράψιμο φάκελο'),
+      findsNothing,
+      reason: greekExpectMsg(
+        'Με έγκυρο φάκελο η αιτία απενεργοποίησης δεν έχει νόημα',
+      ),
     );
   });
 
@@ -326,6 +362,110 @@ void main() {
     expect(publishCalls, 0);
   });
 
+  // Ο χρήστης αποφασίζει για τη δημοσίευση κοιτάζοντας το ιστορικό από πίσω —
+  // ένας καρφωμένος διάλογος τον υποχρεώνει να κλείσει και να ξανανοίξει.
+  testWidgets('ο διάλογος «Κενό ιστορικό» μετακινείται από τον τίτλο', (
+    tester,
+  ) async {
+    await pumpCard(
+      tester,
+      initialFolder: tempDir.path,
+      serviceFactory: ({required updateFolderPath, onProgress}) {
+        return _TrackingPublisherService(
+          projectRoot: projectRoot.path,
+          updateFolderPath: updateFolderPath,
+          onPublish: () {},
+          preview: const ReleasePublishPreview(
+            currentVersion: '0.23.1',
+            currentBuild: 31,
+            nextVersion: '0.23.2',
+            nextBuild: 32,
+            unreleasedEntryCount: 0,
+            hasUnreleasedEntries: false,
+            bumpKind: VersionBumpKind.patch,
+          ),
+        );
+      },
+    );
+    await tester.enterText(
+      find.byKey(const Key('release_update_folder_field')),
+      tempDir.path,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('release_publish_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final dialog = find.byKey(const Key('release_empty_unreleased_dialog'));
+    expect(dialog, findsOneWidget);
+
+    final before = tester.getTopLeft(dialog);
+    await tester.drag(find.text('Κενό ιστορικό'), const Offset(40, 30));
+    await tester.pump();
+    final after = tester.getTopLeft(dialog);
+
+    expect(
+      after,
+      isNot(before),
+      reason: greekExpectMsg(
+        'Το σύρσιμο του τίτλου πρέπει να μετακινεί τον διάλογο· χωρίς αυτό ο '
+        'χρήστης δεν βλέπει τι κρύβεται από πίσω',
+      ),
+    );
+  });
+
+  testWidgets('ο διάλογος επιβεβαίωσης δημοσίευσης είναι επίσης μετακινήσιμος', (
+    tester,
+  ) async {
+    await pumpCard(
+      tester,
+      initialFolder: tempDir.path,
+      serviceFactory: ({required updateFolderPath, onProgress}) {
+        return _TrackingPublisherService(
+          projectRoot: projectRoot.path,
+          updateFolderPath: updateFolderPath,
+          onPublish: () {},
+          preview: const ReleasePublishPreview(
+            currentVersion: '0.23.1',
+            currentBuild: 31,
+            nextVersion: '0.23.2',
+            nextBuild: 32,
+            unreleasedEntryCount: 3,
+            hasUnreleasedEntries: true,
+            bumpKind: VersionBumpKind.patch,
+          ),
+        );
+      },
+    );
+    await tester.enterText(
+      find.byKey(const Key('release_update_folder_field')),
+      tempDir.path,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('release_publish_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const Key('release_confirm_dialog')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(DraggableDialogShell),
+        matching: find.byKey(const Key('release_confirm_dialog')),
+      ),
+      findsOneWidget,
+      reason: greekExpectMsg(
+        'Όλοι οι διάλογοι της Δημοσίευσης ακολουθούν το ίδιο μοτίβο — ένας '
+        'καρφωμένος ανάμεσα σε μετακινούμενους είναι ασυνέπεια',
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('release_confirm_cancel')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+  });
+
   testWidgets('empty Unreleased dialog includes installer-only option', (
     tester,
   ) async {
@@ -478,6 +618,66 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     },
   );
+
+  testWidgets('οι γραμμές εξόδου εμφανίζονται και ανανεώνονται σε νέα εκτέλεση', (
+    tester,
+  ) async {
+    void Function(String message)? reportProgress;
+
+    await pumpCard(
+      tester,
+      initialFolder: tempDir.path,
+      serviceFactory: ({required updateFolderPath, onProgress}) {
+        reportProgress = onProgress;
+        return _TrackingPublisherService(
+          projectRoot: projectRoot.path,
+          updateFolderPath: updateFolderPath,
+          onPublish: () {},
+          preview: const ReleasePublishPreview(
+            currentVersion: '0.23.1',
+            currentBuild: 31,
+            nextVersion: '0.23.2',
+            nextBuild: 32,
+            unreleasedEntryCount: 1,
+            hasUnreleasedEntries: true,
+            bumpKind: VersionBumpKind.patch,
+          ),
+        );
+      },
+    );
+    await tester.enterText(
+      find.byKey(const Key('release_update_folder_field')),
+      tempDir.path,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('release_installer_only_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(reportProgress, isNotNull);
+    reportProgress!('Πρώτο βήμα');
+    reportProgress!('Δεύτερο βήμα');
+    await tester.pump();
+
+    expect(find.byKey(const Key('release_build_output')), findsOneWidget);
+    expect(find.textContaining('Πρώτο βήμα'), findsOneWidget);
+    expect(find.textContaining('Δεύτερο βήμα'), findsOneWidget);
+
+    // Νέα εκτέλεση: η έξοδος της προηγούμενης δεν πρέπει να παραμένει.
+    await tester.tap(find.byKey(const Key('release_installer_only_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(
+      find.textContaining('Πρώτο βήμα'),
+      findsNothing,
+      reason: greekExpectMsg(
+        'Ανάμεικτη έξοδος δύο εκτελέσεων θα έστελνε τον χρήστη να κυνηγά '
+        'σφάλμα που δεν συνέβη τώρα',
+      ),
+    );
+  });
 
   testWidgets('copy CLI button writes command to clipboard', (tester) async {
     await pumpCard(

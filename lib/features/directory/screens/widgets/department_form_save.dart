@@ -7,7 +7,7 @@ import '../../../../core/errors/department_exists_exception.dart';
 import '../../../../core/services/save_confirmation_summary.dart';
 import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
-import '../../building_map/widgets/building_map_floor_menu_button.dart';
+import '../../building_map/services/building_map_floor_ordering.dart';
 import '../../models/department_model.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import 'department_color_palette.dart';

@@ -6,6 +6,8 @@ import '../../../core/database/old_database/lamp_old_db_validator.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/providers/lamp_db_comparison_provider.dart';
 import '../../../core/providers/lamp_excel_path_health_provider.dart';
+import '../../../core/providers/lamp_read_path_health_provider.dart';
+import '../../../core/widgets/compact_tooltip.dart';
 import '../controllers/lamp_import_controller.dart';
 import '../controllers/lamp_integrity_controller.dart';
 import '../controllers/lamp_path_management.dart';
@@ -25,7 +27,10 @@ const String _kOutputDbInfoTooltip =
 const String _kReadDbInfoTooltip =
     'Εδώ ορίζετε τη βάση δεδομένων που διαβάζει η Λάμπα (αναζήτηση, πίνακες, '
     'έλεγχος προβλημάτων). Είναι ξεχωριστή από το αρχείο που δημιουργεί το Excel, '
-    'ώστε να μπορούν να γίνονται εύκολα δοκιμές. Φυσικά μπορεί να είναι το ίδιο αρχείο.';
+    'ώστε να μπορούν να γίνονται εύκολα δοκιμές. Φυσικά μπορεί να είναι το ίδιο αρχείο.\n\n'
+    'Στην «Επιλογή» θα ερωτηθείτε αν θέλετε αντίγραφο στον φάκελο της εφαρμογής '
+    '(ταξιδεύει μαζί της και μπαίνει στα αντίγραφα ασφαλείας) ή ανάγνωση από τη '
+    'θέση που ήδη βρίσκεται το αρχείο.';
 
 class LampSettingsDialogController {
   LampSettingsDialogController({
@@ -120,6 +125,11 @@ class _LampSettingsDialogShellState
       ref
           .read(lampExcelPathHealthProvider.notifier)
           .refresh(pathOverride: path.excelController.text.trim());
+      // Ο έλεγχος εξόδου γίνεται εδώ (και όχι στο άνοιγμα της Λάμπας) —
+      // τροφοδοτεί μόνο αυτόν τον διάλογο και το κουμπί import (Δ17).
+      ref
+          .read(lampOutputPathHealthProvider.notifier)
+          .refresh(pathOverride: path.outputDbController.text.trim());
       ref
           .read(lampDbComparisonProvider.notifier)
           .refresh(
@@ -231,7 +241,7 @@ class _LampSettingsDialogShellState
                           .controller
                           .path
                           .notifySettingsDialogFieldsChanged,
-                      trailing: Tooltip(
+                      trailing: CompactTooltip(
                         waitDuration: const Duration(milliseconds: 300),
                         showDuration: const Duration(seconds: 6),
                         message: matchButtonState.tooltip,

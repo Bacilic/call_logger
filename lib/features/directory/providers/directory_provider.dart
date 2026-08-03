@@ -8,6 +8,7 @@ import '../../../core/database/phone_repository.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/services/lookup_service.dart';
+import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../../core/utils/user_identity_normalizer.dart';
@@ -342,10 +343,12 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 
   List<UserModel> _filterAndSortPersonalUsers() {
-    final q = SearchTextNormalizer.normalizeForSearch(state.searchQuery);
+    final idQuery = IdSearchQuery.parse(state.searchQuery);
     var list = state.allUsers;
-    if (q.isNotEmpty) {
+    if (!idQuery.isEmpty) {
       list = list.where((u) {
+        if (!idQuery.matchesEntityId(u.id)) return false;
+        if (idQuery.text.isEmpty) return true;
         final blob = [
           u.firstName ?? '',
           u.lastName ?? '',
@@ -354,7 +357,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
           u.departmentName ?? '',
           u.location ?? '',
         ].join(' ');
-        return SearchTextNormalizer.containsAllTokens(blob, state.searchQuery);
+        return SearchTextNormalizer.containsAllTokens(blob, idQuery.text);
       }).toList();
     }
     final col = state.sortColumn;
@@ -393,11 +396,13 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
 
   List<NonUserPhoneEntry> _filterAndSortSharedPhones() {
     var list = state.allNonUserPhones;
-    final q = state.searchQuery;
-    if (q.trim().isNotEmpty) {
+    final idQuery = IdSearchQuery.parse(state.searchQuery);
+    if (!idQuery.isEmpty) {
       list = list.where((e) {
+        if (!idQuery.matchesEntityId(e.phoneId)) return false;
+        if (idQuery.text.isEmpty) return true;
         final blob = '${e.number} ${e.departmentLabel}';
-        return SearchTextNormalizer.containsAllTokens(blob, q);
+        return SearchTextNormalizer.containsAllTokens(blob, idQuery.text);
       }).toList();
     }
     final col = state.sortColumn;
@@ -666,13 +671,18 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   /// Μετά από ατομική soft-delete εκτός notifier (μία συναλλαγή με τις
   /// διαθέσεις τηλεφώνων/εξοπλισμού): ενημερώνει μόνο UI/cache, χωρίς νέο
   /// γράψιμο στη βάση.
-  Future<void> finalizeExternalDeletion(List<UserModel> toDelete) async {
+  /// Το [keepSelectedIds] κρατά επιλεγμένους όσους **δεν** διαγράφηκαν: ο
+  /// χρήστης μπορεί να τους αφαίρεσε από τη λίστα για να τους χειριστεί μετά.
+  Future<void> finalizeExternalDeletion(
+    List<UserModel> toDelete, {
+    Set<int> keepSelectedIds = const {},
+  }) async {
     if (toDelete.isEmpty) return;
     _settlePendingBulkUndo();
     await _refreshLookupCache();
     if (!ref.mounted) return;
     state = state.copyWith(
-      selectedIds: {},
+      selectedIds: Set<int>.from(keepSelectedIds),
       lastDeleted: toDelete,
       lastUserDeletionUndo: null,
     );

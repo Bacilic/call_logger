@@ -102,6 +102,10 @@ Future<void> _closeCurrentConnection() =>
 /// οπωσδήποτε: το [DatabaseHelper.initializeDatabase] επιστρέφει την ήδη
 /// ανοιχτή σύνδεση, οπότε μια σύνδεση που έμεινε ανοιχτή θα οδηγούσε σε
 /// επαλήθευση της ΠΑΛΙΑΣ βάσης με αναφορά επιτυχίας για τη νέα διαδρομή.
+///
+/// Για τον ίδιο λόγο λύνεται πρώτα και τυχόν δέσμευση δοκιμαστικής βάσης από
+/// ροή αποσφαλμάτωσης: όσο ζει, κάθε άνοιγμα αγνοεί τη ρυθμισμένη διαδρομή και
+/// η «επαλήθευση» θα αφορούσε πάλι άλλο αρχείο από αυτό που ελέγχεται.
 Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
   String trimmed, {
   DatabaseInitChecksRunner runInitChecks = runDatabaseInitChecks,
@@ -112,6 +116,7 @@ Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
   final previous = wasUnconfigured ? null : await settings.getDatabasePath();
 
   try {
+    await DatabaseHelper.restoreConfiguredDatabasePath();
     await closeConnection();
   } catch (e, st) {
     // Έξοδος πριν γραφτεί η νέα διαδρομή: η ρύθμιση μένει άθικτη, οπότε δεν

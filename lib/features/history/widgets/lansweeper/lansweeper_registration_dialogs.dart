@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'lansweeper_ticket_link.dart';
+
 enum UnsentTicketChoice { clear, retain, cancel }
 
 enum DuplicateTicketAction { proceed, changeId, cancel }
@@ -28,17 +30,23 @@ Future<bool> showLansweeperResubmitConfirmDialog(BuildContext context) async {
   return confirmed == true;
 }
 
+/// Ο αριθμός γίνεται σύνδεσμος επειδή ο χρήστης καλείται να **αποφασίσει** για
+/// αυτό το ticket: για να κρίνει αν το κρατά, θέλει να δει τι είναι.
 Future<UnsentTicketChoice?> showLansweeperUnsentTicketChoiceDialog(
   BuildContext context, {
   required String storedTicket,
+  String? ticketViewUrlTemplate,
 }) {
   return showDialog<UnsentTicketChoice>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Ακαταχώρητη κλήση'),
-      content: Text(
-        'Η κλήση έχει καταχωρηθεί με id: #$storedTicket στο Lansweeper.\n\n'
-        'Τι θέλεις να γίνει με το ticket id;',
+      content: LansweeperTicketRichText(
+        leadingText: 'Η κλήση έχει καταχωρηθεί με id: ',
+        ticketId: storedTicket,
+        ticketViewUrlTemplate: ticketViewUrlTemplate,
+        trailingText: ' στο Lansweeper.\n\nΤι θέλεις να γίνει με το ticket id;',
+        style: Theme.of(ctx).textTheme.bodyMedium,
       ),
       actions: [
         TextButton(
@@ -58,21 +66,28 @@ Future<UnsentTicketChoice?> showLansweeperUnsentTicketChoiceDialog(
   );
 }
 
+/// Ο αριθμός γίνεται σύνδεσμος επειδή η απόφαση «πρόσθεση ή αλλαγή id» απαιτεί
+/// να ξέρει ο χρήστης τι περιέχει ήδη αυτό το ticket.
 Future<DuplicateTicketAction> showLansweeperDuplicateTicketDialog(
   BuildContext context, {
   required int count,
   required String ticketId,
+  String? ticketViewUrlTemplate,
 }) async {
   final callsLabel = count == 1 ? 'άλλη κλήση' : 'άλλες κλήσεις';
   return await showDialog<DuplicateTicketAction>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Ίδιο Ticket ID'),
-          content: Text(
-            'Υπάρχουν $count $callsLabel καταχωρημένες με ticket #$ticketId.\n\n'
-            'Συνήθως ένα ticket Lansweeper αντιστοιχεί σε ένα περιστατικό· '
-            'πολλές κλήσεις με το ίδιο id επιτρέπονται (π.χ. ίδιος καλών / '
-            'ομαδοποιημένες κλήσεις).',
+          content: LansweeperTicketRichText(
+            leadingText: 'Υπάρχουν $count $callsLabel καταχωρημένες με ticket ',
+            ticketId: ticketId,
+            ticketViewUrlTemplate: ticketViewUrlTemplate,
+            trailingText:
+                '.\n\nΣυνήθως ένα ticket Lansweeper αντιστοιχεί σε ένα '
+                'περιστατικό· πολλές κλήσεις με το ίδιο id επιτρέπονται '
+                '(π.χ. ίδιος καλών / ομαδοποιημένες κλήσεις).',
+            style: Theme.of(ctx).textTheme.bodyMedium,
           ),
           actions: [
             TextButton(

@@ -74,6 +74,7 @@ void main() {
       await tester.pump();
 
       expect(debugDatabaseSwitchCompletionSteps, [
+        'restoreConfiguredPath',
         'onSessionStateUpdated',
         'onLifecycleChanged',
         'invalidateCaches',
@@ -115,6 +116,17 @@ void main() {
       reason:
           'Η αντιστροφή caches→lifecycle ήταν το σφάλμα της δημιουργίας νέας βάσης',
     );
+
+    final restoreIndex = steps.indexOf('restoreConfiguredPath');
+    expect(restoreIndex, isNonNegative);
+    expect(
+      restoreIndex,
+      lessThan(lifecycleIndex),
+      reason:
+          'Η αποδέσμευση της δοκιμαστικής βάσης πρέπει να προηγείται κάθε '
+          'ανοίγματος· αλλιώς η νέα διαδρομή αγνοείται και το κίτρινο '
+          '«ΛΕΙΤΟΥΡΓΙΑ ΑΝΑΠΤΥΞΗΣ» μένει κολλημένο',
+    );
   });
 
   testWidgets(
@@ -136,6 +148,7 @@ void main() {
       await tester.pump();
 
       expect(debugDatabaseSwitchCompletionSteps, [
+        'restoreConfiguredPath',
         'onSessionStateUpdated',
         'onLifecycleChanged',
         'invalidateCaches',
@@ -156,6 +169,7 @@ void main() {
     await tester.pump();
 
     expect(debugDatabaseSwitchCompletionSteps, [
+      'restoreConfiguredPath',
       'onSessionStateUpdated',
       'onLifecycleChanged',
       'invalidateCaches',

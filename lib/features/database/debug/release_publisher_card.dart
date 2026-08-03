@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -10,11 +9,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/about/providers/app_version_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/updates/network_folder_classifier.dart';
+import '../../../core/utils/elapsed_stopwatch_format.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/search_debouncer.dart';
+import '../../../core/widgets/compact_tooltip.dart';
+import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../utils/backup_destination_folder_validator.dart';
+import 'build_output_log.dart';
 import 'publish_cli.dart';
+import 'publish_reminder_provider.dart';
+import 'release_process_runner.dart';
 import 'release_publisher_service.dart';
 
 /// Κάρτα «Δημοσίευση έκδοσης» — μόνο στα Σενάρια σφαλμάτων (debug).
@@ -46,7 +51,7 @@ class ReleasePublisherCard extends ConsumerStatefulWidget {
 
 class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   final _folderController = TextEditingController();
-  final _logController = TextEditingController();
+  final _buildOutputLog = BuildOutputLog();
   late final SearchDebouncer _networkClassifyDebouncer;
   bool _running = false;
   String? _statusMessage;
@@ -57,7 +62,31 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   bool _showLocalOnlyWarning = false;
   final Stopwatch _actionStopwatch = Stopwatch();
   Timer? _elapsedTimer;
-  String _elapsedLabel = '00:00';
+  String _elapsedLabel = _initialElapsedLabel;
+
+  static final String _initialElapsedLabel = formatElapsedWithMillis(
+    Duration.zero,
+  );
+
+  static const _publishDescription =
+      'Πλήρης δημοσίευση νέας έκδοσης: σφραγίζει το ιστορικό αλλαγών, '
+      'αυξάνει τον αριθμό έκδοσης, χτίζει την εφαρμογή από την αρχή και '
+      'αντιγράφει το συμπιεσμένο πακέτο μαζί με τον εγκαταστάτη στον φάκελο '
+      'ενημερώσεων. Διαρκεί αρκετά λεπτά.';
+
+  static const _installerDescription =
+      'Γράφει ΜΟΝΟ το αρχείο εγκατάστασης (install_call_logger.bat) στον '
+      'φάκελο ενημερώσεων. Δεν χτίζει την εφαρμογή, δεν αλλάζει έκδοση και '
+      'δεν αγγίζει το ιστορικό.';
+
+  static const _folderRequirement =
+      'Ορίστε έγκυρο εγγράψιμο φάκελο ενημερώσεων';
+
+  /// Η υπόδειξη λέει πάντα **τι κάνει** το κουμπί· όταν είναι ανενεργό λόγω
+  /// φακέλου, προστίθεται και η αιτία. Όσο τρέχει μια ενέργεια δεν προστίθεται
+  /// τίποτα — το κουμπί είναι ανενεργό επειδή δουλεύει, όχι επειδή λείπει κάτι.
+  String _actionTooltip(String description) =>
+      (_canPublish || _running) ? description : '$description\n\n$_folderRequirement';
 
   NetworkFolderClassifier get _classifier =>
       widget.networkFolderClassifier ?? NetworkFolderClassifier.system();
@@ -87,7 +116,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     _stopActionTimer(freezeLabel: false);
     _networkClassifyDebouncer.dispose();
     _folderController.dispose();
-    _logController.dispose();
+    _buildOutputLog.dispose();
     super.dispose();
   }
 
@@ -113,23 +142,18 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     });
   }
 
-  static String _formatElapsed(Duration d) {
-    final totalSeconds = d.inSeconds;
-    final mm = (totalSeconds ~/ 60).toString().padLeft(2, '0');
-    final ss = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$mm:$ss';
-  }
-
   void _startActionTimer() {
     _elapsedTimer?.cancel();
     _actionStopwatch
       ..reset()
       ..start();
-    _elapsedLabel = '00:00';
-    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _elapsedLabel = _initialElapsedLabel;
+    // Ρυθμός ανανέωσης πυκνότερος από τα χιλιοστά που δείχνει: χωρίς αυτό ο
+    // αριθμός θα «κολλούσε» ανά δευτερόλεπτο και τα χιλιοστά θα ήταν διακοσμητικά.
+    _elapsedTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (!mounted) return;
       setState(() {
-        _elapsedLabel = _formatElapsed(_actionStopwatch.elapsed);
+        _elapsedLabel = formatElapsedWithMillis(_actionStopwatch.elapsed);
       });
     });
   }
@@ -141,17 +165,13 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
       _actionStopwatch.stop();
     }
     if (freezeLabel) {
-      _elapsedLabel = _formatElapsed(_actionStopwatch.elapsed);
+      _elapsedLabel = formatElapsedWithMillis(_actionStopwatch.elapsed);
     }
   }
 
   void _appendLog(String line) {
-    final stamp = _formatElapsed(_actionStopwatch.elapsed);
-    final stamped = '[$stamp] $line';
-    final next = _logController.text.isEmpty
-        ? stamped
-        : '${_logController.text}\n$stamped';
-    _logController.text = next;
+    final stamp = formatElapsedWithMillis(_actionStopwatch.elapsed);
+    _buildOutputLog.append('[$stamp] $line');
   }
 
   bool get _canPublish =>
@@ -160,19 +180,22 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   Future<bool> _confirmCreateFolder(String folderPath) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => DraggableDialogShell(
         title: const Text('Δημιουργία φακέλου'),
-        content: const Text('Ο φάκελος δεν υπάρχει. Να δημιουργηθεί;'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Άκυρο'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Δημιουργία'),
-          ),
-        ],
+        builder: (titleHandle) => AlertDialog(
+          title: titleHandle,
+          content: const Text('Ο φάκελος δεν υπάρχει. Να δημιουργηθεί;'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Άκυρο'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Δημιουργία'),
+            ),
+          ],
+        ),
       ),
     );
     return confirmed == true;
@@ -269,7 +292,21 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     await _validateAndPersistFolder(offerCreateIfMissing: true);
   }
 
-  Future<void> _publish() async {
+  Future<void> _publish() =>
+      _runPublisherAction((service) => service.publish());
+
+  Future<void> _writeInstallerOnly() =>
+      _runPublisherAction((service) => service.writeInstallerOnly());
+
+  /// Κοινή ροή για κάθε ενέργεια της κάρτας: κλείδωμα κουμπιών, χρονόμετρο,
+  /// αποθήκευση φακέλου, εκτέλεση, μήνυμα αποτελέσματος.
+  ///
+  /// Η [action] λέει **τι** εκτελείται· τα υπόλοιπα βήματα είναι ίδια για όλες
+  /// τις ενέργειες, ώστε μια αλλαγή στο φινάλε να γίνεται σε ένα σημείο.
+  Future<void> _runPublisherAction(
+    Future<ReleasePublishResult> Function(ReleasePublisherService service)
+    action,
+  ) async {
     if (!_canPublish) return;
     final folder = _folderController.text.trim();
 
@@ -277,16 +314,13 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
       _running = true;
       _statusMessage = null;
       _statusIsError = false;
-      _logController.clear();
-      _elapsedLabel = '00:00';
+      _elapsedLabel = _initialElapsedLabel;
     });
+    _buildOutputLog.clear();
     _startActionTimer();
 
     await SettingsService().catalogs.setUpdateFolderPath(folder);
-
-    final service = _createService(folder);
-
-    final result = await service.publish();
+    final result = await action(_createService(folder));
 
     if (!mounted) {
       _stopActionTimer();
@@ -298,66 +332,40 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     setState(() {
       _running = false;
       _statusIsError = result.status == ReleasePublishStatus.failure;
-      if (result.status == ReleasePublishStatus.success) {
-        final base = result.message ?? 'Επιτυχία.';
-        _statusMessage = '$base (συνολικός χρόνος: $elapsed)';
-      } else if (result.status == ReleasePublishStatus.emptyUnreleasedWarning) {
-        _statusMessage = result.message;
-        _statusIsError = false;
-      } else {
-        final step = result.failedStep ?? 'άγνωστο';
-        _statusMessage = 'Αποτυχία στο βήμα «$step»: ${result.message ?? ''}';
-      }
+      _statusMessage = _statusMessageFor(result, elapsed);
     });
+
+    // Το Unreleased άδειασε: η υπενθύμιση δημοσίευσης πρέπει να σβήσει τώρα,
+    // όχι στην επόμενη εκκίνηση.
+    if (result.status == ReleasePublishStatus.success) {
+      ref.invalidate(publishReminderProvider);
+    }
   }
 
-  Future<void> _writeInstallerOnly() async {
-    if (!_canPublish) return;
-    final folder = _folderController.text.trim();
-
-    setState(() {
-      _running = true;
-      _statusMessage = null;
-      _statusIsError = false;
-      _logController.clear();
-      _elapsedLabel = '00:00';
-    });
-    _startActionTimer();
-
-    await SettingsService().catalogs.setUpdateFolderPath(folder);
-    final service = _createService(folder);
-    final result = await service.writeInstallerOnly();
-
-    if (!mounted) {
-      _stopActionTimer();
-      return;
-    }
-
-    _stopActionTimer();
-    final elapsed = _elapsedLabel;
-    setState(() {
-      _running = false;
-      _statusIsError = result.status == ReleasePublishStatus.failure;
-      if (result.status == ReleasePublishStatus.success) {
+  static String? _statusMessageFor(ReleasePublishResult result, String elapsed) {
+    switch (result.status) {
+      case ReleasePublishStatus.success:
         final base = result.message ?? 'Επιτυχία.';
-        _statusMessage = '$base (συνολικός χρόνος: $elapsed)';
-      } else {
+        return '$base (συνολικός χρόνος: $elapsed)';
+      case ReleasePublishStatus.emptyUnreleasedWarning:
+        return result.message;
+      case ReleasePublishStatus.failure:
         final step = result.failedStep ?? 'άγνωστο';
-        _statusMessage = 'Αποτυχία στο βήμα «$step»: ${result.message ?? ''}';
-      }
-    });
+        return 'Αποτυχία στο βήμα «$step»: ${result.message ?? ''}';
+    }
   }
 
   ReleasePublisherService _createService(String folder) {
+    // Χωρίς setState: το log ειδοποιεί μόνο του την προβολή του, ώστε μια
+    // γραμμή εξόδου να μην ξαναχτίζει ολόκληρη την κάρτα.
+    void reportProgress(String message) {
+      if (!mounted) return;
+      _appendLog(message);
+    }
+
     final factory = widget.serviceFactory;
     if (factory != null) {
-      return factory(
-        updateFolderPath: folder,
-        onProgress: (msg) {
-          if (!mounted) return;
-          setState(() => _appendLog(msg));
-        },
-      );
+      return factory(updateFolderPath: folder, onProgress: reportProgress);
     }
 
     final projectRoot = Directory.current.path;
@@ -375,31 +383,8 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
       buildReleaseDirectory: releaseDir,
       updateFolderPath: folder,
       clock: DateTime.now,
-      onProgress: (msg) {
-        if (!mounted) return;
-        setState(() => _appendLog(msg));
-      },
-      processRunner: (exe, args, {workingDirectory, onOutput}) async {
-        final process = await Process.start(
-          exe,
-          args,
-          workingDirectory: workingDirectory,
-          runInShell: true,
-        );
-        process.stdout.transform(utf8.decoder).listen((chunk) {
-          for (final line in chunk.split(RegExp(r'\r?\n'))) {
-            if (line.trim().isEmpty) continue;
-            onOutput?.call(line);
-          }
-        });
-        process.stderr.transform(utf8.decoder).listen((chunk) {
-          for (final line in chunk.split(RegExp(r'\r?\n'))) {
-            if (line.trim().isEmpty) continue;
-            onOutput?.call(line);
-          }
-        });
-        return process.exitCode;
-      },
+      onProgress: reportProgress,
+      processRunner: runReleaseProcess,
     );
   }
 
@@ -429,23 +414,26 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     if (!preview.hasUnreleasedEntries) {
       final choice = await showDialog<String>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          key: const Key('release_empty_unreleased_dialog'),
+        builder: (ctx) => DraggableDialogShell(
           title: const Text('Κενό ιστορικό'),
-          content: const Text('Το ιστορικό (Unreleased) είναι κενό.'),
-          actions: [
-            TextButton(
-              key: const Key('release_empty_cancel'),
-              autofocus: true,
-              onPressed: () => Navigator.of(ctx).pop('cancel'),
-              child: const Text('Ακύρωση'),
-            ),
-            TextButton(
-              key: const Key('release_empty_installer_only'),
-              onPressed: () => Navigator.of(ctx).pop('installer'),
-              child: const Text('Μόνο εγκαταστάτης'),
-            ),
-          ],
+          builder: (titleHandle) => AlertDialog(
+            key: const Key('release_empty_unreleased_dialog'),
+            title: titleHandle,
+            content: const Text('Το ιστορικό (Unreleased) είναι κενό.'),
+            actions: [
+              TextButton(
+                key: const Key('release_empty_cancel'),
+                autofocus: true,
+                onPressed: () => Navigator.of(ctx).pop('cancel'),
+                child: const Text('Ακύρωση'),
+              ),
+              TextButton(
+                key: const Key('release_empty_installer_only'),
+                onPressed: () => Navigator.of(ctx).pop('installer'),
+                child: const Text('Μόνο εγκαταστάτης'),
+              ),
+            ],
+          ),
         ),
       );
       if (!mounted) return;
@@ -458,29 +446,32 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     final bumpLabel = _bumpKindLabel(preview.bumpKind);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        key: const Key('release_confirm_dialog'),
+      builder: (ctx) => DraggableDialogShell(
         title: const Text('Επιβεβαίωση δημοσίευσης'),
-        content: Text(
-          'Δημοσίευση: ${preview.currentVersion}+${preview.currentBuild} → '
-          '${preview.nextVersion}+${preview.nextBuild}, με '
-          '${preview.unreleasedEntryCount} καταχωρήσεις ιστορικού.\n\n'
-          'Θα δημοσιευτεί ως $bumpLabel → ${preview.nextVersion}\n\n'
-          'Συνέχεια;',
+        builder: (titleHandle) => AlertDialog(
+          key: const Key('release_confirm_dialog'),
+          title: titleHandle,
+          content: Text(
+            'Δημοσίευση: ${preview.currentVersion}+${preview.currentBuild} → '
+            '${preview.nextVersion}+${preview.nextBuild}, με '
+            '${preview.unreleasedEntryCount} καταχωρήσεις ιστορικού.\n\n'
+            'Θα δημοσιευτεί ως $bumpLabel → ${preview.nextVersion}\n\n'
+            'Συνέχεια;',
+          ),
+          actions: [
+            TextButton(
+              key: const Key('release_confirm_cancel'),
+              autofocus: true,
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              key: const Key('release_confirm_publish'),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Δημοσίευση'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            key: const Key('release_confirm_cancel'),
-            autofocus: true,
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Ακύρωση'),
-          ),
-          FilledButton(
-            key: const Key('release_confirm_publish'),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Δημοσίευση'),
-          ),
-        ],
       ),
     );
     if (confirmed == true && mounted) {
@@ -649,22 +640,16 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                if (!_canPublish && !_running)
-                  Tooltip(
-                    message: 'Ορίστε έγκυρο εγγράψιμο φάκελο ενημερώσεων',
-                    waitDuration: const Duration(milliseconds: 400),
-                    child: publishButton,
-                  )
-                else
-                  publishButton,
-                if (!_canPublish && !_running)
-                  Tooltip(
-                    message: 'Ορίστε έγκυρο εγγράψιμο φάκελο ενημερώσεων',
-                    waitDuration: const Duration(milliseconds: 400),
-                    child: installerButton,
-                  )
-                else
-                  installerButton,
+                CompactTooltip(
+                  message: _actionTooltip(_publishDescription),
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: publishButton,
+                ),
+                CompactTooltip(
+                  message: _actionTooltip(_installerDescription),
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: installerButton,
+                ),
                 IconButton(
                   key: const Key('release_copy_cli_button'),
                   tooltip:
@@ -697,19 +682,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _logController,
-              readOnly: true,
-              maxLines: 10,
-              decoration: const InputDecoration(
-                labelText: 'Πρόοδος / έξοδος Μεταγλώττισης',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontFamily: 'Consolas',
-              ),
-            ),
+            _BuildOutputView(log: _buildOutputLog),
             if (_statusMessage != null) ...[
               const SizedBox(height: 12),
               Material(
@@ -733,6 +706,86 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Προβολή της εξόδου μεταγλώττισης: ζωγραφίζει **μόνο τις ορατές γραμμές**.
+///
+/// Ακούει το ίδιο το [BuildOutputLog], οπότε μια νέα γραμμή ξαναχτίζει αυτό το
+/// widget και όχι ολόκληρη την κάρτα.
+class _BuildOutputView extends StatefulWidget {
+  const _BuildOutputView({required this.log});
+
+  final BuildOutputLog log;
+
+  @override
+  State<_BuildOutputView> createState() => _BuildOutputViewState();
+}
+
+class _BuildOutputViewState extends State<_BuildOutputView> {
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.log.addListener(_handleLogChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.log.removeListener(_handleLogChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _handleLogChanged() {
+    if (!mounted) return;
+    final shouldFollowTail = _isNearBottom();
+    setState(() {});
+    if (!shouldFollowTail) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    });
+  }
+
+  /// Μακριά από το τέλος σημαίνει ότι ο χρήστης διαβάζει παλιότερη γραμμή —
+  /// δεν του αρπάζουμε τη θέση με αυτόματη κύλιση.
+  bool _isNearBottom() {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    return position.pixels >= position.maxScrollExtent - 48;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final lineStyle = theme.textTheme.bodySmall?.copyWith(
+      fontFamily: 'Consolas',
+    );
+    final lines = widget.log.lines;
+
+    return InputDecorator(
+      decoration: const InputDecoration(
+        labelText: 'Πρόοδος / έξοδος Μεταγλώττισης',
+        border: OutlineInputBorder(),
+        alignLabelWithHint: true,
+      ),
+      isEmpty: false,
+      child: SizedBox(
+        height: 190,
+        child: SelectionArea(
+          child: ListView.builder(
+            key: const Key('release_build_output'),
+            controller: _scrollController,
+            primary: false,
+            itemCount: lines.length,
+            itemBuilder: (context, index) =>
+                Text(lines[index], style: lineStyle),
+          ),
         ),
       ),
     );
@@ -767,58 +820,61 @@ class _PublishCliSettingsDialogState extends State<_PublishCliSettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      key: const Key('release_cli_settings_dialog'),
+    return DraggableDialogShell(
       title: const Text('Πρότυπο εντολής τερματικού'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Η εντολή χρησιμοποιεί τα placeholders {bump} '
-                '(patch ή minor) και {folder} (φάκελος ενημερώσεων).\n\n'
-                'Παράμετροι εντολής:\n'
-                '$kPublishCliParametersHelp',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const Key('release_cli_template_field'),
-                controller: _controller,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Πρότυπο εντολής',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
+      builder: (titleHandle) => AlertDialog(
+        key: const Key('release_cli_settings_dialog'),
+        title: titleHandle,
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Η εντολή χρησιμοποιεί τα placeholders {bump} '
+                  '(patch ή minor) και {folder} (φάκελος ενημερώσεων).\n\n'
+                  'Παράμετροι εντολής:\n'
+                  '$kPublishCliParametersHelp',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('release_cli_template_field'),
+                  controller: _controller,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Πρότυπο εντολής',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            key: const Key('release_cli_reset_default_button'),
+            onPressed: () {
+              setState(() {
+                _controller.text = kDefaultPublishCliCommandTemplate;
+              });
+            },
+            child: const Text('Επαναφορά προεπιλογής'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Άκυρο'),
+          ),
+          FilledButton(
+            key: const Key('release_cli_save_button'),
+            onPressed: () => Navigator.of(context).pop(_controller.text),
+            child: const Text('Αποθήκευση'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          key: const Key('release_cli_reset_default_button'),
-          onPressed: () {
-            setState(() {
-              _controller.text = kDefaultPublishCliCommandTemplate;
-            });
-          },
-          child: const Text('Επαναφορά προεπιλογής'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Άκυρο'),
-        ),
-        FilledButton(
-          key: const Key('release_cli_save_button'),
-          onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: const Text('Αποθήκευση'),
-        ),
-      ],
     );
   }
 }

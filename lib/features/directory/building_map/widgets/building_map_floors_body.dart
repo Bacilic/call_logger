@@ -11,7 +11,7 @@ import '../controllers/building_map_controller.dart';
 import '../models/building_map_jump_target.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_empty_canvas_message.dart';
-import 'building_map_floor_menu_button.dart';
+import '../services/building_map_floor_ordering.dart';
 import 'building_map_omnisearch_field.dart';
 import 'building_map_search_unresolved_banner.dart';
 import 'building_map_sheet_viewport.dart';
@@ -162,7 +162,9 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                   border: OutlineInputBorder(),
                 ),
                 items: [
-                  for (final fl in floors)
+                  // Ίδια σειρά με το μενού της Επεξεργασίας — η ωμή σειρά της
+                  // βάσης δεν φτάνει ποτέ στα μάτια του χρήστη.
+                  for (final fl in buildingMapFloorsSortedForDisplay(floors))
                     DropdownMenuItem(
                       value: fl.id,
                       child: Text(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/widgets/compact_tooltip.dart';
 import '../controllers/lamp_search_controller.dart';
 import '../controllers/lamp_search_query_parser.dart';
 
@@ -9,7 +10,11 @@ const String kLampGlobalSearchSyntaxTooltip =
     'Παραδείγματα:\n'
     '• κατηγορία:υπολογιστής\n'
     '• τμήμα:"Ιατρική Υπηρεσία"\n'
-    '• ip:10.10';
+    '• ip:10.10\n'
+    'Ακριβές αναγνωριστικό με «#»:\n'
+    '• #243 — μόνο οντότητα με id 243\n'
+    '• υπάλληλος:#243, τμήμα:#73, μοντέλο:#410\n'
+    '• τηλέφωνο:#2534 — ακριβής αριθμός, όχι το 25341';
 
 /// Πεδίο καθολικής αναζήτησης με autocomplete κλειδιών και tooltip σύνταξης.
 class LampSearchKeyAutocomplete extends StatefulWidget {
@@ -266,7 +271,7 @@ class _LampSearchKeyAutocompleteState extends State<LampSearchKeyAutocomplete> {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 12, right: 4),
-          child: Tooltip(
+          child: CompactTooltip(
             waitDuration: const Duration(milliseconds: 300),
             showDuration: const Duration(seconds: 10),
             message: kLampGlobalSearchSyntaxTooltip,

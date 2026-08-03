@@ -5,7 +5,7 @@ import '../../../../core/utils/natural_string_compare.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
-import 'building_map_floor_menu_button.dart';
+import '../services/building_map_floor_ordering.dart';
 
 /// Πλέγμα (HUD) επιλογής τμήματος πάνω από τον καμβά· αναζήτηση και ομαδοποίηση.
 class DepartmentSelectionOverlay extends StatefulWidget {
@@ -100,7 +100,7 @@ class _DepartmentSelectionOverlayState
           final fa = floorById[a];
           final fb = floorById[b];
           if (fa != null && fb != null) {
-            return compareBuildingMapFloorsByNumericLabel(fa, fb);
+            return compareBuildingMapFloorsForDisplay(fa, fb);
           }
           if (fa != null) return -1;
           if (fb != null) return 1;

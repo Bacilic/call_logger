@@ -1,3 +1,5 @@
+import 'package:sqflite_common/sqlite_api.dart' show DatabaseException;
+
 import 'database_helper.dart';
 
 /// Αποτέλεσμα προεπισκόπησης πίνακα: ονόματα στηλών και γραμμές (List<Map>).
@@ -44,10 +46,20 @@ class DatabaseTableInspection {
     return parts.join(', ');
   }
 
-  /// Προεπισκόπηση πίνακα: στήλες + γραμμές (μέγ. [rowLimit]). Για προβολή τύπου Excel.
+  /// Συνολικό πλήθος εγγραφών πίνακα (για ένδειξη «Χ από Ψ» στην προεπισκόπηση).
+  Future<int> getTableRowCount(String tableName) async {
+    final db = await helper.database;
+    final quoted = _sqliteQuoteIdentifier(tableName);
+    final q = await db.rawQuery('SELECT COUNT(*) AS c FROM $quoted');
+    return (q.first['c'] as int?) ?? 0;
+  }
+
+  /// Προεπισκόπηση πίνακα: στήλες + μία σελίδα γραμμών ([rowLimit] από [offset]).
+  /// Για προβολή τύπου Excel με σελιδοποίηση.
   Future<TablePreviewResult> getTablePreview(
     String tableName, {
     int rowLimit = 500,
+    int offset = 0,
   }) async {
     final db = await helper.database;
     final quoted = _sqliteQuoteIdentifier(tableName);
@@ -58,7 +70,19 @@ class DatabaseTableInspection {
         .toList());
     if (columns.isEmpty) return TablePreviewResult(columns: [], rows: []);
 
-    final rows = await db.rawQuery('SELECT * FROM $quoted LIMIT $rowLimit');
+    // ORDER BY rowid: χωρίς ρητή σειρά η SQLite δεν εγγυάται σταθερότητα
+    // μεταξύ σελίδων (κίνδυνος κενών/διπλοτύπων στη σελιδοποίηση).
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await db.rawQuery(
+        'SELECT * FROM $quoted ORDER BY rowid LIMIT $rowLimit OFFSET $offset',
+      );
+    } on DatabaseException {
+      // Πίνακες WITHOUT ROWID δεν έχουν στήλη rowid.
+      rows = await db.rawQuery(
+        'SELECT * FROM $quoted LIMIT $rowLimit OFFSET $offset',
+      );
+    }
     return TablePreviewResult(columns: columns, rows: rows);
   }
 }

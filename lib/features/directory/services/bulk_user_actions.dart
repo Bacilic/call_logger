@@ -590,15 +590,23 @@ Future<Map<String, dynamic>?> _userRowInTxn(
 }
 
 Future<List<String>> _userPhonesInTxn(DatabaseExecutor txn, int userId) async {
-  final rows = await txn.rawQuery(
-    '''
-    SELECT p.number AS number
-    FROM user_phones up
-    JOIN phones p ON p.id = up.phone_id
-    WHERE up.user_id = ?
-    ORDER BY p.number
-  ''',
-    [userId],
+  // Χωρίς raw SQL (κανόνας «SQL μόνο στα Repositories»): ο σύνδεσμος και οι
+  // αριθμοί διαβάζονται με δύο query στο ίδιο transaction.
+  final links = await txn.query(
+    'user_phones',
+    columns: ['phone_id'],
+    where: 'user_id = ?',
+    whereArgs: [userId],
+  );
+  if (links.isEmpty) return const [];
+  final phoneIds = [for (final l in links) l['phone_id'] as int];
+  final placeholders = List.filled(phoneIds.length, '?').join(', ');
+  final rows = await txn.query(
+    'phones',
+    columns: ['number'],
+    where: 'id IN ($placeholders)',
+    whereArgs: phoneIds,
+    orderBy: 'number',
   );
   return [
     for (final r in rows)

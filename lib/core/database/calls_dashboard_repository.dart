@@ -250,6 +250,18 @@ WHERE ${whereTrend.join(' AND ')}
       LIMIT 20
       ''', args);
 
+    // Συγκεντρωτικός χρόνος ανά καλούντα: άλλο ερώτημα από τις μεμονωμένες
+    // κλήσεις — λίγες μεγάλες ζυγίζουν διαφορετικά από πολλές σύντομες.
+    final callerTotalsRows = await db.rawQuery('''
+      SELECT $callerLabelExpr AS caller_name,
+             COUNT(*) AS cnt,
+             COALESCE(SUM(calls.duration), 0) AS total_dur
+      $fromJoin
+      GROUP BY $callerLabelExpr
+      ORDER BY total_dur DESC, caller_name ASC
+      LIMIT 20
+      ''', args);
+
     final hourRows = await db.rawQuery('''
       SELECT CAST(SUBSTR(COALESCE(calls.time, '00:00'), 1, 2) AS INTEGER) AS hh,
              COUNT(*) AS cnt
@@ -387,6 +399,22 @@ WHERE ${whereSpark.join(' AND ')}
                 ? (row['dept_name'] as String).trim()
                 : '-',
             durationSeconds: (row['dur'] as num?)?.toInt() ?? 0,
+          ),
+        )
+        .toList();
+
+    final callerTimeTotals = callerTotalsRows
+        .map(
+          (row) => CallerTimeStat(
+            name: () {
+              final raw = (row['caller_name'] as String?)?.trim() ?? '';
+              if (raw.isEmpty || raw == '-') {
+                return kDashboardUnknownCallerLabel;
+              }
+              return raw;
+            }(),
+            callCount: (row['cnt'] as num?)?.toInt() ?? 0,
+            totalDurationSeconds: (row['total_dur'] as num?)?.toInt() ?? 0,
           ),
         )
         .toList();
@@ -529,6 +557,7 @@ WHERE ${whereSpark.join(' AND ')}
       sparklineLast7Days: sparklineLast7Days,
       topCallers: topCallers,
       longestCalls: longestCalls,
+      callerTimeTotals: callerTimeTotals,
       hourlyDistribution: hourlyDistribution,
       byDepartment: byDepartment,
       byIssue: byIssue,

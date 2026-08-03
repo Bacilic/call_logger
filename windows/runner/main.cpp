@@ -142,11 +142,18 @@ void RegisterCrashRestart(const std::vector<std::string>& command_line_arguments
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
-  // Attach to console when present (e.g., 'flutter run') or create a
-  // new console when running with a debugger.
+  // Πρόσδεση σε κονσόλα ΜΟΝΟ σε debug build (χρήσιμη για τα logs του
+  // `flutter run`). Σε release ΔΕΝ προσδενόμαστε στην κονσόλα του γονέα:
+  // όταν η εφαρμογή εκκινείται από script (install_call_logger.bat,
+  // updater.cmd), η πρόσδεση κρατούσε το παράθυρο της κονσόλας ανοιχτό-
+  // «παγωμένο» όσο ζούσε η εφαρμογή, και το κλείσιμο της κονσόλας με Χ
+  // σκότωνε ΚΑΙ την εφαρμογή (επαληθευμένο 03/08/2026 στην εγκατάσταση
+  // της 0.22.0 — τα Windows τερματίζουν κάθε προσδεμένη διεργασία).
+#ifndef NDEBUG
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
   }
+#endif
 
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.

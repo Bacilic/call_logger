@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/remote_tool.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../core/widgets/compact_tooltip.dart';
 import '../controllers/call_submit_controller.dart';
 import '../provider/call_entry_provider.dart';
 import '../provider/call_header_provider.dart';
@@ -852,7 +853,7 @@ class _CategoryTimerSubmitRow extends ConsumerWidget {
     );
     return header.canSubmitCall
         ? primarySubmit
-        : Tooltip(
+        : CompactTooltip(
             message:
                 'Συμπληρώστε ένα αριθμό τηλεφώνου ώστε να είναι δυνατή η καταγραφή της κλήσης',
             child: primarySubmit,

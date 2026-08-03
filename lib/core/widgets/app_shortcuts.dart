@@ -15,7 +15,6 @@ import '../services/shutdown_coordinator.dart';
 import '../services/shutdown_runner.dart';
 import '../services/shutdown_trace_service.dart';
 import '../services/crash_log_service.dart';
-import '../services/startup_asset_integrity_service.dart';
 import '../database/database_file_classifier.dart';
 import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
@@ -36,6 +35,7 @@ class AppShortcuts extends ConsumerStatefulWidget {
     required this.initialDatabaseResult,
     required this.initialIsLocalDevMode,
     this.initialDatabaseProfile,
+    this.missingApplicationFiles = const <String>[],
     @visibleForTesting this.shutdownCoordinatorFactory,
     @visibleForTesting this.shutdownTraceFactory,
   });
@@ -43,6 +43,10 @@ class AppShortcuts extends ConsumerStatefulWidget {
   final DatabaseInitResult initialDatabaseResult;
   final bool initialIsLocalDevMode;
   final DatabaseFileProfile? initialDatabaseProfile;
+
+  /// Ελλείποντα κρίσιμα αρχεία, όπως τα βρήκε ο δομικός έλεγχος της εκκίνησης.
+  /// Το κέλυφος μόνο τα ανακοινώνει — δεν τα ανακαλύπτει.
+  final List<String> missingApplicationFiles;
 
   /// Εργοστάσιο συντονιστή (μόνο για τεστ — παράκαμψη πραγματικών βημάτων).
   final ShutdownCoordinator Function()? shutdownCoordinatorFactory;
@@ -102,13 +106,14 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     HardwareKeyboard.instance.addHandler(_handleGlobalQuickCallKey);
   }
 
-  /// Μη-μπλοκάρουσα προειδοποίηση όταν λείπουν μη-μοιραία αρχεία πόρων (Π1/Δ4).
-  /// Τρέχει το πολύ μία φορά ανά εκκίνηση (μόνο από το post-frame στο initState).
+  /// Μη-μπλοκάρουσα ανακοίνωση όταν λείπουν μη-μοιραία αρχεία πόρων.
+  ///
+  /// Ο εντοπισμός έγινε στην αρχικοποίηση, πριν από τους ελέγχους βάσης· εδώ
+  /// μένει μόνο η εμφάνιση. Τρέχει το πολύ μία φορά ανά εκκίνηση.
   void _warnIfMissingStartupAssets() {
     if (!mounted) return;
-    final missing = StartupAssetIntegrityService().findMissingCriticalAssets();
+    final missing = widget.missingApplicationFiles;
     if (missing.isEmpty) return;
-    if (!mounted) return;
 
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return;

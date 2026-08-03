@@ -44,6 +44,32 @@ void main() {
     });
   });
 
+  group('Διακοπή στη μέση — τι ολοκληρώθηκε', () {
+    test('ένας ολοκληρωμένος: ενικός', () {
+      expect(
+        userDeletionCompletedSummary(completed: 1, total: 9),
+        'Ολοκληρώσατε 1 υπάλληλο από τους 9.',
+      );
+      expect(
+        userDeletionApplyCompletedHint(1),
+        'Κλείνει ο οδηγός και διαγράφεται ο 1 υπάλληλος που ολοκληρώσατε. Οι '
+        'υπόλοιποι μένουν ανέγγιχτοι και επιλεγμένοι.',
+      );
+    });
+
+    test('πολλοί ολοκληρωμένοι: πληθυντικός', () {
+      expect(
+        userDeletionCompletedSummary(completed: 3, total: 9),
+        'Ολοκληρώσατε 3 υπαλλήλους από τους 9.',
+      );
+      expect(
+        userDeletionApplyCompletedHint(3),
+        'Κλείνει ο οδηγός και διαγράφονται οι 3 υπάλληλοι που ολοκληρώσατε. '
+        'Οι υπόλοιποι μένουν ανέγγιχτοι και επιλεγμένοι.',
+      );
+    });
+  });
+
   group('userDeletionSummaryMessage', () {
     test('(γ)(δ) ονόματα + ενέργειες με αναγνωριστικά', () {
       final msg = userDeletionSummaryMessage(

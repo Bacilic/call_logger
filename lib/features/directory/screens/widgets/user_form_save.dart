@@ -20,6 +20,7 @@ import 'similar_department_suggestion_dialog.dart';
 import 'similar_users_dialog.dart';
 import 'user_form_dialog.dart';
 import 'user_name_change_confirm_dialog.dart';
+import 'user_no_department_warning_dialog.dart';
 
 const _kUserFormDuplicateSnack = SnackBar(
   content: Text(
@@ -75,8 +76,12 @@ class UserFormSave {
       final result = await showDialog<SimilarUsersDialogResult>(
         context: host.context,
         barrierDismissible: true,
-        builder: (ctx) =>
-            SimilarUsersDialog(matches: similar, allowPickExisting: false),
+        builder: (ctx) => SimilarUsersDialog(
+          matches: similar,
+          allowPickExisting: false,
+          typedDisplayName: host.buildUserDisplayName(),
+          typedDepartmentName: host.departmentController.text.trim(),
+        ),
       );
       if (!host.mounted) return;
       if (result == null || !result.continuedAsNew) return;
@@ -153,6 +158,12 @@ class UserFormSave {
         }
       }
 
+      if (!await _confirmMissingDepartmentForNewUser(
+        cloneAsNewEmployee: cloneAsNewEmployee,
+      )) {
+        return;
+      }
+
       SharedAssetDisconnectBatchResult? phoneDisconnectBatch;
       if (host.isEdit && !cloneAsNewEmployee) {
         phoneDisconnectBatch = await host.phonePolicy
@@ -191,6 +202,56 @@ class UserFormSave {
       if (!host.mounted) return;
       showDatabasePersistenceErrorSnackBar(host.context, e, st);
     }
+  }
+
+  /// Φρουρός νέας εγγραφής χωρίς τμήμα — ο τελευταίος έλεγχος πριν την
+  /// αποθήκευση, γι' αυτό προσφέρει εκχώρηση επιτόπου αντί να στέλνει τον
+  /// χρήστη να ξανακάνει όλα τα βήματα. `false` = ακύρωση αποθήκευσης.
+  Future<bool> _confirmMissingDepartmentForNewUser({
+    required bool cloneAsNewEmployee,
+  }) async {
+    final isNewRegistration =
+        !host.isEdit || host.widget.isClone || cloneAsNewEmployee;
+    if (!isNewRegistration) return true;
+    if (host.departmentController.text.trim().isNotEmpty) return true;
+
+    if (!host.mounted) return false;
+    final choice = await showUserNoDepartmentWarningDialog(
+      host.context,
+      userDisplayName: host.buildUserDisplayName(),
+    );
+    if (!host.mounted || choice == null) return false;
+    if (choice == UserNoDepartmentWarningChoice.continueWithoutDepartment) {
+      return true;
+    }
+
+    final departments = LookupService.instance.departments
+        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
+        .toList();
+    final target = await showAssetTransferTargetPicker(
+      context: host.context,
+      headerLabel: 'Εκχώρηση του «${host.buildUserDisplayName()}» σε τμήμα',
+      availableDepartments: departments,
+    );
+    if (!host.mounted || target == null) return false;
+
+    final newName = target.newDepartmentName?.trim() ?? '';
+    var pickedName = newName;
+    if (pickedName.isEmpty && target.departmentId != null) {
+      for (final d in departments) {
+        if (d.id == target.departmentId) {
+          pickedName = d.name.trim();
+          break;
+        }
+      }
+    }
+    if (pickedName.isEmpty) return false;
+
+    // Ρητή επιλογή τμήματος: η αποθήκευση συνεχίζει με αυτό, χωρίς δεύτερη
+    // επιβεβαίωση μεταφοράς — και οι έλεγχοι τηλεφώνων τρέχουν μετά από εδώ,
+    // ώστε να δουν το σωστό τμήμα-στόχο.
+    host.departmentController.text = pickedName;
+    return true;
   }
 
   Future<void> _persistUser({

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/database/audit_service.dart';
 import '../../../core/services/save_confirmation_summary.dart';
+import '../../../core/utils/call_duration_format.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/lexicon_spell_text_form_field.dart';
@@ -14,6 +15,8 @@ import '../../calls/provider/smart_entity_selector_provider.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../providers/history_call_actions_provider.dart';
 import '../providers/history_provider.dart';
+import '../providers/lansweeper_settings_provider.dart';
+import 'lansweeper/lansweeper_edit_warning.dart';
 
 Future<void> showCallEditDialog(BuildContext context, {required int callId}) {
   return showDialog<void>(
@@ -274,7 +277,6 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final categoryEntriesAsync = ref.watch(historyCategoryEntriesProvider);
     final selector = ref.watch(historyEditSmartEntityProvider);
     final original = _original;
@@ -300,52 +302,13 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         if (hasLansweeperTicket) ...[
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.errorContainer
-                                  .withValues(alpha: 0.55),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: theme.colorScheme.error.withValues(
-                                  alpha: 0.4,
-                                ),
-                              ),
+                          LansweeperEditWarning(
+                            ticketId: original?.lansweeperMainTicketId,
+                            ticketViewUrlTemplate: ref.watch(
+                              lansweeperTicketViewUrlProvider,
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Προσοχή: Η κλήση έχει Lansweeper ticket ή κατάσταση sent.',
-                                  style: theme.textTheme.bodyMedium,
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Οι αλλαγές δεν θα επανασταλούν αυτόματα στο Lansweeper.',
-                                ),
-                                const SizedBox(height: 8),
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: OutlinedButton.icon(
-                                    onPressed: _hardCloneBusy
-                                        ? null
-                                        : _cloneCall,
-                                    icon: _hardCloneBusy
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : const Icon(Icons.copy_all_outlined),
-                                    label: const Text(
-                                      'Κλωνοποίηση ως νέα κλήση',
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                            onClone: _cloneCall,
+                            cloneBusy: _hardCloneBusy,
                           ),
                           const SizedBox(height: 12),
                         ],
@@ -474,13 +437,16 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                           ],
                         ),
                         const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _durationController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Διάρκεια (sec)',
-                            border: OutlineInputBorder(),
-                            isDense: true,
+                        ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _durationController,
+                          builder: (context, value, _) => TextFormField(
+                            controller: _durationController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: callDurationFieldLabel(value.text),
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),

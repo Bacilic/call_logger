@@ -11,6 +11,59 @@ class TextSimilarity {
     );
   }
 
+  /// Κάτω από αυτό το μήκος το κοινό τμήμα είναι θόρυβος και δεν μαρκάρεται.
+  static const int kMinMatchedSpanLength = 3;
+
+  /// Το μεγαλύτερο συνεχόμενο κοινό τμήμα των [a] και [b], χωρίς διάκριση
+  /// πεζών/κεφαλαίων και τόνων. Επιστρέφει τη θέση του πάνω στο [a]·
+  /// `length: 0` σημαίνει κανένα αξιόλογο κοινό τμήμα.
+  ///
+  /// Τροφοδοτεί την οπτική ανάδειξη του κοινού μέρους στους διαλόγους
+  /// «Μήπως εννοείτε;». Καλύπτει και κοινή αρχή («Βασίλης Δροσούλης» /
+  /// «Βασίλης Δρόσος» → «Βασίλης Δροσο») και εμπεριέχον όνομα
+  /// («Γραφείο Πληροφορικής» / «Πληροφορική» → «Πληροφορική»).
+  static ({int start, int length}) matchedSpan(String a, String b) {
+    if (a.isEmpty || b.isEmpty) return (start: 0, length: 0);
+
+    var best = 0;
+    var bestEnd = 0;
+    var previous = List<int>.filled(b.length + 1, 0);
+    for (var i = 1; i <= a.length; i++) {
+      final current = List<int>.filled(b.length + 1, 0);
+      for (var j = 1; j <= b.length; j++) {
+        if (_foldChar(a[i - 1]) != _foldChar(b[j - 1])) continue;
+        current[j] = previous[j - 1] + 1;
+        if (current[j] > best) {
+          best = current[j];
+          bestEnd = i;
+        }
+      }
+      previous = current;
+    }
+
+    if (best < kMinMatchedSpanLength) return (start: 0, length: 0);
+    return (start: bestEnd - best, length: best);
+  }
+
+  static String _foldChar(String ch) {
+    final lower = ch.toLowerCase();
+    const folds = {
+      'ς': 'σ',
+      'ά': 'α',
+      'έ': 'ε',
+      'ή': 'η',
+      'ί': 'ι',
+      'ϊ': 'ι',
+      'ΐ': 'ι',
+      'ό': 'ο',
+      'ύ': 'υ',
+      'ϋ': 'υ',
+      'ΰ': 'υ',
+      'ώ': 'ω',
+    };
+    return folds[lower] ?? lower;
+  }
+
   /// Απόσταση Levenshtein μεταξύ δύο συμβολοσειρών.
   static int levenshtein(String a, String b) {
     if (a == b) return 0;

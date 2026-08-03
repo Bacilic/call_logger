@@ -2,7 +2,10 @@ import 'package:sqflite_common/sqflite.dart';
 
 import 'database_helper.dart';
 
-/// Λειτουργίες SQL συντήρησης βάσης (VACUUM, REINDEX).
+/// Λειτουργίες SQL συντήρησης βάσης (VACUUM, REINDEX, εκκαθαρίσεις).
+///
+/// Οι φραγές πολιτικής (ποιοι πίνακες επιτρέπονται, audit) μένουν στο service —
+/// εδώ ζει μόνο η εκτέλεση.
 class DatabaseMaintenanceRepository {
   DatabaseMaintenanceRepository(this.db);
 
@@ -11,6 +14,33 @@ class DatabaseMaintenanceRepository {
   Future<void> vacuum() => db.execute('VACUUM');
 
   Future<void> reindex() => db.execute('REINDEX');
+
+  /// `DELETE FROM` χωρίς όρους — άδειασμα ολόκληρου πίνακα.
+  Future<int> deleteAllRows(String tableName) => db.delete(tableName);
+
+  /// Εγγραφές audit με `timestamp` (ISO) πριν το [isoCutoff].
+  Future<int> deleteAuditLogRowsBefore(String isoCutoff) {
+    return db.delete(
+      'audit_log',
+      where: 'timestamp < ?',
+      whereArgs: [isoCutoff],
+    );
+  }
+
+  /// Κλειστές, μη διαγραμμένες εκκρεμότητες παλαιότερες του [isoCutoff]
+  /// (με βάση `updated_at`, αλλιώς `created_at`).
+  Future<int> deleteClosedTasksBefore({
+    required String closedStatus,
+    required String isoCutoff,
+  }) {
+    return db.delete(
+      'tasks',
+      where:
+          'status = ? AND COALESCE(is_deleted, 0) = 0 AND COALESCE(updated_at, created_at) IS NOT NULL '
+          'AND COALESCE(updated_at, created_at) < ?',
+      whereArgs: [closedStatus, isoCutoff],
+    );
+  }
 }
 
 /// Στατιστικά `COUNT(*)` ανά πίνακα.

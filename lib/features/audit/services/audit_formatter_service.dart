@@ -412,8 +412,8 @@ class AuditFormatterService {
     }
 
     if (entityType == 'phone' && field == 'linked_user_id') {
-      final o = oldValue == null ? null : '#$oldValue';
-      final n = newValue == null ? null : '#$newValue';
+      final o = _formatUserReference(oldValue, technical: technical, labels: labels);
+      final n = _formatUserReference(newValue, technical: technical, labels: labels);
       if (o == null && n != null) return 'Σύνδεση σε χρήστη $n';
       if (o != null && n == null) return 'Αποσύνδεση από χρήστη $o';
       if (o != null && n != null) return 'Μεταφορά από χρήστη $o σε $n';
@@ -498,6 +498,19 @@ class AuditFormatterService {
       sideMap: sideMap,
       forSearch: false,
     );
+  }
+
+  /// Αναφορά χρήστη: όνομα από τις ετικέτες, αλλιώς «#id» ως υπόδειξη.
+  String? _formatUserReference(
+    dynamic value, {
+    required bool technical,
+    required AuditReferenceLabels labels,
+  }) {
+    if (value == null || _isEmptyLike(value)) return null;
+    if (technical) return '#$value';
+    final resolved = labels.userName(_parseIntId(value));
+    if (resolved != null) return resolved;
+    return '#$value';
   }
 
   String? _formatDepartmentReference(

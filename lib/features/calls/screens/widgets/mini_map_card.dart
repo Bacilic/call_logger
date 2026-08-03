@@ -7,15 +7,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/building_map_repository.dart';
-import '../../../../core/database/department_repository.dart';
-import '../../../../core/database/directory_support.dart';
-import '../../../../core/database/equipment_repository.dart';
-import '../../../../core/database/sqlite_types.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/building_map_storage.dart';
-import '../../../../core/services/lookup_service.dart';
 import '../../../../core/widgets/app_asset_image.dart';
 import '../../../directory/building_map/models/building_map_jump_target.dart';
 import '../../../directory/building_map/screens/building_map_dialog.dart';
@@ -23,8 +16,8 @@ import '../../../directory/models/department_floor_display_extension.dart';
 import '../../../directory/models/department_model.dart';
 import '../../models/equipment_model.dart';
 import '../../models/user_model.dart';
-
-enum _MiniMapMode { department, equipment, phone, user }
+import '../../provider/mini_map_sources_revision_provider.dart';
+import '../../services/mini_map_data_loader.dart';
 
 class MiniMapCard extends ConsumerStatefulWidget {
   const MiniMapCard({
@@ -35,6 +28,7 @@ class MiniMapCard extends ConsumerStatefulWidget {
     required this.user,
     this.callerDisplayText = '',
     this.departmentId,
+    this.loadData,
   });
 
   final EquipmentModel? equipment;
@@ -45,6 +39,9 @@ class MiniMapCard extends ConsumerStatefulWidget {
 
   /// Selected department from header (priority source for map).
   final int? departmentId;
+
+  /// Injectable φόρτωση δεδομένων· κενό = πραγματική ανάγνωση από τη βάση.
+  final MiniMapDataLoad? loadData;
 
   @override
   ConsumerState<MiniMapCard> createState() => _MiniMapCardState();
@@ -58,8 +55,10 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   static const String _kDepartmentNotOnMapMessage =
       'Δεν υπάρχει το τμήμα στο χάρτη';
 
-  late Future<_MiniMapCardData> _dataFuture;
-  _MiniMapMode _mode = _MiniMapMode.equipment;
+  static const MiniMapDataLoader _defaultLoader = MiniMapDataLoader();
+
+  late Future<MiniMapCardData> _dataFuture;
+  MiniMapMode _mode = MiniMapMode.equipment;
 
   @override
   void initState() {
@@ -79,127 +78,32 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
         oldWidget.user?.id != widget.user?.id ||
         oldWidget.user?.departmentId != widget.user?.departmentId ||
         oldWidget.departmentId != widget.departmentId;
-    if (changed) {
+    if (changed) _reload();
+  }
+
+  /// Ξαναδιαβάζει τις πηγές του χάρτη. Η όψη εξοπλισμός/τηλέφωνο επιστρέφει
+  /// στην προεπιλογή: μετά από αλλαγή δεδομένων η παλιά επιλογή δεν ισχύει.
+  void _reload() {
+    setState(() {
+      _mode = MiniMapMode.equipment;
       _dataFuture = _loadData();
-    }
+    });
   }
 
-  Future<List<int>> _departmentIdsForPhone(
-    DepartmentRepository departments,
-    String phone,
-  ) => departments.resolveActiveDepartmentIdsForPhone(phone);
-
-  Future<List<int>> _departmentIdsForEquipment(
-    DepartmentRepository departments,
-    EquipmentRepository equipmentRepo,
-    EquipmentModel equipment,
-  ) async {
-    final direct = equipment.departmentId;
-    if (direct != null) return [direct];
-    final equipmentId = equipment.id;
-    if (equipmentId == null) return const [];
-    final linkedUsers = await equipmentRepo.getUserIdsLinkedToEquipment(
-      equipmentId,
+  Future<MiniMapCardData> _loadData() {
+    final request = MiniMapRequest(
+      equipment: widget.equipment,
+      equipmentCodeText: widget.equipmentCodeText,
+      phoneText: widget.phoneText,
+      user: widget.user,
+      departmentId: widget.departmentId,
     );
-    final ids = <int>{};
-    for (final uid in linkedUsers) {
-      ids.addAll(await departments.resolveActiveDepartmentIdsForUserId(uid));
-    }
-    return ids.toList()..sort();
-  }
-
-  Future<EquipmentModel?> _resolveEquipment(Database db) async {
-    if (widget.equipment != null) return widget.equipment;
-    final query = widget.equipmentCodeText.trim();
-    if (query.isEmpty) return null;
-    final lookup = LookupService.instance;
-    await lookup.loadFromDatabase();
-    final found = lookup.findEquipmentsByCode(query);
-    if (found.length == 1) return found.first;
-    return null;
-  }
-
-  Future<_MiniMapCardData> _loadData() async {
-    final db = await DatabaseHelper.instance.database;
-    final departmentsRepo = DepartmentRepository(db);
-    final equipmentRepo = EquipmentRepository(db);
-    final floors = await BuildingMapRepository(
-      db,
-      DirectorySupport(db),
-    ).listBuildingMapFloors();
-    final departmentRows = await departmentsRepo.getActiveDepartments();
-    final departments = departmentRows
-        .map(DepartmentModel.fromMap)
-        .toList(growable: false);
-    final byId = <int, DepartmentModel>{
-      for (final d in departments)
-        if (d.id != null) d.id!: d,
-    };
-
-    final equipment = await _resolveEquipment(db);
-    final equipmentDeptIds = equipment == null
-        ? const <int>[]
-        : await _departmentIdsForEquipment(
-            departmentsRepo,
-            equipmentRepo,
-            equipment,
-          );
-    final phoneDeptIds = await _departmentIdsForPhone(
-      departmentsRepo,
-      widget.phoneText,
-    );
-
-    final userDeptId = widget.user?.departmentId;
-    final userDeptIds = userDeptId == null ? const <int>[] : <int>[userDeptId];
-
-    final headerDeptId = widget.departmentId;
-    final equipmentDeptId = equipmentDeptIds.isNotEmpty
-        ? equipmentDeptIds.first
-        : null;
-    final phoneDeptId = phoneDeptIds.isNotEmpty ? phoneDeptIds.first : null;
-    final userDeptFallback = userDeptIds.isNotEmpty ? userDeptIds.first : null;
-
-    // Priority: Department → Equipment → Caller (design doc §7).
-    _MiniMapMode mode = _MiniMapMode.department;
-    if (headerDeptId == null) {
-      mode = _MiniMapMode.equipment;
-      if (equipmentDeptId == null && phoneDeptId != null) {
-        mode = _MiniMapMode.phone;
-      } else if (equipmentDeptId == null &&
-          phoneDeptId == null &&
-          userDeptFallback != null) {
-        mode = _MiniMapMode.user;
-      }
-    }
-
-    final hasToggle =
-        equipmentDeptId != null &&
-        phoneDeptId != null &&
-        equipmentDeptId != phoneDeptId;
-    final selectedDeptId = switch (mode) {
-      _MiniMapMode.department =>
-        headerDeptId ?? equipmentDeptId ?? userDeptFallback ?? phoneDeptId,
-      _MiniMapMode.equipment =>
-        equipmentDeptId ?? phoneDeptId ?? userDeptFallback,
-      _MiniMapMode.phone => phoneDeptId ?? equipmentDeptId ?? userDeptFallback,
-      _MiniMapMode.user => userDeptFallback ?? equipmentDeptId ?? phoneDeptId,
-    };
-
-    return _MiniMapCardData(
-      floors: floors,
-      departmentsById: byId,
-      selectedDepartmentId: selectedDeptId,
-      hasPhoneEquipmentToggle: hasToggle,
-      initialMode: mode,
-      equipmentEntity: equipment,
-      equipmentDepartmentId: equipmentDeptId,
-      phoneDepartmentId: phoneDeptId,
-      userDepartmentId: userDeptFallback,
-    );
+    final load = widget.loadData ?? _defaultLoader.load;
+    return load(request);
   }
 
   DepartmentModel? _departmentForTarget(
-    _MiniMapCardData data,
+    MiniMapCardData data,
     _MiniMapTarget target,
   ) {
     final deptId = target.departmentId;
@@ -207,7 +111,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     return data.departmentsById[deptId];
   }
 
-  String? _floorDisplayName(_MiniMapCardData data, DepartmentModel? dept) {
+  String? _floorDisplayName(MiniMapCardData data, DepartmentModel? dept) {
     if (dept == null) return null;
     final floorById = {for (final f in data.floors) f.id: f};
     return dept.floorDisplayWithCatalog(floorById);
@@ -221,7 +125,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     return null;
   }
 
-  String _snapshotTooltip(_MiniMapCardData data, _MiniMapTarget target) {
+  String _snapshotTooltip(MiniMapCardData data, _MiniMapTarget target) {
     final dept = _departmentForTarget(data, target);
     if (dept == null) {
       return 'Δεν βρέθηκε συσχετισμένο τμήμα για ${target.label.toLowerCase()}.';
@@ -236,7 +140,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   }
 
   String _exploreTooltip(
-    _MiniMapCardData data,
+    MiniMapCardData data,
     _MiniMapTarget target,
     BuildingMapJumpTarget? pendingEntity,
   ) {
@@ -254,8 +158,8 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     return lines.join('\n');
   }
 
-  String _swapTooltip(_MiniMapCardData data, _MiniMapMode activeMode) {
-    if (activeMode == _MiniMapMode.equipment) {
+  String _swapTooltip(MiniMapCardData data, MiniMapMode activeMode) {
+    if (activeMode == MiniMapMode.equipment) {
       final dept = data.phoneDepartmentId == null
           ? null
           : data.departmentsById[data.phoneDepartmentId!];
@@ -273,9 +177,9 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     return 'Προβολή θέσης εξοπλισμού';
   }
 
-  _MiniMapTarget _targetForMode(_MiniMapCardData data, _MiniMapMode mode) {
+  _MiniMapTarget _targetForMode(MiniMapCardData data, MiniMapMode mode) {
     final fallback = data.selectedDepartmentId;
-    if (mode == _MiniMapMode.department) {
+    if (mode == MiniMapMode.department) {
       final deptId = widget.departmentId;
       return _MiniMapTarget(
         label: 'Θέση τμήματος',
@@ -285,7 +189,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
             : BuildingMapJumpTarget.department(deptId),
       );
     }
-    if (mode == _MiniMapMode.phone) {
+    if (mode == MiniMapMode.phone) {
       final phone = widget.phoneText.trim();
       return _MiniMapTarget(
         label: 'Θέση τηλεφώνου',
@@ -295,7 +199,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
             : BuildingMapJumpTarget.phone(phone),
       );
     }
-    if (mode == _MiniMapMode.user) {
+    if (mode == MiniMapMode.user) {
       final user = widget.user;
       return _MiniMapTarget(
         label: 'Θέση υπαλλήλου',
@@ -316,7 +220,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   Widget _buildSnapshot(
     BuildContext context,
     _MiniMapTarget target,
-    _MiniMapCardData data,
+    MiniMapCardData data,
   ) {
     final deptId = target.departmentId;
     final dept = deptId == null ? null : data.departmentsById[deptId];
@@ -436,6 +340,14 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
 
   @override
   Widget build(BuildContext context) {
+    // Οι πηγές του χάρτη (χαρτογράφηση τμημάτων, κατόψεις, συσχετίσεις
+    // καταλόγου) αλλάζουν και έξω από τη φόρμα — κυρίως από τον πλήρη χάρτη
+    // που ανοίγει αυτή η ίδια η κάρτα. Ο provider τις συγκεντρώνει σε ένα σήμα.
+    ref.listen<int>(miniMapSourcesRevisionProvider, (previous, next) {
+      if (previous == null || previous == next) return;
+      _reload();
+    });
+
     final theme = Theme.of(context);
     return Card(
       margin: EdgeInsets.zero,
@@ -443,7 +355,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
         width: _kCardWidth,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: FutureBuilder<_MiniMapCardData>(
+          child: FutureBuilder<MiniMapCardData>(
             future: _dataFuture,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
@@ -484,9 +396,9 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
                           tooltip: _swapTooltip(data, activeMode),
                           onPressed: () {
                             setState(() {
-                              _mode = activeMode == _MiniMapMode.equipment
-                                  ? _MiniMapMode.phone
-                                  : _MiniMapMode.equipment;
+                              _mode = activeMode == MiniMapMode.equipment
+                                  ? MiniMapMode.phone
+                                  : MiniMapMode.equipment;
                             });
                           },
                           icon: const Icon(Icons.swap_horiz),
@@ -550,30 +462,6 @@ class _MiniMapTarget {
 
   /// Στόχος για το άνοιγμα του πλήρους χάρτη· null = τίποτα προς εστίαση.
   final BuildingMapJumpTarget? pendingEntity;
-}
-
-class _MiniMapCardData {
-  const _MiniMapCardData({
-    required this.floors,
-    required this.departmentsById,
-    required this.selectedDepartmentId,
-    required this.hasPhoneEquipmentToggle,
-    required this.initialMode,
-    required this.equipmentEntity,
-    required this.equipmentDepartmentId,
-    required this.phoneDepartmentId,
-    required this.userDepartmentId,
-  });
-
-  final List<BuildingMapFloor> floors;
-  final Map<int, DepartmentModel> departmentsById;
-  final int? selectedDepartmentId;
-  final bool hasPhoneEquipmentToggle;
-  final _MiniMapMode initialMode;
-  final EquipmentModel? equipmentEntity;
-  final int? equipmentDepartmentId;
-  final int? phoneDepartmentId;
-  final int? userDepartmentId;
 }
 
 extension<T> on List<T> {

@@ -4,30 +4,40 @@
 //   flutter test test/features/directory/similar_users_dialog_text_test.dart --timeout 30s
 
 import 'package:call_logger/core/utils/user_similarity_finder.dart';
+import 'package:call_logger/core/widgets/draggable_dialog_shell.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/directory/screens/widgets/similar_users_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../test_reporter.dart';
+
 void main() {
+  SimilarUsersDialogResult? lastResult;
+
   Future<void> pumpDialog(
     WidgetTester tester, {
     required List<UserSimilarityMatch> matches,
     bool allowPickExisting = false,
+    String typedDisplayName = 'Τυπωμένο Όνομα',
+    String? typedDepartmentName,
     SimilarUsersDialogPurpose purpose =
         SimilarUsersDialogPurpose.directoryEntry,
   }) async {
+    lastResult = null;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
-              onPressed: () {
-                showDialog<SimilarUsersDialogResult>(
+              onPressed: () async {
+                lastResult = await showDialog<SimilarUsersDialogResult>(
                   context: context,
                   builder: (_) => SimilarUsersDialog(
                     matches: matches,
                     allowPickExisting: allowPickExisting,
+                    typedDisplayName: typedDisplayName,
+                    typedDepartmentName: typedDepartmentName,
                     purpose: purpose,
                   ),
                 );
@@ -179,6 +189,102 @@ void main() {
       expect(find.text('Μήπως εννοείτε;'), findsOneWidget);
       expect(find.text('Ίδιο ονοματεπώνυμο'), findsNothing);
       expect(find.text('Συνέχεια ως Συνωνυμία'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'σύγκριση — δείχνει τι πληκτρολογήθηκε και τι υπάρχει, με ετικέτες',
+    (tester) async {
+      await pumpDialog(
+        tester,
+        typedDisplayName: 'Βασίλης Δροσούλης',
+        typedDepartmentName: '',
+        matches: [
+          UserSimilarityMatch(
+            user: UserModel(
+              id: 1,
+              firstName: 'Βασίλης',
+              lastName: 'Δρόσος',
+              departmentId: 1,
+              departmentName: 'Πληροφορική',
+            ),
+            score: 88,
+          ),
+        ],
+      );
+
+      expect(
+        find.text('Πληκτρολογήσατε'),
+        findsOneWidget,
+        reason: greekExpectMsg('Ο διάλογος δείχνει τι πληκτρολόγησε ο χρήστης'),
+      );
+      expect(find.text('Υπάρχει ήδη'), findsOneWidget);
+      expect(
+        find.text('Βασίλης Δροσούλης', findRichText: true),
+        findsOneWidget,
+        reason: greekExpectMsg('Το πληκτρολογημένο όνομα εμφανίζεται'),
+      );
+      expect(find.text('Βασίλης Δρόσος', findRichText: true), findsOneWidget);
+      expect(
+        find.text('(χωρίς τμήμα)'),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Κενό τμήμα νέας εγγραφής δηλώνεται ρητά ως «(χωρίς τμήμα)»',
+        ),
+      );
+      expect(find.text('(Πληροφορική)'), findsOneWidget);
+    },
+  );
+
+  testWidgets('σύγκριση — ο διάλογος είναι μετακινήσιμος', (tester) async {
+    await pumpDialog(
+      tester,
+      typedDisplayName: 'Βασίλης Δροσούλης',
+      matches: [
+        UserSimilarityMatch(
+          user: UserModel(id: 1, firstName: 'Βασίλης', lastName: 'Δρόσος'),
+          score: 88,
+        ),
+      ],
+    );
+
+    expect(
+      find.byType(DraggableDialogShell),
+      findsOneWidget,
+      reason: greekExpectMsg(
+        'Ο διάλογος «Μήπως εννοείτε;» πρέπει να μετακινείται για να '
+        'φαίνεται η φόρμα από πίσω',
+      ),
+    );
+  });
+
+  testWidgets(
+    'σύγκριση — πάτημα σε υπάρχοντα επιστρέφει επιλογή όταν επιτρέπεται',
+    (tester) async {
+      final existing = UserModel(
+        id: 7,
+        firstName: 'Βασίλης',
+        lastName: 'Δρόσος',
+        departmentId: 1,
+        departmentName: 'Πληροφορική',
+      );
+      await pumpDialog(
+        tester,
+        allowPickExisting: true,
+        typedDisplayName: 'Βασίλης Δροσούλης',
+        matches: [UserSimilarityMatch(user: existing, score: 88)],
+      );
+
+      await tester.tap(find.text('Βασίλης Δρόσος', findRichText: true));
+      await tester.pumpAndSettle();
+
+      expect(
+        lastResult?.selectedUser?.id,
+        7,
+        reason: greekExpectMsg(
+          'Το πάτημα στη γραμμή του υπάρχοντος επιστρέφει τον χρήστη',
+        ),
+      );
     },
   );
 }

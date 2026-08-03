@@ -1,108 +1,156 @@
-// Μόνο για τον τύπο [Database] στην υπογραφή — τα ερωτήματα πάνε σε repositories.
-import 'package:sqflite_common/sqflite.dart';
+// Περίληψη και συγκεντρωτικά για τη μαζική διαγραφή εξοπλισμού.
+//
+// Μόνο μοντέλα και λογική παρουσίασης — οι αναγνώσεις ζουν στο
+// `core/database/equipment_deletion_summary_repository.dart`.
 
-import '../../../core/database/calls_repository.dart';
-import '../../../core/database/user_repository.dart';
+import '../../../core/utils/asset_history_labels.dart';
+import 'bulk_deletion_summary.dart';
+
+/// Πάνω από αυτό το μήκος το μικρό όνομα συντομεύεται σε αρχικά.
+const int _kOwnerNameCompactThreshold = 18;
 
 /// Περίληψη εξοπλισμού για τον διάλογο επιβεβαίωσης διαγραφής.
 class EquipmentDeletionSummary {
   const EquipmentDeletionSummary({
+    required this.equipmentId,
     required this.code,
     this.ownerName,
+    this.departmentName,
     this.phone,
-    required this.historyCount,
+    this.callCount = 0,
+    this.taskCount = 0,
+    this.lastCallAt,
+    this.lastTaskAt,
   });
 
+  final int equipmentId;
   final String code;
+
+  /// Ο υπάλληλος-κάτοχος, αν υπάρχει.
   final String? ownerName;
+
+  /// Το τμήμα του εξοπλισμού — παίρνει τη θέση του κατόχου όταν δεν υπάρχει
+  /// υπάλληλος. Χωρίς αυτό ο εξοπλισμός είναι σκέτος αριθμός στην οθόνη.
+  final String? departmentName;
+
   final String? phone;
-  final int historyCount;
+
+  /// Κλήσεις ιστορικού που τον αναφέρουν — και με δεσμό, και μόνο ως κείμενο.
+  final int callCount;
+
+  /// Εκκρεμότητες που τον αναφέρουν. Δεν είναι «ιστορικό»: είναι ανοιχτή
+  /// δουλειά, γι' αυτό μετριούνται χωριστά.
+  final int taskCount;
+
+  final DateTime? lastCallAt;
+  final DateTime? lastTaskAt;
+
+  /// Πόσα ίχνη χρήσης αφήνει πίσω του συνολικά.
+  int get traceCount => callCount + taskCount;
+
+  bool get hasTraces => traceCount > 0;
+
+  /// «2113 → Αναστασία Φούφα» ή «2113 → τμήμα Αιμοδοσία».
+  String get titleLine => '$code → $ownerLabel';
+
+  /// Ο κάτοχος όπως εμφανίζεται: υπάλληλος, αλλιώς τμήμα.
+  String get ownerLabel =>
+      equipmentOwnerLabel(ownerName: ownerName, departmentName: departmentName);
+
+  /// Τι αφήνει πίσω του, μία γραμμή ανά είδος· παραλείπει τα μηδενικά.
+  List<String> buildTraceLines() {
+    final p = phone?.trim() ?? '';
+    return [
+      if (p.isNotEmpty) 'τηλ. $p',
+      if (callCount > 0) callHistoryLabel(callCount, lastUsedAt: lastCallAt),
+      if (taskCount > 0) taskHistoryLabel(taskCount, lastUsedAt: lastTaskAt),
+    ];
+  }
 }
 
-/// Γραμμές λεπτομερειών για έως 5 εξοπλισμούς.
+/// «Αναστασία Φούφα» → «Αν. Φούφα»: αρχικά στα μικρά ονόματα, ακέραιο το
+/// επώνυμο — αυτό είναι που ξεχωρίζει τον υπάλληλο.
+String compactPersonName(String fullName) {
+  final parts = fullName
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((p) => p.isNotEmpty)
+      .toList();
+  if (parts.length < 2) return fullName.trim();
+  final surname = parts.removeLast();
+  final initials = parts
+      .map((p) => '${p.substring(0, p.length >= 2 ? 2 : 1)}.')
+      .join(' ');
+  return '$initials $surname';
+}
+
+/// Ποιος «κρατά» τον εξοπλισμό: ο υπάλληλος, αλλιώς το τμήμα.
 ///
-/// Μορφή: `2113 → Αναστασία Φούφα · τηλ. 2898 · 12 εγγραφές ιστορικού`
-/// (παραλείπει κάτοχο/τηλέφωνο όταν λείπουν).
-List<String> formatEquipmentDeletionLines(
-  List<EquipmentDeletionSummary> summaries,
-) {
-  return summaries.map(_formatOne).toList(growable: false);
-}
-
-String _formatOne(EquipmentDeletionSummary s) {
-  final historyLabel = s.historyCount == 1
-      ? '1 εγγραφή ιστορικού'
-      : '${s.historyCount} εγγραφές ιστορικού';
-  final owner = s.ownerName?.trim();
-  final phone = s.phone?.trim();
-  final buf = StringBuffer(s.code);
-  if (owner != null && owner.isNotEmpty) {
-    buf.write(' → $owner');
+/// Χωρίς κάτοχο ο εξοπλισμός εμφανίζεται ως σκέτος κωδικός και ο χρήστης δεν
+/// έχει τρόπο να καταλάβει τι διαγράφει.
+String equipmentOwnerLabel({String? ownerName, String? departmentName}) {
+  final owner = ownerName?.trim() ?? '';
+  if (owner.isNotEmpty) {
+    return owner.length > _kOwnerNameCompactThreshold
+        ? compactPersonName(owner)
+        : owner;
   }
-  if (phone != null && phone.isNotEmpty) {
-    buf.write(' · τηλ. $phone');
-  }
-  buf.write(' · $historyLabel');
-  return buf.toString();
+  final dept = departmentName?.trim() ?? '';
+  if (dept.isNotEmpty) return 'τμήμα $dept';
+  return 'χωρίς κάτοχο και τμήμα';
 }
 
-String? _ownerDisplayName(Map<String, dynamic> snapshot) {
-  final first = (snapshot['first_name'] as String?)?.trim() ?? '';
-  final last = (snapshot['last_name'] as String?)?.trim() ?? '';
-  final name = '$first $last'.trim();
-  return name.isEmpty ? null : name;
-}
+/// Συγκεντρωτικά πλήθη για τη σύνοψη της μαζικής διαγραφής εξοπλισμού.
+class EquipmentDeletionTotals {
+  const EquipmentDeletionTotals({
+    required this.equipmentCount,
+    required this.withOwnerCount,
+    required this.callCount,
+    required this.taskCount,
+  });
 
-/// Φορτώνει περίληψη διαγραφής για τα δοσμένα ids εξοπλισμού (σειρά εισόδου).
-Future<List<EquipmentDeletionSummary>> deletionSummaries(
-  Database db,
-  List<int> equipmentIds,
-) async {
-  if (equipmentIds.isEmpty) return const [];
-
-  final userRepo = UserRepository(db);
-  final callsRepo = CallsRepository(db);
-  final out = <EquipmentDeletionSummary>[];
-
-  for (final id in equipmentIds) {
-    final codeRows = await db.query(
-      'equipment',
-      columns: ['code_equipment'],
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    final rawCode = codeRows.isEmpty
-        ? null
-        : (codeRows.first['code_equipment'] as String?)?.trim();
-    final code = (rawCode == null || rawCode.isEmpty) ? id.toString() : rawCode;
-
-    String? ownerName;
-    String? phone;
-    final owners = await userRepo.getEquipmentOwnerSnapshots(id);
-    if (owners.isNotEmpty) {
-      final owner = owners.first;
-      ownerName = _ownerDisplayName(owner);
-      final ownerId = owner['id'] as int?;
-      if (ownerId != null) {
-        final phones = await userRepo.userPhoneNumbersOrdered(db, ownerId);
-        if (phones.isNotEmpty) {
-          final p = phones.first.trim();
-          phone = p.isEmpty ? null : p;
-        }
-      }
+  /// Τα συγκεντρωτικά βγαίνουν από τις **ίδιες** περιλήψεις που βλέπει ο
+  /// χρήστης — έτσι η σύνοψη δεν μπορεί ποτέ να διαφωνήσει με τη λίστα.
+  factory EquipmentDeletionTotals.fromSummaries(
+    List<EquipmentDeletionSummary> summaries,
+  ) {
+    var withOwner = 0;
+    var calls = 0;
+    var tasks = 0;
+    for (final s in summaries) {
+      if ((s.ownerName?.trim() ?? '').isNotEmpty) withOwner++;
+      calls += s.callCount;
+      tasks += s.taskCount;
     }
-
-    final historyCount = await callsRepo.countCallsForEquipment(id);
-    out.add(
-      EquipmentDeletionSummary(
-        code: code,
-        ownerName: ownerName,
-        phone: phone,
-        historyCount: historyCount,
-      ),
+    return EquipmentDeletionTotals(
+      equipmentCount: summaries.length,
+      withOwnerCount: withOwner,
+      callCount: calls,
+      taskCount: tasks,
     );
   }
 
-  return out;
+  final int equipmentCount;
+
+  /// Πόσοι έχουν υπάλληλο-κάτοχο — αυτοί αφήνουν κάποιον χωρίς το μηχάνημά του.
+  final int withOwnerCount;
+
+  /// Συνολικές κλήσεις ιστορικού που δείχνουν σε αυτούς.
+  final int callCount;
+
+  /// Συνολικές εκκρεμότητες που δείχνουν σε αυτούς.
+  final int taskCount;
+
+  /// «13 εξοπλισμοί · 2 με κάτοχο · 5 κλήσεις ιστορικού · 1 εκκρεμότητα».
+  String headline({int? initiallySelected}) {
+    return buildBulkDeletionHeadline(
+      subject: SummaryCount(equipmentCount, 'εξοπλισμός', 'εξοπλισμοί'),
+      initiallySelected: initiallySelected,
+      details: [
+        SummaryCount(withOwnerCount, 'με κάτοχο', 'με κάτοχο'),
+        SummaryCount(callCount, 'κλήση ιστορικού', 'κλήσεις ιστορικού'),
+        SummaryCount(taskCount, 'εκκρεμότητα', 'εκκρεμότητες'),
+      ],
+    );
+  }
 }

@@ -81,14 +81,20 @@ class CallerQuickAddDialogPrompts implements CallerQuickAddPrompts {
 
   @override
   Future<SimilarUsersDialogResult?> resolveSimilarCallers(
-    List<UserSimilarityMatch> matches,
-  ) async {
+    List<UserSimilarityMatch> matches, {
+    required String typedDisplayName,
+    required String typedDepartmentName,
+  }) async {
     if (!context.mounted) return const SimilarUsersDialogResult.cancelled();
     final result = await showDialog<SimilarUsersDialogResult>(
       context: context,
       barrierDismissible: true,
-      builder: (_) =>
-          SimilarUsersDialog(matches: matches, allowPickExisting: true),
+      builder: (_) => SimilarUsersDialog(
+        matches: matches,
+        allowPickExisting: true,
+        typedDisplayName: typedDisplayName,
+        typedDepartmentName: typedDepartmentName,
+      ),
     );
     return result ?? const SimilarUsersDialogResult.cancelled();
   }

@@ -1,5 +1,7 @@
 import 'package:sqflite_common/sqflite.dart';
 
+import 'settings_repository.dart';
+
 /// Κατηγορία αρχείου SQLite ως προς την εφαρμογή Καταγραφή Κλήσεων / Λάμπα.
 enum DatabaseFileKind {
   /// Βάση της Καταγραφής Κλήσεων (πλήρες βασικό σχήμα).
@@ -56,6 +58,7 @@ class DatabaseFileProfile {
     this.departmentCount,
     this.latestCallDate,
     this.failureReason,
+    this.hasDebugScenarioSignature = false,
   });
 
   final DatabaseFileKind kind;
@@ -69,6 +72,10 @@ class DatabaseFileProfile {
   final int? departmentCount;
   final String? latestCallDate;
   final String? failureReason;
+
+  /// True όταν το περιεχόμενο φέρει την υπογραφή του σπορέα «Σενάρια
+  /// σφαλμάτων» — τα δεδομένα είναι τεχνητά, όποιο όνομα κι αν έχει το αρχείο.
+  final bool hasDebugScenarioSignature;
 }
 
 /// Ταξινομεί αρχείο `.db` με άνοιγμα **μόνο για ανάγνωση** (χωρίς version /
@@ -174,6 +181,9 @@ Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
       equipmentCount: await _tryCount(db, 'equipment'),
       departmentCount: await _tryCount(db, 'departments'),
       latestCallDate: await _tryLatestCallDate(db),
+      hasDebugScenarioSignature: tables.contains('app_settings')
+          ? await _tryHasDebugScenarioSignature(db)
+          : false,
     );
   } catch (e) {
     return DatabaseFileProfile(
@@ -213,6 +223,20 @@ Future<int?> _tryCount(Database db, String table) async {
     return int.tryParse('$value');
   } catch (_) {
     return null;
+  }
+}
+
+Future<bool> _tryHasDebugScenarioSignature(Database db) async {
+  try {
+    final rows = await db.rawQuery(
+      'SELECT value FROM app_settings WHERE key = ? LIMIT 1',
+      [kDebugScenarioSignatureSettingKey],
+    );
+    if (rows.isEmpty) return false;
+    final value = (rows.first['value'] as String?)?.trim() ?? '';
+    return value.isNotEmpty;
+  } catch (_) {
+    return false;
   }
 }
 

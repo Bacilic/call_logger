@@ -4,12 +4,12 @@
 // Το widget κρατά ό,τι είναι όντως δικό του: πότε ρωτά τον χρήστη και τι του
 // δείχνει. Ό,τι αφορά δεδομένα ζει εδώ και τεστάρεται χωρίς UI.
 
+import '../../../core/database/department_repository.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/sqlite_types.dart';
 import '../../../core/database/user_delete_equipment_policy.dart';
 import '../../../core/database/user_delete_phone_policy.dart';
 import '../../../core/database/user_repository.dart';
-import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/user_model.dart';
 import 'asset_disconnect_models.dart';
 import 'asset_disconnect_session.dart';
@@ -80,10 +80,13 @@ class UserBulkDeletionPlan {
   /// Μία συνεδρία για ΟΛΗ τη διαγραφή: ο μετρητής μετρά τηλέφωνα και
   /// εξοπλισμούς όλων των υπαλλήλων μαζί, και μια γρήγορη επιλογή ισχύει από
   /// εκεί και πέρα για όλους τους υπόλοιπους.
-  AssetDisconnectSession createDisconnectSession() {
+  AssetDisconnectSession createDisconnectSession({
+    AssetDisconnectCompletedWork? Function()? completedWork,
+  }) {
     return AssetDisconnectSession(
       items: disconnectItems(),
       cancelScopeDescription: userDeletionCancelScopeDescription(users.length),
+      completedWork: completedWork,
     );
   }
 }
@@ -234,17 +237,9 @@ Future<int?> _resolveTransferDeptId(
   SharedAssetTransferTarget target,
 ) async {
   if (target.departmentId != null) return target.departmentId;
-  final name = target.newDepartmentName?.trim();
-  if (name == null || name.isEmpty) return null;
-  final rows = await db.query(
-    'departments',
-    columns: ['id'],
-    where: 'name_key = ? AND COALESCE(is_deleted, 0) = 0',
-    whereArgs: [SearchTextNormalizer.normalizeForSearch(name)],
-    limit: 1,
-  );
-  if (rows.isEmpty) return null;
-  return rows.first['id'] as int?;
+  return DepartmentRepository(
+    db,
+  ).findActiveDepartmentIdByName(target.newDepartmentName);
 }
 
 /// Τι έγινε με κάθε τηλέφωνο/εξοπλισμό, για τη σύνοψη στο snackbar.

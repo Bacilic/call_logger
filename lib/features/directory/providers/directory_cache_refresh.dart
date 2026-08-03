@@ -1,3 +1,9 @@
+// ΠΡΟΣΟΧΗ: το ξέπλυμα της αλυσίδας των Κλήσεων ΔΕΝ γίνεται εδώ.
+//
+// Η συνάρτηση καλείται και από μέσα από τον `callSmartEntityProvider`, ο οποίος
+// βρίσκεται στην ίδια αλυσίδα με το `callsFieldGroupsProvider` — ένα `ref.read`
+// προς τα εκεί δίνει `CircularDependencyError`. Το ξέπλυμα ανήκει στο widget
+// layer: δες [flushCallsChainAfterDirectoryMutation].
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../calls/provider/lookup_provider.dart';

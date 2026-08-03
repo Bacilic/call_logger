@@ -37,6 +37,7 @@ Future<DepartmentEmployeeReassignBatch?> showDepartmentEmployeeReassignFlow({
   required List<DepartmentEmployeeReassignCandidate> employees,
   required List<DepartmentModel> availableDepartments,
   required int sourceDepartmentId,
+  List<String> blockedDepartmentNames = const [],
 }) async {
   if (employees.isEmpty) {
     return const DepartmentEmployeeReassignBatch(transfers: {});
@@ -51,6 +52,7 @@ Future<DepartmentEmployeeReassignBatch?> showDepartmentEmployeeReassignFlow({
       employees: employees,
       availableDepartments: availableDepartments,
       sourceDepartmentId: sourceDepartmentId,
+      blockedDepartmentNames: blockedDepartmentNames,
     ),
   );
 }
@@ -61,12 +63,16 @@ class _DepartmentEmployeeReassignDialog extends StatefulWidget {
     required this.employees,
     required this.availableDepartments,
     required this.sourceDepartmentId,
+    this.blockedDepartmentNames = const [],
   });
 
   final String sourceDepartmentName;
   final List<DepartmentEmployeeReassignCandidate> employees;
   final List<DepartmentModel> availableDepartments;
   final int sourceDepartmentId;
+
+  /// Τμήματα που διαγράφονται στην ίδια πράξη — απαγορευμένοι προορισμοί.
+  final List<String> blockedDepartmentNames;
 
   @override
   State<_DepartmentEmployeeReassignDialog> createState() =>
@@ -113,6 +119,7 @@ class _DepartmentEmployeeReassignDialogState
       headerLabel: 'Πού μεταφέρονται οι επιλεγμένοι ($n);',
       availableDepartments: widget.availableDepartments,
       sourceDepartmentId: widget.sourceDepartmentId,
+      blockedDepartmentNames: widget.blockedDepartmentNames,
     );
     if (!mounted || target == null) return;
     setState(() {

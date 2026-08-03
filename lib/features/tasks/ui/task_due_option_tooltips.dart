@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 String _formatHm(TimeOfDay t) =>
@@ -30,44 +28,3 @@ abstract final class TaskDueOptionTooltips {
   }
 }
 
-/// Συμπαγής υπόδειξη για τις επιλογές λήξης μέσα στη φόρμα ρυθμίσεων.
-class TaskDueOptionTooltip extends StatelessWidget {
-  const TaskDueOptionTooltip({
-    super.key,
-    required this.message,
-    required this.child,
-  });
-
-  final String message;
-  final Widget child;
-
-  double _maxTooltipWidth(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    return math.min(360, math.max(220, screenWidth * 0.32));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Tooltip(
-      message: message,
-      constraints: BoxConstraints(maxWidth: _maxTooltipWidth(context)),
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      preferBelow: false,
-      verticalOffset: 12,
-      waitDuration: const Duration(milliseconds: 250),
-      showDuration: const Duration(seconds: 6),
-      textStyle: theme.textTheme.bodyMedium?.copyWith(
-        color: theme.colorScheme.onInverseSurface,
-        height: 1.35,
-      ),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.inverseSurface,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: child,
-    );
-  }
-}

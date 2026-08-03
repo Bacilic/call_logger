@@ -36,7 +36,8 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
       final result = await service.seedAndActivate();
       if (!mounted) return;
 
-      if (!result.success) {
+      final activatedPath = result.databasePath;
+      if (!result.success || activatedPath == null) {
         setState(() {
           _seedError =
               result.errorMessage ?? 'Αποτυχία δημιουργίας debug βάσης.';
@@ -44,7 +45,10 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
         return;
       }
 
-      await refreshProvidersAfterIntegrityDebugSwitch(ref);
+      await refreshProvidersAfterIntegrityDebugSwitch(
+        ref,
+        activatedPath: activatedPath,
+      );
       if (!mounted) return;
       setState(() => _seedSucceeded = true);
     } finally {
@@ -95,9 +99,14 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
+    // Δύο ανεξάρτητες ενότητες: η Δημοσίευση έκδοσης έχει δικό της τίτλο και
+    // δεν αφορά τα σενάρια — γι' αυτό ο τίτλος «Σενάρια σφαλμάτων» κάθεται
+    // πάνω από τα δικά του στοιχεία, όχι στην κορυφή της οθόνης.
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        const ReleasePublisherCard(),
+        const SizedBox(height: 32),
         Text(
           'Σενάρια σφαλμάτων',
           style: theme.textTheme.headlineSmall?.copyWith(
@@ -112,8 +121,6 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
             color: scheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 24),
-        const ReleasePublisherCard(),
         const SizedBox(height: 24),
         if (_seedSucceeded) ...[
           Material(

@@ -20,11 +20,9 @@ import '../../../core/utils/user_facing_error_messages.dart';
 import '../models/database_backup_settings.dart';
 import '../utils/backup_destination_folder_validator.dart';
 import '../utils/portable_backup_availability.dart';
-import 'backup_zip_candidate_selection.dart';
-import 'backup_zip_inventory.dart';
 import 'backup_zip_manifest.dart';
 import 'database_backup_audit.dart';
-import 'database_file_replacement.dart';
+import 'restore_report.dart';
 
 /// Κωδικοί αποτυχίας backup (για UI / scheduler).
 abstract final class DatabaseBackupFailureCode {
@@ -46,31 +44,21 @@ class DatabaseBackupResult {
   final String? failureCode;
 }
 
-/// Αποτέλεσμα επαναφοράς από zip αντιγράφου.
-class DatabaseRestoreResult {
-  const DatabaseRestoreResult({
-    required this.success,
-    this.databasePath,
-    this.message,
-    this.imagesRelinked = 0,
-    this.mapImagesCopied = 0,
-    this.toolImagesCopied = 0,
-    this.dictionaryFilesCopied = 0,
-    this.lampDbRestored = false,
-    this.warnings = const <String>[],
-    this.preRestoreBackupPath,
+/// Αποτέλεσμα επαναφοράς φορητών αρχείων μετά την τοποθέτηση της βάσης.
+///
+/// Τα [reportItems] είναι η δομημένη αναφορά ανά στοιχείο (βάση, κατόψεις,
+/// εικονίδια, λεξικό, Λάμπα) — κενή λίστα μόνο όταν το zip δεν διαβάστηκε
+/// καθόλου, οπότε ισχύει μόνο το [message].
+class RestorePortablesOutcome {
+  const RestorePortablesOutcome({
+    required this.message,
+    required this.warnings,
+    this.reportItems = const <RestoreReportItem>[],
   });
 
-  final bool success;
-  final String? databasePath;
-  final String? message;
-  final int imagesRelinked;
-  final int mapImagesCopied;
-  final int toolImagesCopied;
-  final int dictionaryFilesCopied;
-  final bool lampDbRestored;
+  final String message;
   final List<String> warnings;
-  final String? preRestoreBackupPath;
+  final List<RestoreReportItem> reportItems;
 }
 
 /// Αφαιρετική κλάση εκτέλεσης αντιγράφου: φάκελος προορισμού, μορφή ονομασίας, zip (μέσω [DatabaseBackupService]).
@@ -91,16 +79,6 @@ class DatabaseBackupFileOperation {
     auditTrigger: auditTrigger,
   );
 
-  /// Επαναφορά από zip (βάση + εικόνες χαρτών).
-  static Future<DatabaseRestoreResult> restoreFromZip(
-    String zipPath, {
-    required String targetDatabasePath,
-    String? databaseEntryName,
-  }) => DatabaseBackupService.restoreFromBackupZip(
-    zipPath,
-    targetDatabasePath: targetDatabasePath,
-    databaseEntryName: databaseEntryName,
-  );
 }
 
 /// Δημιουργία αντιγράφων με `VACUUM INTO` (ατομικό, ενσωματώνει WAL/SHM),
@@ -297,7 +275,7 @@ class DatabaseBackupService {
             : dbFileName;
         archive.addFile(ArchiveFile(innerDbName, dbBytes.length, dbBytes));
         // Manifest στη ρίζα: παλιότερες εκδόσεις αγνοούν μη-.db εγγραφές
-        // κατά την επαναφορά (βλ. επιλογή dbEntry στο restoreFromBackupZip).
+        // κατά την επιλογή βάσης της επαναφοράς.
         archive.addFile(
           BackupZipManifest.toArchiveFile(await _buildBackupManifest(db.path)),
         );
@@ -429,202 +407,20 @@ class DatabaseBackupService {
     }
   }
 
-  /// Αποσυμπίεση zip αντιγράφου· τοποθετεί τη βάση και φορητά αρχεία στη ρίζα εφαρμογής.
-  ///
-  /// Όταν λείπει το [databaseEntryName], επιτρέπεται αυτόματη επιλογή **μόνο**
-  /// αν υπάρχει ακριβώς ένας έγκυρος υποψήφιος· αλλιώς αποτυχία χωρίς μαντεψιά.
-  static Future<DatabaseRestoreResult> restoreFromBackupZip(
-    String zipPath, {
-    required String targetDatabasePath,
-    String? databaseEntryName,
-  }) async {
-    final zipFile = File(zipPath);
-    if (!await zipFile.exists()) {
-      return const DatabaseRestoreResult(
-        success: false,
-        message: 'Το αρχείο zip δεν βρέθηκε.',
-      );
-    }
-
-    final targetDb = p.normalize(p.absolute(targetDatabasePath));
-    final targetDir = p.dirname(targetDb);
-    final mapsRoot = AppConfig.portableMapsDirectory;
-    final imagesRoot = AppConfig.portableImagesDirectory;
-    final dictionariesRoot = AppConfig.portableDictionariesDirectory;
-    final lampDataBaseRoot = AppConfig.portableDataBaseDirectory;
-
-    try {
-      await Directory(targetDir).create(recursive: true);
-    } catch (e) {
-      return DatabaseRestoreResult(
-        success: false,
-        message: 'Δεν ήταν δυνατή η δημιουργία φακέλων προορισμού: $e',
-      );
-    }
-
-    Archive archive;
-    try {
-      final bytes = await zipFile.readAsBytes();
-      archive = ZipDecoder().decodeBytes(bytes);
-    } catch (e) {
-      return DatabaseRestoreResult(
-        success: false,
-        message: 'Αποτυχία ανάγνωσης/αποσυμπίεσης zip: $e',
-      );
-    }
-
-    final resolvedEntryName = databaseEntryName?.trim();
-    late final String entryNameToExtract;
-    if (resolvedEntryName != null && resolvedEntryName.isNotEmpty) {
-      entryNameToExtract = resolvedEntryName.replaceAll('\\', '/');
-    } else {
-      final inventory = await inventoryBackupZip(zipPath);
-      final decision = decideBackupZipCandidateSelection(inventory);
-      switch (decision.kind) {
-        case BackupZipCandidateSelectionKind.none:
-          return DatabaseRestoreResult(
-            success: false,
-            message:
-                decision.failureMessage ??
-                'Δεν βρέθηκε έγκυρη βάση μέσα στο zip.',
-          );
-        case BackupZipCandidateSelectionKind.requiresChoice:
-          return const DatabaseRestoreResult(
-            success: false,
-            message:
-                'Το αντίγραφο περιέχει περισσότερες από μία βάσεις της εφαρμογής. '
-                'Απαιτείται ρητή επιλογή ποια θα επαναφερθεί.',
-          );
-        case BackupZipCandidateSelectionKind.automatic:
-          entryNameToExtract = decision.selected!.entryName;
-      }
-    }
-
-    ArchiveFile? dbEntry;
-    for (final f in archive.files) {
-      if (!f.isFile) continue;
-      final name = f.name.replaceAll('\\', '/');
-      if (name == entryNameToExtract) {
-        dbEntry = f;
-        break;
-      }
-    }
-
-    if (dbEntry == null) {
-      return DatabaseRestoreResult(
-        success: false,
-        message:
-            'Δεν βρέθηκε η επιλεγμένη εγγραφή βάσης «$entryNameToExtract» '
-            'μέσα στο zip.',
-      );
-    }
-
-    final replacement = await DatabaseFileReplacement.replaceWithBytes(
-      targetDatabasePath: targetDb,
-      bytes: Uint8List.fromList(dbEntry.content),
-    );
-    if (!replacement.success) {
-      return DatabaseRestoreResult(
-        success: false,
-        message:
-            replacement.message ?? 'Αποτυχία εγγραφής βάσης στον προορισμό.',
-      );
-    }
-
-    final portable = await _copyPortableEntriesFromArchive(
-      archive: archive,
-      mapsRoot: mapsRoot,
-      imagesRoot: imagesRoot,
-      dictionariesRoot: dictionariesRoot,
-      lampDataBaseRoot: lampDataBaseRoot,
-    );
-    final warnings = List<String>.from(portable.warnings);
-
-    if (portable.restoredLampDbPath != null) {
-      try {
-        final lampStore = LampSettingsStore();
-        final read = await lampStore.getReadPathRaw();
-        final output = await lampStore.getOutputPathRaw();
-        final restoredBase = p.basename(portable.restoredLampDbPath!);
-        if (read != null && p.basename(read) == restoredBase) {
-          await lampStore.setReadPath(portable.restoredLampDbPath!);
-        }
-        if (output != null && p.basename(output) == restoredBase) {
-          await lampStore.setOutputPath(portable.restoredLampDbPath!);
-        }
-      } catch (e) {
-        warnings.add(
-          'Οι διαδρομές της Λάμπας δεν ενημερώθηκαν: '
-          '${humanizeUserFacingError(e)}',
-        );
-      }
-    }
-
-    var relinked = 0;
-    try {
-      final restoredDb = await openDatabase(
-        targetDb,
-        readOnly: false,
-        singleInstance: false,
-      );
-      try {
-        relinked =
-            await BuildingMapStorage.relinkMissingFloorImagesAfterRestore(
-              restoredDb,
-            );
-      } finally {
-        await restoredDb.close();
-      }
-    } catch (e) {
-      warnings.add(
-        'Η επανασύνδεση κατόψεων απέτυχε: ${humanizeUserFacingError(e)}',
-      );
-    }
-
-    final notes = <String>[
-      'βάση: επαναφέρθηκε',
-      if (portable.mapImagesCopied > 0)
-        'κατόψεις: ${portable.mapImagesCopied}'
-      else
-        'κατόψεις: δεν βρέθηκαν στο zip',
-      if (portable.toolImagesCopied > 0)
-        'εικονίδια: ${portable.toolImagesCopied}'
-      else
-        'εικονίδια: δεν βρέθηκαν στο zip',
-      if (portable.dictionaryFilesCopied > 0)
-        'λεξικό: ${portable.dictionaryFilesCopied} αρχεία'
-      else
-        'λεξικό: δεν βρέθηκε στο zip',
-      if (portable.restoredLampDbPath != null)
-        'Λάμπα: ${p.basename(portable.restoredLampDbPath!)}'
-      else
-        'Λάμπα: δεν βρέθηκε στο zip',
-      if (relinked > 0) 'σύνδεση κατόψεων: $relinked',
-      if (replacement.preRestoreBackupPath != null)
-        'προηγούμενη βάση: ${p.basename(replacement.preRestoreBackupPath!)}',
-    ];
-
-    return DatabaseRestoreResult(
-      success: true,
-      databasePath: targetDb,
-      imagesRelinked: relinked,
-      mapImagesCopied: portable.mapImagesCopied,
-      toolImagesCopied: portable.toolImagesCopied,
-      dictionaryFilesCopied: portable.dictionaryFilesCopied,
-      lampDbRestored: portable.restoredLampDbPath != null,
-      warnings: warnings,
-      preRestoreBackupPath: replacement.preRestoreBackupPath,
-      message: 'Η επαναφορά ολοκληρώθηκε.\n${notes.join(' · ')}',
-    );
-  }
-
   /// Αντιγραφή φορητών αρχείων από το αρχείο zip (κατόψεις, εικονίδια, λεξικό, Λάμπα).
+  ///
+  /// Οι αποτυχίες μετριούνται ΑΝΑ κατηγορία — αλλιώς μια αποτυχημένη αντιγραφή
+  /// θα εμφανιζόταν ψευδώς ως «δεν βρέθηκε στο αντίγραφο».
   static Future<
     ({
       int mapImagesCopied,
+      int mapImagesFailed,
       int toolImagesCopied,
+      int toolImagesFailed,
       int dictionaryFilesCopied,
+      int dictionaryFilesFailed,
       String? restoredLampDbPath,
+      bool lampDbFailed,
       List<String> warnings,
     })
   >
@@ -636,9 +432,13 @@ class DatabaseBackupService {
     required String lampDataBaseRoot,
   }) async {
     var mapImagesCopied = 0;
+    var mapImagesFailed = 0;
     var toolImagesCopied = 0;
+    var toolImagesFailed = 0;
     var dictionaryFilesCopied = 0;
+    var dictionaryFilesFailed = 0;
     String? restoredLampDbPath;
+    var lampDbFailed = false;
     final warnings = <String>[];
 
     final mapsPrefix = '${BuildingMapStorage.backupZipMapsFolderName}/';
@@ -690,6 +490,15 @@ class DatabaseBackupService {
           restoredLampDbPath = dest.path;
         }
       } catch (e) {
+        if (name.startsWith(mapsPrefix)) {
+          mapImagesFailed++;
+        } else if (name.startsWith(imagesPrefix)) {
+          toolImagesFailed++;
+        } else if (name.startsWith(dictPrefix)) {
+          dictionaryFilesFailed++;
+        } else if (name.startsWith(lampPrefix)) {
+          lampDbFailed = true;
+        }
         warnings.add(
           'Αποτυχία αντιγραφής «${p.basename(name)}»: '
           '${humanizeUserFacingError(e)}',
@@ -699,9 +508,13 @@ class DatabaseBackupService {
 
     return (
       mapImagesCopied: mapImagesCopied,
+      mapImagesFailed: mapImagesFailed,
       toolImagesCopied: toolImagesCopied,
+      toolImagesFailed: toolImagesFailed,
       dictionaryFilesCopied: dictionaryFilesCopied,
+      dictionaryFilesFailed: dictionaryFilesFailed,
       restoredLampDbPath: restoredLampDbPath,
+      lampDbFailed: lampDbFailed,
       warnings: warnings,
     );
   }
@@ -725,32 +538,16 @@ class DatabaseBackupService {
   /// Επαναφέρει μόνο φορητά αρχεία και επανασύνδεση κατόψεων (χωρίς εγγραφή βάσης).
   ///
   /// Χρησιμοποιείται όταν η βάση έχει ήδη τοποθετηθεί από staging/αντικατάσταση.
-  static Future<
-    ({
-      String? message,
-      List<String> warnings,
-      int imagesRelinked,
-      int mapImagesCopied,
-      int toolImagesCopied,
-      int dictionaryFilesCopied,
-      bool lampDbRestored,
-    })
-  >
-  restorePortablesFromBackupZip(
+  static Future<RestorePortablesOutcome> restorePortablesFromBackupZip(
     String zipPath, {
     required String restoredDatabasePath,
   }) async {
     final warnings = <String>[];
     final zipFile = File(zipPath);
     if (!await zipFile.exists()) {
-      return (
+      return RestorePortablesOutcome(
         message: 'Το αρχείο zip δεν βρέθηκε.',
         warnings: warnings,
-        imagesRelinked: 0,
-        mapImagesCopied: 0,
-        toolImagesCopied: 0,
-        dictionaryFilesCopied: 0,
-        lampDbRestored: false,
       );
     }
 
@@ -758,14 +555,9 @@ class DatabaseBackupService {
     try {
       archive = ZipDecoder().decodeBytes(await zipFile.readAsBytes());
     } catch (e) {
-      return (
+      return RestorePortablesOutcome(
         message: 'Αποτυχία ανάγνωσης zip για φορητά αρχεία: $e',
         warnings: warnings,
-        imagesRelinked: 0,
-        mapImagesCopied: 0,
-        toolImagesCopied: 0,
-        dictionaryFilesCopied: 0,
-        lampDbRestored: false,
       );
     }
 
@@ -819,35 +611,22 @@ class DatabaseBackupService {
       );
     }
 
-    final notes = <String>[
-      'βάση: επαναφέρθηκε',
-      if (portable.mapImagesCopied > 0)
-        'κατόψεις: ${portable.mapImagesCopied}'
-      else
-        'κατόψεις: δεν βρέθηκαν στο zip',
-      if (portable.toolImagesCopied > 0)
-        'εικονίδια: ${portable.toolImagesCopied}'
-      else
-        'εικονίδια: δεν βρέθηκαν στο zip',
-      if (portable.dictionaryFilesCopied > 0)
-        'λεξικό: ${portable.dictionaryFilesCopied} αρχεία'
-      else
-        'λεξικό: δεν βρέθηκε στο zip',
-      if (portable.restoredLampDbPath != null)
-        'Λάμπα: ${p.basename(portable.restoredLampDbPath!)}'
-      else
-        'Λάμπα: δεν βρέθηκε στο zip',
-      if (relinked > 0) 'σύνδεση κατόψεων: $relinked',
-    ];
-
-    return (
-      message: 'Η επαναφορά ολοκληρώθηκε.\n${notes.join(' · ')}',
-      warnings: warnings,
-      imagesRelinked: relinked,
+    final reportItems = buildRestoreReportItems(
       mapImagesCopied: portable.mapImagesCopied,
+      mapImagesFailed: portable.mapImagesFailed,
       toolImagesCopied: portable.toolImagesCopied,
+      toolImagesFailed: portable.toolImagesFailed,
       dictionaryFilesCopied: portable.dictionaryFilesCopied,
+      dictionaryFilesFailed: portable.dictionaryFilesFailed,
       lampDbRestored: portable.restoredLampDbPath != null,
+      lampDbFailed: portable.lampDbFailed,
+      imagesRelinked: relinked,
+    );
+
+    return RestorePortablesOutcome(
+      message: restoreReportPlainText(reportItems),
+      warnings: warnings,
+      reportItems: reportItems,
     );
   }
 

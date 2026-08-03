@@ -32,6 +32,31 @@ void main() {
     expect(formatter.prettyJsonBlock(null), '—');
   });
 
+  test('linked_user_id με ετικέτες δείχνει όνομα αντί για #id', () {
+    final row = AuditLogModel(
+      id: 10,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
+      entityType: 'phone',
+      newValuesJson: '{"linked_user_id":243}',
+      oldValuesJson: '{"linked_user_id":null}',
+    );
+    const labels = AuditReferenceLabels(userNames: {243: 'Ψαρρά Βαρβάρα'});
+    final lines = formatter.describeChanges(row, labels: labels);
+    expect(lines.single, 'Σύνδεση σε χρήστη Ψαρρά Βαρβάρα');
+  });
+
+  test('linked_user_id χωρίς ετικέτα κρατά το #id ως υπόδειξη', () {
+    final row = AuditLogModel(
+      id: 11,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
+      entityType: 'phone',
+      oldValuesJson: '{"linked_user_id":243}',
+      newValuesJson: '{"linked_user_id":null}',
+    );
+    final lines = formatter.describeChanges(row);
+    expect(lines.single, 'Αποσύνδεση από χρήστη #243');
+  });
+
   test('formatAuditTimestamp τοπική μορφή ελληνικής ημέρας', () {
     final s = formatter.formatAuditTimestamp('2026-04-13T11:00:17.756183');
     expect(s, contains('13-04-2026'));

@@ -140,4 +140,44 @@ void main() {
       },
     );
   });
+
+  group('lampDataIssueMessageDisplayText', () {
+    test('παλιό μήνυμα με αγγλικές στήλες εξελληνίζεται', () {
+      final text = lampDataIssueMessageDisplayText(
+        'Διπλότυπο (model, serial_no): (410, SN-1) σε 2 εγγραφές.',
+      );
+
+      expect(text, contains('μοντέλο'));
+      expect(text, contains('σειριακός αριθμός'));
+      expect(text, isNot(contains('model')));
+      expect(text, isNot(contains('serial_no')));
+    });
+
+    test('μήνυμα σε μορφή «ετικέτα=τιμή» επιστρέφεται αυτούσιο', () {
+      const message =
+          'Διπλότυπος συνδυασμός μοντέλου και σειριακού — '
+          'μοντέλο=Model A (1) · σειριακός αριθμός=SN-1 · σε 2 εγγραφές.';
+
+      expect(lampDataIssueMessageDisplayText(message), message);
+    });
+
+    test('όνομα δεδομένων που συμπίπτει με στήλη δεν αλλοιώνεται', () {
+      // Ρεαλιστικό μοντέλο «Microsoft Office»: χωρίς τη δικλείδα θα γινόταν
+      // «Microsoft γραφείο».
+      const message =
+          'Διπλότυπος συνδυασμός μοντέλου και σειριακού — '
+          'μοντέλο=Microsoft Office (77) · σειριακός αριθμός=SN-9 · '
+          'σε 2 εγγραφές.';
+
+      final text = lampDataIssueMessageDisplayText(message);
+
+      expect(text, contains('Microsoft Office (77)'));
+      expect(text, isNot(contains('Microsoft γραφείο')));
+    });
+
+    test('κενό ή null μήνυμα δίνει παύλα', () {
+      expect(lampDataIssueMessageDisplayText(null), '-');
+      expect(lampDataIssueMessageDisplayText('   '), '-');
+    });
+  });
 }

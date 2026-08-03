@@ -4,7 +4,22 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/greek_weekday.dart';
 import '../models/dashboard_summary_model.dart';
+import '../utils/hourly_axis_range.dart';
+import '../utils/issue_distribution.dart';
+
+/// «1 κλήση» / «5 κλήσεις» — το πλήθος είναι ακέραιος, ποτέ «5.0».
+String callCountLabel(int count) => count == 1 ? '1 κλήση' : '$count κλήσεις';
+
+/// Κείμενο υπόδειξης διαγράμματος: η προεπιλογή του `fl_chart` βάφει τον
+/// αριθμό με το χρώμα της μπάρας πάνω σε σκούρο φόντο, που τον κάνει
+/// δυσανάγνωστο.
+TextStyle chartTooltipTextStyle(ColorScheme scheme) => TextStyle(
+  color: scheme.onInverseSurface,
+  fontWeight: FontWeight.w600,
+  fontSize: 12,
+);
 
 class BarSparklineChart extends StatefulWidget {
   const BarSparklineChart({
@@ -424,15 +439,35 @@ class HourlyBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxY = buckets.isEmpty
+    final scheme = Theme.of(context).colorScheme;
+    final range = visibleHourRange(buckets);
+    final visible = buckets.where((e) => range.contains(e.hour)).toList();
+    final maxY = visible.isEmpty
         ? 1.0
-        : (buckets.map((e) => e.callCount).reduce(math.max)).toDouble();
+        : (visible.map((e) => e.callCount).reduce(math.max)).toDouble();
     return SizedBox(
       height: 220,
       child: BarChart(
         BarChartData(
           maxY: math.max(maxY, 1),
           alignment: BarChartAlignment.spaceAround,
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              // Χωρίς αυτά, η υπόδειξη της ψηλότερης μπάρας δεν έχει πού να
+              // σχεδιαστεί και κόβεται στην κορυφή της κάρτας.
+              fitInsideVertically: true,
+              fitInsideHorizontally: true,
+              // Η προεπιλογή των 120 px σπάει το κείμενο σε δύο γραμμές.
+              maxContentWidth: 260,
+              getTooltipColor: (_) => scheme.inverseSurface,
+              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                  BarTooltipItem(
+                    '${group.x.toString().padLeft(2, '0')}:00 · '
+                    '${callCountLabel(rod.toY.round())}',
+                    chartTooltipTextStyle(scheme),
+                  ),
+            ),
+          ),
           gridData: FlGridData(
             drawVerticalLine: false,
             horizontalInterval: math.max(1, maxY / 4),
@@ -453,7 +488,6 @@ class HourlyBarChart extends StatelessWidget {
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                interval: 3,
                 getTitlesWidget: (value, meta) {
                   return Text(
                     value.toInt().toString(),
@@ -463,7 +497,7 @@ class HourlyBarChart extends StatelessWidget {
               ),
             ),
           ),
-          barGroups: buckets
+          barGroups: visible
               .map(
                 (e) => BarChartGroupData(
                   x: e.hour,
@@ -498,162 +532,248 @@ class TrendLineChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final maxY = trend.isEmpty
         ? 1.0
         : trend.map((e) => e.callCount).reduce(math.max).toDouble();
     return SizedBox(
       height: 220,
-      child: LineChart(
-        LineChartData(
-          minY: 0,
-          maxY: math.max(maxY, 1),
-          gridData: FlGridData(
-            drawVerticalLine: false,
-            horizontalInterval: math.max(1, maxY / 4),
-            getDrawingHorizontalLine: (_) =>
-                FlLine(color: gridLineColor, strokeWidth: 1),
-          ),
-          borderData: FlBorderData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                interval: 1,
-                getTitlesWidget: (value, meta) {
-                  final index = value.toInt();
-                  if (index < 0 || index >= trend.length) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      DateFormat('dd/MM').format(trend[index].date),
-                      style: const TextStyle(fontSize: 10),
-                    ),
+      // Οι ετικέτες με το τρίγραμμο είναι φαρδιές και κεντράρονται πάνω στο
+      // σημείο τους· χωρίς αυτό το περιθώριο, η πρώτη και η τελευταία
+      // κόβονταν στα άκρα της κάρτας.
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: LineChart(
+          LineChartData(
+            minY: 0,
+            maxY: math.max(maxY, 1),
+            lineTouchData: LineTouchData(
+              touchTooltipData: LineTouchTooltipData(
+                // Η κορυφή της καμπύλης ακουμπά το πάνω όριο· χωρίς αυτά η
+                // υπόδειξη βγαίνει έξω από την κάρτα.
+                fitInsideVertically: true,
+                fitInsideHorizontally: true,
+                // Η προεπιλογή των 120 px έσπαγε το κείμενο σε δύο γραμμές.
+                maxContentWidth: 260,
+                getTooltipColor: (_) => scheme.inverseSurface,
+                getTooltipItems: (spots) => spots.map((spot) {
+                  final index = spot.x.round();
+                  final date = index >= 0 && index < trend.length
+                      ? trend[index].date
+                      : null;
+                  final label = date == null
+                      ? ''
+                      : '${weekdayShortEl(date)} '
+                            '${DateFormat('dd/MM').format(date)} · ';
+                  return LineTooltipItem(
+                    '$label${callCountLabel(spot.y.round())}',
+                    chartTooltipTextStyle(scheme),
                   );
-                },
+                }).toList(),
               ),
             ),
+            gridData: FlGridData(
+              drawVerticalLine: false,
+              horizontalInterval: math.max(1, maxY / 4),
+              getDrawingHorizontalLine: (_) =>
+                  FlLine(color: gridLineColor, strokeWidth: 1),
+            ),
+            borderData: FlBorderData(show: false),
+            titlesData: FlTitlesData(
+              leftTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  interval: 1,
+                  getTitlesWidget: (value, meta) {
+                    final index = value.round();
+                    // Ετικέτα μόνο πάνω σε πραγματικό σημείο: ενδιάμεσες τιμές
+                    // θα στρογγυλοποιούνταν στην ίδια ημέρα και θα την έδειχναν
+                    // δύο φορές, τη μία πάνω στην άλλη.
+                    if ((value - index).abs() > 0.01) {
+                      return const SizedBox.shrink();
+                    }
+                    if (index < 0 || index >= trend.length) {
+                      return const SizedBox.shrink();
+                    }
+                    final date = trend[index].date;
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${weekdayShortEl(date)} ',
+                              style: TextStyle(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            TextSpan(text: DateFormat('dd/MM').format(date)),
+                          ],
+                        ),
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            lineBarsData: [
+              LineChartBarData(
+                spots: trend.indexed
+                    .map(
+                      (e) => FlSpot(e.$1.toDouble(), e.$2.callCount.toDouble()),
+                    )
+                    .toList(),
+                isCurved: true,
+                barWidth: 2.6,
+                color: color,
+                dotData: const FlDotData(show: false),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: color.withValues(alpha: 0.16),
+                ),
+              ),
+            ],
           ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: trend.indexed
-                  .map(
-                    (e) => FlSpot(e.$1.toDouble(), e.$2.callCount.toDouble()),
-                  )
-                  .toList(),
-              isCurved: true,
-              barWidth: 2.6,
-              color: color,
-              dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                color: color.withValues(alpha: 0.16),
-              ),
-            ),
-          ],
         ),
       ),
     );
   }
 }
 
-class IssuePieChart extends StatelessWidget {
-  const IssuePieChart({
+/// Η «Κατανομή Βλαβών» ως λίστα οριζόντιων μπαρών.
+///
+/// Αντικατέστησε το donut: τα μήκη συγκρίνονται πολύ ευκολότερα από τις γωνίες,
+/// η κάρτα χαμηλώνει στο μισό, και οι στήλες μένουν στοιχισμένες αντί να
+/// σπρώχνονται στο δεξί άκρο από το όνομα.
+class IssueDistributionList extends StatelessWidget {
+  const IssueDistributionList({
     super.key,
     required this.issues,
-    required this.pieColors,
-    required this.legendMutedColor,
+    required this.metric,
+    required this.barColors,
+    required this.mutedColor,
   });
 
   final List<IssueStat> issues;
-  final List<Color> pieColors;
-  final Color legendMutedColor;
+  final IssueDistributionMetric metric;
+  final List<Color> barColors;
+  final Color mutedColor;
+
+  static const double _nameWidth = 104;
+  static const double _valueWidth = 62;
+  static const double _shareWidth = 42;
+  static const double _secondaryWidth = 62;
 
   @override
   Widget build(BuildContext context) {
-    final top = issues.take(5).toList();
-    if (top.isEmpty) {
+    final view = buildIssueDistribution(issues, metric);
+    if (view.isEmpty) {
       return const SizedBox(
-        height: 180,
+        height: 120,
         child: Center(child: Text('Δεν υπάρχουν δεδομένα.')),
       );
     }
-    final colors = pieColors;
+
+    final theme = Theme.of(context);
+    final byCount = metric == IssueDistributionMetric.count;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final entry in view.rows.indexed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 9),
+            child: _row(
+              theme: theme,
+              row: entry.$2,
+              color: barColors[entry.$1 % barColors.length],
+              byCount: byCount,
+            ),
+          ),
+        if (view.hiddenCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              '+${view.hiddenCount} ακόμη κατηγορίες · '
+              '${(view.hiddenShare * 100).round()}%',
+              style: theme.textTheme.bodySmall?.copyWith(color: mutedColor),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _row({
+    required ThemeData theme,
+    required IssueDistributionRow row,
+    required Color color,
+    required bool byCount,
+  }) {
+    final duration = formatIssueChartDurationSeconds(row.durationSeconds);
+    final primary = byCount ? '${row.count}' : duration;
+    final secondary = byCount ? duration : '${row.count}';
+    final numeric = theme.textTheme.bodySmall?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
     return Row(
       children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+        ),
+        const SizedBox(width: 8),
         SizedBox(
-          width: 210,
-          height: 210,
-          child: PieChart(
-            PieChartData(
-              centerSpaceRadius: 46,
-              sectionsSpace: 2,
-              sections: top.indexed.map((entry) {
-                final i = entry.$1;
-                final issue = entry.$2;
-                return PieChartSectionData(
-                  color: colors[i % colors.length],
-                  value: issue.count.toDouble(),
-                  title: '${issue.count}',
-                  radius: 52,
-                  titleStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                );
-              }).toList(),
+          width: _nameWidth,
+          child: Text(row.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: row.barFraction,
+              minHeight: 8,
+              backgroundColor: color.withValues(alpha: 0.14),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: top.indexed.map((entry) {
-              final i = entry.$1;
-              final issue = entry.$2;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colors[i % colors.length],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        issue.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text('${issue.count}'),
-                    const SizedBox(width: 8),
-                    Text(
-                      formatIssueChartDurationSeconds(issue.sumDurationSeconds),
-                      style: TextStyle(color: legendMutedColor),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: _valueWidth,
+          child: Text(
+            primary,
+            textAlign: TextAlign.right,
+            style: numeric?.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+        SizedBox(
+          width: _shareWidth,
+          child: Text(
+            '${(row.share * 100).round()}%',
+            textAlign: TextAlign.right,
+            style: numeric?.copyWith(color: mutedColor),
+          ),
+        ),
+        SizedBox(
+          width: _secondaryWidth,
+          child: Text(
+            secondary,
+            textAlign: TextAlign.right,
+            style: numeric?.copyWith(color: mutedColor),
           ),
         ),
       ],

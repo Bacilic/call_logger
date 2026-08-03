@@ -173,6 +173,81 @@ void main() {
   );
 
   test(
+    'το μήνυμα duplicate_model_serial γράφεται με όνομα μοντέλου, όχι ωμό id',
+    () async {
+      await LampDatabaseProvider.instance.close();
+      final db = await openDatabase(dbPath, singleInstance: false);
+      try {
+        await db.insert('equipment', <String, Object?>{
+          'code': 2360,
+          'description': 'Ποντίκι Α',
+          'model': 1,
+          'serial_no': 'SN-NAMED-001',
+        });
+        await db.insert('equipment', <String, Object?>{
+          'code': 2361,
+          'description': 'Ποντίκι Β',
+          'model': 1,
+          'serial_no': 'SN-NAMED-001',
+        });
+      } finally {
+        await db.close();
+      }
+
+      final scan = await repository.scanIntegrityIssues(dbPath);
+      final message = scan.issues
+          .firstWhere(
+            (issue) =>
+                issue['issue_type'] == 'duplicate_model_serial' &&
+                issue['raw_value'] == 'SN-NAMED-001',
+          )['message']
+          .toString();
+
+      expect(message, contains('Model A (1)'));
+      expect(message, contains('SN-NAMED-001'));
+      // Χωρίς αγγλικά ονόματα στηλών και χωρίς γυμνό id μοντέλου.
+      expect(message, isNot(contains('model,')));
+      expect(message, isNot(contains('(1,')));
+    },
+  );
+
+  test(
+    'το μήνυμα duplicate_model_serial κρατά το id όταν λείπει όνομα μοντέλου',
+    () async {
+      await LampDatabaseProvider.instance.close();
+      final db = await openDatabase(dbPath, singleInstance: false);
+      try {
+        await db.insert('model', <String, Object?>{'model': 77});
+        await db.insert('equipment', <String, Object?>{
+          'code': 2370,
+          'description': 'Ορφανό Α',
+          'model': 77,
+          'serial_no': 'SN-ORPHAN-001',
+        });
+        await db.insert('equipment', <String, Object?>{
+          'code': 2371,
+          'description': 'Ορφανό Β',
+          'model': 77,
+          'serial_no': 'SN-ORPHAN-001',
+        });
+      } finally {
+        await db.close();
+      }
+
+      final scan = await repository.scanIntegrityIssues(dbPath);
+      final message = scan.issues
+          .firstWhere(
+            (issue) =>
+                issue['issue_type'] == 'duplicate_model_serial' &&
+                issue['raw_value'] == 'SN-ORPHAN-001',
+          )['message']
+          .toString();
+
+      expect(message, contains('77'));
+    },
+  );
+
+  test(
     'collectDbSnapshot δεν αφήνει ανοιχτό handle — το αρχείο διαγράφεται αμέσως',
     () async {
       final snapshotPath = p.join(tempDir.path, 'snapshot_collect.db');

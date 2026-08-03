@@ -18,6 +18,7 @@ import '../updates/update_manifest.dart';
 import '../updates/update_providers.dart';
 import '../utils/database_path_identity.dart';
 import '../utils/user_facing_error_messages.dart';
+import 'compact_tooltip.dart';
 import '../../features/database/widgets/schema_upgrade_consent_dialog.dart';
 import '../../features/settings/widgets/create_new_database_dialog.dart';
 
@@ -415,20 +416,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     final toOpen = result.pathToOpen?.trim();
     if (toOpen != null && toOpen.isNotEmpty) {
       await _verifyPathAndRetry(toOpen);
-      return;
     }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.restoredPath == null
-              ? 'Η επαναφορά ολοκληρώθηκε.'
-              : 'Η βάση επαναφέρθηκε στο:\n${result.restoredPath}',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   Widget _buildMissingDatabaseGuidance(ThemeData theme) {
@@ -629,7 +617,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
             for (var i = 0; i < _recentExistingPaths.length; i++) ...[
               if (i > 0) const SizedBox(width: 8),
               Expanded(
-                child: Tooltip(
+                child: CompactTooltip(
                   message:
                       'Γρήγορη επιστροφή σε προηγούμενη έγκυρη βάση.\n\n'
                       'Πατήστε για να συνδέσετε ξανά αυτό το αρχείο '
@@ -662,7 +650,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     required VoidCallback onPressed,
   }) {
     return Expanded(
-      child: Tooltip(
+      child: CompactTooltip(
         message: tooltip,
         waitDuration: const Duration(milliseconds: 350),
         child: OutlinedButton.icon(
@@ -909,7 +897,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Tooltip(
+              CompactTooltip(
                 message:
                     'Αντιγράφει στο πρόχειρο ολόκληρη την τεχνική αναφορά '
                     '(μήνυμα, διαδρομή, runtime σφάλμα, stack trace).\n\n'
@@ -926,7 +914,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
               _buildRecentDatabasesSection(theme),
               _buildPrimaryActionsRow(),
               const SizedBox(height: 12),
-              Tooltip(
+              CompactTooltip(
                 message: _isMissingApplicationFile
                     ? 'Κλείνει την εφαρμογή και την ανοίγει ξανά από την αρχή.\n\n'
                           'Λείπει αρχείο της εγκατάστασης. Η επαναδοκιμή δεν '

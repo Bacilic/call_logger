@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/history_entity_display_utils.dart';
+import '../../../../core/utils/text_layout_utils.dart';
 import '../../../../core/widgets/deleted_catalog_entity_text.dart';
 import '../../models/call_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
@@ -57,25 +58,6 @@ String _globalRecentCallDateTimeLabel(CallModel call) {
   return '$dd-$mm-$yy $timePart';
 }
 
-double _globalRecentTextWidth(
-  String text,
-  TextStyle style,
-  TextScaler textScaler,
-) {
-  final painter = TextPainter(
-    text: TextSpan(text: text, style: style),
-    textDirection: TextDirection.ltr,
-    textScaler: textScaler,
-    maxLines: 1,
-  );
-  try {
-    painter.layout(maxWidth: double.infinity);
-    return painter.size.width;
-  } finally {
-    painter.dispose();
-  }
-}
-
 class _RecentCallColumnWidths {
   const _RecentCallColumnWidths({
     required this.time,
@@ -99,37 +81,42 @@ _RecentCallColumnWidths _intrinsicRecentColumnWidths(
   final bodySmall = theme.textTheme.bodySmall ?? const TextStyle();
   final bodyMedium = theme.textTheme.bodyMedium ?? const TextStyle();
 
-  var maxTime = _globalRecentTextWidth('Ώρα', headerStyle, textScaler);
-  var maxPhone = _globalRecentTextWidth('Τηλέφωνο', headerStyle, textScaler);
-  var maxCaller = _globalRecentTextWidth('Καλών', headerStyle, textScaler);
+  double widestHeader(String header) => singleLineTextWidth(
+    text: header,
+    style: headerStyle,
+    textScaler: textScaler,
+  );
 
-  for (final c in calls) {
-    maxTime = math.max(
-      maxTime,
-      _globalRecentTextWidth(
-        _globalRecentCallDateTimeLabel(c),
-        bodySmall,
-        textScaler,
+  final maxTime = math.max(
+    widestHeader('Ώρα'),
+    widestSingleLineTextWidth(
+      texts: calls.map(_globalRecentCallDateTimeLabel),
+      style: bodySmall,
+      textScaler: textScaler,
+    ),
+  );
+  final maxPhone = math.max(
+    widestHeader('Τηλέφωνο'),
+    widestSingleLineTextWidth(
+      texts: calls.map((c) => _globalRecentDisplayOrDash(c.phoneText)),
+      style: bodySmall,
+      textScaler: textScaler,
+    ),
+  );
+  final maxCaller = math.max(
+    widestHeader('Καλών'),
+    widestSingleLineTextWidth(
+      texts: calls.map(
+        (c) => historyDeletedDisplayLabel(
+          _globalRecentDisplayOrDash(c.callerText),
+          isDeleted: c.callerLinkedDeleted,
+          deletedSuffix: kCatalogEntityDeletedSuffix,
+        ),
       ),
-    );
-    maxPhone = math.max(
-      maxPhone,
-      _globalRecentTextWidth(
-        _globalRecentDisplayOrDash(c.phoneText),
-        bodySmall,
-        textScaler,
-      ),
-    );
-    final callerLabel = historyDeletedDisplayLabel(
-      _globalRecentDisplayOrDash(c.callerText),
-      isDeleted: c.callerLinkedDeleted,
-      deletedSuffix: kCatalogEntityDeletedSuffix,
-    );
-    maxCaller = math.max(
-      maxCaller,
-      _globalRecentTextWidth(callerLabel, bodyMedium, textScaler),
-    );
-  }
+      style: bodyMedium,
+      textScaler: textScaler,
+    ),
+  );
 
   return _RecentCallColumnWidths(
     time: maxTime.ceilToDouble(),

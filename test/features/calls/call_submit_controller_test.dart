@@ -28,13 +28,16 @@ class _FakePrompts implements CallSubmitPrompts {
 
   int asks = 0;
   List<UserSimilarityMatch>? askedMatches;
+  String? askedTypedDisplayName;
 
   @override
   Future<SimilarUsersDialogResult?> resolveSimilarCallers(
-    List<UserSimilarityMatch> matches,
-  ) async {
+    List<UserSimilarityMatch> matches, {
+    required String typedDisplayName,
+  }) async {
     asks++;
     askedMatches = matches;
+    askedTypedDisplayName = typedDisplayName;
     return answer;
   }
 }

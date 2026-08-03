@@ -11,7 +11,7 @@ import '../../../history/providers/history_provider.dart';
 import '../../models/call_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
-import 'text_layout_utils.dart';
+import '../../../../core/utils/text_layout_utils.dart';
 
 /// Λέξη-κλειδί για αναζήτηση ιστορικού: όνομα, αλλιώς πρώτο μη κενό τηλέφωνο.
 String _recentCallsHistorySearchKeyword(UserModel user) {

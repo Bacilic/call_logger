@@ -5,6 +5,7 @@
 
 import 'package:call_logger/core/config/app_config.dart';
 import 'package:call_logger/core/config/audit_retention_config.dart';
+import 'package:call_logger/core/services/app_instance_registry.dart';
 import 'package:call_logger/core/services/settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,6 +24,50 @@ void main() {
 
   tearDown(() {
     AppConfig.activeProfile = null;
+  });
+
+  // Το μητρώο αντιγράφων απαντά «ποιοι μοιράζονται ΑΥΤΑ τα κλειδιά» — άρα
+  // πρέπει να είναι κι αυτό ανά προφίλ, αλλιώς δύο απομονωμένες εκτελέσεις θα
+  // κατηγορούσαν η μία την άλλη.
+  group('Μητρώο αντιγράφων εφαρμογής', () {
+    test('με ενεργό προφίλ, η αποθήκευση διαβάζεται πίσω', () async {
+      AppConfig.activeProfile = 'dev';
+      final settings = SettingsService();
+
+      await settings.setKnownAppInstances([
+        AppInstanceRecord(
+          executablePath: r'C:\app\call_logger.exe',
+          version: '0.22.1',
+          lastSeen: DateTime(2026, 8, 3, 10),
+        ),
+      ]);
+
+      final read = await settings.getKnownAppInstances();
+      expect(read.single.executablePath, r'C:\app\call_logger.exe');
+    });
+
+    test('το προφίλ δεν μολύνει το παραγωγικό μητρώο', () async {
+      final settings = SettingsService();
+
+      AppConfig.activeProfile = 'dev';
+      await settings.setKnownAppInstances([
+        AppInstanceRecord(
+          executablePath: r'F:\build\call_logger.exe',
+          version: '0.22.1',
+          lastSeen: DateTime(2026, 8, 3, 10),
+        ),
+      ]);
+      await settings.setDismissedAppInstancesSignature('υπογραφή-dev');
+
+      AppConfig.activeProfile = null;
+      expect(
+        await settings.getKnownAppInstances(),
+        isEmpty,
+        reason:
+            'Η παραγωγική εκτέλεση δεν βλέπει τα αντίγραφα του προφίλ «dev»',
+      );
+      expect(await settings.getDismissedAppInstancesSignature(), isNull);
+    });
   });
 
   group('Φίλτρο ημερομηνιών αναφορών εκκρεμοτήτων', () {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
 import '../building_map_label_layout.dart';
@@ -9,6 +10,7 @@ import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
 import '../services/building_map_sheet_export.dart';
 import 'building_map_floor_departments_dialog.dart';
+import '../services/building_map_floor_ordering.dart';
 import 'building_map_floor_menu_button.dart';
 
 /// Εναλλαγή Επιλογή / Σχεδίαση. Η [MapToolMode.edit] (λαβές, περιστροφή) μπαίνει
@@ -89,7 +91,7 @@ class BuildingMapEditToolbar extends ConsumerWidget {
         }
       },
       children: [
-        Tooltip(
+        CompactTooltip(
           message:
               'Μετακίνηση και εστίαση στον χάρτη. Το hover πάνω από την ετικέτα ονόματος επισημαίνει το τμήμα όπως πάνω από την περιοχή του. Κλικ σε χαρτογραφημένο τμήμα για επεξεργασία περιοχής (λαβές, περιστροφή).',
           child: const Padding(
@@ -103,7 +105,7 @@ class BuildingMapEditToolbar extends ConsumerWidget {
             ),
           ),
         ),
-        Tooltip(
+        CompactTooltip(
           message:
               'Σύρετε για νέο περίγραμμα τμήματος (χρειάζεται επιλεγμένο τμήμα). Αν δεν έχει επιλεγεί τμήμα, ανοίγει η λίστα επιλογής. Μετά το σχέδιο χρησιμοποιήστε τις λαβές για μέγεθος και περιστροφή.',
           child: const Padding(

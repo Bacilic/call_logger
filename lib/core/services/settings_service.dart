@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import '../utils/database_path_identity.dart';
+import 'app_instance_registry.dart';
 
 import 'settings_service_analytics_filters.dart';
 import 'settings_service_catalogs.dart';
@@ -40,6 +41,9 @@ class SettingsService {
       'last_opened_database_path_v1';
   static const String _keySchemaUpgradeConsentIdentity =
       'schema_upgrade_consent_identity_v1';
+  static const String _keyKnownAppInstances = 'known_app_instances_v1';
+  static const String _keyDismissedInstancesSignature =
+      'dismissed_app_instances_signature_v1';
   static const int _maxRecentPaths = 3;
 
   /// Τιμή [database_setup_state_v1] όταν η εφαρμογή περιμένει επιλογή/δημιουργία βάσης.
@@ -134,6 +138,41 @@ class SettingsService {
       return;
     }
     await prefs.setString(_prefKey(_keyLastOpenedDatabasePath), trimmed);
+  }
+
+  /// Μητρώο αντιγράφων της εφαρμογής που μοιράζονται αυτές τις ρυθμίσεις.
+  ///
+  /// Το κλειδί παίρνει πρόθεμα προφίλ όπως όλα τα υπόλοιπα: κάθε προφίλ έχει
+  /// δικό του μητρώο, αφού δικά του κλειδιά μοιράζεται.
+  Future<List<AppInstanceRecord>> getKnownAppInstances() async {
+    final prefs = await SharedPreferences.getInstance();
+    return AppInstanceRegistry.decode(
+      prefs.getString(_prefKey(_keyKnownAppInstances)),
+    );
+  }
+
+  Future<void> setKnownAppInstances(List<AppInstanceRecord> instances) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefKey(_keyKnownAppInstances),
+      AppInstanceRegistry.encode(instances),
+    );
+  }
+
+  /// Υπογραφή συνόλου αντιγράφων για την οποία ο χρήστης έκλεισε τη λωρίδα.
+  Future<String?> getDismissedAppInstancesSignature() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefKey(_keyDismissedInstancesSignature));
+    if (value == null || value.isEmpty) return null;
+    return value;
+  }
+
+  Future<void> setDismissedAppInstancesSignature(String signature) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefKey(_keyDismissedInstancesSignature),
+      signature,
+    );
   }
 
   /// Ταυτότητα περιεχομένου για την οποία δόθηκε συγκατάθεση μόνιμης αναβάθμισης.

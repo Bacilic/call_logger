@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
 import '../../../core/config/app_config.dart';
+import '../../../core/database/database_file_bundle.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/init/database_switch_completion.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
@@ -14,7 +15,9 @@ import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/new_database_suggested_file_name.dart';
 import '../../../core/utils/windows_save_sqlite_database_dialog.dart';
 import '../../database/providers/database_maintenance_provider.dart';
+import '../../database/services/create_new_database_texts.dart';
 import '../../database/widgets/database_rename_failure_dialog.dart';
+import '../../database/widgets/database_rename_notice_text.dart';
 
 bool _sameResolvedPath(String a, String b) {
   final na = path.normalize(a);
@@ -208,54 +211,34 @@ class CreateNewDatabaseFlow {
       return;
     }
 
+    // Το όνομα υπολογίζεται ΜΙΑ φορά, με την ίδια συνάρτηση που θα εκτελέσει τη
+    // μετονομασία — ό,τι υπόσχεται ο διάλογος είναι ό,τι θα γίνει.
+    final renamedFileName = resolveRenamedOldDatabaseFileName(
+      currentDatabasePath: currentDbForCompare,
+    );
+
     if (!exists) {
       if (!context.mounted) return;
-      final confirm = await showDialog<bool>(
+      final confirm = await showDatabaseRenameConfirmationDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Δημιουργία νέου αρχείου βάσης'),
-          content: Text(
-            'Θα δημιουργηθεί νέο κενό αρχείο στη διαδρομή:\n\n$norm\n\n'
-            'Η τρέχουσα βάση θα μετονομαστεί στον φάκελό της ως '
-            '«όνομα_αρχείου_old_ημερομηνία» (χωρίς διαγραφή) και θα οριστεί ως ενεργή η νέα διαδρομή. '
-            'Η εφαρμογή θα επανασυνδεθεί με τη νέα βάση.',
-            style: Theme.of(ctx).textTheme.bodyMedium,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Ακύρωση'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Δημιουργία'),
-            ),
-          ],
+        title: 'Δημιουργία νέου αρχείου βάσης',
+        parts: createNewDatabaseConfirmation(
+          targetPath: norm,
+          renamedFileName: renamedFileName,
         ),
+        confirmLabel: 'Δημιουργία',
       );
       if (confirm != true || !context.mounted) return;
     } else {
       if (!context.mounted) return;
-      final confirm = await showDialog<bool>(
+      final confirm = await showDatabaseRenameConfirmationDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Νέο κενό αρχείο στη θέση της τρέχουσας βάσης'),
-          content: Text(
-            'Το τρέχον αρχείο θα μετονομαστεί ως «όνομα_old_ημερομηνία» στον ίδιο φάκελο '
-            'και θα δημιουργηθεί νέο κενό στη θέση:\n\n$norm',
-            style: Theme.of(ctx).textTheme.bodyMedium,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Ακύρωση'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Συνέχεια'),
-            ),
-          ],
+        title: 'Νέο κενό αρχείο στη θέση της τρέχουσας βάσης',
+        parts: replaceCurrentDatabaseConfirmation(
+          targetPath: norm,
+          renamedFileName: renamedFileName,
         ),
+        confirmLabel: 'Συνέχεια',
       );
       if (confirm != true || !context.mounted) return;
     }

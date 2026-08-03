@@ -13,6 +13,7 @@ import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_fill_color_dialog.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 
 /// Ύψος γραμμής εργαλείων (checkbox κ.λπ.) + διάκενο πριν την επεκτεινόμενη λίστα.
 const double _kFloorDeptToolbarBlockHeight = 48 + 6;
@@ -352,7 +353,7 @@ class _BuildingMapFloorDepartmentsDialogState
       );
     } else {
       final hasCustom = (d.mapCustomName?.trim().isNotEmpty ?? false);
-      nameWidget = Tooltip(
+      nameWidget = CompactTooltip(
         message: hasCustom
             ? 'Επωνυμία χάρτη: ${d.displayName}\nΌνομα τμήματος: ${d.name}'
             : d.name,
@@ -544,7 +545,7 @@ class _BuildingMapFloorDepartmentsDialogState
                     Row(
                       children: [
                         if (_isEdit)
-                          Tooltip(
+                          CompactTooltip(
                             message: filteredIds.isEmpty
                                 ? 'Επιλογή τμημάτων'
                                 : (allFilteredSelected

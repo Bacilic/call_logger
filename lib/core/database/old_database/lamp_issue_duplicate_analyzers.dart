@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'lamp_data_issue_type_labels.dart';
 import 'lamp_issue_resolution_models.dart';
 import 'lamp_issue_resolution_support.dart';
 import 'lamp_scientific_serial.dart';
@@ -97,7 +98,8 @@ class LampIssueDuplicateAnalyzers {
           issueType: LampIssueType.duplicateModelSerial,
           issueIds: issueIdsBySerial[serial] ?? const <int>[],
           column: 'serial_no',
-          originalValue: '$model / $serial',
+          originalValue:
+              '${lampLabelledId(labels.modelLabelById, model)} / $serial',
           rows: rows,
           operationPrefix: 'duplicate_model_serial',
           clearOperation: 'clear_duplicate_serial_others',
@@ -196,7 +198,7 @@ class LampIssueDuplicateAnalyzers {
     required String reassignOperation,
     required String inputLabel,
     Map<String, Object?> extraMetadata = const <String, Object?>{},
-    LampFkLabelMaps labels = LampFkLabelMaps.empty,
+    required LampFkLabelMaps labels,
   }) {
     String codeWithDescription(Map<String, Object?> row) {
       final code = row['code'];
