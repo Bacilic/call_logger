@@ -10,6 +10,8 @@ import 'calls_search_index.dart';
 import '../utils/lexicon_word_metrics.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_file_classifier.dart';
+import 'database_foreign_keys.dart';
+import 'database_helper.dart';
 import 'database_init_result.dart';
 import 'database_v1_schema.dart';
 import 'dictionary_repository.dart';
@@ -51,15 +53,28 @@ Future<void> onDatabaseCreate(Database db, int version) async {
 }
 
 /// Μήνυμα αναντιστοιχίας user_version (αρχείο) έναντι έκδοσης σχήματος εφαρμογής.
-String schemaVersionMismatchUserMessage(
-  Database db,
-  int fileUserVersion,
-  int appSchemaVersion,
-) {
-  final fileName = p.basename(db.path);
-  return 'Το αρχείο της βάσης σας $fileName είναι στην έκδοση '
-      '$fileUserVersion. Η εφαρμογή τρέχει την έκδοση '
-      '$appSchemaVersion.\n\n'
+///
+/// Όταν το αρχείο είναι ΝΕΟΤΕΡΟ από την εφαρμογή, το πιθανότερο αίτιο είναι
+/// ξεχασμένο παλαιότερο αντίγραφο της εφαρμογής που ανοίγει βάση ήδη
+/// αναβαθμισμένη από νεότερη εγκατάσταση — το μήνυμα το λέει ρητά και
+/// παραπέμπει στην κάρτα «Αντίγραφα της εφαρμογής», αντί να αφήνει τον χρήστη
+/// με ένα αίνιγμα περί εκδόσεων.
+String schemaVersionMismatchUserMessage({
+  required String fileName,
+  required int fileUserVersion,
+  required int appSchemaVersion,
+}) {
+  final header =
+      'Το αρχείο της βάσης σας $fileName είναι στην έκδοση '
+      '$fileUserVersion. Η εφαρμογή τρέχει την έκδοση $appSchemaVersion.';
+  final staleAppHint = fileUserVersion > appSchemaVersion
+      ? '\n\nΠιθανότερο αίτιο: τρέχετε παλαιότερο αντίγραφο της εφαρμογής, '
+            'ενώ ένα νεότερο έχει ήδη αναβαθμίσει αυτή τη βάση. Ελέγξτε για '
+            'ενημέρωση της εφαρμογής, και στην κάρτα «Αντίγραφα της '
+            'εφαρμογής» (Ρυθμίσεις → Βάση Δεδομένων) θα βρείτε ποιες '
+            'εγκαταστάσεις υπάρχουν στον υπολογιστή και ποια είναι η καθεμιά.'
+      : '';
+  return '$header$staleAppHint\n\n'
       'Μπορείτε να:\n'
       '• Μετασχηματίσετε την βάση σας στη σωστή έκδοση με κάποιο script.\n'
       '• Να εντοπίσετε το σωστό αρχείο βάσης (μέσα από τις ρυθμίσεις).\n'
@@ -182,6 +197,32 @@ Future<void> onDatabaseUpgradeSquashed(
   }
   if (oldVersion < 37 && newVersion >= 37) {
     await migrateDatabaseToV37(db);
+  }
+  if (oldVersion < 38 && newVersion >= 38) {
+    final repaired = await migrateDatabaseToV38(db);
+    await _logForeignKeyRepairs(db, repaired);
+  }
+}
+
+/// Καταγράφει στο Ιστορικό τι αποσυνδέθηκε ή σβήστηκε από την αναβάθμιση v38.
+///
+/// Μία εγγραφή ανά είδος με το πλήθος, και όχι μία ανά γραμμή: η αναβάθμιση δεν
+/// είναι ενέργεια χρήστη, και «3 συσχετίσεις χρήστη-τηλεφώνου με ανύπαρκτο
+/// χρήστη» λέει ό,τι χρειάζεται. Σιωπηλή διόρθωση όμως δεν γίνεται — ο χρήστης
+/// πρέπει να μπορεί να δει γιατί μια σύνδεση δεν υπάρχει πια.
+Future<void> _logForeignKeyRepairs(Database db, Map<String, int> repaired) async {
+  if (repaired.isEmpty) return;
+  final user = await AuditService.performingUser(db);
+  for (final entry in repaired.entries) {
+    await AuditService.log(
+      db,
+      action: DatabaseHelper.auditActionIntegrityFix,
+      userPerforming: user,
+      details:
+          'Αναβάθμιση σχήματος v38: ${entry.value} ${entry.key} '
+          '— δεν αντιστοιχούσαν σε υπαρκτή εγγραφή.',
+      newValues: <String, dynamic>{'count': entry.value},
+    );
   }
 }
 
@@ -750,7 +791,11 @@ Future<void> onDatabaseDowngradeSquashed(
   throw DatabaseInitException(
     DatabaseInitResult(
       status: DatabaseStatus.applicationError,
-      message: schemaVersionMismatchUserMessage(db, oldVersion, newVersion),
+      message: schemaVersionMismatchUserMessage(
+        fileName: p.basename(db.path),
+        fileUserVersion: oldVersion,
+        appSchemaVersion: newVersion,
+      ),
     ),
   );
 }

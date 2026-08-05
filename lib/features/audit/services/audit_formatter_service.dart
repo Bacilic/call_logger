@@ -521,8 +521,14 @@ class AuditFormatterService {
   }) {
     if (value == null || _isEmptyLike(value)) return null;
     if (technical) return '#$value';
+    // Δύο ονόματα-στιγμιότυπα, από διαφορετικές ροές: το `department_text`
+    // (κλήσεις/εκκρεμότητες) και το `department_label` (επιδιορθώσεις
+    // ακεραιότητας). Προηγούνται του lookup, γιατί κρατούν το όνομα ακόμη κι
+    // όταν το τμήμα δεν υπάρχει πια — που είναι ακριβώς η περίπτωση του Fixer.
     final text = sideMap['department_text']?.toString().trim();
     if (text != null && text.isNotEmpty) return text;
+    final label = sideMap['department_label']?.toString().trim();
+    if (label != null && label.isNotEmpty && label != '—') return label;
     final id = _parseIntId(value);
     final resolved = labels.departmentName(id);
     if (resolved != null) return resolved;

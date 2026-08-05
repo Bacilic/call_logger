@@ -2,6 +2,7 @@
 
 import 'package:sqflite_common/sqlite_api.dart';
 import '../utils/search_text_normalizer.dart';
+import 'database_foreign_keys.dart';
 
 /// User-visible schema version (squashed v1· v2 = στήλες τμήμα/τοποθεσία στον εξοπλισμό).
 /// v4: departments.name = display, departments.name_key = normalized unique key.
@@ -37,7 +38,9 @@ import '../utils/search_text_normalizer.dart';
 /// v34: μετονομασία γενικών ενεργειών audit «ΤΡΟΠΟΠΟΙΗΣΗ» σε ενέργειες ανά οντότητα (μόνο δεδομένα).
 /// v35: αναδρομικός καθαρισμός ιστορικού audit (συγχώνευση διπλών εγγραφών, μόνο δεδομένα).
 /// v37: `calls.search_index` με τον αριθμό ticket Lansweeper (μόνο δεδομένα).
-const int databaseSchemaVersionV1 = 37;
+/// v38: δηλωμένα foreign keys στις σχέσεις που έχουν έναν ιδιοκτήτη
+/// (συσχετίσεις, παιδιά, ζωντανές αναφορές) + `PRAGMA foreign_keys = ON`.
+const int databaseSchemaVersionV1 = 38;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
@@ -84,7 +87,8 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         external_id TEXT NOT NULL,
         provider TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        metadata TEXT
+        metadata TEXT,
+        FOREIGN KEY (call_id) REFERENCES calls(id) ON DELETE CASCADE
       )
     ''');
   await db.execute(
@@ -94,92 +98,19 @@ Future<void> applyDatabaseV1Schema(Database db) async {
     'CREATE INDEX IF NOT EXISTS idx_call_external_links_created_at ON call_external_links(created_at)',
   );
 
-  await db.execute('''
-      CREATE TABLE users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        last_name TEXT NOT NULL,
-        first_name TEXT NOT NULL,
-        department_id INTEGER,
-        location TEXT,
-        notes TEXT,
-        is_deleted INTEGER DEFAULT 0
-      )
-    ''');
+  await db.execute(kCreateUsersTable);
 
-  await db.execute('''
-      CREATE TABLE phones (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        number TEXT UNIQUE NOT NULL,
-        department_id INTEGER,
-        is_deleted INTEGER DEFAULT 0
-      )
-    ''');
+  await db.execute(kCreatePhonesTable);
 
-  await db.execute('''
-      CREATE TABLE department_phones (
-        department_id INTEGER NOT NULL,
-        phone_id INTEGER NOT NULL,
-        PRIMARY KEY (department_id, phone_id)
-      )
-    ''');
+  await db.execute(kCreateDepartmentPhonesTable);
 
-  await db.execute('''
-      CREATE TABLE user_phones (
-        user_id INTEGER NOT NULL,
-        phone_id INTEGER NOT NULL,
-        PRIMARY KEY (user_id, phone_id)
-      )
-    ''');
+  await db.execute(kCreateUserPhonesTable);
 
-  await db.execute('''
-      CREATE TABLE equipment (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code_equipment TEXT,
-        type TEXT,
-        notes TEXT,
-        remote_params TEXT,
-        default_remote_tool TEXT,
-        department_id INTEGER,
-        location TEXT,
-        is_deleted INTEGER DEFAULT 0
-      )
-    ''');
+  await db.execute(kCreateEquipmentTable);
 
-  await db.execute('''
-      CREATE TABLE user_equipment (
-        user_id INTEGER NOT NULL,
-        equipment_id INTEGER NOT NULL,
-        PRIMARY KEY (user_id, equipment_id)
-      )
-    ''');
+  await db.execute(kCreateUserEquipmentTable);
 
-  await db.execute('''
-      CREATE TABLE departments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        name_key TEXT UNIQUE NOT NULL,
-        building TEXT,
-        color TEXT DEFAULT '#1976D2',
-        notes TEXT,
-        map_floor TEXT,
-        map_x REAL DEFAULT 0.0,
-        map_y REAL DEFAULT 0.0,
-        map_width REAL DEFAULT 0.0,
-        map_height REAL DEFAULT 0.0,
-        map_rotation REAL DEFAULT 0.0,
-        map_label_offset_x REAL,
-        map_label_offset_y REAL,
-        map_anchor_offset_x REAL,
-        map_anchor_offset_y REAL,
-        map_custom_name TEXT,
-        map_label_font_scale REAL,
-        map_label_width REAL DEFAULT 150.0,
-        map_label_height REAL DEFAULT 50.0,
-        group_name TEXT,
-        floor_id INTEGER,
-        is_deleted INTEGER DEFAULT 0
-      )
-    ''');
+  await db.execute(kCreateDepartmentsTable);
 
   await db.execute('''
       CREATE TABLE building_map_floors (
@@ -200,33 +131,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
       )
     ''');
 
-  await db.execute('''
-      CREATE TABLE tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        description TEXT,
-        due_date TEXT,
-        snooze_history_json TEXT,
-        status TEXT,
-        call_id INTEGER,
-        priority INTEGER,
-        solution_notes TEXT,
-        snooze_until TEXT,
-        caller_id INTEGER,
-        equipment_id INTEGER,
-        department_id INTEGER,
-        phone_id INTEGER,
-        phone_text TEXT,
-        user_text TEXT,
-        equipment_text TEXT,
-        department_text TEXT,
-        created_at TEXT,
-        updated_at TEXT,
-        origin TEXT DEFAULT 'legacy',
-        search_index TEXT,
-        is_deleted INTEGER DEFAULT 0
-      )
-    ''');
+  await db.execute(kCreateTasksTable);
 
   await db.execute('''
       CREATE TABLE knowledge_base (
@@ -289,17 +194,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
     'CREATE INDEX IF NOT EXISTS idx_remote_tools_role ON remote_tools(role)',
   );
 
-  await db.execute('''
-      CREATE TABLE IF NOT EXISTS remote_tool_args (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        remote_tool_id INTEGER,
-        tool_name TEXT,
-        arg_flag TEXT,
-        description TEXT,
-        is_active INTEGER DEFAULT 0,
-        FOREIGN KEY (remote_tool_id) REFERENCES remote_tools(id)
-      )
-    ''');
+  await db.execute(kCreateRemoteToolArgsTable);
   await seedRemoteToolsAndArgsIfEmpty(db);
 
   await db.execute('''

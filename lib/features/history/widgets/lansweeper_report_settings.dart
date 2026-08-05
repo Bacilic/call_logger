@@ -64,6 +64,8 @@ class LansweeperReportSettings {
     final savedTemplate = host.ref.read(geminiPromptTemplateProvider);
     await showDialog<void>(
       context: host.context,
+      // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
+      barrierDismissible: false,
       builder: (ctx) => AiPromptTemplateEditorDialog(
         savedTemplate: savedTemplate,
         onSave: (text) async {

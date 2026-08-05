@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ρυθμίσεις Lansweeper — Ανασχεδιασμός με καρτέλες (Τώρα ↔ Προτεινόμενο)</title>
+  <style>
+    :root {
+      --bg: #e8eaed;
+      --panel: #ffffff;
+      --border: #d1d5db;
+      --muted: #6b7280;
+      --title: #111827;
+      --accent: #2563eb;
+      --bad: #dc2626;
+      --good: #059669;
+      /* Material 3 (όπως η εφαρμογή) */
+      --m3-primary: #6750a4;
+      --m3-primary-container: #e8def8;
+      --m3-on-primary-container: #21005d;
+      --m3-surface: #fdf7ff;
+      --m3-surface-2: #f3edf7;
+      --m3-outline: #cac4d0;
+      --m3-outline-strong: #938f99;
+      --m3-muted: #49454f;
+      --m3-error: #b3261e;
+      --m3-error-bg: #fdeeed;
+      --m3-good: #1b5e20;
+      --m3-good-bg: #e8f5e9;
+      --m3-good-border: #81c784;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--title);
+    }
+    .page {
+      max-width: 1660px;
+      margin: 0 auto;
+      padding: 20px 24px 48px;
+    }
+    h1 { font-size: 1.35rem; margin: 0 0 6px; }
+    .intro {
+      color: var(--muted);
+      margin: 0 0 16px;
+      max-width: 980px;
+      line-height: 1.5;
+    }
+    .source-map {
+      margin: 0 0 16px;
+      padding: 12px 14px;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 10px;
+      line-height: 1.55;
+      font-size: .9rem;
+      max-width: 980px;
+    }
+    .source-map h2 { margin: 0 0 8px; font-size: .95rem; }
+    .source-map code {
+      font-size: .8rem;
+      background: #fef3c7;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .source-map ul { margin: 6px 0 0; padding-left: 1.2rem; }
+    .source-map li { margin: 3px 0; }
+
+    .pair {
+      display: grid;
+      grid-template-columns: 560px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    @media (max-width: 1420px) {
+      .pair { grid-template-columns: 1fr; }
+    }
+    .frame-wrap {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .frame-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      font-size: .95rem;
+    }
+    .badge {
+      font-size: .75rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: #fff;
+      white-space: nowrap;
+    }
+    .badge.bad { background: var(--bad); }
+    .badge.good { background: var(--good); }
+    .stage {
+      background: #dcd7e2;
+      padding: 18px 16px 22px;
+      display: flex;
+      justify-content: center;
+    }
+
+    /* ================= ΚΟΙΝΑ ΣΤΟΙΧΕΙΑ ΔΙΑΛΟΓΩΝ (M3) ================= */
+    .fld { margin: 0 0 10px; position: relative; }
+    .fld label {
+      display: block;
+      font-size: .72rem;
+      color: var(--m3-muted);
+      margin: 0 0 3px 2px;
+    }
+    .fld input, .fld textarea, .fld select {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--m3-outline-strong);
+      border-radius: 6px;
+      font-size: .85rem;
+      font-family: inherit;
+      background: #fff;
+      color: var(--title);
+    }
+    .fld textarea { resize: vertical; line-height: 1.5; }
+    .fld .eye {
+      position: absolute;
+      right: 6px;
+      bottom: 4px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: .95rem;
+      color: var(--m3-muted);
+      padding: 2px 4px;
+    }
+    .fld.has-eye input { padding-right: 34px; }
+    .helper {
+      font-size: .72rem;
+      color: var(--m3-muted);
+      margin: -6px 2px 10px;
+      line-height: 1.4;
+    }
+    .warn {
+      font-size: .74rem;
+      color: var(--m3-error);
+      margin: -4px 2px 10px;
+      line-height: 1.4;
+    }
+    .lnk {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--m3-primary);
+      font-size: .78rem;
+      font-weight: 600;
+      text-decoration: none;
+      margin: -4px 0 10px;
+      cursor: pointer;
+    }
+    .btn-tonal {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      width: 100%;
+      background: var(--m3-primary-container);
+      color: var(--m3-on-primary-container);
+      border: none;
+      border-radius: 999px;
+      padding: 9px 16px;
+      font-size: .84rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn-outline {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: transparent;
+      color: var(--m3-primary);
+      border: 1px solid var(--m3-outline);
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-size: .8rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn-text {
+      background: transparent;
+      border: none;
+      color: var(--m3-primary);
+      font-size: .9rem;
+      font-weight: 600;
+      font-family: inherit;
+      padding: 8px 14px;
+      cursor: pointer;
+      border-radius: 999px;
+    }
+    .btn-text:hover { background: var(--m3-surface-2); }
+
+    /* Διακόπτης (λειτουργικός) */
+    .sw {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 10px;
+    }
+    .sw .txt { flex: 1; }
+    .sw .txt .t { font-size: .84rem; font-weight: 500; }
+    .sw .txt .s { font-size: .72rem; color: var(--m3-muted); line-height: 1.4; margin-top: 2px; }
+    .tgl { position: relative; display: inline-block; width: 44px; height: 24px; flex: none; margin-top: 2px; }
+    .tgl input { opacity: 0; width: 0; height: 0; }
+    .tgl .knob {
+      position: absolute;
+      inset: 0;
+      background: #e5e0ec;
+      border: 1px solid var(--m3-outline-strong);
+      border-radius: 999px;
+      transition: background .15s;
+      cursor: pointer;
+    }
+    .tgl .knob::after {
+      content: "";
+      position: absolute;
+      left: 3px; top: 3px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--m3-outline-strong);
+      transition: left .15s, background .15s;
+    }
+    .tgl input:checked + .knob { background: var(--m3-primary); border-color: var(--m3-primary); }
+    .tgl input:checked + .knob::after { left: 23px; background: #fff; }
+
+    .result-banner {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: .78rem;
+      line-height: 1.45;
+      margin-top: 8px;
+    }
+    .result-banner.err {
+      background: var(--m3-error-bg);
+      border: 1px solid #f2b8b5;
+      color: #601410;
+    }
+
+    /* ================= ΑΡΙΣΤΕΡΑ: ΤΩΡΑ ================= */
+    .now-dialog {
+      width: 520px;
+      max-width: 100%;
+      background: var(--m3-surface);
+      border-radius: 22px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .now-dialog .ttl { font-size: 1.15rem; font-weight: 500; padding: 18px 22px 10px; }
+    .now-body {
+      height: 600px;
+      overflow-y: scroll;
+      padding: 4px 18px 12px 22px;
+      scrollbar-gutter: stable;
+    }
+    .now-body::-webkit-scrollbar { width: 10px; }
+    .now-body::-webkit-scrollbar-thumb { background: #b8b2c0; border-radius: 999px; }
+    .now-body h3 {
+      font-size: .85rem;
+      font-weight: 700;
+      margin: 16px 0 8px;
+    }
+    .now-body h3:first-child { margin-top: 4px; }
+    .now-body .divider { border: none; border-top: 1px solid var(--m3-outline); margin: 14px 0 2px; }
+    .now-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding: 10px 16px 14px;
+      border-top: 1px solid var(--m3-outline);
+    }
+    .scroll-hint {
+      background: #fef2f2;
+      border: 1px dashed #fca5a5;
+      color: #b91c1c;
+      border-radius: 8px;
+      font-size: .74rem;
+      padding: 6px 10px;
+      margin: 10px 0;
+      text-align: center;
+    }
+    .mini-chip-panel {
+      background: var(--m3-good-bg);
+      border: 1px solid var(--m3-good-border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: .74rem;
+      color: var(--m3-good);
+      margin-bottom: 10px;
+    }
+    .mini-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .mini-chips span {
+      border: 1px solid var(--m3-outline);
+      background: #fff;
+      color: var(--title);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: .68rem;
+    }
+    .mini-chips span.dis { color: #a8a3ae; border-color: #ddd8e2; background: var(--m3-surface-2); }
+    .cf-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      border: 1px solid var(--m3-outline);
+      border-radius: 10px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      font-size: .78rem;
+    }
+    .cf-row .nm { flex: 1; }
+    .cf-row .nm b { display: block; font-size: .8rem; }
+    .cf-row .nm i { color: var(--m3-muted); font-style: normal; font-size: .7rem; }
+    .cf-row .ic { color: var(--m3-muted); display: flex; gap: 7px; font-size: .8rem; }
+
+    /* ================= ΔΕΞΙΑ: ΠΡΟΤΕΙΝΟΜΕΝΟ ================= */
+    .prop-dialog {
+      width: 100%;
+      max-width: 920px;
+      background: var(--m3-surface);
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .prop-dialog .ttl {
+      font-size: 1.15rem;
+      font-weight: 500;
+      padding: 18px 24px 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .m3tabs {
+      display: flex;
+      border-bottom: 1px solid var(--m3-outline);
+      padding: 0 12px;
+      gap: 4px;
+    }
+    .m3tabs button {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: .84rem;
+      font-weight: 600;
+      color: var(--m3-muted);
+      padding: 11px 6px 9px;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      border-radius: 8px 8px 0 0;
+      white-space: nowrap;
+    }
+    .m3tabs button:hover { background: var(--m3-surface-2); }
+    .m3tabs button.active {
+      color: var(--m3-primary);
+      border-bottom-color: var(--m3-primary);
+    }
+    .tabpane { display: none; padding: 16px 18px 6px; }
+    .tabpane.active { display: block; }
+    .cols2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+    /* Λίστες τιμών: αριστερά οι τιμές (κόμμα), δεξιά η προεπιλογή */
+    .list-grid {
+      display: grid;
+      grid-template-columns: 1.7fr 1fr;
+      gap: 0 14px;
+      align-items: end;
+    }
+    .list-grid textarea.vals {
+      overflow: hidden;
+      resize: none;
+      min-height: 34px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .m3card {
+      background: var(--m3-surface-2);
+      border: 1px solid #e3ddea;
+      border-radius: 14px;
+      padding: 14px 14px 10px;
+      margin-bottom: 14px;
+    }
+    .m3card > h4 {
+      margin: 0 0 10px;
+      font-size: .84rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .m3card .card-intro {
+      font-size: .74rem;
+      color: var(--m3-muted);
+      line-height: 1.45;
+      margin: -4px 0 10px;
+    }
+
+    /* Πάνελ μοντέλων */
+    .quota-panel {
+      background: var(--m3-good-bg);
+      border: 1px solid var(--m3-good-border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: .78rem;
+      color: var(--m3-good);
+    }
+    .quota-panel .lastcheck { font-size: .7rem; margin-top: 2px; }
+    .seg {
+      display: inline-flex;
+      border: 1px solid var(--m3-outline);
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 8px 0 8px;
+      background: #fff;
+    }
+    .seg button {
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: .74rem;
+      font-weight: 600;
+      padding: 5px 14px;
+      cursor: pointer;
+      color: var(--m3-muted);
+    }
+    .seg button.on {
+      background: var(--m3-primary-container);
+      color: var(--m3-on-primary-container);
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chips button {
+      border: 1px solid var(--m3-outline);
+      background: #fff;
+      color: var(--title);
+      border-radius: 999px;
+      padding: 4px 11px;
+      font-size: .74rem;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .chips button:hover { border-color: var(--m3-primary); }
+    .chips button.assigned {
+      color: #a8a3ae;
+      border-color: #ddd8e2;
+      background: var(--m3-surface-2);
+      cursor: default;
+    }
+
+    /* Λωρίδα κατάστασης (μόνιμη) */
+    .status-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 4px 18px 0;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: .8rem;
+      line-height: 1.4;
+    }
+    .status-strip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .status-strip.err { background: var(--m3-error-bg); border: 1px solid #f2b8b5; color: #601410; }
+    .status-strip.err .dot { background: var(--m3-error); }
+    .status-strip.ok { background: var(--m3-good-bg); border: 1px solid var(--m3-good-border); color: var(--m3-good); }
+    .status-strip.ok .dot { background: #2e7d32; }
+    .status-strip .grow { flex: 1; }
+    .status-strip .demo {
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: .68rem;
+      color: inherit;
+      opacity: .65;
+      cursor: pointer;
+      text-decoration: underline;
+      white-space: nowrap;
+    }
+    .prop-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding: 10px 16px 14px;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      padding: 14px 16px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      line-height: 1.55;
+      font-size: .92rem;
+      max-width: 980px;
+    }
+    .footer-note strong { color: var(--accent); }
+    .footer-note ul { margin: 8px 0 0; padding-left: 1.2rem; }
+    .footer-note li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <!--
+    ΑΝΤΙΣΤΟΙΧΙΑ FLUTTER (πηγή αλήθειας για υλοποίηση)
+    -------------------------------------------------
+    Κύριος διάλογος (όλες οι ενότητες, σειρά, κλείσιμο με έλεγχο μοντέλων):
+      lib/features/history/widgets/lansweeper/lansweeper_connection_settings_dialog.dart
+    Ενότητα «Παραμετροποίηση καταχώρησης εισιτηρίου» (custom fields, λίστες, διακόπτες, επαναφορά):
+      lib/features/history/widgets/lansweeper/lansweeper_ticket_submit_settings_section.dart
+    Πεδία/chips μοντέλων Gemini (κύριο, εφεδρικό, ανανέωση, έλεγχος):
+      lib/features/history/widgets/lansweeper/gemini_model_field.dart
+    Ένδειξη «Κατάσταση σύνδεσης»:
+      lib/features/history/widgets/lansweeper/lansweeper_connection_status_indicator.dart
+    Άνοιγμα διαλόγου + controllers κειμένου:
+      lib/features/history/widgets/lansweeper_report_settings.dart
+  -->
+  <div class="page">
+    <h1>Ρυθμίσεις Lansweeper — ανασχεδιασμός σε καρτέλες</h1>
+
+    <div class="source-map">
+      <h2>Αναπαριστά widgets Flutter</h2>
+      <ul>
+        <li><strong>Κύριος διάλογος:</strong> <code>lib/features/history/widgets/lansweeper/lansweeper_connection_settings_dialog.dart</code></li>
+        <li><strong>Ενότητα καταχώρησης εισιτηρίου:</strong> <code>lib/features/history/widgets/lansweeper/lansweeper_ticket_submit_settings_section.dart</code></li>
+        <li><strong>Μοντέλα Τεχνητής Νοημοσύνης (chips):</strong> <code>lib/features/history/widgets/lansweeper/gemini_model_field.dart</code></li>
+        <li><strong>Ένδειξη κατάστασης σύνδεσης:</strong> <code>lib/features/history/widgets/lansweeper/lansweeper_connection_status_indicator.dart</code></li>
+        <li><strong>Άνοιγμα διαλόγου + πεδία κειμένου:</strong> <code>lib/features/history/widgets/lansweeper_report_settings.dart</code></li>
+      </ul>
+    </div>
+
+    <p class="intro">
+      Σήμερα ο διάλογος είναι <strong>μία στενή στήλη 520px με ατελείωτη κύλιση</strong> — χρειάζονται ~4 οθόνες
+      για να τον δεις ολόκληρο. Η πρόταση τον κάνει φαρδύτερο, με <strong>4 καρτέλες</strong> ανά θεματική ενότητα
+      και <strong>μόνιμη λωρίδα «Κατάσταση σύνδεσης»</strong> στο κάτω μέρος, ορατή από κάθε καρτέλα.
+      Όλα τα πεδία και οι διακόπτες διατηρούνται 1:1 — αλλάζει μόνο η διάταξη.
+      Οι καρτέλες δεξιά είναι <strong>λειτουργικές</strong> — πάτησέ τις. Λειτουργούν επίσης οι διακόπτες,
+      τα «ματάκια» των κωδικών και τα chips μοντέλων.
+    </p>
+
+    <div class="pair">
+      <!-- ================= ΤΩΡΑ ================= -->
+      <div class="frame-wrap">
+        <div class="frame-label">
+          <span>Τώρα (μία στήλη με κύλιση)</span>
+          <span class="badge bad">~4 οθόνες κύλισης</span>
+        </div>
+        <div class="stage">
+          <div class="now-dialog">
+            <div class="ttl">Ρυθμίσεις Lansweeper</div>
+            <div class="now-body">
+              <h3>Σύνδεση API (Ticket API)</h3>
+              <div class="fld">
+                <label>URL API (api.aspx)</label>
+                <input value="http://lansweeper.example:81/api.aspx" readonly />
+              </div>
+              <span class="lnk">🔗 Έλεγχος συνδέσμου</span>
+              <div class="fld">
+                <label>Lansweeper API key</label>
+                <input value="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" readonly />
+              </div>
+
+              <hr class="divider" />
+              <h3>Φόρμα νέου αιτήματος (browser)</h3>
+              <div class="fld">
+                <label>URL φόρμας νέου αιτήματος</label>
+                <input value="http://lansweeper.example:81/helpdesk/NewTicket.aspx" readonly />
+              </div>
+              <span class="lnk">🔗 Έλεγχος συνδέσμου</span>
+              <div class="fld">
+                <label>URL προβολής ticket</label>
+                <input value="http://lansweeper.example:81/helpdesk/ticket.aspx?tid={tid}" readonly />
+              </div>
+              <div class="helper">Χρησιμοποιήστε {tid} ως θέση του αριθμού ticket στη λίστα αναφοράς.</div>
+              <span class="lnk">🔗 Έλεγχος συνδέσμου</span>
+              <div class="sw">
+                <div class="txt">
+                  <div class="t">Άνοιγμα ticket μετά την Άμεση Καταχώρηση</div>
+                  <div class="s">Μετά επιτυχή καταχώρηση μέσω API, άνοιγμα του αιτήματος στον περιηγητή.</div>
+                </div>
+                <label class="tgl"><input type="checkbox" /><span class="knob"></span></label>
+              </div>
+
+              <div class="scroll-hint">↓ κι όμως, είσαι μόλις στο 1/4 της κύλισης ↓</div>
+
+              <hr class="divider" />
+              <h3>Πράκτορας &amp; αιτών API (ίδια τιμή)</h3>
+              <div class="fld">
+                <label>Πράκτορας = αιτών (domain\username)</label>
+                <input value="ΌνομαΕπώνυμο@example.local" readonly />
+              </div>
+              <div class="helper">Στο AddTicket στέλνονται Username και AgentUsername με την ίδια τιμή (όπως στο Lansweeper: domain\username).</div>
+              <div class="warn">Η τιμή δεν μοιάζει με έγκυρη ταυτότητα (domain\username ή email). Ελέγξτε τη μορφή πριν τον έλεγχο API.</div>
+              <button class="btn-tonal" type="button">🪪 Έλεγχος πράκτορα API</button>
+
+              <hr class="divider" />
+              <h3>Help Desk — αυτόματη σύνδεση (browser)</h3>
+              <div class="helper" style="margin-top:0">Η εφαρμογή δεν μεταφέρει συνεδρία στον περιηγητή. Με ενεργή επιλογή ανοίγει πρώτα η σελίδα σύνδεσης και μετά η φόρμα.</div>
+              <div class="sw">
+                <div class="txt"><div class="t">Άνοιγμα σελίδας σύνδεσης πριν τη φόρμα</div></div>
+                <label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label>
+              </div>
+              <div class="fld">
+                <label>URL σελίδας σύνδεσης (login.aspx)</label>
+                <input value="http://lansweeper.example:81/login.aspx?" readonly />
+              </div>
+              <span class="lnk">🔗 Έλεγχος συνδέσμου</span>
+              <div class="fld">
+                <label>Όνομα χρήστη Help Desk</label>
+                <input value="ο.χρήστης" readonly />
+              </div>
+              <div class="fld">
+                <label>Κωδικός Help Desk</label>
+                <input type="password" value="••••••••" readonly />
+              </div>
+              <button class="btn-tonal" type="button">🛡 Έλεγχος διαπιστευτηρίων</button>
+
+              <hr class="divider" />
+              <h3>Τεχνητή Νοημοσύνη</h3>
+              <div class="helper" style="margin-top:0">Απαιτείται για την αυτόματη πρόταση τίτλου/περιγραφής ticket.</div>
+              <span class="lnk">🔗 Δωρεάν κλειδί από: aistudio.google.com</span>
+              <div class="fld">
+                <label>Gemini API key</label>
+                <input type="password" value="•••••••••••••••••••••••••••••••••••••" readonly />
+              </div>
+              <div class="fld">
+                <label>Διεύθυνση κλήσης API του Gemini</label>
+                <input value="https://generativelanguage.googleapis.com/v1beta/models" readonly />
+              </div>
+              <div class="helper">Χρησιμοποιήστε {προτεύων μοντέλο} και {κλειδί API} ως placeholders.</div>
+              <div class="sw">
+                <div class="txt">
+                  <div class="t">Υποβάθμιση σε εφεδρικό μοντέλο</div>
+                  <div class="s">Αν το κύριο μοντέλο είναι υπερφορτωμένο (503), δοκιμάζεται αυτόματα το εφεδρικό.</div>
+                </div>
+                <label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label>
+              </div>
+              <div class="sw">
+                <div class="txt">
+                  <div class="t">Αυτόματη επανυποβολή μέχρι την επιτυχία</div>
+                  <div class="s">Μετά από αναμονή ποσόστωσης, επαναλαμβάνεται αυτόματα η πρόταση ΤΝ.</div>
+                </div>
+                <label class="tgl"><input type="checkbox" /><span class="knob"></span></label>
+              </div>
+              <div class="fld">
+                <label>Κύριο μοντέλο</label>
+                <input value="gemini-3.5-flash" readonly />
+              </div>
+              <div class="fld">
+                <label>Εφεδρικό μοντέλο</label>
+                <input value="gemini-flash-latest" readonly />
+              </div>
+              <div style="display:flex; gap:8px; margin-bottom:10px;">
+                <button class="btn-outline" type="button">⟳ Ανανέωση λίστας</button>
+                <button class="btn-outline" type="button">✓ Έλεγχος μοντέλων</button>
+              </div>
+              <div class="mini-chip-panel">
+                ✅ 8 από 19 μοντέλα με διαθέσιμη ποσόστωση (&gt; 0). Τελευταίος έλεγχος: 13/06/2026 14:24
+                <div class="mini-chips">
+                  <span>gemini-2.5-flash</span><span>gemini-2.5-flash-lite</span>
+                  <span>gemini-3-flash-preview</span><span>gemini-3.1-flash-lite</span>
+                  <span>gemini-3.1-flash-lite-preview</span><span class="dis">gemini-3.5-flash</span>
+                  <span class="dis">gemini-flash-latest</span><span>gemini-flash-lite-latest</span>
+                </div>
+              </div>
+
+              <div class="scroll-hint">↓ …και συνεχίζεται: όλη η παραμετροποίηση καταχώρησης ↓</div>
+
+              <hr class="divider" />
+              <h3>Παραμετροποίηση καταχώρησης εισιτηρίου</h3>
+              <div class="cf-row">
+                <div class="nm"><b>Κατηγορία αιτήματος</b><i>Κατηγορία αιτήματος · Ραδιοπλήκτρα</i></div>
+                <div class="ic">↑ ↓ ✎ 🗑</div>
+              </div>
+              <div class="cf-row">
+                <div class="nm"><b>Τί αφορά;</b><i>Τί αφορά; · Λίστα</i></div>
+                <div class="ic">↑ ↓ ✎ 🗑</div>
+              </div>
+              <div class="fld">
+                <label>Καταστάσεις (μία ανά γραμμή)</label>
+                <textarea rows="3" readonly>Open
+Closed
+In Progress</textarea>
+              </div>
+              <div class="fld">
+                <label>Προεπιλογή κατάστασης</label>
+                <select disabled><option>Closed</option></select>
+              </div>
+              <div class="fld">
+                <label>Τύποι αιτήματος (μία ανά γραμμή)</label>
+                <textarea rows="2" readonly>IT Support</textarea>
+              </div>
+              <div class="fld">
+                <label>Προεπιλογή τύπου αιτήματος</label>
+                <select disabled><option>IT Support</option></select>
+              </div>
+              <div class="fld">
+                <label>Προτεραιότητες (μία ανά γραμμή)</label>
+                <textarea rows="3" readonly>Low
+Medium
+High</textarea>
+              </div>
+              <div class="fld">
+                <label>Προεπιλογή προτεραιότητας</label>
+                <select disabled><option>Low</option></select>
+              </div>
+              <div class="fld">
+                <label>Ομάδες (μία ανά γραμμή)</label>
+                <textarea rows="2" readonly>IT Support</textarea>
+              </div>
+              <div class="fld">
+                <label>Προεπιλογή ομάδας</label>
+                <select disabled><option>IT Support</option></select>
+              </div>
+              <div class="fld">
+                <label>Τύπος σημείωσης</label>
+                <select disabled><option>Ιδιωτική</option></select>
+              </div>
+              <div class="sw"><div class="txt"><div class="t">Ενεργό βήμα σημείωσης (AddNote)</div></div><label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label></div>
+              <div class="sw"><div class="txt"><div class="t">Ενεργό βήμα κατάστασης (EditTicket)</div></div><label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label></div>
+              <div class="sw"><div class="txt"><div class="t">Απομνημόνευση τελευταίων επιλογών φόρμας</div></div><label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label></div>
+              <div class="sw">
+                <div class="txt">
+                  <div class="t">Προσθήκη χρόνου εργασίας στη σημείωση</div>
+                  <div class="s">Προστίθεται γραμμή «Χρόνος: MM:SS» στη σημείωση λύσης.</div>
+                </div>
+                <label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label>
+              </div>
+              <button class="btn-outline" type="button" style="margin-bottom:10px">🕘 Επαναφορά προεπιλογών</button>
+
+              <hr class="divider" />
+              <h3>Κατάσταση σύνδεσης</h3>
+              <div class="result-banner err">⛔ Λήξη χρόνου αναμονής — ο διακομιστής δεν ανταποκρίνεται εντός 5 δευτερολέπτων</div>
+              <div style="height:8px"></div>
+            </div>
+            <div class="now-actions"><button class="btn-text" type="button">Κλείσιμο</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= ΠΡΟΤΕΙΝΟΜΕΝΟ ================= -->
+      <div class="frame-wrap">
+        <div class="frame-label">
+          <span>Προτεινόμενο (4 καρτέλες + μόνιμη κατάσταση)</span>
+          <span class="badge good">Όλα ορατά χωρίς κύλιση</span>
+        </div>
+        <div class="stage">
+          <div class="prop-dialog">
+            <div class="ttl">⚙️ Ρυθμίσεις Lansweeper</div>
+
+            <div class="m3tabs" id="propTabs">
+              <button class="active" data-pane="pane-api">🔌 Σύνδεση API</button>
+              <button data-pane="pane-hd">🌐 Help Desk / Browser</button>
+              <button data-pane="pane-ai">✨ Τεχνητή Νοημοσύνη</button>
+              <button data-pane="pane-ticket">🎫 Καταχώρηση εισιτηρίου</button>
+            </div>
+
+            <!-- ===== Καρτέλα 1: Σύνδεση API ===== -->
+            <div class="tabpane active" id="pane-api">
+              <div class="cols2">
+                <div class="m3card">
+                  <h4>🔌 Σύνδεση API (Ticket API)</h4>
+                  <div class="fld">
+                    <label>URL API (api.aspx)</label>
+                    <input value="http://lansweeper.example:81/api.aspx" />
+                  </div>
+                  <span class="lnk">🔗 Έλεγχος συνδέσμου</span>
+                  <div class="fld has-eye">
+                    <label>Lansweeper API key</label>
+                    <input type="password" value="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+                    <button class="eye" type="button" title="Εμφάνιση/απόκρυψη">👁</button>
+                  </div>
+                </div>
+                <div class="m3card">
+                  <h4>🪪 Πράκτορας &amp; αιτών API (ίδια τιμή)</h4>
+                  <div class="fld">
+                    <label>Πράκτορας = αιτών (domain\username)</label>
+                    <input value="ΌνομαΕπώνυμο@example.local" />
+                  </div>
+                  <div class="helper">Στο AddTicket στέλνονται Username και AgentUsername με την ίδια τιμή (όπως στο Lansweeper: domain\username). Ο έλεγχος καλεί το API με δοκιμαστικό αίτημα — αν επιτύχει, δημιουργείται ticket που μπορείτε να διαγράψετε.</div>
+                  <div class="warn">Η τιμή δεν μοιάζει με έγκυρη ταυτότητα (domain\username ή email). Ελέγξτε τη μορφή πριν τον έλεγχο API.</div>
+                  <button class="btn-tonal" type="button">🪪 Έλεγχος πράκτορα API</button>
+                  <div style="height:10px"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===== Καρτέλα 2: Help Desk / Browser ===== -->
+            <div class="tabpane" id="pane-hd">
+              <div class="cols2">
+                <div class="m3card">
+                  <h4>🌐 Φόρμα νέου αιτήματος (browser)</h4>
+                  <div class="fld">
+                    <label>URL φόρμας νέου αιτήματος</label>
+                    <input value="http://lansweeper.example:81/helpdesk/NewTicket.aspx" />
+                  </div>
+                  <span class="lnk">🔗 Έλεγχος συνδέσμου</span>
+                  <div class="fld">
+                    <label>URL προβολής ticket</label>
+                    <input value="http://lansweeper.example:81/helpdesk/ticket.aspx?tid={tid}" />
+                  </div>
+                  <div class="helper">Χρησιμοποιήστε {tid} ως θέση του αριθμού ticket στη λίστα αναφοράς.</div>
+                  <span class="lnk">🔗 Έλεγχος συνδέσμου</span>
+                  <div class="sw">
+                    <div class="txt">
+                      <div class="t">Άνοιγμα ticket μετά την Άμεση Καταχώρηση</div>
+                      <div class="s">Μετά επιτυχή καταχώρηση μέσω API, άνοιγμα του αιτήματος στον περιηγητή με βάση το URL προβολής ticket.</div>
+                    </div>
+                    <label class="tgl"><input type="checkbox" /><span class="knob"></span></label>
+                  </div>
+                </div>
+                <div class="m3card">
+                  <h4>🔐 Αυτόματη σύνδεση Help Desk</h4>
+                  <div class="card-intro">Η εφαρμογή δεν μεταφέρει συνεδρία στον περιηγητή. Με ενεργή επιλογή ανοίγει πρώτα η σελίδα σύνδεσης και μετά η φόρμα.</div>
+                  <div class="sw">
+                    <div class="txt"><div class="t">Άνοιγμα σελίδας σύνδεσης πριν τη φόρμα</div></div>
+                    <label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label>
+                  </div>
+                  <div class="fld">
+                    <label>URL σελίδας σύνδεσης (login.aspx)</label>
+                    <input value="http://lansweeper.example:81/login.aspx?" />
+                  </div>
+                  <span class="lnk">🔗 Έλεγχος συνδέσμου</span>
+                  <div class="fld">
+                    <label>Όνομα χρήστη Help Desk</label>
+                    <input value="ο.χρήστης" />
+                  </div>
+                  <div class="fld has-eye">
+                    <label>Κωδικός Help Desk</label>
+                    <input type="password" value="••••••••" />
+                    <button class="eye" type="button" title="Εμφάνιση/απόκρυψη">👁</button>
+                  </div>
+                  <button class="btn-tonal" type="button">🛡 Έλεγχος διαπιστευτηρίων</button>
+                  <div style="height:10px"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===== Καρτέλα 3: Τεχνητή Νοημοσύνη ===== -->
+            <div class="tabpane" id="pane-ai">
+              <div class="cols2">
+                <div>
+                  <div class="m3card">
+                    <h4>🔑 Κλειδί &amp; διεύθυνση</h4>
+                    <div class="card-intro">Απαιτείται για την αυτόματη πρόταση τίτλου/περιγραφής ticket.</div>
+                    <span class="lnk">🔗 Δωρεάν κλειδί από: aistudio.google.com</span>
+                    <div class="fld has-eye">
+                      <label>Gemini API key</label>
+                      <input type="password" value="AIza…(κλειδί Gemini)" />
+                      <button class="eye" type="button" title="Εμφάνιση/απόκρυψη">👁</button>
+                    </div>
+                    <div class="fld">
+                      <label>Διεύθυνση κλήσης API του Gemini</label>
+                      <input value="https://generativelanguage.googleapis.com/v1beta/models" />
+                    </div>
+                    <div class="helper">Χρησιμοποιήστε {προτεύων μοντέλο} και {κλειδί API} ως placeholders.</div>
+                  </div>
+                  <div class="m3card">
+                    <h4>⚙️ Συμπεριφορά</h4>
+                    <div class="sw">
+                      <div class="txt">
+                        <div class="t">Υποβάθμιση σε εφεδρικό μοντέλο</div>
+                        <div class="s">Αν το κύριο μοντέλο είναι υπερφορτωμένο (503), δοκιμάζεται αυτόματα το εφεδρικό μοντέλο.</div>
+                      </div>
+                      <label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label>
+                    </div>
+                    <div class="sw">
+                      <div class="txt">
+                        <div class="t">Αυτόματη επανυποβολή μέχρι την επιτυχία</div>
+                        <div class="s">Μετά από αναμονή ποσόστωσης, επαναλαμβάνεται αυτόματα η πρόταση ΤΝ όσο το παράθυρο παραμένει ανοιχτό.</div>
+                      </div>
+                      <label class="tgl"><input type="checkbox" /><span class="knob"></span></label>
+                    </div>
+                  </div>
+                </div>
+                <div class="m3card">
+                  <h4>🧠 Μοντέλα</h4>
+                  <div class="fld">
+                    <label>Κύριο μοντέλο</label>
+                    <input id="primaryModel" value="gemini-3.5-flash" />
+                  </div>
+                  <div class="helper">Αντικαθιστά το {προτεύων μοντέλο} στο endpoint. Επιλογή από chip ή χειροκίνητη πληκτρολόγηση.</div>
+                  <div class="fld">
+                    <label>Εφεδρικό μοντέλο</label>
+                    <input id="fallbackModel" value="gemini-flash-latest" />
+                  </div>
+                  <div class="helper">Χρησιμοποιείται σε 503 (υπερφόρτωση).</div>
+                  <div style="display:flex; gap:8px; margin-bottom:10px;">
+                    <button class="btn-outline" type="button">⟳ Ανανέωση λίστας</button>
+                    <button class="btn-outline" type="button">✓ Έλεγχος μοντέλων</button>
+                  </div>
+                  <div class="quota-panel">
+                    ✅ 8 από 19 μοντέλα με διαθέσιμη ποσόστωση (&gt; 0).
+                    <div class="lastcheck">Τελευταίος έλεγχος: 13/06/2026 14:24</div>
+                    <div style="font-size:.7rem; margin-top:8px;">Επόμενη επιλογή chip:</div>
+                    <div class="seg" id="chipTarget">
+                      <button class="on" data-target="primaryModel">✔ Κύριο</button>
+                      <button data-target="fallbackModel">⇄ Εφεδρικό</button>
+                    </div>
+                    <div class="chips" id="modelChips">
+                      <button type="button">gemini-2.5-flash</button>
+                      <button type="button">gemini-2.5-flash-lite</button>
+                      <button type="button">gemini-3-flash-preview</button>
+                      <button type="button">gemini-3.1-flash-lite</button>
+                      <button type="button">gemini-3.1-flash-lite-preview</button>
+                      <button type="button">gemini-3.5-flash</button>
+                      <button type="button">gemini-flash-latest</button>
+                      <button type="button">gemini-flash-lite-latest</button>
+                    </div>
+                  </div>
+                  <div style="height:10px"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===== Καρτέλα 4: Καταχώρηση εισιτηρίου ===== -->
+            <div class="tabpane" id="pane-ticket">
+              <div class="cols2">
+                <div class="m3card">
+                  <h4 style="justify-content:space-between;">
+                    <span>📋 Πεδία εισιτηρίου (custom fields)</span>
+                    <button class="btn-text" type="button" style="padding:2px 8px; font-size:.78rem;">＋ Προσθήκη</button>
+                  </h4>
+                  <div class="cf-row">
+                    <div class="nm"><b>Κατηγορία αιτήματος</b><i>Κατηγορία αιτήματος · Ραδιοπλήκτρα</i></div>
+                    <div class="ic">↑ ↓ ✎ 🗑</div>
+                  </div>
+                  <div class="cf-row">
+                    <div class="nm"><b>Τί αφορά;</b><i>Τί αφορά; · Λίστα</i></div>
+                    <div class="ic">↑ ↓ ✎ 🗑</div>
+                  </div>
+                </div>
+                <div class="m3card">
+                  <h4>📝 Σημείωση &amp; βήματα</h4>
+                  <div class="fld">
+                    <label>Τύπος σημείωσης</label>
+                    <select><option selected>Ιδιωτική</option><option>Δημόσια</option></select>
+                  </div>
+                  <div class="sw"><div class="txt"><div class="t">Ενεργό βήμα σημείωσης (AddNote)</div></div><label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label></div>
+                  <div class="sw"><div class="txt"><div class="t">Ενεργό βήμα κατάστασης (EditTicket)</div></div><label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label></div>
+                  <div class="sw"><div class="txt"><div class="t">Απομνημόνευση τελευταίων επιλογών φόρμας</div></div><label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label></div>
+                  <div class="sw">
+                    <div class="txt">
+                      <div class="t">Προσθήκη χρόνου εργασίας στη σημείωση</div>
+                      <div class="s">Προστίθεται γραμμή «Χρόνος: MM:SS» στη σημείωση λύσης.</div>
+                    </div>
+                    <label class="tgl"><input type="checkbox" checked /><span class="knob"></span></label>
+                  </div>
+                </div>
+              </div>
+              <div class="m3card">
+                <h4>🗂 Λίστες &amp; προεπιλογές</h4>
+                <div class="list-grid">
+                  <div class="fld">
+                    <label>Καταστάσεις ticket (τιμές με κόμμα)</label>
+                    <textarea class="vals" rows="1">Open, Closed, In Progress</textarea>
+                  </div>
+                  <div class="fld">
+                    <label>Προεπιλογή κατάστασης</label>
+                    <select><option>Open</option><option selected>Closed</option><option>In Progress</option></select>
+                  </div>
+                  <div class="fld">
+                    <label>Τύποι αιτήματος (τιμές με κόμμα)</label>
+                    <textarea class="vals" rows="1">IT Support</textarea>
+                  </div>
+                  <div class="fld">
+                    <label>Προεπιλογή τύπου αιτήματος</label>
+                    <select><option selected>IT Support</option></select>
+                  </div>
+                  <div class="fld">
+                    <label>Προτεραιότητες (τιμές με κόμμα)</label>
+                    <textarea class="vals" rows="1">Low, Medium, High</textarea>
+                  </div>
+                  <div class="fld">
+                    <label>Προεπιλογή προτεραιότητας</label>
+                    <select><option selected>Low</option><option>Medium</option><option>High</option></select>
+                  </div>
+                  <div class="fld">
+                    <label>Ομάδες (τιμές με κόμμα)</label>
+                    <textarea class="vals" rows="1">IT Support</textarea>
+                  </div>
+                  <div class="fld">
+                    <label>Προεπιλογή ομάδας</label>
+                    <select><option selected>IT Support</option></select>
+                  </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px; margin-top:2px;">
+                  <button class="btn-outline" type="button">🕘 Επαναφορά προεπιλογών</button>
+                  <span class="helper" style="margin:0;">Επαναφέρει ΜΟΝΟ τις ρυθμίσεις καταχώρησης εισιτηρίου (αυτή την καρτέλα).</span>
+                </div>
+                <div style="height:8px"></div>
+              </div>
+            </div>
+
+            <!-- ===== Μόνιμη λωρίδα κατάστασης (ορατή από κάθε καρτέλα) ===== -->
+            <div class="status-strip err" id="statusStrip">
+              <span class="dot"></span>
+              <span class="grow" id="statusText"><strong>Κατάσταση σύνδεσης:</strong> Λήξη χρόνου αναμονής — ο διακομιστής δεν ανταποκρίνεται εντός 5 δευτερολέπτων.</span>
+              <button class="demo" id="statusDemo" type="button">εναλλαγή δείγματος (μόνο στο mockup)</button>
+            </div>
+
+            <div class="prop-actions">
+              <button class="btn-text" type="button">Κλείσιμο</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      <strong>Κανόνες πρότασης:</strong>
+      <ul>
+        <li><strong>4 καρτέλες</strong> ανά θεματική ενότητα: Σύνδεση API · Help Desk / Browser · Τεχνητή Νοημοσύνη · Καταχώρηση εισιτηρίου. Κανένα πεδίο δεν αφαιρείται ούτε προστίθεται — μόνο αναδιάταξη.</li>
+        <li><strong>Μόνιμη λωρίδα «Κατάσταση σύνδεσης»</strong> στο κάτω μέρος, ορατή από κάθε καρτέλα (αντί για ξεχωριστή καρτέλα που είχε το προσχέδιο).</li>
+        <li>Το <strong>«Επαναφορά προεπιλογών»</strong> μένει ΜΕΣΑ στην καρτέλα «Καταχώρηση εισιτηρίου» — στο προσχέδιο ήταν καθολικό κουμπί στο κάτω μέρος, αλλά στην πραγματικότητα επαναφέρει μόνο τις ρυθμίσεις καταχώρησης, οπότε εκεί θα παραπλανούσε.</li>
+        <li>Ο έλεγχος στο κλείσιμο (μπλοκάρισμα όταν κύριο = εφεδρικό μοντέλο) <strong>παραμένει ως έχει</strong>.</li>
+        <li><strong>Λίστες τιμών σε μία γραμμή, με κόμμα:</strong> Καταστάσεις, Τύποι, Προτεραιότητες και Ομάδες γράφονται πλέον «Open, Closed, In Progress» (όπως παντού στην εφαρμογή) αντί για μία τιμή ανά γραμμή. Αριστερά οι τιμές, δεξιά η προεπιλογή τους. Αν οι τιμές ξεπεράσουν το πλάτος, το πεδίο αναδιπλώνει και ψηλώνει αυτόματα ώστε να φαίνονται όλες — δοκίμασε να πληκτρολογήσεις κι άλλες. Στην υλοποίηση αυτό αλλάζει και τον διαχωρισμό κατά την ανάγνωση (κόμμα αντί για αλλαγή γραμμής) στο <code>lansweeper_ticket_submit_settings_section.dart</code>.</li>
+        <li>Ο διάλογος γίνεται φαρδύτερος (~920px αντί 520px) ώστε κάθε καρτέλα να χωρά σε δύο στήλες χωρίς κύλιση — μόνο η «Καταχώρηση εισιτηρίου» μπορεί να χρειαστεί ελάχιστη κύλιση σε μικρές οθόνες.</li>
+      </ul>
+      <br />
+      Πες μου αν η κατανομή σε καρτέλες και η λωρίδα κατάστασης σου ταιριάζουν, ή αν θέλεις αλλαγές
+      (π.χ. άλλη σειρά καρτελών, άλλη ομαδοποίηση καρτών). Μόνο μετά την επικύρωσή σου προχωράμε σε υλοποίηση στο Flutter.
+    </div>
+  </div>
+
+  <script>
+    // Πεδία τιμών με κόμμα: το ύψος μεγαλώνει αυτόματα όταν οι τιμές αναδιπλώνονται
+    const growValTextareas = () => {
+      document.querySelectorAll('textarea.vals').forEach((t) => {
+        t.style.height = 'auto';
+        t.style.height = (t.scrollHeight + 2) + 'px';
+      });
+    };
+    document.querySelectorAll('textarea.vals').forEach((t) => {
+      t.addEventListener('input', growValTextareas);
+    });
+
+    // Καρτέλες
+    document.querySelectorAll('#propTabs button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#propTabs button').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.tabpane').forEach((p) => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.pane).classList.add('active');
+        growValTextareas();
+      });
+    });
+
+    // Ματάκια κωδικών
+    document.querySelectorAll('.fld .eye').forEach((eye) => {
+      eye.addEventListener('click', () => {
+        const input = eye.parentElement.querySelector('input');
+        input.type = input.type === 'password' ? 'text' : 'password';
+      });
+    });
+
+    // Chips μοντέλων: επιλογή στόχου (Κύριο/Εφεδρικό) + ανάθεση με κλικ
+    let chipTargetId = 'primaryModel';
+    const segButtons = document.querySelectorAll('#chipTarget button');
+    segButtons.forEach((b) => {
+      b.addEventListener('click', () => {
+        segButtons.forEach((x) => x.classList.remove('on'));
+        b.classList.add('on');
+        chipTargetId = b.dataset.target;
+      });
+    });
+    function refreshChips() {
+      const primary = document.getElementById('primaryModel').value.trim();
+      const fallback = document.getElementById('fallbackModel').value.trim();
+      document.querySelectorAll('#modelChips button').forEach((c) => {
+        const assigned = c.textContent === primary || c.textContent === fallback;
+        c.classList.toggle('assigned', assigned);
+      });
+    }
+    document.querySelectorAll('#modelChips button').forEach((c) => {
+      c.addEventListener('click', () => {
+        if (c.classList.contains('assigned')) return;
+        document.getElementById(chipTargetId).value = c.textContent;
+        refreshChips();
+      });
+    });
+    ['primaryModel', 'fallbackModel'].forEach((id) => {
+      document.getElementById(id).addEventListener('input', refreshChips);
+    });
+    refreshChips();
+
+    // Λωρίδα κατάστασης — εναλλαγή δείγματος (μόνο για το mockup)
+    const strip = document.getElementById('statusStrip');
+    const statusText = document.getElementById('statusText');
+    document.getElementById('statusDemo').addEventListener('click', () => {
+      const isErr = strip.classList.contains('err');
+      strip.classList.toggle('err', !isErr);
+      strip.classList.toggle('ok', isErr);
+      statusText.innerHTML = isErr
+        ? '<strong>Κατάσταση σύνδεσης:</strong> Επιτυχής επικοινωνία με τον διακομιστή — τελευταίος έλεγχος 14:24.'
+        : '<strong>Κατάσταση σύνδεσης:</strong> Λήξη χρόνου αναμονής — ο διακομιστής δεν ανταποκρίνεται εντός 5 δευτερολέπτων.';
+    });
+  </script>
+</body>
+</html>

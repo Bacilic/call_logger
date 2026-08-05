@@ -25,6 +25,7 @@ enum IntegrityCheckType {
   tasksDeletedLinkedEntities,
   tasksTemporalInconsistency,
   auditMissingSearchText,
+  foreignKeyViolations,
 }
 
 extension IntegrityCheckTypeLabels on IntegrityCheckType {
@@ -58,6 +59,7 @@ extension IntegrityCheckTypeLabels on IntegrityCheckType {
     IntegrityCheckType.tasksTemporalInconsistency =>
       'Εκκρεμότητες: created_at > updated_at',
     IntegrityCheckType.auditMissingSearchText => 'Audit χωρίς search_text',
+    IntegrityCheckType.foreignKeyViolations => 'Παραβιάσεις κανόνων σχέσεων',
   };
 }
 

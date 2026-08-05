@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:call_logger/core/updates/network_folder_classifier.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -140,4 +141,51 @@ void main() {
       );
     },
   );
+
+  // Συμβόλαιο: «όποιος βάζει προθεσμία σε εξωτερική διεργασία, οφείλει και να
+  // την τερματίζει στη λήξη». Το παλιό Process.run(...).timeout(...) παρατούσε
+  // το Future αλλά άφηνε τη διεργασία ορφανή να τρέχει αόρατη.
+  group('NetworkFolderClassifier.runForStdoutWithTimeout (real processes)', () {
+    test(
+      'fast process returns its stdout',
+      () async {
+        final out = await NetworkFolderClassifier.runForStdoutWithTimeout(
+          'cmd',
+          const ['/d', '/c', 'echo', 'hello'],
+          const Duration(seconds: 10),
+        );
+
+        expect(out, isNotNull);
+        expect(out!.trim(), 'hello');
+      },
+      skip: !Platform.isWindows,
+    );
+
+    test(
+      'stuck process is KILLED on timeout, not abandoned',
+      () async {
+        Process? started;
+        // Το ping -n 30 τρέχει ~29 δευτερόλεπτα αν δεν το σκοτώσει κανείς.
+        final out = await NetworkFolderClassifier.runForStdoutWithTimeout(
+          'ping',
+          const ['-n', '30', '127.0.0.1'],
+          const Duration(milliseconds: 300),
+          startProcess: (executable, arguments) async {
+            started = await Process.start(executable, arguments);
+            return started!;
+          },
+        );
+
+        expect(out, isNull);
+        // Αν είχε μείνει ορφανή, το exitCode θα αργούσε ~30 δευτερόλεπτα.
+        final exitCode = await started!.exitCode.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () =>
+              fail('Η διεργασία δεν τερματίστηκε — έμεινε ορφανή.'),
+        );
+        expect(exitCode, isNot(0));
+      },
+      skip: !Platform.isWindows,
+    );
+  });
 }

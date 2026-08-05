@@ -95,6 +95,23 @@ class IntegrityDebugSeederService {
     '3606',
   ];
 
+  /// Σενάριο δοκιμής του διαλόγου διαγραφής κλήσης.
+  ///
+  /// Κοινό πρόθεμα στο θέμα και των τριών κλήσεων, ώστε να βρίσκονται με μία
+  /// αναζήτηση στο Ιστορικό αντί να ψάχνει ο χρήστης τρεις άσχετες γραμμές.
+  static const String callDeletionScenarioPrefix = 'Δοκιμή διαγραφής';
+  static const String callDeletionTasksOnlyIssue =
+      '$callDeletionScenarioPrefix — μόνο εκκρεμότητα';
+  static const String callDeletionLansweeperOnlyIssue =
+      '$callDeletionScenarioPrefix — μόνο Lansweeper';
+  static const String callDeletionBothIssue =
+      '$callDeletionScenarioPrefix — εκκρεμότητα και Lansweeper';
+
+  /// Ένα εισιτήριο στη μία κλήση, δύο στην άλλη: έτσι φαίνεται με τα μάτια και ο
+  /// ενικός («1 εγγραφή (εισιτήριο 7001)») και ο πληθυντικός της προειδοποίησης.
+  static const String callDeletionLansweeperOnlyTicket = '7001';
+  static const List<String> callDeletionBothTickets = ['7002', '7003'];
+
   /// Διαθέσιμο μόνο σε debug builds σε desktop (Windows/macOS/Linux).
   static bool get isEnabled {
     if (!kDebugMode) return false;
@@ -211,6 +228,7 @@ class IntegrityDebugSeederService {
         await _insertAuditMissingSearchText(txn);
         await _insertDokimastikoSharedAssetsScenario(txn);
         await insertInformatikiDeletionScenario(txn);
+        await insertCallDeletionScenario(txn);
       });
     } finally {
       await db.close();
@@ -749,6 +767,113 @@ class IntegrityDebugSeederService {
       'lansweeper_state': 'unsent',
       'is_deleted': 0,
     });
+  }
+
+  /// Σενάριο δοκιμής του διαλόγου διαγραφής κλήσης: τρεις κλήσεις, τρεις
+  /// συνδυασμοί συνδέσεων.
+  ///
+  /// Ο διάλογος οφείλει να ονομάζει ό,τι θα χαθεί· εδώ φαίνεται με τα μάτια αν
+  /// το κάνει σωστά και στις τρεις περιπτώσεις — και αν σιωπά όταν δεν υπάρχει
+  /// τίποτα να χαθεί. Οι δεσμοί Lansweeper χάνονται μόνο με τον διακόπτη της
+  /// οριστικής διαγραφής, οπότε κάθε κλήση δοκιμάζεται και με τις δύο θέσεις του.
+  ///
+  /// Καμία από τις τρεις **δεν** είναι εύρημα ακεραιότητας: οι αναφορές δείχνουν
+  /// σε υπαρκτές μη διαγραμμένες εγγραφές και το ευρετήριο είναι γεμάτο.
+  Future<void> insertCallDeletionScenario(Transaction txn) async {
+    final now = DateTime.now().toIso8601String();
+
+    Future<int> insertScenarioCall({
+      required String issue,
+      required int daysAgo,
+      required String phoneText,
+      String? mainTicketId,
+    }) {
+      return txn.insert('calls', {
+        ..._callTimestamp(daysAgo, hour: 9, minute: 40),
+        'phone_text': phoneText,
+        'caller_text': 'Δοκιμαστής Διαγραφής',
+        'department_text': dokimastikoDepartmentName,
+        'issue': issue,
+        'status': 'completed',
+        'search_index': SearchTextNormalizer.normalizeForSearch(
+          '$issue $phoneText ${mainTicketId ?? ''}',
+        ),
+        'lansweeper_state': mainTicketId == null ? 'unsent' : 'sent',
+        'lansweeper_main_ticket_id': mainTicketId,
+        'lansweeper_last_sync_at': mainTicketId == null ? null : now,
+        'is_deleted': 0,
+      });
+    }
+
+    Future<void> insertScenarioTask({
+      required int callId,
+      required String title,
+    }) async {
+      await txn.insert('tasks', {
+        'title': title,
+        'status': 'open',
+        'search_index': SearchTextNormalizer.normalizeForSearch(title),
+        'call_id': callId,
+        'created_at': now,
+        'updated_at': now,
+        'is_deleted': 0,
+      });
+    }
+
+    Future<void> insertScenarioLink({
+      required int callId,
+      required String ticketId,
+    }) async {
+      await txn.insert('call_external_links', {
+        'call_id': callId,
+        'external_id': ticketId,
+        'provider': 'lansweeper',
+        'created_at': now,
+      });
+    }
+
+    // 1) Μόνο εκκρεμότητα: ο διάλογος ρωτά τι να τις κάνει, και δεν έχει λόγο να
+    //    προειδοποιήσει για ιστορικό Lansweeper ούτε με ενεργό τον διακόπτη.
+    final tasksOnlyCallId = await insertScenarioCall(
+      issue: callDeletionTasksOnlyIssue,
+      daysAgo: 1,
+      phoneText: '7101',
+    );
+    await insertScenarioTask(
+      callId: tasksOnlyCallId,
+      title: 'Εκκρεμότητα κλήσης «$callDeletionTasksOnlyIssue»',
+    );
+
+    // 2) Μόνο Lansweeper: κανένα κουμπί για εκκρεμότητες, αλλά με τον διακόπτη
+    //    ενεργό εμφανίζεται η προειδοποίηση στον ενικό.
+    final lansweeperOnlyCallId = await insertScenarioCall(
+      issue: callDeletionLansweeperOnlyIssue,
+      daysAgo: 2,
+      phoneText: '7102',
+      mainTicketId: callDeletionLansweeperOnlyTicket,
+    );
+    await insertScenarioLink(
+      callId: lansweeperOnlyCallId,
+      ticketId: callDeletionLansweeperOnlyTicket,
+    );
+
+    // 3) Και τα δύο, με δύο εισιτήρια: μία πρώτη καταχώρηση που ακυρώθηκε και το
+    //    τελικό εισιτήριο — η προειδοποίηση τα ονομάζει και τα δύο.
+    final bothCallId = await insertScenarioCall(
+      issue: callDeletionBothIssue,
+      daysAgo: 3,
+      phoneText: '7103',
+      mainTicketId: callDeletionBothTickets.last,
+    );
+    for (var i = 0; i < 2; i++) {
+      await insertScenarioTask(
+        callId: bothCallId,
+        title: 'Εκκρεμότητα ${i + 1} κλήσης «$callDeletionBothIssue»',
+      );
+    }
+    for (final ticketId in callDeletionBothTickets) {
+      await insertScenarioLink(callId: bothCallId, ticketId: ticketId);
+    }
   }
 
   Future<void> _insertAuditMissingSearchText(Transaction txn) async {

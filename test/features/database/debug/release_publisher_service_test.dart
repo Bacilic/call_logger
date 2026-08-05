@@ -631,7 +631,7 @@ environment:
       final zipPath = p.join(
         updateFolder.path,
         'current',
-        'call_logger_0.24.0.zip',
+        'call_logger_0.24.0(32).zip',
       );
       expect(await File(zipPath).exists(), isTrue);
 
@@ -683,6 +683,300 @@ environment:
       );
     },
   );
+
+  group('rebuildCurrentVersion', () {
+    test(
+      'keeps version label and changelog untouched, bumps only the build',
+      () async {
+        await writeProjectFiles(
+          changelogJson: sampleChangelogJson(emptyUnreleased: true),
+          pubspec: samplePubspec,
+        );
+        await seedReleaseArtifacts();
+        final changelogBefore = await File(
+          p.join(projectRoot.path, 'assets', 'changelog.json'),
+        ).readAsBytes();
+
+        final progress = <String>[];
+        final service = buildService(
+          processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
+          onProgress: progress.add,
+        );
+
+        final result = await service.rebuildCurrentVersion();
+
+        expect(result.status, ReleasePublishStatus.success);
+        // Ετικέτα ΙΔΙΑ, build +1.
+        expect(result.newVersion, '0.23.1');
+        expect(result.newBuild, 32);
+        expect(
+          await File(p.join(projectRoot.path, 'pubspec.yaml')).readAsString(),
+          contains('version: 0.23.1+32'),
+        );
+        // Το ιστορικό δεν αγγίχτηκε καθόλου — καμία νέα κάρτα, καμία σφράγιση.
+        expect(
+          await File(
+            p.join(projectRoot.path, 'assets', 'changelog.json'),
+          ).readAsBytes(),
+          changelogBefore,
+        );
+        expect(progress.any((m) => m.contains('Σφράγιση changelog')), isFalse);
+
+        // Πλήρης δημοσίευση: zip, app/, εγκαταστάτης, manifest με το νέο build.
+        // Το κτίσιμο στο όνομα ξεχωρίζει το πακέτο από εκείνο του build 31.
+        final currentDir = Directory(p.join(updateFolder.path, 'current'));
+        expect(
+          await File(
+            p.join(currentDir.path, 'call_logger_0.23.1(32).zip'),
+          ).exists(),
+          isTrue,
+        );
+        expect(
+          await File(p.join(currentDir.path, 'app', 'call_logger.exe')).exists(),
+          isTrue,
+        );
+        expect(
+          await File(
+            p.join(updateFolder.path, 'install_call_logger.bat'),
+          ).exists(),
+          isTrue,
+        );
+        final manifest =
+            jsonDecode(
+                  await File(
+                    p.join(currentDir.path, 'version.json'),
+                  ).readAsString(),
+                )
+                as Map<String, dynamic>;
+        expect(manifest['version'], '0.23.1');
+        expect(manifest['build'], 32);
+      },
+    );
+
+    // Χωρίς το κτίσιμο στο όνομα, η δεύτερη αναδημιουργία θα αντικαθιστούσε
+    // σιωπηλά το πακέτο της πρώτης — και στο current/ και στο αρχείο releases/.
+    test(
+      'two rebuilds of the same version keep BOTH packages in releases/',
+      () async {
+        await writeProjectFiles(
+          changelogJson: sampleChangelogJson(emptyUnreleased: true),
+          pubspec: samplePubspec,
+        );
+        await seedReleaseArtifacts();
+
+        final service = buildService(
+          processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
+        );
+
+        final first = await service.rebuildCurrentVersion();
+        final second = await service.rebuildCurrentVersion();
+
+        expect(first.newBuild, 32);
+        expect(second.newBuild, 33);
+        expect(first.newVersion, second.newVersion);
+
+        // Το αρχείο κρατά ΚΑΙ ΤΑ ΔΥΟ κτίσματα της ίδιας έκδοσης.
+        final releaseDir = Directory(
+          p.join(updateFolder.path, 'releases', '0.23.1'),
+        );
+        final archived = releaseDir
+            .listSync()
+            .whereType<File>()
+            .map((f) => p.basename(f.path))
+            .toList()
+          ..sort();
+        expect(archived, [
+          'call_logger_0.23.1(32).zip',
+          'call_logger_0.23.1(33).zip',
+        ]);
+
+        // Το current/ κρατά μόνο το τελευταίο — το προηγούμενο καθαρίστηκε.
+        final currentDir = Directory(p.join(updateFolder.path, 'current'));
+        final live = currentDir
+            .listSync()
+            .whereType<File>()
+            .map((f) => p.basename(f.path))
+            .where((n) => n.endsWith('.zip'))
+            .toList();
+        expect(live, ['call_logger_0.23.1(33).zip']);
+
+        // Το manifest δείχνει στο πακέτο που όντως υπάρχει.
+        final manifest =
+            jsonDecode(
+                  await File(
+                    p.join(currentDir.path, 'version.json'),
+                  ).readAsString(),
+                )
+                as Map<String, dynamic>;
+        expect(manifest['zipFile'], 'call_logger_0.23.1(33).zip');
+        expect(manifest['build'], 33);
+        expect(
+          await File(
+            p.join(currentDir.path, manifest['zipFile'] as String),
+          ).exists(),
+          isTrue,
+        );
+      },
+    );
+
+    test('build failure restores pubspec and writes no version.json', () async {
+      await writeProjectFiles(
+        changelogJson: sampleChangelogJson(emptyUnreleased: true),
+        pubspec: samplePubspec,
+      );
+      final pubBefore = await File(
+        p.join(projectRoot.path, 'pubspec.yaml'),
+      ).readAsBytes();
+
+      final service = buildService(
+        processRunner: (_, _, {workingDirectory, onOutput}) async => 1,
+      );
+
+      final result = await service.rebuildCurrentVersion();
+
+      expect(result.status, ReleasePublishStatus.failure);
+      expect(result.failedStep, contains('build'));
+      expect(
+        await File(p.join(projectRoot.path, 'pubspec.yaml')).readAsBytes(),
+        pubBefore,
+      );
+      expect(
+        await File(
+          p.join(updateFolder.path, 'current', 'version.json'),
+        ).exists(),
+        isFalse,
+      );
+    });
+  });
+
+  test(
+    'successful publish prunes old zips in current/ and keeps 5 newest '
+    'releases, reporting each deletion and leaving foreign files intact',
+    () async {
+      await writeProjectFiles(
+        changelogJson: sampleChangelogJson(),
+        pubspec: samplePubspec,
+      );
+      await seedReleaseArtifacts();
+
+      // Παλιά zip + ξένο αρχείο στο current/. Μπαίνουν και τα δύο σχήματα
+      // ονόματος: με κτίσιμο (νέο) και χωρίς (πριν την αλλαγή) — η συντήρηση
+      // πρέπει να καθαρίζει και τα δύο.
+      final currentDir = Directory(p.join(updateFolder.path, 'current'));
+      await currentDir.create(recursive: true);
+      for (final name in [
+        'call_logger_0.20.0.zip',
+        'call_logger_0.21.0.zip',
+        'call_logger_0.22.0.zip',
+        'call_logger_0.24.0(30).zip',
+        'call_logger_0.24.0(31).zip',
+      ]) {
+        await File(p.join(currentDir.path, name)).writeAsBytes([1]);
+      }
+      await File(
+        p.join(currentDir.path, 'σημειώσεις.txt'),
+      ).writeAsString('δικό μου');
+
+      // 7 φάκελοι εκδόσεων + ξένος φάκελος στο releases/.
+      final releasesRoot = Directory(p.join(updateFolder.path, 'releases'));
+      const seededReleases = [
+        '0.18.0',
+        '0.19.0',
+        '0.20.0',
+        '0.21.0',
+        '0.22.0',
+        '0.23.0',
+        '0.23.1',
+      ];
+      for (final v in seededReleases) {
+        final dir = Directory(p.join(releasesRoot.path, v));
+        await dir.create(recursive: true);
+        await File(
+          p.join(dir.path, 'call_logger_$v.zip'),
+        ).writeAsBytes([1]);
+      }
+      await Directory(
+        p.join(releasesRoot.path, 'παλιές_σημειώσεις'),
+      ).create(recursive: true);
+
+      final progress = <String>[];
+      final service = buildService(
+        processRunner: (_, _, {workingDirectory, onOutput}) async => 0,
+        onProgress: progress.add,
+      );
+
+      final result = await service.publish(); // → 0.24.0
+      expect(result.status, ReleasePublishStatus.success);
+
+      // current/: μόνο το νέο zip· το ξένο αρχείο δεν αγγίχτηκε.
+      final zipNames = currentDir
+          .listSync()
+          .whereType<File>()
+          .map((f) => p.basename(f.path))
+          .where((n) => n.endsWith('.zip'))
+          .toList();
+      expect(zipNames, ['call_logger_0.24.0(32).zip']);
+      expect(
+        await File(p.join(currentDir.path, 'σημειώσεις.txt')).exists(),
+        isTrue,
+      );
+
+      // releases/: οι 5 νεότερες (μαζί με τη νέα)· ο ξένος φάκελος μένει.
+      final remaining = releasesRoot
+          .listSync()
+          .whereType<Directory>()
+          .map((d) => p.basename(d.path))
+          .toSet();
+      expect(remaining, {
+        '0.24.0',
+        '0.23.1',
+        '0.23.0',
+        '0.22.0',
+        '0.21.0',
+        'παλιές_σημειώσεις',
+      });
+
+      // Κάθε διαγραφή αναφέρεται στην πρόοδο — και στα δύο σχήματα ονόματος.
+      expect(
+        progress.any((m) => m.contains('current/call_logger_0.22.0.zip')),
+        isTrue,
+      );
+      expect(
+        progress.any((m) => m.contains('current/call_logger_0.24.0(31).zip')),
+        isTrue,
+      );
+      expect(progress.any((m) => m.contains('releases/0.18.0')), isTrue);
+      expect(progress.any((m) => m.contains('releases/0.19.0')), isTrue);
+      expect(progress.any((m) => m.contains('releases/0.20.0')), isTrue);
+    },
+  );
+
+  test('failed publish deletes nothing from the update folder', () async {
+    await writeProjectFiles(
+      changelogJson: sampleChangelogJson(),
+      pubspec: samplePubspec,
+    );
+
+    final currentDir = Directory(p.join(updateFolder.path, 'current'));
+    await currentDir.create(recursive: true);
+    await File(
+      p.join(currentDir.path, 'call_logger_0.20.0.zip'),
+    ).writeAsBytes([1]);
+    final oldRelease = Directory(p.join(updateFolder.path, 'releases', '0.1.0'));
+    await oldRelease.create(recursive: true);
+
+    final service = buildService(
+      processRunner: (_, _, {workingDirectory, onOutput}) async => 1,
+    );
+
+    final result = await service.publish();
+    expect(result.status, ReleasePublishStatus.failure);
+    expect(
+      await File(p.join(currentDir.path, 'call_logger_0.20.0.zip')).exists(),
+      isTrue,
+    );
+    expect(await oldRelease.exists(), isTrue);
+  });
 
   group('nextVersion', () {
     test('patch and minor bump numerically', () {

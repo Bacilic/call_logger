@@ -158,21 +158,24 @@ class BuildingMapEditToolbar extends ConsumerWidget {
         children: [
           toggles,
           const SizedBox(width: 4),
-          IconButton(
-            tooltip:
+          CompactTooltip(
+            message:
                 'Μετακίνηση χάρτη στη Σχεδίαση (διακόπτης).\n'
                 'Γρήγοροι δρόμοι: κρατήστε πατημένο το Space ή σύρετε '
                 'με το μεσαίο πλήκτρο του ποντικιού.',
-            isSelected: panLock,
-            style: IconButton.styleFrom(
-              backgroundColor: panLock
-                  ? Theme.of(context).colorScheme.secondaryContainer
-                  : null,
+            child: IconButton(
+              isSelected: panLock,
+              style: IconButton.styleFrom(
+                backgroundColor: panLock
+                    ? Theme.of(context).colorScheme.secondaryContainer
+                    : null,
+              ),
+              onPressed: !hasActiveCanvas
+                  ? null
+                  : () =>
+                        ref.read(buildingMapPanLockProvider.notifier).toggle(),
+              icon: const Icon(Icons.open_with),
             ),
-            onPressed: !hasActiveCanvas
-                ? null
-                : () => ref.read(buildingMapPanLockProvider.notifier).toggle(),
-            icon: const Icon(Icons.open_with),
           ),
           if (!hasActiveCanvas)
             Opacity(

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/about/providers/app_version_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/updates/network_folder_classifier.dart';
+import '../../../core/updates/update_folder_status.dart';
 import '../../../core/utils/elapsed_stopwatch_format.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
@@ -60,6 +61,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   bool _folderValid = false;
   int _validationGen = 0;
   bool _showLocalOnlyWarning = false;
+  UpdateFolderStatus? _folderStatus;
   final Stopwatch _actionStopwatch = Stopwatch();
   Timer? _elapsedTimer;
   String _elapsedLabel = _initialElapsedLabel;
@@ -85,8 +87,9 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   /// Η υπόδειξη λέει πάντα **τι κάνει** το κουμπί· όταν είναι ανενεργό λόγω
   /// φακέλου, προστίθεται και η αιτία. Όσο τρέχει μια ενέργεια δεν προστίθεται
   /// τίποτα — το κουμπί είναι ανενεργό επειδή δουλεύει, όχι επειδή λείπει κάτι.
-  String _actionTooltip(String description) =>
-      (_canPublish || _running) ? description : '$description\n\n$_folderRequirement';
+  String _actionTooltip(String description) => (_canPublish || _running)
+      ? description
+      : '$description\n\n$_folderRequirement';
 
   NetworkFolderClassifier get _classifier =>
       widget.networkFolderClassifier ?? NetworkFolderClassifier.system();
@@ -230,6 +233,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
       setState(() {
         _folderError = null;
         _folderValid = false;
+        _folderStatus = null;
       });
       return;
     }
@@ -265,12 +269,23 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
         _folderValid = true;
       });
       await SettingsService().catalogs.setUpdateFolderPath(trimmed);
+      await _refreshFolderStatus(trimmed, gen: gen);
     } else {
       setState(() {
         _folderError = result.errorMessage;
         _folderValid = false;
+        _folderStatus = null;
       });
     }
+  }
+
+  /// Ανανεώνει την ένδειξη «τι περιέχει ο φάκελος» (δημοσιευμένη έκδοση ή τι
+  /// λείπει). Το [gen] κόβει αποτελέσματα που πρόλαβε να ξεπεράσει νεότερη
+  /// πληκτρολόγηση.
+  Future<void> _refreshFolderStatus(String folder, {int? gen}) async {
+    final status = await inspectUpdateFolder(folder);
+    if (!mounted || (gen != null && gen != _validationGen)) return;
+    setState(() => _folderStatus = status);
   }
 
   Future<void> _pickFolder() async {
@@ -297,6 +312,9 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
 
   Future<void> _writeInstallerOnly() =>
       _runPublisherAction((service) => service.writeInstallerOnly());
+
+  Future<void> _rebuildCurrentVersion() =>
+      _runPublisherAction((service) => service.rebuildCurrentVersion());
 
   /// Κοινή ροή για κάθε ενέργεια της κάρτας: κλείδωμα κουμπιών, χρονόμετρο,
   /// αποθήκευση φακέλου, εκτέλεση, μήνυμα αποτελέσματος.
@@ -340,9 +358,16 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     if (result.status == ReleasePublishStatus.success) {
       ref.invalidate(publishReminderProvider);
     }
+
+    // Κάθε ενέργεια αλλάζει το περιεχόμενο του φακέλου — η ένδειξη κατάστασης
+    // πρέπει να δείχνει το ΝΕΟ περιεχόμενο, όχι αυτό πριν την ενέργεια.
+    await _refreshFolderStatus(folder);
   }
 
-  static String? _statusMessageFor(ReleasePublishResult result, String elapsed) {
+  static String? _statusMessageFor(
+    ReleasePublishResult result,
+    String elapsed,
+  ) {
     switch (result.status) {
       case ReleasePublishStatus.success:
         final base = result.message ?? 'Επιτυχία.';
@@ -419,7 +444,17 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
           builder: (titleHandle) => AlertDialog(
             key: const Key('release_empty_unreleased_dialog'),
             title: titleHandle,
-            content: const Text('Το ιστορικό (Unreleased) είναι κενό.'),
+            content: Text(
+              'Το ιστορικό (Unreleased) είναι κενό, οπότε δεν προκύπτει νέος '
+              'αριθμός έκδοσης.\n\n'
+              '• Μόνο εγκαταστάτης: ξαναγράφει μόνο το '
+              'install_call_logger.bat.\n'
+              '• Δημιουργία πάραυτα: ξαναχτίζει και ξαναδημοσιεύει την '
+              '${preview.currentVersion} χωρίς αλλαγή του αριθμού έκδοσης. '
+              'Ο αριθμός κτισίματος πάει ${preview.currentBuild} → '
+              '${preview.currentBuild + 1}, ώστε οι εγκατεστημένες εφαρμογές '
+              'να δουν την ενημέρωση.',
+            ),
             actions: [
               TextButton(
                 key: const Key('release_empty_cancel'),
@@ -432,6 +467,11 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
                 onPressed: () => Navigator.of(ctx).pop('installer'),
                 child: const Text('Μόνο εγκαταστάτης'),
               ),
+              FilledButton(
+                key: const Key('release_empty_rebuild'),
+                onPressed: () => Navigator.of(ctx).pop('rebuild'),
+                child: const Text('Δημιουργία πάραυτα'),
+              ),
             ],
           ),
         ),
@@ -439,6 +479,8 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
       if (!mounted) return;
       if (choice == 'installer') {
         await _writeInstallerOnly();
+      } else if (choice == 'rebuild') {
+        await _rebuildCurrentVersion();
       }
       return;
     }
@@ -482,21 +524,9 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   Future<void> _copyCliCommand() async {
     if (!_canPublish) return;
     final folder = _folderController.text.trim();
-    final service = _createService(folder);
-    late final ReleasePublishPreview preview;
-    try {
-      preview = await service.preparePreview();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _statusIsError = true;
-        _statusMessage = 'Αποτυχία προεπισκόπησης: $e';
-      });
-      return;
-    }
     final template = await SettingsService().catalogs
         .getPublishCliCommandTemplate();
-    final command = buildPublishCliCommand(template, preview.bumpKind, folder);
+    final command = buildPublishCliCommand(template, folder);
     await Clipboard.setData(ClipboardData(text: command));
     if (!mounted) return;
     setState(() {
@@ -608,6 +638,37 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
                 ),
               ],
             ),
+            if (_folderStatus case final status?
+                when status.state != UpdateFolderState.unavailable) ...[
+              const SizedBox(height: 8),
+              Row(
+                key: const Key('release_update_folder_status'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    status.isReady
+                        ? Icons.check_circle_outline
+                        : Icons.error_outline,
+                    size: 16,
+                    color: status.isReady ? scheme.primary : scheme.error,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      status.isReady
+                          ? status.describe()
+                          : '${status.describe()} Η «Δημοσίευση» τον '
+                                'ξαναγεμίζει.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: status.isReady
+                            ? scheme.onSurfaceVariant
+                            : scheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (_showLocalOnlyWarning) ...[
               const SizedBox(height: 8),
               Row(
@@ -650,18 +711,20 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
                   waitDuration: const Duration(milliseconds: 400),
                   child: installerButton,
                 ),
-                IconButton(
-                  key: const Key('release_copy_cli_button'),
-                  tooltip:
+                CompactTooltip(
+                  message:
                       'Λόγω περιορισμών ασφαλείας στο εργασιακό περιβάλλον '
                       '(antivirus), η μεταγλώττιση από την εφαρμογή ενδέχεται '
                       'να μπλοκάρεται. Αντιγράφει την εντολή δημοσίευσης για '
                       'εκτέλεση από τερματικό (π.χ. Cursor), όπου το build '
                       'ολοκληρώνεται κανονικά με το ίδιο ακριβώς αποτέλεσμα.',
-                  onPressed: _canPublish
-                      ? () => unawaited(_copyCliCommand())
-                      : null,
-                  icon: const Icon(Icons.code),
+                  child: IconButton(
+                    key: const Key('release_copy_cli_button'),
+                    onPressed: _canPublish
+                        ? () => unawaited(_copyCliCommand())
+                        : null,
+                    icon: const Icon(Icons.code),
+                  ),
                 ),
                 IconButton(
                   key: const Key('release_cli_settings_button'),
@@ -833,8 +896,8 @@ class _PublishCliSettingsDialogState extends State<_PublishCliSettingsDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Η εντολή χρησιμοποιεί τα placeholders {bump} '
-                  '(patch ή minor) και {folder} (φάκελος ενημερώσεων).\n\n'
+                  'Η εντολή χρησιμοποιεί το placeholder {folder} '
+                  '(φάκελος ενημερώσεων).\n\n'
                   'Παράμετροι εντολής:\n'
                   '$kPublishCliParametersHelp',
                   style: Theme.of(context).textTheme.bodySmall,

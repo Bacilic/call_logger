@@ -86,9 +86,10 @@ UpdateInstallerService buildDefaultUpdateInstallerService() {
     resolveUpdateFolder: config.resolveUpdateFolderPath,
     isDevelopmentBuild: () => BuildEnvironment.isDevelopmentBuild(),
     launchDetached: (exe, args, {workingDirectory}) async {
-      // exe = updater.cmd. Εκκίνηση μέσω cmd.exe ώστε διαδρομές με κενά
-      // (π.χ. Documents\Call Logger) να μην σπάσουν τη γραμμή εντολών.
-      await UpdateCmdLauncher.launchDetached(
+      // exe = updater.cmd. Εκκίνηση μέσω cmd.exe σε δική του ορατή κονσόλα
+      // (μία — δείχνει την πρόοδο)· οι διαδρομές με κενά δεν σπάνε τη γραμμή
+      // εντολών γιατί μόνο η διαδρομή του script μπαίνει σε εισαγωγικά.
+      await UpdateCmdLauncher.launch(
         scriptPath: exe,
         scriptArgs: args,
         workingDirectory: workingDirectory,

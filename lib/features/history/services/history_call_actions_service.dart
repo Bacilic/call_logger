@@ -1,11 +1,10 @@
-import 'dart:async';
-
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/call_deletion_impact.dart';
 import '../../../core/database/calls_deletion_repository.dart';
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/run_after_next_frame.dart';
 import '../../calls/models/call_model.dart';
 import '../../calls/provider/calls_dashboard_providers.dart';
 import '../../tasks/providers/tasks_provider.dart';
@@ -32,14 +31,9 @@ class HistoryCallActionsService {
     return repo.getCallById(callId);
   }
 
-  Future<int> countLinkedTasks(int callId) async {
+  Future<CallDeletionImpact> callDeletionImpact(List<int> callIds) async {
     final deletion = await _deletion();
-    return deletion.getTasksCountLinkedToCall(callId);
-  }
-
-  Future<int> countLinkedTasksForCalls(List<int> callIds) async {
-    final deletion = await _deletion();
-    return deletion.getTasksCountLinkedToCalls(callIds);
+    return deletion.getCallDeletionImpact(callIds);
   }
 
   Future<void> saveEditedCall(CallModel call) async {
@@ -51,6 +45,8 @@ class HistoryCallActionsService {
     );
   }
 
+  /// Διαγραφή κλήσης — το [hard] αλλάζει πόσο βαθιά σβήνει, ποτέ τι θα γίνουν
+  /// οι εκκρεμότητες: αυτό το λέει πάντα το [taskAction] του χρήστη.
   Future<void> deleteCall(
     int callId, {
     required String taskAction,
@@ -66,22 +62,15 @@ class HistoryCallActionsService {
     );
   }
 
-  Future<void> hardDeleteCall(
-    int callId, {
-    int? callerId,
-    String? equipmentCode,
+  /// Μαζική διαγραφή — το [hard] αλλάζει πόσο βαθιά σβήνει, ποτέ τι θα γίνουν
+  /// οι εκκρεμότητες: αυτό το λέει πάντα το [taskAction] του χρήστη.
+  Future<void> bulkDelete(
+    List<int> callIds, {
+    String? taskAction,
+    bool hard = false,
   }) async {
     final deletion = await _deletion();
-    await deletion.hardDeleteCall(callId);
-    await refreshAfterMutation(
-      callerId: callerId,
-      equipmentCode: equipmentCode,
-    );
-  }
-
-  Future<void> bulkSoftDelete(List<int> callIds, {String? taskAction}) async {
-    final deletion = await _deletion();
-    await deletion.bulkSoftDeleteCalls(callIds, taskAction: taskAction);
+    await deletion.bulkDeleteCalls(callIds, taskAction: taskAction, hard: hard);
     await refreshAfterMutation();
   }
 
@@ -97,27 +86,21 @@ class HistoryCallActionsService {
     String? equipmentCode,
   }) async {
     if (!ref.mounted) return;
-    final completer = Completer<void>();
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      try {
-        if (!ref.mounted) return;
-        ref.invalidate(historyCallsProvider);
-        ref.invalidate(historyCategoryDateCallCountProvider);
-        ref.invalidate(globalRecentCallsProvider);
-        ref.invalidate(dashboardStatsProvider);
-        ref.invalidate(tasksProvider);
+    return runAfterNextFrame(() {
+      if (!ref.mounted) return;
+      ref.invalidate(historyCallsProvider);
+      ref.invalidate(historyCategoryDateCallCountProvider);
+      ref.invalidate(globalRecentCallsProvider);
+      ref.invalidate(dashboardStatsProvider);
+      ref.invalidate(tasksProvider);
 
-        if (callerId != null) {
-          ref.invalidate(recentCallsProvider(callerId));
-        }
-        final code = equipmentCode?.trim();
-        if (code != null && code.isNotEmpty) {
-          ref.invalidate(recentCallsByEquipmentProvider(code));
-        }
-      } finally {
-        if (!completer.isCompleted) completer.complete();
+      if (callerId != null) {
+        ref.invalidate(recentCallsProvider(callerId));
+      }
+      final code = equipmentCode?.trim();
+      if (code != null && code.isNotEmpty) {
+        ref.invalidate(recentCallsByEquipmentProvider(code));
       }
     });
-    return completer.future;
   }
 }

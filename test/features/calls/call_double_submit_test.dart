@@ -109,11 +109,8 @@ Future<int> _countTasksForMarker(String marker) async {
     where: 'issue LIKE ? AND COALESCE(is_deleted, 0) = 0',
     whereArgs: ['%$marker%'],
   );
-  var total = 0;
-  for (final call in calls) {
-    total += await deletion.getTasksCountLinkedToCall(call['id'] as int);
-  }
-  return total;
+  final callIds = [for (final call in calls) call['id'] as int];
+  return deletion.getTasksCountLinkedToCalls(callIds);
 }
 
 void main() {

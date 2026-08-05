@@ -126,7 +126,14 @@ class DatabaseIntegrityFixService {
         await _fixTaskTemporal(db, dir, finding);
       case IntegrityCheckType.auditMissingSearchText:
         await _fixAuditSearchText(db, dir, finding);
+      // Δύο διαγνωστικά χωρίς αυτόματη επιδιόρθωση, για διαφορετικό λόγο το
+      // καθένα: το `quick_check` αναφέρει φθορά του ίδιου του αρχείου, που
+      // θέλει επαναφορά από αντίγραφο· οι παραβιάσεις κανόνων δεν θα έπρεπε να
+      // υπάρχουν καθόλου μετά την v38, οπότε αν εμφανιστούν είναι ένδειξη ότι
+      // κάποια ροή γράφει παρακάμπτοντας τους κανόνες — αυτό διορθώνεται στον
+      // κώδικα, όχι στα δεδομένα.
       case IntegrityCheckType.pragmaQuickCheck:
+      case IntegrityCheckType.foreignKeyViolations:
         break;
     }
   }

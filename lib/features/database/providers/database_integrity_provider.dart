@@ -92,7 +92,7 @@ class DatabaseIntegrityNotifier extends Notifier<DatabaseIntegrityState> {
   Future<void> runCheck({bool force = false}) async {
     if (state is DatabaseIntegrityLoading && !force) return;
 
-    state = const DatabaseIntegrityLoading(
+    state = DatabaseIntegrityLoading(
       currentStep: 0,
       totalSteps: DatabaseIntegrityService.totalSteps,
       currentCheckName: 'Προετοιμασία…',

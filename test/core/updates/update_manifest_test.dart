@@ -110,5 +110,43 @@ void main() {
         lessThan(0),
       );
     });
+
+    // Αναπροσαρμογή αρίθμησης: το build είναι η μονότονη αλήθεια. Ξεχασμένη
+    // εγκατάσταση με «μπροστινή» ετικέτα από παλιά γραμμή (0.24.4, build 25)
+    // πρέπει να αναγνωρίζει το κανάλι (0.23.2, build 33) ως ΝΕΟΤΕΡΟ — αλλιώς
+    // δεν θα αυτοενημερωθεί ποτέ.
+    test('build decides: stray 0.24.4+25 is OLDER than channel 0.23.2+33', () {
+      expect(
+        UpdateManifest.compareVersions(
+          versionA: '0.24.4',
+          buildA: 25,
+          versionB: '0.23.2',
+          buildB: 33,
+        ),
+        lessThan(0),
+      );
+    });
+
+    test('label manipulation without newer build does not win', () {
+      // Πειραγμένη ετικέτα 9.9.9 με ΠΑΛΙΟΤΕΡΟ build δεν είναι «νεότερη».
+      expect(
+        UpdateManifest.compareVersions(
+          versionA: '0.23.1',
+          buildA: 31,
+          versionB: '9.9.9',
+          buildB: 30,
+        ),
+        greaterThan(0),
+      );
+    });
+  });
+
+  group('UpdateManifest.compareVersionLabels', () {
+    test('compares only the X.Y.Z label, numerically', () {
+      expect(UpdateManifest.compareVersionLabels('0.23.2', '0.24.4'), lessThan(0));
+      expect(UpdateManifest.compareVersionLabels('0.24.4', '0.23.2'), greaterThan(0));
+      expect(UpdateManifest.compareVersionLabels('0.23.2', '0.23.2'), 0);
+      expect(UpdateManifest.compareVersionLabels('0.9.0', '0.10.0'), lessThan(0));
+    });
   });
 }

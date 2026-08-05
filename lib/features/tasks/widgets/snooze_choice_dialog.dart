@@ -108,13 +108,13 @@ class _SnoozeChoiceDialogState extends State<SnoozeChoiceDialog> {
         option: TaskSettingsConfig.kOneHour,
         label: '+1 ώρα',
         due: widget.calculateDue(TaskSettingsConfig.kOneHour, _now),
-        tooltip: TaskDueOptionTooltips.plusOneHour(),
+        message: TaskDueOptionTooltips.plusOneHour(),
       ),
       TaskDueQuickChoice(
         option: TaskSettingsConfig.kDayEnd,
         label: 'Μέσα στο ωράριο',
         due: widget.calculateDue(TaskSettingsConfig.kDayEnd, _now),
-        tooltip: TaskDueOptionTooltips.withinSchedule(
+        message: TaskDueOptionTooltips.withinSchedule(
           config.nextBusinessHour,
           config.dayEndTime,
         ),
@@ -123,7 +123,7 @@ class _SnoozeChoiceDialogState extends State<SnoozeChoiceDialog> {
         option: TaskSettingsConfig.kNextBusiness,
         label: 'Επόμενη εργάσιμη',
         due: widget.calculateDue(TaskSettingsConfig.kNextBusiness, _now),
-        tooltip: TaskDueOptionTooltips.nextBusiness(config.nextBusinessHour),
+        message: TaskDueOptionTooltips.nextBusiness(config.nextBusinessHour),
       ),
     ];
   }

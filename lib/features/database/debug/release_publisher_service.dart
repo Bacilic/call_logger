@@ -95,6 +95,18 @@ class ReleasePublisherService {
 
   static const _categoryKeys = ['added', 'improvements', 'changed', 'fixed'];
 
+  /// Πόσες εκδόσεις κρατά το `releases/` μετά από κάθε δημοσίευση.
+  static const int retainedReleaseCount = 5;
+
+  /// Μόνο δικά μας πακέτα επιτρέπεται να διαγραφούν από τη συντήρηση:
+  /// `call_logger_X.Y.Z(build).zip` και το παλιό `call_logger_X.Y.Z.zip`
+  /// (χωρίς κτίσιμο), ώστε να καθαρίζονται και όσα δημοσιεύτηκαν πριν την
+  /// αλλαγή ονοματοδοσίας.
+  static final RegExp _publishedZipPattern = RegExp(
+    r'^call_logger_\d+\.\d+\.\d+(\(\d+\))?\.zip$',
+    caseSensitive: false,
+  );
+
   static Future<Uint8List> _defaultVerificationReader(String zipPath) =>
       File(zipPath).readAsBytes();
 
@@ -212,6 +224,69 @@ class ReleasePublisherService {
       _progress('Bump έκδοσης στο pubspec.yaml…');
       await _writePubspecVersion(bumped.version, bumped.build);
 
+      return await _buildPackageAndPublish(
+        version: bumped.version,
+        build: bumped.build,
+        releasedDate: releasedDate,
+        snapshot: snapshot,
+        completionVerb: 'Δημοσιεύτηκε',
+      );
+    } catch (e) {
+      return _failureAfterRestore(e, snapshot);
+    }
+  }
+
+  /// Ξαναχτίζει και ξαναδημοσιεύει την τρέχουσα έκδοση **χωρίς νέο αριθμό
+  /// έκδοσης και χωρίς να αγγίξει το ιστορικό αλλαγών**.
+  ///
+  /// Δύο πραγματικές ανάγκες:
+  /// 1. αλλαγές που δεν δικαιολογούν καταχώρηση ιστορικού (εσωτερικές
+  ///    διορθώσεις, εργαλεία αποσφαλμάτωσης) αλλά πρέπει να φτάσουν στους
+  ///    χρήστες·
+  /// 2. επιδιόρθωση κατεστραμμένου/άδειου φακέλου ενημερώσεων.
+  ///
+  /// Η ετικέτα `X.Y.Z` μένει ΙΔΙΑ — αυξάνεται μόνο ο αριθμός κτισίματος, ώστε
+  /// οι εγκατεστημένες εφαρμογές να δουν την ενημέρωση (η σύγκριση «υπάρχει
+  /// νεότερη έκδοση;» γίνεται με το build, όχι με την ετικέτα).
+  Future<ReleasePublishResult> rebuildCurrentVersion() async {
+    _ProjectFileSnapshot? snapshot;
+    try {
+      snapshot = await _snapshotProjectFiles();
+      final current = await _readPubspecVersion();
+      final nextBuild = current.build + 1;
+
+      _progress(
+        'Αύξηση αριθμού κτισίματος σε $nextBuild '
+        '(η έκδοση ${current.version} και το ιστορικό μένουν ως έχουν)…',
+      );
+      await _writePubspecVersion(current.version, nextBuild);
+
+      return await _buildPackageAndPublish(
+        version: current.version,
+        build: nextBuild,
+        releasedDate: _formatDate(clock()),
+        snapshot: snapshot,
+        completionVerb: 'Αναδημοσιεύτηκε',
+      );
+    } catch (e) {
+      return _failureAfterRestore(e, snapshot);
+    }
+  }
+
+  /// Κοινό φινάλε των [publish] και [rebuildCurrentVersion]: μεταγλώττιση,
+  /// πακετάρισμα, zip, εγγραφή στον φάκελο ενημερώσεων, εγκαταστάτης,
+  /// επαλήθευση ακεραιότητας, `version.json` και συντήρηση.
+  ///
+  /// Κάθε αποτυχία επαναφέρει τα αρχεία του έργου από το [snapshot]: ό,τι
+  /// άλλαξε ο καλών (changelog, έκδοση) γυρίζει πίσω byte-προς-byte.
+  Future<ReleasePublishResult> _buildPackageAndPublish({
+    required String version,
+    required int build,
+    required String releasedDate,
+    required _ProjectFileSnapshot snapshot,
+    required String completionVerb,
+  }) async {
+    try {
       _progress('flutter build windows --release…');
       final buildCode = await processRunner(
         'flutter',
@@ -239,7 +314,12 @@ class ReleasePublisherService {
         );
       }
 
-      final zipName = 'call_logger_${bumped.version}.zip';
+      // Το κτίσιμο μπαίνει στο όνομα: αλλιώς μια αναδημοσίευση της ίδιας
+      // έκδοσης θα αντικαθιστούσε σιωπηλά το προηγούμενο πακέτο — και στο
+      // `current/` και στο αρχείο `releases/`, χάνοντας το τι ακριβώς είχε
+      // σταλεί. Το όνομα δεν το μαντεύει κανείς: όλη η ροή ενημέρωσης το
+      // διαβάζει από το `zipFile` του manifest.
+      final zipName = 'call_logger_$version($build).zip';
       final archive = Archive();
       for (final entry in packaged.entries) {
         final bytes = entry.value;
@@ -274,7 +354,7 @@ class ReleasePublisherService {
       final currentDir = Directory(p.join(updateFolderPath, 'current'));
       final appDir = Directory(p.join(currentDir.path, 'app'));
       final releasesDir = Directory(
-        p.join(updateFolderPath, 'releases', bumped.version),
+        p.join(updateFolderPath, 'releases', version),
       );
       await currentDir.create(recursive: true);
       if (await appDir.exists()) {
@@ -318,8 +398,8 @@ class ReleasePublisherService {
 
       _progress('Εγγραφή version.json…');
       final manifest = {
-        'version': bumped.version,
-        'build': bumped.build,
+        'version': version,
+        'build': build,
         'released': releasedDate,
         'zipFile': zipName,
         'sha256': sha,
@@ -333,30 +413,114 @@ class ReleasePublisherService {
       }
       await versionTmp.rename(versionFinal.path);
 
-      _progress('Ολοκληρώθηκε η δημοσίευση ${bumped.version}+${bumped.build}.');
+      // Συντήρηση ΜΟΝΟ μετά από πλήρως επιτυχή δημοσίευση: μια αποτυχία
+      // παραπάνω δεν πρέπει ποτέ να έχει σβήσει τίποτα.
+      await _cleanUpdateFolder(currentDir: currentDir, keepZipName: zipName);
+
+      _progress('Ολοκληρώθηκε: $version+$build.');
       return ReleasePublishResult(
         status: ReleasePublishStatus.success,
-        message: 'Δημοσιεύτηκε η έκδοση ${bumped.version}+${bumped.build}.',
-        newVersion: bumped.version,
-        newBuild: bumped.build,
+        message: '$completionVerb η έκδοση $version+$build.',
+        newVersion: version,
+        newBuild: build,
       );
     } catch (e) {
-      if (snapshot != null) {
-        try {
-          await _restoreProjectFiles(snapshot);
-        } catch (_) {
-          // Το αρχικό σφάλμα έχει προτεραιότητα.
-        }
-      }
-      return ReleasePublishResult(
-        status: ReleasePublishStatus.failure,
-        failedStep: 'άγνωστο',
-        message: e.toString(),
-      );
+      return _failureAfterRestore(e, snapshot);
     }
   }
 
+  /// Επαναφέρει τα αρχεία του έργου (αν υπάρχει [snapshot]) και επιστρέφει
+  /// αποτυχία. Αποτυχία της ίδιας της επαναφοράς δεν σκεπάζει το αρχικό σφάλμα.
+  Future<ReleasePublishResult> _failureAfterRestore(
+    Object error,
+    _ProjectFileSnapshot? snapshot,
+  ) async {
+    if (snapshot != null) {
+      try {
+        await _restoreProjectFiles(snapshot);
+      } catch (_) {
+        // Το αρχικό σφάλμα έχει προτεραιότητα.
+      }
+    }
+    return ReleasePublishResult(
+      status: ReleasePublishStatus.failure,
+      failedStep: 'άγνωστο',
+      message: error.toString(),
+    );
+  }
+
   void _progress(String message) => onProgress?.call(message);
+
+  /// Συντήρηση φακέλου ενημερώσεων μετά από ΕΠΙΤΥΧΗ δημοσίευση.
+  ///
+  /// Στο `current/` μένει μόνο το zip της νέας έκδοσης· στο `releases/` οι
+  /// [retainedReleaseCount] νεότερες εκδόσεις. Διαγράφεται ΜΟΝΟ ό,τι ταιριάζει
+  /// στα αναμενόμενα μοτίβα ονομάτων (`call_logger_X.Y.Z.zip`, φάκελοι `X.Y.Z`)
+  /// — οτιδήποτε ξένο βρεθεί στους φακέλους δεν αγγίζεται. Κάθε διαγραφή
+  /// αναφέρεται στην πρόοδο· αποτυχία διαγραφής δεν αποτυγχάνει τη δημοσίευση
+  /// (θα ξαναδοκιμαστεί αυτόματα στην επόμενη).
+  Future<void> _cleanUpdateFolder({
+    required Directory currentDir,
+    required String keepZipName,
+  }) async {
+    _progress('Συντήρηση φακέλου ενημερώσεων…');
+    try {
+      await for (final entity in currentDir.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        if (name == keepZipName) continue;
+        if (!_publishedZipPattern.hasMatch(name)) continue;
+        try {
+          await entity.delete();
+          _progress('Διαγράφηκε παλιό zip: current/$name');
+        } catch (e) {
+          _progress('Αποτυχία διαγραφής current/$name: $e');
+        }
+      }
+    } catch (e) {
+      _progress('Η συντήρηση του current/ διακόπηκε: $e');
+    }
+
+    try {
+      final releasesRoot = Directory(p.join(updateFolderPath, 'releases'));
+      if (!await releasesRoot.exists()) return;
+      final versioned = <(Directory, (int, int, int))>[];
+      await for (final entity in releasesRoot.list(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final version = _parseVersionFolderName(p.basename(entity.path));
+        if (version == null) continue;
+        versioned.add((entity, version));
+      }
+      versioned.sort((a, b) => _compareVersionTuples(b.$2, a.$2));
+      for (final (dir, _) in versioned.skip(retainedReleaseCount)) {
+        final name = p.basename(dir.path);
+        try {
+          await dir.delete(recursive: true);
+          _progress('Διαγράφηκε παλιά έκδοση: releases/$name');
+        } catch (e) {
+          _progress('Αποτυχία διαγραφής releases/$name: $e');
+        }
+      }
+    } catch (e) {
+      _progress('Η συντήρηση του releases/ διακόπηκε: $e');
+    }
+  }
+
+  static (int, int, int)? _parseVersionFolderName(String name) {
+    final match = RegExp(r'^(\d+)\.(\d+)\.(\d+)$').firstMatch(name.trim());
+    if (match == null) return null;
+    return (
+      int.parse(match[1]!),
+      int.parse(match[2]!),
+      int.parse(match[3]!),
+    );
+  }
+
+  static int _compareVersionTuples((int, int, int) a, (int, int, int) b) {
+    if (a.$1 != b.$1) return a.$1.compareTo(b.$1);
+    if (a.$2 != b.$2) return a.$2.compareTo(b.$2);
+    return a.$3.compareTo(b.$3);
+  }
 
   File get _changelogJsonFile =>
       File(p.join(projectRoot, 'assets', 'changelog.json'));

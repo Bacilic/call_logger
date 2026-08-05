@@ -398,13 +398,13 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                           TaskSettingsConfig.kOneHour,
                           quickDueNow,
                         ),
-                        tooltip: TaskDueOptionTooltips.plusOneHour(),
+                        message: TaskDueOptionTooltips.plusOneHour(),
                       ),
                       TaskDueQuickChoice(
                         option: TaskSettingsConfig.kDayEnd,
                         label: 'Μέσα στο ωράριο',
                         due: _quickDue(TaskSettingsConfig.kDayEnd, quickDueNow),
-                        tooltip: TaskDueOptionTooltips.withinSchedule(
+                        message: TaskDueOptionTooltips.withinSchedule(
                           cfg.nextBusinessHour,
                           cfg.dayEndTime,
                         ),
@@ -416,7 +416,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                           TaskSettingsConfig.kNextBusiness,
                           quickDueNow,
                         ),
-                        tooltip: TaskDueOptionTooltips.nextBusiness(
+                        message: TaskDueOptionTooltips.nextBusiness(
                           cfg.nextBusinessHour,
                         ),
                       ),
@@ -424,7 +424,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                         option: _kSettingsDefaultOption,
                         label: 'Προεπιλογή ρυθμίσεων',
                         due: suggestedDefault,
-                        tooltip:
+                        message:
                             'Η λήξη ορίζεται από την προεπιλεγμένη επιλογή των '
                             'ρυθμίσεων εκκρεμοτήτων.',
                       ),

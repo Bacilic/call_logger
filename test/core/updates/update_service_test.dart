@@ -133,6 +133,100 @@ void main() {
     expect(result.updateAvailable, isTrue);
     expect(result.latestVersion, '0.24.0');
     expect(result.manifest?.build, 32);
+    // Κανονική αναβάθμιση (μεγαλύτερη ετικέτα ΚΑΙ build): καμία επεξήγηση.
+    expect(result.needsVersionLabelExplanation, isFalse);
+    expect(result.versionLabelRelation, UpdateVersionLabelRelation.higher);
+    expect(result.currentVersion, '0.23.1');
+    expect(result.currentBuild, 31);
+  });
+
+  // Αναπροσαρμογή αρίθμησης: ξεχασμένη εγκατάσταση «0.24.4» (build 25) πρέπει
+  // να δει το κανάλι «0.23.2» (build 33) ως νεότερο — και να σηκωθεί η σημαία
+  // που οδηγεί στη σπάνια επεξήγηση προς τον χρήστη.
+  test(
+    'realigned numbering: lower label with newer build → available + flagged',
+    () async {
+      final currentDir = Directory(p.join(tempDir.path, 'current'));
+      await currentDir.create(recursive: true);
+      await File(p.join(currentDir.path, 'version.json')).writeAsString('''
+{
+  "version": "0.23.2",
+  "build": 33,
+  "released": "2026-08-03",
+  "zipFile": "call_logger_0.23.2.zip",
+  "sha256": "abc"
+}
+''');
+
+      final service = buildService(
+        resolveFolder: () async => tempDir.path,
+        readFile: (path) => File(path).readAsString(),
+        currentVersion: '0.24.4',
+        currentBuild: 25,
+      );
+
+      final result = await service.checkForUpdate();
+
+      expect(result.updateAvailable, isTrue);
+      expect(result.needsVersionLabelExplanation, isTrue);
+      expect(result.versionLabelRelation, UpdateVersionLabelRelation.lower);
+      expect(result.currentVersion, '0.24.4');
+      expect(result.currentBuild, 25);
+    },
+  );
+
+  // Αναδημιουργία («Δημιουργία πάραυτα»): ίδια ετικέτα, νεότερο build.
+  test(
+    'rebuilt same version with newer build → available + same-label relation',
+    () async {
+      final currentDir = Directory(p.join(tempDir.path, 'current'));
+      await currentDir.create(recursive: true);
+      await File(p.join(currentDir.path, 'version.json')).writeAsString('''
+{
+  "version": "0.23.1",
+  "build": 32,
+  "released": "2026-08-04",
+  "zipFile": "call_logger_0.23.1.zip",
+  "sha256": "abc"
+}
+''');
+
+      final service = buildService(
+        resolveFolder: () async => tempDir.path,
+        readFile: (path) => File(path).readAsString(),
+      );
+
+      final result = await service.checkForUpdate();
+
+      expect(result.updateAvailable, isTrue);
+      expect(result.versionLabelRelation, UpdateVersionLabelRelation.same);
+      expect(result.needsVersionLabelExplanation, isTrue);
+    },
+  );
+
+  test('higher label with older build → NOT available (build decides)', () async {
+    final currentDir = Directory(p.join(tempDir.path, 'current'));
+    await currentDir.create(recursive: true);
+    await File(p.join(currentDir.path, 'version.json')).writeAsString('''
+{
+  "version": "9.9.9",
+  "build": 30,
+  "released": "2026-07-01",
+  "zipFile": "call_logger_9.9.9.zip",
+  "sha256": "abc"
+}
+''');
+
+    final service = buildService(
+      resolveFolder: () async => tempDir.path,
+      readFile: (path) => File(path).readAsString(),
+    );
+
+    final result = await service.checkForUpdate();
+
+    expect(result.updateAvailable, isFalse);
+    expect(result.needsVersionLabelExplanation, isFalse);
+    expect(result.versionLabelRelation, isNull);
   });
 
   test('same version and build → updateAvailable false', () async {

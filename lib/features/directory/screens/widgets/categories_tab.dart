@@ -146,6 +146,8 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
   ) async {
     await showDialog<void>(
       context: context,
+      // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
+      barrierDismissible: false,
       builder: (ctx) => CategoryFormDialog(
         initialCategory: category,
         notifier: ref.read(categoryDirectoryProvider.notifier),

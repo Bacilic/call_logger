@@ -11,6 +11,8 @@ Future<Color?> showDepartmentColorPickerDialog(
 }) {
   return showDialog<Color>(
     context: context,
+    // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
+    barrierDismissible: false,
     builder: (ctx) => _DepartmentColorPickerDialog(initialColor: initialColor),
   );
 }

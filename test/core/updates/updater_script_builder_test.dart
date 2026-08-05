@@ -15,13 +15,22 @@ void main() {
             .toList();
 
         expect(script, contains('@echo off'));
-        // Ο updater ΔΕΝ χρησιμοποιεί chcp/ελληνικά: πρέπει να είναι καθαρά ASCII,
-        // αλλιώς το batch parsing καταρρέει (όπως συνέβη με τον installer).
-        expect(script, isNot(contains('chcp')));
+        // Το script δείχνει ελληνική πρόοδο σε ορατή κονσόλα: απαιτεί chcp 1253
+        // ΠΡΙΝ από το πρώτο ελληνικό κείμενο, CRLF γραμμές και εγγραφή σε
+        // Windows-1253 (buildBytes). UTF-8 καταρρέει το batch parsing.
+        final chcpIdx = script.indexOf('chcp 1253');
+        final firstGreekIdx = script.codeUnits.indexWhere((c) => c > 127);
+        expect(chcpIdx, greaterThanOrEqualTo(0));
+        expect(firstGreekIdx, greaterThan(chcpIdx));
+        expect(script, contains('\r\n'));
+        expect(script, isNot(matches(RegExp('[^\r]\n'))));
+        // Ο φρουρός του prepareUpdate: κάθε χαρακτήρας του script πρέπει να
+        // κωδικοποιείται σε Windows-1253, αλλιώς η προετοιμασία ενημέρωσης
+        // θα σκάσει την ώρα της εγγραφής του updater.cmd.
         expect(
-          script.codeUnits.every((c) => c < 128),
-          isTrue,
-          reason: 'Ο updater.cmd πρέπει να είναι ASCII-only',
+          UpdaterScriptBuilder.buildBytes().length,
+          script.runes.length,
+          reason: 'Χαρακτήρας εκτός Windows-1253 μέσα στο updater.cmd',
         );
         expect(script.toLowerCase(), contains('tasklist'));
 

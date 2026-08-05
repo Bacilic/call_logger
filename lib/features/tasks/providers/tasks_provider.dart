@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/run_after_next_frame.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart';
 import '../services/task_service.dart';
@@ -41,19 +41,11 @@ final tasksProvider = AsyncNotifierProvider<TasksNotifier, List<Task>>(
 /// `FlutterError` (locked widget tree) μετά το κλείσιμο διαλόγου επεξεργασίας.
 Future<void> deferTasksProviderInvalidate(WidgetRef ref) async {
   if (!ref.context.mounted) return;
-  final completer = Completer<void>();
-  SchedulerBinding.instance.addPostFrameCallback((_) {
-    try {
-      if (ref.context.mounted) {
-        ref.invalidate(tasksProvider);
-      }
-    } finally {
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
+  return runAfterNextFrame(() {
+    if (ref.context.mounted) {
+      ref.invalidate(tasksProvider);
     }
   });
-  return completer.future;
 }
 
 /// Πλήθος open+snoozed για badge στο κύριο μενού. Ανανεώνεται όταν αλλάζει η λίστα tasks.

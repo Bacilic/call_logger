@@ -17,6 +17,8 @@ abstract final class AuditDiffHelper {
   /// Ονομαστικές ετικέτες πεδίων (σύνοψη «N αλλαγές: …»).
   static const Map<String, String> _titleLabels = {
     'name': 'όνομα',
+    'name_key': 'κλειδί ονόματος',
+    'department_label': 'τμήμα',
     'email': 'email',
     'phone': 'τηλέφωνο',
     'status': 'κατάσταση',
@@ -90,6 +92,8 @@ abstract final class AuditDiffHelper {
   /// Γενικές ετικέtes πεδίων (γενική πτώση — «Αλλαγή … από»).
   static const Map<String, String> _detailLabels = {
     'name': 'ονόματος',
+    'name_key': 'κλειδιού ονόματος',
+    'department_label': 'τμήματος',
     'email': 'email',
     'phone': 'τηλεφώνου',
     'status': 'κατάστασης',
@@ -237,6 +241,12 @@ abstract final class AuditDiffHelper {
   static bool shouldSkipDerivativeField(String field, Set<String> keys) {
     if (field == 'floor_id' && keys.contains('map_floor')) return true;
     if (field == 'department_text' && keys.contains('department_id')) {
+      return true;
+    }
+    // Το όνομα-στιγμιότυπο του τμήματος (γράφεται από τις επιδιορθώσεις
+    // ακεραιότητας): ίδια αλλαγή με το department_id σε άλλη μορφή — μαζί
+    // μετρούσαν «2 αλλαγές: τμήμα, department label» για μία μεταφορά.
+    if (field == 'department_label' && keys.contains('department_id')) {
       return true;
     }
     if (field == 'caller_text' && keys.contains('caller_id')) return true;

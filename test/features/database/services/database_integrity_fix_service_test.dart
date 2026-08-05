@@ -31,6 +31,11 @@ void main() {
       await db.delete('call_external_links');
       await db.delete('department_phones');
       await db.delete('audit_log');
+      // Ολόκληρο το αρχείο στήνει **επίτηδες** σπασμένες αναφορές για να
+      // ελέγξει ότι ο Fixer τις τακτοποιεί. Από την v38 η βάση τις απορρίπτει,
+      // οπότε το στήσιμο πρέπει να παρακάμψει τον κανόνα που το ίδιο το
+      // σενάριο παραβιάζει.
+      await db.execute('PRAGMA foreign_keys = OFF');
     });
 
     tearDownAll(() async {

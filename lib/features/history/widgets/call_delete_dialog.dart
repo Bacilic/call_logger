@@ -1,9 +1,16 @@
-import '../../../core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/utils/user_facing_error_messages.dart';
+import '../../../core/database/call_deletion_impact.dart';
+import '../../../core/providers/pending_deferred_actions_provider.dart';
+import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../providers/history_call_actions_provider.dart';
+import '../services/call_deletion_messages.dart';
+import 'call_deletion_dialog_parts.dart';
+import 'deferred_deletion_snackbar.dart';
+
+/// Πλάτος και των δύο διαλόγων: η λίστα συνδέσεων θέλει σταθερή στήλη ώρας.
+const double _kDialogWidth = 520;
 
 Future<void> showCallDeleteDialog(
   BuildContext context, {
@@ -46,147 +53,149 @@ class _CallDeleteDialog extends ConsumerStatefulWidget {
   ConsumerState<_CallDeleteDialog> createState() => _CallDeleteDialogState();
 }
 
-class _CallDeleteDialogState extends ConsumerState<_CallDeleteDialog>
-    with DialogSnackbarHost {
+class _CallDeleteDialogState extends ConsumerState<_CallDeleteDialog> {
   bool _loading = true;
   bool _busy = false;
-  int _linkedTasks = 0;
+  CallDeletionImpact _impact = CallDeletionImpact.empty;
   bool _hardDelete = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCount();
+    _loadImpact();
   }
 
-  Future<void> _loadCount() async {
-    final count = await ref
+  Future<void> _loadImpact() async {
+    final impact = await ref
         .read(historyCallActionsServiceProvider)
-        .countLinkedTasks(widget.callId);
+        .callDeletionImpact([widget.callId]);
     if (!mounted) return;
     setState(() {
-      _linkedTasks = count;
+      _impact = impact;
       _loading = false;
     });
   }
 
-  Future<void> _delete({required String taskAction}) async {
+  void _delete({required String taskAction}) {
     if (_busy) return;
     setState(() => _busy = true);
-    try {
-      if (_hardDelete) {
-        await ref
-            .read(historyCallActionsServiceProvider)
-            .hardDeleteCall(
-              widget.callId,
-              callerId: widget.callerId,
-              equipmentCode: widget.equipmentCode,
-            );
-      } else {
-        await ref
-            .read(historyCallActionsServiceProvider)
-            .deleteCall(
-              widget.callId,
-              taskAction: taskAction,
-              callerId: widget.callerId,
-              equipmentCode: widget.equipmentCode,
-            );
-      }
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _hardDelete
-                ? 'Η κλήση διαγράφηκε οριστικά.'
-                : 'Η κλήση διαγράφηκε επιτυχώς.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _busy = false);
-      showDialogSnackBar(
-        SnackBar(
-          content: Text('Αποτυχία διαγραφής: ${humanizeUserFacingError(e)}'),
-        ),
-      );
-    }
+    // Ο διακόπτης λέει ΠΟΣΟ βαθιά σβήνει η διαγραφή· τι γίνονται οι
+    // εκκρεμότητες το λέει πάντα το κουμπί που πάτησε ο χρήστης.
+    // Όλα διαβάζονται πριν το κλείσιμο: το ref του διαλόγου πεθαίνει με το pop,
+    // ενώ η εκτέλεση θα τρέξει μετά το παράθυρο αναίρεσης.
+    final actions = ref.read(historyCallActionsServiceProvider);
+    final deferredActions = ref.read(pendingDeferredActionsProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
+    final hard = _hardDelete;
+    final callId = widget.callId;
+    final callerId = widget.callerId;
+    final equipmentCode = widget.equipmentCode;
+    Navigator.of(context).pop();
+
+    scheduleDeferredDeletionWithUndo(
+      messenger: messenger,
+      deferredActions: deferredActions,
+      label: 'Διαγραφή κλήσης',
+      countdownMessage: (s) => hard
+          ? 'Η κλήση θα διαγραφεί οριστικά σε $s″.'
+          : 'Η κλήση θα διαγραφεί σε $s″.',
+      completedMessage: hard
+          ? 'Η κλήση διαγράφηκε οριστικά.'
+          : 'Η κλήση διαγράφηκε.',
+      failureMessage: 'Η διαγραφή απέτυχε — η κλήση παραμένει.',
+      execute: () => actions.deleteCall(
+        callId,
+        taskAction: taskAction,
+        hard: hard,
+        callerId: callerId,
+        equipmentCode: equipmentCode,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return DialogSnackbarScope(
-      messengerKey: dialogMessengerKey,
-      child: Center(
-        child: AlertDialog(
-          title: const Text('Διαγραφή κλήσης'),
-          content: _loading
-              ? const SizedBox(
-                  height: 100,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_linkedTasks > 0)
-                      Text(
-                        'Βρέθηκαν $_linkedTasks συνδεδεμένες εκκρεμότητες για την κλήση.',
-                      )
-                    else
-                      const Text('Επιβεβαιώστε τη διαγραφή της κλήσης.'),
-                    const SizedBox(height: 10),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Οριστική διαγραφή (hard delete)'),
-                      subtitle: const Text('Χωρίς δυνατότητα επαναφοράς.'),
-                      value: _hardDelete,
-                      onChanged: _busy
-                          ? null
-                          : (v) => setState(() => _hardDelete = v),
-                    ),
-                  ],
-                ),
-          actions: _loading
-              ? [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Κλείσιμο'),
-                  ),
-                ]
-              : [
-                  TextButton(
-                    onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                    child: const Text('Ακύρωση διαγραφής'),
-                  ),
-                  if (_linkedTasks > 0) ...[
-                    FilledButton.tonal(
-                      onPressed: _busy
-                          ? null
-                          : () => _delete(taskAction: 'nullify'),
-                      child: const Text(
-                        'Διαγραφή μόνο κλήσης (αποσύνδεση tasks)',
-                      ),
-                    ),
-                    FilledButton(
-                      onPressed: _busy
-                          ? null
-                          : () => _delete(taskAction: 'cascade'),
-                      child: const Text(
-                        'Διαγραφή κλήσης και συνδεδεμένων εκκρεμοτήτων',
-                      ),
-                    ),
-                  ] else
-                    FilledButton(
-                      onPressed: _busy
-                          ? null
-                          : () => _delete(taskAction: 'nullify'),
-                      child: const Text('Διαγραφή κλήσης'),
-                    ),
-                ],
-        ),
+    return DraggableDialogShell(
+      title: const Text('Διαγραφή κλήσης'),
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: _loading
+            ? const SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            : SizedBox(width: _kDialogWidth, child: _buildBody(context)),
+        actions: [
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(),
+            child: Text(_loading ? 'Κλείσιμο' : 'Ακύρωση διαγραφής'),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    final theme = Theme.of(context);
+    final hardDeleteWarning = callHardDeleteLossWarning(_impact);
+    final lansweeperNote = callLansweeperUnaffectedNote(
+      _impact,
+      hardDelete: _hardDelete,
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(callDeletionHeadline(_impact)),
+        if (_impact.hasConnections) ...[
+          const SizedBox(height: 8),
+          CallConnectionsCard(impact: _impact),
+        ],
+        const SizedBox(height: 4),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Οριστική διαγραφή (hard delete)'),
+          subtitle: const Text('Χωρίς δυνατότητα επαναφοράς.'),
+          value: _hardDelete,
+          onChanged: _busy ? null : (v) => setState(() => _hardDelete = v),
+        ),
+        if (_hardDelete && hardDeleteWarning != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            hardDeleteWarning,
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+        ],
+        const SizedBox(height: 12),
+        if (_impact.hasLinkedTasks) ...[
+          CallDeletionChoiceButton(
+            label: callKeepTasksButtonLabel(callCount: 1),
+            hint: callKeepTasksButtonHint(_impact),
+            onPressed: _busy ? null : () => _delete(taskAction: 'nullify'),
+          ),
+          const SizedBox(height: 8),
+          CallDeletionChoiceButton(
+            label: callCascadeButtonLabel(callCount: 1),
+            hint: callCascadeButtonHint(_impact),
+            emphasized: true,
+            onPressed: _busy ? null : () => _delete(taskAction: 'cascade'),
+          ),
+        ] else
+          FilledButton(
+            onPressed: _busy ? null : () => _delete(taskAction: 'nullify'),
+            child: const Text('Διαγραφή κλήσης'),
+          ),
+        if (lansweeperNote != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            lansweeperNote,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -201,106 +210,148 @@ class _CallBulkDeleteDialog extends ConsumerStatefulWidget {
       _CallBulkDeleteDialogState();
 }
 
-class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog>
-    with DialogSnackbarHost {
+class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog> {
   bool _loading = true;
   bool _busy = false;
-  int _linkedTasksCount = 0;
+  CallDeletionImpact _impact = CallDeletionImpact.empty;
+  bool _hardDelete = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCount();
+    _loadImpact();
   }
 
-  Future<void> _loadCount() async {
-    final count = await ref
+  Future<void> _loadImpact() async {
+    final impact = await ref
         .read(historyCallActionsServiceProvider)
-        .countLinkedTasksForCalls(widget.callIds);
+        .callDeletionImpact(widget.callIds);
     if (!mounted) return;
     setState(() {
-      _linkedTasksCount = count;
+      _impact = impact;
       _loading = false;
     });
   }
 
-  Future<void> _executeDelete(String? taskAction) async {
+  void _executeDelete(String? taskAction) {
     if (_busy) return;
     setState(() => _busy = true);
-    try {
-      await ref
-          .read(historyCallActionsServiceProvider)
-          .bulkSoftDelete(widget.callIds, taskAction: taskAction);
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Διαγράφηκαν ${widget.callIds.length} κλήσεις.'),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _busy = false);
-      showDialogSnackBar(
-        SnackBar(
-          content: Text(
-            'Αποτυχία μαζικής διαγραφής: ${humanizeUserFacingError(e)}',
-          ),
-        ),
-      );
-    }
+    // Όλα διαβάζονται πριν το κλείσιμο: το ref του διαλόγου πεθαίνει με το pop,
+    // ενώ η εκτέλεση θα τρέξει μετά το παράθυρο αναίρεσης.
+    final actions = ref.read(historyCallActionsServiceProvider);
+    final deferredActions = ref.read(pendingDeferredActionsProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
+    final hard = _hardDelete;
+    final callIds = List<int>.of(widget.callIds);
+    Navigator.of(context).pop();
+
+    final count = callIds.length;
+    scheduleDeferredDeletionWithUndo(
+      messenger: messenger,
+      deferredActions: deferredActions,
+      label: 'Μαζική διαγραφή $count κλήσεων',
+      countdownMessage: (s) => count == 1
+          ? (hard
+                ? 'Η κλήση θα διαγραφεί οριστικά σε $s″.'
+                : 'Η κλήση θα διαγραφεί σε $s″.')
+          : (hard
+                ? 'Οι $count κλήσεις θα διαγραφούν οριστικά σε $s″.'
+                : 'Οι $count κλήσεις θα διαγραφούν σε $s″.'),
+      completedMessage: count == 1
+          ? (hard ? 'Η κλήση διαγράφηκε οριστικά.' : 'Η κλήση διαγράφηκε.')
+          : (hard
+                ? 'Διαγράφηκαν οριστικά $count κλήσεις.'
+                : 'Διαγράφηκαν $count κλήσεις.'),
+      failureMessage: 'Η μαζική διαγραφή απέτυχε — οι κλήσεις παραμένουν.',
+      execute: () =>
+          actions.bulkDelete(callIds, taskAction: taskAction, hard: hard),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return DialogSnackbarScope(
-      messengerKey: dialogMessengerKey,
-      child: Center(
-        child: AlertDialog(
-          title: const Text('Μαζική διαγραφή κλήσεων'),
-          content: _loading
-              ? const SizedBox(
-                  height: 100,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              : Text(
-                  _linkedTasksCount > 0
-                      ? 'Οι ${widget.callIds.length} επιλεγμένες κλήσεις έχουν συνολικά $_linkedTasksCount συνδεδεμένες εκκρεμότητες.'
-                      : 'Να διαγραφούν οι ${widget.callIds.length} επιλεγμένες κλήσεις;',
-                ),
-          actions: _loading
-              ? [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Κλείσιμο'),
-                  ),
-                ]
-              : [
-                  TextButton(
-                    onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                    child: const Text('Ακύρωση'),
-                  ),
-                  if (_linkedTasksCount > 0) ...[
-                    FilledButton.tonal(
-                      onPressed: _busy ? null : () => _executeDelete('nullify'),
-                      child: const Text(
-                        'Διαγραφή μόνο κλήσεων (αποσύνδεση tasks)',
-                      ),
-                    ),
-                    FilledButton(
-                      onPressed: _busy ? null : () => _executeDelete('cascade'),
-                      child: const Text(
-                        'Διαγραφή κλήσεων + συνδεδεμένων εκκρεμοτήτων',
-                      ),
-                    ),
-                  ] else
-                    FilledButton(
-                      onPressed: _busy ? null : () => _executeDelete('nullify'),
-                      child: const Text('Μαζική διαγραφή'),
-                    ),
-                ],
-        ),
+    return DraggableDialogShell(
+      title: const Text('Μαζική διαγραφή κλήσεων'),
+      builder: (titleHandle) => AlertDialog(
+        title: titleHandle,
+        content: _loading
+            ? const SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            : SizedBox(width: _kDialogWidth, child: _buildBody(context)),
+        actions: [
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(),
+            child: Text(_loading ? 'Κλείσιμο' : 'Ακύρωση'),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    final theme = Theme.of(context);
+    final callCount = widget.callIds.length;
+    final hardDeleteWarning = callBulkHardDeleteLossWarning(_impact);
+    final lansweeperNote = callLansweeperUnaffectedNote(
+      _impact,
+      hardDelete: _hardDelete,
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(callBulkDeletionHeadline(_impact, callCount: callCount)),
+        if (_impact.connectedCalls.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          CallConnectionRowsList(impact: _impact),
+        ],
+        const SizedBox(height: 4),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Οριστική διαγραφή (hard delete)'),
+          subtitle: const Text('Χωρίς δυνατότητα επαναφοράς.'),
+          value: _hardDelete,
+          onChanged: _busy ? null : (v) => setState(() => _hardDelete = v),
+        ),
+        if (_hardDelete && hardDeleteWarning != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            hardDeleteWarning,
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+        ],
+        const SizedBox(height: 12),
+        if (_impact.hasLinkedTasks) ...[
+          CallDeletionChoiceButton(
+            label: callKeepTasksButtonLabel(callCount: callCount),
+            hint: callKeepTasksButtonHint(_impact),
+            onPressed: _busy ? null : () => _executeDelete('nullify'),
+          ),
+          const SizedBox(height: 8),
+          CallDeletionChoiceButton(
+            label: callCascadeButtonLabel(callCount: callCount),
+            hint: callCascadeButtonHint(_impact),
+            emphasized: true,
+            onPressed: _busy ? null : () => _executeDelete('cascade'),
+          ),
+        ] else
+          FilledButton(
+            onPressed: _busy ? null : () => _executeDelete('nullify'),
+            child: const Text('Μαζική διαγραφή'),
+          ),
+        if (lansweeperNote != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            lansweeperNote,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

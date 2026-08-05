@@ -1,15 +1,20 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../../providers/lansweeper_ticket_submit_config_provider.dart';
+import 'lansweeper_settings_card.dart';
 
-/// Ενότητα ρυθμίσεων παραμετροποίησης πολυβηματικής καταχώρησης Lansweeper.
+/// Ενότητα ρυθμίσεων παραμετροποίησης πολυβηματικής καταχώρησης Lansweeper
+/// (καρτέλα «Καταχώρηση εισιτηρίου»): πεδία εισιτηρίου, σημείωση & βήματα,
+/// λίστες τιμών με προεπιλογές.
 class LansweeperTicketSubmitSettingsSection extends ConsumerWidget {
   const LansweeperTicketSubmitSettingsSection({super.key});
 
+  /// Ανάλυση λίστας «μία τιμή ανά γραμμή» (επιλογές custom πεδίων).
   static List<String> parseLines(String raw) {
     return raw
         .split(RegExp(r'\r?\n'))
@@ -20,6 +25,17 @@ class LansweeperTicketSubmitSettingsSection extends ConsumerWidget {
 
   static String linesText(List<String> values) => values.join('\n');
 
+  /// Ανάλυση λίστας «τιμές με κόμμα» (καταστάσεις, τύποι, προτεραιότητες, ομάδες).
+  static List<String> parseCommaValues(String raw) {
+    return raw
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+  }
+
+  static String commaText(List<String> values) => values.join(', ');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final config = ref.watch(lansweeperTicketSubmitConfigProvider);
@@ -28,56 +44,38 @@ class LansweeperTicketSubmitSettingsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Παραμετροποίηση καταχώρησης εισιτηρίου',
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _CustomFieldsEditor(config: config, notifier: notifier),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: _NoteAndStepsCard(config: config, notifier: notifier),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        _CustomFieldsEditor(config: config, notifier: notifier),
-        const SizedBox(height: 12),
-        _ListWithDefaultSection(
-          title: 'Καταστάσεις ticket',
-          listLabel: 'Καταστάσεις (μία ανά γραμμή)',
-          defaultLabel: 'Προεπιλογή κατάστασης',
-          values: config.ticketStates,
-          selected: config.defaultTicketState,
-          onListChanged: (lines) => unawaited(notifier.setTicketStates(lines)),
-          onDefaultChanged: (value) =>
-              unawaited(notifier.setDefaultTicketState(value)),
-        ),
-        const SizedBox(height: 12),
-        _ListWithDefaultSection(
-          title: 'Τύπος αιτήματος (Type)',
-          listLabel: 'Τύποι αιτήματος (μία ανά γραμμή)',
-          defaultLabel: 'Προεπιλογή τύπου αιτήματος',
-          values: config.ticketTypes,
-          selected: config.ticketType,
-          onListChanged: (lines) => unawaited(notifier.setTicketTypes(lines)),
-          onDefaultChanged: (value) => unawaited(notifier.setTicketType(value)),
-        ),
-        const SizedBox(height: 12),
-        _ListWithDefaultSection(
-          title: 'Προτεραιότητα (Priority)',
-          listLabel: 'Προτεραιότητες (μία ανά γραμμή)',
-          defaultLabel: 'Προεπιλογή προτεραιότητας',
-          values: config.priorities,
-          selected: config.priority,
-          onListChanged: (lines) => unawaited(notifier.setPriorities(lines)),
-          onDefaultChanged: (value) => unawaited(notifier.setPriority(value)),
-        ),
-        const SizedBox(height: 12),
-        _ListWithDefaultSection(
-          title: 'Ομάδα (Team)',
-          listLabel: 'Ομάδες (μία ανά γραμμή)',
-          defaultLabel: 'Προεπιλογή ομάδας',
-          values: config.teams,
-          selected: config.team,
-          onListChanged: (lines) => unawaited(notifier.setTeams(lines)),
-          onDefaultChanged: (value) => unawaited(notifier.setTeam(value)),
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
+        _ListsAndDefaultsCard(config: config, notifier: notifier),
+      ],
+    );
+  }
+}
+
+/// Κάρτα «Σημείωση & βήματα»: τύπος σημείωσης και διακόπτες ροής.
+class _NoteAndStepsCard extends StatelessWidget {
+  const _NoteAndStepsCard({required this.config, required this.notifier});
+
+  final LansweeperTicketSubmitConfig config;
+  final LansweeperTicketSubmitConfigNotifier notifier;
+
+  @override
+  Widget build(BuildContext context) {
+    return LansweeperSettingsCard(
+      icon: Icons.edit_note_rounded,
+      title: 'Σημείωση & βήματα',
+      children: [
         DropdownButtonFormField<String>(
           key: ValueKey('note_type_${config.noteType}'),
           isExpanded: true,
@@ -124,48 +122,116 @@ class LansweeperTicketSubmitSettingsSection extends ConsumerWidget {
           value: config.includeNoteTime,
           onChanged: (value) => unawaited(notifier.setIncludeNoteTime(value)),
         ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.restore),
-            label: const Text('Επαναφορά προεπιλογών'),
-            onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Επαναφορά προεπιλογών;'),
-                  content: const Text(
-                    'Θα αντικατασταθούν όλες οι ρυθμίσεις καταχώρησης '
-                    'με τις προεπιλογές Lansweeper.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      child: const Text('Ακύρωση'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      child: const Text('Επαναφορά'),
-                    ),
-                  ],
-                ),
-              );
-              if (confirmed == true) {
-                await notifier.resetToDefaults();
-              }
-            },
+      ],
+    );
+  }
+}
+
+/// Κάρτα «Λίστες & προεπιλογές»: τιμές με κόμμα αριστερά, προεπιλογή δεξιά.
+class _ListsAndDefaultsCard extends StatelessWidget {
+  const _ListsAndDefaultsCard({required this.config, required this.notifier});
+
+  final LansweeperTicketSubmitConfig config;
+  final LansweeperTicketSubmitConfigNotifier notifier;
+
+  Future<void> _confirmAndResetDefaults(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Επαναφορά προεπιλογών;'),
+        content: const Text(
+          'Θα αντικατασταθούν όλες οι ρυθμίσεις καταχώρησης '
+          'με τις προεπιλογές Lansweeper.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Ακύρωση'),
           ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Επαναφορά'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await notifier.resetToDefaults();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LansweeperSettingsCard(
+      icon: Icons.checklist_rounded,
+      title: 'Λίστες & προεπιλογές',
+      children: [
+        _ListWithDefaultRow(
+          valuesLabel: 'Καταστάσεις ticket (τιμές με κόμμα)',
+          defaultLabel: 'Προεπιλογή κατάστασης',
+          values: config.ticketStates,
+          selected: config.defaultTicketState,
+          onListChanged: (values) =>
+              unawaited(notifier.setTicketStates(values)),
+          onDefaultChanged: (value) =>
+              unawaited(notifier.setDefaultTicketState(value)),
+        ),
+        const SizedBox(height: 12),
+        _ListWithDefaultRow(
+          valuesLabel: 'Τύποι αιτήματος (τιμές με κόμμα)',
+          defaultLabel: 'Προεπιλογή τύπου αιτήματος',
+          values: config.ticketTypes,
+          selected: config.ticketType,
+          onListChanged: (values) => unawaited(notifier.setTicketTypes(values)),
+          onDefaultChanged: (value) => unawaited(notifier.setTicketType(value)),
+        ),
+        const SizedBox(height: 12),
+        _ListWithDefaultRow(
+          valuesLabel: 'Προτεραιότητες (τιμές με κόμμα)',
+          defaultLabel: 'Προεπιλογή προτεραιότητας',
+          values: config.priorities,
+          selected: config.priority,
+          onListChanged: (values) => unawaited(notifier.setPriorities(values)),
+          onDefaultChanged: (value) => unawaited(notifier.setPriority(value)),
+        ),
+        const SizedBox(height: 12),
+        _ListWithDefaultRow(
+          valuesLabel: 'Ομάδες (τιμές με κόμμα)',
+          defaultLabel: 'Προεπιλογή ομάδας',
+          values: config.teams,
+          selected: config.team,
+          onListChanged: (values) => unawaited(notifier.setTeams(values)),
+          onDefaultChanged: (value) => unawaited(notifier.setTeam(value)),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.restore),
+              label: const Text('Επαναφορά προεπιλογών'),
+              onPressed: () => unawaited(_confirmAndResetDefaults(context)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Επαναφέρει ΜΟΝΟ τις ρυθμίσεις καταχώρησης εισιτηρίου '
+                '(αυτή την καρτέλα).',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 }
 
-class _ListWithDefaultSection extends StatefulWidget {
-  const _ListWithDefaultSection({
-    required this.title,
-    required this.listLabel,
+/// Μία γραμμή λίστας: αριστερά οι τιμές με κόμμα, δεξιά η προεπιλογή τους.
+class _ListWithDefaultRow extends StatefulWidget {
+  const _ListWithDefaultRow({
+    required this.valuesLabel,
     required this.defaultLabel,
     required this.values,
     required this.selected,
@@ -173,8 +239,7 @@ class _ListWithDefaultSection extends StatefulWidget {
     required this.onDefaultChanged,
   });
 
-  final String title;
-  final String listLabel;
+  final String valuesLabel;
   final String defaultLabel;
   final List<String> values;
   final String selected;
@@ -182,29 +247,31 @@ class _ListWithDefaultSection extends StatefulWidget {
   final ValueChanged<String> onDefaultChanged;
 
   @override
-  State<_ListWithDefaultSection> createState() =>
-      _ListWithDefaultSectionState();
+  State<_ListWithDefaultRow> createState() => _ListWithDefaultRowState();
 }
 
-class _ListWithDefaultSectionState extends State<_ListWithDefaultSection> {
+class _ListWithDefaultRowState extends State<_ListWithDefaultRow> {
   late final TextEditingController _controller;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(
-      text: LansweeperTicketSubmitSettingsSection.linesText(widget.values),
+      text: LansweeperTicketSubmitSettingsSection.commaText(widget.values),
     );
   }
 
   @override
-  void didUpdateWidget(covariant _ListWithDefaultSection oldWidget) {
+  void didUpdateWidget(covariant _ListWithDefaultRow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final nextText = LansweeperTicketSubmitSettingsSection.linesText(
-      widget.values,
-    );
-    if (_controller.text != nextText) {
-      _controller.text = nextText;
+    // Σύγκριση σε επίπεδο τιμών, όχι κειμένου: όσο ο χρήστης πληκτρολογεί
+    // (π.χ. αφήνει προσωρινό κόμμα στο τέλος), το κείμενό του δεν ξαναγράφεται.
+    final controllerValues = LansweeperTicketSubmitSettingsSection
+        .parseCommaValues(_controller.text);
+    if (!listEquals(controllerValues, widget.values)) {
+      _controller.text = LansweeperTicketSubmitSettingsSection.commaText(
+        widget.values,
+      );
     }
   }
 
@@ -223,58 +290,58 @@ class _ListWithDefaultSectionState extends State<_ListWithDefaultSection> {
         ? widget.selected
         : (items.isNotEmpty ? items.first : null);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.title,
-          style: Theme.of(
-            context,
-          ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: _controller,
-          minLines: 2,
-          maxLines: 5,
-          decoration: InputDecoration(
-            labelText: widget.listLabel,
-            border: const OutlineInputBorder(),
-            alignLabelWithHint: true,
-          ),
-          onChanged: (raw) => widget.onListChanged(
-            LansweeperTicketSubmitSettingsSection.parseLines(raw),
+        Expanded(
+          flex: 8,
+          child: TextFormField(
+            controller: _controller,
+            minLines: 1,
+            maxLines: null,
+            decoration: InputDecoration(
+              labelText: widget.valuesLabel,
+              border: const OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+            onChanged: (raw) => widget.onListChanged(
+              LansweeperTicketSubmitSettingsSection.parseCommaValues(raw),
+            ),
           ),
         ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          key: ValueKey('${widget.defaultLabel}_$selected'),
-          isExpanded: true,
-          initialValue: selected,
-          decoration: InputDecoration(
-            labelText: widget.defaultLabel,
-            border: const OutlineInputBorder(),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 5,
+          child: DropdownButtonFormField<String>(
+            key: ValueKey('${widget.defaultLabel}_$selected'),
+            isExpanded: true,
+            initialValue: selected,
+            decoration: InputDecoration(
+              labelText: widget.defaultLabel,
+              border: const OutlineInputBorder(),
+            ),
+            items: items
+                .map(
+                  (value) => DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: selected == null
+                ? null
+                : (value) {
+                    if (value != null) widget.onDefaultChanged(value);
+                  },
           ),
-          items: items
-              .map(
-                (value) => DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(value, overflow: TextOverflow.ellipsis),
-                ),
-              )
-              .toList(),
-          onChanged: selected == null
-              ? null
-              : (value) {
-                  if (value != null) widget.onDefaultChanged(value);
-                },
         ),
       ],
     );
   }
 }
 
-class _CustomFieldsEditor extends ConsumerWidget {
+/// Κάρτα «Πεδία εισιτηρίου (custom fields)» με προσθήκη/σειρά/επεξεργασία/διαγραφή.
+class _CustomFieldsEditor extends StatelessWidget {
   const _CustomFieldsEditor({required this.config, required this.notifier});
 
   final LansweeperTicketSubmitConfig config;
@@ -300,27 +367,16 @@ class _CustomFieldsEditor extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context) {
+    return LansweeperSettingsCard(
+      icon: Icons.list_alt_rounded,
+      title: 'Πεδία εισιτηρίου (custom fields)',
+      trailing: TextButton.icon(
+        onPressed: () => unawaited(_editField(context)),
+        icon: const Icon(Icons.add, size: 18),
+        label: const Text('Προσθήκη'),
+      ),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Πεδία εισιτηρίου (custom fields)',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => unawaited(_editField(context)),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Προσθήκη'),
-            ),
-          ],
-        ),
         if (config.customFields.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),

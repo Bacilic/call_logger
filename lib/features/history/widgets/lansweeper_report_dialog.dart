@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
+import '../../../core/widgets/compact_tooltip.dart';
 import '../../../core/widgets/dialog_snackbar_scope.dart';
 import '../../../core/widgets/app_asset_image.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
@@ -574,23 +575,27 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(child: titleHandle),
-                    IconButton(
-                      tooltip:
+                    CompactTooltip(
+                      message:
                           'Ρυθμίσεις Lansweeper (API, φόρμα, πράκτορας, αυτόματη σύνδεση Help Desk)',
-                      padding: const EdgeInsets.all(4),
-                      constraints: const BoxConstraints(
-                        minWidth: 40,
-                        minHeight: 40,
-                      ),
-                      onPressed: () {
-                        unawaited(settingsFlow.openConnectionSettingsDialog());
-                      },
-                      icon: AppAssetImage(
-                        assetPath: 'assets/lansweeper_settings.png',
-                        height: 28,
-                        width: 28,
-                        filterQuality: FilterQuality.medium,
-                        fallbackIcon: Icons.settings,
+                      child: IconButton(
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(
+                          minWidth: 40,
+                          minHeight: 40,
+                        ),
+                        onPressed: () {
+                          unawaited(
+                            settingsFlow.openConnectionSettingsDialog(),
+                          );
+                        },
+                        icon: AppAssetImage(
+                          assetPath: 'assets/lansweeper_settings.png',
+                          height: 28,
+                          width: 28,
+                          filterQuality: FilterQuality.medium,
+                          fallbackIcon: Icons.settings,
+                        ),
                       ),
                     ),
                   ],

@@ -6,6 +6,7 @@ import '../../features/calls/layout/calls_field_groups_provider.dart';
 import '../../features/calls/provider/call_entry_provider.dart';
 import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/provider/smart_entity_selector_provider.dart';
+import '../../features/database/debug/integrity_debug_provider_refresh.dart';
 import '../../features/database/providers/database_browser_stats_provider.dart';
 import '../../features/directory/providers/category_directory_provider.dart';
 import '../../features/directory/providers/department_directory_provider.dart';
@@ -38,6 +39,9 @@ void invalidateDatabaseScopedCaches(WidgetRef ref) {
   void run() {
     if (!ref.context.mounted) return;
     ref.invalidate(databaseBrowserStatsProvider);
+    // Η υπογραφή του σπορέα ζει ΜΕΣΑ στη βάση: μετά την αλλαγή, η οθόνη
+    // σεναρίων πρέπει να ξαναρωτήσει τη νέα και όχι να θυμάται την παλιά.
+    ref.invalidate(activeDatabaseHasDebugScenariosProvider);
     ref.invalidate(lookupServiceProvider);
     ref.invalidate(tasksProvider);
     ref.invalidate(totalTasksCountProvider);

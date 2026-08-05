@@ -13,7 +13,7 @@ import '../services/settings_service.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/database/debug/error_scenarios_screen.dart';
 import '../../features/database/screens/database_browser_screen.dart';
-import '../../features/database/widgets/database_settings_panel.dart';
+import '../../features/database/widgets/database_settings_dialog.dart';
 import '../../features/dictionary/screens/dictionary_manager_screen.dart';
 import '../../features/directory/screens/directory_screen.dart';
 import '../../features/history/screens/history_screen.dart';
@@ -95,22 +95,10 @@ class MainShellDestinationContent {
 
   Future<void> _openDatabaseSettingsDialog() async {
     if (!host.mounted) return;
-    await showDialog<void>(
-      context: host.context,
-      builder: (dialogContext) {
-        return Dialog(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920, maxHeight: 720),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: DatabaseSettingsPanel(
-                onDatabaseLifecycleChanged:
-                    host.widget.onDatabaseReopened ?? () async {},
-              ),
-            ),
-          ),
-        );
-      },
+    await showDatabaseSettingsDialog(
+      host.context,
+      onDatabaseLifecycleChanged:
+          host.widget.onDatabaseReopened ?? () async {},
     );
   }
 

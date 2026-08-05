@@ -1,9 +1,18 @@
 // Πρότυπο υποδείξεων: κείμενο μεγέθους πρότασης περνά από το CompactTooltip.
 //
 // Το σκέτο Tooltip απλώνει τη μεγάλη πρόταση σε όλο το πλάτος της οθόνης
-// («μακαρόνι»). Ο φρουρός πιάνει `Tooltip(` με literal `message:` που είναι
-// πολυγραμμικό ή μακρύτερο από το όριο. Δυναμικά μηνύματα (μεταβλητές) δεν
-// ελέγχονται στατικά — αυτά τα κρίνει το code review.
+// («μακαρόνι»). Ο φρουρός πιάνει δύο μορφές με literal κείμενο πολυγραμμικό
+// ή μακρύτερο από το όριο:
+//   1. `Tooltip(` ως widget, με `message:`.
+//   2. `tooltip:` ως παράμετρο (IconButton, Chip κ.ά.) — το framework την
+//      τυλίγει εσωτερικά στο ίδιο σκέτο Tooltip, οπότε «μακαρονιάζει» κι αυτή.
+// Δυναμικά μηνύματα (μεταβλητές) δεν ελέγχονται στατικά — αυτά τα κρίνει το
+// code review.
+//
+// Σύμβαση ονομασίας: δικά μας widgets/μοντέλα που τροφοδοτούν CompactTooltip
+// ονομάζουν την παράμετρό τους `message` (όπως το CompactTooltip) — το όνομα
+// `tooltip:` μένει δεσμευμένο για τις παραμέτρους του framework, ώστε ο
+// φρουρός να μη βγάζει ψευδώς θετικά σε συμμορφωμένους βοηθούς.
 //
 //   flutter test test/architecture/tooltip_compact_standard_test.dart
 
@@ -24,6 +33,7 @@ const _allowlistedRelativePaths = <String>{
 };
 
 final _plainTooltipPattern = RegExp(r'(?<![Cc]ompact)\bTooltip\(');
+final _tooltipParamPattern = RegExp(r'\btooltip:');
 final _stringLiteralPattern = RegExp("'([^']*)'");
 
 List<File> _dartFilesInLib(Directory libRoot) {
@@ -33,6 +43,28 @@ List<File> _dartFilesInLib(Directory libRoot) {
       .whereType<File>()
       .where((file) => file.path.endsWith('.dart'))
       .toList();
+}
+
+/// Το literal κείμενο μιας παραμέτρου `tooltip:` — literals στην ίδια γραμμή
+/// μετά το `tooltip:`, συν γραμμές-συνέχειες που αρχίζουν με string literal
+/// (adjacent strings), μέχρι την επόμενη παράμετρο ή το τέλος του lookahead.
+String _literalTooltipParamAfter(List<String> lines, int paramLineIndex) {
+  final buffer = StringBuffer();
+  final firstLine = lines[paramLineIndex];
+  final afterParam = firstLine.substring(
+    firstLine.indexOf('tooltip:') + 'tooltip:'.length,
+  );
+  for (final m in _stringLiteralPattern.allMatches(afterParam)) {
+    buffer.write(m.group(1));
+  }
+  final end = paramLineIndex + _lookaheadLines;
+  for (var i = paramLineIndex + 1; i < lines.length && i <= end; i++) {
+    if (!lines[i].trimLeft().startsWith("'")) break;
+    for (final m in _stringLiteralPattern.allMatches(lines[i])) {
+      buffer.write(m.group(1));
+    }
+  }
+  return buffer.toString();
 }
 
 /// Το literal κείμενο του `message:` — συνενώνει διαδοχικά string literals
@@ -74,13 +106,23 @@ void main() {
       final lines = file.readAsStringSync().split('\n');
       for (var i = 0; i < lines.length; i++) {
         if (lines[i].trimLeft().startsWith('//')) continue;
-        if (!_plainTooltipPattern.hasMatch(lines[i])) continue;
 
-        final literal = _literalMessageAfter(lines, i);
+        final String literal;
+        final String form;
+        if (_plainTooltipPattern.hasMatch(lines[i])) {
+          literal = _literalMessageAfter(lines, i);
+          form = 'σκέτο Tooltip';
+        } else if (_tooltipParamPattern.hasMatch(lines[i])) {
+          literal = _literalTooltipParamAfter(lines, i);
+          form = 'παράμετρος tooltip:';
+        } else {
+          continue;
+        }
+
         final multiline = literal.contains(r'\n');
         if (multiline || literal.length > _maxPlainTooltipLiteralLength) {
           violations.add(
-            '$relative:${i + 1} — σκέτο Tooltip με κείμενο '
+            '$relative:${i + 1} — $form με κείμενο '
             '${literal.length} χαρακτήρων${multiline ? ' (πολυγραμμικό)' : ''} '
             '— χρησιμοποίησε CompactTooltip',
           );

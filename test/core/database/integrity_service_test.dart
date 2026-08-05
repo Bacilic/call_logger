@@ -361,6 +361,9 @@ void main() {
         expect(audits, hasLength(1));
         expect(audits.single['entity_id'], userId);
         expect(audits.single['details'], 'assign department');
+        // Με όνομα, όχι «Χρήστης #9»: η επιδιόρθωση ονομάζει το αντικείμενό
+        // της όπως κάθε άλλη ενέργεια του Ιστορικού.
+        expect(audits.single['entity_name'], 'Μετακίνηση Χρήστη');
       },
     );
 
@@ -388,6 +391,8 @@ void main() {
         final audits = await integrityAuditRows();
         expect(audits.single['entity_type'], AuditEntityTypes.department);
         expect(audits.single['entity_id'], deptId);
+        // Με όνομα, όχι «Τμήμα #5».
+        expect(audits.single['entity_name'], 'Παλιό Όνομα');
       },
     );
 
@@ -543,11 +548,14 @@ void main() {
     test(
       'disconnectPhoneFromDepartmentForIntegrity: NULL department_id + audit',
       () async {
-        final phoneId = await db.insert('phones', {
-          'number': '21008888',
-          'department_id': 990101,
-          'is_deleted': 0,
-        });
+        final phoneId = await withForeignKeysDisabled(
+          db,
+          () => db.insert('phones', {
+            'number': '21008888',
+            'department_id': 990101,
+            'is_deleted': 0,
+          }),
+        );
 
         await repo.disconnectPhoneFromDepartmentForIntegrity(
           phoneId: phoneId,
@@ -573,11 +581,14 @@ void main() {
     test(
       'disconnectEquipmentFromDepartmentForIntegrity: NULL department_id + audit',
       () async {
-        final equipmentId = await db.insert('equipment', {
-          'code_equipment': 'EQ-DISCONNECT',
-          'department_id': 990301,
-          'is_deleted': 0,
-        });
+        final equipmentId = await withForeignKeysDisabled(
+          db,
+          () => db.insert('equipment', {
+            'code_equipment': 'EQ-DISCONNECT',
+            'department_id': 990301,
+            'is_deleted': 0,
+          }),
+        );
 
         await repo.disconnectEquipmentFromDepartmentForIntegrity(
           equipmentId: equipmentId,
@@ -603,17 +614,20 @@ void main() {
     test(
       'clearDepartmentFloorForIntegrity: καθαρισμός floor_id και map_* + audit',
       () async {
-        final deptId = await db.insert('departments', {
-          'name': 'Χάρτης Dept',
-          'name_key': 'χαρτης_dept',
-          'floor_id': 990201,
-          'map_floor': 990201,
-          'map_x': 100.0,
-          'map_y': 200.0,
-          'map_width': 50.0,
-          'map_height': 40.0,
-          'is_deleted': 0,
-        });
+        final deptId = await withForeignKeysDisabled(
+          db,
+          () => db.insert('departments', {
+            'name': 'Χάρτης Dept',
+            'name_key': 'χαρτης_dept',
+            'floor_id': 990201,
+            'map_floor': 990201,
+            'map_x': 100.0,
+            'map_y': 200.0,
+            'map_width': 50.0,
+            'map_height': 40.0,
+            'is_deleted': 0,
+          }),
+        );
 
         await repo.clearDepartmentFloorForIntegrity(
           departmentId: deptId,

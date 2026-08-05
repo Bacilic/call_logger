@@ -27,6 +27,11 @@ void main() {
       await db.delete('call_external_links');
       await db.delete('department_phones');
       await db.delete('audit_log');
+      // Ολόκληρο το αρχείο στήνει **επίτηδες** σπασμένες αναφορές για να
+      // ελέγξει ότι ο Έλεγχος Ακεραιότητας τις βρίσκει. Από την v38 η βάση τις
+      // απορρίπτει, οπότε το στήσιμο πρέπει να παρακάμψει τον κανόνα που το
+      // ίδιο το σενάριο παραβιάζει.
+      await db.execute('PRAGMA foreign_keys = OFF');
     });
 
     tearDownAll(() async {
@@ -55,7 +60,7 @@ void main() {
           ),
           isEmpty,
         );
-        expect(progressSteps, equals(List.generate(19, (i) => i + 1)));
+        expect(progressSteps, equals(List.generate(20, (i) => i + 1)));
       },
     );
 
@@ -73,6 +78,59 @@ void main() {
       expect(orphanFindings.first.category, IntegrityCategory.referential);
       expect(orphanFindings.first.checkType, IntegrityCheckType.orphanPhone);
       expect(orphanFindings.first.context['phone_id'], isNotNull);
+    });
+
+    test('η διαγραμμένη κλήση δεν κάνει ορφανό το ιστορικό της', () async {
+      // Η αναστρέψιμη διαγραφή αφήνει επίτηδες το εισιτήριο, ώστε η επαναφορά
+      // να το βρει. Όσο ο έλεγχος το ανέφερε, κάθε διαγραφή κλήσης με εισιτήριο
+      // γέμιζε την αναφορά με «Κρίσιμα» για κατάσταση απολύτως φυσιολογική.
+      final db = await DatabaseHelper.instance.database;
+      final callId = await db.insert('calls', {
+        'date': '2026-08-04',
+        'time': '10:00',
+        'issue': 'διαγραμμένη με εισιτήριο',
+        'status': 'completed',
+        'search_index': 'διαγραμμενη',
+        'lansweeper_state': 'sent',
+        'lansweeper_main_ticket_id': '7001',
+        'is_deleted': 1,
+      });
+      await db.insert('call_external_links', {
+        'call_id': callId,
+        'external_id': '7001',
+        'provider': 'lansweeper',
+        'created_at': '2026-08-04T10:00:00.000',
+      });
+
+      final report = await service.runChecks();
+
+      expect(
+        report.findings.where(
+          (f) => f.checkType == IntegrityCheckType.orphanCallExternalLinks,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('η εγγραφή σε κλήση που δεν υπάρχει μένει εύρημα', () async {
+      final db = await DatabaseHelper.instance.database;
+      await db.insert('call_external_links', {
+        'call_id': 987654,
+        'external_id': '7002',
+        'provider': 'lansweeper',
+        'created_at': '2026-08-04T10:00:00.000',
+      });
+
+      final report = await service.runChecks();
+      final findings = report.findings
+          .where(
+            (f) => f.checkType == IntegrityCheckType.orphanCallExternalLinks,
+          )
+          .toList();
+
+      expect(findings, hasLength(1));
+      expect(findings.first.severity, IntegritySeverity.critical);
+      expect(findings.first.context['call_id'], 987654);
     });
 
     test('detects call without search_index', () async {
@@ -202,10 +260,10 @@ VALUES ('Κενό κλειδί', '', 0)
       final progress = <DatabaseIntegrityProgress>[];
       await service.runChecks(onProgress: (p) => progress.add(p));
 
-      expect(progress, hasLength(19));
+      expect(progress, hasLength(20));
       expect(progress.first.currentStep, 1);
-      expect(progress.last.currentStep, 19);
-      expect(progress.first.totalSteps, 19);
+      expect(progress.last.currentStep, 20);
+      expect(progress.first.totalSteps, 20);
       expect(
         progress.any((p) => p.currentCheckName == 'Ορφανά τηλέφωνα'),
         isTrue,

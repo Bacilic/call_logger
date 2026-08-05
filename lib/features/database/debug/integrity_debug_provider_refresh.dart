@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/database_helper.dart';
+import '../../../core/database/settings_repository.dart';
 import '../../../core/init/database_switch_completion.dart';
 import '../providers/database_integrity_provider.dart';
 import 'integrity_debug_seeder_service.dart';
@@ -9,6 +11,32 @@ final integrityDebugSeederServiceProvider =
     Provider<IntegrityDebugSeederService>(
       (ref) => IntegrityDebugSeederService(),
     );
+
+/// `true` όταν η **ενεργή** βάση φέρει την υπογραφή του σπορέα σεναρίων.
+///
+/// Τα σενάρια είναι ιδιότητα της βάσης, όχι της επίσκεψης στην οθόνη: όσο η
+/// δοκιμαστική βάση είναι ανοιχτή, οι κάρτες πρέπει να φαίνονται — ακόμη κι αν
+/// η εφαρμογή ξεκίνησε ξανά ή ο χρήστης πήγε αλλού και γύρισε. Με τοπική σημαία
+/// «μόλις έτρεξε ο σπορέας» ο μόνος τρόπος να ξαναδεί κανείς τις κάρτες ήταν να
+/// ξαναφτιάξει τη βάση από την αρχή.
+///
+/// Ακυρώνεται από την [invalidateDatabaseScopedCaches], δηλαδή από **κάθε**
+/// αλλαγή βάσης — αλλιώς η απάντηση θα αφορούσε τη βάση που έκλεισε.
+final activeDatabaseHasDebugScenariosProvider = FutureProvider<bool>((
+  ref,
+) async {
+  try {
+    final db = await DatabaseHelper.instance.database;
+    final signature = await SettingsRepository(
+      db,
+    ).getSetting(kDebugScenarioSignatureSettingKey);
+    return (signature?.trim().isNotEmpty ?? false);
+  } catch (_) {
+    // Βάση που δεν ανοίγει δεν είναι δοκιμαστική· το σφάλμα το αναφέρει ήδη η
+    // αρχικοποίηση, εδώ θα ήταν διπλή — και η οθόνη χρειάζεται ναι/όχι.
+    return false;
+  }
+});
 
 /// Ανανέωση κατάστασης μετά την ενεργοποίηση της δοκιμαστικής βάσης.
 ///

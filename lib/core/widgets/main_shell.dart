@@ -17,6 +17,7 @@ import '../providers/lamp_read_path_health_provider.dart';
 import '../../features/history/providers/history_application_audit_view_provider.dart';
 import '../providers/main_nav_request_provider.dart';
 import '../providers/call_department_prefill_intent_provider.dart';
+import '../providers/history_search_prefill_intent_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_navigation_intent_provider.dart';
 import '../providers/task_focus_intent_provider.dart';
@@ -130,6 +131,7 @@ class MainShellState extends ConsumerState<MainShell> {
     final taskId = req.taskFocusEntityId;
     final callId = req.callFocusEntityId;
     final callPrefillDepartment = req.callPrefillDepartmentName?.trim();
+    final historyPrefillSearch = req.historyPrefillSearch?.trim();
 
     if (req.destination == MainNavDestination.history && callId != null) {
       ref.read(historyApplicationAuditViewProvider.notifier).setFalse();
@@ -146,6 +148,11 @@ class MainShellState extends ConsumerState<MainShell> {
       ref
           .read(callDepartmentPrefillIntentProvider.notifier)
           .prefill(callPrefillDepartment);
+    }
+    if (historyPrefillSearch != null && historyPrefillSearch.isNotEmpty) {
+      ref
+          .read(historySearchPrefillIntentProvider.notifier)
+          .prefill(historyPrefillSearch);
     }
 
     void focusEquipment() {

@@ -89,17 +89,12 @@ class UpdateService {
       versionB: manifest.version,
       buildB: manifest.build,
     );
-    if (cmp < 0) {
-      return UpdateCheckResult(
-        updateAvailable: true,
-        latestVersion: manifest.version,
-        manifest: manifest,
-      );
-    }
     return UpdateCheckResult(
-      updateAvailable: false,
+      updateAvailable: cmp < 0,
       latestVersion: manifest.version,
       manifest: manifest,
+      currentVersion: currentVersion,
+      currentBuild: currentBuild,
     );
   }
 }

@@ -107,6 +107,27 @@ void initSqfliteFfiForTests() {
   databaseFactory = databaseFactoryFfi;
 }
 
+/// Εκτελεί το [body] με τους κανόνες σχέσεων σβηστούς.
+///
+/// Απαραίτητο **μόνο** για τεστ που στήνουν επίτηδες σπασμένες αναφορές — π.χ.
+/// τηλέφωνο σε ανύπαρκτο τμήμα — για να ελέγξουν ότι ο Έλεγχος Ακεραιότητας τις
+/// βρίσκει. Από την v38 η ίδια η βάση τις απορρίπτει, οπότε το στήσιμο του
+/// σεναρίου πρέπει να παρακάμψει τον κανόνα που το σενάριο παραβιάζει.
+///
+/// Ο κώδικας παραγωγής **δεν** το χρησιμοποιεί ποτέ: εκεί μια απόρριψη σημαίνει
+/// ότι κάποιος πάει να γράψει δεσμό που δεν στέκει.
+Future<T> withForeignKeysDisabled<T>(
+  DatabaseExecutor db,
+  Future<T> Function() body,
+) async {
+  await db.execute('PRAGMA foreign_keys = OFF');
+  try {
+    return await body();
+  } finally {
+    await db.execute('PRAGMA foreign_keys = ON');
+  }
+}
+
 /// Δημιουργεί πίνακα τμημάτων αν λείπει (νέα κενή βάση από `_onCreate`).
 Future<void> _ensureDepartmentsTable() async {
   final db = await DatabaseHelper.instance.database;

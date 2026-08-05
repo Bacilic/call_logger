@@ -80,6 +80,18 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
         );
   }
 
+  void _openHistoryForCallDeletionCheck() {
+    ref
+        .read(mainNavRequestProvider.notifier)
+        .request(
+          const MainNavRequest(
+            destination: MainNavDestination.history,
+            historyPrefillSearch:
+                IntegrityDebugSeederService.callDeletionScenarioPrefix,
+          ),
+        );
+  }
+
   String _formatGreekList(List<String> items) {
     if (items.isEmpty) return '';
     if (items.length == 1) return items.first;
@@ -93,6 +105,18 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
   String get _dokimastikoEquipmentLabel => _formatGreekList(
     IntegrityDebugSeederService.dokimastikoSharedEquipmentCodes,
   );
+
+  /// Τα σενάρια ζουν όσο ζει η δοκιμαστική βάση, όχι όσο κρατά η επίσκεψη.
+  ///
+  /// Το `_seedSucceeded` μπαίνει στη διάζευξη μόνο για το ένα frame ανάμεσα στο
+  /// τέλος του σπορέα και στην απάντηση του provider: η ακύρωση των caches
+  /// αναβάλλεται στο επόμενο frame και οι κάρτες δεν πρέπει να τρεμοπαίξουν.
+  bool get _scenariosAvailable {
+    if (_seedSucceeded) return true;
+    return ref
+        .watch(activeDatabaseHasDebugScenariosProvider)
+        .maybeWhen(data: (value) => value, orElse: () => false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +223,7 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        if (_seedSucceeded) ...[
+        if (_scenariosAvailable) ...[
           _ErrorScenarioCard(
             icon: Icons.fact_check_outlined,
             title: 'Έλεγχος ακεραιότητας βάσης',
@@ -243,6 +267,29 @@ class _ErrorScenariosScreenState extends ConsumerState<ErrorScenariosScreen> {
               ),
               _linkSpan(scheme: scheme, onTap: _openCatalogForDeletionCheck),
               const TextSpan(text: ' για έλεγχο στον κατάλογο.'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ErrorScenarioCard(
+            icon: Icons.phone_missed_outlined,
+            title: 'Διαγραφή κλήσης: τι ονομάζει ο διάλογος ότι θα χαθεί',
+            descriptionSpans: [
+              const TextSpan(
+                text:
+                    'Δημιουργήθηκαν τρεις κλήσεις — μία με εκκρεμότητα, μία με '
+                    'εισιτήριο Lansweeper, μία με τα δύο μαζί (δύο εισιτήρια). '
+                    'Δοκιμάστε τη διαγραφή καθεμιάς με τον διακόπτη «Οριστική '
+                    'διαγραφή» κλειστό και ανοιχτό. Κάντε κλικ ',
+              ),
+              _linkSpan(
+                scheme: scheme,
+                onTap: _openHistoryForCallDeletionCheck,
+              ),
+              const TextSpan(
+                text:
+                    ' για το Ιστορικό Κλήσεων, με την αναζήτηση '
+                    'συμπληρωμένη στις τρεις κλήσεις.',
+              ),
             ],
           ),
         ] else

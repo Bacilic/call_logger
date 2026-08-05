@@ -5,32 +5,37 @@ import 'release_publisher_service.dart';
 
 /// Προεπιλεγμένο πρότυπο εντολής δημοσίευσης μέσω τερματικού.
 const String kDefaultPublishCliCommandTemplate =
-    'dart run tool/publish.dart --bump={bump} --folder="{folder}"';
+    'dart run tool/publish.dart --folder="{folder}"';
 
 /// Τεκμηρίωση όλων των παραμέτρων CLI (μία γραμμή ανά παράμετρο).
 const String kPublishCliParametersHelp =
-    '--bump=patch|minor — υποχρεωτικό· είδος αύξησης έκδοσης\n'
     '--folder="<διαδρομή>" — υποχρεωτικό· φάκελος ενημερώσεων\n'
-    '--allow-empty — προαιρετικό· μεταγλωττίζει και δημοσιεύει χωρίς έλεγχο '
-    'μη δημοσιευμένων αλλαγών, παρακάμπτοντας το ερώτημα κενού Unreleased';
+    '--rebuild — προαιρετικό· ξαναχτίζει και ξαναδημοσιεύει την τρέχουσα '
+    'έκδοση χωρίς νέο αριθμό έκδοσης και χωρίς αλλαγή ιστορικού (αυξάνεται '
+    'μόνο ο αριθμός κτισίματος)';
+
+/// Μήνυμα για το καταργημένο `--bump`: το είδος αύξησης (patch/minor) προκύπτει
+/// αποκλειστικά από το περιεχόμενο του Unreleased, οπότε το όρισμα δεν είχε
+/// ποτέ επίδραση. Ρητή απόρριψη αντί για σιωπηλή ανοχή, ώστε να καθαριστεί και
+/// το αποθηκευμένο πρότυπο εντολής.
+const String kRemovedBumpArgumentMessage =
+    'Το --bump καταργήθηκε: το είδος αύξησης (patch/minor) προκύπτει αυτόματα '
+    'από το περιεχόμενο του Unreleased. Αφαιρέστε το από το πρότυπο εντολής.';
 
 /// Επιλογή όταν το Unreleased είναι κενό (καθρέφτης διαλόγου εφαρμογής).
-enum EmptyUnreleasedChoice { cancel, installerOnly, publishAnyway }
+enum EmptyUnreleasedChoice { cancel, installerOnly, rebuild }
 
 /// Ερώτηση διαδραστικού μενού για κενό Unreleased.
 typedef EmptyUnreleasedPrompt = EmptyUnreleasedChoice Function();
 
 /// Ορίσματα CLI δημοσίευσης έκδοσης.
 class PublishCliArgs {
-  const PublishCliArgs({
-    required this.bumpKind,
-    required this.folder,
-    this.allowEmpty = false,
-  });
+  const PublishCliArgs({required this.folder, this.rebuild = false});
 
-  final VersionBumpKind bumpKind;
   final String folder;
-  final bool allowEmpty;
+
+  /// Αναδημιουργία τρέχουσας έκδοσης χωρίς νέο αριθμό έκδοσης.
+  final bool rebuild;
 }
 
 /// Αποτέλεσμα ανάλυσης ορισμάτων CLI.
@@ -42,31 +47,20 @@ class PublishCliParseResult {
   final String? error;
 }
 
-/// Ανάλυση ορισμάτων `--bump=`, `--folder=`, προαιρετικό `--allow-empty`.
+/// Ανάλυση ορισμάτων: υποχρεωτικό `--folder=`, προαιρετικό `--rebuild`.
 PublishCliParseResult parsePublishCliArgs(List<String> arguments) {
-  VersionBumpKind? bumpKind;
   String? folder;
-  var allowEmpty = false;
+  var rebuild = false;
 
   for (final raw in arguments) {
     final arg = raw.trim();
     if (arg.isEmpty) continue;
-    if (arg == '--allow-empty') {
-      allowEmpty = true;
+    if (arg == '--rebuild') {
+      rebuild = true;
       continue;
     }
-    if (arg.startsWith('--bump=')) {
-      final value = arg.substring('--bump='.length).trim().toLowerCase();
-      if (value == 'patch') {
-        bumpKind = VersionBumpKind.patch;
-      } else if (value == 'minor') {
-        bumpKind = VersionBumpKind.minor;
-      } else {
-        return const PublishCliParseResult.error(
-          'Μη έγκυρο --bump. Επιτρεπόμενες τιμές: patch, minor.',
-        );
-      }
-      continue;
+    if (arg == '--bump' || arg.startsWith('--bump=')) {
+      return const PublishCliParseResult.error(kRemovedBumpArgumentMessage);
     }
     if (arg.startsWith('--folder=')) {
       folder = arg.substring('--folder='.length).trim();
@@ -80,31 +74,18 @@ PublishCliParseResult parsePublishCliArgs(List<String> arguments) {
     return PublishCliParseResult.error('Άγνωστο όρισμα: $arg');
   }
 
-  if (bumpKind == null) {
-    return const PublishCliParseResult.error(
-      'Απαιτείται --bump=patch ή --bump=minor.',
-    );
-  }
   if (folder == null || folder.isEmpty) {
     return const PublishCliParseResult.error('Απαιτείται --folder=<διαδρομή>.');
   }
 
   return PublishCliParseResult.ok(
-    PublishCliArgs(bumpKind: bumpKind, folder: folder, allowEmpty: allowEmpty),
+    PublishCliArgs(folder: folder, rebuild: rebuild),
   );
 }
 
-/// Συμπληρώνει τα placeholders `{bump}` και `{folder}` στο πρότυπο εντολής.
-String buildPublishCliCommand(
-  String template,
-  VersionBumpKind bumpKind,
-  String folder,
-) {
-  final bump = switch (bumpKind) {
-    VersionBumpKind.patch => 'patch',
-    VersionBumpKind.minor => 'minor',
-  };
-  return template.replaceAll('{bump}', bump).replaceAll('{folder}', folder);
+/// Συμπληρώνει το placeholder `{folder}` στο πρότυπο εντολής.
+String buildPublishCliCommand(String template, String folder) {
+  return template.replaceAll('{folder}', folder);
 }
 
 typedef PublishCliServiceFactory =
@@ -136,6 +117,11 @@ Future<int> runPublishCli(
   final factory = serviceFactory ?? _defaultServiceFactory;
   final service = factory(updateFolderPath: args.folder, onProgress: log);
 
+  // Ρητή εντολή αναδημιουργίας: δεν εξαρτάται από το Unreleased ούτε ρωτά.
+  if (args.rebuild) {
+    return _mapPublishResult(await service.rebuildCurrentVersion(), log);
+  }
+
   late final ReleasePublishPreview preview;
   try {
     preview = await service.preparePreview();
@@ -145,18 +131,11 @@ Future<int> runPublishCli(
   }
 
   if (!preview.hasUnreleasedEntries) {
-    if (args.allowEmpty) {
-      log(
-        'Η ενότητα Unreleased στο changelog είναι κενή. '
-        'Η δημοσίευση χωρίς καταχωρήσεις δεν επιτρέπεται πλέον '
-        '(το --allow-empty αγνοείται για αύξηση έκδοσης).',
-      );
-      return 2;
-    }
     if (!interactive) {
       log(
         'Η ενότητα Unreleased στο changelog είναι κενή. '
-        'Τρέξτε από διαδραστικό τερματικό ή προσθέστε καταχωρήσεις.',
+        'Τρέξτε από διαδραστικό τερματικό, προσθέστε καταχωρήσεις, '
+        'ή ξανατρέξτε με --rebuild για αναδημιουργία χωρίς νέα έκδοση.',
       );
       return 2;
     }
@@ -168,19 +147,15 @@ Future<int> runPublishCli(
         return 2;
       case EmptyUnreleasedChoice.installerOnly:
         return _mapPublishResult(await service.writeInstallerOnly(), log);
-      case EmptyUnreleasedChoice.publishAnyway:
-        log('Η δημοσίευση χωρίς καταχωρήσεις Unreleased δεν επιτρέπεται.');
-        return 2;
+      case EmptyUnreleasedChoice.rebuild:
+        return _mapPublishResult(await service.rebuildCurrentVersion(), log);
     }
   }
 
-  if (args.bumpKind != preview.bumpKind) {
-    log(
-      'Σημείωση: το --bump=${args.bumpKind.name} αγνοείται· '
-      'από το Unreleased προκύπτει αυτόματα ${preview.bumpKind.name} '
-      '→ ${preview.nextVersion}.',
-    );
-  }
+  log(
+    'Είδος αύξησης από το Unreleased: ${preview.bumpKind.name} '
+    '→ ${preview.nextVersion}.',
+  );
 
   return _mapPublishResult(await service.publish(), log);
 }
@@ -201,7 +176,7 @@ int _mapPublishResult(
       log(
         result.message ??
             'Η ενότητα Unreleased στο changelog είναι κενή. '
-                'Προσθέστε καταχωρήσεις ή ξανατρέξτε με --allow-empty.',
+                'Προσθέστε καταχωρήσεις ή ξανατρέξτε με --rebuild.',
       );
       return 2;
   }
@@ -213,11 +188,14 @@ EmptyUnreleasedChoice _defaultPromptEmptyUnreleased({
   writeLine('Το ιστορικό (Unreleased) είναι κενό.');
   writeLine('1) Ακύρωση');
   writeLine('2) Μόνο εγκαταστάτης');
-  writeLine('Επιλογή [1-2]:');
+  writeLine('3) Δημιουργία πάραυτα (ίδια έκδοση, νέος αριθμός κτισίματος)');
+  writeLine('Επιλογή [1-3]:');
   final raw = stdin.readLineSync()?.trim() ?? '';
   switch (raw) {
     case '2':
       return EmptyUnreleasedChoice.installerOnly;
+    case '3':
+      return EmptyUnreleasedChoice.rebuild;
     case '1':
     default:
       return EmptyUnreleasedChoice.cancel;

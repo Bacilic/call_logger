@@ -104,6 +104,8 @@ Future<void> showBuildingMapFloorDepartmentsDialog(
 }) {
   return showDialog<void>(
     context: context,
+    // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
+    barrierDismissible: false,
     builder: (ctx) => _BuildingMapFloorDepartmentsDialog(
       parentRef: ref,
       currentSheetId: currentSheetId,

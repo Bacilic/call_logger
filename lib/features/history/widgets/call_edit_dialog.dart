@@ -21,6 +21,8 @@ import 'lansweeper/lansweeper_edit_warning.dart';
 Future<void> showCallEditDialog(BuildContext context, {required int callId}) {
   return showDialog<void>(
     context: context,
+    // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
+    barrierDismissible: false,
     builder: (context) => _CallEditDialog(callId: callId),
   );
 }

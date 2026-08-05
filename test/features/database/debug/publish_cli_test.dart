@@ -7,81 +7,73 @@ import 'package:path/path.dart' as p;
 
 void main() {
   group('parsePublishCliArgs', () {
-    test('parses patch bump, folder and allow-empty', () {
-      final result = parsePublishCliArgs([
-        '--bump=patch',
-        r'--folder=C:\updates',
-        '--allow-empty',
-      ]);
+    test('folder alone is enough', () {
+      final result = parsePublishCliArgs([r'--folder=C:\updates']);
       expect(result.error, isNull);
       expect(result.args, isNotNull);
-      expect(result.args!.bumpKind, VersionBumpKind.patch);
       expect(result.args!.folder, r'C:\updates');
-      expect(result.args!.allowEmpty, isTrue);
+      expect(result.args!.rebuild, isFalse);
     });
 
-    test('parses minor bump without allow-empty', () {
-      final result = parsePublishCliArgs([
-        '--bump=minor',
-        '--folder=/share/updates',
-      ]);
+    test('parses --rebuild flag', () {
+      final result = parsePublishCliArgs([r'--folder=C:\updates', '--rebuild']);
       expect(result.error, isNull);
-      expect(result.args!.bumpKind, VersionBumpKind.minor);
-      expect(result.args!.folder, '/share/updates');
-      expect(result.args!.allowEmpty, isFalse);
+      expect(result.args!.rebuild, isTrue);
     });
 
-    test('rejects missing bump', () {
-      final result = parsePublishCliArgs(['--folder=/x']);
-      expect(result.args, isNull);
-      expect(result.error, isNotNull);
+    // Το --bump ήταν υποχρεωτικό αλλά αγνοούνταν πάντα (το είδος αύξησης
+    // προκύπτει από το Unreleased). Ρητή απόρριψη με οδηγία, ώστε να καθαριστεί
+    // και το αποθηκευμένο πρότυπο εντολής, αντί για σιωπηλή ανοχή.
+    test('rejects the removed --bump with an actionable message', () {
+      for (final args in [
+        ['--bump=minor', '--folder=/share/updates'],
+        ['--bump=patch', '--folder=/x'],
+        ['--bump', '--folder=/x'],
+      ]) {
+        final result = parsePublishCliArgs(args);
+        expect(result.args, isNull, reason: args.join(' '));
+        expect(result.error, contains('--bump καταργήθηκε'));
+        expect(result.error, contains('Unreleased'));
+      }
     });
 
     test('rejects missing folder', () {
-      final result = parsePublishCliArgs(['--bump=patch']);
-      expect(result.args, isNull);
-      expect(result.error, isNotNull);
-    });
-
-    test('rejects invalid bump', () {
-      final result = parsePublishCliArgs(['--bump=major', '--folder=/x']);
+      final result = parsePublishCliArgs(['--rebuild']);
       expect(result.args, isNull);
       expect(result.error, isNotNull);
     });
   });
 
   group('buildPublishCliCommand', () {
-    test('replaces bump and folder placeholders in default template', () {
+    test('default template carries only the folder', () {
       final cmd = buildPublishCliCommand(
         kDefaultPublishCliCommandTemplate,
-        VersionBumpKind.patch,
         r'\\server\share\updates',
       );
       expect(
         cmd,
-        'dart run tool/publish.dart --bump=patch '
-        r'--folder="\\server\share\updates"',
+        r'dart run tool/publish.dart --folder="\\server\share\updates"',
       );
+      expect(cmd, isNot(contains('--bump')));
     });
 
-    test('replaces placeholders in custom template', () {
+    test('replaces the folder placeholder in a custom template', () {
       final cmd = buildPublishCliCommand(
-        'flutter pub run tool/publish.dart --bump={bump} --folder={folder}',
-        VersionBumpKind.minor,
+        'flutter pub run tool/publish.dart --folder={folder} --rebuild',
         r'D:\out',
       );
       expect(
         cmd,
-        r'flutter pub run tool/publish.dart --bump=minor --folder=D:\out',
+        r'flutter pub run tool/publish.dart --folder=D:\out --rebuild',
       );
     });
   });
 
   group('kPublishCliParametersHelp', () {
-    test('documents bump, folder and allow-empty', () {
-      expect(kPublishCliParametersHelp, contains('--bump'));
+    test('documents folder and rebuild, and no longer mentions bump', () {
       expect(kPublishCliParametersHelp, contains('--folder'));
-      expect(kPublishCliParametersHelp, contains('--allow-empty'));
+      expect(kPublishCliParametersHelp, contains('--rebuild'));
+      expect(kPublishCliParametersHelp, isNot(contains('--bump')));
     });
   });
 
@@ -122,7 +114,7 @@ void main() {
       final lines = <String>[];
       final tracker = _CallTracker();
       final code = await runPublishCli(
-        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
+        PublishCliArgs(folder: tempDir.path),
         writeLine: lines.add,
         isInteractive: false,
         serviceFactory: ({required updateFolderPath, onProgress}) {
@@ -148,7 +140,7 @@ void main() {
     test('returns 1 on failure', () async {
       final tracker = _CallTracker();
       final code = await runPublishCli(
-        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
+        PublishCliArgs(folder: tempDir.path),
         writeLine: (_) {},
         isInteractive: false,
         serviceFactory: ({required updateFolderPath, onProgress}) {
@@ -174,7 +166,7 @@ void main() {
       final tracker = _CallTracker();
       var promptCalls = 0;
       final code = await runPublishCli(
-        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
+        PublishCliArgs(folder: tempDir.path),
         writeLine: (_) {},
         isInteractive: true,
         promptEmptyUnreleased: () {
@@ -200,7 +192,7 @@ void main() {
     test('empty Unreleased + installerOnly calls writeInstallerOnly', () async {
       final tracker = _CallTracker();
       final code = await runPublishCli(
-        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
+        PublishCliArgs(folder: tempDir.path),
         writeLine: (_) {},
         isInteractive: true,
         promptEmptyUnreleased: () => EmptyUnreleasedChoice.installerOnly,
@@ -224,14 +216,14 @@ void main() {
     });
 
     test(
-      'empty Unreleased + publishAnyway returns 2 without publish',
+      'empty Unreleased + rebuild choice calls rebuildCurrentVersion',
       () async {
         final tracker = _CallTracker();
         final code = await runPublishCli(
-          PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
+          PublishCliArgs(folder: tempDir.path),
           writeLine: (_) {},
           isInteractive: true,
-          promptEmptyUnreleased: () => EmptyUnreleasedChoice.publishAnyway,
+          promptEmptyUnreleased: () => EmptyUnreleasedChoice.rebuild,
           serviceFactory: ({required updateFolderPath, onProgress}) {
             return _FakePublisherService(
               projectRoot: tempDir.path,
@@ -239,57 +231,23 @@ void main() {
               onProgress: onProgress,
               preview: emptyPreview,
               tracker: tracker,
-              publishResult: const ReleasePublishResult(
-                status: ReleasePublishStatus.success,
-              ),
             );
           },
         );
-        expect(code, 2);
+        expect(code, 0);
+        expect(tracker.rebuildCalls, 1);
+        // Η αναδημιουργία ΔΕΝ περνά από την κανονική δημοσίευση.
         expect(tracker.publishCalls, 0);
         expect(tracker.writeInstallerCalls, 0);
       },
     );
 
-    test('empty Unreleased + non-interactive returns 2', () async {
+    test('--rebuild publishes without prompting, even with entries', () async {
       final tracker = _CallTracker();
       var promptCalls = 0;
-      final lines = <String>[];
       final code = await runPublishCli(
-        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
-        writeLine: lines.add,
-        isInteractive: false,
-        promptEmptyUnreleased: () {
-          promptCalls++;
-          return EmptyUnreleasedChoice.publishAnyway;
-        },
-        serviceFactory: ({required updateFolderPath, onProgress}) {
-          return _FakePublisherService(
-            projectRoot: tempDir.path,
-            updateFolderPath: updateFolderPath,
-            onProgress: onProgress,
-            preview: emptyPreview,
-            tracker: tracker,
-          );
-        },
-      );
-      expect(code, 2);
-      expect(promptCalls, 0);
-      expect(tracker.publishCalls, 0);
-      expect(lines.join('\n'), contains('Unreleased'));
-    });
-
-    test('empty + --allow-empty returns 2 without publish or prompt', () async {
-      final tracker = _CallTracker();
-      var promptCalls = 0;
-      final lines = <String>[];
-      final code = await runPublishCli(
-        PublishCliArgs(
-          bumpKind: VersionBumpKind.minor,
-          folder: tempDir.path,
-          allowEmpty: true,
-        ),
-        writeLine: lines.add,
+        PublishCliArgs(folder: tempDir.path, rebuild: true),
+        writeLine: (_) {},
         isInteractive: true,
         promptEmptyUnreleased: () {
           promptCalls++;
@@ -300,25 +258,52 @@ void main() {
             projectRoot: tempDir.path,
             updateFolderPath: updateFolderPath,
             onProgress: onProgress,
+            preview: filledPreview,
+            tracker: tracker,
+          );
+        },
+      );
+      expect(code, 0);
+      expect(promptCalls, 0);
+      expect(tracker.rebuildCalls, 1);
+      expect(tracker.publishCalls, 0);
+    });
+
+    test('empty Unreleased + non-interactive returns 2 and hints --rebuild', () async {
+      final tracker = _CallTracker();
+      var promptCalls = 0;
+      final lines = <String>[];
+      final code = await runPublishCli(
+        PublishCliArgs(folder: tempDir.path),
+        writeLine: lines.add,
+        isInteractive: false,
+        promptEmptyUnreleased: () {
+          promptCalls++;
+          return EmptyUnreleasedChoice.rebuild;
+        },
+        serviceFactory: ({required updateFolderPath, onProgress}) {
+          return _FakePublisherService(
+            projectRoot: tempDir.path,
+            updateFolderPath: updateFolderPath,
+            onProgress: onProgress,
             preview: emptyPreview,
             tracker: tracker,
-            publishResult: const ReleasePublishResult(
-              status: ReleasePublishStatus.success,
-            ),
           );
         },
       );
       expect(code, 2);
       expect(promptCalls, 0);
       expect(tracker.publishCalls, 0);
-      expect(lines.join('\n'), contains('--allow-empty'));
+      expect(tracker.rebuildCalls, 0);
+      expect(lines.join('\n'), contains('Unreleased'));
+      expect(lines.join('\n'), contains('--rebuild'));
     });
 
     test('non-empty Unreleased publishes normally without prompt', () async {
       final tracker = _CallTracker();
       var promptCalls = 0;
       final code = await runPublishCli(
-        PublishCliArgs(bumpKind: VersionBumpKind.patch, folder: tempDir.path),
+        PublishCliArgs(folder: tempDir.path),
         writeLine: (_) {},
         isInteractive: true,
         promptEmptyUnreleased: () {
@@ -348,6 +333,7 @@ void main() {
 class _CallTracker {
   int publishCalls = 0;
   int writeInstallerCalls = 0;
+  int rebuildCalls = 0;
 }
 
 class _FakePublisherService extends ReleasePublisherService {
@@ -388,5 +374,11 @@ class _FakePublisherService extends ReleasePublisherService {
   Future<ReleasePublishResult> writeInstallerOnly() async {
     tracker.writeInstallerCalls++;
     return writeInstallerResult;
+  }
+
+  @override
+  Future<ReleasePublishResult> rebuildCurrentVersion() async {
+    tracker.rebuildCalls++;
+    return const ReleasePublishResult(status: ReleasePublishStatus.success);
   }
 }

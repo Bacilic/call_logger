@@ -17,6 +17,57 @@ class IntegrityService {
   final DirectorySupport _support;
   late final UserRepository _users;
 
+  // Μικροί αναζητητές ονόματος για το `entity_name` του Ιστορικού.
+  //
+  // Κάθε επιδιόρθωση οφείλει να ονομάζει το αντικείμενό της όπως κάθε άλλη
+  // ενέργεια: «Μαγειρεία», όχι «Τμήμα #5». Χωρίς όνομα, ο μορφοποιητής πέφτει
+  // στο εφεδρικό «Τύπος #id» — που δεν λέει τίποτα σε ανθρώπινο μάτι.
+
+  Future<String?> _departmentNameById(DatabaseExecutor e, int id) async {
+    final rows = await e.query(
+      'departments',
+      columns: ['name'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final name = (rows.first['name'] as String?)?.trim() ?? '';
+    return name.isEmpty ? null : name;
+  }
+
+  Future<String?> _userNameById(DatabaseExecutor e, int id) async {
+    final row = await _support.userRowById(e, id);
+    final name = _support.userDisplayNameFromRow(row).trim();
+    return name.isEmpty ? null : name;
+  }
+
+  Future<String?> _phoneNumberById(DatabaseExecutor e, int id) async {
+    final rows = await e.query(
+      'phones',
+      columns: ['number'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final number = (rows.first['number'] as String?)?.trim() ?? '';
+    return number.isEmpty ? null : number;
+  }
+
+  Future<String?> _equipmentCodeById(DatabaseExecutor e, int id) async {
+    final rows = await e.query(
+      'equipment',
+      columns: ['code_equipment'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final code = (rows.first['code_equipment'] as String?)?.trim() ?? '';
+    return code.isEmpty ? null : code;
+  }
+
   Future<void> softDeleteTask(int id) async {
     final user = await _support.auditPerformingUser();
     await db.transaction((txn) async {
@@ -104,6 +155,17 @@ class IntegrityService {
     Map<String, dynamic>? newValues,
   }) async {
     await db.transaction((txn) async {
+      // Το εισιτήριο διαβάζεται ΠΡΙΝ τη διαγραφή — μετά δεν υπάρχει πού.
+      final linkRows = await txn.query(
+        'call_external_links',
+        columns: ['external_id'],
+        where: 'id = ?',
+        whereArgs: [linkId],
+        limit: 1,
+      );
+      final externalId = linkRows.isEmpty
+          ? ''
+          : (linkRows.first['external_id'] as String?)?.trim() ?? '';
       await txn.delete(
         'call_external_links',
         where: 'id = ?',
@@ -117,6 +179,7 @@ class IntegrityService {
         details: details,
         entityType: AuditEntityTypes.call,
         entityId: linkId,
+        entityName: externalId.isEmpty ? null : 'Εισιτήριο $externalId',
         oldValues: oldValues,
         newValues: newValues,
       );
@@ -144,6 +207,7 @@ class IntegrityService {
         details: details,
         entityType: AuditEntityTypes.phone,
         entityId: phoneId,
+        entityName: await _phoneNumberById(txn, phoneId),
         oldValues: oldValues,
         newValues: newValues,
       );
@@ -171,6 +235,7 @@ class IntegrityService {
         details: details,
         entityType: AuditEntityTypes.phone,
         entityId: phoneId,
+        entityName: await _phoneNumberById(txn, phoneId),
         oldValues: oldValues,
         newValues: newValues,
       );
@@ -198,6 +263,7 @@ class IntegrityService {
         details: details,
         entityType: AuditEntityTypes.equipment,
         entityId: equipmentId,
+        entityName: await _equipmentCodeById(txn, equipmentId),
         oldValues: oldValues,
         newValues: newValues,
       );
@@ -310,6 +376,7 @@ class IntegrityService {
         details: details,
         entityType: AuditEntityTypes.department,
         entityId: departmentId,
+        entityName: await _departmentNameById(txn, departmentId),
         oldValues: oldValues,
         newValues: newValues,
       );
@@ -331,6 +398,8 @@ class IntegrityService {
       details: details,
       entityType: AuditEntityTypes.user,
       entityId: userId,
+      // Η διαγραφή είναι αναστρέψιμη — η γραμμή υπάρχει ακόμη και δίνει όνομα.
+      entityName: await _userNameById(db, userId),
       oldValues: oldValues,
       newValues: newValues,
     );
@@ -354,6 +423,7 @@ class IntegrityService {
       details: details,
       entityType: AuditEntityTypes.user,
       entityId: userId,
+      entityName: await _userNameById(db, userId),
       oldValues: oldValues,
       newValues: newValues,
     );

@@ -645,13 +645,13 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
 
   Widget _tooltipActionButton({
     required String label,
-    required String tooltip,
+    required String message,
     required IconData icon,
     required VoidCallback onPressed,
   }) {
     return Expanded(
       child: CompactTooltip(
-        message: tooltip,
+        message: message,
         waitDuration: const Duration(milliseconds: 350),
         child: OutlinedButton.icon(
           onPressed: onPressed,
@@ -681,7 +681,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
           label: repairInstaller.version.isNotEmpty
               ? 'Επιδιόρθωση εγκατάστασης (${repairInstaller.version})'
               : 'Επιδιόρθωση εγκατάστασης',
-          tooltip:
+          message:
               'Ξαναγράφει τα αρχεία της εφαρμογής από το διαθέσιμο πακέτο '
               'ενημερώσεων'
               '${repairInstaller.version.isNotEmpty ? ' — θα εγκατασταθεί η έκδοση ${repairInstaller.version}' : ''}.\n\n'
@@ -695,7 +695,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       if (_shouldOfferDatabaseActions)
         _tooltipActionButton(
           label: 'Επιλογή αρχείου βάσης',
-          tooltip:
+          message:
               'Ανοίγει το παράθυρο των Windows για να διαλέξετε ένα υπάρχον '
               'αρχείο βάσης (.db).\n\n'
               'Χρησιμοποιήστε το όταν ξέρετε πού βρίσκεται η σωστή βάση '
@@ -706,7 +706,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       if (_shouldOfferRestoreFromBackup)
         _tooltipActionButton(
           label: 'Επαναφορά από αντίγραφο ασφαλείας',
-          tooltip:
+          message:
               'Ανοίγει επιλογέα για αρχείο .zip αντιγράφου ασφαλείας και '
               'επαναφέρει τη βάση (και σχετικά αρχεία) από αυτό.\n\n'
               'Αν έχετε ορίσει φάκελο αντιγράφων στις ρυθμίσεις και ο '
@@ -719,7 +719,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       if (_shouldOfferDatabaseActions)
         _tooltipActionButton(
           label: 'Δημιουργία νέας βάσης',
-          tooltip:
+          message:
               'Δημιουργεί ένα ολοκαίνουργιο, κενό αρχείο βάσης (χωρίς παλιά '
               'δεδομένα) και το ορίζει ως ενεργό.\n\n'
               'Χρησιμοποιήστε το μόνο αν θέλετε να ξεκινήσετε από την αρχή. '
@@ -730,7 +730,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       if (_shouldOfferLocateDatabase)
         _tooltipActionButton(
           label: 'Εμφάνιση φακέλου βάσης',
-          tooltip:
+          message:
               'Ανοίγει τον Εξερευνητή αρχείων των Windows στον φάκελο του '
               'τρέχοντος (προβληματικού) αρχείου .db.\n\n'
               'Δεν αλλάζει τη ρύθμιση της εφαρμογής· χρησιμεύει για να '

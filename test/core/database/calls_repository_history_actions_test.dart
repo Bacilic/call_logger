@@ -90,8 +90,8 @@ void main() {
       await insertTask(callId: call1, isDeleted: true, title: 'deleted');
       await insertTask(callId: call2, title: 'open-2');
 
-      expect(await deletion.getTasksCountLinkedToCall(call1), 1);
-      expect(await deletion.getTasksCountLinkedToCall(call2), 1);
+      expect(await deletion.getTasksCountLinkedToCalls([call1]), 1);
+      expect(await deletion.getTasksCountLinkedToCalls([call2]), 1);
       expect(await deletion.getTasksCountLinkedToCalls([call1, call2]), 2);
       expect(await deletion.getTasksCountLinkedToCalls(const []), 0);
     });
@@ -142,7 +142,7 @@ void main() {
       expect(tasks.single['is_deleted'], 0);
     });
 
-    test('hardDeleteCall removes call and external links', () async {
+    test('hard delete removes call and external links', () async {
       final callId = await insertCall(
         issue: 'hard',
         lansweeperState: 'sent',
@@ -154,7 +154,7 @@ void main() {
         provider: 'lansweeper',
       );
 
-      await deletion.hardDeleteCall(callId);
+      await deletion.deleteCallWithTasksAction(callId, 'nullify', hard: true);
 
       final db = await DatabaseHelper.instance.database;
       final callRows = await db.query(
@@ -177,13 +177,151 @@ void main() {
       expect(auditRows, isNotEmpty);
     });
 
-    test('bulkSoftDeleteCalls cascades tasks and writes bulk audit', () async {
+    test('hard delete honours the cascade choice for linked tasks', () async {
+      final callId = await insertCall(issue: 'hard-cascade');
+      await insertTask(callId: callId, title: 'task-cascade');
+
+      await deletion.deleteCallWithTasksAction(callId, 'cascade', hard: true);
+
+      final db = await DatabaseHelper.instance.database;
+      final callRows = await db.query(
+        'calls',
+        where: 'id = ?',
+        whereArgs: [callId],
+      );
+      // Ο δεσμός σβήνει μόνος του (ON DELETE SET NULL): η αναζήτηση γίνεται με
+      // τον τίτλο, γιατί μετά τη διαγραφή δεν υπάρχει πια `call_id` να δείξει.
+      final taskRows = await db.query(
+        'tasks',
+        columns: ['call_id', 'is_deleted'],
+        where: 'title = ?',
+        whereArgs: ['task-cascade'],
+      );
+      expect(callRows, isEmpty);
+      expect(taskRows.single['is_deleted'], 1);
+      expect(taskRows.single['call_id'], isNull);
+    });
+
+    test('hard delete honours the nullify choice for linked tasks', () async {
+      final callId = await insertCall(issue: 'hard-nullify');
+      await insertTask(callId: callId, title: 'task-nullify');
+
+      await deletion.deleteCallWithTasksAction(callId, 'nullify', hard: true);
+
+      final db = await DatabaseHelper.instance.database;
+      final orphanRows = await db.query(
+        'tasks',
+        where: 'call_id = ?',
+        whereArgs: [callId],
+      );
+      final taskRows = await db.query(
+        'tasks',
+        columns: ['call_id', 'is_deleted'],
+        where: 'title = ?',
+        whereArgs: ['task-nullify'],
+      );
+      expect(orphanRows, isEmpty);
+      expect(taskRows.single['call_id'], isNull);
+      expect(taskRows.single['is_deleted'], 0);
+    });
+
+    test('deletion impact reports tasks and lansweeper links', () async {
+      final callId = await insertCall(
+        issue: 'impact',
+        lansweeperState: 'sent',
+        ticketId: '5102',
+      );
+      await insertTask(callId: callId, title: 'impact-task');
+      await insertTask(callId: callId, isDeleted: true, title: 'impact-gone');
+      await lansweeper.addExternalLink(
+        callId: callId,
+        externalId: '5102',
+        provider: 'lansweeper',
+      );
+      await lansweeper.addExternalLink(
+        callId: callId,
+        externalId: '5067',
+        provider: 'lansweeper',
+      );
+
+      final impact = await deletion.getCallDeletionImpact([callId]);
+
+      expect(impact.linkedTasks, 1);
+      expect(impact.taskTitles, ['impact-task']);
+      expect(impact.externalLinks, 2);
+      expect(impact.lansweeperTicketIds, ['5067', '5102']);
+    });
+
+    test('deletion impact de-duplicates repeated ticket ids', () async {
+      final callId = await insertCall(issue: 'impact-dupes');
+      await lansweeper.addExternalLink(
+        callId: callId,
+        externalId: '5067',
+        provider: 'lansweeper',
+      );
+      await lansweeper.addExternalLink(
+        callId: callId,
+        externalId: '5067',
+        provider: 'lansweeper',
+      );
+
+      final impact = await deletion.getCallDeletionImpact([callId]);
+
+      expect(impact.externalLinks, 2);
+      expect(impact.lansweeperTicketIds, ['5067']);
+    });
+
+    test('deletion impact groups connections per call, newest first', () async {
+      final older = await insertCall(issue: 'older', date: '2026-08-01');
+      final newer = await insertCall(
+        issue: 'newer',
+        date: '2026-08-03',
+        lansweeperState: 'sent',
+        ticketId: '7001',
+      );
+      await insertTask(callId: older, title: 'older-task');
+      await lansweeper.addExternalLink(
+        callId: newer,
+        externalId: '7001',
+        provider: 'lansweeper',
+      );
+
+      final impact = await deletion.getCallDeletionImpact([older, newer]);
+
+      expect(impact.calls.map((c) => c.callId), [newer, older]);
+      expect(impact.calls.first.lansweeperTicketIds, ['7001']);
+      expect(impact.calls.first.taskTitles, isEmpty);
+      expect(impact.calls.last.taskTitles, ['older-task']);
+      expect(impact.calls.last.externalLinks, 0);
+      expect(impact.totalConnections, 2);
+    });
+
+    test('deletion impact separates calls without connections', () async {
+      final connected = await insertCall(issue: 'connected');
+      final bare = await insertCall(issue: 'bare');
+      await insertTask(callId: connected, title: 'only-task');
+
+      final impact = await deletion.getCallDeletionImpact([connected, bare]);
+
+      expect(impact.calls, hasLength(2));
+      expect(impact.connectedCalls.map((c) => c.callId), [connected]);
+    });
+
+    test('deletion impact is empty for an empty selection', () async {
+      final impact = await deletion.getCallDeletionImpact(const []);
+
+      expect(impact.linkedTasks, 0);
+      expect(impact.externalLinks, 0);
+      expect(impact.lansweeperTicketIds, isEmpty);
+    });
+
+    test('bulk soft delete cascades tasks and writes one bulk audit', () async {
       final call1 = await insertCall(issue: 'bulk1');
       final call2 = await insertCall(issue: 'bulk2');
       await insertTask(callId: call1, title: 'task-1');
       await insertTask(callId: call2, title: 'task-2');
 
-      await deletion.bulkSoftDeleteCalls([call1, call2], taskAction: 'cascade');
+      await deletion.bulkDeleteCalls([call1, call2], taskAction: 'cascade');
 
       final db = await DatabaseHelper.instance.database;
       final callRows = await db.query(
@@ -214,6 +352,85 @@ void main() {
       );
       expect(taskRows.every((r) => (r['is_deleted'] as int?) == 1), isTrue);
       expect(bulkAuditRows.length, 1);
+    });
+
+    test('bulk hard delete removes calls, tasks choice and links', () async {
+      final call1 = await insertCall(
+        issue: 'bulk-hard-1',
+        lansweeperState: 'sent',
+        ticketId: '7001',
+      );
+      final call2 = await insertCall(issue: 'bulk-hard-2');
+      await insertTask(callId: call1, title: 'bulk-hard-task');
+      await lansweeper.addExternalLink(
+        callId: call1,
+        externalId: '7001',
+        provider: 'lansweeper',
+      );
+
+      await deletion.bulkDeleteCalls(
+        [call1, call2],
+        taskAction: 'cascade',
+        hard: true,
+      );
+
+      final db = await DatabaseHelper.instance.database;
+      final callRows = await db.query(
+        'calls',
+        where: 'id IN (?, ?)',
+        whereArgs: [call1, call2],
+      );
+      final linkRows = await db.query(
+        'call_external_links',
+        where: 'call_id = ?',
+        whereArgs: [call1],
+      );
+      final taskRows = await db.query(
+        'tasks',
+        columns: ['is_deleted'],
+        where: 'title = ?',
+        whereArgs: ['bulk-hard-task'],
+      );
+
+      expect(callRows, isEmpty);
+      expect(linkRows, isEmpty);
+      expect(taskRows.single['is_deleted'], 1);
+    });
+
+    test('bulk hard delete records what each call held', () async {
+      final call1 = await insertCall(
+        issue: 'audit-1',
+        lansweeperState: 'sent',
+        ticketId: '7001',
+      );
+      final call2 = await insertCall(issue: 'audit-2');
+
+      await deletion.bulkDeleteCalls(
+        [call1, call2],
+        taskAction: 'nullify',
+        hard: true,
+      );
+
+      final db = await DatabaseHelper.instance.database;
+      final perCallRows = await db.query(
+        'audit_log',
+        where: 'action = ? AND entity_type = ?',
+        whereArgs: [DatabaseHelper.auditActionDelete, 'call'],
+      );
+      final bulkRows = await db.query(
+        'audit_log',
+        where: 'action = ?',
+        whereArgs: [DatabaseHelper.auditActionBulkDelete],
+      );
+
+      // Μία εγγραφή ανά κλήση: μόνο εκεί χωρούν τα `oldValues` της καθεμιάς.
+      // Με μία συγκεντρωτική, ο αριθμός εισιτηρίου θα χανόταν για πάντα.
+      expect(perCallRows, hasLength(2));
+      expect(bulkRows, isEmpty);
+      final withTicket = perCallRows.singleWhere(
+        (r) => (r['old_values_json'] as String?)?.contains('7001') ?? false,
+      );
+      expect(withTicket['entity_id'], call1);
     });
 
     test('cloneCall creates new unsent call with current datetime', () async {

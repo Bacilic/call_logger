@@ -97,6 +97,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
+      // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
+      barrierDismissible: false,
       builder: (context) => const LansweeperReportDialog(),
     );
   }

@@ -1,4 +1,6 @@
-/// Παράγει το περιεχόμενο του updater `.cmd` ως κείμενο.
+import 'package:call_logger/core/utils/windows1253_encoder.dart';
+
+/// Παράγει το περιεχόμενο του updater `.cmd`.
 class UpdaterScriptBuilder {
   UpdaterScriptBuilder._();
 
@@ -14,13 +16,18 @@ class UpdaterScriptBuilder {
   ///   `<install>\`                              → INSTALL_DIR (%~dp0..)
   ///   `<install>\.update_backup\`               → BACKUP_DIR
   ///
-  /// Μηνύματα ΜΟΝΟ ASCII (χωρίς chcp/ελληνικά): το script τρέχει αόρατο στο
-  /// παρασκήνιο και τα ελληνικά+UTF-8 καταρρέουν το batch parsing.
+  /// Το script τρέχει σε ΟΡΑΤΗ κονσόλα (μία — βλ. UpdateCmdLauncher) και
+  /// δείχνει την πρόοδο στα ελληνικά. Τα ελληνικά απαιτούν `chcp 1253` +
+  /// εγγραφή σε Windows-1253 μέσω [buildBytes] — το δοκιμασμένο μοτίβο του
+  /// install_call_logger.bat. ΠΟΤΕ UTF-8: καταρρέει το batch parsing.
   ///
-  /// Γράφει `%~dp0updater.log` σε κάθε κρίσιμο βήμα / αποτυχία.
+  /// Γράφει `%~dp0updater.log` (μηνύματα ASCII) σε κάθε κρίσιμο βήμα.
   static String build({String pidPlaceholder = '%~1'}) {
-    return '''
+    final script =
+        '''
 @echo off
+chcp 1253 >nul
+title Ενημέρωση - Καταγραφή Κλήσεων
 setlocal EnableExtensions EnableDelayedExpansion
 
 set "OLD_PID=$pidPlaceholder"
@@ -37,6 +44,10 @@ call :log "INSTALL=%INSTALL_DIR%"
 call :log "STAGING=%STAGING_DIR%"
 call :log "BACKUP=%BACKUP_DIR%"
 
+echo Ενημέρωση της Καταγραφής Κλήσεων σε εξέλιξη.
+echo Μην κλείσετε αυτό το παράθυρο - θα κλείσει μόνο του όταν ολοκληρωθεί.
+echo.
+
 if "%OLD_PID%"=="" (
   call :fail "EMPTY_PID"
   exit /b 1
@@ -50,6 +61,7 @@ if not exist "%STAGING_DIR%\\call_logger.exe" (
   exit /b 1
 )
 
+echo Αναμονή για το κλείσιμο της εφαρμογής...
 :wait_for_exit
 tasklist /FI "PID eq %OLD_PID%" 2>nul | find "%OLD_PID%" >nul
 if errorlevel 1 goto process_gone
@@ -63,6 +75,7 @@ goto wait_for_exit
 
 :process_gone
 call :log "process_gone"
+echo Δημιουργία αντιγράφου ασφαλείας...
 if exist "%BACKUP_DIR%" rmdir /S /Q "%BACKUP_DIR%"
 mkdir "%BACKUP_DIR%" >nul 2>&1
 if not exist "%BACKUP_DIR%" (
@@ -89,18 +102,22 @@ if exist "%INSTALL_DIR%\\data" (
 )
 
 rem Overlay without /MIR and without /PURGE: user data folders are kept.
+echo Αντιγραφή αρχείων νέας έκδοσης...
 robocopy "%STAGING_DIR%" "%INSTALL_DIR%" /E /R:2 /W:2 /NFL /NDL /NJH /NJS /nc /ns /np
 set "RC=!ERRORLEVEL!"
 call :log "overlay RC=!RC!"
 if !RC! GEQ 8 goto rollback
 
 call :log "start_exe"
+echo Η ενημέρωση ολοκληρώθηκε. Η εφαρμογή ξεκινά ξανά...
 start "" "%INSTALL_DIR%\\call_logger.exe"
 call :log "SUCCESS"
+timeout /t 3 /nobreak >nul
 exit /b 0
 
 :rollback
 call :log "ROLLBACK overlay_failed RC=!RC!"
+echo Η αντιγραφή απέτυχε - επαναφορά της προηγούμενης έκδοσης...
 robocopy "%BACKUP_DIR%" "%INSTALL_DIR%" /E /R:2 /W:2 /NFL /NDL /NJH /NJS /nc /ns /np
 start "" "%INSTALL_DIR%\\call_logger.exe"
 call :fail "OVERLAY_FAILED"
@@ -112,7 +129,17 @@ goto :eof
 
 :fail
 >> "%LOG%" echo [%TIME%] FAIL %~1
+echo.
+echo Η ενημέρωση απέτυχε [%~1]. Λεπτομέρειες στο αρχείο updater.log
+echo στον φάκελο του σεναρίου ενημέρωσης.
+pause
 goto :eof
 ''';
+    return script.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n');
   }
+
+  /// Bytes του script σε Windows-1253 (χωρίς BOM) — η μόνη σωστή μορφή
+  /// εγγραφής όσο το script περιέχει ελληνικά μηνύματα προόδου.
+  static List<int> buildBytes({String pidPlaceholder = '%~1'}) =>
+      Windows1253Encoder.encode(build(pidPlaceholder: pidPlaceholder));
 }

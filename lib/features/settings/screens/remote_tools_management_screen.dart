@@ -5,6 +5,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
+import '../../../core/widgets/compact_tooltip.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../core/widgets/info_hint_icon.dart';
 import '../../../core/widgets/remote_tool_icon.dart';
@@ -410,11 +411,13 @@ class _RemoteToolsManagementScreenState
                     icon: const Icon(Icons.edit_outlined),
                     onPressed: () => _openToolEditor(t),
                   ),
-                  IconButton(
-                    tooltip:
+                  CompactTooltip(
+                    message:
                         'Αντίγραφο (ίδιες ρυθμίσεις, νέο όνομα με «$kRemoteToolCloneSuffix»)',
-                    icon: const Icon(Icons.copy_outlined),
-                    onPressed: () => _cloneTool(t),
+                    child: IconButton(
+                      icon: const Icon(Icons.copy_outlined),
+                      onPressed: () => _cloneTool(t),
+                    ),
                   ),
                   IconButton(
                     tooltip: 'Απομάκρυνση από τη λίστα (soft delete)',

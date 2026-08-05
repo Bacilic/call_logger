@@ -25,6 +25,36 @@ Finder _dropdownByLabel(String label) {
 void main() {
   registerCallLoggerIsolatedDatabaseHooks();
 
+  group('τιμές με κόμμα (parseCommaValues/commaText)', () {
+    test('κόβει κενά γύρω από τις τιμές και αγνοεί κενά τμήματα', () {
+      expect(
+        LansweeperTicketSubmitSettingsSection.parseCommaValues(
+          ' Open, Closed ,In Progress,,  ,',
+        ),
+        ['Open', 'Closed', 'In Progress'],
+      );
+    });
+
+    test('κρατά τα εσωτερικά κενά μιας τιμής', () {
+      expect(
+        LansweeperTicketSubmitSettingsSection.parseCommaValues(
+          'In Progress, Waiting for user',
+        ),
+        ['In Progress', 'Waiting for user'],
+      );
+    });
+
+    test('commaText: ενιαία μορφή «τιμή, τιμή» και πλήρης κύκλος', () {
+      const values = ['Open', 'Closed', 'In Progress'];
+      final text = LansweeperTicketSubmitSettingsSection.commaText(values);
+      expect(text, 'Open, Closed, In Progress');
+      expect(
+        LansweeperTicketSubmitSettingsSection.parseCommaValues(text),
+        values,
+      );
+    });
+  });
+
   group('LansweeperTicketSubmitSettingsSection', () {
     tearDown(() async {
       final db = await DatabaseHelper.instance.database;
@@ -100,9 +130,9 @@ void main() {
       (tester) async {
         await pumpSection(tester);
 
-        expect(find.textContaining('Προτεραιότητα'), findsWidgets);
-        expect(find.textContaining('Τύπος αιτήματος'), findsWidgets);
-        expect(find.textContaining('Ομάδα'), findsWidgets);
+        expect(find.text('Προτεραιότητες (τιμές με κόμμα)'), findsOneWidget);
+        expect(find.text('Τύποι αιτήματος (τιμές με κόμμα)'), findsOneWidget);
+        expect(find.text('Ομάδες (τιμές με κόμμα)'), findsOneWidget);
 
         expect(_dropdownByLabel('Προεπιλογή προτεραιότητας'), findsOneWidget);
         expect(
@@ -163,6 +193,65 @@ void main() {
         expect(raw, isNotNull);
         final decoded = LansweeperTicketSubmitConfig.decodeFromStorage(raw);
         expect(decoded.priority, 'High');
+      },
+    );
+
+    testWidgets(
+      'πληκτρολόγηση τιμών με κόμμα ενημερώνει τη λίστα προτεραιοτήτων μέσω provider',
+      (tester) async {
+        final container = await pumpSection(tester);
+
+        final valuesField = find.widgetWithText(
+          TextFormField,
+          'Προτεραιότητες (τιμές με κόμμα)',
+        );
+        expect(valuesField, findsOneWidget);
+
+        await tester.ensureVisible(valuesField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(valuesField, 'Low, Medium, High, Urgent');
+        await pumpUntilSettled(tester);
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await pumpUntilSettled(tester);
+
+        expect(container.read(lansweeperTicketSubmitConfigProvider).priorities, [
+          'Low',
+          'Medium',
+          'High',
+          'Urgent',
+        ]);
+      },
+    );
+
+    testWidgets(
+      'προσωρινό κόμμα στο τέλος δεν ξαναγράφει το κείμενο του χρήστη κατά την πληκτρολόγηση',
+      (tester) async {
+        final container = await pumpSection(tester);
+
+        final valuesField = find.widgetWithText(
+          TextFormField,
+          'Προτεραιότητες (τιμές με κόμμα)',
+        );
+        await tester.ensureVisible(valuesField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(valuesField, 'Low, Medium,');
+        await pumpUntilSettled(tester);
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await pumpUntilSettled(tester);
+
+        expect(container.read(lansweeperTicketSubmitConfigProvider).priorities, [
+          'Low',
+          'Medium',
+        ]);
+
+        final editable = tester.widget<EditableText>(
+          find.descendant(of: valuesField, matching: find.byType(EditableText)),
+        );
+        expect(editable.controller.text, 'Low, Medium,');
       },
     );
 

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/providers/history_audit_immersive_provider.dart';
+import '../../../core/providers/history_search_prefill_intent_provider.dart';
 import '../../../core/providers/lexicon_full_mode_provider.dart';
 import '../../../core/providers/shell_navigation_intent_provider.dart';
 import '../../../core/widgets/calendar_range_picker.dart';
@@ -205,6 +206,21 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   Widget build(BuildContext context) {
     ref.listen<HistoryFilterModel>(historyFilterProvider, (_, _) {
       ref.read(historySelectedCallIdsProvider.notifier).clear();
+    });
+    ref.listen<String?>(historySearchPrefillIntentProvider, (_, next) {
+      final keyword = next?.trim() ?? '';
+      if (keyword.isEmpty) return;
+      ref.read(historySearchPrefillIntentProvider.notifier).clear();
+      // Ο όρος έρχεται έτοιμος από αλλού: εφαρμόζεται αμέσως, χωρίς την
+      // αναμονή πληκτρολόγησης που έχει νόημα μόνο όταν γράφει ο χρήστης.
+      _debounceTimer?.cancel();
+      _searchController.text = keyword;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref
+            .read(historyFilterProvider.notifier)
+            .update((s) => s.copyWith(keyword: keyword));
+      });
     });
     final theme = Theme.of(context);
     final filter = ref.watch(historyFilterProvider);

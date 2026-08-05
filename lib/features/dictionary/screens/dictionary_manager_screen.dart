@@ -607,6 +607,8 @@ class _DictionaryManagerScreenState
   Future<void> _openDictionarySettings() async {
     await showDialog<void>(
       context: context,
+      // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
+      barrierDismissible: false,
       builder: (ctx) => DictionarySettingsDialog(
         onImportTxt: _importTxtFile,
         onCompile: _compileExport,

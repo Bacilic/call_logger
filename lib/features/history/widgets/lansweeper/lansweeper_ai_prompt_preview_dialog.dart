@@ -10,6 +10,8 @@ Future<void> showLansweeperAiPromptPreviewDialog(
 }) {
   return showDialog<void>(
     context: context,
+    // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
+    barrierDismissible: false,
     builder: (dialogContext) =>
         _LansweeperAiPromptPreviewDialog(promptText: promptText),
   );

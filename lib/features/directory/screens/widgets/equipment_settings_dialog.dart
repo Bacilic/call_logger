@@ -14,7 +14,10 @@ import '../../../../core/widgets/spell_check_controller.dart';
 Future<bool> showEquipmentSettingsDialog(BuildContext context) async {
   final result = await showDialog<bool>(
     context: context,
-    barrierDismissible: true,
+    // Έλεγε `true` ενώ ποτέ δεν έκλεινε με κλικ έξω: το Scaffold του
+    // DialogSnackbarScope απλώνεται σε όλη την οθόνη και καταπίνει το χτύπημα.
+    // Η δήλωση ευθυγραμμίστηκε με την πραγματικότητα — καμία αλλαγή στην πράξη.
+    barrierDismissible: false,
     builder: (ctx) => const _EquipmentSettingsDialog(),
   );
   return result ?? false;

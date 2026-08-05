@@ -195,10 +195,14 @@ class _DatabaseIntegrityDialogState
 }
 
 /// Περιεχόμενο ελέγχου/επιδιόρθωσης ακεραιότητας (μέσα στο [DatabaseIntegrityDialog]).
+///
+/// Το [onFeedback] είναι υποχρεωτικό: ο ξενιστής αποφασίζει πού εμφανίζονται τα
+/// μηνύματα, ώστε μέσα σε διάλογο να μην καταλήξουν ποτέ στο ριζικό Scaffold,
+/// πίσω από το φράγμα.
 class DatabaseIntegrityPanel extends ConsumerStatefulWidget {
-  const DatabaseIntegrityPanel({super.key, this.onFeedback});
+  const DatabaseIntegrityPanel({super.key, required this.onFeedback});
 
-  final IntegrityFeedbackCallback? onFeedback;
+  final IntegrityFeedbackCallback onFeedback;
 
   @override
   ConsumerState<DatabaseIntegrityPanel> createState() =>
@@ -222,18 +226,7 @@ class _DatabaseIntegrityPanelState
   }
 
   void _feedback(String message, {bool isError = false}) {
-    if (widget.onFeedback != null) {
-      widget.onFeedback!(message, isError: isError);
-      return;
-    }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-      ),
-    );
+    widget.onFeedback(message, isError: isError);
   }
 
   Future<void> _copyReport() async {

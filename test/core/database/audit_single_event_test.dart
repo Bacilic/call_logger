@@ -202,6 +202,12 @@ void main() {
     test(
       'saveDepartmentWithFloorContext: μία εγγραφή audit ανά αποθήκευση',
       () async {
+        final floorId = await db.insert('building_map_floors', {
+          'sort_order': 0,
+          'label': 'Ισόγειο',
+          'image_path': 'ground.png',
+          'rotation_degrees': 0.0,
+        });
         final deptId = await db.insert('departments', {
           'name': 'Τμήμα Χάρτη',
           'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα Χάρτη'),
@@ -216,7 +222,7 @@ void main() {
         await departments.saveDepartmentWithFloorContext(deptId, {
           'color': '#EF5350',
           'map_x': 100.0,
-        }, drawingFloorId: 3);
+        }, drawingFloorId: floorId);
 
         final rows = await allAuditRows();
         expect(rows, hasLength(1));

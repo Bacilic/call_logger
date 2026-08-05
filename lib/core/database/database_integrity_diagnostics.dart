@@ -3,6 +3,7 @@ import 'package:sqflite_common/sqflite.dart';
 import '../../features/database/models/database_integrity_finding.dart';
 import '../../features/database/models/database_integrity_report.dart';
 import '../utils/search_text_normalizer.dart';
+import 'database_foreign_keys.dart';
 import 'database_helper.dart';
 import 'database_v1_schema.dart';
 
@@ -28,7 +29,13 @@ class _IntegrityCheckStep {
 
 /// Read-only διαγνωστικά SQL για ακεραιότητα δεδομένων SQLite.
 class DatabaseIntegrityDiagnostics {
-  static const int totalSteps = 19;
+  /// Πόσα βήματα αναγγέλλει η μπάρα προόδου.
+  ///
+  /// Παράγεται από την ίδια τη λίστα ελέγχων (`+1` για το `PRAGMA quick_check`,
+  /// που τρέχει πρώτο και χωριστά). Ως καρφωμένος αριθμός ήταν δεύτερη πηγή
+  /// αλήθειας: κάθε νέος έλεγχος τον άφηνε πίσω, και η μπάρα σταματούσε στο
+  /// «19 από 19» ενώ έτρεχε ακόμη.
+  static int get totalSteps => _diagnosticSteps().length + 1;
 
   static const String _activePhones = 'COALESCE(is_deleted, 0) = 0';
   static const String _activeCalls = 'COALESCE(c.is_deleted, 0) = 0';
@@ -85,7 +92,7 @@ class DatabaseIntegrityDiagnostics {
     );
   }
 
-  /// Στοχευμένη επαν-επαλήθευση ενός τύπου ελέγχου (χωρίς πλήρες 19-βηματικό scan).
+  /// Στοχευμένη επαν-επαλήθευση ενός τύπου ελέγχου (χωρίς πλήρη σάρωση).
   Future<List<DatabaseIntegrityFinding>> runCheck(
     IntegrityCheckType type,
   ) async {
@@ -257,7 +264,47 @@ WHERE $_activeTasks
         countSql: 'SELECT COUNT(*) FROM audit_log WHERE entity_id IS NOT NULL',
         run: _checkAuditMissingSearchText,
       ),
+      _IntegrityCheckStep(
+        checkType: IntegrityCheckType.foreignKeyViolations,
+        name: IntegrityCheckType.foreignKeyViolations.displayNameEl,
+        tableScopeLabel: 'δηλωμένοι κανόνες σχέσεων',
+        countSql:
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' "
+            "AND sql LIKE '%FOREIGN KEY%'",
+        run: _checkForeignKeyViolations,
+      ),
     ];
+  }
+
+  /// Ρωτά την ίδια τη SQLite αν κάποια γραμμή παραβιάζει δηλωμένο κανόνα.
+  ///
+  /// Οι υπόλοιποι έλεγχοι ψάχνουν σχέσεις μία-μία με χειρόγραφο SQL· αυτός
+  /// ελέγχει **όλες** μαζί, και πιάνει και όσες προστεθούν αργότερα χωρίς να
+  /// θυμηθεί κανείς να γράψει έλεγχο γι' αυτές.
+  static Future<List<DatabaseIntegrityFinding>> _checkForeignKeyViolations(
+    Database db,
+  ) async {
+    final rows = await foreignKeyViolations(db);
+    return rows
+        .map(
+          (r) => DatabaseIntegrityFinding(
+            severity: IntegritySeverity.critical,
+            category: IntegrityCategory.referential,
+            checkType: IntegrityCheckType.foreignKeyViolations,
+            title: 'Παραβίαση κανόνα σχέσης',
+            description:
+                'Ο πίνακας «${r['table']}» έχει γραμμή που δείχνει σε '
+                'ανύπαρκτη εγγραφή του «${r['parent']}».',
+            affectedId: r['rowid'] is int ? r['rowid'] as int : null,
+            affectedEntity: r['table']?.toString(),
+            context: {
+              'table': r['table'],
+              'rowid': r['rowid'],
+              'parent': r['parent'],
+            },
+          ),
+        )
+        .toList();
   }
 
   static Future<List<DatabaseIntegrityFinding>> _checkPragmaQuickCheck(
@@ -600,6 +647,18 @@ WHERE COALESCE(d.is_deleted, 0) = 0
     return findings;
   }
 
+  /// Εγγραφές ιστορικού Lansweeper που δείχνουν σε κλήση που **δεν υπάρχει**.
+  ///
+  /// Η διαγραμμένη κλήση δεν μετράει: η αναστρέψιμη διαγραφή αφήνει επίτηδες το
+  /// ιστορικό της, ώστε η επαναφορά να βρει το εισιτήριό της εκεί που το άφησε.
+  /// Όσο ο έλεγχος τα ανέφερε κι αυτά, κάθε συνηθισμένη διαγραφή κλήσης με
+  /// εισιτήριο γέμιζε την αναφορά με «Κρίσιμα» ευρήματα για κατάσταση απολύτως
+  /// φυσιολογική.
+  ///
+  /// Από το σχήμα v38 το `ON DELETE CASCADE` κάνει το εύρημα αδύνατο στην
+  /// κανονική λειτουργία. Ο έλεγχος μένει ως δικλείδα για ό,τι δεν περνά από
+  /// εκεί: αρχείο που πειράχτηκε με εξωτερικό εργαλείο, παλιό αντίγραφο που
+  /// επαναφέρθηκε, ή διαδρομή ανοίγματος που ξέχασε να ανάψει τους κανόνες.
   static Future<List<DatabaseIntegrityFinding>> _checkOrphanCallExternalLinks(
     Database db,
   ) async {
@@ -607,7 +666,7 @@ WHERE COALESCE(d.is_deleted, 0) = 0
 SELECT cel.id, cel.call_id
 FROM call_external_links cel
 LEFT JOIN calls c ON c.id = cel.call_id
-WHERE c.id IS NULL OR COALESCE(c.is_deleted, 0) = 1
+WHERE c.id IS NULL
 ''');
     return rows
         .map(
@@ -617,7 +676,7 @@ WHERE c.id IS NULL OR COALESCE(c.is_deleted, 0) = 1
             checkType: IntegrityCheckType.orphanCallExternalLinks,
             title: 'Ορφανό call_external_link',
             description:
-                'Η εγγραφή δείχνει σε ανύπαρκτη ή διαγραμμένη κλήση (call_id=${r['call_id']}).',
+                'Η εγγραφή δείχνει σε κλήση που δεν υπάρχει (call_id=${r['call_id']}).',
             affectedId: r['id'] as int?,
             affectedEntity: 'call_external_links',
             context: {'link_id': r['id'], 'call_id': r['call_id']},

@@ -11,6 +11,7 @@ class MainNavRequest {
     this.taskFocusEntityId,
     this.callFocusEntityId,
     this.callPrefillDepartmentName,
+    this.historyPrefillSearch,
   });
 
   final MainNavDestination destination;
@@ -29,6 +30,9 @@ class MainNavRequest {
 
   /// Όνομα τμήματος για προσυμπλήρωση πεδίου «Τμήμα» στην οθόνη Νέα Κλήση.
   final String? callPrefillDepartmentName;
+
+  /// Όρος για προσυμπλήρωση της αναζήτησης στο Ιστορικό Κλήσεων.
+  final String? historyPrefillSearch;
 }
 
 class MainNavRequestNotifier extends Notifier<MainNavRequest?> {

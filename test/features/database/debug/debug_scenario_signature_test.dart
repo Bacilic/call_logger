@@ -11,7 +11,9 @@ import 'package:call_logger/core/database/database_file_classifier.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/database_init_runner.dart';
 import 'package:call_logger/core/services/settings_service.dart';
+import 'package:call_logger/features/database/debug/integrity_debug_provider_refresh.dart';
 import 'package:call_logger/features/database/debug/integrity_debug_seeder_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,6 +92,39 @@ void main() {
       reason: greekExpectMsg(
         'Η «patates.db» με τεχνητά δεδομένα παραμένει δοκιμαστική — το είδος '
         'της βάσης το λέει το περιεχόμενο, όχι το όνομα',
+      ),
+    );
+  });
+
+  test('η ΕΝΕΡΓΗ δοκιμαστική βάση κρατά ανοιχτά τα σενάρια', () async {
+    await DatabaseHelper.instance.initializeDatabase();
+    await IntegrityDebugSeederService().seedAndActivate();
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    expect(
+      await container.read(activeDatabaseHasDebugScenariosProvider.future),
+      isTrue,
+      reason: greekExpectMsg(
+        'Τα σενάρια είναι ιδιότητα της ανοιχτής βάσης, όχι της επίσκεψης στην '
+        'οθόνη — αλλιώς ο μόνος τρόπος να ξαναφανούν είναι νέος σπορέας',
+      ),
+    );
+  });
+
+  test('κανονική ενεργή βάση δεν ξεκλειδώνει σενάρια', () async {
+    await DatabaseHelper.instance.initializeDatabase();
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    expect(
+      await container.read(activeDatabaseHasDebugScenariosProvider.future),
+      isFalse,
+      reason: greekExpectMsg(
+        'Σε αληθινή βάση οι κάρτες σεναρίων θα υπόσχονταν τεχνητά δεδομένα '
+        'που δεν υπάρχουν',
       ),
     );
   });

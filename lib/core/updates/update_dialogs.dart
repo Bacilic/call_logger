@@ -3,12 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../about/providers/changelog_provider.dart';
 import 'update_check_result.dart';
 import 'update_installer_service.dart';
 import 'update_manifest.dart';
 import 'update_providers.dart';
 
 /// Διάλογος «Διαθέσιμη νέα έκδοση» → προαιρετική προετοιμασία ενημέρωσης.
+///
+/// Όταν ο αριθμός έκδοσης δεν ανεβαίνει (ίδιος ή μικρότερος), η εικόνα μοιάζει
+/// παράλογη — μόνο τότε προστίθεται επεξήγηση, με τους αριθμούς κτισίματος και
+/// τις ημερομηνίες τους. Σε κανονική αναβάθμιση δεν εμφανίζεται τίποτα.
 Future<void> showUpdateAvailableDialog(
   BuildContext context,
   UpdateCheckResult result,
@@ -16,14 +21,39 @@ Future<void> showUpdateAvailableDialog(
   final manifest = result.manifest;
   if (manifest == null) return;
 
+  var content =
+      'Διαθέσιμη νέα έκδοση ${manifest.version} '
+      '(${_displayDate(manifest.released)}) — θέλετε να την προετοιμάσετε τώρα;';
+  if (result.needsVersionLabelExplanation) {
+    final currentDate = await _currentInstallReleaseDate(
+      context,
+      result.currentVersion,
+    );
+    if (!context.mounted) return;
+    final installedBuild = result.currentBuild == null
+        ? 'το εγκατεστημένο'
+        : 'το εγκατεστημένο ${result.currentBuild}'
+              '${currentDate == null ? '' : ' (${_displayDate(currentDate)})'}';
+    final cause =
+        result.versionLabelRelation == UpdateVersionLabelRelation.same
+        ? 'ο αριθμός της νέας έκδοσης (${manifest.version}) είναι ο ίδιος με '
+              'τον εγκατεστημένο, επειδή περιέχει αλλαγές που δεν άλλαξαν το '
+              'ιστορικό εκδόσεων'
+        : 'ο αριθμός της νέας έκδοσης (${manifest.version}) φαίνεται '
+              'μικρότερος από τον εγκατεστημένο (${result.currentVersion}) '
+              'επειδή η αρίθμηση των εκδόσεων αναπροσαρμόστηκε';
+    content =
+        '$content\n\n'
+        'Σημείωση: $cause. Δεν πρόκειται για υποβάθμιση: το πακέτο με αριθμό '
+        'κτισίματος ${manifest.build} (${_displayDate(manifest.released)}) '
+        'είναι νεότερο από $installedBuild. Η ενημέρωση συνιστάται.';
+  }
+
   final choice = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Διαθέσιμη νέα έκδοση'),
-      content: Text(
-        'Διαθέσιμη νέα έκδοση ${manifest.version} '
-        '(${manifest.released}) — θέλετε να την προετοιμάσετε τώρα;',
-      ),
+      content: Text(content),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
@@ -175,6 +205,34 @@ Future<void> launchPendingUpdateNow(BuildContext context) async {
   if (!result.success) {
     await _showFailure(context, result);
   }
+}
+
+/// Ημερομηνία κυκλοφορίας της ΕΓΚΑΤΕΣΤΗΜΕΝΗΣ έκδοσης, από το δικό της
+/// ενσωματωμένο ιστορικό αλλαγών (η κάρτα που ταιριάζει στην ετικέτα της).
+/// `null` αν δεν βρεθεί — το μήνυμα τότε παραλείπει την ημερομηνία.
+Future<String?> _currentInstallReleaseDate(
+  BuildContext context,
+  String? currentVersion,
+) async {
+  if (currentVersion == null) return null;
+  try {
+    final entries = await ProviderScope.containerOf(
+      context,
+    ).read(changelogProvider.future);
+    for (final entry in entries) {
+      if (entry.version == currentVersion) return entry.date;
+    }
+  } catch (_) {
+    // Χωρίς ιστορικό δεν χάνεται η επεξήγηση — μόνο η ημερομηνία.
+  }
+  return null;
+}
+
+/// `yyyy-MM-dd` → `dd-MM-yyyy` για εμφάνιση· οτιδήποτε άλλο επιστρέφεται ως έχει.
+String _displayDate(String isoDate) {
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(isoDate.trim());
+  if (match == null) return isoDate;
+  return '${match[3]}-${match[2]}-${match[1]}';
 }
 
 Future<void> _showFailure(

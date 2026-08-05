@@ -1,10 +1,15 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
+import 'database_foreign_keys.dart';
 import 'database_v1_schema.dart';
 
 /// Κανονικοποιήσεις λεξικού και επιπλέον στήλες κατά το άνοιγμα βάσης (onOpen).
 Future<void> applyLexiconOpenNormalizations(Database db) async {
+  // Πρώτο βήμα κάθε ανοίγματος: οι κανόνες σχέσεων είναι ρύθμιση της σύνδεσης,
+  // όχι ιδιότητα του αρχείου. Η SQLite τους ξεκινά σβηστούς — αν ξεχαστεί εδώ,
+  // η βάση κουβαλά κανόνες που δεν επιβάλλει κανείς.
+  await enableForeignKeys(db);
   await normalizeLexiconSourceOnOpen(db);
   await normalizeLexiconCategoryLegacyOnOpen(db);
   await ensureDepartmentsMapRotationColumn(db);

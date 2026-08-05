@@ -81,6 +81,8 @@ Future<void> openNewTaskForm(BuildContext context, WidgetRef ref) async {
 Future<void> openTaskSettings(BuildContext context, WidgetRef ref) async {
   await showDialog<void>(
     context: context,
+    // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
+    barrierDismissible: false,
     builder: (context) => const TaskSettingsDialog(),
   );
 }

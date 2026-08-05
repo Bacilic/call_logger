@@ -155,7 +155,17 @@ class _BuildingMapPortableImageCopyDialogState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Η επιλεγμένη εικόνα βρίσκεται εκτός του φακέλου της εφαρμογής.\n'
+              'Η επιλεγμένη εικόνα βρίσκεται εκτός του φακέλου της εφαρμογής:',
+            ),
+            const SizedBox(height: 6),
+            SelectableText(
+              widget.sourceImagePath,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
               'Μπορείτε να την αντιγράψετε στο maps_images δίπλα στο εκτελέσιμο '
               'ή να τη χρησιμοποιήσετε από την τρέχουσα θέση της (χωρίς μεταφορά).',
             ),
@@ -184,8 +194,11 @@ class _BuildingMapPortableImageCopyDialogState
                 decoration: InputDecoration(
                   hintText: renameHint,
                   helperText: _useRename
-                      ? 'Αν παραλείψετε την κατάληξη, θα χρησιμοποιηθεί $_originalExtension.'
+                      ? 'Αν παραλείψετε την κατάληξη, θα χρησιμοποιηθεί '
+                            '$_originalExtension. '
+                            'Η μετονομασία ισχύει μόνο με μεταφορά.'
                       : null,
+                  helperMaxLines: 3,
                   errorText: _useRename ? _validationError : null,
                 ),
                 onChanged: (_) {
@@ -210,8 +223,10 @@ class _BuildingMapPortableImageCopyDialogState
           onPressed: _submitting ? null : () => Navigator.pop(context),
           child: const Text('Άκυρο'),
         ),
+        // Η μετονομασία έχει νόημα μόνο με αντιγραφή στο maps_images — όσο
+        // είναι ενεργή, η «χρήση από την τρέχουσα θέση» θα την αγνοούσε σιωπηλά.
         TextButton(
-          onPressed: _submitting ? null : _useExternalPath,
+          onPressed: (_submitting || _useRename) ? null : _useExternalPath,
           child: const Text('Χωρίς μεταφορά'),
         ),
         FilledButton(

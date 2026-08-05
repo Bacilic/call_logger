@@ -57,6 +57,57 @@ void main() {
     expect(lines.single, 'Αποσύνδεση από χρήστη #243');
   });
 
+  test('το name_key αποδίδεται ως «κλειδί ονόματος», όχι αγγλικά', () {
+    final row = AuditLogModel(
+      id: 20,
+      action: 'ΕΠΙΔΙΟΡΘΩΣΗ ΑΚΕΡΑΙΟΤΗΤΑΣ',
+      entityType: 'department',
+      entityName: 'Μαγειρεία',
+      oldValuesJson: '{"name_key":"μαγειριο"}',
+      newValuesJson: '{"name_key":"μαγειρεια"}',
+    );
+    final lines = formatter.describeChanges(row);
+    expect(lines.single, 'Αλλαγή κλειδιού ονόματος από μαγειριο σε μαγειρεια');
+    final s = formatter.summaryLine(row, technical: false);
+    expect(s, isNot(contains('name key')));
+  });
+
+  test('η μεταφορά τμήματος από τον Fixer μετράει ως ΜΙΑ αλλαγή', () {
+    // Ο Fixer γράφει department_id + department_label (στιγμιότυπο ονόματος).
+    // Είναι η ίδια αλλαγή σε δύο μορφές — όσο μετρούσαν χωριστά, το Ιστορικό
+    // έλεγε «2 αλλαγές: τμήμα, department label» για μία μεταφορά.
+    final row = AuditLogModel(
+      id: 21,
+      action: 'ΕΠΙΔΙΟΡΘΩΣΗ ΑΚΕΡΑΙΟΤΗΤΑΣ',
+      entityType: 'user',
+      entityName: 'Ελένη Ψαρά',
+      oldValuesJson:
+          '{"department_id":990101,"department_label":"Τμήμα ID 990101 [Ανύπαρκτο]"}',
+      newValuesJson: '{"department_id":7,"department_label":"Αιμοδοσία"}',
+    );
+    final lines = formatter.describeChanges(row);
+    expect(lines, hasLength(1));
+    final s = formatter.summaryLine(row, technical: false);
+    expect(s, isNot(contains('2 αλλαγές')));
+    expect(s, isNot(contains('department label')));
+  });
+
+  test('το department_label ντύνει το department_id με όνομα', () {
+    // Το στιγμιότυπο προηγείται του lookup: κρατά το όνομα ακόμη κι όταν το
+    // τμήμα δεν υπάρχει πια — ακριβώς η περίπτωση του Fixer.
+    final row = AuditLogModel(
+      id: 22,
+      action: 'ΕΠΙΔΙΟΡΘΩΣΗ ΑΚΕΡΑΙΟΤΗΤΑΣ',
+      entityType: 'user',
+      entityName: 'Ελένη Ψαρά',
+      oldValuesJson: '{"department_id":null,"department_label":"—"}',
+      newValuesJson: '{"department_id":7,"department_label":"Αιμοδοσία"}',
+    );
+    final lines = formatter.describeChanges(row);
+    expect(lines.single, contains('Αιμοδοσία'));
+    expect(lines.single, isNot(contains('#7')));
+  });
+
   test('formatAuditTimestamp τοπική μορφή ελληνικής ημέρας', () {
     final s = formatter.formatAuditTimestamp('2026-04-13T11:00:17.756183');
     expect(s, contains('13-04-2026'));

@@ -59,19 +59,36 @@ class UpdateManifest {
     'sha256': sha256,
   };
 
-  /// Αριθμητική σύγκριση `X.Y.Z` + build. Αρνητικό αν A < B, 0 αν ίσα, θετικό αν A > B.
+  /// Σύγκριση «ποιο πακέτο είναι νεότερο» — αποφασίζει το BUILD, όχι η ετικέτα.
+  ///
+  /// Το build αυξάνεται κατά 1 σε κάθε δημοσίευση και δεν μηδενίζει ποτέ, άρα
+  /// επιβιώνει και από αναπροσαρμογή της αρίθμησης εκδόσεων (π.χ. η γραμμή
+  /// γύρισε από 0.24.x σε 0.22.0). Αν αποφάσιζε η ετικέτα, ξεχασμένη
+  /// εγκατάσταση με «μπροστινό» αριθμό έκδοσης θα θεωρούσε για πάντα τον
+  /// εαυτό της νεότερο και δεν θα αυτοενημερωνόταν ποτέ. Η ετικέτα `X.Y.Z`
+  /// χρησιμεύει μόνο ως δεύτερο κριτήριο σε ίσα builds (αμυντικό — κανονικά
+  /// κάθε δημοσίευση έχει μοναδικό build).
+  ///
+  /// Αρνητικό αν A < B, 0 αν ίσα, θετικό αν A > B.
   static int compareVersions({
     required String versionA,
     required int buildA,
     required String versionB,
     required int buildB,
   }) {
+    if (buildA != buildB) return buildA.compareTo(buildB);
+    return compareVersionLabels(versionA, versionB);
+  }
+
+  /// Αριθμητική σύγκριση ΜΟΝΟ της ετικέτας `X.Y.Z` — για την ένδειξη προς τον
+  /// χρήστη (π.χ. «η νέα έκδοση φαίνεται μικρότερη λόγω αναπροσαρμογής»),
+  /// ΟΧΙ για την απόφαση ενημέρωσης.
+  static int compareVersionLabels(String versionA, String versionB) {
     final a = _parseSemVer(versionA) ?? const (0, 0, 0);
     final b = _parseSemVer(versionB) ?? const (0, 0, 0);
     if (a.$1 != b.$1) return a.$1.compareTo(b.$1);
     if (a.$2 != b.$2) return a.$2.compareTo(b.$2);
-    if (a.$3 != b.$3) return a.$3.compareTo(b.$3);
-    return buildA.compareTo(buildB);
+    return a.$3.compareTo(b.$3);
   }
 
   static (int, int, int)? _parseSemVer(String raw) {

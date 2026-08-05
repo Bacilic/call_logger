@@ -31,7 +31,7 @@ class TaskDueQuickChoice {
     required this.option,
     required this.label,
     required this.due,
-    required this.tooltip,
+    required this.message,
   });
 
   /// Κωδικός επιλογής (`TaskSettingsConfig.kOneHour` κ.λπ.).
@@ -44,7 +44,7 @@ class TaskDueQuickChoice {
   final DateTime due;
 
   /// Κείμενο υπόδειξης· περνά από το κοινό πρότυπο [CompactTooltip].
-  final String tooltip;
+  final String message;
 }
 
 /// Σειρά μικρών chips γρήγορης λήξης: ετικέτα πάνω, στιγμή λήξης από κάτω.
@@ -79,7 +79,7 @@ class TaskDueQuickChips extends StatelessWidget {
       children: [
         for (final choice in choices)
           CompactTooltip(
-            message: choice.tooltip,
+            message: choice.message,
             child: ChoiceChip(
               selected: choice.option == selectedOption,
               onSelected: (_) => onSelected(choice),

@@ -256,9 +256,11 @@ class UpdateInstallerService {
 
       final backupDir = Directory(p.join(installDirectory, backupDirName));
       final scriptPath = p.join(stagingRoot.path, 'updater.cmd');
+      // Windows-1253 (όχι UTF-8): το script δείχνει ελληνική πρόοδο στην
+      // κονσόλα του με chcp 1253 — βλ. UpdaterScriptBuilder.
       await File(
         scriptPath,
-      ).writeAsBytes(utf8.encode(UpdaterScriptBuilder.build()), flush: true);
+      ).writeAsBytes(UpdaterScriptBuilder.buildBytes(), flush: true);
 
       progress('Καταγραφή εκκρεμότητας…');
       await _pendingMarkerFile.writeAsString(

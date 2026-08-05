@@ -1,4 +1,5 @@
-// Ασφαλής εκκίνηση updater.cmd με διαδρομές που περιέχουν κενά.
+// Ασφαλής εκκίνηση updater.cmd: quoting σε διαδρομές με κενά + σημαίες
+// κονσόλας που δεν προκαλούν καταιγίδα παραθύρων.
 //
 //   flutter test test/core/updates/update_cmd_launcher_test.dart
 
@@ -7,44 +8,90 @@ import 'dart:io';
 import 'package:call_logger/core/updates/update_cmd_launcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:win32/win32.dart';
 
 void main() {
-  group('UpdateCmdLauncher.buildCmdExeArguments', () {
-    test('starts with cmd /d /c switches', () {
-      final args = UpdateCmdLauncher.buildCmdExeArguments(
-        r'C:\Users\V.drosos\Documents\Call Logger\.update_staging\updater.cmd',
-        ['16220'],
+  group('UpdateCmdLauncher.creationFlags', () {
+    // Το σφάλμα «ατέρμονα παράθυρα τερματικού»: με DETACHED_PROCESS το cmd.exe
+    // τρέχει χωρίς κονσόλα και ΚΑΘΕ παιδί του batch (tasklist, timeout,
+    // robocopy) ανοίγει δικό του παράθυρο — 3 το δευτερόλεπτο στον βρόχο
+    // αναμονής. Καμία παραλλαγή δεν επιτρέπεται να ξαναφέρει αυτή τη σημαία.
+    test('never uses DETACHED_PROCESS (window-storm regression guard)', () {
+      expect(
+        UpdateCmdLauncher.creationFlags(visibleConsole: true)
+            .has(DETACHED_PROCESS),
+        isFalse,
       );
-      expect(args.take(2), ['/d', '/c']);
+      expect(
+        UpdateCmdLauncher.creationFlags(visibleConsole: false)
+            .has(DETACHED_PROCESS),
+        isFalse,
+      );
     });
 
-    test('passes script path and PID as distinct list elements', () {
-      final args = UpdateCmdLauncher.buildCmdExeArguments(
-        r'C:\Apps\Call Logger\updater.cmd',
-        ['4242'],
+    test('visible console = ONE new console, hidden = windowless console', () {
+      expect(
+        UpdateCmdLauncher.creationFlags(visibleConsole: true),
+        CREATE_NEW_CONSOLE,
       );
-      expect(args[0], '/d');
-      expect(args[1], '/c');
-      expect(args[2], r'C:\Apps\Call Logger\updater.cmd');
-      expect(args[3], '4242');
-      // Καμία χειροποίητη μορφοποίηση εισαγωγικών / escaping.
-      expect(args.length, 4);
-      expect(args.any((a) => a.contains(r'\"')), isFalse);
-    });
-
-    test('does NOT use /s (which would strip the script path quotes)', () {
-      final args = UpdateCmdLauncher.buildCmdExeArguments(
-        r'C:\Apps\Call Logger\updater.cmd',
-        ['1'],
+      expect(
+        UpdateCmdLauncher.creationFlags(visibleConsole: false),
+        CREATE_NO_WINDOW,
       );
-      expect(args, isNot(contains('/s')));
     });
   });
 
-  // Πιστός έλεγχος: πραγματικό cmd.exe σε φάκελο ΜΕ ΚΕΝΟ στο όνομα.
-  // Αυτός ο έλεγχος αποτυγχάνει με το παλιό μοτίβο (προ-quoted string ή
-  // πολλαπλά quoted ορίσματα) και περνά μόνο με τη σωστή εκκίνηση.
-  group('UpdateCmdLauncher.launchDetached (real cmd.exe)', () {
+  group('UpdateCmdLauncher.buildCommandLine', () {
+    const cmdExe = r'C:\Windows\System32\cmd.exe';
+
+    test('after /c there are EXACTLY two quote chars (cmd keeps them)', () {
+      final line = UpdateCmdLauncher.buildCommandLine(
+        cmdExe,
+        r'C:\Users\V.drosos\Documents\Call Logger\.update_staging\updater.cmd',
+        ['16220'],
+      );
+      final tail = line.substring(line.indexOf('/c') + 2);
+      expect('"'.allMatches(tail).length, 2);
+      expect(tail.trim(), startsWith('"'));
+      expect(tail, contains('updater.cmd" 16220'));
+    });
+
+    test('uses /d /c without /s and without manual escaping', () {
+      final line = UpdateCmdLauncher.buildCommandLine(
+        cmdExe,
+        r'C:\Apps\Call Logger\updater.cmd',
+        ['4242'],
+      );
+      expect(line, contains(' /d /c '));
+      expect(line, isNot(contains(' /s ')));
+      expect(line, isNot(contains(r'\"')));
+    });
+
+    test('rejects args with spaces or quotes (would break the quote rule)', () {
+      expect(
+        () => UpdateCmdLauncher.buildCommandLine(
+          cmdExe,
+          r'C:\Apps\updater.cmd',
+          [r'C:\path with space'],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => UpdateCmdLauncher.buildCommandLine(
+          cmdExe,
+          r'C:\Apps\updater.cmd',
+          ['"4242"'],
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  // Πιστός έλεγχος: πραγματικό cmd.exe σε φάκελο ΜΕ ΚΕΝΟ στο όνομα, μέσω του
+  // πραγματικού CreateProcess (FFI). Αποτυγχάνει με σπασμένο quoting ή σπασμένη
+  // μεταφορά ορισμάτων/φακέλου εργασίας. Αόρατη κονσόλα ώστε το τρέξιμο των
+  // τεστ να μην ανοίγει παράθυρα.
+  group('UpdateCmdLauncher.launch (real cmd.exe)', () {
     test(
       'runs a script located in a path with spaces and passes the PID arg',
       () async {
@@ -61,13 +108,14 @@ void main() {
         );
 
         try {
-          await UpdateCmdLauncher.launchDetached(
+          await UpdateCmdLauncher.launch(
             scriptPath: scriptPath,
             scriptArgs: ['4242'],
             workingDirectory: spaced.path,
+            visibleConsole: false,
           );
 
-          // Detached: δώσε λίγο χρόνο και δες αν το script όντως έτρεξε.
+          // Ανεξάρτητη διεργασία: δώσε λίγο χρόνο και δες αν όντως έτρεξε.
           final out = File(ranFile);
           var waited = 0;
           while (!await out.exists() && waited < 50) {

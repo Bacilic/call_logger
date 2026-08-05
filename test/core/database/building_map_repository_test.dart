@@ -150,7 +150,7 @@ void main() {
           'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα Με Χάρτη'),
           'is_deleted': 0,
           'map_floor': idStr,
-          'floor_id': 99,
+          'floor_id': floorId,
           'map_x': 10.0,
           'map_y': 20.0,
           'map_width': 100.0,

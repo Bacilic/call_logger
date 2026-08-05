@@ -88,7 +88,7 @@ void main() {
         );
         await insertTask(callId: callId);
 
-        expect(await deletion.getTasksCountLinkedToCall(callId), 1);
+        expect(await deletion.getTasksCountLinkedToCalls([callId]), 1);
         await deletion.deleteCallWithTasksAction(callId, 'cascade');
 
         final db = await DatabaseHelper.instance.database;

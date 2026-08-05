@@ -155,26 +155,65 @@ class NetworkFolderClassifier {
   static Future<List<String>> _systemLocalSharesProvider() async {
     if (!Platform.isWindows) return const <String>[];
     try {
-      final result = await Process.run('powershell', const <String>[
-        '-NoProfile',
-        '-Command',
-        // Αποκλεισμός special/διαχειριστικών shares (C$, ADMIN$, IPC$…).
-        r'Get-SmbShare | Where-Object { -not $_.Special } | ForEach-Object { $_.Path }',
-      ]).timeout(const Duration(seconds: 2));
-      if (result.exitCode != 0) return const <String>[];
-      final stdout = result.stdout;
-      final text = stdout is String
-          ? stdout
-          : utf8.decode(stdout as List<int>, allowMalformed: true);
+      final text = await runForStdoutWithTimeout(
+        'powershell',
+        const <String>[
+          '-NoProfile',
+          '-Command',
+          // Αποκλεισμός special/διαχειριστικών shares (C$, ADMIN$, IPC$…).
+          r'Get-SmbShare | Where-Object { -not $_.Special } | ForEach-Object { $_.Path }',
+        ],
+        const Duration(seconds: 2),
+      );
+      if (text == null) return const <String>[];
       return const LineSplitter()
           .convert(text)
           .map((line) => line.trim())
           .where((line) => line.isNotEmpty)
           .toList(growable: false);
-    } on TimeoutException {
-      return const <String>[];
     } catch (_) {
       return const <String>[];
+    }
+  }
+
+  /// Εκτέλεση εξωτερικής διεργασίας με προθεσμία, ΧΩΡΙΣ ορφανά: αν η
+  /// προθεσμία λήξει, η διεργασία ΤΕΡΜΑΤΙΖΕΤΑΙ (kill) πριν επιστραφεί `null`.
+  ///
+  /// Το `Process.run(...).timeout(...)` δεν κάνει το ίδιο: στη λήξη παρατά
+  /// μόνο το Future, ενώ η διεργασία συνεχίζει να τρέχει αόρατη στο
+  /// παρασκήνιο — σε αργά μηχανήματα domain συσσωρεύονταν ορφανά powershell.
+  ///
+  /// Επιστρέφει το stdout σε επιτυχία, `null` σε λήξη προθεσμίας ή μη
+  /// μηδενικό κωδικό εξόδου. Το [startProcess] είναι για έγχυση στα τεστ.
+  static Future<String?> runForStdoutWithTimeout(
+    String executable,
+    List<String> arguments,
+    Duration timeout, {
+    Future<Process> Function(String executable, List<String> arguments)?
+    startProcess,
+  }) async {
+    final process = await (startProcess ?? Process.start)(
+      executable,
+      arguments,
+    );
+    final stdoutBytes = <int>[];
+    // Αποστράγγιση ΚΑΙ των δύο σωλήνων: γεμάτος σωλήνας μπλοκάρει τη διεργασία.
+    final stdoutDone = process.stdout
+        .listen(stdoutBytes.addAll)
+        .asFuture<void>();
+    process.stderr.listen((_) {});
+    try {
+      final exitCode = await process.exitCode.timeout(timeout);
+      await stdoutDone;
+      if (exitCode != 0) return null;
+      try {
+        return systemEncoding.decode(stdoutBytes);
+      } catch (_) {
+        return utf8.decode(stdoutBytes, allowMalformed: true);
+      }
+    } on TimeoutException {
+      process.kill();
+      return null;
     }
   }
 }
