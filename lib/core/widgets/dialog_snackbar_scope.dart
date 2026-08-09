@@ -28,37 +28,71 @@ mixin DialogSnackbarHost<T extends StatefulWidget> on State<T> {
   final GlobalKey<ScaffoldMessengerState> dialogMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
+  /// Εμφανίζει το μήνυμα στον τοπικό messenger του διαλόγου· αν εκείνος δεν
+  /// μπορεί να το δείξει, πέφτει στον ριζικό.
+  ///
+  /// **Γιατί υπάρχει η εφεδρεία:** ένας [ScaffoldMessenger] χωρίς [Scaffold]
+  /// από κάτω δεν έχει πού να εμφανίσει τίποτα. Σε debug σκάει με
+  /// «no descendant Scaffolds» τη στιγμή που ο κώδικας πάει να μιλήσει στον
+  /// χρήστη· σε release δεν σκάει, απλώς **χάνει σιωπηλά** το μήνυμα — που
+  /// είναι χειρότερο. Γι' αυτό ο έλεγχος γίνεται στο δέντρο και όχι με
+  /// `try/catch`: το `catch` πιάνει μόνο το debug σύμπτωμα.
+  ///
+  /// Η κατάσταση προκύπτει όταν ένας διάλογος δηλώνει σκέτο
+  /// [ScaffoldMessenger] αντί για [DialogSnackbarScope] — αναγκαστική επιλογή
+  /// μέσα σε `DraggableDialogShell`, που απαγορεύει τοπικό `Scaffold` επειδή
+  /// σκοτώνει το κλείσιμο με κλικ στο φόντο.
   void showDialogSnackBar(SnackBar snackBar, {String? copyText}) {
     if (!mounted) return;
-    final messenger = dialogMessengerKey.currentState;
-    if (messenger == null) return;
-
-    final textToCopy = (copyText ?? '').trim();
-    if (textToCopy.isEmpty) {
-      messenger.showSnackBar(snackBar);
+    final toShow = _composeSnackBar(snackBar, copyText);
+    final local = dialogMessengerKey.currentState;
+    if (local != null && _canPresent(dialogMessengerKey.currentContext)) {
+      local.showSnackBar(toShow);
       return;
     }
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(toShow);
+  }
 
-    messenger.showSnackBar(
-      SnackBar(
-        content: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: snackBar.content),
-            IconButton(
-              tooltip: 'Αντιγραφή',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              icon: const Icon(Icons.content_copy_outlined, size: 18),
-              color: Theme.of(context).colorScheme.inversePrimary,
-              onPressed: () => unawaited(_copyDialogSnackBarText(textToCopy)),
-            ),
-          ],
-        ),
-        duration: snackBar.duration,
-        behavior: snackBar.behavior,
+  /// True όταν κάτω από τον [ScaffoldMessenger] υπάρχει [Scaffold] να
+  /// φιλοξενήσει το snackbar.
+  static bool _canPresent(BuildContext? messengerContext) {
+    if (messengerContext == null) return false;
+    var found = false;
+    void visit(Element element) {
+      if (found) return;
+      if (element.widget is Scaffold) {
+        found = true;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    messengerContext.visitChildElements(visit);
+    return found;
+  }
+
+  /// Το snackbar όπως θα εμφανιστεί: με κουμπί αντιγραφής όταν ζητηθεί.
+  SnackBar _composeSnackBar(SnackBar snackBar, String? copyText) {
+    final textToCopy = (copyText ?? '').trim();
+    if (textToCopy.isEmpty) return snackBar;
+    return SnackBar(
+      content: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: snackBar.content),
+          IconButton(
+            tooltip: 'Αντιγραφή',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            icon: const Icon(Icons.content_copy_outlined, size: 18),
+            color: Theme.of(context).colorScheme.inversePrimary,
+            onPressed: () => unawaited(_copyDialogSnackBarText(textToCopy)),
+          ),
+        ],
       ),
+      duration: snackBar.duration,
+      behavior: snackBar.behavior,
     );
   }
 

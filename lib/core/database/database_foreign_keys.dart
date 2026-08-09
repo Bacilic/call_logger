@@ -174,6 +174,7 @@ CREATE TABLE tasks (
   department_text TEXT,
   created_at TEXT,
   updated_at TEXT,
+  completed_at TEXT,
   origin TEXT DEFAULT 'legacy',
   search_index TEXT,
   is_deleted INTEGER DEFAULT 0,

@@ -19,7 +19,11 @@ import '../../test_setup.dart';
 const _kOpenDialogButton = 'OPEN_TASK_CLOSE_DIALOG';
 const _kWideScreenWidth = 1200.0;
 const _kWideScreenHeight = 800.0;
-const _kMaxContentWidth = 420.0;
+/// Το πλάτος του κυλιόμενου περιεχομένου: 420 για τα πεδία + 2×24 περιθώριο.
+///
+/// Το περιθώριο μετακινήθηκε από τον διάλογο μέσα στο scrollable, ώστε η μπάρα
+/// κύλησης να ζωγραφίζεται στην άκρη και όχι πάνω στα πεδία.
+const _kMaxContentWidth = 468.0;
 const _kMinMultilineFieldHeight = 72.0;
 
 /// Πολύ μεγάλο κείμενο χωρίς χειροκίνητες αλλαγές γραμής (όχι `\n`).

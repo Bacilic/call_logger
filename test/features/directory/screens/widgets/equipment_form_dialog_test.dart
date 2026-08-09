@@ -193,8 +193,8 @@ Future<void> _openEquipmentFormInDialog(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        home: Consumer(
-          builder: (context, ref, _) => Scaffold(
+        home: Builder(
+          builder: (context) => Scaffold(
             body: Center(
               child: FilledButton(
                 onPressed: () => showDialog<void>(
@@ -203,7 +203,6 @@ Future<void> _openEquipmentFormInDialog(
                   builder: (ctx) => EquipmentFormDialog(
                     initialEquipment: initialEquipment,
                     notifier: notifier,
-                    ref: ref,
                   ),
                 ),
                 child: const Text(_kOpenEquipmentFormButton),
@@ -239,6 +238,248 @@ Future<void> _pumpUntilEquipmentSaveCompletes(WidgetTester tester) async {
 
 void main() {
   registerCallLoggerIsolatedDatabaseHooks();
+
+  group('Φόρμα εξοπλισμού — εστίαση στο ζητούμενο πεδίο', () {
+    // Διπλό κλικ σε κελί του πίνακα ανοίγει τη φόρμα ΣΤΟ πεδίο εκείνης της
+    // στήλης. Ως τη διόρθωση, η φόρμα δεχόταν την παράμετρο και την αγνοούσε.
+    //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "εστίαση"
+    Future<void> expectFocusedField(
+      WidgetTester tester,
+      ProviderContainer container, {
+      required String focusedField,
+      required String expectedLabel,
+    }) async {
+      late EquipmentDirectoryNotifier notifier;
+      late EquipmentModel existing;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
+        existing = container.read(equipmentDirectoryProvider).allItems.first.$1;
+      });
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => Center(
+                  child: FilledButton(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => EquipmentFormDialog(
+                        initialEquipment: existing,
+                        notifier: notifier,
+                        focusedField: focusedField,
+                      ),
+                    ),
+                    child: const Text(_kOpenEquipmentFormButton),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text(_kOpenEquipmentFormButton));
+      await pumpUntilSettledLong(tester);
+
+      final field = _fieldByLabel(expectedLabel);
+      expect(
+        field,
+        findsOneWidget,
+        reason: greekExpectMsg('Το πεδίο «$expectedLabel» πρέπει να υπάρχει'),
+      );
+      expect(
+        tester.widget<EditableText>(field).focusNode.hasFocus,
+        isTrue,
+        reason: greekExpectMsg(
+          'Ο κέρσορας πρέπει να βρίσκεται στο πεδίο «$expectedLabel»',
+        ),
+      );
+    }
+
+    testWidgets('«notes»: ο κέρσορας πάει στις Σημειώσεις', (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      await expectFocusedField(
+        tester,
+        container,
+        focusedField: 'notes',
+        expectedLabel: 'Σημειώσεις',
+      );
+    });
+
+    testWidgets('«code»: ο κέρσορας πάει στον Κωδικό', (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      await expectFocusedField(
+        tester,
+        container,
+        focusedField: 'code',
+        expectedLabel: 'Κωδικός',
+      );
+    });
+
+    testWidgets('στήλη χωρίς πεδίο («id»): καμία κατάρρευση, καμία εστίαση', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late EquipmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
+      });
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => Center(
+                  child: FilledButton(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => EquipmentFormDialog(
+                        notifier: notifier,
+                        focusedField: 'id',
+                      ),
+                    ),
+                    child: const Text(_kOpenEquipmentFormButton),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text(_kOpenEquipmentFormButton));
+      await pumpUntilSettledLong(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text(_kNewEquipmentTitle), findsOneWidget);
+    });
+  });
+
+  group('Φόρμα εξοπλισμού — μηνύματα απόρριψης', () {
+    // Ο τοπικός ScaffoldMessenger του διαλόγου ΔΕΝ έχει Scaffold από κάτω
+    // (απαγορεύεται μέσα σε DraggableDialogShell — σκοτώνει το barrier).
+    // Μέχρι τη διόρθωση, κάθε μήνυμα απόρριψης έσκαγε με _AssertionError
+    // «no descendant Scaffolds» και εμφανιζόταν ως δήθεν «σφάλμα βάσης».
+    //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "διπλότυπος"
+    testWidgets(
+      'διπλότυπος κωδικός: εμφανίζεται μήνυμα απόρριψης, χωρίς κατάρρευση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        late String existingCode;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          existingCode =
+              (container
+                      .read(equipmentDirectoryProvider)
+                      .allItems
+                      .first
+                      .$1
+                      .code ??
+                  '')
+                  .trim();
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
+        });
+
+        expect(
+          existingCode,
+          isNotEmpty,
+          reason: greekExpectMsg('Το σενάριο χρειάζεται υπαρκτό κωδικό'),
+        );
+
+        await tester.enterText(_fieldByLabel('Κωδικός'), existingCode);
+        await pumpUntilSettled(tester);
+
+        final addButton = find.widgetWithText(FilledButton, 'Προσθήκη');
+        expect(
+          tester.widget<FilledButton>(addButton).onPressed,
+          isNotNull,
+          reason: greekExpectMsg('Το κουμπί προσθήκης πρέπει να είναι ενεργό'),
+        );
+
+        // Η αποθήκευση περνά από πραγματικές async κλήσεις (βάση, κατάλογος
+        // εργαλείων): ο fake χρόνος του testWidgets δεν τις προωθεί.
+        await tester.tap(addButton);
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+        });
+        await pumpUntilSettledLong(tester);
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: greekExpectMsg(
+            'Η απόρριψη διπλότυπου κωδικού δεν πρέπει να πετά εξαίρεση',
+          ),
+        );
+        expect(
+          find.textContaining('Υπάρχει ήδη εξοπλισμός'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Ο χρήστης πρέπει να δει γιατί απορρίφθηκε η αποθήκευση',
+          ),
+        );
+        expect(
+          find.text(_kNewEquipmentTitle),
+          findsOneWidget,
+          reason: greekExpectMsg('Η φόρμα μένει ανοιχτή για διόρθωση'),
+        );
+      },
+    );
+  });
 
   group('Φόρμα εξοπλισμού — χαρακτηρισμός (widget)', () {
     // Ο εγγενής ορθογραφικός έλεγχος είναι απενεργοποιημένος στα Windows· το

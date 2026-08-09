@@ -16,10 +16,12 @@ import '../../../core/services/ai_prompt_template_controller.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../models/lansweeper_connection_status.dart';
+import '../models/lansweeper_report_scope.dart';
 import '../models/lansweeper_sync_state.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/gemini_settings_provider.dart';
 import '../providers/lansweeper_connection_probe_provider.dart';
+import '../providers/lansweeper_report_scope_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
@@ -27,6 +29,7 @@ import 'lansweeper/lansweeper_report_call_list.dart';
 import 'lansweeper/lansweeper_report_filter.dart';
 import 'lansweeper/lansweeper_report_filter_bar.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
+import 'lansweeper/lansweeper_report_range_bar.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
 import 'lansweeper/lansweeper_sync_form.dart';
 import 'lansweeper/sync_history_list.dart';
@@ -128,6 +131,20 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   List<ReportCallItem>? aiLastSuggestSelection;
 
   LansweeperReportFilter reportFilter = LansweeperReportFilter.unsentOnly;
+
+  /// Αλλαγή χρονικού πλαισίου από τα chips της κεφαλίδας.
+  ///
+  /// Το «όλες οι ακαταχώρητες» ζητά ρητά μία κατάσταση, οπότε επαναφέρει και την
+  /// καρτέλα — αλλιώς ο χρήστης θα ζητούσε τις ακαταχώρητες και θα έβλεπε τις
+  /// καταχωρημένες όλων των εποχών.
+  void _selectRange(LansweeperReportRange range) {
+    ref
+        .read(lansweeperReportScopeProvider.notifier)
+        .set(LansweeperReportScope.range(range));
+    if (range == LansweeperReportRange.allUnregistered) {
+      setState(() => reportFilter = LansweeperReportFilter.unsentOnly);
+    }
+  }
 
   /// Σηματοδοτεί ανανέωση της αναφοράς (rebuild) — χρήση και από συνεργάτες.
   void notifyReportChanged() {
@@ -484,8 +501,8 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
             const SizedBox(height: 8),
             Text(
               'Στο εύρος «$reportRangeTitle» δεν υπάρχουν κλήσεις.\n\n'
-              'Αλλάξτε το φίλτρο ημερομηνίας στον πίνακα ελέγχου '
-              'και ανοίξτε ξανά την αναφορά.',
+              'Δοκιμάστε άλλο διάστημα από τα κουμπιά «Διάστημα» παραπάνω — '
+              'το «Όλες οι ακαταχώρητες» αγνοεί εντελώς τις ημερομηνίες.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -499,20 +516,23 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
 
   @override
   Widget build(BuildContext context) {
-    final callsAsync = ref.watch(dashboardCallsForReportProvider);
+    final callsAsync = ref.watch(lansweeperReportCallsProvider);
+    final scope = ref.watch(lansweeperReportScopeProvider);
     final dashboardFilter = ref.watch(dashboardFilterProvider);
     final statsAsync = ref.watch(dashboardStatsProvider);
-    final reportRangeTitle = statsAsync.when(
-      loading: () =>
-          dashboardFilter.dateFrom == null && dashboardFilter.dateTo == null
-          ? 'Όλες: …'
-          : dashboardFilter.kpiTotalCallsRangeTitle(),
-      error: (_, _) => dashboardFilter.lansweeperReportRangeTitle(),
-      data: (stats) => dashboardFilter.lansweeperReportRangeTitle(
-        historyDateFrom: stats.historyDateFrom,
-        historyDateTo: stats.historyDateTo,
-      ),
-    );
+    final String reportRangeTitle =
+        scope.label ??
+        statsAsync.when(
+          loading: () =>
+              dashboardFilter.dateFrom == null && dashboardFilter.dateTo == null
+              ? 'Όλες: …'
+              : dashboardFilter.kpiTotalCallsRangeTitle(),
+          error: (_, _) => dashboardFilter.lansweeperReportRangeTitle(),
+          data: (stats) => dashboardFilter.lansweeperReportRangeTitle(
+            historyDateFrom: stats.historyDateFrom,
+            historyDateTo: stats.historyDateTo,
+          ),
+        );
     final lansweeperApiUrl = ref.watch(lansweeperApiUrlProvider);
     final lansweeperTicketFormUrl = ref.watch(lansweeperTicketFormUrlProvider);
     final lansweeperTicketViewUrl = ref.watch(lansweeperTicketViewUrlProvider);
@@ -538,7 +558,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       orElse: () => null,
     );
 
-    ref.listen(dashboardCallsForReportProvider, (previous, next) {
+    ref.listen(lansweeperReportCallsProvider, (previous, next) {
       next.whenData((calls) {
         if (!mounted) return;
         if (calls.isEmpty) {
@@ -606,6 +626,11 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      LansweeperReportRangeBar(
+                        scope: scope,
+                        onSelect: _selectRange,
+                      ),
+                      const SizedBox(height: 8),
                       LansweeperReportFilterBar(
                         selected: reportFilter,
                         counts: reportCounts,
@@ -798,6 +823,11 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                 Expanded(
                                   flex: 3,
                                   child: SingleChildScrollView(
+                                    // Κενό δεξιά ώστε η μπάρα κύλησης να μην
+                                    // πέφτει πάνω στα πεδία και στη λαβή τους.
+                                    padding: const EdgeInsetsDirectional.only(
+                                      end: 14,
+                                    ),
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,

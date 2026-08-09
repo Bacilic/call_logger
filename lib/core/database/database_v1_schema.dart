@@ -40,7 +40,10 @@ import 'database_foreign_keys.dart';
 /// v37: `calls.search_index` με τον αριθμό ticket Lansweeper (μόνο δεδομένα).
 /// v38: δηλωμένα foreign keys στις σχέσεις που έχουν έναν ιδιοκτήτη
 /// (συσχετίσεις, παιδιά, ζωντανές αναφορές) + `PRAGMA foreign_keys = ON`.
-const int databaseSchemaVersionV1 = 38;
+/// v39: ανακατασκευή `search_text` του audit με τις συμπληρωμένες ελληνικές
+/// ετικέτες πεδίων (μόνο δεδομένα).
+/// v40: `tasks.completed_at` — στιγμή ολοκλήρωσης που επιβιώνει της αναίρεσης.
+const int databaseSchemaVersionV1 = 40;
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =

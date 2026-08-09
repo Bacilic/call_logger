@@ -7,7 +7,7 @@ import 'package:call_logger/core/providers/settings_provider.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/widgets/main_shell.dart';
 import 'package:call_logger/core/widgets/quick_call_fab.dart';
-import 'package:call_logger/core/widgets/quick_call_shortcuts.dart';
+import 'package:call_logger/core/widgets/app_keyboard_shortcuts.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';

@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 
+import '../../../core/database/database_table_labels.dart';
 import '../../../core/database/database_v1_schema.dart';
 import 'database_integrity_finding.dart';
 
@@ -40,23 +41,8 @@ class DatabaseIntegrityReport {
   }
 
   /// Ελληνική απόδοση ονόματος πίνακα για UI / Markdown (το [tableName] παραμένει στα αγγλικά στη βάση).
-  static String entityLabelEl(String? tableName) {
-    if (tableName == null || tableName.isEmpty) return '—';
-    return switch (tableName) {
-      'user_phones' => 'Συσχέτιση χρήστη–τηλεφώνου',
-      'user_equipment' => 'Συσχέτιση χρήστη–εξοπλισμού',
-      'department_phones' => 'Συσχέτιση τμήματος–τηλεφώνου',
-      'call_external_links' => 'Εξωτερικός σύνδεσμος κλήσης',
-      'audit_log' => 'Αρχείο καταγραφής (audit)',
-      'calls' => 'Κλήσεις',
-      'tasks' => 'Εκκρεμότητες',
-      'users' => 'Χρήστες',
-      'phones' => 'Τηλέφωνα',
-      'departments' => 'Τμήματα',
-      'equipment' => 'Εξοπλισμός',
-      _ => tableName,
-    };
-  }
+  static String entityLabelEl(String? tableName) =>
+      databaseTableLabelEl(tableName);
 
   String toMarkdown() {
     final buffer = StringBuffer();

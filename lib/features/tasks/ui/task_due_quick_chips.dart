@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/utils/greek_weekday.dart';
+import '../../../core/utils/greek_date_format.dart';
 import '../../../core/widgets/compact_tooltip.dart';
 
 /// Προεπισκόπηση της στιγμής λήξης που δείχνει ένα chip γρήγορης επιλογής.

@@ -4,12 +4,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
+import '../../../core/database/old_database/lamp_search_filter_selection.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
+import '../../../core/database/old_database/lamp_unlinked_entities.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
-import '../../database/services/database_stats_service.dart';
 import '../widgets/lamp_result_card.dart';
 import 'lamp_path_management.dart';
 import 'lamp_screen_host.dart';
+import 'lamp_search_outcome_message.dart';
 import 'lamp_search_query_parser.dart';
 
 class LampSearchController {
@@ -44,7 +46,45 @@ class LampSearchController {
   int maxSearchResults = LampSettingsStore.defaultMaxSearchResults;
   List<Map<String, Object?>> results = const <Map<String, Object?>>[];
   List<EquipmentViewModel> resultViewModels = const <EquipmentViewModel>[];
+
+  /// Ταιριάσματα χωρίς συνδεδεμένο εξοπλισμό — δική τους ενότητα κάτω από τις
+  /// κάρτες εξοπλισμού, ώστε να μη χάνονται μέσα σε εκατοντάδες αποτελέσματα.
+  List<LampUnlinkedEntity> unlinkedResults = const <LampUnlinkedEntity>[];
+
+  /// Συνολικό πλήθος ασύνδετων ταιριασμάτων (πριν το όριο εμφάνισης).
+  int unlinkedTotalCount = 0;
+
+  /// Πλήθη ανά είδος από την τελευταία αναζήτηση — για το μενού φίλτρων.
+  Map<LampUnlinkedEntityKind, int> unlinkedCountsByKind =
+      const <LampUnlinkedEntityKind, int>{};
+
+  /// Η επιλογή του μενού «Φίλτρα».
+  ///
+  /// Δεν κόβει αποτελέσματα — ορίζει τι ψάχνουμε, γι' αυτό και λειτουργεί
+  /// ακόμη και με εντελώς κενή αναζήτηση.
+  LampSearchFilterSelection filterSelection = LampSearchFilterSelection.none;
+
+  bool get unlinkedFilterActive => filterSelection.isActive;
+
+  /// Πόσες από τις ταιριασμένες ασύνδετες είναι «κενές εγγραφές».
+  int unlinkedEmptyCount = 0;
+
+  /// Συνολικά πλήθη ανά είδος (χωρίς κριτήρια) — φορτώνονται μία φορά για το
+  /// μενού, όταν δεν έχει τρέξει ακόμη αναζήτηση. Δεμένα με τη διαδρομή της
+  /// βάσης: σε αλλαγή βάσης δεν ισχύουν και ξαναφορτώνονται.
+  LampFilterMenuCounts? _totalUnlinkedCounts;
+  String? _totalUnlinkedCountsPath;
+
+  /// Τα κενά εξοπλισμού δεν εξαρτώνται από την αναζήτηση — μένουν σταθερά
+  /// μέσα στην ίδια βάση, οπότε κρατιούνται και όταν τα υπόλοιπα φρεσκάρουν.
+  Map<LampEquipmentGapKind, int>? _equipmentGapTotals;
+
+  /// True όταν τα [unlinkedCountsByKind] προέρχονται από πραγματική αναζήτηση.
+  bool _hasFreshCounts = false;
   String? message;
+
+  /// Υπάρχει οτιδήποτε να δείξουμε — εξοπλισμός ή ασύνδετη οντότητα;
+  bool get hasAnyResult => results.isNotEmpty || unlinkedResults.isNotEmpty;
 
   static List<EquipmentViewModel> buildResultViewModels(
     List<Map<String, Object?>> rows,
@@ -52,9 +92,22 @@ class LampSearchController {
     return rows.map(EquipmentViewModel.fromRow).toList(growable: false);
   }
 
-  void _assignResults(List<Map<String, Object?>> rows) {
+  void _assignResults(
+    List<Map<String, Object?>> rows, {
+    List<LampUnlinkedEntity> unlinked = const <LampUnlinkedEntity>[],
+    int unlinkedTotal = 0,
+    Map<LampUnlinkedEntityKind, int> countsByKind =
+        const <LampUnlinkedEntityKind, int>{},
+    int emptyCount = 0,
+    bool freshCounts = false,
+  }) {
     results = rows;
     resultViewModels = buildResultViewModels(rows);
+    unlinkedResults = unlinked;
+    unlinkedTotalCount = unlinkedTotal;
+    unlinkedCountsByKind = countsByKind;
+    unlinkedEmptyCount = emptyCount;
+    _hasFreshCounts = freshCounts;
   }
 
   void clearResults() {
@@ -123,7 +176,9 @@ class LampSearchController {
       fieldSearchControllers.any((c) => c.text.trim().isNotEmpty);
 
   bool get hasAnySearchInput =>
-      globalController.text.trim().isNotEmpty || hasAnyFieldSearchInput;
+      globalController.text.trim().isNotEmpty ||
+      hasAnyFieldSearchInput ||
+      unlinkedFilterActive;
 
   List<String> get activeFieldSearchTerms => fieldSearchControllers
       .map((c) => c.text.trim())
@@ -142,6 +197,11 @@ class LampSearchController {
       return 'Ξεκινήστε την αναζήτηση: είτε καθολικά είτε σε συγκεκριμένο πεδίο';
     }
     final globalTerm = globalController.text.trim();
+    // Σκέτο φίλτρο, χωρίς κείμενο: το γενικό «η αναζήτηση του "..."» δεν έχει
+    // όρο να δείξει — το κενό εδώ σημαίνει «κανένα τέτοιο είδος δεν ταίριαξε».
+    if (unlinkedFilterActive && globalTerm.isEmpty && !hasAnyFieldSearchInput) {
+      return 'Καμία οντότητα χωρίς εξοπλισμό δεν ταιριάζει στο ενεργό φίλτρο';
+    }
     if (globalTerm.isNotEmpty) {
       return 'Η αναζήτηση του «$globalTerm» δεν αντιστοιχεί σε καμία εγγραφή στη βάση της Λάμπας';
     }
@@ -269,19 +329,63 @@ class LampSearchController {
     if (!host.mounted) return;
     final hasGlobal = globalController.text.trim().isNotEmpty;
     final hasFields = hasAnyFieldSearchInput;
-    if (!hasGlobal && !hasFields) {
+    if (!hasGlobal && !hasFields && !unlinkedFilterActive) {
       _assignResults(_emptyResults);
       message = null;
       host.notifyState();
       return;
     }
-    if (hasGlobal) {
+    if (hasGlobal || (!hasFields && unlinkedFilterActive)) {
+      // Σκέτο φίλτρο περνά από το καθολικό μονοπάτι με κενό κείμενο:
+      // «όλες οι ασύνδετες οντότητες των επιλεγμένων ειδών».
       final parsed = parseGlobalQuery();
       applyMirrorFromParsed(parsed);
       await globalSearch(showProgressSnack: false);
       return;
     }
     await fieldSearch(showProgressSnack: false);
+  }
+
+  /// Αλλαγή φίλτρου: νέα επιλογή και άμεση επανεκτέλεση της τρέχουσας
+  /// αναζήτησης (χωρίς debounce — είναι κλικ, όχι πληκτρολόγηση).
+  Future<void> setFilterSelection(LampSearchFilterSelection selection) async {
+    filterSelection = selection;
+    host.notifyState();
+    liveSearchDebounce?.cancel();
+    await runLiveSearch();
+  }
+
+  /// Πλήθη για το μενού φίλτρων.
+  ///
+  /// Με πρόσφατη αναζήτηση: τα ταιριάσματα ανά είδος (πριν την επιλογή ειδών,
+  /// ώστε τα ανεπίλεκτα να μη δείχνουν μηδέν). Χωρίς αναζήτηση: τα συνολικά
+  /// της βάσης — φορτώνονται μία φορά και ξεχνιούνται σε αλλαγή διαδρομής.
+  Future<LampFilterMenuCounts> unlinkedMenuCounts() async {
+    if (_hasFreshCounts) {
+      return LampFilterMenuCounts(
+        byKind: unlinkedCountsByKind,
+        emptyRecords: unlinkedEmptyCount,
+        equipmentGaps: _equipmentGapTotals ?? const <LampEquipmentGapKind, int>{},
+      );
+    }
+    final currentPath = path.readDbController.text.trim();
+    final cached = _totalUnlinkedCounts;
+    if (cached != null && _totalUnlinkedCountsPath == currentPath) {
+      return cached;
+    }
+    if (!readPathReadyForQuery) return const LampFilterMenuCounts();
+    try {
+      final totals = await host.shared.repository.countFilterCandidates(
+        currentPath,
+      );
+      _totalUnlinkedCounts = totals;
+      _equipmentGapTotals = totals.equipmentGaps;
+      _totalUnlinkedCountsPath = currentPath;
+      return totals;
+    } catch (_) {
+      // Χωρίς πλήθη το μενού παραμένει χρήσιμο — απλώς δεν δείχνει αριθμούς.
+      return const LampFilterMenuCounts();
+    }
   }
 
   void clearAllSearchInputs() {
@@ -292,6 +396,7 @@ class LampSearchController {
     }
     _mirroredFieldValues.updateAll((_, _) => null);
     suppressLiveSearch = false;
+    filterSelection = LampSearchFilterSelection.none;
     liveSearchDebounce?.cancel();
     _assignResults(_emptyResults);
     message = null;
@@ -335,6 +440,7 @@ class LampSearchController {
           serialNo: serialController.text,
         ),
         maxDisplay: maxSearchResults,
+        filters: filterSelection,
       ),
       showProgressSnack: showProgressSnack,
     );
@@ -357,6 +463,7 @@ class LampSearchController {
           path.readDbController.text.trim(),
           globalController.text,
           maxDisplay: maxSearchResults,
+          filters: filterSelection,
         );
       }
       return host.shared.repository.globalSearch(
@@ -365,21 +472,13 @@ class LampSearchController {
         maxDisplay: maxSearchResults,
         scopedTerms: parsed.scopedTerms,
         freeText: parsed.freeText,
+        filters: filterSelection,
       );
     }, showProgressSnack: showProgressSnack);
   }
 
-  String? searchOutcomeMessage(int totalCount) {
-    if (totalCount == 0) return null;
-    final xStr = DatabaseStatsService.formatIntegerEl(totalCount);
-    final n = maxSearchResults;
-    if (totalCount > 0 && n < totalCount) {
-      final nStr = DatabaseStatsService.formatIntegerEl(n);
-      return 'Εμφάνιση των πρώτων $nStr αποτελεσμάτων από $xStr.';
-    }
-    return 'Βρέθηκαν $xStr αποτελέσματα.';
-  }
-
+  /// Η γραμμή σύνοψης πάνω από τα αποτελέσματα.
+  ///
   Future<void> runSearch(
     Future<OldEquipmentSearchResult> Function() action, {
     bool showProgressSnack = true,
@@ -401,8 +500,20 @@ class LampSearchController {
     try {
       final result = await action();
       if (!host.mounted) return;
-      _assignResults(result.rows);
-      message = searchOutcomeMessage(result.totalCount);
+      _assignResults(
+        result.rows,
+        unlinked: result.unlinked,
+        unlinkedTotal: result.unlinkedTotalCount,
+        countsByKind: result.unlinkedCountsByKind,
+        emptyCount: result.unlinkedEmptyCount,
+        freshCounts: true,
+      );
+      message = lampSearchOutcomeMessage(
+        equipmentTotal: result.totalCount,
+        equipmentShown: result.rows.length,
+        unlinkedTotal: result.unlinkedTotalCount,
+        unlinkedShown: result.unlinked.length,
+      );
       host.notifyState();
     } catch (e) {
       if (!host.mounted) return;

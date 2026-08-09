@@ -112,7 +112,7 @@ class AuditEntityPreviewResolver {
     final name = '$fn $ln'.trim();
     return AuditEntityPreview(
       title: name.isEmpty ? 'Χρήστης #$id' : name,
-      lines: ['Τμήμα: ${row['dept'] ?? '—'}', 'Id: $id'],
+      lines: ['Τμήμα: ${row['dept'] ?? '—'}', 'Κωδικός εγγραφής: $id'],
     );
   }
 
@@ -142,7 +142,7 @@ class AuditEntityPreviewResolver {
     }
     return AuditEntityPreview(
       title: num.isEmpty ? 'Τηλέφωνο #$id' : num,
-      lines: ['Τμήμα (department_id): ${deptLabel ?? '—'}', 'Id: $id'],
+      lines: ['Τμήμα: ${deptLabel ?? '—'}', 'Κωδικός εγγραφής: $id'],
     );
   }
 
@@ -163,9 +163,13 @@ class AuditEntityPreviewResolver {
       lines.add('Τύπος: $type');
     }
     if (remoteParams != null && remoteParams.isNotEmpty) {
+      // Ωμό, όπως το γράφει ο κώδικας στη στήλη — ρητή απαίτηση του Διευθυντή.
+      // Είναι διαγνωστική πληροφορία: τα κλειδιά είναι τα id των εργαλείων και
+      // πρέπει να φαίνονται όπως αποθηκεύονται, ώστε μια λάθος αντιστοίχιση να
+      // μπορεί να εντοπιστεί. ΜΗΝ το μεταφράσεις σε «AnyDesk: …».
       lines.add('Παράμετροι: $remoteParams');
     }
-    lines.add('Id: $id');
+    lines.add('Κωδικός εγγραφής: $id');
     return AuditEntityPreview(
       title: code.isEmpty ? 'Εξοπλισμός #$id' : 'Εξοπλισμός $code',
       lines: lines,
@@ -189,7 +193,7 @@ class AuditEntityPreviewResolver {
       lines: [
         'Κτίριο: ${(building == null || building.isEmpty) ? '—' : building}',
         'Όροφος: ${(floor == null || floor.isEmpty) ? '—' : floor}',
-        'Id: $id',
+        'Κωδικός εγγραφής: $id',
       ],
     );
   }
@@ -206,7 +210,7 @@ class AuditEntityPreviewResolver {
     final name = (r['name'] as String?)?.trim();
     return AuditEntityPreview(
       title: (name == null || name.isEmpty) ? 'Κατηγορία #$id' : name,
-      lines: ['Id: $id'],
+      lines: ['Κωδικός εγγραφής: $id'],
     );
   }
 }

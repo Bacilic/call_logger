@@ -534,7 +534,7 @@ void main() {
           )
           .data!;
       expect(text, contains('0.23.1+31'));
-      expect(text, contains('03-08-2026'));
+      expect(text, contains('Δευ 03 - Αυγ - 2026'));
       expect(text, isNot(contains('ξαναγεμίζει')));
     });
 

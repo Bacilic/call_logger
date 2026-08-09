@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../../core/widgets/app_asset_image.dart';
 import '../../../settings/screens/remote_tools_management_screen.dart';
 import 'categories_tab.dart';
+import 'validation_rules_view.dart';
 
-enum MiscView { dashboard, categories, remoteTools }
+enum MiscView { dashboard, categories, remoteTools, validationRules }
 
 /// Καρτέλα «Διάφορα»: κεντρικό hub με πλοήγηση σε υπο-οθόνες.
 class MiscellaneousTab extends StatefulWidget {
@@ -26,7 +27,7 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_view == MiscView.categories)
+        if (_view == MiscView.categories || _view == MiscView.validationRules)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
             child: Row(
@@ -53,6 +54,7 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
               onBackToDashboard: () =>
                   setState(() => _view = MiscView.dashboard),
             ),
+            MiscView.validationRules => const ValidationRulesView(),
             MiscView.dashboard => const SizedBox.shrink(),
           },
         ),
@@ -88,6 +90,14 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
                   title: 'Απομακρυσμένα Εργαλεία',
                   assetPath: 'assets/remote_tools.png',
                   onTap: () => setState(() => _view = MiscView.remoteTools),
+                ),
+              ),
+              SizedBox(
+                width: cardWidth.clamp(280.0, 520.0),
+                child: _HubNavCard(
+                  title: 'Κανόνες Επικύρωσης',
+                  assetPath: 'assets/validation_rules.png',
+                  onTap: () => setState(() => _view = MiscView.validationRules),
                 ),
               ),
             ],

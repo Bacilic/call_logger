@@ -281,6 +281,9 @@ class UserFormSave {
       firstName: host.firstNameController.text.trim(),
       phones: PhoneListParser.splitPhones(host.phoneController.text),
       departmentId: departmentId,
+      location: host.locationController.text.trim().isEmpty
+          ? null
+          : host.locationController.text.trim(),
       notes: host.notesController.text.trim().isEmpty
           ? null
           : host.notesController.text.trim(),

@@ -233,7 +233,7 @@ void main() {
       final report = await service.runChecks();
       expect(
         report.findings.any(
-          (f) => f.title == 'Τμήμα με μη συμβαδίζον name_key',
+          (f) => f.title == 'Τμήμα με λάθος κλειδί ονόματος',
         ),
         isTrue,
       );
@@ -248,7 +248,7 @@ VALUES ('Κενό κλειδί', '', 0)
 
       final report = await service.runChecks();
       expect(
-        report.findings.any((f) => f.title == 'Τμήμα με κενό name_key'),
+        report.findings.any((f) => f.title == 'Τμήμα χωρίς κλειδί ονόματος'),
         isTrue,
       );
     });
@@ -314,11 +314,11 @@ VALUES ('Κενό κλειδί', '', 0)
         expect(findings, hasLength(1));
         expect(
           findings.first.description,
-          contains('Παπαδόπουλος Γιάννης (id=$userId)'),
+          contains('Παπαδόπουλος Γιάννης #$userId'),
         );
         expect(
           findings.first.description,
-          contains('PC-LAP-001 (id=$equipmentId)'),
+          contains('PC-LAP-001 #$equipmentId'),
         );
         expect(findings.first.description, isNot(contains('user_id=')));
         expect(findings.first.description, isNot(contains('equipment_id=')));

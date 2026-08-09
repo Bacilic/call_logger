@@ -29,6 +29,8 @@ class SettingsServiceCatalogs {
   static const String _keyShutdownTraceEnabled = 'shutdown_trace_enabled_v1';
   static const String _keyShutdownTraceRetentionCount =
       'shutdown_trace_retention_count_v1';
+  static const String _keyCatalogValidationRules =
+      'catalog_validation_rules_v1';
   static const String _keyUpdateFolderPath = 'update_folder_path';
   static const String _keyPublishCliCommandTemplate =
       'publish_cli_command_template';
@@ -270,6 +272,21 @@ class SettingsServiceCatalogs {
   Future<void> setEquipmentTypes(String value) async {
     if (_setAppSetting != null) {
       await _setAppSetting!(_keyEquipmentTypes, value.trim());
+    }
+  }
+
+  /// Ακατέργαστο JSON των κανόνων επικύρωσης Καταλόγου (app_settings).
+  ///
+  /// Το core δεν γνωρίζει το σχήμα — η αποκωδικοποίηση γίνεται στο feature
+  /// (`CatalogValidationRules.fromRawJson`), που δίνει προεπιλογές σε null.
+  Future<String?> getCatalogValidationRulesRaw() async {
+    if (_getAppSetting == null) return null;
+    return _getAppSetting!(_keyCatalogValidationRules);
+  }
+
+  Future<void> setCatalogValidationRulesRaw(String value) async {
+    if (_setAppSetting != null) {
+      await _setAppSetting!(_keyCatalogValidationRules, value);
     }
   }
 

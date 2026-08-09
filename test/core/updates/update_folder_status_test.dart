@@ -72,7 +72,7 @@ void main() {
     expect(status.isReady, isTrue);
     expect(status.manifest?.version, '0.23.1');
     expect(status.describe(), contains('0.23.1+31'));
-    expect(status.describe(), contains('03-08-2026'));
+    expect(status.describe(), contains('Δευ 03 - Αυγ - 2026'));
   });
 
   // Το σενάριο «καταστράφηκε/χάθηκε ο φάκελος»: σήμερα φαινόταν έγκυρος.

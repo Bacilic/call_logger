@@ -105,7 +105,7 @@ void main() {
       expect(
         message,
         'Αποθηκεύτηκε — υπάλληλος «Γιάννης Παπαδόπουλος»\n'
-        'phones: 2531, 2839 → 2531',
+        'τηλέφωνα: 2531, 2839 → 2531',
       );
     });
 
@@ -122,7 +122,7 @@ void main() {
         message,
         'Αποθηκεύτηκε — κλήση «#123»\n'
         'θέμα: Παλιό θέμα → Νέο θέμα\n'
-        'Διάρκεια: 5 → 10',
+        'διάρκεια: 5 → 10',
       );
     });
 
@@ -218,6 +218,40 @@ void main() {
         'Αποθηκεύτηκε — εργαλείο «Γενικό»\n'
         'Ρόλος: Κανένα – Χωρίς αυτόματο στόχο → RDP Hostname/IP',
       );
+    });
+  });
+
+  group('mapForTaskSaveConfirmationDiff', () {
+    test('κρύβει τις τεχνικές χρονοσφραγίδες και το ιστορικό αναβολών', () {
+      final visible = mapForTaskSaveConfirmationDiff(const {
+        'title': 'Έλεγχος εκτυπωτή',
+        'created_at': '2026-08-01T09:00:00.000',
+        'updated_at': '2026-08-07T17:36:00.000',
+        'completed_at': '2026-08-07T17:36:00.000',
+        'snooze_history_json': '[]',
+      });
+
+      expect(visible.keys, ['title']);
+    });
+
+    test('η επεξεργασία ολοκληρωμένης δεν αναφέρει ψεύτικη αλλαγή', () {
+      // Η φόρμα δεν γνωρίζει τη σφραγίδα ολοκλήρωσης, οπότε το «μετά» δεν την
+      // έχει. Χωρίς απόκρυψη, το μήνυμα θα έλεγε ότι κάτι άλλαξε ενώ η βάση
+      // μένει ανέπαφη.
+      final message = buildSaveConfirmationMessage(
+        entityType: 'task',
+        entityLabel: 'Έλεγχος εκτυπωτή',
+        oldMap: mapForTaskSaveConfirmationDiff(const {
+          'title': 'Έλεγχος εκτυπωτή',
+          'completed_at': '2026-08-07T17:36:00.000',
+        }),
+        newMap: mapForTaskSaveConfirmationDiff(const {
+          'title': 'Έλεγχος εκτυπωτή',
+        }),
+        isNew: false,
+      );
+
+      expect(message, isNot(contains('completed_at')));
     });
   });
 }

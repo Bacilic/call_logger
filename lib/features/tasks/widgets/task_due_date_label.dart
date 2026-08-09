@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/utils/greek_weekday.dart';
+import '../../../core/utils/greek_date_format.dart';
 import '../utils/task_duration_format.dart';
 
 /// Η ημερομηνία λήξης (ή ολοκλήρωσης) στην κεφαλίδα της κάρτας εκκρεμότητας.

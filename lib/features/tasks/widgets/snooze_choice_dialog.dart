@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/compact_tooltip.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
-import '../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../core/widgets/resizable_text_area.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../models/task_settings_config.dart';
 import '../ui/task_due_option_tooltips.dart';
@@ -147,23 +147,26 @@ class _SnoozeChoiceDialogState extends State<SnoozeChoiceDialog> {
       ),
       builder: (titleHandle) => AlertDialog(
         title: titleHandle,
-        contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+        // Το οριζόντιο περιθώριο περνά μέσα στο scrollable, ώστε η μπάρα
+        // κύλησης να μένει στην άκρη του διαλόγου και όχι πάνω στα πεδία.
+        contentPadding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
         content: SizedBox(
-          width: 440,
+          width: 488,
           child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildContextHeader(theme),
-                LexiconSpellTextFormField(
+                ResizableTextArea(
                   controller: _noteController,
-                  maxLines: 2,
-                  textCapitalization: TextCapitalization.sentences,
+                  minLines: 2,
+                  autoGrowMaxLines: 8,
                   decoration: const InputDecoration(
                     labelText: 'Λόγος αναβολής (προαιρετικό)',
                     border: OutlineInputBorder(),
-                    isDense: true,
+                    alignLabelWithHint: true,
                   ),
                 ),
                 const SizedBox(height: 16),

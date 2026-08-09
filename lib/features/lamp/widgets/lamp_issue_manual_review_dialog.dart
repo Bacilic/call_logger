@@ -6,7 +6,11 @@ import 'package:flutter/services.dart';
 import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/lamp_scientific_serial.dart';
+import '../controllers/lamp_manual_review_progress.dart';
+import 'lamp_contract_fields.dart';
 import 'lamp_issue_row_context.dart';
+import 'lamp_placement_fields.dart';
+import 'lamp_serial_series_fields.dart';
 
 /// Ρητή παράλειψη στον χειροκίνητο έλεγχο (διακριτή από «καμία επιλογή»).
 final LampIssueResolutionOption kLampManualSkipOption =
@@ -26,6 +30,8 @@ Future<List<LampIssueResolutionDecision>?> showLampIssueManualReviewDialog({
   required List<LampIssueResolutionProposal> proposals,
   bool groupedIdenticalValues = false,
   LampSerialExistsChecker? serialExistsChecker,
+  LampManualReviewProgress? progress,
+  LampPlacementCatalog placementCatalog = LampPlacementCatalog.empty,
 }) {
   return showDialog<List<LampIssueResolutionDecision>>(
     context: context,
@@ -35,6 +41,8 @@ Future<List<LampIssueResolutionDecision>?> showLampIssueManualReviewDialog({
       proposals: proposals,
       groupedIdenticalValues: groupedIdenticalValues,
       serialExistsChecker: serialExistsChecker,
+      progress: progress,
+      placementCatalog: placementCatalog,
     ),
   );
 }
@@ -46,12 +54,22 @@ class LampIssueManualReviewDialog extends StatefulWidget {
     required this.proposals,
     this.groupedIdenticalValues = false,
     this.serialExistsChecker,
+    this.progress,
+    this.placementCatalog = LampPlacementCatalog.empty,
   });
 
   final LampIssueType issueType;
   final List<LampIssueResolutionProposal> proposals;
   final bool groupedIdenticalValues;
   final LampSerialExistsChecker? serialExistsChecker;
+
+  /// Γραφεία και υπάλληλοι για τα πεδία τοποθέτησης — φορτώνονται μία φορά
+  /// από τον ενορχηστρωτή και μοιράζονται σε όλα τα βήματα.
+  final LampPlacementCatalog placementCatalog;
+
+  /// Θέση στη σειρά χειροκίνητων βημάτων· `null` όταν ο διάλογος ανοίγει
+  /// μεμονωμένα (π.χ. σε τεστ ή από μελλοντικό σημείο χωρίς ορχήστρωση).
+  final LampManualReviewProgress? progress;
 
   @override
   State<LampIssueManualReviewDialog> createState() =>
@@ -65,9 +83,27 @@ class _LampIssueManualReviewDialogState
   final Map<int, TextEditingController> _textControllers =
       <int, TextEditingController>{};
 
+  /// Τι διάλεξε ο χρήστης στα δύο πεδία τοποθέτησης, ανά πρόταση.
+  final Map<int, ({int? officeId, int? ownerId})> _placements =
+      <int, ({int? officeId, int? ownerId})>{};
+
+  /// Προμηθευτής και κατηγορία για τη δημιουργία σύμβασης, ανά πρόταση.
+  final Map<int, ({int? supplierId, int? categoryId})> _contracts =
+      <int, ({int? supplierId, int? categoryId})>{};
+
+  /// Προσαρμοσμένο πρότυπο αρίθμησης ανά πρόταση· κενό σημαίνει «προεπιλογή».
+  ///
+  /// Ανά πρόταση και όχι ανά διάλογο: το πρότυπο περιέχει τον σειριακό ή το
+  /// μοντέλο της συγκεκριμένης ομάδας, οπότε δεν μεταφέρεται στην επόμενη.
+  final Map<int, TextEditingController> _seriesTemplates =
+      <int, TextEditingController>{};
+
   @override
   void dispose() {
     for (final controller in _textControllers.values) {
+      controller.dispose();
+    }
+    for (final controller in _seriesTemplates.values) {
       controller.dispose();
     }
     super.dispose();
@@ -78,8 +114,8 @@ class _LampIssueManualReviewDialogState
     final grouped =
         widget.groupedIdenticalValues && widget.proposals.length > 1;
     final selectedCount = grouped
-        ? (_isDecidedOption(_selectedOptions[0]) ? 1 : 0)
-        : _selectedOptions.values.where(_isDecidedOption).length;
+        ? (_isReadyDecision(0) ? 1 : 0)
+        : _selectedOptions.keys.where(_isReadyDecision).length;
     final displayProposals = grouped
         ? <LampIssueResolutionProposal>[widget.proposals.first]
         : widget.proposals;
@@ -123,19 +159,49 @@ class _LampIssueManualReviewDialogState
                     selectedOption: _selectedOptions[sourceIndex],
                     textController: _controllerFor(sourceIndex),
                     serialExistsChecker: widget.serialExistsChecker,
+                    placementCatalog: widget.placementCatalog,
+                    placement: _placements[sourceIndex],
+                    onPlacementChanged: ({officeId, ownerId}) {
+                      setState(
+                        () => _placements[sourceIndex] = (
+                          officeId: officeId,
+                          ownerId: ownerId,
+                        ),
+                      );
+                    },
+                    contractSelection: _contracts[sourceIndex],
+                    onContractChanged: ({supplierId, categoryId}) {
+                      setState(
+                        () => _contracts[sourceIndex] = (
+                          supplierId: supplierId,
+                          categoryId: categoryId,
+                        ),
+                      );
+                    },
+                    seriesTemplateController: _seriesTemplateFor(sourceIndex),
+                    onSeriesTemplateChanged: () => setState(() {}),
                     onChanged: (option) {
-                      setState(() => _selectedOptions[sourceIndex] = option);
+                      setState(() {
+                        _selectedOptions[sourceIndex] = option;
+                        _prefillContractName(sourceIndex, option);
+                      });
                     },
                   );
                 },
               ),
             ),
-            if (!grouped) ...[
+            // Ο μετρητής έχει νόημα μόνο ως πρόοδος σε πολλαπλές αποφάσεις·
+            // με μία μοναδική πρόταση το «1/1» δεν λέει τίποτα.
+            if (!grouped && widget.proposals.length > 1) ...[
               const SizedBox(height: 12),
               Text(
                 'Αποφασισμένες: $selectedCount/${widget.proposals.length}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+            ],
+            if (widget.progress case final progress?) ...[
+              const SizedBox(height: 12),
+              _ManualReviewProgressBar(progress: progress),
             ],
           ],
         ),
@@ -148,13 +214,27 @@ class _LampIssueManualReviewDialogState
         TextButton(
           onPressed: () =>
               Navigator.of(context).pop(const <LampIssueResolutionDecision>[]),
-          child: const Text('Παράλειψη όλων'),
+          // Παραλείπει **το τρέχον βήμα** και προχωρά στο επόμενο — δεν
+          // ακυρώνει τη σειρά. Το «όλων» έχει νόημα μόνο όταν το βήμα καλύπτει
+          // πολλές εγγραφές· με μία, ήταν απλώς λάθος.
+          child: Text(
+            widget.proposals.length > 1
+                ? 'Παράλειψη και των ${widget.proposals.length}'
+                : 'Παράλειψη',
+          ),
         ),
         FilledButton(
           onPressed: selectedCount == 0
               ? null
               : () => Navigator.of(context).pop(_buildDecisions()),
-          child: const Text('Εφαρμογή επιλεγμένων'),
+          // Το κουμπί μετρά **επιλογές**, όχι εγγραφές: στην ομαδοποιημένη
+          // μορφή μία επιλογή εφαρμόζεται σε πολλές εγγραφές, και ο
+          // πληθυντικός θα υπονοούσε ότι έχεις πάρει πολλές αποφάσεις.
+          child: Text(
+            displayProposals.length > 1
+                ? 'Εφαρμογή επιλεγμένων'
+                : 'Εφαρμογή επιλογής',
+          ),
         ),
       ],
     );
@@ -164,8 +244,54 @@ class _LampIssueManualReviewDialogState
     return _textControllers.putIfAbsent(index, TextEditingController.new);
   }
 
+  TextEditingController _seriesTemplateFor(int index) {
+    return _seriesTemplates.putIfAbsent(index, TextEditingController.new);
+  }
+
+  /// Το πρότυπο που ισχύει: το προσαρμοσμένο αν γράφτηκε, αλλιώς η πρόταση
+  /// του αναλυτή.
+  String _seriesTemplateValue(int index, LampIssueResolutionOption option) {
+    final custom = _seriesTemplateFor(index).text.trim();
+    if (custom.isNotEmpty) return custom;
+    return option.metadata['suggestedTemplate']?.toString() ?? '';
+  }
+
+  /// Το όνομα της νέας σύμβασης ξεκινά από την ωμή τιμή — «30236» είναι το
+  /// μόνο που ξέρει η βάση γι' αυτήν. Ό,τι έχει ήδη γράψει ο χρήστης μένει.
+  void _prefillContractName(int index, LampIssueResolutionOption? option) {
+    if (option == null || !option.requiresContractInput) return;
+    final controller = _controllerFor(index);
+    if (controller.text.trim().isNotEmpty) return;
+    final suggested = option.metadata['createContractName']?.toString().trim();
+    if (suggested == null || suggested.isEmpty) return;
+    controller.text = suggested;
+  }
+
   /// Αποφασισμένη εγγραφή: πραγματική επιλογή ή ρητή παράλειψη (όχι απουσία).
   bool _isDecidedOption(LampIssueResolutionOption? option) => option != null;
+
+  /// Έτοιμη προς εφαρμογή: αποφασισμένη **και** συμπληρωμένη.
+  ///
+  /// Ο ορισμός τοποθέτησης χωρίς γραφείο δεν είναι απόφαση — αλλιώς το κουμπί
+  /// θα ενεργοποιούνταν σε μια επιλογή που δεν έχει τι να γράψει.
+  bool _isReadyDecision(int index) {
+    final option = _selectedOptions[index];
+    if (!_isDecidedOption(option)) return false;
+    if (option!.requiresPlacementInput) {
+      return _placements[index]?.officeId != null;
+    }
+    // Η σύμβαση χρειάζεται τουλάχιστον όνομα· ο προμηθευτής και η κατηγορία
+    // μπορούν να συμπληρωθούν αργότερα.
+    if (option.requiresContractInput) {
+      return _controllerFor(index).text.trim().isNotEmpty;
+    }
+    // Πρότυπο χωρίς τον τελεστή θα έδινε την ίδια τιμή σε όλες τις εγγραφές:
+    // το κουμπί μένει κλειστό αντί να σκάσει η ενέργεια.
+    if (option.requiresSerialSeriesInput) {
+      return lampSeriesTemplateIsValid(_seriesTemplateValue(index, option));
+    }
+    return true;
+  }
 
   /// Ρητή παράλειψη — δεν γράφει απόφαση στη βάση.
   bool _isExplicitSkip(LampIssueResolutionOption? option) =>
@@ -182,12 +308,19 @@ class _LampIssueManualReviewDialogState
       final textInput = option.requiresTextInput
           ? _controllerFor(0).text
           : null;
+      final placement = _placementInputFor(0, option);
+      final contract = _contractInputFor(0, option);
       return <LampIssueResolutionDecision>[
         for (final proposal in widget.proposals)
           LampIssueResolutionDecision(
             proposal: proposal,
             option: option,
             textInput: textInput,
+            placementInput: placement,
+            contractInput: contract,
+            serialSeriesTemplate: option.requiresSerialSeriesInput
+                ? _seriesTemplateValue(0, option)
+                : null,
           ),
       ];
     }
@@ -196,15 +329,55 @@ class _LampIssueManualReviewDialogState
     for (var i = 0; i < widget.proposals.length; i++) {
       final option = _selectedOptions[i];
       if (option == null || _isExplicitSkip(option)) continue;
+      // Ημιτελής τοποθέτηση δεν στέλνεται: θα έσκαγε στον applier αντί να
+      // μείνει απλώς ανοιχτή.
+      if ((option.requiresPlacementInput || option.requiresContractInput) &&
+          !_isReadyDecision(i)) {
+        continue;
+      }
       decisions.add(
         LampIssueResolutionDecision(
           proposal: widget.proposals[i],
           option: option,
           textInput: option.requiresTextInput ? _controllerFor(i).text : null,
+          placementInput: _placementInputFor(i, option),
+          contractInput: _contractInputFor(i, option),
+          serialSeriesTemplate: option.requiresSerialSeriesInput
+              ? _seriesTemplateValue(i, option)
+              : null,
         ),
       );
     }
     return decisions;
+  }
+
+  LampPlacementInput? _placementInputFor(
+    int index,
+    LampIssueResolutionOption option,
+  ) {
+    if (!option.requiresPlacementInput) return null;
+    final placement = _placements[index];
+    final officeId = placement?.officeId;
+    if (officeId == null) return null;
+    return LampPlacementInput(
+      officeId: officeId,
+      ownerId: placement?.ownerId,
+    );
+  }
+
+  LampContractInput? _contractInputFor(
+    int index,
+    LampIssueResolutionOption option,
+  ) {
+    if (!option.requiresContractInput) return null;
+    final name = _controllerFor(index).text.trim();
+    if (name.isEmpty) return null;
+    final selection = _contracts[index];
+    return LampContractInput(
+      name: name,
+      supplierId: selection?.supplierId,
+      categoryId: selection?.categoryId,
+    );
   }
 }
 
@@ -215,7 +388,14 @@ class _ManualReviewCard extends StatefulWidget {
     required this.selectedOption,
     required this.textController,
     required this.onChanged,
+    required this.onPlacementChanged,
+    required this.onContractChanged,
+    required this.seriesTemplateController,
+    required this.onSeriesTemplateChanged,
     this.serialExistsChecker,
+    this.placementCatalog = LampPlacementCatalog.empty,
+    this.placement,
+    this.contractSelection,
   });
 
   final int index;
@@ -224,6 +404,13 @@ class _ManualReviewCard extends StatefulWidget {
   final TextEditingController textController;
   final ValueChanged<LampIssueResolutionOption?> onChanged;
   final LampSerialExistsChecker? serialExistsChecker;
+  final LampPlacementCatalog placementCatalog;
+  final ({int? officeId, int? ownerId})? placement;
+  final void Function({int? officeId, int? ownerId}) onPlacementChanged;
+  final ({int? supplierId, int? categoryId})? contractSelection;
+  final void Function({int? supplierId, int? categoryId}) onContractChanged;
+  final TextEditingController seriesTemplateController;
+  final VoidCallback onSeriesTemplateChanged;
 
   @override
   State<_ManualReviewCard> createState() => _ManualReviewCardState();
@@ -235,6 +422,41 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
   bool _serialCheckInFlight = false;
   int? _selectedDuplicateCode;
   String? _selectedDuplicateActionKind;
+
+  /// Η αρίθμηση ξαναϋπολογίζεται σε κάθε build με την τρέχουσα μορφή, ώστε η
+  /// προεπισκόπηση να δείχνει **ακριβώς** ό,τι θα γραφτεί. Η ίδια συνάρτηση
+  /// τρέχει και στην εφαρμογή — μία πηγή αλήθειας, καμία απόκλιση.
+  String _defaultTemplateFor(LampIssueResolutionOption option) =>
+      option.metadata['suggestedTemplate']?.toString() ?? '';
+
+  LampSerialSeriesPlan _seriesPlanFor(
+    LampIssueResolutionOption option,
+    String template,
+  ) {
+    final metadata = option.metadata;
+    return lampBuildSerialSeries(
+      template: template,
+      equipmentCodes: <int>[
+        for (final value in (metadata['codes'] as List<Object?>? ?? const []))
+          if (value is int) value,
+      ],
+      takenSerials: <String>[
+        for (final value
+            in (metadata['takenSerials'] as List<Object?>? ?? const []))
+          if (value != null) value.toString(),
+      ],
+    );
+  }
+
+  Map<int, String> _descriptionByCode(LampIssueResolutionProposal proposal) {
+    final rows = proposal.metadata['rows'];
+    if (rows is! List) return const <int, String>{};
+    return <int, String>{
+      for (final row in rows)
+        if (row is Map && row['code'] is int)
+          row['code'] as int: (row['description']?.toString().trim() ?? ''),
+    }..removeWhere((_, value) => value.isEmpty);
+  }
 
   bool get _isDuplicateGroupLayout {
     if (widget.proposal.options.isEmpty) return false;
@@ -618,15 +840,60 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
                       contentPadding: EdgeInsets.zero,
                       visualDensity: VisualDensity.compact,
                     ),
-                    for (final option in proposal.options)
+                    for (final option in proposal.options) ...[
                       RadioListTile<LampIssueResolutionOption?>(
-                        title: Text(_displayResolutionOptionLabel(option)),
+                        title: _resolutionOptionTitle(theme, option),
                         subtitle: _resolutionOptionSubtitle(theme, option),
                         value: option,
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
                       ),
+                      // Τα πεδία ανοίγουν κάτω από τη δική τους επιλογή, όχι
+                      // στο τέλος της κάρτας: αλλιώς δεν φαίνεται σε ποια
+                      // ενέργεια ανήκουν.
+                      if (option.requiresPlacementInput &&
+                          identical(selectedOption, option))
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(32, 4, 0, 8),
+                          child: LampPlacementFields(
+                            key: Key('lamp_placement_${widget.index}'),
+                            catalog: widget.placementCatalog,
+                            officeId: widget.placement?.officeId,
+                            ownerId: widget.placement?.ownerId,
+                            onChanged: widget.onPlacementChanged,
+                          ),
+                        ),
+                      if (option.requiresSerialSeriesInput &&
+                          identical(selectedOption, option))
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(32, 4, 0, 8),
+                          child: LampSerialSeriesFields(
+                            buildPlan: (template) =>
+                                _seriesPlanFor(option, template),
+                            defaultTemplate: _defaultTemplateFor(option),
+                            controller: widget.seriesTemplateController,
+                            descriptionByCode: _descriptionByCode(proposal),
+                            onUseDefault: () {
+                              widget.seriesTemplateController.clear();
+                              widget.onSeriesTemplateChanged();
+                            },
+                          ),
+                        ),
+                      if (option.requiresContractInput &&
+                          identical(selectedOption, option))
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(32, 4, 0, 8),
+                          child: LampContractFields(
+                            key: Key('lamp_contract_${widget.index}'),
+                            catalog: widget.placementCatalog,
+                            nameController: widget.textController,
+                            supplierId: widget.contractSelection?.supplierId,
+                            categoryId: widget.contractSelection?.categoryId,
+                            onChanged: widget.onContractChanged,
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),
@@ -705,6 +972,95 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
       ),
     );
   }
+}
+
+/// Πρόοδος στη σειρά χειροκίνητων βημάτων: θέση, μπάρα, εναπομείναντα.
+///
+/// Η μπάρα οδηγείται από τις **προτάσεις**, όχι τα βήματα: ένα βήμα που
+/// καλύπτει 30 όμοιες εγγραφές είναι πολύ μεγαλύτερη πρόοδος από ένα που
+/// καλύπτει μία, και η μπάρα πρέπει να το δείχνει.
+class _ManualReviewProgressBar extends StatelessWidget {
+  const _ManualReviewProgressBar({required this.progress});
+
+  final LampManualReviewProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final labelStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(
+              progress.stepLabel,
+              key: const Key('lamp_manual_step_label'),
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  key: const Key('lamp_manual_progress_bar'),
+                  value: progress.fraction,
+                  minHeight: 4,
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              progress.remainingLabel,
+              key: const Key('lamp_manual_remaining_label'),
+              style: labelStyle,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          progress.proposalsLabel,
+          key: const Key('lamp_manual_proposals_label'),
+          style: labelStyle,
+        ),
+      ],
+    );
+  }
+}
+
+/// Τίτλος επιλογής, με σπασμένο σύνδεσμο όταν ο υποψήφιος δεν έχει κανέναν
+/// συνδεδεμένο εξοπλισμό.
+///
+/// Η ένδειξη ζει **μόνο εδώ**, στον οδηγό επίλυσης: εκεί αλλάζει απόφαση —
+/// τέτοιοι υποψήφιοι συνήθως απορρίπτονται. Στην αναζήτηση θα ήταν θόρυβος,
+/// αφού η ίδια η ενότητα «Χωρίς συνδεδεμένο εξοπλισμό» το λέει ήδη.
+Widget _resolutionOptionTitle(
+  ThemeData theme,
+  LampIssueResolutionOption option,
+) {
+  final label = _displayResolutionOptionLabel(option);
+  if (option.metadata[kLampOptionUnlinkedFlag] != true) return Text(label);
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Tooltip(
+        message:
+            'Καμία εγγραφή εξοπλισμού δεν χρησιμοποιεί αυτή την οντότητα — '
+            'πιθανό κατάλοιπο της παλιάς βάσης.',
+        child: Icon(
+          Icons.link_off,
+          size: 16,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      const SizedBox(width: 6),
+      Flexible(child: Text(label)),
+    ],
+  );
 }
 
 Widget? _resolutionOptionSubtitle(

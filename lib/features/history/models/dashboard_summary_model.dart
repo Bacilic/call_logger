@@ -131,6 +131,17 @@ List<CallerTimeStat> visibleCallerTimeStats(
       .toList(growable: false);
 }
 
+/// Το ίδιο για την κατάταξη πλήθους κλήσεων της κάρτας «Κορυφαίοι Καλούντες».
+List<CallerStat> visibleCallerStats(
+  List<CallerStat> stats, {
+  required bool hideUnknownCaller,
+}) {
+  if (!hideUnknownCaller) return stats;
+  return stats
+      .where((s) => s.name != kDashboardUnknownCallerLabel)
+      .toList(growable: false);
+}
+
 /// Εγγραφή χρονοβόρας κλήσης.
 class LongestCallEntry {
   const LongestCallEntry({

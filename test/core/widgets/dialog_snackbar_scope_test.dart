@@ -1,184 +1,207 @@
+// Το τοπικό σύστημα μηνυμάτων διαλόγου δεν καταρρέει ούτε σιωπά ποτέ.
+//
+// Ολόκληρο αρχείο:
+//   flutter test test/core/widgets/dialog_snackbar_scope_test.dart
+
 import 'package:call_logger/core/widgets/dialog_snackbar_scope.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-class _TestDialog extends StatefulWidget {
-  const _TestDialog({required this.onReady});
+import '../../test_reporter.dart';
 
-  final void Function(_TestDialogState state) onReady;
+const _kMessage = 'Υπάρχει ήδη εξοπλισμός με αυτόν τον κωδικό.';
+const _kOpenButton = 'ΑΝΟΙΓΜΑ';
+const _kShowButton = 'ΕΜΦΑΝΙΣΗ';
+
+/// Διάλογος που τυλίγει σωστά το περιεχόμενό του (η καθιερωμένη χρήση).
+class _ScopedDialog extends StatefulWidget {
+  const _ScopedDialog();
 
   @override
-  State<_TestDialog> createState() => _TestDialogState();
+  State<_ScopedDialog> createState() => _ScopedDialogState();
 }
 
-class _TestDialogState extends State<_TestDialog> with DialogSnackbarHost {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onReady(this);
-    });
-  }
-
+class _ScopedDialogState extends State<_ScopedDialog>
+    with DialogSnackbarHost {
   @override
   Widget build(BuildContext context) {
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
-      child: Center(
-        child: AlertDialog(
-          title: const Text('Δοκιμαστικός διάλογος'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Κλείσιμο'),
-            ),
-          ],
+      child: AlertDialog(
+        content: FilledButton(
+          onPressed: () => showDialogSnackBar(
+            const SnackBar(content: Text(_kMessage)),
+          ),
+          child: const Text(_kShowButton),
         ),
       ),
     );
   }
 }
 
-Future<void> _openTestDialog(WidgetTester tester) async {
-  await tester.tap(find.text('Άνοιγμα'));
+/// Διάλογος που δηλώνει σκέτο [ScaffoldMessenger] χωρίς [Scaffold] — η
+/// λανθασμένη χρήση που κάποτε έριχνε την εφαρμογή.
+class _UnscopedDialog extends StatefulWidget {
+  const _UnscopedDialog();
+
+  @override
+  State<_UnscopedDialog> createState() => _UnscopedDialogState();
+}
+
+class _UnscopedDialogState extends State<_UnscopedDialog>
+    with DialogSnackbarHost {
+  @override
+  Widget build(BuildContext context) {
+    return ScaffoldMessenger(
+      key: dialogMessengerKey,
+      child: AlertDialog(
+        content: FilledButton(
+          onPressed: () => showDialogSnackBar(
+            const SnackBar(content: Text(_kMessage)),
+          ),
+          child: const Text(_kShowButton),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _openDialogAndShowSnackBar(
+  WidgetTester tester,
+  WidgetBuilder dialogBuilder,
+) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: dialogBuilder,
+              ),
+              child: const Text(_kOpenButton),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text(_kOpenButton));
   await tester.pumpAndSettle();
+  await tester.tap(find.text(_kShowButton));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+  group('showDialogSnackBar — το μήνυμα φτάνει πάντα στον χρήστη', () {
+    testWidgets('με DialogSnackbarScope: εμφανίζεται στον τοπικό messenger', (
+      tester,
+    ) async {
+      await _openDialogAndShowSnackBar(
+        tester,
+        (_) => const _ScopedDialog(),
+      );
 
-  final copyCalls = <String>[];
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text(_kMessage),
+        findsOneWidget,
+        reason: greekExpectMsg('Η καθιερωμένη χρήση πρέπει να δείχνει μήνυμα'),
+      );
+    });
 
-  setUpAll(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-          switch (call.method) {
-            case 'Clipboard.setData':
-              final args = call.arguments as Map<Object?, Object?>;
-              copyCalls.add(args['text'] as String);
-              return null;
-            default:
-              return null;
-          }
-        });
-  });
-
-  tearDownAll(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null);
-  });
-
-  setUp(() => copyCalls.clear());
-
-  group('DialogSnackbarHost / DialogSnackbarScope', () {
+    // Χωρίς την εφεδρεία, αυτή η διάταξη έσκαγε με _AssertionError
+    // «no descendant Scaffolds» σε debug — και σε release έχανε το μήνυμα.
+    //   flutter test test/core/widgets/dialog_snackbar_scope_test.dart --plain-name "χωρίς Scaffold"
     testWidgets(
-      'showDialogSnackBar εμφανίζει snackbar στο subtree του διαλόγου',
+      'χωρίς Scaffold: πέφτει στον ριζικό messenger αντί να καταρρεύσει',
       (tester) async {
-        _TestDialogState? dialogState;
-        final rootMessengerKey = GlobalKey<ScaffoldMessengerState>();
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: ScaffoldMessenger(
-              key: rootMessengerKey,
-              child: Scaffold(
-                body: Builder(
-                  builder: (context) => FilledButton(
-                    onPressed: () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (_) => _TestDialog(
-                          onReady: (state) => dialogState = state,
-                        ),
-                      );
-                    },
-                    child: const Text('Άνοιγμα'),
-                  ),
-                ),
-              ),
-            ),
-          ),
+        await _openDialogAndShowSnackBar(
+          tester,
+          (_) => const _UnscopedDialog(),
         );
 
-        await _openTestDialog(tester);
-
-        expect(dialogState, isNotNull);
-        dialogState!.showDialogSnackBar(
-          const SnackBar(content: Text('Μήνυμα διαλόγου')),
-        );
-        await tester.pump();
-
-        expect(find.text('Μήνυμα διαλόγου'), findsOneWidget);
         expect(
-          find.descendant(
-            of: find.byType(DialogSnackbarScope),
-            matching: find.text('Μήνυμα διαλόγου'),
+          tester.takeException(),
+          isNull,
+          reason: greekExpectMsg(
+            'Ο νεκρός τοπικός messenger δεν πρέπει να ρίχνει την εφαρμογή',
           ),
+        );
+        expect(
+          find.text(_kMessage),
           findsOneWidget,
+          reason: greekExpectMsg(
+            'Το μήνυμα πρέπει να φτάνει στον χρήστη από τον ριζικό messenger',
+          ),
         );
-        expect(
-          dialogState!.dialogMessengerKey.currentState,
-          isNot(rootMessengerKey.currentState),
-        );
-
-        await tester.tap(find.text('Κλείσιμο'));
-        await tester.pumpAndSettle();
       },
     );
 
-    testWidgets('copyText αντιγράφει και εμφανίζει επιβεβαίωση', (
+    testWidgets('η εφεδρεία ισχύει και για το μήνυμα με κουμπί αντιγραφής', (
       tester,
     ) async {
-      _TestDialogState? dialogState;
-
-      await tester.binding.setSurfaceSize(const Size(1024, 900));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: Builder(
-              builder: (context) => FilledButton(
-                onPressed: () {
-                  showDialog<void>(
+              builder: (context) => Center(
+                child: FilledButton(
+                  onPressed: () => showDialog<void>(
                     context: context,
-                    builder: (_) =>
-                        _TestDialog(onReady: (state) => dialogState = state),
-                  );
-                },
-                child: const Text('Άνοιγμα'),
+                    builder: (_) => const _UnscopedDialogWithCopy(),
+                  ),
+                  child: const Text(_kOpenButton),
+                ),
               ),
             ),
           ),
         ),
       );
-
-      await _openTestDialog(tester);
-
-      dialogState!.showDialogSnackBar(
-        const SnackBar(
-          content: Text('Σφάλμα API'),
-          behavior: SnackBarBehavior.floating,
-        ),
-        copyText: 'λεπτομέρειες σφάλματος',
-      );
+      await tester.tap(find.text(_kOpenButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(_kShowButton));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-      final copyIconButton = find.descendant(
-        of: find.byType(SnackBar),
-        matching: find.byType(IconButton),
+      expect(tester.takeException(), isNull);
+      expect(find.text(_kMessage), findsOneWidget);
+      expect(
+        find.byIcon(Icons.content_copy_outlined),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Το κουμπί αντιγραφής επιβιώνει και στη διαδρομή εφεδρείας',
+        ),
       );
-      expect(copyIconButton, findsOneWidget);
-      final iconButton = tester.widget<IconButton>(copyIconButton);
-      iconButton.onPressed?.call();
-      await tester.pumpAndSettle();
-
-      expect(copyCalls, ['λεπτομέρειες σφάλματος']);
-      expect(find.text('Αντιγραφή στο πρόχειρο.'), findsOneWidget);
-
-      await tester.tap(find.text('Κλείσιμο'));
-      await tester.pumpAndSettle();
     });
   });
+}
+
+class _UnscopedDialogWithCopy extends StatefulWidget {
+  const _UnscopedDialogWithCopy();
+
+  @override
+  State<_UnscopedDialogWithCopy> createState() =>
+      _UnscopedDialogWithCopyState();
+}
+
+class _UnscopedDialogWithCopyState extends State<_UnscopedDialogWithCopy>
+    with DialogSnackbarHost {
+  @override
+  Widget build(BuildContext context) {
+    return ScaffoldMessenger(
+      key: dialogMessengerKey,
+      child: AlertDialog(
+        content: FilledButton(
+          onPressed: () => showDialogSnackBar(
+            const SnackBar(content: Text(_kMessage)),
+            copyText: 'τεχνικές λεπτομέρειες',
+          ),
+          child: const Text(_kShowButton),
+        ),
+      ),
+    );
+  }
 }

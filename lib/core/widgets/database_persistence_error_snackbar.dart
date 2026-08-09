@@ -10,6 +10,10 @@ void showDatabasePersistenceErrorSnackBar(
 ) {
   final result = DatabaseInitResult.fromException(error, null, stackTrace);
   final scheme = Theme.of(context).colorScheme;
+  // Ο navigator κρατιέται ΤΩΡΑ: το «Αναφορά» πατιέται δευτερόλεπτα αργότερα,
+  // όταν ο διάλογος που προκάλεσε το σφάλμα έχει συνήθως ήδη κλείσει και ο
+  // [context] του είναι νεκρός.
+  final navigator = Navigator.maybeOf(context, rootNavigator: true);
   final summary = (result.message ?? 'Αποτυχία εγγραφής στη βάση δεδομένων.')
       .trim();
   final details = result.details?.trim();
@@ -45,8 +49,9 @@ void showDatabasePersistenceErrorSnackBar(
         textColor: scheme.onError,
         label: 'Αναφορά',
         onPressed: () {
+          if (navigator == null || !navigator.mounted) return;
           showDialog<void>(
-            context: context,
+            context: navigator.context,
             builder: (ctx) => AlertDialog(
               title: const Text('Λεπτομέρειες σφάλματος'),
               content: SingleChildScrollView(

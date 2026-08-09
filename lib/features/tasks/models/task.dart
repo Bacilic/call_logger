@@ -43,6 +43,17 @@ extension TaskStatusX on TaskStatus {
 /// Μοντέλο εργασίας (πίνακας tasks).
 class Task {
   static const String quickAddTag = '[QUICK_ADD]';
+
+  /// Πρόθεμα γραμμής με υπόδειξη κανόνων επικύρωσης, μέσα στην περιγραφή
+  /// γρήγορης καταχώρησης. Η κάρτα βάφει αυτές τις γραμμές πορτοκαλί.
+  ///
+  /// Είναι **φωτογραφία της στιγμής** της καταχώρησης: δεν ξαναϋπολογίζεται
+  /// αν διορθωθεί η εγγραφή αργότερα — η εκκρεμότητα κλείνει όταν τελειώσει
+  /// ο έλεγχος και το θέμα λήγει εκεί.
+  static const String validationHintPrefix = '⚠ ';
+
+  /// Επικεφαλίδα του τμήματος υποδείξεων (μία φορά, πάνω από τις γραμμές).
+  static const String validationHintHeader = 'Προς έλεγχο — κανόνες επικύρωσης';
   static const String quickAddCategoryEn = 'Quick Add';
   static const String quickAddCategoryEl = 'Γρήγορη προσθήκη';
   static const String originManualFab = 'manual_fab';
@@ -71,6 +82,7 @@ class Task {
     this.solutionNotes,
     this.createdAt,
     this.updatedAt,
+    this.completedAt,
     this.origin = originLegacy,
     this.isDeleted = false,
     this.callerLinkedDeleted = false,
@@ -102,6 +114,12 @@ class Task {
   final String? solutionNotes;
   final String? createdAt;
   final String? updatedAt;
+
+  /// Στιγμή της τελευταίας ολοκλήρωσης — επιβιώνει της αναίρεσης.
+  ///
+  /// Το [updatedAt] ξαναγράφεται σε κάθε αποθήκευση, οπότε δεν μπορεί να
+  /// απαντήσει «πότε είχε λυθεί» αφότου η εκκρεμότητα ξανανοίξει.
+  final String? completedAt;
   final String origin;
   final bool isDeleted;
   final bool callerLinkedDeleted;
@@ -146,6 +164,7 @@ class Task {
       solutionNotes: map['solution_notes'] as String?,
       createdAt: map['created_at'] as String?,
       updatedAt: map['updated_at'] as String?,
+      completedAt: map['completed_at'] as String?,
       origin: normalizeOrigin(map['origin'] as String?),
       isDeleted: (map['is_deleted'] as int?) == 1,
       callerLinkedDeleted: historyEntityIsDeleted(map['caller_is_deleted']),
@@ -180,6 +199,7 @@ class Task {
       if (solutionNotes != null) 'solution_notes': solutionNotes,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (completedAt != null) 'completed_at': completedAt,
       'origin': normalizeOrigin(origin),
       'is_deleted': isDeleted ? 1 : 0,
     };
@@ -206,6 +226,7 @@ class Task {
     String? solutionNotes,
     String? createdAt,
     String? updatedAt,
+    String? completedAt,
     String? origin,
     bool? isDeleted,
   }) {
@@ -230,6 +251,7 @@ class Task {
       solutionNotes: solutionNotes ?? this.solutionNotes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      completedAt: completedAt ?? this.completedAt,
       origin: normalizeOrigin(origin ?? this.origin),
       isDeleted: isDeleted ?? this.isDeleted,
     );
@@ -250,6 +272,14 @@ class Task {
   DateTime? get snoozeUntilDateTime => _parseDateTime(snoozeUntil);
   DateTime? get createdAtDateTime => _parseDateTime(createdAt);
   DateTime? get updatedAtDateTime => _parseDateTime(updatedAt);
+
+  /// Στιγμή ολοκλήρωσης, με πισωγύρισμα στο [updatedAt] για εγγραφές που
+  /// έκλεισαν πριν υπάρξει η στήλη και δεν έχουν ξαναγραφτεί από τότε.
+  DateTime? get completedAtDateTime =>
+      _parseDateTime(completedAt) ??
+      (TaskStatusX.fromString(status) == TaskStatus.closed
+          ? _parseDateTime(updatedAt)
+          : null);
 
   /// Ιστορικό αναβολών (συμβατό με παλιό format λίστας από ISO strings).
   /// Νέο format: [{"snoozedAt":"...","dueAt":"..."}].
@@ -342,13 +372,92 @@ class Task {
 
   bool get isQuickAdd => description?.contains(quickAddTag) ?? false;
 
+  /// Η περιγραφή χωρίς την εσωτερική ετικέτα.
+  ///
+  /// Οι **αλλαγές γραμμής διατηρούνται**: οι υποδείξεις κανόνων ζουν σε δικές
+  /// τους γραμμές και η σύμπτυξη όλων των κενών θα τις κολλούσε σε μία.
   String get cleanDescription {
     final raw = description;
     if (raw == null) return '';
     return raw
         .replaceAll(quickAddTag, '')
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'[ \t]+'), ' ')
+        .split('\n')
+        .map((line) => line.trim())
+        .join('\n')
         .trim();
+  }
+
+  /// Εφαρμόζει τις τιμές μιας φόρμας επεξεργασίας πάνω στην εκκρεμότητα.
+  ///
+  /// Σε αντίθεση με το [copyWith], εδώ **το κενό είναι τιμή**: πεδίο που ο
+  /// χρήστης άδειασε αποθηκεύεται άδειο αντί να κρατά σιωπηλά την παλιά του
+  /// τιμή. Ό,τι δεν ανήκει στη φόρμα — κατάσταση, λύση, ιστορικό αναβολών,
+  /// χρονοσφραγίδες — περνά ανέπαφο.
+  Task withFormValues({
+    required String title,
+    required String? description,
+    required String dueDate,
+    required int? priority,
+    required int? callerId,
+    required String? userText,
+    required String? phoneText,
+    required String? departmentText,
+    required String? equipmentText,
+    String? updatedAt,
+  }) {
+    return Task(
+      id: id,
+      callId: callId,
+      callerId: callerId,
+      equipmentId: equipmentId,
+      departmentId: departmentId,
+      phoneId: phoneId,
+      phoneText: phoneText,
+      userText: userText,
+      equipmentText: equipmentText,
+      departmentText: departmentText,
+      title: title,
+      description: description,
+      dueDate: dueDate,
+      snoozeUntil: snoozeUntil,
+      snoozeHistoryJson: snoozeHistoryJson,
+      status: status,
+      priority: priority,
+      solutionNotes: solutionNotes,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      completedAt: completedAt,
+      origin: origin,
+      isDeleted: isDeleted,
+      callerLinkedDeleted: callerLinkedDeleted,
+      equipmentLinkedDeleted: equipmentLinkedDeleted,
+      departmentLinkedDeleted: departmentLinkedDeleted,
+    );
+  }
+
+  /// Ξαναβάζει τον εσωτερικό δείκτη μπροστά από περιγραφή που τον έχασε.
+  ///
+  /// Οι φόρμες δείχνουν το [cleanDescription] — ο δείκτης είναι μηχανικός και
+  /// δεν έχει νόημα για τον χρήστη. Χωρίς αυτό, η πρώτη κιόλας αποθήκευση θα
+  /// τον έσβηνε και η εκκρεμότητα θα έπαυε να θεωρείται γρήγορης καταχώρησης:
+  /// θα εξαφανίζονταν τα κουμπιά «Επεξεργασία Χρήστη/Τμήματος/Εξοπλισμού».
+  static String? withQuickAddTag(String? description) {
+    final text = description?.trim() ?? '';
+    if (text.isEmpty) return quickAddTag;
+    if (text.contains(quickAddTag)) return text;
+    return '$quickAddTag $text';
+  }
+
+  /// Οι γραμμές υποδείξεων κανόνων, χωρίς πρόθεμα — κενή λίστα όταν η
+  /// καταχώρηση ήταν καθαρή.
+  List<String> get validationHintLines {
+    return cleanDescription
+        .split('\n')
+        .where((line) => line.startsWith(validationHintPrefix.trim()))
+        .map((line) => line.replaceFirst(validationHintPrefix.trim(), '').trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
   }
 
   String get displayTitle {

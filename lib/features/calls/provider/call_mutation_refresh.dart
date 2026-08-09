@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../history/providers/dashboard_provider.dart';
 import '../../history/providers/history_provider.dart';
+import '../../history/providers/lansweeper_report_scope_provider.dart';
 import '../../tasks/providers/task_analytics_provider.dart';
 import '../../tasks/providers/tasks_provider.dart';
 import 'calls_dashboard_providers.dart';
@@ -19,7 +20,7 @@ void refreshAfterCallMutation(
     ref.invalidate(historyCategoryDateCallCountProvider);
     ref.invalidate(totalCallsCountProvider);
     ref.invalidate(dashboardStatsProvider);
-    ref.invalidate(dashboardCallsForReportProvider);
+    ref.invalidate(lansweeperReportCallsProvider);
   }
   ref.invalidate(globalRecentCallsProvider);
   if (callerId != null) {

@@ -132,5 +132,68 @@ void main() {
       },
       semanticsEnabled: false,
     );
+
+    // Ο μετρητής της λεζάντας μετρούσε άλλο σύνολο από αυτό που έδειχνε η
+    // λίστα: αγνοούσε το keyword, οπότε «Κλήσεις 226» με 4 αποτελέσματα.
+    //   flutter test test/features/history/history_search_test.dart --plain-name "η λεζάντα μετράει τα αποτελέσματα της αναζήτησης, όχι το σύνολο"
+    testWidgets(
+      'η λεζάντα μετράει τα αποτελέσματα της αναζήτησης, όχι το σύνολο',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: historySearchWidgetTestOverrides(),
+              child: const MyApp(),
+            ),
+          );
+          await tester.pump();
+          await pumpUntilSettledLong(tester);
+        });
+
+        await tester.tap(find.byKey(const ValueKey('nav_rail_history')));
+        await pumpUntilSettled(tester);
+
+        // Χωρίς αναζήτηση: ρητή λεζάντα συνόλου, ώστε να μη διαβάζεται ως
+        // πλήθος αποτελεσμάτων.
+        expect(
+          find.text('Συνολικές κλήσεις'),
+          findsOneWidget,
+          reason: greekExpectMsg('Χωρίς αναζήτηση η λεζάντα λέει «σύνολο»'),
+        );
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(MaterialApp)),
+        );
+        // Λέξη που δεν ταιριάζει με τίποτα: η λίστα αδειάζει, ενώ το σύνολο
+        // παραμένει 1 — εδώ φαινόταν το ψέμα.
+        container
+            .read(historyFilterProvider.notifier)
+            .update((s) => s.copyWith(keyword: 'ανύπαρκτη λέξη'));
+        await pumpUntilSettled(tester);
+
+        expect(
+          find.text('Αποτελέσματα'),
+          findsOneWidget,
+          reason: greekExpectMsg('Με αναζήτηση η λεζάντα λέει «αποτελέσματα»'),
+        );
+        expect(
+          find.text('0 από 1'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Ο αριθμός πρέπει να μετράει τις γραμμές που δείχνει η λίστα',
+          ),
+        );
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+      semanticsEnabled: false,
+    );
   });
 }

@@ -119,6 +119,7 @@ void main() {
           solutionNotes: 'done',
           createdAt: '2026-01-01',
           updatedAt: '2026-01-02',
+          completedAt: '2026-01-02',
           origin: Task.originManualFab,
           isDeleted: false,
         ).toMap(),
@@ -270,6 +271,7 @@ dynamic _sampleValueForColumn(String column, {String columnType = 'TEXT'}) {
       column == 'time' ||
       column == 'created_at' ||
       column == 'updated_at' ||
+      column == 'completed_at' ||
       column == 'snooze_until' ||
       column == 'lansweeper_last_sync_at') {
     return '2026-01-01T00:00:00';

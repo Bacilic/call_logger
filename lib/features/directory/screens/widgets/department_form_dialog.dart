@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lookup_service.dart';
@@ -8,10 +9,13 @@ import '../../../../core/database/directory_support.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../building_map/services/building_map_floor_ordering.dart';
 import '../../models/department_model.dart';
+import '../../providers/catalog_validation_provider.dart';
 import '../../providers/department_directory_provider.dart';
+import 'catalog_validation_hint_text.dart';
 import 'department_color_palette.dart';
 import 'department_color_picker_dialog.dart';
 import 'department_form_dismiss_guard.dart';
@@ -69,7 +73,7 @@ String suggestDistinctDepartmentNameExample(String name) {
 }
 
 /// Διάλογος προσθήκης / επεξεργασίας / αντιγράφου τμήματος.
-class DepartmentFormDialog extends StatefulWidget {
+class DepartmentFormDialog extends ConsumerStatefulWidget {
   const DepartmentFormDialog({
     super.key,
     this.initialDepartment,
@@ -86,12 +90,13 @@ class DepartmentFormDialog extends StatefulWidget {
   final VoidCallback? onSaved;
 
   @override
-  State<DepartmentFormDialog> createState() => DepartmentFormDialogState();
+  ConsumerState<DepartmentFormDialog> createState() =>
+      DepartmentFormDialogState();
 }
 
 /// Δημόσιο State: τα πεδία της φόρμας είναι ορατά στους συνεργάτες της
 /// (φρουρός κλεισίματος, κοινόχρηστα στοιχεία, αποθήκευση).
-class DepartmentFormDialogState extends State<DepartmentFormDialog> {
+class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   /// Φρουρός κλεισίματος (dirty έλεγχος + διάλογος αλλαγών).
   late final DepartmentFormDismissGuard dismissGuard =
       DepartmentFormDismissGuard(this);
@@ -470,6 +475,12 @@ class DepartmentFormDialogState extends State<DepartmentFormDialog> {
         : widget.isClone
         ? 'Νέο τμήμα (αντίγραφο)'
         : 'Νέο τμήμα';
+    // Κανόνες επικύρωσης (υποδείξεις, όχι απαγορεύσεις) — όσο φορτώνουν,
+    // απλώς δεν εμφανίζονται υποδείξεις.
+    final validation = ref
+        .watch(catalogValidationServiceProvider)
+        .asData
+        ?.value;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
@@ -480,11 +491,15 @@ class DepartmentFormDialogState extends State<DepartmentFormDialog> {
         title: Text(title),
         builder: (titleHandle) => AlertDialog(
           title: titleHandle,
+          // Το οριζόντιο περιθώριο περνά μέσα στο scrollable, ώστε η μπάρα
+          // κύλησης να μένει στην άκρη του διαλόγου και όχι πάνω στα πεδία.
+          contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 24),
           content: SizedBox(
-            width: 420,
+            width: 468,
             child: Form(
               key: formKey,
               child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Column(
@@ -526,6 +541,11 @@ class DepartmentFormDialogState extends State<DepartmentFormDialog> {
                             options,
                           );
                         },
+                      ),
+                      CatalogValidationHintText(
+                        hint: validation?.departmentNameHint(
+                          nameController.text,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -595,6 +615,16 @@ class DepartmentFormDialogState extends State<DepartmentFormDialog> {
                             ),
                           );
                         },
+                      ),
+                      // Ελέγχει και τα ήδη προστεθειμένα chips και ό,τι
+                      // πληκτρολογείται τώρα στο πεδίο εισαγωγής.
+                      CatalogValidationHintText(
+                        hint: validation?.phonesFieldHint(
+                          [
+                            ...sharedPhones,
+                            sharedPhoneInputController.text,
+                          ].join(','),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Wrap(
@@ -936,14 +966,14 @@ class DepartmentFormDialogState extends State<DepartmentFormDialog> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      LexiconSpellTextFormField(
+                      ResizableTextArea(
                         controller: notesController,
                         focusNode: _notesFocus,
                         decoration: const InputDecoration(
                           labelText: 'Σημειώσεις',
                           border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
                         ),
-                        maxLines: 3,
                         onChanged: (_) => notifyFormChanged(),
                       ),
                     ],

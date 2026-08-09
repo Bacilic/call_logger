@@ -7,6 +7,7 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/history/models/lansweeper_sync_state.dart';
 import 'package:call_logger/features/history/providers/dashboard_provider.dart';
+import 'package:call_logger/features/history/providers/lansweeper_report_scope_provider.dart';
 import 'package:call_logger/features/history/providers/history_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_sync_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,11 +56,11 @@ void main() {
 
         // Κρατάμε ζωντανούς autoDispose providers (όπως ανοιχτές οθόνες Ιστορικού/Lansweeper).
         container.listen(historyCallsProvider, (_, _) {});
-        container.listen(dashboardCallsForReportProvider, (_, _) {});
+        container.listen(lansweeperReportCallsProvider, (_, _) {});
         container.listen(lansweeperSyncProvider, (_, _) {});
 
         await container.read(historyCallsProvider.future);
-        await container.read(dashboardCallsForReportProvider.future);
+        await container.read(lansweeperReportCallsProvider.future);
         expect(
           container.read(historyCallsProvider).hasValue,
           isTrue,

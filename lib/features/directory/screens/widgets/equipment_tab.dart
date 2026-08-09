@@ -348,7 +348,6 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
         initialEquipment: initialEquipment,
         initialOwner: initialOwner,
         notifier: ref.read(equipmentDirectoryProvider.notifier),
-        ref: ref,
         isClone: isClone,
         focusedField: focusedField,
       ),

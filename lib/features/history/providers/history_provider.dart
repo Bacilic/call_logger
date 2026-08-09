@@ -6,6 +6,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/category_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
+import '../models/dashboard_summary_model.dart';
 
 /// Μοντέλο φίλτρων για το ιστορικό κλήσεων.
 class HistoryFilterModel {
@@ -14,6 +15,8 @@ class HistoryFilterModel {
     this.dateFrom,
     this.dateTo,
     this.category,
+    this.onlyWithTask = false,
+    this.onlyWithLansweeper = false,
   });
 
   final String keyword;
@@ -21,11 +24,19 @@ class HistoryFilterModel {
   final DateTime? dateTo;
   final String? category;
 
+  /// Μόνο κλήσεις με ζωντανή συνδεδεμένη εκκρεμότητα.
+  final bool onlyWithTask;
+
+  /// Μόνο κλήσεις με αίτημα Lansweeper.
+  final bool onlyWithLansweeper;
+
   HistoryFilterModel copyWith({
     String? keyword,
     DateTime? dateFrom,
     DateTime? dateTo,
     String? category,
+    bool? onlyWithTask,
+    bool? onlyWithLansweeper,
     bool clearDateRange = false,
     bool clearCategory = false,
   }) {
@@ -34,6 +45,8 @@ class HistoryFilterModel {
       dateFrom: clearDateRange ? null : (dateFrom ?? this.dateFrom),
       dateTo: clearDateRange ? null : (dateTo ?? this.dateTo),
       category: clearCategory ? null : (category ?? this.category),
+      onlyWithTask: onlyWithTask ?? this.onlyWithTask,
+      onlyWithLansweeper: onlyWithLansweeper ?? this.onlyWithLansweeper,
     );
   }
 
@@ -42,12 +55,26 @@ class HistoryFilterModel {
 
   String? get dateToSql => dateTo != null ? _formatDate(dateTo!) : null;
 
+  /// Τα ονόματα των φίλτρων που περιορίζουν αυτή τη στιγμή τη λίστα.
+  ///
+  /// Χρησιμεύει σε όποιον αλλάζει το πλαίσιο απ' έξω, ώστε να μπορεί να πει στον
+  /// χρήστη τι ακριβώς έπαψε να ισχύει.
+  List<String> get activeFilterLabels => [
+    if (keyword.trim().isNotEmpty) 'αναζήτηση',
+    if (dateFrom != null || dateTo != null) 'ημερομηνίες',
+    if (category != null && category!.trim().isNotEmpty) 'κατηγορία',
+    if (onlyWithTask) 'με εκκρεμότητα',
+    if (onlyWithLansweeper) 'με αίτημα Lansweeper',
+  ];
+
   /// True όταν υπάρχει ενεργό φίλτρο (αναζήτηση, ημερομηνίες ή κατηγορία).
   bool get hasActiveFilters =>
       keyword.trim().isNotEmpty ||
       dateFrom != null ||
       dateTo != null ||
-      (category != null && category!.trim().isNotEmpty);
+      (category != null && category!.trim().isNotEmpty) ||
+      onlyWithTask ||
+      onlyWithLansweeper;
 
   static String _formatDate(DateTime d) {
     final y = d.year;
@@ -65,12 +92,114 @@ class HistoryFilterNotifier extends Notifier<HistoryFilterModel> {
   void update(HistoryFilterModel Function(HistoryFilterModel) fn) {
     state = fn(state);
   }
+
+  /// Πλαίσιο μετάβασης από άλλη οθόνη: ό,τι δεν δηλώνεται εδώ **μηδενίζεται**.
+  ///
+  /// Η [update] κρατά ό,τι ίσχυε — σωστό για τα χειριστήρια του ίδιου του
+  /// Ιστορικού, λάθος για όποιον έρχεται απ' έξω: ένα φίλτρο κατηγορίας που είχε
+  /// μείνει από προηγούμενη δουλειά θα έκρυβε ακριβώς τις κλήσεις που ζητήθηκαν,
+  /// και ο χρήστης θα έβλεπε «δεν βρέθηκαν κλήσεις» χωρίς να ξέρει γιατί.
+  ///
+  /// Επιστρέφει τα ονόματα των φίλτρων που έπαψαν να ισχύουν, ώστε ο καλών να
+  /// μπορεί να το ανακοινώσει. Φίλτρο που αντικαταστάθηκε (π.χ. άλλες
+  /// ημερομηνίες) δεν μετράει ως καθαρισμένο — δεν χάθηκε, άλλαξε.
+  List<String> focus({
+    String keyword = '',
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) {
+    final before = state.activeFilterLabels;
+    state = HistoryFilterModel(
+      keyword: keyword,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+    );
+    final after = state.activeFilterLabels.toSet();
+    return before.where((label) => !after.contains(label)).toList();
+  }
+}
+
+/// Μήνυμα για τα φίλτρα που καθάρισε μια μετάβαση· `null` όταν δεν έφυγε κανένα.
+String? historyFiltersClearedMessage(List<String> cleared) {
+  if (cleared.isEmpty) return null;
+  if (cleared.length == 1) {
+    return 'Καθαρίστηκε το φίλτρο: ${cleared.single}.';
+  }
+  return 'Καθαρίστηκαν τα φίλτρα: ${cleared.join(', ')}.';
 }
 
 final historyFilterProvider =
     NotifierProvider<HistoryFilterNotifier, HistoryFilterModel>(
       HistoryFilterNotifier.new,
     );
+
+/// Οι στήλες δεδομένων του πίνακα ιστορικού που ταξινομούνται.
+///
+/// Η σειρά των τιμών ταυτίζεται με τη σειρά των στηλών στον πίνακα — έτσι όποιος
+/// ζητά ταξινόμηση γράφει το όνομα της στήλης αντί για γυμνό αριθμό θέσης.
+enum HistorySortColumn {
+  dateTime,
+  caller,
+  phone,
+  department,
+  equipment,
+  category,
+  notes,
+  duration,
+  links,
+}
+
+/// Ταξινόμηση του πίνακα ιστορικού.
+///
+/// Ζει σε provider και όχι μέσα στον πίνακα, ώστε όποιος στέλνει τον χρήστη στο
+/// Ιστορικό — π.χ. τα κουμπιά «Προβολή όλων» του Πίνακα Ελέγχου — να ορίζει και
+/// με ποια σειρά θα δει τις κλήσεις.
+class HistorySortModel {
+  const HistorySortModel({this.column, this.ascending = true});
+
+  /// `null` σημαίνει καμία ταξινόμηση: ισχύει η σειρά που δίνει η βάση.
+  final HistorySortColumn? column;
+  final bool ascending;
+}
+
+class HistorySortNotifier extends Notifier<HistorySortModel> {
+  @override
+  HistorySortModel build() => const HistorySortModel();
+
+  void apply(HistorySortModel sort) => state = sort;
+
+  /// Πάτημα κεφαλίδας: η ίδια στήλη αντιστρέφει τη φορά, νέα στήλη ξεκινά αύξουσα.
+  void toggle(HistorySortColumn column) {
+    state = state.column == column
+        ? HistorySortModel(column: column, ascending: !state.ascending)
+        : HistorySortModel(column: column);
+  }
+}
+
+final historySortProvider =
+    NotifierProvider<HistorySortNotifier, HistorySortModel>(
+      HistorySortNotifier.new,
+    );
+
+/// Η ταξινόμηση που αναπαράγει στο Ιστορικό τη σειρά της κάρτας «Κορυφαίοι
+/// Καλούντες»: αλφαβητικά ανά άτομο, ώστε οι κλήσεις καθενός να είναι μαζί.
+const HistorySortModel historySortForTopCallers = HistorySortModel(
+  column: HistorySortColumn.caller,
+);
+
+/// Η ταξινόμηση που αναπαράγει τη σειρά της κάρτας χρόνου.
+///
+/// Οι δύο όψεις της απαντούν σε διαφορετικό ερώτημα: «ανά κλήση» ρωτά ποια κλήση
+/// κράτησε περισσότερο (μεγαλύτερες διάρκειες πρώτες), «ανά άτομο» ποιος
+/// τηλεφωνεί (ομαδοποίηση ανά καλούντα).
+HistorySortModel historySortForLongestCalls(LongestCallsMode mode) =>
+    switch (mode) {
+      LongestCallsMode.perCall => const HistorySortModel(
+        column: HistorySortColumn.duration,
+        ascending: false,
+      ),
+      LongestCallsMode.perPerson => historySortForTopCallers,
+    };
 
 /// Όνομα αρχείου ενεργής βάσης (για μηνύματα σφάλματος).
 final historyDatabaseDisplayNameProvider = FutureProvider.autoDispose<String>((
@@ -127,6 +256,8 @@ final historyCallsProvider =
             ? null
             : filter.category,
         keyword: keyword.isEmpty ? null : normalizedKeyword,
+        onlyWithTask: filter.onlyWithTask,
+        onlyWithLansweeper: filter.onlyWithLansweeper,
       );
     });
 

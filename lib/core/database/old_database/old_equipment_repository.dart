@@ -13,6 +13,8 @@ import 'lamp_excel_parse_int.dart';
 import 'lamp_legacy_issue_type_normalizer.dart';
 import 'lamp_scientific_serial.dart';
 import 'lamp_network_sheet_importer.dart';
+import 'lamp_search_filter_selection.dart';
+import 'lamp_unlinked_entities.dart';
 import 'old_database_schema.dart';
 
 const String oldDataIssueEntityTypeEquipment = 'equipment';
@@ -26,10 +28,38 @@ class OldEquipmentSearchResult {
   const OldEquipmentSearchResult({
     required this.rows,
     required this.totalCount,
+    this.unlinked = const <LampUnlinkedEntity>[],
+    this.unlinkedTotalCount = 0,
+    this.unlinkedCountsByKind = const <LampUnlinkedEntityKind, int>{},
+    this.unlinkedEmptyCount = 0,
   });
 
   final List<Map<String, Object?>> rows;
   final int totalCount;
+
+  /// Οντότητες που ταιριάζουν στην αναζήτηση αλλά **δεν έχουν εξοπλισμό**.
+  ///
+  /// Μένουν χωριστά από τα [rows]: εμφανίζονται σε δική τους ενότητα, ώστε ο
+  /// χρήστης να ξέρει με μια ματιά τι είναι εξοπλισμός και τι ασύνδετη
+  /// εγγραφή, και να τα βρίσκει μαζεμένα ακόμη κι όταν τα [rows] είναι εκατοντάδες.
+  /// Κομμένες στο ίδιο όριο εμφάνισης με τον εξοπλισμό — το συνολικό πλήθος
+  /// ζει στο [unlinkedTotalCount].
+  final List<LampUnlinkedEntity> unlinked;
+
+  /// Πόσες ασύνδετες οντότητες ταίριαξαν συνολικά (πριν το όριο εμφάνισης).
+  final int unlinkedTotalCount;
+
+  /// Ταιριάσματα ανά είδος, **πριν** την επιλογή ειδών του φίλτρου.
+  ///
+  /// Τροφοδοτεί τα πλήθη του μενού φίλτρων: αν μετρούσαν μετά την επιλογή,
+  /// τα ανεπίλεκτα είδη θα έδειχναν μηδέν και δεν θα μπορούσαν να επιλεγούν.
+  final Map<LampUnlinkedEntityKind, int> unlinkedCountsByKind;
+
+  /// Πόσες από τις ταιριασμένες ασύνδετες είναι «κενές εγγραφές» — για την
+  /// υπο-επιλογή «μόνο οι κενές» στο μενού φίλτρων.
+  final int unlinkedEmptyCount;
+
+  bool get isEmpty => rows.isEmpty && unlinked.isEmpty;
 }
 
 enum OldEquipmentSectionType {
@@ -61,15 +91,17 @@ class OldEquipmentUpdateResult {
   final String? message;
 }
 
-/// Αποτέλεσμα επαναδόμησης πίνακα `search_index` (Λάμπα).
-class OldSearchIndexRebuildResult {
-  const OldSearchIndexRebuildResult({
-    required this.previousRowCount,
-    required this.newRowCount,
+/// Αποτέλεσμα ανανέωσης της μνήμης αναζήτησης (Λάμπα).
+class OldSearchCacheRefreshResult {
+  const OldSearchCacheRefreshResult({
+    required this.droppedLegacyIndexRows,
   });
 
-  final int previousRowCount;
-  final int newRowCount;
+  /// Πόσες γραμμές είχε ο καταργημένος `search_index` που διαγράφηκε τώρα·
+  /// `null` όταν ο πίνακας δεν υπήρχε (η συνηθισμένη περίπτωση πλέον).
+  final int? droppedLegacyIndexRows;
+
+  bool get droppedLegacyIndex => droppedLegacyIndexRows != null;
 }
 
 class OldIntegrityScanResult {
@@ -257,6 +289,18 @@ class OldEquipmentRepository {
   static String _cacheKey(String databasePath) =>
       '${databasePath.trim()}#v$_searchCacheSchemaVersion';
 
+  /// Ξεχνά το αντίγραφο αναζήτησης — η επόμενη αναζήτηση το ξαναχτίζει.
+  ///
+  /// Το συμβόλαιο είναι μονοκόμματο: **ό,τι γράφει στη βάση, ακυρώνει το
+  /// αντίγραφο.** Χωρίς αυτό ο οδηγός επίλυσης άλλαζε δεκάδες εγγραφές και η
+  /// αναζήτηση συνέχιζε να δείχνει το στιγμιότυπο πριν την επίλυση — λυμένα
+  /// διπλότυπα εμφανίζονταν σαν να υπήρχαν ακόμη.
+  ///
+  /// Φθηνό: το ξαναχτίσιμο είναι ένα query λίγων δεκάδων χιλιοστών.
+  void invalidateSearchCache(String databasePath) {
+    _cacheByPath.remove(_cacheKey(databasePath.trim()));
+  }
+
   Future<void> preloadSearchCache(String databasePath) async {
     final path = databasePath.trim();
     if (path.isEmpty) return;
@@ -305,21 +349,22 @@ class OldEquipmentRepository {
 
   Future<OldEquipmentSearchResult> searchByFields(
     String databasePath,
-    OldEquipmentSearchFilters filters, {
+    OldEquipmentSearchFilters fieldFilters, {
     required int maxDisplay,
+    LampSearchFilterSelection filters = LampSearchFilterSelection.none,
   }) async {
     final hasAnyField =
-        _normalizeMaybe(filters.code) != null ||
-        _normalizeMaybe(filters.description) != null ||
-        _normalizeMaybe(filters.serialNo) != null ||
-        _normalizeMaybe(filters.assetNo) != null ||
-        _normalizeMaybe(filters.owner) != null ||
-        _normalizeMaybe(filters.office) != null ||
-        _normalizeMaybe(filters.phone) != null ||
-        _normalizeMaybe(filters.model) != null ||
-        _normalizeMaybe(filters.contract) != null ||
-        _normalizeMaybe(filters.state) != null;
-    if (!hasAnyField) {
+        _normalizeMaybe(fieldFilters.code) != null ||
+        _normalizeMaybe(fieldFilters.description) != null ||
+        _normalizeMaybe(fieldFilters.serialNo) != null ||
+        _normalizeMaybe(fieldFilters.assetNo) != null ||
+        _normalizeMaybe(fieldFilters.owner) != null ||
+        _normalizeMaybe(fieldFilters.office) != null ||
+        _normalizeMaybe(fieldFilters.phone) != null ||
+        _normalizeMaybe(fieldFilters.model) != null ||
+        _normalizeMaybe(fieldFilters.contract) != null ||
+        _normalizeMaybe(fieldFilters.state) != null;
+    if (!hasAnyField && !filters.isActive) {
       return const OldEquipmentSearchResult(
         rows: <Map<String, Object?>>[],
         totalCount: 0,
@@ -329,14 +374,129 @@ class OldEquipmentRepository {
     final cache = await _ensureCache(databasePath);
     var totalCount = 0;
     final displayed = <Map<String, Object?>>[];
-    for (final row in cache.rows) {
-      if (!_matchesFieldFilters(row, filters)) continue;
-      totalCount++;
-      if (displayed.length < cap) {
-        displayed.add(row.dto);
+    // Με ενεργό φίλτρο ασύνδετων ο εξοπλισμός δεν συμμετέχει: το φίλτρο δεν
+    // κόβει αποτελέσματα — ορίζει τι ψάχνουμε.
+    if (!filters.hidesEquipment) {
+      for (final row in cache.rows) {
+        if (!_rowMatchesEquipmentGaps(row, filters)) continue;
+        if (hasAnyField && !_matchesFieldFilters(row, fieldFilters)) continue;
+        totalCount++;
+        if (displayed.length < cap) {
+          displayed.add(row.dto);
+        }
       }
     }
-    return OldEquipmentSearchResult(rows: displayed, totalCount: totalCount);
+    final normalizedFields = _normalizedFieldFilters(fieldFilters);
+    // Φίλτρο χωρίς κανένα πεδίο = «δείξε μου όλες τις ασύνδετες»: το ταίριασμα
+    // κειμένου παραλείπεται, δεν υπάρχει κείμενο να ταιριάξει.
+    final textMatched = hasAnyField
+        ? <LampUnlinkedEntity>[
+            for (final entity in cache.unlinked)
+              if (lampUnlinkedMatchesFields(entity, normalizedFields)) entity,
+          ]
+        : cache.unlinked;
+    return _withUnlinkedOutcome(
+      rows: displayed,
+      totalCount: totalCount,
+      textMatched: textMatched,
+      filters: filters,
+      hasTextInput: hasAnyField,
+      cap: cap,
+    );
+  }
+
+  /// Κοινό φινάλε των δύο αναζητήσεων: επιλογή ειδών, όριο εμφάνισης, πλήθη.
+  ///
+  /// Το [hasTextInput] κρίνει τι σημαίνει «καμία επιλογή ειδών»:
+  /// - **Με κείμενο** — οι ασύνδετες που ταιριάζουν συνοδεύουν τον εξοπλισμό·
+  ///   είναι μέρος της απάντησης στο ερώτημα του χρήστη.
+  /// - **Χωρίς κείμενο** — δεν τις ζήτησε κανείς. Σκέτο φίλτρο «εξοπλισμός
+  ///   χωρίς ιδιοκτήτη» δεν πρέπει να σέρνει μαζί του και τις 360 ασύνδετες.
+  OldEquipmentSearchResult _withUnlinkedOutcome({
+    required List<Map<String, Object?>> rows,
+    required int totalCount,
+    required List<LampUnlinkedEntity> textMatched,
+    required LampSearchFilterSelection filters,
+    required bool hasTextInput,
+    required int cap,
+  }) {
+    final countsByKind = <LampUnlinkedEntityKind, int>{};
+    var emptyCount = 0;
+    for (final entity in textMatched) {
+      countsByKind[entity.kind] = (countsByKind[entity.kind] ?? 0) + 1;
+      if (entity.isEmptyRecord) emptyCount++;
+    }
+    final List<LampUnlinkedEntity> selected;
+    if (filters.hasUnlinked) {
+      selected = <LampUnlinkedEntity>[
+        for (final entity in textMatched)
+          if (filters.acceptsUnlinked(entity)) entity,
+      ];
+    } else {
+      selected = hasTextInput ? textMatched : const <LampUnlinkedEntity>[];
+    }
+    return OldEquipmentSearchResult(
+      rows: rows,
+      totalCount: totalCount,
+      unlinked: selected.length <= cap ? selected : selected.sublist(0, cap),
+      unlinkedTotalCount: selected.length,
+      unlinkedCountsByKind: Map<LampUnlinkedEntityKind, int>.unmodifiable(
+        countsByKind,
+      ),
+      unlinkedEmptyCount: emptyCount,
+    );
+  }
+
+  /// Συνολικά πλήθη για το μενού φίλτρων, όταν δεν έχει τρέξει αναζήτηση.
+  Future<LampFilterMenuCounts> countFilterCandidates(
+    String databasePath,
+  ) async {
+    final cache = await _ensureCache(databasePath);
+    final byKind = <LampUnlinkedEntityKind, int>{};
+    var emptyRecords = 0;
+    for (final entity in cache.unlinked) {
+      byKind[entity.kind] = (byKind[entity.kind] ?? 0) + 1;
+      if (entity.isEmptyRecord) emptyRecords++;
+    }
+    final gaps = <LampEquipmentGapKind, int>{};
+    for (final row in cache.rows) {
+      for (final gap in LampEquipmentGapKind.values) {
+        final value = switch (gap) {
+          LampEquipmentGapKind.withoutOffice => row.dto['office_id'],
+          LampEquipmentGapKind.withoutOwner => row.dto['owner_id'],
+        };
+        if (_toInt(value) == null) gaps[gap] = (gaps[gap] ?? 0) + 1;
+      }
+    }
+    return LampFilterMenuCounts(
+      byKind: Map<LampUnlinkedEntityKind, int>.unmodifiable(byKind),
+      emptyRecords: emptyRecords,
+      equipmentGaps: Map<LampEquipmentGapKind, int>.unmodifiable(gaps),
+    );
+  }
+
+  /// Τα γεμάτα πεδία αναζήτησης ως «κλειδί → κανονικοποιημένη τιμή».
+  Map<String, String> _normalizedFieldFilters(
+    OldEquipmentSearchFilters filters,
+  ) {
+    final raw = <String, String?>{
+      'code': filters.code,
+      'description': filters.description,
+      'serialNo': filters.serialNo,
+      'assetNo': filters.assetNo,
+      'owner': filters.owner,
+      'office': filters.office,
+      'phone': filters.phone,
+      'model': filters.model,
+      'contract': filters.contract,
+      'state': filters.state,
+    };
+    final normalized = <String, String>{};
+    for (final entry in raw.entries) {
+      final value = _normalizeMaybe(entry.value);
+      if (value != null) normalized[entry.key] = value;
+    }
+    return normalized;
   }
 
   Future<OldEquipmentSearchResult> globalSearch(
@@ -345,6 +505,7 @@ class OldEquipmentRepository {
     required int maxDisplay,
     List<LampScopedSearchTerm>? scopedTerms,
     String? freeText,
+    LampSearchFilterSelection filters = LampSearchFilterSelection.none,
   }) async {
     final effectiveFreeText = scopedTerms == null && freeText == null
         ? query
@@ -353,7 +514,11 @@ class OldEquipmentRepository {
     final idQuery = IdSearchQuery.parse(effectiveFreeText);
     final normalizedQuery = _normalizeMaybe(idQuery.text);
     final terms = scopedTerms ?? const <LampScopedSearchTerm>[];
-    if (normalizedQuery == null && terms.isEmpty && !idQuery.hasIdTokens) {
+    final hasTextInput =
+        normalizedQuery != null || terms.isNotEmpty || idQuery.hasIdTokens;
+    // Το ενεργό φίλτρο είναι από μόνο του έγκυρη είσοδος: «δείξε μου όλα τα
+    // γραφεία χωρίς εξοπλισμό» δεν χρειάζεται κείμενο.
+    if (!hasTextInput && !filters.isActive) {
       return const OldEquipmentSearchResult(
         rows: <Map<String, Object?>>[],
         totalCount: 0,
@@ -363,19 +528,82 @@ class OldEquipmentRepository {
     final cache = await _ensureCache(databasePath);
     var totalCount = 0;
     final displayed = <Map<String, Object?>>[];
-    for (final row in cache.rows) {
-      if (!_rowMatchesGlobalIdTokens(row, idQuery)) continue;
-      if (normalizedQuery != null &&
-          !_containsAllTokens(row.normalizedText, normalizedQuery)) {
-        continue;
-      }
-      if (terms.isNotEmpty && !_matchesScopedTerms(row, terms)) continue;
-      totalCount++;
-      if (displayed.length < cap) {
-        displayed.add(row.dto);
+    if (!filters.hidesEquipment) {
+      for (final row in cache.rows) {
+        if (!_rowMatchesEquipmentGaps(row, filters)) continue;
+        if (!_rowMatchesGlobalIdTokens(row, idQuery)) continue;
+        if (normalizedQuery != null &&
+            !_containsAllTokens(row.normalizedText, normalizedQuery)) {
+          continue;
+        }
+        if (terms.isNotEmpty && !_matchesScopedTerms(row, terms)) continue;
+        totalCount++;
+        if (displayed.length < cap) {
+          displayed.add(row.dto);
+        }
       }
     }
-    return OldEquipmentSearchResult(rows: displayed, totalCount: totalCount);
+    // Χωρίς κείμενο, το _unlinkedMatchesGlobal περνά τα πάντα — δηλαδή
+    // «όλες οι ασύνδετες», που είναι ακριβώς το ζητούμενο του σκέτου φίλτρου.
+    return _withUnlinkedOutcome(
+      rows: displayed,
+      totalCount: totalCount,
+      textMatched: <LampUnlinkedEntity>[
+        for (final entity in cache.unlinked)
+          if (_unlinkedMatchesGlobal(entity, normalizedQuery, idQuery, terms))
+            entity,
+      ],
+      filters: filters,
+      hasTextInput: hasTextInput,
+      cap: cap,
+    );
+  }
+
+  /// Πληροί η γραμμή εξοπλισμού τα ζητούμενα κενά;
+  ///
+  /// Πολλαπλά κενά ενώνονται με «ή»: «χωρίς γραφείο Ή χωρίς ιδιοκτήτη» είναι
+  /// το χρήσιμο ερώτημα — το «και τα δύο» θα ήταν σπάνια τομή.
+  bool _rowMatchesEquipmentGaps(
+    _IndexedEquipmentRow row,
+    LampSearchFilterSelection filters,
+  ) {
+    if (!filters.hasEquipmentGaps) return true;
+    for (final gap in filters.equipmentGaps) {
+      final value = switch (gap) {
+        LampEquipmentGapKind.withoutOffice => row.dto['office_id'],
+        LampEquipmentGapKind.withoutOwner => row.dto['owner_id'],
+      };
+      if (_toInt(value) == null) return true;
+    }
+    return false;
+  }
+
+  /// Ταίριασμα ασύνδετης οντότητας με καθολική αναζήτηση.
+  ///
+  /// Οι όροι με εμβέλεια (`τμήμα:Χ`) ελέγχονται στο ίδιο ενιαίο κείμενο: η
+  /// οντότητα δεν έχει τις στήλες του εξοπλισμού πάνω στις οποίες δουλεύει η
+  /// κανονική εμβέλεια, και ένα ταίριασμα παραπάνω είναι προτιμότερο από μια
+  /// εγγραφή που εξαφανίζεται σιωπηλά.
+  bool _unlinkedMatchesGlobal(
+    LampUnlinkedEntity entity,
+    String? normalizedQuery,
+    IdSearchQuery idQuery,
+    List<LampScopedSearchTerm> terms,
+  ) {
+    if (idQuery.hasInvalidIdToken) return false;
+    for (final id in idQuery.ids) {
+      if (entity.id != id) return false;
+    }
+    if (normalizedQuery != null &&
+        !_containsAllTokens(entity.normalizedText, normalizedQuery)) {
+      return false;
+    }
+    for (final term in terms) {
+      final normalized = _normalizeMaybe(term.value);
+      if (normalized == null) continue;
+      if (!_containsAllTokens(entity.normalizedText, normalized)) return false;
+    }
+    return true;
   }
 
   /// Στήλες αναγνωριστικών που δέχονται καθολικούς όρους «#id».
@@ -665,54 +893,55 @@ class OldEquipmentRepository {
     }
   }
 
-  /// Πλήρης εκκαθάριση και επαναδόμηση του `search_index` από τον εξοπλισμό (ίδια λογική με την εσωτερική αναδόμηση).
-  Future<OldSearchIndexRebuildResult> rebuildLampSearchIndex(
+  /// Ξεχνά τη μνήμη αναζήτησης, ώστε η επόμενη αναζήτηση να ξαναδιαβάσει τη
+  /// βάση — και ξεφορτώνεται τον καταργημένο πίνακα `search_index`.
+  ///
+  /// **Γιατί δεν υπάρχει πια «αναδόμηση ευρετηρίου»:** ο `search_index` δεν
+  /// διαβαζόταν από πουθενά. Η αναζήτηση φορτώνει κατευθείαν τους πίνακες
+  /// δεδομένων (20 ms για 3.488 γραμμές) και κρατά στη μνήμη τα **πλήρη**
+  /// πεδία των καρτών, όχι μόνο κείμενο — ένα ευρετήριο κειμένου δεν θα
+  /// γλίτωνε ερώτημα. Το μόνο χρήσιμο που έκανε το παλιό κουμπί ήταν αυτό το
+  /// ξέχασμα της μνήμης· κρατιέται, χωρίς το νεκρό βάρος του πίνακα
+  /// (1,66 MB σε βάση 7,61 MB).
+  Future<OldSearchCacheRefreshResult> refreshSearchCache(
     String databasePath,
   ) async {
     final path = databasePath.trim();
     if (path.isEmpty) {
       throw StateError('Κενή διαδρομή βάσης.');
     }
+    // Η μνήμη ξεχνιέται πάντα, ακόμη κι αν η βάση είναι μόνο-ανάγνωσης και το
+    // drop παρακάτω αποτύχει: αυτό είναι το ζητούμενο της ενέργειας.
+    invalidateSearchCache(path);
+    return OldSearchCacheRefreshResult(
+      droppedLegacyIndexRows: await _dropLegacySearchIndex(path),
+    );
+  }
+
+  /// Διαγράφει τον καταργημένο `search_index`. Επιστρέφει πόσες γραμμές είχε,
+  /// ή `null` αν δεν υπήρχε ή δεν ήταν δυνατή η εγγραφή.
+  Future<int?> _dropLegacySearchIndex(String path) async {
     try {
-      await _ensureSearchIndexTable(path);
       final db = await _databaseProvider.open(
         path,
         mode: LampDatabaseMode.write,
       );
-      final before = await _countTable(db, 'search_index');
-      await _applyLampSearchIndexRebuild(db);
-      final after = await _countTable(db, 'search_index');
-      _cacheByPath.remove(_cacheKey(path));
-      return OldSearchIndexRebuildResult(
-        previousRowCount: before,
-        newRowCount: after,
+      final exists = await db.rawQuery(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='search_index' LIMIT 1",
       );
-    } catch (e) {
-      throw Exception(_friendlySqlError(e));
+      if (exists.isEmpty) return null;
+      final rows = await _countTable(db, 'search_index');
+      await db.execute('DROP TABLE IF EXISTS search_index');
+      return rows;
+    } catch (_) {
+      // Μόνο-ανάγνωση ή κλειδωμένη βάση: το ξέχασμα της μνήμης έχει ήδη γίνει.
+      return null;
     }
   }
 
   Future<int> _countTable(Database db, String tableName) async {
     final q = await db.rawQuery('SELECT COUNT(*) AS c FROM $tableName');
     return (q.first['c'] as int?) ?? 0;
-  }
-
-  Future<void> _applyLampSearchIndexRebuild(Database db) async {
-    final rows = await _loadSourceRows(db);
-    await db.transaction((txn) async {
-      await txn.delete('search_index');
-      final batch = txn.batch();
-      for (final row in rows) {
-        final sourceId = _toInt(row['_source_id']) ?? 0;
-        final normalizedText = _buildNormalizedSearchText(row);
-        batch.insert('search_index', <String, Object?>{
-          'source_table': 'equipment',
-          'source_id': sourceId,
-          'normalized_text': normalizedText,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-      await batch.commit(noResult: true);
-    });
   }
 
   Future<OldIntegrityScanResult> scanIntegrityIssues(
@@ -1083,6 +1312,11 @@ class OldEquipmentRepository {
       final raw = row['office_original_text']?.toString();
       final hasRaw = raw != null && raw.trim().isNotEmpty;
       if (!hasRaw) continue;
+      // Ίδιος κανόνας με τον εξοπλισμό: λυμένο FK σημαίνει λυμένο πρόβλημα.
+      final resolvedOffice = _toInt(row['office']);
+      if (resolvedOffice != null && officeIds.contains(resolvedOffice)) {
+        continue;
+      }
       final parsed = lampParseExcelInt(raw);
       if (parsed != null && officeIds.contains(parsed)) continue;
       final ownerId = _toInt(row['owner']);
@@ -1120,6 +1354,12 @@ class OldEquipmentRepository {
         final raw = row[rawCol]?.toString();
         final hasRaw = raw != null && raw.trim().isNotEmpty;
         if (!hasRaw) continue;
+        // Το ωμό κείμενο είναι το **ερώτημα**, όχι η απάντηση: όταν η στήλη
+        // αναφοράς δείχνει ήδη σε υπαρκτή εγγραφή, το ερώτημα απαντήθηκε και
+        // ό,τι έμεινε γραμμένο είναι ιστορικό. Χωρίς αυτόν τον έλεγχο κάθε
+        // σάρωση ξαναέφτιαχνε προβλήματα που ο χρήστης είχε ήδη λύσει.
+        final resolvedId = _toInt(row[col]);
+        if (resolvedId != null && valid.contains(resolvedId)) continue;
         final parsed = lampParseExcelInt(raw);
         if (parsed != null && valid.contains(parsed)) continue;
         addIfNew(
@@ -1921,7 +2161,31 @@ class OldEquipmentRepository {
     final db = await _databaseProvider.open(databasePath);
     final rows = await _loadSourceRows(db);
     final indexedRows = rows.map(_mapToIndexedRow).toList(growable: false);
-    return _SearchCacheEntry(rows: indexedRows);
+    return _SearchCacheEntry(
+      rows: indexedRows,
+      unlinked: await _loadUnlinkedEntities(db),
+    );
+  }
+
+  /// Φορτώνει τις οντότητες που δεν έχουν κανέναν συνδεδεμένο εξοπλισμό.
+  ///
+  /// Κάθε πίνακας δοκιμάζεται χωριστά: μια βάση μπορεί να μην έχει όλους τους
+  /// πίνακες αναφοράς, και η απουσία ενός δεν πρέπει να αφήνει την αναζήτηση
+  /// χωρίς τους υπόλοιπους.
+  Future<List<LampUnlinkedEntity>> _loadUnlinkedEntities(Database db) async {
+    final entities = <LampUnlinkedEntity>[];
+    for (final entry in kLampUnlinkedEntitySql.entries) {
+      try {
+        final rows = await db.rawQuery(entry.value);
+        for (final row in rows) {
+          final entity = buildLampUnlinkedEntity(entry.key, row);
+          if (entity != null) entities.add(entity);
+        }
+      } catch (_) {
+        // Πίνακας που λείπει ή στήλη με άλλο όνομα: οι υπόλοιποι συνεχίζουν.
+      }
+    }
+    return List<LampUnlinkedEntity>.unmodifiable(entities);
   }
 
   /// Idempotent προσθήκη των στηλών δικτύου σε παλαιότερες βάσεις.
@@ -1947,32 +2211,6 @@ class OldEquipmentRepository {
   Future<Set<String>> _equipmentColumnNames(Database db) async {
     final rows = await db.rawQuery("PRAGMA table_info('equipment')");
     return rows.map((row) => row['name'] as String).toSet();
-  }
-
-  Future<void> _ensureSearchIndexTable(String databasePath) async {
-    try {
-      final db = await _databaseProvider.open(
-        databasePath,
-        mode: LampDatabaseMode.write,
-      );
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS search_index (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          source_table TEXT NOT NULL,
-          source_id INTEGER NOT NULL,
-          normalized_text TEXT NOT NULL,
-          UNIQUE(source_table, source_id)
-        )
-      ''');
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_search_index_source ON search_index(source_table, source_id)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_search_index_normalized ON search_index(normalized_text)',
-      );
-    } catch (_) {
-      // Αν η βάση είναι μόνο-ανάγνωση, συνεχίζουμε με in-memory cache χωρίς persisted index.
-    }
   }
 
   Future<List<Map<String, Object?>>> _loadSourceRows(Database db) async {
@@ -2542,8 +2780,12 @@ class _OldIntegrityScanCancelled implements Exception {
 }
 
 class _SearchCacheEntry {
-  _SearchCacheEntry({required this.rows});
+  _SearchCacheEntry({required this.rows, required this.unlinked});
   final List<_IndexedEquipmentRow> rows;
+
+  /// Οντότητες χωρίς συνδεδεμένο εξοπλισμό — αόρατες στο [rows], που είναι
+  /// εξ ορισμού μία γραμμή ανά εξοπλισμό.
+  final List<LampUnlinkedEntity> unlinked;
 }
 
 class _IndexedEquipmentRow {

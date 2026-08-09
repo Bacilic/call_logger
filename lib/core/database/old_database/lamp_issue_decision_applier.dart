@@ -59,7 +59,10 @@ class LampIssueDecisionApplier {
         final changed = await db.transaction<_AppliedDecision>((txn) async {
           return _applyDecision(txn, decision, emit: emit);
         });
-        if (changed.created) {
+        if (changed.unresolved) {
+          // Μερική εφαρμογή: γράφτηκε το γραφείο, ο υπάλληλος λείπει ακόμη.
+          unresolved++;
+        } else if (changed.created) {
           created++;
         } else if (decision.option != null) {
           manualApplied++;
@@ -151,6 +154,135 @@ class LampIssueDecisionApplier {
     }
 
     switch (operation) {
+      case 'close_resolved_fk_issue':
+        // Καμία εγγραφή δεν αλλάζει: το πεδίο είναι ήδη σωστό και μόνο η
+        // εκκρεμότητα είχε ξεμείνει.
+        final code = proposal.row;
+        final column = metadata['fkColumn']?.toString();
+        if (code == null || column == null) {
+          throw StateError('Λείπουν στοιχεία για κλείσιμο λυμένου FK.');
+        }
+        await _closeIssuesForField(txn, code, column, emit: emit);
+        return const _AppliedDecision(created: false);
+      case 'number_serial_series':
+        final model = metadata['model'] as int?;
+        final serial = _support.text(metadata['serialNo']);
+        if (model == null || serial == null) {
+          throw StateError('Λείπουν στοιχεία για αρίθμηση σειράς.');
+        }
+        final codes = <int>[
+          for (final value in (metadata['codes'] as List<Object?>? ?? const []))
+            ?_support.toInt(value),
+        ];
+        final taken = <String>[
+          for (final value
+              in (metadata['takenSerials'] as List<Object?>? ?? const []))
+            ?_support.text(value),
+        ];
+        final template =
+            decision.serialSeriesTemplate?.trim() ??
+            _support.text(metadata['suggestedTemplate']) ??
+            '$serial-$kLampSeriesCounterToken';
+        if (!lampSeriesTemplateIsValid(template)) {
+          throw StateError(
+            'Το πρότυπο αρίθμησης πρέπει να περιέχει τον τελεστή '
+            '$kLampSeriesCounterToken· αλλιώς όλες οι εγγραφές θα έπαιρναν '
+            'την ίδια τιμή.',
+          );
+        }
+        final plan = lampBuildSerialSeries(
+          template: template,
+          equipmentCodes: codes,
+          takenSerials: taken,
+        );
+        if (plan.isEmpty) {
+          throw StateError('Η αρίθμηση δεν παρήγαγε καμία τιμή.');
+        }
+        // Όλα σε μία συναλλαγή: μερική αρίθμηση θα άφηνε τη σειρά σπασμένη
+        // και το πρόβλημα ανοιχτό με χειρότερα δεδομένα από πριν.
+        for (final assignment in plan.assignments) {
+          await _assertSerialNoAvailable(
+            txn,
+            model: model,
+            serialNo: assignment.serial,
+            exceptCode: assignment.code,
+          );
+          await txn.update(
+            'equipment',
+            <String, Object?>{'serial_no': assignment.serial},
+            where: 'code = ?',
+            whereArgs: <Object?>[assignment.code],
+          );
+        }
+        emit(
+          ResolutionLogEntry.success(
+            'Αριθμήθηκε η σειρά «${plan.root}»: '
+            '${plan.assignments.length} εγγραφές, από '
+            '${plan.assignments.first.serial} έως '
+            '${plan.assignments.last.serial}.',
+          ),
+        );
+      case 'accept_duplicate_serial':
+        // Καμία αλλαγή δεδομένων: η επανάληψη είναι νόμιμη (κοινή άδεια).
+        //
+        // Η εκκρεμότητα **σημειώνεται**, δεν σβήνεται. Τα διπλότυπα μένουν
+        // επίτηδες, οπότε ο επόμενος έλεγχος θα τα ξαναβρεί· η σημειωμένη
+        // εγγραφή είναι το μόνο ίχνος ότι κάποιος τα ενέκρινε, και ο έλεγχος
+        // τη σέβεται γιατί συγκρίνει με όλες τις εγγραφές, όχι μόνο τις
+        // ανοιχτές.
+        await _markIssuesAccepted(
+          txn,
+          proposal.issueIds,
+          note:
+              'Αποδεκτός διπλότυπος σειριακός: η τιμή μοιάζει με κλειδί '
+              'άδειας λογισμικού και επαναλαμβάνεται νόμιμα.',
+          emit: emit,
+        );
+        return const _AppliedDecision(created: false);
+      case 'create_contract_and_update_equipment':
+        final code = proposal.row;
+        final input = decision.contractInput;
+        if (code == null || input == null || input.name.trim().isEmpty) {
+          throw StateError('Η δημιουργία σύμβασης απαιτεί όνομα.');
+        }
+        final contractId = await _createContract(txn, input, emit: emit);
+        await txn.update(
+          'equipment',
+          <String, Object?>{
+            'contract': contractId,
+            'contract_original_text': null,
+          },
+          where: 'code = ?',
+          whereArgs: <Object?>[code],
+        );
+        emit(
+          ResolutionLogEntry.success(
+            'Ο εξοπλισμός $code συνδέθηκε με τη σύμβαση $contractId.',
+          ),
+        );
+        await _closeIssuesForField(txn, code, 'contract', emit: emit);
+        return const _AppliedDecision(created: true);
+      case 'set_equipment_placement':
+        final code = proposal.row;
+        final placement = decision.placementInput;
+        if (code == null || placement == null) {
+          throw StateError('Ο ορισμός τοποθέτησης απαιτεί γραφείο.');
+        }
+        await _applyEquipmentPlacement(
+          txn,
+          code: code,
+          placement: placement,
+          emit: emit,
+        );
+        // Ο υπάλληλος είναι προαιρετικός: όταν λείπει, το γραφείο γράφτηκε
+        // αλλά το πρόβλημα του υπαλλήλου παραμένει ανοιχτό για αργότερα.
+        if (placement.ownerId == null) {
+          await _closeIssuesForField(txn, code, 'office', emit: emit);
+          return const _AppliedDecision(created: false, unresolved: true);
+        }
+        await _closeIssuesForField(txn, code, 'owner', emit: emit);
+        await _closeIssuesForField(txn, code, 'office', emit: emit);
+        return const _AppliedDecision(created: false);
       case 'update_equipment_fk':
         final code = proposal.row;
         final fkColumn = metadata['fkColumn']?.toString();
@@ -264,6 +396,7 @@ class LampIssueDecisionApplier {
           txn,
           code: code,
           ownerId: ownerId,
+          clearOriginalText: true,
           emit: emit,
         );
       case 'update_equipment_owner_null_clear_original':
@@ -630,7 +763,56 @@ class LampIssueDecisionApplier {
       proposal.issueIds,
     );
     await _deleteIssues(txn, issueIdsToDelete, emit: emit);
+    await _closeIssuesOfResolvedFk(txn, proposal, emit: emit);
     return _AppliedDecision(created: created);
+  }
+
+  /// Αν η ενέργεια άφησε τη στήλη FK με έγκυρη τιμή, κλείνει ό,τι άλλο είχε
+  /// μείνει ανοιχτό για το ίδιο πεδίο.
+  ///
+  /// Το κριτήριο είναι η **βάση**, όχι ο τύπος της ενέργειας: το ίδιο ερώτημα
+  /// που κάνει και ο έλεγχος ακεραιότητας — «δείχνει η στήλη σε υπαρκτή
+  /// εγγραφή;». Ένα συμβόλαιο, ένας τρόπος να απαντηθεί.
+  Future<void> _closeIssuesOfResolvedFk(
+    Transaction txn,
+    LampIssueResolutionProposal proposal, {
+    required ResolutionLogSink emit,
+  }) async {
+    final code = proposal.row;
+    final column = proposal.column?.toLowerCase();
+    if (code == null || column == null) return;
+    final spec = _support.fkSpec(column);
+    if (spec == null) return;
+
+    final rows = await txn.query(
+      'equipment',
+      columns: <String>[column],
+      where: 'code = ?',
+      whereArgs: <Object?>[code],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final resolvedId = _support.toInt(rows.first[column]);
+    if (resolvedId == null) return;
+
+    final table = switch (column) {
+      'office' => 'offices',
+      'owner' => 'owners',
+      'contract' => 'contracts',
+      'model' => 'model',
+      _ => null,
+    };
+    if (table == null) return;
+    final target = await txn.query(
+      table,
+      columns: <String>[column],
+      where: '$column = ?',
+      whereArgs: <Object?>[resolvedId],
+      limit: 1,
+    );
+    if (target.isEmpty) return;
+
+    await _closeIssuesForField(txn, code, column, emit: emit);
   }
 
   Future<bool> _createReferenceAndUpdateEquipment(
@@ -934,6 +1116,173 @@ class LampIssueDecisionApplier {
     }
   }
 
+  /// Γράφει γραφείο και υπάλληλο μαζί, μέσα στην ίδια συναλλαγή.
+  ///
+  /// Το αρχικό κείμενο κάθε πεδίου καθαρίζεται μόνο όταν το πεδίο πάρει τιμή:
+  /// αν ο χρήστης ξέρει το γραφείο αλλά όχι τον κάτοχο, το «Γιατροί
+  /// Μαιευτικής» μένει γραμμένο στη στήλη του υπαλλήλου ως ένδειξη.
+  Future<void> _applyEquipmentPlacement(
+    Transaction txn, {
+    required int code,
+    required LampPlacementInput placement,
+    required ResolutionLogSink emit,
+  }) async {
+    await txn.update(
+      'equipment',
+      <String, Object?>{'office': placement.officeId, 'office_original_text': null},
+      where: 'code = ?',
+      whereArgs: <Object?>[code],
+    );
+    final officeDisplay = await _support.fkTargetDisplay(
+      txn,
+      'office',
+      placement.officeId,
+    );
+    emit(
+      ResolutionLogEntry.success(
+        'Ορίστηκε γραφείο $officeDisplay στον εξοπλισμό $code.',
+      ),
+    );
+
+    final ownerId = placement.ownerId;
+    if (ownerId == null) {
+      emit(
+        ResolutionLogEntry.info(
+          'Δεν δόθηκε υπάλληλος για τον εξοπλισμό $code· το πρόβλημα '
+          'παραμένει ανοιχτό και το αρχικό κείμενο διατηρείται.',
+        ),
+      );
+      return;
+    }
+    await _updateEquipmentOwner(
+      txn,
+      code: code,
+      ownerId: ownerId,
+      clearOriginalText: true,
+      emit: emit,
+    );
+  }
+
+  /// Δημιουργεί σύμβαση και επιστρέφει το αναγνωριστικό της.
+  ///
+  /// Ο προμηθευτής και η κατηγορία γράφονται **και ως αναγνωριστικό και ως
+  /// όνομα**: η Λάμπα δεν έχει χωριστούς πίνακες γι' αυτούς, κρατά και τα δύο
+  /// μέσα στη σύμβαση. Το όνομα διαβάζεται από τα υπάρχοντα ζεύγη, ώστε ο
+  /// ίδιος προμηθευτής να μη γραφτεί με δύο διαφορετικές ορθογραφίες.
+  Future<int> _createContract(
+    Transaction txn,
+    LampContractInput input, {
+    required ResolutionLogSink emit,
+  }) async {
+    Future<String?> nameFor(String column, int? id) async {
+      if (id == null) return null;
+      final rows = await txn.query(
+        'contracts',
+        columns: <String>['${column}_name'],
+        where: '$column = ? AND ${column}_name IS NOT NULL',
+        whereArgs: <Object?>[id],
+        limit: 1,
+      );
+      return rows.isEmpty ? null : _support.text(rows.first['${column}_name']);
+    }
+
+    final contractId = await _nextId(txn, 'contracts', 'contract');
+    final supplierName = await nameFor('supplier', input.supplierId);
+    final categoryName = await nameFor('category', input.categoryId);
+    await txn.insert('contracts', <String, Object?>{
+      'contract': contractId,
+      'contract_name': input.name.trim(),
+      'supplier': input.supplierId,
+      'supplier_name': supplierName,
+      'category': input.categoryId,
+      'category_name': categoryName,
+    });
+    emit(
+      ResolutionLogEntry.success(
+        'Δημιουργήθηκε σύμβαση: id=$contractId, όνομα=${input.name.trim()}, '
+        'προμηθευτής=${supplierName ?? '(κενό)'}, '
+        'κατηγορία=${categoryName ?? '(κενή)'}.',
+      ),
+    );
+    return contractId;
+  }
+
+  /// Κλείνει **όλα** τα ανοιχτά προβλήματα ενός (εξοπλισμού, στήλης).
+  ///
+  /// Ένα FK λύνεται μία φορά· κάθε άλλο ανοιχτό πρόβλημα για το ίδιο πεδίο
+  /// αφορά πλέον κάτι που δεν υπάρχει. Χωρίς αυτό έμεναν πίσω ορφανά —
+  /// είκοσι «unknown_id» σε εξοπλισμούς με σωστό κάτοχο — και για το γραφείο
+  /// ο οδηγός θα ξαναρωτούσε λίγα βήματα μετά, με την απάντηση εκεί να
+  /// αντικαθιστά αυτό που μόλις όρισε ο χρήστης.
+  Future<void> _closeIssuesForField(
+    Transaction txn,
+    int code,
+    String column, {
+    required ResolutionLogSink emit,
+  }) async {
+    final rows = await txn.query(
+      'data_issues',
+      columns: <String>['id'],
+      where:
+          "row_number = ? AND lower(column_name) = ? AND status = 'open'",
+      whereArgs: <Object?>[code, column.toLowerCase()],
+    );
+    final ids = <int>[
+      for (final row in rows)
+        if (_support.toInt(row['id']) != null) _support.toInt(row['id'])!,
+    ];
+    if (ids.isEmpty) return;
+    await _deleteIssues(txn, ids, emit: emit);
+    emit(
+      ResolutionLogEntry.info(
+        'Έκλεισαν ${ids.length} ανοιχτά προβλήματα «$column» του εξοπλισμού '
+        '$code, γιατί το πεδίο ορίστηκε ρητά.',
+      ),
+    );
+  }
+
+  /// Σημειώνει εκκρεμότητες ως αποδεκτές, με αιτιολογία.
+  ///
+  /// Χρησιμοποιείται όταν η κατάσταση που εντόπισε ο έλεγχος είναι **σωστή**
+  /// και θα ξαναεντοπιστεί: η διαγραφή δεν αφήνει ίχνος, οπότε το πρόβλημα
+  /// θα επέστρεφε στην επόμενη σάρωση.
+  Future<void> _markIssuesAccepted(
+    Transaction txn,
+    List<int> ids, {
+    required String note,
+    required ResolutionLogSink emit,
+  }) async {
+    if (ids.isEmpty) return;
+    // Η στήλη λείπει από τις παλιές βάσεις· προστίθεται όπως και στην
+    // αποδοχή προβλημάτων δικτύου.
+    final columns = await txn.rawQuery('PRAGMA table_info(data_issues)');
+    final hasNote = columns.any(
+      (row) => row['name']?.toString() == 'resolution_note',
+    );
+    if (!hasNote) {
+      await txn.execute(
+        'ALTER TABLE data_issues ADD COLUMN resolution_note TEXT',
+      );
+    }
+
+    final placeholders = List<String>.filled(ids.length, '?').join(',');
+    await txn.update(
+      'data_issues',
+      <String, Object?>{
+        'status': kDataIssueStatusAccepted,
+        'resolution_note': note,
+      },
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
+    emit(
+      ResolutionLogEntry.success(
+        'Σημειώθηκαν ${ids.length} εγγραφές ως αποδεκτές· δεν άλλαξε κανένα '
+        'δεδομένο και ο επόμενος έλεγχος δεν θα τις ξαναφέρει.',
+      ),
+    );
+  }
+
   Future<void> _deleteIssues(
     Transaction txn,
     List<int> ids, {
@@ -968,7 +1317,10 @@ class LampIssueDecisionApplier {
     Transaction txn, {
     required int code,
     required int ownerId,
-    bool clearOriginalText = false,
+    // Ρητό και υποχρεωτικό: η σιωπηλή προεπιλογή `false` έκανε τη δημιουργία
+    // υπαλλήλου να αφήνει το ωμό κείμενο πίσω της, και ο επόμενος έλεγχος
+    // ακεραιότητας το ξαναδιάβαζε ως πρόβλημα.
+    required bool clearOriginalText,
     required ResolutionLogSink emit,
   }) async {
     final values = <String, Object?>{
@@ -1037,7 +1389,11 @@ class LampIssueDecisionApplier {
 }
 
 class _AppliedDecision {
-  const _AppliedDecision({required this.created});
+  const _AppliedDecision({required this.created, this.unresolved = false});
 
   final bool created;
+
+  /// Η ενέργεια εφαρμόστηκε εν μέρει και το πρόβλημα μένει ανοιχτό — ορισμός
+  /// γραφείου χωρίς υπάλληλο.
+  final bool unresolved;
 }

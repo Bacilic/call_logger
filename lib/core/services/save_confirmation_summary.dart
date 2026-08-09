@@ -134,6 +134,7 @@ Map<String, dynamic> mapForTaskSaveConfirmationDiff(
     for (final entry in source.entries)
       if (entry.key != 'created_at' &&
           entry.key != 'updated_at' &&
+          entry.key != 'completed_at' &&
           entry.key != 'snooze_history_json')
         entry.key: entry.value,
   };

@@ -24,9 +24,12 @@ import '../services/lamp_migration_service.dart';
 import '../widgets/lamp_db_tables_tab.dart';
 import '../widgets/lamp_issue_widgets.dart';
 import '../widgets/lamp_result_card.dart';
+import '../../../core/database/old_database/lamp_unlinked_entities.dart';
+import '../widgets/lamp_search_filters_button.dart';
 import '../widgets/lamp_search_key_autocomplete.dart';
 import '../widgets/lamp_settings_dialog.dart';
 import '../widgets/lamp_transfer_wizard_dialog.dart';
+import '../widgets/lamp_unlinked_entities_section.dart';
 
 class LampScreen extends ConsumerStatefulWidget {
   const LampScreen({super.key});
@@ -353,6 +356,29 @@ class _LampScreenState extends ConsumerState<LampScreen>
     };
   }
 
+  /// Μεταφορά ασύνδετης οντότητας — ίδιος οδηγός με τις κάρτες εξοπλισμού.
+  ///
+  /// Οι ασύνδετες δεν έχουν κάρτα εξοπλισμού από την οποία να ξεκινήσουν, γι'
+  /// αυτό κουβαλούν δική τους [LampUnlinkedEntity.transferRow] με τα ονόματα
+  /// στηλών που περιμένει ο οδηγός.
+  Future<void> _openUnlinkedTransferWizard(LampUnlinkedEntity entity) async {
+    final sourceRow = entity.transferRow;
+    final target = switch (entity.kind) {
+      LampUnlinkedEntityKind.owner => LampTransferTarget.owner,
+      LampUnlinkedEntityKind.office => LampTransferTarget.department,
+      LampUnlinkedEntityKind.model ||
+      LampUnlinkedEntityKind.contract => null,
+    };
+    if (sourceRow == null || target == null) {
+      showSnack(
+        'Τα ${entity.kind.pluralLabel} δεν υπάρχουν ως ξεχωριστές εγγραφές '
+        'στην κανονική βάση — δεν μεταφέρονται.',
+      );
+      return;
+    }
+    await _runTransferWizard(target: target, sourceRow: sourceRow);
+  }
+
   Future<void> _openTransferWizard({
     required InfoSectionType sectionType,
     required Map<String, Object?> sourceRow,
@@ -362,6 +388,13 @@ class _LampScreenState extends ConsumerState<LampScreen>
       showSnack('Η μεταφορά υποστηρίζεται μόνο για εξοπλισμό/κάτοχο/τμήμα.');
       return;
     }
+    await _runTransferWizard(target: target, sourceRow: sourceRow);
+  }
+
+  Future<void> _runTransferWizard({
+    required LampTransferTarget target,
+    required Map<String, Object?> sourceRow,
+  }) async {
     final message = await showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -557,13 +590,26 @@ class _LampScreenState extends ConsumerState<LampScreen>
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: blockWidth,
-                    child: LampSearchKeyAutocomplete(
-                      search: _search,
-                      width: blockWidth,
-                      onSubmitted: _search.globalSearch,
-                    ),
+                  Wrap(
+                    spacing: LampSearchController.searchFieldSpacing,
+                    runSpacing: LampSearchController.searchFieldSpacing,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: blockWidth,
+                        child: LampSearchKeyAutocomplete(
+                          search: _search,
+                          width: blockWidth,
+                          onSubmitted: _search.globalSearch,
+                        ),
+                      ),
+                      LampSearchFiltersButton(
+                        selection: _search.filterSelection,
+                        loadCounts: _search.unlinkedMenuCounts,
+                        onChanged: (selection) =>
+                            _search.setFilterSelection(selection),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Wrap(
@@ -627,7 +673,7 @@ class _LampScreenState extends ConsumerState<LampScreen>
   }
 
   Widget _resultsList(BuildContext context) {
-    if (_search.results.isEmpty) {
+    if (!_search.hasAnyResult) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -638,14 +684,26 @@ class _LampScreenState extends ConsumerState<LampScreen>
         ),
       );
     }
+    // Οι κάρτες εξοπλισμού πρώτες· η ενότητα των ασύνδετων μπαίνει ως τελευταίο
+    // στοιχείο της ίδιας λίστας, ώστε να κυλά μαζί τους αντί να διεκδικεί δικό
+    // της ύψος στην οθόνη.
+    final equipmentCount = _search.results.length;
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _search.results.length,
-      itemBuilder: (context, index) => EquipmentResultCard(
-        viewModel: _search.resultViewModels[index],
-        onSaveSection: _saveEquipmentSection,
-        onTransferSection: _openTransferWizard,
-      ),
+      itemCount: equipmentCount + 1,
+      itemBuilder: (context, index) {
+        if (index == equipmentCount) {
+          return LampUnlinkedEntitiesSection(
+            entities: _search.unlinkedResults,
+            onTransfer: _openUnlinkedTransferWizard,
+          );
+        }
+        return EquipmentResultCard(
+          viewModel: _search.resultViewModels[index],
+          onSaveSection: _saveEquipmentSection,
+          onTransferSection: _openTransferWizard,
+        );
+      },
     );
   }
 }

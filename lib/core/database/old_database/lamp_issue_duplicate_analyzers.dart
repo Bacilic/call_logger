@@ -4,6 +4,7 @@ import 'lamp_data_issue_type_labels.dart';
 import 'lamp_issue_resolution_models.dart';
 import 'lamp_issue_resolution_support.dart';
 import 'lamp_scientific_serial.dart';
+import 'old_equipment_repository.dart';
 
 class LampIssueDuplicateAnalyzers {
   LampIssueDuplicateAnalyzers(this._support);
@@ -73,6 +74,11 @@ class LampIssueDuplicateAnalyzers {
       }
     }
 
+    // Σειριακοί που ο χρήστης έχει ήδη εγκρίνει ως νόμιμα επαναλαμβανόμενους
+    // — κλειδιά αδειών. Τα διπλότυπα παραμένουν επίτηδες, οπότε χωρίς αυτό ο
+    // οδηγός θα ρωτούσε ξανά σε κάθε πέρασμα.
+    final acceptedSerials = await _acceptedDuplicateSerials(db);
+
     final duplicateGroups = await db.rawQuery('''
       SELECT model, serial_no
       FROM equipment
@@ -86,6 +92,7 @@ class LampIssueDuplicateAnalyzers {
       final model = _support.toInt(group['model']);
       final serial = _support.text(group['serial_no']);
       if (model == null || serial == null) continue;
+      if (acceptedSerials.contains(serial)) continue;
       final rows = await db.query(
         'equipment',
         columns: LampIssueResolutionSupport.equipmentPreviewColumns,
@@ -108,10 +115,114 @@ class LampIssueDuplicateAnalyzers {
           inputLabel: 'Νέο serial_no',
           extraMetadata: <String, Object?>{'model': model, 'serialNo': serial},
           labels: labels,
+          leadingOptions: await _serialSeriesOptions(
+            db,
+            model: model,
+            serial: serial,
+            rows: rows,
+          ),
         ),
       );
     }
     return proposals;
+  }
+
+  /// Οι σειριακοί με σημειωμένη αποδοχή στην ουρά προβλημάτων.
+  Future<Set<String>> _acceptedDuplicateSerials(Database db) async {
+    final rows = await db.query(
+      'data_issues',
+      columns: <String>['raw_value'],
+      where: 'issue_type = ? AND status = ?',
+      whereArgs: <Object?>[
+        LampIssueType.duplicateModelSerial.issueType,
+        kDataIssueStatusAccepted,
+      ],
+    );
+    return <String>{for (final row in rows) ?_support.text(row['raw_value'])};
+  }
+
+  /// Η ενέργεια που λύνει ολόκληρη την ομάδα με ένα πάτημα — ή η αποδοχή,
+  /// όταν η τιμή είναι κλειδί άδειας και η αρίθμηση θα έκανε ζημιά.
+  Future<List<LampIssueResolutionOption>> _serialSeriesOptions(
+    Database db, {
+    required int model,
+    required String serial,
+    required List<Map<String, Object?>> rows,
+  }) async {
+    final modelRows = await db.query(
+      'model',
+      columns: <String>['model_name', 'category_name'],
+      where: 'model = ?',
+      whereArgs: <Object?>[model],
+      limit: 1,
+    );
+    final modelName = modelRows.isEmpty
+        ? null
+        : _support.text(modelRows.first['model_name']);
+    final categoryName = modelRows.isEmpty
+        ? null
+        : _support.text(modelRows.first['category_name']);
+
+    if (lampSerialLooksLikeLicenseKey(
+      serial: serial,
+      modelName: modelName,
+      categoryName: categoryName,
+    )) {
+      return <LampIssueResolutionOption>[
+        LampIssueResolutionOption(
+          id: 'duplicate_model_serial_accept',
+          label: 'Αποδοχή ως σωστό · το πρόβλημα κλείνει χωρίς αλλαγή',
+          description:
+              'Η τιμή μοιάζει με κλειδί άδειας λογισμικού. Είναι φυσιολογικό '
+              'να επαναλαμβάνεται σε πολλά μηχανήματα — η αρίθμηση θα '
+              'κατέστρεφε την πληροφορία ότι μοιράζονται την ίδια άδεια.',
+          action: LampIssueResolutionAction.autoFix,
+          metadata: const <String, Object?>{
+            'operation': 'accept_duplicate_serial',
+          },
+        ),
+      ];
+    }
+
+    // Όλοι οι σειριακοί του ίδιου μοντέλου: η μοναδικότητα ισχύει ανά μοντέλο
+    // και ένας κατειλημμένος αριθμός πρέπει να προσπεραστεί, όχι να πατηθεί.
+    final takenRows = await db.query(
+      'equipment',
+      columns: <String>['serial_no'],
+      where: "model = ? AND serial_no IS NOT NULL AND TRIM(serial_no) <> ''",
+      whereArgs: <Object?>[model],
+    );
+    final taken = <String>[
+      for (final row in takenRows) ?_support.text(row['serial_no']),
+    ];
+    final codes = <int>[for (final row in rows) ?_support.toInt(row['code'])];
+
+    // Όταν ο σειριακός δεν λέει τίποτα («-»), αφετηρία γίνεται το μοντέλο:
+    // η σύμβαση του νοσοκομείου για μηχανήματα χωρίς δικό τους σειριακό.
+    // Χωρίς αυτό η αρίθμηση παρήγαγε «--1».
+    final suggestedTemplate = lampSuggestedSeriesTemplate(
+      serial: serial,
+      modelName: modelName,
+      modelId: model,
+    );
+
+    return <LampIssueResolutionOption>[
+      LampIssueResolutionOption(
+        id: 'duplicate_model_serial_series',
+        label: 'Αρίθμησε τη σειρά · ${codes.length} εγγραφές',
+        action: LampIssueResolutionAction.autoFix,
+        requiresSerialSeriesInput: true,
+        metadata: <String, Object?>{
+          'operation': 'number_serial_series',
+          'model': model,
+          'serialNo': serial,
+          'codes': codes,
+          'takenSerials': taken,
+          'suggestedTemplate': suggestedTemplate,
+          'serialIsPlaceholder': lampSerialIsPlaceholder(serial),
+        },
+      ),
+    ];
   }
 
   Future<List<LampIssueResolutionProposal>> analyzeScientificSerials(
@@ -199,6 +310,10 @@ class LampIssueDuplicateAnalyzers {
     required String inputLabel,
     Map<String, Object?> extraMetadata = const <String, Object?>{},
     required LampFkLabelMaps labels,
+    /// Μπαίνουν **πρώτες**: η αρίθμηση σειράς λύνει όλη την ομάδα με ένα
+    /// πάτημα, ενώ οι υπόλοιπες ενέργειες αφορούν μία εγγραφή τη φορά.
+    List<LampIssueResolutionOption> leadingOptions =
+        const <LampIssueResolutionOption>[],
   }) {
     String codeWithDescription(Map<String, Object?> row) {
       final code = row['code'];
@@ -226,6 +341,7 @@ class LampIssueDuplicateAnalyzers {
         ...extraMetadata,
       },
       options: <LampIssueResolutionOption>[
+        ...leadingOptions,
         for (final row in rows)
           LampIssueResolutionOption(
             id: '${operationPrefix}_clear_keep_${row['code']}',

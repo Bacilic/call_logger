@@ -1,8 +1,11 @@
 import 'package:call_logger/core/database/old_database/lamp_issue_resolution_service.dart';
 import 'package:call_logger/core/database/old_database/lamp_scientific_serial.dart';
+import 'package:call_logger/features/lamp/controllers/lamp_manual_review_progress.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_issue_manual_review_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../../test_reporter.dart';
 
 const _newValueOption = LampIssueResolutionOption(
   id: 'test_reassign_5001',
@@ -313,7 +316,7 @@ void main() {
         );
         await tester.pump();
         await tester.tap(
-          find.widgetWithText(FilledButton, 'Εφαρμογή επιλεγμένων'),
+          find.widgetWithText(FilledButton, 'Εφαρμογή επιλογής'),
         );
         await tester.pumpAndSettle();
 
@@ -474,11 +477,13 @@ void main() {
               find.byType(RadioGroup<LampIssueResolutionOption?>),
             );
         expect(radioGroup.groupValue, isNull);
-        expect(find.text('Αποφασισμένες: 0/1'), findsOneWidget);
+        // Με μία μοναδική πρόταση ο μετρητής «1/1» δεν λέει τίποτα — δεν
+        // εμφανίζεται καθόλου· η κατάσταση φαίνεται από το ίδιο το κουμπί.
+        expect(find.textContaining('Αποφασισμένες:'), findsNothing);
         expect(
           tester
               .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Εφαρμογή επιλεγμένων'),
+                find.widgetWithText(FilledButton, 'Εφαρμογή επιλογής'),
               )
               .onPressed,
           isNull,
@@ -492,11 +497,11 @@ void main() {
           find.byType(RadioGroup<LampIssueResolutionOption?>),
         );
         expect(afterSkip.groupValue, same(kLampManualSkipOption));
-        expect(find.text('Αποφασισμένες: 1/1'), findsOneWidget);
+        expect(find.textContaining('Αποφασισμένες:'), findsNothing);
         expect(
           tester
               .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Εφαρμογή επιλεγμένων'),
+                find.widgetWithText(FilledButton, 'Εφαρμογή επιλογής'),
               )
               .onPressed,
           isNotNull,
@@ -504,7 +509,7 @@ void main() {
 
         // Εφαρμογή μόνο με παράλειψη → χωρίς αποφάσεις που αλλάζουν τη βάση.
         await tester.tap(
-          find.widgetWithText(FilledButton, 'Εφαρμογή επιλεγμένων'),
+          find.widgetWithText(FilledButton, 'Εφαρμογή επιλογής'),
         );
         await tester.pumpAndSettle();
 
@@ -521,5 +526,260 @@ void main() {
         await tearDownDialog(tester);
       },
     );
+  });
+
+  group('σήμα ασύνδετου υποψηφίου', () {
+    const linked = LampIssueResolutionOption(
+      id: 'owner_191',
+      label: '191 · Παπαβασιλείου Τζένη · γραφείο=Αλλαγή ΜΤΝ',
+      action: LampIssueResolutionAction.autoFix,
+    );
+    const unlinked = LampIssueResolutionOption(
+      id: 'owner_340',
+      label: '340 · Παπαβασιλείου Ελένη · γραφείο=Διευθυντής Παιδιατρικής',
+      action: LampIssueResolutionAction.autoFix,
+      metadata: <String, Object?>{kLampOptionUnlinkedFlag: true},
+    );
+    const proposal = LampIssueResolutionProposal(
+      issueType: LampIssueType.nonNumericFk,
+      issueIds: <int>[1],
+      sheet: 'integrity_scan',
+      row: 5010,
+      column: 'owner',
+      originalValue: 'Παπαβασιλείου',
+      proposedAction: LampIssueResolutionAction.manualReview,
+      confidence: 52,
+      notes: 'Μονολεκτικός υπάλληλος ως επώνυμο.',
+      options: <LampIssueResolutionOption>[linked, unlinked],
+    );
+
+    testWidgets('μόνο ο ασύνδετος παίρνει σπασμένο σύνδεσμο', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showLampIssueManualReviewDialog(
+                  context: context,
+                  issueType: LampIssueType.nonNumericFk,
+                  proposals: const <LampIssueResolutionProposal>[proposal],
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byIcon(Icons.link_off),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Ένα σήμα για τον έναν ασύνδετο — ο συνδεδεμένος δεν το παίρνει',
+        ),
+      );
+      // Και οι δύο ετικέτες δείχνουν γραφείο: χωρίς αυτό οι δύο
+      // «Παπαβασιλείου» δεν ξεχωρίζουν.
+      expect(find.textContaining('γραφείο=Αλλαγή ΜΤΝ'), findsOneWidget);
+      expect(
+        find.textContaining('γραφείο=Διευθυντής Παιδιατρικής'),
+        findsOneWidget,
+      );
+
+      await tearDownDialog(tester);
+    });
+  });
+
+  group('μετρητής βημάτων', () {
+    Future<void> openWithProgress(
+      WidgetTester tester, {
+      LampManualReviewProgress? progress,
+      List<LampIssueResolutionProposal> proposals = const <
+        LampIssueResolutionProposal
+      >[_testProposal],
+    }) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showLampIssueManualReviewDialog(
+                  context: context,
+                  issueType: LampIssueType.nonNumericFk,
+                  proposals: proposals,
+                  progress: progress,
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('δείχνει θέση, εναπομείναντα, προτάσεις και μπάρα', (
+      tester,
+    ) async {
+      await openWithProgress(
+        tester,
+        progress: const LampManualReviewProgress(
+          stepNumber: 3,
+          totalSteps: 47,
+          proposalsDone: 12,
+          totalProposals: 121,
+        ),
+      );
+
+      expect(find.text('Βήμα 3 από 47'), findsOneWidget);
+      expect(find.text('απομένουν 44'), findsOneWidget);
+      expect(find.text('12 από 121 προτάσεις'), findsOneWidget);
+
+      final bar = tester.widget<LinearProgressIndicator>(
+        find.byKey(const Key('lamp_manual_progress_bar')),
+      );
+      expect(bar.value, closeTo(12 / 121, 0.0001));
+
+      await tearDownDialog(tester);
+    });
+
+    testWidgets('χωρίς πρόοδο ο διάλογος δεν δείχνει μετρητή', (tester) async {
+      await openWithProgress(tester);
+
+      expect(find.byKey(const Key('lamp_manual_step_label')), findsNothing);
+      expect(find.byKey(const Key('lamp_manual_progress_bar')), findsNothing);
+
+      await tearDownDialog(tester);
+    });
+  });
+
+  group('κουμπί παράλειψης', () {
+    Future<void> open(
+      WidgetTester tester,
+      List<LampIssueResolutionProposal> proposals, {
+      bool grouped = false,
+    }) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showLampIssueManualReviewDialog(
+                  context: context,
+                  issueType: LampIssueType.nonNumericFk,
+                  proposals: proposals,
+                  groupedIdenticalValues: grouped,
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('μία πρόταση: σκέτο «Παράλειψη»', (tester) async {
+      await open(tester, const <LampIssueResolutionProposal>[_testProposal]);
+
+      expect(find.text('Παράλειψη'), findsOneWidget);
+      expect(
+        find.text('Παράλειψη όλων'),
+        findsNothing,
+        reason: greekExpectMsg(
+          'Το «όλων» υπονοούσε ακύρωση της σειράς, ενώ παραλείπεται μόνο το '
+          'τρέχον βήμα — με μία πρόταση ήταν και γραμματικά λάθος',
+        ),
+      );
+
+      await tearDownDialog(tester);
+    });
+
+    testWidgets('ομάδα όμοιων: «Παράλειψη και των 3»', (tester) async {
+      await open(
+        tester,
+        const <LampIssueResolutionProposal>[
+          _testProposal,
+          _testProposal,
+          _testProposal,
+        ],
+        grouped: true,
+      );
+
+      expect(find.text('Παράλειψη και των 3'), findsOneWidget);
+
+      await tearDownDialog(tester);
+    });
+  });
+
+  group('ενικός/πληθυντικός ανάλογα με το πλήθος προτάσεων', () {
+    Future<void> openWith(
+      WidgetTester tester,
+      List<LampIssueResolutionProposal> proposals,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showLampIssueManualReviewDialog(
+                  context: context,
+                  issueType: LampIssueType.nonNumericFk,
+                  proposals: proposals,
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('μία πρόταση: ενικό κουμπί, κανένας μετρητής', (tester) async {
+      await openWith(tester, const <LampIssueResolutionProposal>[
+        _testProposal,
+      ]);
+
+      expect(find.text('Εφαρμογή επιλογής'), findsOneWidget);
+      expect(find.text('Εφαρμογή επιλεγμένων'), findsNothing);
+      expect(find.textContaining('Αποφασισμένες:'), findsNothing);
+
+      await tearDownDialog(tester);
+    });
+
+    testWidgets('πολλές προτάσεις: πληθυντικό κουμπί και μετρητής προόδου', (
+      tester,
+    ) async {
+      await openWith(tester, const <LampIssueResolutionProposal>[
+        _testProposal,
+        _testProposal,
+      ]);
+
+      expect(
+        find.text('Εφαρμογή επιλεγμένων'),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Με πολλές αποφάσεις ο πληθυντικός είναι σωστός — δεν τον χάνουμε '
+          'διορθώνοντας τη μία περίπτωση',
+        ),
+      );
+      expect(find.text('Αποφασισμένες: 0/2'), findsOneWidget);
+
+      await tearDownDialog(tester);
+    });
   });
 }

@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Διάλογος συνδεδεμένης εκκρεμότητας — προσχέδιο (Τώρα ↔ Προτεινόμενο)</title>
+  <style>
+    :root {
+      --bg: #e8eaed;
+      --border: #d1d5db;
+      --muted: #6b7280;
+      --title: #111827;
+      --accent: #2563eb;
+      --bad: #dc2626;
+      --good: #059669;
+      --m3-primary: #6750a4;
+      --m3-primary-container: #e8def8;
+      --m3-on-primary-container: #21005d;
+      --m3-surface: #fdf7ff;
+      --m3-surface-2: #f3edf7;
+      --m3-outline: #cac4d0;
+      --m3-outline-strong: #938f99;
+      --m3-muted: #49454f;
+      --m3-secondary-container: #e8def8;
+      --m3-tertiary: #7d5260;
+      --card-open: #eef4ff;
+      --card-snoozed: #fff7e6;
+      --card-closed: #ead9d9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--title);
+    }
+    .page { max-width: 1500px; margin: 0 auto; padding: 20px 24px 48px; }
+    h1 { font-size: 1.35rem; margin: 0 0 6px; }
+    .intro {
+      color: var(--muted);
+      margin: 0 0 16px;
+      max-width: 980px;
+      line-height: 1.5;
+    }
+    .source-map {
+      margin: 0 0 16px;
+      padding: 12px 14px;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 10px;
+      line-height: 1.55;
+      font-size: .9rem;
+      max-width: 980px;
+    }
+    .source-map h2 { margin: 0 0 8px; font-size: .95rem; }
+    .source-map code {
+      font-size: .8rem;
+      background: #fef3c7;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .source-map ul { margin: 6px 0 0; padding-left: 1.2rem; }
+    .source-map li { margin: 3px 0; }
+
+    .tabs { display: flex; gap: 8px; margin: 0 0 16px; flex-wrap: wrap; }
+    .tab {
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-family: inherit;
+      font-size: .9rem;
+    }
+    .tab.active { background: var(--m3-primary); color: #fff; border-color: var(--m3-primary); }
+    .scenario { display: none; }
+    .scenario.active { display: block; }
+
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+    @media (max-width: 1200px) { .pair { grid-template-columns: 1fr; } }
+    .frame-wrap {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .frame-label {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700; font-size: .95rem;
+    }
+    .badge {
+      font-size: .75rem; font-weight: 700; padding: 3px 8px;
+      border-radius: 999px; color: #fff; white-space: nowrap;
+    }
+    .badge.bad { background: var(--bad); }
+    .badge.good { background: var(--good); }
+    .stage { background: #dcd7e2; padding: 20px 16px; display: flex; justify-content: center; }
+
+    /* ---------- Διάλογοι ---------- */
+    .dlg {
+      width: 100%;
+      max-width: 560px;
+      background: var(--m3-surface);
+      border-radius: 22px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      overflow: hidden;
+    }
+    .dlg .ttl {
+      font-size: 1.1rem; font-weight: 500;
+      padding: 18px 22px 6px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dlg .body { padding: 8px 22px 4px; font-size: .88rem; line-height: 1.5; }
+    .dlg .acts {
+      display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap;
+      padding: 12px 16px 16px;
+    }
+    .btn-text {
+      background: transparent; border: none; color: var(--m3-primary);
+      font-size: .88rem; font-weight: 600; font-family: inherit;
+      padding: 8px 14px; border-radius: 999px; cursor: pointer;
+    }
+    .btn-text:hover { background: var(--m3-surface-2); }
+    .btn-filled {
+      background: var(--m3-primary); color: #fff; border: none;
+      font-size: .88rem; font-weight: 600; font-family: inherit;
+      padding: 9px 18px; border-radius: 999px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-tonal {
+      background: var(--m3-primary-container); color: var(--m3-on-primary-container);
+      border: none; font-size: .88rem; font-weight: 600; font-family: inherit;
+      padding: 9px 16px; border-radius: 999px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-outline {
+      background: transparent; color: var(--m3-primary);
+      border: 1px solid var(--m3-outline);
+      font-size: .88rem; font-weight: 600; font-family: inherit;
+      padding: 8px 14px; border-radius: 999px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .select {
+      width: 100%; padding: 10px 12px; margin-top: 8px;
+      border: 1px solid var(--m3-outline-strong); border-radius: 6px;
+      font-family: inherit; font-size: .9rem; background: #fff;
+    }
+
+    /* ---------- Η κάρτα εκκρεμότητας μέσα στον διάλογο ---------- */
+    .taskcard {
+      border-radius: 14px;
+      padding: 14px 16px;
+      border: 1px solid rgba(0,0,0,.08);
+      box-shadow: 0 1px 2px rgba(0,0,0,.05);
+    }
+    .taskcard.open { background: var(--card-open); }
+    .taskcard.snoozed { background: var(--card-snoozed); }
+    .taskcard.closed { background: var(--card-closed); }
+    .tc-head { display: flex; align-items: flex-start; gap: 10px; }
+    .tc-title { flex: 1; font-size: 1rem; font-weight: 700; line-height: 1.35; }
+    .chip {
+      font-size: .72rem; padding: 3px 10px; border-radius: 999px;
+      background: #fff; border: 1px solid rgba(0,0,0,.15); white-space: nowrap;
+    }
+    .chip.prio { background: #fde8e8; border-color: #f5b5b5; color: #922; }
+    .tc-desc { margin: 10px 0 0; font-size: .86rem; line-height: 1.5; }
+    .tc-desc a { color: var(--m3-primary); }
+    .tc-meta {
+      display: flex; flex-wrap: wrap; gap: 6px 16px;
+      margin-top: 12px; font-size: .8rem; color: var(--m3-muted);
+    }
+    .tc-meta span { display: inline-flex; align-items: center; gap: 5px; }
+    .tc-dates {
+      display: flex; flex-wrap: wrap; gap: 6px 20px;
+      margin-top: 12px; padding-top: 10px;
+      border-top: 1px solid rgba(0,0,0,.08);
+      font-size: .8rem; color: var(--m3-muted);
+    }
+    .tc-solution {
+      margin-top: 12px; padding-top: 10px;
+      border-top: 1px solid rgba(0,0,0,.08);
+    }
+    .tc-solution .lbl {
+      font-size: .74rem; font-weight: 700; color: var(--m3-muted);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .tc-solution .val { margin-top: 4px; font-size: .86rem; line-height: 1.5; }
+
+    .flow {
+      background: #fef2f2; border: 1px dashed #fca5a5; color: #b91c1c;
+      border-radius: 8px; font-size: .8rem; padding: 8px 10px; margin: 10px 0;
+      line-height: 1.45;
+    }
+    .flow.ok { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+    .stepno {
+      display: inline-block; width: 20px; height: 20px; line-height: 20px;
+      text-align: center; border-radius: 50%; background: #b91c1c; color: #fff;
+      font-size: .72rem; font-weight: 700; margin-right: 6px;
+    }
+    .flow.ok .stepno { background: #059669; }
+
+    .footer-note {
+      margin-top: 18px; padding: 14px 16px; background: #fff;
+      border: 1px solid var(--border); border-radius: 10px;
+      line-height: 1.55; font-size: .92rem; max-width: 1040px;
+    }
+    .footer-note strong { color: var(--accent); }
+    .footer-note ul { margin: 8px 0 0; padding-left: 1.2rem; }
+    .footer-note li { margin: 6px 0; }
+    .q { background: #fffbeb; border: 1px solid #fcd34d; }
+  </style>
+</head>
+<body>
+  <!--
+    ΑΝΤΙΣΤΟΙΧΙΑ FLUTTER (πηγή αλήθειας για υλοποίηση)
+    -------------------------------------------------
+    Σημείο εκκίνησης — κάρτα συνδεδεμένων εκκρεμοτήτων στην επεξεργασία κλήσης:
+      lib/features/history/widgets/linked_tasks_card.dart
+    Σημερινή (λάθος) διαδρομή του κουμπιού «Άνοιγμα»:
+      lib/features/tasks/screens/tasks_screen_actions.dart  → editTask()
+      → _pickClosedEditMode() → showTaskFormDialog()
+    Η κάρτα-πρότυπο (εμφάνιση & ενέργειες):
+      lib/features/tasks/screens/task_card.dart
+    Ενέργειες που θα καλεί ο νέος διάλογος:
+      ολοκλήρωση / αναβολή / επεξεργασία / διαγραφή → tasks_screen_actions.dart
+  -->
+  <div class="page">
+    <h1>Διάλογος συνδεδεμένης εκκρεμότητας — προσχέδιο</h1>
+
+    <div class="source-map">
+      <h2>Αναπαριστά widgets Flutter</h2>
+      <ul>
+        <li><strong>Αφετηρία:</strong> <code>lib/features/history/widgets/linked_tasks_card.dart</code> (κουμπί «Άνοιγμα»)</li>
+        <li><strong>Σημερινή διαδρομή:</strong> <code>tasks_screen_actions.dart → editTask()</code> → ερώτηση κλειστής → <code>task_form_dialog.dart</code></li>
+        <li><strong>Κάρτα-πρότυπο:</strong> <code>lib/features/tasks/screens/task_card.dart</code></li>
+        <li><strong>Νέο αρχείο (προς δημιουργία):</strong> <code>lib/features/history/widgets/linked_task_details_dialog.dart</code></li>
+      </ul>
+    </div>
+
+    <p class="intro">
+      Ζήτησες «άνοιγμα» και η εφαρμογή απαντά με <strong>ερώτηση αλλαγής</strong>: «θέλετε να την επαναφέρετε ως…».
+      Για να <em>δεις</em> τι είναι η εκκρεμότητα, πρέπει πρώτα να δηλώσεις τι θέλεις να της <em>κάνεις</em> — και μετά
+      καταλήγεις σε φόρμα συμπλήρωσης, όχι σε πληροφορία.
+      Η πρόταση: ένας διάλογος που <strong>δείχνει την κάρτα όπως τη γνωρίζεις</strong> και βάζει τις ενέργειες από κάτω,
+      ώστε να διαλέγεις — ή να μη διαλέγεις τίποτα και απλώς να κλείνεις.
+      Δες και τις τρεις καταστάσεις: <strong>οι ενέργειες αλλάζουν, η κάρτα όχι.</strong>
+    </p>
+
+    <div class="tabs">
+      <button class="tab active" data-scenario="s-closed">Ολοκληρωμένη (το σενάριό σου)</button>
+      <button class="tab" data-scenario="s-open">Ανοιχτή</button>
+      <button class="tab" data-scenario="s-snoozed">Σε αναβολή</button>
+    </div>
+
+    <!-- ================= ΟΛΟΚΛΗΡΩΜΕΝΗ ================= -->
+    <div class="scenario active" id="s-closed">
+      <div class="pair">
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Τώρα — δύο βήματα πριν δεις οτιδήποτε</span>
+            <span class="badge bad">ερώτηση αντί για πληροφορία</span>
+          </div>
+          <div class="stage">
+            <div style="width:100%; max-width:520px;">
+              <div class="flow">
+                <span class="stepno">1</span>Πατάς «Άνοιγμα» στην κάρτα της κλήσης.
+              </div>
+              <div class="dlg">
+                <div class="ttl">Επεξεργασία Εκκρεμότητας</div>
+                <div class="body">
+                  Η εκκρεμότητα έχει ολοκληρωθεί στις 28/07/2026 20:11 (1 ώρ. 48 λ.).<br />
+                  Λύση: δουλεύει;<br /><br />
+                  Θέλετε να την επαναφέρετε ως:
+                  <select class="select">
+                    <option>Αναίρεση ολοκλήρωσης</option>
+                  </select>
+                </div>
+                <div class="acts">
+                  <button class="btn-text">Ακύρωση</button>
+                  <button class="btn-filled">Συνέχεια</button>
+                </div>
+              </div>
+              <div class="flow">
+                <span class="stepno">2</span>Μόνο αφού απαντήσεις, ανοίγει η <strong>φόρμα επεξεργασίας</strong> — πεδία για συμπλήρωση,
+                όχι εικόνα της εκκρεμότητας. Και για να γυρίσεις πίσω: Ακύρωση → Ακύρωση.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Προτεινόμενο — η κάρτα, όπως τη γνωρίζεις</span>
+            <span class="badge good">ένα βήμα, μηδέν ερωτήσεις</span>
+          </div>
+          <div class="stage">
+            <div class="dlg">
+              <div class="ttl">✅ Συνδεδεμένη εκκρεμότητα</div>
+              <div class="body">
+                <div class="taskcard closed">
+                  <div class="tc-head">
+                    <div class="tc-title">για να τι δουλεύει: \\10.10.212.23\oki4410</div>
+                    <span class="chip">ολοκληρωμένη</span>
+                  </div>
+                  <div class="tc-desc">
+                    για να τι δουλεύει: <a href="#" onclick="return false">\\10.10.212.23\oki4410</a>
+                  </div>
+                  <div class="tc-meta">
+                    <span>👤 Νικολέτα Παπανδρεάδη</span>
+                    <span>📞 2895</span>
+                    <span>🏢 Χρηματικό</span>
+                    <span>🖥 446</span>
+                  </div>
+                  <div class="tc-dates">
+                    <span>Δημιουργήθηκε: 28/07/2026 18:23</span>
+                    <span>Ολοκληρώθηκε: 28/07/2026 20:11 <b>(1 ώρ. 48 λ.)</b></span>
+                  </div>
+                  <div class="tc-solution">
+                    <div class="lbl">Λύση</div>
+                    <div class="val">δουλεύει;</div>
+                  </div>
+                </div>
+              </div>
+              <div class="acts">
+                <button class="btn-outline">↩ Αναίρεση ολοκλήρωσης</button>
+                <button class="btn-tonal">✎ Επεξεργασία</button>
+                <button class="btn-text">Κλείσιμο</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flow ok" style="max-width:1040px; margin-top:14px;">
+        <strong>Η ουσία:</strong> η «Αναίρεση ολοκλήρωσης» δεν εξαφανίζεται — γίνεται <strong>επιλογή</strong> δίπλα στις άλλες,
+        αντί για <strong>διόδιο</strong> που πρέπει να περάσεις για να δεις. Η λύση και ο χρόνος ολοκλήρωσης φαίνονται
+        αμέσως, χωρίς να ανοίξεις τίποτα.
+      </div>
+    </div>
+
+    <!-- ================= ΑΝΟΙΧΤΗ ================= -->
+    <div class="scenario" id="s-open">
+      <div class="pair">
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Τώρα</span>
+            <span class="badge bad">κατευθείαν φόρμα</span>
+          </div>
+          <div class="stage">
+            <div style="width:100%; max-width:520px;">
+              <div class="flow">
+                Στην ανοιχτή εκκρεμότητα δεν μεσολαβεί ερώτηση — ανοίγει όμως <strong>φόρμα επεξεργασίας</strong>:
+                πεδία κειμένου, ημερομηνίες, προτεραιότητα. Για να δεις «ποιος και τι», διαβάζεις μέσα από πεδία
+                συμπλήρωσης· και κάθε έξοδος περνά από «Ακύρωση».
+              </div>
+              <div class="dlg">
+                <div class="ttl">Επεξεργασία Εκκρεμότητας</div>
+                <div class="body" style="padding-bottom:12px">
+                  <div style="border:1px solid var(--m3-outline-strong); border-radius:6px; padding:10px 12px; margin-bottom:10px;">
+                    <div style="font-size:.7rem; color:var(--m3-muted)">Τίτλος</div>
+                    Παραγγελία μελανιού για τον εκτυπωτή
+                  </div>
+                  <div style="border:1px solid var(--m3-outline-strong); border-radius:6px; padding:10px 12px; margin-bottom:10px; min-height:72px;">
+                    <div style="font-size:.7rem; color:var(--m3-muted)">Περιγραφή</div>
+                    Τελείωσε το μαύρο μελάνι, ζητήθηκε από το Γραφείο Προμηθειών.
+                  </div>
+                  <div style="border:1px solid var(--m3-outline-strong); border-radius:6px; padding:10px 12px;">
+                    <div style="font-size:.7rem; color:var(--m3-muted)">Ημερομηνία λήξης</div>
+                    30/07/2026 12:00
+                  </div>
+                </div>
+                <div class="acts">
+                  <button class="btn-text">Ακύρωση</button>
+                  <button class="btn-filled">Αποθήκευση</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Προτεινόμενο</span>
+            <span class="badge good">ίδια κάρτα, άλλες ενέργειες</span>
+          </div>
+          <div class="stage">
+            <div class="dlg">
+              <div class="ttl">🕐 Συνδεδεμένη εκκρεμότητα</div>
+              <div class="body">
+                <div class="taskcard open">
+                  <div class="tc-head">
+                    <div class="tc-title">Παραγγελία μελανιού για τον εκτυπωτή</div>
+                    <span class="chip prio">Υψηλή</span>
+                    <span class="chip">ανοιχτή</span>
+                  </div>
+                  <div class="tc-desc">
+                    Τελείωσε το μαύρο μελάνι, ζητήθηκε από το Γραφείο Προμηθειών.
+                  </div>
+                  <div class="tc-meta">
+                    <span>👤 Νικολέτα Παπανδρεάδη</span>
+                    <span>📞 2895</span>
+                    <span>🏢 Χρηματικό</span>
+                    <span>🖥 446</span>
+                  </div>
+                  <div class="tc-dates">
+                    <span>Δημιουργήθηκε: 28/07/2026 18:23</span>
+                    <span>Λήγει: 30/07/2026 12:00 <b>(σε 2 ημέρες)</b></span>
+                  </div>
+                </div>
+              </div>
+              <div class="acts">
+                <button class="btn-tonal">✓ Ολοκλήρωση</button>
+                <button class="btn-outline">⏰ Αναβολή</button>
+                <button class="btn-outline">✎ Επεξεργασία</button>
+                <button class="btn-text">Κλείσιμο</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flow ok" style="max-width:1040px; margin-top:14px;">
+        <strong>Το κέρδος εδώ:</strong> μπορείς να <strong>ολοκληρώσεις ή να αναβάλεις επιτόπου</strong>, χωρίς να ανοίξεις
+        φόρμα και χωρίς να φύγεις από το ιστορικό. Η «Επεξεργασία» μένει για όταν θες όντως να αλλάξεις κείμενο.
+      </div>
+    </div>
+
+    <!-- ================= ΣΕ ΑΝΑΒΟΛΗ ================= -->
+    <div class="scenario" id="s-snoozed">
+      <div class="pair">
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Τώρα</span>
+            <span class="badge bad">η αναβολή δεν φαίνεται</span>
+          </div>
+          <div class="stage">
+            <div style="width:100%; max-width:520px;">
+              <div class="flow">
+                Η φόρμα δείχνει την ημερομηνία λήξης, αλλά <strong>όχι μέχρι πότε αναβλήθηκε</strong> ούτε
+                <strong>πόσες φορές</strong> — η πληροφορία υπάρχει στην κάρτα του πίνακα Εκκρεμοτήτων, όχι εδώ.
+              </div>
+              <div class="dlg">
+                <div class="ttl">Επεξεργασία Εκκρεμότητας</div>
+                <div class="body" style="padding-bottom:12px">
+                  <div style="border:1px solid var(--m3-outline-strong); border-radius:6px; padding:10px 12px; margin-bottom:10px;">
+                    <div style="font-size:.7rem; color:var(--m3-muted)">Τίτλος</div>
+                    Έλεγχος καλωδίωσης δικτύου
+                  </div>
+                  <div style="border:1px solid var(--m3-outline-strong); border-radius:6px; padding:10px 12px;">
+                    <div style="font-size:.7rem; color:var(--m3-muted)">Ημερομηνία λήξης</div>
+                    29/07/2026 09:00
+                  </div>
+                </div>
+                <div class="acts">
+                  <button class="btn-text">Ακύρωση</button>
+                  <button class="btn-filled">Αποθήκευση</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="frame-wrap">
+          <div class="frame-label">
+            <span>Προτεινόμενο</span>
+            <span class="badge good">φαίνεται το «μέχρι πότε»</span>
+          </div>
+          <div class="stage">
+            <div class="dlg">
+              <div class="ttl">⏰ Συνδεδεμένη εκκρεμότητα</div>
+              <div class="body">
+                <div class="taskcard snoozed">
+                  <div class="tc-head">
+                    <div class="tc-title">Έλεγχος καλωδίωσης δικτύου</div>
+                    <span class="chip">σε αναβολή</span>
+                  </div>
+                  <div class="tc-desc">
+                    Να ελεγχθεί η πρίζα δικτύου στο γραφείο 2 — πέφτει η σύνδεση.
+                  </div>
+                  <div class="tc-meta">
+                    <span>👤 Νικολέτα Παπανδρεάδη</span>
+                    <span>📞 2895</span>
+                    <span>🏢 Χρηματικό</span>
+                  </div>
+                  <div class="tc-dates">
+                    <span>Δημιουργήθηκε: 26/07/2026 09:10</span>
+                    <span>Αναβλήθηκε ως: 29/07/2026 09:00 <b>(2η φορά)</b></span>
+                  </div>
+                </div>
+              </div>
+              <div class="acts">
+                <button class="btn-tonal">✓ Ολοκλήρωση</button>
+                <button class="btn-outline">⏰ Αλλαγή αναβολής</button>
+                <button class="btn-outline">✎ Επεξεργασία</button>
+                <button class="btn-text">Κλείσιμο</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      <strong>Κανόνες της πρότασης</strong>
+      <ul>
+        <li><strong>Η κάρτα είναι η ίδια, οι ενέργειες αλλάζουν.</strong> Ό,τι βλέπεις στον πίνακα Εκκρεμοτήτων το βλέπεις κι εδώ — τίτλος, περιγραφή, καλών/τηλέφωνο/τμήμα/εξοπλισμός, ημερομηνίες, λύση. Καμία νέα «γλώσσα» να μάθεις.</li>
+        <li><strong>Καμία ερώτηση πριν την πληροφορία.</strong> Η «Αναίρεση ολοκλήρωσης» γίνεται κουμπί δίπλα στα άλλα, όχι διόδιο.</li>
+        <li><strong>Η λύση φαίνεται ανοιχτή.</strong> Στον πίνακα είναι πτυσσόμενη («Λύση ▾») γιατί οι κάρτες είναι πολλές· εδώ η εκκρεμότητα είναι μία, οπότε δεν υπάρχει λόγος να κρύβεται.</li>
+        <li><strong>Δεν φεύγεις από το ιστορικό.</strong> Ο διάλογος ανοίγει πάνω από την επεξεργασία κλήσης· το «Κλείσιμο» σε αφήνει ακριβώς εκεί που ήσουν.</li>
+        <li><strong>Η «Επεξεργασία» παραμένει</strong> — οδηγεί στην υπάρχουσα φόρμα, για όταν θες όντως να αλλάξεις κείμενο ή ημερομηνία.</li>
+      </ul>
+    </div>
+
+    <div class="footer-note q">
+      <strong>Τρία σημεία που θέλω την απόφασή σου</strong>
+      <ul>
+        <li><strong>Διαγραφή:</strong> να υπάρχει κουμπί διαγραφής εκκρεμότητας εδώ; Το απέφυγα — καταστροφική ενέργεια σε διάλογο που άνοιξες «για να δεις», με τη λίστα κλήσεων από πίσω. Αν τη θες, προτείνω να μπει διακριτικά (μενού ⋮) και όχι ως κουμπί.</li>
+        <li><strong>Πολλές εκκρεμότητες:</strong> όταν η κλήση έχει 2–3, σήμερα η κάρτα έχει ένα «Άνοιγμα» ανά γραμμή, οπότε ο διάλογος δείχνει μία. Εναλλακτικά θα μπορούσε να τις δείχνει όλες στη σειρά με ενέργειες ανά κάρτα — πες μου αν συμβαίνει αρκετά συχνά ώστε να αξίζει.</li>
+        <li><strong>Μετά την ενέργεια:</strong> όταν πατήσεις «Ολοκλήρωση», να κλείνει ο διάλογος ή να μένει ανοιχτός δείχνοντας τη νέα κατάσταση («ολοκληρωμένη», με τη λύση); Προτείνω <em>να μένει</em>, ώστε να βλέπεις ότι έγινε — και κλείνεις εσύ.</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.scenario').forEach((s) => s.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.scenario).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

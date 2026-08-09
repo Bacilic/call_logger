@@ -25,6 +25,7 @@ class UpdateCheckResult {
     this.manifest,
     this.currentVersion,
     this.currentBuild,
+    this.checkedAt,
   });
 
   const UpdateCheckResult.none()
@@ -32,11 +33,17 @@ class UpdateCheckResult {
       latestVersion = null,
       manifest = null,
       currentVersion = null,
-      currentBuild = null;
+      currentBuild = null,
+      checkedAt = null;
 
   final bool updateAvailable;
   final String? latestVersion;
   final UpdateManifest? manifest;
+
+  /// Πότε ολοκληρώθηκε ο έλεγχος που έδωσε αυτό το αποτέλεσμα. `null` όταν
+  /// έλεγχος δεν έγινε πραγματικά (build ανάπτυξης, χωρίς φάκελο, αποτυχία) —
+  /// τότε το UI δεν ισχυρίζεται «ελέγχθηκε» κάτι που δεν συνέβη.
+  final DateTime? checkedAt;
 
   /// Ετικέτα έκδοσης της εγκατεστημένης εφαρμογής τη στιγμή του ελέγχου.
   final String? currentVersion;

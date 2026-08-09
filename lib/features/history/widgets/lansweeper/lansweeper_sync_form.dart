@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../../core/widgets/app_asset_image.dart';
 
@@ -272,10 +273,9 @@ class LansweeperSyncForm extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 10),
-            LexiconSpellTextFormField(
+            ResizableTextArea(
               controller: notesController,
               minLines: 2,
-              maxLines: null,
               decoration: const InputDecoration(
                 labelText: 'Σημειώσεις - Πρόβλημα (περιγραφή ticket)',
                 hintText:
@@ -285,10 +285,9 @@ class LansweeperSyncForm extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 10),
-            LexiconSpellTextFormField(
+            ResizableTextArea(
               controller: solutionController,
               minLines: 2,
-              maxLines: null,
               decoration: const InputDecoration(
                 labelText: 'Λύση',
                 hintText:

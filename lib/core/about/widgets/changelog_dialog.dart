@@ -8,6 +8,7 @@ import '../models/changelog_entry.dart';
 import '../providers/app_version_provider.dart';
 import '../providers/changelog_provider.dart';
 import '../version_display.dart';
+import '../../updates/update_check_result.dart';
 import '../../updates/update_dialogs.dart';
 import '../../updates/update_providers.dart';
 
@@ -21,7 +22,9 @@ class ChangelogDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final changelogAsync = ref.watch(changelogProvider);
     final versionAsync = ref.watch(appVersionProvider);
-    final updateResult = ref.watch(updateCheckProvider).asData?.value;
+    final updateAsync = ref.watch(updateCheckProvider);
+    final updateResult = updateAsync.asData?.value;
+    final updateChecking = updateAsync.isLoading;
     final updateManifest = updateResult?.updateAvailable == true
         ? updateResult?.manifest
         : null;
@@ -90,24 +93,65 @@ class ChangelogDialog extends ConsumerWidget {
                             style: Theme.of(context).textTheme.bodyLarge,
                           ),
                         )
-                      : ListView.builder(
+                      // Όχι τεμπέλικη λίστα εδώ: μια ανοιχτή κάρτα είναι
+                      // δεκάδες φορές ψηλότερη από μια κλειστή, οπότε η
+                      // εκτίμηση του συνολικού ύψους από τον μέσο όρο των
+                      // ορατών στοιχείων πέφτει έξω κατά τάξη μεγέθους και
+                      // διορθώνεται στην πορεία — με αποτέλεσμα η μπάρα
+                      // κύλισης να μεταπηδά ενώ ο χρήστης τη σέρνει. Με
+                      // μέτρηση όλων των καρτών μία φορά, το ύψος είναι
+                      // ακριβές από το πρώτο καρέ. Οι κλειστές κάρτες δεν
+                      // αποδίδουν το περιεχόμενό τους, άρα το κόστος είναι
+                      // μερικές δεκάδες γραμμές τίτλου.
+                      : SingleChildScrollView(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
-                          itemCount: entries.length,
-                          itemBuilder: (context, index) {
-                            final e = entries[index];
-                            return _VersionExpansionTile(
-                              entry: e,
-                              initiallyExpanded: index == 0,
-                            );
-                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (
+                                var index = 0;
+                                index < entries.length;
+                                index++
+                              )
+                                _VersionExpansionTile(
+                                  entry: entries[index],
+                                  initiallyExpanded: index == 0,
+                                ),
+                            ],
+                          ),
                         ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    // Χειροκίνητος έλεγχος: ακυρώνει την προσωρινή αποθήκευση
+                    // του ελέγχου — ό,τι βρεθεί εμφανίζεται από τους ίδιους
+                    // μηχανισμούς με τον αυτόματο (κουμπί «Ενημέρωση» δίπλα,
+                    // κόκκινη κουκίδα έκδοσης).
+                    TextButton.icon(
+                      key: const Key('changelog_check_now_button'),
+                      onPressed: updateChecking
+                          ? null
+                          : () => ref.invalidate(updateCheckProvider),
+                      icon: updateChecking
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh, size: 18),
+                      label: const Text('Έλεγχος τώρα'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _UpdateCheckStatusLabel(
+                        checking: updateChecking,
+                        result: updateResult,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     if (pendingUpdate) ...[
                       FilledButton.icon(
                         key: const Key('changelog_restart_button'),
@@ -162,6 +206,46 @@ class ChangelogDialog extends ConsumerWidget {
   }
 }
 
+/// Λιτή κατάσταση του ελέγχου ενημέρωσης δίπλα στο «Έλεγχος τώρα».
+///
+/// Σιωπά όταν έλεγχος δεν έχει γίνει πραγματικά ([UpdateCheckResult.checkedAt]
+/// κενό — build ανάπτυξης, χωρίς φάκελο, αποτυχία): δεν ισχυριζόμαστε
+/// «Είστε ενημερωμένοι» χωρίς να έχουμε κοιτάξει.
+class _UpdateCheckStatusLabel extends StatelessWidget {
+  const _UpdateCheckStatusLabel({required this.checking, required this.result});
+
+  final bool checking;
+  final UpdateCheckResult? result;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+
+    final String text;
+    if (checking) {
+      text = 'Έλεγχος…';
+    } else {
+      final checkedAt = result?.checkedAt;
+      if (checkedAt == null) {
+        return const SizedBox.shrink();
+      }
+      final stamp = DateFormat.Hm().format(checkedAt);
+      text = result?.updateAvailable == true
+          ? 'Διαθέσιμη νέα έκδοση ${result?.latestVersion} · έλεγχος $stamp'
+          : 'Είστε ενημερωμένοι · έλεγχος $stamp';
+    }
+
+    return Text(
+      text,
+      key: const Key('changelog_update_check_status'),
+      style: style,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
 class _VersionExpansionTile extends StatelessWidget {
   const _VersionExpansionTile({
     required this.entry,
@@ -197,9 +281,9 @@ class _VersionExpansionTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ExpansionTile(
-        // Το ListView ανακυκλώνει στοιχεία εκτός οθόνης: χωρίς αποθηκευμένη
-        // κατάσταση ανά έκδοση, έκδοση που έκλεισε ο χρήστης ξαναεμφανίζεται
-        // ανοιχτή (επανεφαρμογή της προεπιλογής) όταν επιστρέψει στην οθόνη.
+        // Κρατάει την κατάσταση «ανοιχτό/κλειστό» δεμένη με τη συγκεκριμένη
+        // έκδοση, ώστε ό,τι έκλεισε ο χρήστης να μην ξαναεμφανίζεται ανοιχτό
+        // αν το στοιχείο ξαναχτιστεί.
         key: PageStorageKey<String>('changelog_${entry.version}_${entry.date}'),
         initiallyExpanded: initiallyExpanded,
         title: Text(header, style: Theme.of(context).textTheme.titleSmall),

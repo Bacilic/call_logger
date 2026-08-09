@@ -7,6 +7,7 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/utils/phone_list_parser.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
+import 'package:call_logger/features/directory/providers/catalog_validation_provider.dart';
 import 'package:call_logger/features/directory/providers/directory_provider.dart';
 import 'package:call_logger/features/directory/screens/widgets/user_form_dialog.dart';
 import 'package:flutter/material.dart';
@@ -281,6 +282,75 @@ void main() {
         expect(find.text('Ακύρωση Αλλαγών'), findsOneWidget);
         expect(find.text('Επεξεργασία'), findsOneWidget);
         expect(find.text(_kEditUserTitle), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'κανόνες επικύρωσης: λάθος πρόθεμα τηλεφώνου και επώνυμο-αριθμός εμφανίζουν υπόδειξη χωρίς να μπλοκάρουν',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          // Προφόρτωση των κανόνων ΜΕΣΑ σε runAsync: το sqflite FFI δεν
+          // προωθείται από τον fake χρόνο του testWidgets.
+          await container.read(catalogValidationServiceProvider.future);
+          notifier = container.read(directoryProvider.notifier);
+          await notifier.loadUsers();
+          await _openUserFormInDialog(tester, container, notifier: notifier);
+        });
+
+        // Τηλέφωνο 4ψήφιο με πρόθεμα εκτός 22–29 → υπόδειξη προθέματος.
+        await tester.enterText(_fieldByLabel('Τηλέφωνο'), '3122');
+        await pumpUntilSettled(tester);
+        expect(
+          find.text('Το 3122 δεν ξεκινά από 22–29'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Το λάθος πρόθεμα εσωτερικού εμφανίζει υπόδειξη κάτω από το πεδίο',
+          ),
+        );
+
+        // Διόρθωση σε έγκυρο εσωτερικό → η υπόδειξη φεύγει.
+        await tester.enterText(_fieldByLabel('Τηλέφωνο'), '2534');
+        await pumpUntilSettled(tester);
+        expect(find.text('Το 3122 δεν ξεκινά από 22–29'), findsNothing);
+
+        // Επώνυμο που ξεκινά από ψηφίο (εταιρεία «3π») → υπόδειξη, ΟΧΙ σφάλμα.
+        await tester.enterText(_lastNameField(), '3π');
+        await pumpUntilSettled(tester);
+        expect(
+          find.text(
+            'Ξεκινά από ψηφίο ή σύμβολο — σωστό μόνο αν πρόκειται για εταιρεία',
+          ),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Το επώνυμο-αριθμός εμφανίζει υπόδειξη εταιρείας',
+          ),
+        );
+
+        // Η υπόδειξη είναι προειδοποίηση: η φόρμα δεν δείχνει κόκκινο
+        // «Υποχρεωτικό» και το κουμπί προσθήκης παραμένει ενεργό.
+        expect(find.text('Υποχρεωτικό'), findsNothing);
+        final addButton = find.widgetWithText(FilledButton, 'Προσθήκη');
+        expect(
+          tester.widget<FilledButton>(addButton).onPressed,
+          isNotNull,
+          reason: greekExpectMsg(
+            'Οι υποδείξεις δεν απενεργοποιούν την αποθήκευση',
+          ),
+        );
       },
     );
 

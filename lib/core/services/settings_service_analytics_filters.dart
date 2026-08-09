@@ -16,6 +16,8 @@ class SettingsServiceAnalyticsFilters {
       'dashboard_exclude_calls_without_category';
   static const String _keyDashboardHideUnknownCaller =
       'dashboard_hide_unknown_caller';
+  static const String _keyDashboardHideUnknownTopCaller =
+      'dashboard_hide_unknown_top_caller';
   static const String _keyTaskAnalyticsDatePreset =
       'task_analytics_date_preset_v1';
   static const String _keyTaskAnalyticsDateFrom = 'task_analytics_date_from_v1';
@@ -89,6 +91,20 @@ class SettingsServiceAnalyticsFilters {
   Future<void> setDashboardHideUnknownCaller(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefKey(_keyDashboardHideUnknownCaller), value);
+  }
+
+  /// Απόκρυψη του συγκεντρωτικού «Άγνωστου» στην κατάταξη «Κορυφαίοι Καλούντες».
+  /// Χωριστή από την όψη «χρόνος ανά άτομο»: οι δύο κάρτες απαντούν σε
+  /// διαφορετικό ερώτημα και ο χρήστης μπορεί να θέλει τον «Άγνωστο» στη μία και
+  /// όχι στην άλλη. Προεπιλογή: false.
+  Future<bool> getDashboardHideUnknownTopCaller() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefKey(_keyDashboardHideUnknownTopCaller)) ?? false;
+  }
+
+  Future<void> setDashboardHideUnknownTopCaller(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKey(_keyDashboardHideUnknownTopCaller), value);
   }
 
   /// Τελευταία επιλογή εύρους ημερομηνιών στις αναφορές εκκρεμοτήτων.

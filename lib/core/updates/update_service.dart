@@ -15,8 +15,10 @@ class UpdateService {
     Future<bool> Function(String path)? pathExists,
     this.timeout = const Duration(seconds: 3),
     bool Function()? isDevelopmentBuild,
+    DateTime Function()? clock,
   }) : pathExists = pathExists ?? ((_) async => true),
-       isDevelopmentBuild = isDevelopmentBuild ?? (() => false);
+       isDevelopmentBuild = isDevelopmentBuild ?? (() => false),
+       clock = clock ?? DateTime.now;
 
   final Future<String?> Function() resolveUpdateFolder;
   final Future<String> Function(String path) readFileAsString;
@@ -24,6 +26,10 @@ class UpdateService {
   final Future<bool> Function(String path) pathExists;
   final Duration timeout;
   final bool Function() isDevelopmentBuild;
+
+  /// Ρολόι για τη σφραγίδα «πότε ελέγχθηκε» — εγχύσιμο ώστε τα τεστ να μη
+  /// διαβάζουν το πραγματικό.
+  final DateTime Function() clock;
 
   /// Κάθε αποτυχία → [UpdateCheckResult.none] χωρίς εξαίρεση προς τα έξω.
   Future<UpdateCheckResult> checkForUpdate() async {
@@ -95,6 +101,7 @@ class UpdateService {
       manifest: manifest,
       currentVersion: currentVersion,
       currentBuild: currentBuild,
+      checkedAt: clock(),
     );
   }
 }

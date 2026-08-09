@@ -41,13 +41,15 @@ extension IntegrityCheckTypeLabels on IntegrityCheckType {
       'Χρήστες σε διαγραμμένο/ανύπαρκτο τμήμα',
     IntegrityCheckType.tasksInvalidCall => 'Εκκρεμότητες με άκυρη κλήση',
     IntegrityCheckType.departmentsInvalidNameKey =>
-      'Τμήματα χωρίς έγκυρο name_key',
+      'Τμήματα χωρίς έγκυρο κλειδί ονόματος',
     IntegrityCheckType.departmentInvalidFloor =>
       'Τμήματα με ανύπαρκτο όροφο χάρτη',
-    IntegrityCheckType.orphanCallExternalLinks => 'Ορφανά call_external_links',
+    IntegrityCheckType.orphanCallExternalLinks =>
+      'Ορφανοί εξωτερικοί σύνδεσμοι κλήσης',
     IntegrityCheckType.orphanUserPhones =>
       'Ορφανές συσχετίσεις χρήστη–τηλεφώνου',
-    IntegrityCheckType.orphanDepartmentPhones => 'Ορφανά department_phones',
+    IntegrityCheckType.orphanDepartmentPhones =>
+      'Ορφανές συσχετίσεις τμήματος–τηλεφώνου',
     IntegrityCheckType.orphanUserEquipment =>
       'Ορφανές συσχετίσεις χρήστη–εξοπλισμού',
     IntegrityCheckType.equipmentInvalidDepartment =>
@@ -57,8 +59,9 @@ extension IntegrityCheckTypeLabels on IntegrityCheckType {
     IntegrityCheckType.tasksDeletedLinkedEntities =>
       'Εκκρεμότητες με ανύπαρκτες αναφορές',
     IntegrityCheckType.tasksTemporalInconsistency =>
-      'Εκκρεμότητες: created_at > updated_at',
-    IntegrityCheckType.auditMissingSearchText => 'Audit χωρίς search_text',
+      'Εκκρεμότητες με ασυνεπείς ημερομηνίες',
+    IntegrityCheckType.auditMissingSearchText =>
+      'Ιστορικό εφαρμογής χωρίς ευρετήριο',
     IntegrityCheckType.foreignKeyViolations => 'Παραβιάσεις κανόνων σχέσεων',
   };
 }

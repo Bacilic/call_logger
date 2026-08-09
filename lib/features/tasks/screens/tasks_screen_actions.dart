@@ -8,24 +8,20 @@ import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../directory/providers/department_directory_provider.dart';
 import '../../directory/providers/directory_provider.dart';
-import '../../directory/providers/equipment_directory_provider.dart';
 import '../../directory/screens/widgets/department_form_dialog.dart';
-import '../../directory/screens/widgets/equipment_form_dialog.dart';
 import '../../directory/screens/widgets/user_form_dialog.dart';
+import '../../directory/services/equipment_form_launcher.dart';
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
 import '../providers/pending_task_delete_provider.dart';
 import '../providers/task_service_provider.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
-import '../utils/task_duration_format.dart';
 import '../widgets/snooze_choice_dialog.dart';
 import 'task_close_dialog.dart';
 import 'task_form_dialog.dart';
 import 'task_settings_dialog.dart';
 import 'tasks_screen_support_widgets.dart';
-
-enum _ClosedEditMode { recreate, reopen, snooze }
 
 Future<void> createTasksForOrphans(BuildContext context, WidgetRef ref) async {
   final service = ref.read(taskServiceProvider);
@@ -52,8 +48,9 @@ void _showTaskSaveError(BuildContext context, TaskSaveException e) {
 }
 
 Future<void> openNewTaskForm(BuildContext context, WidgetRef ref) async {
-  final result = await showTaskFormDialog(context, task: null);
-  if (!context.mounted || result == null) return;
+  final formResult = await showTaskFormDialog(context, task: null);
+  if (!context.mounted || formResult == null) return;
+  final result = formResult.task;
   try {
     await ref
         .read(tasksProvider.notifier)
@@ -87,82 +84,95 @@ Future<void> openTaskSettings(BuildContext context, WidgetRef ref) async {
   );
 }
 
-Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
-  _ClosedEditMode? closedMode;
-  if (TaskStatusX.fromString(task.status) == TaskStatus.closed) {
-    closedMode = await _pickClosedEditMode(context, task);
-    if (!context.mounted || closedMode == null) return;
-  }
+/// Καθαρή αντιγραφή για το «Εκ νέου»: μόνο τα στοιχεία της υπόθεσης.
+///
+/// Χτίζεται ρητά αντί για copyWith, γιατί το copyWith με null ΚΡΑΤΑ την
+/// παλιά τιμή — η «καθαρή» εκκρεμότητα γεννιόταν κουβαλώντας τη λύση, το
+/// ιστορικό αναβολών και τη σφραγίδα ολοκλήρωσης της παλιάς.
+Task recreatedTaskFrom(Task edited) {
+  return Task(
+    title: edited.title,
+    description: edited.description,
+    dueDate: edited.dueDate,
+    status: TaskStatus.open.toDbValue,
+    priority: edited.priority,
+    callId: edited.callId,
+    callerId: edited.callerId,
+    equipmentId: edited.equipmentId,
+    departmentId: edited.departmentId,
+    phoneId: edited.phoneId,
+    phoneText: edited.phoneText,
+    userText: edited.userText,
+    equipmentText: edited.equipmentText,
+    departmentText: edited.departmentText,
+    origin: edited.origin,
+  );
+}
 
-  final result = await showTaskFormDialog(context, task: task);
-  if (!context.mounted || result == null) return;
+/// Επεξεργασία εκκρεμότητας.
+///
+/// Σε ολοκληρωμένη, η απόφαση «τι απογίνεται» επιλέγεται ΜΕΣΑ στη φόρμα και
+/// επιστρέφει μαζί με το αποτέλεσμα — δεν υπάρχει προηγούμενο βήμα που η φόρμα
+/// δεν θυμάται, ούτε δεύτερο παράθυρο μετά το κουμπί. Τίποτα δεν γράφεται στη
+/// βάση πριν πατηθεί η αποθήκευση.
+Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
+  final formResult = await showTaskFormDialog(context, task: task);
+  if (!context.mounted || formResult == null) return;
+  final result = formResult.task;
 
   try {
-    if (closedMode != null) {
-      final notifier = ref.read(tasksProvider.notifier);
-      switch (closedMode) {
-        case _ClosedEditMode.recreate:
-          await notifier.addTask(
-            result.copyWith(
-              id: null,
-              status: TaskStatus.open.toDbValue,
-              solutionNotes: null,
-              snoozeHistoryJson: null,
-              createdAt: null,
-              updatedAt: null,
+    final notifier = ref.read(tasksProvider.notifier);
+    switch (formResult.closedMode) {
+      case ClosedTaskSaveMode.recreate:
+        await notifier.addTask(recreatedTaskFrom(result));
+        if (!context.mounted) return;
+        final recreateMessage =
+            'Δημιουργήθηκε νέα εκκρεμότητα «${result.title}»';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(recreateMessage),
+            duration: saveConfirmationSnackBarDuration(recreateMessage),
+          ),
+        );
+        return;
+      case ClosedTaskSaveMode.reopen:
+        // Η λύση και το ιστορικό ταξιδεύουν μέσα στο αποτέλεσμα της φόρμας·
+        // μόνο η κατάσταση αλλάζει. Η σφραγίδα ολοκλήρωσης μένει στη βάση.
+        await notifier.updateTask(
+          result.copyWith(status: TaskStatus.open.toDbValue),
+        );
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Η ολοκλήρωση αναιρέθηκε.')),
+        );
+        return;
+      case ClosedTaskSaveMode.snoozeAgain:
+        final due = result.dueDateTime ?? DateTime.now();
+        await notifier.updateTask(
+          result
+              .copyWith(status: TaskStatus.snoozed.toDbValue)
+              .addSnoozeEntry(due, note: formResult.snoozeReason),
+        );
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Η εκκρεμότητα αναβλήθηκε για τις: '
+              '${DateFormat('dd/MM HH:mm').format(due)}',
             ),
-          );
-          if (!context.mounted) return;
-          final recreateMessage =
-              'Δημιουργήθηκε νέα εκκρεμότητα «${result.title}»';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(recreateMessage),
-              duration: saveConfirmationSnackBarDuration(recreateMessage),
-            ),
-          );
-          return;
-        case _ClosedEditMode.reopen:
-          await notifier.updateTask(
-            result.copyWith(
-              status: TaskStatus.open.toDbValue,
-              // Ρητό: στην αναίρεση ολοκλήρωσης η λύση παραμένει.
-              solutionNotes: task.solutionNotes,
-              createdAt: task.createdAt,
-              snoozeHistoryJson: task.snoozeHistoryJson,
-            ),
-          );
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Η ολοκλήρωση αναιρέθηκε.')),
-          );
-          return;
-        case _ClosedEditMode.snooze:
-          final due = result.dueDateTime ?? DateTime.now();
-          await notifier.updateTask(
-            result
-                .copyWith(
-                  status: TaskStatus.snoozed.toDbValue,
-                  createdAt: task.createdAt,
-                )
-                .addSnoozeEntry(due),
-          );
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Η εκκρεμότητα αναβλήθηκε για τις: ${DateFormat('dd/MM HH:mm').format(due)}',
-              ),
-            ),
-          );
-          return;
-      }
+          ),
+        );
+        return;
+      case ClosedTaskSaveMode.stayClosed:
+      case null:
+        // Κανονική αποθήκευση — η κατάσταση δεν αλλάζει.
+        break;
     }
 
     if (result.id != null) {
-      await ref.read(tasksProvider.notifier).updateTask(result);
+      await notifier.updateTask(result);
     } else {
-      await ref.read(tasksProvider.notifier).addTask(result);
+      await notifier.addTask(result);
     }
     if (!context.mounted) return;
     final saveMessage = result.id != null
@@ -192,119 +202,29 @@ Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
   }
 }
 
-String _buildClosedInfoText(Task task) {
-  final completedAt = task.updatedAtDateTime;
-  final createdAt = task.createdAtDateTime;
-  final completedText = completedAt != null
-      ? DateFormat('dd/MM/yyyy HH:mm').format(completedAt)
-      : 'άγνωστη ημερομηνία';
-  String durationText = '';
-  if (completedAt != null && createdAt != null) {
-    final diff = completedAt.difference(createdAt);
-    final mins = diff.inMinutes < 1 ? 1 : diff.inMinutes;
-    final days = mins ~/ (24 * 60);
-    final hours = (mins % (24 * 60)) ~/ 60;
-    final minutes = mins % 60;
-    if (days > 0) {
-      durationText = '$days μ. $hours ώρ. $minutes λ.';
-    } else if (hours > 0) {
-      durationText = '$hours ώρ. $minutes λ.';
-    } else {
-      durationText = '$minutes λ.';
-    }
+/// Αναίρεση ολοκλήρωσης — η εκκρεμότητα ξαναγίνεται ανοιχτή.
+///
+/// Η λύση **παραμένει** καταγεγραμμένη: περιγράφει τι δοκιμάστηκε και δεν
+/// παύει να ισχύει επειδή το θέμα ξανάνοιξε.
+Future<void> reopenTask(BuildContext context, WidgetRef ref, Task task) async {
+  try {
+    await ref
+        .read(tasksProvider.notifier)
+        .updateTask(task.copyWith(status: TaskStatus.open.toDbValue));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Η ολοκλήρωση αναιρέθηκε.')));
+  } on TaskSaveException catch (e) {
+    if (!context.mounted) return;
+    _showTaskSaveError(context, e);
   }
-  final snoozeEntries = task.snoozeEntries;
-  final lastSnoozeAt = snoozeEntries.isNotEmpty
-      ? snoozeEntries.last.snoozedAt
-      : null;
-  String fromLastSnoozeText = '';
-  if (lastSnoozeAt != null && completedAt != null) {
-    fromLastSnoozeText = durationSince(lastSnoozeAt, completedAt);
-  }
-  final solution = (task.solutionNotes?.trim().isNotEmpty ?? false)
-      ? task.solutionNotes!.trim()
-      : 'Καθόλου λύση';
-  final durationSegment = durationText.isNotEmpty
-      ? fromLastSnoozeText.isNotEmpty
-            ? ' ($durationText, από τελευταία αναβολή: $fromLastSnoozeText)'
-            : ' ($durationText)'
-      : fromLastSnoozeText.isNotEmpty
-      ? ' (από τελευταία αναβολή: $fromLastSnoozeText)'
-      : '';
-  return 'Η εκκρεμότητα έχει ολοκληρωθεί στις $completedText$durationSegment.\n'
-      'Λύση: $solution';
 }
 
-Future<_ClosedEditMode?> _pickClosedEditMode(
-  BuildContext context,
-  Task task,
-) async {
-  var selected = _ClosedEditMode.reopen;
-  return showDialog<_ClosedEditMode>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setState) => DraggableDialogShell(
-        title: const Text('Επεξεργασία Εκκρεμότητας'),
-        builder: (titleHandle) => AlertDialog(
-          title: titleHandle,
-          content: SizedBox(
-            width: 440,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  _buildClosedInfoText(task),
-                  style: Theme.of(ctx).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Θέλετε να την επαναφέρετε ως:',
-                  style: Theme.of(ctx).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<_ClosedEditMode>(
-                  initialValue: selected,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: _ClosedEditMode.recreate,
-                      child: Text('Εκ νέου'),
-                    ),
-                    DropdownMenuItem(
-                      value: _ClosedEditMode.reopen,
-                      child: Text('Αναίρεση ολοκλήρωσης'),
-                    ),
-                    DropdownMenuItem(
-                      value: _ClosedEditMode.snooze,
-                      child: Text('Αναβολή'),
-                    ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setState(() => selected = v);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Ακύρωση'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(selected),
-              child: const Text('Συνέχεια'),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
+/// Γρήγορη αναβολή από το μενού της κάρτας ή από το Ιστορικό Κλήσεων.
+///
+/// Η αναβολή μέσα από τη φόρμα επεξεργασίας ΔΕΝ περνά από εδώ: εκεί η νέα
+/// λήξη και ο λόγος ορίζονται στην ίδια οθόνη με τα υπόλοιπα πεδία.
 Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
   final service = ref.read(taskServiceProvider);
   final config =
@@ -577,28 +497,5 @@ Future<bool> editTaskEquipment(
 ) async {
   final equipmentId = task.equipmentId;
   if (equipmentId == null) return false;
-
-  final notifier = ref.read(equipmentDirectoryProvider.notifier);
-  await notifier.load();
-  final equipmentState = ref.read(equipmentDirectoryProvider);
-  final matchingRows = equipmentState.allItems
-      .where((r) => r.$1.id == equipmentId)
-      .toList();
-  final row = matchingRows.isEmpty ? null : matchingRows.first;
-  if (row == null || !context.mounted) return false;
-
-  var saved = false;
-  await showDialog<bool>(
-    context: context,
-    barrierDismissible: true,
-    builder: (_) => EquipmentFormDialog(
-      initialEquipment: row.$1,
-      initialOwner: row.$2,
-      notifier: notifier,
-      ref: ref,
-      onSaved: () => saved = true,
-    ),
-  );
-  if (!context.mounted) return false;
-  return saved;
+  return EquipmentFormLauncher.openById(context, ref, equipmentId);
 }

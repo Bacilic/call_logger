@@ -20,7 +20,17 @@ class LampScreenShared {
     required this.networkIssueResolutionService,
     required this.migrationService,
     required this.importer,
-  });
+  }) {
+    // Η αναζήτηση δουλεύει πάνω σε αντίγραφο της βάσης στη μνήμη. Η σύνδεση
+    // γίνεται **εδώ**, όπου συναντιούνται τα δύο αντικείμενα, και όχι σε κάθε
+    // σημείο που καλεί επίλυση: αλλιώς κάθε νέα διαδρομή θα έπρεπε να το
+    // θυμηθεί, και η μία που θα το ξεχνούσε θα άφηνε τον χρήστη να βλέπει
+    // λυμένα προβλήματα σαν να υπάρχουν ακόμη.
+    issueResolutionService.onDatabaseChanged =
+        repository.invalidateSearchCache;
+    networkIssueResolutionService.onDatabaseChanged =
+        repository.invalidateSearchCache;
+  }
 
   final LampSettingsStore settings;
   final OldEquipmentRepository repository;

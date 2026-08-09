@@ -13,6 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../../test_reporter.dart';
+
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
@@ -91,13 +93,74 @@ void main() {
     expect(statAfter.modified, statBefore.modified);
   });
 
-  test('η χειροκίνητη αναδόμηση search_index εξακολουθεί να δουλεύει '
-      'σε βάση χωρίς τον πίνακα', () async {
+  // Ο `search_index` καταργήθηκε: δεν τον διάβαζε κανείς, κρατούσε 22% του
+  // αρχείου και έμενε μπαγιάτικος. Η ενέργεια συντήρησης πλέον αδειάζει τη
+  // μνήμη αναζήτησης και ξεφορτώνεται τον πίνακα όπου τον βρει.
+  test('η ανανέωση αναζήτησης σε βάση χωρίς τον πίνακα δεν σκάει', () async {
     await seedMinimal();
 
-    final result = await repository.rebuildLampSearchIndex(dbPath);
+    final result = await repository.refreshSearchCache(dbPath);
 
-    expect(result.newRowCount, 1);
+    expect(result.droppedLegacyIndex, isFalse);
+    expect(
+      await schemaObjectNames(),
+      isNot(contains('search_index')),
+      reason: greekExpectMsg('Η ανανέωση δεν ξαναδημιουργεί τον πίνακα'),
+    );
+  });
+
+  test('η ανανέωση διαγράφει τον καταργημένο search_index όπου υπάρχει', () async {
+    await seedMinimal();
+    final db = await openDatabase(dbPath, singleInstance: false);
+    try {
+      await db.execute('''
+        CREATE TABLE search_index (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source_table TEXT NOT NULL,
+          source_id INTEGER NOT NULL,
+          normalized_text TEXT NOT NULL
+        )
+      ''');
+      await db.insert('search_index', <String, Object?>{
+        'source_table': 'equipment',
+        'source_id': 1,
+        'normalized_text': 'παλιο κειμενο',
+      });
+    } finally {
+      await db.close();
+    }
+
+    final result = await repository.refreshSearchCache(dbPath);
+    await LampDatabaseProvider.instance.close();
+
+    expect(result.droppedLegacyIndexRows, 1);
+    expect(
+      await schemaObjectNames(),
+      isNot(contains('search_index')),
+      reason: greekExpectMsg(
+        'Ο πίνακας δεν διαβάζεται από πουθενά — μένοντας, μόνο χώρο πιάνει '
+        'και παραπλανά όποιον τον δει στη λίστα πινάκων',
+      ),
+    );
+  });
+
+  test('η αναζήτηση δουλεύει κανονικά μετά την ανανέωση', () async {
+    await seedMinimal();
+
+    await repository.refreshSearchCache(dbPath);
+    final result = await repository.globalSearch(
+      dbPath,
+      'γραφειου',
+      maxDisplay: 10,
+    );
+
+    expect(
+      result.totalCount,
+      1,
+      reason: greekExpectMsg(
+        'Το άδειασμα της μνήμης πρέπει να οδηγεί σε επαναφόρτωση, όχι σε κενό',
+      ),
+    );
   });
 
   test('updateSection δικτύου δουλεύει σε παλιά βάση χωρίς στήλες δικτύου '

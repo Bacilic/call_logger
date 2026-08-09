@@ -37,6 +37,11 @@ class SpellCheckController extends TextEditingController {
   }
 
   void _onTextChanged() {
+    // Το [refreshSpellDecorations] τελειώνει με notifyListeners(), που ξαναφτάνει
+    // εδώ: χωρίς αυτόν τον φρουρό ο controller ξαναπρογραμματίζει τον εαυτό του
+    // κάθε 500ms για πάντα, σε κάθε ανοιχτό πεδίο. Το κείμενο που έχει ήδη
+    // αναλυθεί δεν χρειάζεται νέα ανάλυση — ούτε όταν αλλάζει μόνο η επιλογή.
+    if (text == _analyzedText) return;
     _scheduleSpellRecompute();
   }
 

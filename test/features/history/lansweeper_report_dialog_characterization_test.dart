@@ -9,6 +9,7 @@ import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/history/models/dashboard_summary_model.dart';
 import 'package:call_logger/features/history/models/lansweeper_sync_state.dart';
 import 'package:call_logger/features/history/providers/dashboard_provider.dart';
+import 'package:call_logger/features/history/providers/lansweeper_report_scope_provider.dart';
 import 'package:call_logger/features/history/providers/gemini_settings_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_connection_probe_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_settings_provider.dart';
@@ -67,7 +68,7 @@ List<Override> _lansweeperCharacterizationOverrides({
     ),
     dashboardFilterProvider.overrideWith(AllDatesDashboardFilterNotifier.new),
     dashboardStatsProvider.overrideWith((ref) async => _kEmptyDashboardStats),
-    dashboardCallsForReportProvider.overrideWith((ref) async => reportCalls),
+    lansweeperReportCallsProvider.overrideWith((ref) async => reportCalls),
     geminiApiKeyProvider.overrideWith(FixedGeminiApiKeyNotifier.new),
     geminiPromptTemplateProvider.overrideWith(
       FixedGeminiPromptTemplateNotifier.new,

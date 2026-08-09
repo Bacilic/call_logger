@@ -74,6 +74,12 @@ class LampNetworkIssueResolutionService {
 
   final LampDatabaseProvider _databaseProvider;
 
+  /// Ειδοποιείται μόλις μια ενέργεια αγγίξει τη βάση — βλ. το ίδιο σήμα στο
+  /// [LampIssueResolutionService]. Καλείται από **κάθε** μέθοδο που γράφει,
+  /// ακόμη κι όταν αλλάζει μόνο την ουρά προβλημάτων: ο κανόνας «ό,τι γράφει
+  /// ακυρώνει» δεν αφήνει κενά και το ξαναχτίσιμο κοστίζει ελάχιστα.
+  void Function(String databasePath)? onDatabaseChanged;
+
   /// Αναλύει raw_value: 10 πεδία (με κωδικό εξοπλισμού) ή 9 (παλαιά μορφή).
   ParsedNetworkIssueRow? parseNetworkIssueRawValue(String rawValue) {
     final parts = rawValue.split(';');
@@ -172,8 +178,85 @@ class LampNetworkIssueResolutionService {
     return _equipmentPreviewLabel(rows.single);
   }
 
+  /// Τυλίγει κάθε εγγραφή στη βάση, ώστε το σήμα να μη μπορεί να ξεχαστεί σε
+  /// κάποιο από τα δέκα σημεία εξόδου των μεθόδων.
+  Future<T> _writing<T>(
+    String databasePath,
+    Future<T> Function() action,
+  ) async {
+    try {
+      return await action();
+    } finally {
+      onDatabaseChanged?.call(databasePath);
+    }
+  }
+
   /// Αντιστοιχίζει εγγραφή ουράς σε εξοπλισμό και διαγράφει την εγγραφή.
   Future<NetworkIssueMatchResult> matchIssueToEquipment({
+    required String databasePath,
+    required int issueId,
+    required int equipmentCode,
+    bool overwrite = false,
+  }) {
+    return _writing(
+      databasePath,
+      () => _matchIssueToEquipment(
+        databasePath: databasePath,
+        issueId: issueId,
+        equipmentCode: equipmentCode,
+        overwrite: overwrite,
+      ),
+    );
+  }
+
+  /// Διορθώνει ένα πεδίο δικτύου του εξοπλισμού από την ουρά προβλημάτων.
+  Future<NetworkIssueMatchResult> fixEquipmentNetworkField({
+    required String databasePath,
+    required int issueId,
+    required int equipmentCode,
+    required String column,
+    required String newValue,
+  }) {
+    return _writing(
+      databasePath,
+      () => _fixEquipmentNetworkField(
+        databasePath: databasePath,
+        issueId: issueId,
+        equipmentCode: equipmentCode,
+        column: column,
+        newValue: newValue,
+      ),
+    );
+  }
+
+  /// Αποδέχεται την εγγραφή ουράς ως σωστή, με αιτιολογία.
+  Future<bool> acceptIssue({
+    required String databasePath,
+    required int issueId,
+    required String reason,
+  }) {
+    return _writing(
+      databasePath,
+      () => _acceptIssue(
+        databasePath: databasePath,
+        issueId: issueId,
+        reason: reason,
+      ),
+    );
+  }
+
+  /// Διαγράφει την εγγραφή ουράς.
+  Future<bool> deleteIssue({
+    required String databasePath,
+    required int issueId,
+  }) {
+    return _writing(
+      databasePath,
+      () => _deleteIssue(databasePath: databasePath, issueId: issueId),
+    );
+  }
+
+  Future<NetworkIssueMatchResult> _matchIssueToEquipment({
     required String databasePath,
     required int issueId,
     required int equipmentCode,
@@ -291,7 +374,7 @@ class LampNetworkIssueResolutionService {
   }
 
   /// Διορθώνει πεδίο δικτύου στον εξοπλισμό και αφαιρεί την εγγραφή ουράς.
-  Future<NetworkIssueMatchResult> fixEquipmentNetworkField({
+  Future<NetworkIssueMatchResult> _fixEquipmentNetworkField({
     required String databasePath,
     required int issueId,
     required int equipmentCode,
@@ -343,7 +426,7 @@ class LampNetworkIssueResolutionService {
   }
 
   /// Αποδέχεται εγγραφή ουράς ως έχει, με αιτιολογία (χωρίς αλλαγή εξοπλισμού).
-  Future<bool> acceptIssue({
+  Future<bool> _acceptIssue({
     required String databasePath,
     required int issueId,
     required String reason,
@@ -378,7 +461,7 @@ class LampNetworkIssueResolutionService {
   }
 
   /// Διαγράφει εγγραφή ουράς χωρίς αντιστοίχιση.
-  Future<bool> deleteIssue({
+  Future<bool> _deleteIssue({
     required String databasePath,
     required int issueId,
   }) async {

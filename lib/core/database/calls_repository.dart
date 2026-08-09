@@ -369,11 +369,37 @@ class CallsRepository {
   }
 
   /// Ιστορικό κλήσεων με προαιρετικά φίλτρα. LEFT JOIN users και equipment.
+  /// «Η κλήση έχει ζωντανή εκκρεμότητα» — ίδια έκφραση στο SELECT και στο
+  /// WHERE, ώστε η ένδειξη της γραμμής και το φίλτρο να μη μπορούν να
+  /// αποκλίνουν.
+  static const String _openTaskExistsSql =
+      '''
+      (CASE WHEN EXISTS (
+         SELECT 1 FROM tasks t
+         WHERE t.call_id = calls.id AND COALESCE(t.is_deleted, 0) = 0
+       ) THEN 1 ELSE 0 END)''';
+
+  /// «Η κλήση έχει αίτημα Lansweeper» — είτε κρατά αριθμό ticket είτε είναι
+  /// σημειωμένη ως σταλμένη.
+  static const String _lansweeperTicketSql =
+      '''
+      (CASE WHEN calls.lansweeper_state = 'sent'
+              OR TRIM(COALESCE(calls.lansweeper_main_ticket_id, '')) <> ''
+            THEN 1 ELSE 0 END)''';
+
+  /// Γραμμές ιστορικού με τα φίλτρα της οθόνης.
+  ///
+  /// Επιστρέφει και δύο ενδείξεις «ουράς» ανά κλήση — `has_open_task` και
+  /// `has_lansweeper_ticket` — ώστε η λίστα να δείχνει ποιες κλήσεις άφησαν
+  /// συνέχεια. Τα [onlyWithTask] / [onlyWithLansweeper] περιορίζουν σε αυτές·
+  /// όταν ζητηθούν και τα δύο, ισχύουν αθροιστικά (ΚΑΙ, όχι Ή).
   Future<List<Map<String, dynamic>>> getHistoryCalls({
     String? dateFrom,
     String? dateTo,
     String? category,
     String? keyword,
+    bool onlyWithTask = false,
+    bool onlyWithLansweeper = false,
   }) async {
     const userPhoneExpr =
         "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
@@ -396,6 +422,12 @@ class CallsRepository {
       whereClauses.add('calls.search_index LIKE ?');
       args.add('%$keyword%');
     }
+    if (onlyWithTask) {
+      whereClauses.add('$_openTaskExistsSql = 1');
+    }
+    if (onlyWithLansweeper) {
+      whereClauses.add('$_lansweeperTicketSql = 1');
+    }
 
     whereClauses.insert(0, 'COALESCE(calls.is_deleted, 0) = 0');
 
@@ -414,7 +446,9 @@ class CallsRepository {
              COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted,
              $userPhoneExpr AS user_phone,
              COALESCE(departments.name, calls.department_text, '-') AS user_department,
-             COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code
+             COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code,
+             $_openTaskExistsSql AS has_open_task,
+             $_lansweeperTicketSql AS has_lansweeper_ticket
       FROM calls
       LEFT JOIN categories cat ON cat.id = calls.category_id
       LEFT JOIN users ON calls.caller_id = users.id

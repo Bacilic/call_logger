@@ -8,6 +8,7 @@ import 'package:call_logger/core/providers/settings_provider.dart';
 import 'package:call_logger/core/providers/spell_check_provider.dart';
 import 'package:call_logger/core/services/spell_check_service.dart';
 import 'package:call_logger/core/widgets/lexicon_spell_text_form_field.dart';
+import 'package:call_logger/core/widgets/resizable_text_area.dart';
 import 'package:call_logger/features/tasks/models/task.dart';
 import 'package:call_logger/features/tasks/models/task_settings_config.dart';
 import 'package:call_logger/features/tasks/providers/task_settings_config_provider.dart';
@@ -55,8 +56,17 @@ Task _taskWithoutSnoozes() {
   );
 }
 
-Future<Task?> _openTaskFormDialog(WidgetTester tester, {Task? task}) async {
-  Task? result;
+/// Δοχείο για το αποτέλεσμα της φόρμας: γεμίζει όταν ο διάλογος κλείσει,
+/// ώστε το τεστ να αλληλεπιδράσει πρώτα και να διαβάσει μετά.
+class _FormResultHolder {
+  TaskFormResult? value;
+}
+
+Future<_FormResultHolder> _openTaskFormDialog(
+  WidgetTester tester, {
+  Task? task,
+}) async {
+  final holder = _FormResultHolder();
 
   await tester.binding.setSurfaceSize(
     const Size(_kDialogWidth, _kDialogHeight),
@@ -83,7 +93,7 @@ Future<Task?> _openTaskFormDialog(WidgetTester tester, {Task? task}) async {
             body: Center(
               child: FilledButton(
                 onPressed: () async {
-                  result = await showTaskFormDialog(context, task: task);
+                  holder.value = await showTaskFormDialog(context, task: task);
                 },
                 child: const Text(_kOpenDialogButton),
               ),
@@ -98,7 +108,7 @@ Future<Task?> _openTaskFormDialog(WidgetTester tester, {Task? task}) async {
   await pumpUntilSettled(tester, steps: 30);
   expect(find.text('Επεξεργασία εκκρεμότητας'), findsOneWidget);
 
-  return result;
+  return holder;
 }
 
 class _TestTaskSettingsConfigNotifier extends TaskSettingsConfigNotifier {
@@ -145,14 +155,20 @@ void main() {
       },
     );
 
-    testWidgets('σημείωση αναβολής χρησιμοποιεί LexiconSpellTextFormField', (
-      tester,
-    ) async {
+    testWidgets('η σημείωση αναβολής έχει ορθογραφικό έλεγχο', (tester) async {
       await _openTaskFormDialog(tester, task: _taskWithTwoSnoozes());
 
       final noteField = find.byKey(const ValueKey('snooze_note_0'));
       expect(noteField, findsOneWidget);
-      expect(tester.widget(noteField), isA<LexiconSpellTextFormField>());
+      // Το πεδίο μεγαλώνει και σέρνεται, αλλά ο ορθογραφικός έλεγχος μένει.
+      expect(tester.widget(noteField), isA<ResizableTextArea>());
+      expect(
+        find.descendant(
+          of: noteField,
+          matching: find.byType(LexiconSpellTextFormField),
+        ),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('Ακύρωση'));
       await pumpUntilSettled(tester, steps: 10);
@@ -175,7 +191,7 @@ void main() {
     testWidgets(
       'αλλαγή σημείωσης και αποθήκευση επιστρέφει Task με ενημερωμένη σημείωση',
       (tester) async {
-        Task? saved;
+        TaskFormResult? saved;
         final task = _taskWithTwoSnoozes();
 
         await tester.binding.setSurfaceSize(
@@ -227,11 +243,187 @@ void main() {
         await pumpUntilSettled(tester, steps: 20);
 
         expect(saved, isNotNull);
-        expect(saved!.snoozeEntries, hasLength(2));
-        expect(saved!.snoozeEntries[0].note, 'σημείωση 1');
-        expect(saved!.snoozeEntries[1].note, 'ενημερωμένη σημείωση 2');
+        expect(saved!.task.snoozeEntries, hasLength(2));
+        expect(saved!.task.snoozeEntries[0].note, 'σημείωση 1');
+        expect(saved!.task.snoozeEntries[1].note, 'ενημερωμένη σημείωση 2');
+        expect(
+          saved!.closedMode,
+          isNull,
+          reason: 'Αναβληθείσα, όχι ολοκληρωμένη — δεν τίθεται απόφαση',
+        );
         await flushCallLoggerSqfliteLockTimers(tester);
       },
     );
+  });
+
+  group('showTaskFormDialog για ολοκληρωμένη εκκρεμότητα', () {
+    setUp(() async {
+      await seedIsolatedTestDatabase();
+    });
+
+    Task closedTask() => Task(
+      id: 55,
+      title: 'Κλειστή εκκρεμότητα',
+      description: 'Περιγραφή',
+      dueDate: '2026-08-01T09:00:00.000',
+      status: 'closed',
+      solutionNotes: 'Αντικαταστάθηκε το τόνερ.',
+      createdAt: '2026-07-30T08:00:00.000',
+      updatedAt: '2026-08-01T10:00:00.000',
+      completedAt: '2026-08-01T10:00:00.000',
+    );
+
+    testWidgets(
+      'προεπιλογή «Παραμένει ολοκληρωμένη»: κρυφή προθεσμία, κλειδωμένη '
+      'προτεραιότητα, αποθήκευση επιστρέφει stayClosed',
+      (tester) async {
+        final holder = await _openTaskFormDialog(tester, task: closedTask());
+
+        // Η φόρμα δηλώνει τι επεξεργάζεται και δείχνει τη σύνοψη.
+        expect(find.text('Ολοκληρωμένη'), findsOneWidget);
+        expect(find.text('Ολοκληρώθηκε'), findsOneWidget);
+        expect(find.text('Αντικαταστάθηκε το τόνερ.'), findsOneWidget);
+        expect(find.text('Με την αποθήκευση:'), findsOneWidget);
+
+        // Προθεσμία κρυφή — δεν έχει νόημα σε κλειστή υπόθεση.
+        expect(find.text('Ημερομηνία / ώρα λήξης'), findsNothing);
+        expect(find.text('Γρήγορη προθεσμία'), findsNothing);
+
+        // Προτεραιότητα κλειδωμένη.
+        final priorityDropdown = tester.widget<DropdownButtonFormField<int>>(
+          find.byWidgetPredicate((w) => w is DropdownButtonFormField<int>),
+        );
+        expect(priorityDropdown.onChanged, isNull);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+        await pumpUntilSettled(tester, steps: 20);
+
+        final result = holder.value;
+        expect(result, isNotNull);
+        expect(result!.closedMode, ClosedTaskSaveMode.stayClosed);
+        expect(result.task.status, 'closed');
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+    );
+
+    testWidgets(
+      '«Ξανανοίγει»: εμφανίζεται η προθεσμία, το κουμπί αλλάζει ετικέτα και '
+      'επιστρέφεται reopen',
+      (tester) async {
+        final holder = await _openTaskFormDialog(tester, task: closedTask());
+
+        await tester.ensureVisible(find.text('Ξανανοίγει'));
+        await tester.tap(find.text('Ξανανοίγει'));
+        await pumpUntilSettled(tester, steps: 10);
+
+        expect(find.text('Ημερομηνία / ώρα λήξης'), findsOneWidget);
+        expect(
+          find.widgetWithText(FilledButton, 'Αποθήκευση και άνοιγμα'),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.widgetWithText(FilledButton, 'Αποθήκευση και άνοιγμα'),
+        );
+        await pumpUntilSettled(tester, steps: 20);
+
+        expect(holder.value!.closedMode, ClosedTaskSaveMode.reopen);
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+    );
+
+    testWidgets('«Εκ νέου»: το κουμπί δηλώνει δημιουργία και επιστρέφει '
+        'recreate', (tester) async {
+      final holder = await _openTaskFormDialog(tester, task: closedTask());
+
+      await tester.ensureVisible(find.text('Εκ νέου'));
+      await tester.tap(find.text('Εκ νέου'));
+      await pumpUntilSettled(tester, steps: 10);
+
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Δημιουργία νέας εκκρεμότητας'),
+      );
+      await pumpUntilSettled(tester, steps: 20);
+
+      expect(holder.value!.closedMode, ClosedTaskSaveMode.recreate);
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+
+    testWidgets(
+      '«Ξανανοίγει με αναβολή»: λόγος και νέα λήξη μέσα στη φόρμα, χωρίς '
+      'δεύτερο παράθυρο',
+      (tester) async {
+        final holder = await _openTaskFormDialog(tester, task: closedTask());
+
+        // Ως τώρα ο λόγος ζητιόταν σε ξεχωριστό διάλογο μετά την αποθήκευση.
+        expect(find.text('Λόγος αναβολής (προαιρετικό)'), findsNothing);
+
+        await tester.ensureVisible(find.text('Ξανανοίγει με αναβολή'));
+        await tester.tap(find.text('Ξανανοίγει με αναβολή'));
+        await pumpUntilSettled(tester, steps: 10);
+
+        expect(find.text('Λόγος αναβολής (προαιρετικό)'), findsOneWidget);
+        expect(find.text('Γρήγορη νέα λήξη'), findsOneWidget);
+        expect(find.text('Νέα λήξη'), findsOneWidget);
+
+        await tester.enterText(
+          find.byKey(const ValueKey('snooze_reason')),
+          'Περιμένω ανταλλακτικό',
+        );
+        await pumpUntilSettled(tester, steps: 5);
+
+        await tester.tap(
+          find.widgetWithText(FilledButton, 'Αποθήκευση και αναβολή'),
+        );
+        await pumpUntilSettled(tester, steps: 20);
+
+        final result = holder.value;
+        expect(result!.closedMode, ClosedTaskSaveMode.snoozeAgain);
+        expect(result.snoozeReason, 'Περιμένω ανταλλακτικό');
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+    );
+
+    testWidgets('ο λόγος αναβολής δεν ταξιδεύει σε άλλη επιλογή', (
+      tester,
+    ) async {
+      final holder = await _openTaskFormDialog(tester, task: closedTask());
+
+      await tester.ensureVisible(find.text('Ξανανοίγει με αναβολή'));
+      await tester.tap(find.text('Ξανανοίγει με αναβολή'));
+      await pumpUntilSettled(tester, steps: 10);
+      await tester.enterText(
+        find.byKey(const ValueKey('snooze_reason')),
+        'Γράφτηκε κατά λάθος',
+      );
+      await pumpUntilSettled(tester, steps: 5);
+
+      await tester.ensureVisible(find.text('Ξανανοίγει'));
+      await tester.tap(find.text('Ξανανοίγει'));
+      await pumpUntilSettled(tester, steps: 10);
+
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Αποθήκευση και άνοιγμα'),
+      );
+      await pumpUntilSettled(tester, steps: 20);
+
+      expect(holder.value!.closedMode, ClosedTaskSaveMode.reopen);
+      expect(holder.value!.snoozeReason, isNull);
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+
+    testWidgets('ανοιχτή εκκρεμότητα: χωρίς επιλογέα, με ορατή προθεσμία', (
+      tester,
+    ) async {
+      await _openTaskFormDialog(tester, task: _taskWithoutSnoozes());
+
+      expect(find.text('Με την αποθήκευση:'), findsNothing);
+      expect(find.text('Ημερομηνία / ώρα λήξης'), findsOneWidget);
+      expect(find.text('Ανοιχτή'), findsOneWidget);
+
+      await tester.tap(find.text('Ακύρωση'));
+      await pumpUntilSettled(tester, steps: 10);
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
   });
 }

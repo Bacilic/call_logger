@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../database/building_map_repository.dart';
 import '../database/database_helper.dart';
 import '../database/department_repository.dart';
 import '../database/equipment_repository.dart';
@@ -81,6 +82,12 @@ class LookupService {
 
   List<DepartmentModel> departments = [];
   Map<int, String> departmentIdToName = {};
+
+  /// Ετικέτες φύλλων κατόψης (`building_map_floors`) ανά id.
+  ///
+  /// Ζουν εδώ ώστε ο όροφος ενός τμήματος να συνθέτεται όπου χρειάζεται, χωρίς
+  /// να ταξιδεύει ο κατάλογος από widget σε widget.
+  Map<int, String> floorLabelById = {};
   Map<int, List<String>> _departmentDirectPhones = {};
   final Map<String, int?> _phoneDepartmentByNumber = {};
 
@@ -165,23 +172,43 @@ class LookupService {
             : dep.name;
       }
     }
+    final floors = await BuildingMapRepository(db).listBuildingMapFloors();
+    floorLabelById = {
+      for (final f in floors)
+        if (f.label.trim().isNotEmpty) f.id: f.label.trim(),
+    };
     _loadedDepartments = true;
   }
 
   String? getDepartmentName(int? id) =>
       id == null ? null : departmentIdToName[id] ?? '';
 
+  DepartmentModel? _departmentById(int id) {
+    for (final d in departments) {
+      if (d.id == id) return d;
+    }
+    return null;
+  }
+
   /// Κτίριο τμήματος από id (in-memory [departments]). Null αν λείπει ή είναι κενό.
   String? getDepartmentBuilding(int? id) {
     if (id == null) return null;
-    for (final d in departments) {
-      if (d.id == id) {
-        final b = d.building?.trim();
-        if (b == null || b.isEmpty) return null;
-        return b;
-      }
-    }
-    return null;
+    final b = _departmentById(id)?.building?.trim();
+    if (b == null || b.isEmpty) return null;
+    return b;
+  }
+
+  /// Όροφος τμήματος, με την ετικέτα του φύλλου κατόψης («1ος», «Ισόγειο»).
+  ///
+  /// Το τμήμα κρατά `floor_id`· η ετικέτα ζει στον κατάλογο ορόφων. Επιστρέφει
+  /// `null` όταν το τμήμα δεν έχει τοποθετηθεί σε φύλλο.
+  String? getDepartmentFloor(int? id) {
+    if (id == null) return null;
+    final d = _departmentById(id);
+    if (d == null) return null;
+    final floorId = d.floorId ?? int.tryParse(d.mapFloor?.trim() ?? '');
+    if (floorId == null) return null;
+    return floorLabelById[floorId];
   }
 
   /// Αναζήτηση στη μνήμη βάσει ψηφίων τηλεφώνου. Κενά/παύλες αγνοούνται και στα δύο μέρη.

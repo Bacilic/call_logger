@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../../core/database/audit_diff_helper.dart';
 import '../../../core/database/audit_service.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/database_table_labels.dart';
 import '../../../core/database/directory_support.dart';
 import '../models/audit_log_model.dart';
 import '../models/audit_reference_labels.dart';
@@ -348,38 +349,9 @@ class AuditFormatterService {
     );
   }
 
-  String _entityTypeGreek(String type) {
-    switch (type) {
-      case 'user':
-        return 'Χρήστης';
-      case 'department':
-        return 'Τμήμα';
-      case 'equipment':
-        return 'Εξοπλισμός';
-      case 'category':
-        return 'Κατηγορία';
-      case 'task':
-        return 'Εκκρεμότητα';
-      case 'call':
-        return 'Κλήση';
-      case 'bulk_users':
-        return 'Μαζική ενημέρωση χρηστών';
-      case 'bulk_departments':
-        return 'Μαζική ενημέρωση τμημάτων';
-      case 'bulk_equipment':
-        return 'Μαζική ενημέρωση εξοπλισμού';
-      case 'import_data':
-        return 'Δεδομένα εισαγωγής';
-      case 'maintenance':
-        return 'Συντήρηση βάσης';
-      case 'backup':
-        return 'Αντίγραφο ασφαλείας';
-      case 'phone':
-        return 'Τηλέφωνο';
-      default:
-        return type;
-    }
-  }
+  /// Μία πηγή αλήθειας με τον Έλεγχο Ακεραιότητας: ό,τι ονομάζει «Εκκρεμότητα»
+  /// το Ιστορικό, το ονομάζει έτσι και ο Έλεγχος.
+  String _entityTypeGreek(String type) => databaseEntityTypeLabelEl(type);
 
   String? _diffLineForField({
     required String entityType,
@@ -604,7 +576,9 @@ class AuditFormatterService {
       if (key == 'department_text' && fields.containsKey('department_id')) {
         continue;
       }
-      final label = AuditDiffHelper.fieldDetailLabel(entityType, key);
+      // Ονομαστική: η λίστα απαριθμεί πεδία («Πεδία: διαγραφή, τμήμα»), δεν
+      // συμπληρώνει πρόταση τύπου «Αλλαγή … από».
+      final label = AuditDiffHelper.fieldTitleLabel(entityType, key);
       if (key == 'department_id' && !technical) {
         final name = _formatDepartmentReference(
           fields['department_id'],
@@ -646,7 +620,16 @@ class AuditFormatterService {
     }
   }
 
-  /// Ανάγνωση πεδίων για εμφάνιση «Πριν/Μετά».
+  /// Ανάγνωση πεδίων για εμφάνιση «Πριν/Μετά» στις «Τεχνικές λεπτομέρειες».
+  ///
+  /// ΜΗΝ μεταφράσεις και ΜΗΝ ωραιοποιήσεις τα κλειδιά εδώ — ρητή απαίτηση του
+  /// Διευθυντή. Το τμήμα αυτό είναι η **πηγή αλήθειας** για διάγνωση: δείχνει
+  /// τα κλειδιά ακριβώς όπως τα γράφει ο κώδικας στη βάση. Αν έμπαινε κι εδώ
+  /// ελληνική ετικέτα, μια λάθος αντιστοίχιση ετικέτας-πεδίου θα ήταν αόρατη
+  /// παντού — ακριβώς αυτό συνέβη με το `equipment_code` που ο κατάλογος το
+  /// ήξερε ως `code_equipment`, και μόνο αυτό το μπλοκ μπορούσε να το δείξει.
+  ///
+  /// Μοναδική επιτρεπτή επέμβαση: στοίχιση (indent) για να διαβάζεται.
   String prettyJsonBlock(String? raw) {
     if (raw == null || raw.trim().isEmpty) return '—';
     try {

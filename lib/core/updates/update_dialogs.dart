@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../about/providers/changelog_provider.dart';
+import '../utils/greek_date_format.dart';
 import 'update_check_result.dart';
 import 'update_installer_service.dart';
+import 'update_level_badge.dart';
 import 'update_manifest.dart';
 import 'update_providers.dart';
 
-/// Διάλογος «Διαθέσιμη νέα έκδοση» → προαιρετική προετοιμασία ενημέρωσης.
+/// Διάλογος «Νέο επίπεδο!» → προαιρετική προετοιμασία ενημέρωσης.
 ///
 /// Όταν ο αριθμός έκδοσης δεν ανεβαίνει (ίδιος ή μικρότερος), η εικόνα μοιάζει
 /// παράλογη — μόνο τότε προστίθεται επεξήγηση, με τους αριθμούς κτισίματος και
@@ -22,8 +24,8 @@ Future<void> showUpdateAvailableDialog(
   if (manifest == null) return;
 
   var content =
-      'Διαθέσιμη νέα έκδοση ${manifest.version} '
-      '(${_displayDate(manifest.released)}) — θέλετε να την προετοιμάσετε τώρα;';
+      'Θέλετε να αναβαθμίσετε στην έκδοση ${manifest.version} '
+      '(${formatGreekShortDateFromIso(manifest.released)});';
   if (result.needsVersionLabelExplanation) {
     final currentDate = await _currentInstallReleaseDate(
       context,
@@ -33,7 +35,7 @@ Future<void> showUpdateAvailableDialog(
     final installedBuild = result.currentBuild == null
         ? 'το εγκατεστημένο'
         : 'το εγκατεστημένο ${result.currentBuild}'
-              '${currentDate == null ? '' : ' (${_displayDate(currentDate)})'}';
+              '${currentDate == null ? '' : ' (${formatGreekShortDateFromIso(currentDate)})'}';
     final cause =
         result.versionLabelRelation == UpdateVersionLabelRelation.same
         ? 'ο αριθμός της νέας έκδοσης (${manifest.version}) είναι ο ίδιος με '
@@ -45,15 +47,27 @@ Future<void> showUpdateAvailableDialog(
     content =
         '$content\n\n'
         'Σημείωση: $cause. Δεν πρόκειται για υποβάθμιση: το πακέτο με αριθμό '
-        'κτισίματος ${manifest.build} (${_displayDate(manifest.released)}) '
+        'κτισίματος ${manifest.build} (${formatGreekShortDateFromIso(manifest.released)}) '
         'είναι νεότερο από $installedBuild. Η ενημέρωση συνιστάται.';
   }
 
   final choice = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Διαθέσιμη νέα έκδοση'),
-      content: Text(content),
+      title: const Text('Νέο επίπεδο!'),
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UpdateLevelBadge(version: manifest.version),
+              const SizedBox(width: 18),
+              Expanded(child: Text(content)),
+            ],
+          ),
+        ),
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
@@ -226,13 +240,6 @@ Future<String?> _currentInstallReleaseDate(
     // Χωρίς ιστορικό δεν χάνεται η επεξήγηση — μόνο η ημερομηνία.
   }
   return null;
-}
-
-/// `yyyy-MM-dd` → `dd-MM-yyyy` για εμφάνιση· οτιδήποτε άλλο επιστρέφεται ως έχει.
-String _displayDate(String isoDate) {
-  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(isoDate.trim());
-  if (match == null) return isoDate;
-  return '${match[3]}-${match[2]}-${match[1]}';
 }
 
 Future<void> _showFailure(

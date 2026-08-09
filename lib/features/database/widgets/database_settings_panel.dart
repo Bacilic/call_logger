@@ -1429,27 +1429,20 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
                         FilterChip(
                           label: Text(_weekdayChipLabel(i + 1)),
                           selected: settings.backupDays.contains(i + 1),
-                          onSelected: settings.backupOnExit
-                              ? (selected) {
-                                  final wd = i + 1;
-                                  final next = List<int>.from(
-                                    settings.backupDays,
-                                  );
-                                  if (selected) {
-                                    if (!next.contains(wd)) next.add(wd);
-                                  } else {
-                                    next.remove(wd);
-                                  }
-                                  unawaited(
-                                    ref
-                                        .read(
-                                          databaseBackupSettingsProvider
-                                              .notifier,
-                                        )
-                                        .setBackupScheduleDays(next),
-                                  );
-                                }
-                              : null,
+                          onSelected: (selected) {
+                            final wd = i + 1;
+                            final next = List<int>.from(settings.backupDays);
+                            if (selected) {
+                              if (!next.contains(wd)) next.add(wd);
+                            } else {
+                              next.remove(wd);
+                            }
+                            unawaited(
+                              ref
+                                  .read(databaseBackupSettingsProvider.notifier)
+                                  .setBackupScheduleDays(next),
+                            );
+                          },
                         ),
                     ],
                   ),

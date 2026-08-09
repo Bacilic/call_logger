@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/widgets/compact_tooltip.dart';
 import '../../../core/providers/history_audit_immersive_provider.dart';
 import '../../../core/providers/history_search_prefill_intent_provider.dart';
 import '../../../core/providers/lexicon_full_mode_provider.dart';
@@ -14,8 +15,11 @@ import '../../../core/providers/settings_provider.dart';
 import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/utils/call_duration_format.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
+import '../../../core/widgets/app_asset_image.dart';
+import '../models/lansweeper_report_scope.dart';
 import '../providers/history_application_audit_view_provider.dart';
 import '../providers/history_provider.dart';
+import '../widgets/lansweeper/lansweeper_report_launcher.dart';
 import '../widgets/call_delete_dialog.dart';
 import '../widgets/call_edit_dialog.dart';
 import '../widgets/history_deleted_entity_text.dart';
@@ -108,6 +112,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         .read(historyFilterProvider.notifier)
         .update((s) => s.copyWith(clearDateRange: true));
   }
+
+  /// Η καθημερινή δουλειά: όλες οι κλήσεις της ημέρας προς το Lansweeper.
+  ///
+  /// Η αναφορά ανοίγει πάντα στο «Σήμερα» — τα φίλτρα του Ιστορικού δεν την
+  /// αφορούν, και το διάστημα αλλάζει από τα δικά της chips.
+  Future<void> _openLansweeperReportForToday() =>
+      openLansweeperReport(context, ref, scope: LansweeperReportScope.today);
 
   void _toggleApplicationAuditView() {
     final next = !ref.read(historyApplicationAuditViewProvider);
@@ -281,6 +292,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               child: Text('Ιστορικό Κλήσεων', overflow: TextOverflow.ellipsis),
             ),
             IconButton(
+              tooltip: kLansweeperReportShortcutTooltip,
+              onPressed: filtersEnabled ? _openLansweeperReportForToday : null,
+              icon: const AppAssetImage(
+                assetPath: kLansweeperReportBadgeAsset,
+                width: 24,
+                height: 24,
+                fit: BoxFit.contain,
+                fallbackIcon: Icons.confirmation_number_outlined,
+              ),
+            ),
+            IconButton(
               tooltip: 'Στατιστικά κλήσεων / Αναφορές',
               onPressed: filtersEnabled
                   ? () {
@@ -450,26 +472,14 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      asyncCallCount.when(
-                        data: (count) => Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Κλήσεις',
-                              style: theme.textTheme.labelLarge?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '$count',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                            ),
-                          ],
+                      asyncCalls.when(
+                        data: (rows) => _HistoryCountLabel(
+                          shownCount: rows.length,
+                          searching: filter.keyword.trim().isNotEmpty,
+                          totalWithoutKeyword: asyncCallCount.maybeWhen(
+                            data: (count) => count,
+                            orElse: () => null,
+                          ),
                         ),
                         loading: () => SizedBox(
                           width: 16,
@@ -480,6 +490,28 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                           ),
                         ),
                         error: (_, _) => const SizedBox.shrink(),
+                      ),
+                      const SizedBox(width: 16),
+                      _CallLinkFilterChip(
+                        label: 'Με εκκρεμότητα',
+                        icon: Icons.task_alt,
+                        selected: filter.onlyWithTask,
+                        enabled: filtersEnabled,
+                        onChanged: (value) => ref
+                            .read(historyFilterProvider.notifier)
+                            .update((s) => s.copyWith(onlyWithTask: value)),
+                      ),
+                      const SizedBox(width: 8),
+                      _CallLinkFilterChip(
+                        label: 'Με αίτημα Lansweeper',
+                        icon: Icons.confirmation_number_outlined,
+                        selected: filter.onlyWithLansweeper,
+                        enabled: filtersEnabled,
+                        onChanged: (value) => ref
+                            .read(historyFilterProvider.notifier)
+                            .update(
+                              (s) => s.copyWith(onlyWithLansweeper: value),
+                            ),
                       ),
                       const Spacer(),
                       IconButton(
@@ -697,6 +729,129 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 }
 
+/// Διακόπτης φίλτρου «μόνο κλήσεις με …» πάνω από τον πίνακα.
+class _CallLinkFilterChip extends StatelessWidget {
+  const _CallLinkFilterChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Text(label),
+      avatar: Icon(icon, size: 18),
+      selected: selected,
+      onSelected: enabled ? onChanged : null,
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+/// Ενδείξεις «ουράς» μιας κλήσης: συνδεδεμένη εκκρεμότητα ή αίτημα Lansweeper.
+///
+/// Είναι σήματα, όχι κουμπιά: απαντούν «τι άφησε πίσω της αυτή η κλήση» με μια
+/// ματιά στη λίστα. Το άνοιγμα γίνεται από την επεξεργασία της κλήσης.
+class _CallLinkBadges extends StatelessWidget {
+  const _CallLinkBadges({required this.hasTask, required this.hasLansweeper});
+
+  final bool hasTask;
+  final bool hasLansweeper;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (!hasTask && !hasLansweeper) {
+      return Text(
+        '—',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasTask)
+          CompactTooltip(
+            message: 'Συνδεδεμένη εκκρεμότητα',
+            child: Icon(
+              Icons.task_alt,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        if (hasTask && hasLansweeper) const SizedBox(width: 6),
+        if (hasLansweeper)
+          CompactTooltip(
+            message: 'Αίτημα Lansweeper',
+            child: Icon(
+              Icons.confirmation_number_outlined,
+              size: 18,
+              color: theme.colorScheme.tertiary,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Λεζάντα πλήθους πάνω από τον πίνακα.
+///
+/// Το [shownCount] είναι το μήκος της λίστας που εμφανίζεται από κάτω, ώστε ο
+/// αριθμός να μη λέει ποτέ άλλα από όσα βλέπει ο χρήστης. Το
+/// [totalWithoutKeyword] μετράει τα ίδια φίλτρα χωρίς την αναζήτηση, οπότε
+/// χρησιμεύει μόνο ως «από N» όταν όντως γίνεται αναζήτηση.
+class _HistoryCountLabel extends StatelessWidget {
+  const _HistoryCountLabel({
+    required this.shownCount,
+    required this.searching,
+    required this.totalWithoutKeyword,
+  });
+
+  final int shownCount;
+  final bool searching;
+  final int? totalWithoutKeyword;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final total = totalWithoutKeyword;
+    final value = searching && total != null
+        ? '$shownCount από $total'
+        : '$shownCount';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          searching ? 'Αποτελέσματα' : 'Συνολικές κλήσεις',
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          value,
+          style: theme.textTheme.labelMedium?.copyWith(
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Πίνακας γραμμών ιστορικού (ημ/νία & ώρα, καλούντας, τηλέφωνο, τμήμα, εξοπλισμός, κατηγορία, σημειώσεις, διάρκεια).
 class _HistoryDataTable extends ConsumerStatefulWidget {
   const _HistoryDataTable({required this.rows});
@@ -709,7 +864,7 @@ class _HistoryDataTable extends ConsumerStatefulWidget {
 
 class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
   /// Βασικά πλάτη στηλών (checkbox, ημ/νία, καλούντας, τηλέφωνο, τμήμα,
-  /// εξοπλισμός, κατηγορία, σημειώσεις, διάρκεια, ενέργειες).
+  /// εξοπλισμός, κατηγορία, σημειώσεις, διάρκεια, συνδέσεις, ενέργειες).
   static const List<double> _baseColumnWidths = [
     50,
     130,
@@ -720,6 +875,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     140,
     220,
     90,
+    80,
     110,
   ];
 
@@ -732,12 +888,14 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     'Κατηγορία',
     'Σημειώσεις',
     'Διάρκεια',
+    'Συνδέσεις',
   ];
+
+  /// Δείκτης της στήλης ενεργειών — τελευταία, μετά τις στήλες δεδομένων.
+  static const int _actionsColumnIndex = 10;
 
   late final ScrollController _horizontalScrollController;
   late final ScrollController _verticalScrollController;
-  int? _sortColumnIndex;
-  bool _sortAscending = true;
   int? _hoveredRowIndex;
 
   int? _rowId(Map<String, dynamic> row) => row['id'] as int?;
@@ -775,6 +933,13 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
   }
 
   String _str(dynamic v) => v?.toString().trim() ?? '';
+
+  /// Οι ενδείξεις έρχονται από SQL ως 1/0 — ανεκτικό και σε bool/κείμενο.
+  static bool _isTruthy(dynamic v) {
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    return v?.toString().trim() == '1';
+  }
 
   static final DateFormat _callDateParse = DateFormat('yyyy-MM-dd');
   static final DateFormat _callDateTimeParse = DateFormat('yyyy-MM-dd HH:mm');
@@ -830,6 +995,10 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
         final dur = row['duration'];
         if (dur == null) return -1;
         return dur is int ? dur : int.tryParse(dur?.toString() ?? '') ?? -1;
+      case 8:
+        // Πρώτα όσες άφησαν ουρά — μετράει το πλήθος των συνδέσεων.
+        return (_isTruthy(row['has_open_task']) ? 1 : 0) +
+            (_isTruthy(row['has_lansweeper_ticket']) ? 1 : 0);
       default:
         return '';
     }
@@ -856,16 +1025,8 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
   double _totalTableWidth(double zoomLevel) =>
       _scaledColumnWidths(zoomLevel).fold(0.0, (a, b) => a + b);
 
-  void _onSortHeaderTap(int columnIndex) {
-    setState(() {
-      if (_sortColumnIndex == columnIndex) {
-        _sortAscending = !_sortAscending;
-      } else {
-        _sortColumnIndex = columnIndex;
-        _sortAscending = true;
-      }
-    });
-  }
+  void _onSortHeaderTap(HistorySortColumn column) =>
+      ref.read(historySortProvider.notifier).toggle(column);
 
   Widget _headerCell({
     required double width,
@@ -903,14 +1064,15 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     required bool allVisibleSelected,
     required Set<int> visibleIds,
     required Set<int> selectedCallIds,
+    required HistorySortModel sort,
   }) {
     final headingStyle = theme.textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w600,
       color: theme.colorScheme.onSurface,
     );
 
-    Widget sortableLabel(int columnIndex, String label) {
-      final isActive = _sortColumnIndex == columnIndex;
+    Widget sortableLabel(HistorySortColumn column, String label) {
+      final isActive = sort.column == column;
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -924,7 +1086,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
           if (isActive) ...[
             const SizedBox(width: 4),
             Icon(
-              _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+              sort.ascending ? Icons.arrow_upward : Icons.arrow_downward,
               size: 16 * zoomLevel,
               color: theme.colorScheme.primary,
             ),
@@ -958,11 +1120,14 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
         _headerCell(
           width: columnWidths[i + 1],
           horizontalPadding: horizontalPadding,
-          onTap: () => _onSortHeaderTap(i + 1),
-          child: sortableLabel(i + 1, _dataColumnLabels[i]),
+          onTap: () => _onSortHeaderTap(HistorySortColumn.values[i]),
+          child: sortableLabel(
+            HistorySortColumn.values[i],
+            _dataColumnLabels[i],
+          ),
         ),
       _headerCell(
-        width: columnWidths[9],
+        width: columnWidths[_actionsColumnIndex],
         horizontalPadding: horizontalPadding,
         child: Text('Ενέργειες', style: headingStyle),
       ),
@@ -1126,6 +1291,14 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
             _dataCell(
               width: columnWidths[9],
               horizontalPadding: horizontalPadding,
+              child: _CallLinkBadges(
+                hasTask: _isTruthy(row['has_open_task']),
+                hasLansweeper: _isTruthy(row['has_lansweeper_ticket']),
+              ),
+            ),
+            _dataCell(
+              width: columnWidths[_actionsColumnIndex],
+              horizontalPadding: horizontalPadding,
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
@@ -1171,8 +1344,9 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     final theme = Theme.of(context);
     final zoomLevel = ref.watch(historyTableZoomProvider);
     final selectedCallIds = ref.watch(historySelectedCallIdsProvider);
-    final rowsToShow = _sortColumnIndex != null
-        ? _sortedRows(widget.rows, _sortColumnIndex! - 1, _sortAscending)
+    final sort = ref.watch(historySortProvider);
+    final rowsToShow = sort.column != null
+        ? _sortedRows(widget.rows, sort.column!.index, sort.ascending)
         : widget.rows;
     final visibleIds = rowsToShow.map(_rowId).whereType<int>().toSet();
     final allVisibleSelected =
@@ -1211,6 +1385,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                     allVisibleSelected: allVisibleSelected,
                     visibleIds: visibleIds,
                     selectedCallIds: selectedCallIds,
+                    sort: sort,
                   ),
                   Expanded(
                     child: Scrollbar(

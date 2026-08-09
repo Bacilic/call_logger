@@ -17,10 +17,12 @@ import '../../calls/models/user_model.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/non_user_phone_entry.dart';
 import '../models/user_catalog_mode.dart';
+import '../models/user_column_layout.dart';
 import '../models/user_directory_column.dart';
 import '../services/bulk_action_undo_record.dart';
 import '../services/bulk_user_actions.dart';
 import '../services/user_deletion_undo_record.dart';
+import '../services/user_equipment_codes.dart';
 import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
 
@@ -43,12 +45,6 @@ class _UnsetLastDeleted {
 }
 
 const _kUnsetLastDeleted = _UnsetLastDeleted();
-
-/// Αποτέλεσμα ανάγνωσης ρυθμίσεων στηλών χρηστών (σειρά πλήρους λίστας + ποια κλειδιά είναι ορατά).
-typedef _UserColumnLayout = ({
-  List<UserDirectoryColumn> order,
-  Set<String> visible,
-});
 
 /// Κατάσταση του κατάλογου χρηστών: πλήρης λίστα, φιλτραρισμένη λίστα, αναζήτηση, sort, επιλογές, undo, focused row.
 class DirectoryState {
@@ -179,75 +175,13 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     ref.read(pendingBulkUndoProvider.notifier).settleSilently();
   }
 
-  _UserColumnLayout? _parseColumnLayoutFromJson(String raw) {
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        final o = decoded['order'];
-        final v = decoded['visible'];
-        final rawOrder = <UserDirectoryColumn>[];
-        if (o is List) {
-          for (final e in o) {
-            if (e is! String) continue;
-            final c = UserDirectoryColumn.fromKey(e);
-            if (c != null) rawOrder.add(c);
-          }
-        }
-        final seenKeys = <String>{};
-        final order = <UserDirectoryColumn>[];
-        for (final c in rawOrder) {
-          if (seenKeys.add(c.key)) order.add(c);
-        }
-        for (final c in UserDirectoryColumn.all) {
-          if (!seenKeys.contains(c.key)) order.add(c);
-        }
-        Set<String> visible;
-        if (v is List && v.isNotEmpty) {
-          visible = {};
-          for (final e in v) {
-            if (e is String && UserDirectoryColumn.fromKey(e) != null) {
-              visible.add(e);
-            }
-          }
-          if (visible.isEmpty) {
-            visible = {for (final c in order) c.key};
-          }
-        } else {
-          visible = {for (final c in order) c.key};
-        }
-        return (
-          order: UserDirectoryColumn.pinSelectionFirst(order),
-          visible: visible,
-        );
-      }
-      if (decoded is List) {
-        final ordered = <UserDirectoryColumn>[];
-        final seen = <String>{};
-        for (final e in decoded) {
-          if (e is! String) continue;
-          final c = UserDirectoryColumn.fromKey(e);
-          if (c != null && seen.add(c.key)) ordered.add(c);
-        }
-        if (ordered.isEmpty) return null;
-        for (final c in UserDirectoryColumn.all) {
-          if (!seen.contains(c.key)) ordered.add(c);
-        }
-        return (
-          order: UserDirectoryColumn.pinSelectionFirst(ordered),
-          visible: Set<String>.from(seen),
-        );
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  Future<_UserColumnLayout?> _readColumnLayoutFromSettings() async {
+  Future<UserColumnLayout?> _readColumnLayoutFromSettings() async {
     final dbRead = await DatabaseHelper.instance.database;
     final raw = await SettingsRepository(
       dbRead,
     ).getSetting(_catalogUsersVisibleColumnsKey);
     if (raw == null || raw.trim().isEmpty) return null;
-    return _parseColumnLayoutFromJson(raw);
+    return parseUserColumnLayoutJson(raw);
   }
 
   Future<void> _persistUserColumnLayout(DirectoryState s) async {
@@ -268,7 +202,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
 
   /// Φόρτωση χρηστών από τη βάση και εφαρμογή filter/sort.
   Future<void> loadUsers() async {
-    _UserColumnLayout? parsed;
+    UserColumnLayout? parsed;
     if (!_columnLayoutHydrated) {
       parsed = await _readColumnLayoutFromSettings();
       _columnLayoutHydrated = true;
@@ -381,6 +315,11 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
             break;
           case 'department':
             cmp = (a.departmentName ?? '').compareTo(b.departmentName ?? '');
+            break;
+          case 'equipment':
+            cmp = UserEquipmentCodes.textForUser(
+              a.id,
+            ).compareTo(UserEquipmentCodes.textForUser(b.id));
             break;
           case 'notes':
             cmp = (a.notes ?? '').compareTo(b.notes ?? '');

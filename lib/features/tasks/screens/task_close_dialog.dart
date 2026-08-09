@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/widgets/draggable_dialog_shell.dart';
-import '../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../core/widgets/resizable_text_area.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../models/task.dart';
 import '../utils/task_duration_format.dart';
@@ -94,41 +94,49 @@ class _TaskCloseDialogState extends ConsumerState<_TaskCloseDialog> {
       title: const Text('Ολοκλήρωση εκκρεμότητας'),
       builder: (titleHandle) => AlertDialog(
         title: titleHandle,
+        // Το οριζόντιο περιθώριο περνά μέσα στο scrollable, ώστε η μπάρα
+        // κύλησης να μένει στην άκρη του διαλόγου και όχι πάνω στα πεδία.
+        contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 24),
         content: SizedBox(
-          width: 420,
+          width: 468,
           child: Form(
             key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (timingLines.isNotEmpty) ...[
-                  Text(
-                    timingLines.join('\n'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+            // Το πεδίο της λύσης μεγαλώνει — χωρίς κύλιση ο διάλογος θα
+            // ξεχείλιζε μόλις η σημείωση ξεπερνούσε το ύψος της οθόνης.
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (timingLines.isNotEmpty) ...[
+                    Text(
+                      timingLines.join('\n'),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
+                    const SizedBox(height: 12),
+                  ],
+                  ResizableTextArea(
+                    controller: _controller,
+                    decoration: const InputDecoration(
+                      labelText: 'Λύση / Σημειώσεις Κλεισίματος',
+                      hintText: 'Περιγράψτε τη λύση ή σημειώσεις...',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                    minLines: 4,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Το πεδίο είναι υποχρεωτικό για το κλείσιμο.';
+                      }
+                      return null;
+                    },
+                    textCapitalization: TextCapitalization.sentences,
                   ),
-                  const SizedBox(height: 12),
                 ],
-                LexiconSpellTextFormField(
-                  controller: _controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Λύση / Σημειώσεις Κλεισίματος',
-                    hintText: 'Περιγράψτε τη λύση ή σημειώσεις...',
-                    border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
-                  ),
-                  maxLines: 4,
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Το πεδίο είναι υποχρεωτικό για το κλείσιμο.';
-                    }
-                    return null;
-                  },
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-              ],
+              ),
             ),
           ),
         ),

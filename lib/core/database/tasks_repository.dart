@@ -515,6 +515,19 @@ class TasksRepository {
     return true;
   }
 
+  /// Ζωντανές εκκρεμότητες μιας κλήσης — και οι κλειστές, γιατί η ερώτηση
+  /// «τι άφησε πίσω της η κλήση» δεν παύει να ισχύει όταν η εκκρεμότητα κλείσει.
+  Future<List<Task>> getTasksForCall(int callId) async {
+    final db = await _db;
+    final rows = await db.rawQuery(
+      'SELECT * FROM tasks '
+      'WHERE call_id = ? AND COALESCE(is_deleted, 0) = 0 '
+      'ORDER BY id ASC',
+      [callId],
+    );
+    return rows.map((row) => Task.fromMap(row)).toList();
+  }
+
   Future<List<Task>> getOpenTasks() async {
     final db = await _db;
     final rows = await db.rawQuery(
@@ -1080,6 +1093,7 @@ class TasksRepository {
     final now = DateTime.now().toIso8601String();
     map['created_at'] = now;
     map['updated_at'] = now;
+    _stampCompletionMoment(map, null, now);
     map['origin'] = Task.normalizeOrigin(map['origin'] as String?);
     map['search_index'] = SearchTextNormalizer.normalizeForSearch(
       task.combinedSearchText,
@@ -1098,6 +1112,37 @@ class TasksRepository {
     }
   }
 
+  /// Πεδία που ο χρήστης μπορεί να αδειάσει από φόρμα.
+  ///
+  /// Το [Task.toMap] παραλείπει ό,τι είναι null, ώστε μια μερική ενημέρωση να
+  /// μην πατάει πάνω σε τιμές που δεν αφορούν. Για αυτά τα πεδία όμως το κενό
+  /// είναι απόφαση του χρήστη: αν λείψουν από το map, το UPDATE δεν τα αγγίζει
+  /// και η παλιά τιμή επιστρέφει στην οθόνη σαν να μη σβήστηκε ποτέ.
+  static const _kUserClearableFields = <String>[
+    'description',
+    'caller_id',
+    'user_text',
+    'phone_text',
+    'department_text',
+    'equipment_text',
+  ];
+
+  /// Σφραγίζει τη στιγμή ολοκλήρωσης όταν η εγγραφή μόλις έκλεισε.
+  ///
+  /// Ένα σημείο για όλες τις ροές: η σφραγίδα μπαίνει μόνο στη μετάβαση προς
+  /// «ολοκληρωμένη», ώστε μια απλή διόρθωση κειμένου να μη μετακινεί τη στιγμή
+  /// της λύσης, και δεν αφαιρείται ποτέ — η αναίρεση χρειάζεται να τη δείξει.
+  static void _stampCompletionMoment(
+    Map<String, dynamic> map,
+    Map<String, dynamic>? oldRow,
+    String nowIso,
+  ) {
+    final closedValue = TaskStatus.closed.toDbValue;
+    if (map['status'] != closedValue) return;
+    if (oldRow != null && oldRow['status'] == closedValue) return;
+    map['completed_at'] = nowIso;
+  }
+
   /// Ενημερώνει μια υπάρχουσα εγγραφή στον πίνακα tasks.
   ///
   /// Εγγραφή + audit στο ίδιο transaction ([TaskSaveException] σε αποτυχία).
@@ -1111,7 +1156,11 @@ class TasksRepository {
     if (!await _hasSnoozeHistoryColumn(db)) {
       map.remove('snooze_history_json');
     }
-    map['updated_at'] = DateTime.now().toIso8601String();
+    final nowIso = DateTime.now().toIso8601String();
+    map['updated_at'] = nowIso;
+    for (final field in _kUserClearableFields) {
+      map.putIfAbsent(field, () => null);
+    }
     map['origin'] = Task.normalizeOrigin(map['origin'] as String?);
     map['search_index'] = SearchTextNormalizer.normalizeForSearch(
       task.combinedSearchText,
@@ -1129,6 +1178,7 @@ class TasksRepository {
         final oldRow = oldRows.isEmpty
             ? null
             : Map<String, dynamic>.from(oldRows.first);
+        _stampCompletionMoment(map, oldRow, nowIso);
         final n = await txn.update(
           'tasks',
           map,
@@ -1227,13 +1277,19 @@ class TasksRepository {
         final oldStatus = oldRows.isEmpty
             ? null
             : oldRows.first['status'] as String?;
+        final values = <String, dynamic>{
+          'status': 'closed',
+          'solution_notes': solutionNotes,
+          'updated_at': now,
+        };
+        _stampCompletionMoment(
+          values,
+          oldStatus != null ? {'status': oldStatus} : null,
+          now,
+        );
         final n = await txn.update(
           'tasks',
-          {
-            'status': 'closed',
-            'solution_notes': solutionNotes,
-            'updated_at': now,
-          },
+          values,
           where: 'id = ?',
           whereArgs: [id],
         );

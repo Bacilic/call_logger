@@ -6,6 +6,7 @@ import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/resolution_log_entry.dart';
 import 'lamp_issue_grouping.dart';
+import 'lamp_manual_review_progress.dart';
 import '../widgets/lamp_issue_manual_review_dialog.dart';
 import '../widgets/lamp_network_issue_resolution_dialog.dart';
 import '../widgets/lamp_resolution_progress_dialog.dart';
@@ -461,6 +462,32 @@ class LampIssueResolutionController {
 
     final units = buildLampIssueOrchestrationUnits(proposals);
 
+    // Τα χειροκίνητα βήματα είναι λιγότερα από τις προτάσεις: οι αυτόματες
+    // τρέχουν σε παρτίδες χωρίς ερώτηση και οι όμοιες τιμές συγχωνεύονται.
+    // Ο μετρητής πρέπει να δείχνει πόσες φορές θα ρωτηθεί ο χρήστης.
+    final totalManualSteps = units
+        .whereType<LampManualReviewOrchestrationUnit>()
+        .length;
+    // Κρατιέται εδώ: μέσα στο `case … (:final proposals)` το όνομα σκιάζεται
+    // από τις προτάσεις του τρέχοντος βήματος.
+    final totalProposalCount = proposals.length;
+    var manualStepNumber = 0;
+
+    // Ένα φόρτωμα για όλη τη σειρά: εκατοντάδες γραφεία και υπάλληλοι που δεν
+    // αλλάζουν όσο τρέχει ο οδηγός. Αποτυχία εδώ δεν σταματά την επίλυση —
+    // απλώς τα πεδία τοποθέτησης μένουν άδεια.
+    var placementCatalog = LampPlacementCatalog.empty;
+    try {
+      placementCatalog = await host.shared.issueResolutionService
+          .loadPlacementCatalog(databasePath: databasePath);
+    } catch (e) {
+      emit(
+        ResolutionLogEntry.warning(
+          'Δεν φορτώθηκαν οι κατάλογοι γραφείων και υπαλλήλων: $e',
+        ),
+      );
+    }
+
     var destructiveConfirmed = false;
 
     Future<bool> confirmDestructiveIfNeeded(
@@ -521,6 +548,7 @@ class LampIssueResolutionController {
           :final proposals,
           :final groupedIdenticalValues,
         ):
+          manualStepNumber++;
           final manualDecisions = await _pauseForUserDialog(
             paused,
             () => showLampIssueManualReviewDialog(
@@ -531,6 +559,13 @@ class LampIssueResolutionController {
               serialExistsChecker: lampSerialExistsCheckerFor(
                 host.shared.repository,
                 databasePath,
+              ),
+              placementCatalog: placementCatalog,
+              progress: LampManualReviewProgress(
+                stepNumber: manualStepNumber,
+                totalSteps: totalManualSteps,
+                proposalsDone: progress.value,
+                totalProposals: totalProposalCount,
               ),
             ),
           );

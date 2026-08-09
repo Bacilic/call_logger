@@ -13,13 +13,14 @@ import '../models/dashboard_date_preset.dart';
 import '../models/dashboard_filter_model.dart';
 import '../models/dashboard_summary_model.dart';
 import '../providers/dashboard_provider.dart';
+import '../models/lansweeper_report_scope.dart';
 import '../providers/history_provider.dart';
-import '../widgets/lansweeper_report_dialog.dart';
+import '../utils/history_navigation_feedback.dart';
+import '../widgets/lansweeper/lansweeper_report_launcher.dart';
 import 'dashboard_cards.dart';
 import 'dashboard_filter_pane.dart';
 import 'dashboard_palette_colors.dart';
-
-enum TopEntityMode { department, caller, issue }
+import 'dashboard_top_entity_selector.dart';
 
 /// Οθόνη στατιστικών κλήσεων (πίνακας ελέγχου / dashboard).
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -95,11 +96,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _openLansweeperReportDialog() async {
     _applyAllFilters();
     if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
-      barrierDismissible: false,
-      builder: (context) => const LansweeperReportDialog(),
+    await openLansweeperReport(
+      context,
+      ref,
+      // Η είσοδος από τα Στατιστικά είναι η μόνη που δανείζεται τα φίλτρα της
+      // οθόνης — και το δηλώνει, αντί να το υποθέτει η αναφορά.
+      scope: LansweeperReportScope.dashboard(ref.read(dashboardFilterProvider)),
     );
   }
 
@@ -211,24 +213,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  void _popWithHistoryPrefill({
-    required String keyword,
-    required bool clearKeyword,
-  }) {
+  /// Επιστροφή στο Ιστορικό με το πλαίσιο της κάρτας: ίδιο χρονικό διάστημα,
+  /// καθαρή αναζήτηση ώστε να φανούν όντως όλες οι κλήσεις, και η ταξινόμηση που
+  /// αναπαράγει τη σειρά της κάρτας.
+  void _openHistoryForCard(HistorySortModel sort) {
     final dash = ref.read(dashboardFilterProvider);
-    final kw = clearKeyword ? '' : keyword;
-    ref
+    final messenger = ScaffoldMessenger.of(context);
+    ref.read(historySortProvider.notifier).apply(sort);
+    final cleared = ref
         .read(historyFilterProvider.notifier)
-        .update(
-          (s) => s.copyWith(
-            keyword: kw,
-            dateFrom: dash.dateFrom,
-            dateTo: dash.dateTo,
-            clearDateRange: dash.dateFrom == null && dash.dateTo == null,
-          ),
-        );
+        .focus(dateFrom: dash.dateFrom, dateTo: dash.dateTo);
     Navigator.of(context).pop();
+    showHistoryFiltersClearedSnackBar(messenger, cleared);
   }
+
+  void _openHistoryForTopCallers() =>
+      _openHistoryForCard(historySortForTopCallers);
+
+  void _openHistoryForLongestCalls() => _openHistoryForCard(
+    historySortForLongestCalls(ref.read(dashboardLongestCallsModeProvider)),
+  );
 
   KpiTopEntity _resolveTopEntity(DashboardSummaryModel data) {
     switch (_topEntityMode) {
@@ -347,6 +351,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                           allDatesBars?.callsByMonth ??
                                           const <KpiBarSparklinePoint>[],
                                       showLansweeperReportBadge: true,
+                                      onTap: _openLansweeperReportDialog,
                                       colors: colors.kpiBlue,
                                     ),
                                     KpiCardData(
@@ -434,72 +439,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                         allDatesBars,
                                         _topEntityMode,
                                       ),
+                                      headerTrailing: TopEntityModeSelector(
+                                        mode: _topEntityMode,
+                                        onChanged: (selected) => setState(
+                                          () => _topEntityMode = selected,
+                                        ),
+                                      ),
                                       colors: colors.kpiPurple,
                                     ),
                                   ],
-                                  onCardTap: (index) async {
-                                    if (index == 0) {
-                                      await _openLansweeperReportDialog();
-                                      return;
-                                    }
-                                    if (index != 3) return;
-                                    final selected =
-                                        await showModalBottomSheet<
-                                          TopEntityMode
-                                        >(
-                                          context: context,
-                                          showDragHandle: true,
-                                          builder: (context) {
-                                            return SafeArea(
-                                              child: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  ListTile(
-                                                    leading: const Icon(
-                                                      Icons.apartment_outlined,
-                                                    ),
-                                                    title: const Text(
-                                                      'Κορυφαίο Τμήμα',
-                                                    ),
-                                                    onTap: () => Navigator.pop(
-                                                      context,
-                                                      TopEntityMode.department,
-                                                    ),
-                                                  ),
-                                                  ListTile(
-                                                    leading: const Icon(
-                                                      Icons
-                                                          .person_outline_rounded,
-                                                    ),
-                                                    title: const Text(
-                                                      'Κορυφαίος Καλών',
-                                                    ),
-                                                    onTap: () => Navigator.pop(
-                                                      context,
-                                                      TopEntityMode.caller,
-                                                    ),
-                                                  ),
-                                                  ListTile(
-                                                    leading: const Icon(
-                                                      Icons.build_outlined,
-                                                    ),
-                                                    title: const Text(
-                                                      'Κορυφαία Κατηγορία',
-                                                    ),
-                                                    onTap: () => Navigator.pop(
-                                                      context,
-                                                      TopEntityMode.issue,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                        );
-                                    if (selected != null) {
-                                      setState(() => _topEntityMode = selected);
-                                    }
-                                  },
                                 ),
                                 const SizedBox(height: 18),
                                 if (mainSplit)
@@ -512,16 +460,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                         child: TopCallersCard(
                                           data: data,
                                           colors: colors,
-                                          onViewAll: () {
-                                            final q = data.topCallers.isNotEmpty
-                                                ? data.topCallers.first.name
-                                                : null;
-                                            _popWithHistoryPrefill(
-                                              keyword: q ?? '',
-                                              clearKeyword:
-                                                  q == null || q == '-',
-                                            );
-                                          },
+                                          onViewAll: _openHistoryForTopCallers,
                                         ),
                                       ),
                                       const SizedBox(width: 16),
@@ -545,12 +484,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                                   (s) => s.copyWith(topN: v),
                                                 );
                                           },
-                                          onOpenReport: () {
-                                            _popWithHistoryPrefill(
-                                              keyword: '',
-                                              clearKeyword: true,
-                                            );
-                                          },
+                                          onViewAll:
+                                              _openHistoryForLongestCalls,
                                         ),
                                       ),
                                     ],
@@ -559,15 +494,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   TopCallersCard(
                                     data: data,
                                     colors: colors,
-                                    onViewAll: () {
-                                      final q = data.topCallers.isNotEmpty
-                                          ? data.topCallers.first.name
-                                          : null;
-                                      _popWithHistoryPrefill(
-                                        keyword: q ?? '',
-                                        clearKeyword: q == null || q == '-',
-                                      );
-                                    },
+                                    onViewAll: _openHistoryForTopCallers,
                                   ),
                                   const SizedBox(height: 16),
                                   LongestCallsCard(
@@ -584,12 +511,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                           )
                                           .update((s) => s.copyWith(topN: v));
                                     },
-                                    onOpenReport: () {
-                                      _popWithHistoryPrefill(
-                                        keyword: '',
-                                        clearKeyword: true,
-                                      );
-                                    },
+                                    onViewAll: _openHistoryForLongestCalls,
                                   ),
                                 ],
                                 const SizedBox(height: 18),

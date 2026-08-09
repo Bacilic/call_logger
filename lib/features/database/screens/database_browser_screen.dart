@@ -443,9 +443,8 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Αυτά τα εκτελέσιμα μοιράζονται τις ίδιες ρυθμίσεις και την ίδια '
-                'επιλογή βάσης. Για ανεξάρτητη λειτουργία, εκτελέστε με '
-                '--profile <όνομα>. Ενεργό προφίλ: ${activeProfileLabel()}',
+                currentAppInstancesSharedScopeText(),
+                key: const Key('app_instances_scope_text'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

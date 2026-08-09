@@ -4,7 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/utils/greek_weekday.dart';
+import '../../../core/utils/greek_date_format.dart';
 import '../models/dashboard_summary_model.dart';
 import '../utils/hourly_axis_range.dart';
 import '../utils/issue_distribution.dart';

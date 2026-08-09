@@ -191,5 +191,188 @@ void main() {
         expect(rows.single['is_deleted'], 1);
       },
     );
+
+    group('πεδία που ο χρήστης αδειάζει', () {
+      Future<Map<String, dynamic>> rowOf(int id) async =>
+          (await db.query('tasks', where: 'id = ?', whereArgs: [id])).single;
+
+      test('η σβησμένη περιγραφή σβήνεται και στη βάση', () async {
+        final id = await repo.createTask(newTask());
+        expect((await rowOf(id))['description'], isNotNull);
+
+        final stored = Task.fromMap(await rowOf(id));
+        await repo.updateTask(
+          stored.withFormValues(
+            title: stored.title,
+            description: null,
+            dueDate: stored.dueDate,
+            priority: stored.priority,
+            callerId: stored.callerId,
+            userText: stored.userText,
+            phoneText: stored.phoneText,
+            departmentText: stored.departmentText,
+            equipmentText: stored.equipmentText,
+          ),
+        );
+
+        expect(
+          (await rowOf(id))['description'],
+          isNull,
+          reason: 'Το κενό είναι απόφαση του χρήστη, όχι «καμία αλλαγή»',
+        );
+      });
+
+      test('τα σβησμένα πεδία καλούντα σβήνονται και στη βάση', () async {
+        final id = await repo.createTask(
+          Task(
+            title: 'Με στοιχεία καλούντα',
+            dueDate: DateTime(2026, 8, 1, 9).toIso8601String(),
+            status: 'open',
+            userText: 'Ψαρρά Σοφία',
+            phoneText: '2565',
+            departmentText: 'Γραμματεία ΤΕΠ',
+            equipmentText: '5067',
+          ),
+        );
+        final stored = Task.fromMap(await rowOf(id));
+        expect(stored.userText, 'Ψαρρά Σοφία');
+
+        await repo.updateTask(
+          stored.withFormValues(
+            title: stored.title,
+            description: stored.description,
+            dueDate: stored.dueDate,
+            priority: stored.priority,
+            callerId: null,
+            userText: null,
+            phoneText: null,
+            departmentText: null,
+            equipmentText: null,
+          ),
+        );
+
+        final row = await rowOf(id);
+        expect(row['user_text'], isNull);
+        expect(row['phone_text'], isNull);
+        expect(row['department_text'], isNull);
+        expect(row['equipment_text'], isNull);
+      });
+
+      test('η withFormValues δεν αγγίζει τίποτα εκτός φόρμας', () async {
+        final id = await repo.createTask(newTask());
+        await repo.closeTask(id, 'Αντικαταστάθηκε το τόνερ.');
+        final stored = Task.fromMap(await rowOf(id));
+
+        final edited = stored.withFormValues(
+          title: 'Νέος τίτλος',
+          description: null,
+          dueDate: stored.dueDate,
+          priority: 2,
+          callerId: null,
+          userText: null,
+          phoneText: null,
+          departmentText: null,
+          equipmentText: null,
+        );
+
+        // Ό,τι δεν ανήκει στη φόρμα μένει ακριβώς όπως ήταν — και ο έλεγχος
+        // γίνεται πάνω στο toMap, ώστε να πιάνει και πεδία που θα προστεθούν.
+        const formKeys = {
+          'title',
+          'description',
+          'due_date',
+          'priority',
+          'caller_id',
+          'user_text',
+          'phone_text',
+          'department_text',
+          'equipment_text',
+        };
+        final before = stored.toMap();
+        final after = edited.toMap();
+        for (final key in before.keys.where((k) => !formKeys.contains(k))) {
+          expect(
+            after[key],
+            before[key],
+            reason:
+                'Το «$key» δεν ανήκει στη φόρμα και δεν επιτρέπεται να αλλάξει',
+          );
+        }
+        expect(after['completed_at'], before['completed_at']);
+        expect(after['solution_notes'], 'Αντικαταστάθηκε το τόνερ.');
+      });
+    });
+
+    group('completed_at — η σφραγίδα ολοκλήρωσης', () {
+      Future<Map<String, dynamic>> rowOf(int id) async =>
+          (await db.query('tasks', where: 'id = ?', whereArgs: [id])).single;
+
+      Future<Task> taskOf(int id) async => Task.fromMap(await rowOf(id));
+
+      test('closeTask: σφραγίζει τη στιγμή ολοκλήρωσης', () async {
+        final id = await repo.createTask(newTask());
+
+        await repo.closeTask(id, 'Αντικαταστάθηκε το τόνερ.');
+
+        expect((await rowOf(id))['completed_at'], isNotNull);
+      });
+
+      test('αναίρεση ολοκλήρωσης: η στιγμή παραμένει', () async {
+        final id = await repo.createTask(newTask());
+        await repo.closeTask(id, 'Αντικαταστάθηκε το τόνερ.');
+        final closedAt = (await rowOf(id))['completed_at'] as String?;
+
+        await repo.updateTask((await taskOf(id)).copyWith(status: 'open'));
+
+        final row = await rowOf(id);
+        expect(row['status'], 'open');
+        expect(
+          row['completed_at'],
+          closedAt,
+          reason: 'Η κάρτα δείχνει πότε είχε λυθεί — δεν σβήνεται στο άνοιγμα',
+        );
+      });
+
+      test('επεξεργασία ολοκληρωμένης: η στιγμή δεν μετακινείται', () async {
+        final id = await repo.createTask(newTask());
+        await repo.closeTask(id, 'Αντικαταστάθηκε το τόνερ.');
+        final closedAt = (await rowOf(id))['completed_at'] as String?;
+
+        await repo.updateTask(
+          (await taskOf(id)).copyWith(title: 'Διορθωμένος τίτλος'),
+        );
+
+        final row = await rowOf(id);
+        expect(row['title'], 'Διορθωμένος τίτλος');
+        expect(
+          row['completed_at'],
+          closedAt,
+          reason: 'Μια διόρθωση κειμένου δεν είναι νέα ολοκλήρωση',
+        );
+      });
+
+      test('δεύτερο κλείσιμο: η στιγμή ενημερώνεται', () async {
+        final id = await repo.createTask(newTask());
+        await repo.closeTask(id, 'Πρώτη λύση.');
+        final firstClosedAt = (await rowOf(id))['completed_at'] as String?;
+        await repo.updateTask((await taskOf(id)).copyWith(status: 'open'));
+
+        await repo.closeTask(id, 'Δεύτερη λύση.');
+
+        final row = await rowOf(id);
+        expect(firstClosedAt, isNotNull);
+        expect(
+          row['completed_at'],
+          row['updated_at'],
+          reason: 'Το νέο κλείσιμο ξαναγράφει τη σφραγίδα στη στιγμή του',
+        );
+      });
+
+      test('ανοιχτή εκκρεμότητα: καμία σφραγίδα', () async {
+        final id = await repo.createTask(newTask());
+
+        expect((await rowOf(id))['completed_at'], isNull);
+      });
+    });
   });
 }

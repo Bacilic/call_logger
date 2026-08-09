@@ -6,6 +6,7 @@ import '../../../core/utils/user_facing_error_messages.dart';
 import '../../audit/models/audit_log_model.dart';
 import '../../audit/models/audit_reference_labels.dart';
 import '../../audit/providers/audit_providers.dart';
+import '../../audit/services/audit_details_humanizer.dart';
 import '../../audit/services/audit_entity_preview_resolver.dart';
 import '../../audit/services/audit_formatter_service.dart';
 import 'audit_before_after_section.dart';
@@ -85,14 +86,9 @@ class AuditEntitySidePanel extends ConsumerWidget {
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    if (entry.details != null &&
-                        entry.details!.trim().isNotEmpty &&
-                        !entry.isTechnicalTableDetailsOnly) ...[
+                    if (humanizeAuditDetails(entry.details) case final d?) ...[
                       const SizedBox(height: 8),
-                      Text(
-                        entry.details!.trim(),
-                        style: theme.textTheme.bodySmall,
-                      ),
+                      Text(d, style: theme.textTheme.bodySmall),
                     ],
                     if (entry.hasAnyDeltaJson) ...[
                       const SizedBox(height: 12),
@@ -125,13 +121,14 @@ class AuditEntitySidePanel extends ConsumerWidget {
   ) {
     final theme = Theme.of(context);
     if (isMaintenance || isBackup) {
+      final detailsLine = humanizeAuditDetails(entry.details);
+      final hasTimestamp =
+          entry.timestamp != null && entry.timestamp!.trim().isNotEmpty;
       final previewLines = <String>[
-        if (entry.details != null && entry.details!.trim().isNotEmpty)
-          entry.details!.trim(),
-        if (entry.timestamp != null && entry.timestamp!.trim().isNotEmpty)
+        ?detailsLine,
+        if (hasTimestamp)
           'Χρονική σήμανση: ${formatter.formatAuditTimestamp(entry.timestamp)}',
-        if ((entry.details == null || entry.details!.trim().isEmpty) &&
-            (entry.timestamp == null || entry.timestamp!.trim().isEmpty))
+        if (detailsLine == null && !hasTimestamp)
           'Δεν υπάρχει συγκεκριμένη οντότητα.',
       ];
       return AuditEntityPreviewBody(

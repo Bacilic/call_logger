@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../calls/models/user_model.dart';
 import '../../models/user_directory_column.dart';
+import '../../services/user_equipment_codes.dart';
 import 'catalog_table_hover_focus.dart';
 
 /// Πίνακας χρηστών με σελιδοποίηση, sortable headers, επιλογή γραμμής (αν η στήλη εμφανίζεται), διπλό κλικ = επεξεργασία.
@@ -59,6 +60,7 @@ const _defaultWidthsByKey = <String, double>{
   'first_name': 120.0,
   'phone': 120.0,
   'department': 140.0,
+  'equipment': 140.0,
   'notes': 180.0,
 };
 
@@ -795,6 +797,17 @@ class _UsersTableSource extends DataTableSource {
         return DataCell(
           Text(
             user.departmentName ?? '–',
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+      case 'equipment':
+        return DataCell(
+          Text(
+            UserEquipmentCodes.textForUser(id),
             maxLines: 1,
             softWrap: false,
             overflow: TextOverflow.ellipsis,

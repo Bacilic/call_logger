@@ -34,15 +34,6 @@ class AuditLogModel {
   /// Έχει τουλάχιστον ένα από τα JSON πεδία «πριν/μετά».
   bool get hasAnyDeltaJson => hasOldJson || hasNewJson;
 
-  /// `tasks id=45` κ.λπ. — ήδη καλύπτεται από το φιλικό `summaryLine`.
-  bool get isTechnicalTableDetailsOnly {
-    final d = details?.trim() ?? '';
-    return RegExp(
-      r'^(tasks|users|categories|departments|equipment)\s+id=\d+\s*$',
-      caseSensitive: false,
-    ).hasMatch(d);
-  }
-
   /// Όταν υπάρχει πραγματικό όνομα χρήστη (όχι κενό / placeholder `—`).
   /// Για μελλοντική ρύθμιση· τώρα συχνά κενό ώστε να κρύβεται γραμμή «Χρήστης».
   bool get hasMeaningfulPerformingUser {

@@ -66,7 +66,7 @@ void main() {
         getShowUpdateOnStartup: () async => true,
       );
 
-      expect(find.text('Διαθέσιμη νέα έκδοση'), findsOneWidget);
+      expect(find.text('Νέο επίπεδο!'), findsOneWidget);
       expect(find.textContaining('0.24.0'), findsWidgets);
     },
   );
@@ -78,7 +78,7 @@ void main() {
       getShowUpdateOnStartup: () async => false,
     );
 
-    expect(find.text('Διαθέσιμη νέα έκδοση'), findsNothing);
+    expect(find.text('Νέο επίπεδο!'), findsNothing);
   });
 
   testWidgets(
@@ -90,15 +90,15 @@ void main() {
         getShowUpdateOnStartup: () async => true,
       );
 
-      expect(find.text('Διαθέσιμη νέα έκδοση'), findsOneWidget);
+      expect(find.text('Νέο επίπεδο!'), findsOneWidget);
       await tester.tap(find.text('Αργότερα'));
       await tester.pumpAndSettle();
-      expect(find.text('Διαθέσιμη νέα έκδοση'), findsNothing);
+      expect(find.text('Νέο επίπεδο!'), findsNothing);
 
       container.invalidate(updateCheckProvider);
       await tester.pumpAndSettle();
 
-      expect(find.text('Διαθέσιμη νέα έκδοση'), findsNothing);
+      expect(find.text('Νέο επίπεδο!'), findsNothing);
     },
   );
 }

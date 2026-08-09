@@ -62,8 +62,11 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
   double _tablesPaneWidth = _kDefaultTablesPaneWidth;
   CustomMouseCursor? _splitterCursor;
 
-  /// `'data_issues'` ή `'search_index'` όταν τρέχει η αντίστοιχη ενέργεια.
+  /// `'data_issues'` ή [_kSearchCacheActionKey] όσο τρέχει η ενέργειά τους.
   String? _tableMaintenanceBusy;
+
+  /// Ο πίνακας πάνω στον οποίο κάθεται το κουμπί «Ανανέωση αναζήτησης».
+  static const String _kSearchCacheActionKey = 'equipment';
 
   @override
   void initState() {
@@ -302,32 +305,26 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
     }
   }
 
-  Future<void> _onRebuildSearchIndexPressed() async {
+  /// Ξεχνά τη μνήμη αναζήτησης — και ξεφορτώνεται τον καταργημένο
+  /// `search_index` αν η βάση τον κουβαλά ακόμη.
+  Future<void> _onRefreshSearchCachePressed() async {
     final path = widget.databasePath.trim();
     if (path.isEmpty) return;
-    int indexCount;
-    int equipmentCount;
-    try {
-      indexCount = await _api.getTableRowCount(path, 'search_index');
-      equipmentCount = await _api.getTableRowCount(path, 'equipment');
-    } catch (e) {
-      _showSnack('Αποτυχία ανάγνωσης στατιστικών πινάκων: $e', isError: true);
-      return;
-    }
-    if (!mounted) return;
-    final indexLabel = DatabaseStatsService.formatIntegerEl(indexCount);
-    final equipLabel = DatabaseStatsService.formatIntegerEl(equipmentCount);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Αναδόμηση ευρετηρίου αναζήτησης'),
-        content: SingleChildScrollView(
+        title: const Text('Ανανέωση αναζήτησης'),
+        content: const SingleChildScrollView(
           child: Text(
-            'Ο πίνακας search_index περιέχει τώρα $indexLabel εγγραφές.\n\n'
-            'Όλες θα διαγραφούν· στη συνέχεια θα δημιουργηθούν ξανά $equipLabel '
-            'εγγραφές (μία ανά γραμμή εξοπλισμού), με την ισχύουσα λογική '
-            'κανονικοποιημένου κειμένου αναζήτησης.\n\n'
-            'Η λειτουργία αναζήτησης στη Λάμπα ενημερώνεται αμέσως μετά.\n\n'
+            'Η Λάμπα κρατά τα δεδομένα αναζήτησης στη μνήμη για ταχύτητα. Αν '
+            'τα δεδομένα άλλαξαν εκτός εφαρμογής (νέα εισαγωγή Excel, '
+            'επεξεργασία της βάσης από άλλο εργαλείο), η μνήμη είναι '
+            'παλιά.\n\n'
+            'Η ανανέωση την αδειάζει: η επόμενη αναζήτηση ξαναδιαβάζει τη '
+            'βάση από την αρχή.\n\n'
+            'Αν η βάση κουβαλά ακόμη τον παλιό πίνακα search_index, θα '
+            'διαγραφεί — δεν χρησιμοποιείται από την αναζήτηση και μόνο χώρο '
+            'πιάνει.\n\n'
             'Να συνεχιστεί;',
           ),
         ),
@@ -338,28 +335,31 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Αναδόμηση'),
+            child: const Text('Ανανέωση'),
           ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _tableMaintenanceBusy = 'search_index');
+    setState(() => _tableMaintenanceBusy = _kSearchCacheActionKey);
     try {
-      final r = await widget.repository.rebuildLampSearchIndex(path);
+      final r = await widget.repository.refreshSearchCache(path);
       if (!mounted) return;
-      final prevLabel = DatabaseStatsService.formatIntegerEl(
-        r.previousRowCount,
-      );
-      final newLabel = DatabaseStatsService.formatIntegerEl(r.newRowCount);
-      _showSnack('Αναδόμηση search_index: $prevLabel → $newLabel εγγραφές.');
-      await _load();
-      if (_selected == 'search_index') {
-        await _onSelectTable('search_index');
+      if (r.droppedLegacyIndex) {
+        final rowsLabel = DatabaseStatsService.formatIntegerEl(
+          r.droppedLegacyIndexRows!,
+        );
+        _showSnack(
+          'Η αναζήτηση ανανεώθηκε. Διαγράφηκε ο αχρησιμοποίητος πίνακας '
+          'search_index ($rowsLabel εγγραφές).',
+        );
+      } else {
+        _showSnack('Η αναζήτηση ανανεώθηκε.');
       }
+      await _load();
     } catch (e) {
       if (mounted) {
-        _showSnack('Αποτυχία αναδόμησης search_index: $e', isError: true);
+        _showSnack('Αποτυχία ανανέωσης αναζήτησης: $e', isError: true);
       }
     } finally {
       if (mounted) {
@@ -369,7 +369,10 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
   }
 
   Widget? _buildTableTrailingActions(String tableName) {
-    if (tableName != 'data_issues' && tableName != 'search_index') {
+    // Η ανανέωση αναζήτησης κρέμεται από τον `equipment`, όχι από τον
+    // `search_index`: ο δεύτερος καταργήθηκε και διαγράφεται από την ίδια
+    // ενέργεια — κουμπί πάνω του θα εξαφανιζόταν με το πρώτο πάτημα.
+    if (tableName != 'data_issues' && tableName != _kSearchCacheActionKey) {
       return null;
     }
     final busyHere = _tableMaintenanceBusy == tableName;
@@ -409,10 +412,10 @@ class _LampDbTablesTabState extends State<LampDbTablesTab> {
       );
     }
     return iconButton(
-      icon: Icons.restart_alt_outlined,
-      tooltip: 'Αναδόμηση πίνακα search_index',
+      icon: Icons.refresh,
+      tooltip: 'Ανανέωση αναζήτησης (άδειασμα μνήμης)',
       showSpinner: busyHere,
-      onPressed: busyHere || busyOther ? null : _onRebuildSearchIndexPressed,
+      onPressed: busyHere || busyOther ? null : _onRefreshSearchCachePressed,
     );
   }
 

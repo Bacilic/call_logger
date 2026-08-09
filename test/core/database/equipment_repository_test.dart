@@ -215,6 +215,14 @@ void main() {
         auditRows.single['details'],
         'equipment id=$eqId (αφαίρεση κοινόχρηστου τμήματος $deptId)',
       );
+
+      // Το `details` κρατά τον κωδικό ως τεχνικό ίχνος· το όνομα του τμήματος
+      // ταξιδεύει στο στιγμιότυπο, και από εκεί το διαβάζει το Ιστορικό
+      // Εφαρμογής για τη σύνοψη και το «Τι άλλαξε».
+      final oldValues =
+          jsonDecode(auditRows.single['old_values_json'] as String)
+              as Map<String, dynamic>;
+      expect(oldValues['department_text'], 'Κοινό Τμήμα');
     });
 
     test('replaceEquipmentUsers: audit σύνδεσης/αποσύνδεσης χρηστών', () async {

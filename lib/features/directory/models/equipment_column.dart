@@ -5,30 +5,56 @@ import '../../calls/models/user_model.dart';
 /// Γραμμή πίνακα εξοπλισμού: εξοπλισμός + κάτοχος (από `user_equipment`, εμφάνιση πρώτου). $1 = equipment, $2 = owner.
 typedef EquipmentRow = (EquipmentModel, UserModel?);
 
-/// Στήλη «Τοποθεσία»: `[Κτίριο] Τμήμα - Τοποθεσία` με αυστηρή πηγή (κάτοχος ή εξοπλισμός).
-/// Με [showBuilding]: false παραλείπεται το πρόθεμα `[Κτίριο]`.
+/// Η τοποθεσία που ισχύει για μια γραμμή εξοπλισμού.
+///
+/// Η δική του υπερισχύει· όταν είναι κενή, κληρονομεί από τον κάτοχο. Έτσι ο
+/// φορητός ακολουθεί τον άνθρωπο, ενώ ο εκτυπωτής που κάθεται στον διάδρομο
+/// κρατά δική του θέση.
+String effectiveEquipmentLocation(EquipmentRow row) {
+  final own = (row.$1.location ?? '').trim();
+  if (own.isNotEmpty) return own;
+  return (row.$2?.location ?? '').trim();
+}
+
+/// Το κείμενο που εξηγεί ότι ο εξοπλισμός **δεν** ακολουθεί τον κάτοχό του.
+///
+/// Είναι ένδειξη κατάστασης, όχι κατηγορία: ο εκτυπωτής που στέκεται αλλού από
+/// το γραφείο του κατόχου είναι απόλυτα θεμιτός. Ο λόγος που φαίνεται πάντα
+/// είναι ότι κάποιος πρέπει να ξέρει τι αφήνει πίσω του πριν το αφήσει.
+String equipmentLocationDivergenceNotice({
+  required String ownerName,
+  String? ownerLocation,
+}) {
+  final name = ownerName.trim();
+  final who = name.isEmpty ? 'ο κάτοχος' : 'ο/η $name';
+  final loc = (ownerLocation ?? '').trim();
+  if (loc.isEmpty) {
+    return 'Δεν ακολουθεί τον κάτοχο — $who δεν έχει ορίσει θέση';
+  }
+  return 'Δεν ακολουθεί τον κάτοχο — $who είναι «$loc»';
+}
+
+/// Στήλη «Τοποθεσία»: `[Κτίριο Όροφος] Τμήμα - Τοποθεσία`.
+///
+/// Κτίριο, όροφος και τμήμα προκύπτουν από τη βάση· το ελεύθερο κείμενο της
+/// τοποθεσίας συμπληρώνει μόνο ό,τι δεν ξέρει κανείς άλλος — τη θέση μέσα στο
+/// γραφείο («πίσω από την πόρτα»). Με [showBuilding]: false φεύγει το πρόθεμα.
 String equipmentRowLocationFormattedLine(
   EquipmentRow row, {
   bool showBuilding = true,
 }) {
   final owner = row.$2;
   final eq = row.$1;
-  final int? deptId;
-  final String? locRaw;
-  if (owner != null) {
-    deptId = owner.departmentId;
-    locRaw = owner.location;
-  } else {
-    deptId = eq.departmentId;
-    locRaw = eq.location;
-  }
+  final deptId = owner != null ? owner.departmentId : eq.departmentId;
   final deptName =
       (deptId != null ? LookupService.instance.getDepartmentName(deptId) : null)
           ?.trim() ??
       '';
-  final building = (LookupService.instance.getDepartmentBuilding(deptId) ?? '')
-      .trim();
-  final loc = (locRaw ?? '').trim();
+  final building = [
+    (LookupService.instance.getDepartmentBuilding(deptId) ?? '').trim(),
+    (LookupService.instance.getDepartmentFloor(deptId) ?? '').trim(),
+  ].where((part) => part.isNotEmpty).join(' ');
+  final loc = effectiveEquipmentLocation(row);
 
   final hasB = building.isNotEmpty;
   final hasD = deptName.isNotEmpty;

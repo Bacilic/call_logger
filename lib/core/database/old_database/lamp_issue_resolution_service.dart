@@ -6,9 +6,11 @@ import 'lamp_issue_fk_analyzer.dart';
 import 'lamp_issue_matching_engine.dart';
 import 'lamp_issue_resolution_models.dart';
 import 'lamp_issue_resolution_support.dart';
+import 'lamp_placement_catalog.dart';
 import 'resolution_log_entry.dart';
 
 export 'lamp_issue_resolution_models.dart';
+export 'lamp_placement_catalog.dart';
 
 class LampIssueResolutionService {
   LampIssueResolutionService({LampDatabaseProvider? databaseProvider})
@@ -22,6 +24,15 @@ class LampIssueResolutionService {
   }
 
   final LampDatabaseProvider _databaseProvider;
+
+  /// Ειδοποιείται μόλις μια εφαρμογή αποφάσεων αγγίξει τη βάση.
+  ///
+  /// Η αναζήτηση της Λάμπας δουλεύει πάνω σε αντίγραφο στη μνήμη· χωρίς αυτό
+  /// το σήμα το αντίγραφο έμενε στο στιγμιότυπο πριν την επίλυση και ο
+  /// χρήστης έβλεπε λυμένα προβλήματα σαν να υπήρχαν ακόμη. Συνδέεται μία
+  /// φορά, εκεί που στήνονται τα κοινά αντικείμενα της οθόνης.
+  void Function(String databasePath)? onDatabaseChanged;
+
   late final LampIssueMatchingEngine _matching;
   late final LampIssueResolutionSupport _support;
   late final LampIssueFkAnalyzer _fkAnalyzer;
@@ -44,6 +55,118 @@ class LampIssueResolutionService {
       candidate,
       sourceDepartment: sourceDepartment,
       candidateDepartment: candidateDepartment,
+    );
+  }
+
+  /// Οι κατάλογοι γραφείων και υπαλλήλων για τα πεδία τοποθέτησης.
+  ///
+  /// Ένα φόρτωμα ανά συνεδρία επίλυσης: εκατοντάδες εγγραφές που δεν αλλάζουν
+  /// όσο ο οδηγός τρέχει.
+  Future<LampPlacementCatalog> loadPlacementCatalog({
+    required String databasePath,
+  }) async {
+    final db = await _databaseProvider.open(
+      databasePath.trim(),
+      mode: LampDatabaseMode.read,
+    );
+
+    final officeRows = await db.query(
+      'offices',
+      columns: <String>['office', 'office_name', 'department_name'],
+    );
+    final offices = <LampPlacementOffice>[];
+    final departmentByOffice = <int, String?>{};
+    final officeNameById = <int, String>{};
+    for (final row in officeRows) {
+      final id = _support.toInt(row['office']);
+      if (id == null) continue;
+      final name = _support.text(row['office_name']) ?? '';
+      final department = _support.text(row['department_name']);
+      departmentByOffice[id] = department;
+      officeNameById[id] = name;
+      offices.add(
+        LampPlacementOffice(
+          id: id,
+          officeName: name,
+          departmentName: department,
+        ),
+      );
+    }
+    offices.sort((a, b) => a.officeName.compareTo(b.officeName));
+
+    final countRows = await db.rawQuery(
+      'SELECT owner, COUNT(*) AS total FROM equipment '
+      'WHERE owner IS NOT NULL GROUP BY owner',
+    );
+    final equipmentCountByOwner = <int, int>{};
+    for (final row in countRows) {
+      final id = _support.toInt(row['owner']);
+      if (id != null) {
+        equipmentCountByOwner[id] = _support.toInt(row['total']) ?? 0;
+      }
+    }
+
+    final ownerRows = await db.query(
+      'owners',
+      columns: <String>['owner', 'last_name', 'first_name', 'office'],
+    );
+    final owners = <LampPlacementOwner>[];
+    for (final row in ownerRows) {
+      final id = _support.toInt(row['owner']);
+      if (id == null) continue;
+      final name = _support.ownerLabel(row);
+      if (name.isEmpty) continue;
+      final officeId = _support.toInt(row['office']);
+      owners.add(
+        LampPlacementOwner(
+          id: id,
+          name: name,
+          officeId: officeId,
+          officeName: officeId == null ? null : officeNameById[officeId],
+          departmentName: officeId == null ? null : departmentByOffice[officeId],
+          equipmentCount: equipmentCountByOwner[id] ?? 0,
+        ),
+      );
+    }
+    owners.sort((a, b) => a.name.compareTo(b.name));
+
+    // Προμηθευτές και κατηγορίες δεν έχουν δικούς τους πίνακες: τα ζεύγη
+    // «αναγνωριστικό — όνομα» ζουν μέσα στις συμβάσεις και εξάγονται από εκεί.
+    final contractRows = await db.query(
+      'contracts',
+      columns: <String>[
+        'supplier',
+        'supplier_name',
+        'category',
+        'category_name',
+      ],
+    );
+    final supplierByName = <int, String>{};
+    final categoryByName = <int, String>{};
+    for (final row in contractRows) {
+      final supplierId = _support.toInt(row['supplier']);
+      final supplierName = _support.text(row['supplier_name']);
+      if (supplierId != null && supplierName != null) {
+        supplierByName.putIfAbsent(supplierId, () => supplierName);
+      }
+      final categoryId = _support.toInt(row['category']);
+      final categoryName = _support.text(row['category_name']);
+      if (categoryId != null && categoryName != null) {
+        categoryByName.putIfAbsent(categoryId, () => categoryName);
+      }
+    }
+    List<LampContractLookupEntry> sortedEntries(Map<int, String> source) {
+      return <LampContractLookupEntry>[
+        for (final entry in source.entries)
+          LampContractLookupEntry(id: entry.key, name: entry.value),
+      ]..sort((a, b) => a.name.compareTo(b.name));
+    }
+
+    return LampPlacementCatalog(
+      offices: offices,
+      owners: owners,
+      suppliers: sortedEntries(supplierByName),
+      contractCategories: sortedEntries(categoryByName),
     );
   }
 
@@ -79,14 +202,19 @@ class LampIssueResolutionService {
     ResolutionLogSink? onLog,
     ResolutionCancelToken? cancelToken,
     void Function(LampIssueResolutionDecision decision)? onDecisionApplied,
-  }) {
-    return _applier.applyDecisions(
-      databasePath: databasePath,
-      decisions: decisions,
-      onLog: onLog,
-      cancelToken: cancelToken,
-      onDecisionApplied: onDecisionApplied,
-    );
+  }) async {
+    try {
+      return await _applier.applyDecisions(
+        databasePath: databasePath,
+        decisions: decisions,
+        onLog: onLog,
+        cancelToken: cancelToken,
+        onDecisionApplied: onDecisionApplied,
+      );
+    } finally {
+      // Και σε αποτυχία: μέρος των αποφάσεων μπορεί να έχει ήδη γραφτεί.
+      onDatabaseChanged?.call(databasePath);
+    }
   }
 
   /// Μία απόφαση σε μία συναλλαγή — ίδια διαδρομή με [applyDecisions].
@@ -97,9 +225,9 @@ class LampIssueResolutionService {
     ResolutionCancelToken? cancelToken,
     void Function(LampIssueResolutionDecision decision)? onDecisionApplied,
   }) {
-    return _applier.applySingleDecision(
+    return applyDecisions(
       databasePath: databasePath,
-      decision: decision,
+      decisions: <LampIssueResolutionDecision>[decision],
       onLog: onLog,
       cancelToken: cancelToken,
       onDecisionApplied: onDecisionApplied,

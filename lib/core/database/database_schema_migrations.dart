@@ -202,6 +202,40 @@ Future<void> onDatabaseUpgradeSquashed(
     final repaired = await migrateDatabaseToV38(db);
     await _logForeignKeyRepairs(db, repaired);
   }
+  if (oldVersion < 39 && newVersion >= 39) {
+    await migrateDatabaseToV39(db);
+  }
+  if (oldVersion < 40 && newVersion >= 40) {
+    await migrateDatabaseToV40(db);
+  }
+}
+
+/// v39: ανακατασκευή `search_text` μετά τη συμπλήρωση των ελληνικών ετικετών
+/// πεδίων (idempotent).
+///
+/// Το ευρετήριο αναζήτησης γράφεται τη στιγμή της εγγραφής, οπότε οι παλιές
+/// γραμμές κουβαλούν ακόμη τα αγγλικά κλειδιά (`equipment code`). Χωρίς αυτό,
+/// αναζήτηση για «κωδικός εξοπλισμού» θα έβρισκε μόνο ό,τι γράφτηκε από εδώ
+/// και πέρα.
+Future<void> migrateDatabaseToV39(Database db) async {
+  await AuditService.migrateRebuildAuditSearchTextIndex(db);
+}
+
+/// v40: `tasks.completed_at` — η στιγμή που ολοκληρώθηκε η εκκρεμότητα.
+///
+/// Το `updated_at` ξαναγράφεται σε κάθε αποθήκευση, οπότε η αναίρεση της
+/// ολοκλήρωσης έσβηνε την ίδια πληροφορία που θέλει να δείξει μετά. Οι ήδη
+/// κλειστές εγγραφές κρατούν το `updated_at` τους ως αφετηρία.
+Future<void> migrateDatabaseToV40(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(tasks)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('completed_at')) {
+    await db.execute('ALTER TABLE tasks ADD COLUMN completed_at TEXT');
+  }
+  await db.rawUpdate(
+    "UPDATE tasks SET completed_at = updated_at "
+    "WHERE status = 'closed' AND completed_at IS NULL",
+  );
 }
 
 /// Καταγράφει στο Ιστορικό τι αποσυνδέθηκε ή σβήστηκε από την αναβάθμιση v38.

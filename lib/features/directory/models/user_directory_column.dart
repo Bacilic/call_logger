@@ -26,6 +26,11 @@ class UserDirectoryColumn {
     'Τμήμα',
     'department',
   );
+  static const equipment = UserDirectoryColumn._(
+    'equipment',
+    'Εξοπλισμός',
+    'equipment',
+  );
   static const notes = UserDirectoryColumn._('notes', 'Σημειώσεις', 'notes');
 
   /// Προεπιλογή: όλες οι στήλες ορατές.
@@ -36,6 +41,7 @@ class UserDirectoryColumn {
     firstName,
     phone,
     department,
+    equipment,
     notes,
   ];
 
@@ -46,6 +52,7 @@ class UserDirectoryColumn {
     firstName,
     phone,
     department,
+    equipment,
     notes,
   ];
 
@@ -82,6 +89,8 @@ class UserDirectoryColumn {
         return 'department';
       case 'notes':
         return 'notes';
+      // Ο εξοπλισμός δεν είναι πεδίο της φόρμας υπαλλήλου: διπλό κλικ πάνω του
+      // ανοίγει τη φόρμα εστιασμένη στο όνομα, όπως κάθε στήλη χωρίς πεδίο.
       default:
         return 'firstName';
     }
@@ -104,6 +113,10 @@ class UserDirectoryColumn {
         return u.departmentName ?? '';
       case 'notes':
         return u.notes ?? '';
+      // Ο εξοπλισμός δεν συμμετέχει στην αναζήτηση στηλών (όπως και στα τμήματα):
+      // οι κωδικοί του βρίσκονται από την καρτέλα Εξοπλισμός.
+      case 'equipment':
+        return '';
       default:
         return '';
     }

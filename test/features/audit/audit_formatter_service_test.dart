@@ -15,7 +15,8 @@ void main() {
     );
     final s = formatter.summaryLine(row, technical: false);
     expect(s, contains('Επηρέασε 3'));
-    expect(s, contains('τμήματος'));
+    // Ονομαστική: η λίστα απαριθμεί πεδία, δεν συμπληρώνει πρόταση.
+    expect(s, contains('Πεδία: τμήμα'));
   });
 
   test('summaryLine fallback όταν λείπει entity_type', () {

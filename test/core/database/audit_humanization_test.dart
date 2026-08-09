@@ -86,10 +86,11 @@ void main() {
         expect(summary, isNot(contains('destination')));
         expect(summary, isNot(contains('outcome')));
         expect(summary, isNot(contains('trigger el')));
-        expect(summary, contains('Προορισμός'));
-        expect(summary, contains('Αποτέλεσμα'));
-        expect(summary, contains('Διαδρομή αρχείου'));
-        expect(summary, contains('Έναυσμα'));
+        // Πεζά: οι ετικέτες μπαίνουν μέσα στην πρόταση «N αλλαγές: …».
+        expect(summary, contains('προορισμός'));
+        expect(summary, contains('αποτέλεσμα'));
+        expect(summary, contains('διαδρομή αρχείου'));
+        expect(summary, contains('έναυσμα'));
         expect(summary, matches(RegExp(r'\d+ αλλαγές:')));
       },
     );

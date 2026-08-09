@@ -17,10 +17,16 @@ class LexiconSpellTextFormField extends ConsumerStatefulWidget {
     this.textCapitalization = TextCapitalization.none,
     this.maxLines = 1,
     this.minLines,
+    this.expands = false,
     this.onChanged,
     this.focusNode,
     this.enabled,
-  });
+    this.readOnly = false,
+    this.style,
+  }) : assert(
+         !expands || (maxLines == null && minLines == null),
+         'Το expands απαιτεί maxLines και minLines null — το ύψος το ορίζει ο γονέας.',
+       );
 
   final SpellCheckController controller;
   final InputDecoration decoration;
@@ -28,11 +34,21 @@ class LexiconSpellTextFormField extends ConsumerStatefulWidget {
   final TextCapitalization textCapitalization;
   final int? maxLines;
   final int? minLines;
+
+  /// Γεμίζει το ύψος που του δίνει ο γονέας, αντί να το υπολογίζει από γραμμές.
+  final bool expands;
   final ValueChanged<String>? onChanged;
   final FocusNode? focusNode;
 
   /// `null` = ενεργό (προεπιλογή του [TextFormField]).
   final bool? enabled;
+
+  /// Ορατό και επιλέξιμο, αλλά μη επεξεργάσιμο — για τιμές που προκύπτουν
+  /// αλλού, όπου το γκριζάρισμα του [enabled] θα έκρυβε το κείμενο.
+  final bool readOnly;
+
+  /// Στυλ του κειμένου — π.χ. αχνό γκρι για τιμή που κληρονομείται από αλλού.
+  final TextStyle? style;
 
   @override
   ConsumerState<LexiconSpellTextFormField> createState() =>
@@ -178,7 +194,11 @@ class _LexiconSpellTextFormFieldState
         textCapitalization: widget.textCapitalization,
         maxLines: widget.maxLines,
         minLines: widget.minLines,
+        expands: widget.expands,
+        textAlignVertical: widget.expands ? TextAlignVertical.top : null,
         enabled: widget.enabled,
+        readOnly: widget.readOnly,
+        style: widget.style,
         spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
         contextMenuBuilder: _contextMenuBuilder,
         onChanged: widget.onChanged,

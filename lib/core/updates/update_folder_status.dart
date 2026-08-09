@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../utils/greek_date_format.dart';
 import 'update_manifest.dart';
 
 /// Κατάσταση ενός φακέλου ενημερώσεων ως προς το τι μπορούν να κάνουν οι
@@ -65,7 +66,7 @@ class UpdateFolderStatus {
       case UpdateFolderState.ready:
         final m = manifest!;
         return 'Δημοσιευμένη έκδοση ${m.version}+${m.build} '
-            '(${_displayDate(m.released)}).';
+            '(${formatGreekShortDateFromIso(m.released)}).';
     }
   }
 
@@ -75,14 +76,6 @@ class UpdateFolderStatus {
     return '${parts.sublist(0, parts.length - 1).join(', ')} και ${parts.last}';
   }
 
-  /// `yyyy-MM-dd` → `dd-MM-yyyy`· οτιδήποτε άλλο επιστρέφεται ως έχει.
-  static String _displayDate(String isoDate) {
-    final match = RegExp(
-      r'^(\d{4})-(\d{2})-(\d{2})$',
-    ).firstMatch(isoDate.trim());
-    if (match == null) return isoDate;
-    return '${match[3]}-${match[2]}-${match[1]}';
-  }
 }
 
 /// Ελέγχει τι περιέχει ο [folderPath] ως φάκελος ενημερώσεων.

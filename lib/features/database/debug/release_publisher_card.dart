@@ -19,8 +19,8 @@ import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../utils/backup_destination_folder_validator.dart';
 import 'build_output_log.dart';
 import 'publish_cli.dart';
-import 'publish_reminder_provider.dart';
 import 'release_process_runner.dart';
+import 'release_publish_run_provider.dart';
 import 'release_publisher_service.dart';
 
 /// Κάρτα «Δημοσίευση έκδοσης» — μόνο στα Σενάρια σφαλμάτων (debug).
@@ -52,19 +52,21 @@ class ReleasePublisherCard extends ConsumerStatefulWidget {
 
 class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   final _folderController = TextEditingController();
-  final _buildOutputLog = BuildOutputLog();
   late final SearchDebouncer _networkClassifyDebouncer;
-  bool _running = false;
-  String? _statusMessage;
-  bool _statusIsError = false;
+
+  /// Τοπικό μήνυμα της κάρτας (αντιγραφή εντολής, αποτυχία προεπισκόπησης).
+  /// Το αποτέλεσμα της ίδιας της εκτέλεσης ζει στον [releasePublishRunProvider]
+  /// — με ζωή εφαρμογής, ώστε να μη χάνεται όταν ο χρήστης αλλάζει οθόνη.
+  String? _localNotice;
+  bool _localNoticeIsError = false;
   String? _folderError;
   bool _folderValid = false;
   int _validationGen = 0;
   bool _showLocalOnlyWarning = false;
   UpdateFolderStatus? _folderStatus;
-  final Stopwatch _actionStopwatch = Stopwatch();
-  Timer? _elapsedTimer;
-  String _elapsedLabel = _initialElapsedLabel;
+
+  /// Μόνο ανανέωση προβολής του χρονομέτρου — το ρολόι ζει στον controller.
+  Timer? _elapsedTicker;
 
   static final String _initialElapsedLabel = formatElapsedWithMillis(
     Duration.zero,
@@ -87,7 +89,8 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   /// Η υπόδειξη λέει πάντα **τι κάνει** το κουμπί· όταν είναι ανενεργό λόγω
   /// φακέλου, προστίθεται και η αιτία. Όσο τρέχει μια ενέργεια δεν προστίθεται
   /// τίποτα — το κουμπί είναι ανενεργό επειδή δουλεύει, όχι επειδή λείπει κάτι.
-  String _actionTooltip(String description) => (_canPublish || _running)
+  String _actionTooltip(String description) =>
+      (_canPublish || ref.read(releasePublishRunProvider).running)
       ? description
       : '$description\n\n$_folderRequirement';
 
@@ -102,6 +105,11 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     );
     _folderController.addListener(_onFolderTextChanged);
     _loadFolder();
+    // Επανείσοδος στην οθόνη ενώ μια εκτέλεση ήδη τρέχει: το χρονόμετρο
+    // πρέπει να ξαναρχίσει να προβάλλεται αμέσως.
+    if (ref.read(releasePublishRunProvider).running) {
+      _startElapsedTicker();
+    }
   }
 
   Future<void> _loadFolder() async {
@@ -116,10 +124,9 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   @override
   void dispose() {
     _folderController.removeListener(_onFolderTextChanged);
-    _stopActionTimer(freezeLabel: false);
+    _elapsedTicker?.cancel();
     _networkClassifyDebouncer.dispose();
     _folderController.dispose();
-    _buildOutputLog.dispose();
     super.dispose();
   }
 
@@ -145,40 +152,25 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     });
   }
 
-  void _startActionTimer() {
-    _elapsedTimer?.cancel();
-    _actionStopwatch
-      ..reset()
-      ..start();
-    _elapsedLabel = _initialElapsedLabel;
+  void _startElapsedTicker() {
+    _elapsedTicker?.cancel();
     // Ρυθμός ανανέωσης πυκνότερος από τα χιλιοστά που δείχνει: χωρίς αυτό ο
     // αριθμός θα «κολλούσε» ανά δευτερόλεπτο και τα χιλιοστά θα ήταν διακοσμητικά.
-    _elapsedTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+    _elapsedTicker = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (!mounted) return;
-      setState(() {
-        _elapsedLabel = formatElapsedWithMillis(_actionStopwatch.elapsed);
-      });
+      setState(() {}); // Ξαναδιαβάζει το ρολόι του controller.
     });
   }
 
-  void _stopActionTimer({bool freezeLabel = true}) {
-    _elapsedTimer?.cancel();
-    _elapsedTimer = null;
-    if (_actionStopwatch.isRunning) {
-      _actionStopwatch.stop();
-    }
-    if (freezeLabel) {
-      _elapsedLabel = formatElapsedWithMillis(_actionStopwatch.elapsed);
-    }
-  }
-
-  void _appendLog(String line) {
-    final stamp = formatElapsedWithMillis(_actionStopwatch.elapsed);
-    _buildOutputLog.append('[$stamp] $line');
+  void _stopElapsedTicker() {
+    _elapsedTicker?.cancel();
+    _elapsedTicker = null;
   }
 
   bool get _canPublish =>
-      !_running && _folderValid && _folderController.text.trim().isNotEmpty;
+      !ref.read(releasePublishRunProvider).running &&
+      _folderValid &&
+      _folderController.text.trim().isNotEmpty;
 
   Future<bool> _confirmCreateFolder(String folderPath) async {
     final confirmed = await showDialog<bool>(
@@ -316,76 +308,42 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
   Future<void> _rebuildCurrentVersion() =>
       _runPublisherAction((service) => service.rebuildCurrentVersion());
 
-  /// Κοινή ροή για κάθε ενέργεια της κάρτας: κλείδωμα κουμπιών, χρονόμετρο,
-  /// αποθήκευση φακέλου, εκτέλεση, μήνυμα αποτελέσματος.
+  /// Κοινή ροή για κάθε ενέργεια της κάρτας: αποθήκευση φακέλου, ανάθεση της
+  /// εκτέλεσης στον controller με ζωή εφαρμογής, ανανέωση ένδειξης φακέλου.
   ///
-  /// Η [action] λέει **τι** εκτελείται· τα υπόλοιπα βήματα είναι ίδια για όλες
-  /// τις ενέργειες, ώστε μια αλλαγή στο φινάλε να γίνεται σε ένα σημείο.
+  /// Η [action] λέει **τι** εκτελείται· το κλείδωμα «μία το πολύ εκτέλεση»,
+  /// το χρονόμετρο, το log και το μήνυμα αποτελέσματος ζουν στον
+  /// [releasePublishRunProvider], ώστε να επιβιώνουν την αλλαγή οθόνης.
   Future<void> _runPublisherAction(
     Future<ReleasePublishResult> Function(ReleasePublisherService service)
     action,
   ) async {
     if (!_canPublish) return;
     final folder = _folderController.text.trim();
+    final runNotifier = ref.read(releasePublishRunProvider.notifier);
+    final service = _createService(folder);
 
     setState(() {
-      _running = true;
-      _statusMessage = null;
-      _statusIsError = false;
-      _elapsedLabel = _initialElapsedLabel;
+      _localNotice = null;
+      _localNoticeIsError = false;
     });
-    _buildOutputLog.clear();
-    _startActionTimer();
 
     await SettingsService().catalogs.setUpdateFolderPath(folder);
-    final result = await action(_createService(folder));
+    final started = await runNotifier.run(() => action(service));
 
-    if (!mounted) {
-      _stopActionTimer();
-      return;
-    }
-
-    _stopActionTimer();
-    final elapsed = _elapsedLabel;
-    setState(() {
-      _running = false;
-      _statusIsError = result.status == ReleasePublishStatus.failure;
-      _statusMessage = _statusMessageFor(result, elapsed);
-    });
-
-    // Το Unreleased άδειασε: η υπενθύμιση δημοσίευσης πρέπει να σβήσει τώρα,
-    // όχι στην επόμενη εκκίνηση.
-    if (result.status == ReleasePublishStatus.success) {
-      ref.invalidate(publishReminderProvider);
-    }
+    if (!started || !mounted) return;
 
     // Κάθε ενέργεια αλλάζει το περιεχόμενο του φακέλου — η ένδειξη κατάστασης
     // πρέπει να δείχνει το ΝΕΟ περιεχόμενο, όχι αυτό πριν την ενέργεια.
     await _refreshFolderStatus(folder);
   }
 
-  static String? _statusMessageFor(
-    ReleasePublishResult result,
-    String elapsed,
-  ) {
-    switch (result.status) {
-      case ReleasePublishStatus.success:
-        final base = result.message ?? 'Επιτυχία.';
-        return '$base (συνολικός χρόνος: $elapsed)';
-      case ReleasePublishStatus.emptyUnreleasedWarning:
-        return result.message;
-      case ReleasePublishStatus.failure:
-        final step = result.failedStep ?? 'άγνωστο';
-        return 'Αποτυχία στο βήμα «$step»: ${result.message ?? ''}';
-    }
-  }
-
   ReleasePublisherService _createService(String folder) {
-    // Χωρίς setState: το log ειδοποιεί μόνο του την προβολή του, ώστε μια
-    // γραμμή εξόδου να μην ξαναχτίζει ολόκληρη την κάρτα.
+    // Ο controller κρατιέται ΤΩΡΑ: το callback προόδου καλείται και αφού η
+    // κάρτα καταστραφεί (αλλαγή οθόνης) — το log ζει όσο η εφαρμογή.
+    final runNotifier = ref.read(releasePublishRunProvider.notifier);
     void reportProgress(String message) {
-      if (!mounted) return;
-      _appendLog(message);
+      runNotifier.appendLog(message);
     }
 
     final factory = widget.serviceFactory;
@@ -429,8 +387,8 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _statusIsError = true;
-        _statusMessage = 'Αποτυχία προεπισκόπησης: $e';
+        _localNoticeIsError = true;
+        _localNotice = 'Αποτυχία προεπισκόπησης: $e';
       });
       return;
     }
@@ -530,8 +488,8 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     await Clipboard.setData(ClipboardData(text: command));
     if (!mounted) return;
     setState(() {
-      _statusIsError = false;
-      _statusMessage = 'Η εντολή αντιγράφηκε στο πρόχειρο:\n$command';
+      _localNoticeIsError = false;
+      _localNotice = 'Η εντολή αντιγράφηκε στο πρόχειρο:\n$command';
     });
   }
 
@@ -557,10 +515,38 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
     // Διατηρείται για συμβατότητα με overrides τεστ (appVersionProvider).
     ref.watch(appVersionProvider);
 
+    final runState = ref.watch(releasePublishRunProvider);
+    final runNotifier = ref.read(releasePublishRunProvider.notifier);
+    final running = runState.running;
+
+    // Εκκίνηση/παύση της προβολής χρονομέτρου ακολουθεί την εκτέλεση —
+    // από όπου κι αν ξεκίνησε ή τελείωσε εκείνη.
+    ref.listen<ReleasePublishRunState>(releasePublishRunProvider, (
+      previous,
+      next,
+    ) {
+      if ((previous?.running ?? false) == next.running) return;
+      if (next.running) {
+        _startElapsedTicker();
+      } else {
+        _stopElapsedTicker();
+        if (mounted) setState(() {});
+      }
+    });
+
+    final completion = runState.completion;
+    final statusMessage = _localNotice ?? completion?.statusMessage;
+    final statusIsError = _localNotice != null
+        ? _localNoticeIsError
+        : (completion?.isFailure ?? false);
+    final elapsedLabel = running
+        ? formatElapsedWithMillis(runNotifier.elapsed)
+        : (completion?.elapsedLabel ?? _initialElapsedLabel);
+
     final publishButton = FilledButton.icon(
       key: const Key('release_publish_button'),
       onPressed: _canPublish ? () => unawaited(_onPublishPressed()) : null,
-      icon: _running
+      icon: running
           ? SizedBox(
               width: 16,
               height: 16,
@@ -570,7 +556,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
               ),
             )
           : const Icon(Icons.publish_outlined),
-      label: Text(_running ? 'Δημοσίευση…' : 'Δημοσίευση'),
+      label: Text(running ? 'Δημοσίευση…' : 'Δημοσίευση'),
     );
 
     final installerButton = OutlinedButton.icon(
@@ -621,7 +607,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
                       isDense: true,
                       errorText: _folderError,
                     ),
-                    enabled: !_running,
+                    enabled: !running,
                     onEditingComplete: () => unawaited(
                       _validateAndPersistFolder(offerCreateIfMissing: true),
                     ),
@@ -633,7 +619,7 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
                 const SizedBox(width: 8),
                 IconButton(
                   tooltip: 'Επιλογή φακέλου',
-                  onPressed: _running ? null : _pickFolder,
+                  onPressed: running ? null : _pickFolder,
                   icon: const Icon(Icons.folder_open),
                 ),
               ],
@@ -729,15 +715,15 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
                 IconButton(
                   key: const Key('release_cli_settings_button'),
                   tooltip: 'Ρυθμίσεις εντολής τερματικού',
-                  onPressed: _running
+                  onPressed: running
                       ? null
                       : () => unawaited(_openCliSettingsDialog()),
                   icon: const Icon(Icons.settings_outlined),
                 ),
-                if (_running || _actionStopwatch.elapsedMilliseconds > 0)
+                if (running || completion != null)
                   Text(
                     key: const Key('release_elapsed_timer'),
-                    'Χρόνος: $_elapsedLabel',
+                    'Χρόνος: $elapsedLabel',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
@@ -745,12 +731,12 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
               ],
             ),
             const SizedBox(height: 12),
-            _BuildOutputView(log: _buildOutputLog),
-            if (_statusMessage != null) ...[
+            _BuildOutputView(log: runNotifier.log),
+            if (statusMessage != null) ...[
               const SizedBox(height: 12),
               Material(
                 color:
-                    (_statusIsError
+                    (statusIsError
                             ? scheme.errorContainer
                             : scheme.primaryContainer)
                         .withValues(alpha: 0.55),
@@ -758,9 +744,9 @@ class _ReleasePublisherCardState extends ConsumerState<ReleasePublisherCard> {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
-                    _statusMessage!,
+                    statusMessage,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: _statusIsError
+                      color: statusIsError
                           ? scheme.onErrorContainer
                           : scheme.onPrimaryContainer,
                     ),

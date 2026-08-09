@@ -16,6 +16,7 @@ import '../../directory/models/department_model.dart';
 import '../../directory/providers/directory_cache_refresh.dart';
 import '../../directory/screens/widgets/user_phone_department_conflict_dialog.dart';
 import '../../tasks/models/task.dart';
+import '../../directory/providers/catalog_validation_provider.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
@@ -762,6 +763,29 @@ class SmartEntitySelectorAssociation {
     invalidateTaskListProviders(ref);
   }
 
+  /// Οι υποδείξεις κανόνων για τα πεδία της γρήγορης καταχώρησης.
+  ///
+  /// Αν οι κανόνες δεν φορτώνονται (π.χ. βάση σε μετάβαση), η καταχώρηση
+  /// προχωρά κανονικά χωρίς υποδείξεις — ποτέ δεν εμποδίζεται.
+  Future<List<String>> _quickAddValidationHints({
+    String? callerName,
+    String? phones,
+    String? departmentName,
+    String? equipmentCode,
+  }) async {
+    try {
+      final service = await ref.read(catalogValidationServiceProvider.future);
+      return service.quickAddHints(
+        callerName: callerName,
+        phones: phones,
+        departmentName: departmentName,
+        equipmentCode: equipmentCode,
+      );
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<int> _insertQuickAddTask({
     required String? callerName,
     required String? summaryText,
@@ -780,7 +804,20 @@ class SmartEntitySelectorAssociation {
         : (caller?.isNotEmpty == true
               ? 'Ενημερώθηκε οντότητα καλούντα'
               : 'Quick add');
-    final quickDescription = '${Task.quickAddTag} $descriptionCore';
+    // Οι κανόνες επικύρωσης δεν διακόπτουν τη γρήγορη καταχώρηση — οι
+    // υποδείξεις τους ταξιδεύουν στην εκκρεμότητα, για έλεγχο με την ησυχία
+    // του χρήστη. Καθαρή καταχώρηση δεν προσθέτει καμία γραμμή.
+    final hints = await _quickAddValidationHints(
+      callerName: userText ?? caller,
+      phones: phoneText,
+      departmentName: departmentText,
+      equipmentCode: equipmentText,
+    );
+    final hintBlock = hints.isEmpty
+        ? ''
+        : '\n${Task.validationHintHeader}\n'
+              '${hints.map((h) => '${Task.validationHintPrefix}$h').join('\n')}';
+    final quickDescription = '${Task.quickAddTag} $descriptionCore$hintBlock';
     return ref
         .read(taskServiceProvider)
         .createFromCall(

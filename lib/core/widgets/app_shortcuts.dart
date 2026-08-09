@@ -22,8 +22,10 @@ import '../database/database_init_runner.dart';
 import '../providers/core_lexicon_provider.dart';
 import '../providers/quick_call_providers.dart';
 import '../../features/calls/screens/widgets/quick_call_dialog.dart';
+import '../../features/history/models/lansweeper_report_scope.dart';
+import '../../features/history/widgets/lansweeper/lansweeper_report_launcher.dart';
+import 'app_keyboard_shortcuts.dart';
 import 'main_shell.dart';
-import 'quick_call_shortcuts.dart';
 import 'shutdown_progress_screen.dart';
 
 /// Root-level Shortcuts και Actions για την εφαρμογή.
@@ -73,7 +75,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   Timer? _shutdownRevealTimer;
   bool _shutdownStillRunning = false;
 
-  static final Map<ShortcutActivator, Intent> _shortcuts = quickCallShortcuts;
+  static final Map<ShortcutActivator, Intent> _shortcuts = appKeyboardShortcuts;
 
   @override
   void initState() {
@@ -103,7 +105,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
         ref.read(coreLexiconProvider.notifier).bootstrapFromSavedPath(),
       );
     });
-    HardwareKeyboard.instance.addHandler(_handleGlobalQuickCallKey);
+    HardwareKeyboard.instance.addHandler(_handleGlobalShortcutKey);
   }
 
   /// Μη-μπλοκάρουσα ανακοίνωση όταν λείπουν μη-μοιραία αρχεία πόρων.
@@ -142,7 +144,15 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     unawaited(showQuickCallDialog(context));
   }
 
-  bool _handleGlobalQuickCallKey(KeyEvent event) {
+  /// Η καθημερινή εργασία «όλες οι σημερινές κλήσεις στο Lansweeper», ένα
+  /// πάτημα από παντού. Ο φρουρός διπλού ανοίγματος ζει στον launcher.
+  void _invokeLansweeperReport() {
+    unawaited(
+      openLansweeperReport(context, ref, scope: LansweeperReportScope.today),
+    );
+  }
+
+  bool _handleGlobalShortcutKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
 
     final keyboard = HardwareKeyboard.instance;
@@ -153,16 +163,24 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
         break;
       }
     }
-    if (matched is! QuickCaptureIntent) return false;
-    if (!isQuickCallCaptureAvailable(ref)) return true;
 
-    _invokeQuickCapture();
-    return true;
+    switch (matched) {
+      case QuickCaptureIntent():
+        // Το `true` και όταν η καταγραφή δεν είναι διαθέσιμη: η συντόμευση
+        // αναγνωρίστηκε, δεν πρέπει να πέσει σε άλλον χειριστή.
+        if (isQuickCallCaptureAvailable(ref)) _invokeQuickCapture();
+        return true;
+      case LansweeperReportIntent():
+        _invokeLansweeperReport();
+        return true;
+      default:
+        return false;
+    }
   }
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_handleGlobalQuickCallKey);
+    HardwareKeyboard.instance.removeHandler(_handleGlobalShortcutKey);
     _windowBoundsSaveTimer?.cancel();
     _shutdownRevealTimer?.cancel();
     _appLifecycleListener?.dispose();
@@ -343,6 +361,12 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
           QuickCaptureIntent: CallbackAction<QuickCaptureIntent>(
             onInvoke: (QuickCaptureIntent intent) {
               _invokeQuickCapture();
+              return null;
+            },
+          ),
+          LansweeperReportIntent: CallbackAction<LansweeperReportIntent>(
+            onInvoke: (LansweeperReportIntent intent) {
+              _invokeLansweeperReport();
               return null;
             },
           ),

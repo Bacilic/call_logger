@@ -5,6 +5,10 @@ import 'lamp_data_issue_type_labels.dart';
 import 'lamp_issue_matching_engine.dart';
 import 'lamp_issue_resolution_models.dart';
 import 'lamp_issue_resolution_support.dart';
+import 'lamp_owner_name_similarity.dart';
+import 'lamp_place_suggestion.dart';
+import 'lamp_reference_labels.dart';
+import 'lamp_reference_name_match.dart';
 
 class LampIssueFkAnalyzer {
   LampIssueFkAnalyzer(this._matching, this._support);
@@ -105,6 +109,25 @@ class LampIssueFkAnalyzer {
       columns: <String>['model', 'contract', 'owner', 'office'],
     );
     final usageByColumn = _buildFkUsageByColumn(equipmentStatsRows);
+
+    /// Οντότητες που δεν τις χρησιμοποιεί κανένας εξοπλισμός.
+    ///
+    /// Στη λίστα υποψηφίων σημαίνονται με σπασμένο σύνδεσμο: συνήθως
+    /// απορρίπτονται, και η ένδειξη γλιτώνει τον χρήστη από το να το
+    /// ανακαλύψει αφού διαλέξει.
+    Set<int> unlinkedIdsFor(String column) {
+      final usage = usageByColumn[column] ?? const <int, int>{};
+      final all = switch (column) {
+        'owner' => owners.map((row) => _support.toInt(row['owner'])),
+        'office' => offices.map((row) => row.id),
+        _ => const Iterable<int?>.empty(),
+      };
+      return <int>{
+        for (final id in all)
+          if (id != null && (usage[id] ?? 0) == 0) id,
+      };
+    }
+
     final officeLabelById = <int, String>{
       for (final row in offices)
         row.id: _officeDisplayLabel(
@@ -112,10 +135,19 @@ class LampIssueFkAnalyzer {
               _OfficeDetailRow(id: row.id, officeName: row.label),
         ),
     };
+    // Το γραφείο μπαίνει δίπλα στο όνομα: όταν δύο υποψήφιοι λέγονται
+    // «Παπαβασιλείου», είναι συχνά το μόνο κριτήριο επιλογής.
     final ownerLabelById = <int, String>{
       for (final row in owners)
         if (_support.toInt(row['owner']) != null)
-          _support.toInt(row['owner'])!: _support.ownerLabel(row),
+          _support.toInt(row['owner'])!: lampOwnerDisplayLabel(
+            lastName: _support.text(row['last_name']),
+            firstName: _support.text(row['first_name']),
+            officeName:
+                officeDetailsById[_support.toInt(row['office'])]?.officeName,
+            departmentName: officeDetailsById[_support.toInt(row['office'])]
+                ?.departmentName,
+          ),
     };
     final modelLabelById = <int, String>{
       for (final row in models)
@@ -233,6 +265,37 @@ class LampIssueFkAnalyzer {
         );
       }
 
+      // Το FK λύθηκε ήδη — σε προηγούμενη συνεδρία ή σε άλλο βήμα. Το πρόβλημα
+      // είναι φάντασμα και δεν αξίζει ερώτηση: κλείνει μόνο του στην αυτόματη
+      // παρτίδα, με γραμμή στο ημερολόγιο ώστε να φαίνεται τι έγινε.
+      final resolvedFkId = _support.toInt(equipment[column]);
+      if (resolvedFkId != null &&
+          _fkTargetIds(
+            column,
+            offices: offices,
+            owners: owners,
+            contracts: contracts,
+            models: models,
+          ).contains(resolvedFkId)) {
+        proposals.add(
+          withEquipmentContext(
+            base(
+              action: LampIssueResolutionAction.autoFix,
+              proposedId: resolvedFkId,
+              confidence: 100,
+              notes:
+                  'Το πεδίο δείχνει ήδη σε έγκυρη εγγραφή ($resolvedFkId)· '
+                  'το πρόβλημα έχει λυθεί και κλείνει.',
+              metadata: <String, Object?>{
+                'operation': 'close_resolved_fk_issue',
+                'fkColumn': column,
+              },
+            ),
+          ),
+        );
+        continue;
+      }
+
       if (issueType == LampIssueType.unknownId) {
         final unknownProposal = _resolveUnknownIdReference(
           issue: issue,
@@ -268,6 +331,7 @@ class LampIssueFkAnalyzer {
               exactAutoConfidence: 97,
               fuzzyAllowed: true,
               detailedLabelById: officeLabelById,
+              unlinkedReferenceIds: unlinkedIdsFor('office'),
             ),
           ),
         );
@@ -280,6 +344,23 @@ class LampIssueFkAnalyzer {
               original: original,
               normalized: normalized,
               owners: owners,
+              ownerLabelById: ownerLabelById,
+              unlinkedOwnerIds: unlinkedIdsFor('owner'),
+              ownerEquipmentCounts:
+                  usageByColumn['owner'] ?? const <int, int>{},
+              // Η τιμή του υπαλλήλου είναι συχνά τμήμα ή γραφείο· χρειάζονται
+              // τα πραγματικά γραφεία και το πεδίο γραφείου του εξοπλισμού
+              // για να δοθεί ο λόγος, χωρίς να αλλάξει τίποτα εκεί.
+              placeRows: <LampPlaceRow>[
+                for (final detail in officeDetailsById.values)
+                  (
+                    id: detail.id,
+                    officeName: detail.officeName,
+                    departmentName: detail.departmentName,
+                  ),
+              ],
+              linkedOfficeId: _support.toInt(equipment['office']),
+              officeRawValue: _support.text(equipment['office_original_text']),
             ),
           ),
         );
@@ -393,6 +474,7 @@ class LampIssueFkAnalyzer {
     required int exactAutoConfidence,
     required bool fuzzyAllowed,
     Map<int, String>? detailedLabelById,
+    Set<int> unlinkedReferenceIds = const <int>{},
   }) {
     final base = _support.baseProposal(
       issueType,
@@ -496,14 +578,18 @@ class LampIssueFkAnalyzer {
                   candidate.reference,
                   detailedLabelById: detailedLabelById,
                 ),
-                description:
-                    'Ομοιότητα: ${candidate.score}% · Απόσταση: ${candidate.distance}',
+                // Μόνο η ομοιότητα: η απόσταση Levenshtein είναι εσωτερικό
+                // μέγεθος του αλγορίθμου και λέει την ίδια πληροφορία σε
+                // μορφή που δεν βοηθά ανθρώπινη απόφαση.
+                description: 'Ομοιότητα: ${candidate.score}%',
                 action: LampIssueResolutionAction.autoFix,
                 proposedId: candidate.reference.id,
                 proposedMatch: candidate.reference.label,
                 metadata: <String, Object?>{
                   ...metadata,
                   'proposedId': candidate.reference.id,
+                  if (unlinkedReferenceIds.contains(candidate.reference.id))
+                    kLampOptionUnlinkedFlag: true,
                 },
               ),
           ],
@@ -755,15 +841,28 @@ class LampIssueFkAnalyzer {
           break;
       }
 
-      if (column == 'contract') {
+      // Η τιμή μπορεί να είναι το ΟΝΟΜΑ της εγγραφής και όχι αναγνωριστικό:
+      // «30236» είναι η σύμβαση 231 «30236 18/12/2024». Ένδειξη πολύ
+      // ισχυρότερη από τα συμφραζόμενα, γι' αυτό βαραίνει περισσότερο απ'
+      // όλες τις άλλες μαζί.
+      final nameMatch = lampReferenceNameMatch(
+        rawValue: issueRaw,
+        name: ref.label,
+      );
+      if (nameMatch != null) {
+        score += nameMatch.score;
+        reasons.add(nameMatch.reason);
+      }
+
+      if (column == 'contract' && nameMatch == null) {
         final details = contractDetailsById[ref.id];
         if (details != null &&
-            (details.contractName.contains(issueRaw) ||
-                (details.supplierName?.contains(issueRaw) ?? false) ||
+            ((details.supplierName?.contains(issueRaw) ?? false) ||
                 (details.categoryName?.contains(issueRaw) ?? false))) {
           score += 15;
           reasons.add(
-            'Ο αριθμός εμφανίζεται σε όνομα/κατηγορία/προμηθευτή συμβολαίου.',
+            'Ο αριθμός εμφανίζεται στην κατηγορία ή τον προμηθευτή του '
+            'συμβολαίου.',
           );
         }
       }
@@ -780,6 +879,7 @@ class LampIssueFkAnalyzer {
           label: finalLabel,
           score: score,
           reasons: reasons,
+          nameMatch: nameMatch,
         ),
       );
     }
@@ -806,6 +906,23 @@ class LampIssueFkAnalyzer {
             'proposedId': candidate.id,
           },
         ),
+      // Όταν η σύμβαση όντως δεν υπάρχει — τιμή που ήρθε από το Excel και
+      // δεν αντιστοιχεί σε τίποτα — ο χρήστης πρέπει να μπορεί να τη
+      // δημιουργήσει εδώ, με προμηθευτή από τους ήδη καταχωρημένους.
+      if (column == 'contract')
+        LampIssueResolutionOption(
+          id: 'contract_create',
+          label: 'Δημιουργία σύμβασης «$issueRaw»',
+          description:
+              'Νέα εγγραφή με προμηθευτή και κατηγορία από τη βάση· '
+              'ο εξοπλισμός συνδέεται μαζί της.',
+          action: LampIssueResolutionAction.createNew,
+          requiresContractInput: true,
+          metadata: <String, Object?>{
+            'operation': 'create_contract_and_update_equipment',
+            'createContractName': issueRaw,
+          },
+        ),
     ];
     if (options.isEmpty) {
       return base(
@@ -821,8 +938,12 @@ class LampIssueFkAnalyzer {
       proposedId: first.id,
       proposedMatch: first.label,
       confidence: first.score.clamp(15, 95),
-      notes:
-          'Ασύμβατο αναγνωριστικό `$issueRawId` στο πεδίο `$column`. Προτείνονται μόνο επιλογές επανασύνδεσης και απαιτείται χειροκίνητη επιβεβαίωση.',
+      notes: first.nameMatch != null
+          // Η τιμή δεν ήταν αναγνωριστικό αλλά όνομα· ο χρήστης πρέπει να το
+          // δει, γιατί αλλιώς θα δημιουργήσει διπλοεγγραφή.
+          ? 'Η τιμή `$issueRawId` δεν είναι αναγνωριστικό αλλά ταιριάζει με '
+                'το όνομα υπάρχουσας εγγραφής στο πεδίο `$column`.'
+          : 'Ασύμβατο αναγνωριστικό `$issueRawId` στο πεδίο `$column`. Προτείνονται μόνο επιλογές επανασύνδεσης και απαιτείται χειροκίνητη επιβεβαίωση.',
       metadata: <String, Object?>{
         'unknownId': issueRawId,
         'unknownColumn': column,
@@ -878,18 +999,11 @@ class LampIssueFkAnalyzer {
     return parts.where((p) => p.trim().isNotEmpty).join(' · ');
   }
 
-  String _officeDisplayLabel(_OfficeDetailRow details) {
-    final preferred = _firstInformativeText(
-      details.departmentName,
-      details.officeName,
-      details.organizationName,
-    );
-    if (preferred != null) return preferred;
-    return details.officeName ??
-        details.departmentName ??
-        details.organizationName ??
-        '';
-  }
+  String _officeDisplayLabel(_OfficeDetailRow details) => lampOfficeDisplayLabel(
+    officeName: details.officeName,
+    departmentName: details.departmentName,
+    organizationName: details.organizationName,
+  );
 
   String _modelDisplayLabel(_ModelDetailRow details) {
     final baseName = _firstInformativeText(
@@ -912,20 +1026,8 @@ class LampIssueFkAnalyzer {
     return parts.join(' · ');
   }
 
-  String? _firstInformativeText(String? a, String? b, String? c) {
-    final candidates = <String?>[a, b, c];
-    for (final candidate in candidates) {
-      final text = candidate?.trim();
-      if (text == null || text.isEmpty) continue;
-      if (_looksNumericOnly(text)) continue;
-      return text;
-    }
-    return null;
-  }
-
-  bool _looksNumericOnly(String value) {
-    return RegExp(r'^[0-9\-\s]+$').hasMatch(value.trim());
-  }
+  String? _firstInformativeText(String? a, String? b, String? c) =>
+      lampFirstInformativeText(a, b, c);
 
   LampIssueResolutionProposal _resolveOwner({
     required LampIssueType issueType,
@@ -933,7 +1035,63 @@ class LampIssueFkAnalyzer {
     required String original,
     required String normalized,
     required List<Map<String, Object?>> owners,
+    required Map<int, String> ownerLabelById,
+    required Set<int> unlinkedOwnerIds,
+    Map<int, int> ownerEquipmentCounts = const <int, int>{},
+    Iterable<LampPlaceRow> placeRows = const <LampPlaceRow>[],
+    int? linkedOfficeId,
+    String? officeRawValue,
   }) {
+    // Το πεδίο υπαλλήλου κρατά συχνά χώρο: «Γιατροί Μαιευτικής», «ΞΕΝΩΝΑΣ».
+    // Η πρόταση είναι μόνο ένδειξη — δίνει σημείο εκκίνησης, δεν συμπληρώνει.
+    final placeSuggestion = lampPlaceSuggestion(
+      rawValue: original,
+      places: placeRows,
+    );
+
+    /// Ορισμός τοποθέτησης: δύο συνδεδεμένα πεδία, γραφείο και υπάλληλος.
+    ///
+    /// Υπάρχει σε κάθε μορφή τιμής, ακόμη και όταν βρέθηκε υποψήφιος
+    /// υπάλληλος: χωρίς αυτό, όταν ο υποψήφιος είναι λάθος δεν υπάρχει
+    /// διέξοδος πέρα από την παράλειψη.
+    LampIssueResolutionOption placementOption() => LampIssueResolutionOption(
+      id: 'owner_set_placement',
+      label: 'Ορισμός γραφείου και υπαλλήλου',
+      description: placeSuggestion.sentence,
+      action: LampIssueResolutionAction.manualReview,
+      requiresPlacementInput: true,
+      metadata: <String, Object?>{
+        'operation': 'set_equipment_placement',
+        'currentOfficeId': ?linkedOfficeId,
+        if (placeSuggestion.matches.isNotEmpty)
+          'suggestedOfficeId': placeSuggestion.matches.first.id,
+      },
+    );
+
+    /// Ετικέτα υποψηφίου: όνομα **και γραφείο**, γιατί όταν δύο υποψήφιοι
+    /// λέγονται «Παπαβασιλείου» το γραφείο είναι το μόνο κριτήριο επιλογής.
+    String labelFor(Map<String, Object?> owner) {
+      final id = _support.toInt(owner['owner']);
+      return ownerLabelById[id] ?? _support.ownerLabel(owner);
+    }
+
+    /// «21 εξοπλισμοί» — το κριτήριο που ξεχωρίζει τον υπαρκτό υπάλληλο από
+    /// τη σκουπιδο-εγγραφή. Στους μηδενικούς μιλάει ήδη το σπασμένο
+    /// εικονίδιο, οπότε το «0 εξοπλισμοί» θα ήταν πλεονασμός.
+    String? equipmentCountText(int? ownerId) {
+      final count = ownerId == null ? 0 : (ownerEquipmentCounts[ownerId] ?? 0);
+      if (count <= 0) return null;
+      return count == 1 ? '1 εξοπλισμός' : '$count εξοπλισμοί';
+    }
+
+    Map<String, Object?> optionMetadata(
+      Map<String, Object?> base,
+      int? ownerId,
+    ) {
+      if (ownerId == null || !unlinkedOwnerIds.contains(ownerId)) return base;
+      return <String, Object?>{...base, kLampOptionUnlinkedFlag: true};
+    }
+
     final base = _support.baseProposal(
       issueType,
       issue,
@@ -971,47 +1129,107 @@ class LampIssueFkAnalyzer {
             ) ==
             normalizedParts.single;
       }).toList();
+
+      // Εφεδρική ανάγνωση: κάποιος έγραψε σκέτο το ΜΙΚΡΟ όνομα. Το «Θάνια»
+      // έβγαζε πρόταση για νέο υπάλληλο ενώ υπάρχει η «Αναγνωστοπούλου
+      // Θάνια» με 4 εξοπλισμούς. Μπαίνει μετά τα επώνυμα, γιατί μονολεκτική
+      // τιμή σε πεδίο υπαλλήλου είναι πρώτα επώνυμο.
+      final firstNameMatches =
+          owners.where((owner) {
+            final ownerId = _support.toInt(owner['owner']);
+            if (ownerId == null) return false;
+            if (matches.any((m) => _support.toInt(m['owner']) == ownerId)) {
+              return false;
+            }
+            return _matching.normalizeReferenceText(
+                  _support.text(owner['first_name']) ?? '',
+                ) ==
+                normalizedParts.single;
+          }).toList()
+          // Περισσότεροι εξοπλισμοί πρώτα: σε κοινά μικρά ονόματα οι
+          // υποψήφιοι πληθαίνουν και ο υπαρκτός πρέπει να φαίνεται αμέσως.
+          ..sort((a, b) {
+            final aCount =
+                ownerEquipmentCounts[_support.toInt(a['owner'])] ?? 0;
+            final bCount =
+                ownerEquipmentCounts[_support.toInt(b['owner'])] ?? 0;
+            return bCount.compareTo(aCount);
+          });
+      // Πέρα από αυτό το πλήθος η λίστα παύει να είναι επιλογή και γίνεται
+      // κατάλογος· ίδιο όριο με την ασαφή αντιστοίχιση των άλλων πεδίων.
+      final nameFallbackMatches = firstNameMatches.take(5).toList();
+
       final preferredLastName = originalParts.isNotEmpty
           ? originalParts.single
           : original;
-      if (matches.isEmpty) {
+      if (matches.isEmpty && nameFallbackMatches.isEmpty) {
+        final looksLikePlace = !placeSuggestion.isEmpty;
         return base(
-          action: LampIssueResolutionAction.createNew,
-          proposedMatch:
-              'υπάλληλος (επώνυμο=$preferredLastName, μικρό όνομα=κενό)',
-          confidence: 70,
-          notes:
-              'Μονολεκτικός υπάλληλος χωρίς αντιστοίχιση· προτείνεται νέος υπάλληλος.',
-          metadata: <String, Object?>{
-            ...metadata,
-            'createValue': original,
-            'createOwnerLastName': preferredLastName,
-          },
+          action: LampIssueResolutionAction.manualReview,
+          confidence: looksLikePlace ? 74 : 70,
+          notes: looksLikePlace
+              ? 'Μονολεκτική τιμή που ταιριάζει με χώρο· απαιτείται επιβεβαίωση.'
+              : 'Μονολεκτικός υπάλληλος χωρίς αντιστοίχιση· απαιτείται απόφαση.',
+          options: <LampIssueResolutionOption>[
+            if (looksLikePlace) placementOption(),
+            _createOwnerOption(
+              id: 'owner_create_single',
+              lastName: preferredLastName,
+              firstName: null,
+              originalLabel: original,
+            ),
+            if (!looksLikePlace) placementOption(),
+            _clearOriginalOption(),
+          ],
         );
       }
+      LampIssueResolutionOption linkOption(
+        Map<String, Object?> match, {
+        required bool asFirstName,
+      }) {
+        final ownerId = _support.toInt(match['owner']);
+        final count = equipmentCountText(ownerId);
+        return LampIssueResolutionOption(
+          id: asFirstName ? 'owner_first_$ownerId' : 'owner_$ownerId',
+          label: '$ownerId · ${labelFor(match)}',
+          description: <String>[
+            if (asFirstName) 'ταιριάζει ως μικρό όνομα',
+            ?count,
+          ].join(' · '),
+          action: LampIssueResolutionAction.autoFix,
+          proposedId: ownerId,
+          proposedMatch: _support.ownerLabel(match),
+          metadata: optionMetadata(<String, Object?>{
+            ...metadata,
+            'proposedId': ownerId,
+          }, ownerId),
+        );
+      }
+
       return base(
         action: LampIssueResolutionAction.manualReview,
         proposedId: matches.length == 1
             ? _support.toInt(matches.first['owner'])
             : null,
-        proposedMatch: matches.length == 1
-            ? _support.ownerLabel(matches.first)
-            : null,
+        proposedMatch: matches.length == 1 ? labelFor(matches.first) : null,
         confidence: matches.length == 1 ? 76 : 52,
-        notes: 'Μονολεκτικός υπάλληλος ως επώνυμο· απαιτείται επιβεβαίωση.',
+        notes: matches.isEmpty
+            ? 'Μονολεκτική τιμή που ταιριάζει ως μικρό όνομα υπάρχοντος υπαλλήλου· απαιτείται επιβεβαίωση.'
+            : 'Μονολεκτικός υπάλληλος ως επώνυμο· απαιτείται επιβεβαίωση.',
         options: [
-          for (final match in matches)
-            LampIssueResolutionOption(
-              id: 'owner_${match['owner']}',
-              label: '${match['owner']} · ${_support.ownerLabel(match)}',
-              action: LampIssueResolutionAction.autoFix,
-              proposedId: _support.toInt(match['owner']),
-              proposedMatch: _support.ownerLabel(match),
-              metadata: <String, Object?>{
-                ...metadata,
-                'proposedId': _support.toInt(match['owner']),
-              },
-            ),
+          for (final match in matches) linkOption(match, asFirstName: false),
+          for (final match in nameFallbackMatches)
+            linkOption(match, asFirstName: true),
+          // Χωρίς αυτή την επιλογή η λίστα υποψηφίων γίνεται παγίδα: όποιος
+          // έχει όντως νέο υπάλληλο με το ίδιο όνομα δεν έχει τρόπο να το πει.
+          _createOwnerOption(
+            id: 'owner_create_single',
+            lastName: preferredLastName,
+            firstName: null,
+            originalLabel: original,
+          ),
+          placementOption(),
+          _clearOriginalOption(),
         ],
       );
     }
@@ -1039,16 +1257,67 @@ class LampIssueFkAnalyzer {
           linkExistingOptions.add(
             LampIssueResolutionOption(
               id: 'owner_link_$ownerId',
-              label:
-                  'Σύνδεση με υπάρχον: $ownerId · ${_support.ownerLabel(owner)}',
+              label: 'Σύνδεση με υπάρχον: $ownerId · ${labelFor(owner)}',
+              description: equipmentCountText(ownerId),
               action: LampIssueResolutionAction.autoFix,
               proposedId: ownerId,
               proposedMatch: _support.ownerLabel(owner),
-              metadata: <String, Object?>{...metadata, 'proposedId': ownerId},
+              metadata: optionMetadata(<String, Object?>{
+                ...metadata,
+                'proposedId': ownerId,
+              }, ownerId),
             ),
           );
         }
       }
+
+      // Ο ίδιος άνθρωπος γραμμένος αλλιώς: «Μαλατέστα Καλλή» στο ωμό κείμενο,
+      // «Μαλατέστα Καλή» στη βάση. Χωρίς αυτό το πέρασμα ο οδηγός πρότεινε
+      // μόνο δημιουργία νέου — διπλοεγγραφή δίπλα σε μία με 21 εξοπλισμούς.
+      final nearOptions = <({int distance, LampIssueResolutionOption option})>[];
+      for (final pair in candidatePairs) {
+        for (final owner in owners) {
+          final ownerId = _support.toInt(owner['owner']);
+          if (ownerId == null || seenOwnerIds.contains(ownerId)) continue;
+          final deviation = lampOwnerNameDeviation(
+            candidateLastName: pair.lastName,
+            candidateFirstName: pair.firstName,
+            ownerLastName: _support.text(owner['last_name']),
+            ownerFirstName: _support.text(owner['first_name']),
+          );
+          if (deviation == null || deviation.isExact) continue;
+          seenOwnerIds.add(ownerId);
+          final count = equipmentCountText(ownerId);
+          nearOptions.add((
+            distance: deviation.totalDistance,
+            option: LampIssueResolutionOption(
+              id: 'owner_near_$ownerId',
+              label: 'Σύνδεση με υπάρχον: $ownerId · ${labelFor(owner)}',
+              description: <String>[
+                deviation.description,
+                ?count,
+              ].join(' · '),
+              action: LampIssueResolutionAction.autoFix,
+              proposedId: ownerId,
+              proposedMatch: _support.ownerLabel(owner),
+              metadata: optionMetadata(<String, Object?>{
+                ...metadata,
+                'proposedId': ownerId,
+              }, ownerId),
+            ),
+          ));
+        }
+      }
+      // Λιγότερη απόκλιση πρώτα· σε ισοπαλία προηγείται ο υπάλληλος με τους
+      // περισσότερους εξοπλισμούς, γιατί είναι ο πιθανότερα υπαρκτός.
+      nearOptions.sort((a, b) {
+        final byDistance = a.distance.compareTo(b.distance);
+        if (byDistance != 0) return byDistance;
+        final aCount = ownerEquipmentCounts[a.option.proposedId] ?? 0;
+        final bCount = ownerEquipmentCounts[b.option.proposedId] ?? 0;
+        return bCount.compareTo(aCount);
+      });
+
       final createOwnerOptions = <LampIssueResolutionOption>[
         for (final pair in candidatePairs)
           _createOwnerOption(
@@ -1073,56 +1342,104 @@ class LampIssueFkAnalyzer {
           'createOwnerFirstName': originalParts[1],
         },
       );
+      final nearLinkOptions = <LampIssueResolutionOption>[
+        for (final entry in nearOptions) entry.option,
+      ];
+      final hasName =
+          linkExistingOptions.isNotEmpty || nearLinkOptions.isNotEmpty;
+      final looksLikePlace = !placeSuggestion.isEmpty && !hasName;
       final allOptions = <LampIssueResolutionOption>[
+        // «Γιατροί Μαιευτικής» δεν είναι ονοματεπώνυμο· όταν δεν βρέθηκε
+        // κανένα πρόσωπο, η σωστή απάντηση μπαίνει πρώτη ώστε να μη
+        // διαβαστούν πρώτα οι δύο λάθος «Νέος υπάλληλος».
+        if (looksLikePlace) placementOption(),
         ...linkExistingOptions,
+        ...nearLinkOptions,
         ...createOwnerOptions,
         manualEditOption,
+        if (!looksLikePlace) placementOption(),
+        _clearOriginalOption(),
       ];
       final singleLink = linkExistingOptions.length == 1
           ? linkExistingOptions.single
-          : null;
+          : (linkExistingOptions.isEmpty && nearLinkOptions.length == 1
+                ? nearLinkOptions.single
+                : null);
+      // Ο κοντινός υποψήφιος παίρνει χαμηλότερη βεβαιότητα από τον ισοδύναμο:
+      // είναι πολύ πιθανός, αλλά η απόφαση μένει στον άνθρωπο.
+      final confidence = switch ((linkExistingOptions.isNotEmpty, hasName)) {
+        _ when looksLikePlace => 74,
+        (true, _) => 86,
+        (false, true) => 72,
+        (false, false) => 45,
+      };
       return base(
         action: LampIssueResolutionAction.manualReview,
         proposedId: singleLink?.proposedId,
         proposedMatch: singleLink?.proposedMatch,
-        confidence: linkExistingOptions.isNotEmpty ? 86 : 45,
-        notes: linkExistingOptions.isNotEmpty
-            ? 'Διμερής τιμή υπαλλήλου· βρέθηκε ισοδύναμο ονοματεπώνυμο σε υπάρχοντα υπάλληλο.'
-            : 'Διμερής τιμή υπαλλήλου· απαιτείται επιλογή μικρού ονόματος/επωνύμου.',
+        confidence: confidence,
+        notes: switch ((linkExistingOptions.isNotEmpty, hasName)) {
+          _ when looksLikePlace =>
+            'Διμερής τιμή που ταιριάζει με χώρο, όχι με πρόσωπο· απαιτείται επιβεβαίωση.',
+          (true, _) =>
+            'Διμερής τιμή υπαλλήλου· βρέθηκε ισοδύναμο ονοματεπώνυμο σε υπάρχοντα υπάλληλο.',
+          (false, true) =>
+            'Διμερής τιμή υπαλλήλου· βρέθηκε υπάρχων υπάλληλος με σχεδόν ίδιο όνομα.',
+          (false, false) =>
+            'Διμερής τιμή υπαλλήλου· απαιτείται επιλογή μικρού ονόματος/επωνύμου.',
+        },
         options: allOptions,
       );
     }
 
+    final looksLikePlace = !placeSuggestion.isEmpty;
     return base(
       action: LampIssueResolutionAction.manualReview,
-      confidence: 30,
-      notes: 'Σύνθετη ή ασυνήθιστη τιμή υπαλλήλου· απαιτείται απόφαση.',
+      confidence: looksLikePlace ? 74 : 30,
+      notes: looksLikePlace
+          ? 'Σύνθετη τιμή που ταιριάζει με χώρο, όχι με πρόσωπο· απαιτείται επιβεβαίωση.'
+          : 'Σύνθετη ή ασυνήθιστη τιμή υπαλλήλου· απαιτείται απόφαση.',
       options: <LampIssueResolutionOption>[
+        if (looksLikePlace) placementOption(),
         _createOwnerOption(
           id: 'owner_create_full',
           lastName: original,
           firstName: null,
           originalLabel: original,
         ),
-        LampIssueResolutionOption(
-          id: 'owner_null_keep_note',
-          label: 'Αποσύνδεση υπαλλήλου, διατήρηση του αρχικού κειμένου',
-          action: LampIssueResolutionAction.autoFix,
-          metadata: <String, Object?>{
-            'operation': 'update_equipment_fk',
-            'fkColumn': 'owner',
-            'proposedId': null,
-          },
-        ),
-        LampIssueResolutionOption(
-          id: 'owner_null_clear_original',
-          label: 'Αποσύνδεση υπαλλήλου και εκκαθάριση του αρχικού κειμένου',
-          action: LampIssueResolutionAction.autoFix,
-          metadata: <String, Object?>{
-            'operation': 'update_equipment_owner_null_clear_original',
-          },
-        ),
+        if (!looksLikePlace) placementOption(),
+        _clearOriginalOption(),
       ],
+    );
+  }
+
+  /// Τα υπαρκτά αναγνωριστικά του πίνακα στον οποίο δείχνει μια στήλη FK.
+  Set<int> _fkTargetIds(
+    String column, {
+    required List<ReferenceRow> offices,
+    required List<Map<String, Object?>> owners,
+    required List<ReferenceRow> contracts,
+    required List<ReferenceRow> models,
+  }) {
+    return switch (column) {
+      'office' => <int>{for (final row in offices) row.id},
+      'contract' => <int>{for (final row in contracts) row.id},
+      'model' => <int>{for (final row in models) row.id},
+      'owner' => <int>{for (final row in owners) ?_support.toInt(row['owner'])},
+      _ => const <int>{},
+    };
+  }
+
+  /// Η διέξοδος για σκέτα σκουπίδια: ούτε πρόσωπο ούτε χώρος, απλώς θόρυβος
+  /// που δεν αξίζει να μείνει γραμμένος δίπλα στον εξοπλισμό.
+  LampIssueResolutionOption _clearOriginalOption() {
+    return const LampIssueResolutionOption(
+      id: 'owner_null_clear_original',
+      label: 'Αποσύνδεση υπαλλήλου και εκκαθάριση του αρχικού κειμένου',
+      action: LampIssueResolutionAction.autoFix,
+      metadata: <String, Object?>{
+        'operation': 'update_equipment_owner_null_clear_original',
+      },
     );
   }
 
@@ -1299,10 +1616,14 @@ class _UnknownIdCandidate {
     required this.label,
     required this.score,
     required this.reasons,
+    this.nameMatch,
   });
 
   final int id;
   final String label;
   final int score;
   final List<String> reasons;
+
+  /// Πόσο δυνατά ταιριάζει η ωμή τιμή με το όνομα της εγγραφής, αν ταιριάζει.
+  final LampNameMatchStrength? nameMatch;
 }

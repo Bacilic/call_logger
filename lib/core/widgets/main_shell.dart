@@ -30,7 +30,9 @@ import 'main_shell_nav_icons.dart';
 import 'quick_call_fab.dart';
 import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
+import '../updates/update_periodic_check.dart';
 import '../updates/update_startup_prompt.dart';
+import '../../features/database/debug/release_publish_finished_snackbar.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import 'compact_tooltip.dart';
 
@@ -322,6 +324,8 @@ class MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Κρατά ζωντανό τον περιοδικό έλεγχο νέας έκδοσης όσο ζει το κέλυφος.
+    ref.watch(updatePeriodicCheckProvider);
     final showBadgeAsync = ref.watch(showTasksBadgeProvider);
     final pendingCountAsync = ref.watch(globalPendingTasksCountProvider);
     final showBadge = showBadgeAsync.value ?? true;
@@ -419,6 +423,16 @@ class MainShellState extends ConsumerState<MainShell> {
         _dispatchFollowUpNavIntents(req);
       });
     });
+
+    // Η δημοσίευση έκδοσης τρέχει με ζωή εφαρμογής: αν ολοκληρωθεί ενώ ο
+    // χρήστης βρίσκεται σε άλλη οθόνη, το μαθαίνει από snackbar με
+    // «Μετάβαση»/«Κλείσιμο» αντί να χαθεί το αποτέλεσμα σιωπηλά.
+    listenForReleasePublishFinishedSnackBar(
+      ref,
+      context,
+      isPublisherScreenVisible: () =>
+          _selectedDestination == MainNavDestination.debugScenarios,
+    );
 
     final wideEnoughForExtendedRail =
         MediaQuery.sizeOf(context).width >= _kNavRailWideBreakpoint;

@@ -9,12 +9,20 @@ import '../../../../core/utils/user_similarity_finder.dart';
 import '../../../../core/utils/user_identity_normalizer.dart';
 import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
+import '../../models/full_location_breadcrumb.dart';
+import 'full_location_line.dart';
+import 'location_field_help_icon.dart';
+import '../../providers/catalog_validation_provider.dart';
+import 'catalog_validation_hint_text.dart';
 import 'user_form_dismiss_guard.dart';
+import 'user_form_equipment_chips.dart';
+import 'user_form_equipment_link.dart';
 import 'user_form_phone_policy.dart';
 import 'user_form_save.dart';
 import 'user_form_smart_text_field.dart';
@@ -54,6 +62,14 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
   /// Ροή αποθήκευσης (επιβεβαιώσεις + εγγραφή).
   late final UserFormSave saveFlow = UserFormSave(this);
 
+  /// Ο εξοπλισμός που κουβαλά ο υπάλληλος (προβολή + άνοιγμα καρτέλας).
+  late final UserFormEquipmentLink equipmentLink = UserFormEquipmentLink(this);
+
+  /// Ξανασχεδιασμός της ενότητας εξοπλισμού μετά από αλλαγή στην καρτέλα του.
+  void refreshEquipmentSection() {
+    if (mounted) setState(() {});
+  }
+
   final formKey = GlobalKey<FormState>();
 
   /// Αρχικό κείμενο τμήματος όπως στη βάση (εμφάνιση· επαναφορά στον διάλογο μεταφοράς).
@@ -65,16 +81,21 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
   late final String snapFirstName;
   late final String snapPhone;
   late final String snapNotes;
+  late final String snapLocation;
   late final TextEditingController lastNameController;
   late final SpellCheckController firstNameController;
   late final TextEditingController phoneController;
   late final SpellCheckController departmentController;
+
+  /// Πού κάθεται ο υπάλληλος. Ο εξοπλισμός του την κληρονομεί όταν δεν έχει δική του.
+  late final SpellCheckController locationController;
   late final SpellCheckController notesController;
 
   final FocusNode _lastNameFocusNode = FocusNode();
   final FocusNode _firstNameFocusNode = FocusNode();
   final FocusNode _phoneFocusNode = FocusNode();
   final FocusNode _departmentFocusNode = FocusNode();
+  final FocusNode _locationFocusNode = FocusNode();
   final FocusNode _notesFocusNode = FocusNode();
 
   bool get isEdit => widget.initialUser != null && !widget.isClone;
@@ -91,6 +112,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     snapFirstName = (u?.firstName ?? '').trim();
     snapPhone = PhoneListParser.joinPhones(u?.phones ?? const []);
     snapNotes = (u?.notes ?? '').trim();
+    snapLocation = (u?.location ?? '').trim();
     initialDepartmentText = (u?.departmentName ?? '').trim();
     snapDepartmentNorm = SearchTextNormalizer.normalizeForSearch(
       initialDepartmentText,
@@ -102,12 +124,14 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
       text: PhoneListParser.joinPhones(u?.phones ?? const []),
     );
     departmentController = SpellCheckController()..text = initialDepartmentText;
+    locationController = SpellCheckController()..text = (u?.location ?? '');
     notesController = SpellCheckController()..text = (u?.notes ?? '');
 
     lastNameController.addListener(_onFieldChanged);
     firstNameController.addListener(_onFieldChanged);
     phoneController.addListener(_onFieldChanged);
     departmentController.addListener(_onFieldChanged);
+    locationController.addListener(_onFieldChanged);
     notesController.addListener(_onFieldChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -144,18 +168,21 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     firstNameController.removeListener(_onFieldChanged);
     phoneController.removeListener(_onFieldChanged);
     departmentController.removeListener(_onFieldChanged);
+    locationController.removeListener(_onFieldChanged);
     notesController.removeListener(_onFieldChanged);
 
     _lastNameFocusNode.dispose();
     _firstNameFocusNode.dispose();
     _phoneFocusNode.dispose();
     _departmentFocusNode.dispose();
+    _locationFocusNode.dispose();
     _notesFocusNode.dispose();
 
     lastNameController.dispose();
     firstNameController.dispose();
     phoneController.dispose();
     departmentController.dispose();
+    locationController.dispose();
     notesController.dispose();
     super.dispose();
   }
@@ -204,6 +231,21 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
       firstName: firstNameController.text,
       lastName: lastNameController.text,
       excludeUserId: excludeId,
+    );
+  }
+
+  /// «Κτίριο › Όροφος › Τμήμα › Τοποθεσία» για τον υπάλληλο που επεξεργάζεται.
+  ///
+  /// Το κτίριο και ο όροφος προκύπτουν από το τμήμα που γράφεται εκείνη τη
+  /// στιγμή στη φόρμα, οπότε η γραμμή ακολουθεί την πληκτρολόγηση.
+  String _fullLocationText() {
+    final lookup = LookupService.instance;
+    final deptId = lookup.findDepartmentByName(departmentController.text)?.id;
+    return fullLocationBreadcrumb(
+      building: lookup.getDepartmentBuilding(deptId),
+      floor: lookup.getDepartmentFloor(deptId),
+      department: departmentController.text,
+      location: locationController.text,
     );
   }
 
@@ -382,6 +424,12 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     final firstNameOptions = _catalogFirstNameOptionsSortedForLast(
       lastNameController.text,
     );
+    // Κανόνες επικύρωσης (υποδείξεις, όχι απαγορεύσεις) — όσο φορτώνουν,
+    // απλώς δεν εμφανίζονται υποδείξεις.
+    final validation = ref
+        .watch(catalogValidationServiceProvider)
+        .asData
+        ?.value;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
@@ -392,9 +440,13 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
         title: Text(_title),
         builder: (titleHandle) => AlertDialog(
           title: titleHandle,
+          // Το οριζόντιο περιθώριο περνά μέσα στο scrollable, ώστε η μπάρα
+          // κύλησης να μένει στην άκρη του διαλόγου και όχι πάνω στα πεδία.
+          contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 24),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -428,6 +480,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                         ),
                         validator: _requiredValidator,
                         textCapitalization: TextCapitalization.words,
+                        onChanged: (_) => _onFieldChanged(),
                       );
                     },
                     optionsViewBuilder: (context, onSelected, options) {
@@ -437,6 +490,9 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                         options,
                       );
                     },
+                  ),
+                  CatalogValidationHintText(
+                    hint: validation?.personNameHint(lastNameController.text),
                   ),
                   const SizedBox(height: 12),
                   RawAutocomplete<String>(
@@ -483,6 +539,9 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                         options,
                       );
                     },
+                  ),
+                  CatalogValidationHintText(
+                    hint: validation?.personNameHint(firstNameController.text),
                   ),
                   const SizedBox(height: 12),
                   RawAutocomplete<String>(
@@ -555,6 +614,9 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                       );
                     },
                   ),
+                  CatalogValidationHintText(
+                    hint: validation?.phonesFieldHint(phoneController.text),
+                  ),
                   const SizedBox(height: 12),
                   RawAutocomplete<String>(
                     textEditingController: departmentController,
@@ -599,6 +661,18 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                   ),
                   const SizedBox(height: 12),
                   LexiconSpellTextFormField(
+                    controller: locationController,
+                    focusNode: _locationFocusNode,
+                    decoration: const InputDecoration(
+                      labelText: 'Τοποθεσία',
+                      border: OutlineInputBorder(),
+                      suffixIcon: LocationFieldHelpIcon(),
+                    ),
+                    onChanged: (_) => _onFieldChanged(),
+                  ),
+                  FullLocationLine(text: _fullLocationText()),
+                  const SizedBox(height: 12),
+                  ResizableTextArea(
                     controller: notesController,
                     focusNode: _notesFocusNode,
                     decoration: const InputDecoration(
@@ -606,9 +680,13 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                       border: OutlineInputBorder(),
                       alignLabelWithHint: true,
                     ),
-                    maxLines: 3,
                     onChanged: (_) => _onFieldChanged(),
                   ),
+                  if (equipmentLink.isVisible)
+                    UserFormEquipmentChips(
+                      entries: equipmentLink.entries,
+                      onTapEquipment: equipmentLink.openEquipment,
+                    ),
                 ],
               ),
             ),

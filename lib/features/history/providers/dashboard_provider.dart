@@ -13,7 +13,7 @@ import '../../../core/database/department_repository.dart';
 
 import '../../../core/services/settings_service.dart';
 
-import '../../calls/models/call_model.dart';
+import '../../../core/services/settings_service_analytics_filters.dart';
 
 import '../models/dashboard_date_preset.dart';
 
@@ -207,37 +207,54 @@ final dashboardFilterProvider =
 
 /// Τοπική εμφάνιση γραφήματος «Κατανομή Βλαβών» — δεν επηρεάζει [dashboardStatsProvider].
 
-class DashboardExcludeCallsWithoutCategoryNotifier extends Notifier<bool> {
+/// Διακόπτης εμφάνισης του Πίνακα Ελέγχου που θυμάται την επιλογή του χρήστη.
+///
+/// Κοινός σκελετός: ξεκινά κλειστός ώστε η πρώτη σχεδίαση να μη σταματά στον
+/// δίσκο, και παίρνει την αποθηκευμένη τιμή μόλις τη διαβάσουν οι ρυθμίσεις.
+/// Κάθε διακόπτης δηλώνει μόνο πού διαβάζει και πού γράφει.
+abstract class PersistedDashboardToggle extends Notifier<bool> {
   bool _hydrated = false;
+
+  Future<bool> readSetting(SettingsServiceAnalyticsFilters filters);
+
+  Future<void> writeSetting(
+    SettingsServiceAnalyticsFilters filters,
+    bool value,
+  );
 
   @override
   bool build() {
     if (!_hydrated) {
       _hydrated = true;
-
       Future<void>(_hydrateFromSettings);
     }
-
     return false;
   }
 
   Future<void> _hydrateFromSettings() async {
-    final value = await SettingsService().analyticsFilters
-        .getDashboardExcludeCallsWithoutCategory();
-
+    final value = await readSetting(SettingsService().analyticsFilters);
     if (!ref.mounted) return;
-
     state = value;
   }
 
   Future<void> set(bool value) async {
     if (state == value) return;
-
     state = value;
-
-    await SettingsService().analyticsFilters
-        .setDashboardExcludeCallsWithoutCategory(value);
+    await writeSetting(SettingsService().analyticsFilters, value);
   }
+}
+
+class DashboardExcludeCallsWithoutCategoryNotifier
+    extends PersistedDashboardToggle {
+  @override
+  Future<bool> readSetting(SettingsServiceAnalyticsFilters filters) =>
+      filters.getDashboardExcludeCallsWithoutCategory();
+
+  @override
+  Future<void> writeSetting(
+    SettingsServiceAnalyticsFilters filters,
+    bool value,
+  ) => filters.setDashboardExcludeCallsWithoutCategory(value);
 }
 
 final dashboardExcludeCallsWithoutCategoryProvider =
@@ -249,37 +266,41 @@ final dashboardExcludeCallsWithoutCategoryProvider =
 
 /// Απόκρυψη του συγκεντρωτικού «Άγνωστου» στην όψη «χρόνος ανά άτομο» —
 /// τοπική εμφάνιση, δεν επηρεάζει τα δεδομένα του [dashboardStatsProvider].
-class DashboardHideUnknownCallerNotifier extends Notifier<bool> {
-  bool _hydrated = false;
+class DashboardHideUnknownCallerNotifier extends PersistedDashboardToggle {
+  @override
+  Future<bool> readSetting(SettingsServiceAnalyticsFilters filters) =>
+      filters.getDashboardHideUnknownCaller();
 
   @override
-  bool build() {
-    if (!_hydrated) {
-      _hydrated = true;
-      Future<void>(_hydrateFromSettings);
-    }
-    return false;
-  }
-
-  Future<void> _hydrateFromSettings() async {
-    final value = await SettingsService().analyticsFilters
-        .getDashboardHideUnknownCaller();
-    if (!ref.mounted) return;
-    state = value;
-  }
-
-  Future<void> set(bool value) async {
-    if (state == value) return;
-    state = value;
-    await SettingsService().analyticsFilters.setDashboardHideUnknownCaller(
-      value,
-    );
-  }
+  Future<void> writeSetting(
+    SettingsServiceAnalyticsFilters filters,
+    bool value,
+  ) => filters.setDashboardHideUnknownCaller(value);
 }
 
 final dashboardHideUnknownCallerProvider =
     NotifierProvider.autoDispose<DashboardHideUnknownCallerNotifier, bool>(
       DashboardHideUnknownCallerNotifier.new,
+    );
+
+/// Απόκρυψη του «Άγνωστου» στην κατάταξη «Κορυφαίοι Καλούντες» — χωριστός
+/// διακόπτης από την όψη «χρόνος ανά άτομο», αφού οι δύο κάρτες μετρούν άλλο
+/// πράγμα (πλήθος κλήσεων έναντι συνολικού χρόνου).
+class DashboardHideUnknownTopCallerNotifier extends PersistedDashboardToggle {
+  @override
+  Future<bool> readSetting(SettingsServiceAnalyticsFilters filters) =>
+      filters.getDashboardHideUnknownTopCaller();
+
+  @override
+  Future<void> writeSetting(
+    SettingsServiceAnalyticsFilters filters,
+    bool value,
+  ) => filters.setDashboardHideUnknownTopCaller(value);
+}
+
+final dashboardHideUnknownTopCallerProvider =
+    NotifierProvider.autoDispose<DashboardHideUnknownTopCallerNotifier, bool>(
+      DashboardHideUnknownTopCallerNotifier.new,
     );
 
 /// Ποια όψη δείχνει η κάρτα χρόνου — μεμονωμένες κλήσεις ή σύνολο ανά άτομο.
@@ -351,17 +372,6 @@ final dashboardStatsProvider =
       final db = await DatabaseHelper.instance.database;
 
       return CallsDashboardRepository(db).getDashboardStatistics(filter);
-    });
-
-/// Κλήσεις dashboard με τα τρέχοντα φίλτρα, για αναφορά Lansweeper.
-
-final dashboardCallsForReportProvider =
-    FutureProvider.autoDispose<List<CallModel>>((ref) async {
-      final filter = ref.watch(dashboardFilterProvider);
-
-      final db = await DatabaseHelper.instance.database;
-
-      return CallsDashboardRepository(db).getDashboardCalls(filter);
     });
 
 /// Ονόματα τμημάτων για dropdown φίλτρου (ταξινόμηση όπως στη βάση).

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../utils/task_completion_summary.dart';
 import '../utils/task_duration_format.dart';
 import '../../../core/widgets/deleted_catalog_entity_text.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
@@ -18,6 +19,10 @@ import '../widgets/task_due_date_label.dart';
 import '../../../core/widgets/compact_tooltip.dart';
 
 /// Περιγραφή εκκρεμότητας: δυναμικό ύψος έως 5 γραμμές, πάνω από 5 → κυλιώμενο πλαίσιο.
+///
+/// Οι γραμμές με υποδείξεις κανόνων επικύρωσης (γρήγορη καταχώρηση) φεύγουν
+/// από το ελεύθερο κείμενο και αποδίδονται χωριστά, πορτοκαλί — δεν είναι
+/// περιγραφή του χρήστη αλλά σημείωση προς έλεγχο.
 class _TaskDescription extends StatelessWidget {
   const _TaskDescription({required this.description});
 
@@ -25,15 +30,55 @@ class _TaskDescription extends StatelessWidget {
 
   final String description;
 
+  /// Το κείμενο χωρίς το τμήμα υποδείξεων.
+  String get _plainText {
+    final marker = Task.validationHintPrefix.trim();
+    return description
+        .split('\n')
+        .where(
+          (line) =>
+              !line.trimLeft().startsWith(marker) &&
+              line.trim() != Task.validationHintHeader,
+        )
+        .join('\n')
+        .trim();
+  }
+
+  List<String> get _hintLines {
+    final marker = Task.validationHintPrefix.trim();
+    return description
+        .split('\n')
+        .where((line) => line.trimLeft().startsWith(marker))
+        .map((line) => line.trimLeft().replaceFirst(marker, '').trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final style = theme.textTheme.bodyMedium ?? const TextStyle(fontSize: 14);
+    final hints = _hintLines;
+    final plain = _plainText;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (plain.isNotEmpty) _buildScrollableText(plain, style),
+        if (hints.isNotEmpty) ...[
+          if (plain.isNotEmpty) const SizedBox(height: 8),
+          _ValidationHintBlock(hints: hints),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildScrollableText(String text, TextStyle style) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final textDirection = Directionality.of(context);
         final painter = TextPainter(
-          text: TextSpan(text: description, style: style),
+          text: TextSpan(text: text, style: style),
           maxLines: null,
           textDirection: textDirection,
         );
@@ -42,19 +87,63 @@ class _TaskDescription extends StatelessWidget {
           final lineHeight = painter.preferredLineHeight;
           final lineCount = (painter.height / lineHeight).ceil();
           if (lineCount <= _maxLines) {
-            return LinkableSelectableText(text: description, style: style);
+            return LinkableSelectableText(text: text, style: style);
           }
           return SizedBox(
             height: lineHeight * _maxLines,
             child: SingleChildScrollView(
               physics: const ClampingScrollPhysics(),
-              child: LinkableSelectableText(text: description, style: style),
+              child: LinkableSelectableText(text: text, style: style),
             ),
           );
         } finally {
           painter.dispose();
         }
       },
+    );
+  }
+}
+
+/// Οι υποδείξεις κανόνων μιας γρήγορης καταχώρησης — προειδοποίηση προς
+/// έλεγχο, όχι σφάλμα: ίδιο πορτοκαλί με τις υποδείξεις των φορμών.
+class _ValidationHintBlock extends StatelessWidget {
+  const _ValidationHintBlock({required this.hints});
+
+  final List<String> hints;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = Colors.orange.shade800;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          Task.validationHintHeader,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        for (final hint in hints)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: color),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    hint,
+                    style: theme.textTheme.bodySmall?.copyWith(color: color),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
@@ -120,7 +209,7 @@ class TaskCard extends ConsumerStatefulWidget {
 
   static String _buildStatusTooltip(Task task, TaskStatus status) {
     final createdAt = task.createdAtDateTime;
-    final completedAt = task.updatedAtDateTime;
+    final completedAt = task.completedAtDateTime;
     final snoozeEntries = task.snoozeEntries;
     final lastSnoozeAt = snoozeEntries.isNotEmpty
         ? snoozeEntries.last.snoozedAt
@@ -401,8 +490,10 @@ class _TaskCardState extends ConsumerState<TaskCard> {
     final status = TaskStatusX.fromString(task.status);
     final isSnoozed = status == TaskStatus.snoozed;
     final isClosed = status == TaskStatus.closed;
-    final hasSolution =
-        (task.solutionNotes?.trim().isNotEmpty ?? false) && isClosed;
+    // Η λύση δείχνεται και σε ξανα-ανοιγμένη εκκρεμότητα: περιγράφει τι είχε
+    // δοκιμαστεί και δεν παύει να ισχύει επειδή το θέμα ξανάνοιξε.
+    final completion = TaskCompletionSummary.of(task);
+    final hasSolution = completion.solution != null;
 
     final statusLabel = isSnoozed ? 'Αναβληθείσα' : status.displayLabelEl;
     final statusTooltip = TaskCard._buildStatusTooltip(task, status);
@@ -493,7 +584,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                         const SizedBox(width: 10),
                         TaskDueDateLabel(
                           date: isClosed
-                              ? task.updatedAtDateTime
+                              ? task.completedAtDateTime
                               : task.dueDateTime,
                           pattern: isClosed ? 'dd/MM - HH:mm' : 'dd/MM HH:mm',
                           fallbackText: task.dueDate,
@@ -528,10 +619,14 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                               value: 'edit',
                               child: Text('Επεξεργασία'),
                             ),
-                            const PopupMenuItem(
-                              value: 'snooze',
-                              child: Text('Αναβολή'),
-                            ),
+                            // Σε ολοκληρωμένη, η αναβολή ζει μέσα στον διάλογο
+                            // επεξεργασίας: χρειάζεται πρώτα απόφαση για το αν
+                            // η εκκρεμότητα ξανανοίγει, και με ποια μορφή.
+                            if (!isClosed)
+                              const PopupMenuItem(
+                                value: 'snooze',
+                                child: Text('Αναβολή'),
+                              ),
                             PopupMenuItem<String>(
                               value: 'delete',
                               enabled: deleteMenuEnabled,
@@ -558,7 +653,11 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(_showSolution ? 'Απόκρυψη λύσης' : 'Λύση'),
+                            Text(
+                              _showSolution
+                                  ? 'Απόκρυψη λύσης'
+                                  : (isClosed ? 'Λύση' : 'Προηγούμενη λύση'),
+                            ),
                             const SizedBox(width: 2),
                             Icon(
                               _showSolution
@@ -581,8 +680,18 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Divider(height: 10, thickness: 0.5, color: Colors.black87),
+                  if (!isClosed && completion.momentLine != null) ...[
+                    Text(
+                      'Προηγούμενη λύση — ${completion.momentLine}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                   LinkableSelectableText(
-                    text: task.solutionNotes!.trim(),
+                    text: completion.solution!,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

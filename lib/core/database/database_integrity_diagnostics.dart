@@ -5,6 +5,7 @@ import '../../features/database/models/database_integrity_report.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_foreign_keys.dart';
 import 'database_helper.dart';
+import 'database_table_labels.dart';
 import 'database_v1_schema.dart';
 
 /// Βήμα ελέγχου ακεραιότητας με count + διαγνωστικό query.
@@ -189,7 +190,7 @@ WHERE COALESCE(is_deleted, 0) = 0 AND floor_id IS NOT NULL
       _IntegrityCheckStep(
         checkType: IntegrityCheckType.orphanCallExternalLinks,
         name: IntegrityCheckType.orphanCallExternalLinks.displayNameEl,
-        tableScopeLabel: 'call_external_links',
+        tableScopeLabel: 'εξωτερικοί σύνδεσμοι κλήσης',
         countSql: 'SELECT COUNT(*) FROM call_external_links',
         run: _checkOrphanCallExternalLinks,
       ),
@@ -203,7 +204,7 @@ WHERE COALESCE(is_deleted, 0) = 0 AND floor_id IS NOT NULL
       _IntegrityCheckStep(
         checkType: IntegrityCheckType.orphanDepartmentPhones,
         name: IntegrityCheckType.orphanDepartmentPhones.displayNameEl,
-        tableScopeLabel: 'department_phones',
+        tableScopeLabel: 'συσχετίσεις τμήματος–τηλεφώνου',
         countSql: 'SELECT COUNT(*) FROM department_phones',
         run: _checkOrphanDepartmentPhones,
       ),
@@ -293,8 +294,9 @@ WHERE $_activeTasks
             checkType: IntegrityCheckType.foreignKeyViolations,
             title: 'Παραβίαση κανόνα σχέσης',
             description:
-                'Ο πίνακας «${r['table']}» έχει γραμμή που δείχνει σε '
-                'ανύπαρκτη εγγραφή του «${r['parent']}».',
+                'Στα ${databaseTableLabelWithTechnicalEl(r['table']?.toString())} '
+                'υπάρχει γραμμή που δείχνει σε ανύπαρκτη εγγραφή του '
+                '${databaseTableLabelWithTechnicalEl(r['parent']?.toString())}.',
             affectedId: r['rowid'] is int ? r['rowid'] as int : null,
             affectedEntity: r['table']?.toString(),
             context: {
@@ -346,7 +348,7 @@ WHERE $_activePhones
             checkType: IntegrityCheckType.orphanPhone,
             title: 'Ορφανό τηλέφωνο',
             description:
-                'Το τηλέφωνο ${r['number']} δεν συνδέεται με χρήστη, τμήμα ή department_phones.',
+                'Το τηλέφωνο ${r['number']} δεν συνδέεται με χρήστη ούτε με τμήμα.',
             affectedId: r['id'] as int?,
             affectedEntity: 'phones',
             context: {'phone_id': r['id']},
@@ -377,7 +379,7 @@ WHERE COALESCE(p.is_deleted, 0) = 0
             title: 'Τηλέφωνο με ανύπαρκτο τμήμα',
             description:
                 'Το τηλέφωνο ${_formatPhoneLabel(r['id'] as int?, r['number'] as String?)} '
-                'δείχνει σε τμήμα (id=${r['department_id']}) που λείπει εντελώς από τη βάση.',
+                'δείχνει σε τμήμα #${r['department_id']} που λείπει εντελώς από τη βάση.',
             affectedId: r['id'] as int?,
             affectedEntity: 'phones',
             context: {'phone_id': r['id'], 'department_id': r['department_id']},
@@ -406,7 +408,7 @@ WHERE COALESCE(d.is_deleted, 0) = 0
             title: 'Τμήμα με ανύπαρκτο όροφο χάρτη',
             description:
                 'Το τμήμα ${_formatDepartmentLabel(r['id'] as int?, r['name'] as String?)} '
-                'δείχνει σε όροφο χάρτη (id=${r['floor_id']}) που λείπει εντελώς από τη βάση.',
+                'δείχνει σε όροφο χάρτη #${r['floor_id']} που λείπει εντελώς από τη βάση.',
             affectedId: r['id'] as int?,
             affectedEntity: 'departments',
             context: {'department_id': r['id'], 'floor_id': r['floor_id']},
@@ -435,7 +437,7 @@ WHERE COALESCE(e.is_deleted, 0) = 0
             title: 'Εξοπλισμός με ανύπαρκτο τμήμα',
             description:
                 'Ο εξοπλισμός ${_formatEquipmentLabel(r['id'] as int?, r['code_equipment'] as String?)} '
-                'δείχνει σε τμήμα (id=${r['department_id']}) που λείπει εντελώς από τη βάση.',
+                'δείχνει σε τμήμα #${r['department_id']} που λείπει εντελώς από τη βάση.',
             affectedId: r['id'] as int?,
             affectedEntity: 'equipment',
             context: {
@@ -463,7 +465,7 @@ WHERE $_activeCalls
             category: IntegrityCategory.searchIndex,
             checkType: IntegrityCheckType.callsMissingSearchIndex,
             title: 'Κλήση χωρίς ευρετήριο αναζήτησης',
-            description: 'Η κλήση δεν έχει search_index.',
+            description: 'Η κλήση δεν έχει ευρετήριο αναζήτησης.',
             affectedId: r['id'] as int?,
             affectedEntity: 'calls',
             context: {'call_id': r['id']},
@@ -489,7 +491,7 @@ WHERE $_activeTasks
             checkType: IntegrityCheckType.tasksMissingSearchIndex,
             title: 'Εκκρεμότητα χωρίς ευρετήριο αναζήτησης',
             description:
-                'Η εκκρεμότητα «${r['title'] ?? ''}» δεν έχει search_index.',
+                'Η εκκρεμότητα «${r['title'] ?? ''}» δεν έχει ευρετήριο αναζήτησης.',
             affectedId: r['id'] as int?,
             affectedEntity: 'tasks',
             context: {'task_id': r['id']},
@@ -515,7 +517,7 @@ WHERE $_activeUsers
             checkType: IntegrityCheckType.usersWithoutDepartment,
             title: 'Χρήστης χωρίς τμήμα',
             description:
-                'Ο χρήστης ${r['last_name']} ${r['first_name']} δεν έχει department_id.',
+                'Ο χρήστης ${r['last_name']} ${r['first_name']} δεν ανήκει σε κανένα τμήμα.',
             affectedId: r['id'] as int?,
             affectedEntity: 'users',
             context: {'user_id': r['id']},
@@ -543,7 +545,7 @@ WHERE $_activeUsers
             checkType: IntegrityCheckType.usersInvalidDepartment,
             title: 'Χρήστης με άκυρο τμήμα',
             description:
-                'Ο χρήστης ${r['last_name']} ${r['first_name']} δείχνει σε ανύπαρκτο ή διαγραμμένο τμήμα (department_id=${r['department_id']}).',
+                'Ο χρήστης ${r['last_name']} ${r['first_name']} δείχνει σε ανύπαρκτο ή διαγραμμένο τμήμα #${r['department_id']}.',
             affectedId: r['id'] as int?,
             affectedEntity: 'users',
             context: {'user_id': r['id'], 'department_id': r['department_id']},
@@ -571,7 +573,7 @@ WHERE $_activeTasks
             checkType: IntegrityCheckType.tasksInvalidCall,
             title: 'Εκκρεμότητα με άκυρη κλήση',
             description:
-                'Η εκκρεμότητα «${r['title'] ?? ''}» δείχνει σε ανύπαρκτη ή διαγραμμένη κλήση (call_id=${r['call_id']}).',
+                'Η εκκρεμότητα «${r['title'] ?? ''}» δείχνει σε ανύπαρκτη ή διαγραμμένη κλήση #${r['call_id']}.',
             affectedId: r['id'] as int?,
             affectedEntity: 'tasks',
             context: {
@@ -603,8 +605,8 @@ WHERE COALESCE(d.is_deleted, 0) = 0
           severity: IntegritySeverity.warning,
           category: IntegrityCategory.technicalFlow,
           checkType: IntegrityCheckType.departmentsInvalidNameKey,
-          title: 'Τμήμα με κενό name_key',
-          description: 'Το τμήμα «$name» έχει κενό ή null name_key.',
+          title: 'Τμήμα χωρίς κλειδί ονόματος',
+          description: 'Το τμήμα «$name» δεν έχει κλειδί ονόματος.',
           affectedId: r['id'] as int?,
           affectedEntity: 'departments',
           context: {'department_id': r['id'], 'expectedNameKey': expected},
@@ -629,9 +631,9 @@ WHERE COALESCE(d.is_deleted, 0) = 0
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.technicalFlow,
             checkType: IntegrityCheckType.departmentsInvalidNameKey,
-            title: 'Τμήμα με μη συμβαδίζον name_key',
+            title: 'Τμήμα με λάθος κλειδί ονόματος',
             description:
-                'Το τμήμα «$name» έχει name_key «$nameKey» αντί για «$expected».',
+                'Το τμήμα «$name» έχει κλειδί ονόματος «$nameKey» αντί για «$expected».',
             affectedId: r['id'] as int?,
             affectedEntity: 'departments',
             context: {
@@ -674,9 +676,9 @@ WHERE c.id IS NULL
             severity: IntegritySeverity.critical,
             category: IntegrityCategory.referential,
             checkType: IntegrityCheckType.orphanCallExternalLinks,
-            title: 'Ορφανό call_external_link',
+            title: 'Ορφανός εξωτερικός σύνδεσμος κλήσης',
             description:
-                'Η εγγραφή δείχνει σε κλήση που δεν υπάρχει (call_id=${r['call_id']}).',
+                'Η εγγραφή δείχνει σε κλήση #${r['call_id']} που δεν υπάρχει.',
             affectedId: r['id'] as int?,
             affectedEntity: 'call_external_links',
             context: {'link_id': r['id'], 'call_id': r['call_id']},
@@ -737,7 +739,7 @@ WHERE d.id IS NULL OR COALESCE(d.is_deleted, 0) = 1
             severity: IntegritySeverity.critical,
             category: IntegrityCategory.referential,
             checkType: IntegrityCheckType.orphanDepartmentPhones,
-            title: 'Ορφανό department_phones',
+            title: 'Ορφανή συσχέτιση τμήματος–τηλεφώνου',
             description:
                 'Σύνδεση τμήματος ${_formatDepartmentLabel(r['department_id'] as int?, r['department_name'] as String?)} '
                 'με τηλέφωνο ${_formatPhoneLabel(r['phone_id'] as int?, r['phone_number'] as String?)} '
@@ -829,7 +831,7 @@ WHERE $_activeCalls
             checkType: IntegrityCheckType.callsDeletedLinkedEntities,
             title: 'Κλήση με ανύπαρκτη αναφορά (υπάλληλος)',
             description:
-                'Η κλήση αναφέρεται σε υπάλληλο (id=$callerId) που λείπει εντελώς από τη βάση.',
+                'Η κλήση αναφέρεται σε υπάλληλο #$callerId που λείπει εντελώς από τη βάση.',
             affectedId: callId,
             affectedEntity: 'calls',
             context: {
@@ -849,7 +851,7 @@ WHERE $_activeCalls
             checkType: IntegrityCheckType.callsDeletedLinkedEntities,
             title: 'Κλήση με ανύπαρκτη αναφορά (εξοπλισμός)',
             description:
-                'Η κλήση αναφέρεται σε εξοπλισμό (id=$equipmentId) που λείπει εντελώς από τη βάση.',
+                'Η κλήση αναφέρεται σε εξοπλισμό #$equipmentId που λείπει εντελώς από τη βάση.',
             affectedId: callId,
             affectedEntity: 'calls',
             context: {
@@ -869,7 +871,7 @@ WHERE $_activeCalls
             checkType: IntegrityCheckType.callsDeletedLinkedEntities,
             title: 'Κλήση με ανύπαρκτη αναφορά (κατηγορία)',
             description:
-                'Η κλήση αναφέρεται σε κατηγορία (id=$categoryId) που λείπει εντελώς από τη βάση.',
+                'Η κλήση αναφέρεται σε κατηγορία #$categoryId που λείπει εντελώς από τη βάση.',
             affectedId: callId,
             affectedEntity: 'calls',
             context: {
@@ -926,7 +928,7 @@ WHERE $_activeTasks
             checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
             title: 'Εκκρεμότητα με ανύπαρκτη αναφορά (υπάλληλος)',
             description:
-                'Η εκκρεμότητα «$title» αναφέρεται σε υπάλληλο (id=$callerId) που λείπει εντελώς από τη βάση.',
+                'Η εκκρεμότητα «$title» αναφέρεται σε υπάλληλο #$callerId που λείπει εντελώς από τη βάση.',
             affectedId: taskId,
             affectedEntity: 'tasks',
             context: {
@@ -946,7 +948,7 @@ WHERE $_activeTasks
             checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
             title: 'Εκκρεμότητα με ανύπαρκτη αναφορά (εξοπλισμός)',
             description:
-                'Η εκκρεμότητα «$title» αναφέρεται σε εξοπλισμό (id=$equipmentId) που λείπει εντελώς από τη βάση.',
+                'Η εκκρεμότητα «$title» αναφέρεται σε εξοπλισμό #$equipmentId που λείπει εντελώς από τη βάση.',
             affectedId: taskId,
             affectedEntity: 'tasks',
             context: {
@@ -966,7 +968,7 @@ WHERE $_activeTasks
             checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
             title: 'Εκκρεμότητα με ανύπαρκτη αναφορά (τμήμα)',
             description:
-                'Η εκκρεμότητα «$title» αναφέρεται σε τμήμα (id=$departmentId) που λείπει εντελώς από τη βάση.',
+                'Η εκκρεμότητα «$title» αναφέρεται σε τμήμα #$departmentId που λείπει εντελώς από τη βάση.',
             affectedId: taskId,
             affectedEntity: 'tasks',
             context: {
@@ -986,7 +988,7 @@ WHERE $_activeTasks
             checkType: IntegrityCheckType.tasksDeletedLinkedEntities,
             title: 'Εκκρεμότητα με ανύπαρκτη αναφορά (τηλέφωνο)',
             description:
-                'Η εκκρεμότητα «$title» αναφέρεται σε τηλέφωνο (id=$phoneId) που λείπει εντελώς από τη βάση.',
+                'Η εκκρεμότητα «$title» αναφέρεται σε τηλέφωνο #$phoneId που λείπει εντελώς από τη βάση.',
             affectedId: taskId,
             affectedEntity: 'tasks',
             context: {
@@ -1017,9 +1019,9 @@ WHERE $_activeTasks
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.temporal,
             checkType: IntegrityCheckType.tasksTemporalInconsistency,
-            title: 'Εκκρεμότητα: created_at > updated_at',
+            title: 'Εκκρεμότητα με ασυνεπείς ημερομηνίες',
             description:
-                'Η εκκρεμότητα «${r['title'] ?? ''}» έχει created_at (${r['created_at']}) μεταγενέστερο από updated_at (${r['updated_at']}).',
+                'Η εκκρεμότητα «${r['title'] ?? ''}» δημιουργήθηκε (${r['created_at']}) μετά την τελευταία της αλλαγή (${r['updated_at']}).',
             affectedId: r['id'] as int?,
             affectedEntity: 'tasks',
             context: {'task_id': r['id']},
@@ -1043,9 +1045,11 @@ WHERE a.entity_id IS NOT NULL
             severity: IntegritySeverity.warning,
             category: IntegrityCategory.searchIndex,
             checkType: IntegrityCheckType.auditMissingSearchText,
-            title: 'Audit χωρίς search_text',
+            title: 'Εγγραφή ιστορικού χωρίς ευρετήριο',
             description:
-                'Η εγγραφή audit για ${r['entity_type']} #${r['entity_id']} δεν έχει search_text.',
+                'Η εγγραφή ιστορικού για '
+                '${databaseEntityTypeLabelEl(r['entity_type']?.toString())} '
+                '#${r['entity_id']} δεν έχει ευρετήριο αναζήτησης.',
             affectedId: r['id'] as int?,
             affectedEntity: 'audit_log',
             context: {
@@ -1066,6 +1070,13 @@ WHERE a.entity_id IS NOT NULL
     return parts.join(' ');
   }
 
+  /// Ο εσωτερικός κωδικός εγγραφής ως «#42».
+  ///
+  /// Ο αριθμός μένει πάντα ορατός — είναι διαγνωστική πληροφορία, αυτός που
+  /// επιτρέπει να βρεθεί η γραμμή στη βάση. Αλλάζει μόνο η μορφή του: το
+  /// «id=42» είναι ονομασία στήλης, το «#42» διαβάζεται σε κάθε γλώσσα.
+  static String _formatRecordId(int id) => '#$id';
+
   static String _formatUserLabel(
     int? userId,
     String? lastName,
@@ -1073,34 +1084,34 @@ WHERE a.entity_id IS NOT NULL
   ) {
     if (userId == null) return 'άγνωστος υπάλληλος';
     final name = _formatPersonName(lastName, firstName);
-    if (name.isNotEmpty) return '$name (id=$userId)';
-    return 'υπάλληλος id=$userId';
+    if (name.isNotEmpty) return '$name ${_formatRecordId(userId)}';
+    return 'υπάλληλος ${_formatRecordId(userId)}';
   }
 
   static String _formatEquipmentLabel(int? equipmentId, String? code) {
     if (equipmentId == null) return 'άγνωστος εξοπλισμός';
     final trimmed = code?.trim();
     if (trimmed != null && trimmed.isNotEmpty) {
-      return '$trimmed (id=$equipmentId)';
+      return '$trimmed ${_formatRecordId(equipmentId)}';
     }
-    return 'εξοπλισμός id=$equipmentId';
+    return 'εξοπλισμός ${_formatRecordId(equipmentId)}';
   }
 
   static String _formatPhoneLabel(int? phoneId, String? number) {
     if (phoneId == null) return 'άγνωστο τηλέφωνο';
     final trimmed = number?.trim();
     if (trimmed != null && trimmed.isNotEmpty) {
-      return '$trimmed (id=$phoneId)';
+      return '$trimmed ${_formatRecordId(phoneId)}';
     }
-    return 'τηλέφωνο id=$phoneId';
+    return 'τηλέφωνο ${_formatRecordId(phoneId)}';
   }
 
   static String _formatDepartmentLabel(int? departmentId, String? name) {
     if (departmentId == null) return 'άγνωστο τμήμα';
     final trimmed = name?.trim();
     if (trimmed != null && trimmed.isNotEmpty) {
-      return '«$trimmed» (id=$departmentId)';
+      return '«$trimmed» ${_formatRecordId(departmentId)}';
     }
-    return 'τμήμα id=$departmentId';
+    return 'τμήμα ${_formatRecordId(departmentId)}';
   }
 }

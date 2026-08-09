@@ -9,11 +9,18 @@ import '../../../core/widgets/app_asset_image.dart';
 import '../models/dashboard_summary_model.dart';
 import '../providers/dashboard_provider.dart';
 import '../utils/issue_distribution.dart';
+import '../widgets/lansweeper/lansweeper_report_launcher.dart';
 import 'dashboard_charts.dart';
 import 'dashboard_palette_colors.dart';
 
-const _kLansweeperReportBadgeAsset = 'assets/lansweeper tickets.png';
 const _kLansweeperReportBadgeTooltip = 'Αναφορές Lansweeper';
+
+/// Υπόδειξη για τα κουμπιά που φεύγουν από τον Πίνακα Ελέγχου προς το Ιστορικό.
+///
+/// Το κουμπί λέει «Προβολή όλων» — η υπόδειξη είναι που προειδοποιεί ότι αλλάζει
+/// οθόνη και με τι σειρά θα βρει τις κλήσεις εκεί.
+String dashboardOpenHistoryTooltip(String sortHint) =>
+    'Μετάβαση στο Ιστορικό Κλήσεων — ίδιο χρονικό διάστημα, $sortHint';
 
 /// Μέγιστο πλάτος της κάρτας χρόνου.
 ///
@@ -54,6 +61,8 @@ class KpiCardData {
     this.sparklineTooltips = const [],
     this.barPoints = const <KpiBarSparklinePoint>[],
     this.showLansweeperReportBadge = false,
+    this.headerTrailing,
+    this.onTap,
     required this.colors,
   });
 
@@ -68,6 +77,16 @@ class KpiCardData {
   final List<String> sparklineTooltips;
   final List<KpiBarSparklinePoint> barPoints;
   final bool showLansweeperReportBadge;
+
+  /// Χειριστήριο στην πάνω-δεξιά γωνία της κάρτας — π.χ. ο επιλογέας όψης της
+  /// κάρτας «Κορυφαίο …».
+  final Widget? headerTrailing;
+
+  /// Ενέργεια στο κλικ πάνω στην κάρτα. Όταν λείπει, η κάρτα δεν αντιδρά ούτε
+  /// στο πέρασμα του ποντικιού — ώστε το σήκωμα να μην υπόσχεται κάτι που δεν
+  /// υπάρχει.
+  final VoidCallback? onTap;
+
   final KpiTone colors;
 }
 
@@ -76,13 +95,11 @@ class KpiGrid extends StatelessWidget {
     super.key,
     required this.crossAxisCount,
     required this.cards,
-    required this.onCardTap,
     required this.paletteColors,
   });
 
   final int crossAxisCount;
   final List<KpiCardData> cards;
-  final ValueChanged<int> onCardTap;
   final DashboardPaletteColors paletteColors;
 
   @override
@@ -113,7 +130,7 @@ class KpiGrid extends StatelessWidget {
             );
           },
           child: HoverLiftCard(
-            onTap: () => onCardTap(index),
+            onTap: card.onTap,
             child: Container(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
               decoration: BoxDecoration(
@@ -221,7 +238,7 @@ class KpiGrid extends StatelessWidget {
                       child: Tooltip(
                         message: _kLansweeperReportBadgeTooltip,
                         child: AppAssetImage(
-                          assetPath: _kLansweeperReportBadgeAsset,
+                          assetPath: kLansweeperReportBadgeAsset,
                           width: 32,
                           height: 32,
                           fit: BoxFit.contain,
@@ -229,6 +246,8 @@ class KpiGrid extends StatelessWidget {
                         ),
                       ),
                     ),
+                  if (card.headerTrailing != null)
+                    Positioned(top: 5, right: 0, child: card.headerTrailing!),
                 ],
               ),
             ),
@@ -239,11 +258,14 @@ class KpiGrid extends StatelessWidget {
   }
 }
 
+/// Κάρτα που σηκώνεται στο πέρασμα του ποντικιού — αλλά **μόνο** όταν το κλικ
+/// της κάνει κάτι. Χωρίς [onTap] επιστρέφει το παιδί της αυτούσιο, ώστε η
+/// κίνηση να μη διαφημίζει ενέργεια που δεν υπάρχει.
 class HoverLiftCard extends StatefulWidget {
   const HoverLiftCard({super.key, required this.child, required this.onTap});
 
   final Widget child;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   State<HoverLiftCard> createState() => HoverLiftCardState();
@@ -255,6 +277,8 @@ class HoverLiftCardState extends State<HoverLiftCard> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.onTap == null) return widget.child;
+
     final scale = _pressed
         ? 0.992
         : _hovered
@@ -288,7 +312,7 @@ class HoverLiftCardState extends State<HoverLiftCard> {
   }
 }
 
-class TopCallersCard extends StatelessWidget {
+class TopCallersCard extends ConsumerWidget {
   const TopCallersCard({
     super.key,
     required this.data,
@@ -301,8 +325,15 @@ class TopCallersCard extends StatelessWidget {
   final VoidCallback onViewAll;
 
   @override
-  Widget build(BuildContext context) {
-    final callers = data.topCallers.take(7).toList();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hideUnknown = ref.watch(dashboardHideUnknownTopCallerProvider);
+    final callers = visibleCallerStats(
+      data.topCallers,
+      hideUnknownCaller: hideUnknown,
+    ).take(7).toList();
+    final hiddenUnknown = data.topCallers
+        .where((s) => s.name == kDashboardUnknownCallerLabel)
+        .firstOrNull;
     final maxCount = callers.isEmpty
         ? 1
         : callers.map((e) => e.count).reduce(math.max).toDouble();
@@ -389,7 +420,49 @@ class TopCallersCard extends StatelessWidget {
                 ),
               );
             }),
-          TextButton(onPressed: onViewAll, child: const Text('Προβολή όλων >')),
+          Row(
+            children: [
+              Tooltip(
+                message: 'Απόκρυψη κλήσεων χωρίς καταγεγραμμένο καλούντα',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Απόκρυψη «Άγνωστου»',
+                      style: TextStyle(fontSize: 11, color: colors.kpiSubtitle),
+                    ),
+                    const SizedBox(width: 4),
+                    Transform.scale(
+                      scale: 0.82,
+                      child: Switch(
+                        value: hideUnknown,
+                        onChanged: (value) => ref
+                            .read(dashboardHideUnknownTopCallerProvider.notifier)
+                            .set(value),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (hideUnknown && hiddenUnknown != null)
+                Expanded(
+                  child: Text(
+                    '+ ${hiddenUnknown.count} κλήσεις χωρίς καταγεγραμμένο καλούντα',
+                    style: TextStyle(fontSize: 11, color: colors.kpiSubtitle),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+          Tooltip(
+            message: dashboardOpenHistoryTooltip('ταξινόμηση ανά καλούντα'),
+            child: TextButton(
+              onPressed: onViewAll,
+              child: const Text('Προβολή όλων >'),
+            ),
+          ),
         ],
       ),
     );
@@ -405,7 +478,7 @@ class LongestCallsCard extends ConsumerWidget {
     required this.formatDuration,
     required this.formatAggregateDuration,
     required this.onTopNChanged,
-    required this.onOpenReport,
+    required this.onViewAll,
   });
 
   final DashboardSummaryModel data;
@@ -419,7 +492,10 @@ class LongestCallsCard extends ConsumerWidget {
   final String Function(num) formatAggregateDuration;
 
   final ValueChanged<int> onTopNChanged;
-  final VoidCallback onOpenReport;
+
+  /// Μετάβαση στο Ιστορικό με το πλαίσιο της κάρτας. Η ταξινόμηση εκεί ακολουθεί
+  /// την ενεργή όψη — γι' αυτό την αποφασίζει ο καλών, που ξέρει ποια ισχύει.
+  final VoidCallback onViewAll;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -503,9 +579,16 @@ class LongestCallsCard extends ConsumerWidget {
             _buildPerPersonTable(context, ref)
           else
             _buildPerCallTable(context),
-          TextButton(
-            onPressed: onOpenReport,
-            child: const Text('Προβολή αναφοράς >'),
+          Tooltip(
+            message: dashboardOpenHistoryTooltip(
+              isPerPerson
+                  ? 'ταξινόμηση ανά καλούντα'
+                  : 'ταξινόμηση από τη μεγαλύτερη διάρκεια',
+            ),
+            child: TextButton(
+              onPressed: onViewAll,
+              child: const Text('Προβολή όλων >'),
+            ),
           ),
         ],
       ),

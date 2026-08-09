@@ -8,12 +8,16 @@ import '../../../core/services/save_confirmation_summary.dart';
 import '../../../core/utils/call_duration_format.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
-import '../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../core/widgets/resizable_text_area.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
 import '../../calls/provider/smart_entity_selector_provider.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
+import '../../tasks/models/task.dart';
+import '../../tasks/providers/task_service_provider.dart';
 import '../providers/history_call_actions_provider.dart';
+import 'linked_task_details_dialog.dart';
+import 'linked_tasks_card.dart';
 import '../providers/history_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import 'lansweeper/lansweeper_edit_warning.dart';
@@ -48,6 +52,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
   ProviderContainer? _providerContainer;
 
   CallModel? _original;
+  List<Task> _linkedTasks = const <Task>[];
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   int? _categoryId;
@@ -103,6 +108,24 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     _selectedTime = _parseTime(call.time);
     _syncDateTimeControllers();
     setState(() => _loading = false);
+    await _loadLinkedTasks();
+  }
+
+  /// Οι συνδεδεμένες εκκρεμότητες φορτώνονται χωριστά, μετά την κλήση: δεν
+  /// εμποδίζουν την επεξεργασία αν αργήσουν ή αποτύχουν.
+  Future<void> _loadLinkedTasks() async {
+    final tasks = await ref
+        .read(taskServiceProvider)
+        .getTasksForCall(widget.callId);
+    if (!mounted) return;
+    setState(() => _linkedTasks = tasks);
+  }
+
+  Future<void> _openLinkedTask(Task task) async {
+    await showLinkedTaskDetailsDialog(context, task: task);
+    if (!mounted) return;
+    // Ο διάλογος μπορεί να άλλαξε τίτλο ή κατάσταση — ξαναδιαβάζουμε.
+    await _loadLinkedTasks();
   }
 
   DateTime? _parseDate(String? raw) {
@@ -291,14 +314,18 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       child: Center(
         child: AlertDialog(
           title: const Text('Επεξεργασία κλήσης'),
+          // Το οριζόντιο περιθώριο περνά μέσα στο scrollable, ώστε η μπάρα
+          // κύλησης να μένει στην άκρη του διαλόγου και όχι πάνω στα πεδία.
+          contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 24),
           content: SizedBox(
-            width: 980,
+            width: 1028,
             child: _loading
                 ? const SizedBox(
                     height: 280,
                     child: Center(child: CircularProgressIndicator()),
                   )
                 : SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -311,6 +338,13 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                             ),
                             onClone: _cloneCall,
                             cloneBusy: _hardCloneBusy,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (_linkedTasks.isNotEmpty) ...[
+                          LinkedTasksCard(
+                            tasks: _linkedTasks,
+                            onOpen: _openLinkedTask,
                           ),
                           const SizedBox(height: 12),
                         ],
@@ -452,10 +486,9 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                           ),
                         ),
                         const SizedBox(height: 12),
-                        LexiconSpellTextFormField(
+                        ResizableTextArea(
                           controller: _issueController,
                           minLines: 2,
-                          maxLines: 5,
                           decoration: const InputDecoration(
                             labelText: 'Σημειώσεις',
                             border: OutlineInputBorder(),

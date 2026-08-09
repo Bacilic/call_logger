@@ -6,12 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/main_nav_request_provider.dart';
 import '../../../../core/widgets/main_nav_destination.dart';
-import '../../../directory/providers/equipment_directory_provider.dart';
-import '../../../directory/screens/widgets/equipment_form_dialog.dart';
+import '../../../directory/services/equipment_form_launcher.dart';
 import '../../../history/providers/history_provider.dart';
+import '../../../history/utils/history_navigation_feedback.dart';
 import '../../models/call_model.dart';
-import '../../models/equipment_model.dart';
-import '../../models/user_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
 import '../../../../core/utils/text_layout_utils.dart';
 
@@ -107,53 +105,6 @@ double _equipmentRecentSmartCardWidth(
   );
 }
 
-Future<void> _openEquipmentCatalogForm(
-  BuildContext context,
-  WidgetRef ref,
-  String equipmentCode,
-) async {
-  final code = equipmentCode.trim();
-  if (code.isEmpty) return;
-  final notifier = ref.read(equipmentDirectoryProvider.notifier);
-  await notifier.load();
-  if (!context.mounted) return;
-  final rows = ref.read(equipmentDirectoryProvider).allItems;
-  final codeNorm = code.toLowerCase();
-  EquipmentModel? equipment;
-  UserModel? owner;
-  for (final row in rows) {
-    final c = (row.$1.code ?? '').trim().toLowerCase();
-    if (c == codeNorm) {
-      equipment = row.$1;
-      owner = row.$2;
-      break;
-    }
-  }
-  if (equipment == null) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Δεν βρέθηκε εξοπλισμός με κωδικό $code στον κατάλογο.',
-          ),
-        ),
-      );
-    }
-    return;
-  }
-  if (!context.mounted) return;
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    builder: (ctx) => EquipmentFormDialog(
-      initialEquipment: equipment,
-      initialOwner: owner,
-      notifier: notifier,
-      ref: ref,
-    ),
-  );
-}
-
 class EquipmentRecentCallsPanel extends ConsumerWidget {
   const EquipmentRecentCallsPanel({super.key, required this.equipmentCode});
 
@@ -230,11 +181,12 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
                                       );
                                     }
                                   case _EquipmentRecentTitleMenu.openHistory:
-                                    ref
+                                    final messenger = ScaffoldMessenger.of(
+                                      context,
+                                    );
+                                    final cleared = ref
                                         .read(historyFilterProvider.notifier)
-                                        .update(
-                                          (s) => s.copyWith(keyword: code),
-                                        );
+                                        .focus(keyword: code);
                                     ref
                                         .read(mainNavRequestProvider.notifier)
                                         .request(
@@ -243,9 +195,13 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
                                                 MainNavDestination.history,
                                           ),
                                         );
+                                    showHistoryFiltersClearedSnackBar(
+                                      messenger,
+                                      cleared,
+                                    );
                                   case _EquipmentRecentTitleMenu
                                       .openEquipmentEdit:
-                                    _openEquipmentCatalogForm(
+                                    EquipmentFormLauncher.openByCode(
                                       context,
                                       ref,
                                       code,

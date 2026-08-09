@@ -8,6 +8,7 @@ import '../../../../core/providers/main_nav_request_provider.dart';
 import '../../../../core/widgets/linkable_text.dart';
 import '../../../../core/widgets/main_nav_destination.dart';
 import '../../../history/providers/history_provider.dart';
+import '../../../history/utils/history_navigation_feedback.dart';
 import '../../models/call_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
@@ -166,13 +167,12 @@ class RecentCallsList extends ConsumerWidget {
                                       );
                                     }
                                   case _RecentCallsTitleMenu.openHistory:
-                                    ref
+                                    final messenger = ScaffoldMessenger.of(
+                                      context,
+                                    );
+                                    final cleared = ref
                                         .read(historyFilterProvider.notifier)
-                                        .update(
-                                          (s) => s.copyWith(
-                                            keyword: searchKeyword,
-                                          ),
-                                        );
+                                        .focus(keyword: searchKeyword);
                                     ref
                                         .read(mainNavRequestProvider.notifier)
                                         .request(
@@ -181,6 +181,10 @@ class RecentCallsList extends ConsumerWidget {
                                                 MainNavDestination.history,
                                           ),
                                         );
+                                    showHistoryFiltersClearedSnackBar(
+                                      messenger,
+                                      cleared,
+                                    );
                                 }
                               },
                               itemBuilder: (ctx) => const [

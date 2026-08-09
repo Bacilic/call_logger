@@ -1,5 +1,9 @@
 import 'resolution_log_entry.dart';
 
+// Το πρότυπο αρίθμησης ταξιδεύει μέσα στο [LampIssueResolutionDecision]·
+// όποιος φτιάχνει απόφαση χρειάζεται και τα εργαλεία του.
+export 'lamp_serial_series.dart';
+
 typedef ResolutionLogSink = void Function(ResolutionLogEntry entry);
 
 enum LampIssueType {
@@ -59,6 +63,12 @@ extension LampIssueResolutionActionLabelsEl on LampIssueResolutionAction {
   }
 }
 
+/// Κλειδί metadata: ο υποψήφιος δεν έχει κανέναν συνδεδεμένο εξοπλισμό.
+///
+/// Σημαίνεται με σπασμένο σύνδεσμο **μόνο** στον οδηγό επίλυσης, όπου η
+/// πληροφορία αλλάζει απόφαση: τέτοιοι υποψήφιοι συνήθως απορρίπτονται.
+const String kLampOptionUnlinkedFlag = 'unlinkedReference';
+
 class LampIssueResolutionOption {
   const LampIssueResolutionOption({
     required this.id,
@@ -69,6 +79,9 @@ class LampIssueResolutionOption {
     this.proposedMatch,
     this.confidence,
     this.requiresTextInput = false,
+    this.requiresPlacementInput = false,
+    this.requiresContractInput = false,
+    this.requiresSerialSeriesInput = false,
     this.inputLabel,
     this.metadata = const <String, Object?>{},
   });
@@ -81,8 +94,48 @@ class LampIssueResolutionOption {
   final String? proposedMatch;
   final int? confidence;
   final bool requiresTextInput;
+
+  /// Η επιλογή ανοίγει **δύο** συνδεδεμένα πεδία, γραφείο και υπάλληλο, αντί
+  /// για ένα πεδίο κειμένου. Ο υπάλληλος είναι προαιρετικός: μισή σωστή
+  /// τοποθέτηση αξίζει περισσότερο από καμία.
+  final bool requiresPlacementInput;
+
+  /// Η επιλογή ανοίγει τα πεδία δημιουργίας σύμβασης: όνομα, προμηθευτής,
+  /// κατηγορία.
+  final bool requiresContractInput;
+
+  /// Η επιλογή ανοίγει τον διακόπτη μορφής και την προεπισκόπηση αρίθμησης.
+  final bool requiresSerialSeriesInput;
+
   final String? inputLabel;
   final Map<String, Object?> metadata;
+}
+
+/// Τι διάλεξε ο χρήστης στα δύο πεδία τοποθέτησης.
+class LampPlacementInput {
+  const LampPlacementInput({required this.officeId, this.ownerId});
+
+  final int officeId;
+
+  /// `null` όταν ο χρήστης ξέρει το γραφείο αλλά όχι τον κάτοχο.
+  final int? ownerId;
+}
+
+/// Τα στοιχεία μιας νέας σύμβασης, όπως τα συμπλήρωσε ο χρήστης.
+class LampContractInput {
+  const LampContractInput({
+    required this.name,
+    this.supplierId,
+    this.categoryId,
+  });
+
+  /// Το όνομα της σύμβασης — προσυμπληρώνεται από την ωμή τιμή.
+  final String name;
+
+  /// Προμηθευτής από τους ήδη καταχωρημένους· `null` όταν δεν είναι γνωστός.
+  final int? supplierId;
+
+  final int? categoryId;
 }
 
 class LampIssueResolutionProposal {
@@ -149,11 +202,23 @@ class LampIssueResolutionDecision {
     required this.proposal,
     this.option,
     this.textInput,
+    this.placementInput,
+    this.contractInput,
+    this.serialSeriesTemplate,
   });
 
   final LampIssueResolutionProposal proposal;
   final LampIssueResolutionOption? option;
   final String? textInput;
+
+  /// Συμπληρωμένο μόνο όταν η επιλογή ζητά γραφείο και υπάλληλο.
+  final LampPlacementInput? placementInput;
+
+  /// Συμπληρωμένο μόνο όταν η επιλογή δημιουργεί σύμβαση.
+  final LampContractInput? contractInput;
+
+  /// Το πρότυπο αρίθμησης, όταν η επιλογή αριθμεί σειρά.
+  final String? serialSeriesTemplate;
 }
 
 /// Πράξεις επίλυσης ανεπίλυτων προτάσεων (metadata `operation`).

@@ -8,6 +8,7 @@ import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/provider/smart_entity_selector_provider.dart';
 import '../../features/database/debug/integrity_debug_provider_refresh.dart';
 import '../../features/database/providers/database_browser_stats_provider.dart';
+import '../../features/directory/providers/catalog_validation_provider.dart';
 import '../../features/directory/providers/category_directory_provider.dart';
 import '../../features/directory/providers/department_directory_provider.dart';
 import '../../features/directory/providers/directory_provider.dart';
@@ -62,6 +63,9 @@ void invalidateDatabaseScopedCaches(WidgetRef ref) {
     ref.invalidate(departmentDirectoryProvider);
     ref.invalidate(equipmentDirectoryProvider);
     ref.invalidate(categoryDirectoryProvider);
+    // Οι κανόνες επικύρωσης ζουν στο app_settings της βάσης — η νέα βάση
+    // έχει τους δικούς της.
+    ref.invalidate(catalogValidationRulesProvider);
     ref.read(taskServiceProvider).resetSnoozeHistoryColumnCache();
     // Άμεσο flush του lookup ΕΚΤΟΣ φάσης build: το single-flight lock της
     // αρχικοποίησης ([runDatabaseInitChecks]) σειριοποιεί τυχόν παράλληλο άνοιγμα.

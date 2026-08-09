@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/greek_date_format.dart';
 import '../models/database_backup_settings.dart';
 import 'backup_destination_folder_validator.dart';
 import 'backup_schedule_utils.dart';
@@ -24,16 +25,6 @@ class BackupScheduleStatusInfo {
 /// Υπολογισμός και μορφοποίηση κατάστασης προγράμματος backup για το UI.
 abstract final class BackupScheduleStatusFormatter {
   BackupScheduleStatusFormatter._();
-
-  static const _weekdayShort = [
-    'Δευ',
-    'Τρι',
-    'Τετ',
-    'Πεμ',
-    'Παρ',
-    'Σαβ',
-    'Κυρ',
-  ];
 
   static String formatLocalTimeHm(DateTime local) {
     final l = local.toLocal();
@@ -181,7 +172,7 @@ abstract final class BackupScheduleStatusFormatter {
   ) => shouldMarkScheduleMissed(settings, now);
 
   static String formatLocalDateTime(DateTime local) {
-    final w = _weekdayShort[local.weekday - 1];
+    final w = weekdayShortElTitle(local);
     final dd = local.day.toString().padLeft(2, '0');
     final mm = local.month.toString().padLeft(2, '0');
     final yyyy = local.year.toString();
