@@ -36,6 +36,7 @@ import 'lansweeper/sync_history_list.dart';
 import 'lansweeper_report_ai.dart';
 import 'lansweeper_report_browser.dart';
 import 'lansweeper_report_items.dart';
+import 'lansweeper_report_knowledge.dart';
 import 'lansweeper_report_registration.dart';
 import 'lansweeper_report_settings.dart';
 
@@ -72,6 +73,10 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   late final LansweeperReportRegistration registrationFlow =
       LansweeperReportRegistration(this);
 
+  /// «Αποθήκευση ως γνώση» — η λύση γίνεται άρθρο Βάσης Γνώσης.
+  late final LansweeperReportKnowledge knowledgeFlow =
+      LansweeperReportKnowledge(this);
+
   final Set<String> selectedKeys = <String>{};
   final SpellCheckController titleController = SpellCheckController();
   final SpellCheckController notesController = SpellCheckController();
@@ -102,6 +107,13 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   final TextEditingController geminiFallbackModelController =
       TextEditingController();
   final Map<String, String> customFieldValues = <String, String>{};
+
+  /// Το κείμενο ακριβώς όπως το γύρισε η τελευταία «Πρόταση ΤΝ», για να ξέρει η
+  /// κλήση αν στάλθηκε η πρόταση ως έχει ή η διορθωμένη εκδοχή της. `null` όσο
+  /// δεν έχει τρέξει πρόταση — τότε ό,τι σταλεί είναι χειρόγραφο.
+  String? aiSuggestedNotes;
+  String? aiSuggestedSolution;
+
   String? selectedTicketState;
   ProviderSubscription<String>? _lansweeperApiUrlSub;
   ProviderSubscription<String>? _lansweeperTicketFormUrlSub;
@@ -894,6 +906,20 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                             settingsFlow
                                                 .openAiPromptTemplateEditorDialog(),
                                           ),
+                                          saveAsKnowledgeDisabledTooltip:
+                                              knowledgeFlow
+                                                  .saveDisabledReason(selected),
+                                          onSaveAsKnowledge:
+                                              knowledgeFlow.saveDisabledReason(
+                                                    selected,
+                                                  ) ==
+                                                  null
+                                              ? () => unawaited(
+                                                  knowledgeFlow.saveAsKnowledge(
+                                                    selected,
+                                                  ),
+                                                )
+                                              : null,
                                         ),
                                         const SizedBox(height: 10),
                                         Card(
@@ -1096,6 +1122,10 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                   connectionReady
                               ? () => browserFlow.copyAndOpen(
                                   ticketFormUrl: lansweeperTicketFormUrl,
+                                  callIds: selected
+                                      .map((item) => item.call.id)
+                                      .whereType<int>()
+                                      .toList(),
                                   durationSeconds: hasSelection
                                       ? totalSelectedSeconds
                                       : null,

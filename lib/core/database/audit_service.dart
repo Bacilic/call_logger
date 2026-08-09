@@ -227,6 +227,8 @@ class AuditService {
         return 'αντιγραφο ασφαλειας';
       case AuditEntityTypes.phone:
         return 'τηλεφωνο';
+      case AuditEntityTypes.knowledge:
+        return 'αρθρο γνωσησ';
       default:
         return '';
     }
@@ -729,6 +731,9 @@ abstract final class AuditEntityTypes {
 
   /// Πίνακας `phones` (entity_id = `phones.id`).
   static const String phone = 'phone';
+
+  /// Άρθρο Βάσης Γνώσης (entity_id = `knowledge_base.id`).
+  static const String knowledge = 'knowledge';
 }
 
 /// Σταθερές ενεργειών audit (ΚΕΦΑΛΑΙΑ).

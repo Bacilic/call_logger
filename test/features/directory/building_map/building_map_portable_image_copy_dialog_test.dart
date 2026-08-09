@@ -64,37 +64,34 @@ void main() {
     await _closeDialog(tester);
   });
 
-  testWidgets(
-    'με ενεργή μετονομασία το «Χωρίς μεταφορά» απενεργοποιείται και '
-    'εξηγείται ο λόγος',
-    (tester) async {
-      await _pumpAndOpenDialog(tester);
+  testWidgets('με ενεργή μετονομασία το «Χωρίς μεταφορά» απενεργοποιείται και '
+      'εξηγείται ο λόγος', (tester) async {
+    await _pumpAndOpenDialog(tester);
 
-      expect(_noTransferButton(tester).onPressed, isNotNull);
+    expect(_noTransferButton(tester).onPressed, isNotNull);
 
-      await tester.tap(find.text('Μετονομασία σε:'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Μετονομασία σε:'));
+    await tester.pumpAndSettle();
 
-      expect(
-        _noTransferButton(tester).onPressed,
-        isNull,
-        reason:
-            'Η μετονομασία ισχύει μόνο με μεταφορά — το «Χωρίς μεταφορά» '
-            'δεν επιτρέπεται να αγνοήσει σιωπηλά την ενεργή επιλογή.',
-      );
-      expect(
-        find.textContaining('Η μετονομασία ισχύει μόνο με μεταφορά'),
-        findsOneWidget,
-      );
+    expect(
+      _noTransferButton(tester).onPressed,
+      isNull,
+      reason:
+          'Η μετονομασία ισχύει μόνο με μεταφορά — το «Χωρίς μεταφορά» '
+          'δεν επιτρέπεται να αγνοήσει σιωπηλά την ενεργή επιλογή.',
+    );
+    expect(
+      find.textContaining('Η μετονομασία ισχύει μόνο με μεταφορά'),
+      findsOneWidget,
+    );
 
-      // Η επιστροφή στη «Διατήρηση ονόματος» ξανανοίγει τον δρόμο.
-      await tester.tap(find.text('Διατήρηση ονόματος «2 - Γραφεία.png»'));
-      await tester.pumpAndSettle();
-      expect(_noTransferButton(tester).onPressed, isNotNull);
+    // Η επιστροφή στη «Διατήρηση ονόματος» ξανανοίγει τον δρόμο.
+    await tester.tap(find.text('Διατήρηση ονόματος «2 - Γραφεία.png»'));
+    await tester.pumpAndSettle();
+    expect(_noTransferButton(tester).onPressed, isNotNull);
 
-      await _closeDialog(tester);
-    },
-  );
+    await _closeDialog(tester);
+  });
 
   testWidgets(
     'με διατήρηση ονόματος το «Χωρίς μεταφορά» επιστρέφει χρήση από την '

@@ -652,6 +652,7 @@ class _DictionaryManagerScreenState
     if (added == true && mounted) {
       ref.invalidate(coreLexiconProvider);
       ref.invalidate(spellCheckServiceProvider);
+      flushLexiconProviderChain(ref);
       ref.read(lexiconMasterDataRevisionProvider.notifier).bump();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -746,6 +747,7 @@ class _DictionaryManagerScreenState
       await _master.compileExportToTxt();
       ref.invalidate(coreLexiconProvider);
       ref.invalidate(spellCheckServiceProvider);
+      flushLexiconProviderChain(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

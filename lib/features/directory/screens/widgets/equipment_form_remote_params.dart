@@ -70,9 +70,7 @@ class EquipmentFormRemoteParams {
 
   Future<void> pruneAfterCatalogLoad() async {
     if (!host.mounted || host.didPruneUnknownRemoteKeys) return;
-    final pairs = await host.ref.read(
-      remoteToolFormPairsProvider.future,
-    );
+    final pairs = await host.ref.read(remoteToolFormPairsProvider.future);
     if (!host.mounted || host.didPruneUnknownRemoteKeys) return;
     host.didPruneUnknownRemoteKeys = true;
     _syncRemoteParamsToForm(pairs);

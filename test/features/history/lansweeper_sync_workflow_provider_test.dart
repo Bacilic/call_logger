@@ -9,6 +9,7 @@ import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lansweeper_sync_service.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
+import 'package:call_logger/features/calls/models/call_refined_source.dart';
 import 'package:call_logger/features/history/models/lansweeper_sync_state.dart';
 import 'package:call_logger/features/history/providers/lansweeper_sync_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,6 +51,7 @@ const _kDefaultSubmitInput = LansweeperSubmitInput(
   title: 'Τίτλος δοκιμής',
   notes: 'Πρόβλημα δοκιμής',
   solution: 'Λύση δοκιμής.',
+  refinedSource: CallRefinedSource.ai,
   agentUsername: r'CORP\agent',
   durationSeconds: 300,
 );
@@ -116,6 +118,53 @@ void main() {
         final call = await CallsRepository(db).getCallById(callId);
         expect(call!.lansweeperState, LansweeperSyncState.sent);
         expect(call.lansweeperMainTicketId, _kFakeTicketId);
+      },
+    );
+
+    test(
+      'Μετά την επιτυχή υποβολή το κείμενο του ticket γράφεται στην κλήση, χωρίς να αντικαταστήσει το ωμό issue',
+      () async {
+        final callId = await _seedWorkflowCall();
+        final container = _workflowTestContainer(poster);
+        addTearDown(container.dispose);
+
+        container.listen(lansweeperSyncProvider, (_, _) {});
+
+        await container
+            .read(lansweeperSyncProvider.notifier)
+            .submitCall(callId: callId, input: _kDefaultSubmitInput);
+
+        final db = await DatabaseHelper.instance.database;
+        final call = await CallsRepository(db).getCallById(callId);
+        expect(call!.issue, _kWorkflowTestMarker);
+        expect(call.issueRefined, _kDefaultSubmitInput.notes);
+        expect(call.solution, _kDefaultSubmitInput.solution);
+        expect(call.refinedSource, CallRefinedSource.ai);
+      },
+    );
+
+    test(
+      'Οι συνοδές κλήσεις του ίδιου ticket παίρνουν κι αυτές το κείμενο',
+      () async {
+        final callId = await _seedWorkflowCall();
+        final companionId = await _seedWorkflowCall();
+        final container = _workflowTestContainer(poster);
+        addTearDown(container.dispose);
+
+        container.listen(lansweeperSyncProvider, (_, _) {});
+
+        await container
+            .read(lansweeperSyncProvider.notifier)
+            .submitCall(
+              callId: callId,
+              input: _kDefaultSubmitInput,
+              companionCallIds: <int>[companionId],
+            );
+
+        final db = await DatabaseHelper.instance.database;
+        final companion = await CallsRepository(db).getCallById(companionId);
+        expect(companion!.issueRefined, _kDefaultSubmitInput.notes);
+        expect(companion.solution, _kDefaultSubmitInput.solution);
       },
     );
 
@@ -194,6 +243,7 @@ void main() {
                 title: 'Τίτλος',
                 notes: 'Πρόβλημα',
                 solution: 'Λύση',
+                refinedSource: CallRefinedSource.ai,
                 agentUsername: '   ',
               ),
             );

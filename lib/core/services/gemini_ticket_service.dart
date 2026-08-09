@@ -297,6 +297,7 @@ abstract final class GeminiTicketService {
     required String titleText,
     required String notesText,
     required String solutionText,
+    String knowledgeText = '',
   }) {
     final trimmedNotes = notesText.trim();
     final trimmedIssue = issue.trim();
@@ -312,6 +313,7 @@ abstract final class GeminiTicketService {
       '{Σημειώσεις}': trimmedNotes,
       '{Πρόβλημα}': problemText,
       '{Λύση}': solutionText.trim(),
+      '{Γνώση}': knowledgeText.trim(),
     };
 
     final emptyTokens = <String>{

@@ -248,7 +248,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
             },
           ),
       createTrace: () =>
-          widget.shutdownTraceFactory?.call() ?? _createTraceServiceIfEnabled(),
+          widget.shutdownTraceFactory?.call() ?? _createTraceService(),
       presenter: this,
     );
     await runner.run();
@@ -285,20 +285,18 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     _shutdownRevealTimer = null;
   }
 
-  Future<ShutdownTraceService?> _createTraceServiceIfEnabled() async {
+  /// Ο ιχνηλάτης τρέχει πάντα — δεν έχει διακόπτη, γιατί σε φυσιολογικό
+  /// κλείσιμο δεν αφήνει αρχείο. Κρατά ίχνος μόνο όταν κάτι πάει στραβά.
+  Future<ShutdownTraceService?> _createTraceService() async {
     try {
       final settings = SettingsService();
-      final enabled = await settings.catalogs.getShutdownTraceEnabled();
-      if (!enabled) return null;
       final dbPath = await settings.getDatabasePath();
       if (dbPath.trim().isEmpty) return null;
       return ShutdownTraceService(
         logsDirectory: ShutdownTraceService.logsDirectoryForDatabasePath(
           dbPath,
         ),
-        enabled: true,
-        retentionCount: await settings.catalogs
-            .getShutdownTraceRetentionCount(),
+        retentionCount: await settings.catalogs.getCrashLogRetentionCount(),
       );
     } catch (_) {
       return null;

@@ -22,6 +22,12 @@ class CatalogValidationRules {
     this.departmentNameEnabled = true,
     this.personNameEnabled = true,
     this.personNameAllowedSymbols = defaultPersonNameAllowedSymbols,
+    this.phoneEquipmentCodeEnabled = true,
+    this.swappedNamesEnabled = true,
+    this.duplicateNamesEnabled = true,
+    this.crossDepartmentPhoneEnabled = true,
+    this.equipmentOwnerDepartmentEnabled = true,
+    this.emptyDepartmentEnabled = true,
   });
 
   /// Προεπιλεγμένες εξαιρέσεις: η ανοιχτή παρένθεση, γιατί το πεδίο «Όνομα»
@@ -58,6 +64,32 @@ class CatalogValidationRules {
   /// κόμμα (π.χ. `(, -`). Τα ψηφία ΔΕΝ εξαιρούνται ποτέ από εδώ.
   final String personNameAllowedSymbols;
 
+  // ---- Διασταυρώσεις: κανόνες που κοιτούν ΣΧΕΣΕΙΣ μεταξύ εγγραφών.
+  // Τρέχουν μόνο στη σάρωση «Έλεγχος δεδομένων» — στις φόρμες δεν υπάρχει
+  // ολόκληρη η βάση διαθέσιμη τη στιγμή της πληκτρολόγησης.
+
+  /// Τηλέφωνο που ταυτίζεται με καταχωρημένο κωδικό εξοπλισμού
+  /// (το ιστορικό λάθος «3685 ως τηλέφωνο»).
+  final bool phoneEquipmentCodeEnabled;
+
+  /// Ζεύγη υπαλλήλων με αντεστραμμένα όνομα/επώνυμο
+  /// (Δρόσος Βασίλης / Βασίλης Δρόσος).
+  final bool swappedNamesEnabled;
+
+  /// Υπάλληλοι με ολόιδιο ονοματεπώνυμο — πιθανά διπλότυπα.
+  final bool duplicateNamesEnabled;
+
+  /// Ίδιο τηλέφωνο σε υπαλλήλους ΔΙΑΦΟΡΕΤΙΚΩΝ τμημάτων. Στο ίδιο τμήμα
+  /// είναι θεμιτό (κοινό τηλέφωνο βάρδιας) και δεν ελέγχεται.
+  final bool crossDepartmentPhoneEnabled;
+
+  /// Εξοπλισμός χρεωμένος σε υπάλληλο άλλου τμήματος από αυτό που ανήκει.
+  final bool equipmentOwnerDepartmentEnabled;
+
+  /// Τμήμα χωρίς κανέναν υπάλληλο, τηλέφωνο και εξοπλισμό. Δεν είναι σφάλμα —
+  /// ένα τμήμα μπορεί να αδειάσει θεμιτά — αλλά συνήθως θέλει απόφαση.
+  final bool emptyDepartmentEnabled;
+
   static final RegExp _letterOrDigit = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
   /// Οι εξαιρέσεις ως σύνολο χαρακτήρων.
@@ -93,6 +125,12 @@ class CatalogValidationRules {
     bool? departmentNameEnabled,
     bool? personNameEnabled,
     String? personNameAllowedSymbols,
+    bool? phoneEquipmentCodeEnabled,
+    bool? swappedNamesEnabled,
+    bool? duplicateNamesEnabled,
+    bool? crossDepartmentPhoneEnabled,
+    bool? equipmentOwnerDepartmentEnabled,
+    bool? emptyDepartmentEnabled,
   }) {
     return CatalogValidationRules(
       internalPhoneDigitsEnabled:
@@ -114,6 +152,18 @@ class CatalogValidationRules {
       personNameEnabled: personNameEnabled ?? this.personNameEnabled,
       personNameAllowedSymbols:
           personNameAllowedSymbols ?? this.personNameAllowedSymbols,
+      phoneEquipmentCodeEnabled:
+          phoneEquipmentCodeEnabled ?? this.phoneEquipmentCodeEnabled,
+      swappedNamesEnabled: swappedNamesEnabled ?? this.swappedNamesEnabled,
+      duplicateNamesEnabled:
+          duplicateNamesEnabled ?? this.duplicateNamesEnabled,
+      crossDepartmentPhoneEnabled:
+          crossDepartmentPhoneEnabled ?? this.crossDepartmentPhoneEnabled,
+      equipmentOwnerDepartmentEnabled:
+          equipmentOwnerDepartmentEnabled ??
+          this.equipmentOwnerDepartmentEnabled,
+      emptyDepartmentEnabled:
+          emptyDepartmentEnabled ?? this.emptyDepartmentEnabled,
     );
   }
 
@@ -131,6 +181,12 @@ class CatalogValidationRules {
     'department_name_enabled': departmentNameEnabled,
     'person_name_enabled': personNameEnabled,
     'person_name_allowed_symbols': personNameAllowedSymbols,
+    'phone_equipment_code_enabled': phoneEquipmentCodeEnabled,
+    'swapped_names_enabled': swappedNamesEnabled,
+    'duplicate_names_enabled': duplicateNamesEnabled,
+    'cross_department_phone_enabled': crossDepartmentPhoneEnabled,
+    'equipment_owner_department_enabled': equipmentOwnerDepartmentEnabled,
+    'empty_department_enabled': emptyDepartmentEnabled,
   };
 
   String toRawJson() => jsonEncode(toJson());
@@ -219,6 +275,36 @@ class CatalogValidationRules {
         map,
         'person_name_allowed_symbols',
         d.personNameAllowedSymbols,
+      ),
+      phoneEquipmentCodeEnabled: _boolOf(
+        map,
+        'phone_equipment_code_enabled',
+        d.phoneEquipmentCodeEnabled,
+      ),
+      swappedNamesEnabled: _boolOf(
+        map,
+        'swapped_names_enabled',
+        d.swappedNamesEnabled,
+      ),
+      duplicateNamesEnabled: _boolOf(
+        map,
+        'duplicate_names_enabled',
+        d.duplicateNamesEnabled,
+      ),
+      crossDepartmentPhoneEnabled: _boolOf(
+        map,
+        'cross_department_phone_enabled',
+        d.crossDepartmentPhoneEnabled,
+      ),
+      equipmentOwnerDepartmentEnabled: _boolOf(
+        map,
+        'equipment_owner_department_enabled',
+        d.equipmentOwnerDepartmentEnabled,
+      ),
+      emptyDepartmentEnabled: _boolOf(
+        map,
+        'empty_department_enabled',
+        d.emptyDepartmentEnabled,
       ),
     );
   }

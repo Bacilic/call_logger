@@ -26,9 +26,6 @@ class SettingsServiceCatalogs {
   static const String _keyAuditRetentionConfig = 'audit_retention_config_v1';
   static const String _keyCrashLogRetentionCount =
       'crash_log_retention_count_v1';
-  static const String _keyShutdownTraceEnabled = 'shutdown_trace_enabled_v1';
-  static const String _keyShutdownTraceRetentionCount =
-      'shutdown_trace_retention_count_v1';
   static const String _keyCatalogValidationRules =
       'catalog_validation_rules_v1';
   static const String _keyUpdateFolderPath = 'update_folder_path';
@@ -39,12 +36,6 @@ class SettingsServiceCatalogs {
   static const int defaultCrashLogRetentionCount = 14;
   static const int minCrashLogRetentionCount = 3;
   static const int maxCrashLogRetentionCount = 90;
-
-  static const bool defaultShutdownTraceEnabled = true;
-  static const int defaultShutdownTraceRetentionCount =
-      defaultCrashLogRetentionCount;
-  static const int minShutdownTraceRetentionCount = minCrashLogRetentionCount;
-  static const int maxShutdownTraceRetentionCount = maxCrashLogRetentionCount;
 
   /// Προεπιλεγμένες κατηγορίες λεξικού (CSV για ρυθμίσεις / dropdown).
   static const String defaultLexiconCategoriesCsv =
@@ -167,40 +158,6 @@ class SettingsServiceCatalogs {
     await prefs.setInt(
       _prefKey(_keyCrashLogRetentionCount),
       value.clamp(minCrashLogRetentionCount, maxCrashLogRetentionCount),
-    );
-  }
-
-  /// Ενεργοποίηση αρχείου ιχνηλάτησης βημάτων κλεισίματος.
-  Future<bool> getShutdownTraceEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyShutdownTraceEnabled)) ??
-        defaultShutdownTraceEnabled;
-  }
-
-  Future<void> setShutdownTraceEnabled(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyShutdownTraceEnabled), value);
-  }
-
-  /// Πόσα πρόσφατα αρχεία shutdown_trace_*.log διατηρούνται στον φάκελο logs.
-  Future<int> getShutdownTraceRetentionCount() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getInt(_prefKey(_keyShutdownTraceRetentionCount));
-    if (value == null) return defaultShutdownTraceRetentionCount;
-    return value.clamp(
-      minShutdownTraceRetentionCount,
-      maxShutdownTraceRetentionCount,
-    );
-  }
-
-  Future<void> setShutdownTraceRetentionCount(int value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(
-      _prefKey(_keyShutdownTraceRetentionCount),
-      value.clamp(
-        minShutdownTraceRetentionCount,
-        maxShutdownTraceRetentionCount,
-      ),
     );
   }
 

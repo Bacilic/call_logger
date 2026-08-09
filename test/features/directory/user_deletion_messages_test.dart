@@ -119,4 +119,66 @@ void main() {
       );
     });
   });
+
+  group('Τμήμα που έμεινε κενό μετά τη διαγραφή', () {
+    test('κανένα κενό τμήμα: καμία προσθήκη στο μήνυμα', () {
+      expect(emptiedDepartmentsNotice(const []), isNull);
+      expect(
+        userDeletionSummaryMessage(
+          employeeNames: ['Κόλια Μαρία'],
+          assetActions: const [],
+        ),
+        'Διαγράφηκε Κόλια Μαρία',
+      );
+    });
+
+    test('κενά ονόματα αγνοούνται — δεν παράγεται μήνυμα-φάντασμα', () {
+      expect(emptiedDepartmentsNotice(const ['', '   ']), isNull);
+    });
+
+    test('ένα τμήμα: ενικός', () {
+      expect(
+        emptiedDepartmentsNotice(const ['Ακτινολογικό']),
+        'Το τμήμα «Ακτινολογικό» έμεινε χωρίς κανένα εξάρτημα',
+      );
+    });
+
+    test('δύο τμήματα: πληθυντικός με εισαγωγικά στο καθένα', () {
+      expect(
+        emptiedDepartmentsNotice(const ['Ακτινολογικό', 'Μαγειρείο']),
+        'Τα τμήματα «Ακτινολογικό», «Μαγειρείο» έμειναν χωρίς κανένα εξάρτημα',
+      );
+    });
+
+    test('το σενάριο της Κόλια Μαρίας: μπαίνει στο τέλος του snackbar', () {
+      final msg = userDeletionSummaryMessage(
+        employeeNames: ['Κόλια Μαρία'],
+        assetActions: const [
+          UserDeletionAssetAction(
+            kind: UserDeletionAssetActionKind.delete,
+            identifier: '3874',
+            isPhone: false,
+          ),
+        ],
+        emptiedDepartments: const ['Ακτινολογικό'],
+      );
+      expect(
+        msg,
+        'Διαγράφηκε Κόλια Μαρία · διαγραφή εξοπλισμού (3874) · '
+        'Το τμήμα «Ακτινολογικό» έμεινε χωρίς κανένα εξάρτημα',
+      );
+    });
+
+    test('χωρίς ενέργειες στοιχείων το μήνυμα παραμένει διαβάσιμο', () {
+      expect(
+        userDeletionSummaryMessage(
+          employeeNames: ['Κόλια Μαρία'],
+          assetActions: const [],
+          emptiedDepartments: const ['Ακτινολογικό'],
+        ),
+        'Διαγράφηκε Κόλια Μαρία · '
+        'Το τμήμα «Ακτινολογικό» έμεινε χωρίς κανένα εξάρτημα',
+      );
+    });
+  });
 }

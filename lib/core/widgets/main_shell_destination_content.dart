@@ -17,6 +17,7 @@ import '../../features/database/widgets/database_settings_dialog.dart';
 import '../../features/dictionary/screens/dictionary_manager_screen.dart';
 import '../../features/directory/screens/directory_screen.dart';
 import '../../features/history/screens/history_screen.dart';
+import '../../features/knowledge/screens/knowledge_screen.dart';
 import '../../features/lamp/screens/lamp_screen.dart';
 import '../../features/tasks/screens/tasks_screen.dart';
 import 'main_nav_destination.dart';
@@ -122,6 +123,8 @@ class MainShellDestinationContent {
         return DictionaryManagerScreen(
           databaseResult: host.widget.databaseResult,
         );
+      case MainNavDestination.knowledge:
+        return const KnowledgeScreen();
       case MainNavDestination.lamp:
         return const LampScreen();
       case MainNavDestination.debugScenarios:

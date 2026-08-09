@@ -132,6 +132,7 @@ lib/
 │   │   ├── remote_launcher_service.dart
 │   │   ├── settings_service.dart  (+ _analytics_filters / _catalogs / _remote_lansweeper / _window_ui)
 │   │   ├── shutdown_coordinator.dart
+│   │   ├── shutdown_trace_incident.dart
 │   │   ├── shutdown_trace_service.dart
 │   │   ├── spell_check_service.dart
 │   │   └── spelling_lookup_gemini_service.dart
@@ -201,7 +202,8 @@ lib/
 │   │   └── widgets/  lamp_transfer_wizard_dialog, lamp_resolution_progress_dialog κ.λπ.
 │   ├── settings/
 │   │   ├── screens/  settings_screen, remote_tools_management_screen
-│   │   └── widgets/  remote_tool_form/* (controller, dialog, saver, sort, test_panel)
+│   │   └── widgets/  remote_tool_form/* (controller, dialog, saver, sort, test_panel),
+│   │                 shutdown_incident_notice
 │   └── tasks/
 │       ├── models/  task, task_analytics_filter, task_analytics_summary, task_filter,
 │       │            task_settings_config, task_analytics_date_preset

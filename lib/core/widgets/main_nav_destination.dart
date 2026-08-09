@@ -7,6 +7,7 @@ enum MainNavDestination {
   database,
   dictionary,
   lamp,
+  knowledge,
 
   /// Οθόνη debug σενάριων σφαλμάτων (μόνο kDebugMode desktop).
   debugScenarios;
@@ -23,6 +24,7 @@ enum MainNavDestination {
     MainNavDestination.database => 'Βάση Δεδομένων',
     MainNavDestination.dictionary => 'Λεξικό',
     MainNavDestination.lamp => 'Λάμπα',
+    MainNavDestination.knowledge => 'Βάση Γνώσης',
     MainNavDestination.debugScenarios => 'Σενάρια',
   };
 }

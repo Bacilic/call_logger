@@ -238,5 +238,46 @@ void main() {
       expect(prompt, contains('Πρόβλημα: Ρύθμιση αξονικού'));
       expect(prompt, isNot(contains('{@')));
     });
+
+    test('η γνώση μπαίνει στην προτροπή όταν βρέθηκαν σχετικά άρθρα', () {
+      final prompt = GeminiTicketService.buildPrompt(
+        promptTemplate: kDefaultAiPromptTemplate,
+        callerText: 'Μαρίνα Κυνηγάρη',
+        equipmentText: '5151',
+        departmentText: 'Πρωτόκολλο',
+        category: '',
+        issue: 'Βλέπει μαυρη οθόνη από το πρωί',
+        titleText: '',
+        notesText: '',
+        solutionText: '',
+        knowledgeText:
+            '- Σύμπτωμα: Μαύρη οθόνη από το πρωί\n'
+            '  Λύση: Αποσύνδεση ενεργής συνεδρίας VNC.',
+      );
+
+      expect(prompt, contains('Παρόμοια περιστατικά'));
+      expect(prompt, contains('Αποσύνδεση ενεργής συνεδρίας VNC.'));
+      expect(prompt, isNot(contains('{@')));
+    });
+
+    test('χωρίς σχετικά άρθρα η προτροπή δεν αναφέρει καθόλου γνώση', () {
+      final prompt = GeminiTicketService.buildPrompt(
+        promptTemplate: kDefaultAiPromptTemplate,
+        callerText: 'Μαρίνα Κυνηγάρη',
+        equipmentText: '5151',
+        departmentText: 'Πρωτόκολλο',
+        category: '',
+        issue: 'Βλέπει μαυρη οθόνη από το πρωί',
+        titleText: '',
+        notesText: '',
+        solutionText: '',
+      );
+
+      expect(prompt, isNot(contains('Παρόμοια περιστατικά')));
+      expect(prompt, isNot(contains('{Γνώση}')));
+      expect(prompt, isNot(contains('{@')));
+      // Η προτροπή μένει λειτουργική: η γνώση είναι μπόνους, όχι προϋπόθεση.
+      expect(prompt, contains('Πρόβλημα: Βλέπει μαυρη οθόνη από το πρωί'));
+    });
   });
 }

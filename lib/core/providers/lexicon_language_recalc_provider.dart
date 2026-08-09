@@ -1,8 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/master_dictionary_service.dart';
-import 'core_lexicon_provider.dart';
-import 'spell_check_provider.dart';
 
 /// Κατάσταση βαριάς διεργασίας επανελέγχου γλωσσών στο `full_dictionary`.
 sealed class LexiconLanguageRecalcState {
@@ -42,10 +40,11 @@ class LexiconLanguageRecalcNotifier
           state = LexiconLanguageRecalcLoading(p);
         },
       );
+      // Η ακύρωση/ξέπλυμα της αλυσίδας λεξικού και το bump της αναθεώρησης
+      // γίνονται από τον καλούντα στο widget layer (κουμπί «Επανέλεγχος
+      // Γλωσσών») — ποτέ μέσα από provider, ώστε το ξέπλυμα να μη συμπέσει
+      // με build και να μην μπλέξει αλυσίδες μεταξύ providers.
       state = const LexiconLanguageRecalcSuccess();
-      ref.invalidate(coreLexiconProvider);
-      ref.invalidate(spellCheckServiceProvider);
-      ref.read(lexiconMasterDataRevisionProvider.notifier).bump();
     } catch (e) {
       state = LexiconLanguageRecalcError('$e');
     }

@@ -262,3 +262,27 @@ class DepartmentDeletionZones {
     return '$count τμήματα χωρίς εξαρτήματα — διαγράφονται χωρίς ερώτηση';
   }
 }
+
+/// Ονόματα των τμημάτων που είναι **αυτή τη στιγμή** χωρίς κανένα εξάρτημα,
+/// από τα [departmentIds] που άγγιξε μια ενέργεια.
+///
+/// Καλείται ΜΕΤΑ τη μεταβολή και το ξαναχτίσιμο του lookup: απαντά «τι ισχύει
+/// τώρα», όχι «τι άλλαξε». Τα `null` και τα διπλότυπα id αγνοούνται, ώστε ο
+/// καλών να μπορεί να δώσει ωμά τα τμήματα των εγγραφών που έσβησε.
+List<String> emptiedDepartmentNames(
+  Iterable<int?> departmentIds, {
+  LookupService? lookup,
+}) {
+  final svc = lookup ?? LookupService.instance;
+  final seen = <int>{};
+  final names = <String>[];
+  for (final id in departmentIds) {
+    if (id == null || !seen.add(id)) continue;
+    final name = svc.getDepartmentName(id)?.trim() ?? '';
+    if (name.isEmpty) continue;
+    if (DepartmentDeletionInventory.fromLookup(id, name, lookup: svc).isEmpty) {
+      names.add(name);
+    }
+  }
+  return names;
+}

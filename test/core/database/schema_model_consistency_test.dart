@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/database_v1_schema.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
+import 'package:call_logger/features/calls/models/call_refined_source.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/directory/models/category_model.dart';
@@ -84,6 +85,10 @@ void main() {
           departmentText: 'dept',
           equipmentText: 'eq',
           issue: 'issue',
+          issueRefined: 'refined issue',
+          solution: 'solution',
+          refinedSource: CallRefinedSource.ai,
+          refinedAt: '2026-01-01T12:00:00',
           category: 'cat',
           categoryId: 4,
           status: 'completed',

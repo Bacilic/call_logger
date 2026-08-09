@@ -288,7 +288,6 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
     ref.invalidate(remoteToolsAllCatalogProvider);
     ref.invalidate(remoteToolsCatalogProvider);
     ref.invalidate(remoteToolFormPairsProvider);
-    ref.invalidate(remotePathsProvider);
     ref.invalidate(validRemoteToolPathsByIdProvider);
     ref.invalidate(remoteLauncherStatusesByIdProvider);
   }

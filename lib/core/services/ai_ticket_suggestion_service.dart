@@ -37,6 +37,8 @@ class AiTicketSuggestionRequest {
     required this.notesText,
 
     required this.solutionText,
+
+    this.knowledgeText = '',
   });
 
   final String callerText;
@@ -54,6 +56,12 @@ class AiTicketSuggestionRequest {
   final String notesText;
 
   final String solutionText;
+
+  /// Παρόμοια περιστατικά από τη Βάση Γνώσης, έτοιμα για το `{Γνώση}`.
+  ///
+  /// Κενό όταν δεν βρέθηκε τίποτα σχετικό — τότε το προαιρετικό block της
+  /// προτροπής αφαιρείται και η ΤΝ δουλεύει όπως πάντα.
+  final String knowledgeText;
 }
 
 /// Σφάλμα πρότασης ΤΝ (ρύθμιση, HTTP, μορφή απάντησης).

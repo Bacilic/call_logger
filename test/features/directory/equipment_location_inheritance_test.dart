@@ -42,10 +42,7 @@ void main() {
     test('με κάτοχο και κενό δικό του πεδίο, κληρονομεί από τον κάτοχο', () {
       final row = rowWith(ownerLocation: 'κάτω από το παράθυρο');
 
-      expect(
-        effectiveEquipmentLocation(row),
-        'κάτω από το παράθυρο',
-      );
+      expect(effectiveEquipmentLocation(row), 'κάτω από το παράθυρο');
     });
 
     test('η ρητή τοποθεσία του εξοπλισμού υπερισχύει του κατόχου', () {

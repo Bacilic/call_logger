@@ -22,10 +22,7 @@ class CatalogValidationHintText extends StatelessWidget {
           Icon(Icons.warning_amber_rounded, size: 14, color: color),
           const SizedBox(width: 4),
           Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 12, color: color),
-            ),
+            child: Text(text, style: TextStyle(fontSize: 12, color: color)),
           ),
         ],
       ),

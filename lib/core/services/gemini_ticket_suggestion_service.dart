@@ -72,6 +72,8 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
       notesText: request.notesText,
 
       solutionText: request.solutionText,
+
+      knowledgeText: request.knowledgeText,
     );
   }
 

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<title>Προσχέδιο — Κάρτες διένεξης «Έλεγχος δεδομένων»</title>
+<style>
+  :root {
+    --primary: #6750a4;
+    --primary-soft: #eaddff;
+    --surface: #fdf7ff;
+    --card: #f6eefe;
+    --chip: #ffffff;
+    --outline: #cac4d0;
+    --warn: #9a4d00;
+    --warn-soft: #ffe9d6;
+    --text: #1d1b20;
+    --muted: #79747e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Roboto, sans-serif;
+    background: #e9e4f0;
+    color: var(--text);
+    padding: 32px;
+    display: flex;
+    justify-content: center;
+  }
+  .page { max-width: 760px; width: 100%; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .pagehint { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+
+  .section-title {
+    font-size: 15px; font-weight: 600; margin: 26px 0 8px;
+  }
+  .section-note { font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
+
+  /* ---- Κάρτα διένεξης ---- */
+  .conflict-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px 16px 12px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12);
+  }
+  .conflict-head {
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .rule-icon {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: var(--primary-soft);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; flex: 0 0 auto;
+  }
+  .rule-title { font-size: 14.5px; font-weight: 600; }
+  .rule-message { font-size: 13px; color: var(--warn); margin-top: 2px; }
+  .select-hint {
+    font-size: 12.5px; color: var(--muted);
+    margin: 10px 0 8px 2px;
+  }
+
+  /* ---- Chip εγγραφής ---- */
+  .record-chip {
+    background: var(--chip);
+    border: 1px solid var(--outline);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 12px;
+    cursor: pointer;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .record-chip:hover {
+    border-color: var(--primary);
+    box-shadow: 0 1px 6px rgba(103,80,164,.25);
+  }
+  .kind-icon {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--outline);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex: 0 0 auto;
+  }
+  .record-main { flex: 1 1 auto; min-width: 0; }
+  .record-name { font-size: 14px; font-weight: 600; }
+  .record-name .kind { font-weight: 400; color: var(--muted); }
+  .record-details { font-size: 12.5px; color: var(--text); margin-top: 2px; }
+  .record-details .focus {
+    background: var(--warn-soft); color: var(--warn);
+    border-radius: 4px; padding: 0 4px; font-weight: 600;
+  }
+  .record-stamp { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .record-stamp .unknown { font-style: italic; }
+  .badge-newer {
+    font-size: 11px; font-weight: 600;
+    color: var(--primary);
+    background: var(--primary-soft);
+    border-radius: 99px; padding: 1px 8px;
+    margin-left: 6px; white-space: nowrap;
+  }
+  .chip-edit { color: var(--primary); font-size: 15px; flex: 0 0 auto; }
+
+  /* ---- Απλό εύρημα (ένα πρόσωπο) — παραμένει ως έχει ---- */
+  .single-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12);
+    cursor: pointer;
+  }
+  .single-main { flex: 1; }
+  .single-name { font-size: 14px; font-weight: 600; }
+  .single-msg { font-size: 13px; color: var(--warn); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Προσχέδιο — «Έλεγχος δεδομένων»: κάρτες διένεξης</h1>
+  <div class="pagehint">Κάθε διένεξη = μία κάρτα. Οι εμπλεκόμενες εγγραφές είναι λεπτομερή chips σε λίστα — κλικ στο chip ανοίγει τη δική του καρτέλα. Η χρονοσφραγίδα (από το Ιστορικό Εφαρμογής) βοηθά να κριθεί ποια εγγραφή είναι η μπαγιάτικη.</div>
+
+  <div class="section-title">Α. Αντεστραμμένα ονόματα</div>
+  <div class="conflict-card">
+    <div class="conflict-head">
+      <div class="rule-icon">⇄</div>
+      <div>
+        <div class="rule-title">Αντεστραμμένο όνομα/επώνυμο</div>
+        <div class="rule-message">Πιθανό ίδιο πρόσωπο με αντεστραμμένα πεδία</div>
+      </div>
+    </div>
+    <div class="select-hint">Επιλέξτε εγγραφή για επεξεργασία:</div>
+    <div class="record-chip">
+      <div class="kind-icon">👤</div>
+      <div class="record-main">
+        <div class="record-name"><span class="kind">Υπάλληλος ·</span> Δρόσος Βασίλης</div>
+        <div class="record-details">Πληροφορική · τηλ. 2854 · εξοπλισμός 3604</div>
+        <div class="record-stamp">Δημιουργία 12/03/2026 · Τελευταία αλλαγή 02/06/2026</div>
+      </div>
+      <div class="chip-edit">✏️</div>
+    </div>
+    <div class="record-chip">
+      <div class="kind-icon">👤</div>
+      <div class="record-main">
+        <div class="record-name"><span class="kind">Υπάλληλος ·</span> Βασίλης Δρόσος<span class="badge-newer">νεότερη</span></div>
+        <div class="record-details">Δοκιμαστικό · χωρίς τηλέφωνο · χωρίς εξοπλισμό</div>
+        <div class="record-stamp">Δημιουργία 09/08/2026 · Τελευταία αλλαγή 09/08/2026</div>
+      </div>
+      <div class="chip-edit">✏️</div>
+    </div>
+  </div>
+
+  <div class="section-title">Β. Τηλέφωνο που ταυτίζεται με κωδικό εξοπλισμού</div>
+  <div class="conflict-card">
+    <div class="conflict-head">
+      <div class="rule-icon">☎</div>
+      <div>
+        <div class="rule-title">Τηλέφωνο = κωδικός εξοπλισμού</div>
+        <div class="rule-message">Το 2851 είναι καταχωρημένος κωδικός εξοπλισμού — ίσως γράφτηκε σε λάθος πεδίο</div>
+      </div>
+    </div>
+    <div class="select-hint">Επιλέξτε εγγραφή για επεξεργασία:</div>
+    <div class="record-chip">
+      <div class="kind-icon">👤</div>
+      <div class="record-main">
+        <div class="record-name"><span class="kind">Υπάλληλος ·</span> Πατσαρίκα Άννα</div>
+        <div class="record-details">Πληροφορική · τηλ. <span class="focus">2851</span> · εξοπλισμός 3601</div>
+        <div class="record-stamp">Δημιουργία 15/01/2026 · Τελευταία αλλαγή 09/08/2026</div>
+      </div>
+      <div class="chip-edit">✏️</div>
+    </div>
+    <div class="record-chip">
+      <div class="kind-icon">💻</div>
+      <div class="record-main">
+        <div class="record-name"><span class="kind">Εξοπλισμός ·</span> <span class="focus">2851</span></div>
+        <div class="record-details">Δοκιμαστικό · Η/Υ</div>
+        <div class="record-stamp"><span class="unknown">Δημιουργία άγνωστη — παλαιότερη από το Ιστορικό</span></div>
+      </div>
+      <div class="chip-edit">✏️</div>
+    </div>
+  </div>
+
+  <div class="section-title">Γ. Ίδιο τηλέφωνο σε υπαλλήλους διαφορετικών τμημάτων</div>
+  <div class="section-note">Το ίδιο σχέδιο κλιμακώνεται και σε 3+ εμπλεκόμενους: μία κάρτα, ένα chip ανά κάτοχο — όχι ένα εύρημα ανά κάτοχο όπως τώρα.</div>
+  <div class="conflict-card">
+    <div class="conflict-head">
+      <div class="rule-icon">⚭</div>
+      <div>
+        <div class="rule-title">Ίδιο τηλέφωνο σε διαφορετικά τμήματα</div>
+        <div class="rule-message">Το 2534 είναι καταχωρημένο σε 3 υπαλλήλους σε 2 τμήματα</div>
+      </div>
+    </div>
+    <div class="select-hint">Επιλέξτε εγγραφή για επεξεργασία:</div>
+    <div class="record-chip">
+      <div class="kind-icon">👤</div>
+      <div class="record-main">
+        <div class="record-name"><span class="kind">Υπάλληλος ·</span> Ψαρρά Σοφία</div>
+        <div class="record-details">Γραμματεία ΤΕΠ · τηλ. <span class="focus">2534</span></div>
+        <div class="record-stamp">Δημιουργία 03/11/2025 · Τελευταία αλλαγή 22/07/2026</div>
+      </div>
+      <div class="chip-edit">✏️</div>
+    </div>
+    <div class="record-chip">
+      <div class="kind-icon">👤</div>
+      <div class="record-main">
+        <div class="record-name"><span class="kind">Υπάλληλος ·</span> Μαρκάτου Ελένη</div>
+        <div class="record-details">Γραμματεία ΤΕΠ · τηλ. <span class="focus">2534</span></div>
+        <div class="record-stamp">Δημιουργία 03/11/2025 · Τελευταία αλλαγή 03/11/2025</div>
+      </div>
+      <div class="chip-edit">✏️</div>
+    </div>
+    <div class="record-chip">
+      <div class="kind-icon">👤</div>
+      <div class="record-main">
+        <div class="record-name"><span class="kind">Υπάλληλος ·</span> Δρόσος Βασίλης<span class="badge-newer">νεότερη</span></div>
+        <div class="record-details">Χειρουργική · τηλ. <span class="focus">2534</span></div>
+        <div class="record-stamp">Δημιουργία 01/08/2026 · Τελευταία αλλαγή 09/08/2026</div>
+      </div>
+      <div class="chip-edit">✏️</div>
+    </div>
+  </div>
+
+  <div class="section-title">Δ. Απλά ευρήματα (ένα πρόσωπο) — παραμένουν ως έχουν</div>
+  <div class="section-note">Οι ανά-πεδίο κανόνες αφορούν ΜΙΑ εγγραφή — δεν υπάρχει απόφαση «ποιο από τα δύο», άρα δεν χρειάζονται chips.</div>
+  <div class="single-card">
+    <div class="kind-icon">🏢</div>
+    <div class="single-main">
+      <div class="single-name">Τμήμα: Δοκιμαστικό</div>
+      <div class="single-msg">Κοινόχρηστο τηλέφωνο — Το 2001 δεν ξεκινά από 22–29</div>
+    </div>
+    <div class="chip-edit">✏️</div>
+  </div>
+</div>
+</body>
+</html>

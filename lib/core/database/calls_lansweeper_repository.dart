@@ -33,13 +33,22 @@ class CallsLansweeperRepository {
     'lansweeper_main_ticket_id',
   ];
 
-  Future<Map<String, Object?>> _readAuditedFields(
+  /// Τα πεδία του καθαρού κειμένου που αξίζουν καταγραφή. Τα `refined_source` /
+  /// `refined_at` μένουν έξω για τον ίδιο λόγο με το `lansweeper_last_sync_at`:
+  /// αλλάζουν σε κάθε αποστολή και θα έπνιγαν το Ιστορικό σε θόρυβο.
+  static const List<String> _refinedAuditedFields = [
+    'issue_refined',
+    'solution',
+  ];
+
+  Future<Map<String, Object?>> _readFields(
     DatabaseExecutor e,
     int callId,
+    List<String> fields,
   ) async {
     final rows = await e.query(
       'calls',
-      columns: _auditedFields,
+      columns: fields,
       where: 'id = ?',
       whereArgs: [callId],
       limit: 1,
@@ -51,29 +60,33 @@ class CallsLansweeperRepository {
 
   /// Γράφει την αλλαγή στα `calls` **και** την καταγράφει στο Ιστορικό.
   ///
-  /// ΜΟΝΑΔΙΚΟ σημείο εγγραφής για τις τέσσερις ροές κατάστασης Lansweeper: αν
-  /// κάποια έγραφε μόνη της, θα ξανάνοιγε η τρύπα που άφηνε κάθε καταχώρηση
-  /// αόρατη στο Ιστορικό — η κλήση φαινόταν για πάντα «Μη αποσταλμένη».
-  Future<void> _applyAndLog(
+  /// Μία διαδρομή για κάθε εγγραφή κλήσης αυτού του repository: διάβασε το
+  /// «πριν», γράψε, ξαναχτίσε το ευρετήριο όπου χρειάζεται, διάβασε το «μετά»,
+  /// κατέγραψε μόνο ό,τι όντως άλλαξε. Οι δύο καλούντες διαφέρουν μόνο σε ποια
+  /// πεδία παρακολουθούν και πώς ονομάζουν την ενέργεια.
+  Future<void> _updateAndLog(
     DatabaseExecutor e, {
     required int callId,
     required Map<String, Object?> payload,
+    required List<String> auditedFields,
     required String action,
+    required bool rebuildSearchIndex,
     Map<String, dynamic>? extraNewValues,
   }) async {
-    final before = await _readAuditedFields(e, callId);
+    final before = await _readFields(e, callId, auditedFields);
+    // Κλήση που δεν υπάρχει (π.χ. διαγράφηκε στο μεταξύ): καμία εγγραφή,
+    // καμία εγγραφή ιστορικού για οντότητα-φάντασμα.
+    if (before.isEmpty) return;
+
     await e.update('calls', payload, where: 'id = ?', whereArgs: [callId]);
-    // Το ticket συμμετέχει στο ευρετήριο αναζήτησης: κάθε ροή που το αλλάζει
-    // ξαναχτίζει το ευρετήριο στην ΙΔΙΑ συναλλαγή, αλλιώς η κλήση δεν βρίσκεται
-    // από τον αριθμό της (ή βρίσκεται από ticket που δεν έχει πια).
-    if (payload.containsKey('lansweeper_main_ticket_id')) {
+    if (rebuildSearchIndex) {
       await CallsSearchIndex(db).rebuildSearchIndexForCallIdInTxn(e, callId);
     }
-    final after = await _readAuditedFields(e, callId);
+    final after = await _readFields(e, callId, auditedFields);
 
     final oldValues = <String, dynamic>{};
     final newValues = <String, dynamic>{};
-    for (final field in _auditedFields) {
+    for (final field in auditedFields) {
       final a = before[field];
       final b = after[field];
       if (a?.toString() != b?.toString()) {
@@ -101,6 +114,83 @@ class CallsLansweeperRepository {
       oldValues: oldValues.isEmpty ? null : oldValues,
       newValues: newValues,
     );
+  }
+
+  /// Αλλαγή κατάστασης/ticket Lansweeper.
+  ///
+  /// ΜΟΝΑΔΙΚΟ σημείο εγγραφής για τις τέσσερις ροές κατάστασης: αν κάποια
+  /// έγραφε μόνη της, θα ξανάνοιγε η τρύπα που άφηνε κάθε καταχώρηση αόρατη
+  /// στο Ιστορικό — η κλήση φαινόταν για πάντα «Μη αποσταλμένη».
+  Future<void> _applyAndLog(
+    DatabaseExecutor e, {
+    required int callId,
+    required Map<String, Object?> payload,
+    required String action,
+    Map<String, dynamic>? extraNewValues,
+  }) => _updateAndLog(
+    e,
+    callId: callId,
+    payload: payload,
+    auditedFields: _auditedFields,
+    action: action,
+    // Το ticket συμμετέχει στο ευρετήριο αναζήτησης: κάθε ροή που το αλλάζει
+    // ξαναχτίζει το ευρετήριο στην ΙΔΙΑ συναλλαγή, αλλιώς η κλήση δεν βρίσκεται
+    // από τον αριθμό της (ή βρίσκεται από ticket που δεν έχει πια).
+    rebuildSearchIndex: payload.containsKey('lansweeper_main_ticket_id'),
+    extraNewValues: extraNewValues,
+  );
+
+  /// Γράφει πίσω στις κλήσεις το εξευγενισμένο κείμενο της φόρμας Lansweeper.
+  ///
+  /// ΜΟΝΑΔΙΚΟ σημείο εγγραφής για κάθε έξοδο κειμένου προς το Lansweeper —
+  /// υποβολή API, επανυποβολή, «Αντιγραφή & Άνοιγμα». Χωρίς αυτό το κείμενο
+  /// έφευγε στο ticket (ή στο πρόχειρο) και η δουλειά του καθαρισμού χανόταν:
+  /// η κλήση έμενε για πάντα με τη μία τηλεγραφική γραμμή που γράφτηκε βιαστικά
+  /// στο τηλέφωνο, και η λύση δεν υπήρχε πουθενά στην εφαρμογή.
+  ///
+  /// Το `issue` **δεν** αγγίζεται ποτέ: είναι ο τρόπος που ο χρήστης περιγράφει
+  /// το πρόβλημα όταν τηλεφωνεί, δηλαδή το κλειδί με το οποίο θα αναγνωριστεί
+  /// το ίδιο περιστατικό την επόμενη φορά.
+  ///
+  /// Όλες οι [callIds] παίρνουν το ίδιο κείμενο. Όταν πολλές κλήσεις μπαίνουν
+  /// σε ένα ticket, το κείμενο γράφτηκε για όλες μαζί — αφήνοντας τις υπόλοιπες
+  /// κενές, θα έμεναν μόνιμα τηλεγραφικές χωρίς λόγο.
+  Future<void> saveRefinedTexts({
+    required List<int> callIds,
+    required String problem,
+    required String solution,
+    required String source,
+    String? refinedAt,
+  }) async {
+    final trimmedProblem = problem.trim();
+    final trimmedSolution = solution.trim();
+    // Άδεια φόρμα δεν σβήνει ό,τι έγραψε προηγούμενη αποστολή.
+    if (trimmedProblem.isEmpty && trimmedSolution.isEmpty) return;
+
+    final ids = callIds.toSet().toList()..sort();
+    if (ids.isEmpty) return;
+
+    final payload = <String, Object?>{
+      'issue_refined': trimmedProblem.isEmpty ? null : trimmedProblem,
+      'solution': trimmedSolution.isEmpty ? null : trimmedSolution,
+      'refined_source': source,
+      'refined_at': refinedAt ?? DateTime.now().toIso8601String(),
+    };
+
+    await db.transaction((txn) async {
+      for (final callId in ids) {
+        await _updateAndLog(
+          txn,
+          callId: callId,
+          payload: payload,
+          auditedFields: _refinedAuditedFields,
+          action: 'ΚΑΘΑΡΟ ΚΕΙΜΕΝΟ ΚΛΗΣΗΣ',
+          // Το καθαρό κείμενο συμμετέχει στην αναζήτηση: χωρίς το ξαναχτίσιμο,
+          // η λέξη υπάρχει στη βάση αλλά δεν βρίσκει την κλήση.
+          rebuildSearchIndex: true,
+        );
+      }
+    });
   }
 
   /// Μέγιστο αριθμητικό Lansweeper ticket id από κλήσεις και ιστορικό links.

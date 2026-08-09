@@ -65,12 +65,6 @@ final remoteToolFormPairsProvider = FutureProvider<List<RemoteToolFormPair>>((
   }
 });
 
-/// Ονόματα εργαλείων για dropdown εξοπλισμού· κενή λίστα όταν δεν υπάρχει επιλογή (μόνο «Κανένα» στο UI).
-final remotePathsProvider = FutureProvider<List<String>>((ref) async {
-  final pairs = await ref.watch(remoteToolFormPairsProvider.future);
-  return pairs.map((p) => p.label).toList();
-});
-
 /// Έγκυρες διαδρομές ανά id εργαλείου (μόνο ενεργά εργαλεία όταν η λίστα δεν είναι κενή).
 final validRemoteToolPathsByIdProvider = FutureProvider<Map<int, String?>>((
   ref,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/database_helper.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/catalog_validation_finding.dart';
@@ -42,33 +43,146 @@ class CatalogScanRunner {
           department.id!: lookup.getDirectPhonesByDepartment(department.id!),
     };
 
-    return service.scan(
+    final equipment = ref
+        .read(equipmentDirectoryProvider)
+        .allItems
+        .map((row) => row.$1)
+        .toList();
+
+    // Κάτοχοι ανά εξοπλισμό (user_equipment) — τους χρειάζεται η
+    // διασταύρωση «εξοπλισμός σε υπάλληλο άλλου τμήματος».
+    final owners = <int, List<int>>{};
+    for (final item in equipment) {
+      final id = item.id;
+      if (id == null) continue;
+      final ownerIds = lookup
+          .findUsersForEquipment(id)
+          .map((u) => u.id)
+          .whereType<int>()
+          .toList();
+      if (ownerIds.isNotEmpty) owners[id] = ownerIds;
+    }
+
+    final findings = service.scan(
       users: directoryNotifier.allUsersForUi,
       departments: departments,
-      equipment: ref
-          .read(equipmentDirectoryProvider)
-          .allItems
-          .map((row) => row.$1)
-          .toList(),
+      equipment: equipment,
       sharedPhonesByDepartmentId: sharedPhones,
+      ownerUserIdsByEquipmentId: owners,
+    );
+
+    return _withAuditStamps(findings);
+  }
+
+  /// Συμπληρώνει στα chips των διενέξεων τις χρονοσφραγίδες από το
+  /// Ιστορικό Εφαρμογής: πρώτη εγγραφή «ΔΗΜΙΟΥΡΓΙΑ…» = δημιουργία,
+  /// τελευταία οποιαδήποτε = τελευταία αλλαγή. Οι πίνακες του καταλόγου
+  /// δεν κρατούν δικές τους χρονοσφραγίδες — το Ιστορικό είναι η μόνη
+  /// πηγή, και εγγραφές χωρίς ίχνος εμφανίζονται τίμια ως «άγνωστες».
+  static Future<List<CatalogValidationFinding>> _withAuditStamps(
+    List<CatalogValidationFinding> findings,
+  ) async {
+    final involved = <String, Set<int>>{};
+    for (final finding in findings) {
+      if (!finding.isConflict) continue;
+      for (final record in finding.records) {
+        involved
+            .putIfAbsent(_auditEntityType(record.kind), () => {})
+            .add(record.entityId);
+      }
+    }
+    if (involved.isEmpty) return findings;
+
+    final where = <String>[];
+    final args = <Object?>[];
+    involved.forEach((type, ids) {
+      final placeholders = List.filled(ids.length, '?').join(', ');
+      where.add('(entity_type = ? AND entity_id IN ($placeholders))');
+      args
+        ..add(type)
+        ..addAll(ids);
+    });
+
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.rawQuery('''
+      SELECT entity_type, entity_id,
+             MIN(CASE WHEN action LIKE 'ΔΗΜΙΟΥΡΓΙΑ%' THEN timestamp END)
+               AS created_at,
+             MAX(timestamp) AS last_changed_at
+      FROM audit_log
+      WHERE ${where.join(' OR ')}
+      GROUP BY entity_type, entity_id
+    ''', args);
+
+    final stamps = <String, (DateTime?, DateTime?)>{};
+    for (final row in rows) {
+      final key = '${row['entity_type']}#${row['entity_id']}';
+      stamps[key] = (
+        DateTime.tryParse(row['created_at']?.toString() ?? ''),
+        DateTime.tryParse(row['last_changed_at']?.toString() ?? ''),
+      );
+    }
+
+    return [
+      for (final finding in findings)
+        if (!finding.isConflict)
+          finding
+        else
+          finding.withRecords([
+            for (final record in finding.records)
+              switch (stamps['${_auditEntityType(record.kind)}'
+                  '#${record.entityId}']) {
+                null => record,
+                (final created, final changed) => record.withStamps(
+                  createdAt: created,
+                  lastChangedAt: changed,
+                ),
+              },
+          ]),
+    ];
+  }
+
+  /// Το `entity_type` του Ιστορικού για κάθε είδος εγγραφής καταλόγου.
+  static String _auditEntityType(CatalogEntityKind kind) {
+    return switch (kind) {
+      CatalogEntityKind.user => 'user',
+      CatalogEntityKind.department => 'department',
+      CatalogEntityKind.equipment => 'equipment',
+    };
+  }
+
+  /// Ανοίγει την καρτέλα μιας εγγραφής ευρήματος, εστιασμένη στο πεδίο
+  /// που φταίει.
+  static Future<void> openRecord(
+    BuildContext context,
+    WidgetRef ref,
+    CatalogFindingRecord record,
+  ) {
+    return openEntity(
+      context,
+      ref,
+      kind: record.kind,
+      entityId: record.entityId,
+      focusedField: record.focusedField,
     );
   }
 
-  /// Ανοίγει τον διάλογο επεξεργασίας της οντότητας του ευρήματος,
-  /// εστιασμένο στο πεδίο που φταίει.
+  /// Ανοίγει την καρτέλα οποιασδήποτε οντότητας του καταλόγου.
   ///
   /// Χρησιμοποιεί τις ΙΔΙΕΣ διαδρομές με τις καρτέλες του Καταλόγου, ώστε
   /// αποθήκευση, φρουρός κλεισίματος και ιστορικό να συμπεριφέρονται ίδια.
-  static Future<void> openEditorFor(
+  static Future<void> openEntity(
     BuildContext context,
-    WidgetRef ref,
-    CatalogValidationFinding finding,
-  ) async {
-    switch (finding.kind) {
+    WidgetRef ref, {
+    required CatalogEntityKind kind,
+    required int entityId,
+    String? focusedField,
+  }) async {
+    switch (kind) {
       case CatalogEntityKind.user:
         final notifier = ref.read(directoryProvider.notifier);
         final user = notifier.allUsersForUi
-            .where((u) => u.id == finding.entityId)
+            .where((u) => u.id == entityId)
             .firstOrNull;
         if (user == null) {
           _notFound(context, 'Ο υπάλληλος δεν βρέθηκε στον κατάλογο.');
@@ -79,7 +193,7 @@ class CatalogScanRunner {
           builder: (_) => UserFormDialog(
             initialUser: user,
             notifier: notifier,
-            focusedField: finding.focusedField,
+            focusedField: focusedField,
           ),
         );
 
@@ -88,7 +202,7 @@ class CatalogScanRunner {
         final department = ref
             .read(departmentDirectoryProvider)
             .allDepartments
-            .where((d) => d.id == finding.entityId)
+            .where((d) => d.id == entityId)
             .firstOrNull;
         if (department == null) {
           _notFound(context, 'Το τμήμα δεν βρέθηκε στον κατάλογο.');
@@ -99,14 +213,14 @@ class CatalogScanRunner {
           builder: (_) => DepartmentFormDialog(
             initialDepartment: department,
             notifier: notifier,
-            focusedField: finding.focusedField,
+            focusedField: focusedField,
           ),
         );
 
       case CatalogEntityKind.equipment:
         // Ο κοινός εκκινητής φορτώνει μόνος του τον κατάλογο και βρίσκει
         // και τον κάτοχο — τον ίδιο χρησιμοποιούν ιστορικό και εκκρεμότητες.
-        await EquipmentFormLauncher.openById(context, ref, finding.entityId);
+        await EquipmentFormLauncher.openById(context, ref, entityId);
     }
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/settings_service.dart';
+import '../../../../core/utils/greek_date_format.dart';
 import '../../models/catalog_validation_finding.dart';
 import '../../models/catalog_validation_rules.dart';
 import '../../providers/catalog_validation_provider.dart';
@@ -86,6 +87,10 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
     });
     SettingsService().catalogs.setCatalogValidationRulesRaw(next.toRawJson());
     ref.invalidate(catalogValidationRulesProvider);
+    // Ο service παρακολουθεί τους κανόνες με watch: χωρίς άμεσο ξέπλυμα η
+    // αλυσίδα μένει «dirty» (καμία φόρμα ανοιχτή εδώ) και ξεπλένεται σύγχρονα
+    // μέσα στο build της επόμενης φόρμας καταλόγου → «setState during build».
+    flushCatalogValidationProviderChain(ref);
   }
 
   Future<void> _runScan() async {
@@ -99,11 +104,11 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
     }
   }
 
-  /// Άνοιγμα της καρτέλας του ευρήματος· μετά το κλείσιμο ο έλεγχος
-  /// ξανατρέχει, ώστε η λίστα να δείχνει την πραγματικότητα και όχι
-  /// ευρήματα που μόλις διορθώθηκαν.
-  Future<void> _openFinding(CatalogValidationFinding finding) async {
-    await CatalogScanRunner.openEditorFor(context, ref, finding);
+  /// Άνοιγμα της καρτέλας μιας εγγραφής ευρήματος· μετά το κλείσιμο ο
+  /// έλεγχος ξανατρέχει, ώστε η λίστα να δείχνει την πραγματικότητα και
+  /// όχι ευρήματα που μόλις διορθώθηκαν.
+  Future<void> _openRecord(CatalogFindingRecord record) async {
+    await CatalogScanRunner.openRecord(context, ref, record);
     if (!mounted) return;
     await _runScan();
   }
@@ -321,12 +326,102 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              _RuleCard(
+                icon: Icons.compare_arrows_outlined,
+                title: 'Διασταυρώσεις',
+                subtitle:
+                    'Κοιτούν ολόκληρο τον κατάλογο — τρέχουν μόνο στον '
+                    '«Έλεγχο δεδομένων», όχι στις φόρμες.',
+                children: [
+                  _RuleRow(
+                    enabled: rules.emptyDepartmentEnabled,
+                    onToggle: (v) =>
+                        _apply(rules.copyWith(emptyDepartmentEnabled: v)),
+                    note:
+                        'Δεν είναι σφάλμα — ένα τμήμα μπορεί να αδειάσει '
+                        'θεμιτά· η υπόδειξη θυμίζει να αποφασίσετε τι το κάνετε',
+                    example:
+                        'Παράδειγμα υπόδειξης: «Δεν έχει κανέναν υπάλληλο, '
+                        'κοινόχρηστο τηλέφωνο ή εξοπλισμό»',
+                    child: Text(
+                      'Τμήματα χωρίς κανένα εξάρτημα',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
+                    enabled: rules.phoneEquipmentCodeEnabled,
+                    onToggle: (v) =>
+                        _apply(rules.copyWith(phoneEquipmentCodeEnabled: v)),
+                    example:
+                        'Παράδειγμα υπόδειξης: «Το 3685 είναι καταχωρημένος '
+                        'κωδικός εξοπλισμού — ίσως γράφτηκε σε λάθος πεδίο»',
+                    child: Text(
+                      'Τηλέφωνο που ταυτίζεται με κωδικό εξοπλισμού',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
+                    enabled: rules.swappedNamesEnabled,
+                    onToggle: (v) =>
+                        _apply(rules.copyWith(swappedNamesEnabled: v)),
+                    example:
+                        'Παράδειγμα υπόδειξης: «Πιθανό ίδιο πρόσωπο με '
+                        'αντεστραμμένα πεδία»',
+                    child: Text(
+                      'Υπάλληλοι με αντεστραμμένο όνομα/επώνυμο',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
+                    enabled: rules.duplicateNamesEnabled,
+                    onToggle: (v) =>
+                        _apply(rules.copyWith(duplicateNamesEnabled: v)),
+                    example:
+                        'Παράδειγμα υπόδειξης: «Ίδιο ονοματεπώνυμο σε 2 '
+                        'εγγραφές — πιθανό διπλότυπο»',
+                    child: Text(
+                      'Υπάλληλοι με ολόιδιο ονοματεπώνυμο',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
+                    enabled: rules.crossDepartmentPhoneEnabled,
+                    onToggle: (v) =>
+                        _apply(rules.copyWith(crossDepartmentPhoneEnabled: v)),
+                    note:
+                        'Στο ίδιο τμήμα το κοινό τηλέφωνο βάρδιας είναι '
+                        'θεμιτό και δεν ελέγχεται',
+                    example:
+                        'Παράδειγμα υπόδειξης: «Το 2534 είναι καταχωρημένο '
+                        'σε 2 υπαλλήλους σε 2 τμήματα»',
+                    child: Text(
+                      'Ίδιο τηλέφωνο σε υπαλλήλους διαφορετικών τμημάτων',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
+                    enabled: rules.equipmentOwnerDepartmentEnabled,
+                    onToggle: (v) => _apply(
+                      rules.copyWith(equipmentOwnerDepartmentEnabled: v),
+                    ),
+                    example:
+                        'Παράδειγμα υπόδειξης: «Χρεωμένος στην εγγραφή '
+                        '«Ψαρρά Σοφία» (Γραμματεία ΤΕΠ), ενώ ανήκει στο '
+                        '«Χειρουργική»»',
+                    child: Text(
+                      'Εξοπλισμός χρεωμένος σε υπάλληλο άλλου τμήματος',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 20),
               _ScanSection(
                 scanning: _scanning,
                 findings: _findings,
                 onScan: _runScan,
-                onOpenFinding: _openFinding,
+                onOpenRecord: _openRecord,
               ),
             ],
           ),
@@ -342,13 +437,13 @@ class _ScanSection extends StatelessWidget {
     required this.scanning,
     required this.findings,
     required this.onScan,
-    required this.onOpenFinding,
+    required this.onOpenRecord,
   });
 
   final bool scanning;
   final List<CatalogValidationFinding>? findings;
   final Future<void> Function() onScan;
-  final Future<void> Function(CatalogValidationFinding finding) onOpenFinding;
+  final Future<void> Function(CatalogFindingRecord record) onOpenRecord;
 
   @override
   Widget build(BuildContext context) {
@@ -368,9 +463,7 @@ class _ScanSection extends StatelessWidget {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.fact_check_outlined),
-            label: Text(
-              scanning ? 'Γίνεται έλεγχος…' : 'Έλεγχος δεδομένων',
-            ),
+            label: Text(scanning ? 'Γίνεται έλεγχος…' : 'Έλεγχος δεδομένων'),
           ),
         ),
         const SizedBox(height: 6),
@@ -406,10 +499,13 @@ class _ScanSection extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             for (final finding in results)
-              _FindingTile(
-                finding: finding,
-                onTap: () => onOpenFinding(finding),
-              ),
+              if (finding.isConflict)
+                _ConflictCard(finding: finding, onOpenRecord: onOpenRecord)
+              else
+                _FindingTile(
+                  finding: finding,
+                  onTap: () => onOpenRecord(finding.primary),
+                ),
           ],
         ],
       ],
@@ -455,31 +551,20 @@ class _FindingTile extends StatelessWidget {
   final CatalogValidationFinding finding;
   final VoidCallback onTap;
 
-  static const _icons = {
-    CatalogEntityKind.user: Icons.person_outline,
-    CatalogEntityKind.department: Icons.apartment_outlined,
-    CatalogEntityKind.equipment: Icons.computer_outlined,
-  };
-
-  static const _kindLabels = {
-    CatalogEntityKind.user: 'Υπάλληλος',
-    CatalogEntityKind.department: 'Τμήμα',
-    CatalogEntityKind.equipment: 'Εξοπλισμός',
-  };
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final warning = Colors.orange.shade800;
+    final record = finding.primary;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: Icon(
-          _icons[finding.kind],
+          _entityIcons[record.kind],
           color: theme.colorScheme.primary,
         ),
         title: Text(
-          '${_kindLabels[finding.kind]}: ${finding.entityLabel}',
+          '${_entityKindLabels[record.kind]}: ${record.label}',
           style: theme.textTheme.bodyLarge,
         ),
         subtitle: Column(
@@ -494,6 +579,211 @@ class _FindingTile extends StatelessWidget {
         ),
         trailing: const Icon(Icons.edit_outlined, size: 20),
         onTap: onTap,
+      ),
+    );
+  }
+}
+
+const _entityIcons = {
+  CatalogEntityKind.user: Icons.person_outline,
+  CatalogEntityKind.department: Icons.apartment_outlined,
+  CatalogEntityKind.equipment: Icons.computer_outlined,
+};
+
+const _entityKindLabels = {
+  CatalogEntityKind.user: 'Υπάλληλος',
+  CatalogEntityKind.department: 'Τμήμα',
+  CatalogEntityKind.equipment: 'Εξοπλισμός',
+};
+
+/// Κάρτα διένεξης: κεφαλίδα κανόνα + όλες οι εμπλεκόμενες εγγραφές ως
+/// επιλέξιμα chips. Ο χρήστης αποφασίζει ΠΟΙΑ εγγραφή θα διορθώσει
+/// βλέποντας τα στοιχεία και τις χρονοσφραγίδες όλων μαζί.
+class _ConflictCard extends StatelessWidget {
+  const _ConflictCard({required this.finding, required this.onOpenRecord});
+
+  final CatalogValidationFinding finding;
+  final Future<void> Function(CatalogFindingRecord record) onOpenRecord;
+
+  static const _ruleIcons = {
+    CatalogFindingType.phoneEquipmentCode: Icons.phonelink_erase_outlined,
+    CatalogFindingType.nameConflict: Icons.swap_horiz_outlined,
+    CatalogFindingType.crossDepartmentPhone: Icons.phone_forwarded_outlined,
+    CatalogFindingType.equipmentOwnerDepartment: Icons.computer_outlined,
+  };
+
+  static const _ruleTitles = {
+    CatalogFindingType.phoneEquipmentCode: 'Τηλέφωνο = κωδικός εξοπλισμού',
+    CatalogFindingType.nameConflict: 'Πιθανό ίδιο πρόσωπο',
+    CatalogFindingType.crossDepartmentPhone:
+        'Ίδιο τηλέφωνο σε διαφορετικά τμήματα',
+    CatalogFindingType.equipmentOwnerDepartment:
+        'Εξοπλισμός σε υπάλληλο άλλου τμήματος',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final warning = Colors.orange.shade800;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  _ruleIcons[finding.type],
+                  size: 22,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _ruleTitles[finding.type] ?? '',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        finding.message,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: warning,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Επιλέξτε εγγραφή για επεξεργασία:',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+            const SizedBox(height: 6),
+            for (final record in finding.records)
+              _RecordChip(record: record, onTap: () => onOpenRecord(record)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Chip μίας εμπλεκόμενης εγγραφής: στοιχεία + χρονοσφραγίδες από το
+/// Ιστορικό Εφαρμογής. Κλικ = άνοιγμα της καρτέλας της.
+class _RecordChip extends StatelessWidget {
+  const _RecordChip({required this.record, required this.onTap});
+
+  final CatalogFindingRecord record;
+  final VoidCallback onTap;
+
+  /// Η γραμμή χρονοσφραγίδων — τίμια όταν το Ιστορικό δεν έχει ίχνος:
+  /// οι πίνακες του καταλόγου δεν κρατούν δικές τους ημερομηνίες.
+  String get _stampLine {
+    final created = record.createdAt;
+    final changed = record.lastChangedAt;
+    if (created == null && changed == null) {
+      return 'Χωρίς ίχνος στο Ιστορικό Εφαρμογής';
+    }
+    final parts = <String>[
+      created == null
+          ? 'Δημιουργία άγνωστη'
+          : 'Δημιουργία ${formatGreekShortDate(created)}',
+      if (changed != null) 'Τελευταία αλλαγή ${formatGreekShortDate(changed)}',
+    ];
+    return parts.join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Icon(
+                _entityIcons[record.kind],
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '${_entityKindLabels[record.kind]} · '
+                            '${record.label}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (record.isNewest)
+                          Container(
+                            margin: const EdgeInsets.only(left: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Text(
+                              'νεότερη',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (record.details.isNotEmpty)
+                      Text(record.details, style: theme.textTheme.bodySmall),
+                    Text(
+                      _stampLine,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.edit_outlined,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -537,10 +827,12 @@ class _RuleCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.children,
+    this.subtitle,
   });
 
   final IconData icon;
   final String title;
+  final String? subtitle;
   final List<Widget> children;
 
   @override
@@ -565,6 +857,16 @@ class _RuleCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (subtitle != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  subtitle!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
             const SizedBox(height: 4),
             for (var i = 0; i < children.length; i++) ...[
               const Divider(height: 12),

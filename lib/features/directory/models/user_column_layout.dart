@@ -59,7 +59,10 @@ UserColumnLayout _parseObjectForm(Map<String, dynamic> decoded) {
   } else {
     visible = {for (final c in order) c.key};
   }
-  return (order: UserDirectoryColumn.pinSelectionFirst(order), visible: visible);
+  return (
+    order: UserDirectoryColumn.pinSelectionFirst(order),
+    visible: visible,
+  );
 }
 
 UserColumnLayout? _parseLegacyListForm(List<dynamic> decoded) {
@@ -73,7 +76,10 @@ UserColumnLayout? _parseLegacyListForm(List<dynamic> decoded) {
   if (order.isEmpty) return null;
   final visible = Set<String>.from(seen);
   visible.addAll(_appendMissingColumns(order, seen));
-  return (order: UserDirectoryColumn.pinSelectionFirst(order), visible: visible);
+  return (
+    order: UserDirectoryColumn.pinSelectionFirst(order),
+    visible: visible,
+  );
 }
 
 /// Προσθέτει στο τέλος όσες στήλες λείπουν και επιστρέφει τα κλειδιά τους.

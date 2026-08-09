@@ -4,12 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/services/ai_ticket_suggestion_service.dart';
+import '../../knowledge/providers/knowledge_provider.dart';
+import '../../knowledge/services/knowledge_prompt_context.dart';
 import '../providers/ai_ticket_suggestion_provider.dart';
 import '../providers/gemini_settings_provider.dart';
 import 'lansweeper/lansweeper_ai_presenter.dart';
 import 'lansweeper/lansweeper_ai_prompt_preview_dialog.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper_report_dialog.dart';
+import 'lansweeper_report_knowledge.dart';
 
 /// Προσυμπλήρωση φόρμας και προτάσεις AI (Gemini) με cooldown/αυτόματη επανυποβολή.
 ///
@@ -34,19 +37,49 @@ class LansweeperReportAi {
     host.notesController.text =
         LansweeperReportItemMapper.combinedSelectedNotes(selected);
     host.solutionController.text = '';
+    // Άλλη επιλογή κλήσεων, άλλο περιστατικό: η προηγούμενη πρόταση ΤΝ δεν το
+    // αφορά, οπότε ό,τι σταλεί από δω και πέρα μετράει ως χειρόγραφο.
+    host.aiSuggestedNotes = null;
+    host.aiSuggestedSolution = null;
   }
 
-  String _buildAiPromptForSelected(List<ReportCallItem> selected) {
+  /// Τα σχετικά άρθρα Βάσης Γνώσης, έτοιμα για το `{Γνώση}` της προτροπής.
+  ///
+  /// Το ερώτημα είναι το **ωμό** κείμενο της κλήσης: τα άρθρα κρατούν το
+  /// σύμπτωμα στη γλώσσα του καλούντα, οπότε εκεί ταιριάζουν. Αν το ταίριασμα
+  /// αποτύχει, η προτροπή φεύγει όπως πάντα — η γνώση είναι μπόνους, όχι
+  /// προϋπόθεση, και δεν επιτρέπεται να μπλοκάρει την πρόταση ΤΝ.
+  Future<String> _knowledgeContextFor(List<ReportCallItem> selected) async {
+    if (selected.isEmpty) return '';
+    final query = LansweeperReportKnowledge.rawSymptomOf(selected);
+    if (query.trim().isEmpty) return '';
+    try {
+      final articles = await host.ref.read(
+        relevantKnowledgeProvider((
+          query: query,
+          categoryId: selected.first.call.categoryId,
+        )).future,
+      );
+      return KnowledgePromptContext.format(articles);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<String> _buildAiPromptForSelected(List<ReportCallItem> selected) async {
     final service = host.ref.read(aiTicketSuggestionServiceProvider);
-    return service.buildPrompt(_aiPromptInputs(selected));
+    return service.buildPrompt(await _aiPromptInputs(selected));
   }
 
-  AiTicketSuggestionRequest _aiPromptInputs(List<ReportCallItem> selected) {
+  Future<AiTicketSuggestionRequest> _aiPromptInputs(
+    List<ReportCallItem> selected,
+  ) async {
     return LansweeperAiPresenter.buildRequest(
       selected: selected,
       titleText: host.titleController.text,
       notesText: host.notesController.text,
       solutionText: host.solutionController.text,
+      knowledgeText: await _knowledgeContextFor(selected),
     );
   }
 
@@ -54,7 +87,8 @@ class LansweeperReportAi {
     if (selected.isEmpty || host.aiSuggestRunning || isAiCooldownActive) {
       return;
     }
-    final prompt = _buildAiPromptForSelected(selected);
+    final prompt = await _buildAiPromptForSelected(selected);
+    if (!host.mounted) return;
     await showLansweeperAiPromptPreviewDialog(host.context, promptText: prompt);
   }
 
@@ -131,7 +165,8 @@ class LansweeperReportAi {
       return;
     }
 
-    final request = _aiPromptInputs(selected);
+    final request = await _aiPromptInputs(selected);
+    if (!host.mounted) return;
     host.aiLastSuggestSelection = selected;
     host.aiAutoResubmitArmed = false;
 
@@ -170,6 +205,8 @@ class LansweeperReportAi {
       host.titleController.text = result.title;
       host.notesController.text = result.description;
       host.solutionController.text = result.solution;
+      host.aiSuggestedNotes = result.description;
+      host.aiSuggestedSolution = result.solution;
       host.notifyReportChanged();
     } on AiSuggestionException catch (e) {
       if (!host.mounted) return;

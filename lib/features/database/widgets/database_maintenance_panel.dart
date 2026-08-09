@@ -17,7 +17,7 @@ import '../services/database_maintenance_service.dart';
 const Map<String, String> _kMaintenanceTableLabels = {
   'audit_log': 'Αρχείο καταγραφής (audit)',
   'tasks': 'Εκκρεμότητες',
-  'knowledge_base': 'Βάση γνώσεων',
+  'knowledge_base': 'Βάση Γνώσης',
   'user_dictionary': 'Προσωπικό λεξικό',
 };
 

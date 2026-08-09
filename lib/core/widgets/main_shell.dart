@@ -20,6 +20,7 @@ import '../providers/call_department_prefill_intent_provider.dart';
 import '../providers/history_search_prefill_intent_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_navigation_intent_provider.dart';
+import '../providers/spell_check_provider.dart';
 import '../providers/task_focus_intent_provider.dart';
 import '../providers/quick_call_providers.dart';
 import 'main_nav_destination.dart';
@@ -190,6 +191,7 @@ class MainShellState extends ConsumerState<MainShell> {
       MainNavDestination.tasks,
       MainNavDestination.directory,
       MainNavDestination.history,
+      MainNavDestination.knowledge,
       if (showLampNav) MainNavDestination.lamp,
       if (showDatabaseNav) MainNavDestination.database,
       if (showDictionary) MainNavDestination.dictionary,
@@ -244,6 +246,20 @@ class MainShellState extends ConsumerState<MainShell> {
             message:
                 'Προηγούμενες κλήσεις & αναζήτηση\nΕμφάνιση, τροποποίηση ή διαγραφή παλιών καταγραφών',
             child: const Icon(Icons.history, key: ValueKey('nav_rail_history')),
+          ),
+          label: Text(dest.label),
+        );
+      case MainNavDestination.knowledge:
+        return NavigationRailDestination(
+          icon: CompactTooltip(
+            waitDuration: const Duration(milliseconds: 600),
+            showDuration: const Duration(seconds: 4),
+            message:
+                'Οι λύσεις που έχετε κρατήσει από τις κλήσεις\nΣύμπτωμα και αντιμετώπιση, με αναζήτηση',
+            child: const Icon(
+              Icons.menu_book_outlined,
+              key: ValueKey('nav_rail_knowledge'),
+            ),
           ),
           label: Text(dest.label),
         );
@@ -319,6 +335,10 @@ class MainShellState extends ConsumerState<MainShell> {
     ref.invalidate(showDictionaryNavProvider);
     ref.invalidate(showQuickCallFabProvider);
     ref.invalidate(coreLexiconProvider);
+    // Ο ορθογράφος και το λεξικό-πυρήνας παρακολουθούν τον πυρήνα με watch:
+    // χωρίς άμεσο ξέπλυμα, οι κρίκοι με συνδρομές σε παύση μένουν «dirty»
+    // και ξεπλένονται μέσα στο επόμενο build → «setState during build».
+    flushLexiconProviderChain(ref);
     if (mounted) setState(() {});
   }
 

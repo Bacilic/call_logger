@@ -420,12 +420,12 @@ void main() {
           await notifier.load();
           existingCode =
               (container
-                      .read(equipmentDirectoryProvider)
-                      .allItems
-                      .first
-                      .$1
-                      .code ??
-                  '')
+                          .read(equipmentDirectoryProvider)
+                          .allItems
+                          .first
+                          .$1
+                          .code ??
+                      '')
                   .trim();
           await _openEquipmentFormInDialog(
             tester,

@@ -1,4 +1,5 @@
 import '../../../core/utils/history_entity_display_utils.dart';
+import 'call_refined_source.dart';
 
 /// Μοντέλο κλήσης (πίνακας calls).
 class CallModel {
@@ -13,6 +14,10 @@ class CallModel {
     this.departmentText,
     this.equipmentText,
     this.issue,
+    this.issueRefined,
+    this.solution,
+    this.refinedSource,
+    this.refinedAt,
     this.category,
     this.categoryId,
     this.status,
@@ -35,7 +40,21 @@ class CallModel {
   final String? phoneText;
   final String? departmentText;
   final String? equipmentText;
+
+  /// Ό,τι γράφτηκε στο τηλέφωνο, αυτούσιο. Δεν το ξαναγράφει ποτέ η ΤΝ.
   final String? issue;
+
+  /// Η καθαρή περιγραφή του προβλήματος, όπως έφυγε προς το Lansweeper.
+  final String? issueRefined;
+
+  /// Τι έγινε για να λυθεί — υπάρχει μόνο εδώ και στο ticket.
+  final String? solution;
+
+  /// Πώς προέκυψε το καθαρό κείμενο: [CallRefinedSource].
+  final String? refinedSource;
+
+  /// Πότε γράφτηκε το καθαρό κείμενο (ISO 8601).
+  final String? refinedAt;
   final String? category;
   final int? categoryId;
   final String? status;
@@ -64,6 +83,10 @@ class CallModel {
       departmentText: map['department_text'] as String?,
       equipmentText: map['equipment_text'] as String?,
       issue: map['issue'] as String?,
+      issueRefined: map['issue_refined'] as String?,
+      solution: map['solution'] as String?,
+      refinedSource: map['refined_source'] as String?,
+      refinedAt: map['refined_at'] as String?,
       category: map['category'] as String? ?? map['category_text'] as String?,
       categoryId: map['category_id'] as int?,
       status: map['status'] as String?,
@@ -92,6 +115,10 @@ class CallModel {
       if (departmentText != null) 'department_text': departmentText,
       if (equipmentText != null) 'equipment_text': equipmentText,
       if (issue != null) 'issue': issue,
+      if (issueRefined != null) 'issue_refined': issueRefined,
+      if (solution != null) 'solution': solution,
+      if (refinedSource != null) 'refined_source': refinedSource,
+      if (refinedAt != null) 'refined_at': refinedAt,
       if (category != null) 'category_text': category,
       if (categoryId != null) 'category_id': categoryId,
       if (status != null) 'status': status,

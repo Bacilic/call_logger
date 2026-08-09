@@ -10,6 +10,7 @@ import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/calls/provider/call_entry_provider.dart';
 import 'package:call_logger/features/calls/provider/smart_entity_selector_provider.dart';
+import 'package:call_logger/features/directory/providers/catalog_validation_provider.dart';
 import 'package:call_logger/features/tasks/models/task.dart';
 import 'package:call_logger/features/tasks/providers/tasks_provider.dart';
 import 'package:flutter/material.dart';
@@ -212,6 +213,63 @@ void main() {
       expect(after.selectedEquipment, isNull);
       expect(after.selectedDepartmentId, isNull);
       expect(container.read(callEntryProvider).categoryId, isNull);
+    },
+  );
+
+  testWidgets(
+    'η αλυσίδα Κανόνων Επικύρωσης ξεπλένεται εκτός build μετά την εκκαθάριση',
+    (tester) async {
+      late WidgetRef widgetRef;
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: Consumer(
+            builder: (context, ref, _) {
+              widgetRef = ref;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      await tester.runAsync(() async {
+        await DatabaseHelper.bindTestDatabaseFile(pathB);
+
+        // Ο χρήστης δεν έχει ανοίξει φόρμα ή οθόνη κανόνων: η αλυσίδα
+        // rules → service δεν έχει χτιστεί ακόμη.
+        expect(container.exists(catalogValidationRulesProvider), isFalse);
+        expect(container.exists(catalogValidationServiceProvider), isFalse);
+
+        invalidateDatabaseScopedCaches(widgetRef);
+
+        // Ο καλών βρίσκεται εκτός build, οπότε το ξέπλυμα γίνεται αμέσως.
+        // Αν η αλυσίδα έμενε «dirty χωρίς listeners», θα ξεπλενόταν σύγχρονα
+        // μέσα στο initState/build της επόμενης οθόνης που τη διαβάζει →
+        // «setState() called during build» (κατάρρευση 09/08 στους Κανόνες
+        // Επικύρωσης μετά από αλλαγή βάσης).
+        expect(
+          container.exists(catalogValidationRulesProvider),
+          isTrue,
+          reason:
+              'Η εκκαθάριση ακύρωσε τους κανόνες χωρίς να τους ξαναδιαβάσει '
+              'εκτός build.',
+        );
+        expect(
+          container.exists(catalogValidationServiceProvider),
+          isTrue,
+          reason:
+              'Ο service παρακολουθεί τους κανόνες με watch — χωρίς eager '
+              'flush μένει «βόμβα» για το επόμενο build.',
+        );
+
+        // Άφησε τα futures της αλυσίδας να ολοκληρωθούν πριν κλείσει η βάση.
+        try {
+          await container.read(catalogValidationServiceProvider.future);
+        } catch (_) {}
+      });
     },
   );
 }

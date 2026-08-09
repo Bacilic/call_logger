@@ -10,11 +10,13 @@ import '../../../core/models/window_placement_mode.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/crash_log_service.dart';
+import '../../../core/services/shutdown_trace_incident.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/services/settings_service.dart';
 import '../../database/services/database_maintenance_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
+import '../widgets/shutdown_incident_notice.dart';
 import '../widgets/start_from_beginning_flow.dart';
 import '../widgets/update_folder_setting_field.dart';
 
@@ -45,9 +47,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _crashLogRetentionController =
       TextEditingController();
   final FocusNode _crashLogRetentionFocus = FocusNode();
-  final TextEditingController _shutdownTraceRetentionController =
-      TextEditingController();
-  final FocusNode _shutdownTraceRetentionFocus = FocusNode();
 
   bool _isLoadingSettings = true;
   bool _showActiveTimer = true;
@@ -65,10 +64,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       CallsScreenCardsVisibility.defaults;
   WindowPlacementMode _windowPlacementMode = WindowPlacementMode.alwaysCenter;
   int _crashLogRetentionCount = SettingsService.defaultCrashLogRetentionCount;
-  bool _shutdownTraceEnabled = SettingsService.defaultShutdownTraceEnabled;
-  int _shutdownTraceRetentionCount =
-      SettingsService.defaultShutdownTraceRetentionCount;
   String _logsDirectoryPath = '';
+
+  /// Το τελευταίο προβληματικό κλείσιμο, αν υπάρχει· `null` = όλα καθαρά.
+  ShutdownTraceIncident? _shutdownIncident;
   bool _showUpdateOnStartup = true;
 
   @override
@@ -92,8 +91,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void dispose() {
     _crashLogRetentionController.dispose();
     _crashLogRetentionFocus.dispose();
-    _shutdownTraceRetentionController.dispose();
-    _shutdownTraceRetentionFocus.dispose();
     super.dispose();
   }
 
@@ -121,16 +118,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           : WindowPlacementMode.alwaysCenter;
       final crashLogRetention = await _settings.catalogs
           .getCrashLogRetentionCount();
-      final shutdownTraceEnabled = await _settings.catalogs
-          .getShutdownTraceEnabled();
-      final shutdownTraceRetention = await _settings.catalogs
-          .getShutdownTraceRetentionCount();
       final showUpdateOnStartup = await _settings.catalogs
           .getShowUpdateOnStartup();
       final databasePath = await _settings.getDatabasePath();
       final logsDirectoryPath = databasePath.trim().isEmpty
           ? ''
           : CrashLogService.logsDirectoryForDatabasePath(databasePath);
+      // Ο ιχνηλάτης κλεισίματος αφήνει αρχείο μόνο όταν κάτι πήγε στραβά —
+      // αν υπάρχει, το λέμε εδώ αντί να περιμένουμε να το βρει ο χρήστης.
+      final shutdownIncident = logsDirectoryPath.isEmpty
+          ? null
+          : await ShutdownTraceIncident.findLatest(logsDirectoryPath);
       var dictionaryNavVisible = showDictionaryNav;
       if (!enableSpellCheck && dictionaryNavVisible) {
         await _settings.windowUi.setShowDictionaryNav(false);
@@ -150,16 +148,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _callsCardsVisibility = callsCardsVisibility;
           _windowPlacementMode = windowPlacementMode;
           _crashLogRetentionCount = crashLogRetention;
-          _shutdownTraceEnabled = shutdownTraceEnabled;
-          _shutdownTraceRetentionCount = shutdownTraceRetention;
           _showUpdateOnStartup = showUpdateOnStartup;
           _logsDirectoryPath = logsDirectoryPath;
+          _shutdownIncident = shutdownIncident;
           if (!_crashLogRetentionFocus.hasFocus) {
             _crashLogRetentionController.text = crashLogRetention.toString();
-          }
-          if (!_shutdownTraceRetentionFocus.hasFocus) {
-            _shutdownTraceRetentionController.text = shutdownTraceRetention
-                .toString();
           }
           _isLoadingSettings = false;
         });
@@ -191,21 +184,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _crashLogRetentionController.text = normalized.toString();
   }
 
-  Future<void> _persistShutdownTraceRetentionCount() async {
-    final raw = _shutdownTraceRetentionController.text.trim();
-    if (raw.isEmpty) {
-      _shutdownTraceRetentionController.text = _shutdownTraceRetentionCount
-          .toString();
-      return;
+  /// Ανοίγει το αρχείο ιχνηλάτησης του τελευταίου προβληματικού κλεισίματος.
+  Future<void> _openShutdownIncidentFile() async {
+    final path = _shutdownIncident?.filePath.trim() ?? '';
+    if (path.isEmpty) return;
+    try {
+      await DatabaseMaintenanceService.openFileInDefaultApp(path);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Αποτυχία ανοίγματος του αρχείου ιχνηλάτησης.'),
+        ),
+      );
     }
-    final n = int.tryParse(raw);
-    if (n == null) return;
-    await _settings.catalogs.setShutdownTraceRetentionCount(n);
-    final normalized = await _settings.catalogs
-        .getShutdownTraceRetentionCount();
-    if (!mounted) return;
-    setState(() => _shutdownTraceRetentionCount = normalized);
-    _shutdownTraceRetentionController.text = normalized.toString();
   }
 
   Future<void> _openLogsFolderInExplorer() async {
@@ -575,75 +567,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ],
                     ),
             ),
-            const SizedBox(height: 8),
-            IgnorePointer(
-              ignoring: _isLoadingSettings,
-              child: SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _shutdownTraceEnabled,
-                onChanged: (value) async {
-                  await _settings.catalogs.setShutdownTraceEnabled(value);
-                  if (mounted) {
-                    setState(() => _shutdownTraceEnabled = value);
-                  }
-                },
-                title: const Text('Ιχνηλάτηση βημάτων κλεισίματος'),
-                subtitle: const Text(
-                  'Γράφει σε αρχείο κάθε βήμα του κλεισίματος '
-                  '(θέση παραθύρου, αντίγραφο, βάση) για διάγνωση καθυστερήσεων.',
-                ),
+            if (_shutdownIncident != null)
+              ShutdownIncidentNotice(
+                incident: _shutdownIncident!,
+                onOpenFile: _openShutdownIncidentFile,
               ),
-            ),
-            IgnorePointer(
-              ignoring: _isLoadingSettings || !_shutdownTraceEnabled,
-              child: Opacity(
-                opacity: _shutdownTraceEnabled ? 1 : 0.5,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            'Αρχεία ιχνηλάτησης κλεισίματος που διατηρούνται ',
-                            style: theme.textTheme.bodyLarge,
-                          ),
-                          SizedBox(
-                            width: 64,
-                            child: TextField(
-                              focusNode: _shutdownTraceRetentionFocus,
-                              controller: _shutdownTraceRetentionController,
-                              enabled: _shutdownTraceEnabled,
-                              textAlign: TextAlign.center,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(2),
-                              ],
-                              decoration: const InputDecoration(
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 8,
-                                ),
-                              ),
-                              onEditingComplete:
-                                  _persistShutdownTraceRetentionCount,
-                              onSubmitted: (_) =>
-                                  _persistShutdownTraceRetentionCount(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
             if (Platform.isWindows) ...[
               const SizedBox(height: 32),
               const Divider(),

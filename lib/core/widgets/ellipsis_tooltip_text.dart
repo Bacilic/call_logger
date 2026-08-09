@@ -9,12 +9,19 @@ class EllipsisTooltipText extends StatefulWidget {
     this.style,
     this.maxLines = 1,
     this.textAlign,
+    this.tooltipMessage,
   });
 
   final String text;
   final TextStyle? style;
   final int? maxLines;
   final TextAlign? textAlign;
+
+  /// Διαφορετικό κείμενο tooltip, ορατό ΠΑΝΤΑ — και όταν δεν κόβεται τίποτα.
+  ///
+  /// Χρησιμεύει όταν το κελί δείχνει μια εκδοχή του κειμένου και το tooltip
+  /// οφείλει να δείξει την άλλη (π.χ. καθαρό στο κελί, ωμό στο tooltip).
+  final String? tooltipMessage;
 
   @override
   State<EllipsisTooltipText> createState() => EllipsisTooltipTextState();
@@ -63,6 +70,10 @@ class EllipsisTooltipTextState extends State<EllipsisTooltipText> {
           style: widget.style,
           textAlign: widget.textAlign,
         );
+        final override = widget.tooltipMessage?.trim() ?? '';
+        if (override.isNotEmpty) {
+          return Tooltip(message: override, child: text);
+        }
         if (!_overflows || widget.text.isEmpty) return text;
         return Tooltip(message: widget.text, child: text);
       },

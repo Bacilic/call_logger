@@ -455,4 +455,17 @@ class DatabaseMaintenanceService {
       await Process.run('xdg-open', [norm]);
     }
   }
+
+  /// Άνοιγμα αρχείου με την προεπιλεγμένη εφαρμογή του συστήματος
+  /// (π.χ. ένα `.log` στο Σημειωματάριο).
+  static Future<void> openFileInDefaultApp(String filePath) async {
+    final norm = p.normalize(filePath);
+    if (Platform.isWindows) {
+      await Process.run('explorer', [norm]);
+    } else if (Platform.isMacOS) {
+      await Process.run('open', [norm]);
+    } else {
+      await Process.run('xdg-open', [norm]);
+    }
+  }
 }

@@ -4,6 +4,7 @@ import '../models/lansweeper_sync_state.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
+import 'lansweeper/lansweeper_ai_presenter.dart';
 import 'lansweeper/lansweeper_registration_dialogs.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
@@ -79,6 +80,12 @@ class LansweeperReportRegistration {
       title: host.titleController.text,
       notes: host.notesController.text,
       solution: host.solutionController.text,
+      refinedSource: LansweeperAiPresenter.refinedSource(
+        aiProblem: host.aiSuggestedNotes,
+        aiSolution: host.aiSuggestedSolution,
+        problem: host.notesController.text,
+        solution: host.solutionController.text,
+      ),
       agentUsername: host.lansweeperAgentUsernameController.text,
       durationSeconds: durationSeconds,
       config: ticketConfig,

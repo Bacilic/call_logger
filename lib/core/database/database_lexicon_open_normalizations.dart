@@ -14,7 +14,6 @@ Future<void> applyLexiconOpenNormalizations(Database db) async {
   await normalizeLexiconCategoryLegacyOnOpen(db);
   await ensureDepartmentsMapRotationColumn(db);
   await ensureDepartmentsMapHiddenColumn(db);
-  await ensureCallsNoSolutionColumn(db);
   await clearEquipmentDefaultRemoteToolOnOpen(db);
   await dropRemoteToolsLaunchModeColumnOnOpen(db);
 }

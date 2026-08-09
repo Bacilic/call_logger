@@ -19,6 +19,7 @@ import '../../providers/bulk_action_undo_provider.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../providers/directory_provider.dart';
 import '../../services/user_bulk_deletion_runner.dart';
+import '../../services/department_deletion_inventory.dart';
 import '../../services/user_deletion_messages.dart';
 import '../../services/user_deletion_zones.dart';
 import 'user_deletion_preview_dialog.dart';
@@ -497,12 +498,18 @@ class _UsersTabState extends ConsumerState<UsersTab>
     final names = deleted
         .map((u) => u.name?.trim().isEmpty ?? true ? '?' : u.name!)
         .toList();
+    // Το lookup έχει ήδη ξαναχτιστεί, οπότε η ερώτηση «έμεινε κενό;» απαντιέται
+    // στα τωρινά δεδομένα.
+    final emptiedDepartments = emptiedDepartmentNames(
+      deleted.map((u) => u.departmentId),
+    );
     final message = userDeletionSummaryMessage(
       employeeNames: names,
       assetActions: userDeletionAssetActions(
         phoneBatches: phoneBatches,
         equipmentBatches: equipmentBatches,
       ),
+      emptiedDepartments: emptiedDepartments,
     );
     final tooltipAllNames = names.isEmpty ? null : names.join(', ');
 

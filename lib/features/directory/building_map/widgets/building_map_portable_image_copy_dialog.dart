@@ -160,9 +160,9 @@ class _BuildingMapPortableImageCopyDialogState
             const SizedBox(height: 6),
             SelectableText(
               widget.sourceImagePath,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 10),
             const Text(

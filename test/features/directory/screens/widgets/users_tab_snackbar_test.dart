@@ -24,23 +24,6 @@ class _FakeDirectoryNotifier extends DirectoryNotifier {
   Future<void> loadUsers() async {}
 
   @override
-  Future<void> deleteSelected() async {
-    if (state.selectedIds.isEmpty) return;
-    final toDelete = state.allUsers
-        .where((u) => u.id != null && state.selectedIds.contains(u.id))
-        .toList();
-    final remaining = state.allUsers
-        .where((u) => u.id == null || !state.selectedIds.contains(u.id))
-        .toList();
-    state = state.copyWith(
-      allUsers: remaining,
-      filteredUsers: remaining,
-      selectedIds: {},
-      lastDeleted: toDelete,
-    );
-  }
-
-  @override
   Future<void> undoLastDelete() async {
     state = state.copyWith(lastDeleted: null);
   }

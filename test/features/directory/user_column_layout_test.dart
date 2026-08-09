@@ -35,10 +35,7 @@ void main() {
       final layout = parseUserColumnLayoutJson(raw);
 
       expect(layout, isNotNull);
-      expect(
-        layout!.visible,
-        isNot(contains(UserDirectoryColumn.notes.key)),
-      );
+      expect(layout!.visible, isNot(contains(UserDirectoryColumn.notes.key)));
     });
 
     test('η παλιά μορφή σκέτης λίστας δέχεται κι αυτή τις νέες στήλες', () {

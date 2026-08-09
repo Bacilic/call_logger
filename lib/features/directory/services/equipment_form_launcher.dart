@@ -42,8 +42,7 @@ class EquipmentFormLauncher {
       context,
       ref,
       matches: (row) => (row.$1.code ?? '').trim().toLowerCase() == codeNorm,
-      missingMessage:
-          'Δεν βρέθηκε εξοπλισμός με κωδικό $code στον κατάλογο.',
+      missingMessage: 'Δεν βρέθηκε εξοπλισμός με κωδικό $code στον κατάλογο.',
     );
   }
 

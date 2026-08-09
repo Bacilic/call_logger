@@ -208,6 +208,12 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 40 && newVersion >= 40) {
     await migrateDatabaseToV40(db);
   }
+  if (oldVersion < 41 && newVersion >= 41) {
+    await migrateDatabaseToV41(db);
+  }
+  if (oldVersion < 42 && newVersion >= 42) {
+    await migrateDatabaseToV42(db);
+  }
 }
 
 /// v39: ανακατασκευή `search_text` μετά τη συμπλήρωση των ελληνικών ετικετών
@@ -236,6 +242,76 @@ Future<void> migrateDatabaseToV40(Database db) async {
     "UPDATE tasks SET completed_at = updated_at "
     "WHERE status = 'closed' AND completed_at IS NULL",
   );
+}
+
+/// v41: το εξευγενισμένο κείμενο του ticket επιστρέφει στην κλήση.
+///
+/// Το `issue` κρατά αυτούσιο ό,τι γράφτηκε στο τηλέφωνο — τηλεγραφικά και
+/// ανορθόγραφα. Είναι το κλειδί με το οποίο θα ξαναειπωθεί το ίδιο πρόβλημα την
+/// επόμενη φορά, οπότε δεν αντικαθίσταται ποτέ· το καθαρό κείμενο ζει δίπλα του.
+///
+/// Η στήλη `solution` είχε καταργηθεί στην v0.9.2 μαζί με το χειροκίνητο πεδίο
+/// «Λύση» της καρτέλας — εκεί ήταν άδειο πεδίο προς συμπλήρωση. Επιστρέφει με
+/// άλλο ρόλο: γεμίζει από τη φόρμα Lansweeper, όπου το κείμενο γράφεται έτσι κι
+/// αλλιώς. Βάσεις που πρόλαβαν την παλιά στήλη τη βρίσκουν εδώ κενή.
+Future<void> migrateDatabaseToV41(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(calls)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  const columns = ['issue_refined', 'solution', 'refined_source', 'refined_at'];
+  for (final column in columns) {
+    if (names.contains(column)) continue;
+    await db.execute('ALTER TABLE calls ADD COLUMN $column TEXT');
+  }
+}
+
+/// v42: ο `knowledge_base` από τέσσερις άδειες στήλες γίνεται Βάση Γνώσης.
+///
+/// Ο πίνακας υπήρχε από την αρχή αλλά καμία ροή δεν έγραψε ποτέ σε αυτόν, οπότε
+/// στην πράξη είναι άδειος παντού. Όταν είναι, ξαναχτίζεται καθαρά με το πλήρες
+/// σχήμα (συμπεριλαμβανομένων των foreign keys, που το `ALTER TABLE` δεν μπορεί
+/// να προσθέσει). Αν κάποια βάση έχει εντούτοις γραμμές, τις κρατά και δέχεται
+/// μόνο τις στήλες που λείπουν — δεδομένα δεν πετιούνται ποτέ από μετάπτωση.
+Future<void> migrateDatabaseToV42(Database db) async {
+  final existing = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'knowledge_base'",
+  );
+  if (existing.isEmpty) {
+    await db.execute(kCreateKnowledgeBaseTable);
+    return;
+  }
+
+  final rows = await db.rawQuery(
+    'SELECT COUNT(*) AS c FROM knowledge_base',
+  );
+  final count = (rows.first['c'] as int?) ?? 0;
+  if (count == 0) {
+    await db.execute('DROP TABLE knowledge_base');
+    await db.execute(kCreateKnowledgeBaseTable);
+    return;
+  }
+
+  final info = await db.rawQuery('PRAGMA table_info(knowledge_base)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  const textColumns = [
+    'symptom',
+    'last_used_at',
+    'created_at',
+    'updated_at',
+    'search_index',
+  ];
+  for (final column in textColumns) {
+    if (names.contains(column)) continue;
+    await db.execute('ALTER TABLE knowledge_base ADD COLUMN $column TEXT');
+  }
+  for (final column in ['category_id', 'source_call_id']) {
+    if (names.contains(column)) continue;
+    await db.execute('ALTER TABLE knowledge_base ADD COLUMN $column INTEGER');
+  }
+  if (!names.contains('times_used')) {
+    await db.execute(
+      'ALTER TABLE knowledge_base ADD COLUMN times_used INTEGER NOT NULL DEFAULT 0',
+    );
+  }
 }
 
 /// Καταγράφει στο Ιστορικό τι αποσυνδέθηκε ή σβήστηκε από την αναβάθμιση v38.

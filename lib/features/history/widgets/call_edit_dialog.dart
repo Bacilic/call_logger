@@ -11,7 +11,9 @@ import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/resizable_text_area.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
+import '../../calls/models/call_refined_source.dart';
 import '../../calls/provider/smart_entity_selector_provider.dart';
+import 'call_refined_text_section.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_service_provider.dart';
@@ -43,9 +45,15 @@ class _CallEditDialog extends ConsumerStatefulWidget {
 class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     with DialogSnackbarHost {
   late final SpellCheckController _issueController;
+  late final SpellCheckController _refinedIssueController;
+  late final SpellCheckController _solutionController;
   final TextEditingController _durationController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _timeController = TextEditingController();
+
+  /// Η ενότητα καθαρού κειμένου ανοίγει μόνη της όταν υπάρχει περιεχόμενο, και
+  /// με το κουμπί όταν θέλετε να γράψετε κάτι σε κλήση που δεν πήγε σε ticket.
+  bool _refinedSectionExpanded = false;
   bool _loading = true;
   bool _saving = false;
   bool _hardCloneBusy = false;
@@ -62,12 +70,16 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
   void initState() {
     super.initState();
     _issueController = SpellCheckController();
+    _refinedIssueController = SpellCheckController();
+    _solutionController = SpellCheckController();
     _load();
   }
 
   @override
   void dispose() {
     _issueController.dispose();
+    _refinedIssueController.dispose();
+    _solutionController.dispose();
     _durationController.dispose();
     _dateController.dispose();
     _timeController.dispose();
@@ -101,6 +113,11 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     if (!mounted) return;
     _original = call;
     _issueController.text = call.issue ?? '';
+    _refinedIssueController.text = call.issueRefined ?? '';
+    _solutionController.text = call.solution ?? '';
+    _refinedSectionExpanded =
+        _refinedIssueController.text.trim().isNotEmpty ||
+        _solutionController.text.trim().isNotEmpty;
     _durationController.text = call.duration?.toString() ?? '';
     _categoryId = call.categoryId;
     _categoryText = (call.category ?? '').trim();
@@ -220,7 +237,28 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     final departmentRaw = selector.departmentText.trim();
     final equipmentRaw = selector.equipmentText.trim();
     final issueRaw = _issueController.text.trim();
+    final refinedIssueRaw = _refinedIssueController.text.trim();
+    final solutionRaw = _solutionController.text.trim();
     final categoryRaw = _categoryText.trim();
+
+    // Χειρόγραφο καθαρό κείμενο σε κλήση που δεν πέρασε ποτέ από ΤΝ: η
+    // προέλευση το δηλώνει, ώστε αργότερα να ξέρετε ποιανού είναι τα λόγια.
+    final hasRefinedText = refinedIssueRaw.isNotEmpty || solutionRaw.isNotEmpty;
+    final refinedChanged =
+        refinedIssueRaw != (_original!.issueRefined ?? '').trim() ||
+        solutionRaw != (_original!.solution ?? '').trim();
+    final refinedSource = !hasRefinedText
+        ? null
+        : (refinedChanged
+              ? (_original!.refinedSource == null
+                    ? CallRefinedSource.manual
+                    : CallRefinedSource.aiEdited)
+              : _original!.refinedSource);
+    final refinedAt = !hasRefinedText
+        ? null
+        : (refinedChanged
+              ? DateTime.now().toIso8601String()
+              : _original!.refinedAt);
 
     final updated = CallModel(
       id: _original!.id,
@@ -235,6 +273,10 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       departmentText: departmentRaw.isEmpty ? null : departmentRaw,
       equipmentText: equipmentRaw.isEmpty ? null : equipmentRaw,
       issue: issueRaw.isEmpty ? null : issueRaw,
+      issueRefined: refinedIssueRaw.isEmpty ? null : refinedIssueRaw,
+      solution: solutionRaw.isEmpty ? null : solutionRaw,
+      refinedSource: refinedSource,
+      refinedAt: refinedAt,
       category: categoryRaw.isEmpty ? null : categoryRaw,
       categoryId: _categoryId,
       status: _original!.status,
@@ -494,6 +536,16 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                             border: OutlineInputBorder(),
                             alignLabelWithHint: true,
                           ),
+                        ),
+                        const SizedBox(height: 20),
+                        CallRefinedTextSection(
+                          problemController: _refinedIssueController,
+                          solutionController: _solutionController,
+                          expanded: _refinedSectionExpanded,
+                          onExpand: () =>
+                              setState(() => _refinedSectionExpanded = true),
+                          refinedSource: original?.refinedSource,
+                          refinedAt: original?.refinedAt,
                         ),
                         const SizedBox(height: 12),
                         if (historyEntityIsDeleted(

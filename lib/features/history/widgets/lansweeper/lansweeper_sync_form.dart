@@ -28,6 +28,8 @@ class LansweeperSyncForm extends ConsumerWidget {
     this.onCustomFieldChanged,
     this.ticketState,
     this.onTicketStateChanged,
+    this.onSaveAsKnowledge,
+    this.saveAsKnowledgeDisabledTooltip,
     super.key,
   });
 
@@ -50,6 +52,13 @@ class LansweeperSyncForm extends ConsumerWidget {
   final void Function(String fieldId, String value)? onCustomFieldChanged;
   final String? ticketState;
   final ValueChanged<String>? onTicketStateChanged;
+
+  /// Κρατά τη λύση ως άρθρο Βάσης Γνώσης· `null` κρύβει το κουμπί εντελώς.
+  final VoidCallback? onSaveAsKnowledge;
+
+  /// Γιατί δεν γίνεται τώρα (π.χ. κενή λύση) — αλλιώς το κουμπί απλώς σβήνει
+  /// χωρίς εξήγηση και μοιάζει με βλάβη.
+  final String? saveAsKnowledgeDisabledTooltip;
 
   static Color cooldownRemainingColor(int seconds) {
     if (seconds > 30) return Colors.red;
@@ -296,6 +305,20 @@ class LansweeperSyncForm extends ConsumerWidget {
                 alignLabelWithHint: true,
               ),
             ),
+            if (onSaveAsKnowledge != null || saveAsKnowledgeDisabledTooltip != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Tooltip(
+                  message: onSaveAsKnowledge == null
+                      ? (saveAsKnowledgeDisabledTooltip ?? '')
+                      : 'Κρατά το σύμπτωμα και τη λύση ως άρθρο, για την επόμενη φορά που θα εμφανιστεί το ίδιο',
+                  child: TextButton.icon(
+                    onPressed: onSaveAsKnowledge,
+                    icon: const Icon(Icons.menu_book_outlined, size: 18),
+                    label: const Text('Αποθήκευση ως γνώση'),
+                  ),
+                ),
+              ),
             ...customFieldWidgets,
           ],
         ),

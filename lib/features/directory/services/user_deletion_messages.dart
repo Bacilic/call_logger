@@ -150,13 +150,36 @@ String _assetActionNoun({required bool isPhone, required bool plural}) {
   return plural ? 'εξοπλισμών' : 'εξοπλισμού';
 }
 
+/// Προειδοποίηση ότι η διαγραφή άφησε τμήμα χωρίς κανένα εξάρτημα.
+///
+/// Επιστρέφει `null` όταν δεν άδειασε κανένα — δεν υπάρχει λόγος να
+/// προστεθεί σιωπή στο μήνυμα. Δεν είναι απαγόρευση ούτε σφάλμα: ένα τμήμα
+/// μπορεί να αδειάσει θεμιτά, απλώς αξίζει να το ξέρει ο χρήστης όσο έχει
+/// φρέσκο το πλαίσιο στο μυαλό του.
+String? emptiedDepartmentsNotice(List<String> departmentNames) {
+  final names = departmentNames
+      .map((n) => n.trim())
+      .where((n) => n.isNotEmpty)
+      .toList();
+  if (names.isEmpty) return null;
+  if (names.length == 1) {
+    return 'Το τμήμα «${names.first}» έμεινε χωρίς κανένα εξάρτημα';
+  }
+  final quoted = names.map((n) => '«$n»').join(', ');
+  return 'Τα τμήματα $quoted έμειναν χωρίς κανένα εξάρτημα';
+}
+
 /// Snackbar σύνοψης μετά τη διαγραφή.
 ///
 /// Παράδειγμα:
 /// `Διαγράφηκε Αναστασία Φούφα · μετακίνηση τηλεφώνου (2896) · διαγραφή εξοπλισμού (3874)`
+///
+/// Το [emptiedDepartments] προσαρτάται στο τέλος, μετά τις ενέργειες: είναι
+/// συνέπεια της διαγραφής, όχι μέρος της.
 String userDeletionSummaryMessage({
   required List<String> employeeNames,
   required List<UserDeletionAssetAction> assetActions,
+  List<String> emptiedDepartments = const [],
 }) {
   final names = employeeNames
       .map((n) => n.trim())
@@ -168,10 +191,6 @@ String userDeletionSummaryMessage({
             ? 'Διαγράφηκε ${names.first}'
             : 'Διαγράφηκαν ${names.join(', ')}');
 
-  if (assetActions.isEmpty) {
-    return namePart;
-  }
-
   final parts = <String>[namePart];
   for (final action in assetActions) {
     final id = action.identifier.trim();
@@ -180,5 +199,9 @@ String userDeletionSummaryMessage({
     final noun = _assetActionNoun(isPhone: action.isPhone, plural: false);
     parts.add('$verb $noun ($id)');
   }
+
+  final emptied = emptiedDepartmentsNotice(emptiedDepartments);
+  if (emptied != null) parts.add(emptied);
+
   return parts.join(' · ');
 }

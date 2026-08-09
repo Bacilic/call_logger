@@ -25,6 +25,11 @@ class CallsSearchIndex {
     final parts = <String>[];
 
     addNonEmpty(parts, callMap['issue']);
+    // Το καθαρό κείμενο μπαίνει ΔΙΠΛΑ στο ωμό, όχι στη θέση του: η ίδια κλήση
+    // πρέπει να βρίσκεται και με «μαυρη οθονη» (όπως ειπώθηκε) και με «VNC»
+    // (όπως καταγράφηκε) — αλλιώς η μία από τις δύο γραφές γίνεται αόρατη.
+    addNonEmpty(parts, callMap['issue_refined']);
+    addNonEmpty(parts, callMap['solution']);
     addNonEmpty(parts, callMap['category_text']);
     addNonEmpty(parts, callMap['caller_text']);
     addNonEmpty(parts, callMap['phone_text']);

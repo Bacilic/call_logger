@@ -925,6 +925,14 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     super.dispose();
   }
 
+  /// Τι δείχνει η στήλη «Σημειώσεις»: το καθαρό κείμενο όταν υπάρχει, αλλιώς το
+  /// ωμό. Κοιτώντας πίσω, εκείνο που ψάχνει κανείς είναι η διατυπωμένη μορφή —
+  /// το ωμό μένει διαθέσιμο στο tooltip, δεν χάνεται.
+  String _notesDisplay(Map<String, dynamic> row) {
+    final refined = _str(row['issue_refined']);
+    return refined.isEmpty ? _str(row['issue']) : refined;
+  }
+
   String _userDisplay(Map<String, dynamic> row) {
     final first = row['user_first_name'] as String? ?? '';
     final last = row['user_last_name'] as String? ?? '';
@@ -990,7 +998,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
       case 5:
         return _str(row['category']);
       case 6:
-        return _str(row['issue']);
+        return _notesDisplay(row);
       case 7:
         final dur = row['duration'];
         if (dur == null) return -1;
@@ -1194,6 +1202,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     final category = _str(row['category']);
     final categoryDeleted = historyEntityIsDeleted(row['category_is_deleted']);
     final issue = _str(row['issue']);
+    final issueRefined = _str(row['issue_refined']);
     final durationStr = _formatDuration(row['duration']);
 
     final bodyStyle = theme.textTheme.bodyMedium;
@@ -1278,10 +1287,32 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
             _dataCell(
               width: columnWidths[7],
               horizontalPadding: horizontalPadding,
-              child: EllipsisTooltipText(
-                text: issue.isEmpty ? '—' : issue,
-                style: bodyStyle,
-              ),
+              child: issueRefined.isEmpty
+                  ? EllipsisTooltipText(
+                      text: issue.isEmpty ? '—' : issue,
+                      style: bodyStyle,
+                    )
+                  : Row(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Icon(
+                            Icons.auto_awesome_outlined,
+                            size: 14,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        Expanded(
+                          child: EllipsisTooltipText(
+                            text: issueRefined,
+                            style: bodyStyle,
+                            tooltipMessage: issue.isEmpty
+                                ? issueRefined
+                                : 'Όπως γράφτηκε στην κλήση:\n$issue',
+                          ),
+                        ),
+                      ],
+                    ),
             ),
             _dataCell(
               width: columnWidths[8],

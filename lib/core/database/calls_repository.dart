@@ -75,6 +75,10 @@ class CallsRepository {
       'department_text': call.departmentText,
       'equipment_text': call.equipmentText,
       'issue': call.issue,
+      'issue_refined': call.issueRefined,
+      'solution': call.solution,
+      'refined_source': call.refinedSource,
+      'refined_at': call.refinedAt,
       'category_text': call.category,
       'category_id': call.categoryId,
       'status': call.status ?? 'completed',
@@ -254,6 +258,12 @@ class CallsRepository {
       'lansweeper_state': 'unsent',
       'lansweeper_main_ticket_id': null,
       'lansweeper_last_sync_at': null,
+      // Ο κλώνος ξεκινά χωρίς καθαρό κείμενο: εκείνο περιγράφει το ticket της
+      // αρχικής κλήσης, όχι το νέο περιστατικό που πάει να δουλευτεί εδώ.
+      'issue_refined': null,
+      'solution': null,
+      'refined_source': null,
+      'refined_at': null,
       'is_deleted': 0,
     };
 
@@ -437,7 +447,8 @@ class CallsRepository {
     final sql =
         '''
       SELECT calls.id, calls.date, calls.time, calls.caller_id, calls.equipment_id,
-             calls.issue, calls.caller_text, calls.phone_text, calls.department_text, calls.equipment_text,
+             calls.issue, calls.issue_refined, calls.solution, calls.refined_source, calls.refined_at,
+             calls.caller_text, calls.phone_text, calls.department_text, calls.equipment_text,
              COALESCE(cat.name, calls.category_text, '') AS category, calls.status, calls.duration, calls.is_priority,
              COALESCE(users.first_name, calls.caller_text, '') AS user_first_name,
              COALESCE(users.last_name, '') AS user_last_name,

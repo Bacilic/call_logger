@@ -43,7 +43,36 @@ import 'database_foreign_keys.dart';
 /// v39: ανακατασκευή `search_text` του audit με τις συμπληρωμένες ελληνικές
 /// ετικέτες πεδίων (μόνο δεδομένα).
 /// v40: `tasks.completed_at` — στιγμή ολοκλήρωσης που επιβιώνει της αναίρεσης.
-const int databaseSchemaVersionV1 = 40;
+/// v41: `calls.issue_refined` / `solution` / `refined_source` / `refined_at` —
+/// το εξευγενισμένο κείμενο που φεύγει προς Lansweeper επιστρέφει στην κλήση.
+/// v42: ο `knowledge_base` γίνεται πραγματική Βάση Γνώσης (σύμπτωμα, κατηγορία,
+/// κλήση προέλευσης, μετρητής χρήσης, ευρετήριο αναζήτησης).
+const int databaseSchemaVersionV1 = 42;
+
+/// Ο πίνακας της Βάσης Γνώσης: μία «συνταγή» ανά είδος βλάβης.
+///
+/// Δεν είναι αρχείο των ticket — εκείνο ζει στην ίδια την κλήση. Εδώ μένει ό,τι
+/// αξίζει να ξαναδιαβαστεί: το σύμπτωμα όπως το λέει ο χρήστης στο τηλέφωνο και
+/// η λύση όπως γράφτηκε καθαρά. Το `symptom` είναι το κλειδί ταιριάσματος, γι'
+/// αυτό κρατιέται στη γλώσσα του καλούντα και όχι στη γλώσσα του ticket.
+const String kCreateKnowledgeBaseTable = '''
+      CREATE TABLE IF NOT EXISTS knowledge_base (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT,
+        symptom TEXT,
+        content TEXT,
+        tags TEXT,
+        category_id INTEGER,
+        source_call_id INTEGER,
+        times_used INTEGER NOT NULL DEFAULT 0,
+        last_used_at TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        search_index TEXT,
+        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+        FOREIGN KEY (source_call_id) REFERENCES calls(id) ON DELETE SET NULL
+      )
+    ''';
 
 /// Προεπιλογές διαδρομών (ίδιες με SettingsService — χωρίς εξάρτηση Flutter εδώ).
 const String kDefaultVncExecutablePath =
@@ -67,6 +96,10 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         department_text TEXT,
         equipment_text TEXT,
         issue TEXT,
+        issue_refined TEXT,
+        solution TEXT,
+        refined_source TEXT,
+        refined_at TEXT,
         category_text TEXT,
         category_id INTEGER,
         status TEXT,
@@ -136,14 +169,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
 
   await db.execute(kCreateTasksTable);
 
-  await db.execute('''
-      CREATE TABLE knowledge_base (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        topic TEXT,
-        content TEXT,
-        tags TEXT
-      )
-    ''');
+  await db.execute(kCreateKnowledgeBaseTable);
 
   await db.execute('''
       CREATE TABLE audit_log (
@@ -685,27 +711,6 @@ Future<void> ensureDepartmentsMapHiddenColumn(Database db) async {
   }
 }
 
-/// Αφαιρεί (idempotent) τη στήλη `calls.solution` αν υπάρχει ακόμα.
-///
-/// Εκτελείται σε κάθε άνοιγμα βάσης χωρίς αλλαγή [databaseSchemaVersionV1].
-/// Το ιστορικό `search_index` μπορεί να διατηρεί κανονικοποιημένα tokens από την
-/// παλιά στήλη μέχρι την επόμενη ενημέρωση της αντίστοιχης κλήσης.
-Future<void> ensureCallsNoSolutionColumn(Database db) async {
-  List<Map<String, Object?>> info;
-  try {
-    info = await db.rawQuery('PRAGMA table_info(calls)');
-  } catch (_) {
-    return;
-  }
-  final names = info.map((r) => r['name'] as String).toSet();
-  if (!names.contains('solution')) return;
-  try {
-    await db.execute('ALTER TABLE calls DROP COLUMN solution');
-  } catch (_) {
-    // Παλαιότερο SQLite χωρίς DROP COLUMN · η στήλη μένει· η εφαρμογή την αγνοεί.
-  }
-}
-
 /// v21: ομαδοποίηση τμημάτων στο HUD επιλογής (`group_name`, `floor_id` → `building_map_floors`).
 Future<void> migrateDatabaseToV21(Database db) async {
   final info = await db.rawQuery('PRAGMA table_info(departments)');
@@ -1109,7 +1114,12 @@ String _fieldLabelForMigration(String entityType, String field) {
     'category_text': 'κατηγορια',
     'category_id': 'κατηγορια',
     'issue': 'θεμα',
+    'issue_refined': 'αναλυτικη περιγραφη',
     'solution': 'λυση',
+    'topic': 'τιτλοσ αρθρου',
+    'symptom': 'συμπτωμα',
+    'content': 'λυση αρθρου',
+    'tags': 'λεξεισ-κλειδια',
     'type': 'τυπος',
     'remote_params': 'παραμετροι απομακρυσμενης',
     'linked_users': 'συνδεδεμενοι χρηστες',

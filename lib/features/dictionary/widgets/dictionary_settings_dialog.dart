@@ -12,6 +12,7 @@ import '../../../core/database/dictionary_repository.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/providers/lexicon_categories_provider.dart';
 import '../../../core/providers/lexicon_language_recalc_provider.dart';
+import '../../../core/providers/spell_check_provider.dart';
 import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/core_lexicon_validation.dart';
 import '../../../core/services/settings_service.dart';
@@ -104,6 +105,22 @@ class _DictionarySettingsDialogState
     _exportPathCtrl.dispose();
     _lexiconCategoriesCtrl.dispose();
     super.dispose();
+  }
+
+  /// Ο βαρύς επανυπολογισμός τρέχει στον notifier· η ακύρωση και το ξέπλυμα
+  /// της αλυσίδας λεξικού γίνονται εδώ, από το widget layer, ώστε να μη μείνει
+  /// «dirty» κρίκος που θα ξεπλυθεί σύγχρονα μέσα σε επόμενο build.
+  Future<void> _recalculateLanguages() async {
+    await ref.read(lexiconLanguageRecalcProvider.notifier).recalculate();
+    if (!mounted) return;
+    if (ref.read(lexiconLanguageRecalcProvider)
+        is! LexiconLanguageRecalcSuccess) {
+      return;
+    }
+    ref.invalidate(coreLexiconProvider);
+    ref.invalidate(spellCheckServiceProvider);
+    flushLexiconProviderChain(ref);
+    ref.read(lexiconMasterDataRevisionProvider.notifier).bump();
   }
 
   String _formatWordCount(int n) {
@@ -360,11 +377,7 @@ class _DictionarySettingsDialogState
                         FilledButton.tonalIcon(
                           onPressed: recalcLoading
                               ? null
-                              : () => ref
-                                    .read(
-                                      lexiconLanguageRecalcProvider.notifier,
-                                    )
-                                    .recalculate(),
+                              : _recalculateLanguages,
                           style: FilledButton.styleFrom(
                             visualDensity: VisualDensity.compact,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,

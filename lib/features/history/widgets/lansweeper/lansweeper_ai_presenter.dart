@@ -1,4 +1,5 @@
 import '../../../../core/services/ai_ticket_suggestion_service.dart';
+import '../../../calls/models/call_refined_source.dart';
 import 'lansweeper_report_item_mapper.dart';
 
 class LansweeperAiPresenter {
@@ -34,6 +35,7 @@ class LansweeperAiPresenter {
     required String titleText,
     required String notesText,
     required String solutionText,
+    String knowledgeText = '',
   }) {
     return AiTicketSuggestionRequest(
       callerText: LansweeperReportItemMapper.combinedUniqueCallField(
@@ -56,11 +58,33 @@ class LansweeperAiPresenter {
       titleText: titleText,
       notesText: notesText,
       solutionText: solutionText,
+      knowledgeText: knowledgeText,
     );
   }
 
   static String prefillTitle({required String category, required int? id}) {
     final idSuffix = id != null ? ' #$id' : '';
     return category.isEmpty ? 'Κλήση$idSuffix' : '[$category]$idSuffix';
+  }
+
+  /// Πώς προέκυψε το κείμενο που φεύγει τώρα προς το Lansweeper.
+  ///
+  /// Συγκρίνει με ό,τι γύρισε η τελευταία «Πρόταση ΤΝ»: ίδιο κείμενο σημαίνει
+  /// ότι η πρόταση στάλθηκε ως έχει, αλλαγμένο σημαίνει ότι πέρασε από τα χέρια
+  /// του χρήστη, και απουσία πρότασης σημαίνει χειρόγραφο.
+  static String refinedSource({
+    required String? aiProblem,
+    required String? aiSolution,
+    required String problem,
+    required String solution,
+  }) {
+    if (aiProblem == null && aiSolution == null) {
+      return CallRefinedSource.manual;
+    }
+    final sameProblem = (aiProblem ?? '').trim() == problem.trim();
+    final sameSolution = (aiSolution ?? '').trim() == solution.trim();
+    return sameProblem && sameSolution
+        ? CallRefinedSource.ai
+        : CallRefinedSource.aiEdited;
   }
 }

@@ -27,7 +27,7 @@ String databaseTableLabelEl(String? tableName) {
     'remote_tool_args' => 'Ορίσματα εργαλείων',
     'full_dictionary' => 'Λεξικό',
     'user_dictionary' => 'Λεξικό χρήστη',
-    'knowledge_base' => 'Βάση γνώσης',
+    'knowledge_base' => 'Βάση Γνώσης',
     _ => name,
   };
 }

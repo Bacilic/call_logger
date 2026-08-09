@@ -64,8 +64,13 @@ void invalidateDatabaseScopedCaches(WidgetRef ref) {
     ref.invalidate(equipmentDirectoryProvider);
     ref.invalidate(categoryDirectoryProvider);
     // Οι κανόνες επικύρωσης ζουν στο app_settings της βάσης — η νέα βάση
-    // έχει τους δικούς της.
+    // έχει τους δικούς της. Ο [catalogValidationServiceProvider] τους
+    // παρακολουθεί με watch, οπότε η ακύρωση συνοδεύεται ΑΜΕΣΑ από ξέπλυμα
+    // της αλυσίδας — αλλιώς μένει «dirty» και ξεπλένεται σύγχρονα μέσα στο
+    // build της επόμενης οθόνης που τη διαβάζει (initState των Κανόνων
+    // Επικύρωσης ή φόρμα καταλόγου) → «setState() called during build».
     ref.invalidate(catalogValidationRulesProvider);
+    flushCatalogValidationProviderChain(ref);
     ref.read(taskServiceProvider).resetSnoozeHistoryColumnCache();
     // Άμεσο flush του lookup ΕΚΤΟΣ φάσης build: το single-flight lock της
     // αρχικοποίησης ([runDatabaseInitChecks]) σειριοποιεί τυχόν παράλληλο άνοιγμα.

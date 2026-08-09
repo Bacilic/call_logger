@@ -116,7 +116,7 @@ const Map<String, String> _kTableDisplayNames = {
   'user_phones': 'Συσχέτιση χρήστη–τηλεφώνου',
   'department_phones': 'Συσχέτιση τμήματος–τηλεφώνου',
   'user_equipment': 'Συσχέτιση χρήστη–εξοπλισμού',
-  'knowledge_base': 'Βάση γνώσεων',
+  'knowledge_base': 'Βάση Γνώσης',
   'remote_tools': 'Εργαλεία απομακρυσμένης επιφάνειας',
   'remote_tool_args': 'Ορίσματα απομακρυσμένου εργαλείου',
   'user_dictionary': 'Προσωπικό λεξικό',

@@ -22,6 +22,7 @@ class LansweeperSubmitInput {
     required this.notes,
     required this.solution,
     required this.agentUsername,
+    required this.refinedSource,
     this.durationSeconds,
     this.customFieldValues = const <String, String>{},
     this.targetTicketState,
@@ -32,6 +33,10 @@ class LansweeperSubmitInput {
   final String notes;
   final String solution;
   final String agentUsername;
+
+  /// Πώς προέκυψε το κείμενο ([CallRefinedSource]) — ταξιδεύει μαζί του ώστε η
+  /// κλήση να θυμάται αν το έγραψε η ΤΝ, αν το διορθώσατε ή αν είναι δικό σας.
+  final String refinedSource;
   final int? durationSeconds;
   final Map<String, String> customFieldValues;
   final String? targetTicketState;
@@ -145,6 +150,14 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
 
       if (result.success && (result.ticketId?.trim().isNotEmpty ?? false)) {
         final ticketId = result.ticketId!.trim();
+        // Πριν από κάθε άλλη εγγραφή: το κείμενο μόλις έφυγε στο ticket στην πιο
+        // έγκυρη μορφή του — περασμένο από την ΤΝ και από το μάτι του χρήστη.
+        await writeRepo.saveRefinedTexts(
+          callIds: <int>[callId, ...companionCallIds],
+          problem: input.notes,
+          solution: input.solution,
+          source: input.refinedSource,
+        );
         await writeRepo.markLansweeperSynced(
           callId: callId,
           ticketId: ticketId,
@@ -261,6 +274,29 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       input: input,
       companionCallIds: companionCallIds,
     );
+  }
+
+  /// Κρατά το καθαρό κείμενο όταν φεύγει από τη φόρμα χωρίς υποβολή API.
+  ///
+  /// Η «Αντιγραφή & Άνοιγμα» στέλνει το κείμενο στο πρόχειρο και ανοίγει τον
+  /// περιηγητή· χωρίς αυτό, η ροή που δουλεύεται καθημερινά θα ήταν η μόνη που
+  /// πετά όλη τη δουλειά. Η κατάσταση καταχώρησης δεν αλλάζει — το ticket δεν
+  /// έχει δημιουργηθεί ακόμα, το κείμενο όμως υπάρχει και είναι έγκυρο.
+  Future<void> persistRefinedTexts({
+    required List<int> callIds,
+    required String problem,
+    required String solution,
+    required String source,
+  }) async {
+    if (callIds.isEmpty) return;
+    final db = await DatabaseHelper.instance.database;
+    await CallsLansweeperRepository(db).saveRefinedTexts(
+      callIds: callIds,
+      problem: problem,
+      solution: solution,
+      source: source,
+    );
+    _refreshAfterLansweeperMutation();
   }
 
   Future<void> markAsPassedManually({

@@ -8,6 +8,7 @@ import '../init/app_init_provider.dart';
 import '../providers/application_reset_provider.dart';
 import '../providers/core_lexicon_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/spell_check_provider.dart';
 import 'core_lexicon_service.dart';
 import 'application_prefs_snapshot.dart';
 import 'settings_service.dart';
@@ -70,5 +71,8 @@ class ApplicationResetService {
     ref.invalidate(databaseBackupSettingsProvider);
     ref.invalidate(backupSchedulerProvider);
     ref.read(callEntryProvider.notifier).reset();
+    // Ο πυρήνας λεξικού ακυρώθηκε παραπάνω: ξέπλυμα της αλυσίδας που τον
+    // παρακολουθεί, ώστε να μη μείνει «dirty» κρίκος για επόμενο build.
+    flushLexiconProviderChain(ref);
   }
 }

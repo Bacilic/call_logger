@@ -588,25 +588,6 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await refreshDirectoryCaches(ref, equipment: true);
   }
 
-  Future<void> deleteSelected() async {
-    if (state.selectedIds.isEmpty) return;
-    _settlePendingBulkUndo();
-    final toDelete = state.allUsers
-        .where((u) => u.id != null && state.selectedIds.contains(u.id))
-        .toList();
-    final dbDel = await DatabaseHelper.instance.database;
-    await UserRepository(dbDel).deleteUsers(state.selectedIds.toList());
-    await _refreshLookupCache();
-    if (!ref.mounted) return;
-    state = state.copyWith(
-      selectedIds: {},
-      lastDeleted: toDelete,
-      lastUserDeletionUndo: null,
-    );
-    await loadUsers();
-    await refreshDirectoryCaches(ref, equipment: true);
-  }
-
   /// Μετά από ατομική soft-delete εκτός notifier (μία συναλλαγή με τις
   /// διαθέσεις τηλεφώνων/εξοπλισμού): ενημερώνει μόνο UI/cache, χωρίς νέο
   /// γράψιμο στη βάση.
