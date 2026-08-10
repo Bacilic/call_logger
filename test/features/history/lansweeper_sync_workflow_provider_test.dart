@@ -136,8 +136,8 @@ void main() {
 
         final db = await DatabaseHelper.instance.database;
         final call = await CallsRepository(db).getCallById(callId);
-        expect(call!.issue, _kWorkflowTestMarker);
-        expect(call.issueRefined, _kDefaultSubmitInput.notes);
+        // Νέο συμβόλαιο (v43): το κείμενο του ticket ΑΝΤΙΚΑΘΙΣΤΑ την Περιγραφή.
+        expect(call!.issue, _kDefaultSubmitInput.notes);
         expect(call.solution, _kDefaultSubmitInput.solution);
         expect(call.refinedSource, CallRefinedSource.ai);
       },
@@ -163,7 +163,7 @@ void main() {
 
         final db = await DatabaseHelper.instance.database;
         final companion = await CallsRepository(db).getCallById(companionId);
-        expect(companion!.issueRefined, _kDefaultSubmitInput.notes);
+        expect(companion!.issue, _kDefaultSubmitInput.notes);
         expect(companion.solution, _kDefaultSubmitInput.solution);
       },
     );

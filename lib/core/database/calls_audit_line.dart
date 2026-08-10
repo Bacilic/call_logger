@@ -14,7 +14,6 @@ const List<String> kCallAuditFields = [
   'department_text',
   'equipment_text',
   'issue',
-  'issue_refined',
   'solution',
   'category_text',
   'category_id',

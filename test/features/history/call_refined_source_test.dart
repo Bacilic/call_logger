@@ -3,7 +3,6 @@
 //   flutter test test/features/history/call_refined_source_test.dart
 
 import 'package:call_logger/features/calls/models/call_refined_source.dart';
-import 'package:call_logger/features/history/widgets/call_refined_text_section.dart';
 import 'package:call_logger/features/history/widgets/lansweeper/lansweeper_ai_presenter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -58,10 +57,10 @@ void main() {
     });
   });
 
-  group('CallRefinedTextSection.provenanceLabel', () {
+  group('CallRefinedSource.provenanceLabel', () {
     test('προέλευση και στιγμή μαζί', () {
       expect(
-        CallRefinedTextSection.provenanceLabel(
+        CallRefinedSource.provenanceLabel(
           source: CallRefinedSource.aiEdited,
           refinedAt: '2026-07-15T13:24:00',
         ),
@@ -71,7 +70,7 @@ void main() {
 
     test('χωρίς χρονοσφραγίδα μένει μόνο η προέλευση', () {
       expect(
-        CallRefinedTextSection.provenanceLabel(
+        CallRefinedSource.provenanceLabel(
           source: CallRefinedSource.ai,
           refinedAt: null,
         ),
@@ -81,7 +80,7 @@ void main() {
 
     test('άγνωστη προέλευση χωρίς στιγμή δεν εμφανίζει τίποτα', () {
       expect(
-        CallRefinedTextSection.provenanceLabel(source: null, refinedAt: null),
+        CallRefinedSource.provenanceLabel(source: null, refinedAt: null),
         isEmpty,
       );
     });

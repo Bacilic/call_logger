@@ -55,6 +55,29 @@ abstract final class LansweeperReportItemMapper {
         .join('\n');
   }
 
+  /// Οι λύσεις των επιλεγμένων κλήσεων, όπως ακριβώς αθροίζονται οι περιγραφές.
+  ///
+  /// Κλήσεις χωρίς λύση **παραλείπονται** αντί να μπουν με παύλα: εδώ το κενό
+  /// σημαίνει «δεν γράφτηκε ακόμα λύση», και μια σειρά από παύλες θα ήταν
+  /// θόρυβος που θα έφτανε αυτούσιος στο ticket. Όταν καμία δεν έχει λύση, το
+  /// πεδίο μένει κενό — έτοιμο να γραφτεί από την αρχή.
+  static String combinedSelectedSolutions(List<ReportCallItem> selected) {
+    if (selected.isEmpty) return '';
+    if (selected.length == 1) {
+      return (selected.first.call.solution ?? '').trim();
+    }
+    final parts = <String>[];
+    for (final item in selected) {
+      final solution = (item.call.solution ?? '').trim();
+      if (solution.isEmpty) continue;
+      final date = DateFormat(
+        'dd/MM/yyyy HH:mm',
+      ).format(_callDateTime(item.call));
+      parts.add('[$date] ${item.caller}: $solution');
+    }
+    return parts.join('\n');
+  }
+
   static String combinedAiIssue(List<ReportCallItem> selected) {
     if (selected.isEmpty) return '';
     if (selected.length == 1) {

@@ -58,6 +58,8 @@ abstract final class AuditDiffHelper {
     'category_text': 'κατηγορία',
     'category_id': 'κατηγορία',
     'issue': 'θέμα',
+    // Η στήλη issue_refined καταργήθηκε (v43)· η ετικέτα μένει για τις παλιές
+    // εγγραφές του Ιστορικού που την αναφέρουν.
     'issue_refined': 'αναλυτική περιγραφή',
     'solution': 'λύση',
     'topic': 'τίτλος άρθρου',

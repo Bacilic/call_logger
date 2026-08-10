@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/services/ai_ticket_suggestion_service.dart';
+import '../../../core/utils/run_after_next_frame.dart';
 import '../../knowledge/providers/knowledge_provider.dart';
 import '../../knowledge/services/knowledge_prompt_context.dart';
 import '../providers/ai_ticket_suggestion_provider.dart';
@@ -12,7 +13,6 @@ import 'lansweeper/lansweeper_ai_presenter.dart';
 import 'lansweeper/lansweeper_ai_prompt_preview_dialog.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper_report_dialog.dart';
-import 'lansweeper_report_knowledge.dart';
 
 /// Προσυμπλήρωση φόρμας και προτάσεις AI (Gemini) με cooldown/αυτόματη επανυποβολή.
 ///
@@ -22,36 +22,69 @@ class LansweeperReportAi {
 
   final LansweeperReportDialogState host;
 
+  /// Προσυμπληρώνει τη φόρμα από τις επιλεγμένες κλήσεις.
+  ///
+  /// Καλείται **μέσα από το build** του διαλόγου, μόλις αλλάξει η επιλογή. Η
+  /// γραφή σε `TextEditingController` ειδοποιεί τους ακροατές του, οπότε εκεί
+  /// είναι απαγορευμένη: όποιος ακούει θα ζητούσε ανανέωση μέσα σε φάση
+  /// χτισίματος και η εφαρμογή θα έπεφτε με «setState() called during build».
+  /// Το κλειδί μπαίνει **συγχρόνως** (αλλιώς θα προγραμματίζαμε την ίδια
+  /// προσυμπλήρωση σε κάθε ενδιάμεσο frame), η γραφή αναβάλλεται.
   void prefillForm(ReportCallItem primary, List<ReportCallItem> selected) {
     final signature = LansweeperReportItemMapper.selectedKeysSignature(
       selected,
     );
     if (host.lastPrefilledKey == signature) return;
     host.lastPrefilledKey = signature;
-    final category = (primary.call.category ?? '').trim();
-    final id = primary.call.id;
-    host.titleController.text = LansweeperAiPresenter.prefillTitle(
-      category: category,
-      id: id,
+
+    final title = LansweeperAiPresenter.prefillTitle(
+      category: (primary.call.category ?? '').trim(),
+      id: primary.call.id,
     );
-    host.notesController.text =
-        LansweeperReportItemMapper.combinedSelectedNotes(selected);
-    host.solutionController.text = '';
-    // Άλλη επιλογή κλήσεων, άλλο περιστατικό: η προηγούμενη πρόταση ΤΝ δεν το
-    // αφορά, οπότε ό,τι σταλεί από δω και πέρα μετράει ως χειρόγραφο.
-    host.aiSuggestedNotes = null;
-    host.aiSuggestedSolution = null;
+    final notes = LansweeperReportItemMapper.combinedSelectedNotes(selected);
+    // Η λύση φορτώνεται από τις ίδιες τις κλήσεις, όπως η περιγραφή: από τη
+    // στιγμή που η καρτέλα επεξεργασίας δέχεται λύση, η φόρμα δεν είναι πια η
+    // μόνη πηγή της. Καρφωτό κενό εδώ σήμαινε ότι δουλεμένη λύση δεν έφτανε
+    // ποτέ στο ticket και ότι το «Αποθήκευση ως γνώση» έμενε ανενεργό.
+    final solution = LansweeperReportItemMapper.combinedSelectedSolutions(
+      selected,
+    );
+
+    runNowOrAfterFrame(() {
+      if (!host.mounted) return;
+      host.titleController.text = title;
+      host.notesController.text = notes;
+      host.solutionController.text = solution;
+      // Άλλη επιλογή κλήσεων, άλλο περιστατικό: η προηγούμενη πρόταση ΤΝ δεν το
+      // αφορά, οπότε ό,τι σταλεί από δω και πέρα μετράει ως χειρόγραφο.
+      host.aiSuggestedNotes = null;
+      host.aiSuggestedSolution = null;
+    });
+  }
+
+  /// Το ερώτημα αναζήτησης γνώσης: τα κείμενα των κλήσεων, χωρίς ημερομηνίες
+  /// και ονόματα.
+  ///
+  /// Τα άρθρα κρατούν το σύμπτωμα στη γλώσσα του καλούντα· ένα «[16/07 07:25]
+  /// Φιλιώ Γκίλλα:» μπροστά θα το έδενε σε ένα περιστατικό και θα χαλούσε το
+  /// ταίριασμα.
+  static String _knowledgeQueryOf(List<ReportCallItem> selected) {
+    final parts = <String>[];
+    for (final item in selected) {
+      final issue = (item.call.issue ?? '').trim();
+      if (issue.isEmpty || parts.contains(issue)) continue;
+      parts.add(issue);
+    }
+    return parts.join('\n');
   }
 
   /// Τα σχετικά άρθρα Βάσης Γνώσης, έτοιμα για το `{Γνώση}` της προτροπής.
   ///
-  /// Το ερώτημα είναι το **ωμό** κείμενο της κλήσης: τα άρθρα κρατούν το
-  /// σύμπτωμα στη γλώσσα του καλούντα, οπότε εκεί ταιριάζουν. Αν το ταίριασμα
-  /// αποτύχει, η προτροπή φεύγει όπως πάντα — η γνώση είναι μπόνους, όχι
-  /// προϋπόθεση, και δεν επιτρέπεται να μπλοκάρει την πρόταση ΤΝ.
+  /// Αν το ταίριασμα αποτύχει, η προτροπή φεύγει όπως πάντα — η γνώση είναι
+  /// μπόνους, όχι προϋπόθεση, και δεν επιτρέπεται να μπλοκάρει την πρόταση ΤΝ.
   Future<String> _knowledgeContextFor(List<ReportCallItem> selected) async {
     if (selected.isEmpty) return '';
-    final query = LansweeperReportKnowledge.rawSymptomOf(selected);
+    final query = _knowledgeQueryOf(selected);
     if (query.trim().isEmpty) return '';
     try {
       final articles = await host.ref.read(

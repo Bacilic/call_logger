@@ -72,7 +72,7 @@ Future<void> _fillValidCallForm(
   final notesFinder = find.byWidgetPredicate(
     (w) =>
         w is TextField &&
-        (w.decoration?.hintText?.contains('Σημειώσεις') ?? false),
+        (w.decoration?.hintText?.contains('Περιγραφή κλήσης') ?? false),
   );
   await tester.tap(notesFinder);
   await pumpUntilSettled(tester);

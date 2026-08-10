@@ -314,7 +314,7 @@ class LansweeperSyncForm extends ConsumerWidget {
                       : 'Κρατά το σύμπτωμα και τη λύση ως άρθρο, για την επόμενη φορά που θα εμφανιστεί το ίδιο',
                   child: TextButton.icon(
                     onPressed: onSaveAsKnowledge,
-                    icon: const Icon(Icons.menu_book_outlined, size: 18),
+                    icon: const Icon(Icons.healing, size: 18),
                     label: const Text('Αποθήκευση ως γνώση'),
                   ),
                 ),

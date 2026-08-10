@@ -47,7 +47,10 @@ import 'database_foreign_keys.dart';
 /// το εξευγενισμένο κείμενο που φεύγει προς Lansweeper επιστρέφει στην κλήση.
 /// v42: ο `knowledge_base` γίνεται πραγματική Βάση Γνώσης (σύμπτωμα, κατηγορία,
 /// κλήση προέλευσης, μετρητής χρήσης, ευρετήριο αναζήτησης).
-const int databaseSchemaVersionV1 = 42;
+/// v43: η `calls.issue_refined` καταργείται — κάθε κλήση έχει ΜΙΑ Περιγραφή
+/// (`issue`), που η φόρμα Lansweeper αντικαθιστά με το καθαρό κείμενο· όπου
+/// υπήρχε καθαρό, γίνεται η νέα τιμή του `issue` και το ευρετήριο ξαναχτίζεται.
+const int databaseSchemaVersionV1 = 43;
 
 /// Ο πίνακας της Βάσης Γνώσης: μία «συνταγή» ανά είδος βλάβης.
 ///
@@ -96,7 +99,6 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         department_text TEXT,
         equipment_text TEXT,
         issue TEXT,
-        issue_refined TEXT,
         solution TEXT,
         refined_source TEXT,
         refined_at TEXT,
@@ -1114,6 +1116,8 @@ String _fieldLabelForMigration(String entityType, String field) {
     'category_text': 'κατηγορια',
     'category_id': 'κατηγορια',
     'issue': 'θεμα',
+    // Η στήλη issue_refined καταργήθηκε (v43), αλλά παλιές εγγραφές του
+    // Ιστορικού την αναφέρουν — η ετικέτα μένει για να αποδίδονται σωστά.
     'issue_refined': 'αναλυτικη περιγραφη',
     'solution': 'λυση',
     'topic': 'τιτλοσ αρθρου',

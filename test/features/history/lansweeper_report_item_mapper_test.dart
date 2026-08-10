@@ -11,6 +11,7 @@ CallModel _call({
   int? id,
   String? callerText,
   String? issue,
+  String? solution,
   String? equipmentText,
   String? departmentText,
   String? category,
@@ -23,6 +24,7 @@ CallModel _call({
     id: id,
     callerText: callerText,
     issue: issue,
+    solution: solution,
     equipmentText: equipmentText,
     departmentText: departmentText,
     category: category,
@@ -164,6 +166,100 @@ void main() {
       );
       expect(combined, contains('[16/03/2026 11:00] Μαρία: Δεύτερο'));
       expect(combined.split('\n'), hasLength(2));
+    });
+  });
+
+  // Η λύση της κλήσης ήταν καρφωτά κενή στη φόρμα: λύση γραμμένη στην καρτέλα
+  // επεξεργασίας δεν έφτανε ποτέ στο ticket, και το «Αποθήκευση ως γνώση» έμενε
+  // ανενεργό επειδή έβλεπε άδειο πεδίο.
+  group('LansweeperReportItemMapper.combinedSelectedSolutions', () {
+    test('μονή επιλογή: επιστρέφει τη λύση ως έχει', () {
+      final selected = <ReportCallItem>[
+        _item(key: 'a', call: _call(solution: '  Επανεκκίνηση οδηγών.  ')),
+      ];
+      expect(
+        LansweeperReportItemMapper.combinedSelectedSolutions(selected),
+        'Επανεκκίνηση οδηγών.',
+      );
+    });
+
+    test('κλήση χωρίς λύση δίνει κενό — όχι παύλα', () {
+      final selected = <ReportCallItem>[_item(key: 'a', call: _call())];
+      expect(
+        LansweeperReportItemMapper.combinedSelectedSolutions(selected),
+        isEmpty,
+      );
+    });
+
+    test('πολλαπλή επιλογή: αθροίζει με πρόθεμα, όπως οι περιγραφές', () {
+      final selected = <ReportCallItem>[
+        _item(
+          key: 'a',
+          call: _call(
+            date: '2026-03-15',
+            time: '10:30:00',
+            solution: 'Επανεκκίνηση οδηγών.',
+          ),
+          caller: 'Γιάννης',
+        ),
+        _item(
+          key: 'b',
+          call: _call(
+            date: '2026-03-16',
+            time: '11:00:00',
+            solution: 'Αντικατάσταση καλωδίου.',
+          ),
+          caller: 'Μαρία',
+        ),
+      ];
+
+      final combined = LansweeperReportItemMapper.combinedSelectedSolutions(
+        selected,
+      );
+
+      expect(combined, contains('[15/03/2026 10:30] Γιάννης: Επανεκκίνηση οδηγών.'));
+      expect(
+        combined,
+        contains('[16/03/2026 11:00] Μαρία: Αντικατάσταση καλωδίου.'),
+      );
+      expect(combined.split('\n'), hasLength(2));
+    });
+
+    test('οι κλήσεις χωρίς λύση παραλείπονται από το άθροισμα', () {
+      final selected = <ReportCallItem>[
+        _item(
+          key: 'a',
+          call: _call(date: '2026-03-15', time: '10:30:00'),
+          caller: 'Γιάννης',
+        ),
+        _item(
+          key: 'b',
+          call: _call(
+            date: '2026-03-16',
+            time: '11:00:00',
+            solution: 'Αντικατάσταση καλωδίου.',
+          ),
+          caller: 'Μαρία',
+        ),
+      ];
+
+      final combined = LansweeperReportItemMapper.combinedSelectedSolutions(
+        selected,
+      );
+
+      expect(combined, isNot(contains('Γιάννης')));
+      expect(combined.split('\n'), hasLength(1));
+    });
+
+    test('καμία λύση σε πολλές κλήσεις δίνει κενό', () {
+      final selected = <ReportCallItem>[
+        _item(key: 'a', call: _call(date: '2026-03-15', time: '10:30:00')),
+        _item(key: 'b', call: _call(date: '2026-03-16', time: '11:00:00')),
+      ];
+      expect(
+        LansweeperReportItemMapper.combinedSelectedSolutions(selected),
+        isEmpty,
+      );
     });
   });
 

@@ -13,7 +13,6 @@ import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
 import '../../calls/models/call_refined_source.dart';
 import '../../calls/provider/smart_entity_selector_provider.dart';
-import 'call_refined_text_section.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_service_provider.dart';
@@ -45,15 +44,11 @@ class _CallEditDialog extends ConsumerStatefulWidget {
 class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     with DialogSnackbarHost {
   late final SpellCheckController _issueController;
-  late final SpellCheckController _refinedIssueController;
   late final SpellCheckController _solutionController;
   final TextEditingController _durationController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _timeController = TextEditingController();
 
-  /// Η ενότητα καθαρού κειμένου ανοίγει μόνη της όταν υπάρχει περιεχόμενο, και
-  /// με το κουμπί όταν θέλετε να γράψετε κάτι σε κλήση που δεν πήγε σε ticket.
-  bool _refinedSectionExpanded = false;
   bool _loading = true;
   bool _saving = false;
   bool _hardCloneBusy = false;
@@ -61,6 +56,13 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
 
   CallModel? _original;
   List<Task> _linkedTasks = const <Task>[];
+
+  /// Το ίχνος εξευγενισμού της Περιγραφής — «από ΤΝ · επεξεργασμένο · 10/08
+  /// 09:38». Κενό όταν η κλήση δεν πέρασε ποτέ από τη φόρμα Lansweeper.
+  String get _provenance => CallRefinedSource.provenanceLabel(
+    source: _original?.refinedSource,
+    refinedAt: _original?.refinedAt,
+  );
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   int? _categoryId;
@@ -70,7 +72,6 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
   void initState() {
     super.initState();
     _issueController = SpellCheckController();
-    _refinedIssueController = SpellCheckController();
     _solutionController = SpellCheckController();
     _load();
   }
@@ -78,7 +79,6 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
   @override
   void dispose() {
     _issueController.dispose();
-    _refinedIssueController.dispose();
     _solutionController.dispose();
     _durationController.dispose();
     _dateController.dispose();
@@ -113,11 +113,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     if (!mounted) return;
     _original = call;
     _issueController.text = call.issue ?? '';
-    _refinedIssueController.text = call.issueRefined ?? '';
     _solutionController.text = call.solution ?? '';
-    _refinedSectionExpanded =
-        _refinedIssueController.text.trim().isNotEmpty ||
-        _solutionController.text.trim().isNotEmpty;
     _durationController.text = call.duration?.toString() ?? '';
     _categoryId = call.categoryId;
     _categoryText = (call.category ?? '').trim();
@@ -237,28 +233,35 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     final departmentRaw = selector.departmentText.trim();
     final equipmentRaw = selector.equipmentText.trim();
     final issueRaw = _issueController.text.trim();
-    final refinedIssueRaw = _refinedIssueController.text.trim();
     final solutionRaw = _solutionController.text.trim();
     final categoryRaw = _categoryText.trim();
 
-    // Χειρόγραφο καθαρό κείμενο σε κλήση που δεν πέρασε ποτέ από ΤΝ: η
-    // προέλευση το δηλώνει, ώστε αργότερα να ξέρετε ποιανού είναι τα λόγια.
-    final hasRefinedText = refinedIssueRaw.isNotEmpty || solutionRaw.isNotEmpty;
-    final refinedChanged =
-        refinedIssueRaw != (_original!.issueRefined ?? '').trim() ||
+    // Το ίχνος εξευγενισμού ακολουθεί το κείμενο. Κλήση με ίχνος που
+    // διορθώνεται εδώ: το «από ΤΝ» γίνεται «επεξεργασμένο» και η χρονοσφραγίδα
+    // ανανεώνεται. Κλήση χωρίς ίχνος: αποκτά «χειρόγραφο» μόνο όταν γραφτεί
+    // λύση — σκέτη διόρθωση της Περιγραφής είναι επεξεργασία σημειώσεων, όχι
+    // εξευγενισμός, και δεν δικαιούται εικονίδιο στο Ιστορικό.
+    final textChanged =
+        issueRaw != (_original!.issue ?? '').trim() ||
         solutionRaw != (_original!.solution ?? '').trim();
-    final refinedSource = !hasRefinedText
-        ? null
-        : (refinedChanged
-              ? (_original!.refinedSource == null
-                    ? CallRefinedSource.manual
-                    : CallRefinedSource.aiEdited)
-              : _original!.refinedSource);
-    final refinedAt = !hasRefinedText
-        ? null
-        : (refinedChanged
-              ? DateTime.now().toIso8601String()
-              : _original!.refinedAt);
+    final hasTrace = _original!.refinedSource != null;
+    String? refinedSource;
+    String? refinedAt;
+    if (hasTrace) {
+      // Μόνο το ανέγγιχτο «από ΤΝ» προάγεται σε «επεξεργασμένο»· το χειρόγραφο
+      // και το ήδη επεξεργασμένο κρατούν τον χαρακτηρισμό τους.
+      refinedSource = textChanged && _original!.refinedSource == CallRefinedSource.ai
+          ? CallRefinedSource.aiEdited
+          : _original!.refinedSource;
+      refinedAt = textChanged
+          ? DateTime.now().toIso8601String()
+          : _original!.refinedAt;
+    } else if (solutionRaw.isNotEmpty) {
+      refinedSource = CallRefinedSource.manual;
+      refinedAt = textChanged
+          ? DateTime.now().toIso8601String()
+          : _original!.refinedAt;
+    }
 
     final updated = CallModel(
       id: _original!.id,
@@ -273,7 +276,6 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       departmentText: departmentRaw.isEmpty ? null : departmentRaw,
       equipmentText: equipmentRaw.isEmpty ? null : equipmentRaw,
       issue: issueRaw.isEmpty ? null : issueRaw,
-      issueRefined: refinedIssueRaw.isEmpty ? null : refinedIssueRaw,
       solution: solutionRaw.isEmpty ? null : solutionRaw,
       refinedSource: refinedSource,
       refinedAt: refinedAt,
@@ -528,24 +530,47 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                           ),
                         ),
                         const SizedBox(height: 12),
+                        if (_provenance.isNotEmpty) ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Icon(
+                                Icons.auto_awesome_outlined,
+                                size: 14,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _provenance,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                        ],
                         ResizableTextArea(
                           controller: _issueController,
                           minLines: 2,
                           decoration: const InputDecoration(
-                            labelText: 'Σημειώσεις',
+                            labelText: 'Περιγραφή κλήσης',
                             border: OutlineInputBorder(),
                             alignLabelWithHint: true,
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        CallRefinedTextSection(
-                          problemController: _refinedIssueController,
-                          solutionController: _solutionController,
-                          expanded: _refinedSectionExpanded,
-                          onExpand: () =>
-                              setState(() => _refinedSectionExpanded = true),
-                          refinedSource: original?.refinedSource,
-                          refinedAt: original?.refinedAt,
+                        const SizedBox(height: 12),
+                        ResizableTextArea(
+                          controller: _solutionController,
+                          minLines: 2,
+                          decoration: const InputDecoration(
+                            labelText: 'Λύση',
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         if (historyEntityIsDeleted(

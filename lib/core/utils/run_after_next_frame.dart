@@ -25,3 +25,24 @@ Future<void> runAfterNextFrame(void Function() action) {
   SchedulerBinding.instance.ensureVisualUpdate();
   return completer.future;
 }
+
+/// Εκτελεί το [action] **τώρα** όταν είναι ασφαλές, αλλιώς μετά το τρέχον frame.
+///
+/// Το «ασφαλές» είναι ένα και μόνο ερώτημα: τρέχει αυτή τη στιγμή φάση
+/// χτισίματος; Αν ναι, κάθε `setState` / `invalidate` / γραφή σε controller που
+/// έχει ακροατές πετάει «setState() called during build» — και η εφαρμογή
+/// κατεβαίνει στην οθόνη σφάλματος. Ο έλεγχος γράφεται **εδώ μία φορά**, ώστε
+/// κανένας καλών να μη χρειάζεται να τον θυμάται.
+///
+/// Προτιμάται από το σκέτο [runAfterNextFrame] όταν ο καλών μπορεί να βρίσκεται
+/// είτε μέσα είτε έξω από build: εκτός φάσης δεν χάνεται frame.
+void runNowOrAfterFrame(void Function() action) {
+  final phase = SchedulerBinding.instance.schedulerPhase;
+  final safeNow =
+      phase == SchedulerPhase.idle || phase == SchedulerPhase.postFrameCallbacks;
+  if (safeNow) {
+    action();
+    return;
+  }
+  unawaited(runAfterNextFrame(action));
+}

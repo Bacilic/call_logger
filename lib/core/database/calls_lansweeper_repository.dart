@@ -37,7 +37,7 @@ class CallsLansweeperRepository {
   /// `refined_at` μένουν έξω για τον ίδιο λόγο με το `lansweeper_last_sync_at`:
   /// αλλάζουν σε κάθε αποστολή και θα έπνιγαν το Ιστορικό σε θόρυβο.
   static const List<String> _refinedAuditedFields = [
-    'issue_refined',
+    'issue',
     'solution',
   ];
 
@@ -148,9 +148,11 @@ class CallsLansweeperRepository {
   /// η κλήση έμενε για πάντα με τη μία τηλεγραφική γραμμή που γράφτηκε βιαστικά
   /// στο τηλέφωνο, και η λύση δεν υπήρχε πουθενά στην εφαρμογή.
   ///
-  /// Το `issue` **δεν** αγγίζεται ποτέ: είναι ο τρόπος που ο χρήστης περιγράφει
-  /// το πρόβλημα όταν τηλεφωνεί, δηλαδή το κλειδί με το οποίο θα αναγνωριστεί
-  /// το ίδιο περιστατικό την επόμενη φορά.
+  /// Το καθαρό κείμενο ΑΝΤΙΚΑΘΙΣΤΑ την Περιγραφή (`issue`): από την v43 κάθε
+  /// κλήση έχει ένα και μόνο κείμενο — το καλύτερο διαθέσιμο. Το πρόχειρο του
+  /// τηλεφώνου χάνεται οριστικά με ρητή απόφαση (10/08/2026): το γράφει μόνο ο
+  /// χρήστης, δυσλεξικά, και μετά τον εξευγενισμό δεν έχει αξία για κανέναν.
+  /// Τα `refined_source`/`refined_at` κρατούν το ίχνος του πώς και πότε.
   ///
   /// Όλες οι [callIds] παίρνουν το ίδιο κείμενο. Όταν πολλές κλήσεις μπαίνουν
   /// σε ένα ticket, το κείμενο γράφτηκε για όλες μαζί — αφήνοντας τις υπόλοιπες
@@ -164,15 +166,16 @@ class CallsLansweeperRepository {
   }) async {
     final trimmedProblem = problem.trim();
     final trimmedSolution = solution.trim();
-    // Άδεια φόρμα δεν σβήνει ό,τι έγραψε προηγούμενη αποστολή.
+    // Άδεια φόρμα δεν σβήνει ό,τι έγραψε προηγούμενη αποστολή — και άδειο
+    // επιμέρους πεδίο δεν αδειάζει ποτέ την Περιγραφή ή τη λύση της κλήσης.
     if (trimmedProblem.isEmpty && trimmedSolution.isEmpty) return;
 
     final ids = callIds.toSet().toList()..sort();
     if (ids.isEmpty) return;
 
     final payload = <String, Object?>{
-      'issue_refined': trimmedProblem.isEmpty ? null : trimmedProblem,
-      'solution': trimmedSolution.isEmpty ? null : trimmedSolution,
+      if (trimmedProblem.isNotEmpty) 'issue': trimmedProblem,
+      if (trimmedSolution.isNotEmpty) 'solution': trimmedSolution,
       'refined_source': source,
       'refined_at': refinedAt ?? DateTime.now().toIso8601String(),
     };

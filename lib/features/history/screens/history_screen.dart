@@ -16,6 +16,7 @@ import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/utils/call_duration_format.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
 import '../../../core/widgets/app_asset_image.dart';
+import '../../calls/models/call_refined_source.dart';
 import '../models/lansweeper_sync_state.dart';
 import '../providers/history_application_audit_view_provider.dart';
 import '../providers/history_provider.dart';
@@ -1038,7 +1039,7 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     'Τμήμα',
     'Εξοπλισμός',
     'Κατηγορία',
-    'Σημειώσεις',
+    'Περιγραφή',
     'Διάρκεια',
     'Συνδέσεις',
   ];
@@ -1077,13 +1078,8 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     super.dispose();
   }
 
-  /// Τι δείχνει η στήλη «Σημειώσεις»: το καθαρό κείμενο όταν υπάρχει, αλλιώς το
-  /// ωμό. Κοιτώντας πίσω, εκείνο που ψάχνει κανείς είναι η διατυπωμένη μορφή —
-  /// το ωμό μένει διαθέσιμο στο tooltip, δεν χάνεται.
-  String _notesDisplay(Map<String, dynamic> row) {
-    final refined = _str(row['issue_refined']);
-    return refined.isEmpty ? _str(row['issue']) : refined;
-  }
+  /// Η στήλη «Περιγραφή»: το ένα και μοναδικό κείμενο της κλήσης (v43).
+  String _notesDisplay(Map<String, dynamic> row) => _str(row['issue']);
 
   String _userDisplay(Map<String, dynamic> row) {
     final first = row['user_first_name'] as String? ?? '';
@@ -1357,7 +1353,10 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     final category = _str(row['category']);
     final categoryDeleted = historyEntityIsDeleted(row['category_is_deleted']);
     final issue = _str(row['issue']);
-    final issueRefined = _str(row['issue_refined']);
+    final provenance = CallRefinedSource.provenanceLabel(
+      source: row['refined_source'] as String?,
+      refinedAt: row['refined_at'] as String?,
+    );
     final durationStr = _formatDuration(row['duration']);
 
     final bodyStyle = theme.textTheme.bodyMedium;
@@ -1442,7 +1441,9 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
             _dataCell(
               width: columnWidths[7],
               horizontalPadding: horizontalPadding,
-              child: issueRefined.isEmpty
+              // Το εικονίδιο σημαίνει «η Περιγραφή πέρασε από εξευγενισμό» και
+              // το tooltip του λέει πώς και πότε — το πρόχειρο δεν υπάρχει πια.
+              child: provenance.isEmpty
                   ? EllipsisTooltipText(
                       text: issue.isEmpty ? '—' : issue,
                       style: bodyStyle,
@@ -1451,19 +1452,19 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(right: 6),
-                          child: Icon(
-                            Icons.auto_awesome_outlined,
-                            size: 14,
-                            color: theme.colorScheme.primary,
+                          child: Tooltip(
+                            message: provenance,
+                            child: Icon(
+                              Icons.auto_awesome_outlined,
+                              size: 14,
+                              color: theme.colorScheme.primary,
+                            ),
                           ),
                         ),
                         Expanded(
                           child: EllipsisTooltipText(
-                            text: issueRefined,
+                            text: issue.isEmpty ? '—' : issue,
                             style: bodyStyle,
-                            tooltipMessage: issue.isEmpty
-                                ? issueRefined
-                                : 'Όπως γράφτηκε στην κλήση:\n$issue',
                           ),
                         ),
                       ],

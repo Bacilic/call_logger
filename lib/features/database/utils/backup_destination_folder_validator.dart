@@ -125,7 +125,18 @@ class BackupDestinationFolderValidator {
       );
     }
 
-    if (!dir.existsSync()) {
+    bool exists;
+    try {
+      exists = dir.existsSync();
+    } on FileSystemException {
+      // Άφταστη διαδρομή (π.χ. UNC εκτός δικτύου, OS error 53): στα Windows το
+      // existsSync ΠΕΤΑΕΙ αντί να απαντήσει false. Για τον χρήστη η κατάσταση
+      // είναι μία — «ο φάκελος δεν υπάρχει τώρα».
+      return const BackupDestinationValidationResult(
+        BackupDestinationValidationKind.missingDirectory,
+      );
+    }
+    if (!exists) {
       return const BackupDestinationValidationResult(
         BackupDestinationValidationKind.missingDirectory,
       );
@@ -170,27 +181,38 @@ class BackupDestinationFolderValidator {
       );
     }
 
-    final dir = Directory(dest);
-    if (!await dir.exists()) {
+    // Ολόκληρη η προσπέλαση υπό προστασία: σε άφταστη διαδρομή δικτύου το
+    // exists() ΠΕΤΑΕΙ (δεν απαντά false), και το list() μπορεί να κοπεί στη
+    // μέση αν το δίκτυο χαθεί κατά την απαρίθμηση. Και στις δύο περιπτώσεις η
+    // απάντηση προς τους καλούντες είναι μία: ο φάκελος δεν είναι διαθέσιμος.
+    var count = 0;
+    DateTime? newest;
+    try {
+      final dir = Directory(dest);
+      if (!await dir.exists()) {
+        return BackupDestinationContentResult(
+          kind: BackupDestinationContentKind.folderMissing,
+          dbBaseName: dbBaseName,
+        );
+      }
+
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        if (!isBackupArtifactFileName(name, dbBaseName)) continue;
+        count++;
+        try {
+          final modified = await entity.lastModified();
+          if (newest == null || modified.isAfter(newest)) {
+            newest = modified;
+          }
+        } catch (_) {}
+      }
+    } on FileSystemException {
       return BackupDestinationContentResult(
         kind: BackupDestinationContentKind.folderMissing,
         dbBaseName: dbBaseName,
       );
-    }
-
-    var count = 0;
-    DateTime? newest;
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is! File) continue;
-      final name = p.basename(entity.path);
-      if (!isBackupArtifactFileName(name, dbBaseName)) continue;
-      count++;
-      try {
-        final modified = await entity.lastModified();
-        if (newest == null || modified.isAfter(newest)) {
-          newest = modified;
-        }
-      } catch (_) {}
     }
 
     if (count == 0) {
@@ -215,23 +237,28 @@ class BackupDestinationFolderValidator {
     final dest = destinationDirectory.trim();
     if (dest.isEmpty) return null;
 
-    final dir = Directory(dest);
-    if (!await dir.exists()) return null;
-
     File? latest;
     DateTime? newest;
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is! File) continue;
-      final name = p.basename(entity.path);
-      if (!name.toLowerCase().endsWith('.zip')) continue;
-      if (!isBackupArtifactFileName(name, dbBaseName)) continue;
-      try {
-        final modified = await entity.lastModified();
-        if (newest == null || modified.isAfter(newest)) {
-          newest = modified;
-          latest = entity;
-        }
-      } catch (_) {}
+    try {
+      final dir = Directory(dest);
+      if (!await dir.exists()) return null;
+
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        if (!name.toLowerCase().endsWith('.zip')) continue;
+        if (!isBackupArtifactFileName(name, dbBaseName)) continue;
+        try {
+          final modified = await entity.lastModified();
+          if (newest == null || modified.isAfter(newest)) {
+            newest = modified;
+            latest = entity;
+          }
+        } catch (_) {}
+      }
+    } on FileSystemException {
+      // Άφταστος προορισμός = δεν υπάρχει αντίγραφο προς εύρεση.
+      return null;
     }
     return latest;
   }

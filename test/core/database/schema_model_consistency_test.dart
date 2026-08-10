@@ -85,7 +85,6 @@ void main() {
           departmentText: 'dept',
           equipmentText: 'eq',
           issue: 'issue',
-          issueRefined: 'refined issue',
           solution: 'solution',
           refinedSource: CallRefinedSource.ai,
           refinedAt: '2026-01-01T12:00:00',

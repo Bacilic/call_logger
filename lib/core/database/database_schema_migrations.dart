@@ -214,6 +214,9 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 42 && newVersion >= 42) {
     await migrateDatabaseToV42(db);
   }
+  if (oldVersion < 43 && newVersion >= 43) {
+    await migrateDatabaseToV43(db);
+  }
 }
 
 /// v39: ανακατασκευή `search_text` μετά τη συμπλήρωση των ελληνικών ετικετών
@@ -311,6 +314,38 @@ Future<void> migrateDatabaseToV42(Database db) async {
     await db.execute(
       'ALTER TABLE knowledge_base ADD COLUMN times_used INTEGER NOT NULL DEFAULT 0',
     );
+  }
+}
+
+/// v43: κάθε κλήση έχει ΜΙΑ Περιγραφή — η `issue_refined` καταργείται.
+///
+/// Το μοντέλο «ωμό + καθαρό δίπλα-δίπλα» της v41 αναιρείται συνειδητά
+/// (απόφαση 10/08/2026): το ωμό το γράφει μόνο ο χρήστης, βιαστικά και
+/// δυσλεξικά, και από τη στιγμή που υπάρχει καθαρό κείμενο δεν έχει αξία για
+/// κανέναν. Όπου υπάρχει καθαρό, γίνεται η νέα τιμή του `issue` — το πρόχειρο
+/// χάνεται οριστικά — και το ευρετήριο αναζήτησης ξαναχτίζεται ώστε να
+/// δεικτοδοτεί μόνο το κείμενο που πλέον υπάρχει.
+Future<void> migrateDatabaseToV43(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(calls)');
+  final names = info.map((r) => r['name'] as String).toSet();
+  if (!names.contains('issue_refined')) return;
+
+  // Τα ids ΠΡΙΝ από την αντικατάσταση: μετά το DROP δεν υπάρχει τρόπος να
+  // ξεχωρίσεις ποιες κλήσεις χρειάζονται νέο ευρετήριο.
+  final affected = await db.rawQuery(
+    "SELECT id FROM calls WHERE issue_refined IS NOT NULL AND trim(issue_refined) != ''",
+  );
+  await db.execute(
+    "UPDATE calls SET issue = issue_refined "
+    "WHERE issue_refined IS NOT NULL AND trim(issue_refined) != ''",
+  );
+  await db.execute('ALTER TABLE calls DROP COLUMN issue_refined');
+
+  final searchIndex = CallsSearchIndex(db);
+  for (final row in affected) {
+    final id = row['id'];
+    if (id is! int) continue;
+    await searchIndex.rebuildSearchIndexForCallIdInTxn(db, id);
   }
 }
 

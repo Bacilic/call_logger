@@ -11,6 +11,7 @@ import '../../tasks/models/task_filter.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import '../../tasks/providers/tasks_provider.dart';
 import '../models/call_model.dart';
+import '../models/call_refined_source.dart';
 import 'call_header_provider.dart';
 import 'call_mutation_refresh.dart';
 
@@ -18,6 +19,7 @@ import 'call_mutation_refresh.dart';
 class CallEntryState {
   CallEntryState({
     this.notes = '',
+    this.solution = '',
     this.category = '',
     this.categoryId,
     this.isPending = false,
@@ -28,6 +30,11 @@ class CallEntryState {
   });
 
   final String notes;
+
+  /// Η λύση της κλήσης, από τη ζώνη «Λύση» του χαρτιού σημειώσεων. Γράφεται
+  /// στην κλήση από τη γέννησή της — δεν περιμένει τη φόρμα Lansweeper.
+  final String solution;
+
   final String category;
   final int? categoryId;
   final bool isPending;
@@ -44,6 +51,7 @@ class CallEntryState {
 
   CallEntryState copyWith({
     String? notes,
+    String? solution,
     String? category,
     int? categoryId,
     bool? isPending,
@@ -54,6 +62,7 @@ class CallEntryState {
   }) {
     return CallEntryState(
       notes: notes ?? this.notes,
+      solution: solution ?? this.solution,
       category: category ?? this.category,
       categoryId: categoryId ?? this.categoryId,
       isPending: isPending ?? this.isPending,
@@ -145,6 +154,10 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     );
   }
 
+  void setSolution(String value) {
+    state = state.copyWith(solution: value);
+  }
+
   void setCategory(String value, {int? categoryId}) {
     state = state.copyWith(category: value, categoryId: categoryId);
   }
@@ -185,6 +198,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     final header = ref.read(callHeaderProvider);
     final user = header.selectedCaller;
     final notes = state.notes.trim();
+    final solution = state.solution.trim();
     final callerId = header.selectedCaller?.id;
     final callerTextRaw = header.callerDisplayText.trim();
     final callerText = callerId != null
@@ -214,6 +228,12 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
             ? null
             : header.equipmentText.trim(),
         issue: notes.isEmpty ? null : notes,
+        solution: solution.isEmpty ? null : solution,
+        // Ίδιο συμβόλαιο ιχνών με την καρτέλα επεξεργασίας: λύση γραμμένη με
+        // το χέρι, χωρίς πέρασμα από ΤΝ, σημαίνεται «χειρόγραφο» — έτσι το
+        // Ιστορικό ξεχωρίζει ποιανού είναι τα λόγια.
+        refinedSource: solution.isEmpty ? null : CallRefinedSource.manual,
+        refinedAt: solution.isEmpty ? null : DateTime.now().toIso8601String(),
         category: state.category.isEmpty ? null : state.category,
         categoryId: state.categoryId,
         status: createsPendingTask ? 'pending' : 'completed',
@@ -368,11 +388,12 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
     }
   }
 
-  /// Επαναφορά όλων των πεδίων της φόρμας κλήσης (χρονόμετρο, πεδία, σημειώσεις, κατηγορία, checkbox).
+  /// Επαναφορά όλων των πεδίων της φόρμας κλήσης (χρονόμετρο, πεδία, σημειώσεις, λύση, κατηγορία, checkbox).
   void reset() {
     stopTimer();
     state = CallEntryState(
       notes: '',
+      solution: '',
       category: '',
       categoryId: null,
       isPending: false,

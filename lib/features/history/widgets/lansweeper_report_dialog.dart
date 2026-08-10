@@ -11,6 +11,7 @@ import '../../../core/widgets/compact_tooltip.dart';
 import '../../../core/widgets/dialog_snackbar_scope.dart';
 import '../../../core/widgets/app_asset_image.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
+import '../../../core/utils/run_after_next_frame.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/services/ai_prompt_template_controller.dart';
 import '../../../core/widgets/quick_call_fab.dart';
@@ -173,13 +174,41 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   }
 
   /// Σηματοδοτεί ανανέωση της αναφοράς (rebuild) — χρήση και από συνεργάτες.
+  ///
+  /// Το `setState` περνά από [runNowOrAfterFrame] ως **φράχτης**: οι συνεργάτες
+  /// του διαλόγου καλούνται και μέσα από το build (π.χ. η προσυμπλήρωση), και
+  /// ένα `setState` εκεί ρίχνει την εφαρμογή. Η ρίζα διορθώνεται στον εκάστοτε
+  /// καλούντα· εδώ μπαίνει η εγγύηση ότι κανένας μελλοντικός δεν θα την ξανανοίξει.
   void notifyReportChanged() {
-    if (mounted) setState(() {});
+    runNowOrAfterFrame(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Είχαν και τα δύο κείμενα περιεχόμενο στο τελευταίο χτίσιμο;
+  bool _formTextsWereFilled = false;
+
+  /// Ξαναχτίζει **μόνο** στη μετάβαση κενό↔γεμάτο, όχι σε κάθε χαρακτήρα.
+  ///
+  /// Το «Αποθήκευση ως γνώση» κρίνεται από τα κείμενα της φόρμας, αλλά κανείς
+  /// δεν παρακολουθούσε την πληκτρολόγηση: χειρόγραφη λύση άφηνε το κουμπί
+  /// κολλημένο σε «Συμπληρώστε τη Λύση», ενώ η πρόταση ΤΝ το ξεκλείδωνε επειδή
+  /// καλεί ρητά ανανέωση. Ο διάλογος κουβαλά ολόκληρη τη λίστα κλήσεων, οπότε
+  /// δεν ξαναχτίζεται ανά χαρακτήρα — μόνο όταν αλλάζει η απάντηση.
+  void _onFormTextChanged() {
+    final filled =
+        notesController.text.trim().isNotEmpty &&
+        solutionController.text.trim().isNotEmpty;
+    if (filled == _formTextsWereFilled) return;
+    _formTextsWereFilled = filled;
+    notifyReportChanged();
   }
 
   @override
   void initState() {
     super.initState();
+    notesController.addListener(_onFormTextChanged);
+    solutionController.addListener(_onFormTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       lansweeperApiUrlController.text = ref.read(lansweeperApiUrlProvider);
@@ -427,7 +456,9 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     geminiPrimaryModelController.dispose();
     geminiFallbackModelController.dispose();
     titleController.dispose();
+    notesController.removeListener(_onFormTextChanged);
     notesController.dispose();
+    solutionController.removeListener(_onFormTextChanged);
     solutionController.dispose();
     super.dispose();
   }

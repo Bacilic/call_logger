@@ -256,8 +256,11 @@ class MainShellState extends ConsumerState<MainShell> {
             showDuration: const Duration(seconds: 4),
             message:
                 'Οι λύσεις που έχετε κρατήσει από τις κλήσεις\nΣύμπτωμα και αντιμετώπιση, με αναζήτηση',
+            // Όχι βιβλίο: το Λεξικό κρατά ήδη το βιβλίο, και δύο βιβλία στην
+            // ίδια μπάρα ξεχωρίζουν μόνο σε γεμάτο/περίγραμμα — αδιόρατο στα
+            // 24px. Το τσιρότο λέει «λύση», όχι «ανάγνωσμα».
             child: const Icon(
-              Icons.menu_book_outlined,
+              Icons.healing,
               key: ValueKey('nav_rail_knowledge'),
             ),
           ),

@@ -14,7 +14,6 @@ class CallModel {
     this.departmentText,
     this.equipmentText,
     this.issue,
-    this.issueRefined,
     this.solution,
     this.refinedSource,
     this.refinedAt,
@@ -41,19 +40,20 @@ class CallModel {
   final String? departmentText;
   final String? equipmentText;
 
-  /// Ό,τι γράφτηκε στο τηλέφωνο, αυτούσιο. Δεν το ξαναγράφει ποτέ η ΤΝ.
+  /// Η Περιγραφή κλήσης — ένα κείμενο, το καλύτερο διαθέσιμο: ξεκινά ως
+  /// πρόχειρο του τηλεφώνου και η φόρμα Lansweeper το αντικαθιστά με το
+  /// καθαρό κείμενο του ticket.
   final String? issue;
-
-  /// Η καθαρή περιγραφή του προβλήματος, όπως έφυγε προς το Lansweeper.
-  final String? issueRefined;
 
   /// Τι έγινε για να λυθεί — υπάρχει μόνο εδώ και στο ticket.
   final String? solution;
 
-  /// Πώς προέκυψε το καθαρό κείμενο: [CallRefinedSource].
+  /// Πώς προέκυψε η Περιγραφή όταν πέρασε από εξευγενισμό: [CallRefinedSource].
+  /// Null σημαίνει «δεν πέρασε ποτέ» — η Περιγραφή είναι ό,τι γράφτηκε στην ώρα
+  /// της κλήσης.
   final String? refinedSource;
 
-  /// Πότε γράφτηκε το καθαρό κείμενο (ISO 8601).
+  /// Πότε γράφτηκε το εξευγενισμένο κείμενο (ISO 8601).
   final String? refinedAt;
   final String? category;
   final int? categoryId;
@@ -83,7 +83,6 @@ class CallModel {
       departmentText: map['department_text'] as String?,
       equipmentText: map['equipment_text'] as String?,
       issue: map['issue'] as String?,
-      issueRefined: map['issue_refined'] as String?,
       solution: map['solution'] as String?,
       refinedSource: map['refined_source'] as String?,
       refinedAt: map['refined_at'] as String?,
@@ -115,7 +114,6 @@ class CallModel {
       if (departmentText != null) 'department_text': departmentText,
       if (equipmentText != null) 'equipment_text': equipmentText,
       if (issue != null) 'issue': issue,
-      if (issueRefined != null) 'issue_refined': issueRefined,
       if (solution != null) 'solution': solution,
       if (refinedSource != null) 'refined_source': refinedSource,
       if (refinedAt != null) 'refined_at': refinedAt,

@@ -12,6 +12,7 @@ import '../database/database_path_resolution.dart';
 import '../database/lock_diagnostic_service.dart';
 import '../services/core_lexicon_service.dart';
 import '../services/settings_service.dart';
+import '../updates/update_residue_cleaner.dart';
 import 'startup_engine_failure.dart';
 import 'startup_notices.dart';
 import 'startup_structural_check.dart';
@@ -27,6 +28,26 @@ DatabaseInitResult _appendStartupNoticesToFailureDetails(
       ? report
       : '$existing\n\n$report';
   return base.copyWith(details: merged);
+}
+
+/// Καθαρίζει τα υπολείμματα προηγούμενης ενημέρωσης, ανακοινώνοντας βήμα **μόνο**
+/// όταν υπάρχει κάτι να καθαριστεί.
+///
+/// Η σιωπή είναι ο κανόνας: στη συντριπτική πλειονότητα των ανοιγμάτων δεν
+/// υπάρχει τίποτα να φύγει, και η εκκίνηση δεν έχει λόγο να αναφέρει έναν έλεγχο
+/// που δεν έκανε τίποτα. Ο καθαρισμός είναι νοικοκυριό, όχι προϋπόθεση: καμία
+/// αποτυχία του δεν εμποδίζει την εφαρμογή να ανοίξει.
+Future<void> cleanUpdateResidue({
+  DatabaseInitProgressNotifier? progressNotifier,
+  UpdateResidueCleaner? cleaner,
+}) async {
+  try {
+    final worker = cleaner ?? UpdateResidueCleaner.production();
+    final scan = await worker.scan();
+    if (!scan.hasWork) return;
+    progressNotifier?.setStep('Καθαρισμός υπολειμμάτων ενημέρωσης');
+    await worker.clean(scan);
+  } catch (_) {}
 }
 
 /// Αποτέλεσμα αρχικοποίησης εφαρμογής (βάση δεδομένων + τρόπος λειτουργίας).
@@ -64,8 +85,16 @@ class AppInitializer {
   static Future<void> activateBackupSchedulingAfterDatabaseReady(
     Ref ref,
   ) async {
-    await ref.read(databaseBackupSettingsProvider.notifier).load();
-    await ref.read(backupSchedulerProvider.notifier).checkStartupAndStart();
+    // Soft-fail: μετά από επιτυχή βάση, ΚΑΝΕΝΑ προαιρετικό βήμα δεν επιτρέπεται
+    // να ρίξει την εκκίνηση. Τα αντίγραφα ασφαλείας είναι νοικοκυριό — ένας
+    // άφταστος φάκελος προορισμού (π.χ. UNC του νοσοκομείου, ανοιγμένος από το
+    // σπίτι) δεν δικαιούται να ντύσει μια υγιή βάση με οθόνη σφάλματος.
+    try {
+      await ref.read(databaseBackupSettingsProvider.notifier).load();
+      await ref.read(backupSchedulerProvider.notifier).checkStartupAndStart();
+    } catch (e, st) {
+      recordStartupNotice('Ενεργοποίηση αντιγράφων ασφαλείας', e, st);
+    }
   }
 
   static Future<AppInitResult> initialize({
@@ -88,6 +117,7 @@ class AppInitializer {
         } catch (_) {
           spellCheckReady = false;
         }
+        await cleanUpdateResidue(progressNotifier: progressNotifier);
       }
       progressNotifier?.setStep(
         'Ολοκλήρωση εκκίνησης',

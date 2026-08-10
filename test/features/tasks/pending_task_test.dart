@@ -57,7 +57,7 @@ void main() {
         final notesFinder = find.byWidgetPredicate(
           (w) =>
               w is TextField &&
-              (w.decoration?.hintText?.contains('Σημειώσεις') ?? false),
+              (w.decoration?.hintText?.contains('Περιγραφή κλήσης') ?? false),
         );
         final pendingNotes = '$kTestHistorySearchMarker εκκρεμότητα ροή';
         reporter.logStep(

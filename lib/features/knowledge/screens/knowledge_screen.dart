@@ -215,7 +215,7 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.menu_book_outlined,
+              Icons.healing,
               size: 48,
               color: theme.colorScheme.outline,
             ),

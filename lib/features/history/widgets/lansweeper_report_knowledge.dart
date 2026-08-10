@@ -14,35 +14,44 @@ class LansweeperReportKnowledge {
 
   final LansweeperReportDialogState host;
 
-  /// Τα ωμά κείμενα των επιλεγμένων κλήσεων, χωρίς ημερομηνίες και ονόματα.
+  /// Γιατί δεν μπορεί να γίνει άρθρο· `null` σημαίνει «μπορεί».
   ///
-  /// Το άρθρο περιγράφει **είδος** βλάβης: ένα «[16/07 07:25] Φιλιώ Γκίλλα:»
-  /// μπροστά από το σύμπτωμα θα το έδενε σε ένα περιστατικό και θα χαλούσε το
-  /// ταίριασμα με την επόμενη κλήση.
-  static String rawSymptomOf(List<ReportCallItem> selected) {
-    final parts = <String>[];
-    for (final item in selected) {
-      final issue = (item.call.issue ?? '').trim();
-      if (issue.isEmpty || parts.contains(issue)) continue;
-      parts.add(issue);
+  /// Καθαρή λογική, χωρίς εξάρτηση από τον διάλογο: η ίδια απόφαση κρίνει και
+  /// το κουμπί και την ίδια την αποθήκευση. Ο **τίτλος δεν ελέγχεται** — όταν
+  /// λείπει, το άρθρο τον παράγει από το σύμπτωμα, οπότε ένας έλεγχος θα
+  /// μπλόκαρε κάτι που δεν μπορεί να αποτύχει.
+  static String? disabledReasonFor({
+    required int selectedCount,
+    required String symptom,
+    required String solution,
+  }) {
+    if (selectedCount == 0) {
+      return 'Επιλέξτε πρώτα την κλήση που αφορά η λύση.';
     }
-    return parts.join('\n');
-  }
-
-  /// Γιατί δεν μπορεί να αποθηκευτεί τώρα· `null` σημαίνει «μπορεί».
-  String? saveDisabledReason(List<ReportCallItem> selected) {
-    if (selected.isEmpty) {
-      return 'Επιλέξτε πρώτα τις κλήσεις που αφορά η λύση.';
+    // Το άρθρο κρατά ΜΙΑ κλήση προέλευσης και περιγράφει ένα είδος βλάβης· με
+    // πολλές επιλεγμένες θα διαλέγαμε σιωπηλά την πρώτη και το σύμπτωμα θα
+    // γινόταν συνονθύλευμα από διαφορετικά περιστατικά.
+    if (selectedCount > 1) {
+      return 'Επιλέξτε μία μόνο κλήση — το άρθρο περιγράφει ένα είδος βλάβης, '
+          'όχι πολλά περιστατικά.';
     }
-    if (host.solutionController.text.trim().isEmpty) {
+    if (solution.trim().isEmpty) {
       return 'Συμπληρώστε τη «Λύση» — άρθρο χωρίς λύση δεν βοηθά κανέναν.';
     }
-    if (rawSymptomOf(selected).isEmpty) {
-      return 'Η κλήση δεν έχει σημειώσεις, οπότε λείπει το σύμπτωμα με το '
-          'οποίο θα αναγνωριστεί ξανά το πρόβλημα.';
+    if (symptom.trim().isEmpty) {
+      return 'Συμπληρώστε την περιγραφή του προβλήματος — είναι το σύμπτωμα με '
+          'το οποίο θα αναγνωριστεί ξανά η βλάβη.';
     }
     return null;
   }
+
+  /// Η ίδια απόφαση για τα **τρέχοντα** πεδία της φόρμας.
+  String? saveDisabledReason(List<ReportCallItem> selected) =>
+      disabledReasonFor(
+        selectedCount: selected.length,
+        symptom: host.notesController.text,
+        solution: host.solutionController.text,
+      );
 
   /// Το ήδη καταγεγραμμένο άρθρο για το ίδιο πρόβλημα, αν υπάρχει.
   ///
@@ -61,7 +70,10 @@ class LansweeperReportKnowledge {
   Future<void> saveAsKnowledge(List<ReportCallItem> selected) async {
     if (saveDisabledReason(selected) != null) return;
     final primary = selected.first;
-    final symptom = rawSymptomOf(selected);
+    // Σύμπτωμα και λύση από τα **πεδία της φόρμας**, όχι από την αποθηκευμένη
+    // κλήση: ό,τι μόλις διόρθωσε ο χρήστης εδώ είναι η διατύπωση που θέλει να
+    // κρατήσει. Διαβάζοντας την κλήση, το άρθρο έπαιρνε την παλιά γραφή.
+    final symptom = host.notesController.text;
     var draft = KnowledgeArticleDraft.fromCall(
       rawIssue: symptom,
       solution: host.solutionController.text,
