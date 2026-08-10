@@ -371,6 +371,18 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
   Future<void> _showVerifyFailureDialog(
     ({bool ok, DatabaseInitRunnerResult runner}) outcome,
   ) async {
+    // Αποτυχία που ζητά συγκατάθεση αναβάθμισης ΔΕΝ είναι αδιέξοδο: ο χρήστης
+    // πρέπει να πάρει τις ίδιες επιλογές με την αλλαγή βάσης (αντίγραφο /
+    // πρωτότυπο / άκυρο), όχι ένα σκέτο «Εντάξει».
+    if (outcome.runner.result.recoveryKind ==
+        DatabaseInitRecoveryKind.schemaUpgradeConsent) {
+      await runSchemaUpgradeConsentRecovery(
+        context: context,
+        result: outcome.runner.result,
+        onSuccess: widget.onRetry,
+      );
+      return;
+    }
     final msg =
         outcome.runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
     final det = outcome.runner.result.details?.trim();

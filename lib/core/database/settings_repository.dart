@@ -20,6 +20,12 @@ const String kLansweeperTicketSubmitConfigSettingKey =
     'lansweeper_ticket_submit_config';
 const String kLansweeperTicketSubmitFormPrefsSettingKey =
     'lansweeper_ticket_submit_form_prefs';
+
+/// Το διάστημα που είχε επιλεγμένο τελευταία η Αναφορά Lansweeper.
+///
+/// Μετά την αφαίρεση της μπάρας καταστάσεων το διάστημα είναι η μοναδική
+/// ρύθμιση της αναφοράς, οπότε αξίζει να επιβιώνει μεταξύ ανοιγμάτων.
+const String kLansweeperReportRangeSettingKey = 'lansweeper_report_range';
 const String kGeminiApiKeySettingKey = 'gemini_api_key';
 const String kGeminiPromptTemplateSettingKey = 'gemini_prompt_template';
 const String kGeminiPromptTemplateUserDefaultSettingKey =

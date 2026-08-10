@@ -16,9 +16,10 @@ import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/utils/call_duration_format.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
 import '../../../core/widgets/app_asset_image.dart';
-import '../models/lansweeper_report_scope.dart';
+import '../models/lansweeper_sync_state.dart';
 import '../providers/history_application_audit_view_provider.dart';
 import '../providers/history_provider.dart';
+import '../services/lansweeper_state_actions.dart';
 import '../widgets/lansweeper/lansweeper_report_launcher.dart';
 import '../widgets/call_delete_dialog.dart';
 import '../widgets/call_edit_dialog.dart';
@@ -113,12 +114,14 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         .update((s) => s.copyWith(clearDateRange: true));
   }
 
-  /// Η καθημερινή δουλειά: όλες οι κλήσεις της ημέρας προς το Lansweeper.
+  /// Η καθημερινή δουλειά: ό,τι μένει να καταχωρηθεί στο Lansweeper.
   ///
-  /// Η αναφορά ανοίγει πάντα στο «Σήμερα» — τα φίλτρα του Ιστορικού δεν την
-  /// αφορούν, και το διάστημα αλλάζει από τα δικά της chips.
-  Future<void> _openLansweeperReportForToday() =>
-      openLansweeperReport(context, ref, scope: LansweeperReportScope.today);
+  /// Ανοίγει στο διάστημα που διάλεξε τελευταία ο χρήστης. Τα φίλτρα του
+  /// Ιστορικού δεν μεταφέρονται: η αναφορά είναι ουρά εργασίας, ενώ το
+  /// Ιστορικό απαντά «τι έγινε» — μια μισή μεταφορά θα έδειχνε σύνολο που δεν
+  /// θα αντιστοιχούσε ούτε στο ένα ούτε στο άλλο.
+  Future<void> _openLansweeperReport() =>
+      openLansweeperReport(context, ref, scope: null);
 
   void _toggleApplicationAuditView() {
     final next = !ref.read(historyApplicationAuditViewProvider);
@@ -293,7 +296,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             ),
             IconButton(
               tooltip: kLansweeperReportShortcutTooltip,
-              onPressed: filtersEnabled ? _openLansweeperReportForToday : null,
+              onPressed: filtersEnabled ? _openLansweeperReport : null,
               icon: const AppAssetImage(
                 assetPath: kLansweeperReportBadgeAsset,
                 width: 24,
@@ -502,15 +505,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                             .update((s) => s.copyWith(onlyWithTask: value)),
                       ),
                       const SizedBox(width: 8),
-                      _CallLinkFilterChip(
-                        label: 'Με αίτημα Lansweeper',
-                        icon: Icons.confirmation_number_outlined,
-                        selected: filter.onlyWithLansweeper,
+                      _LansweeperStateFilterChip(
+                        selectedState: filter.lansweeperState,
                         enabled: filtersEnabled,
                         onChanged: (value) => ref
                             .read(historyFilterProvider.notifier)
                             .update(
-                              (s) => s.copyWith(onlyWithLansweeper: value),
+                              (s) => value == null
+                                  ? s.copyWith(clearLansweeperState: true)
+                                  : s.copyWith(lansweeperState: value),
                             ),
                       ),
                       const Spacer(),
@@ -757,20 +760,152 @@ class _CallLinkFilterChip extends StatelessWidget {
   }
 }
 
-/// Ενδείξεις «ουράς» μιας κλήσης: συνδεδεμένη εκκρεμότητα ή αίτημα Lansweeper.
+/// Μενού αλλαγής κατάστασης Lansweeper, στη στήλη ενεργειών της γραμμής.
 ///
-/// Είναι σήματα, όχι κουμπιά: απαντούν «τι άφησε πίσω της αυτή η κλήση» με μια
-/// ματιά στη λίστα. Το άνοιγμα γίνεται από την επεξεργασία της κλήσης.
-class _CallLinkBadges extends StatelessWidget {
-  const _CallLinkBadges({required this.hasTask, required this.hasLansweeper});
+/// Αφορά **μόνο τη δική του κλήση**, ακόμη κι όταν υπάρχουν πολλές επιλεγμένες
+/// — ίδια συμπεριφορά με την επεξεργασία και την ατομική διαγραφή δίπλα του.
+/// Μαζική αλλαγή γίνεται από τη μπάρα των επιλεγμένων, όχι από τη γραμμή.
+class _LansweeperRowMenu extends ConsumerWidget {
+  const _LansweeperRowMenu({
+    required this.callId,
+    required this.currentState,
+    required this.ticketId,
+  });
 
-  final bool hasTask;
-  final bool hasLansweeper;
+  final int? callId;
+  final String currentState;
+  final String ticketId;
+
+  Future<void> _apply(
+    BuildContext context,
+    WidgetRef ref,
+    String targetState,
+  ) async {
+    final id = callId;
+    if (id == null) return;
+    // Ο messenger κρατιέται ΠΡΙΝ από τα await: οι διάλογοι που ακολουθούν
+    // μπορεί να αφήσουν πίσω τους νεκρό context.
+    final messenger = ScaffoldMessenger.of(context);
+    final message = await LansweeperStateActions.apply(
+      context,
+      ref,
+      callId: id,
+      storedTicketId: ticketId,
+      targetState: targetState,
+    );
+    if (message == null) return;
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final targets = LansweeperStateActions.availableTargets(currentState);
+    return PopupMenuButton<String>(
+      enabled: callId != null && targets.isNotEmpty,
+      tooltip:
+          'Lansweeper: ${LansweeperSyncState.label(currentState)} — αλλαγή κατάστασης',
+      icon: const Icon(Icons.confirmation_number_outlined),
+      iconSize: 20,
+      padding: EdgeInsets.zero,
+      onSelected: (target) => unawaited(_apply(context, ref, target)),
+      itemBuilder: (context) => [
+        for (final target in targets)
+          PopupMenuItem(
+            value: target,
+            child: Text(LansweeperStateActions.actionLabel(target)),
+          ),
+      ],
+    );
+  }
+}
+
+/// Φίλτρο κατάστασης Lansweeper: μία θέση στη μπάρα, πέντε επιλογές.
+///
+/// Ως αναπτυσσόμενη λίστα και όχι ως πέντε chips — η μπάρα κουβαλά ήδη
+/// αναζήτηση, ημερομηνίες, κατηγορία και «Με εκκρεμότητα».
+class _LansweeperStateFilterChip extends StatelessWidget {
+  const _LansweeperStateFilterChip({
+    required this.selectedState,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  /// `null` σημαίνει «όλες οι καταστάσεις» — η προεπιλογή.
+  final String? selectedState;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
+
+  /// Τιμή-θέση για το «Όλες»: το μενού δεν δέχεται `null` ως τιμή στοιχείου.
+  static const String _allValue = '';
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (!hasTask && !hasLansweeper) {
+    final active = selectedState != null && selectedState!.trim().isNotEmpty;
+    final label = active
+        ? 'Lansweeper: ${LansweeperSyncState.labelPlural(selectedState)}'
+        : 'Lansweeper: όλες';
+
+    return PopupMenuButton<String>(
+      enabled: enabled,
+      initialValue: active ? selectedState : _allValue,
+      tooltip: 'Κατάσταση καταχώρησης στο Lansweeper',
+      onSelected: (value) => onChanged(value == _allValue ? null : value),
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: _allValue, child: Text('Όλες')),
+        for (final state in LansweeperSyncState.all)
+          PopupMenuItem(
+            value: state,
+            child: Text(LansweeperSyncState.labelPlural(state)),
+          ),
+      ],
+      child: Chip(
+        avatar: Icon(
+          Icons.confirmation_number_outlined,
+          size: 18,
+          color: active ? theme.colorScheme.onSecondaryContainer : null,
+        ),
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label),
+            const SizedBox(width: 2),
+            const Icon(Icons.arrow_drop_down, size: 18),
+          ],
+        ),
+        backgroundColor: active ? theme.colorScheme.secondaryContainer : null,
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+}
+
+/// Ενδείξεις «ουράς» μιας κλήσης: συνδεδεμένη εκκρεμότητα ή κατάσταση
+/// Lansweeper.
+///
+/// Είναι σήματα, όχι κουμπιά: απαντούν «τι άφησε πίσω της αυτή η κλήση» με μια
+/// ματιά στη λίστα. Οι αλλαγές γίνονται από το μενού της στήλης ενεργειών.
+///
+/// Η ακαταχώρητη δεν παίρνει εικονίδιο επίτηδες: είναι η αφετηρία κάθε κλήσης
+/// και η πλειοψηφία της λίστας — ένα σήμα σε κάθε γραμμή δεν θα σήμαινε τίποτα.
+class _CallLinkBadges extends StatelessWidget {
+  const _CallLinkBadges({
+    required this.hasTask,
+    required this.lansweeperState,
+    required this.ticketId,
+  });
+
+  final bool hasTask;
+  final String lansweeperState;
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final state = LansweeperSyncState.normalize(lansweeperState);
+    final showsState = state != LansweeperSyncState.unsent;
+
+    if (!hasTask && !showsState) {
       return Text(
         '—',
         style: theme.textTheme.bodySmall?.copyWith(
@@ -778,6 +913,26 @@ class _CallLinkBadges extends StatelessWidget {
         ),
       );
     }
+
+    final (icon, color) = switch (state) {
+      LansweeperSyncState.sent => (
+        Icons.confirmation_number,
+        theme.colorScheme.tertiary,
+      ),
+      LansweeperSyncState.excluded => (
+        Icons.remove_circle_outline,
+        theme.colorScheme.onSurfaceVariant,
+      ),
+      LansweeperSyncState.failed => (
+        Icons.error_outline,
+        theme.colorScheme.error,
+      ),
+      _ => (Icons.confirmation_number_outlined, theme.colorScheme.tertiary),
+    };
+    final ticket = ticketId.trim();
+    final stateMessage = ticket.isEmpty
+        ? 'Lansweeper: ${LansweeperSyncState.label(state)}'
+        : 'Lansweeper: ${LansweeperSyncState.label(state)} — αίτημα #$ticket';
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -791,15 +946,11 @@ class _CallLinkBadges extends StatelessWidget {
               color: theme.colorScheme.primary,
             ),
           ),
-        if (hasTask && hasLansweeper) const SizedBox(width: 6),
-        if (hasLansweeper)
+        if (hasTask && showsState) const SizedBox(width: 6),
+        if (showsState)
           CompactTooltip(
-            message: 'Αίτημα Lansweeper',
-            child: Icon(
-              Icons.confirmation_number_outlined,
-              size: 18,
-              color: theme.colorScheme.tertiary,
-            ),
+            message: stateMessage,
+            child: Icon(icon, size: 18, color: color),
           ),
       ],
     );
@@ -876,7 +1027,8 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
     220,
     90,
     80,
-    110,
+    // Τρία χειριστήρια πλέον: κατάσταση Lansweeper, επεξεργασία, διαγραφή.
+    150,
   ];
 
   static const List<String> _dataColumnLabels = [
@@ -1004,9 +1156,12 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
         if (dur == null) return -1;
         return dur is int ? dur : int.tryParse(dur?.toString() ?? '') ?? -1;
       case 8:
-        // Πρώτα όσες άφησαν ουρά — μετράει το πλήθος των συνδέσεων.
+        // Πρώτα όσες άφησαν ουρά — μετράει το πλήθος των ορατών σημάτων.
+        final state = LansweeperSyncState.normalize(
+          _str(row['lansweeper_state']),
+        );
         return (_isTruthy(row['has_open_task']) ? 1 : 0) +
-            (_isTruthy(row['has_lansweeper_ticket']) ? 1 : 0);
+            (state == LansweeperSyncState.unsent ? 0 : 1);
       default:
         return '';
     }
@@ -1324,7 +1479,8 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
               horizontalPadding: horizontalPadding,
               child: _CallLinkBadges(
                 hasTask: _isTruthy(row['has_open_task']),
-                hasLansweeper: _isTruthy(row['has_lansweeper_ticket']),
+                lansweeperState: _str(row['lansweeper_state']),
+                ticketId: _str(row['lansweeper_ticket_id']),
               ),
             ),
             _dataCell(
@@ -1336,6 +1492,11 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    _LansweeperRowMenu(
+                      callId: callId,
+                      currentState: _str(row['lansweeper_state']),
+                      ticketId: _str(row['lansweeper_ticket_id']),
+                    ),
                     IconButton(
                       tooltip: 'Επεξεργασία',
                       visualDensity: VisualDensity.compact,

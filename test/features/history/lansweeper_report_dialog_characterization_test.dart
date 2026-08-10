@@ -28,6 +28,7 @@ const _kCharRenderMarkerA = 'LS_CHAR_RENDER_A';
 const _kCharRenderMarkerB = 'LS_CHAR_RENDER_B';
 const _kCharFilterUnsent = 'LS_UNSENT';
 const _kCharFilterSent = 'LS_SENT';
+const _kCharFilterFailed = 'LS_FAILED';
 const _kCharSelectMarker = 'LS_CHAR_SELECT_ONE';
 
 const _kEmptyDashboardStats = DashboardSummaryModel(
@@ -139,7 +140,15 @@ Future<List<CallModel>> _seedFilterCalls() async {
       lansweeperState: LansweeperSyncState.sent,
     ),
   );
-  return _loadCallsByIds(<int>[unsentId, sentId]);
+  final failedId = await repo.insertCall(
+    CallModel(
+      phoneText: kTestPhoneDigits,
+      issue: _kCharFilterFailed,
+      status: 'completed',
+      lansweeperState: LansweeperSyncState.failed,
+    ),
+  );
+  return _loadCallsByIds(<int>[unsentId, sentId, failedId]);
 }
 
 Future<List<CallModel>> _seedSelectCall() async {
@@ -227,8 +236,10 @@ void main() {
       await _pumpLansweeperReportDialog(tester, container);
 
       expect(find.textContaining('Αναφορά Lansweeper'), findsOneWidget);
-      expect(find.textContaining('Ακαταχώρητες (2)'), findsOneWidget);
-      expect(find.textContaining('Όλες (2)'), findsOneWidget);
+      expect(
+        find.textContaining('Εκκρεμούν 2 καταχωρήσεις από 2 κλήσεις'),
+        findsOneWidget,
+      );
       expect(find.textContaining(_kCharRenderMarkerA), findsOneWidget);
       expect(find.textContaining(_kCharRenderMarkerB), findsOneWidget);
       await tester.pump(const Duration(seconds: 11));
@@ -285,7 +296,7 @@ void main() {
       semanticsEnabled: false,
     );
 
-    testWidgets('φίλτρα: τα chips κατάστασης φιλτράρουν τη λίστα', (
+    testWidgets('η αναφορά δείχνει την ουρά, όχι τις τακτοποιημένες', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1600, 900);
@@ -297,7 +308,7 @@ void main() {
 
       final reportCalls =
           await tester.runAsync(_seedFilterCalls) ?? <CallModel>[];
-      expect(reportCalls, hasLength(2));
+      expect(reportCalls, hasLength(3));
 
       final container = ProviderContainer(
         overrides: _lansweeperCharacterizationOverrides(
@@ -308,22 +319,63 @@ void main() {
 
       await _pumpLansweeperReportDialog(tester, container);
 
-      expect(find.textContaining('Ακαταχώρητες (1)'), findsOneWidget);
-      expect(find.textContaining('Όλες (2)'), findsOneWidget);
-      expect(find.textContaining(_kCharFilterUnsent), findsOneWidget);
-      expect(find.textContaining(_kCharFilterSent), findsNothing);
+      expect(
+        find.textContaining(_kCharFilterUnsent),
+        findsOneWidget,
+        reason: greekExpectMsg('Η ακαταχώρητη μένει να γίνει'),
+      );
+      expect(
+        find.textContaining(_kCharFilterFailed),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Η αποτυχημένη θέλει την ίδια ενέργεια — μένει στην ουρά',
+        ),
+      );
+      expect(
+        find.textContaining(_kCharFilterSent),
+        findsNothing,
+        reason: greekExpectMsg('Η καταχωρημένη έχει τακτοποιηθεί'),
+      );
+      expect(
+        find.textContaining('Εκκρεμούν 2 καταχωρήσεις από 3 κλήσεις'),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(seconds: 11));
+    }, semanticsEnabled: false);
 
-      await tester.tap(find.textContaining('Καταχωρημένες'));
-      await pumpUntilSettled(tester);
+    testWidgets('δεν προσφέρεται πια σήμανση «Ακαταχώρητη» μέσα στην αναφορά', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-      expect(find.textContaining(_kCharFilterUnsent), findsNothing);
-      expect(find.textContaining(_kCharFilterSent), findsOneWidget);
+      final reportCalls =
+          await tester.runAsync(_seedSelectCall) ?? <CallModel>[];
 
-      await tester.tap(find.textContaining('Όλες ('));
-      await pumpUntilSettled(tester);
+      final container = ProviderContainer(
+        overrides: _lansweeperCharacterizationOverrides(
+          reportCalls: reportCalls,
+        ),
+      );
+      addTearDown(container.dispose);
 
-      expect(find.textContaining(_kCharFilterUnsent), findsOneWidget);
-      expect(find.textContaining(_kCharFilterSent), findsOneWidget);
+      await _pumpLansweeperReportDialog(tester, container);
+
+      // Κάθε κλήση της αναφοράς είναι ήδη ακαταχώρητη — το κουμπί θα ήταν
+      // μονίμως ανενεργό. Η επαναφορά γίνεται από το Ιστορικό.
+      expect(
+        find.widgetWithText(OutlinedButton, 'Ακαταχώρητη'),
+        findsNothing,
+      );
+      expect(find.widgetWithText(OutlinedButton, 'Εξαίρεση'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Καταχωρημένη'),
+        findsOneWidget,
+      );
       await tester.pump(const Duration(seconds: 11));
     }, semanticsEnabled: false);
   });

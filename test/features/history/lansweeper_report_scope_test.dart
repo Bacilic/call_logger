@@ -57,9 +57,9 @@ void main() {
       expect(filter.dateTo, DateTime(2026, 8, 5));
     });
 
-    test('«Όλες οι ακαταχώρητες» δεν βάζει όριο ημερομηνίας', () {
+    test('«Όλο το ιστορικό» δεν βάζει όριο ημερομηνίας', () {
       final filter = const LansweeperReportScope.range(
-        LansweeperReportRange.allUnregistered,
+        LansweeperReportRange.allTime,
       ).resolveFilter(now);
 
       expect(filter.dateFrom, isNull);
@@ -99,10 +99,8 @@ void main() {
         '7 ημέρες',
       );
       expect(
-        const LansweeperReportScope.range(
-          LansweeperReportRange.allUnregistered,
-        ).label,
-        'Όλες οι ακαταχώρητες',
+        const LansweeperReportScope.range(LansweeperReportRange.allTime).label,
+        'Όλο το ιστορικό',
       );
     });
 
@@ -112,6 +110,44 @@ void main() {
       );
 
       expect(scope.label, isNull);
+    });
+
+    test('κάθε προσφερόμενο διάστημα έχει όνομα να δείξει στο chip', () {
+      for (final range in LansweeperReportScope.presets) {
+        expect(
+          LansweeperReportScope.range(range).label,
+          isNotNull,
+          reason: 'το $range θα εμφανιζόταν ως κενό chip',
+        );
+      }
+    });
+  });
+
+  group('αποθήκευση διαστήματος', () {
+    test('ό,τι αποθηκεύεται διαβάζεται πίσω ίδιο', () {
+      for (final range in LansweeperReportScope.presets) {
+        final raw = LansweeperReportRangeSetting.encode(range);
+
+        expect(LansweeperReportRangeSetting.decode(raw), range);
+      }
+    });
+
+    test('κενή ή άγνωστη τιμή δεν επιβάλλει διάστημα', () {
+      expect(LansweeperReportRangeSetting.decode(null), isNull);
+      expect(LansweeperReportRangeSetting.decode(''), isNull);
+      expect(LansweeperReportRangeSetting.decode('   '), isNull);
+      expect(LansweeperReportRangeSetting.decode('περσινό'), isNull);
+    });
+
+    test('τα φίλτρα των Στατιστικών δεν επιβιώνουν ως επιλογή', () {
+      // Είναι το πλαίσιο μιας συγκεκριμένης εισόδου· αν επέστρεφαν στο επόμενο
+      // άνοιγμα, η αναφορά θα έδειχνε φίλτρα άλλης οθόνης χωρίς να το λέει.
+      expect(
+        LansweeperReportRangeSetting.decode(
+          LansweeperReportRange.dashboardFilters.name,
+        ),
+        isNull,
+      );
     });
   });
 }

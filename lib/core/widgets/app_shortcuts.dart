@@ -22,7 +22,6 @@ import '../database/database_init_runner.dart';
 import '../providers/core_lexicon_provider.dart';
 import '../providers/quick_call_providers.dart';
 import '../../features/calls/screens/widgets/quick_call_dialog.dart';
-import '../../features/history/models/lansweeper_report_scope.dart';
 import '../../features/history/widgets/lansweeper/lansweeper_report_launcher.dart';
 import 'app_keyboard_shortcuts.dart';
 import 'main_shell.dart';
@@ -144,12 +143,14 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     unawaited(showQuickCallDialog(context));
   }
 
-  /// Η καθημερινή εργασία «όλες οι σημερινές κλήσεις στο Lansweeper», ένα
-  /// πάτημα από παντού. Ο φρουρός διπλού ανοίγματος ζει στον launcher.
+  /// Η καθημερινή εργασία «ό,τι μένει να καταχωρηθεί», ένα πάτημα από παντού.
+  ///
+  /// Ανοίγει στο διάστημα που διάλεξε τελευταία ο χρήστης — ίδια συμπεριφορά με
+  /// το εικονίδιο του Ιστορικού. Η συντόμευση δεν ξέρει από ποια οθόνη πατήθηκε,
+  /// οπότε δεν έχει δικό της πλαίσιο να επιβάλει. Ο φρουρός διπλού ανοίγματος
+  /// ζει στον launcher.
   void _invokeLansweeperReport() {
-    unawaited(
-      openLansweeperReport(context, ref, scope: LansweeperReportScope.today),
-    );
+    unawaited(openLansweeperReport(context, ref, scope: null));
   }
 
   bool _handleGlobalShortcutKey(KeyEvent event) {
