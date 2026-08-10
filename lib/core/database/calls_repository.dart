@@ -389,27 +389,35 @@ class CallsRepository {
          WHERE t.call_id = calls.id AND COALESCE(t.is_deleted, 0) = 0
        ) THEN 1 ELSE 0 END)''';
 
-  /// «Η κλήση έχει αίτημα Lansweeper» — είτε κρατά αριθμό ticket είτε είναι
-  /// σημειωμένη ως σταλμένη.
-  static const String _lansweeperTicketSql =
+  /// Η κατάσταση Lansweeper της κλήσης, κανονικοποιημένη.
+  ///
+  /// Ίδιος κανόνας με το `LansweeperSyncState.normalize`: κενό, `NULL` ή
+  /// άγνωστη τιμή σημαίνει «ακαταχώρητη». Οι δύο διατυπώσεις — Dart και SQL —
+  /// φυλάγονται μαζί από τεστ· αν αποκλίνουν, η ίδια κλήση εμφανίζεται σε άλλη
+  /// κατηγορία στο Ιστορικό απ' ό,τι στην αναφορά.
+  static const String _lansweeperStateSql =
       '''
-      (CASE WHEN calls.lansweeper_state = 'sent'
-              OR TRIM(COALESCE(calls.lansweeper_main_ticket_id, '')) <> ''
-            THEN 1 ELSE 0 END)''';
+      (CASE WHEN TRIM(COALESCE(calls.lansweeper_state, ''))
+                 IN ('sent', 'excluded', 'failed')
+            THEN TRIM(calls.lansweeper_state)
+            ELSE 'unsent' END)''';
 
   /// Γραμμές ιστορικού με τα φίλτρα της οθόνης.
   ///
   /// Επιστρέφει και δύο ενδείξεις «ουράς» ανά κλήση — `has_open_task` και
-  /// `has_lansweeper_ticket` — ώστε η λίστα να δείχνει ποιες κλήσεις άφησαν
-  /// συνέχεια. Τα [onlyWithTask] / [onlyWithLansweeper] περιορίζουν σε αυτές·
+  /// `lansweeper_state` — ώστε η λίστα να δείχνει ποιες κλήσεις άφησαν
+  /// συνέχεια. Τα [onlyWithTask] / [lansweeperState] περιορίζουν σε αυτές·
   /// όταν ζητηθούν και τα δύο, ισχύουν αθροιστικά (ΚΑΙ, όχι Ή).
+  ///
+  /// Το [lansweeperState] δέχεται μία από τις τιμές του `LansweeperSyncState`·
+  /// `null` σημαίνει «όλες οι καταστάσεις».
   Future<List<Map<String, dynamic>>> getHistoryCalls({
     String? dateFrom,
     String? dateTo,
     String? category,
     String? keyword,
     bool onlyWithTask = false,
-    bool onlyWithLansweeper = false,
+    String? lansweeperState,
   }) async {
     const userPhoneExpr =
         "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
@@ -435,8 +443,10 @@ class CallsRepository {
     if (onlyWithTask) {
       whereClauses.add('$_openTaskExistsSql = 1');
     }
-    if (onlyWithLansweeper) {
-      whereClauses.add('$_lansweeperTicketSql = 1');
+    final requestedState = (lansweeperState ?? '').trim();
+    if (requestedState.isNotEmpty) {
+      whereClauses.add('$_lansweeperStateSql = ?');
+      args.add(requestedState);
     }
 
     whereClauses.insert(0, 'COALESCE(calls.is_deleted, 0) = 0');
@@ -459,7 +469,8 @@ class CallsRepository {
              COALESCE(departments.name, calls.department_text, '-') AS user_department,
              COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code,
              $_openTaskExistsSql AS has_open_task,
-             $_lansweeperTicketSql AS has_lansweeper_ticket
+             $_lansweeperStateSql AS lansweeper_state,
+             TRIM(COALESCE(calls.lansweeper_main_ticket_id, '')) AS lansweeper_ticket_id
       FROM calls
       LEFT JOIN categories cat ON cat.id = calls.category_id
       LEFT JOIN users ON calls.caller_id = users.id

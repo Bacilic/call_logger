@@ -7,6 +7,7 @@ import '../../../core/database/category_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/dashboard_summary_model.dart';
+import '../models/lansweeper_sync_state.dart';
 
 /// Μοντέλο φίλτρων για το ιστορικό κλήσεων.
 class HistoryFilterModel {
@@ -16,7 +17,7 @@ class HistoryFilterModel {
     this.dateTo,
     this.category,
     this.onlyWithTask = false,
-    this.onlyWithLansweeper = false,
+    this.lansweeperState,
   });
 
   final String keyword;
@@ -27,8 +28,12 @@ class HistoryFilterModel {
   /// Μόνο κλήσεις με ζωντανή συνδεδεμένη εκκρεμότητα.
   final bool onlyWithTask;
 
-  /// Μόνο κλήσεις με αίτημα Lansweeper.
-  final bool onlyWithLansweeper;
+  /// Μόνο κλήσεις σε αυτή την κατάσταση Lansweeper· `null` σημαίνει «όλες».
+  ///
+  /// Αντικατέστησε ένα δυαδικό «με αίτημα Lansweeper», που δεν μπορούσε να
+  /// ξεχωρίσει την εξαιρεμένη από την ακαταχώρητη — καμία από τις δύο δεν έχει
+  /// αριθμό αιτήματος, οπότε και οι δύο έπεφταν έξω από το παλιό φίλτρο.
+  final String? lansweeperState;
 
   HistoryFilterModel copyWith({
     String? keyword,
@@ -36,9 +41,10 @@ class HistoryFilterModel {
     DateTime? dateTo,
     String? category,
     bool? onlyWithTask,
-    bool? onlyWithLansweeper,
+    String? lansweeperState,
     bool clearDateRange = false,
     bool clearCategory = false,
+    bool clearLansweeperState = false,
   }) {
     return HistoryFilterModel(
       keyword: keyword ?? this.keyword,
@@ -46,7 +52,9 @@ class HistoryFilterModel {
       dateTo: clearDateRange ? null : (dateTo ?? this.dateTo),
       category: clearCategory ? null : (category ?? this.category),
       onlyWithTask: onlyWithTask ?? this.onlyWithTask,
-      onlyWithLansweeper: onlyWithLansweeper ?? this.onlyWithLansweeper,
+      lansweeperState: clearLansweeperState
+          ? null
+          : (lansweeperState ?? this.lansweeperState),
     );
   }
 
@@ -64,8 +72,13 @@ class HistoryFilterModel {
     if (dateFrom != null || dateTo != null) 'ημερομηνίες',
     if (category != null && category!.trim().isNotEmpty) 'κατηγορία',
     if (onlyWithTask) 'με εκκρεμότητα',
-    if (onlyWithLansweeper) 'με αίτημα Lansweeper',
+    if (hasLansweeperStateFilter)
+      'Lansweeper: ${LansweeperSyncState.labelPlural(lansweeperState)}',
   ];
+
+  /// True όταν το φίλτρο κατάστασης περιορίζει όντως τη λίστα.
+  bool get hasLansweeperStateFilter =>
+      lansweeperState != null && lansweeperState!.trim().isNotEmpty;
 
   /// True όταν υπάρχει ενεργό φίλτρο (αναζήτηση, ημερομηνίες ή κατηγορία).
   bool get hasActiveFilters =>
@@ -74,7 +87,7 @@ class HistoryFilterModel {
       dateTo != null ||
       (category != null && category!.trim().isNotEmpty) ||
       onlyWithTask ||
-      onlyWithLansweeper;
+      hasLansweeperStateFilter;
 
   static String _formatDate(DateTime d) {
     final y = d.year;
@@ -257,7 +270,7 @@ final historyCallsProvider =
             : filter.category,
         keyword: keyword.isEmpty ? null : normalizedKeyword,
         onlyWithTask: filter.onlyWithTask,
-        onlyWithLansweeper: filter.onlyWithLansweeper,
+        lansweeperState: filter.lansweeperState,
       );
     });
 

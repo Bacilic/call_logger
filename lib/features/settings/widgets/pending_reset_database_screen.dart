@@ -7,6 +7,7 @@ import '../../../core/database/database_init_result.dart';
 import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/services/application_reset_service.dart';
 import '../../../features/directory/screens/widgets/department_palette_store.dart';
+import '../../database/widgets/schema_upgrade_consent_dialog.dart';
 import 'create_new_database_dialog.dart';
 
 /// Οθόνη μετά την επαναφορά: επιλογή/δημιουργία βάσης ή αναίρεση (rollback).
@@ -146,6 +147,16 @@ class _PendingResetDatabaseScreenState
   }
 
   Future<void> _showDbError(DatabaseInitResult result) async {
+    // Ίδια αρχή με την οθόνη σφάλματος: όταν λείπει μόνο η συγκατάθεση
+    // αναβάθμισης, προσφέρουμε τις κανονικές επιλογές αντί για αδιέξοδο.
+    if (result.recoveryKind == DatabaseInitRecoveryKind.schemaUpgradeConsent) {
+      await runSchemaUpgradeConsentRecovery(
+        context: context,
+        result: result,
+        onSuccess: widget.onLifecycleChanged,
+      );
+      return;
+    }
     final msg = result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
     final det = result.details?.trim();
     await showDialog<void>(

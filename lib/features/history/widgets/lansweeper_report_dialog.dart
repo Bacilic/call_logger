@@ -26,8 +26,6 @@ import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
 import 'lansweeper/lansweeper_report_call_list.dart';
-import 'lansweeper/lansweeper_report_filter.dart';
-import 'lansweeper/lansweeper_report_filter_bar.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper/lansweeper_report_range_bar.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
@@ -142,20 +140,36 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   bool aiAutoResubmitArmed = false;
   List<ReportCallItem>? aiLastSuggestSelection;
 
-  LansweeperReportFilter reportFilter = LansweeperReportFilter.unsentOnly;
+  /// Τι δείχνει αυτή τη στιγμή η αναφορά, σε μία γραμμή.
+  ///
+  /// Ξεχωρίζει το άδειο διάστημα («δεν υπάρχουν κλήσεις») από την τελειωμένη
+  /// δουλειά («υπάρχουν, αλλά καμία δεν εκκρεμεί») — δύο καταστάσεις που θα
+  /// έδειχναν και οι δύο μια άδεια λίστα.
+  static String _queueSummary({
+    required int? queued,
+    required int? inRange,
+    required String rangeTitle,
+  }) {
+    if (queued == null || inRange == null) return 'Φόρτωση κλήσεων…';
+    if (inRange == 0) return 'Καμία κλήση στο διάστημα «$rangeTitle»';
+    if (queued == 0) {
+      return inRange == 1
+          ? 'Καμία εκκρεμότητα — η μοναδική κλήση έχει τακτοποιηθεί'
+          : 'Καμία εκκρεμότητα — και οι $inRange κλήσεις έχουν τακτοποιηθεί';
+    }
+    return queued == 1
+        ? 'Εκκρεμεί 1 καταχώρηση από $inRange κλήσεις'
+        : 'Εκκρεμούν $queued καταχωρήσεις από $inRange κλήσεις';
+  }
 
   /// Αλλαγή χρονικού πλαισίου από τα chips της κεφαλίδας.
   ///
-  /// Το «όλες οι ακαταχώρητες» ζητά ρητά μία κατάσταση, οπότε επαναφέρει και την
-  /// καρτέλα — αλλιώς ο χρήστης θα ζητούσε τις ακαταχώρητες και θα έβλεπε τις
-  /// καταχωρημένες όλων των εποχών.
+  /// Το διάστημα είναι η μοναδική ρύθμιση της αναφοράς — η κατάσταση δεν
+  /// επιλέγεται εδώ, η αναφορά δείχνει πάντα ό,τι μένει να καταχωρηθεί.
   void _selectRange(LansweeperReportRange range) {
     ref
         .read(lansweeperReportScopeProvider.notifier)
         .set(LansweeperReportScope.range(range));
-    if (range == LansweeperReportRange.allUnregistered) {
-      setState(() => reportFilter = LansweeperReportFilter.unsentOnly);
-    }
   }
 
   /// Σηματοδοτεί ανανέωση της αναφοράς (rebuild) — χρήση και από συνεργάτες.
@@ -559,34 +573,18 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     final canOpenTicketForm = LansweeperUrlRules.isBrowserLaunchableUrl(
       lansweeperTicketFormUrl,
     );
-    final hasAnyCallsInRange = callsAsync.maybeWhen(
-      data: (calls) => calls.isNotEmpty,
-      orElse: () => true,
-    );
-    final reportCounts = callsAsync.maybeWhen(
-      data: (calls) => lansweeperReportCategoryCounts(
-        calls.map((call) => call.lansweeperState),
-      ),
+    // Το πλήθος της ουράς λέει τη μισή ιστορία μόνο του: «0 από 0» σημαίνει
+    // άδειο διάστημα, «0 από 12» σημαίνει τελειωμένη δουλειά.
+    final queuedCount = callsAsync.maybeWhen(
+      data: (calls) => calls
+          .where((call) => LansweeperSyncState.isQueued(call.lansweeperState))
+          .length,
       orElse: () => null,
     );
-
-    ref.listen(lansweeperReportCallsProvider, (previous, next) {
-      next.whenData((calls) {
-        if (!mounted) return;
-        if (calls.isEmpty) {
-          if (reportFilter == LansweeperReportFilter.all) return;
-          setState(() => reportFilter = LansweeperReportFilter.all);
-          return;
-        }
-        if (reportFilter != LansweeperReportFilter.all &&
-            lansweeperReportCategoryCounts(
-                  calls.map((call) => call.lansweeperState),
-                ).forFilter(reportFilter) ==
-                0) {
-          setState(() => reportFilter = LansweeperReportFilter.all);
-        }
-      });
-    });
+    final callsInRange = callsAsync.maybeWhen(
+      data: (calls) => calls.length,
+      orElse: () => null,
+    );
 
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
@@ -642,16 +640,18 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                         scope: scope,
                         onSelect: _selectRange,
                       ),
-                      const SizedBox(height: 8),
-                      LansweeperReportFilterBar(
-                        selected: reportFilter,
-                        counts: reportCounts,
-                        hasAnyCallsInRange: hasAnyCallsInRange,
-                        reportRangeTitle: reportRangeTitle,
-                        onSelect: (filter) =>
-                            setState(() => reportFilter = filter),
-                      ),
                       const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          _queueSummary(
+                            queued: queuedCount,
+                            inRange: callsInRange,
+                            rangeTitle: reportRangeTitle,
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
                       Expanded(
                         child: callsAsync.when(
                           loading: () =>
@@ -1023,22 +1023,12 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                                 .excluded,
                                                           ),
                                                 ),
-                                                _buildLansweeperStateButton(
-                                                  selected: selected,
-                                                  isLoading:
-                                                      syncState.isLoading,
-                                                  targetState:
-                                                      LansweeperSyncState
-                                                          .unsent,
-                                                  label: 'Ακαταχώρητη',
-                                                  onPressed: () =>
-                                                      registrationFlow
-                                                          .setStateForAllSelected(
-                                                            selected,
-                                                            LansweeperSyncState
-                                                                .unsent,
-                                                          ),
-                                                ),
+                                                // Το «Ακαταχώρητη» έφυγε από εδώ:
+                                                // η αναφορά δείχνει πλέον μόνο
+                                                // την ουρά, οπότε το κουμπί θα
+                                                // ήταν μονίμως ανενεργό. Η
+                                                // επαναφορά σε ακαταχώρητη
+                                                // γίνεται από το Ιστορικό.
                                                 _buildLansweeperStateButton(
                                                   selected: selected,
                                                   isLoading:

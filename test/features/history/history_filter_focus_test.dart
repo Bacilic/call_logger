@@ -3,6 +3,7 @@
 //
 //   flutter test test/features/history/history_filter_focus_test.dart
 
+import 'package:call_logger/features/history/models/lansweeper_sync_state.dart';
 import 'package:call_logger/features/history/providers/history_provider.dart';
 import 'package:call_logger/features/history/utils/history_navigation_feedback.dart';
 import 'package:flutter/material.dart';
@@ -21,7 +22,7 @@ void main() {
         dateFrom: DateTime(2026, 7),
         category: 'Medico',
         onlyWithTask: true,
-        onlyWithLansweeper: true,
+        lansweeperState: LansweeperSyncState.excluded,
       );
 
       expect(filter.activeFilterLabels, [
@@ -29,7 +30,7 @@ void main() {
         'ημερομηνίες',
         'κατηγορία',
         'με εκκρεμότητα',
-        'με αίτημα Lansweeper',
+        'Lansweeper: Εξαιρεμένες',
       ]);
     });
 
@@ -37,6 +38,27 @@ void main() {
       const filter = HistoryFilterModel(keyword: '   ', category: '  ');
 
       expect(filter.activeFilterLabels, isEmpty);
+    });
+
+    test('το φίλτρο κατάστασης ονομάζει ποια κατάσταση δείχνει', () {
+      // Η ετικέτα δεν λέει σκέτο «Lansweeper»: ο χρήστης που επιστρέφει στην
+      // οθόνη πρέπει να μαθαίνει ποιο υποσύνολο βλέπει, όχι μόνο ότι φιλτράρει.
+      const unsent = HistoryFilterModel(
+        lansweeperState: LansweeperSyncState.unsent,
+      );
+      const sent = HistoryFilterModel(
+        lansweeperState: LansweeperSyncState.sent,
+      );
+
+      expect(unsent.activeFilterLabels, ['Lansweeper: Ακαταχώρητες']);
+      expect(sent.activeFilterLabels, ['Lansweeper: Καταχωρημένες']);
+    });
+
+    test('κενή κατάσταση δεν μετράει ως φίλτρο', () {
+      const filter = HistoryFilterModel(lansweeperState: '  ');
+
+      expect(filter.activeFilterLabels, isEmpty);
+      expect(filter.hasActiveFilters, isFalse);
     });
   });
 
@@ -57,7 +79,7 @@ void main() {
               dateFrom: DateTime(2026, 7),
               dateTo: DateTime(2026, 7, 31),
               onlyWithTask: true,
-              onlyWithLansweeper: true,
+              lansweeperState: LansweeperSyncState.sent,
             ),
           );
 
@@ -69,7 +91,20 @@ void main() {
       expect(filter.dateFrom, isNull);
       expect(filter.dateTo, isNull);
       expect(filter.onlyWithTask, isFalse);
-      expect(filter.onlyWithLansweeper, isFalse);
+      expect(filter.lansweeperState, isNull);
+    });
+
+    test('το φίλτρο κατάστασης καθαρίζεται ρητά, χωρίς να χρειάζεται νέα τιμή', () {
+      final container = buildContainer();
+      container
+          .read(historyFilterProvider.notifier)
+          .update((s) => s.copyWith(lansweeperState: LansweeperSyncState.sent));
+
+      container
+          .read(historyFilterProvider.notifier)
+          .update((s) => s.copyWith(clearLansweeperState: true));
+
+      expect(container.read(historyFilterProvider).lansweeperState, isNull);
     });
 
     test('επιστρέφει τα φίλτρα που έπαψαν να ισχύουν', () {
@@ -77,14 +112,17 @@ void main() {
       container
           .read(historyFilterProvider.notifier)
           .update(
-            (s) => s.copyWith(category: 'Medico', onlyWithLansweeper: true),
+            (s) => s.copyWith(
+              category: 'Medico',
+              lansweeperState: LansweeperSyncState.excluded,
+            ),
           );
 
       final cleared = container
           .read(historyFilterProvider.notifier)
           .focus(keyword: '5067');
 
-      expect(cleared, ['κατηγορία', 'με αίτημα Lansweeper']);
+      expect(cleared, ['κατηγορία', 'Lansweeper: Εξαιρεμένες']);
     });
 
     test('φίλτρο που αντικαταστάθηκε δεν μετράει ως καθαρισμένο', () {

@@ -17,15 +17,12 @@ class LansweeperReportRangeBar extends StatelessWidget {
   final LansweeperReportScope scope;
   final ValueChanged<LansweeperReportRange> onSelect;
 
-  static const _presets = [
-    (LansweeperReportRange.today, 'Οι κλήσεις της σημερινής ημέρας'),
-    (LansweeperReportRange.yesterday, 'Οι κλήσεις της χθεσινής ημέρας'),
-    (LansweeperReportRange.last7Days, 'Οι κλήσεις των τελευταίων επτά ημερών'),
-    (
-      LansweeperReportRange.allUnregistered,
-      'Κάθε κλήση που δεν έχει περάσει ποτέ στο Lansweeper, χωρίς όριο ημερομηνίας',
-    ),
-  ];
+  static const _tooltips = {
+    LansweeperReportRange.today: 'Οι κλήσεις της σημερινής ημέρας',
+    LansweeperReportRange.yesterday: 'Οι κλήσεις της χθεσινής ημέρας',
+    LansweeperReportRange.last7Days: 'Οι κλήσεις των τελευταίων επτά ημερών',
+    LansweeperReportRange.allTime: 'Κάθε κλήση, χωρίς όριο ημερομηνίας',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -41,9 +38,9 @@ class LansweeperReportRangeBar extends StatelessWidget {
             style: Theme.of(context).textTheme.labelMedium,
           ),
         ),
-        for (final (range, tooltip) in _presets)
+        for (final range in LansweeperReportScope.presets)
           Tooltip(
-            message: tooltip,
+            message: _tooltips[range] ?? '',
             child: ChoiceChip(
               label: Text(
                 LansweeperReportScope.range(range).label ?? '',

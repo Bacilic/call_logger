@@ -13,8 +13,13 @@ enum LansweeperReportRange {
   /// Οι τελευταίες επτά ημέρες, με σημερινή συμπεριλαμβανόμενη.
   last7Days,
 
-  /// Χωρίς όριο ημερομηνίας — για όσες δεν έχουν περάσει ποτέ στο Lansweeper.
-  allUnregistered,
+  /// Χωρίς όριο ημερομηνίας.
+  ///
+  /// Λεγόταν «όλες οι ακαταχώρητες» όσο η αναφορά είχε και δεύτερη μπάρα με
+  /// καταστάσεις — ένα διάστημα που ονομαζόταν κατάσταση, οπότε το επάνω chip
+  /// έλεγε «ακαταχώρητες» και το κάτω «καταχωρημένες» ταυτόχρονα. Τώρα που η
+  /// αναφορά δείχνει πάντα την ουρά, το διάστημα λέει μόνο διάστημα.
+  allTime,
 
   /// Ό,τι δείχνει εκείνη τη στιγμή ο Πίνακας Ελέγχου (ημερομηνίες, τμήμα,
   /// υπάλληλος, εξοπλισμός) — η είσοδος από την κάρτα των Στατιστικών.
@@ -55,7 +60,7 @@ class LansweeperReportScope {
           dateFrom: today.subtract(const Duration(days: 6)),
           dateTo: today,
         );
-      case LansweeperReportRange.allUnregistered:
+      case LansweeperReportRange.allTime:
         return const DashboardFilterModel();
       case LansweeperReportRange.dashboardFilters:
         return dashboardFilter ?? const DashboardFilterModel();
@@ -70,7 +75,39 @@ class LansweeperReportScope {
     LansweeperReportRange.today => 'Σήμερα',
     LansweeperReportRange.yesterday => 'Χθες',
     LansweeperReportRange.last7Days => '7 ημέρες',
-    LansweeperReportRange.allUnregistered => 'Όλες οι ακαταχώρητες',
+    LansweeperReportRange.allTime => 'Όλο το ιστορικό',
     LansweeperReportRange.dashboardFilters => null,
   };
+
+  /// Τα διαστήματα που προσφέρει η μπάρα — με τη σειρά εμφάνισης.
+  ///
+  /// Το [LansweeperReportRange.dashboardFilters] λείπει επίτηδες: δεν το
+  /// επιλέγει ο χρήστης, το φέρνει μαζί του η είσοδος από τα Στατιστικά.
+  static const List<LansweeperReportRange> presets = [
+    LansweeperReportRange.today,
+    LansweeperReportRange.yesterday,
+    LansweeperReportRange.last7Days,
+    LansweeperReportRange.allTime,
+  ];
+}
+
+/// Μετατροπή διαστήματος σε κείμενο ρύθμισης και πίσω.
+///
+/// Αποθηκεύεται το όνομα, όχι ο αριθμός θέσης: μια μελλοντική προσθήκη ή
+/// αναδιάταξη των τιμών δεν αλλάζει σιωπηλά το διάστημα του χρήστη.
+abstract final class LansweeperReportRangeSetting {
+  static String encode(LansweeperReportRange range) => range.name;
+
+  /// Άγνωστο ή κενό κείμενο επιστρέφει `null` — ο καλών κρατά την προεπιλογή.
+  ///
+  /// Τα φίλτρα των Στατιστικών δεν επιβιώνουν: είναι εφήμερο πλαίσιο μιας
+  /// συγκεκριμένης εισόδου, όχι επιλογή του χρήστη μέσα στην αναφορά.
+  static LansweeperReportRange? decode(String? raw) {
+    final trimmed = (raw ?? '').trim();
+    if (trimmed.isEmpty) return null;
+    for (final range in LansweeperReportScope.presets) {
+      if (range.name == trimmed) return range;
+    }
+    return null;
+  }
 }

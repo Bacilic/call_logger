@@ -1,4 +1,4 @@
-import 'lansweeper/lansweeper_report_filter.dart';
+import '../models/lansweeper_sync_state.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper_report_dialog.dart';
 
@@ -40,13 +40,14 @@ class LansweeperReportSelection {
     return null;
   }
 
-  bool _matchesReportFilter(String state) {
-    return lansweeperReportStateMatches(host.reportFilter, state);
-  }
-
+  /// Η αναφορά είναι ουρά εργασίας: δείχνει ό,τι μένει να καταχωρηθεί.
+  ///
+  /// Το «τι έγινε με τις υπόλοιπες» απαντιέται στο Ιστορικό Κλήσεων, που έχει
+  /// αναζήτηση, ταξινόμηση και στήλες. Ως τώρα η αναφορά προσπαθούσε να κάνει
+  /// και τις δύο δουλειές με δεύτερη μπάρα φίλτρων, σε μισό πλάτος.
   List<ReportCallItem> filterReportItems(List<ReportCallItem> items) {
     return items
-        .where((item) => _matchesReportFilter(item.call.lansweeperState ?? ''))
+        .where((item) => LansweeperSyncState.isQueued(item.call.lansweeperState))
         .toList();
   }
 }

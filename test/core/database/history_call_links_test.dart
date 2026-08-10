@@ -1,5 +1,5 @@
-// Π4: το ιστορικό ξέρει ποιες κλήσεις άφησαν «ουρά» — συνδεδεμένη εκκρεμότητα
-// ή αίτημα Lansweeper — και μπορεί να φιλτράρει σε αυτές.
+// Το ιστορικό ξέρει ποιες κλήσεις άφησαν «ουρά» — συνδεδεμένη εκκρεμότητα ή
+// κατάσταση Lansweeper — και μπορεί να φιλτράρει σε αυτές.
 //
 //   flutter test test/core/database/history_call_links_test.dart
 
@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/features/history/models/lansweeper_sync_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -90,16 +91,59 @@ void main() {
       expect(rowFor(rows, 'Σβησμένη εκκρεμότητα')['has_open_task'], 0);
     });
 
-    test('το αίτημα Lansweeper αναγνωρίζεται από ticket ή από κατάσταση', () async {
-      await insertCall(issue: 'Με ticket', ticketId: '7001');
-      await insertCall(issue: 'Σταλμένη', lansweeperState: 'sent');
+    test('η γραμμή κουβαλά την κατάσταση Lansweeper και τον αριθμό αιτήματος', () async {
+      await insertCall(
+        issue: 'Καταχωρημένη',
+        lansweeperState: 'sent',
+        ticketId: '7001',
+      );
+      await insertCall(issue: 'Εξαιρεμένη', lansweeperState: 'excluded');
       await insertCall(issue: 'Καθαρή');
 
       final rows = await calls.getHistoryCalls();
 
-      expect(rowFor(rows, 'Με ticket')['has_lansweeper_ticket'], 1);
-      expect(rowFor(rows, 'Σταλμένη')['has_lansweeper_ticket'], 1);
-      expect(rowFor(rows, 'Καθαρή')['has_lansweeper_ticket'], 0);
+      expect(rowFor(rows, 'Καταχωρημένη')['lansweeper_state'], 'sent');
+      expect(rowFor(rows, 'Καταχωρημένη')['lansweeper_ticket_id'], '7001');
+      expect(rowFor(rows, 'Εξαιρεμένη')['lansweeper_state'], 'excluded');
+      expect(rowFor(rows, 'Καθαρή')['lansweeper_state'], 'unsent');
+      expect(rowFor(rows, 'Καθαρή')['lansweeper_ticket_id'], '');
+    });
+
+    test('η SQL κανονικοποίηση συμφωνεί με τον κανόνα της Dart', () async {
+      // Δύο διατυπώσεις του ίδιου κανόνα: αν αποκλίνουν, η ίδια κλήση πέφτει
+      // σε άλλη κατηγορία στο Ιστορικό απ' ό,τι στην Αναφορά.
+      //
+      // Το `null` λείπει από τη λίστα επίτηδες: η στήλη είναι NOT NULL με
+      // DEFAULT 'unsent', οπότε κενή τιμή δεν φτάνει ποτέ στη βάση.
+      const rawStates = <String>[
+        '',
+        '   ',
+        'unsent',
+        'sent',
+        'excluded',
+        'failed',
+        'unknown_state',
+      ];
+      for (var i = 0; i < rawStates.length; i++) {
+        await db.insert('calls', {
+          'date': '2026-07-15',
+          'time': '13:14',
+          'issue': 'Κατάσταση $i',
+          'status': 'completed',
+          'lansweeper_state': rawStates[i],
+          'is_deleted': 0,
+        });
+      }
+
+      final rows = await calls.getHistoryCalls();
+
+      for (var i = 0; i < rawStates.length; i++) {
+        expect(
+          rowFor(rows, 'Κατάσταση $i')['lansweeper_state'],
+          LansweeperSyncState.normalize(rawStates[i]),
+          reason: 'η ωμή τιμή «${rawStates[i]}» διαβάστηκε αλλιώς στο SQL',
+        );
+      }
     });
   });
 
@@ -115,26 +159,70 @@ void main() {
       expect(rows.single['issue'], 'Με εκκρεμότητα');
     });
 
-    test('onlyWithLansweeper κρατά μόνο τις κλήσεις με αίτημα', () async {
-      await insertCall(issue: 'Με ticket', ticketId: '7001');
-      await insertCall(issue: 'Καθαρή');
+    test('το φίλτρο κατάστασης κρατά μόνο τη ζητούμενη κατάσταση', () async {
+      await insertCall(issue: 'Καταχωρημένη', lansweeperState: 'sent');
+      await insertCall(issue: 'Εξαιρεμένη', lansweeperState: 'excluded');
+      await insertCall(issue: 'Ακαταχώρητη');
 
-      final rows = await calls.getHistoryCalls(onlyWithLansweeper: true);
+      final excluded = await calls.getHistoryCalls(
+        lansweeperState: LansweeperSyncState.excluded,
+      );
 
-      expect(rows, hasLength(1));
-      expect(rows.single['issue'], 'Με ticket');
+      expect(excluded, hasLength(1));
+      expect(excluded.single['issue'], 'Εξαιρεμένη');
+    });
+
+    test('η εξαιρεμένη ξεχωρίζει από την ακαταχώρητη', () async {
+      // Το παλιό δυαδικό φίλτρο δεν μπορούσε να τις χωρίσει: καμία από τις δύο
+      // δεν έχει αριθμό αιτήματος, οπότε έπεφταν μαζί έξω.
+      await insertCall(issue: 'Εξαιρεμένη', lansweeperState: 'excluded');
+      await insertCall(issue: 'Ακαταχώρητη');
+
+      final unsent = await calls.getHistoryCalls(
+        lansweeperState: LansweeperSyncState.unsent,
+      );
+
+      expect(unsent, hasLength(1));
+      expect(unsent.single['issue'], 'Ακαταχώρητη');
+    });
+
+    test('κλήση με κενή ή άγνωστη κατάσταση μετράει ως ακαταχώρητη', () async {
+      // Κλήση που δεν ταίριαζε πουθενά θα ήταν αόρατη σε κάθε φίλτρο.
+      await insertCall(issue: 'Κενή κατάσταση', lansweeperState: '');
+      await insertCall(issue: 'Άγνωστη κατάσταση', lansweeperState: 'pending');
+
+      final unsent = await calls.getHistoryCalls(
+        lansweeperState: LansweeperSyncState.unsent,
+      );
+
+      expect(unsent.map((r) => r['issue']), containsAll(<String>[
+        'Κενή κατάσταση',
+        'Άγνωστη κατάσταση',
+      ]));
+    });
+
+    test('κενό φίλτρο κατάστασης δεν περιορίζει τίποτα', () async {
+      await insertCall(issue: 'Καταχωρημένη', lansweeperState: 'sent');
+      await insertCall(issue: 'Ακαταχώρητη');
+
+      final all = await calls.getHistoryCalls(lansweeperState: '  ');
+
+      expect(all, hasLength(2));
     });
 
     test('τα δύο φίλτρα μαζί ζητούν ΚΑΙ τα δύο, όχι ένα από τα δύο', () async {
-      final both = await insertCall(issue: 'Και τα δύο', ticketId: '7002');
+      final both = await insertCall(
+        issue: 'Και τα δύο',
+        lansweeperState: 'sent',
+      );
       await insertTask(callId: both);
       final onlyTask = await insertCall(issue: 'Μόνο εκκρεμότητα');
       await insertTask(callId: onlyTask);
-      await insertCall(issue: 'Μόνο ticket', ticketId: '7003');
+      await insertCall(issue: 'Μόνο καταχώρηση', lansweeperState: 'sent');
 
       final rows = await calls.getHistoryCalls(
         onlyWithTask: true,
-        onlyWithLansweeper: true,
+        lansweeperState: LansweeperSyncState.sent,
       );
 
       expect(rows, hasLength(1));
