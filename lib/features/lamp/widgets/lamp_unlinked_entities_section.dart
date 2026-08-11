@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/database/old_database/lamp_unlinked_entities.dart';
+import '../../../core/widgets/compact_tooltip.dart';
 
 /// Ενότητα «Χωρίς συνδεδεμένο εξοπλισμό», κάτω από τις κάρτες εξοπλισμού.
 ///
@@ -83,7 +84,7 @@ class _EmptyRecordBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Tooltip(
+    return CompactTooltip(
       message:
           'Δεν έχει τηλέφωνο, email ή συνδεδεμένους ανθρώπους — πιθανό '
           'κατάλοιπο της παλιάς βάσης. Η μεταφορά παραμένει διαθέσιμη.',

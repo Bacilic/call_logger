@@ -137,51 +137,22 @@ void main() {
     });
   });
 
-  group('lansweeperAccountsWarning — τι δεν θα βρεθεί στο Lansweeper', () {
-    test('έγκυροι λογαριασμοί: καμία προειδοποίηση', () {
-      final accounts = parseLansweeperAccountsInput(
-        r'Α = gnk\bio1, grammateia@hospkorinthos.gr',
-      );
-
-      expect(lansweeperAccountsWarning(accounts), isNull);
-    });
-
-    test('ονομασία χωρίς αναγνωριστικό: ονομάζει τι φταίει', () {
-      final accounts = parseLansweeperAccountsInput('Γραφείο Λοιμώξεων');
-      final warning = lansweeperAccountsWarning(accounts);
-
-      expect(warning, isNotNull);
-      expect(warning, contains('Γραφείο Λοιμώξεων'));
-    });
-
-    test('τελεία στο τέλος του email πιάνεται', () {
-      final accounts = parseLansweeperAccountsInput(
-        'v.drosos@hospkorinthos.gr.',
-      );
-
-      expect(lansweeperAccountsWarning(accounts), isNotNull);
-    });
-
-    test('πολλά άκυρα: αναφέρονται όλα', () {
-      final accounts = parseLansweeperAccountsInput(
-        r'Πρώτο λάθος, Δεύτερο λάθος, Σωστό = gnk\bio1',
-      );
-      final warning = lansweeperAccountsWarning(accounts);
-
-      expect(warning, contains('Πρώτο λάθος'));
-      expect(warning, contains('Δεύτερο λάθος'));
-      expect(warning, isNot(contains(r'gnk\bio1')));
-    });
-  });
+  // Η συγκεντρωτική προειδοποίηση αντικαταστάθηκε από τη στοχευμένη
+  // διάγνωση ανά λογαριασμό — βλ. lansweeper_identity_diagnosis_test.dart.
 
   group('resolveLansweeperRequester — ιεραρχία', () {
     const bio1 = LansweeperAccount(username: r'gnk\bio1', label: 'Βιοχημικό #1');
     const bio2 = LansweeperAccount(username: r'gnk\bio2', label: 'Βιοχημικό #2');
     const paid = LansweeperAccount(username: r'gnk\docpaid', label: 'Παιδιατρική');
+    const brami = LansweeperTicketCaller(
+      displayName: 'Δήμητρα Μπράμη',
+      departmentName: 'Βιοχημικό',
+      username: r'gnk\d.brami',
+    );
 
-    test('ο καλών με δικό του αναγνωριστικό κερδίζει — καμία ερώτηση', () {
+    test('ΕΝΑΣ καλών με δικό του αναγνωριστικό κερδίζει — καμία ερώτηση', () {
       final options = resolveLansweeperRequester(
-        callerUsername: r'gnk\d.brami',
+        callers: const [brami],
         departments: [(departmentName: 'Βιοχημικό', accounts: [bio1, bio2])],
       );
 
@@ -192,7 +163,7 @@ void main() {
 
     test('άγνωστος καλών με ΕΝΑ λογαριασμό τμήματος: μπαίνει αυτόματα', () {
       final options = resolveLansweeperRequester(
-        callerUsername: null,
+        hasUnidentifiedCalls: true,
         departments: [(departmentName: 'Παιδιατρική', accounts: [paid])],
       );
 
@@ -205,9 +176,14 @@ void main() {
       expect(options.candidates, hasLength(1));
     });
 
-    test('άγνωστος καλών με ΠΟΛΛΟΥΣ: προεπιλογή ο πρώτος, με επιλογή', () {
+    test('γνωστός καλών ΧΩΡΙΣ αναγνωριστικό: λογαριασμοί τμήματος', () {
       final options = resolveLansweeperRequester(
-        callerUsername: '   ',
+        callers: const [
+          LansweeperTicketCaller(
+            displayName: 'Χωρίς ταυτότητα',
+            username: '   ',
+          ),
+        ],
         departments: [(departmentName: 'Βιοχημικό', accounts: [bio1, bio2])],
       );
 
@@ -219,9 +195,110 @@ void main() {
       ]);
     });
 
+    test(
+      'ΠΟΛΛΑΠΛΗ επιλογή (καλών με αναγνωριστικό + άγνωστος): ο επιλογέας '
+      'εμφανίζεται ΠΑΝΤΑ — προεπιλογή ο καλών της κύριας',
+      () {
+        // Το σενάριο της οθόνης: Ελένη (με δικό της id) + Άγνωστος.
+        final options = resolveLansweeperRequester(
+          callers: const [
+            LansweeperTicketCaller(
+              displayName: 'Ελένη Πλακογιάννη',
+              departmentName: 'Βιοϊατρική',
+              username: r'gnk\e.plakogianni',
+            ),
+          ],
+          hasUnidentifiedCalls: true,
+          departments: [
+            (departmentName: 'Λοιμώξεων', accounts: [bio1]),
+          ],
+        );
+
+        expect(options.selectedUsername, r'gnk\e.plakogianni');
+        expect(
+          options.isChoosable,
+          isTrue,
+          reason:
+              'Με δύο εμπλεκόμενα πρόσωπα ο αιτών είναι απόφαση — '
+              'όχι σιωπηλή χρέωση στον πρώτο',
+        );
+        expect(options.candidates.map((c) => c.account.username), [
+          r'gnk\e.plakogianni',
+          r'gnk\bio1',
+        ]);
+        expect(options.candidates.first.account.label, 'Ελένη Πλακογιάννη');
+      },
+    );
+
+    test(
+      'ΠΟΛΛΑΠΛΗ με δύο γνωστούς καλούντες: και τα δύο προσωπικά '
+      'αναγνωριστικά υποψήφια, προεπιλογή της κύριας',
+      () {
+        final options = resolveLansweeperRequester(
+          callers: const [
+            brami,
+            LansweeperTicketCaller(
+              displayName: 'Ελένη Πλακογιάννη',
+              departmentName: 'Βιοϊατρική',
+              username: r'gnk\e.plakogianni',
+            ),
+          ],
+          departments: const [],
+        );
+
+        expect(options.selectedUsername, r'gnk\d.brami');
+        expect(options.isChoosable, isTrue);
+        expect(options.candidates.map((c) => c.account.username), [
+          r'gnk\d.brami',
+          r'gnk\e.plakogianni',
+        ]);
+      },
+    );
+
+    test(
+      'κόκκινος πρώτος + έγκυρος δεύτερος: προεπιλέγεται ο ΕΓΚΥΡΟΣ, '
+      'ο κόκκινος μένει επιλέξιμος',
+      () {
+        const broken = LansweeperAccount(
+          username: r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+        );
+        final options = resolveLansweeperRequester(
+          hasUnidentifiedCalls: true,
+          departments: [
+            (departmentName: 'Λοιμώξεων', accounts: [broken, bio1]),
+          ],
+        );
+
+        expect(options.selectedUsername, r'gnk\bio1');
+        // Δεν αποκλείεται: ίσως είναι η σπάνια εξαίρεση που το Lansweeper
+        // δέχεται — τον τελικό λόγο τον έχει το SearchUsers.
+        expect(options.candidates.map((c) => c.account.username), [
+          r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+          r'gnk\bio1',
+        ]);
+      },
+    );
+
+    test('ΜΟΝΟ κόκκινοι λογαριασμοί: μπαίνει ο πρώτος, όπως πριν', () {
+      const broken = LansweeperAccount(
+        username: r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+      );
+      final options = resolveLansweeperRequester(
+        hasUnidentifiedCalls: true,
+        departments: [
+          (departmentName: 'Λοιμώξεων', accounts: [broken]),
+        ],
+      );
+
+      expect(
+        options.selectedUsername,
+        r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+      );
+    });
+
     test('πολλά τμήματα: όλοι οι λογαριασμοί, με το τμήμα τους', () {
       final options = resolveLansweeperRequester(
-        callerUsername: null,
+        hasUnidentifiedCalls: true,
         departments: [
           (departmentName: 'Βιοχημικό', accounts: [bio1]),
           (departmentName: 'Παιδιατρική', accounts: [paid]),
@@ -237,7 +314,7 @@ void main() {
 
     test('ίδιος λογαριασμός σε δύο τμήματα εμφανίζεται μία φορά', () {
       final options = resolveLansweeperRequester(
-        callerUsername: null,
+        hasUnidentifiedCalls: true,
         departments: [
           (departmentName: 'Βιοχημικό', accounts: [bio1]),
           (departmentName: 'Αιματολογικό', accounts: [bio1, bio2]),
@@ -253,7 +330,7 @@ void main() {
 
     test('τίποτα πουθενά: αιτών ο πράκτορας, χωρίς επιλογέα', () {
       final options = resolveLansweeperRequester(
-        callerUsername: null,
+        hasUnidentifiedCalls: true,
         departments: [(departmentName: 'Λοιμώξεων', accounts: const [])],
       );
 

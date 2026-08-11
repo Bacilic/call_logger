@@ -558,16 +558,42 @@ final lansweeperTicketPartiesProvider = FutureProvider.autoDispose
       if (calls.isEmpty) return LansweeperTicketParties.empty;
 
       final primary = calls.first;
-      final callerId = primary.callerId;
-      final callerUsername = callerId == null
-          ? null
-          : await UserRepository(db).getLansweeperUsernameById(callerId);
 
-      // Τα τμήματα διαβάζονται μόνο όταν χρειάζονται — ο καλών με δικό του
-      // αναγνωριστικό κερδίζει έτσι κι αλλιώς.
+      // Οι ΔΙΑΚΡΙΤΟΙ καλούντες όλων των επιλεγμένων κλήσεων, με σειρά πρώτης
+      // εμφάνισης (πρώτος = της κύριας). Κλήσεις χωρίς συνδεδεμένο καλούντα
+      // μετρούν ως επιπλέον «πρόσωπο»: κάνουν τον αιτούντα απόφαση.
+      final userRepo = UserRepository(db);
+      final callers = <LansweeperTicketCaller>[];
+      final seenCallerIds = <int>{};
+      var hasUnidentifiedCalls = false;
+      for (final call in calls) {
+        final callerId = call.callerId;
+        if (callerId == null) {
+          hasUnidentifiedCalls = true;
+          continue;
+        }
+        if (!seenCallerIds.add(callerId)) continue;
+        final username = await userRepo.getLansweeperUsernameById(callerId);
+        final displayName = (call.callerText ?? '').trim();
+        callers.add(
+          LansweeperTicketCaller(
+            displayName: displayName.isEmpty ? 'Καλών #$callerId' : displayName,
+            departmentName: (call.departmentText ?? '').trim(),
+            username: username,
+          ),
+        );
+      }
+      final partyCount = callers.length + (hasUnidentifiedCalls ? 1 : 0);
+
+      // Τα τμήματα διαβάζονται όταν η απόφαση τα χρειάζεται: με πολλά
+      // εμπλεκόμενα πρόσωπα, ή με μοναδικό πρόσωπο χωρίς δικό του
+      // αναγνωριστικό — ο μοναδικός καλών με δικό του κερδίζει χωρίς λίστα.
       final departments =
           <({String departmentName, List<LansweeperAccount> accounts})>[];
-      if ((callerUsername ?? '').trim().isEmpty) {
+      final needDepartments =
+          partyCount > 1 ||
+          !(callers.length == 1 && callers.first.hasUsername);
+      if (needDepartments) {
         final seenDepartments = <int>{};
         final lookup = LookupService.instance;
         for (final call in calls) {
@@ -604,7 +630,8 @@ final lansweeperTicketPartiesProvider = FutureProvider.autoDispose
 
       return LansweeperTicketParties(
         requester: resolveLansweeperRequester(
-          callerUsername: callerUsername,
+          callers: callers,
+          hasUnidentifiedCalls: hasUnidentifiedCalls,
           departments: departments,
         ),
         asset: asset,

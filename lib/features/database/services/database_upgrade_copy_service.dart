@@ -18,9 +18,10 @@ class UpgradeCopyResult {
   bool get isSuccess => copyPath != null && copyPath!.trim().isNotEmpty;
 }
 
-/// Επίθημα προηγούμενου αντιγράφου αναβάθμισης (ημερομηνία, προαιρετική ώρα).
+/// Επίθημα προηγούμενου αντιγράφου αναβάθμισης Ή υποβάθμισης (ημερομηνία,
+/// προαιρετική ώρα) — αφαιρείται πριν προστεθεί νέο, ώστε να μη συσσωρεύεται.
 final RegExp _upgradeCopySuffix = RegExp(
-  r'_αναβαθμισμένη_\d{2}-\d{2}-\d{4}(_\d{2}-\d{2}(-\d{2})?)?(_\d+)?$',
+  r'_(αναβαθμισμένη|υποβαθμισμένη)_\d{2}-\d{2}-\d{4}(_\d{2}-\d{2}(-\d{2})?)?(_\d+)?$',
 );
 
 /// Το όνομα που θα πάρει το αντίγραφο αναβάθμισης (χωρίς να δημιουργηθεί).
@@ -29,7 +30,11 @@ final RegExp _upgradeCopySuffix = RegExp(
 /// βλέπει εκ των προτέρων ποιο αρχείο θα δημιουργηθεί. Αν το αρχείο-πηγή είναι
 /// ήδη αντίγραφο αναβάθμισης, το παλιό επίθημα αντικαθίσταται αντί να
 /// συσσωρεύεται (`..._αναβαθμισμένη_25-07-2026_αναβαθμισμένη_25-07-2026.db`).
-String upgradeCopyFileName(String sourceDbPath, {DateTime? now}) {
+String upgradeCopyFileName(
+  String sourceDbPath, {
+  DateTime? now,
+  String suffix = '_αναβαθμισμένη_',
+}) {
   final stem = p
       .basenameWithoutExtension(sourceDbPath)
       .replaceFirst(_upgradeCopySuffix, '');
@@ -38,7 +43,7 @@ String upgradeCopyFileName(String sourceDbPath, {DateTime? now}) {
   return resolveUniqueTimestampedFileName(
     directory: '',
     baseName: stem,
-    suffix: '_αναβαθμισμένη_',
+    suffix: suffix,
     extension: effectiveExt,
     now: now,
     fileExists: (_) => false,
@@ -54,6 +59,7 @@ String resolveUpgradeCopyFileName({
   required String directory,
   DateTime? now,
   bool Function(String absolutePath)? fileExists,
+  String suffix = '_αναβαθμισμένη_',
 }) {
   final stem = p
       .basenameWithoutExtension(sourceDbPath)
@@ -63,18 +69,20 @@ String resolveUpgradeCopyFileName({
   return resolveUniqueTimestampedFileName(
     directory: directory,
     baseName: stem,
-    suffix: '_αναβαθμισμένη_',
+    suffix: suffix,
     extension: effectiveExt,
     now: now,
     fileExists: fileExists,
   );
 }
 
-/// Δημιουργεί αντίγραφο βάσης για ασφαλή αναβάθμιση σχήματος.
+/// Δημιουργεί αντίγραφο βάσης για ασφαλή αναβάθμιση — ή, με [suffix]
+/// «_υποβαθμισμένη_», για υποβάθμιση — σχήματος.
 /// Ποτέ δεν γράφει στο πρωτότυπο αρχείο.
 Future<UpgradeCopyResult> createUpgradeCopy(
   String sourceDbPath, {
   DateTime? now,
+  String suffix = '_αναβαθμισμένη_',
 }) async {
   final source = File(sourceDbPath);
   if (!await source.exists()) {
@@ -92,6 +100,7 @@ Future<UpgradeCopyResult> createUpgradeCopy(
       sourceDbPath: sourceDbPath,
       directory: dir,
       now: now,
+      suffix: suffix,
     ),
   );
 

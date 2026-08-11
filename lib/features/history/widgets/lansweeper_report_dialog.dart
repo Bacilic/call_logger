@@ -14,6 +14,9 @@ import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../core/utils/run_after_next_frame.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/services/ai_prompt_template_controller.dart';
+import '../../../core/services/lansweeper_department_accounts.dart';
+import '../../../core/services/lansweeper_identity_diagnosis.dart';
+import '../../../core/services/lookup_service.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../models/lansweeper_connection_status.dart';
@@ -812,6 +815,26 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                     asset: ticketParties.asset,
                                   );
 
+                            // Μέτρο σύγκρισης για τις πορτοκαλί υποψίες
+                            // τομέα: πράκτορας (αν είναι τομέας\όνομα),
+                            // αλλιώς ο πλειοψηφικός τομέας του καταλόγου.
+                            final requesterReferenceDomain =
+                                lansweeperReferenceDomain(
+                                  agentIdentity: ref.read(
+                                    lansweeperAgentUsernameProvider,
+                                  ),
+                                  knownIdentities: [
+                                    for (final user
+                                        in LookupService.instance.users)
+                                      user.lansweeperUsername ?? '',
+                                    for (final department
+                                        in LookupService.instance.departments)
+                                      ...decodeLansweeperAccounts(
+                                        department.lansweeperUsernames,
+                                      ).map((account) => account.username),
+                                  ],
+                                );
+
                             if (allItems.isEmpty) {
                               return _buildNoCallsInRangeEmptyState(
                                 context,
@@ -929,6 +952,8 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                               : const [],
                                           selectedRequesterUsername:
                                               effectiveRequester,
+                                          referenceDomain:
+                                              requesterReferenceDomain,
                                           onRequesterChanged: (value) =>
                                               setState(
                                                 () =>

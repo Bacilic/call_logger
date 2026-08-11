@@ -10,7 +10,6 @@ import '../../../core/database/settings_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/id_search_query.dart';
-import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../calls/models/user_model.dart';
@@ -18,6 +17,7 @@ import '../../../core/database/sqlite_types.dart';
 import '../models/equipment_column.dart';
 import '../services/bulk_action_undo_record.dart';
 import '../services/bulk_equipment_actions.dart';
+import '../services/catalog_search_evaluation.dart';
 import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
 
@@ -116,6 +116,7 @@ class EquipmentDirectoryState {
     this.lastDeleted,
     this.focusedRowIndex,
     this.showBuildingInLocationColumn = true,
+    this.searchSummary = CatalogSearchSummary.empty,
     List<EquipmentColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) : columnOrder = _normalizeColumnOrder(columnOrder),
@@ -167,6 +168,9 @@ class EquipmentDirectoryState {
   /// Πρόθεμα `[Κτίριο]` στη στήλη Τοποθεσία (πίνακας εξοπλισμού).
   final bool showBuildingInLocationColumn;
 
+  /// Σύνοψη τρέχουσας αναζήτησης (πλήθος + ευρήματα σε κρυφά πεδία).
+  final CatalogSearchSummary searchSummary;
+
   /// Ορατές στήλες κατά [columnOrder].
   List<EquipmentColumn> get orderedVisibleColumns => [
     for (final c in columnOrder)
@@ -184,6 +188,7 @@ class EquipmentDirectoryState {
     List<EquipmentDeleteUndoEntry>? lastDeleted,
     int? focusedRowIndex,
     bool? showBuildingInLocationColumn,
+    CatalogSearchSummary? searchSummary,
     List<EquipmentColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) {
@@ -200,6 +205,7 @@ class EquipmentDirectoryState {
       focusedRowIndex: focusedRowIndex ?? this.focusedRowIndex,
       showBuildingInLocationColumn:
           showBuildingInLocationColumn ?? this.showBuildingInLocationColumn,
+      searchSummary: searchSummary ?? this.searchSummary,
       columnOrder: columnOrder ?? this.columnOrder,
       visibleColumnKeys: visibleColumnKeys ?? this.visibleColumnKeys,
     );
@@ -466,25 +472,41 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     filterAndSort();
   }
 
+  /// Τα γεγονότα μιας γραμμής για την αναζήτηση: ΟΛΕΣ οι στήλες, ορατές και
+  /// κρυφές. Η αναζήτηση βρίσκει με βάση την εγγραφή, όχι τη διάταξη οθόνης —
+  /// οι κρυφές απλώς «χρεώνονται» στη γραμμή αποτελεσμάτων.
+  List<CatalogSearchFact> _searchFactsForRow(EquipmentRow row) {
+    return [
+      for (final col in state.columnOrder)
+        if (col.key != EquipmentColumn.selection.key)
+          CatalogSearchFact(
+            label: col.label,
+            // Το «–» των κενών κελιών δεν είναι περιεχόμενο προς εύρεση.
+            text: col.key == EquipmentColumn.department.key
+                ? equipmentOwnDepartmentName(row)
+                : _cellTextForColumn(row, col),
+            isVisible: state.visibleColumnKeys.contains(col.key),
+          ),
+    ];
+  }
+
   void filterAndSort() {
     final idQuery = IdSearchQuery.parse(state.searchQuery);
-    final q = SearchTextNormalizer.normalizeForSearch(idQuery.text);
     var list = state.allItems;
-    final visibleCols = state.orderedVisibleColumns;
 
+    var summary = CatalogSearchSummary.empty;
     if (!idQuery.isEmpty) {
+      final builder = CatalogSearchSummaryBuilder();
       list = list.where((row) {
         if (!idQuery.matchesEntityId(row.$1.id)) return false;
-        if (q.isEmpty) return true;
-        for (final col in visibleCols) {
-          final text = _cellTextForColumn(row, col);
-          if (text.isEmpty) continue;
-          if (SearchTextNormalizer.normalizeForSearch(text).contains(q)) {
-            return true;
-          }
-        }
-        return false;
+        final result = evaluateCatalogSearchRow(
+          _searchFactsForRow(row),
+          idQuery.text,
+        );
+        builder.addMatch(result);
+        return result.matches;
       }).toList();
+      summary = builder.build();
     }
 
     final col = state.sortColumn;
@@ -505,7 +527,11 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
         ? (len > 0 ? len - 1 : null)
         : idx;
 
-    state = state.copyWith(filteredItems: list, focusedRowIndex: clamped);
+    state = state.copyWith(
+      filteredItems: list,
+      focusedRowIndex: clamped,
+      searchSummary: summary,
+    );
   }
 
   static int _compareComparable(Comparable? a, Comparable? b) {

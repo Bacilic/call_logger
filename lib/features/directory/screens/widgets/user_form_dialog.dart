@@ -11,8 +11,9 @@ import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
-import '../../../../core/services/lansweeper_ticket_requester_fields.dart';
+import '../../../../core/services/lansweeper_identity_diagnosis.dart';
 import '../../../../core/services/lookup_service.dart';
+import '../../../../core/services/settings_service.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
@@ -103,6 +104,11 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
   final FocusNode _departmentFocusNode = FocusNode();
   final FocusNode _locationFocusNode = FocusNode();
   final FocusNode _notesFocusNode = FocusNode();
+  final FocusNode _lansweeperFocusNode = FocusNode();
+
+  /// Ταυτότητα πράκτορα (Ρυθμίσεις API) — μέτρο σύγκρισης για την ήπια
+  /// υποψία τομέα στο αναγνωριστικό Lansweeper.
+  String? _lansweeperAgentIdentity;
 
   bool get isEdit => widget.initialUser != null && !widget.isClone;
 
@@ -144,6 +150,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     locationController.addListener(_onFieldChanged);
     notesController.addListener(_onFieldChanged);
     lansweeperUsernameController.addListener(_onFieldChanged);
+    _loadLansweeperAgentIdentity();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -164,6 +171,10 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
           _notesFocusNode.requestFocus();
           _selectAll(notesController);
           break;
+        case 'lansweeperUsername':
+          _lansweeperFocusNode.requestFocus();
+          _selectAll(lansweeperUsernameController);
+          break;
         case 'firstName':
         default:
           _firstNameFocusNode.requestFocus();
@@ -171,6 +182,16 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
           break;
       }
     });
+  }
+
+  /// Αποτυχία φόρτωσης = απλώς καμία πορτοκαλί υποψία τομέα.
+  Future<void> _loadLansweeperAgentIdentity() async {
+    try {
+      final value = await SettingsService().remoteLansweeper
+          .getLansweeperAgentUsername();
+      if (!mounted) return;
+      setState(() => _lansweeperAgentIdentity = value);
+    } catch (_) {}
   }
 
   @override
@@ -189,6 +210,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     _departmentFocusNode.dispose();
     _locationFocusNode.dispose();
     _notesFocusNode.dispose();
+    _lansweeperFocusNode.dispose();
 
     lastNameController.dispose();
     firstNameController.dispose();
@@ -700,27 +722,53 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                     builder: (context) {
                       // Προειδοποίηση, ποτέ απαγόρευση: ο κατάλογος έχει πάντα
                       // την εξαίρεση που κανένας κανόνας δεν προέβλεψε.
-                      final looksWrong =
-                          lansweeperAgentValueLooksLikeDisplayName(
-                            lansweeperUsernameController.text,
-                          );
+                      // Στοχευμένη διάγνωση: λέμε ΤΙ χάλασε (τομέας ή email),
+                      // όχι γενικό «δεν μοιάζει»· και ήπια υποψία όταν ο
+                      // τομέας διαφέρει από του πράκτορα.
+                      final text = lansweeperUsernameController.text.trim();
+                      final diagnosis = diagnoseLansweeperIdentity(text);
+                      final looksWrong = text.isNotEmpty && !diagnosis.isValid;
+                      final mismatch = text.isNotEmpty && diagnosis.isValid
+                          ? lansweeperDomainMismatchHint(
+                              text,
+                              lansweeperReferenceDomain(
+                                agentIdentity: _lansweeperAgentIdentity,
+                                knownIdentities: [
+                                  for (final u in LookupService.instance.users)
+                                    u.lansweeperUsername ?? '',
+                                ],
+                              ),
+                            )
+                          : null;
+                      final String helper;
+                      if (looksWrong) {
+                        final suggestion = diagnosis.suggestion;
+                        helper = suggestion == null
+                            ? '${diagnosis.problem!} — το αίτημα δεν θα βρει '
+                                  'τον υπάλληλο.'
+                            : '${diagnosis.problem!} — $suggestion';
+                      } else if (mismatch != null) {
+                        helper = '$mismatch.';
+                      } else {
+                        helper =
+                            'Με συμπληρωμένο αναγνωριστικό, ο υπάλληλος '
+                            'καταχωρείται ως αιτών στο ticket του '
+                            'Lansweeper.';
+                      }
                       return TextFormField(
                         controller: lansweeperUsernameController,
+                        focusNode: _lansweeperFocusNode,
                         decoration: InputDecoration(
                           labelText: 'Αναγνωριστικό Lansweeper',
                           hintText: r'τομέας\όνομα.χρήστη ή email',
-                          helperText: looksWrong
-                              ? 'Δεν μοιάζει με αναγνωριστικό Lansweeper '
-                                    '(τομέας\\όνομα ή email) — το αίτημα δεν θα '
-                                    'βρει τον υπάλληλο.'
-                              : 'Με συμπληρωμένο αναγνωριστικό, ο υπάλληλος '
-                                    'καταχωρείται ως αιτών στο ticket του '
-                                    'Lansweeper.',
+                          helperText: helper,
                           helperMaxLines: 3,
                           helperStyle: looksWrong
                               ? TextStyle(
                                   color: Theme.of(context).colorScheme.error,
                                 )
+                              : mismatch != null
+                              ? TextStyle(color: Colors.orange.shade800)
                               : null,
                           border: const OutlineInputBorder(),
                         ),

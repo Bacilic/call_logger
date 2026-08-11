@@ -500,6 +500,8 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                   [
                     if (isCurrent) 'εκτελείται τώρα',
                     if (record.version.isNotEmpty) 'έκδοση ${record.version}',
+                    if (record.schemaVersion != null)
+                      'διαβάζει βάσεις έως την έκδοση ${record.schemaVersion}',
                     'τελευταία εκκίνηση $stamp',
                   ].join(' · '),
                   style: theme.textTheme.bodySmall?.copyWith(

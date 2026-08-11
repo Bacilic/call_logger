@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/app_config.dart';
+import '../database/database_v1_schema.dart';
 import '../services/app_instance_registry.dart';
 import '../services/settings_service.dart';
 
@@ -67,6 +68,10 @@ final appInstancesProvider = FutureProvider<AppInstancesStatus>((ref) async {
     executablePath: executablePath,
     version: version,
     now: DateTime.now(),
+    // Η έκδοση σχήματος που ΞΕΡΕΙ αυτό το εκτελέσιμο: με αυτήν, όταν άλλο
+    // (παλαιότερο) αντίγραφο βρει βάση νεότερης έκδοσης, μπορεί να υποδείξει
+    // με βεβαιότητα ποιο εκτελέσιμο τη διαβάζει.
+    schemaVersion: databaseSchemaVersionV1,
   );
   await settings.setKnownAppInstances(updated);
 

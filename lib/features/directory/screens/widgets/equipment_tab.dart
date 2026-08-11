@@ -22,6 +22,7 @@ import '../../../../core/database/equipment_deletion_summary_repository.dart';
 import 'bulk_equipment_edit_dialog.dart';
 import 'bulk_undo_bar.dart';
 import 'catalog_column_selector_shell.dart';
+import 'catalog_search_results_line.dart';
 import 'equipment_data_table.dart';
 import 'equipment_deletion_preview_dialog.dart';
 import 'equipment_delete_countdown_snackbar.dart';
@@ -100,14 +101,16 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
                   triggerMode: TooltipTriggerMode.tap,
                   richMessage: const TextSpan(
                     children: [
-                      TextSpan(text: 'Η αναζήτηση γίνεται μόνο '),
+                      TextSpan(text: 'Η αναζήτηση ψάχνει σε '),
                       TextSpan(
-                        text: 'στις ορατές στήλες',
+                        text: 'όλα τα στοιχεία του εξοπλισμού',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       TextSpan(
                         text:
-                            '. Εμφανίστε τις στήλες που θέλετε να ψάξετε, π.χ. Σημειώσεις.',
+                            ', ακόμη και σε κρυφές στήλες (π.χ. Τμήμα, '
+                            'Σημειώσεις). Όταν ένα εύρημα ταιριάζει μόνο σε '
+                            'κρυφό πεδίο, η γραμμή αποτελεσμάτων το λέει.',
                       ),
                     ],
                   ),
@@ -166,6 +169,7 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
             ],
           ),
         ),
+        CatalogSearchResultsLine(summary: state.searchSummary),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(

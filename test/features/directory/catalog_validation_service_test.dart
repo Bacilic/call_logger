@@ -1263,4 +1263,193 @@ void main() {
       expect(rules.internalPrefixTo, 29);
     });
   });
+
+  // Τα αναγνωριστικά μπήκαν με αντιγραφή-επικόλληση χωρίς κανέναν έλεγχο —
+  // ο κανόνας φέρνει τον ΙΔΙΟ κριτή των φορμών και στη μαζική σάρωση,
+  // ώστε τα ήδη περασμένα λάθη να εντοπίζονται με ένα κλικ.
+  group('Αναγνωριστικά Lansweeper', () {
+    test('υπάλληλος: στοχευμένο μήνυμα ανά περίπτωση, έγκυρες/κενό → καμία',
+        () {
+      // Χωρίς σημάδι πρόθεσης → το γενικό μήνυμα (μόνο τότε).
+      expect(
+        service.lansweeperUserIdentifierHint('Βασίλης Δρόσος'),
+        contains('Δεν μοιάζει ούτε με'),
+      );
+      // Με σημάδι πρόθεσης → το στοχευμένο λάθος, όχι το γενικό.
+      expect(
+        service.lansweeperUserIdentifierHint(r'mad\fdf\56'),
+        contains('περισσότερες από μία'),
+      );
+      expect(
+        service.lansweeperUserIdentifierHint('dro@fd'),
+        contains('δεν μοιάζει πλήρης'),
+      );
+      expect(service.lansweeperUserIdentifierHint(r'gnk\v.drosos'), isNull);
+      expect(
+        service.lansweeperUserIdentifierHint('v.drosos@hospital.gr'),
+        isNull,
+      );
+      expect(service.lansweeperUserIdentifierHint(''), isNull);
+      expect(service.lansweeperUserIdentifierHint('   '), isNull);
+    });
+
+    test('τμήμα: ένα μήνυμα ΑΝΑ προβληματικό λογαριασμό — όχι συγκεντρωτικό',
+        () {
+      final problems = service.lansweeperDepartmentAccountProblems(
+        r'Γραφείο Λοιμώξεων, Α = gnk\bio1, path@ gnk.g',
+      );
+      expect(problems, hasLength(2));
+      expect(problems.first, contains('Γραφείο Λοιμώξεων'));
+      expect(problems.first, contains('Δεν μοιάζει ούτε με'));
+      expect(problems.last, contains('κενό'));
+
+      expect(
+        service.lansweeperDepartmentAccountProblems(r'gnk\loimokseis1'),
+        isEmpty,
+      );
+      expect(service.lansweeperDepartmentAccountProblems(null), isEmpty);
+      expect(service.lansweeperDepartmentAccountProblems('  '), isEmpty);
+    });
+
+    test('τμήμα: ήπια υποψία τομέα μόνο με μέτρο σύγκρισης', () {
+      final mismatches = service.lansweeperDomainMismatchProblems(
+        r'Α = 3gnk\TepPath1, Β = gnk\bio1',
+        'gnk',
+      );
+      expect(mismatches, hasLength(1));
+      expect(mismatches.single, contains('«3gnk»'));
+
+      expect(
+        service.lansweeperDomainMismatchProblems(r'Α = 3gnk\TepPath1', null),
+        isEmpty,
+      );
+    });
+
+    test(
+      'scan: πράκτορας-email → μέτρο σύγκρισης ο πλειοψηφικός τομέας — '
+      'το 3gnk σημαίνεται',
+      () {
+        const s = CatalogValidationService(
+          CatalogValidationRules(emptyDepartmentEnabled: false),
+        );
+        final findings = s.scan(
+          users: [
+            UserModel(
+              id: 1,
+              lastName: 'Α',
+              firstName: 'Α',
+              lansweeperUsername: r'gnk\a',
+            ),
+            UserModel(
+              id: 2,
+              lastName: 'Β',
+              firstName: 'Β',
+              lansweeperUsername: r'gnk\b',
+            ),
+          ],
+          departments: [
+            DepartmentModel(
+              id: 63,
+              name: 'ΤΕΠ Παθολογικό',
+              lansweeperUsernames: r'Γιατρός = 3gnk\TepPath1',
+            ),
+          ],
+          equipment: const [],
+          lansweeperAgentIdentity: 'v.drosos@hospkorinthos.gr',
+        );
+        expect(findings, hasLength(1));
+        expect(findings.single.message, contains('«3gnk»'));
+        expect(findings.single.message, contains('πιθανό τυπογραφικό'));
+      },
+    );
+
+    test('ανενεργός κανόνας → σιωπή παντού', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(lansweeperIdentifierEnabled: false),
+      );
+      expect(s.lansweeperUserIdentifierHint('Βασίλης Δρόσος'), isNull);
+      expect(
+        s.lansweeperDepartmentAccountProblems('Γραφείο Λοιμώξεων'),
+        isEmpty,
+      );
+      expect(
+        s.lansweeperDomainMismatchProblems(r'Α = 3gnk\a', 'gnk'),
+        isEmpty,
+      );
+    });
+
+    test('scan: άκυρο αναγνωριστικό υπαλλήλου → εύρημα με εστίαση στο πεδίο',
+        () {
+      final findings = service.scan(
+        users: [
+          UserModel(
+            id: 5,
+            lastName: 'Βελέντζας',
+            firstName: 'Κωνσταντίνος',
+            phones: const ['2534'],
+            lansweeperUsername: 'Κωνσταντίνος Βελέντζας',
+          ),
+        ],
+        departments: const [],
+        equipment: const [],
+      );
+      expect(findings, hasLength(1));
+      final f = findings.single;
+      expect(f.type, CatalogFindingType.fieldHint);
+      expect(f.fieldLabel, 'Αναγνωριστικό Lansweeper');
+      expect(f.primary.kind, CatalogEntityKind.user);
+      expect(f.primary.entityId, 5);
+      expect(f.primary.focusedField, 'lansweeperUsername');
+    });
+
+    test('scan: άκυρος λογαριασμός τμήματος → εύρημα με εστίαση στο πεδίο',
+        () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(emptyDepartmentEnabled: false),
+      );
+      final findings = s.scan(
+        users: const [],
+        departments: [
+          DepartmentModel(
+            id: 63,
+            name: 'Λοιμώξεων',
+            lansweeperUsernames: 'Γραφείο Λοιμώξεων',
+          ),
+        ],
+        equipment: const [],
+      );
+      expect(findings, hasLength(1));
+      final f = findings.single;
+      expect(f.fieldLabel, 'Αναγνωριστικά Lansweeper');
+      expect(f.primary.kind, CatalogEntityKind.department);
+      expect(f.primary.entityId, 63);
+      expect(f.primary.focusedField, 'lansweeperUsernames');
+    });
+
+    test('scan: έγκυρα αναγνωριστικά παντού → κανένα εύρημα', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(emptyDepartmentEnabled: false),
+      );
+      final findings = s.scan(
+        users: [
+          UserModel(
+            id: 5,
+            lastName: 'Βελέντζας',
+            firstName: 'Κωνσταντίνος',
+            phones: const ['2534'],
+            lansweeperUsername: r'gnk\k.velentzas',
+          ),
+        ],
+        departments: [
+          DepartmentModel(
+            id: 63,
+            name: 'Λοιμώξεων',
+            lansweeperUsernames: r'gnk\loimokseis1',
+          ),
+        ],
+        equipment: const [],
+      );
+      expect(findings, isEmpty);
+    });
+  });
 }

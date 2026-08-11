@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/audit_entity_stamps.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/services/lookup_service.dart';
+import '../../../core/services/settings_service.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/catalog_validation_finding.dart';
 import '../providers/catalog_validation_provider.dart';
@@ -63,12 +65,21 @@ class CatalogScanRunner {
       if (ownerIds.isNotEmpty) owners[id] = ownerIds;
     }
 
+    // Η ταυτότητα του πράκτορα (Ρυθμίσεις API) τροφοδοτεί τις ήπιες υποψίες
+    // τομέα· χωρίς αυτήν, απλώς δεν υπάρχουν υποψίες.
+    String? agentIdentity;
+    try {
+      agentIdentity = await SettingsService().remoteLansweeper
+          .getLansweeperAgentUsername();
+    } catch (_) {}
+
     final findings = service.scan(
       users: directoryNotifier.allUsersForUi,
       departments: departments,
       equipment: equipment,
       sharedPhonesByDepartmentId: sharedPhones,
       ownerUserIdsByEquipmentId: owners,
+      lansweeperAgentIdentity: agentIdentity,
     );
 
     return _withAuditStamps(findings);
@@ -93,35 +104,9 @@ class CatalogScanRunner {
     }
     if (involved.isEmpty) return findings;
 
-    final where = <String>[];
-    final args = <Object?>[];
-    involved.forEach((type, ids) {
-      final placeholders = List.filled(ids.length, '?').join(', ');
-      where.add('(entity_type = ? AND entity_id IN ($placeholders))');
-      args
-        ..add(type)
-        ..addAll(ids);
-    });
-
+    // Το ερώτημα ζει στο core/database — «SQL μόνο στα Repositories».
     final db = await DatabaseHelper.instance.database;
-    final rows = await db.rawQuery('''
-      SELECT entity_type, entity_id,
-             MIN(CASE WHEN action LIKE 'ΔΗΜΙΟΥΡΓΙΑ%' THEN timestamp END)
-               AS created_at,
-             MAX(timestamp) AS last_changed_at
-      FROM audit_log
-      WHERE ${where.join(' OR ')}
-      GROUP BY entity_type, entity_id
-    ''', args);
-
-    final stamps = <String, (DateTime?, DateTime?)>{};
-    for (final row in rows) {
-      final key = '${row['entity_type']}#${row['entity_id']}';
-      stamps[key] = (
-        DateTime.tryParse(row['created_at']?.toString() ?? ''),
-        DateTime.tryParse(row['last_changed_at']?.toString() ?? ''),
-      );
-    }
+    final stamps = await fetchAuditEntityStamps(db, involved);
 
     return [
       for (final finding in findings)

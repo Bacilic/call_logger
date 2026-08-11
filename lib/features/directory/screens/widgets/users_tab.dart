@@ -26,6 +26,7 @@ import 'user_deletion_preview_dialog.dart';
 import 'bulk_undo_bar.dart';
 import 'bulk_user_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
+import 'catalog_search_results_line.dart';
 import 'department_form_dialog.dart';
 import 'non_user_phones_data_table.dart';
 import 'shared_asset_disconnect_dialog.dart';
@@ -155,6 +156,7 @@ class _UsersTabState extends ConsumerState<UsersTab>
             ],
           ),
         ),
+        CatalogSearchResultsLine(summary: state.searchSummary),
         const BulkUndoBar(scope: BulkUndoScope.users),
         Expanded(
           child: personal

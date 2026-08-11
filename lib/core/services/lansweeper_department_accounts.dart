@@ -68,26 +68,9 @@ LansweeperAccount? parseLansweeperAccount(String raw) {
   return LansweeperAccount(username: text);
 }
 
-/// Ποια αναγνωριστικά δεν θα βρεθούν στο Lansweeper — `null` όταν όλα μοιάζουν
-/// σωστά.
-///
-/// Προειδοποίηση, ποτέ απαγόρευση: ο κατάλογος του νοσοκομείου έχει πάντα την
-/// εξαίρεση που κανένας κανόνας δεν προέβλεψε.
-String? lansweeperAccountsWarning(List<LansweeperAccount> accounts) {
-  final invalid = [
-    for (final account in accounts)
-      if (lansweeperAgentValueLooksLikeDisplayName(account.username))
-        account.username,
-  ];
-  if (invalid.isEmpty) return null;
-
-  final list = invalid.map((value) => '«$value»').join(', ');
-  return invalid.length == 1
-      ? 'Το $list δεν μοιάζει με αναγνωριστικό Lansweeper (τομέας\\όνομα ή '
-            'email) — γράψτε «Ονομασία = τομέας\\όνομα».'
-      : 'Τα $list δεν μοιάζουν με αναγνωριστικά Lansweeper (τομέας\\όνομα ή '
-            'email) — γράψτε «Ονομασία = τομέας\\όνομα».';
-}
+// Η παλιά συγκεντρωτική προειδοποίηση (lansweeperAccountsWarning)
+// αντικαταστάθηκε 12/08/2026 από τη στοχευμένη διάγνωση ανά λογαριασμό
+// (lansweeper_identity_diagnosis.dart) — κάθε chip κουβαλά το δικό του λάθος.
 
 /// Τα ζεύγη που πληκτρολόγησε ο χρήστης, χωρισμένα με κόμμα.
 ///

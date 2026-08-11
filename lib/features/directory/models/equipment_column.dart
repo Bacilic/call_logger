@@ -88,6 +88,17 @@ String equipmentRowLocationFormattedLine(
   return '–';
 }
 
+/// Το ΔΙΚΟ ΤΟΥ τμήμα του εξοπλισμού (ποιανού είναι) — όχι του κατόχου.
+///
+/// Η «Τοποθεσία» απαντά «πού είναι» και ακολουθεί τον κάτοχο· όταν εξοπλισμός
+/// και κάτοχος ανήκουν σε διαφορετικά τμήματα (εύρημα που σημαίνει και ο
+/// Έλεγχος Ακεραιότητας), το πραγματικό τμήμα του εξοπλισμού φαίνεται μόνο εδώ.
+String equipmentOwnDepartmentName(EquipmentRow row) {
+  final id = row.$1.departmentId;
+  if (id == null) return '';
+  return (LookupService.instance.getDepartmentName(id) ?? '').trim();
+}
+
 /// Ορισμός στηλών πίνακα εξοπλισμού με key, label, displayValue και sortValue.
 class EquipmentColumn {
   EquipmentColumn(this.key, this.label, this.displayValue, this.sortValue);
@@ -131,6 +142,15 @@ class EquipmentColumn {
     'Κάτοχος',
     (row) => row.$2?.name ?? emptyOwnerDisplayLabel,
     (row) => row.$2?.name ?? '',
+  );
+  static final department = EquipmentColumn(
+    'department',
+    'Τμήμα',
+    (row) {
+      final name = equipmentOwnDepartmentName(row);
+      return name.isEmpty ? '–' : name;
+    },
+    (row) => equipmentOwnDepartmentName(row),
   );
   static final location = EquipmentColumn(
     'location',
@@ -176,12 +196,16 @@ class EquipmentColumn {
   ];
 
   /// Όλες οι διαθέσιμες στήλες για το μενού επιλογής.
+  ///
+  /// Η «Τμήμα» ΔΕΝ είναι στις προεπιλεγμένες: η εμφάνισή της είναι στη
+  /// βούληση του χρήστη (μενού στηλών). Η αναζήτηση όμως τη βλέπει πάντα.
   static final List<EquipmentColumn> all = [
     selection,
     id,
     code,
     type,
     owner,
+    department,
     location,
     phone,
     notes,

@@ -16,6 +16,7 @@ import 'database_lock_recovery.dart';
 import 'database_schema_migrations.dart';
 import 'database_state_notice.dart';
 import 'lock_diagnostic_service.dart';
+import 'schema_downgrade_compatibility.dart';
 import 'database_path_resolution.dart';
 import 'database_table_inspection.dart';
 
@@ -377,7 +378,7 @@ class DatabaseHelper {
       dbPath,
       progressNotifier: progressNotifier,
     );
-    await _requireSchemaUpgradeConsentIfNeeded(dbPath);
+    await _requireSchemaVersionCompatibility(dbPath);
 
     final timeoutSeconds = await _resolveDatabaseOpenTimeoutSeconds();
     final maxAttempts = await _resolveDatabaseOpenMaxAttempts();
@@ -419,7 +420,7 @@ class DatabaseHelper {
         dbPath,
         progressNotifier: progressNotifier,
       );
-      await _requireSchemaUpgradeConsentIfNeeded(dbPath);
+      await _requireSchemaVersionCompatibility(dbPath);
     }
 
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -527,13 +528,24 @@ class DatabaseHelper {
     throw error;
   }
 
-  /// Συγκατάθεση πριν από μόνιμη αναβάθμιση σχήματος σε ΝΕΑ διαδρομή.
-  /// Η ίδια διαδρομή με την τελευταία επιτυχημένη (`getLastOpenedDatabasePath`)
-  /// προχωρά σιωπηλά — δικλείδα για την καθημερινή βάση παραγωγής.
-  Future<void> _requireSchemaUpgradeConsentIfNeeded(String dbPath) async {
+  /// Φρουρός έκδοσης σχήματος — και προς τις ΔΥΟ κατευθύνσεις, πριν από
+  /// κάθε άνοιγμα που θα μπορούσε να αγγίξει το αρχείο.
+  ///
+  /// Αρχείο ΝΕΟΤΕΡΟ από την εφαρμογή: άμεση, ρητή αποτυχία με σαφές μήνυμα
+  /// και αξιολόγηση υποβάθμισης — χωρίς διαγνωστικά πρόσβασης, χωρίς
+  /// επαναδοκιμές, χωρίς να ανοίξει το αρχείο για εγγραφή.
+  ///
+  /// Αρχείο ΠΑΛΑΙΟΤΕΡΟ: συγκατάθεση πριν από μόνιμη αναβάθμιση σε ΝΕΑ
+  /// διαδρομή. Η ίδια διαδρομή με την τελευταία επιτυχημένη
+  /// (`getLastOpenedDatabasePath`) προχωρά σιωπηλά — δικλείδα για την
+  /// καθημερινή βάση παραγωγής.
+  Future<void> _requireSchemaVersionCompatibility(String dbPath) async {
     final profile = _lastDatabaseProfile;
     final fileVersion = profile?.userVersion;
     if (fileVersion == null || fileVersion <= 0) return;
+    if (fileVersion > kDatabaseSchemaVersion) {
+      await _rejectNewerDatabaseFile(dbPath, fileVersion);
+    }
     if (fileVersion >= kDatabaseSchemaVersion) return;
 
     final settings = SettingsService();
@@ -572,6 +584,42 @@ class DatabaseHelper {
         path: dbPath,
         recoveryKind: DatabaseInitRecoveryKind.schemaUpgradeConsent,
         technicalCode: '$fileVersion→$kDatabaseSchemaVersion',
+      ),
+    );
+  }
+
+  /// Το αρχείο γράφτηκε από νεότερη έκδοση: το άνοιγμα σταματά εδώ, με το
+  /// αρχείο ανέγγιχτο. Η αξιολόγηση υποβάθμισης (σύγκριση πραγματικού
+  /// σχήματος με το αναμενόμενο) γίνεται τώρα, ώστε τα κουμπιά διεξόδου να
+  /// ξέρουν αν και γιατί (δεν) προσφέρεται υποβάθμιση.
+  Future<Never> _rejectNewerDatabaseFile(String dbPath, int fileVersion) async {
+    SchemaDowngradeAssessment? assessment;
+    try {
+      assessment = await assessSchemaDowngrade(dbPath, fileVersion: fileVersion);
+    } catch (_) {
+      // Χωρίς αξιολόγηση η υποβάθμιση απλώς δεν προσφέρεται — το σφάλμα
+      // παραμένει σαφές και οι υπόλοιπες διέξοδοι ισχύουν.
+      assessment = null;
+    }
+
+    final fileName = dbPath.split(RegExp(r'[/\\]')).last.trim();
+    final displayName = fileName.isEmpty ? dbPath : fileName;
+    throw DatabaseInitException(
+      DatabaseInitResult(
+        status: DatabaseStatus.applicationError,
+        message: schemaVersionMismatchUserMessage(
+          fileName: displayName,
+          fileUserVersion: fileVersion,
+          appSchemaVersion: kDatabaseSchemaVersion,
+        ),
+        details:
+            'Διαδρομή: $dbPath\n'
+            'Έκδοση αρχείου: $fileVersion\n'
+            'Έκδοση εφαρμογής: $kDatabaseSchemaVersion',
+        path: dbPath,
+        recoveryKind: DatabaseInitRecoveryKind.databaseNewerThanApp,
+        technicalCode: '$fileVersion→$kDatabaseSchemaVersion',
+        schemaDowngrade: assessment,
       ),
     );
   }

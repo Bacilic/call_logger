@@ -119,7 +119,7 @@ Future<bool> runSchemaUpgradeConsentRecovery({
   final path = (result.path ?? '').trim();
   if (path.isEmpty) return false;
 
-  final versions = _parseSchemaVersions(result);
+  final versions = parseSchemaMismatchVersions(result);
   final choice = await showSchemaUpgradeConsentDialog(
     context: context,
     dbPath: path,
@@ -204,7 +204,11 @@ Future<bool> runSchemaUpgradeConsentRecovery({
   }
 }
 
-({int fileVersion, int appVersion}) _parseSchemaVersions(
+/// Διαβάζει «έκδοση αρχείου → έκδοση εφαρμογής» από ένα αποτέλεσμα
+/// αναντιστοιχίας σχήματος (πρώτα από το `technicalCode`, μετά από τα
+/// details). Κοινή και για τις δύο κατευθύνσεις: συγκατάθεση αναβάθμισης
+/// και βάση νεότερης έκδοσης.
+({int fileVersion, int appVersion}) parseSchemaMismatchVersions(
   DatabaseInitResult result,
 ) {
   var fileVersion = 0;

@@ -6,6 +6,7 @@ class AppInstanceRecord {
     required this.executablePath,
     required this.version,
     required this.lastSeen,
+    this.schemaVersion,
   });
 
   /// Πλήρης διαδρομή του εκτελέσιμου.
@@ -16,10 +17,18 @@ class AppInstanceRecord {
 
   final DateTime lastSeen;
 
+  /// Έως ποια έκδοση σχήματος βάσης διαβάζει αυτό το αντίγραφο.
+  ///
+  /// `null` σε εγγραφές από παλαιότερες εκδόσεις που δεν την κατέγραφαν —
+  /// «άγνωστη», ποτέ μάντεμα: μια οδηγία «άνοιξε τη βάση με εκείνο το
+  /// εκτελέσιμο» επιτρέπεται μόνο όταν το ξέρουμε με βεβαιότητα.
+  final int? schemaVersion;
+
   Map<String, dynamic> toJson() => {
     'path': executablePath,
     'version': version,
     'lastSeen': lastSeen.toIso8601String(),
+    if (schemaVersion != null) 'schemaVersion': schemaVersion,
   };
 
   static AppInstanceRecord? fromJson(Map<String, dynamic> json) {
@@ -31,6 +40,7 @@ class AppInstanceRecord {
       executablePath: path,
       version: (json['version'] as String?)?.trim() ?? '',
       lastSeen: seen,
+      schemaVersion: (json['schemaVersion'] as num?)?.toInt(),
     );
   }
 }
@@ -54,6 +64,7 @@ class AppInstanceRegistry {
     required String executablePath,
     required String version,
     required DateTime now,
+    int? schemaVersion,
   }) {
     final current = executablePath.trim();
     if (current.isEmpty) return List.unmodifiable(known);
@@ -65,6 +76,7 @@ class AppInstanceRegistry {
         executablePath: current,
         version: version.trim(),
         lastSeen: now,
+        schemaVersion: schemaVersion,
       ),
     ]..sort((a, b) => b.lastSeen.compareTo(a.lastSeen));
 

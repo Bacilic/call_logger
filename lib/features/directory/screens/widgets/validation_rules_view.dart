@@ -8,6 +8,7 @@ import '../../models/catalog_validation_finding.dart';
 import '../../models/catalog_validation_rules.dart';
 import '../../providers/catalog_validation_provider.dart';
 import '../../services/catalog_scan_runner.dart';
+import '../../services/configured_path_check.dart';
 
 /// Υπο-οθόνη «Κανόνες επικύρωσης» του hub «Διάφορα».
 ///
@@ -27,6 +28,9 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
 
   /// Αποτελέσματα του τελευταίου ελέγχου· `null` = δεν έχει τρέξει ακόμη.
   List<CatalogValidationFinding>? _findings;
+
+  /// Ρυθμισμένες διαδρομές που δεν βρέθηκαν σε αυτό το μηχάνημα.
+  List<ConfiguredPathEntry>? _invalidPaths;
   bool _scanning = false;
 
   late final TextEditingController _internalDigitsController;
@@ -84,6 +88,7 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
       _rules = next;
       // Τα ευρήματα προήλθαν από τους ΠΑΛΙΟΥΣ κανόνες — παύουν να ισχύουν.
       _findings = null;
+      _invalidPaths = null;
     });
     SettingsService().catalogs.setCatalogValidationRulesRaw(next.toRawJson());
     ref.invalidate(catalogValidationRulesProvider);
@@ -93,12 +98,21 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
     flushCatalogValidationProviderChain(ref);
   }
 
-  Future<void> _runScan() async {
+  /// Με [recheckPaths]: false κρατούνται τα προηγούμενα ευρήματα διαδρομών.
+  /// Οι έλεγχοι διαδρομών περιμένουν απαντήσεις δικτύου (έως 3" η καθεμιά) —
+  /// τρέχουν μόνο όταν πατιέται το κουμπί, όχι σε κάθε φρεσκάρισμα.
+  Future<void> _runScan({bool recheckPaths = true}) async {
     setState(() => _scanning = true);
     try {
       final findings = await CatalogScanRunner.scan(ref);
+      final invalidPaths = recheckPaths
+          ? await findInvalidConfiguredPaths()
+          : _invalidPaths;
       if (!mounted) return;
-      setState(() => _findings = findings);
+      setState(() {
+        _findings = findings;
+        _invalidPaths = invalidPaths;
+      });
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
@@ -107,10 +121,14 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
   /// Άνοιγμα της καρτέλας μιας εγγραφής ευρήματος· μετά το κλείσιμο ο
   /// έλεγχος ξανατρέχει, ώστε η λίστα να δείχνει την πραγματικότητα και
   /// όχι ευρήματα που μόλις διορθώθηκαν.
+  ///
+  /// ΧΩΡΙΣ επανέλεγχο διαδρομών: η επεξεργασία μιας εγγραφής δεν μπορεί να
+  /// αλλάξει ρυθμισμένες διαδρομές, και οι έλεγχοί τους περιμένουν δίκτυο —
+  /// αυτό έκανε το κλείσιμο της καρτέλας να «κολλάει» αισθητά.
   Future<void> _openRecord(CatalogFindingRecord record) async {
     await CatalogScanRunner.openRecord(context, ref, record);
     if (!mounted) return;
-    await _runScan();
+    await _runScan(recheckPaths: false);
   }
 
   int? _parseInRange(String text, int min, int max) {
@@ -328,6 +346,32 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
               ),
               const SizedBox(height: 12),
               _RuleCard(
+                icon: Icons.confirmation_number_outlined,
+                title: 'Lansweeper',
+                subtitle:
+                    'Οι φόρμες δείχνουν πάντα την προειδοποίηση — ο '
+                    'διακόπτης αφορά τον «Έλεγχο δεδομένων».',
+                children: [
+                  _RuleRow(
+                    enabled: rules.lansweeperIdentifierEnabled,
+                    onToggle: (v) =>
+                        _apply(rules.copyWith(lansweeperIdentifierEnabled: v)),
+                    note:
+                        'Ελέγχονται τα αναγνωριστικά υπαλλήλων και οι '
+                        'γενικοί λογαριασμοί τμημάτων',
+                    example:
+                        'Παράδειγμα υπόδειξης: «Το «Γραφείο Λοιμώξεων '
+                        'gnk\\loimokseis1» δεν μοιάζει με αναγνωριστικό '
+                        'Lansweeper (τομέας\\όνομα ή email)»',
+                    child: Text(
+                      'Αναγνωριστικά σε μορφή τομέας\\όνομα ή email',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _RuleCard(
                 icon: Icons.compare_arrows_outlined,
                 title: 'Διασταυρώσεις',
                 subtitle:
@@ -420,6 +464,7 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
               _ScanSection(
                 scanning: _scanning,
                 findings: _findings,
+                invalidPaths: _invalidPaths,
                 onScan: _runScan,
                 onOpenRecord: _openRecord,
               ),
@@ -436,12 +481,14 @@ class _ScanSection extends StatelessWidget {
   const _ScanSection({
     required this.scanning,
     required this.findings,
+    required this.invalidPaths,
     required this.onScan,
     required this.onOpenRecord,
   });
 
   final bool scanning;
   final List<CatalogValidationFinding>? findings;
+  final List<ConfiguredPathEntry>? invalidPaths;
   final Future<void> Function() onScan;
   final Future<void> Function(CatalogFindingRecord record) onOpenRecord;
 
@@ -507,8 +554,155 @@ class _ScanSection extends StatelessWidget {
                   onTap: () => onOpenRecord(finding.primary),
                 ),
           ],
+          if (invalidPaths != null) ...[
+            const SizedBox(height: 16),
+            _InvalidPathsSection(theme: theme, invalidPaths: invalidPaths!),
+          ],
         ],
       ],
+    );
+  }
+}
+
+/// Ενότητα «Διαδρομές»: ποιες ρυθμισμένες διαδρομές δεν βρέθηκαν σε αυτό
+/// το μηχάνημα — με σαφή ένδειξη αν ταξιδεύουν με τη βάση ή είναι τοπικές.
+class _InvalidPathsSection extends StatelessWidget {
+  const _InvalidPathsSection({required this.theme, required this.invalidPaths});
+
+  final ThemeData theme;
+  final List<ConfiguredPathEntry> invalidPaths;
+
+  @override
+  Widget build(BuildContext context) {
+    if (invalidPaths.isEmpty) {
+      final color = Colors.green.shade800;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.folder_outlined, size: 18, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Όλες οι ρυθμισμένες διαδρομές βρέθηκαν σε αυτό το μηχάνημα.',
+                style: theme.textTheme.bodySmall?.copyWith(color: color),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          invalidPaths.length == 1
+              ? '1 διαδρομή εκτός λειτουργίας σε αυτό το μηχάνημα'
+              : '${invalidPaths.length} διαδρομές εκτός λειτουργίας σε αυτό '
+                    'το μηχάνημα',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Οι διαδρομές «της βάσης» ταξιδεύουν μαζί της (δουλειά ↔ σπίτι)· '
+          'οι «τοπικές» αφορούν μόνο αυτόν τον υπολογιστή.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final entry in invalidPaths)
+          _InvalidPathTile(theme: theme, entry: entry),
+      ],
+    );
+  }
+}
+
+class _InvalidPathTile extends StatelessWidget {
+  const _InvalidPathTile({required this.theme, required this.entry});
+
+  final ThemeData theme;
+  final ConfiguredPathEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final warning = Colors.orange.shade800;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.folder_off_outlined, size: 22, color: warning),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          entry.settingName,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: entry.storedInDatabase
+                              ? theme.colorScheme.primaryContainer
+                              : theme.colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          entry.storedInDatabase
+                              ? 'ρύθμιση της βάσης'
+                              : 'τοπική ρύθμιση',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: entry.storedInDatabase
+                                ? theme.colorScheme.onPrimaryContainer
+                                : theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  SelectableText(
+                    entry.path,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      fontFamilyFallback: const ['Consolas', 'monospace'],
+                    ),
+                  ),
+                  Text(
+                    'Δεν βρέθηκε σε αυτό το μηχάνημα · διορθώνεται: '
+                    '${entry.fixLocation}',
+                    style: theme.textTheme.bodySmall?.copyWith(color: warning),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

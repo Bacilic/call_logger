@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/lansweeper_identity_diagnosis.dart';
 import '../../../../core/services/lansweeper_requester_resolution.dart';
 import '../../../../core/services/lansweeper_ticket_submit_config.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../../core/widgets/app_asset_image.dart';
+
+/// Διαβάθμιση εγκυρότητας αιτούντα: εντάξει / ύποπτος τομέας / λάθος μορφή.
+enum _RequesterSeverity { ok, suspect, invalid }
 
 class LansweeperSyncForm extends ConsumerWidget {
   const LansweeperSyncForm({
@@ -35,6 +40,7 @@ class LansweeperSyncForm extends ConsumerWidget {
     this.requesterCandidates = const [],
     this.selectedRequesterUsername,
     this.onRequesterChanged,
+    this.referenceDomain,
     super.key,
   });
 
@@ -73,6 +79,10 @@ class LansweeperSyncForm extends ConsumerWidget {
   /// Κενή λίστα = καμία επιλογή προς εμφάνιση.
   final List<LansweeperRequesterCandidate> requesterCandidates;
 
+  /// Τομέας αναφοράς για τις πορτοκαλί υποψίες τομέα — null = χωρίς μέτρο
+  /// σύγκρισης (βλ. τη συνάρτηση lansweeperReferenceDomain του πυρήνα).
+  final String? referenceDomain;
+
   /// Ποιος είναι επιλεγμένος· κενό = «χωρίς αιτούντα».
   final String? selectedRequesterUsername;
   final ValueChanged<String>? onRequesterChanged;
@@ -81,6 +91,87 @@ class LansweeperSyncForm extends ConsumerWidget {
     if (seconds > 30) return Colors.red;
     if (seconds >= 10) return Colors.orange;
     return Colors.green;
+  }
+
+  /// Διαβάθμιση ενός αιτούντα με την ίδια γλώσσα των chips του τμήματος.
+  _RequesterSeverity _requesterSeverity(String username) {
+    final trimmed = username.trim();
+    if (trimmed.isEmpty) return _RequesterSeverity.ok;
+    if (!diagnoseLansweeperIdentity(trimmed).isValid) {
+      return _RequesterSeverity.invalid;
+    }
+    if (lansweeperDomainMismatchHint(trimmed, referenceDomain) != null) {
+      return _RequesterSeverity.suspect;
+    }
+    return _RequesterSeverity.ok;
+  }
+
+  /// Το στοχευμένο μήνυμα για τον αιτούντα — null όταν όλα είναι εντάξει.
+  String? _requesterAlertText(String username) {
+    final trimmed = username.trim();
+    if (trimmed.isEmpty) return null;
+    final diagnosis = diagnoseLansweeperIdentity(trimmed);
+    if (!diagnosis.isValid) {
+      final suggestion = diagnosis.suggestion;
+      final base = suggestion == null
+          ? diagnosis.problem!
+          : '${diagnosis.problem!} — $suggestion';
+      return '$base.\nΑν δεν βρεθεί στο Lansweeper, το ticket θα '
+          'καταχωρηθεί χωρίς αιτούντα.';
+    }
+    return lansweeperDomainMismatchHint(trimmed, referenceDomain);
+  }
+
+  /// Η γραμμή «Στο ticket»: ο αιτών χρωματίζεται όταν η διάγνωση έχει κάτι
+  /// να πει (κόκκινο = λάθος μορφή, πορτοκαλί = ύποπτος τομέας), με το
+  /// στοχευμένο μήνυμα στο tooltip — ποτέ φραγμός: τον τελικό λόγο τον έχει
+  /// το SearchUsers του Lansweeper κατά την καταχώρηση.
+  Widget _buildAutoPartiesLine(BuildContext context) {
+    final theme = Theme.of(context);
+    final requester = autoParties!.requester;
+    final severity = requester == null
+        ? _RequesterSeverity.ok
+        : _requesterSeverity(requester);
+    final alert = requester == null ? null : _requesterAlertText(requester);
+
+    var message =
+        'Συμπληρώνονται αυτόματα στο ticket από τα αναγνωριστικά '
+        'του Καταλόγου. Το «—» σημαίνει χωρίς αντιστοίχιση: εκεί '
+        'το ticket βγαίνει όπως πριν και συμπληρώνετε χειροκίνητα '
+        'στο Lansweeper.';
+    if (alert != null) {
+      message = '$message\n\n⚠ $alert';
+    }
+
+    final baseStyle = theme.textTheme.labelMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final requesterStyle = switch (severity) {
+      _RequesterSeverity.invalid => TextStyle(
+        color: theme.colorScheme.error,
+        fontWeight: FontWeight.w600,
+      ),
+      _RequesterSeverity.suspect => TextStyle(
+        color: Colors.orange.shade800,
+        fontWeight: FontWeight.w600,
+      ),
+      _RequesterSeverity.ok => null,
+    };
+
+    return CompactTooltip(
+      message: message,
+      child: Text.rich(
+        TextSpan(
+          style: baseStyle,
+          children: [
+            const TextSpan(text: 'Στο ticket — Αιτών: '),
+            TextSpan(text: requester ?? '—', style: requesterStyle),
+            TextSpan(text: ' · Εξοπλισμός: ${autoParties!.asset ?? '—'}'),
+          ],
+        ),
+        key: const ValueKey('lansweeper_auto_parties_line'),
+      ),
+    );
   }
 
   Widget _buildCustomField(
@@ -292,21 +383,7 @@ class LansweeperSyncForm extends ConsumerWidget {
             ),
             if (autoParties != null) ...[
               const SizedBox(height: 4),
-              Tooltip(
-                message:
-                    'Συμπληρώνονται αυτόματα στο ticket από τα αναγνωριστικά '
-                    'του Καταλόγου. Το «—» σημαίνει χωρίς αντιστοίχιση: εκεί '
-                    'το ticket βγαίνει όπως πριν και συμπληρώνετε χειροκίνητα '
-                    'στο Lansweeper.',
-                child: Text(
-                  'Στο ticket — Αιτών: ${autoParties!.requester ?? '—'} · '
-                  'Εξοπλισμός: ${autoParties!.asset ?? '—'}',
-                  key: const ValueKey('lansweeper_auto_parties_line'),
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
+              _buildAutoPartiesLine(context),
             ],
             if (requesterCandidates.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -331,6 +408,19 @@ class LansweeperSyncForm extends ConsumerWidget {
                         '${candidate.account.displayLabel}',
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
+                        // Ίδια χρωματική γλώσσα με τα chips του τμήματος:
+                        // κόκκινο = λάθος μορφή, πορτοκαλί = ύποπτος τομέας.
+                        style: switch (_requesterSeverity(
+                          candidate.account.username,
+                        )) {
+                          _RequesterSeverity.invalid => TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          _RequesterSeverity.suspect => TextStyle(
+                            color: Colors.orange.shade800,
+                          ),
+                          _RequesterSeverity.ok => null,
+                        },
                       ),
                     ),
                   const DropdownMenuItem<String>(
@@ -377,10 +467,11 @@ class LansweeperSyncForm extends ConsumerWidget {
             if (onSaveAsKnowledge != null || saveAsKnowledgeDisabledTooltip != null)
               Align(
                 alignment: Alignment.centerLeft,
-                child: Tooltip(
+                child: CompactTooltip(
                   message: onSaveAsKnowledge == null
                       ? (saveAsKnowledgeDisabledTooltip ?? '')
-                      : 'Κρατά το σύμπτωμα και τη λύση ως άρθρο, για την επόμενη φορά που θα εμφανιστεί το ίδιο',
+                      : 'Κρατά το σύμπτωμα και τη λύση ως άρθρο, για την '
+                            'επόμενη φορά που θα εμφανιστεί το ίδιο',
                   child: TextButton.icon(
                     onPressed: onSaveAsKnowledge,
                     icon: const Icon(Icons.healing, size: 18),

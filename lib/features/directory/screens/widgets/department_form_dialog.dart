@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lansweeper_department_accounts.dart';
+import '../../../../core/services/lansweeper_identity_diagnosis.dart';
 import '../../../../core/services/lookup_service.dart';
+import '../../../../core/services/settings_service.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/directory_support.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
@@ -124,11 +127,16 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   /// Οι λογαριασμοί που θα αποθηκευτούν, με τη σειρά που τους έγραψε ο χρήστης.
   List<LansweeperAccount> lansweeperAccounts = const [];
 
+  /// Ταυτότητα πράκτορα (Ρυθμίσεις API) — μέτρο σύγκρισης για τις ήπιες
+  /// υποψίες τομέα (πορτοκαλί chip). Null όσο δεν έχει φορτωθεί/οριστεί.
+  String? lansweeperAgentIdentity;
+
   late Color selectedColor;
 
   final FocusNode _nameFocus = FocusNode();
   final FocusNode _buildingFocus = FocusNode();
   final FocusNode _colorFocus = FocusNode();
+  final FocusNode _lansweeperAccountsFocus = FocusNode();
   final FocusNode _notesFocus = FocusNode();
   final FocusNode sharedPhoneInputFocus = FocusNode();
   final FocusNode sharedEquipmentInputFocus = FocusNode();
@@ -223,6 +231,32 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     });
   }
 
+  /// Φορτώνει την ταυτότητα πράκτορα για τη σύγκριση τομέα. Αποτυχία =
+  /// απλώς καμία πορτοκαλί υποψία — τα chips μένουν πράσινα/κόκκινα.
+  Future<void> _loadLansweeperAgentIdentity() async {
+    try {
+      final value = await SettingsService().remoteLansweeper
+          .getLansweeperAgentUsername();
+      if (!mounted) return;
+      setState(() => lansweeperAgentIdentity = value);
+    } catch (_) {}
+  }
+
+  /// Ο τομέας αναφοράς για τα πορτοκαλί chips: του πράκτορα, ή —όταν εκείνος
+  /// είναι email— ο πλειοψηφικός τομέας των αναγνωριστικών του καταλόγου.
+  String? get lansweeperReferenceDomainForChips => lansweeperReferenceDomain(
+    agentIdentity: lansweeperAgentIdentity,
+    knownIdentities: [
+      for (final user in LookupService.instance.users)
+        user.lansweeperUsername ?? '',
+      for (final department in LookupService.instance.departments)
+        ...decodeLansweeperAccounts(
+          department.lansweeperUsernames,
+        ).map((account) => account.username),
+      for (final account in lansweeperAccounts) account.username,
+    ],
+  );
+
   void removeLansweeperAccount(LansweeperAccount account) {
     setState(() {
       lansweeperAccounts = [
@@ -230,6 +264,28 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
           if (a != account) a,
       ];
     });
+  }
+
+  /// Φέρνει έναν λογαριασμό πίσω στο πεδίο για επεξεργασία: το chip φεύγει,
+  /// το κείμενό του μπαίνει στο πεδίο και η εστίαση πάει εκεί — καμία
+  /// επαναπληκτρολόγηση του «Ονομασία = τομέας\όνομα» από το μηδέν.
+  ///
+  /// Ό,τι μισογραμμένο υπάρχει ήδη στο πεδίο κατοχυρώνεται πρώτα ως
+  /// λογαριασμός, ώστε να μη σβηστεί σιωπηλά από το κείμενο του chip.
+  void editLansweeperAccount(LansweeperAccount account) {
+    commitLansweeperAccountInput();
+    final text = account.toInputText();
+    setState(() {
+      lansweeperAccounts = [
+        for (final a in lansweeperAccounts)
+          if (a != account) a,
+      ];
+      lansweeperAccountInputController.text = text;
+      lansweeperAccountInputController.selection = TextSelection.collapsed(
+        offset: text.length,
+      );
+    });
+    _lansweeperAccountsFocus.requestFocus();
   }
 
   @override
@@ -247,6 +303,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     sharedEquipmentInputController = TextEditingController();
     lansweeperAccountInputController = TextEditingController();
     lansweeperAccounts = decodeLansweeperAccounts(d?.lansweeperUsernames);
+    _loadLansweeperAgentIdentity();
     final did = d?.id;
     if (did != null) {
       sharedPhones = LookupService.instance.getDirectPhonesByDepartment(did);
@@ -307,6 +364,9 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
         case 'notes':
           _notesFocus.requestFocus();
           break;
+        case 'lansweeperUsernames':
+          _lansweeperAccountsFocus.requestFocus();
+          break;
         case 'name':
         default:
           _nameFocus.requestFocus();
@@ -335,6 +395,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     _buildingFocus.dispose();
     _colorFocus.dispose();
     _notesFocus.dispose();
+    _lansweeperAccountsFocus.dispose();
     sharedPhoneInputFocus.dispose();
     sharedEquipmentInputFocus.dispose();
     super.dispose();
@@ -1024,6 +1085,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: lansweeperAccountInputController,
+                        focusNode: _lansweeperAccountsFocus,
                         decoration: const InputDecoration(
                           labelText: 'Αναγνωριστικά Lansweeper (με κόμμα)',
                           hintText: r'Ονομασία = τομέας\όνομα, ή σκέτο email',
@@ -1053,32 +1115,19 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                             runSpacing: 4,
                             children: [
                               for (final account in lansweeperAccounts)
-                                RemovableSharedChip(
+                                LansweeperAccountChip(
                                   key: ValueKey(
                                     'lansweeper_account_${account.username}',
                                   ),
-                                  label: account.toInputText(),
-                                  isNewlyAdded: false,
-                                  isPendingRemoval: false,
-                                  onToggle: () =>
+                                  account: account,
+                                  referenceDomain:
+                                      lansweeperReferenceDomainForChips,
+                                  onEdit: () =>
+                                      editLansweeperAccount(account),
+                                  onRemove: () =>
                                       removeLansweeperAccount(account),
                                 ),
                             ],
-                          ),
-                        ),
-                      if (lansweeperAccountsWarning(lansweeperAccounts)
-                          case final warning?)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            warning,
-                            key: const ValueKey(
-                              'lansweeper_accounts_warning',
-                            ),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
                           ),
                         ),
                     ],
@@ -1106,6 +1155,70 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
 }
 
 /// Chip κοινόχρηστου τηλεφώνου/εξοπλισμού: ενεργό, νεοπροστεθέν ή προς αφαίρεση.
+/// Chip λογαριασμού Lansweeper με σήμανση εγκυρότητας:
+/// 🟩 έγκυρο · 🟧 έγκυρο με ύποπτο τομέα (διαφέρει από του πράκτορα) ·
+/// 🟥 άκυρο, με το ΣΤΟΧΕΥΜΕΝΟ λάθος στο tooltip (οικονομία χώρου — δεν
+/// υπάρχει πια συγκεντρωτικό κόκκινο κείμενο κάτω από τα chips).
+///
+/// Κλικ στο σώμα = επεξεργασία (το κείμενο επιστρέφει στο πεδίο)· το X
+/// παραμένει η αφαίρεση.
+class LansweeperAccountChip extends StatelessWidget {
+  const LansweeperAccountChip({
+    super.key,
+    required this.account,
+    required this.referenceDomain,
+    required this.onEdit,
+    required this.onRemove,
+  });
+
+  final LansweeperAccount account;
+
+  /// Τομέας αναφοράς για την πορτοκαλί υποψία (βλ.
+  /// [lansweeperReferenceDomain]) — null = χωρίς μέτρο σύγκρισης.
+  final String? referenceDomain;
+  final VoidCallback onEdit;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final diagnosis = diagnoseLansweeperIdentity(account.username);
+    final mismatch = diagnosis.isValid
+        ? lansweeperDomainMismatchHint(account.username, referenceDomain)
+        : null;
+
+    final Color background;
+    final String statusLine;
+    if (!diagnosis.isValid) {
+      background = Colors.red.shade100;
+      statusLine = diagnosis.suggestion == null
+          ? diagnosis.problem!
+          : '${diagnosis.problem!}\n${diagnosis.suggestion!}';
+    } else if (mismatch != null) {
+      background = Colors.orange.shade100;
+      statusLine = mismatch;
+    } else {
+      background = Colors.lightGreen.shade100;
+      statusLine = diagnosis.kind == LansweeperIdentityKind.email
+          ? 'Έγκυρο email'
+          : 'Έγκυρο αναγνωριστικό τομέα';
+    }
+
+    return CompactTooltip(
+      message: '$statusLine\n\nΚλικ για επεξεργασία — το κείμενο '
+          'επιστρέφει στο πεδίο',
+      waitDuration: const Duration(milliseconds: 350),
+      child: InputChip(
+        label: Text(account.toInputText()),
+        backgroundColor: background,
+        onPressed: onEdit,
+        deleteIcon: const Icon(Icons.cancel),
+        deleteButtonTooltipMessage: 'Διαγραφή',
+        onDeleted: onRemove,
+      ),
+    );
+  }
+}
+
 class RemovableSharedChip extends StatelessWidget {
   const RemovableSharedChip({
     super.key,
@@ -1113,6 +1226,7 @@ class RemovableSharedChip extends StatelessWidget {
     required this.isNewlyAdded,
     required this.isPendingRemoval,
     required this.onToggle,
+    this.onPressed,
   });
 
   final String label;
@@ -1120,9 +1234,14 @@ class RemovableSharedChip extends StatelessWidget {
   final bool isPendingRemoval;
   final VoidCallback onToggle;
 
+  /// Προαιρετικό κλικ στο σώμα του chip (π.χ. «φέρε το προς επεξεργασία»).
+  /// Το X παραμένει η διαγραφή/αναίρεση, ανεξάρτητα από αυτό.
+  final VoidCallback? onPressed;
+
   @override
   Widget build(BuildContext context) {
     return InputChip(
+      onPressed: onPressed,
       label: Text(
         label,
         style: isPendingRemoval

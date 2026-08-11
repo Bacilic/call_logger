@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/compact_tooltip.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
@@ -1047,7 +1049,7 @@ Widget _resolutionOptionTitle(
   return Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Tooltip(
+      CompactTooltip(
         message:
             'Καμία εγγραφή εξοπλισμού δεν χρησιμοποιεί αυτή την οντότητα — '
             'πιθανό κατάλοιπο της παλιάς βάσης.',

@@ -33,6 +33,7 @@ import '../../providers/directory_provider.dart';
 import 'bulk_department_edit_dialog.dart';
 import 'bulk_undo_bar.dart';
 import 'catalog_column_selector_shell.dart';
+import 'catalog_search_results_line.dart';
 import 'department_form_dialog.dart';
 import 'departments_data_table.dart';
 import '../../building_map/screens/building_map_dialog.dart';
@@ -138,6 +139,7 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             ],
           ),
         ),
+        CatalogSearchResultsLine(summary: state.searchSummary),
         const BulkUndoBar(scope: BulkUndoScope.departments),
         Expanded(
           child: DepartmentsDataTable(

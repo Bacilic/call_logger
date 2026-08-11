@@ -19,6 +19,8 @@ import '../updates/update_providers.dart';
 import '../utils/database_path_identity.dart';
 import '../utils/user_facing_error_messages.dart';
 import 'compact_tooltip.dart';
+import '../../features/database/widgets/database_check_failed_dialog.dart';
+import '../../features/database/widgets/database_newer_recovery_dialog.dart';
 import '../../features/database/widgets/schema_upgrade_consent_dialog.dart';
 import '../../features/settings/widgets/create_new_database_dialog.dart';
 
@@ -142,7 +144,8 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     final kind = _effectiveRecoveryKind;
     return kind == DatabaseInitRecoveryKind.wrongDatabaseLamp ||
         kind == DatabaseInitRecoveryKind.wrongDatabaseUnknown ||
-        kind == DatabaseInitRecoveryKind.corruptedOrMigration;
+        kind == DatabaseInitRecoveryKind.corruptedOrMigration ||
+        kind == DatabaseInitRecoveryKind.databaseNewerThanApp;
   }
 
   bool get _shouldOfferRestoreFromBackup {
@@ -155,7 +158,8 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     if (_isFileNotFound) return true;
     return kind == DatabaseInitRecoveryKind.wrongDatabaseLamp ||
         kind == DatabaseInitRecoveryKind.wrongDatabaseUnknown ||
-        kind == DatabaseInitRecoveryKind.corruptedOrMigration;
+        kind == DatabaseInitRecoveryKind.corruptedOrMigration ||
+        kind == DatabaseInitRecoveryKind.databaseNewerThanApp;
   }
 
   String? get _databaseFilePath =>
@@ -178,6 +182,13 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
         unawaited(_offerSchemaUpgradeConsent());
       });
     }
+    if (_effectiveRecoveryKind ==
+        DatabaseInitRecoveryKind.databaseNewerThanApp) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_offerNewerDatabaseRecovery());
+      });
+    }
   }
 
   Future<void> _probeAvailableInstaller() async {
@@ -191,6 +202,14 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
 
   Future<void> _offerSchemaUpgradeConsent() async {
     await runSchemaUpgradeConsentRecovery(
+      context: context,
+      result: widget.result,
+      onSuccess: widget.onRetry,
+    );
+  }
+
+  Future<void> _offerNewerDatabaseRecovery() async {
+    await runDatabaseNewerRecovery(
       context: context,
       result: widget.result,
       onSuccess: widget.onRetry,
@@ -371,35 +390,13 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
   Future<void> _showVerifyFailureDialog(
     ({bool ok, DatabaseInitRunnerResult runner}) outcome,
   ) async {
-    // Αποτυχία που ζητά συγκατάθεση αναβάθμισης ΔΕΝ είναι αδιέξοδο: ο χρήστης
-    // πρέπει να πάρει τις ίδιες επιλογές με την αλλαγή βάσης (αντίγραφο /
-    // πρωτότυπο / άκυρο), όχι ένα σκέτο «Εντάξει».
-    if (outcome.runner.result.recoveryKind ==
-        DatabaseInitRecoveryKind.schemaUpgradeConsent) {
-      await runSchemaUpgradeConsentRecovery(
-        context: context,
-        result: outcome.runner.result,
-        onSuccess: widget.onRetry,
-      );
-      return;
-    }
-    final msg =
-        outcome.runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
-    final det = outcome.runner.result.details?.trim();
-    await showDialog<void>(
+    // Αποτυχία με πραγματική διέξοδο (συγκατάθεση αναβάθμισης, βάση νεότερης
+    // έκδοσης) ΔΕΝ είναι αδιέξοδο — ο κοινός διάλογος δρομολογεί στη ροή
+    // ανάκαμψης αντί για ένα σκέτο «Εντάξει».
+    await showDatabaseCheckFailedDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Η βάση δεν είναι έγκυρη'),
-        content: SingleChildScrollView(
-          child: Text(det != null && det.isNotEmpty ? '$msg\n\n$det' : msg),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Εντάξει'),
-          ),
-        ],
-      ),
+      result: outcome.runner.result,
+      onSuccess: widget.onRetry,
     );
   }
 

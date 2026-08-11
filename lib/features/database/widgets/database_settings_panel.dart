@@ -14,7 +14,6 @@ import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/database/database_file_bundle.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/database_init_result.dart';
 import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/database/database_restore_flow.dart';
@@ -43,9 +42,9 @@ import '../utils/backup_schedule_status.dart';
 import '../utils/backup_schedule_utils.dart';
 import '../utils/backup_restore_tooltip.dart';
 import '../utils/portable_backup_availability.dart';
+import 'database_check_failed_dialog.dart';
 import 'database_integrity_panel.dart';
 import 'database_rename_notice_text.dart';
-import 'schema_upgrade_consent_dialog.dart';
 
 String _weekdayChipLabel(int weekday) {
   const labels = ['Δε', 'Τρ', 'Τε', 'Πε', 'Πα', 'Σα', 'Κυ'];
@@ -294,36 +293,16 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
     DatabaseInitRunnerResult runner,
   ) async {
     if (!mounted) return;
-    if (runner.result.recoveryKind ==
-        DatabaseInitRecoveryKind.schemaUpgradeConsent) {
-      final recovered = await runSchemaUpgradeConsentRecovery(
-        context: context,
-        result: runner.result,
-        onSuccess: _applySwitchAfterSchemaRecovery,
-      );
-      if (recovered && mounted) {
-        // Η διαδρομή μπορεί να είναι το αντίγραφο — ανανέωση ετικετών.
-        await _loadDatabasePathSection();
-      }
-      return;
-    }
-    final msg = runner.result.message ?? 'Η βάση δεν πέρασε τον έλεγχο.';
-    final det = runner.result.details?.trim();
-    await showDialog<void>(
+    final recovered = await showDatabaseCheckFailedDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Η βάση δεν είναι έγκυρη'),
-        content: SingleChildScrollView(
-          child: Text(det != null && det.isNotEmpty ? '$msg\n\n$det' : msg),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Εντάξει'),
-          ),
-        ],
-      ),
+      result: runner.result,
+      onSuccess: _applySwitchAfterSchemaRecovery,
     );
+    if (recovered && mounted) {
+      // Η διαδρομή μπορεί να είναι αντίγραφο (αναβαθμισμένο ή υποβαθμισμένο)
+      // — ανανέωση ετικετών.
+      await _loadDatabasePathSection();
+    }
   }
 
   @override

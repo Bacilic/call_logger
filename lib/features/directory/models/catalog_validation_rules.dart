@@ -28,6 +28,7 @@ class CatalogValidationRules {
     this.crossDepartmentPhoneEnabled = true,
     this.equipmentOwnerDepartmentEnabled = true,
     this.emptyDepartmentEnabled = true,
+    this.lansweeperIdentifierEnabled = true,
   });
 
   /// Προεπιλεγμένες εξαιρέσεις: η ανοιχτή παρένθεση, γιατί το πεδίο «Όνομα»
@@ -90,6 +91,11 @@ class CatalogValidationRules {
   /// ένα τμήμα μπορεί να αδειάσει θεμιτά — αλλά συνήθως θέλει απόφαση.
   final bool emptyDepartmentEnabled;
 
+  /// Μορφή αναγνωριστικών Lansweeper (υπάλληλοι + τμήματα): `τομέας\όνομα`
+  /// ή email. Χωρίς σωστή μορφή το αίτημα δεν θα βρει ποτέ τον χρήστη —
+  /// ο κριτής είναι ο ΙΔΙΟΣ που προειδοποιεί και στις φόρμες.
+  final bool lansweeperIdentifierEnabled;
+
   static final RegExp _letterOrDigit = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
   /// Οι εξαιρέσεις ως σύνολο χαρακτήρων.
@@ -131,6 +137,7 @@ class CatalogValidationRules {
     bool? crossDepartmentPhoneEnabled,
     bool? equipmentOwnerDepartmentEnabled,
     bool? emptyDepartmentEnabled,
+    bool? lansweeperIdentifierEnabled,
   }) {
     return CatalogValidationRules(
       internalPhoneDigitsEnabled:
@@ -164,6 +171,8 @@ class CatalogValidationRules {
           this.equipmentOwnerDepartmentEnabled,
       emptyDepartmentEnabled:
           emptyDepartmentEnabled ?? this.emptyDepartmentEnabled,
+      lansweeperIdentifierEnabled:
+          lansweeperIdentifierEnabled ?? this.lansweeperIdentifierEnabled,
     );
   }
 
@@ -187,6 +196,7 @@ class CatalogValidationRules {
     'cross_department_phone_enabled': crossDepartmentPhoneEnabled,
     'equipment_owner_department_enabled': equipmentOwnerDepartmentEnabled,
     'empty_department_enabled': emptyDepartmentEnabled,
+    'lansweeper_identifier_enabled': lansweeperIdentifierEnabled,
   };
 
   String toRawJson() => jsonEncode(toJson());
@@ -305,6 +315,11 @@ class CatalogValidationRules {
         map,
         'empty_department_enabled',
         d.emptyDepartmentEnabled,
+      ),
+      lansweeperIdentifierEnabled: _boolOf(
+        map,
+        'lansweeper_identifier_enabled',
+        d.lansweeperIdentifierEnabled,
       ),
     );
   }

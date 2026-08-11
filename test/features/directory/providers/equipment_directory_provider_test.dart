@@ -5,8 +5,10 @@
 // Ομάδα:
 //   flutter test test/features/directory/providers/equipment_directory_provider_test.dart --plain-name "EquipmentDirectoryNotifier"
 
+import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
+import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/models/equipment_column.dart';
 import 'package:call_logger/features/directory/providers/equipment_directory_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -260,5 +262,100 @@ void main() {
         expect(state.filteredItems[1].$2, isNull);
       },
     );
+  });
+
+  // Το σενάριο του 3698: εξοπλισμός της Ψυχιατρικής χρεωμένος σε υπάλληλο
+  // της Γραμματείας Κίνησης. Η αναζήτηση με το τμήμα ΤΟΥ ΕΞΟΠΛΙΣΜΟΥ πρέπει
+  // να τον βρίσκει — παλιότερα έψαχνε μόνο τις ορατές στήλες, όπου το τμήμα
+  // του κατόχου είχε αντικαταστήσει σιωπηλά το δικό του, και «τον έκρυβε
+  // από το τμήμα».
+  group('αναζήτηση σε όλα τα γεγονότα (κρυφή στήλη Τμήμα)', () {
+    ProviderContainer buildContainer() {
+      LookupService.instance.injectInMemoryCatalogForTests(
+        users: const [],
+        equipment: const [],
+        departmentRows: [
+          DepartmentModel(id: 5, name: 'Ψυχιατρική'),
+          DepartmentModel(id: 7, name: 'Γραμματεία Κίνησης'),
+        ],
+      );
+      final container = ProviderContainer(
+        overrides: [
+          equipmentDirectoryProvider.overrideWith(
+            () => _FakeEquipmentDirectoryNotifier(
+              initialState: EquipmentDirectoryState(),
+              equipmentRows: [
+                {'id': 15, 'code_equipment': '3698', 'department_id': 5},
+                {'id': 16, 'code_equipment': 'PC-77', 'department_id': 7},
+              ],
+              linkRows: [
+                {'user_id': 10, 'equipment_id': 15},
+              ],
+              userRows: [
+                {
+                  'id': 10,
+                  'first_name': 'Θάνια',
+                  'last_name': 'Αναγνωστοπούλου',
+                  'department_id': 7,
+                },
+              ],
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('βρίσκεται από το ΔΙΚΟ του τμήμα και χρεώνεται η κρυφή «Τμήμα»',
+        () async {
+      final container = buildContainer();
+      final notifier = container.read(equipmentDirectoryProvider.notifier);
+      await notifier.load();
+
+      notifier.setSearchQuery('Ψυχιατρική');
+
+      final state = container.read(equipmentDirectoryProvider);
+      expect(state.filteredItems, hasLength(1));
+      expect(state.filteredItems.single.$1.code, '3698');
+      expect(state.searchSummary.searchActive, isTrue);
+      expect(state.searchSummary.totalMatches, 1);
+      expect(state.searchSummary.hiddenMatchCounts, {'Τμήμα': 1});
+    });
+
+    test('με τη στήλη «Τμήμα» ορατή, η χρέωση κρυφού πεδίου φεύγει', () async {
+      final container = buildContainer();
+      final notifier = container.read(equipmentDirectoryProvider.notifier);
+      await notifier.load();
+
+      notifier.toggleColumn(EquipmentColumn.department);
+      notifier.setSearchQuery('Ψυχιατρική');
+
+      final state = container.read(equipmentDirectoryProvider);
+      expect(state.filteredItems, hasLength(1));
+      expect(state.searchSummary.hiddenMatchCounts, isEmpty);
+    });
+
+    test('αναζήτηση με ορατό πεδίο (κωδικός) → καμία αναφορά κρυφών', () async {
+      final container = buildContainer();
+      final notifier = container.read(equipmentDirectoryProvider.notifier);
+      await notifier.load();
+
+      notifier.setSearchQuery('3698');
+
+      final state = container.read(equipmentDirectoryProvider);
+      expect(state.filteredItems, hasLength(1));
+      expect(state.searchSummary.totalMatches, 1);
+      expect(state.searchSummary.hiddenMatchCounts, isEmpty);
+    });
+
+    test('χωρίς ερώτημα δεν υπάρχει ενεργή σύνοψη', () async {
+      final container = buildContainer();
+      final notifier = container.read(equipmentDirectoryProvider.notifier);
+      await notifier.load();
+
+      final state = container.read(equipmentDirectoryProvider);
+      expect(state.searchSummary.searchActive, isFalse);
+    });
   });
 }

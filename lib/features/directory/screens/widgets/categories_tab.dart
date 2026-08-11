@@ -5,6 +5,7 @@ import '../../models/category_directory_column.dart';
 import '../../models/category_model.dart';
 import '../../providers/category_directory_provider.dart';
 import 'catalog_column_selector_shell.dart';
+import 'catalog_search_results_line.dart';
 import 'categories_data_table.dart';
 import 'category_form_dialog.dart';
 import 'category_undo_snackbar.dart';
@@ -86,6 +87,7 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
             ],
           ),
         ),
+        CatalogSearchResultsLine(summary: state.searchSummary),
         Expanded(
           child: CategoriesDataTable(
             categories: state.filteredCategories,

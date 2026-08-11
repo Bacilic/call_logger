@@ -1063,6 +1063,81 @@ void main() {
     );
 
     testWidgets(
+      'κλικ στο chip: ο λογαριασμός επιστρέφει στο πεδίο για επεξεργασία '
+      'και ό,τι μισογραμμένο κατοχυρώνεται πρώτα',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: deptName,
+              color: '#1976D2',
+              lansweeperUsernames: r'Γραφείο Λοιμώξεων = gnk\loimokseis1',
+            ),
+            notifier: notifier,
+          );
+        });
+
+        final chip = find.byKey(
+          const ValueKey(r'lansweeper_account_gnk\loimokseis1'),
+        );
+        expect(chip, findsOneWidget);
+
+        // Μισογραμμένος δεύτερος λογαριασμός στο πεδίο — δεν πρέπει να χαθεί.
+        final accountsField = _fieldByLabel(
+          'Αναγνωριστικά Lansweeper (με κόμμα)',
+        );
+        await tester.ensureVisible(accountsField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(accountsField, r'gnk\extra1');
+
+        await tester.ensureVisible(chip);
+        await pumpUntilSettled(tester);
+        await tester.tap(chip);
+        await pumpUntilSettled(tester);
+
+        // Το chip του λογαριασμού έφυγε και το κείμενό του γύρισε στο πεδίο.
+        expect(chip, findsNothing);
+        final field = tester.widget<EditableText>(accountsField);
+        expect(
+          field.controller.text,
+          r'Γραφείο Λοιμώξεων = gnk\loimokseis1',
+          reason: greekExpectMsg(
+            'Η επεξεργασία δεν ξεκινά από το μηδέν — το πλήρες κείμενο '
+            'επιστρέφει στο πεδίο',
+          ),
+        );
+        // Ο μισογραμμένος έγινε chip πριν την επεξεργασία — δεν σβήστηκε.
+        expect(
+          find.byKey(const ValueKey(r'lansweeper_account_gnk\extra1')),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Ό,τι υπήρχε στο πεδίο κατοχυρώνεται ως λογαριασμός πριν '
+            'αντικατασταθεί από το κείμενο του chip',
+          ),
+        );
+      },
+    );
+
+    testWidgets(
       'ξεχασμένο «=»: το αναγνωριστικό ξεχωρίζει μόνο του από την ονομασία',
       (tester) async {
         tester.view.physicalSize = const Size(1600, 900);
@@ -1164,11 +1239,21 @@ void main() {
       await tester.enterText(accountsField, 'Γραφείο Λοιμώξεων,');
       await pumpUntilSettled(tester);
 
+      // Η προειδοποίηση ζει πλέον ΠΑΝΩ στο chip: το στοχευμένο λάθος
+      // βρίσκεται στο tooltip του, όχι σε συγκεντρωτικό κείμενο από κάτω.
+      final chip = find.byKey(
+        const ValueKey('lansweeper_account_Γραφείο Λοιμώξεων'),
+      );
+      expect(chip, findsOneWidget);
+      final tooltip = tester.widget<Tooltip>(
+        find.descendant(of: chip, matching: find.byType(Tooltip)).first,
+      );
       expect(
-        find.byKey(const ValueKey('lansweeper_accounts_warning')),
-        findsOneWidget,
+        tooltip.message,
+        contains('Δεν μοιάζει ούτε με'),
         reason: greekExpectMsg(
-          'Ονομασία χωρίς αναγνωριστικό προειδοποιεί πριν την αποθήκευση',
+          'Ονομασία χωρίς αναγνωριστικό προειδοποιεί πριν την αποθήκευση — '
+          'με το στοχευμένο λάθος στο tooltip του chip',
         ),
       );
     });

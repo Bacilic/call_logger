@@ -10,7 +10,6 @@ import '../../../core/database/user_repository.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/phone_list_parser.dart';
-import '../../../core/utils/search_text_normalizer.dart';
 import '../../../core/utils/user_identity_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/models/user_model.dart';
@@ -21,6 +20,7 @@ import '../models/user_column_layout.dart';
 import '../models/user_directory_column.dart';
 import '../services/bulk_action_undo_record.dart';
 import '../services/bulk_user_actions.dart';
+import '../services/catalog_search_evaluation.dart';
 import '../services/user_deletion_undo_record.dart';
 import '../services/user_equipment_codes.dart';
 import 'bulk_action_undo_provider.dart';
@@ -61,6 +61,7 @@ class DirectoryState {
     this.lastDeleted,
     this.lastUserDeletionUndo,
     this.focusedRowIndex,
+    this.searchSummary = CatalogSearchSummary.empty,
     List<UserDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) : columnOrder = UserDirectoryColumn.pinSelectionFirst(
@@ -89,6 +90,9 @@ class DirectoryState {
   /// Ευρετήριο στη [filteredUsers] για keyboard navigation (πάνω/κάτω, Enter).
   final int? focusedRowIndex;
 
+  /// Σύνοψη τρέχουσας αναζήτησης (πλήθος + ευρήματα σε κρυφά πεδία).
+  final CatalogSearchSummary searchSummary;
+
   /// Πλήρης σειρά όλων των στηλών (κρυφές παραμένουν στη λίστα).
   final List<UserDirectoryColumn> columnOrder;
 
@@ -116,6 +120,7 @@ class DirectoryState {
     Object? lastDeleted = _kUnsetLastDeleted,
     Object? lastUserDeletionUndo = _kUnsetDeletionUndo,
     Object? focusedRowIndex = _kUnsetFocus,
+    CatalogSearchSummary? searchSummary,
     List<UserDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) {
@@ -142,6 +147,7 @@ class DirectoryState {
       lastDeleted: nextLastDeleted,
       lastUserDeletionUndo: nextUndo,
       focusedRowIndex: nextFocus,
+      searchSummary: searchSummary ?? this.searchSummary,
       columnOrder: columnOrder ?? this.columnOrder,
       visibleColumnKeys: visibleColumnKeys ?? this.visibleColumnKeys,
     );
@@ -255,13 +261,14 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     filterAndSort();
   }
 
-  /// Φιλτράρισμα in-memory σε ενιαίο κείμενο ανά χρήστη: όνομα, επώνυμο, τηλέφωνο,
-  /// σημειώσεις, τμήμα (πεδίο [UserModel.departmentName], γεμισμένο στη φόρτωση).
-  /// Όλα τα tokens του query πρέπει να περιέχονται στο κανονικοποιημένο blob
-  /// ([SearchTextNormalizer.containsAllTokens]).
+  /// Φιλτράρισμα in-memory στα γεγονότα κάθε χρήστη (όνομα, τηλέφωνα, τμήμα,
+  /// εξοπλισμός, σημειώσεις, τοποθεσία) — **ανεξάρτητα** από τις ορατές
+  /// στήλες: οι στήλες ρυθμίζουν τι βλέπεις, όχι τι βρίσκεται. Η σύνοψη
+  /// καταγράφει πόσα ευρήματα ταίριαξαν μόνο σε κρυφά πεδία.
   void filterAndSort() {
-    final users = _filterAndSortPersonalUsers();
-    final shared = _filterAndSortSharedPhones();
+    final builder = CatalogSearchSummaryBuilder();
+    final users = _filterAndSortPersonalUsers(builder);
+    final shared = _filterAndSortSharedPhones(builder);
     final len = state.catalogMode == UserCatalogMode.shared
         ? shared.length
         : users.length;
@@ -269,29 +276,81 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final clamped = idx != null && idx >= len
         ? (len > 0 ? len - 1 : null)
         : idx;
+    final idQuery = IdSearchQuery.parse(state.searchQuery);
     state = state.copyWith(
       filteredUsers: users,
       filteredNonUserPhones: shared,
       focusedRowIndex: clamped,
+      searchSummary: idQuery.isEmpty
+          ? CatalogSearchSummary.empty
+          : builder.build(),
     );
   }
 
-  List<UserModel> _filterAndSortPersonalUsers() {
+  /// Γεγονότα χρήστη με τις ετικέτες των στηλών τους· η «Τοποθεσία» δεν έχει
+  /// στήλη στον πίνακα, οπότε μετρά πάντα ως κρυφό πεδίο.
+  List<CatalogSearchFact> _searchFactsForUser(UserModel u) {
+    bool visible(String key) => state.visibleColumnKeys.contains(key);
+    return [
+      CatalogSearchFact(
+        label: UserDirectoryColumn.id.label,
+        text: '${u.id ?? ''}',
+        isVisible: visible(UserDirectoryColumn.id.key),
+      ),
+      CatalogSearchFact(
+        label: UserDirectoryColumn.lastName.label,
+        text: u.lastName ?? '',
+        isVisible: visible(UserDirectoryColumn.lastName.key),
+      ),
+      CatalogSearchFact(
+        label: UserDirectoryColumn.firstName.label,
+        text: u.firstName ?? '',
+        isVisible: visible(UserDirectoryColumn.firstName.key),
+      ),
+      CatalogSearchFact(
+        label: UserDirectoryColumn.phone.label,
+        text: u.phoneJoined,
+        isVisible: visible(UserDirectoryColumn.phone.key),
+      ),
+      CatalogSearchFact(
+        label: UserDirectoryColumn.department.label,
+        text: u.departmentName ?? '',
+        isVisible: visible(UserDirectoryColumn.department.key),
+      ),
+      CatalogSearchFact(
+        label: UserDirectoryColumn.equipment.label,
+        text: UserEquipmentCodes.textForUser(u.id),
+        isVisible: visible(UserDirectoryColumn.equipment.key),
+      ),
+      CatalogSearchFact(
+        label: UserDirectoryColumn.notes.label,
+        text: u.notes ?? '',
+        isVisible: visible(UserDirectoryColumn.notes.key),
+      ),
+      CatalogSearchFact(
+        label: 'Τοποθεσία',
+        text: u.location ?? '',
+        isVisible: false,
+      ),
+    ];
+  }
+
+  List<UserModel> _filterAndSortPersonalUsers(
+    CatalogSearchSummaryBuilder builder,
+  ) {
     final idQuery = IdSearchQuery.parse(state.searchQuery);
     var list = state.allUsers;
     if (!idQuery.isEmpty) {
+      final countTowardsSummary =
+          state.catalogMode == UserCatalogMode.personal;
       list = list.where((u) {
         if (!idQuery.matchesEntityId(u.id)) return false;
-        if (idQuery.text.isEmpty) return true;
-        final blob = [
-          u.firstName ?? '',
-          u.lastName ?? '',
-          u.phoneJoined,
-          u.notes ?? '',
-          u.departmentName ?? '',
-          u.location ?? '',
-        ].join(' ');
-        return SearchTextNormalizer.containsAllTokens(blob, idQuery.text);
+        final result = evaluateCatalogSearchRow(
+          _searchFactsForUser(u),
+          idQuery.text,
+        );
+        if (countTowardsSummary) builder.addMatch(result);
+        return result.matches;
       }).toList();
     }
     final col = state.sortColumn;
@@ -333,15 +392,29 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     return list;
   }
 
-  List<NonUserPhoneEntry> _filterAndSortSharedPhones() {
+  List<NonUserPhoneEntry> _filterAndSortSharedPhones(
+    CatalogSearchSummaryBuilder builder,
+  ) {
     var list = state.allNonUserPhones;
     final idQuery = IdSearchQuery.parse(state.searchQuery);
     if (!idQuery.isEmpty) {
+      final countTowardsSummary = state.catalogMode == UserCatalogMode.shared;
       list = list.where((e) {
         if (!idQuery.matchesEntityId(e.phoneId)) return false;
-        if (idQuery.text.isEmpty) return true;
-        final blob = '${e.number} ${e.departmentLabel}';
-        return SearchTextNormalizer.containsAllTokens(blob, idQuery.text);
+        final result = evaluateCatalogSearchRow([
+          CatalogSearchFact(
+            label: 'Τηλέφωνο',
+            text: e.number,
+            isVisible: true,
+          ),
+          CatalogSearchFact(
+            label: 'Τμήμα',
+            text: e.departmentLabel,
+            isVisible: true,
+          ),
+        ], idQuery.text);
+        if (countTowardsSummary) builder.addMatch(result);
+        return result.matches;
       }).toList();
     }
     final col = state.sortColumn;

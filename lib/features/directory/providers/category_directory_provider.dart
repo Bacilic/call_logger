@@ -7,10 +7,10 @@ import '../../../core/database/category_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/utils/id_search_query.dart';
-import '../../../core/utils/search_text_normalizer.dart';
 import '../../history/providers/history_provider.dart';
 import '../models/category_directory_column.dart';
 import '../models/category_model.dart';
+import '../services/catalog_search_evaluation.dart';
 
 const _catalogCategoriesVisibleColumnsKey =
     'catalog_categories_visible_columns';
@@ -37,6 +37,7 @@ class CategoryDirectoryState {
     this.selectedIds = const {},
     this.lastDeleted,
     this.focusedRowIndex,
+    this.searchSummary = CatalogSearchSummary.empty,
     List<CategoryDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) : columnOrder = CategoryDirectoryColumn.pinSelectionFirst(
@@ -60,6 +61,9 @@ class CategoryDirectoryState {
   final Set<int> selectedIds;
   final List<CategoryModel>? lastDeleted;
   final int? focusedRowIndex;
+
+  /// Σύνοψη τρέχουσας αναζήτησης (πλήθος + ευρήματα σε κρυφά πεδία).
+  final CatalogSearchSummary searchSummary;
   final List<CategoryDirectoryColumn> columnOrder;
   final Set<String> visibleColumnKeys;
 
@@ -191,18 +195,31 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   void filterAndSort() {
     final idQuery = IdSearchQuery.parse(state.searchQuery);
     var list = state.allCategories;
+    var summary = CatalogSearchSummary.empty;
     if (!idQuery.isEmpty) {
-      list = list
-          .where(
-            (c) =>
-                idQuery.matchesEntityId(c.id) &&
-                (idQuery.text.isEmpty ||
-                    SearchTextNormalizer.containsAllTokens(
-                      c.name,
-                      idQuery.text,
-                    )),
-          )
-          .toList();
+      final builder = CatalogSearchSummaryBuilder();
+      list = list.where((c) {
+        if (!idQuery.matchesEntityId(c.id)) return false;
+        final result = evaluateCatalogSearchRow([
+          CatalogSearchFact(
+            label: CategoryDirectoryColumn.id.label,
+            text: '${c.id ?? ''}',
+            isVisible: state.visibleColumnKeys.contains(
+              CategoryDirectoryColumn.id.key,
+            ),
+          ),
+          CatalogSearchFact(
+            label: CategoryDirectoryColumn.name.label,
+            text: c.name,
+            isVisible: state.visibleColumnKeys.contains(
+              CategoryDirectoryColumn.name.key,
+            ),
+          ),
+        ], idQuery.text);
+        builder.addMatch(result);
+        return result.matches;
+      }).toList();
+      summary = builder.build();
     }
     final col = state.sortColumn;
     final asc = state.sortAscending;
@@ -237,6 +254,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
       selectedIds: state.selectedIds,
       lastDeleted: state.lastDeleted,
       focusedRowIndex: clamped,
+      searchSummary: summary,
       columnOrder: state.columnOrder,
       visibleColumnKeys: state.visibleColumnKeys,
     );

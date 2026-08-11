@@ -801,21 +801,27 @@ class _LansweeperRowMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final targets = LansweeperStateActions.availableTargets(currentState);
-    return PopupMenuButton<String>(
-      enabled: callId != null && targets.isNotEmpty,
-      tooltip:
-          'Lansweeper: ${LansweeperSyncState.label(currentState)} — αλλαγή κατάστασης',
-      icon: const Icon(Icons.confirmation_number_outlined),
-      iconSize: 20,
-      padding: EdgeInsets.zero,
-      onSelected: (target) => unawaited(_apply(context, ref, target)),
-      itemBuilder: (context) => [
-        for (final target in targets)
-          PopupMenuItem(
-            value: target,
-            child: Text(LansweeperStateActions.actionLabel(target)),
-          ),
-      ],
+    // Η υπόδειξη περνά από το CompactTooltip (πρότυπο)· το ενσωματωμένο
+    // tooltip του PopupMenuButton σιγεί με κενό κείμενο.
+    return CompactTooltip(
+      message:
+          'Lansweeper: ${LansweeperSyncState.label(currentState)} — '
+          'αλλαγή κατάστασης',
+      child: PopupMenuButton<String>(
+        enabled: callId != null && targets.isNotEmpty,
+        tooltip: '',
+        icon: const Icon(Icons.confirmation_number_outlined),
+        iconSize: 20,
+        padding: EdgeInsets.zero,
+        onSelected: (target) => unawaited(_apply(context, ref, target)),
+        itemBuilder: (context) => [
+          for (final target in targets)
+            PopupMenuItem(
+              value: target,
+              child: Text(LansweeperStateActions.actionLabel(target)),
+            ),
+        ],
+      ),
     );
   }
 }

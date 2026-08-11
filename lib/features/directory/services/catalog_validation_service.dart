@@ -1,5 +1,7 @@
 import 'package:characters/characters.dart';
 
+import '../../../core/services/lansweeper_department_accounts.dart';
+import '../../../core/services/lansweeper_identity_diagnosis.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/models/user_model.dart';
@@ -112,6 +114,64 @@ class CatalogValidationService {
     return 'Ξεκινά από ψηφίο ή σύμβολο — σωστό μόνο αν πρόκειται για εταιρεία';
   }
 
+  /// Υπόδειξη για το αναγνωριστικό Lansweeper ενός υπαλλήλου — το ΣΤΟΧΕΥΜΕΝΟ
+  /// μήνυμα της διάγνωσης ([diagnoseLansweeperIdentity]), ίδιο με τη φόρμα.
+  /// Κενή τιμή = «χωρίς αναγνωριστικό», απολύτως θεμιτό.
+  String? lansweeperUserIdentifierHint(String value) {
+    if (!rules.lansweeperIdentifierEnabled) return null;
+    final s = value.trim();
+    if (s.isEmpty) return null;
+    final diagnosis = diagnoseLansweeperIdentity(s);
+    if (diagnosis.isValid) return null;
+    return _composeDiagnosisMessage('«$s»', diagnosis);
+  }
+
+  /// Ένα μήνυμα ΑΝΑ προβληματικό λογαριασμό τμήματος — όχι συγκεντρωτικό:
+  /// κάθε λάθος αναφέρεται χωριστά, με τη δική του διάγνωση.
+  List<String> lansweeperDepartmentAccountProblems(String? stored) {
+    if (!rules.lansweeperIdentifierEnabled) return const [];
+    final raw = (stored ?? '').trim();
+    if (raw.isEmpty) return const [];
+    final out = <String>[];
+    for (final account in decodeLansweeperAccounts(raw)) {
+      final diagnosis = diagnoseLansweeperIdentity(account.username);
+      if (diagnosis.isValid) continue;
+      out.add(_composeDiagnosisMessage('«${account.username}»', diagnosis));
+    }
+    return out;
+  }
+
+  /// Ήπιες υποψίες τομέα (πορτοκαλί): ΕΓΚΥΡΕΣ ταυτότητες με τομέα
+  /// διαφορετικό από τον [referenceDomain]. Χωρίς μέτρο σύγκρισης η λίστα
+  /// μένει κενή.
+  List<String> lansweeperDomainMismatchProblems(
+    String? stored,
+    String? referenceDomain,
+  ) {
+    if (!rules.lansweeperIdentifierEnabled) return const [];
+    final raw = (stored ?? '').trim();
+    if (raw.isEmpty) return const [];
+    final out = <String>[];
+    for (final account in decodeLansweeperAccounts(raw)) {
+      final hint = lansweeperDomainMismatchHint(
+        account.username,
+        referenceDomain,
+      );
+      if (hint != null) out.add('«${account.username}»: $hint');
+    }
+    return out;
+  }
+
+  static String _composeDiagnosisMessage(
+    String subject,
+    LansweeperIdentityDiagnosis diagnosis,
+  ) {
+    final suggestion = diagnosis.suggestion;
+    return suggestion == null
+        ? '$subject: ${diagnosis.problem}'
+        : '$subject: ${diagnosis.problem} — $suggestion';
+  }
+
   /// Υποδείξεις για τα πεδία μιας **γρήγορης καταχώρησης**, έτοιμες γραμμές.
   ///
   /// Η γρήγορη καταχώρηση γίνεται ενώ ο χρήστης μιλά στο τηλέφωνο: δεν τον
@@ -160,6 +220,9 @@ class CatalogValidationService {
     required List<EquipmentModel> equipment,
     Map<int, List<String>> sharedPhonesByDepartmentId = const {},
     Map<int, List<int>> ownerUserIdsByEquipmentId = const {},
+
+    /// Ταυτότητα πράκτορα (Ρυθμίσεις API) για τις ήπιες υποψίες τομέα.
+    String? lansweeperAgentIdentity,
   }) {
     final findings = <CatalogValidationFinding>[];
 
@@ -185,12 +248,26 @@ class CatalogValidationService {
       }
     }
 
+    // Μέτρο σύγκρισης τομέα: του πράκτορα αν είναι «τομέας\όνομα», αλλιώς ο
+    // πλειοψηφικός τομέας των αναγνωριστικών που ήδη σαρώνονται.
+    final referenceDomain = lansweeperReferenceDomain(
+      agentIdentity: lansweeperAgentIdentity,
+      knownIdentities: [
+        for (final user in activeUsers) user.lansweeperUsername ?? '',
+        for (final department in departments)
+          ...decodeLansweeperAccounts(
+            department.lansweeperUsernames,
+          ).map((account) => account.username),
+      ],
+    );
+
     _addFieldHintFindings(
       findings,
       users: activeUsers,
       departments: departments,
       equipment: activeEquipment,
       sharedPhonesByDepartmentId: sharedPhonesByDepartmentId,
+      lansweeperReferenceDomain: referenceDomain,
     );
     _addEmptyDepartmentFindings(
       findings,
@@ -239,6 +316,7 @@ class CatalogValidationService {
     required List<DepartmentModel> departments,
     required List<EquipmentModel> equipment,
     required Map<int, List<String>> sharedPhonesByDepartmentId,
+    String? lansweeperReferenceDomain,
   }) {
     void add({
       required CatalogEntityKind kind,
@@ -306,6 +384,36 @@ class CatalogValidationService {
           focusedField: 'phone',
         );
       }
+
+      final lansweeperHint = lansweeperUserIdentifierHint(
+        user.lansweeperUsername ?? '',
+      );
+      if (lansweeperHint != null) {
+        add(
+          kind: CatalogEntityKind.user,
+          entityId: user.id!,
+          label: label,
+          fieldLabel: 'Αναγνωριστικό Lansweeper',
+          message: lansweeperHint,
+          focusedField: 'lansweeperUsername',
+        );
+      } else if (rules.lansweeperIdentifierEnabled) {
+        // Έγκυρο μεν, με ύποπτο τομέα δε — ήπια υποψία, όχι λάθος.
+        final mismatch = lansweeperDomainMismatchHint(
+          user.lansweeperUsername ?? '',
+          lansweeperReferenceDomain,
+        );
+        if (mismatch != null) {
+          add(
+            kind: CatalogEntityKind.user,
+            entityId: user.id!,
+            label: label,
+            fieldLabel: 'Αναγνωριστικό Lansweeper',
+            message: mismatch,
+            focusedField: 'lansweeperUsername',
+          );
+        }
+      }
     }
 
     for (final department in departments) {
@@ -335,6 +443,33 @@ class CatalogValidationService {
           fieldLabel: 'Κοινόχρηστο τηλέφωνο',
           message: hint,
           focusedField: 'phones',
+        );
+      }
+
+      // Ένα εύρημα ΑΝΑ προβληματικό λογαριασμό — κάθε λάθος χωριστά.
+      for (final problem in lansweeperDepartmentAccountProblems(
+        department.lansweeperUsernames,
+      )) {
+        add(
+          kind: CatalogEntityKind.department,
+          entityId: id,
+          label: label,
+          fieldLabel: 'Αναγνωριστικά Lansweeper',
+          message: problem,
+          focusedField: 'lansweeperUsernames',
+        );
+      }
+      for (final mismatch in lansweeperDomainMismatchProblems(
+        department.lansweeperUsernames,
+        lansweeperReferenceDomain,
+      )) {
+        add(
+          kind: CatalogEntityKind.department,
+          entityId: id,
+          label: label,
+          fieldLabel: 'Αναγνωριστικά Lansweeper',
+          message: mismatch,
+          focusedField: 'lansweeperUsernames',
         );
       }
     }

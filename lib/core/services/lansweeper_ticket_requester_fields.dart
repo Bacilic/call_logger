@@ -1,5 +1,7 @@
 import 'package:email_validator/email_validator.dart';
 
+import 'lansweeper_identity_diagnosis.dart';
+
 /// Πεδία για Lansweeper `AddTicket`: πράκτορας (agent) και αιτών (requester)
 /// με την **ίδια** καταχώριση — χρήστης τομέα `domain\username`.
 ///
@@ -66,30 +68,13 @@ Map<String, String> lansweeperSearchUsersParamsFor(String identity) {
 
 /// Κρίνει αν η τιμή **δεν** μοιάζει με έγκυρη ταυτότητα `domain\username`
 /// ούτε με έγκυρο email (π.χ. απλό display name ή άκυρο `dro@fd`).
+///
+/// Παραπέμπει στη στοχευμένη διάγνωση ([diagnoseLansweeperIdentity]) ώστε η
+/// ετυμηγορία «έγκυρο/άκυρο» να είναι ΜΙΑ σε όλη την εφαρμογή — φόρμες,
+/// μαζική σάρωση και υποβολή δεν επιτρέπεται να διαφωνούν μεταξύ τους.
 bool lansweeperAgentValueLooksLikeDisplayName(String value) {
   final trimmed = value.trim();
   if (trimmed.isEmpty) return false;
-  if (lansweeperAgentValueLooksLikeEmail(trimmed)) return false;
-  if (_looksLikeDomainUsername(trimmed)) return false;
-  return true;
+  return !diagnoseLansweeperIdentity(trimmed).isValid;
 }
 
-bool _looksLikeDomainUsername(String trimmed) {
-  final separator = trimmed.indexOf(r'\');
-  if (separator <= 0) return false;
-  if (trimmed.contains(r'\', separator + 1)) return false;
-  final domain = trimmed.substring(0, separator);
-  final username = trimmed.substring(separator + 1);
-  if (domain.isEmpty || username.isEmpty) return false;
-  // Κενό μέσα στην ταυτότητα σημαίνει σχεδόν πάντα ότι κόλλησε μπροστά μια
-  // ονομασία («Γραφείο Λοιμώξεων gnk\loimokseis1»). Λογαριασμοί τομέα δεν
-  // έχουν κενά, οπότε το Lansweeper δεν θα έβρισκε ποτέ τέτοιον χρήστη.
-  if (_containsWhitespace(domain) || _containsWhitespace(username)) {
-    return false;
-  }
-  return true;
-}
-
-final RegExp _whitespace = RegExp(r'\s');
-
-bool _containsWhitespace(String value) => _whitespace.hasMatch(value);

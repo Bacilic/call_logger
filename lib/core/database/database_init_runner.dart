@@ -277,6 +277,11 @@ Future<DatabaseInitResult> _attachLockDiagnostic(
   String dbPath, {
   DatabaseInitProgressNotifier? progressNotifier,
 }) async {
+  // Η αναντιστοιχία έκδοσης δεν είναι κλείδωμα: η αναζήτηση «ποια διεργασία
+  // κρατά το αρχείο» θα πρόσθετε μόνο χρόνο και άσχετο θόρυβο στο μήνυμα.
+  if (result.recoveryKind == DatabaseInitRecoveryKind.databaseNewerThanApp) {
+    return result;
+  }
   final shouldAppend =
       result.status == DatabaseStatus.accessDenied ||
       result.status == DatabaseStatus.applicationError;

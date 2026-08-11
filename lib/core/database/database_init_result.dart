@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'schema_downgrade_compatibility.dart';
+
 /// Κατάσταση αρχικοποίησης / ελέγχου βάσης δεδομένων (fail-fast).
 enum DatabaseStatus {
   success,
@@ -24,6 +26,9 @@ enum DatabaseInitRecoveryKind {
 
   /// Απαιτείται συγκατάθεση πριν από μόνιμη αναβάθμιση σχήματος.
   schemaUpgradeConsent,
+
+  /// Το αρχείο βάσης γράφτηκε από ΝΕΟΤΕΡΗ έκδοση της εφαρμογής.
+  databaseNewerThanApp,
   generic,
 }
 
@@ -39,6 +44,7 @@ class DatabaseInitResult {
     this.stackTraceText,
     this.technicalCode,
     this.recoveryKind,
+    this.schemaDowngrade,
   });
 
   final DatabaseStatus status;
@@ -49,6 +55,10 @@ class DatabaseInitResult {
   final String? stackTraceText;
   final String? technicalCode;
   final DatabaseInitRecoveryKind? recoveryKind;
+
+  /// Μόνο για [DatabaseInitRecoveryKind.databaseNewerThanApp]: αν και γιατί
+  /// (δεν) προσφέρεται υποβάθμιση της βάσης στην έκδοση της εφαρμογής.
+  final SchemaDowngradeAssessment? schemaDowngrade;
 
   bool get isSuccess => status == DatabaseStatus.success;
 
@@ -88,6 +98,18 @@ class DatabaseInitResult {
     String? pathHint,
     StackTrace? stack,
   ]) {
+    // Έτοιμο, διατυπωμένο αποτέλεσμα ΔΕΝ ξαναμεταφράζεται: χωρίς αυτό, ένα
+    // σαφές ελληνικό μήνυμα (π.χ. «βάση νεότερης έκδοσης») που περνούσε από
+    // εδώ κατέληγε «Προέκυψε σφάλμα (DatabaseInitException)» — μαζί με το
+    // recoveryKind του, δηλαδή και τα κουμπιά διεξόδου του.
+    if (error is DatabaseInitException) {
+      final ready = error.result;
+      return ready.copyWith(
+        path: ready.path ?? pathHint,
+        stackTraceText: ready.stackTraceText ?? stack?.toString(),
+      );
+    }
+
     final raw = error.toString();
     final lower = raw.toLowerCase();
     final stackStr = stack?.toString() ?? '';
@@ -597,6 +619,7 @@ class DatabaseInitResult {
     String? stackTraceText,
     String? technicalCode,
     DatabaseInitRecoveryKind? recoveryKind,
+    SchemaDowngradeAssessment? schemaDowngrade,
   }) {
     return DatabaseInitResult(
       status: status ?? this.status,
@@ -608,6 +631,7 @@ class DatabaseInitResult {
       stackTraceText: stackTraceText ?? this.stackTraceText,
       technicalCode: technicalCode ?? this.technicalCode,
       recoveryKind: recoveryKind ?? this.recoveryKind,
+      schemaDowngrade: schemaDowngrade ?? this.schemaDowngrade,
     );
   }
 }

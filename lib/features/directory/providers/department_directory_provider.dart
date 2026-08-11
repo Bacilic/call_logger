@@ -11,7 +11,6 @@ import '../../../core/database/settings_repository.dart';
 import '../../../core/errors/department_exists_exception.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/id_search_query.dart';
-import '../../../core/utils/search_text_normalizer.dart';
 import '../../../core/utils/department_floor_sync.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/department_directory_column.dart';
@@ -19,6 +18,7 @@ import '../models/department_model.dart';
 import '../../../core/database/sqlite_types.dart';
 import '../services/bulk_action_undo_record.dart';
 import '../services/bulk_department_actions.dart';
+import '../services/catalog_search_evaluation.dart';
 import '../services/department_deletion_undo_record.dart';
 import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
@@ -50,6 +50,7 @@ class DepartmentDirectoryState {
     this.lastDeleted,
     this.lastDepartmentDeletionUndo,
     this.focusedRowIndex,
+    this.searchSummary = CatalogSearchSummary.empty,
     List<DepartmentDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) : columnOrder = DepartmentDirectoryColumn.pinSelectionFirst(
@@ -72,6 +73,9 @@ class DepartmentDirectoryState {
   /// Φάκελος πλήρους αναίρεσης διαγραφής τμήματος.
   final DepartmentDeletionUndoRecord? lastDepartmentDeletionUndo;
   final int? focusedRowIndex;
+
+  /// Σύνοψη τρέχουσας αναζήτησης (πλήθος + ευρήματα σε κρυφά πεδία).
+  final CatalogSearchSummary searchSummary;
   final List<DepartmentDirectoryColumn> columnOrder;
   final Set<String> visibleColumnKeys;
 
@@ -214,41 +218,91 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     filterAndSort();
   }
 
+  /// Γεγονότα τμήματος με τις ετικέτες των στηλών τους. Όροφος και ομάδα
+  /// χάρτη δεν έχουν στήλη — όταν ταιριάζουν μόνο αυτά, η γραμμή
+  /// αποτελεσμάτων το λέει με τη δική τους ετικέτα.
+  List<CatalogSearchFact> _searchFactsForDepartment(DepartmentModel d) {
+    bool visible(String key) => state.visibleColumnKeys.contains(key);
+    final did = d.id;
+    final phonesText = did == null
+        ? ''
+        : LookupService.instance.getPhonesByDepartment(did).join(' ');
+    final equipmentText = did == null
+        ? ''
+        : LookupService.instance
+              .getAllEquipmentByDepartment(did)
+              .map((e) {
+                final code = e.code?.trim();
+                if (code != null && code.isNotEmpty) return code;
+                return e.displayLabel.trim();
+              })
+              .where((v) => v.isNotEmpty)
+              .join(' ');
+    return [
+      CatalogSearchFact(
+        label: DepartmentDirectoryColumn.id.label,
+        text: '${d.id ?? ''}',
+        isVisible: visible(DepartmentDirectoryColumn.id.key),
+      ),
+      CatalogSearchFact(
+        label: DepartmentDirectoryColumn.name.label,
+        text: d.name,
+        isVisible: visible(DepartmentDirectoryColumn.name.key),
+      ),
+      CatalogSearchFact(
+        label: DepartmentDirectoryColumn.building.label,
+        text: d.building ?? '',
+        isVisible: visible(DepartmentDirectoryColumn.building.key),
+      ),
+      CatalogSearchFact(
+        label: DepartmentDirectoryColumn.color.label,
+        text: d.color ?? '',
+        isVisible: visible(DepartmentDirectoryColumn.color.key),
+      ),
+      CatalogSearchFact(
+        label: DepartmentDirectoryColumn.phones.label,
+        text: phonesText,
+        isVisible: visible(DepartmentDirectoryColumn.phones.key),
+      ),
+      CatalogSearchFact(
+        label: DepartmentDirectoryColumn.equipment.label,
+        text: equipmentText,
+        isVisible: visible(DepartmentDirectoryColumn.equipment.key),
+      ),
+      CatalogSearchFact(
+        label: DepartmentDirectoryColumn.notes.label,
+        text: d.notes ?? '',
+        isVisible: visible(DepartmentDirectoryColumn.notes.key),
+      ),
+      CatalogSearchFact(
+        label: 'Όροφος',
+        text: d.floorDisplay ?? '',
+        isVisible: false,
+      ),
+      CatalogSearchFact(
+        label: 'Ομάδα χάρτη',
+        text: d.groupName ?? '',
+        isVisible: false,
+      ),
+    ];
+  }
+
   void filterAndSort() {
     final idQuery = IdSearchQuery.parse(state.searchQuery);
     var list = state.allDepartments;
+    var summary = CatalogSearchSummary.empty;
     if (!idQuery.isEmpty) {
+      final builder = CatalogSearchSummaryBuilder();
       list = list.where((d) {
         if (!idQuery.matchesEntityId(d.id)) return false;
-        if (idQuery.text.isEmpty) return true;
-        final did = d.id;
-        final phonesText = did == null
-            ? ''
-            : LookupService.instance.getPhonesByDepartment(did).join(' ');
-        final equipmentText = did == null
-            ? ''
-            : LookupService.instance
-                  .getAllEquipmentByDepartment(did)
-                  .map((e) {
-                    final code = e.code?.trim();
-                    if (code != null && code.isNotEmpty) return code;
-                    return e.displayLabel.trim();
-                  })
-                  .where((v) => v.isNotEmpty)
-                  .join(' ');
-        final blob = [
-          d.name,
-          d.building ?? '',
-          d.groupName ?? '',
-          d.notes ?? '',
-          d.color ?? '',
-          d.floorDisplay ?? '',
-          phonesText,
-          equipmentText,
-          '${d.id ?? ''}',
-        ].join(' ');
-        return SearchTextNormalizer.containsAllTokens(blob, idQuery.text);
+        final result = evaluateCatalogSearchRow(
+          _searchFactsForDepartment(d),
+          idQuery.text,
+        );
+        builder.addMatch(result);
+        return result.matches;
       }).toList();
+      summary = builder.build();
     }
     final col = state.sortColumn;
     final asc = state.sortAscending;
@@ -323,6 +377,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       lastDeleted: state.lastDeleted,
       lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
       focusedRowIndex: clamped,
+      searchSummary: summary,
       columnOrder: state.columnOrder,
       visibleColumnKeys: state.visibleColumnKeys,
     );
@@ -355,6 +410,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     Object? lastDepartmentDeletionUndo = _kPatchKeep,
     int? focusedRow,
     bool keepFocusedRow = true,
+    CatalogSearchSummary? searchSummary,
     List<DepartmentDirectoryColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) {
@@ -373,6 +429,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
           ? state.lastDepartmentDeletionUndo
           : lastDepartmentDeletionUndo as DepartmentDeletionUndoRecord?,
       focusedRowIndex: keepFocusedRow ? state.focusedRowIndex : focusedRow,
+      searchSummary: searchSummary ?? state.searchSummary,
       columnOrder: columnOrder ?? state.columnOrder,
       visibleColumnKeys: visibleColumnKeys ?? state.visibleColumnKeys,
     );
