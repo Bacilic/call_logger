@@ -602,6 +602,141 @@ void main() {
     });
 
     testWidgets(
+      'δημιουργία: το αναγνωριστικό Lansweeper που πληκτρολογήθηκε γράφεται στη βάση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            notifier: notifier,
+          );
+        });
+
+        await tester.enterText(_codeField(), 'EQ-LSID-9002');
+        await tester.enterText(
+          _fieldByLabel('Αναγνωριστικό Lansweeper'),
+          'PRINTER-B2',
+        );
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Προσθήκη'));
+        await pumpUntilSettled(tester);
+        await _pumpUntilEquipmentSaveCompletes(tester);
+
+        final stored = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'equipment',
+            columns: ['lansweeper_asset_name'],
+            where: 'code_equipment = ?',
+            whereArgs: ['EQ-LSID-9002'],
+            limit: 1,
+          );
+          return rows.isEmpty
+              ? null
+              : rows.first['lansweeper_asset_name'] as String?;
+        });
+        expect(stored, 'PRINTER-B2');
+      },
+    );
+
+    testWidgets(
+      'επεξεργασία: το άδειασμα Σημειώσεων και Τύπου γράφεται στη βάση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentDirectoryNotifier notifier;
+        late EquipmentModel initial;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          // Ο εξοπλισμός αποκτά σημειώσεις και τύπο, ώστε το άδειασμα να
+          // έχει κάτι να καθαρίσει.
+          final seeded = await _loadEquipmentByCode(kTestEquipmentCode);
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'equipment',
+            {'notes': 'Θέλει τόνερ', 'type': 'Εκτυπωτής'},
+            where: 'id = ?',
+            whereArgs: [seeded.id],
+          );
+          await notifier.load();
+          initial = await _loadEquipmentByCode(kTestEquipmentCode);
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            initialEquipment: initial,
+            notifier: notifier,
+          );
+        });
+
+        await pumpUntilSettledLong(tester);
+        expect(find.text(_kEditEquipmentTitle), findsOneWidget);
+
+        await tester.enterText(_notesField(), '');
+        await tester.tap(find.text('Εκτυπωτής'));
+        await pumpUntilSettled(tester);
+        await tester.tap(find.text('Κανένας').last);
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+        await pumpUntilSettled(tester);
+        await _pumpUntilEquipmentSaveCompletes(tester);
+
+        final row = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'equipment',
+            columns: ['notes', 'type'],
+            where: 'id = ?',
+            whereArgs: [initial.id],
+            limit: 1,
+          );
+          return rows.first;
+        });
+        expect(
+          (row!['notes'] as String?) ?? '',
+          isEmpty,
+          reason: greekExpectMsg(
+            'Το άδειασμα των Σημειώσεων γράφεται στη βάση',
+          ),
+        );
+        expect(
+          (row['type'] as String?) ?? '',
+          isEmpty,
+          reason: greekExpectMsg('Ο Τύπος «Κανένας» γράφεται στη βάση'),
+        );
+      },
+    );
+
+    testWidgets(
       'επεξεργασία: αλλαγή εμφανίζει διάλογο με τρεις επιλογές, χωρίς αλλαγές όχι',
       (tester) async {
         tester.view.physicalSize = const Size(1600, 900);
@@ -994,9 +1129,10 @@ void main() {
           find.byWidgetPredicate(
             (w) => w is InputDecorator && w.decoration.hintText == 'PC1002',
           ),
-          findsOneWidget,
+          findsNWidgets(2),
           reason: greekExpectMsg(
-            'Το VNC πεδίο δείχνει ως hint τον προεπιλεγμένο στόχο PC+κωδικό',
+            'Δύο πεδία δείχνουν ως hint τον προεπιλεγμένο στόχο PC+κωδικό: '
+            'το VNC και το «Αναγνωριστικό Lansweeper» (κοινός κανόνας)',
           ),
         );
         expect(

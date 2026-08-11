@@ -217,6 +217,50 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 43 && newVersion >= 43) {
     await migrateDatabaseToV43(db);
   }
+  if (oldVersion < 44 && newVersion >= 44) {
+    await migrateDatabaseToV44(db);
+  }
+  if (oldVersion < 45 && newVersion >= 45) {
+    await migrateDatabaseToV45(db);
+  }
+}
+
+/// v45: `departments.lansweeper_usernames` — οι γενικοί λογαριασμοί που
+/// χρεώνονται τα αιτήματα ενός τμήματος όταν ο καλών είναι άγνωστος.
+///
+/// Κενή από προεπιλογή: όσο δεν συμπληρωθεί, το ticket βγαίνει όπως πριν.
+Future<void> migrateDatabaseToV45(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(departments)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('lansweeper_usernames')) {
+    await db.execute(
+      'ALTER TABLE departments ADD COLUMN lansweeper_usernames TEXT',
+    );
+  }
+}
+
+/// v44: αναγνωριστικά Lansweeper — `users.lansweeper_username` (τομέας\όνομα ή
+/// email) και `equipment.lansweeper_asset_name` (όνομα asset).
+///
+/// Κενές από προεπιλογή: ο εξοπλισμός καλύπτεται από τον κανόνα «PC + κωδικός»
+/// χωρίς συμπλήρωση, ενώ ο χρήστης χωρίς αναγνωριστικό απλώς δεν μπαίνει ως
+/// αιτών — το ticket βγαίνει όπως πριν.
+Future<void> migrateDatabaseToV44(Database db) async {
+  final usersInfo = await db.rawQuery('PRAGMA table_info(users)');
+  final userColumns = usersInfo.map((r) => r['name'] as String).toSet();
+  if (!userColumns.contains('lansweeper_username')) {
+    await db.execute('ALTER TABLE users ADD COLUMN lansweeper_username TEXT');
+  }
+
+  final equipmentInfo = await db.rawQuery('PRAGMA table_info(equipment)');
+  final equipmentColumns = equipmentInfo
+      .map((r) => r['name'] as String)
+      .toSet();
+  if (!equipmentColumns.contains('lansweeper_asset_name')) {
+    await db.execute(
+      'ALTER TABLE equipment ADD COLUMN lansweeper_asset_name TEXT',
+    );
+  }
 }
 
 /// v39: ανακατασκευή `search_text` μετά τη συμπλήρωση των ελληνικών ετικετών

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
+import '../../../../core/services/lansweeper_department_accounts.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/building_map_repository.dart';
@@ -117,6 +118,12 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   late final TextEditingController sharedPhoneInputController;
   late final TextEditingController sharedEquipmentInputController;
 
+  /// Πεδίο εισαγωγής των γενικών λογαριασμών Lansweeper του τμήματος.
+  late final TextEditingController lansweeperAccountInputController;
+
+  /// Οι λογαριασμοί που θα αποθηκευτούν, με τη σειρά που τους έγραψε ο χρήστης.
+  List<LansweeperAccount> lansweeperAccounts = const [];
+
   late Color selectedColor;
 
   final FocusNode _nameFocus = FocusNode();
@@ -137,6 +144,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   late final String snapColorHex;
   late final List<String> snapSharedPhones;
   late final List<String> snapSharedEquipmentCodes;
+  late final String snapLansweeperAccounts;
 
   List<BuildingMapFloor> floors = const [];
   int? selectedFloorId;
@@ -191,6 +199,39 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     return items;
   }
 
+  /// Υπογραφή των λογαριασμών για τον έλεγχο «άλλαξε κάτι;».
+  String lansweeperAccountsSignature() =>
+      lansweeperAccounts.map((a) => a.toInputText()).join('');
+
+  /// Προσθέτει ό,τι έχει πληκτρολογηθεί ως λογαριασμούς και αδειάζει το πεδίο.
+  ///
+  /// Διπλά αναγνωριστικά αγνοούνται, ώστε ο επιλογέας του ticket να μη δείχνει
+  /// δύο φορές τον ίδιο άνθρωπο.
+  void commitLansweeperAccountInput() {
+    final typed = lansweeperAccountInputController.text;
+    if (typed.trim().isEmpty) return;
+    final existing = {
+      for (final a in lansweeperAccounts) a.username.toLowerCase(),
+    };
+    final added = [
+      for (final account in parseLansweeperAccountsInput(typed))
+        if (!existing.contains(account.username.toLowerCase())) account,
+    ];
+    setState(() {
+      lansweeperAccounts = [...lansweeperAccounts, ...added];
+      lansweeperAccountInputController.clear();
+    });
+  }
+
+  void removeLansweeperAccount(LansweeperAccount account) {
+    setState(() {
+      lansweeperAccounts = [
+        for (final a in lansweeperAccounts)
+          if (a != account) a,
+      ];
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -204,6 +245,8 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     );
     sharedPhoneInputController = TextEditingController();
     sharedEquipmentInputController = TextEditingController();
+    lansweeperAccountInputController = TextEditingController();
+    lansweeperAccounts = decodeLansweeperAccounts(d?.lansweeperUsernames);
     final did = d?.id;
     if (did != null) {
       sharedPhones = LookupService.instance.getDirectPhonesByDepartment(did);
@@ -214,6 +257,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     snapBuilding = buildingController.text.trim();
     snapNotes = notesController.text.trim();
     snapColorHex = colorToDepartmentHex(selectedColor);
+    snapLansweeperAccounts = lansweeperAccountsSignature();
     snapSharedPhones =
         sharedPhones
             .map((v) => v.trim())
@@ -285,6 +329,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     hexController.dispose();
     sharedPhoneInputController.dispose();
     sharedEquipmentInputController.dispose();
+    lansweeperAccountInputController.dispose();
     notesController.dispose();
     _nameFocus.dispose();
     _buildingFocus.dispose();
@@ -976,6 +1021,66 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                         ),
                         onChanged: (_) => notifyFormChanged(),
                       ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: lansweeperAccountInputController,
+                        decoration: const InputDecoration(
+                          labelText: 'Αναγνωριστικά Lansweeper (με κόμμα)',
+                          hintText: r'Ονομασία = τομέας\όνομα, ή σκέτο email',
+                          helperText:
+                              'Ποιος χρεώνεται τα αιτήματα του τμήματος όταν ο '
+                              'καλών είναι άγνωστος. Η ονομασία πριν το «=» '
+                              'μένει στην εφαρμογή — στο Lansweeper φεύγει '
+                              'μόνο το αναγνωριστικό.',
+                          helperMaxLines: 3,
+                          border: OutlineInputBorder(),
+                        ),
+                        onSubmitted: (_) => commitLansweeperAccountInput(),
+                        onEditingComplete: commitLansweeperAccountInput,
+                        onChanged: (value) {
+                          if (value.endsWith(',')) {
+                            commitLansweeperAccountInput();
+                            return;
+                          }
+                          notifyFormChanged();
+                        },
+                      ),
+                      if (lansweeperAccounts.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              for (final account in lansweeperAccounts)
+                                RemovableSharedChip(
+                                  key: ValueKey(
+                                    'lansweeper_account_${account.username}',
+                                  ),
+                                  label: account.toInputText(),
+                                  isNewlyAdded: false,
+                                  isPendingRemoval: false,
+                                  onToggle: () =>
+                                      removeLansweeperAccount(account),
+                                ),
+                            ],
+                          ),
+                        ),
+                      if (lansweeperAccountsWarning(lansweeperAccounts)
+                          case final warning?)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            warning,
+                            key: const ValueKey(
+                              'lansweeper_accounts_warning',
+                            ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                          ),
+                        ),
                     ],
                   ),
                 ),

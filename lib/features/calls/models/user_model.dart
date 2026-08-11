@@ -12,6 +12,7 @@ class UserModel {
     this.departmentName,
     this.location,
     this.notes,
+    this.lansweeperUsername,
     this.isDeleted = false,
   });
 
@@ -34,6 +35,10 @@ class UserModel {
   /// Φυσική τοποθεσία / γραφείο χρήστη (στήλη `users.location`).
   final String? location;
   final String? notes;
+
+  /// Ταυτότητα του χρήστη στο Lansweeper (στήλη `users.lansweeper_username`):
+  /// `τομέας\όνομα` ή email. Κενή = ο χρήστης δεν μπαίνει ως αιτών στο ticket.
+  final String? lansweeperUsername;
 
   /// Soft delete (πίνακας users.is_deleted).
   final bool isDeleted;
@@ -80,6 +85,7 @@ class UserModel {
       departmentName: map['department_name'] as String?,
       location: map['location'] as String?,
       notes: map['notes'] as String?,
+      lansweeperUsername: map['lansweeper_username'] as String?,
       isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
@@ -97,6 +103,7 @@ class UserModel {
       if (departmentId != null) 'department_id': departmentId,
       if (location != null) 'location': location,
       if (notes != null) 'notes': notes,
+      if (lansweeperUsername != null) 'lansweeper_username': lansweeperUsername,
       'is_deleted': isDeleted ? 1 : 0,
     };
   }
@@ -110,6 +117,7 @@ class UserModel {
     String? departmentName,
     String? location,
     String? notes,
+    String? lansweeperUsername,
     bool? isDeleted,
   }) {
     return UserModel(
@@ -121,6 +129,7 @@ class UserModel {
       departmentName: departmentName ?? this.departmentName,
       location: location ?? this.location,
       notes: notes ?? this.notes,
+      lansweeperUsername: lansweeperUsername ?? this.lansweeperUsername,
       isDeleted: isDeleted ?? this.isDeleted,
     );
   }

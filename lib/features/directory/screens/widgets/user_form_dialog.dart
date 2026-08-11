@@ -11,6 +11,7 @@ import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
+import '../../../../core/services/lansweeper_ticket_requester_fields.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
@@ -82,6 +83,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
   late final String snapPhone;
   late final String snapNotes;
   late final String snapLocation;
+  late final String snapLansweeperUsername;
   late final TextEditingController lastNameController;
   late final SpellCheckController firstNameController;
   late final TextEditingController phoneController;
@@ -90,6 +92,10 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
   /// Πού κάθεται ο υπάλληλος. Ο εξοπλισμός του την κληρονομεί όταν δεν έχει δική του.
   late final SpellCheckController locationController;
   late final SpellCheckController notesController;
+
+  /// Ταυτότητα στο Lansweeper (τομέας\όνομα ή email) — βάζει τον υπάλληλο
+  /// ως αιτούντα στο ticket. Χωρίς ορθογραφικό έλεγχο: είναι λογαριασμός.
+  late final TextEditingController lansweeperUsernameController;
 
   final FocusNode _lastNameFocusNode = FocusNode();
   final FocusNode _firstNameFocusNode = FocusNode();
@@ -113,6 +119,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     snapPhone = PhoneListParser.joinPhones(u?.phones ?? const []);
     snapNotes = (u?.notes ?? '').trim();
     snapLocation = (u?.location ?? '').trim();
+    snapLansweeperUsername = (u?.lansweeperUsername ?? '').trim();
     initialDepartmentText = (u?.departmentName ?? '').trim();
     snapDepartmentNorm = SearchTextNormalizer.normalizeForSearch(
       initialDepartmentText,
@@ -126,6 +133,9 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     departmentController = SpellCheckController()..text = initialDepartmentText;
     locationController = SpellCheckController()..text = (u?.location ?? '');
     notesController = SpellCheckController()..text = (u?.notes ?? '');
+    lansweeperUsernameController = TextEditingController(
+      text: u?.lansweeperUsername ?? '',
+    );
 
     lastNameController.addListener(_onFieldChanged);
     firstNameController.addListener(_onFieldChanged);
@@ -133,6 +143,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     departmentController.addListener(_onFieldChanged);
     locationController.addListener(_onFieldChanged);
     notesController.addListener(_onFieldChanged);
+    lansweeperUsernameController.addListener(_onFieldChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -170,6 +181,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     departmentController.removeListener(_onFieldChanged);
     locationController.removeListener(_onFieldChanged);
     notesController.removeListener(_onFieldChanged);
+    lansweeperUsernameController.removeListener(_onFieldChanged);
 
     _lastNameFocusNode.dispose();
     _firstNameFocusNode.dispose();
@@ -184,6 +196,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     departmentController.dispose();
     locationController.dispose();
     notesController.dispose();
+    lansweeperUsernameController.dispose();
     super.dispose();
   }
 
@@ -681,6 +694,39 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                       alignLabelWithHint: true,
                     ),
                     onChanged: (_) => _onFieldChanged(),
+                  ),
+                  const SizedBox(height: 12),
+                  Builder(
+                    builder: (context) {
+                      // Προειδοποίηση, ποτέ απαγόρευση: ο κατάλογος έχει πάντα
+                      // την εξαίρεση που κανένας κανόνας δεν προέβλεψε.
+                      final looksWrong =
+                          lansweeperAgentValueLooksLikeDisplayName(
+                            lansweeperUsernameController.text,
+                          );
+                      return TextFormField(
+                        controller: lansweeperUsernameController,
+                        decoration: InputDecoration(
+                          labelText: 'Αναγνωριστικό Lansweeper',
+                          hintText: r'τομέας\όνομα.χρήστη ή email',
+                          helperText: looksWrong
+                              ? 'Δεν μοιάζει με αναγνωριστικό Lansweeper '
+                                    '(τομέας\\όνομα ή email) — το αίτημα δεν θα '
+                                    'βρει τον υπάλληλο.'
+                              : 'Με συμπληρωμένο αναγνωριστικό, ο υπάλληλος '
+                                    'καταχωρείται ως αιτών στο ticket του '
+                                    'Lansweeper.',
+                          helperMaxLines: 3,
+                          helperStyle: looksWrong
+                              ? TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                )
+                              : null,
+                          border: const OutlineInputBorder(),
+                        ),
+                        onChanged: (_) => _onFieldChanged(),
+                      );
+                    },
                   ),
                   if (equipmentLink.isVisible)
                     UserFormEquipmentChips(

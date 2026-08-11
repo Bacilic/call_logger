@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/lansweeper_requester_resolution.dart';
 import '../../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/resizable_text_area.dart';
@@ -30,6 +31,10 @@ class LansweeperSyncForm extends ConsumerWidget {
     this.onTicketStateChanged,
     this.onSaveAsKnowledge,
     this.saveAsKnowledgeDisabledTooltip,
+    this.autoParties,
+    this.requesterCandidates = const [],
+    this.selectedRequesterUsername,
+    this.onRequesterChanged,
     super.key,
   });
 
@@ -59,6 +64,18 @@ class LansweeperSyncForm extends ConsumerWidget {
   /// Γιατί δεν γίνεται τώρα (π.χ. κενή λύση) — αλλιώς το κουμπί απλώς σβήνει
   /// χωρίς εξήγηση και μοιάζει με βλάβη.
   final String? saveAsKnowledgeDisabledTooltip;
+
+  /// Τι θα μπει αυτόματα στο ticket: αιτών (υπάλληλος) και εξοπλισμός.
+  /// Null = δεν έχει φορτώσει ακόμη· η γραμμή δεν εμφανίζεται καθόλου.
+  final ({String? requester, String? asset})? autoParties;
+
+  /// Οι λογαριασμοί του τμήματος όταν ο καλών δεν έχει δικό του αναγνωριστικό.
+  /// Κενή λίστα = καμία επιλογή προς εμφάνιση.
+  final List<LansweeperRequesterCandidate> requesterCandidates;
+
+  /// Ποιος είναι επιλεγμένος· κενό = «χωρίς αιτούντα».
+  final String? selectedRequesterUsername;
+  final ValueChanged<String>? onRequesterChanged;
 
   static Color cooldownRemainingColor(int seconds) {
     if (seconds > 30) return Colors.red;
@@ -273,6 +290,59 @@ class LansweeperSyncForm extends ConsumerWidget {
                 context,
               ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
             ),
+            if (autoParties != null) ...[
+              const SizedBox(height: 4),
+              Tooltip(
+                message:
+                    'Συμπληρώνονται αυτόματα στο ticket από τα αναγνωριστικά '
+                    'του Καταλόγου. Το «—» σημαίνει χωρίς αντιστοίχιση: εκεί '
+                    'το ticket βγαίνει όπως πριν και συμπληρώνετε χειροκίνητα '
+                    'στο Lansweeper.',
+                child: Text(
+                  'Στο ticket — Αιτών: ${autoParties!.requester ?? '—'} · '
+                  'Εξοπλισμός: ${autoParties!.asset ?? '—'}',
+                  key: const ValueKey('lansweeper_auto_parties_line'),
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+            if (requesterCandidates.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                key: const ValueKey('lansweeper_requester_picker'),
+                isExpanded: true,
+                initialValue: selectedRequesterUsername ?? '',
+                decoration: const InputDecoration(
+                  labelText: 'Αιτών στο ticket',
+                  helperText:
+                      'Ο καλών δεν έχει δικό του αναγνωριστικό — διαλέξτε '
+                      'λογαριασμό του τμήματος.',
+                  helperMaxLines: 2,
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (final candidate in requesterCandidates)
+                    DropdownMenuItem<String>(
+                      value: candidate.account.username,
+                      child: Text(
+                        '${candidate.departmentName} · '
+                        '${candidate.account.displayLabel}',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  const DropdownMenuItem<String>(
+                    value: '',
+                    child: Text('Χωρίς αιτούντα (μπαίνω εγώ ως πράκτορας)'),
+                  ),
+                ],
+                onChanged: onRequesterChanged == null
+                    ? null
+                    : (value) => onRequesterChanged!(value ?? ''),
+              ),
+            ],
             const SizedBox(height: 8),
             LexiconSpellTextFormField(
               controller: titleController,
@@ -287,8 +357,7 @@ class LansweeperSyncForm extends ConsumerWidget {
               minLines: 2,
               decoration: const InputDecoration(
                 labelText: 'Σημειώσεις - Πρόβλημα (περιγραφή ticket)',
-                hintText:
-                    'Καλών και εξοπλισμό συμπληρώνετε χειροκίνητα στο Lansweeper.',
+                hintText: 'Η περιγραφή που θα μπει στο ticket.',
                 border: OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),

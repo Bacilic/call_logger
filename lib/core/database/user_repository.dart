@@ -33,6 +33,7 @@ class UserRepository {
     'department_id',
     'location',
     'notes',
+    'lansweeper_username',
     'is_deleted',
   };
 
@@ -70,6 +71,22 @@ class UserRepository {
       if (name.isNotEmpty) out[id] = name;
     }
     return out;
+  }
+
+  /// Ταυτότητα Lansweeper (`τομέας\όνομα` ή email) του χρήστη — null όταν
+  /// δεν έχει συμπληρωθεί. Διαβάζει και διαγραμμένους: η κλήση κρατά τον
+  /// καλούντα της ακόμη κι αν έφυγε αργότερα από τον Κατάλογο.
+  Future<String?> getLansweeperUsernameById(int userId) async {
+    final rows = await db.query(
+      'users',
+      columns: ['lansweeper_username'],
+      where: 'id = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final value = (rows.first['lansweeper_username'] as String?)?.trim() ?? '';
+    return value.isEmpty ? null : value;
   }
 
   Future<List<Map<String, dynamic>>> getAllUsers() async {

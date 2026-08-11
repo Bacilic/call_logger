@@ -43,6 +43,8 @@ class EquipmentFormDismissGuard {
       ..write('\u001e')
       ..write(host.locationController.text)
       ..write('\u001e')
+      ..write(host.lansweeperAssetNameController.text)
+      ..write('\u001e')
       ..write(host.defaultRemoteToolId ?? '');
     final remoteKeys = <String>{
       ...host.expandedRemoteKeys,
@@ -65,11 +67,11 @@ class EquipmentFormDismissGuard {
   }
 
   String _signatureExclusiveSegment(List<String> parts) =>
-      parts.length > 8 ? parts.last : '';
+      parts.length > 9 ? parts.last : '';
 
   String _signatureRemoteTail(List<String> parts) {
-    if (parts.length <= 9) return '';
-    return parts.sublist(8, parts.length - 1).join('\u001e');
+    if (parts.length <= 10) return '';
+    return parts.sublist(9, parts.length - 1).join('\u001e');
   }
 
   void tryCaptureFormBaseline() {
@@ -100,7 +102,10 @@ class EquipmentFormDismissGuard {
     }
     if (host.departmentController.text != initAt(5)) labels.add('Τμήμα');
     if (host.locationController.text != initAt(6)) labels.add('Τοποθεσία');
-    if ('${host.defaultRemoteToolId ?? ''}' != initAt(7)) {
+    if (host.lansweeperAssetNameController.text != initAt(7)) {
+      labels.add('Αναγνωριστικό Lansweeper');
+    }
+    if ('${host.defaultRemoteToolId ?? ''}' != initAt(8)) {
       labels.add('Προεπιλεγμένο εργαλείο');
     }
     final curParts = formStateSignature().split('\u001e');

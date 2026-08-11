@@ -88,6 +88,33 @@ void main() {
         isTrue,
       );
     });
+
+    test(
+      r'ονομασία κολλημένη μπροστά («Γραφείο Λοιμώξεων gnk\x») → true — '
+      'το Lansweeper δεν θα βρει τέτοιον χρήστη',
+      () {
+        expect(
+          lansweeperAgentValueLooksLikeDisplayName(
+            r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('κενό μέσα στο όνομα χρήστη → true (προειδοποίηση)', () {
+      expect(
+        lansweeperAgentValueLooksLikeDisplayName(r'gnk\p koutra'),
+        isTrue,
+      );
+    });
+
+    test('καθαρό domain\\username χωρίς κενά → false (καμία προειδοποίηση)', () {
+      expect(
+        lansweeperAgentValueLooksLikeDisplayName(r'gnk\loimokseis1'),
+        isFalse,
+      );
+    });
   });
 
   group('lansweeperAgentAsMatchingRequesterFields', () {
@@ -136,6 +163,69 @@ void main() {
           'AgentUsername': 'ΒασίληςΔρόσος@γγγ.κλ',
         },
       );
+    });
+  });
+
+  group('lansweeperRequesterAndAgentFields — αιτών ≠ πράκτορας', () {
+    test('δύο ταυτότητες τομέα: Username=αιτών, AgentUsername=πράκτορας', () {
+      expect(
+        lansweeperRequesterAndAgentFields(
+          requester: r'gnk\d.brami',
+          agent: r'gnk\v.drosos',
+        ),
+        <String, String>{
+          'Username': r'gnk\d.brami',
+          'AgentUsername': r'gnk\v.drosos',
+        },
+      );
+    });
+
+    test('μικτά είδη: αιτών email + πράκτορας τομέα, το καθένα στο πεδίο του', () {
+      expect(
+        lansweeperRequesterAndAgentFields(
+          requester: 'dbrami@hospkorinthos.gr',
+          agent: r'gnk\v.drosos',
+        ),
+        <String, String>{
+          'Email': 'dbrami@hospkorinthos.gr',
+          'AgentUsername': r'gnk\v.drosos',
+        },
+      );
+    });
+
+    test('αντίστροφα μικτά: αιτών τομέα + πράκτορας email', () {
+      expect(
+        lansweeperRequesterAndAgentFields(
+          requester: r'gnk\d.brami',
+          agent: 'v.drosos@hospkorinthos.gr',
+        ),
+        <String, String>{
+          'Username': r'gnk\d.brami',
+          'AgentEmail': 'v.drosos@hospkorinthos.gr',
+        },
+      );
+    });
+  });
+
+  group('lansweeperSearchUsersParamsFor', () {
+    test(r'τομέας\όνομα → Username + UserDomain χωριστά', () {
+      expect(lansweeperSearchUsersParamsFor(r'gnk\d.brami'), <String, String>{
+        'Username': 'd.brami',
+        'UserDomain': 'gnk',
+      });
+    });
+
+    test('email → μόνο Email', () {
+      expect(
+        lansweeperSearchUsersParamsFor('dbrami@hospkorinthos.gr'),
+        <String, String>{'Email': 'dbrami@hospkorinthos.gr'},
+      );
+    });
+
+    test('σκέτο κείμενο → Username ως έχει', () {
+      expect(lansweeperSearchUsersParamsFor('d.brami'), <String, String>{
+        'Username': 'd.brami',
+      });
     });
   });
 }

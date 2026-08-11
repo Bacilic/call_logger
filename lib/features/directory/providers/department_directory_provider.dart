@@ -494,6 +494,13 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       throw StateError('Υπάρχει ήδη άλλο τμήμα με αυτό το όνομα.');
     }
     var map = Map<String, dynamic>.from(d.toMap());
+    // Η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: το toMap παραλείπει τα null κλειδιά, οπότε
+    // χωρίς τη ρητή συμπλήρωση το άδειασμα Κτιρίου/Σημειώσεων δεν έφτανε ποτέ
+    // στη βάση — η παλιά τιμή έμενε σιωπηλά. Ίδιο συμβόλαιο με τις καρτέλες
+    // υπαλλήλου και εξοπλισμού (updateUser / updateEquipment).
+    map['building'] = d.building;
+    map['notes'] = d.notes;
+    map['lansweeper_usernames'] = d.lansweeperUsernames;
     if (d.floorId != null) {
       map = DepartmentFloorSync.mergeFloorContext(
         map,

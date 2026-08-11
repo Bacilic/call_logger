@@ -20,6 +20,9 @@ class LansweeperReportSelection {
         host.selectedKeys.remove(item.key);
       }
     }
+    // Αλλαγή επιλογής = πιθανή αλλαγή τμημάτων· μια επιλογή αιτούντα από την
+    // προηγούμενη ομάδα κλήσεων δεν ισχύει πια.
+    host.selectedRequesterUsername = null;
     host.notifyReportChanged();
   }
 
@@ -29,6 +32,9 @@ class LansweeperReportSelection {
     } else {
       host.selectedKeys.remove(item.key);
     }
+    // Αλλαγή επιλογής = πιθανή αλλαγή τμημάτων· μια επιλογή αιτούντα από την
+    // προηγούμενη ομάδα κλήσεων δεν ισχύει πια.
+    host.selectedRequesterUsername = null;
     host.notifyReportChanged();
   }
 

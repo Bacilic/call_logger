@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
+import '../../../core/services/lansweeper_asset_target.dart';
 import '../utils/equipment_remote_param_key.dart';
 import '../utils/vnc_remote_target.dart';
 
@@ -18,6 +19,7 @@ class EquipmentModel {
     this.defaultRemoteTool,
     this.departmentId,
     this.location,
+    this.lansweeperAssetName,
     this.isDeleted = false,
   }) : remoteParams = Map<String, String>.unmodifiable(
          Map<String, String>.from(remoteParams),
@@ -41,7 +43,21 @@ class EquipmentModel {
 
   /// Τοποθεσία απευθείας στον εξοπλισμό (`equipment.location`).
   final String? location;
+
+  /// Όνομα asset στο Lansweeper (`equipment.lansweeper_asset_name`).
+  /// Κενό = ισχύει ο κοινός κανόνας του VNC («PC + κωδικός», IP μένει IP) —
+  /// βλ. [lansweeperAssetTargetResolved].
+  final String? lansweeperAssetName;
   final bool isDeleted;
+
+  /// Στόχος `AddAsset` για ticket Lansweeper: η αποθηκευμένη τιμή αν υπάρχει,
+  /// αλλιώς ο κοινός κανόνας του VNC από τον κωδικό (βλ.
+  /// [lansweeperAssetTargetFor]). Null = δεν συνδέεται εξοπλισμός.
+  LansweeperAssetTarget? lansweeperAssetTargetResolved() =>
+      lansweeperAssetTargetFor(
+        storedAssetName: lansweeperAssetName,
+        equipmentCode: code,
+      );
 
   /// Για εμφάνιση σε λίστες (κωδικός + τύπος).
   String get displayLabel {
@@ -182,6 +198,7 @@ class EquipmentModel {
       defaultRemoteTool: map['default_remote_tool'] as String?,
       departmentId: map['department_id'] as int?,
       location: map['location'] as String?,
+      lansweeperAssetName: map['lansweeper_asset_name'] as String?,
       isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
@@ -195,6 +212,7 @@ class EquipmentModel {
       'default_remote_tool': defaultRemoteTool,
       'department_id': departmentId,
       'location': location,
+      'lansweeper_asset_name': lansweeperAssetName,
       'is_deleted': isDeleted ? 1 : 0,
       'remote_params': remoteParams.isEmpty ? null : jsonEncode(remoteParams),
     };
@@ -209,6 +227,7 @@ class EquipmentModel {
     String? defaultRemoteTool,
     int? departmentId,
     String? location,
+    String? lansweeperAssetName,
     bool? isDeleted,
   }) {
     final nextRemote = remoteParams ?? this.remoteParams;
@@ -221,6 +240,7 @@ class EquipmentModel {
       defaultRemoteTool: defaultRemoteTool ?? this.defaultRemoteTool,
       departmentId: departmentId ?? this.departmentId,
       location: location ?? this.location,
+      lansweeperAssetName: lansweeperAssetName ?? this.lansweeperAssetName,
       isDeleted: isDeleted ?? this.isDeleted,
     );
   }

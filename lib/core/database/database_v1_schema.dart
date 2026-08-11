@@ -50,7 +50,12 @@ import 'database_foreign_keys.dart';
 /// v43: η `calls.issue_refined` καταργείται — κάθε κλήση έχει ΜΙΑ Περιγραφή
 /// (`issue`), που η φόρμα Lansweeper αντικαθιστά με το καθαρό κείμενο· όπου
 /// υπήρχε καθαρό, γίνεται η νέα τιμή του `issue` και το ευρετήριο ξαναχτίζεται.
-const int databaseSchemaVersionV1 = 43;
+/// v44: `users.lansweeper_username` (τομέας\\όνομα ή email του χρήστη στο
+/// Lansweeper) και `equipment.lansweeper_asset_name` (όνομα asset) — τα
+/// αναγνωριστικά που βάζουν αυτόματα αιτούντα και εξοπλισμό στο ticket.
+/// v45: `departments.lansweeper_usernames` — οι γενικοί λογαριασμοί του
+/// τμήματος, για κλήσεις όπου ο καλών είναι άγνωστος ή δεν έχει δικό του.
+const int databaseSchemaVersionV1 = 45;
 
 /// Ο πίνακας της Βάσης Γνώσης: μία «συνταγή» ανά είδος βλάβης.
 ///

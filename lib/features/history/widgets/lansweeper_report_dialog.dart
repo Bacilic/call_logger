@@ -114,6 +114,10 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   String? aiSuggestedSolution;
 
   String? selectedTicketState;
+
+  /// Ο αιτών που διάλεξε ο χρήστης στη φόρμα· κενό = «χωρίς αιτούντα».
+  /// `null` = δεν άγγιξε τον επιλογέα, οπότε ισχύει η αυτόματη ιεραρχία.
+  String? selectedRequesterUsername;
   ProviderSubscription<String>? _lansweeperApiUrlSub;
   ProviderSubscription<String>? _lansweeperTicketFormUrlSub;
   ProviderSubscription<String>? _lansweeperTicketViewUrlSub;
@@ -774,6 +778,39 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                 : const AsyncData<List<Map<String, dynamic>>>(
                                     <Map<String, dynamic>>[],
                                   );
+                            // Τι θα μπει αυτόματα στο ticket (αιτών,
+                            // εξοπλισμός) — null όσο φορτώνει ή χωρίς επιλογή,
+                            // οπότε η γραμμή απλώς δεν εμφανίζεται. Το κλειδί
+                            // κρατά ΟΛΕΣ τις επιλεγμένες κλήσεις: ο αιτών
+                            // μπορεί να προκύψει από τμήμα οποιασδήποτε.
+                            final selectedCallIdsKey = selected
+                                .map((entry) => entry.call.id)
+                                .whereType<int>()
+                                .join(',');
+                            final ticketParties = selectedCallIdsKey.isEmpty
+                                ? null
+                                : ref
+                                      .watch(
+                                        lansweeperTicketPartiesProvider(
+                                          selectedCallIdsKey,
+                                        ),
+                                      )
+                                      .value;
+                            final effectiveRequester =
+                                (selectedRequesterUsername ??
+                                        ticketParties
+                                            ?.requester
+                                            .selectedUsername ??
+                                        '')
+                                    .trim();
+                            final autoParties = ticketParties == null
+                                ? null
+                                : (
+                                    requester: effectiveRequester.isEmpty
+                                        ? null
+                                        : effectiveRequester,
+                                    asset: ticketParties.asset,
+                                  );
 
                             if (allItems.isEmpty) {
                               return _buildNoCallsInRangeEmptyState(
@@ -880,6 +917,24 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                           notesController: notesController,
                                           solutionController:
                                               solutionController,
+                                          autoParties: autoParties,
+                                          requesterCandidates:
+                                              ticketParties
+                                                      ?.requester
+                                                      .isChoosable ??
+                                                  false
+                                              ? ticketParties!
+                                                    .requester
+                                                    .candidates
+                                              : const [],
+                                          selectedRequesterUsername:
+                                              effectiveRequester,
+                                          onRequesterChanged: (value) =>
+                                              setState(
+                                                () =>
+                                                    selectedRequesterUsername =
+                                                        value,
+                                              ),
                                           config: ticketConfig,
                                           customFieldValues: customFieldValues,
                                           onCustomFieldChanged: (id, value) =>

@@ -5,6 +5,7 @@ import '../models/lansweeper_sync_state.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../widgets/lansweeper/lansweeper_registration_dialogs.dart';
+import '../widgets/lansweeper/lansweeper_registration_flow.dart';
 
 /// Αλλαγή της κατάστασης Lansweeper μιας κλήσης, με τις ερωτήσεις που χρωστά.
 ///
@@ -106,47 +107,52 @@ abstract final class LansweeperStateActions {
     if (prefilled.isEmpty) {
       prefilled = await notifier.suggestedNextLansweeperTicketId() ?? '';
     }
-    while (true) {
-      if (!context.mounted) return null;
-      final ticketId = await showLansweeperOptionalTicketIdDialog(
-        context,
-        prefilled: prefilled,
-        title: 'Σήμανση ως καταχωρημένη',
-        subtitle:
-            'Ο αριθμός αιτήματος Lansweeper είναι προαιρετικός (π.χ. 17132).',
-      );
-      if (ticketId == null || !context.mounted) return null;
+    if (!context.mounted) return null;
 
-      if (ticketId.isNotEmpty) {
+    final requested = await showLansweeperOptionalTicketIdDialog(
+      context,
+      prefilled: prefilled,
+      title: 'Σήμανση ως καταχωρημένη',
+      subtitle:
+          'Ο αριθμός αιτήματος Lansweeper είναι προαιρετικός (π.χ. 17132).',
+    );
+    if (requested == null || !context.mounted) return null;
+
+    // Ο ίδιος κανόνας διπλού με την Αναφορά — γραμμένος μία φορά, ώστε μια
+    // μελλοντική αλλαγή του να μην ξεχαστεί εδώ.
+    final ticketId = await resolveTicketIdWithoutDuplicate(
+      candidate: requested,
+      checkDuplicate: (candidate) async {
         final duplicates = await notifier.countRegisteredCallsWithTicketId(
-          ticketId,
+          candidate,
           excludeCallId: callId,
         );
+        if (duplicates <= 0) return DuplicateTicketAction.proceed;
+        if (!context.mounted) return DuplicateTicketAction.cancel;
+        return showLansweeperDuplicateTicketDialog(
+          context,
+          count: duplicates,
+          ticketId: candidate,
+          ticketViewUrlTemplate: ref.read(lansweeperTicketViewUrlProvider),
+        );
+      },
+      askForDifferentId: (currentTicketId) async {
         if (!context.mounted) return null;
-        if (duplicates > 0) {
-          final action = await showLansweeperDuplicateTicketDialog(
-            context,
-            count: duplicates,
-            ticketId: ticketId,
-            ticketViewUrlTemplate: ref.read(lansweeperTicketViewUrlProvider),
-          );
-          if (action == DuplicateTicketAction.cancel || !context.mounted) {
-            return null;
-          }
-          if (action == DuplicateTicketAction.changeId) {
-            prefilled = ticketId;
-            continue;
-          }
-        }
-      }
+        return showLansweeperOptionalTicketIdDialog(
+          context,
+          prefilled: currentTicketId,
+          title: 'Αλλαγή αριθμού αιτήματος',
+        );
+      },
+    );
+    if (ticketId == null || !context.mounted) return null;
 
-      await notifier.markRegistered(
-        callId: callId,
-        ticketId: ticketId.isEmpty ? null : ticketId,
-      );
-      return ticketId.isEmpty
-          ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
-          : 'Η κλήση επισημάνθηκε ως καταχωρημένη (αίτημα #$ticketId).';
-    }
+    await notifier.markRegistered(
+      callId: callId,
+      ticketId: ticketId.isEmpty ? null : ticketId,
+    );
+    return ticketId.isEmpty
+        ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
+        : 'Η κλήση επισημάνθηκε ως καταχωρημένη (αίτημα #$ticketId).';
   }
 }

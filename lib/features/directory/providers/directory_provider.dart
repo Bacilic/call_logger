@@ -582,7 +582,15 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     if (u.id == null) return;
     _settlePendingBulkUndo();
     final dbUp = await DatabaseHelper.instance.database;
-    await UserRepository(dbUp).updateUser(u.id!, u.toMap());
+    // Η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: το toMap παραλείπει τα null κλειδιά, οπότε
+    // χωρίς τη ρητή συμπλήρωση το άδειασμα Σημειώσεων/Τοποθεσίας/Τμήματος δεν
+    // έφτανε ποτέ στη βάση — η παλιά τιμή έμενε σιωπηλά.
+    final map = u.toMap()
+      ..['location'] = u.location
+      ..['notes'] = u.notes
+      ..['department_id'] = u.departmentId
+      ..['lansweeper_username'] = u.lansweeperUsername;
+    await UserRepository(dbUp).updateUser(u.id!, map);
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);

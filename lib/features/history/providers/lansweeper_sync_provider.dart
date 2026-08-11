@@ -6,9 +6,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/calls_lansweeper_repository.dart';
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/equipment_repository.dart';
+import '../../../core/database/user_repository.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
+import '../../../core/services/lansweeper_asset_target.dart';
+import '../../../core/services/lansweeper_department_accounts.dart';
+import '../../../core/services/lansweeper_requester_resolution.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
 import '../../../core/services/lansweeper_ticket_submit_config.dart';
+import '../../../core/services/lookup_service.dart';
+import '../../calls/models/call_model.dart';
 import '../../calls/provider/call_mutation_refresh.dart';
 import '../models/lansweeper_sync_state.dart';
 
@@ -27,6 +34,7 @@ class LansweeperSubmitInput {
     this.customFieldValues = const <String, String>{},
     this.targetTicketState,
     this.config,
+    this.requesterUsername,
   });
 
   final String title;
@@ -41,6 +49,12 @@ class LansweeperSubmitInput {
   final Map<String, String> customFieldValues;
   final String? targetTicketState;
   final LansweeperTicketSubmitConfig? config;
+
+  /// Ο αιτών που έδειχνε η φόρμα τη στιγμή της αποστολής.
+  ///
+  /// `null` = η φόρμα δεν είχε άποψη, οπότε αποφασίζει η αυτόματη ιεραρχία.
+  /// Κενό κείμενο = ρητή επιλογή «χωρίς αιτούντα» — μπαίνει ο πράκτορας.
+  final String? requesterUsername;
 }
 
 class LansweeperCommandResult {
@@ -122,6 +136,38 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           ? input.targetTicketState!.trim()
           : config.defaultTicketState;
 
+      // Αναγνωριστικά της συνδεδεμένης κλήσης: ο υπάλληλος ως αιτών και ο
+      // εξοπλισμός ως asset. Κλήση με ελεύθερο κείμενο (χωρίς σύνδεση στον
+      // Κατάλογο) δεν έχει τίποτα να δώσει — η ροή μένει όπως πριν.
+      //
+      // Ό,τι έδειχνε η φόρμα κερδίζει: εκεί ο χρήστης μπορεί να διάλεξε
+      // λογαριασμό τμήματος ή ρητά «χωρίς αιτούντα», και η επιλογή του δεν
+      // επιτρέπεται να παρακαμφθεί από την αυτόματη ιεραρχία.
+      final String? requesterUsername;
+      final formChoice = input.requesterUsername;
+      if (formChoice != null) {
+        final chosen = formChoice.trim();
+        requesterUsername = chosen.isEmpty ? null : chosen;
+      } else {
+        final callerId = call.callerId;
+        requesterUsername = callerId == null
+            ? null
+            : await UserRepository(db).getLansweeperUsernameById(callerId);
+      }
+      final equipmentId = call.equipmentId;
+      LansweeperAssetTarget? assetTarget;
+      if (equipmentId != null) {
+        final assetFields = await EquipmentRepository(
+          db,
+        ).getLansweeperAssetFieldsById(equipmentId);
+        if (assetFields != null) {
+          assetTarget = lansweeperAssetTargetFor(
+            storedAssetName: assetFields.assetName,
+            equipmentCode: assetFields.code,
+          );
+        }
+      }
+
       final service = ref.read(lansweeperSyncServiceProvider);
       final result = await service.submitTicketWorkflow(
         LansweeperWorkflowRequest(
@@ -135,6 +181,8 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           customFieldValues: input.customFieldValues,
           targetState: targetState,
           existingTicketId: existingTicketId,
+          requesterUsername: requesterUsername,
+          assetTarget: assetTarget,
         ),
       );
 
@@ -464,4 +512,101 @@ final callExternalLinksProvider = FutureProvider.autoDispose
       return CallsLansweeperRepository(
         db,
       ).getCallExternalLinks(callId, provider: 'lansweeper');
+    });
+
+/// Τι θα μπει αυτόματα στο ticket: ο αιτών (με τους υποψηφίους του, όταν
+/// υπάρχει επιλογή) και ο εξοπλισμός.
+class LansweeperTicketParties {
+  const LansweeperTicketParties({required this.requester, this.asset});
+
+  static const empty = LansweeperTicketParties(
+    requester: LansweeperRequesterOptions(
+      selectedUsername: null,
+      candidates: [],
+      isChoosable: false,
+    ),
+  );
+
+  final LansweeperRequesterOptions requester;
+
+  /// Το όνομα asset που θα συνδεθεί· `null` = χωρίς εξοπλισμό.
+  final String? asset;
+}
+
+/// Τα «πρόσωπα» του ticket για τις δοσμένες κλήσεις.
+///
+/// Κλειδί: τα ids χωρισμένα με κόμμα — **η σειρά μετράει**, η πρώτη κλήση
+/// είναι η κύρια και δίνει τον εξοπλισμό. Ο αιτών προκύπτει από τον καλούντα
+/// της κύριας και, όταν εκείνος δεν έχει αναγνωριστικό, από τα τμήματα **όλων**
+/// των κλήσεων του ticket.
+final lansweeperTicketPartiesProvider = FutureProvider.autoDispose
+    .family<LansweeperTicketParties, String>((ref, callIdsKey) async {
+      final callIds = callIdsKey
+          .split(',')
+          .map((raw) => int.tryParse(raw.trim()))
+          .whereType<int>()
+          .toList();
+      if (callIds.isEmpty) return LansweeperTicketParties.empty;
+
+      final db = await DatabaseHelper.instance.database;
+      final callsRepo = CallsRepository(db);
+      final calls = <CallModel>[];
+      for (final id in callIds) {
+        final call = await callsRepo.getCallById(id);
+        if (call != null) calls.add(call);
+      }
+      if (calls.isEmpty) return LansweeperTicketParties.empty;
+
+      final primary = calls.first;
+      final callerId = primary.callerId;
+      final callerUsername = callerId == null
+          ? null
+          : await UserRepository(db).getLansweeperUsernameById(callerId);
+
+      // Τα τμήματα διαβάζονται μόνο όταν χρειάζονται — ο καλών με δικό του
+      // αναγνωριστικό κερδίζει έτσι κι αλλιώς.
+      final departments =
+          <({String departmentName, List<LansweeperAccount> accounts})>[];
+      if ((callerUsername ?? '').trim().isEmpty) {
+        final seenDepartments = <int>{};
+        final lookup = LookupService.instance;
+        for (final call in calls) {
+          final department = lookup.findDepartmentByName(
+            call.departmentText ?? '',
+          );
+          final departmentId = department?.id;
+          if (department == null || departmentId == null) continue;
+          if (!seenDepartments.add(departmentId)) continue;
+          final accounts = decodeLansweeperAccounts(
+            department.lansweeperUsernames,
+          );
+          if (accounts.isEmpty) continue;
+          departments.add((
+            departmentName: department.name,
+            accounts: accounts,
+          ));
+        }
+      }
+
+      final equipmentId = primary.equipmentId;
+      String? asset;
+      if (equipmentId != null) {
+        final assetFields = await EquipmentRepository(
+          db,
+        ).getLansweeperAssetFieldsById(equipmentId);
+        if (assetFields != null) {
+          asset = lansweeperAssetTargetFor(
+            storedAssetName: assetFields.assetName,
+            equipmentCode: assetFields.code,
+          )?.value;
+        }
+      }
+
+      return LansweeperTicketParties(
+        requester: resolveLansweeperRequester(
+          callerUsername: callerUsername,
+          departments: departments,
+        ),
+        asset: asset,
+      );
     });

@@ -37,6 +37,7 @@ class DepartmentModel {
     this.groupName,
     this.floorId,
     this.directPhones,
+    this.lansweeperUsernames,
     this.isDeleted = false,
     this.isHiddenOnMap = false,
   });
@@ -78,6 +79,11 @@ class DepartmentModel {
   /// “Ορφανά” τηλέφωνα που ανήκουν απευθείας στο τμήμα (δεν είναι των χρηστών).
   /// Δεν αποθηκεύονται μέσα στον πίνακα `departments`· φορτώνονται από `department_phones`.
   final List<String>? directPhones;
+
+  /// Οι γενικοί λογαριασμοί Lansweeper του τμήματος, κωδικοποιημένοι
+  /// (στήλη `departments.lansweeper_usernames`). Διαβάζονται με το
+  /// `decodeLansweeperAccounts`· χρησιμεύουν όταν ο καλών είναι άγνωστος.
+  final String? lansweeperUsernames;
   final bool isDeleted;
 
   /// Απόκρυψη τμήματος από τον χάρτη κτιρίου (διατηρεί τη γεωμετρία). Per-department
@@ -158,6 +164,7 @@ class DepartmentModel {
       groupName: map['group_name'] as String?,
       floorId: (map['floor_id'] as num?)?.toInt(),
       directPhones: parseDirectPhones(map['direct_phones']),
+      lansweeperUsernames: map['lansweeper_usernames'] as String?,
       isDeleted: (map['is_deleted'] as int?) == 1,
       isHiddenOnMap: (map['map_hidden'] as int?) == 1,
     );
@@ -190,6 +197,7 @@ class DepartmentModel {
     Object? groupName = _unset,
     Object? floorId = _unset,
     Object? directPhones = _unset,
+    Object? lansweeperUsernames = _unset,
     bool? isDeleted,
     bool? isHiddenOnMap,
   }) {
@@ -244,6 +252,9 @@ class DepartmentModel {
       directPhones: identical(directPhones, _unset)
           ? this.directPhones
           : directPhones as List<String>?,
+      lansweeperUsernames: identical(lansweeperUsernames, _unset)
+          ? this.lansweeperUsernames
+          : lansweeperUsernames as String?,
       isDeleted: isDeleted ?? this.isDeleted,
       isHiddenOnMap: isHiddenOnMap ?? this.isHiddenOnMap,
     );
@@ -272,6 +283,8 @@ class DepartmentModel {
       if (mapLabelHeight != null) 'map_label_height': mapLabelHeight,
       if (groupName != null) 'group_name': groupName,
       if (floorId != null) 'floor_id': floorId,
+      if (lansweeperUsernames != null)
+        'lansweeper_usernames': lansweeperUsernames,
       'is_deleted': isDeleted ? 1 : 0,
       'map_hidden': isHiddenOnMap ? 1 : 0,
     };

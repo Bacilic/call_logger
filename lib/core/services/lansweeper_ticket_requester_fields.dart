@@ -25,6 +25,45 @@ bool lansweeperAgentValueLooksLikeEmail(String value) {
   return EmailValidator.validate(trimmed, false, false);
 }
 
+/// Πεδία `AddTicket`/`EditTicket` όταν ο αιτών **διαφέρει** από τον πράκτορα:
+/// ο αιτών στα [Username]/[Email], ο πράκτορας στα [AgentUsername]/[AgentEmail].
+/// Καθεμιά από τις δύο ταυτότητες ταξινομείται ανεξάρτητα (email ή τομέας\όνομα).
+Map<String, String> lansweeperRequesterAndAgentFields({
+  required String requester,
+  required String agent,
+}) {
+  final requesterValue = requester.trim();
+  final agentValue = agent.trim();
+  return <String, String>{
+    if (lansweeperAgentValueLooksLikeEmail(requesterValue))
+      'Email': requesterValue
+    else
+      'Username': requesterValue,
+    if (lansweeperAgentValueLooksLikeEmail(agentValue))
+      'AgentEmail': agentValue
+    else
+      'AgentUsername': agentValue,
+  };
+}
+
+/// Παράμετροι `SearchUsers` για τη δοσμένη ταυτότητα: email → `Email`,
+/// `τομέας\όνομα` → `Username` + `UserDomain`, αλλιώς σκέτο `Username`.
+Map<String, String> lansweeperSearchUsersParamsFor(String identity) {
+  final value = identity.trim();
+  if (lansweeperAgentValueLooksLikeEmail(value)) {
+    return <String, String>{'Email': value};
+  }
+  final separator = value.indexOf(r'\');
+  if (separator > 0 && !value.contains(r'\', separator + 1)) {
+    final domain = value.substring(0, separator);
+    final username = value.substring(separator + 1);
+    if (domain.isNotEmpty && username.isNotEmpty) {
+      return <String, String>{'Username': username, 'UserDomain': domain};
+    }
+  }
+  return <String, String>{'Username': value};
+}
+
 /// Κρίνει αν η τιμή **δεν** μοιάζει με έγκυρη ταυτότητα `domain\username`
 /// ούτε με έγκυρο email (π.χ. απλό display name ή άκυρο `dro@fd`).
 bool lansweeperAgentValueLooksLikeDisplayName(String value) {
@@ -41,5 +80,16 @@ bool _looksLikeDomainUsername(String trimmed) {
   if (trimmed.contains(r'\', separator + 1)) return false;
   final domain = trimmed.substring(0, separator);
   final username = trimmed.substring(separator + 1);
-  return domain.isNotEmpty && username.isNotEmpty;
+  if (domain.isEmpty || username.isEmpty) return false;
+  // Κενό μέσα στην ταυτότητα σημαίνει σχεδόν πάντα ότι κόλλησε μπροστά μια
+  // ονομασία («Γραφείο Λοιμώξεων gnk\loimokseis1»). Λογαριασμοί τομέα δεν
+  // έχουν κενά, οπότε το Lansweeper δεν θα έβρισκε ποτέ τέτοιον χρήστη.
+  if (_containsWhitespace(domain) || _containsWhitespace(username)) {
+    return false;
+  }
+  return true;
 }
+
+final RegExp _whitespace = RegExp(r'\s');
+
+bool _containsWhitespace(String value) => _whitespace.hasMatch(value);

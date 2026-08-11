@@ -6,6 +6,7 @@ typedef UserFormFields = ({
   String department,
   String location,
   String notes,
+  String lansweeper,
 });
 
 /// Οι ετικέτες των πεδίων που άλλαξαν, με τη σειρά που εμφανίζονται στη φόρμα.
@@ -17,6 +18,9 @@ List<String> changedUserFieldLabels(UserFormFields before, UserFormFields now) {
   if (now.department != before.department) changes.add('Τμήμα');
   if (now.location != before.location) changes.add('Τοποθεσία');
   if (now.notes != before.notes) changes.add('Σημειώσεις');
+  if (now.lansweeper != before.lansweeper) {
+    changes.add('Αναγνωριστικό Lansweeper');
+  }
   return changes;
 }
 

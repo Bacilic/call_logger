@@ -4,6 +4,7 @@ import '../../../../core/database/audit_service.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/errors/department_exists_exception.dart';
+import '../../../../core/services/lansweeper_department_accounts.dart';
 import '../../../../core/services/save_confirmation_summary.dart';
 import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
@@ -54,12 +55,18 @@ class DepartmentFormSave {
         host.selectedFloorId == null &&
         (host.snapFloorId != null || ini?.floorId != null);
 
+    // Ό,τι έχει μείνει πληκτρολογημένο χωρίς να γίνει chip μετράει κανονικά —
+    // ο χρήστης δεν πρέπει να χάνει γραμμένο αναγνωριστικό επειδή πάτησε
+    // «Αποθήκευση» χωρίς να πατήσει πρώτα Enter.
+    host.commitLansweeperAccountInput();
+
     final model = DepartmentModel(
       id: host.isEdit ? ini?.id : null,
       name: name,
       building: building.isEmpty ? null : building,
       color: color,
       notes: notes.isEmpty ? null : notes,
+      lansweeperUsernames: encodeLansweeperAccounts(host.lansweeperAccounts),
       floorId: host.selectedFloorId,
       groupName: ini?.groupName,
       mapFloor: host.selectedFloorId != null

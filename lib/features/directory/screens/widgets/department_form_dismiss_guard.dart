@@ -43,6 +43,14 @@ class DepartmentFormDismissGuard {
       return true;
     }
     if (host.selectedFloorId != host.snapFloorId) return true;
+    if (host.lansweeperAccountsSignature() != host.snapLansweeperAccounts) {
+      return true;
+    }
+    // Πληκτρολογημένο αναγνωριστικό που δεν έγινε ακόμη chip μετράει κι αυτό:
+    // αλλιώς το κουμπί μένει ανενεργό και η δουλειά μοιάζει να αγνοείται.
+    if (host.lansweeperAccountInputController.text.trim().isNotEmpty) {
+      return true;
+    }
     return false;
   }
 
@@ -86,6 +94,9 @@ class DepartmentFormDismissGuard {
     }
     if (host.selectedFloorId != host.snapFloorId) {
       labels.add('Όροφος (κατόψη)');
+    }
+    if (host.lansweeperAccountsSignature() != host.snapLansweeperAccounts) {
+      labels.add('Αναγνωριστικά Lansweeper');
     }
     return labels;
   }

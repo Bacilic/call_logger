@@ -5,6 +5,7 @@ import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
+import '../../../../core/services/lansweeper_asset_target.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/database/audit_diff_helper.dart';
 import '../../../../core/database/audit_service.dart';
@@ -91,6 +92,10 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController codeController;
   late final SpellCheckController notesController;
+
+  /// Όνομα asset στο Lansweeper. Κενό = ισχύει ο κοινός κανόνας του VNC
+  /// («PC + κωδικός»), που φαίνεται αχνά μέσα στο πεδίο.
+  late final TextEditingController lansweeperAssetNameController;
   late final TextEditingController ownerController;
   late final FocusNode _ownerFocusNode;
   bool ownerTextInitialized = false;
@@ -191,6 +196,9 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     remoteParams.initFromEquipment(e);
     codeController = TextEditingController(text: e?.code ?? '');
     notesController = SpellCheckController()..text = (e?.notes ?? '');
+    lansweeperAssetNameController = TextEditingController(
+      text: e?.lansweeperAssetName ?? '',
+    );
     ownerController = TextEditingController();
     _ownerFocusNode = FocusNode();
     departmentController = TextEditingController();
@@ -221,6 +229,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     }
     for (final c in [
       codeController,
+      lansweeperAssetNameController,
       ownerController,
       departmentController,
       locationController,
@@ -273,6 +282,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
   void dispose() {
     for (final c in [
       codeController,
+      lansweeperAssetNameController,
       ownerController,
       departmentController,
       locationController,
@@ -281,6 +291,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     }
     notesController.removeListener(markFormChanged);
     codeController.dispose();
+    lansweeperAssetNameController.dispose();
     notesController.dispose();
     for (final c in remoteParamControllers.values) {
       c.dispose();
@@ -440,6 +451,13 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     return (userId: matches.first.id, error: null);
   }
 
+  /// Η αυτόματη τιμή που θα σταλεί όταν το πεδίο Lansweeper μείνει κενό —
+  /// ίδιος κανόνας με το VNC («PC + κωδικός», IP μένει IP).
+  String? _lansweeperAutoSuggestion() => lansweeperAssetTargetFor(
+    storedAssetName: null,
+    equipmentCode: codeController.text,
+  )?.value;
+
   /// null, κενό ή "Κανένα" → null· αλλιώς επιστρέφει το trim string.
   String? _requiredValidator(String? v) =>
       (v?.trim().isEmpty ?? true) ? 'Υποχρεωτικό' : null;
@@ -504,6 +522,9 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
       defaultRemoteTool: null,
       departmentId: equipmentDepartmentId,
       location: locTrim.isEmpty ? null : locTrim,
+      lansweeperAssetName: lansweeperAssetNameController.text.trim().isEmpty
+          ? null
+          : lansweeperAssetNameController.text.trim(),
     );
     if (isEdit) {
       if (equipment.id != null &&
@@ -735,6 +756,23 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
                         alignLabelWithHint: true,
                       ),
                       minLines: 2,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: lansweeperAssetNameController,
+                      decoration: InputDecoration(
+                        labelText: 'Αναγνωριστικό Lansweeper',
+                        hintText:
+                            _lansweeperAutoSuggestion() ?? 'Όνομα asset ή IP',
+                        helperText: _lansweeperAutoSuggestion() == null
+                            ? 'Όνομα asset (ή IP) για τη σύνδεση του '
+                                  'εξοπλισμού στο ticket του Lansweeper.'
+                            : 'Κενό = στέλνεται αυτόματα η αχνή τιμή '
+                                  'από τον κωδικό.',
+                        helperMaxLines: 2,
+                        border: const OutlineInputBorder(),
+                      ),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),

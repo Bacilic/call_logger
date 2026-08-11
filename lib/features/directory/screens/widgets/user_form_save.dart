@@ -287,6 +287,9 @@ class UserFormSave {
       notes: host.notesController.text.trim().isEmpty
           ? null
           : host.notesController.text.trim(),
+      // Πάντα string (και κενό): το toMap παραλείπει τα null, οπότε μόνο έτσι
+      // καθαρίζει η αποθηκευμένη τιμή όταν σβηστεί το πεδίο.
+      lansweeperUsername: host.lansweeperUsernameController.text.trim(),
     );
 
     if (host.isEdit && cloneAsNewEmployee) {

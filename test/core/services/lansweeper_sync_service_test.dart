@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:call_logger/core/services/lansweeper_asset_target.dart';
 import 'package:call_logger/core/services/lansweeper_sync_service.dart';
 import 'package:call_logger/core/services/lansweeper_ticket_submit_config.dart';
 import 'package:call_logger/core/services/settings_service.dart';
@@ -28,6 +29,25 @@ class _RecordingFakePoster {
   }
 }
 
+class _RecordingFakeGetter {
+  _RecordingFakeGetter({required this.responses});
+
+  final List<LansweeperRawResponse> responses;
+  final List<({String action, Map<String, String> params})> calls = [];
+  int _index = 0;
+
+  Future<LansweeperRawResponse> call(
+    String action,
+    Map<String, String> params,
+  ) async {
+    calls.add((action: action, params: Map<String, String>.from(params)));
+    if (_index < responses.length) {
+      return responses[_index++];
+    }
+    return const LansweeperRawResponse(200, '{"Success":true,"Count":0}');
+  }
+}
+
 LansweeperWorkflowRequest _workflowRequest({
   String title = 'Τίτλος δοκιμής',
   String problem = 'Πρόβλημα δοκιμής',
@@ -38,6 +58,8 @@ LansweeperWorkflowRequest _workflowRequest({
   Map<String, String>? customFieldValues,
   String? targetState = 'Closed',
   String? existingTicketId,
+  String? requesterUsername,
+  LansweeperAssetTarget? assetTarget,
 }) {
   return LansweeperWorkflowRequest(
     call: CallModel(id: 42, category: 'IT'),
@@ -55,6 +77,8 @@ LansweeperWorkflowRequest _workflowRequest({
         },
     targetState: targetState,
     existingTicketId: existingTicketId,
+    requesterUsername: requesterUsername,
+    assetTarget: assetTarget,
   );
 }
 
@@ -342,6 +366,316 @@ void main() {
         final fields = _fieldsForAction(fakePoster, 'AddNote');
         expect(fields, isNotNull);
         expect(fields!['Text'], contains('Χρόνος: 05:00'));
+      },
+    );
+  });
+
+  group('LansweeperSyncService — αιτών (υπάλληλος) και εξοπλισμός', () {
+    const successWithTicketId = LansweeperRawResponse(
+      200,
+      '{"Success":true,"TicketID":"17476"}',
+    );
+    const successOnly = LansweeperRawResponse(200, '{"Success":true}');
+    const failure = LansweeperRawResponse(
+      200,
+      '{"Success":false,"Message":"αποτυχία"}',
+    );
+    const userFound = LansweeperRawResponse(
+      200,
+      '{"Success":true,"Count":1,"Results":[65305]}',
+    );
+    const userNotFound = LansweeperRawResponse(
+      200,
+      '{"Success":true,"Count":0}',
+    );
+
+    setUp(_registerTestLansweeperSettings);
+
+    test(
+      'έγκυρος αιτών: SearchUsers με Username+UserDomain, AddTicket με Username=υπάλληλος και AgentUsername=πράκτορας, και ΟΛΑ τα EditTicket κρατούν τον υπάλληλο',
+      () async {
+        final fakeGetter = _RecordingFakeGetter(responses: const [userFound]);
+        final fakePoster = _RecordingFakePoster(
+          responses: const [successWithTicketId, successOnly, successOnly],
+        );
+        final service = LansweeperSyncService(
+          poster: fakePoster.call,
+          getter: fakeGetter.call,
+        );
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(requesterUsername: r'gnk\d.brami'),
+        );
+
+        expect(result.success, isTrue);
+        expect(fakeGetter.calls, hasLength(1));
+        expect(fakeGetter.calls.first.action, 'SearchUsers');
+        expect(fakeGetter.calls.first.params, {
+          'Username': 'd.brami',
+          'UserDomain': 'gnk',
+        });
+
+        final addFields = _fieldsForAction(fakePoster, 'AddTicket');
+        expect(addFields, isNotNull);
+        expect(addFields!['Username'], r'gnk\d.brami');
+        expect(addFields['AgentUsername'], r'CORP\agent');
+
+        // Ο συντάκτης της σημείωσης παραμένει ο πράκτορας.
+        final noteFields = _fieldsForAction(fakePoster, 'AddNote');
+        expect(noteFields, isNotNull);
+        expect(noteFields!['Username'], r'CORP\agent');
+
+        // Το βήμα κατάστασης ΔΕΝ γυρίζει τον αιτούντα πίσω στον πράκτορα.
+        final stateFields = _fieldsForAction(fakePoster, 'EditTicket');
+        expect(stateFields, isNotNull);
+        expect(stateFields!['State'], 'Closed');
+        expect(stateFields['Username'], r'gnk\d.brami');
+        expect(stateFields['AgentUsername'], r'CORP\agent');
+      },
+    );
+
+    test(
+      'αιτών με email: SearchUsers με Email, AddTicket με Email=υπάλληλος και AgentUsername=πράκτορας (μικτά είδη)',
+      () async {
+        final fakeGetter = _RecordingFakeGetter(responses: const [userFound]);
+        final fakePoster = _RecordingFakePoster(
+          responses: const [successWithTicketId, successOnly, successOnly],
+        );
+        final service = LansweeperSyncService(
+          poster: fakePoster.call,
+          getter: fakeGetter.call,
+        );
+
+        await service.submitTicketWorkflow(
+          _workflowRequest(requesterUsername: 'dbrami@hospkorinthos.gr'),
+        );
+
+        expect(fakeGetter.calls.first.params, {
+          'Email': 'dbrami@hospkorinthos.gr',
+        });
+
+        final addFields = _fieldsForAction(fakePoster, 'AddTicket');
+        expect(addFields, isNotNull);
+        expect(addFields!['Email'], 'dbrami@hospkorinthos.gr');
+        expect(addFields['AgentUsername'], r'CORP\agent');
+        expect(addFields.containsKey('Username'), isFalse);
+      },
+    );
+
+    test(
+      'άγνωστος αιτών (Count=0): AddTicket με τα σημερινά πεδία (πράκτορας παντού) και warning',
+      () async {
+        final fakeGetter = _RecordingFakeGetter(
+          responses: const [userNotFound],
+        );
+        final fakePoster = _RecordingFakePoster(
+          responses: const [successWithTicketId, successOnly, successOnly],
+        );
+        final service = LansweeperSyncService(
+          poster: fakePoster.call,
+          getter: fakeGetter.call,
+        );
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(requesterUsername: r'gnk\anyparktos'),
+        );
+
+        expect(result.success, isTrue);
+        final addFields = _fieldsForAction(fakePoster, 'AddTicket');
+        expect(addFields, isNotNull);
+        expect(addFields!['Username'], r'CORP\agent');
+        expect(addFields['AgentUsername'], r'CORP\agent');
+        expect(
+          result.warnings.any((w) => w.contains(r'gnk\anyparktos')),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'AddTicket με υπάλληλο αποτυγχάνει: ξαναστέλνεται με τον πράκτορα, επιτυχία με warning',
+      () async {
+        final fakeGetter = _RecordingFakeGetter(responses: const [userFound]);
+        final fakePoster = _RecordingFakePoster(
+          responses: const [
+            failure,
+            successWithTicketId,
+            successOnly,
+            successOnly,
+          ],
+        );
+        final service = LansweeperSyncService(
+          poster: fakePoster.call,
+          getter: fakeGetter.call,
+        );
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(requesterUsername: r'gnk\d.brami'),
+        );
+
+        expect(result.success, isTrue);
+        expect(result.ticketId, '17476');
+
+        final firstTry = _fieldsForAction(fakePoster, 'AddTicket');
+        final retry = _fieldsForAction(fakePoster, 'AddTicket', occurrence: 1);
+        expect(firstTry!['Username'], r'gnk\d.brami');
+        expect(retry!['Username'], r'CORP\agent');
+        expect(result.warnings.any((w) => w.contains(r'gnk\d.brami')), isTrue);
+
+        // Μετά το retry ο αιτών των επόμενων βημάτων είναι ο πράκτορας.
+        final stateFields = _fieldsForAction(fakePoster, 'EditTicket');
+        expect(stateFields!['Username'], r'CORP\agent');
+      },
+    );
+
+    test(
+      'εξοπλισμός: AddAsset αμέσως μετά το AddTicket με AssetName, μπαίνει στα completedSteps',
+      () async {
+        final fakePoster = _RecordingFakePoster(
+          responses: const [
+            successWithTicketId,
+            successOnly,
+            successOnly,
+            successOnly,
+          ],
+        );
+        final service = LansweeperSyncService(poster: fakePoster.call);
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(
+            assetTarget: const LansweeperAssetTarget(
+              value: 'PC3715',
+              kind: LansweeperAssetTargetKind.assetName,
+            ),
+          ),
+        );
+
+        expect(result.success, isTrue);
+        expect(
+          fakePoster.calls.map((c) => c.action).toList(),
+          ['AddTicket', 'AddAsset', 'AddNote', 'EditTicket'],
+        );
+        final assetFields = _fieldsForAction(fakePoster, 'AddAsset');
+        expect(assetFields, isNotNull);
+        expect(assetFields!['TicketID'], '17476');
+        expect(assetFields['AssetName'], 'PC3715');
+        expect(assetFields.containsKey('IPAddress'), isFalse);
+        expect(result.completedSteps, contains('AddAsset'));
+      },
+    );
+
+    test('εξοπλισμός με IP: το AddAsset στέλνει IPAddress, όχι AssetName', () async {
+      final fakePoster = _RecordingFakePoster(
+        responses: const [
+          successWithTicketId,
+          successOnly,
+          successOnly,
+          successOnly,
+        ],
+      );
+      final service = LansweeperSyncService(poster: fakePoster.call);
+
+      await service.submitTicketWorkflow(
+        _workflowRequest(
+          assetTarget: const LansweeperAssetTarget(
+            value: '10.10.222.19',
+            kind: LansweeperAssetTargetKind.ipAddress,
+          ),
+        ),
+      );
+
+      final assetFields = _fieldsForAction(fakePoster, 'AddAsset');
+      expect(assetFields, isNotNull);
+      expect(assetFields!['IPAddress'], '10.10.222.19');
+      expect(assetFields.containsKey('AssetName'), isFalse);
+    });
+
+    test(
+      'αποτυχία AddAsset: η ροή συνεχίζει, success=true με warning, χωρίς AddAsset στα completedSteps',
+      () async {
+        final fakePoster = _RecordingFakePoster(
+          responses: const [
+            successWithTicketId,
+            failure,
+            successOnly,
+            successOnly,
+          ],
+        );
+        final service = LansweeperSyncService(poster: fakePoster.call);
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(
+            assetTarget: const LansweeperAssetTarget(
+              value: 'PC9999',
+              kind: LansweeperAssetTargetKind.assetName,
+            ),
+          ),
+        );
+
+        expect(result.success, isTrue);
+        expect(result.completedSteps, contains('AddTicket'));
+        expect(result.completedSteps, isNot(contains('AddAsset')));
+        expect(result.warnings.any((w) => w.contains('PC9999')), isTrue);
+        // Τα υπόλοιπα βήματα έτρεξαν κανονικά.
+        expect(result.completedSteps, contains('AddNote'));
+      },
+    );
+
+    test(
+      'κλήση χωρίς αναγνωριστικά: κανένα SearchUsers, κανένα AddAsset — η ροή ίδια με πριν',
+      () async {
+        final fakeGetter = _RecordingFakeGetter(responses: const []);
+        final fakePoster = _RecordingFakePoster(
+          responses: const [successWithTicketId, successOnly, successOnly],
+        );
+        final service = LansweeperSyncService(
+          poster: fakePoster.call,
+          getter: fakeGetter.call,
+        );
+
+        final result = await service.submitTicketWorkflow(_workflowRequest());
+
+        expect(result.success, isTrue);
+        expect(fakeGetter.calls, isEmpty);
+        expect(
+          fakePoster.calls.map((c) => c.action).toList(),
+          ['AddTicket', 'AddNote', 'EditTicket'],
+        );
+        expect(result.warnings, isEmpty);
+      },
+    );
+
+    test(
+      'υπάρχον ticket (retry): χωρίς AddAsset, αλλά ο επιβεβαιωμένος αιτών περνά στο EditTicket κατάστασης',
+      () async {
+        final fakeGetter = _RecordingFakeGetter(responses: const [userFound]);
+        final fakePoster = _RecordingFakePoster(
+          responses: const [successOnly, successOnly],
+        );
+        final service = LansweeperSyncService(
+          poster: fakePoster.call,
+          getter: fakeGetter.call,
+        );
+
+        await service.submitTicketWorkflow(
+          _workflowRequest(
+            existingTicketId: '17476',
+            requesterUsername: r'gnk\d.brami',
+            assetTarget: const LansweeperAssetTarget(
+              value: 'PC3715',
+              kind: LansweeperAssetTargetKind.assetName,
+            ),
+          ),
+        );
+
+        expect(
+          fakePoster.calls.any((c) => c.action == 'AddAsset'),
+          isFalse,
+          reason: 'η σύνδεση εξοπλισμού έγινε ήδη στη δημιουργία',
+        );
+        final stateFields = _fieldsForAction(fakePoster, 'EditTicket');
+        expect(stateFields, isNotNull);
+        expect(stateFields!['Username'], r'gnk\d.brami');
       },
     );
   });

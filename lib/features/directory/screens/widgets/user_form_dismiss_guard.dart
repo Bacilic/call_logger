@@ -26,6 +26,10 @@ class UserFormDismissGuard {
     if (host.phoneController.text.trim() != host.snapPhone) return true;
     if (host.notesController.text.trim() != host.snapNotes) return true;
     if (host.locationController.text.trim() != host.snapLocation) return true;
+    if (host.lansweeperUsernameController.text.trim() !=
+        host.snapLansweeperUsername) {
+      return true;
+    }
     // Εμφανιζόμενο κείμενο (όχι μόνο κανονικοποίηση): τόνοι/κεφαλαία μετράνε ως αλλαγή.
     if (host.departmentController.text.trim() != host.initialDepartmentText) {
       return true;
@@ -50,6 +54,7 @@ class UserFormDismissGuard {
     department: host.initialDepartmentText,
     location: host.snapLocation,
     notes: host.snapNotes,
+    lansweeper: host.snapLansweeperUsername,
   );
 
   /// Οι τιμές που έχουν τώρα τα πεδία.
@@ -60,6 +65,7 @@ class UserFormDismissGuard {
     department: host.departmentController.text.trim(),
     location: host.locationController.text.trim(),
     notes: host.notesController.text.trim(),
+    lansweeper: host.lansweeperUsernameController.text.trim(),
   );
 
   List<String> _changedFieldLabels() =>

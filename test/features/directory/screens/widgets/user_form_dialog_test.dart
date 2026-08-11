@@ -220,6 +220,139 @@ void main() {
     });
 
     testWidgets(
+      'δημιουργία: το αναγνωριστικό Lansweeper που πληκτρολογήθηκε γράφεται στη βάση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(directoryProvider.notifier);
+          await notifier.loadUsers();
+          await _openUserFormInDialog(tester, container, notifier: notifier);
+        });
+
+        await tester.enterText(_lastNameField(), 'LsIdUserLn');
+        await tester.enterText(_firstNameField(), 'LsIdUserFn');
+        await tester.enterText(
+          _fieldByLabel('Αναγνωριστικό Lansweeper'),
+          r'gnk\ls.user',
+        );
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Προσθήκη'));
+        await pumpUntilSettled(tester);
+
+        // Νέος υπάλληλος χωρίς τμήμα: ο φρουρός ρωτά πριν την αποθήκευση.
+        await tester.tap(find.text('Συνέχεια χωρίς τμήμα'));
+        await pumpUntilSettled(tester);
+        await _pumpUntilUserSaveCompletes(tester);
+
+        final stored = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'users',
+            columns: ['lansweeper_username'],
+            where: 'first_name = ? AND last_name = ?',
+            whereArgs: ['LsIdUserFn', 'LsIdUserLn'],
+            limit: 1,
+          );
+          return rows.isEmpty
+              ? null
+              : rows.first['lansweeper_username'] as String?;
+        });
+        expect(stored, r'gnk\ls.user');
+      },
+    );
+
+    testWidgets(
+      'επεξεργασία: το άδειασμα Σημειώσεων και Τοποθεσίας γράφεται στη βάση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DirectoryNotifier notifier;
+        late UserModel initial;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(directoryProvider.notifier);
+          await notifier.loadUsers();
+          final seeded = _findSeededTestUser(notifier);
+          // Ο χρήστης αποκτά σημειώσεις και τοποθεσία, ώστε το άδειασμα
+          // να έχει κάτι να καθαρίσει.
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'users',
+            {'notes': 'Προϊσταμένη', 'location': 'δίπλα στο ερμάριο'},
+            where: 'id = ?',
+            whereArgs: [seeded.id],
+          );
+          await notifier.loadUsers();
+          initial = _findSeededTestUser(notifier);
+          await _openUserFormInDialog(
+            tester,
+            container,
+            initialUser: initial,
+            notifier: notifier,
+          );
+        });
+
+        expect(find.text(_kEditUserTitle), findsOneWidget);
+
+        await tester.enterText(_notesField(), '');
+        await tester.enterText(_fieldByLabel('Τοποθεσία'), '');
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+        await pumpUntilSettled(tester);
+        await _pumpUntilUserSaveCompletes(tester);
+
+        final row = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'users',
+            columns: ['notes', 'location'],
+            where: 'id = ?',
+            whereArgs: [initial.id],
+            limit: 1,
+          );
+          return rows.first;
+        });
+        expect(
+          (row!['notes'] as String?) ?? '',
+          isEmpty,
+          reason: greekExpectMsg(
+            'Το άδειασμα των Σημειώσεων γράφεται στη βάση',
+          ),
+        );
+        expect(
+          (row['location'] as String?) ?? '',
+          isEmpty,
+          reason: greekExpectMsg('Το άδειασμα της Τοποθεσίας γράφεται στη βάση'),
+        );
+      },
+    );
+
+    testWidgets(
       'επεξεργασία: αλλαγή εμφανίζει διάλογο επιβεβαίωσης, χωρίς αλλαγές όχι',
       (tester) async {
         tester.view.physicalSize = const Size(1600, 900);

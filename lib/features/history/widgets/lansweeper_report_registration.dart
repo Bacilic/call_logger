@@ -6,6 +6,7 @@ import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
 import 'lansweeper/lansweeper_ai_presenter.dart';
 import 'lansweeper/lansweeper_registration_dialogs.dart';
+import 'lansweeper/lansweeper_registration_flow.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
 import 'lansweeper_report_dialog.dart';
@@ -92,6 +93,7 @@ class LansweeperReportRegistration {
       customFieldValues: resolvedCustomFields,
       targetTicketState:
           host.selectedTicketState ?? ticketConfig.defaultTicketState,
+      requesterUsername: host.selectedRequesterUsername,
     );
     final companionCallIds = selected
         .map((entry) => entry.call.id)
@@ -209,6 +211,56 @@ class LansweeperReportRegistration {
     );
   }
 
+  /// Ο κοινός κανόνας ελέγχου διπλού, δεμένος στους διαλόγους αυτής της οθόνης.
+  ///
+  /// `null` = ακύρωση από τον χρήστη· τότε καμία κλήση δεν σημαίνεται.
+  Future<String?> _ticketIdWithoutDuplicate({
+    required String candidate,
+    required int duplicateCheckCallId,
+  }) {
+    return resolveTicketIdWithoutDuplicate(
+      candidate: candidate,
+      checkDuplicate: (ticketId) => _promptDuplicateTicketWarning(
+        ticketId: ticketId,
+        callId: duplicateCheckCallId,
+      ),
+      askForDifferentId: (currentTicketId) => _promptOptionalTicketId(
+        initialTicketId: currentTicketId,
+        title: 'Αλλαγή Ticket ID',
+      ),
+    );
+  }
+
+  /// Σημαίνει τις [callIds] ως καταχωρημένες και το ανακοινώνει με ένα μήνυμα.
+  ///
+  /// Το κενό [ticketId] σημαίνει «καταχωρημένη χωρίς αριθμό» — έγκυρη κατάσταση,
+  /// γι' αυτό καθαρίζεται εδώ σε `null` αντί να το θυμάται κάθε καλών.
+  Future<void> _markRegisteredAndAnnounce({
+    required List<int> callIds,
+    required String ticketId,
+    String? comment,
+  }) async {
+    final notifier = host.ref.read(lansweeperSyncProvider.notifier);
+    for (final callId in callIds) {
+      await notifier.markRegistered(
+        callId: callId,
+        ticketId: ticketId.isEmpty ? null : ticketId,
+        comment: comment,
+      );
+    }
+    if (!host.mounted) return;
+    host.showDialogSnackBar(
+      SnackBar(
+        content: Text(
+          registrationSuccessMessage(
+            count: callIds.length,
+            ticketId: ticketId,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _applyRegistration({
     required ReportCallItem item,
     String? comment,
@@ -217,49 +269,25 @@ class LansweeperReportRegistration {
   }) async {
     final callId = item.call.id;
     if (callId == null) return;
-    var initialTicket = (item.call.lansweeperMainTicketId ?? '').trim();
-    while (host.mounted) {
-      final ticketId = await _promptOptionalTicketId(
-        initialTicketId: initialTicket.isEmpty ? null : initialTicket,
-        title: title,
-        subtitle: subtitle,
-      );
-      if (ticketId == null) return;
-      if (ticketId.isNotEmpty) {
-        final duplicateAction = await _promptDuplicateTicketWarning(
-          ticketId: ticketId,
-          callId: callId,
-        );
-        if (duplicateAction == DuplicateTicketAction.cancel) return;
-        if (duplicateAction == DuplicateTicketAction.changeId) {
-          final next = await _promptOptionalTicketId(
-            initialTicketId: ticketId,
-            title: 'Αλλαγή Ticket ID',
-          );
-          if (next == null) return;
-          initialTicket = next;
-          continue;
-        }
-      }
-      await host.ref
-          .read(lansweeperSyncProvider.notifier)
-          .markRegistered(
-            callId: callId,
-            ticketId: ticketId.isEmpty ? null : ticketId,
-            comment: comment,
-          );
-      if (!host.mounted) return;
-      host.showDialogSnackBar(
-        SnackBar(
-          content: Text(
-            ticketId.isEmpty
-                ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
-                : 'Η κλήση επισημάνθηκε ως καταχωρημένη (ticket #$ticketId).',
-          ),
-        ),
-      );
-      return;
-    }
+    final storedTicket = (item.call.lansweeperMainTicketId ?? '').trim();
+    final requested = await _promptOptionalTicketId(
+      initialTicketId: storedTicket.isEmpty ? null : storedTicket,
+      title: title,
+      subtitle: subtitle,
+    );
+    if (requested == null) return;
+
+    final ticketId = await _ticketIdWithoutDuplicate(
+      candidate: requested,
+      duplicateCheckCallId: callId,
+    );
+    if (ticketId == null || !host.mounted) return;
+
+    await _markRegisteredAndAnnounce(
+      callIds: <int>[callId],
+      ticketId: ticketId,
+      comment: comment,
+    );
   }
 
   Future<String?> _promptOptionalTicketId({
@@ -298,44 +326,18 @@ class LansweeperReportRegistration {
       initialTicket: initialTicket,
     );
     if (input == null) return;
-    var ticketId = input.ticketId;
-    final comment = input.comment;
-    while (host.mounted) {
-      if (ticketId.isNotEmpty) {
-        final duplicateAction = await _promptDuplicateTicketWarning(
-          ticketId: ticketId,
-          callId: callId,
-        );
-        if (duplicateAction == DuplicateTicketAction.cancel) return;
-        if (duplicateAction == DuplicateTicketAction.changeId) {
-          final next = await _promptOptionalTicketId(
-            initialTicketId: ticketId,
-            title: 'Αλλαγή Ticket ID',
-          );
-          if (next == null) return;
-          ticketId = next;
-          continue;
-        }
-      }
-      await host.ref
-          .read(lansweeperSyncProvider.notifier)
-          .markRegistered(
-            callId: callId,
-            ticketId: ticketId.isEmpty ? null : ticketId,
-            comment: comment,
-          );
-      if (!host.mounted) return;
-      host.showDialogSnackBar(
-        SnackBar(
-          content: Text(
-            ticketId.isEmpty
-                ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
-                : 'Η κλήση επισημάνθηκε ως καταχωρημένη (ticket #$ticketId).',
-          ),
-        ),
-      );
-      return;
-    }
+
+    final ticketId = await _ticketIdWithoutDuplicate(
+      candidate: input.ticketId,
+      duplicateCheckCallId: callId,
+    );
+    if (ticketId == null || !host.mounted) return;
+
+    await _markRegisteredAndAnnounce(
+      callIds: <int>[callId],
+      ticketId: ticketId,
+      comment: input.comment,
+    );
   }
 
   Future<void> toggleRegistrationFromBadge(ReportCallItem item) async {
@@ -360,64 +362,29 @@ class LansweeperReportRegistration {
     final validItems = items.where((item) => item.call.id != null).toList();
     if (validItems.isEmpty) return;
 
-    final count = validItems.length;
-    var initialTicket = count == 1
+    final callIds = validItems.map((item) => item.call.id!).toList();
+    final count = callIds.length;
+    // Μόνο σε μία κλήση έχει νόημα το ήδη αποθηκευμένο ticket ως πρόταση· σε
+    // πολλές θα ήταν αυθαίρετο ποιανής θα προτεινόταν.
+    final storedTicket = count == 1
         ? (validItems.first.call.lansweeperMainTicketId ?? '').trim()
         : '';
-    initialTicket = await _resolveSuggestedTicketId(
-      initialTicket.isEmpty ? null : initialTicket,
+    final requested = await _promptOptionalTicketId(
+      initialTicketId: storedTicket.isEmpty ? null : storedTicket,
+      title: count == 1 ? 'Καταχώρηση κλήσης' : 'Καταχώρηση $count κλήσεων',
+      subtitle: count == 1
+          ? 'Ο αριθμός ticket Lansweeper είναι προαιρετικός (π.χ. 17132).'
+          : 'Ο αριθμός ticket Lansweeper είναι προαιρετικός και θα εφαρμοστεί σε όλες τις επιλεγμένες κλήσεις.',
     );
-    if (!host.mounted) return;
+    if (requested == null) return;
 
-    while (host.mounted) {
-      final ticketId = await _promptOptionalTicketId(
-        initialTicketId: initialTicket.isEmpty ? null : initialTicket,
-        title: count == 1 ? 'Καταχώρηση κλήσης' : 'Καταχώρηση $count κλήσεων',
-        subtitle: count == 1
-            ? 'Ο αριθμός ticket Lansweeper είναι προαιρετικός (π.χ. 17132).'
-            : 'Ο αριθμός ticket Lansweeper είναι προαιρετικός και θα εφαρμοστεί σε όλες τις επιλεγμένες κλήσεις.',
-      );
-      if (ticketId == null) return;
-      if (ticketId.isNotEmpty) {
-        final duplicateAction = await _promptDuplicateTicketWarning(
-          ticketId: ticketId,
-          callId: validItems.first.call.id!,
-        );
-        if (duplicateAction == DuplicateTicketAction.cancel) return;
-        if (duplicateAction == DuplicateTicketAction.changeId) {
-          final next = await _promptOptionalTicketId(
-            initialTicketId: ticketId,
-            title: 'Αλλαγή Ticket ID',
-          );
-          if (next == null) return;
-          initialTicket = next;
-          continue;
-        }
-      }
+    final ticketId = await _ticketIdWithoutDuplicate(
+      candidate: requested,
+      duplicateCheckCallId: callIds.first,
+    );
+    if (ticketId == null || !host.mounted) return;
 
-      final notifier = host.ref.read(lansweeperSyncProvider.notifier);
-      for (final item in validItems) {
-        await notifier.markRegistered(
-          callId: item.call.id!,
-          ticketId: ticketId.isEmpty ? null : ticketId,
-        );
-      }
-      if (!host.mounted) return;
-      host.showDialogSnackBar(
-        SnackBar(
-          content: Text(
-            count == 1
-                ? ticketId.isEmpty
-                      ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
-                      : 'Η κλήση επισημάνθηκε ως καταχωρημένη (ticket #$ticketId).'
-                : ticketId.isEmpty
-                ? '$count κλήσεις επισημάνθηκαν ως καταχωρημένες.'
-                : '$count κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #$ticketId).',
-          ),
-        ),
-      );
-      return;
-    }
+    await _markRegisteredAndAnnounce(callIds: callIds, ticketId: ticketId);
   }
 
   Future<void> setStateForAllSelected(

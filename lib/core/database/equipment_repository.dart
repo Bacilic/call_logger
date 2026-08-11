@@ -96,6 +96,25 @@ class EquipmentRepository {
     return rows.first['id'] as int?;
   }
 
+  /// Τα δύο πεδία από τα οποία προκύπτει ο στόχος `AddAsset` του Lansweeper:
+  /// αποθηκευμένο όνομα asset και κωδικός. Null όταν δεν υπάρχει η εγγραφή.
+  Future<({String? assetName, String? code})?> getLansweeperAssetFieldsById(
+    int equipmentId,
+  ) async {
+    final rows = await db.query(
+      'equipment',
+      columns: ['lansweeper_asset_name', 'code_equipment'],
+      where: 'id = ?',
+      whereArgs: [equipmentId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return (
+      assetName: rows.first['lansweeper_asset_name'] as String?,
+      code: rows.first['code_equipment'] as String?,
+    );
+  }
+
   Future<int> countEquipmentReferencesExcludingAudit(int equipmentId) async {
     final userLinks = await db.rawQuery(
       'SELECT COUNT(*) AS c FROM user_equipment WHERE equipment_id = ?',

@@ -660,7 +660,14 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     }
     final dbUp = await DatabaseHelper.instance.database;
     final equipment = EquipmentRepository(dbUp);
-    await equipment.updateEquipment(eq.id!, eq.toMap());
+    // Η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: το toMap παραλείπει τα null κλειδιά, οπότε
+    // χωρίς τη ρητή συμπλήρωση το άδειασμα Σημειώσεων ή ο Τύπος «Κανένας» δεν
+    // έφτανε ποτέ στη βάση — η παλιά τιμή έμενε σιωπηλά. Ίδιο συμβόλαιο με
+    // την καρτέλα υπαλλήλου (DirectoryNotifier.updateUser).
+    final map = eq.toMap()
+      ..['notes'] = eq.notes
+      ..['type'] = eq.type;
+    await equipment.updateEquipment(eq.id!, map);
     await equipment.replaceEquipmentUsers(
       eq.id!,
       ownerUserId != null ? [ownerUserId] : [],

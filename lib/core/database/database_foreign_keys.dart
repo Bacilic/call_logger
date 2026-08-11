@@ -51,6 +51,7 @@ CREATE TABLE users (
   department_id INTEGER,
   location TEXT,
   notes TEXT,
+  lansweeper_username TEXT,
   is_deleted INTEGER DEFAULT 0,
   FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
 )
@@ -96,6 +97,7 @@ CREATE TABLE equipment (
   default_remote_tool TEXT,
   department_id INTEGER,
   location TEXT,
+  lansweeper_asset_name TEXT,
   is_deleted INTEGER DEFAULT 0,
   FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
 )
@@ -147,6 +149,7 @@ CREATE TABLE departments (
   map_label_height REAL DEFAULT 50.0,
   group_name TEXT,
   floor_id INTEGER,
+  lansweeper_usernames TEXT,
   is_deleted INTEGER DEFAULT 0,
   FOREIGN KEY (floor_id) REFERENCES building_map_floors(id) ON DELETE SET NULL
 )

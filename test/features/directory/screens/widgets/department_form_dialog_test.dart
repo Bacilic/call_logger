@@ -6,6 +6,7 @@
 //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "μικτή σύγκρουση"
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/services/lansweeper_department_accounts.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/core/widgets/lexicon_spell_text_form_field.dart';
@@ -856,6 +857,386 @@ void main() {
         expect(row?['is_deleted'], 0);
       },
     );
+  });
+
+  group('Φόρμα τμήματος — άδειασμα πεδίων', () {
+    late int deptId;
+    const deptName = 'Παθολογική';
+
+    setUp(() async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('user_equipment');
+      await db.delete('user_phones');
+      await db.delete('department_phones');
+      await db.delete('phones');
+      await db.delete('equipment');
+      await db.delete('users');
+      await db.delete('departments');
+
+      // Το τμήμα ξεκινά με κτίριο και σημειώσεις, ώστε το άδειασμα να έχει
+      // κάτι να καθαρίσει.
+      deptId = await db.insert('departments', {
+        'name': deptName,
+        'name_key': SearchTextNormalizer.normalizeForSearch(deptName),
+        'color': '#1976D2',
+        'building': 'Κτίριο Α',
+        'notes': 'Παλιές σημειώσεις',
+        'is_deleted': 0,
+      });
+      LookupService.instance.resetForReload();
+      await LookupService.instance.loadFromDatabase();
+    });
+
+    testWidgets(
+      'επεξεργασία: το άδειασμα Κτιρίου και Σημειώσεων γράφεται στη βάση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: deptName,
+              color: '#1976D2',
+              building: 'Κτίριο Α',
+              notes: 'Παλιές σημειώσεις',
+            ),
+            notifier: notifier,
+          );
+        });
+
+        expect(find.text(_kDepartmentFormTitle), findsOneWidget);
+
+        await tester.enterText(_buildingField(), '');
+        await tester.enterText(_fieldByLabel('Σημειώσεις'), '');
+        await pumpUntilSettled(tester);
+
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton);
+        await pumpUntilSettled(tester);
+        await _pumpUntilDepartmentSaveCompletes(tester);
+
+        final row = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'departments',
+            columns: ['building', 'notes'],
+            where: 'id = ?',
+            whereArgs: [deptId],
+            limit: 1,
+          );
+          return rows.single;
+        });
+        expect(
+          (row!['building'] as String?) ?? '',
+          isEmpty,
+          reason: greekExpectMsg('Το άδειασμα του Κτιρίου γράφεται στη βάση'),
+        );
+        expect(
+          (row['notes'] as String?) ?? '',
+          isEmpty,
+          reason: greekExpectMsg(
+            'Το άδειασμα των Σημειώσεων γράφεται στη βάση',
+          ),
+        );
+      },
+    );
+  });
+
+  group('Φόρμα τμήματος — αναγνωριστικά Lansweeper', () {
+    late int deptId;
+    const deptName = 'Βιοχημικό';
+
+    setUp(() async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('user_equipment');
+      await db.delete('user_phones');
+      await db.delete('department_phones');
+      await db.delete('phones');
+      await db.delete('equipment');
+      await db.delete('users');
+      await db.delete('departments');
+
+      deptId = await db.insert('departments', {
+        'name': deptName,
+        'name_key': SearchTextNormalizer.normalizeForSearch(deptName),
+        'color': '#1976D2',
+        'is_deleted': 0,
+      });
+      LookupService.instance.resetForReload();
+      await LookupService.instance.loadFromDatabase();
+    });
+
+    Future<String?> storedAccounts() async {
+      final db = await DatabaseHelper.instance.database;
+      final rows = await db.query(
+        'departments',
+        columns: ['lansweeper_usernames'],
+        where: 'id = ?',
+        whereArgs: [deptId],
+        limit: 1,
+      );
+      return rows.single['lansweeper_usernames'] as String?;
+    }
+
+    testWidgets(
+      'δύο λογαριασμοί με ονομασία γράφονται στη βάση και ξαναδιαβάζονται',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: deptName,
+              color: '#1976D2',
+            ),
+            notifier: notifier,
+          );
+        });
+
+        final accountsField = _fieldByLabel(
+          'Αναγνωριστικά Lansweeper (με κόμμα)',
+        );
+        await tester.ensureVisible(accountsField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(
+          accountsField,
+          r'Υπάλληλος #1 = gnk\bio1, Υπάλληλος #2 = gnk\bio2',
+        );
+        await pumpUntilSettled(tester);
+
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton);
+        await pumpUntilSettled(tester);
+        await _pumpUntilDepartmentSaveCompletes(tester);
+
+        final stored = await tester.runAsync(storedAccounts);
+        final accounts = decodeLansweeperAccounts(stored);
+        expect(
+          accounts.map((a) => a.username),
+          [r'gnk\bio1', r'gnk\bio2'],
+          reason: greekExpectMsg(
+            'Στο Lansweeper φεύγουν τα αναγνωριστικά, όχι οι ονομασίες',
+          ),
+        );
+        expect(
+          accounts.map((a) => a.label),
+          ['Υπάλληλος #1', 'Υπάλληλος #2'],
+          reason: greekExpectMsg('Οι ονομασίες μένουν για τον επιλογέα'),
+        );
+      },
+    );
+
+    testWidgets(
+      'ξεχασμένο «=»: το αναγνωριστικό ξεχωρίζει μόνο του από την ονομασία',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: deptName,
+              color: '#1976D2',
+            ),
+            notifier: notifier,
+          );
+        });
+
+        final accountsField = _fieldByLabel(
+          'Αναγνωριστικά Lansweeper (με κόμμα)',
+        );
+        await tester.ensureVisible(accountsField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(
+          accountsField,
+          r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+        );
+        await pumpUntilSettled(tester);
+
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton);
+        await pumpUntilSettled(tester);
+        await _pumpUntilDepartmentSaveCompletes(tester);
+
+        final stored = await tester.runAsync(storedAccounts);
+        final accounts = decodeLansweeperAccounts(stored);
+        expect(
+          accounts.single.username,
+          r'gnk\loimokseis1',
+          reason: greekExpectMsg(
+            'Στο Lansweeper φεύγει μόνο ο λογαριασμός, χωρίς την ονομασία',
+          ),
+        );
+        expect(accounts.single.label, 'Γραφείο Λοιμώξεων');
+      },
+    );
+
+    testWidgets('αναγνωριστικό που δεν στέκει: εμφανίζεται προειδοποίηση', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          initialDepartment: DepartmentModel(
+            id: deptId,
+            name: deptName,
+            color: '#1976D2',
+          ),
+          notifier: notifier,
+        );
+      });
+
+      final accountsField = _fieldByLabel(
+        'Αναγνωριστικά Lansweeper (με κόμμα)',
+      );
+      await tester.ensureVisible(accountsField);
+      await pumpUntilSettled(tester);
+      await tester.enterText(accountsField, 'Γραφείο Λοιμώξεων,');
+      await pumpUntilSettled(tester);
+
+      expect(
+        find.byKey(const ValueKey('lansweeper_accounts_warning')),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Ονομασία χωρίς αναγνωριστικό προειδοποιεί πριν την αποθήκευση',
+        ),
+      );
+    });
+
+    testWidgets('το σβήσιμο όλων των λογαριασμών γράφεται στη βάση', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'departments',
+          {'lansweeper_usernames': r'[{"username":"gnk\\bio1"}]'},
+          where: 'id = ?',
+          whereArgs: [deptId],
+        );
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+      });
+
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          initialDepartment: DepartmentModel(
+            id: deptId,
+            name: deptName,
+            color: '#1976D2',
+            lansweeperUsernames: r'[{"username":"gnk\\bio1"}]',
+          ),
+          notifier: notifier,
+        );
+      });
+
+      final removeChip = find.byIcon(Icons.cancel).first;
+      await tester.ensureVisible(removeChip);
+      await pumpUntilSettled(tester);
+      await tester.tap(removeChip);
+      await pumpUntilSettled(tester);
+
+      final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await pumpUntilSettled(tester);
+      await _pumpUntilDepartmentSaveCompletes(tester);
+
+      final stored = await tester.runAsync(storedAccounts);
+      expect(
+        decodeLansweeperAccounts(stored),
+        isEmpty,
+        reason: greekExpectMsg('Το άδειασμα φτάνει στη βάση'),
+      );
+    });
   });
 
   group('Φόρμα τμήματος — map_hidden', () {
