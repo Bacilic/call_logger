@@ -23,9 +23,6 @@ class LansweeperConnectionSettingsDialog extends ConsumerStatefulWidget {
     required this.ticketViewUrlController,
     required this.apiKeyController,
     required this.agentUsernameController,
-    required this.loginUrlController,
-    required this.helpdeskUsernameController,
-    required this.helpdeskPasswordController,
     required this.geminiApiKeyController,
     required this.geminiEndpointController,
     required this.geminiPrimaryModelController,
@@ -35,7 +32,6 @@ class LansweeperConnectionSettingsDialog extends ConsumerStatefulWidget {
     required this.onApiHelpLink,
     required this.onTicketFormHelpLink,
     required this.onTicketViewHelpLink,
-    required this.onLoginHelpLink,
     required this.onAiHelpLink,
     super.key,
   });
@@ -45,9 +41,6 @@ class LansweeperConnectionSettingsDialog extends ConsumerStatefulWidget {
   final TextEditingController ticketViewUrlController;
   final TextEditingController apiKeyController;
   final TextEditingController agentUsernameController;
-  final TextEditingController loginUrlController;
-  final TextEditingController helpdeskUsernameController;
-  final TextEditingController helpdeskPasswordController;
   final TextEditingController geminiApiKeyController;
   final TextEditingController geminiEndpointController;
   final TextEditingController geminiPrimaryModelController;
@@ -57,7 +50,6 @@ class LansweeperConnectionSettingsDialog extends ConsumerStatefulWidget {
   final VoidCallback onApiHelpLink;
   final VoidCallback onTicketFormHelpLink;
   final VoidCallback onTicketViewHelpLink;
-  final VoidCallback onLoginHelpLink;
   final VoidCallback onAiHelpLink;
 
   @override
@@ -188,16 +180,9 @@ class _LansweeperConnectionSettingsDialogState
                               widget.ticketFormUrlController,
                           ticketViewUrlController:
                               widget.ticketViewUrlController,
-                          loginUrlController: widget.loginUrlController,
-                          helpdeskUsernameController:
-                              widget.helpdeskUsernameController,
-                          helpdeskPasswordController:
-                              widget.helpdeskPasswordController,
-                          onSettingsChanged: widget.onSettingsChanged,
                           onLansweeperUrlChanged: widget.onLansweeperUrlChanged,
                           onTicketFormHelpLink: widget.onTicketFormHelpLink,
                           onTicketViewHelpLink: widget.onTicketViewHelpLink,
-                          onLoginHelpLink: widget.onLoginHelpLink,
                         ),
                       ),
                       _scrollableTab(

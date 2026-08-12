@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/gemini_settings_provider.dart';
 import '../providers/lansweeper_connection_probe_provider.dart';
+import '../providers/lansweeper_sync_provider.dart';
 import 'lansweeper/ai_prompt_template_editor_dialog.dart';
 import 'lansweeper/lansweeper_connection_settings_dialog.dart';
 import 'lansweeper/lansweeper_settings_persistence.dart';
@@ -31,9 +32,6 @@ class LansweeperReportSettings {
         ticketViewUrlController: host.lansweeperTicketViewUrlController,
         apiKeyController: host.lansweeperApiKeyController,
         agentUsernameController: host.lansweeperAgentUsernameController,
-        loginUrlController: host.lansweeperLoginUrlController,
-        helpdeskUsernameController: host.lansweeperHelpdeskUsernameController,
-        helpdeskPasswordController: host.lansweeperHelpdeskPasswordController,
         geminiApiKeyController: host.geminiApiKeyController,
         geminiEndpointController: host.geminiEndpointController,
         geminiPrimaryModelController: host.geminiPrimaryModelController,
@@ -49,9 +47,6 @@ class LansweeperReportSettings {
         },
         onTicketViewHelpLink: () {
           unawaited(_lansweeperTicketViewHelpFromSettings());
-        },
-        onLoginHelpLink: () {
-          unawaited(_lansweeperLoginHelpFromSettings());
         },
         onAiHelpLink: () {
           unawaited(_geminiApiHelpFromSettings());
@@ -124,32 +119,32 @@ class LansweeperReportSettings {
   }
 
   Future<void> _lansweeperTicketViewHelpFromSettings() async {
+    // Ο έλεγχος αξίζει μόνο αν καταλήξει σε αίτημα που υπάρχει: με καρφωτό
+    // αριθμό, μια σελίδα «δεν βρέθηκε» δεν ξεχωρίζει το λάθος πρότυπο από τον
+    // ανύπαρκτο αριθμό.
+    final ticketId = await host.ref
+        .read(lansweeperSyncProvider.notifier)
+        .latestLansweeperTicketId();
+    if (!host.mounted) return;
+
     final chosen = LansweeperUrlRules.ticketViewUrlForHelpLink(
       host.lansweeperTicketViewUrlController.text,
+      ticketId: ticketId,
     );
-    if (!host.mounted) return;
     final uri = Uri.tryParse(chosen);
     if (uri != null && uri.hasScheme) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
     if (!host.mounted) return;
     host.showDialogSnackBar(
-      SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
-    );
-  }
-
-  Future<void> _lansweeperLoginHelpFromSettings() async {
-    final chosen = LansweeperUrlRules.loginPageUrlForHelpLink(
-      host.lansweeperLoginUrlController.text,
-    );
-    if (!host.mounted) return;
-    final uri = Uri.tryParse(chosen);
-    if (uri != null && uri.hasScheme) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-    if (!host.mounted) return;
-    host.showDialogSnackBar(
-      SnackBar(content: Text('Άνοιξε ο σύνδεσμος: $chosen')),
+      SnackBar(
+        content: Text(
+          ticketId == null
+              ? 'Άνοιξε ο σύνδεσμος με δοκιμαστικό αριθμό — καμία κλήση δεν '
+                    'έχει ακόμη καταχωρημένο αίτημα: $chosen'
+              : 'Άνοιξε ο σύνδεσμος με το αίτημα #$ticketId: $chosen',
+        ),
+      ),
     );
   }
 
@@ -179,9 +174,6 @@ class LansweeperReportSettings {
           ticketViewUrl: host.lansweeperTicketViewUrlController.text,
           apiKey: host.lansweeperApiKeyController.text,
           agentUsername: host.lansweeperAgentUsernameController.text,
-          loginUrl: host.lansweeperLoginUrlController.text,
-          helpdeskUsername: host.lansweeperHelpdeskUsernameController.text,
-          helpdeskPassword: host.lansweeperHelpdeskPasswordController.text,
           geminiApiKey: host.geminiApiKeyController.text,
           geminiPromptTemplate: host.aiPromptTemplateController.text,
           geminiEndpoint: host.geminiEndpointController.text,

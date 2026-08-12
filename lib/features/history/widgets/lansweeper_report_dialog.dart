@@ -93,12 +93,6 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       TextEditingController();
   final TextEditingController lansweeperApiKeyController =
       TextEditingController();
-  final TextEditingController lansweeperLoginUrlController =
-      TextEditingController();
-  final TextEditingController lansweeperHelpdeskUsernameController =
-      TextEditingController();
-  final TextEditingController lansweeperHelpdeskPasswordController =
-      TextEditingController();
   final TextEditingController geminiApiKeyController = TextEditingController();
   final AiPromptTemplateTextEditingController aiPromptTemplateController =
       AiPromptTemplateTextEditingController();
@@ -126,9 +120,6 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   ProviderSubscription<String>? _lansweeperTicketViewUrlSub;
   ProviderSubscription<String>? _lansweeperApiKeySub;
   ProviderSubscription<String>? _lansweeperAgentUsernameSub;
-  ProviderSubscription<String>? _lansweeperLoginUrlSub;
-  ProviderSubscription<String>? _lansweeperHelpdeskUsernameSub;
-  ProviderSubscription<String>? _lansweeperHelpdeskPasswordSub;
   ProviderSubscription<String>? _geminiApiKeySub;
   ProviderSubscription<String>? _geminiPromptTemplateSub;
   ProviderSubscription<String>? _geminiEndpointSub;
@@ -229,15 +220,6 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       lansweeperAgentUsernameController.text = ref.read(
         lansweeperAgentUsernameProvider,
       );
-      lansweeperLoginUrlController.text = ref.read(
-        lansweeperHelpdeskLoginUrlProvider,
-      );
-      lansweeperHelpdeskUsernameController.text = ref.read(
-        lansweeperHelpdeskWebUsernameProvider,
-      );
-      lansweeperHelpdeskPasswordController.text = ref.read(
-        lansweeperHelpdeskWebPasswordProvider,
-      );
       geminiApiKeyController.text = ref.read(geminiApiKeyProvider);
       aiPromptTemplateController.text = ref.read(geminiPromptTemplateProvider);
       geminiEndpointController.text = ref.read(geminiEndpointProvider);
@@ -284,27 +266,6 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       (_, next) {
         if (lansweeperAgentUsernameController.text == next) return;
         lansweeperAgentUsernameController.text = next;
-      },
-    );
-    _lansweeperLoginUrlSub = ref.listenManual<String>(
-      lansweeperHelpdeskLoginUrlProvider,
-      (_, next) {
-        if (lansweeperLoginUrlController.text == next) return;
-        lansweeperLoginUrlController.text = next;
-      },
-    );
-    _lansweeperHelpdeskUsernameSub = ref.listenManual<String>(
-      lansweeperHelpdeskWebUsernameProvider,
-      (_, next) {
-        if (lansweeperHelpdeskUsernameController.text == next) return;
-        lansweeperHelpdeskUsernameController.text = next;
-      },
-    );
-    _lansweeperHelpdeskPasswordSub = ref.listenManual<String>(
-      lansweeperHelpdeskWebPasswordProvider,
-      (_, next) {
-        if (lansweeperHelpdeskPasswordController.text == next) return;
-        lansweeperHelpdeskPasswordController.text = next;
       },
     );
     _geminiApiKeySub = ref.listenManual<String>(geminiApiKeyProvider, (
@@ -441,9 +402,6 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     _lansweeperTicketViewUrlSub?.close();
     _lansweeperApiKeySub?.close();
     _lansweeperAgentUsernameSub?.close();
-    _lansweeperLoginUrlSub?.close();
-    _lansweeperHelpdeskUsernameSub?.close();
-    _lansweeperHelpdeskPasswordSub?.close();
     _geminiApiKeySub?.close();
     _geminiPromptTemplateSub?.close();
     _geminiEndpointSub?.close();
@@ -453,9 +411,6 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     lansweeperTicketFormUrlController.dispose();
     lansweeperTicketViewUrlController.dispose();
     lansweeperApiKeyController.dispose();
-    lansweeperLoginUrlController.dispose();
-    lansweeperHelpdeskUsernameController.dispose();
-    lansweeperHelpdeskPasswordController.dispose();
     lansweeperAgentUsernameController.dispose();
     geminiApiKeyController.dispose();
     aiPromptTemplateController.dispose();

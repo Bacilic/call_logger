@@ -2,72 +2,39 @@ import 'lansweeper_url_rules.dart';
 
 typedef LansweeperUrlLauncher = Future<bool> Function(Uri uri);
 
-enum LansweeperBrowserLaunchOutcome {
-  notLaunchable,
-  invalidTarget,
-  openFailed,
-  opened,
-}
+enum LansweeperBrowserLaunchOutcome { notLaunchable, openFailed, opened }
 
 class LansweeperBrowserLaunchResult {
   const LansweeperBrowserLaunchResult({
     required this.opened,
-    required this.openedLoginTab,
     required this.outcome,
   });
 
   final bool opened;
-  final bool openedLoginTab;
   final LansweeperBrowserLaunchOutcome outcome;
 }
 
+/// Επικυρώνει και ανοίγει URL του Help Desk στον εξωτερικό περιηγητή.
+///
+/// Το Lansweeper αναλαμβάνει μόνο του τη σύνδεση: αποσυνδεδεμένος χρήστης
+/// ανακατευθύνεται στο login και μετά επιστρέφει στη σελίδα που ζήτησε.
 class LansweeperBrowserLauncher {
-  LansweeperBrowserLauncher({
-    required this.launch,
-    this.loginSettleDelay = const Duration(milliseconds: 450),
-    Future<void> Function(Duration duration)? sleep,
-  }) : sleep = sleep ?? ((Duration duration) => Future<void>.delayed(duration));
+  LansweeperBrowserLauncher({required this.launch});
 
   final LansweeperUrlLauncher launch;
-  final Duration loginSettleDelay;
-  final Future<void> Function(Duration duration) sleep;
 
-  Future<LansweeperBrowserLaunchResult> launchWithOptionalLogin({
-    required String targetUrl,
-    required bool autoLogin,
-    required String loginUrl,
-  }) async {
+  Future<LansweeperBrowserLaunchResult> launchTarget(String targetUrl) async {
     if (!LansweeperUrlRules.isBrowserLaunchableUrl(targetUrl)) {
       return const LansweeperBrowserLaunchResult(
         opened: false,
-        openedLoginTab: false,
         outcome: LansweeperBrowserLaunchOutcome.notLaunchable,
       );
     }
 
-    var openedLoginTab = false;
-    final loginPageRaw = loginUrl.trim();
-    if (autoLogin && LansweeperUrlRules.isBrowserLaunchableUrl(loginPageRaw)) {
-      final loginUri = Uri.tryParse(loginPageRaw);
-      if (loginUri != null && loginUri.hasScheme) {
-        openedLoginTab = await launch(loginUri);
-        await sleep(loginSettleDelay);
-      }
-    }
-
-    final uri = Uri.tryParse(targetUrl.trim());
-    if (uri == null || !uri.hasScheme) {
-      return LansweeperBrowserLaunchResult(
-        opened: false,
-        openedLoginTab: openedLoginTab,
-        outcome: LansweeperBrowserLaunchOutcome.invalidTarget,
-      );
-    }
-
+    final uri = Uri.parse(targetUrl.trim());
     final opened = await launch(uri);
     return LansweeperBrowserLaunchResult(
       opened: opened,
-      openedLoginTab: openedLoginTab,
       outcome: opened
           ? LansweeperBrowserLaunchOutcome.opened
           : LansweeperBrowserLaunchOutcome.openFailed,

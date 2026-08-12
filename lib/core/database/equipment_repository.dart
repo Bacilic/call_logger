@@ -115,6 +115,29 @@ class EquipmentRepository {
     );
   }
 
+  /// Τα ίδια πεδία, εντοπισμένα από τον κωδικό — για κλήσεις που κρατούν μόνο
+  /// το κείμενο του εξοπλισμού, χωρίς σύνδεση στην καρτέλα του Καταλόγου.
+  Future<({String? assetName, String? code})?> getLansweeperAssetFieldsByCode(
+    String code,
+  ) async {
+    final c = code.trim();
+    if (c.isEmpty) return null;
+    final rows = await db.query(
+      'equipment',
+      columns: ['lansweeper_asset_name', 'code_equipment'],
+      where:
+          'code_equipment = ? COLLATE NOCASE AND '
+          '${DirectorySupport.notDeletedClause}',
+      whereArgs: [c],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return (
+      assetName: rows.first['lansweeper_asset_name'] as String?,
+      code: rows.first['code_equipment'] as String?,
+    );
+  }
+
   Future<int> countEquipmentReferencesExcludingAudit(int equipmentId) async {
     final userLinks = await db.rawQuery(
       'SELECT COUNT(*) AS c FROM user_equipment WHERE equipment_id = ?',

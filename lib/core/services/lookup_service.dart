@@ -236,14 +236,28 @@ class LookupService {
     if (digits.length < 2) return [];
     final seen = <String>{};
     final result = <String>[];
+
+    void consider(String phone) {
+      final phoneDigits = _digitsOnly(phone);
+      if (phoneDigits.isEmpty) return;
+      if (!phoneDigits.contains(digits) && !phoneDigits.startsWith(digits)) {
+        return;
+      }
+      if (seen.add(phone)) result.add(phone);
+    }
+
     for (final u in _users) {
       if (u.isDeleted) continue;
       for (final phone in u.phones) {
-        final phoneDigits = _digitsOnly(phone);
-        if ((phoneDigits.contains(digits) || phoneDigits.startsWith(digits)) &&
-            seen.add(phone)) {
-          result.add(phone);
-        }
+        consider(phone);
+      }
+    }
+    // Και τα κοινόχρηστα του τμήματος: ένα τηλέφωνο χωρίς προσωπικό κάτοχο
+    // (π.χ. γραμμή θαλάμου) είναι εξίσου υπαρκτό — αν λείπει από τη λίστα, ο
+    // χρήστης νομίζει ότι δεν υπάρχει στον κατάλογο.
+    for (final phones in _departmentDirectPhones.values) {
+      for (final phone in phones) {
+        consider(phone);
       }
     }
     return result;

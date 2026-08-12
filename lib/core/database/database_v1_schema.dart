@@ -55,7 +55,10 @@ import 'database_foreign_keys.dart';
 /// αναγνωριστικά που βάζουν αυτόματα αιτούντα και εξοπλισμό στο ticket.
 /// v45: `departments.lansweeper_usernames` — οι γενικοί λογαριασμοί του
 /// τμήματος, για κλήσεις όπου ο καλών είναι άγνωστος ή δεν έχει δικό του.
-const int databaseSchemaVersionV1 = 45;
+/// v46: διαγραφή των ρυθμίσεων της καταργημένης «Αυτόματης σύνδεσης Help
+/// Desk» από το `app_settings` — μαζί και ο αποθηκευμένος κωδικός web
+/// console (μόνο δεδομένα).
+const int databaseSchemaVersionV1 = 46;
 
 /// Ο πίνακας της Βάσης Γνώσης: μία «συνταγή» ανά είδος βλάβης.
 ///

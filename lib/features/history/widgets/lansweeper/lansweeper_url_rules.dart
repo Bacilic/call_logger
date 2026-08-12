@@ -60,28 +60,20 @@ abstract final class LansweeperUrlRules {
     return isBrowserLaunchableUrl(result) ? result : null;
   }
 
-  /// URL για έλεγχο συνδέσμου προβολής ticket (δοκιμαστικό id).
-  static String ticketViewUrlForHelpLink(String fieldText) {
+  /// URL για έλεγχο συνδέσμου προβολής ticket με συγκεκριμένο αριθμό αιτήματος.
+  ///
+  /// Το [ticketId] είναι υπαρκτό αίτημα της βάσης· `null` (ή κενό) σημαίνει ότι
+  /// δεν βρέθηκε κανένα, οπότε μπαίνει το δείγμα — ο σύνδεσμος ανοίγει και
+  /// αποδεικνύει ότι το πρότυπο είναι σωστό, απλώς δεν δείχνει αληθινό αίτημα.
+  static String ticketViewUrlForHelpLink(String fieldText, {String? ticketId}) {
     final template = fieldText.trim().isEmpty
         ? kDefaultLansweeperTicketViewUrl
         : fieldText.trim();
-    return buildTicketViewUrl(template, '17132') ??
-        buildTicketViewUrl(kDefaultLansweeperTicketViewUrl, '17132')!;
+    final id = (ticketId ?? '').trim().isEmpty
+        ? kSampleLansweeperTicketId
+        : ticketId!.trim();
+    return buildTicketViewUrl(template, id) ??
+        buildTicketViewUrl(kDefaultLansweeperTicketViewUrl, id)!;
   }
 
-  /// URL σελίδας σύνδεσης (`login.aspx`) στο ίδιο origin με τη φόρμα αιτήματος.
-  static String loginUrlDerivedFromTicketFormUrl(String ticketFormUrl) {
-    final t = ticketFormUrl.trim();
-    final u = Uri.tryParse(t);
-    if (u == null || !u.hasScheme || u.host.isEmpty) {
-      return kDefaultLansweeperLoginUrl;
-    }
-    return u.replace(path: '/login.aspx', queryParameters: {}).toString();
-  }
-
-  /// URL για βοήθεια σελίδας σύνδεσης: έγκυρο πεδίο ή προεπιλογή.
-  static String loginPageUrlForHelpLink(String fieldText) {
-    final t = fieldText.trim();
-    return isBrowserLaunchableUrl(t) ? t : kDefaultLansweeperLoginUrl;
-  }
 }

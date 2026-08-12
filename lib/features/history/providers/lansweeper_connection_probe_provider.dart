@@ -38,7 +38,6 @@ class LansweeperConnectionProbeNotifier
 
     final apiUrl = ref.read(lansweeperApiUrlProvider);
     final ticketFormUrl = ref.read(lansweeperTicketFormUrlProvider);
-    final loginUrl = ref.read(lansweeperHelpdeskLoginUrlProvider);
     final apiKey = ref.read(lansweeperApiKeyProvider);
     final agentUsername = ref.read(lansweeperAgentUsernameProvider);
 
@@ -48,7 +47,6 @@ class LansweeperConnectionProbeNotifier
     final next = await _runProbe(
       apiUrl: apiUrl,
       ticketFormUrl: ticketFormUrl,
-      loginUrl: loginUrl,
       apiKey: apiKey,
       agentUsername: agentUsername,
     );
@@ -60,14 +58,12 @@ class LansweeperConnectionProbeNotifier
   static Future<LansweeperConnectionStatus> _runProbe({
     required String apiUrl,
     required String ticketFormUrl,
-    required String loginUrl,
     required String apiKey,
     required String agentUsername,
   }) async {
     final reachabilityUrl = _pickReachabilityUrl(
       apiUrl: apiUrl,
       ticketFormUrl: ticketFormUrl,
-      loginUrl: loginUrl,
     );
 
     if (reachabilityUrl == null) {
@@ -89,16 +85,12 @@ class LansweeperConnectionProbeNotifier
   static String? _pickReachabilityUrl({
     required String apiUrl,
     required String ticketFormUrl,
-    required String loginUrl,
   }) {
     if (LansweeperUrlRules.isApiEndpointUrl(apiUrl)) {
       return apiUrl.trim();
     }
     if (LansweeperUrlRules.isBrowserLaunchableUrl(ticketFormUrl)) {
       return ticketFormUrl.trim();
-    }
-    if (LansweeperUrlRules.isBrowserLaunchableUrl(loginUrl)) {
-      return loginUrl.trim();
     }
     return null;
   }

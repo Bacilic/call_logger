@@ -76,6 +76,22 @@ class CallSubmitController {
     );
     if (matches.isEmpty) return true;
 
+    // Ταυτόσημο ονοματεπώνυμο δεν είναι ερώτημα: ο διάλογος «Μήπως εννοείτε;»
+    // υπάρχει για ΠΑΡΟΜΟΙΑ ονόματα («Δροσούλης» δίπλα σε «Δρόσος»). Όταν το
+    // γραμμένο όνομα ταυτίζεται με έναν και μοναδικό υπάλληλο, η σύνδεση
+    // γίνεται σιωπηλά — αλλιώς η καταγραφή σταματούσε σε ερώτηση που είχε μία
+    // μόνο λογική απάντηση.
+    //
+    // Με δύο συνώνυμους η επιλογή είναι πραγματική και ο διάλογος μένει: μόνο
+    // ο χρήστης ξέρει ποιον από τους δύο εννοεί.
+    final identical = matches
+        .where((m) => m.score == UserSimilarityFinder.kIdenticalScore)
+        .toList();
+    if (identical.length == 1) {
+      actions.attachExistingCaller(identical.single.user);
+      return true;
+    }
+
     final result = await prompts.resolveSimilarCallers(
       matches,
       typedDisplayName: header.normalizedCallerDisplayText,

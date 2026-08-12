@@ -82,9 +82,6 @@ void main() {
                 ticketViewUrlController: ctrl('http://test/ticket.aspx?tid={tid}'),
                 apiKeyController: ctrl('test-key'),
                 agentUsernameController: ctrl('gnk\\v.drosos'),
-                loginUrlController: ctrl('http://test/login.aspx'),
-                helpdeskUsernameController: ctrl('v.drosos'),
-                helpdeskPasswordController: ctrl('secret'),
                 geminiApiKeyController: ctrl(),
                 geminiEndpointController: ctrl(),
                 geminiPrimaryModelController: ctrl(primaryModel),
@@ -94,7 +91,6 @@ void main() {
                 onApiHelpLink: () {},
                 onTicketFormHelpLink: () {},
                 onTicketViewHelpLink: () {},
-                onLoginHelpLink: () {},
                 onAiHelpLink: () {},
               ),
             ),
@@ -131,8 +127,16 @@ void main() {
         await tester.tap(find.text('Help Desk / Browser'));
         await pumpUntilSettled(tester);
 
-        expect(find.text('Όνομα χρήστη Help Desk'), findsOneWidget);
-        expect(find.text('Κωδικός Help Desk'), findsOneWidget);
+        expect(find.text('URL φόρμας νέου αιτήματος'), findsOneWidget);
+        expect(find.text('URL προβολής ticket'), findsOneWidget);
+        expect(
+          find.text('Άνοιγμα ticket μετά την Άμεση Καταχώρηση'),
+          findsOneWidget,
+        );
+        // Η «Αυτόματη σύνδεση Help Desk» καταργήθηκε — δεν ξαναεμφανίζεται.
+        expect(find.text('Αυτόματη σύνδεση Help Desk'), findsNothing);
+        expect(find.text('Όνομα χρήστη Help Desk'), findsNothing);
+        expect(find.text('Κωδικός Help Desk'), findsNothing);
         expect(
           find.text('Η σύνδεση με το Lansweeper είναι διαθέσιμη.'),
           findsOneWidget,

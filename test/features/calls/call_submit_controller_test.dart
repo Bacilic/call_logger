@@ -213,6 +213,86 @@ void main() {
     expect(outcome, CallSubmitOutcome.saved);
   });
 
+  group('ταυτόσημο ονοματεπώνυμο', () {
+    final befani = _u(id: 56, first: 'Σωτηρία', last: 'Μπεφάνη');
+
+    test('συνδέεται σιωπηλά — καμία ερώτηση «Μήπως εννοείτε;»', () async {
+      final actions = _FakeActions(
+        initialHeader: _header(caller: 'Σωτηρία Μπεφάνη'),
+      );
+      final prompts = _FakePrompts();
+
+      final outcome = await CallSubmitController(
+        actions: actions,
+        prompts: prompts,
+      ).run(_FakeLookup([befani, drosos]));
+
+      expect(
+        prompts.asks,
+        0,
+        reason:
+            'ίδιο όνομα με υπάρχοντα υπάλληλο δεν είναι ερώτημα — ο διάλογος '
+            'υπάρχει για ΠΑΡΟΜΟΙΑ ονόματα',
+      );
+      expect(actions.attachedCaller, same(befani));
+      expect(outcome, CallSubmitOutcome.saved);
+    });
+
+    test('ίδιο όνομα με διαφορετικά κενά/τόνους πάλι συνδέεται', () async {
+      final actions = _FakeActions(
+        initialHeader: _header(caller: '  σωτηρια   μπεφανη '),
+      );
+      final prompts = _FakePrompts();
+
+      await CallSubmitController(
+        actions: actions,
+        prompts: prompts,
+      ).run(_FakeLookup([befani]));
+
+      expect(prompts.asks, 0);
+      expect(actions.attachedCaller, same(befani));
+    });
+
+    test('δύο συνώνυμοι υπάλληλοι: η επιλογή είναι πραγματική, ρωτά', () async {
+      final otherBefani = _u(id: 91, first: 'Σωτηρία', last: 'Μπεφάνη');
+      final actions = _FakeActions(
+        initialHeader: _header(caller: 'Σωτηρία Μπεφάνη'),
+      );
+      final prompts = _FakePrompts(
+        answer: SimilarUsersDialogResult.pickExisting(otherBefani),
+      );
+
+      await CallSubmitController(
+        actions: actions,
+        prompts: prompts,
+      ).run(_FakeLookup([befani, otherBefani]));
+
+      expect(
+        prompts.asks,
+        1,
+        reason: 'δύο εγγραφές με το ίδιο όνομα — μόνο ο χρήστης ξέρει ποια',
+      );
+      expect(actions.attachedCaller, same(otherBefani));
+    });
+
+    test('ανάστροφη σειρά είναι παρόμοια, ΟΧΙ ίδια — εξακολουθεί να ρωτά', () async {
+      final actions = _FakeActions(
+        initialHeader: _header(caller: 'Μπεφάνη Σωτηρία'),
+      );
+      final prompts = _FakePrompts(
+        answer: const SimilarUsersDialogResult.continueAsNew(),
+      );
+
+      await CallSubmitController(
+        actions: actions,
+        prompts: prompts,
+      ).run(_FakeLookup([befani]));
+
+      expect(prompts.asks, 1);
+      expect(actions.attachedCaller, isNull);
+    });
+  });
+
   test('αποτυχία αποθήκευσης επιστρέφει failed', () async {
     final actions = _FakeActions(
       initialHeader: _header(caller: 'Άσχετο Όνομα'),

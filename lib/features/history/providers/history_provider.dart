@@ -5,6 +5,7 @@ import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/category_repository.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/dashboard_summary_model.dart';
 import '../models/lansweeper_sync_state.dart';
@@ -255,9 +256,15 @@ final historyCategoryDateCallCountProvider = FutureProvider.autoDispose<int>((
 final historyCallsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
       final filter = ref.watch(historyFilterProvider);
-      final keyword = filter.keyword.trim();
+      // Ο ίδιος κανόνας «#id» με τον Κατάλογο: το «#276» δείχνει την κλήση 276
+      // και μόνο αυτήν, ενώ οι υπόλοιποι όροι μένουν ελεύθερο κείμενο.
+      final query = IdSearchQuery.parse(filter.keyword);
+      // «#» χωρίς αριθμό δεν ταιριάζει τίποτα — ειλικρινές «κανένα
+      // αποτέλεσμα», αντί για σιωπηλή μετάπτωση σε αναζήτηση κειμένου.
+      if (query.hasInvalidIdToken) return const <Map<String, dynamic>>[];
+
       final normalizedKeyword = SearchTextNormalizer.normalizeForSearch(
-        keyword,
+        query.text,
       );
 
       final db = await DatabaseHelper.instance.database;
@@ -268,9 +275,10 @@ final historyCallsProvider =
         category: filter.category != null && filter.category!.isEmpty
             ? null
             : filter.category,
-        keyword: keyword.isEmpty ? null : normalizedKeyword,
+        keyword: normalizedKeyword.isEmpty ? null : normalizedKeyword,
         onlyWithTask: filter.onlyWithTask,
         lansweeperState: filter.lansweeperState,
+        callIds: query.ids,
       );
     });
 

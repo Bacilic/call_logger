@@ -3,13 +3,16 @@ chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 REM ============================================================
-REM  Επαναφορα αρχειων του Dart SDK στο cache της Flutter (3.44.6)
+REM  Επαναφορα αρχειων του Dart SDK στο cache της Flutter (3.44.9)
 REM  Πηγη: εξαγομενος φακελος ή, αλλιως, το .zip.
+REM  Ο φακελος ενημερωνεται ως καθρεφτης του C:\flutter μετα απο
+REM  καθε flutter upgrade — το zip ειναι παλαιοτερο (3.44.6) και
+REM  χρησιμευει μονο ως εσχατη λυση.
 REM ============================================================
 
 REM --- Διαδρομες (προσαρμοσε τες αν χρειαστει) ---
 set "ZIP=C:\Users\V.drosos\Downloads\flutter_windows_3.44.6-stable.zip"
-set "SRCROOT=C:\Users\V.drosos\Downloads\flutter_windows_3.44.6-stable\flutter"
+set "SRCROOT=C:\Users\V.drosos\Downloads\flutter_windows_3.44.9-stable\flutter"
 set "FLUTTER=C:\flutter"
 
 echo.

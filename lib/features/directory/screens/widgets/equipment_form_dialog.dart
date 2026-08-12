@@ -765,11 +765,14 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
                         labelText: 'Αναγνωριστικό Lansweeper',
                         hintText:
                             _lansweeperAutoSuggestion() ?? 'Όνομα asset ή IP',
+                        // Η αυτόματη τιμή γράφεται ΜΕΣΑ στο κείμενο βοήθειας:
+                        // ως υπόδειξη του πεδίου φαίνεται μόνο με εστίαση, και
+                        // η ερώτηση «τι θα σταλεί;» δεν πρέπει να απαιτεί κλικ.
                         helperText: _lansweeperAutoSuggestion() == null
                             ? 'Όνομα asset (ή IP) για τη σύνδεση του '
                                   'εξοπλισμού στο ticket του Lansweeper.'
-                            : 'Κενό = στέλνεται αυτόματα η αχνή τιμή '
-                                  'από τον κωδικό.',
+                            : 'Κενό = στέλνεται αυτόματα η τιμή '
+                                  '${_lansweeperAutoSuggestion()}',
                         helperMaxLines: 2,
                         border: const OutlineInputBorder(),
                       ),

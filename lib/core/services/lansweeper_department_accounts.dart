@@ -88,6 +88,30 @@ List<LansweeperAccount> parseLansweeperAccountsInput(String raw) {
   return out;
 }
 
+/// Επιδιορθώνει αποθηκευμένο ζεύγος που κουβαλά ολόκληρη τη φράση ως
+/// αναγνωριστικό («Γιατρός Τεπ Παθολογικού 1 gnk\TepPath1»).
+///
+/// Ο κανόνας του «ξεχασμένου ίσον» έτρεχε μόνο την ώρα της πληκτρολόγησης, άρα
+/// ό,τι είχε ήδη αποθηκευτεί έμενε σπασμένο: κενό μέσα στο αναγνωριστικό
+/// σημαίνει ότι το Lansweeper δεν βρίσκει χρήστη και το αίτημα φεύγει χωρίς
+/// αιτούντα — σιωπηλά, γιατί η παράκαμψη είναι σχεδιασμένη να μη μπλοκάρει.
+///
+/// Αναγνωριστικό χωρίς κενά δεν αγγίζεται ποτέ. Ρητή ονομασία του χρήστη
+/// υπερισχύει εκείνης που θα μάντευε ο διαχωρισμός.
+LansweeperAccount _repairStoredAccount(String username, String label) {
+  if (!username.contains(RegExp(r'\s'))) {
+    return LansweeperAccount(username: username, label: label);
+  }
+  final repaired = parseLansweeperAccount(username);
+  if (repaired == null || repaired.username == username) {
+    return LansweeperAccount(username: username, label: label);
+  }
+  return LansweeperAccount(
+    username: repaired.username,
+    label: label.isNotEmpty ? label : repaired.label,
+  );
+}
+
 /// Αποκωδικοποιεί τα αποθηκευμένα ζεύγη. Ανθεκτικό σε ό,τι βρει: παλιό απλό
 /// κείμενο με κόμματα διαβάζεται κι αυτό, ώστε μια χειροκίνητη εγγραφή στη
 /// βάση να μη χάνεται σιωπηλά.
@@ -105,13 +129,12 @@ List<LansweeperAccount> decodeLansweeperAccounts(String? stored) {
           if (item is! Map) continue;
           final username = (item['username'] ?? '').toString().trim();
           if (username.isEmpty) continue;
-          if (!seen.add(username.toLowerCase())) continue;
-          out.add(
-            LansweeperAccount(
-              username: username,
-              label: (item['label'] ?? '').toString().trim(),
-            ),
+          final account = _repairStoredAccount(
+            username,
+            (item['label'] ?? '').toString().trim(),
           );
+          if (!seen.add(account.username.toLowerCase())) continue;
+          out.add(account);
         }
         return out;
       }

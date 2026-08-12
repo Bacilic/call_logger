@@ -350,10 +350,26 @@ class SmartEntitySelectorLookups {
         final canAutofillDepartment =
             state.departmentText.trim().isEmpty &&
             state.selectedDepartmentId == null;
+        // Γράφοντας ψηφίο-ψηφίο, ένα ενδιάμεσο τηλέφωνο («224») μπορεί να έχει
+        // ήδη δέσει κάτοχο· το τελικό («2244») δεν είναι δικό του. Το όνομα που
+        // έγραψε ΜΟΝΗ της η εφαρμογή είναι πλέον μπαγιάτικο: αν μείνει, δείχνει
+        // υπαρκτό υπάλληλο χωρίς δεσμό — η κλήση φεύγει με ελεύθερο κείμενο και
+        // ο κανόνας του τμήματος δεν προλαβαίνει καν να τρέξει, γιατί βλέπει
+        // γεμάτο πεδίο. Ό,τι πληκτρολόγησε ο χρήστης δεν αγγίζεται.
+        final previous = state.selectedCaller;
+        final autofilledName = previous == null
+            ? ''
+            : (previous.name ?? previous.fullNameWithDepartment).trim();
+        final callerTextIsStaleAutofill =
+            autofilledName.isNotEmpty &&
+            state.callerDisplayText.trim() == autofilledName;
         state = state.copyWith(
           clearPhoneCandidates: true,
           callerCandidates: [],
           clearSelectedCaller: true,
+          callerDisplayText: callerTextIsStaleAutofill
+              ? ''
+              : state.callerDisplayText,
           equipmentCandidates: [],
           clearSelectedEquipment: !hasManualEquipmentSelection,
           isPhoneAmbiguous: false,

@@ -410,6 +410,10 @@ class CallsRepository {
   ///
   /// Το [lansweeperState] δέχεται μία από τις τιμές του `LansweeperSyncState`·
   /// `null` σημαίνει «όλες οι καταστάσεις».
+  ///
+  /// Το [callIds] περιορίζει σε συγκεκριμένα αναγνωριστικά κλήσης (όροι «#N»
+  /// της αναζήτησης). Ισχύει αθροιστικά με το [keyword], όπως στον Κατάλογο:
+  /// «#276 εκτυπωτής» σημαίνει «η κλήση 276, ΑΝ περιέχει και το κείμενο».
   Future<List<Map<String, dynamic>>> getHistoryCalls({
     String? dateFrom,
     String? dateTo,
@@ -417,6 +421,7 @@ class CallsRepository {
     String? keyword,
     bool onlyWithTask = false,
     String? lansweeperState,
+    Iterable<int>? callIds,
   }) async {
     const userPhoneExpr =
         "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
@@ -438,6 +443,12 @@ class CallsRepository {
     if (keyword != null && keyword.isNotEmpty) {
       whereClauses.add('calls.search_index LIKE ?');
       args.add('%$keyword%');
+    }
+    // Δύο διαφορετικά «#id» δεν μπορούν να δείχνουν την ίδια γραμμή: το ΚΑΙ
+    // αδειάζει το αποτέλεσμα, ακριβώς όπως στον Κατάλογο.
+    for (final id in callIds ?? const <int>[]) {
+      whereClauses.add('calls.id = ?');
+      args.add(id);
     }
     if (onlyWithTask) {
       whereClauses.add('$_openTaskExistsSql = 1');

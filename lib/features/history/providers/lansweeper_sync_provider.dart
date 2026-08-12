@@ -9,8 +9,8 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
-import '../../../core/services/lansweeper_asset_target.dart';
-import '../../../core/services/lansweeper_department_accounts.dart';
+import '../../../core/services/lansweeper_call_asset_resolution.dart';
+import '../../../core/services/lansweeper_call_requester_resolution.dart';
 import '../../../core/services/lansweeper_requester_resolution.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
 import '../../../core/services/lansweeper_ticket_submit_config.dart';
@@ -149,24 +149,28 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         final chosen = formChoice.trim();
         requesterUsername = chosen.isEmpty ? null : chosen;
       } else {
-        final callerId = call.callerId;
-        requesterUsername = callerId == null
-            ? null
-            : await UserRepository(db).getLansweeperUsernameById(callerId);
-      }
-      final equipmentId = call.equipmentId;
-      LansweeperAssetTarget? assetTarget;
-      if (equipmentId != null) {
-        final assetFields = await EquipmentRepository(
-          db,
-        ).getLansweeperAssetFieldsById(equipmentId);
-        if (assetFields != null) {
-          assetTarget = lansweeperAssetTargetFor(
-            storedAssetName: assetFields.assetName,
-            equipmentCode: assetFields.code,
-          );
+        // Ο χρήστης δεν άγγιξε τον επιλογέα: ισχύει η ΙΔΙΑ ιεραρχία που έδειξε
+        // η φόρμα — προσωπικό αναγνωριστικό του καλούντα, αλλιώς λογαριασμός
+        // του τμήματός του. Χωρίς αυτό, κλήση «Άγνωστου» έφευγε χωρίς αιτούντα
+        // ενώ η γραμμή «Στο ticket» υποσχόταν τον λογαριασμό του τμήματος.
+        final companions = <CallModel>[call];
+        for (final id in companionCallIds) {
+          if (id == callId) continue;
+          final companion = await repo.getCallById(id);
+          if (companion != null) companions.add(companion);
         }
+        final resolved = await resolveLansweeperRequesterForCalls(
+          userRepository: UserRepository(db),
+          lookup: LookupService.instance,
+          calls: companions,
+        );
+        requesterUsername = resolved.selectedUsername;
       }
+      final assetTarget = await resolveCallLansweeperAsset(
+        repository: EquipmentRepository(db),
+        equipmentId: call.equipmentId,
+        equipmentText: call.equipmentText,
+      );
 
       final service = ref.read(lansweeperSyncServiceProvider);
       final result = await service.submitTicketWorkflow(
@@ -401,6 +405,18 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     return CallsLansweeperRepository(db).suggestedNextLansweeperTicketId();
   }
 
+  /// Το πιο πρόσφατο υπαρκτό ticket id, για δοκιμή του συνδέσμου προβολής.
+  ///
+  /// Το μεγαλύτερο αριθμητικό είναι και το τελευταίο που καταχωρήθηκε, άρα το
+  /// πιο σίγουρα υπαρκτό στο Lansweeper. `null` όταν η βάση δεν έχει κανένα.
+  Future<String?> latestLansweeperTicketId() async {
+    final db = await DatabaseHelper.instance.database;
+    final maxId = await CallsLansweeperRepository(
+      db,
+    ).maxNumericLansweeperTicketId();
+    return maxId?.toString();
+  }
+
   Future<void> setSent(int callId, {String? ticketId}) async {
     final normalized = ticketId?.trim() ?? '';
     if (normalized.isEmpty) {
@@ -559,80 +575,17 @@ final lansweeperTicketPartiesProvider = FutureProvider.autoDispose
 
       final primary = calls.first;
 
-      // Οι ΔΙΑΚΡΙΤΟΙ καλούντες όλων των επιλεγμένων κλήσεων, με σειρά πρώτης
-      // εμφάνισης (πρώτος = της κύριας). Κλήσεις χωρίς συνδεδεμένο καλούντα
-      // μετρούν ως επιπλέον «πρόσωπο»: κάνουν τον αιτούντα απόφαση.
-      final userRepo = UserRepository(db);
-      final callers = <LansweeperTicketCaller>[];
-      final seenCallerIds = <int>{};
-      var hasUnidentifiedCalls = false;
-      for (final call in calls) {
-        final callerId = call.callerId;
-        if (callerId == null) {
-          hasUnidentifiedCalls = true;
-          continue;
-        }
-        if (!seenCallerIds.add(callerId)) continue;
-        final username = await userRepo.getLansweeperUsernameById(callerId);
-        final displayName = (call.callerText ?? '').trim();
-        callers.add(
-          LansweeperTicketCaller(
-            displayName: displayName.isEmpty ? 'Καλών #$callerId' : displayName,
-            departmentName: (call.departmentText ?? '').trim(),
-            username: username,
-          ),
-        );
-      }
-      final partyCount = callers.length + (hasUnidentifiedCalls ? 1 : 0);
-
-      // Τα τμήματα διαβάζονται όταν η απόφαση τα χρειάζεται: με πολλά
-      // εμπλεκόμενα πρόσωπα, ή με μοναδικό πρόσωπο χωρίς δικό του
-      // αναγνωριστικό — ο μοναδικός καλών με δικό του κερδίζει χωρίς λίστα.
-      final departments =
-          <({String departmentName, List<LansweeperAccount> accounts})>[];
-      final needDepartments =
-          partyCount > 1 ||
-          !(callers.length == 1 && callers.first.hasUsername);
-      if (needDepartments) {
-        final seenDepartments = <int>{};
-        final lookup = LookupService.instance;
-        for (final call in calls) {
-          final department = lookup.findDepartmentByName(
-            call.departmentText ?? '',
-          );
-          final departmentId = department?.id;
-          if (department == null || departmentId == null) continue;
-          if (!seenDepartments.add(departmentId)) continue;
-          final accounts = decodeLansweeperAccounts(
-            department.lansweeperUsernames,
-          );
-          if (accounts.isEmpty) continue;
-          departments.add((
-            departmentName: department.name,
-            accounts: accounts,
-          ));
-        }
-      }
-
-      final equipmentId = primary.equipmentId;
-      String? asset;
-      if (equipmentId != null) {
-        final assetFields = await EquipmentRepository(
-          db,
-        ).getLansweeperAssetFieldsById(equipmentId);
-        if (assetFields != null) {
-          asset = lansweeperAssetTargetFor(
-            storedAssetName: assetFields.assetName,
-            equipmentCode: assetFields.code,
-          )?.value;
-        }
-      }
+      final asset = (await resolveCallLansweeperAsset(
+        repository: EquipmentRepository(db),
+        equipmentId: primary.equipmentId,
+        equipmentText: primary.equipmentText,
+      ))?.value;
 
       return LansweeperTicketParties(
-        requester: resolveLansweeperRequester(
-          callers: callers,
-          hasUnidentifiedCalls: hasUnidentifiedCalls,
-          departments: departments,
+        requester: await resolveLansweeperRequesterForCalls(
+          userRepository: UserRepository(db),
+          lookup: LookupService.instance,
+          calls: calls,
         ),
         asset: asset,
       );

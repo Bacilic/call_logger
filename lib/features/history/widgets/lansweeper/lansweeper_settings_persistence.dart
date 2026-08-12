@@ -12,9 +12,6 @@ class LansweeperSettingsValues {
     required this.ticketViewUrl,
     required this.apiKey,
     required this.agentUsername,
-    required this.loginUrl,
-    required this.helpdeskUsername,
-    required this.helpdeskPassword,
     required this.geminiApiKey,
     required this.geminiPromptTemplate,
     required this.geminiEndpoint,
@@ -27,9 +24,6 @@ class LansweeperSettingsValues {
   final String ticketViewUrl;
   final String apiKey;
   final String agentUsername;
-  final String loginUrl;
-  final String helpdeskUsername;
-  final String helpdeskPassword;
   final String geminiApiKey;
   final String geminiPromptTemplate;
   final String geminiEndpoint;
@@ -54,21 +48,6 @@ void persistLansweeperSettings(WidgetRef ref, LansweeperSettingsValues v) {
     ref
         .read(lansweeperAgentUsernameProvider.notifier)
         .setAgentUsername(v.agentUsername),
-  );
-  unawaited(
-    ref
-        .read(lansweeperHelpdeskLoginUrlProvider.notifier)
-        .setLoginUrl(v.loginUrl),
-  );
-  unawaited(
-    ref
-        .read(lansweeperHelpdeskWebUsernameProvider.notifier)
-        .setUsername(v.helpdeskUsername),
-  );
-  unawaited(
-    ref
-        .read(lansweeperHelpdeskWebPasswordProvider.notifier)
-        .setPassword(v.helpdeskPassword),
   );
   unawaited(ref.read(geminiApiKeyProvider.notifier).setApiKey(v.geminiApiKey));
   unawaited(

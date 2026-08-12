@@ -1,4 +1,4 @@
-// Unit test: persistLansweeperSettings — χαρτογράφηση 13 πεδίων -> providers.
+// Unit test: persistLansweeperSettings — χαρτογράφηση 10 πεδίων -> providers.
 //
 //   flutter test test/features/history/lansweeper_settings_persistence_test.dart
 
@@ -15,9 +15,6 @@ const _vTicketFormUrl = 'VAL_TICKET_FORM_URL';
 const _vTicketViewUrl = 'VAL_TICKET_VIEW_URL';
 const _vLansweeperApiKey = 'VAL_LANSWEEPER_API_KEY';
 const _vAgentUsername = 'VAL_AGENT_USERNAME';
-const _vLoginUrl = 'VAL_LOGIN_URL';
-const _vHelpdeskUsername = 'VAL_HELPDESK_USERNAME';
-const _vHelpdeskPassword = 'VAL_HELPDESK_PASSWORD';
 const _vGeminiApiKey = 'VAL_GEMINI_API_KEY';
 const _vGeminiPromptTemplate = 'VAL_GEMINI_PROMPT';
 const _vGeminiEndpoint = 'VAL_GEMINI_ENDPOINT';
@@ -30,9 +27,6 @@ const _kValues = LansweeperSettingsValues(
   ticketViewUrl: _vTicketViewUrl,
   apiKey: _vLansweeperApiKey,
   agentUsername: _vAgentUsername,
-  loginUrl: _vLoginUrl,
-  helpdeskUsername: _vHelpdeskUsername,
-  helpdeskPassword: _vHelpdeskPassword,
   geminiApiKey: _vGeminiApiKey,
   geminiPromptTemplate: _vGeminiPromptTemplate,
   geminiEndpoint: _vGeminiEndpoint,
@@ -114,54 +108,6 @@ class RecordingLansweeperAgentUsernameNotifier
   @override
   Future<void> setAgentUsername(String value) async {
     recorded['agentUsername'] = value;
-    state = value;
-  }
-}
-
-class RecordingLansweeperHelpdeskLoginUrlNotifier
-    extends LansweeperHelpdeskLoginUrlNotifier {
-  RecordingLansweeperHelpdeskLoginUrlNotifier(this.recorded);
-
-  final Map<String, String> recorded;
-
-  @override
-  String build() => '';
-
-  @override
-  Future<void> setLoginUrl(String value) async {
-    recorded['loginUrl'] = value;
-    state = value;
-  }
-}
-
-class RecordingLansweeperHelpdeskWebUsernameNotifier
-    extends LansweeperHelpdeskWebUsernameNotifier {
-  RecordingLansweeperHelpdeskWebUsernameNotifier(this.recorded);
-
-  final Map<String, String> recorded;
-
-  @override
-  String build() => '';
-
-  @override
-  Future<void> setUsername(String value) async {
-    recorded['helpdeskUsername'] = value;
-    state = value;
-  }
-}
-
-class RecordingLansweeperHelpdeskWebPasswordNotifier
-    extends LansweeperHelpdeskWebPasswordNotifier {
-  RecordingLansweeperHelpdeskWebPasswordNotifier(this.recorded);
-
-  final Map<String, String> recorded;
-
-  @override
-  String build() => '';
-
-  @override
-  Future<void> setPassword(String value) async {
-    recorded['helpdeskPassword'] = value;
     state = value;
   }
 }
@@ -259,15 +205,6 @@ List<Override> _recordingOverrides(Map<String, String> recorded) {
     lansweeperAgentUsernameProvider.overrideWith(
       () => RecordingLansweeperAgentUsernameNotifier(recorded),
     ),
-    lansweeperHelpdeskLoginUrlProvider.overrideWith(
-      () => RecordingLansweeperHelpdeskLoginUrlNotifier(recorded),
-    ),
-    lansweeperHelpdeskWebUsernameProvider.overrideWith(
-      () => RecordingLansweeperHelpdeskWebUsernameNotifier(recorded),
-    ),
-    lansweeperHelpdeskWebPasswordProvider.overrideWith(
-      () => RecordingLansweeperHelpdeskWebPasswordNotifier(recorded),
-    ),
     geminiApiKeyProvider.overrideWith(
       () => RecordingGeminiApiKeyNotifier(recorded),
     ),
@@ -288,7 +225,7 @@ List<Override> _recordingOverrides(Map<String, String> recorded) {
 
 void main() {
   testWidgets(
-    'persistLansweeperSettings γράφει και τα 13 πεδία στους σωστούς providers',
+    'persistLansweeperSettings γράφει και τα 10 πεδία στους σωστούς providers',
     (tester) async {
       final recorded = <String, String>{};
       late WidgetRef capturedRef;
@@ -311,15 +248,10 @@ void main() {
       expect(recorded['apiUrl'], _vApiUrl);
       expect(recorded['ticketFormUrl'], _vTicketFormUrl);
       expect(recorded['ticketViewUrl'], _vTicketViewUrl);
-      expect(recorded['loginUrl'], _vLoginUrl);
 
       expect(recorded['lansweeperApiKey'], _vLansweeperApiKey);
       expect(recorded['geminiApiKey'], _vGeminiApiKey);
       expect(recorded['lansweeperApiKey'], isNot(_vGeminiApiKey));
-
-      expect(recorded['helpdeskUsername'], _vHelpdeskUsername);
-      expect(recorded['helpdeskPassword'], _vHelpdeskPassword);
-      expect(recorded['helpdeskUsername'], isNot(_vHelpdeskPassword));
 
       expect(recorded['geminiPrimaryModel'], _vGeminiPrimaryModel);
       expect(recorded['geminiFallbackModel'], _vGeminiFallbackModel);
@@ -328,7 +260,7 @@ void main() {
       expect(recorded['agentUsername'], _vAgentUsername);
       expect(recorded['geminiPromptTemplate'], _vGeminiPromptTemplate);
       expect(recorded['geminiEndpoint'], _vGeminiEndpoint);
-      expect(recorded, hasLength(13));
+      expect(recorded, hasLength(10));
     },
   );
 }

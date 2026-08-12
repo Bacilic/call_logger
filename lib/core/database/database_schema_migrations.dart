@@ -234,6 +234,33 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 45 && newVersion >= 45) {
     await migrateDatabaseToV45(db);
   }
+  if (oldVersion < 46 && newVersion >= 46) {
+    await migrateDatabaseToV46(db);
+  }
+}
+
+/// v46: καθάρισμα των ρυθμίσεων της καταργημένης «Αυτόματης σύνδεσης Help
+/// Desk» (μόνο δεδομένα, idempotent).
+///
+/// Η λειτουργία αφαιρέθηκε γιατί δεν μπορούσε να δουλέψει: η εφαρμογή δεν
+/// μεταφέρει συνεδρία στον εξωτερικό περιηγητή. Μαζί της φεύγει και ο κωδικός
+/// web console που φύλαγε το `app_settings` σε απλό κείμενο — καμία ροή δεν
+/// τον διαβάζει πια, οπότε δεν έχει λόγο να μείνει στο αρχείο.
+Future<void> migrateDatabaseToV46(Database db) async {
+  final existing = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'",
+  );
+  if (existing.isEmpty) return;
+  await db.delete(
+    'app_settings',
+    where: 'key IN (?, ?, ?, ?)',
+    whereArgs: [
+      'lansweeper_helpdesk_auto_login',
+      'lansweeper_helpdesk_login_url',
+      'lansweeper_helpdesk_web_username',
+      'lansweeper_helpdesk_web_password',
+    ],
+  );
 }
 
 /// v45: `departments.lansweeper_usernames` — οι γενικοί λογαριασμοί που

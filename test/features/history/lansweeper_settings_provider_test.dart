@@ -5,7 +5,6 @@
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/features/history/providers/lansweeper_settings_provider.dart';
-import 'package:call_logger/features/history/widgets/lansweeper/lansweeper_url_rules.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -207,95 +206,6 @@ void main() {
           );
         },
       );
-    });
-
-    group('lansweeperHelpdeskLoginUrlProvider', () {
-      test(
-        'παράγει login url από ticket form url όταν λείπει ρητή τιμή',
-        () async {
-          await (await _settingsRepo()).saveSetting(
-            kLansweeperUrlSettingKey,
-            _kTicketFormUrl,
-          );
-
-          final expected = LansweeperUrlRules.loginUrlDerivedFromTicketFormUrl(
-            _kTicketFormUrl,
-          );
-
-          final container = _testContainer();
-          addTearDown(container.dispose);
-
-          container.listen(lansweeperHelpdeskLoginUrlProvider, (_, _) {});
-          await _pumpUntil(
-            () =>
-                container.read(lansweeperHelpdeskLoginUrlProvider) == expected,
-          );
-
-          expect(container.read(lansweeperHelpdeskLoginUrlProvider), expected);
-          expect(
-            await (await _settingsRepo()).getSetting(
-              kLansweeperHelpdeskLoginUrlSettingKey,
-            ),
-            isNull,
-          );
-        },
-      );
-
-      test(
-        'διατηρεί ρητή τιμή login url όταν είναι browser-launchable',
-        () async {
-          const explicitLogin = 'http://10.10.201.22:81/login.aspx';
-          await (await _settingsRepo()).saveSetting(
-            kLansweeperHelpdeskLoginUrlSettingKey,
-            explicitLogin,
-          );
-
-          final container = _testContainer();
-          addTearDown(container.dispose);
-
-          container.listen(lansweeperHelpdeskLoginUrlProvider, (_, _) {});
-          await _pumpUntil(
-            () =>
-                container.read(lansweeperHelpdeskLoginUrlProvider) ==
-                explicitLogin,
-          );
-
-          expect(
-            container.read(lansweeperHelpdeskLoginUrlProvider),
-            explicitLogin,
-          );
-        },
-      );
-    });
-
-    group('lansweeperHelpdeskAutoLoginProvider', () {
-      test('προεπιλογή false όταν λείπει ρύθμιση', () async {
-        final container = _testContainer();
-        addTearDown(container.dispose);
-
-        container.listen(lansweeperHelpdeskAutoLoginProvider, (_, _) {});
-        container.read(lansweeperHelpdeskAutoLoginProvider);
-        await _pumpHydration();
-
-        expect(container.read(lansweeperHelpdeskAutoLoginProvider), isFalse);
-      });
-
-      test('hydrate true από "yes" μέσω parseBoolAppSetting', () async {
-        await (await _settingsRepo()).saveSetting(
-          kLansweeperHelpdeskAutoLoginSettingKey,
-          'yes',
-        );
-
-        final container = _testContainer();
-        addTearDown(container.dispose);
-
-        container.listen(lansweeperHelpdeskAutoLoginProvider, (_, _) {});
-        await _pumpUntil(
-          () => container.read(lansweeperHelpdeskAutoLoginProvider) == true,
-        );
-
-        expect(container.read(lansweeperHelpdeskAutoLoginProvider), isTrue);
-      });
     });
 
     group('lansweeperOpenTicketAfterApiSubmitProvider', () {

@@ -5,17 +5,9 @@ const String kLansweeperUrlSettingKey = 'lansweeper_url';
 const String kLansweeperApiUrlSettingKey = 'lansweeper_api_url';
 const String kLansweeperApiKeySettingKey = 'lansweeper_api_key';
 const String kLansweeperAgentUsernameSettingKey = 'lansweeper_agent_username';
-const String kLansweeperHelpdeskAutoLoginSettingKey =
-    'lansweeper_helpdesk_auto_login';
-const String kLansweeperHelpdeskLoginUrlSettingKey =
-    'lansweeper_helpdesk_login_url';
 const String kLansweeperTicketViewUrlSettingKey = 'lansweeper_ticket_view_url';
 const String kLansweeperOpenTicketAfterApiSubmitSettingKey =
     'lansweeper_open_ticket_after_api_submit';
-const String kLansweeperHelpdeskWebUsernameSettingKey =
-    'lansweeper_helpdesk_web_username';
-const String kLansweeperHelpdeskWebPasswordSettingKey =
-    'lansweeper_helpdesk_web_password';
 const String kLansweeperTicketSubmitConfigSettingKey =
     'lansweeper_ticket_submit_config';
 const String kLansweeperTicketSubmitFormPrefsSettingKey =
@@ -52,8 +44,9 @@ const String kDefaultLansweeperUrl =
 const String kDefaultLansweeperTicketViewUrl =
     'http://10.10.201.22:81/helpdesk/ticket.aspx?tid={tid}';
 
-/// Προεπιλεγμένο URL σελίδας σύνδεσης Help Desk (browser).
-const String kDefaultLansweeperLoginUrl = 'http://10.10.201.22:81/login.aspx';
+/// Δείγμα αριθμού αιτήματος για τον «Έλεγχο συνδέσμου» προβολής ticket, όταν
+/// καμία κλήση δεν έχει ακόμη καταχωρημένο αίτημα.
+const String kSampleLansweeperTicketId = '17132';
 
 /// Παράδειγμα URL τελικού σημείου API (`api.aspx`) για υποδείξεις.
 const String kExampleLansweeperApiUrl = 'http://10.10.201.22:81/api.aspx';

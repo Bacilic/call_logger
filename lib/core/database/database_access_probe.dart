@@ -57,12 +57,29 @@ class DatabaseAccessProbe {
 
   static const Duration _kProbeTotalTimeout = Duration(milliseconds: 1000);
   static const Duration _kShortStepTimeout = Duration(milliseconds: 250);
+  static const Duration _kSweepTimeout = Duration(milliseconds: 400);
   static const String _kSqliteHeader = 'SQLite format 3\x00';
   static const int _kLargeWalThresholdBytes = 4 * 1024 * 1024;
   static const int _kLowDiskSpaceThresholdBytes = 50 * 1024 * 1024;
 
+  /// Ηλικία πάνω από την οποία ένα δοκιμαστικό αρχείο θεωρείται ξεχασμένο.
+  ///
+  /// Το κανονικό probe ζει χιλιοστά του δευτερολέπτου. Το περιθώριο υπάρχει
+  /// ώστε να μην πειραχθεί ΠΟΤΕ το ζωντανό probe μιας δεύτερης εκκίνησης που
+  /// τρέχει την ίδια στιγμή στον ίδιο φάκελο.
+  static const Duration _kStaleProbeAge = Duration(minutes: 5);
+
+  /// Μόνο ό,τι φτιάχνει το [_checkParentWritable]: `.__probe_<ms>_<τυχαίο>.tmp`.
+  ///
+  /// Το μοτίβο είναι σκόπιμα αυστηρό — στον φάκελο της βάσης ζουν αντίγραφα,
+  /// `-wal`/`-shm` και αρχεία του χρήστη, και τίποτα από αυτά δεν επιτρέπεται
+  /// να ακουμπήσει ο καθαρισμός.
+  static final RegExp _kProbeLeftoverPattern = RegExp(
+    r'^\.__probe_\d+_\d+\.tmp$',
+  );
+
   Future<DatabaseAccessProbeReport> probe(String dbPath) async {
-    return _runProbe(dbPath).timeout(
+    final report = await _runProbe(dbPath).timeout(
       _kProbeTotalTimeout,
       onTimeout: () => const DatabaseAccessProbeReport(
         findings: <ProbeFinding>[
@@ -76,6 +93,75 @@ class DatabaseAccessProbe {
         ],
       ),
     );
+
+    // Έξω από το χρονικό όριο των διαγνωστικών: ο καθαρισμός δεν είναι
+    // διάγνωση και δεν επιτρέπεται να τρώει από τον χρόνο της.
+    final sweptFindings = await sweepStaleWriteProbes(dbPath);
+    if (sweptFindings.isEmpty) return report;
+    return DatabaseAccessProbeReport(
+      findings: <ProbeFinding>[...report.findings, ...sweptFindings],
+      fatalResult: report.fatalResult,
+    );
+  }
+
+  /// Σβήνει ξεχασμένα δοκιμαστικά αρχεία εγγραφής από τον φάκελο της βάσης.
+  ///
+  /// Το probe του [_checkParentWritable] σβήνεται μόνο του· όταν όμως η
+  /// εγγραφή αργήσει πάνω από το όριο (π.χ. antivirus που κρατά το αρχείο),
+  /// η διαγραφή αποτυγχάνει και το υπόλειμμα μένει για πάντα. Εδώ μαζεύεται
+  /// στην επόμενη εκκίνηση.
+  ///
+  /// Δεν εμποδίζει ποτέ την εκκίνηση: κάθε αποτυχία καταπίνεται και
+  /// ξαναδοκιμάζεται την επόμενη φορά. Επιστρέφει ευρήματα **μόνο** όταν όντως
+  /// έσβησε κάτι — βήμα που δηλώνει ότι δεν έκανε τίποτα είναι θόρυβος.
+  Future<List<ProbeFinding>> sweepStaleWriteProbes(String dbPath) async {
+    try {
+      final parent = File(dbPath).parent;
+      if (!await parent.exists().timeout(_kSweepTimeout)) {
+        return const <ProbeFinding>[];
+      }
+
+      final now = DateTime.now();
+      var removed = 0;
+      var failed = 0;
+
+      final entries = await parent
+          .list(followLinks: false)
+          .where((entity) => entity is File)
+          .toList()
+          .timeout(_kSweepTimeout);
+
+      for (final entity in entries) {
+        final name = entity.uri.pathSegments.last;
+        if (!_kProbeLeftoverPattern.hasMatch(name)) continue;
+        final file = File(entity.path);
+        try {
+          final stat = await file.stat();
+          if (now.difference(stat.modified) < _kStaleProbeAge) continue;
+          await file.delete();
+          removed++;
+        } catch (_) {
+          // Ακόμη κρατημένο: το αφήνουμε για την επόμενη εκκίνηση.
+          failed++;
+        }
+      }
+
+      if (removed == 0 && failed == 0) return const <ProbeFinding>[];
+      return <ProbeFinding>[
+        ProbeFinding(
+          severity: ProbeSeverity.info,
+          code: 'stale_write_probes_swept',
+          message: removed == 1
+              ? 'Καθαρίστηκε 1 ξεχασμένο δοκιμαστικό αρχείο εγγραφής.'
+              : 'Καθαρίστηκαν $removed ξεχασμένα δοκιμαστικά αρχεία εγγραφής.',
+          hint: failed == 0
+              ? null
+              : '$failed δεν σβήστηκαν (πιθανόν κρατούνται) — θα ξαναδοκιμαστούν.',
+        ),
+      ];
+    } catch (_) {
+      return const <ProbeFinding>[];
+    }
   }
 
   Future<DatabaseAccessProbeReport> _runProbe(String dbPath) async {

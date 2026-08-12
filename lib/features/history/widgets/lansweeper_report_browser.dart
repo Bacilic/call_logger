@@ -10,7 +10,7 @@ import 'lansweeper/lansweeper_browser_launcher.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
 import 'lansweeper_report_dialog.dart';
 
-/// Άνοιγμα σελίδων Lansweeper στον περιηγητή (ticket, φόρμα, προαιρετικό login).
+/// Άνοιγμα σελίδων Lansweeper στον περιηγητή (ticket, φόρμα).
 ///
 /// Συνεργάτης του [LansweeperReportDialogState] (Σύνθεση).
 class LansweeperReportBrowser {
@@ -18,44 +18,33 @@ class LansweeperReportBrowser {
 
   final LansweeperReportDialogState host;
 
-  Future<({bool opened, bool openedLoginTab})> _launchHelpdeskBrowserUrl(
+  Future<bool> _launchHelpdeskBrowserUrl(
     String targetUrl, {
     required String invalidUrlMessage,
     required String openFailureMessage,
   }) async {
-    final autoLogin = host.ref.read(lansweeperHelpdeskAutoLoginProvider);
-
-    final loginPageRaw = host.ref.read(lansweeperHelpdeskLoginUrlProvider);
-
     final launcher = LansweeperBrowserLauncher(
       launch: (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
     );
 
-    final result = await launcher.launchWithOptionalLogin(
-      targetUrl: targetUrl,
-
-      autoLogin: autoLogin,
-
-      loginUrl: loginPageRaw,
-    );
+    final result = await launcher.launchTarget(targetUrl);
 
     switch (result.outcome) {
       case LansweeperBrowserLaunchOutcome.notLaunchable:
+        if (host.mounted) {
+          host.showDialogSnackBar(SnackBar(content: Text(invalidUrlMessage)));
+        }
+
       case LansweeperBrowserLaunchOutcome.openFailed:
         if (host.mounted) {
           host.showDialogSnackBar(SnackBar(content: Text(openFailureMessage)));
-        }
-
-      case LansweeperBrowserLaunchOutcome.invalidTarget:
-        if (host.mounted) {
-          host.showDialogSnackBar(SnackBar(content: Text(invalidUrlMessage)));
         }
 
       case LansweeperBrowserLaunchOutcome.opened:
         break;
     }
 
-    return (opened: result.opened, openedLoginTab: result.openedLoginTab);
+    return result.opened;
   }
 
   Future<void> openTicketViewInBrowser(String ticketId) async {
@@ -81,31 +70,13 @@ class LansweeperReportBrowser {
       return;
     }
 
-    final result = await _launchHelpdeskBrowserUrl(
+    await _launchHelpdeskBrowserUrl(
       url,
 
       invalidUrlMessage: 'Μη έγκυρο URL προβολής ticket.',
 
       openFailureMessage: 'Αποτυχία ανοίγματος ticket στον περιηγητή.',
     );
-
-    if (!host.mounted) return;
-
-    if (result.openedLoginTab) {
-      host.showDialogSnackBar(
-        const SnackBar(
-          content: Text(
-            'Ανοίχτηκαν καρτέλες στον περιηγητή· αν χρειάζεται, συνδεθείτε στη σελίδα σύνδεσης και επιστρέψτε στο ticket.',
-          ),
-        ),
-      );
-    } else if (!result.opened) {
-      host.showDialogSnackBar(
-        const SnackBar(
-          content: Text('Αποτυχία ανοίγματος ticket στον περιηγητή.'),
-        ),
-      );
-    }
   }
 
   Future<void> copyAndOpen({
@@ -175,22 +146,12 @@ class LansweeperReportBrowser {
       ),
     );
 
-    final result = await _launchHelpdeskBrowserUrl(
+    await _launchHelpdeskBrowserUrl(
       ticketFormUrl,
 
       invalidUrlMessage: 'Μη έγκυρο URL φόρμας εισιτηρίου.',
 
       openFailureMessage: 'Αποτυχία ανοίγματος URL φόρμας.',
     );
-
-    if (host.mounted && result.openedLoginTab) {
-      host.showDialogSnackBar(
-        const SnackBar(
-          content: Text(
-            'Ανοίχτηκαν καρτέλες στον περιηγητή· αν χρειάζεται, συνδεθείτε στη σελίδα σύνδεσης και επιστρέψτε στη φόρμα αιτήματος.',
-          ),
-        ),
-      );
-    }
   }
 }
