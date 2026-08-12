@@ -26,7 +26,7 @@ Future<void> _pumpCallLoggerApp(WidgetTester tester) async {
           ...callLoggerTestProviderOverrides(),
           showQuickCallFabProvider.overrideWith((ref) async => true),
         ],
-        child: const MyApp(),
+        child: const MyApp(showStartupSplash: false),
       ),
     );
     await tester.pump();

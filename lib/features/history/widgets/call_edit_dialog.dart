@@ -17,6 +17,7 @@ import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import '../providers/history_call_actions_provider.dart';
+import 'call_provenance_icon.dart';
 import 'linked_task_details_dialog.dart';
 import 'linked_tasks_card.dart';
 import '../providers/history_provider.dart';
@@ -534,10 +535,8 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              Icon(
-                                Icons.auto_awesome_outlined,
-                                size: 14,
-                                color: Theme.of(context).colorScheme.primary,
+                              CallProvenanceIcon(
+                                source: _original?.refinedSource,
                               ),
                               const SizedBox(width: 6),
                               Text(

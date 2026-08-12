@@ -9,6 +9,39 @@ import '../models/catalog_validation_finding.dart';
 import '../models/catalog_validation_rules.dart';
 import '../models/department_model.dart';
 
+/// Πόσο ύποπτη είναι μια μεμονωμένη τιμή — η κλίμακα που χρωματίζει τα chips.
+///
+/// Δεν είναι «σωστό/λάθος»: όλα τα σχήματα αποθηκεύονται κανονικά. Είναι
+/// **πόσο σπάνιο** είναι αυτό που βλέπεις, ώστε το μάτι να σταματά εκεί που
+/// αξίζει.
+enum CatalogChipSeverity {
+  /// Συνηθισμένο — καμία ένδειξη.
+  ok,
+
+  /// Σπάνιο αλλά θεμιτό. Διακριτική ένδειξη, χωρίς δραματοποίηση.
+  suspicious,
+
+  /// Σχεδόν πάντα λάθος. Εδώ επιτρέπεται να τραβήξει το βλέμμα.
+  wrong,
+}
+
+/// Η κρίση για ΕΝΑ chip: πόσο ύποπτο και γιατί.
+class CatalogChipDiagnosis {
+  const CatalogChipDiagnosis(this.severity, this.message);
+
+  final CatalogChipSeverity severity;
+
+  /// Το «γιατί», για το tooltip. Κενό όταν δεν υπάρχει παρατήρηση.
+  final String message;
+
+  static const CatalogChipDiagnosis ok = CatalogChipDiagnosis(
+    CatalogChipSeverity.ok,
+    '',
+  );
+
+  bool get hasRemark => severity != CatalogChipSeverity.ok;
+}
+
 /// Καθαρή λογική των κανόνων επικύρωσης Καταλόγου.
 ///
 /// Κάθε μέθοδος επιστρέφει το κείμενο υπόδειξης ή `null` όταν όλα είναι
@@ -22,6 +55,12 @@ class CatalogValidationService {
   static final RegExp _digitsOnly = RegExp(r'^[0-9]+$');
   static final RegExp _anyLetter = RegExp(r'\p{L}', unicode: true);
   static final RegExp _startsWithLetter = RegExp(r'^\p{L}', unicode: true);
+
+  /// Το σχήμα που θεωρείται «λατινικός κωδικός»: γράμματα, ψηφία και τα τρία
+  /// σημεία που μπαίνουν θεμιτά σε κωδικούς εξοπλισμού («SRV-01», «PC_2»).
+  static final RegExp _latinCodeShape = RegExp(r'^[A-Za-z0-9._-]+$');
+  static final RegExp _latinCodeChar = RegExp(r'[A-Za-z0-9._-]');
+  static final RegExp _greekLetter = RegExp(r'[Ͱ-Ͽἀ-῿]');
 
   /// Υπόδειξη για ΕΝΑΝ τηλεφωνικό αριθμό.
   ///
@@ -88,6 +127,66 @@ class CatalogValidationService {
         ? '${rules.equipmentMinDigits}'
         : '${rules.equipmentMinDigits} έως ${rules.equipmentMaxDigits}';
     return 'Το $s έχει ${s.length} ψηφία — αναμένονται $expected';
+  }
+
+  /// Η κρίση για κωδικό εξοπλισμού ως σκέτο κείμενο — η μορφή που θέλει η
+  /// γραμμή υπόδειξης κάτω από το πεδίο πληκτρολόγησης.
+  String? equipmentCodeFieldHint(String value) {
+    final diagnosis = equipmentCodeChipDiagnosis(value);
+    return diagnosis.hasRemark ? diagnosis.message : null;
+  }
+
+  /// Η κρίση για ένα τηλέφωνο, στη μορφή που χρωματίζει chip.
+  ///
+  /// Τα τηλέφωνα δεν έχουν βαθμίδες: ή τηρούν τους κανόνες ή όχι.
+  CatalogChipDiagnosis phoneChipDiagnosis(String value) {
+    final hint = phoneHint(value);
+    return hint == null
+        ? CatalogChipDiagnosis.ok
+        : CatalogChipDiagnosis(CatalogChipSeverity.suspicious, hint);
+  }
+
+  /// Η κρίση για έναν κωδικό εξοπλισμού, σε **τρεις βαθμίδες**.
+  ///
+  /// Σκέτος αριθμός είναι ο κανόνας — εκεί μετράει μόνο το πλήθος ψηφίων.
+  /// Λατινικά γράμματα («PC470») είναι σπάνια αλλά υπαρκτά, οπότε λένε
+  /// «κοίτα το» και τίποτα παραπάνω. Ελληνικά ή σύμβολα είναι σχεδόν πάντα
+  /// ξεχασμένο πληκτρολόγιο, και μόνο εκεί επιτρέπεται η έντονη ένδειξη.
+  ///
+  /// Κάθε βαθμίδα έχει τον δικό της διακόπτη: όταν σβήσει, η τιμή περνά ως
+  /// συνηθισμένη αντί να υποβαθμιστεί σε ηπιότερη παρατήρηση.
+  CatalogChipDiagnosis equipmentCodeChipDiagnosis(String value) {
+    final s = value.trim();
+    if (s.isEmpty) return CatalogChipDiagnosis.ok;
+
+    if (_digitsOnly.hasMatch(s)) {
+      final hint = equipmentCodeHint(s);
+      return hint == null
+          ? CatalogChipDiagnosis.ok
+          : CatalogChipDiagnosis(CatalogChipSeverity.suspicious, hint);
+    }
+
+    if (!_latinCodeShape.hasMatch(s)) {
+      if (!rules.equipmentForeignCodeEnabled) return CatalogChipDiagnosis.ok;
+      final offenders = s.characters
+          .where((c) => !_latinCodeChar.hasMatch(c))
+          .toSet()
+          .join(' ');
+      final cause = _greekLetter.hasMatch(s)
+          ? 'μάλλον ξεχασμένο ελληνικό πληκτρολόγιο'
+          : 'σύμβολα δεν συνηθίζονται σε κωδικό';
+      return CatalogChipDiagnosis(
+        CatalogChipSeverity.wrong,
+        'Το «$s» έχει χαρακτήρες εκτός λατινικών: $offenders — $cause',
+      );
+    }
+
+    if (!rules.equipmentLatinCodeEnabled) return CatalogChipDiagnosis.ok;
+    return CatalogChipDiagnosis(
+      CatalogChipSeverity.suspicious,
+      'Το «$s» έχει γράμματα — σπάνιο σχήμα κωδικού, οι περισσότεροι είναι '
+      'σκέτοι αριθμοί',
+    );
   }
 
   /// Υπόδειξη για όνομα τμήματος: να περιέχει τουλάχιστον ένα γράμμα,
@@ -475,14 +574,16 @@ class CatalogValidationService {
     }
 
     for (final item in equipment) {
-      final hint = equipmentCodeHint(item.code ?? '');
-      if (hint == null) continue;
+      // Η ΙΔΙΑ κρίση με τα chips των φορμών: ένας κωδικός δεν επιτρέπεται να
+      // περνά καθαρός στη μια οθόνη και να κοκκινίζει στην άλλη.
+      final diagnosis = equipmentCodeChipDiagnosis(item.code ?? '');
+      if (!diagnosis.hasRemark) continue;
       add(
         kind: CatalogEntityKind.equipment,
         entityId: item.id!,
         label: _equipmentLabel(item),
         fieldLabel: 'Κωδικός',
-        message: hint,
+        message: diagnosis.message,
         focusedField: 'code',
       );
     }

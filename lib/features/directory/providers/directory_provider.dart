@@ -287,8 +287,10 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     );
   }
 
-  /// Γεγονότα χρήστη με τις ετικέτες των στηλών τους· η «Τοποθεσία» δεν έχει
-  /// στήλη στον πίνακα, οπότε μετρά πάντα ως κρυφό πεδίο.
+  /// Γεγονότα χρήστη με τις ετικέτες των στηλών τους· η «Τοποθεσία» και το
+  /// «Αναγνωριστικό Lansweeper» δεν έχουν στήλη στον πίνακα, οπότε μετρούν
+  /// πάντα ως κρυφά πεδία — η γραμμή αποτελεσμάτων το λέει ρητά, ώστε ένα
+  /// εύρημα «από το πουθενά» να έχει εξήγηση.
   List<CatalogSearchFact> _searchFactsForUser(UserModel u) {
     bool visible(String key) => state.visibleColumnKeys.contains(key);
     return [
@@ -330,6 +332,13 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       CatalogSearchFact(
         label: 'Τοποθεσία',
         text: u.location ?? '',
+        isVisible: false,
+      ),
+      // Το «plakogianni» βρίσκει τον υπάλληλο μέσα από το «gnk\e.plakogianni»:
+      // η αναζήτηση κοιτά μέσα στο κείμενο, οπότε ο τομέας δεν χρειάζεται.
+      CatalogSearchFact(
+        label: 'Αναγνωριστικό Lansweeper',
+        text: u.lansweeperUsername ?? '',
         isVisible: false,
       ),
     ];

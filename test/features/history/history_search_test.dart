@@ -94,7 +94,7 @@ void main() {
           await tester.pumpWidget(
             ProviderScope(
               overrides: historySearchWidgetTestOverrides(),
-              child: const MyApp(),
+              child: const MyApp(showStartupSplash: false),
             ),
           );
           await tester.pump();
@@ -150,7 +150,7 @@ void main() {
           await tester.pumpWidget(
             ProviderScope(
               overrides: historySearchWidgetTestOverrides(),
-              child: const MyApp(),
+              child: const MyApp(showStartupSplash: false),
             ),
           );
           await tester.pump();

@@ -36,7 +36,7 @@ void main() {
       },
     );
 
-    test('επεξεργασία με 6 αλλαγές — περικοπή σε 4 + υπόλοιπες', () {
+    test('επεξεργασία με 8 αλλαγές — περικοπή σε 6 + υπόλοιπες', () {
       final message = buildSaveConfirmationMessage(
         entityType: 'department',
         entityLabel: 'Πληροφορική',
@@ -47,6 +47,8 @@ void main() {
           'map_x': 10.0,
           'map_y': 20.0,
           'map_rotation': 0.0,
+          'map_width': 30.0,
+          'map_height': 40.0,
         },
         newMap: const {
           'color': '#EF5350',
@@ -55,13 +57,15 @@ void main() {
           'map_x': 50.0,
           'map_y': 60.0,
           'map_rotation': 90.0,
+          'map_width': 70.0,
+          'map_height': 80.0,
         },
         isNew: false,
       );
 
       final lines = message.split('\n');
       expect(lines.first, 'Αποθηκεύτηκε — τμήμα «Πληροφορική»');
-      expect(lines, hasLength(6));
+      expect(lines, hasLength(8));
       expect(lines.last, '… και 2 ακόμη αλλαγές');
     });
 
@@ -89,7 +93,7 @@ void main() {
       expect(message, kSaveConfirmationNoChangesMessage);
     });
 
-    test('λίστα phones — τιμές χωρισμένες με κόμμα', () {
+    test('λίστα phones — λέει τι αφαιρέθηκε, όχι όλη τη λίστα δύο φορές', () {
       final message = buildSaveConfirmationMessage(
         entityType: 'user',
         entityLabel: 'Γιάννης Παπαδόπουλος',
@@ -105,7 +109,7 @@ void main() {
       expect(
         message,
         'Αποθηκεύτηκε — υπάλληλος «Γιάννης Παπαδόπουλος»\n'
-        'τηλέφωνα: 2531, 2839 → 2531',
+        'Αφαιρέθηκε τηλέφωνο: 2839',
       );
     });
 

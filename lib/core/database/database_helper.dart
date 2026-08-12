@@ -453,6 +453,7 @@ class DatabaseHelper {
         progressNotifier?.setStep(
           'Η βάση άνοιξε επιτυχώς',
           clearSecondsRemaining: true,
+          kind: StartupStepKind.completed,
         );
         return db;
       } catch (e, st) {

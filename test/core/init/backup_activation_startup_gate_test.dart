@@ -37,7 +37,7 @@ void main() {
     await expectLater(container.read(probe.future), completes);
 
     expect(startupNotices, hasLength(1));
-    expect(startupNotices.single.phase, 'Ενεργοποίηση αντιγράφων ασφαλείας');
+    expect(startupNotices.single.phase, 'Έλεγχος αντιγράφων ασφαλείας');
     expect(startupNotices.single.error, isA<PathNotFoundException>());
   });
 }

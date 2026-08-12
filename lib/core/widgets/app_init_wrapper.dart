@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,21 +9,59 @@ import '../database/database_init_progress_provider.dart';
 import '../database/database_helper.dart';
 import '../init/app_init_provider.dart';
 import '../init/app_init_retry_runner.dart';
+import '../init/startup_notices.dart';
+import '../init/startup_window_placement.dart';
 import '../providers/application_reset_provider.dart';
 import '../services/application_reset_service.dart';
+import '../services/crash_log_service.dart';
 import '../../features/settings/widgets/pending_reset_database_screen.dart';
 import 'app_shortcuts.dart';
 import 'database_error_screen.dart';
+import 'startup_splash_screen.dart';
 
 /// Εκτελεί αρχικοποίηση εφαρμογής και προβάλλει live πρόοδο εκκίνησης.
 class AppInitWrapper extends ConsumerStatefulWidget {
-  const AppInitWrapper({super.key});
+  const AppInitWrapper({super.key, this.showStartupSplash = true});
+
+  /// Αν θα προβληθεί η οθόνη εκκίνησης πριν το κέλυφος.
+  ///
+  /// Η οθόνη έχει δικό της ελάχιστο χρόνο ζωής και έναν ρυθμιστή που χτυπά
+  /// συνεχώς. Τα widget tests που στήνουν ολόκληρη την εφαρμογή για να
+  /// ελέγξουν κάτι εντελώς άλλο δεν έχουν λόγο να την περιμένουν — και ο
+  /// ρυθμιστής της θα κρέμαγε κάθε `pumpAndSettle`.
+  final bool showStartupSplash;
 
   @override
   ConsumerState<AppInitWrapper> createState() => _AppInitWrapperState();
 }
 
 class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
+  /// True μόλις η οθόνη εκκίνησης πει όσα είχε να πει.
+  ///
+  /// Ξεχωριστό από την κατάσταση του [appInitProvider] επίτηδες: η
+  /// αρχικοποίηση μπορεί να τελειώσει σε μισό δευτερόλεπτο, αλλά η οθόνη έχει
+  /// δικό της ελάχιστο χρόνο ζωής.
+  bool _splashDone = false;
+
+  /// Η οθόνη εκκίνησης παραδίδει τη σκυτάλη στην εφαρμογή.
+  ///
+  /// Το κέλυφος εμφανίζεται αμέσως και το παράθυρο μεγαλώνει μετά: αν
+  /// περιμέναμε το λειτουργικό να αλλάξει διαστάσεις πριν χτίσουμε τη διεπαφή,
+  /// θα υπήρχε ένα καρέ με άδειο, μεγάλο παράθυρο. Η αποτυχία της αλλαγής
+  /// μεγέθους δεν αφορά τον χρήστη — η εφαρμογή είναι ήδη μπροστά του.
+  void _leaveSplash() {
+    if (!mounted) return;
+    setState(() => _splashDone = true);
+    unawaited(
+      StartupWindowPlacement.restoreApplicationWindow().catchError((
+        Object e,
+        StackTrace st,
+      ) {
+        recordStartupNotice('Επαναφορά μεγέθους παραθύρου', e, st);
+      }),
+    );
+  }
+
   Future<void> _retryAppInitialization() async {
     // Η επαναδοκιμή τρέχει ολόκληρη ακόμη κι αν το widget φύγει στο μεταξύ:
     // διακοπή στη μέση θα άφηνε τη βάση κλειστή. Το `mounted` φυλάει μόνο την
@@ -71,6 +111,21 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     }
 
     final asyncInit = ref.watch(appInitProvider);
+
+    // Η οθόνη εκκίνησης μένει μπροστά όσο τρέχει η αρχικοποίηση ΚΑΙ όσο έχει
+    // ακόμη βήματα να δείξει. Η αποτυχία την παρακάμπτει αμέσως: μπροστά σε
+    // σφάλμα, ο χρήστης θέλει τα διαγνωστικά, όχι την εικόνα της ημέρας.
+    final failed = asyncInit.hasError || asyncInit.value?.success == false;
+    if (widget.showStartupSplash && !_splashDone && !failed) {
+      return StartupSplashScreen(
+        // Η έκδοση διαβάστηκε ήδη στην εκκίνηση για το ημερολόγιο σφαλμάτων —
+        // δεν υπάρχει λόγος να ξαναρωτηθεί το λειτουργικό.
+        appVersion: CrashLogService.instanceOrNull?.appVersion ?? '',
+        initializationComplete: asyncInit.value?.success == true,
+        onFinished: _leaveSplash,
+      );
+    }
+
     return asyncInit.when(
       loading: () => const _InitLoadingScreen(),
       error: (err, st) {

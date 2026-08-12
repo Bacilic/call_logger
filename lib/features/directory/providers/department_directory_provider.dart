@@ -9,6 +9,7 @@ import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/errors/department_exists_exception.dart';
+import '../../../core/services/lansweeper_department_accounts.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/department_floor_sync.dart';
@@ -282,6 +283,16 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       CatalogSearchFact(
         label: 'Ομάδα χάρτη',
         text: d.groupName ?? '',
+        isVisible: false,
+      ),
+      // Αναγνωριστικά ΚΑΙ ονομασίες μαζί: το «docpath» βρίσκει το τμήμα μέσα
+      // από το «gnk\docpath1» χωρίς να χρειάζεται ο τομέας, και το «Γιατρός
+      // Παθολογικής» το βρίσκει από την ονομασία που δώσατε εσείς.
+      CatalogSearchFact(
+        label: 'Αναγνωριστικά Lansweeper',
+        text: decodeLansweeperAccounts(d.lansweeperUsernames)
+            .map((a) => '${a.username} ${a.label}'.trim())
+            .join(' '),
         isVisible: false,
       ),
     ];

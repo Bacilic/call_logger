@@ -19,6 +19,7 @@ import '../../building_map/services/building_map_floor_ordering.dart';
 import '../../models/department_model.dart';
 import '../../providers/catalog_validation_provider.dart';
 import '../../providers/department_directory_provider.dart';
+import '../../services/catalog_validation_service.dart';
 import 'catalog_validation_hint_text.dart';
 import 'department_color_palette.dart';
 import 'department_color_picker_dialog.dart';
@@ -722,14 +723,12 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                           );
                         },
                       ),
-                      // Ελέγχει και τα ήδη προστεθειμένα chips και ό,τι
-                      // πληκτρολογείται τώρα στο πεδίο εισαγωγής.
+                      // Μόνο για ό,τι πληκτρολογείται τώρα: για τα ήδη
+                      // προστεθειμένα μιλά το καθένα με το εικονίδιό του,
+                      // οπότε φαίνονται όλα μαζί αντί για ένα τη φορά.
                       CatalogValidationHintText(
-                        hint: validation?.phonesFieldHint(
-                          [
-                            ...sharedPhones,
-                            sharedPhoneInputController.text,
-                          ].join(','),
+                        hint: validation?.phoneHint(
+                          sharedPhoneInputController.text,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -740,6 +739,9 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                           for (final p in sharedPhones)
                             RemovableSharedChip(
                               label: p,
+                              diagnosis:
+                                  validation?.phoneChipDiagnosis(p) ??
+                                  CatalogChipDiagnosis.ok,
                               isNewlyAdded: !snapSharedPhones.contains(p),
                               isPendingRemoval: false,
                               onToggle: () => setState(() {
@@ -848,6 +850,13 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                           );
                         },
                       ),
+                      // Ίδια λογική με τα τηλέφωνα: εδώ μόνο ό,τι γράφεται
+                      // τώρα· τα προστεθειμένα τα λένε τα εικονίδιά τους.
+                      CatalogValidationHintText(
+                        hint: validation?.equipmentCodeFieldHint(
+                          sharedEquipmentInputController.text,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 6,
@@ -856,6 +865,11 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                           for (final code in sharedEquipmentCodes)
                             RemovableSharedChip(
                               label: code,
+                              diagnosis:
+                                  validation?.equipmentCodeChipDiagnosis(
+                                    code,
+                                  ) ??
+                                  CatalogChipDiagnosis.ok,
                               isNewlyAdded: !snapSharedEquipmentCodes.contains(
                                 code,
                               ),
@@ -1227,6 +1241,7 @@ class RemovableSharedChip extends StatelessWidget {
     required this.isPendingRemoval,
     required this.onToggle,
     this.onPressed,
+    this.diagnosis = CatalogChipDiagnosis.ok,
   });
 
   final String label;
@@ -1238,10 +1253,17 @@ class RemovableSharedChip extends StatelessWidget {
   /// Το X παραμένει η διαγραφή/αναίρεση, ανεξάρτητα από αυτό.
   final VoidCallback? onPressed;
 
+  /// Πόσο ύποπτη είναι η τιμή. Φοριέται ως **εικονίδιο**, όχι ως φόντο: το
+  /// φόντο μιλά ήδη για την κατάσταση του chip (πράσινο = μόλις προστέθηκε,
+  /// κόκκινο = θα αφαιρεθεί) και δύο νοήματα στο ίδιο χρώμα θα ακύρωναν
+  /// και τα δύο.
+  final CatalogChipDiagnosis diagnosis;
+
   @override
   Widget build(BuildContext context) {
-    return InputChip(
+    final chip = InputChip(
       onPressed: onPressed,
+      avatar: _severityIcon(),
       label: Text(
         label,
         style: isPendingRemoval
@@ -1257,5 +1279,29 @@ class RemovableSharedChip extends StatelessWidget {
           : 'Διαγραφή',
       onDeleted: onToggle,
     );
+
+    if (!diagnosis.hasRemark) return chip;
+    return CompactTooltip(
+      message: diagnosis.message,
+      waitDuration: const Duration(milliseconds: 350),
+      child: chip,
+    );
+  }
+
+  /// Το σπάνιο ψιθυρίζει, το απίθανο μιλά — καμία ένδειξη για το συνηθισμένο.
+  Widget? _severityIcon() {
+    return switch (diagnosis.severity) {
+      CatalogChipSeverity.ok => null,
+      CatalogChipSeverity.suspicious => Icon(
+        Icons.info_outline,
+        size: 18,
+        color: Colors.orange.shade800,
+      ),
+      CatalogChipSeverity.wrong => Icon(
+        Icons.error_outline,
+        size: 18,
+        color: Colors.red.shade700,
+      ),
+    };
   }
 }

@@ -260,6 +260,32 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                       },
                     ),
                   ),
+                  _RuleRow(
+                    enabled: rules.equipmentLatinCodeEnabled,
+                    onToggle: (v) =>
+                        _apply(rules.copyWith(equipmentLatinCodeEnabled: v)),
+                    example:
+                        'Παράδειγμα υπόδειξης: «Το «PC470» έχει γράμματα — '
+                        'σπάνιο σχήμα κωδικού, οι περισσότεροι είναι σκέτοι '
+                        'αριθμοί»',
+                    child: Text(
+                      'Διακριτική ένδειξη σε κωδικούς με λατινικά γράμματα',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
+                    enabled: rules.equipmentForeignCodeEnabled,
+                    onToggle: (v) =>
+                        _apply(rules.copyWith(equipmentForeignCodeEnabled: v)),
+                    example:
+                        'Παράδειγμα υπόδειξης: «Το «πισι2» έχει χαρακτήρες '
+                        'εκτός λατινικών: π ι σ — μάλλον ξεχασμένο ελληνικό '
+                        'πληκτρολόγιο»',
+                    child: Text(
+                      'Έντονη ένδειξη σε κωδικούς με ελληνικά ή σύμβολα',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),

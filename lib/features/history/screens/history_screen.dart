@@ -24,6 +24,7 @@ import '../services/lansweeper_state_actions.dart';
 import '../widgets/lansweeper/lansweeper_report_launcher.dart';
 import '../widgets/call_delete_dialog.dart';
 import '../widgets/call_edit_dialog.dart';
+import '../widgets/call_provenance_icon.dart';
 import '../widgets/history_deleted_entity_text.dart';
 import '../widgets/application_audit_tab.dart';
 import 'dashboard_screen.dart';
@@ -1447,8 +1448,9 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
             _dataCell(
               width: columnWidths[7],
               horizontalPadding: horizontalPadding,
-              // Το εικονίδιο σημαίνει «η Περιγραφή πέρασε από εξευγενισμό» και
-              // το tooltip του λέει πώς και πότε — το πρόχειρο δεν υπάρχει πια.
+              // Το σχήμα του εικονιδίου λέει ποιανού είναι τα λόγια —
+              // χειρόγραφο, από ΤΝ, ή από ΤΝ και πειραγμένο — και το tooltip
+              // τα ίδια με λόγια, μαζί με το πότε.
               child: provenance.isEmpty
                   ? EllipsisTooltipText(
                       text: issue.isEmpty ? '—' : issue,
@@ -1460,10 +1462,8 @@ class _HistoryDataTableState extends ConsumerState<_HistoryDataTable> {
                           padding: const EdgeInsets.only(right: 6),
                           child: Tooltip(
                             message: provenance,
-                            child: Icon(
-                              Icons.auto_awesome_outlined,
-                              size: 14,
-                              color: theme.colorScheme.primary,
+                            child: CallProvenanceIcon(
+                              source: row['refined_source'] as String?,
                             ),
                           ),
                         ),

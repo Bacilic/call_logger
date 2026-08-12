@@ -2,8 +2,9 @@ import '../database/audit_diff_helper.dart';
 import '../database/audit_service.dart';
 import '../models/remote_tool.dart';
 import '../models/remote_tool_role.dart';
+import 'save_change_line_builder.dart';
 
-const _kMaxVisibleFieldChanges = 4;
+const _kMaxVisibleFieldChanges = 6;
 
 /// Εμφανίζεται όταν το diff δεν εντοπίζει αλλαγές σε πεδία που παρακολουθεί —
 /// η αποθήκευση μπορεί ωστόσο να άγγιξε πεδία εκτός diff (π.χ. εικονίδιο,
@@ -29,11 +30,32 @@ String buildSaveConfirmationMessage({
   final orderedKeys = AuditDiffHelper.orderedDiffKeys(entityType, newKeys);
   final changeLines = <String>[];
 
+  // Η μετονομασία μπαίνει πρώτη και ξεχωριστά: είναι η μία αλλαγή που αλλάζει
+  // το ποια εγγραφή είναι αυτή, όχι απλώς τι γράφει μέσα της.
+  final renameLine = buildRenameLine(
+    entityType: entityType,
+    oldMap: oldMap,
+    newMap: newMap,
+  );
+  if (renameLine != null) changeLines.add(renameLine);
+  final renameFields = renameFieldsFor(entityType);
+
   for (final key in orderedKeys) {
+    if (renameFields.contains(key)) continue;
     if (AuditDiffHelper.shouldSkipDerivativeField(key, newKeys)) continue;
     final oldValue = oldMap[key];
     final newValue = newMap[key];
     if (!AuditService.shouldIncludeFieldInAuditDiff(key, oldValue, newValue)) {
+      continue;
+    }
+    if (isCollectionField(key)) {
+      changeLines.addAll(
+        buildCollectionChangeLines(
+          field: key,
+          oldValue: oldValue,
+          newValue: newValue,
+        ),
+      );
       continue;
     }
     final fieldLabel = AuditDiffHelper.fieldTitleLabel(entityType, key);
@@ -119,11 +141,12 @@ String buildRemoteToolSaveMessage({
   return lines.join('\n');
 }
 
-/// Διάρκεια SnackBar: 5 δευτ. όταν το μήνυμα έχει πάνω από μία γραμμή.
+/// Διάρκεια SnackBar: μεγαλώνει με τις γραμμές, γιατί έξι αλλαγές δεν
+/// διαβάζονται στον χρόνο που χρειάζεται μία.
 Duration saveConfirmationSnackBarDuration(String message) {
-  return message.contains('\n')
-      ? const Duration(seconds: 5)
-      : const Duration(seconds: 4);
+  if (!message.contains('\n')) return const Duration(seconds: 4);
+  final lineCount = '\n'.allMatches(message).length + 1;
+  return Duration(seconds: (3 + lineCount).clamp(5, 10));
 }
 
 /// Αφαιρεί τεχνικά πεδία εκκρεμότητας πριν το diff επιβεβαίωσης αποθήκευσης.

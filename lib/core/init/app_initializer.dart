@@ -89,12 +89,11 @@ class AppInitializer {
     // να ρίξει την εκκίνηση. Τα αντίγραφα ασφαλείας είναι νοικοκυριό — ένας
     // άφταστος φάκελος προορισμού (π.χ. UNC του νοσοκομείου, ανοιγμένος από το
     // σπίτι) δεν δικαιούται να ντύσει μια υγιή βάση με οθόνη σφάλματος.
-    try {
+    await runStartupHousekeeping('Έλεγχος αντιγράφων ασφαλείας', () async {
       await ref.read(databaseBackupSettingsProvider.notifier).load();
       await ref.read(backupSchedulerProvider.notifier).checkStartupAndStart();
-    } catch (e, st) {
-      recordStartupNotice('Ενεργοποίηση αντιγράφων ασφαλείας', e, st);
-    }
+      return true;
+    });
   }
 
   static Future<AppInitResult> initialize({
@@ -122,6 +121,7 @@ class AppInitializer {
       progressNotifier?.setStep(
         'Ολοκλήρωση εκκίνησης',
         clearSecondsRemaining: true,
+        kind: StartupStepKind.completed,
       );
       return AppInitResult(
         result: _appendStartupNoticesToFailureDetails(runnerResult.result),

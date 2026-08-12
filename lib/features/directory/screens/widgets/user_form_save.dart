@@ -70,21 +70,33 @@ class UserFormSave {
     if (!(host.formKey.currentState?.validate() ?? false)) return;
     if (!host.dismissGuard.isDirty) return;
 
-    final similar = host.findSimilarUsers();
-    if (similar.isNotEmpty) {
-      if (!host.mounted) return;
-      final result = await showDialog<SimilarUsersDialogResult>(
-        context: host.context,
-        barrierDismissible: true,
-        builder: (ctx) => SimilarUsersDialog(
-          matches: similar,
-          allowPickExisting: false,
-          typedDisplayName: host.buildUserDisplayName(),
-          typedDepartmentName: host.departmentController.text.trim(),
-        ),
-      );
-      if (!host.mounted) return;
-      if (result == null || !result.continuedAsNew) return;
+    // Ο έλεγχος ομοιότητας κοιτάζει αποκλειστικά το ονοματεπώνυμο, οπότε
+    // αξίζει μόνο όταν το ονοματεπώνυμο είναι καινούριο ή άλλαξε. Σε
+    // επεξεργασία που δεν το αγγίζει, ο κίνδυνος διπλοεγγραφής δεν γεννιέται
+    // τώρα: το όνομα ήταν ήδη έτσι στη βάση και η ερώτηση «μήπως εννοείτε;»
+    // απαντήθηκε όταν μπήκε. Χωρίς αυτόν τον φρουρό, δύο συνώνυμοι υπάλληλοι
+    // ξαναρωτούσαν σε κάθε αποθήκευση, για οποιοδήποτε πεδίο.
+    final isRename = host.isEdit && !host.widget.isClone;
+    if (!isRename || host.nameIdentityChanged()) {
+      final similar = host.findSimilarUsers();
+      if (similar.isNotEmpty) {
+        if (!host.mounted) return;
+        final result = await showDialog<SimilarUsersDialogResult>(
+          context: host.context,
+          barrierDismissible: true,
+          builder: (ctx) => SimilarUsersDialog(
+            matches: similar,
+            allowPickExisting: false,
+            typedDisplayName: host.buildUserDisplayName(),
+            typedDepartmentName: host.departmentController.text.trim(),
+            purpose: isRename
+                ? SimilarUsersDialogPurpose.directoryRename
+                : SimilarUsersDialogPurpose.directoryEntry,
+          ),
+        );
+        if (!host.mounted) return;
+        if (result == null || !result.continuedAsNew) return;
+      }
     }
 
     var cloneAsNewEmployee = false;

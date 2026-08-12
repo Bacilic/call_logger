@@ -215,15 +215,27 @@ class DepartmentFormSave {
           ? buildSaveConfirmationMessage(
               entityType: AuditEntityTypes.department,
               entityLabel: name,
-              oldMap: _departmentMapsForSaveConfirmation(ini!.toMap()),
-              newMap: _departmentMapsForSaveConfirmation(model.toMap()),
+              oldMap: _departmentMapsForSaveConfirmation(
+                ini!.toMap(),
+                sharedPhones: host.snapSharedPhones,
+                sharedEquipmentCodes: host.snapSharedEquipmentCodes,
+              ),
+              newMap: _departmentMapsForSaveConfirmation(
+                model.toMap(),
+                sharedPhones: sharedPhones,
+                sharedEquipmentCodes: sharedEquipmentCodes,
+              ),
               isNew: false,
             )
           : buildSaveConfirmationMessage(
               entityType: AuditEntityTypes.department,
               entityLabel: name,
               oldMap: const {},
-              newMap: _departmentMapsForSaveConfirmation(model.toMap()),
+              newMap: _departmentMapsForSaveConfirmation(
+                model.toMap(),
+                sharedPhones: sharedPhones,
+                sharedEquipmentCodes: sharedEquipmentCodes,
+              ),
               isNew: true,
             );
       host.widget.onSaved?.call();
@@ -322,10 +334,18 @@ class DepartmentFormSave {
     }
   }
 
+  /// Τα κοινόχρηστα τηλέφωνα και ο εξοπλισμός δεν ζουν στον πίνακα
+  /// `departments` — αποθηκεύονται χωριστά, οπότε λείπουν από το `toMap()` και
+  /// ως τώρα ήταν αόρατα στην επιβεβαίωση. Μπαίνουν εδώ, ώστε η αποθήκευση να
+  /// λέει και γι' αυτά τι άλλαξε.
   Map<String, dynamic> _departmentMapsForSaveConfirmation(
-    Map<String, dynamic> source,
-  ) {
+    Map<String, dynamic> source, {
+    required List<String> sharedPhones,
+    required List<String> sharedEquipmentCodes,
+  }) {
     final map = Map<String, dynamic>.from(source);
+    map['shared_phones'] = [...sharedPhones]..sort();
+    map['shared_equipment_codes'] = [...sharedEquipmentCodes]..sort();
     if (map.containsKey('floor_id')) {
       final raw = map['floor_id'];
       final id = raw is int ? raw : int.tryParse('$raw');

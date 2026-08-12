@@ -25,7 +25,12 @@ class CallLoggerTestMaterialApp extends StatelessWidget {
         visualDensity: VisualDensity.adaptivePlatformDensity,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const AppShellWithGlobalFatalError(child: AppInitWrapper()),
+      // Χωρίς οθόνη εκκίνησης: τα τεστ που στήνουν ολόκληρη την εφαρμογή
+      // ελέγχουν το κέλυφος, όχι την εικόνα της ημέρας — και ο ρυθμιστής της
+      // οθόνης θα κρέμαγε κάθε pumpAndSettle.
+      home: const AppShellWithGlobalFatalError(
+        child: AppInitWrapper(showStartupSplash: false),
+      ),
     );
   }
 }

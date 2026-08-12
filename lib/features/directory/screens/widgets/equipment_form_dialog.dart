@@ -699,7 +699,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
                                 onChanged: (_) => setState(() {}),
                               ),
                               CatalogValidationHintText(
-                                hint: validation?.equipmentCodeHint(
+                                hint: validation?.equipmentCodeFieldHint(
                                   codeController.text,
                                 ),
                               ),

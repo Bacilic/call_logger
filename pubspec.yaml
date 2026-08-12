@@ -94,6 +94,9 @@ flutter:
     - assets/
     - assets/anydesk_seeklogo.png
     - assets/vnc_viewer.png
+    # Εικόνες οθόνης εκκίνησης. Ο φάκελος δηλώνεται ολόκληρος: νέα εικόνα
+    # μπαίνει στην περιστροφή με απλή αντιγραφή, χωρίς αλλαγή εδώ.
+    - assets/splash/
     # Inter για widget tests με GoogleFonts.config.allowRuntimeFetching = false
     - assets/fonts/Inter-Regular.ttf
 

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../services/crash_log_service.dart';
+import 'startup_journal.dart';
 
 /// Σημειώσεις εκκίνησης που συλλέγονται όταν αποτυχίες δεν μπλοκάρουν την εκκίνηση,
 /// αλλά πρέπει να φανούν στην τεχνική οθόνη σφάλματος.
@@ -31,6 +32,34 @@ void recordStartupNotice(String phase, Object error, [StackTrace? stack]) {
 /// Διαγράφει όλη την ουρά (για απομόνωση τεστ).
 void clearStartupNotices() {
   _startupNotices.clear();
+}
+
+/// Τρέχει βήμα εκκίνησης που **δεν** επιτρέπεται να ρίξει την εφαρμογή.
+///
+/// Ένα βήμα νοικοκυριού έχει τρεις εκβάσεις και καθεμιά έχει τον δικό της
+/// παραλήπτη: η επιτυχία πάει στο ημερολόγιο που βλέπει ο χρήστης, η
+/// παράλειψη πουθενά (σιωπή είναι ο κανόνας όταν δεν υπήρχε δουλειά), και η
+/// αποτυχία και στα δύο — γραμμή προειδοποίησης στην οθόνη **και** σημείωση
+/// για την τεχνική αναφορά. Χωρίς αυτή τη συνάρτηση κάθε καλών θα θυμόταν
+/// μόνος του και τα τρία, που σημαίνει ότι κάποιος θα ξεχνούσε.
+///
+/// Το [action] επιστρέφει `true` όταν έκανε πράγματι δουλειά.
+Future<void> runStartupHousekeeping(
+  String label,
+  Future<bool> Function() action,
+) async {
+  final step = StartupJournal.instance.begin(label);
+  try {
+    final didWork = await action();
+    if (didWork) {
+      step.ok();
+    } else {
+      step.skip();
+    }
+  } catch (e, st) {
+    step.warn(e.toString());
+    recordStartupNotice(label, e, st);
+  }
 }
 
 /// Μορφοποιημένη έκθεση των σημειώσεων εκκίνησης.

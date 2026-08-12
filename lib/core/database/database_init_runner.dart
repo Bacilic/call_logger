@@ -113,6 +113,7 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
         progressNotifier?.setStep(
           'Η αρχικοποίηση ολοκληρώθηκε',
           clearSecondsRemaining: true,
+          kind: StartupStepKind.completed,
         );
         return remembered;
       }
@@ -180,6 +181,7 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
       'Αποτυχία αρχικοποίησης',
       clearSecondsRemaining: true,
       diagnosticInfo: ranked.details,
+      kind: StartupStepKind.failed,
     );
     return DatabaseInitRunnerResult(
       result: ranked,
@@ -262,6 +264,9 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
         : 'Αποτυχία αρχικοποίησης',
     clearSecondsRemaining: true,
     diagnosticInfo: finalResult.details,
+    kind: finalResult.isSuccess
+        ? StartupStepKind.completed
+        : StartupStepKind.failed,
   );
 
   return DatabaseInitRunnerResult(

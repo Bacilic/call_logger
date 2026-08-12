@@ -39,6 +39,11 @@ enum SimilarUsersDialogPurpose {
 
   /// Πρόκειται να αποθηκευτεί κλήση (κουμπί «Καταγραφή») — καμία εγγραφή καταλόγου.
   callRecord,
+
+  /// Μετονομάζεται ΥΠΑΡΧΟΥΣΑ εγγραφή και το νέο όνομα πέφτει πάνω σε άλλη.
+  /// Καμία εγγραφή δεν δημιουργείται, οπότε η διατύπωση δεν επιτρέπεται να
+  /// μιλά για «νέα εγγραφή» — ο χρήστης θα έψαχνε μια εγγραφή που δεν έγινε.
+  directoryRename,
 }
 
 /// Διάλογος όταν το ονοματεπώνυμο ταυτίζεται ή μοιάζει με ΥΠΑΡΧΟΥΣΕΣ εγγραφές του καταλόγου.
@@ -72,6 +77,8 @@ class SimilarUsersDialog extends StatelessWidget {
   final SimilarUsersDialogPurpose purpose;
 
   bool get _isCallRecord => purpose == SimilarUsersDialogPurpose.callRecord;
+
+  bool get _isRename => purpose == SimilarUsersDialogPurpose.directoryRename;
 
   bool get _allIdentical =>
       matches.isNotEmpty &&
@@ -150,11 +157,16 @@ class SimilarUsersDialog extends StatelessWidget {
     );
   }
 
-  /// Η καταγραφή κλήσης ΔΕΝ δημιουργεί εγγραφή καταλόγου — η διατύπωση δεν
-  /// επιτρέπεται να υπονοεί ότι δημιουργεί.
+  /// Ούτε η καταγραφή κλήσης ούτε η μετονομασία δημιουργούν εγγραφή καταλόγου
+  /// — η διατύπωση δεν επιτρέπεται να υπονοεί ότι δημιουργούν.
   String _closingQuestion(bool identical) {
     if (_isCallRecord) {
       return 'Θέλετε να καταχωρηθεί η κλήση σε αυτόν τον υπάλληλο ή να καταγραφεί το όνομα όπως το γράψατε;';
+    }
+    if (_isRename) {
+      return identical
+          ? 'Μετά τη μετονομασία θα υπάρχουν δύο εγγραφές με ταυτόσημο ονοματεπώνυμο. Θέλετε να συνεχίσετε ή να ακυρώσετε και να διορθώσετε;'
+          : 'Θέλετε να συνεχίσετε τη μετονομασία ή να ακυρώσετε και να διορθώσετε;';
     }
     if (identical) {
       return 'Πρόκειται για συνωνυμία (νέος υπάλληλος με το ίδιο όνομα) ή θέλετε να ακυρώσετε και να διορθώσετε την υπάρχουσα εγγραφή;';
@@ -166,6 +178,7 @@ class SimilarUsersDialog extends StatelessWidget {
 
   String _continueLabel(bool identical) {
     if (_isCallRecord) return 'Όχι, κατέγραψε όπως το έγραψα';
+    if (_isRename) return 'Ναι, συνέχισε τη μετονομασία';
     return identical ? 'Συνέχεια ως Συνωνυμία' : 'Όχι, είναι νέα εγγραφή';
   }
 

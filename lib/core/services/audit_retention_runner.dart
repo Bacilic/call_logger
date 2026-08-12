@@ -8,10 +8,13 @@ class AuditRetentionRunner {
   AuditRetentionRunner._();
 
   /// Αν [config.purgeOnAppStart] και [config.enabled], εκτελεί εκκαθάριση.
-  static Future<void> applyIfConfiguredOnStartup() async {
+  /// Επιστρέφει `true` μόνο όταν διαγράφηκε πράγματι κάτι — η εκκίνηση
+  /// ανακοινώνει μόνο τα βήματα που είχαν δουλειά.
+  static Future<bool> applyIfConfiguredOnStartup() async {
     final config = await SettingsService().catalogs.getAuditRetentionConfig();
-    if (!config.enabled || !config.purgeOnAppStart) return;
-    await applyWithConfig(config);
+    if (!config.enabled || !config.purgeOnAppStart) return false;
+    final removed = await applyWithConfig(config);
+    return removed.byAge > 0 || removed.byTrim > 0;
   }
 
   /// Εκτέλεση με συγκεκριμένη πολιτική (π.χ. από UI «Εκκαθάριση τώρα»).

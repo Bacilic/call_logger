@@ -143,6 +143,90 @@ void main() {
     });
   });
 
+  group('equipmentCodeChipDiagnosis — τρεις βαθμίδες', () {
+    test('σκέτος αριθμός στο σωστό εύρος: καμία παρατήρηση', () {
+      expect(service.equipmentCodeChipDiagnosis('446').hasRemark, isFalse);
+      expect(service.equipmentCodeChipDiagnosis('5067').hasRemark, isFalse);
+    });
+
+    test('σκέτος αριθμός εκτός εύρους: ήπια, με το μήνυμα του μήκους', () {
+      final d = service.equipmentCodeChipDiagnosis('25067');
+      expect(d.severity, CatalogChipSeverity.suspicious);
+      expect(d.message, 'Το 25067 έχει 5 ψηφία — αναμένονται 3 έως 4');
+    });
+
+    test('λατινικά γράμματα: ήπια — σπάνιο αλλά θεμιτό', () {
+      final d = service.equipmentCodeChipDiagnosis('PC470');
+      expect(d.severity, CatalogChipSeverity.suspicious);
+      expect(d.message, contains('σπάνιο'));
+    });
+
+    test('παύλα, κάτω παύλα και τελεία δεν μετρούν ως σύμβολα', () {
+      // Κωδικοί τύπου «SRV-01» είναι θεμιτοί· αν έπεφταν στην έντονη βαθμίδα,
+      // ο κανόνας θα ούρλιαζε σε κάθε σωστή εγγραφή.
+      for (final code in <String>['SRV-01', 'PC_2', 'A.1']) {
+        expect(
+          service.equipmentCodeChipDiagnosis(code).severity,
+          CatalogChipSeverity.suspicious,
+          reason: 'το «$code» είναι λατινικός κωδικός, όχι σκουπίδι',
+        );
+      }
+    });
+
+    test('ελληνικά: έντονη, με τους ένοχους χαρακτήρες και την αιτία', () {
+      final d = service.equipmentCodeChipDiagnosis('πισι2');
+      expect(d.severity, CatalogChipSeverity.wrong);
+      expect(d.message, contains('π'));
+      expect(d.message, contains('ελληνικό πληκτρολόγιο'));
+    });
+
+    test('σύμβολα: έντονη, χωρίς να κατηγορεί το πληκτρολόγιο', () {
+      final d = service.equipmentCodeChipDiagnosis(r'$%^*');
+      expect(d.severity, CatalogChipSeverity.wrong);
+      expect(d.message, isNot(contains('ελληνικό πληκτρολόγιο')));
+    });
+
+    test('κενός κωδικός: καμία παρατήρηση', () {
+      expect(service.equipmentCodeChipDiagnosis('   ').hasRemark, isFalse);
+    });
+
+    test('σβηστός διακόπτης λατινικών: καθαρό, όχι υποβάθμιση', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(equipmentLatinCodeEnabled: false),
+      );
+      expect(s.equipmentCodeChipDiagnosis('PC470').hasRemark, isFalse);
+      expect(
+        s.equipmentCodeChipDiagnosis('πισι2').severity,
+        CatalogChipSeverity.wrong,
+        reason: 'ο ένας διακόπτης δεν σβήνει τον άλλον',
+      );
+    });
+
+    test('σβηστός διακόπτης ελληνικών/συμβόλων: καθαρό', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(equipmentForeignCodeEnabled: false),
+      );
+      expect(s.equipmentCodeChipDiagnosis('πισι2').hasRemark, isFalse);
+      expect(
+        s.equipmentCodeChipDiagnosis('PC470').severity,
+        CatalogChipSeverity.suspicious,
+      );
+    });
+  });
+
+  group('phoneChipDiagnosis — κάθε αριθμός κρίνεται μόνος του', () {
+    test('δύο προβληματικοί: ο καθένας παίρνει τη δική του κρίση', () {
+      // Το παλιό συγκεντρωτικό μήνυμα σταματούσε στον πρώτο· έτσι ο δεύτερος
+      // εμφανιζόταν μόνο αφού διορθωνόταν ο πρώτος.
+      expect(service.phoneChipDiagnosis('4569').hasRemark, isTrue);
+      expect(service.phoneChipDiagnosis('6666').hasRemark, isTrue);
+    });
+
+    test('σωστό τηλέφωνο: καμία παρατήρηση', () {
+      expect(service.phoneChipDiagnosis('2534').hasRemark, isFalse);
+    });
+  });
+
   group('departmentNameHint — όνομα που μοιάζει με αριθμό', () {
     test('σκέτος αριθμός (το ιστορικό λάθος): υπόδειξη', () {
       expect(
@@ -1201,6 +1285,8 @@ void main() {
         equipmentDigitsEnabled: false,
         equipmentMinDigits: 2,
         equipmentMaxDigits: 6,
+        equipmentLatinCodeEnabled: false,
+        equipmentForeignCodeEnabled: false,
         departmentNameEnabled: false,
         personNameEnabled: false,
         personNameAllowedSymbols: '(, -, .',

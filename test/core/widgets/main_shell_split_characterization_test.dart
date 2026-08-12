@@ -25,7 +25,7 @@ Future<void> _pumpMainShellApp(WidgetTester tester) async {
           showLampNavProvider.overrideWith((ref) async => true),
           enableSpellCheckProvider.overrideWith((ref) async => true),
         ],
-        child: const MyApp(),
+        child: const MyApp(showStartupSplash: false),
       ),
     );
     await tester.pump();
@@ -121,7 +121,7 @@ void main() {
                 enableSpellCheckProvider.overrideWith((ref) async => true),
                 globalPendingTasksCountProvider.overrideWith((ref) async => 4),
               ],
-              child: const MyApp(),
+              child: const MyApp(showStartupSplash: false),
             ),
           );
           await tester.pump();

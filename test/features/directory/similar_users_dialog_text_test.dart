@@ -192,6 +192,39 @@ void main() {
     },
   );
 
+  testWidgets('μετονομασία — καμία διατύπωση περί νέας εγγραφής', (
+    tester,
+  ) async {
+    await pumpDialog(
+      tester,
+      purpose: SimilarUsersDialogPurpose.directoryRename,
+      typedDisplayName: 'Θάνια Αναγνωστοπούλου',
+      matches: [
+        UserSimilarityMatch(
+          user: UserModel(
+            id: 1,
+            firstName: 'Θάνια',
+            lastName: 'Αναγνωστοπούλου',
+            departmentId: 1,
+            departmentName: 'Γραμματεία Κίνησης',
+          ),
+          score: UserSimilarityFinder.kIdenticalScore,
+        ),
+      ],
+    );
+
+    expect(find.text('Ναι, συνέχισε τη μετονομασία'), findsOneWidget);
+    expect(
+      find.textContaining('νέα εγγραφή'),
+      findsNothing,
+      reason: greekExpectMsg(
+        'Η μετονομασία υπάρχουσας εγγραφής δεν δημιουργεί δεύτερη',
+      ),
+    );
+    expect(find.text('Συνέχεια ως Συνωνυμία'), findsNothing);
+    expect(find.textContaining('συνωνυμία'), findsNothing);
+  });
+
   testWidgets(
     'σύγκριση — δείχνει τι πληκτρολογήθηκε και τι υπάρχει, με ετικέτες',
     (tester) async {

@@ -19,6 +19,8 @@ class CatalogValidationRules {
     this.equipmentDigitsEnabled = true,
     this.equipmentMinDigits = 3,
     this.equipmentMaxDigits = 4,
+    this.equipmentLatinCodeEnabled = true,
+    this.equipmentForeignCodeEnabled = true,
     this.departmentNameEnabled = true,
     this.personNameEnabled = true,
     this.personNameAllowedSymbols = defaultPersonNameAllowedSymbols,
@@ -50,9 +52,21 @@ class CatalogValidationRules {
   final int internalPrefixTo;
 
   /// Έλεγχος πλήθους ψηφίων κωδικού εξοπλισμού (εύρος από-έως).
+  /// Εξετάζεται ΜΟΝΟ σε κωδικούς που είναι σκέτοι αριθμοί — σε «PC470» το
+  /// πλήθος ψηφίων δεν σημαίνει τίποτα.
   final bool equipmentDigitsEnabled;
   final int equipmentMinDigits;
   final int equipmentMaxDigits;
+
+  /// Κωδικός εξοπλισμού με λατινικά γράμματα (π.χ. «PC470»): **σπάνιο** αλλά
+  /// θεμιτό. Η ένδειξη είναι διακριτική — αν το σχήμα είναι συνηθισμένο στη
+  /// δική σας βάση, ο κανόνας σβήνει από εδώ.
+  final bool equipmentLatinCodeEnabled;
+
+  /// Κωδικός εξοπλισμού με ελληνικά γράμματα ή σύμβολα: **απίθανο**, σχεδόν
+  /// πάντα ξεχασμένο ελληνικό πληκτρολόγιο («πισι2» αντί «pc2») ή σκουπίδι
+  /// από βιαστική πληκτρολόγηση.
+  final bool equipmentForeignCodeEnabled;
 
   /// Το όνομα τμήματος να μη μοιάζει με αριθμό/τηλέφωνο.
   final bool departmentNameEnabled;
@@ -128,6 +142,8 @@ class CatalogValidationRules {
     bool? equipmentDigitsEnabled,
     int? equipmentMinDigits,
     int? equipmentMaxDigits,
+    bool? equipmentLatinCodeEnabled,
+    bool? equipmentForeignCodeEnabled,
     bool? departmentNameEnabled,
     bool? personNameEnabled,
     String? personNameAllowedSymbols,
@@ -154,6 +170,10 @@ class CatalogValidationRules {
           equipmentDigitsEnabled ?? this.equipmentDigitsEnabled,
       equipmentMinDigits: equipmentMinDigits ?? this.equipmentMinDigits,
       equipmentMaxDigits: equipmentMaxDigits ?? this.equipmentMaxDigits,
+      equipmentLatinCodeEnabled:
+          equipmentLatinCodeEnabled ?? this.equipmentLatinCodeEnabled,
+      equipmentForeignCodeEnabled:
+          equipmentForeignCodeEnabled ?? this.equipmentForeignCodeEnabled,
       departmentNameEnabled:
           departmentNameEnabled ?? this.departmentNameEnabled,
       personNameEnabled: personNameEnabled ?? this.personNameEnabled,
@@ -187,6 +207,8 @@ class CatalogValidationRules {
     'equipment_digits_enabled': equipmentDigitsEnabled,
     'equipment_min_digits': equipmentMinDigits,
     'equipment_max_digits': equipmentMaxDigits,
+    'equipment_latin_code_enabled': equipmentLatinCodeEnabled,
+    'equipment_foreign_code_enabled': equipmentForeignCodeEnabled,
     'department_name_enabled': departmentNameEnabled,
     'person_name_enabled': personNameEnabled,
     'person_name_allowed_symbols': personNameAllowedSymbols,
@@ -260,6 +282,16 @@ class CatalogValidationRules {
         map,
         'equipment_digits_enabled',
         d.equipmentDigitsEnabled,
+      ),
+      equipmentLatinCodeEnabled: _boolOf(
+        map,
+        'equipment_latin_code_enabled',
+        d.equipmentLatinCodeEnabled,
+      ),
+      equipmentForeignCodeEnabled: _boolOf(
+        map,
+        'equipment_foreign_code_enabled',
+        d.equipmentForeignCodeEnabled,
       ),
       equipmentMinDigits: _intOf(
         map,

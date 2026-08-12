@@ -24,7 +24,7 @@ Future<void> _loadCallsScreen(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: callLoggerTestProviderOverrides(),
-        child: const MyApp(),
+        child: const MyApp(showStartupSplash: false),
       ),
     );
     await tester.pump();

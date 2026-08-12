@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,12 +15,13 @@ import 'package:window_manager/window_manager.dart';
 import 'core/about/version_display.dart';
 import 'core/config/app_config.dart';
 import 'core/init/startup_engine_failure.dart';
+import 'core/init/startup_journal.dart';
 import 'core/init/startup_notices.dart';
+import 'core/init/startup_window_placement.dart';
 import 'core/updates/update_providers.dart';
 import 'core/utils/windows_cli_error_dialog.dart';
 import 'core/services/app_close_controller.dart';
 import 'core/services/crash_log_service.dart';
-import 'core/services/desktop_window_service.dart';
 import 'core/services/settings_service.dart';
 import 'core/errors/app_error_result.dart';
 import 'core/errors/nonfatal_font_error_classifier.dart';
@@ -29,19 +29,6 @@ import 'core/widgets/crash_restart_notice.dart';
 import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
 import 'core/widgets/global_fatal_error_notifier.dart';
-import 'features/calls/screens/widgets/call_header_form.dart';
-
-/// Ελάχιστο πλάτος: γραμμή πεδίων + padding Κλήσεων (16*2) + συμπυγμένο NavigationRail + περιθώριο.
-const double _kCallsScreenPaddingH = 32;
-const double _kNavigationRailMinWidth = 80;
-const double _kMinWindowWidthMargin = 20;
-
-final double _kMinWindowWidth =
-    kCallHeaderRowMinWidth +
-    _kCallsScreenPaddingH +
-    _kNavigationRailMinWidth +
-    _kMinWindowWidthMargin;
-const double _kMinWindowHeight = 640;
 
 void _routeFatalErrorToUi(Object exception, StackTrace stack) {
   final result = AppErrorResult.fromException(exception, stack);
@@ -105,29 +92,39 @@ void _rootZoneErrorHandler(Object error, StackTrace stack) {
 }
 
 Future<void> main(List<String> arguments) async {
+  final journal = StartupJournal.instance;
+
+  final cliStep = journal.begin('Έλεγχος ορισμάτων εκκίνησης');
   final cliValidation = AppConfig.validateCliArguments(arguments);
   if (!cliValidation.isValid) {
+    cliStep.fail(cliValidation.buildErrorMessage());
     showWindowsCliErrorDialog(cliValidation.buildErrorMessage());
     exit(1);
   }
+  cliStep.ok();
 
   await runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
       // Το debug build απομονώνεται αυτόματα στο προφίλ «dev»: τρέχει από τον
       // επεξεργαστή κώδικα, όπου δεν υπάρχει συντόμευση για να περαστεί όρισμα.
+      final profileStep = journal.begin('Επιλογή προφίλ δεδομένων');
       await AppConfig.configureFromCliArguments(
         arguments,
         defaultProfileWhenAbsent: kDebugMode
             ? AppConfig.debugDefaultProfileName
             : null,
       );
+      profileStep.ok();
 
       // Εκκρεμής ενημέρωση: αν υπάρχει έτοιμο πακέτο από προηγούμενη «Αναμονή»,
       // εφάρμοσέ το τώρα (εκκίνηση updater + κλείσιμο) πριν φορτώσει η εφαρμογή.
+      final pendingStep = journal.begin('Έλεγχος εκκρεμούς ενημέρωσης');
       if (await maybeApplyPendingUpdateOnStartup()) {
+        pendingStep.ok('Εφαρμογή εκκρεμούς ενημέρωσης');
         return; // η εφαρμογή κλείνει· ο updater θα την ξανανοίξει.
       }
+      pendingStep.skip();
 
       FlutterError.onError = (FlutterErrorDetails details) {
         final st = details.stack ?? StackTrace.empty;
@@ -184,15 +181,22 @@ Future<void> main(List<String> arguments) async {
 }
 
 Future<void> _bootstrapAndRunApp() async {
+  final journal = StartupJournal.instance;
   String appVersion = 'unknown';
   if (Platform.isWindows) {
+    final engineStep = journal.begin('Φόρτωση μηχανής SQLite');
     try {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
+      engineStep.ok();
     } catch (e, st) {
+      // Δεν σταματά εδώ: ο έλεγχος βάσης δίνει πολύ καλύτερο μήνυμα από
+      // «databaseFactory not initialized». Η γραμμή μένει ως προειδοποίηση.
+      engineStep.warn(e.toString());
       recordStartupEngineFailure(e, st);
     }
 
+    final windowStep = journal.begin('Προετοιμασία παραθύρου');
     try {
       final wm = WindowManager.instance;
       await wm.ensureInitialized();
@@ -214,24 +218,24 @@ Future<void> _bootstrapAndRunApp() async {
         recordStartupNotice('Τίτλος παραθύρου / έκδοση', e, st);
       }
       final display = await ScreenRetriever.instance.getPrimaryDisplay();
-      final screenWidth = display.size.width;
-      final screenHeight = display.size.height;
-      final minW = math.min(_kMinWindowWidth, screenWidth);
-      final minH = math.min(_kMinWindowHeight, screenHeight);
-      await wm.setMinimumSize(Size(minW, minH));
+      // Φάση 1: η κάρτα της εκκίνησης. Το ελάχιστο μέγεθος και οι
+      // αποθηκευμένες διαστάσεις μπαίνουν μόλις φύγει η οθόνη εκκίνησης —
+      // δες StartupWindowPlacement.
+      await StartupWindowPlacement.applySplashWindow(
+        windowManager: wm,
+        screenWidth: display.size.width,
+        screenHeight: display.size.height,
+      );
       await wm.waitUntilReadyToShow(null, () async {
         await wm.show();
       });
-      await DesktopWindowService().applyStartupPlacement(
-        windowManager: wm,
-        screenWidth: screenWidth,
-        screenHeight: screenHeight,
-        minWidth: minW,
-        minHeight: minH,
-      );
-    } catch (_) {}
+      windowStep.ok();
+    } catch (e) {
+      windowStep.warn(e.toString());
+    }
   }
 
+  final logStep = journal.begin('Άνοιγμα ημερολογίου καταρρεύσεων');
   try {
     if (appVersion == 'unknown') {
       final pkg = await PackageInfo.fromPlatform();
@@ -248,17 +252,26 @@ Future<void> _bootstrapAndRunApp() async {
       appVersion: appVersion,
       retentionCount: await settings.catalogs.getCrashLogRetentionCount(),
     );
+    logStep.ok();
   } catch (e, st) {
+    logStep.warn(e.toString());
     recordStartupNotice('Ημερολόγιο καταρρεύσεων', e, st);
   }
 
   flushStartupNoticesToCrashLog();
 
+  // Ό,τι έγινε ως εδώ δεν ξανατρέχει — ούτε στην επαναδοκιμή, ούτε στην
+  // εναλλαγή βάσης. Σφραγίζεται ώστε να επιβιώνει κάθε νέας προσπάθειας.
+  journal.sealBootPrefix();
+
   runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, this.showStartupSplash = true});
+
+  /// Αν θα προβληθεί η οθόνη εκκίνησης. Δες [AppInitWrapper.showStartupSplash].
+  final bool showStartupSplash;
 
   @override
   Widget build(BuildContext context) {
@@ -297,7 +310,9 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: CrashRestartNotice(
-        child: const AppShellWithGlobalFatalError(child: AppInitWrapper()),
+        child: AppShellWithGlobalFatalError(
+          child: AppInitWrapper(showStartupSplash: showStartupSplash),
+        ),
       ),
     );
   }
