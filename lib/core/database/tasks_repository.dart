@@ -605,6 +605,21 @@ class TasksRepository {
     );
   }
 
+  /// Η στιγμή ολοκλήρωσης μιας κλειστής εκκρεμότητας, σε SQL.
+  ///
+  /// Το `completed_at` σφραγίζεται **μόνο** στη μετάβαση προς «ολοκληρωμένη»
+  /// και δεν κουνιέται από μεταγενέστερες διορθώσεις κειμένου· το `updated_at`
+  /// κουνιέται με κάθε αποθήκευση. Ένα ορθογραφικό που διορθώθηκε έξι μέρες
+  /// αργότερα δεν είναι νέα ολοκλήρωση.
+  ///
+  /// Η εφεδρεία στο `updated_at` αφορά εγγραφές που γεννήθηκαν πριν υπάρξει
+  /// σφραγίδα: καλύτερα μια προσέγγιση παρά ολοκλήρωση που εξαφανίζεται από τα
+  /// στατιστικά.
+  ///
+  /// Γράφεται μία φορά και χρησιμοποιείται από **κάθε** ερώτημα ολοκληρώσεων,
+  /// ώστε ένα μελλοντικό ερώτημα να μην μπορεί να ξεχάσει τον κανόνα.
+  static const String _completionMoment = 'COALESCE(completed_at, updated_at)';
+
   Future<TaskAnalyticsSummary> getTaskAnalytics(DateTimeRange range) async {
     final db = await _db;
     final normalized = _normalizeRange(range);
@@ -643,7 +658,7 @@ class TasksRepository {
     final closedInRangeCount = await countByQuery(
       "SELECT COUNT(*) AS count FROM tasks "
       "WHERE status = 'closed' AND COALESCE(is_deleted, 0) = 0 "
-      "AND updated_at >= ? AND updated_at < ?",
+      "AND $_completionMoment >= ? AND $_completionMoment < ?",
       [startIso, endExclusiveIso],
     );
     final cancelledInRangeCount = await countByQuery(
@@ -672,11 +687,11 @@ class TasksRepository {
     );
 
     final avgCompletionRows = await db.rawQuery(
-      "SELECT AVG((julianday(updated_at) - julianday(created_at)) * 86400.0) AS avg_seconds "
+      "SELECT AVG((julianday($_completionMoment) - julianday(created_at)) * 86400.0) AS avg_seconds "
       "FROM tasks "
       "WHERE status = 'closed' AND COALESCE(is_deleted, 0) = 0 "
-      "AND created_at IS NOT NULL AND updated_at IS NOT NULL "
-      "AND updated_at >= ? AND updated_at < ?",
+      "AND created_at IS NOT NULL AND $_completionMoment IS NOT NULL "
+      "AND $_completionMoment >= ? AND $_completionMoment < ?",
       [startIso, endExclusiveIso],
     );
     final avgCompletionSeconds = avgCompletionRows.isEmpty
@@ -734,11 +749,11 @@ class TasksRepository {
       [startIso, endExclusiveIso],
     );
     final closedByDayRows = await db.rawQuery(
-      "SELECT SUBSTR(updated_at, 1, 10) AS day, COUNT(*) AS count "
+      "SELECT SUBSTR($_completionMoment, 1, 10) AS day, COUNT(*) AS count "
       "FROM tasks "
       "WHERE status = 'closed' AND COALESCE(is_deleted, 0) = 0 "
-      "AND updated_at >= ? AND updated_at < ? "
-      "GROUP BY SUBSTR(updated_at, 1, 10)",
+      "AND $_completionMoment >= ? AND $_completionMoment < ? "
+      "GROUP BY SUBSTR($_completionMoment, 1, 10)",
       [startIso, endExclusiveIso],
     );
     final createdByDay = _countMapByDay(createdByDayRows);
@@ -905,11 +920,11 @@ class TasksRepository {
       [startIso, endExclusiveIso],
     );
     final closedRows = await db.rawQuery(
-      "SELECT SUBSTR(updated_at, 1, 10) AS day, COUNT(*) AS count "
+      "SELECT SUBSTR($_completionMoment, 1, 10) AS day, COUNT(*) AS count "
       "FROM tasks "
       "WHERE status = 'closed' AND COALESCE(is_deleted, 0) = 0 "
-      "AND updated_at >= ? AND updated_at < ? "
-      "GROUP BY SUBSTR(updated_at, 1, 10)",
+      "AND $_completionMoment >= ? AND $_completionMoment < ? "
+      "GROUP BY SUBSTR($_completionMoment, 1, 10)",
       [startIso, endExclusiveIso],
     );
     final cancelledRows = await db.rawQuery(

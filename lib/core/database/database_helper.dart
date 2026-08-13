@@ -5,10 +5,12 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
+import '../services/crash_log_service.dart';
 import '../services/settings_service.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_access_probe.dart';
 import 'database_file_classifier.dart';
+import 'database_file_identity.dart';
 import 'database_init_result.dart';
 import 'database_init_progress_provider.dart';
 import 'database_lexicon_open_normalizations.dart';
@@ -120,6 +122,19 @@ class DatabaseHelper {
   bool _isUsingLocalDb = false;
   DatabaseFileProfile? _lastDatabaseProfile;
 
+  /// Η διαδρομή του αρχείου που άνοιξε πραγματικά (μετά από κάθε fallback).
+  String? _openedDatabasePath;
+
+  /// Πώς έδειχνε το αρχείο τη στιγμή που το ανοίξαμε.
+  ///
+  /// Ανανεώνεται σε κάθε ήσυχο έλεγχο, ώστε η σύγκριση να γίνεται πάντα με
+  /// πρόσφατη αφετηρία: όσο πιο κοντινή η αφετηρία, τόσο στενότερο το παράθυρο
+  /// μέσα στο οποίο μια αντικατάσταση θα μπορούσε να περάσει απαρατήρητη.
+  DatabaseFileIdentity? _openedFileIdentity;
+
+  /// Η διαδρομή του αρχείου βάσης που είναι ανοιχτό αυτή τη στιγμή.
+  String? get openedDatabasePath => _openedDatabasePath;
+
   /// True αν η εφαρμογή χρησιμοποιεί την τοπική βάση (Dev Mode).
   bool get isUsingLocalDb => _isUsingLocalDb;
 
@@ -174,6 +189,11 @@ class DatabaseHelper {
 
   /// Κλείνει την τρέχουσα σύνδεση και επαναφέρει την κατάσταση.
   /// Περιμένει τυχόν εκκρεμές άνοιγμα, checkpoint (best-effort) και κλείσιμο sqflite.
+  ///
+  /// Όταν το αρχείο έχει αντικατασταθεί απ' έξω, το κλείσιμο αλλάζει χαρακτήρα:
+  /// αντί να σώσει ό,τι εκκρεμεί, φροντίζει **να μη γράψει τίποτα**. Δεν υπάρχει
+  /// παράμετρος γι' αυτό επίτηδες — ο έλεγχος κοστίζει την ανάγνωση 100 bytes και
+  /// γίνεται πάντα, ώστε καμία ροή να μην μπορεί να τον ξεχάσει.
   Future<void> closeConnection() async {
     requestOpeningAbort();
 
@@ -188,18 +208,12 @@ class DatabaseHelper {
 
     final db = _database;
     if (db != null && db.isOpen) {
-      try {
-        final mode = _isUsingLocalDb ? 'FULL' : 'PASSIVE';
-        await db
-            .rawQuery('PRAGMA wal_checkpoint($mode)')
-            .timeout(
-              Duration(seconds: databaseWalCheckpointTimeoutSeconds),
-              onTimeout: () => throw TimeoutException(
-                'wal_checkpoint($mode) timed out after '
-                '${databaseWalCheckpointTimeoutSeconds}s',
-              ),
-            );
-      } catch (_) {}
+      final replacedPath = await _replacedDatabasePathOrNull();
+      if (replacedPath != null) {
+        await _abandonReplacedFile(replacedPath);
+      } else {
+        await _checkpoint(db, _isUsingLocalDb ? 'FULL' : 'PASSIVE');
+      }
       await db.close();
     }
     _database = null;
@@ -207,6 +221,8 @@ class DatabaseHelper {
     _userAbortCompleter = null;
     _isUsingLocalDb = false;
     _lastDatabaseProfile = null;
+    _openedDatabasePath = null;
+    _openedFileIdentity = null;
     // Πάντα, ακόμα κι όταν δεν υπήρχε ανοιχτή σύνδεση: προτιμότερο ένα
     // περιττό ξαναέλεγχο από ένα «όλα καλά» πάνω σε κλειστή βάση.
     _connectionGeneration++;
@@ -253,6 +269,7 @@ class DatabaseHelper {
       throw _enrichSchemaValidationException(e);
     }
     await db.execute('PRAGMA journal_mode = WAL;');
+    await _captureFileIdentity(dbPath);
     // ΔΕΝ καταγράφεται «τελευταία ανοιγμένη βάση»: αυτή η διαδρομή ανοίγει
     // αρχείο που έδεσε τεστ, όχι βάση που επέλεξε ο χρήστης. Η καταγραφή
     // ανήκει αποκλειστικά στην κανονική ροή ανοίγματος.
@@ -265,17 +282,116 @@ class DatabaseHelper {
     final effective = normalized.isEmpty ? 'PASSIVE' : normalized;
     final db = _database;
     if (db == null || !db.isOpen) return;
+    await _checkpointUnlessFileReplaced(db, effective);
+  }
+
+  /// Το ΕΝΑ σημείο όπου το WAL γράφεται πίσω στο κύριο αρχείο.
+  ///
+  /// Κάθε ροή που έκανε checkpoint —κλείσιμο εφαρμογής, ελαχιστοποίηση,
+  /// εναλλαγή βάσης, απελευθέρωση κλειδώματος— περνά από εδώ, οπότε ο φρουρός
+  /// γράφεται μία φορά και δεν μπορεί να ξεχαστεί από μελλοντικό καλούντα.
+  ///
+  /// Επιστρέφει `false` όταν το checkpoint παραλείφθηκε επειδή το αρχείο δεν
+  /// είναι πια αυτό που ανοίξαμε.
+  Future<bool> _checkpointUnlessFileReplaced(Database db, String mode) async {
+    if (await _replacedDatabasePathOrNull() != null) return false;
+    await _checkpoint(db, mode);
+    return true;
+  }
+
+  /// Η διαδρομή του ανοιχτού αρχείου όταν έχει αντικατασταθεί· αλλιώς `null`.
+  Future<String?> _replacedDatabasePathOrNull() async {
+    final path = _openedDatabasePath;
+    if (path == null) return null;
+    return await databaseFileWasReplaced() ? path : null;
+  }
+
+  /// Εγκαταλείπει αρχείο που δεν είναι πια δικό μας, χωρίς να το πειράξει.
+  ///
+  /// Δεν αρκεί να παραλείψουμε το δικό μας checkpoint: **το ίδιο το `close()`
+  /// του SQLite κάνει checkpoint** όταν κλείνει η τελευταία σύνδεση σε WAL, και
+  /// θα έγραφε τις σελίδες της παλιάς βάσης πάνω στο ξένο περιεχόμενο.
+  /// Μετρημένο, όχι υποθετικό: με γεμάτο WAL το αρχείο των 8 KB έγινε 16 KB
+  /// μετά το κλείσιμο· με αδειασμένο WAL έμεινε ακριβώς όπως ήταν.
+  ///
+  /// Το περιεχόμενο του WAL δεν πετιέται αθόρυβα: φυλάγεται δίπλα ως
+  /// `<βάση>.orphan-wal`. Ανήκει σε βάση που δεν βρίσκεται πια σε αυτή τη θέση,
+  /// αλλά η απόφαση «άχρηστο» δεν είναι δική μας.
+  Future<void> _abandonReplacedFile(String dbPath) async {
+    CrashLogService.instanceOrNull?.logError(
+      StateError(
+        'Το αρχείο βάσης αντικαταστάθηκε από έξω όσο η εφαρμογή ήταν ανοιχτή '
+        '($dbPath). Η σύνδεση κλείνει χωρίς εγγραφή.',
+      ),
+      StackTrace.current,
+      fatal: false,
+    );
+
+    final wal = File('$dbPath-wal');
+    try {
+      if (!await wal.exists()) return;
+      if (await wal.length() == 0) return;
+      try {
+        await wal.copy('$dbPath.orphan-wal');
+      } catch (_) {
+        // Η φύλαξη είναι ευγένεια· η ουδετεροποίηση είναι η δουλειά.
+      }
+      final handle = await wal.open(mode: FileMode.write);
+      try {
+        await handle.truncate(0);
+      } finally {
+        await handle.close();
+      }
+    } catch (_) {
+      // Αν δεν μπορούμε να αγγίξουμε το WAL, το κλείσιμο συνεχίζει όπως-όπως:
+      // δεν υπάρχει καλύτερη επιλογή και η εναλλακτική είναι να κολλήσει η έξοδος.
+    }
+  }
+
+  Future<void> _checkpoint(Database db, String mode) async {
     try {
       await db
-          .rawQuery('PRAGMA wal_checkpoint($effective)')
+          .rawQuery('PRAGMA wal_checkpoint($mode)')
           .timeout(
             Duration(seconds: databaseWalCheckpointTimeoutSeconds),
             onTimeout: () => throw TimeoutException(
-              'wal_checkpoint($effective) timed out after '
+              'wal_checkpoint($mode) timed out after '
               '${databaseWalCheckpointTimeoutSeconds}s',
             ),
           );
     } catch (_) {}
+  }
+
+  /// Καταγράφει πώς δείχνει τώρα το αρχείο — η αφετηρία κάθε επόμενης κρίσης.
+  Future<void> _captureFileIdentity(String dbPath) async {
+    _openedDatabasePath = dbPath;
+    _openedFileIdentity = await readDatabaseFileIdentity(dbPath);
+  }
+
+  /// Έχει αντικατασταθεί το αρχείο βάσης απ' έξω από τότε που το ανοίξαμε;
+  ///
+  /// **Fail-open:** χωρίς αφετηρία, με άφταστο αρχείο ή με οποιαδήποτε αποτυχία
+  /// ανάγνωσης η απάντηση είναι `false`. Η άγνοια δεν σταματά τη δουλειά — μόνο
+  /// η θετική απόδειξη το κάνει. Σε κοινόχρηστη βάση αυτή η επιλογή είναι η
+  /// διαφορά ανάμεσα σε φρουρό και σε εμπόδιο.
+  ///
+  /// Όταν η εικόνα είναι ομαλή, η αφετηρία ανανεώνεται επιτόπου: η επόμενη
+  /// σύγκριση γίνεται με ό,τι ίσχυε πριν από λίγο, όχι με ό,τι ίσχυε στην
+  /// εκκίνηση.
+  Future<bool> databaseFileWasReplaced() async {
+    final path = _openedDatabasePath;
+    final baseline = _openedFileIdentity;
+    if (path == null || baseline == null) return false;
+
+    final verdict = await verifyDatabaseFileIdentity(
+      path: path,
+      before: baseline,
+    );
+    if (verdict == DatabaseIdentityVerdict.unchangedOrNormal) {
+      final fresh = await readDatabaseFileIdentity(path);
+      if (fresh != null) _openedFileIdentity = fresh;
+    }
+    return verdict == DatabaseIdentityVerdict.replaced;
   }
 
   Future<String> forceReleaseLock(
@@ -449,6 +565,7 @@ class DatabaseHelper {
           throw _enrichSchemaValidationException(e);
         }
         await db.execute('PRAGMA journal_mode = WAL;');
+        await _captureFileIdentity(dbPath);
         await SettingsService().setLastOpenedDatabasePath(dbPath);
         progressNotifier?.setStep(
           'Η βάση άνοιξε επιτυχώς',

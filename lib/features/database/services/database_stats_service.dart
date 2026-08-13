@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/database_identity_repository.dart';
 import '../../../core/database/database_maintenance_repository.dart';
 import '../../../core/database/settings_repository.dart';
 import '../models/database_backup_settings.dart';
@@ -101,11 +102,81 @@ class DatabaseStatsService {
       );
     } catch (_) {}
 
+    final identity = await _readIdentity(
+      DatabaseIdentityRepository(db),
+      dbPath,
+    );
+
     return DatabaseStats(
       fileSizeBytes: fileSizeBytes,
       dbPath: dbPath,
       rowCountsByTable: rowCounts,
       lastBackupTime: lastBackup,
+      label: identity.label,
+      schemaVersion: identity.schemaVersion,
+      lastChangeAt: identity.lastChangeAt,
+      firstCallDate: identity.firstCallDate,
+      lastCallDate: identity.lastCallDate,
+      reclaimableBytes: identity.reclaimableBytes,
+      pendingWalBytes: identity.pendingWalBytes,
     );
   }
+
+  /// Ταυτότητα και υγεία της βάσης, με κάθε στοιχείο ανεξάρτητα ανεκτικό.
+  ///
+  /// Κάθε ερώτημα μπαίνει σε δικό του `try`: μια βάση με σβησμένο ιστορικό ή
+  /// με ασυνήθιστο σχήμα οφείλει να δείχνει ό,τι ξέρουμε γι' αυτήν, όχι να
+  /// αφήνει ολόκληρη την κάρτα κενή επειδή ένα ερώτημα απέτυχε.
+  static Future<_DatabaseIdentity> _readIdentity(
+    DatabaseIdentityRepository repo,
+    String dbPath,
+  ) async {
+    Future<T?> quiet<T>(Future<T?> Function() read) async {
+      try {
+        return await read();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final range =
+        await quiet(repo.readCallDateRange) ?? (first: null, last: null);
+
+    int? pendingWalBytes;
+    try {
+      final wal = File('$dbPath-wal');
+      if (await wal.exists()) pendingWalBytes = await wal.length();
+    } catch (_) {}
+
+    return _DatabaseIdentity(
+      label: await quiet(repo.readLabel),
+      schemaVersion: await quiet(repo.readSchemaVersion),
+      lastChangeAt: await quiet(repo.readLastChangeAt),
+      firstCallDate: range.first,
+      lastCallDate: range.last,
+      reclaimableBytes: await quiet(repo.readReclaimableBytes),
+      pendingWalBytes: pendingWalBytes,
+    );
+  }
+}
+
+/// Μεταφορέας των στοιχείων ταυτότητας μέσα στην υπηρεσία.
+class _DatabaseIdentity {
+  const _DatabaseIdentity({
+    this.label,
+    this.schemaVersion,
+    this.lastChangeAt,
+    this.firstCallDate,
+    this.lastCallDate,
+    this.reclaimableBytes,
+    this.pendingWalBytes,
+  });
+
+  final String? label;
+  final int? schemaVersion;
+  final DateTime? lastChangeAt;
+  final String? firstCallDate;
+  final String? lastCallDate;
+  final int? reclaimableBytes;
+  final int? pendingWalBytes;
 }

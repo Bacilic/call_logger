@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
+import '../../../core/database/active_database_generation.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/database_identity_repository.dart';
 import '../../../core/database/database_table_inspection.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/database/database_init_result.dart';
@@ -15,6 +18,7 @@ import '../../../core/services/settings_service.dart';
 import '../models/database_stats.dart';
 import '../providers/database_browser_stats_provider.dart';
 import '../services/database_stats_service.dart';
+import '../widgets/database_label_dialog.dart';
 import '../widgets/database_maintenance_panel.dart';
 import '../widgets/table_preview_grid.dart';
 
@@ -253,6 +257,20 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
         });
       }
     }
+  }
+
+  /// Ξαναδιαβάζει τα πάντα από τη βάση που είναι ανοιχτή **τώρα**.
+  ///
+  /// Ο πίνακας που κοιτούσε ο χρήστης διατηρείται όταν υπάρχει και στη νέα
+  /// βάση — η συνηθισμένη χρήση είναι η σύγκριση του ίδιου πίνακα ανάμεσα σε
+  /// δύο βάσεις, και μια επιστροφή στη λίστα θα την έκανε χειροκίνητη κάθε
+  /// φορά. Όταν ο πίνακας δεν υπάρχει εκεί, η λίστα είναι η μόνη τίμια απάντηση.
+  Future<void> _reloadAfterDatabaseSwitch() async {
+    final previouslySelected = _selectedTable;
+    await _loadTables();
+    if (!mounted || previouslySelected == null) return;
+    if (!_tableNames.contains(previouslySelected)) return;
+    await _selectTable(previouslySelected);
   }
 
   Future<void> _selectTable(String tableName) async {
@@ -616,9 +634,67 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
               curve: Curves.easeInOut,
               alignment: Alignment.topCenter,
               child: _statsCardExpanded
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                  ? LayoutBuilder(
+                      builder: (context, constraints) {
+                        final left = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: _fileColumn(
+                            theme: theme,
+                            connText: connText,
+                            connOk: connOk,
+                            details: r.details,
+                            statsAsync: statsAsync,
+                            statRow: statRow,
+                            sizeLabel: sizeLabel,
+                            backupText: backupText,
+                            pathText: pathText,
+                          ),
+                        );
+                        final right = _identityColumn(theme, stats, statsAsync);
+                        // Κάτω από αυτό το πλάτος οι δύο στήλες στριμώχνονται
+                        // τόσο που η διαδρομή σπάει σε πέντε γραμμές: τότε η
+                        // μία κάτω από την άλλη διαβάζεται καλύτερα.
+                        if (constraints.maxWidth < 900) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              left,
+                              const SizedBox(height: 12),
+                              right,
+                            ],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: left),
+                            const SizedBox(width: 14),
+                            Expanded(child: right),
+                          ],
+                        );
+                      },
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Η αριστερή στήλη: το **αρχείο** — πού είναι, πόσο πιάνει, πότε σώθηκε.
+  List<Widget> _fileColumn({
+    required ThemeData theme,
+    required String connText,
+    required bool connOk,
+    required String? details,
+    required AsyncValue<DatabaseStats> statsAsync,
+    required Widget Function(String, String, {TextStyle? valueStyle}) statRow,
+    required String sizeLabel,
+    required String backupText,
+    required String pathText,
+  }) {
+    return [
                         const SizedBox(height: 10),
                         Text(
                           connText,
@@ -630,11 +706,11 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                           ),
                         ),
                         if (!connOk &&
-                            r.details != null &&
-                            r.details!.trim().isNotEmpty) ...[
+                            details != null &&
+                            details.trim().isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text(
-                            r.details!,
+                            details,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.error.withValues(
                                 alpha: 0.85,
@@ -695,19 +771,160 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                             ],
                           ),
                         ),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
+    ];
+  }
+
+  /// Η δεξιά στήλη: **ταυτότητα και υγεία** του περιεχομένου.
+  ///
+  /// Ξεχωριστή επιφάνεια, όχι μόνο για διαχωρισμό: το όνομα δέχεται κλικ, και
+  /// ένα πεδίο που πατιέται χρειάζεται ορατό όριο για να μη μοιάζει με ακόμη
+  /// μία ετικέτα ανάμεσα σε ετικέτες.
+  Widget _identityColumn(
+    ThemeData theme,
+    DatabaseStats? stats,
+    AsyncValue<DatabaseStats> statsAsync,
+  ) {
+    final pending = statsAsync.isLoading ? '…' : '—';
+
+    Widget row(String label, String value) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 150,
+              child: Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
+            Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
           ],
         ),
+      );
+    }
+
+    final label = stats?.label;
+    final schema = stats?.schemaVersion;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: stats == null ? null : () => _editDatabaseLabel(label),
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      label ?? 'Χωρίς όνομα',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: label == null
+                            ? theme.colorScheme.onSurfaceVariant
+                            : null,
+                        fontStyle: label == null ? FontStyle.italic : null,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.edit_outlined,
+                    size: 15,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          row('Έκδοση σχήματος', schema == null ? pending : '$schema'),
+          row('Τελευταία αλλαγή', _formatLastChange(stats?.lastChangeAt, pending)),
+          row('Κλήσεις', _formatCallRange(stats, pending)),
+          row('Χαμένος χώρος', _formatOptionalSize(stats?.reclaimableBytes, pending)),
+          row('Εκκρεμείς εγγραφές', _formatPendingWal(stats?.pendingWalBytes, pending)),
+        ],
       ),
     );
+  }
+
+  String _formatLastChange(DateTime? value, String pending) {
+    if (value == null) return pending;
+    return DateFormat('dd/MM/yyyy, HH:mm').format(value);
+  }
+
+  /// «από–έως» με ελληνικές ημερομηνίες· μία μέρα δεν γράφεται δύο φορές.
+  String _formatCallRange(DatabaseStats? stats, String pending) {
+    final first = stats?.firstCallDate;
+    final last = stats?.lastCallDate;
+    if (first == null || last == null) {
+      return stats == null ? pending : 'καμία';
+    }
+    final a = _formatIsoDay(first);
+    final b = _formatIsoDay(last);
+    return a == b ? a : '$a – $b';
+  }
+
+  String _formatIsoDay(String isoDay) {
+    final parsed = DateTime.tryParse(isoDay);
+    if (parsed == null) return isoDay;
+    return DateFormat('dd/MM/yyyy').format(parsed);
+  }
+
+  String _formatOptionalSize(int? bytes, String pending) {
+    if (bytes == null) return pending;
+    if (bytes <= 0) return 'κανένας';
+    return DatabaseStatsService.formatFileSizeBytes(bytes);
+  }
+
+  String _formatPendingWal(int? bytes, String pending) {
+    if (bytes == null) return 'καμία';
+    if (bytes <= 0) return 'καμία';
+    return DatabaseStatsService.formatFileSizeBytes(bytes);
+  }
+
+  Future<void> _editDatabaseLabel(String? current) async {
+    final next = await showDatabaseLabelDialog(
+      context: context,
+      currentLabel: current,
+    );
+    if (next == null || !mounted) return;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await DatabaseIdentityRepository(db).writeLabel(next.value);
+      ref.invalidate(databaseBrowserStatsProvider);
+    } catch (e, stack) {
+      CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Το όνομα της βάσης δεν αποθηκεύτηκε.'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Οι Ρυθμίσεις βάσης ανοίγουν ως διάλογος **πάνω από αυτή την οθόνη**, οπότε
+    // η εναλλαγή βάσης τη βρίσκει ζωντανή: το δέντρο δεν ξηλώνεται και οι
+    // φορτωμένες γραμμές θα έμεναν εκεί, δείχνοντας βάση που δεν διαβάζουμε πια.
+    ref.listen<int>(activeDatabaseGenerationProvider, (_, _) {
+      unawaited(_reloadAfterDatabaseSwitch());
+    });
     final zoomByTable = ref.watch(databaseBrowserZoomByTableProvider);
     final statsAsync = ref.watch(databaseBrowserStatsProvider);
 

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_file_classifier.dart';
 import '../database/database_init_result.dart';
+import '../database/database_replacement_notice.dart';
+import 'database_replacement_dialog.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../providers/core_lexicon_provider.dart';
 import '../../features/dictionary/widgets/core_lexicon_setup_dialog.dart';
@@ -349,6 +351,19 @@ class MainShellState extends ConsumerState<MainShell> {
   Widget build(BuildContext context) {
     // Κρατά ζωντανό τον περιοδικό έλεγχο νέας έκδοσης όσο ζει το κέλυφος.
     ref.watch(updatePeriodicCheckProvider);
+    // …και τον φρουρό που βλέπει αν αντικαταστάθηκε το αρχείο της βάσης.
+    ref.watch(databaseReplacementWatchdogProvider);
+    ref.listen<String?>(databaseReplacementNoticeProvider, (previous, next) {
+      if (next == null || !mounted) return;
+      unawaited(
+        showDatabaseReplacementDialog(
+          context: context,
+          ref: ref,
+          databasePath: next.isEmpty ? null : next,
+          onReconnected: widget.onDatabaseReopened,
+        ),
+      );
+    });
     final showBadgeAsync = ref.watch(showTasksBadgeProvider);
     final pendingCountAsync = ref.watch(globalPendingTasksCountProvider);
     final showBadge = showBadgeAsync.value ?? true;

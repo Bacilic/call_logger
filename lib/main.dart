@@ -23,6 +23,8 @@ import 'core/utils/windows_cli_error_dialog.dart';
 import 'core/services/app_close_controller.dart';
 import 'core/services/crash_log_service.dart';
 import 'core/services/settings_service.dart';
+import 'core/database/database_file_identity.dart';
+import 'core/database/database_replacement_notice.dart';
 import 'core/errors/app_error_result.dart';
 import 'core/errors/layout_error_diagnostics.dart';
 import 'core/errors/nonfatal_font_error_classifier.dart';
@@ -32,7 +34,33 @@ import 'core/widgets/app_shell_with_global_fatal_error.dart';
 import 'core/widgets/global_fatal_error_notifier.dart';
 
 void _routeFatalErrorToUi(Object exception, StackTrace stack) {
-  final result = AppErrorResult.fromException(exception, stack);
+  // Το «disk image is malformed» έχει δύο πολύ διαφορετικές αιτίες: φθαρμένο
+  // αρχείο, ή αρχείο που αντικαταστάθηκε απ' έξω ενώ το διαβάζαμε. Το δεύτερο
+  // έχει δικό του, κατατοπιστικό μήνυμα — και ο μόνος τρόπος να ξεχωρίσουν
+  // είναι να ρωτηθεί ο φρουρός τη στιγμή του σφάλματος. Αν αναλάβει εκείνος,
+  // εδώ δεν μένει τίποτα να ανακοινωθεί· αν όχι, το σφάλμα προχωρά κανονικά.
+  if (looksLikeCorruptImageError(exception)) {
+    unawaited(_routeAfterReplacementCheck(exception, stack));
+    return;
+  }
+  _presentFatalError(AppErrorResult.fromException(exception, stack));
+}
+
+Future<void> _routeAfterReplacementCheck(
+  Object exception,
+  StackTrace stack,
+) async {
+  var handled = false;
+  try {
+    handled = await pokeDatabaseReplacementWatchdog();
+  } catch (_) {
+    // Ο έλεγχος δεν επιτρέπεται να καταπιεί το αρχικό σφάλμα.
+  }
+  if (handled) return;
+  _presentFatalError(AppErrorResult.fromException(exception, stack));
+}
+
+void _presentFatalError(AppErrorResult result) {
   final phase = WidgetsBinding.instance.schedulerPhase;
   if (phase == SchedulerPhase.persistentCallbacks ||
       phase == SchedulerPhase.midFrameMicrotasks) {

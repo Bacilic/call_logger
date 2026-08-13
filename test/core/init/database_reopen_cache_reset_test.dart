@@ -4,6 +4,7 @@
 
 import 'dart:io';
 
+import 'package:call_logger/core/database/active_database_generation.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/init/database_reopen_cache_reset.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
@@ -266,6 +267,49 @@ void main() {
         );
 
         // Άφησε τα futures της αλυσίδας να ολοκληρωθούν πριν κλείσει η βάση.
+        try {
+          await container.read(catalogValidationServiceProvider.future);
+        } catch (_) {}
+      });
+    },
+  );
+
+  testWidgets(
+    'η εκκαθάριση εκπέμπει σήμα αλλαγής βάσης για τις οθόνες χωρίς provider',
+    (tester) async {
+      // Οι φορτωμένες γραμμές της προβολής πινάκων ζουν στην κατάσταση του
+      // widget, όχι σε provider: το ξέπλυμα των caches δεν τις φτάνει ποτέ.
+      // Το σήμα είναι ο μόνος τρόπος να μάθουν ότι διαβάζουμε άλλη βάση.
+      late WidgetRef widgetRef;
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: Consumer(
+            builder: (context, ref, _) {
+              widgetRef = ref;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      await tester.runAsync(() async {
+        await DatabaseHelper.bindTestDatabaseFile(pathB);
+        final before = container.read(activeDatabaseGenerationProvider);
+
+        invalidateDatabaseScopedCaches(widgetRef);
+
+        expect(
+          container.read(activeDatabaseGenerationProvider),
+          greaterThan(before),
+          reason:
+              'Χωρίς το σήμα, η προβολή πίνακα συνεχίζει να δείχνει τη βάση '
+              'που δεν διαβάζουμε πια.',
+        );
+
         try {
           await container.read(catalogValidationServiceProvider.future);
         } catch (_) {}

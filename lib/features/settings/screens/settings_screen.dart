@@ -12,7 +12,9 @@ import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/crash_log_service.dart';
 import '../../../core/services/shutdown_trace_incident.dart';
 import '../../../core/widgets/quick_call_fab.dart';
+import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/services/spell_check_activation.dart';
 import '../../database/services/database_maintenance_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
@@ -386,20 +388,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _onEnableSpellCheckChanged(bool value) async {
-    await _settings.windowUi.setEnableSpellCheck(value);
+    final coreLoaded = ref.read(coreLexiconLoadedProvider);
     if (!value) {
-      await _settings.windowUi.setShowDictionaryNav(false);
+      await SpellCheckActivation.disable(_settings);
       if (!mounted) return;
       setState(() {
         _enableSpellCheck = false;
         _showDictionaryNav = false;
       });
     } else {
+      await _settings.windowUi.setEnableSpellCheck(true);
       if (!mounted) return;
       setState(() => _enableSpellCheck = true);
     }
     ref.invalidate(enableSpellCheckProvider);
     ref.invalidate(showDictionaryNavProvider);
+
+    // Προειδοποίηση, ποτέ απαγόρευση: το χτίσιμο προσωπικού λεξικού από το
+    // μηδέν είναι νόμιμη χρήση — ο χρήστης χρειάζεται μόνο να ξέρει τι θα δει.
+    if (!mounted) return;
+    if (shouldWarnEnablingSpellCheck(
+      turningOn: value,
+      coreLexiconLoaded: coreLoaded,
+    )) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(kSpellCheckWithoutCoreWarning),
+            duration: Duration(seconds: 6),
+          ),
+        );
+    }
   }
 
   Future<void> _onHideDictionaryNavChanged(bool hideDictionary) async {
@@ -417,6 +437,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final coreLexiconLoaded = ref.watch(coreLexiconLoadedProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ρυθμίσεις')),
@@ -651,6 +672,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             SwitchListTile(
               value: _showQuickCallFab,
+              secondary: Icon(
+                Icons.add_ic_call_outlined,
+                color: theme.colorScheme.primary,
+              ),
               onChanged: _isLoadingSettings
                   ? null
                   : (value) async {
@@ -667,6 +692,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             SwitchListTile(
               value: _showActiveTimer,
+              secondary: Icon(
+                Icons.timer_outlined,
+                color: theme.colorScheme.primary,
+              ),
               onChanged: (value) async {
                 await _settings.windowUi.setShowActiveTimer(value);
                 if (mounted) setState(() => _showActiveTimer = value);
@@ -679,6 +708,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             SwitchListTile(
               value: _showEmptyRemoteLaunchers,
+              secondary: Icon(
+                Icons.desktop_access_disabled,
+                color: theme.colorScheme.primary,
+              ),
               onChanged: (value) async {
                 await _settings.remoteLansweeper
                     .setCallsShowEmptyRemoteLaunchers(value);
@@ -714,17 +747,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               child: SwitchListTile(
                 value: _enableSpellCheck,
+                secondary: Icon(
+                  coreLexiconLoaded
+                      ? Icons.spellcheck
+                      : Icons.warning_amber_rounded,
+                  color: coreLexiconLoaded
+                      ? theme.colorScheme.primary
+                      : kMissingCoreLexiconColor,
+                ),
                 onChanged: _isLoadingSettings
                     ? null
                     : (value) => _onEnableSpellCheckChanged(value),
                 title: const Text('Ορθογραφικός έλεγχος'),
-                subtitle: const Text(
-                  'Ενσωματωμένο λεξικό (ελληνικά + IT)· σημαντικό σε Windows όπου δεν υπάρχει εγγενής έλεγχος.',
+                subtitle: Text(
+                  spellCheckSubtitle(coreLexiconLoaded: coreLexiconLoaded),
+                  style: coreLexiconLoaded
+                      ? null
+                      : const TextStyle(color: kMissingCoreLexiconColor),
                 ),
               ),
             ),
             SwitchListTile(
               value: !_showDatabaseNav,
+              secondary: Icon(
+                Icons.storage,
+                color: theme.colorScheme.primary,
+              ),
               onChanged: (value) async {
                 final show = !value;
                 await _settings.windowUi.setShowDatabaseNav(show);
@@ -738,6 +786,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             SwitchListTile(
               value: !_showLampNav,
+              secondary: Icon(
+                Icons.lightbulb_outline,
+                color: theme.colorScheme.primary,
+              ),
               onChanged: (value) async {
                 final show = !value;
                 await _settings.windowUi.setShowLampNav(show);
@@ -751,6 +803,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             SwitchListTile(
               value: !_showDictionaryNav,
+              secondary: Icon(
+                Icons.menu_book,
+                color: theme.colorScheme.primary,
+              ),
               onChanged: _isLoadingSettings
                   ? null
                   : (value) => _onHideDictionaryNavChanged(value),

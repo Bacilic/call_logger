@@ -12,7 +12,6 @@ void main() {
 
   setUp(() {
     journal = StartupJournal.instance..reset();
-    SplashArtworkPicker.resetLastPick();
   });
 
   /// Χωρίς εικόνες: η οθόνη πέφτει στη χρωματική εφεδρεία και τα widget tests
@@ -27,7 +26,13 @@ void main() {
         appVersion: '0.36.0',
         initializationComplete: complete,
         onFinished: onFinished,
-        artworkPicker: SplashArtworkPicker(bundle: _EmptyAssetBundle()),
+        // Χωρίς άγγιγμα των τοπικών ρυθμίσεων: η οθόνη δεν έχει δουλειά να
+        // εξαρτάται από αποθηκευμένη προτίμηση για να ζωγραφίσει.
+        artworkPicker: SplashArtworkPicker(
+          bundle: _EmptyAssetBundle(),
+          readLastAsset: () async => null,
+          writeLastAsset: (_) async {},
+        ),
         minimumDuration: minimum,
         lineInterval: const Duration(milliseconds: 20),
       ),

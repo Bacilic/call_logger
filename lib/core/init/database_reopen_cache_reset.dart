@@ -15,6 +15,7 @@ import '../../features/directory/providers/directory_provider.dart';
 import '../../features/directory/providers/equipment_directory_provider.dart';
 import '../../features/tasks/providers/task_service_provider.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
+import '../database/active_database_generation.dart';
 
 /// Εκκαθάριση Riverpod caches που κρατούν δεδομένα της προηγούμενης βάσης.
 ///
@@ -79,6 +80,10 @@ void invalidateDatabaseScopedCaches(WidgetRef ref) {
     // [callsFieldGroupsProvider] εξαρτάται και από το [callSmartEntityProvider]
     // που μόλις ακυρώθηκε παραπάνω.
     flushCallsScreenProviderChain(ref);
+    // ΤΕΛΕΥΤΑΙΟ, αφού όλα τα caches είναι πια φρέσκα: οι οθόνες που ακούν το
+    // σήμα ξαναφορτώνουν αμέσως, και δεν επιτρέπεται να προλάβουν να διαβάσουν
+    // provider που δεν έχει ξεπλυθεί ακόμα.
+    ref.read(activeDatabaseGenerationProvider.notifier).bump();
   }
 
   final phase = SchedulerBinding.instance.schedulerPhase;

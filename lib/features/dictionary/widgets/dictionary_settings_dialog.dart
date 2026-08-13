@@ -10,6 +10,8 @@ import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/dictionary_repository.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
+import '../../../core/providers/settings_provider.dart';
+import '../../../core/services/spell_check_activation.dart';
 import '../../../core/providers/lexicon_categories_provider.dart';
 import '../../../core/providers/lexicon_language_recalc_provider.dart';
 import '../../../core/providers/spell_check_provider.dart';
@@ -168,11 +170,25 @@ class _DictionarySettingsDialogState
     if (t.isEmpty) {
       await _settings.catalogs.setDictionarySourcePath(null);
       ref.read(coreLexiconProvider.notifier).unload();
+      // Χωρίς πυρήνα ο έλεγχος θα υπογράμμιζε σχεδόν κάθε λέξη: ο διακόπτης
+      // σβήνει μαζί με το λεξικό, αντί να μείνει αναμμένος και να φανεί σαν
+      // βλάβη. Ο χρήστης μπορεί να τον ξανανάψει όποτε θέλει — προειδοποιείται,
+      // δεν εμποδίζεται.
+      await SpellCheckActivation.disable(_settings);
+      ref.invalidate(enableSpellCheckProvider);
+      ref.invalidate(showDictionaryNavProvider);
       if (mounted) {
         _markSourcePathSaved('');
         setState(() {});
         showDialogSnackBar(
-          const SnackBar(content: Text('Αφαιρέθηκε διαδρομή πυρήνα λεξικού')),
+          const SnackBar(
+            content: Text(
+              'Αφαιρέθηκε η διαδρομή πυρήνα λεξικού. Ο ορθογραφικός έλεγχος '
+              'απενεργοποιήθηκε — μπορείτε να τον ανάψετε ξανά από τις '
+              'Ρυθμίσεις.',
+            ),
+            duration: Duration(seconds: 6),
+          ),
         );
       }
       return;

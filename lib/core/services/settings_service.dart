@@ -41,6 +41,7 @@ class SettingsService {
       'last_opened_database_path_v1';
   static const String _keySchemaUpgradeConsentIdentity =
       'schema_upgrade_consent_identity_v1';
+  static const String _keyLastSplashAsset = 'last_splash_asset_v1';
   static const String _keyKnownAppInstances = 'known_app_instances_v1';
   static const String _keyDismissedInstancesSignature =
       'dismissed_app_instances_signature_v1';
@@ -110,6 +111,27 @@ class SettingsService {
       _prefKey(_keyAcknowledgedDatabaseNoticeIdentity),
       trimmed,
     );
+  }
+
+  /// Η εικόνα εκκίνησης που έπαιξε την προηγούμενη φορά.
+  ///
+  /// Τοπική ρύθμιση, όχι στη βάση: είναι προτίμηση εμφάνισης αυτού του
+  /// μηχανήματος και διαβάζεται πριν καν ανοίξει η βάση.
+  Future<String?> getLastSplashAsset() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefKey(_keyLastSplashAsset));
+    if (value == null || value.trim().isEmpty) return null;
+    return value.trim();
+  }
+
+  Future<void> setLastSplashAsset(String assetPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = assetPath.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_prefKey(_keyLastSplashAsset));
+      return;
+    }
+    await prefs.setString(_prefKey(_keyLastSplashAsset), trimmed);
   }
 
   /// Διαδρομή βάσης που άνοιξε επιτυχώς τελευταία φορά (για σιωπηλή αναβάθμιση).
