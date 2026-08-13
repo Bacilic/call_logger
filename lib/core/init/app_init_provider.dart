@@ -43,6 +43,10 @@ final appInitProvider = FutureProvider<AppInitResult>((ref) async {
       'Επαναϋπολογισμός κλειδιών ονομάτων',
       DepartmentNameKeyMigrationRunner.runIfNeeded,
     );
+    await runStartupHousekeeping(
+      'Καθαρισμός υπολειμμάτων εγκατάστασης',
+      cleanAssetResidue,
+    );
   }
   return result;
 });

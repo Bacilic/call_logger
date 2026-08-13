@@ -89,6 +89,40 @@ class UserRepository {
     return value.isEmpty ? null : value;
   }
 
+  /// Οι υπάλληλοι ενός τμήματος που έχουν **δικό τους** αναγνωριστικό
+  /// Lansweeper, αλφαβητικά.
+  ///
+  /// Τροφοδοτεί τον επιλογέα αιτούντα όταν η κλήση καταγράφηκε σε «Άγνωστο»:
+  /// το όνομα συχνά δεν προλαβαίνει να γραφτεί την ώρα της κλήσης, αλλά την
+  /// ώρα της καταχώρησης ο χρήστης αναγνωρίζει ποιος ήταν.
+  ///
+  /// Όσοι δεν έχουν αναγνωριστικό δεν επιστρέφονται: στο ticket δεν θα
+  /// μπορούσαν να μπουν, οπότε στη λίστα θα ήταν μόνο θόρυβος. Οι διαγραμμένοι
+  /// επίσης — δεν δουλεύουν πια εκεί.
+  Future<List<({String name, String username})>>
+  getLansweeperUsersByDepartmentId(int departmentId) async {
+    final rows = await db.query(
+      'users',
+      columns: ['last_name', 'first_name', 'lansweeper_username'],
+      where:
+          'department_id = ? AND COALESCE(is_deleted, 0) = 0 '
+          "AND TRIM(COALESCE(lansweeper_username, '')) <> ''",
+      whereArgs: [departmentId],
+      orderBy: 'last_name, first_name',
+    );
+
+    final out = <({String name, String username})>[];
+    for (final row in rows) {
+      final username = (row['lansweeper_username'] as String?)?.trim() ?? '';
+      if (username.isEmpty) continue;
+      final lastName = (row['last_name'] as String?)?.trim() ?? '';
+      final firstName = (row['first_name'] as String?)?.trim() ?? '';
+      final name = '$lastName $firstName'.trim();
+      out.add((name: name.isEmpty ? username : name, username: username));
+    }
+    return out;
+  }
+
   Future<List<Map<String, dynamic>>> getAllUsers() async {
     final users = await db.query(
       'users',

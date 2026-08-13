@@ -72,6 +72,28 @@ void main() {
       expect(content, endsWith('\n\n'));
     });
 
+    test('logError — τα συνοδευτικά μπαίνουν στην εγγραφή', () {
+      service.logError(
+        sampleError('A RenderFlex overflowed by 25 pixels'),
+        StackTrace.empty,
+        fatal: false,
+        diagnostics: 'Φάση: during layout\n'
+            'debugCreator: Column ← Padding ← CallsScreen',
+      );
+
+      final content = todayLogFile().readAsStringSync();
+      expect(content, contains('debugCreator: Column ← Padding ← CallsScreen'));
+      expect(content, contains('Φάση: during layout'));
+    });
+
+    test('logError — χωρίς συνοδευτικά η εγγραφή μένει όπως ήταν', () {
+      service.logError(sampleError('Απλό'), sampleStack(), fatal: false);
+
+      final content = todayLogFile().readAsStringSync();
+      expect(content, contains('Exception: Απλό'));
+      expect(content, contains('#0      main.<fn>'));
+    });
+
     test('logError — ΜΟΙΡΑΙΟ για fatal σφάλματα', () {
       service.logError(sampleError('Κρίσιμο'), sampleStack(), fatal: true);
 

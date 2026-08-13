@@ -55,6 +55,11 @@ Future<LansweeperRequesterOptions> resolveLansweeperRequesterForCalls({
   // καλών με δικό του αναγνωριστικό κερδίζει χωρίς λίστα.
   final departments =
       <({String departmentName, List<LansweeperAccount> accounts})>[];
+  // Οι συνάδελφοι του τμήματος: μόνο όταν κάποια κλήση έμεινε σε «Άγνωστο».
+  // Με γνωστό καλούντα ο χρήστης ξέρει ήδη ποιος τηλεφώνησε, οπότε μια λίστα
+  // συναδέλφων εκεί θα ήταν ευκαιρία για λάθος και όχι βοήθεια.
+  final colleagues =
+      <({String departmentName, List<LansweeperAccount> accounts})>[];
   final needDepartments =
       partyCount > 1 || !(callers.length == 1 && callers.first.hasUsername);
   if (needDepartments) {
@@ -64,11 +69,26 @@ Future<LansweeperRequesterOptions> resolveLansweeperRequesterForCalls({
       final departmentId = department?.id;
       if (department == null || departmentId == null) continue;
       if (!seenDepartments.add(departmentId)) continue;
+
       final accounts = decodeLansweeperAccounts(department.lansweeperUsernames);
-      if (accounts.isEmpty) continue;
-      departments.add((
+      if (accounts.isNotEmpty) {
+        departments.add((
+          departmentName: department.name,
+          accounts: accounts,
+        ));
+      }
+
+      if (!hasUnidentifiedCalls) continue;
+      final members = await userRepository.getLansweeperUsersByDepartmentId(
+        departmentId,
+      );
+      if (members.isEmpty) continue;
+      colleagues.add((
         departmentName: department.name,
-        accounts: accounts,
+        accounts: [
+          for (final member in members)
+            LansweeperAccount(username: member.username, label: member.name),
+        ],
       ));
     }
   }
@@ -77,5 +97,6 @@ Future<LansweeperRequesterOptions> resolveLansweeperRequesterForCalls({
     callers: callers,
     hasUnidentifiedCalls: hasUnidentifiedCalls,
     departments: departments,
+    departmentColleagues: colleagues,
   );
 }

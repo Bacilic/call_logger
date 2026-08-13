@@ -10,6 +10,7 @@ import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
 import '../database/database_path_resolution.dart';
 import '../database/lock_diagnostic_service.dart';
+import '../services/asset_residue_cleaner.dart';
 import '../services/core_lexicon_service.dart';
 import '../services/settings_service.dart';
 import '../updates/update_residue_cleaner.dart';
@@ -48,6 +49,19 @@ Future<void> cleanUpdateResidue({
     progressNotifier?.setStep('Καθαρισμός υπολειμμάτων ενημέρωσης');
     await worker.clean(scan);
   } catch (_) {}
+}
+
+/// Σβήνει από τον φάκελο πόρων της εγκατάστασης ό,τι δεν ανήκει πουθενά.
+///
+/// Επιστρέφει `true` μόνο όταν έφυγε κάτι — τότε και μόνο τότε το βήμα
+/// εμφανίζεται στην οθόνη εκκίνησης. Στα περισσότερα ανοίγματα δεν υπάρχει
+/// τίποτα να καθαριστεί και η σιωπή είναι η σωστή απάντηση.
+Future<bool> cleanAssetResidue({AssetResidueCleaner? cleaner}) async {
+  final worker = cleaner ?? AssetResidueCleaner.production();
+  final scan = await worker.scan();
+  if (!scan.hasWork) return false;
+  final removed = await worker.clean(scan);
+  return removed.isNotEmpty;
 }
 
 /// Αποτέλεσμα αρχικοποίησης εφαρμογής (βάση δεδομένων + τρόπος λειτουργίας).

@@ -391,36 +391,61 @@ class LansweeperSyncForm extends ConsumerWidget {
                 key: const ValueKey('lansweeper_requester_picker'),
                 isExpanded: true,
                 initialValue: selectedRequesterUsername ?? '',
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Αιτών στο ticket',
                   helperText:
-                      'Ο καλών δεν έχει δικό του αναγνωριστικό — διαλέξτε '
-                      'λογαριασμό του τμήματος.',
-                  helperMaxLines: 2,
-                  border: OutlineInputBorder(),
+                      requesterCandidates.any((c) => c.isSuggestionOnly)
+                      ? 'Ο καλών έμεινε άγνωστος — διαλέξτε λογαριασμό του '
+                            'τμήματος ή, αν θυμάστε ποιος τηλεφώνησε, τον ίδιο '
+                            'τον υπάλληλο.'
+                      : 'Ο καλών δεν έχει δικό του αναγνωριστικό — διαλέξτε '
+                            'λογαριασμό του τμήματος.',
+                  helperMaxLines: 3,
+                  border: const OutlineInputBorder(),
                 ),
                 items: [
                   for (final candidate in requesterCandidates)
                     DropdownMenuItem<String>(
                       value: candidate.account.username,
-                      child: Text(
-                        '${candidate.departmentName} · '
-                        '${candidate.account.displayLabel}',
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        // Ίδια χρωματική γλώσσα με τα chips του τμήματος:
-                        // κόκκινο = λάθος μορφή, πορτοκαλί = ύποπτος τομέας.
-                        style: switch (_requesterSeverity(
-                          candidate.account.username,
-                        )) {
-                          _RequesterSeverity.invalid => TextStyle(
-                            color: Theme.of(context).colorScheme.error,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Το εικονίδιο κουβαλά τη διάκριση: ο γενικός
+                          // λογαριασμός του τμήματος και ένας συγκεκριμένος
+                          // συνάδελφος γράφονται αλλιώς μεν, αλλά σε μια λίστα
+                          // με ίδια μορφή δεν ξεχωρίζουν με τη ματιά.
+                          Icon(
+                            candidate.isSuggestionOnly
+                                ? Icons.person_outline
+                                : Icons.groups_outlined,
+                            size: 16,
+                            color: Theme.of(context).textTheme.bodySmall?.color,
                           ),
-                          _RequesterSeverity.suspect => TextStyle(
-                            color: Colors.orange.shade800,
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              candidate.isSuggestionOnly
+                                  ? candidate.account.displayLabel
+                                  : '${candidate.departmentName} · '
+                                        '${candidate.account.displayLabel}',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              // Ίδια χρωματική γλώσσα με τα chips του τμήματος:
+                              // κόκκινο = λάθος μορφή, πορτοκαλί = ύποπτος τομέας.
+                              style: switch (_requesterSeverity(
+                                candidate.account.username,
+                              )) {
+                                _RequesterSeverity.invalid => TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                                _RequesterSeverity.suspect => TextStyle(
+                                  color: Colors.orange.shade800,
+                                ),
+                                _RequesterSeverity.ok => null,
+                              },
+                            ),
                           ),
-                          _RequesterSeverity.ok => null,
-                        },
+                        ],
                       ),
                     ),
                   const DropdownMenuItem<String>(

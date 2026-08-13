@@ -24,6 +24,7 @@ import 'core/services/app_close_controller.dart';
 import 'core/services/crash_log_service.dart';
 import 'core/services/settings_service.dart';
 import 'core/errors/app_error_result.dart';
+import 'core/errors/layout_error_diagnostics.dart';
 import 'core/errors/nonfatal_font_error_classifier.dart';
 import 'core/widgets/crash_restart_notice.dart';
 import 'core/widgets/app_init_wrapper.dart';
@@ -41,13 +42,6 @@ void _routeFatalErrorToUi(Object exception, StackTrace stack) {
     return;
   }
   globalFatalErrorNotifier.value = result;
-}
-
-bool _isNonFatalUiLayoutErrorMessage(String message) {
-  final lower = message.toLowerCase();
-  return lower.contains('overflowed') ||
-      lower.contains('renderflex') ||
-      lower.contains('renderbox');
 }
 
 bool _isIgnorableHardwareKeyboardAssertion(Object exception) {
@@ -138,11 +132,22 @@ Future<void> main(List<String> arguments) async {
           }
           return;
         }
-        if (kReleaseMode &&
-            _isNonFatalUiLayoutErrorMessage(details.exceptionAsString())) {
-          debugPrint(
-            'UI layout error (αγνοήθηκε σε release): ${details.exceptionAsString()}',
+        if (isLayoutErrorMessage(details.exceptionAsString())) {
+          // Καταγράφεται πάντα, και σε release: ένα σφάλμα διάταξης που δεν
+          // αφήνει ίχνος πουθενά είναι ένα σφάλμα που δεν διορθώνεται ποτέ.
+          // Μαζί του πάνε και τα συνοδευτικά — χωρίς αυτά μένει μόνο ένας
+          // αριθμός pixel, που δεν οδηγεί σε κανένα αρχείο.
+          CrashLogService.instanceOrNull?.logError(
+            details.exception,
+            st,
+            fatal: false,
+            diagnostics: layoutErrorDiagnostics(details),
           );
+          // Σε release ο χρήστης δεν διακόπτεται: η διεπαφή είναι
+          // παραμορφωμένη, όχι χαλασμένη. Στην ανάπτυξη ο διάλογος μένει —
+          // είναι ο λόγος που ένα τέτοιο σφάλμα φτάνει ποτέ σε μάτια.
+          if (kReleaseMode) return;
+          _routeFatalErrorToUi(details.exception, st);
           return;
         }
         if (isNonFatalFontLoadError(details.exception, st)) {

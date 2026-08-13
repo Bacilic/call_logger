@@ -83,9 +83,20 @@ class CrashLogService {
     } catch (_) {}
   }
 
-  void logError(Object error, StackTrace stack, {required bool fatal}) {
+  /// Καταγράφει ένα σφάλμα.
+  ///
+  /// Το [diagnostics] είναι για τα σφάλματα που **δεν φέρνουν ίχνος**: τα
+  /// σφάλματα διάταξης δεν έχουν στοίβα κλήσεων, έχουν όμως την αλυσίδα των
+  /// widget που τα γέννησε. Χωρίς αυτήν, η εγγραφή είναι μία γραμμή που λέει
+  /// «κάτι ξεχείλισε» και δεν οδηγεί πουθενά.
+  void logError(
+    Object error,
+    StackTrace stack, {
+    required bool fatal,
+    String? diagnostics,
+  }) {
     try {
-      _logErrorInternal(error, stack, fatal: fatal);
+      _logErrorInternal(error, stack, fatal: fatal, diagnostics: diagnostics);
     } catch (_) {}
   }
 
@@ -93,6 +104,7 @@ class CrashLogService {
     Object error,
     StackTrace stack, {
     required bool fatal,
+    String? diagnostics,
   }) {
     Directory(logsDirectory).createSync(recursive: true);
     final key = _dedupKey(error, stack);
@@ -103,6 +115,7 @@ class CrashLogService {
         message: error.toString(),
         stack: stack,
         fatal: fatal,
+        diagnostics: diagnostics,
       );
       state.detailedCount++;
       return;
@@ -132,10 +145,14 @@ class CrashLogService {
     required String message,
     StackTrace? stack,
     required bool fatal,
+    String? diagnostics,
   }) {
     final buffer = StringBuffer()
       ..writeln(_formatHeader(fatal: fatal))
       ..writeln(message);
+    if (diagnostics != null && diagnostics.trim().isNotEmpty) {
+      buffer.writeln(diagnostics.trim());
+    }
     if (stack != null) {
       buffer.write(stack);
     }

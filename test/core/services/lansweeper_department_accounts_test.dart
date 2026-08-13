@@ -161,7 +161,11 @@ void main() {
       expect(options.candidates, isEmpty);
     });
 
-    test('άγνωστος καλών με ΕΝΑ λογαριασμό τμήματος: μπαίνει αυτόματα', () {
+    // Ως 13/08/2026 ο μοναδικός λογαριασμός έμπαινε ΚΑΙ έκρυβε τον επιλογέα.
+    // Η πρόταση ήταν σωστή αλλά αμετάκλητη: υπάρχουν υπάλληλοι εκτός τομέα που
+    // δουλεύουν με τον γενικό λογαριασμό, και ο χρήστης πρέπει να μπορεί να
+    // επέμβει. Η προεπιλογή έμεινε ίδια — άλλαξε μόνο ποιος έχει τον έλεγχο.
+    test('άγνωστος καλών με ΕΝΑ λογαριασμό τμήματος: μπαίνει, αλλά αλλάζει', () {
       final options = resolveLansweeperRequester(
         hasUnidentifiedCalls: true,
         departments: [(departmentName: 'Παιδιατρική', accounts: [paid])],
@@ -170,8 +174,8 @@ void main() {
       expect(options.selectedUsername, r'gnk\docpaid');
       expect(
         options.isChoosable,
-        isFalse,
-        reason: 'Με μία επιλογή δεν υπάρχει τι να διαλέξει ο χρήστης',
+        isTrue,
+        reason: 'ο μοναδικός λογαριασμός μένει πρόταση, όχι τελεσίδικη απόφαση',
       );
       expect(options.candidates, hasLength(1));
     });

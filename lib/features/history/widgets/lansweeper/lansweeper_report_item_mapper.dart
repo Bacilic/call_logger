@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 
 import '../../../calls/models/call_model.dart';
 import '../../models/lansweeper_sync_state.dart';
+import 'lansweeper_call_summary.dart';
 import 'lansweeper_report_call_list.dart';
 
 class ReportCallItem {
@@ -35,6 +36,13 @@ abstract final class LansweeperReportItemMapper {
     if (issue.isNotEmpty) return issue;
     return '-';
   }
+
+  /// Η Λύση όπως εμφανίζεται στη λίστα — κενή όταν δεν έχει γραφτεί ακόμη.
+  ///
+  /// Το κενό μένει κενό αντί για παύλα: εδώ σημαίνει «εκκρεμεί», και μια σειρά
+  /// από παύλες θα γέμιζε τη λίστα με θόρυβο αντί να ξεχωρίζει τι έχει λυθεί.
+  static String solutionSnippet(CallModel call) =>
+      (call.solution ?? '').trim();
 
   static String selectedKeysSignature(List<ReportCallItem> selected) {
     final keys = selected.map((e) => e.key).toList()..sort();
@@ -188,14 +196,13 @@ abstract final class LansweeperReportItemMapper {
     return LansweeperReportCallRowData(
       key: item.key,
       call: item.call,
-      dateLabel: DateFormat(
-        'dd/MM/yyyy HH:mm',
-      ).format(_callDateTime(item.call)),
+      dateLabel: LansweeperCallSummary.shortDateLabel(item.call),
+      tooltip: LansweeperCallSummary.callTooltip(item.call),
       durationLabel: durationLabel(item.durationSeconds),
       lansweeperState: state,
       ticketId: item.call.lansweeperMainTicketId,
       notes: item.notes,
-      details: item.details,
+      solution: solutionSnippet(item.call),
       durationSeconds: item.durationSeconds,
     );
   }

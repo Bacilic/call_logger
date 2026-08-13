@@ -21,7 +21,15 @@ import 'startup_splash_screen.dart';
 
 /// Εκτελεί αρχικοποίηση εφαρμογής και προβάλλει live πρόοδο εκκίνησης.
 class AppInitWrapper extends ConsumerStatefulWidget {
-  const AppInitWrapper({super.key, this.showStartupSplash = true});
+  const AppInitWrapper({
+    super.key,
+    this.showStartupSplash = true,
+    @visibleForTesting this.windowRestorer,
+  });
+
+  /// Επαναφορά μεγέθους/θέσης παραθύρου (εγχύσιμη — στα τεστ δεν υπάρχει
+  /// πραγματικό παράθυρο, και η σειρά είναι ακριβώς αυτό που ελέγχεται).
+  final Future<void> Function()? windowRestorer;
 
   /// Αν θα προβληθεί η οθόνη εκκίνησης πριν το κέλυφος.
   ///
@@ -45,21 +53,30 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
 
   /// Η οθόνη εκκίνησης παραδίδει τη σκυτάλη στην εφαρμογή.
   ///
-  /// Το κέλυφος εμφανίζεται αμέσως και το παράθυρο μεγαλώνει μετά: αν
-  /// περιμέναμε το λειτουργικό να αλλάξει διαστάσεις πριν χτίσουμε τη διεπαφή,
-  /// θα υπήρχε ένα καρέ με άδειο, μεγάλο παράθυρο. Η αποτυχία της αλλαγής
-  /// μεγέθους δεν αφορά τον χρήστη — η εφαρμογή είναι ήδη μπροστά του.
-  void _leaveSplash() {
+  /// Το παράθυρο επανέρχεται **πρώτα** και το κέλυφος χτίζεται μετά. Η κάρτα
+  /// εκκίνησης ανοίγει σε μέγεθος μικρότερο από το ελάχιστο για το οποίο είναι
+  /// σχεδιασμένη η διεπαφή· αν το κέλυφος χτιζόταν όσο το παράθυρο είναι ακόμη
+  /// στο μέγεθος της κάρτας, η διεπαφή θα ζωγραφιζόταν σε ύψος που δεν της
+  /// φτάνει και θα ξεχείλιζε. Δεν είναι θεωρητικό: σε αργό μηχάνημα η επαναφορά
+  /// κρατά αρκετά καρέ ώστε να προλάβει να φανεί, ενώ σε γρήγορο δεν προλαβαίνει
+  /// ποτέ — γι' αυτό και εμφανιζόταν μόνο στον έναν υπολογιστή.
+  ///
+  /// Η κάρτα δεν «αδειάζει» στο μεταξύ: είναι στοίβα σε πλήρη έκταση και
+  /// ακολουθεί όποιο μέγεθος κι αν πάρει το παράθυρο.
+  ///
+  /// Η αποτυχία ή η αργοπορία της επαναφοράς δεν κρατά την πόρτα κλειστή: το
+  /// χρονικό όριο εγγυάται ότι η εφαρμογή ανοίγει ούτως ή άλλως.
+  Future<void> _leaveSplash() async {
+    if (!mounted) return;
+    final restore =
+        widget.windowRestorer ?? StartupWindowPlacement.restoreApplicationWindow;
+    try {
+      await restore().timeout(kWindowRestoreTimeout);
+    } catch (e, st) {
+      recordStartupNotice('Επαναφορά μεγέθους παραθύρου', e, st);
+    }
     if (!mounted) return;
     setState(() => _splashDone = true);
-    unawaited(
-      StartupWindowPlacement.restoreApplicationWindow().catchError((
-        Object e,
-        StackTrace st,
-      ) {
-        recordStartupNotice('Επαναφορά μεγέθους παραθύρου', e, st);
-      }),
-    );
   }
 
   Future<void> _retryAppInitialization() async {
@@ -122,7 +139,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
         // δεν υπάρχει λόγος να ξαναρωτηθεί το λειτουργικό.
         appVersion: CrashLogService.instanceOrNull?.appVersion ?? '',
         initializationComplete: asyncInit.value?.success == true,
-        onFinished: _leaveSplash,
+        onFinished: () => unawaited(_leaveSplash()),
       );
     }
 
