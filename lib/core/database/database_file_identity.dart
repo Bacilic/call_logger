@@ -198,3 +198,59 @@ bool looksLikeCorruptImageError(Object error) {
       lower.contains('sqlite_corrupt') ||
       (lower.contains('malformed') && lower.contains('database'));
 }
+
+/// Ετυμηγορία δομικού ελέγχου: χωρά το αρχείο τις σελίδες που δηλώνει;
+enum DatabaseStructuralVerdict {
+  /// Το αρχείο είναι τουλάχιστον όσο μεγάλο υπόσχεται η κεφαλίδα του.
+  ok,
+
+  /// Δεν διαβάστηκε ταυτότητα. **Σιωπή, ποτέ συναγερμός.**
+  unknown,
+
+  /// Η κεφαλίδα δηλώνει περισσότερες σελίδες από όσες χωρά το αρχείο —
+  /// ο κατάλογος της βάσης δείχνει σε σελίδες που δεν υπάρχουν.
+  truncated,
+}
+
+/// Ελέγχει αν το αρχείο χωρά τις σελίδες που δηλώνει η κεφαλίδα του.
+///
+/// Κοστίζει όσο και η ανάγνωση των 100 bytes που έχει ήδη γίνει: καμία
+/// σύνδεση SQLite, κανένα κλείδωμα, καμία σάρωση περιεχομένου. Πιάνει το
+/// αντίγραφο που δεν πρόλαβε να ολοκληρωθεί — τη συχνότερη μορφή αρχείου που
+/// «είναι εκεί, διαβάζεται, και δεν ανοίγει».
+///
+/// **Κατηγορούμε μόνο για το αδύνατο**, όπως και το
+/// [compareDatabaseFileIdentity]: αρχείο μεγαλύτερο από όσο δηλώνει είναι
+/// απολύτως νόμιμο (η βάση κρατά χώρο που δεν χρησιμοποιεί) και προσπερνιέται
+/// σιωπηλά. Μόνο το **μικρότερο** είναι αδύνατο για ακέραιο αρχείο.
+DatabaseStructuralVerdict inspectDatabaseFileStructure(
+  DatabaseFileIdentity? identity,
+) {
+  if (identity == null) return DatabaseStructuralVerdict.unknown;
+  if (identity.pageSize <= 0 || identity.pageCount <= 0) {
+    return DatabaseStructuralVerdict.unknown;
+  }
+  final declaredBytes = identity.pageCount * identity.pageSize;
+  if (identity.fileSize < declaredBytes) {
+    return DatabaseStructuralVerdict.truncated;
+  }
+  return DatabaseStructuralVerdict.ok;
+}
+
+/// Μυρίζει αυτό το σφάλμα «αντιγράφηκε ενώ η βάση δούλευε»;
+///
+/// Όταν αντιγράφεις αρχείο SQLite που εκείνη τη στιγμή γράφεται, ο αντιγραφέας
+/// διαβάζει το αρχείο σε κομμάτια· ανάμεσα στα κομμάτια η βάση αλλάζει. Το
+/// αποτέλεσμα δεν αντιστοιχεί σε **καμία** πραγματική στιγμή: ο κατάλογος
+/// είναι από τη μία στιγμή και τα δεδομένα από την άλλη, οπότε το SQLite
+/// ψάχνει πίνακα σε σελίδα που δεν υπάρχει.
+///
+/// Ξεχωρίζει σκόπιμα από το [looksLikeCorruptImageError]: εκείνο μιλά για
+/// **ό,τι διάβασε** μια ανοιχτή σύνδεση όταν το αρχείο αντικαταστάθηκε από
+/// κάτω της, και οδηγεί στον φρουρό αντικατάστασης. Εδώ το αρχείο είναι
+/// ασυνεπές **από μόνο του** — καμία επανασύνδεση δεν το θεραπεύει.
+bool looksLikeCopiedWhileInUseError(Object error) {
+  final lower = error.toString().toLowerCase();
+  return lower.contains('invalid rootpage') ||
+      lower.contains('malformed database schema');
+}

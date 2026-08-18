@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/department_model.dart';
@@ -11,6 +10,7 @@ import '../../providers/department_directory_provider.dart';
 import '../../screens/widgets/department_color_palette.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../controllers/building_map_controller.dart';
+import '../services/building_map_department_bulk_actions.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_fill_color_dialog.dart';
 import '../../../../core/widgets/compact_tooltip.dart';
@@ -209,9 +209,14 @@ class _BuildingMapFloorDepartmentsDialogState
     if (ids.isEmpty) return;
     final db = await DatabaseHelper.instance.database;
     final repo = DepartmentRepository(db);
-    for (final id in ids) {
-      await repo.updateDepartment(id, {'map_hidden': hidden ? 1 : 0});
-    }
+    await db.transaction(
+      (txn) => setDepartmentsHiddenOnMapInTxn(
+        txn,
+        repository: repo,
+        departmentIds: ids,
+        hidden: hidden,
+      ),
+    );
     await ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (mounted) setState(() {});
   }
@@ -302,22 +307,17 @@ class _BuildingMapFloorDepartmentsDialogState
     final db = await DatabaseHelper.instance.database;
     final repo = DepartmentRepository(db);
     final fid = widget.currentSheetId;
-    for (final d in selected) {
-      if (d.id == null) continue;
-      final removedColor = tryParseDepartmentHex(d.color);
-      await repo.updateDepartment(
-        d.id!,
-        BuildingMapRepository.clearedBuildingMapPlacementColumns(
-          clearFloorId: true,
-          clearDepartmentHex: true,
-        ),
-      );
-      if (removedColor != null) {
-        FloorColorAssignmentService.instance.removeColorFromFloor(
-          fid,
-          removedColor,
-        );
-      }
+    final releasedColors = await db.transaction(
+      (txn) => removeDepartmentsFromFloorInTxn(
+        txn,
+        repository: repo,
+        departments: selected,
+      ),
+    );
+    // Μετά την επιτυχή ολοκλήρωση: το μητρώο χρωμάτων ζει στη μνήμη και δεν
+    // γυρίζει πίσω μαζί με τη συναλλαγή.
+    for (final color in releasedColors) {
+      FloorColorAssignmentService.instance.removeColorFromFloor(fid, color);
     }
     await ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (!mounted) return;

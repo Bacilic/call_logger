@@ -9,9 +9,12 @@ import '../services/crash_log_service.dart';
 import '../services/settings_service.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_access_probe.dart';
+import 'database_busy_timeout.dart';
 import 'database_file_classifier.dart';
 import 'database_file_identity.dart';
+import '../init/startup_notices.dart';
 import 'database_init_result.dart';
+import 'database_journal_mode.dart';
 import 'database_init_progress_provider.dart';
 import 'database_lexicon_open_normalizations.dart';
 import 'database_lock_recovery.dart';
@@ -268,7 +271,6 @@ class DatabaseHelper {
       _database = null;
       throw _enrichSchemaValidationException(e);
     }
-    await db.execute('PRAGMA journal_mode = WAL;');
     await _captureFileIdentity(dbPath);
     // ΔΕΝ καταγράφεται «τελευταία ανοιγμένη βάση»: αυτή η διαδρομή ανοίγει
     // αρχείο που έδεσε τεστ, όχι βάση που επέλεξε ο χρήστης. Η καταγραφή
@@ -564,7 +566,6 @@ class DatabaseHelper {
           _database = null;
           throw _enrichSchemaValidationException(e);
         }
-        await db.execute('PRAGMA journal_mode = WAL;');
         await _captureFileIdentity(dbPath);
         await SettingsService().setLastOpenedDatabasePath(dbPath);
         progressNotifier?.setStep(
@@ -834,6 +835,26 @@ class DatabaseHelper {
     );
   }
 
+  /// Ό,τι πρέπει να ισχύει ΠΡΙΝ αγγίξει οτιδήποτε τη βάση — και πριν από τις
+  /// μεταπτώσεις σχήματος, που κι εκείνες γράφουν.
+  ///
+  /// Η αποτυχία αλλαγής τρόπου ημερολογίου **δεν σταματά** την εκκίνηση: η
+  /// βάση δουλεύει και σε WAL. Καταγράφεται όμως, γιατί μια βάση δικτύου που
+  /// έμεινε σιωπηλά σε WAL είναι ακριβώς το επικίνδυνο σενάριο.
+  static Future<void> _configureConnection(Database db, String dbPath) async {
+    await applyDatabaseBusyTimeout(db, dbPath);
+    final outcome = await applyDatabaseJournalMode(db, dbPath);
+    if (outcome.applied) return;
+    recordStartupNotice(
+      'Τρόπος ημερολογίου βάσης',
+      StateError(
+        'Ζητήθηκε ${outcome.requested.name}, η βάση παρέμεινε '
+        '${outcome.effective?.name ?? 'άγνωστο'}. '
+        'Πιθανόν την κρατά ανοιχτή άλλη σύνδεση.',
+      ),
+    );
+  }
+
   Future<int> _resolveDatabaseOpenTimeoutSeconds() async {
     try {
       final value = await SettingsService().catalogs
@@ -897,6 +918,9 @@ class DatabaseHelper {
       final openFuture = openDatabase(
         targetPath,
         version: kDatabaseSchemaVersion,
+        // Πριν από κάθε δημιουργία ή μετάπτωση σχήματος: κι εκείνες γράφουν,
+        // κι εκείνες θα έβρισκαν τη βάση πιασμένη από άλλο μηχάνημα.
+        onConfigure: (db) => _configureConnection(db, targetPath),
         onCreate: onDatabaseCreate,
         onUpgrade: onDatabaseUpgradeSquashed,
         onDowngrade: onDatabaseDowngradeSquashed,
@@ -936,7 +960,7 @@ class DatabaseHelper {
     final d = diagnostic.trim();
     if (d.isEmpty) return c;
     if (c.isEmpty) return d;
-    return '$c\n\n--- Diagnostics ---\n$d';
+    return '$c\n\n$kDiagnosticsSectionMarker\n$d';
   }
 
   /// Επαληθεύει ότι υπάρχει ο πίνακας `calls`. Αλλιώς ρίχνει [DatabaseInitException].
@@ -949,13 +973,13 @@ class DatabaseHelper {
     final db = await openDatabase(
       filePath,
       version: kDatabaseSchemaVersion,
+      onConfigure: (db) => _configureConnection(db, filePath),
       onCreate: onDatabaseCreate,
       onUpgrade: onDatabaseUpgradeSquashed,
       onDowngrade: onDatabaseDowngradeSquashed,
       singleInstance: false,
       onOpen: applyLexiconOpenNormalizations,
     );
-    await db.execute('PRAGMA journal_mode = WAL;');
     await db.close();
   }
 

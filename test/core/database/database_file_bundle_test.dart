@@ -60,7 +60,7 @@ void main() {
   });
 
   group('deleteDatabaseSidecars', () {
-    test('σβήνει μόνο τα -wal / -shm ανεκτικά', () async {
+    test('σβήνει τα συνοδά, ποτέ το κύριο αρχείο', () async {
       final mainPath = p.join(tempDir.path, 'keep.db');
       await File(mainPath).writeAsString('keep');
       await File('$mainPath-wal').writeAsString('wal');
@@ -114,6 +114,50 @@ void main() {
       );
 
       expect(name, 'call_logger_pre_restore_25-07-2026_14-32-07_2.db');
+    });
+  });
+
+  group('το -journal του κλασικού ημερολογίου', () {
+    test('μετονομάζεται μαζί με το κύριο αρχείο', () async {
+      // Ένα «-journal» που θα έμενε πίσω περιγράφει ημιτελή εγγραφή σε βάση
+      // που δεν βρίσκεται πια εκεί.
+      final mainPath = p.join(tempDir.path, 'call_logger.db');
+      await File(mainPath).writeAsString('main');
+      await File('$mainPath-journal').writeAsString('journal');
+
+      await renameDatabaseBundle(mainPath, 'metonomasmeni.db');
+
+      final renamed = p.join(tempDir.path, 'metonomasmeni.db');
+      expect(await File('$mainPath-journal').exists(), isFalse);
+      expect(await File('$renamed-journal').exists(), isTrue);
+      expect(await File('$renamed-journal').readAsString(), 'journal');
+    });
+
+    test('σβήνεται μαζί με τα υπόλοιπα συνοδά', () async {
+      // Το σενάριο που το κάνει κρίσιμο: κατάρρευση αφήνει «-journal», μετά
+      // γίνεται επαναφορά από αντίγραφο. Αν το «-journal» της ΠΑΛΙΑΣ βάσης
+      // μείνει δίπλα στη ΝΕΑ, το SQLite θα το εφαρμόσει σαν δικό της.
+      final mainPath = p.join(tempDir.path, 'call_logger.db');
+      await File(mainPath).writeAsString('main');
+      await File('$mainPath-wal').writeAsString('wal');
+      await File('$mainPath-shm').writeAsString('shm');
+      await File('$mainPath-journal').writeAsString('journal');
+
+      await deleteDatabaseSidecars(mainPath);
+
+      expect(await File(mainPath).exists(), isTrue, reason: 'το κύριο μένει');
+      for (final suffix in kDatabaseSidecarSuffixes) {
+        expect(
+          await File('$mainPath$suffix').exists(),
+          isFalse,
+          reason: 'έμεινε συνοδό $suffix',
+        );
+      }
+    });
+
+    test('η λίστα συνοδών καλύπτει και τους δύο τρόπους ημερολογίου', () {
+      expect(kDatabaseSidecarSuffixes, containsAll(<String>['-wal', '-shm']));
+      expect(kDatabaseSidecarSuffixes, contains('-journal'));
     });
   });
 }

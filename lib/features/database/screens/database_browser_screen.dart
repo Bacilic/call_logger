@@ -853,7 +853,14 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
           row('Τελευταία αλλαγή', _formatLastChange(stats?.lastChangeAt, pending)),
           row('Κλήσεις', _formatCallRange(stats, pending)),
           row('Χαμένος χώρος', _formatOptionalSize(stats?.reclaimableBytes, pending)),
-          row('Εκκρεμείς εγγραφές', _formatPendingWal(stats?.pendingWalBytes, pending)),
+          // Μόνο όταν υπάρχει κάτι να αναφερθεί. Με κλασικό ημερολόγιο δεν
+          // υπάρχει «-wal», οπότε μια γραμμή που θα έλεγε αιωνίως «καμία» δεν
+          // πληροφορεί — αφήνει να εννοηθεί ότι μετράει κάτι.
+          if ((stats?.pendingWalBytes ?? 0) > 0)
+            row(
+              'Εκκρεμείς εγγραφές',
+              DatabaseStatsService.formatFileSizeBytes(stats!.pendingWalBytes!),
+            ),
         ],
       ),
     );
@@ -885,12 +892,6 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
   String _formatOptionalSize(int? bytes, String pending) {
     if (bytes == null) return pending;
     if (bytes <= 0) return 'κανένας';
-    return DatabaseStatsService.formatFileSizeBytes(bytes);
-  }
-
-  String _formatPendingWal(int? bytes, String pending) {
-    if (bytes == null) return 'καμία';
-    if (bytes <= 0) return 'καμία';
     return DatabaseStatsService.formatFileSizeBytes(bytes);
   }
 

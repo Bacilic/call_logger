@@ -2,29 +2,50 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-/// Μετονομάζει το κύριο αρχείο βάσης και τα υπαρκτά sidecars `-wal` / `-shm`.
+/// Τα αρχεία που μπορεί να συνοδεύουν μια βάση SQLite.
+///
+/// `-wal` και `-shm` ανήκουν στο WAL· το `-journal` στο κλασικό ημερολόγιο
+/// αναίρεσης. Δεν συνυπάρχουν ποτέ και τα τρία — αλλά μια βάση που άλλαξε
+/// τρόπο, ή που έπεσε στη μέση μιας εγγραφής, μπορεί να αφήσει πίσω της
+/// οποιοδήποτε από αυτά. Γι' αυτό η λίστα είναι μία και κοινή: ένα συνοδό που
+/// ξεχνιέται σε κάποιο σημείο είναι ακριβώς ο τρόπος να καταστραφεί μια βάση.
+const List<String> kDatabaseSidecarSuffixes = <String>[
+  '-wal',
+  '-shm',
+  '-journal',
+];
+
+/// Μετονομάζει το κύριο αρχείο βάσης μαζί με όσα συνοδά του υπάρχουν.
+///
+/// Τα συνοδά ταξιδεύουν **μαζί** με το κύριο αρχείο: ένα `-journal` που θα
+/// έμενε πίσω περιγράφει ημιτελή εγγραφή σε βάση που δεν βρίσκεται πια εκεί.
 Future<void> renameDatabaseBundle(String dbPath, String newMainFileName) async {
   final dir = p.dirname(dbPath);
   final newMain = p.join(dir, newMainFileName);
-  final wal = '$dbPath-wal';
-  final shm = '$dbPath-shm';
-  final newWal = '$newMain-wal';
-  final newShm = '$newMain-shm';
 
   await File(dbPath).rename(newMain);
-  if (await File(wal).exists()) {
-    await File(wal).rename(newWal);
-  }
-  if (await File(shm).exists()) {
-    await File(shm).rename(newShm);
+  for (final suffix in kDatabaseSidecarSuffixes) {
+    final sidecar = File('$dbPath$suffix');
+    if (await sidecar.exists()) {
+      await sidecar.rename('$newMain$suffix');
+    }
   }
 }
 
-/// Σβήνει ανεκτικά μόνο τα συνοδευτικά `-wal` / `-shm` του [dbPath].
+/// Σβήνει ανεκτικά τα συνοδά αρχεία του [dbPath].
+///
+/// **Καλείται ΜΟΝΟ αφού το κύριο αρχείο έχει αντικατασταθεί.** Εκεί τα συνοδά
+/// ανήκουν σε βάση που δεν υπάρχει πια, και είναι επικίνδυνα: το SQLite θα τα
+/// εφαρμόσει πάνω στη νέα βάση σαν να ήταν δικά της — δηλαδή θα γράψει σελίδες
+/// της παλιάς πάνω στη νέα.
+///
+/// Έξω από αυτό το πλαίσιο η διαγραφή θα ήταν **λάθος**: ένα ζωντανό
+/// `-journal` κρατά την αναίρεση μιας εγγραφής που δεν πρόλαβε να ολοκληρωθεί,
+/// και σβήνοντάς το αφήνεις τη βάση μισογραμμένη χωρίς δρόμο επιστροφής.
 Future<void> deleteDatabaseSidecars(String dbPath) async {
-  for (final sidecar in <String>['$dbPath-wal', '$dbPath-shm']) {
+  for (final suffix in kDatabaseSidecarSuffixes) {
     try {
-      final file = File(sidecar);
+      final file = File('$dbPath$suffix');
       if (await file.exists()) {
         await file.delete();
       }

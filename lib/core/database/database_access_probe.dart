@@ -3,7 +3,10 @@ import 'dart:io';
 import 'dart:math';
 
 import '../config/app_config.dart';
+import 'database_file_bundle.dart';
+import 'database_file_identity.dart';
 import 'database_init_result.dart';
+import 'database_integrity_probe.dart';
 
 enum ProbeSeverity { info, warning, error }
 
@@ -94,12 +97,20 @@ class DatabaseAccessProbe {
       ),
     );
 
+    // Έξω από το χρονικό όριο των διαγνωστικών πρόσβασης: ο έλεγχος
+    // περιεχομένου απαντά σε άλλο ερώτημα και έχει δικό του όριο.
+    final extra = <ProbeFinding>[];
+    if (report.fatalResult == null) {
+      final integrity = await _checkContentIntegrity(dbPath);
+      if (integrity != null) extra.add(integrity);
+    }
+
     // Έξω από το χρονικό όριο των διαγνωστικών: ο καθαρισμός δεν είναι
     // διάγνωση και δεν επιτρέπεται να τρώει από τον χρόνο της.
-    final sweptFindings = await sweepStaleWriteProbes(dbPath);
-    if (sweptFindings.isEmpty) return report;
+    extra.addAll(await sweepStaleWriteProbes(dbPath));
+    if (extra.isEmpty) return report;
     return DatabaseAccessProbeReport(
-      findings: <ProbeFinding>[...report.findings, ...sweptFindings],
+      findings: <ProbeFinding>[...report.findings, ...extra],
       fatalResult: report.fatalResult,
     );
   }
@@ -226,6 +237,11 @@ class DatabaseAccessProbe {
       }
     }
 
+    if (fatalResult == null) {
+      final structural = await _checkStructuralConsistency(dbPath);
+      if (structural != null) findings.add(structural);
+    }
+
     final readProbe = await _checkReadProbe(dbFile, dbPath);
     if (readProbe != null) {
       findings.add(readProbe.$1);
@@ -346,6 +362,76 @@ class DatabaseAccessProbe {
         ),
         null,
       );
+    }
+  }
+
+  /// Χωρά το αρχείο τις σελίδες που δηλώνει η κεφαλίδα του;
+  ///
+  /// Κοστίζει 100 bytes και πιάνει το αντίγραφο που κόπηκε στη μέση — αρχείο
+  /// που «υπάρχει, διαβάζεται, γράφεται» και παρ' όλα αυτά δεν ανοίγει.
+  ///
+  /// **Αναφέρει, δεν μπλοκάρει.** Την απόφαση αν η βάση ανοίγει τη δίνει το
+  /// άνοιγμα· ένα διαγνωστικό δεν κλειδώνει κανέναν έξω από τη βάση του.
+  Future<ProbeFinding?> _checkStructuralConsistency(String dbPath) async {
+    final identity = await readDatabaseFileIdentity(dbPath);
+    final verdict = inspectDatabaseFileStructure(identity);
+    if (verdict == DatabaseStructuralVerdict.unknown || identity == null) {
+      return null;
+    }
+    if (verdict == DatabaseStructuralVerdict.ok) {
+      return ProbeFinding(
+        severity: ProbeSeverity.info,
+        code: 'structure_consistent',
+        message:
+            'Το αρχείο χωρά τις ${identity.pageCount} σελίδες που δηλώνει.',
+      );
+    }
+    final declared = identity.pageCount * identity.pageSize;
+    return ProbeFinding(
+      severity: ProbeSeverity.error,
+      code: 'db_file_truncated',
+      message:
+          'Το αρχείο είναι μικρότερο από όσο δηλώνει η κεφαλίδα του: '
+          '${_formatBytes(identity.fileSize)} αντί για '
+          '${_formatBytes(declared)}.',
+      hint: 'Τυπικό σημάδι αντιγραφής που δεν ολοκληρώθηκε.',
+    );
+  }
+
+  /// Ρωτά το SQLite αν το **περιεχόμενο** στέκει — το ερώτημα που κανένας
+  /// άλλος έλεγχος εδώ δεν αγγίζει.
+  ///
+  /// Οι υπόλοιποι έλεγχοι απαντούν «υπάρχει; διαβάζεται; γράφεται;». Ένα
+  /// αρχείο μπορεί να περνά και τα τρία και να είναι άχρηστο· τότε ο χρήστης
+  /// βλέπει σειρά από «[OK]» κάτω από ένα «φαίνεται κατεστραμμένο».
+  ///
+  /// **Αναφέρει, δεν μπλοκάρει** — και το ωμό κείμενο του SQLite περνά
+  /// αυτούσιο στο `hint`, χωρίς μετάφραση.
+  Future<ProbeFinding?> _checkContentIntegrity(String dbPath) async {
+    final outcome = await runDatabaseIntegrityProbe(dbPath);
+    final raw = outcome.rawMessage?.trim();
+    switch (outcome.status) {
+      case DatabaseIntegrityStatus.ok:
+        return const ProbeFinding(
+          severity: ProbeSeverity.info,
+          code: 'integrity_ok',
+          message: 'Ο έλεγχος ακεραιότητας περιεχομένου δεν βρήκε πρόβλημα.',
+        );
+      case DatabaseIntegrityStatus.inconclusive:
+        if (raw == null || raw.isEmpty) return null;
+        return ProbeFinding(
+          severity: ProbeSeverity.warning,
+          code: 'integrity_inconclusive',
+          message: 'Ο έλεγχος ακεραιότητας δεν κατέληξε.',
+          hint: raw,
+        );
+      case DatabaseIntegrityStatus.corrupt:
+        return ProbeFinding(
+          severity: ProbeSeverity.error,
+          code: 'integrity_failed',
+          message: 'Ο έλεγχος ακεραιότητας βρήκε χαλασμένο περιεχόμενο.',
+          hint: (raw == null || raw.isEmpty) ? null : raw,
+        );
     }
   }
 
@@ -519,7 +605,7 @@ class DatabaseAccessProbe {
     final findings = <ProbeFinding>[];
     final now = DateTime.now();
 
-    for (final suffix in const <String>['-wal', '-shm']) {
+    for (final suffix in kDatabaseSidecarSuffixes) {
       final f = File('$dbPath$suffix');
       if (!f.existsSync()) continue;
       try {
@@ -533,6 +619,21 @@ class DatabaseAccessProbe {
                 'Βρέθηκε sidecar ${f.path.split(Platform.pathSeparator).last} (${_formatBytes(stat.size)}).',
           ),
         );
+
+        if (suffix == '-journal' && stat.size > 0) {
+          findings.add(
+            const ProbeFinding(
+              severity: ProbeSeverity.warning,
+              code: 'hot_journal_present',
+              message:
+                  'Υπάρχει ημερολόγιο αναίρεσης: προηγούμενη εγγραφή δεν '
+                  'ολοκληρώθηκε.',
+              hint:
+                  'Το άνοιγμα θα την αναιρέσει πρώτα — αναμένεται μικρή '
+                  'καθυστέρηση.',
+            ),
+          );
+        }
 
         if (suffix == '-wal' && stat.size > _kLargeWalThresholdBytes) {
           findings.add(

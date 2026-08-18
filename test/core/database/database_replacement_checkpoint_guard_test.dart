@@ -64,7 +64,12 @@ void main() {
     activePath = p.join(tempDir.path, 'ενεργή.db');
     await DatabaseHelper.bindTestDatabaseFile(activePath);
     // Άνοιγμα: εδώ καταγράφεται η ταυτότητα του αρχείου.
-    await DatabaseHelper.instance.database;
+    final db = await DatabaseHelper.instance.database;
+    // Η εφαρμογή βάζει πλέον κλασικό ημερολόγιο, όπου δεν υπάρχει «-wal» και
+    // άρα ούτε ο κίνδυνος που φυλά αυτός ο φρουρός. Δεν είναι όμως νεκρός:
+    // βάση που ΔΕΝ κατάφερε να βγει από WAL —επειδή την κρατά άλλο μηχάνημα—
+    // εξακολουθεί να τον χρειάζεται. Εδώ στήνεται ακριβώς εκείνη η κατάσταση.
+    await db.execute('PRAGMA journal_mode = WAL');
   });
 
   tearDown(() async {
