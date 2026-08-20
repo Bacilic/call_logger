@@ -862,7 +862,7 @@ class OldEquipmentRepository {
         path,
         mode: LampDatabaseMode.write,
       );
-      return db.delete('data_issues');
+      return await db.delete('data_issues');
     } catch (e) {
       throw Exception(_friendlySqlError(e));
     }
@@ -883,7 +883,7 @@ class OldEquipmentRepository {
         path,
         mode: LampDatabaseMode.write,
       );
-      return db.delete(
+      return await db.delete(
         'data_issues',
         where: 'issue_type = ?',
         whereArgs: <Object?>[issueType.trim()],

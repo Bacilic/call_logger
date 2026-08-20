@@ -248,15 +248,14 @@ class LampPathController {
   Future<void> pickExcel() async {
     const memory = PickerLocationMemory('lamp_excel');
     final session = await FilePickerSession.run(() async {
-      final result = await FilePicker.pickFiles(
+      final result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: const <String>['xlsx', 'xls'],
         initialDirectory: await memory.initialDirectory(
           pathHint: excelController.text,
         ),
       );
-      if (result == null || result.files.isEmpty) return null;
-      final picked = result.files.first.path;
+      final picked = result?.path;
       if (picked != null) await memory.remember(picked);
       return picked;
     });
@@ -379,13 +378,12 @@ class LampPathController {
   }) async {
     const memory = PickerLocationMemory('lamp_read_db');
     final session = await FilePickerSession.run(() async {
-      final result = await FilePicker.pickFiles(
+      final result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: const <String>['db'],
         initialDirectory: await memory.initialDirectory(),
       );
-      if (result == null || result.files.isEmpty) return null;
-      final picked = result.files.first.path;
+      final picked = result?.path;
       if (picked != null) await memory.remember(picked);
       return picked;
     });

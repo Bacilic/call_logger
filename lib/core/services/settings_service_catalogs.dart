@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
+import 'shared_settings.dart';
 import '../config/audit_retention_config.dart';
 import '../../features/database/debug/publish_cli.dart';
 import 'settings_service.dart';
@@ -23,12 +24,10 @@ class SettingsServiceCatalogs {
   static const String _keyDictionaryExportPath = 'dictionary_export_path';
   static const String _keyEquipmentTypes = 'equipment_types';
   static const String _keyLexiconCategories = 'lexicon_categories';
-  static const String _keyAuditRetentionConfig = 'audit_retention_config_v1';
   static const String _keyCrashLogRetentionCount =
       'crash_log_retention_count_v1';
   static const String _keyCatalogValidationRules =
       'catalog_validation_rules_v1';
-  static const String _keyUpdateFolderPath = 'update_folder_path';
   static const String _keyPublishCliCommandTemplate =
       'publish_cli_command_template';
   static const String _keyShowUpdateOnStartup = 'show_update_on_startup';
@@ -130,17 +129,18 @@ class SettingsServiceCatalogs {
     }
   }
 
-  /// Πολιτική εκκαθάρισης audit log (ηλικία / max rows).
+  /// Πολιτική εκκαθάρισης Ιστορικού — **κοινή** (Φάση 2): καθαρίζει το κοινό
+  /// Ιστορικό, οπότε δεν επιτρέπεται να διαφέρει ανά μηχάνημα.
   Future<AuditRetentionConfig> getAuditRetentionConfig() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefKey(_keyAuditRetentionConfig));
+    final raw = await SharedSettings.read(
+      SharedSettingKeys.auditRetentionConfig,
+    );
     return AuditRetentionConfig.fromJsonString(raw);
   }
 
   Future<void> setAuditRetentionConfig(AuditRetentionConfig config) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _prefKey(_keyAuditRetentionConfig),
+    await SharedSettings.write(
+      SharedSettingKeys.auditRetentionConfig,
       jsonEncode(config.toJson()),
     );
   }
@@ -161,22 +161,20 @@ class SettingsServiceCatalogs {
     );
   }
 
-  /// Διαδρομή κοινόχρηστου φακέλου ενημερώσεων. Κενό/null = χωρίς τοπική ρύθμιση.
+  /// Φάκελος ενημερώσεων — **κοινός** (Φάση 2): τον ορίζει ο διαχειριστής και
+  /// από εκεί παίρνουν όλοι τις εκδόσεις.
   Future<String?> getUpdateFolderPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    final s = prefs.getString(_prefKey(_keyUpdateFolderPath));
+    final s = await SharedSettings.read(SharedSettingKeys.updateFolderPath);
     if (s == null) return null;
     final t = s.trim();
     return t.isEmpty ? null : t;
   }
 
   Future<void> setUpdateFolderPath(String? path) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (path == null || path.trim().isEmpty) {
-      await prefs.remove(_prefKey(_keyUpdateFolderPath));
-    } else {
-      await prefs.setString(_prefKey(_keyUpdateFolderPath), path.trim());
-    }
+    await SharedSettings.write(
+      SharedSettingKeys.updateFolderPath,
+      path?.trim() ?? '',
+    );
   }
 
   /// Πρότυπο εντολής δημοσίευσης μέσω τερματικού.

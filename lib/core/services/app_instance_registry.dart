@@ -116,8 +116,7 @@ class AppInstanceRegistry {
     final normalized = executablePath.trim().replaceAll('/', r'\');
     if (normalized.isEmpty) return '';
 
-    final parts = normalized.split(r'\')
-      ..removeWhere((part) => part.isEmpty);
+    final parts = normalized.split(r'\')..removeWhere((part) => part.isEmpty);
     if (parts.length <= 1) return normalized;
 
     // Χωρίς το όνομα του εκτελέσιμου — ο φάκελος είναι που ξεχωρίζει.

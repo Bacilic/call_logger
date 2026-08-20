@@ -396,32 +396,32 @@ class _LansweeperReportCallListState extends State<LansweeperReportCallList> {
         :final bodyHeight,
       ) =>
         _groupSurface(
-        theme: theme,
-        top: false,
-        bottom: isLastInGroup,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(8, 0, 8, isLastInGroup ? 10 : 0),
-          child: RepaintBoundary(
-            child: LansweeperReportCallTile(
-              checked: widget.selectedKeys.contains(item.key),
-              onCheckedChanged: (value) => widget.onToggleItem(item, value),
-              dateLabel: item.dateLabel,
-              tooltip: item.tooltip,
-              inlineMeta: inlineMeta,
-              durationLabel: item.durationLabel,
-              lansweeperState: item.lansweeperState,
-              ticketId: item.ticketId,
-              ticketViewUrlTemplate: widget.ticketViewUrlTemplate,
-              notes: item.notes,
-              solution: item.solution,
-              isSyncLoading: widget.isSyncLoading,
-              ticketLinkEnabled: widget.ticketLinkEnabled,
-              bodyHeight: bodyHeight,
-              onBadgePressed: () => widget.onBadgePressed(item),
+          theme: theme,
+          top: false,
+          bottom: isLastInGroup,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(8, 0, 8, isLastInGroup ? 10 : 0),
+            child: RepaintBoundary(
+              child: LansweeperReportCallTile(
+                checked: widget.selectedKeys.contains(item.key),
+                onCheckedChanged: (value) => widget.onToggleItem(item, value),
+                dateLabel: item.dateLabel,
+                tooltip: item.tooltip,
+                inlineMeta: inlineMeta,
+                durationLabel: item.durationLabel,
+                lansweeperState: item.lansweeperState,
+                ticketId: item.ticketId,
+                ticketViewUrlTemplate: widget.ticketViewUrlTemplate,
+                notes: item.notes,
+                solution: item.solution,
+                isSyncLoading: widget.isSyncLoading,
+                ticketLinkEnabled: widget.ticketLinkEnabled,
+                bodyHeight: bodyHeight,
+                onBadgePressed: () => widget.onBadgePressed(item),
+              ),
             ),
           ),
         ),
-      ),
     };
   }
 

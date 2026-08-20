@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/models/app_permission.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
+import '../../../core/services/permission_service.dart';
 import '../models/database_backup_settings.dart';
 import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
@@ -157,6 +159,9 @@ class BackupSchedulerNotifier extends Notifier<int> {
   }
 
   Future<void> _tick() async {
+    // Φάση 2: το πλήρες αντίγραφο είναι μόνο του διαχειριστή. Ο έλεγχος
+    // γίνεται σε κάθε τικ — η «Αλλαγή χρήστη» αλλάζει την απάντηση ζωντανά.
+    if (!PermissionService.instance.can(AppPermission.fullBackup)) return;
     final settings = ref.read(databaseBackupSettingsProvider);
     final now = DateTime.now();
     final atWindow = _isAtScheduledWindow(settings, now);

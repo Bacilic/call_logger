@@ -80,7 +80,7 @@ class CoreLexiconService {
       await Directory(dir).create(recursive: true);
       final target = p.normalize(p.join(dir, p.basename(assetPath)));
       await File(target).writeAsString(text, encoding: utf8);
-      return loadFromDiskPath(target, persistPath: true);
+      return await loadFromDiskPath(target, persistPath: true);
     } catch (e) {
       state = CoreLexiconState(lastError: e.toString());
       return false;
@@ -95,7 +95,7 @@ class CoreLexiconService {
         return false;
       }
       final target = await copyFileToPortableDictionaries(sourcePath);
-      return loadFromDiskPath(target, persistPath: true);
+      return await loadFromDiskPath(target, persistPath: true);
     } catch (e) {
       state = CoreLexiconState(lastError: e.toString());
       return false;

@@ -53,7 +53,9 @@ class LansweeperReportSelection {
   /// και τις δύο δουλειές με δεύτερη μπάρα φίλτρων, σε μισό πλάτος.
   List<ReportCallItem> filterReportItems(List<ReportCallItem> items) {
     return items
-        .where((item) => LansweeperSyncState.isQueued(item.call.lansweeperState))
+        .where(
+          (item) => LansweeperSyncState.isQueued(item.call.lansweeperState),
+        )
         .toList();
   }
 }

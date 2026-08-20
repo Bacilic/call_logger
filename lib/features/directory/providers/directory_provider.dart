@@ -25,8 +25,8 @@ import '../services/user_deletion_undo_record.dart';
 import '../services/user_equipment_codes.dart';
 import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
-
-const _catalogUsersVisibleColumnsKey = 'catalog_users_visible_columns';
+import '../../../core/services/profile_settings.dart';
+import '../../../core/services/scoped_settings.dart';
 
 class _UnsetFocus {
   const _UnsetFocus();
@@ -182,10 +182,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 
   Future<UserColumnLayout?> _readColumnLayoutFromSettings() async {
-    final dbRead = await DatabaseHelper.instance.database;
-    final raw = await SettingsRepository(
-      dbRead,
-    ).getSetting(_catalogUsersVisibleColumnsKey);
+    final raw = await ScopedSettings.getString(
+      ProfileSettingKeys.catalogUsersVisibleColumns,
+    );
     if (raw == null || raw.trim().isEmpty) return null;
     return parseUserColumnLayoutJson(raw);
   }
@@ -200,13 +199,39 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
           if (vis.contains(c.key)) c.key,
       ],
     });
-    final dbPersist = await DatabaseHelper.instance.database;
-    await SettingsRepository(
-      dbPersist,
-    ).saveSetting(_catalogUsersVisibleColumnsKey, payload);
+    await ScopedSettings.setString(
+      ProfileSettingKeys.catalogUsersVisibleColumns,
+      payload,
+    );
   }
 
   /// Φόρτωση χρηστών από τη βάση και εφαρμογή filter/sort.
+  /// Ξαναδιαβάζει **μόνο τις στήλες** του τρέχοντος χρήστη, κρατώντας τις
+  /// φορτωμένες εγγραφές.
+  ///
+  /// Καλείται στην «Αλλαγή χρήστη»: η βάση δεν άλλαξε, άρα τα δεδομένα
+  /// παραμένουν έγκυρα — αλλάζουν μόνο οι προτιμήσεις προβολής. Σκέτο
+  /// `invalidate` θα άδειαζε τον Κατάλογο μπροστά στα μάτια του χρήστη, γιατί
+  /// το `build()` ξεκινά από κενή κατάσταση και οι εγγραφές έρχονται μόνο με
+  /// [loadUsers].
+  ///
+  /// Χωρίς αποθηκευμένη επιλογή, οι στήλες επιστρέφουν στις **προεπιλογές** —
+  /// ποτέ σε αυτές του προηγούμενου χρήστη.
+  Future<void> reloadColumnLayoutForCurrentOperator() async {
+    final parsed = await _readColumnLayoutFromSettings();
+    _columnLayoutHydrated = true;
+    if (!ref.mounted) return;
+    final defaults = DirectoryState();
+    state = state.copyWith(
+      columnOrder: parsed != null
+          ? List<UserDirectoryColumn>.from(parsed.order)
+          : List<UserDirectoryColumn>.from(defaults.columnOrder),
+      visibleColumnKeys: parsed != null
+          ? Set<String>.from(parsed.visible)
+          : Set<String>.from(defaults.visibleColumnKeys),
+    );
+  }
+
   Future<void> loadUsers() async {
     UserColumnLayout? parsed;
     if (!_columnLayoutHydrated) {
@@ -350,8 +375,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final idQuery = IdSearchQuery.parse(state.searchQuery);
     var list = state.allUsers;
     if (!idQuery.isEmpty) {
-      final countTowardsSummary =
-          state.catalogMode == UserCatalogMode.personal;
+      final countTowardsSummary = state.catalogMode == UserCatalogMode.personal;
       list = list.where((u) {
         if (!idQuery.matchesEntityId(u.id)) return false;
         final result = evaluateCatalogSearchRow(
@@ -411,11 +435,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       list = list.where((e) {
         if (!idQuery.matchesEntityId(e.phoneId)) return false;
         final result = evaluateCatalogSearchRow([
-          CatalogSearchFact(
-            label: 'Τηλέφωνο',
-            text: e.number,
-            isVisible: true,
-          ),
+          CatalogSearchFact(label: 'Τηλέφωνο', text: e.number, isVisible: true),
           CatalogSearchFact(
             label: 'Τμήμα',
             text: e.departmentLabel,

@@ -393,8 +393,7 @@ class LansweeperSyncForm extends ConsumerWidget {
                 initialValue: selectedRequesterUsername ?? '',
                 decoration: InputDecoration(
                   labelText: 'Αιτών στο ticket',
-                  helperText:
-                      requesterCandidates.any((c) => c.isSuggestionOnly)
+                  helperText: requesterCandidates.any((c) => c.isSuggestionOnly)
                       ? 'Ο καλών έμεινε άγνωστος — διαλέξτε λογαριασμό του '
                             'τμήματος ή, αν θυμάστε ποιος τηλεφώνησε, τον ίδιο '
                             'τον υπάλληλο.'
@@ -489,7 +488,8 @@ class LansweeperSyncForm extends ConsumerWidget {
                 alignLabelWithHint: true,
               ),
             ),
-            if (onSaveAsKnowledge != null || saveAsKnowledgeDisabledTooltip != null)
+            if (onSaveAsKnowledge != null ||
+                saveAsKnowledgeDisabledTooltip != null)
               Align(
                 alignment: Alignment.centerLeft,
                 child: CompactTooltip(

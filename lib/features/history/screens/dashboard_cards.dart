@@ -437,7 +437,9 @@ class TopCallersCard extends ConsumerWidget {
                       child: Switch(
                         value: hideUnknown,
                         onChanged: (value) => ref
-                            .read(dashboardHideUnknownTopCallerProvider.notifier)
+                            .read(
+                              dashboardHideUnknownTopCallerProvider.notifier,
+                            )
                             .set(value),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),

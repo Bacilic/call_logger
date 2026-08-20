@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/department_repository.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/settings_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/id_search_query.dart';
@@ -20,8 +19,8 @@ import '../services/bulk_equipment_actions.dart';
 import '../services/catalog_search_evaluation.dart';
 import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
-
-const _catalogEquipmentLayoutKey = 'catalog_equipment_columns';
+import '../../../core/services/profile_settings.dart';
+import '../../../core/services/scoped_settings.dart';
 
 typedef _EquipmentColumnLayout = ({
   List<EquipmentColumn> order,
@@ -339,10 +338,9 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   Future<_EquipmentColumnLayout?> _readEquipmentLayoutFromSettings() async {
-    final dbLayout = await DatabaseHelper.instance.database;
-    final raw = await SettingsRepository(
-      dbLayout,
-    ).getSetting(_catalogEquipmentLayoutKey);
+    final raw = await ScopedSettings.getString(
+      ProfileSettingKeys.catalogEquipmentColumns,
+    );
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseEquipmentLayoutFromJson(raw);
   }
@@ -358,10 +356,10 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       'sortColumn': s.sortColumn?.key,
       'sortAscending': s.sortAscending,
     });
-    final dbPersist = await DatabaseHelper.instance.database;
-    await SettingsRepository(
-      dbPersist,
-    ).saveSetting(_catalogEquipmentLayoutKey, payload);
+    await ScopedSettings.setString(
+      ProfileSettingKeys.catalogEquipmentColumns,
+      payload,
+    );
   }
 
   void _schedulePersistEquipmentLayout() {
@@ -392,6 +390,41 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     } finally {
       _loadInFlight = false;
     }
+  }
+
+  /// Ξαναδιαβάζει **μόνο τις στήλες** του τρέχοντος χρήστη, κρατώντας τις
+  /// φορτωμένες εγγραφές.
+  ///
+  /// Ίδιο σκεπτικό με την αδελφή της στους Υπαλλήλους: στην «Αλλαγή χρήστη» η
+  /// βάση δεν άλλαξε, οπότε τα δεδομένα μένουν — σκέτο `invalidate` θα άδειαζε
+  /// τον πίνακα μπροστά στα μάτια του χρήστη.
+  Future<void> reloadColumnLayoutForCurrentOperator() async {
+    final parsed = await _readEquipmentLayoutFromSettings();
+    _equipmentLayoutHydrated = true;
+    if (!ref.mounted) return;
+    final showBuildingInLocation = await SettingsService().windowUi
+        .getEquipmentLocationShowBuilding();
+    if (!ref.mounted) return;
+
+    if (parsed != null) {
+      state = state.copyWith(
+        columnOrder: parsed.order,
+        visibleColumnKeys: parsed.visible,
+        sortColumn: _resolveSortColumn(parsed.sortKey),
+        sortAscending: parsed.sortAscending,
+        showBuildingInLocationColumn: showBuildingInLocation,
+      );
+    } else {
+      // Χωρίς αποθηκευμένη επιλογή: προεπιλογές, ποτέ οι στήλες του
+      // προηγούμενου χρήστη.
+      final defaults = EquipmentDirectoryState();
+      state = state.copyWith(
+        columnOrder: defaults.columnOrder,
+        visibleColumnKeys: defaults.visibleColumnKeys,
+        showBuildingInLocationColumn: showBuildingInLocation,
+      );
+    }
+    filterAndSort();
   }
 
   Future<void> _loadInternal() async {

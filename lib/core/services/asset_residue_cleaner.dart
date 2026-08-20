@@ -85,9 +85,7 @@ class AssetResidueCleaner {
     // με το επόμενο χτίσιμο — καθαρίζουμε εγκαταστάσεις, όχι χώρους εργασίας.
     if (isDevelopmentBuild()) return const AssetResidueScan();
 
-    final root = Directory(
-      p.join(flutterAssetsDirectory, scannedSubdirectory),
-    );
+    final root = Directory(p.join(flutterAssetsDirectory, scannedSubdirectory));
     if (!await root.exists()) return const AssetResidueScan();
 
     final Set<String> declared;

@@ -77,13 +77,11 @@ IssueDistributionView buildIssueDistribution(
     IssueDistributionMetric.duration => totalDuration,
   };
 
-  final sorted = [...issues]
-    ..sort((a, b) => valueOf(b).compareTo(valueOf(a)));
+  final sorted = [...issues]..sort((a, b) => valueOf(b).compareTo(valueOf(a)));
   final visible = sorted.take(limit).toList();
   final maxValue = visible.isEmpty ? 0 : valueOf(visible.first);
 
-  double shareOf(IssueStat issue) =>
-      total <= 0 ? 0 : valueOf(issue) / total;
+  double shareOf(IssueStat issue) => total <= 0 ? 0 : valueOf(issue) / total;
 
   final rows = [
     for (final issue in visible)

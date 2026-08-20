@@ -240,6 +240,59 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 47 && newVersion >= 47) {
     await migrateDatabaseToV47(db);
   }
+  if (oldVersion < 48 && newVersion >= 48) {
+    await migrateDatabaseToV48(db);
+  }
+  if (oldVersion < 49 && newVersion >= 49) {
+    await migrateDatabaseToV49(db);
+  }
+}
+
+/// Κλειδιά που δεν διαβάζει καμία ροή της εφαρμογής και φεύγουν στην v49.
+///
+/// Επαληθεύτηκαν ένα προς ένα: μηδέν αναφορές στο `lib/`. Το `test_target_ip`
+/// είναι η λεπτή περίπτωση — ως **στήλη** του `remote_tools` είναι ζωντανή και
+/// σε χρήση (πεδίο δοκιμής IP ανά εργαλείο)· ως **κλειδί ρυθμίσεων** δεν το
+/// γράφει ούτε το διαβάζει κανείς. Η διαγραφή αφορά μόνο το κλειδί.
+const List<String> kDeadAppSettingKeysV49 = <String>[
+  // Κωδικός σε απλό κείμενο, μέσα σε πίνακα ορατό από την Περιήγηση Βάσης.
+  'vnc_password',
+  // Σημαίες παλιών μεταπτώσεων, ολοκληρωμένων προ πολλού.
+  'departments_migration_done',
+  'phones_m2m_migration_done',
+  'users_normalized_v1',
+  'test_target_ip',
+];
+
+/// v49: καθαρισμός νεκρών κλειδιών από το `app_settings` (μόνο δεδομένα).
+///
+/// Idempotent και ακίνδυνη: αν τα κλειδιά δεν υπάρχουν, δεν αλλάζει τίποτα.
+/// Καμία δομή δεν αγγίζεται, οπότε παλαιότερη έκδοση της εφαρμογής συνεχίζει
+/// να ανοίγει τη βάση κανονικά.
+Future<void> migrateDatabaseToV49(Database db) async {
+  final existing = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_settings'",
+  );
+  if (existing.isEmpty) return;
+  final placeholders = List<String>.filled(
+    kDeadAppSettingKeysV49.length,
+    '?',
+  ).join(', ');
+  await db.delete(
+    'app_settings',
+    where: 'key IN ($placeholders)',
+    whereArgs: kDeadAppSettingKeysV49,
+  );
+}
+
+/// v48: πίνακας `operator_settings` — οι προσωπικές ρυθμίσεις κάθε χρήστη.
+///
+/// Καθαρή προσθήκη, χωρίς δεσμούς, όπως και ο `operators`: παλαιότερη έκδοση
+/// της εφαρμογής αγνοεί τον πίνακα και ανοίγει τη βάση κανονικά. Καμία εγγραφή
+/// δεν δημιουργείται εδώ — οι τιμές γεννιούνται όταν ο κάθε χρήστης πρωτοδεί
+/// (ή πρωτοαλλάξει) τις ρυθμίσεις του.
+Future<void> migrateDatabaseToV48(Database db) async {
+  await db.execute(kCreateOperatorSettingsTable);
 }
 
 /// v47: πίνακας `operators` — οι χρήστες της ίδιας της εφαρμογής.
@@ -379,9 +432,7 @@ Future<void> migrateDatabaseToV42(Database db) async {
     return;
   }
 
-  final rows = await db.rawQuery(
-    'SELECT COUNT(*) AS c FROM knowledge_base',
-  );
+  final rows = await db.rawQuery('SELECT COUNT(*) AS c FROM knowledge_base');
   final count = (rows.first['c'] as int?) ?? 0;
   if (count == 0) {
     await db.execute('DROP TABLE knowledge_base');
@@ -451,7 +502,10 @@ Future<void> migrateDatabaseToV43(Database db) async {
 /// είναι ενέργεια χρήστη, και «3 συσχετίσεις χρήστη-τηλεφώνου με ανύπαρκτο
 /// χρήστη» λέει ό,τι χρειάζεται. Σιωπηλή διόρθωση όμως δεν γίνεται — ο χρήστης
 /// πρέπει να μπορεί να δει γιατί μια σύνδεση δεν υπάρχει πια.
-Future<void> _logForeignKeyRepairs(Database db, Map<String, int> repaired) async {
+Future<void> _logForeignKeyRepairs(
+  Database db,
+  Map<String, int> repaired,
+) async {
   if (repaired.isEmpty) return;
   final user = await AuditService.performingUser(db);
   for (final entry in repaired.entries) {

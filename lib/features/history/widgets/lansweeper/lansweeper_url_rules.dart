@@ -1,4 +1,4 @@
-﻿import '../../../../core/database/settings_repository.dart';
+import '../../../../core/database/settings_repository.dart';
 
 /// Κανόνες επικύρωσης για τα δύο ξεχωριστά URL Lansweeper (API vs φόρμα web).
 abstract final class LansweeperUrlRules {
@@ -75,5 +75,4 @@ abstract final class LansweeperUrlRules {
     return buildTicketViewUrl(template, id) ??
         buildTicketViewUrl(kDefaultLansweeperTicketViewUrl, id)!;
   }
-
 }

@@ -140,20 +140,12 @@ void main() {
     );
   });
 
-  group('Πολιτική εκκαθάρισης ιστορικού ενεργειών', () {
-    test('με ενεργό προφίλ, η αποθήκευση διαβάζεται πίσω', () async {
-      AppConfig.activeProfile = 'dev';
-      final settings = SettingsService();
-      const config = AuditRetentionConfig(maxAgeDays: 45, maxRows: 5000);
-
-      await settings.catalogs.setAuditRetentionConfig(config);
-
-      final read = await settings.catalogs.getAuditRetentionConfig();
-      expect(read.maxAgeDays, 45);
-      expect(read.maxRows, 5000);
-    });
-
-    test('με ενεργό προφίλ δεν μολύνεται το παραγωγικό κλειδί', () async {
+  // Η πολιτική εκκαθάρισης Ιστορικού ΕΦΥΓΕ από τις τοπικές ρυθμίσεις στη
+  // Φάση 2: καθαρίζει το ΚΟΙΝΟ Ιστορικό, οπότε ζει πλέον στη βάση και είναι
+  // ίδια για όλους. Η απομόνωση ανά προφίλ CLI εξακολουθεί να ισχύει — μέσω
+  // του ξεχωριστού αρχείου βάσης κάθε προφίλ, όχι μέσω προθέματος κλειδιού.
+  group('Πολιτική εκκαθάρισης Ιστορικού — δεν είναι πια τοπική', () {
+    test('η αποθήκευση ΔΕΝ αγγίζει τις τοπικές ρυθμίσεις', () async {
       AppConfig.activeProfile = 'dev';
       final settings = SettingsService();
 
@@ -162,32 +154,31 @@ void main() {
       );
 
       final prefs = await SharedPreferences.getInstance();
-      expect(
-        prefs.containsKey('audit_retention_config_v1'),
-        isFalse,
-        reason:
-            'Η εκτέλεση με προφίλ δεν επιτρέπεται να γράφει πάνω στη '
-            'ρύθμιση της παραγωγικής εκτέλεσης',
-      );
+      expect(prefs.containsKey('audit_retention_config_v1'), isFalse);
       expect(
         prefs.containsKey('profile_dev_audit_retention_config_v1'),
-        isTrue,
+        isFalse,
+        reason:
+            'Η ρύθμιση ανήκει στα δεδομένα — μια τοπική εγγραφή θα ξαναγεννούσε '
+            'το πρόβλημα που έλυσε η Φάση 2.',
       );
     });
 
-    test(
-      'χωρίς προφίλ (παραγωγή) γράφει και διαβάζει το σκέτο κλειδί',
-      () async {
-        final settings = SettingsService();
-        await settings.catalogs.setAuditRetentionConfig(
-          const AuditRetentionConfig(maxAgeDays: 10, maxRows: 100),
-        );
+    test('περνά από τον πάροχο κοινών ρυθμίσεων', () async {
+      final store = <String, String>{};
+      SettingsService.registerAppSettingsProvider(
+        (key) async => store[key],
+        (key, value) async => store[key] = value,
+      );
+      final settings = SettingsService();
 
-        final prefs = await SharedPreferences.getInstance();
-        expect(prefs.containsKey('audit_retention_config_v1'), isTrue);
-        final read = await settings.catalogs.getAuditRetentionConfig();
-        expect(read.maxAgeDays, 10);
-      },
-    );
+      await settings.catalogs.setAuditRetentionConfig(
+        const AuditRetentionConfig(maxAgeDays: 10, maxRows: 100),
+      );
+
+      expect(store.containsKey('audit_retention_config_v1'), isTrue);
+      final read = await settings.catalogs.getAuditRetentionConfig();
+      expect(read.maxAgeDays, 10);
+    });
   });
 }

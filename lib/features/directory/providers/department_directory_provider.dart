@@ -290,9 +290,9 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       // Παθολογικής» το βρίσκει από την ονομασία που δώσατε εσείς.
       CatalogSearchFact(
         label: 'Αναγνωριστικά Lansweeper',
-        text: decodeLansweeperAccounts(d.lansweeperUsernames)
-            .map((a) => '${a.username} ${a.label}'.trim())
-            .join(' '),
+        text: decodeLansweeperAccounts(
+          d.lansweeperUsernames,
+        ).map((a) => '${a.username} ${a.label}'.trim()).join(' '),
         isVisible: false,
       ),
     ];

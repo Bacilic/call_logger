@@ -797,8 +797,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
     };
     return types
         .map(
-          (t) =>
-              AuditFilterAutocompleteOption(value: t, label: labels[t] ?? t),
+          (t) => AuditFilterAutocompleteOption(value: t, label: labels[t] ?? t),
         )
         .toList();
   }

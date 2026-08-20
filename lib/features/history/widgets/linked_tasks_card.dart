@@ -8,11 +8,7 @@ import '../../tasks/models/task.dart';
 /// εκεί το αίτημα Lansweeper, εδώ η εκκρεμότητα. Χωρίς αυτό, η σύνδεση
 /// φαινόταν μόνο τη στιγμή της διαγραφής.
 class LinkedTasksCard extends StatelessWidget {
-  const LinkedTasksCard({
-    required this.tasks,
-    required this.onOpen,
-    super.key,
-  });
+  const LinkedTasksCard({required this.tasks, required this.onOpen, super.key});
 
   final List<Task> tasks;
   final ValueChanged<Task> onOpen;

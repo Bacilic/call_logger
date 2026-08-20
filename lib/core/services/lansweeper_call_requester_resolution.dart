@@ -72,10 +72,7 @@ Future<LansweeperRequesterOptions> resolveLansweeperRequesterForCalls({
 
       final accounts = decodeLansweeperAccounts(department.lansweeperUsernames);
       if (accounts.isNotEmpty) {
-        departments.add((
-          departmentName: department.name,
-          accounts: accounts,
-        ));
+        departments.add((departmentName: department.name, accounts: accounts));
       }
 
       if (!hasUnidentifiedCalls) continue;

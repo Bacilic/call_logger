@@ -1845,7 +1845,7 @@ class _BuildingMapSheetViewportState
                                                     .commitDraftToDatabase(
                                                       context: context,
                                                       draft: draftShape,
-                                                      dept: selectedDept,
+                                                      dept: selectedDept!,
                                                       floorId:
                                                           w.currentSheetId!,
                                                     );

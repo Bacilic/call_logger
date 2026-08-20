@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
+import '../widgets/operator_picker_body.dart';
 
 /// «Ποιος είστε;» — η οθόνη που εμφανίζεται όταν ο λογαριασμός Windows δεν
 /// αρκεί για να αναγνωριστεί ο χρήστης.
 ///
 /// Δεν είναι σύνδεση με κωδικό και δεν φυλάει τίποτα: επιλέγει ποιο όνομα θα
-/// υπογράφει τις ενέργειες αυτής της συνεδρίας.
-class OperatorPickerScreen extends StatefulWidget {
+/// υπογράφει τις ενέργειες αυτής της συνεδρίας. Το περιεχόμενο (λίστα/φόρμα)
+/// ζει στο [OperatorPickerBody], κοινό με τον διάλογο «Αλλαγή χρήστη».
+class OperatorPickerScreen extends StatelessWidget {
   const OperatorPickerScreen({
     super.key,
     required this.profiles,
@@ -32,46 +34,6 @@ class OperatorPickerScreen extends StatefulWidget {
 
   /// Όταν δεν υπάρχει καθόλου λογαριασμός Windows, το δέσιμο δεν προσφέρεται.
   final bool hasWindowsAccount;
-
-  @override
-  State<OperatorPickerScreen> createState() => _OperatorPickerScreenState();
-}
-
-class _OperatorPickerScreenState extends State<OperatorPickerScreen> {
-  late final TextEditingController _name = TextEditingController(
-    text: widget.suggestedName,
-  );
-  bool _creating = false;
-  bool _bindAccount = true;
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    // Χωρίς προφίλ να διαλέξει κανείς, η μόνη χρήσιμη οθόνη είναι η φόρμα.
-    _creating = widget.profiles.isEmpty;
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  Future<void> _create() async {
-    final name = _name.text.trim();
-    if (name.isEmpty) {
-      setState(() => _error = 'Δώστε όνομα — με αυτό θα υπογράφονται οι '
-          'ενέργειές σας στο Ιστορικό.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    await widget.onCreate(name, _bindAccount && widget.hasWindowsAccount);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,82 +70,18 @@ class _OperatorPickerScreenState extends State<OperatorPickerScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                if (_creating) ..._buildCreateForm(theme) else
-                  ..._buildProfileList(theme),
+                OperatorPickerBody(
+                  profiles: profiles,
+                  onPick: onPick,
+                  onCreate: onCreate,
+                  suggestedName: suggestedName,
+                  hasWindowsAccount: hasWindowsAccount,
+                ),
               ],
             ),
           ),
         ),
       ),
     );
-  }
-
-  List<Widget> _buildProfileList(ThemeData theme) {
-    return [
-      for (final profile in widget.profiles)
-        Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: Text(profile.displayName),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _busy ? null : () => widget.onPick(profile),
-          ),
-        ),
-      const SizedBox(height: 8),
-      TextButton.icon(
-        onPressed: _busy ? null : () => setState(() => _creating = true),
-        icon: const Icon(Icons.person_add_alt_1_outlined),
-        label: const Text('Δεν είμαι στη λίστα'),
-      ),
-    ];
-  }
-
-  List<Widget> _buildCreateForm(ThemeData theme) {
-    return [
-      TextField(
-        controller: _name,
-        autofocus: true,
-        decoration: const InputDecoration(
-          labelText: 'Το όνομά σας',
-          helperText: 'Όπως θέλετε να εμφανίζεται στο Ιστορικό.',
-        ),
-        onSubmitted: (_) => _busy ? null : _create(),
-      ),
-      if (widget.hasWindowsAccount) ...[
-        const SizedBox(height: 8),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          value: _bindAccount,
-          onChanged: _busy
-              ? null
-              : (value) => setState(() => _bindAccount = value ?? false),
-          title: const Text('Αυτός ο υπολογιστής είναι δικός μου'),
-          subtitle: const Text(
-            'Θα σας αναγνωρίζει αυτόματα και δεν θα ξαναρωτήσει. Αφήστε το '
-            'κενό αν τον μοιράζεστε με συναδέλφους.',
-          ),
-        ),
-      ],
-      if (_error != null) ...[
-        const SizedBox(height: 8),
-        Text(
-          _error!,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.error,
-          ),
-        ),
-      ],
-      const SizedBox(height: 16),
-      FilledButton(
-        onPressed: _busy ? null : _create,
-        child: const Text('Συνέχεια'),
-      ),
-      if (widget.profiles.isNotEmpty)
-        TextButton(
-          onPressed: _busy ? null : () => setState(() => _creating = false),
-          child: const Text('Επιστροφή στη λίστα'),
-        ),
-    ];
   }
 }

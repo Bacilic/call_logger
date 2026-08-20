@@ -343,14 +343,14 @@ class _LampResolutionProgressDialogState
     setState(() => _exporting = true);
     try {
       const memory = PickerLocationMemory('lamp_resolution_report');
-      final path = await FilePicker.saveFile(
+      final path = (await FilePicker.saveFile(
         dialogTitle: 'Εξαγωγή αναφοράς επίλυσης',
         fileName: 'resolution_log_${_timestampForFileName()}.txt',
         type: FileType.custom,
         allowedExtensions: const <String>['txt'],
         initialDirectory: await memory.initialDirectory(),
         bytes: Uint8List(0),
-      );
+      ))?.toFilePath();
       if (!mounted) return;
       if (path == null) {
         setState(() => _exporting = false);

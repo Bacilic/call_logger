@@ -36,6 +36,67 @@ class _LansweeperSettingsAiTabState
     extends ConsumerState<LansweeperSettingsAiTab> {
   bool _obscureGeminiKey = true;
 
+  /// Έχει ο συνδεδεμένος χρήστης δικό του κλειδί (Φάση 3), ή ισχύει το κοινό;
+  bool _hasPersonalKey = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refreshPersonalKeyState());
+  }
+
+  Future<void> _refreshPersonalKeyState() async {
+    final has = await ref
+        .read(geminiApiKeyProvider.notifier)
+        .hasPersonalApiKey();
+    if (!mounted) return;
+    setState(() => _hasPersonalKey = has);
+  }
+
+  Future<void> _useSharedKey() async {
+    await ref.read(geminiApiKeyProvider.notifier).useSharedApiKey();
+    if (!mounted) return;
+    widget.geminiApiKeyController.text = ref.read(geminiApiKeyProvider);
+    await _refreshPersonalKeyState();
+  }
+
+  /// Εξηγεί ΠΟΙΟ κλειδί ισχύει τώρα — χωρίς αυτό, ο χρήστης δεν μπορεί να
+  /// ξεχωρίσει το κοινό της ομάδας από το δικό του.
+  Widget _buildKeyScopeNotice(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Icon(
+            _hasPersonalKey ? Icons.person_outline : Icons.groups_outlined,
+            size: 16,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              _hasPersonalKey
+                  ? 'Χρησιμοποιείται το δικό σας κλειδί — σας ακολουθεί σε '
+                        'όποιον υπολογιστή καθίσετε.'
+                  : 'Χρησιμοποιείται το κοινό κλειδί της ομάδας. Ό,τι '
+                        'πληκτρολογήσετε εδώ γίνεται δικό σας.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          if (_hasPersonalKey)
+            TextButton(
+              key: const Key('gemini_use_shared_key_button'),
+              onPressed: _useSharedKey,
+              child: const Text('Χρήση του κοινού'),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildKeyAndEndpointCard(BuildContext context) {
     return LansweeperSettingsCard(
       icon: Icons.key_rounded,
@@ -79,6 +140,7 @@ class _LansweeperSettingsAiTabState
             ),
           ),
         ),
+        _buildKeyScopeNotice(context),
         const SizedBox(height: 8),
         TextFormField(
           controller: widget.geminiEndpointController,
@@ -128,7 +190,9 @@ class _LansweeperSettingsAiTabState
           value: ref.watch(geminiAutoResubmitEnabledProvider),
           onChanged: (v) {
             unawaited(
-              ref.read(geminiAutoResubmitEnabledProvider.notifier).setEnabled(v),
+              ref
+                  .read(geminiAutoResubmitEnabledProvider.notifier)
+                  .setEnabled(v),
             );
           },
         ),
@@ -148,8 +212,7 @@ class _LansweeperSettingsAiTabState
           fallbackModelController: widget.geminiFallbackModelController,
           apiKeyController: widget.geminiApiKeyController,
           fallbackEnabled: geminiFallbackEnabled,
-          endpointTemplate:
-              widget.geminiEndpointController.text.trim().isEmpty
+          endpointTemplate: widget.geminiEndpointController.text.trim().isEmpty
               ? kDefaultGeminiEndpoint
               : widget.geminiEndpointController.text,
           onChanged: widget.onSettingsChanged,

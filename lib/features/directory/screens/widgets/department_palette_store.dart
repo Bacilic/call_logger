@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/services/shared_settings.dart';
+
 import '../../../../core/config/app_config.dart';
 import 'department_color_palette.dart';
 
@@ -35,9 +37,19 @@ class DepartmentPaletteStore extends ChangeNotifier {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    var raw = prefs.getStringList(_prefKey(_prefsKeySlots));
-    raw ??= await _migrateFromLegacy(prefs);
+    // Η παλέτα είναι **κοινή** (Φάση 2): το χρώμα ενός τμήματος πρέπει να
+    // σημαίνει το ίδιο για όλη την ομάδα. Η τοπική τιμή ανεβαίνει στα κοινά
+    // μία φορά, από τον διαχειριστή.
+    final shared = await SharedSettings.read(
+      SharedSettingKeys.departmentPaletteSlots,
+    );
+    List<String>? raw = shared == null || shared.isEmpty
+        ? null
+        : SharedSettings.decodeList(shared);
+    if (raw == null) {
+      final prefs = await SharedPreferences.getInstance();
+      raw = await _migrateFromLegacy(prefs);
+    }
     final slots = List<Color?>.filled(customSlotCount, null);
     for (var i = 0; i < customSlotCount; i++) {
       if (i < raw.length) {
@@ -62,10 +74,12 @@ class DepartmentPaletteStore extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_prefKey(_prefsKeySlots), [
-      for (final c in _slots) c == null ? '' : colorToDepartmentHex(c),
-    ]);
+    await SharedSettings.write(
+      SharedSettingKeys.departmentPaletteSlots,
+      SharedSettings.encodeList([
+        for (final c in _slots) c == null ? '' : colorToDepartmentHex(c),
+      ]),
+    );
   }
 
   /// Πρώτη κενή θέση (0–7) ή null αν η παλέτα είναι πλήρη.

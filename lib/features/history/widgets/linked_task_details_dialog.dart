@@ -141,9 +141,7 @@ class _LinkedTaskDetailsDialogState
         // Χωρίς την ερώτηση επαναφοράς: η αναίρεση έχει δικό της κουμπί.
         onPressed: _busy
             ? null
-            : () => _run(
-                () => editTask(context, ref, _task),
-              ),
+            : () => _run(() => editTask(context, ref, _task)),
         icon: const Icon(Icons.edit_outlined, size: 20),
         label: const Text('Επεξεργασία'),
       ),
@@ -277,7 +275,10 @@ class _TaskDetailsCard extends StatelessWidget {
         final until = task.snoozeUntilDateTime ?? task.dueDateTime;
         if (until != null) {
           final times = task.snoozeHistory.length;
-          final suffix = times > 1 ? ' ($times' 'η φορά)' : '';
+          final suffix = times > 1
+              ? ' ($times'
+                    'η φορά)'
+              : '';
           lines.add(
             Text('Αναβλήθηκε ως: ${_fmt.format(until)}$suffix', style: style),
           );

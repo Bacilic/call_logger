@@ -114,7 +114,8 @@ LansweeperRequesterOptions resolveLansweeperRequester({
   required List<({String departmentName, List<LansweeperAccount> accounts})>
   departments,
   List<({String departmentName, List<LansweeperAccount> accounts})>
-  departmentColleagues = const [],
+      departmentColleagues =
+      const [],
 }) {
   final partyCount = callers.length + (hasUnidentifiedCalls ? 1 : 0);
 

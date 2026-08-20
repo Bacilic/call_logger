@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/settings_repository.dart';
+import '../../../core/services/current_operator.dart';
+import '../../../core/services/profile_settings.dart';
 import '../models/database_backup_settings.dart';
 import '../utils/backup_schedule_utils.dart';
 
-/// Φόρτωση και αποθήκευση [DatabaseBackupSettings] στον πίνακα `app_settings`.
+/// Φόρτωση και αποθήκευση [DatabaseBackupSettings] — **προσωπικά, ανά χρήστη**
+/// (Φάση 2): το «δέμα» ζει στον πίνακα `operator_settings` του συνδεδεμένου
+/// χρήστη και τον ακολουθεί σε όποιον υπολογιστή καθίσει. Χωρίς συνδεδεμένο
+/// χρήστη, η [ProfileSettings] πέφτει στην παλιά κοινή θέση — όλα όπως χθες.
 final databaseBackupSettingsProvider =
     NotifierProvider<DatabaseBackupSettingsNotifier, DatabaseBackupSettings>(
       DatabaseBackupSettingsNotifier.new,
@@ -13,14 +19,23 @@ final databaseBackupSettingsProvider =
 
 class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
   @override
-  DatabaseBackupSettings build() => DatabaseBackupSettings.defaults();
+  DatabaseBackupSettings build() {
+    // «Αλλαγή χρήστη» εν λειτουργία: το δέμα του προηγούμενου δεν ισχύει πια —
+    // ξαναφορτώνεται του νέου, από το ίδιο ένα σημείο (αυτό εδώ).
+    void onIdentityChanged() => unawaited(load());
+    CurrentOperator.listenable.addListener(onIdentityChanged);
+    ref.onDispose(
+      () => CurrentOperator.listenable.removeListener(onIdentityChanged),
+    );
+    return DatabaseBackupSettings.defaults();
+  }
 
   Future<void> load() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final raw = await SettingsRepository(
+      final raw = await ProfileSettings(
         db,
-      ).getSetting(DatabaseBackupSettings.appSettingsKey);
+      ).read(ProfileSettingKeys.databaseBackupSettings);
       state = DatabaseBackupSettings.fromJsonString(raw);
     } catch (_) {
       state = DatabaseBackupSettings.defaults();
@@ -29,9 +44,9 @@ class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
 
   Future<void> _persist() async {
     final db = await DatabaseHelper.instance.database;
-    await SettingsRepository(
+    await ProfileSettings(
       db,
-    ).saveSetting(DatabaseBackupSettings.appSettingsKey, state.toJsonString());
+    ).write(ProfileSettingKeys.databaseBackupSettings, state.toJsonString());
   }
 
   Future<void> setDestinationDirectory(String value) async {

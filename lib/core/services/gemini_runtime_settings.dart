@@ -1,5 +1,6 @@
 import '../database/database_helper.dart';
 import '../database/settings_repository.dart';
+import 'gemini_api_key_resolution.dart';
 import 'gemini_ticket_service.dart';
 
 /// Ρυθμίσεις Gemini για on-demand κλήσεις (ανεξάρτητα από autoDispose providers).
@@ -18,8 +19,8 @@ class GeminiRuntimeSettings {
     final db = await DatabaseHelper.instance.database;
     final repo = SettingsRepository(db);
 
-    final apiKey =
-        (await repo.getSetting(kGeminiApiKeySettingKey))?.trim() ?? '';
+    // Η ΙΔΙΑ αλυσίδα με την οθόνη: προσωπικό κλειδί αν υπάρχει, αλλιώς κοινό.
+    final apiKey = await resolveGeminiApiKey();
 
     final endpointRaw =
         (await repo.getSetting(kGeminiEndpointSettingKey))?.trim() ?? '';

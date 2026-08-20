@@ -58,10 +58,13 @@ class LansweeperReportKnowledge {
   /// Αποτυχία εδώ δεν εμποδίζει την αποθήκευση: χειρότερο αποτέλεσμα είναι ένα
   /// διπλό άρθρο, ενώ το να χαθεί η λύση επειδή κόλλησε ένα ερώτημα θα ήταν
   /// πραγματική ζημιά.
-  Future<KnowledgeArticle?> _findExisting(String symptom, int? categoryId) async {
+  Future<KnowledgeArticle?> _findExisting(
+    String symptom,
+    int? categoryId,
+  ) async {
     try {
       final repo = await host.ref.read(knowledgeRepositoryProvider.future);
-      return repo.findDuplicate(query: symptom, categoryId: categoryId);
+      return await repo.findDuplicate(query: symptom, categoryId: categoryId);
     } catch (_) {
       return null;
     }
@@ -105,8 +108,6 @@ class LansweeperReportKnowledge {
     if (id == null || !host.mounted) return;
     // Το άρθρο γεννήθηκε από πραγματικό περιστατικό — μετράει ως χρήση από την
     // πρώτη στιγμή, αλλιώς η νέα γνώση φαίνεται για πάντα αδοκίμαστη.
-    await host.ref
-        .read(knowledgeActionsProvider.notifier)
-        .markUsed(<int>[id]);
+    await host.ref.read(knowledgeActionsProvider.notifier).markUsed(<int>[id]);
   }
 }

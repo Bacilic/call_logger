@@ -12,6 +12,13 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - "Grok/**"
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
 
 linter:
   # Οι κανόνες ελέγχου που ισχύουν στο project μπορούν να προσαρμοστούν πιο κάτω:

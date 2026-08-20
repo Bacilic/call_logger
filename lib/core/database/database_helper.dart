@@ -144,6 +144,17 @@ class DatabaseHelper {
   /// True όταν εκτελείται προσπάθεια ανοίγματος βάσης.
   bool get isOpening => _databaseInitializingFuture != null;
 
+  /// Η ήδη ανοιχτή σύνδεση, ή `null` — **χωρίς να ανοίξει καμία**.
+  ///
+  /// Για καλούντες που θέλουν να διαβάσουν κάτι «αν τυχόν υπάρχει βάση», χωρίς
+  /// να προκαλέσουν άνοιγμα: μια ρύθμιση δεν είναι λόγος να ξεκινήσει σύνδεση,
+  /// και σε ελέγχους ένα τέτοιο άνοιγμα δεν ολοκληρώνεται ποτέ.
+  Database? get openDatabaseOrNull {
+    final db = _database;
+    if (db == null || !db.isOpen) return null;
+    return db;
+  }
+
   int _connectionGeneration = 0;
 
   /// Αυξάνεται σε ΚΑΘΕ κλείσιμο σύνδεσης.
@@ -711,7 +722,10 @@ class DatabaseHelper {
   Future<Never> _rejectNewerDatabaseFile(String dbPath, int fileVersion) async {
     SchemaDowngradeAssessment? assessment;
     try {
-      assessment = await assessSchemaDowngrade(dbPath, fileVersion: fileVersion);
+      assessment = await assessSchemaDowngrade(
+        dbPath,
+        fileVersion: fileVersion,
+      );
     } catch (_) {
       // Χωρίς αξιολόγηση η υποβάθμιση απλώς δεν προσφέρεται — το σφάλμα
       // παραμένει σαφές και οι υπόλοιπες διέξοδοι ισχύουν.
@@ -1030,7 +1044,7 @@ class DatabaseHelper {
         success: true,
         isLocalDev: resolved.usedUncFallback,
       );
-    } catch (_, _) {
+    } catch (_) {
       return const ConnectionCheckResult(success: false, isLocalDev: false);
     }
   }

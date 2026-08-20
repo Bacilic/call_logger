@@ -20,8 +20,11 @@ import '../../../core/database/database_restore_flow.dart';
 import '../../../core/init/database_switch_completion.dart';
 import '../../../core/init/database_switch_guard.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
+import '../../../core/models/app_permission.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/new_database_suggested_file_name.dart';
+import '../../operators/services/profile_settings_export.dart';
 import '../../../core/widgets/compact_tooltip.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
 import '../models/database_backup_settings.dart';
@@ -159,7 +162,7 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
     try {
       final db = await DatabaseHelper.instance.database;
       final baseName = p.basenameWithoutExtension(db.path);
-      return BackupDestinationFolderValidator.inspectDestinationContent(
+      return await BackupDestinationFolderValidator.inspectDestinationContent(
         destinationDirectory: dest,
         dbBaseName: baseName,
       );
@@ -723,6 +726,99 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
     await _validateAndPersistDestination();
   }
 
+  /// Τι βλέπει ο χρήστης χωρίς δικαίωμα πλήρους αντιγράφου: ποιος χειρίζεται
+  /// τα αντίγραφα, και το δικό του «αντίγραφο ρυθμίσεων» (κλειδωμένη απόφαση
+  /// Φάσης 0: ο απλός χρήστης παίρνει αντίγραφο μόνο του προφίλ του).
+  Widget _buildBackupManagedByAdminNotice(ThemeData theme) {
+    return Card(
+      margin: EdgeInsets.zero,
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.admin_panel_settings_outlined,
+                  size: 20,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Τα αντίγραφα ασφαλείας της βάσης τα χειρίζεται ο '
+                    'διαχειριστής.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Μπορείτε να αποθηκεύσετε ένα αντίγραφο των δικών σας '
+              'προσωπικών ρυθμίσεων και να το επαναφέρετε όποτε χρειαστεί.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _exportMyProfileSettings,
+                  icon: const Icon(Icons.save_alt_outlined, size: 18),
+                  label: const Text('Αντίγραφο των ρυθμίσεών μου'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _importMyProfileSettings,
+                  icon: const Icon(Icons.settings_backup_restore, size: 18),
+                  label: const Text('Επαναφορά ρυθμίσεων'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _importMyProfileSettings() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await importActiveOperatorSettings();
+    if (result.isRestored) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Επανήλθαν ${result.restoredCount} ρυθμίσεις. Κάποιες οθόνες '
+            'δείχνουν τις νέες τιμές όταν ξανανοίξουν.',
+          ),
+        ),
+      );
+    } else if (result.error != null) {
+      messenger.showSnackBar(SnackBar(content: Text(result.error!)));
+    }
+  }
+
+  Future<void> _exportMyProfileSettings() async {
+    // Ο messenger κρατιέται ΠΡΙΝ το await — μετά το κλείσιμο του επιλογέα το
+    // context μπορεί να μην είναι πια ζωντανό.
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await exportActiveOperatorSettings();
+    if (result.isSaved) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Οι ρυθμίσεις αποθηκεύτηκαν στο ${result.path}'),
+        ),
+      );
+    } else if (result.error != null) {
+      messenger.showSnackBar(SnackBar(content: Text(result.error!)));
+    }
+  }
+
   Widget _buildBackupScheduleStatusSection(
     ThemeData theme,
     DatabaseBackupSettings settings,
@@ -956,6 +1052,12 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
     });
 
     final cWarning = settings.destinationLooksLikeWindowsSystemDriveC;
+    // Φάση 2: το πλήρες αντίγραφο είναι δουλειά του διαχειριστή. Ο απλός
+    // χρήστης δεν βλέπει τις ενότητες — βλέπει ποιος τις χειρίζεται, και το
+    // δικό του «αντίγραφο ρυθμίσεων». Χωρίς συνδεδεμένο χρήστη: όλα ως έχουν.
+    final canManageFullBackup = PermissionService.instance.can(
+      AppPermission.fullBackup,
+    );
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -994,617 +1096,630 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
                 const SizedBox(height: 12),
                 _RestoreFromBackupZipButton(onPressed: _restoreFromBackupZip),
                 const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Αυτόματα αντίγραφα ασφαλείας'),
-                        subtitle: const Text(
-                          'Ενεργοποίηση\\Απενεργοποίηση Αυτόματων Αντιγράφων ασφαλείας της εφαρμογής.',
-                        ),
-                        value: settings.backupOnExit,
-                        onChanged: (v) => ref
-                            .read(databaseBackupSettingsProvider.notifier)
-                            .setBackupOnExit(v),
-                      ),
-                    ),
-                    _SettingsPanelInfoTooltip(
-                      message: _backupSafetyTooltipMessage,
-                      iconColor: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ],
-                ),
-                if (!settings.backupOnExit) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Ενεργοποιήστε το διακόπτη για να εμφανιστούν όλες οι σχετικές ρυθμίσεις.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-                if (settings.backupOnExit) ...[
-                  FutureBuilder<List<BackupCaptionSegment>>(
-                    future: _locationCaptionSegmentsFuture,
-                    builder: (context, snapshot) {
-                      final color = snapshot.hasError
-                          ? theme.colorScheme.error
-                          : theme.colorScheme.onSurfaceVariant;
-                      if (snapshot.hasError) {
-                        return Text(
-                          'Δεν ήταν δυνατή η φόρτωση υποδείξεων τοποθεσίας.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: color,
-                          ),
-                        );
-                      }
-                      if (!snapshot.hasData) {
-                        return Text(
-                          'Φόρτωση υποδείξεων τοποθεσίας…',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: color,
-                          ),
-                        );
-                      }
-                      final baseStyle = theme.textTheme.bodySmall?.copyWith(
-                        color: color,
-                      );
-                      return Text.rich(
-                        TextSpan(
-                          style: baseStyle,
-                          children: [
-                            for (final s in snapshot.data!)
-                              TextSpan(
-                                text: s.text,
-                                style: s.bold
-                                    ? const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      )
-                                    : null,
-                              ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          focusNode: _destinationFocus,
-                          controller: _destinationController,
-                          textAlignVertical: TextAlignVertical.center,
-                          decoration: InputDecoration(
-                            labelText: 'Φάκελος προορισμού',
-                            floatingLabelBehavior: FloatingLabelBehavior.auto,
-                            isDense: true,
-                            errorText: _destinationFolderError,
-                            errorMaxLines: 2,
-                            errorStyle: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.error,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: 1,
-                                color: theme.colorScheme.outline,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: 1,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: 1,
-                                color: theme.colorScheme.error,
-                              ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: 1,
-                                color: theme.colorScheme.error,
-                              ),
-                            ),
-                            disabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: 1,
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.12,
-                                ),
-                              ),
-                            ),
-                          ),
-                          maxLines: 1,
-                          onEditingComplete: () =>
-                              unawaited(_validateAndPersistDestination()),
-                          onSubmitted: (_) =>
-                              unawaited(_validateAndPersistDestination()),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        height: 38,
-                        child: FilledButton.tonalIcon(
-                          onPressed: _pickFolder,
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(0, 38),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          icon: const Icon(Icons.folder_open, size: 18),
-                          label: const Text('Αναζήτηση'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (settings.destinationDirectory.trim().isNotEmpty)
-                    _buildDestinationFolderMissingBanner(theme),
-                  if (Platform.isWindows) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Στον διάλογο επιλογής (Windows) χρησιμοποιήστε «Νέος φάκελος» '
-                      'για δημιουργία φακέλου (π.χ. backups σε εξωτερικό δίσκο). '
-                      'Μπορείτε επίσης να πληκτρολογήσετε διαδρομή και να επιβεβαιώσετε '
-                      'με Enter — αν λείπει ο φάκελος, θα σας ζητηθεί δημιουργία.',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                  FutureBuilder<
-                    ({String dbPath, int eligibleWindowsVolumeCount})
-                  >(
-                    future: _backupDestinationWarningContextFuture,
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const SizedBox.shrink();
-                      }
-                      final dest = _destinationController.text.trim();
-                      if (dest.isEmpty || _destinationFolderError != null) {
-                        return const SizedBox.shrink();
-                      }
-                      final ctx = snapshot.data!;
-                      final colocated =
-                          BackupDestinationLocationWarnings.colocatedWithDatabase(
-                            databaseFilePath: ctx.dbPath,
-                            destinationDirectory: dest,
-                          );
-                      final sameVolume =
-                          BackupDestinationLocationWarnings.sameWindowsVolume(
-                            databasePath: ctx.dbPath,
-                            destinationDirectory: dest,
-                          );
-                      final showSameVolume =
-                          sameVolume && ctx.eligibleWindowsVolumeCount >= 2;
-                      if (!colocated && !showSameVolume) {
-                        return const SizedBox.shrink();
-                      }
-                      final orange = Colors.deepOrange.shade800;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (colocated) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.warning_amber_rounded,
-                                  size: 20,
-                                  color: orange,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Ο φάκελος προορισμού του αντιγράφου ασφαλείας '
-                                    '(backup) βρίσκεται στον ίδιο χώρο με τα αρχεία '
-                                    'της βάσης (ίδιος φάκελος ή υποφάκελός του). Σε '
-                                    'απώλεια, διαγραφή ή βλάβη του μέσου ενδέχεται '
-                                    'να χαθούν μαζί τα δεδομένα και το αντίγραφο.',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: orange,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (showSameVolume) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(
-                                  Icons.warning_amber_rounded,
-                                  size: 20,
-                                  color: orange,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Το αντίγραφο αποθηκεύεται στον ίδιο τόμο '
-                                    '(volume) με τη βάση. Σε βλάβη δίσκου '
-                                    'ενδέχεται να επηρεαστούν και τα δύο.',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: orange,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      );
-                    },
-                  ),
-                  if (cWarning) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          size: 20,
-                          color: theme.colorScheme.error,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Ο φάκελος είναι στον τόμο C: (συστήματος). '
-                            'Σε βλάβη δίσκου ή επανεγκατάσταση Windows το αντίγραφο μπορεί να χαθεί μαζί με τα δεδομένα.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<DatabaseBackupNamingFormat>(
-                    key: ValueKey(settings.namingFormat),
-                    initialValue: settings.namingFormat,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Μορφή ονόματος αρχείου',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: DatabaseBackupNamingFormat.dateTimeThenBase,
-                        child: Text('Ημερομηνία-Ώρα_Όνομα βάσης (.db)'),
-                      ),
-                      DropdownMenuItem(
-                        value: DatabaseBackupNamingFormat.baseThenDateTime,
-                        child: Text('Όνομα βάσης_Ημερομηνία-Ώρα (.db)'),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      ref
-                          .read(databaseBackupSettingsProvider.notifier)
-                          .setNamingFormat(v);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  FutureBuilder<PortableBackupAvailability>(
-                    future: PortableBackupAvailability.load(
-                      lexiconLoaded: ref.watch(coreLexiconProvider).loaded,
-                    ),
-                    builder: (context, snapshot) {
-                      final avail = snapshot.data;
-                      final bundleLocksZip =
-                          avail != null &&
-                          settings.effectiveIncludesPortableBundleInZip(avail);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Αποθήκευση σε μορφή .zip'),
-                            subtitle: const Text(
-                              'Αναδιοργάνωση και εκκαθάριση κενών χώρων της βάσης και εξαγωγή σε νέο αρχείο (VACUUM INTO). Έπιτα συμπίεση σε αρχείο .zip.',
-                            ),
-                            value: settings.zipOutput,
-                            onChanged: bundleLocksZip
-                                ? null
-                                : (v) => ref
-                                      .read(
-                                        databaseBackupSettingsProvider.notifier,
-                                      )
-                                      .setZipOutput(v),
-                          ),
-                          _portableBackupSwitch(
-                            title: 'Συμπερίληψη εικόνων χαρτών',
-                            subtitle: Text(
-                              PortableBackupAvailability.mapsImagesSubtitle(),
-                            ),
-                            value: settings.includeMapImagesInBackup,
-                            enabled: avail?.hasMapImages ?? false,
-                            disabledTooltip:
-                                'Δεν υπάρχουν αποθηκευμένες εικόνες χαρτών',
-                            onChanged: (v) => ref
-                                .read(databaseBackupSettingsProvider.notifier)
-                                .setIncludeMapImagesInBackup(v),
-                          ),
-                          _portableBackupSwitch(
-                            title: 'Εικονίδια εργαλείων',
-                            subtitle: Text(
-                              'Zip με φάκελο ${AppConfig.portableImagesDirName} '
-                              '(στη ρίζα εφαρμογής)',
-                            ),
-                            value: settings.includeToolImages,
-                            enabled: avail?.hasToolImages ?? false,
-                            disabledTooltip:
-                                'Δεν υπάρχουν αποθηκευμένα εικονίδια εργαλείων',
-                            onChanged: (v) => ref
-                                .read(databaseBackupSettingsProvider.notifier)
-                                .setIncludeToolImages(v),
-                          ),
-                          _portableBackupSwitch(
-                            title: 'Λεξικό',
-                            subtitle: Text(
-                              'Zip με φάκελο ${AppConfig.portableDictionariesDirName}',
-                            ),
-                            value: settings.includeLexicon,
-                            enabled: avail?.hasLoadedLexicon ?? false,
-                            disabledTooltip: 'Δεν υπάρχει φορτωμένο λεξικό',
-                            onChanged: (v) => ref
-                                .read(databaseBackupSettingsProvider.notifier)
-                                .setIncludeLexicon(v),
-                          ),
-                          _portableBackupSwitch(
-                            title: 'Βάση Λάμπας',
-                            subtitle: Text(
-                              'Zip με αρχείο .db από ${AppConfig.portableDataBaseDirName}',
-                            ),
-                            value: settings.includeLampDb,
-                            enabled:
-                                avail?.hasLampDbInPortableDataBase ?? false,
-                            disabledTooltip:
-                                'Δεν υπάρχει βάση Λάμπας στον φάκελο της εφαρμογής',
-                            onChanged: (v) => ref
-                                .read(databaseBackupSettingsProvider.notifier)
-                                .setIncludeLampDb(v),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const Divider(height: 24),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Πρόγραμμα ημερών & ώρας',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Επιλέξτε ημέρες και ώρα για αυτόματο αντίγραφο ασφαλείας όσο η εφαρμογή είναι ανοιχτή. '
-                    'Εκτελείται το πολύ ένα προγραμματισμένο αντίγραφο ανά ημερολογιακή ημέρα.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (var i = 0; i < 7; i++)
-                        FilterChip(
-                          label: Text(_weekdayChipLabel(i + 1)),
-                          selected: settings.backupDays.contains(i + 1),
-                          onSelected: (selected) {
-                            final wd = i + 1;
-                            final next = List<int>.from(settings.backupDays);
-                            if (selected) {
-                              if (!next.contains(wd)) next.add(wd);
-                            } else {
-                              next.remove(wd);
-                            }
-                            unawaited(
-                              ref
-                                  .read(databaseBackupSettingsProvider.notifier)
-                                  .setBackupScheduleDays(next),
-                            );
-                          },
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (settings.backupDays.isEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, bottom: 4),
-                      child: Text(
-                        'Επιλέξτε τουλάχιστον μία ημέρα για τη λειτουργία των '
-                        'προγραμματισμένων αντιγράφων ασφαλείας.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
-                    ),
-                  ] else ...[
-                    Row(
-                      children: [
-                        Text(
-                          'Προγραμματισμένη Ώρα:',
-                          style: theme.textTheme.bodyLarge,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          settings.backupTime,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: () async {
-                            final p = BackupScheduleUtils.parseTime(
-                              settings.backupTime,
-                            );
-                            final initial = TimeOfDay(
-                              hour: p?.hour ?? 9,
-                              minute: p?.minute ?? 0,
-                            );
-                            final picked = await showTimePicker(
-                              context: context,
-                              initialTime: initial,
-                            );
-                            if (picked == null || !mounted) return;
-                            final h = picked.hour.toString().padLeft(2, '0');
-                            final m = picked.minute.toString().padLeft(2, '0');
-                            await ref
-                                .read(databaseBackupSettingsProvider.notifier)
-                                .setBackupTime('$h:$m');
-                          },
-                          icon: const Icon(Icons.access_time, size: 20),
-                          label: const Text('Επιλογή'),
-                        ),
-                      ],
-                    ),
-                    _buildBackupScheduleStatusSection(theme, settings),
-                  ],
-                  const Divider(height: 24),
-                  Text(
-                    'Πολιτική διατήρησης',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                if (!canManageFullBackup)
+                  _buildBackupManagedByAdminNotice(theme),
+                if (canManageFullBackup) ...[
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              'Διατήρηση μόνο των τελευταίων ',
-                              style: theme.textTheme.bodyLarge,
-                            ),
-                            SizedBox(
-                              width: 64,
-                              child: TextField(
-                                focusNode: _maxCopiesFocus,
-                                controller: _maxCopiesController,
-                                textAlign: TextAlign.center,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(4),
-                                ],
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 8,
-                                  ),
-                                ),
-                                onEditingComplete: _persistRetentionMaxCopies,
-                                onSubmitted: (_) =>
-                                    _persistRetentionMaxCopies(),
-                              ),
-                            ),
-                            Text(
-                              ' αντιγράφων ασφαλείας',
-                              style: theme.textTheme.bodyLarge,
-                            ),
-                          ],
+                        child: SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Αυτόματα αντίγραφα ασφαλείας'),
+                          subtitle: const Text(
+                            'Ενεργοποίηση\\Απενεργοποίηση Αυτόματων Αντιγράφων ασφαλείας της εφαρμογής.',
+                          ),
+                          value: settings.backupOnExit,
+                          onChanged: (v) => ref
+                              .read(databaseBackupSettingsProvider.notifier)
+                              .setBackupOnExit(v),
                         ),
                       ),
-                      Switch(
-                        value: settings.retentionMaxCopiesEnabled,
-                        onChanged: (v) => ref
-                            .read(databaseBackupSettingsProvider.notifier)
-                            .setRetentionMaxCopiesEnabled(v),
+                      _SettingsPanelInfoTooltip(
+                        message: _backupSafetyTooltipMessage,
+                        iconColor: theme.colorScheme.onSurfaceVariant,
                       ),
                     ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, bottom: 12),
-                    child: Text(
-                      'Διαγράφεται το παλαιότερο όταν ξεπεραστεί το όριο.',
+                  if (!settings.backupOnExit) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ενεργοποιήστε το διακόπτη για να εμφανιστούν όλες οι σχετικές ρυθμίσεις.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              'Διαγραφή αντιγράφων παλαιότερων από ',
-                              style: theme.textTheme.bodyLarge,
+                  ],
+                  if (settings.backupOnExit) ...[
+                    FutureBuilder<List<BackupCaptionSegment>>(
+                      future: _locationCaptionSegmentsFuture,
+                      builder: (context, snapshot) {
+                        final color = snapshot.hasError
+                            ? theme.colorScheme.error
+                            : theme.colorScheme.onSurfaceVariant;
+                        if (snapshot.hasError) {
+                          return Text(
+                            'Δεν ήταν δυνατή η φόρτωση υποδείξεων τοποθεσίας.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: color,
                             ),
-                            SizedBox(
-                              width: 64,
-                              child: TextField(
-                                focusNode: _maxAgeFocus,
-                                controller: _maxAgeController,
-                                textAlign: TextAlign.center,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(4),
-                                ],
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 8,
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return Text(
+                            'Φόρτωση υποδείξεων τοποθεσίας…',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: color,
+                            ),
+                          );
+                        }
+                        final baseStyle = theme.textTheme.bodySmall?.copyWith(
+                          color: color,
+                        );
+                        return Text.rich(
+                          TextSpan(
+                            style: baseStyle,
+                            children: [
+                              for (final s in snapshot.data!)
+                                TextSpan(
+                                  text: s.text,
+                                  style: s.bold
+                                      ? const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        )
+                                      : null,
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            focusNode: _destinationFocus,
+                            controller: _destinationController,
+                            textAlignVertical: TextAlignVertical.center,
+                            decoration: InputDecoration(
+                              labelText: 'Φάκελος προορισμού',
+                              floatingLabelBehavior: FloatingLabelBehavior.auto,
+                              isDense: true,
+                              errorText: _destinationFolderError,
+                              errorMaxLines: 2,
+                              errorStyle: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.error,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  width: 1,
+                                  color: theme.colorScheme.outline,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  width: 1,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  width: 1,
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  width: 1,
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                              disabledBorder: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                  width: 1,
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.12,
                                   ),
                                 ),
-                                onEditingComplete: _persistRetentionMaxAgeDays,
-                                onSubmitted: (_) =>
-                                    _persistRetentionMaxAgeDays(),
                               ),
                             ),
-                            Text(' ημέρες', style: theme.textTheme.bodyLarge),
-                          ],
+                            maxLines: 1,
+                            onEditingComplete: () =>
+                                unawaited(_validateAndPersistDestination()),
+                            onSubmitted: (_) =>
+                                unawaited(_validateAndPersistDestination()),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 38,
+                          child: FilledButton.tonalIcon(
+                            onPressed: _pickFolder,
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 38),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            icon: const Icon(Icons.folder_open, size: 18),
+                            label: const Text('Αναζήτηση'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (settings.destinationDirectory.trim().isNotEmpty)
+                      _buildDestinationFolderMissingBanner(theme),
+                    if (Platform.isWindows) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Στον διάλογο επιλογής (Windows) χρησιμοποιήστε «Νέος φάκελος» '
+                        'για δημιουργία φακέλου (π.χ. backups σε εξωτερικό δίσκο). '
+                        'Μπορείτε επίσης να πληκτρολογήσετε διαδρομή και να επιβεβαιώσετε '
+                        'με Enter — αν λείπει ο φάκελος, θα σας ζητηθεί δημιουργία.',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      Switch(
-                        value: settings.retentionMaxAgeEnabled,
-                        onChanged: (v) => ref
-                            .read(databaseBackupSettingsProvider.notifier)
-                            .setRetentionMaxAgeEnabled(v),
+                    ],
+                    FutureBuilder<
+                      ({String dbPath, int eligibleWindowsVolumeCount})
+                    >(
+                      future: _backupDestinationWarningContextFuture,
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const SizedBox.shrink();
+                        }
+                        final dest = _destinationController.text.trim();
+                        if (dest.isEmpty || _destinationFolderError != null) {
+                          return const SizedBox.shrink();
+                        }
+                        final ctx = snapshot.data!;
+                        final colocated =
+                            BackupDestinationLocationWarnings.colocatedWithDatabase(
+                              databaseFilePath: ctx.dbPath,
+                              destinationDirectory: dest,
+                            );
+                        final sameVolume =
+                            BackupDestinationLocationWarnings.sameWindowsVolume(
+                              databasePath: ctx.dbPath,
+                              destinationDirectory: dest,
+                            );
+                        final showSameVolume =
+                            sameVolume && ctx.eligibleWindowsVolumeCount >= 2;
+                        if (!colocated && !showSameVolume) {
+                          return const SizedBox.shrink();
+                        }
+                        final orange = Colors.deepOrange.shade800;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (colocated) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 20,
+                                    color: orange,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Ο φάκελος προορισμού του αντιγράφου ασφαλείας '
+                                      '(backup) βρίσκεται στον ίδιο χώρο με τα αρχεία '
+                                      'της βάσης (ίδιος φάκελος ή υποφάκελός του). Σε '
+                                      'απώλεια, διαγραφή ή βλάβη του μέσου ενδέχεται '
+                                      'να χαθούν μαζί τα δεδομένα και το αντίγραφο.',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: orange),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            if (showSameVolume) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 20,
+                                    color: orange,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Το αντίγραφο αποθηκεύεται στον ίδιο τόμο '
+                                      '(volume) με τη βάση. Σε βλάβη δίσκου '
+                                      'ενδέχεται να επηρεαστούν και τα δύο.',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: orange),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                    if (cWarning) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 20,
+                            color: theme.colorScheme.error,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Ο φάκελος είναι στον τόμο C: (συστήματος). '
+                              'Σε βλάβη δίσκου ή επανεγκατάσταση Windows το αντίγραφο μπορεί να χαθεί μαζί με τα δεδομένα.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: settings.destinationDirectory.trim().isEmpty
-                        ? null
-                        : _runBackupNow,
-                    icon: const Icon(Icons.save_alt_outlined),
-                    label: const Text('Δημιουργία αντιγράφου τώρα'),
-                  ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<DatabaseBackupNamingFormat>(
+                      key: ValueKey(settings.namingFormat),
+                      initialValue: settings.namingFormat,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Μορφή ονόματος αρχείου',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: DatabaseBackupNamingFormat.dateTimeThenBase,
+                          child: Text('Ημερομηνία-Ώρα_Όνομα βάσης (.db)'),
+                        ),
+                        DropdownMenuItem(
+                          value: DatabaseBackupNamingFormat.baseThenDateTime,
+                          child: Text('Όνομα βάσης_Ημερομηνία-Ώρα (.db)'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        ref
+                            .read(databaseBackupSettingsProvider.notifier)
+                            .setNamingFormat(v);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    FutureBuilder<PortableBackupAvailability>(
+                      future: PortableBackupAvailability.load(
+                        lexiconLoaded: ref.watch(coreLexiconProvider).loaded,
+                      ),
+                      builder: (context, snapshot) {
+                        final avail = snapshot.data;
+                        final bundleLocksZip =
+                            avail != null &&
+                            settings.effectiveIncludesPortableBundleInZip(
+                              avail,
+                            );
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Αποθήκευση σε μορφή .zip'),
+                              subtitle: const Text(
+                                'Αναδιοργάνωση και εκκαθάριση κενών χώρων της βάσης και εξαγωγή σε νέο αρχείο (VACUUM INTO). Έπιτα συμπίεση σε αρχείο .zip.',
+                              ),
+                              value: settings.zipOutput,
+                              onChanged: bundleLocksZip
+                                  ? null
+                                  : (v) => ref
+                                        .read(
+                                          databaseBackupSettingsProvider
+                                              .notifier,
+                                        )
+                                        .setZipOutput(v),
+                            ),
+                            _portableBackupSwitch(
+                              title: 'Συμπερίληψη εικόνων χαρτών',
+                              subtitle: Text(
+                                PortableBackupAvailability.mapsImagesSubtitle(),
+                              ),
+                              value: settings.includeMapImagesInBackup,
+                              enabled: avail?.hasMapImages ?? false,
+                              disabledTooltip:
+                                  'Δεν υπάρχουν αποθηκευμένες εικόνες χαρτών',
+                              onChanged: (v) => ref
+                                  .read(databaseBackupSettingsProvider.notifier)
+                                  .setIncludeMapImagesInBackup(v),
+                            ),
+                            _portableBackupSwitch(
+                              title: 'Εικονίδια εργαλείων',
+                              subtitle: Text(
+                                'Zip με φάκελο ${AppConfig.portableImagesDirName} '
+                                '(στη ρίζα εφαρμογής)',
+                              ),
+                              value: settings.includeToolImages,
+                              enabled: avail?.hasToolImages ?? false,
+                              disabledTooltip:
+                                  'Δεν υπάρχουν αποθηκευμένα εικονίδια εργαλείων',
+                              onChanged: (v) => ref
+                                  .read(databaseBackupSettingsProvider.notifier)
+                                  .setIncludeToolImages(v),
+                            ),
+                            _portableBackupSwitch(
+                              title: 'Λεξικό',
+                              subtitle: Text(
+                                'Zip με φάκελο ${AppConfig.portableDictionariesDirName}',
+                              ),
+                              value: settings.includeLexicon,
+                              enabled: avail?.hasLoadedLexicon ?? false,
+                              disabledTooltip: 'Δεν υπάρχει φορτωμένο λεξικό',
+                              onChanged: (v) => ref
+                                  .read(databaseBackupSettingsProvider.notifier)
+                                  .setIncludeLexicon(v),
+                            ),
+                            _portableBackupSwitch(
+                              title: 'Βάση Λάμπας',
+                              subtitle: Text(
+                                'Zip με αρχείο .db από ${AppConfig.portableDataBaseDirName}',
+                              ),
+                              value: settings.includeLampDb,
+                              enabled:
+                                  avail?.hasLampDbInPortableDataBase ?? false,
+                              disabledTooltip:
+                                  'Δεν υπάρχει βάση Λάμπας στον φάκελο της εφαρμογής',
+                              onChanged: (v) => ref
+                                  .read(databaseBackupSettingsProvider.notifier)
+                                  .setIncludeLampDb(v),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    const Divider(height: 24),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Πρόγραμμα ημερών & ώρας',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Επιλέξτε ημέρες και ώρα για αυτόματο αντίγραφο ασφαλείας όσο η εφαρμογή είναι ανοιχτή. '
+                      'Εκτελείται το πολύ ένα προγραμματισμένο αντίγραφο ανά ημερολογιακή ημέρα.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (var i = 0; i < 7; i++)
+                          FilterChip(
+                            label: Text(_weekdayChipLabel(i + 1)),
+                            selected: settings.backupDays.contains(i + 1),
+                            onSelected: (selected) {
+                              final wd = i + 1;
+                              final next = List<int>.from(settings.backupDays);
+                              if (selected) {
+                                if (!next.contains(wd)) next.add(wd);
+                              } else {
+                                next.remove(wd);
+                              }
+                              unawaited(
+                                ref
+                                    .read(
+                                      databaseBackupSettingsProvider.notifier,
+                                    )
+                                    .setBackupScheduleDays(next),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (settings.backupDays.isEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 4),
+                        child: Text(
+                          'Επιλέξτε τουλάχιστον μία ημέρα για τη λειτουργία των '
+                          'προγραμματισμένων αντιγράφων ασφαλείας.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Text(
+                            'Προγραμματισμένη Ώρα:',
+                            style: theme.textTheme.bodyLarge,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            settings.backupTime,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: () async {
+                              final p = BackupScheduleUtils.parseTime(
+                                settings.backupTime,
+                              );
+                              final initial = TimeOfDay(
+                                hour: p?.hour ?? 9,
+                                minute: p?.minute ?? 0,
+                              );
+                              final picked = await showTimePicker(
+                                context: context,
+                                initialTime: initial,
+                              );
+                              if (picked == null || !mounted) return;
+                              final h = picked.hour.toString().padLeft(2, '0');
+                              final m = picked.minute.toString().padLeft(
+                                2,
+                                '0',
+                              );
+                              await ref
+                                  .read(databaseBackupSettingsProvider.notifier)
+                                  .setBackupTime('$h:$m');
+                            },
+                            icon: const Icon(Icons.access_time, size: 20),
+                            label: const Text('Επιλογή'),
+                          ),
+                        ],
+                      ),
+                      _buildBackupScheduleStatusSection(theme, settings),
+                    ],
+                    const Divider(height: 24),
+                    Text(
+                      'Πολιτική διατήρησης',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'Διατήρηση μόνο των τελευταίων ',
+                                style: theme.textTheme.bodyLarge,
+                              ),
+                              SizedBox(
+                                width: 64,
+                                child: TextField(
+                                  focusNode: _maxCopiesFocus,
+                                  controller: _maxCopiesController,
+                                  textAlign: TextAlign.center,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(4),
+                                  ],
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  onEditingComplete: _persistRetentionMaxCopies,
+                                  onSubmitted: (_) =>
+                                      _persistRetentionMaxCopies(),
+                                ),
+                              ),
+                              Text(
+                                ' αντιγράφων ασφαλείας',
+                                style: theme.textTheme.bodyLarge,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: settings.retentionMaxCopiesEnabled,
+                          onChanged: (v) => ref
+                              .read(databaseBackupSettingsProvider.notifier)
+                              .setRetentionMaxCopiesEnabled(v),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 12),
+                      child: Text(
+                        'Διαγράφεται το παλαιότερο όταν ξεπεραστεί το όριο.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'Διαγραφή αντιγράφων παλαιότερων από ',
+                                style: theme.textTheme.bodyLarge,
+                              ),
+                              SizedBox(
+                                width: 64,
+                                child: TextField(
+                                  focusNode: _maxAgeFocus,
+                                  controller: _maxAgeController,
+                                  textAlign: TextAlign.center,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(4),
+                                  ],
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  onEditingComplete:
+                                      _persistRetentionMaxAgeDays,
+                                  onSubmitted: (_) =>
+                                      _persistRetentionMaxAgeDays(),
+                                ),
+                              ),
+                              Text(' ημέρες', style: theme.textTheme.bodyLarge),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: settings.retentionMaxAgeEnabled,
+                          onChanged: (v) => ref
+                              .read(databaseBackupSettingsProvider.notifier)
+                              .setRetentionMaxAgeEnabled(v),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: settings.destinationDirectory.trim().isEmpty
+                          ? null
+                          : _runBackupNow,
+                      icon: const Icon(Icons.save_alt_outlined),
+                      label: const Text('Δημιουργία αντιγράφου τώρα'),
+                    ),
+                  ],
                 ],
                 const Divider(height: 24),
                 Text(

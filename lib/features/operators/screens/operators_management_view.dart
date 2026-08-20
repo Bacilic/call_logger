@@ -123,15 +123,20 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                   child: Text('Δεν υπάρχει κανένα προφίλ ακόμη.'),
                 );
               }
-              return ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                itemCount: operators.length,
-                itemBuilder: (context, index) => _OperatorCard(
-                  operator: operators[index],
-                  isCurrent:
-                      operators[index].id != null &&
-                      operators[index].id == CurrentOperator.active?.id,
-                  onEdit: () => _openForm(existing: operators[index]),
+              // Η ταυτότητα παρακολουθείται ζωντανά: αν γίνει «Αλλαγή χρήστη»
+              // ενώ η οθόνη είναι ανοιχτή, το σήμα «Εσείς» μετακινείται αμέσως.
+              return ValueListenableBuilder<Operator?>(
+                valueListenable: CurrentOperator.listenable,
+                builder: (context, activeOperator, _) => ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: operators.length,
+                  itemBuilder: (context, index) => _OperatorCard(
+                    operator: operators[index],
+                    isCurrent:
+                        operators[index].id != null &&
+                        operators[index].id == activeOperator?.id,
+                    onEdit: () => _openForm(existing: operators[index]),
+                  ),
                 ),
               );
             },

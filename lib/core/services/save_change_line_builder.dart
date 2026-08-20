@@ -28,11 +28,7 @@ const Map<String, CollectionNoun> _collectionNouns = <String, CollectionNoun>{
     plural: 'αναγνωριστικά Lansweeper',
     genitive: 'αναγνωριστικού Lansweeper',
   ),
-  'phones': (
-    singular: 'τηλέφωνο',
-    plural: 'τηλέφωνα',
-    genitive: 'τηλεφώνου',
-  ),
+  'phones': (singular: 'τηλέφωνο', plural: 'τηλέφωνα', genitive: 'τηλεφώνου'),
   'shared_phones': (
     singular: 'κοινόχρηστο τηλέφωνο',
     plural: 'κοινόχρηστα τηλέφωνα',

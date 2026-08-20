@@ -40,9 +40,7 @@ class OperatorIdentity {
     );
     if (account == null) return null;
 
-    final existing = await OperatorRepository(
-      db,
-    ).findByWindowsAccount(account);
+    final existing = await OperatorRepository(db).findByWindowsAccount(account);
     if (existing == null) return null;
 
     CurrentOperator.activate(existing);
@@ -52,7 +50,10 @@ class OperatorIdentity {
   /// Τα προφίλ που προσφέρονται προς επιλογή — μόνο τα ενεργά.
   static Future<List<Operator>> selectableProfiles(DatabaseExecutor db) async {
     final all = await OperatorRepository(db).getAll();
-    return [for (final operator in all) if (operator.isActive) operator];
+    return [
+      for (final operator in all)
+        if (operator.isActive) operator,
+    ];
   }
 
   /// Ενεργοποιεί υπάρχον προφίλ **για αυτή τη συνεδρία μόνο**.

@@ -3,35 +3,26 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import '../models/calls_screen_cards_visibility.dart';
 import '../models/window_placement_mode.dart';
+import 'profile_settings.dart';
+import 'scoped_settings.dart';
 
 /// Ρυθμίσεις παραθύρου, πλοήγησης και ορατότητας UI.
 ///
 /// Συνεργάτης του `SettingsService` (Σύνθεση) — πρόσβαση μέσω
 /// `SettingsService().windowUi`.
+///
+/// **Οι προτιμήσεις εμφάνισης είναι προσωπικές** (Φάση 2): περνούν από το
+/// [ScopedSettings] και ακολουθούν τον χρήστη σε όποιον υπολογιστή καθίσει.
+/// **Το μέγεθος και η θέση του παραθύρου ΟΧΙ** — εξαρτώνται από την οθόνη του
+/// συγκεκριμένου μηχανήματος, γι' αυτό μένουν στις τοπικές ρυθμίσεις.
 class SettingsServiceWindowUi {
   const SettingsServiceWindowUi();
 
-  static const String _keyShowActiveTimer = 'show_active_timer';
-  static const String _keyShowTasksBadge = 'show_tasks_badge';
-  static const String _keyNavRailShowLabels = 'nav_rail_show_labels';
   static const String _keyWindowWidth = 'window_width_v1';
   static const String _keyWindowHeight = 'window_height_v1';
   static const String _keyWindowPositionX = 'window_position_x_v1';
   static const String _keyWindowPositionY = 'window_position_y_v1';
   static const String _keyWindowPlacementMode = 'window_placement_mode_v1';
-  static const String _keyDatabaseBrowserStatsCardExpanded =
-      'database_browser_stats_card_expanded';
-  static const String _keyEquipmentLocationShowBuilding =
-      'equipment_location_show_building';
-  static const String _keyEnableSpellCheck = 'enable_spell_check';
-  static const String _keyShowGlobalCallsDashboard =
-      'show_global_calls_dashboard';
-  static const String _keyShowDatabaseNav = 'show_database_nav';
-  static const String _keyShowLampNav = 'show_lamp_nav';
-  static const String _keyShowDictionaryNav = 'show_dictionary_nav';
-  static const String _keyCallsScreenCardsVisibility =
-      'calls_screen_cards_visibility_v1';
-  static const String _keyShowQuickCallFab = 'show_quick_call_fab';
 
   /// Κλειδί αποθήκευσης SharedPreferences (με πρόθεμα προφίλ όταν υπάρχει CLI `--profile`).
   static String _prefKey(String baseKey) =>
@@ -39,37 +30,34 @@ class SettingsServiceWindowUi {
 
   /// Εμφάνιση ενεργού χρονομέτρου στη φόρμα κλήσεων. Προεπιλογή: true.
   Future<bool> getShowActiveTimer() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyShowActiveTimer)) ?? true;
+    return await ScopedSettings.getBool(ProfileSettingKeys.showActiveTimer) ??
+        true;
   }
 
   /// Ορίζει αν θα εμφανίζεται το ενεργό χρονόμετρο (MM:SS) στη φόρμα κλήσεων.
   Future<void> setShowActiveTimer(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyShowActiveTimer), value);
+    await ScopedSettings.setBool(ProfileSettingKeys.showActiveTimer, value);
   }
 
   /// Εμφάνιση μετρητή (badge) εκκρεμοτήτων στο κεντρικό μενού. Προεπιλογή: true.
   Future<bool> getShowTasksBadge() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyShowTasksBadge)) ?? true;
+    return await ScopedSettings.getBool(ProfileSettingKeys.showTasksBadge) ??
+        true;
   }
 
   Future<void> setShowTasksBadge(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyShowTasksBadge), value);
+    await ScopedSettings.setBool(ProfileSettingKeys.showTasksBadge, value);
   }
 
   /// Εμφάνιση λεζαντών στην πλευρική μπάρα (NavigationRail extended) όταν το πλάτος επιτρέπει.
   /// Προεπιλογή: true.
   Future<bool> getNavRailShowLabels() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyNavRailShowLabels)) ?? true;
+    return await ScopedSettings.getBool(ProfileSettingKeys.navRailShowLabels) ??
+        true;
   }
 
   Future<void> setNavRailShowLabels(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyNavRailShowLabels), value);
+    await ScopedSettings.setBool(ProfileSettingKeys.navRailShowLabels, value);
   }
 
   /// Τελευταίο πλάτος/ύψος κύριου παραθύρου (Windows desktop)· null αν δεν έχει αποθηκευτεί.
@@ -142,107 +130,112 @@ class SettingsServiceWindowUi {
   /// Κάρτα «Στατιστικά Βάσης Δεδομένων» στην οθόνη περιήγησης βάσης — ανοιχτή/κλειστή.
   /// Προεπιλογή: false (συμπτυγμένη).
   Future<bool> getDatabaseBrowserStatsCardExpanded() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyDatabaseBrowserStatsCardExpanded)) ??
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.databaseBrowserStatsCardExpanded,
+        ) ??
         false;
   }
 
   Future<void> setDatabaseBrowserStatsCardExpanded(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyDatabaseBrowserStatsCardExpanded), value);
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.databaseBrowserStatsCardExpanded,
+      value,
+    );
   }
 
   /// Εμφάνιση κωδικού κτιρίου `[...]` στη στήλη Τοποθεσία (πίνακας εξοπλισμού). Προεπιλογή: true.
   Future<bool> getEquipmentLocationShowBuilding() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyEquipmentLocationShowBuilding)) ?? true;
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.equipmentLocationShowBuilding,
+        ) ??
+        true;
   }
 
   Future<void> setEquipmentLocationShowBuilding(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyEquipmentLocationShowBuilding), value);
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.equipmentLocationShowBuilding,
+      value,
+    );
   }
 
   /// Ενεργοποίηση ενσωματωμένου ορθογραφικού ελέγχου σημειώσεων (Windows). Προεπιλογή: true.
   Future<bool> getEnableSpellCheck() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyEnableSpellCheck)) ?? true;
+    return await ScopedSettings.getBool(ProfileSettingKeys.enableSpellCheck) ??
+        true;
   }
 
   Future<void> setEnableSpellCheck(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyEnableSpellCheck), value);
+    await ScopedSettings.setBool(ProfileSettingKeys.enableSpellCheck, value);
   }
 
   /// Εμφάνιση κάρτας «Τελευταίες 7 Κλήσεις» στην οθόνη κλήσεων. Προεπιλογή: true.
   Future<bool> getShowGlobalCalls() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyShowGlobalCallsDashboard)) ?? true;
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.showGlobalCallsDashboard,
+        ) ??
+        true;
   }
 
   Future<void> setShowGlobalCalls(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyShowGlobalCallsDashboard), value);
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.showGlobalCallsDashboard,
+      value,
+    );
   }
 
   /// Εμφάνιση στοιχείου πλοήγησης «Βάση Δεδομένων». Προεπιλογή: true.
   Future<bool> getShowDatabaseNav() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyShowDatabaseNav)) ?? true;
+    return await ScopedSettings.getBool(ProfileSettingKeys.showDatabaseNav) ??
+        true;
   }
 
   Future<void> setShowDatabaseNav(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyShowDatabaseNav), value);
+    await ScopedSettings.setBool(ProfileSettingKeys.showDatabaseNav, value);
   }
 
   /// Εμφάνιση στοιχείου πλοήγησης «Λάμπα» (παλιά βάση). Προεπιλογή: true.
   Future<bool> getShowLampNav() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyShowLampNav)) ?? true;
+    return await ScopedSettings.getBool(ProfileSettingKeys.showLampNav) ?? true;
   }
 
   Future<void> setShowLampNav(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyShowLampNav), value);
+    await ScopedSettings.setBool(ProfileSettingKeys.showLampNav, value);
   }
 
   /// Εμφάνιση στοιχείου πλοήγησης «Λεξικό». Προεπιλογή: true.
   Future<bool> getShowDictionaryNav() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyShowDictionaryNav)) ?? true;
+    return await ScopedSettings.getBool(ProfileSettingKeys.showDictionaryNav) ??
+        true;
   }
 
   Future<void> setShowDictionaryNav(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyShowDictionaryNav), value);
+    await ScopedSettings.setBool(ProfileSettingKeys.showDictionaryNav, value);
   }
 
   /// Ποια κάρτες εμφανίζονται στην οθόνη κλήσεων. Προεπιλογή: όλες ορατές.
   Future<CallsScreenCardsVisibility> getCallsScreenCardsVisibility() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefKey(_keyCallsScreenCardsVisibility));
+    final raw = await ScopedSettings.getString(
+      ProfileSettingKeys.callsScreenCardsVisibility,
+    );
     return CallsScreenCardsVisibility.fromJsonString(raw);
   }
 
   Future<void> setCallsScreenCardsVisibility(
     CallsScreenCardsVisibility value,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _prefKey(_keyCallsScreenCardsVisibility),
+    await ScopedSettings.setString(
+      ProfileSettingKeys.callsScreenCardsVisibility,
       value.toJsonString(),
     );
   }
 
   /// Εμφάνιση ιπτάμενου κουμπιού γρήγορης καταγραφής κλήσης. Προεπιλογή: true.
   Future<bool> getShowQuickCallFab() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyShowQuickCallFab)) ?? true;
+    return await ScopedSettings.getBool(ProfileSettingKeys.showQuickCallFab) ??
+        true;
   }
 
   Future<void> setShowQuickCallFab(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyShowQuickCallFab), value);
+    await ScopedSettings.setBool(ProfileSettingKeys.showQuickCallFab, value);
   }
 }

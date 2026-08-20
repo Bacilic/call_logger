@@ -16,6 +16,7 @@ String databaseTableLabelEl(String? tableName) {
     // (`operators`) — δύο έννοιες δεν μοιράζονται την ίδια λέξη.
     'users' => 'Υπάλληλοι',
     'operators' => 'Χρήστες',
+    'operator_settings' => 'Ρυθμίσεις χρηστών',
     'phones' => 'Τηλέφωνα',
     'departments' => 'Τμήματα',
     'equipment' => 'Εξοπλισμός',

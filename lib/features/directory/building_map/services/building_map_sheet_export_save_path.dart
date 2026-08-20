@@ -63,7 +63,7 @@ Future<String?> _promptExportSavePath({
   final ext = kind == _ExportKind.png ? 'png' : 'jpg';
   final suggested = '$sanitizedBaseName.$ext';
 
-  return FilePicker.saveFile(
+  final saved = await FilePicker.saveFile(
     dialogTitle: 'Εξαγωγή χάρτη ορόφου',
     fileName: suggested,
     initialDirectory: initialDir,
@@ -71,4 +71,5 @@ Future<String?> _promptExportSavePath({
     allowedExtensions: kind == _ExportKind.png ? const ['png'] : const ['jpg'],
     bytes: Uint8List(0),
   );
+  return saved?.toFilePath();
 }

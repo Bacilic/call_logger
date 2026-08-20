@@ -256,7 +256,7 @@ class _DictionarySettingsDialogState
 
   Future<void> _pickSaveSourcePath() async {
     const memory = PickerLocationMemory('lexicon_txt');
-    final r = await FilePicker.pickFiles(
+    final r = await FilePicker.pickFile(
       dialogTitle: 'Αρχείο λεξικού-πυρήνα (TXT)',
       type: FileType.custom,
       allowedExtensions: const ['txt'],
@@ -264,8 +264,7 @@ class _DictionarySettingsDialogState
         pathHint: _sourcePathCtrl.text,
       ),
     );
-    if (r == null || r.files.isEmpty) return;
-    final p = r.files.single.path;
+    final p = r?.path;
     if (p == null) return;
     await memory.remember(p);
 
@@ -314,14 +313,14 @@ class _DictionarySettingsDialogState
         ? existing.replaceAll(r'\', '/').split('/').last
         : await _defaultExportFileName();
 
-    final p = await FilePicker.saveFile(
+    final p = (await FilePicker.saveFile(
       dialogTitle: 'Αρχείο εξαγωγής Compile (TXT)',
       fileName: fileName,
       initialDirectory: await _exportPickerInitialDirectory(),
       type: FileType.custom,
       allowedExtensions: const ['txt'],
       bytes: Uint8List(0),
-    );
+    ))?.toFilePath();
     if (p == null) return;
     _exportPathCtrl.text = p;
     await _saveExportPath();

@@ -354,7 +354,7 @@ Future<String?> _pickZipPath(
     folder.isNotEmpty ? folder : null,
   );
   final session = await FilePickerSession.run(
-    () => FilePicker.pickFiles(
+    () => FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['zip'],
       dialogTitle: 'Επιλογή αρχείου επαναφοράς (.zip)',
@@ -362,13 +362,11 @@ Future<String?> _pickZipPath(
     ),
   );
   if (session.refocusedExisting) return null;
-  final picked = session.value;
-  if (picked == null ||
-      picked.files.isEmpty ||
-      picked.files.single.path == null) {
+  final pickedPath = session.value?.path;
+  if (pickedPath == null) {
     return null;
   }
-  return picked.files.single.path!.trim();
+  return pickedPath.trim();
 }
 
 void _showBusyDialog(BuildContext context, ValueNotifier<String> label) {

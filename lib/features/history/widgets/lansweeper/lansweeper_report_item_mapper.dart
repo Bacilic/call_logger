@@ -41,8 +41,7 @@ abstract final class LansweeperReportItemMapper {
   ///
   /// Το κενό μένει κενό αντί για παύλα: εδώ σημαίνει «εκκρεμεί», και μια σειρά
   /// από παύλες θα γέμιζε τη λίστα με θόρυβο αντί να ξεχωρίζει τι έχει λυθεί.
-  static String solutionSnippet(CallModel call) =>
-      (call.solution ?? '').trim();
+  static String solutionSnippet(CallModel call) => (call.solution ?? '').trim();
 
   static String selectedKeysSignature(List<ReportCallItem> selected) {
     final keys = selected.map((e) => e.key).toList()..sort();

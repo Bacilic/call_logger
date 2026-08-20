@@ -13,6 +13,7 @@ import '../../../../core/utils/user_facing_error_messages.dart';
 import 'remote_tool_arguments_editor.dart';
 import 'remote_tool_basic_fields.dart';
 import 'remote_tool_behavior_fields.dart';
+import 'local_executable_path_override_field.dart';
 import 'remote_tool_form_controller.dart';
 import 'remote_tool_form_saver.dart';
 import 'remote_tool_form_sort.dart';
@@ -72,29 +73,38 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
 
   Future<void> _pickExecutable() async {
     final initial = initialDirectoryForFilePicker(_ctrl.pathC.text);
-    final r = await FilePicker.pickFiles(
+    final r = await FilePicker.pickFile(
       type: FileType.any,
       dialogTitle: 'Εκτελέσιμο',
       initialDirectory: initial,
     );
-    if (r != null && r.files.isNotEmpty) {
-      final p = r.files.single.path;
-      if (p != null) {
-        _ctrl.pathC.text = p;
-      }
+    final p = r?.path;
+    if (p != null) {
+      _ctrl.pathC.text = p;
     }
+  }
+
+  /// Επιλογή αρχείου για την **τοπική** διαδρομή — χωριστή από την κοινή, ώστε
+  /// να μην μπερδεύονται τα δύο πεδία.
+  Future<String?> _pickLocalExecutableOverride() async {
+    final initial = initialDirectoryForFilePicker(_ctrl.pathC.text);
+    final r = await FilePicker.pickFile(
+      type: FileType.any,
+      dialogTitle: 'Εκτελέσιμο σε αυτόν τον υπολογιστή',
+      initialDirectory: initial,
+    );
+    return r?.path;
   }
 
   Future<void> _pickIcon() async {
     final initial = initialDirectoryForFilePicker(_ctrl.iconC.text);
-    final r = await FilePicker.pickFiles(
+    final r = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['png', 'svg', 'ico'],
       dialogTitle: 'Εικονίδιο εργαλείου',
       initialDirectory: initial,
     );
-    if (r == null || r.files.isEmpty) return;
-    final picked = r.files.single.path;
+    final picked = r?.path;
     if (picked == null) return;
     if (!mounted) return;
 
@@ -476,6 +486,12 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
                               onPick: _pickExecutable,
                               enabled: !_ctrl.saving,
                               isCreate: !_ctrl.isEdit,
+                            ),
+                            LocalExecutablePathOverrideField(
+                              toolId: _ctrl.initialTool?.id,
+                              sharedPath: _ctrl.pathC.text,
+                              enabled: !_ctrl.saving,
+                              onPick: _pickLocalExecutableOverride,
                             ),
                             const SizedBox(height: 16),
                             _sectionTitle(theme, 'Εικονίδιο εργαλείου'),

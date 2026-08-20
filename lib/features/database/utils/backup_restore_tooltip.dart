@@ -22,7 +22,7 @@ final backupRestoreTooltipProvider = FutureProvider<String>((ref) async {
         .read(databaseBackupSettingsProvider)
         .destinationDirectory
         .trim();
-    return BackupRestoreTooltipBuilder.build(
+    return await BackupRestoreTooltipBuilder.build(
       destinationDirectory: dest,
       dbBaseName: baseName,
     );

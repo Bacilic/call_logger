@@ -282,11 +282,16 @@ void main() {
       );
     });
 
-    test('σήμερα καμία προεπιλογή δεν απαγορεύει', () {
-      // Η επιβολή έρχεται με δική της οθόνη· ως τότε η υποδομή δεν αλλάζει
-      // τίποτα στη χρήση.
+    test('μοναδική προεπιλεγμένη απαγόρευση: το πλήρες αντίγραφο (Φάση 2)', () {
+      // Η γενική επιβολή έρχεται με δική της οθόνη (Φάση 4)· ως τότε η μόνη
+      // ρητά κλειδωμένη απόφαση είναι «πλήρες αντίγραφο μόνο ο διαχειριστής».
+      // Το τεστ φυλάει ότι δεν θα γλιστρήσει σιωπηλά δεύτερη απαγόρευση.
       for (final permission in AppPermission.values) {
-        expect(permission.allowedByDefault, isTrue, reason: permission.key);
+        expect(
+          permission.allowedByDefault,
+          permission == AppPermission.fullBackup ? isFalse : isTrue,
+          reason: permission.key,
+        );
       }
     });
 
@@ -302,7 +307,10 @@ void main() {
       final stored = decodePermissionOverrides('{"κλειδι_που_εφυγε": false}');
       final operator = operatorWith(overrides: stored);
 
-      expect(service.can(AppPermission.fullBackup, operator: operator), isTrue);
+      expect(
+        service.can(AppPermission.manageEmployees, operator: operator),
+        isTrue,
+      );
     });
 
     test('χαλασμένο περιεχόμενο δίνει προεπιλογές, όχι σφάλμα', () {

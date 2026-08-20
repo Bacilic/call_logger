@@ -77,4 +77,3 @@ bool lansweeperAgentValueLooksLikeDisplayName(String value) {
   if (trimmed.isEmpty) return false;
   return !diagnoseLansweeperIdentity(trimmed).isValid;
 }
-

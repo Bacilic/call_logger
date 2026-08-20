@@ -1,6 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../config/app_config.dart';
+import 'profile_settings.dart';
+import 'scoped_settings.dart';
 import 'settings_service.dart';
 
 /// Ρυθμίσεις απομακρυσμένης σύνδεσης, Lansweeper και προτεραιότητας εργαλείων.
@@ -12,24 +11,12 @@ class SettingsServiceRemoteLansweeper {
   const SettingsServiceRemoteLansweeper();
 
   /// Κλειδιά για ρυθμίσεις απομακρυσμένης σύνδεσης (πίνακας app_settings).
-  static const String _keyCallsPrimaryToolId = 'calls_primary_tool_id';
-  static const String _keyCallsShowSecondaryRemoteActions =
-      'calls_show_secondary_remote_actions';
-  static const String _keyCallsShowEmptyRemoteLaunchers =
-      'calls_show_empty_remote_launchers';
   static const String _keyLansweeperApiUrl = 'lansweeper_api_url';
   static const String _keyLansweeperApiKey = 'lansweeper_api_key';
-  static const String _keyLansweeperAgentUsername = 'lansweeper_agent_username';
   static const String _legacyKeyLansweeperUrl = 'lansweeper_url';
 
   /// Μία φορά: migration legacy remote_tools → arguments_json (placeholders v2).
   static const String _keyRemoteToolsV2Migrated = 'remote_tools_v2_migrated';
-  static const String _keyRemoteToolPrioritySwapMode =
-      'remote_tool_priority_swap_mode';
-
-  /// Κλειδί αποθήκευσης SharedPreferences (με πρόθεμα προφίλ όταν υπάρχει CLI `--profile`).
-  static String _prefKey(String baseKey) =>
-      AppConfig.prefixedPreferencesKey(baseKey);
 
   static Future<String?> Function(String key)? get _getAppSetting =>
       SettingsService.appSettingReader;
@@ -40,67 +27,66 @@ class SettingsServiceRemoteLansweeper {
   /// `false` = ταξινόμιση (ολίσθηση), `true` = αντιμετάθεση θέσεων.
   /// Δεν αποθηκεύεται ανά εργαλείο· κοινή για όλα τα διαλόγους.
   Future<bool> getRemoteToolPrioritySwapMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyRemoteToolPrioritySwapMode)) ?? false;
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.remoteToolPrioritySwapMode,
+        ) ??
+        false;
   }
 
   Future<void> setRemoteToolPrioritySwapMode(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyRemoteToolPrioritySwapMode), value);
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.remoteToolPrioritySwapMode,
+      value,
+    );
   }
 
   // --- Ρυθμίσεις απομακρυσμένης σύνδεσης (app_settings) ---
 
   /// Προεπιλεγμένο κύριο εργαλείο στην οθόνη κλήσεων (`remote_tools.id`)· null = πρώτο ενεργό.
   Future<int?> getCallsPrimaryToolId() async {
-    final value = _getAppSetting != null
-        ? await _getAppSetting!(_keyCallsPrimaryToolId)
-        : null;
+    final value = await ScopedSettings.getString(
+      ProfileSettingKeys.callsPrimaryToolId,
+    );
     if (value == null || value.trim().isEmpty) return null;
     return int.tryParse(value.trim());
   }
 
   Future<void> setCallsPrimaryToolId(int? id) async {
-    if (_setAppSetting == null) return;
-    if (id == null) {
-      await _setAppSetting!(_keyCallsPrimaryToolId, '');
-    } else {
-      await _setAppSetting!(_keyCallsPrimaryToolId, id.toString());
-    }
+    await ScopedSettings.setString(
+      ProfileSettingKeys.callsPrimaryToolId,
+      id?.toString() ?? '',
+    );
   }
 
   /// Αν false, τα δευτερεύοντα εργαλεία μπαίνουν σε overflow menu.
   Future<bool> getCallsShowSecondaryRemoteActions() async {
-    final value = _getAppSetting != null
-        ? await _getAppSetting!(_keyCallsShowSecondaryRemoteActions)
-        : null;
-    if (value == null || value.trim().isEmpty) return true;
-    final lower = value.trim().toLowerCase();
-    return lower != '0' && lower != 'false' && lower != 'no';
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.callsShowSecondaryRemoteActions,
+        ) ??
+        true;
   }
 
   Future<void> setCallsShowSecondaryRemoteActions(bool value) async {
-    if (_setAppSetting == null) return;
-    await _setAppSetting!(
-      _keyCallsShowSecondaryRemoteActions,
-      value ? '1' : '0',
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.callsShowSecondaryRemoteActions,
+      value,
     );
   }
 
   /// Εμφάνιση κουμπιών «εκκίνηση χωρίς παραμέτρους» δίπλα στα εργαλεία κλήσεων.
   /// Προεπιλογή: true.
   Future<bool> getCallsShowEmptyRemoteLaunchers() async {
-    final value = _getAppSetting != null
-        ? await _getAppSetting!(_keyCallsShowEmptyRemoteLaunchers)
-        : null;
-    if (value == null || value.trim().isEmpty) return true;
-    final lower = value.trim().toLowerCase();
-    return lower != '0' && lower != 'false' && lower != 'no';
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.callsShowEmptyRemoteLaunchers,
+        ) ??
+        true;
   }
 
   Future<void> setCallsShowEmptyRemoteLaunchers(bool value) async {
-    if (_setAppSetting == null) return;
-    await _setAppSetting!(_keyCallsShowEmptyRemoteLaunchers, value ? '1' : '0');
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.callsShowEmptyRemoteLaunchers,
+      value,
+    );
   }
 
   /// Έχει ολοκληρωθεί το one-shot migration legacy remote_tools → arguments_json.
@@ -162,17 +148,20 @@ class SettingsServiceRemoteLansweeper {
     await _setAppSetting!(_keyLansweeperApiKey, value.trim());
   }
 
-  /// Όνομα χρήστη πράκτορα Lansweeper (μόνιμη ρύθμιση, κοινό σε υποβολές).
+  /// Όνομα χρήστη πράκτορα Lansweeper — **προσωπικό** (Φάση 2): καθορίζει σε
+  /// ποιον χρεώνεται το αίτημα, οπότε κοινή τιμή σημαίνει λάθος χρέωση.
   Future<String?> getLansweeperAgentUsername() async {
-    if (_getAppSetting == null) return null;
-    final value = await _getAppSetting!(_keyLansweeperAgentUsername);
+    final value = await ScopedSettings.getString(
+      ProfileSettingKeys.lansweeperAgentUsername,
+    );
     final normalized = value?.trim() ?? '';
     return normalized.isEmpty ? null : normalized;
   }
 
   Future<void> setLansweeperAgentUsername(String value) async {
-    if (_setAppSetting == null) return;
-    await _setAppSetting!(_keyLansweeperAgentUsername, value.trim());
+    await ScopedSettings.setString(
+      ProfileSettingKeys.lansweeperAgentUsername,
+      value.trim(),
+    );
   }
-
 }

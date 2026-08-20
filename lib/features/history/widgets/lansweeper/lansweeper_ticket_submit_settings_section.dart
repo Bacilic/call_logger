@@ -266,8 +266,10 @@ class _ListWithDefaultRowState extends State<_ListWithDefaultRow> {
     super.didUpdateWidget(oldWidget);
     // Σύγκριση σε επίπεδο τιμών, όχι κειμένου: όσο ο χρήστης πληκτρολογεί
     // (π.χ. αφήνει προσωρινό κόμμα στο τέλος), το κείμενό του δεν ξαναγράφεται.
-    final controllerValues = LansweeperTicketSubmitSettingsSection
-        .parseCommaValues(_controller.text);
+    final controllerValues =
+        LansweeperTicketSubmitSettingsSection.parseCommaValues(
+          _controller.text,
+        );
     if (!listEquals(controllerValues, widget.values)) {
       _controller.text = LansweeperTicketSubmitSettingsSection.commaText(
         widget.values,

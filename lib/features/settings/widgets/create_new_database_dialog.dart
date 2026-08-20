@@ -90,14 +90,14 @@ Future<String?> _pickSqliteDatabaseSavePathImpl({
       initialDirectory: initialDir,
     );
   } else {
-    picked = await FilePicker.saveFile(
+    picked = (await FilePicker.saveFile(
       dialogTitle: dialogTitle,
       fileName: suggested,
       initialDirectory: initialDir,
       type: FileType.custom,
       allowedExtensions: const ['db'],
       bytes: Uint8List(0),
-    );
+    ))?.toFilePath();
   }
   if (picked == null || picked.trim().isEmpty) return null;
 

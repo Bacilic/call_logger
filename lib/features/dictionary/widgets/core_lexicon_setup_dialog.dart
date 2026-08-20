@@ -77,14 +77,13 @@ class _CoreLexiconSetupDialogState
 
   Future<void> _pickExternalFile() async {
     const memory = PickerLocationMemory('lexicon_txt');
-    final r = await FilePicker.pickFiles(
+    final r = await FilePicker.pickFile(
       dialogTitle: 'Επιλογή αρχείου λεξικού-πυρήνα (.txt)',
       type: FileType.custom,
       allowedExtensions: const ['txt'],
       initialDirectory: await memory.initialDirectory(),
     );
-    if (r == null || r.files.isEmpty) return;
-    final path = r.files.single.path;
+    final path = r?.path;
     if (path == null || !mounted) return;
     await memory.remember(path);
 

@@ -99,7 +99,9 @@ class LansweeperReportAi {
     }
   }
 
-  Future<String> _buildAiPromptForSelected(List<ReportCallItem> selected) async {
+  Future<String> _buildAiPromptForSelected(
+    List<ReportCallItem> selected,
+  ) async {
     final service = host.ref.read(aiTicketSuggestionServiceProvider);
     return service.buildPrompt(await _aiPromptInputs(selected));
   }

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_file_classifier.dart';
 import '../../../core/database/database_init_result.dart';
+import '../../../core/database/database_init_runner.dart';
 import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/database/database_schema_migrations.dart';
 import '../../../core/database/database_state_notice.dart';
@@ -109,22 +110,54 @@ Future<SchemaUpgradeConsentChoice> showSchemaUpgradeConsentDialog({
   return choice ?? SchemaUpgradeConsentChoice.cancel;
 }
 
+/// Άνοιγμα και επαλήθευση διαδρομής βάσης — αντικαθίσταται στα τεστ.
+typedef SchemaUpgradeOpenAndVerify =
+    Future<({bool ok, DatabaseInitRunnerResult runner})> Function(String path);
+
+/// Ερώτηση συγκατάθεσης προς τον χρήστη — αντικαθίσταται στα τεστ.
+typedef SchemaUpgradeConsentPrompt =
+    Future<SchemaUpgradeConsentChoice> Function(
+      BuildContext context,
+      String dbPath,
+      int fileSchemaVersion,
+      int appSchemaVersion,
+    );
+
+Future<SchemaUpgradeConsentChoice> _askConsentViaDialog(
+  BuildContext context,
+  String dbPath,
+  int fileSchemaVersion,
+  int appSchemaVersion,
+) => showSchemaUpgradeConsentDialog(
+  context: context,
+  dbPath: dbPath,
+  fileSchemaVersion: fileSchemaVersion,
+  appSchemaVersion: appSchemaVersion,
+);
+
 /// Κοινή ροή συγκατάθεσης (εκκίνηση / Ρυθμίσεις).
 /// Επιστρέφει true αν ολοκληρώθηκε επιτυχής ανάκαμψη.
+///
+/// Τα [createCopy], [openAndVerify] και [askConsent] υπάρχουν για τα τεστ της
+/// ροής· η παραγωγή χρησιμοποιεί πάντα τις προεπιλογές.
 Future<bool> runSchemaUpgradeConsentRecovery({
   required BuildContext context,
   required DatabaseInitResult result,
   required Future<void> Function() onSuccess,
+  Future<UpgradeCopyResult> Function(String sourceDbPath) createCopy =
+      createUpgradeCopy,
+  SchemaUpgradeOpenAndVerify openAndVerify = setAndVerifyDatabasePath,
+  SchemaUpgradeConsentPrompt askConsent = _askConsentViaDialog,
 }) async {
   final path = (result.path ?? '').trim();
   if (path.isEmpty) return false;
 
   final versions = parseSchemaMismatchVersions(result);
-  final choice = await showSchemaUpgradeConsentDialog(
-    context: context,
-    dbPath: path,
-    fileSchemaVersion: versions.fileVersion,
-    appSchemaVersion: versions.appVersion,
+  final choice = await askConsent(
+    context,
+    path,
+    versions.fileVersion,
+    versions.appVersion,
   );
   if (!context.mounted) return false;
 
@@ -132,7 +165,7 @@ Future<bool> runSchemaUpgradeConsentRecovery({
     case SchemaUpgradeConsentChoice.cancel:
       return false;
     case SchemaUpgradeConsentChoice.upgradeCopy:
-      final copyResult = await createUpgradeCopy(path);
+      final copyResult = await createCopy(path);
       if (!context.mounted) return false;
       if (!copyResult.isSuccess) {
         await showDialog<void>(
@@ -152,7 +185,14 @@ Future<bool> runSchemaUpgradeConsentRecovery({
         );
         return false;
       }
-      final outcome = await setAndVerifyDatabasePath(copyResult.copyPath!);
+      // Η συγκατάθεση που μόλις έδωσε ο χρήστης ακολουθεί το αρχείο που θα
+      // ανοίξει: καταγράφεται για το ΑΝΤΙΓΡΑΦΟ πριν από το άνοιγμα, αλλιώς ο
+      // φρουρός σχήματος θα το ξαναμπλοκάρει ως «χωρίς συγκατάθεση».
+      final copyIdentity = await schemaUpgradeConsentIdentityForPath(
+        copyResult.copyPath!,
+      );
+      await SettingsService().setSchemaUpgradeConsentIdentity(copyIdentity);
+      final outcome = await openAndVerify(copyResult.copyPath!);
       if (!context.mounted) return false;
       if (!outcome.ok) {
         await showDialog<void>(
@@ -178,7 +218,7 @@ Future<bool> runSchemaUpgradeConsentRecovery({
     case SchemaUpgradeConsentChoice.upgradeOriginal:
       final identity = await schemaUpgradeConsentIdentityForPath(path);
       await SettingsService().setSchemaUpgradeConsentIdentity(identity);
-      final outcome = await setAndVerifyDatabasePath(path);
+      final outcome = await openAndVerify(path);
       if (!context.mounted) return false;
       if (!outcome.ok) {
         await showDialog<void>(

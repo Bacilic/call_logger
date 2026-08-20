@@ -273,4 +273,3 @@ final lansweeperOpenTicketAfterApiSubmitProvider =
     NotifierProvider<LansweeperOpenTicketAfterApiSubmitNotifier, bool>(
       LansweeperOpenTicketAfterApiSubmitNotifier.new,
     );
-

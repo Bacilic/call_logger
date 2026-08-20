@@ -973,8 +973,9 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                 .openAiPromptTemplateEditorDialog(),
                                           ),
                                           saveAsKnowledgeDisabledTooltip:
-                                              knowledgeFlow
-                                                  .saveDisabledReason(selected),
+                                              knowledgeFlow.saveDisabledReason(
+                                                selected,
+                                              ),
                                           onSaveAsKnowledge:
                                               knowledgeFlow.saveDisabledReason(
                                                     selected,

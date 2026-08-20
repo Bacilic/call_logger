@@ -77,8 +77,6 @@ abstract final class LansweeperReportRowMetrics {
     required double bodyHeight,
     required bool isLastInGroup,
   }) {
-    return chromeHeight +
-        bodyHeight +
-        (isLastInGroup ? groupBottomHeight : 0);
+    return chromeHeight + bodyHeight + (isLastInGroup ? groupBottomHeight : 0);
   }
 }

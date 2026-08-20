@@ -1,6 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../config/app_config.dart';
+import 'profile_settings.dart';
+import 'scoped_settings.dart';
 
 /// Φίλτρα ημερομηνιών για στατιστικά κλήσεων και εκκρεμοτήτων.
 ///
@@ -9,39 +8,25 @@ import '../config/app_config.dart';
 class SettingsServiceAnalyticsFilters {
   const SettingsServiceAnalyticsFilters();
 
-  static const String _keyDashboardDatePreset = 'dashboard_date_preset';
-  static const String _keyDashboardDateFrom = 'dashboard_date_from';
-  static const String _keyDashboardDateTo = 'dashboard_date_to';
-  static const String _keyDashboardExcludeCallsWithoutCategory =
-      'dashboard_exclude_calls_without_category';
-  static const String _keyDashboardHideUnknownCaller =
-      'dashboard_hide_unknown_caller';
-  static const String _keyDashboardHideUnknownTopCaller =
-      'dashboard_hide_unknown_top_caller';
-  static const String _keyTaskAnalyticsDatePreset =
-      'task_analytics_date_preset_v1';
-  static const String _keyTaskAnalyticsDateFrom = 'task_analytics_date_from_v1';
-  static const String _keyTaskAnalyticsDateTo = 'task_analytics_date_to_v1';
-
-  /// Κλειδί αποθήκευσης SharedPreferences (με πρόθεμα προφίλ όταν υπάρχει CLI `--profile`).
-  static String _prefKey(String baseKey) =>
-      AppConfig.prefixedPreferencesKey(baseKey);
-
   /// Τελευταία επιλογή εύρους ημερομηνιών στον πίνακα στατιστικών κλήσεων.
   /// Προεπιλογή: `today`.
   Future<String> getDashboardDatePreset() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_prefKey(_keyDashboardDatePreset)) ?? 'today';
+    return await ScopedSettings.getString(
+          ProfileSettingKeys.dashboardDatePreset,
+        ) ??
+        'today';
   }
 
   Future<DateTime?> getDashboardCustomDateFrom() async {
-    final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(_prefKey(_keyDashboardDateFrom)));
+    return _parseStoredDate(
+      await ScopedSettings.getString(ProfileSettingKeys.dashboardDateFrom),
+    );
   }
 
   Future<DateTime?> getDashboardCustomDateTo() async {
-    final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(_prefKey(_keyDashboardDateTo)));
+    return _parseStoredDate(
+      await ScopedSettings.getString(ProfileSettingKeys.dashboardDateTo),
+    );
   }
 
   Future<void> setDashboardDateFilter({
@@ -49,34 +34,36 @@ class SettingsServiceAnalyticsFilters {
     DateTime? customFrom,
     DateTime? customTo,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefKey(_keyDashboardDatePreset), preset);
+    await ScopedSettings.setString(
+      ProfileSettingKeys.dashboardDatePreset,
+      preset,
+    );
     if (preset == 'custom' && customFrom != null && customTo != null) {
-      await prefs.setString(
-        _prefKey(_keyDashboardDateFrom),
+      await ScopedSettings.setString(
+        ProfileSettingKeys.dashboardDateFrom,
         _formatStoredDate(customFrom),
       );
-      await prefs.setString(
-        _prefKey(_keyDashboardDateTo),
+      await ScopedSettings.setString(
+        ProfileSettingKeys.dashboardDateTo,
         _formatStoredDate(customTo),
       );
     } else {
-      await prefs.remove(_prefKey(_keyDashboardDateFrom));
-      await prefs.remove(_prefKey(_keyDashboardDateTo));
+      await ScopedSettings.remove(ProfileSettingKeys.dashboardDateFrom);
+      await ScopedSettings.remove(ProfileSettingKeys.dashboardDateTo);
     }
   }
 
   /// Απόκρυψη κλήσεων χωρίς κατηγορία στο γράφημα «Κατανομή Βλαβών». Προεπιλογή: false.
   Future<bool> getDashboardExcludeCallsWithoutCategory() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyDashboardExcludeCallsWithoutCategory)) ??
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.dashboardExcludeCallsWithoutCategory,
+        ) ??
         false;
   }
 
   Future<void> setDashboardExcludeCallsWithoutCategory(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(
-      _prefKey(_keyDashboardExcludeCallsWithoutCategory),
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.dashboardExcludeCallsWithoutCategory,
       value,
     );
   }
@@ -84,13 +71,17 @@ class SettingsServiceAnalyticsFilters {
   /// Απόκρυψη του συγκεντρωτικού «Άγνωστου» στην όψη «χρόνος ανά άτομο».
   /// Προεπιλογή: false.
   Future<bool> getDashboardHideUnknownCaller() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyDashboardHideUnknownCaller)) ?? false;
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.dashboardHideUnknownCaller,
+        ) ??
+        false;
   }
 
   Future<void> setDashboardHideUnknownCaller(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyDashboardHideUnknownCaller), value);
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.dashboardHideUnknownCaller,
+      value,
+    );
   }
 
   /// Απόκρυψη του συγκεντρωτικού «Άγνωστου» στην κατάταξη «Κορυφαίοι Καλούντες».
@@ -98,32 +89,38 @@ class SettingsServiceAnalyticsFilters {
   /// διαφορετικό ερώτημα και ο χρήστης μπορεί να θέλει τον «Άγνωστο» στη μία και
   /// όχι στην άλλη. Προεπιλογή: false.
   Future<bool> getDashboardHideUnknownTopCaller() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyDashboardHideUnknownTopCaller)) ?? false;
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.dashboardHideUnknownTopCaller,
+        ) ??
+        false;
   }
 
   Future<void> setDashboardHideUnknownTopCaller(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyDashboardHideUnknownTopCaller), value);
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.dashboardHideUnknownTopCaller,
+      value,
+    );
   }
 
   /// Τελευταία επιλογή εύρους ημερομηνιών στις αναφορές εκκρεμοτήτων.
   /// Προεπιλογή: `all` (πλήρες εύρος δημιουργίας).
   Future<String> getTaskAnalyticsDatePreset() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_prefKey(_keyTaskAnalyticsDatePreset)) ?? 'all';
+    return await ScopedSettings.getString(
+          ProfileSettingKeys.taskAnalyticsDatePreset,
+        ) ??
+        'all';
   }
 
   Future<DateTime?> getTaskAnalyticsCustomDateFrom() async {
-    final prefs = await SharedPreferences.getInstance();
     return _parseStoredDate(
-      prefs.getString(_prefKey(_keyTaskAnalyticsDateFrom)),
+      await ScopedSettings.getString(ProfileSettingKeys.taskAnalyticsDateFrom),
     );
   }
 
   Future<DateTime?> getTaskAnalyticsCustomDateTo() async {
-    final prefs = await SharedPreferences.getInstance();
-    return _parseStoredDate(prefs.getString(_prefKey(_keyTaskAnalyticsDateTo)));
+    return _parseStoredDate(
+      await ScopedSettings.getString(ProfileSettingKeys.taskAnalyticsDateTo),
+    );
   }
 
   Future<void> setTaskAnalyticsDateFilter({
@@ -131,20 +128,22 @@ class SettingsServiceAnalyticsFilters {
     DateTime? customFrom,
     DateTime? customTo,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefKey(_keyTaskAnalyticsDatePreset), preset);
+    await ScopedSettings.setString(
+      ProfileSettingKeys.taskAnalyticsDatePreset,
+      preset,
+    );
     if (preset == 'custom' && customFrom != null && customTo != null) {
-      await prefs.setString(
-        _prefKey(_keyTaskAnalyticsDateFrom),
+      await ScopedSettings.setString(
+        ProfileSettingKeys.taskAnalyticsDateFrom,
         _formatStoredDate(customFrom),
       );
-      await prefs.setString(
-        _prefKey(_keyTaskAnalyticsDateTo),
+      await ScopedSettings.setString(
+        ProfileSettingKeys.taskAnalyticsDateTo,
         _formatStoredDate(customTo),
       );
     } else {
-      await prefs.remove(_prefKey(_keyTaskAnalyticsDateFrom));
-      await prefs.remove(_prefKey(_keyTaskAnalyticsDateTo));
+      await ScopedSettings.remove(ProfileSettingKeys.taskAnalyticsDateFrom);
+      await ScopedSettings.remove(ProfileSettingKeys.taskAnalyticsDateTo);
     }
   }
 

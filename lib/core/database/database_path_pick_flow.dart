@@ -47,7 +47,7 @@ Future<DatabasePickSelection?> _pickDatabasePathWithSystemPickerImpl() async {
     'database_file',
   ).initialDirectory(pathHint: await SettingsService().getDatabasePath());
 
-  final fileResult = await FilePicker.pickFiles(
+  final fileResult = await FilePicker.pickFile(
     type: FileType.custom,
     allowedExtensions: ['db', 'zip'],
     dialogTitle: 'Επιλογή αρχείου βάσης (.db) ή αντιγράφου (.zip)',
@@ -58,8 +58,9 @@ Future<DatabasePickSelection?> _pickDatabasePathWithSystemPickerImpl() async {
     return null;
   }
 
-  if (fileResult.files.isNotEmpty && fileResult.files.single.path != null) {
-    final path = fileResult.files.single.path!.trim();
+  final pickedPath = fileResult.path;
+  if (pickedPath != null) {
+    final path = pickedPath.trim();
     if (path.isEmpty) return null;
     return DatabasePickSelection(
       kind: classifyPickedDatabasePath(path),

@@ -148,8 +148,14 @@ class ExecutablePathField extends StatelessWidget {
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
                 decoration: InputDecoration(
                   labelText: isCreate
-                      ? 'Διαδρομή εκτελέσιμου *'
-                      : 'Διαδρομή εκτελέσιμου',
+                      ? 'Κοινή διαδρομή εκτελέσιμου *'
+                      : 'Κοινή διαδρομή εκτελέσιμου',
+                  // Η κοινή διαδρομή αφορά ΟΛΟΥΣ όσοι ανοίγουν τη βάση: μια
+                  // «διόρθωση» για το δικό μας μηχάνημα τη χαλάει για τους
+                  // υπόλοιπους. Η ένδειξη δείχνει τον δρόμο στο σωστό πεδίο.
+                  helperText:
+                      'Ισχύει για όλους — για το δικό σας μηχάνημα '
+                      'χρησιμοποιήστε το πεδίο παρακάτω',
                   border: const OutlineInputBorder(),
                 ),
               ),

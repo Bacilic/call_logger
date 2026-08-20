@@ -63,7 +63,13 @@ import 'database_foreign_keys.dart';
 /// λογαριασμό Windows και ποια δικαιώματα του έχουν οριστεί ρητά. Καθαρή
 /// προσθήκη, χωρίς δεσμούς προς υπάρχοντες πίνακες: παλαιότερη έκδοση της
 /// εφαρμογής συνεχίζει να ανοίγει τη βάση κανονικά.
-const int databaseSchemaVersionV1 = 47;
+/// v48: πίνακας `operator_settings` — οι προσωπικές ρυθμίσεις κάθε χρήστη
+/// (key-value ανά προφίλ), ώστε να τον ακολουθούν σε όποιον υπολογιστή καθίσει.
+/// Καθαρή προσθήκη, χωρίς δεσμούς, για τον ίδιο λόγο με τον `operators`.
+/// v49: διαγραφή νεκρών κλειδιών από το `app_settings` — μόνο δεδομένα, καμία
+/// αλλαγή δομής. Πρώτο το `vnc_password`: **κωδικός σε απλό κείμενο** μέσα σε
+/// πίνακα που φαίνεται από την ίδια την εφαρμογή (Περιήγηση Βάσης).
+const int databaseSchemaVersionV1 = 49;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
 ///
@@ -90,6 +96,21 @@ const String kCreateOperatorsWindowsAccountIndex = '''
       CREATE UNIQUE INDEX IF NOT EXISTS idx_operators_windows_account
       ON operators(windows_account)
       WHERE windows_account IS NOT NULL
+''';
+
+/// Οι προσωπικές ρυθμίσεις κάθε χρήστη — «δικό μου, όπου κι αν κάτσω».
+///
+/// **Χωρίς δεσμούς (foreign keys), όπως και ο `operators`** — ίδιο σκεπτικό
+/// συμβατότητας με παλαιότερες εκδόσεις. Η σχέση με τον χρήστη κρατιέται μόνο
+/// μέσω του `operator_id`· ορφανές εγγραφές καθαρίζονται από την εφαρμογή,
+/// όχι από τη βάση.
+const String kCreateOperatorSettingsTable = '''
+      CREATE TABLE IF NOT EXISTS operator_settings (
+        operator_id INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT,
+        PRIMARY KEY (operator_id, key)
+      )
 ''';
 
 /// Ο πίνακας της Βάσης Γνώσης: μία «συνταγή» ανά είδος βλάβης.
@@ -247,6 +268,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
 
   await db.execute(kCreateOperatorsTable);
   await db.execute(kCreateOperatorsWindowsAccountIndex);
+  await db.execute(kCreateOperatorSettingsTable);
 
   await db.execute('''
       CREATE TABLE IF NOT EXISTS remote_tools (

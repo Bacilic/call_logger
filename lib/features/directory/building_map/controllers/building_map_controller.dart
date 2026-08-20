@@ -597,12 +597,11 @@ class BuildingMapController {
   /// θυμάται μετά από επιτυχή επιλογή. null σε ακύρωση.
   Future<String?> _pickFloorSheetImagePath() async {
     const memory = PickerLocationMemory('building_map_image');
-    final picked = await FilePicker.pickFiles(
+    final picked = await FilePicker.pickFile(
       type: FileType.image,
       initialDirectory: await memory.initialDirectory(),
     );
-    if (picked == null || picked.files.isEmpty) return null;
-    final srcPath = picked.files.single.path;
+    final srcPath = picked?.path;
     if (srcPath == null) return null;
     await memory.remember(srcPath);
     return srcPath;

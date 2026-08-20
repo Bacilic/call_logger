@@ -182,10 +182,7 @@ class SettingsService {
 
   Future<void> setDismissedAppInstancesSignature(String signature) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _prefKey(_keyDismissedInstancesSignature),
-      signature,
-    );
+    await prefs.setString(_prefKey(_keyDismissedInstancesSignature), signature);
   }
 
   /// Ταυτότητα περιεχομένου για την οποία δόθηκε συγκατάθεση μόνιμης αναβάθμισης.

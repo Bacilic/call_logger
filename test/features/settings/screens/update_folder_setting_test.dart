@@ -9,8 +9,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  // Ο φάκελος ενημερώσεων είναι **κοινός** από τη Φάση 2: τον ορίζει ο
+  // διαχειριστής και από εκεί παίρνουν όλοι τις εκδόσεις. Δεν ζει πια στις
+  // τοπικές ρυθμίσεις, οπότε ο έλεγχος γίνεται στον πάροχο κοινών ρυθμίσεων —
+  // το ίδιο σημείο που χρησιμοποιεί η εφαρμογή μετά το άνοιγμα της βάσης.
+  late Map<String, String> sharedStore;
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    sharedStore = <String, String>{};
+    SettingsService.registerAppSettingsProvider(
+      (key) async => sharedStore[key],
+      (key, value) async => sharedStore[key] = value,
+    );
   });
 
   NetworkFolderClassifier fixedKind(NetworkFolderKind kind) {
@@ -76,8 +87,13 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
+    expect(sharedStore['update_folder_path'], next);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('update_folder_path'), next);
+    expect(
+      prefs.containsKey('update_folder_path'),
+      isFalse,
+      reason: 'Κοινή ρύθμιση δεν γράφεται στις τοπικές ρυθμίσεις.',
+    );
   });
 
   testWidgets('localOnly warning visible only for localOnly', (tester) async {

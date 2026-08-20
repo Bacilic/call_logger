@@ -469,7 +469,10 @@ class LansweeperSyncService {
     if (requester == agent) {
       return lansweeperAgentAsMatchingRequesterFields(agent);
     }
-    return lansweeperRequesterAndAgentFields(requester: requester, agent: agent);
+    return lansweeperRequesterAndAgentFields(
+      requester: requester,
+      agent: agent,
+    );
   }
 
   /// Προ-έλεγχος `SearchUsers`: υπάρχει ο χρήστης στο Lansweeper;

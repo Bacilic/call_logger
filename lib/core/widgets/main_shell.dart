@@ -31,8 +31,11 @@ import 'main_nav_rail_toggle_button.dart';
 import 'main_shell_destination_content.dart';
 import 'main_shell_nav_icons.dart';
 import 'quick_call_fab.dart';
+import '../services/current_operator.dart';
 import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
+import '../../features/operators/widgets/active_operator_chip.dart';
+import '../../features/operators/widgets/operator_change_refresh_listener.dart';
 import '../updates/update_periodic_check.dart';
 import '../updates/update_startup_prompt.dart';
 import '../../features/database/debug/release_publish_finished_snackbar.dart';
@@ -87,6 +90,17 @@ class MainShellState extends ConsumerState<MainShell> {
     super.initState();
     destinationContent.initDatabaseStateNotice();
     _loadNavRailShowLabels();
+    // Οι λεζάντες είναι προσωπική ρύθμιση αλλά ζουν σε τοπική κατάσταση, όχι
+    // σε provider — η καθολική ανανέωση δεν τις αγγίζει. Χωρίς αυτόν τον
+    // ακροατή, μετά την «Αλλαγή χρήστη» η μπάρα θα κρατούσε την επιλογή του
+    // προηγούμενου μέχρι την επόμενη εκκίνηση.
+    CurrentOperator.listenable.addListener(_loadNavRailShowLabels);
+  }
+
+  @override
+  void dispose() {
+    CurrentOperator.listenable.removeListener(_loadNavRailShowLabels);
+    super.dispose();
   }
 
   @override
@@ -518,6 +532,7 @@ class MainShellState extends ConsumerState<MainShell> {
             ),
           ),
           const UpdateStartupPromptListener(),
+          const OperatorChangeRefreshListener(),
         ],
       );
     }
@@ -610,6 +625,10 @@ class MainShellState extends ConsumerState<MainShell> {
                     ),
                   ),
                   Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: ActiveOperatorChip(extended: railExtended),
+                  ),
+                  Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: VersionChip(extended: railExtended),
                   ),
@@ -628,6 +647,7 @@ class MainShellState extends ConsumerState<MainShell> {
           ),
         ),
         const UpdateStartupPromptListener(),
+        const OperatorChangeRefreshListener(),
       ],
     );
   }

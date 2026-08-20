@@ -666,13 +666,12 @@ class _DictionaryManagerScreenState
 
   Future<void> _importTxtFile() async {
     const memory = PickerLocationMemory('lexicon_txt');
-    final r = await FilePicker.pickFiles(
+    final r = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: const ['txt'],
       initialDirectory: await memory.initialDirectory(),
     );
-    if (r == null || r.files.isEmpty) return;
-    final path = r.files.single.path;
+    final path = r?.path;
     if (path == null) return;
     await memory.remember(path);
     if (!mounted) return;

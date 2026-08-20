@@ -4,6 +4,10 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/services/gemini_ticket_service.dart';
 import 'app_settings_bool.dart';
+import '../../../core/services/gemini_api_key_resolution.dart';
+import '../../../core/services/overridable_settings.dart';
+import '../../../core/services/profile_settings.dart';
+import '../../../core/services/scoped_settings.dart';
 
 class GeminiApiKeyNotifier extends Notifier<String> {
   bool _hydrated = false;
@@ -18,24 +22,66 @@ class GeminiApiKeyNotifier extends Notifier<String> {
   }
 
   Future<void> _hydrateFromDb() async {
-    final db = await DatabaseHelper.instance.database;
+    final resolved = await resolveGeminiApiKey();
     if (!ref.mounted) return;
-    final raw = await SettingsRepository(
-      db,
-    ).getSetting(kGeminiApiKeySettingKey);
-    if (!ref.mounted) return;
-    state = raw?.trim() ?? '';
+    state = resolved;
   }
 
+  /// Αποθηκεύει **προσωπικό** κλειδί (Φάση 3): δική σας παράκαμψη πάνω από το
+  /// κοινό της ομάδας, που σας ακολουθεί σε όποιον υπολογιστή καθίσετε.
+  ///
+  /// **Αν η τιμή ταυτίζεται με το κοινό, δεν δημιουργείται παράκαμψη** — η
+  /// δήλωση απλώς αφαιρείται. Χωρίς αυτό, ένα σκέτο «Αποθήκευση» χωρίς αλλαγή
+  /// θα πάγωνε αντίγραφο του κοινού ως προσωπικό, και η επόμενη αλλαγή του
+  /// διαχειριστή δεν θα έφτανε ποτέ σε αυτόν τον χρήστη.
   Future<void> setApiKey(String value) async {
     final normalized = value.trim();
     state = normalized;
+    if (normalized == await _sharedApiKey()) {
+      await OverridableSettings.clearOverride(
+        OverridableSettingKeys.geminiApiKey,
+      );
+      return;
+    }
+    await OverridableSettings.setOverride(
+      OverridableSettingKeys.geminiApiKey,
+      normalized,
+    );
+  }
+
+  Future<String> _sharedApiKey() async {
     final db = await DatabaseHelper.instance.database;
-    if (!ref.mounted) return;
+    return (await SettingsRepository(
+          db,
+        ).getSetting(kGeminiApiKeySettingKey))?.trim() ??
+        '';
+  }
+
+  /// Το κοινό κλειδί που όρισε ο διαχειριστής — ό,τι ισχύει χωρίς προσωπικό.
+  Future<void> setSharedApiKey(String value) async {
+    final normalized = value.trim();
+    final db = await DatabaseHelper.instance.database;
     await SettingsRepository(
       db,
     ).saveSetting(kGeminiApiKeySettingKey, normalized);
+    await _hydrateFromDb();
   }
+
+  /// «Χρήση του κοινού κλειδιού»: αφαιρεί τη δήλωση προσωπικού.
+  ///
+  /// Χωριστό από το «άδειασε το πεδίο»: κενό προσωπικό κλειδί σημαίνει
+  /// «επίτηδες κανένα», και χωρίς αυτή τη διάκριση δεν θα υπήρχε δρόμος
+  /// επιστροφής στο κοινό.
+  Future<void> useSharedApiKey() async {
+    await OverridableSettings.clearOverride(
+      OverridableSettingKeys.geminiApiKey,
+    );
+    await _hydrateFromDb();
+  }
+
+  /// True όταν ισχύει προσωπικό κλειδί (δηλωμένο, έστω κενό).
+  Future<bool> hasPersonalApiKey() =>
+      OverridableSettings.hasOverride(OverridableSettingKeys.geminiApiKey);
 }
 
 final geminiApiKeyProvider =
@@ -56,12 +102,10 @@ class GeminiPromptTemplateNotifier extends Notifier<String> {
   }
 
   Future<void> _hydrateFromDb() async {
-    final db = await DatabaseHelper.instance.database;
-    if (!ref.mounted) return;
     final raw =
-        (await SettingsRepository(
-          db,
-        ).getSetting(kGeminiPromptTemplateSettingKey))?.trim() ??
+        (await ScopedSettings.getString(
+          ProfileSettingKeys.geminiPromptTemplate,
+        ))?.trim() ??
         '';
     if (!ref.mounted) return;
     state = raw.isEmpty ? kDefaultAiPromptTemplate : raw;
@@ -71,11 +115,10 @@ class GeminiPromptTemplateNotifier extends Notifier<String> {
     final normalized = value.trim();
     final next = normalized.isEmpty ? kDefaultAiPromptTemplate : normalized;
     state = next;
-    final db = await DatabaseHelper.instance.database;
-    if (!ref.mounted) return;
-    await SettingsRepository(
-      db,
-    ).saveSetting(kGeminiPromptTemplateSettingKey, next);
+    await ScopedSettings.setString(
+      ProfileSettingKeys.geminiPromptTemplate,
+      next,
+    );
   }
 }
 
