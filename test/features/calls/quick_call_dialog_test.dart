@@ -27,7 +27,7 @@ Future<void> _pumpCallLoggerApp(WidgetTester tester) async {
           showQuickCallFabProvider.overrideWith((ref) async => true),
           enableSpellCheckProvider.overrideWith((ref) async => true),
         ],
-        child: const MyApp(showStartupSplash: false),
+        child: const MyApp(showStartupScreens: false),
       ),
     );
     await tester.pump();

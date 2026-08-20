@@ -38,10 +38,7 @@ void main() {
       await db.delete('equipment');
       await db.delete('users');
       await db.delete('departments');
-      await db.insert('app_settings', {
-        'key': DatabaseHelper.auditUserPerformingSettingsKey,
-        'value': 'Tester Integrity',
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      activateTestOperator('Tester Integrity');
       repo = IntegrityService(db);
     });
 

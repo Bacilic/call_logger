@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/category_repository.dart';
-import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/database/audit_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -13,7 +12,6 @@ import '../../test_setup.dart';
 void main() {
   group('CategoryRepository behavior — lock πριν εξαγωγή', () {
     late CategoryRepository repo;
-    late SettingsRepository settings;
     late Database db;
 
     setUpAll(() async {
@@ -31,7 +29,6 @@ void main() {
       await db.delete('calls');
       await db.delete('categories');
       repo = CategoryRepository(db);
-      settings = SettingsRepository(db);
     });
 
     tearDownAll(() async {
@@ -161,10 +158,7 @@ void main() {
           'is_deleted': 0,
         });
 
-        await settings.saveSetting(
-          DatabaseHelper.auditUserPerformingSettingsKey,
-          'Editor Κατηγορίας',
-        );
+        activateTestOperator('Editor Κατηγορίας');
 
         int? rebuildCategoryId;
         Object? rebuildTxn;
@@ -227,10 +221,7 @@ void main() {
         'is_deleted': 0,
       });
 
-      await settings.saveSetting(
-        DatabaseHelper.auditUserPerformingSettingsKey,
-        'Admin Κατηγοριών',
-      );
+      activateTestOperator('Admin Κατηγοριών');
 
       await repo.softDeleteCategories([id1, id2]);
 

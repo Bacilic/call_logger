@@ -1,0 +1,105 @@
+// Προσωρινός παραγωγός εικονιδίου — διαγράφεται μετά τη χρήση.
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+const _slate = Color(0xFF4C6472);
+const _pale = Color(0xFFAFC4D0);
+const _green = Color(0xFF3FA34D);
+
+void _person(
+  Canvas canvas, {
+  required Offset head,
+  required double headRadius,
+  required Rect shoulders,
+  required Color color,
+  double haloWidth = 0,
+}) {
+  if (haloWidth > 0) {
+    final halo = Paint()..color = Colors.white;
+    canvas.drawCircle(head, headRadius + haloWidth, halo);
+    canvas.drawRRect(
+      RRect.fromRectAndCorners(
+        shoulders.inflate(haloWidth),
+        topLeft: Radius.circular(shoulders.width / 2 + haloWidth),
+        topRight: Radius.circular(shoulders.width / 2 + haloWidth),
+      ),
+      halo,
+    );
+  }
+  final paint = Paint()..color = color;
+  canvas.drawCircle(head, headRadius, paint);
+  canvas.drawRRect(
+    RRect.fromRectAndCorners(
+      shoulders,
+      topLeft: Radius.circular(shoulders.width / 2),
+      topRight: Radius.circular(shoulders.width / 2),
+    ),
+    paint,
+  );
+}
+
+void _paint(Canvas canvas) {
+  // Η σύνθεση σχεδιάζεται γύρω από το (276, 269)· εδώ κεντράρεται στον καμβά
+  // και μεγαλώνει ώστε να γεμίζει όσο και τα υπόλοιπα εικονίδια της οικογένειας.
+  canvas.translate(256, 256);
+  canvas.scale(1.12);
+  canvas.translate(-276, -269);
+
+  _person(
+    canvas,
+    head: const Offset(170, 212),
+    headRadius: 44,
+    shoulders: const Rect.fromLTRB(96, 278, 244, 396),
+    color: _pale,
+  );
+
+  _person(
+    canvas,
+    head: const Offset(288, 196),
+    headRadius: 62,
+    shoulders: const Rect.fromLTRB(184, 276, 392, 404),
+    color: _slate,
+    haloWidth: 12,
+  );
+
+  const badge = Offset(390, 366);
+  canvas.drawCircle(badge, 66, Paint()..color = Colors.white);
+  canvas.drawCircle(badge, 54, Paint()..color = _green);
+
+  final check = Path()
+    ..moveTo(365, 366)
+    ..lineTo(382, 385)
+    ..lineTo(417, 344);
+  canvas.drawPath(
+    check,
+    Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 16
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round,
+  );
+}
+
+void main() {
+  testWidgets('παράγει το assets/app_users.png', (tester) async {
+    late Uint8List bytes;
+    await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(
+        recorder,
+        const Rect.fromLTWH(0, 0, 512, 512),
+      );
+      _paint(canvas);
+      final image = await recorder.endRecording().toImage(512, 512);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      bytes = data!.buffer.asUint8List();
+    });
+    File('assets/app_users.png').writeAsBytesSync(bytes);
+    expect(bytes.length, greaterThan(1000));
+  });
+}

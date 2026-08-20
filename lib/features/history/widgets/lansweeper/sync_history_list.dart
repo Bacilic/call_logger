@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../services/lansweeper_submission_warnings.dart';
+
 class SyncHistoryList extends StatelessWidget {
   const SyncHistoryList({required this.links, super.key});
 
@@ -30,6 +32,12 @@ class SyncHistoryList extends StatelessWidget {
                 final metadata = _readMetadata(row['metadata']);
                 final mode = metadata['mode']?.toString().trim() ?? '';
                 final comment = metadata['comment']?.toString().trim() ?? '';
+                // Η ανάγνωση των προειδοποιήσεων ζει σε ένα σημείο για όλη την
+                // εφαρμογή — εδώ, στο μήνυμα της καταχώρησης και στην
+                // προειδοποίηση επεξεργασίας κλήσης.
+                final warnings = lansweeperWarningsFromMetadata(
+                  row['metadata'],
+                );
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -39,6 +47,8 @@ class SyncHistoryList extends StatelessWidget {
                       'Χρόνος: $createdAt',
                       if (mode.isNotEmpty) 'Τρόπος: $mode',
                       if (comment.isNotEmpty) 'Σχόλιο: $comment',
+                      if (warnings.isNotEmpty)
+                        'Προειδοποιήσεις: ${warnings.join(', ')}',
                     ].join('\n'),
                   ),
                 );

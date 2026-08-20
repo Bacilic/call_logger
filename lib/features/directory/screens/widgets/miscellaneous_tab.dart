@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/app_asset_image.dart';
+import '../../../operators/screens/operators_management_view.dart';
 import '../../../settings/screens/remote_tools_management_screen.dart';
 import 'categories_tab.dart';
 import 'validation_rules_view.dart';
 
-enum MiscView { dashboard, categories, remoteTools, validationRules }
+enum MiscView { dashboard, categories, remoteTools, validationRules, operators }
 
 /// Καρτέλα «Διάφορα»: κεντρικό hub με πλοήγηση σε υπο-οθόνες.
 class MiscellaneousTab extends StatefulWidget {
@@ -27,7 +28,9 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_view == MiscView.categories || _view == MiscView.validationRules)
+        if (_view == MiscView.categories ||
+            _view == MiscView.validationRules ||
+            _view == MiscView.operators)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
             child: Row(
@@ -55,6 +58,7 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
                   setState(() => _view = MiscView.dashboard),
             ),
             MiscView.validationRules => const ValidationRulesView(),
+            MiscView.operators => const OperatorsManagementView(),
             MiscView.dashboard => const SizedBox.shrink(),
           },
         ),
@@ -100,6 +104,15 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
                   onTap: () => setState(() => _view = MiscView.validationRules),
                 ),
               ),
+              SizedBox(
+                width: cardWidth.clamp(280.0, 520.0),
+                child: _HubNavCard(
+                  title: 'Χρήστες',
+                  assetPath: 'assets/app_users.png',
+                  fallbackIcon: Icons.manage_accounts_outlined,
+                  onTap: () => setState(() => _view = MiscView.operators),
+                ),
+              ),
             ],
           ),
         );
@@ -113,11 +126,16 @@ class _HubNavCard extends StatefulWidget {
     required this.title,
     required this.assetPath,
     required this.onTap,
+    this.fallbackIcon = Icons.image_outlined,
   });
 
   final String title;
   final String assetPath;
   final VoidCallback onTap;
+
+  /// Δείχνεται όταν λείπει η εικόνα — ώστε η κάρτα να μη μένει κενή μέχρι να
+  /// φτιαχτεί το εικαστικό.
+  final IconData fallbackIcon;
 
   @override
   State<_HubNavCard> createState() => _HubNavCardState();
@@ -155,7 +173,8 @@ class _HubNavCardState extends State<_HubNavCard> {
                     width: 72,
                     height: 72,
                     filterQuality: FilterQuality.medium,
-                    fallbackIcon: Icons.image_outlined,
+                    fallbackIcon: widget.fallbackIcon,
+                    fallbackSize: 56,
                   ),
                   const SizedBox(width: 20),
                   Expanded(

@@ -301,10 +301,10 @@ Future<void> _bootstrapAndRunApp() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, this.showStartupSplash = true});
+  const MyApp({super.key, this.showStartupScreens = true});
 
-  /// Αν θα προβληθεί η οθόνη εκκίνησης. Δες [AppInitWrapper.showStartupSplash].
-  final bool showStartupSplash;
+  /// Αν θα προβληθεί η οθόνη εκκίνησης. Δες [AppInitWrapper.showStartupScreens].
+  final bool showStartupScreens;
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +344,7 @@ class MyApp extends StatelessWidget {
       ),
       home: CrashRestartNotice(
         child: AppShellWithGlobalFatalError(
-          child: AppInitWrapper(showStartupSplash: showStartupSplash),
+          child: AppInitWrapper(showStartupScreens: showStartupScreens),
         ),
       ),
     );

@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/equipment_repository.dart';
-import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +14,6 @@ import '../../test_setup.dart';
 void main() {
   group('EquipmentRepository behavior — lock πριν εξαγωγή', () {
     late EquipmentRepository repo;
-    late SettingsRepository settings;
     late Database db;
     late int userId;
     late int userId2;
@@ -51,7 +49,6 @@ void main() {
         'is_deleted': 0,
       });
       repo = EquipmentRepository(db);
-      settings = SettingsRepository(db);
     });
 
     tearDownAll(() async {
@@ -120,10 +117,7 @@ void main() {
       () async {
         final deptId = await insertDepartment('Τμήμα Εξοπλισμού');
 
-        await settings.saveSetting(
-          DatabaseHelper.auditUserPerformingSettingsKey,
-          'Editor Εξοπλισμού',
-        );
+        activateTestOperator('Editor Εξοπλισμού');
         await db.delete('audit_log');
 
         await repo.updateEquipmentDepartment('PC-DEPT-CREATE', deptId);
@@ -341,10 +335,7 @@ void main() {
 
     test('deleteEquipments / restoreEquipment: is_deleted και audit', () async {
       final eqId = await repo.insertEquipmentFromMap(equipmentRow('PC-DELETE'));
-      await settings.saveSetting(
-        DatabaseHelper.auditUserPerformingSettingsKey,
-        'Admin Εξοπλισμού',
-      );
+      activateTestOperator('Admin Εξοπλισμού');
 
       await db.delete('audit_log');
       await repo.deleteEquipments([eqId]);

@@ -8,10 +8,13 @@ import '../database/database_file_classifier.dart';
 import '../database/database_init_progress_provider.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
+import '../database/database_helper.dart';
 import '../database/database_path_resolution.dart';
 import '../database/lock_diagnostic_service.dart';
 import '../services/asset_residue_cleaner.dart';
 import '../services/core_lexicon_service.dart';
+import '../services/current_operator.dart';
+import '../services/operator_identity.dart';
 import '../services/settings_service.dart';
 import '../updates/update_residue_cleaner.dart';
 import 'startup_engine_failure.dart';
@@ -110,6 +113,23 @@ class AppInitializer {
     });
   }
 
+  /// Αναγνωρίζει ποιος χρησιμοποιεί την εφαρμογή, μόλις η βάση είναι έτοιμη.
+  ///
+  /// Τρέχει και σε κάθε αλλαγή βάσης, γιατί τα προφίλ ζουν **μέσα** στη βάση:
+  /// η επόμενη μπορεί να μην ξέρει καθόλου αυτό το πρόσωπο.
+  ///
+  /// Αποτυχία δεν εμποδίζει την εκκίνηση — η ταυτότητα είναι ευκολία, όχι
+  /// προϋπόθεση. Το αποτέλεσμα είναι ορατό εκεί που έχει σημασία: το Ιστορικό
+  /// γράφει παύλα αντί για όνομα, όπως έκανε πάντα πριν υπάρξουν προφίλ.
+  static Future<void> _resolveCurrentOperator() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await OperatorIdentity.resolveAndActivate(db);
+    } catch (_) {
+      CurrentOperator.reset();
+    }
+  }
+
   static Future<AppInitResult> initialize({
     DatabaseInitProgressNotifier? progressNotifier,
   }) async {
@@ -124,6 +144,7 @@ class AppInitializer {
       );
       var spellCheckReady = false;
       if (runnerResult.result.isSuccess) {
+        await _resolveCurrentOperator();
         try {
           spellCheckReady = await CoreLexiconService.instance
               .bootstrapFromSavedPath();

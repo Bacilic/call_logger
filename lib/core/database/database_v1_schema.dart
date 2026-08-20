@@ -58,7 +58,39 @@ import 'database_foreign_keys.dart';
 /// v46: διαγραφή των ρυθμίσεων της καταργημένης «Αυτόματης σύνδεσης Help
 /// Desk» από το `app_settings` — μαζί και ο αποθηκευμένος κωδικός web
 /// console (μόνο δεδομένα).
-const int databaseSchemaVersionV1 = 46;
+/// v47: πίνακας `operators` — οι χρήστες της ίδιας της εφαρμογής, ξεχωριστοί
+/// από τους υπαλλήλους του καταλόγου (`users`). Κρατά ποιος ταυτίζεται με ποιον
+/// λογαριασμό Windows και ποια δικαιώματα του έχουν οριστεί ρητά. Καθαρή
+/// προσθήκη, χωρίς δεσμούς προς υπάρχοντες πίνακες: παλαιότερη έκδοση της
+/// εφαρμογής συνεχίζει να ανοίγει τη βάση κανονικά.
+const int databaseSchemaVersionV1 = 47;
+
+/// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
+///
+/// **Δεν έχει δεσμούς (foreign keys) προς κανέναν άλλο πίνακα, και δεν πρέπει
+/// να αποκτήσει.** Παλαιότερη έκδοση της εφαρμογής που ανοίγει αυτή τη βάση
+/// αγνοεί όσους πίνακες δεν γνωρίζει· ένας δεσμός όμως προς πίνακα που *ξέρει*
+/// θα εμπόδιζε τις δικές της διαγραφές, και τότε η βάση θα της απαγορευόταν.
+const String kCreateOperatorsTable = '''
+      CREATE TABLE IF NOT EXISTS operators (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        display_name TEXT NOT NULL,
+        windows_account TEXT,
+        is_admin INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        permissions_json TEXT,
+        created_at TEXT NOT NULL
+      )
+''';
+
+/// Ένας λογαριασμός Windows ανήκει σε έναν χρήστη — αλλά τα προφίλ χωρίς
+/// λογαριασμό (αυτόνομα) είναι όσα θέλει κανείς, γι' αυτό το ευρετήριο αγνοεί
+/// τις κενές τιμές.
+const String kCreateOperatorsWindowsAccountIndex = '''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_operators_windows_account
+      ON operators(windows_account)
+      WHERE windows_account IS NOT NULL
+''';
 
 /// Ο πίνακας της Βάσης Γνώσης: μία «συνταγή» ανά είδος βλάβης.
 ///
@@ -212,6 +244,9 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         value TEXT
       )
     ''');
+
+  await db.execute(kCreateOperatorsTable);
+  await db.execute(kCreateOperatorsWindowsAccountIndex);
 
   await db.execute('''
       CREATE TABLE IF NOT EXISTS remote_tools (

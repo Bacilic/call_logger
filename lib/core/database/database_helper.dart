@@ -58,9 +58,6 @@ class DatabaseHelper {
     this,
   );
 
-  /// Κλειδί `app_settings` για το όνομα χρήστη στις εγγραφές audit (προαιρετικό).
-  static const String auditUserPerformingSettingsKey = 'audit_user_performing';
-
   static const String auditActionDelete = 'ΔΙΑΓΡΑΦΗ';
   static const String auditActionRestore = 'ΕΠΑΝΑΦΟΡΑ';
   static const String auditActionBulkDelete = 'ΜΑΖΙΚΗ ΔΙΑΓΡΑΦΗ';

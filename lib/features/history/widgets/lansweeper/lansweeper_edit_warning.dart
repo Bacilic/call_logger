@@ -36,9 +36,18 @@ class LansweeperEditWarning extends StatelessWidget {
     required this.ticketViewUrlTemplate,
     required this.onClone,
     required this.cloneBusy,
+    this.warnings = const <String>[],
   });
 
   final String? ticketId;
+
+  /// Τι χρειάστηκε προσοχή όταν έφυγε η κλήση — π.χ. ότι ο αιτών δεν βρέθηκε
+  /// στο Lansweeper και το αίτημα καταχωρήθηκε στο όνομα του πράκτορα.
+  ///
+  /// Το μήνυμα ειπώθηκε μία φορά σε ένα snackbar την ώρα της αποστολής και
+  /// μετά χανόταν. Εδώ είναι το σημείο όπου κάποιος ρωτά «τι έγινε με αυτό το
+  /// ticket;», οπότε εδώ ξαναβρίσκεται. Κενή λίστα = καθαρή καταχώρηση.
+  final List<String> warnings;
 
   /// Πρότυπο URL προβολής ticket από τις ρυθμίσεις Lansweeper. Όταν λείπει ή
   /// είναι άκυρο, ο αριθμός εμφανίζεται ως απλό κείμενο — καλύτερα ορατός
@@ -77,6 +86,30 @@ class LansweeperEditWarning extends StatelessWidget {
             ),
           const SizedBox(height: 8),
           Text(kLansweeperEditWarningConsequence),
+          // Οι δύο γραμμές από πάνω είναι ζευγάρι — τι είναι η κλήση και τι
+          // δεν κάνει η αποθήκευση. Οι προειδοποιήσεις είναι τρίτο, ξεχωριστό
+          // πράγμα (τι συνέβη κατά την αποστολή) και μπαίνουν από κάτω τους.
+          if (warnings.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final warning in warnings)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 16,
+                      color: theme.colorScheme.error,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(warning, style: theme.textTheme.bodySmall),
+                    ),
+                  ],
+                ),
+              ),
+          ],
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,

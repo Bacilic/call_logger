@@ -237,6 +237,20 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 46 && newVersion >= 46) {
     await migrateDatabaseToV46(db);
   }
+  if (oldVersion < 47 && newVersion >= 47) {
+    await migrateDatabaseToV47(db);
+  }
+}
+
+/// v47: πίνακας `operators` — οι χρήστες της ίδιας της εφαρμογής.
+///
+/// Καθαρή προσθήκη: κανένας υπάρχων πίνακας δεν αγγίζεται και καμία εγγραφή δεν
+/// δημιουργείται. Το πρώτο προφίλ γεννιέται στην εκκίνηση, από τον λογαριασμό
+/// Windows εκείνου που ανοίγει τη βάση — όχι εδώ, γιατί η μετάπτωση δεν ξέρει
+/// ποιος τρέχει και θα έγραφε λάθος όνομα.
+Future<void> migrateDatabaseToV47(Database db) async {
+  await db.execute(kCreateOperatorsTable);
+  await db.execute(kCreateOperatorsWindowsAccountIndex);
 }
 
 /// v46: καθάρισμα των ρυθμίσεων της καταργημένης «Αυτόματης σύνδεσης Help

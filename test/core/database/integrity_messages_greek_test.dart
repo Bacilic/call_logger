@@ -80,6 +80,7 @@ void main() {
         'full_dictionary',
         'user_dictionary',
         'knowledge_base',
+        'operators',
       ];
 
       final untranslated = [

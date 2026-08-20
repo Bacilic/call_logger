@@ -22,6 +22,8 @@ import 'linked_task_details_dialog.dart';
 import 'linked_tasks_card.dart';
 import '../providers/history_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
+import '../providers/lansweeper_sync_provider.dart';
+import '../services/lansweeper_submission_warnings.dart';
 import 'lansweeper/lansweeper_edit_warning.dart';
 
 Future<void> showCallEditDialog(BuildContext context, {required int callId}) {
@@ -251,7 +253,8 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     if (hasTrace) {
       // Μόνο το ανέγγιχτο «από ΤΝ» προάγεται σε «επεξεργασμένο»· το χειρόγραφο
       // και το ήδη επεξεργασμένο κρατούν τον χαρακτηρισμό τους.
-      refinedSource = textChanged && _original!.refinedSource == CallRefinedSource.ai
+      refinedSource =
+          textChanged && _original!.refinedSource == CallRefinedSource.ai
           ? CallRefinedSource.aiEdited
           : _original!.refinedSource;
       refinedAt = textChanged
@@ -354,6 +357,20 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
         (original?.lansweeperMainTicketId?.trim().isNotEmpty ?? false) ||
         original?.lansweeperState == 'sent';
 
+    // Το watch γίνεται άνευ όρων, έξω από κάθε `if`: ένα watch που άλλοτε
+    // εκτελείται και άλλοτε όχι αλλάζει το σύνολο των εξαρτήσεων του widget
+    // από build σε build. Το ιστορικό είναι μια μικρή τοπική ανάγνωση και
+    // δεν κοστίζει τίποτα όταν δεν χρειάζεται.
+    final lansweeperWarnings = ref
+        .watch(callExternalLinksProvider(widget.callId))
+        .maybeWhen(
+          data: (links) => lansweeperWarningsForTicket(
+            links: links,
+            ticketId: original?.lansweeperMainTicketId,
+          ),
+          orElse: () => const <String>[],
+        );
+
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
       child: Center(
@@ -383,6 +400,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                             ),
                             onClone: _cloneCall,
                             cloneBusy: _hardCloneBusy,
+                            warnings: lansweeperWarnings,
                           ),
                           const SizedBox(height: 12),
                         ],

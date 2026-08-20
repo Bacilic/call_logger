@@ -433,7 +433,7 @@ Future<void> _loadCallFormApp(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: callLoggerTestProviderOverrides(),
-        child: const MyApp(showStartupSplash: false),
+        child: const MyApp(showStartupScreens: false),
       ),
     );
     await tester.pump();

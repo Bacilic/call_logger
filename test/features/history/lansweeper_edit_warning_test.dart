@@ -18,6 +18,7 @@ Future<void> _pumpWarning(
   WidgetTester tester, {
   required String? ticketId,
   String? template = _template,
+  List<String> warnings = const <String>[],
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -27,6 +28,7 @@ Future<void> _pumpWarning(
           ticketViewUrlTemplate: template,
           onClone: () {},
           cloneBusy: false,
+          warnings: warnings,
         ),
       ),
     ),
@@ -125,5 +127,56 @@ void main() {
 
     await _pumpWarning(tester, ticketId: null);
     expect(find.text(kLansweeperEditWarningConsequence), findsOneWidget);
+  });
+
+  group('προειδοποιήσεις καταχώρησης', () {
+    const requesterWarning =
+        'Ο αιτών «gnk\\aimat1» δεν βρέθηκε στο Lansweeper· '
+        'αιτών καταχωρήθηκε ο πράκτορας.';
+
+    testWidgets('ό,τι χρειάστηκε προσοχή στην αποστολή ξαναβρίσκεται εδώ', (
+      tester,
+    ) async {
+      await _pumpWarning(
+        tester,
+        ticketId: '17679',
+        warnings: const <String>[requesterWarning],
+      );
+
+      expect(
+        find.text(requesterWarning),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Το μήνυμα ειπώθηκε μία φορά σε snackbar· εδώ ρωτά κανείς «τι έγινε '
+          'με αυτό το ticket;»',
+        ),
+      );
+      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    });
+
+    testWidgets('κάθε προειδοποίηση παίρνει δική της γραμμή', (tester) async {
+      await _pumpWarning(
+        tester,
+        ticketId: '17679',
+        warnings: const <String>[requesterWarning, 'Η σημείωση απέτυχε.'],
+      );
+
+      expect(find.text(requesterWarning), findsOneWidget);
+      expect(find.text('Η σημείωση απέτυχε.'), findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsNWidgets(2));
+    });
+
+    testWidgets('καθαρή καταχώρηση δεν δείχνει τίποτα', (tester) async {
+      await _pumpWarning(tester, ticketId: '17679');
+
+      expect(
+        find.byIcon(Icons.warning_amber_rounded),
+        findsNothing,
+        reason: greekExpectMsg(
+          'Χωρίς προειδοποιήσεις το πλαίσιο μένει όπως ήταν — κανένα κενό '
+          'σύμβολο προσοχής',
+        ),
+      );
+    });
   });
 }

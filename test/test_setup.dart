@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/database_v1_schema.dart';
+import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/models/remote_tool.dart';
+import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter/material.dart';
 import 'package:call_logger/core/database/database_init_result.dart';
@@ -32,6 +34,20 @@ const String kTestEquipmentCode = 'PC-TEST';
 const String kTestDepartmentName = 'Τμήμα Δοκιμών';
 const String kTestCategoryName = 'Δοκιμαστική Κατηγορία';
 const String kTestHistorySearchMarker = 'TEST_ELL_MARKER';
+
+/// Ορίζει ποιος «ενεργεί» — για ελέγχους που φυλάνε τη σφραγίδα του Ιστορικού.
+///
+/// Η ταυτότητα είναι καθολική, οπότε **μηδενίζεται πρώτα**: ένας έλεγχος δεν
+/// επιτρέπεται να αλλάζει την αφετηρία του επόμενου.
+void activateTestOperator(String displayName) {
+  CurrentOperator.reset();
+  CurrentOperator.activate(
+    Operator(displayName: displayName, createdAt: DateTime(2026, 1, 1)),
+  );
+}
+
+/// Μηδενίζει την ταυτότητα — το Ιστορικό ξαναγράφει παύλα.
+void resetTestOperator() => CurrentOperator.reset();
 
 Directory? _testTempDir;
 

@@ -11,13 +11,17 @@ String databaseTableLabelEl(String? tableName) {
   return switch (name) {
     'calls' => 'Κλήσεις',
     'tasks' => 'Εκκρεμότητες',
-    'users' => 'Χρήστες',
+    // «Υπάλληλοι» και όχι «Χρήστες»: ο πίνακας κρατά το προσωπικό του
+    // νοσοκομείου. Οι «Χρήστες» είναι πλέον όσοι χειρίζονται την εφαρμογή
+    // (`operators`) — δύο έννοιες δεν μοιράζονται την ίδια λέξη.
+    'users' => 'Υπάλληλοι',
+    'operators' => 'Χρήστες',
     'phones' => 'Τηλέφωνα',
     'departments' => 'Τμήματα',
     'equipment' => 'Εξοπλισμός',
     'categories' => 'Κατηγορίες',
-    'user_phones' => 'Συσχέτιση χρήστη–τηλεφώνου',
-    'user_equipment' => 'Συσχέτιση χρήστη–εξοπλισμού',
+    'user_phones' => 'Συσχέτιση υπαλλήλου–τηλεφώνου',
+    'user_equipment' => 'Συσχέτιση υπαλλήλου–εξοπλισμού',
     'department_phones' => 'Συσχέτιση τμήματος–τηλεφώνου',
     'call_external_links' => 'Εξωτερικός σύνδεσμος κλήσης',
     'building_map_floors' => 'Όροφοι χάρτη κτιρίου',
@@ -26,6 +30,8 @@ String databaseTableLabelEl(String? tableName) {
     'remote_tools' => 'Εργαλεία απομακρυσμένης',
     'remote_tool_args' => 'Ορίσματα εργαλείων',
     'full_dictionary' => 'Λεξικό',
+    // Εδώ το «χρήστη» είναι σωστό: το προσωπικό λεξικό ορθογραφίας ανήκει σε
+    // αυτόν που χειρίζεται την εφαρμογή, όχι σε υπάλληλο του καταλόγου.
     'user_dictionary' => 'Λεξικό χρήστη',
     'knowledge_base' => 'Βάση Γνώσης',
     _ => name,
@@ -40,14 +46,14 @@ String databaseEntityTypeLabelEl(String? entityType) {
   final type = entityType?.trim() ?? '';
   if (type.isEmpty) return '—';
   return switch (type) {
-    'user' => 'Χρήστης',
+    'user' => 'Υπάλληλος',
     'department' => 'Τμήμα',
     'equipment' => 'Εξοπλισμός',
     'category' => 'Κατηγορία',
     'task' => 'Εκκρεμότητα',
     'call' => 'Κλήση',
     'phone' => 'Τηλέφωνο',
-    'bulk_users' => 'Μαζική ενημέρωση χρηστών',
+    'bulk_users' => 'Μαζική ενημέρωση υπαλλήλων',
     'bulk_departments' => 'Μαζική ενημέρωση τμημάτων',
     'bulk_equipment' => 'Μαζική ενημέρωση εξοπλισμού',
     'import_data' => 'Δεδομένα εισαγωγής',

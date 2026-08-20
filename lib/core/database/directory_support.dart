@@ -1,7 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'audit_service.dart';
-import 'database_helper.dart';
 
 /// Οι ιστορικές συνδέσεις ενός τηλεφώνου ή εξοπλισμού: πόσες είναι και πότε
 /// ήταν η τελευταία της κάθε κατηγορίας.
@@ -75,14 +74,13 @@ class DirectorySupport {
     return DateTime.tryParse(raw);
   }
 
-  Future<String> auditPerformingUser({DatabaseExecutor? executor}) async {
-    final v = await getSetting(
-      DatabaseHelper.auditUserPerformingSettingsKey,
-      executor: executor ?? db,
-    );
-    final t = v?.trim();
-    if (t != null && t.isNotEmpty) return t;
-    return '—';
+  /// Ο ενεργός χρήστης, για τη στήλη `user_performing` του Ιστορικού.
+  ///
+  /// **Δεν έχει δική του απάντηση** — προωθεί στην ίδια πηγή με όλα τα
+  /// υπόλοιπα. Δύο σημεία που απαντούν στο ίδιο ερώτημα κάποια μέρα θα
+  /// διαφωνήσουν σιωπηλά. Το [executor] δεν χρησιμοποιείται πια.
+  Future<String> auditPerformingUser({DatabaseExecutor? executor}) {
+    return AuditService.performingUser(executor);
   }
 
   String userDisplayNameFromRow(Map<String, dynamic>? r) {

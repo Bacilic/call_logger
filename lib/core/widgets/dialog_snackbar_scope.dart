@@ -72,10 +72,21 @@ mixin DialogSnackbarHost<T extends StatefulWidget> on State<T> {
   }
 
   /// Το snackbar όπως θα εμφανιστεί: με κουμπί αντιγραφής όταν ζητηθεί.
+  ///
+  /// Το `SnackBar` δεν έχει `copyWith`, οπότε το αντίγραφο χτίζεται στο χέρι.
+  /// Αντιγράφονται **όλα** τα πεδία, με πρότυπο το `SnackBar.withAnimation` του
+  /// ίδιου του framework — αλλάζει μόνο το `content`.
+  ///
+  /// Η πληρότητα δεν είναι σχολαστικότητα: όσο μεταφέρονταν μόνο η διάρκεια και
+  /// η συμπεριφορά, κάθε άλλη ρύθμιση του καλούντος έσβηνε σιωπηλά μόλις ζητούσε
+  /// αντιγραφή — ένα χρώμα φόντου ή ένα πλάτος χάνονταν χωρίς προειδοποίηση από
+  /// τον μεταγλωττιστή. Αν κάποτε προστεθεί νέο πεδίο στο `SnackBar`, η λίστα
+  /// εδώ ενημερώνεται από εκεί.
   SnackBar _composeSnackBar(SnackBar snackBar, String? copyText) {
     final textToCopy = (copyText ?? '').trim();
     if (textToCopy.isEmpty) return snackBar;
     return SnackBar(
+      key: snackBar.key,
       content: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -91,8 +102,24 @@ mixin DialogSnackbarHost<T extends StatefulWidget> on State<T> {
           ),
         ],
       ),
-      duration: snackBar.duration,
+      backgroundColor: snackBar.backgroundColor,
+      elevation: snackBar.elevation,
+      margin: snackBar.margin,
+      padding: snackBar.padding,
+      width: snackBar.width,
+      shape: snackBar.shape,
+      hitTestBehavior: snackBar.hitTestBehavior,
       behavior: snackBar.behavior,
+      action: snackBar.action,
+      actionOverflowThreshold: snackBar.actionOverflowThreshold,
+      showCloseIcon: snackBar.showCloseIcon,
+      closeIconColor: snackBar.closeIconColor,
+      duration: snackBar.duration,
+      persist: snackBar.persist,
+      animation: snackBar.animation,
+      onVisible: snackBar.onVisible,
+      dismissDirection: snackBar.dismissDirection,
+      clipBehavior: snackBar.clipBehavior,
     );
   }
 

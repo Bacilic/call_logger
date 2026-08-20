@@ -29,7 +29,7 @@ class CallLoggerTestMaterialApp extends StatelessWidget {
       // ελέγχουν το κέλυφος, όχι την εικόνα της ημέρας — και ο ρυθμιστής της
       // οθόνης θα κρέμαγε κάθε pumpAndSettle.
       home: const AppShellWithGlobalFatalError(
-        child: AppInitWrapper(showStartupSplash: false),
+        child: AppInitWrapper(showStartupScreens: false),
       ),
     );
   }

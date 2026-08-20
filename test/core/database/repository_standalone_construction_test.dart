@@ -7,7 +7,6 @@ import 'package:call_logger/core/database/department_repository.dart';
 import 'package:call_logger/core/database/directory_support.dart';
 import 'package:call_logger/core/database/equipment_repository.dart';
 import 'package:call_logger/core/database/phone_repository.dart';
-import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/errors/department_exists_exception.dart';
 import 'package:call_logger/core/database/integrity_service.dart';
@@ -218,10 +217,7 @@ void main() {
           'is_deleted': 0,
         });
 
-        await SettingsRepository(db).saveSetting(
-          DatabaseHelper.auditUserPerformingSettingsKey,
-          'Admin Standalone Κατηγοριών',
-        );
+        activateTestOperator('Admin Standalone Κατηγοριών');
 
         await repo.softDeleteCategories([id1, id2]);
 
@@ -404,10 +400,7 @@ void main() {
 
       await repo.updateDepartment(id, {'notes': 'Standalone σημείωση'});
 
-      await SettingsRepository(db).saveSetting(
-        DatabaseHelper.auditUserPerformingSettingsKey,
-        'Admin Standalone Dept',
-      );
+      activateTestOperator('Admin Standalone Dept');
 
       await db.delete('audit_log');
       await repo.bulkUpdateDepartments([id], {'building': 'Κτίριο Α'});

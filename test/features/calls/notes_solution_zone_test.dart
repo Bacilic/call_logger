@@ -44,7 +44,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: callLoggerTestProviderOverrides(),
-            child: const MyApp(showStartupSplash: false),
+            child: const MyApp(showStartupScreens: false),
           ),
         );
         await tester.pump();

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import 'audit_diff_helper.dart';
-import 'database_helper.dart';
+import '../services/current_operator.dart';
 import '../utils/search_text_normalizer.dart';
 
 /// Κεντρική εγγραφή στον πίνακα `audit_log` (μόνο από εδώ).
@@ -12,23 +12,17 @@ class AuditService {
 
   final Database _db;
 
-  /// Όνομα χρήστη για στήλη `user_performing` (ρύθμιση `app_settings`).
+  /// Όνομα χρήστη για τη στήλη `user_performing` — ο ενεργός χρήστης.
   ///
-  /// Χρησιμοποίησε το ίδιο [DatabaseExecutor] με το ενεργό transaction (π.χ. `txn`),
-  /// όχι το root [Database] ενώ είναι ανοιχτό transaction — αλλιώς κλείδωμα SQLite.
-  static Future<String> performingUser(DatabaseExecutor executor) async {
-    final rows = await executor.query(
-      'app_settings',
-      columns: ['value'],
-      where: 'key = ?',
-      whereArgs: [DatabaseHelper.auditUserPerformingSettingsKey],
-      limit: 1,
-    );
-    if (rows.isEmpty) return '—';
-    final v = rows.first['value'] as String?;
-    final t = v?.trim();
-    if (t != null && t.isNotEmpty) return t;
-    return '—';
+  /// Η ταυτότητα έρχεται από τον [CurrentOperator], που την ορίζει μία φορά
+  /// στην εκκίνηση. Όσο δεν έχει αναγνωριστεί κανείς, η στήλη γράφει παύλα.
+  ///
+  /// Το [executor] δεν χρησιμοποιείται πια και δεν χρειάζεται να δίνεται: η
+  /// απάντηση δεν αγγίζει τη βάση. Μένει προαιρετικό ώστε να μη χρειαστεί να
+  /// ξαναγραφτούν δεκάδες σημεία κλήσης — και επειδή δεν ρωτά τη βάση, παύει
+  /// να υπάρχει και ο κίνδυνος κλειδώματος μέσα σε ανοιχτό transaction.
+  static Future<String> performingUser([DatabaseExecutor? executor]) async {
+    return CurrentOperator.auditName;
   }
 
   /// Εισαγωγή μίας γραμμής audit μέσα σε transaction ή απευθείας.

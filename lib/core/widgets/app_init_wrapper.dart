@@ -11,9 +11,13 @@ import '../init/app_init_provider.dart';
 import '../init/app_init_retry_runner.dart';
 import '../init/startup_notices.dart';
 import '../init/startup_window_placement.dart';
+import '../models/operator.dart';
 import '../providers/application_reset_provider.dart';
 import '../services/application_reset_service.dart';
 import '../services/crash_log_service.dart';
+import '../services/current_operator.dart';
+import '../services/operator_identity.dart';
+import '../../features/operators/screens/operator_picker_screen.dart';
 import '../../features/settings/widgets/pending_reset_database_screen.dart';
 import 'app_shortcuts.dart';
 import 'database_error_screen.dart';
@@ -23,7 +27,7 @@ import 'startup_splash_screen.dart';
 class AppInitWrapper extends ConsumerStatefulWidget {
   const AppInitWrapper({
     super.key,
-    this.showStartupSplash = true,
+    this.showStartupScreens = true,
     @visibleForTesting this.windowRestorer,
   });
 
@@ -31,13 +35,19 @@ class AppInitWrapper extends ConsumerStatefulWidget {
   /// πραγματικό παράθυρο, και η σειρά είναι ακριβώς αυτό που ελέγχεται).
   final Future<void> Function()? windowRestorer;
 
-  /// Αν θα προβληθεί η οθόνη εκκίνησης πριν το κέλυφος.
+  /// Αν θα προβληθούν **όλες** οι οθόνες που προηγούνται του κελύφους: η κάρτα
+  /// εκκίνησης και η επιλογή χρήστη.
   ///
-  /// Η οθόνη έχει δικό της ελάχιστο χρόνο ζωής και έναν ρυθμιστή που χτυπά
-  /// συνεχώς. Τα widget tests που στήνουν ολόκληρη την εφαρμογή για να
-  /// ελέγξουν κάτι εντελώς άλλο δεν έχουν λόγο να την περιμένουν — και ο
-  /// ρυθμιστής της θα κρέμαγε κάθε `pumpAndSettle`.
-  final bool showStartupSplash;
+  /// Τα widget tests που στήνουν ολόκληρη την εφαρμογή για να ελέγξουν κάτι
+  /// εντελώς άλλο δεν έχουν λόγο να τις περιμένουν: η κάρτα εκκίνησης έχει
+  /// ρυθμιστή που χτυπά συνεχώς και θα κρέμαγε κάθε `pumpAndSettle`, ενώ η
+  /// επιλογή χρήστη θα στεκόταν μπροστά σε κάθε δοκιμαστική βάση που δεν έχει
+  /// προφίλ.
+  ///
+  /// Είναι **ρητή σημαία και όχι ανίχνευση περιβάλλοντος**: κρυφή συμπεριφορά
+  /// που εξαρτάται από το πού τρέχει η εφαρμογή δεν βρίσκεται όταν χαλάσει.
+  /// Κάθε νέα οθόνη πριν το κέλυφος περνά από εδώ.
+  final bool showStartupScreens;
 
   @override
   ConsumerState<AppInitWrapper> createState() => _AppInitWrapperState();
@@ -50,6 +60,13 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   /// αρχικοποίηση μπορεί να τελειώσει σε μισό δευτερόλεπτο, αλλά η οθόνη έχει
   /// δικό της ελάχιστο χρόνο ζωής.
   bool _splashDone = false;
+
+  /// True μόλις ο χρήστης δηλώσει ποιος είναι — ή όταν δεν χρειάστηκε να ρωτηθεί.
+  bool _operatorChosen = false;
+
+  /// Τα προφίλ προς επιλογή, φορτωμένα **μία φορά**: χωρίς αυτό, κάθε
+  /// ξαναχτίσιμο θα ξεκινούσε νέα ανάγνωση και η λίστα θα αναβόσβηνε.
+  Future<List<Operator>>? _selectableProfiles;
 
   /// Η οθόνη εκκίνησης παραδίδει τη σκυτάλη στην εφαρμογή.
   ///
@@ -120,6 +137,48 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     );
   }
 
+  /// Η οθόνη «Ποιος είστε;» — μόνο όταν ο λογαριασμός Windows δεν αρκεί.
+  ///
+  /// Επιστρέφει `null` όταν δεν χρειάζεται, ώστε η συνηθισμένη εκκίνηση (ο
+  /// καθένας στον δικό του λογαριασμό) να μη βλέπει ποτέ τίποτα.
+  Widget? _buildOperatorPickerIfNeeded() {
+    if (CurrentOperator.active != null) return null;
+
+    return FutureBuilder<List<Operator>>(
+      future: _selectableProfiles ??= _loadSelectableProfiles(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _InitLoadingScreen();
+        }
+        return OperatorPickerScreen(
+          profiles: snapshot.data ?? const <Operator>[],
+          suggestedName: OperatorIdentity.suggestedDisplayName(),
+          hasWindowsAccount:
+              OperatorIdentity.suggestedDisplayName().isNotEmpty,
+          onPick: (operator) {
+            OperatorIdentity.activateForSession(operator);
+            setState(() => _operatorChosen = true);
+          },
+          onCreate: (displayName, bindCurrentAccount) async {
+            final db = await DatabaseHelper.instance.database;
+            await OperatorIdentity.createAndActivate(
+              db,
+              displayName: displayName,
+              bindCurrentAccount: bindCurrentAccount,
+            );
+            if (!mounted) return;
+            setState(() => _operatorChosen = true);
+          },
+        );
+      },
+    );
+  }
+
+  Future<List<Operator>> _loadSelectableProfiles() async {
+    final db = await DatabaseHelper.instance.database;
+    return OperatorIdentity.selectableProfiles(db);
+  }
+
   @override
   Widget build(BuildContext context) {
     final pendingReset = ref.watch(applicationResetPendingProvider);
@@ -133,7 +192,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     // ακόμη βήματα να δείξει. Η αποτυχία την παρακάμπτει αμέσως: μπροστά σε
     // σφάλμα, ο χρήστης θέλει τα διαγνωστικά, όχι την εικόνα της ημέρας.
     final failed = asyncInit.hasError || asyncInit.value?.success == false;
-    if (widget.showStartupSplash && !_splashDone && !failed) {
+    if (widget.showStartupScreens && !_splashDone && !failed) {
       return StartupSplashScreen(
         // Η έκδοση διαβάστηκε ήδη στην εκκίνηση για το ημερολόγιο σφαλμάτων —
         // δεν υπάρχει λόγος να ξαναρωτηθεί το λειτουργικό.
@@ -151,6 +210,10 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       },
       data: (initResult) {
         if (initResult.success) {
+          if (widget.showStartupScreens && !_operatorChosen) {
+            final picker = _buildOperatorPickerIfNeeded();
+            if (picker != null) return picker;
+          }
           return AppShortcuts(
             initialDatabaseResult: initResult.result,
             initialIsLocalDevMode: initResult.isLocalDevMode,

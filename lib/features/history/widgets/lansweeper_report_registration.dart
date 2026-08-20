@@ -4,6 +4,7 @@ import '../models/lansweeper_sync_state.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
+import '../services/lansweeper_submission_warnings.dart';
 import 'lansweeper/lansweeper_ai_presenter.dart';
 import 'lansweeper/lansweeper_registration_dialogs.dart';
 import 'lansweeper/lansweeper_registration_flow.dart';
@@ -128,12 +129,33 @@ class LansweeperReportRegistration {
           : ticketId.isEmpty
           ? '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες.'
           : '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #$ticketId).';
-      final warningsText = result.warnings.isEmpty
-          ? ''
-          : '\n${result.warnings.join('\n')}';
-      host.showDialogSnackBar(
-        SnackBar(content: Text('$baseMessage$warningsText')),
+      final message = lansweeperSubmitSnackBarText(
+        baseMessage: baseMessage,
+        warnings: result.warnings,
       );
+      if (result.warnings.isEmpty) {
+        host.showDialogSnackBar(SnackBar(content: Text(message)));
+      } else {
+        // Οι προειδοποιήσεις κρύβονταν κάτω από ένα «Καταχώρηση επιτυχής» που
+        // έφευγε σε τέσσερα δευτερόλεπτα, χωρίς τρόπο να τις κρατήσει κανείς.
+        // Παίρνουν εδώ ό,τι είχε ως τώρα μόνο η αποτυχία: διπλάσιο χρόνο στην
+        // οθόνη και κουμπί αντιγραφής. Το επιτυχές αποτέλεσμα δεν αλλάζει —
+        // μια προειδοποίηση δεν είναι σφάλμα, αλλά πρέπει να διαβαστεί.
+        host.showDialogSnackBar(
+          SnackBar(
+            content: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_amber_rounded, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(message)),
+              ],
+            ),
+            duration: const Duration(seconds: 8),
+          ),
+          copyText: message,
+        );
+      }
       if (!resubmit && ticketId.isNotEmpty) {
         final openTicketAfterSubmit =
             await readLansweeperOpenTicketAfterApiSubmitSetting();
@@ -252,10 +274,7 @@ class LansweeperReportRegistration {
     host.showDialogSnackBar(
       SnackBar(
         content: Text(
-          registrationSuccessMessage(
-            count: callIds.length,
-            ticketId: ticketId,
-          ),
+          registrationSuccessMessage(count: callIds.length, ticketId: ticketId),
         ),
       ),
     );

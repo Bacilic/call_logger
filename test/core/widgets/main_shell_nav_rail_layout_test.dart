@@ -45,7 +45,7 @@ Future<void> _pumpShell(
           showLampNavProvider.overrideWith((ref) async => showLampNav),
           enableSpellCheckProvider.overrideWith((ref) async => enableSpellCheck),
         ],
-        child: const MyApp(showStartupSplash: false),
+        child: const MyApp(showStartupScreens: false),
       ),
     );
     await tester.pump();
