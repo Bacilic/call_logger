@@ -6,11 +6,9 @@
 import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/core/database/database_schema_migrations.dart';
 import 'package:call_logger/core/database/operator_repository.dart';
-import 'package:call_logger/core/models/app_permission.dart';
 import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/core/services/operator_identity.dart';
-import 'package:call_logger/core/services/permission_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -162,10 +160,7 @@ void main() {
       CurrentOperator.reset();
 
       expect(
-        await OperatorIdentity.resolveAndActivate(
-          db,
-          windowsAccount: 'koino',
-        ),
+        await OperatorIdentity.resolveAndActivate(db, windowsAccount: 'koino'),
         isNull,
       );
       expect((await repository.getAll()).single.windowsAccount, isNull);
@@ -191,10 +186,7 @@ void main() {
 
     test('η λίστα επιλογής κρύβει τους αρχειοθετημένους', () async {
       await repository.insert(
-        Operator(
-          displayName: 'Ενεργός',
-          createdAt: DateTime(2026, 8, 20),
-        ),
+        Operator(displayName: 'Ενεργός', createdAt: DateTime(2026, 8, 20)),
       );
       await repository.insert(
         Operator(
@@ -207,6 +199,38 @@ void main() {
       final selectable = await OperatorIdentity.selectableProfiles(db);
 
       expect(selectable.map((o) => o.displayName), ['Ενεργός']);
+    });
+
+    test('ο ήδη συνδεδεμένος δεν προσφέρεται προς επιλογή', () async {
+      final me = await repository.insert(
+        Operator(displayName: 'Βασίλης', createdAt: DateTime(2026, 8, 21)),
+      );
+      await repository.insert(
+        Operator(displayName: 'Δοκιμαστικός', createdAt: DateTime(2026, 8, 21)),
+      );
+      CurrentOperator.activate(me);
+
+      final selectable = await OperatorIdentity.selectableProfiles(db);
+
+      expect(
+        selectable.map((o) => o.displayName),
+        ['Δοκιμαστικός'],
+        reason:
+            '«Αλλαγή χρήστη» σε αυτόν που είναι ήδη ο χρήστης δεν κάνει τίποτα',
+      );
+    });
+
+    test('στην εκκίνηση, χωρίς συνδεδεμένο, προσφέρονται όλοι', () async {
+      await repository.insert(
+        Operator(displayName: 'Βασίλης', createdAt: DateTime(2026, 8, 21)),
+      );
+      await repository.insert(
+        Operator(displayName: 'Δοκιμαστικός', createdAt: DateTime(2026, 8, 21)),
+      );
+
+      final selectable = await OperatorIdentity.selectableProfiles(db);
+
+      expect(selectable, hasLength(2));
     });
   });
 
@@ -230,93 +254,6 @@ void main() {
       );
 
       expect(await AuditService.performingUser(), '—');
-    });
-  });
-
-  group('Δικαιώματα — υποδομή χωρίς επιβολή', () {
-    const service = PermissionService.instance;
-
-    setUp(CurrentOperator.reset);
-    tearDown(CurrentOperator.reset);
-
-    Operator operatorWith({
-      bool isAdmin = false,
-      Map<String, bool> overrides = const <String, bool>{},
-    }) {
-      return Operator(
-        displayName: 'Δοκιμή',
-        isAdmin: isAdmin,
-        permissionOverrides: overrides,
-        createdAt: DateTime(2026, 1, 1),
-      );
-    }
-
-    test('χωρίς αναγνωρισμένο χρήστη επιτρέπονται όλα', () {
-      for (final permission in AppPermission.values) {
-        expect(service.can(permission), isTrue, reason: permission.key);
-      }
-    });
-
-    test('ο διαχειριστής δεν περνά καν από τη λίστα', () {
-      final admin = operatorWith(
-        isAdmin: true,
-        overrides: {AppPermission.bulkDelete.key: false},
-      );
-
-      expect(service.can(AppPermission.bulkDelete, operator: admin), isTrue);
-    });
-
-    test('ρητή απαγόρευση του διαχειριστή υπερισχύει της προεπιλογής', () {
-      final restricted = operatorWith(
-        overrides: {AppPermission.manageDepartments.key: false},
-      );
-
-      expect(
-        service.can(AppPermission.manageDepartments, operator: restricted),
-        isFalse,
-      );
-      expect(
-        service.can(AppPermission.manageEmployees, operator: restricted),
-        isTrue,
-        reason: 'ό,τι δεν ρυθμίστηκε ακολουθεί την προεπιλογή του',
-      );
-    });
-
-    test('μοναδική προεπιλεγμένη απαγόρευση: το πλήρες αντίγραφο (Φάση 2)', () {
-      // Η γενική επιβολή έρχεται με δική της οθόνη (Φάση 4)· ως τότε η μόνη
-      // ρητά κλειδωμένη απόφαση είναι «πλήρες αντίγραφο μόνο ο διαχειριστής».
-      // Το τεστ φυλάει ότι δεν θα γλιστρήσει σιωπηλά δεύτερη απαγόρευση.
-      for (final permission in AppPermission.values) {
-        expect(
-          permission.allowedByDefault,
-          permission == AppPermission.fullBackup ? isFalse : isTrue,
-          reason: permission.key,
-        );
-      }
-    });
-
-    test('τα κλειδιά των δικαιωμάτων είναι μοναδικά', () {
-      // Αποθηκευμένα προφίλ αναφέρουν τα κλειδιά ονομαστικά: ένα διπλό κλειδί
-      // θα έσβηνε σιωπηλά τη ρύθμιση του άλλου.
-      final keys = AppPermission.values.map((p) => p.key).toList();
-
-      expect(keys.toSet(), hasLength(keys.length));
-    });
-
-    test('άγνωστο αποθηκευμένο κλειδί δεν ρίχνει την εφαρμογή', () {
-      final stored = decodePermissionOverrides('{"κλειδι_που_εφυγε": false}');
-      final operator = operatorWith(overrides: stored);
-
-      expect(
-        service.can(AppPermission.manageEmployees, operator: operator),
-        isTrue,
-      );
-    });
-
-    test('χαλασμένο περιεχόμενο δίνει προεπιλογές, όχι σφάλμα', () {
-      expect(decodePermissionOverrides('όχι-json'), isEmpty);
-      expect(decodePermissionOverrides(null), isEmpty);
-      expect(decodePermissionOverrides('[]'), isEmpty);
     });
   });
 }

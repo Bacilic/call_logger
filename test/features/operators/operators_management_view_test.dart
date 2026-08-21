@@ -95,8 +95,94 @@ void main() {
       expect(
         find.widgetWithText(FilledButton, 'Αποθήκευση'),
         findsNothing,
-        reason: 'ο διάλογος οφείλει να έχει κλείσει μετά από επιτυχή αποθήκευση',
+        reason:
+            'ο διάλογος οφείλει να έχει κλείσει μετά από επιτυχή αποθήκευση',
       );
+    });
+
+    testWidgets('απλός χρήστης: καμία πύλη αλλαγής στη λίστα', (tester) async {
+      await tester.runAsync(() async {
+        await OperatorRepository(db).insert(
+          Operator(
+            displayName: 'Βασίλης',
+            windowsAccount: 'v.drosos',
+            isAdmin: true,
+            createdAt: DateTime(2026, 8, 19),
+          ),
+        );
+      });
+
+      CurrentOperator.activate(
+        Operator(
+          id: 999,
+          displayName: 'Δοκιμαστικός',
+          createdAt: DateTime(2026, 8, 21),
+        ),
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: OperatorsManagementView())),
+      );
+      await _advance(tester);
+
+      expect(
+        find.text('Νέο προφίλ'),
+        findsNothing,
+        reason:
+            'Χωρίς σήμανση διαχειριστή δεν δημιουργούνται προφίλ από εδώ. Η '
+            'σύσταση κάποιου που δεν αναγνωρίστηκε γίνεται στην οθόνη επιλογής.',
+      );
+      expect(find.byIcon(Icons.edit_outlined), findsNothing);
+      expect(
+        find.byIcon(Icons.visibility_outlined),
+        findsWidgets,
+        reason: 'βλέπει ποιοι υπάρχουν και τι ισχύει, απλώς δεν το αλλάζει',
+      );
+    });
+
+    testWidgets('απλός χρήστης: η καρτέλα ανοίγει χωρίς Αποθήκευση', (
+      tester,
+    ) async {
+      await tester.runAsync(() async {
+        await OperatorRepository(db).insert(
+          Operator(
+            displayName: 'Βασίλης',
+            windowsAccount: 'v.drosos',
+            isAdmin: true,
+            createdAt: DateTime(2026, 8, 19),
+          ),
+        );
+      });
+
+      CurrentOperator.activate(
+        Operator(
+          id: 999,
+          displayName: 'Δοκιμαστικός',
+          createdAt: DateTime(2026, 8, 21),
+        ),
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: OperatorsManagementView())),
+      );
+      await _advance(tester);
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(Card, 'Βασίλης'),
+          matching: find.byIcon(Icons.visibility_outlined),
+        ),
+      );
+      await _advance(tester);
+
+      expect(find.text('Προβολή χρήστη'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Αποθήκευση'),
+        findsNothing,
+        reason:
+            'κουμπί που δεν θα δεχόταν τίποτα είναι υπόσχεση που δεν τηρείται',
+      );
+      expect(find.widgetWithText(FilledButton, 'Κλείσιμο'), findsOneWidget);
     });
 
     testWidgets('μπλοκαρισμένη αποθήκευση: ο διάλογος μένει με τον λόγο', (

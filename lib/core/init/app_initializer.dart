@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,6 +16,7 @@ import '../services/asset_residue_cleaner.dart';
 import '../services/core_lexicon_service.dart';
 import '../services/current_operator.dart';
 import '../services/operator_identity.dart';
+import '../services/operator_presence_heartbeat.dart';
 import '../services/settings_service.dart';
 import '../updates/update_residue_cleaner.dart';
 import 'startup_engine_failure.dart';
@@ -127,6 +129,16 @@ class AppInitializer {
       await OperatorIdentity.resolveAndActivate(db);
     } catch (_) {
       CurrentOperator.reset();
+    }
+    // Μετά την αναγνώριση, ώστε ο πρώτος χτύπος να έχει ποιον να σημειώσει.
+    // Ο χτύπος ακούει την ταυτότητα, άρα ακολουθεί μόνος του κάθε επόμενη
+    // αλλαγή χρήστη — και δεύτερη κλήση εδώ (αλλαγή βάσης) δεν κάνει τίποτα.
+    //
+    // **Ποτέ αυτόματα μέσα σε τεστ.** Είναι χρονοδιακόπτης που δεν σταματά μόνος
+    // του: θα κρατούσε ανοιχτό το αρχείο της δοκιμαστικής βάσης και θα έγραφε
+    // μέσα σε άσχετους ελέγχους. Ο δικός του έλεγχος τον ξεκινά ρητά.
+    if (Platform.environment['FLUTTER_TEST'] != 'true') {
+      OperatorPresenceHeartbeat.instance.start();
     }
   }
 

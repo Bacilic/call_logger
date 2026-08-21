@@ -8,7 +8,9 @@ import '../../../calls/models/equipment_model.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/settings_repository.dart';
+import '../../../../core/models/app_permission.dart';
 import '../../../../core/models/remote_tool.dart';
+import '../../../../core/services/permission_service.dart';
 import '../../../../core/providers/equipment_focus_intent_provider.dart';
 import '../../../../core/services/default_remote_tool_display.dart';
 import '../../../../core/utils/user_facing_error_messages.dart';
@@ -144,28 +146,34 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
                 label: const Text('Προσθήκη'),
               ),
               const SizedBox(width: 4),
-              IconButton(
-                tooltip: 'Ρυθμίσεις εξοπλισμού',
-                onPressed: () async {
-                  final saved = await showEquipmentSettingsDialog(context);
-                  if (!context.mounted) return;
-                  if (saved) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Οι τύποι εξοπλισμού αποθηκεύτηκαν.'),
-                      ),
-                    );
-                  }
-                },
-                icon: AppAssetImage(
-                  assetPath: 'assets/equipment_settings_icon.png',
-                  width: 28,
-                  height: 28,
-                  fit: BoxFit.contain,
-                  filterQuality: FilterQuality.medium,
-                  fallbackIcon: Icons.settings,
+              // Οι τύποι εξοπλισμού είναι κοινός κατάλογος: ό,τι προστεθεί εδώ
+              // το βλέπουν όλοι και μένει. Η καταχώρηση εξοπλισμού με υπάρχοντα
+              // τύπο δεν αγγίζεται — μόνο η αλλαγή της ίδιας της λίστας.
+              if (PermissionService.instance.can(
+                AppPermission.manageEquipmentTypes,
+              ))
+                IconButton(
+                  tooltip: 'Ρυθμίσεις εξοπλισμού',
+                  onPressed: () async {
+                    final saved = await showEquipmentSettingsDialog(context);
+                    if (!context.mounted) return;
+                    if (saved) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Οι τύποι εξοπλισμού αποθηκεύτηκαν.'),
+                        ),
+                      );
+                    }
+                  },
+                  icon: AppAssetImage(
+                    assetPath: 'assets/equipment_settings_icon.png',
+                    width: 28,
+                    height: 28,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.medium,
+                    fallbackIcon: Icons.settings,
+                  ),
                 ),
-              ),
             ],
           ),
         ),

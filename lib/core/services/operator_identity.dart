@@ -47,12 +47,19 @@ class OperatorIdentity {
     return existing;
   }
 
-  /// Τα προφίλ που προσφέρονται προς επιλογή — μόνο τα ενεργά.
+  /// Τα προφίλ που προσφέρονται προς επιλογή — μόνο τα ενεργά, **και ποτέ
+  /// αυτός που είναι ήδη συνδεδεμένος**.
+  ///
+  /// «Αλλαγή χρήστη» σε αυτόν που είναι ήδη ο χρήστης δεν σημαίνει τίποτα. Στην
+  /// οθόνη εκκίνησης δεν υπάρχει ακόμη συνδεδεμένος, οπότε εκεί η αφαίρεση δεν
+  /// αγγίζει τίποτα — ένα σημείο, δύο σωστές συμπεριφορές.
   static Future<List<Operator>> selectableProfiles(DatabaseExecutor db) async {
     final all = await OperatorRepository(db).getAll();
+    final activeId = CurrentOperator.active?.id;
     return [
       for (final operator in all)
-        if (operator.isActive) operator,
+        if (operator.isActive && (activeId == null || operator.id != activeId))
+          operator,
     ];
   }
 

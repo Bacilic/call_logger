@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/models/app_permission.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/database/department_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/database/lock_diagnostic_service.dart';
@@ -90,18 +92,19 @@ Future<void> showIntegrityCorruptionBlockoutDialog(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Κλείσιμο'),
           ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              if (onDatabaseReopened != null) {
-                await DatabaseMaintenancePanel.show(
-                  context,
-                  onDatabaseReopened: onDatabaseReopened,
-                );
-              }
-            },
-            child: const Text('Συντήρηση βάσης'),
-          ),
+          if (PermissionService.instance.can(AppPermission.databaseMaintenance))
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                if (onDatabaseReopened != null) {
+                  await DatabaseMaintenancePanel.show(
+                    context,
+                    onDatabaseReopened: onDatabaseReopened,
+                  );
+                }
+              },
+              child: const Text('Συντήρηση βάσης'),
+            ),
         ],
       ),
     ),

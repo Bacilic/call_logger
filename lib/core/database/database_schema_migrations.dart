@@ -246,6 +246,19 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 49 && newVersion >= 49) {
     await migrateDatabaseToV49(db);
   }
+  if (oldVersion < 50 && newVersion >= 50) {
+    await migrateDatabaseToV50(db);
+  }
+}
+
+/// v50: πίνακας `operator_presence` — ποιος είδε τη βάση, από ποιον σταθμό,
+/// πότε τελευταία φορά.
+///
+/// Καθαρή προσθήκη, χωρίς δεσμούς και χωρίς καμία εγγραφή: οι γραμμές γεννιούνται
+/// μόνες τους μόλις κάποιος συνδεθεί. Παλαιότερη έκδοση της εφαρμογής αγνοεί τον
+/// πίνακα και ανοίγει τη βάση κανονικά.
+Future<void> migrateDatabaseToV50(Database db) async {
+  await db.execute(kCreateOperatorPresenceTable);
 }
 
 /// Κλειδιά που δεν διαβάζει καμία ροή της εφαρμογής και φεύγουν στην v49.

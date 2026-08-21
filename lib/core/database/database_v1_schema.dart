@@ -69,7 +69,10 @@ import 'database_foreign_keys.dart';
 /// v49: διαγραφή νεκρών κλειδιών από το `app_settings` — μόνο δεδομένα, καμία
 /// αλλαγή δομής. Πρώτο το `vnc_password`: **κωδικός σε απλό κείμενο** μέσα σε
 /// πίνακα που φαίνεται από την ίδια την εφαρμογή (Περιήγηση Βάσης).
-const int databaseSchemaVersionV1 = 49;
+/// v50: πίνακας `operator_presence` — πότε είδε τελευταία φορά τη βάση ο κάθε
+/// χρήστης, από κάθε σταθμό. Καθαρή προσθήκη, χωρίς δεσμούς, όπως οι δύο
+/// προηγούμενοι πίνακες των χρηστών.
+const int databaseSchemaVersionV1 = 50;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
 ///
@@ -110,6 +113,29 @@ const String kCreateOperatorSettingsTable = '''
         key TEXT NOT NULL,
         value TEXT,
         PRIMARY KEY (operator_id, key)
+      )
+''';
+
+/// Πότε είδε τελευταία φορά τη βάση ο κάθε χρήστης, **από κάθε σταθμό**.
+///
+/// Το SQLite δεν κρατά λίστα συνδέσεων — είναι αρχείο, όχι διακομιστής. Κανείς
+/// δεν μπορεί να ρωτήσει «ποιος με έχει ανοιχτό τώρα». Αντ' αυτού κάθε ανοιχτή
+/// εφαρμογή ανανεώνει τη δική της γραμμή κάθε λίγο· «συνδεδεμένος» σημαίνει
+/// **σημάδι νεότερο από το όριο παλαιότητας**, ποτέ βεβαιότητα. Απότομο
+/// κλείσιμο ή πτώση δικτύου αφήνει τη γραμμή να παλιώσει μόνη της.
+///
+/// Κλειδί ο συνδυασμός **χρήστη και σταθμού**: το ίδιο προφίλ μπορεί να
+/// χρησιμοποιείται από δύο θέσεις ταυτόχρονα (κοινόχρηστο προφίλ τμήματος), και
+/// μία γραμμή ανά πρόσωπο θα έσβηνε σιωπηλά τη μία θέση με την άλλη.
+///
+/// **Χωρίς δεσμούς (foreign keys)**, όπως οι `operators` και `operator_settings`
+/// — ίδιο σκεπτικό συμβατότητας με παλαιότερες εκδόσεις.
+const String kCreateOperatorPresenceTable = '''
+      CREATE TABLE IF NOT EXISTS operator_presence (
+        operator_id INTEGER NOT NULL,
+        station TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        PRIMARY KEY (operator_id, station)
       )
 ''';
 
@@ -269,6 +295,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   await db.execute(kCreateOperatorsTable);
   await db.execute(kCreateOperatorsWindowsAccountIndex);
   await db.execute(kCreateOperatorSettingsTable);
+  await db.execute(kCreateOperatorPresenceTable);
 
   await db.execute('''
       CREATE TABLE IF NOT EXISTS remote_tools (

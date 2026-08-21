@@ -385,9 +385,7 @@ class MainShellState extends ConsumerState<MainShell> {
     final showLampNav = ref
         .watch(showLampNavProvider)
         .maybeWhen(data: (v) => v, orElse: () => true);
-    final showDatabaseNav = ref
-        .watch(showDatabaseNavProvider)
-        .maybeWhen(data: (v) => v, orElse: () => true);
+    final showDatabaseNav = ref.watch(databaseNavVisibleProvider);
     final showDictionaryNav = ref
         .watch(showDictionaryNavProvider)
         .maybeWhen(data: (v) => v, orElse: () => true);

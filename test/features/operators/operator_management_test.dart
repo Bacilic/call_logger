@@ -4,6 +4,7 @@
 
 import 'package:call_logger/core/database/database_schema_migrations.dart';
 import 'package:call_logger/core/database/operator_repository.dart';
+import 'package:call_logger/core/models/app_permission.dart';
 import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/features/operators/services/operator_management.dart';
@@ -153,40 +154,109 @@ void main() {
       expect((await repository.findById(admin.id!))!.windowsAccount, isNull);
     });
 
-    test('μετονομασία του δικού μου προφίλ αλλάζει αμέσως τη σφραγίδα', () async {
-      // Αλλιώς το Ιστορικό θα κρατούσε το παλιό όνομα ως την επόμενη εκκίνηση.
-      final me = await seedAdmin(name: 'v.drosos');
-      CurrentOperator.activate(me);
-
-      await management.save(
-        me,
-        displayName: 'Βασίλης Δρόσος',
-        windowsAccount: me.windowsAccount,
-        isAdmin: true,
-        isActive: true,
+    test('τα δικαιώματα φτάνουν στη βάση κατά τη δημιουργία', () async {
+      final result = await management.create(
+        displayName: 'Βλάσσης',
+        permissionOverrides: {AppPermission.browseDatabase.key: false},
       );
 
-      expect(CurrentOperator.auditName, 'Βασίλης Δρόσος');
+      expect(result.allowed, isTrue);
+      final stored = await repository.findById(result.operator!.id!);
+      expect(stored!.permissionOverrides, {
+        AppPermission.browseDatabase.key: false,
+      });
     });
 
-    test('μετονομασία ΑΛΛΟΥ προφίλ δεν αγγίζει τη δική μου ταυτότητα', () async {
-      final me = await seedAdmin(name: 'Εγώ');
-      CurrentOperator.activate(me);
-      final other = (await management.create(
-        displayName: 'Άλλος',
-        windowsAccount: 'other.account',
-        now: DateTime(2026, 8, 19),
-      )).operator!;
+    test(
+      'αποθήκευση χωρίς αναφορά σε δικαιώματα ΔΕΝ σβήνει τα υπάρχοντα',
+      () async {
+        // Σιωπηλή απώλεια: ο διαχειριστής μετονομάζει κάποιον από άλλη οθόνη και
+        // τα δικαιώματά του εξαφανίζονται χωρίς κανένα μήνυμα, χωρίς κανείς να
+        // το προσέξει μέχρι να μπορέσει αυτός κάτι που δεν έπρεπε.
+        final created = await management.create(
+          displayName: 'Βλάσσης',
+          permissionOverrides: {AppPermission.browseDatabase.key: false},
+        );
+        final existing = created.operator!;
+
+        final result = await management.save(
+          existing,
+          displayName: 'Βλάσσης Παπαδόπουλος',
+          windowsAccount: null,
+          isAdmin: false,
+          isActive: true,
+        );
+
+        expect(result.allowed, isTrue);
+        final stored = await repository.findById(existing.id!);
+        expect(stored!.permissionOverrides, {
+          AppPermission.browseDatabase.key: false,
+        });
+      },
+    );
+
+    test('κενός χάρτης δικαιωμάτων σβήνει κανονικά τις παρακάμψεις', () async {
+      // Διαφορετικό από το «δεν ασχολήθηκα»: εδώ ο διαχειριστής ξανατίκαρε τα
+      // πάντα και η απουσία παρακάμψεων είναι η ίδια η απόφαση.
+      final created = await management.create(
+        displayName: 'Βλάσσης',
+        permissionOverrides: {AppPermission.browseDatabase.key: false},
+      );
+      final existing = created.operator!;
 
       await management.save(
-        other,
-        displayName: 'Άλλος Μετονομασμένος',
-        windowsAccount: other.windowsAccount,
+        existing,
+        displayName: existing.displayName,
+        windowsAccount: null,
         isAdmin: false,
         isActive: true,
+        permissionOverrides: const <String, bool>{},
       );
 
-      expect(CurrentOperator.auditName, 'Εγώ');
+      final stored = await repository.findById(existing.id!);
+      expect(stored!.permissionOverrides, isEmpty);
     });
+
+    test(
+      'μετονομασία του δικού μου προφίλ αλλάζει αμέσως τη σφραγίδα',
+      () async {
+        // Αλλιώς το Ιστορικό θα κρατούσε το παλιό όνομα ως την επόμενη εκκίνηση.
+        final me = await seedAdmin(name: 'v.drosos');
+        CurrentOperator.activate(me);
+
+        await management.save(
+          me,
+          displayName: 'Βασίλης Δρόσος',
+          windowsAccount: me.windowsAccount,
+          isAdmin: true,
+          isActive: true,
+        );
+
+        expect(CurrentOperator.auditName, 'Βασίλης Δρόσος');
+      },
+    );
+
+    test(
+      'μετονομασία ΑΛΛΟΥ προφίλ δεν αγγίζει τη δική μου ταυτότητα',
+      () async {
+        final me = await seedAdmin(name: 'Εγώ');
+        CurrentOperator.activate(me);
+        final other = (await management.create(
+          displayName: 'Άλλος',
+          windowsAccount: 'other.account',
+          now: DateTime(2026, 8, 19),
+        )).operator!;
+
+        await management.save(
+          other,
+          displayName: 'Άλλος Μετονομασμένος',
+          windowsAccount: other.windowsAccount,
+          isAdmin: false,
+          isActive: true,
+        );
+
+        expect(CurrentOperator.auditName, 'Εγώ');
+      },
+    );
   });
 }

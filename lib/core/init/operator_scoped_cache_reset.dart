@@ -49,6 +49,11 @@ void invalidateOperatorScopedCaches(WidgetRef ref) {
     ref.invalidate(showTasksBadgeProvider);
     ref.invalidate(enableSpellCheckProvider);
     ref.invalidate(showDatabaseNavProvider);
+    // Ρητά, παρότι κρέμεται από το από πάνω: το δικαίωμα Περιήγησης Βάσης δεν
+    // είναι provider — διαβάζεται από τον συνδεδεμένο χρήστη τη στιγμή του
+    // υπολογισμού. Χωρίς αυτή τη γραμμή, η φρεσκάδα του θα στηριζόταν σιωπηλά
+    // στο ότι κάποιος άλλος ακυρώνει τη ρύθμιση από κάτω του.
+    ref.invalidate(databaseNavVisibleProvider);
     ref.invalidate(showLampNavProvider);
     ref.invalidate(showDictionaryNavProvider);
     ref.invalidate(callsScreenCardsVisibilityProvider);

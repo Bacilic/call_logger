@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../core/database/active_database_generation.dart';
+import '../../../core/models/app_permission.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_identity_repository.dart';
 import '../../../core/database/database_table_inspection.dart';
@@ -368,14 +370,15 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
           alignment: Alignment.topCenter,
           onPressed: widget.onOpenDatabaseSettings,
         ),
-        IconButton(
-          tooltip: 'Συντήρηση',
-          icon: const Icon(Icons.cleaning_services_outlined),
-          padding: const EdgeInsets.only(left: 4),
-          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-          alignment: Alignment.topCenter,
-          onPressed: _openDatabaseMaintenance,
-        ),
+        if (PermissionService.instance.can(AppPermission.databaseMaintenance))
+          IconButton(
+            tooltip: 'Συντήρηση',
+            icon: const Icon(Icons.cleaning_services_outlined),
+            padding: const EdgeInsets.only(left: 4),
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            alignment: Alignment.topCenter,
+            onPressed: _openDatabaseMaintenance,
+          ),
       ],
     );
   }
@@ -441,7 +444,9 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
         key: const ValueKey('app_instances_card'),
         margin: EdgeInsets.zero,
         elevation: 0,
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(
@@ -657,11 +662,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                         if (constraints.maxWidth < 900) {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              left,
-                              const SizedBox(height: 12),
-                              right,
-                            ],
+                            children: [left, const SizedBox(height: 12), right],
                           );
                         }
                         return Row(
@@ -695,82 +696,73 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     required String pathText,
   }) {
     return [
-                        const SizedBox(height: 10),
-                        Text(
-                          connText,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: connOk
-                                ? Colors.green.shade700
-                                : theme.colorScheme.error,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        if (!connOk &&
-                            details != null &&
-                            details.trim().isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            details,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.error.withValues(
-                                alpha: 0.85,
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (statsAsync.isLoading) ...[
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Φόρτωση στατιστικών…',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        statRow('Μέγεθος αρχείου', sizeLabel),
-                        statRow('Τελευταίο αντίγραφο ασφαλείας', backupText),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 200,
-                                child: Text(
-                                  'Διαδρομή βάσης',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: SelectableText(
-                                  pathText,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    fontFamilyFallback: const [
-                                      'Consolas',
-                                      'monospace',
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+      const SizedBox(height: 10),
+      Text(
+        connText,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: connOk ? Colors.green.shade700 : theme.colorScheme.error,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      if (!connOk && details != null && details.trim().isNotEmpty) ...[
+        const SizedBox(height: 4),
+        Text(
+          details,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.error.withValues(alpha: 0.85),
+          ),
+        ),
+      ],
+      if (statsAsync.isLoading) ...[
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Φόρτωση στατιστικών…',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ],
+      statRow('Μέγεθος αρχείου', sizeLabel),
+      statRow('Τελευταίο αντίγραφο ασφαλείας', backupText),
+      Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 200,
+              child: Text(
+                'Διαδρομή βάσης',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Expanded(
+              child: SelectableText(
+                pathText,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  fontFamilyFallback: const ['Consolas', 'monospace'],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     ];
   }
 
@@ -850,9 +842,15 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
             ),
           ),
           row('Έκδοση σχήματος', schema == null ? pending : '$schema'),
-          row('Τελευταία αλλαγή', _formatLastChange(stats?.lastChangeAt, pending)),
+          row(
+            'Τελευταία αλλαγή',
+            _formatLastChange(stats?.lastChangeAt, pending),
+          ),
           row('Κλήσεις', _formatCallRange(stats, pending)),
-          row('Χαμένος χώρος', _formatOptionalSize(stats?.reclaimableBytes, pending)),
+          row(
+            'Χαμένος χώρος',
+            _formatOptionalSize(stats?.reclaimableBytes, pending),
+          ),
           // Μόνο όταν υπάρχει κάτι να αναφερθεί. Με κλασικό ημερολόγιο δεν
           // υπάρχει «-wal», οπότε μια γραμμή που θα έλεγε αιωνίως «καμία» δεν
           // πληροφορεί — αφήνει να εννοηθεί ότι μετράει κάτι.

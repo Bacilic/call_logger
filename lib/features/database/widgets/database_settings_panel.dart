@@ -1094,8 +1094,15 @@ class _DatabaseSettingsPanelState extends ConsumerState<DatabaseSettingsPanel>
                 const SizedBox(height: 8),
                 ..._buildDatabaseFilePathSection(theme),
                 const SizedBox(height: 12),
-                _RestoreFromBackupZipButton(onPressed: _restoreFromBackupZip),
-                const SizedBox(height: 12),
+                // Η πιο καταστροφική ενέργεια της εφαρμογής: αντικαθιστά
+                // ολόκληρη την κοινόχρηστη βάση, για όλους ταυτόχρονα. Ως τη
+                // Φάση 4 ήταν διαθέσιμη σε οποιονδήποτε.
+                if (PermissionService.instance.can(
+                  AppPermission.databaseMaintenance,
+                )) ...[
+                  _RestoreFromBackupZipButton(onPressed: _restoreFromBackupZip),
+                  const SizedBox(height: 12),
+                ],
                 if (!canManageFullBackup)
                   _buildBackupManagedByAdminNotice(theme),
                 if (canManageFullBackup) ...[

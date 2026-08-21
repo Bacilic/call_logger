@@ -7,7 +7,10 @@
 //
 //   flutter test test/core/widgets/main_shell_nav_rail_layout_test.dart
 
+import 'package:call_logger/core/models/app_permission.dart';
+import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/providers/settings_provider.dart';
+import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/services/settings_service.dart';
 import 'package:call_logger/core/widgets/main_nav_destination.dart';
@@ -43,7 +46,9 @@ Future<void> _pumpShell(
         overrides: [
           ...callLoggerTestProviderOverrides(showDatabaseNav: showDatabaseNav),
           showLampNavProvider.overrideWith((ref) async => showLampNav),
-          enableSpellCheckProvider.overrideWith((ref) async => enableSpellCheck),
+          enableSpellCheckProvider.overrideWith(
+            (ref) async => enableSpellCheck,
+          ),
         ],
         child: const MyApp(showStartupScreens: false),
       ),
@@ -63,6 +68,18 @@ double _dividerLeft(WidgetTester tester) =>
 
 Future<void> _flushSqfliteLockTimers(WidgetTester tester) async {
   await tester.pump(const Duration(seconds: 11));
+}
+
+Future<void> _openSettings(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('nav_rail_settings')));
+  await pumpUntilSettled(tester);
+  expect(find.byType(SettingsScreen), findsOneWidget);
+}
+
+/// Κλείσιμο ώστε να μη μείνει ανοιχτή διαδρομή στο τέλος του ελέγχου.
+Future<void> _closeSettings(WidgetTester tester) async {
+  Navigator.of(tester.element(find.byType(SettingsScreen))).pop();
+  await pumpUntilSettled(tester);
 }
 
 void main() {
@@ -93,6 +110,59 @@ void main() {
       Navigator.of(tester.element(find.byType(SettingsScreen))).pop();
       await pumpUntilSettled(tester);
 
+      await _flushSqfliteLockTimers(tester);
+    });
+
+    testWidgets('η ρύθμιση απόκρυψης της Βάσης υπάρχει όταν επιτρέπεται', (
+      tester,
+    ) async {
+      // Θετικός μάρτυρας: χωρίς αυτόν, ο επόμενος έλεγχος θα περνούσε ακόμη κι
+      // αν η γραμμή έλειπε για εντελώς άλλον λόγο.
+      await _pumpShell(
+        tester,
+        showLampNav: true,
+        showDatabaseNav: true,
+        enableSpellCheck: true,
+      );
+
+      await _openSettings(tester);
+      expect(find.text('Απόκρυψη Βάσης Δεδομένων'), findsOneWidget);
+
+      await _closeSettings(tester);
+      await _flushSqfliteLockTimers(tester);
+    });
+
+    testWidgets('χωρίς το δικαίωμα λείπει και η ρύθμιση που το αφορά', (
+      tester,
+    ) async {
+      CurrentOperator.activate(
+        Operator(
+          id: 77,
+          displayName: 'Δοκιμαστικός',
+          permissionOverrides: {AppPermission.browseDatabase.key: false},
+          createdAt: DateTime(2026, 8, 21),
+        ),
+      );
+      addTearDown(CurrentOperator.reset);
+
+      await _pumpShell(
+        tester,
+        showLampNav: true,
+        showDatabaseNav: true,
+        enableSpellCheck: true,
+      );
+
+      await _openSettings(tester);
+      expect(
+        find.text('Απόκρυψη Βάσης Δεδομένων'),
+        findsNothing,
+        reason:
+            'Ο προορισμός είναι ήδη κρυμμένος από το δικαίωμα, οπότε ο '
+            'διακόπτης δεν αλλάζει τίποτα σε καμία θέση. Ρύθμιση που δεν κάνει '
+            'τίποτα κάνει τον χρήστη να νομίζει ότι κάτι χάλασε.',
+      );
+
+      await _closeSettings(tester);
       await _flushSqfliteLockTimers(tester);
     });
 

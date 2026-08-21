@@ -153,9 +153,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 
   Widget _immersiveNavigationMenuButton() {
-    final showDb = ref
-        .watch(showDatabaseNavProvider)
-        .maybeWhen(data: (v) => v, orElse: () => true);
+    final showDb = ref.watch(databaseNavVisibleProvider);
     return PopupMenuButton<MainNavDestination>(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       tooltip: 'Μετάβαση σε άλλη οθόνη',

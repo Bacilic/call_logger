@@ -35,6 +35,7 @@ class OperatorManagement {
     required String displayName,
     String? windowsAccount,
     bool isAdmin = false,
+    Map<String, bool> permissionOverrides = const <String, bool>{},
     DateTime? now,
   }) async {
     final name = displayName.trim();
@@ -52,6 +53,7 @@ class OperatorManagement {
         displayName: name,
         windowsAccount: account,
         isAdmin: isAdmin,
+        permissionOverrides: permissionOverrides,
         createdAt: now ?? DateTime.now(),
       ),
     );
@@ -65,6 +67,7 @@ class OperatorManagement {
     required String? windowsAccount,
     required bool isAdmin,
     required bool isActive,
+    Map<String, bool>? permissionOverrides,
   }) async {
     final id = original.id;
     if (id == null) {
@@ -78,10 +81,7 @@ class OperatorManagement {
     if (nameProblem != null) return OperatorActionResult.blocked(nameProblem);
 
     final account = normalizeWindowsAccount(windowsAccount);
-    final accountProblem = await _windowsAccountProblem(
-      account,
-      excludeId: id,
-    );
+    final accountProblem = await _windowsAccountProblem(account, excludeId: id);
     if (accountProblem != null) {
       return OperatorActionResult.blocked(accountProblem);
     }
@@ -101,12 +101,16 @@ class OperatorManagement {
       }
     }
 
+    // `null` σημαίνει «ο καλών δεν ασχολήθηκε με δικαιώματα» — τα υπάρχοντα
+    // μένουν ως έχουν. Κενός χάρτης σημαίνει «καμία παράκαμψη», που είναι
+    // διαφορετικό πράγμα και πρέπει να μπορεί να γραφτεί.
     final updated = original.copyWith(
       displayName: name,
       windowsAccount: account,
       clearWindowsAccount: account == null,
       isAdmin: isAdmin,
       isActive: isActive,
+      permissionOverrides: permissionOverrides,
     );
     await _repository.update(updated);
     _refreshActiveIdentity(updated);

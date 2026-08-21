@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/operator_presence_repository.dart';
 import '../../../core/database/operator_repository.dart';
 import '../../../core/models/operator.dart';
+import '../../../core/models/operator_presence.dart';
 import '../../../core/services/current_operator.dart';
+import '../../../core/services/permission_service.dart';
 import '../services/operator_management.dart';
+import '../services/operator_presence_summary.dart';
 import '../widgets/operator_form_dialog.dart';
 
 /// «Χρήστες»: ποιοι χειρίζονται την εφαρμογή και με ποιο όνομα υπογράφουν.
@@ -19,8 +23,24 @@ class OperatorsManagementView extends StatefulWidget {
       _OperatorsManagementViewState();
 }
 
+/// Ό,τι χρειάζεται η οθόνη, διαβασμένο μαζί σε μία στιγμή.
+///
+/// Η [readAt] κρατιέται ρητά ώστε το «συνδεδεμένος τώρα» να κρίνεται με τη
+/// στιγμή της ανάγνωσης και όχι με ένα δεύτερο ρολόι μέσα στο `build`.
+class _ProfilesSnapshot {
+  const _ProfilesSnapshot({
+    required this.operators,
+    required this.presence,
+    required this.readAt,
+  });
+
+  final List<Operator> operators;
+  final Map<int, List<OperatorPresence>> presence;
+  final DateTime readAt;
+}
+
 class _OperatorsManagementViewState extends State<OperatorsManagementView> {
-  late Future<List<Operator>> _operators;
+  late Future<_ProfilesSnapshot> _operators;
 
   @override
   void initState() {
@@ -33,8 +53,30 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
     return OperatorManagement(OperatorRepository(db));
   }
 
-  Future<List<Operator>> _load() async {
-    return (await _management()).load();
+  Future<_ProfilesSnapshot> _load() async {
+    final db = await DatabaseHelper.instance.database;
+    final operators = await OperatorManagement(OperatorRepository(db)).load();
+
+    // Τα ίχνη σύνδεσης είναι πληροφορία άνεσης: αν λείπει ο πίνακας (βάση από
+    // παλαιότερη έκδοση που δεν αναβαθμίστηκε ακόμη) η οθόνη δείχνει κανονικά
+    // τους χρήστες, απλώς χωρίς γραμμή σύνδεσης.
+    var marks = const <OperatorPresence>[];
+    try {
+      marks = await OperatorPresenceRepository(db).getAll();
+    } catch (_) {
+      marks = const <OperatorPresence>[];
+    }
+
+    final byOperator = <int, List<OperatorPresence>>{};
+    for (final mark in marks) {
+      byOperator.putIfAbsent(mark.operatorId, () => []).add(mark);
+    }
+
+    return _ProfilesSnapshot(
+      operators: operators,
+      presence: byOperator,
+      readAt: DateTime.now(),
+    );
   }
 
   void _reload() {
@@ -46,7 +88,7 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
     });
   }
 
-  Future<void> _openForm({Operator? existing}) async {
+  Future<void> _openForm({Operator? existing, bool readOnly = false}) async {
     final management = await _management();
     if (!mounted) return;
 
@@ -54,12 +96,14 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
       context: context,
       builder: (_) => OperatorFormDialog(
         existing: existing,
+        readOnly: readOnly,
         onSubmit: (values) async {
           final result = existing == null
               ? await management.create(
                   displayName: values.displayName,
                   windowsAccount: values.windowsAccount,
                   isAdmin: values.isAdmin,
+                  permissionOverrides: values.permissionOverrides,
                 )
               : await management.save(
                   existing,
@@ -67,6 +111,7 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                   windowsAccount: values.windowsAccount,
                   isAdmin: values.isAdmin,
                   isActive: values.isActive,
+                  permissionOverrides: values.permissionOverrides,
                 );
           return result.allowed ? null : result.message;
         },
@@ -80,6 +125,23 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // Η ταυτότητα παρακολουθείται ζωντανά: μια «Αλλαγή χρήστη» με την οθόνη
+    // ανοιχτή αλλάζει αμέσως και το σήμα «Εσείς» και το τι επιτρέπεται εδώ.
+    return ValueListenableBuilder<Operator?>(
+      valueListenable: CurrentOperator.listenable,
+      builder: (context, activeOperator, _) {
+        final canManage = PermissionService.instance.canManageOperators();
+        return _buildBody(context, theme, activeOperator, canManage);
+      },
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    ThemeData theme,
+    Operator? activeOperator,
+    bool canManage,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -96,17 +158,19 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: () => _openForm(),
-                icon: const Icon(Icons.person_add_alt_1_outlined),
-                label: const Text('Νέο προφίλ'),
-              ),
+              if (canManage) ...[
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: () => _openForm(),
+                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                  label: const Text('Νέο προφίλ'),
+                ),
+              ],
             ],
           ),
         ),
         Expanded(
-          child: FutureBuilder<List<Operator>>(
+          child: FutureBuilder<_ProfilesSnapshot>(
             future: _operators,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
@@ -117,27 +181,34 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                   child: Text('Αποτυχία φόρτωσης: ${snapshot.error}'),
                 );
               }
-              final operators = snapshot.data ?? const <Operator>[];
+              final data = snapshot.data;
+              final operators = data?.operators ?? const <Operator>[];
               if (operators.isEmpty) {
                 return const Center(
                   child: Text('Δεν υπάρχει κανένα προφίλ ακόμη.'),
                 );
               }
-              // Η ταυτότητα παρακολουθείται ζωντανά: αν γίνει «Αλλαγή χρήστη»
-              // ενώ η οθόνη είναι ανοιχτή, το σήμα «Εσείς» μετακινείται αμέσως.
-              return ValueListenableBuilder<Operator?>(
-                valueListenable: CurrentOperator.listenable,
-                builder: (context, activeOperator, _) => ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  itemCount: operators.length,
-                  itemBuilder: (context, index) => _OperatorCard(
-                    operator: operators[index],
+              return ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                itemCount: operators.length,
+                itemBuilder: (context, index) {
+                  final operator = operators[index];
+                  final marks =
+                      data?.presence[operator.id] ?? const <OperatorPresence>[];
+                  return _OperatorCard(
+                    operator: operator,
                     isCurrent:
-                        operators[index].id != null &&
-                        operators[index].id == activeOperator?.id,
-                    onEdit: () => _openForm(existing: operators[index]),
-                  ),
-                ),
+                        operator.id != null &&
+                        operator.id == activeOperator?.id,
+                    canManage: canManage,
+                    presence: describeOperatorPresence(
+                      marks,
+                      data?.readAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+                    ),
+                    onEdit: () =>
+                        _openForm(existing: operator, readOnly: !canManage),
+                  );
+                },
               );
             },
           ),
@@ -151,11 +222,20 @@ class _OperatorCard extends StatelessWidget {
   const _OperatorCard({
     required this.operator,
     required this.isCurrent,
+    required this.canManage,
+    required this.presence,
     required this.onEdit,
   });
 
   final Operator operator;
   final bool isCurrent;
+
+  /// Ο θεατής είναι διαχειριστής; Αλλιώς η καρτέλα ανοίγει μόνο για ανάγνωση.
+  final bool canManage;
+
+  /// Έτοιμες γραμμές σύνδεσης — η κάρτα δείχνει, δεν υπολογίζει.
+  final List<OperatorPresenceLine> presence;
+
   final VoidCallback onEdit;
 
   String get _initials {
@@ -208,35 +288,73 @@ class _OperatorCard extends StatelessWidget {
               operator.displayName,
               style: theme.textTheme.titleMedium?.copyWith(color: titleColor),
             ),
-            if (operator.isAdmin) const _Tag(label: 'Διαχειριστής'),
+            // Ο ρόλος γράφεται πάντα, και για τους δύο. Η απουσία σήμανσης
+            // διαβάζεται ως «δεν ξέρω», όχι ως «απλός χρήστης».
+            _Tag(label: operator.isAdmin ? 'Διαχειριστής' : 'Χρήστης'),
             if (isCurrent) const _Tag(label: 'Εσείς'),
-            if (operator.windowsAccount == null)
-              const _Tag(label: 'Αυτόνομο'),
+            if (operator.windowsAccount == null) const _Tag(label: 'Αυτόνομο'),
             if (muted) const _Tag(label: 'Αρχειοθετημένος'),
           ],
         ),
-        subtitle: Row(
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            if (operator.windowsAccount != null) ...[
-              Icon(
-                Icons.badge_outlined,
-                size: 15,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 4),
-            ],
-            Flexible(
-              child: Text(
-                subtitle,
-                style: theme.textTheme.bodySmall,
-                overflow: TextOverflow.ellipsis,
-              ),
+            Row(
+              children: [
+                if (operator.windowsAccount != null) ...[
+                  Icon(
+                    Icons.badge_outlined,
+                    size: 15,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                Flexible(
+                  child: Text(
+                    subtitle,
+                    style: theme.textTheme.bodySmall,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
+            for (final line in presence)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  children: [
+                    Icon(
+                      line.online
+                          ? Icons.circle
+                          : Icons.history_toggle_off_outlined,
+                      size: line.online ? 9 : 15,
+                      color: line.online
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                    SizedBox(width: line.online ? 7 : 4),
+                    Flexible(
+                      child: Text(
+                        line.text,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: line.online
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
         trailing: IconButton(
-          icon: const Icon(Icons.edit_outlined),
-          tooltip: 'Επεξεργασία',
+          icon: Icon(
+            canManage ? Icons.edit_outlined : Icons.visibility_outlined,
+          ),
+          tooltip: canManage ? 'Επεξεργασία' : 'Προβολή',
           onPressed: onEdit,
         ),
       ),

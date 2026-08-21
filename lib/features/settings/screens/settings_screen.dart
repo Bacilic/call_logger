@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/app_permission.dart';
 import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/window_placement_mode.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/crash_log_service.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/services/shutdown_trace_incident.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
@@ -479,7 +481,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            widget.updateFolderSetting ?? const UpdateFolderSettingField(),
+            // Κοινή διαδρομή: από εκεί παίρνουν όλοι τις εκδόσεις. Ο απλός
+            // χρήστης βλέπει ότι υπάρχει ενημέρωση και την εγκαθιστά κανονικά —
+            // απλώς δεν μετακινεί τον φάκελο για λογαριασμό όλων.
+            if (PermissionService.instance.can(
+              AppPermission.manageUpdateFolder,
+            ))
+              widget.updateFolderSetting ?? const UpdateFolderSettingField(),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: _showUpdateOnStartup,
@@ -767,23 +775,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ),
-            SwitchListTile(
-              value: !_showDatabaseNav,
-              secondary: Icon(
-                Icons.storage,
-                color: theme.colorScheme.primary,
+            // Χωρίς το δικαίωμα, ο προορισμός είναι ήδη κρυμμένος και ο
+            // διακόπτης δεν θα άλλαζε τίποτα σε καμία θέση. Ρύθμιση που δεν
+            // κάνει τίποτα είναι χειρότερη από ρύθμιση που λείπει: ο χρήστης
+            // την πατά, δεν βλέπει αποτέλεσμα και νομίζει ότι κάτι χάλασε.
+            if (PermissionService.instance.can(AppPermission.browseDatabase))
+              SwitchListTile(
+                value: !_showDatabaseNav,
+                secondary: Icon(
+                  Icons.storage,
+                  color: theme.colorScheme.primary,
+                ),
+                onChanged: (value) async {
+                  final show = !value;
+                  await _settings.windowUi.setShowDatabaseNav(show);
+                  if (mounted) setState(() => _showDatabaseNav = show);
+                  ref.invalidate(showDatabaseNavProvider);
+                },
+                title: const Text('Απόκρυψη Βάσης Δεδομένων'),
+                subtitle: const Text(
+                  'Κρύβει το στοιχείο πλοήγησης «Βάση Δεδομένων». Οι ρυθμίσεις λεξικού είναι στην οθόνη Λεξικό.',
+                ),
               ),
-              onChanged: (value) async {
-                final show = !value;
-                await _settings.windowUi.setShowDatabaseNav(show);
-                if (mounted) setState(() => _showDatabaseNav = show);
-                ref.invalidate(showDatabaseNavProvider);
-              },
-              title: const Text('Απόκρυψη Βάσης Δεδομένων'),
-              subtitle: const Text(
-                'Κρύβει το στοιχείο πλοήγησης «Βάση Δεδομένων». Οι ρυθμίσεις λεξικού είναι στην οθόνη Λεξικό.',
-              ),
-            ),
             SwitchListTile(
               value: !_showLampNav,
               secondary: Icon(

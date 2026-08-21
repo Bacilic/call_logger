@@ -12,7 +12,7 @@ REM ============================================================
 
 REM --- Διαδρομες (προσαρμοσε τες αν χρειαστει) ---
 set "ZIP=C:\Users\V.drosos\Downloads\flutter_windows_3.44.6-stable.zip"
-set "SRCROOT=C:\Users\V.drosos\Downloads\flutter_windows_3.44.9-stable\flutter"
+set "SRCROOT=C:\Users\V.drosos\Downloads\flutter_windows_3.47.1-stable\flutter"
 set "FLUTTER=C:\flutter"
 
 echo.
