@@ -90,7 +90,8 @@ void main() {
     const stored =
         r'[{"username":"gnk\\loimokseis1","label":"Γραφείο Λοιμώξεων"},'
         r'{"username":"gnk\\testaki"}]';
-    const withoutSecond = r'[{"username":"gnk\\loimokseis1","label":"Γραφείο Λοιμώξεων"}]';
+    const withoutSecond =
+        r'[{"username":"gnk\\loimokseis1","label":"Γραφείο Λοιμώξεων"}]';
 
     test('αφαίρεση ενός λογαριασμού δεν ξεβράζει ολόκληρο το JSON', () {
       final lines = buildCollectionChangeLines(
@@ -120,7 +121,10 @@ void main() {
       );
 
       expect(lines, hasLength(1));
-      expect(lines.single, startsWith('Επεξεργασία αναγνωριστικού Lansweeper:'));
+      expect(
+        lines.single,
+        startsWith('Επεξεργασία αναγνωριστικού Lansweeper:'),
+      );
       expect(lines.single, contains('Παλιά'));
       expect(lines.single, contains('Νέα'));
     });
@@ -182,11 +186,14 @@ void main() {
       );
     });
 
-    test('τα πεδία ταυτότητας δηλώνονται, ώστε να μη μετρηθούν δεύτερη φορά', () {
-      expect(renameFieldsFor('user'), {'first_name', 'last_name'});
-      expect(renameFieldsFor('department'), {'name'});
-      expect(renameFieldsFor('call'), isEmpty);
-    });
+    test(
+      'τα πεδία ταυτότητας δηλώνονται, ώστε να μη μετρηθούν δεύτερη φορά',
+      () {
+        expect(renameFieldsFor('user'), {'first_name', 'last_name'});
+        expect(renameFieldsFor('department'), {'name'});
+        expect(renameFieldsFor('call'), isEmpty);
+      },
+    );
   });
 
   group('isCollectionField', () {

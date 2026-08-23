@@ -141,22 +141,20 @@ void main() {
     semanticsEnabled: false,
   );
 
-  testWidgets(
-    'αφαίρεση χαρτογράφησης ανανεώνει επίσης τον μικρό χάρτη',
-    (tester) async {
-      final source = _FakeMapSource()..mapped = true;
+  testWidgets('αφαίρεση χαρτογράφησης ανανεώνει επίσης τον μικρό χάρτη', (
+    tester,
+  ) async {
+    final source = _FakeMapSource()..mapped = true;
 
-      await _pumpCard(tester, source);
-      expect(find.text(_kNotOnMapMessage), findsNothing);
+    await _pumpCard(tester, source);
+    expect(find.text(_kNotOnMapMessage), findsNothing);
 
-      source.mapped = false;
-      _publishDepartmentDirectoryReload(tester, [_department(mapped: false)]);
-      await tester.pumpAndSettle();
+    source.mapped = false;
+    _publishDepartmentDirectoryReload(tester, [_department(mapped: false)]);
+    await tester.pumpAndSettle();
 
-      expect(find.text(_kNotOnMapMessage), findsOneWidget);
-    },
-    semanticsEnabled: false,
-  );
+    expect(find.text(_kNotOnMapMessage), findsOneWidget);
+  }, semanticsEnabled: false);
 
   testWidgets('αλλαγή φύλλου κατόψης ανανεώνει τον μικρό χάρτη', (
     tester,
@@ -174,24 +172,22 @@ void main() {
     expect(find.text(_kNotOnMapMessage), findsNothing);
   }, semanticsEnabled: false);
 
-  testWidgets(
-    'αλλαγή συσχετίσεων καταλόγου ανανεώνει τον μικρό χάρτη',
-    (tester) async {
-      final source = _FakeMapSource();
-      await _pumpCard(tester, source);
-      expect(source.loadCount, 1);
+  testWidgets('αλλαγή συσχετίσεων καταλόγου ανανεώνει τον μικρό χάρτη', (
+    tester,
+  ) async {
+    final source = _FakeMapSource();
+    await _pumpCard(tester, source);
+    expect(source.loadCount, 1);
 
-      // Αλλαγή κατόχου/τμήματος εξοπλισμού από τον Κατάλογο: το τμήμα-στόχος
-      // του χάρτη προκύπτει από τις συσχετίσεις, όχι από τα πεδία της φόρμας.
-      source.mapped = true;
-      _containerOf(tester).invalidate(lookupServiceProvider);
-      await tester.pumpAndSettle();
+    // Αλλαγή κατόχου/τμήματος εξοπλισμού από τον Κατάλογο: το τμήμα-στόχος
+    // του χάρτη προκύπτει από τις συσχετίσεις, όχι από τα πεδία της φόρμας.
+    source.mapped = true;
+    _containerOf(tester).invalidate(lookupServiceProvider);
+    await tester.pumpAndSettle();
 
-      expect(source.loadCount, 2);
-      expect(find.text(_kNotOnMapMessage), findsNothing);
-    },
-    semanticsEnabled: false,
-  );
+    expect(source.loadCount, 2);
+    expect(find.text(_kNotOnMapMessage), findsNothing);
+  }, semanticsEnabled: false);
 
   testWidgets(
     'αλλαγή ΕΝΩ ο πλήρης χάρτης σκεπάζει την κάρτα φαίνεται στην επιστροφή '

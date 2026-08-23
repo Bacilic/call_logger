@@ -36,10 +36,7 @@ class CallsLansweeperRepository {
   /// Τα πεδία του καθαρού κειμένου που αξίζουν καταγραφή. Τα `refined_source` /
   /// `refined_at` μένουν έξω για τον ίδιο λόγο με το `lansweeper_last_sync_at`:
   /// αλλάζουν σε κάθε αποστολή και θα έπνιγαν το Ιστορικό σε θόρυβο.
-  static const List<String> _refinedAuditedFields = [
-    'issue',
-    'solution',
-  ];
+  static const List<String> _refinedAuditedFields = ['issue', 'solution'];
 
   Future<Map<String, Object?>> _readFields(
     DatabaseExecutor e,

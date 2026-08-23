@@ -77,7 +77,8 @@ void main() {
         sampleError('A RenderFlex overflowed by 25 pixels'),
         StackTrace.empty,
         fatal: false,
-        diagnostics: 'Φάση: during layout\n'
+        diagnostics:
+            'Φάση: during layout\n'
             'debugCreator: Column ← Padding ← CallsScreen',
       );
 

@@ -98,8 +98,7 @@ class MainShellDestinationContent {
     if (!host.mounted) return;
     await showDatabaseSettingsDialog(
       host.context,
-      onDatabaseLifecycleChanged:
-          host.widget.onDatabaseReopened ?? () async {},
+      onDatabaseLifecycleChanged: host.widget.onDatabaseReopened ?? () async {},
     );
   }
 
@@ -384,7 +383,8 @@ class _SharedInstancesBanner extends StatelessWidget {
                       recognizer: TapGestureRecognizer()..onTap = onOpenList,
                     ),
                     const TextSpan(
-                      text: ' ή εκτελέστε με --profile για ανεξάρτητη λειτουργία.',
+                      text:
+                          ' ή εκτελέστε με --profile για ανεξάρτητη λειτουργία.',
                     ),
                   ],
                 ),

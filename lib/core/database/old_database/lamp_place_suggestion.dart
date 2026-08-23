@@ -93,8 +93,8 @@ LampPlaceSuggestion lampPlaceSuggestion({
       ..addAll(_tokens(place.departmentName ?? ''));
     final common = needle.intersection(haystack).length;
     if (common == 0) continue;
-    final exact = TextSimilarity.normalize(place.officeName ?? '') ==
-            normalizedValue
+    final exact =
+        TextSimilarity.normalize(place.officeName ?? '') == normalizedValue
         ? 2
         : (TextSimilarity.normalize(place.departmentName ?? '') ==
                   normalizedValue

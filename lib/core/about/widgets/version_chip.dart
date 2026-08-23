@@ -156,11 +156,7 @@ class _DebugScenariosButton extends StatelessWidget {
     final status = reminder;
     final showReminder = status?.shouldRemind ?? false;
 
-    final icon = Icon(
-      Icons.bug_report_outlined,
-      size: 20,
-      color: scheme.error,
-    );
+    final icon = Icon(Icons.bug_report_outlined, size: 20, color: scheme.error);
 
     return CompactTooltip(
       waitDuration: const Duration(milliseconds: 600),

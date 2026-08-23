@@ -27,4 +27,3 @@ abstract final class TaskDueOptionTooltips {
     return 'Η λήξη ορίζεται για την επόμενη εργάσιμη ημέρα στις $a.';
   }
 }
-

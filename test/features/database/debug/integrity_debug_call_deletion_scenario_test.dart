@@ -132,15 +132,18 @@ void main() {
       }
     });
 
-    test('οι τρεις κλήσεις είναι πρόσφατες και σε διαφορετικές ημέρες', () async {
-      final rows = await db.query('calls', columns: ['date']);
-      final dates = rows
-          .map((r) => DateTime.parse(r['date'] as String))
-          .toList();
+    test(
+      'οι τρεις κλήσεις είναι πρόσφατες και σε διαφορετικές ημέρες',
+      () async {
+        final rows = await db.query('calls', columns: ['date']);
+        final dates = rows
+            .map((r) => DateTime.parse(r['date'] as String))
+            .toList();
 
-      expect(dates.toSet(), hasLength(3));
-      final oldest = dates.reduce((a, b) => a.isBefore(b) ? a : b);
-      expect(DateTime.now().difference(oldest).inDays, lessThanOrEqualTo(4));
-    });
+        expect(dates.toSet(), hasLength(3));
+        final oldest = dates.reduce((a, b) => a.isBefore(b) ? a : b);
+        expect(DateTime.now().difference(oldest).inDays, lessThanOrEqualTo(4));
+      },
+    );
   });
 }

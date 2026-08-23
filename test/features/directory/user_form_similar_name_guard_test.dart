@@ -132,8 +132,7 @@ void main() {
           notifier = container.read(directoryProvider.notifier);
           await notifier.loadUsers();
           edited = notifier.allUsersForUi.firstWhere(
-            (u) =>
-                u.firstName == _kEditedFirstName && u.lastName == _kSurname,
+            (u) => u.firstName == _kEditedFirstName && u.lastName == _kSurname,
           );
           await _openEditForm(
             tester,
@@ -186,8 +185,7 @@ void main() {
           notifier = container.read(directoryProvider.notifier);
           await notifier.loadUsers();
           edited = notifier.allUsersForUi.firstWhere(
-            (u) =>
-                u.firstName == _kEditedFirstName && u.lastName == _kSurname,
+            (u) => u.firstName == _kEditedFirstName && u.lastName == _kSurname,
           );
           await _openEditForm(
             tester,

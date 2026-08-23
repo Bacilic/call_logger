@@ -36,8 +36,7 @@ Future<void> showUpdateAvailableDialog(
         ? 'το εγκατεστημένο'
         : 'το εγκατεστημένο ${result.currentBuild}'
               '${currentDate == null ? '' : ' (${formatGreekShortDateFromIso(currentDate)})'}';
-    final cause =
-        result.versionLabelRelation == UpdateVersionLabelRelation.same
+    final cause = result.versionLabelRelation == UpdateVersionLabelRelation.same
         ? 'ο αριθμός της νέας έκδοσης (${manifest.version}) είναι ο ίδιος με '
               'τον εγκατεστημένο, επειδή περιέχει αλλαγές που δεν άλλαξαν το '
               'ιστορικό εκδόσεων'

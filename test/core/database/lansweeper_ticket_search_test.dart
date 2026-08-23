@@ -59,19 +59,22 @@ void main() {
     return calls.getHistoryCalls(keyword: ticket);
   }
 
-  test('μετά την αυτόματη καταχώρηση η κλήση βρίσκεται από το ticket', () async {
-    final callId = await insertCall();
+  test(
+    'μετά την αυτόματη καταχώρηση η κλήση βρίσκεται από το ticket',
+    () async {
+      final callId = await insertCall();
 
-    await repo.markLansweeperSynced(
-      callId: callId,
-      ticketId: '17438',
-      provider: 'lansweeper',
-    );
+      await repo.markLansweeperSynced(
+        callId: callId,
+        ticketId: '17438',
+        provider: 'lansweeper',
+      );
 
-    final found = await searchByTicket('17438');
-    expect(found, hasLength(1));
-    expect(found.single['id'], callId);
-  });
+      final found = await searchByTicket('17438');
+      expect(found, hasLength(1));
+      expect(found.single['id'], callId);
+    },
+  );
 
   test('μετά τη χειροκίνητη σήμανση η κλήση βρίσκεται από το ticket', () async {
     final callId = await insertCall();
@@ -83,19 +86,22 @@ void main() {
     expect(found.single['id'], callId);
   });
 
-  test('αλλαγή κύριου ticket: βρίσκεται από το νέο, όχι από το παλιό', () async {
-    final callId = await insertCall();
-    await repo.markLansweeperSynced(
-      callId: callId,
-      ticketId: '17438',
-      provider: 'lansweeper',
-    );
+  test(
+    'αλλαγή κύριου ticket: βρίσκεται από το νέο, όχι από το παλιό',
+    () async {
+      final callId = await insertCall();
+      await repo.markLansweeperSynced(
+        callId: callId,
+        ticketId: '17438',
+        provider: 'lansweeper',
+      );
 
-    await repo.setLansweeperMainTicket(callId: callId, ticketId: '18001');
+      await repo.setLansweeperMainTicket(callId: callId, ticketId: '18001');
 
-    expect(await searchByTicket('18001'), hasLength(1));
-    expect(await searchByTicket('17438'), isEmpty);
-  });
+      expect(await searchByTicket('18001'), hasLength(1));
+      expect(await searchByTicket('17438'), isEmpty);
+    },
+  );
 
   test('η μετάπτωση v37 κάνει αναζητήσιμα τα ήδη περασμένα tickets', () async {
     // Κλήση με ticket αλλά ΜΠΑΓΙΑΤΙΚΟ ευρετήριο (όπως άφηναν οι παλιές ροές).

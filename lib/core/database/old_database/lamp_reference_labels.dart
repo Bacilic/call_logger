@@ -46,8 +46,7 @@ String lampOwnerDisplayLabel({
   ].join(' ');
   // Το γραφείο είναι πιο συγκεκριμένο από το τμήμα· το τμήμα μπαίνει μόνο
   // όταν δεν υπάρχει γραφείο, ώστε η ετικέτα να μένει σύντομη.
-  final place =
-      _trimmedOrNull(officeName) ?? _trimmedOrNull(departmentName);
+  final place = _trimmedOrNull(officeName) ?? _trimmedOrNull(departmentName);
   if (place == null || place.isEmpty) return name;
   if (name.isEmpty) return 'γραφείο=$place';
   return '$name · γραφείο=$place';

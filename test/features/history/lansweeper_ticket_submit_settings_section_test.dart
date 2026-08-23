@@ -216,12 +216,10 @@ void main() {
         });
         await pumpUntilSettled(tester);
 
-        expect(container.read(lansweeperTicketSubmitConfigProvider).priorities, [
-          'Low',
-          'Medium',
-          'High',
-          'Urgent',
-        ]);
+        expect(
+          container.read(lansweeperTicketSubmitConfigProvider).priorities,
+          ['Low', 'Medium', 'High', 'Urgent'],
+        );
       },
     );
 
@@ -243,10 +241,10 @@ void main() {
         });
         await pumpUntilSettled(tester);
 
-        expect(container.read(lansweeperTicketSubmitConfigProvider).priorities, [
-          'Low',
-          'Medium',
-        ]);
+        expect(
+          container.read(lansweeperTicketSubmitConfigProvider).priorities,
+          ['Low', 'Medium'],
+        );
 
         final editable = tester.widget<EditableText>(
           find.descendant(of: valuesField, matching: find.byType(EditableText)),

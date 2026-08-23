@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/calls_dashboard_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../calls/models/call_model.dart';
+import '../../../core/models/owner_filter.dart';
 import '../models/lansweeper_report_scope.dart';
+import 'call_owner_filter_providers.dart';
 import '../../../core/services/profile_settings.dart';
 import '../../../core/services/scoped_settings.dart';
 
@@ -58,7 +60,20 @@ final lansweeperReportScopeProvider =
 final lansweeperReportCallsProvider =
     FutureProvider.autoDispose<List<CallModel>>((ref) async {
       final scope = ref.watch(lansweeperReportScopeProvider);
+      final owner =
+          ref.watch(lansweeperReportOwnerFilterProvider).value ??
+          OwnerFilter.everyone;
       final filter = scope.resolveFilter(DateTime.now());
       final db = await DatabaseHelper.instance.database;
-      return CallsDashboardRepository(db).getDashboardCalls(filter);
+      final calls = await CallsDashboardRepository(
+        db,
+      ).getDashboardCalls(filter);
+      // Το φίλτρο χρήστη εφαρμόζεται στη ρίζα, πριν από κάθε καταναλωτή:
+      // λίστα, μετρητής «Εκκρεμούν Ν» και προτάσεις ΤΝ βλέπουν την ΙΔΙΑ
+      // εικόνα — δύο σημεία φιλτραρίσματος θα απέκλιναν σιωπηλά.
+      if (owner.isEveryone) return calls;
+      return [
+        for (final call in calls)
+          if (callMatchesOwner(owner, call.createdByOperatorId)) call,
+      ];
     });

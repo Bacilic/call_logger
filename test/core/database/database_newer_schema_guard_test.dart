@@ -134,9 +134,8 @@ void main() {
       tempDir,
       'extra_column.db',
       fileVersion: kDatabaseSchemaVersion + 2,
-      mutate: (db) => db.execute(
-        'ALTER TABLE calls ADD COLUMN future_note TEXT',
-      ),
+      mutate: (db) =>
+          db.execute('ALTER TABLE calls ADD COLUMN future_note TEXT'),
     );
 
     final runner = await runChecksFor(dbPath);
@@ -150,58 +149,57 @@ void main() {
     );
   });
 
-  test(
-    'νεότερη βάση χωρίς στήλη που χρειάζεται η εφαρμογή → μη γεφυρώσιμη, '
-    'με ονομαστικό λόγο',
-    () async {
-      // Το σενάριο 45→40 (η v43 κατάργησε στήλη): η «μελλοντική» μετάπτωση
-      // μετονόμασε στήλη που αυτή η έκδοση χρησιμοποιεί.
-      final dbPath = await _createNewerSchemaDb(
-        tempDir,
-        'renamed_column.db',
-        fileVersion: kDatabaseSchemaVersion + 2,
-        mutate: (db) => db.execute(
-          'ALTER TABLE tasks RENAME COLUMN completed_at TO completed_at_v2',
-        ),
-      );
+  test('νεότερη βάση χωρίς στήλη που χρειάζεται η εφαρμογή → μη γεφυρώσιμη, '
+      'με ονομαστικό λόγο', () async {
+    // Το σενάριο 45→40 (η v43 κατάργησε στήλη): η «μελλοντική» μετάπτωση
+    // μετονόμασε στήλη που αυτή η έκδοση χρησιμοποιεί.
+    final dbPath = await _createNewerSchemaDb(
+      tempDir,
+      'renamed_column.db',
+      fileVersion: kDatabaseSchemaVersion + 2,
+      mutate: (db) => db.execute(
+        'ALTER TABLE tasks RENAME COLUMN completed_at TO completed_at_v2',
+      ),
+    );
 
-      final runner = await runChecksFor(dbPath);
+    final runner = await runChecksFor(dbPath);
 
-      expect(
-        runner.result.recoveryKind,
-        DatabaseInitRecoveryKind.databaseNewerThanApp,
-      );
-      final assessment = runner.result.schemaDowngrade;
-      expect(assessment, isNotNull);
-      expect(assessment!.isBridgeable, isFalse);
-      expect(assessment.blockersSummary, contains('completed_at'));
-      expect(assessment.blockersSummary, contains('tasks'));
-    },
-  );
+    expect(
+      runner.result.recoveryKind,
+      DatabaseInitRecoveryKind.databaseNewerThanApp,
+    );
+    final assessment = runner.result.schemaDowngrade;
+    expect(assessment, isNotNull);
+    expect(assessment!.isBridgeable, isFalse);
+    expect(assessment.blockersSummary, contains('completed_at'));
+    expect(assessment.blockersSummary, contains('tasks'));
+  });
 
   group('DatabaseInitResult.fromException', () {
-    test('έτοιμο DatabaseInitException περνά αυτούσιο, δεν ξαναμεταφράζεται',
-        () {
-      const ready = DatabaseInitResult(
-        status: DatabaseStatus.applicationError,
-        message: 'Σαφές μήνυμα προς τον χρήστη.',
-        recoveryKind: DatabaseInitRecoveryKind.databaseNewerThanApp,
-        technicalCode: '45→40',
-      );
+    test(
+      'έτοιμο DatabaseInitException περνά αυτούσιο, δεν ξαναμεταφράζεται',
+      () {
+        const ready = DatabaseInitResult(
+          status: DatabaseStatus.applicationError,
+          message: 'Σαφές μήνυμα προς τον χρήστη.',
+          recoveryKind: DatabaseInitRecoveryKind.databaseNewerThanApp,
+          technicalCode: '45→40',
+        );
 
-      final result = DatabaseInitResult.fromException(
-        const DatabaseInitException(ready),
-        r'C:\tmp\hosp.db',
-      );
+        final result = DatabaseInitResult.fromException(
+          const DatabaseInitException(ready),
+          r'C:\tmp\hosp.db',
+        );
 
-      expect(result.message, 'Σαφές μήνυμα προς τον χρήστη.');
-      expect(
-        result.recoveryKind,
-        DatabaseInitRecoveryKind.databaseNewerThanApp,
-      );
-      expect(result.technicalCode, '45→40');
-      // Η διαδρομή συμπληρώνεται από το hint όταν λείπει.
-      expect(result.path, r'C:\tmp\hosp.db');
-    });
+        expect(result.message, 'Σαφές μήνυμα προς τον χρήστη.');
+        expect(
+          result.recoveryKind,
+          DatabaseInitRecoveryKind.databaseNewerThanApp,
+        );
+        expect(result.technicalCode, '45→40');
+        // Η διαδρομή συμπληρώνεται από το hint όταν λείπει.
+        expect(result.path, r'C:\tmp\hosp.db');
+      },
+    );
   });
 }

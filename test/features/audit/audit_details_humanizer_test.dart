@@ -20,7 +20,9 @@ void main() {
         isNull,
       );
       expect(
-        humanizeAuditDetails('departments id=8 (getOrCreateDepartmentIdByName)'),
+        humanizeAuditDetails(
+          'departments id=8 (getOrCreateDepartmentIdByName)',
+        ),
         isNull,
       );
       expect(
@@ -38,7 +40,9 @@ void main() {
   group('Ελληνικό σχόλιο που αξίζει να μείνει', () {
     test('κρατά μόνο το σχόλιο, χωρίς το τεχνικό πρόθεμα', () {
       expect(
-        humanizeAuditDetails('equipment id=23 (αφαίρεση κοινόχρηστου τμήματος 38)'),
+        humanizeAuditDetails(
+          'equipment id=23 (αφαίρεση κοινόχρηστου τμήματος 38)',
+        ),
         'Αφαίρεση κοινόχρηστου τμήματος 38',
       );
       expect(

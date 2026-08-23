@@ -155,16 +155,12 @@ class NetworkFolderClassifier {
   static Future<List<String>> _systemLocalSharesProvider() async {
     if (!Platform.isWindows) return const <String>[];
     try {
-      final text = await runForStdoutWithTimeout(
-        'powershell',
-        const <String>[
-          '-NoProfile',
-          '-Command',
-          // Αποκλεισμός special/διαχειριστικών shares (C$, ADMIN$, IPC$…).
-          r'Get-SmbShare | Where-Object { -not $_.Special } | ForEach-Object { $_.Path }',
-        ],
-        const Duration(seconds: 2),
-      );
+      final text = await runForStdoutWithTimeout('powershell', const <String>[
+        '-NoProfile',
+        '-Command',
+        // Αποκλεισμός special/διαχειριστικών shares (C$, ADMIN$, IPC$…).
+        r'Get-SmbShare | Where-Object { -not $_.Special } | ForEach-Object { $_.Path }',
+      ], const Duration(seconds: 2));
       if (text == null) return const <String>[];
       return const LineSplitter()
           .convert(text)

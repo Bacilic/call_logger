@@ -60,9 +60,7 @@ void main() {
         '3 μέρες',
       );
       expect(
-        twoUnitDuration(
-          const Duration(hours: 23, minutes: 59, seconds: 40),
-        ),
+        twoUnitDuration(const Duration(hours: 23, minutes: 59, seconds: 40)),
         '1 μέρα',
       );
     });
@@ -135,10 +133,7 @@ void main() {
 
     test('λήξη στο παρελθόν', () {
       expect(
-        dueRelativeLabel(
-          now,
-          now.subtract(const Duration(days: 2, hours: 12)),
-        ),
+        dueRelativeLabel(now, now.subtract(const Duration(days: 2, hours: 12))),
         'Εκκρεμεί 2 μέρες και 12 ώρες',
       );
     });

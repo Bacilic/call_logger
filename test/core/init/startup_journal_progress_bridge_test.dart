@@ -56,10 +56,14 @@ void main() {
   });
 
   test('μετά την αντίστροφη μέτρηση, νέο βήμα ανοίγει κανονικά γραμμή', () {
-    notifier.setStep('Προσπάθεια άνοιγμα βάσης σε 5 δευτερόλεπτα',
-        secondsRemaining: 5);
-    notifier.setStep('Προσπάθεια άνοιγμα βάσης σε 4 δευτερόλεπτα',
-        secondsRemaining: 4);
+    notifier.setStep(
+      'Προσπάθεια άνοιγμα βάσης σε 5 δευτερόλεπτα',
+      secondsRemaining: 5,
+    );
+    notifier.setStep(
+      'Προσπάθεια άνοιγμα βάσης σε 4 δευτερόλεπτα',
+      secondsRemaining: 4,
+    );
     notifier.setStep('Επικύρωση δομής πινάκων');
 
     expect(labels(), [
@@ -108,10 +112,14 @@ void main() {
   test('η κατάσταση προόδου συνεχίζει να δουλεύει όπως πριν', () {
     notifier.setStep('Άνοιγμα βάσης', secondsRemaining: 5);
 
-    expect(container.read(databaseInitProgressProvider).currentStep,
-        'Άνοιγμα βάσης');
+    expect(
+      container.read(databaseInitProgressProvider).currentStep,
+      'Άνοιγμα βάσης',
+    );
     expect(container.read(databaseInitProgressProvider).secondsRemaining, 5);
-    expect(container.read(databaseInitProgressProvider).isOpeningAttemptActive,
-        isTrue);
+    expect(
+      container.read(databaseInitProgressProvider).isOpeningAttemptActive,
+      isTrue,
+    );
   });
 }

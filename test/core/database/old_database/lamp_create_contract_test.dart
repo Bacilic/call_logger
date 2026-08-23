@@ -95,87 +95,94 @@ void main() {
     )).single;
   }
 
-  test('η επιλογή δημιουργίας υπάρχει και προτείνει την ωμή τιμή ως όνομα', () async {
-    final option = (await proposal()).options.firstWhere(
-      (o) => o.requiresContractInput,
-    );
+  test(
+    'η επιλογή δημιουργίας υπάρχει και προτείνει την ωμή τιμή ως όνομα',
+    () async {
+      final option = (await proposal()).options.firstWhere(
+        (o) => o.requiresContractInput,
+      );
 
-    expect(option.metadata['createContractName'], '44444');
-    expect(option.label, contains('44444'));
-  });
+      expect(option.metadata['createContractName'], '44444');
+      expect(option.label, contains('44444'));
+    },
+  );
 
-  test('ο κατάλογος φέρνει τους υπάρχοντες προμηθευτές και κατηγορίες', () async {
-    final catalog = await LampIssueResolutionService().loadPlacementCatalog(
-      databasePath: dbPath,
-    );
+  test(
+    'ο κατάλογος φέρνει τους υπάρχοντες προμηθευτές και κατηγορίες',
+    () async {
+      final catalog = await LampIssueResolutionService().loadPlacementCatalog(
+        databasePath: dbPath,
+      );
 
-    expect(catalog.suppliers.map((s) => s.name), containsAll(<String>[
-      'Infotechnica SA',
-      'MULTILAB AE',
-    ]));
-    expect(catalog.contractCategories.map((c) => c.name), containsAll(<String>[
-      'Προμήθεια',
-      'Δωρεά',
-    ]));
-    expect(
-      catalog.searchSuppliers('multi').single.id,
-      42,
-      reason: greekExpectMsg(
-        'Χωρίς αναζήτηση ο χρήστης θα κυλούσε λίστα 77 προμηθευτών',
-      ),
-    );
-  });
-
-  test('η δημιουργία γράφει σύμβαση, προμηθευτή και συνδέει τον εξοπλισμό', () async {
-    final target = await proposal();
-    final service = LampIssueResolutionService();
-
-    await service.applySingleDecision(
-      databasePath: dbPath,
-      decision: LampIssueResolutionDecision(
-        proposal: target,
-        option: target.options.firstWhere((o) => o.requiresContractInput),
-        contractInput: const LampContractInput(
-          name: '44444 09/08/2026',
-          supplierId: 42,
-          categoryId: 2,
+      expect(
+        catalog.suppliers.map((s) => s.name),
+        containsAll(<String>['Infotechnica SA', 'MULTILAB AE']),
+      );
+      expect(
+        catalog.contractCategories.map((c) => c.name),
+        containsAll(<String>['Προμήθεια', 'Δωρεά']),
+      );
+      expect(
+        catalog.searchSuppliers('multi').single.id,
+        42,
+        reason: greekExpectMsg(
+          'Χωρίς αναζήτηση ο χρήστης θα κυλούσε λίστα 77 προμηθευτών',
         ),
-      ),
-    );
+      );
+    },
+  );
 
-    final created = await withDb(
-      (db) async => (await db.query(
-        'contracts',
-        where: "contract_name = '44444 09/08/2026'",
-      )).single,
-    );
+  test(
+    'η δημιουργία γράφει σύμβαση, προμηθευτή και συνδέει τον εξοπλισμό',
+    () async {
+      final target = await proposal();
+      final service = LampIssueResolutionService();
 
-    expect(created['supplier'], 42);
-    expect(
-      created['supplier_name'],
-      'MULTILAB AE',
-      reason: greekExpectMsg(
-        'Το όνομα διαβάζεται από τα υπάρχοντα ζεύγη, ώστε ο ίδιος '
-        'προμηθευτής να μη γραφτεί με δύο ορθογραφίες',
-      ),
-    );
-    expect(created['category'], 2);
-    expect(created['category_name'], 'Δωρεά');
+      await service.applySingleDecision(
+        databasePath: dbPath,
+        decision: LampIssueResolutionDecision(
+          proposal: target,
+          option: target.options.firstWhere((o) => o.requiresContractInput),
+          contractInput: const LampContractInput(
+            name: '44444 09/08/2026',
+            supplierId: 42,
+            categoryId: 2,
+          ),
+        ),
+      );
 
-    final equipment = await withDb(
-      (db) async => (await db.query(
-        'equipment',
-        where: 'code = 5099',
-      )).single,
-    );
-    expect(equipment['contract'], created['contract']);
-    expect(equipment['contract_original_text'], isNull);
+      final created = await withDb(
+        (db) async => (await db.query(
+          'contracts',
+          where: "contract_name = '44444 09/08/2026'",
+        )).single,
+      );
 
-    final open = await withDb(
-      (db) async => db.query('data_issues', where: "status = 'open'"),
-    );
-    expect(open, isEmpty);
-  });
+      expect(created['supplier'], 42);
+      expect(
+        created['supplier_name'],
+        'MULTILAB AE',
+        reason: greekExpectMsg(
+          'Το όνομα διαβάζεται από τα υπάρχοντα ζεύγη, ώστε ο ίδιος '
+          'προμηθευτής να μη γραφτεί με δύο ορθογραφίες',
+        ),
+      );
+      expect(created['category'], 2);
+      expect(created['category_name'], 'Δωρεά');
+
+      final equipment = await withDb(
+        (db) async =>
+            (await db.query('equipment', where: 'code = 5099')).single,
+      );
+      expect(equipment['contract'], created['contract']);
+      expect(equipment['contract_original_text'], isNull);
+
+      final open = await withDb(
+        (db) async => db.query('data_issues', where: "status = 'open'"),
+      );
+      expect(open, isEmpty);
+    },
+  );
 
   test('σύμβαση χωρίς προμηθευτή επιτρέπεται', () async {
     final target = await proposal();
@@ -190,8 +197,10 @@ void main() {
     );
 
     final created = await withDb(
-      (db) async =>
-          (await db.query('contracts', where: "contract_name = '44444'")).single,
+      (db) async => (await db.query(
+        'contracts',
+        where: "contract_name = '44444'",
+      )).single,
     );
 
     expect(created['supplier'], isNull);

@@ -62,6 +62,7 @@ final auditListProvider = FutureProvider.autoDispose<AuditPageResult>((
     keywordNormalized: kw.isEmpty ? null : kw,
     action: filter.action,
     entityType: filter.entityType,
+    userPerforming: filter.userPerforming,
     dateFromInclusiveIso: filter.dateFromInclusiveIso,
     dateToExclusiveIso: filter.dateToExclusiveIso,
   );
@@ -85,18 +86,50 @@ final auditActionOptionsProvider = FutureProvider.autoDispose<List<String>>((
 ) async {
   // ΜΟΝΟ τα πεδία που επηρεάζουν το query: η επιλογή Ενέργειας δεν πρέπει να
   // ξαναφορτώνει τις επιλογές (προκαλούσε αγώνα δρόμου που έσβηνε το φίλτρο).
-  final (entityType, dateFromIso, dateToIso) = ref.watch(
+  final (entityType, userPerforming, dateFromIso, dateToIso) = ref.watch(
     auditFilterProvider.select(
-      (f) => (f.entityType, f.dateFromInclusiveIso, f.dateToExclusiveIso),
+      (f) => (
+        f.entityType,
+        f.userPerforming,
+        f.dateFromInclusiveIso,
+        f.dateToExclusiveIso,
+      ),
     ),
   );
   final svc = await ref.watch(auditServiceAsyncProvider.future);
   return svc.queryDistinctActions(
     entityType: entityType,
+    userPerforming: userPerforming,
     dateFromInclusiveIso: dateFromIso,
     dateToExclusiveIso: dateToIso,
   );
 });
+
+/// Διαθέσιμοι χειριστές για το φίλτρο «Χειριστής», βάσει των άλλων φίλτρων.
+///
+/// Δεν παρακολουθεί την ίδια του την επιλογή — αλλιώς η στιγμή που διαλέγει
+/// κανείς όνομα θα συρρίκνωνε τη λίστα σε αυτό το ένα και δεν θα υπήρχε πια
+/// τρόπος να επιλεγεί άλλο.
+final auditPerformingUserOptionsProvider =
+    FutureProvider.autoDispose<List<String>>((ref) async {
+      final (action, entityType, dateFromIso, dateToIso) = ref.watch(
+        auditFilterProvider.select(
+          (f) => (
+            f.action,
+            f.entityType,
+            f.dateFromInclusiveIso,
+            f.dateToExclusiveIso,
+          ),
+        ),
+      );
+      final svc = await ref.watch(auditServiceAsyncProvider.future);
+      return svc.queryDistinctPerformingUsers(
+        action: action,
+        entityType: entityType,
+        dateFromInclusiveIso: dateFromIso,
+        dateToExclusiveIso: dateToIso,
+      );
+    });
 
 final selectedAuditEntryIdProvider =
     NotifierProvider<SelectedAuditEntryNotifier, int?>(

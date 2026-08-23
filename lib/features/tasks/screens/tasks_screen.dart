@@ -112,31 +112,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                     ),
                     Expanded(
                       child: tasks.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    totalTaskCount == 0
-                                        ? Icons.task_alt_outlined
-                                        : Icons.search_off_outlined,
-                                    size: 64,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    totalTaskCount == 0
-                                        ? 'Δεν υπάρχουν εκκρεμότητες αυτή τη στιγμή'
-                                        : 'Δεν βρέθηκαν εκκρεμότητες με τα επιλεγμένα κριτήρια',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge,
-                                  ),
-                                ],
-                              ),
-                            )
+                          ? TasksEmptyState(totalTaskCount: totalTaskCount)
                           : RefreshIndicator(
                               onRefresh: () =>
                                   ref.read(tasksProvider.notifier).refresh(),
@@ -161,6 +137,8 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                                       task: task,
                                       onEdit: () =>
                                           editTask(context, ref, task),
+                                      onAssign: () =>
+                                          assignTaskFlow(context, ref, task),
                                       onSnooze: () =>
                                           snoozeTask(context, ref, task),
                                       onDelete: () => deleteTaskWithCountdown(

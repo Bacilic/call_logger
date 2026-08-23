@@ -73,9 +73,10 @@ class _LampContractFieldsState extends State<LampContractFields> {
                 displayStringForOption: (entry) => entry.label,
                 optionsBuilder: (value) =>
                     widget.catalog.searchSuppliers(value.text),
-                onSelected: (entry) =>
-                    widget.onChanged(supplierId: entry.id,
-                        categoryId: widget.categoryId),
+                onSelected: (entry) => widget.onChanged(
+                  supplierId: entry.id,
+                  categoryId: widget.categoryId,
+                ),
                 optionsViewBuilder: (context, select, options) => Align(
                   alignment: Alignment.topLeft,
                   child: Material(
@@ -129,10 +130,7 @@ class _LampContractFieldsState extends State<LampContractFields> {
                   isDense: true,
                 ),
                 items: <DropdownMenuItem<int?>>[
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('—'),
-                  ),
+                  const DropdownMenuItem<int?>(value: null, child: Text('—')),
                   for (final category in categories)
                     DropdownMenuItem<int?>(
                       value: category.id,

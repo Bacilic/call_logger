@@ -95,44 +95,56 @@ void main() {
     },
   );
 
-  test('με ΔΥΟ λογαριασμούς προεπιλέγεται ο πρώτος και είναι επιλέξιμο', () async {
-    final options = await resolveLansweeperRequesterForCalls(
-      userRepository: users,
-      lookup: lookupWith(_kTwoAccounts),
-      calls: [_call(callerText: 'Άγνωστος')],
-    );
+  test(
+    'με ΔΥΟ λογαριασμούς προεπιλέγεται ο πρώτος και είναι επιλέξιμο',
+    () async {
+      final options = await resolveLansweeperRequesterForCalls(
+        userRepository: users,
+        lookup: lookupWith(_kTwoAccounts),
+        calls: [_call(callerText: 'Άγνωστος')],
+      );
 
-    expect(options.selectedUsername, _kDoc1);
-    expect(options.candidates.map((c) => c.account.username), [_kDoc1, _kDoc2]);
-    expect(options.isChoosable, isTrue);
-  });
+      expect(options.selectedUsername, _kDoc1);
+      expect(options.candidates.map((c) => c.account.username), [
+        _kDoc1,
+        _kDoc2,
+      ]);
+      expect(options.isChoosable, isTrue);
+    },
+  );
 
-  test('τμήμα χωρίς λογαριασμούς: κανένας αιτών, το ticket μένει ως ήταν', () async {
-    final options = await resolveLansweeperRequesterForCalls(
-      userRepository: users,
-      lookup: lookupWith(null),
-      calls: [_call(callerText: 'Άγνωστος')],
-    );
+  test(
+    'τμήμα χωρίς λογαριασμούς: κανένας αιτών, το ticket μένει ως ήταν',
+    () async {
+      final options = await resolveLansweeperRequesterForCalls(
+        userRepository: users,
+        lookup: lookupWith(null),
+        calls: [_call(callerText: 'Άγνωστος')],
+      );
 
-    expect(options.selectedUsername, isNull);
-    expect(options.isChoosable, isFalse);
-  });
+      expect(options.selectedUsername, isNull);
+      expect(options.isChoosable, isFalse);
+    },
+  );
 
-  test('σπασμένος αποθηκευμένος λογαριασμός καθαρίζεται στην ανάγνωση', () async {
-    final options = await resolveLansweeperRequesterForCalls(
-      userRepository: users,
-      lookup: lookupWith(
-        '[{"username":"Γιατρός Παθολογικής 1 gnk\\\\docpath1"}]',
-      ),
-      calls: [_call(callerText: 'Άγνωστος')],
-    );
+  test(
+    'σπασμένος αποθηκευμένος λογαριασμός καθαρίζεται στην ανάγνωση',
+    () async {
+      final options = await resolveLansweeperRequesterForCalls(
+        userRepository: users,
+        lookup: lookupWith(
+          '[{"username":"Γιατρός Παθολογικής 1 gnk\\\\docpath1"}]',
+        ),
+        calls: [_call(callerText: 'Άγνωστος')],
+      );
 
-    expect(
-      options.selectedUsername,
-      _kDoc1,
-      reason: 'το κενό μέσα στο αναγνωριστικό δεν φτάνει ποτέ στο Lansweeper',
-    );
-  });
+      expect(
+        options.selectedUsername,
+        _kDoc1,
+        reason: 'το κενό μέσα στο αναγνωριστικό δεν φτάνει ποτέ στο Lansweeper',
+      );
+    },
+  );
 
   // Ο μοναδικός λογαριασμός τμήματος έμπαινε αυτόματα χωρίς να εμφανίζεται ο
   // επιλογέας: σωστή πρόταση, αλλά αμετάκλητη. Υπάρχουν υπάλληλοι που δεν
@@ -191,35 +203,38 @@ void main() {
       });
     }
 
-    test('προσφέρονται, αλλά προεπιλογή μένει ο λογαριασμός τμήματος', () async {
-      await addUser(
-        lastName: 'Νικολαράκη',
-        firstName: 'Αναστασία',
-        username: r'gnk\a.nikolaraki',
-      );
+    test(
+      'προσφέρονται, αλλά προεπιλογή μένει ο λογαριασμός τμήματος',
+      () async {
+        await addUser(
+          lastName: 'Νικολαράκη',
+          firstName: 'Αναστασία',
+          username: r'gnk\a.nikolaraki',
+        );
 
-      final options = await resolveLansweeperRequesterForCalls(
-        userRepository: users,
-        lookup: lookupWith(_kOneAccount),
-        calls: [_call(callerText: 'Άγνωστος')],
-      );
+        final options = await resolveLansweeperRequesterForCalls(
+          userRepository: users,
+          lookup: lookupWith(_kOneAccount),
+          calls: [_call(callerText: 'Άγνωστος')],
+        );
 
-      expect(
-        options.selectedUsername,
-        _kDoc1,
-        reason: 'ο απρόσωπος λογαριασμός δεν χρεώνει αίτημα σε κανέναν',
-      );
-      expect(
-        options.candidates.map((c) => c.account.username),
-        containsAll([_kDoc1, r'gnk\a.nikolaraki']),
-      );
-      expect(
-        options.candidates
-            .where((c) => c.isSuggestionOnly)
-            .map((c) => c.account.username),
-        [r'gnk\a.nikolaraki'],
-      );
-    });
+        expect(
+          options.selectedUsername,
+          _kDoc1,
+          reason: 'ο απρόσωπος λογαριασμός δεν χρεώνει αίτημα σε κανέναν',
+        );
+        expect(
+          options.candidates.map((c) => c.account.username),
+          containsAll([_kDoc1, r'gnk\a.nikolaraki']),
+        );
+        expect(
+          options.candidates
+              .where((c) => c.isSuggestionOnly)
+              .map((c) => c.account.username),
+          [r'gnk\a.nikolaraki'],
+        );
+      },
+    );
 
     test('χωρίς λογαριασμό τμήματος η προεπιλογή μένει κενή', () async {
       await addUser(

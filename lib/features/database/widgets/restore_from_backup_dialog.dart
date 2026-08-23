@@ -151,10 +151,7 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                _preservationText(),
-                style: theme.textTheme.bodySmall,
-              ),
+              Text(_preservationText(), style: theme.textTheme.bodySmall),
             ],
           ),
         ),
@@ -223,9 +220,10 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
   String _preservationText() {
     switch (_destination) {
       case RestoreDestinationChoice.currentDatabase:
-        final preRestoreName = DatabaseFileReplacement.previewPreRestoreFileName(
-          widget.currentDatabasePath,
-        );
+        final preRestoreName =
+            DatabaseFileReplacement.previewPreRestoreFileName(
+              widget.currentDatabasePath,
+            );
         return 'Η τρέχουσα βάση θα φυλαχτεί ως:\n$preRestoreName';
       case RestoreDestinationChoice.backupName:
         final currentName = p.basename(widget.currentDatabasePath);
@@ -233,9 +231,8 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
         if (!widget.backupNameTargetExists) {
           return 'Η τρέχουσα βάση ($currentName) παραμένει στη θέση της.';
         }
-        final preRestoreName = DatabaseFileReplacement.previewPreRestoreFileName(
-          target,
-        );
+        final preRestoreName =
+            DatabaseFileReplacement.previewPreRestoreFileName(target);
         return 'Η τρέχουσα βάση ($currentName) παραμένει στη θέση της.\n'
             'Το υπάρχον αρχείο «${p.basename(target)}» θα φυλαχτεί ως:\n'
             '$preRestoreName';

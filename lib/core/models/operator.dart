@@ -81,7 +81,9 @@ class Operator {
     return Operator(
       id: (map['id'] as num?)?.toInt(),
       displayName: (map['display_name'] as String?)?.trim() ?? '',
-      windowsAccount: normalizeWindowsAccount(map['windows_account'] as String?),
+      windowsAccount: normalizeWindowsAccount(
+        map['windows_account'] as String?,
+      ),
       isAdmin: _asBool(map['is_admin']),
       isActive: _asBool(map['is_active'], whenNull: true),
       permissionOverrides: decodePermissionOverrides(

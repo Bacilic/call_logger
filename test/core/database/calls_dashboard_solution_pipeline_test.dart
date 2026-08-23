@@ -50,39 +50,36 @@ void main() {
     }
   });
 
-  test(
-    'η λύση (και τα συνοδευτικά της) φτάνουν από τη βάση στις κλήσεις '
-    'της αναφοράς',
-    () async {
-      await CallsRepository(db).insertCall(
-        CallModel(
-          date: '2026-08-11',
-          time: '14:24:00',
-          phoneText: '2531',
-          issue: 'docutracks μη έμπιστη σελίδα',
-          solution: 'ενημέρωση το chrome ότι είναι έγκυρη σελίδα',
-          refinedSource: 'manual',
-          refinedAt: '2026-08-11T14:24:00',
-          status: 'completed',
-        ),
-      );
+  test('η λύση (και τα συνοδευτικά της) φτάνουν από τη βάση στις κλήσεις '
+      'της αναφοράς', () async {
+    await CallsRepository(db).insertCall(
+      CallModel(
+        date: '2026-08-11',
+        time: '14:24:00',
+        phoneText: '2531',
+        issue: 'docutracks μη έμπιστη σελίδα',
+        solution: 'ενημέρωση το chrome ότι είναι έγκυρη σελίδα',
+        refinedSource: 'manual',
+        refinedAt: '2026-08-11T14:24:00',
+        status: 'completed',
+      ),
+    );
 
-      final calls = await CallsDashboardRepository(
-        db,
-      ).getDashboardCalls(const DashboardFilterModel());
+    final calls = await CallsDashboardRepository(
+      db,
+    ).getDashboardCalls(const DashboardFilterModel());
 
-      expect(calls, hasLength(1));
-      final call = calls.single;
-      expect(call.issue, 'docutracks μη έμπιστη σελίδα');
-      expect(
-        call.solution,
-        'ενημέρωση το chrome ότι είναι έγκυρη σελίδα',
-        reason:
-            'Η Λύση της κλήσης πρέπει να φτάνει στην Αναφορά Lansweeper — '
-            'χωρίς αυτήν, η προσυμπλήρωση της φόρμας δεν έχει τι να φορτώσει',
-      );
-      expect(call.refinedSource, 'manual');
-      expect(call.refinedAt, '2026-08-11T14:24:00');
-    },
-  );
+    expect(calls, hasLength(1));
+    final call = calls.single;
+    expect(call.issue, 'docutracks μη έμπιστη σελίδα');
+    expect(
+      call.solution,
+      'ενημέρωση το chrome ότι είναι έγκυρη σελίδα',
+      reason:
+          'Η Λύση της κλήσης πρέπει να φτάνει στην Αναφορά Lansweeper — '
+          'χωρίς αυτήν, η προσυμπλήρωση της φόρμας δεν έχει τι να φορτώσει',
+    );
+    expect(call.refinedSource, 'manual');
+    expect(call.refinedAt, '2026-08-11T14:24:00');
+  });
 }

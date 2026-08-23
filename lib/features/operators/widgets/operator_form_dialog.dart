@@ -224,36 +224,6 @@ class _OperatorFormDialogState extends State<OperatorFormDialog> {
                               'Οι αρχειοθετημένοι κρύβονται από τις λίστες επιλογής',
                             ),
                           ),
-                          if (!isNew) ...[
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color:
-                                    theme.colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(
-                                    Icons.history,
-                                    size: 20,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      'Οι παλιές εγγραφές του Ιστορικού κρατούν το όνομα '
-                                      'που ίσχυε τότε. Η μετονομασία αφορά μόνο τις '
-                                      'επόμενες.',
-                                      style: theme.textTheme.bodySmall,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),

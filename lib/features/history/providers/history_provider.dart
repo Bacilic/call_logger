@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/models/owner_filter.dart';
+import 'call_owner_filter_providers.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/calls_repository.dart';
@@ -256,6 +259,8 @@ final historyCategoryDateCallCountProvider = FutureProvider.autoDispose<int>((
 final historyCallsProvider =
     FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
       final filter = ref.watch(historyFilterProvider);
+      final owner =
+          ref.watch(historyOwnerFilterProvider).value ?? OwnerFilter.everyone;
       // Ο ίδιος κανόνας «#id» με τον Κατάλογο: το «#276» δείχνει την κλήση 276
       // και μόνο αυτήν, ενώ οι υπόλοιποι όροι μένουν ελεύθερο κείμενο.
       final query = IdSearchQuery.parse(filter.keyword);
@@ -279,6 +284,7 @@ final historyCallsProvider =
         onlyWithTask: filter.onlyWithTask,
         lansweeperState: filter.lansweeperState,
         callIds: query.ids,
+        owner: owner,
       );
     });
 

@@ -143,10 +143,19 @@ void main() {
 
   group('UpdateManifest.compareVersionLabels', () {
     test('compares only the X.Y.Z label, numerically', () {
-      expect(UpdateManifest.compareVersionLabels('0.23.2', '0.24.4'), lessThan(0));
-      expect(UpdateManifest.compareVersionLabels('0.24.4', '0.23.2'), greaterThan(0));
+      expect(
+        UpdateManifest.compareVersionLabels('0.23.2', '0.24.4'),
+        lessThan(0),
+      );
+      expect(
+        UpdateManifest.compareVersionLabels('0.24.4', '0.23.2'),
+        greaterThan(0),
+      );
       expect(UpdateManifest.compareVersionLabels('0.23.2', '0.23.2'), 0);
-      expect(UpdateManifest.compareVersionLabels('0.9.0', '0.10.0'), lessThan(0));
+      expect(
+        UpdateManifest.compareVersionLabels('0.9.0', '0.10.0'),
+        lessThan(0),
+      );
     });
   });
 }

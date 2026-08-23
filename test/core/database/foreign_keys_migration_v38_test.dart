@@ -86,7 +86,11 @@ void main() {
       );
       expect(dept.single['floor_id'], floorId);
       expect(dept.single['notes'], 'κρατά τις σημειώσεις της');
-      final user = await db.query('users', where: 'id = ?', whereArgs: [userId]);
+      final user = await db.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [userId],
+      );
       expect(user.single['department_id'], deptId);
       expect(await db.query('tasks'), hasLength(1));
       expect(await db.query('call_external_links'), hasLength(1));
@@ -179,7 +183,10 @@ void main() {
 
       await migrateDatabaseToV38(db);
 
-      final call = await db.query('calls', columns: ['caller_id', 'caller_text']);
+      final call = await db.query(
+        'calls',
+        columns: ['caller_id', 'caller_text'],
+      );
       expect(call.single['caller_id'], 987654);
       expect(call.single['caller_text'], 'Στιγμιότυπο');
     });

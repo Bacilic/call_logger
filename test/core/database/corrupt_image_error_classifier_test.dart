@@ -29,10 +29,7 @@ void main() {
       isTrue,
     );
     expect(looksLikeCorruptImageError('SQLITE_CORRUPT: something'), isTrue);
-    expect(
-      looksLikeCorruptImageError('malformed database schema'),
-      isTrue,
-    );
+    expect(looksLikeCorruptImageError('malformed database schema'), isTrue);
   });
 
   test('δεν μπερδεύει άσχετα σφάλματα', () {

@@ -75,11 +75,9 @@ void main() {
     await LampDatabaseProvider.instance.close();
     final db = await openDatabase(dbPath, singleInstance: false);
     try {
-      await db.update(
-        'equipment',
-        <String, Object?>{'asset_no': null},
-        where: 'code = 3790',
-      );
+      await db.update('equipment', <String, Object?>{
+        'asset_no': null,
+      }, where: 'code = 3790');
     } finally {
       await db.close();
     }

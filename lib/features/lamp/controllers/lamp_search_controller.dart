@@ -365,7 +365,8 @@ class LampSearchController {
       return LampFilterMenuCounts(
         byKind: unlinkedCountsByKind,
         emptyRecords: unlinkedEmptyCount,
-        equipmentGaps: _equipmentGapTotals ?? const <LampEquipmentGapKind, int>{},
+        equipmentGaps:
+            _equipmentGapTotals ?? const <LampEquipmentGapKind, int>{},
       );
     }
     final currentPath = path.readDbController.text.trim();

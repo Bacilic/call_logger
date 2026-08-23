@@ -269,35 +269,38 @@ void main() {
       expect(tracker.publishCalls, 0);
     });
 
-    test('empty Unreleased + non-interactive returns 2 and hints --rebuild', () async {
-      final tracker = _CallTracker();
-      var promptCalls = 0;
-      final lines = <String>[];
-      final code = await runPublishCli(
-        PublishCliArgs(folder: tempDir.path),
-        writeLine: lines.add,
-        isInteractive: false,
-        promptEmptyUnreleased: () {
-          promptCalls++;
-          return EmptyUnreleasedChoice.rebuild;
-        },
-        serviceFactory: ({required updateFolderPath, onProgress}) {
-          return _FakePublisherService(
-            projectRoot: tempDir.path,
-            updateFolderPath: updateFolderPath,
-            onProgress: onProgress,
-            preview: emptyPreview,
-            tracker: tracker,
-          );
-        },
-      );
-      expect(code, 2);
-      expect(promptCalls, 0);
-      expect(tracker.publishCalls, 0);
-      expect(tracker.rebuildCalls, 0);
-      expect(lines.join('\n'), contains('Unreleased'));
-      expect(lines.join('\n'), contains('--rebuild'));
-    });
+    test(
+      'empty Unreleased + non-interactive returns 2 and hints --rebuild',
+      () async {
+        final tracker = _CallTracker();
+        var promptCalls = 0;
+        final lines = <String>[];
+        final code = await runPublishCli(
+          PublishCliArgs(folder: tempDir.path),
+          writeLine: lines.add,
+          isInteractive: false,
+          promptEmptyUnreleased: () {
+            promptCalls++;
+            return EmptyUnreleasedChoice.rebuild;
+          },
+          serviceFactory: ({required updateFolderPath, onProgress}) {
+            return _FakePublisherService(
+              projectRoot: tempDir.path,
+              updateFolderPath: updateFolderPath,
+              onProgress: onProgress,
+              preview: emptyPreview,
+              tracker: tracker,
+            );
+          },
+        );
+        expect(code, 2);
+        expect(promptCalls, 0);
+        expect(tracker.publishCalls, 0);
+        expect(tracker.rebuildCalls, 0);
+        expect(lines.join('\n'), contains('Unreleased'));
+        expect(lines.join('\n'), contains('--rebuild'));
+      },
+    );
 
     test('non-empty Unreleased publishes normally without prompt', () async {
       final tracker = _CallTracker();

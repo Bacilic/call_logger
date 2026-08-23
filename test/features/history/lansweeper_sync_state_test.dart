@@ -70,8 +70,14 @@ void main() {
 
   group('ετικέτες', () {
     test('κάθε κατάσταση έχει ενικό και πληθυντικό', () {
-      expect(LansweeperSyncState.label(LansweeperSyncState.unsent), 'Ακαταχώρητη');
-      expect(LansweeperSyncState.label(LansweeperSyncState.sent), 'Καταχωρημένη');
+      expect(
+        LansweeperSyncState.label(LansweeperSyncState.unsent),
+        'Ακαταχώρητη',
+      );
+      expect(
+        LansweeperSyncState.label(LansweeperSyncState.sent),
+        'Καταχωρημένη',
+      );
       expect(
         LansweeperSyncState.label(LansweeperSyncState.excluded),
         'Εξαιρεμένη',

@@ -27,8 +27,10 @@ void main() {
     });
 
     test('ακριβές όνομα', () {
-      expect(match('8006/8-6-2004', '8006/8-6-2004'),
-          LampNameMatchStrength.exact);
+      expect(
+        match('8006/8-6-2004', '8006/8-6-2004'),
+        LampNameMatchStrength.exact,
+      );
     });
 
     test('η τιμή ως ολόκληρη λέξη μέσα στο όνομα', () {

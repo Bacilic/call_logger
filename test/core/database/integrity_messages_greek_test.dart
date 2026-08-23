@@ -33,8 +33,10 @@ const List<String> _technicalTerms = [
 /// στο ελληνικό όνομα, ώστε να παραμένει διαγνώσιμο.
 const _typesAllowedTechnicalNames = {IntegrityCheckType.foreignKeyViolations};
 
-List<String> _offendingTermsIn(String text) =>
-    [for (final t in _technicalTerms) if (text.contains(t)) t];
+List<String> _offendingTermsIn(String text) => [
+  for (final t in _technicalTerms)
+    if (text.contains(t)) t,
+];
 
 void main() {
   group('Τίτλοι ομάδων Ελέγχου Ακεραιότητας', () {

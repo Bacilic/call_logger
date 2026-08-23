@@ -113,25 +113,28 @@ void main() {
   });
 
   group('μέσος χρόνος επίλυσης', () {
-    test('μετρά ως τη στιγμή ολοκλήρωσης, όχι ως την τελευταία αλλαγή', () async {
-      await insertClosedTask(
-        createdAt: _created,
-        completedAt: _completed,
-        updatedAt: _editedLater,
-      );
+    test(
+      'μετρά ως τη στιγμή ολοκλήρωσης, όχι ως την τελευταία αλλαγή',
+      () async {
+        await insertClosedTask(
+          createdAt: _created,
+          completedAt: _completed,
+          updatedAt: _editedLater,
+        );
 
-      final summary = await repo.getTaskAnalytics(rangeOfCompletionOnly);
+        final summary = await repo.getTaskAnalytics(rangeOfCompletionOnly);
 
-      // 09:00 → 17:00 της ίδιας μέρας = 8 ώρες. Με το updated_at θα έβγαινε
-      // πάνω από έξι μέρες.
-      expect(
-        summary.avgCompletionSeconds,
-        closeTo(8 * 3600, 1),
-        reason:
-            'Ο μέσος χρόνος επίλυσης δεν επιτρέπεται να φουσκώνει από μια '
-            'διόρθωση ορθογραφικού έξι μέρες αργότερα.',
-      );
-    });
+        // 09:00 → 17:00 της ίδιας μέρας = 8 ώρες. Με το updated_at θα έβγαινε
+        // πάνω από έξι μέρες.
+        expect(
+          summary.avgCompletionSeconds,
+          closeTo(8 * 3600, 1),
+          reason:
+              'Ο μέσος χρόνος επίλυσης δεν επιτρέπεται να φουσκώνει από μια '
+              'διόρθωση ορθογραφικού έξι μέρες αργότερα.',
+        );
+      },
+    );
   });
 
   group('καμπύλη ολοκληρώσεων ανά ημέρα', () {
@@ -172,27 +175,30 @@ void main() {
   });
 
   group('παλιές εγγραφές χωρίς σφραγίδα', () {
-    test('εγγραφή χωρίς completed_at μετριέται από την τελευταία αλλαγή', () async {
-      // Η μετάπτωση v40 γέμισε τις υπάρχουσες, αλλά μια βάση που δεν πέρασε
-      // ποτέ από εκεί δεν επιτρέπεται να χάσει τις ολοκληρώσεις της.
-      await db.insert('tasks', {
-        'title': 'Παλιά κλειστή χωρίς σφραγίδα',
-        'status': 'closed',
-        'created_at': _created.toIso8601String(),
-        'completed_at': null,
-        'updated_at': _completed.toIso8601String(),
-        'is_deleted': 0,
-      });
+    test(
+      'εγγραφή χωρίς completed_at μετριέται από την τελευταία αλλαγή',
+      () async {
+        // Η μετάπτωση v40 γέμισε τις υπάρχουσες, αλλά μια βάση που δεν πέρασε
+        // ποτέ από εκεί δεν επιτρέπεται να χάσει τις ολοκληρώσεις της.
+        await db.insert('tasks', {
+          'title': 'Παλιά κλειστή χωρίς σφραγίδα',
+          'status': 'closed',
+          'created_at': _created.toIso8601String(),
+          'completed_at': null,
+          'updated_at': _completed.toIso8601String(),
+          'is_deleted': 0,
+        });
 
-      final summary = await repo.getTaskAnalytics(rangeOfCompletionOnly);
+        final summary = await repo.getTaskAnalytics(rangeOfCompletionOnly);
 
-      expect(
-        summary.closedInRangeCount,
-        1,
-        reason:
-            'Χωρίς σφραγίδα, η ώρα τελευταίας αλλαγής είναι η καλύτερη γνωστή '
-            'προσέγγιση — δεν εξαφανίζουμε την εγγραφή.',
-      );
-    });
+        expect(
+          summary.closedInRangeCount,
+          1,
+          reason:
+              'Χωρίς σφραγίδα, η ώρα τελευταίας αλλαγής είναι η καλύτερη γνωστή '
+              'προσέγγιση — δεν εξαφανίζουμε την εγγραφή.',
+        );
+      },
+    );
   });
 }

@@ -384,11 +384,19 @@ class AuditFormatterService {
     }
 
     if (entityType == 'phone' && field == 'linked_user_id') {
-      final o = _formatUserReference(oldValue, technical: technical, labels: labels);
-      final n = _formatUserReference(newValue, technical: technical, labels: labels);
-      if (o == null && n != null) return 'Σύνδεση σε χρήστη $n';
-      if (o != null && n == null) return 'Αποσύνδεση από χρήστη $o';
-      if (o != null && n != null) return 'Μεταφορά από χρήστη $o σε $n';
+      final o = _formatUserReference(
+        oldValue,
+        technical: technical,
+        labels: labels,
+      );
+      final n = _formatUserReference(
+        newValue,
+        technical: technical,
+        labels: labels,
+      );
+      if (o == null && n != null) return 'Σύνδεση σε υπάλληλο $n';
+      if (o != null && n == null) return 'Αποσύνδεση από υπάλληλο $o';
+      if (o != null && n != null) return 'Μεταφορά από υπάλληλο $o σε $n';
     }
     if (entityType == 'phone' && field == 'department_id') {
       final o = _formatDepartmentReference(

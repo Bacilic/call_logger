@@ -35,18 +35,18 @@ void main() {
     });
 
     test('κενή διαδρομή = «χωρίς ρύθμιση», ποτέ εύρημα', () async {
-      final invalid = await evaluateConfiguredPaths(
-        [_entry(''), _entry('   ')],
-        (_) async => false,
-      );
+      final invalid = await evaluateConfiguredPaths([
+        _entry(''),
+        _entry('   '),
+      ], (_) async => false);
       expect(invalid, isEmpty);
     });
 
     test('όλα έγκυρα → κενή λίστα', () async {
-      final invalid = await evaluateConfiguredPaths(
-        [_entry(r'C:\a'), _entry(r'C:\b', inDb: false)],
-        (_) async => true,
-      );
+      final invalid = await evaluateConfiguredPaths([
+        _entry(r'C:\a'),
+        _entry(r'C:\b', inDb: false),
+      ], (_) async => true);
       expect(invalid, isEmpty);
     });
   });

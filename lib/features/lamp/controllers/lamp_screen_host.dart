@@ -26,8 +26,7 @@ class LampScreenShared {
     // σημείο που καλεί επίλυση: αλλιώς κάθε νέα διαδρομή θα έπρεπε να το
     // θυμηθεί, και η μία που θα το ξεχνούσε θα άφηνε τον χρήστη να βλέπει
     // λυμένα προβλήματα σαν να υπάρχουν ακόμη.
-    issueResolutionService.onDatabaseChanged =
-        repository.invalidateSearchCache;
+    issueResolutionService.onDatabaseChanged = repository.invalidateSearchCache;
     networkIssueResolutionService.onDatabaseChanged =
         repository.invalidateSearchCache;
   }

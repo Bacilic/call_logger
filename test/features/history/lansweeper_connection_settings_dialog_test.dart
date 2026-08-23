@@ -79,7 +79,9 @@ void main() {
               body: LansweeperConnectionSettingsDialog(
                 apiUrlController: ctrl('http://test/api.aspx'),
                 ticketFormUrlController: ctrl('http://test/NewTicket.aspx'),
-                ticketViewUrlController: ctrl('http://test/ticket.aspx?tid={tid}'),
+                ticketViewUrlController: ctrl(
+                  'http://test/ticket.aspx?tid={tid}',
+                ),
                 apiKeyController: ctrl('test-key'),
                 agentUsernameController: ctrl('gnk\\v.drosos'),
                 geminiApiKeyController: ctrl(),
@@ -157,7 +159,10 @@ void main() {
         await pumpUntilSettled(tester);
 
         expect(find.text('Πεδία εισιτηρίου (custom fields)'), findsOneWidget);
-        expect(find.text('Καταστάσεις ticket (τιμές με κόμμα)'), findsOneWidget);
+        expect(
+          find.text('Καταστάσεις ticket (τιμές με κόμμα)'),
+          findsOneWidget,
+        );
         expect(find.text('Επαναφορά προεπιλογών'), findsOneWidget);
       },
     );

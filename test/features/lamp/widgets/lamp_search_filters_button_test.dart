@@ -52,10 +52,7 @@ void main() {
   }
 
   testWidgets('η ένδειξη μετρά ΕΝΟΤΗΤΕΣ, όχι επιλογές', (tester) async {
-    await pumpAndTap(
-      tester,
-      selection: LampSearchFilterSelection.none,
-    );
+    await pumpAndTap(tester, selection: LampSearchFilterSelection.none);
     expect(find.text('Φίλτρα'), findsOneWidget);
 
     await pumpAndTap(

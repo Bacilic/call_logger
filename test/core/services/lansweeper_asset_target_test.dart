@@ -32,39 +32,42 @@ void main() {
     });
   });
 
-  group('lansweeperAssetTargetFor — κενή αποθηκευμένη τιμή (κοινός κανόνας VNC)', () {
-    test('κωδικός 3-6 ψηφίων → PC + κωδικός', () {
-      final target = lansweeperAssetTargetFor(
-        storedAssetName: null,
-        equipmentCode: '3715',
-      );
-      expect(target!.value, 'PC3715');
-      expect(target.kind, LansweeperAssetTargetKind.assetName);
-    });
+  group(
+    'lansweeperAssetTargetFor — κενή αποθηκευμένη τιμή (κοινός κανόνας VNC)',
+    () {
+      test('κωδικός 3-6 ψηφίων → PC + κωδικός', () {
+        final target = lansweeperAssetTargetFor(
+          storedAssetName: null,
+          equipmentCode: '3715',
+        );
+        expect(target!.value, 'PC3715');
+        expect(target.kind, LansweeperAssetTargetKind.assetName);
+      });
 
-    test('κωδικός που ξεκινά με γράμμα μένει ως έχει', () {
-      final target = lansweeperAssetTargetFor(
-        storedAssetName: '',
-        equipmentCode: 'SRV-DC1',
-      );
-      expect(target!.value, 'SRV-DC1');
-      expect(target.kind, LansweeperAssetTargetKind.assetName);
-    });
+      test('κωδικός που ξεκινά με γράμμα μένει ως έχει', () {
+        final target = lansweeperAssetTargetFor(
+          storedAssetName: '',
+          equipmentCode: 'SRV-DC1',
+        );
+        expect(target!.value, 'SRV-DC1');
+        expect(target.kind, LansweeperAssetTargetKind.assetName);
+      });
 
-    test('χωρίς τίποτα χρήσιμο → null (χωρίς σύνδεση, χωρίς σφάλμα)', () {
-      expect(
-        lansweeperAssetTargetFor(storedAssetName: null, equipmentCode: null),
-        isNull,
-      );
-      expect(
-        lansweeperAssetTargetFor(storedAssetName: '  ', equipmentCode: ''),
-        isNull,
-      );
-      // Κωδικός εκτός κανόνα (π.χ. 2 ψηφία με σύμβολο) δεν παράγει στόχο.
-      expect(
-        lansweeperAssetTargetFor(storedAssetName: null, equipmentCode: '#12'),
-        isNull,
-      );
-    });
-  });
+      test('χωρίς τίποτα χρήσιμο → null (χωρίς σύνδεση, χωρίς σφάλμα)', () {
+        expect(
+          lansweeperAssetTargetFor(storedAssetName: null, equipmentCode: null),
+          isNull,
+        );
+        expect(
+          lansweeperAssetTargetFor(storedAssetName: '  ', equipmentCode: ''),
+          isNull,
+        );
+        // Κωδικός εκτός κανόνα (π.χ. 2 ψηφία με σύμβολο) δεν παράγει στόχο.
+        expect(
+          lansweeperAssetTargetFor(storedAssetName: null, equipmentCode: '#12'),
+          isNull,
+        );
+      });
+    },
+  );
 }

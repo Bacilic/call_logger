@@ -732,7 +732,9 @@ environment:
           isTrue,
         );
         expect(
-          await File(p.join(currentDir.path, 'app', 'call_logger.exe')).exists(),
+          await File(
+            p.join(currentDir.path, 'app', 'call_logger.exe'),
+          ).exists(),
           isTrue,
         );
         expect(
@@ -779,12 +781,13 @@ environment:
         final releaseDir = Directory(
           p.join(updateFolder.path, 'releases', '0.23.1'),
         );
-        final archived = releaseDir
-            .listSync()
-            .whereType<File>()
-            .map((f) => p.basename(f.path))
-            .toList()
-          ..sort();
+        final archived =
+            releaseDir
+                .listSync()
+                .whereType<File>()
+                .map((f) => p.basename(f.path))
+                .toList()
+              ..sort();
         expect(archived, [
           'call_logger_0.23.1(32).zip',
           'call_logger_0.23.1(33).zip',
@@ -891,9 +894,7 @@ environment:
       for (final v in seededReleases) {
         final dir = Directory(p.join(releasesRoot.path, v));
         await dir.create(recursive: true);
-        await File(
-          p.join(dir.path, 'call_logger_$v.zip'),
-        ).writeAsBytes([1]);
+        await File(p.join(dir.path, 'call_logger_$v.zip')).writeAsBytes([1]);
       }
       await Directory(
         p.join(releasesRoot.path, 'παλιές_σημειώσεις'),
@@ -962,7 +963,9 @@ environment:
     await File(
       p.join(currentDir.path, 'call_logger_0.20.0.zip'),
     ).writeAsBytes([1]);
-    final oldRelease = Directory(p.join(updateFolder.path, 'releases', '0.1.0'));
+    final oldRelease = Directory(
+      p.join(updateFolder.path, 'releases', '0.1.0'),
+    );
     await oldRelease.create(recursive: true);
 
     final service = buildService(

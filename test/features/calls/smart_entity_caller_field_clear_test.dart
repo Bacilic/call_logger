@@ -108,88 +108,84 @@ void main() {
 
     // Τεστ Γ: κουμπί «Καθαρισμός Καλούντα» δεν αδειάζει τμήμα/εξοπλισμό.
     //   flutter test test/features/calls/smart_entity_caller_field_clear_test.dart --plain-name "κουμπί καθαρισμού"
-    testWidgets(
-      'κουμπί καθαρισμού Καλούντα διατηρεί Τμήμα και Εξοπλισμό',
-      (tester) async {
-        _configureDesktopViewport(tester);
-        await _pumpCallLoggerApp(tester);
+    testWidgets('κουμπί καθαρισμού Καλούντα διατηρεί Τμήμα και Εξοπλισμό', (
+      tester,
+    ) async {
+      _configureDesktopViewport(tester);
+      await _pumpCallLoggerApp(tester);
 
-        await _fillDepartmentAndEquipment(tester);
+      await _fillDepartmentAndEquipment(tester);
 
-        await tester.tap(_callerTextField());
-        await pumpUntilSettled(tester);
-        await tester.enterText(_callerTextField(), _kCallerText);
-        await tester.pump();
+      await tester.tap(_callerTextField());
+      await pumpUntilSettled(tester);
+      await tester.enterText(_callerTextField(), _kCallerText);
+      await tester.pump();
 
-        final clearButton = find.byTooltip('Καθαρισμός Καλούντα');
-        expect(
-          clearButton,
-          findsOneWidget,
-          reason: greekExpectMsg('Εμφανές κουμπί καθαρισμού καλούντα'),
-        );
-        await tester.tap(clearButton);
-        await pumpUntilSettled(tester);
+      final clearButton = find.byTooltip('Καθαρισμός Καλούντα');
+      expect(
+        clearButton,
+        findsOneWidget,
+        reason: greekExpectMsg('Εμφανές κουμπί καθαρισμού καλούντα'),
+      );
+      await tester.tap(clearButton);
+      await pumpUntilSettled(tester);
 
-        final header = await _readHeader(tester);
-        expect(
-          header.departmentText,
-          _kDepartmentText,
-          reason: greekExpectMsg('Το τμήμα παραμένει'),
-        );
-        expect(
-          header.equipmentText,
-          _kEquipmentText,
-          reason: greekExpectMsg('Ο εξοπλισμός παραμένει'),
-        );
-        expect(
-          header.callerDisplayText,
-          '',
-          reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'),
-        );
+      final header = await _readHeader(tester);
+      expect(
+        header.departmentText,
+        _kDepartmentText,
+        reason: greekExpectMsg('Το τμήμα παραμένει'),
+      );
+      expect(
+        header.equipmentText,
+        _kEquipmentText,
+        reason: greekExpectMsg('Ο εξοπλισμός παραμένει'),
+      );
+      expect(
+        header.callerDisplayText,
+        '',
+        reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'),
+      );
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
 
     // Τεστ Δ: χειροκίνητο σβήσιμο κειμένου Καλούντα διατηρεί τμήμα/εξοπλισμό.
     //   flutter test test/features/calls/smart_entity_caller_field_clear_test.dart --plain-name "χειροκίνητο σβήσιμο"
-    testWidgets(
-      'χειροκίνητο σβήσιμο Καλούντα διατηρεί Τμήμα και Εξοπλισμό',
-      (tester) async {
-        _configureDesktopViewport(tester);
-        await _pumpCallLoggerApp(tester);
+    testWidgets('χειροκίνητο σβήσιμο Καλούντα διατηρεί Τμήμα και Εξοπλισμό', (
+      tester,
+    ) async {
+      _configureDesktopViewport(tester);
+      await _pumpCallLoggerApp(tester);
 
-        await _fillDepartmentAndEquipment(tester);
+      await _fillDepartmentAndEquipment(tester);
 
-        await tester.tap(_callerTextField());
-        await pumpUntilSettled(tester);
-        await tester.enterText(_callerTextField(), _kCallerText);
-        await tester.pump();
+      await tester.tap(_callerTextField());
+      await pumpUntilSettled(tester);
+      await tester.enterText(_callerTextField(), _kCallerText);
+      await tester.pump();
 
-        await tester.enterText(_callerTextField(), '');
-        await tester.pump();
+      await tester.enterText(_callerTextField(), '');
+      await tester.pump();
 
-        final header = await _readHeader(tester);
-        expect(
-          header.departmentText,
-          _kDepartmentText,
-          reason: greekExpectMsg('Το τμήμα παραμένει'),
-        );
-        expect(
-          header.equipmentText,
-          _kEquipmentText,
-          reason: greekExpectMsg('Ο εξοπλισμός παραμένει'),
-        );
-        expect(
-          header.callerDisplayText,
-          '',
-          reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'),
-        );
+      final header = await _readHeader(tester);
+      expect(
+        header.departmentText,
+        _kDepartmentText,
+        reason: greekExpectMsg('Το τμήμα παραμένει'),
+      );
+      expect(
+        header.equipmentText,
+        _kEquipmentText,
+        reason: greekExpectMsg('Ο εξοπλισμός παραμένει'),
+      );
+      expect(
+        header.callerDisplayText,
+        '',
+        reason: greekExpectMsg('Ο καλώντας καθαρίστηκε'),
+      );
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
   });
 }

@@ -94,11 +94,12 @@ class UpdateCmdLauncher {
         processInfo,
       );
       if (!result.value) {
-        throw ProcessException(
-          'cmd.exe',
-          ['/d', '/c', scriptPath, ...scriptArgs],
-          'CreateProcess απέτυχε (κωδικός Windows ${result.error})',
-        );
+        throw ProcessException('cmd.exe', [
+          '/d',
+          '/c',
+          scriptPath,
+          ...scriptArgs,
+        ], 'CreateProcess απέτυχε (κωδικός Windows ${result.error})');
       }
       // Ο updater ζει ανεξάρτητα — τα handles δεν χρειάζονται σε εμάς.
       CloseHandle(processInfo.ref.hProcess);

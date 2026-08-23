@@ -44,7 +44,11 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(checks, 1, reason: greekExpectMsg('Ο πρώτος έλεγχος: στην εκκίνηση'));
+    expect(
+      checks,
+      1,
+      reason: greekExpectMsg('Ο πρώτος έλεγχος: στην εκκίνηση'),
+    );
 
     // Λίγο πριν συμπληρωθεί η ώρα: τίποτα ακόμη.
     await tester.pump(const Duration(minutes: 59));

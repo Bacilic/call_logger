@@ -135,7 +135,8 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
                         (id: null, name: '— Όλες οι κατηγορίες —'),
                         ...entries.map((e) => (id: e.id, name: e.name)),
                       ];
-                      final selected = options.any((e) => e.id == categoryFilter)
+                      final selected =
+                          options.any((e) => e.id == categoryFilter)
                           ? categoryFilter
                           : null;
                       return DropdownButtonFormField<int?>(
@@ -183,8 +184,7 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
                     },
                   );
                 },
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) => Center(
                   child: Text(
                     'Αποτυχία φόρτωσης: ${humanizeUserFacingError(error)}',
@@ -214,11 +214,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.healing,
-              size: 48,
-              color: theme.colorScheme.outline,
-            ),
+            Icon(Icons.healing, size: 48, color: theme.colorScheme.outline),
             const SizedBox(height: 12),
             Text(
               filtered

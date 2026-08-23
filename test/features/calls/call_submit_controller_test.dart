@@ -275,22 +275,25 @@ void main() {
       expect(actions.attachedCaller, same(otherBefani));
     });
 
-    test('ανάστροφη σειρά είναι παρόμοια, ΟΧΙ ίδια — εξακολουθεί να ρωτά', () async {
-      final actions = _FakeActions(
-        initialHeader: _header(caller: 'Μπεφάνη Σωτηρία'),
-      );
-      final prompts = _FakePrompts(
-        answer: const SimilarUsersDialogResult.continueAsNew(),
-      );
+    test(
+      'ανάστροφη σειρά είναι παρόμοια, ΟΧΙ ίδια — εξακολουθεί να ρωτά',
+      () async {
+        final actions = _FakeActions(
+          initialHeader: _header(caller: 'Μπεφάνη Σωτηρία'),
+        );
+        final prompts = _FakePrompts(
+          answer: const SimilarUsersDialogResult.continueAsNew(),
+        );
 
-      await CallSubmitController(
-        actions: actions,
-        prompts: prompts,
-      ).run(_FakeLookup([befani]));
+        await CallSubmitController(
+          actions: actions,
+          prompts: prompts,
+        ).run(_FakeLookup([befani]));
 
-      expect(prompts.asks, 1);
-      expect(actions.attachedCaller, isNull);
-    });
+        expect(prompts.asks, 1);
+        expect(actions.attachedCaller, isNull);
+      },
+    );
   });
 
   test('αποτυχία αποθήκευσης επιστρέφει failed', () async {

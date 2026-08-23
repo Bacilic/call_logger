@@ -125,8 +125,8 @@ void main() {
         '',
         maxDisplay: 10,
         filters: LampSearchFilterSelection(
-        unlinkedKinds: LampUnlinkedEntityKind.values.toSet(),
-      ),
+          unlinkedKinds: LampUnlinkedEntityKind.values.toSet(),
+        ),
       );
 
       expect(
@@ -235,21 +235,24 @@ void main() {
     );
   });
 
-  test('searchByFields: φίλτρο χωρίς πεδία φέρνει όλες τις ασύνδετες', () async {
-    await seed();
+  test(
+    'searchByFields: φίλτρο χωρίς πεδία φέρνει όλες τις ασύνδετες',
+    () async {
+      await seed();
 
-    final result = await repository.searchByFields(
-      dbPath,
-      const OldEquipmentSearchFilters(),
-      maxDisplay: 10,
-      filters: LampSearchFilterSelection(
-        unlinkedKinds: LampUnlinkedEntityKind.values.toSet(),
-      ),
-    );
+      final result = await repository.searchByFields(
+        dbPath,
+        const OldEquipmentSearchFilters(),
+        maxDisplay: 10,
+        filters: LampSearchFilterSelection(
+          unlinkedKinds: LampUnlinkedEntityKind.values.toSet(),
+        ),
+      );
 
-    expect(result.totalCount, 0);
-    expect(result.unlinkedTotalCount, 3);
-  });
+      expect(result.totalCount, 0);
+      expect(result.unlinkedTotalCount, 3);
+    },
+  );
 
   test('συνολικά πλήθη για το μενού χωρίς αναζήτηση', () async {
     await seed();

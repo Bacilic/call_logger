@@ -3,18 +3,19 @@ import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/models/operator.dart';
 import '../../../core/services/operator_identity.dart';
+import '../services/selectable_profiles.dart';
 import 'operator_picker_body.dart';
 
 /// Φόρτωση των προφίλ που προσφέρονται προς επιλογή — αντικαθίσταται στα τεστ.
-typedef SelectableProfilesLoader = Future<List<Operator>> Function();
+typedef SelectableProfilesLoader = Future<SelectableProfiles> Function();
 
 /// Δημιουργία και ενεργοποίηση νέου προφίλ — αντικαθίσταται στα τεστ.
 typedef OperatorProfileCreator =
     Future<Operator> Function(String displayName, bool bindCurrentAccount);
 
-Future<List<Operator>> _loadSelectableProfiles() async {
+Future<SelectableProfiles> _loadSelectableProfiles() async {
   final db = await DatabaseHelper.instance.database;
-  return OperatorIdentity.selectableProfiles(db);
+  return loadSelectableProfiles(db);
 }
 
 Future<Operator> _createAndActivateProfile(
@@ -45,7 +46,7 @@ Future<void> showChangeOperatorDialog(
   void Function(Operator operator) activateExisting =
       OperatorIdentity.activateForSession,
 }) async {
-  final profiles = await loadProfiles();
+  final selectable = await loadProfiles();
   if (!context.mounted) return;
 
   await showDialog<void>(
@@ -56,7 +57,8 @@ Future<void> showChangeOperatorDialog(
         width: 420,
         child: SingleChildScrollView(
           child: OperatorPickerBody(
-            profiles: profiles,
+            profiles: selectable.profiles,
+            presence: selectable.presence,
             suggestedName: OperatorIdentity.suggestedDisplayName(),
             hasWindowsAccount:
                 OperatorIdentity.suggestedDisplayName().isNotEmpty,

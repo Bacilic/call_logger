@@ -53,17 +53,18 @@ void main() {
     expect(find.textContaining('invalid rootpage'), findsOneWidget);
   });
 
-  testWidgets('το κύριο μήνυμα ονομάζει την αιτία, δεν λέει μόνο «κατεστραμμένο»', (
-    tester,
-  ) async {
-    final result = DatabaseInitResult.fromException(
-      _rawSqliteError,
-      r'C:\vaseis\call_logger.db',
-    );
-    await _pump(tester, result);
+  testWidgets(
+    'το κύριο μήνυμα ονομάζει την αιτία, δεν λέει μόνο «κατεστραμμένο»',
+    (tester) async {
+      final result = DatabaseInitResult.fromException(
+        _rawSqliteError,
+        r'C:\vaseis\call_logger.db',
+      );
+      await _pump(tester, result);
 
-    expect(find.textContaining('ανοιχτή'), findsOneWidget);
-  });
+      expect(find.textContaining('ανοιχτή'), findsOneWidget);
+    },
+  );
 
   testWidgets('χωρίς τεχνικό υλικό δεν εμφανίζεται καθόλου το τμήμα', (
     tester,

@@ -71,10 +71,7 @@ void main() {
   test(
     'βάση που λείπει + ελλιπή αρχεία → τα αρχεία πρώτα, η βάση δεύτερη',
     () async {
-      final assetsPath = await _createFlutterAssets(
-        tempRoot,
-        withFonts: false,
-      );
+      final assetsPath = await _createFlutterAssets(tempRoot, withFonts: false);
       await SettingsService().setDatabasePath(
         p.join(tempRoot.path, 'δεν_υπάρχει.db'),
       );
@@ -113,9 +110,7 @@ void main() {
     );
 
     expect(runnerResult.result.isSuccess, isTrue);
-    expect(runnerResult.missingApplicationFiles, [
-      'Γραμματοσειρές/εικονίδια',
-    ]);
+    expect(runnerResult.missingApplicationFiles, ['Γραμματοσειρές/εικονίδια']);
   });
 
   test('άρτια αρχεία → καμία αναφορά ελλείψεων', () async {

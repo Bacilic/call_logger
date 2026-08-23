@@ -107,18 +107,21 @@ void main() {
   group('άφταστη διαδρομή δικτύου', () {
     const unc = r'\\unreachable-host.local\share\Backups';
 
-    test('inspectDestinationContent → folderMissing όταν το exists πετάει', () async {
-      final result = await IOOverrides.runZoned(
-        () => BackupDestinationFolderValidator.inspectDestinationContent(
-          destinationDirectory: unc,
-          dbBaseName: 'Hospital',
-        ),
-        createDirectory: (path) => _UnreachableDirectory(path),
-      );
+    test(
+      'inspectDestinationContent → folderMissing όταν το exists πετάει',
+      () async {
+        final result = await IOOverrides.runZoned(
+          () => BackupDestinationFolderValidator.inspectDestinationContent(
+            destinationDirectory: unc,
+            dbBaseName: 'Hospital',
+          ),
+          createDirectory: (path) => _UnreachableDirectory(path),
+        );
 
-      expect(result.kind, BackupDestinationContentKind.folderMissing);
-      expect(result.dbBaseName, 'Hospital');
-    });
+        expect(result.kind, BackupDestinationContentKind.folderMissing);
+        expect(result.dbBaseName, 'Hospital');
+      },
+    );
 
     test('inspectDestinationContent → folderMissing όταν το δίκτυο κοπεί '
         'στη μέση της απαρίθμησης', () async {

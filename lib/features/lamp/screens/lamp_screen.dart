@@ -366,8 +366,7 @@ class _LampScreenState extends ConsumerState<LampScreen>
     final target = switch (entity.kind) {
       LampUnlinkedEntityKind.owner => LampTransferTarget.owner,
       LampUnlinkedEntityKind.office => LampTransferTarget.department,
-      LampUnlinkedEntityKind.model ||
-      LampUnlinkedEntityKind.contract => null,
+      LampUnlinkedEntityKind.model || LampUnlinkedEntityKind.contract => null,
     };
     if (sourceRow == null || target == null) {
       showSnack(

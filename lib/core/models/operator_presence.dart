@@ -11,6 +11,7 @@ class OperatorPresence {
     required this.operatorId,
     required this.station,
     required this.lastSeenAt,
+    this.instance,
   });
 
   /// Κάθε πότε η ανοιχτή εφαρμογή ξαναγράφει το ίχνος της.
@@ -32,11 +33,28 @@ class OperatorPresence {
 
   final DateTime lastSeenAt;
 
+  /// Ποιο ανοιχτό αντίγραφο της εφαρμογής κρατά ζωντανό αυτό το ίχνος.
+  ///
+  /// `null` σημαίνει «κανένα πια»: ο σταθμός πέρασε σε άλλον χρήστη, ή η γραμμή
+  /// γράφτηκε πριν από την αναβάθμιση που πρόσθεσε τη στήλη. Η γραμμή μένει ως
+  /// **ιστορικό** — «πότε ήταν τελευταία φορά εδώ» — αλλά παύει να μετρά ως
+  /// παρουσία.
+  ///
+  /// Χωρίς αυτό, το ίχνος ανήκε στο πρόσωπο και όχι στο ανοιχτό παράθυρο: μια
+  /// «Αλλαγή χρήστη» άφηνε τον προηγούμενο να φαίνεται συνδεδεμένος για όσο
+  /// κρατούσε το [onlineWindow], στον ίδιο ακριβώς υπολογιστή με τον νέο.
+  final String? instance;
+
   /// Θεωρείται συνδεδεμένος τη στιγμή [now];
+  ///
+  /// Δύο όροι, όχι ένας: το ίχνος πρέπει να είναι **φρέσκο** και να το κρατά
+  /// ακόμη **ανοιχτό αντίγραφο**. Η φρεσκάδα μόνη της απαντά «πότε γράφτηκε»,
+  /// όχι «ποιος είναι εδώ τώρα».
   ///
   /// Το [now] δίνεται πάντα απ' έξω: μια εσωτερική `DateTime.now()` θα έκανε
   /// τον κανόνα αδύνατο να ελεγχθεί και θα έδινε δεύτερο ρολόι στην οθόνη.
-  bool isOnlineAt(DateTime now) => now.difference(lastSeenAt) < onlineWindow;
+  bool isOnlineAt(DateTime now) =>
+      instance != null && now.difference(lastSeenAt) < onlineWindow;
 
   /// `null` όταν η γραμμή δεν διαβάζεται — χαλασμένη εγγραφή δεν ρίχνει οθόνη.
   static OperatorPresence? fromMap(Map<String, Object?> map) {
@@ -44,6 +62,12 @@ class OperatorPresence {
     final station = (map['station'] as String?)?.trim() ?? '';
     final seen = DateTime.tryParse((map['last_seen_at'] as String?) ?? '');
     if (id is! int || station.isEmpty || seen == null) return null;
-    return OperatorPresence(operatorId: id, station: station, lastSeenAt: seen);
+    final instance = (map['instance'] as String?)?.trim();
+    return OperatorPresence(
+      operatorId: id,
+      station: station,
+      lastSeenAt: seen,
+      instance: (instance == null || instance.isEmpty) ? null : instance,
+    );
   }
 }

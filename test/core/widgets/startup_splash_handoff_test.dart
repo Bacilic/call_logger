@@ -69,7 +69,8 @@ void main() {
     expect(
       find.byType(StartupSplashScreen),
       findsOneWidget,
-      reason: 'το κέλυφος δεν χτίζεται όσο το παράθυρο είναι στο μέγεθος '
+      reason:
+          'το κέλυφος δεν χτίζεται όσο το παράθυρο είναι στο μέγεθος '
           'της κάρτας',
     );
 
@@ -110,7 +111,8 @@ void main() {
     expect(
       find.byType(StartupSplashScreen),
       findsNothing,
-      reason: 'μια εφαρμογή που δεν ανοίγει είναι χειρότερη από μια που '
+      reason:
+          'μια εφαρμογή που δεν ανοίγει είναι χειρότερη από μια που '
           'ξεχειλίζει',
     );
 

@@ -30,25 +30,31 @@ void main() {
     );
   });
 
-  test('το όνομα του αντιγράφου πάει ΠΑΝΤΑ στον φάκελο της τρέχουσας βάσης', () {
-    final target = resolveRestoreTargetPath(
-      choice: RestoreDestinationChoice.backupName,
-      currentDatabasePath: current,
-      backupDatabaseFileName: 'call_logger.db',
-    );
-    expect(p.dirname(target), p.dirname(current));
-    expect(p.basename(target), 'call_logger.db');
-  });
+  test(
+    'το όνομα του αντιγράφου πάει ΠΑΝΤΑ στον φάκελο της τρέχουσας βάσης',
+    () {
+      final target = resolveRestoreTargetPath(
+        choice: RestoreDestinationChoice.backupName,
+        currentDatabasePath: current,
+        backupDatabaseFileName: 'call_logger.db',
+      );
+      expect(p.dirname(target), p.dirname(current));
+      expect(p.basename(target), 'call_logger.db');
+    },
+  );
 
-  test('όνομα αντιγράφου χωρίς .db συμπληρώνεται και καθαρίζεται από φακέλους', () {
-    final target = resolveRestoreTargetPath(
-      choice: RestoreDestinationChoice.backupName,
-      currentDatabasePath: current,
-      backupDatabaseFileName: r'backups\call_logger_old',
-    );
-    expect(p.dirname(target), p.dirname(current));
-    expect(p.basename(target), 'call_logger_old.db');
-  });
+  test(
+    'όνομα αντιγράφου χωρίς .db συμπληρώνεται και καθαρίζεται από φακέλους',
+    () {
+      final target = resolveRestoreTargetPath(
+        choice: RestoreDestinationChoice.backupName,
+        currentDatabasePath: current,
+        backupDatabaseFileName: r'backups\call_logger_old',
+      );
+      expect(p.dirname(target), p.dirname(current));
+      expect(p.basename(target), 'call_logger_old.db');
+    },
+  );
 
   test('χωρίς αξιοποιήσιμο όνομα αντιγράφου μένει μόνο η τρέχουσα βάση', () {
     expect(

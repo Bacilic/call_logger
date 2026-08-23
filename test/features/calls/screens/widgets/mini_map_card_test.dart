@@ -215,37 +215,33 @@ void main() {
       await _disposePumpedWidget(tester);
     }, semanticsEnabled: false);
 
-    testWidgets(
-      'διπλό κλικ επαναφέρει την αρχική μετασχηματιστική τιμή',
-      (tester) async {
-        await _pumpMiniMapFloorPreview(
-          tester,
-          dept: _mappedDepartment(),
-          imagePath: imagePath,
-        );
+    testWidgets('διπλό κλικ επαναφέρει την αρχική μετασχηματιστική τιμή', (
+      tester,
+    ) async {
+      await _pumpMiniMapFloorPreview(
+        tester,
+        dept: _mappedDepartment(),
+        imagePath: imagePath,
+      );
 
-        final viewerFinder = find.byKey(
-          const Key('mini_map_interactive_viewer'),
-        );
-        final viewer = tester.widget<InteractiveViewer>(viewerFinder);
-        final controller = viewer.transformationController!;
-        final initial = Matrix4.copy(controller.value);
+      final viewerFinder = find.byKey(const Key('mini_map_interactive_viewer'));
+      final viewer = tester.widget<InteractiveViewer>(viewerFinder);
+      final controller = viewer.transformationController!;
+      final initial = Matrix4.copy(controller.value);
 
-        final center = tester.getCenter(
-          find.byKey(const Key('mini_map_scroll_listener')),
-        );
-        await _dispatchScroll(tester, center, -120);
-        expect(controller.value, isNot(equals(initial)));
+      final center = tester.getCenter(
+        find.byKey(const Key('mini_map_scroll_listener')),
+      );
+      await _dispatchScroll(tester, center, -120);
+      expect(controller.value, isNot(equals(initial)));
 
-        await tester.tapAt(center);
-        await tester.pump();
-        await tester.tapAt(center);
-        await tester.pump(const Duration(milliseconds: 100));
+      await tester.tapAt(center);
+      await tester.pump();
+      await tester.tapAt(center);
+      await tester.pump(const Duration(milliseconds: 100));
 
-        expect(controller.value, equals(initial));
-        await _disposePumpedWidget(tester);
-      },
-      semanticsEnabled: false,
-    );
+      expect(controller.value, equals(initial));
+      await _disposePumpedWidget(tester);
+    }, semanticsEnabled: false);
   });
 }

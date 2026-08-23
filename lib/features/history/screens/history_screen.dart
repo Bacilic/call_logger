@@ -19,6 +19,9 @@ import '../../../core/widgets/app_asset_image.dart';
 import '../../calls/models/call_refined_source.dart';
 import '../models/lansweeper_sync_state.dart';
 import '../providers/history_application_audit_view_provider.dart';
+import '../../../core/models/owner_filter.dart';
+import '../../../core/widgets/owner_filter_chip.dart';
+import '../providers/call_owner_filter_providers.dart';
 import '../providers/history_provider.dart';
 import '../services/lansweeper_state_actions.dart';
 import '../widgets/lansweeper/lansweeper_report_launcher.dart';
@@ -516,6 +519,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                   : s.copyWith(lansweeperState: value),
                             ),
                       ),
+                      const SizedBox(width: 8),
+                      OwnerFilterChip(
+                        tooltip: 'Ποιος κατέγραψε την κλήση',
+                        options:
+                            ref.watch(callOwnerOptionsProvider).value ??
+                            const [],
+                        current:
+                            ref.watch(historyOwnerFilterProvider).value ??
+                            OwnerFilter.everyone,
+                        enabled: filtersEnabled,
+                        onSelected: (value) => ref
+                            .read(historyOwnerFilterProvider.notifier)
+                            .select(value),
+                      ),
                       const Spacer(),
                       IconButton(
                         tooltip: 'Σμίκρυνση',
@@ -642,15 +659,38 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               ),
               data: (rows) {
                 if (rows.isEmpty) {
+                  // Όταν το φίλτρο χρήστη είναι αυτό που αδειάζει τη λίστα,
+                  // η οθόνη το λέει και δίνει διέξοδο — αλλιώς η άδεια λίστα
+                  // μοιάζει με «δεν υπάρχουν κλήσεις», που είναι ψέμα.
+                  final owner =
+                      ref.watch(historyOwnerFilterProvider).value ??
+                      OwnerFilter.everyone;
                   final emptyMessage = filter.hasActiveFilters
                       ? 'Δεν βρέθηκαν κλήσεις με τα τρέχοντα κριτήρια.'
-                      : 'Δεν υπάρχουν εγγραφές';
+                      : (owner.isEveryone
+                            ? 'Δεν υπάρχουν εγγραφές'
+                            : 'Καμία κλήση για την επιλογή του φίλτρου χρήστη');
                   return Center(
-                    child: Text(
-                      emptyMessage,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          emptyMessage,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        if (!owner.isEveryone) ...[
+                          const SizedBox(height: 16),
+                          FilledButton.tonalIcon(
+                            onPressed: () => ref
+                                .read(historyOwnerFilterProvider.notifier)
+                                .select(OwnerFilter.everyone),
+                            icon: const Icon(Icons.groups_outlined),
+                            label: const Text('Δείξε όλες'),
+                          ),
+                        ],
+                      ],
                     ),
                   );
                 }

@@ -1136,8 +1136,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                                   account: account,
                                   referenceDomain:
                                       lansweeperReferenceDomainForChips,
-                                  onEdit: () =>
-                                      editLansweeperAccount(account),
+                                  onEdit: () => editLansweeperAccount(account),
                                   onRemove: () =>
                                       removeLansweeperAccount(account),
                                 ),
@@ -1218,7 +1217,8 @@ class LansweeperAccountChip extends StatelessWidget {
     }
 
     return CompactTooltip(
-      message: '$statusLine\n\nΚλικ για επεξεργασία — το κείμενο '
+      message:
+          '$statusLine\n\nΚλικ για επεξεργασία — το κείμενο '
           'επιστρέφει στο πεδίο',
       waitDuration: const Duration(milliseconds: 350),
       child: InputChip(

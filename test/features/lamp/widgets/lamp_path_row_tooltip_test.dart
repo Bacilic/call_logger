@@ -33,9 +33,7 @@ void main() {
   ) async {
     await pumpRow(tester, infoTooltip: 'Μακροσκελής υπόδειξη προς αναδίπλωση.');
 
-    final compact = tester.widget<CompactTooltip>(
-      find.byType(CompactTooltip),
-    );
+    final compact = tester.widget<CompactTooltip>(find.byType(CompactTooltip));
     expect(compact.message, 'Μακροσκελής υπόδειξη προς αναδίπλωση.');
   });
 

@@ -101,21 +101,27 @@ void main() {
       expect(descriptions, contains('Άννα Πατσαρίκα'));
     });
 
-    test('τηλέφωνο με 3 κλήσεις → πλήθος και η ΠΙΟ ΠΡΟΣΦΑΤΗ ημερομηνία', () async {
-      final phoneId = await db.insert('phones', {
-        'number': '2851',
-        'is_deleted': 0,
-      });
-      await insertCall(phoneText: '2851', date: '2021-03-04');
-      await insertCall(phoneText: '2851', date: '2026-06-12');
-      await insertCall(phoneText: '2851', date: '2024-11-30');
+    test(
+      'τηλέφωνο με 3 κλήσεις → πλήθος και η ΠΙΟ ΠΡΟΣΦΑΤΗ ημερομηνία',
+      () async {
+        final phoneId = await db.insert('phones', {
+          'number': '2851',
+          'is_deleted': 0,
+        });
+        await insertCall(phoneText: '2851', date: '2021-03-04');
+        await insertCall(phoneText: '2851', date: '2026-06-12');
+        await insertCall(phoneText: '2851', date: '2024-11-30');
 
-      final descriptions = await phones.phoneReferenceDescriptions(
-        phoneId,
-        '2851',
-      );
-      expect(descriptions, contains('3 κλήσεις ιστορικού (τελευταία 12/06/2026)'));
-    });
+        final descriptions = await phones.phoneReferenceDescriptions(
+          phoneId,
+          '2851',
+        );
+        expect(
+          descriptions,
+          contains('3 κλήσεις ιστορικού (τελευταία 12/06/2026)'),
+        );
+      },
+    );
 
     test('τηλέφωνο με εκκρεμότητα → ημερομηνία τελευταίας κίνησης', () async {
       final phoneId = await db.insert('phones', {

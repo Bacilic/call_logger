@@ -42,24 +42,19 @@ void main() {
         r'  ,  gnk\bio1 ,, Ετικέτα =   , ',
       );
 
-      expect(
-        accounts.map((a) => a.username),
-        [r'gnk\bio1'],
-        reason: 'Ζεύγος χωρίς αναγνωριστικό δεν είναι λογαριασμός',
-      );
+      expect(accounts.map((a) => a.username), [
+        r'gnk\bio1',
+      ], reason: 'Ζεύγος χωρίς αναγνωριστικό δεν είναι λογαριασμός');
     });
 
-    test(
-      r'ξεχασμένο «=»: «Γραφείο Λοιμώξεων gnk\x» σπάει μόνο του σωστά',
-      () {
-        final accounts = parseLansweeperAccountsInput(
-          r'Γραφείο Λοιμώξεων gnk\loimokseis1',
-        );
+    test(r'ξεχασμένο «=»: «Γραφείο Λοιμώξεων gnk\x» σπάει μόνο του σωστά', () {
+      final accounts = parseLansweeperAccountsInput(
+        r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+      );
 
-        expect(accounts.single.username, r'gnk\loimokseis1');
-        expect(accounts.single.label, 'Γραφείο Λοιμώξεων');
-      },
-    );
+      expect(accounts.single.username, r'gnk\loimokseis1');
+      expect(accounts.single.label, 'Γραφείο Λοιμώξεων');
+    });
 
     test('ξεχασμένο «=» με email στο τέλος', () {
       final accounts = parseLansweeperAccountsInput(
@@ -141,9 +136,18 @@ void main() {
   // διάγνωση ανά λογαριασμό — βλ. lansweeper_identity_diagnosis_test.dart.
 
   group('resolveLansweeperRequester — ιεραρχία', () {
-    const bio1 = LansweeperAccount(username: r'gnk\bio1', label: 'Βιοχημικό #1');
-    const bio2 = LansweeperAccount(username: r'gnk\bio2', label: 'Βιοχημικό #2');
-    const paid = LansweeperAccount(username: r'gnk\docpaid', label: 'Παιδιατρική');
+    const bio1 = LansweeperAccount(
+      username: r'gnk\bio1',
+      label: 'Βιοχημικό #1',
+    );
+    const bio2 = LansweeperAccount(
+      username: r'gnk\bio2',
+      label: 'Βιοχημικό #2',
+    );
+    const paid = LansweeperAccount(
+      username: r'gnk\docpaid',
+      label: 'Παιδιατρική',
+    );
     const brami = LansweeperTicketCaller(
       displayName: 'Δήμητρα Μπράμη',
       departmentName: 'Βιοχημικό',
@@ -153,7 +157,9 @@ void main() {
     test('ΕΝΑΣ καλών με δικό του αναγνωριστικό κερδίζει — καμία ερώτηση', () {
       final options = resolveLansweeperRequester(
         callers: const [brami],
-        departments: [(departmentName: 'Βιοχημικό', accounts: [bio1, bio2])],
+        departments: [
+          (departmentName: 'Βιοχημικό', accounts: [bio1, bio2]),
+        ],
       );
 
       expect(options.selectedUsername, r'gnk\d.brami');
@@ -165,20 +171,26 @@ void main() {
     // Η πρόταση ήταν σωστή αλλά αμετάκλητη: υπάρχουν υπάλληλοι εκτός τομέα που
     // δουλεύουν με τον γενικό λογαριασμό, και ο χρήστης πρέπει να μπορεί να
     // επέμβει. Η προεπιλογή έμεινε ίδια — άλλαξε μόνο ποιος έχει τον έλεγχο.
-    test('άγνωστος καλών με ΕΝΑ λογαριασμό τμήματος: μπαίνει, αλλά αλλάζει', () {
-      final options = resolveLansweeperRequester(
-        hasUnidentifiedCalls: true,
-        departments: [(departmentName: 'Παιδιατρική', accounts: [paid])],
-      );
+    test(
+      'άγνωστος καλών με ΕΝΑ λογαριασμό τμήματος: μπαίνει, αλλά αλλάζει',
+      () {
+        final options = resolveLansweeperRequester(
+          hasUnidentifiedCalls: true,
+          departments: [
+            (departmentName: 'Παιδιατρική', accounts: [paid]),
+          ],
+        );
 
-      expect(options.selectedUsername, r'gnk\docpaid');
-      expect(
-        options.isChoosable,
-        isTrue,
-        reason: 'ο μοναδικός λογαριασμός μένει πρόταση, όχι τελεσίδικη απόφαση',
-      );
-      expect(options.candidates, hasLength(1));
-    });
+        expect(options.selectedUsername, r'gnk\docpaid');
+        expect(
+          options.isChoosable,
+          isTrue,
+          reason:
+              'ο μοναδικός λογαριασμός μένει πρόταση, όχι τελεσίδικη απόφαση',
+        );
+        expect(options.candidates, hasLength(1));
+      },
+    );
 
     test('γνωστός καλών ΧΩΡΙΣ αναγνωριστικό: λογαριασμοί τμήματος', () {
       final options = resolveLansweeperRequester(
@@ -188,7 +200,9 @@ void main() {
             username: '   ',
           ),
         ],
-        departments: [(departmentName: 'Βιοχημικό', accounts: [bio1, bio2])],
+        departments: [
+          (departmentName: 'Βιοχημικό', accounts: [bio1, bio2]),
+        ],
       );
 
       expect(options.selectedUsername, r'gnk\bio1');
@@ -199,89 +213,80 @@ void main() {
       ]);
     });
 
-    test(
-      'ΠΟΛΛΑΠΛΗ επιλογή (καλών με αναγνωριστικό + άγνωστος): ο επιλογέας '
-      'εμφανίζεται ΠΑΝΤΑ — προεπιλογή ο καλών της κύριας',
-      () {
-        // Το σενάριο της οθόνης: Ελένη (με δικό της id) + Άγνωστος.
-        final options = resolveLansweeperRequester(
-          callers: const [
-            LansweeperTicketCaller(
-              displayName: 'Ελένη Πλακογιάννη',
-              departmentName: 'Βιοϊατρική',
-              username: r'gnk\e.plakogianni',
-            ),
-          ],
-          hasUnidentifiedCalls: true,
-          departments: [
-            (departmentName: 'Λοιμώξεων', accounts: [bio1]),
-          ],
-        );
+    test('ΠΟΛΛΑΠΛΗ επιλογή (καλών με αναγνωριστικό + άγνωστος): ο επιλογέας '
+        'εμφανίζεται ΠΑΝΤΑ — προεπιλογή ο καλών της κύριας', () {
+      // Το σενάριο της οθόνης: Ελένη (με δικό της id) + Άγνωστος.
+      final options = resolveLansweeperRequester(
+        callers: const [
+          LansweeperTicketCaller(
+            displayName: 'Ελένη Πλακογιάννη',
+            departmentName: 'Βιοϊατρική',
+            username: r'gnk\e.plakogianni',
+          ),
+        ],
+        hasUnidentifiedCalls: true,
+        departments: [
+          (departmentName: 'Λοιμώξεων', accounts: [bio1]),
+        ],
+      );
 
-        expect(options.selectedUsername, r'gnk\e.plakogianni');
-        expect(
-          options.isChoosable,
-          isTrue,
-          reason:
-              'Με δύο εμπλεκόμενα πρόσωπα ο αιτών είναι απόφαση — '
-              'όχι σιωπηλή χρέωση στον πρώτο',
-        );
-        expect(options.candidates.map((c) => c.account.username), [
-          r'gnk\e.plakogianni',
-          r'gnk\bio1',
-        ]);
-        expect(options.candidates.first.account.label, 'Ελένη Πλακογιάννη');
-      },
-    );
+      expect(options.selectedUsername, r'gnk\e.plakogianni');
+      expect(
+        options.isChoosable,
+        isTrue,
+        reason:
+            'Με δύο εμπλεκόμενα πρόσωπα ο αιτών είναι απόφαση — '
+            'όχι σιωπηλή χρέωση στον πρώτο',
+      );
+      expect(options.candidates.map((c) => c.account.username), [
+        r'gnk\e.plakogianni',
+        r'gnk\bio1',
+      ]);
+      expect(options.candidates.first.account.label, 'Ελένη Πλακογιάννη');
+    });
 
-    test(
-      'ΠΟΛΛΑΠΛΗ με δύο γνωστούς καλούντες: και τα δύο προσωπικά '
-      'αναγνωριστικά υποψήφια, προεπιλογή της κύριας',
-      () {
-        final options = resolveLansweeperRequester(
-          callers: const [
-            brami,
-            LansweeperTicketCaller(
-              displayName: 'Ελένη Πλακογιάννη',
-              departmentName: 'Βιοϊατρική',
-              username: r'gnk\e.plakogianni',
-            ),
-          ],
-          departments: const [],
-        );
+    test('ΠΟΛΛΑΠΛΗ με δύο γνωστούς καλούντες: και τα δύο προσωπικά '
+        'αναγνωριστικά υποψήφια, προεπιλογή της κύριας', () {
+      final options = resolveLansweeperRequester(
+        callers: const [
+          brami,
+          LansweeperTicketCaller(
+            displayName: 'Ελένη Πλακογιάννη',
+            departmentName: 'Βιοϊατρική',
+            username: r'gnk\e.plakogianni',
+          ),
+        ],
+        departments: const [],
+      );
 
-        expect(options.selectedUsername, r'gnk\d.brami');
-        expect(options.isChoosable, isTrue);
-        expect(options.candidates.map((c) => c.account.username), [
-          r'gnk\d.brami',
-          r'gnk\e.plakogianni',
-        ]);
-      },
-    );
+      expect(options.selectedUsername, r'gnk\d.brami');
+      expect(options.isChoosable, isTrue);
+      expect(options.candidates.map((c) => c.account.username), [
+        r'gnk\d.brami',
+        r'gnk\e.plakogianni',
+      ]);
+    });
 
-    test(
-      'κόκκινος πρώτος + έγκυρος δεύτερος: προεπιλέγεται ο ΕΓΚΥΡΟΣ, '
-      'ο κόκκινος μένει επιλέξιμος',
-      () {
-        const broken = LansweeperAccount(
-          username: r'Γραφείο Λοιμώξεων gnk\loimokseis1',
-        );
-        final options = resolveLansweeperRequester(
-          hasUnidentifiedCalls: true,
-          departments: [
-            (departmentName: 'Λοιμώξεων', accounts: [broken, bio1]),
-          ],
-        );
+    test('κόκκινος πρώτος + έγκυρος δεύτερος: προεπιλέγεται ο ΕΓΚΥΡΟΣ, '
+        'ο κόκκινος μένει επιλέξιμος', () {
+      const broken = LansweeperAccount(
+        username: r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+      );
+      final options = resolveLansweeperRequester(
+        hasUnidentifiedCalls: true,
+        departments: [
+          (departmentName: 'Λοιμώξεων', accounts: [broken, bio1]),
+        ],
+      );
 
-        expect(options.selectedUsername, r'gnk\bio1');
-        // Δεν αποκλείεται: ίσως είναι η σπάνια εξαίρεση που το Lansweeper
-        // δέχεται — τον τελικό λόγο τον έχει το SearchUsers.
-        expect(options.candidates.map((c) => c.account.username), [
-          r'Γραφείο Λοιμώξεων gnk\loimokseis1',
-          r'gnk\bio1',
-        ]);
-      },
-    );
+      expect(options.selectedUsername, r'gnk\bio1');
+      // Δεν αποκλείεται: ίσως είναι η σπάνια εξαίρεση που το Lansweeper
+      // δέχεται — τον τελικό λόγο τον έχει το SearchUsers.
+      expect(options.candidates.map((c) => c.account.username), [
+        r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+        r'gnk\bio1',
+      ]);
+    });
 
     test('ΜΟΝΟ κόκκινοι λογαριασμοί: μπαίνει ο πρώτος, όπως πριν', () {
       const broken = LansweeperAccount(
@@ -294,10 +299,7 @@ void main() {
         ],
       );
 
-      expect(
-        options.selectedUsername,
-        r'Γραφείο Λοιμώξεων gnk\loimokseis1',
-      );
+      expect(options.selectedUsername, r'Γραφείο Λοιμώξεων gnk\loimokseis1');
     });
 
     test('πολλά τμήματα: όλοι οι λογαριασμοί, με το τμήμα τους', () {

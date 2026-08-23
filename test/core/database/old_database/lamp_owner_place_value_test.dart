@@ -134,60 +134,66 @@ void main() {
       }
     });
 
-    test('ο ορισμός τοποθέτησης μπαίνει πρώτος όταν η τιμή είναι χώρος', () async {
-      final db = await open();
-      try {
-        await addOwnerIssue(db, 5034, 'Γιατροί Μαιευτικής');
+    test(
+      'ο ορισμός τοποθέτησης μπαίνει πρώτος όταν η τιμή είναι χώρος',
+      () async {
+        final db = await open();
+        try {
+          await addOwnerIssue(db, 5034, 'Γιατροί Μαιευτικής');
 
-        final proposals = await analyzer.analyzeFkIssues(
-          db,
-          LampIssueType.nonNumericFk,
-        );
-        final first = proposals.single.options.first;
+          final proposals = await analyzer.analyzeFkIssues(
+            db,
+            LampIssueType.nonNumericFk,
+          );
+          final first = proposals.single.options.first;
 
-        expect(first.requiresPlacementInput, isTrue);
-        expect(
-          first.description,
-          contains('Μαιευτική-Γυναικολογική Κλινική'),
-          reason: greekExpectMsg(
-            'Καμία λέξη δεν ταιριάζει ολόκληρη· η ρίζα «μαιευτ» δίνει στον '
-            'χρήστη σημείο εκκίνησης αντί για λευκό πεδίο',
-          ),
-        );
-      } finally {
-        await db.close();
-      }
-    });
+          expect(first.requiresPlacementInput, isTrue);
+          expect(
+            first.description,
+            contains('Μαιευτική-Γυναικολογική Κλινική'),
+            reason: greekExpectMsg(
+              'Καμία λέξη δεν ταιριάζει ολόκληρη· η ρίζα «μαιευτ» δίνει στον '
+              'χρήστη σημείο εκκίνησης αντί για λευκό πεδίο',
+            ),
+          );
+        } finally {
+          await db.close();
+        }
+      },
+    );
 
-    test('με πραγματικό όνομα ο υποψήφιος προηγείται της τοποθέτησης', () async {
-      final db = await open();
-      try {
-        await db.insert('owners', <String, Object?>{
-          'owner': 31,
-          'last_name': 'Μαλατέστα',
-          'first_name': 'Καλή',
-          'office': 27,
-        });
-        await addOwnerIssue(db, 5020, 'Μαλατέστα Καλλή');
+    test(
+      'με πραγματικό όνομα ο υποψήφιος προηγείται της τοποθέτησης',
+      () async {
+        final db = await open();
+        try {
+          await db.insert('owners', <String, Object?>{
+            'owner': 31,
+            'last_name': 'Μαλατέστα',
+            'first_name': 'Καλή',
+            'office': 27,
+          });
+          await addOwnerIssue(db, 5020, 'Μαλατέστα Καλλή');
 
-        final options = (await analyzer.analyzeFkIssues(
-          db,
-          LampIssueType.nonNumericFk,
-        )).single.options;
+          final options = (await analyzer.analyzeFkIssues(
+            db,
+            LampIssueType.nonNumericFk,
+          )).single.options;
 
-        expect(options.first.proposedId, 31);
-        expect(
-          options.any((o) => o.requiresPlacementInput),
-          isTrue,
-          reason: greekExpectMsg(
-            'Τα πεδία υπάρχουν παντού: όταν ο υποψήφιος είναι λάθος, χωρίς '
-            'αυτά δεν μένει άλλη διέξοδος από την παράλειψη',
-          ),
-        );
-      } finally {
-        await db.close();
-      }
-    });
+          expect(options.first.proposedId, 31);
+          expect(
+            options.any((o) => o.requiresPlacementInput),
+            isTrue,
+            reason: greekExpectMsg(
+              'Τα πεδία υπάρχουν παντού: όταν ο υποψήφιος είναι λάθος, χωρίς '
+              'αυτά δεν μένει άλλη διέξοδος από την παράλειψη',
+            ),
+          );
+        } finally {
+          await db.close();
+        }
+      },
+    );
   });
 
   group('η εφαρμογή', () {

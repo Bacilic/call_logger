@@ -18,13 +18,15 @@ void main() {
     // αναμονής. Καμία παραλλαγή δεν επιτρέπεται να ξαναφέρει αυτή τη σημαία.
     test('never uses DETACHED_PROCESS (window-storm regression guard)', () {
       expect(
-        UpdateCmdLauncher.creationFlags(visibleConsole: true)
-            .has(DETACHED_PROCESS),
+        UpdateCmdLauncher.creationFlags(
+          visibleConsole: true,
+        ).has(DETACHED_PROCESS),
         isFalse,
       );
       expect(
-        UpdateCmdLauncher.creationFlags(visibleConsole: false)
-            .has(DETACHED_PROCESS),
+        UpdateCmdLauncher.creationFlags(
+          visibleConsole: false,
+        ).has(DETACHED_PROCESS),
         isFalse,
       );
     });

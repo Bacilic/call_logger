@@ -99,7 +99,7 @@ void main() {
         final updateRows = await db.query(
           'audit_log',
           where: 'user_performing = ? AND action = ?',
-          whereArgs: [performer, 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ'],
+          whereArgs: [performer, AuditActions.modifyUser],
         );
         expect(updateRows, hasLength(1));
         expect(updateRows.single['entity_id'], userId);
@@ -168,7 +168,7 @@ void main() {
         ],
       );
       expect(rows, hasLength(1));
-      expect(rows.single['action'], 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ');
+      expect(rows.single['action'], AuditActions.createUser);
       final newV = decodeJson(rows.single['new_values_json'] as String?);
       expect(newV?['linked_phone_numbers'], [phoneNumber]);
     });

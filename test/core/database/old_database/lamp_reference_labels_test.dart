@@ -120,9 +120,7 @@ void main() {
       expect(
         first,
         isNot(second),
-        reason: greekExpectMsg(
-          'Χωρίς διάκριση, ο χρήστης διαλέγει στα τυφλά',
-        ),
+        reason: greekExpectMsg('Χωρίς διάκριση, ο χρήστης διαλέγει στα τυφλά'),
       );
     });
 
@@ -156,9 +154,15 @@ void main() {
 
   group('lampFirstInformativeText', () {
     test('προσπερνά κενά και σκέτους αριθμούς', () {
-      expect(lampFirstInformativeText('  ', '42', 'Καρδιολογική'), 'Καρδιολογική');
+      expect(
+        lampFirstInformativeText('  ', '42', 'Καρδιολογική'),
+        'Καρδιολογική',
+      );
       expect(lampFirstInformativeText(null, null, null), isNull);
-      expect(lampFirstInformativeText('12-34', 'Παθολογική', null), 'Παθολογική');
+      expect(
+        lampFirstInformativeText('12-34', 'Παθολογική', null),
+        'Παθολογική',
+      );
     });
   });
 }

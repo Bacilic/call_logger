@@ -47,8 +47,9 @@ void main() {
     return captured;
   }
 
-  testWidgets('μη γεφυρώσιμη → κουμπιά ανενεργά και ορατός λόγος',
-      (tester) async {
+  testWidgets('μη γεφυρώσιμη → κουμπιά ανενεργά και ορατός λόγος', (
+    tester,
+  ) async {
     await pumpDialog(
       tester,
       assessment: const SchemaDowngradeAssessment(
@@ -77,8 +78,9 @@ void main() {
     expect(reason.data, contains('issue_refined'));
   });
 
-  testWidgets('χωρίς αξιολόγηση → κουμπιά ανενεργά με λόγο αδυναμίας ελέγχου',
-      (tester) async {
+  testWidgets('χωρίς αξιολόγηση → κουμπιά ανενεργά με λόγο αδυναμίας ελέγχου', (
+    tester,
+  ) async {
     await pumpDialog(tester, assessment: null);
 
     final copyButton = tester.widget<OutlinedButton>(
@@ -91,8 +93,9 @@ void main() {
     expect(reason.data, contains('έλεγχος συμβατότητας'));
   });
 
-  testWidgets('γεφυρώσιμη → το πάτημα «αντίγραφο» επιστρέφει την επιλογή',
-      (tester) async {
+  testWidgets('γεφυρώσιμη → το πάτημα «αντίγραφο» επιστρέφει την επιλογή', (
+    tester,
+  ) async {
     DatabaseNewerVersionChoice? captured;
     await tester.pumpWidget(
       MaterialApp(
@@ -132,56 +135,56 @@ void main() {
       find.byKey(const Key('newer_db_downgrade_copy_button')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('newer_db_downgrade_copy_button')),
-    );
+    await tester.tap(find.byKey(const Key('newer_db_downgrade_copy_button')));
     await tester.pumpAndSettle();
     expect(captured, DatabaseNewerVersionChoice.downgradeCopy);
   });
 
   testWidgets(
-      'με γνωστή νεότερη εγκατάσταση → φαίνεται η διαδρομή και το κουμπί '
-      'εκκίνησης επιστρέφει την επιλογή', (tester) async {
-    DatabaseNewerVersionChoice? captured;
-    final instance = AppInstanceRecord(
-      executablePath: r'F:\Apps\CallLoggerNew\call_logger.exe',
-      version: '0.38.0',
-      lastSeen: DateTime(2026, 8, 10),
-      schemaVersion: 45,
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => Center(
-              child: ElevatedButton(
-                onPressed: () async {
-                  captured = await showDatabaseNewerVersionChoiceDialog(
-                    context: context,
-                    dbPath: r'C:\Data\Hospital.db',
-                    fileVersion: 45,
-                    appVersion: 40,
-                    assessment: null,
-                    newerInstance: instance,
-                  );
-                },
-                child: const Text('open'),
+    'με γνωστή νεότερη εγκατάσταση → φαίνεται η διαδρομή και το κουμπί '
+    'εκκίνησης επιστρέφει την επιλογή',
+    (tester) async {
+      DatabaseNewerVersionChoice? captured;
+      final instance = AppInstanceRecord(
+        executablePath: r'F:\Apps\CallLoggerNew\call_logger.exe',
+        version: '0.38.0',
+        lastSeen: DateTime(2026, 8, 10),
+        schemaVersion: 45,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    captured = await showDatabaseNewerVersionChoiceDialog(
+                      context: context,
+                      dbPath: r'C:\Data\Hospital.db',
+                      fileVersion: 45,
+                      appVersion: 40,
+                      assessment: null,
+                      newerInstance: instance,
+                    );
+                  },
+                  child: const Text('open'),
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.text(r'F:\Apps\CallLoggerNew\call_logger.exe'),
-      findsOneWidget,
-    );
+      expect(
+        find.text(r'F:\Apps\CallLoggerNew\call_logger.exe'),
+        findsOneWidget,
+      );
 
-    await tester.tap(find.byKey(const Key('newer_db_launch_newer_button')));
-    await tester.pumpAndSettle();
-    expect(captured, DatabaseNewerVersionChoice.launchNewer);
-  });
+      await tester.tap(find.byKey(const Key('newer_db_launch_newer_button')));
+      await tester.pumpAndSettle();
+      expect(captured, DatabaseNewerVersionChoice.launchNewer);
+    },
+  );
 }

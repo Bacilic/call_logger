@@ -93,10 +93,7 @@ void main() {
       await releaseCallLoggerTestDatabase();
     });
 
-    Future<int> insertCall({
-      String? ticketId,
-      bool isDeleted = false,
-    }) {
+    Future<int> insertCall({String? ticketId, bool isDeleted = false}) {
       return db.insert('calls', {
         'date': '2026-08-12',
         'time': '09:15',
@@ -144,16 +141,19 @@ void main() {
       expect(await repo.maxNumericLansweeperTicketId(), 20481);
     });
 
-    test('ο σύνδεσμος χτίζεται με τον αριθμό της βάσης, όχι με δείγμα', () async {
-      await insertCall(ticketId: '20481');
+    test(
+      'ο σύνδεσμος χτίζεται με τον αριθμό της βάσης, όχι με δείγμα',
+      () async {
+        await insertCall(ticketId: '20481');
 
-      final fromDb = await repo.maxNumericLansweeperTicketId();
-      final url = LansweeperUrlRules.ticketViewUrlForHelpLink(
-        _kTemplate,
-        ticketId: fromDb?.toString(),
-      );
+        final fromDb = await repo.maxNumericLansweeperTicketId();
+        final url = LansweeperUrlRules.ticketViewUrlForHelpLink(
+          _kTemplate,
+          ticketId: fromDb?.toString(),
+        );
 
-      expect(url, 'http://10.10.201.22:81/helpdesk/ticket.aspx?tid=20481');
-    });
+        expect(url, 'http://10.10.201.22:81/helpdesk/ticket.aspx?tid=20481');
+      },
+    );
   });
 }

@@ -1,4 +1,5 @@
 import 'package:call_logger/core/database/audit_service.dart';
+import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/features/audit/models/audit_filter_model.dart';
 import 'package:call_logger/features/audit/models/audit_log_model.dart';
 import 'package:call_logger/features/audit/models/audit_page_result.dart';
@@ -25,13 +26,33 @@ void main() {
     }),
     AuditLogModel.fromMap({
       'id': 2,
-      'action': 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ',
+      'action': 'ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ',
       'timestamp': '2026-07-11T11:00:00.000',
       'user_performing': 'tester',
       'details': 'users id=2',
       'entity_type': AuditEntityTypes.user,
       'entity_id': 2,
       'entity_name': 'Νέος',
+    }),
+    AuditLogModel.fromMap({
+      'id': 3,
+      'action': 'ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ',
+      'timestamp': '2026-07-11T12:00:00.000',
+      'user_performing': 'Βασίλης',
+      'details': 'users id=3',
+      'entity_type': AuditEntityTypes.user,
+      'entity_id': 3,
+      'entity_name': 'Τρίτος',
+    }),
+    AuditLogModel.fromMap({
+      'id': 4,
+      'action': 'ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ',
+      'timestamp': '2026-07-11T13:00:00.000',
+      'user_performing': CurrentOperator.unknownAuditName,
+      'details': 'users id=4',
+      'entity_type': AuditEntityTypes.user,
+      'entity_id': 4,
+      'entity_name': 'Παλιά εγγραφή',
     }),
   ];
 
@@ -42,6 +63,9 @@ void main() {
       }
       if (filter.entityType != null && filter.entityType!.isNotEmpty) {
         if (row.entityType != filter.entityType) return false;
+      }
+      if (filter.userPerforming != null && filter.userPerforming!.isNotEmpty) {
+        if (row.userPerforming != filter.userPerforming) return false;
       }
       return true;
     }).toList();
@@ -54,8 +78,8 @@ void main() {
           auditActionOptionsProvider.overrideWith(
             (ref) async => const [
               'συσχέτιση από κλήση',
-              'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ',
-              'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ',
+              'ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ',
+              'ΤΡΟΠΟΠΟΙΗΣΗ ΥΠΑΛΛΗΛΟΥ',
             ],
           ),
           auditListProvider.overrideWith((ref) async {
@@ -66,6 +90,13 @@ void main() {
               totalCount: filtered.length,
             );
           }),
+          auditPerformingUserOptionsProvider.overrideWith(
+            (ref) async => [
+              'Βασίλης',
+              CurrentOperator.unknownAuditName,
+              'tester',
+            ],
+          ),
           auditPageReferenceLabelsProvider.overrideWith(
             (ref) async => AuditReferenceLabels.empty,
           ),
@@ -88,6 +119,78 @@ void main() {
     (w) => w is TextField && w.decoration?.labelText == 'Ενέργεια',
   );
 
+  Finder performerField() => find.byWidgetPredicate(
+    (w) => w is TextField && w.decoration?.labelText == 'Χειριστής',
+  );
+
+  group('Φίλτρο «Χειριστής» στην οθόνη', () {
+    testWidgets('υπάρχει δικό του πεδίο, χωριστά από την αναζήτηση', (
+      tester,
+    ) async {
+      await pumpAuditTab(tester);
+
+      expect(performerField(), findsOneWidget);
+
+      await finishInteraction(tester);
+    });
+
+    testWidgets('η επιλογή χειριστή στενεύει τη λίστα', (tester) async {
+      await pumpAuditTab(tester);
+      expect(find.textContaining('4 εγγραφές'), findsOneWidget);
+
+      await tester.tap(performerField());
+      await tester.pumpAndSettle();
+      await tester.enterText(performerField(), 'Βασίλ');
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1 εγγραφές'), findsOneWidget);
+
+      await finishInteraction(tester);
+    });
+
+    testWidgets('η παύλα διαβάζεται «Χωρίς καταγραφή»', (tester) async {
+      await pumpAuditTab(tester);
+
+      await tester.tap(performerField());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Χωρίς καταγραφή'),
+        findsOneWidget,
+        reason:
+            'Σκέτη παύλα μέσα σε λίστα ονομάτων δεν διαβάζεται ως επιλογή — '
+            'και είναι η επιλογή που αφορά τη μεγάλη πλειοψηφία των εγγραφών.',
+      );
+
+      await finishInteraction(tester);
+    });
+
+    testWidgets('συνδυάζεται με το φίλτρο ενέργειας ως ΚΑΙ', (tester) async {
+      await pumpAuditTab(tester);
+
+      await tester.tap(actionField());
+      await tester.pumpAndSettle();
+      await tester.enterText(actionField(), 'ΔΗΜΙΟΥΡΓΙΑ');
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('3 εγγραφές'), findsOneWidget);
+
+      await tester.tap(performerField());
+      await tester.pumpAndSettle();
+      await tester.enterText(performerField(), 'Βασίλ');
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1 εγγραφές'), findsOneWidget);
+
+      await finishInteraction(tester);
+    });
+  });
+
   group('ApplicationAuditTab autocomplete φίλτρα', () {
     testWidgets('πληκτρολόγηση φιλτράρει τις προτάσεις ενέργειας', (
       tester,
@@ -99,7 +202,7 @@ void main() {
       await tester.enterText(actionField(), 'δημι');
       await tester.pumpAndSettle();
 
-      expect(find.text('ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ'), findsOneWidget);
+      expect(find.text('ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ'), findsOneWidget);
       expect(find.text('συσχέτιση από κλήση'), findsNothing);
 
       await finishInteraction(tester);
@@ -124,34 +227,33 @@ void main() {
       await finishInteraction(tester);
     });
 
-    testWidgets(
-      'βελάκι κάτω + Enter εφαρμόζει τη δεύτερη πρόταση ενέργειας',
-      (tester) async {
-        await pumpAuditTab(tester);
+    testWidgets('βελάκι κάτω + Enter εφαρμόζει τη δεύτερη πρόταση ενέργειας', (
+      tester,
+    ) async {
+      await pumpAuditTab(tester);
 
-        await tester.tap(actionField());
-        await tester.pumpAndSettle();
+      await tester.tap(actionField());
+      await tester.pumpAndSettle();
 
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-        await tester.pumpAndSettle();
-        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-        await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
 
-        // Εφαρμόστηκε η δεύτερη πρόταση («ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ») → 1 εγγραφή.
-        expect(find.textContaining('1 εγγραφές'), findsOneWidget);
-        final field = tester.widget<TextField>(actionField());
-        expect(field.controller!.text, 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ');
+      // Εφαρμόστηκε η δεύτερη πρόταση («ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ») → 3 εγγραφές.
+      expect(find.textContaining('3 εγγραφές'), findsOneWidget);
+      final field = tester.widget<TextField>(actionField());
+      expect(field.controller!.text, 'ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ');
 
-        await finishInteraction(tester);
-      },
-    );
+      await finishInteraction(tester);
+    });
 
     testWidgets('κενό πεδίο ενέργειας δείχνει όλες τις εγγραφές', (
       tester,
     ) async {
       await pumpAuditTab(tester);
 
-      expect(find.textContaining('2 εγγραφές'), findsOneWidget);
+      expect(find.textContaining('4 εγγραφές'), findsOneWidget);
 
       await tester.tap(actionField());
       await tester.pumpAndSettle();
@@ -166,7 +268,7 @@ void main() {
       await tester.tap(clearButtons.first);
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('2 εγγραφές'), findsOneWidget);
+      expect(find.textContaining('4 εγγραφές'), findsOneWidget);
 
       await finishInteraction(tester);
     });
@@ -177,7 +279,7 @@ void main() {
       100,
       (i) => AuditLogModel.fromMap({
         'id': i + 1,
-        'action': 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ',
+        'action': 'ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ',
         'timestamp': '2026-07-11T10:00:00.000',
         'user_performing': 'tester',
         'details': 'Εγγραφή ${i + 1}',
@@ -188,12 +290,23 @@ void main() {
     );
 
     Future<void> pumpPagedAuditTab(WidgetTester tester) async {
+      // Πραγματικό μέγεθος παραθύρου. Στο προεπιλεγμένο 800x600 — μικρότερο
+      // από το ελάχιστο που επιβάλλει η εφαρμογή (`kMinWindowHeight` = 640) —
+      // οι γραμμές τυλίγονται ανομοιόμορφα· η τεμπέλικη λίστα τότε *εκτιμά*
+      // το συνολικό ύψος και η εκτίμηση μετατοπίζεται μόλις χτιστούν άλλες
+      // γραμμές, οπότε η θέση κύλισης μετρά κάτι που δεν ζει στην εφαρμογή.
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
       final items = manyItems();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             auditActionOptionsProvider.overrideWith(
-              (ref) async => const ['ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ'],
+              (ref) async => const ['ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ'],
             ),
             auditListProvider.overrideWith((ref) async {
               final page = ref.watch(auditPageIndexProvider);
@@ -253,7 +366,7 @@ void main() {
 
       await tester.tap(actionField());
       await tester.pumpAndSettle();
-      await tester.tap(find.text('ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ'));
+      await tester.tap(find.text('ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ'));
       await tester.pumpAndSettle();
 
       expect(listScrollable(tester).position.pixels, 0);

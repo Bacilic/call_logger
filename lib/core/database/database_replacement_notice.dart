@@ -85,22 +85,21 @@ void registerActiveDatabaseReplacementWatchdog(
 /// αναμονή —η αποσύνδεση χωρίς checkpoint, που σταματά τη ζημιά— και **στο UI**
 /// μένει μόνο η ανακοίνωση. Έτσι η προστασία δεν εξαρτάται από το αν υπάρχει
 /// κάποιος να πατήσει «Εντάξει».
-final databaseReplacementWatchdogProvider = Provider<DatabaseReplacementWatchdog>(
-  (ref) {
-    final helper = DatabaseHelper.instance;
-    final watchdog = DatabaseReplacementWatchdog(
-      interval: kDatabaseReplacementCheckInterval,
-      detect: helper.databaseFileWasReplaced,
-      onDetected: () async {
-        final path = helper.openedDatabasePath;
-        // ΠΡΩΤΑ η αποσύνδεση: όσο η σύνδεση ζει, κάθε εγγραφή πηγαίνει σε βάση
-        // που δεν βρίσκεται πια εκεί. Το ίδιο το κλείσιμο ξέρει να μη γράψει
-        // τίποτα πάνω σε αντικατεστημένο αρχείο.
-        await helper.closeConnection();
-        ref.read(databaseReplacementNoticeProvider.notifier).show(path);
-      },
-    )..start();
-    registerActiveDatabaseReplacementWatchdog(ref, watchdog);
-    return watchdog;
-  },
-);
+final databaseReplacementWatchdogProvider =
+    Provider<DatabaseReplacementWatchdog>((ref) {
+      final helper = DatabaseHelper.instance;
+      final watchdog = DatabaseReplacementWatchdog(
+        interval: kDatabaseReplacementCheckInterval,
+        detect: helper.databaseFileWasReplaced,
+        onDetected: () async {
+          final path = helper.openedDatabasePath;
+          // ΠΡΩΤΑ η αποσύνδεση: όσο η σύνδεση ζει, κάθε εγγραφή πηγαίνει σε βάση
+          // που δεν βρίσκεται πια εκεί. Το ίδιο το κλείσιμο ξέρει να μη γράψει
+          // τίποτα πάνω σε αντικατεστημένο αρχείο.
+          await helper.closeConnection();
+          ref.read(databaseReplacementNoticeProvider.notifier).show(path);
+        },
+      )..start();
+      registerActiveDatabaseReplacementWatchdog(ref, watchdog);
+      return watchdog;
+    });

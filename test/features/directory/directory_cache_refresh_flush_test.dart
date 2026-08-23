@@ -42,35 +42,33 @@ class _MutatingTabState extends ConsumerState<_MutatingTab> {
 void main() {
   registerCallLoggerIsolatedDatabaseHooks();
 
-  testWidgets(
-    'μετά από μαζική ενέργεια η αλυσίδα των Κλήσεων έχει ξεπλυθεί',
-    (tester) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: callLoggerTestProviderOverrides(),
-          child: const MaterialApp(home: _MutatingTab()),
-        ),
-      );
-      await tester.pump();
+  testWidgets('μετά από μαζική ενέργεια η αλυσίδα των Κλήσεων έχει ξεπλυθεί', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: callLoggerTestProviderOverrides(),
+        child: const MaterialApp(home: _MutatingTab()),
+      ),
+    );
+    await tester.pump();
 
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(_MutatingTab)),
-      );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(_MutatingTab)),
+    );
 
-      // Ο χρήστης δεν έχει ανοίξει την οθόνη κλήσεων: η αλυσίδα δεν υπάρχει.
-      expect(container.exists(callsFieldGroupsProvider), isFalse);
-      expect(container.exists(callsScreenIsExpandedProvider), isFalse);
+    // Ο χρήστης δεν έχει ανοίξει την οθόνη κλήσεων: η αλυσίδα δεν υπάρχει.
+    expect(container.exists(callsFieldGroupsProvider), isFalse);
+    expect(container.exists(callsScreenIsExpandedProvider), isFalse);
 
-      final state = tester.state<_MutatingTabState>(find.byType(_MutatingTab));
-      state.runMutation();
+    final state = tester.state<_MutatingTabState>(find.byType(_MutatingTab));
+    state.runMutation();
 
-      // Ο καλών βρίσκεται εκτός build (μετά από `await` της μετάλλαξης), οπότε
-      // το ξέπλυμα γίνεται αμέσως: δεν μένει τίποτα «dirty» για επόμενο build.
-      expect(container.exists(callsFieldGroupsProvider), isTrue);
-      expect(container.exists(callsScreenIsExpandedProvider), isTrue);
+    // Ο καλών βρίσκεται εκτός build (μετά από `await` της μετάλλαξης), οπότε
+    // το ξέπλυμα γίνεται αμέσως: δεν μένει τίποτα «dirty» για επόμενο build.
+    expect(container.exists(callsFieldGroupsProvider), isTrue);
+    expect(container.exists(callsScreenIsExpandedProvider), isTrue);
 
-      await flushCallLoggerSqfliteLockTimers(tester);
-    },
-    semanticsEnabled: false,
-  );
+    await flushCallLoggerSqfliteLockTimers(tester);
+  }, semanticsEnabled: false);
 }

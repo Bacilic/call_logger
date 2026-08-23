@@ -1,3 +1,5 @@
+import '../utils/search_text_normalizer.dart';
+
 /// Ελληνική απόδοση ονόματος πίνακα για ό,τι διαβάζει ο χρήστης.
 ///
 /// Τα ονόματα των πινάκων μένουν αγγλικά μέσα στη βάση· εδώ μεταφράζονται μόνο
@@ -54,6 +56,11 @@ String databaseEntityTypeLabelEl(String? entityType) {
     'task' => 'Εκκρεμότητα',
     'call' => 'Κλήση',
     'phone' => 'Τηλέφωνο',
+    'knowledge' => 'Άρθρο Βάσης Γνώσης',
+    // «Χρήστης» = όποιος χειρίζεται την εφαρμογή. Ο «Υπάλληλος» από πάνω είναι
+    // άνθρωπος του νοσοκομείου· οι δύο λέξεις χώρισαν δρόμους στην v51 και δεν
+    // επιτρέπεται να ξανασυναντηθούν.
+    'operator' => 'Χρήστης',
     'bulk_users' => 'Μαζική ενημέρωση υπαλλήλων',
     'bulk_departments' => 'Μαζική ενημέρωση τμημάτων',
     'bulk_equipment' => 'Μαζική ενημέρωση εξοπλισμού',
@@ -62,6 +69,23 @@ String databaseEntityTypeLabelEl(String? entityType) {
     'backup' => 'Αντίγραφο ασφαλείας',
     _ => type,
   };
+}
+
+/// Η ίδια ετικέτα του [databaseEntityTypeLabelEl], σε μορφή ευρετηρίου.
+///
+/// Το κείμενο αναζήτησης του ιστορικού γράφεται τη στιγμή της καταγραφής και
+/// μένει αόρατο· αν το συντάξει κανείς χωριστά, αποκλίνει σιωπηλά από την
+/// οθόνη και η αναζήτηση σπάει χωρίς να το πάρει είδηση κανείς. Γι' αυτό
+/// παράγεται **από** την ετικέτα και ποτέ δίπλα της.
+///
+/// Άγνωστος ή κενός τύπος δεν γράφει τίποτα: το ωμό αγγλικό όνομα δεν έχει
+/// θέση μέσα σε ελληνικό ευρετήριο.
+String databaseEntityTypeSearchLabelEl(String? entityType) {
+  final type = entityType?.trim() ?? '';
+  if (type.isEmpty) return '';
+  final label = databaseEntityTypeLabelEl(type);
+  if (label == type || label == '—') return '';
+  return SearchTextNormalizer.normalizeForSearch(label);
 }
 
 /// «Τμήματα (`departments`)» — ελληνικό όνομα με το τεχνικό δίπλα.

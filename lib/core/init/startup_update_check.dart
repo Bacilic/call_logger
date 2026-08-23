@@ -22,8 +22,9 @@ Future<UpdateCheckResult?> runStartupUpdateCheck(
   Duration timeout = kStartupUpdateCheckTimeout,
   StartupJournal? journal,
 }) async {
-  final step = (journal ?? StartupJournal.instance)
-      .begin('Έλεγχος για νέα έκδοση');
+  final step = (journal ?? StartupJournal.instance).begin(
+    'Έλεγχος για νέα έκδοση',
+  );
   try {
     final result = await check().timeout(timeout);
     if (result.checkedAt == null) {

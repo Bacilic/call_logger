@@ -11,6 +11,7 @@
 import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/core/services/operator_identity.dart';
+import 'package:call_logger/features/operators/services/selectable_profiles.dart';
 import 'package:call_logger/features/operators/widgets/active_operator_chip.dart';
 import 'package:call_logger/features/operators/widgets/change_operator_dialog.dart';
 import 'package:flutter/material.dart';
@@ -34,8 +35,7 @@ void main() {
 
     test('η αλλαγή ειδοποιεί όσους παρακολουθούν την ταυτότητα', () {
       final seen = <String?>[];
-      void listener() =>
-          seen.add(CurrentOperator.active?.displayName);
+      void listener() => seen.add(CurrentOperator.active?.displayName);
       CurrentOperator.listenable.addListener(listener);
       addTearDown(() => CurrentOperator.listenable.removeListener(listener));
 
@@ -54,10 +54,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: ActiveOperatorChip(
-              extended: true,
-              openDialog: (_) async {},
-            ),
+            body: ActiveOperatorChip(extended: true, openDialog: (_) async {}),
           ),
         ),
       );
@@ -106,7 +103,10 @@ void main() {
               builder: (ctx) => ElevatedButton(
                 onPressed: () => showChangeOperatorDialog(
                   ctx,
-                  loadProfiles: () async => profiles,
+                  loadProfiles: () async => SelectableProfiles(
+                    profiles: profiles,
+                    presence: const {},
+                  ),
                   createProfile:
                       createProfile ??
                       (name, bind) async => _operator(99, name),

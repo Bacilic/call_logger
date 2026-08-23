@@ -141,97 +141,93 @@ Future<void> _dismissQuickCallDialog(WidgetTester tester) async {
 
 void main() {
   group('DialogOutsideTapHint — Autocomplete μέσα σε διάλογο', () {
-    testWidgets(
-      'κλικ σε πρόταση τμήματος διατηρεί κείμενο καλούντα',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-        addTearDown(() async {
-          await _dismissQuickCallDialog(tester);
-        });
+    testWidgets('κλικ σε πρόταση τμήματος διατηρεί κείμενο καλούντα', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      addTearDown(() async {
+        await _dismissQuickCallDialog(tester);
+      });
 
-        await _pumpHarness(tester);
-        await _openQuickCallDialog(tester);
+      await _pumpHarness(tester);
+      await _openQuickCallDialog(tester);
 
-        await tester.tap(_callerField());
-        await pumpUntilSettled(tester);
-        await tester.enterText(_callerField(), _kTestCallerText);
-        await pumpUntilSettled(tester);
-        expect(
-          tester.widget<TextField>(_callerField()).controller?.text,
-          _kTestCallerText,
-        );
+      await tester.tap(_callerField());
+      await pumpUntilSettled(tester);
+      await tester.enterText(_callerField(), _kTestCallerText);
+      await pumpUntilSettled(tester);
+      expect(
+        tester.widget<TextField>(_callerField()).controller?.text,
+        _kTestCallerText,
+      );
 
-        await tester.tap(_departmentField());
-        await pumpUntilSettled(tester);
-        await tester.enterText(
-          _departmentField(),
-          _kTestDepartmentName.substring(0, 3),
-        );
-        await pumpUntilSettled(tester);
+      await tester.tap(_departmentField());
+      await pumpUntilSettled(tester);
+      await tester.enterText(
+        _departmentField(),
+        _kTestDepartmentName.substring(0, 3),
+      );
+      await pumpUntilSettled(tester);
 
-        final option = find.descendant(
-          of: find.byType(Material),
-          matching: find.widgetWithText(ListTile, _kTestDepartmentName),
-        );
-        expect(option, findsWidgets);
+      final option = find.descendant(
+        of: find.byType(Material),
+        matching: find.widgetWithText(ListTile, _kTestDepartmentName),
+      );
+      expect(option, findsWidgets);
 
-        await tester.tap(option.first);
-        await pumpUntilSettled(tester);
-        await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(option.first);
+      await pumpUntilSettled(tester);
+      await tester.pump(const Duration(milliseconds: 500));
 
-        expect(
-          tester.widget<TextField>(_callerField()).controller?.text,
-          _kTestCallerText,
-          reason:
-              'Το κείμενο καλούντα πρέπει να διατηρείται μετά την επιλογή τμήματος από τη λίστα',
-        );
-      },
-      semanticsEnabled: false,
-    );
+      expect(
+        tester.widget<TextField>(_callerField()).controller?.text,
+        _kTestCallerText,
+        reason:
+            'Το κείμενο καλούντα πρέπει να διατηρείται μετά την επιλογή τμήματος από τη λίστα',
+      );
+    }, semanticsEnabled: false);
 
-    testWidgets(
-      'κλικ έξω από τον διάλογο διατηρεί κείμενο καλούντα',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-        addTearDown(() async {
-          await _dismissQuickCallDialog(tester);
-        });
+    testWidgets('κλικ έξω από τον διάλογο διατηρεί κείμενο καλούντα', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      addTearDown(() async {
+        await _dismissQuickCallDialog(tester);
+      });
 
-        await _pumpHarness(tester);
-        await _openQuickCallDialog(tester);
+      await _pumpHarness(tester);
+      await _openQuickCallDialog(tester);
 
-        await tester.tap(_callerField());
-        await pumpUntilSettled(tester);
-        await tester.enterText(_callerField(), _kTestCallerText);
-        await pumpUntilSettled(tester);
-        expect(
-          tester.widget<TextField>(_callerField()).controller?.text,
-          _kTestCallerText,
-        );
+      await tester.tap(_callerField());
+      await pumpUntilSettled(tester);
+      await tester.enterText(_callerField(), _kTestCallerText);
+      await pumpUntilSettled(tester);
+      expect(
+        tester.widget<TextField>(_callerField()).controller?.text,
+        _kTestCallerText,
+      );
 
-        // Γνήσιο κλικ στο scrim, έξω από το ορατό κουτί του διαλόγου.
-        await tester.tapAt(const Offset(10, 10));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 900));
+      // Γνήσιο κλικ στο scrim, έξω από το ορατό κουτί του διαλόγου.
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 900));
 
-        expect(
-          tester.widget<TextField>(_callerField()).controller?.text,
-          _kTestCallerText,
-          reason:
-              'Μετά το flash από κλικ έξω, το κείμενο καλούντα πρέπει να διατηρείται',
-        );
-      },
-      semanticsEnabled: false,
-    );
+      expect(
+        tester.widget<TextField>(_callerField()).controller?.text,
+        _kTestCallerText,
+        reason:
+            'Μετά το flash από κλικ έξω, το κείμενο καλούντα πρέπει να διατηρείται',
+      );
+    }, semanticsEnabled: false);
   });
 }

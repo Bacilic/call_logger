@@ -48,12 +48,8 @@ void main() {
         _intentForLogicalKey(shortcuts, LogicalKeyboardKey.keyN),
         isA<QuickCaptureIntent>(),
       );
-      expect(_intentsForCharacter(shortcuts, 'N'), [
-        isA<QuickCaptureIntent>(),
-      ]);
-      expect(_intentsForCharacter(shortcuts, 'Ν'), [
-        isA<QuickCaptureIntent>(),
-      ]);
+      expect(_intentsForCharacter(shortcuts, 'N'), [isA<QuickCaptureIntent>()]);
+      expect(_intentsForCharacter(shortcuts, 'Ν'), [isA<QuickCaptureIntent>()]);
     });
 
     test('το παλιό Ctrl+Alt+L δεν επανήλθε', () {

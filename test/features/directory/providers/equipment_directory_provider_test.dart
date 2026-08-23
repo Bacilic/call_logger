@@ -307,21 +307,23 @@ void main() {
       return container;
     }
 
-    test('βρίσκεται από το ΔΙΚΟ του τμήμα και χρεώνεται η κρυφή «Τμήμα»',
-        () async {
-      final container = buildContainer();
-      final notifier = container.read(equipmentDirectoryProvider.notifier);
-      await notifier.load();
+    test(
+      'βρίσκεται από το ΔΙΚΟ του τμήμα και χρεώνεται η κρυφή «Τμήμα»',
+      () async {
+        final container = buildContainer();
+        final notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
 
-      notifier.setSearchQuery('Ψυχιατρική');
+        notifier.setSearchQuery('Ψυχιατρική');
 
-      final state = container.read(equipmentDirectoryProvider);
-      expect(state.filteredItems, hasLength(1));
-      expect(state.filteredItems.single.$1.code, '3698');
-      expect(state.searchSummary.searchActive, isTrue);
-      expect(state.searchSummary.totalMatches, 1);
-      expect(state.searchSummary.hiddenMatchCounts, {'Τμήμα': 1});
-    });
+        final state = container.read(equipmentDirectoryProvider);
+        expect(state.filteredItems, hasLength(1));
+        expect(state.filteredItems.single.$1.code, '3698');
+        expect(state.searchSummary.searchActive, isTrue);
+        expect(state.searchSummary.totalMatches, 1);
+        expect(state.searchSummary.hiddenMatchCounts, {'Τμήμα': 1});
+      },
+    );
 
     test('με τη στήλη «Τμήμα» ορατή, η χρέωση κρυφού πεδίου φεύγει', () async {
       final container = buildContainer();

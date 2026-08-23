@@ -99,9 +99,7 @@ Future<DatabaseIntegrityOutcome> _runIntegrityProbe(
               : rows.first.values.first?.toString().trim() ?? '');
 
     if (verdict.toLowerCase() == 'ok') {
-      return const DatabaseIntegrityOutcome(
-        status: DatabaseIntegrityStatus.ok,
-      );
+      return const DatabaseIntegrityOutcome(status: DatabaseIntegrityStatus.ok);
     }
     if (verdict.isEmpty) {
       return const DatabaseIntegrityOutcome(

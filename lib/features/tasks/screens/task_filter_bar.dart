@@ -9,6 +9,9 @@ import '../../../core/widgets/calendar_range_picker.dart';
 import '../../../core/widgets/app_asset_image.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart';
+import '../../../core/models/owner_filter.dart';
+import '../../../core/widgets/owner_filter_chip.dart';
+import '../providers/task_owner_filter_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../widgets/task_analytics_bottom_sheet.dart';
 
@@ -242,143 +245,172 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
               ],
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FilterChip(
-                  label: _statusChipLabel(TaskStatus.open, countsAsync, filter),
-                  selected: filter.statuses.contains(TaskStatus.open),
-                  onSelected: filtersEnabled
-                      ? (_) => _toggleStatus(TaskStatus.open)
-                      : null,
-                ),
-                FilterChip(
-                  label: _statusChipLabel(
-                    TaskStatus.snoozed,
-                    countsAsync,
-                    filter,
-                  ),
-                  selected: filter.statuses.contains(TaskStatus.snoozed),
-                  onSelected: filtersEnabled
-                      ? (_) => _toggleStatus(TaskStatus.snoozed)
-                      : null,
-                ),
-                FilterChip(
-                  label: _statusChipLabel(
-                    TaskStatus.closed,
-                    countsAsync,
-                    filter,
-                  ),
-                  selected: filter.statuses.contains(TaskStatus.closed),
-                  onSelected: filtersEnabled
-                      ? (_) => _toggleStatus(TaskStatus.closed)
-                      : null,
-                ),
-                if (allFiltersOff)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    child: Text(
-                      'Εμφάνιση Όλων',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                    ),
-                  ),
-                if (hasDateRange) ...[
-                  const SizedBox(width: 8),
-                  ActionChip(
-                    avatar: const Icon(Icons.calendar_today, size: 18),
-                    label: Text(dateRangeLabel),
-                    onPressed: filtersEnabled ? _pickDateRange : null,
-                  ),
-                  IconButton(
-                    tooltip: 'Καθαρισμός ημερομηνιών',
-                    icon: AppAssetImage(
-                      assetPath: 'assets/ic_calendar_broom_clear.png',
-                      width: 22,
-                      height: 22,
-                      fallbackIcon: Icons.event_busy,
-                    ),
-                    onPressed: filtersEnabled ? _clearDateRange : null,
-                  ),
-                ],
-                const SizedBox(width: 8),
-                if (filtersEnabled)
-                  PopupMenuButton<TaskSortOption>(
-                    tooltip: 'Ταξινόμηση',
-                    onSelected: (value) {
-                      _deferProviderUpdate(() {
-                        ref
-                            .read(taskFilterProvider.notifier)
-                            .update((s) => s.copyWith(sortBy: value));
-                      });
-                    },
-                    itemBuilder: (context) => TaskSortOption.values
-                        .map(
-                          (o) => PopupMenuItem<TaskSortOption>(
-                            value: o,
-                            child: Text(_getSortOptionLabel(o)),
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      FilterChip(
+                        label: _statusChipLabel(
+                          TaskStatus.open,
+                          countsAsync,
+                          filter,
+                        ),
+                        selected: filter.statuses.contains(TaskStatus.open),
+                        onSelected: filtersEnabled
+                            ? (_) => _toggleStatus(TaskStatus.open)
+                            : null,
+                      ),
+                      FilterChip(
+                        label: _statusChipLabel(
+                          TaskStatus.snoozed,
+                          countsAsync,
+                          filter,
+                        ),
+                        selected: filter.statuses.contains(TaskStatus.snoozed),
+                        onSelected: filtersEnabled
+                            ? (_) => _toggleStatus(TaskStatus.snoozed)
+                            : null,
+                      ),
+                      FilterChip(
+                        label: _statusChipLabel(
+                          TaskStatus.closed,
+                          countsAsync,
+                          filter,
+                        ),
+                        selected: filter.statuses.contains(TaskStatus.closed),
+                        onSelected: filtersEnabled
+                            ? (_) => _toggleStatus(TaskStatus.closed)
+                            : null,
+                      ),
+                      if (allFiltersOff)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          child: Text(
+                            'Εμφάνιση Όλων',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
+                        ),
+                      if (hasDateRange) ...[
+                        const SizedBox(width: 8),
+                        ActionChip(
+                          avatar: const Icon(Icons.calendar_today, size: 18),
+                          label: Text(dateRangeLabel),
+                          onPressed: filtersEnabled ? _pickDateRange : null,
+                        ),
+                        IconButton(
+                          tooltip: 'Καθαρισμός ημερομηνιών',
+                          icon: AppAssetImage(
+                            assetPath: 'assets/ic_calendar_broom_clear.png',
+                            width: 22,
+                            height: 22,
+                            fallbackIcon: Icons.event_busy,
+                          ),
+                          onPressed: filtersEnabled ? _clearDateRange : null,
+                        ),
+                      ],
+                      const SizedBox(width: 8),
+                      if (filtersEnabled)
+                        PopupMenuButton<TaskSortOption>(
+                          tooltip: 'Ταξινόμηση',
+                          onSelected: (value) {
+                            _deferProviderUpdate(() {
+                              ref
+                                  .read(taskFilterProvider.notifier)
+                                  .update((s) => s.copyWith(sortBy: value));
+                            });
+                          },
+                          itemBuilder: (context) => TaskSortOption.values
+                              .map(
+                                (o) => PopupMenuItem<TaskSortOption>(
+                                  value: o,
+                                  child: Text(_getSortOptionLabel(o)),
+                                ),
+                              )
+                              .toList(),
+                          child: Chip(
+                            avatar: const Icon(Icons.sort, size: 18),
+                            label: Text(_getSortOptionLabel(filter.sortBy)),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
                           ),
                         )
-                        .toList(),
-                    child: Chip(
-                      avatar: const Icon(Icons.sort, size: 18),
-                      label: Text(_getSortOptionLabel(filter.sortBy)),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  )
-                else
-                  FilterChip(
-                    avatar: const Icon(Icons.sort, size: 18),
-                    label: Text(_getSortOptionLabel(filter.sortBy)),
-                    selected: false,
-                    onSelected: null,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                IconButton.filledTonal(
-                  constraints: const BoxConstraints(
-                    minWidth: 36,
-                    minHeight: 36,
-                  ),
-                  padding: EdgeInsets.zero,
-                  style: IconButton.styleFrom(
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  tooltip: filter.sortAscending
-                      ? 'Αύξουσα ταξινόμηση'
-                      : 'Φθίνουσα ταξινόμηση',
-                  onPressed: filtersEnabled
-                      ? () {
-                          _deferProviderUpdate(() {
-                            ref
-                                .read(taskFilterProvider.notifier)
-                                .update(
-                                  (s) => s.copyWith(
-                                    sortAscending: !s.sortAscending,
-                                  ),
-                                );
-                          });
-                        }
-                      : null,
-                  icon: Icon(
-                    filter.sortAscending
-                        ? Icons.arrow_upward
-                        : Icons.arrow_downward,
-                    size: 20,
+                      else
+                        FilterChip(
+                          avatar: const Icon(Icons.sort, size: 18),
+                          label: Text(_getSortOptionLabel(filter.sortBy)),
+                          selected: false,
+                          onSelected: null,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      IconButton.filledTonal(
+                        constraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 36,
+                        ),
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        tooltip: filter.sortAscending
+                            ? 'Αύξουσα ταξινόμηση'
+                            : 'Φθίνουσα ταξινόμηση',
+                        onPressed: filtersEnabled
+                            ? () {
+                                _deferProviderUpdate(() {
+                                  ref
+                                      .read(taskFilterProvider.notifier)
+                                      .update(
+                                        (s) => s.copyWith(
+                                          sortAscending: !s.sortAscending,
+                                        ),
+                                      );
+                                });
+                              }
+                            : null,
+                        icon: Icon(
+                          filter.sortAscending
+                              ? Icons.arrow_upward
+                              : Icons.arrow_downward,
+                          size: 20,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(width: 8),
+                _buildOwnerFilter(context),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Το φίλτρο «ποιανού εκκρεμότητες», δεξιά στη γραμμή των chips — το κοινό
+  /// chip του [OwnerFilterChip], με τις επιλογές των εκκρεμοτήτων.
+  Widget _buildOwnerFilter(BuildContext context) {
+    return OwnerFilterChip(
+      tooltip: 'Ποιανού εκκρεμότητες',
+      options: ref.watch(taskOwnerOptionsProvider).value ?? const [],
+      current: ref.watch(taskOwnerFilterProvider).value ?? OwnerFilter.everyone,
+      onSelected: (value) {
+        _deferProviderUpdate(() {
+          ref.read(taskOwnerFilterProvider.notifier).select(value);
+        });
+      },
     );
   }
 }

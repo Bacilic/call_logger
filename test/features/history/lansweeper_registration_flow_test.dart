@@ -107,38 +107,38 @@ void main() {
       );
 
       expect(result, '17133');
-      expect(
-        dialogs.duplicateChecks,
-        ['17132', '17133'],
-        reason: 'Ο νέος αριθμός δεν εξαιρείται από τον έλεγχο',
-      );
-      expect(
-        dialogs.changeIdPrompts,
-        ['17132'],
-        reason: 'Ο διάλογος αλλαγής ανοίγει με τον τρέχοντα αριθμό',
-      );
+      expect(dialogs.duplicateChecks, [
+        '17132',
+        '17133',
+      ], reason: 'Ο νέος αριθμός δεν εξαιρείται από τον έλεγχο');
+      expect(dialogs.changeIdPrompts, [
+        '17132',
+      ], reason: 'Ο διάλογος αλλαγής ανοίγει με τον τρέχοντα αριθμό');
     });
 
-    test('αλυσιδωτές αλλαγές: ο έλεγχος επαναλαμβάνεται ώσπου να καθαρίσει', () async {
-      final dialogs = _ScriptedDialogs(
-        duplicateAnswers: const [
-          DuplicateTicketAction.changeId,
-          DuplicateTicketAction.changeId,
-          DuplicateTicketAction.proceed,
-        ],
-        changeIdAnswers: const ['17133', '17134'],
-      );
+    test(
+      'αλυσιδωτές αλλαγές: ο έλεγχος επαναλαμβάνεται ώσπου να καθαρίσει',
+      () async {
+        final dialogs = _ScriptedDialogs(
+          duplicateAnswers: const [
+            DuplicateTicketAction.changeId,
+            DuplicateTicketAction.changeId,
+            DuplicateTicketAction.proceed,
+          ],
+          changeIdAnswers: const ['17133', '17134'],
+        );
 
-      final result = await resolveTicketIdWithoutDuplicate(
-        candidate: '17132',
-        checkDuplicate: dialogs.checkDuplicate,
-        askForDifferentId: dialogs.askForDifferentId,
-      );
+        final result = await resolveTicketIdWithoutDuplicate(
+          candidate: '17132',
+          checkDuplicate: dialogs.checkDuplicate,
+          askForDifferentId: dialogs.askForDifferentId,
+        );
 
-      expect(result, '17134');
-      expect(dialogs.duplicateChecks, ['17132', '17133', '17134']);
-      expect(dialogs.changeIdPrompts, ['17132', '17133']);
-    });
+        expect(result, '17134');
+        expect(dialogs.duplicateChecks, ['17132', '17133', '17134']);
+        expect(dialogs.changeIdPrompts, ['17132', '17133']);
+      },
+    );
 
     test('«Άκυρο» στον διάλογο αλλαγής: null (καμία σήμανση)', () async {
       final dialogs = _ScriptedDialogs(
@@ -155,34 +155,27 @@ void main() {
       expect(result, isNull);
     });
 
-    test(
-      'σβήσιμο του αριθμού στην αλλαγή: γίνεται δεκτό ως «χωρίς ticket», '
-      'χωρίς νέα πρόταση αριθμού',
-      () async {
-        final dialogs = _ScriptedDialogs(
-          duplicateAnswers: const [DuplicateTicketAction.changeId],
-          changeIdAnswers: const [''],
-        );
+    test('σβήσιμο του αριθμού στην αλλαγή: γίνεται δεκτό ως «χωρίς ticket», '
+        'χωρίς νέα πρόταση αριθμού', () async {
+      final dialogs = _ScriptedDialogs(
+        duplicateAnswers: const [DuplicateTicketAction.changeId],
+        changeIdAnswers: const [''],
+      );
 
-        final result = await resolveTicketIdWithoutDuplicate(
-          candidate: '17132',
-          checkDuplicate: dialogs.checkDuplicate,
-          askForDifferentId: dialogs.askForDifferentId,
-        );
+      final result = await resolveTicketIdWithoutDuplicate(
+        candidate: '17132',
+        checkDuplicate: dialogs.checkDuplicate,
+        askForDifferentId: dialogs.askForDifferentId,
+      );
 
-        expect(result, '');
-        expect(
-          dialogs.duplicateChecks,
-          ['17132'],
-          reason: 'Το κενό δεν ξαναελέγχεται για διπλό',
-        );
-        expect(
-          dialogs.changeIdPrompts,
-          ['17132'],
-          reason: 'Η ρητή επιλογή «χωρίς ticket» δεν ακυρώνεται με νέα ερώτηση',
-        );
-      },
-    );
+      expect(result, '');
+      expect(dialogs.duplicateChecks, [
+        '17132',
+      ], reason: 'Το κενό δεν ξαναελέγχεται για διπλό');
+      expect(dialogs.changeIdPrompts, [
+        '17132',
+      ], reason: 'Η ρητή επιλογή «χωρίς ticket» δεν ακυρώνεται με νέα ερώτηση');
+    });
   });
 
   group('registrationSuccessMessage', () {

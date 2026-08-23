@@ -512,8 +512,7 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
                       const SizedBox(width: 4),
                       _SolutionChip(
                         active:
-                            _solutionZoneVisible ||
-                            solution.trim().isNotEmpty,
+                            _solutionZoneVisible || solution.trim().isNotEmpty,
                         onPressed: _activateSolutionZone,
                       ),
                       const SizedBox(width: 8),
@@ -611,8 +610,7 @@ class _SolutionChip extends StatelessWidget {
     final muted = theme.colorScheme.onSurfaceVariant;
     return Tooltip(
       waitDuration: const Duration(milliseconds: 600),
-      message:
-          'Η γραμμή του κέρσορα γίνεται η Λύση της κλήσης (Ctrl+Enter)',
+      message: 'Η γραμμή του κέρσορα γίνεται η Λύση της κλήσης (Ctrl+Enter)',
       child: Material(
         color: active ? muted : Colors.transparent,
         shape: StadiumBorder(

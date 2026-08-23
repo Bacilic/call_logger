@@ -17,10 +17,7 @@ void main() {
   group('πότε προειδοποιούμε', () {
     test('άναμμα χωρίς πυρήνα: ναι', () {
       expect(
-        shouldWarnEnablingSpellCheck(
-          turningOn: true,
-          coreLexiconLoaded: false,
-        ),
+        shouldWarnEnablingSpellCheck(turningOn: true, coreLexiconLoaded: false),
         isTrue,
       );
     });

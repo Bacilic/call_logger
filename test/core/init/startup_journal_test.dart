@@ -119,10 +119,10 @@ void main() {
 
       journal.rewindToBootPrefix();
 
-      expect(
-        journal.steps.value.map((s) => s.label),
-        ['Φόρτωση μηχανής SQLite', 'Προετοιμασία παραθύρου'],
-      );
+      expect(journal.steps.value.map((s) => s.label), [
+        'Φόρτωση μηχανής SQLite',
+        'Προετοιμασία παραθύρου',
+      ]);
       expect(journal.hasFailure, isFalse);
     });
 

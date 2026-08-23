@@ -72,7 +72,13 @@ import 'database_foreign_keys.dart';
 /// v50: πίνακας `operator_presence` — πότε είδε τελευταία φορά τη βάση ο κάθε
 /// χρήστης, από κάθε σταθμό. Καθαρή προσθήκη, χωρίς δεσμούς, όπως οι δύο
 /// προηγούμενοι πίνακες των χρηστών.
-const int databaseSchemaVersionV1 = 50;
+/// v51: το ιστορικό λέει «Υπάλληλος» και στην αναζήτηση — μετονομασία της
+/// ενέργειας «ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ» και ξαναχτίσιμο του ευρετηρίου. Μόνο
+/// δεδομένα, καμία αλλαγή δομής.
+/// v52: `operator_presence.instance` — ποιο ανοιχτό αντίγραφο κρατά το ίχνος.
+/// Χωρίς αυτό, η αλλαγή χρήστη άφηνε τον προηγούμενο «συνδεδεμένο» για τρία
+/// λεπτά στον ίδιο υπολογιστή με τον νέο.
+const int databaseSchemaVersionV1 = 54;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
 ///
@@ -80,6 +86,28 @@ const int databaseSchemaVersionV1 = 50;
 /// να αποκτήσει.** Παλαιότερη έκδοση της εφαρμογής που ανοίγει αυτή τη βάση
 /// αγνοεί όσους πίνακες δεν γνωρίζει· ένας δεσμός όμως προς πίνακα που *ξέρει*
 /// θα εμπόδιζε τις δικές της διαγραφές, και τότε η βάση θα της απαγορευόταν.
+/// Ο πίνακας του Ιστορικού Εφαρμογής.
+///
+/// Γραμμένος σε σταθερά ώστε οι έλεγχοι να στήνουν **τον ίδιο** πίνακα με την
+/// παραγωγή. Όσο ζούσε μόνο μέσα στη δημιουργία σχήματος, κάθε έλεγχος τον
+/// ξανάγραφε με το χέρι — και μια νέα στήλη θα έμενε έξω από τα αντίγραφα
+/// χωρίς να παραπονεθεί κανείς.
+const String kCreateAuditLogTable = '''
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT,
+        timestamp TEXT,
+        user_performing TEXT,
+        details TEXT,
+        entity_type TEXT,
+        entity_id INTEGER,
+        entity_name TEXT,
+        search_text TEXT,
+        old_values_json TEXT,
+        new_values_json TEXT
+      )
+    ''';
+
 const String kCreateOperatorsTable = '''
       CREATE TABLE IF NOT EXISTS operators (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -135,6 +163,7 @@ const String kCreateOperatorPresenceTable = '''
         operator_id INTEGER NOT NULL,
         station TEXT NOT NULL,
         last_seen_at TEXT NOT NULL,
+        instance TEXT,
         PRIMARY KEY (operator_id, station)
       )
 ''';
@@ -198,7 +227,8 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         lansweeper_state TEXT NOT NULL DEFAULT 'unsent',
         lansweeper_main_ticket_id TEXT,
         lansweeper_last_sync_at TEXT,
-        is_deleted INTEGER DEFAULT 0
+        is_deleted INTEGER DEFAULT 0,
+        created_by_operator_id INTEGER
       )
     ''');
   await db.execute(
@@ -260,21 +290,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
 
   await db.execute(kCreateKnowledgeBaseTable);
 
-  await db.execute('''
-      CREATE TABLE audit_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        action TEXT,
-        timestamp TEXT,
-        user_performing TEXT,
-        details TEXT,
-        entity_type TEXT,
-        entity_id INTEGER,
-        entity_name TEXT,
-        search_text TEXT,
-        old_values_json TEXT,
-        new_values_json TEXT
-      )
-    ''');
+  await db.execute(kCreateAuditLogTable);
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)',
   );

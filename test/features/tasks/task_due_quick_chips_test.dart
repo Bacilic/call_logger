@@ -14,25 +14,22 @@ void main() {
     });
 
     test('αύριο: τρίγραμμο ημέρας και ώρα', () {
-      expect(
-        formatTaskDuePreview(now, DateTime(2026, 8, 1, 8)),
-        'ΣΑΒ 08:00',
-      );
+      expect(formatTaskDuePreview(now, DateTime(2026, 8, 1, 8)), 'ΣΑΒ 08:00');
     });
 
     test('έκτη ημέρα μπροστά: ακόμη τρίγραμμο ημέρας', () {
-      expect(
-        formatTaskDuePreview(now, DateTime(2026, 8, 6, 8)),
-        'ΠΕΜ 08:00',
-      );
+      expect(formatTaskDuePreview(now, DateTime(2026, 8, 6, 8)), 'ΠΕΜ 08:00');
     });
 
-    test('έβδομη ημέρα μπροστά: ημερομηνία, ώστε να μην μπερδεύεται η εβδομάδα', () {
-      expect(
-        formatTaskDuePreview(now, DateTime(2026, 8, 7, 8)),
-        '07/08 08:00',
-      );
-    });
+    test(
+      'έβδομη ημέρα μπροστά: ημερομηνία, ώστε να μην μπερδεύεται η εβδομάδα',
+      () {
+        expect(
+          formatTaskDuePreview(now, DateTime(2026, 8, 7, 8)),
+          '07/08 08:00',
+        );
+      },
+    );
 
     test('παρελθόν: ημερομηνία', () {
       expect(

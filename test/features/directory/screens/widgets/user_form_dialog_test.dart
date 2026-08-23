@@ -347,7 +347,9 @@ void main() {
         expect(
           (row['location'] as String?) ?? '',
           isEmpty,
-          reason: greekExpectMsg('Το άδειασμα της Τοποθεσίας γράφεται στη βάση'),
+          reason: greekExpectMsg(
+            'Το άδειασμα της Τοποθεσίας γράφεται στη βάση',
+          ),
         );
       },
     );

@@ -109,7 +109,10 @@ void main() {
 
     test('κλείδωμα ή άλλο σφάλμα: όχι', () {
       expect(looksLikeCopiedWhileInUseError('database is locked'), isFalse);
-      expect(looksLikeCopiedWhileInUseError('unable to open database'), isFalse);
+      expect(
+        looksLikeCopiedWhileInUseError('unable to open database'),
+        isFalse,
+      );
     });
   });
 
@@ -157,23 +160,26 @@ void main() {
       }
     });
 
-    test('κεφαλίδα δηλώνει περισσότερες σελίδες από όσες έχει το αρχείο', () async {
-      const pageSize = 4096;
-      final path = '${tempDir.path}${Platform.pathSeparator}kommeno.db';
-      // Κεφαλίδα που υπόσχεται 10 σελίδες, αρχείο που έχει 3.
-      final content = <int>[
-        ..._header(pageSize: pageSize, pageCount: 10),
-        ...List<int>.filled(3 * pageSize - 100, 0),
-      ];
-      await File(path).writeAsBytes(content);
+    test(
+      'κεφαλίδα δηλώνει περισσότερες σελίδες από όσες έχει το αρχείο',
+      () async {
+        const pageSize = 4096;
+        final path = '${tempDir.path}${Platform.pathSeparator}kommeno.db';
+        // Κεφαλίδα που υπόσχεται 10 σελίδες, αρχείο που έχει 3.
+        final content = <int>[
+          ..._header(pageSize: pageSize, pageCount: 10),
+          ...List<int>.filled(3 * pageSize - 100, 0),
+        ];
+        await File(path).writeAsBytes(content);
 
-      final identity = await readDatabaseFileIdentity(path);
-      expect(identity, isNotNull);
-      expect(identity!.pageCount, 10);
-      expect(
-        inspectDatabaseFileStructure(identity),
-        DatabaseStructuralVerdict.truncated,
-      );
-    });
+        final identity = await readDatabaseFileIdentity(path);
+        expect(identity, isNotNull);
+        expect(identity!.pageCount, 10);
+        expect(
+          inspectDatabaseFileStructure(identity),
+          DatabaseStructuralVerdict.truncated,
+        );
+      },
+    );
   });
 }

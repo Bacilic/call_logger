@@ -5,6 +5,7 @@
 
 import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/core/database/database_schema_migrations.dart';
+import 'package:call_logger/core/database/database_v1_schema.dart';
 import 'package:call_logger/core/database/operator_repository.dart';
 import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/services/current_operator.dart';
@@ -23,6 +24,10 @@ void main() {
       initSqfliteFfiForTests();
       db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
       await onDatabaseUpgradeSquashed(db, 46, 47);
+      // Το Ιστορικό υπάρχει από πολύ πριν την v47: κάθε αλλαγή προφίλ γράφει
+      // εκεί, οπότε βάση χωρίς αυτόν τον πίνακα δεν αντιστοιχεί σε τίποτα
+      // πραγματικό.
+      await db.execute(kCreateAuditLogTable);
       repository = OperatorRepository(db);
       CurrentOperator.reset();
     });
@@ -121,6 +126,10 @@ void main() {
       initSqfliteFfiForTests();
       db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
       await onDatabaseUpgradeSquashed(db, 46, 47);
+      // Το Ιστορικό υπάρχει από πολύ πριν την v47: κάθε αλλαγή προφίλ γράφει
+      // εκεί, οπότε βάση χωρίς αυτόν τον πίνακα δεν αντιστοιχεί σε τίποτα
+      // πραγματικό.
+      await db.execute(kCreateAuditLogTable);
       repository = OperatorRepository(db);
       CurrentOperator.reset();
     });

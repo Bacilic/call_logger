@@ -77,7 +77,7 @@ void main() {
         final rows = await allAuditRows();
         expect(rows, hasLength(1));
         expect(rows.single['entity_type'], AuditEntityTypes.user);
-        expect(rows.single['action'], 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ');
+        expect(rows.single['action'], AuditActions.modifyUser);
 
         final phoneEntityAudits = await db.query(
           'audit_log',

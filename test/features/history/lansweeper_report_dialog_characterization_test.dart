@@ -245,56 +245,54 @@ void main() {
       await tester.pump(const Duration(seconds: 11));
     }, semanticsEnabled: false);
 
-    testWidgets(
-      'επιλογή: η αλλαγή επιλογής ενεργοποιεί την Άμεση Καταχώρηση',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('επιλογή: η αλλαγή επιλογής ενεργοποιεί την Άμεση Καταχώρηση', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final reportCalls =
-            await tester.runAsync(_seedSelectCall) ?? <CallModel>[];
-        expect(reportCalls, hasLength(1));
+      final reportCalls =
+          await tester.runAsync(_seedSelectCall) ?? <CallModel>[];
+      expect(reportCalls, hasLength(1));
 
-        final container = ProviderContainer(
-          overrides: _lansweeperCharacterizationOverrides(
-            reportCalls: reportCalls,
-          ),
-        );
-        addTearDown(container.dispose);
+      final container = ProviderContainer(
+        overrides: _lansweeperCharacterizationOverrides(
+          reportCalls: reportCalls,
+        ),
+      );
+      addTearDown(container.dispose);
 
-        await _pumpLansweeperReportDialog(tester, container);
+      await _pumpLansweeperReportDialog(tester, container);
 
-        final submitButton = _immediateSubmitButton();
-        expect(submitButton, findsOneWidget);
-        expect(
-          tester.widget<FilledButton>(submitButton).onPressed,
-          isNull,
-          reason: greekExpectMsg(
-            'Χωρίς επιλογή η Άμεση Καταχώρηση είναι απενεργοποιημένη',
-          ),
-        );
+      final submitButton = _immediateSubmitButton();
+      expect(submitButton, findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(submitButton).onPressed,
+        isNull,
+        reason: greekExpectMsg(
+          'Χωρίς επιλογή η Άμεση Καταχώρηση είναι απενεργοποιημένη',
+        ),
+      );
 
-        final itemBoxes = _itemCheckboxes();
-        expect(itemBoxes, findsWidgets);
-        await tester.tap(itemBoxes.first);
-        await pumpUntilSettled(tester);
+      final itemBoxes = _itemCheckboxes();
+      expect(itemBoxes, findsWidgets);
+      await tester.tap(itemBoxes.first);
+      await pumpUntilSettled(tester);
 
-        expect(
-          tester.widget<FilledButton>(submitButton).onPressed,
-          isNotNull,
-          reason: greekExpectMsg(
-            'Με επιλεγμένη κλήση η Άμεση Καταχώρηση ενεργοποιείται',
-          ),
-        );
-        expect(find.textContaining('Επιλεγμένες: 1'), findsOneWidget);
-        await tester.pump(const Duration(seconds: 11));
-      },
-      semanticsEnabled: false,
-    );
+      expect(
+        tester.widget<FilledButton>(submitButton).onPressed,
+        isNotNull,
+        reason: greekExpectMsg(
+          'Με επιλεγμένη κλήση η Άμεση Καταχώρηση ενεργοποιείται',
+        ),
+      );
+      expect(find.textContaining('Επιλεγμένες: 1'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 11));
+    }, semanticsEnabled: false);
 
     testWidgets('η αναφορά δείχνει την ουρά, όχι τις τακτοποιημένες', (
       tester,
@@ -367,10 +365,7 @@ void main() {
 
       // Κάθε κλήση της αναφοράς είναι ήδη ακαταχώρητη — το κουμπί θα ήταν
       // μονίμως ανενεργό. Η επαναφορά γίνεται από το Ιστορικό.
-      expect(
-        find.widgetWithText(OutlinedButton, 'Ακαταχώρητη'),
-        findsNothing,
-      );
+      expect(find.widgetWithText(OutlinedButton, 'Ακαταχώρητη'), findsNothing);
       expect(find.widgetWithText(OutlinedButton, 'Εξαίρεση'), findsOneWidget);
       expect(
         find.widgetWithText(OutlinedButton, 'Καταχωρημένη'),

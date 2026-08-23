@@ -83,83 +83,81 @@ void main() {
     }, semanticsEnabled: false);
 
     //   flutter test test/features/directory/directory_user_search_test.dart --plain-name "hover πίνακα"
-    testWidgets(
-      'Κατάλογος: hover πίνακα δεν κλέβει εστίαση/κείμενο αναζήτησης',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('Κατάλογος: hover πίνακα δεν κλέβει εστίαση/κείμενο αναζήτησης', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        await _openDirectoryUsersTab(tester);
+      await _openDirectoryUsersTab(tester);
 
-        final userSearch = _catalogUserSearchField();
-        expect(userSearch, findsOneWidget);
+      final userSearch = _catalogUserSearchField();
+      expect(userSearch, findsOneWidget);
 
-        await tester.tap(userSearch);
-        await tester.pump();
-        tester.testTextInput.register();
+      await tester.tap(userSearch);
+      await tester.pump();
+      tester.testTextInput.register();
 
-        const partialQuery = 'Παπαδ';
-        await tester.enterText(userSearch, partialQuery);
-        await tester.pump();
-        await pumpUntilSettled(tester);
+      const partialQuery = 'Παπαδ';
+      await tester.enterText(userSearch, partialQuery);
+      await tester.pump();
+      await pumpUntilSettled(tester);
 
-        final editableFinder = find.descendant(
-          of: userSearch,
-          matching: find.byType(EditableText),
-        );
-        expect(editableFinder, findsOneWidget);
+      final editableFinder = find.descendant(
+        of: userSearch,
+        matching: find.byType(EditableText),
+      );
+      expect(editableFinder, findsOneWidget);
 
-        final tableFinder = find.byType(UsersDataTable);
-        expect(tableFinder, findsOneWidget);
+      final tableFinder = find.byType(UsersDataTable);
+      expect(tableFinder, findsOneWidget);
 
-        final tableCenter = tester.getCenter(tableFinder);
-        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-        await mouse.addPointer(location: tableCenter);
-        await mouse.moveTo(tableCenter);
-        await tester.pump();
+      final tableCenter = tester.getCenter(tableFinder);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: tableCenter);
+      await mouse.moveTo(tableCenter);
+      await tester.pump();
 
-        final editableOnHover = tester.widget<EditableText>(editableFinder);
-        expect(
-          editableOnHover.focusNode.hasFocus,
-          isTrue,
-          reason: greekExpectMsg(
-            'Η εστίαση πρέπει να παραμένει στο πεδίο αναζήτησης όταν ο κέρσορας μπαίνει στον πίνακα',
-          ),
-        );
-        expect(
-          editableOnHover.controller.text,
-          partialQuery,
-          reason: greekExpectMsg(
-            'Το κείμενο αναζήτησης δεν πρέπει να κόβεται μετά από hover στον πίνακα',
-          ),
-        );
+      final editableOnHover = tester.widget<EditableText>(editableFinder);
+      expect(
+        editableOnHover.focusNode.hasFocus,
+        isTrue,
+        reason: greekExpectMsg(
+          'Η εστίαση πρέπει να παραμένει στο πεδίο αναζήτησης όταν ο κέρσορας μπαίνει στον πίνακα',
+        ),
+      );
+      expect(
+        editableOnHover.controller.text,
+        partialQuery,
+        reason: greekExpectMsg(
+          'Το κείμενο αναζήτησης δεν πρέπει να κόβεται μετά από hover στον πίνακα',
+        ),
+      );
 
-        const fullQuery = 'Παπαδ μαρι';
-        tester.testTextInput.updateEditingValue(
-          TextEditingValue(
-            text: fullQuery,
-            selection: TextSelection.collapsed(offset: fullQuery.length),
-          ),
-        );
-        await tester.pump();
-        await pumpUntilSettled(tester);
+      const fullQuery = 'Παπαδ μαρι';
+      tester.testTextInput.updateEditingValue(
+        TextEditingValue(
+          text: fullQuery,
+          selection: TextSelection.collapsed(offset: fullQuery.length),
+        ),
+      );
+      await tester.pump();
+      await pumpUntilSettled(tester);
 
-        final editableAfterTyping = tester.widget<EditableText>(editableFinder);
-        expect(
-          editableAfterTyping.controller.text,
-          fullQuery,
-          reason: greekExpectMsg(
-            'Συνέχεια πληκτρολόγησης με hover στον πίνακα πρέπει να διατηρεί το πλήρες κείμενο',
-          ),
-        );
+      final editableAfterTyping = tester.widget<EditableText>(editableFinder);
+      expect(
+        editableAfterTyping.controller.text,
+        fullQuery,
+        reason: greekExpectMsg(
+          'Συνέχεια πληκτρολόγησης με hover στον πίνακα πρέπει να διατηρεί το πλήρες κείμενο',
+        ),
+      );
 
-        await tester.pump(const Duration(seconds: 11));
-      },
-      semanticsEnabled: false,
-    );
+      await tester.pump(const Duration(seconds: 11));
+    }, semanticsEnabled: false);
   });
 }

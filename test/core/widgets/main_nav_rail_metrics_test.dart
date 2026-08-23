@@ -26,10 +26,7 @@ void main() {
     });
 
     test('κενό σύνολο δίνει μηδέν', () {
-      expect(
-        widestSingleLineTextWidth(texts: const [], style: _style),
-        0,
-      );
+      expect(widestSingleLineTextWidth(texts: const [], style: _style), 0);
     });
 
     test('η κλίμακα γραμματοσειράς μεγαλώνει τη μέτρηση', () {

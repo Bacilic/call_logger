@@ -90,31 +90,29 @@ void main() {
       await LookupService.instance.loadFromDatabase();
     });
 
-    testWidgets(
-      'Ιστορικό με rail: χωρίς FAB, η συντόμευση ανοίγει διάλογο',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-        addTearDown(() async {
-          await _dismissQuickCallDialog(tester);
-        });
+    testWidgets('Ιστορικό με rail: χωρίς FAB, η συντόμευση ανοίγει διάλογο', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      addTearDown(() async {
+        await _dismissQuickCallDialog(tester);
+      });
 
-        await _pumpCallLoggerApp(tester);
-        await _goToHistory(tester);
+      await _pumpCallLoggerApp(tester);
+      await _goToHistory(tester);
 
-        expect(_quickCallFab(), findsNothing);
+      expect(_quickCallFab(), findsNothing);
 
-        await _invokeQuickCaptureIntent(tester);
-        expect(_quickCallDialog(), findsOneWidget);
+      await _invokeQuickCaptureIntent(tester);
+      expect(_quickCallDialog(), findsOneWidget);
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
 
     testWidgets(
       'Immersive (ιστορικό/λεξικό): εμφανίζεται υπτάμενο κουμπί FAB',

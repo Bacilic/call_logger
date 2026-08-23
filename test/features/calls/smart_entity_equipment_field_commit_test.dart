@@ -97,67 +97,63 @@ void main() {
     });
 
     // Τεστ Α: focus-out χωρίς debounce 250ms — αποτέλεσμα lookup με ένα pump.
-    testWidgets(
-      'focus-out με υπαρκτό κωδικό → selectedEquipment με ένα pump',
-      (tester) async {
-        _configureDesktopViewport(tester);
-        await _pumpCallLoggerApp(tester);
+    testWidgets('focus-out με υπαρκτό κωδικό → selectedEquipment με ένα pump', (
+      tester,
+    ) async {
+      _configureDesktopViewport(tester);
+      await _pumpCallLoggerApp(tester);
 
-        await tester.tap(_equipmentTextField());
-        await pumpUntilSettled(tester);
-        await tester.enterText(_equipmentTextField(), kTestEquipmentCode);
-        await tester.pump();
+      await tester.tap(_equipmentTextField());
+      await pumpUntilSettled(tester);
+      await tester.enterText(_equipmentTextField(), kTestEquipmentCode);
+      await tester.pump();
 
-        await tester.tap(_departmentTextField());
-        await tester.pump();
+      await tester.tap(_departmentTextField());
+      await tester.pump();
 
-        final header = await _readHeader(tester);
-        expect(
-          header.selectedEquipment?.code,
-          kTestEquipmentCode,
-          reason: greekExpectMsg('Άμεσο lookup — επιλεγμένος εξοπλισμός'),
-        );
-        expect(
-          header.equipmentText,
-          kTestEquipmentCode,
-          reason: greekExpectMsg('Άμεσο lookup — κείμενο πεδίου'),
-        );
+      final header = await _readHeader(tester);
+      expect(
+        header.selectedEquipment?.code,
+        kTestEquipmentCode,
+        reason: greekExpectMsg('Άμεσο lookup — επιλεγμένος εξοπλισμός'),
+      );
+      expect(
+        header.equipmentText,
+        kTestEquipmentCode,
+        reason: greekExpectMsg('Άμεσο lookup — κείμενο πεδίου'),
+      );
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
 
-    testWidgets(
-      'focus-out με άγνωστο κωδικό → equipmentNoMatch με ένα pump',
-      (tester) async {
-        _configureDesktopViewport(tester);
-        await _pumpCallLoggerApp(tester);
+    testWidgets('focus-out με άγνωστο κωδικό → equipmentNoMatch με ένα pump', (
+      tester,
+    ) async {
+      _configureDesktopViewport(tester);
+      await _pumpCallLoggerApp(tester);
 
-        await tester.tap(_equipmentTextField());
-        await pumpUntilSettled(tester);
-        await tester.enterText(_equipmentTextField(), _kUnknownEquipmentCode);
-        await tester.pump();
+      await tester.tap(_equipmentTextField());
+      await pumpUntilSettled(tester);
+      await tester.enterText(_equipmentTextField(), _kUnknownEquipmentCode);
+      await tester.pump();
 
-        await tester.tap(_departmentTextField());
-        await tester.pump();
+      await tester.tap(_departmentTextField());
+      await tester.pump();
 
-        final header = await _readHeader(tester);
-        expect(
-          header.equipmentNoMatch,
-          isTrue,
-          reason: greekExpectMsg('Άμεσο lookup — no-match'),
-        );
-        expect(
-          header.selectedEquipment,
-          isNull,
-          reason: greekExpectMsg('Χωρίς επιλογή'),
-        );
+      final header = await _readHeader(tester);
+      expect(
+        header.equipmentNoMatch,
+        isTrue,
+        reason: greekExpectMsg('Άμεσο lookup — no-match'),
+      );
+      expect(
+        header.selectedEquipment,
+        isNull,
+        reason: greekExpectMsg('Χωρίς επιλογή'),
+      );
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
 
     // Τεστ Β: δικλείδα _performLookup — blur χωρίς αλλαγή κειμένου δεν ξαναγεμίζει καλούντα.
     testWidgets(
@@ -228,42 +224,40 @@ void main() {
     );
 
     // Τεστ Γ: επιλογή από αρχική λίστα προτάσεων — σωστό selectedEquipment.
-    testWidgets(
-      'tap σε πρόταση αρχικής λίστας → σωστή επιλογή εξοπλισμού',
-      (tester) async {
-        _configureDesktopViewport(tester);
-        await _pumpCallLoggerApp(tester);
+    testWidgets('tap σε πρόταση αρχικής λίστας → σωστή επιλογή εξοπλισμού', (
+      tester,
+    ) async {
+      _configureDesktopViewport(tester);
+      await _pumpCallLoggerApp(tester);
 
-        await _seedPhoneForEquipmentSuggestions(tester);
+      await _seedPhoneForEquipmentSuggestions(tester);
 
-        await tester.tap(_equipmentTextField());
-        await pumpUntilSettled(tester);
-        await tester.pump();
+      await tester.tap(_equipmentTextField());
+      await pumpUntilSettled(tester);
+      await tester.pump();
 
-        final suggestionTile = find.text(kTestEquipmentCode);
-        expect(
-          suggestionTile,
-          findsWidgets,
-          reason: greekExpectMsg('Εμφανής πρόταση εξοπλισμού'),
-        );
-        await tester.tap(suggestionTile.first);
-        await pumpUntilSettled(tester);
+      final suggestionTile = find.text(kTestEquipmentCode);
+      expect(
+        suggestionTile,
+        findsWidgets,
+        reason: greekExpectMsg('Εμφανής πρόταση εξοπλισμού'),
+      );
+      await tester.tap(suggestionTile.first);
+      await pumpUntilSettled(tester);
 
-        final header = await _readHeader(tester);
-        expect(
-          header.selectedEquipment?.code,
-          kTestEquipmentCode,
-          reason: greekExpectMsg('Επιλογή από λίστα — id εξοπλισμού'),
-        );
-        expect(
-          header.equipmentText,
-          kTestEquipmentCode,
-          reason: greekExpectMsg('Επιλογή από λίστα — κείμενο πεδίου'),
-        );
+      final header = await _readHeader(tester);
+      expect(
+        header.selectedEquipment?.code,
+        kTestEquipmentCode,
+        reason: greekExpectMsg('Επιλογή από λίστα — id εξοπλισμού'),
+      );
+      expect(
+        header.equipmentText,
+        kTestEquipmentCode,
+        reason: greekExpectMsg('Επιλογή από λίστα — κείμενο πεδίου'),
+      );
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
   });
 }

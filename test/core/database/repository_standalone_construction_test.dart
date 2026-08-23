@@ -282,7 +282,7 @@ void main() {
       final createAudit = await db.query(
         'audit_log',
         where: 'action = ? AND entity_type = ? AND entity_id = ?',
-        whereArgs: ['ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ', AuditEntityTypes.user, userId],
+        whereArgs: [AuditActions.createUser, AuditEntityTypes.user, userId],
       );
       expect(createAudit, hasLength(1));
 
@@ -295,7 +295,7 @@ void main() {
       final updateAudit = await db.query(
         'audit_log',
         where: 'action = ? AND entity_type = ? AND entity_id = ?',
-        whereArgs: ['ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ', AuditEntityTypes.user, userId],
+        whereArgs: [AuditActions.modifyUser, AuditEntityTypes.user, userId],
       );
       expect(updateAudit, hasLength(1));
 

@@ -82,7 +82,9 @@ void main() {
   test('findRelevant φέρνει το άρθρο από ανορθόγραφη κλήση', () async {
     await repo.saveArticle(_vncArticle);
 
-    final found = await repo.findRelevant(query: 'Βλεπει μαυρη οθονη απο το πρωι');
+    final found = await repo.findRelevant(
+      query: 'Βλεπει μαυρη οθονη απο το πρωι',
+    );
     expect(found, hasLength(1));
     expect(found.single.title, 'Μαύρη οθόνη λόγω VNC');
   });
@@ -91,7 +93,9 @@ void main() {
     await repo.saveArticle(_vncArticle);
 
     expect(
-      await repo.findRelevant(query: 'Να μπει το σύστημα διαλογής αλληλογραφίας'),
+      await repo.findRelevant(
+        query: 'Να μπει το σύστημα διαλογής αλληλογραφίας',
+      ),
       isEmpty,
     );
   });
@@ -122,13 +126,12 @@ void main() {
 
   test('δημιουργία και τροποποίηση καταγράφονται ξεχωριστά', () async {
     final id = await repo.saveArticle(_vncArticle);
-    await repo.saveArticle(
-      _vncArticle.copyWith(id: id, title: 'Άλλος τίτλος'),
-    );
+    await repo.saveArticle(_vncArticle.copyWith(id: id, title: 'Άλλος τίτλος'));
 
-    final actions = (await db.query('audit_log', columns: ['action']))
-        .map((r) => r['action'])
-        .toList();
+    final actions = (await db.query(
+      'audit_log',
+      columns: ['action'],
+    )).map((r) => r['action']).toList();
     expect(actions, contains('ΔΗΜΙΟΥΡΓΙΑ ΑΡΘΡΟΥ ΓΝΩΣΗΣ'));
     expect(actions, contains('ΤΡΟΠΟΠΟΙΗΣΗ ΑΡΘΡΟΥ ΓΝΩΣΗΣ'));
   });

@@ -106,7 +106,11 @@ void main() {
     await acceptTheDuplicate();
 
     final rows = await withDb(
-      (db) => db.query('data_issues', where: 'raw_value = ?', whereArgs: [licenseKey]),
+      (db) => db.query(
+        'data_issues',
+        where: 'raw_value = ?',
+        whereArgs: [licenseKey],
+      ),
     );
 
     expect(

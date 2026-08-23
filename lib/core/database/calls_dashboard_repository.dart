@@ -641,6 +641,7 @@ WHERE ${whereSpark.join(' AND ')}
         calls.lansweeper_state,
         calls.lansweeper_main_ticket_id,
         calls.lansweeper_last_sync_at,
+        calls.created_by_operator_id,
         calls.is_deleted
       FROM calls
       LEFT JOIN users ON calls.caller_id = users.id

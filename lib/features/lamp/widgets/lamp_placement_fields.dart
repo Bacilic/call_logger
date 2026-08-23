@@ -71,8 +71,7 @@ class _LampPlacementFieldsState extends State<LampPlacementFields> {
             textEditingController: _officeController,
             focusNode: _officeFocus,
             displayStringForOption: (office) => office.label,
-            optionsBuilder: (value) =>
-                widget.catalog.searchOffices(value.text),
+            optionsBuilder: (value) => widget.catalog.searchOffices(value.text),
             onSelected: _selectOffice,
             optionsViewBuilder: (context, select, options) => _OptionsPanel(
               theme: theme,

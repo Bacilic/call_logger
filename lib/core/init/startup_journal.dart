@@ -59,7 +59,8 @@ class StartupStep {
 /// έκβασης· αν το ξεχάσει, το βήμα μένει «running» και φαίνεται στην οθόνη —
 /// η παράλειψη είναι ορατή, όχι σιωπηλή.
 class StartupStepHandle {
-  StartupStepHandle._(this._journal, this._index) : _watch = Stopwatch()..start();
+  StartupStepHandle._(this._journal, this._index)
+    : _watch = Stopwatch()..start();
 
   final StartupJournal _journal;
   final int _index;
@@ -115,9 +116,7 @@ class StartupJournal {
   /// Ξεκινά βήμα και επιστρέφει τη λαβή του.
   StartupStepHandle begin(String label) {
     final next = List<StartupStep>.of(steps.value)
-      ..add(
-        StartupStep(label: label, status: StartupStepStatus.running),
-      );
+      ..add(StartupStep(label: label, status: StartupStepStatus.running));
     steps.value = next;
     return StartupStepHandle._(this, next.length - 1);
   }

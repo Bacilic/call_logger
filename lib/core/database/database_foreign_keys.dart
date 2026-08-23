@@ -181,6 +181,8 @@ CREATE TABLE tasks (
   origin TEXT DEFAULT 'legacy',
   search_index TEXT,
   is_deleted INTEGER DEFAULT 0,
+  created_by_operator_id INTEGER,
+  assigned_operator_id INTEGER,
   FOREIGN KEY (call_id) REFERENCES calls(id) ON DELETE SET NULL
 )
 ''';
@@ -211,7 +213,10 @@ const List<ForeignKeyTableDefinition> kForeignKeyRebuiltTables = [
     name: 'user_phones',
     createSql: kCreateUserPhonesTable,
   ),
-  ForeignKeyTableDefinition(name: 'equipment', createSql: kCreateEquipmentTable),
+  ForeignKeyTableDefinition(
+    name: 'equipment',
+    createSql: kCreateEquipmentTable,
+  ),
   ForeignKeyTableDefinition(
     name: 'user_equipment',
     createSql: kCreateUserEquipmentTable,

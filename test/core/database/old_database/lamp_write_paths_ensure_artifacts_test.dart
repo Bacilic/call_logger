@@ -189,35 +189,10 @@ void main() {
     }
   }
 
-  test('updateSection σε γυμνή βάση δημιουργεί τα triggers ακεραιότητας', () async {
-    await seedBare();
-
-    final result = await repository.updateSection(
-      databasePath: dbPath,
-      id: 100,
-      sectionType: OldEquipmentSectionType.equipment,
-      updatedFields: <String, Object?>{'description': 'PC Νέο'},
-    );
-    await LampDatabaseProvider.instance.close();
-
-    expect(result.success, isTrue, reason: result.message ?? '');
-    final verifyDb = await openDatabase(dbPath, singleInstance: false);
-    try {
-      final triggers = await _sqliteMasterNames(verifyDb, type: 'trigger');
-      expect(
-        triggers.contains('trg_equipment_set_master_no_self_insert'),
-        isTrue,
-      );
-    } finally {
-      await verifyDb.close();
-    }
-  });
-
   test(
-    'αποτυχία UNIQUE ux_owners_identity_key_clean δεν μπλοκάρει την εγγραφή '
-    'ούτε τα υπόλοιπα artifacts',
+    'updateSection σε γυμνή βάση δημιουργεί τα triggers ακεραιότητας',
     () async {
-      await seedBare(duplicateOwners: true);
+      await seedBare();
 
       final result = await repository.updateSection(
         databasePath: dbPath,
@@ -231,16 +206,41 @@ void main() {
       final verifyDb = await openDatabase(dbPath, singleInstance: false);
       try {
         final triggers = await _sqliteMasterNames(verifyDb, type: 'trigger');
-        final indexes = await _sqliteMasterNames(verifyDb, type: 'index');
         expect(
           triggers.contains('trg_equipment_set_master_no_self_insert'),
           isTrue,
         );
-        // Το UNIQUE λείπει λόγω διπλοτύπων — δεν μπλοκάρει τα υπόλοιπα.
-        expect(indexes.contains('ux_owners_identity_key_clean'), isFalse);
       } finally {
         await verifyDb.close();
       }
     },
   );
+
+  test('αποτυχία UNIQUE ux_owners_identity_key_clean δεν μπλοκάρει την εγγραφή '
+      'ούτε τα υπόλοιπα artifacts', () async {
+    await seedBare(duplicateOwners: true);
+
+    final result = await repository.updateSection(
+      databasePath: dbPath,
+      id: 100,
+      sectionType: OldEquipmentSectionType.equipment,
+      updatedFields: <String, Object?>{'description': 'PC Νέο'},
+    );
+    await LampDatabaseProvider.instance.close();
+
+    expect(result.success, isTrue, reason: result.message ?? '');
+    final verifyDb = await openDatabase(dbPath, singleInstance: false);
+    try {
+      final triggers = await _sqliteMasterNames(verifyDb, type: 'trigger');
+      final indexes = await _sqliteMasterNames(verifyDb, type: 'index');
+      expect(
+        triggers.contains('trg_equipment_set_master_no_self_insert'),
+        isTrue,
+      );
+      // Το UNIQUE λείπει λόγω διπλοτύπων — δεν μπλοκάρει τα υπόλοιπα.
+      expect(indexes.contains('ux_owners_identity_key_clean'), isFalse);
+    } finally {
+      await verifyDb.close();
+    }
+  });
 }

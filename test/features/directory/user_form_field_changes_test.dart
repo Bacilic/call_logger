@@ -82,9 +82,10 @@ void main() {
     });
 
     test('το τμήμα εμποδίζει — το βλέπει η καρτέλα ως κλειδωμένο πεδίο', () {
-      expect(ownerFacingChangedLabels(_base, _with(department: 'Ακτινολογικό')), [
-        'Τμήμα',
-      ]);
+      expect(
+        ownerFacingChangedLabels(_base, _with(department: 'Ακτινολογικό')),
+        ['Τμήμα'],
+      );
     });
 
     test('η τοποθεσία εμποδίζει — την κληρονομεί ο εξοπλισμός', () {

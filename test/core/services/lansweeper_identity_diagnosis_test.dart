@@ -29,18 +29,20 @@ void main() {
   });
 
   group('προσπάθεια τομέα\\όνομα — στοχευμένα λάθη', () {
-    test('ξεχασμένο «=» πριν από έγκυρη ουρά → πρόταση με το πλήρες κείμενο',
-        () {
-      final d = diagnoseLansweeperIdentity(
-        r'Γιατρός Τεπ Παθολογικού2 gnk\TepPath2',
-      );
-      expect(d.isValid, isFalse);
-      expect(d.problem, contains('λείπει το «=»'));
-      expect(
-        d.suggestion,
-        r'Γράψτε: Γιατρός Τεπ Παθολογικού2 = gnk\TepPath2',
-      );
-    });
+    test(
+      'ξεχασμένο «=» πριν από έγκυρη ουρά → πρόταση με το πλήρες κείμενο',
+      () {
+        final d = diagnoseLansweeperIdentity(
+          r'Γιατρός Τεπ Παθολογικού2 gnk\TepPath2',
+        );
+        expect(d.isValid, isFalse);
+        expect(d.problem, contains('λείπει το «=»'));
+        expect(
+          d.suggestion,
+          r'Γράψτε: Γιατρός Τεπ Παθολογικού2 = gnk\TepPath2',
+        );
+      },
+    );
 
     test('κενά χωρίς έγκυρη ουρά → μήνυμα για τα κενά, χωρίς πρόταση', () {
       final d = diagnoseLansweeperIdentity(r'gnk\Tep Path Κείμενο');
@@ -80,15 +82,11 @@ void main() {
 
     test('όρια μήκους: τομέας >15, όνομα >20 (όρια των Windows)', () {
       expect(
-        diagnoseLansweeperIdentity(
-          r'averylongdomain16\user',
-        ).problem,
+        diagnoseLansweeperIdentity(r'averylongdomain16\user').problem,
         contains('15'),
       );
       expect(
-        diagnoseLansweeperIdentity(
-          r'gnk\averyverylongusername21',
-        ).problem,
+        diagnoseLansweeperIdentity(r'gnk\averyverylongusername21').problem,
         contains('20'),
       );
     });
@@ -141,10 +139,7 @@ void main() {
 
   group('lansweeperReferenceDomain — το μέτρο σύγκρισης', () {
     test('πράκτορας «τομέας\\όνομα» → ο τομέας του, χωρίς ψηφοφορία', () {
-      expect(
-        lansweeperReferenceDomain(agentIdentity: r'gnk\v.drosos'),
-        'gnk',
-      );
+      expect(lansweeperReferenceDomain(agentIdentity: r'gnk\v.drosos'), 'gnk');
     });
 
     test('πράκτορας email → ο πλειοψηφικός τομέας του καταλόγου', () {
@@ -160,10 +155,7 @@ void main() {
     });
 
     test('χωρίς 2 ψήφους ή με ισοπαλία → κανένα μέτρο σύγκρισης', () {
-      expect(
-        lansweeperReferenceDomain(knownIdentities: [r'gnk\bio1']),
-        isNull,
-      );
+      expect(lansweeperReferenceDomain(knownIdentities: [r'gnk\bio1']), isNull);
       expect(
         lansweeperReferenceDomain(
           knownIdentities: [r'gnk\a', r'gnk\b', r'mad\a', r'mad\b'],

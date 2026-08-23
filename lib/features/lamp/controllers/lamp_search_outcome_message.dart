@@ -33,9 +33,7 @@ String? lampSearchOutcomeMessage({
     );
   } else if (equipmentTotal > 0) {
     final verb = equipmentTotal == 1 ? 'Βρέθηκε' : 'Βρέθηκαν';
-    parts.add(
-      '$verb ${el(equipmentTotal)} ${equipmentNoun(equipmentTotal)}.',
-    );
+    parts.add('$verb ${el(equipmentTotal)} ${equipmentNoun(equipmentTotal)}.');
   } else {
     final verb = unlinkedTotal == 1 ? 'Βρέθηκε' : 'Βρέθηκαν';
     parts.add(

@@ -999,11 +999,12 @@ class LampIssueFkAnalyzer {
     return parts.where((p) => p.trim().isNotEmpty).join(' · ');
   }
 
-  String _officeDisplayLabel(_OfficeDetailRow details) => lampOfficeDisplayLabel(
-    officeName: details.officeName,
-    departmentName: details.departmentName,
-    organizationName: details.organizationName,
-  );
+  String _officeDisplayLabel(_OfficeDetailRow details) =>
+      lampOfficeDisplayLabel(
+        officeName: details.officeName,
+        departmentName: details.departmentName,
+        organizationName: details.organizationName,
+      );
 
   String _modelDisplayLabel(_ModelDetailRow details) {
     final baseName = _firstInformativeText(
@@ -1136,25 +1137,25 @@ class LampIssueFkAnalyzer {
       // τιμή σε πεδίο υπαλλήλου είναι πρώτα επώνυμο.
       final firstNameMatches =
           owners.where((owner) {
-            final ownerId = _support.toInt(owner['owner']);
-            if (ownerId == null) return false;
-            if (matches.any((m) => _support.toInt(m['owner']) == ownerId)) {
-              return false;
-            }
-            return _matching.normalizeReferenceText(
-                  _support.text(owner['first_name']) ?? '',
-                ) ==
-                normalizedParts.single;
-          }).toList()
-          // Περισσότεροι εξοπλισμοί πρώτα: σε κοινά μικρά ονόματα οι
-          // υποψήφιοι πληθαίνουν και ο υπαρκτός πρέπει να φαίνεται αμέσως.
-          ..sort((a, b) {
-            final aCount =
-                ownerEquipmentCounts[_support.toInt(a['owner'])] ?? 0;
-            final bCount =
-                ownerEquipmentCounts[_support.toInt(b['owner'])] ?? 0;
-            return bCount.compareTo(aCount);
-          });
+              final ownerId = _support.toInt(owner['owner']);
+              if (ownerId == null) return false;
+              if (matches.any((m) => _support.toInt(m['owner']) == ownerId)) {
+                return false;
+              }
+              return _matching.normalizeReferenceText(
+                    _support.text(owner['first_name']) ?? '',
+                  ) ==
+                  normalizedParts.single;
+            }).toList()
+            // Περισσότεροι εξοπλισμοί πρώτα: σε κοινά μικρά ονόματα οι
+            // υποψήφιοι πληθαίνουν και ο υπαρκτός πρέπει να φαίνεται αμέσως.
+            ..sort((a, b) {
+              final aCount =
+                  ownerEquipmentCounts[_support.toInt(a['owner'])] ?? 0;
+              final bCount =
+                  ownerEquipmentCounts[_support.toInt(b['owner'])] ?? 0;
+              return bCount.compareTo(aCount);
+            });
       // Πέρα από αυτό το πλήθος η λίστα παύει να είναι επιλογή και γίνεται
       // κατάλογος· ίδιο όριο με την ασαφή αντιστοίχιση των άλλων πεδίων.
       final nameFallbackMatches = firstNameMatches.take(5).toList();
@@ -1274,7 +1275,8 @@ class LampIssueFkAnalyzer {
       // Ο ίδιος άνθρωπος γραμμένος αλλιώς: «Μαλατέστα Καλλή» στο ωμό κείμενο,
       // «Μαλατέστα Καλή» στη βάση. Χωρίς αυτό το πέρασμα ο οδηγός πρότεινε
       // μόνο δημιουργία νέου — διπλοεγγραφή δίπλα σε μία με 21 εξοπλισμούς.
-      final nearOptions = <({int distance, LampIssueResolutionOption option})>[];
+      final nearOptions =
+          <({int distance, LampIssueResolutionOption option})>[];
       for (final pair in candidatePairs) {
         for (final owner in owners) {
           final ownerId = _support.toInt(owner['owner']);
@@ -1293,10 +1295,7 @@ class LampIssueFkAnalyzer {
             option: LampIssueResolutionOption(
               id: 'owner_near_$ownerId',
               label: 'Σύνδεση με υπάρχον: $ownerId · ${labelFor(owner)}',
-              description: <String>[
-                deviation.description,
-                ?count,
-              ].join(' · '),
+              description: <String>[deviation.description, ?count].join(' · '),
               action: LampIssueResolutionAction.autoFix,
               proposedId: ownerId,
               proposedMatch: _support.ownerLabel(owner),

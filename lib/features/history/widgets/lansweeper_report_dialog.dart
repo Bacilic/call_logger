@@ -25,6 +25,9 @@ import '../models/lansweeper_sync_state.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/gemini_settings_provider.dart';
 import '../providers/lansweeper_connection_probe_provider.dart';
+import '../../../core/models/owner_filter.dart';
+import '../../../core/widgets/owner_filter_chip.dart';
+import '../providers/call_owner_filter_providers.dart';
 import '../providers/lansweeper_report_scope_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
@@ -527,6 +530,20 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
               ),
               textAlign: TextAlign.center,
             ),
+            // Όταν αυτό που αδειάζει τη λίστα είναι το φίλτρο χρήστη, το
+            // «δοκιμάστε άλλο διάστημα» θα οδηγούσε σε λάθος πόρτα.
+            if (!(ref.watch(lansweeperReportOwnerFilterProvider).value ??
+                    OwnerFilter.everyone)
+                .isEveryone) ...[
+              const SizedBox(height: 16),
+              FilledButton.tonalIcon(
+                onPressed: () => ref
+                    .read(lansweeperReportOwnerFilterProvider.notifier)
+                    .select(OwnerFilter.everyone),
+                icon: const Icon(Icons.groups_outlined),
+                label: const Text('Δείξε όλων των χρηστών'),
+              ),
+            ],
           ],
         ),
       ),
@@ -632,6 +649,22 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                       LansweeperReportRangeBar(
                         scope: scope,
                         onSelect: _selectRange,
+                        trailing: OwnerFilterChip(
+                          tooltip: 'Ποιος κατέγραψε την κλήση',
+                          options:
+                              ref.watch(callOwnerOptionsProvider).value ??
+                              const [],
+                          current:
+                              ref
+                                  .watch(lansweeperReportOwnerFilterProvider)
+                                  .value ??
+                              OwnerFilter.everyone,
+                          onSelected: (value) => ref
+                              .read(
+                                lansweeperReportOwnerFilterProvider.notifier,
+                              )
+                              .select(value),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Padding(

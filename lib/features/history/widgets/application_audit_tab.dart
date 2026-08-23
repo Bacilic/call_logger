@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import '../../../core/providers/main_nav_request_provider.dart';
 import '../../../core/providers/pending_deferred_actions_provider.dart';
 import '../../../core/database/audit_service.dart';
+import '../../../core/database/database_table_labels.dart';
+import '../../../core/services/current_operator.dart';
 import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
@@ -166,6 +168,19 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
     ref.read(auditPageIndexProvider.notifier).reset();
   }
 
+  void _onPerformingUserSelected(String? value) {
+    final next = value?.trim();
+    ref
+        .read(auditFilterProvider.notifier)
+        .update(
+          (s) => s.copyWith(
+            userPerforming: (next == null || next.isEmpty) ? null : next,
+            clearUserPerforming: next == null || next.isEmpty,
+          ),
+        );
+    ref.read(auditPageIndexProvider.notifier).reset();
+  }
+
   void _clearKeyword() {
     _debounceKeyword?.cancel();
     _keywordController.clear();
@@ -202,6 +217,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
       keywordNormalized: keyword.isEmpty ? null : keyword,
       action: filter.action,
       entityType: filter.entityType,
+      userPerforming: filter.userPerforming,
       dateFromInclusiveIso: filter.dateFromInclusiveIso,
       dateToExclusiveIso: filter.dateToExclusiveIso,
     );
@@ -348,11 +364,24 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
       orElse: () => AuditReferenceLabels.empty,
     );
     final actionOptionsAsync = ref.watch(auditActionOptionsProvider);
+    final performingUserOptionsAsync = ref.watch(
+      auditPerformingUserOptionsProvider,
+    );
     final selectedId = ref.watch(selectedAuditEntryIdProvider);
     // Κρατάμε τα προηγούμενα δεδομένα κατά τη διάρκεια refresh (valueOrNull)
     // ώστε το πεδίο να μην αδειάζει/απενεργοποιείται στιγμιαία.
     final actionOptions = actionOptionsAsync.value ?? const <String>[];
     final selectedAction = filter.action;
+    final performingUserOptions = _performingUserAutocompleteOptions(
+      performingUserOptionsAsync.value ?? const <String>[],
+    );
+    String? selectedPerformingUserLabel;
+    for (final option in performingUserOptions) {
+      if (option.value == filter.userPerforming) {
+        selectedPerformingUserLabel = option.label;
+        break;
+      }
+    }
     final entityTypeOptions = _entityTypeAutocompleteOptions();
     String? selectedEntityLabel;
     for (final option in entityTypeOptions) {
@@ -437,7 +466,7 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                     Expanded(
                       child: LayoutBuilder(
                         builder: (context, constraints) {
-                          final compact = constraints.maxWidth < 1250;
+                          final compact = constraints.maxWidth < 1450;
                           final panelButton = IconButton.filled(
                             tooltip: panelOpen
                                 ? 'Απόκρυψη πλαισίου λεπτομερειών'
@@ -504,6 +533,18 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                             selectedLabel: selectedEntityLabel,
                             onSelected: _onEntityTypeSelected,
                           );
+                          final performingUserDropdown =
+                              AuditFilterAutocomplete(
+                                key: const ValueKey('audit-filter-performer'),
+                                labelText: 'Χειριστής',
+                                options: performingUserOptions,
+                                selectedValue: filter.userPerforming,
+                                selectedLabel: selectedPerformingUserLabel,
+                                enabled:
+                                    performingUserOptionsAsync.hasValue ||
+                                    !performingUserOptionsAsync.isLoading,
+                                onSelected: _onPerformingUserSelected,
+                              );
 
                           if (compact) {
                             return Column(
@@ -524,6 +565,8 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                                     Expanded(child: actionField),
                                     const SizedBox(width: 8),
                                     Expanded(child: entityDropdown),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: performingUserDropdown),
                                     const SizedBox(width: 8),
                                     IconButton.filled(
                                       tooltip: 'Μόνιμη διαγραφή επιλεγμένων',
@@ -548,6 +591,11 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                               Expanded(child: actionField),
                               const SizedBox(width: 8),
                               SizedBox(width: 200, child: entityDropdown),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 190,
+                                child: performingUserDropdown,
+                              ),
                               const SizedBox(width: 8),
                               dateButton,
                               const SizedBox(width: 8),
@@ -764,9 +812,29 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
     );
   }
 
+  /// Οι χειριστές του φίλτρου, με την παύλα γραμμένη στα ελληνικά.
+  ///
+  /// Η παύλα είναι το «δεν ξέρουμε ποιος» των εγγραφών που γράφτηκαν πριν
+  /// αποκτήσει η εφαρμογή ταυτότητα χειριστή — και είναι η μεγάλη πλειοψηφία.
+  /// Σκέτη μέσα σε λίστα ονομάτων δεν διαβάζεται ως επιλογή.
+  static List<AuditFilterAutocompleteOption> _performingUserAutocompleteOptions(
+    List<String> names,
+  ) {
+    return [
+      for (final name in names)
+        AuditFilterAutocompleteOption(
+          value: name,
+          label: name == CurrentOperator.unknownAuditName
+              ? 'Χωρίς καταγραφή'
+              : name,
+        ),
+    ];
+  }
+
   static List<AuditFilterAutocompleteOption> _entityTypeAutocompleteOptions() {
     const types = <String>[
       AuditEntityTypes.user,
+      AuditEntityTypes.operatorProfile,
       AuditEntityTypes.phone,
       AuditEntityTypes.department,
       AuditEntityTypes.equipment,
@@ -780,24 +848,15 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
       AuditEntityTypes.maintenance,
       AuditEntityTypes.backup,
     ];
-    const labels = <String, String>{
-      AuditEntityTypes.user: 'Χρήστης',
-      AuditEntityTypes.phone: 'Τηλέφωνο',
-      AuditEntityTypes.department: 'Τμήμα',
-      AuditEntityTypes.equipment: 'Εξοπλισμός',
-      AuditEntityTypes.category: 'Κατηγορία',
-      AuditEntityTypes.task: 'Εκκρεμότητα',
-      AuditEntityTypes.call: 'Κλήση',
-      AuditEntityTypes.bulkUsers: 'Μαζική ενημέρωση χρηστών',
-      AuditEntityTypes.bulkDepartments: 'Μαζική ενημέρωση τμημάτων',
-      AuditEntityTypes.bulkEquipment: 'Μαζική ενημέρωση εξοπλισμού',
-      AuditEntityTypes.importData: 'Εισαγωγή δεδομένων',
-      AuditEntityTypes.maintenance: 'Συντήρηση βάσης',
-      AuditEntityTypes.backup: 'Αντίγραφο ασφαλείας',
-    };
+    // Οι ετικέτες έρχονται από την ίδια πηγή με τη γραμμή του ιστορικού: όσο
+    // ζούσε δεύτερος κατάλογος εδώ, το φίλτρο έλεγε «Χρήστης» και η γραμμή
+    // «Υπάλληλος» για την ίδια εγγραφή.
     return types
         .map(
-          (t) => AuditFilterAutocompleteOption(value: t, label: labels[t] ?? t),
+          (t) => AuditFilterAutocompleteOption(
+            value: t,
+            label: databaseEntityTypeLabelEl(t),
+          ),
         )
         .toList();
   }

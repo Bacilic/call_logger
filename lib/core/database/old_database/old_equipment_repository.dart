@@ -93,9 +93,7 @@ class OldEquipmentUpdateResult {
 
 /// Αποτέλεσμα ανανέωσης της μνήμης αναζήτησης (Λάμπα).
 class OldSearchCacheRefreshResult {
-  const OldSearchCacheRefreshResult({
-    required this.droppedLegacyIndexRows,
-  });
+  const OldSearchCacheRefreshResult({required this.droppedLegacyIndexRows});
 
   /// Πόσες γραμμές είχε ο καταργημένος `search_index` που διαγράφηκε τώρα·
   /// `null` όταν ο πίνακας δεν υπήρχε (η συνηθισμένη περίπτωση πλέον).

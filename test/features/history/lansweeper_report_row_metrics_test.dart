@@ -100,10 +100,7 @@ void main() {
         isLastInGroup: true,
       );
 
-      expect(
-        last - middle,
-        LansweeperReportRowMetrics.groupBottomHeight,
-      );
+      expect(last - middle, LansweeperReportRowMetrics.groupBottomHeight);
     });
 
     // Το παλιό σταθερό ύψος ήταν 90 για κάθε κάρτα, ανεξαρτήτως περιεχομένου.

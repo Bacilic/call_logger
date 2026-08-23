@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import '../../features/calls/utils/equipment_remote_param_key.dart';
 import '../../features/database/services/database_backup_audit.dart';
+import '../models/app_permission.dart';
+import '../utils/search_text_normalizer.dart';
 import 'audit_service.dart';
 
 /// Κοινή λογική «Τι άλλαξε» για audit UI, search_text και migrations.
@@ -29,7 +31,12 @@ abstract final class AuditDiffHelper {
     'phones': 'τηλέφωνα',
     'phone_id': 'τηλέφωνο',
     'phone_associated': 'τηλέφωνο',
-    'user_id': 'χρήστης',
+    'user_id': 'υπάλληλος',
+    'assigned_operator': 'υπεύθυνος',
+    'display_name': 'όνομα',
+    'windows_account': 'λογαριασμός Windows',
+    'is_admin': 'διαχειριστής',
+    'is_active': 'ενεργό προφίλ',
     'call_id': 'κλήση',
     'location': 'τοποθεσία',
     'origin': 'προέλευση',
@@ -55,8 +62,8 @@ abstract final class AuditDiffHelper {
     'department_text': 'τμήμα',
     'equipment_id': 'εξοπλισμός',
     'equipment_text': 'εξοπλισμός',
-    'caller_id': 'χρήστης',
-    'caller_text': 'χρήστης',
+    'caller_id': 'υπάλληλος',
+    'caller_text': 'υπάλληλος',
     'phone_text': 'τηλέφωνο',
     'category_text': 'κατηγορία',
     'category_id': 'κατηγορία',
@@ -71,10 +78,10 @@ abstract final class AuditDiffHelper {
     'tags': 'λέξεις-κλειδιά',
     'type': 'τύπος',
     'remote_params': 'παράμετροι απομακρυσμένης',
-    'linked_users': 'συνδεδεμένοι χρήστες',
+    'linked_users': 'συνδεδεμένοι υπάλληλοι',
     'linked_equipment': 'εξοπλισμός',
     'linked_phone_numbers': 'τηλέφωνα',
-    'linked_user_id': 'χρήστης',
+    'linked_user_id': 'υπάλληλος',
     'color': 'χρώμα',
     'building': 'κτίριο',
     'map_floor': 'όροφος',
@@ -94,7 +101,7 @@ abstract final class AuditDiffHelper {
     'map_anchor_offset_y': 'μετατόπιση άγκυρας',
     'map_custom_name': 'προσαρμοσμένο όνομα',
     'map_hidden': 'ορατότητα',
-    'user_text': 'χρήστης',
+    'user_text': 'υπάλληλος',
     'duration': 'διάρκεια',
     'is_priority': 'προτεραιότητα',
     'date': 'ημερομηνία',
@@ -136,7 +143,12 @@ abstract final class AuditDiffHelper {
     'phones': 'τηλεφώνων',
     'phone_id': 'τηλεφώνου',
     'phone_associated': 'τηλεφώνου',
-    'user_id': 'χρήστη',
+    'user_id': 'υπαλλήλου',
+    'assigned_operator': 'υπευθύνου',
+    'display_name': 'ονόματος',
+    'windows_account': 'λογαριασμού Windows',
+    'is_admin': 'σήμανσης διαχειριστή',
+    'is_active': 'ενεργού προφίλ',
     'call_id': 'κλήσης',
     'location': 'τοποθεσίας',
     'origin': 'προέλευσης',
@@ -162,8 +174,8 @@ abstract final class AuditDiffHelper {
     'department_text': 'τμήματος',
     'equipment_id': 'εξοπλισμού',
     'equipment_text': 'εξοπλισμού',
-    'caller_id': 'χρήστη',
-    'caller_text': 'χρήστη',
+    'caller_id': 'υπαλλήλου',
+    'caller_text': 'υπαλλήλου',
     'phone_text': 'τηλεφώνου',
     'category_text': 'κατηγορίας',
     'category_id': 'κατηγορίας',
@@ -176,10 +188,10 @@ abstract final class AuditDiffHelper {
     'tags': 'λέξεων-κλειδιών',
     'type': 'τύπου',
     'remote_params': 'παραμέτρων απομακρυσμένης',
-    'linked_users': 'συνδεδεμένων χρηστών',
+    'linked_users': 'συνδεδεμένων υπαλλήλων',
     'linked_equipment': 'συνδεδεμένου εξοπλισμού',
     'linked_phone_numbers': 'τηλεφώνων',
-    'linked_user_id': 'χρήστη',
+    'linked_user_id': 'υπαλλήλου',
     'color': 'χρώματος',
     'building': 'κτιρίου',
     'map_floor': 'ορόφου',
@@ -199,7 +211,7 @@ abstract final class AuditDiffHelper {
     'map_anchor_offset_y': 'μετατόπισης άγκυρας Υ',
     'map_custom_name': 'προσαρμοσμένου ονόματος',
     'map_hidden': 'ορατότητας',
-    'user_text': 'χρήστη',
+    'user_text': 'υπαλλήλου',
     'duration': 'διάρκειας',
     'is_priority': 'προτεραιότητας',
     'date': 'ημερομηνίας',
@@ -239,7 +251,12 @@ abstract final class AuditDiffHelper {
     'phones': 'τηλεφωνα',
     'phone_id': 'τηλεφωνο',
     'phone_associated': 'τηλεφωνο',
-    'user_id': 'χρηστης',
+    'user_id': 'υπαλληλος',
+    'assigned_operator': 'υπευθυνος',
+    'display_name': 'ονομα',
+    'windows_account': 'λογαριασμος windows',
+    'is_admin': 'διαχειριστης',
+    'is_active': 'ενεργο προφιλ',
     'call_id': 'κληση',
     'location': 'τοποθεσια',
     'origin': 'προελευση',
@@ -262,8 +279,8 @@ abstract final class AuditDiffHelper {
     'department_text': 'τμημα',
     'equipment_id': 'εξοπλισμος',
     'equipment_text': 'εξοπλισμος',
-    'caller_id': 'χρηστης',
-    'caller_text': 'χρηστης',
+    'caller_id': 'υπαλληλος',
+    'caller_text': 'υπαλληλος',
     'phone_text': 'τηλεφωνο',
     'category_text': 'κατηγορια',
     'category_id': 'κατηγορια',
@@ -276,10 +293,10 @@ abstract final class AuditDiffHelper {
     'tags': 'λεξεισ-κλειδια',
     'type': 'τυπος',
     'remote_params': 'παραμετροι απομακρυσμενης',
-    'linked_users': 'συνδεδεμενοι χρηστες',
+    'linked_users': 'συνδεδεμενοι υπαλληλοι',
     'linked_equipment': 'συνδεδεμενος εξοπλισμος',
     'linked_phone_numbers': 'τηλεφωνα',
-    'linked_user_id': 'χρηστης',
+    'linked_user_id': 'υπαλληλος',
     'color': 'χρωμα',
     'building': 'κτηριο',
     'map_floor': 'οροφος',
@@ -299,7 +316,7 @@ abstract final class AuditDiffHelper {
     'map_anchor_offset_y': 'μετατοπισης αγκυρας υ',
     'map_custom_name': 'προσαρμοσμενου ονοματος',
     'map_hidden': 'ορατοτητας',
-    'user_text': 'χρηστης',
+    'user_text': 'υπαλληλος',
     'duration': 'διαρκεια',
     'is_priority': 'προτεραιοτητα',
     'date': 'ημερομηνια',
@@ -400,13 +417,35 @@ abstract final class AuditDiffHelper {
 
   /// Ετικέτα πεδίου για `search_text` (κανονικοποιημένη, χωρίς τόνους).
   static String fieldSearchLabel(String entityType, String field) {
+    final permission = _permissionLabel(field);
+    if (permission != null) {
+      return SearchTextNormalizer.normalizeForSearch('δικαιωμα $permission');
+    }
     final label = _searchLabels[field];
     if (label != null) return label;
     return humanizeFieldKey(field);
   }
 
+  /// Το ανθρώπινο όνομα ενός δικαιώματος, όταν το κλειδί είναι δικαίωμα.
+  ///
+  /// Τα δικαιώματα δεν είναι σταθερός κατάλογος πεδίων: μπαίνουν και βγαίνουν
+  /// από το [AppPermission]. Γραμμένα ένα-ένα σε τρεις χάρτες θα ξέμεναν στην
+  /// πρώτη προσθήκη — και το Ιστορικό θα έλεγε «permission full backup» εκεί
+  /// που ο διαχειριστής διάβασε «Πλήρες αντίγραφο ασφαλείας».
+  ///
+  /// Κλειδί που δεν αντιστοιχεί σε γνωστό δικαίωμα επιστρέφει `null`: παλιά
+  /// προφίλ κρατούν δικαιώματα που καταργήθηκαν, και για αυτά είναι τιμιότερο
+  /// να φανεί το ωμό κλειδί παρά μια ετικέτα που δεν υπάρχει πια.
+  static String? _permissionLabel(String field) {
+    const prefix = 'permission_';
+    if (!field.startsWith(prefix)) return null;
+    return AppPermission.byKey(field.substring(prefix.length))?.label;
+  }
+
   /// Ετικέτα πεδίου για σύνοψη «N αλλαγές: …» (ονομαστική).
   static String fieldTitleLabel(String entityType, String field) {
+    final permission = _permissionLabel(field);
+    if (permission != null) return 'δικαίωμα «$permission»';
     final label = _titleLabels[field];
     if (label != null) return label;
     return humanizeFieldKey(field);
@@ -414,6 +453,8 @@ abstract final class AuditDiffHelper {
 
   /// Ετικέτα πεδίου για γραμμές diff («Αλλαγή … από»).
   static String fieldDetailLabel(String entityType, String field) {
+    final permission = _permissionLabel(field);
+    if (permission != null) return 'δικαιώματος «$permission»';
     final label = _detailLabels[field];
     if (label != null) return label;
     return humanizeFieldKey(field);
@@ -453,6 +494,14 @@ abstract final class AuditDiffHelper {
       return forSearch
           ? msg.toLowerCase().replaceAll('ά', 'α').replaceAll('έ', 'ε')
           : msg;
+    }
+
+    if (field == 'is_admin' ||
+        field == 'is_active' ||
+        field.startsWith('permission_')) {
+      final n = value is bool ? (value ? 1 : 0) : int.tryParse('$value') ?? 0;
+      if (forSearch) return n != 0 ? 'ναι' : 'οχι';
+      return n != 0 ? 'Ναι' : 'Όχι';
     }
 
     if (field == 'is_priority') {

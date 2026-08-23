@@ -21,8 +21,9 @@ void main() {
 
       var ran = false;
       var completed = false;
-      final future = runAfterNextFrame(() => ran = true)
-          .then((_) => completed = true);
+      final future = runAfterNextFrame(
+        () => ran = true,
+      ).then((_) => completed = true);
 
       // Το συμβόλαιο: η ίδια η συνάρτηση ζητά το frame. Χωρίς αυτό, σε
       // πραγματική αδρανή εφαρμογή το future δεν θα ολοκληρωνόταν ποτέ.
@@ -49,9 +50,9 @@ void main() {
 
     var completed = false;
     unawaited(
-      runAfterNextFrame(() => throw StateError('σφάλμα στο action')).then(
-        (_) => completed = true,
-      ),
+      runAfterNextFrame(
+        () => throw StateError('σφάλμα στο action'),
+      ).then((_) => completed = true),
     );
 
     await tester.pump();

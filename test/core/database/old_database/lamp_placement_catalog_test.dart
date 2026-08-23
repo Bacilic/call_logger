@@ -124,18 +124,24 @@ void main() {
       expect(groups.single.owners.single.id, 81);
     });
 
-    test('βρίσκει υπάλληλο εκτός τμήματος — όλη η βάση παραμένει διαθέσιμη', () {
-      final groups = catalog.ownerGroups(officeId: 27, query: 'δασκαλοπουλου');
+    test(
+      'βρίσκει υπάλληλο εκτός τμήματος — όλη η βάση παραμένει διαθέσιμη',
+      () {
+        final groups = catalog.ownerGroups(
+          officeId: 27,
+          query: 'δασκαλοπουλου',
+        );
 
-      expect(
-        groups.single.owners.single.id,
-        26,
-        reason: greekExpectMsg(
-          'Το φίλτρο του γραφείου βοηθά, δεν κλειδώνει: ο σωστός κάτοχος '
-          'μπορεί να ανήκει αλλού',
-        ),
-      );
-    });
+        expect(
+          groups.single.owners.single.id,
+          26,
+          reason: greekExpectMsg(
+            'Το φίλτρο του γραφείου βοηθά, δεν κλειδώνει: ο σωστός κάτοχος '
+            'μπορεί να ανήκει αλλού',
+          ),
+        );
+      },
+    );
 
     test('η αναζήτηση αγνοεί τόνους και πεζά-κεφαλαία', () {
       expect(catalog.searchOffices('ΓΥΝΑΙΚΟΛΟΓΙΚΗΣ'), hasLength(2));

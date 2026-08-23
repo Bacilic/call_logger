@@ -58,21 +58,28 @@ void main() {
     expect(outcome.rawMessage, isNull);
   });
 
-  test('αρχείο κομμένο στη μέση: ποτέ «εντάξει», και κρατά το ωμό κείμενο', () async {
-    final path = await _createDb(tempDir, 'kommeno.db');
-    final file = File(path);
-    final full = await file.readAsBytes();
-    expect(full.length, greaterThan(40000), reason: 'χρειάζονται πολλές σελίδες');
+  test(
+    'αρχείο κομμένο στη μέση: ποτέ «εντάξει», και κρατά το ωμό κείμενο',
+    () async {
+      final path = await _createDb(tempDir, 'kommeno.db');
+      final file = File(path);
+      final full = await file.readAsBytes();
+      expect(
+        full.length,
+        greaterThan(40000),
+        reason: 'χρειάζονται πολλές σελίδες',
+      );
 
-    // Ό,τι αφήνει πίσω της μια αντιγραφή που δεν ολοκληρώθηκε.
-    await file.writeAsBytes(full.sublist(0, full.length ~/ 2));
+      // Ό,τι αφήνει πίσω της μια αντιγραφή που δεν ολοκληρώθηκε.
+      await file.writeAsBytes(full.sublist(0, full.length ~/ 2));
 
-    final outcome = await runDatabaseIntegrityProbe(path);
+      final outcome = await runDatabaseIntegrityProbe(path);
 
-    expect(outcome.status, isNot(DatabaseIntegrityStatus.ok));
-    expect(outcome.rawMessage, isNotNull);
-    expect(outcome.rawMessage!.trim(), isNotEmpty);
-  });
+      expect(outcome.status, isNot(DatabaseIntegrityStatus.ok));
+      expect(outcome.rawMessage, isNotNull);
+      expect(outcome.rawMessage!.trim(), isNotEmpty);
+    },
+  );
 
   test('ανύπαρκτο αρχείο: άγνοια, ΠΟΤΕ κατηγορία για ζημιά', () async {
     final missing = p.join(tempDir.path, 'den_yparxei.db');

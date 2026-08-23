@@ -93,7 +93,8 @@ void main() {
     expect(
       report.findings,
       isNotEmpty,
-      reason: 'Ο σπορέας φτιάχνει προβλήματα — αν δεν βρέθηκε κανένα, το τεστ '
+      reason:
+          'Ο σπορέας φτιάχνει προβλήματα — αν δεν βρέθηκε κανένα, το τεστ '
           'δεν αποδεικνύει τίποτα.',
     );
 
@@ -113,7 +114,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'Τεχνικοί όροι σε κείμενο που διαβάζει ο χρήστης:\n'
+      reason:
+          'Τεχνικοί όροι σε κείμενο που διαβάζει ο χρήστης:\n'
           '${offenders.join('\n')}',
     );
   }, timeout: const Timeout(Duration(seconds: 90)));

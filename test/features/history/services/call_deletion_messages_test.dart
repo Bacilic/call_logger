@@ -188,8 +188,7 @@ void main() {
 
     test('πάνω από 30 κλήσεις με συνδέσεις κόβονται και δηλώνονται', () {
       final many = CallDeletionImpact([
-        for (var i = 0; i < 35; i++)
-          call(callId: i, tickets: const ['7001']),
+        for (var i = 0; i < 35; i++) call(callId: i, tickets: const ['7001']),
       ]);
 
       expect(callConnectionRows(many), hasLength(30));

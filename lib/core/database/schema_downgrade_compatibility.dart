@@ -175,11 +175,9 @@ Future<List<String>> _extraTableBlockers(
   try {
     final fks = await db.rawQuery('PRAGMA foreign_key_list($extraTable)');
     for (final fk in fks) {
-      final referenced =
-          (fk['table'] as String?)?.trim().toLowerCase() ?? '';
+      final referenced = (fk['table'] as String?)?.trim().toLowerCase() ?? '';
       if (!expected.containsKey(referenced)) continue;
-      final onDelete =
-          (fk['on_delete'] as String?)?.trim().toUpperCase() ?? '';
+      final onDelete = (fk['on_delete'] as String?)?.trim().toUpperCase() ?? '';
       const harmless = <String>{'CASCADE', 'SET NULL', 'SET DEFAULT'};
       if (!harmless.contains(onDelete)) {
         blockers.add(
@@ -315,11 +313,15 @@ Future<DowngradeOutcome> downgradeDatabaseFileToAppVersion(
 String _typeAffinity(String declaredType) {
   final upper = declaredType.trim().toUpperCase();
   if (upper.contains('INT')) return 'INTEGER';
-  if (upper.contains('CHAR') || upper.contains('CLOB') || upper.contains('TEXT')) {
+  if (upper.contains('CHAR') ||
+      upper.contains('CLOB') ||
+      upper.contains('TEXT')) {
     return 'TEXT';
   }
   if (upper.isEmpty || upper.contains('BLOB')) return 'BLOB';
-  if (upper.contains('REAL') || upper.contains('FLOA') || upper.contains('DOUB')) {
+  if (upper.contains('REAL') ||
+      upper.contains('FLOA') ||
+      upper.contains('DOUB')) {
     return 'REAL';
   }
   return 'NUMERIC';

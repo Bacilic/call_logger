@@ -68,7 +68,11 @@ void main() {
       dbPath(),
     );
 
-    expect(findings, isEmpty, reason: 'βήμα που δεν έκανε τίποτα είναι θόρυβος');
+    expect(
+      findings,
+      isEmpty,
+      reason: 'βήμα που δεν έκανε τίποτα είναι θόρυβος',
+    );
   });
 
   test('ΔΕΝ αγγίζει βάσεις, -wal, -shm και αρχεία του χρήστη', () async {

@@ -102,20 +102,26 @@ void main() {
       await reopened.close();
     });
 
-    test('η αλλαγή γράφεται στο αρχείο και επιβιώνει του κλεισίματος', () async {
-      // Ο τρόπος ημερολογίου είναι ιδιότητα του ΑΡΧΕΙΟΥ, όχι της σύνδεσης —
-      // αντίθετα με την αναμονή κλειδώματος.
-      final path = p.join(tempDir.path, 'epiviosi.db');
-      final first = await openDatabase(path, singleInstance: false);
-      await first.execute('PRAGMA journal_mode = WAL');
-      await first.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)');
-      await applyDatabaseJournalMode(first, path);
-      await first.close();
+    test(
+      'η αλλαγή γράφεται στο αρχείο και επιβιώνει του κλεισίματος',
+      () async {
+        // Ο τρόπος ημερολογίου είναι ιδιότητα του ΑΡΧΕΙΟΥ, όχι της σύνδεσης —
+        // αντίθετα με την αναμονή κλειδώματος.
+        final path = p.join(tempDir.path, 'epiviosi.db');
+        final first = await openDatabase(path, singleInstance: false);
+        await first.execute('PRAGMA journal_mode = WAL');
+        await first.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)');
+        await applyDatabaseJournalMode(first, path);
+        await first.close();
 
-      final second = await openDatabase(path, singleInstance: false);
-      expect(await readDatabaseJournalMode(second), DatabaseJournalMode.delete);
-      await second.close();
-    });
+        final second = await openDatabase(path, singleInstance: false);
+        expect(
+          await readDatabaseJournalMode(second),
+          DatabaseJournalMode.delete,
+        );
+        await second.close();
+      },
+    );
 
     test('επανάληψη σε ήδη σωστή βάση δεν αλλάζει τίποτα', () async {
       final path = p.join(tempDir.path, 'idempotent.db');
@@ -167,25 +173,28 @@ void main() {
   });
 
   group('τα διαγνωστικά βλέπουν το -journal', () {
-    test('ξεχασμένο ημερολόγιο αναίρεσης αναφέρεται ως προειδοποίηση', () async {
-      // Ένα «-journal» πριν από το άνοιγμα σημαίνει ότι προηγούμενη εγγραφή
-      // δεν ολοκληρώθηκε: εξηγεί αργό άνοιγμα και μαρτυρά κατάρρευση. Ως τώρα
-      // τα διαγνωστικά έβλεπαν μόνο «-wal» και «-shm», οπότε ήταν αόρατο.
-      final path = p.join(tempDir.path, 'me_journal.db');
-      final db = await openDatabase(path, singleInstance: false);
-      await db.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)');
-      await db.close();
-      await File('$path-journal').writeAsBytes(List<int>.filled(512, 0));
+    test(
+      'ξεχασμένο ημερολόγιο αναίρεσης αναφέρεται ως προειδοποίηση',
+      () async {
+        // Ένα «-journal» πριν από το άνοιγμα σημαίνει ότι προηγούμενη εγγραφή
+        // δεν ολοκληρώθηκε: εξηγεί αργό άνοιγμα και μαρτυρά κατάρρευση. Ως τώρα
+        // τα διαγνωστικά έβλεπαν μόνο «-wal» και «-shm», οπότε ήταν αόρατο.
+        final path = p.join(tempDir.path, 'me_journal.db');
+        final db = await openDatabase(path, singleInstance: false);
+        await db.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)');
+        await db.close();
+        await File('$path-journal').writeAsBytes(List<int>.filled(512, 0));
 
-      final report = await const DatabaseAccessProbe().probe(path);
+        final report = await const DatabaseAccessProbe().probe(path);
 
-      expect(report.humanReadable, contains('-journal'));
-      expect(
-        report.findings.any((f) => f.code == 'hot_journal_present'),
-        isTrue,
-      );
-      expect(report.hasWarnings, isTrue);
-    });
+        expect(report.humanReadable, contains('-journal'));
+        expect(
+          report.findings.any((f) => f.code == 'hot_journal_present'),
+          isTrue,
+        );
+        expect(report.hasWarnings, isTrue);
+      },
+    );
 
     test('χωρίς ημερολόγιο δεν παράγεται θόρυβος', () async {
       final path = p.join(tempDir.path, 'xoris_journal.db');

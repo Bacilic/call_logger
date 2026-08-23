@@ -12,10 +12,16 @@ class LansweeperReportRangeBar extends StatelessWidget {
     super.key,
     required this.scope,
     required this.onSelect,
+    this.trailing,
   });
 
   final LansweeperReportScope scope;
   final ValueChanged<LansweeperReportRange> onSelect;
+
+  /// Προαιρετικό στοιχείο στο τέλος της γραμμής — εκεί ζει το φίλτρο χρήστη
+  /// της αναφοράς, δίπλα στα κουμπιά διαστήματος με τα οποία μοιράζεται τη
+  /// λογική: ρυθμίσεις της ΙΔΙΑΣ της αναφοράς, ανεξάρτητες από την οθόνη.
+  final Widget? trailing;
 
   static const _tooltips = {
     LansweeperReportRange.today: 'Οι κλήσεις της σημερινής ημέρας',
@@ -63,6 +69,7 @@ class LansweeperReportRangeBar extends StatelessWidget {
               onSelected: null,
             ),
           ),
+        ?trailing,
       ],
     );
   }

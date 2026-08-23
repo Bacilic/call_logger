@@ -293,7 +293,10 @@ class LampPathController {
         case LampDbPlacementChoice.cancel:
           return (path: null, copied: false);
         case LampDbPlacementChoice.readInPlace:
-          return (path: p.normalize(p.absolute(pickedPath.trim())), copied: false);
+          return (
+            path: p.normalize(p.absolute(pickedPath.trim())),
+            copied: false,
+          );
         case LampDbPlacementChoice.copyToAppFolder:
           break;
       }
@@ -337,10 +340,7 @@ class LampPathController {
         dialogContext,
         sourcePath: p.normalize(p.absolute(pickedPath.trim())),
         destinationPath: destinationPath,
-        keepBothPath: p.join(
-          AppConfig.portableDataBaseDirectory,
-          keepBothName,
-        ),
+        keepBothPath: p.join(AppConfig.portableDataBaseDirectory, keepBothName),
         destinationIsConfiguredOutput: decision.destinationIsConfiguredOutput,
       );
       switch (choice) {

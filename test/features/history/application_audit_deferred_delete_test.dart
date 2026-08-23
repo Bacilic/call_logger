@@ -92,9 +92,7 @@ void main() {
       return tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(
-            home: Scaffold(body: ApplicationAuditTab()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: ApplicationAuditTab())),
         ),
       );
     }
@@ -151,7 +149,10 @@ void main() {
         await selectAllRowsAndConfirmDelete(tester, 3);
 
         // Έντιμο μήνυμα με μέτρηση — όχι «Διαγράφηκαν» πριν συμβεί.
-        expect(find.textContaining('θα διαγραφούν οριστικά σε'), findsOneWidget);
+        expect(
+          find.textContaining('θα διαγραφούν οριστικά σε'),
+          findsOneWidget,
+        );
 
         // Το σενάριο του ευρήματος: φεύγουμε από την οθόνη ΜΕΣΑ στα 5″.
         await pumpAwayFromTab(tester, container);

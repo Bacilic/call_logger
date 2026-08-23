@@ -53,8 +53,7 @@ void main() {
       expect(result.hiddenLabelsNeeded, {'Τμήμα'});
     });
 
-    test('token και σε ορατό ΚΑΙ σε κρυφό → καμία χρέωση (το ορατό αρκεί)',
-        () {
+    test('token και σε ορατό ΚΑΙ σε κρυφό → καμία χρέωση (το ορατό αρκεί)', () {
       final result = evaluateCatalogSearchRow([
         _fact('Σημειώσεις', 'Ψυχιατρική κλινική', visible: true),
         _fact('Τμήμα', 'Ψυχιατρική', visible: false),
@@ -137,10 +136,7 @@ void main() {
 
       final summary = builder.build();
       expect(summary.totalMatches, 3);
-      expect(summary.hiddenMatchCounts.keys.toList(), [
-        'Τμήμα',
-        'Σημειώσεις',
-      ]);
+      expect(summary.hiddenMatchCounts.keys.toList(), ['Τμήμα', 'Σημειώσεις']);
       expect(summary.hiddenMatchCounts['Τμήμα'], 2);
     });
   });

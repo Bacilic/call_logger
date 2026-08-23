@@ -53,9 +53,7 @@ void main() {
     final entity = owner();
     final transferred = await pump(tester, <LampUnlinkedEntity>[entity]);
 
-    await tester.tap(
-      find.byKey(const Key('lamp_unlinked_transfer_owner_327')),
-    );
+    await tester.tap(find.byKey(const Key('lamp_unlinked_transfer_owner_327')));
     await tester.pump();
 
     expect(transferred, <LampUnlinkedEntity>[entity]);
@@ -88,9 +86,7 @@ void main() {
     final entity = owner(empty: true);
     final transferred = await pump(tester, <LampUnlinkedEntity>[entity]);
 
-    await tester.tap(
-      find.byKey(const Key('lamp_unlinked_transfer_owner_327')),
-    );
+    await tester.tap(find.byKey(const Key('lamp_unlinked_transfer_owner_327')));
     await tester.pump();
 
     expect(
@@ -103,11 +99,7 @@ void main() {
   });
 
   testWidgets('χωρίς χειριστή δεν εμφανίζονται κουμπιά', (tester) async {
-    await pump(
-      tester,
-      <LampUnlinkedEntity>[owner()],
-      withHandler: false,
-    );
+    await pump(tester, <LampUnlinkedEntity>[owner()], withHandler: false);
 
     expect(find.text('Μεταφορά'), findsNothing);
   });

@@ -113,18 +113,12 @@ void main() {
     });
 
     test('κενό κείμενο και offset εκτός ορίων δεν σκάνε', () {
-      expect(
-        NotesSolutionSplit.extractCurrentLine('', 5),
-        (notes: '', movedLine: ''),
-      );
-      expect(
-        NotesSolutionSplit.extractCurrentLine('α\nβ', 99).movedLine,
-        'β',
-      );
-      expect(
-        NotesSolutionSplit.extractCurrentLine('α\nβ', -3).movedLine,
-        'α',
-      );
+      expect(NotesSolutionSplit.extractCurrentLine('', 5), (
+        notes: '',
+        movedLine: '',
+      ));
+      expect(NotesSolutionSplit.extractCurrentLine('α\nβ', 99).movedLine, 'β');
+      expect(NotesSolutionSplit.extractCurrentLine('α\nβ', -3).movedLine, 'α');
     });
   });
 }

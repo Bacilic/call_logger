@@ -21,13 +21,19 @@ void main() {
     );
   });
 
-  test('από ένα δευτερόλεπτο: δευτερόλεπτα χωρίς padding, χιλιοστά με 3 ψηφία', () {
-    expect(formatElapsedWithMillis(const Duration(milliseconds: 1001)), '1:001');
-    expect(
-      formatElapsedWithMillis(const Duration(milliseconds: 59999)),
-      '59:999',
-    );
-  });
+  test(
+    'από ένα δευτερόλεπτο: δευτερόλεπτα χωρίς padding, χιλιοστά με 3 ψηφία',
+    () {
+      expect(
+        formatElapsedWithMillis(const Duration(milliseconds: 1001)),
+        '1:001',
+      );
+      expect(
+        formatElapsedWithMillis(const Duration(milliseconds: 59999)),
+        '59:999',
+      );
+    },
+  );
 
   test('από ένα λεπτό: προστίθεται η μονάδα λεπτών χωρίς padding', () {
     expect(

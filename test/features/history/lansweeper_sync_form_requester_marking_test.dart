@@ -68,40 +68,29 @@ void main() {
     );
   }
 
-  testWidgets(
-    'άκυρος αιτών → το στοχευμένο λάθος και η συνέπεια στο tooltip',
-    (tester) async {
-      await pumpForm(
-        tester,
-        requester: r'Γραφείο Λοιμώξεων gnk\loimokseis1',
-      );
+  testWidgets('άκυρος αιτών → το στοχευμένο λάθος και η συνέπεια στο tooltip', (
+    tester,
+  ) async {
+    await pumpForm(tester, requester: r'Γραφείο Λοιμώξεων gnk\loimokseis1');
 
-      final tooltip = lineTooltip(tester);
-      expect(tooltip.message, contains('λείπει το «=»'));
-      expect(
-        tooltip.message,
-        contains('θα καταχωρηθεί χωρίς αιτούντα'),
-      );
-    },
-  );
+    final tooltip = lineTooltip(tester);
+    expect(tooltip.message, contains('λείπει το «=»'));
+    expect(tooltip.message, contains('θα καταχωρηθεί χωρίς αιτούντα'));
+  });
 
-  testWidgets(
-    'έγκυρος αιτών με ύποπτο τομέα → η υποψία στο tooltip',
-    (tester) async {
-      await pumpForm(
-        tester,
-        requester: r'3gnk\TepPath1',
-        referenceDomain: 'gnk',
-      );
+  testWidgets('έγκυρος αιτών με ύποπτο τομέα → η υποψία στο tooltip', (
+    tester,
+  ) async {
+    await pumpForm(tester, requester: r'3gnk\TepPath1', referenceDomain: 'gnk');
 
-      final tooltip = lineTooltip(tester);
-      expect(tooltip.message, contains('«3gnk»'));
-      expect(tooltip.message, contains('πιθανό τυπογραφικό'));
-    },
-  );
+    final tooltip = lineTooltip(tester);
+    expect(tooltip.message, contains('«3gnk»'));
+    expect(tooltip.message, contains('πιθανό τυπογραφικό'));
+  });
 
-  testWidgets('καθαρός αιτών → κανένα σήμα κινδύνου στο tooltip',
-      (tester) async {
+  testWidgets('καθαρός αιτών → κανένα σήμα κινδύνου στο tooltip', (
+    tester,
+  ) async {
     await pumpForm(
       tester,
       requester: r'gnk\loimokseis1',
@@ -113,14 +102,18 @@ void main() {
     expect(tooltip.message, contains('Συμπληρώνονται αυτόματα'));
   });
 
-  testWidgets('χωρίς αιτούντα («—») → καμία διάγνωση, καμία σήμανση',
-      (tester) async {
+  testWidgets('χωρίς αιτούντα («—») → καμία διάγνωση, καμία σήμανση', (
+    tester,
+  ) async {
     await pumpForm(tester, requester: null);
 
     final tooltip = lineTooltip(tester);
     expect(tooltip.message, isNot(contains('⚠')));
     expect(
-      find.text('Στο ticket — Αιτών: — · Εξοπλισμός: PC3879', findRichText: true),
+      find.text(
+        'Στο ticket — Αιτών: — · Εξοπλισμός: PC3879',
+        findRichText: true,
+      ),
       findsOneWidget,
     );
   });

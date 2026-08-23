@@ -14,6 +14,14 @@ enum ProfileSettingLegacySource {
   /// Χωρίς κληρονομιά: ξεκινά από τις προεπιλογές του καλούντα.
   none,
 
+  /// **Γεννήθηκε προσωπικό.** Το κλειδί δεν υπήρχε πριν από τους χρήστες, άρα
+  /// δεν έχει παλιά τιμή να κληρονομήσει — κανείς δεν χάνει τίποτα.
+  ///
+  /// Ξεχωριστό από το [none], που σημαίνει «δεν το σκέφτηκε κανείς»: ο έλεγχος
+  /// του καταλόγου απαιτεί κάθε κλειδί να δηλώνει ρητά πού πατά, ώστε μια
+  /// ξεχασμένη πηγή να μη γίνει σιωπηλά χαμένη ρύθμιση.
+  bornPersonal,
+
   /// Η παλιά τιμή ζούσε στα ΚΟΙΝΑ (`app_settings`). Την κληρονομεί **μόνο ο
   /// διαχειριστής** — αυτός την όρισε· οι υπόλοιποι ξεκινούν καθαροί.
   sharedForAdmin,
@@ -60,6 +68,33 @@ abstract final class ProfileSettingKeys {
     'show_active_timer',
     legacySource: ProfileSettingLegacySource.machine,
   );
+
+  /// Ποιανού εκκρεμότητες δείχνει η λίστα.
+  ///
+  /// **Χωρίς κληρονομιά από την παλιά θέση** — το φίλτρο γεννιέται μαζί με την
+  /// έννοια του χρήστη, οπότε δεν υπάρχει προηγούμενη τιμή να κληρονομήσει.
+  /// Ο καθένας ξεκινά βλέποντας τις δικές του και αλλάζει αν θέλει· η επιλογή
+  /// τον ακολουθεί σε όποιον υπολογιστή καθίσει.
+  static const ProfileSettingKey tasksOwnerFilter = ProfileSettingKey(
+    'tasks_owner_filter_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
+  /// Το φίλτρο «χρήστης» του Ιστορικού Κλήσεων — δικό του κλειδί: το «ψάχνω
+  /// στο αρχείο» και το «τι έχω να κάνω» είναι διαφορετικές δουλειές.
+  static const ProfileSettingKey historyOwnerFilter = ProfileSettingKey(
+    'history_owner_filter_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
+  /// Το φίλτρο «χρήστης» της αναφοράς Lansweeper — ανεξάρτητο από του
+  /// Ιστορικού, όπως και τα κουμπιά διαστήματος της αναφοράς.
+  static const ProfileSettingKey lansweeperReportOwnerFilter =
+      ProfileSettingKey(
+        'lansweeper_report_owner_filter_v1',
+        legacySource: ProfileSettingLegacySource.bornPersonal,
+      );
+
   static const ProfileSettingKey showTasksBadge = ProfileSettingKey(
     'show_tasks_badge',
     legacySource: ProfileSettingLegacySource.machine,
@@ -328,6 +363,9 @@ abstract final class ProfileSettingKeys {
     lampTablesLeftPaneWidth,
     lampMaxSearchResults,
     taskSettingsConfig,
+    tasksOwnerFilter,
+    historyOwnerFilter,
+    lansweeperReportOwnerFilter,
   ];
 }
 
@@ -403,6 +441,7 @@ class ProfileSettings {
   ) async {
     final legacy = switch (setting.legacySource) {
       ProfileSettingLegacySource.none => null,
+      ProfileSettingLegacySource.bornPersonal => null,
       ProfileSettingLegacySource.sharedForAdmin =>
         op.isAdmin ? await _readShared(setting.key) : null,
       ProfileSettingLegacySource.machine => await _readMachine(setting.key),
@@ -416,6 +455,7 @@ class ProfileSettings {
   Future<String?> _readLegacy(ProfileSettingKey setting) =>
       switch (setting.legacySource) {
         ProfileSettingLegacySource.none => Future<String?>.value(),
+        ProfileSettingLegacySource.bornPersonal => Future<String?>.value(),
         ProfileSettingLegacySource.sharedForAdmin => _readShared(setting.key),
         ProfileSettingLegacySource.machine => _readMachine(setting.key),
       };
@@ -423,6 +463,7 @@ class ProfileSettings {
   Future<void> _writeLegacy(ProfileSettingKey setting, String value) async {
     switch (setting.legacySource) {
       case ProfileSettingLegacySource.none:
+      case ProfileSettingLegacySource.bornPersonal:
         return;
       case ProfileSettingLegacySource.sharedForAdmin:
         final writer = SettingsService.appSettingWriter;

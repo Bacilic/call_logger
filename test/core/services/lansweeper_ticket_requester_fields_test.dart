@@ -89,32 +89,29 @@ void main() {
       );
     });
 
-    test(
-      r'ονομασία κολλημένη μπροστά («Γραφείο Λοιμώξεων gnk\x») → true — '
-      'το Lansweeper δεν θα βρει τέτοιον χρήστη',
-      () {
-        expect(
-          lansweeperAgentValueLooksLikeDisplayName(
-            r'Γραφείο Λοιμώξεων gnk\loimokseis1',
-          ),
-          isTrue,
-        );
-      },
-    );
-
-    test('κενό μέσα στο όνομα χρήστη → true (προειδοποίηση)', () {
+    test(r'ονομασία κολλημένη μπροστά («Γραφείο Λοιμώξεων gnk\x») → true — '
+        'το Lansweeper δεν θα βρει τέτοιον χρήστη', () {
       expect(
-        lansweeperAgentValueLooksLikeDisplayName(r'gnk\p koutra'),
+        lansweeperAgentValueLooksLikeDisplayName(
+          r'Γραφείο Λοιμώξεων gnk\loimokseis1',
+        ),
         isTrue,
       );
     });
 
-    test('καθαρό domain\\username χωρίς κενά → false (καμία προειδοποίηση)', () {
-      expect(
-        lansweeperAgentValueLooksLikeDisplayName(r'gnk\loimokseis1'),
-        isFalse,
-      );
+    test('κενό μέσα στο όνομα χρήστη → true (προειδοποίηση)', () {
+      expect(lansweeperAgentValueLooksLikeDisplayName(r'gnk\p koutra'), isTrue);
     });
+
+    test(
+      'καθαρό domain\\username χωρίς κενά → false (καμία προειδοποίηση)',
+      () {
+        expect(
+          lansweeperAgentValueLooksLikeDisplayName(r'gnk\loimokseis1'),
+          isFalse,
+        );
+      },
+    );
   });
 
   group('lansweeperAgentAsMatchingRequesterFields', () {
@@ -180,18 +177,21 @@ void main() {
       );
     });
 
-    test('μικτά είδη: αιτών email + πράκτορας τομέα, το καθένα στο πεδίο του', () {
-      expect(
-        lansweeperRequesterAndAgentFields(
-          requester: 'dbrami@hospkorinthos.gr',
-          agent: r'gnk\v.drosos',
-        ),
-        <String, String>{
-          'Email': 'dbrami@hospkorinthos.gr',
-          'AgentUsername': r'gnk\v.drosos',
-        },
-      );
-    });
+    test(
+      'μικτά είδη: αιτών email + πράκτορας τομέα, το καθένα στο πεδίο του',
+      () {
+        expect(
+          lansweeperRequesterAndAgentFields(
+            requester: 'dbrami@hospkorinthos.gr',
+            agent: r'gnk\v.drosos',
+          ),
+          <String, String>{
+            'Email': 'dbrami@hospkorinthos.gr',
+            'AgentUsername': r'gnk\v.drosos',
+          },
+        );
+      },
+    );
 
     test('αντίστροφα μικτά: αιτών τομέα + πράκτορας email', () {
       expect(

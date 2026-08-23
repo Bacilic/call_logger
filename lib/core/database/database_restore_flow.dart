@@ -417,4 +417,3 @@ Future<void> _showRestoreMessageDialog(
     ),
   );
 }
-

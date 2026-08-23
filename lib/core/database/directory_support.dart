@@ -501,7 +501,7 @@ class DirectorySupport {
         txn,
         action: AuditActions.modifyPhone,
         userPerforming: ap,
-        details: 'phones id=$pid (αφαίρεση από χρήστη $uid)',
+        details: 'phones id=$pid (αφαίρεση από υπάλληλο $uid)',
         entityType: AuditEntityTypes.phone,
         entityId: pid,
         entityName: t,

@@ -94,18 +94,23 @@ void main() {
       expect(filter.lansweeperState, isNull);
     });
 
-    test('το φίλτρο κατάστασης καθαρίζεται ρητά, χωρίς να χρειάζεται νέα τιμή', () {
-      final container = buildContainer();
-      container
-          .read(historyFilterProvider.notifier)
-          .update((s) => s.copyWith(lansweeperState: LansweeperSyncState.sent));
+    test(
+      'το φίλτρο κατάστασης καθαρίζεται ρητά, χωρίς να χρειάζεται νέα τιμή',
+      () {
+        final container = buildContainer();
+        container
+            .read(historyFilterProvider.notifier)
+            .update(
+              (s) => s.copyWith(lansweeperState: LansweeperSyncState.sent),
+            );
 
-      container
-          .read(historyFilterProvider.notifier)
-          .update((s) => s.copyWith(clearLansweeperState: true));
+        container
+            .read(historyFilterProvider.notifier)
+            .update((s) => s.copyWith(clearLansweeperState: true));
 
-      expect(container.read(historyFilterProvider).lansweeperState, isNull);
-    });
+        expect(container.read(historyFilterProvider).lansweeperState, isNull);
+      },
+    );
 
     test('επιστρέφει τα φίλτρα που έπαψαν να ισχύουν', () {
       final container = buildContainer();

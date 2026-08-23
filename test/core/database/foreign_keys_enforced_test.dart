@@ -116,48 +116,54 @@ void main() {
       expect(links, isEmpty);
     });
 
-    test('η οριστική διαγραφή κλήσης αποσυνδέει τις εκκρεμότητές της', () async {
-      final callId = await insertCall('set-null-tasks');
-      await db.insert('tasks', {
-        'title': 'επιβιώνει',
-        'status': 'open',
-        'call_id': callId,
-        'created_at': '2026-08-04T10:00:00.000',
-        'updated_at': '2026-08-04T10:00:00.000',
-        'is_deleted': 0,
-      });
+    test(
+      'η οριστική διαγραφή κλήσης αποσυνδέει τις εκκρεμότητές της',
+      () async {
+        final callId = await insertCall('set-null-tasks');
+        await db.insert('tasks', {
+          'title': 'επιβιώνει',
+          'status': 'open',
+          'call_id': callId,
+          'created_at': '2026-08-04T10:00:00.000',
+          'updated_at': '2026-08-04T10:00:00.000',
+          'is_deleted': 0,
+        });
 
-      await db.delete('calls', where: 'id = ?', whereArgs: [callId]);
+        await db.delete('calls', where: 'id = ?', whereArgs: [callId]);
 
-      final rows = await db.query(
-        'tasks',
-        columns: ['call_id'],
-        where: 'title = ?',
-        whereArgs: ['επιβιώνει'],
-      );
-      // Η εκκρεμότητα δεν χάνεται μαζί με την κλήση — χάνει μόνο τον δεσμό.
-      expect(rows.single['call_id'], isNull);
-    });
+        final rows = await db.query(
+          'tasks',
+          columns: ['call_id'],
+          where: 'title = ?',
+          whereArgs: ['επιβιώνει'],
+        );
+        // Η εκκρεμότητα δεν χάνεται μαζί με την κλήση — χάνει μόνο τον δεσμό.
+        expect(rows.single['call_id'], isNull);
+      },
+    );
 
-    test('η διαγραφή τμήματος αποσυνδέει χρήστες αντί να τους σβήνει', () async {
-      final deptId = await insertDepartment('Τμήμα Προς Διαγραφή');
-      await db.insert('users', {
-        'first_name': 'Μένει',
-        'last_name': 'Ορφανός',
-        'department_id': deptId,
-        'is_deleted': 0,
-      });
+    test(
+      'η διαγραφή τμήματος αποσυνδέει χρήστες αντί να τους σβήνει',
+      () async {
+        final deptId = await insertDepartment('Τμήμα Προς Διαγραφή');
+        await db.insert('users', {
+          'first_name': 'Μένει',
+          'last_name': 'Ορφανός',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
 
-      await db.delete('departments', where: 'id = ?', whereArgs: [deptId]);
+        await db.delete('departments', where: 'id = ?', whereArgs: [deptId]);
 
-      final rows = await db.query(
-        'users',
-        columns: ['department_id'],
-        where: 'first_name = ?',
-        whereArgs: ['Μένει'],
-      );
-      expect(rows.single['department_id'], isNull);
-    });
+        final rows = await db.query(
+          'users',
+          columns: ['department_id'],
+          where: 'first_name = ?',
+          whereArgs: ['Μένει'],
+        );
+        expect(rows.single['department_id'], isNull);
+      },
+    );
 
     test('η διαγραφή τμήματος παρασύρει τις συσχετίσεις τηλεφώνων', () async {
       final deptId = await insertDepartment('Τμήμα Με Τηλέφωνο');

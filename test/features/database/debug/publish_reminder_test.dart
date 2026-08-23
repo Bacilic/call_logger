@@ -29,10 +29,7 @@ void main() {
 
   group('χωρίς αδημοσίευτες εγγραφές δεν υπάρχει υπενθύμιση', () {
     test('ούτε μετά από πολύ καιρό αδράνειας', () {
-      final status = evaluate(
-        entries: 0,
-        lastRelease: DateTime(2026, 5, 1),
-      );
+      final status = evaluate(entries: 0, lastRelease: DateTime(2026, 5, 1));
       expect(
         status.shouldRemind,
         isFalse,
@@ -77,19 +74,13 @@ void main() {
 
   group('ο χρόνος πιάνει τα αργά διαστήματα', () {
     test('λίγες αλλαγές μετά από επτά ημέρες υπενθυμίζουν', () {
-      final status = evaluate(
-        entries: 1,
-        lastRelease: DateTime(2026, 7, 27),
-      );
+      final status = evaluate(entries: 1, lastRelease: DateTime(2026, 7, 27));
       expect(status.shouldRemind, isTrue);
       expect(status.daysSinceLastRelease, 7);
     });
 
     test('έξι ημέρες με λίγες αλλαγές δεν υπενθυμίζουν ακόμα', () {
-      final status = evaluate(
-        entries: 5,
-        lastRelease: DateTime(2026, 7, 28),
-      );
+      final status = evaluate(entries: 5, lastRelease: DateTime(2026, 7, 28));
       expect(status.shouldRemind, isFalse);
       expect(status.daysSinceLastRelease, 6);
     });
@@ -118,11 +109,11 @@ void main() {
     });
 
     test('η υπόδειξη εξηγεί πλήθος, ηλικία και έκδοση', () {
-      final status = evaluate(
-        entries: 173,
-        lastRelease: DateTime(2026, 7, 23),
+      final status = evaluate(entries: 173, lastRelease: DateTime(2026, 7, 23));
+      expect(
+        status.reasonLine,
+        'Εκκρεμεί δημοσίευση: 173 αλλαγές, 11 ημέρες από την 0.21.3',
       );
-      expect(status.reasonLine, 'Εκκρεμεί δημοσίευση: 173 αλλαγές, 11 ημέρες από την 0.21.3');
     });
 
     test('ενικός στη μία αλλαγή και στη μία ημέρα', () {
@@ -133,7 +124,10 @@ void main() {
         lastReleaseVersion: '0.21.3',
         dayThreshold: 1,
       );
-      expect(status.reasonLine, 'Εκκρεμεί δημοσίευση: 1 αλλαγή, 1 ημέρα από την 0.21.3');
+      expect(
+        status.reasonLine,
+        'Εκκρεμεί δημοσίευση: 1 αλλαγή, 1 ημέρα από την 0.21.3',
+      );
     });
 
     test('χωρίς γνωστή προηγούμενη έκδοση, η υπόδειξη λέει μόνο το πλήθος', () {

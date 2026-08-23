@@ -198,9 +198,7 @@ void main() {
   group('κλειδιά αδειών', () {
     test('το πρότυπο πέντε πεντάδων αναγνωρίζεται', () {
       expect(
-        lampSerialLooksLikeLicenseKey(
-          serial: '3XNJY-9J4GT-Y7DJ8-9R98M-XBT6Y',
-        ),
+        lampSerialLooksLikeLicenseKey(serial: '3XNJY-9J4GT-Y7DJ8-9R98M-XBT6Y'),
         isTrue,
         reason: greekExpectMsg(
           'Είκοσι υπολογιστές με την ίδια volume license δεν είναι σφάλμα· '

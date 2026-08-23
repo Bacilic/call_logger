@@ -20,9 +20,8 @@ Future<int?> showKnowledgeArticleDialog(
   return showDialog<int>(
     context: context,
     barrierDismissible: false,
-    builder: (context) => _KnowledgeArticleDialog(
-      article: article ?? const KnowledgeArticle(),
-    ),
+    builder: (context) =>
+        _KnowledgeArticleDialog(article: article ?? const KnowledgeArticle()),
   );
 }
 
@@ -97,7 +96,9 @@ class _KnowledgeArticleDialogState
 
     setState(() => _saving = true);
     try {
-      final id = await ref.read(knowledgeActionsProvider.notifier).save(updated);
+      final id = await ref
+          .read(knowledgeActionsProvider.notifier)
+          .save(updated);
       if (!mounted) return;
       Navigator.of(context).pop(id);
       ScaffoldMessenger.of(context).showSnackBar(

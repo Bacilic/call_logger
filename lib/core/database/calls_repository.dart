@@ -3,6 +3,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../features/calls/models/call_model.dart';
 import '../errors/call_save_exception.dart';
+import '../models/owner_filter.dart';
+import '../services/current_operator.dart';
 import 'audit_service.dart';
 import 'calls_audit_line.dart';
 import 'calls_search_index.dart';
@@ -96,6 +98,13 @@ class CallsRepository {
       'date': call.date ?? DateFormat('yyyy-MM-dd').format(now),
       'time': call.time ?? DateFormat('HH:mm').format(now),
       'is_deleted': 0,
+      // Η σφραγίδα «ποιος την κατέγραψε» ζει ΕΞΩ από το _callWriteMap ώστε
+      // καμία διαδρομή ενημέρωσης να μην μπορεί να την ξαναγράψει — μια
+      // διόρθωση κειμένου δεν αλλάζει ποιος σήκωσε το τηλέφωνο. Χωρίς
+      // αναγνωρισμένο χειριστή μένει κενή: το κενό είναι τίμιο, ένα τυχαίο id
+      // θα ήταν εφεύρεση.
+      'created_by_operator_id':
+          call.createdByOperatorId ?? CurrentOperator.active?.id,
     };
   }
 
@@ -264,6 +273,9 @@ class CallsRepository {
       'refined_source': null,
       'refined_at': null,
       'is_deleted': 0,
+      // Ο κλώνος είναι νέο περιστατικό: τον χρεώνεται όποιος τον ανοίγει
+      // τώρα, όχι όποιος κατέγραψε την αρχική κλήση.
+      'created_by_operator_id': CurrentOperator.active?.id,
     };
 
     try {
@@ -381,8 +393,7 @@ class CallsRepository {
   /// «Η κλήση έχει ζωντανή εκκρεμότητα» — ίδια έκφραση στο SELECT και στο
   /// WHERE, ώστε η ένδειξη της γραμμής και το φίλτρο να μη μπορούν να
   /// αποκλίνουν.
-  static const String _openTaskExistsSql =
-      '''
+  static const String _openTaskExistsSql = '''
       (CASE WHEN EXISTS (
          SELECT 1 FROM tasks t
          WHERE t.call_id = calls.id AND COALESCE(t.is_deleted, 0) = 0
@@ -394,12 +405,37 @@ class CallsRepository {
   /// άγνωστη τιμή σημαίνει «ακαταχώρητη». Οι δύο διατυπώσεις — Dart και SQL —
   /// φυλάγονται μαζί από τεστ· αν αποκλίνουν, η ίδια κλήση εμφανίζεται σε άλλη
   /// κατηγορία στο Ιστορικό απ' ό,τι στην αναφορά.
-  static const String _lansweeperStateSql =
-      '''
+  static const String _lansweeperStateSql = '''
       (CASE WHEN TRIM(COALESCE(calls.lansweeper_state, ''))
                  IN ('sent', 'excluded', 'failed')
             THEN TRIM(calls.lansweeper_state)
             ELSE 'unsent' END)''';
+
+  /// Τα ids των χρηστών που έχουν καταγράψει έστω μία κλήση.
+  ///
+  /// Τροφοδοτεί τις επιλογές του φίλτρου «χρήστης» — μόνο ονόματα που όντως
+  /// επιστρέφουν κάτι· τον τρέχοντα χρήστη τον προσθέτει ο καλών.
+  Future<List<int>> getDistinctCallOwnerIds() async {
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT created_by_operator_id FROM calls '
+      'WHERE created_by_operator_id IS NOT NULL '
+      'AND COALESCE(is_deleted, 0) = 0',
+    );
+    return rows
+        .map((row) => row['created_by_operator_id'])
+        .whereType<num>()
+        .map((id) => id.toInt())
+        .toList();
+  }
+
+  /// True όταν υπάρχει έστω μία κλήση χωρίς καταγεγραμμένο χρήστη.
+  Future<bool> hasUnassignedCalls() async {
+    final rows = await db.rawQuery(
+      'SELECT 1 FROM calls WHERE created_by_operator_id IS NULL '
+      'AND COALESCE(is_deleted, 0) = 0 LIMIT 1',
+    );
+    return rows.isNotEmpty;
+  }
 
   /// Γραμμές ιστορικού με τα φίλτρα της οθόνης.
   ///
@@ -422,6 +458,7 @@ class CallsRepository {
     bool onlyWithTask = false,
     String? lansweeperState,
     Iterable<int>? callIds,
+    OwnerFilter owner = OwnerFilter.everyone,
   }) async {
     const userPhoneExpr =
         "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
@@ -458,6 +495,12 @@ class CallsRepository {
       whereClauses.add('$_lansweeperStateSql = ?');
       args.add(requestedState);
     }
+    if (owner.unassignedOnly) {
+      whereClauses.add('calls.created_by_operator_id IS NULL');
+    } else if (owner.operatorId != null) {
+      whereClauses.add('calls.created_by_operator_id = ?');
+      args.add(owner.operatorId);
+    }
 
     whereClauses.insert(0, 'COALESCE(calls.is_deleted, 0) = 0');
 
@@ -478,6 +521,7 @@ class CallsRepository {
              $userPhoneExpr AS user_phone,
              COALESCE(departments.name, calls.department_text, '-') AS user_department,
              COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code,
+             calls.created_by_operator_id,
              $_openTaskExistsSql AS has_open_task,
              $_lansweeperStateSql AS lansweeper_state,
              TRIM(COALESCE(calls.lansweeper_main_ticket_id, '')) AS lansweeper_ticket_id

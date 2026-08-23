@@ -124,10 +124,9 @@ void main() {
     test('σε build ανάπτυξης δεν καθαρίζεται τίποτα', () async {
       await makeFile('assets/18628505');
 
-      final scan = await cleanerWith(
-        {'assets/άλλο.png'},
-        developmentBuild: true,
-      ).scan();
+      final scan = await cleanerWith({
+        'assets/άλλο.png',
+      }, developmentBuild: true).scan();
 
       expect(scan.hasWork, isFalse);
     });
@@ -135,10 +134,9 @@ void main() {
     test('εκτός Windows δεν καθαρίζεται τίποτα', () async {
       await makeFile('assets/18628505');
 
-      final scan = await cleanerWith(
-        {'assets/άλλο.png'},
-        windows: false,
-      ).scan();
+      final scan = await cleanerWith({
+        'assets/άλλο.png',
+      }, windows: false).scan();
 
       expect(scan.hasWork, isFalse);
     });

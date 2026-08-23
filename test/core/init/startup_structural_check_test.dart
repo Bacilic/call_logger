@@ -30,16 +30,21 @@ Future<Directory> _createFlutterAssets(
   await File(p.join(assets.path, 'FontManifest.json')).writeAsString('[]');
   await File(p.join(assets.path, 'AssetManifest.bin')).writeAsBytes(const [0]);
   final cupertino = File(
-    p.join(assets.path, 'packages', 'cupertino_icons', 'assets', 'CupertinoIcons.ttf'),
+    p.join(
+      assets.path,
+      'packages',
+      'cupertino_icons',
+      'assets',
+      'CupertinoIcons.ttf',
+    ),
   );
   await cupertino.parent.create(recursive: true);
   await cupertino.writeAsBytes(const [0]);
   return assets;
 }
 
-DatabaseInitResult _databaseFailure() => DatabaseInitResult.fileNotFound(
-  r'C:\δεν\υπάρχει.db',
-);
+DatabaseInitResult _databaseFailure() =>
+    DatabaseInitResult.fileNotFound(r'C:\δεν\υπάρχει.db');
 
 void main() {
   late Directory tempRoot;
@@ -108,34 +113,40 @@ void main() {
       expect(ranked.isSuccess, isTrue);
     });
 
-    test('αποτυχία βάσης + ελλείψεις → τα αρχεία προηγούνται, η βάση δεύτερη', () {
-      final base = _databaseFailure();
+    test(
+      'αποτυχία βάσης + ελλείψεις → τα αρχεία προηγούνται, η βάση δεύτερη',
+      () {
+        final base = _databaseFailure();
 
-      final ranked = withMissingApplicationFilesFirst(base, const [
-        'Γραμματοσειρές/εικονίδια',
-        'Εικόνες εφαρμογής',
-      ]);
+        final ranked = withMissingApplicationFilesFirst(base, const [
+          'Γραμματοσειρές/εικονίδια',
+          'Εικόνες εφαρμογής',
+        ]);
 
-      final message = ranked.message ?? '';
-      final fileLine = message.indexOf('Γραμματοσειρές/εικονίδια');
-      final databaseLine = message.indexOf(base.message ?? '');
+        final message = ranked.message ?? '';
+        final fileLine = message.indexOf('Γραμματοσειρές/εικονίδια');
+        final databaseLine = message.indexOf(base.message ?? '');
 
-      expect(fileLine, greaterThanOrEqualTo(0));
-      expect(databaseLine, greaterThan(fileLine));
-      expect(message, contains('Εικόνες εφαρμογής'));
-      expect(message, contains('επανεγκατάσταση'));
-    });
+        expect(fileLine, greaterThanOrEqualTo(0));
+        expect(databaseLine, greaterThan(fileLine));
+        expect(message, contains('Εικόνες εφαρμογής'));
+        expect(message, contains('επανεγκατάσταση'));
+      },
+    );
 
-    test('η κατηγορία και οι ενέργειες ανάκτησης της βάσης δεν αλλοιώνονται', () {
-      final base = _databaseFailure();
+    test(
+      'η κατηγορία και οι ενέργειες ανάκτησης της βάσης δεν αλλοιώνονται',
+      () {
+        final base = _databaseFailure();
 
-      final ranked = withMissingApplicationFilesFirst(base, const [
-        'Εικόνες εφαρμογής',
-      ]);
+        final ranked = withMissingApplicationFilesFirst(base, const [
+          'Εικόνες εφαρμογής',
+        ]);
 
-      expect(ranked.status, base.status);
-      expect(ranked.recoveryKind, base.recoveryKind);
-      expect(ranked.path, base.path);
-    });
+        expect(ranked.status, base.status);
+        expect(ranked.recoveryKind, base.recoveryKind);
+        expect(ranked.path, base.path);
+      },
+    );
   });
 }

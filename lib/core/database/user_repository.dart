@@ -273,7 +273,7 @@ class UserRepository {
     );
     await AuditService.log(
       txn,
-      action: 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ',
+      action: AuditActions.createUser,
       userPerforming: ap,
       details: DirectorySupport.appendAuditOriginSuffix(
         DirectorySupport.mergeAuditDetailLines(
@@ -453,7 +453,7 @@ class UserRepository {
       );
       await AuditService.log(
         txn,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ',
+        action: AuditActions.modifyUser,
         userPerforming: ap,
         details: DirectorySupport.appendAuditOriginSuffix(
           DirectorySupport.mergeAuditDetailLines(

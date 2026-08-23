@@ -60,28 +60,27 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets(
-    'realignment case shows the explanation with builds and dates',
-    (tester) async {
-      const result = UpdateCheckResult(
-        updateAvailable: true,
-        latestVersion: '0.23.2',
-        manifest: channelManifest,
-        currentVersion: '0.24.4',
-        currentBuild: 25,
-      );
+  testWidgets('realignment case shows the explanation with builds and dates', (
+    tester,
+  ) async {
+    const result = UpdateCheckResult(
+      updateAvailable: true,
+      latestVersion: '0.23.2',
+      manifest: channelManifest,
+      currentVersion: '0.24.4',
+      currentBuild: 25,
+    );
 
-      await pumpAndOpenDialog(tester, result);
+    await pumpAndOpenDialog(tester, result);
 
-      expect(find.text('Νέο επίπεδο!'), findsOneWidget);
-      final content = tester
-          .widget<Text>(find.textContaining('αναπροσαρμόστηκε'))
-          .data!;
-      expect(content, contains('κτισίματος 33 (Δευ 03 - Αυγ - 2026)'));
-      expect(content, contains('εγκατεστημένο 25 (Κυρ 19 - Ιουλ - 2026)'));
-      expect(content, contains('Δεν πρόκειται για υποβάθμιση'));
-    },
-  );
+    expect(find.text('Νέο επίπεδο!'), findsOneWidget);
+    final content = tester
+        .widget<Text>(find.textContaining('αναπροσαρμόστηκε'))
+        .data!;
+    expect(content, contains('κτισίματος 33 (Δευ 03 - Αυγ - 2026)'));
+    expect(content, contains('εγκατεστημένο 25 (Κυρ 19 - Ιουλ - 2026)'));
+    expect(content, contains('Δεν πρόκειται για υποβάθμιση'));
+  });
 
   testWidgets(
     'rebuilt same version explains it as changes without history entry',
@@ -113,36 +112,35 @@ void main() {
     },
   );
 
-  testWidgets(
-    'normal upgrade shows NO realignment explanation',
-    (tester) async {
-      const result = UpdateCheckResult(
-        updateAvailable: true,
-        latestVersion: '0.24.0',
-        manifest: UpdateManifest(
-          version: '0.24.0',
-          build: 34,
-          released: '2026-08-04',
-          zipFile: 'call_logger_0.24.0.zip',
-          sha256: 'abc',
-        ),
-        currentVersion: '0.23.2',
-        currentBuild: 33,
-      );
+  testWidgets('normal upgrade shows NO realignment explanation', (
+    tester,
+  ) async {
+    const result = UpdateCheckResult(
+      updateAvailable: true,
+      latestVersion: '0.24.0',
+      manifest: UpdateManifest(
+        version: '0.24.0',
+        build: 34,
+        released: '2026-08-04',
+        zipFile: 'call_logger_0.24.0.zip',
+        sha256: 'abc',
+      ),
+      currentVersion: '0.23.2',
+      currentBuild: 33,
+    );
 
-      await pumpAndOpenDialog(tester, result);
+    await pumpAndOpenDialog(tester, result);
 
-      expect(find.text('Νέο επίπεδο!'), findsOneWidget);
-      expect(find.textContaining('αναπροσαρμόστηκε'), findsNothing);
-      expect(find.textContaining('υποβάθμιση'), findsNothing);
-      expect(
-        find.text(
-          'Θέλετε να αναβαθμίσετε στην έκδοση 0.24.0 (Τρι 04 - Αυγ - 2026);',
-        ),
-        findsOneWidget,
-      );
-    },
-  );
+    expect(find.text('Νέο επίπεδο!'), findsOneWidget);
+    expect(find.textContaining('αναπροσαρμόστηκε'), findsNothing);
+    expect(find.textContaining('υποβάθμιση'), findsNothing);
+    expect(
+      find.text(
+        'Θέλετε να αναβαθμίσετε στην έκδοση 0.24.0 (Τρι 04 - Αυγ - 2026);',
+      ),
+      findsOneWidget,
+    );
+  });
 
   // Το παράσημο γιορτάζει την αναβάθμιση: ο μεγάλος αριθμός είναι το επίπεδο,
   // η πλήρης ετικέτα έκδοσης μπαίνει από κάτω.

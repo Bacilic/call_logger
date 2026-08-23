@@ -30,9 +30,14 @@ bool lampSerialIsPlaceholder(String? serial) {
   final trimmed = (serial ?? '').trim();
   if (trimmed.isEmpty) return true;
   if (trimmed.length <= 2) return true;
-  return const <String>{'-', '—', '.', '0', 'n/a', 'na'}.contains(
-    trimmed.toLowerCase(),
-  );
+  return const <String>{
+    '-',
+    '—',
+    '.',
+    '0',
+    'n/a',
+    'na',
+  }.contains(trimmed.toLowerCase());
 }
 
 /// Κλειδί άδειας τύπου Microsoft: πέντε πεντάδες με παύλες.

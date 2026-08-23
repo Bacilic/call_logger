@@ -74,9 +74,10 @@ void main() {
 
     test('γραμμή χωρίς αναγνωριστικό απορρίπτεται αντί να σκάσει', () {
       expect(
-        buildLampUnlinkedEntity(LampUnlinkedEntityKind.office, <String, Object?>{
-          'office_name': 'Κάπου',
-        }),
+        buildLampUnlinkedEntity(
+          LampUnlinkedEntityKind.office,
+          <String, Object?>{'office_name': 'Κάπου'},
+        ),
         isNull,
       );
     });
@@ -207,7 +208,10 @@ void main() {
     });
 
     test('χωρίς κανένα φίλτρο δεν επιστρέφεται τίποτα', () {
-      expect(lampUnlinkedMatchesFields(office, const <String, String>{}), isFalse);
+      expect(
+        lampUnlinkedMatchesFields(office, const <String, String>{}),
+        isFalse,
+      );
     });
   });
 

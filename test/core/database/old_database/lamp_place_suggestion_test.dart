@@ -76,7 +76,10 @@ void main() {
     });
 
     test('τα κεφαλαία και οι τόνοι δεν εμποδίζουν', () {
-      expect(suggest('ΞΕΝΩΝΑΣ').matches.map((m) => m.id), containsAll(<int>[19, 205]));
+      expect(
+        suggest('ΞΕΝΩΝΑΣ').matches.map((m) => m.id),
+        containsAll(<int>[19, 205]),
+      );
     });
   });
 

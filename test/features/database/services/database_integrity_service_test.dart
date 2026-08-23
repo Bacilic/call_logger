@@ -232,9 +232,7 @@ void main() {
 
       final report = await service.runChecks();
       expect(
-        report.findings.any(
-          (f) => f.title == 'Τμήμα με λάθος κλειδί ονόματος',
-        ),
+        report.findings.any((f) => f.title == 'Τμήμα με λάθος κλειδί ονόματος'),
         isTrue,
       );
     });

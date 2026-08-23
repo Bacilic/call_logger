@@ -107,11 +107,7 @@ class _EmptyRecordBadge extends StatelessWidget {
 }
 
 class _UnlinkedEntityTile extends StatelessWidget {
-  const _UnlinkedEntityTile({
-    super.key,
-    required this.entity,
-    this.onTransfer,
-  });
+  const _UnlinkedEntityTile({super.key, required this.entity, this.onTransfer});
 
   final LampUnlinkedEntity entity;
   final void Function(LampUnlinkedEntity entity)? onTransfer;
@@ -195,7 +191,9 @@ class _UnlinkedEntityTile extends StatelessWidget {
             if (entity.canTransfer && onTransfer != null) ...[
               const SizedBox(width: 8),
               OutlinedButton.icon(
-                key: Key('lamp_unlinked_transfer_${entity.kind.name}_${entity.id}'),
+                key: Key(
+                  'lamp_unlinked_transfer_${entity.kind.name}_${entity.id}',
+                ),
                 onPressed: () => onTransfer!(entity),
                 icon: const Icon(Icons.upgrade, size: 18),
                 label: const Text('Μεταφορά'),

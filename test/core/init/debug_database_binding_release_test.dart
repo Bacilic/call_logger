@@ -128,20 +128,23 @@ void main() {
     },
   );
 
-  test('χωρίς ενεργή δέσμευση η αποδέσμευση δεν κλείνει την ανοιχτή σύνδεση', () async {
-    await SettingsService().setDatabasePath(chosenPath);
-    await DatabaseHelper.instance.initializeDatabase();
-    final generationBefore = DatabaseHelper.instance.connectionGeneration;
+  test(
+    'χωρίς ενεργή δέσμευση η αποδέσμευση δεν κλείνει την ανοιχτή σύνδεση',
+    () async {
+      await SettingsService().setDatabasePath(chosenPath);
+      await DatabaseHelper.instance.initializeDatabase();
+      final generationBefore = DatabaseHelper.instance.connectionGeneration;
 
-    await DatabaseHelper.restoreConfiguredDatabasePath();
+      await DatabaseHelper.restoreConfiguredDatabasePath();
 
-    expect(
-      DatabaseHelper.instance.connectionGeneration,
-      generationBefore,
-      reason: greekExpectMsg(
-        'Στην κανονική αλλαγή βάσης δεν υπάρχει δέσμευση να λυθεί — η '
-        'αποδέσμευση δεν πρέπει να κλείνει σύνδεση χωρίς λόγο',
-      ),
-    );
-  });
+      expect(
+        DatabaseHelper.instance.connectionGeneration,
+        generationBefore,
+        reason: greekExpectMsg(
+          'Στην κανονική αλλαγή βάσης δεν υπάρχει δέσμευση να λυθεί — η '
+          'αποδέσμευση δεν πρέπει να κλείνει σύνδεση χωρίς λόγο',
+        ),
+      );
+    },
+  );
 }

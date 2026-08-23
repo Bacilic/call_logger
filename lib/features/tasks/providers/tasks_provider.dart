@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/utils/run_after_next_frame.dart';
 import '../models/task.dart';
 import '../models/task_filter.dart';
+import '../../../core/models/owner_filter.dart';
+import 'task_owner_filter_provider.dart';
 import '../services/task_service.dart';
 import 'task_analytics_date_provider.dart';
 import 'task_analytics_provider.dart';
@@ -22,12 +24,26 @@ final taskFilterProvider = NotifierProvider<TaskFilterNotifier, TaskFilter>(
   TaskFilterNotifier.new,
 );
 
+/// Το φίλτρο όπως ισχύει **πραγματικά**: τα chips μαζί με την επιλογή χρήστη.
+///
+/// Οι δύο επιλογές ζουν χωριστά γιατί έχουν διαφορετική διάρκεια — τα chips
+/// ξεκινούν από την αρχή σε κάθε άνοιγμα, ο χρήστης θυμάται. **Το ερώτημα όμως
+/// είναι ένα**, και ενώνεται εδώ: όποιος ρωτήσει τη βάση με σκέτο το
+/// [taskFilterProvider] θα μετρούσε με τα μισά κριτήρια, και η διαφορά θα
+/// φαινόταν μόνο ως αριθμός που δεν βγαίνει.
+final effectiveTaskFilterProvider = Provider<TaskFilter>((ref) {
+  final base = ref.watch(taskFilterProvider);
+  final owner =
+      ref.watch(taskOwnerFilterProvider).value ?? OwnerFilter.everyone;
+  return base.copyWith(owner: owner);
+});
+
 /// Μετρητές ανά κατάσταση (ίδια φίλτρα αναζήτησης/ημερομηνίας, χωρίς status chips).
 /// Παρακολουθεί [tasksProvider] ώστε να ενημερώνεται μετά από αλλαγές λίστας.
 final taskStatusCountsProvider = FutureProvider<Map<TaskStatus, int>>((
   ref,
 ) async {
-  final filter = ref.watch(taskFilterProvider);
+  final filter = ref.watch(effectiveTaskFilterProvider);
   ref.watch(tasksProvider);
   final service = ref.read(taskServiceProvider);
   return service.getTaskCounts(filter);
@@ -66,7 +82,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
   @override
   Future<List<Task>> build() async {
     final service = ref.read(taskServiceProvider);
-    final filter = ref.watch(taskFilterProvider);
+    final filter = ref.watch(effectiveTaskFilterProvider);
     return service.getFilteredTasks(filter);
   }
 
@@ -87,7 +103,7 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
       return;
     }
     final service = ref.read(taskServiceProvider);
-    final filter = ref.read(taskFilterProvider);
+    final filter = ref.read(effectiveTaskFilterProvider);
     _refreshInFlight = () async {
       state = await AsyncValue.guard(() => service.getFilteredTasks(filter));
       if (state.hasError) {

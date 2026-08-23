@@ -16,10 +16,7 @@ export '../../../core/database/schema_downgrade_compatibility.dart'
 /// πινγκ-πονγκ: κάθε εφαρμογή δουλεύει στο δικό της αρχείο, καμία δεν
 /// «διορθώνει» την έκδοση της άλλης.
 Future<DowngradeOutcome> downgradeCopyToAppVersion(String sourceDbPath) async {
-  final copy = await createUpgradeCopy(
-    sourceDbPath,
-    suffix: '_υποβαθμισμένη_',
-  );
+  final copy = await createUpgradeCopy(sourceDbPath, suffix: '_υποβαθμισμένη_');
   if (!copy.isSuccess) {
     return DowngradeOutcome.failure(
       copy.errorMessage ?? 'Δεν δημιουργήθηκε αντίγραφο.',

@@ -143,15 +143,10 @@ class EquipmentColumn {
     (row) => row.$2?.name ?? emptyOwnerDisplayLabel,
     (row) => row.$2?.name ?? '',
   );
-  static final department = EquipmentColumn(
-    'department',
-    'Τμήμα',
-    (row) {
-      final name = equipmentOwnDepartmentName(row);
-      return name.isEmpty ? '–' : name;
-    },
-    (row) => equipmentOwnDepartmentName(row),
-  );
+  static final department = EquipmentColumn('department', 'Τμήμα', (row) {
+    final name = equipmentOwnDepartmentName(row);
+    return name.isEmpty ? '–' : name;
+  }, (row) => equipmentOwnDepartmentName(row));
   static final location = EquipmentColumn(
     'location',
     'Τοποθεσία',

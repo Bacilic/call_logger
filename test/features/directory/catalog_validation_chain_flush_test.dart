@@ -65,7 +65,9 @@ void main() {
       await container.read(catalogValidationServiceProvider.future);
       expect(rulesBuilds, 1);
 
-      tester.state<_RulesEditorState>(find.byType(_RulesEditor)).applyMutation();
+      tester
+          .state<_RulesEditorState>(find.byType(_RulesEditor))
+          .applyMutation();
 
       // Ο έλεγχος γίνεται ΠΡΙΝ από pump: το ξέπλυμα οφείλει να είναι άμεσο
       // (eager), όχι προγραμματισμένο για επόμενο frame.
@@ -104,7 +106,9 @@ void main() {
       expect(container.exists(catalogValidationRulesProvider), isFalse);
       expect(container.exists(catalogValidationServiceProvider), isFalse);
 
-      tester.state<_RulesEditorState>(find.byType(_RulesEditor)).applyMutation();
+      tester
+          .state<_RulesEditorState>(find.byType(_RulesEditor))
+          .applyMutation();
 
       // Η αλυσίδα υπολογίστηκε τώρα — δεν θα υπολογιστεί μέσα σε build.
       expect(container.exists(catalogValidationRulesProvider), isTrue);

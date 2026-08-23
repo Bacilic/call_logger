@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
+import '../services/operator_presence_summary.dart';
+import 'operator_identity_card.dart';
 
 /// Το κοινό σώμα επιλογής χρήστη: λίστα ενεργών προφίλ ή φόρμα δημιουργίας.
 ///
@@ -13,12 +15,20 @@ class OperatorPickerBody extends StatefulWidget {
     required this.profiles,
     required this.onPick,
     required this.onCreate,
+    this.presence = const <int, List<OperatorPresenceLine>>{},
     this.suggestedName = '',
     this.hasWindowsAccount = true,
   });
 
   /// Τα ενεργά προφίλ, προς επιλογή. Κενή λίστα στην πρώτη εκκίνηση.
   final List<Operator> profiles;
+
+  /// Γραμμές σύνδεσης ανά προφίλ, έτοιμες προς εμφάνιση.
+  ///
+  /// Χωρίς αυτές η κάρτα δείχνει μόνο όνομα, ρόλο και λογαριασμό — αρκετά για
+  /// να μη διαλέγει κανείς στα τυφλά, αλλά η στιγμή τελευταίας σύνδεσης είναι
+  /// συχνά το στοιχείο που ξεχωρίζει δύο συναδέλφους στον ίδιο υπολογιστή.
+  final Map<int, List<OperatorPresenceLine>> presence;
 
   final void Function(Operator operator) onPick;
 
@@ -82,23 +92,18 @@ class _OperatorPickerBodyState extends State<OperatorPickerBody> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: _creating
-          ? _buildCreateForm(theme)
-          : _buildProfileList(theme),
+      children: _creating ? _buildCreateForm(theme) : _buildProfileList(theme),
     );
   }
 
   List<Widget> _buildProfileList(ThemeData theme) {
     return [
       for (final profile in widget.profiles)
-        Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: Text(profile.displayName),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _busy ? null : () => widget.onPick(profile),
-          ),
+        OperatorIdentityCard(
+          operator: profile,
+          presence:
+              widget.presence[profile.id] ?? const <OperatorPresenceLine>[],
+          onTap: _busy ? null : () => widget.onPick(profile),
         ),
       const SizedBox(height: 8),
       TextButton.icon(

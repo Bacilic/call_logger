@@ -17,20 +17,23 @@ void main() {
       expect(shapes, hasLength(3));
     });
 
-    test('άγνωστη προέλευση κρατά το σχήμα της ΤΝ, δεν περνά για χειρόγραφη', () {
-      final manual = CallProvenanceIcon.iconFor(CallRefinedSource.manual);
+    test(
+      'άγνωστη προέλευση κρατά το σχήμα της ΤΝ, δεν περνά για χειρόγραφη',
+      () {
+        final manual = CallProvenanceIcon.iconFor(CallRefinedSource.manual);
 
-      for (final unknown in <String?>[null, '', '   ', 'κάτι άλλο']) {
-        expect(
-          CallProvenanceIcon.iconFor(unknown),
-          isNot(manual),
-          reason: 'το «$unknown» δεν αποδεικνύει ότι έγραψε ο χρήστης',
-        );
-        expect(
-          CallProvenanceIcon.iconFor(unknown),
-          CallProvenanceIcon.iconFor(CallRefinedSource.ai),
-        );
-      }
-    });
+        for (final unknown in <String?>[null, '', '   ', 'κάτι άλλο']) {
+          expect(
+            CallProvenanceIcon.iconFor(unknown),
+            isNot(manual),
+            reason: 'το «$unknown» δεν αποδεικνύει ότι έγραψε ο χρήστης',
+          );
+          expect(
+            CallProvenanceIcon.iconFor(unknown),
+            CallProvenanceIcon.iconFor(CallRefinedSource.ai),
+          );
+        }
+      },
+    );
   });
 }

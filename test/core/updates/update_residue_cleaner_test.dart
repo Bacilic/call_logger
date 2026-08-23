@@ -72,15 +72,18 @@ void main() {
       expect(scan.protected, isEmpty);
     });
 
-    test('παλιό staging και backup σημαίνονται και τα δύο προς διαγραφή', () async {
-      await createResidue();
+    test(
+      'παλιό staging και backup σημαίνονται και τα δύο προς διαγραφή',
+      () async {
+        await createResidue();
 
-      final scan = await buildCleaner().scan();
+        final scan = await buildCleaner().scan();
 
-      expect(scan.hasWork, isTrue);
-      expect(scan.removable, hasLength(2));
-      expect(scan.protected, isEmpty);
-    });
+        expect(scan.hasWork, isTrue);
+        expect(scan.removable, hasLength(2));
+        expect(scan.protected, isEmpty);
+      },
+    );
 
     test('εκκρεμής ενημέρωση προστατεύει το staging, όχι το backup', () async {
       await createResidue();
@@ -143,25 +146,28 @@ void main() {
   });
 
   group('διαγραφή', () {
-    test('διαγράφει τα σημασμένα και αφήνει τα δεδομένα χρήστη ανέπαφα', () async {
-      await createResidue();
-      final cleaner = buildCleaner();
+    test(
+      'διαγράφει τα σημασμένα και αφήνει τα δεδομένα χρήστη ανέπαφα',
+      () async {
+        await createResidue();
+        final cleaner = buildCleaner();
 
-      final removed = await cleaner.clean(await cleaner.scan());
+        final removed = await cleaner.clean(await cleaner.scan());
 
-      expect(removed, hasLength(2));
-      expect(await staging.exists(), isFalse);
-      expect(await backup.exists(), isFalse);
-      expect(await userDataDb.exists(), isTrue);
-      expect(
-        await File(p.join(userDataDb.path, 'call_logger.db')).exists(),
-        isTrue,
-      );
-      expect(
-        await File(p.join(installDir.path, 'call_logger.exe')).exists(),
-        isTrue,
-      );
-    });
+        expect(removed, hasLength(2));
+        expect(await staging.exists(), isFalse);
+        expect(await backup.exists(), isFalse);
+        expect(await userDataDb.exists(), isTrue);
+        expect(
+          await File(p.join(userDataDb.path, 'call_logger.db')).exists(),
+          isTrue,
+        );
+        expect(
+          await File(p.join(installDir.path, 'call_logger.exe')).exists(),
+          isTrue,
+        );
+      },
+    );
 
     test('προστατευμένος φάκελος επιβιώνει της διαγραφής', () async {
       await createResidue();

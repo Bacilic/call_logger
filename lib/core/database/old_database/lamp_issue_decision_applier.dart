@@ -1129,7 +1129,10 @@ class LampIssueDecisionApplier {
   }) async {
     await txn.update(
       'equipment',
-      <String, Object?>{'office': placement.officeId, 'office_original_text': null},
+      <String, Object?>{
+        'office': placement.officeId,
+        'office_original_text': null,
+      },
       where: 'code = ?',
       whereArgs: <Object?>[code],
     );
@@ -1223,8 +1226,7 @@ class LampIssueDecisionApplier {
     final rows = await txn.query(
       'data_issues',
       columns: <String>['id'],
-      where:
-          "row_number = ? AND lower(column_name) = ? AND status = 'open'",
+      where: "row_number = ? AND lower(column_name) = ? AND status = 'open'",
       whereArgs: <Object?>[code, column.toLowerCase()],
     );
     final ids = <int>[

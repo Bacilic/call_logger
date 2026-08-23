@@ -598,9 +598,8 @@ void main() {
     Future<void> openWithProgress(
       WidgetTester tester, {
       LampManualReviewProgress? progress,
-      List<LampIssueResolutionProposal> proposals = const <
-        LampIssueResolutionProposal
-      >[_testProposal],
+      List<LampIssueResolutionProposal> proposals =
+          const <LampIssueResolutionProposal>[_testProposal],
     }) async {
       await tester.binding.setSurfaceSize(const Size(1280, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -706,15 +705,11 @@ void main() {
     });
 
     testWidgets('ομάδα όμοιων: «Παράλειψη και των 3»', (tester) async {
-      await open(
-        tester,
-        const <LampIssueResolutionProposal>[
-          _testProposal,
-          _testProposal,
-          _testProposal,
-        ],
-        grouped: true,
-      );
+      await open(tester, const <LampIssueResolutionProposal>[
+        _testProposal,
+        _testProposal,
+        _testProposal,
+      ], grouped: true);
 
       expect(find.text('Παράλειψη και των 3'), findsOneWidget);
 

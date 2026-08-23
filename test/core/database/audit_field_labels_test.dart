@@ -99,10 +99,10 @@ final RegExp _allowedLatin = RegExp(
 
 final RegExp _latinWord = RegExp(r'[A-Za-z]+');
 
-Iterable<String> _foreignWords(String label) =>
-    _latinWord.allMatches(label).map((m) => m.group(0)!).where(
-      (w) => !_allowedLatin.hasMatch(w),
-    );
+Iterable<String> _foreignWords(String label) => _latinWord
+    .allMatches(label)
+    .map((m) => m.group(0)!)
+    .where((w) => !_allowedLatin.hasMatch(w));
 
 void main() {
   group('Ελληνικές ετικέτες πεδίων ιστορικού', () {
@@ -165,30 +165,35 @@ void main() {
       expect(offenders, isEmpty);
     });
 
-    test('οι ονομαστικές ετικέτες ξεκινούν πεζά — μπαίνουν μέσα σε πρόταση', () {
-      final capitalized = <String>[];
-      for (final key in _auditFieldKeys) {
-        final label = AuditDiffHelper.fieldTitleLabel('', key);
-        if (label.isEmpty) continue;
-        final first = label.substring(0, 1);
-        if (first != first.toLowerCase()) capitalized.add('$key → $label');
-      }
+    test(
+      'οι ονομαστικές ετικέτες ξεκινούν πεζά — μπαίνουν μέσα σε πρόταση',
+      () {
+        final capitalized = <String>[];
+        for (final key in _auditFieldKeys) {
+          final label = AuditDiffHelper.fieldTitleLabel('', key);
+          if (label.isEmpty) continue;
+          final first = label.substring(0, 1);
+          if (first != first.toLowerCase()) capitalized.add('$key → $label');
+        }
 
-      expect(capitalized, isEmpty);
-    });
+        expect(capitalized, isEmpty);
+      },
+    );
 
-    test('το κλειδί που γράφει το audit για τον κωδικό είναι το equipment_code',
-        () {
-      expect(
-        AuditDiffHelper.fieldTitleLabel('user', 'equipment_code'),
-        'κωδικός εξοπλισμού',
-      );
-      // Το όνομα της στήλης μένει ως συνώνυμο για τις ήδη γραμμένες εγγραφές.
-      expect(
-        AuditDiffHelper.fieldTitleLabel('user', 'code_equipment'),
-        'κωδικός εξοπλισμού',
-      );
-    });
+    test(
+      'το κλειδί που γράφει το audit για τον κωδικό είναι το equipment_code',
+      () {
+        expect(
+          AuditDiffHelper.fieldTitleLabel('user', 'equipment_code'),
+          'κωδικός εξοπλισμού',
+        );
+        // Το όνομα της στήλης μένει ως συνώνυμο για τις ήδη γραμμένες εγγραφές.
+        expect(
+          AuditDiffHelper.fieldTitleLabel('user', 'code_equipment'),
+          'κωδικός εξοπλισμού',
+        );
+      },
+    );
   });
 
   group('Διπλή καταγραφή του ίδιου εξοπλισμού', () {
@@ -207,15 +212,17 @@ void main() {
       );
     });
 
-    test('μόνο του το id εμφανίζεται κανονικά — δεν υπάρχει κωδικός να το πει',
-        () {
-      expect(
-        AuditDiffHelper.shouldSkipDerivativeField('equipment_id', {
-          'equipment_id',
-        }),
-        isFalse,
-      );
-    });
+    test(
+      'μόνο του το id εμφανίζεται κανονικά — δεν υπάρχει κωδικός να το πει',
+      () {
+        expect(
+          AuditDiffHelper.shouldSkipDerivativeField('equipment_id', {
+            'equipment_id',
+          }),
+          isFalse,
+        );
+      },
+    );
 
     test('μόνος του ο κωδικός εμφανίζεται κανονικά', () {
       expect(

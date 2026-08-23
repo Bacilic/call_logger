@@ -509,11 +509,7 @@ class ReleasePublisherService {
   static (int, int, int)? _parseVersionFolderName(String name) {
     final match = RegExp(r'^(\d+)\.(\d+)\.(\d+)$').firstMatch(name.trim());
     if (match == null) return null;
-    return (
-      int.parse(match[1]!),
-      int.parse(match[2]!),
-      int.parse(match[3]!),
-    );
+    return (int.parse(match[1]!), int.parse(match[2]!), int.parse(match[3]!));
   }
 
   static int _compareVersionTuples((int, int, int) a, (int, int, int) b) {

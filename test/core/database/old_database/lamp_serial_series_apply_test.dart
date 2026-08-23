@@ -224,15 +224,15 @@ void main() {
     );
     await LampIssueResolutionService().applySingleDecision(
       databasePath: dbPath,
-      decision: LampIssueResolutionDecision(
-        proposal: target,
-        option: accept,
-      ),
+      decision: LampIssueResolutionDecision(proposal: target, option: accept),
     );
 
     expect(
       await serialsOf(<int>[2593, 2674]),
-      <String>['3XNJY-9J4GT-Y7DJ8-9R98M-XBT6Y', '3XNJY-9J4GT-Y7DJ8-9R98M-XBT6Y'],
+      <String>[
+        '3XNJY-9J4GT-Y7DJ8-9R98M-XBT6Y',
+        '3XNJY-9J4GT-Y7DJ8-9R98M-XBT6Y',
+      ],
       reason: greekExpectMsg(
         'Η αποδοχή κλείνει την εκκρεμότητα χωρίς να αγγίξει δεδομένα',
       ),
@@ -248,9 +248,7 @@ void main() {
       model: 554,
       serial: '10NXMP0026001',
       codes: <int>[10, 20],
-      extraSerials: <String>[
-        for (var i = 1; i <= 10; i++) '10NXMP0026001-$i',
-      ],
+      extraSerials: <String>[for (var i = 1; i <= 10; i++) '10NXMP0026001-$i'],
     );
     final target = await proposal();
 
@@ -291,10 +289,7 @@ void main() {
     // Χωρίς ρητό πρότυπο εφαρμόζεται η πρόταση του αναλυτή.
     await LampIssueResolutionService().applySingleDecision(
       databasePath: dbPath,
-      decision: LampIssueResolutionDecision(
-        proposal: target,
-        option: option,
-      ),
+      decision: LampIssueResolutionDecision(proposal: target, option: option),
     );
 
     expect(await serialsOf(<int>[789, 790]), <String>[

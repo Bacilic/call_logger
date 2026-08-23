@@ -115,7 +115,8 @@ class _LampSerialSeriesFieldsState extends State<LampSerialSeriesFields> {
                 controller: controller,
                 decoration: InputDecoration(
                   labelText: 'Προσαρμοσμένο',
-                  hintText: 'π.χ. Πληκτρολόγιο Dell (61)-'
+                  hintText:
+                      'π.χ. Πληκτρολόγιο Dell (61)-'
                       '$kLampSeriesCounterToken',
                   helperText: valid
                       ? null

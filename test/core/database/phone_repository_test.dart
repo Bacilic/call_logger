@@ -254,7 +254,7 @@ void main() {
       final auditRows = await db.query(
         'audit_log',
         where: 'entity_id = ? AND details LIKE ?',
-        whereArgs: [phoneId, '%αφαίρεση από χρήστη%'],
+        whereArgs: [phoneId, '%αφαίρεση από υπάλληλο%'],
       );
       expect(auditRows, hasLength(1));
     });

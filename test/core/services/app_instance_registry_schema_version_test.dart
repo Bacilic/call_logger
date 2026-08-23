@@ -28,8 +28,7 @@ void main() {
     expect(decoded.first.version, '0.38.0');
   });
 
-  test('παλιά εγγραφή χωρίς schemaVersion → null, όχι σφάλμα, όχι μάντεμα',
-      () {
+  test('παλιά εγγραφή χωρίς schemaVersion → null, όχι σφάλμα, όχι μάντεμα', () {
     const legacyJson =
         '[{"path":"C:\\\\Apps\\\\Old\\\\call_logger.exe",'
         '"version":"0.34.0","lastSeen":"2026-08-01T10:00:00.000"}]';

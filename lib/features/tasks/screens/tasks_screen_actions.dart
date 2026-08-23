@@ -11,6 +11,8 @@ import '../../directory/providers/directory_provider.dart';
 import '../../directory/screens/widgets/department_form_dialog.dart';
 import '../../directory/screens/widgets/user_form_dialog.dart';
 import '../../directory/services/equipment_form_launcher.dart';
+import '../../../core/services/current_operator.dart';
+import '../../operators/providers/operator_directory_providers.dart';
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
 import '../providers/pending_task_delete_provider.dart';
@@ -115,6 +117,100 @@ Task recreatedTaskFrom(Task edited) {
 /// επιστρέφει μαζί με το αποτέλεσμα — δεν υπάρχει προηγούμενο βήμα που η φόρμα
 /// δεν θυμάται, ούτε δεύτερο παράθυρο μετά το κουμπί. Τίποτα δεν γράφεται στη
 /// βάση πριν πατηθεί η αποθήκευση.
+/// Γρήγορη ανάθεση από το μενού της κάρτας — διάλογος επιλογής υπευθύνου.
+///
+/// «Σε εμένα» πρώτο (η συχνότερη κίνηση: «το παίρνω εγώ»), τα υπόλοιπα ενεργά
+/// προφίλ αλφαβητικά, και «Χωρίς ανάθεση» τελευταίο για να ελευθερωθεί — η
+/// εκκρεμότητα επιστρέφει τότε σε όποιον την άνοιξε. Η τρέχουσα επιλογή
+/// σημαίνεται και δεν ξαναγράφεται.
+Future<void> assignTaskFlow(
+  BuildContext context,
+  WidgetRef ref,
+  Task task,
+) async {
+  final taskId = task.id;
+  if (taskId == null) return;
+
+  final operators = await ref.read(activeOperatorsProvider.future);
+  if (!context.mounted) return;
+
+  final activeId = CurrentOperator.active?.id;
+  final me = [
+    for (final operator in operators)
+      if (operator.id == activeId) operator,
+  ];
+  final others = [
+    for (final operator in operators)
+      if (operator.id != activeId) operator,
+  ];
+
+  // Ο τρέχων υπεύθυνος μένει στη λίστα με το ✓, αλλά δεν ξαναδιαλέγεται:
+  // η επιλογή που δεν αλλάζει τίποτα δεν προσφέρεται, και η λίστα κρατά
+  // σταθερή σύνθεση — το μάτι ξέρει πού είναι ο καθένας χωρίς να ξαναψάχνει
+  // επειδή κάποιος εξαφανίστηκε.
+  Widget option({
+    required int? id,
+    required String label,
+    IconData icon = Icons.person_outline,
+  }) {
+    final isCurrent = task.assignedOperatorId == id;
+    final theme = Theme.of(context);
+    final color = isCurrent ? theme.disabledColor : null;
+    return SimpleDialogOption(
+      onPressed: isCurrent
+          ? null
+          : () => Navigator.of(context).pop((assignee: id)),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(label, style: TextStyle(color: color)),
+          ),
+          if (isCurrent) Icon(Icons.check, size: 18, color: color),
+        ],
+      ),
+    );
+  }
+
+  final choice = await showDialog<({int? assignee})>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: Text('Ανάθεση: ${task.title}', overflow: TextOverflow.ellipsis),
+      children: [
+        for (final operator in me)
+          option(
+            id: operator.id,
+            label: 'Σε εμένα (${operator.displayName})',
+            icon: Icons.person_pin_outlined,
+          ),
+        for (final operator in others)
+          option(id: operator.id, label: operator.displayName),
+        const Divider(height: 8),
+        option(
+          id: null,
+          label: 'Χωρίς ανάθεση',
+          icon: Icons.person_off_outlined,
+        ),
+      ],
+    ),
+  );
+  if (choice == null || !context.mounted) return;
+  if (choice.assignee == task.assignedOperatorId) return;
+
+  try {
+    await ref.read(taskServiceProvider).assignTask(taskId, choice.assignee);
+    await ref.read(tasksProvider.notifier).refresh();
+  } on Exception {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Η ανάθεση δεν αποθηκεύτηκε. Δοκιμάστε ξανά.'),
+      ),
+    );
+  }
+}
+
 Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
   final formResult = await showTaskFormDialog(context, task: task);
   if (!context.mounted || formResult == null) return;

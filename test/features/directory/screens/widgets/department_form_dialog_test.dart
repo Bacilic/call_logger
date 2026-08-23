@@ -1054,11 +1054,10 @@ void main() {
             'Στο Lansweeper φεύγουν τα αναγνωριστικά, όχι οι ονομασίες',
           ),
         );
-        expect(
-          accounts.map((a) => a.label),
-          ['Υπάλληλος #1', 'Υπάλληλος #2'],
-          reason: greekExpectMsg('Οι ονομασίες μένουν για τον επιλογέα'),
-        );
+        expect(accounts.map((a) => a.label), [
+          'Υπάλληλος #1',
+          'Υπάλληλος #2',
+        ], reason: greekExpectMsg('Οι ονομασίες μένουν για τον επιλογέα'));
       },
     );
 

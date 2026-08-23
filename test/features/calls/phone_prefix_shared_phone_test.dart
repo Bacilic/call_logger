@@ -48,9 +48,7 @@ Future<ProviderContainer> _container({bool secondEmployee = false}) async {
         ),
     ],
     equipment: [EquipmentModel(id: 700, code: '3520')],
-    departmentRows: [
-      DepartmentModel(id: _kPathologyId, name: _kPathologyName),
-    ],
+    departmentRows: [DepartmentModel(id: _kPathologyId, name: _kPathologyName)],
     userToEquipmentIds: {
       _kSotiriaId: [700],
     },
@@ -115,8 +113,7 @@ void main() {
 
       final state = container.read(callSmartEntityProvider);
       expect(
-        state.callerDisplayText.trim().isEmpty ||
-            state.selectedCaller != null,
+        state.callerDisplayText.trim().isEmpty || state.selectedCaller != null,
         isTrue,
         reason:
             'όνομα στο πεδίο χωρίς δεσμό = «ανύπαρκτος» υπάλληλος: η κλήση '

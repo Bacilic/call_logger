@@ -278,90 +278,84 @@ void main() {
       semanticsEnabled: false,
     );
 
-    testWidgets(
-      'Εκκρεμότητες: Ctrl+Shift+N ανοίγει QuickCallDialog',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('Εκκρεμότητες: Ctrl+Shift+N ανοίγει QuickCallDialog', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        await _pumpCallLoggerApp(tester);
-        await _goToTasks(tester);
+      await _pumpCallLoggerApp(tester);
+      await _goToTasks(tester);
 
-        expect(_quickCallDialog(), findsNothing);
-        expect(find.byKey(QuickCallTrigger.triggerKey), findsNothing);
+      expect(_quickCallDialog(), findsNothing);
+      expect(find.byKey(QuickCallTrigger.triggerKey), findsNothing);
 
-        await _sendCtrlShiftN(tester);
+      await _sendCtrlShiftN(tester);
 
-        expect(
-          _quickCallDialog(),
-          findsOneWidget,
-          reason:
-              'Ctrl+Shift+N πρέπει να ανοίγει διάλογο γρήγορης κλήσης '
-              'στην οθόνη εκκρεμοτήτων',
-        );
+      expect(
+        _quickCallDialog(),
+        findsOneWidget,
+        reason:
+            'Ctrl+Shift+N πρέπει να ανοίγει διάλογο γρήγορης κλήσης '
+            'στην οθόνη εκκρεμοτήτων',
+      );
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
 
-    testWidgets(
-      'Κατάλογος Διάφορα: Ctrl+Shift+N ανοίγει QuickCallDialog',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('Κατάλογος Διάφορα: Ctrl+Shift+N ανοίγει QuickCallDialog', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        await _pumpCallLoggerApp(tester);
-        await _goToDirectoryMiscTab(tester);
+      await _pumpCallLoggerApp(tester);
+      await _goToDirectoryMiscTab(tester);
 
-        await _sendCtrlShiftN(tester);
+      await _sendCtrlShiftN(tester);
 
-        expect(
-          _quickCallDialog(),
-          findsOneWidget,
-          reason:
-              'Ctrl+Shift+N πρέπει να δουλεύει στην καρτέλα Διάφορα '
-              '(χωρίς πίνακα/Focus hover)',
-        );
+      expect(
+        _quickCallDialog(),
+        findsOneWidget,
+        reason:
+            'Ctrl+Shift+N πρέπει να δουλεύει στην καρτέλα Διάφορα '
+            '(χωρίς πίνακα/Focus hover)',
+      );
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
 
-    testWidgets(
-      'Βάση Δεδομένων: Ctrl+Shift+N ανοίγει QuickCallDialog',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('Βάση Δεδομένων: Ctrl+Shift+N ανοίγει QuickCallDialog', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        await _pumpCallLoggerApp(tester);
-        await _goToDatabase(tester);
+      await _pumpCallLoggerApp(tester);
+      await _goToDatabase(tester);
 
-        await _sendCtrlShiftN(tester);
+      await _sendCtrlShiftN(tester);
 
-        expect(
-          _quickCallDialog(),
-          findsOneWidget,
-          reason: 'Ctrl+Shift+N πρέπει να δουλεύει στην οθόνη Βάσης Δεδομένων',
-        );
+      expect(
+        _quickCallDialog(),
+        findsOneWidget,
+        reason: 'Ctrl+Shift+N πρέπει να δουλεύει στην οθόνη Βάσης Δεδομένων',
+      );
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
 
     testWidgets(
       'Εκκρεμότητες: Ctrl+Ν (ελληνικό CharacterActivator) ανοίγει QuickCallDialog',

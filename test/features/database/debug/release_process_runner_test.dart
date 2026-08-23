@@ -25,11 +25,10 @@ void main() {
 
   test('όλες οι γραμμές εξόδου φτάνουν — και η τελευταία', () async {
     final lines = <String>[];
-    final code = await runReleaseProcess(
-      'cmd',
-      ['/c', 'echo alpha& echo beta& echo omega'],
-      onOutput: lines.add,
-    );
+    final code = await runReleaseProcess('cmd', [
+      '/c',
+      'echo alpha& echo beta& echo omega',
+    ], onOutput: lines.add);
 
     expect(code, 0);
     expect(
@@ -44,22 +43,20 @@ void main() {
 
   test('η έξοδος σφάλματος προωθείται μαζί με την κανονική', () async {
     final lines = <String>[];
-    await runReleaseProcess(
-      'cmd',
-      ['/c', 'echo problem 1>&2'],
-      onOutput: lines.add,
-    );
+    await runReleaseProcess('cmd', [
+      '/c',
+      'echo problem 1>&2',
+    ], onOutput: lines.add);
 
     expect(lines.map((l) => l.trim()), contains('problem'));
   });
 
   test('κενές γραμμές δεν γεμίζουν το αρχείο καταγραφής', () async {
     final lines = <String>[];
-    await runReleaseProcess(
-      'cmd',
-      ['/c', 'echo one& echo.& echo two'],
-      onOutput: lines.add,
-    );
+    await runReleaseProcess('cmd', [
+      '/c',
+      'echo one& echo.& echo two',
+    ], onOutput: lines.add);
 
     expect(lines.map((l) => l.trim()).toList(), ['one', 'two']);
   });

@@ -77,61 +77,59 @@ void main() {
 
     // Μετάβαση στο Ιστορικό, αναζήτηση με marker seed — εμφάνιση γραμμής στον πίνακα.
     //   flutter test test/features/history/history_search_test.dart --plain-name "Ιστορικό: φίλτρο κειμένου εμφανίζει τη δοκιμαστική κλήση"
-    testWidgets(
-      'Ιστορικό: φίλτρο κειμένου εμφανίζει τη δοκιμαστική κλήση',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('Ιστορικό: φίλτρο κειμένου εμφανίζει τη δοκιμαστική κλήση', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final reporter = GreekTestReportCollector();
-        reporter.logStep('Φόρτωση εφαρμογής για αναζήτηση στο Ιστορικό');
+      final reporter = GreekTestReportCollector();
+      reporter.logStep('Φόρτωση εφαρμογής για αναζήτηση στο Ιστορικό');
 
-        await tester.runAsync(() async {
-          await tester.pumpWidget(
-            ProviderScope(
-              overrides: historySearchWidgetTestOverrides(),
-              child: const MyApp(showStartupScreens: false),
-            ),
-          );
-          await tester.pump();
-          await pumpUntilSettledLong(tester);
-        });
-
-        reporter.logStep('Μετάβαση στο Ιστορικό μέσω πλοήγησης');
-        await tester.tap(find.byKey(const ValueKey('nav_rail_history')));
-        await pumpUntilSettled(tester);
-
-        expect(
-          find.text('Ιστορικό Κλήσεων'),
-          findsOneWidget,
-          reason: greekExpectMsg('Μετάβαση στην οθόνη Ιστορικού'),
-        );
-
-        final container = ProviderScope.containerOf(
-          tester.element(find.byType(MaterialApp)),
-        );
-        reporter.logStep('Εφαρμογή φίλτρου αναζήτησης στο Ιστορικό');
-        container
-            .read(historyFilterProvider.notifier)
-            .update((s) => s.copyWith(keyword: kTestHistorySearchMarker));
-        await pumpUntilSettled(tester);
-
-        expect(
-          find.textContaining(kTestHistorySearchMarker),
-          findsWidgets,
-          reason: greekExpectMsg(
-            'Ο πίνακας ιστορικού πρέπει να εμφανίζει το σημείο αναζήτησης',
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: historySearchWidgetTestOverrides(),
+            child: const MyApp(showStartupScreens: false),
           ),
         );
-        reporter.recordPass('Αναζήτηση στο Ιστορικό');
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+        await tester.pump();
+        await pumpUntilSettledLong(tester);
+      });
+
+      reporter.logStep('Μετάβαση στο Ιστορικό μέσω πλοήγησης');
+      await tester.tap(find.byKey(const ValueKey('nav_rail_history')));
+      await pumpUntilSettled(tester);
+
+      expect(
+        find.text('Ιστορικό Κλήσεων'),
+        findsOneWidget,
+        reason: greekExpectMsg('Μετάβαση στην οθόνη Ιστορικού'),
+      );
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      );
+      reporter.logStep('Εφαρμογή φίλτρου αναζήτησης στο Ιστορικό');
+      container
+          .read(historyFilterProvider.notifier)
+          .update((s) => s.copyWith(keyword: kTestHistorySearchMarker));
+      await pumpUntilSettled(tester);
+
+      expect(
+        find.textContaining(kTestHistorySearchMarker),
+        findsWidgets,
+        reason: greekExpectMsg(
+          'Ο πίνακας ιστορικού πρέπει να εμφανίζει το σημείο αναζήτησης',
+        ),
+      );
+      reporter.recordPass('Αναζήτηση στο Ιστορικό');
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
 
     // Ο μετρητής της λεζάντας μετρούσε άλλο σύνολο από αυτό που έδειχνε η
     // λίστα: αγνοούσε το keyword, οπότε «Κλήσεις 226» με 4 αποτελέσματα.

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../config/app_config.dart';
 import '../database/database_helper.dart';
 import '../database/operator_presence_repository.dart';
 import '../models/operator_presence.dart';
@@ -57,6 +58,27 @@ class OperatorPresenceHeartbeat {
     }
   }
 
+  /// Ποιο **ανοιχτό αντίγραφο** είναι αυτό. Αντικαθίσταται στα τεστ.
+  ///
+  /// Διαδρομή εκτελέσιμου συν όνομα προφίλ: δύο εφαρμογές στον ίδιο υπολογιστή
+  /// (η κανονική και η δοκιμαστική) ξεχωρίζουν, ενώ η ίδια εφαρμογή κρατά την
+  /// ίδια ταυτότητα από εκκίνηση σε εκκίνηση — αλλιώς κάθε άνοιγμα θα άφηνε νέα
+  /// γραμμή και ο πίνακας θα γινόταν ημερολόγιο.
+  static String Function() instanceIdReader = () {
+    final exe = Platform.resolvedExecutable.trim();
+    final profile = AppConfig.activeProfile?.trim() ?? '';
+    return profile.isEmpty ? exe : '$exe|$profile';
+  };
+
+  /// Η ταυτότητα αυτού του αντιγράφου· κενή όταν δεν μπορεί να βρεθεί.
+  static String get instanceId {
+    try {
+      return instanceIdReader().trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
   /// Αρχίζει να παρακολουθεί την ταυτότητα και να χτυπά.
   ///
   /// Ασφαλές να κληθεί πολλές φορές — η δεύτερη κλήση δεν κάνει τίποτα.
@@ -106,9 +128,12 @@ class OperatorPresenceHeartbeat {
     if (db == null) return;
 
     try {
-      await OperatorPresenceRepository(
-        db,
-      ).touch(operatorId: operatorId, station: station, at: DateTime.now());
+      await OperatorPresenceRepository(db).touch(
+        operatorId: operatorId,
+        station: station,
+        instance: instanceId,
+        at: DateTime.now(),
+      );
     } catch (e, stack) {
       CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
     }

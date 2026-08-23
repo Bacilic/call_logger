@@ -34,7 +34,10 @@ void main() {
     });
 
     test('κενό ή διάστημα μετρά ως απουσία προφίλ', () {
-      expect(appInstancesSharedScopeText(''), appInstancesSharedScopeText(null));
+      expect(
+        appInstancesSharedScopeText(''),
+        appInstancesSharedScopeText(null),
+      );
       expect(
         appInstancesSharedScopeText('   '),
         appInstancesSharedScopeText(null),

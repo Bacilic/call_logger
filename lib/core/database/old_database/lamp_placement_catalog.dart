@@ -108,8 +108,10 @@ class LampPlacementCatalog {
   /// Οι κατηγορίες συμβάσεων (Προμήθεια, Δωρεά, Σύμβαση συντήρησης, …).
   final List<LampContractLookupEntry> contractCategories;
 
-  List<LampContractLookupEntry> searchSuppliers(String query, {int limit = 40}) =>
-      _search(suppliers, query, limit);
+  List<LampContractLookupEntry> searchSuppliers(
+    String query, {
+    int limit = 40,
+  }) => _search(suppliers, query, limit);
 
   List<LampContractLookupEntry> searchContractCategories(String query) =>
       _search(contractCategories, query, contractCategories.length);
@@ -146,9 +148,8 @@ class LampPlacementCatalog {
         ? offices
         : offices
               .where(
-                (office) => TextSimilarity.normalize(
-                  office.label,
-                ).contains(needle),
+                (office) =>
+                    TextSimilarity.normalize(office.label).contains(needle),
               )
               .toList(growable: false);
     return matches.take(limit).toList(growable: false);

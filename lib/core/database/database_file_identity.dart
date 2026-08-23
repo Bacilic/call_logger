@@ -171,7 +171,10 @@ Future<DatabaseIdentityVerdict> verifyDatabaseFileIdentity({
 }) async {
   if (before == null) return DatabaseIdentityVerdict.unknown;
 
-  final first = compareDatabaseFileIdentity(before: before, after: await read(path));
+  final first = compareDatabaseFileIdentity(
+    before: before,
+    after: await read(path),
+  );
   if (first != DatabaseIdentityVerdict.replaced) return first;
 
   await wait(secondLookDelay);

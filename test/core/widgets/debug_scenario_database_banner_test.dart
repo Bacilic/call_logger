@@ -113,30 +113,31 @@ void main() {
     await _flushPendingTimers(tester);
   });
 
-  testWidgets('βάση χωρίς υπογραφή δεν δείχνει τη λωρίδα — ακόμη κι αν λέγεται integrity_debug.db', (
-    tester,
-  ) async {
-    final realPath = (await DatabaseHelper.instance.database).path;
-    // Επίτηδες το όνομα της δοκιμαστικής: μετά από επαναφορά αληθινών
-    // δεδομένων πάνω στο ίδιο αρχείο, η προειδοποίηση θα έλεγε ψέματα.
-    final debugNamedPath = p.join(
-      p.dirname(realPath),
-      IntegrityDebugSeederService.databaseFileName,
-    );
+  testWidgets(
+    'βάση χωρίς υπογραφή δεν δείχνει τη λωρίδα — ακόμη κι αν λέγεται integrity_debug.db',
+    (tester) async {
+      final realPath = (await DatabaseHelper.instance.database).path;
+      // Επίτηδες το όνομα της δοκιμαστικής: μετά από επαναφορά αληθινών
+      // δεδομένων πάνω στο ίδιο αρχείο, η προειδοποίηση θα έλεγε ψέματα.
+      final debugNamedPath = p.join(
+        p.dirname(realPath),
+        IntegrityDebugSeederService.databaseFileName,
+      );
 
-    await _pumpShell(
-      tester,
-      path: debugNamedPath,
-      profile: _healthyProfile(),
-    );
+      await _pumpShell(
+        tester,
+        path: debugNamedPath,
+        profile: _healthyProfile(),
+      );
 
-    expect(
-      find.byKey(_bannerKey),
-      findsNothing,
-      reason: greekExpectMsg(
-        'Μια προειδοποίηση που εμφανίζεται πάντα δεν προειδοποιεί για τίποτα',
-      ),
-    );
-    await _flushPendingTimers(tester);
-  });
+      expect(
+        find.byKey(_bannerKey),
+        findsNothing,
+        reason: greekExpectMsg(
+          'Μια προειδοποίηση που εμφανίζεται πάντα δεν προειδοποιεί για τίποτα',
+        ),
+      );
+      await _flushPendingTimers(tester);
+    },
+  );
 }

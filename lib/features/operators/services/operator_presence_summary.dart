@@ -14,6 +14,25 @@ class OperatorPresenceLine {
 
 final DateFormat _stamp = DateFormat('dd/MM/yyyy HH:mm');
 
+/// Τα ίχνη όλων των χρηστών, ομαδοποιημένα και μεταφρασμένα σε γραμμές κάρτας.
+///
+/// Οι χρήστες χωρίς κανένα ίχνος **δεν** μπαίνουν στον χάρτη: η κάρτα τους
+/// ζητά τη δική της περιγραφή («δεν έχει συνδεθεί ποτέ») μέσω του
+/// [describeOperatorPresence], ώστε να μην εξαρτάται από το ποιοι βρέθηκαν εδώ.
+Map<int, List<OperatorPresenceLine>> describeOperatorPresenceByOperator(
+  List<OperatorPresence> marks,
+  DateTime now,
+) {
+  final grouped = <int, List<OperatorPresence>>{};
+  for (final mark in marks) {
+    grouped.putIfAbsent(mark.operatorId, () => []).add(mark);
+  }
+  return {
+    for (final entry in grouped.entries)
+      entry.key: describeOperatorPresence(entry.value, now),
+  };
+}
+
 /// Μεταφράζει τα ίχνη σύνδεσης σε ό,τι διαβάζει ο άνθρωπος στην κάρτα.
 ///
 /// **Καθαρή συνάρτηση με ρητό [now]:** ο κανόνας «τι θεωρείται τώρα» ελέγχεται

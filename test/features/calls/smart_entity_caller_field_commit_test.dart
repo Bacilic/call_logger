@@ -85,36 +85,34 @@ void main() {
     });
 
     // Τεστ Α: focus-out χωρίς debounce 250ms — αποτέλεσμα lookup με ένα pump.
-    testWidgets(
-      'focus-out με μερικό όνομα → callerCandidates με ένα pump',
-      (tester) async {
-        _configureDesktopViewport(tester);
-        await _pumpCallLoggerApp(tester);
+    testWidgets('focus-out με μερικό όνομα → callerCandidates με ένα pump', (
+      tester,
+    ) async {
+      _configureDesktopViewport(tester);
+      await _pumpCallLoggerApp(tester);
 
-        await tester.tap(_callerTextField());
-        await pumpUntilSettled(tester);
-        await tester.enterText(_callerTextField(), kTestUserFirstName);
-        await tester.pump();
+      await tester.tap(_callerTextField());
+      await pumpUntilSettled(tester);
+      await tester.enterText(_callerTextField(), kTestUserFirstName);
+      await tester.pump();
 
-        await tester.tap(_departmentTextField());
-        await tester.pump();
+      await tester.tap(_departmentTextField());
+      await tester.pump();
 
-        final header = await _readHeader(tester);
-        expect(
-          header.callerCandidates.length,
-          1,
-          reason: greekExpectMsg('Άμεσο lookup — ένας υποψήφιος καλώντας'),
-        );
-        expect(
-          header.selectedCaller,
-          isNull,
-          reason: greekExpectMsg('Μερικό όνομα — χωρίς επιλογή'),
-        );
+      final header = await _readHeader(tester);
+      expect(
+        header.callerCandidates.length,
+        1,
+        reason: greekExpectMsg('Άμεσο lookup — ένας υποψήφιος καλώντας'),
+      );
+      expect(
+        header.selectedCaller,
+        isNull,
+        reason: greekExpectMsg('Μερικό όνομα — χωρίς επιλογή'),
+      );
 
-        await flushCallLoggerSqfliteLockTimers(tester);
-      },
-      semanticsEnabled: false,
-    );
+      await flushCallLoggerSqfliteLockTimers(tester);
+    }, semanticsEnabled: false);
 
     // Τεστ Β: Enter με ήδη επιλεγμένο καλούντα δεν ξανατρέχει lookup / autofill εξοπλισμού.
     testWidgets(

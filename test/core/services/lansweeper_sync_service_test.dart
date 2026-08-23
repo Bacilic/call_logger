@@ -551,10 +551,12 @@ void main() {
         );
 
         expect(result.success, isTrue);
-        expect(
-          fakePoster.calls.map((c) => c.action).toList(),
-          ['AddTicket', 'AddAsset', 'AddNote', 'EditTicket'],
-        );
+        expect(fakePoster.calls.map((c) => c.action).toList(), [
+          'AddTicket',
+          'AddAsset',
+          'AddNote',
+          'EditTicket',
+        ]);
         final assetFields = _fieldsForAction(fakePoster, 'AddAsset');
         expect(assetFields, isNotNull);
         expect(assetFields!['TicketID'], '17476');
@@ -564,31 +566,34 @@ void main() {
       },
     );
 
-    test('εξοπλισμός με IP: το AddAsset στέλνει IPAddress, όχι AssetName', () async {
-      final fakePoster = _RecordingFakePoster(
-        responses: const [
-          successWithTicketId,
-          successOnly,
-          successOnly,
-          successOnly,
-        ],
-      );
-      final service = LansweeperSyncService(poster: fakePoster.call);
+    test(
+      'εξοπλισμός με IP: το AddAsset στέλνει IPAddress, όχι AssetName',
+      () async {
+        final fakePoster = _RecordingFakePoster(
+          responses: const [
+            successWithTicketId,
+            successOnly,
+            successOnly,
+            successOnly,
+          ],
+        );
+        final service = LansweeperSyncService(poster: fakePoster.call);
 
-      await service.submitTicketWorkflow(
-        _workflowRequest(
-          assetTarget: const LansweeperAssetTarget(
-            value: '10.10.222.19',
-            kind: LansweeperAssetTargetKind.ipAddress,
+        await service.submitTicketWorkflow(
+          _workflowRequest(
+            assetTarget: const LansweeperAssetTarget(
+              value: '10.10.222.19',
+              kind: LansweeperAssetTargetKind.ipAddress,
+            ),
           ),
-        ),
-      );
+        );
 
-      final assetFields = _fieldsForAction(fakePoster, 'AddAsset');
-      expect(assetFields, isNotNull);
-      expect(assetFields!['IPAddress'], '10.10.222.19');
-      expect(assetFields.containsKey('AssetName'), isFalse);
-    });
+        final assetFields = _fieldsForAction(fakePoster, 'AddAsset');
+        expect(assetFields, isNotNull);
+        expect(assetFields!['IPAddress'], '10.10.222.19');
+        expect(assetFields.containsKey('AssetName'), isFalse);
+      },
+    );
 
     test(
       'αποτυχία AddAsset: η ροή συνεχίζει, success=true με warning, χωρίς AddAsset στα completedSteps',
@@ -637,10 +642,11 @@ void main() {
 
         expect(result.success, isTrue);
         expect(fakeGetter.calls, isEmpty);
-        expect(
-          fakePoster.calls.map((c) => c.action).toList(),
-          ['AddTicket', 'AddNote', 'EditTicket'],
-        );
+        expect(fakePoster.calls.map((c) => c.action).toList(), [
+          'AddTicket',
+          'AddNote',
+          'EditTicket',
+        ]);
         expect(result.warnings, isEmpty);
       },
     );

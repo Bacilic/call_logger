@@ -75,7 +75,6 @@ class UpdateFolderStatus {
     if (parts.length == 1) return parts.first;
     return '${parts.sublist(0, parts.length - 1).join(', ')} και ${parts.last}';
   }
-
 }
 
 /// Ελέγχει τι περιέχει ο [folderPath] ως φάκελος ενημερώσεων.

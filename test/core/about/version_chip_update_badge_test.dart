@@ -90,25 +90,26 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('το σήμα δημοσίευσης δείχνει το πλήθος των αδημοσίευτων αλλαγών', (
-    tester,
-  ) async {
-    await pumpWithReminder(
-      tester,
-      evaluatePublishReminder(
-        unreleasedEntryCount: 173,
-        now: DateTime(2026, 8, 3),
-        lastReleaseDate: DateTime(2026, 7, 23),
-        lastReleaseVersion: '0.21.3',
-      ),
-    );
+  testWidgets(
+    'το σήμα δημοσίευσης δείχνει το πλήθος των αδημοσίευτων αλλαγών',
+    (tester) async {
+      await pumpWithReminder(
+        tester,
+        evaluatePublishReminder(
+          unreleasedEntryCount: 173,
+          now: DateTime(2026, 8, 3),
+          lastReleaseDate: DateTime(2026, 7, 23),
+          lastReleaseVersion: '0.21.3',
+        ),
+      );
 
-    expect(find.byKey(const Key('publish_reminder_badge')), findsOneWidget);
-    expect(find.text('99+'), findsOneWidget);
+      expect(find.byKey(const Key('publish_reminder_badge')), findsOneWidget);
+      expect(find.text('99+'), findsOneWidget);
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-  });
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
 
   testWidgets('χωρίς αδημοσίευτες αλλαγές δεν υπάρχει σήμα δημοσίευσης', (
     tester,

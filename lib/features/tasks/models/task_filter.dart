@@ -1,4 +1,5 @@
 import 'task.dart';
+import '../../../core/models/owner_filter.dart';
 
 /// Κριτήριο ταξινόμησης λίστας εκκρεμοτήτων (αντιστοιχεί σε στήλη SQLite).
 enum TaskSortOption { createdAt, dueAt, priority, department, user, equipment }
@@ -12,6 +13,7 @@ class TaskFilter {
     this.endDate,
     this.sortBy = TaskSortOption.createdAt,
     this.sortAscending = false,
+    this.owner = OwnerFilter.everyone,
   }) : statuses = statuses ?? const [TaskStatus.open, TaskStatus.snoozed];
 
   final String searchQuery;
@@ -20,6 +22,10 @@ class TaskFilter {
   final DateTime? endDate;
   final TaskSortOption sortBy;
   final bool sortAscending;
+
+  /// Ποιανού εκκρεμότητες δείχνει η λίστα — ξεχωριστό φίλτρο, ποτέ μέσα στην
+  /// αναζήτηση κειμένου.
+  final OwnerFilter owner;
 
   /// True όταν δεν είναι επιλεγμένο κανένα status chip.
   bool get allFiltersOff => statuses.isEmpty;
@@ -37,6 +43,7 @@ class TaskFilter {
     DateTime? endDate,
     TaskSortOption? sortBy,
     bool? sortAscending,
+    OwnerFilter? owner,
     bool clearDateRange = false,
   }) {
     return TaskFilter(
@@ -46,6 +53,7 @@ class TaskFilter {
       endDate: clearDateRange ? null : (endDate ?? this.endDate),
       sortBy: sortBy ?? this.sortBy,
       sortAscending: sortAscending ?? this.sortAscending,
+      owner: owner ?? this.owner,
     );
   }
 }

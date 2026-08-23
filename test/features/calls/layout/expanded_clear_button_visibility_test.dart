@@ -61,63 +61,59 @@ void main() {
   registerCallLoggerIsolatedDatabaseHooks();
 
   group('Νέα κλήση · Εκκαθάριση σε αναπτυγμένη όψη', () {
-    testWidgets(
-      'expanded latch κενά πεδία: το Εκκαθάριση παραμένει προσβάσιμο',
-      (tester) async {
-        await _pumpCallsExpanded(tester);
-        await _confirmPhoneField(tester);
+    testWidgets('expanded latch κενά πεδία: το Εκκαθάριση παραμένει προσβάσιμο', (
+      tester,
+    ) async {
+      await _pumpCallsExpanded(tester);
+      await _confirmPhoneField(tester);
 
-        final container = await _callsContainer(tester);
-        expect(
-          container.read(callsScreenIsExpandedProvider),
-          isTrue,
-          reason: greekExpectMsg('Μετά επιβεβαίωση τηλεφώνου → expanded'),
-        );
+      final container = await _callsContainer(tester);
+      expect(
+        container.read(callsScreenIsExpandedProvider),
+        isTrue,
+        reason: greekExpectMsg('Μετά επιβεβαίωση τηλεφώνου → expanded'),
+      );
 
-        await tester.tap(find.byTooltip('Καθαρισμός όλων των πεδίων'));
-        await pumpUntilSettled(tester);
+      await tester.tap(find.byTooltip('Καθαρισμός όλων των πεδίων'));
+      await pumpUntilSettled(tester);
 
-        expect(
-          container.read(callsFieldGroupsProvider).anyGroupActive,
-          isFalse,
-          reason: greekExpectMsg('Μετά κόκκινο × καμία ενεργή ομάδα'),
-        );
-        expect(
-          container.read(callsScreenIsExpandedProvider),
-          isTrue,
-          reason: greekExpectMsg('Μετά κόκκινο × η κεφαλίδα μένει expanded'),
-        );
-        expect(
-          _clearButtonFinder(),
-          findsOneWidget,
-          reason: greekExpectMsg(
-            'Αναπτυγμένη όψη χωρίς τηλέφωνο: το Εκκαθάριση πρέπει να είναι ορατό',
-          ),
-        );
+      expect(
+        container.read(callsFieldGroupsProvider).anyGroupActive,
+        isFalse,
+        reason: greekExpectMsg('Μετά κόκκινο × καμία ενεργή ομάδα'),
+      );
+      expect(
+        container.read(callsScreenIsExpandedProvider),
+        isTrue,
+        reason: greekExpectMsg('Μετά κόκκινο × η κεφαλίδα μένει expanded'),
+      );
+      expect(
+        _clearButtonFinder(),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Αναπτυγμένη όψη χωρίς τηλέφωνο: το Εκκαθάριση πρέπει να είναι ορατό',
+        ),
+      );
 
-        await tester.pump(const Duration(seconds: 11));
-      },
-      semanticsEnabled: false,
-    );
+      await tester.pump(const Duration(seconds: 11));
+    }, semanticsEnabled: false);
 
-    testWidgets(
-      'ενεργή ομάδα τηλεφώνου: ένα μόνο κουμπί Εκκαθάριση',
-      (tester) async {
-        await _pumpCallsExpanded(tester);
-        await _confirmPhoneField(tester);
+    testWidgets('ενεργή ομάδα τηλεφώνου: ένα μόνο κουμπί Εκκαθάριση', (
+      tester,
+    ) async {
+      await _pumpCallsExpanded(tester);
+      await _confirmPhoneField(tester);
 
-        expect(
-          _clearButtonFinder(),
-          findsOneWidget,
-          reason: greekExpectMsg(
-            'Με ενεργή ομάδα τηλεφώνου: ένα Εκκαθάριση στο anchor κάτω δεξιά',
-          ),
-        );
+      expect(
+        _clearButtonFinder(),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Με ενεργή ομάδα τηλεφώνου: ένα Εκκαθάριση στο anchor κάτω δεξιά',
+        ),
+      );
 
-        await tester.pump(const Duration(seconds: 11));
-      },
-      semanticsEnabled: false,
-    );
+      await tester.pump(const Duration(seconds: 11));
+    }, semanticsEnabled: false);
 
     testWidgets(
       'tap Εκκαθάριση σε expanded latch: επιστροφή σε συμπτυγμένη όψη',

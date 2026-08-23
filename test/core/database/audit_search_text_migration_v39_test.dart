@@ -87,23 +87,26 @@ void main() {
       expect(
         await matchesFor('κωδικος εξοπλισμου'),
         0,
-        reason: 'Χωρίς την αναβάθμιση, ο ελληνικός όρος δεν υπάρχει στο '
+        reason:
+            'Χωρίς την αναβάθμιση, ο ελληνικός όρος δεν υπάρχει στο '
             'αποθηκευμένο ευρετήριο — αυτό ακριβώς διορθώνει η v39.',
       );
     });
 
-    test('μετά την αναβάθμιση, ο ελληνικός όρος βρίσκει την παλιά εγγραφή',
-        () async {
-      await insertLegacyRow(
-        action: 'συσχέτιση από κλήση',
-        newValues: {'equipment_code': '3180'},
-        legacySearchText: 'συσχετιση απο κληση equipment code',
-      );
+    test(
+      'μετά την αναβάθμιση, ο ελληνικός όρος βρίσκει την παλιά εγγραφή',
+      () async {
+        await insertLegacyRow(
+          action: 'συσχέτιση από κλήση',
+          newValues: {'equipment_code': '3180'},
+          legacySearchText: 'συσχετιση απο κληση equipment code',
+        );
 
-      await migrateDatabaseToV39(db);
+        await migrateDatabaseToV39(db);
 
-      expect(await matchesFor('κωδικος εξοπλισμου'), 1);
-    });
+        expect(await matchesFor('κωδικος εξοπλισμου'), 1);
+      },
+    );
 
     test('η αναβάθμιση ξανατρέχει χωρίς παρενέργειες', () async {
       await insertLegacyRow(
@@ -118,7 +121,10 @@ void main() {
       await migrateDatabaseToV39(db);
       final afterSecond = await db.query('audit_log', columns: ['search_text']);
 
-      expect(afterSecond.single['search_text'], afterFirst.single['search_text']);
+      expect(
+        afterSecond.single['search_text'],
+        afterFirst.single['search_text'],
+      );
       expect(await matchesFor('εισιτηριο lansweeper'), 1);
     });
 

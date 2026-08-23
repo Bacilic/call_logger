@@ -50,11 +50,15 @@ void main() {
     }
   });
 
-  Widget appHost(ProviderContainer container, {required bool showCard,
-      required ReleasePublisherService Function({
-        required String updateFolderPath,
-        void Function(String message)? onProgress,
-      }) serviceFactory}) {
+  Widget appHost(
+    ProviderContainer container, {
+    required bool showCard,
+    required ReleasePublisherService Function({
+      required String updateFolderPath,
+      void Function(String message)? onProgress,
+    })
+    serviceFactory,
+  }) {
     return UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
@@ -251,43 +255,47 @@ void main() {
       expect(ok, isTrue);
     }
 
-    testWidgets('εμφανίζεται με «Μετάβαση» και «Κλείσιμο»· η Μετάβαση πλοηγεί', (
-      tester,
-    ) async {
-      final container = await pumpProbe(tester, publisherVisible: false);
-      await finishRun(
-        container,
-        result: const ReleasePublishResult(
-          status: ReleasePublishStatus.success,
-          message: 'Δημοσιεύτηκε η έκδοση 0.23.2.',
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+    testWidgets(
+      'εμφανίζεται με «Μετάβαση» και «Κλείσιμο»· η Μετάβαση πλοηγεί',
+      (tester) async {
+        final container = await pumpProbe(tester, publisherVisible: false);
+        await finishRun(
+          container,
+          result: const ReleasePublishResult(
+            status: ReleasePublishStatus.success,
+            message: 'Δημοσιεύτηκε η έκδοση 0.23.2.',
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      expect(
-        find.byKey(const Key('release_publish_finished_snackbar')),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Δημοσιεύτηκε η έκδοση 0.23.2.'), findsOneWidget);
-      expect(find.text('Μετάβαση'), findsOneWidget);
-      expect(find.text('Κλείσιμο'), findsOneWidget);
+        expect(
+          find.byKey(const Key('release_publish_finished_snackbar')),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Δημοσιεύτηκε η έκδοση 0.23.2.'),
+          findsOneWidget,
+        );
+        expect(find.text('Μετάβαση'), findsOneWidget);
+        expect(find.text('Κλείσιμο'), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('release_publish_snackbar_go')));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('release_publish_snackbar_go')));
+        await tester.pumpAndSettle();
 
-      expect(
-        container.read(mainNavRequestProvider)?.destination,
-        MainNavDestination.debugScenarios,
-        reason: greekExpectMsg(
-          'Η «Μετάβαση» πρέπει να ζητά πλοήγηση στα Σενάρια σφαλμάτων',
-        ),
-      );
-      expect(
-        find.byKey(const Key('release_publish_finished_snackbar')),
-        findsNothing,
-      );
-    });
+        expect(
+          container.read(mainNavRequestProvider)?.destination,
+          MainNavDestination.debugScenarios,
+          reason: greekExpectMsg(
+            'Η «Μετάβαση» πρέπει να ζητά πλοήγηση στα Σενάρια σφαλμάτων',
+          ),
+        );
+        expect(
+          find.byKey(const Key('release_publish_finished_snackbar')),
+          findsNothing,
+        );
+      },
+    );
 
     testWidgets('το «Κλείσιμο» κλείνει χωρίς πλοήγηση', (tester) async {
       final container = await pumpProbe(tester, publisherVisible: false);

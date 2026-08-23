@@ -11,13 +11,13 @@ import '../init/app_init_provider.dart';
 import '../init/app_init_retry_runner.dart';
 import '../init/startup_notices.dart';
 import '../init/startup_window_placement.dart';
-import '../models/operator.dart';
 import '../providers/application_reset_provider.dart';
 import '../services/application_reset_service.dart';
 import '../services/crash_log_service.dart';
 import '../services/current_operator.dart';
 import '../services/operator_identity.dart';
 import '../../features/operators/screens/operator_picker_screen.dart';
+import '../../features/operators/services/selectable_profiles.dart';
 import '../../features/settings/widgets/pending_reset_database_screen.dart';
 import 'app_shortcuts.dart';
 import 'database_error_screen.dart';
@@ -66,7 +66,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
 
   /// Τα προφίλ προς επιλογή, φορτωμένα **μία φορά**: χωρίς αυτό, κάθε
   /// ξαναχτίσιμο θα ξεκινούσε νέα ανάγνωση και η λίστα θα αναβόσβηνε.
-  Future<List<Operator>>? _selectableProfiles;
+  Future<SelectableProfiles>? _selectableProfiles;
 
   /// Η οθόνη εκκίνησης παραδίδει τη σκυτάλη στην εφαρμογή.
   ///
@@ -86,7 +86,8 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   Future<void> _leaveSplash() async {
     if (!mounted) return;
     final restore =
-        widget.windowRestorer ?? StartupWindowPlacement.restoreApplicationWindow;
+        widget.windowRestorer ??
+        StartupWindowPlacement.restoreApplicationWindow;
     try {
       await restore().timeout(kWindowRestoreTimeout);
     } catch (e, st) {
@@ -144,17 +145,18 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   Widget? _buildOperatorPickerIfNeeded() {
     if (CurrentOperator.active != null) return null;
 
-    return FutureBuilder<List<Operator>>(
+    return FutureBuilder<SelectableProfiles>(
       future: _selectableProfiles ??= _loadSelectableProfiles(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const _InitLoadingScreen();
         }
+        final selectable = snapshot.data ?? SelectableProfiles.empty;
         return OperatorPickerScreen(
-          profiles: snapshot.data ?? const <Operator>[],
+          profiles: selectable.profiles,
+          presence: selectable.presence,
           suggestedName: OperatorIdentity.suggestedDisplayName(),
-          hasWindowsAccount:
-              OperatorIdentity.suggestedDisplayName().isNotEmpty,
+          hasWindowsAccount: OperatorIdentity.suggestedDisplayName().isNotEmpty,
           onPick: (operator) {
             OperatorIdentity.activateForSession(operator);
             setState(() => _operatorChosen = true);
@@ -174,9 +176,9 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     );
   }
 
-  Future<List<Operator>> _loadSelectableProfiles() async {
+  Future<SelectableProfiles> _loadSelectableProfiles() async {
     final db = await DatabaseHelper.instance.database;
-    return OperatorIdentity.selectableProfiles(db);
+    return loadSelectableProfiles(db);
   }
 
   @override

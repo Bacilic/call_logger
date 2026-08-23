@@ -51,11 +51,7 @@ void main() {
     await releaseCallLoggerTestDatabase();
   });
 
-  Future<int> addDepartment(
-    String name, {
-    String? color,
-    int? floorId,
-  }) async {
+  Future<int> addDepartment(String name, {String? color, int? floorId}) async {
     return db.insert('departments', {
       'name': name,
       'name_key': SearchTextNormalizer.normalizeForSearch(name),
@@ -132,40 +128,63 @@ void main() {
   });
 
   group('μαζική αφαίρεση από φύλλο κατόψης', () {
-    test('καθαρίζει τη θέση και επιστρέφει τα χρώματα που ελευθερώθηκαν', () async {
-      final a = await addDepartment('Ακτινολογικό', color: '#FF0000', floorId: floorId);
-      final b = await addDepartment('Βιοχημικό', color: '#00FF00', floorId: floorId);
-      final rows = await db.query('departments', where: 'id IN (?, ?)', whereArgs: [a, b]);
-      final models = rows.map(DepartmentModel.fromMap).toList();
+    test(
+      'καθαρίζει τη θέση και επιστρέφει τα χρώματα που ελευθερώθηκαν',
+      () async {
+        final a = await addDepartment(
+          'Ακτινολογικό',
+          color: '#FF0000',
+          floorId: floorId,
+        );
+        final b = await addDepartment(
+          'Βιοχημικό',
+          color: '#00FF00',
+          floorId: floorId,
+        );
+        final rows = await db.query(
+          'departments',
+          where: 'id IN (?, ?)',
+          whereArgs: [a, b],
+        );
+        final models = rows.map(DepartmentModel.fromMap).toList();
 
-      final released = await db.transaction(
-        (txn) => removeDepartmentsFromFloorInTxn(
-          txn,
-          repository: repo,
-          departments: models,
-        ),
-      );
+        final released = await db.transaction(
+          (txn) => removeDepartmentsFromFloorInTxn(
+            txn,
+            repository: repo,
+            departments: models,
+          ),
+        );
 
-      // Τα χρώματα επιστρέφονται στον καλούντα — δεν τα αποδεσμεύει η υπηρεσία.
-      expect(released, hasLength(2));
-      expect(released, everyElement(isA<Color>()));
+        // Τα χρώματα επιστρέφονται στον καλούντα — δεν τα αποδεσμεύει η υπηρεσία.
+        expect(released, hasLength(2));
+        expect(released, everyElement(isA<Color>()));
 
-      final after = await db.query(
-        'departments',
-        columns: ['floor_id'],
-        where: 'id IN (?, ?)',
-        whereArgs: [a, b],
-      );
-      for (final row in after) {
-        expect(row['floor_id'], isNull);
-      }
-    });
+        final after = await db.query(
+          'departments',
+          columns: ['floor_id'],
+          where: 'id IN (?, ?)',
+          whereArgs: [a, b],
+        );
+        for (final row in after) {
+          expect(row['floor_id'], isNull);
+        }
+      },
+    );
 
     test('τμήμα με άκυρο χρώμα δεν προσθέτει τίποτα στη λίστα', () async {
       // Το σχήμα δίνει προεπιλεγμένο χρώμα, οπότε «χωρίς χρώμα» στην πράξη
       // σημαίνει κενή ή αναγνώσιμη τιμή — εδώ ελέγχεται ο φρουρός ανάγνωσης.
-      final a = await addDepartment('Ακτινολογικό', color: '', floorId: floorId);
-      final rows = await db.query('departments', where: 'id = ?', whereArgs: [a]);
+      final a = await addDepartment(
+        'Ακτινολογικό',
+        color: '',
+        floorId: floorId,
+      );
+      final rows = await db.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [a],
+      );
       final models = rows.map(DepartmentModel.fromMap).toList();
 
       final released = await db.transaction(
@@ -180,8 +199,16 @@ void main() {
     });
 
     test('όλα ή τίποτα: αποτυχία αφήνει τα τμήματα στο φύλλο τους', () async {
-      final a = await addDepartment('Ακτινολογικό', color: '#FF0000', floorId: floorId);
-      final rows = await db.query('departments', where: 'id = ?', whereArgs: [a]);
+      final a = await addDepartment(
+        'Ακτινολογικό',
+        color: '#FF0000',
+        floorId: floorId,
+      );
+      final rows = await db.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [a],
+      );
       final models = rows.map(DepartmentModel.fromMap).toList();
 
       await expectLater(

@@ -77,7 +77,9 @@ void main() {
     expect(
       checks(),
       2,
-      reason: greekExpectMsg('Το «Έλεγχος τώρα» πρέπει να ξανατρέχει τον έλεγχο'),
+      reason: greekExpectMsg(
+        'Το «Έλεγχος τώρα» πρέπει να ξανατρέχει τον έλεγχο',
+      ),
     );
   });
 

@@ -153,7 +153,10 @@ void main() {
 
     expect(findPublishButton(tester).onPressed, isNotNull);
 
-    expect(tooltipContaining('χτίζει την εφαρμογή από την αρχή'), findsOneWidget);
+    expect(
+      tooltipContaining('χτίζει την εφαρμογή από την αρχή'),
+      findsOneWidget,
+    );
     expect(
       tooltipContaining('Γράφει ΜΟΝΟ το αρχείο εγκατάστασης'),
       findsOneWidget,
@@ -415,56 +418,57 @@ void main() {
     );
   });
 
-  testWidgets('ο διάλογος επιβεβαίωσης δημοσίευσης είναι επίσης μετακινήσιμος', (
-    tester,
-  ) async {
-    await pumpCard(
-      tester,
-      initialFolder: tempDir.path,
-      serviceFactory: ({required updateFolderPath, onProgress}) {
-        return _TrackingPublisherService(
-          projectRoot: projectRoot.path,
-          updateFolderPath: updateFolderPath,
-          onPublish: () {},
-          preview: const ReleasePublishPreview(
-            currentVersion: '0.23.1',
-            currentBuild: 31,
-            nextVersion: '0.23.2',
-            nextBuild: 32,
-            unreleasedEntryCount: 3,
-            hasUnreleasedEntries: true,
-            bumpKind: VersionBumpKind.patch,
-          ),
-        );
-      },
-    );
-    await tester.enterText(
-      find.byKey(const Key('release_update_folder_field')),
-      tempDir.path,
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'ο διάλογος επιβεβαίωσης δημοσίευσης είναι επίσης μετακινήσιμος',
+    (tester) async {
+      await pumpCard(
+        tester,
+        initialFolder: tempDir.path,
+        serviceFactory: ({required updateFolderPath, onProgress}) {
+          return _TrackingPublisherService(
+            projectRoot: projectRoot.path,
+            updateFolderPath: updateFolderPath,
+            onPublish: () {},
+            preview: const ReleasePublishPreview(
+              currentVersion: '0.23.1',
+              currentBuild: 31,
+              nextVersion: '0.23.2',
+              nextBuild: 32,
+              unreleasedEntryCount: 3,
+              hasUnreleasedEntries: true,
+              bumpKind: VersionBumpKind.patch,
+            ),
+          );
+        },
+      );
+      await tester.enterText(
+        find.byKey(const Key('release_update_folder_field')),
+        tempDir.path,
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('release_publish_button')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const Key('release_publish_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byKey(const Key('release_confirm_dialog')), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byType(DraggableDialogShell),
-        matching: find.byKey(const Key('release_confirm_dialog')),
-      ),
-      findsOneWidget,
-      reason: greekExpectMsg(
-        'Όλοι οι διάλογοι της Δημοσίευσης ακολουθούν το ίδιο μοτίβο — ένας '
-        'καρφωμένος ανάμεσα σε μετακινούμενους είναι ασυνέπεια',
-      ),
-    );
+      expect(find.byKey(const Key('release_confirm_dialog')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(DraggableDialogShell),
+          matching: find.byKey(const Key('release_confirm_dialog')),
+        ),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Όλοι οι διάλογοι της Δημοσίευσης ακολουθούν το ίδιο μοτίβο — ένας '
+          'καρφωμένος ανάμεσα σε μετακινούμενους είναι ασυνέπεια',
+        ),
+      );
 
-    await tester.tap(find.byKey(const Key('release_confirm_cancel')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-  });
+      await tester.tap(find.byKey(const Key('release_confirm_cancel')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    },
+  );
 
   // Χωρίς αυτή την ένδειξη, ένας φάκελος που χάθηκε ή άδειασε φαινόταν μια χαρά
   // (υπάρχει και γράφεται) ενώ κανείς δεν μπορούσε να εγκαταστήσει από αυτόν.
@@ -488,9 +492,9 @@ void main() {
         p.join(currentDir.path, 'call_logger_0.23.1.zip'),
       ).writeAsBytesSync([1]);
       File(p.join(appDir.path, 'call_logger.exe')).writeAsBytesSync([0x4D]);
-      File(p.join(folder.path, 'install_call_logger.bat')).writeAsBytesSync([
-        1,
-      ]);
+      File(
+        p.join(folder.path, 'install_call_logger.bat'),
+      ).writeAsBytesSync([1]);
     }
 
     testWidgets('άδειος φάκελος → προειδοποίηση με προτροπή δημοσίευσης', (
@@ -770,65 +774,66 @@ void main() {
     },
   );
 
-  testWidgets('οι γραμμές εξόδου εμφανίζονται και ανανεώνονται σε νέα εκτέλεση', (
-    tester,
-  ) async {
-    void Function(String message)? reportProgress;
+  testWidgets(
+    'οι γραμμές εξόδου εμφανίζονται και ανανεώνονται σε νέα εκτέλεση',
+    (tester) async {
+      void Function(String message)? reportProgress;
 
-    await pumpCard(
-      tester,
-      initialFolder: tempDir.path,
-      serviceFactory: ({required updateFolderPath, onProgress}) {
-        reportProgress = onProgress;
-        return _TrackingPublisherService(
-          projectRoot: projectRoot.path,
-          updateFolderPath: updateFolderPath,
-          onPublish: () {},
-          preview: const ReleasePublishPreview(
-            currentVersion: '0.23.1',
-            currentBuild: 31,
-            nextVersion: '0.23.2',
-            nextBuild: 32,
-            unreleasedEntryCount: 1,
-            hasUnreleasedEntries: true,
-            bumpKind: VersionBumpKind.patch,
-          ),
-        );
-      },
-    );
-    await tester.enterText(
-      find.byKey(const Key('release_update_folder_field')),
-      tempDir.path,
-    );
-    await tester.pumpAndSettle();
+      await pumpCard(
+        tester,
+        initialFolder: tempDir.path,
+        serviceFactory: ({required updateFolderPath, onProgress}) {
+          reportProgress = onProgress;
+          return _TrackingPublisherService(
+            projectRoot: projectRoot.path,
+            updateFolderPath: updateFolderPath,
+            onPublish: () {},
+            preview: const ReleasePublishPreview(
+              currentVersion: '0.23.1',
+              currentBuild: 31,
+              nextVersion: '0.23.2',
+              nextBuild: 32,
+              unreleasedEntryCount: 1,
+              hasUnreleasedEntries: true,
+              bumpKind: VersionBumpKind.patch,
+            ),
+          );
+        },
+      );
+      await tester.enterText(
+        find.byKey(const Key('release_update_folder_field')),
+        tempDir.path,
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('release_installer_only_button')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const Key('release_installer_only_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    expect(reportProgress, isNotNull);
-    reportProgress!('Πρώτο βήμα');
-    reportProgress!('Δεύτερο βήμα');
-    await tester.pump();
+      expect(reportProgress, isNotNull);
+      reportProgress!('Πρώτο βήμα');
+      reportProgress!('Δεύτερο βήμα');
+      await tester.pump();
 
-    expect(find.byKey(const Key('release_build_output')), findsOneWidget);
-    expect(find.textContaining('Πρώτο βήμα'), findsOneWidget);
-    expect(find.textContaining('Δεύτερο βήμα'), findsOneWidget);
+      expect(find.byKey(const Key('release_build_output')), findsOneWidget);
+      expect(find.textContaining('Πρώτο βήμα'), findsOneWidget);
+      expect(find.textContaining('Δεύτερο βήμα'), findsOneWidget);
 
-    // Νέα εκτέλεση: η έξοδος της προηγούμενης δεν πρέπει να παραμένει.
-    await tester.tap(find.byKey(const Key('release_installer_only_button')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+      // Νέα εκτέλεση: η έξοδος της προηγούμενης δεν πρέπει να παραμένει.
+      await tester.tap(find.byKey(const Key('release_installer_only_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
-    expect(
-      find.textContaining('Πρώτο βήμα'),
-      findsNothing,
-      reason: greekExpectMsg(
-        'Ανάμεικτη έξοδος δύο εκτελέσεων θα έστελνε τον χρήστη να κυνηγά '
-        'σφάλμα που δεν συνέβη τώρα',
-      ),
-    );
-  });
+      expect(
+        find.textContaining('Πρώτο βήμα'),
+        findsNothing,
+        reason: greekExpectMsg(
+          'Ανάμεικτη έξοδος δύο εκτελέσεων θα έστελνε τον χρήστη να κυνηγά '
+          'σφάλμα που δεν συνέβη τώρα',
+        ),
+      );
+    },
+  );
 
   testWidgets('copy CLI button writes command to clipboard', (tester) async {
     await pumpCard(
@@ -915,26 +920,25 @@ void main() {
     );
   });
 
-  testWidgets(
-    'CLI settings dialog shows parameter help including rebuild',
-    (tester) async {
-      await pumpCard(tester, initialFolder: tempDir.path);
-      await tester.enterText(
-        find.byKey(const Key('release_update_folder_field')),
-        tempDir.path,
-      );
-      await tester.pumpAndSettle();
+  testWidgets('CLI settings dialog shows parameter help including rebuild', (
+    tester,
+  ) async {
+    await pumpCard(tester, initialFolder: tempDir.path);
+    await tester.enterText(
+      find.byKey(const Key('release_update_folder_field')),
+      tempDir.path,
+    );
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('release_cli_settings_button')));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('release_cli_settings_button')));
+    await tester.pumpAndSettle();
 
-      expect(find.textContaining('--rebuild'), findsOneWidget);
-      expect(find.textContaining('{folder}'), findsWidgets);
-      // Το καταργημένο --bump δεν επιβιώνει ούτε στη βοήθεια ούτε στο πρότυπο.
-      expect(find.textContaining('{bump}'), findsNothing);
-      expect(find.textContaining('--bump'), findsNothing);
-    },
-  );
+    expect(find.textContaining('--rebuild'), findsOneWidget);
+    expect(find.textContaining('{folder}'), findsWidgets);
+    // Το καταργημένο --bump δεν επιβιώνει ούτε στη βοήθεια ούτε στο πρότυπο.
+    expect(find.textContaining('{bump}'), findsNothing);
+    expect(find.textContaining('--bump'), findsNothing);
+  });
 
   testWidgets('copy CLI disabled when folder invalid', (tester) async {
     await pumpCard(tester);

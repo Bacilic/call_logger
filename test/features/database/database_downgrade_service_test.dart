@@ -63,79 +63,91 @@ void main() {
     }
   });
 
-  test('γεφυρώσιμη βάση → ο αριθμός έκδοσης γυρίζει, οι στήλες μένουν',
-      () async {
-    final dbPath = await _createNewerDb(
-      tempDir,
-      'bridgeable.db',
-      fileVersion: databaseSchemaVersionV1 + 2,
-      mutate: (db) =>
-          db.execute('ALTER TABLE calls ADD COLUMN future_note TEXT'),
-    );
+  test(
+    'γεφυρώσιμη βάση → ο αριθμός έκδοσης γυρίζει, οι στήλες μένουν',
+    () async {
+      final dbPath = await _createNewerDb(
+        tempDir,
+        'bridgeable.db',
+        fileVersion: databaseSchemaVersionV1 + 2,
+        mutate: (db) =>
+            db.execute('ALTER TABLE calls ADD COLUMN future_note TEXT'),
+      );
 
-    final outcome = await downgradeDatabaseFileToAppVersion(dbPath);
+      final outcome = await downgradeDatabaseFileToAppVersion(dbPath);
 
-    expect(outcome.isSuccess, isTrue, reason: outcome.errorMessage);
-    expect(await _readUserVersion(dbPath), databaseSchemaVersionV1);
+      expect(outcome.isSuccess, isTrue, reason: outcome.errorMessage);
+      expect(await _readUserVersion(dbPath), databaseSchemaVersionV1);
 
-    // Η νεότερη στήλη ΔΕΝ σβήστηκε — μένει στη θέση της, αγνοημένη.
-    final db = await openDatabase(dbPath, readOnly: true, singleInstance: false);
-    try {
-      final info = await db.rawQuery('PRAGMA table_info(calls)');
-      final names = info.map((r) => r['name'] as String).toSet();
-      expect(names, contains('future_note'));
-    } finally {
-      await db.close();
-    }
-  });
+      // Η νεότερη στήλη ΔΕΝ σβήστηκε — μένει στη θέση της, αγνοημένη.
+      final db = await openDatabase(
+        dbPath,
+        readOnly: true,
+        singleInstance: false,
+      );
+      try {
+        final info = await db.rawQuery('PRAGMA table_info(calls)');
+        final names = info.map((r) => r['name'] as String).toSet();
+        expect(names, contains('future_note'));
+      } finally {
+        await db.close();
+      }
+    },
+  );
 
-  test('μη γεφυρώσιμη βάση → άρνηση με ονομαστικό λόγο, καμία εγγραφή',
-      () async {
-    final fileVersion = databaseSchemaVersionV1 + 2;
-    final dbPath = await _createNewerDb(
-      tempDir,
-      'blocked.db',
-      fileVersion: fileVersion,
-      mutate: (db) => db.execute(
-        'ALTER TABLE tasks RENAME COLUMN completed_at TO completed_at_v2',
-      ),
-    );
+  test(
+    'μη γεφυρώσιμη βάση → άρνηση με ονομαστικό λόγο, καμία εγγραφή',
+    () async {
+      final fileVersion = databaseSchemaVersionV1 + 2;
+      final dbPath = await _createNewerDb(
+        tempDir,
+        'blocked.db',
+        fileVersion: fileVersion,
+        mutate: (db) => db.execute(
+          'ALTER TABLE tasks RENAME COLUMN completed_at TO completed_at_v2',
+        ),
+      );
 
-    final outcome = await downgradeDatabaseFileToAppVersion(dbPath);
+      final outcome = await downgradeDatabaseFileToAppVersion(dbPath);
 
-    expect(outcome.isSuccess, isFalse);
-    expect(outcome.errorMessage, contains('completed_at'));
-    // Η έκδοση του αρχείου δεν πειράχτηκε.
-    expect(await _readUserVersion(dbPath), fileVersion);
-  });
+      expect(outcome.isSuccess, isFalse);
+      expect(outcome.errorMessage, contains('completed_at'));
+      // Η έκδοση του αρχείου δεν πειράχτηκε.
+      expect(await _readUserVersion(dbPath), fileVersion);
+    },
+  );
 
-  test('υποβάθμιση αντιγράφου → το πρωτότυπο ανέγγιχτο, το αντίγραφο έτοιμο',
-      () async {
-    final fileVersion = databaseSchemaVersionV1 + 1;
-    final dbPath = await _createNewerDb(
-      tempDir,
-      'original.db',
-      fileVersion: fileVersion,
-    );
+  test(
+    'υποβάθμιση αντιγράφου → το πρωτότυπο ανέγγιχτο, το αντίγραφο έτοιμο',
+    () async {
+      final fileVersion = databaseSchemaVersionV1 + 1;
+      final dbPath = await _createNewerDb(
+        tempDir,
+        'original.db',
+        fileVersion: fileVersion,
+      );
 
-    final outcome = await downgradeCopyToAppVersion(dbPath);
+      final outcome = await downgradeCopyToAppVersion(dbPath);
 
-    expect(outcome.isSuccess, isTrue, reason: outcome.errorMessage);
-    expect(outcome.dbPath, isNot(dbPath));
-    expect(p.basename(outcome.dbPath!), contains('_υποβαθμισμένη_'));
-    expect(await _readUserVersion(outcome.dbPath!), databaseSchemaVersionV1);
-    // Το πρωτότυπο παραμένει στη νεότερη έκδοση για τη νεότερη εφαρμογή.
-    expect(await _readUserVersion(dbPath), fileVersion);
-  });
+      expect(outcome.isSuccess, isTrue, reason: outcome.errorMessage);
+      expect(outcome.dbPath, isNot(dbPath));
+      expect(p.basename(outcome.dbPath!), contains('_υποβαθμισμένη_'));
+      expect(await _readUserVersion(outcome.dbPath!), databaseSchemaVersionV1);
+      // Το πρωτότυπο παραμένει στη νεότερη έκδοση για τη νεότερη εφαρμογή.
+      expect(await _readUserVersion(dbPath), fileVersion);
+    },
+  );
 
-  test('βάση ήδη στην έκδοση της εφαρμογής → επιτυχία χωρίς καμία ενέργεια',
-      () async {
-    final dbPath = p.join(tempDir.path, 'current.db');
-    await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
+  test(
+    'βάση ήδη στην έκδοση της εφαρμογής → επιτυχία χωρίς καμία ενέργεια',
+    () async {
+      final dbPath = p.join(tempDir.path, 'current.db');
+      await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
 
-    final outcome = await downgradeDatabaseFileToAppVersion(dbPath);
+      final outcome = await downgradeDatabaseFileToAppVersion(dbPath);
 
-    expect(outcome.isSuccess, isTrue);
-    expect(await _readUserVersion(dbPath), databaseSchemaVersionV1);
-  });
+      expect(outcome.isSuccess, isTrue);
+      expect(await _readUserVersion(dbPath), databaseSchemaVersionV1);
+    },
+  );
 }

@@ -63,9 +63,9 @@ class UpdateLevelBadge extends StatelessWidget {
         Text(
           'v$version',
           key: const Key('update_level_badge_version'),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
         ),
       ],
     );
@@ -102,7 +102,9 @@ class _LevelHexPainter extends CustomPainter {
         _corners[i].dy * size.height,
       );
       final scaled = center + (corner - center) * scale;
-      i == 0 ? path.moveTo(scaled.dx, scaled.dy) : path.lineTo(scaled.dx, scaled.dy);
+      i == 0
+          ? path.moveTo(scaled.dx, scaled.dy)
+          : path.lineTo(scaled.dx, scaled.dy);
     }
     return path..close();
   }

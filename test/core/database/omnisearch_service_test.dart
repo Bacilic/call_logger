@@ -210,11 +210,9 @@ void main() {
       );
       expect(hit.subtitle, contains('Σοφία Κανέλου'));
       expect(hit.subtitle, contains('Εφημερείο ΤΕΠ'));
-      expect(
-        hit.departmentIds,
-        [deptId],
-        reason: 'Η μετάβαση στον χάρτη κληρονομεί το τμήμα της κατόχου',
-      );
+      expect(hit.departmentIds, [
+        deptId,
+      ], reason: 'Η μετάβαση στον χάρτη κληρονομεί το τμήμα της κατόχου');
     });
 
     test('equipment με άμεσο τμήμα: εμφανίζεται και ο κάτοχος', () async {

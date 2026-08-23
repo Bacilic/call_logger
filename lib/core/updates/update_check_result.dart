@@ -57,10 +57,7 @@ class UpdateCheckResult {
     final available = manifest;
     final current = currentVersion;
     if (!updateAvailable || available == null || current == null) return null;
-    final cmp = UpdateManifest.compareVersionLabels(
-      available.version,
-      current,
-    );
+    final cmp = UpdateManifest.compareVersionLabels(available.version, current);
     if (cmp > 0) return UpdateVersionLabelRelation.higher;
     if (cmp == 0) return UpdateVersionLabelRelation.same;
     return UpdateVersionLabelRelation.lower;

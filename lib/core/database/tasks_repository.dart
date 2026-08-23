@@ -10,6 +10,7 @@ import '../../features/tasks/models/task_filter.dart'
     show TaskFilter, TaskSortOption;
 import '../../features/tasks/models/task_settings_config.dart';
 import '../errors/task_save_exception.dart';
+import '../services/current_operator.dart';
 import '../utils/search_text_normalizer.dart';
 import 'audit_service.dart';
 import 'database_helper.dart';
@@ -100,6 +101,21 @@ class TasksRepository {
         newDiff[k] = b;
       }
     }
+    // Η ανάθεση γράφεται στο Ιστορικό ως ΟΝΟΜΑ, όχι ως αριθμός: η εγγραφή
+    // διαβάζεται και ψάχνεται χωρίς να χρειάζεται μετάφραση, και επιβιώνει
+    // ακόμη κι αν το προφίλ διαγραφεί κάποτε.
+    final oldAssigned = oldRow['assigned_operator_id'];
+    final newAssigned = newMap['assigned_operator_id'];
+    if ('${oldAssigned ?? ''}' != '${newAssigned ?? ''}') {
+      oldDiff['assigned_operator'] = await _operatorNameForAudit(
+        executor,
+        oldAssigned,
+      );
+      newDiff['assigned_operator'] = await _operatorNameForAudit(
+        executor,
+        newAssigned,
+      );
+    }
     if (newDiff.isEmpty) return;
     final user = await AuditService.performingUser(executor);
     await AuditService.log(
@@ -113,6 +129,72 @@ class TasksRepository {
       oldValues: oldDiff,
       newValues: newDiff,
     );
+  }
+
+  /// Το όνομα του χειριστή όπως γράφεται στο Ιστορικό — «Χωρίς ανάθεση» για
+  /// το κενό, το ωμό id όταν το προφίλ δεν βρίσκεται πια.
+  static Future<String> _operatorNameForAudit(
+    DatabaseExecutor executor,
+    Object? operatorId,
+  ) async {
+    if (operatorId == null) return 'Χωρίς ανάθεση';
+    final rows = await executor.query(
+      'operators',
+      columns: ['display_name'],
+      where: 'id = ?',
+      whereArgs: [operatorId],
+      limit: 1,
+    );
+    final name = rows.isEmpty ? '' : '${rows.first['display_name'] ?? ''}';
+    return name.trim().isEmpty ? 'Χρήστης #$operatorId' : name.trim();
+  }
+
+  /// Γρήγορη ανάθεση από το μενού της κάρτας — αλλάζει ΜΟΝΟ τον υπεύθυνο.
+  ///
+  /// `null` σημαίνει «Χωρίς ανάθεση»: η εκκρεμότητα επιστρέφει στη λίστα
+  /// όποιου την άνοιξε. Ίδια τιμή με τη σημερινή δεν γράφει τίποτα — ούτε στη
+  /// βάση ούτε στο Ιστορικό.
+  Future<void> assignTask(int taskId, int? operatorId) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'tasks',
+        columns: ['assigned_operator_id', 'title'],
+        where: 'id = ?',
+        whereArgs: [taskId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final current = rows.first['assigned_operator_id'] as int?;
+      if (current == operatorId) return;
+
+      await txn.update(
+        'tasks',
+        {
+          'assigned_operator_id': operatorId,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+
+      final user = await AuditService.performingUser(txn);
+      await AuditService.log(
+        txn,
+        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΚΚΡΕΜΟΤΗΤΑΣ',
+        userPerforming: user,
+        details: 'tasks id=$taskId',
+        entityType: AuditEntityTypes.task,
+        entityId: taskId,
+        entityName: rows.first['title']?.toString(),
+        oldValues: {
+          'assigned_operator': await _operatorNameForAudit(txn, current),
+        },
+        newValues: {
+          'assigned_operator': await _operatorNameForAudit(txn, operatorId),
+        },
+      );
+    });
   }
 
   Future<bool> _hasSnoozeHistoryColumn(Database db) async {
@@ -354,12 +436,29 @@ class TasksRepository {
   ///
   /// Αν δοθεί [afterTaskInserted], εκτελείται μετά την κύρια εγγραφή ΔΗΜΙΟΥΡΓΙΑ ΕΚΚΡΕΜΟΤΗΤΑΣ
   /// και περνά suffix προέλευσης για παράγωγες εγγραφές (Φάση 3).
+  /// Σφραγίζει τη νέα εκκρεμότητα με τον χειριστή που την ανοίγει.
+  ///
+  /// **Ένα σημείο για κάθε πόρτα δημιουργίας.** Η πληροφορία «ποιος την
+  /// άνοιξε» δεν ανακτάται ποτέ αργότερα: αν μια πόρτα ξεφύγει, οι
+  /// εκκρεμότητές της μένουν για πάντα αδέσποτες χωρίς να το πάρει κανείς
+  /// είδηση — φαίνονται απλώς σε λάθος φίλτρο.
+  ///
+  /// Χωρίς αναγνωρισμένο χειριστή δεν γράφεται τίποτα: το κενό είναι τίμιο,
+  /// ενώ ένα τυχαίο id θα ήταν εφεύρεση.
+  static void _stampCreatingOperator(Map<String, dynamic> row) {
+    if (row['created_by_operator_id'] != null) return;
+    final operatorId = CurrentOperator.active?.id;
+    if (operatorId == null) return;
+    row['created_by_operator_id'] = operatorId;
+  }
+
   Future<int> createFromCallOnExecutor(
     DatabaseExecutor executor, {
     required Map<String, dynamic> row,
     Future<void> Function(DatabaseExecutor txn, String auditOriginSuffix)?
     afterTaskInserted,
   }) async {
+    _stampCreatingOperator(row);
     final id = await executor.insert('tasks', row);
     await _auditTaskCreate(executor, id, row);
     if (afterTaskInserted != null) {
@@ -1013,6 +1112,26 @@ class TasksRepository {
         args.add(s.toDbValue);
       }
     }
+    // Η φόρμουλα της ευθύνης: «του Χ» σημαίνει ανατεθειμένες στον Χ, συν
+    // όσες άνοιξε ο Χ και δεν ανατέθηκαν πουθενά. Η ανάθεση ΜΕΤΑΚΙΝΕΙ την
+    // ευθύνη — μια εκκρεμότητα δεν εμφανίζεται ποτέ σε δύο λίστες ταυτόχρονα.
+    // «Χωρίς χρήστη» σημαίνει ούτε δημιουργό ούτε υπεύθυνο.
+    final owner = filter.owner;
+    if (owner.unassignedOnly) {
+      conditions.add(
+        'tasks.assigned_operator_id IS NULL '
+        'AND tasks.created_by_operator_id IS NULL',
+      );
+    } else if (owner.operatorId != null) {
+      conditions.add(
+        '(tasks.assigned_operator_id = ? '
+        'OR (tasks.assigned_operator_id IS NULL '
+        'AND tasks.created_by_operator_id = ?))',
+      );
+      args.add(owner.operatorId);
+      args.add(owner.operatorId);
+    }
+
     if (filter.startDate != null) {
       conditions.add('due_date >= ?');
       args.add(filter.startDate!.toIso8601String());
@@ -1021,6 +1140,69 @@ class TasksRepository {
       conditions.add('due_date <= ?');
       args.add(filter.endDate!.toIso8601String());
     }
+  }
+
+  /// Πόσες εκκρεμότητες ταιριάζουν στο [filter] — τα ίδια ακριβώς κριτήρια με
+  /// τη λίστα, χωρίς να φορτωθούν οι εγγραφές.
+  ///
+  /// Χρησιμεύει στην κενή οθόνη, που πρέπει να ξεχωρίσει το «δεν έμεινε
+  /// δουλειά» από το «δεν τη βλέπω λόγω φίλτρου» — δύο καταστάσεις που
+  /// μοιάζουν ίδιες και δεν είναι.
+  Future<int> countFilteredTasks(TaskFilter filter) async {
+    final db = await _db;
+    final conditions = <String>[];
+    final args = <Object?>[];
+    _appendTaskFilterWhereParts(filter, conditions, args);
+    final rows = await db.rawQuery(
+      'SELECT COUNT(id) AS count FROM tasks WHERE ${conditions.join(' AND ')}',
+      args,
+    );
+    if (rows.isEmpty) return 0;
+    final n = rows.first['count'];
+    return n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0);
+  }
+
+  /// Τα ids των χρηστών που έχουν ανοίξει έστω μία εκκρεμότητα.
+  ///
+  /// Τροφοδοτεί τις επιλογές του φίλτρου. Δεν επιστρέφονται όλοι οι χρήστες
+  /// της εφαρμογής: όνομα που θα έδινε πάντα άδεια λίστα δεν είναι επιλογή,
+  /// είναι θόρυβος. Τον τρέχοντα χρήστη τον προσθέτει ο καλών, ώστε να μπορεί
+  /// πάντα να διαλέξει τον εαυτό του.
+  ///
+  /// Οι διαγραμμένες εκκρεμότητες δεν μετρούν — δεν φαίνονται ούτε στη λίστα.
+  Future<List<int>> getDistinctOwnerIds() async {
+    final db = await _db;
+    // Ίδια φόρμουλα με το φίλτρο: υπεύθυνοι, συν δημιουργοί των ανανάθετων.
+    // Όνομα που θα έδινε πάντα άδεια λίστα δεν είναι επιλογή, είναι θόρυβος.
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT assigned_operator_id AS oid FROM tasks '
+      'WHERE assigned_operator_id IS NOT NULL '
+      'AND COALESCE(is_deleted, 0) = 0 '
+      'UNION '
+      'SELECT DISTINCT created_by_operator_id AS oid FROM tasks '
+      'WHERE assigned_operator_id IS NULL '
+      'AND created_by_operator_id IS NOT NULL '
+      'AND COALESCE(is_deleted, 0) = 0',
+    );
+    return rows
+        .map((row) => row['oid'])
+        .whereType<num>()
+        .map((id) => id.toInt())
+        .toList();
+  }
+
+  /// True όταν υπάρχει έστω μία εκκρεμότητα χωρίς καταγεγραμμένο χρήστη.
+  ///
+  /// Χωρίς αυτό, η επιλογή «Χωρίς χρήστη» θα εμφανιζόταν και σε βάσεις όπου
+  /// δεν αντιστοιχεί σε τίποτα.
+  Future<bool> hasUnassignedTasks() async {
+    final db = await _db;
+    final rows = await db.rawQuery(
+      'SELECT 1 FROM tasks WHERE assigned_operator_id IS NULL '
+      'AND created_by_operator_id IS NULL '
+      'AND COALESCE(is_deleted, 0) = 0 LIMIT 1',
+    );
+    return rows.isNotEmpty;
   }
 
   /// Πλήθος ανά `status` με ίδια φίλτρα αναζήτησης/ημερομηνίας με [getFilteredTasks],
@@ -1113,6 +1295,7 @@ class TasksRepository {
     map['search_index'] = SearchTextNormalizer.normalizeForSearch(
       task.combinedSearchText,
     );
+    _stampCreatingOperator(map);
     try {
       return await db.transaction((txn) async {
         final id = await txn.insert('tasks', map);

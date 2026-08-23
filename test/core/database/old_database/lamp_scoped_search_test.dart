@@ -146,7 +146,11 @@ void main() {
   test('καθολική «#243» — μόνο ο εξοπλισμός του υπαλλήλου 243', () async {
     await seedOwnersForIdSearch();
 
-    final result = await repository.globalSearch(dbPath, '#243', maxDisplay: 10);
+    final result = await repository.globalSearch(
+      dbPath,
+      '#243',
+      maxDisplay: 10,
+    );
 
     expect(result.totalCount, 1);
     expect(result.rows.single['code'], 100);

@@ -10,6 +10,7 @@ import '../../../core/services/permission_service.dart';
 import '../services/operator_management.dart';
 import '../services/operator_presence_summary.dart';
 import '../widgets/operator_form_dialog.dart';
+import '../widgets/operator_identity_card.dart';
 
 /// «Χρήστες»: ποιοι χειρίζονται την εφαρμογή και με ποιο όνομα υπογράφουν.
 ///
@@ -195,18 +196,30 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                   final operator = operators[index];
                   final marks =
                       data?.presence[operator.id] ?? const <OperatorPresence>[];
-                  return _OperatorCard(
+                  final isCurrent =
+                      operator.id != null && operator.id == activeOperator?.id;
+                  return OperatorIdentityCard(
                     operator: operator,
-                    isCurrent:
-                        operator.id != null &&
-                        operator.id == activeOperator?.id,
-                    canManage: canManage,
                     presence: describeOperatorPresence(
                       marks,
                       data?.readAt ?? DateTime.fromMillisecondsSinceEpoch(0),
                     ),
-                    onEdit: () =>
+                    extraTags: [
+                      if (isCurrent) 'Εσείς',
+                      if (!operator.isActive) 'Αρχειοθετημένος',
+                    ],
+                    onTap: () =>
                         _openForm(existing: operator, readOnly: !canManage),
+                    trailing: IconButton(
+                      icon: Icon(
+                        canManage
+                            ? Icons.edit_outlined
+                            : Icons.visibility_outlined,
+                      ),
+                      tooltip: canManage ? 'Επεξεργασία' : 'Προβολή',
+                      onPressed: () =>
+                          _openForm(existing: operator, readOnly: !canManage),
+                    ),
                   );
                 },
               );
@@ -214,174 +227,6 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _OperatorCard extends StatelessWidget {
-  const _OperatorCard({
-    required this.operator,
-    required this.isCurrent,
-    required this.canManage,
-    required this.presence,
-    required this.onEdit,
-  });
-
-  final Operator operator;
-  final bool isCurrent;
-
-  /// Ο θεατής είναι διαχειριστής; Αλλιώς η καρτέλα ανοίγει μόνο για ανάγνωση.
-  final bool canManage;
-
-  /// Έτοιμες γραμμές σύνδεσης — η κάρτα δείχνει, δεν υπολογίζει.
-  final List<OperatorPresenceLine> presence;
-
-  final VoidCallback onEdit;
-
-  String get _initials {
-    final parts = operator.displayName
-        .trim()
-        .split(RegExp(r'[\s.]+'))
-        .where((part) => part.isNotEmpty)
-        .toList();
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) {
-      return parts.first.characters.take(2).toString().toUpperCase();
-    }
-    return (parts[0].characters.first + parts[1].characters.first)
-        .toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = !operator.isActive;
-    final titleColor = muted ? theme.colorScheme.onSurfaceVariant : null;
-
-    final subtitle = operator.windowsAccount == null
-        ? 'Χωρίς λογαριασμό Windows — επιλέγεται χειροκίνητα'
-        : operator.windowsAccount!;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        onTap: onEdit,
-        leading: CircleAvatar(
-          backgroundColor: muted
-              ? theme.colorScheme.surfaceContainerHighest
-              : theme.colorScheme.primaryContainer,
-          child: Text(
-            _initials,
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: muted
-                  ? theme.colorScheme.onSurfaceVariant
-                  : theme.colorScheme.onPrimaryContainer,
-            ),
-          ),
-        ),
-        title: Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              operator.displayName,
-              style: theme.textTheme.titleMedium?.copyWith(color: titleColor),
-            ),
-            // Ο ρόλος γράφεται πάντα, και για τους δύο. Η απουσία σήμανσης
-            // διαβάζεται ως «δεν ξέρω», όχι ως «απλός χρήστης».
-            _Tag(label: operator.isAdmin ? 'Διαχειριστής' : 'Χρήστης'),
-            if (isCurrent) const _Tag(label: 'Εσείς'),
-            if (operator.windowsAccount == null) const _Tag(label: 'Αυτόνομο'),
-            if (muted) const _Tag(label: 'Αρχειοθετημένος'),
-          ],
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                if (operator.windowsAccount != null) ...[
-                  Icon(
-                    Icons.badge_outlined,
-                    size: 15,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                Flexible(
-                  child: Text(
-                    subtitle,
-                    style: theme.textTheme.bodySmall,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            for (final line in presence)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Row(
-                  children: [
-                    Icon(
-                      line.online
-                          ? Icons.circle
-                          : Icons.history_toggle_off_outlined,
-                      size: line.online ? 9 : 15,
-                      color: line.online
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
-                    ),
-                    SizedBox(width: line.online ? 7 : 4),
-                    Flexible(
-                      child: Text(
-                        line.text,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: line.online
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        trailing: IconButton(
-          icon: Icon(
-            canManage ? Icons.edit_outlined : Icons.visibility_outlined,
-          ),
-          tooltip: canManage ? 'Επεξεργασία' : 'Προβολή',
-          onPressed: onEdit,
-        ),
-      ),
-    );
-  }
-}
-
-class _Tag extends StatelessWidget {
-  const _Tag({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSecondaryContainer,
-        ),
-      ),
     );
   }
 }

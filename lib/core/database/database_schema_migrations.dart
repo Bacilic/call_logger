@@ -249,6 +249,120 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 50 && newVersion >= 50) {
     await migrateDatabaseToV50(db);
   }
+  if (oldVersion < 51 && newVersion >= 51) {
+    await migrateDatabaseToV51(db);
+  }
+  if (oldVersion < 52 && newVersion >= 52) {
+    await migrateDatabaseToV52(db);
+  }
+  if (oldVersion < 53 && newVersion >= 53) {
+    await migrateDatabaseToV53(db);
+  }
+  if (oldVersion < 54 && newVersion >= 54) {
+    await migrateDatabaseToV54(db);
+  }
+}
+
+/// v54: οι κλήσεις μαθαίνουν ποιος τις κατέγραψε.
+///
+/// Ίδιο σχέδιο με τη v53 των εκκρεμοτήτων, για τους ίδιους λόγους: σκέτο id
+/// χωρίς δεσμό προς `operators` (ο `calls` είναι γνωστός σε παλαιότερες
+/// εκδόσεις της εφαρμογής), και οι υπάρχουσες γραμμές μένουν κενές — κανείς
+/// δεν ξέρει ποιος τις κατέγραψε, και το να αποδοθούν σε κάποιον θα ήταν
+/// εφεύρεση.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες.
+Future<void> migrateDatabaseToV54(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(calls)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('created_by_operator_id')) {
+    await db.execute(
+      'ALTER TABLE calls ADD COLUMN created_by_operator_id INTEGER',
+    );
+  }
+}
+
+/// v53: οι εκκρεμότητες μαθαίνουν ποιος τις άνοιξε και σε ποιον ανήκουν.
+///
+/// **Χωρίς foreign key προς `operators`, σκόπιμα.** Ο `tasks` είναι πίνακας που
+/// γνωρίζει και παλαιότερη έκδοση της εφαρμογής· δέσμευση προς πίνακα που
+/// εκείνη αγνοεί θα της απαγόρευε τη βάση. Ακολουθείται το μοτίβο των ήδη
+/// υπαρχουσών `caller_id` / `department_id`: σκέτο id, χωρίς δεσμό.
+///
+/// Κρατιέται **id** και όχι όνομα, για δύο λόγους: μια μετονομασία προφίλ δεν
+/// αποσυνδέει τις εκκρεμότητές του, και η σύγκριση δεν πέφτει στην παγίδα του
+/// `COLLATE NOCASE`, που αγνοεί πεζά/κεφαλαία μόνο στα λατινικά.
+///
+/// Οι υπάρχουσες γραμμές μένουν κενές και διαβάζονται «Χωρίς χρήστη»: κανείς
+/// δεν ξέρει ποιος τις άνοιξε, και το να αποδοθούν στον πρώτο τυχόντα θα ήταν
+/// εφεύρεση.
+///
+/// Το `assigned_operator_id` γράφεται από τη 2η φάση της ανάθεσης — μπαίνει
+/// τώρα ώστε η κοινόχρηστη βάση να μη χρειαστεί δεύτερο γύρο αναβάθμισης σε
+/// όλα τα μηχανήματα.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες.
+Future<void> migrateDatabaseToV53(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(tasks)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('created_by_operator_id')) {
+    await db.execute(
+      'ALTER TABLE tasks ADD COLUMN created_by_operator_id INTEGER',
+    );
+  }
+  if (!columns.contains('assigned_operator_id')) {
+    await db.execute(
+      'ALTER TABLE tasks ADD COLUMN assigned_operator_id INTEGER',
+    );
+  }
+}
+
+/// v52: `operator_presence.instance` — ποιο ανοιχτό αντίγραφο κρατά το ίχνος.
+///
+/// Το ίχνος ανήκε στο πρόσωπο και όχι στο ανοιχτό παράθυρο, οπότε μια «Αλλαγή
+/// χρήστη» άφηνε δύο ανθρώπους να φαίνονται συνδεδεμένοι στον ίδιο υπολογιστή
+/// ταυτόχρονα, ώσπου να παλιώσει το ίχνος του προηγούμενου.
+///
+/// Οι υπάρχουσες γραμμές μένουν με κενή στήλη: κρατούν την τελευταία τους
+/// σύνδεση ως ιστορικό, αλλά κανείς δεν λέγεται «συνδεδεμένος τώρα» μέχρι να
+/// γράψει ο πρώτος παλμός — και μόνο όποιος έχει όντως την εφαρμογή ανοιχτή θα
+/// γράψει.
+Future<void> migrateDatabaseToV52(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(operator_presence)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('instance')) {
+    await db.execute('ALTER TABLE operator_presence ADD COLUMN instance TEXT');
+  }
+}
+
+/// v51: ο υπάλληλος λέγεται «Υπάλληλος» και μέσα στην αναζήτηση (μόνο δεδομένα).
+///
+/// Η οθόνη μετονομάστηκε όταν η λέξη «Χρήστης» δόθηκε σε όσους χειρίζονται την
+/// εφαρμογή· το ευρετήριο και το όνομα της ενέργειας έμειναν πίσω. Επειδή και
+/// τα δύο γράφονται τη στιγμή της καταγραφής, οι ήδη γραμμένες εγγραφές τα
+/// κουβαλούν — μια εγγραφή που η οθόνη δείχνει ως «Υπάλληλος» δεν βρισκόταν με
+/// τη λέξη «υπάλληλος».
+///
+/// Η μετονομασία δένεται ρητά στον τύπο `user`. Η λέξη «ΧΡΗΣΤΗ» δεν είναι πια
+/// άδεια: την πήραν τα προφίλ χειριστών, που γράφουν «ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ» με
+/// τύπο `operator`. Χωρίς τη δέσμευση, μια δεύτερη εκτέλεση της αναβάθμισης θα
+/// βάφτιζε τα προφίλ «ΥΠΑΛΛΗΛΟΥ» και θα έλεγαν για πάντα το λάθος πράγμα.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες.
+Future<void> migrateDatabaseToV51(Database db) async {
+  const renames = <String, String>{
+    'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ': AuditActions.modifyUser,
+    'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ': AuditActions.createUser,
+  };
+  for (final entry in renames.entries) {
+    await db.update(
+      'audit_log',
+      {'action': entry.value},
+      where: 'action = ? AND entity_type = ?',
+      whereArgs: [entry.key, AuditEntityTypes.user],
+    );
+  }
+  await AuditService.migrateRebuildAuditSearchTextIndex(db);
 }
 
 /// v50: πίνακας `operator_presence` — ποιος είδε τη βάση, από ποιον σταθμό,

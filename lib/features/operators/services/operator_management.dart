@@ -1,3 +1,4 @@
+import '../../../core/database/operator_audit.dart';
 import '../../../core/database/operator_repository.dart';
 import '../../../core/models/operator.dart';
 import '../../../core/services/current_operator.dart';
@@ -57,6 +58,7 @@ class OperatorManagement {
         createdAt: now ?? DateTime.now(),
       ),
     );
+    await OperatorAudit.logCreated(_repository.db, created);
     return OperatorActionResult.ok(created);
   }
 
@@ -113,6 +115,11 @@ class OperatorManagement {
       permissionOverrides: permissionOverrides,
     );
     await _repository.update(updated);
+    await OperatorAudit.logUpdated(
+      _repository.db,
+      before: original,
+      after: updated,
+    );
     _refreshActiveIdentity(updated);
     return OperatorActionResult.ok(updated);
   }

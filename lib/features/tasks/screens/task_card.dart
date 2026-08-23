@@ -10,6 +10,7 @@ import '../../../core/errors/task_save_exception.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../operators/providers/operator_directory_providers.dart';
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
 import '../providers/pending_task_delete_provider.dart';
@@ -153,6 +154,7 @@ class TaskCard extends ConsumerStatefulWidget {
     super.key,
     required this.task,
     this.onEdit,
+    this.onAssign,
     this.onSnooze,
     this.onDelete,
     this.onComplete,
@@ -163,6 +165,9 @@ class TaskCard extends ConsumerStatefulWidget {
 
   final Task task;
   final VoidCallback? onEdit;
+
+  /// Άνοιγμα του διαλόγου γρήγορης ανάθεσης — δίνεται από την οθόνη.
+  final VoidCallback? onAssign;
   final VoidCallback? onSnooze;
   final VoidCallback? onDelete;
   final VoidCallback? onComplete;
@@ -559,6 +564,41 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildPriorityBadge(theme),
+                        // Ό,τι δείχνει κατάσταση, την αλλάζει κιόλας: το chip
+                        // του υπευθύνου ανοίγει τον ίδιο επιλογέα με το μενού.
+                        // Απλό κλικ — είναι κουμπί, όχι κείμενο (η ημερομηνία
+                        // δίπλα θέλει διπλό επειδή είναι ετικέτα).
+                        if (task.assignedOperatorId != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: Tooltip(
+                              message: widget.onAssign == null
+                                  ? 'Υπεύθυνος'
+                                  : 'Υπεύθυνος — κλικ για αλλαγή ανάθεσης',
+                              preferBelow: false,
+                              child: ActionChip(
+                                avatar: const Icon(
+                                  Icons.person_outline,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  ref
+                                          .watch(operatorNamesProvider)
+                                          .value?[task.assignedOperatorId] ??
+                                      'Χρήστης #${task.assignedOperatorId}',
+                                  style: theme.textTheme.labelSmall,
+                                ),
+                                onPressed: widget.onAssign,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 0,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ),
                         Tooltip(
                           message: statusTooltip,
                           // Πάνω από το chip: από κάτω σκέπαζε το κουμπί «Λύση».
@@ -606,6 +646,9 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                               case 'edit':
                                 widget.onEdit?.call();
                                 break;
+                              case 'assign':
+                                widget.onAssign?.call();
+                                break;
                               case 'snooze':
                                 widget.onSnooze?.call();
                                 break;
@@ -619,6 +662,14 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                               value: 'edit',
                               child: Text('Επεξεργασία'),
                             ),
+                            // Ανάθεση και σε ολοκληρωμένη: το «ποιος το
+                            // έλυσε/το χρεώνεται» διορθώνεται και εκ των
+                            // υστέρων.
+                            if (widget.onAssign != null)
+                              const PopupMenuItem(
+                                value: 'assign',
+                                child: Text('Ανάθεση'),
+                              ),
                             // Σε ολοκληρωμένη, η αναβολή ζει μέσα στον διάλογο
                             // επεξεργασίας: χρειάζεται πρώτα απόφαση για το αν
                             // η εκκρεμότητα ξανανοίγει, και με ποια μορφή.

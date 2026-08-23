@@ -25,6 +25,7 @@ class CallModel {
     this.lansweeperState,
     this.lansweeperMainTicketId,
     this.lansweeperLastSyncAt,
+    this.createdByOperatorId,
     this.isDeleted = false,
     this.callerLinkedDeleted = false,
     this.equipmentLinkedDeleted = false,
@@ -63,6 +64,15 @@ class CallModel {
   final String? lansweeperState;
   final String? lansweeperMainTicketId;
   final String? lansweeperLastSyncAt;
+
+  /// Ποιος χειριστής κατέγραψε την κλήση — `null` για όσες γράφτηκαν πριν
+  /// υπάρξει η έννοια (διαβάζονται «Χωρίς χρήστη»).
+  ///
+  /// Σκέτο id χωρίς δεσμό προς `operators`, όπως το [callerId]: ο πίνακας
+  /// είναι γνωστός σε παλαιότερες εκδόσεις της εφαρμογής και δεν επιτρέπεται
+  /// να δεσμεύει πίνακα που εκείνες αγνοούν. Γράφεται ΜΟΝΟ στη δημιουργία —
+  /// καμία επεξεργασία δεν αλλάζει ποιος σήκωσε το τηλέφωνο.
+  final int? createdByOperatorId;
   final bool isDeleted;
 
   /// Η συνδεδεμένη εγγραφή users είναι soft-deleted (ιστορική αλήθεια).
@@ -94,6 +104,7 @@ class CallModel {
       lansweeperState: map['lansweeper_state'] as String?,
       lansweeperMainTicketId: map['lansweeper_main_ticket_id'] as String?,
       lansweeperLastSyncAt: map['lansweeper_last_sync_at'] as String?,
+      createdByOperatorId: map['created_by_operator_id'] as int?,
       isDeleted: (map['is_deleted'] as int?) == 1,
       callerLinkedDeleted: historyEntityIsDeleted(map['caller_is_deleted']),
       equipmentLinkedDeleted: historyEntityIsDeleted(
@@ -127,6 +138,9 @@ class CallModel {
         'lansweeper_main_ticket_id': lansweeperMainTicketId,
       if (lansweeperLastSyncAt != null)
         'lansweeper_last_sync_at': lansweeperLastSyncAt,
+      // Πάντα παρόν, και με κενή τιμή: στήλη που λείπει από το toMap δεν
+      // βγάζει λάθος, βγάζει σιωπή (μάθημα του schema_model_consistency_test).
+      'created_by_operator_id': createdByOperatorId,
       'is_deleted': isDeleted ? 1 : 0,
     };
   }

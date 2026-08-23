@@ -281,9 +281,7 @@ class _StartupJournalView extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final step in steps) _StartupStepLine(step: step),
-            ],
+            children: [for (final step in steps) _StartupStepLine(step: step)],
           ),
         ),
       ),

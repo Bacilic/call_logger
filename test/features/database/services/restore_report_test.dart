@@ -32,15 +32,23 @@ RestoreReportItem _item(List<RestoreReportItem> items, String label) =>
     items.singleWhere((i) => i.label == label);
 
 void main() {
-  test('η βάση είναι πάντα πρώτη και επιτυχής — η αναφορά χτίζεται μόνο μετά από επιτυχία', () {
-    final items = _build();
-    expect(items.first.label, 'Βάση');
-    expect(items.first.status, RestoreReportStatus.success);
-  });
+  test(
+    'η βάση είναι πάντα πρώτη και επιτυχής — η αναφορά χτίζεται μόνο μετά από επιτυχία',
+    () {
+      final items = _build();
+      expect(items.first.label, 'Βάση');
+      expect(items.first.status, RestoreReportStatus.success);
+    },
+  );
 
   test('στοιχείο που δεν υπήρχε στο αντίγραφο = προειδοποίηση, όχι σφάλμα', () {
     final items = _build();
-    for (final label in ['Κατόψεις', 'Εικονίδια εργαλείων', 'Λεξικό', 'Βάση Λάμπας']) {
+    for (final label in [
+      'Κατόψεις',
+      'Εικονίδια εργαλείων',
+      'Λεξικό',
+      'Βάση Λάμπας',
+    ]) {
       final item = _item(items, label);
       expect(item.status, RestoreReportStatus.warning, reason: label);
       expect(item.detail, contains('στο συμπιεσμένο αρχείο'), reason: label);
@@ -61,14 +69,21 @@ void main() {
     expect(_item(items, 'Βάση Λάμπας').status, RestoreReportStatus.success);
   });
 
-  test('έστω μία αποτυχία αντιγραφής σημαίνει το στοιχείο κόκκινο, με τα δύο πλήθη', () {
-    final items = _build(mapImagesCopied: 4, mapImagesFailed: 1, lampDbFailed: true);
-    final maps = _item(items, 'Κατόψεις');
-    expect(maps.status, RestoreReportStatus.failure);
-    expect(maps.detail, contains('4'));
-    expect(maps.detail, contains('1'));
-    expect(_item(items, 'Βάση Λάμπας').status, RestoreReportStatus.failure);
-  });
+  test(
+    'έστω μία αποτυχία αντιγραφής σημαίνει το στοιχείο κόκκινο, με τα δύο πλήθη',
+    () {
+      final items = _build(
+        mapImagesCopied: 4,
+        mapImagesFailed: 1,
+        lampDbFailed: true,
+      );
+      final maps = _item(items, 'Κατόψεις');
+      expect(maps.status, RestoreReportStatus.failure);
+      expect(maps.detail, contains('4'));
+      expect(maps.detail, contains('1'));
+      expect(_item(items, 'Βάση Λάμπας').status, RestoreReportStatus.failure);
+    },
+  );
 
   test('η σύνδεση κατόψεων εμφανίζεται μόνο όταν έγινε', () {
     expect(
@@ -77,14 +92,20 @@ void main() {
       reason: 'Χωρίς επανασυνδέσεις, η γραμμή θα ήταν θόρυβος',
     );
     final withRelink = _build(imagesRelinked: 2);
-    expect(_item(withRelink, 'Σύνδεση κατόψεων').status, RestoreReportStatus.success);
+    expect(
+      _item(withRelink, 'Σύνδεση κατόψεων').status,
+      RestoreReportStatus.success,
+    );
     expect(_item(withRelink, 'Σύνδεση κατόψεων').detail, contains('2'));
   });
 
-  test('το απλό κείμενο έχει μία γραμμή ανά στοιχείο — όχι «σούπα» σε μία σειρά', () {
-    final text = restoreReportPlainText(_build(mapImagesCopied: 5));
-    expect(text.split('\n').length, 5);
-    expect(text, contains('Βάση: Επαναφέρθηκε'));
-    expect(text, isNot(contains(' · ')));
-  });
+  test(
+    'το απλό κείμενο έχει μία γραμμή ανά στοιχείο — όχι «σούπα» σε μία σειρά',
+    () {
+      final text = restoreReportPlainText(_build(mapImagesCopied: 5));
+      expect(text.split('\n').length, 5);
+      expect(text, contains('Βάση: Επαναφέρθηκε'));
+      expect(text, isNot(contains(' · ')));
+    },
+  );
 }

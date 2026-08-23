@@ -9,6 +9,8 @@ import '../../../core/widgets/resizable_text_area.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/provider/smart_entity_selector_provider.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
+import '../../../core/models/operator.dart';
+import '../../operators/providers/operator_directory_providers.dart';
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
 import '../providers/task_service_provider.dart';
@@ -86,6 +88,10 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   /// Λόγος της νέας αναβολής — ξεχωριστός από τις σημειώσεις των παλιών.
   late final SpellCheckController _snoozeReasonController;
   late int _priority;
+
+  /// Ο υπεύθυνος της εκκρεμότητας· `null` = «Χωρίς ανάθεση» (μένει σε όποιον
+  /// την άνοιξε).
+  int? _assignedOperatorId;
   late DateTime _dueDate;
   bool _userPickedDue = false;
 
@@ -137,6 +143,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
         .toList();
     _snoozeReasonController = SpellCheckController();
     _priority = t?.priority ?? 0;
+    _assignedOperatorId = t?.assignedOperatorId;
     _userPickedDue = t != null;
     _dueDate =
         t?.dueDateTime ??
@@ -294,6 +301,8 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
           dueDate: dueDateStr,
           priority: _priority,
           updatedAt: DateTime.now().toIso8601String(),
+          assignedOperatorId: _assignedOperatorId,
+          clearAssignedOperator: _assignedOperatorId == null,
           callerId: entityState.selectedCaller?.id,
           userText: trimOrNull(entityState.callerDisplayText),
           phoneText: phoneText,
@@ -306,6 +315,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
           dueDate: dueDateStr,
           status: 'open',
           priority: _priority,
+          assignedOperatorId: _assignedOperatorId,
           callerId: entityState.selectedCaller?.id,
           userText: trimOrNull(entityState.callerDisplayText),
           phoneText: phoneText,
@@ -389,6 +399,39 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   /// Η προτεραιότητα αφορά εκκρεμότητα που ζει: σε «Παραμένει ολοκληρωμένη»
   /// κλειδώνει, με υπόδειξη που εξηγεί το γιατί. Το key ανά επιλογή ξαναχτίζει
   /// το πεδίο ώστε η επαναφορά της τιμής να φαίνεται και στην οθόνη.
+  /// Το «Ανάθεση σε» — προαιρετικό εκ σχεδιασμού: η γρήγορη καταγραφή δεν
+  /// σκοντάφτει σε απόφαση που μπορεί να παρθεί και αργότερα.
+  ///
+  /// Υπεύθυνος που δεν είναι πια στα ενεργά προφίλ δεν χάνεται από το πεδίο:
+  /// εμφανίζεται ως επιλογή ώστε η αποθήκευση να μην τον αφαιρέσει σιωπηλά.
+  Widget _buildAssigneeField() {
+    final operators =
+        ref.watch(activeOperatorsProvider).value ?? const <Operator>[];
+    final knownIds = {for (final o in operators) o.id};
+    return DropdownButtonFormField<int?>(
+      initialValue: _assignedOperatorId,
+      decoration: const InputDecoration(
+        labelText: 'Ανάθεση σε',
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        const DropdownMenuItem<int?>(value: null, child: Text('Χωρίς ανάθεση')),
+        for (final operator in operators)
+          DropdownMenuItem<int?>(
+            value: operator.id,
+            child: Text(operator.displayName),
+          ),
+        if (_assignedOperatorId != null &&
+            !knownIds.contains(_assignedOperatorId))
+          DropdownMenuItem<int?>(
+            value: _assignedOperatorId,
+            child: Text('Χρήστης #$_assignedOperatorId'),
+          ),
+      ],
+      onChanged: (v) => setState(() => _assignedOperatorId = v),
+    );
+  }
+
   Widget _buildPriorityField() {
     final field = DropdownButtonFormField<int>(
       key: ValueKey('task_priority_${_closedMode.name}'),
@@ -591,7 +634,13 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildPriorityField(),
+                  Row(
+                    children: [
+                      Expanded(child: _buildPriorityField()),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildAssigneeField()),
+                    ],
+                  ),
                   if (_isClosedTask) ...[
                     const SizedBox(height: 16),
                     Text(

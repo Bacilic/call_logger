@@ -12,8 +12,10 @@ void main() {
   group('αναγνώριση σφάλματος διάταξης', () {
     test('τα μηνύματα overflow αναγνωρίζονται', () {
       expect(
-        isLayoutErrorMessage('A RenderFlex overflowed by 25 pixels on the '
-            'bottom.'),
+        isLayoutErrorMessage(
+          'A RenderFlex overflowed by 25 pixels on the '
+          'bottom.',
+        ),
         isTrue,
       );
     });
@@ -49,7 +51,10 @@ void main() {
     });
 
     test('κρατά τη φάση στην οποία συνέβη', () {
-      expect(layoutErrorDiagnostics(detailsWith([])), contains('during layout'));
+      expect(
+        layoutErrorDiagnostics(detailsWith([])),
+        contains('during layout'),
+      );
     });
 
     test('πετά τις γενικές συμβουλές του framework', () {
@@ -116,7 +121,8 @@ void main() {
     expect(
       details!.stack,
       isNull,
-      reason: 'αν αποκτήσει στοίβα, η καταγραφή πρέπει να ξαναδεί τη λογική της',
+      reason:
+          'αν αποκτήσει στοίβα, η καταγραφή πρέπει να ξαναδεί τη λογική της',
     );
     expect(layoutErrorDiagnostics(details), contains('debugCreator:'));
   });

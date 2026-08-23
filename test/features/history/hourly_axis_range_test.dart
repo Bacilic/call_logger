@@ -48,19 +48,20 @@ void main() {
     });
 
     test('απογευματινή βάρδια απλώνει τον άξονα χωρίς ρύθμιση', () {
-      final range = visibleHourRange(
-        _buckets({8: 4, 12: 9, 17: 5, 22: 2}),
-      );
+      final range = visibleHourRange(_buckets({8: 4, 12: 9, 17: 5, 22: 2}));
       expect(range.firstHour, 7);
       expect(range.lastHour, 23);
     });
 
-    test('μια απομονωμένη νυχτερινή κλήση τεντώνει τον άξονα, δεν κρύβεται', () {
-      final range = visibleHourRange(_buckets({3: 1, 9: 10, 14: 4}));
-      expect(range.firstHour, 2);
-      expect(range.lastHour, 15);
-      expect(range.contains(3), isTrue);
-    });
+    test(
+      'μια απομονωμένη νυχτερινή κλήση τεντώνει τον άξονα, δεν κρύβεται',
+      () {
+        final range = visibleHourRange(_buckets({3: 1, 9: 10, 14: 4}));
+        expect(range.firstHour, 2);
+        expect(range.lastHour, 15);
+        expect(range.contains(3), isTrue);
+      },
+    );
 
     test('ήδη μεγάλο εύρος δεν μεγαλώνει άλλο από το ελάχιστο', () {
       final range = visibleHourRange(_buckets({7: 1, 15: 1}));

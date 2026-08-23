@@ -56,33 +56,36 @@ void main() {
   Future<List<Map<String, Object?>>> auditRows() =>
       db.query('audit_log', orderBy: 'id ASC');
 
-  test('η αυτόματη καταχώρηση γράφεται στο ιστορικό με τον αριθμό ticket', () async {
-    final callId = await insertCall();
+  test(
+    'η αυτόματη καταχώρηση γράφεται στο ιστορικό με τον αριθμό ticket',
+    () async {
+      final callId = await insertCall();
 
-    await repo.markLansweeperSynced(
-      callId: callId,
-      ticketId: '17438',
-      provider: 'lansweeper',
-    );
+      await repo.markLansweeperSynced(
+        callId: callId,
+        ticketId: '17438',
+        provider: 'lansweeper',
+      );
 
-    final rows = await auditRows();
-    expect(
-      rows,
-      hasLength(1),
-      reason: greekExpectMsg(
-        'Χωρίς εγγραφή, η κλήση φαίνεται για πάντα ως μη απεσταλμένη',
-      ),
-    );
-    expect(rows.single['action'], 'ΚΑΤΑΧΩΡΗΣΗ ΣΤΟ LANSWEEPER');
-    expect(rows.single['entity_id'], callId);
-    expect(
-      rows.single['new_values_json'].toString(),
-      contains('17438'),
-      reason: greekExpectMsg(
-        'Ο αριθμός ticket είναι το αποτέλεσμα της ενέργειας — πρέπει να φαίνεται',
-      ),
-    );
-  });
+      final rows = await auditRows();
+      expect(
+        rows,
+        hasLength(1),
+        reason: greekExpectMsg(
+          'Χωρίς εγγραφή, η κλήση φαίνεται για πάντα ως μη απεσταλμένη',
+        ),
+      );
+      expect(rows.single['action'], 'ΚΑΤΑΧΩΡΗΣΗ ΣΤΟ LANSWEEPER');
+      expect(rows.single['entity_id'], callId);
+      expect(
+        rows.single['new_values_json'].toString(),
+        contains('17438'),
+        reason: greekExpectMsg(
+          'Ο αριθμός ticket είναι το αποτέλεσμα της ενέργειας — πρέπει να φαίνεται',
+        ),
+      );
+    },
+  );
 
   test('η χειροκίνητη σήμανση ξεχωρίζει από την αυτόματη', () async {
     final callId = await insertCall();
@@ -179,10 +182,7 @@ void main() {
     });
 
     test('άγνωστη κατάσταση δεν σπάει — γενική ενέργεια', () {
-      expect(
-        lansweeperAuditAction('κάτι_νέο'),
-        'ΑΛΛΑΓΗ ΚΑΤΑΣΤΑΣΗΣ LANSWEEPER',
-      );
+      expect(lansweeperAuditAction('κάτι_νέο'), 'ΑΛΛΑΓΗ ΚΑΤΑΣΤΑΣΗΣ LANSWEEPER');
     });
   });
 }

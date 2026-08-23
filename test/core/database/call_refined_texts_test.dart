@@ -76,22 +76,25 @@ void main() {
     return rows.single;
   }
 
-  test('η καταχώρηση ΑΝΤΙΚΑΘΙΣΤΑ την Περιγραφή με το κείμενο του ticket', () async {
-    final callId = await insertCall();
+  test(
+    'η καταχώρηση ΑΝΤΙΚΑΘΙΣΤΑ την Περιγραφή με το κείμενο του ticket',
+    () async {
+      final callId = await insertCall();
 
-    await repo.saveRefinedTexts(
-      callIds: [callId],
-      problem: _kRefinedProblem,
-      solution: _kSolution,
-      source: CallRefinedSource.aiEdited,
-    );
+      await repo.saveRefinedTexts(
+        callIds: [callId],
+        problem: _kRefinedProblem,
+        solution: _kSolution,
+        source: CallRefinedSource.aiEdited,
+      );
 
-    final row = await readCall(callId);
-    expect(row['issue'], _kRefinedProblem);
-    expect(row['solution'], _kSolution);
-    expect(row['refined_source'], CallRefinedSource.aiEdited);
-    expect((row['refined_at'] as String?)?.isNotEmpty, isTrue);
-  });
+      final row = await readCall(callId);
+      expect(row['issue'], _kRefinedProblem);
+      expect(row['solution'], _kSolution);
+      expect(row['refined_source'], CallRefinedSource.aiEdited);
+      expect((row['refined_at'] as String?)?.isNotEmpty, isTrue);
+    },
+  );
 
   test('όλες οι κλήσεις του ίδιου ticket παίρνουν το ίδιο κείμενο', () async {
     final first = await insertCall();
@@ -169,26 +172,29 @@ void main() {
     expect(await calls.getHistoryCalls(keyword: 'μπαρκοτιερα'), isEmpty);
   });
 
-  test('η αντικατάσταση καταγράφεται στο Ιστορικό ως αλλαγή του θέματος', () async {
-    final callId = await insertCall();
+  test(
+    'η αντικατάσταση καταγράφεται στο Ιστορικό ως αλλαγή του θέματος',
+    () async {
+      final callId = await insertCall();
 
-    await repo.saveRefinedTexts(
-      callIds: [callId],
-      problem: _kRefinedProblem,
-      solution: _kSolution,
-      source: CallRefinedSource.ai,
-    );
+      await repo.saveRefinedTexts(
+        callIds: [callId],
+        problem: _kRefinedProblem,
+        solution: _kSolution,
+        source: CallRefinedSource.ai,
+      );
 
-    final logs = await db.query(
-      'audit_log',
-      where: 'action = ?',
-      whereArgs: ['ΚΑΘΑΡΟ ΚΕΙΜΕΝΟ ΚΛΗΣΗΣ'],
-    );
-    expect(logs, hasLength(1));
-    expect(logs.single['entity_id'], callId);
-    expect(logs.single['old_values_json'], contains(_kRawIssue));
-    expect(logs.single['new_values_json'], contains('εκτυπώσεις'));
-  });
+      final logs = await db.query(
+        'audit_log',
+        where: 'action = ?',
+        whereArgs: ['ΚΑΘΑΡΟ ΚΕΙΜΕΝΟ ΚΛΗΣΗΣ'],
+      );
+      expect(logs, hasLength(1));
+      expect(logs.single['entity_id'], callId);
+      expect(logs.single['old_values_json'], contains(_kRawIssue));
+      expect(logs.single['new_values_json'], contains('εκτυπώσεις'));
+    },
+  );
 
   test('επανάληψη με ίδιο κείμενο δεν γεμίζει το Ιστορικό', () async {
     final callId = await insertCall();

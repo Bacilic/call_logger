@@ -123,7 +123,9 @@ class LampIssueResolutionService {
           name: name,
           officeId: officeId,
           officeName: officeId == null ? null : officeNameById[officeId],
-          departmentName: officeId == null ? null : departmentByOffice[officeId],
+          departmentName: officeId == null
+              ? null
+              : departmentByOffice[officeId],
           equipmentCount: equipmentCountByOwner[id] ?? 0,
         ),
       );

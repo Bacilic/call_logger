@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import 'audit_diff_helper.dart';
+import 'database_table_labels.dart';
 import '../services/current_operator.dart';
 import '../utils/search_text_normalizer.dart';
 
@@ -193,40 +194,13 @@ class AuditService {
     return normalized;
   }
 
-  static String _entityTypeSearchLabel(String? entityType) {
-    switch ((entityType ?? '').trim()) {
-      case AuditEntityTypes.user:
-        return 'χρηστης';
-      case AuditEntityTypes.department:
-        return 'τμημα';
-      case AuditEntityTypes.equipment:
-        return 'εξοπλισμος';
-      case AuditEntityTypes.category:
-        return 'κατηγορια';
-      case AuditEntityTypes.task:
-        return 'εκκρεμοτητα';
-      case AuditEntityTypes.call:
-        return 'κληση';
-      case AuditEntityTypes.bulkUsers:
-        return 'μαζικη ενημερωση χρηστων';
-      case AuditEntityTypes.bulkDepartments:
-        return 'μαζικη ενημερωση τμηματων';
-      case AuditEntityTypes.bulkEquipment:
-        return 'μαζικη ενημερωση εξοπλισμου';
-      case AuditEntityTypes.importData:
-        return 'εισαγωγη δεδομενων';
-      case AuditEntityTypes.maintenance:
-        return 'συντηρηση βασης';
-      case AuditEntityTypes.backup:
-        return 'αντιγραφο ασφαλειας';
-      case AuditEntityTypes.phone:
-        return 'τηλεφωνο';
-      case AuditEntityTypes.knowledge:
-        return 'αρθρο γνωσησ';
-      default:
-        return '';
-    }
-  }
+  /// Η λέξη του τύπου μέσα στο ευρετήριο — πάντα ίδια με αυτήν της οθόνης.
+  ///
+  /// Δεύτερος κατάλογος εδώ σήμαινε δεύτερη αλήθεια: όταν η οθόνη μετονομάστηκε
+  /// σε «Υπάλληλος», το ευρετήριο έμεινε στο «χρήστης» και η αναζήτηση έψαχνε
+  /// λέξη που δεν έγραφε πουθενά η εφαρμογή.
+  static String _entityTypeSearchLabel(String? entityType) =>
+      databaseEntityTypeSearchLabelEl(entityType);
 
   /// Αναγνώσιμη μορφή κλειδιού πεδίου χωρίς underscores (fallback ετικέτας).
   static String humanizeFieldKey(String field) =>
@@ -284,13 +258,13 @@ class AuditService {
       final oldUser = _hasMeaningfulValue(oldValue) ? '#$oldValue' : null;
       final newUser = _hasMeaningfulValue(newValue) ? '#$newValue' : null;
       if (oldUser == null && newUser != null) {
-        return 'συνδεση σε χρηστη $newUser';
+        return 'συνδεση σε υπαλληλο $newUser';
       }
       if (oldUser != null && newUser == null) {
-        return 'αποσυνδεση απο χρηστη $oldUser';
+        return 'αποσυνδεση απο υπαλληλο $oldUser';
       }
       if (oldUser != null && newUser != null) {
-        return 'μεταφορα απο χρηστη $oldUser σε $newUser';
+        return 'μεταφορα απο υπαλληλο $oldUser σε $newUser';
       }
     }
     if (entityType == AuditEntityTypes.phone && field == 'department_id') {
@@ -520,6 +494,44 @@ class AuditService {
     }
   }
 
+  /// Οι όροι που στενεύουν τη λίστα, γραμμένοι ΜΙΑ φορά.
+  ///
+  /// Τρία ερωτήματα ρωτούν το ίδιο πράγμα με διαφορετική αφορμή: η σελίδα, τα
+  /// ids της «επιλογής όλων» και οι διαθέσιμες ενέργειες του φίλτρου. Όσο το
+  /// καθένα έχτιζε τους δικούς του όρους, μια νέα στήλη φίλτρου έμπαινε στα
+  /// δύο και το τρίτο συνέχιζε σιωπηλά να μετρά με τα παλιά κριτήρια.
+  static void _appendScopeFilters(
+    List<String> where,
+    List<Object?> args, {
+    String? action,
+    String? entityType,
+    String? userPerforming,
+    String? dateFromInclusiveIso,
+    String? dateToExclusiveIso,
+  }) {
+    void equals(String column, String? value) {
+      final text = value?.trim() ?? '';
+      if (text.isEmpty) return;
+      where.add('$column = ?');
+      args.add(text);
+    }
+
+    equals('action', action);
+    equals('entity_type', entityType);
+    equals('user_performing', userPerforming);
+
+    final from = dateFromInclusiveIso?.trim() ?? '';
+    if (from.isNotEmpty) {
+      where.add('timestamp >= ?');
+      args.add(from);
+    }
+    final to = dateToExclusiveIso?.trim() ?? '';
+    if (to.isNotEmpty) {
+      where.add('timestamp < ?');
+      args.add(to);
+    }
+  }
+
   /// Σελιδοποιημένη λίστα + συνολικό πλήθος (για φίλτρα UI).
   Future<({List<Map<String, Object?>> rows, int total})> queryPage({
     required int offset,
@@ -527,29 +539,22 @@ class AuditService {
     String? keywordNormalized,
     String? action,
     String? entityType,
+    String? userPerforming,
     String? dateFromInclusiveIso,
     String? dateToExclusiveIso,
   }) async {
     final where = <String>[];
     final args = <Object?>[];
 
-    if (action != null && action.trim().isNotEmpty) {
-      where.add('action = ?');
-      args.add(action.trim());
-    }
-    if (entityType != null && entityType.trim().isNotEmpty) {
-      where.add('entity_type = ?');
-      args.add(entityType.trim());
-    }
-    if (dateFromInclusiveIso != null &&
-        dateFromInclusiveIso.trim().isNotEmpty) {
-      where.add('timestamp >= ?');
-      args.add(dateFromInclusiveIso.trim());
-    }
-    if (dateToExclusiveIso != null && dateToExclusiveIso.trim().isNotEmpty) {
-      where.add('timestamp < ?');
-      args.add(dateToExclusiveIso.trim());
-    }
+    _appendScopeFilters(
+      where,
+      args,
+      action: action,
+      entityType: entityType,
+      userPerforming: userPerforming,
+      dateFromInclusiveIso: dateFromInclusiveIso,
+      dateToExclusiveIso: dateToExclusiveIso,
+    );
     _appendKeywordNormalizedClauses(where, args, keywordNormalized);
 
     final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
@@ -577,29 +582,22 @@ class AuditService {
     String? keywordNormalized,
     String? action,
     String? entityType,
+    String? userPerforming,
     String? dateFromInclusiveIso,
     String? dateToExclusiveIso,
   }) async {
     final where = <String>[];
     final args = <Object?>[];
 
-    if (action != null && action.trim().isNotEmpty) {
-      where.add('action = ?');
-      args.add(action.trim());
-    }
-    if (entityType != null && entityType.trim().isNotEmpty) {
-      where.add('entity_type = ?');
-      args.add(entityType.trim());
-    }
-    if (dateFromInclusiveIso != null &&
-        dateFromInclusiveIso.trim().isNotEmpty) {
-      where.add('timestamp >= ?');
-      args.add(dateFromInclusiveIso.trim());
-    }
-    if (dateToExclusiveIso != null && dateToExclusiveIso.trim().isNotEmpty) {
-      where.add('timestamp < ?');
-      args.add(dateToExclusiveIso.trim());
-    }
+    _appendScopeFilters(
+      where,
+      args,
+      action: action,
+      entityType: entityType,
+      userPerforming: userPerforming,
+      dateFromInclusiveIso: dateFromInclusiveIso,
+      dateToExclusiveIso: dateToExclusiveIso,
+    );
     _appendKeywordNormalizedClauses(where, args, keywordNormalized);
 
     final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
@@ -646,25 +644,21 @@ class AuditService {
   /// Διαθέσιμες ενέργειες (μοναδικές τιμές `action`) για το τρέχον φίλτρο.
   Future<List<String>> queryDistinctActions({
     String? entityType,
+    String? userPerforming,
     String? dateFromInclusiveIso,
     String? dateToExclusiveIso,
   }) async {
     final where = <String>[];
     final args = <Object?>[];
 
-    if (entityType != null && entityType.trim().isNotEmpty) {
-      where.add('entity_type = ?');
-      args.add(entityType.trim());
-    }
-    if (dateFromInclusiveIso != null &&
-        dateFromInclusiveIso.trim().isNotEmpty) {
-      where.add('timestamp >= ?');
-      args.add(dateFromInclusiveIso.trim());
-    }
-    if (dateToExclusiveIso != null && dateToExclusiveIso.trim().isNotEmpty) {
-      where.add('timestamp < ?');
-      args.add(dateToExclusiveIso.trim());
-    }
+    _appendScopeFilters(
+      where,
+      args,
+      entityType: entityType,
+      userPerforming: userPerforming,
+      dateFromInclusiveIso: dateFromInclusiveIso,
+      dateToExclusiveIso: dateToExclusiveIso,
+    );
 
     where.add('action IS NOT NULL');
     where.add('TRIM(action) <> \'\'');
@@ -677,6 +671,46 @@ class AuditService {
 
     return rows
         .map((row) => (row['action'] as String?)?.trim())
+        .whereType<String>()
+        .where((value) => value.isNotEmpty)
+        .toList();
+  }
+
+  /// Τα ονόματα που έχουν σφραγίσει εγγραφές — για το φίλτρο «Χειριστής».
+  ///
+  /// Επιστρέφεται και η παύλα του [CurrentOperator.unknownAuditName]. Οι
+  /// εγγραφές που γράφτηκαν πριν αποκτήσει η εφαρμογή ταυτότητα χειριστή είναι
+  /// η συντριπτική πλειοψηφία· το να λείπουν από τη λίστα δεν θα τις έκρυβε,
+  /// θα έκανε μόνο αδύνατο να απομονωθούν.
+  Future<List<String>> queryDistinctPerformingUsers({
+    String? action,
+    String? entityType,
+    String? dateFromInclusiveIso,
+    String? dateToExclusiveIso,
+  }) async {
+    final where = <String>[];
+    final args = <Object?>[];
+
+    _appendScopeFilters(
+      where,
+      args,
+      action: action,
+      entityType: entityType,
+      dateFromInclusiveIso: dateFromInclusiveIso,
+      dateToExclusiveIso: dateToExclusiveIso,
+    );
+
+    where.add('user_performing IS NOT NULL');
+    where.add("TRIM(user_performing) <> ''");
+    final whereSql = 'WHERE ${where.join(' AND ')}';
+    final rows = await _db.rawQuery(
+      'SELECT DISTINCT user_performing FROM audit_log $whereSql '
+      'ORDER BY user_performing COLLATE NOCASE ASC',
+      args,
+    );
+
+    return rows
+        .map((row) => (row['user_performing'] as String?)?.trim())
         .whereType<String>()
         .where((value) => value.isNotEmpty)
         .toList();
@@ -728,17 +762,39 @@ abstract final class AuditEntityTypes {
 
   /// Άρθρο Βάσης Γνώσης (entity_id = `knowledge_base.id`).
   static const String knowledge = 'knowledge';
+
+  /// Προφίλ χειριστή της εφαρμογής — πίνακας `operators`, όχι `users`.
+  ///
+  /// Η σταθερά λέγεται `operatorProfile` επειδή το `operator` είναι δεσμευμένη
+  /// λέξη της Dart· η τιμή που φτάνει στη βάση μένει «operator». Στην οθόνη
+  /// διαβάζεται «Χρήστης» — ρητά αντιδιαστολή προς τον «Υπάλληλο» του [user],
+  /// που είναι άνθρωπος του νοσοκομείου και όχι κάποιος που χειρίζεται την
+  /// εφαρμογή.
+  static const String operatorProfile = 'operator';
 }
 
 /// Σταθερές ενεργειών audit (ΚΕΦΑΛΑΙΑ).
 abstract final class AuditActions {
-  static const String modifyUser = 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ';
+  /// «ΥΠΑΛΛΗΛΟΥ» και όχι «ΧΡΗΣΤΗ»: εμφανίζεται αυτούσια στη γραμμή του
+  /// ιστορικού, δίπλα στον τύπο «Υπάλληλος». Οι παλιές εγγραφές μεταφράστηκαν
+  /// από την αναβάθμιση v51.
+  static const String modifyUser = 'ΤΡΟΠΟΠΟΙΗΣΗ ΥΠΑΛΛΗΛΟΥ';
+
+  /// Δημιουργία υπαλλήλου του καταλόγου — βλ. [modifyUser] για τη λέξη.
+  static const String createUser = 'ΔΗΜΙΟΥΡΓΙΑ ΥΠΑΛΛΗΛΟΥ';
   static const String modifyDepartment = 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ';
   static const String modifyEquipment = 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ';
   static const String modifyPhone = 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΗΛΕΦΩΝΟΥ';
   static const String modifyCategory = 'ΤΡΟΠΟΠΟΙΗΣΗ ΚΑΤΗΓΟΡΙΑΣ';
   static const String modifyCall = 'ΤΡΟΠΟΠΟΙΗΣΗ ΚΛΗΣΗΣ';
   static const String modifyTask = 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΚΚΡΕΜΟΤΗΤΑΣ';
+
+  /// Αλλαγή προφίλ χειριστή. Η λέξη «ΧΡΗΣΤΗ» είναι πλέον ελεύθερη: την άφησε
+  /// ο υπάλληλος του καταλόγου όταν μετονομάστηκε σε «ΥΠΑΛΛΗΛΟΥ» (v51).
+  static const String modifyOperator = 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ';
+
+  /// Δημιουργία προφίλ χειριστή — βλ. [modifyOperator] για τη λέξη.
+  static const String createOperator = 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ';
 
   static const Set<String> genericModifyActions = {
     'ΤΡΟΠΟΠΟΙΗΣΗ',
@@ -754,6 +810,8 @@ abstract final class AuditActions {
     switch ((entityType ?? '').trim()) {
       case AuditEntityTypes.user:
         return modifyUser;
+      case AuditEntityTypes.operatorProfile:
+        return modifyOperator;
       case AuditEntityTypes.department:
         return modifyDepartment;
       case AuditEntityTypes.equipment:

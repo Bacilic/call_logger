@@ -111,7 +111,7 @@ class AuditEntityPreviewResolver {
     final ln = row['last_name'] as String? ?? '';
     final name = '$fn $ln'.trim();
     return AuditEntityPreview(
-      title: name.isEmpty ? 'Χρήστης #$id' : name,
+      title: name.isEmpty ? 'Υπάλληλος #$id' : name,
       lines: ['Τμήμα: ${row['dept'] ?? '—'}', 'Κωδικός εγγραφής: $id'],
     );
   }

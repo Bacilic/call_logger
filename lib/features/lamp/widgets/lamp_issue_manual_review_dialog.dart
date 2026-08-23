@@ -361,10 +361,7 @@ class _LampIssueManualReviewDialogState
     final placement = _placements[index];
     final officeId = placement?.officeId;
     if (officeId == null) return null;
-    return LampPlacementInput(
-      officeId: officeId,
-      ownerId: placement?.ownerId,
-    );
+    return LampPlacementInput(officeId: officeId, ownerId: placement?.ownerId);
   }
 
   LampContractInput? _contractInputFor(

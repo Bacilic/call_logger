@@ -174,11 +174,9 @@ void main() {
         'Τηλέφωνο 2543 — δεν σχετίζεται με τον εξοπλισμό 3694',
         'Δεν είναι καταχωρημένο στη βάση',
       ]);
-      expect(
-        s.conflictTooltipFor(SelectorField.caller)!.split('\n'),
-        ['Αλεξάνδρα Νικολάου — δεν σχετίζεται με το τηλέφωνο 2543'],
-        reason: 'Ο καλούντας δένει με το τμήμα και τον εξοπλισμό του',
-      );
+      expect(s.conflictTooltipFor(SelectorField.caller)!.split('\n'), [
+        'Αλεξάνδρα Νικολάου — δεν σχετίζεται με το τηλέφωνο 2543',
+      ], reason: 'Ο καλούντας δένει με το τμήμα και τον εξοπλισμό του');
       expect(
         s.conflictSeverityFor(SelectorField.department),
         ConflictSeverity.unknown,
@@ -247,16 +245,12 @@ void main() {
         SelectorField.equipment: ConflictSeverity.unknown,
       });
 
-      expect(
-        s.conflictTooltipFor(SelectorField.equipment)!.split('\n'),
-        [
-          'Εξοπλισμός 3695 — δεν σχετίζεται με το τηλέφωνο 2543',
-          'Εξοπλισμός 3695 — δεν σχετίζεται με Αλεξάνδρα Νικολάου',
-          'Εξοπλισμός 3695 — δεν σχετίζεται με το τμήμα Αιμοδοσία',
-          'Δεν είναι καταχωρημένο στη βάση',
-        ],
-        reason: '§Α.7: πρώτη η άγκυρα (τηλέφωνο), τελευταία η μονομερής',
-      );
+      expect(s.conflictTooltipFor(SelectorField.equipment)!.split('\n'), [
+        'Εξοπλισμός 3695 — δεν σχετίζεται με το τηλέφωνο 2543',
+        'Εξοπλισμός 3695 — δεν σχετίζεται με Αλεξάνδρα Νικολάου',
+        'Εξοπλισμός 3695 — δεν σχετίζεται με το τμήμα Αιμοδοσία',
+        'Δεν είναι καταχωρημένο στη βάση',
+      ], reason: '§Α.7: πρώτη η άγκυρα (τηλέφωνο), τελευταία η μονομερής');
       expect(
         s.conflictTooltipFor(SelectorField.caller)!.split('\n').length,
         3,
@@ -606,11 +600,9 @@ void main() {
         s.conflictSeverityFor(SelectorField.equipment),
         ConflictSeverity.mismatch,
       );
-      expect(
-        s.conflictTooltipFor(SelectorField.caller)!.split('\n'),
-        ['Γιώργος Παππάς — δεν σχετίζεται με τον εξοπλισμό 4040'],
-        reason: 'Μόνο αυτή η σχέση λείπει — οι άλλες δύο δένουν',
-      );
+      expect(s.conflictTooltipFor(SelectorField.caller)!.split('\n'), [
+        'Γιώργος Παππάς — δεν σχετίζεται με τον εξοπλισμό 4040',
+      ], reason: 'Μόνο αυτή η σχέση λείπει — οι άλλες δύο δένουν');
       expect(s.anchorField, SelectorField.equipment);
     });
 

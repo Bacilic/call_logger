@@ -88,14 +88,17 @@ class LampSearchQueryParser {
     }
 
     register(<String>['κωδικός', 'κωδικος'], <String>['code']);
-    register(<String>[
-      'υπάλληλος',
-      'υπαλληλος',
-      'όνομα',
-      'ονομα',
-      'ιδιοκτήτης',
-      'ιδιοκτητης',
-    ], <String>['owner_id']);
+    register(
+      <String>[
+        'υπάλληλος',
+        'υπαλληλος',
+        'όνομα',
+        'ονομα',
+        'ιδιοκτήτης',
+        'ιδιοκτητης',
+      ],
+      <String>['owner_id'],
+    );
     register(<String>['τμήμα', 'τμημα'], <String>['office_id']);
     register(<String>['μοντέλο', 'μοντελο'], <String>['model_id']);
     register(<String>['σύμβαση', 'συμβαση'], <String>['contract_id']);

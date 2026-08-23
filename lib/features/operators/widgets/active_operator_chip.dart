@@ -48,10 +48,7 @@ class ActiveOperatorChip extends StatelessWidget {
               onTap: () => openDialog(context),
               borderRadius: BorderRadius.circular(8),
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: extended
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
@@ -62,8 +59,9 @@ class ActiveOperatorChip extends StatelessWidget {
                             child: Text(
                               label,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.labelMedium
-                                  ?.copyWith(color: color),
+                              style: Theme.of(
+                                context,
+                              ).textTheme.labelMedium?.copyWith(color: color),
                             ),
                           ),
                         ],

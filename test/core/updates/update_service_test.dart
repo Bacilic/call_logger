@@ -204,10 +204,12 @@ void main() {
     },
   );
 
-  test('higher label with older build → NOT available (build decides)', () async {
-    final currentDir = Directory(p.join(tempDir.path, 'current'));
-    await currentDir.create(recursive: true);
-    await File(p.join(currentDir.path, 'version.json')).writeAsString('''
+  test(
+    'higher label with older build → NOT available (build decides)',
+    () async {
+      final currentDir = Directory(p.join(tempDir.path, 'current'));
+      await currentDir.create(recursive: true);
+      await File(p.join(currentDir.path, 'version.json')).writeAsString('''
 {
   "version": "9.9.9",
   "build": 30,
@@ -217,17 +219,18 @@ void main() {
 }
 ''');
 
-    final service = buildService(
-      resolveFolder: () async => tempDir.path,
-      readFile: (path) => File(path).readAsString(),
-    );
+      final service = buildService(
+        resolveFolder: () async => tempDir.path,
+        readFile: (path) => File(path).readAsString(),
+      );
 
-    final result = await service.checkForUpdate();
+      final result = await service.checkForUpdate();
 
-    expect(result.updateAvailable, isFalse);
-    expect(result.needsVersionLabelExplanation, isFalse);
-    expect(result.versionLabelRelation, isNull);
-  });
+      expect(result.updateAvailable, isFalse);
+      expect(result.needsVersionLabelExplanation, isFalse);
+      expect(result.versionLabelRelation, isNull);
+    },
+  );
 
   test('same version and build → updateAvailable false', () async {
     final currentDir = Directory(p.join(tempDir.path, 'current'));

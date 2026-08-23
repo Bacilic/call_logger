@@ -106,6 +106,14 @@ void main() {
 
       final marks = await repository.getAll();
       expect(marks.map((m) => m.operatorId), containsAll([3, 4]));
+
+      // Το ίχνος του πρώτου μένει ως ιστορικό, αλλά η θέση είναι πια του
+      // δεύτερου: ένα ανοιχτό παράθυρο δεν φιλοξενεί δύο ανθρώπους μαζί.
+      final now = DateTime.now();
+      final previous = marks.firstWhere((m) => m.operatorId == 3);
+      final current = marks.firstWhere((m) => m.operatorId == 4);
+      expect(current.isOnlineAt(now), isTrue);
+      expect(previous.isOnlineAt(now), isFalse);
     });
 
     test('μετά το stop, η αλλαγή χρήστη δεν γράφει πια', () async {

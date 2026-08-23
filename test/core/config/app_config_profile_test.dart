@@ -42,10 +42,10 @@ void main() {
 
     test('το ρητό --profile υπερισχύει της προεπιλογής', () {
       expect(
-        AppConfig.resolveProfileName(
-          const ['--profile', 'Test1'],
-          defaultProfileWhenAbsent: AppConfig.debugDefaultProfileName,
-        ),
+        AppConfig.resolveProfileName(const [
+          '--profile',
+          'Test1',
+        ], defaultProfileWhenAbsent: AppConfig.debugDefaultProfileName),
         'Test1',
         reason: 'Ό,τι ζητά ρητά ο χρήστης δεν το παρακάμπτει η προεπιλογή',
       );

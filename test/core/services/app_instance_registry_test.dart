@@ -15,7 +15,8 @@ void main() {
   final t2 = DateTime(2026, 8, 3, 12);
 
   const installed = r'C:\Users\Bacilic\Documents\Call Logger\call_logger.exe';
-  const release = r'F:\flutter_projects\call_logger\build\Release\call_logger.exe';
+  const release =
+      r'F:\flutter_projects\call_logger\build\Release\call_logger.exe';
 
   test('η πρώτη εκκίνηση καταγράφει ένα μόνο αντίγραφο', () {
     final all = AppInstanceRegistry.touch(
@@ -171,7 +172,10 @@ void main() {
         now: t2,
       );
 
-      expect(AppInstanceRegistry.signature(a), AppInstanceRegistry.signature(b));
+      expect(
+        AppInstanceRegistry.signature(a),
+        AppInstanceRegistry.signature(b),
+      );
     });
   });
 
@@ -179,10 +183,7 @@ void main() {
   // («F:» μόνο του στο τέλος της γραμμής).
   group('σύντομη ετικέτα φακέλου', () {
     test('κρατά τα δύο τελευταία τμήματα του φακέλου, χωρίς το εκτελέσιμο', () {
-      expect(
-        AppInstanceRegistry.shortFolderLabel(release),
-        r'…\build\Release',
-      );
+      expect(AppInstanceRegistry.shortFolderLabel(release), r'…\build\Release');
       expect(
         AppInstanceRegistry.shortFolderLabel(installed),
         r'…\Documents\Call Logger',

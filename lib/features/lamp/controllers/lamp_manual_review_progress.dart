@@ -57,6 +57,5 @@ class LampManualReviewProgress {
   }
 
   /// «12 από 121 προτάσεις» — ο αριθμός που ο χρήστης είδε ως σφάλματα.
-  String get proposalsLabel =>
-      '$proposalsDone από $totalProposals προτάσεις';
+  String get proposalsLabel => '$proposalsDone από $totalProposals προτάσεις';
 }

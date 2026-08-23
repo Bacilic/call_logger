@@ -215,7 +215,10 @@ Future<DatabaseNewerVersionChoice> showDatabaseNewerVersionChoiceDialog({
                   style: theme.textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 16),
-                Text('Άνοιγμα με τη νεότερη εφαρμογή', style: sectionTitleStyle),
+                Text(
+                  'Άνοιγμα με τη νεότερη εφαρμογή',
+                  style: sectionTitleStyle,
+                ),
                 const SizedBox(height: 6),
                 if (newerInstance != null) ...[
                   Text(

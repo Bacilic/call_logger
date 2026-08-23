@@ -520,7 +520,7 @@ class EquipmentRepository {
       final uRow = await _support.userRowById(txn, uid);
       await AuditService.log(
         txn,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ',
+        action: AuditActions.modifyUser,
         userPerforming: ap,
         details: 'users id=$uid (αποσύνδεση εξοπλισμού)',
         entityType: AuditEntityTypes.user,
@@ -606,7 +606,7 @@ class EquipmentRepository {
         : (eRows.first['code_equipment'] as String?)?.trim() ?? '';
     await AuditService.log(
       txn,
-      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ',
+      action: AuditActions.modifyUser,
       userPerforming: ap,
       details: 'users id=$userId (αποσύνδεση εξοπλισμού)',
       entityType: AuditEntityTypes.user,
@@ -620,7 +620,7 @@ class EquipmentRepository {
       txn,
       action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
       userPerforming: ap,
-      details: 'equipment id=$equipmentId (αποσύνδεση χρήστη)',
+      details: 'equipment id=$equipmentId (αποσύνδεση υπαλλήλου)',
       entityType: AuditEntityTypes.equipment,
       entityId: equipmentId,
       entityName: code.isEmpty ? null : code,
@@ -680,7 +680,7 @@ class EquipmentRepository {
         : (eRows.first['code_equipment'] as String?)?.trim() ?? '';
     await AuditService.log(
       txn,
-      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ',
+      action: AuditActions.modifyUser,
       userPerforming: ap,
       details: 'users id=$userId (σύνδεση εξοπλισμού)',
       entityType: AuditEntityTypes.user,
@@ -694,7 +694,7 @@ class EquipmentRepository {
       txn,
       action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
       userPerforming: ap,
-      details: 'equipment id=$equipmentId (σύνδεση χρήστη)',
+      details: 'equipment id=$equipmentId (σύνδεση υπαλλήλου)',
       entityType: AuditEntityTypes.equipment,
       entityId: equipmentId,
       entityName: code.isEmpty ? null : code,
@@ -744,7 +744,7 @@ class EquipmentRepository {
       final uRow = await _support.userRowById(txn, toUserId);
       await AuditService.log(
         txn,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ',
+        action: AuditActions.modifyUser,
         userPerforming: ap,
         details: 'users id=$toUserId (αντιγραφή συνδέσεων εξοπλισμού)',
         entityType: AuditEntityTypes.user,
@@ -829,7 +829,7 @@ class EquipmentRepository {
       final uRow = await _support.userRowById(txn, uid);
       await AuditService.log(
         txn,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ',
+        action: AuditActions.modifyUser,
         userPerforming: ap,
         details: 'users id=$uid (αντικατάσταση εξοπλισμού)',
         entityType: AuditEntityTypes.user,

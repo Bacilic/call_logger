@@ -50,7 +50,11 @@ void main() {
   }
 
   Future<Set<String>> schemaObjectNames() async {
-    final db = await openDatabase(dbPath, readOnly: true, singleInstance: false);
+    final db = await openDatabase(
+      dbPath,
+      readOnly: true,
+      singleInstance: false,
+    );
     try {
       final rows = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type IN ('table','trigger','index')",
@@ -109,11 +113,13 @@ void main() {
     );
   });
 
-  test('η ανανέωση διαγράφει τον καταργημένο search_index όπου υπάρχει', () async {
-    await seedMinimal();
-    final db = await openDatabase(dbPath, singleInstance: false);
-    try {
-      await db.execute('''
+  test(
+    'η ανανέωση διαγράφει τον καταργημένο search_index όπου υπάρχει',
+    () async {
+      await seedMinimal();
+      final db = await openDatabase(dbPath, singleInstance: false);
+      try {
+        await db.execute('''
         CREATE TABLE search_index (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           source_table TEXT NOT NULL,
@@ -121,28 +127,29 @@ void main() {
           normalized_text TEXT NOT NULL
         )
       ''');
-      await db.insert('search_index', <String, Object?>{
-        'source_table': 'equipment',
-        'source_id': 1,
-        'normalized_text': 'παλιο κειμενο',
-      });
-    } finally {
-      await db.close();
-    }
+        await db.insert('search_index', <String, Object?>{
+          'source_table': 'equipment',
+          'source_id': 1,
+          'normalized_text': 'παλιο κειμενο',
+        });
+      } finally {
+        await db.close();
+      }
 
-    final result = await repository.refreshSearchCache(dbPath);
-    await LampDatabaseProvider.instance.close();
+      final result = await repository.refreshSearchCache(dbPath);
+      await LampDatabaseProvider.instance.close();
 
-    expect(result.droppedLegacyIndexRows, 1);
-    expect(
-      await schemaObjectNames(),
-      isNot(contains('search_index')),
-      reason: greekExpectMsg(
-        'Ο πίνακας δεν διαβάζεται από πουθενά — μένοντας, μόνο χώρο πιάνει '
-        'και παραπλανά όποιον τον δει στη λίστα πινάκων',
-      ),
-    );
-  });
+      expect(result.droppedLegacyIndexRows, 1);
+      expect(
+        await schemaObjectNames(),
+        isNot(contains('search_index')),
+        reason: greekExpectMsg(
+          'Ο πίνακας δεν διαβάζεται από πουθενά — μένοντας, μόνο χώρο πιάνει '
+          'και παραπλανά όποιον τον δει στη λίστα πινάκων',
+        ),
+      );
+    },
+  );
 
   test('η αναζήτηση δουλεύει κανονικά μετά την ανανέωση', () async {
     await seedMinimal();

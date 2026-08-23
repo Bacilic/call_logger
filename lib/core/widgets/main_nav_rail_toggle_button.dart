@@ -36,11 +36,7 @@ class MainNavRailToggleButton extends StatelessWidget {
       builder: (context, child) {
         final progress = animation.value;
         return SizedBox(
-          width: lerpDouble(
-            kMainNavRailIconZoneWidth,
-            extendedWidth,
-            progress,
-          ),
+          width: lerpDouble(kMainNavRailIconZoneWidth, extendedWidth, progress),
           child: Align(
             alignment: Alignment.lerp(
               Alignment.center,

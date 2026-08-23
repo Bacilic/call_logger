@@ -39,11 +39,19 @@ const String kTestHistorySearchMarker = 'TEST_ELL_MARKER';
 ///
 /// Η ταυτότητα είναι καθολική, οπότε **μηδενίζεται πρώτα**: ένας έλεγχος δεν
 /// επιτρέπεται να αλλάζει την αφετηρία του επόμενου.
-void activateTestOperator(String displayName) {
+/// Το [id] μένει προαιρετικό και **κενό από προεπιλογή**: δεκάδες έλεγχοι
+/// στηρίζονται στο ότι ο δοκιμαστικός χρήστης δεν έχει αποθηκευτεί ακόμη
+/// (οι προσωπικές ρυθμίσεις πέφτουν τότε στην παλιά τους θέση). Δώσ' το μόνο
+/// όταν ο έλεγχος χρειάζεται χρήστη που υπάρχει στη βάση.
+Operator activateTestOperator(String displayName, {int? id}) {
   CurrentOperator.reset();
-  CurrentOperator.activate(
-    Operator(displayName: displayName, createdAt: DateTime(2026, 1, 1)),
+  final operator = Operator(
+    id: id,
+    displayName: displayName,
+    createdAt: DateTime(2026, 1, 1),
   );
+  CurrentOperator.activate(operator);
+  return operator;
 }
 
 /// Μηδενίζει την ταυτότητα — το Ιστορικό ξαναγράφει παύλα.

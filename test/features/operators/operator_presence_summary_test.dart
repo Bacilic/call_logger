@@ -8,12 +8,19 @@ import 'package:flutter_test/flutter_test.dart';
 
 final DateTime _now = DateTime(2026, 8, 21, 14, 30);
 
-OperatorPresence _mark(String station, Duration ago, {int operatorId = 1}) =>
-    OperatorPresence(
-      operatorId: operatorId,
-      station: station,
-      lastSeenAt: _now.subtract(ago),
-    );
+/// Ίχνος που το κρατά ανοιχτή εφαρμογή, εκτός αν δοθεί ρητά [instance] κενό —
+/// τότε είναι απλώς ιστορικό, όπως όταν ο σταθμός πέρασε σε άλλον χρήστη.
+OperatorPresence _mark(
+  String station,
+  Duration ago, {
+  int operatorId = 1,
+  String? instance = r'C:\call_logger\call_logger.exe',
+}) => OperatorPresence(
+  operatorId: operatorId,
+  station: station,
+  lastSeenAt: _now.subtract(ago),
+  instance: instance,
+);
 
 void main() {
   test('χωρίς κανένα ίχνος: δεν έχει συνδεθεί ποτέ', () {
@@ -100,6 +107,22 @@ void main() {
         OperatorPresence.onlineWindow,
         greaterThan(OperatorPresence.heartbeatInterval * 2),
       );
+    });
+
+    test('φρέσκο ίχνος που δεν το κρατά κανείς ΔΕΝ μετρά', () {
+      // Ο σταθμός πέρασε σε άλλον χρήστη: η ώρα λέει «πριν από λίγο», αλλά
+      // εκείνος δεν κάθεται πια εδώ.
+      final handedOver = _mark(
+        'ΤΠΕ-03',
+        const Duration(seconds: 20),
+        instance: null,
+      );
+
+      expect(handedOver.isOnlineAt(_now), isFalse);
+
+      final lines = describeOperatorPresence([handedOver], _now);
+      expect(lines.single.online, isFalse);
+      expect(lines.single.text, startsWith('Τελευταία σύνδεση'));
     });
   });
 }

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/owner_filter.dart';
+import '../providers/task_owner_filter_provider.dart';
 import '../providers/tasks_provider.dart';
 
 /// Αντίστροφη μέτρηση πριν την οριστική διαγραφή· «Αναίρεση» κλείνει το SnackBar.
@@ -159,3 +161,100 @@ class OrphanCallsBanner extends ConsumerWidget {
   }
 }
 
+/// Η άδεια οθόνη των Εκκρεμοτήτων, με τα λόγια που ταιριάζουν στην αιτία.
+///
+/// Τρεις διαφορετικές καταστάσεις μοιάζουν ίδιες όταν η λίστα είναι άδεια:
+/// δεν υπάρχει τίποτα, δεν ταιριάζει τίποτα, ή **υπάρχουν αλλά τις κρύβει το
+/// φίλτρο χρήστη**. Η τρίτη είναι η επικίνδυνη: ο μετρητής της πλοήγησης
+/// εξακολουθεί να λέει «1» και ο χρήστης βλέπει άδεια οθόνη — αντιφατικό
+/// μήνυμα που μοιάζει με σφάλμα της εφαρμογής.
+///
+/// Ο μετρητής **δεν** ακολουθεί το φίλτρο, σκόπιμα: είναι ειδοποίηση και όχι
+/// μετρητής λίστας, και ένα φίλτρο προβολής δεν επιτρέπεται να κρύψει δουλειά
+/// που υπάρχει. Η αντίφαση λύνεται εδώ, εξηγώντας — όχι εκεί, σωπαίνοντας.
+class TasksEmptyState extends ConsumerWidget {
+  const TasksEmptyState({super.key, required this.totalTaskCount});
+
+  /// Πόσες εκκρεμότητες υπάρχουν συνολικά, χωρίς κανένα φίλτρο.
+  final int totalTaskCount;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final hidden = ref.watch(tasksHiddenByOwnerFilterProvider).value ?? 0;
+    final owner =
+        ref.watch(taskOwnerFilterProvider).value ?? OwnerFilter.everyone;
+
+    if (totalTaskCount == 0) {
+      return _message(
+        theme,
+        icon: Icons.task_alt_outlined,
+        title: 'Δεν υπάρχουν εκκρεμότητες αυτή τη στιγμή',
+      );
+    }
+
+    if (hidden == 0 || owner.isEveryone) {
+      return _message(
+        theme,
+        icon: Icons.search_off_outlined,
+        title: 'Δεν βρέθηκαν εκκρεμότητες με τα επιλεγμένα κριτήρια',
+      );
+    }
+
+    var ownerLabel = '';
+    for (final option
+        in ref.watch(taskOwnerOptionsProvider).value ?? const []) {
+      if (option.value == owner) {
+        ownerLabel = option.label;
+        break;
+      }
+    }
+
+    return _message(
+      theme,
+      icon: Icons.person_search_outlined,
+      title: ownerLabel.isEmpty
+          ? 'Καμία εκκρεμότητα για την επιλογή σας'
+          : 'Καμία εκκρεμότητα για «$ownerLabel»',
+      subtitle: hidden == 1
+          ? 'Υπάρχει 1 ακόμη με άλλον χρήστη.'
+          : 'Υπάρχουν $hidden ακόμη με άλλον χρήστη.',
+      action: FilledButton.tonalIcon(
+        onPressed: () => ref
+            .read(taskOwnerFilterProvider.notifier)
+            .select(OwnerFilter.everyone),
+        icon: const Icon(Icons.groups_outlined),
+        label: const Text('Δείξε όλες'),
+      ),
+    );
+  }
+
+  Widget _message(
+    ThemeData theme, {
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Widget? action,
+  }) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 64, color: theme.colorScheme.outline),
+          const SizedBox(height: 16),
+          Text(title, style: theme.textTheme.bodyLarge),
+          if (subtitle != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          if (action != null) ...[const SizedBox(height: 20), action],
+        ],
+      ),
+    );
+  }
+}

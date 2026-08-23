@@ -98,178 +98,193 @@ void main() {
       matching: find.text('Λύση'),
     );
 
-    testWidgets('το chip κατεβάζει τη γραμμή του κέρσορα στη ζώνη Λύσης', (
-      tester,
-    ) async {
-      final container = await pumpApp(tester);
-      await expandFormWithPhone(tester);
+    testWidgets(
+      'το chip κατεβάζει τη γραμμή του κέρσορα στη ζώνη Λύσης',
+      (tester) async {
+        final container = await pumpApp(tester);
+        await expandFormWithPhone(tester);
 
-      await tester.tap(notesField());
-      await pumpUntilSettled(tester);
-      await tester.enterText(notesField(), '$_kProblemLine\n$_kSolutionLine');
-      await pumpUntilSettled(tester);
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(notesField(), '$_kProblemLine\n$_kSolutionLine');
+        await pumpUntilSettled(tester);
 
-      expect(
-        solutionField(),
-        findsNothing,
-        reason: greekExpectMsg('Η ζώνη Λύσης ξεκινά κλειστή'),
-      );
-
-      await tester.tap(solutionChip());
-      await pumpUntilSettled(tester);
-
-      final entry = container.read(callEntryProvider);
-      expect(
-        entry.notes.trim(),
-        _kProblemLine,
-        reason: greekExpectMsg('Στις σημειώσεις μένει μόνο το πρόβλημα'),
-      );
-      expect(
-        entry.solution,
-        _kSolutionLine,
-        reason: greekExpectMsg('Η γραμμή του κέρσορα έγινε λύση'),
-      );
-      expect(
-        solutionField(),
-        findsOneWidget,
-        reason: greekExpectMsg('Η ζώνη Λύσης άνοιξε και είναι ορατή'),
-      );
-    }, semanticsEnabled: false, timeout: const Timeout(Duration(minutes: 2)));
-
-    testWidgets('μοναδική γραμμή δεν μεταφέρεται — το χαρτί δεν αδειάζει', (
-      tester,
-    ) async {
-      final container = await pumpApp(tester);
-      await expandFormWithPhone(tester);
-
-      await tester.tap(notesField());
-      await pumpUntilSettled(tester);
-      await tester.enterText(notesField(), _kProblemLine);
-      await pumpUntilSettled(tester);
-
-      await tester.tap(solutionChip());
-      await pumpUntilSettled(tester);
-
-      final entry = container.read(callEntryProvider);
-      expect(entry.notes.trim(), _kProblemLine);
-      expect(entry.solution, isEmpty);
-      expect(
-        solutionField(),
-        findsOneWidget,
-        reason: greekExpectMsg(
-          'Η ζώνη ανοίγει κενή — έτοιμη να γραφτεί η λύση',
-        ),
-      );
-    }, semanticsEnabled: false, timeout: const Timeout(Duration(minutes: 2)));
-
-    testWidgets('η υποβολή γράφει τη λύση στην κλήση με ίχνος «χειρόγραφο»', (
-      tester,
-    ) async {
-      final container = await pumpApp(tester);
-      await expandFormWithPhone(tester);
-
-      await tester.tap(notesField());
-      await pumpUntilSettled(tester);
-      await tester.enterText(notesField(), '$_kProblemLine\n$_kSolutionLine');
-      await pumpUntilSettled(tester);
-      await tester.tap(solutionChip());
-      await pumpUntilSettled(tester);
-
-      final submitOk = await tester.runAsync(
-        () => container.read(callEntryProvider.notifier).submitCall(),
-      );
-      expect(
-        submitOk,
-        isTrue,
-        reason: greekExpectMsg('Η υποβολή πρέπει να ολοκληρωθεί'),
-      );
-      await tester.pump();
-
-      final saved = await tester.runAsync(() async {
-        final db = await DatabaseHelper.instance.database;
-        return db.query(
-          'calls',
-          where: 'issue LIKE ?',
-          whereArgs: ['%$_kProblemLine%'],
+        expect(
+          solutionField(),
+          findsNothing,
+          reason: greekExpectMsg('Η ζώνη Λύσης ξεκινά κλειστή'),
         );
-      });
-      expect(saved, hasLength(1));
-      final row = saved!.single;
-      expect(row['issue'], _kProblemLine);
-      expect(row['solution'], _kSolutionLine);
-      expect(row['refined_source'], CallRefinedSource.manual);
-      expect((row['refined_at'] as String?)?.isNotEmpty, isTrue);
 
-      // Μετά την υποβολή η φόρμα καθάρισε — και η ζώνη Λύσης μαζί της.
-      final entry = container.read(callEntryProvider);
-      expect(entry.notes, isEmpty);
-      expect(entry.solution, isEmpty);
-    }, semanticsEnabled: false, timeout: const Timeout(Duration(minutes: 2)));
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
 
-    testWidgets('υποβολή χωρίς λύση δεν αφήνει ίχνος εξευγενισμού', (
-      tester,
-    ) async {
-      final container = await pumpApp(tester);
-      await expandFormWithPhone(tester);
-
-      await tester.tap(notesField());
-      await pumpUntilSettled(tester);
-      const plainNote = 'σκετη σημειωση χωρις λυση';
-      await tester.enterText(notesField(), plainNote);
-      await pumpUntilSettled(tester);
-
-      final submitOk = await tester.runAsync(
-        () => container.read(callEntryProvider.notifier).submitCall(),
-      );
-      expect(submitOk, isTrue);
-      await tester.pump();
-
-      final saved = await tester.runAsync(() async {
-        final db = await DatabaseHelper.instance.database;
-        return db.query(
-          'calls',
-          where: 'issue LIKE ?',
-          whereArgs: ['%$plainNote%'],
+        final entry = container.read(callEntryProvider);
+        expect(
+          entry.notes.trim(),
+          _kProblemLine,
+          reason: greekExpectMsg('Στις σημειώσεις μένει μόνο το πρόβλημα'),
         );
-      });
-      expect(saved, hasLength(1));
-      expect(saved!.single['solution'], isNull);
-      expect(saved.single['refined_source'], isNull);
-    }, semanticsEnabled: false, timeout: const Timeout(Duration(minutes: 2)));
+        expect(
+          entry.solution,
+          _kSolutionLine,
+          reason: greekExpectMsg('Η γραμμή του κέρσορα έγινε λύση'),
+        );
+        expect(
+          solutionField(),
+          findsOneWidget,
+          reason: greekExpectMsg('Η ζώνη Λύσης άνοιξε και είναι ορατή'),
+        );
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
 
-    testWidgets('ΕΝΑΣ μετρητής για όλο το χαρτί — περιγραφή συν λύση', (
-      tester,
-    ) async {
-      await pumpApp(tester);
-      await expandFormWithPhone(tester);
+    testWidgets(
+      'μοναδική γραμμή δεν μεταφέρεται — το χαρτί δεν αδειάζει',
+      (tester) async {
+        final container = await pumpApp(tester);
+        await expandFormWithPhone(tester);
 
-      await tester.tap(notesField());
-      await pumpUntilSettled(tester);
-      await tester.enterText(notesField(), '123456\nλ');
-      await pumpUntilSettled(tester);
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(notesField(), _kProblemLine);
+        await pumpUntilSettled(tester);
 
-      expect(
-        find.text('8 / $kNotesTotalMaxLength'),
-        findsOneWidget,
-        reason: greekExpectMsg('Μόνο περιγραφή: 8 χαρακτήρες'),
-      );
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
 
-      await tester.tap(solutionChip());
-      await pumpUntilSettled(tester);
-      await tester.enterText(solutionField(), 'τονερ');
-      await pumpUntilSettled(tester);
+        final entry = container.read(callEntryProvider);
+        expect(entry.notes.trim(), _kProblemLine);
+        expect(entry.solution, isEmpty);
+        expect(
+          solutionField(),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Η ζώνη ανοίγει κενή — έτοιμη να γραφτεί η λύση',
+          ),
+        );
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
 
-      // 6 («123456») + 5 («τονερ») — η γραμμή «λ» κατέβηκε και ξαναγράφτηκε.
-      expect(
-        find.text('11 / $kNotesTotalMaxLength'),
-        findsOneWidget,
-        reason: greekExpectMsg('Ο μετρητής αθροίζει τα δύο πεδία'),
-      );
-      expect(
-        find.textContaining('/ $kNotesTotalMaxLength'),
-        findsOneWidget,
-        reason: greekExpectMsg('Υπάρχει ΜΟΝΟ ένας μετρητής στο χαρτί'),
-      );
-    }, semanticsEnabled: false, timeout: const Timeout(Duration(minutes: 2)));
+    testWidgets(
+      'η υποβολή γράφει τη λύση στην κλήση με ίχνος «χειρόγραφο»',
+      (tester) async {
+        final container = await pumpApp(tester);
+        await expandFormWithPhone(tester);
+
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(notesField(), '$_kProblemLine\n$_kSolutionLine');
+        await pumpUntilSettled(tester);
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
+
+        final submitOk = await tester.runAsync(
+          () => container.read(callEntryProvider.notifier).submitCall(),
+        );
+        expect(
+          submitOk,
+          isTrue,
+          reason: greekExpectMsg('Η υποβολή πρέπει να ολοκληρωθεί'),
+        );
+        await tester.pump();
+
+        final saved = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          return db.query(
+            'calls',
+            where: 'issue LIKE ?',
+            whereArgs: ['%$_kProblemLine%'],
+          );
+        });
+        expect(saved, hasLength(1));
+        final row = saved!.single;
+        expect(row['issue'], _kProblemLine);
+        expect(row['solution'], _kSolutionLine);
+        expect(row['refined_source'], CallRefinedSource.manual);
+        expect((row['refined_at'] as String?)?.isNotEmpty, isTrue);
+
+        // Μετά την υποβολή η φόρμα καθάρισε — και η ζώνη Λύσης μαζί της.
+        final entry = container.read(callEntryProvider);
+        expect(entry.notes, isEmpty);
+        expect(entry.solution, isEmpty);
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    testWidgets(
+      'υποβολή χωρίς λύση δεν αφήνει ίχνος εξευγενισμού',
+      (tester) async {
+        final container = await pumpApp(tester);
+        await expandFormWithPhone(tester);
+
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+        const plainNote = 'σκετη σημειωση χωρις λυση';
+        await tester.enterText(notesField(), plainNote);
+        await pumpUntilSettled(tester);
+
+        final submitOk = await tester.runAsync(
+          () => container.read(callEntryProvider.notifier).submitCall(),
+        );
+        expect(submitOk, isTrue);
+        await tester.pump();
+
+        final saved = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          return db.query(
+            'calls',
+            where: 'issue LIKE ?',
+            whereArgs: ['%$plainNote%'],
+          );
+        });
+        expect(saved, hasLength(1));
+        expect(saved!.single['solution'], isNull);
+        expect(saved.single['refined_source'], isNull);
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    testWidgets(
+      'ΕΝΑΣ μετρητής για όλο το χαρτί — περιγραφή συν λύση',
+      (tester) async {
+        await pumpApp(tester);
+        await expandFormWithPhone(tester);
+
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(notesField(), '123456\nλ');
+        await pumpUntilSettled(tester);
+
+        expect(
+          find.text('8 / $kNotesTotalMaxLength'),
+          findsOneWidget,
+          reason: greekExpectMsg('Μόνο περιγραφή: 8 χαρακτήρες'),
+        );
+
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
+        await tester.enterText(solutionField(), 'τονερ');
+        await pumpUntilSettled(tester);
+
+        // 6 («123456») + 5 («τονερ») — η γραμμή «λ» κατέβηκε και ξαναγράφτηκε.
+        expect(
+          find.text('11 / $kNotesTotalMaxLength'),
+          findsOneWidget,
+          reason: greekExpectMsg('Ο μετρητής αθροίζει τα δύο πεδία'),
+        );
+        expect(
+          find.textContaining('/ $kNotesTotalMaxLength'),
+          findsOneWidget,
+          reason: greekExpectMsg('Υπάρχει ΜΟΝΟ ένας μετρητής στο χαρτί'),
+        );
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
   });
 }

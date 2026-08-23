@@ -23,7 +23,9 @@ final publishReminderProvider = FutureProvider<PublishReminderStatus>((
     return PublishReminderStatus.quiet;
   }
 
-  final entries = await ChangelogService(loadAsset: _readChangelogSource).load();
+  final entries = await ChangelogService(
+    loadAsset: _readChangelogSource,
+  ).load();
   if (entries.isEmpty) return PublishReminderStatus.quiet;
 
   ChangelogEntry? unreleased;

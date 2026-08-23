@@ -23,7 +23,9 @@ int resolveDatabaseBusyTimeoutMs(String dbPath) =>
 /// Μπαίνει στο `onConfigure`, δηλαδή **πριν** από κάθε δημιουργία ή μετάπτωση
 /// σχήματος: κι εκείνες γράφουν, κι εκείνες θα έβρισκαν τη βάση πιασμένη.
 Future<void> applyDatabaseBusyTimeout(Database db, String dbPath) async {
-  await db.execute('PRAGMA busy_timeout = ${resolveDatabaseBusyTimeoutMs(dbPath)}');
+  await db.execute(
+    'PRAGMA busy_timeout = ${resolveDatabaseBusyTimeoutMs(dbPath)}',
+  );
 }
 
 /// Η αναμονή που δηλώνει αυτή τη στιγμή η σύνδεση, σε χιλιοστά.

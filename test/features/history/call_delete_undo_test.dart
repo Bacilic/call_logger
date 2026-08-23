@@ -72,10 +72,7 @@ void main() {
       // Η κλήση δεν έχει εκκρεμότητες → απλό κουμπί διαγραφής. Ο τίτλος του
       // διαλόγου έχει το ίδιο κείμενο, οπότε στοχεύουμε ρητά το κουμπί — και
       // περιμένουμε την async φόρτωση συνδέσεων (πραγματικό I/O βάσης).
-      final deleteButton = find.widgetWithText(
-        FilledButton,
-        'Διαγραφή κλήσης',
-      );
+      final deleteButton = find.widgetWithText(FilledButton, 'Διαγραφή κλήσης');
       for (var i = 0; i < 40 && !tester.any(deleteButton); i++) {
         await tester.runAsync(() async {
           await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -88,9 +85,8 @@ void main() {
       await pumpUntilSettled(tester);
     }
 
-    String countdownText(WidgetTester tester) => tester
-        .widget<Text>(find.textContaining('θα διαγραφεί σε'))
-        .data!;
+    String countdownText(WidgetTester tester) =>
+        tester.widget<Text>(find.textContaining('θα διαγραφεί σε')).data!;
 
     testWidgets(
       'το snackbar λέει την αλήθεια: «θα διαγραφεί σε Ν″» με ζωντανή μέτρηση',

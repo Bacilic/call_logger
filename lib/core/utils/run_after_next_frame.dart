@@ -39,7 +39,8 @@ Future<void> runAfterNextFrame(void Function() action) {
 void runNowOrAfterFrame(void Function() action) {
   final phase = SchedulerBinding.instance.schedulerPhase;
   final safeNow =
-      phase == SchedulerPhase.idle || phase == SchedulerPhase.postFrameCallbacks;
+      phase == SchedulerPhase.idle ||
+      phase == SchedulerPhase.postFrameCallbacks;
   if (safeNow) {
     action();
     return;

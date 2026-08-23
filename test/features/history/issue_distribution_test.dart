@@ -22,10 +22,12 @@ void main() {
         _issues,
         IssueDistributionMetric.count,
       );
-      expect(
-        view.rows.map((r) => r.name).toList(),
-        ['Medico', 'Εκτυπωτής', 'email', 'Word'],
-      );
+      expect(view.rows.map((r) => r.name).toList(), [
+        'Medico',
+        'Εκτυπωτής',
+        'email',
+        'Word',
+      ]);
       expect((view.rows.first.share * 100).round(), 67);
     });
 
@@ -116,10 +118,9 @@ void main() {
     });
 
     test('μηδενικά σύνολα δεν προκαλούν διαίρεση με το μηδέν', () {
-      final view = buildIssueDistribution(
-        const [IssueStat(name: 'Α', count: 0, sumDurationSeconds: 0)],
-        IssueDistributionMetric.duration,
-      );
+      final view = buildIssueDistribution(const [
+        IssueStat(name: 'Α', count: 0, sumDurationSeconds: 0),
+      ], IssueDistributionMetric.duration);
       expect(view.rows.single.share, 0);
       expect(view.rows.single.barFraction, 0);
     });

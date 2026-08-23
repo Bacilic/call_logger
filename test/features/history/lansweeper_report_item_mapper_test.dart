@@ -175,7 +175,10 @@ void main() {
   group('LansweeperReportItemMapper.combinedSelectedSolutions', () {
     test('μονή επιλογή: επιστρέφει τη λύση ως έχει', () {
       final selected = <ReportCallItem>[
-        _item(key: 'a', call: _call(solution: '  Επανεκκίνηση οδηγών.  ')),
+        _item(
+          key: 'a',
+          call: _call(solution: '  Επανεκκίνηση οδηγών.  '),
+        ),
       ];
       expect(
         LansweeperReportItemMapper.combinedSelectedSolutions(selected),
@@ -217,7 +220,10 @@ void main() {
         selected,
       );
 
-      expect(combined, contains('[15/03/2026 10:30] Γιάννης: Επανεκκίνηση οδηγών.'));
+      expect(
+        combined,
+        contains('[15/03/2026 10:30] Γιάννης: Επανεκκίνηση οδηγών.'),
+      );
       expect(
         combined,
         contains('[16/03/2026 11:00] Μαρία: Αντικατάσταση καλωδίου.'),
@@ -253,8 +259,14 @@ void main() {
 
     test('καμία λύση σε πολλές κλήσεις δίνει κενό', () {
       final selected = <ReportCallItem>[
-        _item(key: 'a', call: _call(date: '2026-03-15', time: '10:30:00')),
-        _item(key: 'b', call: _call(date: '2026-03-16', time: '11:00:00')),
+        _item(
+          key: 'a',
+          call: _call(date: '2026-03-15', time: '10:30:00'),
+        ),
+        _item(
+          key: 'b',
+          call: _call(date: '2026-03-16', time: '11:00:00'),
+        ),
       ];
       expect(
         LansweeperReportItemMapper.combinedSelectedSolutions(selected),

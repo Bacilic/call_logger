@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:sqflite_common/sqlite_api.dart';
 
+import '../database/operator_audit.dart';
 import '../database/operator_repository.dart';
 import '../models/operator.dart';
 import 'current_operator.dart';
@@ -100,7 +101,11 @@ class OperatorIdentity {
         createdAt: now ?? DateTime.now(),
       ),
     );
+    // Πρώτα η ταυτότητα, μετά η καταγραφή: αλλιώς η πρώτη εγγραφή της βάσης θα
+    // έγραφε «—» στο «ποιος το έκανε» — τη μόνη εγγραφή για την οποία ξέρουμε
+    // με βεβαιότητα ποιος ήταν.
     CurrentOperator.activate(created);
+    await OperatorAudit.logCreated(db, created);
     return created;
   }
 

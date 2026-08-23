@@ -23,9 +23,11 @@ const _kDepartmentAccounts =
 Future<void> _seedLansweeperRecords() async {
   final db = await DatabaseHelper.instance.database;
   await db.delete('users', where: 'last_name = ?', whereArgs: ['Πλακογιάννη']);
-  await db.delete('departments', where: 'name = ?', whereArgs: [
-    _kDepartmentName,
-  ]);
+  await db.delete(
+    'departments',
+    where: 'name = ?',
+    whereArgs: [_kDepartmentName],
+  );
   await db.insert('users', {
     'first_name': 'Ελένη',
     'last_name': 'Πλακογιάννη',
@@ -87,7 +89,10 @@ void main() {
       notifier.setSearchQuery('plakogianni');
       final summary = container.read(directoryProvider).searchSummary;
 
-      expect(summary.hiddenMatchCounts.keys, contains('Αναγνωριστικό Lansweeper'));
+      expect(
+        summary.hiddenMatchCounts.keys,
+        contains('Αναγνωριστικό Lansweeper'),
+      );
     });
 
     test('τμήμα: το «docpath» φέρνει την Παθολογική', () async {
@@ -102,7 +107,8 @@ void main() {
       await notifier.loadDepartments();
 
       notifier.setSearchQuery('docpath');
-      final found = container.read(departmentDirectoryProvider)
+      final found = container
+          .read(departmentDirectoryProvider)
           .filteredDepartments;
 
       expect(
@@ -129,7 +135,8 @@ void main() {
       await notifier.loadDepartments();
 
       notifier.setSearchQuery('Γιατρός Παθολογικής 2');
-      final found = container.read(departmentDirectoryProvider)
+      final found = container
+          .read(departmentDirectoryProvider)
           .filteredDepartments;
 
       expect(found.map((d) => d.name), contains(_kDepartmentName));

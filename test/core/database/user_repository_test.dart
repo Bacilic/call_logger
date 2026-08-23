@@ -156,7 +156,7 @@ void main() {
         final createAudit = await db.query(
           'audit_log',
           where: 'action = ? AND entity_type = ? AND entity_id = ?',
-          whereArgs: ['ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ', AuditEntityTypes.user, userId],
+          whereArgs: [AuditActions.createUser, AuditEntityTypes.user, userId],
         );
         expect(createAudit, hasLength(1));
         final nv = decodeJson(createAudit.single['new_values_json'] as String?);
@@ -244,7 +244,7 @@ void main() {
         final updateAudit = await db.query(
           'audit_log',
           where: 'action = ? AND entity_type = ? AND entity_id = ?',
-          whereArgs: ['ΤΡΟΠΟΠΟΙΗΣΗ ΧΡΗΣΤΗ', AuditEntityTypes.user, userId],
+          whereArgs: [AuditActions.modifyUser, AuditEntityTypes.user, userId],
         );
         expect(updateAudit, hasLength(1));
 
@@ -262,10 +262,10 @@ void main() {
         expect(newV?['linked_phone_numbers'], [newPhone]);
 
         // Η σύνδεση τηλεφώνου καταγράφεται πλέον μόνο στην πλευρά χρήστη
-        // (όχι ξεχωριστό audit «σύνδεση χρήστη» στο entity τηλεφώνου).
+        // (όχι ξεχωριστό audit «σύνδεση υπαλλήλου» στο entity τηλεφώνου).
         final phoneLinkAudits = await db.query(
           'audit_log',
-          where: "entity_type = ? AND details LIKE '%σύνδεση χρήστη%'",
+          where: "entity_type = ? AND details LIKE '%σύνδεση υπαλλήλου%'",
           whereArgs: [AuditEntityTypes.phone],
         );
         expect(phoneLinkAudits, isEmpty);

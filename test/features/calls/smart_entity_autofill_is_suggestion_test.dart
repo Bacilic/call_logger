@@ -316,11 +316,10 @@ void main() {
         '1001',
         reason: greekExpectMsg('Μοναδικό μηχάνημα τμήματος = απόφαση'),
       );
-      expect(
-        s.phoneCandidates.toSet(),
-        {'2520', '2521'},
-        reason: greekExpectMsg('Δύο κοινόχρηστοι αριθμοί = λίστα'),
-      );
+      expect(s.phoneCandidates.toSet(), {
+        '2520',
+        '2521',
+      }, reason: greekExpectMsg('Δύο κοινόχρηστοι αριθμοί = λίστα'));
     });
 
     test(

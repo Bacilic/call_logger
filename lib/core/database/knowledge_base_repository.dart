@@ -243,9 +243,7 @@ class KnowledgeBaseRepository {
   }
 
   Future<int> countArticles() async {
-    final rows = await db.rawQuery(
-      'SELECT COUNT(*) AS c FROM knowledge_base',
-    );
+    final rows = await db.rawQuery('SELECT COUNT(*) AS c FROM knowledge_base');
     final value = rows.first['c'];
     return value is int ? value : int.tryParse(value?.toString() ?? '') ?? 0;
   }

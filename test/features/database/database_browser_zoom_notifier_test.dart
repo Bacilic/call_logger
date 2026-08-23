@@ -66,15 +66,10 @@ void main() {
 
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    final sub = container.listen(
-      databaseBrowserZoomByTableProvider,
-      (_, _) {},
-    );
+    final sub = container.listen(databaseBrowserZoomByTableProvider, (_, _) {});
     addTearDown(sub.close);
 
-    await container
-        .read(databaseBrowserZoomByTableProvider.notifier)
-        .load();
+    await container.read(databaseBrowserZoomByTableProvider.notifier).load();
 
     expect(container.read(databaseBrowserZoomByTableProvider), isEmpty);
 
@@ -97,10 +92,7 @@ void main() {
 
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    final sub = container.listen(
-      databaseBrowserZoomByTableProvider,
-      (_, _) {},
-    );
+    final sub = container.listen(databaseBrowserZoomByTableProvider, (_, _) {});
     addTearDown(sub.close);
 
     final notifier = container.read(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
+import '../services/operator_presence_summary.dart';
 import '../widgets/operator_picker_body.dart';
 
 /// «Ποιος είστε;» — η οθόνη που εμφανίζεται όταν ο λογαριασμός Windows δεν
@@ -15,12 +16,16 @@ class OperatorPickerScreen extends StatelessWidget {
     required this.profiles,
     required this.onPick,
     required this.onCreate,
+    this.presence = const <int, List<OperatorPresenceLine>>{},
     this.suggestedName = '',
     this.hasWindowsAccount = true,
   });
 
   /// Τα ενεργά προφίλ, προς επιλογή. Κενή λίστα στην πρώτη εκκίνηση.
   final List<Operator> profiles;
+
+  /// Γραμμές σύνδεσης ανά προφίλ — βλ. [OperatorPickerBody.presence].
+  final Map<int, List<OperatorPresenceLine>> presence;
 
   final void Function(Operator operator) onPick;
 
@@ -72,6 +77,7 @@ class OperatorPickerScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 OperatorPickerBody(
                   profiles: profiles,
+                  presence: presence,
                   onPick: onPick,
                   onCreate: onCreate,
                   suggestedName: suggestedName,

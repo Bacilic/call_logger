@@ -43,7 +43,7 @@ void main() {
     );
     const labels = AuditReferenceLabels(userNames: {243: 'Ψαρρά Βαρβάρα'});
     final lines = formatter.describeChanges(row, labels: labels);
-    expect(lines.single, 'Σύνδεση σε χρήστη Ψαρρά Βαρβάρα');
+    expect(lines.single, 'Σύνδεση σε υπάλληλο Ψαρρά Βαρβάρα');
   });
 
   test('linked_user_id χωρίς ετικέτα κρατά το #id ως υπόδειξη', () {
@@ -55,7 +55,7 @@ void main() {
       newValuesJson: '{"linked_user_id":null}',
     );
     final lines = formatter.describeChanges(row);
-    expect(lines.single, 'Αποσύνδεση από χρήστη #243');
+    expect(lines.single, 'Αποσύνδεση από υπάλληλο #243');
   });
 
   test('το name_key αποδίδεται ως «κλειδί ονόματος», όχι αγγλικά', () {
@@ -170,7 +170,7 @@ void main() {
     expect(lines.first, 'Προσθήκη στον όροφο 2');
   });
 
-  test('describeChanges για σύνδεση τηλεφώνου σε χρήστη', () {
+  test('describeChanges για σύνδεση τηλεφώνου σε υπάλληλο', () {
     final row = AuditLogModel(
       id: 5,
       action: 'ΤΡΟΠΟΠΟΙΗΣΗ',
@@ -180,7 +180,7 @@ void main() {
       newValuesJson: '{"linked_user_id":12}',
     );
     final lines = formatter.describeChanges(row);
-    expect(lines.first, 'Σύνδεση σε χρήστη #12');
+    expect(lines.first, 'Σύνδεση σε υπάλληλο #12');
   });
 
   test('describeChanges department_id με department_text στο JSON', () {

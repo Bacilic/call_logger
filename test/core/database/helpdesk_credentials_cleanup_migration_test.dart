@@ -58,10 +58,7 @@ void main() {
 
     await migrateDatabaseToV46(db);
 
-    expect(
-      await repo.getSetting(kLansweeperApiKeySettingKey),
-      'VAL_API_KEY',
-    );
+    expect(await repo.getSetting(kLansweeperApiKeySettingKey), 'VAL_API_KEY');
     expect(
       await repo.getSetting(kLansweeperUrlSettingKey),
       'http://test/NewTicket',

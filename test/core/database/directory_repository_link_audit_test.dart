@@ -111,7 +111,7 @@ void main() {
         label: phoneNumber,
         isLink: true,
       );
-      expect(row['action'], 'ΔΗΜΙΟΥΡΓΙΑ ΧΡΗΣΤΗ');
+      expect(row['action'], AuditActions.createUser);
       expect(row['entity_name'], 'Σύνδεση Τηλεφώνου');
       final newV = decodeJson(row['new_values_json'] as String?);
       expect(newV?['linked_phone_numbers'], [phoneNumber]);

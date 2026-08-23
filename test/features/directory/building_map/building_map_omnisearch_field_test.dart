@@ -76,64 +76,54 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   }
 
-  testWidgets(
-    '«2914» δείχνει μόνο τον Πρόβο, όχι τα αποτελέσματα του «291»',
-    (tester) async {
-      await pumpField(tester);
+  testWidgets('«2914» δείχνει μόνο τον Πρόβο, όχι τα αποτελέσματα του «291»', (
+    tester,
+  ) async {
+    await pumpField(tester);
 
-      await typeAndSettle(tester, '291');
-      expect(
-        find.text('Ψαρρά 2915'),
-        findsOneWidget,
-        reason: 'Το «291» πρέπει να δείχνει και τους τρεις',
-      );
+    await typeAndSettle(tester, '291');
+    expect(
+      find.text('Ψαρρά 2915'),
+      findsOneWidget,
+      reason: 'Το «291» πρέπει να δείχνει και τους τρεις',
+    );
 
-      await typeAndSettle(tester, '2914');
+    await typeAndSettle(tester, '2914');
 
-      expect(
-        find.text('Πρόβος 2914'),
-        findsOneWidget,
-        reason: 'Το «2914» ταιριάζει μόνο με τον Πρόβο',
-      );
-      expect(
-        find.text('Ψαρρά 2915'),
-        findsNothing,
-        reason: 'η λίστα έμενε στα αποτελέσματα του προηγούμενου ερωτήματος',
-      );
-      expect(find.text('Νακαστσή 2916'), findsNothing);
-    },
-    experimentalLeakTesting: LeakTesting.settings.withIgnoredAll(),
-  );
+    expect(
+      find.text('Πρόβος 2914'),
+      findsOneWidget,
+      reason: 'Το «2914» ταιριάζει μόνο με τον Πρόβο',
+    );
+    expect(
+      find.text('Ψαρρά 2915'),
+      findsNothing,
+      reason: 'η λίστα έμενε στα αποτελέσματα του προηγούμενου ερωτήματος',
+    );
+    expect(find.text('Νακαστσή 2916'), findsNothing);
+  }, experimentalLeakTesting: LeakTesting.settings.withIgnoredAll());
 
-  testWidgets(
-    'κενό στο τέλος δεν αλλάζει το αποτέλεσμα',
-    (tester) async {
-      await pumpField(tester);
+  testWidgets('κενό στο τέλος δεν αλλάζει το αποτέλεσμα', (tester) async {
+    await pumpField(tester);
 
-      await typeAndSettle(tester, '2914');
-      await typeAndSettle(tester, '2914 ');
+    await typeAndSettle(tester, '2914');
+    await typeAndSettle(tester, '2914 ');
 
-      expect(
-        find.text('Πρόβος 2914'),
-        findsOneWidget,
-        reason: 'Το κείμενο κανονικοποιείται — το κενό δεν είναι νέο ερώτημα',
-      );
-      expect(find.text('Ψαρρά 2915'), findsNothing);
-    },
-    experimentalLeakTesting: LeakTesting.settings.withIgnoredAll(),
-  );
+    expect(
+      find.text('Πρόβος 2914'),
+      findsOneWidget,
+      reason: 'Το κείμενο κανονικοποιείται — το κενό δεν είναι νέο ερώτημα',
+    );
+    expect(find.text('Ψαρρά 2915'), findsNothing);
+  }, experimentalLeakTesting: LeakTesting.settings.withIgnoredAll());
 
-  testWidgets(
-    'καθαρισμός πεδίου κλείνει τη λίστα',
-    (tester) async {
-      await pumpField(tester);
+  testWidgets('καθαρισμός πεδίου κλείνει τη λίστα', (tester) async {
+    await pumpField(tester);
 
-      await typeAndSettle(tester, '291');
-      expect(find.text('Ψαρρά 2915'), findsOneWidget);
+    await typeAndSettle(tester, '291');
+    expect(find.text('Ψαρρά 2915'), findsOneWidget);
 
-      await typeAndSettle(tester, '');
-      expect(find.text('Ψαρρά 2915'), findsNothing);
-    },
-    experimentalLeakTesting: LeakTesting.settings.withIgnoredAll(),
-  );
+    await typeAndSettle(tester, '');
+    expect(find.text('Ψαρρά 2915'), findsNothing);
+  }, experimentalLeakTesting: LeakTesting.settings.withIgnoredAll());
 }

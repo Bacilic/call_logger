@@ -83,6 +83,8 @@ class Task {
     this.createdAt,
     this.updatedAt,
     this.completedAt,
+    this.createdByOperatorId,
+    this.assignedOperatorId,
     this.origin = originLegacy,
     this.isDeleted = false,
     this.callerLinkedDeleted = false,
@@ -120,6 +122,19 @@ class Task {
   /// Το [updatedAt] ξαναγράφεται σε κάθε αποθήκευση, οπότε δεν μπορεί να
   /// απαντήσει «πότε είχε λυθεί» αφότου η εκκρεμότητα ξανανοίξει.
   final String? completedAt;
+
+  /// Ποιος χειριστής άνοιξε την εκκρεμότητα — `null` για όσες γράφτηκαν πριν
+  /// υπάρξει η έννοια (διαβάζονται «Χωρίς χρήστη»).
+  ///
+  /// Σκέτο id χωρίς δεσμό προς `operators`, όπως τα [callerId] / [departmentId]:
+  /// ο πίνακας είναι γνωστός σε παλαιότερες εκδόσεις της εφαρμογής και δεν
+  /// επιτρέπεται να δεσμεύει πίνακα που εκείνες αγνοούν.
+  final int? createdByOperatorId;
+
+  /// Σε ποιον χειριστή ανατέθηκε. Γράφεται από τη 2η φάση της ανάθεσης — η
+  /// στήλη υπάρχει ήδη ώστε η κοινόχρηστη βάση να μη χρειαστεί δεύτερο γύρο
+  /// αναβάθμισης όταν έρθει η διεπαφή της.
+  final int? assignedOperatorId;
   final String origin;
   final bool isDeleted;
   final bool callerLinkedDeleted;
@@ -165,6 +180,8 @@ class Task {
       createdAt: map['created_at'] as String?,
       updatedAt: map['updated_at'] as String?,
       completedAt: map['completed_at'] as String?,
+      createdByOperatorId: map['created_by_operator_id'] as int?,
+      assignedOperatorId: map['assigned_operator_id'] as int?,
       origin: normalizeOrigin(map['origin'] as String?),
       isDeleted: (map['is_deleted'] as int?) == 1,
       callerLinkedDeleted: historyEntityIsDeleted(map['caller_is_deleted']),
@@ -200,6 +217,8 @@ class Task {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (completedAt != null) 'completed_at': completedAt,
+      'created_by_operator_id': createdByOperatorId,
+      'assigned_operator_id': assignedOperatorId,
       'origin': normalizeOrigin(origin),
       'is_deleted': isDeleted ? 1 : 0,
     };
@@ -227,6 +246,9 @@ class Task {
     String? createdAt,
     String? updatedAt,
     String? completedAt,
+    int? createdByOperatorId,
+    int? assignedOperatorId,
+    bool clearAssignedOperator = false,
     String? origin,
     bool? isDeleted,
   }) {
@@ -252,6 +274,12 @@ class Task {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: completedAt ?? this.completedAt,
+      createdByOperatorId: createdByOperatorId ?? this.createdByOperatorId,
+      // Το «Χωρίς ανάθεση» είναι επιλογή, όχι απουσία τιμής — χωρίς τη
+      // σημαία, η αφαίρεση υπευθύνου θα ήταν αδύνατο να αποθηκευτεί.
+      assignedOperatorId: clearAssignedOperator
+          ? null
+          : (assignedOperatorId ?? this.assignedOperatorId),
       origin: normalizeOrigin(origin ?? this.origin),
       isDeleted: isDeleted ?? this.isDeleted,
     );
@@ -405,6 +433,8 @@ class Task {
     required String? departmentText,
     required String? equipmentText,
     String? updatedAt,
+    int? assignedOperatorId,
+    bool clearAssignedOperator = false,
   }) {
     return Task(
       id: id,
@@ -428,6 +458,13 @@ class Task {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: completedAt,
+      // Οι σφραγίδες χρήστη ΔΕΝ είναι πεδία φόρμας — αντιγράφονται πάντα.
+      // Χωρίς αυτό, η πρώτη αποθήκευση από τη φόρμα θα ξέγραφε σιωπηλά ποιος
+      // άνοιξε την εκκρεμότητα: το toMap γράφει τη στήλη ακόμη και κενή.
+      createdByOperatorId: createdByOperatorId,
+      assignedOperatorId: clearAssignedOperator
+          ? null
+          : (assignedOperatorId ?? this.assignedOperatorId),
       origin: origin,
       isDeleted: isDeleted,
       callerLinkedDeleted: callerLinkedDeleted,
@@ -455,7 +492,9 @@ class Task {
     return cleanDescription
         .split('\n')
         .where((line) => line.startsWith(validationHintPrefix.trim()))
-        .map((line) => line.replaceFirst(validationHintPrefix.trim(), '').trim())
+        .map(
+          (line) => line.replaceFirst(validationHintPrefix.trim(), '').trim(),
+        )
         .where((line) => line.isNotEmpty)
         .toList();
   }

@@ -96,9 +96,8 @@ class CallsDeletionRepository {
             date: (row['date'] as String?)?.trim() ?? '',
             time: (row['time'] as String?)?.trim() ?? '',
             taskTitles: titlesByCall[callId] ?? const <String>[],
-            lansweeperTicketIds:
-                (ticketsByCall[callId]?.toList() ?? <String>[])
-                  ..sort(compareTicketIds),
+            lansweeperTicketIds: (ticketsByCall[callId]?.toList() ?? <String>[])
+              ..sort(compareTicketIds),
             externalLinks: linkCounts[callId] ?? 0,
           ),
     ]);

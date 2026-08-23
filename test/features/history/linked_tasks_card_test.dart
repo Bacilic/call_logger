@@ -50,7 +50,10 @@ void main() {
   testWidgets('πολλές εκκρεμότητες: πληθυντικός με το πλήθος', (tester) async {
     await _pumpCard(
       tester,
-      tasks: [_task(), _task(id: 2, title: 'Έλεγχος καλωδίωσης')],
+      tasks: [
+        _task(),
+        _task(id: 2, title: 'Έλεγχος καλωδίωσης'),
+      ],
     );
 
     expect(
@@ -83,7 +86,10 @@ void main() {
     Task? opened;
     await _pumpCard(
       tester,
-      tasks: [_task(), _task(id: 2, title: 'Δεύτερη')],
+      tasks: [
+        _task(),
+        _task(id: 2, title: 'Δεύτερη'),
+      ],
       onOpen: (task) => opened = task,
     );
 

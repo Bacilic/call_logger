@@ -65,10 +65,8 @@ void main() {
     });
   }
 
-  Map<String, dynamic> rowFor(
-    List<Map<String, dynamic>> rows,
-    String issue,
-  ) => rows.firstWhere((r) => r['issue'] == issue);
+  Map<String, dynamic> rowFor(List<Map<String, dynamic>> rows, String issue) =>
+      rows.firstWhere((r) => r['issue'] == issue);
 
   group('ενδείξεις σύνδεσης στη γραμμή ιστορικού', () {
     test('η κλήση με ανοιχτή εκκρεμότητα σημειώνεται, η άλλη όχι', () async {
@@ -91,23 +89,26 @@ void main() {
       expect(rowFor(rows, 'Σβησμένη εκκρεμότητα')['has_open_task'], 0);
     });
 
-    test('η γραμμή κουβαλά την κατάσταση Lansweeper και τον αριθμό αιτήματος', () async {
-      await insertCall(
-        issue: 'Καταχωρημένη',
-        lansweeperState: 'sent',
-        ticketId: '7001',
-      );
-      await insertCall(issue: 'Εξαιρεμένη', lansweeperState: 'excluded');
-      await insertCall(issue: 'Καθαρή');
+    test(
+      'η γραμμή κουβαλά την κατάσταση Lansweeper και τον αριθμό αιτήματος',
+      () async {
+        await insertCall(
+          issue: 'Καταχωρημένη',
+          lansweeperState: 'sent',
+          ticketId: '7001',
+        );
+        await insertCall(issue: 'Εξαιρεμένη', lansweeperState: 'excluded');
+        await insertCall(issue: 'Καθαρή');
 
-      final rows = await calls.getHistoryCalls();
+        final rows = await calls.getHistoryCalls();
 
-      expect(rowFor(rows, 'Καταχωρημένη')['lansweeper_state'], 'sent');
-      expect(rowFor(rows, 'Καταχωρημένη')['lansweeper_ticket_id'], '7001');
-      expect(rowFor(rows, 'Εξαιρεμένη')['lansweeper_state'], 'excluded');
-      expect(rowFor(rows, 'Καθαρή')['lansweeper_state'], 'unsent');
-      expect(rowFor(rows, 'Καθαρή')['lansweeper_ticket_id'], '');
-    });
+        expect(rowFor(rows, 'Καταχωρημένη')['lansweeper_state'], 'sent');
+        expect(rowFor(rows, 'Καταχωρημένη')['lansweeper_ticket_id'], '7001');
+        expect(rowFor(rows, 'Εξαιρεμένη')['lansweeper_state'], 'excluded');
+        expect(rowFor(rows, 'Καθαρή')['lansweeper_state'], 'unsent');
+        expect(rowFor(rows, 'Καθαρή')['lansweeper_ticket_id'], '');
+      },
+    );
 
     test('η SQL κανονικοποίηση συμφωνεί με τον κανόνα της Dart', () async {
       // Δύο διατυπώσεις του ίδιου κανόνα: αν αποκλίνουν, η ίδια κλήση πέφτει
@@ -148,16 +149,19 @@ void main() {
   });
 
   group('φίλτρα «μόνο με ουρά»', () {
-    test('onlyWithTask κρατά μόνο τις κλήσεις με ανοιχτή εκκρεμότητα', () async {
-      final withTask = await insertCall(issue: 'Με εκκρεμότητα');
-      await insertCall(issue: 'Σκέτη');
-      await insertTask(callId: withTask);
+    test(
+      'onlyWithTask κρατά μόνο τις κλήσεις με ανοιχτή εκκρεμότητα',
+      () async {
+        final withTask = await insertCall(issue: 'Με εκκρεμότητα');
+        await insertCall(issue: 'Σκέτη');
+        await insertTask(callId: withTask);
 
-      final rows = await calls.getHistoryCalls(onlyWithTask: true);
+        final rows = await calls.getHistoryCalls(onlyWithTask: true);
 
-      expect(rows, hasLength(1));
-      expect(rows.single['issue'], 'Με εκκρεμότητα');
-    });
+        expect(rows, hasLength(1));
+        expect(rows.single['issue'], 'Με εκκρεμότητα');
+      },
+    );
 
     test('το φίλτρο κατάστασης κρατά μόνο τη ζητούμενη κατάσταση', () async {
       await insertCall(issue: 'Καταχωρημένη', lansweeperState: 'sent');
@@ -195,10 +199,10 @@ void main() {
         lansweeperState: LansweeperSyncState.unsent,
       );
 
-      expect(unsent.map((r) => r['issue']), containsAll(<String>[
-        'Κενή κατάσταση',
-        'Άγνωστη κατάσταση',
-      ]));
+      expect(
+        unsent.map((r) => r['issue']),
+        containsAll(<String>['Κενή κατάσταση', 'Άγνωστη κατάσταση']),
+      );
     });
 
     test('κενό φίλτρο κατάστασης δεν περιορίζει τίποτα', () async {
