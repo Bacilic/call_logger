@@ -93,4 +93,33 @@ class SettingsRepository {
       'value': value,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
+
+  /// Ατομική αντικατάσταση με σύγκριση: γράφει τη [newValue] ΜΟΝΟ αν η
+  /// αποθηκευμένη τιμή είναι ακόμη η [expectedValue] (ή δεν υπάρχει καθόλου
+  /// γραμμή, όταν `expectedValue == null`). Επιστρέφει true αν κέρδισε.
+  ///
+  /// Είναι η «δέσμευση» δύο ταυτόχρονων εγγραφέων της ίδιας ρύθμισης (π.χ.
+  /// δύο μηχανήματα που οφείλουν αυτόματο αντίγραφο): όποιος χάσει την κούρσα
+  /// βλέπει false και κάνει πίσω, αντί να πατήσει σιωπηλά τη φρέσκια τιμή.
+  Future<bool> compareAndSetSetting(
+    String key,
+    String? expectedValue,
+    String newValue, {
+    DatabaseExecutor? executor,
+  }) async {
+    final e = executor ?? db;
+    await _ensureTable(executor: e);
+    if (expectedValue == null) {
+      final inserted = await e.rawUpdate(
+        'INSERT OR IGNORE INTO app_settings(key, value) VALUES(?, ?)',
+        [key, newValue],
+      );
+      return inserted > 0;
+    }
+    final updated = await e.rawUpdate(
+      'UPDATE app_settings SET value = ? WHERE key = ? AND value = ?',
+      [newValue, key, expectedValue],
+    );
+    return updated > 0;
+  }
 }

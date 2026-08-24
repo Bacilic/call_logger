@@ -1,4 +1,14 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+/// Πόσα widget βαθιά καταγράφεται η αλυσίδα προέλευσης.
+///
+/// Το Flutter τυπώνει μόνο **12** από μόνο του, και τα δώδεκα πρώτα είναι
+/// σχεδόν πάντα δικά του: το `Material`, το `SafeArea`, το `MediaQuery` και τα
+/// υπόλοιπα ενδιάμεσα που παρεμβάλλει το ίδιο. Η αλυσίδα κόβεται με «⋯» ακριβώς
+/// εκεί όπου θα άρχιζαν τα **δικά μας** ονόματα — δηλαδή εκεί όπου αρχίζει η
+/// χρησιμότητά της. Με μεγαλύτερο βάθος, η εγγραφή λέει «ξεχείλισε μέσα στο
+/// TasksEmptyState» αντί για «ξεχείλισε κάπου κατά 9 pixel».
+const int _kCreatorChainDepth = 40;
 
 /// True αν το μήνυμα περιγράφει σφάλμα διάταξης (overflow / RenderBox).
 bool isLayoutErrorMessage(String message) {
@@ -30,6 +40,16 @@ String? layoutErrorDiagnostics(FlutterErrorDetails details) {
   final information =
       details.informationCollector?.call() ?? const <DiagnosticsNode>[];
   for (final node in information) {
+    // Η αλυσίδα προέλευσης, ξαναχτισμένη από την πηγή αντί για το έτοιμο
+    // κείμενο: το έτοιμο έρχεται ήδη κομμένο στα 12 επίπεδα.
+    final value = node.value;
+    if (value is DebugCreator) {
+      lines.add(
+        'debugCreator: ${value.element.debugGetCreatorChain(_kCreatorChainDepth)}',
+      );
+      continue;
+    }
+
     final text = node.toStringDeep().trim();
     if (text.isEmpty) continue;
     if (text.startsWith('debugCreator:')) {

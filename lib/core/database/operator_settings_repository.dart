@@ -47,6 +47,27 @@ class OperatorSettingsRepository {
     );
   }
 
+  /// Οι τιμές ΟΛΩΝ των χρηστών για ένα κλειδί (`operator_id` → τιμή) — για
+  /// μεταπτώσεις κλειδιών που παύουν να είναι προσωπικά.
+  Future<Map<int, String?>> getValuesForKey(String key) async {
+    final rows = await db.query(
+      tableName,
+      columns: ['operator_id', 'value'],
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    return {
+      for (final row in rows)
+        row['operator_id'] as int: row['value'] as String?,
+    };
+  }
+
+  /// Σβήνει το [key] από ΟΛΟΥΣ τους χρήστες — όταν ένα κλειδί επιστρέφει στα
+  /// κοινά, τα προσωπικά αντίτυπα είναι νεκρό βάρος που μόνο σύγχυση σπέρνει.
+  Future<void> deleteKeyForAllOperators(String key) async {
+    await db.delete(tableName, where: 'key = ?', whereArgs: [key]);
+  }
+
   /// Όλες οι προσωπικές ρυθμίσεις του χρήστη — για την εξαγωγή προφίλ.
   Future<Map<String, String?>> getAllForOperator(int operatorId) async {
     final rows = await db.query(

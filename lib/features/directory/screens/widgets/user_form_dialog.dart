@@ -55,6 +55,22 @@ class UserFormDialog extends ConsumerStatefulWidget {
 /// Δημόσιο State: τα πεδία/στιγμιότυπα της φόρμας είναι ορατά στους
 /// συνεργάτες της (φρουρός κλεισίματος, πολιτική τηλεφώνων, αποθήκευση).
 class UserFormDialogState extends ConsumerState<UserFormDialog> {
+  /// Κλείνει **αυτή** τη φόρμα — ποτέ ό,τι τυχαίνει να είναι από πάνω της.
+  ///
+  /// Το `Navigator.pop()` κλείνει την **κορυφαία** διαδρομή, όχι τη δική μας.
+  /// Συνήθως ταυτίζονται· παύουν να ταυτίζονται μόλις μείνει ανοιχτός ένας
+  /// θυγατρικός διάλογος επιβεβαίωσης. Τότε η φόρμα κλείνει τον ξένο διάλογο
+  /// δίνοντάς του **λάθος τύπο απάντησης**, και η εφαρμογή σταματά με σφάλμα.
+  ///
+  /// Όταν κάποιος θυγατρικός διάλογος είναι ακόμη ανοιχτός, **δεν κλείνουμε
+  /// τίποτα**: ο χρήστης απαντά πρώτα εκεί.
+  void closeForm([bool? result]) {
+    if (!mounted) return;
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+    Navigator.of(context).pop(result);
+  }
+
   /// Φρουρός κλεισίματος (dirty έλεγχος + διάλογος αλλαγών).
   late final UserFormDismissGuard dismissGuard = UserFormDismissGuard(this);
 

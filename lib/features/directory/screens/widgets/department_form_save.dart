@@ -239,7 +239,7 @@ class DepartmentFormSave {
               isNew: true,
             );
       host.widget.onSaved?.call();
-      Navigator.of(host.context).pop(true);
+      host.closeForm(true);
       showSaveConfirmationSnackBar(host.context, saveMessage);
     } on DepartmentExistsException catch (e) {
       if (!host.mounted) return;
@@ -277,7 +277,7 @@ class DepartmentFormSave {
             );
             if (!host.mounted) return;
             host.widget.onSaved?.call();
-            Navigator.of(host.context).pop(true);
+            host.closeForm(true);
             final restoreMessage = 'Επαναφέρθηκε το τμήμα «$name»';
             ScaffoldMessenger.of(host.context).showSnackBar(
               SnackBar(

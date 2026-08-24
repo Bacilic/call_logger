@@ -54,6 +54,9 @@ Future<String?> resolveValidBackupDestinationHint({
   return null;
 }
 
+/// Διαβάζει την ΚΟΙΝΗ θέση ρυθμίσεων μιας **ξένης** (κλειστής) βάσης με ωμό
+/// ερώτημα — συνειδητή εξαίρεση από την πύλη `ActiveBackupSettings`: για βάση
+/// που δεν έχει ανοίξει δεν υπάρχει «συνδεδεμένος χρήστης» να ρωτηθεί.
 Future<String?> _readBackupDestinationFromDatabaseFile(String dbPath) async {
   final file = File(dbPath);
   try {

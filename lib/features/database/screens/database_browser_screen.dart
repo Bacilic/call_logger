@@ -20,6 +20,7 @@ import '../../../core/services/settings_service.dart';
 import '../models/database_stats.dart';
 import '../providers/database_browser_stats_provider.dart';
 import '../services/database_stats_service.dart';
+import '../widgets/backup_health_stat_rows.dart';
 import '../widgets/database_label_dialog.dart';
 import '../widgets/database_maintenance_panel.dart';
 import '../widgets/table_preview_grid.dart';
@@ -737,6 +738,9 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
       ],
       statRow('Μέγεθος αρχείου', sizeLabel),
       statRow('Τελευταίο αντίγραφο ασφαλείας', backupText),
+      // Φάση 7: η υγεία των αντιγράφων ορατή σε ΟΛΟΥΣ — αφύλακτες αλλαγές,
+      // καθυστερήσεις, τελευταίο πλήρες.
+      const BackupHealthStatRows(labelWidth: 200),
       Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Row(

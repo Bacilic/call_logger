@@ -4,9 +4,8 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/remote_tools_repository.dart';
-import '../../../core/database/settings_repository.dart';
 import '../../../core/services/settings_service.dart';
-import '../../database/models/database_backup_settings.dart';
+import '../../database/services/active_backup_settings.dart';
 
 /// Έλεγχος ρυθμισμένων διαδρομών: ποιες από τις διαδρομές που κουβαλούν οι
 /// ρυθμίσεις ΔΕΝ υπάρχουν σε αυτό το μηχάνημα.
@@ -97,11 +96,8 @@ Future<List<ConfiguredPathEntry>> loadConfiguredPathEntries() async {
 
   // ---- Ρυθμίσεις ΜΕΣΑ στη βάση: ταξιδεύουν δουλειά ↔ σπίτι.
   try {
-    final db = await DatabaseHelper.instance.database;
-    final rawBackup = await SettingsRepository(
-      db,
-    ).getSetting(DatabaseBackupSettings.appSettingsKey);
-    final backup = DatabaseBackupSettings.fromJsonString(rawBackup);
+    // Ο φάκελος αντιγράφων του συνδεδεμένου χρήστη — ίδια πύλη με την οθόνη.
+    final backup = await ActiveBackupSettings.read();
     entries.add(
       ConfiguredPathEntry(
         settingName: 'Φάκελος αντιγράφων ασφαλείας',

@@ -114,6 +114,26 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   /// Ροή αποθήκευσης (μοντέλο, εγγραφή, επαναφορά, μηνύματα).
   late final DepartmentFormSave saveFlow = DepartmentFormSave(this);
 
+  /// Κλείνει **αυτή** τη φόρμα — ποτέ ό,τι τυχαίνει να είναι από πάνω της.
+  ///
+  /// Το `Navigator.pop()` κλείνει την **κορυφαία** διαδρομή, όχι τη δική μας.
+  /// Συνήθως ταυτίζονται· παύουν να ταυτίζονται μόλις μείνει ανοιχτός ένας
+  /// θυγατρικός διάλογος (συγκρούσεις κοινόχρηστων, επιβεβαιώσεις αφαίρεσης).
+  /// Τότε η φόρμα έκλεινε τον ξένο διάλογο δίνοντάς του **λάθος τύπο
+  /// απάντησης**, και η εφαρμογή σταματούσε με σφάλμα — αντί απλώς να μην
+  /// κλείσει. Πραγματικό σφάλμα χρήστη 24/08/2026: `pop(true)` έπεσε πάνω σε
+  /// `DialogRoute<Map<String, _ConflictResolutionChoice>>`.
+  ///
+  /// Όταν κάποιος θυγατρικός διάλογος είναι ακόμη ανοιχτός, **δεν κλείνουμε
+  /// τίποτα**: ο χρήστης απαντά πρώτα εκεί. Καλύτερα να μη συμβεί το κλείσιμο
+  /// παρά να συμβεί σε λάθος παράθυρο.
+  void closeForm([bool? result]) {
+    if (!mounted) return;
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+    Navigator.of(context).pop(result);
+  }
+
   final formKey = GlobalKey<FormState>();
   late final SpellCheckController nameController;
   late final SpellCheckController buildingController;

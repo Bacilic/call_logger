@@ -142,7 +142,7 @@ class DepartmentFormDismissGuard {
 
   Future<void> requestClose() async {
     if (!_needsDismissConfirmation()) {
-      if (host.mounted) Navigator.of(host.context).pop();
+      host.closeForm();
       return;
     }
     final action = await _showUnsavedChangesDialog();
@@ -151,7 +151,7 @@ class DepartmentFormDismissGuard {
       case _UnsavedChangesAction.save:
         await host.saveFlow.save();
       case _UnsavedChangesAction.discard:
-        Navigator.of(host.context).pop();
+        host.closeForm();
       case _UnsavedChangesAction.continueEditing:
       case null:
         break;
@@ -160,6 +160,6 @@ class DepartmentFormDismissGuard {
 
   /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
   void cancelAndClose() {
-    if (host.mounted) Navigator.of(host.context).pop();
+    host.closeForm();
   }
 }

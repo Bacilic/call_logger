@@ -50,14 +50,13 @@ class ProfileSettingKey {
 /// Η μετακόμιση της Φάσης 2 γίνεται τμηματικά: κάθε κλειδί που γίνεται
 /// προσωπικό προστίθεται εδώ και οι αναγνώστες/εγγραφείς του περνούν από το
 /// [ProfileSettings]. Ό,τι δεν είναι εδώ, ζει ακόμη στην παλιά του θέση.
+///
+/// Κλειδί μπορεί και να **φύγει** από εδώ: το δέμα των αντιγράφων ασφαλείας
+/// (`database_backup_settings_v1`) υπήρξε προσωπικό και επέστρεψε στα κοινά
+/// στη Φάση 2 του μηχανισμού αντιγράφων — μία ρύθμιση της βάσης, κοινή για
+/// όλους, ώστε ο εφεδρικός να εκτελεί ό,τι όρισε ο διαχειριστής. Τη μετάπτωση
+/// της επιστροφής την κάνει η πύλη `ActiveBackupSettings`.
 abstract final class ProfileSettingKeys {
-  /// Το «δέμα» των αντιγράφων ασφαλείας: πρόγραμμα, φάκελος, διατήρηση,
-  /// ιστορικό, τελευταία κατάσταση — ενιαίο JSON, όπως ήταν και στα κοινά.
-  static const ProfileSettingKey databaseBackupSettings = ProfileSettingKey(
-    'database_backup_settings_v1',
-    legacySource: ProfileSettingLegacySource.sharedForAdmin,
-  );
-
   // ── Προτιμήσεις εμφάνισης ────────────────────────────────────────────────
   // Σήμερα ζουν στον υπολογιστή: όποιος πρωτοκαθίσει κληρονομεί ό,τι ίσχυε
   // εκεί, και από εκεί και πέρα οι προτιμήσεις τον ακολουθούν.
@@ -315,7 +314,6 @@ abstract final class ProfileSettingKeys {
   );
 
   static const List<ProfileSettingKey> all = [
-    databaseBackupSettings,
     showActiveTimer,
     showTasksBadge,
     navRailShowLabels,

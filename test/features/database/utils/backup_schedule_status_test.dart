@@ -1,3 +1,9 @@
+// Κατάσταση αυτόματων αντιγράφων για το UI (Φάση 3: μετρητής αλλαγών).
+// Ελέγχεται η υπόσχεση των κειμένων — τι λέει η οθόνη και πότε — όχι η
+// απόφαση πυροδότησης (εκείνη ζει στο backup_trigger_decision_test.dart).
+//
+//   flutter test test/features/database/utils/backup_schedule_status_test.dart
+
 import 'package:call_logger/features/database/models/database_backup_settings.dart';
 import 'package:call_logger/features/database/utils/backup_destination_folder_validator.dart';
 import 'package:call_logger/features/database/utils/backup_schedule_status.dart';
@@ -5,203 +11,121 @@ import 'package:call_logger/features/database/utils/backup_schedule_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 DatabaseBackupSettings _settings({
-  List<int> days = const [6],
-  String time = '18:42',
+  String destination = r'C:\Backups',
+  bool enabled = true,
+  int threshold = 100,
+  int minSpacing = 15,
+  int maxWait = 240,
   DateTime? lastAttempt,
   DateTime? lastManual,
-  DateTime? anchor,
   String lastStatus = BackupScheduleStatus.none,
-}) => DatabaseBackupSettings(
-  destinationDirectory: r'C:\Backups',
-  namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-  zipOutput: false,
-  includeMapImagesInBackup: false,
-  includeToolImages: true,
-  includeLexicon: false,
-  includeLampDb: false,
-  backupOnExit: true,
-  interval: DatabaseBackupInterval.never,
-  backupDays: days,
-  backupTime: time,
+}) => DatabaseBackupSettings.defaults().copyWith(
+  destinationDirectory: destination,
+  backupOnExit: enabled,
+  changeThreshold: threshold,
+  minSpacingMinutes: minSpacing,
+  maxWaitMinutes: maxWait,
   lastBackupAttempt: lastAttempt,
   lastManualBackupAttempt: lastManual,
-  scheduleAnchorAt: anchor,
   lastBackupStatus: lastStatus,
-  retentionMaxCopiesEnabled: false,
-  retentionMaxCopies: 30,
-  retentionMaxAgeEnabled: false,
-  retentionMaxAgeDays: 60,
 );
 
 void main() {
-  test('nextScheduleInstant μελλοντική ώρα σήμερα', () {
-    final now = DateTime(2026, 6, 6, 18, 30);
-    final next = BackupScheduleStatusFormatter.nextScheduleInstant(now, const [
-      6,
-    ], '18:42');
-    expect(next, DateTime(2026, 6, 6, 18, 42));
-  });
+  final now = DateTime(2026, 8, 24, 12, 0);
 
-  test(
-    'nextScheduleInstant πηγαίνει στην επόμενη ημέρα αν έχει ήδη τρέξει σήμερα',
-    () {
-      final now = DateTime(2026, 6, 6, 18, 50);
-      final last = DateTime(2026, 6, 6, 18, 12);
-      final next = BackupScheduleStatusFormatter.nextScheduleInstant(
-        now,
-        const [6],
-        '18:42',
-        lastBackupAttempt: last,
+  group('build — κατάσταση μετρητή', () {
+    test('απενεργοποιημένα: μόνο η υπόδειξη, καμία πρόβλεψη', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(enabled: false),
+        pendingChanges: 50,
+        now: now,
       );
-      expect(next, DateTime(2026, 6, 13, 18, 42));
-    },
-  );
+      expect(info.hintText, contains('απενεργοποιημένα'));
+      expect(info.nextBackupText, isNull);
+    });
 
-  test('build εμφανίζει προειδοποίηση όταν έχει ήδη τρέξει σήμερα', () {
-    final info = BackupScheduleStatusFormatter.build(
-      settings: _settings(
-        lastAttempt: DateTime(2026, 6, 6, 18, 12),
-        lastStatus: BackupScheduleStatus.success,
-      ),
-      now: DateTime(2026, 6, 6, 18, 50),
-    );
-    expect(info.hintText, contains('ήδη εκτελεστεί'));
-    expect(info.nextBackupText, isNot(contains('εντός του επόμενου λεπτού')));
-  });
+    test('χωρίς φάκελο προορισμού: προειδοποίηση', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(destination: ''),
+        pendingChanges: 50,
+        now: now,
+      );
+      expect(info.hintText, contains('φάκελο προορισμού'));
+      expect(info.hintIsWarning, isTrue);
+    });
 
-  test(
-    'shouldMarkScheduleMissed false όταν έχει τρέξει προγραμματισμένο σήμερα',
-    () {
-      final now = DateTime(2026, 6, 6, 18, 50);
-      expect(
-        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-          _settings(
-            time: '18:42',
-            lastAttempt: DateTime(2026, 6, 6, 18, 12),
-            lastStatus: BackupScheduleStatus.success,
-          ),
-          now,
+    test('καμία αλλαγή: το λέει καθαρά και δεν υπόσχεται αντίγραφο', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(lastAttempt: now.subtract(const Duration(hours: 2))),
+        pendingChanges: 0,
+        now: now,
+      );
+      expect(info.lastBackupText, contains('καμία — δεν χρειάζεται αντίγραφο'));
+      expect(info.nextBackupText, contains('όταν υπάρξουν αλλαγές'));
+      expect(info.nextIsImminent, isFalse);
+    });
+
+    test('αλλαγές κάτω από το κατώφλι: δείχνει κατώφλι ΚΑΙ προθεσμία', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(
+          lastAttempt: DateTime(2026, 8, 24, 11, 0),
         ),
-        isFalse,
+        pendingChanges: 7,
+        now: now,
       );
-    },
-  );
+      expect(info.lastBackupText, contains('Αφύλακτες αλλαγές: 7'));
+      expect(info.nextBackupText, contains('στις 100 αλλαγές'));
+      // Προθεσμία: 11:00 + 240΄ = 15:00.
+      expect(info.nextBackupText, contains('15:00'));
+    });
 
-  test(
-    'shouldMarkScheduleMissed false σε μη προγραμματισμένη ημέρα με καλυμμένο slot',
-    () {
-      // 2026-06-07 = Κυριακή (7), πρόγραμμα μόνο Σάββατο (6)·
-      // το slot του Σαββάτου καλύφθηκε (προσπάθεια μετά τις 18:42).
-      expect(
-        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-          _settings(
-            days: const [6],
-            time: '18:42',
-            lastAttempt: DateTime(2026, 6, 6, 18, 45),
-            lastStatus: BackupScheduleStatus.none,
-          ),
-          DateTime(2026, 6, 7, 10, 0),
+    test('κατώφλι γεμάτο: «εντός του επόμενου λεπτού»', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(
+          lastAttempt: now.subtract(const Duration(minutes: 30)),
         ),
-        isFalse,
+        pendingChanges: 120,
+        now: now,
       );
-    },
-  );
+      expect(info.nextBackupText, contains('εντός του επόμενου λεπτού'));
+      expect(info.nextIsImminent, isTrue);
+    });
 
-  test('shouldMarkScheduleMissed false Κυριακή με χειροκίνητο Σάββατο', () {
-    final settings = DatabaseBackupSettings(
-      destinationDirectory: r'C:\Backups',
-      namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-      zipOutput: false,
-      includeMapImagesInBackup: false,
-      includeToolImages: true,
-      includeLexicon: false,
-      includeLampDb: false,
-      backupOnExit: true,
-      interval: DatabaseBackupInterval.never,
-      backupDays: const [6],
-      backupTime: '18:42',
-      lastBackupAttempt: DateTime(2026, 6, 6, 18, 15),
-      lastManualBackupAttempt: DateTime(2026, 6, 6, 19, 46),
-      lastBackupStatus: BackupScheduleStatus.missed,
-      retentionMaxCopiesEnabled: false,
-      retentionMaxCopies: 30,
-      retentionMaxAgeEnabled: false,
-      retentionMaxAgeDays: 60,
-    );
-    expect(
-      BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-        settings,
-        DateTime(2026, 6, 7, 10, 0),
-      ),
-      isFalse,
-    );
-    expect(
-      BackupScheduleStatusFormatter.shouldShowBackupMissedAlert(
-        settings,
-        DateTime(2026, 6, 7, 10, 0),
-      ),
-      isFalse,
-    );
-  });
-
-  test('shouldMarkScheduleMissed false πριν την προγραμματισμένη ώρα', () {
-    expect(
-      BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-        _settings(days: const [6], time: '18:42'),
-        DateTime(2026, 6, 6, 18, 30),
-      ),
-      isFalse,
-    );
-  });
-
-  test(
-    'shouldMarkScheduleMissed true Σάββατο μετά την ώρα χωρίς αντίγραφο',
-    () {
-      expect(
-        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-          _settings(days: const [6], time: '18:42'),
-          DateTime(2026, 6, 6, 19, 0),
+    test('φρέσκο αντίγραφο με γεμάτο κατώφλι: δείχνει το «όχι πριν»', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(
+          lastAttempt: DateTime(2026, 8, 24, 11, 50),
         ),
-        isTrue,
+        pendingChanges: 120,
+        now: now,
       );
-    },
-  );
+      // 11:50 + 15΄ = 12:05.
+      expect(info.nextBackupText, contains('όχι πριν τις 12:05'));
+      expect(info.nextIsImminent, isFalse);
+    });
 
-  test('shouldMarkScheduleMissed false με χειροκίνητο σήμερα', () {
-    final now = DateTime(2026, 6, 6, 18, 50);
-    final settings = DatabaseBackupSettings(
-      destinationDirectory: r'C:\Backups',
-      namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-      zipOutput: false,
-      includeMapImagesInBackup: false,
-      includeToolImages: true,
-      includeLexicon: false,
-      includeLampDb: false,
-      backupOnExit: true,
-      interval: DatabaseBackupInterval.never,
-      backupDays: const [6],
-      backupTime: '18:42',
-      lastBackupAttempt: null,
-      lastManualBackupAttempt: DateTime(2026, 6, 6, 17, 30),
-      lastBackupStatus: BackupScheduleStatus.none,
-      retentionMaxCopiesEnabled: false,
-      retentionMaxCopies: 30,
-      retentionMaxAgeEnabled: false,
-      retentionMaxAgeDays: 60,
-    );
-    expect(
-      BackupScheduleStatusFormatter.shouldMarkScheduleMissed(settings, now),
-      isFalse,
-    );
-  });
+    test('εργασία σε εξέλιξη: το λέει αντί για πρόβλεψη', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(),
+        pendingChanges: 500,
+        now: now,
+        backupJobRunning: true,
+      );
+      expect(info.nextBackupText, contains('σε εξέλιξη τώρα'));
+    });
 
-  test('build imminent όταν η ώρα έχει περάσει και δεν έχει τρέξει σήμερα', () {
-    final info = BackupScheduleStatusFormatter.build(
-      settings: _settings(),
-      now: DateTime(2026, 6, 6, 18, 43),
-    );
-    expect(info.nextIsImminent, isTrue);
-    expect(info.nextBackupText, contains('επόμενου λεπτού'));
+    test('αποτυχία: προειδοποιητική υπόδειξη', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(
+          lastAttempt: now.subtract(const Duration(minutes: 30)),
+          lastStatus: BackupScheduleStatus.failed,
+        ),
+        pendingChanges: 3,
+        now: now,
+      );
+      expect(info.hintText, contains('απέτυχε'));
+      expect(info.hintIsWarning, isTrue);
+    });
   });
 
   group('build lastBackupText', () {
@@ -211,6 +135,7 @@ void main() {
           lastAttempt: DateTime(2026, 6, 6, 18, 42),
           lastStatus: BackupScheduleStatus.success,
         ),
+        pendingChanges: 0,
         now: DateTime(2026, 6, 6, 19, 0),
       );
       expect(info.lastBackupText, contains('— επιτυχία'));
@@ -223,6 +148,7 @@ void main() {
           lastAttempt: DateTime(2026, 6, 6, 18, 15),
           lastStatus: BackupScheduleStatus.none,
         ),
+        pendingChanges: 0,
         now: DateTime(2026, 6, 6, 19, 0),
       );
       expect(info.lastBackupText, contains('χωρίς καταγεγραμμένο αποτέλεσμα'));
@@ -230,32 +156,99 @@ void main() {
     });
 
     test('none με νεότερο χειροκίνητο — αντικατάσταση', () {
-      final settings = DatabaseBackupSettings(
-        destinationDirectory: r'C:\Backups',
-        namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-        zipOutput: false,
-        includeMapImagesInBackup: false,
-        includeToolImages: true,
-        includeLexicon: false,
-        includeLampDb: false,
-        backupOnExit: true,
-        interval: DatabaseBackupInterval.never,
-        backupDays: const [6],
-        backupTime: '18:42',
-        lastBackupAttempt: DateTime(2026, 6, 6, 18, 15),
-        lastManualBackupAttempt: DateTime(2026, 6, 6, 19, 46),
-        lastBackupStatus: BackupScheduleStatus.none,
-        retentionMaxCopiesEnabled: false,
-        retentionMaxCopies: 30,
-        retentionMaxAgeEnabled: false,
-        retentionMaxAgeDays: 60,
-      );
       final info = BackupScheduleStatusFormatter.build(
-        settings: settings,
+        settings: _settings(
+          lastAttempt: DateTime(2026, 6, 6, 18, 15),
+          lastManual: DateTime(2026, 6, 6, 19, 46),
+          lastStatus: BackupScheduleStatus.none,
+        ),
+        pendingChanges: 0,
         now: DateTime(2026, 6, 6, 20, 0),
       );
       expect(info.lastBackupText, contains('αντικαταστάθηκε από χειροκίνητο'));
       expect(info.lastBackupText, isNot(contains('— —')));
+    });
+  });
+
+  group('statsBackupHealth — η γραμμή της κάρτας Στατιστικών (Φάση 7)', () {
+    test('απενεργοποιημένα: προτείνει ενεργοποίηση, με προειδοποίηση', () {
+      final h = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(enabled: false),
+        pendingChanges: 10,
+        canManageBackups: false,
+        now: now,
+      );
+      expect(h.text, contains('απενεργοποιημένα'));
+      expect(h.isWarning, isTrue);
+    });
+
+    test('καμία αλλαγή: ήσυχο πράσινο μήνυμα', () {
+      final h = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(lastAttempt: now.subtract(const Duration(hours: 1))),
+        pendingChanges: 0,
+        canManageBackups: false,
+        now: now,
+      );
+      expect(h.text, contains('καμία'));
+      expect(h.isWarning, isFalse);
+    });
+
+    test('καθυστέρηση πέρα από τη μέγιστη αναμονή: κόκκινο και για τους δύο, '
+        'με διαφορετική οδηγία', () {
+      final overdueAt = now.subtract(const Duration(minutes: 250));
+      final admin = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(lastAttempt: overdueAt),
+        pendingChanges: 5,
+        canManageBackups: true,
+        now: now,
+      );
+      expect(admin.isWarning, isTrue);
+      expect(admin.text, contains('καθυστερήσει'));
+
+      final colleague = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(lastAttempt: overdueAt),
+        pendingChanges: 5,
+        canManageBackups: false,
+        now: now,
+      );
+      expect(colleague.isWarning, isTrue);
+      expect(colleague.text, contains('ενημερώστε τον διαχειριστή'));
+    });
+
+    test('φυσιολογική εκκρεμότητα: πρόβλεψη για τον αρμόδιο, «το χειρίζεται '
+        'ο διαχειριστής» για τον συνάδελφο', () {
+      final lastAt = DateTime(2026, 8, 24, 11, 0);
+      final admin = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(lastAttempt: lastAt),
+        pendingChanges: 7,
+        canManageBackups: true,
+        now: now,
+      );
+      expect(admin.isWarning, isFalse);
+      expect(admin.text, contains('στις 100 αλλαγές'));
+      expect(admin.text, contains('15:00'));
+
+      final colleague = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(lastAttempt: lastAt),
+        pendingChanges: 7,
+        canManageBackups: false,
+        now: now,
+      );
+      expect(colleague.isWarning, isFalse);
+      expect(colleague.text, contains('χειρίζεται'));
+    });
+
+    test('ακριβώς στη μέγιστη αναμονή δεν κοκκινίζει — η ανοχή αφήνει τον '
+        'χρονιστή να προλάβει', () {
+      final h = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(
+          lastAttempt: now.subtract(const Duration(minutes: 241)),
+        ),
+        pendingChanges: 5,
+        canManageBackups: true,
+        now: now,
+      );
+      expect(h.isWarning, isFalse);
     });
   });
 
@@ -299,206 +292,6 @@ void main() {
         ),
       );
       expect(ok, contains('για τη βάση «hosp»'));
-    });
-  });
-
-  group('χαμένο slot προηγούμενης ημέρας (εφαρμογή κλειστή τη σχετική ώρα)', () {
-    // Πρόγραμμα: Σάββατο 18:42. Το Σάββατο 2026-06-06 η εφαρμογή έμεινε
-    // κλειστή· το τελευταίο αντίγραφο είναι από το προηγούμενο Σάββατο.
-    test('αναφέρεται ως χαμένο στην εκκίνηση της Δευτέρας', () {
-      expect(
-        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-          _settings(
-            days: const [6],
-            time: '18:42',
-            lastAttempt: DateTime(2026, 5, 30, 18, 45),
-            lastStatus: BackupScheduleStatus.success,
-          ),
-          DateTime(2026, 6, 8, 9, 0),
-        ),
-        isTrue,
-      );
-    });
-
-    test('δεν αναφέρεται όταν έγινε χειροκίνητο την ημέρα του slot', () {
-      expect(
-        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-          _settings(
-            days: const [6],
-            time: '18:42',
-            lastAttempt: DateTime(2026, 5, 30, 18, 45),
-            lastManual: DateTime(2026, 6, 6, 10, 0),
-            lastStatus: BackupScheduleStatus.success,
-          ),
-          DateTime(2026, 6, 8, 9, 0),
-        ),
-        isFalse,
-      );
-    });
-
-    test('δεν αναφέρεται όταν υπάρχει προσπάθεια μετά το slot', () {
-      expect(
-        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-          _settings(
-            days: const [6],
-            time: '18:42',
-            lastAttempt: DateTime(2026, 6, 7, 11, 0),
-            lastStatus: BackupScheduleStatus.success,
-          ),
-          DateTime(2026, 6, 8, 9, 0),
-        ),
-        isFalse,
-      );
-    });
-
-    test('slot πριν από την αγκύρωση προγράμματος δεν λογίζεται χαμένο', () {
-      // Δευτέρα 2026-06-08 09:00 ορίστηκε πρόγραμμα Σαββάτου: το περασμένο
-      // Σάββατο 06-06 δεν «χρωστιέται».
-      expect(
-        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-          _settings(
-            days: const [6],
-            time: '18:42',
-            anchor: DateTime(2026, 6, 8, 9, 0),
-          ),
-          DateTime(2026, 6, 8, 10, 0),
-        ),
-        isFalse,
-      );
-    });
-
-    test('φρέσκια ρύθμιση χωρίς κανένα ιστορικό δεν χρωστά περασμένο slot', () {
-      // Παλιές ρυθμίσεις χωρίς αγκύρωση και χωρίς καμία προσπάθεια: σιωπή
-      // (δεν ξεχωρίζει από πρόγραμμα που μόλις ορίστηκε).
-      expect(
-        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-          _settings(days: const [6], time: '18:42'),
-          DateTime(2026, 6, 7, 10, 0),
-        ),
-        isFalse,
-      );
-    });
-
-    test('η αγκύρωση δεν κρύβει slot μεταγενέστερό της', () {
-      // Αγκύρωση την Παρασκευή, slot το Σάββατο, εκκίνηση τη Δευτέρα → χαμένο.
-      expect(
-        BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-          _settings(
-            days: const [6],
-            time: '18:42',
-            anchor: DateTime(2026, 6, 5, 12, 0),
-          ),
-          DateTime(2026, 6, 8, 9, 0),
-        ),
-        isTrue,
-      );
-    });
-  });
-
-  group('shouldRunExitBackup', () {
-    test('false σε μη προγραμματισμένη ημέρα', () {
-      // 2026-06-04 = Τετάρτη (weekday 3), πρόγραμμα μόνο Παρασκευή (6)
-      expect(
-        BackupScheduleStatusFormatter.shouldRunExitBackup(
-          _settings(days: const [6], time: '09:00'),
-          DateTime(2026, 6, 4, 18, 0),
-        ),
-        isFalse,
-      );
-    });
-
-    test('false πριν την προγραμματισμένη ώρα', () {
-      expect(
-        BackupScheduleStatusFormatter.shouldRunExitBackup(
-          _settings(days: const [6], time: '18:42'),
-          DateTime(2026, 6, 6, 18, 30),
-        ),
-        isFalse,
-      );
-    });
-
-    test('false με επιτυχές προγραμματισμένο σήμερα', () {
-      expect(
-        BackupScheduleStatusFormatter.shouldRunExitBackup(
-          _settings(
-            days: const [6],
-            time: '18:42',
-            lastAttempt: DateTime(2026, 6, 6, 18, 45),
-            lastStatus: BackupScheduleStatus.success,
-          ),
-          DateTime(2026, 6, 6, 19, 0),
-        ),
-        isFalse,
-      );
-    });
-
-    test('false με χειροκίνητο αντίγραφο σήμερα', () {
-      final settings = DatabaseBackupSettings(
-        destinationDirectory: r'C:\Backups',
-        namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-        zipOutput: false,
-        includeMapImagesInBackup: false,
-        includeToolImages: true,
-        includeLexicon: false,
-        includeLampDb: false,
-        backupOnExit: true,
-        interval: DatabaseBackupInterval.never,
-        backupDays: const [6],
-        backupTime: '18:42',
-        lastBackupAttempt: null,
-        lastManualBackupAttempt: DateTime(2026, 6, 6, 17, 30),
-        lastBackupStatus: BackupScheduleStatus.none,
-        retentionMaxCopiesEnabled: false,
-        retentionMaxCopies: 30,
-        retentionMaxAgeEnabled: false,
-        retentionMaxAgeDays: 60,
-      );
-      expect(
-        BackupScheduleStatusFormatter.shouldRunExitBackup(
-          settings,
-          DateTime(2026, 6, 6, 19, 0),
-        ),
-        isFalse,
-      );
-    });
-
-    test('true μετά την ώρα χωρίς προσπάθεια σήμερα', () {
-      expect(
-        BackupScheduleStatusFormatter.shouldRunExitBackup(
-          _settings(days: const [6], time: '18:42'),
-          DateTime(2026, 6, 6, 19, 0),
-        ),
-        isTrue,
-      );
-    });
-
-    test('true μετά την ώρα με αποτυχημένο προγραμματισμένο σήμερα', () {
-      expect(
-        BackupScheduleStatusFormatter.shouldRunExitBackup(
-          _settings(
-            days: const [6],
-            time: '18:42',
-            lastAttempt: DateTime(2026, 6, 6, 18, 45),
-            lastStatus: BackupScheduleStatus.failed,
-          ),
-          DateTime(2026, 6, 6, 19, 0),
-        ),
-        isTrue,
-      );
-    });
-
-    test('true μετά την ώρα με κατάσταση missed', () {
-      expect(
-        BackupScheduleStatusFormatter.shouldRunExitBackup(
-          _settings(
-            days: const [6],
-            time: '18:42',
-            lastStatus: BackupScheduleStatus.missed,
-          ),
-          DateTime(2026, 6, 6, 19, 0),
-        ),
-        isTrue,
-      );
     });
   });
 }

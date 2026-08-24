@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../../features/database/models/database_backup_settings.dart';
 import '../../features/database/providers/database_backup_settings_provider.dart';
-import '../database/database_helper.dart';
+import '../../features/database/services/active_backup_settings.dart';
 
 /// Στοιχεία για τον διάλογο επαναφοράς (φάκελος αντιγράφων, πιο πρόσφατο αρχείο).
 class BackupResetMetadata {
@@ -33,20 +33,9 @@ class BackupResetMetadataReader {
         await ref.read(databaseBackupSettingsProvider.notifier).load();
         settings = ref.read(databaseBackupSettingsProvider);
       } else {
-        final db = await DatabaseHelper.instance.database;
-        final raw = await db.query(
-          'app_settings',
-          columns: ['value'],
-          where: 'key = ?',
-          whereArgs: [DatabaseBackupSettings.appSettingsKey],
-          limit: 1,
-        );
-        if (raw.isEmpty) {
-          return const BackupResetMetadata();
-        }
-        settings = DatabaseBackupSettings.fromJsonString(
-          raw.first['value'] as String?,
-        );
+        // Ίδια πύλη με τον provider — ο κλάδος χωρίς ref δεν επιτρέπεται να
+        // απαντά διαφορετικά από τον κλάδο με ref.
+        settings = await ActiveBackupSettings.read();
       }
 
       final dest = settings.destinationDirectory.trim();

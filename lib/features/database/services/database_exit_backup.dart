@@ -1,13 +1,22 @@
+import '../../../core/database/backup_pending_changes.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/settings_repository.dart';
-import '../models/database_backup_settings.dart';
-import '../utils/backup_schedule_status.dart';
+import '../../../core/models/app_permission.dart';
+import '../../../core/services/current_operator.dart';
+import '../../../core/services/permission_service.dart';
 import '../utils/backup_schedule_utils.dart';
+import '../utils/backup_trigger_decision.dart';
+import 'active_backup_settings.dart';
+import 'backup_responsibility.dart';
 import 'database_backup_audit.dart';
 import 'database_backup_service.dart';
 
-/// Fallback backup κατά το κλείσιμο παραθύρου (Windows) — μόνο σε προγραμματισμένη
-/// ημέρα, μετά την ώρα και όταν δεν έχει ολοκληρωθεί επιτυχώς το σημερινό αντίγραφο.
+/// Αντίγραφο κατά το κλείσιμο παραθύρου (Windows): η τελευταία ευκαιρία να
+/// προστατευτούν οι αφύλακτες αλλαγές — τρέχει μόνο όταν υπάρχουν (Φάση 3),
+/// χωρίς κατώφλι ή αποστάσεις.
+///
+/// Διαβάζει και γράφει τις ρυθμίσεις μέσα από την [ActiveBackupSettings] — την
+/// ίδια πύλη με το ζωντανό μονοπάτι — και σέβεται το δικαίωμα του πλήρους
+/// αντιγράφου, όπως και ο χρονιστής.
 class DatabaseExitBackup {
   DatabaseExitBackup._();
 
@@ -17,35 +26,74 @@ class DatabaseExitBackup {
     if (_runInProgress) return;
     _runInProgress = true;
     try {
+      // Ίδιο σημείο ελέγχου με τον χρονιστή: χωρίς το δικαίωμα, το κλείσιμο
+      // του συναδέλφου δεν επιτρέπεται να πάρει το αντίγραφο που η οθόνη του
+      // λέει ότι «το χειρίζεται ο διαχειριστής».
+      if (!PermissionService.instance.can(AppPermission.fullBackup)) return;
+
+      final gate = await ActiveBackupSettings.readWithRaw();
+      final settings = gate.settings;
       final db = await DatabaseHelper.instance.database;
-      final repo = SettingsRepository(db);
-      final raw = await repo.getSetting(DatabaseBackupSettings.appSettingsKey);
-      final settings = DatabaseBackupSettings.fromJsonString(raw);
-      if (!BackupScheduleStatusFormatter.shouldRunExitBackup(
-        settings,
-        DateTime.now(),
+      final pendingRepo = BackupPendingChangesRepository(db);
+      final pending = await pendingRepo.countPendingSince(
+        settings.lastBackupAuditId,
+        fallbackSince: settings.lastAnyBackupAt,
+      );
+      if (!BackupTriggerDecision.shouldRunOnClose(
+        settings: settings,
+        pendingChanges: pending,
+      )) {
+        return;
+      }
+
+      // Φάση 4: με παρόντα διαχειριστή, ο χρονιστής εκείνου θα καλύψει τις
+      // αλλαγές — ο εφεδρικός δεν παίρνει αντίγραφο στο δικό του κλείσιμο.
+      if (await BackupResponsibility.shouldDeferToPresentAdmin(
+        current: CurrentOperator.active,
+        now: DateTime.now(),
+      )) {
+        return;
+      }
+
+      // Ατομική δέσμευση, όπως στον χρονιστή: αν άλλο μηχάνημα μόλις άλλαξε
+      // το δέμα (π.χ. πήρε το αντίγραφο), το κλείσιμο κάνει πίσω.
+      final claimed = settings.copyWith(lastBackupAttempt: DateTime.now());
+      if (!await ActiveBackupSettings.tryReplace(
+        expectedRaw: gate.raw,
+        replacement: claimed,
       )) {
         return;
       }
 
       final result = await DatabaseBackupService.runBackup(
-        settings,
+        claimed,
         requireDestination: true,
         auditTrigger: BackupAuditTrigger.onExit,
       );
 
-      final updated = settings.copyWith(
-        lastBackupAttempt: DateTime.now(),
-        lastBackupStatus: result.success
-            ? BackupScheduleStatus.success
-            : (result.failureCode == DatabaseBackupFailureCode.folderMissing
-                  ? BackupScheduleStatus.folderMissing
-                  : BackupScheduleStatus.failed),
-      );
-      await repo.saveSetting(
-        DatabaseBackupSettings.appSettingsKey,
-        updated.toJsonString(),
-      );
+      if (result.success) {
+        // Σημάδι ΜΕΤΑ την audit εγγραφή του αντιγράφου — η ίδια δεν μετρά
+        // ως νέα αφύλακτη αλλαγή.
+        final markId = await pendingRepo.latestAuditId();
+        await ActiveBackupSettings.write(
+          claimed.copyWith(
+            lastBackupAuditId: markId,
+            lastBackupAttempt: DateTime.now(),
+            lastBackupStatus: BackupScheduleStatus.success,
+            lastFullBackupFingerprint: result.portableFingerprint,
+            lastFullBackupAt: result.isFullBackup ? DateTime.now() : null,
+          ),
+        );
+      } else {
+        await ActiveBackupSettings.write(
+          claimed.copyWith(
+            lastBackupStatus:
+                result.failureCode == DatabaseBackupFailureCode.folderMissing
+                ? BackupScheduleStatus.folderMissing
+                : BackupScheduleStatus.failed,
+          ),
+        );
+      }
     } finally {
       _runInProgress = false;
     }

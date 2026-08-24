@@ -30,6 +30,14 @@ const _machineKey = ProfileSettingKey(
   legacySource: ProfileSettingLegacySource.machine,
 );
 
+/// Δοκιμαστικό κλειδί με κληρονομιά κοινής τιμής: η πύλη δοκιμάζεται με
+/// ουδέτερα κλειδιά, όχι με πραγματικά του καταλόγου — οι κανόνες της δεν
+/// αλλάζουν όταν ένα πραγματικό κλειδί μετακομίζει.
+const _sharedKey = ProfileSettingKey(
+  'test_shared_scoped_key',
+  legacySource: ProfileSettingLegacySource.sharedForAdmin,
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -111,21 +119,21 @@ void main() {
     test('read διαβάζει την παλιά κοινή θέση', () async {
       await SettingsRepository(
         db,
-      ).saveSetting('database_backup_settings_v1', '{"παλιό":"δέμα"}');
+      ).saveSetting('test_shared_scoped_key', '{"παλιό":"δέμα"}');
 
       final gate = ProfileSettings(db, operator: null);
       expect(
-        await gate.read(ProfileSettingKeys.databaseBackupSettings),
+        await gate.read(_sharedKey),
         '{"παλιό":"δέμα"}',
       );
     });
 
     test('write γράφει στην παλιά κοινή θέση', () async {
       final gate = ProfileSettings(db, operator: null);
-      await gate.write(ProfileSettingKeys.databaseBackupSettings, '{"ν":1}');
+      await gate.write(_sharedKey, '{"ν":1}');
 
       expect(
-        await SettingsRepository(db).getSetting('database_backup_settings_v1'),
+        await SettingsRepository(db).getSetting('test_shared_scoped_key'),
         '{"ν":1}',
       );
     });
@@ -135,21 +143,21 @@ void main() {
     test('ο διαχειριστής κληρονομεί την κοινή τιμή, μία φορά', () async {
       await SettingsRepository(
         db,
-      ).saveSetting('database_backup_settings_v1', '{"κοινό":"δέμα"}');
+      ).saveSetting('test_shared_scoped_key', '{"κοινό":"δέμα"}');
 
       final admin = _operator(1, isAdmin: true);
       final gate = ProfileSettings(db, operator: admin);
       expect(
-        await gate.read(ProfileSettingKeys.databaseBackupSettings),
+        await gate.read(_sharedKey),
         '{"κοινό":"δέμα"}',
       );
 
       // Η κοινή τιμή αλλάζει μετά — το προφίλ ΔΕΝ την ακολουθεί πια.
       await SettingsRepository(
         db,
-      ).saveSetting('database_backup_settings_v1', '{"άλλαξε":"μετά"}');
+      ).saveSetting('test_shared_scoped_key', '{"άλλαξε":"μετά"}');
       expect(
-        await gate.read(ProfileSettingKeys.databaseBackupSettings),
+        await gate.read(_sharedKey),
         '{"κοινό":"δέμα"}',
       );
     });
@@ -157,11 +165,11 @@ void main() {
     test('ο απλός χρήστης ΔΕΝ κληρονομεί την κοινή τιμή', () async {
       await SettingsRepository(
         db,
-      ).saveSetting('database_backup_settings_v1', '{"κοινό":"δέμα"}');
+      ).saveSetting('test_shared_scoped_key', '{"κοινό":"δέμα"}');
 
       final gate = ProfileSettings(db, operator: _operator(2));
       expect(
-        await gate.read(ProfileSettingKeys.databaseBackupSettings),
+        await gate.read(_sharedKey),
         isNull,
       );
     });
@@ -186,20 +194,20 @@ void main() {
     test('write πάει στο προφίλ και δεν αγγίζει τα κοινά', () async {
       await SettingsRepository(
         db,
-      ).saveSetting('database_backup_settings_v1', '{"κοινό":"δέμα"}');
+      ).saveSetting('test_shared_scoped_key', '{"κοινό":"δέμα"}');
 
       final gate = ProfileSettings(db, operator: _operator(3));
       await gate.write(
-        ProfileSettingKeys.databaseBackupSettings,
+        _sharedKey,
         '{"δικό":"μου"}',
       );
 
       expect(
-        await gate.read(ProfileSettingKeys.databaseBackupSettings),
+        await gate.read(_sharedKey),
         '{"δικό":"μου"}',
       );
       expect(
-        await SettingsRepository(db).getSetting('database_backup_settings_v1'),
+        await SettingsRepository(db).getSetting('test_shared_scoped_key'),
         '{"κοινό":"δέμα"}',
       );
     });
@@ -208,15 +216,15 @@ void main() {
       final first = ProfileSettings(db, operator: _operator(1));
       final second = ProfileSettings(db, operator: _operator(2));
 
-      await first.write(ProfileSettingKeys.databaseBackupSettings, '{"α":1}');
-      await second.write(ProfileSettingKeys.databaseBackupSettings, '{"β":2}');
+      await first.write(_sharedKey, '{"α":1}');
+      await second.write(_sharedKey, '{"β":2}');
 
       expect(
-        await first.read(ProfileSettingKeys.databaseBackupSettings),
+        await first.read(_sharedKey),
         '{"α":1}',
       );
       expect(
-        await second.read(ProfileSettingKeys.databaseBackupSettings),
+        await second.read(_sharedKey),
         '{"β":2}',
       );
     });
@@ -224,12 +232,12 @@ void main() {
     test('χωρίς ρητό όρισμα, η πύλη μιλά για τον ενεργό χρήστη', () async {
       CurrentOperator.activate(_operator(5));
       final gate = ProfileSettings(db);
-      await gate.write(ProfileSettingKeys.databaseBackupSettings, '{"ε":5}');
+      await gate.write(_sharedKey, '{"ε":5}');
 
       expect(
         await OperatorSettingsRepository(
           db,
-        ).getValue(5, 'database_backup_settings_v1'),
+        ).getValue(5, 'test_shared_scoped_key'),
         '{"ε":5}',
       );
     });

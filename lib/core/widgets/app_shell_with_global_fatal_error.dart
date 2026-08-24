@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../database/backup_pending_changes.dart';
 import '../database/database_helper.dart';
 import '../../features/database/providers/database_backup_settings_provider.dart';
 import '../../features/database/services/database_backup_audit.dart';
 import '../../features/database/services/database_backup_service.dart';
-import '../../features/database/utils/backup_schedule_status.dart';
 import '../../features/database/utils/backup_schedule_utils.dart';
 import '../../features/database/widgets/backup_folder_missing_dialog.dart';
 import '../errors/app_error_result.dart';
@@ -25,8 +25,7 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.listen(databaseBackupSettingsProvider, (prev, next) {
       final st = next.lastBackupStatus;
-      if (st != BackupScheduleStatus.missed &&
-          st != BackupScheduleStatus.failed &&
+      if (st != BackupScheduleStatus.failed &&
           st != BackupScheduleStatus.folderMissing) {
         return;
       }
@@ -34,19 +33,6 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;
-        final settings = ref.read(databaseBackupSettingsProvider);
-        if (st == BackupScheduleStatus.missed &&
-            !BackupScheduleStatusFormatter.shouldShowBackupMissedAlert(
-              settings,
-              DateTime.now(),
-            )) {
-          unawaited(
-            ref
-                .read(databaseBackupSettingsProvider.notifier)
-                .setLastBackupStatus(BackupScheduleStatus.none),
-          );
-          return;
-        }
         if (st == BackupScheduleStatus.folderMissing) {
           final dest = ref
               .read(databaseBackupSettingsProvider)
@@ -60,7 +46,7 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
           );
           return;
         }
-        unawaited(_showMissedOrFailedBackupDialog(context, ref, st));
+        unawaited(_showFailedBackupDialog(context, ref));
       });
     });
 
@@ -83,10 +69,9 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
   /// Οι ρυθμίσεις/ιστορικό αντιγράφων ζουν μέσα σε κάθε βάση — το μήνυμα
   /// δηλώνει ρητά ποια βάση αφορά, αλλιώς μετά από αλλαγή βάσης ο χρήστης δεν
   /// ξέρει για ποιο αρχείο μιλάμε.
-  Future<void> _showMissedOrFailedBackupDialog(
+  Future<void> _showFailedBackupDialog(
     BuildContext context,
     WidgetRef ref,
-    String st,
   ) async {
     String dbScope = '';
     try {
@@ -100,42 +85,19 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        final settings = ref.read(databaseBackupSettingsProvider);
-        final manual = settings.lastManualBackupAttempt;
-        final manualToday =
-            manual != null &&
-            BackupScheduleStatusFormatter.hasManualBackupToday(
-              settings,
-              DateTime.now(),
-            );
-        final missedMessage = manualToday
-            ? 'Παραλήφθηκε προγραμματισμένο αντίγραφο ασφαλείας$dbScope, '
-                  'άλλα έχει γίνει αντίγραφο από τον χρήστη στις '
-                  '${BackupScheduleStatusFormatter.formatLocalTimeHm(manual)}.'
-            : 'Παραλήφθηκε προγραμματισμένο αντίγραφο ασφαλείας$dbScope '
-                  '(η εφαρμογή δεν ήταν ανοιχτή στη σχετική ημέρα και ώρα '
-                  'ή δεν ολοκληρώθηκε εγκαίρως).';
-
         return AlertDialog(
           title: const Text('Αυτόματο αντίγραφο ασφαλείας'),
           content: Text(
-            st == BackupScheduleStatus.missed
-                ? missedMessage
-                : 'Το προγραμματισμένο αντίγραφο ασφαλείας$dbScope απέτυχε. '
-                      'Ελέγξτε το φάκελο προορισμού και τα δικαιώματα πρόσβασης.',
+            'Το αυτόματο αντίγραφο ασφαλείας$dbScope απέτυχε. '
+            'Ελέγξτε το φάκελο προορισμού και τα δικαιώματα πρόσβασης.',
           ),
           actions: [
             TextButton(
               onPressed: () async {
                 Navigator.of(ctx).pop();
-                final notifier = ref.read(
-                  databaseBackupSettingsProvider.notifier,
-                );
-                if (st == BackupScheduleStatus.missed) {
-                  await notifier.acknowledgeMissedBackup();
-                } else {
-                  await notifier.setLastBackupStatus(BackupScheduleStatus.none);
-                }
+                await ref
+                    .read(databaseBackupSettingsProvider.notifier)
+                    .setLastBackupStatus(BackupScheduleStatus.none);
               },
               child: const Text('Παράβλεψη'),
             ),
@@ -150,12 +112,21 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
                 final notifier = ref.read(
                   databaseBackupSettingsProvider.notifier,
                 );
-                await notifier.setLastBackupAttempt(DateTime.now());
-                await notifier.setLastBackupStatus(
-                  result.success
-                      ? BackupScheduleStatus.success
-                      : BackupScheduleStatus.failed,
-                );
+                if (result.success) {
+                  final db = await DatabaseHelper.instance.database;
+                  final markId = await BackupPendingChangesRepository(
+                    db,
+                  ).latestAuditId();
+                  await notifier.markBackupTaken(
+                    auditId: markId,
+                    at: DateTime.now(),
+                  );
+                } else {
+                  await notifier.setLastBackupAttempt(DateTime.now());
+                  await notifier.setLastBackupStatus(
+                    BackupScheduleStatus.failed,
+                  );
+                }
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

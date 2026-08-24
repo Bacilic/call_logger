@@ -12,23 +12,10 @@ void main() {
 
   group('DatabaseBackupSettings effective portable bundle', () {
     test('disabled-but-ON lexicon and lamp do not lock zip', () {
-      const settings = DatabaseBackupSettings(
-        destinationDirectory: '',
-        namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-        zipOutput: false,
-        includeMapImagesInBackup: false,
+      final settings = DatabaseBackupSettings.defaults().copyWith(
         includeToolImages: false,
         includeLexicon: true,
         includeLampDb: true,
-        backupOnExit: false,
-        interval: DatabaseBackupInterval.never,
-        backupDays: <int>[],
-        backupTime: '09:00',
-        lastBackupStatus: 'none',
-        retentionMaxCopiesEnabled: false,
-        retentionMaxCopies: 30,
-        retentionMaxAgeEnabled: false,
-        retentionMaxAgeDays: 60,
       );
 
       expect(settings.includesPortableBundleInZip, isTrue);
@@ -39,23 +26,10 @@ void main() {
     });
 
     test('enabled tool images with availability lock zip', () {
-      const settings = DatabaseBackupSettings(
-        destinationDirectory: '',
-        namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-        zipOutput: false,
-        includeMapImagesInBackup: false,
+      final settings = DatabaseBackupSettings.defaults().copyWith(
         includeToolImages: true,
         includeLexicon: true,
         includeLampDb: true,
-        backupOnExit: false,
-        interval: DatabaseBackupInterval.never,
-        backupDays: <int>[],
-        backupTime: '09:00',
-        lastBackupStatus: 'none',
-        retentionMaxCopiesEnabled: false,
-        retentionMaxCopies: 30,
-        retentionMaxAgeEnabled: false,
-        retentionMaxAgeDays: 60,
       );
 
       expect(

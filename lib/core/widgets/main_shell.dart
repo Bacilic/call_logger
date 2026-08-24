@@ -577,49 +577,71 @@ class MainShellState extends ConsumerState<MainShell> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: NavigationRail(
-                      extended: railExtended,
-                      minExtendedWidth: railExtendedWidth,
-                      selectedIndex: selectedRailIndex < 0
-                          ? 0
-                          : selectedRailIndex,
-                      onDestinationSelected: (index) {
-                        // Οι Ρυθμίσεις είναι το τελευταίο κουμπί της λίστας αλλά
-                        // δεν είναι προορισμός: ανοίγουν δική τους οθόνη και δεν
-                        // μένουν ποτέ επιλεγμένες.
-                        if (index >= visibleDestinations.length) {
-                          unawaited(_openSettingsScreen());
-                          return;
-                        }
-                        unawaited(
-                          _selectDestination(visibleDestinations[index]),
-                        );
-                      },
-                      leading: wideEnoughForExtendedRail
-                          ? MainNavRailToggleButton(
-                              extended: railExtended,
-                              extendedWidth: railExtendedWidth,
-                              onToggle: _toggleNavRailLabels,
-                            )
-                          : null,
-                      destinations: [
-                        for (final d in visibleDestinations)
-                          _railDestination(
-                            d,
-                            showBadge,
-                            pendingCount,
-                            isOnCallsScreen:
-                                effectiveDestination ==
-                                MainNavDestination.calls,
-                            showCoreLexiconWarning:
-                                d == MainNavDestination.dictionary &&
-                                showCoreLexiconWarning,
-                            showLampReadPathWarning:
-                                d == MainNavDestination.lamp &&
-                                showLampReadPathWarning,
+                    // **Η NavigationRail δεν κυλά μόνη της.** Σε χαμηλό παράθυρο
+                    // τα εικονίδια δεν χωρούν στο ύψος που της μένει (από κάτω
+                    // κάθονται ο χρήστης και η έκδοση) και ξεχειλίζει — αρκούν
+                    // 9 pixel για να τυπώνεται σφάλμα σε κάθε αλλαγή οθόνης.
+                    //
+                    // Το **ελάχιστο ύψος** την κρατά να γεμίζει τη στήλη όσο
+                    // υπάρχει χώρος, ώστε να μην αλλάξει τίποτα στα κανονικά
+                    // μεγέθη· το **IntrinsicHeight** της δίνει οριστικό ύψος
+                    // μέσα στην κύλιση, που αλλιώς είναι απεριόριστη.
+                    child: LayoutBuilder(
+                      builder: (_, constraints) => SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight,
                           ),
-                        _settingsRailDestination(),
-                      ],
+                          child: IntrinsicHeight(
+                            child: NavigationRail(
+                              extended: railExtended,
+                              minExtendedWidth: railExtendedWidth,
+                              selectedIndex: selectedRailIndex < 0
+                                  ? 0
+                                  : selectedRailIndex,
+                              onDestinationSelected: (index) {
+                                // Οι Ρυθμίσεις είναι το τελευταίο κουμπί της λίστας αλλά
+                                // δεν είναι προορισμός: ανοίγουν δική τους οθόνη και δεν
+                                // μένουν ποτέ επιλεγμένες.
+                                if (index >= visibleDestinations.length) {
+                                  unawaited(_openSettingsScreen());
+                                  return;
+                                }
+                                unawaited(
+                                  _selectDestination(
+                                    visibleDestinations[index],
+                                  ),
+                                );
+                              },
+                              leading: wideEnoughForExtendedRail
+                                  ? MainNavRailToggleButton(
+                                      extended: railExtended,
+                                      extendedWidth: railExtendedWidth,
+                                      onToggle: _toggleNavRailLabels,
+                                    )
+                                  : null,
+                              destinations: [
+                                for (final d in visibleDestinations)
+                                  _railDestination(
+                                    d,
+                                    showBadge,
+                                    pendingCount,
+                                    isOnCallsScreen:
+                                        effectiveDestination ==
+                                        MainNavDestination.calls,
+                                    showCoreLexiconWarning:
+                                        d == MainNavDestination.dictionary &&
+                                        showCoreLexiconWarning,
+                                    showLampReadPathWarning:
+                                        d == MainNavDestination.lamp &&
+                                        showLampReadPathWarning,
+                                  ),
+                                _settingsRailDestination(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   Padding(

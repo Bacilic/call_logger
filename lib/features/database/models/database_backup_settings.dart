@@ -12,38 +12,48 @@ enum DatabaseBackupNamingFormat {
   baseThenDateTime,
 }
 
-/// Περιοδικό αυτόματο αντίγραφο (ενεργό όσο τρέχει η εφαρμογή).
-enum DatabaseBackupInterval { never, every4Hours, daily }
-
 /// Ρυθμίσεις αντιγράφων ασφαλείας βάσης (αποθήκευση σε `app_settings` ως JSON).
+///
+/// Το «πότε» οδηγείται από **αλλαγές**, όχι από ημερολόγιο (Φάση 3): αντίγραφο
+/// όταν μαζευτούν [changeThreshold] αλλαγές ή περάσει το πολύ
+/// [maxWaitMinutes] από το τελευταίο, ποτέ πιο συχνά από
+/// [minSpacingMinutes] — βάση χωρίς καμία αλλαγή δεν αντιγράφεται ποτέ.
 class DatabaseBackupSettings {
   const DatabaseBackupSettings({
     required this.destinationDirectory,
     required this.namingFormat,
-    required this.zipOutput,
     required this.includeMapImagesInBackup,
     required this.includeToolImages,
     required this.includeLexicon,
     required this.includeLampDb,
     required this.backupOnExit,
-    required this.interval,
-    required this.backupDays,
-    required this.backupTime,
+    required this.changeThreshold,
+    required this.minSpacingMinutes,
+    required this.maxWaitMinutes,
+    required this.backupOnCloseIfPending,
+    this.lastBackupAuditId,
     this.lastBackupAttempt,
     this.lastManualBackupAttempt,
-    this.scheduleAnchorAt,
+    this.lastFullBackupFingerprint,
+    this.lastFullBackupAt,
     required this.lastBackupStatus,
-    required this.retentionMaxCopiesEnabled,
-    required this.retentionMaxCopies,
-    required this.retentionMaxAgeEnabled,
-    required this.retentionMaxAgeDays,
+    required this.retentionQuickMaxCopiesEnabled,
+    required this.retentionQuickMaxCopies,
+    required this.retentionQuickMaxAgeEnabled,
+    required this.retentionQuickMaxAgeDays,
+    required this.retentionFullMaxCopiesEnabled,
+    required this.retentionFullMaxCopies,
   });
 
   static const String appSettingsKey = 'database_backup_settings_v1';
 
+  /// Κάτω όριο ελάχιστης απόστασης: κάθε αντίγραφο διαβάζει ολόκληρη τη βάση
+  /// μέσα από το δίκτυο — πιο πυκνά από 15΄ φορτώνει τη γραμμή χωρίς κέρδος
+  /// (απόφαση Διευθυντή 24/08/2026).
+  static const int minAllowedSpacingMinutes = 15;
+
   final String destinationDirectory;
   final DatabaseBackupNamingFormat namingFormat;
-  final bool zipOutput;
 
   /// Συμπερίληψη φακέλου `maps_images` στο zip (με `call_logger.db` εσωτερικά).
   final bool includeMapImagesInBackup;
@@ -57,60 +67,94 @@ class DatabaseBackupSettings {
   /// Συμπερίληψη αρχείου βάσης Λάμπας από portable `Data Base/`.
   final bool includeLampDb;
 
-  /// Κύριος διακόπτης: αν false, δεν εκτελείται κανένα backup (ούτε χειροκίνητο).
+  /// Κύριος διακόπτης: αν false, δεν εκτελείται κανένα αυτόματο αντίγραφο.
+  /// (Ιστορικό όνομα — καλύπτει ΟΛΑ τα αυτόματα, όχι μόνο του κλεισίματος.)
   final bool backupOnExit;
-  final DatabaseBackupInterval interval;
 
-  /// Ημέρες εβδομάδας (DateTime.weekday: Δευτέρα=1 … Κυριακή=7).
-  final List<int> backupDays;
+  /// Πλήθος αλλαγών που πυροδοτεί αντίγραφο.
+  final int changeThreshold;
 
-  /// Ώρα εκκίνησης αντιγράφου, π.χ. `14:30`.
-  final String backupTime;
+  /// Ελάχιστη απόσταση δύο αυτόματων αντιγράφων, σε λεπτά.
+  final int minSpacingMinutes;
+
+  /// Μέγιστη αναμονή με αφύλακτες αλλαγές, σε λεπτά — όποιο έρθει πρώτο
+  /// (κατώφλι ή αναμονή) πυροδοτεί.
+  final int maxWaitMinutes;
+
+  /// Αντίγραφο και στο κλείσιμο της εφαρμογής, αν υπάρχουν αφύλακτες αλλαγές.
+  final bool backupOnCloseIfPending;
+
+  /// Ο αύξων αριθμός Ιστορικού μέχρι τον οποίο οι αλλαγές είναι φυλαγμένες.
+  /// `null` = δεν έχει καταγραφεί αντίγραφο με το νέο σύστημα.
+  final int? lastBackupAuditId;
 
   final DateTime? lastBackupAttempt;
 
   /// Τελευταίο επιτυχές χειροκίνητο αντίγραφο (για ένδειξη/διάλογο).
   final DateTime? lastManualBackupAttempt;
 
-  /// Στιγμή που ορίστηκε/άλλαξε το πρόγραμμα ή έγινε ρητή παράβλεψη χαμένου
-  /// αντιγράφου. Slots παλαιότερα από αυτήν δεν λογίζονται «χαμένα» — αλλιώς
-  /// φρέσκια ρύθμιση (π.χ. Δευτέρα ορίζω αντίγραφο Σαββάτου) θα «χρωστούσε»
-  /// το περασμένο Σάββατο. `null` σε παλιές ρυθμίσεις = χωρίς περιορισμό.
-  final DateTime? scheduleAnchorAt;
+  /// Αποτύπωμα των φορητών (ονόματα, μεγέθη, ώρες) στο τελευταίο ΠΛΗΡΕΣ
+  /// αντίγραφο — ίδιο αποτύπωμα σημαίνει «τίποτα δεν άλλαξε ⇒ γρήγορο».
+  final String? lastFullBackupFingerprint;
 
-  /// `success` | `failed` | `missed` | `none` — βλ. [BackupScheduleStatus].
+  /// Πότε πάρθηκε το τελευταίο πλήρες αντίγραφο (βάση + φορητά).
+  final DateTime? lastFullBackupAt;
+
+  /// `success` | `failed` | `folder_missing` | `none` — βλ. [BackupScheduleStatus].
   final String lastBackupStatus;
 
-  final bool retentionMaxCopiesEnabled;
-  final int retentionMaxCopies;
-  final bool retentionMaxAgeEnabled;
-  final int retentionMaxAgeDays;
+  /// Διατήρηση ΓΡΗΓΟΡΩΝ αντιγράφων (.db — μόνο βάση).
+  final bool retentionQuickMaxCopiesEnabled;
+  final int retentionQuickMaxCopies;
+  final bool retentionQuickMaxAgeEnabled;
+  final int retentionQuickMaxAgeDays;
+
+  /// Διατήρηση ΠΛΗΡΩΝ αντιγράφων (.zip — βάση + φορητά). Το πιο πρόσφατο
+  /// πλήρες δεν διαγράφεται ΠΟΤΕ, ό,τι κι αν λένε τα όρια.
+  final bool retentionFullMaxCopiesEnabled;
+  final int retentionFullMaxCopies;
 
   static DatabaseBackupSettings defaults() => const DatabaseBackupSettings(
     destinationDirectory: '',
     namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-    zipOutput: false,
     includeMapImagesInBackup: false,
     includeToolImages: true,
     includeLexicon: false,
     includeLampDb: false,
     backupOnExit: false,
-    interval: DatabaseBackupInterval.never,
-    backupDays: <int>[],
-    backupTime: '09:00',
+    changeThreshold: 100,
+    minSpacingMinutes: 15,
+    maxWaitMinutes: 240,
+    backupOnCloseIfPending: true,
+    lastBackupAuditId: null,
     lastBackupAttempt: null,
     lastManualBackupAttempt: null,
+    lastFullBackupFingerprint: null,
+    lastFullBackupAt: null,
     lastBackupStatus: BackupScheduleStatus.none,
-    retentionMaxCopiesEnabled: false,
-    retentionMaxCopies: 30,
-    retentionMaxAgeEnabled: false,
-    retentionMaxAgeDays: 60,
+    retentionQuickMaxCopiesEnabled: true,
+    retentionQuickMaxCopies: 48,
+    retentionQuickMaxAgeEnabled: true,
+    retentionQuickMaxAgeDays: 7,
+    retentionFullMaxCopiesEnabled: true,
+    retentionFullMaxCopies: 6,
   );
 
-  /// Προσαρμοσμένο εβδομαδιαίο χρονοδιάγραμμα (αντικαθιστά το περιοδικό [interval] όταν ενεργό).
-  bool get usesCustomSchedule =>
-      backupDays.isNotEmpty &&
-      BackupScheduleUtils.hasValidTimeString(backupTime);
+  /// Η μέγιστη αναμονή δεν μπορεί να είναι μικρότερη από την ελάχιστη
+  /// απόσταση — αλλιώς η μία ρύθμιση θα ακύρωνε σιωπηλά την άλλη.
+  int get effectiveMaxWaitMinutes => maxWaitMinutes < minSpacingMinutes
+      ? minSpacingMinutes
+      : maxWaitMinutes;
+
+  /// Η πιο πρόσφατη στιγμή οποιουδήποτε αντιγράφου (αυτόματου ή χειροκίνητου)
+  /// — από αυτήν μετρούν απόσταση και αναμονή.
+  DateTime? get lastAnyBackupAt {
+    final auto = lastBackupAttempt;
+    final manual = lastManualBackupAttempt;
+    if (auto == null) return manual;
+    if (manual == null) return auto;
+    return manual.isAfter(auto) ? manual : auto;
+  }
 
   /// Προτίμηση χρήστη: κάποιο portable περιεχόμενο επιλέχθηκε (χωρίς έλεγχο διαθεσιμότητας).
   bool get includesPortableBundleInZip =>
@@ -154,76 +198,94 @@ class DatabaseBackupSettings {
   DatabaseBackupSettings copyWith({
     String? destinationDirectory,
     DatabaseBackupNamingFormat? namingFormat,
-    bool? zipOutput,
     bool? includeMapImagesInBackup,
     bool? includeToolImages,
     bool? includeLexicon,
     bool? includeLampDb,
     bool? backupOnExit,
-    DatabaseBackupInterval? interval,
-    List<int>? backupDays,
-    String? backupTime,
+    int? changeThreshold,
+    int? minSpacingMinutes,
+    int? maxWaitMinutes,
+    bool? backupOnCloseIfPending,
+    int? lastBackupAuditId,
     DateTime? lastBackupAttempt,
     bool clearLastBackupAttempt = false,
     DateTime? lastManualBackupAttempt,
     bool clearLastManualBackupAttempt = false,
-    DateTime? scheduleAnchorAt,
+    String? lastFullBackupFingerprint,
+    DateTime? lastFullBackupAt,
     String? lastBackupStatus,
-    bool? retentionMaxCopiesEnabled,
-    int? retentionMaxCopies,
-    bool? retentionMaxAgeEnabled,
-    int? retentionMaxAgeDays,
+    bool? retentionQuickMaxCopiesEnabled,
+    int? retentionQuickMaxCopies,
+    bool? retentionQuickMaxAgeEnabled,
+    int? retentionQuickMaxAgeDays,
+    bool? retentionFullMaxCopiesEnabled,
+    int? retentionFullMaxCopies,
   }) {
     return DatabaseBackupSettings(
       destinationDirectory: destinationDirectory ?? this.destinationDirectory,
       namingFormat: namingFormat ?? this.namingFormat,
-      zipOutput: zipOutput ?? this.zipOutput,
       includeMapImagesInBackup:
           includeMapImagesInBackup ?? this.includeMapImagesInBackup,
       includeToolImages: includeToolImages ?? this.includeToolImages,
       includeLexicon: includeLexicon ?? this.includeLexicon,
       includeLampDb: includeLampDb ?? this.includeLampDb,
       backupOnExit: backupOnExit ?? this.backupOnExit,
-      interval: interval ?? this.interval,
-      backupDays: backupDays ?? this.backupDays,
-      backupTime: backupTime ?? this.backupTime,
+      changeThreshold: changeThreshold ?? this.changeThreshold,
+      minSpacingMinutes: minSpacingMinutes ?? this.minSpacingMinutes,
+      maxWaitMinutes: maxWaitMinutes ?? this.maxWaitMinutes,
+      backupOnCloseIfPending:
+          backupOnCloseIfPending ?? this.backupOnCloseIfPending,
+      lastBackupAuditId: lastBackupAuditId ?? this.lastBackupAuditId,
       lastBackupAttempt: clearLastBackupAttempt
           ? null
           : (lastBackupAttempt ?? this.lastBackupAttempt),
       lastManualBackupAttempt: clearLastManualBackupAttempt
           ? null
           : (lastManualBackupAttempt ?? this.lastManualBackupAttempt),
-      scheduleAnchorAt: scheduleAnchorAt ?? this.scheduleAnchorAt,
+      lastFullBackupFingerprint:
+          lastFullBackupFingerprint ?? this.lastFullBackupFingerprint,
+      lastFullBackupAt: lastFullBackupAt ?? this.lastFullBackupAt,
       lastBackupStatus: lastBackupStatus ?? this.lastBackupStatus,
-      retentionMaxCopiesEnabled:
-          retentionMaxCopiesEnabled ?? this.retentionMaxCopiesEnabled,
-      retentionMaxCopies: retentionMaxCopies ?? this.retentionMaxCopies,
-      retentionMaxAgeEnabled:
-          retentionMaxAgeEnabled ?? this.retentionMaxAgeEnabled,
-      retentionMaxAgeDays: retentionMaxAgeDays ?? this.retentionMaxAgeDays,
+      retentionQuickMaxCopiesEnabled:
+          retentionQuickMaxCopiesEnabled ?? this.retentionQuickMaxCopiesEnabled,
+      retentionQuickMaxCopies:
+          retentionQuickMaxCopies ?? this.retentionQuickMaxCopies,
+      retentionQuickMaxAgeEnabled:
+          retentionQuickMaxAgeEnabled ?? this.retentionQuickMaxAgeEnabled,
+      retentionQuickMaxAgeDays:
+          retentionQuickMaxAgeDays ?? this.retentionQuickMaxAgeDays,
+      retentionFullMaxCopiesEnabled:
+          retentionFullMaxCopiesEnabled ?? this.retentionFullMaxCopiesEnabled,
+      retentionFullMaxCopies:
+          retentionFullMaxCopies ?? this.retentionFullMaxCopies,
     );
   }
 
   Map<String, dynamic> toJson() => {
     'destinationDirectory': destinationDirectory,
     'namingFormat': namingFormat.index,
-    'zipOutput': zipOutput,
     'includeMapImagesInBackup': includeMapImagesInBackup,
     'includeToolImages': includeToolImages,
     'includeLexicon': includeLexicon,
     'includeLampDb': includeLampDb,
     'backupOnExit': backupOnExit,
-    'interval': interval.index,
-    'backupDays': backupDays,
-    'backupTime': backupTime,
+    'changeThreshold': changeThreshold,
+    'minSpacingMinutes': minSpacingMinutes,
+    'maxWaitMinutes': maxWaitMinutes,
+    'backupOnCloseIfPending': backupOnCloseIfPending,
+    'lastBackupAuditId': lastBackupAuditId,
     'lastBackupAttempt': lastBackupAttempt?.toIso8601String(),
     'lastManualBackupAttempt': lastManualBackupAttempt?.toIso8601String(),
-    'scheduleAnchorAt': scheduleAnchorAt?.toIso8601String(),
+    'lastFullBackupFingerprint': lastFullBackupFingerprint,
+    'lastFullBackupAt': lastFullBackupAt?.toIso8601String(),
     'lastBackupStatus': lastBackupStatus,
-    'retentionMaxCopiesEnabled': retentionMaxCopiesEnabled,
-    'retentionMaxCopies': retentionMaxCopies,
-    'retentionMaxAgeEnabled': retentionMaxAgeEnabled,
-    'retentionMaxAgeDays': retentionMaxAgeDays,
+    'retentionQuickMaxCopiesEnabled': retentionQuickMaxCopiesEnabled,
+    'retentionQuickMaxCopies': retentionQuickMaxCopies,
+    'retentionQuickMaxAgeEnabled': retentionQuickMaxAgeEnabled,
+    'retentionQuickMaxAgeDays': retentionQuickMaxAgeDays,
+    'retentionFullMaxCopiesEnabled': retentionFullMaxCopiesEnabled,
+    'retentionFullMaxCopies': retentionFullMaxCopies,
   };
 
   static DatabaseBackupSettings fromJson(Map<String, dynamic> json) {
@@ -246,62 +308,63 @@ class DatabaseBackupSettings {
       return fallback;
     }
 
-    final nf = i('namingFormat', 0).clamp(0, 1);
-    final iv = i('interval', 0).clamp(0, 2);
-
-    List<int> daysList(String k) {
+    DateTime? dt(String k) {
       final v = json[k];
-      if (v is! List) return [];
-      final out = <int>[];
-      for (final e in v) {
-        if (e is int) {
-          out.add(e);
-        } else if (e is num) {
-          out.add(e.toInt());
-        }
-      }
-      return BackupScheduleUtils.normalizeDays(out);
-    }
-
-    DateTime? parseAttempt() {
-      final v = json['lastBackupAttempt'];
-      if (v == null) return null;
       if (v is String) return DateTime.tryParse(v);
       return null;
     }
 
+    final nf = i('namingFormat', 0).clamp(0, 1);
+
+    int? auditId() {
+      final v = json['lastBackupAuditId'];
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return null;
+    }
+
+    // Πεδία παλαιότερων εκδόσεων (interval, backupDays, backupTime,
+    // scheduleAnchorAt) αγνοούνται σιωπηλά — το «πότε» δεν είναι πια
+    // ημερολογιακό.
     return DatabaseBackupSettings(
       destinationDirectory: s('destinationDirectory', ''),
       namingFormat: DatabaseBackupNamingFormat.values[nf],
-      zipOutput: b('zipOutput', false),
       includeMapImagesInBackup: b('includeMapImagesInBackup', false),
       includeToolImages: b('includeToolImages', true),
       includeLexicon: b('includeLexicon', true),
       includeLampDb: b('includeLampDb', true),
       backupOnExit: b('backupOnExit', false),
-      interval: DatabaseBackupInterval.values[iv],
-      backupDays: daysList('backupDays'),
-      backupTime: s('backupTime', '09:00'),
-      lastBackupAttempt: parseAttempt(),
-      lastManualBackupAttempt: () {
-        final v = json['lastManualBackupAttempt'];
-        if (v == null) return null;
-        if (v is String) return DateTime.tryParse(v);
+      changeThreshold: i('changeThreshold', 100).clamp(1, 9999),
+      minSpacingMinutes: i(
+        'minSpacingMinutes',
+        15,
+      ).clamp(minAllowedSpacingMinutes, 1440),
+      maxWaitMinutes: i(
+        'maxWaitMinutes',
+        240,
+      ).clamp(minAllowedSpacingMinutes, 10080),
+      backupOnCloseIfPending: b('backupOnCloseIfPending', true),
+      lastBackupAuditId: auditId(),
+      lastBackupAttempt: dt('lastBackupAttempt'),
+      lastManualBackupAttempt: dt('lastManualBackupAttempt'),
+      lastFullBackupFingerprint: () {
+        final v = json['lastFullBackupFingerprint'];
+        if (v is String && v.trim().isNotEmpty) return v;
         return null;
       }(),
-      scheduleAnchorAt: () {
-        final v = json['scheduleAnchorAt'];
-        if (v == null) return null;
-        if (v is String) return DateTime.tryParse(v);
-        return null;
-      }(),
+      lastFullBackupAt: dt('lastFullBackupAt'),
       lastBackupStatus: BackupScheduleStatus.normalize(
         s('lastBackupStatus', 'none'),
       ),
-      retentionMaxCopiesEnabled: b('retentionMaxCopiesEnabled', false),
-      retentionMaxCopies: i('retentionMaxCopies', 30).clamp(1, 9999),
-      retentionMaxAgeEnabled: b('retentionMaxAgeEnabled', false),
-      retentionMaxAgeDays: i('retentionMaxAgeDays', 60).clamp(1, 9999),
+      retentionQuickMaxCopiesEnabled: b('retentionQuickMaxCopiesEnabled', true),
+      retentionQuickMaxCopies: i('retentionQuickMaxCopies', 48).clamp(1, 9999),
+      retentionQuickMaxAgeEnabled: b('retentionQuickMaxAgeEnabled', true),
+      retentionQuickMaxAgeDays: i(
+        'retentionQuickMaxAgeDays',
+        7,
+      ).clamp(1, 9999),
+      retentionFullMaxCopiesEnabled: b('retentionFullMaxCopiesEnabled', true),
+      retentionFullMaxCopies: i('retentionFullMaxCopies', 6).clamp(1, 9999),
     );
   }
 
@@ -323,53 +386,55 @@ class DatabaseBackupSettings {
     if (identical(this, other)) return true;
     if (other is! DatabaseBackupSettings) return false;
     final o = other;
-    if (o.destinationDirectory != destinationDirectory ||
-        o.namingFormat != namingFormat ||
-        o.zipOutput != zipOutput ||
-        o.includeMapImagesInBackup != includeMapImagesInBackup ||
-        o.includeToolImages != includeToolImages ||
-        o.includeLexicon != includeLexicon ||
-        o.includeLampDb != includeLampDb ||
-        o.backupOnExit != backupOnExit ||
-        o.interval != interval ||
-        o.backupTime != backupTime ||
-        o.lastBackupAttempt != lastBackupAttempt ||
-        o.lastManualBackupAttempt != lastManualBackupAttempt ||
-        o.scheduleAnchorAt != scheduleAnchorAt ||
-        o.lastBackupStatus != lastBackupStatus ||
-        o.retentionMaxCopiesEnabled != retentionMaxCopiesEnabled ||
-        o.retentionMaxCopies != retentionMaxCopies ||
-        o.retentionMaxAgeEnabled != retentionMaxAgeEnabled ||
-        o.retentionMaxAgeDays != retentionMaxAgeDays) {
-      return false;
-    }
-    if (o.backupDays.length != backupDays.length) return false;
-    for (var i = 0; i < backupDays.length; i++) {
-      if (o.backupDays[i] != backupDays[i]) return false;
-    }
-    return true;
+    return o.destinationDirectory == destinationDirectory &&
+        o.namingFormat == namingFormat &&
+        o.includeMapImagesInBackup == includeMapImagesInBackup &&
+        o.includeToolImages == includeToolImages &&
+        o.includeLexicon == includeLexicon &&
+        o.includeLampDb == includeLampDb &&
+        o.backupOnExit == backupOnExit &&
+        o.changeThreshold == changeThreshold &&
+        o.minSpacingMinutes == minSpacingMinutes &&
+        o.maxWaitMinutes == maxWaitMinutes &&
+        o.backupOnCloseIfPending == backupOnCloseIfPending &&
+        o.lastBackupAuditId == lastBackupAuditId &&
+        o.lastBackupAttempt == lastBackupAttempt &&
+        o.lastManualBackupAttempt == lastManualBackupAttempt &&
+        o.lastFullBackupFingerprint == lastFullBackupFingerprint &&
+        o.lastFullBackupAt == lastFullBackupAt &&
+        o.lastBackupStatus == lastBackupStatus &&
+        o.retentionQuickMaxCopiesEnabled == retentionQuickMaxCopiesEnabled &&
+        o.retentionQuickMaxCopies == retentionQuickMaxCopies &&
+        o.retentionQuickMaxAgeEnabled == retentionQuickMaxAgeEnabled &&
+        o.retentionQuickMaxAgeDays == retentionQuickMaxAgeDays &&
+        o.retentionFullMaxCopiesEnabled == retentionFullMaxCopiesEnabled &&
+        o.retentionFullMaxCopies == retentionFullMaxCopies;
   }
 
   @override
   int get hashCode => Object.hashAll([
     destinationDirectory,
     namingFormat,
-    zipOutput,
     includeMapImagesInBackup,
     includeToolImages,
     includeLexicon,
     includeLampDb,
     backupOnExit,
-    interval,
-    Object.hashAll(backupDays),
-    backupTime,
+    changeThreshold,
+    minSpacingMinutes,
+    maxWaitMinutes,
+    backupOnCloseIfPending,
+    lastBackupAuditId,
     lastBackupAttempt,
     lastManualBackupAttempt,
-    scheduleAnchorAt,
+    lastFullBackupFingerprint,
+    lastFullBackupAt,
     lastBackupStatus,
-    retentionMaxCopiesEnabled,
-    retentionMaxCopies,
-    retentionMaxAgeEnabled,
-    retentionMaxAgeDays,
+    retentionQuickMaxCopiesEnabled,
+    retentionQuickMaxCopies,
+    retentionQuickMaxAgeEnabled,
+    retentionQuickMaxAgeDays,
+    retentionFullMaxCopiesEnabled,
+    retentionFullMaxCopies,
   ]);
 }

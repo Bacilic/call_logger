@@ -4,8 +4,9 @@ import '../../../core/utils/greek_date_format.dart';
 import '../models/database_backup_settings.dart';
 import 'backup_destination_folder_validator.dart';
 import 'backup_schedule_utils.dart';
+import 'backup_trigger_decision.dart';
 
-/// Πληροφορίες εμφάνισης για επόμενο/τελευταίο προγραμματισμένο αντίγραφο.
+/// Πληροφορίες εμφάνισης για την κατάσταση των αυτόματων αντιγράφων.
 class BackupScheduleStatusInfo {
   const BackupScheduleStatusInfo({
     this.nextBackupText,
@@ -22,7 +23,8 @@ class BackupScheduleStatusInfo {
   final bool nextIsImminent;
 }
 
-/// Υπολογισμός και μορφοποίηση κατάστασης προγράμματος backup για το UI.
+/// Μορφοποίηση κατάστασης αυτόματων αντιγράφων για το UI (Φάση 3: μετρητής
+/// αλλαγών αντί για ημερολογιακό πρόγραμμα).
 abstract final class BackupScheduleStatusFormatter {
   BackupScheduleStatusFormatter._();
 
@@ -32,144 +34,6 @@ abstract final class BackupScheduleStatusFormatter {
     final min = l.minute.toString().padLeft(2, '0');
     return '$hh:$min';
   }
-
-  static bool hasManualBackupToday(
-    DatabaseBackupSettings settings,
-    DateTime now,
-  ) {
-    final manual = settings.lastManualBackupAttempt;
-    return manual != null &&
-        BackupScheduleUtils.isSameLocalDate(manual.toLocal(), now.toLocal());
-  }
-
-  /// True όταν έχει ήδη εκτελεστεί προγραμματισμένο αντίγραφο σήμερα (ένα ανά ημέρα).
-  static bool hasScheduledBackupToday(
-    DatabaseBackupSettings settings,
-    DateTime now,
-  ) {
-    final attempt = settings.lastBackupAttempt;
-    return attempt != null &&
-        BackupScheduleUtils.isSameLocalDate(attempt.toLocal(), now.toLocal());
-  }
-
-  static DateTime? _scheduleSlotForDay(DateTime day, String time) {
-    final p = BackupScheduleUtils.parseTime(time);
-    if (p == null) return null;
-    final d = day.toLocal();
-    return DateTime(d.year, d.month, d.day, p.hour, p.minute);
-  }
-
-  /// Αν δεν πρέπει να σημειωθεί/να εμφανιστεί «χάθηκε» για το τρέχον πρόγραμμα.
-  ///
-  /// Ικανοποιημένο: χειροκίνητο σήμερα, επιτυχές προγραμματισμένο σήμερα, ή
-  /// προσπάθεια σήμερα μετά/στην προγραμματισμένη ώρα.
-  static bool isScheduleSatisfiedForToday(
-    DatabaseBackupSettings settings,
-    DateTime now,
-  ) {
-    final local = now.toLocal();
-    if (hasManualBackupToday(settings, local)) return true;
-
-    final attempt = settings.lastBackupAttempt;
-    if (attempt == null ||
-        !BackupScheduleUtils.isSameLocalDate(attempt.toLocal(), local)) {
-      return false;
-    }
-
-    final status = BackupScheduleStatus.normalize(settings.lastBackupStatus);
-    if (status == BackupScheduleStatus.success) return true;
-
-    final slot = _scheduleSlotForDay(local, settings.backupTime);
-    if (slot == null) return false;
-    return !attempt.toLocal().isBefore(slot);
-  }
-
-  /// True όταν πρέπει να τρέξει fallback αντίγραφο κατά το κλείσιμο (Windows).
-  ///
-  /// Απαιτεί προγραμματισμένη ημέρα, ώρα που έχει περάσει και εκκρεμές αντίγραφο
-  /// (αποτυχία, χάθηκε ή καμία επιτυχής προσπάθεια σήμερα).
-  static bool shouldRunExitBackup(
-    DatabaseBackupSettings settings,
-    DateTime now,
-  ) {
-    if (!settings.backupOnExit || !settings.usesCustomSchedule) return false;
-    if (settings.destinationDirectory.trim().isEmpty) return false;
-
-    final local = now.toLocal();
-    if (!BackupScheduleUtils.isScheduledWeekday(local, settings.backupDays)) {
-      return false;
-    }
-    if (!BackupScheduleUtils.hasReachedTimeToday(local, settings.backupTime)) {
-      return false;
-    }
-    if (hasManualBackupToday(settings, local)) return false;
-
-    final status = BackupScheduleStatus.normalize(settings.lastBackupStatus);
-    if (hasScheduledBackupToday(settings, local) &&
-        status == BackupScheduleStatus.success) {
-      return false;
-    }
-    return true;
-  }
-
-  /// True όταν το τελευταίο περασμένο slot του προγράμματος (έως 14 ημέρες
-  /// πίσω) έμεινε χωρίς αντίγραφο — ανεξαρτήτως του αν σήμερα είναι
-  /// προγραμματισμένη ημέρα, ώστε χαμένο Σάββατο να αναφέρεται και τη Δευτέρα.
-  ///
-  /// Ένα slot λογίζεται καλυμμένο όταν υπάρχει προσπάθεια (προγραμματισμένη ή
-  /// χειροκίνητη) στο slot ή μετά, χειροκίνητο αντίγραφο την ίδια ημέρα με το
-  /// slot, ή επιτυχής προγραμματισμένη προσπάθεια την ίδια ημέρα. Slots πριν
-  /// από το [DatabaseBackupSettings.scheduleAnchorAt] δεν λογίζονται. Χωρίς
-  /// κανένα ιστορικό (ούτε προσπάθεια, ούτε αγκύρωση) περασμένο slot άλλης
-  /// ημέρας δεν αναφέρεται — δεν ξεχωρίζει από φρέσκια ρύθμιση προγράμματος.
-  static bool shouldMarkScheduleMissed(
-    DatabaseBackupSettings settings,
-    DateTime now,
-  ) {
-    if (!settings.backupOnExit || !settings.usesCustomSchedule) return false;
-    if (settings.destinationDirectory.trim().isEmpty) return false;
-
-    final local = now.toLocal();
-    final slot = BackupScheduleUtils.lastPassedScheduleInstant(
-      local,
-      settings.backupDays,
-      settings.backupTime,
-    );
-    if (slot == null) return false;
-
-    final anchor = settings.scheduleAnchorAt?.toLocal();
-    if (anchor != null && slot.isBefore(anchor)) return false;
-
-    if (isScheduleSatisfiedForToday(settings, local)) return false;
-    final status = BackupScheduleStatus.normalize(settings.lastBackupStatus);
-    if (status == BackupScheduleStatus.failed) return false;
-
-    final attempt = settings.lastBackupAttempt?.toLocal();
-    final manual = settings.lastManualBackupAttempt?.toLocal();
-
-    final slotIsToday = BackupScheduleUtils.isSameLocalDate(slot, local);
-    if (!slotIsToday && attempt == null && manual == null && anchor == null) {
-      return false;
-    }
-
-    if (attempt != null && !attempt.isBefore(slot)) return false;
-    if (manual != null && !manual.isBefore(slot)) return false;
-    if (manual != null && BackupScheduleUtils.isSameLocalDate(manual, slot)) {
-      return false;
-    }
-    if (attempt != null &&
-        BackupScheduleUtils.isSameLocalDate(attempt, slot) &&
-        status == BackupScheduleStatus.success) {
-      return false;
-    }
-    return true;
-  }
-
-  /// True όταν πρέπει να εμφανιστεί διάλογος «χάθηκε» (ίδιοι κανόνες με [shouldMarkScheduleMissed]).
-  static bool shouldShowBackupMissedAlert(
-    DatabaseBackupSettings settings,
-    DateTime now,
-  ) => shouldMarkScheduleMissed(settings, now);
 
   static String formatLocalDateTime(DateTime local) {
     final w = weekdayShortElTitle(local);
@@ -203,8 +67,6 @@ abstract final class BackupScheduleStatusFormatter {
         return '$prefix $datePart — επιτυχία';
       case BackupScheduleStatus.failed:
         return '$prefix $datePart — αποτυχία';
-      case BackupScheduleStatus.missed:
-        return '$prefix $datePart — χάθηκε';
       case BackupScheduleStatus.folderMissing:
         return '$prefix $datePart — φάκελος λείπει';
       case BackupScheduleStatus.none:
@@ -247,56 +109,92 @@ abstract final class BackupScheduleStatusFormatter {
     }
   }
 
-  /// Επόμενη χρονική στιγμή προγράμματος (από [now], αποκλείοντας σημερινό slot αν έχει ήδη τρέξει).
-  static DateTime? nextScheduleInstant(
-    DateTime now,
-    List<int> weekdays,
-    String time, {
-    DateTime? lastBackupAttempt,
+  /// Γραμμή «Αφύλακτες αλλαγές: Ν».
+  static String pendingChangesLine(int pendingChanges) => pendingChanges == 0
+      ? 'Αφύλακτες αλλαγές: καμία — δεν χρειάζεται αντίγραφο.'
+      : 'Αφύλακτες αλλαγές: $pendingChanges.';
+
+  /// Πόσα λεπτά ανοχής πριν το «καθυστερεί»: σε κανονική λειτουργία το
+  /// οφειλόμενο αντίγραφο παίρνεται μέσα σε ένα λεπτό από τη μέγιστη αναμονή —
+  /// κόκκινο νωρίτερα θα αναβόσβηνε σε κάθε φυσιολογικό κύκλο.
+  static const int _overdueGraceMinutes = 5;
+
+  /// Η γραμμή υγείας αντιγράφων της κάρτας «Στατιστικά Βάσης» — ορατή σε
+  /// ΟΛΟΥΣ (Φάση 7): όσοι δεν χειρίζονται τα αντίγραφα πρέπει τουλάχιστον να
+  /// βλέπουν αν οι αλλαγές τους μένουν αφύλακτες.
+  static ({String text, bool isWarning}) statsBackupHealth({
+    required DatabaseBackupSettings settings,
+    required int pendingChanges,
+    required bool canManageBackups,
+    DateTime? now,
   }) {
-    final p = BackupScheduleUtils.parseTime(time);
-    if (p == null || weekdays.isEmpty) return null;
+    final current = (now ?? DateTime.now()).toLocal();
 
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final attemptedToday =
-        lastBackupAttempt != null &&
-        BackupScheduleUtils.isSameLocalDate(lastBackupAttempt, now);
-
-    for (var dayOffset = 0; dayOffset <= 14; dayOffset++) {
-      final day = todayStart.add(Duration(days: dayOffset));
-      if (!weekdays.contains(day.weekday)) continue;
-
-      final slot = DateTime(day.year, day.month, day.day, p.hour, p.minute);
-      if (dayOffset == 0) {
-        if (attemptedToday) continue;
-        if (slot.isAfter(now)) return slot;
-        // Ώρα έχει περάσει σήμερα· ο scheduler θα τρέξει στο επόμενο tick (αντί για null).
-        return slot;
-      }
-      return slot;
+    if (!settings.backupOnExit) {
+      return (
+        text:
+            'Τα αυτόματα αντίγραφα είναι απενεργοποιημένα — για κοινόχρηστη '
+            'βάση προτείνεται η ενεργοποίησή τους.',
+        isWarning: true,
+      );
     }
-    return null;
+    if (pendingChanges <= 0) {
+      return (
+        text: 'Αφύλακτες αλλαγές: καμία — όλα φυλαγμένα.',
+        isWarning: false,
+      );
+    }
+
+    final last = settings.lastAnyBackupAt;
+    final overdue =
+        last != null &&
+        current.difference(last).inMinutes >
+            settings.effectiveMaxWaitMinutes + _overdueGraceMinutes;
+    if (overdue) {
+      return (
+        text: canManageBackups
+            ? 'Αφύλακτες αλλαγές: $pendingChanges — το αυτόματο αντίγραφο '
+                  'έχει καθυστερήσει.'
+            : 'Αφύλακτες αλλαγές: $pendingChanges — κανένα πρόσφατο '
+                  'αντίγραφο· ενημερώστε τον διαχειριστή.',
+        isWarning: true,
+      );
+    }
+
+    if (!canManageBackups) {
+      return (
+        text:
+            'Αφύλακτες αλλαγές: $pendingChanges — τα αντίγραφα τα χειρίζεται '
+            'ο διαχειριστής.',
+        isWarning: false,
+      );
+    }
+    if (last == null) {
+      return (
+        text:
+            'Αφύλακτες αλλαγές: $pendingChanges — πρώτο αντίγραφο εντός του '
+            'επόμενου λεπτού.',
+        isWarning: false,
+      );
+    }
+    final deadline = last.add(
+      Duration(minutes: settings.effectiveMaxWaitMinutes),
+    );
+    return (
+      text:
+          'Αφύλακτες αλλαγές: $pendingChanges — επόμενο στις '
+          '${settings.changeThreshold} αλλαγές ή έως '
+          '${formatLocalTimeHm(deadline)}.',
+      isWarning: false,
+    );
   }
 
-  static bool isNextBackupImminent(
-    DateTime now,
-    List<int> weekdays,
-    String time, {
-    DateTime? lastBackupAttempt,
-  }) {
-    if (!weekdays.contains(now.weekday)) return false;
-    if (lastBackupAttempt != null &&
-        BackupScheduleUtils.isSameLocalDate(lastBackupAttempt, now)) {
-      return false;
-    }
-    final p = BackupScheduleUtils.parseTime(time);
-    if (p == null) return false;
-    final slot = DateTime(now.year, now.month, now.day, p.hour, p.minute);
-    return !slot.isAfter(now);
-  }
-
+  /// Κατάσταση για το UI: τι εκκρεμεί, πότε έρχεται το επόμενο, τι πήγε
+  /// στραβά. Ο μετρητής [pendingChanges] έρχεται από τον καλούντα — ο
+  /// υπολογισμός θέλει βάση, η μορφοποίηση όχι.
   static BackupScheduleStatusInfo build({
     required DatabaseBackupSettings settings,
+    required int pendingChanges,
     DateTime? now,
     bool backupJobRunning = false,
     String? dbBaseName,
@@ -309,91 +207,72 @@ abstract final class BackupScheduleStatusFormatter {
       );
     }
 
-    if (!settings.usesCustomSchedule) {
-      return const BackupScheduleStatusInfo(
-        hintText:
-            'Ορίστε τουλάχιστον μία ημέρα και έγκυρη ώρα για προγραμματισμένο αντίγραφο.',
-        hintIsWarning: true,
-      );
-    }
-
     if (settings.destinationDirectory.trim().isEmpty) {
       return const BackupScheduleStatusInfo(
         hintText:
-            'Ορίστε φάκελο προορισμού ώστε να εκτελεστεί το προγραμματισμένο αντίγραφο.',
+            'Ορίστε φάκελο προορισμού ώστε να εκτελούνται αυτόματα αντίγραφα.',
         hintIsWarning: true,
       );
     }
 
     String? nextText;
-    String? hintText;
-    var hintWarning = false;
     var imminent = false;
 
     if (backupJobRunning) {
       nextText = 'Επόμενο αυτόματο αντίγραφο: σε εξέλιξη τώρα…';
     } else {
-      imminent = isNextBackupImminent(
-        current,
-        settings.backupDays,
-        settings.backupTime,
-        lastBackupAttempt: settings.lastBackupAttempt,
+      final decision = BackupTriggerDecision.evaluate(
+        settings: settings,
+        pendingChanges: pendingChanges,
+        now: current,
       );
-      final next = nextScheduleInstant(
-        current,
-        settings.backupDays,
-        settings.backupTime,
-        lastBackupAttempt: settings.lastBackupAttempt,
-      );
-
-      if (next != null) {
-        if (imminent) {
-          nextText =
-              'Επόμενο αυτόματο αντίγραφο: εντός του επόμενου λεπτού '
-              '(έλεγχος κάθε λεπτό, όσο η εφαρμογή είναι ανοιχτή).';
-        } else {
-          nextText = 'Επόμενο αυτόματο αντίγραφο: ${formatLocalDateTime(next)}';
+      if (decision.due) {
+        imminent = true;
+        nextText =
+            'Επόμενο αυτόματο αντίγραφο: εντός του επόμενου λεπτού '
+            '(έλεγχος κάθε λεπτό, όσο η εφαρμογή είναι ανοιχτή).';
+      } else {
+        switch (decision.reason) {
+          case BackupTriggerReason.noPendingChanges:
+            nextText = 'Επόμενο αυτόματο αντίγραφο: όταν υπάρξουν αλλαγές.';
+          case BackupTriggerReason.spacingNotElapsed:
+            final availableAt = settings.lastAnyBackupAt!.add(
+              Duration(minutes: settings.minSpacingMinutes),
+            );
+            nextText =
+                'Επόμενο αυτόματο αντίγραφο: όχι πριν τις '
+                '${formatLocalTimeHm(availableAt)} (ελάχιστη απόσταση '
+                '${settings.minSpacingMinutes}΄).';
+          case BackupTriggerReason.belowThreshold:
+            final deadline = settings.lastAnyBackupAt!.add(
+              Duration(minutes: settings.effectiveMaxWaitMinutes),
+            );
+            nextText =
+                'Επόμενο αυτόματο αντίγραφο: στις '
+                '${settings.changeThreshold} αλλαγές, ή το αργότερο στις '
+                '${formatLocalTimeHm(deadline)}.';
+          default:
+            nextText = null;
         }
-      }
-
-      final attemptedToday =
-          settings.lastBackupAttempt != null &&
-          BackupScheduleUtils.isSameLocalDate(
-            settings.lastBackupAttempt!,
-            current,
-          );
-      final atWindow =
-          BackupScheduleUtils.isScheduledWeekday(
-            current,
-            settings.backupDays,
-          ) &&
-          BackupScheduleUtils.hasReachedTimeToday(current, settings.backupTime);
-
-      if (attemptedToday && atWindow) {
-        hintText =
-            'Σήμερα έχει ήδη εκτελεστεί προγραμματισμένο αντίγραφο· '
-            'νέα ώρα ή επανεπιλογή ημέρας ισχύει από την επόμενη προγραμματισμένη ημέρα.';
-        hintWarning = true;
-      } else if (settings.lastBackupStatus == BackupScheduleStatus.missed) {
-        hintText =
-            'Το τελευταίο προγραμματισμένο αντίγραφο χάθηκε (η εφαρμογή δεν ήταν ανοιχτή στη σχετική ώρα).';
-        hintWarning = true;
-      } else if (settings.lastBackupStatus ==
-          BackupScheduleStatus.folderMissing) {
-        hintText =
-            'Ο φάκελος προορισμού δεν βρέθηκε· τα αρχεία αντιγράφου μπορεί να λείπουν.';
-        hintWarning = true;
-      } else if (settings.lastBackupStatus == BackupScheduleStatus.failed) {
-        hintText =
-            'Το τελευταίο προγραμματισμένο αντίγραφο απέτυχε· ελέγξτε φάκελο και δικαιώματα.';
-        hintWarning = true;
       }
     }
 
-    var lastText = _formatLastRecordedAttemptLine(
-      settings,
-      dbBaseName: dbBaseName,
-    );
+    String? hintText;
+    var hintWarning = false;
+    final st = BackupScheduleStatus.normalize(settings.lastBackupStatus);
+    if (st == BackupScheduleStatus.folderMissing) {
+      hintText =
+          'Ο φάκελος προορισμού δεν βρέθηκε· τα αρχεία αντιγράφου μπορεί να λείπουν.';
+      hintWarning = true;
+    } else if (st == BackupScheduleStatus.failed) {
+      hintText =
+          'Το τελευταίο αυτόματο αντίγραφο απέτυχε· ελέγξτε φάκελο και δικαιώματα.';
+      hintWarning = true;
+    }
+
+    var lastText =
+        '${pendingChangesLine(pendingChanges)}\n'
+        '${_formatLastRecordedAttemptLine(settings, dbBaseName: dbBaseName)}';
 
     final manual = settings.lastManualBackupAttempt;
     if (manual != null) {
@@ -401,6 +280,13 @@ abstract final class BackupScheduleStatusFormatter {
       final scope = base.isEmpty ? '' : ' (βάση «$base»)';
       lastText =
           '$lastText\nΤελευταίο χειροκίνητο αντίγραφο$scope: ${formatLocalDateTime(manual.toLocal())}';
+    }
+
+    final lastFull = settings.lastFullBackupAt;
+    if (lastFull != null) {
+      lastText =
+          '$lastText\nΤελευταίο πλήρες αντίγραφο (βάση + φορητά): '
+          '${formatLocalDateTime(lastFull.toLocal())}';
     }
 
     return BackupScheduleStatusInfo(

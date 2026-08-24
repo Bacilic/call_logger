@@ -5,11 +5,10 @@ import 'package:path/path.dart' as p;
 import '../../../core/database/database_file_bundle.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_maintenance_repository.dart';
-import '../../../core/database/settings_repository.dart';
 import '../../../core/database/audit_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../tasks/models/task.dart';
-import '../models/database_backup_settings.dart';
+import 'active_backup_settings.dart';
 import 'database_backup_audit.dart';
 import 'database_backup_service.dart';
 
@@ -85,14 +84,14 @@ class DatabaseMaintenanceService {
   static bool isPurgeableTable(String name) => purgeableTables.contains(name);
 
   /// Ξεκινά backup αν είναι ενεργό και υπάρχει προορισμός.
+  ///
+  /// Οι ρυθμίσεις έρχονται από την [ActiveBackupSettings] — το αντίγραφο
+  /// ασφαλείας πριν από συντήρηση πηγαίνει στον φάκελο που βλέπει και ο
+  /// συνδεδεμένος χρήστης στην οθόνη του, όχι σε παγωμένη παλιά τιμή.
   Future<({MaintenanceBackupPrecheck kind, String? message})>
   runPreMaintenanceBackup() async {
     try {
-      final dbBk = await DatabaseHelper.instance.database;
-      final raw = await SettingsRepository(
-        dbBk,
-      ).getSetting(DatabaseBackupSettings.appSettingsKey);
-      final settings = DatabaseBackupSettings.fromJsonString(raw);
+      final settings = await ActiveBackupSettings.read();
       if (!settings.backupOnExit ||
           settings.destinationDirectory.trim().isEmpty) {
         await DatabaseBackupAudit.log(

@@ -192,14 +192,14 @@ class EquipmentFormDismissGuard {
       return;
     }
     if (!_shouldConfirmDismissOnClose) {
-      if (host.mounted) Navigator.of(host.context).pop();
+      host.closeForm();
       return;
     }
 
     if (host.isEdit) {
       final labels = _buildChangedFieldLabels();
       if (labels.isEmpty) {
-        if (host.mounted) Navigator.of(host.context).pop();
+        host.closeForm();
         return;
       }
       final action = await _showEditDismissDialog(labels);
@@ -207,7 +207,7 @@ class EquipmentFormDismissGuard {
         case _EditDismissAction.save:
           await host.save();
         case _EditDismissAction.discard:
-          if (host.mounted) Navigator.of(host.context).pop();
+          host.closeForm();
         case _EditDismissAction.keepEditing:
         case null:
           break;
@@ -217,12 +217,12 @@ class EquipmentFormDismissGuard {
 
     final discard = await _showNewDismissDialog();
     if (discard == true && host.mounted) {
-      Navigator.of(host.context).pop();
+      host.closeForm();
     }
   }
 
   /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
   void cancelAndClose() {
-    if (host.mounted) Navigator.of(host.context).pop();
+    host.closeForm();
   }
 }

@@ -116,7 +116,7 @@ class UserFormDismissGuard {
 
   Future<void> requestClose() async {
     if (!_shouldConfirmDismiss) {
-      if (host.mounted) Navigator.of(host.context).pop();
+      host.closeForm();
       return;
     }
     final choice = await _showDismissConfirmationDialog();
@@ -126,7 +126,7 @@ class UserFormDismissGuard {
       return;
     }
     if (choice == _UserFormDismissChoice.discard) {
-      Navigator.of(host.context).pop();
+      host.closeForm();
       return;
     }
     await host.saveFlow.save();
@@ -134,7 +134,7 @@ class UserFormDismissGuard {
 
   /// Κουμπί «Ακύρωση»: κλείσιμο χωρίς διάλογο επιβεβαίωσης (εκούσια απόρριψη).
   void cancelAndClose() {
-    if (host.mounted) Navigator.of(host.context).pop();
+    host.closeForm();
   }
 
   /// Άδεια να ανοίξει η καρτέλα του εξοπλισμού πάνω από τη φόρμα.

@@ -1,22 +1,33 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/database/backup_pending_changes.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/models/app_permission.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
+import '../../../core/services/current_operator.dart';
 import '../../../core/services/permission_service.dart';
 import '../models/database_backup_settings.dart';
+import '../services/active_backup_settings.dart';
+import '../services/backup_responsibility.dart';
 import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
 import '../utils/backup_destination_folder_validator.dart';
-import '../utils/backup_schedule_status.dart';
 import '../utils/backup_schedule_utils.dart';
+import '../utils/backup_trigger_decision.dart';
 import 'database_backup_settings_provider.dart';
 
-/// Προγραμματιστής εβδομαδιαίου ωρολογίου (έλεγχος κάθε 1 λεπτό) + έλεγχος εκκίνησης.
+/// Χρονιστής αυτόματων αντιγράφων: έλεγχος κάθε 1 λεπτό με βάση τον μετρητή
+/// αλλαγών του Ιστορικού (Φάση 3) — όχι ημερολογιακό πρόγραμμα.
+///
+/// Σε κάθε τικ οι ρυθμίσεις ξαναφορτώνονται από τη βάση: είναι κοινές, και το
+/// σημάδι «μέχρι πού είναι φυλαγμένες οι αλλαγές» μπορεί να το έχει μόλις
+/// προχωρήσει άλλο μηχάνημα — μια παλιά τιμή στη μνήμη θα οδηγούσε σε διπλό
+/// αντίγραφο.
 final backupSchedulerProvider = NotifierProvider<BackupSchedulerNotifier, int>(
   BackupSchedulerNotifier.new,
 );
@@ -26,7 +37,7 @@ class BackupSchedulerNotifier extends Notifier<int> {
   bool _runLock = false;
   String? _skipAuditLoggedKey;
 
-  /// True όσο τρέχει προγραμματισμένο αντίγραφο ασφαλείας.
+  /// True όσο τρέχει αυτόματο αντίγραφο ασφαλείας.
   bool get isBackupJobRunning => _runLock;
 
   @override
@@ -38,12 +49,10 @@ class BackupSchedulerNotifier extends Notifier<int> {
     return 0;
   }
 
-  /// Φόρτωση ρυθμίσεων, [checkStartupStatus], εκκίνηση περιοδικού ελέγχου.
+  /// Φόρτωση ρυθμίσεων, έλεγχος φακέλου προορισμού, εκκίνηση περιοδικού ελέγχου.
   Future<void> checkStartupAndStart() async {
     await ref.read(databaseBackupSettingsProvider.notifier).load();
-    var settings = ref.read(databaseBackupSettingsProvider);
-    await checkStartupStatus(settings);
-    settings = ref.read(databaseBackupSettingsProvider);
+    final settings = ref.read(databaseBackupSettingsProvider);
     await checkDestinationFolderStatus(settings);
     startTimer();
   }
@@ -55,18 +64,11 @@ class BackupSchedulerNotifier extends Notifier<int> {
     });
   }
 
-  static bool _isAtScheduledWindow(
-    DatabaseBackupSettings settings,
-    DateTime now,
-  ) =>
-      settings.usesCustomSchedule &&
-      BackupScheduleUtils.isScheduledWeekday(now, settings.backupDays) &&
-      BackupScheduleUtils.hasReachedTimeToday(now, settings.backupTime);
-
   void _maybeLogScheduledSkip(
     DatabaseBackupSettings settings,
     String skipReason,
   ) {
+    // Μία καταγραφή ανά ημέρα και αιτία — όχι θόρυβος σε κάθε τικ.
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final key = '$today:$skipReason';
     if (_skipAuditLoggedKey == key) return;
@@ -75,56 +77,11 @@ class BackupSchedulerNotifier extends Notifier<int> {
       DatabaseBackupAudit.logScheduledSkip(
         skipReason: skipReason,
         destination: settings.destinationDirectory.trim(),
-        scheduledTime: settings.backupTime,
       ),
     );
   }
 
-  Future<void> checkStartupStatus(DatabaseBackupSettings settings) async {
-    final now = DateTime.now();
-    final notifier = ref.read(databaseBackupSettingsProvider.notifier);
-
-    if (BackupScheduleStatusFormatter.isScheduleSatisfiedForToday(
-      settings,
-      now,
-    )) {
-      if (BackupScheduleStatus.normalize(settings.lastBackupStatus) ==
-          BackupScheduleStatus.missed) {
-        await notifier.setLastBackupStatus(BackupScheduleStatus.none);
-        state = state + 1;
-      }
-      return;
-    }
-
-    if (!BackupScheduleStatusFormatter.shouldMarkScheduleMissed(
-      settings,
-      now,
-    )) {
-      if (BackupScheduleStatus.normalize(settings.lastBackupStatus) ==
-          BackupScheduleStatus.missed) {
-        await notifier.setLastBackupStatus(BackupScheduleStatus.none);
-        state = state + 1;
-      }
-      return;
-    }
-
-    final deadline = BackupScheduleUtils.lastPassedScheduleInstant(
-      now,
-      settings.backupDays,
-      settings.backupTime,
-    );
-    if (deadline == null) return;
-
-    await notifier.setLastBackupStatus(BackupScheduleStatus.missed);
-    await DatabaseBackupAudit.logScheduledMissed(
-      missedDeadline: deadline,
-      destination: settings.destinationDirectory.trim(),
-      scheduledTime: settings.backupTime,
-    );
-    state = state + 1;
-  }
-
-  /// Αναβάθμιση failed/missed σε folder_missing όταν λείπει ο φάκελος· καθάρισμα όταν επανέρχεται.
+  /// Αναβάθμιση failed σε folder_missing όταν λείπει ο φάκελος· καθάρισμα όταν επανέρχεται.
   Future<void> checkDestinationFolderStatus(
     DatabaseBackupSettings settings,
   ) async {
@@ -144,8 +101,7 @@ class BackupSchedulerNotifier extends Notifier<int> {
     final st = BackupScheduleStatus.normalize(settings.lastBackupStatus);
 
     if (content.kind == BackupDestinationContentKind.folderMissing) {
-      if (st == BackupScheduleStatus.failed ||
-          st == BackupScheduleStatus.missed) {
+      if (st == BackupScheduleStatus.failed) {
         await notifier.setLastBackupStatus(BackupScheduleStatus.folderMissing);
         state = state + 1;
       }
@@ -158,18 +114,59 @@ class BackupSchedulerNotifier extends Notifier<int> {
     }
   }
 
+  /// Ένα τικ του χρονιστή, εκτός Timer — για τα τεστ.
+  @visibleForTesting
+  Future<void> debugRunTick() => _tick();
+
   Future<void> _tick() async {
-    // Φάση 2: το πλήρες αντίγραφο είναι μόνο του διαχειριστή. Ο έλεγχος
-    // γίνεται σε κάθε τικ — η «Αλλαγή χρήστη» αλλάζει την απάντηση ζωντανά.
+    // Το πλήρες αντίγραφο είναι δικαίωμα. Ο έλεγχος γίνεται σε κάθε τικ —
+    // η «Αλλαγή χρήστη» αλλάζει την απάντηση ζωντανά.
     if (!PermissionService.instance.can(AppPermission.fullBackup)) return;
-    final settings = ref.read(databaseBackupSettingsProvider);
-    final now = DateTime.now();
-    final atWindow = _isAtScheduledWindow(settings, now);
+
+    final notifier = ref.read(databaseBackupSettingsProvider.notifier);
+
+    // Φρέσκια ανάγνωση από τη βάση (με το ωμό JSON για τη δέσμευση) — το
+    // σημάδι μπορεί να το προχώρησε μόλις άλλο μηχάνημα.
+    final ({DatabaseBackupSettings settings, String? raw}) gate;
+    final int pending;
+    try {
+      gate = await ActiveBackupSettings.readWithRaw();
+      final db = await DatabaseHelper.instance.database;
+      pending = await BackupPendingChangesRepository(
+        db,
+      ).countPendingSince(
+        gate.settings.lastBackupAuditId,
+        fallbackSince: gate.settings.lastAnyBackupAt,
+      );
+    } catch (_) {
+      // Χωρίς προσβάσιμη βάση δεν υπάρχει ούτε κάτι να αντιγραφεί.
+      return;
+    }
+    final settings = gate.settings;
+    notifier.adopt(settings);
+
+    final decision = BackupTriggerDecision.evaluate(
+      settings: settings,
+      pendingChanges: pending,
+      now: DateTime.now(),
+    );
+    if (!decision.due) {
+      // Οφειλόμενες αλλαγές που μπλοκάρουν σε ρύθμιση: μία καταγραφή την ημέρα.
+      if (pending >= settings.changeThreshold) {
+        if (decision.reason == BackupTriggerReason.disabled) {
+          _maybeLogScheduledSkip(
+            settings,
+            BackupAuditSkipReason.backupDisabled,
+          );
+        } else if (decision.reason == BackupTriggerReason.noDestination) {
+          _maybeLogScheduledSkip(settings, BackupAuditSkipReason.noDestination);
+        }
+      }
+      return;
+    }
 
     if (_runLock) {
-      if (atWindow) {
-        _maybeLogScheduledSkip(settings, BackupAuditSkipReason.jobRunning);
-      }
+      _maybeLogScheduledSkip(settings, BackupAuditSkipReason.jobRunning);
       return;
     }
 
@@ -180,67 +177,66 @@ class BackupSchedulerNotifier extends Notifier<int> {
     if (ref
         .read(activeCriticalOperationsProvider)
         .contains(CriticalOperation.databaseSwitch)) {
-      if (atWindow) {
-        _maybeLogScheduledSkip(
-          settings,
-          BackupAuditSkipReason.databaseSwitchInProgress,
-        );
-      }
+      _maybeLogScheduledSkip(
+        settings,
+        BackupAuditSkipReason.databaseSwitchInProgress,
+      );
       return;
     }
 
-    if (!settings.backupOnExit) {
-      if (atWindow) {
-        _maybeLogScheduledSkip(settings, BackupAuditSkipReason.backupDisabled);
-      }
-      return;
-    }
-    if (!settings.usesCustomSchedule) {
-      if (atWindow) {
-        _maybeLogScheduledSkip(settings, BackupAuditSkipReason.noSchedule);
-      }
-      return;
-    }
-    if (settings.destinationDirectory.trim().isEmpty) {
-      if (atWindow) {
-        _maybeLogScheduledSkip(settings, BackupAuditSkipReason.noDestination);
-      }
+    // Φάση 4: «είμαι ο πρώτος διαθέσιμος;» — ο παρών διαχειριστής προηγείται.
+    // Φυσιολογική λειτουργία του εφεδρικού, όχι ανωμαλία — χωρίς audit.
+    if (await BackupResponsibility.shouldDeferToPresentAdmin(
+      current: CurrentOperator.active,
+      now: DateTime.now(),
+    )) {
       return;
     }
 
-    if (!BackupScheduleUtils.isScheduledWeekday(now, settings.backupDays)) {
+    // Ατομική δέσμευση: η προσπάθεια σφραγίζεται ΠΡΙΝ τρέξει το αντίγραφο.
+    // Όποιος χάσει την κούρσα (άλλο μηχάνημα, δεύτερος εφεδρικός) βλέπει
+    // false και κάνει πίσω· στο επόμενο τικ θα δει το φρέσκο σημάδι.
+    final claimed = settings.copyWith(lastBackupAttempt: DateTime.now());
+    if (!await ActiveBackupSettings.tryReplace(
+      expectedRaw: gate.raw,
+      replacement: claimed,
+    )) {
       return;
     }
-    if (!BackupScheduleUtils.hasReachedTimeToday(now, settings.backupTime)) {
-      return;
-    }
-
-    final last = settings.lastBackupAttempt;
-    if (last != null && BackupScheduleUtils.isSameLocalDate(last, now)) {
-      _maybeLogScheduledSkip(settings, BackupAuditSkipReason.alreadyRanToday);
-      return;
-    }
+    notifier.adopt(claimed);
 
     _runLock = true;
     try {
-      final notifier = ref.read(databaseBackupSettingsProvider.notifier);
-      final attemptAt = DateTime.now();
-      await notifier.setLastBackupAttempt(attemptAt);
-
-      final fresh = ref.read(databaseBackupSettingsProvider);
       final result = await DatabaseBackupFileOperation.run(
-        fresh,
+        claimed,
         auditTrigger: BackupAuditTrigger.scheduled,
       );
 
-      await notifier.setLastBackupAttempt(DateTime.now());
-      await notifier.setLastBackupStatus(
-        result.success
-            ? BackupScheduleStatus.success
-            : (result.failureCode == DatabaseBackupFailureCode.folderMissing
-                  ? BackupScheduleStatus.folderMissing
-                  : BackupScheduleStatus.failed),
-      );
+      final DatabaseBackupSettings done;
+      if (result.success) {
+        // Το σημάδι παίρνεται ΜΕΤΑ το αντίγραφο και την audit εγγραφή του:
+        // έτσι η ίδια η εγγραφή «ΕΠΙΤΥΧΙΑ» δεν μετρά ως νέα αφύλακτη αλλαγή.
+        final db = await DatabaseHelper.instance.database;
+        final markId = await BackupPendingChangesRepository(
+          db,
+        ).latestAuditId();
+        done = claimed.copyWith(
+          lastBackupAuditId: markId,
+          lastBackupAttempt: DateTime.now(),
+          lastBackupStatus: BackupScheduleStatus.success,
+          lastFullBackupFingerprint: result.portableFingerprint,
+          lastFullBackupAt: result.isFullBackup ? DateTime.now() : null,
+        );
+      } else {
+        done = claimed.copyWith(
+          lastBackupStatus:
+              result.failureCode == DatabaseBackupFailureCode.folderMissing
+              ? BackupScheduleStatus.folderMissing
+              : BackupScheduleStatus.failed,
+        );
+      }
+      await ActiveBackupSettings.write(done);
+      notifier.adopt(done);
       state = state + 1;
     } finally {
       _runLock = false;

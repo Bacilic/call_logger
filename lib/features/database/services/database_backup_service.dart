@@ -20,8 +20,10 @@ import '../../../core/utils/user_facing_error_messages.dart';
 import '../models/database_backup_settings.dart';
 import '../utils/backup_destination_folder_validator.dart';
 import '../utils/portable_backup_availability.dart';
+import 'backup_retention.dart';
 import 'backup_zip_manifest.dart';
 import 'database_backup_audit.dart';
+import 'portable_content_fingerprint.dart';
 import 'restore_report.dart';
 
 /// Κωδικοί αποτυχίας backup (για UI / scheduler).
@@ -36,12 +38,22 @@ class DatabaseBackupResult {
     this.outputPath,
     this.message,
     this.failureCode,
+    this.isFullBackup = false,
+    this.portableFingerprint,
   });
 
   final bool success;
   final String? outputPath;
   final String? message;
   final String? failureCode;
+
+  /// True όταν το αντίγραφο ήταν ΠΛΗΡΕΣ (.zip με φορητά) — Φάση 5.
+  final bool isFullBackup;
+
+  /// Το αποτύπωμα των φορητών που μπήκαν στο πλήρες αντίγραφο· ο καλών το
+  /// αποθηκεύει στις ρυθμίσεις ώστε το επόμενο ίδιο περιεχόμενο να δώσει
+  /// γρήγορο αντίγραφο. `null` σε γρήγορο ή αποτυχημένο.
+  final String? portableFingerprint;
 }
 
 /// Αποτέλεσμα επαναφοράς φορητών αρχείων μετά την τοποθέτηση της βάσης.
@@ -258,21 +270,36 @@ class DatabaseBackupService {
     final portableAvailability = await PortableBackupAvailability.load(
       lexiconLoaded: CoreLexiconService.instance.state.loaded,
     );
-    final effectiveBundle = settings.effectiveIncludesPortableBundleInZip(
+    final wantBundle = settings.effectiveIncludesPortableBundleInZip(
       portableAvailability,
     );
-    final useZipBundle = effectiveBundle || settings.zipOutput;
+    // Φάση 5 — το έξυπνο «τι»: πλήρες (.zip με φορητά) ΜΟΝΟ όταν το αποτύπωμα
+    // των φορητών άλλαξε από το τελευταίο πλήρες· αλλιώς γρήγορο (.db, μόνο
+    // βάση). Κανένα αντίγραφο δεν εξαρτάται από άλλο — το πλήρες είναι πάντα
+    // αυτοτελές.
+    String? currentFingerprint;
+    var isFull = false;
+    if (wantBundle) {
+      currentFingerprint = await PortableContentFingerprint.compute(
+        settings: settings,
+        availability: portableAvailability,
+      );
+      isFull = settings.lastFullBackupFingerprint != currentFingerprint;
+    }
     var finalPath = outDbPath;
 
-    if (useZipBundle) {
+    if (isFull) {
       final zipPath = p.join(dest, '$stem.zip');
       try {
         final archive = Archive();
         final dbBytes = await outDbFile.readAsBytes();
-        final innerDbName = effectiveBundle
-            ? BuildingMapStorage.backupZipDbFileName
-            : dbFileName;
-        archive.addFile(ArchiveFile(innerDbName, dbBytes.length, dbBytes));
+        archive.addFile(
+          ArchiveFile(
+            BuildingMapStorage.backupZipDbFileName,
+            dbBytes.length,
+            dbBytes,
+          ),
+        );
         // Manifest στη ρίζα: παλιότερες εκδόσεις αγνοούν μη-.db εγγραφές
         // κατά την επιλογή βάσης της επαναφοράς.
         archive.addFile(
@@ -325,9 +352,7 @@ class DatabaseBackupService {
         } catch (_) {}
         finalPath = zipPath;
       } catch (e) {
-        final message = effectiveBundle
-            ? 'Η συμπίεση zip (βάση + φορητά αρχεία) απέτυχε: $e'
-            : 'Η συμπίεση zip απέτυχε: $e';
+        final message = 'Η συμπίεση zip (βάση + φορητά αρχεία) απέτυχε: $e';
         await auditFailure(message, outputPath: outDbPath);
         return DatabaseBackupResult(
           success: false,
@@ -338,24 +363,35 @@ class DatabaseBackupService {
     }
 
     try {
-      await _applyRetention(destDir, baseName, settings);
+      await BackupRetention.apply(
+        destDir: destDir,
+        baseName: baseName,
+        settings: settings,
+      );
     } catch (_) {}
 
     final parts = <String>[];
-    if (settings.effectiveIncludeMapImagesInBackup(portableAvailability)) {
-      parts.add('εικόνες χαρτών');
-    }
-    if (settings.effectiveIncludeToolImages(portableAvailability)) {
-      parts.add('εικονίδια εργαλείων');
-    }
-    if (settings.effectiveIncludeLexicon(portableAvailability)) {
-      parts.add('λεξικό');
-    }
-    if (settings.effectiveIncludeLampDb(portableAvailability)) {
-      parts.add('βάση Λάμπας');
+    if (isFull) {
+      if (settings.effectiveIncludeMapImagesInBackup(portableAvailability)) {
+        parts.add('εικόνες χαρτών');
+      }
+      if (settings.effectiveIncludeToolImages(portableAvailability)) {
+        parts.add('εικονίδια εργαλείων');
+      }
+      if (settings.effectiveIncludeLexicon(portableAvailability)) {
+        parts.add('λεξικό');
+      }
+      if (settings.effectiveIncludeLampDb(portableAvailability)) {
+        parts.add('βάση Λάμπας');
+      }
     }
     final tail = parts.isEmpty ? '' : ' (${parts.join(', ')})';
-    final message = 'Το αντίγραφο ολοκληρώθηκε$tail.';
+    final message = isFull
+        ? 'Το πλήρες αντίγραφο ολοκληρώθηκε$tail.'
+        : (wantBundle
+              ? 'Το γρήγορο αντίγραφο ολοκληρώθηκε — τα φορητά αρχεία δεν '
+                    'έχουν αλλάξει από το τελευταίο πλήρες.'
+              : 'Το αντίγραφο ολοκληρώθηκε.');
     await DatabaseBackupAudit.logRunResult(
       trigger: auditTrigger,
       success: true,
@@ -367,6 +403,8 @@ class DatabaseBackupService {
       success: true,
       outputPath: finalPath,
       message: message,
+      isFullBackup: isFull,
+      portableFingerprint: isFull ? currentFingerprint : null,
     );
   }
 
@@ -629,72 +667,4 @@ class DatabaseBackupService {
     );
   }
 
-  static Future<void> _applyRetention(
-    Directory destDir,
-    String baseName,
-    DatabaseBackupSettings settings,
-  ) async {
-    if (!settings.retentionMaxAgeEnabled &&
-        !settings.retentionMaxCopiesEnabled) {
-      return;
-    }
-
-    final escapedBase = RegExp.escape(baseName);
-    final dateFirst = RegExp(
-      '^(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2})_$escapedBase\\.(db|zip)\$',
-    );
-    final baseFirst = RegExp(
-      '^${escapedBase}_(\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2})\\.(db|zip)\$',
-    );
-
-    final backups = <File>[];
-    await for (final entity in destDir.list(followLinks: false)) {
-      if (entity is! File) continue;
-      final name = p.basename(entity.path);
-      if (!dateFirst.hasMatch(name) && !baseFirst.hasMatch(name)) continue;
-      backups.add(entity);
-    }
-
-    if (backups.isEmpty) return;
-
-    if (settings.retentionMaxAgeEnabled) {
-      final cutoff = DateTime.now().subtract(
-        Duration(days: settings.retentionMaxAgeDays),
-      );
-      for (final f in backups) {
-        try {
-          final stat = await f.stat();
-          if (stat.modified.isBefore(cutoff)) {
-            await f.delete();
-          }
-        } catch (_) {}
-      }
-    }
-
-    if (!settings.retentionMaxCopiesEnabled) return;
-
-    final remaining = <File>[];
-    await for (final entity in destDir.list(followLinks: false)) {
-      if (entity is! File) continue;
-      final name = p.basename(entity.path);
-      if (!dateFirst.hasMatch(name) && !baseFirst.hasMatch(name)) continue;
-      remaining.add(entity);
-    }
-    if (remaining.length <= settings.retentionMaxCopies) return;
-
-    remaining.sort((a, b) {
-      try {
-        return b.lastModifiedSync().compareTo(a.lastModifiedSync());
-      } catch (_) {
-        return 0;
-      }
-    });
-
-    final excess = remaining.skip(settings.retentionMaxCopies);
-    for (final f in excess) {
-      try {
-        await f.delete();
-      } catch (_) {}
-    }
-  }
 }

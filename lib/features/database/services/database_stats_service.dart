@@ -5,9 +5,8 @@ import 'package:path/path.dart' as p;
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_identity_repository.dart';
 import '../../../core/database/database_maintenance_repository.dart';
-import '../../../core/database/settings_repository.dart';
-import '../models/database_backup_settings.dart';
 import '../models/database_stats.dart';
+import 'active_backup_settings.dart';
 
 /// Συλλογή στατιστικών αρχείου βάσης και `COUNT(*)` ανά πίνακα.
 class DatabaseStatsService {
@@ -92,10 +91,9 @@ class DatabaseStatsService {
     DateTime? lastBackup;
 
     try {
-      final raw = await SettingsRepository(
-        db,
-      ).getSetting(DatabaseBackupSettings.appSettingsKey);
-      final settings = DatabaseBackupSettings.fromJsonString(raw);
+      // Η ένδειξη «Τελευταίο αντίγραφο» κοιτά τον φάκελο του συνδεδεμένου
+      // χρήστη — εκεί όπου γράφονται πράγματι τα αντίγραφα.
+      final settings = await ActiveBackupSettings.read();
       lastBackup = await latestBackupFileModified(
         destinationDirectory: settings.destinationDirectory,
         dbBaseName: baseName,

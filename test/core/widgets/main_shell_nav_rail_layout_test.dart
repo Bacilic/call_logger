@@ -29,8 +29,10 @@ Future<void> _pumpShell(
   required bool showLampNav,
   required bool showDatabaseNav,
   required bool enableSpellCheck,
+  Size size = const Size(1600, 900),
+  bool showLabels = true,
 }) async {
-  tester.view.physicalSize = const Size(1600, 900);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();
@@ -40,7 +42,7 @@ Future<void> _pumpShell(
   await tester.runAsync(() async {
     // Η προτίμηση «ανοιχτή μπάρα» αποθηκεύεται στη βάση: χωρίς μηδενισμό, ένα
     // τεστ που πατά το κουμπί σύμπτυξης αλλάζει την αφετηρία του επόμενου.
-    await SettingsService().windowUi.setNavRailShowLabels(true);
+    await SettingsService().windowUi.setNavRailShowLabels(showLabels);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -163,6 +165,63 @@ void main() {
       );
 
       await _closeSettings(tester);
+      await _flushSqfliteLockTimers(tester);
+    });
+
+    testWidgets('χαμηλό παράθυρο: η μπάρα κυλά αντί να ξεχειλίζει', (
+      tester,
+    ) async {
+      // Πραγματικό σφάλμα χρήστη, 24/08/2026: εννέα κουμπιά σε συμπτυγμένη
+      // μπάρα ξεχείλιζαν κατά 9 pixel σε κάθε αλλαγή οθόνης. Η NavigationRail
+      // δεν κυλά μόνη της· την τυλίγουμε εμείς.
+      //
+      // **Το ύψος εδώ ΔΕΝ είναι το ύψος του χρήστη.** Στο δικό του μηχάνημα
+      // έπαιζε ρόλο και η κλίμακα οθόνης των Windows, που δεν αναπαράγεται
+      // εύκολα σε τεστ. Αυτό που φυλάγεται δεν είναι ένας αριθμός αλλά ο
+      // κανόνας: **όταν δεν χωρά, κυλά** — γι' αυτό το ύψος διαλέγεται τόσο
+      // χαμηλό ώστε να μη χωρά με βεβαιότητα, και η δεύτερη προσδοκία το
+      // επιβεβαιώνει αντί να το υποθέτει.
+      //
+      // Η μπάρα στήνεται **συμπτυγμένη επίτηδες**: εκεί κάθε κουμπί πιάνει
+      // περισσότερο ύψος από ό,τι με λεζάντες.
+      await _pumpShell(
+        tester,
+        showLampNav: true,
+        showDatabaseNav: true,
+        enableSpellCheck: true,
+        showLabels: false,
+        size: const Size(1290, 420),
+      );
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason:
+            'Χαμηλό παράθυρο: η πλευρική μπάρα οφείλει να κυλά, όχι να '
+            'ξεχειλίζει.',
+      );
+
+      // Απόδειξη ότι ο έλεγχος φυλάει κάτι: σε αυτό το ύψος το περιεχόμενο
+      // ΟΝΤΩΣ δεν χωρά. Χωρίς αυτό, το τεστ θα έμενε πράσινο ακόμη κι αν το
+      // παράθυρο μεγάλωνε τόσο που να μη στενεύει ποτέ τίποτα.
+      final position = tester
+          .state<ScrollableState>(
+            find
+                .ancestor(
+                  of: find.byType(NavigationRail),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          )
+          .position;
+      expect(
+        position.maxScrollExtent,
+        greaterThan(0),
+        reason:
+            'Αν χωρούσε, το τεστ δεν θα δοκίμαζε τίποτα — ανέβασε τα κουμπιά ή '
+            'χαμήλωσε το παράθυρο.',
+      );
+
       await _flushSqfliteLockTimers(tester);
     });
 

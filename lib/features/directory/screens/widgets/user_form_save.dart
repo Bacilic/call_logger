@@ -322,7 +322,7 @@ class UserFormSave {
       await host.ref.read(lookupServiceProvider.future);
       if (!host.mounted) return;
       host.widget.onSaved?.call();
-      Navigator.of(host.context).pop(true);
+      host.closeForm(true);
       ScaffoldMessenger.of(host.context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -374,7 +374,7 @@ class UserFormSave {
         isNew: false,
       );
       host.widget.onSaved?.call();
-      Navigator.of(host.context).pop(true);
+      host.closeForm(true);
       showSaveConfirmationSnackBar(host.context, saveMessage);
       return;
     }
@@ -395,7 +395,7 @@ class UserFormSave {
       isNew: true,
     );
     host.widget.onSaved?.call();
-    Navigator.of(host.context).pop(true);
+    host.closeForm(true);
     showSaveConfirmationSnackBar(host.context, saveMessage);
   }
 

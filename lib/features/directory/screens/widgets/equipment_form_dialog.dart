@@ -68,6 +68,22 @@ class EquipmentFormDialog extends ConsumerStatefulWidget {
 /// Διαβάζει providers με το δικό του `ref` — ποτέ με του καλούντος, που
 /// μπορεί να πάψει να υπάρχει όσο τρέχει μια αποθήκευση.
 class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
+  /// Κλείνει **αυτή** τη φόρμα — ποτέ ό,τι τυχαίνει να είναι από πάνω της.
+  ///
+  /// Το `Navigator.pop()` κλείνει την **κορυφαία** διαδρομή, όχι τη δική μας.
+  /// Συνήθως ταυτίζονται· παύουν να ταυτίζονται μόλις μείνει ανοιχτός ένας
+  /// θυγατρικός διάλογος επιβεβαίωσης. Τότε η φόρμα κλείνει τον ξένο διάλογο
+  /// δίνοντάς του **λάθος τύπο απάντησης**, και η εφαρμογή σταματά με σφάλμα.
+  ///
+  /// Όταν κάποιος θυγατρικός διάλογος είναι ακόμη ανοιχτός, **δεν κλείνουμε
+  /// τίποτα**: ο χρήστης απαντά πρώτα εκεί.
+  void closeForm([bool? result]) {
+    if (!mounted) return;
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+    Navigator.of(context).pop(result);
+  }
+
   /// Μήνυμα απόρριψης αποθήκευσης (διπλότυπος κωδικός, άγνωστος κάτοχος).
   ///
   /// Πάει στον **ριζικό** messenger επίτηδες: ο διάλογος ζει μέσα σε
@@ -553,7 +569,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
       } catch (_) {
         if (!mounted) return;
         widget.onSaved?.call();
-        Navigator.of(context).pop(true);
+        closeForm(true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -566,7 +582,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
       }
       if (!mounted) return;
       widget.onSaved?.call();
-      Navigator.of(context).pop(true);
+      closeForm(true);
       showSaveConfirmationSnackBar(context, savedMessage);
       return;
     }
@@ -590,7 +606,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     } catch (_) {
       if (!mounted) return;
       widget.onSaved?.call();
-      Navigator.of(context).pop(true);
+      closeForm(true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -603,7 +619,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     }
     if (!mounted) return;
     widget.onSaved?.call();
-    Navigator.of(context).pop(true);
+    closeForm(true);
     final createMessage = 'Δημιουργήθηκε εξοπλισμός «$code»';
     showSaveConfirmationSnackBar(context, createMessage);
   }
