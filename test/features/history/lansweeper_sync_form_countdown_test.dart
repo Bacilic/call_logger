@@ -91,4 +91,26 @@ void main() {
       expect(green, Colors.green);
     });
   });
+
+  group('Χρώμα χρόνου αναμονής ΤΝ', () {
+    Color colorAt(double seconds) =>
+        LansweeperSyncForm.suggestElapsedColor(seconds);
+
+    test('φυσιολογική αναμονή κάτω από 7 δευτερόλεπτα: πράσινο', () {
+      expect(colorAt(0), Colors.green);
+      expect(colorAt(3.43), Colors.green);
+      expect(colorAt(6.99), Colors.green);
+    });
+
+    test('από 7 έως 19 δευτερόλεπτα: πορτοκαλί', () {
+      expect(colorAt(7), Colors.orange);
+      expect(colorAt(12.5), Colors.orange);
+      expect(colorAt(18.99), Colors.orange);
+    });
+
+    test('από 19 δευτερόλεπτα και πάνω: κόκκινο ως το όριο των 30', () {
+      expect(colorAt(19), Colors.red);
+      expect(colorAt(29.9), Colors.red);
+    });
+  });
 }

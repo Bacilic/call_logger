@@ -157,8 +157,9 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
           presence: selectable.presence,
           suggestedName: OperatorIdentity.suggestedDisplayName(),
           hasWindowsAccount: OperatorIdentity.suggestedDisplayName().isNotEmpty,
-          onPick: (operator) {
-            OperatorIdentity.activateForSession(operator);
+          onPick: (operator) async {
+            await OperatorIdentity.chooseForSession(operator);
+            if (!mounted) return;
             setState(() => _operatorChosen = true);
           },
           onCreate: (displayName, bindCurrentAccount) async {

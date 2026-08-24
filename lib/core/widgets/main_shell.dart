@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/database_file_classifier.dart';
 import '../database/database_init_result.dart';
 import '../database/database_replacement_notice.dart';
+import '../database/shared_database_refresh.dart';
 import 'database_replacement_dialog.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../providers/core_lexicon_provider.dart';
@@ -367,6 +368,10 @@ class MainShellState extends ConsumerState<MainShell> {
     ref.watch(updatePeriodicCheckProvider);
     // …και τον φρουρό που βλέπει αν αντικαταστάθηκε το αρχείο της βάσης.
     ref.watch(databaseReplacementWatchdogProvider);
+    // …και τον φρουρό που φέρνει τις αλλαγές των συναδέλφων στην οθόνη. Ζει στο
+    // κέλυφος και όχι στην οθόνη Εκκρεμοτήτων, ώστε ο μετρητής της μπάρας να
+    // ενημερώνεται και από άλλη οθόνη.
+    ref.watch(sharedDatabaseChangeWatcherProvider);
     ref.listen<String?>(databaseReplacementNoticeProvider, (previous, next) {
       if (next == null || !mounted) return;
       unawaited(

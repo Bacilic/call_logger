@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
@@ -30,7 +32,9 @@ class OperatorPickerBody extends StatefulWidget {
   /// συχνά το στοιχείο που ξεχωρίζει δύο συναδέλφους στον ίδιο υπολογιστή.
   final Map<int, List<OperatorPresenceLine>> presence;
 
-  final void Function(Operator operator) onPick;
+  /// Ασύγχρονο: η επιλογή δεν αλλάζει μόνο την ταυτότητα της συνεδρίας — τη
+  /// σημειώνει και στη μνήμη του υπολογιστή, ώστε να επιβιώσει της εκκίνησης.
+  final Future<void> Function(Operator operator) onPick;
 
   /// Δημιουργία νέου προφίλ· `bindCurrentAccount` το δένει στον λογαριασμό
   /// Windows ώστε να μην ξαναρωτηθεί.
@@ -69,6 +73,13 @@ class _OperatorPickerBodyState extends State<OperatorPickerBody> {
     super.dispose();
   }
 
+  /// Το κλείδωμα εμποδίζει δεύτερη επιλογή όσο γράφεται η πρώτη — δύο γρήγορα
+  /// κλικ σε διαφορετικά ονόματα θα άφηναν τον σταθμό να θυμάται λάθος.
+  Future<void> _pick(Operator profile) async {
+    setState(() => _busy = true);
+    await widget.onPick(profile);
+  }
+
   Future<void> _create() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
@@ -103,7 +114,7 @@ class _OperatorPickerBodyState extends State<OperatorPickerBody> {
           operator: profile,
           presence:
               widget.presence[profile.id] ?? const <OperatorPresenceLine>[],
-          onTap: _busy ? null : () => widget.onPick(profile),
+          onTap: _busy ? null : () => unawaited(_pick(profile)),
         ),
       const SizedBox(height: 8),
       TextButton.icon(

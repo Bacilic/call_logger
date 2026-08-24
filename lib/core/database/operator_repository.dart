@@ -1,5 +1,6 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
+import '../../features/operators/services/operator_save_conflict.dart';
 import '../models/operator.dart';
 import '../utils/search_text_normalizer.dart';
 
@@ -101,7 +102,22 @@ class OperatorRepository {
   }
 
   /// Ενημερώνει υπάρχον προφίλ. Χωρίς id δεν υπάρχει τι να ενημερωθεί.
-  Future<void> update(Operator operator) async {
+  ///
+  /// Το [expected] είναι η εικόνα **που είχε φορτώσει η φόρμα**. Είναι
+  /// υποχρεωτικό — και δεκτικό `null` μόνο ρητά — γιατί η αποθήκευση γράφει
+  /// ολόκληρη τη γραμμή: χωρίς αφετηρία, ο δεύτερος διαχειριστής σβήνει ό,τι
+  /// έδωσε ο πρώτος και κανείς δεν το μαθαίνει. Με προαιρετική παράμετρο ο
+  /// επόμενος καλών θα την παρέλειπε χωρίς να το προσέξει.
+  ///
+  /// Με [force] `true` η εγγραφή περνά παρά τη διένεξη: ο χρήστης είδε τι
+  /// άλλαξε και επέλεξε να κρατήσει τη δική του εικόνα.
+  ///
+  /// Πετά [OperatorStaleException] **πριν** γράψει οτιδήποτε.
+  Future<void> update(
+    Operator operator, {
+    required Operator? expected,
+    bool force = false,
+  }) async {
     final id = operator.id;
     if (id == null) {
       throw ArgumentError.value(
@@ -110,7 +126,40 @@ class OperatorRepository {
         'Το προφίλ δεν έχει αποθηκευτεί ακόμη — δεν υπάρχει id για ενημέρωση.',
       );
     }
+    if (!force && expected != null) {
+      final conflict = await conflictFor(
+        expected: expected,
+        attempted: operator,
+      );
+      if (conflict != null) throw OperatorStaleException(conflict);
+    }
     final data = Map<String, Object?>.from(operator.toMap())..remove('id');
     await db.update(tableName, data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Άλλαξε το προφίλ από τότε που το διάβασε η φόρμα; `null` = καθαρό.
+  ///
+  /// Δεν υπάρχει `updated_at` στα προφίλ, οπότε η διένεξη κρίνεται από τις
+  /// **τιμές** — και είναι ακριβέστερο: ό,τι δεν άλλαξε δεν είναι διένεξη.
+  ///
+  /// Ζει χωριστά από το [update] ώστε ο καλών να μπορεί να ρωτήσει **πρώτος**,
+  /// πριν από τους δικούς του κανόνες. Ένας έλεγχος που τρέχει μετά τους
+  /// υπόλοιπους δίνει σωστή προστασία με λάθος αιτιολογία: ο χρήστης διαβάζει
+  /// «πρέπει να μείνει ένας διαχειριστής» ενώ το πραγματικό θέμα είναι ότι η
+  /// καρτέλα του είναι παλιά.
+  Future<OperatorSaveConflict?> conflictFor({
+    required Operator expected,
+    required Operator attempted,
+  }) async {
+    final id = attempted.id ?? expected.id;
+    if (id == null) return null;
+    final current = await findById(id);
+    if (current == null) return null;
+    final conflict = OperatorSaveConflict(
+      expected: expected,
+      fresh: current,
+      attempted: attempted,
+    );
+    return conflict.hasChanges ? conflict : null;
   }
 }

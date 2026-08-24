@@ -205,6 +205,8 @@ class LansweeperReportAi {
     host.aiLastSuggestSelection = selected;
     host.aiAutoResubmitArmed = false;
 
+    _announceDowngradeIfAny(selected);
+
     host.aiSuggestRunning = true;
     host.notifyReportChanged();
     final client = http.Client();
@@ -293,6 +295,49 @@ class LansweeperReportAi {
         host.notifyReportChanged();
       }
     }
+  }
+
+  /// Λέει στον χρήστη ότι η πρόταση **δεν** ξεκινά από το μοντέλο που έχει
+  /// ρυθμίσει — και την ακριβή αιτία.
+  ///
+  /// Εμφανίζεται σε κάθε «Πρόταση ΤΝ» όσο ο υπολογιστής θυμάται το κύριο
+  /// πεσμένο: χωρίς αυτό, ο χρήστης βλέπει να τρέχει άλλο μοντέλο και δεν έχει
+  /// τρόπο να μάθει γιατί. Μόλις αλλάξει το κύριο μοντέλο, η μνήμη δεν
+  /// αντιστοιχεί σε τίποτα και το μήνυμα σβήνει μόνο του.
+  void _announceDowngradeIfAny(List<ReportCallItem> selected) {
+    final registry = host.ref.read(aiModelCooldownRegistryProvider);
+    final primary = host.ref.read(geminiPrimaryModelProvider).trim();
+    final downtime = registry.downtime(primary);
+    if (downtime == null) return;
+
+    final fallback = host.ref.read(geminiFallbackModelProvider).trim();
+    final fallbackEnabled = host.ref.read(geminiFallbackEnabledProvider);
+    final activeModel =
+        fallbackEnabled && fallback.isNotEmpty && fallback != primary
+        ? fallback
+        : primary;
+
+    host.showDialogSnackBar(
+      SnackBar(
+        content: Text(
+          LansweeperAiPresenter.downgradedMessage(
+            downtime: downtime,
+            activeModel: activeModel,
+            now: DateTime.now(),
+          ),
+        ),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: 'Δοκίμασε το κύριο',
+          onPressed: () {
+            registry.clear(primary);
+            // Όσο τρέχει ήδη πρόταση, η κλήση επιστρέφει αμέσως: τότε το πάτημα
+            // απλώς καθαρίζει τη μνήμη και ισχύει από την επόμενη φορά.
+            unawaited(suggestWithAi(selected));
+          },
+        ),
+      ),
+    );
   }
 
   void _startAiSuggestTicker({required String model}) {

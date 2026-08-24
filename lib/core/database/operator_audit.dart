@@ -98,6 +98,37 @@ abstract final class OperatorAudit {
         permission.allowedByDefault;
   }
 
+  /// Ποιος άγγιξε τελευταίος αυτό το προφίλ, και πότε.
+  ///
+  /// Η γραμμή `operators` δεν κρατά «ποιος με άλλαξε» — το κρατά μόνο το
+  /// Ιστορικό. Χρησιμοποιείται όταν έχει διαπιστωθεί διένεξη, ώστε ο διάλογος να
+  /// λέει «ο Βασίλης» και όχι «κάποιος». Πατά στο υπάρχον ευρετήριο
+  /// `(entity_type, entity_id)`.
+  ///
+  /// **Η αποτυχία είναι σιωπή:** η ταυτότητα είναι συμπληρωματική, και μια
+  /// διένεξη πρέπει να αναφέρεται ακόμη κι όταν το Ιστορικό δεν απαντά.
+  static Future<({String? who, DateTime? at})> lastActorFor(
+    DatabaseExecutor db,
+    int operatorId,
+  ) async {
+    try {
+      final rows = await db.query(
+        'audit_log',
+        columns: ['user_performing', 'timestamp'],
+        where: 'entity_type = ? AND entity_id = ?',
+        whereArgs: [AuditEntityTypes.operatorProfile, operatorId],
+        orderBy: 'id DESC',
+        limit: 1,
+      );
+      if (rows.isEmpty) return (who: null, at: null);
+      final who = (rows.first['user_performing'] as String?)?.trim();
+      final at = DateTime.tryParse((rows.first['timestamp'] as String?) ?? '');
+      return (who: (who == null || who.isEmpty) ? null : who, at: at);
+    } catch (_) {
+      return (who: null, at: null);
+    }
+  }
+
   static Map<String, dynamic> _identityValues(Operator operator) {
     return <String, dynamic>{
       'display_name': operator.displayName,

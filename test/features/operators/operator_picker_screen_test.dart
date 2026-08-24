@@ -32,7 +32,7 @@ void main() {
             profiles: profiles,
             suggestedName: suggestedName,
             hasWindowsAccount: hasWindowsAccount,
-            onPick: (operator) => picked.add(operator.displayName),
+            onPick: (operator) async => picked.add(operator.displayName),
             onCreate: (name, bind) async => created.add((name, bind)),
           ),
         ),

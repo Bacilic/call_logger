@@ -6,13 +6,14 @@ import '../database/operator_audit.dart';
 import '../database/operator_repository.dart';
 import '../models/operator.dart';
 import 'current_operator.dart';
+import 'workstation_operators.dart';
 
 /// Ποιος κάθεται μπροστά στην οθόνη — αναγνώριση χωρίς κωδικούς.
 ///
-/// Η εφαρμογή διαβάζει τον λογαριασμό Windows και βρίσκει μόνη της το προφίλ.
-/// Όταν δεν τον αναγνωρίζει **δεν μαντεύει**: επιστρέφει άδεια και ρωτά, γιατί
-/// σε κοινόχρηστο λογαριασμό η αυτόματη δημιουργία θα χρέωνε τις ενέργειες
-/// όλων σε ένα πρόσωπο.
+/// Η εφαρμογή ρωτά πρώτα τη μνήμη του σταθμού (ποιοι έχουν διαλέξει ταυτότητα
+/// εδώ) και μετά τον λογαριασμό Windows. Όταν δεν καταλήγει σε ένα πρόσωπο
+/// **δεν μαντεύει**: επιστρέφει άδεια και ρωτά, γιατί σε κοινόχρηστο σταθμό
+/// μια λάθος εικασία χρεώνει τις ενέργειες σε άλλον άνθρωπο.
 class OperatorIdentity {
   const OperatorIdentity._();
 
@@ -20,28 +21,52 @@ class OperatorIdentity {
   static String? get currentWindowsAccount =>
       Platform.environment['USERNAME'] ?? Platform.environment['USER'];
 
-  /// Βρίσκει το προφίλ του τρέχοντος λογαριασμού και το ορίζει ως ενεργό.
+  /// Βρίσκει ποιος κάθεται εδώ και τον ορίζει ως ενεργό.
   ///
-  /// Επιστρέφει `null` όταν δεν υπάρχει ταύτιση — τότε αποφασίζει ο άνθρωπος,
-  /// από την οθόνη επιλογής.
+  /// Δύο ερωτήματα, με αυτή τη σειρά:
+  ///
+  /// 1. **Ποιοι έχουν δουλέψει σε αυτόν τον σταθμό;** Ένας ⇒ αυτός είναι, χωρίς
+  ///    ερώτηση. Δύο ή περισσότεροι ⇒ `null`, δηλαδή ρωτά ο άνθρωπος: όπου
+  ///    εναλλάσσονται πρόσωπα, καμία εικασία δεν είναι αρκετά καλή.
+  /// 2. **Ποιον λέει ο λογαριασμός Windows;** Μόνο όταν ο σταθμός δεν θυμάται
+  ///    κανέναν — πρώτη εκκίνηση, ή μετά από αλλαγή βάσης που δεν ξέρει αυτά
+  ///    τα ονόματα.
+  ///
+  /// Επιστρέφει `null` όταν δεν καταλήγει σε ένα πρόσωπο — τότε αποφασίζει ο
+  /// άνθρωπος, από την οθόνη επιλογής.
   ///
   /// Η ταυτότητα **μηδενίζεται πρώτα**: μετά από αλλαγή βάσης τα προφίλ είναι
   /// άλλα, και μια αποτυχία δεν επιτρέπεται να αφήσει ενεργό τον χρήστη της
   /// προηγούμενης βάσης.
   ///
-  /// Το [windowsAccount] δίνεται μόνο από ελέγχους.
+  /// Τα [windowsAccount] και [workstationNames] δίνονται μόνο από ελέγχους.
   static Future<Operator?> resolveAndActivate(
     DatabaseExecutor db, {
     String? windowsAccount,
+    List<String>? workstationNames,
   }) async {
     CurrentOperator.reset();
+
+    final repository = OperatorRepository(db);
+    final remembered = workstationNames ?? await WorkstationOperators.names();
+    if (remembered.isNotEmpty) {
+      final known = rememberedWorkstationProfiles(
+        remembered,
+        await repository.getAll(),
+      );
+      if (known.length > 1) return null;
+      if (known.length == 1) {
+        CurrentOperator.activate(known.single);
+        return known.single;
+      }
+    }
 
     final account = normalizeWindowsAccount(
       windowsAccount ?? currentWindowsAccount,
     );
     if (account == null) return null;
 
-    final existing = await OperatorRepository(db).findByWindowsAccount(account);
+    final existing = await repository.findByWindowsAccount(account);
     if (existing == null) return null;
 
     CurrentOperator.activate(existing);
@@ -54,8 +79,12 @@ class OperatorIdentity {
   /// «Αλλαγή χρήστη» σε αυτόν που είναι ήδη ο χρήστης δεν σημαίνει τίποτα. Στην
   /// οθόνη εκκίνησης δεν υπάρχει ακόμη συνδεδεμένος, οπότε εκεί η αφαίρεση δεν
   /// αγγίζει τίποτα — ένα σημείο, δύο σωστές συμπεριφορές.
-  static Future<List<Operator>> selectableProfiles(DatabaseExecutor db) async {
-    final all = await OperatorRepository(db).getAll();
+  static Future<List<Operator>> selectableProfiles(DatabaseExecutor db) async =>
+      selectableFrom(await OperatorRepository(db).getAll());
+
+  /// Ο ίδιος κανόνας πάνω σε λίστα που έχει ήδη διαβαστεί — ώστε ο επιλογέας,
+  /// που χρειάζεται και τα υπόλοιπα προφίλ, να μη ρωτά τη βάση δεύτερη φορά.
+  static List<Operator> selectableFrom(List<Operator> all) {
     final activeId = CurrentOperator.active?.id;
     return [
       for (final operator in all)
@@ -64,13 +93,24 @@ class OperatorIdentity {
     ];
   }
 
-  /// Ενεργοποιεί υπάρχον προφίλ **για αυτή τη συνεδρία μόνο**.
+  /// Ενεργοποιεί υπάρχον προφίλ **χωρίς να το σημειώσει στον σταθμό**.
   ///
-  /// Δεν δένει τον λογαριασμό Windows: σε κοινόχρηστο υπολογιστή η επόμενη
-  /// εκκίνηση πρέπει να ξαναρωτήσει. Το μόνιμο δέσιμο γίνεται ρητά, από την
-  /// οθόνη «Χρήστες».
+  /// Για εσωτερική χρήση και ελέγχους. Η ρητή ανθρώπινη επιλογή περνά από το
+  /// [chooseForSession], ώστε ο σταθμός να θυμάται ποιος διάλεξε εδώ.
   static void activateForSession(Operator operator) {
     CurrentOperator.activate(operator);
+  }
+
+  /// Ο άνθρωπος διάλεξε ρητά ποιος είναι — από την οθόνη «Ποιος είστε;» ή τον
+  /// διάλογο «Αλλαγή χρήστη».
+  ///
+  /// Ενεργοποιεί την ταυτότητα **και** τη σημειώνει στη μνήμη του σταθμού,
+  /// ώστε η επόμενη εκκίνηση να μην ξεχάσει την επιλογή. Δεν δένει τον
+  /// λογαριασμό Windows: αυτό είναι μόνιμη αντιστοίχιση προσώπου με λογαριασμό
+  /// και γίνεται ρητά, από την οθόνη «Χρήστες».
+  static Future<void> chooseForSession(Operator operator) async {
+    CurrentOperator.activate(operator);
+    await WorkstationOperators.remember(operator.displayName);
   }
 
   /// Δημιουργεί προφίλ από την οθόνη επιλογής και το ενεργοποιεί.
@@ -105,6 +145,9 @@ class OperatorIdentity {
     // έγραφε «—» στο «ποιος το έκανε» — τη μόνη εγγραφή για την οποία ξέρουμε
     // με βεβαιότητα ποιος ήταν.
     CurrentOperator.activate(created);
+    // Η δημιουργία είναι κι αυτή ρητή επιλογή: ο σταθμός πρέπει να τη θυμάται
+    // όπως θυμάται κάθε άλλη.
+    await WorkstationOperators.remember(created.displayName);
     await OperatorAudit.logCreated(db, created);
     return created;
   }

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/database/audit_service.dart';
+import '../../calls/services/call_save_conflict.dart';
+import 'call_conflict_dialog.dart';
 import '../../../core/services/save_confirmation_summary.dart';
 import '../../../core/utils/call_duration_format.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
@@ -296,7 +298,34 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
 
     setState(() => _saving = true);
     try {
-      await ref.read(historyCallActionsServiceProvider).saveEditedCall(updated);
+      final service = ref.read(historyCallActionsServiceProvider);
+      try {
+        await service.saveEditedCall(updated, expected: _original);
+      } on CallStaleException catch (stale) {
+        if (!mounted) return;
+        // Ο διάλογος ρωτά αντί να γράψει: όταν ο συνάδελφος έχει καταχωρήσει
+        // την κλήση στο Lansweeper, το πέρασμα από πάνω δεν χάνει κείμενο —
+        // ανοίγει δεύτερο αίτημα, που η εφαρμογή δεν μπορεί να σβήσει.
+        final described = await service.describeConflict(stale.conflict);
+        if (!mounted) return;
+        final choice = await showCallConflictDialog(context, described);
+        if (!mounted) return;
+        if (choice != CallConflictChoice.overwrite) {
+          setState(() => _saving = false);
+          await _load();
+          if (!mounted) return;
+          showDialogSnackBar(
+            const SnackBar(
+              content: Text(
+                'Η αποθήκευση ακυρώθηκε — η κλήση ανανεώθηκε με τα τρέχοντα '
+                'στοιχεία. Ελέγξτε τα και δοκιμάστε ξανά.',
+              ),
+            ),
+          );
+          return;
+        }
+        await service.saveEditedCall(updated, expected: _original, force: true);
+      }
       if (!mounted) return;
       final saveMessage = buildSaveConfirmationMessage(
         entityType: AuditEntityTypes.call,

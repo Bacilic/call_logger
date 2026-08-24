@@ -2,6 +2,7 @@ import '../../../core/database/operator_audit.dart';
 import '../../../core/database/operator_repository.dart';
 import '../../../core/models/operator.dart';
 import '../../../core/services/current_operator.dart';
+import 'operator_save_conflict.dart';
 
 /// Το αποτέλεσμα μιας ενέργειας διαχείρισης χρηστών.
 ///
@@ -10,15 +11,32 @@ import '../../../core/services/current_operator.dart';
 class OperatorActionResult {
   const OperatorActionResult.ok([this.operator])
     : allowed = true,
-      message = null;
+      message = null,
+      conflict = null;
 
   const OperatorActionResult.blocked(this.message)
     : allowed = false,
-      operator = null;
+      operator = null,
+      conflict = null;
+
+  /// Η καρτέλα άλλαξε από άλλον — η αποθήκευση σταμάτησε πριν γράψει.
+  ///
+  /// Το [message] συμπληρώνεται κι εδώ επίτηδες: όποιος καλών δεν κοιτάξει το
+  /// [conflict] θα δείξει κάτι **αληθές** («κάποιος άλλος την άλλαξε») αντί να
+  /// αποθηκεύσει σιωπηλά ή να μείνει βουβός.
+  OperatorActionResult.conflictFound(OperatorSaveConflict found)
+    : allowed = false,
+      operator = null,
+      conflict = found,
+      message =
+          'Η καρτέλα άλλαξε από άλλον χρήστη στο μεταξύ '
+              '(${found.changedFields.join(', ')}). '
+              'Κλείστε την και ξανανοίξτε τη για να δείτε τα τρέχοντα στοιχεία.';
 
   final bool allowed;
   final String? message;
   final Operator? operator;
+  final OperatorSaveConflict? conflict;
 }
 
 /// Οι κανόνες της διαχείρισης χρηστών — έξω από τα widgets.
@@ -63,6 +81,9 @@ class OperatorManagement {
   }
 
   /// Αποθηκεύει τις αλλαγές ενός προφίλ, αφού περάσουν όλες οι δικλείδες.
+  ///
+  /// Με [force] `true` η αποθήκευση περνά παρά τη διένεξη — ο διαχειριστής είδε
+  /// τι άλλαξε ο συνάδελφός του και επέλεξε να κρατήσει τη δική του εικόνα.
   Future<OperatorActionResult> save(
     Operator original, {
     required String displayName,
@@ -70,6 +91,7 @@ class OperatorManagement {
     required bool isAdmin,
     required bool isActive,
     Map<String, bool>? permissionOverrides,
+    bool force = false,
   }) async {
     final id = original.id;
     if (id == null) {
@@ -79,17 +101,48 @@ class OperatorManagement {
     }
 
     final name = displayName.trim();
+    final account = normalizeWindowsAccount(windowsAccount);
+
+    // `null` στα δικαιώματα σημαίνει «ο καλών δεν ασχολήθηκε» — τα υπάρχοντα
+    // μένουν ως έχουν. Κενός χάρτης σημαίνει «καμία παράκαμψη», που είναι
+    // διαφορετικό πράγμα και πρέπει να μπορεί να γραφτεί.
+    final updated = original.copyWith(
+      displayName: name,
+      windowsAccount: account,
+      clearWindowsAccount: account == null,
+      isAdmin: isAdmin,
+      isActive: isActive,
+      permissionOverrides: permissionOverrides,
+    );
+
+    // ΠΡΩΤΑ η διένεξη, πριν από κάθε άλλο κανόνα. Ένας κανόνας που κρίνει πάνω
+    // σε παλιά δεδομένα δίνει σωστή προστασία με λάθος αιτιολογία: ο χρήστης
+    // διάβαζε «πρέπει να μείνει ένας διαχειριστής» ενώ το πραγματικό θέμα ήταν
+    // ότι ο συνάδελφός του είχε προλάβει.
+    if (!force) {
+      final conflict = await _repository.conflictFor(
+        expected: original,
+        attempted: updated,
+      );
+      if (conflict != null) return _conflictResult(conflict, id);
+    }
+
     final nameProblem = await _displayNameProblem(name, excludeId: id);
     if (nameProblem != null) return OperatorActionResult.blocked(nameProblem);
 
-    final account = normalizeWindowsAccount(windowsAccount);
     final accountProblem = await _windowsAccountProblem(account, excludeId: id);
     if (accountProblem != null) {
       return OperatorActionResult.blocked(accountProblem);
     }
 
-    final losesAdmin = original.isAdmin && !isAdmin;
-    final getsArchived = original.isAdmin && isAdmin && !isActive;
+    // Η κρίση γίνεται με τη ΒΑΣΗ, όχι με την εικόνα της φόρμας: αν ο συνάδελφος
+    // προήγαγε αυτό το προφίλ από άλλη οθόνη, η μπαγιάτικη καρτέλα δεν το ξέρει
+    // και ο έλεγχος «πρέπει να μείνει ένας διαχειριστής» θα έκρινε με το παλιό
+    // «δεν ήταν διαχειριστής» — δηλαδή δεν θα πυροδοτούσε καθόλου.
+    final storedIsAdmin =
+        (await _repository.findById(id))?.isAdmin ?? original.isAdmin;
+    final losesAdmin = storedIsAdmin && !isAdmin;
+    final getsArchived = storedIsAdmin && isAdmin && !isActive;
     if (losesAdmin || getsArchived) {
       final remaining = await _repository.countAdmins();
       if (remaining <= 1) {
@@ -103,18 +156,13 @@ class OperatorManagement {
       }
     }
 
-    // `null` σημαίνει «ο καλών δεν ασχολήθηκε με δικαιώματα» — τα υπάρχοντα
-    // μένουν ως έχουν. Κενός χάρτης σημαίνει «καμία παράκαμψη», που είναι
-    // διαφορετικό πράγμα και πρέπει να μπορεί να γραφτεί.
-    final updated = original.copyWith(
-      displayName: name,
-      windowsAccount: account,
-      clearWindowsAccount: account == null,
-      isAdmin: isAdmin,
-      isActive: isActive,
-      permissionOverrides: permissionOverrides,
-    );
-    await _repository.update(updated);
+    try {
+      // Ο φρουρός του repository ξανατρέχει εδώ ως δίχτυ — φθηνός, και πιάνει
+      // την κούρσα που άνοιξε όσο έτρεχαν οι υπόλοιποι έλεγχοι.
+      await _repository.update(updated, expected: original, force: force);
+    } on OperatorStaleException catch (e) {
+      return _conflictResult(e.conflict, id);
+    }
     await OperatorAudit.logUpdated(
       _repository.db,
       before: original,
@@ -122,6 +170,30 @@ class OperatorManagement {
     );
     _refreshActiveIdentity(updated);
     return OperatorActionResult.ok(updated);
+  }
+
+  /// Ντύνει τη διένεξη με το «ποιος και πότε» και τη δίνει στον καλούντα.
+  ///
+  /// Η ταυτότητα δεν ζει στη γραμμή του προφίλ — μόνο στο Ιστορικό. Ζητείται
+  /// **αφού** η διένεξη διαπιστωθεί, ώστε η κανονική αποθήκευση να μην πληρώνει
+  /// ποτέ το ερώτημα.
+  Future<OperatorActionResult> _conflictResult(
+    OperatorSaveConflict conflict,
+    int operatorId,
+  ) async {
+    final actor = await OperatorAudit.lastActorFor(
+      _repository.db,
+      operatorId,
+    );
+    return OperatorActionResult.conflictFound(
+      OperatorSaveConflict(
+        expected: conflict.expected,
+        fresh: conflict.fresh,
+        attempted: conflict.attempted,
+        changedBy: actor.who,
+        changedAt: actor.at,
+      ),
+    );
   }
 
   /// Όταν αλλάζει το **δικό μας** προφίλ, η ταυτότητα ανανεώνεται αμέσως.

@@ -27,7 +27,7 @@ class OperatorPickerScreen extends StatelessWidget {
   /// Γραμμές σύνδεσης ανά προφίλ — βλ. [OperatorPickerBody.presence].
   final Map<int, List<OperatorPresenceLine>> presence;
 
-  final void Function(Operator operator) onPick;
+  final Future<void> Function(Operator operator) onPick;
 
   /// Δημιουργία νέου προφίλ· `bindCurrentAccount` το δένει στον λογαριασμό
   /// Windows ώστε να μην ξαναρωτηθεί.

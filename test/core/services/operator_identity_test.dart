@@ -10,7 +10,9 @@ import 'package:call_logger/core/database/operator_repository.dart';
 import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/core/services/operator_identity.dart';
+import 'package:call_logger/core/services/workstation_operators.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../test_setup.dart';
@@ -21,6 +23,10 @@ void main() {
     late OperatorRepository repository;
 
     setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      // Η μνήμη του σταθμού ζει στις τοπικές ρυθμίσεις: κάθε τεστ ξεκινά με
+      // άδεια, αλλιώς η επιλογή του ενός θα ήταν η αφετηρία του επόμενου.
+      SharedPreferences.setMockInitialValues(<String, Object>{});
       initSqfliteFfiForTests();
       db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
       await onDatabaseUpgradeSquashed(db, 46, 47);
@@ -63,6 +69,7 @@ void main() {
       final resolved = await OperatorIdentity.resolveAndActivate(
         db,
         windowsAccount: 'vdrosos',
+        workstationNames: const <String>[],
       );
 
       expect(resolved!.id, created.id);
@@ -84,6 +91,7 @@ void main() {
         (await OperatorIdentity.resolveAndActivate(
           db,
           windowsAccount: 'ΝΟΣΟΚΟΜΕΙΟ\\VDROSOS',
+          workstationNames: const <String>[],
         ))?.displayName,
         'Βασίλης',
       );
@@ -112,7 +120,11 @@ void main() {
       );
       expect(CurrentOperator.active, isNotNull);
 
-      await OperatorIdentity.resolveAndActivate(db, windowsAccount: '');
+      await OperatorIdentity.resolveAndActivate(
+        db,
+        windowsAccount: '',
+        workstationNames: const <String>[],
+      );
 
       expect(CurrentOperator.active, isNull);
     });
@@ -123,6 +135,10 @@ void main() {
     late OperatorRepository repository;
 
     setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      // Η μνήμη του σταθμού ζει στις τοπικές ρυθμίσεις: κάθε τεστ ξεκινά με
+      // άδεια, αλλιώς η επιλογή του ενός θα ήταν η αφετηρία του επόμενου.
+      SharedPreferences.setMockInitialValues(<String, Object>{});
       initSqfliteFfiForTests();
       db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
       await onDatabaseUpgradeSquashed(db, 46, 47);
@@ -152,6 +168,7 @@ void main() {
       final resolved = await OperatorIdentity.resolveAndActivate(
         db,
         windowsAccount: 'v.drosos',
+        workstationNames: const <String>[],
       );
 
       expect(resolved?.displayName, 'Βασίλης Δρόσος');
@@ -169,7 +186,11 @@ void main() {
       CurrentOperator.reset();
 
       expect(
-        await OperatorIdentity.resolveAndActivate(db, windowsAccount: 'koino'),
+        await OperatorIdentity.resolveAndActivate(
+          db,
+          windowsAccount: 'koino',
+          workstationNames: const <String>[],
+        ),
         isNull,
       );
       expect((await repository.getAll()).single.windowsAccount, isNull);
@@ -263,6 +284,136 @@ void main() {
       );
 
       expect(await AuditService.performingUser(), '—');
+    });
+  });
+
+  group('Η μνήμη του σταθμού', () {
+    late Database db;
+    late OperatorRepository repository;
+
+    setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      initSqfliteFfiForTests();
+      db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
+      await onDatabaseUpgradeSquashed(db, 46, 47);
+      await db.execute(kCreateAuditLogTable);
+      repository = OperatorRepository(db);
+      CurrentOperator.reset();
+    });
+
+    tearDown(() async {
+      CurrentOperator.reset();
+      await db.close();
+    });
+
+    /// Ο ίδιος άνθρωπος με δύο λογαριασμούς Windows: στη δουλειά «v.drosos»,
+    /// στο σπίτι «bacilic». Το δεύτερο μηχάνημα έχει δικό του προφίλ, οπότε η
+    /// αναγνώριση από τον λογαριασμό τον βάζει πάντα ως λάθος πρόσωπο.
+    Future<void> seedTwoProfiles() async {
+      await repository.insert(
+        Operator(
+          displayName: 'Βασίλης',
+          windowsAccount: 'v.drosos',
+          isAdmin: true,
+          createdAt: DateTime(2026, 8, 20),
+        ),
+      );
+      await repository.insert(
+        Operator(
+          displayName: 'Bacilic',
+          windowsAccount: 'bacilic',
+          createdAt: DateTime(2026, 8, 20),
+        ),
+      );
+    }
+
+    test('η αλλαγή χρήστη επιβιώνει της επανεκκίνησης', () async {
+      await seedTwoProfiles();
+
+      // Πριν διαλέξει άνθρωπος, αποφασίζει ο λογαριασμός Windows.
+      expect(
+        (await OperatorIdentity.resolveAndActivate(
+          db,
+          windowsAccount: 'bacilic',
+        ))?.displayName,
+        'Bacilic',
+      );
+
+      // Ο άνθρωπος διαλέγει ρητά ποιος είναι.
+      final vasilis = (await repository.getAll()).firstWhere(
+        (operator) => operator.displayName == 'Βασίλης',
+      );
+      await OperatorIdentity.chooseForSession(vasilis);
+
+      // Επανεκκίνηση: η επιλογή του νικά τον λογαριασμό Windows.
+      expect(
+        (await OperatorIdentity.resolveAndActivate(
+          db,
+          windowsAccount: 'bacilic',
+        ))?.displayName,
+        'Βασίλης',
+      );
+      expect(CurrentOperator.active?.displayName, 'Βασίλης');
+    });
+
+    test('δύο άνθρωποι στον ίδιο σταθμό: η εκκίνηση ρωτά', () async {
+      await seedTwoProfiles();
+      final all = await repository.getAll();
+      for (final operator in all) {
+        await OperatorIdentity.chooseForSession(operator);
+      }
+
+      final resolved = await OperatorIdentity.resolveAndActivate(
+        db,
+        windowsAccount: 'bacilic',
+      );
+
+      expect(resolved, isNull, reason: 'όπου εναλλάσσονται πρόσωπα, ρωτάει');
+      expect(CurrentOperator.active, isNull);
+    });
+
+    test('«Εδώ κάθομαι μόνο εγώ» σταματά την ερώτηση', () async {
+      await seedTwoProfiles();
+      final all = await repository.getAll();
+      for (final operator in all) {
+        await OperatorIdentity.chooseForSession(operator);
+      }
+
+      await WorkstationOperators.keepOnly('Βασίλης');
+
+      expect(
+        (await OperatorIdentity.resolveAndActivate(
+          db,
+          windowsAccount: 'bacilic',
+        ))?.displayName,
+        'Βασίλης',
+      );
+    });
+
+    test('όνομα άλλης βάσης αγνοείται και αποφασίζει ο λογαριασμός', () async {
+      // Μετά από αλλαγή βάσης τα προφίλ είναι άλλα: ένα όνομα που δεν υπάρχει
+      // δεν επιτρέπεται ούτε να ενεργοποιήσει κάποιον, ούτε να μπλοκάρει.
+      await seedTwoProfiles();
+
+      expect(
+        (await OperatorIdentity.resolveAndActivate(
+          db,
+          windowsAccount: 'bacilic',
+          workstationNames: const <String>['Κάποιος Άλλος'],
+        ))?.displayName,
+        'Bacilic',
+      );
+    });
+
+    test('η αυτόματη αναγνώριση δεν γεμίζει τη μνήμη του σταθμού', () async {
+      // Αλλιώς ο πρώτος που αναγνωρίστηκε αυτόματα θα έμενε για πάντα στη
+      // λίστα και ο σταθμός θα ρωτούσε αιώνια μετά την πρώτη αλλαγή χρήστη.
+      await seedTwoProfiles();
+
+      await OperatorIdentity.resolveAndActivate(db, windowsAccount: 'bacilic');
+
+      expect(await WorkstationOperators.names(), isEmpty);
     });
   });
 }

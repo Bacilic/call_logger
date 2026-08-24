@@ -79,6 +79,9 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
 
   AiFallbackReason _fallbackReasonFor(GeminiException e) {
     switch (e.statusCode) {
+      case 404:
+        return AiFallbackReason.modelNotFound;
+
       case 429:
         return AiFallbackReason.rateLimited;
 
@@ -90,13 +93,45 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
     }
   }
 
+  /// Πόσο βαριά μετράει η αποτυχία για τη μνήμη του υπολογιστή.
+  ///
+  /// Το 404 και το 429 δεν αλλάζουν με την επανάληψη — μία αποτυχία αρκεί για
+  /// να μπει το μοντέλο στην άκρη. Όλα τα υπόλοιπα (υπερφόρτωση, λήξη χρόνου,
+  /// κενή απάντηση) περνούν, οπότε παίρνουν τρεις ευκαιρίες.
+  static AiModelDownReason downReasonFor(GeminiException e) {
+    switch (e.statusCode) {
+      case 404:
+        return AiModelDownReason.modelNotFound;
+
+      case 429:
+        return AiModelDownReason.quotaExhausted;
+
+      default:
+        return AiModelDownReason.unavailable;
+    }
+  }
+
+  /// Γιατί ο διακομιστής ζήτησε να περιμένουμε, με τα λόγια του χρήστη.
+  ///
+  /// Το μήνυμα έλεγε πάντα «αναμονή ποσόστωσης», ακόμη κι όταν η αιτία ήταν
+  /// υπερφόρτωση ή ανύπαρκτο μοντέλο — και ο χρήστης έψαχνε ποσόστωση που δεν
+  /// είχε εξαντληθεί.
+  static String waitReasonText(AiModelDownReason? reason) => switch (reason) {
+    AiModelDownReason.quotaExhausted => 'εξαντλημένη ποσόστωση',
+    AiModelDownReason.modelNotFound => 'μη διαθέσιμο μοντέλο',
+    _ => 'προσωρινή αναμονή',
+  };
+
   Never _throwCooldownExhausted(List<String> modelIds) {
     final earliest = cooldownRegistry.earliestAvailable(modelIds);
+    final reasonText = waitReasonText(
+      earliest == null ? null : cooldownRegistry.downtime(earliest.model)?.reason,
+    );
 
     throw AiSuggestionException(
       earliest == null
-          ? 'Δεν ήταν δυνατή η πρόταση ΤΝ — όλα τα μοντέλα είναι σε αναμονή ποσόστωσης.'
-          : 'Τα μοντέλα ΤΝ είναι σε αναμονή ποσόστωσης. '
+          ? 'Δεν ήταν δυνατή η πρόταση ΤΝ — κανένα μοντέλο δεν είναι διαθέσιμο αυτή τη στιγμή.'
+          : 'Τα μοντέλα ΤΝ είναι σε αναμονή ($reasonText). '
                 'Δοκιμάστε ξανά μετά τις '
                 '${earliest.availableAt.hour.toString().padLeft(2, '0')}:'
                 '${earliest.availableAt.minute.toString().padLeft(2, '0')}:'
@@ -154,6 +189,20 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
       ));
     }
 
+    // Η μνήμη του υπολογιστή αλλάζει τη **σειρά**, όχι το περιεχόμενο: ό,τι
+    // ξέρουμε προβληματικό πάει τελευταίο. Έτσι όταν το κύριο είναι πεσμένο
+    // ξεκινάμε κατευθείαν από το εφεδρικό — χωρίς να χαθεί το μισό λεπτό της
+    // αναμονής — ενώ αν είναι πεσμένα όλα, επιστρέφουμε φυσικά στη
+    // φυσιολογική σειρά αντί να μείνουμε κολλημένοι στο εφεδρικό.
+    final preferredOrder = cooldownRegistry.orderedForAttempt(
+      attempts.map((a) => a.model),
+    );
+    attempts.sort((a, b) {
+      final ia = preferredOrder.indexOf(a.model);
+      final ib = preferredOrder.indexOf(b.model);
+      return ia.compareTo(ib);
+    });
+
     final modelIds = attempts.map((a) => a.model).toList();
 
     var anyAttempted = false;
@@ -210,6 +259,10 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
           client: client,
         );
 
+        // Το μοντέλο απάντησε: ό,τι ξέραμε εναντίον του παύει να ισχύει, και η
+        // σειρά διαδοχικών αποτυχιών μηδενίζει.
+        cooldownRegistry.recordSuccess(attempt.model);
+
         return (
           title: result.title,
 
@@ -218,9 +271,11 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
           solution: result.solution,
         );
       } on GeminiException catch (e) {
-        if (e.retryAfter != null) {
-          cooldownRegistry.markUnavailable(attempt.model, e.retryAfter!);
-        }
+        cooldownRegistry.recordFailure(
+          attempt.model,
+          reason: downReasonFor(e),
+          serverRetryAfter: e.retryAfter,
+        );
 
         final scope =
             e.scope ??

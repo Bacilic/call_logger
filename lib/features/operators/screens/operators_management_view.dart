@@ -9,6 +9,7 @@ import '../../../core/services/current_operator.dart';
 import '../../../core/services/permission_service.dart';
 import '../services/operator_management.dart';
 import '../services/operator_presence_summary.dart';
+import '../widgets/operator_conflict_dialog.dart';
 import '../widgets/operator_form_dialog.dart';
 import '../widgets/operator_identity_card.dart';
 
@@ -99,27 +100,68 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
         existing: existing,
         readOnly: readOnly,
         onSubmit: (values) async {
-          final result = existing == null
-              ? await management.create(
-                  displayName: values.displayName,
-                  windowsAccount: values.windowsAccount,
-                  isAdmin: values.isAdmin,
-                  permissionOverrides: values.permissionOverrides,
-                )
-              : await management.save(
-                  existing,
-                  displayName: values.displayName,
-                  windowsAccount: values.windowsAccount,
-                  isAdmin: values.isAdmin,
-                  isActive: values.isActive,
-                  permissionOverrides: values.permissionOverrides,
-                );
-          return result.allowed ? null : result.message;
+          if (existing == null) {
+            final created = await management.create(
+              displayName: values.displayName,
+              windowsAccount: values.windowsAccount,
+              isAdmin: values.isAdmin,
+              permissionOverrides: values.permissionOverrides,
+            );
+            return created.allowed ? null : created.message;
+          }
+          return _saveGuarded(management, existing, values);
         },
       ),
     );
 
     if (saved == true) _reload();
+  }
+
+  /// Αποθήκευση καρτέλας με φρουρό διένεξης.
+  ///
+  /// **Ένα σημείο:** ο διάλογος ζει εδώ και όχι μέσα στη φόρμα, ώστε η φόρμα να
+  /// μένει αυτό που είναι — πεδία και επικύρωση — και η πολιτική «τι γίνεται
+  /// όταν κάποιος πρόλαβε» να μη ξαναγραφτεί σε δεύτερο σημείο.
+  ///
+  /// Επιστρέφει `null` όταν η αποθήκευση πέρασε (η φόρμα κλείνει), αλλιώς το
+  /// μήνυμα που θα δει ο χρήστης μέσα στη φόρμα.
+  Future<String?> _saveGuarded(
+    OperatorManagement management,
+    Operator existing,
+    OperatorFormValues values,
+  ) async {
+    final result = await management.save(
+      existing,
+      displayName: values.displayName,
+      windowsAccount: values.windowsAccount,
+      isAdmin: values.isAdmin,
+      isActive: values.isActive,
+      permissionOverrides: values.permissionOverrides,
+    );
+
+    final conflict = result.conflict;
+    if (conflict == null) return result.allowed ? null : result.message;
+    if (!mounted) return result.message;
+
+    final choice = await showOperatorConflictDialog(context, conflict);
+    if (choice != OperatorConflictChoice.overwrite) {
+      // Η λίστα από κάτω δείχνει αμέσως την αλήθεια· η φόρμα κρατά ακόμη τα
+      // παλιά πεδία, γι' αυτό το μήνυμα λέει ρητά να ξανανοιχτεί.
+      _reload();
+      return 'Η αποθήκευση ακυρώθηκε — η καρτέλα άλλαξε από άλλον χρήστη. '
+          'Κλείστε και ξανανοίξτε τη για να δείτε τα τρέχοντα στοιχεία.';
+    }
+
+    final forced = await management.save(
+      existing,
+      displayName: values.displayName,
+      windowsAccount: values.windowsAccount,
+      isAdmin: values.isAdmin,
+      isActive: values.isActive,
+      permissionOverrides: values.permissionOverrides,
+      force: true,
+    );
+    return forced.allowed ? null : forced.message;
   }
 
   @override

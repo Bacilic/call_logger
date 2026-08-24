@@ -48,6 +48,8 @@ void main() {
       );
 
       await calls.updateCall(
+        // Χωρίς αφετηρία: το τεστ μετρά τις προεπιλογές εγγραφής, όχι τη διένεξη.
+        expected: null,
         CallModel(
           id: id,
           date: '2026-07-28',

@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../features/calls/models/call_model.dart';
+import '../../features/calls/services/call_save_conflict.dart';
 import '../errors/call_save_exception.dart';
 import '../models/owner_filter.dart';
 import '../services/current_operator.dart';
@@ -170,10 +171,29 @@ class CallsRepository {
   /// Ενημερώνει υπάρχουσα κλήση. Απαιτείται μη-null [CallModel.id].
   ///
   /// Κλήση + audit στο ίδιο transaction· σε αποτυχία rollback ([CallSaveException]).
-  Future<int> updateCall(CallModel call) async {
+  /// Το [expected] είναι η κλήση **όπως τη διάβασε η οθόνη**.
+  ///
+  /// Υποχρεωτικό — και δεκτικό `null` μόνο ρητά — γιατί η ενημέρωση γράφει
+  /// ολόκληρη τη γραμμή, **μαζί με τα πεδία Lansweeper**: χωρίς αφετηρία, μια
+  /// διόρθωση κειμένου επαναφέρει στην ουρά κλήση που ο συνάδελφος μόλις
+  /// καταχώρησε, και το επόμενο πέρασμα ανοίγει δεύτερο αίτημα.
+  ///
+  /// Με [force] `true` η εγγραφή περνά παρά τη διένεξη: ο χρήστης είδε τι
+  /// άλλαξε και επέλεξε να κρατήσει τη δική του εικόνα.
+  ///
+  /// Πετά [CallStaleException] **πριν** γράψει οτιδήποτε.
+  Future<int> updateCall(
+    CallModel call, {
+    required CallModel? expected,
+    bool force = false,
+  }) async {
     final id = call.id;
     if (id == null) {
       throw ArgumentError('CallModel.id is required for updateCall');
+    }
+    if (!force && expected != null) {
+      final conflict = await conflictFor(expected: expected, attempted: call);
+      if (conflict != null) throw CallStaleException(conflict);
     }
     final map = <String, dynamic>{
       ..._callWriteMap(call),
@@ -238,6 +258,56 @@ class CallsRepository {
     } catch (e) {
       if (e is CallSaveException) rethrow;
       throw CallSaveException('Η κλήση δεν ενημερώθηκε. Δοκιμάστε ξανά.');
+    }
+  }
+
+  /// Άλλαξε η κλήση από τότε που τη διάβασε η οθόνη; `null` = καθαρή.
+  ///
+  /// Δεν υπάρχει `updated_at` στις κλήσεις, οπότε η διένεξη κρίνεται από τις
+  /// **τιμές** — και είναι ακριβέστερο: ό,τι δεν άλλαξε δεν είναι διένεξη.
+  ///
+  /// Ζει χωριστά από το [updateCall] ώστε ο καλών να μπορεί να ρωτήσει πρώτος,
+  /// πριν από τους δικούς του κανόνες.
+  Future<CallSaveConflict?> conflictFor({
+    required CallModel expected,
+    required CallModel attempted,
+  }) async {
+    final id = attempted.id ?? expected.id;
+    if (id == null) return null;
+    final current = await getCallById(id);
+    if (current == null) return null;
+    final conflict = CallSaveConflict(
+      expected: expected,
+      fresh: current,
+      attempted: attempted,
+    );
+    return conflict.hasChanges ? conflict : null;
+  }
+
+  /// Ποιος άγγιξε τελευταίος αυτή την κλήση, και πότε.
+  ///
+  /// Η γραμμή `calls` δεν κρατά «ποιος με άλλαξε» — το κρατά μόνο το Ιστορικό.
+  /// Ζητείται όταν έχει διαπιστωθεί διένεξη, οπότε δεν επιβαρύνει την κανονική
+  /// αποθήκευση, και πατά στο υπάρχον ευρετήριο `(entity_type, entity_id)`.
+  ///
+  /// **Η αποτυχία είναι σιωπή:** η ταυτότητα είναι συμπληρωματική, και μια
+  /// διένεξη πρέπει να αναφέρεται ακόμη κι όταν το Ιστορικό δεν απαντά.
+  Future<({String? who, DateTime? at})> lastActorFor(int callId) async {
+    try {
+      final rows = await db.query(
+        'audit_log',
+        columns: ['user_performing', 'timestamp'],
+        where: 'entity_type = ? AND entity_id = ?',
+        whereArgs: [AuditEntityTypes.call, callId],
+        orderBy: 'id DESC',
+        limit: 1,
+      );
+      if (rows.isEmpty) return (who: null, at: null);
+      final who = (rows.first['user_performing'] as String?)?.trim();
+      final at = DateTime.tryParse((rows.first['timestamp'] as String?) ?? '');
+      return (who: (who == null || who.isEmpty) ? null : who, at: at);
+    } catch (_) {
+      return (who: null, at: null);
     }
   }
 

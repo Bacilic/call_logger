@@ -220,5 +220,95 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
       await _advance(tester, rounds: 4);
     });
+
+    /// Στήνει τη διένεξη: η καρτέλα είναι ανοιχτή, και ο «άλλος υπολογιστής»
+    /// γράφει απευθείας στη βάση — ακριβώς ό,τι συμβαίνει σε κοινόχρηστο αρχείο.
+    Future<void> openCardThenSomeoneElseWrites(WidgetTester tester) async {
+      await tester.runAsync(() async {
+        final repository = OperatorRepository(db);
+        // Δεύτερος διαχειριστής: χωρίς αυτόν ο κανόνας «πρέπει να μείνει ένας
+        // διαχειριστής» μπλοκάρει και το τεστ θα μέτραγε εκείνον, όχι τη διένεξη.
+        await repository.insert(
+          Operator(
+            displayName: 'Διαχειριστής',
+            isAdmin: true,
+            createdAt: DateTime(2026, 8, 22),
+          ),
+        );
+        await repository.insert(
+          Operator(displayName: 'Βλάσης', createdAt: DateTime(2026, 8, 22)),
+        );
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: OperatorsManagementView())),
+      );
+      await _advance(tester);
+      await openEditorOf(tester, 'Βλάσης');
+
+      await tester.runAsync(() async {
+        await db.update(
+          'operators',
+          {'is_admin': 1, 'permissions_json': '{"browse_database":false}'},
+          where: 'display_name = ?',
+          whereArgs: ['Βλάσης'],
+        );
+      });
+    }
+
+    testWidgets('διένεξη: η οθόνη ρωτά αντί να σβήσει ξένα δικαιώματα', (
+      tester,
+    ) async {
+      await openCardThenSomeoneElseWrites(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'Βλάσης Δ.');
+      await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+      await _advance(tester);
+
+      expect(
+        find.text('Κάποιος πρόλαβε'),
+        findsOneWidget,
+        reason: 'χωρίς ερώτηση, η αποθήκευση θα έσβηνε δικαίωμα και σήμανση',
+      );
+      expect(find.text('δικαιώματα'), findsOneWidget);
+      expect(find.text('σήμανση διαχειριστή'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Άφησε τη δική του'));
+      await _advance(tester);
+
+      final stored = await tester.runAsync(
+        () => OperatorRepository(db).findByDisplayName('Βλάσης'),
+      );
+      expect(stored, isNotNull, reason: 'το όνομα δεν έπρεπε να αλλάξει');
+      expect(stored!.isAdmin, isTrue);
+      expect(stored.permissionOverrides, {'browse_database': false});
+
+      await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
+      await _advance(tester, rounds: 4);
+    });
+
+    testWidgets('διένεξη: «Κράτα τη δική μου» γράφει εν γνώσει του χρήστη', (
+      tester,
+    ) async {
+      await openCardThenSomeoneElseWrites(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'Βλάσης Δ.');
+      await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+      await _advance(tester);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Κράτα τη δική μου'));
+      await _advance(tester, rounds: 8);
+
+      final stored = await tester.runAsync(
+        () => OperatorRepository(db).findByDisplayName('Βλάσης Δ.'),
+      );
+      expect(stored, isNotNull);
+      expect(
+        stored!.isAdmin,
+        isFalse,
+        reason: 'η ρητή επιλογή του χρήστη πρέπει να ισχύει ολόκληρη',
+      );
+      expect(stored.permissionOverrides, isEmpty);
+    });
   });
 }

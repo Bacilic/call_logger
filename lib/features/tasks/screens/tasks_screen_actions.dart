@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/errors/task_save_exception.dart';
+import '../../../core/errors/task_stale_exception.dart';
 import '../../../core/services/save_confirmation_summary.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../calls/provider/lookup_provider.dart';
@@ -21,6 +22,7 @@ import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../widgets/snooze_choice_dialog.dart';
 import 'task_close_dialog.dart';
+import 'task_conflict_dialog.dart';
 import 'task_form_dialog.dart';
 import 'task_settings_dialog.dart';
 import 'tasks_screen_support_widgets.dart';
@@ -47,6 +49,72 @@ void _showTaskSaveError(BuildContext context, TaskSaveException e) {
   ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(e.message)));
+}
+
+/// Εκτελεί μια εγγραφή εκκρεμότητας με φρουρό διένεξης.
+///
+/// **Ένα σημείο για όλες τις ροές** (κλείσιμο, αναβολή, ανάθεση, επαναφορά,
+/// επεξεργασία): αν ο φρουρός της βάσης βρει ότι κάποιος άλλος πρόλαβε, ο
+/// χρήστης βλέπει τι άλλαξε και αποφασίζει. Χωρίς κοινό σημείο, κάθε νέα ροή θα
+/// έπρεπε να θυμηθεί μόνη της τον διάλογο — και η πρώτη που θα τον ξεχνούσε θα
+/// έσβηνε ξένη δουλειά σιωπηλά.
+///
+/// Επιστρέφει `true` μόνο όταν η εγγραφή τελικά πέρασε.
+Future<bool> _writeTaskGuarded(
+  BuildContext context,
+  WidgetRef ref,
+  Future<void> Function(bool force) write,
+) async {
+  try {
+    await write(false);
+    return true;
+  } on TaskStaleException catch (conflict) {
+    if (!context.mounted) return false;
+    final choice = await showTaskConflictDialog(context, conflict);
+    if (choice != TaskConflictChoice.overwrite) {
+      // Και στο «Δες τη φρέσκια εικόνα» και στο κλείσιμο του διαλόγου: η λίστα
+      // ξαναδιαβάζεται, ώστε ο χρήστης να κοιτάζει την αλήθεια πριν ξαναδοκιμάσει.
+      await ref.read(tasksProvider.notifier).refresh();
+      return false;
+    }
+    try {
+      await write(true);
+      return true;
+    } on TaskSaveException catch (e) {
+      if (!context.mounted) return false;
+      _showTaskSaveError(context, e);
+      return false;
+    }
+  }
+}
+
+/// Αποθήκευση εκκρεμότητας με φρουρό διένεξης.
+Future<bool> saveTaskGuarded(
+  BuildContext context,
+  WidgetRef ref,
+  Task task,
+) {
+  return _writeTaskGuarded(
+    context,
+    ref,
+    (force) => ref.read(tasksProvider.notifier).updateTask(task, force: force),
+  );
+}
+
+/// Κλείσιμο εκκρεμότητας με φρουρό διένεξης.
+Future<bool> closeTaskGuarded(
+  BuildContext context,
+  WidgetRef ref,
+  Task task,
+  String solutionNotes,
+) {
+  return _writeTaskGuarded(
+    context,
+    ref,
+    (force) => ref
+        .read(tasksProvider.notifier)
+        .closeTask(task, solutionNotes, force: force),
+  );
 }
 
 Future<void> openNewTaskForm(BuildContext context, WidgetRef ref) async {
@@ -234,22 +302,26 @@ Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
       case ClosedTaskSaveMode.reopen:
         // Η λύση και το ιστορικό ταξιδεύουν μέσα στο αποτέλεσμα της φόρμας·
         // μόνο η κατάσταση αλλάζει. Η σφραγίδα ολοκλήρωσης μένει στη βάση.
-        await notifier.updateTask(
+        final reopened = await saveTaskGuarded(
+          context,
+          ref,
           result.copyWith(status: TaskStatus.open.toDbValue),
         );
-        if (!context.mounted) return;
+        if (!context.mounted || !reopened) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Η ολοκλήρωση αναιρέθηκε.')),
         );
         return;
       case ClosedTaskSaveMode.snoozeAgain:
         final due = result.dueDateTime ?? DateTime.now();
-        await notifier.updateTask(
+        final snoozedAgain = await saveTaskGuarded(
+          context,
+          ref,
           result
               .copyWith(status: TaskStatus.snoozed.toDbValue)
               .addSnoozeEntry(due, note: formResult.snoozeReason),
         );
-        if (!context.mounted) return;
+        if (!context.mounted || !snoozedAgain) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -266,7 +338,8 @@ Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
     }
 
     if (result.id != null) {
-      await notifier.updateTask(result);
+      final saved = await saveTaskGuarded(context, ref, result);
+      if (!saved) return;
     } else {
       await notifier.addTask(result);
     }
@@ -304,10 +377,12 @@ Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
 /// παύει να ισχύει επειδή το θέμα ξανάνοιξε.
 Future<void> reopenTask(BuildContext context, WidgetRef ref, Task task) async {
   try {
-    await ref
-        .read(tasksProvider.notifier)
-        .updateTask(task.copyWith(status: TaskStatus.open.toDbValue));
-    if (!context.mounted) return;
+    final reopened = await saveTaskGuarded(
+      context,
+      ref,
+      task.copyWith(status: TaskStatus.open.toDbValue),
+    );
+    if (!context.mounted || !reopened) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Η ολοκλήρωση αναιρέθηκε.')));
@@ -366,8 +441,8 @@ Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
         )
         .addSnoozeEntry(newDue, note: snoozeNote);
     try {
-      await ref.read(tasksProvider.notifier).updateTask(updatedTask);
-      if (!context.mounted) return;
+      final snoozed = await saveTaskGuarded(context, ref, updatedTask);
+      if (!context.mounted || !snoozed) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -420,8 +495,8 @@ Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
       )
       .addSnoozeEntry(newDue, note: snoozeNote);
   try {
-    await ref.read(tasksProvider.notifier).updateTask(updatedTask);
-    if (!context.mounted) return;
+    final snoozed = await saveTaskGuarded(context, ref, updatedTask);
+    if (!context.mounted || !snoozed) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -516,8 +591,8 @@ Future<void> completeTask(
   if (!context.mounted || solutionNotes == null) return;
   if (task.id == null) return;
   try {
-    await ref.read(tasksProvider.notifier).closeTask(task.id!, solutionNotes);
-    if (!context.mounted) return;
+    final closed = await closeTaskGuarded(context, ref, task, solutionNotes);
+    if (!context.mounted || !closed) return;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')));

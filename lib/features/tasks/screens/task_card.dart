@@ -18,6 +18,7 @@ import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../widgets/task_due_date_label.dart';
 import '../../../core/widgets/compact_tooltip.dart';
+import 'tasks_screen_actions.dart';
 
 /// Περιγραφή εκκρεμότητας: δυναμικό ύψος έως 5 γραμμές, πάνω από 5 → κυλιώμενο πλαίσιο.
 ///
@@ -467,15 +468,15 @@ class _TaskCardState extends ConsumerState<TaskCard> {
         ? task.solutionNotes!.trim()
         : 'Κλείσιμο μετά από επιτυχή επεξεργασία οντότητας';
     try {
-      await ref
-          .read(tasksProvider.notifier)
-          .updateTask(
-            task.copyWith(
-              status: TaskStatus.closed.toDbValue,
-              solutionNotes: notes,
-            ),
-          );
-      if (!mounted) return;
+      final closed = await saveTaskGuarded(
+        context,
+        ref,
+        task.copyWith(
+          status: TaskStatus.closed.toDbValue,
+          solutionNotes: notes,
+        ),
+      );
+      if (!mounted || !closed) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Εκκρεμότητα ολοκληρώθηκε.')),
       );

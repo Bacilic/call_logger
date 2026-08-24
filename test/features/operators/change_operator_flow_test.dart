@@ -16,12 +16,19 @@ import 'package:call_logger/features/operators/widgets/active_operator_chip.dart
 import 'package:call_logger/features/operators/widgets/change_operator_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Operator _operator(int id, String name) =>
     Operator(id: id, displayName: name, createdAt: DateTime(2026, 8, 20));
 
 void main() {
-  setUp(CurrentOperator.reset);
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    // Η επιλογή χρήστη γράφεται και στη μνήμη του υπολογιστή: κάθε τεστ
+    // ξεκινά με άδεια, αλλιώς η επιλογή του ενός γίνεται αφετηρία του άλλου.
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    CurrentOperator.reset();
+  });
   tearDown(CurrentOperator.reset);
 
   group('Ταυτότητα συνεδρίας', () {
@@ -95,6 +102,8 @@ void main() {
       WidgetTester tester, {
       required List<Operator> profiles,
       OperatorProfileCreator? createProfile,
+      List<Operator> workstationProfiles = const <Operator>[],
+      Future<void> Function(String displayName)? keepOnlyCurrent,
     }) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -106,10 +115,12 @@ void main() {
                   loadProfiles: () async => SelectableProfiles(
                     profiles: profiles,
                     presence: const {},
+                    workstationProfiles: workstationProfiles,
                   ),
                   createProfile:
                       createProfile ??
                       (name, bind) async => _operator(99, name),
+                  keepOnlyCurrent: keepOnlyCurrent ?? (_) async {},
                 ),
                 child: const Text('άνοιγμα'),
               ),
@@ -174,6 +185,42 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(CurrentOperator.active?.id, 1);
+      expect(find.text('Αλλαγή χρήστη'), findsNothing);
+    });
+
+    testWidgets('με έναν μόνο χρήστη δεν προσφέρεται καθαρισμός', (
+      tester,
+    ) async {
+      OperatorIdentity.activateForSession(_operator(1, 'Βασίλης'));
+
+      await openDialog(
+        tester,
+        profiles: [_operator(2, 'Βλάσης')],
+        workstationProfiles: [_operator(1, 'Βασίλης')],
+      );
+
+      expect(find.text('Εδώ κάθομαι μόνο εγώ'), findsNothing);
+    });
+
+    testWidgets('με δύο χρήστες, ο καθαρισμός κρατά τον τρέχοντα', (
+      tester,
+    ) async {
+      // Ο συνάδελφος που κάθισε μια φορά δεν πρέπει να κάνει τον σταθμό να
+      // ρωτά για έναν μήνα.
+      OperatorIdentity.activateForSession(_operator(1, 'Βασίλης'));
+      final kept = <String>[];
+
+      await openDialog(
+        tester,
+        profiles: [_operator(2, 'Βλάσης')],
+        workstationProfiles: [_operator(2, 'Βλάσης'), _operator(1, 'Βασίλης')],
+        keepOnlyCurrent: (name) async => kept.add(name),
+      );
+
+      await tester.tap(find.text('Εδώ κάθομαι μόνο εγώ'));
+      await tester.pumpAndSettle();
+
+      expect(kept, ['Βασίλης']);
       expect(find.text('Αλλαγή χρήστη'), findsNothing);
     });
   });

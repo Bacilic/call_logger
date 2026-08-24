@@ -23,7 +23,7 @@ class LansweeperSyncForm extends ConsumerWidget {
     this.onEditPromptTemplate,
     this.isSuggesting = false,
     this.suggestModelLabel,
-    this.suggestElapsedLabel,
+    this.suggestElapsedSeconds,
     this.suggestDisabledTooltip,
     this.previewDisabledTooltip,
     this.cooldownRemainingSeconds,
@@ -52,7 +52,10 @@ class LansweeperSyncForm extends ConsumerWidget {
   final VoidCallback? onEditPromptTemplate;
   final bool isSuggesting;
   final String? suggestModelLabel;
-  final String? suggestElapsedLabel;
+
+  /// Πόση ώρα τρέχει η τρέχουσα προσπάθεια· μηδενίζεται σε κάθε αλλαγή
+  /// μοντέλου. Null = δεν τρέχει τίποτα.
+  final double? suggestElapsedSeconds;
   final String? suggestDisabledTooltip;
   final String? previewDisabledTooltip;
   final int? cooldownRemainingSeconds;
@@ -90,6 +93,16 @@ class LansweeperSyncForm extends ConsumerWidget {
   static Color cooldownRemainingColor(int seconds) {
     if (seconds > 30) return Colors.red;
     if (seconds >= 10) return Colors.orange;
+    return Colors.green;
+  }
+
+  /// Χρώμα του χρόνου αναμονής της ΤΝ, με τη λογική του χρονομέτρου κλήσης:
+  /// πράσινο όσο η απάντηση έρχεται σε φυσιολογικό χρόνο, πορτοκαλί όταν
+  /// αργεί, κόκκινο όταν πλησιάζει το όριο των 30 δευτερολέπτων πέρα από το
+  /// οποίο η κλήση λήγει και δοκιμάζεται άλλο μοντέλο.
+  static Color suggestElapsedColor(double seconds) {
+    if (seconds >= 19) return Colors.red;
+    if (seconds >= 7) return Colors.orange;
     return Colors.green;
   }
 
@@ -281,13 +294,14 @@ class LansweeperSyncForm extends ConsumerWidget {
           Tooltip(message: cooldownTooltip, child: suggestButton)
         else
           suggestButton,
-        if (isSuggesting && suggestElapsedLabel != null) ...[
+        if (isSuggesting && suggestElapsedSeconds != null) ...[
           const SizedBox(width: 10),
           Text(
-            '${suggestElapsedLabel!} δλ',
+            '${suggestElapsedSeconds!.toStringAsFixed(2)} δλ',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontFeatures: const [FontFeature.tabularFigures()],
-              color: Theme.of(context).colorScheme.primary,
+              color: suggestElapsedColor(suggestElapsedSeconds!),
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

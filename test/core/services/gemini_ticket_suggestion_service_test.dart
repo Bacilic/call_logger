@@ -239,17 +239,104 @@ void main() {
         });
         addTearDown(client.close);
 
-        AiFallbackReason? reason;
         await _service(cooldownRegistry: registry).suggest(
           _kTestRequest,
           client: client,
-          onFallback: (_, _, r) => reason = r,
         );
 
+        // Ένα χτύπημα, κατευθείαν στο εφεδρικό: το κύριο δεν δοκιμάζεται καν,
+        // άρα δεν χάνεται το μισό λεπτό της αναμονής. Ο χρήστης μαθαίνει τι
+        // συμβαίνει από το μήνυμα που δείχνει ο διάλογος πριν την κλήση.
         expect(callCount, 1);
-        expect(reason, AiFallbackReason.cooldown);
       },
     );
+
+    test(
+      'τρεις αποτυχίες στο κύριο: η επόμενη κλήση ξεκινά από το εφεδρικό',
+      () async {
+        final now = DateTime(2026, 1, 1, 12, 0, 0);
+        final registry = AiModelCooldownRegistry(now: () => now);
+        final service = _service(cooldownRegistry: registry);
+
+        // Το ακριβές παράπονο: το κύριο πέφτει, το εφεδρικό σώζει τη μέρα, και
+        // η επόμενη προσπάθεια ξαναχάνει μισό λεπτό στο ίδιο πεσμένο κύριο.
+        var primaryHits = 0;
+        final client = MockClient((request) async {
+          if (_urlTargetsModel(request.url, _kPrimaryModel)) {
+            primaryHits++;
+            return http.Response('overloaded', 503);
+          }
+          return http.Response(
+            _geminiApiSuccessBody(title: 'FB', description: 'D', solution: 'S'),
+            200,
+          );
+        });
+        addTearDown(client.close);
+
+        for (var i = 0; i < 3; i++) {
+          await service.suggest(_kTestRequest, client: client);
+        }
+        expect(primaryHits, 3);
+
+        await service.suggest(_kTestRequest, client: client);
+
+        expect(primaryHits, 3, reason: 'το κύριο δεν ξαναδοκιμάστηκε');
+      },
+    );
+
+    test(
+      'ανύπαρκτο μοντέλο (404): μία αποτυχία αρκεί για την υποβάθμιση',
+      () async {
+        // Η ρύθμιση επιτρέπει χειροκίνητο όνομα — το τυπογραφικό δεν αξίζει
+        // τρεις μισάλεπτες αναμονές.
+        final now = DateTime(2026, 1, 1, 12, 0, 0);
+        final registry = AiModelCooldownRegistry(now: () => now);
+        final service = _service(cooldownRegistry: registry);
+
+        final client = MockClient((request) async {
+          if (_urlTargetsModel(request.url, _kPrimaryModel)) {
+            return http.Response('not found', 404);
+          }
+          return http.Response(
+            _geminiApiSuccessBody(title: 'FB', description: 'D', solution: 'S'),
+            200,
+          );
+        });
+        addTearDown(client.close);
+
+        await service.suggest(_kTestRequest, client: client);
+
+        final down = registry.downtime(_kPrimaryModel);
+        expect(down, isNotNull);
+        expect(down!.reason, AiModelDownReason.modelNotFound);
+      },
+    );
+
+    test('η επιτυχία καθαρίζει ό,τι ξέραμε εναντίον του μοντέλου', () async {
+      final now = DateTime(2026, 1, 1, 12, 0, 0);
+      final registry = AiModelCooldownRegistry(now: () => now);
+      registry.recordFailure(
+        _kPrimaryModel,
+        reason: AiModelDownReason.quotaExhausted,
+      );
+
+      final client = MockClient((request) async {
+        return http.Response(
+          _geminiApiSuccessBody(title: 'T', description: 'D', solution: 'S'),
+          200,
+        );
+      });
+      addTearDown(client.close);
+
+      // Χωρίς εφεδρικό δοκιμάζεται το ίδιο το κύριο, παρότι υποβαθμισμένο: η
+      // δική μας εκτίμηση αλλάζει σειρά, δεν αποκλείει το μόνο μοντέλο.
+      await _service(
+        fallbackEnabled: false,
+        cooldownRegistry: registry,
+      ).suggest(_kTestRequest, client: client);
+
+      expect(registry.downtime(_kPrimaryModel), isNull);
+    });
 
     test(
       '503 με απενεργοποιημένο fallback — AiSuggestionException 503',
@@ -304,6 +391,34 @@ void main() {
       expect(
         service.validateConfiguration(),
         'Ορίστε κύριο μοντέλο Gemini στις ρυθμίσεις Lansweeper.',
+      );
+    });
+  });
+
+  group('GeminiTicketSuggestionService.waitReasonText', () {
+    test('κάθε αιτία λέγεται με το όνομά της', () {
+      // Το μήνυμα έλεγε πάντα «ποσόστωση», ακόμη κι όταν έφταιγε η υπερφόρτωση.
+      expect(
+        GeminiTicketSuggestionService.waitReasonText(
+          AiModelDownReason.quotaExhausted,
+        ),
+        'εξαντλημένη ποσόστωση',
+      );
+      expect(
+        GeminiTicketSuggestionService.waitReasonText(
+          AiModelDownReason.modelNotFound,
+        ),
+        'μη διαθέσιμο μοντέλο',
+      );
+      expect(
+        GeminiTicketSuggestionService.waitReasonText(
+          AiModelDownReason.unavailable,
+        ),
+        'προσωρινή αναμονή',
+      );
+      expect(
+        GeminiTicketSuggestionService.waitReasonText(null),
+        'προσωρινή αναμονή',
       );
     });
   });

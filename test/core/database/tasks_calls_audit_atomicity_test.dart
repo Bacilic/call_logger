@@ -158,6 +158,9 @@ void main() {
         await db.delete('audit_log');
 
         await calls.updateCall(
+          // Επίτηδες χωρίς αφετηρία: εδώ μετριέται ότι το audit γράφει το
+          // ΠΡΑΓΜΑΤΙΚΟ «πριν» της βάσης, οπότε η εγγραφή πρέπει να περάσει.
+          expected: null,
           CallModel(
             id: id,
             date: '2026-07-28',

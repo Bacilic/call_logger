@@ -16,7 +16,16 @@ enum AiSuggestionFailureScope { model, infrastructure }
 
 /// Λόγος μετάβασης σε εφεδρικό μοντέλο (για μηνύματα UI).
 
-enum AiFallbackReason { modelFailure, rateLimited, overloaded, cooldown }
+enum AiFallbackReason {
+  modelFailure,
+  rateLimited,
+  overloaded,
+  cooldown,
+
+  /// 404 — το μοντέλο δεν υπάρχει με αυτό το κλειδί. Ξεχωριστό από το γενικό
+  /// σφάλμα επίτηδες: είναι το μόνο που ο χρήστης διορθώνει μόνος του.
+  modelNotFound,
+}
 
 /// Κείμενα εισόδου για χτίσιμο προτροπής και κλήση ΤΝ.
 

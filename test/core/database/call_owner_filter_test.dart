@@ -102,6 +102,7 @@ void main() {
       activateTestOperator('Βλάσης', id: 22);
       final stored = await repo.getCallById(id);
       await repo.updateCall(
+        expected: stored,
         CallModel(
           id: id,
           callerText: stored!.callerText,

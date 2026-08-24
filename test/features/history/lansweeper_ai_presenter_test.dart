@@ -2,6 +2,7 @@
 //
 //   flutter test test/features/history/lansweeper_ai_presenter_test.dart
 
+import 'package:call_logger/core/services/ai_model_cooldown_registry.dart';
 import 'package:call_logger/core/services/ai_ticket_suggestion_service.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/history/widgets/lansweeper/lansweeper_ai_presenter.dart';
@@ -56,12 +57,23 @@ void main() {
         toModel: toModel,
         reason: AiFallbackReason.rateLimited,
       );
-      expect(message, contains('ποσόστωση (429)'));
+      expect(message, contains('εξαντλημένη ποσόστωση (429)'));
       expect(
         message,
-        'Το μοντέλο «$fromModel» (ποσόστωση (429)). '
+        'Το μοντέλο «$fromModel» (εξαντλημένη ποσόστωση (429)). '
         'Καλούμε το εφεδρικό μοντέλο: «$toModel».',
       );
+    });
+
+    test('modelNotFound — ξεχωριστό από το γενικό σφάλμα', () {
+      // Είναι το μόνο που ο χρήστης διορθώνει μόνος του, σε πέντε δευτερόλεπτα.
+      final message = LansweeperAiPresenter.fallbackMessage(
+        fromModel: fromModel,
+        toModel: toModel,
+        reason: AiFallbackReason.modelNotFound,
+      );
+      expect(message, contains('δεν υπάρχει'));
+      expect(message, contains('404'));
     });
 
     test('overloaded', () {
@@ -224,6 +236,111 @@ void main() {
       expect(
         LansweeperAiPresenter.prefillTitle(category: '', id: null),
         'Κλήση',
+      );
+    });
+  });
+
+  group('Μήνυμα υποβάθμισης — η ακριβής αιτία', () {
+    final now = DateTime(2026, 1, 1, 12, 0, 0);
+
+    AiModelDowntime downtime({
+      required AiModelDownReason reason,
+      required bool blocking,
+      Duration remaining = const Duration(minutes: 8),
+    }) => AiModelDowntime(
+      model: 'gemini-flash-latest',
+      until: now.add(remaining),
+      reason: reason,
+      blocking: blocking,
+    );
+
+    test('εξαντλημένη ποσόστωση με χρόνο από τον διακομιστή', () {
+      final message = LansweeperAiPresenter.downgradedMessage(
+        downtime: downtime(
+          reason: AiModelDownReason.quotaExhausted,
+          blocking: true,
+          remaining: const Duration(minutes: 34),
+        ),
+        activeModel: 'gemini-flash-lite-latest',
+        now: now,
+      );
+
+      expect(message, contains('ποσόστωση'));
+      expect(message, contains('gemini-flash-latest'));
+      expect(message, contains('σε 34 λεπτά'));
+      expect(message, contains('διακομιστής'));
+      expect(message, contains('gemini-flash-lite-latest'));
+    });
+
+    test('εξαντλημένη ποσόστωση χωρίς χρόνο: μιλά για δική μας επανάληψη', () {
+      final message = LansweeperAiPresenter.downgradedMessage(
+        downtime: downtime(
+          reason: AiModelDownReason.quotaExhausted,
+          blocking: false,
+        ),
+        activeModel: 'efedriko',
+        now: now,
+      );
+
+      expect(message, contains('ποσόστωση'));
+      expect(message, contains('ξαναδοκιμάζεται σε 8 λεπτά'));
+      expect(message, isNot(contains('διακομιστής')));
+    });
+
+    test('ανύπαρκτο μοντέλο: λέει τι να διορθώσει ο χρήστης', () {
+      final message = LansweeperAiPresenter.downgradedMessage(
+        downtime: downtime(
+          reason: AiModelDownReason.modelNotFound,
+          blocking: false,
+        ),
+        activeModel: 'efedriko',
+        now: now,
+      );
+
+      expect(message, contains('δεν υπάρχει'));
+      expect(message, contains('Ρυθμίσεις'));
+      expect(
+        message,
+        isNot(contains('ξαναδοκιμάζεται')),
+        reason: 'η αναμονή δεν φτιάχνει λάθος όνομα',
+      );
+    });
+
+    test('χωρίς εφεδρικό δεν υπόσχεται εφεδρικό', () {
+      final message = LansweeperAiPresenter.downgradedMessage(
+        downtime: downtime(
+          reason: AiModelDownReason.unavailable,
+          blocking: false,
+        ),
+        activeModel: 'gemini-flash-latest',
+        now: now,
+      );
+
+      expect(message, isNot(contains('εφεδρικό')));
+    });
+  });
+
+  group('Υπόλοιπος χρόνος σε λέξεις', () {
+    final now = DateTime(2026, 1, 1, 12, 0, 0);
+
+    test('κάτω από λεπτό', () {
+      expect(
+        LansweeperAiPresenter.remainingText(now.add(const Duration(seconds: 30)), now),
+        'σε λίγο',
+      );
+    });
+
+    test('ένα λεπτό στον ενικό', () {
+      expect(
+        LansweeperAiPresenter.remainingText(now.add(const Duration(minutes: 1)), now),
+        'σε 1 λεπτό',
+      );
+    });
+
+    test('χρόνος που πέρασε δεν βγαίνει αρνητικός', () {
+      expect(
+        LansweeperAiPresenter.remainingText(now.subtract(const Duration(minutes: 5)), now),
+        'σε λίγο',
       );
     });
   });

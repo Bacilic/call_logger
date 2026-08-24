@@ -32,6 +32,7 @@ import 'core/widgets/crash_restart_notice.dart';
 import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
 import 'core/widgets/global_fatal_error_notifier.dart';
+import 'core/widgets/modal_route_tracker.dart';
 
 void _routeFatalErrorToUi(Object exception, StackTrace stack) {
   // Το «disk image is malformed» έχει δύο πολύ διαφορετικές αιτίες: φθαρμένο
@@ -314,6 +315,9 @@ class MyApp extends StatelessWidget {
     final colorScheme = ColorScheme.fromSeed(seedColor: Colors.deepPurple);
     return MaterialApp(
       title: 'Καταγραφή Κλήσεων',
+      // Μετρά τους ανοιχτούς διαλόγους: η αυτόματη ανανέωση της κοινόχρηστης
+      // βάσης περιμένει όσο ο χρήστης δουλεύει πάνω σε κάτι.
+      navigatorObservers: [appModalRouteTracker],
       locale: const Locale('el'),
       supportedLocales: const [Locale('el', 'GR'), Locale('en', 'US')],
       localizationsDelegates: const [

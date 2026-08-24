@@ -404,6 +404,29 @@ class DatabaseHelper {
     return verdict == DatabaseIdentityVerdict.replaced;
   }
 
+  /// Ο μετρητής αλλαγών του SQLite (`PRAGMA data_version`).
+  ///
+  /// Αυξάνεται όταν **άλλη σύνδεση** κάνει commit στο ίδιο αρχείο, και μένει
+  /// σταθερός για τις δικές μας εγγραφές. Αυτό ακριβώς χρειάζεται η κοινόχρηστη
+  /// βάση: «κάποιος άλλος έγραψε», χωρίς ψεύτικα χτυπήματα από τη δική μας
+  /// δουλειά και χωρίς να διαβαστεί ούτε μία γραμμή δεδομένων.
+  ///
+  /// **Fail-open:** `null` σε κάθε αποτυχία ή χωρίς ανοιχτή σύνδεση. Ο καλών
+  /// οφείλει να μεταφράζει την άγνοια σε «δεν ξέρω», ποτέ σε «άλλαξε».
+  Future<int?> readDataVersion() async {
+    final db = _database;
+    if (db == null || !db.isOpen) return null;
+    try {
+      final rows = await db.rawQuery('PRAGMA data_version');
+      if (rows.isEmpty) return null;
+      final value = rows.first.values.first;
+      return value is int ? value : int.tryParse('$value');
+    } catch (_) {
+      // Κλειδωμένο ή μισοκλεισμένο αρχείο: ο φρουρός σωπαίνει αντί να σκάσει.
+      return null;
+    }
+  }
+
   Future<String> forceReleaseLock(
     String dbPath, {
     DatabaseInitProgressNotifier? progressNotifier,

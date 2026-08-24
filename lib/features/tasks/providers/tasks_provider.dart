@@ -53,6 +53,23 @@ final tasksProvider = AsyncNotifierProvider<TasksNotifier, List<Task>>(
   TasksNotifier.new,
 );
 
+/// Πότε διαβάστηκαν τελευταία φορά οι εκκρεμότητες από τη βάση.
+///
+/// Τροφοδοτεί την ένδειξη «στοιχεία της 18:04». Σε κοινόχρηστη βάση η οθόνη δεν
+/// μπορεί να υποσχεθεί ότι είναι πάντα φρέσκια — μπορεί όμως να πει πόσο παλιά
+/// είναι, και αυτό είναι η τίμια εκδοχή της ίδιας πληροφορίας.
+class TasksFreshnessNotifier extends Notifier<DateTime?> {
+  @override
+  DateTime? build() => null;
+
+  void stamp([DateTime? at]) => state = at ?? DateTime.now();
+}
+
+final tasksFreshnessProvider =
+    NotifierProvider<TasksFreshnessNotifier, DateTime?>(
+      TasksFreshnessNotifier.new,
+    );
+
 /// Αναβολή [invalidate] του [tasksProvider] στο επόμενο frame — αποφυγή
 /// `FlutterError` (locked widget tree) μετά το κλείσιμο διαλόγου επεξεργασίας.
 Future<void> deferTasksProviderInvalidate(WidgetRef ref) async {
@@ -108,7 +125,12 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
       state = await AsyncValue.guard(() => service.getFilteredTasks(filter));
       if (state.hasError) {
         ref.invalidateSelf();
+        return;
       }
+      // Η σφραγίδα μπαίνει ΕΔΩ, στο ένα σημείο απ' όπου περνούν όλες οι
+      // αναγνώσεις: χειροκίνητο κουμπί, αυτόματος φρουρός και κάθε αποθήκευση.
+      // Σε δεύτερο σημείο θα ξεχνιόταν, και η ένδειξη θα έλεγε ψέματα.
+      ref.read(tasksFreshnessProvider.notifier).stamp();
     }();
     try {
       await _refreshInFlight;
@@ -124,9 +146,11 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     await refresh();
   }
 
-  Future<void> updateTask(Task task) async {
+  /// Με [force] `true` η εγγραφή περνά παρά τη διένεξη — ο χρήστης είδε τι
+  /// άλλαξε και επέλεξε να κρατήσει τη δική του εικόνα.
+  Future<void> updateTask(Task task, {bool force = false}) async {
     final service = ref.read(taskServiceProvider);
-    await service.updateTask(task);
+    await service.updateTask(task, force: force);
     _afterTasksMutated(refreshAnalytics: true);
     await refresh();
   }
@@ -138,9 +162,25 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     await refresh();
   }
 
-  Future<void> closeTask(int id, String solutionNotes) async {
+  /// Κλείσιμο εκκρεμότητας.
+  ///
+  /// Δέχεται ολόκληρη την [task] και όχι μόνο το αναγνωριστικό, ώστε η σφραγίδα
+  /// «όπως τη διάβασε η οθόνη» να φτάνει **πάντα** στον φρουρό: με σκέτο `id` ο
+  /// καλών μπορούσε να την ξεχάσει, και η διένεξη θα περνούσε αόρατη.
+  Future<void> closeTask(
+    Task task,
+    String solutionNotes, {
+    bool force = false,
+  }) async {
+    final id = task.id;
+    if (id == null) return;
     final service = ref.read(taskServiceProvider);
-    await service.closeTask(id, solutionNotes);
+    await service.closeTask(
+      id,
+      solutionNotes,
+      expectedUpdatedAt: task.updatedAt,
+      force: force,
+    );
     _afterTasksMutated(refreshAnalytics: true);
     await refresh();
   }

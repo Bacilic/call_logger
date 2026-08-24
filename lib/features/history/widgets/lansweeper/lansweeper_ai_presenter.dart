@@ -1,3 +1,4 @@
+import '../../../../core/services/ai_model_cooldown_registry.dart';
 import '../../../../core/services/ai_ticket_suggestion_service.dart';
 import '../../../calls/models/call_refined_source.dart';
 import 'lansweeper_report_item_mapper.dart';
@@ -11,13 +12,58 @@ class LansweeperAiPresenter {
     required AiFallbackReason reason,
   }) {
     final reasonText = switch (reason) {
-      AiFallbackReason.rateLimited => 'ποσόστωση (429)',
+      AiFallbackReason.rateLimited => 'εξαντλημένη ποσόστωση (429)',
       AiFallbackReason.overloaded => 'υπερφόρτωση (503)',
       AiFallbackReason.cooldown => 'αναμονή ποσόστωσης (cooldown)',
+      AiFallbackReason.modelNotFound => 'δεν υπάρχει ή δεν είναι διαθέσιμο (404)',
       AiFallbackReason.modelFailure => 'σφάλμα μοντέλου',
     };
     return 'Το μοντέλο «$fromModel» ($reasonText). '
         'Καλούμε το εφεδρικό μοντέλο: «$toModel».';
+  }
+
+  /// Τι διαβάζει ο χρήστης όταν η «Πρόταση ΤΝ» ξεκινά **ήδη** από το εφεδρικό,
+  /// επειδή ο υπολογιστής θυμάται ότι το κύριο δεν πάει καλά.
+  ///
+  /// Λέει **την ακριβή αιτία**, όχι ένα γενικό «απέτυχε»: άλλο πράγμα να
+  /// περιμένεις μισή ώρα για ποσόστωση, άλλο να έχεις γράψει λάθος όνομα
+  /// μοντέλου και να το διορθώσεις σε πέντε δευτερόλεπτα.
+  ///
+  /// Όταν τον χρόνο τον έδωσε ο ίδιος ο διακομιστής, αναφέρεται ρητά ως δικός
+  /// του: «σε 34 λεπτά» αλλάζει τι θα κάνεις μετά, ενώ η δική μας δεκάλεπτη
+  /// εκτίμηση είναι απλώς πότε θα ξαναπροσπαθήσουμε.
+  static String downgradedMessage({
+    required AiModelDowntime downtime,
+    required String activeModel,
+    required DateTime now,
+  }) {
+    final remaining = remainingText(downtime.until, now);
+    final usingFallback = activeModel.trim() != downtime.model.trim();
+    final using = usingFallback
+        ? ' Τρέχω στο εφεδρικό «$activeModel».'
+        : '';
+
+    final when = downtime.blocking
+        ? 'Ο διακομιστής το δίνει ξανά $remaining.'
+        : 'Το κύριο ξαναδοκιμάζεται $remaining.';
+
+    return switch (downtime.reason) {
+      AiModelDownReason.quotaExhausted =>
+        'Η ποσόστωση του «${downtime.model}» εξαντλήθηκε. $when$using',
+      AiModelDownReason.modelNotFound =>
+        'Το μοντέλο «${downtime.model}» δεν υπάρχει ή δεν είναι διαθέσιμο με '
+            'αυτό το κλειδί. Διορθώστε το όνομα στις Ρυθμίσεις.$using',
+      AiModelDownReason.unavailable =>
+        'Το μοντέλο «${downtime.model}» δεν αποκρίθηκε. $when$using',
+    };
+  }
+
+  /// «σε 34 λεπτά» / «σε 1 λεπτό» / «σε λίγο» — ποτέ αρνητικό, ποτέ «σε 0».
+  static String remainingText(DateTime until, DateTime now) {
+    final seconds = until.difference(now).inSeconds;
+    if (seconds < 60) return 'σε λίγο';
+    final minutes = (seconds / 60).ceil();
+    return minutes == 1 ? 'σε 1 λεπτό' : 'σε $minutes λεπτά';
   }
 
   static bool isCooldownActive(DateTime? until, DateTime now) =>

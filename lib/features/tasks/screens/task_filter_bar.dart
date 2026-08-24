@@ -12,6 +12,7 @@ import '../models/task_filter.dart';
 import '../../../core/models/owner_filter.dart';
 import '../../../core/widgets/owner_filter_chip.dart';
 import '../providers/task_owner_filter_provider.dart';
+import '../widgets/tasks_refresh_button.dart';
 import '../providers/tasks_provider.dart';
 import '../widgets/task_analytics_bottom_sheet.dart';
 
@@ -391,6 +392,7 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                 ),
                 const SizedBox(width: 8),
                 _buildOwnerFilter(context),
+                const TasksRefreshButton(),
               ],
             ),
           ],

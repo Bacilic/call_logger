@@ -10,6 +10,7 @@ import '../../features/tasks/models/task_filter.dart'
     show TaskFilter, TaskSortOption;
 import '../../features/tasks/models/task_settings_config.dart';
 import '../errors/task_save_exception.dart';
+import '../errors/task_stale_exception.dart';
 import '../services/current_operator.dart';
 import '../utils/search_text_normalizer.dart';
 import 'audit_service.dart';
@@ -1325,6 +1326,54 @@ class TasksRepository {
     'equipment_text',
   ];
 
+  /// Άλλαξε η γραμμή από τότε που τη διάβασε η οθόνη;
+  ///
+  /// **Fail-open σε άγνοια:** χωρίς αποθηκευμένη σφραγίδα (`updated_at`) ή
+  /// χωρίς αναμενόμενη τιμή δεν μπλοκάρουμε — μια εγγραφή από παλαιότερη έκδοση
+  /// δεν πρέπει να γίνει άσωστη. Ο φρουρός προστατεύει ό,τι μπορεί να
+  /// αποδείξει, και δεν εφευρίσκει διενέξεις.
+  static bool _isStaleWrite({
+    required Map<String, dynamic>? oldRow,
+    required String? expectedUpdatedAt,
+  }) {
+    if (oldRow == null) return false;
+    if (expectedUpdatedAt == null || expectedUpdatedAt.isEmpty) return false;
+    final stored = oldRow['updated_at'] as String?;
+    if (stored == null || stored.isEmpty) return false;
+    return stored != expectedUpdatedAt;
+  }
+
+  /// Ποιος άγγιξε τελευταίος αυτή την εκκρεμότητα, από το Ιστορικό.
+  ///
+  /// Η γραμμή `tasks` δεν κρατά «ποιος με άλλαξε» — το κρατά μόνο το Ιστορικό.
+  /// Το ερώτημα τρέχει **μόνο** όταν έχει ήδη διαπιστωθεί διένεξη, οπότε δεν
+  /// επιβαρύνει την κανονική αποθήκευση, και πατά στο υπάρχον ευρετήριο
+  /// `(entity_type, entity_id)`.
+  static Future<({String? who, DateTime? at})> _lastAuditActor(
+    DatabaseExecutor executor,
+    int taskId,
+  ) async {
+    try {
+      final rows = await executor.query(
+        'audit_log',
+        columns: ['user_performing', 'timestamp'],
+        where: 'entity_type = ? AND entity_id = ?',
+        whereArgs: [AuditEntityTypes.task, taskId],
+        orderBy: 'id DESC',
+        limit: 1,
+      );
+      if (rows.isEmpty) return (who: null, at: null);
+      final who = (rows.first['user_performing'] as String?)?.trim();
+      final at = DateTime.tryParse(
+        (rows.first['timestamp'] as String?) ?? '',
+      );
+      return (who: (who == null || who.isEmpty) ? null : who, at: at);
+    } catch (_) {
+      // Η ταυτότητα είναι συμπληρωματική: η διένεξη αναφέρεται και χωρίς αυτήν.
+      return (who: null, at: null);
+    }
+  }
+
   /// Σφραγίζει τη στιγμή ολοκλήρωσης όταν η εγγραφή μόλις έκλεισε.
   ///
   /// Ένα σημείο για όλες τις ροές: η σφραγίδα μπαίνει μόνο στη μετάβαση προς
@@ -1344,7 +1393,9 @@ class TasksRepository {
   /// Ενημερώνει μια υπάρχουσα εγγραφή στον πίνακα tasks.
   ///
   /// Εγγραφή + audit στο ίδιο transaction ([TaskSaveException] σε αποτυχία).
-  Future<void> updateTask(Task task) async {
+  /// Με [force] `true` η εγγραφή περνά **παρά** τη διένεξη: ο χρήστης είδε τι
+  /// άλλαξε και επέλεξε ρητά να κρατήσει τη δική του εικόνα.
+  Future<void> updateTask(Task task, {bool force = false}) async {
     if (task.id == null) return;
     final db = await _db;
     final tid = task.id!;
@@ -1376,6 +1427,19 @@ class TasksRepository {
         final oldRow = oldRows.isEmpty
             ? null
             : Map<String, dynamic>.from(oldRows.first);
+        // Ο φρουρός μπαίνει ΕΔΩ και όχι στον καλούντα: η γραμμή έχει μόλις
+        // διαβαστεί μέσα στη συναλλαγή, οπότε η σύγκριση είναι ατομική — δεν
+        // υπάρχει παράθυρο ανάμεσα στον έλεγχο και στην εγγραφή.
+        if (!force &&
+            _isStaleWrite(oldRow: oldRow, expectedUpdatedAt: task.updatedAt)) {
+          final actor = await _lastAuditActor(txn, tid);
+          throw TaskStaleException(
+            fresh: Task.fromMap(oldRow!),
+            attempted: task,
+            changedBy: actor.who,
+            changedAt: actor.at,
+          );
+        }
         _stampCompletionMoment(map, oldRow, nowIso);
         final n = await txn.update(
           'tasks',
@@ -1461,7 +1525,15 @@ class TasksRepository {
   ///
   /// Ενημέρωση και audit σε ΜΙΑ συναλλαγή: αποτυχία audit = καμία αλλαγή,
   /// με ειλικρινές σφάλμα αντί για σιωπηλό κλείσιμο χωρίς ίχνος.
-  Future<void> closeTask(int id, String solutionNotes) async {
+  /// Το [expectedUpdatedAt] είναι η σφραγίδα της εγγραφής **όπως τη διάβασε η
+  /// οθόνη**. Χωρίς αυτήν ο φρουρός δεν έχει αφετηρία και η εγγραφή περνά — γι'
+  /// αυτό οι καλούντες οφείλουν να τη δίνουν πάντα.
+  Future<void> closeTask(
+    int id,
+    String solutionNotes, {
+    String? expectedUpdatedAt,
+    bool force = false,
+  }) async {
     final db = await _db;
     final now = DateTime.now().toIso8601String();
     try {
@@ -1472,9 +1544,30 @@ class TasksRepository {
           whereArgs: [id],
           limit: 1,
         );
-        final oldStatus = oldRows.isEmpty
+        final oldRow = oldRows.isEmpty
             ? null
-            : oldRows.first['status'] as String?;
+            : Map<String, dynamic>.from(oldRows.first);
+        final oldStatus = oldRow?['status'] as String?;
+        if (!force &&
+            _isStaleWrite(
+              oldRow: oldRow,
+              expectedUpdatedAt: expectedUpdatedAt,
+            )) {
+          final actor = await _lastAuditActor(txn, id);
+          final fresh = Task.fromMap(oldRow!);
+          throw TaskStaleException(
+            fresh: fresh,
+            // Η πρόθεση του χρήστη: κλείσιμο με ΑΥΤΟ το κείμενο λύσης. Ο
+            // διάλογος τη χρειάζεται για να πει τι θα αντικατασταθεί.
+            attempted: fresh.copyWith(
+              status: TaskStatus.closed.toDbValue,
+              solutionNotes: solutionNotes,
+              updatedAt: expectedUpdatedAt,
+            ),
+            changedBy: actor.who,
+            changedAt: actor.at,
+          );
+        }
         final values = <String, dynamic>{
           'status': 'closed',
           'solution_notes': solutionNotes,

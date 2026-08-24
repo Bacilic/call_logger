@@ -34,7 +34,7 @@ void main() {
           home: OperatorPickerScreen(
             profiles: profiles,
             presence: presence,
-            onPick: (_) {},
+            onPick: (_) async {},
             onCreate: (name, bind) async {},
           ),
         ),
@@ -125,7 +125,7 @@ void main() {
         MaterialApp(
           home: OperatorPickerScreen(
             profiles: [_profile(1, 'Βασίλης', windowsAccount: 'v.drosos')],
-            onPick: (operator) => picked.add(operator.displayName),
+            onPick: (operator) async => picked.add(operator.displayName),
             onCreate: (name, bind) async {},
           ),
         ),

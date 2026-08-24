@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/widgets/modal_route_tracker.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/widgets/compact_tooltip.dart';
 import '../../../core/widgets/dialog_snackbar_scope.dart';
@@ -208,6 +209,11 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   @override
   void initState() {
     super.initState();
+    // Η ουρά αντέχει ανανέωση όσο δεν έχει τσεκαριστεί καμία κλήση: δύο
+    // άνθρωποι δουλεύουν το ίδιο σύνολο κάθε μεσημέρι, και μια λίστα που δεν
+    // ξαναδιαβάζεται ποτέ όσο ο διάλογος είναι ανοιχτός είναι ακριβώς το
+    // πρόβλημα. Μόλις ο χρήστης επιλέξει κάτι, παγώνει.
+    appModalRouteTracker.refreshTolerantWhile = () => selectedKeys.isEmpty;
     notesController.addListener(_onFormTextChanged);
     solutionController.addListener(_onFormTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -395,6 +401,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
 
   @override
   void dispose() {
+    appModalRouteTracker.refreshTolerantWhile = null;
     aiSuggestTicker?.cancel();
     aiCooldownTicker?.cancel();
     aiSuggestStopwatch.stop();
@@ -967,9 +974,9 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                           suggestModelLabel: aiSuggestRunning
                                               ? aiCurrentModel
                                               : null,
-                                          suggestElapsedLabel: aiSuggestRunning
+                                          suggestElapsedSeconds:
+                                              aiSuggestRunning
                                               ? aiSuggestElapsedSeconds
-                                                    .toStringAsFixed(2)
                                               : null,
                                           cooldownRemainingSeconds:
                                               aiCooldownActive
