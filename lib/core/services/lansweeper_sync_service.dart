@@ -47,40 +47,6 @@ class LansweeperSyncPrecheckException implements Exception {
   String toString() => message;
 }
 
-class LansweeperSyncRequest {
-  const LansweeperSyncRequest({
-    required this.call,
-    required this.title,
-    required this.notes,
-    required this.solution,
-    required this.agentUsername,
-    this.durationSeconds,
-  });
-
-  final CallModel call;
-  final String title;
-  final String notes;
-  final String solution;
-  final String agentUsername;
-
-  /// Συνολική διάρκεια (δευτερόλεπτα) για την αποστολή· αν λείπει, χρησιμοποιείται η διάρκεια της κλήσης.
-  final int? durationSeconds;
-}
-
-class LansweeperSyncResult {
-  const LansweeperSyncResult({
-    required this.success,
-    required this.message,
-    this.ticketId,
-    this.rawPayload,
-  });
-
-  final bool success;
-  final String message;
-  final String? ticketId;
-  final Map<String, dynamic>? rawPayload;
-}
-
 class LansweeperWorkflowRequest {
   const LansweeperWorkflowRequest({
     required this.call,
@@ -121,6 +87,7 @@ class LansweeperWorkflowResult {
     required this.success,
     required this.message,
     this.ticketId,
+    this.ticketCreated = false,
     this.completedSteps = const [],
     this.warnings = const [],
     this.failedStep,
@@ -129,6 +96,14 @@ class LansweeperWorkflowResult {
 
   final bool success;
   final String? ticketId;
+
+  /// `true` όταν το αίτημα δημιουργήθηκε **σε αυτή τη ροή**.
+  ///
+  /// `false` σημαίνει ότι το αίτημα προϋπήρχε — το άνοιξε συνάδελφος από άλλο
+  /// μηχάνημα ή εμείς σε προηγούμενη αποστολή. Η διάκριση δεν είναι
+  /// καλλωπισμός του μηνύματος: ορίζει ποια πεδία επιτρέπεται να γραφτούν.
+  final bool ticketCreated;
+
   final String message;
   final List<String> completedSteps;
   final List<String> warnings;
@@ -182,39 +157,6 @@ class LansweeperSyncService {
         _defaultRawGetter(settingsService, action, params);
   }
 
-  Future<LansweeperSyncResult> submitAddTicket(
-    LansweeperSyncRequest request,
-  ) async {
-    if (request.agentUsername.trim().isEmpty) {
-      throw const LansweeperSyncPrecheckException(
-        'Ο πράκτορας API (AgentUsername) είναι υποχρεωτικός.',
-      );
-    }
-
-    final subject = request.title.trim().isNotEmpty
-        ? request.title.trim()
-        : _buildSubject(request.call);
-    final description = _buildDescription(
-      notes: request.notes,
-      solution: request.solution,
-      durationSeconds: request.durationSeconds ?? request.call.duration,
-    );
-
-    final form = <String, String>{
-      'Subject': subject,
-      'Description': description,
-      ..._requesterFields(request.agentUsername),
-    };
-
-    final result = await _postAction('AddTicket', form);
-    return LansweeperSyncResult(
-      success: result.success,
-      message: result.message,
-      ticketId: result.ticketId,
-      rawPayload: result.rawPayload,
-    );
-  }
-
   Future<LansweeperWorkflowResult> submitTicketWorkflow(
     LansweeperWorkflowRequest request,
   ) async {
@@ -252,6 +194,10 @@ class LansweeperSyncService {
     if (ticketId != null && ticketId.isEmpty) {
       ticketId = null;
     }
+
+    // Ποιος άνοιξε το αίτημα, εμείς τώρα ή κάποιος πριν από εμάς. Κρατιέται
+    // ΠΡΙΝ γεμίσει το `ticketId` από τη δημιουργία, αλλιώς η διάκριση χάνεται.
+    final ticketCreatedHere = ticketId == null;
 
     if (ticketId == null) {
       final baseFields = <String, String>{
@@ -358,9 +304,6 @@ class LansweeperSyncService {
       if (noteResult.success) {
         completedSteps.add('AddNote');
       } else {
-        // Στο EditTicket το Username ΑΛΛΑΖΕΙ τον αιτούντα του εισιτηρίου —
-        // κάθε βήμα μετά τη δημιουργία κουβαλά τον ίδιο αιτούντα, αλλιώς το
-        // κλείσιμο θα τον ξαναγύριζε σιωπηλά στον πράκτορα.
         final fallbackFields = <String, String>{
           'TicketID': resolvedTicketId,
           'Description': buildTicketDescription(
@@ -368,7 +311,11 @@ class LansweeperSyncService {
             solution: request.solution,
             durationSeconds: durationSeconds,
           ),
-          ..._ticketIdentityFields(requester, agent),
+          ..._followUpIdentityFields(
+            requester: requester,
+            agent: agent,
+            ticketCreatedHere: ticketCreatedHere,
+          ),
         };
         final fallbackResult = await _postAction('EditTicket', fallbackFields);
         rawPayloads['EditTicket(fallback)'] = fallbackResult.rawPayload;
@@ -397,7 +344,11 @@ class LansweeperSyncService {
       final stateFields = <String, String>{
         'TicketID': resolvedTicketId,
         'State': targetState,
-        ..._ticketIdentityFields(requester, agent),
+        ..._followUpIdentityFields(
+          requester: requester,
+          agent: agent,
+          ticketCreatedHere: ticketCreatedHere,
+        ),
       };
 
       final stateResult = await _postAction('EditTicket', stateFields);
@@ -422,6 +373,7 @@ class LansweeperSyncService {
       success: true,
       message: _workflowSuccessMessage(completedSteps),
       ticketId: resolvedTicketId,
+      ticketCreated: ticketCreatedHere,
       completedSteps: completedSteps,
       warnings: warnings,
       rawPayloads: rawPayloads,
@@ -465,6 +417,10 @@ class LansweeperSyncService {
 
   /// Πεδία ταυτότητας για AddTicket/EditTicket: όταν αιτών == πράκτορας, η
   /// σημερινή μορφή (ίδια τιμή παντού)· αλλιώς αιτών και πράκτορας χωριστά.
+  /// Πεδία ταυτότητας για τη **δημιουργία** του αιτήματος.
+  ///
+  /// Μόνο εδώ επιτρέπεται να γραφτεί αιτών: το αίτημα γεννιέται τώρα, άρα η
+  /// επιλογή της φόρμας μας είναι η μόνη που υπάρχει.
   Map<String, String> _ticketIdentityFields(String requester, String agent) {
     if (requester == agent) {
       return lansweeperAgentAsMatchingRequesterFields(agent);
@@ -473,6 +429,36 @@ class LansweeperSyncService {
       requester: requester,
       agent: agent,
     );
+  }
+
+  /// Πεδία ταυτότητας για κάθε βήμα **μετά** τη δημιουργία (`EditTicket`).
+  ///
+  /// CONTRACT: η ταυτότητα του αιτούντα γράφεται μόνο τη στιγμή που
+  /// δημιουργούμε εμείς το αίτημα· κάθε βήμα πάνω σε αίτημα που προϋπήρχε το
+  /// αφήνει ανέπαφο.
+  ///
+  /// - **Αίτημα δικό μας, μόλις δημιουργημένο:** ο αιτών ξανα-στέλνεται. Χωρίς
+  ///   αυτό το `EditTicket` του κλεισίματος τον γυρίζει σιωπηλά στον πράκτορα.
+  /// - **Αίτημα που προϋπήρχε:** το άνοιξε συνάδελφος από άλλο μηχάνημα ή εμείς
+  ///   σε προηγούμενη αποστολή. Ο αιτών **δεν** στέλνεται καθόλου — αλλιώς η
+  ///   επιλογή εκείνου αντικαθίσταται από τη δική μας φόρμα, και η αλλοίωση
+  ///   φεύγει εκτός εφαρμογής (το Lansweeper είναι αυτό που βλέπει η
+  ///   προϊσταμένη· από εδώ δεν διορθώνεται).
+  ///
+  /// Η **ανάθεση** πράκτορα περνά και στις δύο περιπτώσεις σε όποιον το δουλεύει
+  /// τώρα — αυτός το κλείνει, αυτός φαίνεται υπεύθυνος.
+  ///
+  /// Η παράμετρος είναι υποχρεωτική επίτηδες: ο καλών δεν μπορεί να ξεχάσει τη
+  /// διάκριση, γιατί ο κώδικας δεν μεταγλωττίζεται χωρίς αυτήν.
+  Map<String, String> _followUpIdentityFields({
+    required String requester,
+    required String agent,
+    required bool ticketCreatedHere,
+  }) {
+    if (!ticketCreatedHere) {
+      return lansweeperAgentOnlyFields(agent);
+    }
+    return _ticketIdentityFields(requester, agent);
   }
 
   /// Προ-έλεγχος `SearchUsers`: υπάρχει ο χρήστης στο Lansweeper;
@@ -701,16 +687,6 @@ class LansweeperSyncService {
     if (body.isEmpty) return durationLine;
     return '$body\n\n$durationLine';
   }
-
-  String _buildDescription({
-    required String notes,
-    required String solution,
-    int? durationSeconds,
-  }) => buildTicketDescription(
-    notes: notes,
-    solution: solution,
-    durationSeconds: durationSeconds,
-  );
 
   Map<String, dynamic>? _tryDecodeJson(String body) {
     try {

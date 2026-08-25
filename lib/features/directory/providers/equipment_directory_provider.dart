@@ -723,15 +723,17 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
   /// Αποθηκεύει την καρτέλα εξοπλισμού.
   ///
-  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα**.
-  ///
-  /// Η χρέωση (κάτοχος) μένει ΕΚΤΟΣ της σύγκρισης σε αυτή τη φάση: δεν είναι
-  /// στήλη του εξοπλισμού και η αντικατάστασή της θέλει δικό της αποτύπωμα.
+  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα**, και το
+  /// [expectedOwnerUserId] η χρέωση που έδειχνε η ίδια στιγμή. Η χρέωση μπαίνει
+  /// στη σύγκριση όπως όλα τα άλλα: η καρτέλα την ξαναγράφει ολόκληρη, οπότε
+  /// χωρίς αφετηρία μια διόρθωση σημειώσεων θα ξεχρέωνε αμίλητα τον υπάλληλο
+  /// που μόλις χρέωσε ο συνάδελφος.
   Future<void> updateEquipment(
     EquipmentModel eq, {
     required EquipmentModel? expected,
     bool force = false,
     int? ownerUserId,
+    int? expectedOwnerUserId,
   }) async {
     _settlePendingBulkUndo();
     if (eq.id == null) {
@@ -741,19 +743,29 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     final equipment = EquipmentRepository(dbUp);
     await equipment.updateEquipment(
       eq.id!,
-      equipmentWriteMap(eq),
+      <String, dynamic>{
+        ...equipmentWriteMap(eq),
+        'owner': _ownerIdsOf(ownerUserId),
+      },
       // Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
       // κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
       // ξεχάστηκε σε δεύτερο κατάλογο.
-      expected: expected == null ? null : equipmentWriteMap(expected),
+      expected: expected == null
+          ? null
+          : <String, Object?>{
+              ...equipmentWriteMap(expected),
+              'owner': EquipmentRepository.ownersFingerprint(
+                _ownerIdsOf(expectedOwnerUserId),
+              ),
+            },
       force: force,
-    );
-    await equipment.replaceEquipmentUsers(
-      eq.id!,
-      ownerUserId != null ? [ownerUserId] : [],
     );
     await _afterEquipmentMutation();
   }
+
+  /// Η χρέωση ως λίστα — ένας κάτοχος ή κανένας.
+  static List<int> _ownerIdsOf(int? ownerUserId) =>
+      ownerUserId != null ? <int>[ownerUserId] : const <int>[];
 
   /// Διαγράφει την επιλογή, ή μόνο τα [onlyIds] όταν δίνονται.
   ///

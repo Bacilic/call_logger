@@ -119,7 +119,6 @@ Finder _codeField() => _fieldByLabel('Κωδικός');
 
 Finder _notesField() => _fieldByLabel('Σημειώσεις');
 
-Finder _locationField() => _fieldByLabel('Τοποθεσία');
 
 Finder _zoneAShowInCall() =>
     find.byWidgetPredicate((w) => w is DropdownButtonFormField<int?>);
@@ -202,6 +201,21 @@ Future<void> _openEquipmentFormInDialog(
                   barrierDismissible: true,
                   builder: (ctx) => EquipmentFormDialog(
                     initialEquipment: initialEquipment,
+                    // Ο κάτοχος έρχεται από τη γραμμή του καταλόγου, όπως και
+                    // στις δύο πραγματικές διαδρομές που ανοίγουν τη φόρμα.
+                    // Χωρίς αυτόν η φόρμα «βλέπει» αχρέωτο εξοπλισμό και η
+                    // αποθήκευση σταματά ως διένεξη — κατάσταση που δεν
+                    // συμβαίνει στην εφαρμογή.
+                    initialOwner: initialEquipment == null
+                        ? null
+                        : container
+                              .read(equipmentDirectoryProvider)
+                              .allItems
+                              .where(
+                                (row) => row.$1.id == initialEquipment.id,
+                              )
+                              .map((row) => row.$2)
+                              .firstOrNull,
                     notifier: notifier,
                   ),
                 ),
@@ -794,14 +808,16 @@ void main() {
           ),
         );
 
-        await tester.enterText(_locationField(), 'Νέα τοποθεσία δοκιμής');
+        // Οι Σημειώσεις είναι πάντα ελεύθερες· η Τοποθεσία κλειδώνει όταν ο
+        // εξοπλισμός έχει κάτοχο, οπότε δεν κάνει για «οποιαδήποτε αλλαγή».
+        await tester.enterText(_notesField(), 'Σημείωση δοκιμής');
         await pumpUntilSettled(tester);
         final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
         expect(
           tester.widget<FilledButton>(saveButton).onPressed,
           isNotNull,
           reason: greekExpectMsg(
-            'Η αλλαγή τοποθεσίας ενεργοποιεί την αποθήκευση',
+            'Η αλλαγή σημειώσεων ενεργοποιεί την αποθήκευση',
           ),
         );
         await tester.tapAt(const Offset(8, 8));

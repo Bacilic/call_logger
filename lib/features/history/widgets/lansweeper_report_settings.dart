@@ -167,6 +167,7 @@ class LansweeperReportSettings {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!host.mounted) return;
       persistLansweeperSettings(
+        host.context,
         host.ref,
         LansweeperSettingsValues(
           apiUrl: host.lansweeperApiUrlController.text,

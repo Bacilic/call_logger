@@ -20,6 +20,51 @@ void main() {
       expect(m.sha256, 'abc123');
     });
 
+    test('η έκδοση σχήματος διαβάζεται όταν υπάρχει', () {
+      final m = UpdateManifest.fromJson({
+        'version': '0.30.0',
+        'build': 300,
+        'released': '2026-08-25',
+        'zipFile': 'call_logger_0.30.0(300).zip',
+        'sha256': 'abc123',
+        'schemaVersion': 54,
+      });
+
+      expect(m, isNotNull);
+      expect(m!.schemaVersion, 54);
+      expect(m.toJson()['schemaVersion'], 54);
+    });
+
+    test('παλιό πακέτο χωρίς έκδοση σχήματος μένει έγκυρο', () {
+      final m = UpdateManifest.fromJson({
+        'version': '0.24.0',
+        'build': 32,
+        'released': '2026-07-19',
+        'zipFile': 'call_logger_0.24.0.zip',
+        'sha256': 'abc123',
+      });
+
+      expect(m, isNotNull);
+      expect(m!.schemaVersion, isNull);
+      expect(m.toJson().containsKey('schemaVersion'), isFalse);
+    });
+
+    test('χαλασμένη έκδοση σχήματος δεν ακυρώνει το πακέτο', () {
+      for (final broken in <Object?>['όχι αριθμός', 0, -3, null]) {
+        final m = UpdateManifest.fromJson({
+          'version': '0.30.0',
+          'build': 300,
+          'released': '2026-08-25',
+          'zipFile': 'call_logger_0.30.0(300).zip',
+          'sha256': 'abc123',
+          'schemaVersion': broken,
+        });
+
+        expect(m, isNotNull, reason: 'schemaVersion=$broken');
+        expect(m!.schemaVersion, isNull, reason: 'schemaVersion=$broken');
+      }
+    });
+
     test('returns null for broken or incomplete JSON', () {
       expect(UpdateManifest.fromJson(null), isNull);
       expect(UpdateManifest.fromJson(<String, dynamic>{}), isNull);

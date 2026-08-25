@@ -6,6 +6,8 @@ import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/database/database_schema_migrations.dart'
+    show kDatabaseSchemaVersion;
 import 'installer_script_builder.dart';
 
 /// Είδος bump έκδοσης (το build αυξάνεται πάντα κατά 1).
@@ -403,6 +405,9 @@ class ReleasePublisherService {
         'released': releasedDate,
         'zipFile': zipName,
         'sha256': sha,
+        // Ώστε ένα αντίγραφο που κόλλησε σε «βάση νεότερης έκδοσης» να ξέρει
+        // αν αυτό το πακέτο το ξεμπλοκάρει, αντί να το μαντεύει.
+        'schemaVersion': kDatabaseSchemaVersion,
       };
       final manifestJson = const JsonEncoder.withIndent('  ').convert(manifest);
       final versionTmp = File(p.join(currentDir.path, 'version.json.tmp'));

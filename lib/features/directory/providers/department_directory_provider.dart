@@ -623,6 +623,40 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
+  /// Βάφει πολλά τμήματα μονομιάς — **μόνο** τη στήλη του χρώματος.
+  ///
+  /// Η μαζική παλέτα δεν έχει καμία δουλειά να ξαναγράψει όνομα, κτίριο,
+  /// σημειώσεις ή θέση στην κάτοψη: η λίστα που κρατά η οθόνη μπορεί να έχει
+  /// γεράσει, και ό,τι άλλαξε στο μεταξύ ο συνάδελφος θα χανόταν σιωπηλά.
+  /// Γι' αυτό δεν περνά από την [updateDepartment] της καρτέλας.
+  ///
+  /// Φρουρός δεν χρειάζεται: το χρώμα είναι ακριβώς αυτό που ζήτησε ρητά ο
+  /// χρήστης, οπότε ο τελευταίος κερδίζει — όπως σε κάθε μαζική ενέργεια.
+  ///
+  /// Η ανανέωση των καταλόγων γίνεται **μία** φορά στο τέλος· περνώντας από
+  /// την καρτέλα γινόταν μία ανά τμήμα, δηλαδή δώδεκα πλήρεις επαναφορτώσεις
+  /// για δώδεκα τμήματα.
+  Future<void> setDepartmentsColor(
+    Iterable<DepartmentModel> departments,
+    String hex,
+  ) async {
+    final ids = departments
+        .map((d) => d.id)
+        .whereType<int>()
+        .toSet()
+        .toList();
+    if (ids.isEmpty) return;
+    _settlePendingBulkUndo();
+    final db = await DatabaseHelper.instance.database;
+    final repository = DepartmentRepository(db);
+    for (final id in ids) {
+      await repository.updateDepartment(id, {'color': hex}, expected: null);
+    }
+    await _refreshLookupCache();
+    await loadDepartments();
+    await refreshDirectoryCaches(ref, users: true, equipment: true);
+  }
+
   Future<void> updateDepartmentSharedAssets(
     int departmentId, {
     required List<String> sharedPhones,

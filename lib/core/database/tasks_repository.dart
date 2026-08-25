@@ -222,6 +222,12 @@ class TasksRepository {
     final raw =
         await settings.getSetting(TaskSettingsConfig.appSettingsKey) ??
         await settings.getSetting(TaskSettingsConfig.legacyAppSettingsKey);
+    return _decodeTaskSettingsConfig(raw);
+  }
+
+  /// Χαλασμένο ή άγνωστο περιεχόμενο δίνει προεπιλογές αντί για κρασάρισμα:
+  /// οι ρυθμίσεις είναι προτιμήσεις, όχι δεδομένα που δεν αντικαθίστανται.
+  static TaskSettingsConfig _decodeTaskSettingsConfig(String? raw) {
     if (raw == null || raw.trim().isEmpty) {
       return TaskSettingsConfig.defaultConfig();
     }
@@ -314,13 +320,33 @@ class TasksRepository {
     return candidate;
   }
 
-  /// Αποθήκευση ρυθμίσεων εκκρεμοτήτων στο `app_settings`.
-  Future<void> saveTaskSettingsConfig(TaskSettingsConfig config) async {
+  /// **Στοχευμένη αλλαγή** των ρυθμίσεων εκκρεμοτήτων.
+  ///
+  /// Οι έξι ρυθμίσεις ζουν σε ΕΝΑ κλειδί, οπότε η [change] εφαρμόζεται στη
+  /// **φρέσκια** αποθηκευμένη τιμή μέσα σε ατομική δέσμευση — όχι στην εικόνα
+  /// που κρατά ο διάλογος. Γι' αυτό οφείλει να είναι καθαρή: μπορεί να
+  /// ξανατρέξει αν κάποιος προλάβει.
+  ///
+  /// Επιστρέφει ό,τι **όντως** αποθηκεύτηκε: ο καλών ενημερώνει την οθόνη του
+  /// με αυτό, οπότε βλέπει και τις αλλαγές του συναδέλφου.
+  Future<TaskSettingsConfig> updateTaskSettingsConfig(
+    TaskSettingsConfig Function(TaskSettingsConfig current) change,
+  ) async {
     final dbSave = await DatabaseHelper.instance.database;
-    await SettingsRepository(dbSave).saveSetting(
-      TaskSettingsConfig.appSettingsKey,
-      jsonEncode(config.toMap()),
+    final settings = SettingsRepository(dbSave);
+    // Εγκατάσταση που δεν έχει ακόμη το νέο κλειδί κρατά τις ρυθμίσεις της στο
+    // παλιό. Χωρίς αυτό, η πρώτη στοχευμένη εγγραφή θα ξεκινούσε από τις
+    // προεπιλογές και θα έσβηνε ό,τι είχε ρυθμίσει ο χρήστης.
+    final legacyRaw = await settings.getSetting(
+      TaskSettingsConfig.legacyAppSettingsKey,
     );
+    final storedRaw = await settings.updateSetting(
+      TaskSettingsConfig.appSettingsKey,
+      (raw) => jsonEncode(
+        change(_decodeTaskSettingsConfig(raw ?? legacyRaw)).toMap(),
+      ),
+    );
+    return _decodeTaskSettingsConfig(storedRaw);
   }
 
   /// Τίτλος εκκρεμότητας από σημειώσεις/κατηγορία (μορφή φόρμας κλήσης).

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/lansweeper_ticket_submit_config.dart';
+import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../../../core/widgets/settings_list_conflict_dialog.dart';
 import '../../providers/lansweeper_ticket_submit_config_provider.dart';
 import 'lansweeper_settings_card.dart';
 
@@ -89,7 +91,12 @@ class _NoteAndStepsCard extends StatelessWidget {
             DropdownMenuItem(value: 'Public', child: Text('Δημόσια')),
           ],
           onChanged: (value) {
-            if (value != null) unawaited(notifier.setNoteType(value));
+            if (value != null) {
+              persistSettingInBackground(
+                context,
+                notifier.setNoteType(value),
+              );
+            }
           },
         ),
         const SizedBox(height: 8),
@@ -97,21 +104,30 @@ class _NoteAndStepsCard extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           title: const Text('Ενεργό βήμα σημείωσης (AddNote)'),
           value: config.enableAddNoteStep,
-          onChanged: (value) => unawaited(notifier.setEnableAddNoteStep(value)),
+          onChanged: (value) => persistSettingInBackground(
+            context,
+            notifier.setEnableAddNoteStep(value),
+          ),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Ενεργό βήμα κατάστασης (EditTicket)'),
           value: config.enableStateUpdateStep,
           onChanged: (value) =>
-              unawaited(notifier.setEnableStateUpdateStep(value)),
+              persistSettingInBackground(
+                context,
+                notifier.setEnableStateUpdateStep(value),
+              ),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Απομνημόνευση τελευταίων επιλογών φόρμας'),
           value: config.rememberFormSelections,
           onChanged: (value) =>
-              unawaited(notifier.setRememberFormSelections(value)),
+              persistSettingInBackground(
+                context,
+                notifier.setRememberFormSelections(value),
+              ),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -120,7 +136,10 @@ class _NoteAndStepsCard extends StatelessWidget {
             'Όταν είναι ενεργό, προστίθεται γραμμή «Χρόνος: MM:SS» στη σημείωση λύσης.',
           ),
           value: config.includeNoteTime,
-          onChanged: (value) => unawaited(notifier.setIncludeNoteTime(value)),
+          onChanged: (value) => persistSettingInBackground(
+            context,
+            notifier.setIncludeNoteTime(value),
+          ),
         ),
       ],
     );
@@ -169,39 +188,74 @@ class _ListsAndDefaultsCard extends StatelessWidget {
         _ListWithDefaultRow(
           valuesLabel: 'Καταστάσεις ticket (τιμές με κόμμα)',
           defaultLabel: 'Προεπιλογή κατάστασης',
+          listLabel: 'λίστα καταστάσεων',
           values: config.ticketStates,
           selected: config.defaultTicketState,
-          onListChanged: (values) =>
-              unawaited(notifier.setTicketStates(values)),
+          onListSubmitted: (values, expected) =>
+              ({required bool force}) => notifier.setTicketStates(
+                values,
+                expected: force ? null : expected,
+                force: force,
+              ),
           onDefaultChanged: (value) =>
-              unawaited(notifier.setDefaultTicketState(value)),
+              persistSettingInBackground(
+                context,
+                notifier.setDefaultTicketState(value),
+              ),
         ),
         const SizedBox(height: 12),
         _ListWithDefaultRow(
           valuesLabel: 'Τύποι αιτήματος (τιμές με κόμμα)',
           defaultLabel: 'Προεπιλογή τύπου αιτήματος',
+          listLabel: 'λίστα τύπων αιτήματος',
           values: config.ticketTypes,
           selected: config.ticketType,
-          onListChanged: (values) => unawaited(notifier.setTicketTypes(values)),
-          onDefaultChanged: (value) => unawaited(notifier.setTicketType(value)),
+          onListSubmitted: (values, expected) =>
+              ({required bool force}) => notifier.setTicketTypes(
+                values,
+                expected: force ? null : expected,
+                force: force,
+              ),
+          onDefaultChanged: (value) => persistSettingInBackground(
+            context,
+            notifier.setTicketType(value),
+          ),
         ),
         const SizedBox(height: 12),
         _ListWithDefaultRow(
           valuesLabel: 'Προτεραιότητες (τιμές με κόμμα)',
           defaultLabel: 'Προεπιλογή προτεραιότητας',
+          listLabel: 'λίστα προτεραιοτήτων',
           values: config.priorities,
           selected: config.priority,
-          onListChanged: (values) => unawaited(notifier.setPriorities(values)),
-          onDefaultChanged: (value) => unawaited(notifier.setPriority(value)),
+          onListSubmitted: (values, expected) =>
+              ({required bool force}) => notifier.setPriorities(
+                values,
+                expected: force ? null : expected,
+                force: force,
+              ),
+          onDefaultChanged: (value) => persistSettingInBackground(
+            context,
+            notifier.setPriority(value),
+          ),
         ),
         const SizedBox(height: 12),
         _ListWithDefaultRow(
           valuesLabel: 'Ομάδες (τιμές με κόμμα)',
           defaultLabel: 'Προεπιλογή ομάδας',
+          listLabel: 'λίστα ομάδων',
           values: config.teams,
           selected: config.team,
-          onListChanged: (values) => unawaited(notifier.setTeams(values)),
-          onDefaultChanged: (value) => unawaited(notifier.setTeam(value)),
+          onListSubmitted: (values, expected) =>
+              ({required bool force}) => notifier.setTeams(
+                values,
+                expected: force ? null : expected,
+                force: force,
+              ),
+          onDefaultChanged: (value) => persistSettingInBackground(
+            context,
+            notifier.setTeam(value),
+          ),
         ),
         const SizedBox(height: 14),
         Row(
@@ -228,22 +282,36 @@ class _ListsAndDefaultsCard extends StatelessWidget {
   }
 }
 
+/// Η αποθήκευση μιας λίστας, έτοιμη να ξανακληθεί με `force` αν ο χρήστης
+/// επιμείνει πάνω στην ξένη αλλαγή.
+typedef _ListSave = Future<void> Function({required bool force});
+
 /// Μία γραμμή λίστας: αριστερά οι τιμές με κόμμα, δεξιά η προεπιλογή τους.
 class _ListWithDefaultRow extends StatefulWidget {
   const _ListWithDefaultRow({
     required this.valuesLabel,
     required this.defaultLabel,
+    required this.listLabel,
     required this.values,
     required this.selected,
-    required this.onListChanged,
+    required this.onListSubmitted,
     required this.onDefaultChanged,
   });
 
   final String valuesLabel;
   final String defaultLabel;
+
+  /// Πώς λέγεται η λίστα μέσα στον διάλογο διένεξης.
+  final String listLabel;
+
   final List<String> values;
   final String selected;
-  final ValueChanged<List<String>> onListChanged;
+
+  /// Δίνει την αποθήκευση για τις [values], με αφετηρία τη λίστα που έδειχνε
+  /// το πεδίο όταν ο χρήστης άρχισε να το επεξεργάζεται.
+  final _ListSave Function(List<String> values, List<String> expected)
+  onListSubmitted;
+
   final ValueChanged<String> onDefaultChanged;
 
   @override
@@ -252,6 +320,10 @@ class _ListWithDefaultRow extends StatefulWidget {
 
 class _ListWithDefaultRowState extends State<_ListWithDefaultRow> {
   late final TextEditingController _controller;
+  final FocusNode _focusNode = FocusNode();
+
+  /// Η λίστα όπως τη βρήκε το πεδίο όταν πήρε την εστίαση — η αφετηρία.
+  List<String> _baseline = const <String>[];
 
   @override
   void initState() {
@@ -259,6 +331,54 @@ class _ListWithDefaultRowState extends State<_ListWithDefaultRow> {
     _controller = TextEditingController(
       text: LansweeperTicketSubmitSettingsSection.commaText(widget.values),
     );
+    _baseline = List<String>.from(widget.values);
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  /// Η αποθήκευση γίνεται όταν ο χρήστης **τελειώσει**, όχι σε κάθε πλήκτρο.
+  ///
+  /// Με εγγραφή ανά χαρακτήρα η βάση κρατούσε μισοπληκτρολογημένες τιμές —
+  /// ορατές στον συνάδελφο που άνοιγε τη φόρμα εκείνη τη στιγμή — και κανένας
+  /// φρουρός διένεξης δεν θα είχε νόημα, αφού θα ρωτούσε ανά πλήκτρο.
+  void _onFocusChange() {
+    if (_focusNode.hasFocus) {
+      _baseline = List<String>.from(widget.values);
+      return;
+    }
+    final values = LansweeperTicketSubmitSettingsSection.parseCommaValues(
+      _controller.text,
+    );
+    if (listEquals(values, _baseline)) return;
+    unawaited(_submit(values));
+  }
+
+  Future<void> _submit(List<String> values) async {
+    final save = widget.onListSubmitted(values, _baseline);
+    final bool saved;
+    try {
+      saved = await saveSettingsListWithConflictPrompt(
+        context,
+        save: save,
+        listLabel: widget.listLabel,
+      );
+    } catch (error, stackTrace) {
+      // Αποτυχία εγγραφής (κλειδωμένη ή άφταστη βάση) — όχι διένεξη.
+      if (!mounted) return;
+      showDatabasePersistenceErrorSnackBar(context, error, stackTrace);
+      _controller.text = LansweeperTicketSubmitSettingsSection.commaText(
+        widget.values,
+      );
+      return;
+    }
+    if (!mounted) return;
+    if (!saved) {
+      // Ο χρήστης κράτησε τη λίστα του συναδέλφου: το πεδίο ξαναδείχνει
+      // την αποθηκευμένη τιμή, αλλιώς θα έμενε να υπόσχεται κάτι που δεν έγινε.
+      _controller.text = LansweeperTicketSubmitSettingsSection.commaText(
+        widget.values,
+      );
+    }
+    _baseline = List<String>.from(widget.values);
   }
 
   @override
@@ -270,7 +390,7 @@ class _ListWithDefaultRowState extends State<_ListWithDefaultRow> {
         LansweeperTicketSubmitSettingsSection.parseCommaValues(
           _controller.text,
         );
-    if (!listEquals(controllerValues, widget.values)) {
+    if (!listEquals(controllerValues, widget.values) && !_focusNode.hasFocus) {
       _controller.text = LansweeperTicketSubmitSettingsSection.commaText(
         widget.values,
       );
@@ -279,6 +399,8 @@ class _ListWithDefaultRowState extends State<_ListWithDefaultRow> {
 
   @override
   void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -299,15 +421,14 @@ class _ListWithDefaultRowState extends State<_ListWithDefaultRow> {
           flex: 8,
           child: TextFormField(
             controller: _controller,
+            focusNode: _focusNode,
             minLines: 1,
             maxLines: null,
             decoration: InputDecoration(
               labelText: widget.valuesLabel,
               border: const OutlineInputBorder(),
               alignLabelWithHint: true,
-            ),
-            onChanged: (raw) => widget.onListChanged(
-              LansweeperTicketSubmitSettingsSection.parseCommaValues(raw),
+              helperText: 'Αποθηκεύεται όταν φύγετε από το πεδίο',
             ),
           ),
         ),
@@ -365,7 +486,29 @@ class _CustomFieldsEditor extends StatelessWidget {
     } else {
       next[index] = result;
     }
-    await notifier.replaceCustomFields(next);
+    if (!context.mounted) return;
+    await _saveFields(context, next);
+  }
+
+  /// Αποθηκεύει τη λίστα πεδίων και ρωτά αν κάποιος πρόλαβε.
+  ///
+  /// Η λίστα γράφεται ολόκληρη (προσθήκη, διαγραφή, αναδιάταξη), οπότε η
+  /// εφαρμογή δεν μπορεί να ξέρει αν ένα πεδίο που λείπει σβήστηκε επίτηδες —
+  /// αποφασίζει ο άνθρωπος, όπως και στις λίστες με κόμμα.
+  Future<void> _saveFields(
+    BuildContext context,
+    List<LansweeperCustomFieldDef> next,
+  ) async {
+    final expected = List<LansweeperCustomFieldDef>.from(config.customFields);
+    await saveSettingsListWithConflictPrompt(
+      context,
+      save: ({required force}) => notifier.replaceCustomFields(
+        next,
+        expected: force ? null : expected,
+        force: force,
+      ),
+      listLabel: 'λίστα πεδίων',
+    );
   }
 
   @override
@@ -406,7 +549,7 @@ class _CustomFieldsEditor extends StatelessWidget {
                             );
                             final item = next.removeAt(i);
                             next.insert(i - 1, item);
-                            await notifier.replaceCustomFields(next);
+                            await _saveFields(context, next);
                           },
                     icon: const Icon(Icons.arrow_upward, size: 18),
                   ),
@@ -420,7 +563,7 @@ class _CustomFieldsEditor extends StatelessWidget {
                             );
                             final item = next.removeAt(i);
                             next.insert(i + 1, item);
-                            await notifier.replaceCustomFields(next);
+                            await _saveFields(context, next);
                           },
                     icon: const Icon(Icons.arrow_downward, size: 18),
                   ),
@@ -441,7 +584,7 @@ class _CustomFieldsEditor extends StatelessWidget {
                       final next = List<LansweeperCustomFieldDef>.from(
                         config.customFields,
                       )..removeAt(i);
-                      await notifier.replaceCustomFields(next);
+                      await _saveFields(context, next);
                     },
                     icon: const Icon(Icons.delete_outline, size: 18),
                   ),

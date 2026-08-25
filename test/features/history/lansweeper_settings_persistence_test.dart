@@ -229,20 +229,27 @@ void main() {
     (tester) async {
       final recorded = <String, String>{};
       late WidgetRef capturedRef;
+      // Η αποθήκευση χρειάζεται οθόνη για να αναφέρει τυχόν αποτυχία εγγραφής.
+      late BuildContext capturedContext;
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: _recordingOverrides(recorded),
-          child: Consumer(
-            builder: (context, ref, _) {
-              capturedRef = ref;
-              return const SizedBox.shrink();
-            },
+          child: MaterialApp(
+            home: Scaffold(
+              body: Consumer(
+                builder: (context, ref, _) {
+                  capturedRef = ref;
+                  capturedContext = context;
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
           ),
         ),
       );
 
-      persistLansweeperSettings(capturedRef, _kValues);
+      persistLansweeperSettings(capturedContext, capturedRef, _kValues);
       await tester.pump();
 
       expect(recorded['apiUrl'], _vApiUrl);

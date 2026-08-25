@@ -11,14 +11,28 @@ class TaskSettingsConfigNotifier extends AsyncNotifier<TaskSettingsConfig> {
     return service.getTaskSettingsConfig();
   }
 
-  /// Αποθήκευση / ενημέρωση ρυθμίσεων στο `app_settings`.
-  Future<void> updateConfig(TaskSettingsConfig config) async {
+  /// Αποθηκεύει **μόνο ό,τι άλλαξε** ανάμεσα στην αφετηρία [from] και το [to].
+  ///
+  /// Το [from] είναι οι ρυθμίσεις **όπως τις φόρτωσε ο διάλογος**. Χωρίς αυτό,
+  /// η αποθήκευση θα έγραφε ολόκληρο το δέμα από την εικόνα της οθόνης και θα
+  /// έσβηνε την επιλογή που μόλις άλλαξε ο άλλος διαχειριστής.
+  ///
+  /// Η κατάσταση ενημερώνεται με ό,τι όντως αποθηκεύτηκε — εκεί φαίνονται και
+  /// οι αλλαγές του συναδέλφου.
+  Future<void> saveChanges({
+    required TaskSettingsConfig from,
+    required TaskSettingsConfig to,
+  }) async {
     final service = ref.read(taskServiceProvider);
-    await service.saveTaskSettingsConfig(config);
-    state = AsyncValue.data(config);
+    final saved = await service.updateTaskSettingsConfig(
+      (current) => TaskSettingsConfig.applyChanges(
+        from: from,
+        to: to,
+        onto: current,
+      ),
+    );
+    state = AsyncValue.data(saved);
   }
-
-  Future<void> save(TaskSettingsConfig config) => updateConfig(config);
 }
 
 final taskSettingsConfigProvider =

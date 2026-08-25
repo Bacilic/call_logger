@@ -59,6 +59,34 @@ List<String> lansweeperWarningsForTicket({
   return const <String>[];
 }
 
+/// Το κύριο κείμενο της επιτυχούς καταχώρησης.
+///
+/// Ξεχωρίζει **δημιουργία** από **ενημέρωση υπάρχοντος** αιτήματος. Η διάκριση
+/// δεν είναι φιλολογία: όταν η κλήση κουβαλά ήδη αριθμό αιτήματος —γιατί την
+/// καταχώρησε συνάδελφος από άλλο μηχάνημα ή εμείς σε προηγούμενη αποστολή—
+/// δεν ανοίγει δεύτερο αίτημα. Χωρίς αυτό, το «Καταχώρηση επιτυχής» άφηνε να
+/// εννοηθεί ότι το αίτημα άνοιξε τώρα.
+String lansweeperSubmitBaseMessage({
+  required String ticketId,
+  required bool ticketCreated,
+  required int markedCalls,
+}) {
+  final id = ticketId.trim();
+  if (markedCalls <= 1) {
+    if (id.isEmpty) return 'Καταχώρηση επιτυχής. Ticket: -';
+    return ticketCreated
+        ? 'Καταχώρηση επιτυχής. Ticket: $id'
+        : 'Ενημερώθηκε το υπάρχον αίτημα #$id (δεν δημιουργήθηκε νέο).';
+  }
+  if (id.isEmpty) {
+    return '$markedCalls κλήσεις επισημάνθηκαν ως καταχωρημένες.';
+  }
+  return ticketCreated
+      ? '$markedCalls κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #$id).'
+      : '$markedCalls κλήσεις επισημάνθηκαν ως καταχωρημένες '
+            '(ενημερώθηκε το υπάρχον αίτημα #$id, δεν δημιουργήθηκε νέο).';
+}
+
 /// Το κείμενο του snackbar μετά την καταχώρηση: το αποτέλεσμα, και από κάτω
 /// ό,τι χρειάζεται προσοχή.
 String lansweeperSubmitSnackBarText({

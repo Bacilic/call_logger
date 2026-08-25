@@ -6,6 +6,7 @@ class UpdateManifest {
     required this.released,
     required this.zipFile,
     required this.sha256,
+    this.schemaVersion,
   });
 
   final String version;
@@ -13,6 +14,15 @@ class UpdateManifest {
   final String released;
   final String zipFile;
   final String sha256;
+
+  /// Ποια έκδοση σχήματος βάσης διαβάζει το πακέτο — `null` σε παλαιότερες
+  /// δημοσιεύσεις, που δεν το κατέγραφαν.
+  ///
+  /// Χωρίς αυτό, η προσφορά αναβάθμισης σε χρήστη που κόλλησε σε «βάση
+  /// νεότερης έκδοσης» θα ήταν στοίχημα: ξέραμε ότι το πακέτο είναι νεότερο,
+  /// όχι ότι φτάνει. Το `null` δεν ακυρώνει την προσφορά — αλλάζει μόνο τη
+  /// διατύπωσή της, ώστε να μην υπόσχεται ό,τι δεν μπορεί να ξέρει.
+  final int? schemaVersion;
 
   /// Ανθεκτική ανάλυση· επιστρέφει null σε ελλιπή/λάθος πεδία (όχι crash).
   static UpdateManifest? fromJson(Object? raw) {
@@ -39,12 +49,25 @@ class UpdateManifest {
         return null;
       }
       if (_parseSemVer(version) == null) return null;
+      // Προαιρετικό και ανεκτικό: άκυρη ή αρνητική τιμή διαβάζεται ως «δεν το
+      // ξέρω» — ένα χαλασμένο πεδίο δεν ακυρώνει ολόκληρο το πακέτο.
+      final schemaRaw = map['schemaVersion'];
+      final int? schemaVersion = switch (schemaRaw) {
+        int v when v > 0 => v,
+        num v when v > 0 => v.toInt(),
+        String v => switch (int.tryParse(v.trim())) {
+          final int parsed when parsed > 0 => parsed,
+          _ => null,
+        },
+        _ => null,
+      };
       return UpdateManifest(
         version: version,
         build: build,
         released: released,
         zipFile: zipFile,
         sha256: sha256,
+        schemaVersion: schemaVersion,
       );
     } catch (_) {
       return null;
@@ -57,6 +80,7 @@ class UpdateManifest {
     'released': released,
     'zipFile': zipFile,
     'sha256': sha256,
+    if (schemaVersion != null) 'schemaVersion': schemaVersion,
   };
 
   /// Σύγκριση «ποιο πακέτο είναι νεότερο» — αποφασίζει το BUILD, όχι η ετικέτα.

@@ -48,6 +48,22 @@ Map<String, String> lansweeperRequesterAndAgentFields({
   };
 }
 
+/// Πεδία ταυτότητας **μόνο για τον πράκτορα** — καμία αναφορά σε αιτούντα.
+///
+/// Χρησιμοποιείται σε `EditTicket` πάνω σε αίτημα που **δεν** δημιουργήσαμε
+/// εμείς σε αυτή τη ροή. Τα [Username]/[Email] του `EditTicket` ΑΝΤΙΚΑΘΙΣΤΟΥΝ
+/// τον αιτούντα του εισιτηρίου· η παράλειψή τους είναι ο μόνος τρόπος να μείνει
+/// ανέπαφος όποιος το άνοιξε. Δεν υπάρχει εναλλακτική «διάβασε και ξαναγράψε»:
+/// το `GetTicket` επιστρέφει εμφανιζόμενο όνομα, ενώ το `EditTicket` απαιτεί
+/// `τομέας\όνομα` — και το API ρητά δεν ψάχνει με display name.
+Map<String, String> lansweeperAgentOnlyFields(String agent) {
+  final value = agent.trim();
+  if (lansweeperAgentValueLooksLikeEmail(value)) {
+    return <String, String>{'AgentEmail': value};
+  }
+  return <String, String>{'AgentUsername': value};
+}
+
 /// Παράμετροι `SearchUsers` για τη δοσμένη ταυτότητα: email → `Email`,
 /// `τομέας\όνομα` → `Username` + `UserDomain`, αλλιώς σκέτο `Username`.
 Map<String, String> lansweeperSearchUsersParamsFor(String identity) {

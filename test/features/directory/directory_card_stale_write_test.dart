@@ -263,6 +263,116 @@ void main() {
 
       expect((await rowById('equipment', id))['location'], 'Γραφείο 3');
     });
+
+    test('η χρέωση που έκανε ο άλλος δεν σβήνεται αμίλητα', () async {
+      final eqId = await equipment.insertEquipmentFromMap({
+        'code_equipment': '5067',
+        'type': 'Υπολογιστής',
+      });
+      final ownerId = await users.insertUserFromMap({
+        'first_name': 'Σοφία',
+        'last_name': 'Ψαρρά',
+      });
+      // Η καρτέλα άνοιξε όσο ο εξοπλισμός ήταν αχρέωτος.
+      final asFormSawIt = <String, Object?>{
+        'code_equipment': '5067',
+        'notes': null,
+        'owner': EquipmentRepository.ownersFingerprint(const <int>[]),
+      };
+
+      // Ο συνάδελφος τον χρεώνει στην Ψαρρά.
+      await equipment.replaceEquipmentUsers(eqId, [ownerId]);
+
+      await expectLater(
+        () => equipment.updateEquipment(eqId, {
+          'code_equipment': '5067',
+          'notes': 'Άλλαξε μνήμη',
+          'owner': const <int>[],
+        }, expected: asFormSawIt),
+        throwsA(isA<DirectoryStaleException>()),
+      );
+
+      expect(
+        await equipment.countUsersLinkedToEquipment(eqId),
+        1,
+        reason: 'η χρέωση του συναδέλφου μένει',
+      );
+      expect(
+        (await rowById('equipment', eqId))['notes'],
+        isNull,
+        reason: 'τίποτα δεν γράφεται όταν η αποθήκευση σταματά',
+      );
+    });
+
+    test('ο ίδιος κάτοχος δεν είναι διένεξη', () async {
+      final ownerId = await users.insertUserFromMap({
+        'first_name': 'Σοφία',
+        'last_name': 'Ψαρρά',
+      });
+      final eqId = await equipment.insertEquipmentFromMap({
+        'code_equipment': '5067',
+      });
+      await equipment.replaceEquipmentUsers(eqId, [ownerId]);
+
+      final asFormSawIt = <String, Object?>{
+        'code_equipment': '5067',
+        'notes': null,
+        'owner': EquipmentRepository.ownersFingerprint([ownerId]),
+      };
+
+      await equipment.updateEquipment(eqId, {
+        'code_equipment': '5067',
+        'notes': 'Καθαρίστηκε',
+        'owner': [ownerId],
+      }, expected: asFormSawIt);
+
+      expect((await rowById('equipment', eqId))['notes'], 'Καθαρίστηκε');
+      expect(await equipment.countUsersLinkedToEquipment(eqId), 1);
+    });
+
+    test('η αλλαγή χρέωσης περνά όταν κανείς άλλος δεν την άγγιξε', () async {
+      final ownerId = await users.insertUserFromMap({
+        'first_name': 'Σοφία',
+        'last_name': 'Ψαρρά',
+      });
+      final eqId = await equipment.insertEquipmentFromMap({
+        'code_equipment': '5067',
+      });
+      final asFormSawIt = <String, Object?>{
+        'code_equipment': '5067',
+        'owner': EquipmentRepository.ownersFingerprint(const <int>[]),
+      };
+
+      await equipment.updateEquipment(eqId, {
+        'code_equipment': '5067',
+        'owner': [ownerId],
+      }, expected: asFormSawIt);
+
+      expect(await equipment.countUsersLinkedToEquipment(eqId), 1);
+    });
+
+    test('η στοχευμένη εγγραφή χωρίς κάτοχο δεν αγγίζει τη χρέωση', () async {
+      final ownerId = await users.insertUserFromMap({
+        'first_name': 'Σοφία',
+        'last_name': 'Ψαρρά',
+      });
+      final eqId = await equipment.insertEquipmentFromMap({
+        'code_equipment': '5067',
+      });
+      await equipment.replaceEquipmentUsers(eqId, [ownerId]);
+
+      // Μαζική μετακίνηση τμήματος: γράφει μία στήλη, δεν ξέρει από κάτοχο.
+      await equipment.updateEquipment(eqId, {
+        'location': 'Γραφείο 3',
+      }, expected: null);
+
+      expect(
+        await equipment.countUsersLinkedToEquipment(eqId),
+        1,
+        reason: 'χωρίς κλειδί κατόχου η χρέωση μένει άθικτη',
+      );
+      expect((await rowById('equipment', eqId))['location'], 'Γραφείο 3');
+    });
   });
 
   group('DirectorySaveConflict — τι κρίνεται', () {

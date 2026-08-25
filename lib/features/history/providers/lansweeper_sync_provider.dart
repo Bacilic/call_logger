@@ -63,6 +63,7 @@ class LansweeperCommandResult {
     required this.success,
     required this.message,
     this.ticketId,
+    this.ticketCreated = false,
     this.ignored = false,
     this.failureReport,
     this.warnings = const <String>[],
@@ -73,6 +74,13 @@ class LansweeperCommandResult {
   final bool success;
   final String message;
   final String? ticketId;
+
+  /// `true` όταν το αίτημα άνοιξε **τώρα**, από αυτή την αποστολή.
+  ///
+  /// `false` σημαίνει ότι ενημερώθηκε αίτημα που υπήρχε ήδη — το άνοιξε
+  /// συνάδελφος ή προηγούμενη αποστολή μας. Το μήνυμα επιτυχίας το λέει, ώστε
+  /// να μη νομίζει κανείς ότι δούλεψε σε δικό του αίτημα ενώ πάτησε πάνω σε ξένο.
+  final bool ticketCreated;
   final bool ignored;
   final String? failureReport;
   final List<String> warnings;
@@ -258,6 +266,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           success: true,
           message: result.message,
           ticketId: result.ticketId,
+          ticketCreated: result.ticketCreated,
           warnings: result.warnings,
           completedSteps: result.completedSteps,
         );
@@ -292,6 +301,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         success: false,
         message: result.message,
         ticketId: result.ticketId,
+        ticketCreated: result.ticketCreated,
         warnings: result.warnings,
         completedSteps: result.completedSteps,
         failedStep: result.failedStep,

@@ -189,4 +189,75 @@ void main() {
       );
     });
   });
+
+  group('lansweeperSubmitBaseMessage', () {
+    test('νέο αίτημα, μία κλήση: το γνωστό μήνυμα με τον αριθμό', () {
+      expect(
+        lansweeperSubmitBaseMessage(
+          ticketId: '17679',
+          ticketCreated: true,
+          markedCalls: 1,
+        ),
+        'Καταχώρηση επιτυχής. Ticket: 17679',
+      );
+    });
+
+    test('υπάρχον αίτημα, μία κλήση: λέει ότι ενημερώθηκε, με τον αριθμό', () {
+      final message = lansweeperSubmitBaseMessage(
+        ticketId: '17476',
+        ticketCreated: false,
+        markedCalls: 1,
+      );
+
+      expect(message, contains('17476'));
+      expect(message, contains('υπάρχον'));
+      expect(
+        message,
+        isNot(contains('Καταχώρηση επιτυχής')),
+        reason: 'δεν άνοιξε νέο αίτημα — το μήνυμα δεν το αφήνει να εννοηθεί',
+      );
+    });
+
+    test('υπάρχον αίτημα, πολλές κλήσεις: πλήθος ΚΑΙ ενημέρωση υπάρχοντος', () {
+      final message = lansweeperSubmitBaseMessage(
+        ticketId: '17476',
+        ticketCreated: false,
+        markedCalls: 3,
+      );
+
+      expect(message, contains('3 κλήσεις'));
+      expect(message, contains('17476'));
+      expect(message, contains('υπάρχον'));
+    });
+
+    test('νέο αίτημα, πολλές κλήσεις: πλήθος και αριθμός αιτήματος', () {
+      expect(
+        lansweeperSubmitBaseMessage(
+          ticketId: '17679',
+          ticketCreated: true,
+          markedCalls: 3,
+        ),
+        '3 κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #17679).',
+      );
+    });
+
+    test('χωρίς αριθμό αιτήματος το μήνυμα δεν επινοεί ενημέρωση', () {
+      expect(
+        lansweeperSubmitBaseMessage(
+          ticketId: '   ',
+          ticketCreated: false,
+          markedCalls: 1,
+        ),
+        'Καταχώρηση επιτυχής. Ticket: -',
+      );
+      expect(
+        lansweeperSubmitBaseMessage(
+          ticketId: '',
+          ticketCreated: false,
+          markedCalls: 4,
+        ),
+        '4 κλήσεις επισημάνθηκαν ως καταχωρημένες.',
+      );
+    });
+  });
 }

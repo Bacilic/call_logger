@@ -879,12 +879,49 @@ class EquipmentRepository {
     return id;
   }
 
+  /// Αποτύπωμα της χρέωσης (κατόχων) για **σύγκριση**, όχι για εμφάνιση.
+  ///
+  /// Ταξινομημένο επίτηδες: ποιος κρατά τον εξοπλισμό είναι σύνολο — η σειρά
+  /// με την οποία τον επέστρεψε η βάση δεν σημαίνει τίποτα, και χωρίς κοινή
+  /// ταξινόμηση κάθε αποθήκευση θα φαινόταν διένεξη.
+  static String ownersFingerprint(Iterable<int> userIds) {
+    final list = userIds.toSet().toList()..sort();
+    return list.join(', ');
+  }
+
+  static List<int> _ownerIdListOf(Object? raw) {
+    if (raw is List) return raw.whereType<int>().toList();
+    if (raw is int) return <int>[raw];
+    return const <int>[];
+  }
+
+  Future<List<int>> _equipmentOwnerIdsInTxn(
+    DatabaseExecutor txn,
+    int equipmentId,
+  ) async {
+    final rows = await txn.query(
+      'user_equipment',
+      columns: ['user_id'],
+      where: 'equipment_id = ?',
+      whereArgs: [equipmentId],
+    );
+    return rows.map((r) => r['user_id']).whereType<int>().toList();
+  }
+
   /// Ενημερώνει υπάρχοντα εξοπλισμό.
   ///
-  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα**, μαζί με τον
-  /// κάτοχο όταν η φόρμα τον γράφει. Υποχρεωτικό — και δεκτικό `null` μόνο
-  /// ρητά — γιατί η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: στοχευμένες εγγραφές (τμήμα,
-  /// θέση, μία στήλη) περνούν `null`.
+  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα** (στήλες γραμμής,
+  /// και `owner` όταν η φόρμα γράφει και τη χρέωση). Υποχρεωτικό — και δεκτικό
+  /// `null` μόνο ρητά — γιατί η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: στοχευμένες
+  /// εγγραφές (τμήμα, θέση, μία στήλη) περνούν `null`.
+  ///
+  /// Το κλειδί `owner` μέσα στο [values] είναι η λίστα κατόχων που γράφει η
+  /// καρτέλα. Ταξιδεύει μαζί με τις στήλες —όχι ως ξεχωριστή κλήση— ώστε ο
+  /// καλών να μην μπορεί να γράψει χρέωση παρακάμπτοντας τον φρουρό. Απουσία
+  /// του κλειδιού σημαίνει «μην αγγίξεις τη χρέωση».
+  ///
+  /// Όλα γίνονται μέσα σε **μία** συναλλαγή: ο έλεγχος διαβάζει την ίδια στιγμή
+  /// που γράφει, άρα δεν υπάρχει παράθυρο ανάμεσά τους.
   ///
   /// Πετά [DirectoryStaleException] **πριν** γράψει οτιδήποτε.
   Future<int> updateEquipment(
@@ -894,11 +931,41 @@ class EquipmentRepository {
     bool force = false,
     DatabaseExecutor? executor,
   }) async {
-    final e = executor ?? db;
     final map = Map<String, dynamic>.from(values);
     map.remove('id');
-    if (map.isEmpty) return 0;
-    final oldRows = await e.query(
+    final ownerRaw = map.remove('owner');
+    if (map.isEmpty && ownerRaw == null) return 0;
+    if (executor != null) {
+      return _updateEquipmentInTxn(
+        executor,
+        id,
+        map,
+        ownerRaw,
+        expected: expected,
+        force: force,
+      );
+    }
+    return db.transaction(
+      (txn) => _updateEquipmentInTxn(
+        txn,
+        id,
+        map,
+        ownerRaw,
+        expected: expected,
+        force: force,
+      ),
+    );
+  }
+
+  Future<int> _updateEquipmentInTxn(
+    DatabaseExecutor txn,
+    int id,
+    Map<String, dynamic> map,
+    Object? ownerRaw, {
+    required Map<String, Object?>? expected,
+    required bool force,
+  }) async {
+    final oldRows = await txn.query(
       'equipment',
       where: 'id = ?',
       whereArgs: [id],
@@ -907,27 +974,40 @@ class EquipmentRepository {
     if (oldRows.isEmpty) return 0;
     final oldRow = oldRows.first;
     if (!force && expected != null) {
+      final tracksOwner = expected.containsKey('owner');
+      final fresh = <String, Object?>{
+        ...oldRow,
+        if (tracksOwner)
+          'owner': ownersFingerprint(await _equipmentOwnerIdsInTxn(txn, id)),
+      };
+      final attempted = <String, Object?>{
+        ...map,
+        if (tracksOwner && ownerRaw != null)
+          'owner': ownersFingerprint(_ownerIdListOf(ownerRaw)),
+      };
       final conflict = DirectorySaveConflict.between(
         entityType: AuditEntityTypes.equipment,
         expected: expected,
-        fresh: oldRow,
-        attempted: map,
+        fresh: fresh,
+        attempted: attempted,
       );
       if (conflict != null) throw DirectoryStaleException(conflict);
     }
-    final n = await e.update(
-      'equipment',
-      map,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    var n = 0;
+    if (map.isNotEmpty) {
+      n = await txn.update('equipment', map, where: 'id = ?', whereArgs: [id]);
+    }
+    if (ownerRaw != null) {
+      await _replaceEquipmentUsersInTxn(txn, id, _ownerIdListOf(ownerRaw));
+    }
+    if (map.isEmpty) return n;
     if (n <= 0) return 0;
     final diff = _equipmentAuditDiff(oldRow, map);
     if (diff.oldDiff.isNotEmpty) {
-      final ap = await _support.auditPerformingUser(executor: executor);
+      final ap = await _support.auditPerformingUser(executor: txn);
       final code = (oldRow['code_equipment'] as String?)?.trim() ?? '';
       await AuditService.log(
-        e,
+        txn,
         action: AuditActions.modifyEquipment,
         userPerforming: ap,
         details: 'equipment id=$id',
@@ -938,7 +1018,7 @@ class EquipmentRepository {
         newValues: diff.newDiff,
       );
     }
-    await CallsSearchIndex(db).rebuildSearchIndexForCallsByEquipmentId(e, id);
+    await CallsSearchIndex(db).rebuildSearchIndexForCallsByEquipmentId(txn, id);
     return n;
   }
 

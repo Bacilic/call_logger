@@ -223,6 +223,8 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
   Future<void> _onSave() async {
     final form = _formKey.currentState;
     if (form == null || !form.validate() || _draft == null) return;
+    final baseline = _initial;
+    if (baseline == null) return;
     final days = int.tryParse(_maxDaysController.text.trim());
     if (days == null) return;
     final clamped = days.clamp(1, 365);
@@ -230,7 +232,11 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
     setState(() => _draft = updated);
     _maxDaysController.text = clamped.toString();
     try {
-      await ref.read(taskSettingsConfigProvider.notifier).save(updated);
+      // Γράφεται μόνο ό,τι άλλαξε από τη στιγμή που άνοιξε ο διάλογος: ό,τι
+      // άγγιξε στο μεταξύ ο συνάδελφος στα υπόλοιπα πεδία δεν επανέρχεται.
+      await ref
+          .read(taskSettingsConfigProvider.notifier)
+          .saveChanges(from: baseline, to: updated);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {

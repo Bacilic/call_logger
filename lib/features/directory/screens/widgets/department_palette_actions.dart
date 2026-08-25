@@ -336,15 +336,13 @@ class DepartmentPaletteActions {
     String hex, {
     DepartmentPaletteHost? host,
   }) async {
+    // Μόνο το χρώμα, και στις δύο διαδρομές: η μαζική παλέτα δεν έχει καμία
+    // δουλειά να ξαναγράψει όνομα, κτίριο ή σημειώσεις από μια λίστα που
+    // μπορεί να έχει γεράσει.
     final notifier = host?.directoryNotifier;
     if (notifier != null) {
-      for (final d in departments) {
-        if (d.id == null) continue;
-        // Μαζική παλέτα, όχι καρτέλα: ο φρουρός θα σταματούσε τη σειρά σε
-        // κάθε τμήμα που άγγιξε άλλος, χωρίς οθόνη να ρωτήσει. Μένει ρητά
-        // εκτός φάσης — καταγεγραμμένο.
-        await notifier.updateDepartment(d.copyWith(color: hex), expected: null);
-      }
+      // Με ανοιχτό κατάλογο η ανανέωση των οθονών ανήκει στο provider.
+      await notifier.setDepartmentsColor(departments, hex);
       return;
     }
 
@@ -352,8 +350,6 @@ class DepartmentPaletteActions {
     final dir = DepartmentRepository(db);
     for (final d in departments) {
       if (d.id == null) continue;
-      // Μόνο το χρώμα: η μαζική παλέτα δεν έχει καμία δουλειά να ξαναγράψει
-      // όνομα, κτίριο ή σημειώσεις από μια λίστα που μπορεί να έχει γεράσει.
       await dir.updateDepartment(d.id!, {'color': hex}, expected: null);
     }
     await LookupService.instance.loadFromDatabase(forceRefresh: true);

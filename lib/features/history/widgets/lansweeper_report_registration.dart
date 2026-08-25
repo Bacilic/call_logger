@@ -127,11 +127,11 @@ class LansweeperReportRegistration {
       host.notifyReportChanged();
       final ticketId = (result.ticketId ?? '').trim();
       final totalMarked = 1 + companionCallIds.length;
-      final baseMessage = totalMarked == 1
-          ? 'Καταχώρηση επιτυχής. Ticket: ${ticketId.isEmpty ? '-' : ticketId}'
-          : ticketId.isEmpty
-          ? '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες.'
-          : '$totalMarked κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #$ticketId).';
+      final baseMessage = lansweeperSubmitBaseMessage(
+        ticketId: ticketId,
+        ticketCreated: result.ticketCreated,
+        markedCalls: totalMarked,
+      );
       final message = lansweeperSubmitSnackBarText(
         baseMessage: baseMessage,
         warnings: result.warnings,

@@ -7,6 +7,8 @@
 //   flutter test test/features/database/database_newer_recovery_dialog_test.dart
 
 import 'package:call_logger/core/database/schema_downgrade_compatibility.dart';
+import 'package:call_logger/core/updates/app_upgrade_offer.dart';
+import 'package:call_logger/core/updates/update_manifest.dart';
 import 'package:call_logger/core/services/app_instance_registry.dart';
 import 'package:call_logger/features/database/widgets/database_newer_recovery_dialog.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +19,7 @@ void main() {
     WidgetTester tester, {
     required SchemaDowngradeAssessment? assessment,
     AppInstanceRecord? newerInstance,
+    AppUpgradeOffer? upgradeOffer,
   }) async {
     DatabaseNewerVersionChoice? captured;
     await tester.pumpWidget(
@@ -33,6 +36,7 @@ void main() {
                     appVersion: 40,
                     assessment: assessment,
                     newerInstance: newerInstance,
+                    upgradeOffer: upgradeOffer,
                   );
                 },
                 child: const Text('open'),
@@ -187,4 +191,103 @@ void main() {
       expect(captured, DatabaseNewerVersionChoice.launchNewer);
     },
   );
+
+  AppUpgradeOffer offerOf(AppUpgradeConfidence confidence) => AppUpgradeOffer(
+    manifest: const UpdateManifest(
+      version: '0.40.0',
+      build: 400,
+      released: '2026-08-25',
+      zipFile: 'call_logger_0.40.0(400).zip',
+      sha256: 'abc123',
+      schemaVersion: 45,
+    ),
+    confidence: confidence,
+  );
+
+  testWidgets('με διαθέσιμο πακέτο → κουμπί αναβάθμισης με την έκδοση', (
+    tester,
+  ) async {
+    await pumpDialog(
+      tester,
+      assessment: null,
+      upgradeOffer: offerOf(AppUpgradeConfidence.resolvesForSure),
+    );
+
+    expect(
+      find.byKey(const Key('newer_db_upgrade_app_button')),
+      findsOneWidget,
+    );
+    expect(find.text('Αναβάθμιση στην έκδοση 0.40.0'), findsOneWidget);
+  });
+
+  testWidgets('το πάτημα της αναβάθμισης επιστρέφει την επιλογή', (
+    tester,
+  ) async {
+    DatabaseNewerVersionChoice? captured;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () async {
+                  captured = await showDatabaseNewerVersionChoiceDialog(
+                    context: context,
+                    dbPath: r'C:\Data\Hospital.db',
+                    fileVersion: 45,
+                    appVersion: 40,
+                    assessment: null,
+                    newerInstance: null,
+                    upgradeOffer: offerOf(
+                      AppUpgradeConfidence.resolvesForSure,
+                    ),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(
+      find.byKey(const Key('newer_db_upgrade_app_button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('newer_db_upgrade_app_button')));
+    await tester.pumpAndSettle();
+
+    expect(captured, DatabaseNewerVersionChoice.upgradeApp);
+  });
+
+  testWidgets('χωρίς δηλωμένη έκδοση βάσης η υπόσχεση δεν εγγυάται', (
+    tester,
+  ) async {
+    await pumpDialog(
+      tester,
+      assessment: null,
+      upgradeOffer: offerOf(AppUpgradeConfidence.likelyResolves),
+    );
+
+    expect(
+      find.byKey(const Key('newer_db_upgrade_app_button')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('χωρίς εγγύηση'), findsOneWidget);
+  });
+
+  testWidgets('χωρίς διαθέσιμο πακέτο δεν υπάρχει κουμπί αναβάθμισης', (
+    tester,
+  ) async {
+    await pumpDialog(tester, assessment: null);
+
+    expect(find.byKey(const Key('newer_db_upgrade_app_button')), findsNothing);
+    expect(
+      find.textContaining('Δεν βρέθηκε νεότερο πακέτο εγκατάστασης'),
+      findsOneWidget,
+    );
+  });
 }

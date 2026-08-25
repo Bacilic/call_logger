@@ -566,6 +566,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
           expected: force ? null : widget.initialEquipment,
           force: force,
           ownerUserId: userId,
+          expectedOwnerUserId: widget.initialOwner?.id,
         ),
       );
       if (!mounted) return;

@@ -22,6 +22,14 @@ Finder _dropdownByLabel(String label) {
   );
 }
 
+/// Αφήνει τις εγγραφές στη βάση να ολοκληρωθούν πριν ελεγχθεί το αποτέλεσμα.
+Future<void> settleAsync(WidgetTester tester) async {
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  });
+  await pumpUntilSettled(tester);
+}
+
 void main() {
   registerCallLoggerIsolatedDatabaseHooks();
 
@@ -197,7 +205,7 @@ void main() {
     );
 
     testWidgets(
-      'πληκτρολόγηση τιμών με κόμμα ενημερώνει τη λίστα προτεραιοτήτων μέσω provider',
+      'η λίστα προτεραιοτήτων αποθηκεύεται όταν φύγει η εστίαση από το πεδίο',
       (tester) async {
         final container = await pumpSection(tester);
 
@@ -211,10 +219,17 @@ void main() {
         await pumpUntilSettled(tester);
         await tester.enterText(valuesField, 'Low, Medium, High, Urgent');
         await pumpUntilSettled(tester);
-        await tester.runAsync(() async {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
+        await settleAsync(tester);
+
+        expect(
+          container.read(lansweeperTicketSubmitConfigProvider).priorities,
+          isNot(contains('Urgent')),
+          reason: 'όσο πληκτρολογεί ο χρήστης δεν γράφεται τίποτα',
+        );
+
+        FocusManager.instance.primaryFocus?.unfocus();
         await pumpUntilSettled(tester);
+        await settleAsync(tester);
 
         expect(
           container.read(lansweeperTicketSubmitConfigProvider).priorities,
@@ -236,20 +251,22 @@ void main() {
         await pumpUntilSettled(tester);
         await tester.enterText(valuesField, 'Low, Medium,');
         await pumpUntilSettled(tester);
-        await tester.runAsync(() async {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await pumpUntilSettled(tester);
-
-        expect(
-          container.read(lansweeperTicketSubmitConfigProvider).priorities,
-          ['Low', 'Medium'],
-        );
+        await settleAsync(tester);
 
         final editable = tester.widget<EditableText>(
           find.descendant(of: valuesField, matching: find.byType(EditableText)),
         );
         expect(editable.controller.text, 'Low, Medium,');
+
+        FocusManager.instance.primaryFocus?.unfocus();
+        await pumpUntilSettled(tester);
+        await settleAsync(tester);
+
+        expect(
+          container.read(lansweeperTicketSubmitConfigProvider).priorities,
+          ['Low', 'Medium'],
+          reason: 'το κρεμασμένο κόμμα δεν γίνεται κενή τιμή',
+        );
       },
     );
 

@@ -653,7 +653,7 @@ void main() {
     );
 
     test(
-      'υπάρχον ticket (retry): χωρίς AddAsset, αλλά ο επιβεβαιωμένος αιτών περνά στο EditTicket κατάστασης',
+      'υπάρχον ticket: χωρίς AddAsset, και το EditTicket κατάστασης ΔΕΝ αγγίζει τον αιτούντα',
       () async {
         final fakeGetter = _RecordingFakeGetter(responses: const [userFound]);
         final fakePoster = _RecordingFakePoster(
@@ -682,8 +682,85 @@ void main() {
         );
         final stateFields = _fieldsForAction(fakePoster, 'EditTicket');
         expect(stateFields, isNotNull);
+        expect(
+          stateFields!.containsKey('Username'),
+          isFalse,
+          reason:
+              'το Username του EditTicket ΑΝΤΙΚΑΘΙΣΤΑ τον αιτούντα του '
+              'εισιτηρίου· σε αίτημα που άνοιξε άλλος δεν στέλνεται καθόλου',
+        );
+        expect(stateFields.containsKey('Email'), isFalse);
+        expect(
+          stateFields['AgentUsername'],
+          r'CORP\agent',
+          reason: 'η ανάθεση περνά κανονικά σε όποιον το δουλεύει τώρα',
+        );
+      },
+    );
+
+    test(
+      'υπάρχον ticket με αποτυχία σημείωσης: ούτε το EditTicket περιγραφής αγγίζει τον αιτούντα',
+      () async {
+        final fakeGetter = _RecordingFakeGetter(responses: const [userFound]);
+        final fakePoster = _RecordingFakePoster(
+          responses: const [failure, successOnly, successOnly],
+        );
+        final service = LansweeperSyncService(
+          poster: fakePoster.call,
+          getter: fakeGetter.call,
+        );
+
+        await service.submitTicketWorkflow(
+          _workflowRequest(
+            existingTicketId: '17476',
+            requesterUsername: r'gnk\d.brami',
+          ),
+        );
+
+        final fallbackFields = _fieldsForAction(fakePoster, 'EditTicket');
+        expect(fallbackFields, isNotNull);
+        expect(fallbackFields!.containsKey('Username'), isFalse);
+        expect(fallbackFields.containsKey('Email'), isFalse);
+        expect(fallbackFields['AgentUsername'], r'CORP\agent');
+      },
+    );
+
+    test(
+      'νέο ticket: ο αιτών ΞΑΝΑ-στέλνεται στα επόμενα βήματα, αλλιώς το κλείσιμο τον γυρίζει στον πράκτορα',
+      () async {
+        final fakeGetter = _RecordingFakeGetter(responses: const [userFound]);
+        final fakePoster = _RecordingFakePoster(
+          responses: const [successWithTicketId, successOnly, successOnly],
+        );
+        final service = LansweeperSyncService(
+          poster: fakePoster.call,
+          getter: fakeGetter.call,
+        );
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(requesterUsername: r'gnk\d.brami'),
+        );
+
+        expect(result.ticketCreated, isTrue);
+        final stateFields = _fieldsForAction(fakePoster, 'EditTicket');
+        expect(stateFields, isNotNull);
         expect(stateFields!['Username'], r'gnk\d.brami');
       },
     );
+
+    test('υπάρχον ticket: το αποτέλεσμα δηλώνει ότι ΔΕΝ δημιουργήθηκε', () async {
+      final fakePoster = _RecordingFakePoster(
+        responses: const [successOnly, successOnly],
+      );
+      final service = LansweeperSyncService(poster: fakePoster.call);
+
+      final result = await service.submitTicketWorkflow(
+        _workflowRequest(existingTicketId: '17476'),
+      );
+
+      expect(result.success, isTrue);
+      expect(result.ticketCreated, isFalse);
+      expect(result.ticketId, '17476');
+    });
   });
 }

@@ -1,7 +1,7 @@
-import 'dart:async';
-
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../providers/gemini_settings_provider.dart';
 import '../../providers/lansweeper_settings_provider.dart';
 
@@ -31,39 +31,54 @@ class LansweeperSettingsValues {
   final String geminiFallbackModel;
 }
 
-void persistLansweeperSettings(WidgetRef ref, LansweeperSettingsValues v) {
-  unawaited(ref.read(lansweeperApiUrlProvider.notifier).setApiUrl(v.apiUrl));
-  unawaited(
+/// Αποθηκεύει τις ρυθμίσεις σύνδεσης χωρίς να μπλοκάρει τη φόρμα.
+///
+/// Το [context] δεν είναι διακοσμητικό: δέκα εγγραφές έφευγαν «και ξέχνα το»,
+/// οπότε μια άφταστη κοινόχρηστη βάση τις κατάπινε όλες σιωπηλά.
+void persistLansweeperSettings(
+  BuildContext context,
+  WidgetRef ref,
+  LansweeperSettingsValues v,
+) {
+  persistSettingInBackground(context, ref.read(lansweeperApiUrlProvider.notifier).setApiUrl(v.apiUrl));
+  persistSettingInBackground(
+    context,
     ref
         .read(lansweeperTicketFormUrlProvider.notifier)
         .setTicketFormUrl(v.ticketFormUrl),
   );
-  unawaited(
+  persistSettingInBackground(
+    context,
     ref
         .read(lansweeperTicketViewUrlProvider.notifier)
         .setTicketViewUrl(v.ticketViewUrl),
   );
-  unawaited(ref.read(lansweeperApiKeyProvider.notifier).setApiKey(v.apiKey));
-  unawaited(
+  persistSettingInBackground(context, ref.read(lansweeperApiKeyProvider.notifier).setApiKey(v.apiKey));
+  persistSettingInBackground(
+    context,
     ref
         .read(lansweeperAgentUsernameProvider.notifier)
         .setAgentUsername(v.agentUsername),
   );
-  unawaited(ref.read(geminiApiKeyProvider.notifier).setApiKey(v.geminiApiKey));
-  unawaited(
+  persistSettingInBackground(context, ref.read(geminiApiKeyProvider.notifier).setApiKey(v.geminiApiKey));
+  persistSettingInBackground(
+    context,
     ref
         .read(geminiPromptTemplateProvider.notifier)
         .setPromptTemplate(v.geminiPromptTemplate),
   );
-  unawaited(
+  persistSettingInBackground(
+    context,
     ref.read(geminiEndpointProvider.notifier).setEndpoint(v.geminiEndpoint),
   );
-  unawaited(
+  persistSettingInBackground(
+    context,
     ref
         .read(geminiPrimaryModelProvider.notifier)
         .setPrimaryModel(v.geminiPrimaryModel),
   );
-  unawaited(
+  persistSettingInBackground(
+    context,
     ref
         .read(geminiFallbackModelProvider.notifier)
         .setFallbackModel(v.geminiFallbackModel),

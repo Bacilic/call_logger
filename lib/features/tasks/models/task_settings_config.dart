@@ -101,6 +101,41 @@ class TaskSettingsConfig {
     );
   }
 
+  /// Εφαρμόζει πάνω στο [onto] **μόνο** τα πεδία που άλλαξαν ανάμεσα στην
+  /// αφετηρία [from] και το πρόχειρο [to].
+  ///
+  /// Οι έξι ρυθμίσεις ζουν σε ΕΝΑ αποθηκευμένο κλειδί, οπότε γράφοντας ολόκληρο
+  /// το δέμα από την εικόνα του διαλόγου σβήναμε την επιλογή που μόλις άλλαξε ο
+  /// άλλος διαχειριστής — κανείς δεν *θέλησε* να την αλλάξει, την κουβάλησε η
+  /// μπαγιάτικη εικόνα. Ό,τι δεν άγγιξε ο χρήστης μένει όπως το βρήκε.
+  ///
+  /// Καθαρή επίτηδες: η στοχευμένη εγγραφή μπορεί να ξανατρέξει πάνω σε
+  /// φρεσκότερη τιμή αν κάποιος προλάβει στο μεταξύ.
+  static TaskSettingsConfig applyChanges({
+    required TaskSettingsConfig from,
+    required TaskSettingsConfig to,
+    required TaskSettingsConfig onto,
+  }) {
+    return onto.copyWith(
+      dayEndTime: to.dayEndTime == from.dayEndTime ? null : to.dayEndTime,
+      nextBusinessHour: to.nextBusinessHour == from.nextBusinessHour
+          ? null
+          : to.nextBusinessHour,
+      skipWeekends: to.skipWeekends == from.skipWeekends
+          ? null
+          : to.skipWeekends,
+      defaultSnoozeOption: to.defaultSnoozeOption == from.defaultSnoozeOption
+          ? null
+          : to.defaultSnoozeOption,
+      maxSnoozeDays: to.maxSnoozeDays == from.maxSnoozeDays
+          ? null
+          : to.maxSnoozeDays,
+      autoCloseQuickAdds: to.autoCloseQuickAdds == from.autoCloseQuickAdds
+          ? null
+          : to.autoCloseQuickAdds,
+    );
+  }
+
   static Map<String, int> _timeToMap(TimeOfDay t) {
     return {'hour': t.hour, 'minute': t.minute};
   }
