@@ -91,7 +91,10 @@ void main() {
 
         await container
             .read(departmentDirectoryProvider.notifier)
-            .updateDepartment(DepartmentModel(id: deptId, name: renamedDept));
+            .updateDepartment(
+              DepartmentModel(id: deptId, name: renamedDept),
+              expected: null,
+            );
 
         expect(
           _orphanPhoneDeptLabel(container, orphanPhone),

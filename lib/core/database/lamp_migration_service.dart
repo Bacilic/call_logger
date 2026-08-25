@@ -1239,7 +1239,7 @@ class LampMigrationService {
       final bool updated;
       final String message;
       if (updateId != null) {
-        await departments.updateDepartment(updateId, map, executor: txn);
+        await departments.updateDepartment(updateId, map, executor: txn, expected: null);
         departmentId = updateId;
         updated = true;
         message = reactivateId != null && selectedCandidateId == null
@@ -1484,7 +1484,7 @@ class LampMigrationService {
               },
               executor: txn,
               skipPhonePolicyValidation: !phonePolicyBatch.isEmpty,
-            );
+            expected: null,);
             savedUserId = updateUserId;
             updated = true;
             message = selectedCandidateId != null
@@ -1760,7 +1760,7 @@ class LampMigrationService {
           updateEquipmentId,
           values,
           executor: txn,
-        );
+        expected: null,);
         if (keepCurrentOwners != true) {
           await equipment.replaceEquipmentUsers(
             updateEquipmentId,

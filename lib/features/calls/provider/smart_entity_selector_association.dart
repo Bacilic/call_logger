@@ -600,7 +600,7 @@ class SmartEntitySelectorAssociation {
           state.selectedCaller!.toMap(),
         );
         updatedMap['department_id'] = selectedDepartmentId;
-        await users.updateUser(state.selectedCaller!.id!, updatedMap);
+        await users.updateUser(state.selectedCaller!.id!, updatedMap, expected: null);
         updatedDepartmentId = selectedDepartmentId;
         primaryDepartmentChanged = true;
       }

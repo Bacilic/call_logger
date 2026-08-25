@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../features/directory/services/directory_save_conflict.dart';
 import '../directory/phone_department_policy.dart';
 import '../utils/phone_list_parser.dart';
 import 'user_delete_equipment_policy.dart';
@@ -46,7 +47,7 @@ class UserRepository {
       await _support.replaceUserPhonesInTxn(executor, userId, numbers);
       return;
     }
-    await updateUser(userId, {'phones': numbers});
+    await updateUser(userId, {'phones': numbers}, expected: null);
   }
 
   /// Ονόματα εμφάνισης («Επώνυμο Όνομα») για τα δοσμένα ids — και διαγραμμένων:
@@ -381,6 +382,66 @@ class UserRepository {
     return _linkedUserSnapshotsForEquipment(db, equipmentId);
   }
 
+  /// Η λίστα τηλεφώνων της καρτέλας, καθαρή — μία διατύπωση για όλους.
+  ///
+  /// Ήταν αντιγραμμένη σε δύο σημεία και ο φρουρός θα πρόσθετε τρίτο: αν οι
+  /// τρεις αποκλίνουν, ο έλεγχος διένεξης κρίνει άλλη λίστα από αυτήν που
+  /// γράφεται.
+  static List<String> _phoneListOf(Object? phonesRaw) => phonesRaw is List
+      ? phonesRaw
+            .map((e) => e.toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
+      : <String>[];
+
+  /// Αποτύπωμα της λίστας τηλεφώνων για **σύγκριση**, όχι για εμφάνιση.
+  ///
+  /// Ταξινομημένο επίτηδες: η φόρμα κρατά τη σειρά που πληκτρολόγησε ο
+  /// χρήστης, ενώ η βάση τα επιστρέφει αλφαβητικά. Χωρίς κοινή ταξινόμηση,
+  /// κάθε αποθήκευση θα φαινόταν διένεξη. Ποια τηλέφωνα έχει ο υπάλληλος
+  /// είναι σύνολο — η σειρά δεν σημαίνει τίποτα.
+  static String phonesFingerprint(Iterable<String> numbers) {
+    final list =
+        numbers.map((n) => n.trim()).where((n) => n.isNotEmpty).toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list.join(', ');
+  }
+
+  /// Σταματά την εγγραφή όταν κάποιος άλλος άγγιξε την καρτέλα στο μεταξύ.
+  ///
+  /// Η ανάγνωση γίνεται ΜΕΣΑ στη συναλλαγή, άρα ο έλεγχος είναι ατομικός: δεν
+  /// υπάρχει παράθυρο ανάμεσα στη σύγκριση και στην εγγραφή. Τα τηλέφωνα
+  /// μπαίνουν στη σύγκριση σαν ένα πεδίο, γιατί η καρτέλα τα αντικαθιστά
+  /// ολόκληρα — ένα τηλέφωνο που πρόσθεσε ο συνάδελφος θα χανόταν αμίλητα.
+  Future<void> _guardStaleUserWrite(
+    DatabaseExecutor txn,
+    int id, {
+    required Map<String, dynamic> map,
+    required Object? phonesRaw,
+    required Map<String, Object?> expected,
+  }) async {
+    final currentRow = await _support.userRowById(txn, id);
+    if (currentRow == null) return;
+    final tracksPhones = expected.containsKey('phones');
+    final fresh = <String, Object?>{
+      ...currentRow,
+      if (tracksPhones)
+        'phones': phonesFingerprint(await _userPhoneNumbersOrdered(txn, id)),
+    };
+    final attempted = <String, Object?>{
+      ...map,
+      if (tracksPhones && phonesRaw != null)
+        'phones': phonesFingerprint(_phoneListOf(phonesRaw)),
+    };
+    final conflict = DirectorySaveConflict.between(
+      entityType: AuditEntityTypes.user,
+      expected: expected,
+      fresh: fresh,
+      attempted: attempted,
+    );
+    if (conflict != null) throw DirectoryStaleException(conflict);
+  }
+
   Future<int> _updateUserInTxn(
     DatabaseExecutor txn,
     int id,
@@ -391,20 +452,25 @@ class UserRepository {
     required List<String> oldPhoneList,
     required List<Map<String, dynamic>> oldEq,
     required bool recordAudit,
+    required Map<String, Object?>? expected,
+    required bool force,
     String? auditOriginSuffix,
   }) async {
+    if (!force && expected != null) {
+      await _guardStaleUserWrite(
+        txn,
+        id,
+        map: map,
+        phonesRaw: phonesRaw,
+        expected: expected,
+      );
+    }
     var n = 0;
     if (map.isNotEmpty) {
       n = await txn.update('users', map, where: 'id = ?', whereArgs: [id]);
     }
     if (phonesRaw != null) {
-      final phones = phonesRaw is List
-          ? phonesRaw
-                .map((e) => e.toString().trim())
-                .where((s) => s.isNotEmpty)
-                .toList()
-          : <String>[];
-      await _support.replaceUserPhonesInTxn(txn, id, phones);
+      await _support.replaceUserPhonesInTxn(txn, id, _phoneListOf(phonesRaw));
     }
     if (map.isNotEmpty || phonesRaw != null) {
       await CallsSearchIndex(db).rebuildSearchIndexForCallsByCallerId(txn, id);
@@ -474,9 +540,23 @@ class UserRepository {
     return n;
   }
 
+  /// Ενημερώνει υπάρχοντα υπάλληλο.
+  ///
+  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα** (στήλες γραμμής,
+  /// και `phones` όταν η φόρμα γράφει και τη λίστα τηλεφώνων). Υποχρεωτικό —
+  /// και δεκτικό `null` μόνο ρητά — γιατί η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: χωρίς
+  /// αφετηρία, μια διόρθωση ονόματος σβήνει το τμήμα ή το τηλέφωνο που μόλις
+  /// άλλαξε ο συνάδελφος. Στοχευμένες εγγραφές (μία-δύο στήλες) περνούν `null`.
+  ///
+  /// Με [force] `true` η εγγραφή περνά παρά τη διένεξη: ο χρήστης είδε τι
+  /// άλλαξε και επέλεξε να κρατήσει τη δική του εικόνα.
+  ///
+  /// Πετά [DirectoryStaleException] **πριν** γράψει οτιδήποτε.
   Future<int> updateUser(
     int id,
     Map<String, dynamic> values, {
+    required Map<String, Object?>? expected,
+    bool force = false,
     bool recordAudit = true,
     DatabaseExecutor? executor,
     bool skipPhonePolicyValidation = false,
@@ -492,12 +572,7 @@ class UserRepository {
     final oldPhoneList = await _userPhoneNumbersOrdered(e, id);
     final oldEq = await _linkedEquipmentSnapshotsForUser(e, id);
     if (phonesRaw != null) {
-      final phones = phonesRaw is List
-          ? phonesRaw
-                .map((e) => e.toString().trim())
-                .where((s) => s.isNotEmpty)
-                .toList()
-          : <String>[];
+      final phones = _phoneListOf(phonesRaw);
       final targetDepartmentId =
           map['department_id'] as int? ?? oldRow?['department_id'] as int?;
       if (!skipPhonePolicyValidation) {
@@ -519,6 +594,8 @@ class UserRepository {
         oldPhoneList: oldPhoneList,
         oldEq: oldEq,
         recordAudit: recordAudit,
+        expected: expected,
+        force: force,
         auditOriginSuffix: auditOriginSuffix,
       );
     }
@@ -533,6 +610,8 @@ class UserRepository {
         oldPhoneList: oldPhoneList,
         oldEq: oldEq,
         recordAudit: recordAudit,
+        expected: expected,
+        force: force,
         auditOriginSuffix: auditOriginSuffix,
       ),
     );

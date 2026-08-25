@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'directory_conflict_dialog.dart';
 
 import '../../../../core/database/audit_service.dart';
 import '../../../../core/database/database_helper.dart';
@@ -131,10 +132,29 @@ class DepartmentFormSave {
             equipmentToSoftDelete: confirmed.equipmentToDelete,
           );
         }
-        await host.widget.notifier.updateDepartment(
-          model,
-          clearBuildingMapPlacement: clearBuildingMapPlacement,
+        // Η καρτέλα γράφεται ολόκληρη: αν κάποιος πρόλαβε, ρωτιέται ο άνθρωπος.
+        if (!host.mounted) return;
+        final saved = await saveDirectoryRecordWithConflictPrompt(
+          host.context,
+          save: ({required force}) => host.widget.notifier.updateDepartment(
+            model,
+            expected: force ? null : ini,
+            force: force,
+            clearBuildingMapPlacement: clearBuildingMapPlacement,
+          ),
         );
+        if (!host.mounted) return;
+        if (!saved) {
+          ScaffoldMessenger.of(host.context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Η αποθήκευση ακυρώθηκε — η καρτέλα κρατά τα στοιχεία του '
+                'συναδέλφου. Κλείστε την και ανοίξτε την ξανά για να τα δείτε.',
+              ),
+            ),
+          );
+          return;
+        }
         if (clearBuildingMapPlacement && ini?.id != null) {
           final fid = int.tryParse(ini!.mapFloor?.trim() ?? '');
           final removedHex = tryParseDepartmentHex(ini.color);

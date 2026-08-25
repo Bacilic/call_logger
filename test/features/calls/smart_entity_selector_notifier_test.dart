@@ -3223,7 +3223,10 @@ void main() {
           );
           await dirNotifier.load();
           final equipment = afterLookup.selectedEquipment!;
-          await dirNotifier.updateEquipment(equipment.copyWith(code: newCode));
+          await dirNotifier.updateEquipment(
+            equipment.copyWith(code: newCode),
+            expected: null,
+          );
 
           container.invalidate(lookupServiceProvider);
           await container.read(lookupServiceProvider.future);

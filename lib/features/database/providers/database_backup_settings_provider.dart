@@ -45,73 +45,80 @@ class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
     state = value;
   }
 
-  Future<void> _persist() async {
-    await ActiveBackupSettings.write(state);
+  /// Κάθε αλλαγή επιλογής περνά από εδώ.
+  ///
+  /// Η [change] εφαρμόζεται πάνω στη **φρέσκια** αποθηκευμένη τιμή, όχι στην
+  /// εικόνα που κρατά η οθόνη: το δέμα είναι κοινό και περιέχει και τη
+  /// λογιστική των αντιγράφων, οπότε γράφοντάς το ολόκληρο από παλιά εικόνα
+  /// σβήναμε τη σφραγίδα του αντιγράφου που μόλις πήρε το άλλο μηχάνημα.
+  /// Η [state] ενημερώνεται με ό,τι όντως αποθηκεύτηκε — έτσι η οθόνη
+  /// αυτοδιορθώνεται και δείχνει και τις ξένες αλλαγές.
+  Future<void> _update(
+    DatabaseBackupSettings Function(DatabaseBackupSettings current) change,
+  ) async {
+    state = await ActiveBackupSettings.update(change);
   }
 
   Future<void> setDestinationDirectory(String value) async {
-    state = state.copyWith(destinationDirectory: value);
-    await _persist();
+    await _update((current) => current.copyWith(destinationDirectory: value));
   }
 
   Future<void> setNamingFormat(DatabaseBackupNamingFormat value) async {
-    state = state.copyWith(namingFormat: value);
-    await _persist();
+    await _update((current) => current.copyWith(namingFormat: value));
   }
 
   Future<void> setIncludeMapImagesInBackup(bool value) async {
-    state = state.copyWith(includeMapImagesInBackup: value);
-    await _persist();
+    await _update(
+      (current) => current.copyWith(includeMapImagesInBackup: value),
+    );
   }
 
   Future<void> setIncludeToolImages(bool value) async {
-    state = state.copyWith(includeToolImages: value);
-    await _persist();
+    await _update((current) => current.copyWith(includeToolImages: value));
   }
 
   Future<void> setIncludeLexicon(bool value) async {
-    state = state.copyWith(includeLexicon: value);
-    await _persist();
+    await _update((current) => current.copyWith(includeLexicon: value));
   }
 
   Future<void> setIncludeLampDb(bool value) async {
-    state = state.copyWith(includeLampDb: value);
-    await _persist();
+    await _update((current) => current.copyWith(includeLampDb: value));
   }
 
   Future<void> setBackupOnExit(bool value) async {
-    state = state.copyWith(backupOnExit: value);
-    await _persist();
+    await _update((current) => current.copyWith(backupOnExit: value));
   }
 
   Future<void> setChangeThreshold(int value) async {
-    state = state.copyWith(changeThreshold: value.clamp(1, 9999));
-    await _persist();
+    await _update(
+      (current) => current.copyWith(changeThreshold: value.clamp(1, 9999)),
+    );
   }
 
   Future<void> setMinSpacingMinutes(int value) async {
-    state = state.copyWith(
-      minSpacingMinutes: value.clamp(
-        DatabaseBackupSettings.minAllowedSpacingMinutes,
-        1440,
+    await _update(
+      (current) => current.copyWith(
+        minSpacingMinutes: value.clamp(
+          DatabaseBackupSettings.minAllowedSpacingMinutes,
+          1440,
+        ),
       ),
     );
-    await _persist();
   }
 
   Future<void> setMaxWaitMinutes(int value) async {
-    state = state.copyWith(
-      maxWaitMinutes: value.clamp(
-        DatabaseBackupSettings.minAllowedSpacingMinutes,
-        10080,
+    await _update(
+      (current) => current.copyWith(
+        maxWaitMinutes: value.clamp(
+          DatabaseBackupSettings.minAllowedSpacingMinutes,
+          10080,
+        ),
       ),
     );
-    await _persist();
   }
 
   Future<void> setBackupOnCloseIfPending(bool value) async {
-    state = state.copyWith(backupOnCloseIfPending: value);
-    await _persist();
+    await _update((current) => current.copyWith(backupOnCloseIfPending: value));
   }
 
   /// Σφραγίζει επιτυχές αντίγραφο: μέχρι ποιον αύξοντα αριθμό Ιστορικού είναι
@@ -124,68 +131,79 @@ class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
     String? fullFingerprint,
     DateTime? fullAt,
   }) async {
-    state = state.copyWith(
-      lastBackupAuditId: auditId,
-      lastBackupAttempt: manual ? null : at,
-      lastManualBackupAttempt: manual ? at : null,
-      lastFullBackupFingerprint: fullFingerprint,
-      lastFullBackupAt: fullAt,
-      lastBackupStatus: BackupScheduleStatus.success,
+    await _update(
+      (current) => current.copyWith(
+        lastBackupAuditId: auditId,
+        lastBackupAttempt: manual ? null : at,
+        lastManualBackupAttempt: manual ? at : null,
+        lastFullBackupFingerprint: fullFingerprint,
+        lastFullBackupAt: fullAt,
+        lastBackupStatus: BackupScheduleStatus.success,
+      ),
     );
-    await _persist();
   }
 
   Future<void> setLastBackupAttempt(DateTime? value) async {
-    if (value == null) {
-      state = state.copyWith(clearLastBackupAttempt: true);
-    } else {
-      state = state.copyWith(
-        lastBackupAttempt: value,
-        clearLastBackupAttempt: false,
-      );
-    }
-    await _persist();
+    await _update(
+      (current) => value == null
+          ? current.copyWith(clearLastBackupAttempt: true)
+          : current.copyWith(
+              lastBackupAttempt: value,
+              clearLastBackupAttempt: false,
+            ),
+    );
   }
 
   Future<void> setLastBackupStatus(String value) async {
-    state = state.copyWith(
-      lastBackupStatus: BackupScheduleStatus.normalize(value),
+    await _update(
+      (current) => current.copyWith(
+        lastBackupStatus: BackupScheduleStatus.normalize(value),
+      ),
     );
-    await _persist();
   }
 
   Future<void> setLastManualBackupAttempt(DateTime value) async {
-    state = state.copyWith(lastManualBackupAttempt: value);
-    await _persist();
+    await _update(
+      (current) => current.copyWith(lastManualBackupAttempt: value),
+    );
   }
 
   Future<void> setRetentionQuickMaxCopiesEnabled(bool value) async {
-    state = state.copyWith(retentionQuickMaxCopiesEnabled: value);
-    await _persist();
+    await _update(
+      (current) => current.copyWith(retentionQuickMaxCopiesEnabled: value),
+    );
   }
 
   Future<void> setRetentionQuickMaxCopies(int value) async {
-    state = state.copyWith(retentionQuickMaxCopies: value.clamp(1, 9999));
-    await _persist();
+    await _update(
+      (current) =>
+          current.copyWith(retentionQuickMaxCopies: value.clamp(1, 9999)),
+    );
   }
 
   Future<void> setRetentionQuickMaxAgeEnabled(bool value) async {
-    state = state.copyWith(retentionQuickMaxAgeEnabled: value);
-    await _persist();
+    await _update(
+      (current) => current.copyWith(retentionQuickMaxAgeEnabled: value),
+    );
   }
 
   Future<void> setRetentionQuickMaxAgeDays(int value) async {
-    state = state.copyWith(retentionQuickMaxAgeDays: value.clamp(1, 9999));
-    await _persist();
+    await _update(
+      (current) =>
+          current.copyWith(retentionQuickMaxAgeDays: value.clamp(1, 9999)),
+    );
   }
 
   Future<void> setRetentionFullMaxCopiesEnabled(bool value) async {
-    state = state.copyWith(retentionFullMaxCopiesEnabled: value);
-    await _persist();
+    await _update(
+      (current) => current.copyWith(retentionFullMaxCopiesEnabled: value),
+    );
   }
 
   Future<void> setRetentionFullMaxCopies(int value) async {
-    state = state.copyWith(retentionFullMaxCopies: value.clamp(1, 9999));
-    await _persist();
+    await _update(
+      (current) =>
+          current.copyWith(retentionFullMaxCopies: value.clamp(1, 9999)),
+    );
   }
 }

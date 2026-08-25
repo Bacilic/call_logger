@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/database/audit_service.dart';
 import '../../../../core/database/database_helper.dart';
+import 'directory_conflict_dialog.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/phone_repository.dart';
 import '../../../../core/directory/phone_department_policy.dart';
@@ -58,7 +59,9 @@ class UserFormSave {
     if (matched.id != null) {
       final stored = (matched.name ?? '').trim();
       if (stored != typed) {
-        await dir.updateDepartment(matched.id!, {'name': typed});
+        await dir.updateDepartment(matched.id!, {
+          'name': typed,
+        }, expected: null);
       }
       return matched.id;
     }
@@ -345,7 +348,29 @@ class UserFormSave {
         ).showSnackBar(_kUserFormDuplicateSnack);
         return;
       }
-      await host.widget.notifier.updateUser(user);
+      if (!host.mounted) return;
+      // Η καρτέλα γράφεται ολόκληρη: αν κάποιος πρόλαβε, ρωτιέται ο άνθρωπος
+      // αντί να σβηστεί αμίλητα το τμήμα ή το τηλέφωνο που εκείνος άλλαξε.
+      final saved = await saveDirectoryRecordWithConflictPrompt(
+        host.context,
+        save: ({required force}) => host.widget.notifier.updateUser(
+          user,
+          expected: force ? null : host.widget.initialUser,
+          force: force,
+        ),
+      );
+      if (!host.mounted) return;
+      if (!saved) {
+        ScaffoldMessenger.of(host.context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Η αποθήκευση ακυρώθηκε — η καρτέλα κρατά τα στοιχεία του '
+              'συναδέλφου. Κλείστε την και ανοίξτε την ξανά για να τα δείτε.',
+            ),
+          ),
+        );
+        return;
+      }
       if (phoneDisconnectBatch != null) {
         final db = await DatabaseHelper.instance.database;
         await applyPersonalPhoneDisconnectBatch(

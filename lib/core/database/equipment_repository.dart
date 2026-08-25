@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../utils/asset_history_labels.dart';
+import '../../features/directory/services/directory_save_conflict.dart';
 import 'audit_service.dart';
 import 'calls_search_index.dart';
 import 'database_helper.dart';
@@ -878,9 +879,19 @@ class EquipmentRepository {
     return id;
   }
 
+  /// Ενημερώνει υπάρχοντα εξοπλισμό.
+  ///
+  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα**, μαζί με τον
+  /// κάτοχο όταν η φόρμα τον γράφει. Υποχρεωτικό — και δεκτικό `null` μόνο
+  /// ρητά — γιατί η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: στοχευμένες εγγραφές (τμήμα,
+  /// θέση, μία στήλη) περνούν `null`.
+  ///
+  /// Πετά [DirectoryStaleException] **πριν** γράψει οτιδήποτε.
   Future<int> updateEquipment(
     int id,
     Map<String, dynamic> values, {
+    required Map<String, Object?>? expected,
+    bool force = false,
     DatabaseExecutor? executor,
   }) async {
     final e = executor ?? db;
@@ -895,6 +906,15 @@ class EquipmentRepository {
     );
     if (oldRows.isEmpty) return 0;
     final oldRow = oldRows.first;
+    if (!force && expected != null) {
+      final conflict = DirectorySaveConflict.between(
+        entityType: AuditEntityTypes.equipment,
+        expected: expected,
+        fresh: oldRow,
+        attempted: map,
+      );
+      if (conflict != null) throw DirectoryStaleException(conflict);
+    }
     final n = await e.update(
       'equipment',
       map,

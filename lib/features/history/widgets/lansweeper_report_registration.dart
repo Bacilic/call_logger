@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../calls/models/call_model.dart';
 import '../models/lansweeper_sync_state.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
+import '../services/lansweeper_registration_conflict.dart';
 import '../services/lansweeper_submission_warnings.dart';
+import 'lansweeper_registration_conflict_dialog.dart';
 import 'lansweeper/lansweeper_ai_presenter.dart';
 import 'lansweeper/lansweeper_registration_dialogs.dart';
 import 'lansweeper/lansweeper_registration_flow.dart';
@@ -199,9 +202,14 @@ class LansweeperReportRegistration {
     if (callId == null) return false;
     final storedTicket = (item.call.lansweeperMainTicketId ?? '').trim();
     final notifier = host.ref.read(lansweeperSyncProvider.notifier);
+    final expected = LansweeperRegistrationBaseline.ofCall(item.call);
     if (storedTicket.isEmpty) {
-      await notifier.setUnsent(callId);
-      return true;
+      final cleared = await applyLansweeperChangeWithConflictPrompt(
+        host.context,
+        write: ({required force}) =>
+            notifier.setUnsent(callId, expected: expected, force: force),
+      );
+      return cleared.isApplied;
     }
     final choice = await showLansweeperUnsentTicketChoiceDialog(
       host.context,
@@ -209,11 +217,18 @@ class LansweeperReportRegistration {
       ticketViewUrlTemplate: host.ref.read(lansweeperTicketViewUrlProvider),
     );
     if (choice == null || choice == UnsentTicketChoice.cancel) return false;
-    await notifier.setUnsent(
-      callId,
-      retainTicketId: choice == UnsentTicketChoice.retain,
+    if (!host.mounted) return false;
+    final retain = choice == UnsentTicketChoice.retain;
+    final withdrawn = await applyLansweeperChangeWithConflictPrompt(
+      host.context,
+      write: ({required force}) => notifier.setUnsent(
+        callId,
+        expected: expected,
+        retainTicketId: retain,
+        force: force,
+      ),
     );
-    return true;
+    return withdrawn.isApplied;
   }
 
   Future<DuplicateTicketAction> _promptDuplicateTicketWarning({
@@ -253,28 +268,56 @@ class LansweeperReportRegistration {
     );
   }
 
-  /// Σημαίνει τις [callIds] ως καταχωρημένες και το ανακοινώνει με ένα μήνυμα.
+  /// Σημαίνει τις [calls] ως καταχωρημένες και το ανακοινώνει με ένα μήνυμα.
+  ///
+  /// Δέχεται τις **κλήσεις** και όχι τα αναγνωριστικά τους επίτηδες: μαζί τους
+  /// ταξιδεύει η κατάσταση που έδειχνε η ουρά, δηλαδή η αφετηρία που κρίνει αν
+  /// κάποιος πρόλαβε. Με σκέτο αναγνωριστικό, ο επόμενος καλών θα την ξεχνούσε.
   ///
   /// Το κενό [ticketId] σημαίνει «καταχωρημένη χωρίς αριθμό» — έγκυρη κατάσταση,
   /// γι' αυτό καθαρίζεται εδώ σε `null` αντί να το θυμάται κάθε καλών.
   Future<void> _markRegisteredAndAnnounce({
-    required List<int> callIds,
+    required List<CallModel> calls,
     required String ticketId,
     String? comment,
   }) async {
     final notifier = host.ref.read(lansweeperSyncProvider.notifier);
-    for (final callId in callIds) {
-      await notifier.markRegistered(
-        callId: callId,
-        ticketId: ticketId.isEmpty ? null : ticketId,
-        comment: comment,
+    var registered = 0;
+    var skipped = 0;
+    var failed = 0;
+    for (final call in calls) {
+      final callId = call.id;
+      if (callId == null) continue;
+      if (!host.mounted) return;
+      final outcome = await applyLansweeperChangeWithConflictPrompt(
+        host.context,
+        write: ({required force}) => notifier.markRegistered(
+          callId: callId,
+          expected: LansweeperRegistrationBaseline.ofCall(call),
+          ticketId: ticketId.isEmpty ? null : ticketId,
+          comment: comment,
+          force: force,
+        ),
       );
+      switch (outcome) {
+        case LansweeperChangeOutcome.applied:
+          registered++;
+        case LansweeperChangeOutcome.skippedByUser:
+          skipped++;
+        case LansweeperChangeOutcome.failed:
+          failed++;
+      }
     }
-    if (!host.mounted) return;
+    if (!host.mounted || registered + skipped + failed == 0) return;
     host.showDialogSnackBar(
       SnackBar(
         content: Text(
-          registrationSuccessMessage(count: callIds.length, ticketId: ticketId),
+          registrationOutcomeMessage(
+            registered: registered,
+            skipped: skipped,
+            failed: failed,
+            ticketId: ticketId,
+          ),
         ),
       ),
     );
@@ -303,7 +346,7 @@ class LansweeperReportRegistration {
     if (ticketId == null || !host.mounted) return;
 
     await _markRegisteredAndAnnounce(
-      callIds: <int>[callId],
+      calls: <CallModel>[item.call],
       ticketId: ticketId,
       comment: comment,
     );
@@ -353,7 +396,7 @@ class LansweeperReportRegistration {
     if (ticketId == null || !host.mounted) return;
 
     await _markRegisteredAndAnnounce(
-      callIds: <int>[callId],
+      calls: <CallModel>[item.call],
       ticketId: ticketId,
       comment: input.comment,
     );
@@ -403,7 +446,10 @@ class LansweeperReportRegistration {
     );
     if (ticketId == null || !host.mounted) return;
 
-    await _markRegisteredAndAnnounce(callIds: callIds, ticketId: ticketId);
+    await _markRegisteredAndAnnounce(
+      calls: validItems.map((item) => item.call).toList(),
+      ticketId: ticketId,
+    );
   }
 
   Future<void> setStateForAllSelected(
@@ -425,8 +471,16 @@ class LansweeperReportRegistration {
       for (final item in toUpdate) {
         final callId = item.call.id;
         if (callId == null) continue;
-        await notifier.setExcluded(callId);
-        count++;
+        if (!host.mounted) return;
+        final excluded = await applyLansweeperChangeWithConflictPrompt(
+          host.context,
+          write: ({required force}) => notifier.setExcluded(
+            callId,
+            expected: LansweeperRegistrationBaseline.ofCall(item.call),
+            force: force,
+          ),
+        );
+        if (excluded.isApplied) count++;
       }
       if (!host.mounted || count == 0) return;
       host.showDialogSnackBar(

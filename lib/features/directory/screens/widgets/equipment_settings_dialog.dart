@@ -7,6 +7,7 @@ import '../../../../core/providers/spell_check_provider.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
+import '../../../../core/widgets/settings_list_conflict_dialog.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 
 /// Εμφανίζει διάλογο ρυθμίσεων εξοπλισμού (τύποι ως CSV στο `app_settings`).
@@ -60,8 +61,19 @@ class _EquipmentSettingsDialogState
   bool get _hasChanges => _controller.text.trim() != _initial.trim();
 
   Future<void> _save() async {
+    final bool saved;
     try {
-      await _settings.catalogs.setEquipmentTypes(_controller.text);
+      // Η λίστα είναι ελεύθερο κείμενο και γράφεται ολόκληρη: αν κάποιος
+      // πρόλαβε, δεν μπορούμε να ξέρουμε αν ένα στοιχείο που λείπει σβήστηκε
+      // επίτηδες — αποφασίζει ο άνθρωπος.
+      saved = await saveSettingsListWithConflictPrompt(
+        context,
+        listLabel: 'λίστα τύπων',
+        save: ({required force}) => _settings.catalogs.setEquipmentTypes(
+          _controller.text,
+          expected: force ? null : _initial,
+        ),
+      );
     } catch (e) {
       if (mounted) {
         showDialogSnackBar(
@@ -74,6 +86,21 @@ class _EquipmentSettingsDialogState
       return;
     }
     if (!mounted) return;
+    if (!saved) {
+      // Ο χρήστης άφησε τη λίστα του συναδέλφου: η φόρμα δείχνει τώρα την
+      // αλήθεια, ώστε να ξαναδεί τι υπάρχει πριν αποφασίσει.
+      await _load();
+      if (!mounted) return;
+      showDialogSnackBar(
+        const SnackBar(
+          content: Text(
+            'Η αποθήκευση ακυρώθηκε — η λίστα ανανεώθηκε με τα τρέχοντα '
+            'στοιχεία. Ελέγξτε τα και δοκιμάστε ξανά.',
+          ),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).pop(true);
   }
 

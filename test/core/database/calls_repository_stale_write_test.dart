@@ -58,6 +58,8 @@ void main() {
       await CallsLansweeperRepository(db).markManualPassed(
         callId: id,
         ticketId: '8001',
+        // Ο συνάδελφος γράφει από άλλο μηχάνημα: δεν έχει αφετηρία να δώσει.
+        expected: null,
       );
 
       final afterOther = (await calls.getCallById(id))!;

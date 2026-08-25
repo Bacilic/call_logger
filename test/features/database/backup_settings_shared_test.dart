@@ -105,7 +105,7 @@ void main() {
       final db = await DatabaseHelper.instance.database;
       CurrentOperator.activate(_operator(903, isAdmin: true));
 
-      await ActiveBackupSettings.write(
+      await ActiveBackupSettings.overwriteAll(
         DatabaseBackupSettings.defaults().copyWith(
           destinationDirectory: r'D:\apo_thn_pylh',
         ),

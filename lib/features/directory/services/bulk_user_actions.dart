@@ -719,7 +719,7 @@ Future<BulkActionUndoRecord> applyBulkUserTransferInTxn(
       {'department_id': targetId},
       executor: txn,
       skipPhonePolicyValidation: true,
-    );
+    expected: null,);
 
     for (final e in plan.equipmentToFollow[userId] ?? const []) {
       final eqRow = await _equipmentRowInTxn(txn, e.id!);
@@ -791,7 +791,7 @@ Future<BulkActionUndoRecord> applyBulkUserNotesInTxn(
       {'notes': next},
       executor: txn,
       skipPhonePolicyValidation: true,
-    );
+    expected: null,);
   }
   return BulkActionUndoRecord(userNotesBefore: notesBefore);
 }
@@ -845,7 +845,7 @@ Future<BulkActionUndoRecord> applyBulkUserClearInTxn(
           {'notes': null},
           executor: txn,
           skipPhonePolicyValidation: true,
-        );
+        expected: null,);
       }
 
     case BulkClearField.phones:

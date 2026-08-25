@@ -75,12 +75,47 @@ abstract final class ActiveBackupSettings {
     );
   }
 
-  /// Γράφει τις ενεργές ρυθμίσεις στην κοινή θέση.
-  static Future<void> write(DatabaseBackupSettings settings) async {
+  /// **Στοχευμένη αλλαγή** — ο μόνος σωστός τρόπος να αλλάξει μία επιλογή.
+  ///
+  /// Το δέμα στοιβάζει σε ΕΝΑ κλειδί και τις επιλογές του διαχειριστή και τη
+  /// λογιστική εκτέλεσης (ποιο αντίγραφο πάρθηκε, πότε, με ποιο αποτύπωμα).
+  /// Γράφοντας ολόκληρο το δέμα από μια εικόνα που φορτώθηκε νωρίτερα, ένα
+  /// απλό τσεκάρισμα σβήνει τη σφραγίδα του αντιγράφου που μόλις πήρε το άλλο
+  /// μηχάνημα — και ο χρονιστής ξαναπαίρνει αντίγραφο που υπάρχει ήδη.
+  ///
+  /// Η [change] εφαρμόζεται πάνω στην **τρέχουσα αποθηκευμένη** τιμή, όχι σε
+  /// αντίγραφο της οθόνης, και γράφεται με ατομική δέσμευση. Έτσι επιβιώνουν
+  /// **και** η δική μου αλλαγή **και** ό,τι άγγιξε στο μεταξύ ο συνάδελφος.
+  ///
+  /// Επιστρέφει ό,τι αποθηκεύτηκε — ο καλών ενημερώνει την οθόνη του με αυτό
+  /// και όχι με τη δική του παλιά εικόνα.
+  static Future<DatabaseBackupSettings> update(
+    DatabaseBackupSettings Function(DatabaseBackupSettings current) change,
+  ) async {
+    // Πρώτη ανάγνωση μέσα από την πύλη: εκεί τρέχει η μετάπτωση επιστροφής στα
+    // κοινά, μία φορά ανά βάση. Η στοχευμένη εγγραφή πιο κάτω μιλά κατευθείαν
+    // στο repository και δεν θα την πυροδοτούσε.
+    await readWithRaw();
     final db = await DatabaseHelper.instance.database;
-    await SettingsRepository(
-      db,
-    ).saveSetting(DatabaseBackupSettings.appSettingsKey, settings.toJsonString());
+    final storedRaw = await SettingsRepository(db).updateSetting(
+      DatabaseBackupSettings.appSettingsKey,
+      (raw) =>
+          change(DatabaseBackupSettings.fromJsonString(raw)).toJsonString(),
+    );
+    return DatabaseBackupSettings.fromJsonString(storedRaw);
+  }
+
+  /// Αντικαθιστά **ολόκληρο** το δέμα — μόνο όταν αυτό είναι όντως το ζητούμενο.
+  ///
+  /// Για αλλαγή μεμονωμένης επιλογής χρησιμοποιείται η [update]: εδώ ό,τι δεν
+  /// περιέχεται στις [settings] χάνεται, μαζί και η λογιστική του άλλου
+  /// μηχανήματος. Το όνομα το λέει επίτηδες ωμά.
+  static Future<void> overwriteAll(DatabaseBackupSettings settings) async {
+    final db = await DatabaseHelper.instance.database;
+    await SettingsRepository(db).saveSetting(
+      DatabaseBackupSettings.appSettingsKey,
+      settings.toJsonString(),
+    );
   }
 
   /// Επιστροφή του δέματος στα κοινά, μία φορά ανά βάση.

@@ -133,7 +133,7 @@ void main() {
 
         await repo.updateUser(userId, {
           'phones': <String>[],
-        }, skipPhonePolicyValidation: true);
+        }, skipPhonePolicyValidation: true, expected: null);
 
         final row = await findLinkDeltaAudit(
           userId: userId,
@@ -199,7 +199,7 @@ void main() {
 
         await repo.updateUser(userId, {
           'phones': [existingPhone, newPhone],
-        }, skipPhonePolicyValidation: true);
+        }, skipPhonePolicyValidation: true, expected: null);
 
         final row = await findLinkDeltaAudit(
           userId: userId,

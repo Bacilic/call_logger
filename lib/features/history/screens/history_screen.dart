@@ -830,6 +830,7 @@ class _LansweeperRowMenu extends ConsumerWidget {
       context,
       ref,
       callId: id,
+      currentState: currentState,
       storedTicketId: ticketId,
       targetState: targetState,
     );

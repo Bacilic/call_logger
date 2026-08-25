@@ -16,6 +16,7 @@ void main() {
     SettingsService.registerAppSettingsProvider(
       (key) async => null,
       (key, value) async {},
+      (key, change) async => change(null),
     );
   });
 
@@ -36,12 +37,13 @@ void main() {
 
     test('remote_lansweeper: get/set calls primary tool id', () async {
       final store = <String, String>{};
-      SettingsService.registerAppSettingsProvider((key) async => store[key], (
-        key,
-        value,
-      ) async {
-        store[key] = value;
-      });
+      SettingsService.registerAppSettingsProvider(
+        (key) async => store[key],
+        (key, value) async {
+          store[key] = value;
+        },
+        (key, change) async => store[key] = change(store[key]),
+      );
       final settings = SettingsService();
       expect(await settings.remoteLansweeper.getCallsPrimaryToolId(), isNull);
       await settings.remoteLansweeper.setCallsPrimaryToolId(42);
@@ -100,12 +102,13 @@ void main() {
       final store = <String, String>{
         'lansweeper_api_url': 'https://example.com/api.aspx',
       };
-      SettingsService.registerAppSettingsProvider((key) async => store[key], (
-        key,
-        value,
-      ) async {
-        store[key] = value;
-      });
+      SettingsService.registerAppSettingsProvider(
+        (key) async => store[key],
+        (key, value) async {
+          store[key] = value;
+        },
+        (key, change) async => store[key] = change(store[key]),
+      );
       final settings = SettingsService();
       expect(
         await settings.remoteLansweeper.getLansweeperApiUrl(),
@@ -118,24 +121,26 @@ void main() {
         'lansweeper_api_url': 'not-a-valid-url',
         'lansweeper_url': 'ftp://legacy.example.com/page',
       };
-      SettingsService.registerAppSettingsProvider((key) async => store[key], (
-        key,
-        value,
-      ) async {
-        store[key] = value;
-      });
+      SettingsService.registerAppSettingsProvider(
+        (key) async => store[key],
+        (key, value) async {
+          store[key] = value;
+        },
+        (key, change) async => store[key] = change(store[key]),
+      );
       final settings = SettingsService();
       expect(await settings.remoteLansweeper.getLansweeperApiUrl(), isNull);
     });
 
     test('getEquipmentTypesList: CSV με κενά και άδειες τιμές', () async {
       final store = <String, String>{'equipment_types': '  PC , , Laptop ,  '};
-      SettingsService.registerAppSettingsProvider((key) async => store[key], (
-        key,
-        value,
-      ) async {
-        store[key] = value;
-      });
+      SettingsService.registerAppSettingsProvider(
+        (key) async => store[key],
+        (key, value) async {
+          store[key] = value;
+        },
+        (key, change) async => store[key] = change(store[key]),
+      );
       final settings = SettingsService();
       expect(await settings.catalogs.getEquipmentTypesList(), ['PC', 'Laptop']);
     });

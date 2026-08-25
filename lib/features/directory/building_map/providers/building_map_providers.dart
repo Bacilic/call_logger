@@ -95,7 +95,11 @@ final buildingMapReposProvider = FutureProvider<BuildingMapRepos>((ref) async {
   final db = await DatabaseHelper.instance.database;
   final departments = DepartmentRepository(db);
   final maps = BuildingMapRepository(db);
-  maps.bindUpdateDepartment(departments.updateDepartment);
+  // Ο χάρτης γράφει ΜΟΝΟ τις δικές του στήλες, ποτέ ολόκληρη την
+  // καρτέλα — άρα δεν υπάρχει αφετηρία να συγκριθεί.
+  maps.bindUpdateDepartment(
+    (id, values) => departments.updateDepartment(id, values, expected: null),
+  );
   return (maps: maps, search: OmnisearchService(db), departments: departments);
 });
 

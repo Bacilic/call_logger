@@ -231,7 +231,7 @@ void main() {
           'first_name': 'Νέο',
           'department_id': newDeptId,
           'phones': [newPhone],
-        }, skipPhonePolicyValidation: true);
+        }, skipPhonePolicyValidation: true, expected: null);
 
         final userRow = await db.query(
           'users',
@@ -453,7 +453,7 @@ void main() {
               {'notes': 'θα γίνει rollback'},
               executor: txn,
               skipPhonePolicyValidation: true,
-            );
+            expected: null,);
             throw StateError('rollback update');
           }),
           throwsA(isA<StateError>()),

@@ -60,14 +60,22 @@ class SettingsService {
   /// Πρόσβαση σε ρυθμίσεις από πίνακα app_settings (ορίζεται μετά το άνοιγμα βάσης).
   static Future<String?> Function(String key)? _getAppSetting;
   static Future<void> Function(String key, String value)? _setAppSetting;
+  static Future<String> Function(
+    String key,
+    String Function(String? current) change,
+  )?
+  _updateAppSetting;
 
   /// Καθιστά διαθέσιμη την πρόσβαση στις ρυθμίσεις app_settings (κλήση μετά το άνοιγμα βάσης).
   static void registerAppSettingsProvider(
     Future<String?> Function(String key) get,
     Future<void> Function(String key, String value) set,
+    Future<String> Function(String key, String Function(String? current) change)
+    update,
   ) {
     _getAppSetting = get;
     _setAppSetting = set;
+    _updateAppSetting = update;
   }
 
   /// Ανάγνωση ρύθμισης app_settings — για τους συνεργάτες ([remoteLansweeper], [catalogs]).
@@ -77,6 +85,15 @@ class SettingsService {
   /// Εγγραφή ρύθμισης app_settings — για τους συνεργάτες ([remoteLansweeper], [catalogs]).
   static Future<void> Function(String key, String value)?
   get appSettingWriter => _setAppSetting;
+
+  /// Στοχευμένη αλλαγή ρύθμισης app_settings — για ρυθμίσεις που στοιβάζουν
+  /// πολλές επιλογές σε ΜΙΑ τιμή. Η [appSettingWriter] ξαναγράφει την τιμή
+  /// ολόκληρη και σβήνει ό,τι άλλαξε στο μεταξύ άλλος διαχειριστής.
+  static Future<String> Function(
+    String key,
+    String Function(String? current) change,
+  )?
+  get appSettingUpdater => _updateAppSetting;
 
   static const int defaultCrashLogRetentionCount =
       SettingsServiceCatalogs.defaultCrashLogRetentionCount;

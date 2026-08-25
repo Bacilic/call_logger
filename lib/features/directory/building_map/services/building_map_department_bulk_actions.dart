@@ -25,7 +25,7 @@ Future<void> setDepartmentsHiddenOnMapInTxn(
   for (final id in departmentIds) {
     await repository.updateDepartment(id, {
       'map_hidden': hidden ? 1 : 0,
-    }, executor: txn);
+    }, executor: txn, expected: null);
   }
 }
 
@@ -53,7 +53,7 @@ Future<List<Color>> removeDepartmentsFromFloorInTxn(
         clearDepartmentHex: true,
       ),
       executor: txn,
-    );
+    expected: null,);
     if (removedColor != null) releasedColors.add(removedColor);
   }
   return releasedColors;

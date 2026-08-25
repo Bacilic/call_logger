@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../features/history/services/lansweeper_registration_conflict.dart';
 import 'audit_service.dart';
 import 'calls_audit_line.dart';
 import 'calls_search_index.dart';
@@ -61,6 +62,11 @@ class CallsLansweeperRepository {
   /// «πριν», γράψε, ξαναχτίσε το ευρετήριο όπου χρειάζεται, διάβασε το «μετά»,
   /// κατέγραψε μόνο ό,τι όντως άλλαξε. Οι δύο καλούντες διαφέρουν μόνο σε ποια
   /// πεδία παρακολουθούν και πώς ονομάζουν την ενέργεια.
+  ///
+  /// Το [guard] κρίνει το «πριν» **προτού** γραφτεί οτιδήποτε, μέσα στην ίδια
+  /// συναλλαγή: εκεί ο έλεγχος είναι ατομικός (δεν υπάρχει παράθυρο ανάμεσα
+  /// στην ανάγνωση και στην εγγραφή) και δωρεάν (η γραμμή διαβάζεται έτσι κι
+  /// αλλιώς για το Ιστορικό). Πετώντας, ακυρώνει ολόκληρη τη συναλλαγή.
   Future<void> _updateAndLog(
     DatabaseExecutor e, {
     required int callId,
@@ -69,11 +75,13 @@ class CallsLansweeperRepository {
     required String action,
     required bool rebuildSearchIndex,
     Map<String, dynamic>? extraNewValues,
+    void Function(Map<String, Object?> before)? guard,
   }) async {
     final before = await _readFields(e, callId, auditedFields);
     // Κλήση που δεν υπάρχει (π.χ. διαγράφηκε στο μεταξύ): καμία εγγραφή,
     // καμία εγγραφή ιστορικού για οντότητα-φάντασμα.
     if (before.isEmpty) return;
+    guard?.call(before);
 
     await e.update('calls', payload, where: 'id = ?', whereArgs: [callId]);
     if (rebuildSearchIndex) {
@@ -118,11 +126,19 @@ class CallsLansweeperRepository {
   /// ΜΟΝΑΔΙΚΟ σημείο εγγραφής για τις τέσσερις ροές κατάστασης: αν κάποια
   /// έγραφε μόνη της, θα ξανάνοιγε η τρύπα που άφηνε κάθε καταχώρηση αόρατη
   /// στο Ιστορικό — η κλήση φαινόταν για πάντα «Μη αποσταλμένη».
+  ///
+  /// Είναι ΚΑΙ το μοναδικό σημείο επιβολής του φρουρού: το [expected] είναι η
+  /// κατάσταση **όπως τη διάβασε η οθόνη**, και χωρίς αυτό μια σήμανση πάνω σε
+  /// μπαγιάτικη ουρά αντικαθιστά το αίτημα που μόλις καταχώρησε ο συνάδελφος.
+  /// Δεκτικό `null` μόνο ρητά — άγνοια της αφετηρίας σημαίνει «πέρνα» (μια
+  /// εγγραφή από παλαιότερη έκδοση δεν γίνεται άσωστη), όχι «μπλόκαρε».
   Future<void> _applyAndLog(
     DatabaseExecutor e, {
     required int callId,
     required Map<String, Object?> payload,
     required String action,
+    required LansweeperRegistrationBaseline? expected,
+    bool force = false,
     Map<String, dynamic>? extraNewValues,
   }) => _updateAndLog(
     e,
@@ -135,7 +151,53 @@ class CallsLansweeperRepository {
     // από τον αριθμό της (ή βρίσκεται από ticket που δεν έχει πια).
     rebuildSearchIndex: payload.containsKey('lansweeper_main_ticket_id'),
     extraNewValues: extraNewValues,
+    guard: (expected == null || force)
+        ? null
+        : (before) {
+            final conflict = _conflictAgainst(
+              before: before,
+              expected: expected,
+              payload: payload,
+            );
+            if (conflict != null) {
+              throw LansweeperRegistrationStaleException(conflict);
+            }
+          },
   );
+
+  /// Η διένεξη ανάμεσα στην αφετηρία της οθόνης και στη γραμμή όπως τη βρήκε η
+  /// συναλλαγή· `null` όταν δεν υπάρχει λόγος να σταματήσει η εγγραφή.
+  ///
+  /// Η «πρόθεσή» μου δεν διαβάζεται από τον καλούντα αλλά από το ίδιο το
+  /// payload: έτσι κάθε νέα ροή κατάστασης κρίνεται σωστά χωρίς να θυμηθεί
+  /// κανείς να περιγράψει τι πάει να γράψει.
+  static LansweeperRegistrationConflict? _conflictAgainst({
+    required Map<String, Object?> before,
+    required LansweeperRegistrationBaseline expected,
+    required Map<String, Object?> payload,
+  }) {
+    final fresh = LansweeperRegistrationBaseline(
+      state: before['lansweeper_state'] as String?,
+      ticketId: before['lansweeper_main_ticket_id'] as String?,
+    );
+    final touchesTicketId = payload.containsKey('lansweeper_main_ticket_id');
+    final conflict = LansweeperRegistrationConflict(
+      expected: expected,
+      fresh: fresh,
+      attempted: LansweeperRegistrationAttempt(
+        // Πεδίο που το payload δεν αγγίζει μένει όπως το βρίσκει: αλλιώς μια
+        // εγγραφή μόνο-ticket θα φαινόταν να επαναφέρει και την κατάσταση.
+        state: payload.containsKey('lansweeper_state')
+            ? '${payload['lansweeper_state'] ?? ''}'
+            : fresh.normalizedState,
+        touchesTicketId: touchesTicketId,
+        ticketId: touchesTicketId
+            ? payload['lansweeper_main_ticket_id'] as String?
+            : null,
+      ),
+    );
+    return conflict.isConflict ? conflict : null;
+  }
 
   /// Γράφει πίσω στις κλήσεις το εξευγενισμένο κείμενο της φόρμας Lansweeper.
   ///
@@ -258,12 +320,17 @@ class CallsLansweeperRepository {
   }
 
   /// Ενημερώνει την κατάσταση Lansweeper μιας κλήσης.
+  ///
+  /// Πετά [LansweeperRegistrationStaleException] **πριν** γράψει οτιδήποτε,
+  /// όταν κάποιος άλλος κούνησε την κλήση μετά την ανάγνωση του [expected].
   Future<void> updateLansweeperState({
     required int callId,
     required String state,
+    required LansweeperRegistrationBaseline? expected,
     String? ticketId,
     bool updateTicketId = false,
     bool clearTicketId = false,
+    bool force = false,
     String? syncedAt,
   }) async {
     final payload = <String, Object?>{
@@ -279,6 +346,8 @@ class CallsLansweeperRepository {
         callId: callId,
         payload: payload,
         action: lansweeperAuditAction(state),
+        expected: expected,
+        force: force,
       ),
     );
   }
@@ -299,6 +368,10 @@ class CallsLansweeperRepository {
               syncedAt ?? DateTime.now().toIso8601String(),
         },
         action: 'ΑΛΛΑΓΗ TICKET LANSWEEPER',
+        // Καμία οθόνη δεν καλεί αυτή τη διαδρομή σήμερα, οπότε δεν υπάρχει
+        // αφετηρία να δοθεί. Όποιος τη συνδέσει με ενέργεια χρήστη οφείλει να
+        // περάσει το `expected` — αλλιώς η σήμανση θα γράφει στα τυφλά.
+        expected: null,
       ),
     );
   }
@@ -343,9 +416,18 @@ class CallsLansweeperRepository {
   }
 
   /// Χειροκίνητη σήμανση κλήσης ως περασμένη, με transactional write (state + link history).
+  ///
+  /// Το [expected] είναι η κατάσταση **όπως τη δείχνει η ουρά μου**. Στη
+  /// ρουτίνα των 13:00 δύο άνθρωποι περνούν την ίδια λίστα: χωρίς αφετηρία, ο
+  /// δεύτερος γράφει τον δικό του αριθμό πάνω στου πρώτου και το αίτημα εκείνου
+  /// μένει ορφανό στο Lansweeper — σύστημα που η εφαρμογή δεν καθαρίζει.
+  ///
+  /// Πετά [LansweeperRegistrationStaleException] **πριν** γράψει οτιδήποτε.
   Future<void> markManualPassed({
     required int callId,
     required String ticketId,
+    required LansweeperRegistrationBaseline? expected,
+    bool force = false,
     String? comment,
   }) async {
     final nowIso = DateTime.now().toIso8601String();
@@ -360,6 +442,8 @@ class CallsLansweeperRepository {
           'lansweeper_last_sync_at': nowIso,
         },
         action: 'ΧΕΙΡΟΚΙΝΗΤΗ ΚΑΤΑΧΩΡΗΣΗ ΣΤΟ LANSWEEPER',
+        expected: expected,
+        force: force,
         extraNewValues: trimmedComment.isEmpty
             ? null
             : <String, dynamic>{'comment': trimmedComment},
@@ -396,6 +480,10 @@ class CallsLansweeperRepository {
           'lansweeper_last_sync_at': nowIso,
         },
         action: 'ΚΑΤΑΧΩΡΗΣΗ ΣΤΟ LANSWEEPER',
+        // Η υποβολή μέσω API φυλάγεται ανάντη: πριν στείλει, διαβάζει φρέσκια
+        // την κλήση και ενημερώνει το υπάρχον αίτημα αντί να ανοίξει δεύτερο.
+        // Ένας δεύτερος έλεγχος εδώ θα απέρριπτε ticket που μόλις γεννήθηκε.
+        expected: null,
       );
       await addExternalLink(
         callId: callId,

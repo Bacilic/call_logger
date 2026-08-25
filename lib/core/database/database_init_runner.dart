@@ -26,6 +26,14 @@ Future<void> _appSettingsSet(String key, String value) async {
   return SettingsRepository(db).saveSetting(key, value);
 }
 
+Future<String> _appSettingsUpdate(
+  String key,
+  String Function(String? current) change,
+) async {
+  final db = await DatabaseHelper.instance.database;
+  return SettingsRepository(db).updateSetting(key, change);
+}
+
 /// Αλυσίδα σειριοποίησης: νέες κλήσεις περιμένουν την προηγούμενη να τελειώσει.
 Future<void> _runDatabaseInitChecksGate = Future<void>.value();
 
@@ -216,6 +224,7 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
           SettingsService.registerAppSettingsProvider(
             _appSettingsGet,
             _appSettingsSet,
+            _appSettingsUpdate,
           );
           try {
             await RemoteToolsRepository(

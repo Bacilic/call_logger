@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'directory_conflict_dialog.dart';
 
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
@@ -556,8 +557,29 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
         );
         return;
       }
-      await widget.notifier.updateEquipment(equipment, ownerUserId: userId);
+      // Η καρτέλα γράφεται ολόκληρη: αν κάποιος πρόλαβε, ρωτιέται ο άνθρωπος.
       if (!mounted) return;
+      final saved = await saveDirectoryRecordWithConflictPrompt(
+        context,
+        save: ({required force}) => widget.notifier.updateEquipment(
+          equipment,
+          expected: force ? null : widget.initialEquipment,
+          force: force,
+          ownerUserId: userId,
+        ),
+      );
+      if (!mounted) return;
+      if (!saved) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Η αποθήκευση ακυρώθηκε — η καρτέλα κρατά τα στοιχεία του '
+              'συναδέλφου. Κλείστε την και ανοίξτε την ξανά για να τα δείτε.',
+            ),
+          ),
+        );
+        return;
+      }
       final savedMessage = await _buildEditSaveConfirmationMessage(
         equipment: equipment,
         catalog: catalog,

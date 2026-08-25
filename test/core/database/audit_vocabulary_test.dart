@@ -115,7 +115,7 @@ void main() {
         await users.updateUser(userId, {
           'first_name': 'Καθαρό',
           'is_deleted': 0,
-        });
+        }, expected: null);
 
         final row = AuditLogModel(
           id: 1,
@@ -157,7 +157,7 @@ void main() {
         await equipment.updateEquipment(eqId, {
           'remote_params': jsonEncode({'2': '10.0.0.99'}),
           'default_remote_tool': null,
-        });
+        }, expected: null);
 
         final auditRow = (await db.query('audit_log')).single;
         expect(auditRow['action'], AuditActions.modifyEquipment);

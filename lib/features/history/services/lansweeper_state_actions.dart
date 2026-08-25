@@ -6,6 +6,8 @@ import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../widgets/lansweeper/lansweeper_registration_dialogs.dart';
 import '../widgets/lansweeper/lansweeper_registration_flow.dart';
+import '../widgets/lansweeper_registration_conflict_dialog.dart';
+import 'lansweeper_registration_conflict.dart';
 
 /// Αλλαγή της κατάστασης Lansweeper μιας κλήσης, με τις ερωτήσεις που χρωστά.
 ///
@@ -46,26 +48,48 @@ abstract final class LansweeperStateActions {
 
   /// Εφαρμόζει τη μετάβαση και επιστρέφει το μήνυμα επιτυχίας.
   ///
+  /// Το [currentState] και το [storedTicketId] είναι η κατάσταση **όπως τη
+  /// δείχνει η γραμμή μου** — η αφετηρία που κρίνει αν κάποιος πρόλαβε. Χωρίς
+  /// αυτήν, μια μετάβαση πάνω σε μπαγιάτικη λίστα σβήνει αθόρυβα το αίτημα που
+  /// μόλις καταχώρησε ο συνάδελφος.
+  ///
   /// Επιστρέφει `null` όταν ο χρήστης ακύρωσε σε κάποια ερώτηση — ο καλών δεν
   /// ανακοινώνει τίποτα, γιατί τίποτα δεν άλλαξε.
   static Future<String?> apply(
     BuildContext context,
     WidgetRef ref, {
     required int callId,
+    required String currentState,
     required String? storedTicketId,
     required String targetState,
   }) async {
     final notifier = ref.read(lansweeperSyncProvider.notifier);
+    final expected = LansweeperRegistrationBaseline(
+      state: currentState,
+      ticketId: storedTicketId,
+    );
     switch (LansweeperSyncState.normalize(targetState)) {
       case LansweeperSyncState.excluded:
-        await notifier.setExcluded(callId);
-        return 'Η κλήση εξαιρέθηκε από το Lansweeper.';
+        final excluded = await applyLansweeperChangeWithConflictPrompt(
+          context,
+          write: ({required force}) =>
+              notifier.setExcluded(callId, expected: expected, force: force),
+        );
+        return excluded.isApplied
+            ? 'Η κλήση εξαιρέθηκε από το Lansweeper.'
+            : null;
 
       case LansweeperSyncState.unsent:
         final stored = (storedTicketId ?? '').trim();
         if (stored.isEmpty) {
-          await notifier.setUnsent(callId);
-          return 'Η κλήση σημειώθηκε ως ακαταχώρητη.';
+          final cleared = await applyLansweeperChangeWithConflictPrompt(
+            context,
+            write: ({required force}) =>
+                notifier.setUnsent(callId, expected: expected, force: force),
+          );
+          return cleared.isApplied
+              ? 'Η κλήση σημειώθηκε ως ακαταχώρητη.'
+              : null;
         }
         // Το αποθηκευμένο αίτημα μπορεί να υπάρχει πράγματι στο Lansweeper —
         // το σβήσιμό του χωρίς ερώτηση θα έσπαγε τον δεσμό αθόρυβα.
@@ -75,11 +99,19 @@ abstract final class LansweeperStateActions {
           ticketViewUrlTemplate: ref.read(lansweeperTicketViewUrlProvider),
         );
         if (choice == null || choice == UnsentTicketChoice.cancel) return null;
-        await notifier.setUnsent(
-          callId,
-          retainTicketId: choice == UnsentTicketChoice.retain,
+        if (!context.mounted) return null;
+        final retain = choice == UnsentTicketChoice.retain;
+        final withdrawn = await applyLansweeperChangeWithConflictPrompt(
+          context,
+          write: ({required force}) => notifier.setUnsent(
+            callId,
+            expected: expected,
+            retainTicketId: retain,
+            force: force,
+          ),
         );
-        return choice == UnsentTicketChoice.retain
+        if (!withdrawn.isApplied) return null;
+        return retain
             ? 'Η κλήση σημειώθηκε ως ακαταχώρητη (το αίτημα #$stored διατηρήθηκε).'
             : 'Η κλήση σημειώθηκε ως ακαταχώρητη.';
 
@@ -88,6 +120,7 @@ abstract final class LansweeperStateActions {
           context,
           ref,
           callId: callId,
+          expected: expected,
           storedTicketId: storedTicketId,
         );
 
@@ -100,6 +133,7 @@ abstract final class LansweeperStateActions {
     BuildContext context,
     WidgetRef ref, {
     required int callId,
+    required LansweeperRegistrationBaseline expected,
     required String? storedTicketId,
   }) async {
     final notifier = ref.read(lansweeperSyncProvider.notifier);
@@ -147,10 +181,16 @@ abstract final class LansweeperStateActions {
     );
     if (ticketId == null || !context.mounted) return null;
 
-    await notifier.markRegistered(
-      callId: callId,
-      ticketId: ticketId.isEmpty ? null : ticketId,
+    final registered = await applyLansweeperChangeWithConflictPrompt(
+      context,
+      write: ({required force}) => notifier.markRegistered(
+        callId: callId,
+        expected: expected,
+        ticketId: ticketId.isEmpty ? null : ticketId,
+        force: force,
+      ),
     );
+    if (!registered.isApplied) return null;
     return ticketId.isEmpty
         ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
         : 'Η κλήση επισημάνθηκε ως καταχωρημένη (αίτημα #$ticketId).';

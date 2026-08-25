@@ -6,6 +6,7 @@ import '../config/app_config.dart';
 import 'shared_settings.dart';
 import '../config/audit_retention_config.dart';
 import '../../features/database/debug/publish_cli.dart';
+import 'settings_list_conflict.dart';
 import 'settings_service.dart';
 
 /// Κατάλογοι, λεξικό, audit retention και timeout ανοίγματος βάσης.
@@ -54,8 +55,6 @@ class SettingsServiceCatalogs {
 
   static Future<String?> Function(String key)? get _getAppSetting =>
       SettingsService.appSettingReader;
-  static Future<void> Function(String key, String value)? get _setAppSetting =>
-      SettingsService.appSettingWriter;
 
   /// Timeout ανοίγματος βάσης σε δευτερόλεπτα. Προεπιλογή: [AppConfig.databaseOpenTimeoutSeconds].
   Future<int> getDatabaseOpenTimeoutSeconds() async {
@@ -213,21 +212,68 @@ class SettingsServiceCatalogs {
 
   // --- Τύποι εξοπλισμού (app_settings, comma-separated) ---
 
+  /// Τι δείχνει η οθόνη για μια αποθηκευμένη τιμή τύπων εξοπλισμού.
+  ///
+  /// Καθαρή συνάρτηση επίτηδες: ο φρουρός της [setEquipmentTypes] συγκρίνει
+  /// την αφετηρία της οθόνης με το **ίδιο** αποτέλεσμα που θα έδειχνε η οθόνη —
+  /// αλλιώς μια κενή αποθηκευμένη τιμή θα φαινόταν ξένη αλλαγή σε κάθε νέα βάση.
+  static String effectiveEquipmentTypes(String? stored) {
+    final trimmed = stored?.trim() ?? '';
+    return trimmed.isEmpty ? 'Υπολογιστής, Εκτυπωτής' : trimmed;
+  }
+
   /// Επιστρέφει το ακατέργαστο string τύπων εξοπλισμού (διαχωρισμένα με κόμμα).
   /// Χρήση στο UI ρυθμίσεων. Προεπιλογή: "Υπολογιστής, Εκτυπωτής".
   Future<String> getEquipmentTypesRaw() async {
     final value = _getAppSetting != null
         ? await _getAppSetting!(_keyEquipmentTypes)
         : null;
-    if (value == null || value.trim().isEmpty) return 'Υπολογιστής, Εκτυπωτής';
-    return value.trim();
+    return effectiveEquipmentTypes(value);
   }
 
   /// Αποθηκεύει τους τύπους εξοπλισμού (comma-separated).
-  Future<void> setEquipmentTypes(String value) async {
-    if (_setAppSetting != null) {
-      await _setAppSetting!(_keyEquipmentTypes, value.trim());
-    }
+  ///
+  /// Το [expected] είναι η λίστα **όπως τη φόρτωσε ο διάλογος**. Ο χρήστης
+  /// επεξεργάζεται ελεύθερο κείμενο, οπότε δεν υπάρχει σιωπηλή συγχώνευση που
+  /// να ξέρει αν ένα στοιχείο λείπει επίτηδες: αν κάποιος πρόλαβε, πετιέται
+  /// [SettingsListStaleException] και αποφασίζει ο άνθρωπος. `null` = χωρίς
+  /// αφετηρία, η εγγραφή περνά (και είναι ο τρόπος να γραφτεί «από πάνω»).
+  Future<void> setEquipmentTypes(
+    String value, {
+    required String? expected,
+  }) async {
+    await _writeGuardedList(
+      key: _keyEquipmentTypes,
+      next: value.trim(),
+      expected: expected,
+      effective: effectiveEquipmentTypes,
+    );
+  }
+
+  /// Η κοινή εγγραφή ρυθμιζόμενης λίστας, με τον φρουρό μέσα στην ατομική
+  /// δέσμευση: ο έλεγχος γίνεται πάνω στην τιμή που μόλις διαβάστηκε, άρα δεν
+  /// υπάρχει παράθυρο ανάμεσα στην ανάγνωση και στην εγγραφή.
+  Future<void> _writeGuardedList({
+    required String key,
+    required String next,
+    required String? expected,
+    required String Function(String? stored) effective,
+  }) async {
+    final update = SettingsService.appSettingUpdater;
+    if (update == null) return;
+    final baseline = expected?.trim();
+    await update(key, (current) {
+      if (baseline != null && effective(current) != baseline) {
+        throw SettingsListStaleException(
+          SettingsListConflict(
+            expected: baseline,
+            fresh: effective(current),
+            attempted: next,
+          ),
+        );
+      }
+      return next;
+    });
   }
 
   /// Ακατέργαστο JSON των κανόνων επικύρωσης Καταλόγου (app_settings).
@@ -239,10 +285,21 @@ class SettingsServiceCatalogs {
     return _getAppSetting!(_keyCatalogValidationRules);
   }
 
-  Future<void> setCatalogValidationRulesRaw(String value) async {
-    if (_setAppSetting != null) {
-      await _setAppSetting!(_keyCatalogValidationRules, value);
-    }
+  /// **Στοχευμένη αλλαγή** των κανόνων επικύρωσης.
+  ///
+  /// Οι είκοσι δύο κανόνες ζουν σε ΕΝΑ κλειδί, οπότε γράφοντας ολόκληρο το
+  /// JSON από την εικόνα της οθόνης σβήναμε τον διακόπτη που μόλις άλλαξε ο
+  /// άλλος διαχειριστής. Η [change] παίρνει το **τρέχον αποθηκευμένο** κείμενο
+  /// (`null` = καμία αποθηκευμένη τιμή) και επιστρέφει το νέο· η εγγραφή είναι
+  /// ατομική και η [change] μπορεί να ξανατρέξει, άρα οφείλει να είναι καθαρή.
+  ///
+  /// Επιστρέφει ό,τι αποθηκεύτηκε — `null` όταν δεν υπάρχει ακόμη ενεργή βάση.
+  Future<String?> updateCatalogValidationRulesRaw(
+    String Function(String? current) change,
+  ) async {
+    final update = SettingsService.appSettingUpdater;
+    if (update == null) return null;
+    return update(_keyCatalogValidationRules, change);
   }
 
   /// Επιστρέφει λίστα τύπων για dropdown. Αν η ρύθμιση είναι κενή, επιστρέφει ["Υπολογιστής", "Εκτυπωτής"].
@@ -265,30 +322,43 @@ class SettingsServiceCatalogs {
     final value = _getAppSetting != null
         ? await _getAppSetting!(_keyLexiconCategories)
         : null;
-    if (value == null || value.trim().isEmpty) {
+    return effectiveLexiconCategories(value);
+  }
+
+  /// Τι δείχνει η οθόνη για μια αποθηκευμένη τιμή κατηγοριών λεξικού.
+  ///
+  /// Ίδιος ρόλος με την [effectiveEquipmentTypes]: ο φρουρός συγκρίνει με ό,τι
+  /// βλέπει ο άνθρωπος, όχι με το ωμό αποθηκευμένο κείμενο.
+  static String effectiveLexiconCategories(String? stored) {
+    if (stored == null || stored.trim().isEmpty) {
       return defaultLexiconCategoriesCsv;
     }
-    final filtered = value
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
-        .join(', ');
+    final filtered = _withoutInternalCategory(stored);
     return filtered.isEmpty ? defaultLexiconCategoriesCsv : filtered;
   }
 
+  /// Η εσωτερική τιμή «χωρίς κατηγορία» δεν ορίζεται από τον χρήστη και δεν
+  /// αποθηκεύεται ποτέ — φιλτράρεται και στην ανάγνωση και στην εγγραφή, ώστε
+  /// οι δύο πλευρές να μη διαφωνήσουν ποτέ για το τι είναι «η ίδια λίστα».
+  static String _withoutInternalCategory(String csv) => csv
+      .split(',')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified)
+      .join(', ');
+
   /// Αποθήκευση κατηγοριών λεξικού (comma-separated).
-  /// Αφαιρεί την εσωτερική τιμή [AppConfig.lexiconCategoryUnspecified] (δεν ορίζεται από τον χρήστη).
-  Future<void> setLexiconCategories(String value) async {
-    if (_setAppSetting != null) {
-      final filtered = value
-          .split(',')
-          .map((s) => s.trim())
-          .where(
-            (s) => s.isNotEmpty && s != AppConfig.lexiconCategoryUnspecified,
-          )
-          .join(', ');
-      await _setAppSetting!(_keyLexiconCategories, filtered);
-    }
+  ///
+  /// Το [expected] παίζει τον ίδιο ρόλο με της [setEquipmentTypes].
+  Future<void> setLexiconCategories(
+    String value, {
+    required String? expected,
+  }) async {
+    await _writeGuardedList(
+      key: _keyLexiconCategories,
+      next: _withoutInternalCategory(value),
+      expected: expected,
+      effective: effectiveLexiconCategories,
+    );
   }
 
   /// Λίστα κατηγοριών για dropdown. Κενό μετά το split → [defaultLexiconCategoriesList].

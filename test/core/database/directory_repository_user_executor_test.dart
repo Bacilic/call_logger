@@ -95,7 +95,7 @@ void main() {
           );
           await users.updateUser(id, {
             'notes': 'ενημέρωση εντός txn',
-          }, executor: txn);
+          }, executor: txn, expected: null);
         });
 
         final rows = await db.query(
@@ -120,7 +120,7 @@ void main() {
         );
         expect(id, greaterThan(0));
 
-        await users.updateUser(id, {'location': 'Αίθουσα'});
+        await users.updateUser(id, {'location': 'Αίθουσα'}, expected: null);
         final row = await db.query('users', where: 'id = ?', whereArgs: [id]);
         expect(row.single['location'], 'Αίθουσα');
 

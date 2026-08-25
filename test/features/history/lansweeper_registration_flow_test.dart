@@ -207,4 +207,69 @@ void main() {
       );
     });
   });
+
+  group('registrationOutcomeMessage', () {
+    test('όλες πέρασαν: σκέτο το μήνυμα επιτυχίας', () {
+      expect(
+        registrationOutcomeMessage(
+          registered: 3,
+          skipped: 0,
+          failed: 0,
+          ticketId: '17132',
+        ),
+        '3 κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #17132).',
+      );
+    });
+
+    test('μερικές τις είχε προλάβει άλλος: λέγονται και τα δύο', () {
+      expect(
+        registrationOutcomeMessage(
+          registered: 2,
+          skipped: 1,
+          failed: 0,
+          ticketId: '17132',
+        ),
+        '2 κλήσεις επισημάνθηκαν ως καταχωρημένες (ticket #17132). '
+        '1 παραλείφθηκε — την είχε ήδη καταχωρήσει άλλος.',
+      );
+    });
+
+    test('καμία δεν πέρασε επειδή τις είχε άλλος', () {
+      expect(
+        registrationOutcomeMessage(
+          registered: 0,
+          skipped: 1,
+          failed: 0,
+          ticketId: '17132',
+        ),
+        'Καμία σήμανση — την κλήση την είχε ήδη καταχωρήσει άλλος.',
+      );
+    });
+
+    test('η αποτυχία δεν παρουσιάζεται ως δουλειά συναδέλφου', () {
+      expect(
+        registrationOutcomeMessage(
+          registered: 0,
+          skipped: 0,
+          failed: 2,
+          ticketId: '17132',
+        ),
+        '2 κλήσεις δεν σημάνθηκαν — η εγγραφή δεν ολοκληρώθηκε.',
+      );
+    });
+
+    test('και οι τρεις εκβάσεις μαζί', () {
+      expect(
+        registrationOutcomeMessage(
+          registered: 1,
+          skipped: 2,
+          failed: 1,
+          ticketId: '',
+        ),
+        'Η κλήση επισημάνθηκε ως καταχωρημένη. '
+        '2 παραλείφθηκαν — τις είχε ήδη καταχωρήσει άλλος. '
+        '1 κλήση δεν σημάνθηκε — η εγγραφή δεν ολοκληρώθηκε.',
+      );
+    });
+  });
 }

@@ -544,8 +544,47 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     await refreshDirectoryCaches(ref, users: true, equipment: true);
   }
 
+  /// Ό,τι γράφει η καρτέλα τμήματος, σε ΜΙΑ διατύπωση.
+  ///
+  /// Η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: το `toMap` παραλείπει τα null κλειδιά, οπότε
+  /// χωρίς τη ρητή συμπλήρωση το άδειασμα Κτιρίου/Σημειώσεων δεν έφτανε ποτέ
+  /// στη βάση — η παλιά τιμή έμενε σιωπηλά. Ίδιο συμβόλαιο με τις καρτέλες
+  /// υπαλλήλου και εξοπλισμού.
+  static Map<String, dynamic> departmentWriteMap(
+    DepartmentModel d, {
+    bool clearBuildingMapPlacement = false,
+  }) {
+    var map = Map<String, dynamic>.from(d.toMap());
+    map['building'] = d.building;
+    map['notes'] = d.notes;
+    map['lansweeper_usernames'] = d.lansweeperUsernames;
+    if (d.floorId != null) {
+      return DepartmentFloorSync.mergeFloorContext(
+        map,
+        manualFloorId: d.floorId,
+      );
+    }
+    map['floor_id'] = null;
+    if (clearBuildingMapPlacement) {
+      map.addAll(
+        BuildingMapRepository.clearedBuildingMapPlacementColumns(
+          clearFloorId: false,
+          clearDepartmentHex: false,
+        ),
+      );
+    }
+    return map;
+  }
+
+  /// Αποθηκεύει την καρτέλα τμήματος.
+  ///
+  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα**. Πετά
+  /// [DirectoryStaleException] όταν κάποιος πρόλαβε — ο καλών ρωτά και, αν ο
+  /// χρήστης επιμείνει, ξανακαλεί με [force].
   Future<void> updateDepartment(
     DepartmentModel d, {
+    required DepartmentModel? expected,
+    bool force = false,
     bool clearBuildingMapPlacement = false,
   }) async {
     _settlePendingBulkUndo();
@@ -561,31 +600,24 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     if (nameTaken) {
       throw StateError('Υπάρχει ήδη άλλο τμήμα με αυτό το όνομα.');
     }
-    var map = Map<String, dynamic>.from(d.toMap());
-    // Η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: το toMap παραλείπει τα null κλειδιά, οπότε
-    // χωρίς τη ρητή συμπλήρωση το άδειασμα Κτιρίου/Σημειώσεων δεν έφτανε ποτέ
-    // στη βάση — η παλιά τιμή έμενε σιωπηλά. Ίδιο συμβόλαιο με τις καρτέλες
-    // υπαλλήλου και εξοπλισμού (updateUser / updateEquipment).
-    map['building'] = d.building;
-    map['notes'] = d.notes;
-    map['lansweeper_usernames'] = d.lansweeperUsernames;
-    if (d.floorId != null) {
-      map = DepartmentFloorSync.mergeFloorContext(
-        map,
-        manualFloorId: d.floorId,
-      );
-    } else {
-      map['floor_id'] = null;
-      if (clearBuildingMapPlacement) {
-        map.addAll(
-          BuildingMapRepository.clearedBuildingMapPlacementColumns(
-            clearFloorId: false,
-            clearDepartmentHex: false,
-          ),
-        );
-      }
-    }
-    await departments.updateDepartment(d.id!, map);
+    final map = departmentWriteMap(
+      d,
+      clearBuildingMapPlacement: clearBuildingMapPlacement,
+    );
+    await departments.updateDepartment(
+      d.id!,
+      map,
+      // Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
+      // κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
+      // ξεχάστηκε σε δεύτερο κατάλογο.
+      expected: expected == null
+          ? null
+          : departmentWriteMap(
+              expected,
+              clearBuildingMapPlacement: clearBuildingMapPlacement,
+            ),
+      force: force,
+    );
     await _refreshLookupCache();
     await loadDepartments();
     await refreshDirectoryCaches(ref, users: true, equipment: true);

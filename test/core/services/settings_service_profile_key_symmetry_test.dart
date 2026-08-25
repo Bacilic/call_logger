@@ -19,6 +19,7 @@ void main() {
     SettingsService.registerAppSettingsProvider(
       (key) async => null,
       (key, value) async {},
+      (key, change) async => change(null),
     );
   });
 
@@ -169,6 +170,7 @@ void main() {
       SettingsService.registerAppSettingsProvider(
         (key) async => store[key],
         (key, value) async => store[key] = value,
+        (key, change) async => store[key] = change(store[key]),
       );
       final settings = SettingsService();
 

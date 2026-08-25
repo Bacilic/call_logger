@@ -79,7 +79,11 @@ void main() {
   test('μετά τη χειροκίνητη σήμανση η κλήση βρίσκεται από το ticket', () async {
     final callId = await insertCall();
 
-    await repo.markManualPassed(callId: callId, ticketId: '20991');
+    await repo.markManualPassed(
+      callId: callId,
+      ticketId: '20991',
+      expected: null,
+    );
 
     final found = await searchByTicket('20991');
     expect(found, hasLength(1));

@@ -12,6 +12,8 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/shared_database_refresh.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/history/providers/history_provider.dart';
+import 'package:call_logger/core/database/department_repository.dart';
+import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_report_scope_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -81,6 +83,39 @@ void main() {
         reason:
             'η ουρά της Αναφοράς είναι το πιεστικό: δύο άνθρωποι τη δουλεύουν '
             'ταυτόχρονα κάθε μεσημέρι',
+      );
+    });
+
+    test('φτάνει και στα τμήματα, που τροφοδοτούν τον χάρτη κτιρίου', () async {
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+      container.read(_refCaptureProvider);
+
+      container.listen(departmentDirectoryProvider, (_, _) {});
+      await container
+          .read(departmentDirectoryProvider.notifier)
+          .loadDepartments();
+      final before = container
+          .read(departmentDirectoryProvider)
+          .allDepartments
+          .length;
+
+      // Το άλλο μηχάνημα τοποθετεί νέο τμήμα στον χάρτη.
+      final db = await DatabaseHelper.instance.database;
+      await DepartmentRepository(db).getOrCreateDepartmentIdByName(
+        'Ακτινολογικό',
+      );
+
+      await refreshSharedDatabaseViews(_capturedRef!);
+
+      expect(
+        container.read(departmentDirectoryProvider).allDepartments.length,
+        greaterThan(before),
+        reason:
+            'ο χάρτης κρίνει θέσεις ΚΑΙ χρώματα από αυτή τη λίστα· μπαγιάτικη '
+            'δίνει σε δύο τμήματα το ίδιο «διακριτό» χρώμα',
       );
     });
 

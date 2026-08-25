@@ -290,7 +290,7 @@ void main() {
       await repo.updateUser(userId, {
         'first_name': 'Ενημερωμένος',
         'last_name': 'Χρήστης',
-      });
+      }, expected: null);
 
       final updateAudit = await db.query(
         'audit_log',
@@ -398,7 +398,7 @@ void main() {
         throwsA(isA<DepartmentExistsException>()),
       );
 
-      await repo.updateDepartment(id, {'notes': 'Standalone σημείωση'});
+      await repo.updateDepartment(id, {'notes': 'Standalone σημείωση'}, expected: null);
 
       activateTestOperator('Admin Standalone Dept');
 
@@ -513,7 +513,7 @@ void main() {
           'code_equipment': 'PC-STANDALONE-EQ-UPD',
           'department_id': deptId,
           'is_deleted': 0,
-        });
+        }, expected: null);
 
         await equipment.unlinkUserFromEquipment(userId, eqId);
         expect(await equipment.countUsersLinkedToEquipment(eqId), 0);
@@ -658,7 +658,7 @@ void main() {
       );
       expect(reusedId, createdId);
 
-      await departments.updateDepartment(createdId!, {'notes': 'Tier 4d-3'});
+      await departments.updateDepartment(createdId!, {'notes': 'Tier 4d-3'}, expected: null);
       final updated = await departments.getDepartmentRowById(createdId);
       expect(updated!['notes'], 'Tier 4d-3');
 

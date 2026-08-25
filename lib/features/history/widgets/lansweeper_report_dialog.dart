@@ -206,6 +206,9 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     notifyReportChanged();
   }
 
+  /// Η συνθήκη ανοχής που ίσχυε πριν ανοίξει αυτός ο διάλογος.
+  bool Function()? _previousRefreshTolerance;
+
   @override
   void initState() {
     super.initState();
@@ -213,6 +216,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     // άνθρωποι δουλεύουν το ίδιο σύνολο κάθε μεσημέρι, και μια λίστα που δεν
     // ξαναδιαβάζεται ποτέ όσο ο διάλογος είναι ανοιχτός είναι ακριβώς το
     // πρόβλημα. Μόλις ο χρήστης επιλέξει κάτι, παγώνει.
+    _previousRefreshTolerance = appModalRouteTracker.refreshTolerantWhile;
     appModalRouteTracker.refreshTolerantWhile = () => selectedKeys.isEmpty;
     notesController.addListener(_onFormTextChanged);
     solutionController.addListener(_onFormTextChanged);
@@ -401,7 +405,10 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
 
   @override
   void dispose() {
-    appModalRouteTracker.refreshTolerantWhile = null;
+    // Επαναφορά και όχι μηδενισμός: η θέση είναι ΜΙΑ και καθολική, οπότε ένας
+    // δεύτερος ανεκτικός διάλογος (χάρτης κτιρίου) δεν πρέπει να χάσει τη δική
+    // του συνθήκη επειδή έκλεισε αυτός εδώ.
+    appModalRouteTracker.refreshTolerantWhile = _previousRefreshTolerance;
     aiSuggestTicker?.cancel();
     aiCooldownTicker?.cancel();
     aiSuggestStopwatch.stop();

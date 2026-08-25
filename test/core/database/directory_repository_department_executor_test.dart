@@ -124,7 +124,7 @@ void main() {
           );
           await departments.updateDepartment(id, {
             'notes': 'ενημέρωση εντός txn',
-          }, executor: txn);
+          }, executor: txn, expected: null);
         });
 
         final deptRows = await db.query(
@@ -154,7 +154,7 @@ void main() {
 
         final updated = await departments.updateDepartment(id, {
           'notes': 'σημείωση',
-        });
+        }, expected: null);
         expect(updated, 1);
 
         final row = await db.query(

@@ -101,12 +101,13 @@ void _registerTestLansweeperSettings() {
     'lansweeper_api_url': _kTestApiUrl,
     'lansweeper_api_key': _kTestApiKey,
   };
-  SettingsService.registerAppSettingsProvider((key) async => store[key], (
-    key,
-    value,
-  ) async {
-    store[key] = value;
-  });
+  SettingsService.registerAppSettingsProvider(
+    (key) async => store[key],
+    (key, value) async {
+      store[key] = value;
+    },
+    (key, change) async => store[key] = change(store[key]),
+  );
 }
 
 void main() {

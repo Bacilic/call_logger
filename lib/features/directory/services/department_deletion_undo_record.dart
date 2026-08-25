@@ -218,7 +218,7 @@ Future<void> applyDepartmentDeletionUndo(
     for (final emp in record.reassignedEmployees) {
       await users.updateUser(emp.userId, <String, dynamic>{
         'department_id': emp.originalDeletedDeptId,
-      }, executor: txn);
+      }, executor: txn, expected: null);
     }
 
     await departments.restoreDepartments(

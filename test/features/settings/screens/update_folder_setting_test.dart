@@ -21,6 +21,7 @@ void main() {
     SettingsService.registerAppSettingsProvider(
       (key) async => sharedStore[key],
       (key, value) async => sharedStore[key] = value,
+      (key, change) async => sharedStore[key] = change(sharedStore[key]),
     );
   });
 

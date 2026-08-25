@@ -83,14 +83,34 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
 
   /// Άμεση αποθήκευση + ακύρωση cache, ώστε οι φόρμες να δουν τους νέους
   /// κανόνες χωρίς επανεκκίνηση.
-  void _apply(CatalogValidationRules next) {
+  ///
+  /// Η [change] περιγράφει **τι άγγιξε ο χρήστης** και εφαρμόζεται πάνω στους
+  /// κανόνες όπως είναι εκείνη τη στιγμή στη βάση — όχι πάνω στην εικόνα που
+  /// φόρτωσε η οθόνη. Και οι είκοσι δύο κανόνες ζουν σε ένα κλειδί: γράφοντάς
+  /// τους ολόκληρους από παλιά εικόνα, ένα τσεκάρισμα εδώ επανέφερε τον
+  /// διακόπτη που μόλις άλλαξε ο άλλος διαχειριστής.
+  ///
+  /// Η οθόνη δείχνει μετά ό,τι όντως αποθηκεύτηκε, άρα βλέπει και τις ξένες
+  /// αλλαγές χωρίς να χρειάζεται να ξανανοίξει.
+  Future<void> _apply(
+    CatalogValidationRules Function(CatalogValidationRules current) change,
+  ) async {
     setState(() {
-      _rules = next;
       // Τα ευρήματα προήλθαν από τους ΠΑΛΙΟΥΣ κανόνες — παύουν να ισχύουν.
       _findings = null;
       _invalidPaths = null;
+      // Άμεση απόκριση του διακόπτη· η αυθεντική τιμή έρχεται πιο κάτω.
+      final shown = _rules;
+      if (shown != null) _rules = change(shown);
     });
-    SettingsService().catalogs.setCatalogValidationRulesRaw(next.toRawJson());
+    final storedRaw = await SettingsService().catalogs
+        .updateCatalogValidationRulesRaw(
+          (raw) => change(CatalogValidationRules.fromRawJson(raw)).toRawJson(),
+        );
+    if (!mounted) return;
+    if (storedRaw != null) {
+      setState(() => _rules = CatalogValidationRules.fromRawJson(storedRaw));
+    }
     ref.invalidate(catalogValidationRulesProvider);
     // Ο service παρακολουθεί τους κανόνες με watch: χωρίς άμεσο ξέπλυμα η
     // αλυσίδα μένει «dirty» (καμία φόρμα ανοιχτή εδώ) και ξεπλένεται σύγχρονα
@@ -161,8 +181,10 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                 children: [
                   _RuleRow(
                     enabled: rules.internalPhoneDigitsEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(internalPhoneDigitsEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(internalPhoneDigitsEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Το 253 έχει 3 ψηφία — '
                         'τα εσωτερικά έχουν ${rules.internalPhoneDigits}»',
@@ -173,15 +195,20 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                       onCommitted: (text) {
                         final v = _parseInRange(text, 1, 15);
                         if (v != null) {
-                          _apply(rules.copyWith(internalPhoneDigits: v));
+                          _apply(
+                            (current) =>
+                                current.copyWith(internalPhoneDigits: v),
+                          );
                         }
                       },
                     ),
                   ),
                   _RuleRow(
                     enabled: rules.externalPhoneDigitsEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(externalPhoneDigitsEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(externalPhoneDigitsEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Το 210123456 έχει 9 ψηφία — '
                         'αναμένονται ${rules.internalPhoneDigits} (εσωτερικό) '
@@ -193,15 +220,19 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                       onCommitted: (text) {
                         final v = _parseInRange(text, 1, 15);
                         if (v != null) {
-                          _apply(rules.copyWith(externalPhoneDigits: v));
+                          _apply(
+                            (current) =>
+                                current.copyWith(externalPhoneDigits: v),
+                          );
                         }
                       },
                     ),
                   ),
                   _RuleRow(
                     enabled: rules.internalPrefixEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(internalPrefixEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) => current.copyWith(internalPrefixEnabled: v),
+                    ),
                     note:
                         'Ελέγχεται μόνο σε αριθμούς με '
                         '${rules.internalPhoneDigits} ψηφία — τα εξωτερικά '
@@ -218,7 +249,7 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                         final to = _parseInRange(toText, 10, 99);
                         if (from != null && to != null && from <= to) {
                           _apply(
-                            rules.copyWith(
+                            (current) => current.copyWith(
                               internalPrefixFrom: from,
                               internalPrefixTo: to,
                             ),
@@ -236,8 +267,9 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                 children: [
                   _RuleRow(
                     enabled: rules.equipmentDigitsEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(equipmentDigitsEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) => current.copyWith(equipmentDigitsEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Το 25067 έχει 5 ψηφία — '
                         'αναμένονται ${rules.equipmentMinDigits} έως '
@@ -251,7 +283,7 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                         final max = _parseInRange(toText, 1, 15);
                         if (min != null && max != null && min <= max) {
                           _apply(
-                            rules.copyWith(
+                            (current) => current.copyWith(
                               equipmentMinDigits: min,
                               equipmentMaxDigits: max,
                             ),
@@ -262,8 +294,10 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                   ),
                   _RuleRow(
                     enabled: rules.equipmentLatinCodeEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(equipmentLatinCodeEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(equipmentLatinCodeEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Το «PC470» έχει γράμματα — '
                         'σπάνιο σχήμα κωδικού, οι περισσότεροι είναι σκέτοι '
@@ -275,8 +309,10 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                   ),
                   _RuleRow(
                     enabled: rules.equipmentForeignCodeEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(equipmentForeignCodeEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(equipmentForeignCodeEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Το «πισι2» έχει χαρακτήρες '
                         'εκτός λατινικών: π ι σ — μάλλον ξεχασμένο ελληνικό '
@@ -295,8 +331,9 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                 children: [
                   _RuleRow(
                     enabled: rules.departmentNameEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(departmentNameEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) => current.copyWith(departmentNameEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Το 2545 μοιάζει με τηλέφωνο, '
                         'όχι με όνομα τμήματος»',
@@ -314,8 +351,9 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                 children: [
                   _RuleRow(
                     enabled: rules.personNameEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(personNameEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) => current.copyWith(personNameEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Το 3π ξεκινά από ψηφίο — '
                         'σωστό μόνο αν είναι εταιρεία»',
@@ -349,7 +387,7 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                                   border: OutlineInputBorder(),
                                 ),
                                 onChanged: (text) => _apply(
-                                  rules.copyWith(
+                                  (current) => current.copyWith(
                                     personNameAllowedSymbols: text,
                                   ),
                                 ),
@@ -380,8 +418,10 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                 children: [
                   _RuleRow(
                     enabled: rules.lansweeperIdentifierEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(lansweeperIdentifierEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(lansweeperIdentifierEnabled: v),
+                    ),
                     note:
                         'Ελέγχονται τα αναγνωριστικά υπαλλήλων και οι '
                         'γενικοί λογαριασμοί τμημάτων',
@@ -406,8 +446,9 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                 children: [
                   _RuleRow(
                     enabled: rules.emptyDepartmentEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(emptyDepartmentEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) => current.copyWith(emptyDepartmentEnabled: v),
+                    ),
                     note:
                         'Δεν είναι σφάλμα — ένα τμήμα μπορεί να αδειάσει '
                         'θεμιτά· η υπόδειξη θυμίζει να αποφασίσετε τι το κάνετε',
@@ -421,8 +462,10 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                   ),
                   _RuleRow(
                     enabled: rules.phoneEquipmentCodeEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(phoneEquipmentCodeEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(phoneEquipmentCodeEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Το 3685 είναι καταχωρημένος '
                         'κωδικός εξοπλισμού — ίσως γράφτηκε σε λάθος πεδίο»',
@@ -433,8 +476,9 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                   ),
                   _RuleRow(
                     enabled: rules.swappedNamesEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(swappedNamesEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) => current.copyWith(swappedNamesEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Πιθανό ίδιο πρόσωπο με '
                         'αντεστραμμένα πεδία»',
@@ -445,8 +489,9 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                   ),
                   _RuleRow(
                     enabled: rules.duplicateNamesEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(duplicateNamesEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) => current.copyWith(duplicateNamesEnabled: v),
+                    ),
                     example:
                         'Παράδειγμα υπόδειξης: «Ίδιο ονοματεπώνυμο σε 2 '
                         'εγγραφές — πιθανό διπλότυπο»',
@@ -457,8 +502,10 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                   ),
                   _RuleRow(
                     enabled: rules.crossDepartmentPhoneEnabled,
-                    onToggle: (v) =>
-                        _apply(rules.copyWith(crossDepartmentPhoneEnabled: v)),
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(crossDepartmentPhoneEnabled: v),
+                    ),
                     note:
                         'Στο ίδιο τμήμα το κοινό τηλέφωνο βάρδιας είναι '
                         'θεμιτό και δεν ελέγχεται',
@@ -473,7 +520,8 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                   _RuleRow(
                     enabled: rules.equipmentOwnerDepartmentEnabled,
                     onToggle: (v) => _apply(
-                      rules.copyWith(equipmentOwnerDepartmentEnabled: v),
+                      (current) =>
+                          current.copyWith(equipmentOwnerDepartmentEnabled: v),
                     ),
                     example:
                         'Παράδειγμα υπόδειξης: «Χρεωμένος στην εγγραφή '

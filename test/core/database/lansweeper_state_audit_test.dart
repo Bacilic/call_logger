@@ -93,6 +93,7 @@ void main() {
     await repo.markManualPassed(
       callId: callId,
       ticketId: '17438',
+      expected: null,
       comment: 'Καταχωρήθηκε τηλεφωνικά',
     );
 
@@ -120,6 +121,7 @@ void main() {
       callId: callId,
       state: 'unsent',
       clearTicketId: true,
+      expected: null,
     );
 
     final rows = await auditRows();

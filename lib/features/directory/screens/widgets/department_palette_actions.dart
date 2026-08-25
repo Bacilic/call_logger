@@ -340,7 +340,10 @@ class DepartmentPaletteActions {
     if (notifier != null) {
       for (final d in departments) {
         if (d.id == null) continue;
-        await notifier.updateDepartment(d.copyWith(color: hex));
+        // Μαζική παλέτα, όχι καρτέλα: ο φρουρός θα σταματούσε τη σειρά σε
+        // κάθε τμήμα που άγγιξε άλλος, χωρίς οθόνη να ρωτήσει. Μένει ρητά
+        // εκτός φάσης — καταγεγραμμένο.
+        await notifier.updateDepartment(d.copyWith(color: hex), expected: null);
       }
       return;
     }
@@ -349,9 +352,9 @@ class DepartmentPaletteActions {
     final dir = DepartmentRepository(db);
     for (final d in departments) {
       if (d.id == null) continue;
-      final map = Map<String, dynamic>.from(d.toMap());
-      map['color'] = hex;
-      await dir.updateDepartment(d.id!, map);
+      // Μόνο το χρώμα: η μαζική παλέτα δεν έχει καμία δουλειά να ξαναγράψει
+      // όνομα, κτίριο ή σημειώσεις από μια λίστα που μπορεί να έχει γεράσει.
+      await dir.updateDepartment(d.id!, {'color': hex}, expected: null);
     }
     await LookupService.instance.loadFromDatabase(forceRefresh: true);
   }

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/calls/provider/call_mutation_refresh.dart';
+import '../../features/directory/providers/department_directory_provider.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../widgets/modal_route_tracker.dart';
 import 'database_helper.dart';
@@ -27,8 +28,17 @@ const Duration kSharedDatabaseCheckInterval = Duration(seconds: 12);
 ///
 /// Οι οθόνες των κλήσεων είναι `autoDispose`: όποια δεν κοιτάζει κανείς εκείνη
 /// τη στιγμή δεν υπάρχει, και η ακύρωσή της δεν κοστίζει ερώτημα.
+/// Η σειρά είναι σκόπιμη: **πρώτα όσα φορτώνουν** (περιμένουν τη βάση), μετά
+/// όσα απλώς ακυρώνονται. Έτσι η αναμονή του ενός δεν προλαβαίνει να ξεπλύνει
+/// τις ακυρώσεις του άλλου πριν προλάβει να τις δει όποιος ακούει.
 Future<void> refreshSharedDatabaseViews(Ref ref) async {
   await ref.read(tasksProvider.notifier).refresh();
+  // Τα τμήματα τροφοδοτούν ΚΑΙ τον χάρτη κτιρίου, όπου η μπαγιάτικη εικόνα δεν
+  // κρύβει απλώς τη δουλειά του άλλου: η αυτόματη επιλογή χρώματος ρωτά αυτή τη
+  // λίστα για να δώσει «διακριτό» χρώμα στον όροφο, οπότε δύο τμήματα
+  // κατέληγαν με το ίδιο. Φόρτωση και όχι ακύρωση — ο notifier κρατά δεδομένα,
+  // και η ακύρωση θα άδειαζε την οθόνη ώσπου να έρθουν τα νέα.
+  await ref.read(departmentDirectoryProvider.notifier).loadDepartments();
   // Ιστορικό, Στατιστικά, ουρά Αναφοράς Lansweeper και πρόσφατες κλήσεις μαζί.
   refreshAfterCallMutation(ref);
 }

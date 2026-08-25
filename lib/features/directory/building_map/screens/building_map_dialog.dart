@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/quick_call_providers.dart';
+import '../../../../core/widgets/modal_route_tracker.dart';
+import '../../providers/department_directory_provider.dart';
 import '../../../../core/widgets/quick_call_fab.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../controllers/building_map_controller.dart';
@@ -31,6 +35,16 @@ Future<void> showBuildingMapDialog(
   }
   ref.read(buildingMapControllerProvider).resetSession();
   ref.read(buildingMapQuickCallBlockedProvider.notifier).setBlocked(false);
+  // Ο χάρτης είναι διάλογος, οπότε ο φρουρός κοινόχρηστης βάσης θα πάγωνε όσο
+  // είναι ανοιχτός — και η δουλειά του συναδέλφου θα έμενε αόρατη. Δηλώνουμε
+  // ρητά πότε αντέχει ανανέωση: **μόνο στην προβολή**. Στην επεξεργασία τίποτα
+  // δεν κουνιέται κάτω από το χέρι του χρήστη (απόφαση Διευθυντή 25/08/2026).
+  //
+  // Φύλαξη και επαναφορά της προηγούμενης συνθήκης: η θέση είναι μία και
+  // καθολική, και το μηδένισμα θα άφηνε άλλον ανεκτικό διάλογο ξεκρέμαστο.
+  final previousTolerance = appModalRouteTracker.refreshTolerantWhile;
+  appModalRouteTracker.refreshTolerantWhile = () =>
+      !ref.read(buildingMapUiEditModeProvider);
   try {
     await showDialog<void>(
       context: context,
@@ -39,6 +53,7 @@ Future<void> showBuildingMapDialog(
       builder: (ctx) => const Dialog.fullscreen(child: BuildingMapDialog()),
     );
   } finally {
+    appModalRouteTracker.refreshTolerantWhile = previousTolerance;
     ref.read(buildingMapQuickCallBlockedProvider.notifier).setBlocked(false);
   }
 }
@@ -53,6 +68,14 @@ class BuildingMapDialog extends ConsumerWidget {
     final editMode = ref.watch(buildingMapUiEditModeProvider);
     ref.listen(buildingMapUiEditModeProvider, (previous, next) {
       ref.read(buildingMapQuickCallBlockedProvider.notifier).setBlocked(next);
+      // Μπαίνοντας στην επεξεργασία η εικόνα παγώνει ώσπου να βγει ο χρήστης:
+      // αυτή είναι η στιγμή να διαβαστεί φρέσκια. Και οι θέσεις και η αυτόματη
+      // επιλογή χρώματος κρίνονται από αυτή τη λίστα.
+      if (next && !(previous ?? false)) {
+        unawaited(
+          ref.read(departmentDirectoryProvider.notifier).loadDepartments(),
+        );
+      }
     });
 
     return Scaffold(

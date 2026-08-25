@@ -132,9 +132,7 @@ class BackupSchedulerNotifier extends Notifier<int> {
     try {
       gate = await ActiveBackupSettings.readWithRaw();
       final db = await DatabaseHelper.instance.database;
-      pending = await BackupPendingChangesRepository(
-        db,
-      ).countPendingSince(
+      pending = await BackupPendingChangesRepository(db).countPendingSince(
         gate.settings.lastBackupAuditId,
         fallbackSince: gate.settings.lastAnyBackupAt,
       );
@@ -212,30 +210,40 @@ class BackupSchedulerNotifier extends Notifier<int> {
         auditTrigger: BackupAuditTrigger.scheduled,
       );
 
+      // Η σφραγίδα γράφεται ΠΑΝΩ ΣΤΗ ΦΡΕΣΚΙΑ τιμή, όχι πάνω στη δεσμευμένη:
+      // το αντίγραφο κρατά δευτερόλεπτα έως λεπτά, και στο μεταξύ ο
+      // διαχειριστής μπορεί να άλλαξε μια επιλογή από την οθόνη ρυθμίσεων.
+      // Γράφοντας ολόκληρο το `claimed` θα την επαναφέραμε αθόρυβα.
       final DatabaseBackupSettings done;
       if (result.success) {
         // Το σημάδι παίρνεται ΜΕΤΑ το αντίγραφο και την audit εγγραφή του:
         // έτσι η ίδια η εγγραφή «ΕΠΙΤΥΧΙΑ» δεν μετρά ως νέα αφύλακτη αλλαγή.
         final db = await DatabaseHelper.instance.database;
-        final markId = await BackupPendingChangesRepository(
-          db,
-        ).latestAuditId();
-        done = claimed.copyWith(
-          lastBackupAuditId: markId,
-          lastBackupAttempt: DateTime.now(),
-          lastBackupStatus: BackupScheduleStatus.success,
-          lastFullBackupFingerprint: result.portableFingerprint,
-          lastFullBackupAt: result.isFullBackup ? DateTime.now() : null,
+        final markId = await BackupPendingChangesRepository(db).latestAuditId();
+        // Οι χρονοσφραγίδες υπολογίζονται ΜΙΑ φορά: η στοχευμένη εγγραφή
+        // μπορεί να ξαναδοκιμάσει, και δύο προσπάθειες δεν επιτρέπεται να
+        // δώσουν διαφορετική ώρα για το ίδιο αντίγραφο.
+        final finishedAt = DateTime.now();
+        final fullAt = result.isFullBackup ? finishedAt : null;
+        done = await ActiveBackupSettings.update(
+          (current) => current.copyWith(
+            lastBackupAuditId: markId,
+            lastBackupAttempt: finishedAt,
+            lastBackupStatus: BackupScheduleStatus.success,
+            lastFullBackupFingerprint: result.portableFingerprint,
+            lastFullBackupAt: fullAt,
+          ),
         );
       } else {
-        done = claimed.copyWith(
-          lastBackupStatus:
-              result.failureCode == DatabaseBackupFailureCode.folderMissing
-              ? BackupScheduleStatus.folderMissing
-              : BackupScheduleStatus.failed,
+        done = await ActiveBackupSettings.update(
+          (current) => current.copyWith(
+            lastBackupStatus:
+                result.failureCode == DatabaseBackupFailureCode.folderMissing
+                ? BackupScheduleStatus.folderMissing
+                : BackupScheduleStatus.failed,
+          ),
         );
       }
-      await ActiveBackupSettings.write(done);
       notifier.adopt(done);
       state = state + 1;
     } finally {

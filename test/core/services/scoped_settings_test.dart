@@ -44,6 +44,7 @@ void main() {
     SettingsService.registerAppSettingsProvider(
       (key) => SettingsRepository(db).getSetting(key),
       (key, value) => SettingsRepository(db).saveSetting(key, value),
+      (key, change) => SettingsRepository(db).updateSetting(key, change),
     );
   });
 

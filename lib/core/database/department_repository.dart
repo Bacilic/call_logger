@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../errors/department_exists_exception.dart';
+import '../../features/directory/services/directory_save_conflict.dart';
 import 'audit_service.dart';
 import '../utils/department_display_utils.dart';
 import '../utils/department_floor_sync.dart';
@@ -307,7 +308,8 @@ class DepartmentRepository {
       drawingFloorId: drawingFloorId,
       manualFloorId: manualFloorId,
     );
-    return updateDepartment(departmentId, merged);
+    // Στοχευμένη εγγραφή στηλών χάρτη: δεν υπάρχει καρτέλα, ούτε αφετηρία.
+    return updateDepartment(departmentId, merged, expected: null);
   }
 
   /// One-time / συντήρηση: γεμίζει `floor_id` από αριθμητικό `map_floor` όπου λείπει (χωρίς αλλαγή `building`).
@@ -322,7 +324,7 @@ class DepartmentRepository {
       final mf = r['map_floor'] as String?;
       final fid = int.tryParse(mf?.trim() ?? '');
       if (fid == null) continue;
-      await updateDepartment(r['id'] as int, {'floor_id': fid});
+      await updateDepartment(r['id'] as int, {'floor_id': fid}, expected: null);
       count++;
     }
     return count;
@@ -423,9 +425,20 @@ class DepartmentRepository {
     return (oldDiff: oldDiff, newDiff: newDiff);
   }
 
+  /// Ενημερώνει υπάρχον τμήμα.
+  ///
+  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα**. Υποχρεωτικό —
+  /// και δεκτικό `null` μόνο ρητά — γιατί η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ:
+  /// στοχευμένες εγγραφές (χάρτης, χρώμα, μία στήλη) περνούν `null`.
+  ///
+  /// Ο έλεγχος γίνεται πάνω στη γραμμή που διαβάζεται ούτως ή άλλως για το
+  /// Ιστορικό, άρα δεν κοστίζει ερώτημα. Πετά [DirectoryStaleException]
+  /// **πριν** γράψει οτιδήποτε.
   Future<int> updateDepartment(
     int id,
     Map<String, dynamic> values, {
+    required Map<String, Object?>? expected,
+    bool force = false,
     DatabaseExecutor? executor,
   }) async {
     final e = executor ?? db;
@@ -441,6 +454,15 @@ class DepartmentRepository {
     );
     if (oldRows.isEmpty) return 0;
     final oldRow = oldRows.first;
+    if (!force && expected != null) {
+      final conflict = DirectorySaveConflict.between(
+        entityType: AuditEntityTypes.department,
+        expected: expected,
+        fresh: oldRow,
+        attempted: map,
+      );
+      if (conflict != null) throw DirectoryStaleException(conflict);
+    }
     final n = await e.update(
       'departments',
       map,

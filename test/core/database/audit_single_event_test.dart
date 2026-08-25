@@ -72,7 +72,7 @@ void main() {
 
         await users.updateUser(userId, {
           'phones': [existingPhone, newPhone],
-        }, skipPhonePolicyValidation: true);
+        }, skipPhonePolicyValidation: true, expected: null);
 
         final rows = await allAuditRows();
         expect(rows, hasLength(1));
@@ -179,7 +179,7 @@ void main() {
         await departments.updateDepartment(deptId, {
           'color': '#33691E',
           'map_x': 50.0,
-        });
+        }, expected: null);
 
         final rows = await allAuditRows();
         expect(rows, hasLength(1));

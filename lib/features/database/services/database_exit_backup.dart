@@ -71,22 +71,26 @@ class DatabaseExitBackup {
         auditTrigger: BackupAuditTrigger.onExit,
       );
 
+      // Στοχευμένη εγγραφή, όχι ολόκληρο το δεσμευμένο δέμα: όσο έτρεχε το
+      // αντίγραφο, ο διαχειριστής στο άλλο μηχάνημα μπορεί να άλλαξε επιλογή.
       if (result.success) {
         // Σημάδι ΜΕΤΑ την audit εγγραφή του αντιγράφου — η ίδια δεν μετρά
         // ως νέα αφύλακτη αλλαγή.
         final markId = await pendingRepo.latestAuditId();
-        await ActiveBackupSettings.write(
-          claimed.copyWith(
+        final finishedAt = DateTime.now();
+        final fullAt = result.isFullBackup ? finishedAt : null;
+        await ActiveBackupSettings.update(
+          (current) => current.copyWith(
             lastBackupAuditId: markId,
-            lastBackupAttempt: DateTime.now(),
+            lastBackupAttempt: finishedAt,
             lastBackupStatus: BackupScheduleStatus.success,
             lastFullBackupFingerprint: result.portableFingerprint,
-            lastFullBackupAt: result.isFullBackup ? DateTime.now() : null,
+            lastFullBackupAt: fullAt,
           ),
         );
       } else {
-        await ActiveBackupSettings.write(
-          claimed.copyWith(
+        await ActiveBackupSettings.update(
+          (current) => current.copyWith(
             lastBackupStatus:
                 result.failureCode == DatabaseBackupFailureCode.folderMissing
                 ? BackupScheduleStatus.folderMissing

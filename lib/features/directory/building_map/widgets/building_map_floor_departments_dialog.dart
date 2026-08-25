@@ -200,7 +200,7 @@ class _BuildingMapFloorDepartmentsDialogState
     final db = await DatabaseHelper.instance.database;
     await DepartmentRepository(
       db,
-    ).updateDepartment(d.id!, {'map_hidden': hidden ? 1 : 0});
+    ).updateDepartment(d.id!, {'map_hidden': hidden ? 1 : 0}, expected: null);
     await ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (mounted) setState(() {});
   }

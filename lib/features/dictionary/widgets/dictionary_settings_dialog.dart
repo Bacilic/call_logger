@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import '../../../core/widgets/dialog_snackbar_scope.dart';
+import '../../../core/widgets/settings_list_conflict_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -243,15 +244,39 @@ class _DictionarySettingsDialogState
       }
       return;
     }
-    await _settings.catalogs.setLexiconCategories(t);
+    // Η λίστα γράφεται ολόκληρη και είναι κοινή για όλα τα μηχανήματα: αν
+    // κάποιος πρόλαβε, ρωτιέται ο άνθρωπος αντί να σβηστεί η δουλειά του.
+    final saved = await saveSettingsListWithConflictPrompt(
+      context,
+      listLabel: 'λίστα κατηγοριών',
+      save: ({required force}) => _settings.catalogs.setLexiconCategories(
+        t,
+        expected: force ? null : _savedLexiconCategories,
+      ),
+    );
     ref.invalidate(lexiconCategoriesProvider);
-    if (mounted) {
-      _markLexiconCategoriesSaved(t);
+    if (!mounted) return;
+    if (!saved) {
+      final fresh = await _settings.catalogs.getLexiconCategoriesRaw();
+      if (!mounted) return;
+      _lexiconCategoriesCtrl.text = fresh;
+      _markLexiconCategoriesSaved(fresh);
       setState(() {});
       showDialogSnackBar(
-        const SnackBar(content: Text('Αποθηκεύτηκαν κατηγορίες λεξικού')),
+        const SnackBar(
+          content: Text(
+            'Η αποθήκευση ακυρώθηκε — οι κατηγορίες ανανεώθηκαν με τα '
+            'τρέχοντα στοιχεία. Ελέγξτε τα και δοκιμάστε ξανά.',
+          ),
+        ),
       );
+      return;
     }
+    _markLexiconCategoriesSaved(t);
+    setState(() {});
+    showDialogSnackBar(
+      const SnackBar(content: Text('Αποθηκεύτηκαν κατηγορίες λεξικού')),
+    );
   }
 
   Future<void> _pickSaveSourcePath() async {

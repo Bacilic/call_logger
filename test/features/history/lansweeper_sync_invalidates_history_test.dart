@@ -57,7 +57,7 @@ void main() {
         // Κρατάμε ζωντανούς autoDispose providers (όπως ανοιχτές οθόνες Ιστορικού/Lansweeper).
         container.listen(historyCallsProvider, (_, _) {});
         container.listen(lansweeperReportCallsProvider, (_, _) {});
-        container.listen(lansweeperSyncProvider, (_, _) {});
+        // Ο lansweeperSyncProvider δεν χρειάζεται στήριγμα: ζει όσο η εφαρμογή.
 
         await container.read(historyCallsProvider.future);
         await container.read(lansweeperReportCallsProvider.future);
@@ -70,7 +70,7 @@ void main() {
 
         await container
             .read(lansweeperSyncProvider.notifier)
-            .markRegistered(callId: callId, ticketId: '123');
+            .markRegistered(callId: callId, ticketId: '123', expected: null);
 
         expect(
           container.read(historyCallsProvider).isLoading,

@@ -339,7 +339,7 @@ class IntegrityService {
     if (existing.contains(number)) return;
     await _users.updateUser(userId, {
       'phones': [...existing, number],
-    }, recordAudit: false);
+    }, recordAudit: false, expected: null);
     final ap = await _support.auditPerformingUser();
     await AuditService.log(
       db,
@@ -414,7 +414,7 @@ class IntegrityService {
   }) async {
     await _users.updateUser(userId, {
       'department_id': departmentId,
-    }, recordAudit: false);
+    }, recordAudit: false, expected: null);
     final ap = await _support.auditPerformingUser();
     await AuditService.log(
       db,

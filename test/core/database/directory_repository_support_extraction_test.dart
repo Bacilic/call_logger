@@ -94,7 +94,7 @@ void main() {
         await db.delete('audit_log');
         await users.updateUser(userId, {
           'notes': 'δοκιμή',
-        }, skipPhonePolicyValidation: true);
+        }, skipPhonePolicyValidation: true, expected: null);
 
         final updateRows = await db.query(
           'audit_log',

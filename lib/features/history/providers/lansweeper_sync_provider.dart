@@ -18,6 +18,7 @@ import '../../../core/services/lookup_service.dart';
 import '../../calls/models/call_model.dart';
 import '../../calls/provider/call_mutation_refresh.dart';
 import '../models/lansweeper_sync_state.dart';
+import '../services/lansweeper_registration_conflict.dart';
 
 final lansweeperSyncServiceProvider = Provider<LansweeperSyncService>(
   (ref) => LansweeperSyncService(),
@@ -85,6 +86,17 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
   @override
   FutureOr<void> build() {}
 
+  /// Δημοσιεύει την κατάσταση χωρίς ποτέ να πετάξει.
+  ///
+  /// Οι εγγραφές τελειώνουν μετά από await· αν στο μεταξύ ο provider έχει
+  /// πάψει να υπάρχει, η ανάθεση κατάστασης θα έσκαγε — και μαζί της το
+  /// `catch` που υποτίθεται ότι κρατά τα σφάλματα. Ένα μήνυμα που δεν
+  /// προλαβαίνει να ακουστεί απλώς χάνεται· δεν ρίχνει τη ροή.
+  void _publish(AsyncValue<void> next) {
+    if (!ref.mounted) return;
+    state = next;
+  }
+
   Future<LansweeperCommandResult> submitCall({
     required int callId,
     required LansweeperSubmitInput input,
@@ -101,13 +113,13 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     _isRunning = true;
     final criticalOps = ref.read(activeCriticalOperationsProvider.notifier);
     criticalOps.begin(CriticalOperation.lansweeperTicketSubmit);
-    state = const AsyncLoading();
+    _publish(const AsyncLoading());
     try {
       final db = await DatabaseHelper.instance.database;
       final repo = CallsRepository(db);
       final call = await repo.getCallById(callId);
       if (call == null) {
-        state = const AsyncData(null);
+        _publish(const AsyncData(null));
         return LansweeperCommandResult(
           success: false,
           message: 'Δεν βρέθηκε η κλήση για αποστολή.',
@@ -120,7 +132,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       }
 
       if (input.agentUsername.trim().isEmpty) {
-        state = const AsyncData(null);
+        _publish(const AsyncData(null));
         return const LansweeperCommandResult(
           success: false,
           message: 'Ο πράκτορας API (AgentUsername) είναι υποχρεωτικός.',
@@ -240,9 +252,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
             },
           );
         }
-        if (ref.mounted) {
-          state = const AsyncData(null);
-        }
+        _publish(const AsyncData(null));
         _refreshAfterLansweeperMutation();
         return LansweeperCommandResult(
           success: true,
@@ -256,6 +266,10 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       await writeRepo.updateLansweeperState(
         callId: callId,
         state: LansweeperSyncState.failed,
+        // Καταγραφή της δικής μου αποτυχίας, όχι χειροκίνητη σήμανση: πρέπει
+        // να γραφτεί ό,τι κι αν έκανε στο μεταξύ ο συνάδελφος, αλλιώς η κλήση
+        // μένει να δείχνει «σε εξέλιξη» για μια αποστολή που έχει ήδη πέσει.
+        expected: null,
       );
       if (result.ticketId?.trim().isNotEmpty ?? false) {
         await writeRepo.addExternalLink(
@@ -272,7 +286,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           },
         );
       }
-      state = const AsyncData(null);
+      _publish(const AsyncData(null));
       _refreshAfterLansweeperMutation();
       return LansweeperCommandResult(
         success: false,
@@ -290,14 +304,17 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         ),
       );
     } on LansweeperSyncPrecheckException catch (e) {
-      state = const AsyncData(null);
+      _publish(const AsyncData(null));
       return LansweeperCommandResult(success: false, message: e.message);
     } catch (e, st) {
-      state = AsyncError(e, st);
+      _publish(AsyncError(e, st));
       final db = await DatabaseHelper.instance.database;
       await CallsLansweeperRepository(db).updateLansweeperState(
         callId: callId,
         state: LansweeperSyncState.failed,
+        // Ίδιος λόγος με παραπάνω: η αποτυχία της αποστολής μου καταγράφεται
+        // πάντα — δεν υπάρχει αφετηρία να συγκριθεί ούτε λόγος να μπλοκάρει.
+        expected: null,
       );
       _refreshAfterLansweeperMutation();
       return LansweeperCommandResult(
@@ -351,41 +368,41 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     _refreshAfterLansweeperMutation();
   }
 
-  Future<void> markAsPassedManually({
-    required int callId,
-    required String ticketId,
-    String? comment,
+  /// Εξαίρεση κλήσης από το Lansweeper. `true` όταν γράφτηκε πράγματι.
+  Future<bool> setExcluded(
+    int callId, {
+    required LansweeperRegistrationBaseline? expected,
+    bool force = false,
+  }) => _setState(
+    callId,
+    LansweeperSyncState.excluded,
+    expected: expected,
+    force: force,
+  );
+
+  /// Επαναφορά κλήσης σε ακαταχώρητη. `true` όταν γράφτηκε πράγματι.
+  ///
+  /// Με [retainTicketId] `false` **σβήνει** τον αριθμό αιτήματος — γι' αυτό το
+  /// [expected] μετράει εδώ όσο και στη σήμανση: πάνω σε μπαγιάτικη εικόνα η
+  /// ερώτηση «να κρατηθεί το αίτημα;» δεν εμφανίζεται καν, γιατί η οθόνη μου
+  /// δεν ξέρει ότι υπάρχει αίτημα.
+  Future<bool> setUnsent(
+    int callId, {
+    required LansweeperRegistrationBaseline? expected,
+    bool retainTicketId = false,
+    bool force = false,
   }) async {
-    if (_isRunning) return;
-    _isRunning = true;
-    state = const AsyncLoading();
-    try {
-      final db = await DatabaseHelper.instance.database;
-      await CallsLansweeperRepository(db).markManualPassed(
+    final written = await _write(callId, (repo) async {
+      await repo.updateLansweeperState(
         callId: callId,
-        ticketId: ticketId.trim(),
-        comment: comment,
+        state: LansweeperSyncState.unsent,
+        clearTicketId: !retainTicketId,
+        expected: expected,
+        force: force,
       );
-      state = const AsyncData(null);
-      _refreshAfterLansweeperMutation();
-    } catch (e, st) {
-      state = AsyncError(e, st);
-    } finally {
-      _isRunning = false;
-    }
-  }
-
-  Future<void> setExcluded(int callId) =>
-      _setState(callId, LansweeperSyncState.excluded);
-
-  Future<void> setUnsent(int callId, {bool retainTicketId = false}) async {
-    final db = await DatabaseHelper.instance.database;
-    await CallsLansweeperRepository(db).updateLansweeperState(
-      callId: callId,
-      state: LansweeperSyncState.unsent,
-      clearTicketId: !retainTicketId,
-    );
-    _refreshAfterLansweeperMutation();
+    });
+    if (written) _refreshAfterLansweeperMutation();
+    return written;
   }
 
   Future<int> countRegisteredCallsWithTicketId(
@@ -417,62 +434,98 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     return maxId?.toString();
   }
 
-  Future<void> setSent(int callId, {String? ticketId}) async {
-    final normalized = ticketId?.trim() ?? '';
-    if (normalized.isEmpty) {
-      await _setState(callId, LansweeperSyncState.sent);
-      return;
-    }
-    final db = await DatabaseHelper.instance.database;
-    await CallsLansweeperRepository(db).updateLansweeperState(
-      callId: callId,
-      state: LansweeperSyncState.sent,
-      ticketId: normalized,
-      updateTicketId: true,
-    );
-    _refreshAfterLansweeperMutation();
-  }
-
   /// Χειροκίνητη καταχώρηση· το ticket id είναι προαιρετικό.
-  Future<void> markRegistered({
+  ///
+  /// Επιστρέφει `true` μόνο όταν η σήμανση όντως γράφτηκε — ο καλών δεν
+  /// επιτρέπεται να ανακοινώσει επιτυχία για κάτι που δεν έγινε.
+  Future<bool> markRegistered({
     required int callId,
+    required LansweeperRegistrationBaseline? expected,
     String? ticketId,
     String? comment,
+    bool force = false,
   }) async {
-    if (_isRunning) return;
+    if (_isRunning) return false;
     _isRunning = true;
-    state = const AsyncLoading();
+    _publish(const AsyncLoading());
     try {
       final normalized = ticketId?.trim() ?? '';
-      final db = await DatabaseHelper.instance.database;
-      final repo = CallsLansweeperRepository(db);
-      if (normalized.isEmpty) {
-        await repo.updateLansweeperState(
-          callId: callId,
-          state: LansweeperSyncState.sent,
-        );
-      } else {
-        await repo.markManualPassed(
-          callId: callId,
-          ticketId: normalized,
-          comment: comment,
-        );
-      }
-      state = const AsyncData(null);
-      _refreshAfterLansweeperMutation();
-    } catch (e, st) {
-      state = AsyncError(e, st);
+      final written = await _write(callId, (repo) async {
+        if (normalized.isEmpty) {
+          await repo.updateLansweeperState(
+            callId: callId,
+            state: LansweeperSyncState.sent,
+            expected: expected,
+            force: force,
+          );
+        } else {
+          await repo.markManualPassed(
+            callId: callId,
+            ticketId: normalized,
+            expected: expected,
+            force: force,
+            comment: comment,
+          );
+        }
+      });
+      if (written) _refreshAfterLansweeperMutation();
+      return written;
     } finally {
       _isRunning = false;
     }
   }
 
-  Future<void> _setState(int callId, String nextState) async {
-    final db = await DatabaseHelper.instance.database;
-    await CallsLansweeperRepository(
-      db,
-    ).updateLansweeperState(callId: callId, state: nextState);
-    _refreshAfterLansweeperMutation();
+  Future<bool> _setState(
+    int callId,
+    String nextState, {
+    required LansweeperRegistrationBaseline? expected,
+    bool force = false,
+  }) async {
+    final written = await _write(callId, (repo) async {
+      await repo.updateLansweeperState(
+        callId: callId,
+        state: nextState,
+        expected: expected,
+        force: force,
+      );
+    });
+    if (written) _refreshAfterLansweeperMutation();
+    return written;
+  }
+
+  /// Εκτελεί μια εγγραφή κατάστασης και φροντίζει τι φτάνει στην οθόνη.
+  ///
+  /// Η διένεξη **ξαναπετιέται**, ντυμένη με το «ποιος και πότε» — αλλιώς ο
+  /// διάλογος που ρωτά τον άνθρωπο δεν θα εμφανιζόταν ποτέ. Η ταυτότητα
+  /// ζητείται εδώ, ώστε καμία οθόνη να μη χρειάζεται να θυμηθεί να τη ζητήσει.
+  ///
+  /// Επιστρέφει `false` όταν η εγγραφή απέτυχε για άλλον λόγο: το σφάλμα μένει
+  /// στην κατάσταση του provider και ο καλών ξέρει ότι δεν έγινε τίποτα.
+  ///
+  /// Το άνοιγμα της βάσης γίνεται **μέσα** στο `try`: αλλιώς μια αποτυχία
+  /// εκεί αφήνει πίσω της το `AsyncLoading` που έβαλε ο καλών, και η
+  /// Αναφορά κρατά τα κουμπιά της κλειδωμένα για μια δουλειά που έχει ήδη
+  /// πέσει.
+  Future<bool> _write(
+    int callId,
+    Future<void> Function(CallsLansweeperRepository repo) write,
+  ) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await write(CallsLansweeperRepository(db));
+      _publish(const AsyncData(null));
+      return true;
+    } on LansweeperRegistrationStaleException catch (stale) {
+      _publish(const AsyncData(null));
+      final db = await DatabaseHelper.instance.database;
+      final actor = await CallsRepository(db).lastActorFor(callId);
+      throw LansweeperRegistrationStaleException(
+        stale.conflict.describedBy(who: actor.who, at: actor.at),
+      );
+    } catch (e, st) {
+      _publish(AsyncError(e, st));
+      return false;
+    }
   }
 
   void _refreshAfterLansweeperMutation() {
@@ -517,8 +570,16 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
   }
 }
 
+/// Ζει όσο η εφαρμογή, όχι όσο η οθόνη που τον κάλεσε.
+///
+/// Το μενού κατάστασης του Ιστορικού τον διαβάζει μια στιγμή και του δίνει τη
+/// δουλειά, χωρίς καμία οθόνη να τον παρακολουθεί. Όσο ήταν `autoDispose`,
+/// πέθαινε στο πρώτο await και η εγγραφή τέλειωνε πάνω σε νεκρό `Ref` — ενώ η
+/// Αναφορά δεν το έβλεπε ποτέ, επειδή ο διάλογός της τον κρατά τυχαία ζωντανό.
+/// Εδώ ζει και το `_isRunning`: σε βραχύβιο instance η προστασία από διπλή
+/// αποστολή μηδενιζόταν σε κάθε ενέργεια.
 final lansweeperSyncProvider =
-    AsyncNotifierProvider.autoDispose<LansweeperSyncNotifier, void>(
+    AsyncNotifierProvider<LansweeperSyncNotifier, void>(
       LansweeperSyncNotifier.new,
     );
 

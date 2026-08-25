@@ -712,21 +712,42 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     await _afterEquipmentMutation();
   }
 
-  Future<void> updateEquipment(EquipmentModel eq, {int? ownerUserId}) async {
+  /// Ό,τι γράφει η καρτέλα εξοπλισμού, σε ΜΙΑ διατύπωση.
+  ///
+  /// Η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: το `toMap` παραλείπει τα null κλειδιά, οπότε
+  /// χωρίς τη ρητή συμπλήρωση το άδειασμα Σημειώσεων ή ο Τύπος «Κανένας» δεν
+  /// έφτανε ποτέ στη βάση — η παλιά τιμή έμενε σιωπηλά.
+  static Map<String, dynamic> equipmentWriteMap(EquipmentModel eq) => eq.toMap()
+    ..['notes'] = eq.notes
+    ..['type'] = eq.type;
+
+  /// Αποθηκεύει την καρτέλα εξοπλισμού.
+  ///
+  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα**.
+  ///
+  /// Η χρέωση (κάτοχος) μένει ΕΚΤΟΣ της σύγκρισης σε αυτή τη φάση: δεν είναι
+  /// στήλη του εξοπλισμού και η αντικατάστασή της θέλει δικό της αποτύπωμα.
+  Future<void> updateEquipment(
+    EquipmentModel eq, {
+    required EquipmentModel? expected,
+    bool force = false,
+    int? ownerUserId,
+  }) async {
     _settlePendingBulkUndo();
     if (eq.id == null) {
       throw ArgumentError.value(eq.id, 'eq.id', 'updateEquipment requires id');
     }
     final dbUp = await DatabaseHelper.instance.database;
     final equipment = EquipmentRepository(dbUp);
-    // Η καρτέλα γράφεται ΟΛΟΚΛΗΡΗ: το toMap παραλείπει τα null κλειδιά, οπότε
-    // χωρίς τη ρητή συμπλήρωση το άδειασμα Σημειώσεων ή ο Τύπος «Κανένας» δεν
-    // έφτανε ποτέ στη βάση — η παλιά τιμή έμενε σιωπηλά. Ίδιο συμβόλαιο με
-    // την καρτέλα υπαλλήλου (DirectoryNotifier.updateUser).
-    final map = eq.toMap()
-      ..['notes'] = eq.notes
-      ..['type'] = eq.type;
-    await equipment.updateEquipment(eq.id!, map);
+    await equipment.updateEquipment(
+      eq.id!,
+      equipmentWriteMap(eq),
+      // Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
+      // κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
+      // ξεχάστηκε σε δεύτερο κατάλογο.
+      expected: expected == null ? null : equipmentWriteMap(expected),
+      force: force,
+    );
     await equipment.replaceEquipmentUsers(
       eq.id!,
       ownerUserId != null ? [ownerUserId] : [],

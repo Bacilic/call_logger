@@ -680,7 +680,18 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     return newId;
   }
 
-  Future<void> updateUser(UserModel u) async {
+  /// Αποθηκεύει την καρτέλα υπαλλήλου.
+  ///
+  /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα**. Επειδή η
+  /// καρτέλα γράφεται ολόκληρη, χωρίς αφετηρία μια διόρθωση ονόματος σβήνει το
+  /// τμήμα ή το τηλέφωνο που μόλις άλλαξε ο συνάδελφος. Πετά
+  /// [DirectoryStaleException] — ο καλών ρωτά τον χρήστη και, αν εκείνος
+  /// επιμείνει, ξανακαλεί με [force].
+  Future<void> updateUser(
+    UserModel u, {
+    required UserModel? expected,
+    bool force = false,
+  }) async {
     if (u.id == null) return;
     _settlePendingBulkUndo();
     final dbUp = await DatabaseHelper.instance.database;
@@ -692,11 +703,31 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       ..['notes'] = u.notes
       ..['department_id'] = u.departmentId
       ..['lansweeper_username'] = u.lansweeperUsername;
-    await UserRepository(dbUp).updateUser(u.id!, map);
+    await UserRepository(dbUp).updateUser(
+      u.id!,
+      map,
+      expected: expected == null ? null : userConflictBaseline(expected),
+      force: force,
+    );
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
   }
+
+  /// Η αφετηρία της σύγκρισης, με τα **ίδια κλειδιά** που γράφει η καρτέλα.
+  ///
+  /// Ζει δίπλα στην εγγραφή και όχι στη φόρμα: αν κάποτε προστεθεί πεδίο στην
+  /// καρτέλα, το ξεχασμένο κλειδί εδώ θα σήμαινε πεδίο που γράφεται αφύλακτο.
+  static Map<String, Object?> userConflictBaseline(UserModel u) =>
+      <String, Object?>{
+        'first_name': u.firstName,
+        'last_name': u.lastName,
+        'department_id': u.departmentId,
+        'location': u.location,
+        'notes': u.notes,
+        'lansweeper_username': u.lansweeperUsername,
+        'phones': UserRepository.phonesFingerprint(u.phones),
+      };
 
   /// Μετά από ατομική soft-delete εκτός notifier (μία συναλλαγή με τις
   /// διαθέσεις τηλεφώνων/εξοπλισμού): ενημερώνει μόνο UI/cache, χωρίς νέο

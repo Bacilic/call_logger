@@ -175,7 +175,9 @@ class BuildingMapController {
     final old = tryParseDepartmentHex(dept.color);
     final hex = colorToDepartmentHex(newColor);
     final db = await DatabaseHelper.instance.database;
-    await DepartmentRepository(db).updateDepartment(dept.id!, {'color': hex});
+    await DepartmentRepository(
+      db,
+    ).updateDepartment(dept.id!, {'color': hex}, expected: null);
     FloorColorAssignmentService.instance.overrideColor(
       floorId,
       newColor,
@@ -402,9 +404,9 @@ class BuildingMapController {
     final canon = canonicalDepartmentName.trim();
     final String? custom = trimmed.isEmpty || trimmed == canon ? null : trimmed;
     final db = await DatabaseHelper.instance.database;
-    await DepartmentRepository(
-      db,
-    ).updateDepartment(departmentId, {'map_custom_name': custom});
+    await DepartmentRepository(db).updateDepartment(departmentId, {
+      'map_custom_name': custom,
+    }, expected: null);
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -463,6 +465,7 @@ class BuildingMapController {
         clearFloorId: true,
         clearDepartmentHex: true,
       ),
+      expected: null,
     );
     final fid = int.tryParse(sheetStr);
     if (fid != null && removedColor != null) {
@@ -765,7 +768,12 @@ class BuildingMapController {
       final db = await DatabaseHelper.instance.database;
       final departments = DepartmentRepository(db);
       final maps = BuildingMapRepository(db);
-      maps.bindUpdateDepartment(departments.updateDepartment);
+      // Ο χάρτης γράφει ΜΟΝΟ τις δικές του στήλες, ποτέ ολόκληρη την
+      // καρτέλα — άρα δεν υπάρχει αφετηρία να συγκριθεί.
+      maps.bindUpdateDepartment(
+        (id, values) =>
+            departments.updateDepartment(id, values, expected: null),
+      );
       await maps.deleteBuildingMapFloorClearingDepartmentMaps(sheetId);
       var imageRemoved = false;
       if (choice.deleteImageFile) {
@@ -823,7 +831,7 @@ class BuildingMapController {
       'map_label_offset_y': snap.mapLabelOffsetY,
       'map_anchor_offset_x': snap.mapAnchorOffsetX,
       'map_anchor_offset_y': snap.mapAnchorOffsetY,
-    });
+    }, expected: null);
     _ref.read(buildingMapUndoProvider.notifier).clear();
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (context.mounted) {

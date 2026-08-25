@@ -35,7 +35,7 @@ void main() {
       departments = DepartmentRepository(db);
       repo = BuildingMapRepository(db, DirectorySupport(db));
       repo.bindUpdateDepartment((deptId, fields) async {
-        await departments.updateDepartment(deptId, fields);
+        await departments.updateDepartment(deptId, fields, expected: null);
       });
     });
 
