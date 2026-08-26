@@ -20,6 +20,7 @@ import '../../audit/models/audit_log_model.dart';
 import '../../audit/models/audit_page_result.dart';
 import '../../audit/models/audit_reference_labels.dart';
 import '../../audit/providers/audit_providers.dart';
+import '../../audit/services/audit_operator_keyword_hint.dart';
 import '../../audit/services/audit_formatter_service.dart';
 import 'audit_entity_side_panel.dart';
 import 'audit_filter_autocomplete.dart';
@@ -176,6 +177,28 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
           (s) => s.copyWith(
             userPerforming: (next == null || next.isEmpty) ? null : next,
             clearUserPerforming: next == null || next.isEmpty,
+          ),
+        );
+    ref.read(auditPageIndexProvider.notifier).reset();
+  }
+
+  /// Ο χρήστης δέχτηκε την πρόταση: η λέξη γίνεται φίλτρο «Χειριστής».
+  ///
+  /// Η λέξη αφαιρείται από το ελεύθερο κείμενο — αλλιώς θα συνέχιζε να κόβει
+  /// ως λέξη-κλειδί και η τομή με το φίλτρο θα έβγαζε σχεδόν πάντα κενή λίστα.
+  void _applyOperatorSuggestion(OperatorKeywordSuggestion suggestion) {
+    _debounceKeyword?.cancel();
+    final newKeyword = keywordWithoutWord(
+      _keywordController.text,
+      suggestion.matchedWord,
+    );
+    _keywordController.text = newKeyword;
+    ref
+        .read(auditFilterProvider.notifier)
+        .update(
+          (s) => s.copyWith(
+            keyword: newKeyword.trim(),
+            userPerforming: suggestion.operatorName,
           ),
         );
     ref.read(auditPageIndexProvider.notifier).reset();
@@ -382,6 +405,15 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
         break;
       }
     }
+    // Η υπόδειξη «μήπως ψάχνετε χειριστή;»: το «ποιος το έκανε» είναι φίλτρο
+    // και όχι λέξη-κλειδί, αλλά όποιος γράφει όνομα στο ελεύθερο κείμενο δεν
+    // το ξέρει — του δείχνουμε το φίλτρο τη στιγμή ακριβώς της σύγχυσης.
+    final operatorSuggestions = operatorKeywordSuggestions(
+      filter.keyword,
+      performingUserOptionsAsync.value ?? const <String>[],
+      alreadySelected: filter.userPerforming,
+    ).take(2).toList();
+
     final entityTypeOptions = _entityTypeAutocompleteOptions();
     String? selectedEntityLabel;
     for (final option in entityTypeOptions) {
@@ -631,6 +663,31 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                           ref.read(auditPageIndexProvider.notifier).reset();
                         },
                       ),
+                    ],
+                  ),
+                ],
+                if (operatorSuggestions.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Ψάχνετε ενέργειες χειριστή;',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      for (final suggestion in operatorSuggestions)
+                        ActionChip(
+                          avatar: const Icon(Icons.person_outline, size: 18),
+                          label: Text(
+                            'Χειριστής: ${suggestion.operatorName}',
+                          ),
+                          onPressed: () =>
+                              _applyOperatorSuggestion(suggestion),
+                        ),
                     ],
                   ),
                 ],

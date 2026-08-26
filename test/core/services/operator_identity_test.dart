@@ -77,6 +77,30 @@ void main() {
       expect(await repository.count(), 1);
     });
 
+    test('αρχειοθετημένο προφίλ δεν αναγνωρίζεται από τον λογαριασμό', () async {
+      // Ο Παναγιώτης αποχώρησε και το προφίλ του αρχειοθετήθηκε. Στον δικό του
+      // υπολογιστή, όπου ο λογαριασμός Windows ήταν δεμένος, η εφαρμογή δεν
+      // επιτρέπεται να τον ξαναδώσει ως ταυτότητα: οι κλήσεις της ημέρας θα
+      // γράφονταν στο όνομα ανθρώπου που έχει φύγει.
+      await repository.insert(
+        Operator(
+          displayName: 'Παναγιώτης',
+          windowsAccount: 'panagiotis',
+          isActive: false,
+          createdAt: DateTime(2026, 8, 20),
+        ),
+      );
+
+      final resolved = await OperatorIdentity.resolveAndActivate(
+        db,
+        windowsAccount: 'panagiotis',
+        workstationNames: const <String>[],
+      );
+
+      expect(resolved, isNull);
+      expect(CurrentOperator.active, isNull);
+    });
+
     test('η γραφή του λογαριασμού δεν φτιάχνει δεύτερο πρόσωπο', () async {
       // Τα Windows δεν ξεχωρίζουν πεζά από κεφαλαία στα ονόματα λογαριασμών.
       await OperatorIdentity.createAndActivate(
@@ -212,6 +236,45 @@ void main() {
 
       expect(first.isAdmin, isTrue);
       expect(second.isAdmin, isFalse);
+    });
+
+    test('σε βάση με μόνο αρχειοθετημένα ο νέος γίνεται διαχειριστής', () async {
+      // Δεν υπάρχει κανείς να ρωτηθεί «ποιος είναι ο διαχειριστής;»: όποιος
+      // συστήνεται τώρα είναι η μόνη διέξοδος από το κλείδωμα.
+      await repository.insert(
+        Operator(
+          displayName: 'Παναγιώτης',
+          isAdmin: true,
+          isActive: false,
+          createdAt: DateTime(2026, 8, 20),
+        ),
+      );
+
+      final created = await OperatorIdentity.createAndActivate(
+        db,
+        displayName: 'Βαρβάρα',
+        bindCurrentAccount: false,
+        now: DateTime(2026, 8, 26),
+      );
+
+      expect(created.isAdmin, isTrue);
+    });
+
+    test('με ενεργά προφίλ ο νέος ΔΕΝ γίνεται σιωπηλά διαχειριστής', () async {
+      // Εδώ υπάρχει ποιον να ρωτήσεις — τη σήμανση την αναλαμβάνει η ρητή
+      // ερώτηση στο άνοιγμα, όχι μια σιωπηλή προαγωγή.
+      await repository.insert(
+        Operator(displayName: 'Παναγιώτης', createdAt: DateTime(2026, 8, 20)),
+      );
+
+      final created = await OperatorIdentity.createAndActivate(
+        db,
+        displayName: 'Βαρβάρα',
+        bindCurrentAccount: false,
+        now: DateTime(2026, 8, 26),
+      );
+
+      expect(created.isAdmin, isFalse);
     });
 
     test('η λίστα επιλογής κρύβει τους αρχειοθετημένους', () async {

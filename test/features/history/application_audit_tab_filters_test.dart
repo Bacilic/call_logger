@@ -412,4 +412,63 @@ void main() {
       },
     );
   });
+
+  group('Υπόδειξη «μήπως ψάχνετε χειριστή;»', () {
+    Finder keywordField() => find.byWidgetPredicate(
+      (w) =>
+          w is TextField &&
+          (w.decoration?.hintText?.startsWith('Λέξη-κλειδί') ?? false),
+    );
+
+    Future<void> typeKeyword(WidgetTester tester, String text) async {
+      await tester.enterText(keywordField(), text);
+      // Η αναζήτηση περιμένει να σταματήσει η πληκτρολόγηση (debounce 350ms).
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('όνομα χειριστή στο ελεύθερο κείμενο εμφανίζει την πρόταση', (
+      tester,
+    ) async {
+      await pumpAuditTab(tester);
+
+      await typeKeyword(tester, 'βασι');
+
+      expect(find.text('Χειριστής: Βασίλης'), findsOneWidget);
+
+      await finishInteraction(tester);
+    });
+
+    testWidgets('το πάτημα εφαρμόζει το φίλτρο και αδειάζει τη λέξη', (
+      tester,
+    ) async {
+      await pumpAuditTab(tester);
+      expect(find.textContaining('4 εγγραφές'), findsOneWidget);
+
+      await typeKeyword(tester, 'βασι');
+      await tester.tap(find.text('Χειριστής: Βασίλης'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1 εγγραφές'), findsOneWidget);
+      final field = tester.widget<TextField>(keywordField());
+      expect(field.controller!.text, isEmpty);
+      expect(
+        find.text('Χειριστής: Βασίλης'),
+        findsNothing,
+        reason: 'ο επιλεγμένος χειριστής δεν ξαναπροτείνεται',
+      );
+
+      await finishInteraction(tester);
+    });
+
+    testWidgets('άσχετη λέξη δεν εμφανίζει πρόταση', (tester) async {
+      await pumpAuditTab(tester);
+
+      await typeKeyword(tester, 'πρωτόκολλο');
+
+      expect(find.textContaining('Χειριστής:'), findsNothing);
+
+      await finishInteraction(tester);
+    });
+  });
 }

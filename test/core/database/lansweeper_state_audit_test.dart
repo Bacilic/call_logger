@@ -109,6 +109,67 @@ void main() {
     );
   });
 
+  test(
+    'η επανασήμανση με τον ΙΔΙΟ αριθμό δεν διπλογράφει το ιστορικό συνδέσμων',
+    () async {
+      // Το ιστορικό συνδέσμων είναι που κάνει ανακτήσιμη τη ζημιά όταν δύο
+      // άνθρωποι καταχωρούν την ίδια κλήση — διπλότυπα το δυσκολεύουν.
+      final callId = await insertCall();
+
+      await repo.markLansweeperSynced(
+        callId: callId,
+        ticketId: '8001',
+        provider: 'lansweeper',
+      );
+      await repo.markLansweeperSynced(
+        callId: callId,
+        ticketId: '8001',
+        provider: 'lansweeper',
+      );
+
+      final links = await db.query(
+        'call_external_links',
+        where: 'call_id = ?',
+        whereArgs: [callId],
+      );
+      expect(
+        links,
+        hasLength(1),
+        reason: greekExpectMsg(
+          'Καμία τιμή δεν άλλαξε στη δεύτερη σήμανση — ούτε σύνδεσμος',
+        ),
+      );
+    },
+  );
+
+  test('αλλαγή σε ΔΙΑΦΟΡΕΤΙΚΟ αριθμό γράφει νέο σύνδεσμο', () async {
+    final callId = await insertCall();
+
+    await repo.markLansweeperSynced(
+      callId: callId,
+      ticketId: '8001',
+      provider: 'lansweeper',
+    );
+    await repo.markLansweeperSynced(
+      callId: callId,
+      ticketId: '8002',
+      provider: 'lansweeper',
+    );
+
+    final links = await db.query(
+      'call_external_links',
+      where: 'call_id = ?',
+      whereArgs: [callId],
+    );
+    expect(
+      links.map((r) => r['external_id']),
+      ['8001', '8002'],
+      reason: greekExpectMsg(
+        'Δύο διαφορετικά αιτήματα άγγιξαν την κλήση — και τα δύο μετρούν',
+      ),
+    );
+  });
+
   test('η απόσυρση καταγράφεται ως δική της ενέργεια', () async {
     final callId = await insertCall();
     await repo.markLansweeperSynced(

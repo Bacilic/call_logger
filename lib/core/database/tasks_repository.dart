@@ -9,6 +9,8 @@ import '../../features/tasks/models/task_analytics_summary.dart';
 import '../../features/tasks/models/task_filter.dart'
     show TaskFilter, TaskSortOption;
 import '../../features/tasks/models/task_settings_config.dart';
+import '../../features/tasks/services/call_task_solution_bridge.dart';
+import 'calls_repository.dart';
 import '../errors/task_save_exception.dart';
 import '../errors/task_stale_exception.dart';
 import '../services/current_operator.dart';
@@ -396,6 +398,7 @@ class TasksRepository {
     required String? callerName,
     required String description,
     required DateTime callDate,
+    String callSolution = '',
     int? callerId,
     int? equipmentId,
     int? departmentId,
@@ -411,12 +414,15 @@ class TasksRepository {
     TaskSettingsConfig? config,
   }) async {
     final titleAt = titleTimestamp ?? callDate;
+    // Ο τίτλος χτίζεται από τη ΣΚΕΤΗ περιγραφή, πριν προστεθεί η λύση: αλλιώς
+    // το απόσπασμα που τον γεννά θα κουβαλούσε και τα πρώτα βήματα.
     final title = smartTaskTitleFromCallContext(
       description: description,
       categoryName: categoryName,
       titleAt: titleAt,
       callerFallback: callerName,
     );
+    final notes = taskNotesFromCall(notes: description, solution: callSolution);
     final settings = config ?? await getTaskSettingsConfig();
     final dueDate = calculateNextDueDate(
       settings,
@@ -432,7 +438,7 @@ class TasksRepository {
       'created_at': nowIso,
       'updated_at': nowIso,
       'title': title,
-      'description': description,
+      'description': notes,
       'due_date': dueDate.toIso8601String(),
       'status': 'open',
       'priority': priority,
@@ -1369,8 +1375,7 @@ class TasksRepository {
     'search_index',
   };
 
-  static String _guardText(Object? value) =>
-      value?.toString().trim() ?? '';
+  static String _guardText(Object? value) => value?.toString().trim() ?? '';
 
   /// Θα σβήσει η εγγραφή μου δουλειά που έκανε **άλλος**;
   ///
@@ -1434,9 +1439,7 @@ class TasksRepository {
       );
       if (rows.isEmpty) return (who: null, at: null);
       final who = (rows.first['user_performing'] as String?)?.trim();
-      final at = DateTime.tryParse(
-        (rows.first['timestamp'] as String?) ?? '',
-      );
+      final at = DateTime.tryParse((rows.first['timestamp'] as String?) ?? '');
       return (who: (who == null || who.isEmpty) ? null : who, at: at);
     } catch (_) {
       // Η ταυτότητα είναι συμπληρωματική: η διένεξη αναφέρεται και χωρίς αυτήν.
@@ -1668,6 +1671,19 @@ class TasksRepository {
           whereArgs: [id],
         );
         if (n == 0) return;
+
+        // Η λύση ταξιδεύει πίσω στην κλήση που γέννησε την εκκρεμότητα, στην
+        // ΙΔΙΑ συναλλαγή: αλλιώς μια διακοπή θα άφηνε την εκκρεμότητα κλειστή
+        // και την κλήση να αγνοεί πώς λύθηκε το πρόβλημά της.
+        final linkedCallId = oldRow?['call_id'] as int?;
+        if (linkedCallId != null) {
+          await CallsRepository(db).appendSolutionFromTask(
+            txn,
+            callId: linkedCallId,
+            taskSolution: solutionNotes,
+          );
+        }
+
         final user = await AuditService.performingUser(txn);
         await AuditService.log(
           txn,

@@ -424,6 +424,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                         if (hasLansweeperTicket) ...[
                           LansweeperEditWarning(
                             ticketId: original?.lansweeperMainTicketId,
+                            registered: original?.lansweeperState == 'sent',
                             ticketViewUrlTemplate: ref.watch(
                               lansweeperTicketViewUrlProvider,
                             ),

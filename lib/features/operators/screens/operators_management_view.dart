@@ -90,7 +90,11 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
     });
   }
 
-  Future<void> _openForm({Operator? existing, bool readOnly = false}) async {
+  Future<void> _openForm({
+    Operator? existing,
+    bool readOnly = false,
+    bool lockedAsLastAdmin = false,
+  }) async {
     final management = await _management();
     if (!mounted) return;
 
@@ -99,6 +103,7 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
       builder: (_) => OperatorFormDialog(
         existing: existing,
         readOnly: readOnly,
+        lockedAsLastAdmin: lockedAsLastAdmin,
         onSubmit: (values) async {
           if (existing == null) {
             final created = await management.create(
@@ -240,6 +245,13 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                       data?.presence[operator.id] ?? const <OperatorPresence>[];
                   final isCurrent =
                       operator.id != null && operator.id == activeOperator?.id;
+                  // Από τη λίστα που μόλις διαβάστηκε: η φόρμα αρνείται τους
+                  // διακόπτες του τελευταίου διαχειριστή στο πάτημα, αντί να
+                  // αφήσει τον χρήστη να το μάθει στην Αποθήκευση.
+                  final lockedAsLastAdmin = isLastActiveAdmin(
+                    operator,
+                    operators,
+                  );
                   return OperatorIdentityCard(
                     operator: operator,
                     presence: describeOperatorPresence(
@@ -250,8 +262,11 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                       if (isCurrent) 'Εσείς',
                       if (!operator.isActive) 'Αρχειοθετημένος',
                     ],
-                    onTap: () =>
-                        _openForm(existing: operator, readOnly: !canManage),
+                    onTap: () => _openForm(
+                      existing: operator,
+                      readOnly: !canManage,
+                      lockedAsLastAdmin: lockedAsLastAdmin,
+                    ),
                     trailing: IconButton(
                       icon: Icon(
                         canManage
@@ -259,8 +274,11 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                             : Icons.visibility_outlined,
                       ),
                       tooltip: canManage ? 'Επεξεργασία' : 'Προβολή',
-                      onPressed: () =>
-                          _openForm(existing: operator, readOnly: !canManage),
+                      onPressed: () => _openForm(
+                        existing: operator,
+                        readOnly: !canManage,
+                        lockedAsLastAdmin: lockedAsLastAdmin,
+                      ),
                     ),
                   );
                 },

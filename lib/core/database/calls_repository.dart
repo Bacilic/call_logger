@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../features/calls/models/call_model.dart';
+import '../../features/tasks/services/call_task_solution_bridge.dart';
 import '../../features/calls/services/call_save_conflict.dart';
 import '../errors/call_save_exception.dart';
 import '../models/owner_filter.dart';
@@ -259,6 +260,72 @@ class CallsRepository {
       if (e is CallSaveException) rethrow;
       throw CallSaveException('Η κλήση δεν ενημερώθηκε. Δοκιμάστε ξανά.');
     }
+  }
+
+  /// Προσθέτει στη λύση της κλήσης τη λύση της εκκρεμότητας που μόλις έκλεισε.
+  ///
+  /// **Δουλεύει μέσα στη συναλλαγή του καλούντος** ([executor]): το κλείσιμο
+  /// της εκκρεμότητας και η ενημέρωση της κλήσης είναι μία πράξη — διακοπή στη
+  /// μέση δεν αφήνει την εκκρεμότητα κλειστή με την κλήση να αγνοεί το γιατί.
+  ///
+  /// **Προσθέτει, δεν αντικαθιστά:** η λύση της κλήσης κρατά συνήθως τα πρώτα
+  /// βήματα («Να γίνει αίτημα στην DataMed») και η εκκρεμότητα φέρνει το
+  /// φινάλε· η αλυσίδα διαβάζεται ολόκληρη μόνο αν μείνουν και τα δύο.
+  ///
+  /// Δεν κάνει τίποτα όταν δεν υπάρχει τι να γραφτεί — κενή λύση, ή κείμενο
+  /// που βρίσκεται ήδη εκεί από προηγούμενο κλείσιμο της ίδιας εκκρεμότητας.
+  Future<void> appendSolutionFromTask(
+    DatabaseExecutor executor, {
+    required int callId,
+    required String taskSolution,
+  }) async {
+    final rows = await executor.query(
+      'calls',
+      where: 'id = ?',
+      whereArgs: [callId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final oldRow = Map<String, dynamic>.from(rows.first);
+
+    final merged = callSolutionAfterTaskClose(
+      existingCallSolution: oldRow['solution'] as String?,
+      taskSolution: taskSolution,
+    );
+    if (merged == null) return;
+
+    // Το ευρετήριο αναζήτησης χτίζεται από ΟΛΟΚΛΗΡΗ τη γραμμή: χωρίς αυτό η
+    // νέα λύση θα γραφόταν στη βάση αλλά δεν θα βρισκόταν ποτέ με αναζήτηση.
+    final map = Map<String, dynamic>.from(oldRow)..['solution'] = merged;
+    map['search_index'] = await _searchIndex.buildCallSearchIndex(
+      executor,
+      map,
+    );
+
+    final n = await executor.update(
+      'calls',
+      {'solution': merged, 'search_index': map['search_index']},
+      where: 'id = ?',
+      whereArgs: [callId],
+    );
+    if (n == 0) return;
+
+    final user = await AuditService.performingUser(executor);
+    final entityName = (await _auditLine.buildCallAuditDisplayLine(
+      callId,
+      executor: executor,
+    )).trim();
+    await AuditService.log(
+      executor,
+      action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΚΛΗΣΗΣ',
+      userPerforming: user,
+      details: 'calls id=$callId (κλείσιμο εκκρεμότητας)',
+      entityType: AuditEntityTypes.call,
+      entityId: callId,
+      entityName: entityName.isEmpty ? null : entityName,
+      oldValues: {'solution': oldRow['solution']},
+      newValues: {'solution': merged},
+    );
   }
 
   /// Άλλαξε η κλήση από τότε που τη διάβασε η οθόνη; `null` = καθαρή.

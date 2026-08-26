@@ -30,13 +30,41 @@ class OperatorActionResult {
       conflict = found,
       message =
           'Η καρτέλα άλλαξε από άλλον χρήστη στο μεταξύ '
-              '(${found.changedFields.join(', ')}). '
-              'Κλείστε την και ξανανοίξτε τη για να δείτε τα τρέχοντα στοιχεία.';
+          '(${found.changedFields.join(', ')}). '
+          'Κλείστε την και ξανανοίξτε τη για να δείτε τα τρέχοντα στοιχεία.';
 
   final bool allowed;
   final String? message;
   final Operator? operator;
   final OperatorSaveConflict? conflict;
+}
+
+/// Τα μηνύματα του φρουρού «πρέπει να μείνει ένας διαχειριστής» — **μία πηγή**.
+///
+/// Τα ίδια λόγια εμφανίζονται και από τον άμεσο φραγμό της φόρμας (πάτημα στον
+/// διακόπτη) και από τον έλεγχο της αποθήκευσης· δύο αντίγραφα θα απέκλιναν
+/// σιωπηλά στην πρώτη αναδιατύπωση.
+const String kLastAdminDemoteBlockedMessage =
+    'Πρέπει να μείνει τουλάχιστον ένας διαχειριστής. Ορίστε '
+    'πρώτα άλλον και μετά αφαιρέστε τη σήμανση από εδώ.';
+const String kLastAdminArchiveBlockedMessage =
+    'Ο μοναδικός διαχειριστής δεν αρχειοθετείται. Ορίστε πρώτα '
+    'άλλον διαχειριστή.';
+
+/// Είναι αυτό το προφίλ ο τελευταίος διαχειριστής που μπορεί να συνδεθεί;
+///
+/// Κρίνει πάνω σε λίστα που έχει ήδη διαβαστεί — για τον **άμεσο** φραγμό της
+/// φόρμας, ώστε ο χρήστης να μάθει το «γιατί όχι» στο πάτημα του διακόπτη και
+/// όχι στην Αποθήκευση. Δεν αντικαθιστά τον έλεγχο της αποθήκευσης: εκείνος
+/// ξαναρωτά τη βάση, γιατί η λίστα της οθόνης μπορεί να έχει παλιώσει όσο
+/// δούλευε δίπλα ένας συνάδελφος.
+bool isLastActiveAdmin(Operator operator, List<Operator> all) {
+  if (!operator.isAdmin || !operator.isActive) return false;
+  final activeAdmins = [
+    for (final candidate in all)
+      if (candidate.isAdmin && candidate.isActive) candidate,
+  ];
+  return activeAdmins.length <= 1;
 }
 
 /// Οι κανόνες της διαχείρισης χρηστών — έξω από τα widgets.
@@ -144,14 +172,12 @@ class OperatorManagement {
     final losesAdmin = storedIsAdmin && !isAdmin;
     final getsArchived = storedIsAdmin && isAdmin && !isActive;
     if (losesAdmin || getsArchived) {
-      final remaining = await _repository.countAdmins();
+      final remaining = await _repository.countActiveAdmins();
       if (remaining <= 1) {
         return OperatorActionResult.blocked(
           losesAdmin
-              ? 'Πρέπει να μείνει τουλάχιστον ένας διαχειριστής. Ορίστε '
-                    'πρώτα άλλον και μετά αφαιρέστε τη σήμανση από εδώ.'
-              : 'Ο μοναδικός διαχειριστής δεν αρχειοθετείται. Ορίστε πρώτα '
-                    'άλλον διαχειριστή.',
+              ? kLastAdminDemoteBlockedMessage
+              : kLastAdminArchiveBlockedMessage,
         );
       }
     }
@@ -181,10 +207,7 @@ class OperatorManagement {
     OperatorSaveConflict conflict,
     int operatorId,
   ) async {
-    final actor = await OperatorAudit.lastActorFor(
-      _repository.db,
-      operatorId,
-    );
+    final actor = await OperatorAudit.lastActorFor(_repository.db, operatorId);
     return OperatorActionResult.conflictFound(
       OperatorSaveConflict(
         expected: conflict.expected,

@@ -75,8 +75,11 @@ class _DatabaseSettingsBackupTabState
   ));
   Future<BackupDestinationContentResult> _destinationContentFuture =
       Future.value(
+        // Αφετηρία πριν διαβαστούν οι ρυθμίσεις: «δεν έχει οριστεί» είναι η
+        // ειλικρινής άγνοια — το «δεν υπάρχει» θα κατηγορούσε φάκελο που
+        // κανείς δεν έχει κοιτάξει ακόμη.
         const BackupDestinationContentResult(
-          kind: BackupDestinationContentKind.folderMissing,
+          kind: BackupDestinationContentKind.folderNotSet,
         ),
       );
 
@@ -196,7 +199,7 @@ class _DatabaseSettingsBackupTabState
         .trim();
     if (dest.isEmpty) {
       return const BackupDestinationContentResult(
-        kind: BackupDestinationContentKind.folderMissing,
+        kind: BackupDestinationContentKind.folderNotSet,
       );
     }
     try {
@@ -606,9 +609,14 @@ class _DatabaseSettingsBackupTabState
                 label,
                 warning:
                     content.kind == BackupDestinationContentKind.folderMissing,
+                // Η κενή διαδρομή είναι διαπίστωση, όχι συναγερμός: το κόκκινο
+                // «Ορίστε φάκελο προορισμού…» από κάτω κουβαλά ήδη την επείγουσα
+                // οδηγία, και δύο κόκκινες γραμμές για το ίδιο πράγμα θα
+                // αλληλοακυρώνονταν.
                 caution:
                     content.kind ==
-                    BackupDestinationContentKind.folderEmptyNoFiles,
+                        BackupDestinationContentKind.folderEmptyNoFiles ||
+                    content.kind == BackupDestinationContentKind.folderNotSet,
               );
             },
           ),

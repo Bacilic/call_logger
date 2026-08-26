@@ -4,6 +4,12 @@ import 'package:path/path.dart' as p;
 
 /// Κατάσταση φακέλου προορισμού ως προς ύπαρξη και αρχεία αντιγράφου.
 enum BackupDestinationContentKind {
+  /// Δεν έχει οριστεί καθόλου φάκελος προορισμού.
+  ///
+  /// Χωριστό από το [folderMissing] επίτηδες: τα δύο θέλουν εντελώς
+  /// διαφορετική αντίδραση από τον χρήστη — στο ένα ψάχνει τι απέγινε ο
+  /// φάκελος (αποσυνδεδεμένος δίσκος; διαγραφή;), στο άλλο απλώς ορίζει έναν.
+  folderNotSet,
   folderMissing,
   folderEmptyNoFiles,
   folderOk,
@@ -177,7 +183,7 @@ class BackupDestinationFolderValidator {
     final dest = destinationDirectory.trim();
     if (dest.isEmpty) {
       return const BackupDestinationContentResult(
-        kind: BackupDestinationContentKind.folderMissing,
+        kind: BackupDestinationContentKind.folderNotSet,
       );
     }
 

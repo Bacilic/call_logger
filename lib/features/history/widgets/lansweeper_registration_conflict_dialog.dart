@@ -23,7 +23,7 @@ Future<bool> showLansweeperRegistrationConflictDialog(
     keepMineLabel: 'Συνέχισε ούτως ή άλλως',
     takeTheirsLabel: registered
         ? 'Κράτα την καταχώρηση'
-        : 'Άφησε τη δική του',
+        : 'Ακύρωσε την αλλαγή μου',
   );
   return overwrite ?? false;
 }

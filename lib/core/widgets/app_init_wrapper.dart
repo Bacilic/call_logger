@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../database/active_database_generation.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_progress_provider.dart';
 import '../database/database_helper.dart';
 import '../init/app_init_provider.dart';
+import '../init/app_initializer.dart';
 import '../init/app_init_retry_runner.dart';
 import '../init/startup_notices.dart';
 import '../init/startup_window_placement.dart';
@@ -16,7 +18,10 @@ import '../services/application_reset_service.dart';
 import '../services/crash_log_service.dart';
 import '../services/current_operator.dart';
 import '../services/operator_identity.dart';
+import '../utils/run_after_next_frame.dart';
+import '../../features/operators/screens/admin_setup_screen.dart';
 import '../../features/operators/screens/operator_picker_screen.dart';
+import '../../features/operators/services/admin_presence_gate.dart';
 import '../../features/operators/services/selectable_profiles.dart';
 import '../../features/settings/widgets/pending_reset_database_screen.dart';
 import 'app_shortcuts.dart';
@@ -67,6 +72,33 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   /// Τα προφίλ προς επιλογή, φορτωμένα **μία φορά**: χωρίς αυτό, κάθε
   /// ξαναχτίσιμο θα ξεκινούσε νέα ανάγνωση και η λίστα θα αναβόσβηνε.
   Future<SelectableProfiles>? _selectableProfiles;
+
+  /// Η κατάσταση των διαχειριστών της βάσης, με τον ίδιο κανόνα μιας φοράς.
+  Future<AdminPresenceState>? _adminPresence;
+
+  /// True μόλις οριστεί διαχειριστής — ή όταν δεν χρειάστηκε να ζητηθεί.
+  bool _adminSetupDone = false;
+
+  /// Ξεχνά ό,τι αφορούσε την προηγούμενη βάση.
+  ///
+  /// Οι απαντήσεις «ποιος είστε» και «ποιος είναι ο διαχειριστής» ισχύουν για
+  /// **μία** βάση: κάθε άλλη έχει δικά της προφίλ και δική της σήμανση. Χωρίς
+  /// αυτό, μετά από αλλαγή βάσης η εφαρμογή προσπερνούσε και τις δύο ερωτήσεις
+  /// και έμπαινε στο κέλυφος χωρίς ταυτότητα — το Ιστορικό της νέας βάσης
+  /// έγραφε παύλα στο «ποιος το έκανε».
+  void _forgetPreviousDatabase() {
+    // Το σήμα φτάνει από ροή που μπορεί να τρέχει μέσα σε φάση χτισίματος —
+    // ένα σκέτο setState εκεί ρίχνει την εφαρμογή στην οθόνη σφάλματος.
+    runNowOrAfterFrame(() {
+      if (!mounted) return;
+      setState(() {
+        _operatorChosen = false;
+        _selectableProfiles = null;
+        _adminPresence = null;
+        _adminSetupDone = false;
+      });
+    });
+  }
 
   /// Η οθόνη εκκίνησης παραδίδει τη σκυτάλη στην εφαρμογή.
   ///
@@ -182,8 +214,59 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     return loadSelectableProfiles(db);
   }
 
+  Widget _buildShell(AppInitResult initResult) {
+    return AppShortcuts(
+      initialDatabaseResult: initResult.result,
+      initialIsLocalDevMode: initResult.isLocalDevMode,
+      initialDatabaseProfile: initResult.databaseProfile,
+      missingApplicationFiles: initResult.missingApplicationFiles,
+    );
+  }
+
+  Future<AdminPresenceState> _loadAdminPresence() async {
+    final db = await DatabaseHelper.instance.database;
+    return AdminPresenceGate.read(db);
+  }
+
+  /// Η οθόνη «Αυτή η βάση δεν έχει διαχειριστή» — ή το κέλυφος, όταν έχει.
+  ///
+  /// Δεν μπαίνει πριν από την επιλογή χρήστη επίτηδες: ο ορισμός γράφεται στο
+  /// Ιστορικό, και το Ιστορικό θέλει να ξέρει ποιος τον έκανε.
+  Widget _buildAdminSetupOrShell(AppInitResult initResult) {
+    return FutureBuilder<AdminPresenceState>(
+      future: _adminPresence ??= _loadAdminPresence(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _InitLoadingScreen();
+        }
+        final presence = snapshot.data ?? AdminPresenceState.fine;
+        if (_adminSetupDone || !presence.needsSetup) {
+          return _buildShell(initResult);
+        }
+        return AdminSetupScreen(
+          candidates: presence.candidates,
+          onChoose: (chosen) async {
+            final db = await DatabaseHelper.instance.database;
+            final result = await AdminPresenceGate.promote(db, chosen);
+            if (!result.allowed) {
+              return result.message ?? 'Ο ορισμός δεν ολοκληρώθηκε.';
+            }
+            if (mounted) setState(() => _adminSetupDone = true);
+            return null;
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Άλλαξε η ενεργή βάση: ό,τι απάντησε ο χρήστης αφορούσε την προηγούμενη.
+    ref.listen<int>(activeDatabaseGenerationProvider, (previous, next) {
+      if (previous == next) return;
+      _forgetPreviousDatabase();
+    });
+
     final pendingReset = ref.watch(applicationResetPendingProvider);
     if (pendingReset.value == true) {
       return _buildPendingResetScreen();
@@ -213,16 +296,12 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       },
       data: (initResult) {
         if (initResult.success) {
-          if (widget.showStartupScreens && !_operatorChosen) {
+          if (!widget.showStartupScreens) return _buildShell(initResult);
+          if (!_operatorChosen) {
             final picker = _buildOperatorPickerIfNeeded();
             if (picker != null) return picker;
           }
-          return AppShortcuts(
-            initialDatabaseResult: initResult.result,
-            initialIsLocalDevMode: initResult.isLocalDevMode,
-            initialDatabaseProfile: initResult.databaseProfile,
-            missingApplicationFiles: initResult.missingApplicationFiles,
-          );
+          return _buildAdminSetupOrShell(initResult);
         }
         return _buildInitFailureScreen(
           result: initResult.result,

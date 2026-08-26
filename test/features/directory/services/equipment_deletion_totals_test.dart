@@ -308,15 +308,23 @@ void main() {
     // Το SQLite έχει σκληρό όριο παραμέτρων ανά δήλωση· με «επιλογή όλων» σε
     // μεγάλο κατάλογο ένα ενιαίο `IN (...)` θα έσκαγε.
     test('περισσότερα ids από το όριο παραμέτρων του SQLite', () async {
+      // Οι 1200 εισαγωγές γίνονται σε ΜΙΑ συναλλαγή επίτηδες: μία-μία, κάθε
+      // εγγραφή είναι ξεχωριστό ταξίδι προς τη βάση και το στήσιμο έφτανε τα
+      // ~8 δευτερόλεπτα μόνο του — στην πλήρη σουίτα, με τον δίσκο και τη CPU
+      // μοιρασμένα σε 14 παράλληλα αρχεία, ξεπερνούσε το όριο των 30 και το
+      // τεστ φαινόταν να «σκάει μόνο με φόρτο». Το ζητούμενο του τεστ είναι το
+      // όριο παραμέτρων του ΕΡΩΤΗΜΑΤΟΣ, όχι η ταχύτητα των εισαγωγών.
       final ids = <int>[];
-      for (var i = 0; i < 1200; i++) {
-        ids.add(
-          await db.insert('equipment', {
-            'code_equipment': 'BULK-$i',
-            'is_deleted': 0,
-          }),
-        );
-      }
+      await db.transaction((txn) async {
+        for (var i = 0; i < 1200; i++) {
+          ids.add(
+            await txn.insert('equipment', {
+              'code_equipment': 'BULK-$i',
+              'is_deleted': 0,
+            }),
+          );
+        }
+      });
 
       final summaries = await deletionSummaries(db, ids);
       final totals = EquipmentDeletionTotals.fromSummaries(summaries);

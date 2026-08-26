@@ -21,12 +21,39 @@ const String kLansweeperEditWarningConsequence =
 ///
 /// Με αριθμό ticket η φράση τελειώνει σε «ticket» **χωρίς τελεία**, γιατί ο
 /// αριθμός ακολουθεί ως σύνδεσμος. Χωρίς αριθμό είναι πλήρης πρόταση.
-String lansweeperEditWarningHeadline({String? ticketId}) {
+///
+/// Με [registered] `false` η κλήση **δεν** μετριέται ως καταχωρημένη, αλλά
+/// κρατά τον αριθμό ενός αιτήματος: η «Επαναφορά σε ακαταχώρητη» με
+/// «Διατήρηση id». Η παλιά διατύπωση («έχει καταχωρηθεί») έλεγε το αντίθετο
+/// από τη λίστα δίπλα, που δείχνει σωστά «καμία σύνδεση» — και αποθάρρυνε από
+/// την επαναποστολή που ο χρήστης μόλις είχε ζητήσει.
+String lansweeperEditWarningHeadline({
+  String? ticketId,
+  bool registered = true,
+}) {
   final id = ticketId?.trim() ?? '';
+  if (!registered) {
+    if (id.isEmpty) {
+      return 'Η κλήση δεν είναι σημειωμένη ως καταχωρημένη στο Lansweeper.';
+    }
+    return 'Η κλήση δεν είναι σημειωμένη ως καταχωρημένη. Κρατείται ο αριθμός '
+        'αιτήματος';
+  }
   if (id.isEmpty) {
     return 'Η κλήση είναι σημειωμένη ως καταχωρημένη στο Lansweeper.';
   }
   return 'Η κλήση έχει καταχωρηθεί στο Lansweeper — ticket';
+}
+
+/// Το κείμενο **μετά** τον αριθμό — μόνο για την ακαταχώρητη με κρατημένο id.
+///
+/// Λέει το πράγμα που καθορίζει την επόμενη κίνηση: ο φυλαγμένος αριθμός δεν
+/// είναι ανάμνηση, είναι οδηγία. Χωρίς αυτόν η επόμενη αποστολή θα άνοιγε
+/// **δεύτερο** αίτημα για την ίδια κλήση.
+String lansweeperEditWarningTrailing({bool registered = true}) {
+  if (registered) return '';
+  return ' — η επόμενη αποστολή θα ενημερώσει αυτό το αίτημα αντί να ανοίξει '
+      'νέο.';
 }
 
 class LansweeperEditWarning extends StatelessWidget {
@@ -36,10 +63,15 @@ class LansweeperEditWarning extends StatelessWidget {
     required this.ticketViewUrlTemplate,
     required this.onClone,
     required this.cloneBusy,
+    this.registered = true,
     this.warnings = const <String>[],
   });
 
   final String? ticketId;
+
+  /// Μετριέται η κλήση ως καταχωρημένη; `false` όταν επαναφέρθηκε σε
+  /// ακαταχώρητη κρατώντας τον αριθμό του αιτήματος.
+  final bool registered;
 
   /// Τι χρειάστηκε προσοχή όταν έφυγε η κλήση — π.χ. ότι ο αιτών δεν βρέθηκε
   /// στο Lansweeper και το αίτημα καταχωρήθηκε στο όνομα του πράκτορα.
@@ -61,16 +93,26 @@ class LansweeperEditWarning extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final id = ticketId?.trim() ?? '';
-    final headline = lansweeperEditWarningHeadline(ticketId: id);
+    final headline = lansweeperEditWarningHeadline(
+      ticketId: id,
+      registered: registered,
+    );
+    // Κόκκινο μόνο για δουλειά που έχει ήδη φύγει και δεν παίρνει πίσω. Η
+    // ακαταχώρητη με κρατημένο αριθμό είναι πληροφορία για την επόμενη κίνηση,
+    // όχι συναγερμός — και το κόκκινο εκεί αποθάρρυνε την επαναποστολή.
+    final accent = registered
+        ? theme.colorScheme.error
+        : theme.colorScheme.tertiary;
+    final surface = registered
+        ? theme.colorScheme.errorContainer
+        : theme.colorScheme.surfaceContainerHighest;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.errorContainer.withValues(alpha: 0.55),
+        color: surface.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.error.withValues(alpha: 0.4),
-        ),
+        border: Border.all(color: accent.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,6 +124,9 @@ class LansweeperEditWarning extends StatelessWidget {
               leadingText: '$headline ',
               ticketId: id,
               ticketViewUrlTemplate: ticketViewUrlTemplate,
+              trailingText: lansweeperEditWarningTrailing(
+                registered: registered,
+              ),
               style: theme.textTheme.bodyMedium,
             ),
           const SizedBox(height: 8),
@@ -97,11 +142,7 @@ class LansweeperEditWarning extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      size: 16,
-                      color: theme.colorScheme.error,
-                    ),
+                    Icon(Icons.warning_amber_rounded, size: 16, color: accent),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(warning, style: theme.textTheme.bodySmall),

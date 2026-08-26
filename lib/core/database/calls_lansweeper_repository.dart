@@ -67,7 +67,11 @@ class CallsLansweeperRepository {
   /// συναλλαγή: εκεί ο έλεγχος είναι ατομικός (δεν υπάρχει παράθυρο ανάμεσα
   /// στην ανάγνωση και στην εγγραφή) και δωρεάν (η γραμμή διαβάζεται έτσι κι
   /// αλλιώς για το Ιστορικό). Πετώντας, ακυρώνει ολόκληρη τη συναλλαγή.
-  Future<void> _updateAndLog(
+  /// Επιστρέφει `true` όταν η εγγραφή **άλλαξε** κάτι ουσιαστικό.
+  ///
+  /// Ο καλών το χρειάζεται: ό,τι συνοδεύει την αλλαγή (π.χ. εγγραφή στο
+  /// ιστορικό συνδέσμων) δεν έχει λόγο να γραφτεί όταν τίποτα δεν κουνήθηκε.
+  Future<bool> _updateAndLog(
     DatabaseExecutor e, {
     required int callId,
     required Map<String, Object?> payload,
@@ -80,7 +84,7 @@ class CallsLansweeperRepository {
     final before = await _readFields(e, callId, auditedFields);
     // Κλήση που δεν υπάρχει (π.χ. διαγράφηκε στο μεταξύ): καμία εγγραφή,
     // καμία εγγραφή ιστορικού για οντότητα-φάντασμα.
-    if (before.isEmpty) return;
+    if (before.isEmpty) return false;
     guard?.call(before);
 
     await e.update('calls', payload, where: 'id = ?', whereArgs: [callId]);
@@ -102,7 +106,7 @@ class CallsLansweeperRepository {
     if (extraNewValues != null) newValues.addAll(extraNewValues);
     // Καμία ουσιαστική αλλαγή (π.χ. επανακαταχώρηση στο ίδιο ticket): δεν
     // γεμίζουμε το ιστορικό με εγγραφές που δεν λένε τίποτα.
-    if (newValues.isEmpty) return;
+    if (newValues.isEmpty) return false;
 
     final user = await AuditService.performingUser(e);
     final entityName = (await CallsAuditLine(
@@ -119,6 +123,7 @@ class CallsLansweeperRepository {
       oldValues: oldValues.isEmpty ? null : oldValues,
       newValues: newValues,
     );
+    return true;
   }
 
   /// Αλλαγή κατάστασης/ticket Lansweeper.
@@ -132,7 +137,7 @@ class CallsLansweeperRepository {
   /// μπαγιάτικη ουρά αντικαθιστά το αίτημα που μόλις καταχώρησε ο συνάδελφος.
   /// Δεκτικό `null` μόνο ρητά — άγνοια της αφετηρίας σημαίνει «πέρνα» (μια
   /// εγγραφή από παλαιότερη έκδοση δεν γίνεται άσωστη), όχι «μπλόκαρε».
-  Future<void> _applyAndLog(
+  Future<bool> _applyAndLog(
     DatabaseExecutor e, {
     required int callId,
     required Map<String, Object?> payload,
@@ -471,7 +476,7 @@ class CallsLansweeperRepository {
   }) async {
     final nowIso = DateTime.now().toIso8601String();
     await db.transaction((txn) async {
-      await _applyAndLog(
+      final changed = await _applyAndLog(
         txn,
         callId: callId,
         payload: {
@@ -485,6 +490,12 @@ class CallsLansweeperRepository {
         // Ένας δεύτερος έλεγχος εδώ θα απέρριπτε ticket που μόλις γεννήθηκε.
         expected: null,
       );
+      // Ο σύνδεσμος ακολουθεί την αλλαγή, δεν την προηγείται: επανασήμανση με
+      // τον ΙΔΙΟ αριθμό δεν άλλαξε τίποτα, οπότε δεν προσθέτει δεύτερη
+      // πανομοιότυπη εγγραφή. Το ιστορικό συνδέσμων είναι που κάνει ανακτήσιμη
+      // τη ζημιά όταν δύο άνθρωποι καταχωρούν την ίδια κλήση — διπλότυπα το
+      // δυσκολεύουν ακριβώς τη στιγμή που χρειάζεται.
+      if (!changed) return;
       await addExternalLink(
         callId: callId,
         externalId: ticketId,

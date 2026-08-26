@@ -32,8 +32,12 @@ class OperatorPermissionsCard extends StatelessWidget {
 
   final ValueChanged<Map<String, bool>> onChanged;
 
+  /// Ο σημασμένος διαχειριστής τα έχει όλα — η πύλη τον περνά χωρίς να
+  /// κοιτάξει τη λίστα, οπότε και τα τικ οφείλουν να δείχνουν αυτή την
+  /// αλήθεια. Χωρίς αυτό, το «Πλήρες αντίγραφο» (προεπιλογή «όχι») φαινόταν
+  /// σβηστό ΚΑΙ κλειδωμένο σε κάποιον που στην πράξη το έχει.
   bool _isAllowed(AppPermission permission) =>
-      overrides[permission.key] ?? permission.allowedByDefault;
+      isAdmin || (overrides[permission.key] ?? permission.allowedByDefault);
 
   void _toggle(AppPermission permission, bool allowed) {
     final next = Map<String, bool>.from(overrides);
@@ -89,6 +93,7 @@ class OperatorPermissionsCard extends StatelessWidget {
             enabled: !isAdmin && !readOnly,
             onChanged: (value) => _toggle(permission, value),
           ),
+        const _AdminOnlyPowers(),
       ],
     );
   }
@@ -156,25 +161,117 @@ class _PermissionTile extends StatelessWidget {
           ],
         ],
       ),
-      subtitle: Text(
-        permission.enforced
-            ? _enforcedNote(permission)
-            : 'Το τικ αποθηκεύεται, αλλά δεν εμποδίζει τίποτα ακόμη.',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
+      subtitle: _note() == null
+          ? null
+          : Text(
+              _note()!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
     );
   }
 
-  static String _enforcedNote(AppPermission permission) {
+  /// Υπότιτλος μόνο όπου λέει κάτι — τα υπόλοιπα μιλούν με το τικ τους.
+  ///
+  /// Το «Ισχύει.» που έγραφαν κάποτε όλα τα επιβαλλόμενα δικαιώματα ξεχώριζε
+  /// από την εποχή που κάποια ήταν «αποθηκευμένα αλλά ανενεργά»· τώρα που
+  /// επιβάλλονται όλα, δεν διέκρινε τίποτα από τίποτα και αφαιρέθηκε.
+  String? _note() {
+    if (!permission.enforced) {
+      return 'Το τικ αποθηκεύεται, αλλά δεν εμποδίζει τίποτα ακόμη.';
+    }
     return switch (permission) {
       // Δείχνει τους ωμούς πίνακες, άρα και ό,τι έχει κρυφτεί αλλού — μαζί με
       // τα προσωπικά κλειδιά ΤΝ σε απλό κείμενο.
       AppPermission.browseDatabase =>
         'Παρακάμπτει κάθε άλλο δικαίωμα: δείχνει τους πίνακες όπως είναι.',
-      _ => 'Ισχύει.',
+      _ => null,
     };
+  }
+}
+
+/// Ό,τι συνοδεύει τη σήμανση «Διαχειριστής» και **δεν** έχει τικ στη λίστα.
+///
+/// Η λίστα από πάνω απαντά «τι επιτρέπεται σε αυτόν τον άνθρωπο»· η σήμανση
+/// «Διαχειριστής» δηλώνει ρόλο, όχι άθροισμα τικ. Χωρίς αυτό το κείμενο, ένας
+/// χρήστης με όλα τα τικ αναμμένα φαινόταν ισοδύναμος με διαχειριστή — και δεν
+/// είναι. Διπλωμένο εξ ορισμού: είναι απάντηση σε ερώτηση που δεν κάνουν όλοι.
+class _AdminOnlyPowers extends StatelessWidget {
+  const _AdminOnlyPowers();
+
+  /// Οι διαφορές, με τη διατύπωση του απλού χρήστη — «τι ΔΕΝ κάνει αυτός».
+  static const List<String> _differences = [
+    'Δεν μπορεί να διαχειριστεί προφίλ — να φτιάξει χρήστη, να δώσει '
+        'δικαίωμα, να ορίσει διαχειριστή. Είναι σκόπιμα εκτός λίστας: όποιος '
+        'μπορεί να δίνει δικαιώματα μπορεί να τα δώσει και στον εαυτό του, '
+        'οπότε ένα τικ «διαχείριση χρηστών» θα ισοδυναμούσε σιωπηλά με όλα τα '
+        'υπόλοιπα μαζί.',
+    'Παραχωρεί το αντίγραφο ασφαλείας σε παρόντα διαχειριστή, αντί να το '
+        'κρατά.',
+    'Δεν προτιμάται η ρύθμισή του όταν η εφαρμογή διαλέγει ποιανού οι '
+        'ρυθμίσεις αντιγράφων ισχύουν.',
+    'Δεν ανεβάζει τοπικές ρυθμίσεις στις κοινές της βάσης.',
+    'Δεν κληρονομεί παλιές κοινές ρυθμίσεις στο προφίλ του.',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Theme(
+      // Ο διαχωριστής της πτυσσόμενης ενότητας δεν προσθέτει τίποτα εδώ: το
+      // περιεχόμενο είναι κείμενο, όχι δεύτερη λίστα.
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        leading: Icon(
+          Icons.workspace_premium_outlined,
+          size: 20,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        title: Text(
+          'Τι μένει μόνο στον διαχειριστή',
+          style: theme.textTheme.bodyMedium,
+        ),
+        subtitle: Text(
+          'Δεν ρυθμίζεται με τικ — συνοδεύει τη σήμανση.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        children: [
+          for (final difference in _differences)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Icon(
+                      Icons.circle,
+                      size: 5,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      difference,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

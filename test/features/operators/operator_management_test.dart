@@ -144,6 +144,67 @@ void main() {
       expect((await repository.findById(first.id!))!.isAdmin, isFalse);
     });
 
+    test('ο αρχειοθετημένος διαχειριστής δεν μετράει ως δικλείδα', () async {
+      // Ο Παναγιώτης αποχώρησε και το προφίλ του αρχειοθετήθηκε. Η Βαρβάρα
+      // είναι ο μόνος διαχειριστής που μπορεί να συνδεθεί: αν ξεσημανθεί, η
+      // βάση κλειδώνει: ο αρχειοθετημένος δεν προσφέρεται πουθενά προς
+      // επιλογή, άρα κανείς δεν μπορεί να μπει ως αυτός για να ξεκλειδώσει.
+      final varvara = await seedAdmin(name: 'Βαρβάρα');
+      final panagiotis = await management.create(
+        displayName: 'Παναγιώτης',
+        windowsAccount: 'panagiotis.account',
+        isAdmin: true,
+        now: DateTime(2026, 8, 19),
+      );
+      await management.save(
+        panagiotis.operator!,
+        displayName: 'Παναγιώτης',
+        windowsAccount: 'panagiotis.account',
+        isAdmin: true,
+        isActive: false,
+      );
+
+      final result = await management.save(
+        varvara,
+        displayName: varvara.displayName,
+        windowsAccount: varvara.windowsAccount,
+        isAdmin: false,
+        isActive: true,
+      );
+
+      expect(result.allowed, isFalse);
+      expect(result.message, contains('τουλάχιστον ένας διαχειριστής'));
+      expect((await repository.findById(varvara.id!))!.isAdmin, isTrue);
+    });
+
+    test('ο τελευταίος ενεργός διαχειριστής δεν αρχειοθετείται', () async {
+      final varvara = await seedAdmin(name: 'Βαρβάρα');
+      final panagiotis = await management.create(
+        displayName: 'Παναγιώτης',
+        windowsAccount: 'panagiotis.account',
+        isAdmin: true,
+        now: DateTime(2026, 8, 19),
+      );
+      await management.save(
+        panagiotis.operator!,
+        displayName: 'Παναγιώτης',
+        windowsAccount: 'panagiotis.account',
+        isAdmin: true,
+        isActive: false,
+      );
+
+      final result = await management.save(
+        varvara,
+        displayName: varvara.displayName,
+        windowsAccount: varvara.windowsAccount,
+        isAdmin: true,
+        isActive: false,
+      );
+
+      expect(result.allowed, isFalse);
+      expect((await repository.findById(varvara.id!))!.isActive, isTrue);
+    });
+
     test('η αποσύνδεση λογαριασμού κάνει το προφίλ αυτόνομο', () async {
       final admin = await seedAdmin();
 

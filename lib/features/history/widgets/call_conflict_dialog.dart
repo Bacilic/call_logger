@@ -34,7 +34,7 @@ Future<CallConflictChoice?> showCallConflictDialog(
     changedFields: conflict.changedFields,
     takeTheirsLabel: registered
         ? 'Κράτα την καταχώρηση'
-        : 'Άφησε τη δική του',
+        : 'Ακύρωσε την αλλαγή μου',
   );
   if (overwrite == null) return null;
   return overwrite ? CallConflictChoice.overwrite : CallConflictChoice.keepTheirs;

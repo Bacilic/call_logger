@@ -28,6 +28,15 @@ class OperatorRepository {
   ///
   /// Ο λογαριασμός κανονικοποιείται πριν τη σύγκριση, ώστε «VDrosos» και
   /// «vdrosos» να είναι το ίδιο πρόσωπο.
+  /// Το προφίλ που κατέχει αυτόν τον λογαριασμό Windows — **ενεργό ή όχι**.
+  ///
+  /// Η απουσία φίλτρου είναι σκόπιμη: ο έλεγχος «κατέχει ήδη κάποιος αυτόν τον
+  /// λογαριασμό;» της φόρμας χρηστών οφείλει να βλέπει και τα αρχειοθετημένα,
+  /// αλλιώς ο ίδιος λογαριασμός θα δινόταν σε δεύτερο προφίλ και η αναγνώριση
+  /// θα διάλεγε τυχαία μόλις ξαναενεργοποιούνταν το πρώτο.
+  ///
+  /// Όποιος τη χρησιμοποιεί για **ταυτοποίηση** πρέπει να απορρίπτει ο ίδιος τα
+  /// αρχειοθετημένα — δες [OperatorIdentity.resolveAndActivate].
   Future<Operator?> findByWindowsAccount(String? rawAccount) async {
     final account = normalizeWindowsAccount(rawAccount);
     if (account == null) return null;
@@ -58,10 +67,26 @@ class OperatorRepository {
     return (rows.first['c'] as num?)?.toInt() ?? 0;
   }
 
-  /// Πόσοι διαχειριστές υπάρχουν — ο τελευταίος δεν επιτρέπεται να χαθεί.
-  Future<int> countAdmins() async {
+  /// Πόσα προφίλ μπορούν να χρησιμοποιηθούν — τα αρχειοθετημένα δεν μετρούν.
+  Future<int> countActive() async {
     final rows = await db.rawQuery(
-      'SELECT COUNT(*) AS c FROM $tableName WHERE is_admin = 1',
+      'SELECT COUNT(*) AS c FROM $tableName WHERE is_active = 1',
+    );
+    if (rows.isEmpty) return 0;
+    return (rows.first['c'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Πόσοι διαχειριστές μπορούν να **συνδεθούν** — ο τελευταίος δεν
+  /// επιτρέπεται να χαθεί.
+  ///
+  /// Μετρά μόνο τους ενεργούς, και το όνομα το λέει: ο αρχειοθετημένος
+  /// διαχειριστής δεν προσφέρεται πουθενά προς επιλογή, οπότε ως δικλείδα
+  /// είναι φάντασμα. Μετρώντας τον, ο φρουρός επέτρεπε να ξεσημανθεί ο
+  /// τελευταίος ενεργός — και η βάση κλείδωνε: χωρίς διαχειριστή κανείς δεν
+  /// μπορεί να ορίσει διαχειριστή.
+  Future<int> countActiveAdmins() async {
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM $tableName WHERE is_admin = 1 AND is_active = 1',
     );
     if (rows.isEmpty) return 0;
     return (rows.first['c'] as num?)?.toInt() ?? 0;

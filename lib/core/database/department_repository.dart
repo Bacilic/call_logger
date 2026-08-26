@@ -441,52 +441,64 @@ class DepartmentRepository {
     bool force = false,
     DatabaseExecutor? executor,
   }) async {
-    final e = executor ?? db;
     final map = Map<String, dynamic>.from(values);
     map.remove('id');
     _applyDepartmentNameKeyFromName(map);
     if (map.isEmpty) return 0;
-    final oldRows = await e.query(
-      'departments',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    if (oldRows.isEmpty) return 0;
-    final oldRow = oldRows.first;
-    if (!force && expected != null) {
-      final conflict = DirectorySaveConflict.between(
-        entityType: AuditEntityTypes.department,
-        expected: expected,
-        fresh: oldRow,
-        attempted: map,
+
+    // Φρουρός, εγγραφή και ίχνος Ιστορικού γίνονται ΜΟΝΟΜΙΑΣ: χωρίς
+    // συναλλαγή, μια διακοπή ανάμεσα στην εγγραφή και το Ιστορικό άφηνε
+    // την καρτέλα αλλαγμένη χωρίς κανένα ίχνος του ποιος και τι άλλαξε —
+    // και ο φρουρός διένεξης έκρινε πάνω σε γραμμή που μπορούσε να
+    // ξαναγραφτεί πριν προλάβει η δική μας εγγραφή.
+    Future<int> run(DatabaseExecutor txn) async {
+      final oldRows = await txn.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
       );
-      if (conflict != null) throw DirectoryStaleException(conflict);
-    }
-    final n = await e.update(
-      'departments',
-      map,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    if (n <= 0) return 0;
-    final diff = _departmentAuditDiff(oldRow, map);
-    if (diff.oldDiff.isNotEmpty) {
-      final ap = await _support.auditPerformingUser(executor: executor);
-      final dn = (oldRow['name'] as String?)?.trim() ?? '';
-      await AuditService.log(
-        e,
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ',
-        userPerforming: ap,
-        details: 'departments id=$id',
-        entityType: AuditEntityTypes.department,
-        entityId: id,
-        entityName: dn.isEmpty ? null : dn,
-        oldValues: diff.oldDiff,
-        newValues: diff.newDiff,
+      if (oldRows.isEmpty) return 0;
+      final oldRow = oldRows.first;
+      if (!force && expected != null) {
+        final conflict = DirectorySaveConflict.between(
+          entityType: AuditEntityTypes.department,
+          expected: expected,
+          fresh: oldRow,
+          attempted: map,
+        );
+        if (conflict != null) throw DirectoryStaleException(conflict);
+      }
+      final n = await txn.update(
+        'departments',
+        map,
+        where: 'id = ?',
+        whereArgs: [id],
       );
+      if (n <= 0) return 0;
+      final diff = _departmentAuditDiff(oldRow, map);
+      if (diff.oldDiff.isNotEmpty) {
+        // Πάντα μέσω του txn: ανάγνωση στο γυμνό db όσο η συναλλαγή είναι
+        // ανοιχτή θα περίμενε τη συναλλαγή — δηλαδή για πάντα.
+        final ap = await _support.auditPerformingUser(executor: txn);
+        final dn = (oldRow['name'] as String?)?.trim() ?? '';
+        await AuditService.log(
+          txn,
+          action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΤΜΗΜΑΤΟΣ',
+          userPerforming: ap,
+          details: 'departments id=$id',
+          entityType: AuditEntityTypes.department,
+          entityId: id,
+          entityName: dn.isEmpty ? null : dn,
+          oldValues: diff.oldDiff,
+          newValues: diff.newDiff,
+        );
+      }
+      return n;
     }
-    return n;
+
+    if (executor != null) return run(executor);
+    return db.transaction(run);
   }
 
   Future<void> bulkUpdateDepartments(

@@ -56,7 +56,9 @@ void main() {
 
     test('καμία αλλαγή: το λέει καθαρά και δεν υπόσχεται αντίγραφο', () {
       final info = BackupScheduleStatusFormatter.build(
-        settings: _settings(lastAttempt: now.subtract(const Duration(hours: 2))),
+        settings: _settings(
+          lastAttempt: now.subtract(const Duration(hours: 2)),
+        ),
         pendingChanges: 0,
         now: now,
       );
@@ -67,9 +69,7 @@ void main() {
 
     test('αλλαγές κάτω από το κατώφλι: δείχνει κατώφλι ΚΑΙ προθεσμία', () {
       final info = BackupScheduleStatusFormatter.build(
-        settings: _settings(
-          lastAttempt: DateTime(2026, 8, 24, 11, 0),
-        ),
+        settings: _settings(lastAttempt: DateTime(2026, 8, 24, 11, 0)),
         pendingChanges: 7,
         now: now,
       );
@@ -93,9 +93,7 @@ void main() {
 
     test('φρέσκο αντίγραφο με γεμάτο κατώφλι: δείχνει το «όχι πριν»', () {
       final info = BackupScheduleStatusFormatter.build(
-        settings: _settings(
-          lastAttempt: DateTime(2026, 8, 24, 11, 50),
-        ),
+        settings: _settings(lastAttempt: DateTime(2026, 8, 24, 11, 50)),
         pendingChanges: 120,
         now: now,
       );
@@ -184,7 +182,9 @@ void main() {
 
     test('καμία αλλαγή: ήσυχο πράσινο μήνυμα', () {
       final h = BackupScheduleStatusFormatter.statsBackupHealth(
-        settings: _settings(lastAttempt: now.subtract(const Duration(hours: 1))),
+        settings: _settings(
+          lastAttempt: now.subtract(const Duration(hours: 1)),
+        ),
         pendingChanges: 0,
         canManageBackups: false,
         now: now,
@@ -253,6 +253,25 @@ void main() {
   });
 
   group('destinationContentLabelEl', () {
+    test('κενή διαδρομή και χαμένος φάκελος λένε ΔΙΑΦΟΡΕΤΙΚΑ πράγματα', () {
+      // Το ένα σε στέλνει να ψάξεις τι απέγινε ο φάκελος, το άλλο απλώς να
+      // ορίσεις έναν — ίδιο μήνυμα θα έστελνε τον μισό κόσμο σε λάθος δουλειά.
+      final notSet = BackupScheduleStatusFormatter.destinationContentLabelEl(
+        const BackupDestinationContentResult(
+          kind: BackupDestinationContentKind.folderNotSet,
+        ),
+      );
+      final missing = BackupScheduleStatusFormatter.destinationContentLabelEl(
+        const BackupDestinationContentResult(
+          kind: BackupDestinationContentKind.folderMissing,
+        ),
+      );
+
+      expect(notSet, 'δεν έχει οριστεί φάκελος προορισμού');
+      expect(missing, 'ο φάκελος προορισμού δεν υπάρχει');
+      expect(notSet, isNot(missing));
+    });
+
     test('folderOk — πλήρες κείμενο χωρίς διπλή αναφορά', () {
       final label = BackupScheduleStatusFormatter.destinationContentLabelEl(
         BackupDestinationContentResult(

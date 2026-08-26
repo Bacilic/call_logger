@@ -139,34 +139,31 @@ void main() {
       expect(d.reason, BackupTriggerReason.spacingNotElapsed);
     });
 
-    test(
-      'μέγιστη αναμονή μικρότερη από την απόσταση: ισχύει η απόσταση',
-      () {
-        final d = BackupTriggerDecision.evaluate(
-          settings: settingsWith(
-            minSpacing: 60,
-            maxWait: 15,
-            lastBackupAt: now.subtract(const Duration(minutes: 59)),
-          ),
-          pendingChanges: 3,
-          now: now,
-        );
-        expect(d.due, isFalse);
-        expect(d.reason, BackupTriggerReason.spacingNotElapsed);
+    test('μέγιστη αναμονή μικρότερη από την απόσταση: ισχύει η απόσταση', () {
+      final d = BackupTriggerDecision.evaluate(
+        settings: settingsWith(
+          minSpacing: 60,
+          maxWait: 15,
+          lastBackupAt: now.subtract(const Duration(minutes: 59)),
+        ),
+        pendingChanges: 3,
+        now: now,
+      );
+      expect(d.due, isFalse);
+      expect(d.reason, BackupTriggerReason.spacingNotElapsed);
 
-        final after = BackupTriggerDecision.evaluate(
-          settings: settingsWith(
-            minSpacing: 60,
-            maxWait: 15,
-            lastBackupAt: now.subtract(const Duration(minutes: 61)),
-          ),
-          pendingChanges: 3,
-          now: now,
-        );
-        expect(after.due, isTrue);
-        expect(after.reason, BackupTriggerReason.dueMaxWait);
-      },
-    );
+      final after = BackupTriggerDecision.evaluate(
+        settings: settingsWith(
+          minSpacing: 60,
+          maxWait: 15,
+          lastBackupAt: now.subtract(const Duration(minutes: 61)),
+        ),
+        pendingChanges: 3,
+        now: now,
+      );
+      expect(after.due, isTrue);
+      expect(after.reason, BackupTriggerReason.dueMaxWait);
+    });
   });
 
   group('BackupTriggerDecision.shouldRunOnClose', () {

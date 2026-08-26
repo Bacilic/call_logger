@@ -175,7 +175,7 @@ void main() {
       );
       await _advance(tester);
 
-      expect(find.text('Προβολή χρήστη'), findsOneWidget);
+      expect(find.text('Προβολή Βασίλης'), findsOneWidget);
       expect(
         find.widgetWithText(FilledButton, 'Αποθήκευση'),
         findsNothing,
@@ -273,7 +273,9 @@ void main() {
       expect(find.text('δικαιώματα'), findsOneWidget);
       expect(find.text('σήμανση διαχειριστή'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Άφησε τη δική του'));
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Ακύρωσε την αλλαγή μου'),
+      );
       await _advance(tester);
 
       final stored = await tester.runAsync(
@@ -287,7 +289,8 @@ void main() {
       await _advance(tester, rounds: 4);
     });
 
-    testWidgets('διένεξη: «Κράτα τη δική μου» γράφει εν γνώσει του χρήστη', (
+    testWidgets('διένεξη: «Κράτα τη δική μου αλλαγή» γράφει εν γνώσει του '
+        'χρήστη', (
       tester,
     ) async {
       await openCardThenSomeoneElseWrites(tester);
@@ -296,7 +299,9 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
       await _advance(tester);
 
-      await tester.tap(find.widgetWithText(TextButton, 'Κράτα τη δική μου'));
+      await tester.tap(
+        find.widgetWithText(TextButton, 'Κράτα τη δική μου αλλαγή'),
+      );
       await _advance(tester, rounds: 8);
 
       final stored = await tester.runAsync(

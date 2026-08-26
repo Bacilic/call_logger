@@ -59,6 +59,35 @@ void main() {
       );
     });
 
+    test('ακαταχώρητη με κρατημένο αριθμό: λέει τι θα γίνει, όχι ότι έφυγε', () {
+      // Η «Επαναφορά σε ακαταχώρητη → Διατήρηση id» αφήνει την κλήση εκτός
+      // καταχώρησης αλλά με τον αριθμό φυλαγμένο: η επόμενη αποστολή ΕΝΗΜΕΡΩΝΕΙ
+      // εκείνο το αίτημα αντί να ανοίξει νέο. Αυτό είναι που πρέπει να ξέρει ο
+      // χρήστης τη στιγμή που κοιτά την καρτέλα.
+      final headline = lansweeperEditWarningHeadline(
+        ticketId: '17691',
+        registered: false,
+      );
+
+      expect(headline, isNot(contains('έχει καταχωρηθεί')));
+      expect(headline, contains('δεν είναι σημειωμένη'));
+      expect(
+        lansweeperEditWarningTrailing(registered: false),
+        contains('θα ενημερώσει'),
+        reason: greekExpectMsg(
+          'Χωρίς αυτό, ο χρήστης δεν ξέρει αν θα ανοίξει δεύτερο αίτημα',
+        ),
+      );
+    });
+
+    test('καταχωρημένη: το κείμενο μένει όπως ήταν', () {
+      expect(
+        lansweeperEditWarningHeadline(ticketId: '17132', registered: true),
+        'Η κλήση έχει καταχωρηθεί στο Lansweeper — ticket',
+      );
+      expect(lansweeperEditWarningTrailing(registered: true), isEmpty);
+    });
+
     test('η φράση δεν εκθέτει ποτέ τη λογική συνθήκη του κώδικα', () {
       for (final id in <String?>[null, '17132']) {
         final headline = lansweeperEditWarningHeadline(ticketId: id);

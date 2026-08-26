@@ -37,6 +37,18 @@ void main() {
       expect(result.kind, BackupDestinationContentKind.folderMissing);
     });
 
+    test('κενή διαδρομή: «δεν έχει οριστεί», ΟΧΙ «δεν υπάρχει»', () async {
+      // Τα δύο θέλουν εντελώς διαφορετική αντίδραση από τον χρήστη: στο ένα
+      // ψάχνει τι απέγινε ο φάκελος, στο άλλο απλώς ορίζει έναν.
+      final result =
+          await BackupDestinationFolderValidator.inspectDestinationContent(
+            destinationDirectory: '   ',
+            dbBaseName: 'call_logger',
+          );
+
+      expect(result.kind, BackupDestinationContentKind.folderNotSet);
+    });
+
     test('inspectDestinationContent folderEmptyNoFiles', () async {
       final dir = await Directory(
         p.join(

@@ -164,4 +164,59 @@ void main() {
       findsNWidgets(AppPermission.notYetEnforced.length),
     );
   });
+
+  testWidgets('ο σημασμένος διαχειριστής φαίνεται με όλα τα δικαιώματα', (
+    tester,
+  ) async {
+    // Το «Πλήρες αντίγραφο ασφαλείας» έχει προεπιλογή «όχι»· ο διαχειριστής
+    // όμως το έχει — η πύλη τον περνά χωρίς να κοιτάξει τη λίστα. Σβηστό τικ
+    // εδώ λέει ψέματα.
+    await _pumpCard(tester, isAdmin: true);
+
+    final tile = tester.widget<CheckboxListTile>(
+      find.ancestor(
+        of: find.text(AppPermission.fullBackup.label),
+        matching: find.byType(CheckboxListTile),
+      ),
+    );
+    expect(tile.value, isTrue);
+  });
+
+  testWidgets('η ενότητα «τι μένει μόνο στον διαχειριστή» ξεδιπλώνει', (
+    tester,
+  ) async {
+    await _pumpCard(tester);
+
+    // Διπλωμένη εξ ορισμού: το περιεχόμενο δεν κλέβει τον χώρο της λίστας.
+    expect(
+      find.textContaining('Δεν μπορεί να διαχειριστεί προφίλ'),
+      findsNothing,
+    );
+
+    final header = find.text('Τι μένει μόνο στον διαχειριστή');
+    await tester.ensureVisible(header);
+    await tester.pumpAndSettle();
+    await tester.tap(header);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Δεν μπορεί να διαχειριστεί προφίλ'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Παραχωρεί το αντίγραφο ασφαλείας'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Δεν κληρονομεί παλιές κοινές ρυθμίσεις'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('η ενότητα υπάρχει και στην καρτέλα διαχειριστή', (tester) async {
+    // Εκεί απαντά στο «σε τι διαφέρει από χρήστη με όλα τα τικ;».
+    await _pumpCard(tester, isAdmin: true);
+
+    expect(find.text('Τι μένει μόνο στον διαχειριστή'), findsOneWidget);
+  });
 }

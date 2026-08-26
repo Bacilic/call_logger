@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
 import '../../../core/services/operator_identity.dart';
+import '../services/operator_management.dart'
+    show kLastAdminArchiveBlockedMessage, kLastAdminDemoteBlockedMessage;
 import 'operator_permissions_card.dart';
 
 /// Τι επέστρεψε η φόρμα — ό,τι πάτησε ο χρήστης, χωρίς κρίση αν επιτρέπεται.
@@ -27,13 +29,16 @@ class OperatorFormValues {
 ///
 /// Οι κανόνες (μοναδικά ονόματα, τελευταίος διαχειριστής, κατειλημμένος
 /// λογαριασμός) ζουν στην υπηρεσία διαχείρισης· εδώ μόνο εμφανίζεται το μήνυμα
-/// που εκείνη επιστρέφει.
+/// που εκείνη επιστρέφει. Ο μόνος άμεσος φραγμός — οι διακόπτες του τελευταίου
+/// διαχειριστή — κρίνεται κι αυτός απ' έξω ([lockedAsLastAdmin])· η φόρμα
+/// απλώς αρνείται το πάτημα και δείχνει το γιατί.
 class OperatorFormDialog extends StatefulWidget {
   const OperatorFormDialog({
     super.key,
     this.existing,
     required this.onSubmit,
     this.readOnly = false,
+    this.lockedAsLastAdmin = false,
   });
 
   /// `null` για νέο προφίλ.
@@ -50,11 +55,23 @@ class OperatorFormDialog extends StatefulWidget {
   /// όταν πέρασε — οπότε ο διάλογος κλείνει.
   final Future<String?> Function(OperatorFormValues values) onSubmit;
 
+  /// Το προφίλ είναι ο τελευταίος διαχειριστής που μπορεί να συνδεθεί.
+  ///
+  /// Οι διακόπτες «Διαχειριστής» και «Ενεργός» δεν κατεβαίνουν: αναβοσβήνουν
+  /// και εξηγούν, αντί να αφήσουν τον χρήστη να το μάθει στην Αποθήκευση.
+  /// Κρίνεται από τη λίστα που έχει ήδη η οθόνη — ο έλεγχος της αποθήκευσης
+  /// παραμένει, ως δίχτυ για τη λίστα που πάλιωσε όσο η καρτέλα ήταν ανοιχτή.
+  final bool lockedAsLastAdmin;
+
   @override
   State<OperatorFormDialog> createState() => _OperatorFormDialogState();
 }
 
-class _OperatorFormDialogState extends State<OperatorFormDialog> {
+/// Ποιος διακόπτης αρνήθηκε το πάτημα — για να αναβοσβήσει μόνο αυτός.
+enum _DeniedSwitch { admin, active }
+
+class _OperatorFormDialogState extends State<OperatorFormDialog>
+    with SingleTickerProviderStateMixin {
   late final TextEditingController _name;
   late final TextEditingController _account;
   late bool _isAdmin;
@@ -62,6 +79,41 @@ class _OperatorFormDialogState extends State<OperatorFormDialog> {
   late Map<String, bool> _permissionOverrides;
   String? _error;
   bool _saving = false;
+
+  /// Δύο αναβοσβήματα — η καθιερωμένη γλώσσα του «δεν επιτρέπεται» χωρίς λόγια.
+  late final AnimationController _denialBlink = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 640),
+  );
+  late final Animation<double> _denialOpacity = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween(begin: 1, end: 0.25), weight: 1),
+    TweenSequenceItem(tween: Tween(begin: 0.25, end: 1), weight: 1),
+    TweenSequenceItem(tween: Tween(begin: 1, end: 0.25), weight: 1),
+    TweenSequenceItem(tween: Tween(begin: 0.25, end: 1), weight: 1),
+  ]).animate(_denialBlink);
+  _DeniedSwitch? _denied;
+
+  /// Αρνείται το πάτημα: ο διακόπτης μένει όπου ήταν, αναβοσβήνει δύο φορές
+  /// και το μήνυμα λέει το γιατί — το ίδιο που θα έλεγε και η Αποθήκευση.
+  void _denySwitch(_DeniedSwitch which, String message) {
+    setState(() {
+      _denied = which;
+      _error = message;
+    });
+    _denialBlink.forward(from: 0);
+  }
+
+  /// Τυλίγει διακόπτη ώστε να μπορεί να αναβοσβήσει όταν αρνηθεί.
+  Widget _blinkable(_DeniedSwitch which, Widget tile) {
+    return AnimatedBuilder(
+      animation: _denialBlink,
+      builder: (context, child) => Opacity(
+        opacity: _denied == which ? _denialOpacity.value : 1,
+        child: child,
+      ),
+      child: tile,
+    );
+  }
 
   @override
   void initState() {
@@ -78,6 +130,7 @@ class _OperatorFormDialogState extends State<OperatorFormDialog> {
 
   @override
   void dispose() {
+    _denialBlink.dispose();
     _name.dispose();
     _account.dispose();
     super.dispose();
@@ -129,11 +182,18 @@ class _OperatorFormDialogState extends State<OperatorFormDialog> {
 
     final readOnly = widget.readOnly;
 
+    // Με το όνομα στον τίτλο, φαίνεται αμέσως για ΠΟΙΟΝ γίνονται οι αλλαγές —
+    // το αποθηκευμένο όνομα, όχι ό,τι πληκτρολογείται τώρα στο πεδίο.
+    final existingName = widget.existing?.displayName.trim() ?? '';
+    final personLabel = existingName.isEmpty ? 'χρήστη' : existingName;
+
     return AlertDialog(
       title: Text(
-        readOnly
-            ? 'Προβολή χρήστη'
-            : (isNew ? 'Νέος χρήστης' : 'Επεξεργασία χρήστη'),
+        isNew
+            ? 'Νέος χρήστης'
+            : (readOnly
+                  ? 'Προβολή $personLabel'
+                  : 'Επεξεργασία $personLabel'),
       ),
       content: SizedBox(
         width: 460,
@@ -200,28 +260,52 @@ class _OperatorFormDialogState extends State<OperatorFormDialog> {
                           ),
                           const SizedBox(height: 8),
                           const Divider(),
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: _isAdmin,
-                            onChanged: readOnly
-                                ? null
-                                : (value) => setState(() => _isAdmin = value),
-                            secondary: const Icon(Icons.shield_outlined),
-                            title: const Text('Διαχειριστής'),
-                            subtitle: const Text(
-                              'Δεν περνά από τη λίστα δικαιωμάτων',
+                          _blinkable(
+                            _DeniedSwitch.admin,
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: _isAdmin,
+                              onChanged: readOnly
+                                  ? null
+                                  : (value) {
+                                      if (!value && widget.lockedAsLastAdmin) {
+                                        _denySwitch(
+                                          _DeniedSwitch.admin,
+                                          kLastAdminDemoteBlockedMessage,
+                                        );
+                                        return;
+                                      }
+                                      setState(() => _isAdmin = value);
+                                    },
+                              secondary: const Icon(Icons.shield_outlined),
+                              title: const Text('Διαχειριστής'),
+                              subtitle: const Text(
+                                'Δεν περνά από τη λίστα δικαιωμάτων',
+                              ),
                             ),
                           ),
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: _isActive,
-                            onChanged: readOnly
-                                ? null
-                                : (value) => setState(() => _isActive = value),
-                            secondary: const Icon(Icons.how_to_reg_outlined),
-                            title: const Text('Ενεργός'),
-                            subtitle: const Text(
-                              'Οι αρχειοθετημένοι κρύβονται από τις λίστες επιλογής',
+                          _blinkable(
+                            _DeniedSwitch.active,
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: _isActive,
+                              onChanged: readOnly
+                                  ? null
+                                  : (value) {
+                                      if (!value && widget.lockedAsLastAdmin) {
+                                        _denySwitch(
+                                          _DeniedSwitch.active,
+                                          kLastAdminArchiveBlockedMessage,
+                                        );
+                                        return;
+                                      }
+                                      setState(() => _isActive = value);
+                                    },
+                              secondary: const Icon(Icons.how_to_reg_outlined),
+                              title: const Text('Ενεργός'),
+                              subtitle: const Text(
+                                'Οι αρχειοθετημένοι κρύβονται από τις λίστες επιλογής',
+                              ),
                             ),
                           ),
                         ],

@@ -91,6 +91,8 @@ abstract final class BackupScheduleStatusFormatter {
     final base = content.dbBaseName.trim();
     final forBase = base.isEmpty ? '' : ' για τη βάση «$base»';
     switch (content.kind) {
+      case BackupDestinationContentKind.folderNotSet:
+        return 'δεν έχει οριστεί φάκελος προορισμού';
       case BackupDestinationContentKind.folderMissing:
         return 'ο φάκελος προορισμού δεν υπάρχει';
       case BackupDestinationContentKind.folderEmptyNoFiles:
