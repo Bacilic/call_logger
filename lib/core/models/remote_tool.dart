@@ -53,6 +53,7 @@ class RemoteTool {
     this.arguments = const [],
     this.testTargetIp,
     this.isExclusive = false,
+    this.connectWaitSeconds = defaultConnectWaitSeconds,
   });
 
   final int id;
@@ -75,6 +76,46 @@ class RemoteTool {
 
   /// Όταν true, αν είναι έγκυρο στην κλήση κρύβει τα μη αποκλειστικά εργαλεία.
   final bool isExclusive;
+
+  /// Πόσο κλειδώνει το κουμπί μετά από **επιβεβαιωμένη** εκκίνηση, σε
+  /// δευτερόλεπτα — η **κοινή** τιμή της ομάδας.
+  ///
+  /// Η απομακρυσμένη επιφάνεια αργεί να εμφανιστεί και η εφαρμογή δεν έχει
+  /// τρόπο να μάθει πότε φόρτωσε: το πρόγραμμα ζωγραφίζει σε δικό του
+  /// παράθυρο και δεν στέλνει κανένα σήμα «τελείωσα». Χωρίς αυτό το διάστημα,
+  /// το κουμπί ξεκλείδωνε τη στιγμή που τα Windows παρελάμβαναν τη διεργασία —
+  /// και κάθε επόμενο πάτημα άνοιγε **νέα συνεδρία**.
+  ///
+  /// Ο χρόνος διαφέρει κατά πολύ από μηχάνημα σε μηχάνημα, γι' αυτό ο καθένας
+  /// τον παρακάμπτει τοπικά (`OverridableSettingKeys.remoteToolConnectWait`).
+  /// Εδώ ζει μόνο η αφετηρία που ορίζει ο διαχειριστής ανά εργαλείο — το RDP
+  /// αργεί δεκάδες δευτερόλεπτα, το AnyDesk ελάχιστα.
+  ///
+  /// **Μηδέν = χωρίς κλείδωμα.**
+  final int connectWaitSeconds;
+
+  /// Αφετηρία όταν δεν έχει οριστεί τίποτα: μεσαία τιμή, ούτε ενοχλητική για
+  /// τα γρήγορα εργαλεία ούτε άχρηστη για τα αργά.
+  static const int defaultConnectWaitSeconds = 30;
+
+  /// Ανώτατο επιτρεπτό: πάνω από τρία λεπτά το κλείδωμα παύει να προστατεύει
+  /// και απλώς εμποδίζει.
+  static const int maxConnectWaitSeconds = 180;
+
+  /// Φέρνει οποιαδήποτε τιμή μέσα στα όρια. Ό,τι δεν διαβάζεται ως αριθμός
+  /// πέφτει στην προεπιλογή — ποτέ σε κλείδωμα-αιωνιότητα ή σε σιωπηλό μηδέν.
+  static int normalizeConnectWaitSeconds(Object? raw) {
+    final int? value = switch (raw) {
+      final int v => v,
+      final num v => v.round(),
+      final String v => int.tryParse(v.trim()),
+      _ => null,
+    };
+    if (value == null) return defaultConnectWaitSeconds;
+    if (value < 0) return 0;
+    if (value > maxConnectWaitSeconds) return maxConnectWaitSeconds;
+    return value;
+  }
 
   /// True όταν υπάρχει ενεργό όρισμα με placeholder `{FILE}`.
   bool get acceptsFileParam {
@@ -245,6 +286,9 @@ class RemoteTool {
       arguments: _parseArgumentsJson(map['arguments_json']),
       testTargetIp: map['test_target_ip'] as String?,
       isExclusive: ((map['is_exclusive'] as int?) ?? 0) == 1,
+      connectWaitSeconds: normalizeConnectWaitSeconds(
+        map['connect_wait_seconds'],
+      ),
     );
   }
 
@@ -262,6 +306,7 @@ class RemoteTool {
       'arguments_json': _argumentsJsonString(),
       'test_target_ip': testTargetIp,
       'is_exclusive': isExclusive ? 1 : 0,
+      'connect_wait_seconds': connectWaitSeconds,
     };
   }
 
@@ -290,6 +335,7 @@ class RemoteTool {
     String? testTargetIp,
     bool clearTestTargetIp = false,
     bool? isExclusive,
+    int? connectWaitSeconds,
   }) {
     return RemoteTool(
       id: id ?? this.id,
@@ -306,6 +352,7 @@ class RemoteTool {
           ? null
           : (testTargetIp ?? this.testTargetIp),
       isExclusive: isExclusive ?? this.isExclusive,
+      connectWaitSeconds: connectWaitSeconds ?? this.connectWaitSeconds,
     );
   }
 
@@ -341,6 +388,7 @@ class RemoteTool {
         other.iconAssetKey == iconAssetKey &&
         other.testTargetIp == testTargetIp &&
         other.isExclusive == isExclusive &&
+        other.connectWaitSeconds == connectWaitSeconds &&
         _argumentsEqual(other.arguments, arguments);
   }
 
@@ -357,6 +405,7 @@ class RemoteTool {
     iconAssetKey,
     testTargetIp,
     isExclusive,
+    connectWaitSeconds,
     Object.hashAll(
       arguments.map((a) => Object.hash(a.value, a.description, a.isActive)),
     ),

@@ -8,10 +8,10 @@ import '../../../../core/models/remote_tool.dart';
 import '../../../../core/widgets/remote_tool_icon.dart';
 import '../../../../core/widgets/app_asset_image.dart';
 import '../../../../core/models/remote_tool_role.dart';
-import '../../../../core/services/remote_connection_service.dart';
 import '../../../../core/services/remote_launcher_service.dart';
 import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../provider/call_header_provider.dart';
+import '../../provider/remote_connect_cooldown_provider.dart';
 import '../../provider/remote_paths_provider.dart';
 import '../../utils/call_remote_targets.dart';
 
@@ -38,8 +38,28 @@ class RemoteConnectionButtons extends ConsumerStatefulWidget {
 
 class _RemoteConnectionButtonsState
     extends ConsumerState<RemoteConnectionButtons> {
-  bool _isConnecting = false;
   bool _showAll = false;
+
+  /// Η κατάσταση ενός κουμπιού σύνδεσης, τη στιγμή που ζωγραφίζεται.
+  ///
+  /// Δεν ζει στο widget: το κλείδωμα κρατά δεκάδες δευτερόλεπτα, μέσα στα
+  /// οποία ο χρήστης αλλάζει εξοπλισμό ή καθαρίζει τη φόρμα — και κάθε τέτοια
+  /// κίνηση ξαναχτίζει αυτό εδώ το widget.
+  _ConnectButtonStatus _statusFor(RemoteTool tool, String? target) {
+    if (target == null || target.isEmpty) return const _ConnectButtonStatus();
+    if (ref
+        .read(remoteConnectLauncherProvider.notifier)
+        .isStarting(toolId: tool.id, target: target)) {
+      return const _ConnectButtonStatus(starting: true);
+    }
+    final left = ref
+        .read(remoteConnectCooldownProvider.notifier)
+        .remaining(toolId: tool.id, target: target);
+    if (left <= Duration.zero) return const _ConnectButtonStatus();
+    return _ConnectButtonStatus(
+      secondsLeft: (left.inMilliseconds / 1000).ceil(),
+    );
+  }
 
   @override
   void didUpdateWidget(RemoteConnectionButtons oldWidget) {
@@ -86,9 +106,7 @@ class _RemoteConnectionButtonsState
             ),
           ),
           TextButton(
-            onPressed: _isConnecting
-                ? null
-                : () => setState(() => _showAll = !_showAll),
+            onPressed: () => setState(() => _showAll = !_showAll),
             child: Text(actionLabel),
           ),
         ],
@@ -170,10 +188,13 @@ class _RemoteConnectionButtonsState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Παρακολούθηση για το ξαναζωγράφισμα· οι τιμές διαβάζονται ανά εργαλείο
+    // στο [_statusFor], γιατί κάθε κουμπί έχει δικό του ζεύγος με τον στόχο.
+    ref.watch(remoteConnectCooldownProvider);
+    ref.watch(remoteConnectLauncherProvider);
     final allCatalogAsync = ref.watch(remoteToolsAllCatalogProvider);
     final pathsAsync = ref.watch(validRemoteToolPathsByIdProvider);
     final uiConfig = ref.watch(callsRemoteUiConfigProvider);
-    final remoteService = ref.read(remoteConnectionServiceProvider);
     final launcherService = ref.read(remoteLauncherServiceProvider);
     final visible = CallRemoteTargets.visibleRemoteToolsForCallState(
       widget.header,
@@ -252,26 +273,16 @@ class _RemoteConnectionButtonsState
                                 context: context,
                                 theme: theme,
                                 tool: primary,
+                                status: _statusFor(primary, targetPrimary),
                                 pathValid: primaryPath != null,
-                                enabled:
-                                    canPrimary &&
-                                    primaryPath != null &&
-                                    !_isConnecting,
+                                enabled: canPrimary && primaryPath != null,
                                 subtitle: CallRemoteTargets.targetSubtitle(
                                   widget.header,
                                   primary,
                                   toolsForTargets,
                                 ),
-                                onPressed:
-                                    canPrimary &&
-                                        primaryPath != null &&
-                                        !_isConnecting
-                                    ? () => _connect(
-                                        remoteService,
-                                        primary,
-                                        targetPrimary,
-                                      )
-                                    : null,
+                                onPressed: () =>
+                                    _connect(primary, targetPrimary),
                                 tooltipDisabled: _tooltipForTool(
                                   primary,
                                   primaryPath != null,
@@ -281,18 +292,28 @@ class _RemoteConnectionButtonsState
                               if (useOverflow) ...[
                                 PopupMenuButton<RemoteTool>(
                                   tooltip: 'Περισσότερα εργαλεία',
-                                  enabled: !_isConnecting,
                                   itemBuilder: (ctx) => [
                                     for (final t in secondary)
                                       PopupMenuItem(
                                         value: t,
+                                        // Η ίδια σύνδεση δεν ξεκινά από την
+                                        // πίσω πόρτα όσο κλειδώνει το κουμπί
+                                        // της.
                                         enabled:
                                             pathMap[t.id] != null &&
                                             CallRemoteTargets.canConnectForTool(
                                               widget.header,
                                               t,
                                               toolsForTargets,
-                                            ),
+                                            ) &&
+                                            !_statusFor(
+                                              t,
+                                              CallRemoteTargets.resolvedLaunchTarget(
+                                                widget.header,
+                                                t,
+                                                toolsForTargets,
+                                              ),
+                                            ).busy,
                                         child: Text(t.name),
                                       ),
                                   ],
@@ -305,7 +326,7 @@ class _RemoteConnectionButtonsState
                                           toolsForTargets,
                                         );
                                     if (p != null && tgt != null) {
-                                      _connect(remoteService, t, tgt);
+                                      _connect(t, tgt);
                                     }
                                   },
                                   child: Icon(
@@ -315,51 +336,43 @@ class _RemoteConnectionButtonsState
                                 ),
                               ] else
                                 for (final t in secondary) ...[
-                                  _buildToolButton(
-                                    context: context,
-                                    theme: theme,
-                                    tool: t,
-                                    pathValid: pathMap[t.id] != null,
-                                    enabled:
-                                        CallRemoteTargets.canConnectForTool(
-                                          widget.header,
-                                          t,
-                                          toolsForTargets,
-                                        ) &&
-                                        pathMap[t.id] != null &&
-                                        !_isConnecting,
-                                    subtitle: CallRemoteTargets.targetSubtitle(
-                                      widget.header,
-                                      t,
-                                      toolsForTargets,
-                                    ),
-                                    onPressed:
-                                        CallRemoteTargets.canConnectForTool(
-                                              widget.header,
-                                              t,
-                                              toolsForTargets,
-                                            ) &&
-                                            pathMap[t.id] != null &&
-                                            !_isConnecting
-                                        ? () => _connect(
-                                            remoteService,
+                                  Builder(
+                                    builder: (context) {
+                                      final target =
+                                          CallRemoteTargets.resolvedLaunchTarget(
+                                            widget.header,
                                             t,
-                                            CallRemoteTargets.resolvedLaunchTarget(
+                                            toolsForTargets,
+                                          );
+                                      final canConnect =
+                                          CallRemoteTargets.canConnectForTool(
+                                            widget.header,
+                                            t,
+                                            toolsForTargets,
+                                          );
+                                      return _buildToolButton(
+                                        context: context,
+                                        theme: theme,
+                                        tool: t,
+                                        status: _statusFor(t, target),
+                                        pathValid: pathMap[t.id] != null,
+                                        enabled:
+                                            canConnect &&
+                                            pathMap[t.id] != null,
+                                        subtitle:
+                                            CallRemoteTargets.targetSubtitle(
                                               widget.header,
                                               t,
                                               toolsForTargets,
                                             ),
-                                          )
-                                        : null,
-                                    tooltipDisabled: _tooltipForTool(
-                                      t,
-                                      pathMap[t.id] != null,
-                                      CallRemoteTargets.canConnectForTool(
-                                        widget.header,
-                                        t,
-                                        toolsForTargets,
-                                      ),
-                                    ),
+                                        onPressed: () => _connect(t, target),
+                                        tooltipDisabled: _tooltipForTool(
+                                          t,
+                                          pathMap[t.id] != null,
+                                          canConnect,
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ],
                               if (cfg.showEmptyRemoteLaunchers) ...[
@@ -446,23 +459,30 @@ class _RemoteConnectionButtonsState
     required String subtitle,
     required VoidCallback? onPressed,
     required String tooltipDisabled,
+    _ConnectButtonStatus status = const _ConnectButtonStatus(),
   }) {
-    final displayLabel = label ?? tool?.name ?? '';
     final ic = icon ?? (tool != null ? _iconForTool(tool) : Icons.link);
     final displaySubtitle = _formatSubtitleForDisplay(tool, subtitle);
-    final buttonChild = _isConnecting
+    // Όσο κρατά η αναμονή, η ετικέτα λέει τι γίνεται και **πόσο ακόμη**: ένας
+    // αριθμός που πέφτει είναι πολύ σαφέστερη ένδειξη από κυκλάκι που γυρίζει.
+    final displayLabel = switch (status) {
+      _ConnectButtonStatus(starting: true) => 'Σύνδεση…',
+      _ConnectButtonStatus(secondsLeft: final int left) => 'Σύνδεση… $left″',
+      _ => label ?? tool?.name ?? '',
+    };
+    final buttonChild = status.busy
         ? SizedBox(
             width: 16,
             height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: theme.colorScheme.onPrimary,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           )
         : _toolButtonIcon(tool: tool, fallbackIcon: ic);
 
     final button = FilledButton.icon(
-      onPressed: onPressed,
+      onPressed: (enabled && !status.busy) ? onPressed : null,
       icon: buttonChild,
       label: Text(displayLabel),
     );
@@ -473,7 +493,7 @@ class _RemoteConnectionButtonsState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          (onPressed == null && !_isConnecting)
+          (!enabled && !status.busy)
               ? Tooltip(message: tooltipDisabled, child: button)
               : button,
           const SizedBox(height: 4),
@@ -505,7 +525,6 @@ class _RemoteConnectionButtonsState
     if (!pathValid) {
       return 'Διαδρομή για «${tool.name}» δεν βρέθηκε.';
     }
-    if (_isConnecting) return 'Γίνεται σύνδεση…';
     if (!canConnect) {
       return 'Δεν υπάρχει έγκυρος στόχος για «${tool.name}».';
     }
@@ -652,11 +671,7 @@ class _RemoteConnectionButtonsState
     }
   }
 
-  Future<void> _connect(
-    RemoteConnectionService remoteService,
-    RemoteTool tool,
-    String? target,
-  ) async {
+  Future<void> _connect(RemoteTool tool, String? target) async {
     if (target == null || target.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -667,23 +682,39 @@ class _RemoteConnectionButtonsState
       }
       return;
     }
-    setState(() => _isConnecting = true);
-    try {
-      final params = widget.header.selectedEquipment?.remoteParams ?? {};
-      await remoteService.launchRemoteTool(
-        tool: tool,
-        resolvedTarget: target,
-        remoteParams: Map<String, String>.from(params),
-        equipmentCode: widget.header.selectedEquipment?.code?.trim(),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(humanizeUserFacingError(e))));
-      }
-    } finally {
-      if (mounted) setState(() => _isConnecting = false);
-    }
+    final messenger = mounted ? ScaffoldMessenger.maybeOf(context) : null;
+    final params = widget.header.selectedEquipment?.remoteParams ?? {};
+    // Η εντολή δόθηκε — λέγεται αμέσως, πριν από τους ελέγχους: η αμφιβολία
+    // «πάτησα ή όχι;» είναι ακριβώς αυτό που γεννούσε τα επαναλαμβανόμενα
+    // πατήματα.
+    messenger?.showSnackBar(
+      SnackBar(content: Text('Ξεκινά η σύνδεση με $target…')),
+    );
+    final error = await ref
+        .read(remoteConnectLauncherProvider.notifier)
+        .connect(
+          tool: tool,
+          target: target,
+          remoteParams: Map<String, String>.from(params),
+          equipmentCode: widget.header.selectedEquipment?.code?.trim(),
+        );
+    if (error == null) return;
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(error)));
   }
+}
+
+/// Τι δείχνει ένα κουμπί σύνδεσης αυτή τη στιγμή.
+///
+/// Δύο διαφορετικές αναμονές, που ο χρήστης δεν χρειάζεται να ξεχωρίζει αλλά ο
+/// κώδικας ναι: η σύντομη των ελέγχων ([starting]) και η μεγάλη μέχρι να
+/// εμφανιστεί η απομακρυσμένη επιφάνεια ([secondsLeft]).
+class _ConnectButtonStatus {
+  const _ConnectButtonStatus({this.starting = false, this.secondsLeft});
+
+  final bool starting;
+  final int? secondsLeft;
+
+  bool get busy => starting || secondsLeft != null;
 }

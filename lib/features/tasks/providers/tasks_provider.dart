@@ -148,9 +148,15 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
 
   /// Με [force] `true` η εγγραφή περνά παρά τη διένεξη — ο χρήστης είδε τι
   /// άλλαξε και επέλεξε να κρατήσει τη δική του εικόνα.
-  Future<void> updateTask(Task task, {bool force = false}) async {
+  /// Το [expected] είναι η εγγραφή όπως τη διάβασε η οθόνη — χωρίς αυτήν ο
+  /// φρουρός δεν ξεχωρίζει τη δική μου αλλαγή από την ξένη.
+  Future<void> updateTask(
+    Task task, {
+    Task? expected,
+    bool force = false,
+  }) async {
     final service = ref.read(taskServiceProvider);
-    await service.updateTask(task, force: force);
+    await service.updateTask(task, expected: expected, force: force);
     _afterTasksMutated(refreshAnalytics: true);
     await refresh();
   }

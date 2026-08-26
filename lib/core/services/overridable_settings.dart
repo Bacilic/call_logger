@@ -9,6 +9,11 @@ import 'current_operator.dart';
 /// Πού ζει η **παράκαμψη** μιας κοινής τιμής.
 enum OverrideScope {
   /// Στον υπολογιστή. Δεν ταξιδεύει — και δεν την βλέπει κανείς άλλος.
+  ///
+  /// Γράφεται στις προτιμήσεις του σταθμού, που περνούν από το
+  /// [AppConfig.prefixedPreferencesKey]· άρα χωρίζεται **και ανά προφίλ CLI**
+  /// χωρίς καμία επιπλέον δουλειά: το `dev` και το παραγωγικό στιγμιότυπο
+  /// στο ίδιο μηχάνημα κρατούν χωριστές τιμές.
   machine,
 
   /// Στο προφίλ του χρήστη. Τον ακολουθεί σε όποιο μηχάνημα καθίσει.
@@ -55,8 +60,27 @@ abstract final class OverridableSettingKeys {
     scope: OverrideScope.profile,
   );
 
+  /// Χρόνος αναμονής μετά την εκκίνηση εργαλείου απομακρυσμένης, **ανά
+  /// υπολογιστή**.
+  ///
+  /// Πόσο κρατά το κουμπί κλειδωμένο μέχρι να προλάβει να εμφανιστεί η
+  /// απομακρυσμένη επιφάνεια. Ο κοινός ορισμός του εργαλείου δίνει την
+  /// αφετηρία (`RemoteTool.connectWaitSeconds`)· εδώ ζει η προσαρμογή του
+  /// κάθε μηχανήματος.
+  ///
+  /// Είναι εγγενώς τοπική ρύθμιση: εξαρτάται από την ταχύτητα του υπολογιστή
+  /// και του δικτύου του, όχι από το πρόσωπο που κάθεται μπροστά του. Κοινή
+  /// τιμή για όλους θα σήμαινε ότι ο συνάδελφος με το γρήγορο μηχάνημα
+  /// περιμένει άσκοπα τον χρόνο του πιο αργού.
+  static const OverridableSettingKey remoteToolConnectWait =
+      OverridableSettingKey(
+        'remote_tool_connect_wait_override',
+        scope: OverrideScope.machine,
+      );
+
   static const List<OverridableSettingKey> all = [
     remoteToolExecutablePath,
+    remoteToolConnectWait,
     geminiApiKey,
   ];
 }

@@ -178,5 +178,62 @@ void main() {
 
       expect((await readTask(scenario.id)).solutionNotes, 'Χωρίς σφραγίδα.');
     });
+
+    // Η σφραγίδα λέει «κάτι άγγιξε τη γραμμή», όχι «κάποιος άλλαξε κάτι που
+    // πάω να γράψω». Όσο ο φρουρός έκρινε μόνο τη σφραγίδα, μια εγγραφή που
+    // δεν άλλαξε τίποτα ουσιαστικό — ή που την έκανε ο ίδιος ο χρήστης από
+    // άλλη ροή — εμφανιζόταν ως ξένη διένεξη, με τον διάλογο να ομολογεί ότι
+    // δεν έχει τι να αναφέρει ως χαμένο.
+    test(
+      'updateTask: σφραγίδα αλλαγμένη χωρίς διαφορά περιεχομένου δεν είναι διένεξη',
+      () async {
+        final id = await repo.createTask(
+          Task(
+            title: 'Ήσυχη εκκρεμότητα',
+            dueDate: DateTime(2026, 8, 22, 16, 31).toIso8601String(),
+            status: 'open',
+          ),
+        );
+        final mine = await readTask(id);
+
+        // Κάτι άγγιξε τη γραμμή χωρίς να αλλάξει καμία τιμή της.
+        await db.update(
+          'tasks',
+          {'updated_at': DateTime(2026, 8, 26, 9, 15).toIso8601String()},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        expect(
+          (await readTask(id)).updatedAt,
+          isNot(mine.updatedAt),
+          reason: 'Χωρίς αλλαγή σφραγίδας το σενάριο δεν στήθηκε',
+        );
+
+        await repo.updateTask(
+          mine.copyWith(title: 'Δικός μου νέος τίτλος'),
+          expected: mine,
+        );
+
+        expect((await readTask(id)).title, 'Δικός μου νέος τίτλος');
+      },
+    );
+
+    test('updateTask: με αφετηρία, η ξένη αλλαγή εξακολουθεί να μπλοκάρει', () async {
+      final scenario = await staleAfterOtherClosed();
+
+      await expectLater(
+        () => repo.updateTask(
+          scenario.stale.copyWith(status: TaskStatus.snoozed.toDbValue),
+          expected: scenario.stale,
+        ),
+        throwsA(isA<TaskStaleException>()),
+      );
+
+      expect(
+        (await readTask(scenario.id)).status,
+        TaskStatus.closed.toDbValue,
+        reason: 'Η ολοκλήρωση του άλλου πρέπει να έχει μείνει ακέραιη',
+      );
+    });
   });
 }

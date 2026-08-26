@@ -264,6 +264,37 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 54 && newVersion >= 54) {
     await migrateDatabaseToV54(db);
   }
+  if (oldVersion < 55 && newVersion >= 55) {
+    await migrateDatabaseToV55(db);
+  }
+}
+
+/// v55: κάθε εργαλείο απομακρυσμένης δηλώνει πόσο αργεί να ανοίξει.
+///
+/// Το κουμπί σύνδεσης κλείδωνε μόνο όσο κρατούσε η **παράδοση** της διεργασίας
+/// στα Windows — λίγα χιλιοστά του δευτερολέπτου — ενώ η απομακρυσμένη
+/// επιφάνεια εμφανιζόταν δεκάδες δευτερόλεπτα αργότερα. Στο ενδιάμεσο κενό,
+/// κάθε πάτημα άνοιγε **νέα συνεδρία**: επτά πατήματα, επτά συνεδρίες.
+///
+/// Η στήλη κρατά την **κοινή αφετηρία ανά εργαλείο** (το RDP αργεί, το AnyDesk
+/// όχι). Ο πραγματικός χρόνος αλλάζει από μηχάνημα σε μηχάνημα, γι' αυτό ο
+/// καθένας τον παρακάμπτει τοπικά — η παράκαμψη ζει στις προτιμήσεις του
+/// υπολογιστή, όχι εδώ.
+///
+/// Καθαρή προσθήκη με `DEFAULT`: παλαιότερη έκδοση της εφαρμογής που γράφει
+/// στον πίνακα χωρίς να ξέρει τη στήλη δεν σκοντάφτει στο `NOT NULL`.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες.
+Future<void> migrateDatabaseToV55(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(remote_tools)');
+  if (info.isEmpty) return;
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('connect_wait_seconds')) {
+    await db.execute(
+      'ALTER TABLE remote_tools '
+      'ADD COLUMN connect_wait_seconds INTEGER NOT NULL DEFAULT 30',
+    );
+  }
 }
 
 /// v54: οι κλήσεις μαθαίνουν ποιος τις κατέγραψε.

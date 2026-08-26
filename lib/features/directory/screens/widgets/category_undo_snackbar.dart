@@ -10,12 +10,10 @@ class CategoryUndoSnackBarContent extends StatefulWidget {
     super.key,
     required this.message,
     this.tooltipMessage,
-    this.showCloseIcon = false,
   });
 
   final String message;
   final String? tooltipMessage;
-  final bool showCloseIcon;
 
   @override
   State<CategoryUndoSnackBarContent> createState() =>
@@ -63,27 +61,12 @@ class _CategoryUndoSnackBarContentState
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: widget.tooltipMessage != null
-                  ? Tooltip(message: widget.tooltipMessage!, child: textWidget)
-                  : textWidget,
-            ),
-            if (widget.showCloseIcon)
-              IconButton(
-                icon: const Icon(Icons.close, size: 20),
-                onPressed: () =>
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar(),
-                style: IconButton.styleFrom(
-                  foregroundColor: theme.colorScheme.onInverseSurface,
-                  padding: const EdgeInsets.all(4),
-                  minimumSize: const Size(32, 32),
-                ),
-              ),
-          ],
-        ),
+        // Το κουμπί κλεισίματος είναι του ίδιου του SnackBar — δεν χτίζεται
+        // εδώ μέσα, ώστε να δείχνει παντού ίδιο.
+        if (widget.tooltipMessage != null)
+          Tooltip(message: widget.tooltipMessage!, child: textWidget)
+        else
+          textWidget,
         const SizedBox(height: 6),
         Text(
           'Αυτόματο κλείσιμο σε $_secondsLeft δευτ.',
@@ -102,16 +85,21 @@ class CategoryUndoSnackBar {
     ScaffoldMessengerState messenger, {
     required String message,
     String? tooltipMessage,
-    bool showCloseIcon = false,
     required VoidCallback onUndo,
   }) {
     messenger.showSnackBar(
       SnackBar(
         duration: const Duration(seconds: _kCategoryUndoSnackSeconds),
+        // Ρητή διάρκεια ζωής: από το Flutter 3.47 κάθε μήνυμα με κουμπί
+        // ενέργειας βαφτίζεται μόνο του «μόνιμο» και δεν φεύγει ποτέ,
+        // μπλοκάροντας και την ουρά των επόμενων μηνυμάτων.
+        // Εδώ η ρητή δήλωση κρατά και μια υπόσχεση της οθόνης: το ίδιο το
+        // μήνυμα γράφει «Αυτόματο κλείσιμο σε X δευτ.».
+        persist: false,
+        showCloseIcon: true,
         content: CategoryUndoSnackBarContent(
           message: message,
           tooltipMessage: tooltipMessage,
-          showCloseIcon: showCloseIcon,
         ),
         action: SnackBarAction(label: 'Αναίρεση', onPressed: onUndo),
       ),

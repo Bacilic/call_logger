@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../services/directory_save_conflict.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/settings_repository.dart';
@@ -703,12 +704,21 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       ..['notes'] = u.notes
       ..['department_id'] = u.departmentId
       ..['lansweeper_username'] = u.lansweeperUsername;
-    await UserRepository(dbUp).updateUser(
-      u.id!,
-      map,
-      expected: expected == null ? null : userConflictBaseline(expected),
-      force: force,
-    );
+    // Όταν ο φρουρός μπλοκάρει, η λίστα ΔΕΝ επιτρέπεται να μείνει όπως ήταν:
+    // η αφετηρία της επόμενης προσπάθειας βγαίνει από εδώ, οπότε μια
+    // μπαγιάτικη λίστα θα ξαναγεννούσε ακριβώς την ίδια διένεξη — ο χρήστης
+    // κλειδωνόταν σε ατέρμονη επανάληψη, χωρίς τρόπο να ξεμπλοκάρει.
+    try {
+      await UserRepository(dbUp).updateUser(
+        u.id!,
+        map,
+        expected: expected == null ? null : userConflictBaseline(expected),
+        force: force,
+      );
+    } on DirectoryStaleException {
+      await loadUsers();
+      rethrow;
+    }
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);

@@ -227,4 +227,84 @@ void main() {
       },
     );
   });
+
+  group('RemoteToolFormController — αναμονή μετά την εκκίνηση', () {
+    test('η κοινή τιμή του εργαλείου φτάνει στη φόρμα και επιστρέφει', () {
+      // Η παγίδα: πεδίο που η φόρμα δεν διαβάζει ούτε γράφει επιστρέφει
+      // σιωπηλά στην προεπιλογή με την πρώτη επεξεργασία — η ρύθμιση του
+      // διαχειριστή θα εξαφανιζόταν χωρίς κανένα μήνυμα.
+      final tool = RemoteTool(
+        id: 3,
+        name: 'RDP',
+        role: ToolRole.rdp,
+        executablePath: r'C:\tool.exe',
+        sortOrder: 1,
+        isActive: true,
+        connectWaitSeconds: 45,
+      );
+      final c = RemoteToolFormController(initialTool: tool);
+      addTearDown(c.dispose);
+
+      expect(c.connectWaitC.text, '45');
+      expect(c.toRemoteTool(id: 3).connectWaitSeconds, 45);
+    });
+
+    test('η αλλαγή του χρόνου μετράει ως αλλαγή της φόρμας', () {
+      final c = RemoteToolFormController(
+        initialTool: RemoteTool(
+          id: 3,
+          name: 'RDP',
+          role: ToolRole.rdp,
+          executablePath: r'C:\tool.exe',
+          sortOrder: 1,
+          isActive: true,
+          connectWaitSeconds: 30,
+        ),
+      );
+      addTearDown(c.dispose);
+
+      expect(c.isDirty, isFalse);
+      c.connectWaitC.text = '15';
+      expect(c.isDirty, isTrue);
+    });
+
+    test('τιμή εκτός ορίων φέρνεται μέσα στα όρια', () {
+      final c = RemoteToolFormController();
+      addTearDown(c.dispose);
+
+      c.connectWaitC.text = '9999';
+      expect(
+        c.toRemoteTool(id: 1).connectWaitSeconds,
+        RemoteTool.maxConnectWaitSeconds,
+      );
+
+      c.connectWaitC.text = '';
+      expect(
+        c.toRemoteTool(id: 1).connectWaitSeconds,
+        RemoteTool.defaultConnectWaitSeconds,
+        reason: 'Κενό πεδίο δεν επιτρέπεται να γίνει σιωπηλό μηδέν.',
+      );
+    });
+
+    test('το πεδίο επιβιώνει της στρογγυλής διαδρομής προς τη βάση', () {
+      final tool = RemoteTool(
+        id: 3,
+        name: 'RDP',
+        role: ToolRole.rdp,
+        executablePath: r'C:\tool.exe',
+        sortOrder: 1,
+        isActive: true,
+        connectWaitSeconds: 12,
+      );
+      expect(RemoteTool.fromMap(tool.toMap()).connectWaitSeconds, 12);
+      expect(
+        RemoteTool.fromMap({...tool.toMap()}..remove('connect_wait_seconds'))
+            .connectWaitSeconds,
+        RemoteTool.defaultConnectWaitSeconds,
+        reason:
+            'Βάση γραμμένη από παλαιότερη έκδοση δεν έχει τη στήλη· η '
+            'ανάγνωση πέφτει στην προεπιλογή αντί να σκάσει.',
+      );
+    });
+  });
 }

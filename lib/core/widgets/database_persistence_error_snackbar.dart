@@ -76,6 +76,8 @@ void showDatabasePersistenceErrorSnackBar(
       // και την ουρά των επόμενων μηνυμάτων. Δεν αφήνουμε σιωπηλή προεπιλογή
       // του framework να αποφασίζει για τη διεπαφή μας.
       persist: false,
+      showCloseIcon: true,
+      closeIconColor: scheme.onError,
       action: SnackBarAction(
         textColor: scheme.onError,
         label: 'Αναφορά',

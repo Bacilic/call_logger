@@ -518,25 +518,15 @@ class _UsersTabState extends ConsumerState<UsersTab>
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Expanded(
-              child: tooltipAllNames != null
-                  ? Tooltip(message: tooltipAllNames, child: Text(message))
-                  : Text(message),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, size: 20),
-              onPressed: () => messenger.hideCurrentSnackBar(),
-              style: IconButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.onInverseSurface,
-                padding: const EdgeInsets.all(4),
-                minimumSize: const Size(32, 32),
-              ),
-            ),
-          ],
-        ),
+        content: tooltipAllNames != null
+            ? Tooltip(message: tooltipAllNames, child: Text(message))
+            : Text(message),
         duration: const Duration(seconds: 5),
+        // Ρητή διάρκεια ζωής: από το Flutter 3.47 κάθε μήνυμα με κουμπί
+        // ενέργειας βαφτίζεται μόνο του «μόνιμο» και δεν φεύγει ποτέ,
+        // μπλοκάροντας και την ουρά των επόμενων μηνυμάτων.
+        persist: false,
+        showCloseIcon: true,
         action: SnackBarAction(
           label: 'Αναίρεση',
           onPressed: () async {

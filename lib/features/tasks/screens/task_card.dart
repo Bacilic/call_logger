@@ -475,6 +475,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
           status: TaskStatus.closed.toDbValue,
           solutionNotes: notes,
         ),
+        expected: task,
       );
       if (!mounted || !closed) return;
       ScaffoldMessenger.of(context).showSnackBar(

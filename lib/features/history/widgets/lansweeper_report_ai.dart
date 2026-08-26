@@ -327,6 +327,11 @@ class LansweeperReportAi {
           ),
         ),
         duration: const Duration(seconds: 8),
+        // Ρητή διάρκεια ζωής: από το Flutter 3.47 κάθε μήνυμα με κουμπί
+        // ενέργειας βαφτίζεται μόνο του «μόνιμο» και δεν φεύγει ποτέ,
+        // μπλοκάροντας και την ουρά των επόμενων μηνυμάτων.
+        persist: false,
+        showCloseIcon: true,
         action: SnackBarAction(
           label: 'Δοκίμασε το κύριο',
           onPressed: () {

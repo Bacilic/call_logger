@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/department_repository.dart';
 import '../../../core/database/equipment_repository.dart';
+import '../services/directory_save_conflict.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/services/settings_service.dart';
@@ -741,25 +742,34 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     }
     final dbUp = await DatabaseHelper.instance.database;
     final equipment = EquipmentRepository(dbUp);
-    await equipment.updateEquipment(
-      eq.id!,
-      <String, dynamic>{
-        ...equipmentWriteMap(eq),
-        'owner': _ownerIdsOf(ownerUserId),
-      },
-      // Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
-      // κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
-      // ξεχάστηκε σε δεύτερο κατάλογο.
-      expected: expected == null
-          ? null
-          : <String, Object?>{
-              ...equipmentWriteMap(expected),
-              'owner': EquipmentRepository.ownersFingerprint(
-                _ownerIdsOf(expectedOwnerUserId),
-              ),
-            },
-      force: force,
-    );
+    // Όταν ο φρουρός μπλοκάρει, η λίστα ΔΕΝ επιτρέπεται να μείνει όπως ήταν:
+    // η αφετηρία της επόμενης προσπάθειας βγαίνει από εδώ, οπότε μια
+    // μπαγιάτικη λίστα θα ξαναγεννούσε ακριβώς την ίδια διένεξη — ο χρήστης
+    // κλειδωνόταν σε ατέρμονη επανάληψη, χωρίς τρόπο να ξεμπλοκάρει.
+    try {
+      await equipment.updateEquipment(
+        eq.id!,
+        <String, dynamic>{
+          ...equipmentWriteMap(eq),
+          'owner': _ownerIdsOf(ownerUserId),
+        },
+        // Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
+        // κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
+        // ξεχάστηκε σε δεύτερο κατάλογο.
+        expected: expected == null
+            ? null
+            : <String, Object?>{
+                ...equipmentWriteMap(expected),
+                'owner': EquipmentRepository.ownersFingerprint(
+                  _ownerIdsOf(expectedOwnerUserId),
+                ),
+              },
+        force: force,
+      );
+    } on DirectoryStaleException {
+      await load();
+      rethrow;
+    }
     await _afterEquipmentMutation();
   }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/building_map_repository.dart';
+import '../services/directory_save_conflict.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/department_repository.dart';
 import '../../../core/database/equipment_repository.dart';
@@ -604,20 +605,29 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       d,
       clearBuildingMapPlacement: clearBuildingMapPlacement,
     );
-    await departments.updateDepartment(
-      d.id!,
-      map,
-      // Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
-      // κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
-      // ξεχάστηκε σε δεύτερο κατάλογο.
-      expected: expected == null
-          ? null
-          : departmentWriteMap(
-              expected,
-              clearBuildingMapPlacement: clearBuildingMapPlacement,
-            ),
-      force: force,
-    );
+    // Όταν ο φρουρός μπλοκάρει, η λίστα ΔΕΝ επιτρέπεται να μείνει όπως ήταν:
+    // η αφετηρία της επόμενης προσπάθειας βγαίνει από εδώ, οπότε μια
+    // μπαγιάτικη λίστα θα ξαναγεννούσε ακριβώς την ίδια διένεξη — ο χρήστης
+    // κλειδωνόταν σε ατέρμονη επανάληψη, χωρίς τρόπο να ξεμπλοκάρει.
+    try {
+      await departments.updateDepartment(
+        d.id!,
+        map,
+        // Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
+        // κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
+        // ξεχάστηκε σε δεύτερο κατάλογο.
+        expected: expected == null
+            ? null
+            : departmentWriteMap(
+                expected,
+                clearBuildingMapPlacement: clearBuildingMapPlacement,
+              ),
+        force: force,
+      );
+    } on DirectoryStaleException {
+      await loadDepartments();
+      rethrow;
+    }
     await _refreshLookupCache();
     await loadDepartments();
     await refreshDirectoryCaches(ref, users: true, equipment: true);

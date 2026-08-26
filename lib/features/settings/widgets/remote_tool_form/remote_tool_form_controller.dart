@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/models/remote_tool.dart';
+import '../../../../core/services/overridable_settings.dart';
+import '../../../../core/services/remote_tool_connect_wait.dart';
 import '../../../../core/models/remote_tool_role.dart';
 import '../../../../core/services/remote_launcher_service.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
@@ -43,6 +45,11 @@ class RemoteToolFormController extends ChangeNotifier {
     role = t?.role ?? ToolRole.generic;
     _suggestedValuesJson = t?.suggestedValuesJson;
     testIpC = TextEditingController(text: t?.testTargetIp ?? '');
+    connectWaitC = TextEditingController(
+      text: '${t?.connectWaitSeconds ?? RemoteTool.defaultConnectWaitSeconds}',
+    );
+    localPathC = TextEditingController();
+    localWaitC = TextEditingController();
     isActive = t?.isActive ?? true;
     if (t != null && t.arguments.isNotEmpty) {
       for (final a in t.arguments) {
@@ -66,6 +73,33 @@ class RemoteToolFormController extends ChangeNotifier {
   late final TextEditingController pathC;
   late final TextEditingController iconC;
   late final TextEditingController testIpC;
+
+  /// Η **κοινή** αφετηρία αναμονής μετά την εκκίνηση, σε δευτερόλεπτα. Ο κάθε
+  /// υπολογιστής την παρακάμπτει χωριστά.
+  late final TextEditingController connectWaitC;
+
+  /// Οι δύο τοπικές παρακάμψεις — διαδρομή και χρόνος αναμονής **σε αυτόν τον
+  /// υπολογιστή**.
+  ///
+  /// Ζουν αλλού από τον κοινό ορισμό (στις προτιμήσεις του σταθμού, όχι στη
+  /// βάση), αλλά **αποθηκεύονται με το ίδιο κουμπί**. Ως τώρα γράφονταν μόνες
+  /// τους μόλις έφευγε η εστίαση: το «Αποθήκευση» έμενε γκρι, και ο χρήστης
+  /// που έγραφε τιμή δεν μάθαινε ποτέ αν πιάστηκε. Μία φόρμα, μία κίνηση.
+  late final TextEditingController localPathC;
+  late final TextEditingController localWaitC;
+
+  /// Η τριπλή κατάσταση της τοπικής διαδρομής: «καμία παράκαμψη» ≠ «δική μου
+  /// και επίτηδες κενή» («κανένα πρόγραμμα εδώ»). Χωρίς αυτό, όποιος άδειαζε
+  /// το πεδίο δεν θα μπορούσε να ξεχωρίσει τα δύο.
+  bool localPathHasOverride = false;
+
+  /// Οι τοπικές τιμές φορτώνονται ασύγχρονα· ώσπου να έρθουν, τα πεδία δεν
+  /// εμφανίζονται και η αφετηρία της φόρμας δεν έχει οριστεί ακόμη.
+  bool localOverridesLoaded = false;
+
+  String _initialLocalPath = '';
+  bool _initialLocalPathHasOverride = false;
+  String _initialLocalWait = '';
 
   String? _suggestedValuesJson;
 
@@ -138,6 +172,14 @@ class RemoteToolFormController extends ChangeNotifier {
       ..write(iconC.text)
       ..write('\u001e')
       ..write(testIpC.text)
+      ..write('\u001e')
+      ..write(connectWaitC.text)
+      ..write('\u001e')
+      ..write(localPathHasOverride)
+      ..write('\u001e')
+      ..write(localPathC.text)
+      ..write('\u001e')
+      ..write(localWaitC.text)
       ..write('\u001e')
       ..write(role.index)
       ..write('\u001e')
@@ -221,6 +263,9 @@ class RemoteToolFormController extends ChangeNotifier {
       arguments: collectArguments(),
       testTargetIp: testIpC.text.trim().isEmpty ? null : testIpC.text.trim(),
       isExclusive: false,
+      connectWaitSeconds: RemoteTool.normalizeConnectWaitSeconds(
+        connectWaitC.text,
+      ),
     );
   }
 
@@ -343,7 +388,15 @@ class RemoteToolFormController extends ChangeNotifier {
   }
 
   void _attachFormListeners() {
-    for (final c in [nameC, pathC, iconC, testIpC]) {
+    for (final c in [
+      nameC,
+      pathC,
+      iconC,
+      testIpC,
+      connectWaitC,
+      localPathC,
+      localWaitC,
+    ]) {
       c.addListener(markFormChanged);
     }
     for (final r in argRows) {
@@ -353,7 +406,15 @@ class RemoteToolFormController extends ChangeNotifier {
   }
 
   void _detachFormListeners() {
-    for (final c in [nameC, pathC, iconC, testIpC]) {
+    for (final c in [
+      nameC,
+      pathC,
+      iconC,
+      testIpC,
+      connectWaitC,
+      localPathC,
+      localWaitC,
+    ]) {
       c.removeListener(markFormChanged);
     }
     for (final r in argRows) {
@@ -370,9 +431,120 @@ class RemoteToolFormController extends ChangeNotifier {
     pathC.dispose();
     iconC.dispose();
     testIpC.dispose();
+    connectWaitC.dispose();
+    localPathC.dispose();
+    localWaitC.dispose();
     for (final r in argRows) {
       r.dispose();
     }
     super.dispose();
+  }
+
+  /// Φέρνει τις τοπικές παρακάμψεις αυτού του υπολογιστή.
+  ///
+  /// Έρχονται ασύγχρονα, οπότε **ξαναορίζουν την αφετηρία** της φόρμας: αν δεν
+  /// το έκαναν, η άφιξή τους θα φαινόταν ως αλλαγή του χρήστη και το κουμπί
+  /// «Αποθήκευση» θα άναβε χωρίς να έχει αγγίξει τίποτα.
+  Future<void> loadLocalOverrides() async {
+    final id = initialTool?.id;
+    if (id != null) {
+      final path = await OverridableSettings.overrideOf(
+        OverridableSettingKeys.remoteToolExecutablePath.forId(id),
+      );
+      final wait = await RemoteToolConnectWait.localOverrideSeconds(id);
+      localPathHasOverride = path != null;
+      localPathC.text = path ?? '';
+      localWaitC.text = wait == null ? '' : '$wait';
+    }
+    _initialLocalPath = localPathC.text;
+    _initialLocalPathHasOverride = localPathHasOverride;
+    _initialLocalWait = localWaitC.text;
+    localOverridesLoaded = true;
+    initialFormSignature = formStateSignature();
+    notifyListeners();
+  }
+
+  /// Πληκτρολόγηση στο πεδίο διαδρομής σημαίνει «θέλω δική μου».
+  void markLocalPathOverridden() {
+    if (localPathHasOverride) return;
+    localPathHasOverride = true;
+    markFormChanged();
+  }
+
+  /// «Χρήση της κοινής διαδρομής»: αίρει τη δήλωση, δεν γράφει κενό.
+  void useSharedPath() {
+    localPathHasOverride = false;
+    localPathC.text = '';
+    markFormChanged();
+  }
+
+  /// «Χρήση της κοινής τιμής» για τον χρόνο: κενό πεδίο σημαίνει ακριβώς αυτό.
+  void useSharedConnectWait() {
+    localWaitC.text = '';
+    markFormChanged();
+  }
+
+  bool get hasLocalOverrideChanges =>
+      localPathC.text != _initialLocalPath ||
+      localPathHasOverride != _initialLocalPathHasOverride ||
+      localWaitC.text.trim() != _initialLocalWait.trim();
+
+  /// Γράφει τις τοπικές παρακάμψεις. Καλείται μαζί με την αποθήκευση του
+  /// κοινού ορισμού — ποτέ χωριστά.
+  Future<void> commitLocalOverrides(int toolId) async {
+    final pathKey = OverridableSettingKeys.remoteToolExecutablePath.forId(
+      toolId,
+    );
+    if (localPathHasOverride) {
+      await OverridableSettings.setOverride(pathKey, localPathC.text.trim());
+    } else {
+      await OverridableSettings.clearOverride(pathKey);
+    }
+
+    final waitText = localWaitC.text.trim();
+    if (waitText.isEmpty) {
+      await RemoteToolConnectWait.clearLocalOverride(toolId);
+    } else {
+      await RemoteToolConnectWait.setLocalOverride(
+        toolId,
+        RemoteTool.normalizeConnectWaitSeconds(waitText),
+      );
+    }
+
+    _initialLocalPath = localPathC.text;
+    _initialLocalPathHasOverride = localPathHasOverride;
+    _initialLocalWait = localWaitC.text;
+  }
+
+  /// Οι γραμμές της σύνοψης αποθήκευσης για ό,τι άλλαξε **μόνο εδώ**.
+  ///
+  /// Χωριστές από τις αλλαγές του κοινού ορισμού, γιατί απαντούν σε άλλο
+  /// ερώτημα: τι είδαν οι συνάδελφοι και τι μόνο αυτό το μηχάνημα.
+  List<String> localOverrideChangeLines() {
+    final lines = <String>[];
+    if (localPathHasOverride != _initialLocalPathHasOverride ||
+        localPathC.text != _initialLocalPath) {
+      lines.add(
+        localPathHasOverride
+            ? (localPathC.text.trim().isEmpty
+                  ? 'Διαδρομή σε αυτόν τον υπολογιστή: κανένα πρόγραμμα'
+                  : 'Διαδρομή σε αυτόν τον υπολογιστή: ${localPathC.text.trim()}')
+            : 'Διαδρομή σε αυτόν τον υπολογιστή: χρήση της κοινής',
+      );
+    }
+    final waitText = localWaitC.text.trim();
+    if (waitText != _initialLocalWait.trim()) {
+      final seconds = waitText.isEmpty
+          ? null
+          : RemoteTool.normalizeConnectWaitSeconds(waitText);
+      lines.add(
+        switch (seconds) {
+          null => 'Αναμονή σε αυτόν τον υπολογιστή: χρήση της κοινής',
+          0 => 'Αναμονή σε αυτόν τον υπολογιστή: χωρίς κλείδωμα',
+          final int v => 'Αναμονή σε αυτόν τον υπολογιστή: $v δευτ.',
+        },
+      );
+    }
+    return lines;
   }
 }

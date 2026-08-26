@@ -89,15 +89,23 @@ Future<bool> _writeTaskGuarded(
 }
 
 /// Αποθήκευση εκκρεμότητας με φρουρό διένεξης.
+///
+/// Το [expected] είναι η εκκρεμότητα **όπως τη διάβασε η οθόνη**, πριν τις
+/// αλλαγές του χρήστη. Είναι υποχρεωτικό και όχι προαιρετικό επίτηδες: χωρίς
+/// αφετηρία ο φρουρός μπλοκάρει κάθε γραμμή που άγγιξε οποιοσδήποτε — και
+/// τις δικές μου αλλαγές μαζί.
 Future<bool> saveTaskGuarded(
   BuildContext context,
   WidgetRef ref,
-  Task task,
-) {
+  Task task, {
+  required Task? expected,
+}) {
   return _writeTaskGuarded(
     context,
     ref,
-    (force) => ref.read(tasksProvider.notifier).updateTask(task, force: force),
+    (force) => ref
+        .read(tasksProvider.notifier)
+        .updateTask(task, expected: expected, force: force),
   );
 }
 
@@ -306,6 +314,7 @@ Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
           context,
           ref,
           result.copyWith(status: TaskStatus.open.toDbValue),
+          expected: task,
         );
         if (!context.mounted || !reopened) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -320,6 +329,7 @@ Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
           result
               .copyWith(status: TaskStatus.snoozed.toDbValue)
               .addSnoozeEntry(due, note: formResult.snoozeReason),
+          expected: task,
         );
         if (!context.mounted || !snoozedAgain) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -338,7 +348,12 @@ Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
     }
 
     if (result.id != null) {
-      final saved = await saveTaskGuarded(context, ref, result);
+      final saved = await saveTaskGuarded(
+        context,
+        ref,
+        result,
+        expected: task,
+      );
       if (!saved) return;
     } else {
       await notifier.addTask(result);
@@ -381,6 +396,7 @@ Future<void> reopenTask(BuildContext context, WidgetRef ref, Task task) async {
       context,
       ref,
       task.copyWith(status: TaskStatus.open.toDbValue),
+      expected: task,
     );
     if (!context.mounted || !reopened) return;
     ScaffoldMessenger.of(
@@ -441,7 +457,12 @@ Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
         )
         .addSnoozeEntry(newDue, note: snoozeNote);
     try {
-      final snoozed = await saveTaskGuarded(context, ref, updatedTask);
+      final snoozed = await saveTaskGuarded(
+        context,
+        ref,
+        updatedTask,
+        expected: task,
+      );
       if (!context.mounted || !snoozed) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -495,7 +516,12 @@ Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
       )
       .addSnoozeEntry(newDue, note: snoozeNote);
   try {
-    final snoozed = await saveTaskGuarded(context, ref, updatedTask);
+    final snoozed = await saveTaskGuarded(
+      context,
+      ref,
+      updatedTask,
+      expected: task,
+    );
     if (!context.mounted || !snoozed) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

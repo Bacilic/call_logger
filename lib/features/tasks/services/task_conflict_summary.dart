@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/conflict_actor_text.dart';
 import '../models/task.dart';
 
 /// Τι λέει ο διάλογος διένεξης, υπολογισμένο χωρίς οθόνη.
@@ -48,9 +49,7 @@ class TaskConflictSummary {
     DateTime? now,
   }) {
     final moment = now ?? DateTime.now();
-    final who = (changedBy == null || changedBy.trim().isEmpty)
-        ? 'Κάποιος άλλος'
-        : 'Ο χρήστης «${changedBy.trim()}»';
+    final who = conflictActorName(changedBy);
     final when = changedAt == null
         ? ''
         : ' στις ${describeMoment(changedAt, now: moment)}';

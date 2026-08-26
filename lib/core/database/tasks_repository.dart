@@ -1358,6 +1358,50 @@ class TasksRepository {
   /// χωρίς αναμενόμενη τιμή δεν μπλοκάρουμε — μια εγγραφή από παλαιότερη έκδοση
   /// δεν πρέπει να γίνει άσωστη. Ο φρουρός προστατεύει ό,τι μπορεί να
   /// αποδείξει, και δεν εφευρίσκει διενέξεις.
+  /// Πεδία που δεν μαρτυρούν ξένη δουλειά.
+  ///
+  /// Η σφραγίδα και το παράγωγο ευρετήριο αναζήτησης αλλάζουν σε **κάθε**
+  /// εγγραφή· η στιγμή δημιουργίας δεν αλλάζει ποτέ. Καμία τους δεν λέει
+  /// «κάποιος άλλαξε κάτι».
+  static const Set<String> _kGuardIgnoredFields = {
+    'updated_at',
+    'created_at',
+    'search_index',
+  };
+
+  static String _guardText(Object? value) =>
+      value?.toString().trim() ?? '';
+
+  /// Θα σβήσει η εγγραφή μου δουλειά που έκανε **άλλος**;
+  ///
+  /// Η σφραγίδα απαντά μόνο «κάτι άγγιξε τη γραμμή» — και την αγγίζει και η
+  /// δική μου προηγούμενη αποθήκευση, και μια εγγραφή που δεν άλλαξε καμία
+  /// τιμή. Η αληθινή ερώτηση είναι στενότερη: **διαφέρει η αφετηρία μου από
+  /// τη βάση σε πεδίο που περνά η εγγραφή μου;** Εκεί και μόνο εκεί υπάρχει
+  /// ξένη δουλειά να χαθεί.
+  ///
+  /// Κρίνεται μόνο ό,τι γράφω: πεδίο που δεν το πειράζω δεν κινδυνεύει, όσο
+  /// κι αν άλλαξε. Και η σύγκριση είναι **αφετηρία προς βάση**, όχι πρόθεσή
+  /// μου προς βάση — αλλιώς κάθε δική μου αλλαγή θα φαινόταν ως ξένη.
+  ///
+  /// Χωρίς αφετηρία μένει η παλιά, αυστηρή απάντηση: μια ερώτηση παραπάνω
+  /// είναι φθηνότερη από σιωπηλή απώλεια.
+  static bool _overwritesForeignWork({
+    required Task? expected,
+    required Map<String, dynamic> freshRow,
+    required Map<String, dynamic> attempted,
+  }) {
+    if (expected == null) return true;
+    final baseline = expected.toMap();
+    for (final key in attempted.keys) {
+      if (key == 'id' || _kGuardIgnoredFields.contains(key)) continue;
+      if (_guardText(baseline[key]) != _guardText(freshRow[key])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static bool _isStaleWrite({
     required Map<String, dynamic>? oldRow,
     required String? expectedUpdatedAt,
@@ -1421,7 +1465,14 @@ class TasksRepository {
   /// Εγγραφή + audit στο ίδιο transaction ([TaskSaveException] σε αποτυχία).
   /// Με [force] `true` η εγγραφή περνά **παρά** τη διένεξη: ο χρήστης είδε τι
   /// άλλαξε και επέλεξε ρητά να κρατήσει τη δική του εικόνα.
-  Future<void> updateTask(Task task, {bool force = false}) async {
+  /// Το [expected] είναι η εγγραφή **όπως τη διάβασε η οθόνη** — η αφετηρία
+  /// της σύγκρισης. Χωρίς αυτήν ο φρουρός δεν μπορεί να ξεχωρίσει τη δική
+  /// μου αλλαγή από την ξένη και μπλοκάρει σε κάθε αγγιγμένη γραμμή.
+  Future<void> updateTask(
+    Task task, {
+    Task? expected,
+    bool force = false,
+  }) async {
     if (task.id == null) return;
     final db = await _db;
     final tid = task.id!;
@@ -1456,11 +1507,17 @@ class TasksRepository {
         // Ο φρουρός μπαίνει ΕΔΩ και όχι στον καλούντα: η γραμμή έχει μόλις
         // διαβαστεί μέσα στη συναλλαγή, οπότε η σύγκριση είναι ατομική — δεν
         // υπάρχει παράθυρο ανάμεσα στον έλεγχο και στην εγγραφή.
+        // Η σφραγίδα είναι το φθηνό πρώτο φίλτρο· το περιεχόμενο κρίνει.
         if (!force &&
-            _isStaleWrite(oldRow: oldRow, expectedUpdatedAt: task.updatedAt)) {
+            _isStaleWrite(oldRow: oldRow, expectedUpdatedAt: task.updatedAt) &&
+            _overwritesForeignWork(
+              expected: expected,
+              freshRow: oldRow!,
+              attempted: map,
+            )) {
           final actor = await _lastAuditActor(txn, tid);
           throw TaskStaleException(
-            fresh: Task.fromMap(oldRow!),
+            fresh: Task.fromMap(oldRow),
             attempted: task,
             changedBy: actor.who,
             changedAt: actor.at,

@@ -14,6 +14,7 @@ import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/history/providers/history_provider.dart';
 import 'package:call_logger/core/database/department_repository.dart';
 import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
+import 'package:call_logger/features/directory/providers/directory_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_report_scope_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -141,6 +142,39 @@ void main() {
             'μπαγιάτικη',
       );
       expect(container.read(historyCallsProvider).value, isNotEmpty);
+    });
+
+    // Ο Κατάλογος έλειπε από την ανανέωση: η αλλαγή του συναδέλφου σε
+    // υπάλληλο έμενε αόρατη επ' αόριστον, και η καρτέλα άνοιγε με μπαγιάτικη
+    // αφετηρία — οπότε ο φρουρός μπλόκαρε τη ΔΙΚΗ μου αποθήκευση, ξανά και
+    // ξανά, χωρίς τρόπο να ξεμπλοκάρω.
+    test('φτάνει και στον Κατάλογο υπαλλήλων', () async {
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+      container.read(_refCaptureProvider);
+
+      container.listen(directoryProvider, (_, _) {});
+      await container.read(directoryProvider.notifier).loadUsers();
+      final before = container.read(directoryProvider).allUsers.length;
+
+      // Το άλλο μηχάνημα προσθέτει υπάλληλο.
+      final db = await DatabaseHelper.instance.database;
+      await db.insert('users', {
+        'first_name': 'Αναστασία',
+        'last_name': 'Αναστασιάδη',
+      });
+
+      await refreshSharedDatabaseViews(_capturedRef!);
+
+      expect(
+        container.read(directoryProvider).allUsers.length,
+        before + 1,
+        reason:
+            'Ο Κατάλογος πρέπει να ξαναδιαβάζεται όπως οι υπόλοιπες οθόνες — '
+            'αλλιώς η καρτέλα ανοίγει με αφετηρία που δεν ισχύει πια',
+      );
     });
   });
 }

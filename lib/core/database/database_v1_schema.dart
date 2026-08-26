@@ -78,7 +78,11 @@ import 'database_foreign_keys.dart';
 /// v52: `operator_presence.instance` — ποιο ανοιχτό αντίγραφο κρατά το ίχνος.
 /// Χωρίς αυτό, η αλλαγή χρήστη άφηνε τον προηγούμενο «συνδεδεμένο» για τρία
 /// λεπτά στον ίδιο υπολογιστή με τον νέο.
-const int databaseSchemaVersionV1 = 54;
+/// v55: `remote_tools.connect_wait_seconds` — πόσο κλειδώνει το κουμπί μετά
+/// από επιβεβαιωμένη εκκίνηση, ώστε τα επαναλαμβανόμενα πατήματα να μην
+/// ανοίγουν αλλεπάλληλες συνεδρίες. Καθαρή προσθήκη με προεπιλογή: παλαιότερη
+/// έκδοση της εφαρμογής γράφει χωρίς τη στήλη και το DEFAULT τη συμπληρώνει.
+const int databaseSchemaVersionV1 = 55;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
 ///
@@ -326,6 +330,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         arguments_json TEXT,
         test_target_ip TEXT,
         is_exclusive INTEGER NOT NULL DEFAULT 0,
+        connect_wait_seconds INTEGER NOT NULL DEFAULT 30,
         deleted_at TEXT
       )
     ''');

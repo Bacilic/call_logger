@@ -47,10 +47,27 @@ mixin DialogSnackbarHost<T extends StatefulWidget> on State<T> {
     final toShow = _composeSnackBar(snackBar, copyText);
     final local = dialogMessengerKey.currentState;
     if (local != null && _canPresent(dialogMessengerKey.currentContext)) {
-      local.showSnackBar(toShow);
+      _replaceCurrent(local, toShow);
       return;
     }
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(toShow);
+    final root = ScaffoldMessenger.maybeOf(context);
+    if (root != null) _replaceCurrent(root, toShow);
+  }
+
+  /// Το νέο μήνυμα παίρνει **αμέσως** τη θέση του προηγούμενου.
+  ///
+  /// Ο [ScaffoldMessenger] βάζει από μόνος του τα μηνύματα σε ουρά. Σε
+  /// εφαρμογή γραφείου αυτό είναι πάντα λάθος: ο χρήστης θέλει να διαβάσει
+  /// ό,τι αφορά την **τελευταία** του ενέργεια, όχι μια προηγούμενη — και
+  /// ένα μήνυμα με υπολογισμένο χρόνο («ξαναδοκιμάζεται σε 5 λεπτά») παγώνει
+  /// τη στιγμή που εμφανίζεται. Χειρότερα: όταν αυτό που κάθεται μπροστά δεν
+  /// φεύγει μόνο του, η ουρά δεν προχωρά ποτέ και ο διάλογος βουβαίνεται.
+  static void _replaceCurrent(
+    ScaffoldMessengerState messenger,
+    SnackBar snackBar,
+  ) {
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(snackBar);
   }
 
   /// True όταν κάτω από τον [ScaffoldMessenger] υπάρχει [Scaffold] να
@@ -126,7 +143,6 @@ mixin DialogSnackbarHost<T extends StatefulWidget> on State<T> {
   Future<void> _copyDialogSnackBarText(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    dialogMessengerKey.currentState?.hideCurrentSnackBar();
     showDialogSnackBar(
       const SnackBar(
         content: Text('Αντιγραφή στο πρόχειρο.'),

@@ -13,6 +13,7 @@ import '../../../../core/utils/user_facing_error_messages.dart';
 import 'remote_tool_arguments_editor.dart';
 import 'remote_tool_basic_fields.dart';
 import 'remote_tool_behavior_fields.dart';
+import 'local_connect_wait_override_field.dart';
 import 'local_executable_path_override_field.dart';
 import 'remote_tool_form_controller.dart';
 import 'remote_tool_form_saver.dart';
@@ -62,6 +63,9 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
     super.initState();
     _ctrl = RemoteToolFormController(initialTool: widget.initialTool);
     _ctrl.addListener(_onControllerChanged);
+    // Οι τοπικές παρακάμψεις ζουν στις προτιμήσεις του σταθμού, όχι στη βάση:
+    // έρχονται ασύγχρονα και ξαναορίζουν την αφετηρία της φόρμας.
+    _ctrl.loadLocalOverrides();
   }
 
   @override
@@ -194,6 +198,11 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
           ? widget.initialTool!.id
           : null,
     );
+    // Και εδώ οι τοπικές ρυθμίσεις ακολουθούν τη φόρμα — στο εργαλείο που
+    // επιβιώνει. Ο χρήστης συμπλήρωσε μία φόρμα και πάτησε ένα κουμπί· ό,τι
+    // έγραψε δεν επιτρέπεται να χαθεί επειδή η αποθήκευση πήρε τον σπάνιο
+    // δρόμο της επαναφοράς.
+    await _ctrl.commitLocalOverrides(softDeleted.id);
     _invalidateRemote();
     if (mounted) Navigator.of(context).pop(true);
   }
@@ -258,11 +267,16 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
       if (_ctrl.isEdit) {
         final tool = _ctrl.toRemoteTool(id: widget.initialTool!.id);
         await saver.commitEdit(toolFromForm: tool);
+        // Οι τοπικές παρακάμψεις γράφονται στην ίδια κίνηση με τον κοινό
+        // ορισμό — αλλιώς το ίδιο κουμπί θα σήμαινε δύο πράγματα.
+        final localChanges = _ctrl.localOverrideChangeLines();
+        await _ctrl.commitLocalOverrides(widget.initialTool!.id);
         _invalidateRemote();
         if (mounted) {
           final message = buildRemoteToolSaveMessage(
             oldTool: widget.initialTool!,
             newTool: tool,
+            localChanges: localChanges,
           );
           Navigator.of(context).pop(true);
           _showHostSnackBar(message);
@@ -488,10 +502,33 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
                               isCreate: !_ctrl.isEdit,
                             ),
                             LocalExecutablePathOverrideField(
-                              toolId: _ctrl.initialTool?.id,
+                              controller: _ctrl.localPathC,
                               sharedPath: _ctrl.pathC.text,
+                              hasOverride: _ctrl.localPathHasOverride,
+                              onOverridden: _ctrl.markLocalPathOverridden,
+                              onUseShared: _ctrl.useSharedPath,
+                              visible:
+                                  _ctrl.isEdit && _ctrl.localOverridesLoaded,
                               enabled: !_ctrl.saving,
                               onPick: _pickLocalExecutableOverride,
+                            ),
+                            const SizedBox(height: 16),
+                            _sectionTitle(theme, 'Αναμονή μετά την εκκίνηση'),
+                            const Divider(),
+                            SharedConnectWaitField(
+                              controller: _ctrl.connectWaitC,
+                              enabled: !_ctrl.saving,
+                            ),
+                            LocalConnectWaitOverrideField(
+                              controller: _ctrl.localWaitC,
+                              sharedSeconds:
+                                  RemoteTool.normalizeConnectWaitSeconds(
+                                    _ctrl.connectWaitC.text,
+                                  ),
+                              onUseShared: _ctrl.useSharedConnectWait,
+                              visible:
+                                  _ctrl.isEdit && _ctrl.localOverridesLoaded,
+                              enabled: !_ctrl.saving,
                             ),
                             const SizedBox(height: 16),
                             _sectionTitle(theme, 'Εικονίδιο εργαλείου'),

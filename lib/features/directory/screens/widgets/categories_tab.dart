@@ -213,7 +213,6 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
       ScaffoldMessenger.of(context),
       message: message,
       tooltipMessage: tooltipAllNames,
-      showCloseIcon: true,
       onUndo: () {
         ref.read(categoryDirectoryProvider.notifier).undoLastDelete();
       },

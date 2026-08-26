@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/calls/provider/call_mutation_refresh.dart';
+import '../../features/directory/providers/category_directory_provider.dart';
 import '../../features/directory/providers/department_directory_provider.dart';
+import '../../features/directory/providers/directory_cache_refresh.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../widgets/modal_route_tracker.dart';
 import 'database_helper.dart';
@@ -39,6 +41,16 @@ Future<void> refreshSharedDatabaseViews(Ref ref) async {
   // κατέληγαν με το ίδιο. Φόρτωση και όχι ακύρωση — ο notifier κρατά δεδομένα,
   // και η ακύρωση θα άδειαζε την οθόνη ώσπου να έρθουν τα νέα.
   await ref.read(departmentDirectoryProvider.notifier).loadDepartments();
+  if (!ref.mounted) return;
+  // Ο Κατάλογος δεν είναι απλώς μια ακόμη οθόνη που γερνά: οι καρτέλες του
+  // γράφονται ΟΛΟΚΛΗΡΕΣ, και η αφετηρία της σύγκρισης είναι η εγγραφή όπως
+  // τη φόρτωσε αυτή η λίστα. Όσο έλειπε από εδώ, η αλλαγή του συναδέλφου
+  // έμενε αόρατη επ' αόριστον και ο φρουρός μπλόκαρε τη ΔΙΚΗ μου αποθήκευση
+  // — ξανά και ξανά, χωρίς τρόπο να ξεμπλοκάρω.
+  await refreshDirectoryCaches(ref, users: true, equipment: true);
+  if (!ref.mounted) return;
+  await ref.read(categoryDirectoryProvider.notifier).loadCategories();
+  if (!ref.mounted) return;
   // Ιστορικό, Στατιστικά, ουρά Αναφοράς Lansweeper και πρόσφατες κλήσεις μαζί.
   refreshAfterCallMutation(ref);
 }

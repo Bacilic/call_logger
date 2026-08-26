@@ -43,7 +43,12 @@ DeferredDeletionRunner scheduleDeferredDeletionWithUndo({
   messenger.hideCurrentSnackBar();
   snackbar = messenger.showSnackBar(
     SnackBar(
-      duration: const Duration(minutes: 10),
+      // Εδώ η παραμονή είναι η **πρόθεση**, όχι παρενέργεια: το μήνυμα ζει
+      // όσο τρέχει η αντίστροφη μέτρηση και το κλείνει ο δρομέας της
+      // διαγραφής — στην εκτέλεση ή στην αναίρεση. Χωρίς κουμπί κλεισίματος:
+      // θα έπαιρνε μαζί του τη μοναδική διέξοδο αναίρεσης, ενώ η διαγραφή θα
+      // προχωρούσε ούτως ή άλλως.
+      persist: true,
       content: DeletionCountdownText(message: countdownMessage),
       action: SnackBarAction(
         label: 'Αναίρεση',

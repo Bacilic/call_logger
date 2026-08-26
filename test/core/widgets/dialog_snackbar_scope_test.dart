@@ -12,6 +12,10 @@ import '../../test_reporter.dart';
 const _kMessage = 'Υπάρχει ήδη εξοπλισμός με αυτόν τον κωδικό.';
 const _kOpenButton = 'ΑΝΟΙΓΜΑ';
 const _kShowButton = 'ΕΜΦΑΝΙΣΗ';
+const _kOlderMessage = 'Η αποθήκευση ολοκληρώθηκε.';
+const _kNewerMessage = 'Το μοντέλο δεν αποκρίθηκε.';
+const _kShowOlder = 'ΠΑΛΙΟ';
+const _kShowNewer = 'ΝΕΟ';
 
 /// Διάλογος που τυλίγει σωστά το περιεχόμενό του (η καθιερωμένη χρήση).
 class _ScopedDialog extends StatefulWidget {
@@ -198,9 +202,107 @@ void main() {
     expect(find.byIcon(Icons.content_copy_outlined), findsOneWidget);
     expect(find.text(_kMessage), findsOneWidget);
   });
+
+  // Σε εφαρμογή γραφείου η ουρά παλιών μηνυμάτων είναι πάντα λάθος: ο
+  // χρήστης θέλει να διαβάσει ό,τι αφορά την ΤΕΛΕΥΤΑΙΑ του ενέργεια. Όσο το
+  // νέο μήνυμα έμπαινε στη σειρά πίσω από το προηγούμενο, ο διάλογος
+  // φαινόταν να «μην ανανεώνεται» — και με μήνυμα που δεν έφευγε ποτέ,
+  // σιωπούσε οριστικά.
+  //   flutter test test/core/widgets/dialog_snackbar_scope_test.dart --plain-name "τελευταίο"
+  testWidgets('το τελευταίο μήνυμα αντικαθιστά το προηγούμενο', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: FilledButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => const _ScopedDialogWithTwoMessages(),
+                ),
+                child: const Text(_kOpenButton),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text(_kOpenButton));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_kShowOlder));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.text(_kOlderMessage),
+      findsOneWidget,
+      reason: greekExpectMsg('Προϋπόθεση: το πρώτο μήνυμα εμφανίστηκε'),
+    );
+
+    await tester.tap(find.text(_kShowNewer));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(
+      find.text(_kNewerMessage),
+      findsOneWidget,
+      reason: greekExpectMsg(
+        'Το νέο μήνυμα πρέπει να φαίνεται αμέσως, όχι να περιμένει τη σειρά '
+        'του πίσω από το προηγούμενο',
+      ),
+    );
+    expect(
+      find.text(_kOlderMessage),
+      findsNothing,
+      reason: greekExpectMsg(
+        'Το προηγούμενο μήνυμα δεν επιτρέπεται να κρατά την οθόνη',
+      ),
+    );
+  });
 }
 
 const Color _kStyledBackground = Color(0xFF7B1FA2);
+
+/// Διάλογος που στέλνει δύο διαφορετικά μηνύματα, το ένα μετά το άλλο.
+class _ScopedDialogWithTwoMessages extends StatefulWidget {
+  const _ScopedDialogWithTwoMessages();
+
+  @override
+  State<_ScopedDialogWithTwoMessages> createState() =>
+      _ScopedDialogWithTwoMessagesState();
+}
+
+class _ScopedDialogWithTwoMessagesState
+    extends State<_ScopedDialogWithTwoMessages>
+    with DialogSnackbarHost {
+  @override
+  Widget build(BuildContext context) {
+    return DialogSnackbarScope(
+      messengerKey: dialogMessengerKey,
+      child: AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilledButton(
+              onPressed: () => showDialogSnackBar(
+                const SnackBar(content: Text(_kOlderMessage)),
+              ),
+              child: const Text(_kShowOlder),
+            ),
+            FilledButton(
+              onPressed: () => showDialogSnackBar(
+                const SnackBar(content: Text(_kNewerMessage)),
+              ),
+              child: const Text(_kShowNewer),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// Διάλογος που στέλνει ρυθμισμένο snackbar **και** ζητά αντιγραφή — ο
 /// συνδυασμός που έχανε τις ρυθμίσεις.

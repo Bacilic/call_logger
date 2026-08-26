@@ -84,6 +84,7 @@ String buildSaveConfirmationMessage({
 String buildRemoteToolSaveMessage({
   required RemoteTool oldTool,
   required RemoteTool newTool,
+  List<String> localChanges = const [],
 }) {
   final label = newTool.name.trim();
   final changeLines = <String>[];
@@ -120,10 +121,20 @@ String buildRemoteToolSaveMessage({
     newTool.isExclusive ? 'Ναι' : 'Όχι',
   );
   addChange(
+    'Αναμονή μετά την εκκίνηση',
+    _remoteToolWaitText(oldTool.connectWaitSeconds),
+    _remoteToolWaitText(newTool.connectWaitSeconds),
+  );
+  addChange(
     'Ορίσματα',
     _formatRemoteToolArgumentValues(oldTool.arguments),
     _formatRemoteToolArgumentValues(newTool.arguments),
   );
+
+  // Οι τοπικές παρακάμψεις μπαίνουν στην ίδια σύνοψη: ο χρήστης πάτησε ένα
+  // κουμπί και πρέπει να δει ό,τι έγραψε αυτό το κουμπί — αλλιώς μια αλλαγή
+  // που αφορά μόνο το μηχάνημά του θα διαβαζόταν ως «καμία αλλαγή».
+  changeLines.addAll(localChanges);
 
   if (changeLines.isEmpty) {
     return kSaveConfirmationNoChangesMessage;
@@ -204,6 +215,9 @@ String _remoteToolRoleDisplayLabel(ToolRole role) {
     ToolRole.vnc => 'VNC Host',
   };
 }
+
+String _remoteToolWaitText(int seconds) =>
+    seconds <= 0 ? 'Χωρίς κλείδωμα' : '$seconds δευτ.';
 
 String _optionalRemoteToolText(String? value) {
   final trimmed = value?.trim() ?? '';

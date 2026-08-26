@@ -6,10 +6,20 @@
 /// διατύπωση έπρεπε να γίνει σε κάθε αντίγραφο και το τελευταίο ξεχνιόταν.
 library;
 
+import '../services/current_operator.dart';
+
 /// «Ο χρήστης «Βασίλης»» — ή «Κάποιος άλλος» όταν το Ιστορικό δεν απαντά.
+///
+/// Η παύλα του [CurrentOperator.unknownAuditName] **δεν** είναι όνομα: είναι
+/// η σφραγίδα «δεν ξέρουμε ποιος». Όσο περνούσε ως κανονική τιμή, ο διάλογος
+/// έγραφε «Ο χρήστης «—»» — κατηγορούσε κάποιον ενώ η εφαρμογή αγνοούσε, και
+/// ο άγνωστος μπορεί κάλλιστα να ήταν ο ίδιος ο χρήστης που διαβάζει.
 String conflictActorName(String? changedBy) {
   final trimmed = (changedBy ?? '').trim();
-  return trimmed.isEmpty ? 'Κάποιος άλλος' : 'Ο χρήστης «$trimmed»';
+  if (trimmed.isEmpty || trimmed == CurrentOperator.unknownAuditName) {
+    return 'Κάποιος άλλος';
+  }
+  return 'Ο χρήστης «$trimmed»';
 }
 
 /// « στις 13:10» — με ημερομηνία όταν δεν είναι σήμερα, κενό όταν δεν ξέρουμε.

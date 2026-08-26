@@ -20,7 +20,7 @@ Future<bool> showSettingsListConflictDialog(
     warning: conflict.overwriteWarning,
     changedFieldsCaption: 'Τι άλλαξε ο άλλος:',
     changedFields: conflict.changeLines,
-    keepMineLabel: 'Κράτα τη δική μου',
+    keepMineLabel: 'Κράτα τη δική μου αλλαγή',
     takeTheirsLabel: 'Άφησε τη δική του',
   );
   return overwrite ?? false;
