@@ -22,7 +22,7 @@ import 'database_schema_version.dart';
 /// v17: remote_tools.is_exclusive (αποκλειστική εμφάνιση στο UI κλήσεων).
 /// v18: audit_log entity columns + indexes για φίλτρα/side panel.
 /// v19: remote_tools — αφαίρεση legacy στηλών (placeholders σε arguments_json).
-/// v20: πίνακας `building_map_floors` (φύλλα κατόψης κτιρίου).
+/// v20: πίνακας `building_map_floors` (φύλλα κάτοψης κτιρίου).
 /// v21: `departments.group_name`, `departments.floor_id` (ομαδοποίηση στον χάρτη).
 /// v22: `departments.map_label_offset_*`, `departments.map_anchor_offset_*`, `departments.map_custom_name`.
 /// v23: `tasks.origin` (πηγή δημιουργίας εκκρεμότητας).
@@ -838,7 +838,7 @@ Future<void> migrateDatabaseToV19(Database db) async {
   }
 }
 
-/// v20: φύλλα κατόψης για χάρτη κτιρίου (`departments.map_floor` → `building_map_floors.id`).
+/// v20: φύλλα κάτοψης για χάρτη κτιρίου (`departments.map_floor` → `building_map_floors.id`).
 Future<void> migrateDatabaseToV20(Database db) async {
   await db.execute('''
 CREATE TABLE IF NOT EXISTS building_map_floors (

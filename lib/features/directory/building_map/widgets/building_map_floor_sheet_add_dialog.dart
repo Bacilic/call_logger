@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 
-/// Αποτέλεσμα του διαλόγου «Νέο φύλλο κατόψης».
+/// Αποτέλεσμα του διαλόγου «Νέο φύλλο κάτοψης».
 class BuildingMapFloorSheetAddResult {
   const BuildingMapFloorSheetAddResult({required this.label, this.floorGroup});
 
@@ -14,7 +14,7 @@ class BuildingMapFloorSheetAddResult {
   final String? floorGroup;
 }
 
-/// Διάλογος «Νέο φύλλο κατόψης»: ετικέτα + προαιρετική ομάδα ορόφου.
+/// Διάλογος «Νέο φύλλο κάτοψης»: ετικέτα + προαιρετική ομάδα ορόφου.
 /// Επιστρέφει null σε ακύρωση. Η «Προσθήκη» ενεργοποιείται μόνο με μη κενή ετικέτα.
 Future<BuildingMapFloorSheetAddResult?> showBuildingMapFloorSheetAddDialog(
   BuildContext context,
@@ -61,7 +61,7 @@ class _BuildingMapFloorSheetAddDialogState
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Νέο φύλλο κατόψης'),
+      title: const Text('Νέο φύλλο κάτοψης'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,

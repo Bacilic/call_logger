@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Αρχεία όπου τα μηνύματα προς χρήστη πρέπει να περνούν από
 /// [humanizeUserFacingError] και όχι από ωμή παρεμβολή `$e`.
 const _guardedRelativePaths = <String>[
-  'lib/features/database/widgets/database_maintenance_panel.dart',
+  'lib/features/database/widgets/database_maintenance_sections.dart',
   'lib/features/database/widgets/database_settings_panel.dart',
   'lib/core/widgets/database_error_screen.dart',
   'lib/features/dictionary/screens/dictionary_manager_screen.dart',

@@ -1,5 +1,5 @@
 // Widget tests: μικροί διάλογοι του χάρτη (επιβεβαιώσεις, επιλογείς άλματος,
-// διαγραφή φύλλου κατόψης).
+// διαγραφή φύλλου κάτοψης).
 //
 //   flutter test test/features/directory/building_map/building_map_small_dialogs_test.dart
 

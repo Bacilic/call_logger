@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -28,6 +27,7 @@ import '../utils/backup_destination_folder_validator.dart';
 import '../utils/backup_destination_location_warnings.dart';
 import '../utils/backup_location_hints.dart';
 import '../utils/backup_restore_tooltip.dart';
+import 'backup_int_setting_field.dart';
 import '../utils/backup_schedule_status.dart';
 import '../utils/portable_backup_availability.dart';
 import 'backup_folder_missing_dialog.dart';
@@ -46,6 +46,19 @@ const _backupSafetyTooltipMessage =
 /// Ο απλός χρήστης (χωρίς δικαίωμα πλήρους αντιγράφου) βλέπει ποιος τα
 /// χειρίζεται και το δικό του «αντίγραφο ρυθμίσεων» — όπως πριν από την
 /// καρτελοποίηση.
+/// Πώς τελείωσε η προσπάθεια δημιουργίας του φακέλου προορισμού.
+///
+/// Ρητό αποτέλεσμα αντί για `bool`: το «δεν έγινε» έκρυβε δύο πολύ
+/// διαφορετικές καταστάσεις — «το ακύρωσε ο χρήστης» και «απέτυχε, και η
+/// αιτία γράφτηκε ήδη». Ο καλών τις μπέρδευε και έσβηνε την αιτία.
+enum _FolderCreationOutcome {
+  created,
+  cancelled,
+
+  /// Απέτυχε· το μήνυμα προς τον χρήστη έχει ΗΔΗ γραφτεί.
+  failedWithMessage,
+}
+
 class DatabaseSettingsBackupTab extends ConsumerStatefulWidget {
   const DatabaseSettingsBackupTab({super.key});
 
@@ -324,23 +337,57 @@ class _DatabaseSettingsBackupTabState
     return confirmed == true;
   }
 
-  Future<bool> _createBackupDestinationFolderIfConfirmed(
+  /// Δημιουργεί τον φάκελο, αφού ρωτήσει — **εφόσον έχει νόημα να ρωτήσει**.
+  ///
+  /// Επιστρέφει `true` μόνο όταν ο φάκελος υπάρχει πλέον. Όταν επιστρέψει
+  /// `false` έχοντας γράψει η ίδια μήνυμα (ανύπαρκτος τόμος, αποτυχία
+  /// δημιουργίας), το δηλώνει με το [_destinationFolderError] ήδη γεμάτο· ο
+  /// καλών δεν πρέπει να το σβήσει.
+  Future<_FolderCreationOutcome> _createBackupDestinationFolderIfConfirmed(
     String folderPath,
   ) async {
+    // Ο δίσκος πρέπει να υπάρχει ΠΡΙΝ προσφερθεί δημιουργία: σε αποσυνδεδεμένο
+    // ή ανύπαρκτο τόμο η δημιουργία είναι αδύνατη, και η ερώτηση «να τον
+    // φτιάξω;» δίνει ελπίδα που δεν υπάρχει.
+    if (!BackupLocationHints.volumeOfPathExists(folderPath)) {
+      if (!mounted) return _FolderCreationOutcome.failedWithMessage;
+      setState(() {
+        _destinationFolderError = _missingVolumeMessage(folderPath);
+      });
+      return _FolderCreationOutcome.failedWithMessage;
+    }
     if (!await _confirmCreateBackupDestinationFolder(folderPath)) {
-      return false;
+      return _FolderCreationOutcome.cancelled;
     }
     try {
       await Directory(folderPath).create(recursive: true);
-      return true;
+      return _FolderCreationOutcome.created;
     } catch (e) {
-      if (!mounted) return false;
+      if (!mounted) return _FolderCreationOutcome.failedWithMessage;
       setState(() {
         _destinationFolderError =
             'Δεν ήταν δυνατή η δημιουργία του φακέλου: ${humanizeUserFacingError(e)}';
       });
-      return false;
+      return _FolderCreationOutcome.failedWithMessage;
     }
+  }
+
+  /// Το μήνυμα για δίσκο που δεν υπάρχει — με τους δίσκους που υπάρχουν.
+  ///
+  /// Η εφαρμογή ήδη ξέρει ποιοι τόμοι είναι συνδεδεμένοι· το να τους πει είναι
+  /// η διαφορά ανάμεσα σε «κάτι πήγε στραβά» και «ορίστε τι μπορείτε να
+  /// διαλέξετε».
+  String _missingVolumeMessage(String folderPath) {
+    final letter = BackupLocationHints.windowsDriveLetterFromPath(folderPath);
+    final drives = BackupLocationHints.eligibleWindowsBackupDriveLabels();
+    final head = letter == null
+        ? 'Ο δίσκος της διαδρομής δεν είναι διαθέσιμος'
+        : 'Ο δίσκος $letter: δεν υπάρχει ή δεν είναι συνδεδεμένος';
+    if (drives.isEmpty) {
+      return '$head — ο φάκελος δεν μπορεί να δημιουργηθεί εκεί.';
+    }
+    return '$head — ο φάκελος δεν μπορεί να δημιουργηθεί εκεί. '
+        'Διαθέσιμοι δίσκοι: ${drives.join(', ')}.';
   }
 
   Future<void> _validateAndPersistDestination() async {
@@ -351,10 +398,16 @@ class _DatabaseSettingsBackupTabState
 
     if (result.kind == BackupDestinationValidationKind.missingDirectory) {
       final trimmed = raw.trim();
-      final created = await _createBackupDestinationFolderIfConfirmed(trimmed);
+      final outcome = await _createBackupDestinationFolderIfConfirmed(trimmed);
       if (!mounted || gen != _destinationValidationGen) return;
-      if (!created) {
-        setState(() => _destinationFolderError = result.errorMessage);
+      if (outcome != _FolderCreationOutcome.created) {
+        // Το γενικό «ο φάκελος δεν υπάρχει» μπαίνει ΜΟΝΟ όταν δεν ειπώθηκε
+        // κάτι πιο συγκεκριμένο. Όσο η απάντηση ήταν σκέτο `false`, αυτή η
+        // γραμμή έσβηνε την πραγματική αιτία (ανύπαρκτος δίσκος, άρνηση
+        // πρόσβασης) που μόλις είχε γραφτεί.
+        if (outcome == _FolderCreationOutcome.cancelled) {
+          setState(() => _destinationFolderError = result.errorMessage);
+        }
         return;
       }
       result = await BackupDestinationFolderValidator.validate(raw);
@@ -1182,12 +1235,13 @@ class _DatabaseSettingsBackupTabState
               ),
             ),
             const SizedBox(height: 8),
-            _triggerIntFieldRow(
-              theme,
-              leadingText: 'Όταν μαζευτούν ',
+            BackupIntSettingField(
+              leadingText: 'Κάθε ',
               trailingText: ' αλλαγές',
               controller: _thresholdController,
               focusNode: _thresholdFocus,
+              min: 1,
+              max: 9999,
               onPersist: () => _persistIntField(
                 _thresholdController,
                 (s) => s.changeThreshold,
@@ -1196,12 +1250,19 @@ class _DatabaseSettingsBackupTabState
                     .setChangeThreshold(v),
               ),
             ),
-            _triggerIntFieldRow(
-              theme,
-              leadingText: 'Ποτέ πιο συχνά από ',
+            BackupIntSettingField(
+              leadingText: 'Το συντομότερο μετά από ',
               trailingText: ' λεπτά',
               controller: _minSpacingController,
               focusNode: _minSpacingFocus,
+              min: DatabaseBackupSettings.minAllowedSpacingMinutes,
+              max: 1440,
+              limitHint:
+                  'ελάχιστο '
+                  '${DatabaseBackupSettings.minAllowedSpacingMinutes} λεπτά',
+              limitTooltip:
+                  'Κάθε αντίγραφο διαβάζει ολόκληρη τη βάση μέσα από το '
+                  'δίκτυο· πιο συχνά από αυτό, η δουλειά σας θα το νιώθει.',
               onPersist: () => _persistIntField(
                 _minSpacingController,
                 (s) => s.minSpacingMinutes,
@@ -1210,23 +1271,13 @@ class _DatabaseSettingsBackupTabState
                     .setMinSpacingMinutes(v),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: 2, bottom: 2),
-              child: Text(
-                'Ελάχιστο ${DatabaseBackupSettings.minAllowedSpacingMinutes} '
-                'λεπτά: κάθε αντίγραφο διαβάζει ολόκληρη τη βάση μέσα από το '
-                'δίκτυο.',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            _triggerIntFieldRow(
-              theme,
+            BackupIntSettingField(
               leadingText: 'Το αργότερο μετά από ',
               trailingText: ' λεπτά',
               controller: _maxWaitController,
               focusNode: _maxWaitFocus,
+              min: DatabaseBackupSettings.minAllowedSpacingMinutes,
+              max: 10080,
               onPersist: () => _persistIntField(
                 _maxWaitController,
                 (s) => s.maxWaitMinutes,
@@ -1324,51 +1375,6 @@ class _DatabaseSettingsBackupTabState
 
   /// Γραμμή «κείμενο [πεδίο] κείμενο» για τις ρυθμίσεις πυροδότησης — ίδιο
   /// μοτίβο με τα πεδία της πολιτικής διατήρησης.
-  Widget _triggerIntFieldRow(
-    ThemeData theme, {
-    required String leadingText,
-    required String trailingText,
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required Future<void> Function() onPersist,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text(leadingText, style: theme.textTheme.bodyLarge),
-          SizedBox(
-            width: 64,
-            child: TextField(
-              focusNode: focusNode,
-              controller: controller,
-              textAlign: TextAlign.center,
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(4),
-              ],
-              decoration: const InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 8,
-                ),
-              ),
-              onEditingComplete: () => unawaited(onPersist()),
-              onSubmitted: (_) => unawaited(onPersist()),
-            ),
-          ),
-          Text(trailingText, style: theme.textTheme.bodyLarge),
-        ],
-      ),
-    );
-  }
-
   /// Γραμμή κανόνα διατήρησης: κείμενο, αριθμητικό πεδίο και διακόπτης.
   Widget _retentionRuleRow(
     ThemeData theme, {
@@ -1384,12 +1390,13 @@ class _DatabaseSettingsBackupTabState
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
-          child: _triggerIntFieldRow(
-            theme,
+          child: BackupIntSettingField(
             leadingText: leadingText,
             trailingText: trailingText,
             controller: controller,
             focusNode: focusNode,
+            min: 1,
+            max: 9999,
             onPersist: onPersist,
           ),
         ),

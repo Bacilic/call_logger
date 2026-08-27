@@ -221,6 +221,33 @@ class CallsLansweeperRepository {
   /// Όλες οι [callIds] παίρνουν το ίδιο κείμενο. Όταν πολλές κλήσεις μπαίνουν
   /// σε ένα ticket, το κείμενο γράφτηκε για όλες μαζί — αφήνοντας τις υπόλοιπες
   /// κενές, θα έμεναν μόνιμα τηλεγραφικές χωρίς λόγο.
+  /// Θα άλλαζε πράγματι κάτι η [saveRefinedTexts] με αυτά τα κείμενα;
+  ///
+  /// Ζει **δίπλα στην εγγραφή και τηρεί τους ίδιους κανόνες** — κενό πεδίο δεν
+  /// αγγίζει ό,τι υπάρχει, και δύο κενά πεδία δεν γράφουν τίποτα. Αν η απάντηση
+  /// εδώ αποκλίνει από τη συμπεριφορά της εγγραφής, το κουμπί που τη ρωτά θα
+  /// λέει ψέματα: είτε θα δηλώνει «αποθηκεύτηκε» χωρίς να αλλάξει τίποτα, είτε
+  /// θα μένει ανενεργό ενώ υπάρχει δουλειά να σωθεί.
+  static bool wouldChangeTexts({
+    required String problem,
+    required String solution,
+    required String? currentIssue,
+    required String? currentSolution,
+  }) {
+    final trimmedProblem = problem.trim();
+    final trimmedSolution = solution.trim();
+    if (trimmedProblem.isEmpty && trimmedSolution.isEmpty) return false;
+    if (trimmedProblem.isNotEmpty &&
+        trimmedProblem != (currentIssue ?? '').trim()) {
+      return true;
+    }
+    if (trimmedSolution.isNotEmpty &&
+        trimmedSolution != (currentSolution ?? '').trim()) {
+      return true;
+    }
+    return false;
+  }
+
   Future<void> saveRefinedTexts({
     required List<int> callIds,
     required String problem,

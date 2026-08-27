@@ -9,7 +9,6 @@ import '../../../core/services/settings_service.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../audit/providers/audit_providers.dart';
 import '../../calls/provider/lookup_provider.dart';
-import '../../settings/widgets/create_new_database_dialog.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import '../../tasks/providers/tasks_provider.dart';
 import '../providers/database_browser_stats_provider.dart';
@@ -23,31 +22,27 @@ const Map<String, String> _kMaintenanceTableLabels = {
   'user_dictionary': 'Προσωπικό λεξικό',
 };
 
-/// Διάλογος συντήρησης βάσης (εκκαθάριση whitelist, VACUUM/REINDEX, νέα βάση).
-class DatabaseMaintenancePanel extends ConsumerStatefulWidget {
-  const DatabaseMaintenancePanel({super.key, required this.onDatabaseReopened});
-
-  final Future<void> Function() onDatabaseReopened;
-
-  static Future<void> show(
-    BuildContext context, {
-    required Future<void> Function() onDatabaseReopened,
-  }) {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) =>
-          DatabaseMaintenancePanel(onDatabaseReopened: onDatabaseReopened),
-    );
-  }
+/// Οι ενότητες συντήρησης της βάσης: εκκαθάριση ιστορικού, VACUUM, αναδόμηση
+/// ευρετηρίων.
+///
+/// **Ενσωματώνεται** στην καρτέλα «Συντήρηση» των Ρυθμίσεων αντί να ανοίγει ως
+/// ξεχωριστός διάλογος: όσο ζούσε έξω, η συντήρηση ήταν μοιρασμένη σε δύο
+/// σπίτια — μια καρτέλα που λεγόταν «Συντήρηση» και είχε μόνο τον έλεγχο
+/// ακεραιότητας, και ένας διάλογος αλλού που έκανε τη δουλειά.
+///
+/// Η «Νέα βάση» έφυγε από εδώ: η δημιουργία και η εναλλαγή αρχείων ανήκουν
+/// στην καρτέλα «Βάση», και το να υπάρχει το ίδιο κουμπί σε δύο σημεία σήμαινε
+/// δύο δρόμους προς μια μη αναστρέψιμη ενέργεια.
+class DatabaseMaintenanceSections extends ConsumerStatefulWidget {
+  const DatabaseMaintenanceSections({super.key});
 
   @override
-  ConsumerState<DatabaseMaintenancePanel> createState() =>
-      _DatabaseMaintenancePanelState();
+  ConsumerState<DatabaseMaintenanceSections> createState() =>
+      _DatabaseMaintenanceSectionsState();
 }
 
-class _DatabaseMaintenancePanelState
-    extends ConsumerState<DatabaseMaintenancePanel> {
+class _DatabaseMaintenanceSectionsState
+    extends ConsumerState<DatabaseMaintenanceSections> {
   bool _busy = false;
   String? _banner;
   bool _bannerError = false;
@@ -419,34 +414,14 @@ class _DatabaseMaintenancePanelState
     });
   }
 
-  Future<void> _onCreateNewDatabase(BuildContext context) async {
-    await CreateNewDatabaseFlow.run(
-      context,
-      ref,
-      onDatabaseReopened: widget.onDatabaseReopened,
-      onFlowSuccessCloseParent: () {
-        if (context.mounted) Navigator.of(context).pop();
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final mq = MediaQuery.sizeOf(context);
 
-    return AlertDialog(
-      title: Row(
-        children: [
-          Icon(Icons.build_circle_outlined, color: theme.colorScheme.primary),
-          const SizedBox(width: 10),
-          const Expanded(child: Text('Συντήρηση Βάσης Δεδομένων')),
-        ],
-      ),
-      content: SizedBox(
-        width: (mq.width * 0.5).clamp(360.0, 560.0),
-        child: Stack(
-          children: [
+    // Χωρίς κέλυφος διαλόγου και χωρίς σταθερό πλάτος: το πλάτος το ορίζει
+    // πλέον η καρτέλα που μας φιλοξενεί.
+    return Stack(
+      children: [
             SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -591,27 +566,7 @@ class _DatabaseMaintenancePanelState
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  _sectionTitle(theme, 'Νέα βάση'),
                   const SizedBox(height: 8),
-                  Text(
-                    'Η τρέχουσα βάση μετονομάζεται σε «call_logger_old_ημερομηνία.db» στην ίδια θέση και δημιουργείται νέο κενό αρχείο.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: theme.colorScheme.error,
-                      foregroundColor: theme.colorScheme.onError,
-                    ),
-                    onPressed: _busy
-                        ? null
-                        : () => _onCreateNewDatabase(context),
-                    icon: const Icon(Icons.warning_amber_rounded),
-                    label: const Text('Δημιουργία νέας βάσης'),
-                  ),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -636,14 +591,6 @@ class _DatabaseMaintenancePanelState
                   ),
                 ),
               ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Κλείσιμο'),
-        ),
       ],
     );
   }

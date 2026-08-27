@@ -7,7 +7,7 @@
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/utils/natural_string_compare.dart';
 
-/// Κείμενο εμφάνισης κατόψης: `ομάδα · ετικέτα`, ή σκέτη ετικέτα χωρίς ομάδα.
+/// Κείμενο εμφάνισης κάτοψης: `ομάδα · ετικέτα`, ή σκέτη ετικέτα χωρίς ομάδα.
 String buildingMapFloorDisplayLabel(BuildingMapFloor f) {
   final g = f.floorGroup?.trim();
   return (g != null && g.isNotEmpty) ? '$g · ${f.label}' : f.label;

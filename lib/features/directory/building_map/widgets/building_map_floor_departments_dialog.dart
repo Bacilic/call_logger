@@ -288,7 +288,7 @@ class _BuildingMapFloorDepartmentsDialogState
       builder: (ctx) => AlertDialog(
         title: const Text('Αφαίρεση από τον χάρτη'),
         content: Text(
-          'Να αφαιρεθούν ${selected.length} τμήματα από αυτό το φύλλο κατόψης; '
+          'Να αφαιρεθούν ${selected.length} τμήματα από αυτό το φύλλο κάτοψης; '
           'Η γεωμετρία και το χρώμα χάρτη θα μηδενιστούν (οι υπόλοιπες πληροφορίες τμήματος διατηρούνται).',
         ),
         actions: [

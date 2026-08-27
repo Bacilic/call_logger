@@ -3,12 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/managed_server.dart';
 import '../../../../core/providers/servers_provider.dart';
-import '../../../../core/services/server_sessions/server_session_models.dart';
-import '../../../../core/services/server_sessions/smb1_client_status.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/widgets/section_card.dart';
 import 'server_form_dialog.dart';
 import 'server_maintenance_actions.dart';
+import 'this_computer_status_card.dart';
 
 /// Οθόνη «Διακομιστές» (Κατάλογος → Διάφορα).
 ///
@@ -108,7 +107,7 @@ class _ServersManagementViewState extends ConsumerState<ServersManagementView> {
                 data: _buildList,
               ),
               const SizedBox(height: 16),
-              const _Smb1StatusCard(),
+              const ThisComputerStatusCard(),
             ],
           ),
         ),
@@ -306,98 +305,6 @@ class _ServerRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Κατάσταση του SMB1 σε αυτόν τον υπολογιστή.
-///
-/// Στέκεται εδώ και όχι σε κάποιο κρυφό διαγνωστικό, γιατί όταν λείπει, κάθε
-/// διακομιστής του 2003 μοιάζει «να μην απαντά» — και η αιτία δεν είναι
-/// μαντέψιμη από το μήνυμα σφάλματος.
-class _Smb1StatusCard extends ConsumerWidget {
-  const _Smb1StatusCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final async = ref.watch(smb1ClientStatusProvider);
-
-    return SectionCard(
-      icon: Icons.computer_outlined,
-      title: 'Κατάσταση αυτού του υπολογιστή',
-      child: async.when(
-        loading: () => const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              SizedBox(width: 10),
-              Text('Γίνεται έλεγχος…'),
-            ],
-          ),
-        ),
-        error: (e, _) => Text('Αποτυχία ελέγχου: $e'),
-        data: (status) {
-          final problem = status.isProblem;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    switch (status) {
-                      Smb1ClientStatus.running => Icons.check_circle_outline,
-                      Smb1ClientStatus.unknown => Icons.help_outline,
-                      _ => Icons.warning_amber_outlined,
-                    },
-                    size: 18,
-                    color: problem
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(status.label)),
-                ],
-              ),
-              if (problem) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    icon: const Icon(Icons.open_in_new, size: 16),
-                    label: const Text(
-                      'Άνοιγμα «Δυνατότητες των Windows» (SMB 1.0/CIFS)',
-                    ),
-                    onPressed: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      final opened = await openWindowsOptionalFeatures();
-                      if (!context.mounted) return;
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            opened
-                                ? 'Άνοιξε το παράθυρο δυνατοτήτων. Μετά την '
-                                      'αλλαγή χρειάζεται επανεκκίνηση του '
-                                      'υπολογιστή.'
-                                : 'Δεν ήταν δυνατό το άνοιγμα του παραθύρου '
-                                      'δυνατοτήτων των Windows.',
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ],
-          );
-        },
       ),
     );
   }

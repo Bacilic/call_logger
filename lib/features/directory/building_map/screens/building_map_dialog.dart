@@ -153,7 +153,7 @@ class BuildingMapDialog extends ConsumerWidget {
   }
 }
 
-/// Τίτλος AppBar σε λειτουργία επεξεργασίας: εμφανίζει τον ενεργό όροφο / φύλλο κατόψης.
+/// Τίτλος AppBar σε λειτουργία επεξεργασίας: εμφανίζει τον ενεργό όροφο / φύλλο κάτοψης.
 Widget _buildingMapEditModeTitle(WidgetRef ref) {
   final reloadSeq = ref.watch(buildingMapFloorReloadSeqProvider);
   final sheetId = ref.watch(buildingMapSelectedSheetIdProvider);

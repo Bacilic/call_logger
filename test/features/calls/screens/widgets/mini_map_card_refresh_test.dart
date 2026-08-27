@@ -105,7 +105,7 @@ void _publishDepartmentDirectoryReload(
   );
 }
 
-/// Ό,τι κάνει ο χάρτης όταν αλλάξει φύλλο κατόψης (εικόνα, περιστροφή, προσθήκη).
+/// Ό,τι κάνει ο χάρτης όταν αλλάξει φύλλο κάτοψης (εικόνα, περιστροφή, προσθήκη).
 void _publishFloorSheetsChanged(WidgetTester tester) {
   _containerOf(tester).read(buildingMapFloorReloadSeqProvider.notifier).bump();
 }
@@ -156,14 +156,14 @@ void main() {
     expect(find.text(_kNotOnMapMessage), findsOneWidget);
   }, semanticsEnabled: false);
 
-  testWidgets('αλλαγή φύλλου κατόψης ανανεώνει τον μικρό χάρτη', (
+  testWidgets('αλλαγή φύλλου κάτοψης ανανεώνει τον μικρό χάρτη', (
     tester,
   ) async {
     final source = _FakeMapSource();
     await _pumpCard(tester, source);
     expect(source.loadCount, 1);
 
-    // Αντικατάσταση εικόνας κατόψης: το τμήμα δεν άλλαξε, η εικόνα του ναι.
+    // Αντικατάσταση εικόνας κάτοψης: το τμήμα δεν άλλαξε, η εικόνα του ναι.
     source.mapped = true;
     _publishFloorSheetsChanged(tester);
     await tester.pumpAndSettle();
@@ -210,7 +210,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('πλήρης χάρτης'), findsOneWidget);
 
-      // Αποθήκευση νέας κατόψης ΜΕΣΑ από τον χάρτη.
+      // Αποθήκευση νέας κάτοψης ΜΕΣΑ από τον χάρτη.
       source.mapped = true;
       _publishFloorSheetsChanged(tester);
       await tester.pumpAndSettle();

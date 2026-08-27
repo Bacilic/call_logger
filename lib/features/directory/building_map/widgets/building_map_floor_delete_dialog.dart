@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Επιλογή διαγραφής φύλλου κατόψης (τι αποφάσισε ο χρήστης στον διάλογο).
+/// Επιλογή διαγραφής φύλλου κάτοψης (τι αποφάσισε ο χρήστης στον διάλογο).
 class BuildingMapFloorDeleteChoice {
   const BuildingMapFloorDeleteChoice({required this.deleteImageFile});
 
@@ -63,7 +63,7 @@ class _BuildingMapFloorDeleteDialogState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'Να διαγραφεί το φύλλο κατόψης;\n\n'
+              'Να διαγραφεί το φύλλο κάτοψης;\n\n'
               'Ο σχεδιασμός στο χάρτη για τα τμήματα που δένονται σε αυτό το φύλλο '
               'θα χαθεί: η θέση και η περιοχή στο χάρτη θα μηδενιστούν.',
             ),

@@ -9,7 +9,7 @@ import '../../models/department_model.dart';
 import 'building_map_floor_edit_preview.dart';
 import '../../../../core/widgets/compact_tooltip.dart';
 
-/// Αποτέλεσμα του διαλόγου «Επεξεργασία κατόψης».
+/// Αποτέλεσμα του διαλόγου «Επεξεργασία κάτοψης».
 class BuildingMapFloorSheetEditResult {
   const BuildingMapFloorSheetEditResult({
     required this.label,
@@ -23,15 +23,15 @@ class BuildingMapFloorSheetEditResult {
   /// Περιοχή ορόφου όπως πληκτρολογήθηκε (χωρίς trim — συμβόλαιο του update).
   final String floorGroupRaw;
 
-  /// Διαδρομή νέας εικόνας κατόψης· null όταν δεν επιλέχθηκε νέα.
+  /// Διαδρομή νέας εικόνας κάτοψης· null όταν δεν επιλέχθηκε νέα.
   final String? pickedSrcPath;
 }
 
-/// Επιλογέας εικόνας κατόψης — ενίεται από τον controller ώστε ο διάλογος να
+/// Επιλογέας εικόνας κάτοψης — ενίεται από τον controller ώστε ο διάλογος να
 /// μη γνωρίζει FilePicker/μνήμη τοποθεσίας.
 typedef PickFloorSheetImagePath = Future<String?> Function();
 
-/// Διάλογος «Επεξεργασία κατόψης»: όνομα, περιοχή, αλλαγή εικόνας με
+/// Διάλογος «Επεξεργασία κάτοψης»: όνομα, περιοχή, αλλαγή εικόνας με
 /// προεπισκόπηση. Επιστρέφει null σε ακύρωση· η «Αποθήκευση» ενεργοποιείται
 /// μόνο όταν υπάρχει πραγματική αλλαγή και μη κενό όνομα.
 Future<BuildingMapFloorSheetEditResult?> showBuildingMapFloorSheetEditDialog(
@@ -126,7 +126,7 @@ class _BuildingMapFloorSheetEditDialogState
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Επεξεργασία κατόψης'),
+      title: const Text('Επεξεργασία κάτοψης'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -149,14 +149,16 @@ class _BuildingMapFloorSheetEditDialogState
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
+            // Σταθερή λεζάντα: το κουμπί ονομάζει τη **δράση** του, που είναι
+            // πάντα η ίδια. Η προηγούμενη εκδοχή γινόταν «Επιλέχθηκε νέα
+            // κάτοψη» μετά την επιλογή, οπότε διαβαζόταν σαν να άλλαξε ρόλο —
+            // ενώ το πάτημα ξανάνοιγε απλώς τον επιλογέα. Ότι επιλέχθηκε νέα
+            // εικόνα φαίνεται ήδη στην προεπισκόπηση από κάτω και στο κουμπί
+            // «Αποθήκευση» που ξυπνά· δεν χρειάζεται να το πει και η λεζάντα.
             OutlinedButton.icon(
               onPressed: _pickNewImage,
               icon: const Icon(Icons.image_outlined),
-              label: Text(
-                _pickedSrcPath != null
-                    ? 'Επιλέχθηκε νέα κατόψη'
-                    : 'Αλλαγή κατόψης',
-              ),
+              label: const Text('Αλλαγή κάτοψης'),
             ),
             const SizedBox(height: 12),
             BuildingMapFloorEditPreview(

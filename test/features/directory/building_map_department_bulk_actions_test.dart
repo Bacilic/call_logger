@@ -40,7 +40,7 @@ void main() {
     await db.delete('building_map_floors');
     repo = DepartmentRepository(db);
     // Τα ξένα κλειδιά είναι ενεργά: το floor_id πρέπει να δείχνει σε
-    // υπαρκτό φύλλο κατόψης.
+    // υπαρκτό φύλλο κάτοψης.
     floorId = await db.insert('building_map_floors', {
       'label': 'Ισόγειο',
       'image_path': 'katopsi.png',
@@ -127,7 +127,7 @@ void main() {
     });
   });
 
-  group('μαζική αφαίρεση από φύλλο κατόψης', () {
+  group('μαζική αφαίρεση από φύλλο κάτοψης', () {
     test(
       'καθαρίζει τη θέση και επιστρέφει τα χρώματα που ελευθερώθηκαν',
       () async {

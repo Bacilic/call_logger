@@ -6,6 +6,7 @@ import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
 import '../services/lansweeper_registration_conflict.dart';
+import '../services/lansweeper_write_failure.dart';
 import '../services/lansweeper_submission_warnings.dart';
 import 'lansweeper_registration_conflict_dialog.dart';
 import 'lansweeper/lansweeper_ai_presenter.dart';
@@ -285,6 +286,10 @@ class LansweeperReportRegistration {
     var registered = 0;
     var skipped = 0;
     var failed = 0;
+    // Η αιτία της ΠΡΩΤΗΣ αποτυχίας: σε μαζική σήμανση οι επόμενες είναι
+    // συνήθως η ίδια (κλειδωμένη βάση, άφταστος φάκελος), και μια σειρά από
+    // πανομοιότυπες προτάσεις δεν προσθέτει τίποτα.
+    LansweeperWriteFailure? firstFailure;
     for (final call in calls) {
       final callId = call.id;
       if (callId == null) continue;
@@ -299,27 +304,32 @@ class LansweeperReportRegistration {
           force: force,
         ),
       );
-      switch (outcome) {
+      switch (outcome.outcome) {
         case LansweeperChangeOutcome.applied:
           registered++;
         case LansweeperChangeOutcome.skippedByUser:
           skipped++;
         case LansweeperChangeOutcome.failed:
           failed++;
+          firstFailure ??= outcome.failure;
       }
     }
     if (!host.mounted || registered + skipped + failed == 0) return;
+    final message = registrationOutcomeMessage(
+      registered: registered,
+      skipped: skipped,
+      failed: failed,
+      ticketId: ticketId,
+      failureReason: firstFailure?.message,
+    );
     host.showDialogSnackBar(
       SnackBar(
-        content: Text(
-          registrationOutcomeMessage(
-            registered: registered,
-            skipped: skipped,
-            failed: failed,
-            ticketId: ticketId,
-          ),
-        ),
+        content: Text(message),
+        // Όση ώρα χρειάζεται μια αιτία για να διαβαστεί — ίδια με την αποτυχία
+        // υποβολής μέσω API. Η επιτυχία δεν έχει τι να διαβάσει κανείς.
+        duration: Duration(seconds: firstFailure == null ? 4 : 8),
       ),
+      copyText: firstFailure?.report,
     );
   }
 

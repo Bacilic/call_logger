@@ -1,4 +1,4 @@
-/// Φύλλο κατόψης για τον χάρτη κτιρίου (`building_map_floors`).
+/// Φύλλο κάτοψης για τον χάρτη κτιρίου (`building_map_floors`).
 class BuildingMapFloor {
   BuildingMapFloor({
     required this.id,

@@ -1273,7 +1273,7 @@ class _BuildingMapSheetViewportState
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
-                'Η εικόνα κατόψης δεν βρέθηκε.',
+                'Η εικόνα κάτοψης δεν βρέθηκε.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),

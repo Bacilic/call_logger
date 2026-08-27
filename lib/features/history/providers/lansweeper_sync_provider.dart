@@ -15,10 +15,12 @@ import '../../../core/services/lansweeper_requester_resolution.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
 import '../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../../../core/services/lookup_service.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../calls/models/call_model.dart';
 import '../../calls/provider/call_mutation_refresh.dart';
 import '../models/lansweeper_sync_state.dart';
 import '../services/lansweeper_registration_conflict.dart';
+import '../services/lansweeper_write_failure.dart';
 
 final lansweeperSyncServiceProvider = Provider<LansweeperSyncService>(
   (ref) => LansweeperSyncService(),
@@ -379,6 +381,9 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
   }
 
   /// Εξαίρεση κλήσης από το Lansweeper. `true` όταν γράφτηκε πράγματι.
+  ///
+  /// Η αποτυχία **πετιέται** ως [LansweeperWriteFailure] — δεν επιστρέφεται
+  /// ως `false`, ώστε να μη χαθεί η αιτία της.
   Future<bool> setExcluded(
     int callId, {
     required LansweeperRegistrationBaseline? expected,
@@ -390,7 +395,8 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     force: force,
   );
 
-  /// Επαναφορά κλήσης σε ακαταχώρητη. `true` όταν γράφτηκε πράγματι.
+  /// Επαναφορά κλήσης σε ακαταχώρητη. `true` όταν γράφτηκε πράγματι· η
+  /// αποτυχία πετιέται ως [LansweeperWriteFailure], με την αιτία της.
   ///
   /// Με [retainTicketId] `false` **σβήνει** τον αριθμό αιτήματος — γι' αυτό το
   /// [expected] μετράει εδώ όσο και στη σήμανση: πάνω σε μπαγιάτικη εικόνα η
@@ -402,7 +408,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     bool retainTicketId = false,
     bool force = false,
   }) async {
-    final written = await _write(callId, (repo) async {
+    await _write(callId, (repo) async {
       await repo.updateLansweeperState(
         callId: callId,
         state: LansweeperSyncState.unsent,
@@ -411,8 +417,8 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         force: force,
       );
     });
-    if (written) _refreshAfterLansweeperMutation();
-    return written;
+    _refreshAfterLansweeperMutation();
+    return true;
   }
 
   Future<int> countRegisteredCallsWithTicketId(
@@ -448,6 +454,10 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
   ///
   /// Επιστρέφει `true` μόνο όταν η σήμανση όντως γράφτηκε — ο καλών δεν
   /// επιτρέπεται να ανακοινώσει επιτυχία για κάτι που δεν έγινε.
+  ///
+  /// Το `false` σημαίνει ένα μόνο πράγμα: **δεν έτρεξε καν**, επειδή υπάρχει
+  /// ήδη ενεργή αποστολή. Κάθε άλλη αποτυχία πετιέται ως
+  /// [LansweeperWriteFailure] και κουβαλά την αιτία της.
   Future<bool> markRegistered({
     required int callId,
     required LansweeperRegistrationBaseline? expected,
@@ -460,7 +470,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     _publish(const AsyncLoading());
     try {
       final normalized = ticketId?.trim() ?? '';
-      final written = await _write(callId, (repo) async {
+      await _write(callId, (repo) async {
         if (normalized.isEmpty) {
           await repo.updateLansweeperState(
             callId: callId,
@@ -478,8 +488,8 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           );
         }
       });
-      if (written) _refreshAfterLansweeperMutation();
-      return written;
+      _refreshAfterLansweeperMutation();
+      return true;
     } finally {
       _isRunning = false;
     }
@@ -491,7 +501,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     required LansweeperRegistrationBaseline? expected,
     bool force = false,
   }) async {
-    final written = await _write(callId, (repo) async {
+    await _write(callId, (repo) async {
       await repo.updateLansweeperState(
         callId: callId,
         state: nextState,
@@ -499,8 +509,8 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         force: force,
       );
     });
-    if (written) _refreshAfterLansweeperMutation();
-    return written;
+    _refreshAfterLansweeperMutation();
+    return true;
   }
 
   /// Εκτελεί μια εγγραφή κατάστασης και φροντίζει τι φτάνει στην οθόνη.
@@ -509,14 +519,16 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
   /// διάλογος που ρωτά τον άνθρωπο δεν θα εμφανιζόταν ποτέ. Η ταυτότητα
   /// ζητείται εδώ, ώστε καμία οθόνη να μη χρειάζεται να θυμηθεί να τη ζητήσει.
   ///
-  /// Επιστρέφει `false` όταν η εγγραφή απέτυχε για άλλον λόγο: το σφάλμα μένει
-  /// στην κατάσταση του provider και ο καλών ξέρει ότι δεν έγινε τίποτα.
+  /// Κάθε άλλη αποτυχία **πετιέται** ως [LansweeperWriteFailure], με την αιτία
+  /// ντυμένη σε ανθρώπινα ελληνικά και μια τεχνική αναφορά προς αντιγραφή. Όσο
+  /// γύριζε σκέτο `false`, η αιτία έμενε μόνο στην κατάσταση του provider — που
+  /// καμία οθόνη δεν διαβάζει για σφάλματα, παρά μόνο για το «φορτώνει;».
   ///
   /// Το άνοιγμα της βάσης γίνεται **μέσα** στο `try`: αλλιώς μια αποτυχία
   /// εκεί αφήνει πίσω της το `AsyncLoading` που έβαλε ο καλών, και η
   /// Αναφορά κρατά τα κουμπιά της κλειδωμένα για μια δουλειά που έχει ήδη
   /// πέσει.
-  Future<bool> _write(
+  Future<void> _write(
     int callId,
     Future<void> Function(CallsLansweeperRepository repo) write,
   ) async {
@@ -524,7 +536,6 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       final db = await DatabaseHelper.instance.database;
       await write(CallsLansweeperRepository(db));
       _publish(const AsyncData(null));
-      return true;
     } on LansweeperRegistrationStaleException catch (stale) {
       _publish(const AsyncData(null));
       final db = await DatabaseHelper.instance.database;
@@ -533,9 +544,31 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         stale.conflict.describedBy(who: actor.who, at: actor.at),
       );
     } catch (e, st) {
+      // Η κατάσταση εξακολουθεί να δημοσιεύεται (τα κουμπιά ξεκλειδώνουν)· η
+      // αιτία όμως δεν μένει ΜΟΝΟ εκεί, γιατί εκεί δεν τη βλέπει κανείς.
       _publish(AsyncError(e, st));
-      return false;
+      throw LansweeperWriteFailure(
+        message: humanizeUserFacingError(e),
+        report: _buildWriteFailureReport(callId: callId, error: e, stack: st),
+      );
     }
+  }
+
+  /// Η τεχνική αναφορά μιας αποτυχημένης εγγραφής, στο ύφος της αποτυχίας API.
+  String _buildWriteFailureReport({
+    required int callId,
+    required Object error,
+    required StackTrace stack,
+  }) {
+    return <String>[
+      'Lansweeper write failed',
+      'callId: $callId',
+      'error: $error',
+      'timestamp: ${DateTime.now().toIso8601String()}',
+      '',
+      'stack:',
+      '$stack',
+    ].join('\n');
   }
 
   void _refreshAfterLansweeperMutation() {

@@ -1,4 +1,4 @@
-// Widget tests: διάλογοι «Νέο φύλλο κατόψης» και «Επεξεργασία κατόψης».
+// Widget tests: διάλογοι «Νέο φύλλο κάτοψης» και «Επεξεργασία κάτοψης».
 //
 //   flutter test test/features/directory/building_map/building_map_floor_sheet_dialogs_test.dart
 
@@ -75,7 +75,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   registerCallLoggerIsolatedDatabaseHooks();
 
-  group('Διάλογος «Νέο φύλλο κατόψης»', () {
+  group('Διάλογος «Νέο φύλλο κάτοψης»', () {
     testWidgets('η «Προσθήκη» ενεργοποιείται μόνο με μη κενή ετικέτα και '
         'επιστρέφει trimmed αποτέλεσμα', (tester) async {
       BuildingMapFloorSheetAddResult? result;
@@ -114,7 +114,7 @@ void main() {
     });
   });
 
-  group('Διάλογος «Επεξεργασία κατόψης»', () {
+  group('Διάλογος «Επεξεργασία κάτοψης»', () {
     testWidgets('χωρίς αλλαγές η «Αποθήκευση» είναι ανενεργή· αλλαγή ονόματος '
         'την ενεργοποιεί και επιστρέφεται το νέο όνομα', (tester) async {
       BuildingMapFloorSheetEditResult? result;
@@ -146,7 +146,7 @@ void main() {
       expect(result!.pickedSrcPath, isNull);
     });
 
-    testWidgets('η «Αλλαγή κατόψης» καλεί τον ενιέμενο επιλογέα και το '
+    testWidgets('η «Αλλαγή κάτοψης» καλεί τον ενιέμενο επιλογέα και το '
         'αποτέλεσμα μεταφέρει τη νέα εικόνα', (tester) async {
       final tempDir = Directory.systemTemp.createTempSync('map_dialog_test_');
       addTearDown(() {
@@ -154,7 +154,7 @@ void main() {
           tempDir.deleteSync(recursive: true);
         } catch (_) {}
       });
-      final imageFile = File(p.join(tempDir.path, 'κατόψη.png'))
+      final imageFile = File(p.join(tempDir.path, 'κάτοψη.png'))
         ..writeAsStringSync('x');
 
       var pickerCalls = 0;
@@ -172,12 +172,21 @@ void main() {
         );
       });
 
-      await tester.tap(find.text('Αλλαγή κατόψης'));
+      await tester.tap(find.text('Αλλαγή κάτοψης'));
       await pumpUntilSettled(tester);
 
       expect(pickerCalls, 1);
-      expect(find.text('Επιλέχθηκε νέα κατόψη'), findsOneWidget);
+      // Η λεζάντα ονομάζει τη ΔΡΑΣΗ και μένει σταθερή: το κουμπί δεν άλλαξε
+      // ρόλο, ξανανοίγει τον ίδιο επιλογέα. Ότι επιλέχθηκε νέα εικόνα το λέει
+      // το «Αποθήκευση» που ξυπνά — και η προεπισκόπηση.
+      expect(find.text('Αλλαγή κάτοψης'), findsOneWidget);
+      expect(find.textContaining('Επιλέχθηκε'), findsNothing);
       expect(_filledButton(tester, 'Αποθήκευση').onPressed, isNotNull);
+
+      // Δεύτερο πάτημα: το κουμπί εξακολουθεί να δουλεύει κανονικά.
+      await tester.tap(find.text('Αλλαγή κάτοψης'));
+      await pumpUntilSettled(tester);
+      expect(pickerCalls, 2);
 
       await tester.tap(find.text('Αποθήκευση'));
       await pumpUntilSettled(tester);

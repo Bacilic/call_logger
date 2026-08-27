@@ -70,7 +70,7 @@ String _ensureImageExtension(String path, {required bool jpeg}) {
   return path + (jpeg ? '.jpg' : '.png');
 }
 
-/// Εξαγωγή bitmap του φύλλου (εικόνα κατόψης + περιοχές τμημάτων, σύμφωνα με ορατότητα).
+/// Εξαγωγή bitmap του φύλλου (εικόνα κάτοψης + περιοχές τμημάτων, σύμφωνα με ορατότητα).
 Future<void> exportBuildingMapSheetToImageFile({
   required BuildContext context,
   required String defaultFloorBaseName,

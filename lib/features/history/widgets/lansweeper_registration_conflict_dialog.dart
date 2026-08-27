@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/stale_write_conflict_dialog.dart';
 import '../services/lansweeper_registration_conflict.dart';
+import '../services/lansweeper_write_failure.dart';
 
 /// Ρωτά τι να γίνει όταν κάποιος άλλος κούνησε την κατάσταση Lansweeper.
 ///
@@ -48,6 +49,23 @@ extension LansweeperChangeOutcomeX on LansweeperChangeOutcome {
   bool get isApplied => this == LansweeperChangeOutcome.applied;
 }
 
+/// Πώς τελείωσε η αλλαγή — **και γιατί**, όταν δεν τελείωσε καλά.
+///
+/// Το σκέτο [LansweeperChangeOutcome] έλεγε μόνο «δεν έγινε». Η αιτία υπήρχε
+/// (η εγγραφή την ήξερε) αλλά σταματούσε εδώ, οπότε καμία οθόνη δεν μπορούσε
+/// να την πει. Τώρα ταξιδεύει μαζί με το αποτέλεσμα.
+class LansweeperChangeResult {
+  const LansweeperChangeResult(this.outcome, {this.failure});
+
+  final LansweeperChangeOutcome outcome;
+
+  /// Τι πήγε στραβά· `null` όταν δεν επρόκειτο για σφάλμα εγγραφής — δηλαδή
+  /// όταν πέτυχε, όταν το άφησε ο χρήστης, ή όταν έτρεχε ήδη άλλη αποστολή.
+  final LansweeperWriteFailure? failure;
+
+  bool get isApplied => outcome == LansweeperChangeOutcome.applied;
+}
+
 /// Εκτελεί μια αλλαγή κατάστασης Lansweeper και ρωτά αν κάποιος πρόλαβε.
 ///
 /// Γραμμένο μία φορά για όλες τις χειροκίνητες μεταβάσεις — σήμανση,
@@ -56,25 +74,56 @@ extension LansweeperChangeOutcomeX on LansweeperChangeOutcome {
 /// και η εγγραφή περνούσε αθόρυβα.
 ///
 /// Το [write] καλείται ξανά με `force: true` **μόνο** αν ο χρήστης επιμείνει.
-Future<LansweeperChangeOutcome> applyLansweeperChangeWithConflictPrompt(
+///
+/// Είναι και το **ένα σημείο** όπου η αιτία μιας αποτυχίας μπαίνει στο
+/// αποτέλεσμα: κάθε χειροκίνητη αλλαγή κατάστασης περνά από εδώ, οπότε καμία
+/// οθόνη —ούτε μελλοντική— δεν μπορεί να ξεχάσει να τη δείξει.
+Future<LansweeperChangeResult> applyLansweeperChangeWithConflictPrompt(
   BuildContext context, {
   required Future<bool> Function({required bool force}) write,
   DateTime? now,
 }) async {
   try {
-    return await write(force: false)
-        ? LansweeperChangeOutcome.applied
-        : LansweeperChangeOutcome.failed;
+    return await _attempt(write, force: false);
   } on LansweeperRegistrationStaleException catch (stale) {
-    if (!context.mounted) return LansweeperChangeOutcome.skippedByUser;
+    if (!context.mounted) {
+      return const LansweeperChangeResult(
+        LansweeperChangeOutcome.skippedByUser,
+      );
+    }
     final proceed = await showLansweeperRegistrationConflictDialog(
       context,
       stale.conflict,
       now: now,
     );
-    if (!proceed) return LansweeperChangeOutcome.skippedByUser;
-    return await write(force: true)
-        ? LansweeperChangeOutcome.applied
-        : LansweeperChangeOutcome.failed;
+    if (!proceed) {
+      return const LansweeperChangeResult(
+        LansweeperChangeOutcome.skippedByUser,
+      );
+    }
+    return _attempt(write, force: true);
+  }
+}
+
+/// Μία απόπειρα εγγραφής, με την αιτία της αποτυχίας αν υπάρξει.
+///
+/// Η διένεξη ΔΕΝ πιάνεται εδώ: την περιμένει ο καλών για να ρωτήσει τον
+/// άνθρωπο. Το `false` χωρίς εξαίρεση σημαίνει «δεν έτρεξε καν» (υπάρχει ήδη
+/// ενεργή αποστολή) — αποτυχία χωρίς αιτία προς εμφάνιση.
+Future<LansweeperChangeResult> _attempt(
+  Future<bool> Function({required bool force}) write, {
+  required bool force,
+}) async {
+  try {
+    return LansweeperChangeResult(
+      await write(force: force)
+          ? LansweeperChangeOutcome.applied
+          : LansweeperChangeOutcome.failed,
+    );
+  } on LansweeperWriteFailure catch (failure) {
+    return LansweeperChangeResult(
+      LansweeperChangeOutcome.failed,
+      failure: failure,
+    );
   }
 }

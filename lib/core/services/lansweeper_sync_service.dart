@@ -646,14 +646,52 @@ class LansweeperSyncService {
     return 'Ολοκληρώθηκαν: ${completedSteps.join(', ')}.';
   }
 
-  String _buildSubject(CallModel call) {
-    final category = (call.category ?? '').trim();
-    final id = call.id;
+  String _buildSubject(CallModel call) =>
+      autoTicketTitle(category: call.category ?? '', id: call.id);
+
+  /// Ο τίτλος που γεννά μόνη της η εφαρμογή όταν κανείς δεν έγραψε δικό του.
+  ///
+  /// **Μία πηγή** για δύο ερωτήσεις: με τι προσυμπληρώνεται το πεδίο, και —
+  /// στην αποθήκευση προς την κλήση — ποιος τίτλος είναι αυτόματος και άρα δεν
+  /// αξίζει να κατέβει στην Περιγραφή. Δύο υλοποιήσεις θα απαντούσαν κάποτε
+  /// διαφορετικά, και τότε ο έλεγχος «είναι αυτόματος;» θα αστοχούσε σιωπηλά,
+  /// γεμίζοντας τις περιγραφές με «Κλήση #344».
+  static String autoTicketTitle({required String category, required int? id}) {
+    final trimmed = category.trim();
     final suffix = id != null ? ' #$id' : '';
-    if (category.isEmpty) {
-      return id != null ? 'Κλήση$suffix' : 'Κλήση';
+    return trimmed.isEmpty ? 'Κλήση$suffix' : '[$trimmed]$suffix';
+  }
+
+  /// Η Περιγραφή που γράφεται στην **κλήση** από το κουμπί αποθήκευσης.
+  ///
+  /// Ο τίτλος κατεβαίνει ως πρώτη παράγραφος, χωρίς καμία ετικέτα μπροστά —
+  /// διαβάζεται ως η πρώτη φράση του κειμένου, όχι ως πεδίο φόρμας. Δύο όροι
+  /// τον κρατούν έξω:
+  ///
+  /// 1. **Είναι ο αυτόματος** ([autoTicketTitle]) — επαναλαμβάνει τον αριθμό
+  ///    της κλήσης, που η εφαρμογή ήδη ξέρει.
+  /// 2. **Βρίσκεται ήδη εκεί.** Ο τίτλος ξαναφτιάχνεται σε κάθε άνοιγμα, ενώ η
+  ///    Περιγραφή ξαναδιαβάζεται αποθηκευμένη: χωρίς αυτόν τον όρο, δεύτερη
+  ///    αποθήκευση της ίδιας κλήσης θα τον έγραφε δεύτερη φορά, τρίτη τρίτη.
+  ///
+  /// Ισχύει **μόνο** για την αποθήκευση στην κλήση. Οι έξοδοι προς το
+  /// Lansweeper στέλνουν τον τίτλο στο δικό του πεδίο του ticket.
+  static String buildCallIssue({
+    required String title,
+    required String autoTitle,
+    required String notes,
+  }) {
+    final trimmedTitle = title.trim();
+    final trimmedNotes = notes.trim();
+    if (trimmedTitle.isEmpty || trimmedTitle == autoTitle.trim()) {
+      return trimmedNotes;
     }
-    return '[$category]$suffix';
+    if (trimmedNotes.isEmpty) return trimmedTitle;
+    if (trimmedNotes == trimmedTitle ||
+        trimmedNotes.startsWith('$trimmedTitle\n')) {
+      return trimmedNotes;
+    }
+    return '$trimmedTitle\n\n$trimmedNotes';
   }
 
   static String formatCallDurationLabel(int seconds) {

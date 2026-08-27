@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 import '../../../core/database/active_database_generation.dart';
-import '../../../core/models/app_permission.dart';
-import '../../../core/services/permission_service.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_identity_repository.dart';
 import '../../../core/database/database_table_inspection.dart';
@@ -22,7 +20,6 @@ import '../providers/database_browser_stats_provider.dart';
 import '../services/database_stats_service.dart';
 import '../widgets/backup_health_stat_rows.dart';
 import '../widgets/database_label_dialog.dart';
-import '../widgets/database_maintenance_panel.dart';
 import '../widgets/table_preview_grid.dart';
 
 /// Κλειδί `app_settings` για JSON `{ "όνομα_πίνακα": zoom, ... }` (zoom 0.5–2.0).
@@ -350,13 +347,6 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     });
   }
 
-  Future<void> _openDatabaseMaintenance() async {
-    await DatabaseMaintenancePanel.show(
-      context,
-      onDatabaseReopened: widget.onDatabaseReopened ?? () async {},
-    );
-  }
-
   /// Κουμπιά ρυθμίσεων και συντήρησης (δεξιά στην κάρτα στατιστικών / προβολή πίνακα).
   Widget _databaseToolbarActions() {
     return Column(
@@ -371,15 +361,6 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
           alignment: Alignment.topCenter,
           onPressed: widget.onOpenDatabaseSettings,
         ),
-        if (PermissionService.instance.can(AppPermission.databaseMaintenance))
-          IconButton(
-            tooltip: 'Συντήρηση',
-            icon: const Icon(Icons.cleaning_services_outlined),
-            padding: const EdgeInsets.only(left: 4),
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-            alignment: Alignment.topCenter,
-            onPressed: _openDatabaseMaintenance,
-          ),
       ],
     );
   }

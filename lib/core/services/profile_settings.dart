@@ -145,6 +145,17 @@ abstract final class ProfileSettingKeys {
     legacySource: ProfileSettingLegacySource.machine,
   );
 
+  /// Υπόδειξη στον διάλογο εκτυπωτών για το πού ενεργοποιείται η πλήρης
+  /// προβολή, όταν η λίστα ήρθε περιορισμένη.
+  ///
+  /// **Γεννήθηκε προσωπική:** η υπόδειξη δεν υπήρχε πριν, και το αν είναι
+  /// χρήσιμη ή θόρυβος εξαρτάται από το ποιος κοιτάζει — άλλος διορθώνει τον
+  /// υπολογιστή του, άλλος θέλει απλώς να δει ποιοι εκτυπωτές υπάρχουν.
+  static const ProfileSettingKey printersLimitedViewHint = ProfileSettingKey(
+    'printers_limited_view_hint_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
   // ── Φίλτρα στατιστικών ───────────────────────────────────────────────────
 
   static const ProfileSettingKey dashboardDatePreset = ProfileSettingKey(
@@ -327,6 +338,7 @@ abstract final class ProfileSettingKeys {
     equipmentLocationShowBuilding,
     enableSpellCheck,
     showUpdateOnStartup,
+    printersLimitedViewHint,
     dashboardDatePreset,
     dashboardDateFrom,
     dashboardDateTo,

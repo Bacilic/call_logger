@@ -42,6 +42,7 @@ import 'lansweeper/sync_history_list.dart';
 import 'lansweeper_report_ai.dart';
 import 'lansweeper_report_browser.dart';
 import 'lansweeper_report_items.dart';
+import 'lansweeper_report_call_save.dart';
 import 'lansweeper_report_knowledge.dart';
 import 'lansweeper_report_registration.dart';
 import 'lansweeper_report_settings.dart';
@@ -82,6 +83,11 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
   /// «Αποθήκευση ως γνώση» — η λύση γίνεται άρθρο Βάσης Γνώσης.
   late final LansweeperReportKnowledge knowledgeFlow =
       LansweeperReportKnowledge(this);
+
+  /// «Αποθήκευση στην κλήση» — το κείμενο μένει στην εφαρμογή, χωρίς αίτημα.
+  late final LansweeperReportCallSave callSaveFlow = LansweeperReportCallSave(
+    this,
+  );
 
   final Set<String> selectedKeys = <String>{};
   final SpellCheckController titleController = SpellCheckController();
@@ -1034,6 +1040,15 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                   ),
                                                 )
                                               : null,
+                                          // Ερώτημα, όχι στιγμιότυπο: το κουμπί
+                                          // ξαναρωτά σε κάθε πληκτρολόγηση.
+                                          saveToCallDisabledReason: () =>
+                                              callSaveFlow.saveDisabledReason(
+                                                selected,
+                                              ),
+                                          onSaveToCall: () => unawaited(
+                                            callSaveFlow.saveToCall(selected),
+                                          ),
                                         ),
                                         const SizedBox(height: 10),
                                         Card(

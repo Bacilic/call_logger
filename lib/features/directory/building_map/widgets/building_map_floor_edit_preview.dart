@@ -20,7 +20,7 @@ class _PreviewData {
   bool get missing => file == null || size.isEmpty;
 }
 
-/// Μικρογραφία ολόκληρης κατόψης για τον διάλογο επεξεργασίας (προαιρετικά τμήματα).
+/// Μικρογραφία ολόκληρης κάτοψης για τον διάλογο επεξεργασίας (προαιρετικά τμήματα).
 class BuildingMapFloorEditPreview extends StatefulWidget {
   const BuildingMapFloorEditPreview({
     super.key,
@@ -148,7 +148,7 @@ class _BuildingMapFloorEditPreviewState
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              'Δεν βρέθηκε εικόνα κατόψης.',
+              'Δεν βρέθηκε εικόνα κάτοψης.',
               style: Theme.of(context).textTheme.bodySmall,
               textAlign: TextAlign.center,
             ),

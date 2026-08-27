@@ -158,6 +158,22 @@ class SettingsServiceWindowUi {
     );
   }
 
+  /// Υπόδειξη στον διάλογο εκτυπωτών για το πού ενεργοποιείται η πλήρης
+  /// προβολή, όταν η λίστα ήρθε περιορισμένη. Προεπιλογή: true.
+  Future<bool> getPrintersLimitedViewHint() async {
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.printersLimitedViewHint,
+        ) ??
+        true;
+  }
+
+  Future<void> setPrintersLimitedViewHint(bool value) async {
+    await ScopedSettings.setBool(
+      ProfileSettingKeys.printersLimitedViewHint,
+      value,
+    );
+  }
+
   /// Ενεργοποίηση ενσωματωμένου ορθογραφικού ελέγχου σημειώσεων (Windows). Προεπιλογή: true.
   Future<bool> getEnableSpellCheck() async {
     return await ScopedSettings.getBool(ProfileSettingKeys.enableSpellCheck) ??

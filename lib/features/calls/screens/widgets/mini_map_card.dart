@@ -244,7 +244,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     }
     final storedImagePath = floor.imagePath.trim();
     if (storedImagePath.isEmpty) {
-      return _placeholder(context, 'Δεν βρέθηκε αρχείο κατόψης.');
+      return _placeholder(context, 'Δεν βρέθηκε αρχείο κάτοψης.');
     }
 
     return FutureBuilder<String>(
@@ -262,7 +262,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
         }
         final imagePath = pathSnap.data!;
         if (imagePath.isEmpty || !File(imagePath).existsSync()) {
-          return _placeholder(context, 'Δεν βρέθηκε αρχείο κατόψης.');
+          return _placeholder(context, 'Δεν βρέθηκε αρχείο κάτοψης.');
         }
         return _buildMappedFloorPreview(
           context,

@@ -2,7 +2,7 @@
 class DepartmentFloorSync {
   DepartmentFloorSync._();
 
-  /// Επιλύει ποιος όροφος (φύλλο κατόψης) ισχύει: το σχέδιο στον χάρτη κερδίζει το χειροκίνητο.
+  /// Επιλύει ποιος όροφος (φύλλο κάτοψης) ισχύει: το σχέδιο στον χάρτη κερδίζει το χειροκίνητο.
   static int? resolveEffectiveFloorId({
     int? drawingFloorId,
     int? manualFloorId,

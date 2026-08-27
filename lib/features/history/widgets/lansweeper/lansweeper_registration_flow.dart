@@ -68,11 +68,15 @@ String registrationSuccessMessage({
 /// Το [skipped] (τις άφησα εγώ, τις είχε καταχωρήσει άλλος) και το [failed]
 /// (δεν πέτυχε η εγγραφή) μένουν χωριστά: μπερδεμένα, ένα σφάλμα βάσης θα
 /// παρουσιαζόταν ως δουλειά συναδέλφου και κανείς δεν θα το κοίταζε ποτέ.
+/// Το [failureReason] είναι η αιτία της πρώτης αποτυχίας, όταν την ξέρουμε:
+/// χωρίς αυτήν ο χειριστής βλέπει «δεν ολοκληρώθηκε» και δεν έχει τρόπο να
+/// καταλάβει αν φταίει η βάση, το δίκτυο ή η ίδια η κλήση.
 String registrationOutcomeMessage({
   required int registered,
   required int skipped,
   required int failed,
   required String ticketId,
+  String? failureReason,
 }) {
   final parts = <String>[];
   if (registered > 0) {
@@ -90,10 +94,14 @@ String registrationOutcomeMessage({
     );
   }
   if (failed > 0) {
+    final reason = (failureReason ?? '').trim();
+    // Η αιτία αντικαθιστά το «η εγγραφή δεν ολοκληρώθηκε» αντί να προστίθεται:
+    // δύο προτάσεις που λένε το ίδιο κουράζουν, και η δεύτερη είναι η χρήσιμη.
+    final tail = reason.isEmpty ? 'η εγγραφή δεν ολοκληρώθηκε.' : reason;
     parts.add(
       failed == 1
-          ? '1 κλήση δεν σημάνθηκε — η εγγραφή δεν ολοκληρώθηκε.'
-          : '$failed κλήσεις δεν σημάνθηκαν — η εγγραφή δεν ολοκληρώθηκε.',
+          ? '1 κλήση δεν σημάνθηκε — $tail'
+          : '$failed κλήσεις δεν σημάνθηκαν — $tail',
     );
   }
   return parts.join(' ');

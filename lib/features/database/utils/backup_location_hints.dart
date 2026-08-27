@@ -29,6 +29,28 @@ class BackupLocationHints {
     return null;
   }
 
+  /// Υπάρχει **αυτή τη στιγμή** ο τόμος στον οποίο δείχνει η [path];
+  ///
+  /// `true` και για διαδρομές χωρίς γράμμα τόμου (UNC, εκτός Windows): εκεί δεν
+  /// έχουμε τι να αποκλείσουμε, και μια άρνηση θα ήταν εικασία.
+  ///
+  /// Υπάρχει για να μη ζητά η εφαρμογή «να δημιουργήσω τον φάκελο;» πάνω σε
+  /// δίσκο που δεν είναι καν συνδεδεμένος: η δημιουργία θα αποτύγχανε ούτως ή
+  /// άλλως, και η ερώτηση δίνει ελπίδα που δεν υπάρχει.
+  static bool volumeOfPathExists(String path) {
+    final letter = windowsDriveLetterFromPath(path);
+    if (letter == null) return true;
+    try {
+      return Directory('$letter:\\').existsSync();
+    } on FileSystemException {
+      // Άφταστος ή αποσυνδεδεμένος τόμος: στα Windows το existsSync ΠΕΤΑΕΙ
+      // αντί να απαντήσει false.
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Το γράμμα τόμου από ετικέτα όπως `D` ή `F (USB)`.
   static String? leadingDriveLetterFromLabel(String label) {
     if (label.isEmpty) return null;

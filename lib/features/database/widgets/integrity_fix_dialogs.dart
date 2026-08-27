@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/models/app_permission.dart';
-import '../../../core/services/permission_service.dart';
 import '../../../core/database/department_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/database/lock_diagnostic_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/database_integrity_finding.dart';
 import '../models/integrity_fix_models.dart';
-import 'database_maintenance_panel.dart';
 
 /// Επιβεβαίωση μονής ή μαζικής επιδιόρθωσης (confirm-only).
 Future<bool> showIntegrityConfirmDialog(
@@ -53,10 +50,7 @@ Future<IntegrityFixDecision?> showIntegrityChoiceDialog(
 }
 
 /// Μη απορριπτικός διάλογος για PRAGMA corruption.
-Future<void> showIntegrityCorruptionBlockoutDialog(
-  BuildContext context, {
-  Future<void> Function()? onDatabaseReopened,
-}) async {
+Future<void> showIntegrityCorruptionBlockoutDialog(BuildContext context) async {
   await showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -79,7 +73,10 @@ Future<void> showIntegrityCorruptionBlockoutDialog(
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               SizedBox(height: 8),
-              Text('• Άνοιγμα πίνακα συντήρησης βάσης (VACUUM / REINDEX)'),
+              Text(
+                '• Εργασίες συντήρησης (VACUUM / αναδόμηση ευρετηρίων) — '
+                'στην ίδια καρτέλα, πιο κάτω',
+              ),
               Text('• Επαναφορά από αντίγραφο ασφαλείας (.zip)'),
               Text(
                 '• Επικοινωνία με διαχειριστή IT αν το πρόβλημα επαναλαμβάνεται',
@@ -92,19 +89,6 @@ Future<void> showIntegrityCorruptionBlockoutDialog(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Κλείσιμο'),
           ),
-          if (PermissionService.instance.can(AppPermission.databaseMaintenance))
-            FilledButton(
-              onPressed: () async {
-                Navigator.of(ctx).pop();
-                if (onDatabaseReopened != null) {
-                  await DatabaseMaintenancePanel.show(
-                    context,
-                    onDatabaseReopened: onDatabaseReopened,
-                  );
-                }
-              },
-              child: const Text('Συντήρηση βάσης'),
-            ),
         ],
       ),
     ),

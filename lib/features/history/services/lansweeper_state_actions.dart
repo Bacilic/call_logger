@@ -9,6 +9,23 @@ import '../widgets/lansweeper/lansweeper_registration_flow.dart';
 import '../widgets/lansweeper_registration_conflict_dialog.dart';
 import 'lansweeper_registration_conflict.dart';
 
+/// Τι πρέπει να ανακοινωθεί μετά από μια μετάβαση κατάστασης Lansweeper.
+///
+/// Αντικαθιστά το σκέτο `String?`, όπου το `null` σήμαινε **και** «ακύρωσε ο
+/// χρήστης» **και** «απέτυχε η εγγραφή» — με αποτέλεσμα η αποτυχία να περνά
+/// τελείως σιωπηλά: η κλήση δεν άλλαζε και καμία λέξη δεν εμφανιζόταν.
+class LansweeperStateActionMessage {
+  const LansweeperStateActionMessage(this.text, {this.failureReport});
+
+  /// Η πρόταση που βλέπει ο χειριστής.
+  final String text;
+
+  /// Η τεχνική αναφορά προς αντιγραφή· `null` όταν δεν πρόκειται για σφάλμα.
+  final String? failureReport;
+
+  bool get isFailure => failureReport != null;
+}
+
 /// Αλλαγή της κατάστασης Lansweeper μιας κλήσης, με τις ερωτήσεις που χρωστά.
 ///
 /// Οι μεταβάσεις είναι αμφίδρομες: ό,τι εξαιρέθηκε επιστρέφει σε ακαταχώρητη,
@@ -46,16 +63,18 @@ abstract final class LansweeperStateActions {
         _ => 'Επαναφορά σε ακαταχώρητη',
       };
 
-  /// Εφαρμόζει τη μετάβαση και επιστρέφει το μήνυμα επιτυχίας.
+  /// Εφαρμόζει τη μετάβαση και επιστρέφει το μήνυμα που πρέπει να ειπωθεί.
   ///
   /// Το [currentState] και το [storedTicketId] είναι η κατάσταση **όπως τη
   /// δείχνει η γραμμή μου** — η αφετηρία που κρίνει αν κάποιος πρόλαβε. Χωρίς
   /// αυτήν, μια μετάβαση πάνω σε μπαγιάτικη λίστα σβήνει αθόρυβα το αίτημα που
   /// μόλις καταχώρησε ο συνάδελφος.
   ///
-  /// Επιστρέφει `null` όταν ο χρήστης ακύρωσε σε κάποια ερώτηση — ο καλών δεν
-  /// ανακοινώνει τίποτα, γιατί τίποτα δεν άλλαξε.
-  static Future<String?> apply(
+  /// Επιστρέφει `null` **μόνο** όταν ο χρήστης ακύρωσε σε κάποια ερώτηση — τότε
+  /// πράγματι δεν υπάρχει τίποτα να ειπωθεί. Η αποτυχία εγγραφής επιστρέφει
+  /// μήνυμα, όπως και η επιτυχία: μια αλλαγή που δεν έγινε χωρίς να το πει
+  /// κανείς είναι χειρότερη από μια που απέτυχε φωναχτά.
+  static Future<LansweeperStateActionMessage?> apply(
     BuildContext context,
     WidgetRef ref, {
     required int callId,
@@ -75,9 +94,7 @@ abstract final class LansweeperStateActions {
           write: ({required force}) =>
               notifier.setExcluded(callId, expected: expected, force: force),
         );
-        return excluded.isApplied
-            ? 'Η κλήση εξαιρέθηκε από το Lansweeper.'
-            : null;
+        return announce(excluded, 'Η κλήση εξαιρέθηκε από το Lansweeper.');
 
       case LansweeperSyncState.unsent:
         final stored = (storedTicketId ?? '').trim();
@@ -87,9 +104,7 @@ abstract final class LansweeperStateActions {
             write: ({required force}) =>
                 notifier.setUnsent(callId, expected: expected, force: force),
           );
-          return cleared.isApplied
-              ? 'Η κλήση σημειώθηκε ως ακαταχώρητη.'
-              : null;
+          return announce(cleared, 'Η κλήση σημειώθηκε ως ακαταχώρητη.');
         }
         // Το αποθηκευμένο αίτημα μπορεί να υπάρχει πράγματι στο Lansweeper —
         // το σβήσιμό του χωρίς ερώτηση θα έσπαγε τον δεσμό αθόρυβα.
@@ -110,10 +125,13 @@ abstract final class LansweeperStateActions {
             force: force,
           ),
         );
-        if (!withdrawn.isApplied) return null;
-        return retain
-            ? 'Η κλήση σημειώθηκε ως ακαταχώρητη (το αίτημα #$stored διατηρήθηκε).'
-            : 'Η κλήση σημειώθηκε ως ακαταχώρητη.';
+        return announce(
+          withdrawn,
+          retain
+              ? 'Η κλήση σημειώθηκε ως ακαταχώρητη (το αίτημα #$stored '
+                    'διατηρήθηκε).'
+              : 'Η κλήση σημειώθηκε ως ακαταχώρητη.',
+        );
 
       case LansweeperSyncState.sent:
         return _markRegistered(
@@ -129,7 +147,7 @@ abstract final class LansweeperStateActions {
     }
   }
 
-  static Future<String?> _markRegistered(
+  static Future<LansweeperStateActionMessage?> _markRegistered(
     BuildContext context,
     WidgetRef ref, {
     required int callId,
@@ -190,9 +208,39 @@ abstract final class LansweeperStateActions {
         force: force,
       ),
     );
-    if (!registered.isApplied) return null;
-    return ticketId.isEmpty
-        ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
-        : 'Η κλήση επισημάνθηκε ως καταχωρημένη (αίτημα #$ticketId).';
+    return announce(
+      registered,
+      ticketId.isEmpty
+          ? 'Η κλήση επισημάνθηκε ως καταχωρημένη.'
+          : 'Η κλήση επισημάνθηκε ως καταχωρημένη (αίτημα #$ticketId).',
+    );
+  }
+
+  /// Μεταφράζει το αποτέλεσμα σε μήνυμα — **το ένα σημείο** που κρίνει πότε το
+  /// Ιστορικό μιλά και πότε σιωπά.
+  ///
+  /// Σιωπή μόνο για την ακύρωση του χρήστη· η αποτυχία λέει την αιτία της, και
+  /// όταν δεν την ξέρουμε (έτρεχε ήδη άλλη αποστολή) λέει τουλάχιστον ότι δεν
+  /// έγινε.
+  @visibleForTesting
+  static LansweeperStateActionMessage? announce(
+    LansweeperChangeResult result,
+    String successText,
+  ) {
+    switch (result.outcome) {
+      case LansweeperChangeOutcome.applied:
+        return LansweeperStateActionMessage(successText);
+      case LansweeperChangeOutcome.skippedByUser:
+        return null;
+      case LansweeperChangeOutcome.failed:
+        final failure = result.failure;
+        return LansweeperStateActionMessage(
+          failure == null
+              ? 'Η αλλαγή δεν έγινε — υπάρχει ήδη ενεργή αποστολή. Δοκιμάστε '
+                    'ξανά σε λίγο.'
+              : 'Η αλλαγή δεν έγινε — ${failure.message}',
+          failureReport: failure?.report ?? 'Lansweeper change skipped: busy',
+        );
+    }
   }
 }

@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/app_permission.dart';
+import '../../../core/services/permission_service.dart';
 import '../providers/database_integrity_provider.dart';
 import 'database_integrity_panel.dart';
+import 'database_maintenance_sections.dart';
 import 'settings_panel_info_tooltip.dart';
 
-/// Καρτέλα «Συντήρηση»: έλεγχος ακεραιότητας της βάσης.
+/// Καρτέλα «Συντήρηση»: έλεγχος ακεραιότητας **και** οι εργασίες συντήρησης.
+///
+/// Οι δεύτερες ζούσαν σε ξεχωριστό διάλογο, που άνοιγε από την Περιήγηση
+/// Βάσης — δηλαδή η καρτέλα που λεγόταν «Συντήρηση» δεν είχε τη συντήρηση.
 class DatabaseSettingsMaintenanceTab extends StatelessWidget {
   const DatabaseSettingsMaintenanceTab({super.key});
 
@@ -32,6 +38,23 @@ class DatabaseSettingsMaintenanceTab extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         const _IntegrityLaunchSection(),
+        // Οι βαριές εργασίες μόνο σε όποιον έχει το δικαίωμα. Ο έλεγχος ήταν
+        // ως τώρα ΜΟΝΟ στα κουμπιά που άνοιγαν τον διάλογο· τώρα που το
+        // περιεχόμενο ζει εδώ, η καρτέλα τον χρωστά η ίδια.
+        if (PermissionService.instance.can(AppPermission.databaseMaintenance))
+          ...[
+            const SizedBox(height: 20),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+            Text(
+              'Εργασίες συντήρησης',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const DatabaseMaintenanceSections(),
+          ],
       ],
     );
   }

@@ -219,7 +219,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
         DropdownMenuItem<int?>(
           value: sel,
           child: Text(
-            'Όροφος #$sel (δεν βρέθηκε κατόψη)',
+            'Όροφος #$sel (δεν βρέθηκε κάτοψη)',
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -954,7 +954,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                               value: _effectiveFloorDropdownValue(),
                               isExpanded: true,
                               decoration: const InputDecoration(
-                                labelText: 'Όροφος (κατόψη)',
+                                labelText: 'Όροφος (κάτοψη)',
                                 border: OutlineInputBorder(),
                                 isDense: true,
                               ),

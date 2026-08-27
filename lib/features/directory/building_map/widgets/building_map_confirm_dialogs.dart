@@ -27,7 +27,7 @@ Future<bool> showBuildingMapOverlapConfirmDialog(BuildContext context) async {
   return go ?? false;
 }
 
-/// «Αφαίρεση από τον χάρτη»: αφαίρεση τμήματος από το τρέχον φύλλο κατόψης.
+/// «Αφαίρεση από τον χάρτη»: αφαίρεση τμήματος από το τρέχον φύλλο κάτοψης.
 Future<bool> showBuildingMapRemoveDepartmentConfirmDialog(
   BuildContext context, {
   required String departmentName,
@@ -37,7 +37,7 @@ Future<bool> showBuildingMapRemoveDepartmentConfirmDialog(
     builder: (ctx) => AlertDialog(
       title: const Text('Αφαίρεση από τον χάρτη'),
       content: Text(
-        'Να αφαιρεθεί το τμήμα «$departmentName» από αυτό το φύλλο κατόψης;',
+        'Να αφαιρεθεί το τμήμα «$departmentName» από αυτό το φύλλο κάτοψης;',
       ),
       actions: [
         TextButton(

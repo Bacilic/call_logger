@@ -93,7 +93,7 @@ class DepartmentFormDismissGuard {
       labels.add('Κοινόχρηστος εξοπλισμός');
     }
     if (host.selectedFloorId != host.snapFloorId) {
-      labels.add('Όροφος (κατόψη)');
+      labels.add('Όροφος (κάτοψη)');
     }
     if (host.lansweeperAccountsSignature() != host.snapLansweeperAccounts) {
       labels.add('Αναγνωριστικά Lansweeper');

@@ -144,7 +144,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
 
         final sheetDropdownPlaceholder = InputDecorator(
           decoration: const InputDecoration(
-            labelText: 'Φύλλο κατόψης',
+            labelText: 'Φύλλο κάτοψης',
             border: OutlineInputBorder(),
             enabled: false,
           ),
@@ -158,7 +158,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                 initialValue: currentSheetId,
                 isExpanded: true,
                 decoration: const InputDecoration(
-                  labelText: 'Φύλλο κατόψης',
+                  labelText: 'Φύλλο κάτοψης',
                   border: OutlineInputBorder(),
                 ),
                 items: [

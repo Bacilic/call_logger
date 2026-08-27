@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -834,8 +835,31 @@ class _LansweeperRowMenu extends ConsumerWidget {
       storedTicketId: ticketId,
       targetState: targetState,
     );
+    // `null` σημαίνει πλέον ΜΟΝΟ «ακύρωσε ο χρήστης». Η αποτυχία έρχεται με
+    // μήνυμα και τεχνική αναφορά, όπως και στην Αναφορά Lansweeper — όσο τα
+    // δύο μοιράζονταν το ίδιο `null`, μια αποτυχημένη εγγραφή περνούσε χωρίς
+    // να το μάθει ποτέ κανείς.
     if (message == null) return;
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message.text),
+        duration: Duration(seconds: message.isFailure ? 8 : 4),
+        // Το μήνυμα φεύγει μόνο του: χωρίς ρητή δήλωση, το Flutter βαφτίζει
+        // «μόνιμο» κάθε SnackBar με κουμπί — και μπλοκάρει την ουρά, οπότε
+        // κανένα επόμενο μήνυμα δεν εμφανίζεται ποτέ.
+        persist: false,
+        action: message.isFailure
+            ? SnackBarAction(
+                label: 'Αντιγραφή',
+                onPressed: () => unawaited(
+                  Clipboard.setData(
+                    ClipboardData(text: message.failureReport ?? message.text),
+                  ),
+                ),
+              )
+            : null,
+      ),
+    );
   }
 
   @override

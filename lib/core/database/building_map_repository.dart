@@ -127,7 +127,7 @@ class BuildingMapRepository {
     return (r.first['c'] as int?) ?? 0;
   }
 
-  /// Διαγράφει το φύλλο κατόψης και μηδενίζει τη θέση στο χάρτη για όλα τα τμήματα
+  /// Διαγράφει το φύλλο κάτοψης και μηδενίζει τη θέση στο χάρτη για όλα τα τμήματα
   /// που δένονταν σε αυτό (`map_floor` = id ως string).
   Future<void> deleteBuildingMapFloorClearingDepartmentMaps(int id) async {
     final updateDepartment = _updateDepartment;

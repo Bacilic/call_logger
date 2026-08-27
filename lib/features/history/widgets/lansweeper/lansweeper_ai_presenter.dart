@@ -1,5 +1,6 @@
 import '../../../../core/services/ai_model_cooldown_registry.dart';
 import '../../../../core/services/ai_ticket_suggestion_service.dart';
+import '../../../../core/services/lansweeper_sync_service.dart';
 import '../../../calls/models/call_refined_source.dart';
 import 'lansweeper_report_item_mapper.dart';
 
@@ -108,10 +109,11 @@ class LansweeperAiPresenter {
     );
   }
 
-  static String prefillTitle({required String category, required int? id}) {
-    final idSuffix = id != null ? ' #$id' : '';
-    return category.isEmpty ? 'Κλήση$idSuffix' : '[$category]$idSuffix';
-  }
+  /// Ο αυτόματος τίτλος του αιτήματος — μία πηγή με την αποστολή προς το
+  /// Lansweeper, ώστε ο έλεγχος «ο χρήστης έγραψε δικό του τίτλο;» να μη
+  /// στηρίζεται σε δεύτερο, παράλληλο ορισμό.
+  static String prefillTitle({required String category, required int? id}) =>
+      LansweeperSyncService.autoTicketTitle(category: category, id: id);
 
   /// Πώς προέκυψε το κείμενο που φεύγει τώρα προς το Lansweeper.
   ///

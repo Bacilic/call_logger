@@ -36,6 +36,8 @@ class LansweeperSyncForm extends ConsumerWidget {
     this.onTicketStateChanged,
     this.onSaveAsKnowledge,
     this.saveAsKnowledgeDisabledTooltip,
+    this.onSaveToCall,
+    this.saveToCallDisabledReason,
     this.autoParties,
     this.requesterCandidates = const [],
     this.selectedRequesterUsername,
@@ -73,6 +75,18 @@ class LansweeperSyncForm extends ConsumerWidget {
   /// Γιατί δεν γίνεται τώρα (π.χ. κενή λύση) — αλλιώς το κουμπί απλώς σβήνει
   /// χωρίς εξήγηση και μοιάζει με βλάβη.
   final String? saveAsKnowledgeDisabledTooltip;
+
+  /// Γράφει τα κείμενα της φόρμας πάνω στην κλήση, χωρίς αίτημα στο Lansweeper·
+  /// `null` κρύβει το κουμπί εντελώς.
+  final VoidCallback? onSaveToCall;
+
+  /// Γιατί δεν γίνεται τώρα· `null` από τη συνάρτηση σημαίνει «γίνεται».
+  ///
+  /// **Συνάρτηση και όχι έτοιμο κείμενο**, σε αντίθεση με το αντίστοιχο της
+  /// γνώσης: η απάντηση εξαρτάται από το τι γράφει αυτή τη στιγμή ο χρήστης
+  /// στα πεδία, και ξαναρωτιέται σε κάθε πληκτρολόγηση. Ένα στιγμιότυπο του
+  /// build θα πάγωνε το κουμπί στην κατάσταση που είχε όταν άνοιξε η οθόνη.
+  final String? Function()? saveToCallDisabledReason;
 
   /// Τι θα μπει αυτόματα στο ticket: αιτών (υπάλληλος) και εξοπλισμός.
   /// Null = δεν έχει φορτώσει ακόμη· η γραμμή δεν εμφανίζεται καθόλου.
@@ -503,20 +517,53 @@ class LansweeperSyncForm extends ConsumerWidget {
               ),
             ),
             if (onSaveAsKnowledge != null ||
-                saveAsKnowledgeDisabledTooltip != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: CompactTooltip(
-                  message: onSaveAsKnowledge == null
-                      ? (saveAsKnowledgeDisabledTooltip ?? '')
-                      : 'Κρατά το σύμπτωμα και τη λύση ως άρθρο, για την '
-                            'επόμενη φορά που θα εμφανιστεί το ίδιο',
-                  child: TextButton.icon(
-                    onPressed: onSaveAsKnowledge,
-                    icon: const Icon(Icons.healing, size: 18),
-                    label: const Text('Αποθήκευση ως γνώση'),
-                  ),
-                ),
+                saveAsKnowledgeDisabledTooltip != null ||
+                onSaveToCall != null ||
+                saveToCallDisabledReason != null)
+              Wrap(
+                spacing: 4,
+                children: [
+                  if (onSaveAsKnowledge != null ||
+                      saveAsKnowledgeDisabledTooltip != null)
+                    CompactTooltip(
+                      message: onSaveAsKnowledge == null
+                          ? (saveAsKnowledgeDisabledTooltip ?? '')
+                          : 'Κρατά το σύμπτωμα και τη λύση ως άρθρο, για την '
+                                'επόμενη φορά που θα εμφανιστεί το ίδιο',
+                      child: TextButton.icon(
+                        onPressed: onSaveAsKnowledge,
+                        icon: const Icon(Icons.healing, size: 18),
+                        label: const Text('Αποθήκευση ως γνώση'),
+                      ),
+                    ),
+                  if (onSaveToCall != null || saveToCallDisabledReason != null)
+                    // Το κουμπί ακούει το ΙΔΙΟ τα πεδία και ξαναχτίζεται μόνο
+                    // του. Η εναλλακτική —ανανέωση όλου του διαλόγου σε κάθε
+                    // πληκτρολόγηση— θα ξανασχεδίαζε και τη λίστα των κλήσεων,
+                    // που είναι το βαρύ κομμάτι της οθόνης.
+                    AnimatedBuilder(
+                      animation: Listenable.merge([
+                        titleController,
+                        notesController,
+                        solutionController,
+                      ]),
+                      builder: (context, _) {
+                        final reason = saveToCallDisabledReason?.call();
+                        return CompactTooltip(
+                          message:
+                              reason ??
+                              'Γράφει το κείμενο πάνω στην κλήση, χωρίς να '
+                                  'δημιουργήσει αίτημα — η κλήση μένει '
+                                  'ακαταχώρητη',
+                          child: TextButton.icon(
+                            onPressed: reason == null ? onSaveToCall : null,
+                            icon: const Icon(Icons.save_outlined, size: 18),
+                            label: const Text('Αποθήκευση στην κλήση'),
+                          ),
+                        );
+                      },
+                    ),
+                ],
               ),
             ...customFieldWidgets,
           ],

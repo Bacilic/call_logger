@@ -3,7 +3,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-/// Αιωρούμενο στοιχείο για περιστροφή κατόψης (glassmorphism), πάνω από τον καμβά.
+/// Αιωρούμενο στοιχείο για περιστροφή κάτοψης (glassmorphism), πάνω από τον καμβά.
 class MapRotationPod extends StatefulWidget {
   const MapRotationPod({
     super.key,

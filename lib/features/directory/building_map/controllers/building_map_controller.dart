@@ -595,7 +595,7 @@ class BuildingMapController {
     await replaceFloorSheetImage(context, floor);
   }
 
-  /// Κοινός επιλογέας εικόνας κατόψης: ανοίγει στον τελευταίο φάκελο εικόνων
+  /// Κοινός επιλογέας εικόνας κάτοψης: ανοίγει στον τελευταίο φάκελο εικόνων
   /// του χάρτη (όχι στην καθολική «τελευταία θέση» των Windows) και τον
   /// θυμάται μετά από επιτυχή επιλογή. null σε ακύρωση.
   Future<String?> _pickFloorSheetImagePath() async {
@@ -643,12 +643,12 @@ class BuildingMapController {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Η κατόψη ενημερώθηκε.')));
+        ).showSnackBar(const SnackBar(content: Text('Η κάτοψη ενημερώθηκε.')));
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Αποτυχία ενημέρωσης κατόψης: $e')),
+          SnackBar(content: Text('Αποτυχία ενημέρωσης κάτοψης: $e')),
         );
       }
     }

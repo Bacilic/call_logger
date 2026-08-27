@@ -357,7 +357,7 @@ class BuildingMapUiEditModeNotifier extends Notifier<bool> {
   }
 }
 
-/// Εικονικές διαστάσεις της τρέχουσας εικόνας κατόψης (για τον καμβά).
+/// Εικονικές διαστάσεις της τρέχουσας εικόνας κάτοψης (για τον καμβά).
 final buildingMapDecodedImageSizeProvider =
     NotifierProvider<BuildingMapDecodedImageSizeNotifier, Size?>(
       BuildingMapDecodedImageSizeNotifier.new,
@@ -392,7 +392,7 @@ class BuildingMapFloorReloadSeqNotifier extends Notifier<int> {
   }
 }
 
-/// Κατάλογος φύλλων κατόψης (`building_map_floors`) για ετικέτες ορόφου στο UI (π.χ. καρτέλα τμήματα).
+/// Κατάλογος φύλλων κάτοψης (`building_map_floors`) για ετικέτες ορόφου στο UI (π.χ. καρτέλα τμήματα).
 final buildingMapFloorsCatalogProvider = FutureProvider<List<BuildingMapFloor>>(
   (ref) async {
     ref.watch(buildingMapFloorReloadSeqProvider);
@@ -418,7 +418,7 @@ class BuildingMapViewportCenterRequestNotifier extends Notifier<int> {
 
 /// Τμήμα που αποκαλύπτεται προσωρινά λόγω αναζήτησης, ενώ είναι κρυμμένο στον χάρτη
 /// (στήλη `departments.map_hidden = 1`). Καθαρίζεται όταν αδειάσει το πεδίο αναζήτησης
-/// ή όταν αλλάξει φύλλο κατόψης.
+/// ή όταν αλλάξει φύλλο κάτοψης.
 final buildingMapSearchRevealedDepartmentIdProvider =
     NotifierProvider<BuildingMapSearchRevealedDeptNotifier, int?>(
       BuildingMapSearchRevealedDeptNotifier.new,
