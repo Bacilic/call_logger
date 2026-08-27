@@ -405,6 +405,20 @@ class LookupService {
     return null;
   }
 
+  /// Αναζήτηση εξοπλισμού με τον κωδικό του (ακριβής, χωρίς διαγραμμένους).
+  ///
+  /// Τη χρειάζονται οι κάρτες της οθόνης κλήσεων, που κρατούν μόνο το κείμενο
+  /// του κωδικού και όχι την εγγραφή του Καταλόγου.
+  EquipmentModel? findEquipmentByCode(String code) {
+    final c = code.trim();
+    if (c.isEmpty) return null;
+    for (final equipment in _equipment) {
+      if (equipment.isDeleted) continue;
+      if ((equipment.code ?? '').trim() == c) return equipment;
+    }
+    return null;
+  }
+
   /// Αναζήτηση τμημάτων στη μνήμη βάσει ονόματος (case-insensitive, αγνοώντας τόνους).
   List<DepartmentModel> searchDepartments(String query) {
     final q = SearchTextNormalizer.normalizeForSearch(query);

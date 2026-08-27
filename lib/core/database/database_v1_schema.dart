@@ -3,6 +3,7 @@
 import 'package:sqflite_common/sqlite_api.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_foreign_keys.dart';
+import 'database_schema_version.dart';
 
 /// User-visible schema version (squashed v1· v2 = στήλες τμήμα/τοποθεσία στον εξοπλισμό).
 /// v4: departments.name = display, departments.name_key = normalized unique key.
@@ -82,7 +83,7 @@ import 'database_foreign_keys.dart';
 /// από επιβεβαιωμένη εκκίνηση, ώστε τα επαναλαμβανόμενα πατήματα να μην
 /// ανοίγουν αλλεπάλληλες συνεδρίες. Καθαρή προσθήκη με προεπιλογή: παλαιότερη
 /// έκδοση της εφαρμογής γράφει χωρίς τη στήλη και το DEFAULT τη συμπληρώνει.
-const int databaseSchemaVersionV1 = 55;
+const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
 ///
@@ -341,6 +342,9 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   await db.execute(kCreateRemoteToolArgsTable);
   await seedRemoteToolsAndArgsIfEmpty(db);
 
+  await db.execute(kCreateServersTable);
+  await seedServersIfEmpty(db);
+
   await db.execute('''
       CREATE TABLE IF NOT EXISTS user_dictionary (
         word TEXT PRIMARY KEY,
@@ -376,6 +380,52 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_full_dictionary_diacritic_mark_count ON full_dictionary(diacritic_mark_count)',
   );
+}
+
+/// Διακομιστές με στοιχεία διαχειριστή.
+///
+/// Ο κωδικός μένει σε **καθαρό κείμενο**, ρητή απόφαση του χρήστη στα πρότυπα
+/// των εργαλείων απομακρυσμένης σύνδεσης. Όποιος ανοίγει τη βάση τον βλέπει.
+const String kCreateServersTable = '''
+      CREATE TABLE IF NOT EXISTS servers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        host TEXT NOT NULL,
+        admin_user TEXT NOT NULL DEFAULT 'Administrator',
+        admin_password TEXT NOT NULL DEFAULT '',
+        is_default INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+        deleted_at TEXT
+      )
+    ''';
+
+/// Οι δύο γνωστοί διακομιστές, **χωρίς κωδικό** — τον ξέρει μόνο ο χρήστης.
+///
+/// Μπαίνουν ώστε η οθόνη να μη γεννιέται άδεια και ο χειριστής να χρειάζεται
+/// μόνο να συμπληρώσει κωδικό. Τρέχει μόνο σε **κενό** πίνακα: όποιος σβήσει
+/// μια γραμμή δεν την ξαναβρίσκει μπροστά του στο επόμενο άνοιγμα.
+Future<void> seedServersIfEmpty(Database db) async {
+  final rows = await db.rawQuery('SELECT COUNT(*) AS c FROM servers');
+  final count = rows.isNotEmpty ? (rows.first['c'] as int? ?? 0) : 0;
+  if (count > 0) return;
+
+  await db.insert('servers', {
+    'name': 'Medico κύριος',
+    'host': '192.168.13.82',
+    'admin_user': 'Administrator',
+    'admin_password': '',
+    'is_default': 1,
+    'sort_order': 1,
+  });
+  await db.insert('servers', {
+    'name': 'Medico δευτερεύων',
+    'host': '192.168.13.83',
+    'admin_user': 'Administrator',
+    'admin_password': '',
+    'is_default': 0,
+    'sort_order': 2,
+  });
 }
 
 /// Σύνδεση `remote_tool_args` με `remote_tools` όταν υπάρχουν γραμμές.

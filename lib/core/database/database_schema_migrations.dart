@@ -17,8 +17,10 @@ import 'database_v1_schema.dart';
 import 'dictionary_repository.dart';
 import 'directory_audit_helpers.dart';
 
-/// Squashed schema version (ίδιο με [databaseSchemaVersionV1]).
-const int kDatabaseSchemaVersion = databaseSchemaVersionV1;
+// Ο αριθμός ζει σε δικό του αρχείο χωρίς imports, ώστε το εργαλείο
+// δημοσίευσης να μην σέρνει από εδώ ολόκληρο το Flutter. Προωθείται για να
+// συνεχίσει να διαβάζεται από όσους τον έπαιρναν πάντα από αυτό το αρχείο.
+export 'database_schema_version.dart' show kDatabaseSchemaVersion;
 
 /// Επαληθεύει ότι υπάρχουν όλοι οι [kCallLoggerCoreTables].
 /// Αλλιώς ρίχνει [DatabaseInitException] με ονομαστική λίστα ελλείψεων.
@@ -267,6 +269,26 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 55 && newVersion >= 55) {
     await migrateDatabaseToV55(db);
   }
+  if (oldVersion < 56 && newVersion >= 56) {
+    await migrateDatabaseToV56(db);
+  }
+}
+
+/// v56: πίνακας διακομιστών με στοιχεία διαχειριστή.
+///
+/// Γενικός επίτηδες — ένας διακομιστής είναι απλώς μηχάνημα με λογαριασμό
+/// διαχειριστή. Η πρώτη λειτουργία που τον χρησιμοποιεί είναι η αποσύνδεση
+/// χρήστη· η επόμενη (π.χ. επανεκκίνηση) δεν θα χρειαστεί αλλαγή σχήματος,
+/// γι' αυτό δεν υπάρχει στήλη «ικανοτήτων».
+///
+/// Καθαρή προσθήκη πίνακα: παλαιότερη έκδοση της εφαρμογής που αγνοεί τον
+/// `servers` συνεχίζει να ανοίγει τη βάση κανονικά.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες — το seed κοιτά αν ο πίνακας
+/// είναι κενός.
+Future<void> migrateDatabaseToV56(Database db) async {
+  await db.execute(kCreateServersTable);
+  await seedServersIfEmpty(db);
 }
 
 /// v55: κάθε εργαλείο απομακρυσμένης δηλώνει πόσο αργεί να ανοίξει.

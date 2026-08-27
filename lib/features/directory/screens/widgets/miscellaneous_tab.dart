@@ -4,9 +4,17 @@ import '../../../../core/widgets/app_asset_image.dart';
 import '../../../operators/screens/operators_management_view.dart';
 import '../../../settings/screens/remote_tools_management_screen.dart';
 import 'categories_tab.dart';
+import 'servers_management_view.dart';
 import 'validation_rules_view.dart';
 
-enum MiscView { dashboard, categories, remoteTools, validationRules, operators }
+enum MiscView {
+  dashboard,
+  categories,
+  remoteTools,
+  validationRules,
+  operators,
+  servers,
+}
 
 /// Καρτέλα «Διάφορα»: κεντρικό hub με πλοήγηση σε υπο-οθόνες.
 class MiscellaneousTab extends StatefulWidget {
@@ -30,7 +38,8 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
       children: [
         if (_view == MiscView.categories ||
             _view == MiscView.validationRules ||
-            _view == MiscView.operators)
+            _view == MiscView.operators ||
+            _view == MiscView.servers)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
             child: Row(
@@ -59,6 +68,7 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
             ),
             MiscView.validationRules => const ValidationRulesView(),
             MiscView.operators => const OperatorsManagementView(),
+            MiscView.servers => const ServersManagementView(),
             MiscView.dashboard => const SizedBox.shrink(),
           },
         ),
@@ -111,6 +121,15 @@ class _MiscellaneousTabState extends State<MiscellaneousTab> {
                   assetPath: 'assets/app_users.png',
                   fallbackIcon: Icons.manage_accounts_outlined,
                   onTap: () => setState(() => _view = MiscView.operators),
+                ),
+              ),
+              SizedBox(
+                width: cardWidth.clamp(280.0, 520.0),
+                child: _HubNavCard(
+                  title: 'Διακομιστές',
+                  assetPath: 'assets/servers.png',
+                  fallbackIcon: Icons.dns_outlined,
+                  onTap: () => setState(() => _view = MiscView.servers),
                 ),
               ),
             ],

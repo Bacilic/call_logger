@@ -6,7 +6,10 @@ import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../core/database/database_schema_migrations.dart'
+// ΟΧΙ από το `database_schema_migrations.dart`: εκείνο σέρνει το
+// `app_config` → `path_provider` → `package:flutter` → `dart:ui`, που δεν
+// υπάρχει όταν το εργαλείο τρέχει με σκέτο `dart run`.
+import '../../../core/database/database_schema_version.dart'
     show kDatabaseSchemaVersion;
 import 'installer_script_builder.dart';
 

@@ -12,6 +12,8 @@ import '../../../history/utils/history_navigation_feedback.dart';
 import '../../models/call_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
 import '../../../../core/utils/text_layout_utils.dart';
+import 'equipment_printers_dialog.dart';
+import 'user_logoff_dialog.dart';
 
 DateTime? _equipmentRecentParseSqlDateOnly(String? raw) {
   final s = raw?.trim();
@@ -60,7 +62,13 @@ String _equipmentRecentCardClipboardText(
   return buf.toString().trimRight();
 }
 
-enum _EquipmentRecentTitleMenu { copyAll, openHistory, openEquipmentEdit }
+enum _EquipmentRecentTitleMenu {
+  copyAll,
+  openHistory,
+  openEquipmentEdit,
+  logoffUser,
+  stationPrinters,
+}
 
 /// Οροφή πλάτους κάρτας ιστορικού εξοπλισμού (βλ. σταθερά στήλης layout).
 const double _kEquipmentRecentCardMaxWidth = 560;
@@ -206,6 +214,17 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
                                       ref,
                                       code,
                                     );
+                                  case _EquipmentRecentTitleMenu.logoffUser:
+                                    showUserLogoffDialog(
+                                      context,
+                                      equipmentCode: code,
+                                    );
+                                  case _EquipmentRecentTitleMenu
+                                      .stationPrinters:
+                                    showEquipmentPrintersDialog(
+                                      context,
+                                      equipmentCode: code,
+                                    );
                                 }
                               },
                               itemBuilder: (ctx) => [
@@ -245,6 +264,34 @@ class EquipmentRecentCallsPanel extends ConsumerWidget {
                                     title: Text('Άνοιγμα καρτέλας εξοπλισμού'),
                                     subtitle: Text(
                                       'Άμεσο άνοιγμα φόρμας επεξεργασίας εξοπλισμού',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                                const PopupMenuItem(
+                                  value: _EquipmentRecentTitleMenu.logoffUser,
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(Icons.logout),
+                                    title: Text('Αποσύνδεση χρήστη…'),
+                                    subtitle: Text(
+                                      'Τερματισμός συνεδρίας στον διακομιστή',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value:
+                                      _EquipmentRecentTitleMenu.stationPrinters,
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(Icons.print_outlined),
+                                    title: Text('Εκτυπωτές στον διακομιστή…'),
+                                    subtitle: Text(
+                                      'Ουρές και εκκαθάριση για αυτόν τον υπολογιστή',
                                       style: TextStyle(fontSize: 12),
                                     ),
                                   ),
