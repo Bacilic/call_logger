@@ -22,6 +22,13 @@ enum CallsLayoutSlot {
   /// Equipment recent calls panel (matched equipment only).
   equipmentHistory,
 
+  /// Εφεδρική κάρτα «Ενέργειες υπολογιστή» (εξοπλισμός χωρίς ιστορικό).
+  ///
+  /// ΚΑΝΟΝΑΣ: παίρνει ΤΗ ΘΕΣΗ του [equipmentHistory], ποτέ δεν στέκεται δίπλα
+  /// του. Ποιο από τα δύο μπαίνει το κρίνει ένα μόνο σημείο:
+  /// `CallsLayoutEngine.showEquipmentActions`.
+  equipmentActions,
+
   /// User info card (caller group).
   callerCard,
 
@@ -104,6 +111,7 @@ double callsLayoutColumnMinWidth(CallsLayoutColumn column) {
       CallsLayoutSlot.notes => 420,
       CallsLayoutSlot.categoryPending => 420,
       CallsLayoutSlot.equipmentHistory => 320,
+      CallsLayoutSlot.equipmentActions => 260,
       CallsLayoutSlot.callerHistory => 320,
       CallsLayoutSlot.globalRecent => 320,
     };

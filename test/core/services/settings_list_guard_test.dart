@@ -46,10 +46,7 @@ void main() {
     test('το σβήσιμο δεν περνά πάνω από την προσθήκη του άλλου', () async {
       // Η οθόνη μου φόρτωσε αυτή τη λίστα.
       const asScreenSawIt = 'Υπολογιστής, Εκτυπωτής, Φαξ';
-      await settings.catalogs.setEquipmentTypes(
-        asScreenSawIt,
-        expected: null,
-      );
+      await settings.catalogs.setEquipmentTypes(asScreenSawIt, expected: null);
 
       // Ο συνάδελφος προσθέτει «Σαρωτής» από το άλλο μηχάνημα.
       await settings.catalogs.setEquipmentTypes(
@@ -139,10 +136,7 @@ void main() {
       );
 
       await expectLater(
-        () => settings.catalogs.setLexiconCategories(
-          'Γενική',
-          expected: shown,
-        ),
+        () => settings.catalogs.setLexiconCategories('Γενική', expected: shown),
         throwsA(isA<SettingsListStaleException>()),
       );
 

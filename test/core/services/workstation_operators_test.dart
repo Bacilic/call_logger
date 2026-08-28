@@ -81,18 +81,17 @@ void main() {
         const ['Μαρία', 'Βασίλης'],
       );
 
-      expect(ordered.map((o) => o.displayName), [
-        'Μαρία',
-        'Βασίλης',
-        'Άννα',
-      ]);
+      expect(ordered.map((o) => o.displayName), ['Μαρία', 'Βασίλης', 'Άννα']);
     });
 
     test('χωρίς μνήμη η σειρά της βάσης μένει ως έχει', () {
       final profiles = [_operator('Άννα'), _operator('Βασίλης')];
 
       expect(
-        orderProfilesForWorkstation(profiles, const []).map((o) => o.displayName),
+        orderProfilesForWorkstation(
+          profiles,
+          const [],
+        ).map((o) => o.displayName),
         ['Άννα', 'Βασίλης'],
       );
     });

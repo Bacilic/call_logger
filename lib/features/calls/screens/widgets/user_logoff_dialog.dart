@@ -162,6 +162,114 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
     );
   }
 
+  /// Αποσυνδέει την οθόνη: η συνεδρία μένει ζωντανή.
+  ///
+  /// Το φθηνό σκαλί για το συνηθέστερο πρόβλημα — «δεν φορτώθηκαν οι
+  /// εκτυπωτές». Ο χρήστης ξανασυνδέεται και ο υπολογιστής του τους
+  /// ξαναστέλνει, χωρίς να κλείσει τίποτα.
+  Future<void> _disconnect() async {
+    final server = _server;
+    final sessionId = _selectedSessionId;
+    final plan = _plan;
+    if (server == null || sessionId == null || plan == null) return;
+
+    final candidate = plan.candidates.firstWhere(
+      (c) => c.session.sessionId == sessionId,
+    );
+    final confirmed = await _confirmDisconnect(candidate, server);
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _working = true);
+    final result = await ref
+        .read(serverSessionServiceProvider)
+        .disconnect(
+          host: server.host,
+          adminUser: server.adminUser,
+          adminPassword: server.adminPassword,
+          sessionId: sessionId,
+        );
+    if (!mounted) return;
+    setState(() => _working = false);
+
+    if (!result.ok) {
+      setState(() => _error = result.error);
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Η οθόνη του «${candidate.session.username}» αποσυνδέθηκε. Η εργασία '
+          'του συνεχίζει — ας ξανασυνδεθεί για να φορτώσουν οι εκτυπωτές.',
+        ),
+        duration: const Duration(seconds: 8),
+      ),
+    );
+  }
+
+  /// Επιβεβαίωση αποσύνδεσης οθόνης — ήπια, γιατί τίποτα δεν χάνεται.
+  ///
+  /// Σε αντίθεση με τον τερματισμό, εδώ προεπιλέγεται το «Ναι»: η ενέργεια
+  /// είναι αναστρέψιμη με μια επανασύνδεση, και η προεπιλογή «Όχι» θα
+  /// υπονοούσε κίνδυνο που δεν υπάρχει.
+  Future<bool?> _confirmDisconnect(
+    LogoffCandidate candidate,
+    ManagedServer server,
+  ) {
+    final theme = Theme.of(context);
+    final s = candidate.session;
+    final from = s.stationName.trim().isEmpty
+        ? ''
+        : ' του σταθμού ${s.stationName}';
+
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => DraggableDialogShell(
+        title: const Text('Αποσύνδεση οθόνης'),
+        builder: (titleHandle) => AlertDialog(
+          title: titleHandle,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Να αποσυνδεθεί η οθόνη του «${s.username}»$from;',
+                style: theme.textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Το medico ΔΕΝ κλείνει και τίποτα δεν χάνεται — η εργασία '
+                'συνεχίζει να τρέχει στον διακομιστή. Ο χρήστης απλώς χάνει '
+                'την εικόνα και ξανασυνδέεται με διπλό κλικ στη συντόμευσή του.',
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Στην επανασύνδεση, ο υπολογιστής του ξαναστέλνει τους '
+                'εκτυπωτές του στον διακομιστή.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Ακύρωση'),
+            ),
+            FilledButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Αποσύνδεση οθόνης'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Επιβεβαίωση με προεπιλογή το «Όχι» — η ενέργεια δεν αναιρείται.
   Future<bool?> _confirm(LogoffCandidate candidate, ManagedServer server) {
     final theme = Theme.of(context);
@@ -266,14 +374,21 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
             label: const Text('Ανανέωση'),
           ),
           FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
+            onPressed: _selectedSessionId == null || _working || _loading
+                ? null
+                : _disconnect,
+            icon: const Icon(Icons.cast_connected_outlined, size: 18),
+            label: const Text('Αποσύνδεση οθόνης'),
+          ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
             ),
             onPressed: _selectedSessionId == null || _working || _loading
                 ? null
                 : _logoff,
             icon: const Icon(Icons.logout, size: 18),
-            label: Text(_working ? 'Γίνεται…' : 'Τερματισμός συνεδρίας'),
+            label: Text(_working ? 'Γίνεται…' : 'Τερματισμός'),
           ),
         ],
       ),

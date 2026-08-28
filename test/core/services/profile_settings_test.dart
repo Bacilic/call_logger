@@ -122,10 +122,7 @@ void main() {
       ).saveSetting('test_shared_scoped_key', '{"παλιό":"δέμα"}');
 
       final gate = ProfileSettings(db, operator: null);
-      expect(
-        await gate.read(_sharedKey),
-        '{"παλιό":"δέμα"}',
-      );
+      expect(await gate.read(_sharedKey), '{"παλιό":"δέμα"}');
     });
 
     test('write γράφει στην παλιά κοινή θέση', () async {
@@ -147,19 +144,13 @@ void main() {
 
       final admin = _operator(1, isAdmin: true);
       final gate = ProfileSettings(db, operator: admin);
-      expect(
-        await gate.read(_sharedKey),
-        '{"κοινό":"δέμα"}',
-      );
+      expect(await gate.read(_sharedKey), '{"κοινό":"δέμα"}');
 
       // Η κοινή τιμή αλλάζει μετά — το προφίλ ΔΕΝ την ακολουθεί πια.
       await SettingsRepository(
         db,
       ).saveSetting('test_shared_scoped_key', '{"άλλαξε":"μετά"}');
-      expect(
-        await gate.read(_sharedKey),
-        '{"κοινό":"δέμα"}',
-      );
+      expect(await gate.read(_sharedKey), '{"κοινό":"δέμα"}');
     });
 
     test('ο απλός χρήστης ΔΕΝ κληρονομεί την κοινή τιμή', () async {
@@ -168,10 +159,7 @@ void main() {
       ).saveSetting('test_shared_scoped_key', '{"κοινό":"δέμα"}');
 
       final gate = ProfileSettings(db, operator: _operator(2));
-      expect(
-        await gate.read(_sharedKey),
-        isNull,
-      );
+      expect(await gate.read(_sharedKey), isNull);
     });
 
     test('τοπική τιμή μηχανήματος κληρονομείται από οποιονδήποτε', () async {
@@ -197,15 +185,9 @@ void main() {
       ).saveSetting('test_shared_scoped_key', '{"κοινό":"δέμα"}');
 
       final gate = ProfileSettings(db, operator: _operator(3));
-      await gate.write(
-        _sharedKey,
-        '{"δικό":"μου"}',
-      );
+      await gate.write(_sharedKey, '{"δικό":"μου"}');
 
-      expect(
-        await gate.read(_sharedKey),
-        '{"δικό":"μου"}',
-      );
+      expect(await gate.read(_sharedKey), '{"δικό":"μου"}');
       expect(
         await SettingsRepository(db).getSetting('test_shared_scoped_key'),
         '{"κοινό":"δέμα"}',
@@ -219,14 +201,8 @@ void main() {
       await first.write(_sharedKey, '{"α":1}');
       await second.write(_sharedKey, '{"β":2}');
 
-      expect(
-        await first.read(_sharedKey),
-        '{"α":1}',
-      );
-      expect(
-        await second.read(_sharedKey),
-        '{"β":2}',
-      );
+      expect(await first.read(_sharedKey), '{"α":1}');
+      expect(await second.read(_sharedKey), '{"β":2}');
     });
 
     test('χωρίς ρητό όρισμα, η πύλη μιλά για τον ενεργό χρήστη', () async {

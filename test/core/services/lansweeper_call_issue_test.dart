@@ -24,17 +24,23 @@ String _issue({
 
 void main() {
   group('Ο τίτλος στην περιγραφή της κλήσης', () {
-    test('ουσιαστικός τίτλος κατεβαίνει ως πρώτη παράγραφος, χωρίς ετικέτα', () {
-      final result = _issue(
-        title: 'Ο εκτυπωτής δεν τραβά χαρτί',
-        autoTitle: 'Κλήση #344',
-        notes: 'Τι θα γίνει με τη λύση;',
-      );
+    test(
+      'ουσιαστικός τίτλος κατεβαίνει ως πρώτη παράγραφος, χωρίς ετικέτα',
+      () {
+        final result = _issue(
+          title: 'Ο εκτυπωτής δεν τραβά χαρτί',
+          autoTitle: 'Κλήση #344',
+          notes: 'Τι θα γίνει με τη λύση;',
+        );
 
-      expect(result, 'Ο εκτυπωτής δεν τραβά χαρτί\n\nΤι θα γίνει με τη λύση;');
-      expect(result.toLowerCase(), isNot(contains('τίτλος')));
-      expect(result, startsWith('Ο εκτυπωτής'));
-    });
+        expect(
+          result,
+          'Ο εκτυπωτής δεν τραβά χαρτί\n\nΤι θα γίνει με τη λύση;',
+        );
+        expect(result.toLowerCase(), isNot(contains('τίτλος')));
+        expect(result, startsWith('Ο εκτυπωτής'));
+      },
+    );
 
     test('ο αυτόματος τίτλος ΔΕΝ κατεβαίνει — δεν λέει τίποτα νέο', () {
       final result = _issue(
@@ -215,17 +221,20 @@ void main() {
       );
     });
 
-    test('κλήση χωρίς κανένα αποθηκευμένο κείμενο: κάθε κείμενο είναι αλλαγή', () {
-      expect(
-        CallsLansweeperRepository.wouldChangeTexts(
-          problem: 'Δεν τυπώνει',
-          solution: '',
-          currentIssue: null,
-          currentSolution: null,
-        ),
-        isTrue,
-      );
-    });
+    test(
+      'κλήση χωρίς κανένα αποθηκευμένο κείμενο: κάθε κείμενο είναι αλλαγή',
+      () {
+        expect(
+          CallsLansweeperRepository.wouldChangeTexts(
+            problem: 'Δεν τυπώνει',
+            solution: '',
+            currentIssue: null,
+            currentSolution: null,
+          ),
+          isTrue,
+        );
+      },
+    );
 
     test('δύο κενά πεδία δεν γράφουν τίποτα', () {
       expect(

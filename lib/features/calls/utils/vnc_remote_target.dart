@@ -22,9 +22,9 @@ abstract final class VncRemoteTarget {
   }
 
   /// Επιστρέφει έγκυρο host για VNC:
-  /// - IPv4 그대로
+  /// - IPv4 ως έχει
   /// - 3..6 ψηφία -> `prefix + code`
-  /// - host που ξεκινά με γράμμα -> 그대로 (χωρίς prefix)
+  /// - host που ξεκινά με γράμμα -> ως έχει (χωρίς prefix)
   /// αλλιώς null.
   static String? resolveValidVncHost(String raw, {String prefix = 'PC'}) {
     final t = raw.trim();

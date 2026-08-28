@@ -101,13 +101,12 @@ void _registerTestLansweeperSettings() {
     'lansweeper_api_url': _kTestApiUrl,
     'lansweeper_api_key': _kTestApiKey,
   };
-  SettingsService.registerAppSettingsProvider(
-    (key) async => store[key],
-    (key, value) async {
-      store[key] = value;
-    },
-    (key, change) async => store[key] = change(store[key]),
-  );
+  SettingsService.registerAppSettingsProvider((key) async => store[key], (
+    key,
+    value,
+  ) async {
+    store[key] = value;
+  }, (key, change) async => store[key] = change(store[key]));
 }
 
 void main() {
@@ -748,19 +747,22 @@ void main() {
       },
     );
 
-    test('υπάρχον ticket: το αποτέλεσμα δηλώνει ότι ΔΕΝ δημιουργήθηκε', () async {
-      final fakePoster = _RecordingFakePoster(
-        responses: const [successOnly, successOnly],
-      );
-      final service = LansweeperSyncService(poster: fakePoster.call);
+    test(
+      'υπάρχον ticket: το αποτέλεσμα δηλώνει ότι ΔΕΝ δημιουργήθηκε',
+      () async {
+        final fakePoster = _RecordingFakePoster(
+          responses: const [successOnly, successOnly],
+        );
+        final service = LansweeperSyncService(poster: fakePoster.call);
 
-      final result = await service.submitTicketWorkflow(
-        _workflowRequest(existingTicketId: '17476'),
-      );
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(existingTicketId: '17476'),
+        );
 
-      expect(result.success, isTrue);
-      expect(result.ticketCreated, isFalse);
-      expect(result.ticketId, '17476');
-    });
+        expect(result.success, isTrue);
+        expect(result.ticketCreated, isFalse);
+        expect(result.ticketId, '17476');
+      },
+    );
   });
 }

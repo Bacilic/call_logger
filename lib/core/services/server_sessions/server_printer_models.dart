@@ -112,16 +112,26 @@ class PrintJob {
               PrintJobStatusFlags.paperOut) !=
       0;
 
+  /// Οι σημαίες μπορούν να συνυπάρχουν· κερδίζει η πρώτη που ταιριάζει.
+  ///
+  /// Η σειρά είναι σκόπιμη: το σφάλμα και το «διαγράφεται» προηγούνται του
+  /// «τυπώνεται», γιατί μια εργασία που κόλλησε συχνά κρατά και τις δύο.
+  static const List<(int, String)> _statusLabels = [
+    (PrintJobStatusFlags.error, 'σφάλμα'),
+    (PrintJobStatusFlags.deleting, 'διαγράφεται'),
+    (PrintJobStatusFlags.blockedDevQ, 'μπλοκαρισμένη'),
+    (PrintJobStatusFlags.paperOut, 'χωρίς χαρτί'),
+    (PrintJobStatusFlags.offline, 'εκτός σύνδεσης'),
+    (PrintJobStatusFlags.printing, 'τυπώνεται'),
+    (PrintJobStatusFlags.spooling, 'προετοιμάζεται'),
+    (PrintJobStatusFlags.paused, 'σε παύση'),
+    (PrintJobStatusFlags.printed, 'τυπώθηκε'),
+  ];
+
   String get statusLabel {
-    if (statusFlags & PrintJobStatusFlags.error != 0) return 'σφάλμα';
-    if (statusFlags & PrintJobStatusFlags.deleting != 0) return 'διαγράφεται';
-    if (statusFlags & PrintJobStatusFlags.blockedDevQ != 0) return 'μπλοκαρισμένη';
-    if (statusFlags & PrintJobStatusFlags.paperOut != 0) return 'χωρίς χαρτί';
-    if (statusFlags & PrintJobStatusFlags.offline != 0) return 'εκτός σύνδεσης';
-    if (statusFlags & PrintJobStatusFlags.printing != 0) return 'τυπώνεται';
-    if (statusFlags & PrintJobStatusFlags.spooling != 0) return 'προετοιμάζεται';
-    if (statusFlags & PrintJobStatusFlags.paused != 0) return 'σε παύση';
-    if (statusFlags & PrintJobStatusFlags.printed != 0) return 'τυπώθηκε';
+    for (final (flag, label) in _statusLabels) {
+      if (statusFlags & flag != 0) return label;
+    }
     return 'αναμονή';
   }
 }

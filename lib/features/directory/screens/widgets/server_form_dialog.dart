@@ -200,9 +200,7 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
                     helperMaxLines: 2,
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _showPassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
+                        _showPassword ? Icons.visibility_off : Icons.visibility,
                       ),
                       tooltip: _showPassword
                           ? 'Απόκρυψη κωδικού'
@@ -292,9 +290,7 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
         ),
         actions: [
           TextButton(
-            onPressed: _saving
-                ? null
-                : () => Navigator.of(context).pop(false),
+            onPressed: _saving ? null : () => Navigator.of(context).pop(false),
             child: const Text('Ακύρωση'),
           ),
           FilledButton(

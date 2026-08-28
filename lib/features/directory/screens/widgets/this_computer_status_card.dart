@@ -191,7 +191,8 @@ class _PrinterRpcSection extends ConsumerWidget {
                       label: const Text(
                         'Ενεργοποίηση πλήρους προβολής εκτυπωτών',
                       ),
-                      onPressed: () => _showDialog(context, ref, restore: false),
+                      onPressed: () =>
+                          _showDialog(context, ref, restore: false),
                     ),
                   // Η επαναφορά προσφέρεται μόνο όταν υπάρχει κάτι να ξηλωθεί —
                   // στη μισοπερασμένη ρύθμιση ο χειριστής μπορεί να θέλει είτε
@@ -199,9 +200,7 @@ class _PrinterRpcSection extends ConsumerWidget {
                   if (status != PrinterRpcPolicyStatus.disabled)
                     TextButton.icon(
                       icon: const Icon(Icons.settings_backup_restore, size: 18),
-                      label: const Text(
-                        'Επαναφορά προεπιλογών των Windows',
-                      ),
+                      label: const Text('Επαναφορά προεπιλογών των Windows'),
                       onPressed: () => _showDialog(context, ref, restore: true),
                     ),
                 ],
@@ -411,9 +410,7 @@ class _PrinterRpcPolicyDialogState
                     size: 18,
                   ),
             label: Text(
-              _working
-                  ? 'Αναμονή…'
-                  : (_restore ? 'Επαναφορά' : 'Ενεργοποίηση'),
+              _working ? 'Αναμονή…' : (_restore ? 'Επαναφορά' : 'Ενεργοποίηση'),
             ),
             onPressed: _working ? null : _apply,
           ),

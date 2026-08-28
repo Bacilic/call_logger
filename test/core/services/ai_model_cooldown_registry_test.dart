@@ -110,7 +110,10 @@ void main() {
 
       registry.recordFailure('lathos', reason: AiModelDownReason.modelNotFound);
 
-      expect(registry.downtime('lathos')?.reason, AiModelDownReason.modelNotFound);
+      expect(
+        registry.downtime('lathos')?.reason,
+        AiModelDownReason.modelNotFound,
+      );
     });
   });
 
@@ -127,7 +130,11 @@ void main() {
 
       final down = registry.downtime('kyrio');
       expect(down!.until, DateTime(2026, 1, 1, 12, 34, 0));
-      expect(down.blocking, isTrue, reason: 'μας ζήτησαν ρητά να μη χτυπήσουμε');
+      expect(
+        down.blocking,
+        isTrue,
+        reason: 'μας ζήτησαν ρητά να μη χτυπήσουμε',
+      );
       expect(registry.isInCooldown('kyrio'), isTrue);
     });
 
@@ -144,7 +151,10 @@ void main() {
       now = DateTime(2026, 1, 1, 12, 5, 0);
       registry.recordFailure('kyrio', reason: AiModelDownReason.quotaExhausted);
 
-      expect(registry.downtime('kyrio')!.until, DateTime(2026, 1, 1, 12, 34, 0));
+      expect(
+        registry.downtime('kyrio')!.until,
+        DateTime(2026, 1, 1, 12, 34, 0),
+      );
     });
   });
 
@@ -210,8 +220,10 @@ void main() {
       );
 
       expect(registry.downtime('neo-montelo'), isNull);
-      expect(registry.orderedForAttempt(['neo-montelo', 'efedriko']).first,
-          'neo-montelo');
+      expect(
+        registry.orderedForAttempt(['neo-montelo', 'efedriko']).first,
+        'neo-montelo',
+      );
     });
   });
 

@@ -239,10 +239,9 @@ void main() {
         });
         addTearDown(client.close);
 
-        await _service(cooldownRegistry: registry).suggest(
-          _kTestRequest,
-          client: client,
-        );
+        await _service(
+          cooldownRegistry: registry,
+        ).suggest(_kTestRequest, client: client);
 
         // Ένα χτύπημα, κατευθείαν στο εφεδρικό: το κύριο δεν δοκιμάζεται καν,
         // άρα δεν χάνεται το μισό λεπτό της αναμονής. Ο χρήστης μαθαίνει τι

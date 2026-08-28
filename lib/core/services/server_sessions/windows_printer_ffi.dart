@@ -187,6 +187,21 @@ typedef _SetJobDart =
 typedef _DeletePrinterNative = Int32 Function(IntPtr printer);
 typedef _DeletePrinterDart = int Function(int printer);
 
+typedef _SetPrinterNative =
+    Int32 Function(
+      IntPtr printer,
+      Uint32 level,
+      Pointer<NativeType> printerInfo,
+      Uint32 command,
+    );
+typedef _SetPrinterDart =
+    int Function(
+      int printer,
+      int level,
+      Pointer<NativeType> printerInfo,
+      int command,
+    );
+
 // --- Υπογραφές: υπηρεσίες & τερματισμός (advapi32) -------------------------
 
 typedef _OpenScManagerNative =
@@ -274,11 +289,14 @@ final _openPrinter = _winspool
     .lookupFunction<_OpenPrinterNative, _OpenPrinterDart>('OpenPrinterW');
 final _closePrinter = _winspool
     .lookupFunction<_ClosePrinterNative, _ClosePrinterDart>('ClosePrinter');
-final _enumJobs = _winspool
-    .lookupFunction<_EnumJobsNative, _EnumJobsDart>('EnumJobsW');
+final _enumJobs = _winspool.lookupFunction<_EnumJobsNative, _EnumJobsDart>(
+  'EnumJobsW',
+);
 final _setJob = _winspool.lookupFunction<_SetJobNative, _SetJobDart>('SetJobW');
 final _deletePrinter = _winspool
     .lookupFunction<_DeletePrinterNative, _DeletePrinterDart>('DeletePrinter');
+final _setPrinter = _winspool
+    .lookupFunction<_SetPrinterNative, _SetPrinterDart>('SetPrinterW');
 
 final _openScManager = _advapi
     .lookupFunction<_OpenScManagerNative, _OpenScManagerDart>('OpenSCManagerW');
@@ -324,7 +342,23 @@ bool _warmedUp = false;
 void _warmUp() {
   if (_warmedUp) return;
   _warmedUp = true;
-  final refs = <Object>[_enumPrinters, _openPrinter, _closePrinter, _enumJobs, _setJob, _deletePrinter, _openScManager, _openService, _queryServiceStatus, _controlService, _startService, _closeServiceHandle, _initiateShutdown, _abortShutdown, _getLastError];
+  final refs = <Object>[
+    _enumPrinters,
+    _openPrinter,
+    _closePrinter,
+    _enumJobs,
+    _setJob,
+    _deletePrinter,
+    _openScManager,
+    _openService,
+    _queryServiceStatus,
+    _controlService,
+    _startService,
+    _closeServiceHandle,
+    _initiateShutdown,
+    _abortShutdown,
+    _getLastError,
+  ];
   // Καθαρίζει ό,τι άφησαν πίσω τους τα φορτώματα.
   if (refs.isNotEmpty) _getLastError();
 }
@@ -360,6 +394,9 @@ const int _errorMoreData = 234;
 
 /// `JOB_CONTROL_DELETE`.
 const int _jobControlDelete = 5;
+
+/// `PRINTER_CONTROL_RESUME` — ξεκολλάει εκτυπωτή που είναι σε παύση.
+const int _printerControlResume = 2;
 
 /// `SERVICE_CONTROL_STOP`.
 const int _serviceControlStop = 1;
@@ -588,6 +625,31 @@ abstract final class WindowsPrinterFfi {
     }
   }
 
+  /// Ξεπαγώνει εκτυπωτή που βρίσκεται σε παύση.
+  ///
+  /// Το φθηνότερο σκαλί επαναφοράς: δεν αγγίζει καμία συνεδρία, δεν κόβει
+  /// καμία εκτύπωση, και κανείς δεν το αντιλαμβάνεται. Έχει νόημα μόνο όταν ο
+  /// εκτυπωτής **υπάρχει** στον διακομιστή αλλά δηλώνει παύση.
+  static ({bool ok, int code}) resumePrinter(String printerName) {
+    _warmUp();
+    final namePtr = printerName.toNativeUtf16();
+    final handle = calloc<IntPtr>();
+    var opened = 0;
+    try {
+      if (_openPrinter(namePtr, handle, nullptr) == 0) {
+        return (ok: false, code: _getLastError());
+      }
+      opened = handle.value;
+      final ok = _setPrinter(opened, 0, nullptr, _printerControlResume);
+      if (ok == 0) return (ok: false, code: _getLastError());
+      return (ok: true, code: 0);
+    } finally {
+      if (opened != 0) _closePrinter(opened);
+      calloc.free(namePtr);
+      calloc.free(handle);
+    }
+  }
+
   /// Σταματά και ξαναξεκινά μια υπηρεσία σε απομακρυσμένο μηχάνημα.
   ///
   /// Περιμένει να σταματήσει πραγματικά πριν ξεκινήσει ξανά: ένα `start` πάνω
@@ -739,4 +801,3 @@ abstract final class WindowsPrinterFfi {
 /// Δικοί μας κωδικοί, αρνητικοί ώστε να μη συγκρούονται με των Windows.
 const int kServiceStopTimedOut = -10;
 const int kServiceStartTimedOut = -11;
-

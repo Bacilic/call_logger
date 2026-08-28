@@ -20,6 +20,7 @@ import '../screens/widgets/call_status_bar.dart';
 import '../screens/widgets/recent_calls_list.dart';
 import '../screens/widgets/mini_map_card.dart';
 import '../screens/widgets/equipment_recent_calls_panel.dart';
+import '../screens/widgets/equipment_station_actions_card.dart';
 import '../screens/widgets/global_recent_calls_list.dart';
 import '../screens/widgets/notes_sticky_field.dart';
 import '../screens/widgets/category_autocomplete_field.dart';
@@ -69,6 +70,10 @@ class CallsScreenLayout extends ConsumerWidget {
 
   /// Ανώτατο πλάτος στήλης για [EquipmentRecentCallsPanel].
   static const double kEquipmentRecentCardColumnMaxWidth = 560;
+
+  /// Ανώτατο πλάτος στήλης για [EquipmentStationActionsCard] — δύο κουμπιά με
+  /// ετικέτα, όχι λίστα εγγραφών: δεν χρειάζεται το πλάτος του ιστορικού.
+  static const double kEquipmentActionsCardColumnMaxWidth = 300;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -320,9 +325,26 @@ class _ExpandedPlanBody extends ConsumerWidget {
 
     final callerId = header.selectedCaller?.id;
     final hasCallerHistory = callerId != null;
+
+    // ΓΕΓΟΝΟΣ, ΟΧΙ ΕΙΚΑΣΙΑ: «έχει ιστορικό» σημαίνει «υπάρχουν κλήσεις», όχι
+    // «βρέθηκε στον κατάλογο». Ένας καταχωρημένος εξοπλισμός με μηδέν κλήσεις
+    // άφηνε κενή στήλη — η κάρτα εξαφανιζόταν μόνη της, αφού είχε ήδη
+    // δεσμευτεί η θέση. Τώρα τη θέση την παίρνει η εφεδρική κάρτα ενεργειών.
+    final equipmentCalls = ref.watch(
+      recentCallsByEquipmentProvider(selectedEquipmentCode),
+    );
     final hasEquipmentHistory =
         selectedEquipmentCode.isNotEmpty &&
-        groups.equipmentTier == EquipmentGroupTier.matchedRecord;
+        groups.equipmentTier == EquipmentGroupTier.matchedRecord &&
+        equipmentCalls.when(
+          data: (calls) => calls.isNotEmpty,
+          // Όσο ρωτάμε, κρατάμε τη θέση του ιστορικού με το σπινάκι του: μια
+          // κάρτα που εμφανίζεται και αντικαθίσταται μετά από ms αναβοσβήνει.
+          loading: () => true,
+          // Σε σφάλμα η κάρτα ιστορικού δεν θα δείξει τίποτα· καλύτερα οι
+          // ενέργειες παρά κενό.
+          error: (_, _) => false,
+        );
 
     final tkOpenInGrid = ref.watch(showGlobalCallsToggleProvider);
 
@@ -599,6 +621,8 @@ double? _layoutSlotMaxWidth(CallsLayoutSlot slot) {
       return CallsScreenLayout.kGlobalRecentCardColumnMaxWidth;
     case CallsLayoutSlot.equipmentHistory:
       return CallsScreenLayout.kEquipmentRecentCardColumnMaxWidth;
+    case CallsLayoutSlot.equipmentActions:
+      return CallsScreenLayout.kEquipmentActionsCardColumnMaxWidth;
     case CallsLayoutSlot.notes:
     case CallsLayoutSlot.categoryPending:
       return CallsScreenLayout.kNotesColumnMaxWidth;
@@ -618,6 +642,7 @@ bool _columnFillsCappedWidth(CallsLayoutColumn column) {
       case CallsLayoutSlot.callerHistory:
       case CallsLayoutSlot.globalRecent:
       case CallsLayoutSlot.equipmentHistory:
+      case CallsLayoutSlot.equipmentActions:
       case CallsLayoutSlot.remoteTools:
         continue;
     }
@@ -700,6 +725,10 @@ class _SlotWidget extends ConsumerWidget {
         return RemoteConnectionButtons(header: header, tools: tools);
       case CallsLayoutSlot.equipmentHistory:
         return EquipmentRecentCallsPanel(equipmentCode: selectedEquipmentCode);
+      case CallsLayoutSlot.equipmentActions:
+        return EquipmentStationActionsCard(
+          equipmentCode: selectedEquipmentCode,
+        );
       case CallsLayoutSlot.callerCard:
         // Σε στήλη με start alignment η κάρτα αγκαλιάζει το περιεχόμενό της.
         final user = header.selectedCaller;

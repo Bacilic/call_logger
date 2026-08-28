@@ -110,6 +110,30 @@ void main() {
       expect(msg, contains('Ανανέωση'));
     });
 
+    test('η αποσύνδεση οθόνης ΔΕΝ μιλά για τερματισμό', () {
+      // Ο χειριστής διάλεξε τη ΜΗ καταστροφική ενέργεια. Ένα μήνυμα που λέει
+      // «τερματισμός» θα τον έκανε να νομίζει ότι έκλεισε το medico κάποιου.
+      final msg = ServerSessionMessages.forDisconnect(
+        code: ServerSessionMessages.errorAccessDenied,
+        host: '192.168.13.82',
+        adminUser: 'Administrator',
+      );
+
+      expect(msg, contains('αποσύνδεσης οθόνης'));
+      expect(msg, isNot(contains('τερματισμ')));
+    });
+
+    test('άγνωστη αποτυχία αποσύνδεσης καθησυχάζει για τη συνεδρία', () {
+      final msg = ServerSessionMessages.forDisconnect(
+        code: 4321,
+        host: 'x',
+        adminUser: 'a',
+      );
+
+      expect(msg, contains('4321'));
+      expect(msg, contains('δεν πειράχτηκε'));
+    });
+
     test('ο δικός μας κωδικός δεν συγκρούεται με των Windows', () {
       expect(ServerSessionMessages.logoffNotVerified, lessThan(0));
     });

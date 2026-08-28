@@ -10,6 +10,7 @@ import '../../../../core/services/server_sessions/printer_station_matching.dart'
 import '../../../../core/services/server_sessions/server_printer_models.dart';
 import '../../../../core/services/server_sessions/server_session_models.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
+import 'server_action_banner.dart';
 
 /// Οι ενέργειες συντήρησης πάνω σε έναν διακομιστή.
 ///
@@ -189,7 +190,7 @@ class _RestartSpoolerDialogState extends ConsumerState<_RestartSpoolerDialog> {
                   ],
                 )
               else if (_done != null)
-                _Banner(
+                ServerActionBanner(
                   icon: Icons.check_circle_outline,
                   color: theme.colorScheme.primary,
                   text: _done!,
@@ -207,7 +208,7 @@ class _RestartSpoolerDialogState extends ConsumerState<_RestartSpoolerDialog> {
                 ),
                 const SizedBox(height: 8),
                 if (_limited)
-                  _Banner(
+                  ServerActionBanner(
                     icon: Icons.info_outline,
                     color: theme.colorScheme.tertiary,
                     text:
@@ -218,7 +219,7 @@ class _RestartSpoolerDialogState extends ConsumerState<_RestartSpoolerDialog> {
                         'αλλά χωρίς να ξέρουμε αν κόβεται εκτύπωση.',
                   )
                 else if (_pendingJobs > 0)
-                  _Banner(
+                  ServerActionBanner(
                     icon: Icons.warning_amber_outlined,
                     color: theme.colorScheme.error,
                     text:
@@ -227,7 +228,7 @@ class _RestartSpoolerDialogState extends ConsumerState<_RestartSpoolerDialog> {
                         'κοπεί και θα ξεκινήσει από την αρχή.',
                   )
                 else
-                  _Banner(
+                  ServerActionBanner(
                     icon: Icons.check_circle_outline,
                     color: theme.colorScheme.primary,
                     text: 'Καμία εκτύπωση σε αναμονή — η στιγμή είναι καλή.',
@@ -235,7 +236,7 @@ class _RestartSpoolerDialogState extends ConsumerState<_RestartSpoolerDialog> {
               ],
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                _Banner(
+                ServerActionBanner(
                   icon: Icons.error_outline,
                   color: theme.colorScheme.error,
                   text: _error!,
@@ -463,7 +464,7 @@ class _OrphanCleanupDialogState extends ConsumerState<_OrphanCleanupDialog> {
               ],
               if (_done != null) ...[
                 const SizedBox(height: 12),
-                _Banner(
+                ServerActionBanner(
                   icon: Icons.check_circle_outline,
                   color: theme.colorScheme.primary,
                   text: _done!,
@@ -471,7 +472,7 @@ class _OrphanCleanupDialogState extends ConsumerState<_OrphanCleanupDialog> {
               ],
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                _Banner(
+                ServerActionBanner(
                   icon: Icons.error_outline,
                   color: theme.colorScheme.error,
                   text: _error!,
@@ -670,7 +671,7 @@ class _ServerRestartDialogState extends ConsumerState<_ServerRestartDialog> {
               ),
               const SizedBox(height: 12),
               if (counting) ...[
-                _Banner(
+                ServerActionBanner(
                   icon: Icons.timer_outlined,
                   color: theme.colorScheme.error,
                   text:
@@ -691,7 +692,7 @@ class _ServerRestartDialogState extends ConsumerState<_ServerRestartDialog> {
                     ],
                   )
                 else ...[
-                  _Banner(
+                  ServerActionBanner(
                     icon: Icons.groups_outlined,
                     color: theme.colorScheme.error,
                     text: _sessions.isEmpty
@@ -728,7 +729,7 @@ class _ServerRestartDialogState extends ConsumerState<_ServerRestartDialog> {
               ],
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                _Banner(
+                ServerActionBanner(
                   icon: Icons.error_outline,
                   color: theme.colorScheme.error,
                   text: _error!,
@@ -766,39 +767,5 @@ class _ServerRestartDialogState extends ConsumerState<_ServerRestartDialog> {
     final names = _sessions.map((s) => s.username).toList()..sort();
     if (names.length <= 6) return names.join(', ');
     return '${names.take(6).join(', ')} και ${names.length - 6} ακόμη';
-  }
-}
-
-// --- Κοινό ----------------------------------------------------------------
-
-class _Banner extends StatelessWidget {
-  const _Banner({required this.icon, required this.color, required this.text});
-
-  final IconData icon;
-  final Color color;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 8),
-            Expanded(
-              child: SelectableText(text, style: theme.textTheme.bodySmall),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

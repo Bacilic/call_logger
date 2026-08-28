@@ -270,4 +270,132 @@ void main() {
       },
     );
   });
+
+  group('Εφεδρική κάρτα «Ενέργειες υπολογιστή»', () {
+    CallsLayoutVisibility visibility(
+      CallsFieldGroups groups, {
+      required bool hasCalls,
+      bool historyCardEnabled = true,
+    }) {
+      return CallsLayoutVisibility(
+        showUserCard: groups.isCallerGroupActive,
+        showMapCard: groups.isMapActive,
+        showEmployeeRecentCard: groups.isCallerGroupActive,
+        showEquipmentRecentPanel:
+            historyCardEnabled &&
+            groups.equipmentTier == EquipmentGroupTier.matchedRecord &&
+            hasCalls,
+        showGlobalRecentCard: false,
+        showRemoteTools: groups.isEquipmentGroupActive,
+        hasCallerHistoryData: groups.isCallerGroupActive,
+        hasEquipmentHistoryData: hasCalls,
+      );
+    }
+
+    test('εξοπλισμός με κλήσεις → μόνο το ιστορικό', () {
+      final g = _groups(equipment: EquipmentGroupTier.matchedRecord);
+      final plan = CallsLayoutEngine.build(
+        g,
+        visibility(g, hasCalls: true),
+      );
+      expect(plan.allSlots, contains(CallsLayoutSlot.equipmentHistory));
+      expect(plan.allSlots, isNot(contains(CallsLayoutSlot.equipmentActions)));
+    });
+
+    test('καταχωρημένος εξοπλισμός χωρίς καμία κλήση → μόνο οι ενέργειες', () {
+      final g = _groups(equipment: EquipmentGroupTier.matchedRecord);
+      final plan = CallsLayoutEngine.build(
+        g,
+        visibility(g, hasCalls: false),
+      );
+      expect(plan.allSlots, contains(CallsLayoutSlot.equipmentActions));
+      expect(plan.allSlots, isNot(contains(CallsLayoutSlot.equipmentHistory)));
+    });
+
+    test('εξοπλισμός εκτός καταλόγου (ελεύθερο κείμενο) → οι ενέργειες', () {
+      final g = _groups(equipment: EquipmentGroupTier.freeTextOnly);
+      final plan = CallsLayoutEngine.build(
+        g,
+        visibility(g, hasCalls: false),
+      );
+      expect(plan.allSlots, contains(CallsLayoutSlot.equipmentActions));
+    });
+
+    test('χωρίς εξοπλισμό → καμία από τις δύο κάρτες', () {
+      final g = _groups(caller: true);
+      final plan = CallsLayoutEngine.build(
+        g,
+        visibility(g, hasCalls: false),
+      );
+      expect(plan.allSlots, isNot(contains(CallsLayoutSlot.equipmentActions)));
+      expect(plan.allSlots, isNot(contains(CallsLayoutSlot.equipmentHistory)));
+    });
+
+    test(
+      'κλειστό «Ιστορικό Εξοπλισμού» από ρυθμίσεις δεν επιστρέφει ως ενέργειες',
+      () {
+        final g = _groups(equipment: EquipmentGroupTier.matchedRecord);
+        final plan = CallsLayoutEngine.build(
+          g,
+          visibility(g, hasCalls: true, historyCardEnabled: false),
+        );
+        expect(
+          plan.allSlots,
+          isNot(contains(CallsLayoutSlot.equipmentActions)),
+        );
+        expect(
+          plan.allSlots,
+          isNot(contains(CallsLayoutSlot.equipmentHistory)),
+        );
+      },
+    );
+
+    test('μόνο εξοπλισμός: οι ενέργειες δίπλα στα εργαλεία απομακρυσμένης', () {
+      final g = _groups(equipment: EquipmentGroupTier.freeTextOnly);
+      final plan = CallsLayoutEngine.build(
+        g,
+        visibility(g, hasCalls: false),
+      );
+      expect(plan.template, CallsLayoutTemplate.d);
+      final firstRow = plan.rows.first.columns
+          .map((c) => c.single)
+          .whereType<CallsLayoutSlot>()
+          .toList();
+      expect(
+        firstRow,
+        containsAll([
+          CallsLayoutSlot.remoteTools,
+          CallsLayoutSlot.equipmentActions,
+        ]),
+      );
+    });
+
+    test('οι δύο κάρτες δεν συνυπάρχουν ποτέ, σε κανένα πρότυπο', () {
+      for (final tier in EquipmentGroupTier.values) {
+        for (final hasCalls in [true, false]) {
+          for (final phone in [true, false]) {
+            for (final caller in [true, false]) {
+              final g = _groups(
+                phone: phone,
+                caller: caller,
+                equipment: tier,
+              );
+              final plan = CallsLayoutEngine.build(
+                g,
+                visibility(g, hasCalls: hasCalls),
+              );
+              final slots = plan.allSlots;
+              expect(
+                slots.contains(CallsLayoutSlot.equipmentHistory) &&
+                    slots.contains(CallsLayoutSlot.equipmentActions),
+                isFalse,
+                reason: 'tier=$tier hasCalls=$hasCalls phone=$phone '
+                    'caller=$caller',
+              );
+            }
+          }
+        }
+      }
+    });
+  });
 }

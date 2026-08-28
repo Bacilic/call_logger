@@ -109,10 +109,7 @@ void main() {
       );
 
       // Και οι δύο υγιείς και χωρίς ουρά, οπότε αποφασίζει το αλφαβητικό.
-      expect(result.map((s) => s.printer.displayName), [
-        'doPDF v7',
-        'EPSON A',
-      ]);
+      expect(result.map((s) => s.printer.displayName), ['doPDF v7', 'EPSON A']);
     });
 
     test('ο τοπικός εκτυπωτής του διακομιστή δεν μπαίνει ποτέ', () {
@@ -273,6 +270,39 @@ void main() {
       expect(printerHealthFromFlags(0), PrinterHealth.ready);
       expect(PrinterHealth.ready.needsAttention, isFalse);
       expect(PrinterHealth.offline.needsAttention, isTrue);
+    });
+
+    test('η ετικέτα κατάστασης δίνει προτεραιότητα στο σφάλμα', () {
+      // Οι σημαίες συνυπάρχουν: μια εργασία που κόλλησε κρατά συχνά ΚΑΙ το
+      // «τυπώνεται». Πρέπει να διαβάζεται η αιτία, όχι η κίνηση.
+      const stuckWhilePrinting = PrintJob(
+        jobId: 7,
+        document: 'Ετικέτα.lbl',
+        user: 'nslpathall',
+        machine: 'PC3686',
+        statusFlags: PrintJobStatusFlags.printing | PrintJobStatusFlags.error,
+        totalPages: 1,
+        pagesPrinted: 0,
+      );
+
+      expect(stuckWhilePrinting.statusLabel, 'σφάλμα');
+      expect(stuckWhilePrinting.isStuck, isTrue);
+    });
+
+    test('εργασία χωρίς καμία σημαία είναι σε αναμονή', () {
+      const waiting = PrintJob(
+        jobId: 8,
+        document: 'Παραπεμπτικό.pdf',
+        user: 'gramtep2',
+        machine: 'PC5068',
+        statusFlags: 0,
+        totalPages: 2,
+        pagesPrinted: 0,
+      );
+
+      expect(waiting.statusLabel, 'αναμονή');
+      expect(waiting.isActive, isFalse);
+      expect(waiting.isStuck, isFalse);
     });
 
     test('εργασία που τυπώνεται τώρα ξεχωρίζει από κολλημένη', () {

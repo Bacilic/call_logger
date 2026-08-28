@@ -7,6 +7,7 @@ import '../../../../core/services/server_sessions/printer_station_matching.dart'
 import '../../../../core/services/server_sessions/server_printer_models.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../utils/equipment_server_context.dart';
+import 'user_logoff_dialog.dart';
 
 /// Ανοίγει τους εκτυπωτές που ο διακομιστής έχει σηκώσει για έναν εξοπλισμό.
 Future<void> showEquipmentPrintersDialog(
@@ -252,6 +253,30 @@ class _EquipmentPrintersDialogState
       return;
     }
     _notify('Αφαιρέθηκε ο εκτυπωτής «${sp.printer.displayName}».');
+    await _refresh();
+  }
+
+  Future<void> _resume(StationPrinter sp) async {
+    final server = _server;
+    if (server == null) return;
+
+    setState(() => _working = true);
+    final result = await ref
+        .read(serverPrinterServiceProvider)
+        .resumePrinter(
+          host: server.host,
+          adminUser: server.adminUser,
+          adminPassword: server.adminPassword,
+          printerFullName: sp.printer.fullName,
+        );
+    if (!mounted) return;
+    setState(() => _working = false);
+
+    if (!result.ok) {
+      setState(() => _error = result.error);
+      return;
+    }
+    _notify('Ο «${sp.printer.displayName}» ξεπάγωσε.');
     await _refresh();
   }
 
@@ -532,11 +557,20 @@ class _EquipmentPrintersDialogState
           limited: _limited,
           onToggleQueue: () => _toggleQueue(sp),
           onPurge: () => _purge(sp),
+          onResume: !_limited && _canResume(sp) ? () => _resume(sp) : null,
           onRemove: sp.isOrphan && !_limited ? () => _removeOrphan(sp) : null,
         );
       },
     );
   }
+
+  /// Το ξεπάγωμα έχει νόημα μόνο όταν ο εκτυπωτής είναι σταματημένος.
+  ///
+  /// Σε εκτυπωτή εκτός σύνδεσης δεν αλλάζει τίποτα — και ένα κουμπί που δεν
+  /// κάνει τίποτα είναι χειρότερο από κουμπί που λείπει.
+  bool _canResume(StationPrinter sp) =>
+      sp.printer.health == PrinterHealth.paused ||
+      sp.printer.health == PrinterHealth.error;
 
   /// Το κενό αποτέλεσμα λέει ΚΑΙ τι είδε ο διακομιστής.
   ///
@@ -570,6 +604,31 @@ class _EquipmentPrintersDialogState
                       '${_stationName.isEmpty ? '(άγνωστο)' : _stationName}.',
             style: muted,
           ),
+          const SizedBox(height: 12),
+          // Το επόμενο σκαλί προτείνεται εδώ, τη στιγμή που χρειάζεται: όταν ο
+          // εκτυπωτής λείπει εντελώς, μόνο μια επανασύνδεση τον ξαναφέρνει.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.tonalIcon(
+              onPressed: _working
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      showUserLogoffDialog(
+                        context,
+                        equipmentCode: widget.equipmentCode,
+                      );
+                    },
+              icon: const Icon(Icons.cast_connected_outlined, size: 18),
+              label: const Text('Δοκίμασε αποσύνδεση οθόνης'),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Η συνεδρία δεν κλείνει. Μόλις ο χρήστης ξανασυνδεθεί, ο '
+            'υπολογιστής του ξαναστέλνει τους εκτυπωτές του.',
+            style: muted,
+          ),
           if (_sampleNames.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text('Δείγμα ονομάτων από τον διακομιστή:', style: muted),
@@ -598,6 +657,7 @@ class _PrinterTile extends StatelessWidget {
     required this.onToggleQueue,
     required this.onPurge,
     required this.onRemove,
+    required this.onResume,
   });
 
   final StationPrinter stationPrinter;
@@ -610,6 +670,9 @@ class _PrinterTile extends StatelessWidget {
   final VoidCallback onToggleQueue;
   final VoidCallback onPurge;
   final VoidCallback? onRemove;
+
+  /// Διαθέσιμο μόνο σε σταματημένο εκτυπωτή — το φθηνότερο σκαλί επαναφοράς.
+  final VoidCallback? onResume;
 
   @override
   Widget build(BuildContext context) {

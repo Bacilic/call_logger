@@ -24,9 +24,7 @@ void main() {
         ),
       ];
 
-      final restored = decodeAiModelDowntimes(
-        encodeAiModelDowntimes(entries),
-      );
+      final restored = decodeAiModelDowntimes(encodeAiModelDowntimes(entries));
 
       expect(restored, hasLength(2));
       expect(restored.first.model, 'gemini-flash-latest');

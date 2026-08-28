@@ -87,16 +87,16 @@ typedef _RegCloseKeyDart = int Function(int key);
 
 const int _hkeyLocalMachine = 0x80000002;
 const int _keyRead = 0x20019;
-const String _printersPath =
-    r'SYSTEM\CurrentControlSet\Control\Print\Printers';
+const String _printersPath = r'SYSTEM\CurrentControlSet\Control\Print\Printers';
 
 /// Μέγιστο μήκος ονόματος κλειδιού μητρώου, σε χαρακτήρες.
 const int _maxKeyNameChars = 512;
 
 final DynamicLibrary _advapi = DynamicLibrary.open('advapi32.dll');
 
-final _regConnect = _advapi
-    .lookupFunction<_RegConnectNative, _RegConnectDart>('RegConnectRegistryW');
+final _regConnect = _advapi.lookupFunction<_RegConnectNative, _RegConnectDart>(
+  'RegConnectRegistryW',
+);
 final _regOpenKeyEx = _advapi
     .lookupFunction<_RegOpenKeyExNative, _RegOpenKeyExDart>('RegOpenKeyExW');
 final _regEnumKeyEx = _advapi

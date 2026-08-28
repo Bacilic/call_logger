@@ -58,18 +58,15 @@ void main() {
     );
     final servers = [primary, secondary];
 
-    test(
-      'η διεύθυνση του εξοπλισμού διαλέγει τον αντίστοιχο διακομιστή',
-      () {
-        final choice = LogoffTargetResolution.resolveServer(
-          equipmentRemoteAddress: '192.168.13.83',
-          servers: servers,
-        );
+    test('η διεύθυνση του εξοπλισμού διαλέγει τον αντίστοιχο διακομιστή', () {
+      final choice = LogoffTargetResolution.resolveServer(
+        equipmentRemoteAddress: '192.168.13.83',
+        servers: servers,
+      );
 
-        expect(choice.server?.id, secondary.id);
-        expect(choice.origin, ServerTargetOrigin.fromEquipment);
-      },
-    );
+      expect(choice.server?.id, secondary.id);
+      expect(choice.origin, ServerTargetOrigin.fromEquipment);
+    });
 
     test('χωρίς διεύθυνση πέφτουμε στον προεπιλεγμένο', () {
       final choice = LogoffTargetResolution.resolveServer(
@@ -111,7 +108,10 @@ void main() {
     test('χωρίς σημαδεμένη προεπιλογή χρησιμοποιείται ο πρώτος', () {
       final choice = LogoffTargetResolution.resolveServer(
         equipmentRemoteAddress: '',
-        servers: [_server(id: 7, host: '10.0.0.1'), secondary],
+        servers: [
+          _server(id: 7, host: '10.0.0.1'),
+          secondary,
+        ],
       );
 
       expect(choice.server?.id, 7);
@@ -135,25 +135,22 @@ void main() {
       expect(plan.candidates.first.matchesEquipment, isTrue);
     });
 
-    test(
-      'δύο συνεδρίες από τον ΙΔΙΟ σταθμό δεν προεπιλέγουν καμία',
-      () {
-        // Επιβεβαιωμένο στον .82: ο λογαριασμός dockardkli2 εμφανίστηκε δύο
-        // φορές από το PC3686. Το αυτόματο μάντεμα θα έκλεινε λάθος συνεδρία.
-        final plan = LogoffTargetResolution.buildPlan(
-          sessions: [
-            _session(id: 2, username: 'dockardkli2', station: 'PC3686'),
-            _session(id: 9, username: 'dockardkli2', station: 'PC3686'),
-          ],
-          equipmentStationName: 'PC3686',
-          adminUser: 'Administrator',
-        );
+    test('δύο συνεδρίες από τον ΙΔΙΟ σταθμό δεν προεπιλέγουν καμία', () {
+      // Επιβεβαιωμένο στον .82: ο λογαριασμός dockardkli2 εμφανίστηκε δύο
+      // φορές από το PC3686. Το αυτόματο μάντεμα θα έκλεινε λάθος συνεδρία.
+      final plan = LogoffTargetResolution.buildPlan(
+        sessions: [
+          _session(id: 2, username: 'dockardkli2', station: 'PC3686'),
+          _session(id: 9, username: 'dockardkli2', station: 'PC3686'),
+        ],
+        equipmentStationName: 'PC3686',
+        adminUser: 'Administrator',
+      );
 
-        expect(plan.preselectedSessionId, isNull);
-        expect(plan.matchCount, 2);
-        expect(plan.needsExplicitChoice, isTrue);
-      },
-    );
+      expect(plan.preselectedSessionId, isNull);
+      expect(plan.matchCount, 2);
+      expect(plan.needsExplicitChoice, isTrue);
+    });
 
     test('όταν κανένας σταθμός δεν ταιριάζει δεν προτείνεται τίποτα', () {
       final plan = LogoffTargetResolution.buildPlan(
@@ -195,12 +192,12 @@ void main() {
     test('συνεδρίες σε μεταβατική κατάσταση δεν προσφέρονται', () {
       final plan = LogoffTargetResolution.buildPlan(
         sessions: [
+          _session(id: 0, username: '', state: ServerSessionState.other),
           _session(
-            id: 0,
-            username: '',
+            id: 4,
+            username: 'listener',
             state: ServerSessionState.other,
           ),
-          _session(id: 4, username: 'listener', state: ServerSessionState.other),
           _session(id: 8, username: 'pragmatikos', station: 'PC1'),
         ],
         equipmentStationName: 'PC1',

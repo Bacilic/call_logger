@@ -7,6 +7,7 @@ import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/widgets/section_card.dart';
 import 'server_form_dialog.dart';
 import 'server_maintenance_actions.dart';
+import 'server_queue_cleanup_dialog.dart';
 import 'this_computer_status_card.dart';
 
 /// Οθόνη «Διακομιστές» (Κατάλογος → Διάφορα).
@@ -141,6 +142,8 @@ class _ServersManagementViewState extends ConsumerState<ServersManagementView> {
                     onDelete: () => _delete(s),
                     onRestartSpooler: () =>
                         showRestartSpoolerDialog(context, ref, s),
+                    onCleanQueues: () =>
+                        showServerQueueCleanupDialog(context, ref, s),
                     onCleanOrphans: () =>
                         showOrphanCleanupDialog(context, ref, s),
                     onRestartServer: () =>
@@ -154,6 +157,7 @@ class _ServersManagementViewState extends ConsumerState<ServersManagementView> {
 
 enum _ServerRowAction {
   edit,
+  cleanQueues,
   restartSpooler,
   cleanOrphans,
   restartServer,
@@ -166,6 +170,7 @@ class _ServerRow extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onRestartSpooler,
+    required this.onCleanQueues,
     required this.onCleanOrphans,
     required this.onRestartServer,
   });
@@ -174,6 +179,7 @@ class _ServerRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onRestartSpooler;
+  final VoidCallback onCleanQueues;
   final VoidCallback onCleanOrphans;
   final VoidCallback onRestartServer;
 
@@ -235,6 +241,7 @@ class _ServerRow extends StatelessWidget {
         icon: const Icon(Icons.more_vert),
         onSelected: (action) => switch (action) {
           _ServerRowAction.edit => onEdit(),
+          _ServerRowAction.cleanQueues => onCleanQueues(),
           _ServerRowAction.restartSpooler => onRestartSpooler(),
           _ServerRowAction.cleanOrphans => onCleanOrphans(),
           _ServerRowAction.restartServer => onRestartServer(),
@@ -251,6 +258,19 @@ class _ServerRow extends StatelessWidget {
             ),
           ),
           const PopupMenuDivider(),
+          const PopupMenuItem(
+            value: _ServerRowAction.cleanQueues,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.delete_sweep_outlined),
+              title: Text('Εκκαθάριση ουρών εκτυπώσεων'),
+              subtitle: Text(
+                'Σβήνει εκκρεμείς εκτυπώσεις, με επιλογή ανά εκτυπωτή',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
           const PopupMenuItem(
             value: _ServerRowAction.restartSpooler,
             child: ListTile(

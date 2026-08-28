@@ -115,6 +115,11 @@ typedef _WtsLogoffSessionNative =
 typedef _WtsLogoffSessionDart =
     int Function(int server, int sessionId, int wait);
 
+typedef _WtsDisconnectSessionNative =
+    Int32 Function(IntPtr server, Uint32 sessionId, Int32 wait);
+typedef _WtsDisconnectSessionDart =
+    int Function(int server, int sessionId, int wait);
+
 typedef _GetLastErrorNative = Uint32 Function();
 typedef _GetLastErrorDart = int Function();
 
@@ -154,6 +159,10 @@ final _wtsLogoffSession = _wts
     .lookupFunction<_WtsLogoffSessionNative, _WtsLogoffSessionDart>(
       'WTSLogoffSession',
     );
+final _wtsDisconnectSession = _wts
+    .lookupFunction<_WtsDisconnectSessionNative, _WtsDisconnectSessionDart>(
+      'WTSDisconnectSession',
+    );
 final _getLastError = _kernel32
     .lookupFunction<_GetLastErrorNative, _GetLastErrorDart>('GetLastError');
 
@@ -178,6 +187,7 @@ void _warmUp() {
     _wtsQuerySessionInformation,
     _wtsFreeMemory,
     _wtsLogoffSession,
+    _wtsDisconnectSession,
     _getLastError,
   ];
   // Καθαρίζει ό,τι άφησαν πίσω τους τα φορτώματα.
@@ -313,6 +323,31 @@ abstract final class WindowsSessionFfi {
       server = _wtsOpenServer(hostPtr);
       if (server == 0) return (ok: false, code: _getLastError());
       final ok = _wtsLogoffSession(server, sessionId, 1);
+      if (ok != 0) return (ok: true, code: 0);
+      return (ok: false, code: _getLastError());
+    } finally {
+      if (server != 0) _wtsCloseServer(server);
+      calloc.free(hostPtr);
+    }
+  }
+
+  /// Αποσυνδέει την **οθόνη** μιας συνεδρίας, χωρίς να την κλείσει.
+  ///
+  /// Η διαφορά από το [logoffSession] είναι όλη η ουσία: εδώ η συνεδρία μένει
+  /// ζωντανή και οι εφαρμογές συνεχίζουν να τρέχουν — φεύγει μόνο η εικόνα.
+  /// Όταν ο χρήστης ξανασυνδεθεί, ο υπολογιστής του ξαναστέλνει τους
+  /// εκτυπωτές του, που είναι ακριβώς ο λόγος που υπάρχει αυτή η ενέργεια.
+  static ({bool ok, int code}) disconnectSession({
+    required String host,
+    required int sessionId,
+  }) {
+    _warmUp();
+    final hostPtr = host.toNativeUtf16();
+    var server = 0;
+    try {
+      server = _wtsOpenServer(hostPtr);
+      if (server == 0) return (ok: false, code: _getLastError());
+      final ok = _wtsDisconnectSession(server, sessionId, 1);
       if (ok != 0) return (ok: true, code: 0);
       return (ok: false, code: _getLastError());
     } finally {

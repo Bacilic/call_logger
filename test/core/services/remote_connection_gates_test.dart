@@ -87,20 +87,23 @@ void main() {
   );
 
   group('Πύλη 2 — ο απομακρυσμένος υπολογιστής απαντά', () {
-    test('σβηστός υπολογιστής RDP: πετάει χωρίς καν να ξεκινήσει πρόγραμμα', () async {
-      final built = buildService(portOpen: false);
-      await expectLater(
-        launch(built.service, toolWith(role: ToolRole.rdp)),
-        throwsA(isA<Exception>()),
-      );
-      expect(
-        built.launched,
-        isEmpty,
-        reason:
-            'Χωρίς απάντηση στη θύρα, η αναμονή των σαράντα δευτερολέπτων θα '
-            'ήταν αναμονή για το τίποτα.',
-      );
-    });
+    test(
+      'σβηστός υπολογιστής RDP: πετάει χωρίς καν να ξεκινήσει πρόγραμμα',
+      () async {
+        final built = buildService(portOpen: false);
+        await expectLater(
+          launch(built.service, toolWith(role: ToolRole.rdp)),
+          throwsA(isA<Exception>()),
+        );
+        expect(
+          built.launched,
+          isEmpty,
+          reason:
+              'Χωρίς απάντηση στη θύρα, η αναμονή των σαράντα δευτερολέπτων θα '
+              'ήταν αναμονή για το τίποτα.',
+        );
+      },
+    );
 
     test('σβηστός υπολογιστής VNC: πετάει', () async {
       final built = buildService(portOpen: false);

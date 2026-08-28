@@ -196,6 +196,49 @@ class ServerPrinterService {
     }
   }
 
+  /// Ξεπαγώνει εκτυπωτή που βρίσκεται σε παύση.
+  ///
+  /// Το φθηνότερο σκαλί επαναφοράς: καμία συνεδρία δεν πειράζεται, καμία
+  /// εκτύπωση δεν κόβεται.
+  Future<ServerActionResult> resumePrinter({
+    required String host,
+    required String adminUser,
+    required String adminPassword,
+    required String printerFullName,
+    Duration timeout = defaultTimeout,
+  }) async {
+    final guard = _guard(host, adminUser, adminPassword);
+    if (guard != null) return ServerActionResult.failure(guard);
+
+    final h = host.trim();
+    final u = adminUser.trim();
+    final target = _remotePrinterPath(h, printerFullName);
+    try {
+      final raw = await Isolate.run(
+        () => _resumePrinterInIsolate(h, u, adminPassword, target),
+      ).timeout(timeout);
+
+      if (!raw.ok) {
+        return ServerActionResult.failure(
+          _message(
+            connectFailed: raw.connectFailed,
+            code: raw.code,
+            host: h,
+            user: u,
+            what: 'ξεπαγώματος εκτυπωτή',
+          ),
+        );
+      }
+      return const ServerActionResult.success(affected: 1);
+    } on TimeoutException {
+      return ServerActionResult.failure(_timeoutMessage(h, timeout));
+    } catch (e) {
+      return ServerActionResult.failure(
+        'Απρόσμενο σφάλμα κατά το ξεπάγωμα εκτυπωτή στον $h: $e',
+      );
+    }
+  }
+
   /// Επανεκκινεί την υπηρεσία ουράς εκτυπώσεων.
   ///
   /// Πιο μακρύ όριο χρόνου: η υπηρεσία σταματά, επαληθεύεται ότι σταμάτησε,
@@ -624,5 +667,17 @@ _ActionIsolateResult _abortRestartInIsolate(
   return _withAdminShare<_ActionIsolateResult>(host, user, password, () {
     final r = WindowsPrinterFfi.abortRestart(host);
     return (ok: r.ok, connectFailed: false, code: r.code, affected: 0);
+  }, (code) => (ok: false, connectFailed: true, code: code, affected: 0));
+}
+
+_ActionIsolateResult _resumePrinterInIsolate(
+  String host,
+  String user,
+  String password,
+  String printerPath,
+) {
+  return _withAdminShare<_ActionIsolateResult>(host, user, password, () {
+    final r = WindowsPrinterFfi.resumePrinter(printerPath);
+    return (ok: r.ok, connectFailed: false, code: r.code, affected: 1);
   }, (code) => (ok: false, connectFailed: true, code: code, affected: 0));
 }

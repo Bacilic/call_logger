@@ -142,6 +142,61 @@ class ServerSessionService {
     }
   }
 
+  /// Αποσυνδέει την **οθόνη** μιας συνεδρίας, χωρίς να την κλείσει.
+  ///
+  /// Δεν επαληθεύεται με δεύτερη ερώτηση, σε αντίθεση με τον τερματισμό: η
+  /// συνεδρία **παραμένει** στη λίστα, απλώς αλλάζει κατάσταση σε «σε
+  /// αναμονή». Το να ψάχναμε την εξαφάνισή της θα ήταν λάθος κριτήριο.
+  Future<SessionLogoffResult> disconnect({
+    required String host,
+    required String adminUser,
+    required String adminPassword,
+    required int sessionId,
+    Duration timeout = defaultTimeout,
+  }) async {
+    final guard = _guardInputs(
+      host: host,
+      adminUser: adminUser,
+      adminPassword: adminPassword,
+    );
+    if (guard != null) return SessionLogoffResult.failure(guard);
+
+    final h = host.trim();
+    final u = adminUser.trim();
+
+    try {
+      final raw = await Isolate.run(
+        () => _disconnectInIsolate(h, u, adminPassword, sessionId),
+      ).timeout(timeout);
+
+      if (!raw.ok) {
+        return SessionLogoffResult.failure(
+          raw.connectFailed
+              ? ServerSessionMessages.forConnect(
+                  code: raw.code,
+                  host: h,
+                  account: u,
+                )
+              : ServerSessionMessages.forDisconnect(
+                  code: raw.code,
+                  host: h,
+                  adminUser: u,
+                ),
+        );
+      }
+      return const SessionLogoffResult.success();
+    } on TimeoutException {
+      return SessionLogoffResult.failure(
+        'Ο διακομιστής $h δεν απάντησε μέσα σε ${timeout.inSeconds} '
+        'δευτερόλεπτα. Πάτα «Ανανέωση» για να δεις αν η οθόνη αποσυνδέθηκε.',
+      );
+    } catch (e) {
+      return SessionLogoffResult.failure(
+        'Απρόσμενο σφάλμα κατά την αποσύνδεση οθόνης στον $h: $e',
+      );
+    }
+  }
+
   /// Έλεγχοι που δεν χρειάζονται δίκτυο. Επιστρέφει μήνυμα ή `null` όταν όλα καλά.
   static String? _guardInputs({
     required String host,
@@ -246,6 +301,37 @@ _IsolateResult _logoffInIsolate(
       }
     }
     return (ok: true, connectFailed: false, code: 0, sessions: const []);
+  } finally {
+    WindowsSessionFfi.disconnectShare(host);
+  }
+}
+
+_IsolateResult _disconnectInIsolate(
+  String host,
+  String user,
+  String password,
+  int sessionId,
+) {
+  final rc = WindowsSessionFfi.connectIpcShare(
+    host: host,
+    user: user,
+    password: password,
+  );
+  if (rc != 0) {
+    WindowsSessionFfi.disconnectShare(host);
+    return (ok: false, connectFailed: true, code: rc, sessions: const []);
+  }
+  try {
+    final result = WindowsSessionFfi.disconnectSession(
+      host: host,
+      sessionId: sessionId,
+    );
+    return (
+      ok: result.ok,
+      connectFailed: false,
+      code: result.code,
+      sessions: const [],
+    );
   } finally {
     WindowsSessionFfi.disconnectShare(host);
   }

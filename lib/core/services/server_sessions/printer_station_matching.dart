@@ -2,7 +2,11 @@ import 'server_printer_models.dart';
 import 'server_session_models.dart';
 
 /// Τα στοιχεία που κρύβει το όνομα ενός ανακατευθυνόμενου εκτυπωτή.
-typedef ParsedPrinterName = ({String displayName, String station, int? session});
+typedef ParsedPrinterName = ({
+  String displayName,
+  String station,
+  int? session,
+});
 
 /// Ανάλυση ονόματος εκτυπωτή και ταίριασμα με σταθμό — καθαρές συναρτήσεις.
 ///
@@ -98,10 +102,7 @@ abstract final class PrinterStationMatching {
       if (!byName && !bySession) continue;
 
       out.add(
-        StationPrinter(
-          printer: p,
-          isOrphan: _isOrphan(p, liveSessionIds),
-        ),
+        StationPrinter(printer: p, isOrphan: _isOrphan(p, liveSessionIds)),
       );
     }
 

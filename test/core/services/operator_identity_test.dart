@@ -238,27 +238,30 @@ void main() {
       expect(second.isAdmin, isFalse);
     });
 
-    test('σε βάση με μόνο αρχειοθετημένα ο νέος γίνεται διαχειριστής', () async {
-      // Δεν υπάρχει κανείς να ρωτηθεί «ποιος είναι ο διαχειριστής;»: όποιος
-      // συστήνεται τώρα είναι η μόνη διέξοδος από το κλείδωμα.
-      await repository.insert(
-        Operator(
-          displayName: 'Παναγιώτης',
-          isAdmin: true,
-          isActive: false,
-          createdAt: DateTime(2026, 8, 20),
-        ),
-      );
+    test(
+      'σε βάση με μόνο αρχειοθετημένα ο νέος γίνεται διαχειριστής',
+      () async {
+        // Δεν υπάρχει κανείς να ρωτηθεί «ποιος είναι ο διαχειριστής;»: όποιος
+        // συστήνεται τώρα είναι η μόνη διέξοδος από το κλείδωμα.
+        await repository.insert(
+          Operator(
+            displayName: 'Παναγιώτης',
+            isAdmin: true,
+            isActive: false,
+            createdAt: DateTime(2026, 8, 20),
+          ),
+        );
 
-      final created = await OperatorIdentity.createAndActivate(
-        db,
-        displayName: 'Βαρβάρα',
-        bindCurrentAccount: false,
-        now: DateTime(2026, 8, 26),
-      );
+        final created = await OperatorIdentity.createAndActivate(
+          db,
+          displayName: 'Βαρβάρα',
+          bindCurrentAccount: false,
+          now: DateTime(2026, 8, 26),
+        );
 
-      expect(created.isAdmin, isTrue);
-    });
+        expect(created.isAdmin, isTrue);
+      },
+    );
 
     test('με ενεργά προφίλ ο νέος ΔΕΝ γίνεται σιωπηλά διαχειριστής', () async {
       // Εδώ υπάρχει ποιον να ρωτήσεις — τη σήμανση την αναλαμβάνει η ρητή

@@ -349,13 +349,7 @@ abstract final class PrinterRpcPolicy {
       final pathPtr = registryPath.toNativeUtf16();
       final keyPtr = calloc<IntPtr>();
       try {
-        final opened = openKey(
-          _hkeyLocalMachine,
-          pathPtr,
-          0,
-          _keyRead,
-          keyPtr,
-        );
+        final opened = openKey(_hkeyLocalMachine, pathPtr, 0, _keyRead, keyPtr);
         if (opened == _errorFileNotFound) {
           // Το κλειδί δεν υπάρχει: καμία ρύθμιση περασμένη. Είναι απάντηση,
           // όχι αποτυχία ανάγνωσης — γι' αυτό δεν γυρίζει «άγνωστο».

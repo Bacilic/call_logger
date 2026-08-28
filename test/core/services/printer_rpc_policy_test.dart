@@ -65,13 +65,16 @@ void main() {
       expect(state.missingLabels, hasLength(2));
     });
 
-    test('αδιάβαστο μητρώο δεν παριστάνει το «όλα καλά» ούτε το «χαλασμένο»', () {
-      const state = PrinterRpcPolicyState.unreadable();
+    test(
+      'αδιάβαστο μητρώο δεν παριστάνει το «όλα καλά» ούτε το «χαλασμένο»',
+      () {
+        const state = PrinterRpcPolicyState.unreadable();
 
-      expect(state.status, PrinterRpcPolicyStatus.unknown);
-      // Το «άγνωστο» ΔΕΝ προσφέρει διόρθωση: δεν ξέρουμε αν χρειάζεται.
-      expect(state.status.isProblem, isFalse);
-    });
+        expect(state.status, PrinterRpcPolicyStatus.unknown);
+        // Το «άγνωστο» ΔΕΝ προσφέρει διόρθωση: δεν ξέρουμε αν χρειάζεται.
+        expect(state.status.isProblem, isFalse);
+      },
+    );
   });
 
   group('Εντολή ανύψωσης δικαιωμάτων', () {

@@ -56,6 +56,36 @@ class CallsLayoutVisibility {
 class CallsLayoutEngine {
   const CallsLayoutEngine._();
 
+  /// ΕΝΑ ΣΗΜΕΙΟ ΑΠΟΦΑΣΗΣ: πότε μπαίνει η εφεδρική κάρτα «Ενέργειες υπολογιστή».
+  ///
+  /// Είναι η άρνηση της ίδιας ερώτησης που ανοίγει την κάρτα ιστορικού, γι'
+  /// αυτό οι δύο κάρτες δεν μπορούν να εμφανιστούν μαζί ούτε να λείψουν και οι
+  /// δύο: όσο υπάρχει ενεργός εξοπλισμός, μία από τις δύο κρατά τη θέση.
+  ///
+  /// Κρίνεται στα **δεδομένα** ([CallsLayoutVisibility.hasEquipmentHistoryData])
+  /// και όχι στην ορατότητα της κάρτας: όποιος έκλεισε το «Ιστορικό
+  /// Εξοπλισμού» από τις ρυθμίσεις δεν πρέπει να το βλέπει να επιστρέφει με
+  /// άλλο πρόσωπο.
+  static bool showEquipmentActions(
+    CallsFieldGroups groups,
+    CallsLayoutVisibility visibility,
+  ) =>
+      groups.isEquipmentGroupActive && !visibility.hasEquipmentHistoryData;
+
+  /// Η στήλη εξοπλισμού μιας γραμμής: ιστορικό ή, εφεδρικά, ενέργειες.
+  static List<CallsLayoutColumn> _equipmentPanelColumns(
+    CallsFieldGroups groups,
+    CallsLayoutVisibility v,
+  ) {
+    if (v.showEquipmentRecentPanel) {
+      return [CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory)];
+    }
+    if (showEquipmentActions(groups, v)) {
+      return [CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentActions)];
+    }
+    return const [];
+  }
+
   static CallsLayoutPlan build(
     CallsFieldGroups groups,
     CallsLayoutVisibility visibility,
@@ -123,8 +153,7 @@ class CallsLayoutEngine {
         ]),
       if (v.showRemoteTools)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
-      if (v.showEquipmentRecentPanel)
-        CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
+      ..._equipmentPanelColumns(groups, v),
     ];
 
     final rows = <CallsLayoutRow>[
@@ -166,8 +195,7 @@ class CallsLayoutEngine {
     ]);
 
     final rowHistory = CallsLayoutRow([
-      if (v.showEquipmentRecentPanel)
-        CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
+      ..._equipmentPanelColumns(groups, v),
       if (v.showEmployeeRecentCard)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.callerHistory),
       if (v.showGlobalRecentCard)
@@ -209,8 +237,7 @@ class CallsLayoutEngine {
       if (v.showRemoteTools)
         CallsLayoutColumn.singleSlot(CallsLayoutSlot.remoteTools),
       if (v.showMapCard) CallsLayoutColumn.singleSlot(CallsLayoutSlot.map),
-      if (v.showEquipmentRecentPanel)
-        CallsLayoutColumn.singleSlot(CallsLayoutSlot.equipmentHistory),
+      ..._equipmentPanelColumns(groups, v),
     ]);
 
     final row3Cols = <CallsLayoutColumn>[
