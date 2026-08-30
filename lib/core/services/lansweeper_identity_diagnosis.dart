@@ -229,6 +229,28 @@ LansweeperIdentityDiagnosis _diagnoseEmail(String trimmed) {
   );
 }
 
+/// Η ταυτότητα πράκτορα Lansweeper **όπως τη γνωρίζει** η εφαρμογή.
+///
+/// Ξεχωρίζει δύο καταστάσεις που έμοιαζαν ίδιες όσο ταξίδευαν ως σκέτο
+/// `String?`, και που οδηγούν σε **διαφορετικό** αποτέλεσμα:
+/// • **δεν έχει οριστεί** — θεμιτό· η εφεδρεία της ψηφοφορίας είναι σωστή·
+/// • **δεν διαβάστηκε** — άγνωστη· η ψηφοφορία θα ήταν εικασία, και μια
+///   εικασία εδώ σημαίνει σωστές εγγραφές σημαδεμένες ως ύποπτες.
+class LansweeperAgentIdentity {
+  /// Διαβάστηκε: [value] η τιμή, ή `null` όταν δεν έχει οριστεί ποτέ.
+  const LansweeperAgentIdentity.read(this.value) : unavailable = false;
+
+  /// ΔΕΝ διαβάστηκε — άγνωστη, όχι ανύπαρκτη.
+  const LansweeperAgentIdentity.unavailable()
+    : value = null,
+      unavailable = true;
+
+  final String? value;
+
+  /// True όταν η ανάγνωση απέτυχε.
+  final bool unavailable;
+}
+
 /// Ο τομέας αναφοράς για τις ήπιες υποψίες τυπογραφικού.
 ///
 /// Δύο πηγές, με σειρά προτίμησης:
@@ -237,17 +259,23 @@ LansweeperIdentityDiagnosis _diagnoseEmail(String trimmed) {
 /// 2. Ο ΠΛΕΙΟΨΗΦΙΚΟΣ τομέας των [knownIdentities] (τα ήδη αποθηκευμένα
 ///    αναγνωριστικά του καταλόγου): χρειάζονται τουλάχιστον 2 ψήφοι και
 ///    καθαρή πρωτιά — ισοπαλία σημαίνει «δεν υπάρχει συνηθισμένος τομέας».
+///
+/// **Άγνωστος πράκτορας σταματά και τις δύο πηγές.** Η δεύτερη είναι
+/// εφεδρεία του «δεν έχει οριστεί», όχι του «δεν ξέρω»: με πράκτορα ενός
+/// τομέα και κατάλογο γεμάτο από άλλον, η ψηφοφορία θα έκρινε με λάθος
+/// μέτρο και θα σημάδευε πορτοκαλί ακριβώς τις σωστές εγγραφές.
 String? lansweeperReferenceDomain({
-  String? agentIdentity,
+  LansweeperAgentIdentity agent = const LansweeperAgentIdentity.read(null),
   Iterable<String> knownIdentities = const [],
 }) {
-  final agent = (agentIdentity ?? '').trim();
-  final agentSeparator = agent.indexOf(r'\');
+  if (agent.unavailable) return null;
+  final agentValue = (agent.value ?? '').trim();
+  final agentSeparator = agentValue.indexOf(r'\');
   if (agentSeparator > 0) {
-    final agentDiagnosis = diagnoseLansweeperIdentity(agent);
+    final agentDiagnosis = diagnoseLansweeperIdentity(agentValue);
     if (agentDiagnosis.isValid &&
         agentDiagnosis.kind == LansweeperIdentityKind.domainAccount) {
-      return agent.substring(0, agentSeparator);
+      return agentValue.substring(0, agentSeparator);
     }
   }
 

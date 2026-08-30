@@ -80,7 +80,9 @@ String registrationOutcomeMessage({
 }) {
   final parts = <String>[];
   if (registered > 0) {
-    parts.add(registrationSuccessMessage(count: registered, ticketId: ticketId));
+    parts.add(
+      registrationSuccessMessage(count: registered, ticketId: ticketId),
+    );
   }
   if (skipped > 0) {
     parts.add(

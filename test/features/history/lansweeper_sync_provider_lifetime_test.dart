@@ -60,26 +60,23 @@ void main() {
       );
     });
 
-    test(
-      'η επαναφορά σε ακαταχώρητη ολοκληρώνεται χωρίς ακροατή',
-      () async {
-        final callId = await _insertSentCall();
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
-        );
-        addTearDown(container.dispose);
+    test('η επαναφορά σε ακαταχώρητη ολοκληρώνεται χωρίς ακροατή', () async {
+      final callId = await _insertSentCall();
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
 
-        // Ακριβώς ό,τι κάνει το μενού γραμμής: ένα read, κανένα watch.
-        final notifier = container.read(lansweeperSyncProvider.notifier);
-        await Future<void>.delayed(Duration.zero);
+      // Ακριβώς ό,τι κάνει το μενού γραμμής: ένα read, κανένα watch.
+      final notifier = container.read(lansweeperSyncProvider.notifier);
+      await Future<void>.delayed(Duration.zero);
 
-        final written = await notifier.setUnsent(callId, expected: null);
+      final written = await notifier.setUnsent(callId, expected: null);
 
-        expect(written, isTrue);
-        final db = await DatabaseHelper.instance.database;
-        final stored = await CallsRepository(db).getCallById(callId);
-        expect(stored?.lansweeperState, LansweeperSyncState.unsent);
-      },
-    );
+      expect(written, isTrue);
+      final db = await DatabaseHelper.instance.database;
+      final stored = await CallsRepository(db).getCallById(callId);
+      expect(stored?.lansweeperState, LansweeperSyncState.unsent);
+    });
   });
 }

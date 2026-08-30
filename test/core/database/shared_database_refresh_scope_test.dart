@@ -44,48 +44,50 @@ void main() {
       );
     });
 
-    test('φτάνει στο Ιστορικό, στους μετρητές και στην ουρά της Αναφοράς',
-        () async {
-      final container = ProviderContainer(
-        overrides: callLoggerTestProviderOverrides(),
-      );
-      addTearDown(container.dispose);
-      container.read(_refCaptureProvider);
+    test(
+      'φτάνει στο Ιστορικό, στους μετρητές και στην ουρά της Αναφοράς',
+      () async {
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+        container.read(_refCaptureProvider);
 
-      container.listen(historyCallsProvider, (_, _) {});
-      container.listen(totalCallsCountProvider, (_, _) {});
-      container.listen(lansweeperReportCallsProvider, (_, _) {});
+        container.listen(historyCallsProvider, (_, _) {});
+        container.listen(totalCallsCountProvider, (_, _) {});
+        container.listen(lansweeperReportCallsProvider, (_, _) {});
 
-      await container.read(historyCallsProvider.future);
-      await container.read(totalCallsCountProvider.future);
-      await container.read(lansweeperReportCallsProvider.future);
+        await container.read(historyCallsProvider.future);
+        await container.read(totalCallsCountProvider.future);
+        await container.read(lansweeperReportCallsProvider.future);
 
-      expect(
-        container.read(historyCallsProvider).hasValue,
-        isTrue,
-        reason: 'προϋπόθεση: οι οθόνες έχουν φορτώσει πριν την ξένη εγγραφή',
-      );
+        expect(
+          container.read(historyCallsProvider).hasValue,
+          isTrue,
+          reason: 'προϋπόθεση: οι οθόνες έχουν φορτώσει πριν την ξένη εγγραφή',
+        );
 
-      await refreshSharedDatabaseViews(_capturedRef!);
+        await refreshSharedDatabaseViews(_capturedRef!);
 
-      expect(
-        container.read(historyCallsProvider).isLoading,
-        isTrue,
-        reason: 'το Ιστορικό πρέπει να ξαναρωτά μετά από ξένη εγγραφή',
-      );
-      expect(
-        container.read(totalCallsCountProvider).isLoading,
-        isTrue,
-        reason: 'οι μετρητές των Στατιστικών το ίδιο',
-      );
-      expect(
-        container.read(lansweeperReportCallsProvider).isLoading,
-        isTrue,
-        reason:
-            'η ουρά της Αναφοράς είναι το πιεστικό: δύο άνθρωποι τη δουλεύουν '
-            'ταυτόχρονα κάθε μεσημέρι',
-      );
-    });
+        expect(
+          container.read(historyCallsProvider).isLoading,
+          isTrue,
+          reason: 'το Ιστορικό πρέπει να ξαναρωτά μετά από ξένη εγγραφή',
+        );
+        expect(
+          container.read(totalCallsCountProvider).isLoading,
+          isTrue,
+          reason: 'οι μετρητές των Στατιστικών το ίδιο',
+        );
+        expect(
+          container.read(lansweeperReportCallsProvider).isLoading,
+          isTrue,
+          reason:
+              'η ουρά της Αναφοράς είναι το πιεστικό: δύο άνθρωποι τη δουλεύουν '
+              'ταυτόχρονα κάθε μεσημέρι',
+        );
+      },
+    );
 
     test('φτάνει και στα τμήματα, που τροφοδοτούν τον χάρτη κτιρίου', () async {
       final container = ProviderContainer(
@@ -105,9 +107,9 @@ void main() {
 
       // Το άλλο μηχάνημα τοποθετεί νέο τμήμα στον χάρτη.
       final db = await DatabaseHelper.instance.database;
-      await DepartmentRepository(db).getOrCreateDepartmentIdByName(
-        'Ακτινολογικό',
-      );
+      await DepartmentRepository(
+        db,
+      ).getOrCreateDepartmentIdByName('Ακτινολογικό');
 
       await refreshSharedDatabaseViews(_capturedRef!);
 
@@ -138,7 +140,8 @@ void main() {
       expect(
         container.read(historyCallsProvider).value,
         isNotNull,
-        reason: 'λίστα που αδειάζει κάθε 12 δευτερόλεπτα είναι χειρότερη από '
+        reason:
+            'λίστα που αδειάζει κάθε 12 δευτερόλεπτα είναι χειρότερη από '
             'μπαγιάτικη',
       );
       expect(container.read(historyCallsProvider).value, isNotEmpty);

@@ -79,7 +79,10 @@ void main() {
       if (!File(current.path).existsSync()) continue;
 
       final imports = importsOf(current.path);
-      final trail = [...current.trail, p.relative(current.path, from: projectRoot)];
+      final trail = [
+        ...current.trail,
+        p.relative(current.path, from: projectRoot),
+      ];
 
       for (final pkg in imports.packages) {
         for (final forbidden in forbiddenPackages) {
@@ -108,7 +111,13 @@ void main() {
     // Ο μοναδικός λόγος ύπαρξής του: να μπορεί να διαβαστεί έξω από το
     // Flutter. Ένα import αρκεί για να το ακυρώσει.
     final file = File(
-      p.join(projectRoot, 'lib', 'core', 'database', 'database_schema_version.dart'),
+      p.join(
+        projectRoot,
+        'lib',
+        'core',
+        'database',
+        'database_schema_version.dart',
+      ),
     );
     expect(file.existsSync(), isTrue);
     expect(

@@ -14,10 +14,19 @@ import 'database_settings_restore_tab.dart';
 /// κρατούν την κατάστασή τους όσο ζει ο διάλογος (keep-alive), όπως όταν όλα
 /// τα τμήματα κατοικούσαν σε ένα ενιαίο πάνελ.
 class DatabaseSettingsPanel extends StatelessWidget {
-  const DatabaseSettingsPanel({super.key, this.onDatabaseLifecycleChanged});
+  const DatabaseSettingsPanel({
+    super.key,
+    this.onDatabaseLifecycleChanged,
+    this.initialTabIndex = 0,
+  });
 
   /// Μετά από επιτυχή αλλαγή διαδρομής (επαλήθευση) ή δημιουργία νέου αρχείου βάσης.
   final Future<void> Function()? onDatabaseLifecycleChanged;
+
+  /// Ποια καρτέλα είναι μπροστά όταν ανοίγει (0: Βάση, 1: Αντίγραφα,
+  /// 2: Επαναφορά, 3: Συντήρηση). Όποιος έρχεται από αλλού για συγκεκριμένη
+  /// ρύθμιση τη βρίσκει χωρίς δεύτερο κλικ.
+  final int initialTabIndex;
 
   Widget _tab(IconData icon, String label) {
     return Tab(
@@ -44,6 +53,7 @@ class DatabaseSettingsPanel extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         child: DefaultTabController(
           length: 4,
+          initialIndex: initialTabIndex.clamp(0, 3),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

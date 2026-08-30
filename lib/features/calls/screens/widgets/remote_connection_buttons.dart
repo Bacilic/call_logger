@@ -357,8 +357,7 @@ class _RemoteConnectionButtonsState
                                         status: _statusFor(t, target),
                                         pathValid: pathMap[t.id] != null,
                                         enabled:
-                                            canConnect &&
-                                            pathMap[t.id] != null,
+                                            canConnect && pathMap[t.id] != null,
                                         subtitle:
                                             CallRemoteTargets.targetSubtitle(
                                               widget.header,

@@ -42,23 +42,26 @@ void main() {
     expect(await repo.countPendingSince(await repo.latestAuditId()), 0);
   });
 
-  test('οι εγγραφές του μηχανισμού αντιγράφων δεν μετρούν ως αλλαγές', () async {
-    final db = await DatabaseHelper.instance.database;
-    final repo = BackupPendingChangesRepository(db);
+  test(
+    'οι εγγραφές του μηχανισμού αντιγράφων δεν μετρούν ως αλλαγές',
+    () async {
+      final db = await DatabaseHelper.instance.database;
+      final repo = BackupPendingChangesRepository(db);
 
-    final mark = await _insertAudit();
-    await _insertAudit(entityType: 'backup');
-    await _insertAudit(entityType: 'backup');
+      final mark = await _insertAudit();
+      await _insertAudit(entityType: 'backup');
+      await _insertAudit(entityType: 'backup');
 
-    expect(
-      await repo.countPendingSince(mark),
-      0,
-      reason: 'Μόνο πραγματικές αλλαγές ξαναοπλίζουν τον μετρητή.',
-    );
+      expect(
+        await repo.countPendingSince(mark),
+        0,
+        reason: 'Μόνο πραγματικές αλλαγές ξαναοπλίζουν τον μετρητή.',
+      );
 
-    await _insertAudit(entityType: 'user');
-    expect(await repo.countPendingSince(mark), 1);
-  });
+      await _insertAudit(entityType: 'user');
+      expect(await repo.countPendingSince(mark), 1);
+    },
+  );
 
   group('χωρίς σημάδι: μέτρημα από το τελευταίο γνωστό αντίγραφο', () {
     Future<void> insertAuditAt(DateTime at, {String? entityType}) async {
@@ -97,7 +100,8 @@ void main() {
       expect(
         await repo.countPendingSince(null),
         5,
-        reason: 'Χωρίς καμία αναφορά, τίποτα δεν είναι αποδεδειγμένα φυλαγμένο.',
+        reason:
+            'Χωρίς καμία αναφορά, τίποτα δεν είναι αποδεδειγμένα φυλαγμένο.',
       );
     });
 
@@ -110,10 +114,7 @@ void main() {
       await insertAuditAt(DateTime(2026, 8, 24, 11, 0));
 
       expect(
-        await repo.countPendingSince(
-          mark,
-          fallbackSince: DateTime(2020, 1, 1),
-        ),
+        await repo.countPendingSince(mark, fallbackSince: DateTime(2020, 1, 1)),
         1,
         reason: 'Το ακριβές σημάδι δεν παρακάμπτεται από τον χρόνο.',
       );

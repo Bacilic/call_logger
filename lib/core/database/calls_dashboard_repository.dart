@@ -5,6 +5,7 @@ import '../../features/calls/models/call_model.dart';
 import '../../features/history/models/dashboard_filter_model.dart';
 import '../../features/history/models/dashboard_summary_model.dart';
 import '../utils/search_text_normalizer.dart';
+import 'call_entity_filters.dart';
 
 /// Στατιστικά και λίστες κλήσεων για τον πίνακα ελέγχου (μόνο αναγνώσεις).
 class CallsDashboardRepository {
@@ -12,59 +13,20 @@ class CallsDashboardRepository {
 
   final Database db;
 
-  void _appendDashboardUserFilter(
-    List<String> whereClauses,
-    List<dynamic> args,
-    String userPhoneExpr,
-    String userQuery,
-  ) {
-    final nq = SearchTextNormalizer.normalizeForSearch(userQuery);
-    if (nq.isEmpty) return;
-    whereClauses.add('(calls.search_index LIKE ? OR $userPhoneExpr LIKE ?)');
-    args.add('%$nq%');
-    args.add('%$nq%');
-  }
-
   /// Στατιστικά κλήσεων για πίνακα ελέγχου: KPIs, ανά τμήμα, ανά βλάβη (`issue`).
   Future<DashboardSummaryModel> getDashboardStatistics(
     DashboardFilterModel filter,
   ) async {
-    const userPhoneExpr =
-        "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
-    const deptExpr = "COALESCE(departments.name, calls.department_text, '-')";
-    const equipExpr =
-        "COALESCE(equipment.code_equipment, calls.equipment_text, '')";
-    const callerNameExpr =
-        "TRIM(COALESCE(users.first_name, '') || ' ' || COALESCE(users.last_name, ''))";
-    const callerLabelExpr =
-        "CASE WHEN TRIM($callerNameExpr) = '' "
-        "THEN COALESCE(NULLIF(TRIM(calls.caller_text), ''), '-') "
-        "ELSE TRIM($callerNameExpr) END";
-
     final whereClausesBase = <String>['COALESCE(calls.is_deleted, 0) = 0'];
     final argsBase = <dynamic>[];
 
-    final dept = filter.department?.trim();
-    if (dept != null && dept.isNotEmpty) {
-      whereClausesBase.add('$deptExpr = ?');
-      argsBase.add(dept);
-    }
-
-    final userQ = filter.userName?.trim();
-    if (userQ != null && userQ.isNotEmpty) {
-      _appendDashboardUserFilter(
-        whereClausesBase,
-        argsBase,
-        userPhoneExpr,
-        userQ,
-      );
-    }
-
-    final eqQ = filter.equipmentCode?.trim();
-    if (eqQ != null && eqQ.isNotEmpty) {
-      whereClausesBase.add('$equipExpr LIKE ?');
-      argsBase.add('%$eqQ%');
-    }
+    appendCallEntityFilters(
+      whereClausesBase,
+      argsBase,
+      department: filter.department,
+      userName: filter.userName,
+      equipmentCode: filter.equipmentCode,
+    );
 
     final kw = filter.keyword.trim();
     if (kw.isNotEmpty) {
@@ -173,11 +135,11 @@ WHERE ${wherePreviousPeriod.join(' AND ')}
     }
 
     final deptRows = await db.rawQuery('''
-      SELECT $deptExpr AS dept_name,
+      SELECT $kCallDepartmentExpr AS dept_name,
              COUNT(*) AS cnt,
              COALESCE(SUM(calls.duration), 0) AS sum_dur
       $fromJoin
-      GROUP BY $deptExpr
+      GROUP BY $kCallDepartmentExpr
       ORDER BY cnt DESC
       ''', args);
 
@@ -233,17 +195,17 @@ WHERE ${whereTrend.join(' AND ')}
       ''', argsTrend);
 
     final topCallerRows = await db.rawQuery('''
-      SELECT $callerLabelExpr AS caller_name,
+      SELECT $kCallCallerLabelExpr AS caller_name,
              COUNT(*) AS cnt
       $fromJoin
-      GROUP BY $callerLabelExpr
+      GROUP BY $kCallCallerLabelExpr
       ORDER BY cnt DESC, caller_name ASC
       LIMIT 10
       ''', args);
 
     final longestRows = await db.rawQuery('''
-      SELECT $callerLabelExpr AS caller_name,
-             $deptExpr AS dept_name,
+      SELECT $kCallCallerLabelExpr AS caller_name,
+             $kCallDepartmentExpr AS dept_name,
              COALESCE(calls.duration, 0) AS dur
       $fromJoin
       ORDER BY dur DESC, caller_name ASC
@@ -253,11 +215,11 @@ WHERE ${whereTrend.join(' AND ')}
     // Συγκεντρωτικός χρόνος ανά καλούντα: άλλο ερώτημα από τις μεμονωμένες
     // κλήσεις — λίγες μεγάλες ζυγίζουν διαφορετικά από πολλές σύντομες.
     final callerTotalsRows = await db.rawQuery('''
-      SELECT $callerLabelExpr AS caller_name,
+      SELECT $kCallCallerLabelExpr AS caller_name,
              COUNT(*) AS cnt,
              COALESCE(SUM(calls.duration), 0) AS total_dur
       $fromJoin
-      GROUP BY $callerLabelExpr
+      GROUP BY $kCallCallerLabelExpr
       ORDER BY total_dur DESC, caller_name ASC
       LIMIT 20
       ''', args);
@@ -566,37 +528,16 @@ WHERE ${whereSpark.join(' AND ')}
 
   /// Κλήσεις για αναφορά dashboard (Lansweeper) με τα ίδια φίλτρα των KPIs.
   Future<List<CallModel>> getDashboardCalls(DashboardFilterModel filter) async {
-    const userPhoneExpr =
-        "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
-    const deptExpr = "COALESCE(departments.name, calls.department_text, '-')";
-    const equipExpr =
-        "COALESCE(equipment.code_equipment, calls.equipment_text, '')";
-    const callerNameExpr =
-        "TRIM(COALESCE(users.first_name, '') || ' ' || COALESCE(users.last_name, ''))";
-    const callerLabelExpr =
-        "CASE WHEN TRIM($callerNameExpr) = '' "
-        "THEN COALESCE(NULLIF(TRIM(calls.caller_text), ''), '-') "
-        "ELSE TRIM($callerNameExpr) END";
-
     final whereClauses = <String>['COALESCE(calls.is_deleted, 0) = 0'];
     final args = <dynamic>[];
 
-    final dept = filter.department?.trim();
-    if (dept != null && dept.isNotEmpty) {
-      whereClauses.add('$deptExpr = ?');
-      args.add(dept);
-    }
-
-    final userQ = filter.userName?.trim();
-    if (userQ != null && userQ.isNotEmpty) {
-      _appendDashboardUserFilter(whereClauses, args, userPhoneExpr, userQ);
-    }
-
-    final eqQ = filter.equipmentCode?.trim();
-    if (eqQ != null && eqQ.isNotEmpty) {
-      whereClauses.add('$equipExpr LIKE ?');
-      args.add('%$eqQ%');
-    }
+    appendCallEntityFilters(
+      whereClauses,
+      args,
+      department: filter.department,
+      userName: filter.userName,
+      equipmentCode: filter.equipmentCode,
+    );
 
     final kw = filter.keyword.trim();
     if (kw.isNotEmpty) {
@@ -625,7 +566,7 @@ WHERE ${whereSpark.join(' AND ')}
         calls.time,
         calls.caller_id,
         calls.equipment_id,
-        $callerLabelExpr AS caller_text,
+        $kCallCallerLabelExpr AS caller_text,
         calls.phone_text,
         calls.department_text,
         calls.equipment_text,

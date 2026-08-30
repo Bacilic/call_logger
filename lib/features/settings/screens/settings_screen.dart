@@ -10,12 +10,14 @@ import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/window_placement_mode.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../core/providers/settings_route_intent_provider.dart';
 import '../../../core/services/crash_log_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/shutdown_trace_incident.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/widgets/save_on_focus_loss.dart';
 import '../../../core/services/spell_check_activation.dart';
 import '../../database/services/database_maintenance_service.dart';
 import '../../calls/provider/remote_paths_provider.dart';
@@ -31,6 +33,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
     this.openCreateDatabaseOnStart = false,
     this.onAfterDatabaseChanged,
     this.updateFolderSetting,
+    this.initialSection,
   });
 
   /// Μετά το πρώτο frame ανοίγει ο διάλογος δημιουργίας νέου αρχείου βάσης.
@@ -41,6 +44,10 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
   /// Προαιρετικό πεδίο φακέλου ενημερώσεων (τεστ / έγχυση).
   final Widget? updateFolderSetting;
+
+  /// Ενότητα που φέρνει μπροστά της τον χρήστη μόλις ανοίξει η οθόνη —
+  /// όταν έρχεται από αλλού για συγκεκριμένη ρύθμιση.
+  final SettingsSection? initialSection;
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -59,6 +66,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _showDatabaseNav = true;
   bool _showLampNav = true;
   bool _showDictionaryNav = true;
+  bool _showKnowledgeNav = true;
   bool _showQuickCallFab = true;
   bool _spellCheckFlashHighlight = false;
   bool _spellCheckFlashPlaying = false;
@@ -70,6 +78,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _crashLogRetentionCount = SettingsService.defaultCrashLogRetentionCount;
   String _logsDirectoryPath = '';
 
+  /// Η ενότητα «Ενημερώσεις», ώστε να μπορεί να κυλήσει μπροστά.
+  final GlobalKey _updatesSectionKey = GlobalKey();
+
+  /// Σύντομος τονισμός της ενότητας στην οποία ήρθε ο χρήστης: χωρίς αυτόν, η
+  /// κύλιση σε μακριά σελίδα δεν λέει ποια από τις ρυθμίσεις είναι το θέμα.
+  bool _highlightInitialSection = false;
+  Timer? _highlightTimer;
+
   /// Το τελευταίο προβληματικό κλείσιμο, αν υπάρχει· `null` = όλα καθαρά.
   ShutdownTraceIncident? _shutdownIncident;
   bool _showUpdateOnStartup = true;
@@ -78,6 +94,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void initState() {
     super.initState();
     _loadGeneralSettings();
+    if (widget.initialSection != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _revealInitialSection(),
+      );
+    }
     if (widget.openCreateDatabaseOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
@@ -93,9 +114,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   void dispose() {
+    _highlightTimer?.cancel();
     _crashLogRetentionController.dispose();
     _crashLogRetentionFocus.dispose();
     super.dispose();
+  }
+
+  /// Κυλά στην ενότητα-στόχο και την τονίζει για λίγο.
+  Future<void> _revealInitialSection() async {
+    final target = switch (widget.initialSection) {
+      SettingsSection.updates => _updatesSectionKey.currentContext,
+      null => null,
+    };
+    if (target == null || !mounted) return;
+    await Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+      alignment: 0.1,
+    );
+    if (!mounted) return;
+    setState(() => _highlightInitialSection = true);
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(milliseconds: 2200), () {
+      if (mounted) setState(() => _highlightInitialSection = false);
+    });
   }
 
   Future<void> _loadGeneralSettings() async {
@@ -110,6 +153,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final showDatabaseNav = await _settings.windowUi.getShowDatabaseNav();
       final showLampNav = await _settings.windowUi.getShowLampNav();
       final showDictionaryNav = await _settings.windowUi.getShowDictionaryNav();
+      final showKnowledgeNav = await _settings.windowUi.getShowKnowledgeNav();
       final showQuickCallFab = await _settings.windowUi.getShowQuickCallFab();
       final dbOpenTimeout = await _settings.catalogs
           .getDatabaseOpenTimeoutSeconds();
@@ -146,6 +190,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _showDatabaseNav = showDatabaseNav;
           _showLampNav = showLampNav;
           _showDictionaryNav = dictionaryNavVisible;
+          _showKnowledgeNav = showKnowledgeNav;
           _showQuickCallFab = showQuickCallFab;
           _databaseOpenTimeoutSeconds = dbOpenTimeout;
           _databaseOpenMaxAttempts = dbOpenMaxAttempts;
@@ -474,35 +519,53 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 32),
             const Divider(),
             const SizedBox(height: 16),
-            Text(
-              'Ενημερώσεις',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Κοινή διαδρομή: από εκεί παίρνουν όλοι τις εκδόσεις. Ο απλός
-            // χρήστης βλέπει ότι υπάρχει ενημέρωση και την εγκαθιστά κανονικά —
-            // απλώς δεν μετακινεί τον φάκελο για λογαριασμό όλων.
-            if (PermissionService.instance.can(
-              AppPermission.manageUpdateFolder,
-            ))
-              widget.updateFolderSetting ?? const UpdateFolderSettingField(),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _showUpdateOnStartup,
-              onChanged: _isLoadingSettings
-                  ? null
-                  : (value) async {
-                      await _settings.catalogs.setShowUpdateOnStartup(value);
-                      if (mounted) {
-                        setState(() => _showUpdateOnStartup = value);
-                      }
-                    },
-              title: const Text('Εμφάνιση μηνύματος ενημέρωσης στην εκκίνηση'),
-              subtitle: const Text(
-                'Απενεργοποιεί μόνο το αυτόματο μήνυμα· η κόκκινη κουκίδα '
-                'στην έκδοση και ο έλεγχος ενημερώσεων παραμένουν ενεργά.',
+            _HighlightableSection(
+              key: _updatesSectionKey,
+              highlighted:
+                  _highlightInitialSection &&
+                  widget.initialSection == SettingsSection.updates,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Ενημερώσεις',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Κοινή διαδρομή: από εκεί παίρνουν όλοι τις εκδόσεις. Ο
+                  // απλός χρήστης βλέπει ότι υπάρχει ενημέρωση και την
+                  // εγκαθιστά κανονικά — απλώς δεν μετακινεί τον φάκελο για
+                  // λογαριασμό όλων.
+                  if (PermissionService.instance.can(
+                    AppPermission.manageUpdateFolder,
+                  ))
+                    widget.updateFolderSetting ??
+                        const UpdateFolderSettingField(),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _showUpdateOnStartup,
+                    onChanged: _isLoadingSettings
+                        ? null
+                        : (value) async {
+                            await _settings.catalogs.setShowUpdateOnStartup(
+                              value,
+                            );
+                            if (mounted) {
+                              setState(() => _showUpdateOnStartup = value);
+                            }
+                          },
+                    title: const Text(
+                      'Εμφάνιση μηνύματος ενημέρωσης στην εκκίνηση',
+                    ),
+                    subtitle: const Text(
+                      'Απενεργοποιεί μόνο το αυτόματο μήνυμα· η κόκκινη '
+                      'κουκίδα στην έκδοση και ο έλεγχος ενημερώσεων '
+                      'παραμένουν ενεργά.',
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 32),
@@ -532,26 +595,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                         SizedBox(
                           width: 64,
-                          child: TextField(
-                            focusNode: _crashLogRetentionFocus,
-                            controller: _crashLogRetentionController,
-                            textAlign: TextAlign.center,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(2),
-                            ],
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 8,
+                          child: SaveOnFocusLoss(
+                            onLostFocus: _persistCrashLogRetentionCount,
+                            child: TextField(
+                              focusNode: _crashLogRetentionFocus,
+                              controller: _crashLogRetentionController,
+                              textAlign: TextAlign.center,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(2),
+                              ],
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 8,
+                                ),
                               ),
+                              onEditingComplete: _persistCrashLogRetentionCount,
+                              onSubmitted: (_) =>
+                                  _persistCrashLogRetentionCount(),
                             ),
-                            onEditingComplete: _persistCrashLogRetentionCount,
-                            onSubmitted: (_) =>
-                                _persistCrashLogRetentionCount(),
                           ),
                         ),
                       ],
@@ -815,6 +881,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             SwitchListTile(
+              value: !_showKnowledgeNav,
+              secondary: Icon(Icons.healing, color: theme.colorScheme.primary),
+              onChanged: (value) async {
+                final show = !value;
+                await _settings.windowUi.setShowKnowledgeNav(show);
+                if (mounted) setState(() => _showKnowledgeNav = show);
+                ref.invalidate(showKnowledgeNavProvider);
+              },
+              title: const Text('Απόκρυψη Βάσης Γνώσης'),
+              subtitle: const Text(
+                'Κρύβει το στοιχείο πλοήγησης «Βάση Γνώσης» (προβλήματα και λύσεις). Οι λύσεις εξακολουθούν να αποθηκεύονται από τις κλήσεις.',
+              ),
+            ),
+            SwitchListTile(
               value: !_showDictionaryNav,
               secondary: Icon(
                 Icons.menu_book,
@@ -970,6 +1050,36 @@ class _CallsScreenCardsEditorDialogState
           child: const Text('Εντάξει'),
         ),
       ],
+    );
+  }
+}
+
+/// Ενότητα ρυθμίσεων που μπορεί να τονιστεί για λίγο όταν ο χρήστης έρχεται
+/// σε αυτήν από άλλη οθόνη.
+class _HighlightableSection extends StatelessWidget {
+  const _HighlightableSection({
+    super.key,
+    required this.highlighted,
+    required this.child,
+  });
+
+  final bool highlighted;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOut,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: highlighted
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
+            : Colors.transparent,
+      ),
+      child: child,
     );
   }
 }

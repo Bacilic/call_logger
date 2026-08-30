@@ -14,6 +14,8 @@ import '../../directory/screens/widgets/user_form_dialog.dart';
 import '../../directory/services/equipment_form_launcher.dart';
 import '../../../core/services/current_operator.dart';
 import '../../operators/providers/operator_directory_providers.dart';
+import '../../operators/avatars/operator_avatar_image.dart';
+import '../../operators/utils/assignable_operators.dart';
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
 import '../providers/pending_task_delete_provider.dart';
@@ -207,7 +209,13 @@ Future<void> assignTaskFlow(
   final taskId = task.id;
   if (taskId == null) return;
 
-  final operators = await ref.read(activeOperatorsProvider.future);
+  // Τα ενεργά προφίλ, συν τον σημερινό υπεύθυνο ακόμη κι αν έχει
+  // απενεργοποιηθεί: αλλιώς ο διάλογος δείχνει μόνο ενεργούς και «Χωρίς
+  // ανάθεση», και η εκκρεμότητα μοιάζει αδέσποτη ενώ ανήκει κάπου.
+  final operators = operatorsForAssignment(
+    await ref.read(allOperatorsProvider.future),
+    task.assignedOperatorId,
+  );
   if (!context.mounted) return;
 
   final activeId = CurrentOperator.active?.id;
@@ -227,7 +235,9 @@ Future<void> assignTaskFlow(
   Widget option({
     required int? id,
     required String label,
-    IconData icon = Icons.person_outline,
+    IconData? icon,
+    String? avatarKey,
+    bool isDisabledProfile = false,
   }) {
     final isCurrent = task.assignedOperatorId == id;
     final theme = Theme.of(context);
@@ -238,10 +248,30 @@ Future<void> assignTaskFlow(
           : () => Navigator.of(context).pop((assignee: id)),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: color),
+          // Οι δύο γραμμές χωρίς πρόσωπο («Χωρίς ανάθεση») κρατούν εικονίδιο
+          // ενέργειας· τα προφίλ δείχνουν το δικό τους. Και τα δύο πιάνουν το
+          // ίδιο πλάτος, ώστε τα ονόματα να ευθυγραμμίζονται.
+          SizedBox(
+            width: 22,
+            child: icon != null
+                ? Icon(icon, size: 18, color: color)
+                : OperatorAvatarImage(
+                    avatarKey: avatarKey,
+                    size: 22,
+                    muted: isDisabledProfile || isCurrent,
+                  ),
+          ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(label, style: TextStyle(color: color)),
+            child: Text(
+              label,
+              // Πλάγια για το απενεργοποιημένο προφίλ — ίδιο σήμα με το
+              // «(διαγραμμένο)» των οντοτήτων καταλόγου.
+              style: TextStyle(
+                color: color,
+                fontStyle: isDisabledProfile ? FontStyle.italic : null,
+              ),
+            ),
           ),
           if (isCurrent) Icon(Icons.check, size: 18, color: color),
         ],
@@ -258,10 +288,15 @@ Future<void> assignTaskFlow(
           option(
             id: operator.id,
             label: 'Σε εμένα (${operator.displayName})',
-            icon: Icons.person_pin_outlined,
+            avatarKey: operator.avatarKey,
           ),
         for (final operator in others)
-          option(id: operator.id, label: operator.displayName),
+          option(
+            id: operator.id,
+            label: operatorChoiceLabel(operator),
+            avatarKey: operator.avatarKey,
+            isDisabledProfile: !operator.isActive,
+          ),
         const Divider(height: 8),
         option(
           id: null,
@@ -348,12 +383,7 @@ Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
     }
 
     if (result.id != null) {
-      final saved = await saveTaskGuarded(
-        context,
-        ref,
-        result,
-        expected: task,
-      );
+      final saved = await saveTaskGuarded(context, ref, result, expected: task);
       if (!saved) return;
     } else {
       await notifier.addTask(result);
@@ -628,6 +658,20 @@ Future<void> completeTask(
   }
 }
 
+/// Μηνύματα όταν η συνδεδεμένη οντότητα δεν υπάρχει πια στον κατάλογο.
+///
+/// Ο εξοπλισμός το έλεγε ήδη, μέσα από τον κοινό εκκινητή της φόρμας του. Ο
+/// υπάλληλος και το τμήμα γύριζαν σιωπηλά: το πάτημα δεν έκανε τίποτα και το
+/// κουμπί έμοιαζε χαλασμένο.
+const String kCatalogUserMissingMessage =
+    'Ο υπάλληλος δεν βρέθηκε στον κατάλογο.';
+const String kCatalogDepartmentMissingMessage =
+    'Το τμήμα δεν βρέθηκε στον κατάλογο.';
+
+void _showCatalogEntityMissing(BuildContext context, String message) {
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
 Future<bool> editTaskCaller(
   BuildContext context,
   WidgetRef ref,
@@ -636,8 +680,12 @@ Future<bool> editTaskCaller(
   final callerId = task.callerId;
   if (callerId == null) return false;
   final lookupBundle = await ref.read(lookupServiceProvider.future);
+  if (!context.mounted) return false;
   final user = lookupBundle.service.findUserById(callerId);
-  if (user == null) return false;
+  if (user == null) {
+    _showCatalogEntityMissing(context, kCatalogUserMissingMessage);
+    return false;
+  }
 
   final notifier = ref.read(directoryProvider.notifier);
   await notifier.loadUsers();
@@ -672,7 +720,11 @@ Future<bool> editTaskDepartment(
   final department = matchingDepartments.isEmpty
       ? null
       : matchingDepartments.first;
-  if (department == null || !context.mounted) return false;
+  if (!context.mounted) return false;
+  if (department == null) {
+    _showCatalogEntityMissing(context, kCatalogDepartmentMissingMessage);
+    return false;
+  }
 
   var saved = false;
   await showDialog<bool>(

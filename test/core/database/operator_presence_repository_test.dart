@@ -33,6 +33,39 @@ void main() {
       expect(tables, hasLength(1));
     });
 
+    test('πόσοι διαφορετικοί υπολογιστές έχουν ανοίξει τη βάση', () async {
+      // Το αυθεντικό κριτήριο «κοινόχρηστη ή όχι»: όχι η διαδρομή ούτε το
+      // όνομα, αλλά το αν το αρχείο έχει δει παραπάνω από έναν σταθμό.
+      expect(await repository.countDistinctStations(), 0);
+
+      await repository.touch(
+        operatorId: 1,
+        station: 'ΤΠΕ-03',
+        at: DateTime(2026, 8, 21, 10),
+      );
+      expect(await repository.countDistinctStations(), 1);
+
+      // Δεύτερος χρήστης στον ΙΔΙΟ υπολογιστή: εξακολουθεί να είναι ένας.
+      await repository.touch(
+        operatorId: 2,
+        station: 'ΤΠΕ-03',
+        at: DateTime(2026, 8, 21, 11),
+      );
+      expect(
+        await repository.countDistinctStations(),
+        1,
+        reason:
+            'Δύο προφίλ στον ίδιο υπολογιστή δεν κάνουν τη βάση κοινόχρηστη.',
+      );
+
+      await repository.touch(
+        operatorId: 2,
+        station: 'ΤΠΕ-07',
+        at: DateTime(2026, 8, 21, 12),
+      );
+      expect(await repository.countDistinctStations(), 2);
+    });
+
     test('ο ίδιος σταθμός ανανεώνεται, δεν συσσωρεύεται', () async {
       // Αλλιώς ο πίνακας θα γινόταν ημερολόγιο: ένας χτύπος το λεπτό, για
       // πάντα, σε βάση που ζει σε δικτυακό φάκελο.

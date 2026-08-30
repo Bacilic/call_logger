@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
+import '../avatars/operator_avatar_image.dart';
 import '../services/operator_presence_summary.dart';
 
-/// Η ταυτότητα ενός χρήστη σε μορφή κάρτας — αρχικά, όνομα, ρόλος, λογαριασμός
-/// Windows και πότε συνδέθηκε τελευταία φορά.
+/// Η ταυτότητα ενός χρήστη σε μορφή κάρτας — εικονίδιο, όνομα, ρόλος,
+/// λογαριασμός Windows και πότε συνδέθηκε τελευταία φορά.
 ///
 /// **Μία πηγή για δύο πλαίσια:** τη λίστα «Χρήστες» και τον επιλογέα ταυτότητας
 /// («Ποιος χρησιμοποιεί την εφαρμογή;» και «Αλλαγή χρήστη»). Όποιος διαλέγει
@@ -25,25 +26,11 @@ class OperatorIdentityCard extends StatelessWidget {
   /// Έτοιμες γραμμές σύνδεσης — η κάρτα δείχνει, δεν υπολογίζει.
   final List<OperatorPresenceLine> presence;
 
-  /// Σημάνσεις πέρα από τον ρόλο, π.χ. «Εσείς» ή «Αρχειοθετημένος».
+  /// Σημάνσεις πέρα από τον ρόλο, π.χ. «Εσείς» ή «Απενεργοποιημένος».
   final List<String> extraTags;
 
   final Widget? trailing;
   final VoidCallback? onTap;
-
-  String get _initials {
-    final parts = operator.displayName
-        .trim()
-        .split(RegExp(r'[\s.]+'))
-        .where((part) => part.isNotEmpty)
-        .toList();
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) {
-      return parts.first.characters.take(2).toString().toUpperCase();
-    }
-    return (parts[0].characters.first + parts[1].characters.first)
-        .toUpperCase();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,18 +46,13 @@ class OperatorIdentityCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: muted
-              ? theme.colorScheme.surfaceContainerHighest
-              : theme.colorScheme.primaryContainer,
-          child: Text(
-            _initials,
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: muted
-                  ? theme.colorScheme.onSurfaceVariant
-                  : theme.colorScheme.onPrimaryContainer,
-            ),
-          ),
+        // Το εικονίδιο πατά κατευθείαν στην κάρτα, χωρίς χρωματιστό δίσκο από
+        // κάτω: οι φιγούρες είναι σχεδιασμένες να στέκονται μόνες τους, και ο
+        // δίσκος θα έκοβε ό,τι ξεπερνά τον κύκλο — καπέλα, φτερά, αυτιά.
+        leading: OperatorAvatarImage(
+          avatarKey: operator.avatarKey,
+          size: 44,
+          muted: muted,
         ),
         title: Wrap(
           spacing: 8,

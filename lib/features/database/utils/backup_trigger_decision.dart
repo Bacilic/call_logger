@@ -48,10 +48,7 @@ class BackupTriggerDecision {
     required DateTime now,
   }) {
     if (!settings.backupOnExit) {
-      return const BackupTriggerDecision._(
-        false,
-        BackupTriggerReason.disabled,
-      );
+      return const BackupTriggerDecision._(false, BackupTriggerReason.disabled);
     }
     if (settings.destinationDirectory.trim().isEmpty) {
       return const BackupTriggerDecision._(

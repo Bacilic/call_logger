@@ -59,6 +59,17 @@ void resetTestOperator() => CurrentOperator.reset();
 
 Directory? _testTempDir;
 
+/// Λεξικό-πυρήνας που ΔΕΝ έχει φορτωθεί — η κατάσταση όπου το εικονίδιο του
+/// Λεξικού φοράει θαυμαστικό.
+class _UnloadedCoreLexiconNotifier extends CoreLexiconNotifier {
+  @override
+  CoreLexiconState build() {
+    CoreLexiconService.instance.dictionaryService = DictionaryService.empty();
+    CoreLexiconService.instance.state = CoreLexiconState.unloaded;
+    return CoreLexiconState.unloaded;
+  }
+}
+
 class _TestCoreLexiconNotifier extends CoreLexiconNotifier {
   @override
   CoreLexiconState build() {
@@ -268,7 +279,11 @@ Future<void> releaseCallLoggerTestDatabase() async {
 ///
 /// Το [showDatabaseNav] επιτρέπει σε τεστ πλοήγησης να κρύψουν το κουμπί της
 /// βάσης· διπλό override του ίδιου provider στο ίδιο container πετάει σφάλμα.
-List<Override> callLoggerTestProviderOverrides({bool showDatabaseNav = true}) {
+List<Override> callLoggerTestProviderOverrides({
+  bool showDatabaseNav = true,
+  bool showDictionaryNav = true,
+  bool coreLexiconLoaded = true,
+}) {
   return <Override>[
     appInitProvider.overrideWith(
       (ref) async => AppInitResult(
@@ -286,8 +301,12 @@ List<Override> callLoggerTestProviderOverrides({bool showDatabaseNav = true}) {
     showActiveTimerProvider.overrideWith((ref) async => true),
     showTasksBadgeProvider.overrideWith((ref) async => true),
     showDatabaseNavProvider.overrideWith((ref) async => showDatabaseNav),
-    showDictionaryNavProvider.overrideWith((ref) async => true),
-    coreLexiconProvider.overrideWith(() => _TestCoreLexiconNotifier()),
+    showDictionaryNavProvider.overrideWith((ref) async => showDictionaryNav),
+    coreLexiconProvider.overrideWith(
+      () => coreLexiconLoaded
+          ? _TestCoreLexiconNotifier()
+          : _UnloadedCoreLexiconNotifier(),
+    ),
     // Αποφυγή επιπλέον async queries στο `remote_tools` κατά widget tests (locks / timers).
     remoteToolsCatalogProvider.overrideWith(
       (ref) async => const <RemoteTool>[],

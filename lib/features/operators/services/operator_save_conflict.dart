@@ -48,6 +48,9 @@ class OperatorSaveConflict {
     if (expected.isActive != fresh.isActive) {
       changes.add('κατάσταση προφίλ');
     }
+    if (expected.avatarKey != fresh.avatarKey) {
+      changes.add('εικονίδιο');
+    }
     if (!_samePermissions(
       expected.permissionOverrides,
       fresh.permissionOverrides,

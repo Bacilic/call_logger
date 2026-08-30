@@ -9,6 +9,7 @@ import '../../../core/models/app_permission.dart';
 import '../../../core/services/permission_service.dart';
 import '../models/database_backup_settings.dart';
 import '../providers/database_backup_settings_provider.dart';
+import '../providers/database_sharing_provider.dart';
 import '../utils/backup_schedule_status.dart';
 
 /// Πόσο συχνά ξαναμετριούνται οι αφύλακτες αλλαγές όσο η κάρτα είναι ανοιχτή.
@@ -26,10 +27,16 @@ class BackupHealthStatRows extends ConsumerStatefulWidget {
   const BackupHealthStatRows({
     super.key,
     required this.labelWidth,
+    this.databaseName,
     this.pendingLoader,
   });
 
   final double labelWidth;
+
+  /// Πώς λέγεται η βάση για τον χρήστη — το όνομα που της έδωσε, αλλιώς το
+  /// όνομα του αρχείου. Μπαίνει στην προειδοποίηση ώστε να ξέρει ποια βάση
+  /// κινδυνεύει όταν εναλλάσσει αρχεία.
+  final String? databaseName;
 
   /// Μόνο για τεστ: υποκατάστατο του μετρητή.
   @visibleForTesting
@@ -90,6 +97,11 @@ class _BackupHealthStatRowsState extends ConsumerState<BackupHealthStatRows> {
     final theme = Theme.of(context);
     final settings = ref.watch(databaseBackupSettingsProvider);
     final canManage = PermissionService.instance.can(AppPermission.fullBackup);
+    // Όσο η απάντηση δεν έχει έρθει, η προειδοποίηση δεν ισχυρίζεται
+    // κοινοχρησία: καλύτερα λιτή αλήθεια παρά βιαστικός ισχυρισμός.
+    final isShared = ref
+        .watch(databaseIsSharedProvider)
+        .maybeWhen(data: (shared) => shared, orElse: () => false);
 
     Widget row(String label, String value, {bool warning = false}) {
       return Padding(
@@ -129,6 +141,8 @@ class _BackupHealthStatRowsState extends ConsumerState<BackupHealthStatRows> {
           settings: settings,
           pendingChanges: snapshot.data ?? 0,
           canManageBackups: canManage,
+          databaseName: widget.databaseName,
+          isSharedDatabase: isShared,
         );
         final lastFull = settings.lastFullBackupAt;
         return Column(

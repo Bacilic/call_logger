@@ -117,7 +117,8 @@ class LansweeperRegistrationConflict {
 
   /// Ο συνάδελφος καταχώρησε την κλήση στο Lansweeper στο μεταξύ;
   bool get otherRegistered =>
-      expected.normalizedTicketId.isEmpty && fresh.normalizedTicketId.isNotEmpty;
+      expected.normalizedTicketId.isEmpty &&
+      fresh.normalizedTicketId.isNotEmpty;
 
   /// Η εγγραφή μου θα αφήσει ορφανό το αίτημα του συναδέλφου;
   bool get losesForeignTicket =>

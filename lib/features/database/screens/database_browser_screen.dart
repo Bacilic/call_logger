@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
+import 'package:path/path.dart' as p;
 
 import '../../../core/database/active_database_generation.dart';
 import '../../../core/database/database_helper.dart';
@@ -635,6 +636,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
                             sizeLabel: sizeLabel,
                             backupText: backupText,
                             pathText: pathText,
+                            databaseName: _databaseDisplayName(stats),
                           ),
                         );
                         final right = _identityColumn(theme, stats, statsAsync);
@@ -665,6 +667,21 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     );
   }
 
+  /// Πώς λέγεται η βάση για τον χρήστη: το όνομα που της έδωσε αν υπάρχει,
+  /// αλλιώς το όνομα του αρχείου της.
+  ///
+  /// Το δικό του όνομα είναι πιο χρήσιμο σε προειδοποίηση («Δικτυακή Βάση»
+  /// λέει περισσότερα από «Hospital_shared.db»), αλλά είναι προαιρετικό — και
+  /// το αρχείο υπάρχει πάντα.
+  static String? _databaseDisplayName(DatabaseStats? stats) {
+    final label = stats?.label?.trim();
+    if (label != null && label.isNotEmpty) return label;
+    final path = stats?.dbPath.trim() ?? '';
+    if (path.isEmpty) return null;
+    final name = p.basename(path).trim();
+    return name.isEmpty ? null : name;
+  }
+
   /// Η αριστερή στήλη: το **αρχείο** — πού είναι, πόσο πιάνει, πότε σώθηκε.
   List<Widget> _fileColumn({
     required ThemeData theme,
@@ -676,6 +693,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     required String sizeLabel,
     required String backupText,
     required String pathText,
+    required String? databaseName,
   }) {
     return [
       const SizedBox(height: 10),
@@ -721,7 +739,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
       statRow('Τελευταίο αντίγραφο ασφαλείας', backupText),
       // Φάση 7: η υγεία των αντιγράφων ορατή σε ΟΛΟΥΣ — αφύλακτες αλλαγές,
       // καθυστερήσεις, τελευταίο πλήρες.
-      const BackupHealthStatRows(labelWidth: 200),
+      BackupHealthStatRows(labelWidth: 200, databaseName: databaseName),
       Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Row(

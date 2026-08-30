@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widgets/app_asset_image.dart';
+import '../../providers/remote_tools_view_intent_provider.dart';
 import '../../../operators/screens/operators_management_view.dart';
 import '../../../settings/screens/remote_tools_management_screen.dart';
 import 'categories_tab.dart';
@@ -17,18 +19,34 @@ enum MiscView {
 }
 
 /// Καρτέλα «Διάφορα»: κεντρικό hub με πλοήγηση σε υπο-οθόνες.
-class MiscellaneousTab extends StatefulWidget {
+class MiscellaneousTab extends ConsumerStatefulWidget {
   const MiscellaneousTab({super.key});
 
   @override
-  State<MiscellaneousTab> createState() => _MiscellaneousTabState();
+  ConsumerState<MiscellaneousTab> createState() => _MiscellaneousTabState();
 }
 
-class _MiscellaneousTabState extends State<MiscellaneousTab> {
+class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
   MiscView _view = MiscView.dashboard;
+
+  /// Αφετηρία των αιτημάτων μετάβασης: ό,τι ζητήθηκε πριν χτιστεί η καρτέλα
+  /// δεν είναι δικό της αίτημα.
+  late int _remoteToolsRequestBaseline;
+
+  @override
+  void initState() {
+    super.initState();
+    _remoteToolsRequestBaseline = ref.read(remoteToolsViewRequestProvider);
+  }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(remoteToolsViewRequestProvider, (previous, next) {
+      if (next <= _remoteToolsRequestBaseline) return;
+      _remoteToolsRequestBaseline = next;
+      setState(() => _view = MiscView.remoteTools);
+    });
+
     if (_view == MiscView.dashboard) {
       return _buildDashboard(context);
     }

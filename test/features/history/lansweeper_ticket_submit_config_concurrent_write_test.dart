@@ -95,38 +95,44 @@ void main() {
       );
     });
 
-    test('πέντε διαδοχικές αλλαγές συσσωρεύονται, δεν αλληλοσβήνονται', () async {
-      final screen = await openScreen();
+    test(
+      'πέντε διαδοχικές αλλαγές συσσωρεύονται, δεν αλληλοσβήνονται',
+      () async {
+        final screen = await openScreen();
 
-      await screen.notifier.setNoteType('Public');
-      await screen.notifier.setEnableAddNoteStep(false);
-      await screen.notifier.setEnableStateUpdateStep(false);
-      await screen.notifier.setRememberFormSelections(false);
-      await screen.notifier.setDefaultTicketState('Closed');
+        await screen.notifier.setNoteType('Public');
+        await screen.notifier.setEnableAddNoteStep(false);
+        await screen.notifier.setEnableStateUpdateStep(false);
+        await screen.notifier.setRememberFormSelections(false);
+        await screen.notifier.setDefaultTicketState('Closed');
 
-      final result = await stored();
-      expect(result.noteType, 'Public');
-      expect(result.enableAddNoteStep, isFalse);
-      expect(result.enableStateUpdateStep, isFalse);
-      expect(result.rememberFormSelections, isFalse);
-      expect(result.defaultTicketState, 'Closed');
-    });
+        final result = await stored();
+        expect(result.noteType, 'Public');
+        expect(result.enableAddNoteStep, isFalse);
+        expect(result.enableStateUpdateStep, isFalse);
+        expect(result.rememberFormSelections, isFalse);
+        expect(result.defaultTicketState, 'Closed');
+      },
+    );
 
-    test('η οθόνη μου δείχνει ό,τι όντως αποθηκεύτηκε, όχι τη δική μου εικόνα', () async {
-      final first = await openScreen();
-      final second = await openScreen();
+    test(
+      'η οθόνη μου δείχνει ό,τι όντως αποθηκεύτηκε, όχι τη δική μου εικόνα',
+      () async {
+        final first = await openScreen();
+        final second = await openScreen();
 
-      // Τιμή διαφορετική από την προεπιλογή, αλλιώς το τεστ θα περνούσε
-      // ακόμη κι αν η οθόνη έδειχνε τη δική της αρχική εικόνα.
-      await first.notifier.setNoteType('Public');
-      await second.notifier.setIncludeNoteTime(false);
+        // Τιμή διαφορετική από την προεπιλογή, αλλιώς το τεστ θα περνούσε
+        // ακόμη κι αν η οθόνη έδειχνε τη δική της αρχική εικόνα.
+        await first.notifier.setNoteType('Public');
+        await second.notifier.setIncludeNoteTime(false);
 
-      expect(
-        second.container.read(lansweeperTicketSubmitConfigProvider).noteType,
-        'Public',
-        reason: 'η αλλαγή του συναδέλφου φαίνεται στη δική μου οθόνη',
-      );
-    });
+        expect(
+          second.container.read(lansweeperTicketSubmitConfigProvider).noteType,
+          'Public',
+          reason: 'η αλλαγή του συναδέλφου φαίνεται στη δική μου οθόνη',
+        );
+      },
+    );
 
     test('λίστα που άλλαξε ο άλλος: η αποθήκευση σταματά και ρωτάει', () async {
       final first = await openScreen();
@@ -153,7 +159,8 @@ void main() {
       expect(
         (await stored()).ticketStates,
         contains('Awaiting Order'),
-        reason: 'η προσθήκη του συναδέλφου μένει ώσπου να αποφασίσει ο άνθρωπος',
+        reason:
+            'η προσθήκη του συναδέλφου μένει ώσπου να αποφασίσει ο άνθρωπος',
       );
     });
 
@@ -170,10 +177,7 @@ void main() {
       ], expected: baseline);
 
       try {
-        await second.notifier.setTicketStates(
-          baseline,
-          expected: baseline,
-        );
+        await second.notifier.setTicketStates(baseline, expected: baseline);
         fail('περιμέναμε διένεξη');
       } on SettingsListStaleException catch (stale) {
         expect(stale.conflict.addedByOther, contains('Awaiting Order'));
@@ -234,10 +238,7 @@ void main() {
       ], expected: baseline);
 
       await expectLater(
-        () => second.notifier.replaceCustomFields(
-          baseline,
-          expected: baseline,
-        ),
+        () => second.notifier.replaceCustomFields(baseline, expected: baseline),
         throwsA(isA<SettingsListStaleException>()),
       );
     });

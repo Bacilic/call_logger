@@ -1,11 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/operator_repository.dart';
 import '../../../core/services/current_operator.dart';
 import '../../../core/services/owner_filter_preference.dart';
 import '../../../core/services/profile_settings.dart';
 import '../../../core/models/owner_filter.dart';
+import '../../operators/providers/operator_directory_providers.dart';
+import '../../operators/utils/owner_filter_options.dart';
 import 'tasks_provider.dart';
 import 'task_service_provider.dart';
 
@@ -15,49 +16,28 @@ import 'task_service_provider.dart';
 /// — μόνο όταν υπάρχουν όντως τέτοιες εκκρεμότητες. Ο τρέχων χρήστης μπαίνει
 /// πάντα, ακόμη κι αν δεν έχει ανοίξει καμία: αλλιώς δεν θα μπορούσε να
 /// διαλέξει τον εαυτό του και να δει ότι η λίστα του είναι άδεια.
-final taskOwnerOptionsProvider = FutureProvider<List<OwnerFilterOption>>((
-  ref,
-) async {
-  // Η λίστα ξαναχτίζεται όταν αλλάζουν οι εκκρεμότητες: ο πρώτος που ανοίγει
-  // εκκρεμότητα πρέπει να εμφανιστεί στο φίλτρο χωρίς επανεκκίνηση.
-  ref.watch(tasksProvider);
-  final service = ref.read(taskServiceProvider);
-  final db = await DatabaseHelper.instance.database;
+///
+/// **autoDispose, όπως το αδελφό φίλτρο του Ιστορικού.** Τα ονόματα έρχονται
+/// πλέον από τον κοινό κατάλογο προφίλ, που είναι κι αυτός autoDispose: ένα
+/// φίλτρο που ζούσε όσο η εφαρμογή θα τον κρατούσε ζωντανό για πάντα, και τα
+/// ονόματα θα πάγωναν παντού — και στα σήματα των καρτών.
+final taskOwnerOptionsProvider =
+    FutureProvider.autoDispose<List<OwnerFilterOption>>((ref) async {
+      // Η λίστα ξαναχτίζεται όταν αλλάζουν οι εκκρεμότητες: ο πρώτος που
+      // ανοίγει εκκρεμότητα πρέπει να εμφανιστεί στο φίλτρο χωρίς επανεκκίνηση.
+      ref.watch(tasksProvider);
+      final service = ref.read(taskServiceProvider);
 
-  final ownerIds = (await service.getDistinctOwnerIds()).toSet();
-  final active = CurrentOperator.active;
-  if (active?.id != null) ownerIds.add(active!.id!);
+      final ownerIds = (await service.getDistinctOwnerIds()).toSet();
+      final active = CurrentOperator.active;
+      if (active?.id != null) ownerIds.add(active!.id!);
 
-  final names = <int, String>{
-    for (final operator in await OperatorRepository(db).getAll())
-      if (operator.id != null) operator.id!: operator.displayName,
-  };
-
-  final named =
-      ownerIds
-          .map(
-            (id) => OwnerFilterOption(
-              value: OwnerFilter.byOperator(id),
-              // Χρήστης που δεν βρίσκεται πια στον πίνακα δεν κρύβεται: οι
-              // εκκρεμότητές του υπάρχουν και πρέπει να μπορούν να βρεθούν.
-              label: names[id] ?? 'Χρήστης #$id',
-            ),
-          )
-          .toList()
-        ..sort(
-          (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
-        );
-
-  return <OwnerFilterOption>[
-    const OwnerFilterOption(value: OwnerFilter.everyone, label: 'Όλοι'),
-    ...named,
-    if (await service.hasUnassignedTasks())
-      const OwnerFilterOption(
-        value: OwnerFilter.unassigned,
-        label: 'Χωρίς χρήστη',
-      ),
-  ];
-});
+      return buildOwnerFilterOptions(
+        ownerIds: ownerIds,
+        names: await ref.watch(operatorNamesProvider.future),
+        hasUnassigned: await service.hasUnassignedTasks(),
+      );
+    });
 
 /// Πόσες εκκρεμότητες κρύβει αυτή τη στιγμή **μόνο** το φίλτρο χρήστη.
 ///

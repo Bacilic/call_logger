@@ -125,7 +125,9 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
   Never _throwCooldownExhausted(List<String> modelIds) {
     final earliest = cooldownRegistry.earliestAvailable(modelIds);
     final reasonText = waitReasonText(
-      earliest == null ? null : cooldownRegistry.downtime(earliest.model)?.reason,
+      earliest == null
+          ? null
+          : cooldownRegistry.downtime(earliest.model)?.reason,
     );
 
     throw AiSuggestionException(

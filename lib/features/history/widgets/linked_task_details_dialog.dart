@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../core/widgets/linkable_selectable_text.dart';
+import '../../operators/providers/operator_directory_providers.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import '../../tasks/screens/tasks_screen_actions.dart';
@@ -155,7 +156,7 @@ class _LinkedTaskDetailsDialogState
 
 /// Η κάρτα της εκκρεμότητας μέσα στον διάλογο — ίδια στοιχεία με τον πίνακα
 /// Εκκρεμοτήτων, με τη λύση ανοιχτή (εδώ η εκκρεμότητα είναι μία).
-class _TaskDetailsCard extends StatelessWidget {
+class _TaskDetailsCard extends ConsumerWidget {
   const _TaskDetailsCard({required this.task, required this.status});
 
   final Task task;
@@ -164,8 +165,9 @@ class _TaskDetailsCard extends StatelessWidget {
   static final DateFormat _fmt = DateFormat('dd/MM/yyyy HH:mm');
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final operatorNames = ref.watch(operatorNamesProvider).value;
     final description = task.isQuickAdd
         ? task.cleanDescription
         : (task.description ?? '');
@@ -211,6 +213,7 @@ class _TaskDetailsCard extends StatelessWidget {
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 10),
+          ..._buildPeople(theme, operatorNames),
           ..._buildDates(theme),
           if (solution.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -244,6 +247,38 @@ class _TaskDetailsCard extends StatelessWidget {
         alpha: 0.6,
       ),
     };
+  }
+
+  /// Τα δύο πρόσωπα της εκκρεμότητας: ποιος την άνοιξε, ποιος τη χρωστάει.
+  ///
+  /// Γράφονται σε ονομαστική και σε ξεχωριστές γραμμές — τα ελληνικά ονόματα
+  /// δεν κλίνονται από τον κώδικα, και η παράθεση κάνει την αντιπαράθεση
+  /// «άλλος την άνοιξε, άλλος τη χρωστάει» να διαβάζεται με μια ματιά.
+  ///
+  /// Ο διάλογος ήταν το μόνο σημείο που άνοιγε ολόκληρη την εκκρεμότητα και
+  /// σιωπούσε για τον υπεύθυνο: η κάρτα του πίνακα τον δείχνει, εδώ έλειπε.
+  List<Widget> _buildPeople(ThemeData theme, Map<int, String>? names) {
+    final creatorId = task.createdByOperatorId;
+    final assignedId = task.assignedOperatorId;
+    if (creatorId == null && assignedId == null) return const [];
+
+    final style = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
+    return [
+      if (creatorId != null)
+        Text(
+          'Δημιουργός: ${operatorDisplayNameFor(names, creatorId)}',
+          style: style,
+        ),
+      if (assignedId != null)
+        Text(
+          'Υπεύθυνος: ${operatorDisplayNameFor(names, assignedId)}',
+          style: style,
+        ),
+      const SizedBox(height: 4),
+    ];
   }
 
   List<Widget> _buildDates(ThemeData theme) {

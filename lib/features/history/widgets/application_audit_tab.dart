@@ -682,11 +682,8 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                       for (final suggestion in operatorSuggestions)
                         ActionChip(
                           avatar: const Icon(Icons.person_outline, size: 18),
-                          label: Text(
-                            'Χειριστής: ${suggestion.operatorName}',
-                          ),
-                          onPressed: () =>
-                              _applyOperatorSuggestion(suggestion),
+                          label: Text('Χειριστής: ${suggestion.operatorName}'),
+                          onPressed: () => _applyOperatorSuggestion(suggestion),
                         ),
                     ],
                   ),

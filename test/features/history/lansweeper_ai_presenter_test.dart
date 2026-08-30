@@ -325,21 +325,30 @@ void main() {
 
     test('κάτω από λεπτό', () {
       expect(
-        LansweeperAiPresenter.remainingText(now.add(const Duration(seconds: 30)), now),
+        LansweeperAiPresenter.remainingText(
+          now.add(const Duration(seconds: 30)),
+          now,
+        ),
         'σε λίγο',
       );
     });
 
     test('ένα λεπτό στον ενικό', () {
       expect(
-        LansweeperAiPresenter.remainingText(now.add(const Duration(minutes: 1)), now),
+        LansweeperAiPresenter.remainingText(
+          now.add(const Duration(minutes: 1)),
+          now,
+        ),
         'σε 1 λεπτό',
       );
     });
 
     test('χρόνος που πέρασε δεν βγαίνει αρνητικός', () {
       expect(
-        LansweeperAiPresenter.remainingText(now.subtract(const Duration(minutes: 5)), now),
+        LansweeperAiPresenter.remainingText(
+          now.subtract(const Duration(minutes: 5)),
+          now,
+        ),
         'σε λίγο',
       );
     });

@@ -34,9 +34,7 @@ void main() {
   test('αλλαγή μεγέθους, ώρας ή ονόματος αλλάζει το αποτύπωμα', () {
     final base = PortableContentFingerprint.digestOf([_entry('maps', 'a.png')]);
     expect(
-      PortableContentFingerprint.digestOf([
-        _entry('maps', 'a.png', size: 101),
-      ]),
+      PortableContentFingerprint.digestOf([_entry('maps', 'a.png', size: 101)]),
       isNot(base),
     );
     expect(

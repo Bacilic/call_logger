@@ -2,6 +2,7 @@ import '../../../core/database/operator_audit.dart';
 import '../../../core/database/operator_repository.dart';
 import '../../../core/models/operator.dart';
 import '../../../core/services/current_operator.dart';
+import '../avatars/operator_avatar_assignment.dart';
 import 'operator_save_conflict.dart';
 
 /// Το αποτέλεσμα μιας ενέργειας διαχείρισης χρηστών.
@@ -47,8 +48,8 @@ class OperatorActionResult {
 const String kLastAdminDemoteBlockedMessage =
     'Πρέπει να μείνει τουλάχιστον ένας διαχειριστής. Ορίστε '
     'πρώτα άλλον και μετά αφαιρέστε τη σήμανση από εδώ.';
-const String kLastAdminArchiveBlockedMessage =
-    'Ο μοναδικός διαχειριστής δεν αρχειοθετείται. Ορίστε πρώτα '
+const String kLastAdminDeactivateBlockedMessage =
+    'Ο μοναδικός διαχειριστής δεν απενεργοποιείται. Ορίστε πρώτα '
     'άλλον διαχειριστή.';
 
 /// Είναι αυτό το προφίλ ο τελευταίος διαχειριστής που μπορεί να συνδεθεί;
@@ -78,11 +79,16 @@ class OperatorManagement {
   Future<List<Operator>> load() => _repository.getAll();
 
   /// Δημιουργεί προφίλ. Κενός λογαριασμός Windows σημαίνει αυτόνομο προφίλ.
+  ///
+  /// Το εικονίδιο δίνεται εδώ, αυτόματα: ο διαχειριστής που φτιάχνει προφίλ για
+  /// συνάδελφο δεν έχει λόγο να διαλέξει πρόσωπο εκ μέρους του — και ο ίδιος ο
+  /// συνάδελφος μπορεί να το αλλάξει αργότερα από την καρτέλα του.
   Future<OperatorActionResult> create({
     required String displayName,
     String? windowsAccount,
     bool isAdmin = false,
     Map<String, bool> permissionOverrides = const <String, bool>{},
+    String? avatarKey,
     DateTime? now,
   }) async {
     final name = displayName.trim();
@@ -95,12 +101,20 @@ class OperatorManagement {
       return OperatorActionResult.blocked(accountProblem);
     }
 
+    final taken = takenAvatarKeys(await _repository.getAll());
+    final avatarProblem = _avatarProblem(avatarKey, taken);
+    if (avatarProblem != null) {
+      return OperatorActionResult.blocked(avatarProblem);
+    }
+
     final created = await _repository.insert(
       Operator(
         displayName: name,
         windowsAccount: account,
         isAdmin: isAdmin,
         permissionOverrides: permissionOverrides,
+        // Ό,τι διάλεξε ρητά ο διαχειριστής νικά· αλλιώς πέφτει ο κλήρος.
+        avatarKey: avatarKey ?? pickAvatarKey(taken),
         createdAt: now ?? DateTime.now(),
       ),
     );
@@ -119,6 +133,8 @@ class OperatorManagement {
     required bool isAdmin,
     required bool isActive,
     Map<String, bool>? permissionOverrides,
+    String? avatarKey,
+    bool clearAvatarKey = false,
     bool force = false,
   }) async {
     final id = original.id;
@@ -141,6 +157,8 @@ class OperatorManagement {
       isAdmin: isAdmin,
       isActive: isActive,
       permissionOverrides: permissionOverrides,
+      avatarKey: avatarKey,
+      clearAvatarKey: clearAvatarKey,
     );
 
     // ΠΡΩΤΑ η διένεξη, πριν από κάθε άλλο κανόνα. Ένας κανόνας που κρίνει πάνω
@@ -163,6 +181,20 @@ class OperatorManagement {
       return OperatorActionResult.blocked(accountProblem);
     }
 
+    // Το εικονίδιο κρίνεται τώρα, με τη ΒΑΣΗ: όσο η καρτέλα ήταν ανοιχτή, ο
+    // συνάδελφος δίπλα μπορεί να διάλεξε το ίδιο. Ο έλεγχος αφορά μόνο τα
+    // ενεργά προφίλ — ο απενεργοποιημένος κρατά το δικό του αλλά δεν το
+    // δεσμεύει.
+    if (updated.isActive) {
+      final avatarProblem = _avatarProblem(
+        updated.avatarKey,
+        takenAvatarKeys(await _repository.getAll(), excludeId: id),
+      );
+      if (avatarProblem != null) {
+        return OperatorActionResult.blocked(avatarProblem);
+      }
+    }
+
     // Η κρίση γίνεται με τη ΒΑΣΗ, όχι με την εικόνα της φόρμας: αν ο συνάδελφος
     // προήγαγε αυτό το προφίλ από άλλη οθόνη, η μπαγιάτικη καρτέλα δεν το ξέρει
     // και ο έλεγχος «πρέπει να μείνει ένας διαχειριστής» θα έκρινε με το παλιό
@@ -177,7 +209,7 @@ class OperatorManagement {
         return OperatorActionResult.blocked(
           losesAdmin
               ? kLastAdminDemoteBlockedMessage
-              : kLastAdminArchiveBlockedMessage,
+              : kLastAdminDeactivateBlockedMessage,
         );
       }
     }
@@ -228,6 +260,17 @@ class OperatorManagement {
     if (active == null || active.id == null) return;
     if (active.id != updated.id) return;
     CurrentOperator.activate(updated);
+  }
+
+  /// Το εικονίδιο είναι πιασμένο από άλλον ενεργό χρήστη;
+  ///
+  /// Το κενό εικονίδιο (κλασικό ανθρωπάκι) δεν ελέγχεται ποτέ: το μοιράζονται
+  /// όσοι θέλουν, γιατί δεν ξεχωρίζει κανέναν.
+  String? _avatarProblem(String? avatarKey, Set<String> taken) {
+    if (avatarKey == null || avatarKey.isEmpty) return null;
+    if (!taken.contains(avatarKey)) return null;
+    return 'Αυτό το εικονίδιο το κρατά ήδη άλλος χρήστης. Διαλέξτε άλλο — '
+        'δύο χρήστες με το ίδιο πρόσωπο δεν ξεχωρίζουν πουθενά.';
   }
 
   Future<String?> _displayNameProblem(String name, {int? excludeId}) async {

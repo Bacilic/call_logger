@@ -209,9 +209,7 @@ void main() {
   // φαινόταν να «μην ανανεώνεται» — και με μήνυμα που δεν έφευγε ποτέ,
   // σιωπούσε οριστικά.
   //   flutter test test/core/widgets/dialog_snackbar_scope_test.dart --plain-name "τελευταίο"
-  testWidgets('το τελευταίο μήνυμα αντικαθιστά το προηγούμενο', (
-    tester,
-  ) async {
+  testWidgets('το τελευταίο μήνυμα αντικαθιστά το προηγούμενο', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(

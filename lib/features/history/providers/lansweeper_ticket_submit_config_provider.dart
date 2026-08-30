@@ -274,8 +274,9 @@ class LansweeperTicketSubmitConfigNotifier
   Future<void> setEnableAddNoteStep(bool value) =>
       _applyTargeted((current) => current.copyWith(enableAddNoteStep: value));
 
-  Future<void> setEnableStateUpdateStep(bool value) =>
-      _applyTargeted((current) => current.copyWith(enableStateUpdateStep: value));
+  Future<void> setEnableStateUpdateStep(bool value) => _applyTargeted(
+    (current) => current.copyWith(enableStateUpdateStep: value),
+  );
 
   Future<void> setRememberFormSelections(bool value) => _applyTargeted(
     (current) => current.copyWith(rememberFormSelections: value),

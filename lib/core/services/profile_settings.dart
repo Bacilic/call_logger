@@ -118,6 +118,15 @@ abstract final class ProfileSettingKeys {
     'show_dictionary_nav',
     legacySource: ProfileSettingLegacySource.machine,
   );
+
+  /// Απόκρυψη του προορισμού «Βάση Γνώσης» από την πλευρική μπάρα.
+  ///
+  /// **Γεννήθηκε προσωπικό**, σε αντίθεση με τα τρία αδέλφια του: ο διακόπτης
+  /// φτιάχνεται τώρα, οπότε δεν υπάρχει παλιά τιμή μηχανήματος να κληρονομήσει.
+  static const ProfileSettingKey showKnowledgeNav = ProfileSettingKey(
+    'show_knowledge_nav',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
   static const ProfileSettingKey showQuickCallFab = ProfileSettingKey(
     'show_quick_call_fab',
     legacySource: ProfileSettingLegacySource.machine,
@@ -332,6 +341,7 @@ abstract final class ProfileSettingKeys {
     showDatabaseNav,
     showLampNav,
     showDictionaryNav,
+    showKnowledgeNav,
     showQuickCallFab,
     callsScreenCardsVisibility,
     databaseBrowserStatsCardExpanded,

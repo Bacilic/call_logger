@@ -11,7 +11,6 @@ import '../../../core/config/app_config.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_init_result.dart';
 import '../../../core/database/dictionary_repository.dart';
-import '../../../core/database/settings_repository.dart';
 import '../../../core/errors/dictionary_export_exception.dart';
 import '../../../core/models/dictionary_import_mode.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
@@ -22,6 +21,7 @@ import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/providers/shell_navigation_intent_provider.dart';
 import '../../../core/providers/spell_check_provider.dart';
+import '../../../core/providers/dictionary_settings_intent_provider.dart';
 import '../../../core/widgets/main_nav_destination.dart';
 import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/dictionary_service.dart';
@@ -358,6 +358,10 @@ class _DictionaryManagerScreenState
     });
   }
 
+  /// Αφετηρία των αιτημάτων ανοίγματος ρυθμίσεων: ό,τι ζητήθηκε πριν ανοίξει
+  /// η οθόνη δεν είναι δικό της αίτημα.
+  late int _settingsRequestBaseline;
+
   @override
   void initState() {
     super.initState();
@@ -366,6 +370,10 @@ class _DictionaryManagerScreenState
     }
     _searchCtrl.addListener(_onSearchChanged);
     _verticalTableScroll.addListener(_onVerticalLexiconScroll);
+    // Το αίτημα φτάνει μαζί με την πλοήγηση: αν είχε ήδη σταλεί πριν χτιστεί η
+    // οθόνη, το listen δεν θα έβλεπε ποτέ μεταβολή — γι' αυτό διαβάζεται και
+    // εδώ, και ό,τι είναι νεότερο από την αφετηρία εκτελείται αμέσως.
+    _settingsRequestBaseline = ref.read(dictionarySettingsRequestProvider);
   }
 
   bool _isAtScrollEnd(ScrollPosition pos) {
@@ -1164,6 +1172,12 @@ class _DictionaryManagerScreenState
 
     ref.listen<int>(lexiconMasterDataRevisionProvider, (prev, next) {
       _refreshList();
+    });
+
+    ref.listen<int>(dictionarySettingsRequestProvider, (previous, next) {
+      if (next <= _settingsRequestBaseline || !mounted) return;
+      _settingsRequestBaseline = next;
+      unawaited(_openDictionarySettings());
     });
 
     final listFilters = ref.watch(lexiconListFiltersProvider);
@@ -2022,19 +2036,12 @@ class _DictionaryManagerScreenState
                                             )
                                             .value ??
                                         true;
-                                    final newVal = !cur;
-                                    final dbSet =
-                                        await DatabaseHelper.instance.database;
-                                    await SettingsRepository(dbSet).saveSetting(
-                                      'lexicon_continuous_scroll',
-                                      newVal.toString(),
-                                    );
-                                    ref.invalidate(
-                                      lexiconContinuousScrollProvider,
-                                    );
-                                    await ref.read(
-                                      lexiconContinuousScrollProvider.future,
-                                    );
+                                    await ref
+                                        .read(
+                                          lexiconContinuousScrollProvider
+                                              .notifier,
+                                        )
+                                        .setEnabled(!cur);
                                     if (!mounted) return;
                                     await ref
                                         .read(
@@ -2131,19 +2138,11 @@ class _DictionaryManagerScreenState
                                       tooltip: 'Λέξεις ανά σελίδα',
                                       icon: const Icon(Icons.numbers),
                                       onSelected: (v) async {
-                                        final dbPs = await DatabaseHelper
-                                            .instance
-                                            .database;
-                                        await SettingsRepository(
-                                          dbPs,
-                                        ).saveSetting(
-                                          'lexicon_page_size',
-                                          '$v',
-                                        );
-                                        ref.invalidate(lexiconPageSizeProvider);
-                                        await ref.read(
-                                          lexiconPageSizeProvider.future,
-                                        );
+                                        await ref
+                                            .read(
+                                              lexiconPageSizeProvider.notifier,
+                                            )
+                                            .setPageSize(v);
                                         if (!mounted) return;
                                         await ref
                                             .read(

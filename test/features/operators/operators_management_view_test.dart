@@ -290,9 +290,7 @@ void main() {
     });
 
     testWidgets('διένεξη: «Κράτα τη δική μου αλλαγή» γράφει εν γνώσει του '
-        'χρήστη', (
-      tester,
-    ) async {
+        'χρήστη', (tester) async {
       await openCardThenSomeoneElseWrites(tester);
 
       await tester.enterText(find.byType(TextField).first, 'Βλάσης Δ.');

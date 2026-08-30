@@ -186,7 +186,9 @@ void main() {
         );
         await db.delete('audit_log');
 
-        await users.updateUser(userId, {'first_name': 'Ενημερωμένος'}, expected: null);
+        await users.updateUser(userId, {
+          'first_name': 'Ενημερωμένος',
+        }, expected: null);
 
         final rows = await allAuditRows();
         expect(rows, hasLength(1));

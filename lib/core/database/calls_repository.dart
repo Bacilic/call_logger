@@ -8,6 +8,7 @@ import '../errors/call_save_exception.dart';
 import '../models/owner_filter.dart';
 import '../services/current_operator.dart';
 import 'audit_service.dart';
+import 'call_entity_filters.dart';
 import 'calls_audit_line.dart';
 import 'calls_search_index.dart';
 import 'directory_support.dart';
@@ -592,15 +593,25 @@ class CallsRepository {
     String? dateTo,
     String? category,
     String? keyword,
+    String? department,
+    String? userName,
+    String? equipmentCode,
     bool onlyWithTask = false,
     String? lansweeperState,
     Iterable<int>? callIds,
     OwnerFilter owner = OwnerFilter.everyone,
   }) async {
-    const userPhoneExpr =
-        "COALESCE(NULLIF(TRIM(calls.phone_text), ''), upl.phone_list, '-')";
+    const userPhoneExpr = kCallUserPhoneExpr;
     final whereClauses = <String>[];
     final args = <dynamic>[];
+
+    appendCallEntityFilters(
+      whereClauses,
+      args,
+      department: department,
+      userName: userName,
+      equipmentCode: equipmentCode,
+    );
 
     if (dateFrom != null && dateFrom.isNotEmpty) {
       whereClauses.add('calls.date >= ?');
@@ -656,7 +667,7 @@ class CallsRepository {
              COALESCE(cat.is_deleted, 0) AS category_is_deleted,
              COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted,
              $userPhoneExpr AS user_phone,
-             COALESCE(departments.name, calls.department_text, '-') AS user_department,
+             $kCallDepartmentExpr AS user_department,
              COALESCE(equipment.code_equipment, calls.equipment_text, '-') AS equipment_code,
              calls.created_by_operator_id,
              $_openTaskExistsSql AS has_open_task,
@@ -664,16 +675,7 @@ class CallsRepository {
              TRIM(COALESCE(calls.lansweeper_main_ticket_id, '')) AS lansweeper_ticket_id
       FROM calls
       LEFT JOIN categories cat ON cat.id = calls.category_id
-      LEFT JOIN users ON calls.caller_id = users.id
-      LEFT JOIN (
-        SELECT up.user_id AS uid,
-               GROUP_CONCAT(p.number, ', ') AS phone_list
-        FROM user_phones up
-        JOIN phones p ON p.id = up.phone_id
-        GROUP BY up.user_id
-      ) upl ON upl.uid = users.id
-      LEFT JOIN equipment ON calls.equipment_id = equipment.id
-      LEFT JOIN departments ON users.department_id = departments.id
+$kCallEntityFilterJoins
       $whereSql
       ORDER BY calls.date DESC, calls.time DESC
     ''';
@@ -706,9 +708,20 @@ class CallsRepository {
     String? dateFrom,
     String? dateTo,
     String? category,
+    String? department,
+    String? userName,
+    String? equipmentCode,
   }) async {
     final whereClauses = <String>[];
     final args = <dynamic>[];
+
+    appendCallEntityFilters(
+      whereClauses,
+      args,
+      department: department,
+      userName: userName,
+      equipmentCode: equipmentCode,
+    );
 
     if (dateFrom != null && dateFrom.isNotEmpty) {
       whereClauses.add('calls.date >= ?');
@@ -727,7 +740,7 @@ class CallsRepository {
 
     final whereSql = 'WHERE ${whereClauses.join(' AND ')}';
     final rows = await db.rawQuery(
-      'SELECT COUNT(*) AS c FROM calls $whereSql',
+      'SELECT COUNT(*) AS c FROM calls\n$kCallEntityFilterJoins\n$whereSql',
       args,
     );
     return (rows.first['c'] as int?) ?? 0;

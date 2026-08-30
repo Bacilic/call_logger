@@ -11,6 +11,8 @@ import 'database_replacement_dialog.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../providers/core_lexicon_provider.dart';
 import '../../features/dictionary/widgets/core_lexicon_setup_dialog.dart';
+import '../providers/database_settings_route_intent_provider.dart';
+import '../providers/dictionary_settings_intent_provider.dart';
 import '../providers/directory_tab_intent_provider.dart';
 import '../providers/equipment_focus_intent_provider.dart';
 import '../providers/history_audit_immersive_provider.dart';
@@ -22,6 +24,7 @@ import '../providers/main_nav_request_provider.dart';
 import '../providers/call_department_prefill_intent_provider.dart';
 import '../providers/history_search_prefill_intent_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/settings_route_intent_provider.dart';
 import '../providers/shell_navigation_intent_provider.dart';
 import '../providers/spell_check_provider.dart';
 import '../providers/task_focus_intent_provider.dart';
@@ -174,6 +177,9 @@ class MainShellState extends ConsumerState<MainShell> {
           .read(historySearchPrefillIntentProvider.notifier)
           .prefill(historyPrefillSearch);
     }
+    if (req.openDictionarySettings) {
+      ref.read(dictionarySettingsRequestProvider.notifier).request();
+    }
 
     void focusEquipment() {
       if (equipId != null) {
@@ -195,20 +201,19 @@ class MainShellState extends ConsumerState<MainShell> {
     bool showLampNav,
     bool showDatabaseNav,
     bool showDictionaryNav,
+    bool showKnowledgeNav,
     bool enableSpellCheck,
-    bool coreLexiconLoaded,
   ) {
     final showDictionary = isDictionaryNavVisible(
       enableSpellCheck: enableSpellCheck,
       showDictionaryNav: showDictionaryNav,
-      coreLexiconLoaded: coreLexiconLoaded,
     );
     return [
       MainNavDestination.calls,
       MainNavDestination.tasks,
       MainNavDestination.directory,
       MainNavDestination.history,
-      MainNavDestination.knowledge,
+      if (showKnowledgeNav) MainNavDestination.knowledge,
       if (showLampNav) MainNavDestination.lamp,
       if (showDatabaseNav) MainNavDestination.database,
       if (showDictionary) MainNavDestination.dictionary,
@@ -332,13 +337,14 @@ class MainShellState extends ConsumerState<MainShell> {
     );
   }
 
-  Future<void> _openSettingsScreen() async {
+  Future<void> _openSettingsScreen({SettingsSection? initialSection}) async {
     if (!mounted) return;
     ref.read(settingsRouteOpenForQuickCallProvider.notifier).setOpen(true);
     try {
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (context) => SettingsScreen(
+            initialSection: initialSection,
             onAfterDatabaseChanged:
                 widget.onDatabaseReopened ?? widget.onReturnFromSettings,
           ),
@@ -353,6 +359,7 @@ class MainShellState extends ConsumerState<MainShell> {
     ref.invalidate(showLampNavProvider);
     ref.invalidate(showDatabaseNavProvider);
     ref.invalidate(showDictionaryNavProvider);
+    ref.invalidate(showKnowledgeNavProvider);
     ref.invalidate(showQuickCallFabProvider);
     ref.invalidate(coreLexiconProvider);
     // Ο ορθογράφος και το λεξικό-πυρήνας παρακολουθούν τον πυρήνα με watch:
@@ -394,6 +401,9 @@ class MainShellState extends ConsumerState<MainShell> {
     final showDictionaryNav = ref
         .watch(showDictionaryNavProvider)
         .maybeWhen(data: (v) => v, orElse: () => true);
+    final showKnowledgeNav = ref
+        .watch(showKnowledgeNavProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
     final enableSpellCheck = ref
         .watch(enableSpellCheckProvider)
         .maybeWhen(data: (v) => v, orElse: () => true);
@@ -404,8 +414,8 @@ class MainShellState extends ConsumerState<MainShell> {
       showLampNav,
       showDatabaseNav,
       showDictionaryNav,
+      showKnowledgeNav,
       enableSpellCheck,
-      coreLexiconLoaded,
     );
     final effectiveDestination =
         visibleDestinations.contains(_selectedDestination) ||
@@ -467,6 +477,25 @@ class MainShellState extends ConsumerState<MainShell> {
           setState(() => _selectedDestination = pending);
         }
       }
+    });
+
+    ref.listen<DatabaseSettingsRouteRequest?>(
+      databaseSettingsRouteIntentProvider,
+      (previous, next) {
+        if (next == null || !mounted) return;
+        ref.read(databaseSettingsRouteIntentProvider.notifier).clear();
+        unawaited(
+          destinationContent.openDatabaseSettingsDialog(
+            initialTabIndex: next.tabIndex,
+          ),
+        );
+      },
+    );
+
+    ref.listen<SettingsSection?>(settingsRouteIntentProvider, (previous, next) {
+      if (next == null || !mounted) return;
+      ref.read(settingsRouteIntentProvider.notifier).clear();
+      unawaited(_openSettingsScreen(initialSection: next));
     });
 
     ref.listen<MainNavRequest?>(mainNavRequestProvider, (previous, req) {

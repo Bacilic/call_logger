@@ -59,47 +59,50 @@ int _lineOf(String source, int index) =>
     '\n'.allMatches(source.substring(0, index)).length + 1;
 
 void main() {
-  test('Κάθε SnackBar με κουμπί ενέργειας δηλώνει ρητά τη διάρκεια ζωής του', () {
-    final projectRoot = Directory.current;
-    final libRoot = Directory(p.join(projectRoot.path, 'lib'));
-    expect(
-      libRoot.existsSync(),
-      isTrue,
-      reason: 'Αναμένεται φάκελος lib/ στο root του project.',
-    );
+  test(
+    'Κάθε SnackBar με κουμπί ενέργειας δηλώνει ρητά τη διάρκεια ζωής του',
+    () {
+      final projectRoot = Directory.current;
+      final libRoot = Directory(p.join(projectRoot.path, 'lib'));
+      expect(
+        libRoot.existsSync(),
+        isTrue,
+        reason: 'Αναμένεται φάκελος lib/ στο root του project.',
+      );
 
-    final violations = <String>[];
+      final violations = <String>[];
 
-    for (final file in _dartFiles(libRoot)) {
-      final source = _withoutCommentLines(file.readAsStringSync());
-      if (!_actionPattern.hasMatch(source)) continue;
+      for (final file in _dartFiles(libRoot)) {
+        final source = _withoutCommentLines(file.readAsStringSync());
+        if (!_actionPattern.hasMatch(source)) continue;
 
-      final relative = p
-          .relative(file.path, from: projectRoot.path)
-          .replaceAll(r'\', '/');
+        final relative = p
+            .relative(file.path, from: projectRoot.path)
+            .replaceAll(r'\', '/');
 
-      for (final match in _snackBarStart.allMatches(source)) {
-        final openIndex = source.indexOf('(', match.start);
-        final body = _callBody(source, openIndex);
-        if (body == null) continue;
-        if (!_actionPattern.hasMatch(body)) continue;
-        if (_persistPattern.hasMatch(body)) continue;
+        for (final match in _snackBarStart.allMatches(source)) {
+          final openIndex = source.indexOf('(', match.start);
+          final body = _callBody(source, openIndex);
+          if (body == null) continue;
+          if (!_actionPattern.hasMatch(body)) continue;
+          if (_persistPattern.hasMatch(body)) continue;
 
-        violations.add(
-          '$relative:${_lineOf(source, match.start)} — SnackBar με '
-          'SnackBarAction χωρίς ρητό persist',
+          violations.add(
+            '$relative:${_lineOf(source, match.start)} — SnackBar με '
+            'SnackBarAction χωρίς ρητό persist',
+          );
+        }
+      }
+
+      if (violations.isNotEmpty) {
+        fail(
+          'Βρέθηκαν ${violations.length} μηνύματα με κουμπί ενέργειας που '
+          'αφήνουν το Flutter να αποφασίσει τη διάρκεια ζωής τους.\n'
+          'Δήλωσε ρητά «persist: false» (φεύγει μόνο του) ή «persist: true» '
+          '(μένει ώσπου να το κλείσει κάποιος):\n'
+          '${violations.join('\n')}',
         );
       }
-    }
-
-    if (violations.isNotEmpty) {
-      fail(
-        'Βρέθηκαν ${violations.length} μηνύματα με κουμπί ενέργειας που '
-        'αφήνουν το Flutter να αποφασίσει τη διάρκεια ζωής τους.\n'
-        'Δήλωσε ρητά «persist: false» (φεύγει μόνο του) ή «persist: true» '
-        '(μένει ώσπου να το κλείσει κάποιος):\n'
-        '${violations.join('\n')}',
-      );
-    }
-  });
+    },
+  );
 }

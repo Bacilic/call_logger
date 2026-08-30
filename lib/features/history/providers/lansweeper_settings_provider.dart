@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
+import '../../../core/services/settings_service.dart';
 import '../widgets/lansweeper/lansweeper_url_rules.dart';
 import 'app_settings_bool.dart';
 
@@ -188,6 +189,17 @@ final lansweeperApiKeyProvider =
     );
 
 /// Μόνιμο όνομα χρήστη πράκτορα Lansweeper (`app_settings`).
+/// Ο πράκτορας API του **συνδεδεμένου χρήστη**.
+///
+/// Καθορίζει σε ποιον χρεώνεται το αίτημα, οπότε είναι προσωπικός: ο καθένας
+/// ορίζει τον δικό του, χωρίς κοινή εφεδρεία. Ο πρώτος διαχειριστής
+/// κληρονομεί μία φορά την παλιά κοινή τιμή, ώστε να μη χαθεί η ρύθμιση που
+/// ήδη δούλευε.
+///
+/// **Γράφει και διαβάζει από την ίδια πύλη** με τους ελέγχους του Καταλόγου
+/// και τις καρτέλες Υπαλλήλου/Τμήματος. Όσο το πεδίο των ρυθμίσεων έγραφε
+/// στην κοινή θέση ενώ οι έλεγχοι ζητούσαν την προσωπική, ό,τι αποθήκευε ο
+/// χρήστης δεν το έβλεπε ποτέ ο έλεγχος.
 class LansweeperAgentUsernameNotifier extends Notifier<String> {
   bool _hydrated = false;
 
@@ -201,10 +213,8 @@ class LansweeperAgentUsernameNotifier extends Notifier<String> {
   }
 
   Future<void> _hydrateFromDb() async {
-    final db = await DatabaseHelper.instance.database;
-    if (!ref.mounted) return;
-    final repo = SettingsRepository(db);
-    final raw = await repo.getSetting(kLansweeperAgentUsernameSettingKey);
+    final raw = await SettingsService().remoteLansweeper
+        .getLansweeperAgentUsername();
     if (!ref.mounted) return;
     state = raw?.trim() ?? '';
   }
@@ -212,11 +222,9 @@ class LansweeperAgentUsernameNotifier extends Notifier<String> {
   Future<void> setAgentUsername(String value) async {
     final normalized = value.trim();
     state = normalized;
-    final db = await DatabaseHelper.instance.database;
-    if (!ref.mounted) return;
-    await SettingsRepository(
-      db,
-    ).saveSetting(kLansweeperAgentUsernameSettingKey, normalized);
+    await SettingsService().remoteLansweeper.setLansweeperAgentUsername(
+      normalized,
+    );
   }
 }
 

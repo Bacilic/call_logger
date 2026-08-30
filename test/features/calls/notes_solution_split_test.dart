@@ -121,4 +121,52 @@ void main() {
       expect(NotesSolutionSplit.extractCurrentLine('α\nβ', -3).movedLine, 'α');
     });
   });
+
+  group('mergeSolutionBack — η αντίστροφη κίνηση', () {
+    test('η λύση επιστρέφει ως δική της γραμμή στο τέλος', () {
+      expect(
+        NotesSolutionSplit.mergeSolutionBack(
+          'Ο εκτυπωτης εχει κοκκινο λαμπακι',
+          'Εγινε αλλαγη τονερ',
+        ),
+        'Ο εκτυπωτης εχει κοκκινο λαμπακι\nΕγινε αλλαγη τονερ',
+      );
+    });
+
+    test('πηγαίνει και έρχεται χωρίς να αλλοιωθεί τίποτα', () {
+      // Η στρογγυλή διαδρομή είναι το νόημα του on/off: ό,τι κατέβηκε,
+      // ανεβαίνει ίδιο.
+      const original = 'Πρώτη γραμμή\nΔεύτερη γραμμή';
+      final split = NotesSolutionSplit.extractCurrentLine(
+        original,
+        original.length,
+      );
+      expect(
+        NotesSolutionSplit.mergeSolutionBack(split.notes, split.movedLine),
+        original,
+      );
+    });
+
+    test('με άδειες σημειώσεις η λύση γίνεται ολόκληρο το κείμενο', () {
+      expect(
+        NotesSolutionSplit.mergeSolutionBack('', 'Μόνο λύση'),
+        'Μόνο λύση',
+      );
+      expect(
+        NotesSolutionSplit.mergeSolutionBack('   ', 'Μόνο λύση'),
+        'Μόνο λύση',
+      );
+    });
+
+    test('κενή λύση αφήνει τις σημειώσεις ανέγγιχτες', () {
+      expect(
+        NotesSolutionSplit.mergeSolutionBack('Σημειώσεις', ''),
+        'Σημειώσεις',
+      );
+      expect(
+        NotesSolutionSplit.mergeSolutionBack('Σημειώσεις', '   '),
+        'Σημειώσεις',
+      );
+    });
+  });
 }

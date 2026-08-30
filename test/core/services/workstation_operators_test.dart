@@ -64,7 +64,7 @@ void main() {
       expect(matched.map((o) => o.displayName), ['Βασίλης']);
     });
 
-    test('ο αρχειοθετημένος δεν μετράει', () {
+    test('ο απενεργοποιημένος δεν μετράει', () {
       final matched = rememberedWorkstationProfiles(
         const ['Παλιός', 'Βασίλης'],
         [_operator('Παλιός', isActive: false), _operator('Βασίλης')],

@@ -109,7 +109,9 @@ void main() {
         'last_name': 'Ψαρρά',
         'notes': null,
       };
-      await users.updateUser(id, {'notes': 'Βάρδια απογεύματος'}, expected: null);
+      await users.updateUser(id, {
+        'notes': 'Βάρδια απογεύματος',
+      }, expected: null);
 
       try {
         await users.updateUser(id, {
@@ -216,11 +218,9 @@ void main() {
       final id = (await departments.getOrCreateDepartmentIdByName('ΤΕΠ'))!;
       final asFormSawIt = <String, Object?>{'name': 'ΤΕΠ', 'building': null};
 
-      await departments.updateDepartment(
-        id,
-        {'building': 'Νέα Πτέρυγα'},
-        expected: null,
-      );
+      await departments.updateDepartment(id, {
+        'building': 'Νέα Πτέρυγα',
+      }, expected: null);
 
       await expectLater(
         () => departments.updateDepartment(id, {
@@ -247,11 +247,9 @@ void main() {
         'location': null,
       };
 
-      await equipment.updateEquipment(
-        id,
-        {'location': 'Γραφείο 3'},
-        expected: null,
-      );
+      await equipment.updateEquipment(id, {
+        'location': 'Γραφείο 3',
+      }, expected: null);
 
       await expectLater(
         () => equipment.updateEquipment(id, {
@@ -412,7 +410,11 @@ void main() {
 
     test('η αφετηρία της καρτέλας υπαλλήλου έχει τα κλειδιά που γράφονται', () {
       final baseline = DirectoryNotifier.userConflictBaseline(
-        UserModel(firstName: 'Σοφία', lastName: 'Ψαρρά', phones: const ['2534']),
+        UserModel(
+          firstName: 'Σοφία',
+          lastName: 'Ψαρρά',
+          phones: const ['2534'],
+        ),
       );
 
       expect(

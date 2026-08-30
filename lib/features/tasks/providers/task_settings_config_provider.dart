@@ -25,11 +25,8 @@ class TaskSettingsConfigNotifier extends AsyncNotifier<TaskSettingsConfig> {
   }) async {
     final service = ref.read(taskServiceProvider);
     final saved = await service.updateTaskSettingsConfig(
-      (current) => TaskSettingsConfig.applyChanges(
-        from: from,
-        to: to,
-        onto: current,
-      ),
+      (current) =>
+          TaskSettingsConfig.applyChanges(from: from, to: to, onto: current),
     );
     state = AsyncValue.data(saved);
   }

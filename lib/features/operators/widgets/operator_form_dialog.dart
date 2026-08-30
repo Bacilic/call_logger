@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
 import '../../../core/services/operator_identity.dart';
+import '../avatars/operator_avatar_picker.dart';
 import '../services/operator_management.dart'
-    show kLastAdminArchiveBlockedMessage, kLastAdminDemoteBlockedMessage;
+    show kLastAdminDeactivateBlockedMessage, kLastAdminDemoteBlockedMessage;
 import 'operator_permissions_card.dart';
 
 /// Τι επέστρεψε η φόρμα — ό,τι πάτησε ο χρήστης, χωρίς κρίση αν επιτρέπεται.
@@ -14,12 +15,16 @@ class OperatorFormValues {
     required this.isAdmin,
     required this.isActive,
     required this.permissionOverrides,
+    required this.avatarKey,
   });
 
   final String displayName;
   final String windowsAccount;
   final bool isAdmin;
   final bool isActive;
+
+  /// Το εικονίδιο που διάλεξε ο χρήστης· `null` = κλασικό ανθρωπάκι.
+  final String? avatarKey;
 
   /// Μόνο όσα δικαιώματα αποκλίνουν από την προεπιλογή τους.
   final Map<String, bool> permissionOverrides;
@@ -39,6 +44,7 @@ class OperatorFormDialog extends StatefulWidget {
     required this.onSubmit,
     this.readOnly = false,
     this.lockedAsLastAdmin = false,
+    this.takenAvatars = const <String, String>{},
   });
 
   /// `null` για νέο προφίλ.
@@ -63,6 +69,12 @@ class OperatorFormDialog extends StatefulWidget {
   /// παραμένει, ως δίχτυ για τη λίστα που πάλιωσε όσο η καρτέλα ήταν ανοιχτή.
   final bool lockedAsLastAdmin;
 
+  /// Ποια εικονίδια κρατούν **άλλα** ενεργά προφίλ, και ποιος το καθένα.
+  ///
+  /// Έρχεται έτοιμος από την οθόνη: η φόρμα δείχνει και μαζεύει, δεν ρωτά τη
+  /// βάση. Το εικονίδιο αυτού του προφίλ έχει ήδη αφαιρεθεί από τον χάρτη.
+  final Map<String, String> takenAvatars;
+
   @override
   State<OperatorFormDialog> createState() => _OperatorFormDialogState();
 }
@@ -77,6 +89,7 @@ class _OperatorFormDialogState extends State<OperatorFormDialog>
   late bool _isAdmin;
   late bool _isActive;
   late Map<String, bool> _permissionOverrides;
+  late String? _avatarKey;
   String? _error;
   bool _saving = false;
 
@@ -126,6 +139,7 @@ class _OperatorFormDialogState extends State<OperatorFormDialog>
     _permissionOverrides = Map<String, bool>.from(
       existing?.permissionOverrides ?? const <String, bool>{},
     );
+    _avatarKey = existing?.avatarKey;
   }
 
   @override
@@ -162,6 +176,7 @@ class _OperatorFormDialogState extends State<OperatorFormDialog>
         isAdmin: _isAdmin,
         isActive: _isActive,
         permissionOverrides: _permissionOverrides,
+        avatarKey: _avatarKey,
       ),
     );
     if (!mounted) return;
@@ -191,20 +206,19 @@ class _OperatorFormDialogState extends State<OperatorFormDialog>
       title: Text(
         isNew
             ? 'Νέος χρήστης'
-            : (readOnly
-                  ? 'Προβολή $personLabel'
-                  : 'Επεξεργασία $personLabel'),
+            : (readOnly ? 'Προβολή $personLabel' : 'Επεξεργασία $personLabel'),
       ),
       content: SizedBox(
         width: 460,
         height: 470,
         child: DefaultTabController(
-          length: 2,
+          length: 3,
           child: Column(
             children: [
               const TabBar(
                 tabs: [
                   Tab(text: 'Στοιχεία'),
+                  Tab(text: 'Εικονίδιο'),
                   Tab(text: 'Δικαιώματα'),
                 ],
               ),
@@ -295,7 +309,7 @@ class _OperatorFormDialogState extends State<OperatorFormDialog>
                                       if (!value && widget.lockedAsLastAdmin) {
                                         _denySwitch(
                                           _DeniedSwitch.active,
-                                          kLastAdminArchiveBlockedMessage,
+                                          kLastAdminDeactivateBlockedMessage,
                                         );
                                         return;
                                       }
@@ -304,11 +318,20 @@ class _OperatorFormDialogState extends State<OperatorFormDialog>
                               secondary: const Icon(Icons.how_to_reg_outlined),
                               title: const Text('Ενεργός'),
                               subtitle: const Text(
-                                'Οι αρχειοθετημένοι κρύβονται από τις λίστες επιλογής',
+                                'Οι απενεργοποιημένοι κρύβονται από τις λίστες επιλογής',
                               ),
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: OperatorAvatarPicker(
+                        selected: _avatarKey,
+                        takenBy: widget.takenAvatars,
+                        readOnly: readOnly,
+                        onChanged: (key) => setState(() => _avatarKey = key),
                       ),
                     ),
                     SingleChildScrollView(

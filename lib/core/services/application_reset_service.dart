@@ -66,6 +66,7 @@ class ApplicationResetService {
     ref.invalidate(showDatabaseNavProvider);
     ref.invalidate(showLampNavProvider);
     ref.invalidate(showDictionaryNavProvider);
+    ref.invalidate(showKnowledgeNavProvider);
     ref.invalidate(coreLexiconProvider);
     ref.invalidate(callsScreenCardsVisibilityProvider);
     ref.invalidate(databaseBackupSettingsProvider);

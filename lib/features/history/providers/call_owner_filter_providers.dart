@@ -2,11 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/operator_repository.dart';
 import '../../../core/models/owner_filter.dart';
 import '../../../core/services/current_operator.dart';
 import '../../../core/services/owner_filter_preference.dart';
 import '../../../core/services/profile_settings.dart';
+import '../../operators/providers/operator_directory_providers.dart';
+import '../../operators/utils/owner_filter_options.dart';
 
 /// Οι επιλογές του φίλτρου «χρήστης» για τις κλήσεις — Ιστορικό και αναφορά
 /// Lansweeper μοιράζονται την ίδια λίστα, γιατί μιλούν για τα ίδια δεδομένα.
@@ -23,35 +24,11 @@ final callOwnerOptionsProvider =
       final active = CurrentOperator.active;
       if (active?.id != null) ownerIds.add(active!.id!);
 
-      final names = <int, String>{
-        for (final operator in await OperatorRepository(db).getAll())
-          if (operator.id != null) operator.id!: operator.displayName,
-      };
-
-      final named =
-          ownerIds
-              .map(
-                (id) => OwnerFilterOption(
-                  value: OwnerFilter.byOperator(id),
-                  // Χρήστης που δεν βρίσκεται πια στον πίνακα δεν κρύβεται:
-                  // οι κλήσεις του υπάρχουν και πρέπει να μπορούν να βρεθούν.
-                  label: names[id] ?? 'Χρήστης #$id',
-                ),
-              )
-              .toList()
-            ..sort(
-              (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
-            );
-
-      return <OwnerFilterOption>[
-        const OwnerFilterOption(value: OwnerFilter.everyone, label: 'Όλοι'),
-        ...named,
-        if (await calls.hasUnassignedCalls())
-          const OwnerFilterOption(
-            value: OwnerFilter.unassigned,
-            label: 'Χωρίς χρήστη',
-          ),
-      ];
+      return buildOwnerFilterOptions(
+        ownerIds: ownerIds,
+        names: await ref.watch(operatorNamesProvider.future),
+        hasUnassigned: await calls.hasUnassignedCalls(),
+      );
     });
 
 /// Κοινός κορμός των δύο φίλτρων «χρήστης» των κλήσεων: προεπιλογή «Όλοι»,

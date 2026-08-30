@@ -65,13 +65,15 @@ void main() {
 
     test('δεν ανασταίνει διακομιστή που έσβησε ο χρήστης', () async {
       await migrateDatabaseToV56(db);
-      await db.delete('servers', where: "host = ?", whereArgs: ['192.168.13.83']);
+      await db.delete(
+        'servers',
+        where: "host = ?",
+        whereArgs: ['192.168.13.83'],
+      );
 
       await migrateDatabaseToV56(db);
 
-      final hosts = (await db.query(
-        'servers',
-      )).map((r) => r['host']).toList();
+      final hosts = (await db.query('servers')).map((r) => r['host']).toList();
       expect(hosts, ['192.168.13.82']);
     });
 

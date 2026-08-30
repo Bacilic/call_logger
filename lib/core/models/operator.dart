@@ -14,6 +14,7 @@ class Operator {
     this.isAdmin = false,
     this.isActive = true,
     this.permissionOverrides = const <String, bool>{},
+    this.avatarKey,
     required this.createdAt,
   });
 
@@ -40,6 +41,13 @@ class Operator {
   /// υπάρχοντα προφίλ — απλώς ισχύει η προεπιλογή του.
   final Map<String, bool> permissionOverrides;
 
+  /// Ποιο εικονίδιο φοράει το προφίλ — το κλειδί του καταλόγου, π.χ. `gorilla`.
+  ///
+  /// `null` σημαίνει «κλασικό ανθρωπάκι»: είτε γιατί το προφίλ φτιάχτηκε πριν
+  /// υπάρξουν εικονίδια, είτε γιατί είχαν πιαστεί όλα τη στιγμή που δημιουργήθηκε.
+  /// Δεν είναι ποτέ σφάλμα και δεν εμποδίζει τίποτα.
+  final String? avatarKey;
+
   final DateTime createdAt;
 
   Operator copyWith({
@@ -50,6 +58,8 @@ class Operator {
     bool? isAdmin,
     bool? isActive,
     Map<String, bool>? permissionOverrides,
+    String? avatarKey,
+    bool clearAvatarKey = false,
     DateTime? createdAt,
   }) {
     return Operator(
@@ -61,6 +71,7 @@ class Operator {
       isAdmin: isAdmin ?? this.isAdmin,
       isActive: isActive ?? this.isActive,
       permissionOverrides: permissionOverrides ?? this.permissionOverrides,
+      avatarKey: clearAvatarKey ? null : (avatarKey ?? this.avatarKey),
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -74,6 +85,7 @@ class Operator {
     'permissions_json': permissionOverrides.isEmpty
         ? null
         : jsonEncode(permissionOverrides),
+    'avatar_key': avatarKey,
     'created_at': createdAt.toIso8601String(),
   };
 
@@ -89,10 +101,20 @@ class Operator {
       permissionOverrides: decodePermissionOverrides(
         map['permissions_json'] as String?,
       ),
+      avatarKey: _trimmedOrNull(map['avatar_key'] as String?),
       createdAt:
           DateTime.tryParse((map['created_at'] as String?) ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
     );
+  }
+
+  /// Κενό κείμενο και `null` είναι το ίδιο πράγμα εδώ: «χωρίς εικονίδιο».
+  ///
+  /// Δύο τρόποι να γραφτεί η ίδια απουσία θα σήμαιναν δύο ελέγχους σε κάθε
+  /// σημείο που τη ρωτά — και ο ένας από τους δύο θα ξεχνιόταν.
+  static String? _trimmedOrNull(String? value) {
+    final trimmed = value?.trim() ?? '';
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   static bool _asBool(Object? value, {bool whenNull = false}) {

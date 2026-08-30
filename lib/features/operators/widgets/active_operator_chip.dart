@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
 import '../../../core/services/current_operator.dart';
+import '../avatars/operator_avatar_image.dart';
 import 'change_operator_dialog.dart';
 
 /// Ποιος είναι συνδεδεμένος τώρα — μόνιμη ένδειξη στο κάτω μέρος της μπάρας
@@ -35,10 +36,14 @@ class ActiveOperatorChip extends StatelessWidget {
         final name = operator?.displayName.trim() ?? '';
         final hasOperator = name.isNotEmpty;
         final label = hasOperator ? name : 'Χωρίς χρήστη';
-        final icon = hasOperator
-            ? Icons.person_outline
-            : Icons.person_off_outlined;
         final color = hasOperator ? scheme.onSurfaceVariant : scheme.error;
+
+        // Χωρίς συνδεδεμένο χρήστη δεν υπάρχει πρόσωπο να δείξουμε — και το
+        // κενό είναι ακριβώς το μήνυμα: το διαγραμμένο ανθρωπάκι στο χρώμα του
+        // σφάλματος λέει ότι οι ενέργειες δεν υπογράφονται από κανέναν.
+        final Widget face = hasOperator
+            ? OperatorAvatarImage(avatarKey: operator?.avatarKey, size: 22)
+            : Icon(Icons.person_off_outlined, size: 18, color: color);
 
         return Tooltip(
           message: 'Αλλαγή χρήστη — τώρα: $label',
@@ -53,7 +58,7 @@ class ActiveOperatorChip extends StatelessWidget {
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(icon, size: 18, color: color),
+                          face,
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
@@ -66,7 +71,7 @@ class ActiveOperatorChip extends StatelessWidget {
                           ),
                         ],
                       )
-                    : Icon(icon, size: 18, color: color),
+                    : face,
               ),
             ),
           ),

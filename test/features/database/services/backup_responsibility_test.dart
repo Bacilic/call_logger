@@ -59,7 +59,10 @@ void main() {
   test('εφεδρικός με παρόντα διαχειριστή → παραχωρεί', () async {
     await _insertOperatorRow(1, isAdmin: true);
     await _insertOperatorRow(2);
-    await _insertPresence(1, lastSeenAt: now.subtract(const Duration(minutes: 1)));
+    await _insertPresence(
+      1,
+      lastSeenAt: now.subtract(const Duration(minutes: 1)),
+    );
 
     expect(
       await BackupResponsibility.shouldDeferToPresentAdmin(
@@ -70,19 +73,25 @@ void main() {
     );
   });
 
-  test('μπαγιάτικο ίχνος διαχειριστή (>3΄) → ο εφεδρικός αναλαμβάνει', () async {
-    await _insertOperatorRow(1, isAdmin: true);
-    await _insertOperatorRow(2);
-    await _insertPresence(1, lastSeenAt: now.subtract(const Duration(minutes: 4)));
+  test(
+    'μπαγιάτικο ίχνος διαχειριστή (>3΄) → ο εφεδρικός αναλαμβάνει',
+    () async {
+      await _insertOperatorRow(1, isAdmin: true);
+      await _insertOperatorRow(2);
+      await _insertPresence(
+        1,
+        lastSeenAt: now.subtract(const Duration(minutes: 4)),
+      );
 
-    expect(
-      await BackupResponsibility.shouldDeferToPresentAdmin(
-        current: _operator(2),
-        now: now,
-      ),
-      isFalse,
-    );
-  });
+      expect(
+        await BackupResponsibility.shouldDeferToPresentAdmin(
+          current: _operator(2),
+          now: now,
+        ),
+        isFalse,
+      );
+    },
+  );
 
   test('ίχνος χωρίς ζωντανό instance δεν μετρά ως παρουσία', () async {
     await _insertOperatorRow(1, isAdmin: true);
@@ -103,45 +112,54 @@ void main() {
     );
   });
 
-  test('ο διαχειριστής δεν παραχωρεί ποτέ — ούτε σε άλλον διαχειριστή', () async {
-    await _insertOperatorRow(1, isAdmin: true);
-    await _insertOperatorRow(3, isAdmin: true);
-    await _insertPresence(3, lastSeenAt: now);
+  test(
+    'ο διαχειριστής δεν παραχωρεί ποτέ — ούτε σε άλλον διαχειριστή',
+    () async {
+      await _insertOperatorRow(1, isAdmin: true);
+      await _insertOperatorRow(3, isAdmin: true);
+      await _insertPresence(3, lastSeenAt: now);
 
-    expect(
-      await BackupResponsibility.shouldDeferToPresentAdmin(
-        current: _operator(1, isAdmin: true),
-        now: now,
-      ),
-      isFalse,
-    );
-  });
+      expect(
+        await BackupResponsibility.shouldDeferToPresentAdmin(
+          current: _operator(1, isAdmin: true),
+          now: now,
+        ),
+        isFalse,
+      );
+    },
+  );
 
-  test('παρών ΑΛΛΟΣ εφεδρικός (όχι διαχειριστής) δεν δίνει προτεραιότητα', () async {
-    await _insertOperatorRow(2);
-    await _insertOperatorRow(4);
-    await _insertPresence(4, lastSeenAt: now);
+  test(
+    'παρών ΑΛΛΟΣ εφεδρικός (όχι διαχειριστής) δεν δίνει προτεραιότητα',
+    () async {
+      await _insertOperatorRow(2);
+      await _insertOperatorRow(4);
+      await _insertPresence(4, lastSeenAt: now);
 
-    expect(
-      await BackupResponsibility.shouldDeferToPresentAdmin(
-        current: _operator(2),
-        now: now,
-      ),
-      isFalse,
-      reason: 'Δύο εφεδρικούς τους χωρίζει η ατομική δέσμευση, όχι η σειρά.',
-    );
-  });
+      expect(
+        await BackupResponsibility.shouldDeferToPresentAdmin(
+          current: _operator(2),
+          now: now,
+        ),
+        isFalse,
+        reason: 'Δύο εφεδρικούς τους χωρίζει η ατομική δέσμευση, όχι η σειρά.',
+      );
+    },
+  );
 
-  test('χωρίς ταυτότητα: κανένας δισταγμός — όλα όπως πριν από τα προφίλ', () async {
-    await _insertOperatorRow(1, isAdmin: true);
-    await _insertPresence(1, lastSeenAt: now);
+  test(
+    'χωρίς ταυτότητα: κανένας δισταγμός — όλα όπως πριν από τα προφίλ',
+    () async {
+      await _insertOperatorRow(1, isAdmin: true);
+      await _insertPresence(1, lastSeenAt: now);
 
-    expect(
-      await BackupResponsibility.shouldDeferToPresentAdmin(
-        current: null,
-        now: now,
-      ),
-      isFalse,
-    );
-  });
+      expect(
+        await BackupResponsibility.shouldDeferToPresentAdmin(
+          current: null,
+          now: now,
+        ),
+        isFalse,
+      );
+    },
+  );
 }

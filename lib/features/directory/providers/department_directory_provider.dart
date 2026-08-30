@@ -650,11 +650,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     Iterable<DepartmentModel> departments,
     String hex,
   ) async {
-    final ids = departments
-        .map((d) => d.id)
-        .whereType<int>()
-        .toSet()
-        .toList();
+    final ids = departments.map((d) => d.id).whereType<int>().toSet().toList();
     if (ids.isEmpty) return;
     _settlePendingBulkUndo();
     final db = await DatabaseHelper.instance.database;

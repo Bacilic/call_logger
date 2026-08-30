@@ -11,6 +11,8 @@ import '../../calls/provider/smart_entity_selector_provider.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../../../core/models/operator.dart';
 import '../../operators/providers/operator_directory_providers.dart';
+import '../../operators/utils/assignable_operators.dart';
+import '../../operators/avatars/operator_avatar_image.dart';
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
 import '../providers/task_service_provider.dart';
@@ -403,13 +405,22 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
   /// σκοντάφτει σε απόφαση που μπορεί να παρθεί και αργότερα.
   ///
   /// Υπεύθυνος που δεν είναι πια στα ενεργά προφίλ δεν χάνεται από το πεδίο:
-  /// εμφανίζεται ως επιλογή ώστε η αποθήκευση να μην τον αφαιρέσει σιωπηλά.
+  /// εμφανίζεται ως επιλογή —σημειωμένος ως απενεργοποιημένος— ώστε η
+  /// αποθήκευση να μην τον αφαιρέσει σιωπηλά. Στον αριθμό πέφτουμε μόνο για
+  /// προφίλ που έχει σβηστεί εντελώς από τη βάση: εκεί δεν υπάρχει όνομα να
+  /// δείξουμε.
   Widget _buildAssigneeField() {
-    final operators =
-        ref.watch(activeOperatorsProvider).value ?? const <Operator>[];
+    final operators = operatorsForAssignment(
+      ref.watch(allOperatorsProvider).value ?? const <Operator>[],
+      _assignedOperatorId,
+    );
     final knownIds = {for (final o in operators) o.id};
     return DropdownButtonFormField<int?>(
       initialValue: _assignedOperatorId,
+      // Χωρίς αυτό το πεδίο ζητά το φυσικό πλάτος του μακρύτερου ονόματος και
+      // ξεχειλίζει: το μισό πλάτος της σειράς δεν χωρά «Όνομα Επώνυμο
+      // (απενεργοποιημένος)».
+      isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Ανάθεση σε',
         border: OutlineInputBorder(),
@@ -419,7 +430,27 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
         for (final operator in operators)
           DropdownMenuItem<int?>(
             value: operator.id,
-            child: Text(operator.displayName),
+            child: Row(
+              children: [
+                OperatorAvatarImage(
+                  avatarKey: operator.avatarKey,
+                  size: 22,
+                  muted: !operator.isActive,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    operatorChoiceLabel(operator),
+                    overflow: TextOverflow.ellipsis,
+                    // Πλάγια για το απενεργοποιημένο προφίλ — ίδιο σήμα με το
+                    // «(διαγραμμένο)» των οντοτήτων καταλόγου.
+                    style: operator.isActive
+                        ? null
+                        : const TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                ),
+              ],
+            ),
           ),
         if (_assignedOperatorId != null &&
             !knownIds.contains(_assignedOperatorId))
@@ -429,6 +460,53 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
           ),
       ],
       onChanged: (v) => setState(() => _assignedOperatorId = v),
+    );
+  }
+
+  /// Ποιος άνοιξε την εκκρεμότητα — ένδειξη, όχι πεδίο.
+  ///
+  /// Κάθεται κάτω από το «Ανάθεση σε» επίτηδες: τα δύο πρόσωπα διαβάζονται
+  /// μαζί, και η αντιπαράθεση «άλλος την άνοιξε, άλλος τη χρωστάει» φαίνεται
+  /// με μια ματιά. Δεν είναι επεξεργάσιμο — η δημιουργία είναι γεγονός.
+  Widget _buildCreatorLine() {
+    final task = widget.task;
+    final creatorId = task?.createdByOperatorId;
+    final createdAt = task?.createdAtDateTime;
+    if (creatorId == null && createdAt == null) return const SizedBox.shrink();
+
+    final names = ref.watch(operatorNamesProvider).value;
+    final moment = createdAt == null
+        ? ''
+        : DateFormat('dd/MM/yyyy HH:mm').format(createdAt);
+    // Ονομαστική και παράθεση, ποτέ «από τον …»: τα ελληνικά ονόματα δεν
+    // κλίνονται από τον κώδικα και το «από τον Βασίλης» θα ήταν χειρότερο
+    // από τη σκέτη ετικέτα.
+    final text = creatorId == null
+        ? 'Δημιουργήθηκε: $moment'
+        : 'Δημιουργός: ${operatorDisplayNameFor(names, creatorId)}'
+              '${moment.isEmpty ? '' : ' — $moment'}';
+
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(
+            Icons.schedule_outlined,
+            size: 16,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -641,6 +719,7 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
                       Expanded(child: _buildAssigneeField()),
                     ],
                   ),
+                  _buildCreatorLine(),
                   if (_isClosedTask) ...[
                     const SizedBox(height: 16),
                     Text(

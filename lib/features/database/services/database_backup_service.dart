@@ -666,5 +666,4 @@ class DatabaseBackupService {
       reportItems: reportItems,
     );
   }
-
 }

@@ -98,12 +98,19 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
     final management = await _management();
     if (!mounted) return;
 
+    // Ποιος κρατά τι, τη στιγμή που ανοίγει η καρτέλα. Ο έλεγχος ξαναγίνεται
+    // στην αποθήκευση — αυτό εδώ είναι για να μη διαλέξει ο χρήστης κάτι που
+    // θα του απορριφθεί μετά.
+    final takenAvatars = await _takenAvatars(management, existing?.id);
+    if (!mounted) return;
+
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => OperatorFormDialog(
         existing: existing,
         readOnly: readOnly,
         lockedAsLastAdmin: lockedAsLastAdmin,
+        takenAvatars: takenAvatars,
         onSubmit: (values) async {
           if (existing == null) {
             final created = await management.create(
@@ -111,6 +118,7 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
               windowsAccount: values.windowsAccount,
               isAdmin: values.isAdmin,
               permissionOverrides: values.permissionOverrides,
+              avatarKey: values.avatarKey,
             );
             return created.allowed ? null : created.message;
           }
@@ -120,6 +128,25 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
     );
 
     if (saved == true) _reload();
+  }
+
+  /// Ποιο εικονίδιο κρατά ποιος **άλλος** ενεργός χρήστης.
+  ///
+  /// Το [selfId] βγαίνει από τον χάρτη: το εικονίδιο που ήδη φοράει η καρτέλα
+  /// δεν είναι κατειλημμένο για την ίδια, αλλιώς θα φαινόταν κλειδωμένο από τον
+  /// εαυτό της και δεν θα μπορούσε να ξαναεπιλεγεί μετά από αλλαγή γνώμης.
+  Future<Map<String, String>> _takenAvatars(
+    OperatorManagement management,
+    int? selfId,
+  ) async {
+    final all = await management.load();
+    return {
+      for (final operator in all)
+        if (operator.isActive &&
+            operator.id != selfId &&
+            operator.avatarKey != null)
+          operator.avatarKey!: operator.displayName,
+    };
   }
 
   /// Αποθήκευση καρτέλας με φρουρό διένεξης.
@@ -142,6 +169,8 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
       isAdmin: values.isAdmin,
       isActive: values.isActive,
       permissionOverrides: values.permissionOverrides,
+      avatarKey: values.avatarKey,
+      clearAvatarKey: values.avatarKey == null,
     );
 
     final conflict = result.conflict;
@@ -164,6 +193,8 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
       isAdmin: values.isAdmin,
       isActive: values.isActive,
       permissionOverrides: values.permissionOverrides,
+      avatarKey: values.avatarKey,
+      clearAvatarKey: values.avatarKey == null,
       force: true,
     );
     return forced.allowed ? null : forced.message;
@@ -260,7 +291,7 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                     ),
                     extraTags: [
                       if (isCurrent) 'Εσείς',
-                      if (!operator.isActive) 'Αρχειοθετημένος',
+                      if (!operator.isActive) 'Απενεργοποιημένος',
                     ],
                     onTap: () => _openForm(
                       existing: operator,

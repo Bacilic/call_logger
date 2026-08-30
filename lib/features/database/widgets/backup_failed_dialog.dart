@@ -133,10 +133,6 @@ Future<void> showBackupFailedDialog({
         pick: pickFolder,
       );
     case BackupFailedChoice.runNow:
-      await runBackupAndReport(
-        context: context,
-        ref: ref,
-        createFolder: false,
-      );
+      await runBackupAndReport(context: context, ref: ref, createFolder: false);
   }
 }

@@ -218,22 +218,25 @@ void main() {
       },
     );
 
-    test('updateTask: με αφετηρία, η ξένη αλλαγή εξακολουθεί να μπλοκάρει', () async {
-      final scenario = await staleAfterOtherClosed();
+    test(
+      'updateTask: με αφετηρία, η ξένη αλλαγή εξακολουθεί να μπλοκάρει',
+      () async {
+        final scenario = await staleAfterOtherClosed();
 
-      await expectLater(
-        () => repo.updateTask(
-          scenario.stale.copyWith(status: TaskStatus.snoozed.toDbValue),
-          expected: scenario.stale,
-        ),
-        throwsA(isA<TaskStaleException>()),
-      );
+        await expectLater(
+          () => repo.updateTask(
+            scenario.stale.copyWith(status: TaskStatus.snoozed.toDbValue),
+            expected: scenario.stale,
+          ),
+          throwsA(isA<TaskStaleException>()),
+        );
 
-      expect(
-        (await readTask(scenario.id)).status,
-        TaskStatus.closed.toDbValue,
-        reason: 'Η ολοκλήρωση του άλλου πρέπει να έχει μείνει ακέραιη',
-      );
-    });
+        expect(
+          (await readTask(scenario.id)).status,
+          TaskStatus.closed.toDbValue,
+          reason: 'Η ολοκλήρωση του άλλου πρέπει να έχει μείνει ακέραιη',
+        );
+      },
+    );
   });
 }

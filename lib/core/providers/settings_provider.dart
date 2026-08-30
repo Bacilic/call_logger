@@ -56,6 +56,11 @@ final showDictionaryNavProvider = FutureProvider<bool>(
   (ref) => SettingsService().windowUi.getShowDictionaryNav(),
 );
 
+/// Εμφάνιση προορισμού Βάση Γνώσης στο NavigationRail. Invalidate μετά από Ρυθμίσεις.
+final showKnowledgeNavProvider = FutureProvider<bool>(
+  (ref) => SettingsService().windowUi.getShowKnowledgeNav(),
+);
+
 /// Ορατότητα καρτελών οθόνης κλήσεων. Invalidate μετά από Ρυθμίσεις.
 final callsScreenCardsVisibilityProvider =
     FutureProvider<CallsScreenCardsVisibility>(

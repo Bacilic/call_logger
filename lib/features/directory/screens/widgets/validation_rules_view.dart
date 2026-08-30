@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/core_lexicon_provider.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/greek_date_format.dart';
 import '../../models/catalog_validation_finding.dart';
@@ -9,6 +10,8 @@ import '../../models/catalog_validation_rules.dart';
 import '../../providers/catalog_validation_provider.dart';
 import '../../services/catalog_scan_runner.dart';
 import '../../services/configured_path_check.dart';
+import '../../services/configured_path_scan_result.dart';
+import '../../services/path_fix_navigator.dart';
 
 /// Υπο-οθόνη «Κανόνες επικύρωσης» του hub «Διάφορα».
 ///
@@ -29,8 +32,9 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
   /// Αποτελέσματα του τελευταίου ελέγχου· `null` = δεν έχει τρέξει ακόμη.
   List<CatalogValidationFinding>? _findings;
 
-  /// Ρυθμισμένες διαδρομές που δεν βρέθηκαν σε αυτό το μηχάνημα.
-  List<ConfiguredPathEntry>? _invalidPaths;
+  /// Το τελευταίο αποτέλεσμα του ελέγχου διαδρομών — μαζί με τις ομάδες που
+  /// δεν κατάφερε να διαβάσει. `null` = δεν έχει τρέξει ακόμη.
+  ConfiguredPathScanResult? _pathScan;
   bool _scanning = false;
 
   late final TextEditingController _internalDigitsController;
@@ -98,7 +102,7 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
     setState(() {
       // Τα ευρήματα προήλθαν από τους ΠΑΛΙΟΥΣ κανόνες — παύουν να ισχύουν.
       _findings = null;
-      _invalidPaths = null;
+      _pathScan = null;
       // Άμεση απόκριση του διακόπτη· η αυθεντική τιμή έρχεται πιο κάτω.
       final shown = _rules;
       if (shown != null) _rules = change(shown);
@@ -125,13 +129,13 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
     setState(() => _scanning = true);
     try {
       final findings = await CatalogScanRunner.scan(ref);
-      final invalidPaths = recheckPaths
+      final pathScan = recheckPaths
           ? await findInvalidConfiguredPaths()
-          : _invalidPaths;
+          : _pathScan;
       if (!mounted) return;
       setState(() {
         _findings = findings;
-        _invalidPaths = invalidPaths;
+        _pathScan = pathScan;
       });
     } finally {
       if (mounted) setState(() => _scanning = false);
@@ -538,7 +542,7 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
               _ScanSection(
                 scanning: _scanning,
                 findings: _findings,
-                invalidPaths: _invalidPaths,
+                pathScan: _pathScan,
                 onScan: _runScan,
                 onOpenRecord: _openRecord,
               ),
@@ -555,14 +559,14 @@ class _ScanSection extends StatelessWidget {
   const _ScanSection({
     required this.scanning,
     required this.findings,
-    required this.invalidPaths,
+    required this.pathScan,
     required this.onScan,
     required this.onOpenRecord,
   });
 
   final bool scanning;
   final List<CatalogValidationFinding>? findings;
-  final List<ConfiguredPathEntry>? invalidPaths;
+  final ConfiguredPathScanResult? pathScan;
   final Future<void> Function() onScan;
   final Future<void> Function(CatalogFindingRecord record) onOpenRecord;
 
@@ -628,9 +632,9 @@ class _ScanSection extends StatelessWidget {
                   onTap: () => onOpenRecord(finding.primary),
                 ),
           ],
-          if (invalidPaths != null) ...[
+          if (pathScan != null) ...[
             const SizedBox(height: 16),
-            _InvalidPathsSection(theme: theme, invalidPaths: invalidPaths!),
+            _InvalidPathsSection(theme: theme, scan: pathScan!),
           ],
         ],
       ],
@@ -640,74 +644,165 @@ class _ScanSection extends StatelessWidget {
 
 /// Ενότητα «Διαδρομές»: ποιες ρυθμισμένες διαδρομές δεν βρέθηκαν σε αυτό
 /// το μηχάνημα — με σαφή ένδειξη αν ταξιδεύουν με τη βάση ή είναι τοπικές.
+///
+/// Το καθαρό μήνυμα μιλά για «όλες» τις διαδρομές **μόνο** όταν εξετάστηκαν
+/// όλες. Όταν μια ομάδα δεν διαβάστηκε, το λέει πρώτα — και το πράσινο
+/// περιορίζεται στις υπόλοιπες.
 class _InvalidPathsSection extends StatelessWidget {
-  const _InvalidPathsSection({required this.theme, required this.invalidPaths});
+  const _InvalidPathsSection({required this.theme, required this.scan});
 
   final ThemeData theme;
-  final List<ConfiguredPathEntry> invalidPaths;
+  final ConfiguredPathScanResult scan;
 
   @override
   Widget build(BuildContext context) {
-    if (invalidPaths.isEmpty) {
-      final color = Colors.green.shade800;
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.green.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.folder_outlined, size: 18, color: color),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Όλες οι ρυθμισμένες διαδρομές βρέθηκαν σε αυτό το μηχάνημα.',
-                style: theme.textTheme.bodySmall?.copyWith(color: color),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
+    final invalidPaths = scan.invalidPaths;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          invalidPaths.length == 1
-              ? '1 διαδρομή εκτός λειτουργίας σε αυτό το μηχάνημα'
-              : '${invalidPaths.length} διαδρομές εκτός λειτουργίας σε αυτό '
-                    'το μηχάνημα',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
+        if (!scan.isFullyChecked) ...[
+          _UncheckedGroupsBanner(theme: theme, groups: scan.uncheckedGroups),
+          const SizedBox(height: 8),
+        ],
+        if (invalidPaths.isEmpty)
+          _AllPathsFoundBanner(theme: theme, partial: !scan.isFullyChecked)
+        else ...[
+          Text(
+            invalidPaths.length == 1
+                ? '1 διαδρομή εκτός λειτουργίας σε αυτό το μηχάνημα'
+                : '${invalidPaths.length} διαδρομές εκτός λειτουργίας σε αυτό '
+                      'το μηχάνημα',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Οι διαδρομές «της βάσης» ταξιδεύουν μαζί της (δουλειά ↔ σπίτι)· '
-          'οι «τοπικές» αφορούν μόνο αυτόν τον υπολογιστή.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.outline,
+          const SizedBox(height: 4),
+          Text(
+            'Οι διαδρομές «της βάσης» ταξιδεύουν μαζί της (δουλειά ↔ σπίτι)· '
+            'οι «τοπικές» αφορούν μόνο αυτόν τον υπολογιστή.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        for (final entry in invalidPaths)
-          _InvalidPathTile(theme: theme, entry: entry),
+          const SizedBox(height: 8),
+          for (final entry in invalidPaths)
+            _InvalidPathTile(theme: theme, entry: entry),
+        ],
       ],
     );
   }
 }
 
-class _InvalidPathTile extends StatelessWidget {
+/// «Δεν ελέγχθηκαν …» — τι έμεινε αόρατο και γιατί.
+///
+/// Τυπική αιτία: η κοινόχρηστη βάση ήταν κλειδωμένη από συνάδελφο τη στιγμή
+/// του ελέγχου, οπότε οι ρυθμίσεις που ζουν μέσα της δεν διαβάστηκαν.
+class _UncheckedGroupsBanner extends StatelessWidget {
+  const _UncheckedGroupsBanner({required this.theme, required this.groups});
+
+  final ThemeData theme;
+  final List<String> groups;
+
+  @override
+  Widget build(BuildContext context) {
+    final warning = Colors.orange.shade800;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.help_outline, size: 18, color: warning),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Δεν ελέγχθηκαν: ${groups.join(', ')}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: warning,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Οι ρυθμίσεις αυτές δεν μπόρεσαν να διαβαστούν — συνήθως '
+                  'επειδή η βάση ήταν απασχολημένη από συνάδελφο. Ξανατρέξτε '
+                  'τον έλεγχο σε λίγο.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: warning),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Το καθαρό μήνυμα των διαδρομών.
+///
+/// Λέει «όλες» **μόνο** όταν εξετάστηκε κάθε ομάδα· αλλιώς περιορίζεται στις
+/// υπόλοιπες. Ζει έξω από το widget ώστε η υπόσχεση να ελέγχεται χωρίς να
+/// χτιστεί οθόνη.
+String configuredPathsCleanMessage({required bool partial}) {
+  return partial
+      ? 'Οι υπόλοιπες ρυθμισμένες διαδρομές βρέθηκαν σε αυτό το μηχάνημα.'
+      : 'Όλες οι ρυθμισμένες διαδρομές βρέθηκαν σε αυτό το μηχάνημα.';
+}
+
+/// Το καθαρό αποτέλεσμα των διαδρομών — «όλες» ή «οι υπόλοιπες».
+class _AllPathsFoundBanner extends StatelessWidget {
+  const _AllPathsFoundBanner({required this.theme, required this.partial});
+
+  final ThemeData theme;
+
+  /// True όταν κάποια ομάδα δεν εξετάστηκε: τότε το μήνυμα δεν δικαιούται
+  /// να μιλήσει για «όλες» τις διαδρομές.
+  final bool partial;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Colors.green.shade800;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.folder_outlined, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              configuredPathsCleanMessage(partial: partial),
+              style: theme.textTheme.bodySmall?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InvalidPathTile extends ConsumerWidget {
   const _InvalidPathTile({required this.theme, required this.entry});
 
   final ThemeData theme;
   final ConfiguredPathEntry entry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final warning = Colors.orange.shade800;
+    final blockedReason = pathFixBlockedReason(
+      entry.fixDestination,
+      dictionaryNavVisible: ref.watch(dictionaryNavVisibleProvider),
+    );
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -770,6 +865,25 @@ class _InvalidPathTile extends StatelessWidget {
                     'Δεν βρέθηκε σε αυτό το μηχάνημα · διορθώνεται: '
                     '${entry.fixLocation}',
                     style: theme.textTheme.bodySmall?.copyWith(color: warning),
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Tooltip(
+                      message:
+                          blockedReason ??
+                          'Μετάβαση στη ρύθμιση: ${entry.fixLocation}',
+                      child: OutlinedButton.icon(
+                        onPressed: blockedReason != null
+                            ? null
+                            : () => requestPathFixNavigation(
+                                ref,
+                                entry.fixDestination,
+                              ),
+                        icon: const Icon(Icons.arrow_forward, size: 18),
+                        label: const Text('Μετάβαση στη ρύθμιση'),
+                      ),
+                    ),
                   ),
                 ],
               ),

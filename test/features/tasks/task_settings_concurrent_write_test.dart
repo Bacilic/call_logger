@@ -171,34 +171,42 @@ void main() {
       );
     });
 
-    test('παλιό κλειδί ρυθμίσεων δεν χάνεται στην πρώτη στοχευμένη εγγραφή', () async {
-      // Εγκατάσταση που δεν έχει ακόμη το νέο κλειδί, μόνο το παλιό.
-      await db.insert('app_settings', {
-        'key': TaskSettingsConfig.legacyAppSettingsKey,
-        'value':
-            '{"dayEndTime":{"hour":17,"minute":45},'
-            '"skipWeekends":false,"maxSnoozeDays":12}',
-      });
+    test(
+      'παλιό κλειδί ρυθμίσεων δεν χάνεται στην πρώτη στοχευμένη εγγραφή',
+      () async {
+        // Εγκατάσταση που δεν έχει ακόμη το νέο κλειδί, μόνο το παλιό.
+        await db.insert('app_settings', {
+          'key': TaskSettingsConfig.legacyAppSettingsKey,
+          'value':
+              '{"dayEndTime":{"hour":17,"minute":45},'
+              '"skipWeekends":false,"maxSnoozeDays":12}',
+        });
 
-      final opened = await repository.getTaskSettingsConfig();
-      expect(opened.maxSnoozeDays, 12, reason: 'η ανάγνωση βλέπει το παλιό κλειδί');
+        final opened = await repository.getTaskSettingsConfig();
+        expect(
+          opened.maxSnoozeDays,
+          12,
+          reason: 'η ανάγνωση βλέπει το παλιό κλειδί',
+        );
 
-      await repository.updateTaskSettingsConfig(
-        (current) => TaskSettingsConfig.applyChanges(
-          from: opened,
-          to: opened.copyWith(autoCloseQuickAdds: false),
-          onto: current,
-        ),
-      );
+        await repository.updateTaskSettingsConfig(
+          (current) => TaskSettingsConfig.applyChanges(
+            from: opened,
+            to: opened.copyWith(autoCloseQuickAdds: false),
+            onto: current,
+          ),
+        );
 
-      final stored = await repository.getTaskSettingsConfig();
-      expect(stored.autoCloseQuickAdds, isFalse, reason: 'η δική μου αλλαγή');
-      expect(
-        stored.dayEndTime,
-        const TimeOfDay(hour: 17, minute: 45),
-        reason: 'οι παλιές ρυθμίσεις δεν σβήνονται από τη μετάβαση στο νέο κλειδί',
-      );
-      expect(stored.maxSnoozeDays, 12);
-    });
+        final stored = await repository.getTaskSettingsConfig();
+        expect(stored.autoCloseQuickAdds, isFalse, reason: 'η δική μου αλλαγή');
+        expect(
+          stored.dayEndTime,
+          const TimeOfDay(hour: 17, minute: 45),
+          reason:
+              'οι παλιές ρυθμίσεις δεν σβήνονται από τη μετάβαση στο νέο κλειδί',
+        );
+        expect(stored.maxSnoozeDays, 12);
+      },
+    );
   });
 }

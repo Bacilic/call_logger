@@ -537,13 +537,11 @@ class RemoteToolFormController extends ChangeNotifier {
       final seconds = waitText.isEmpty
           ? null
           : RemoteTool.normalizeConnectWaitSeconds(waitText);
-      lines.add(
-        switch (seconds) {
-          null => 'Αναμονή σε αυτόν τον υπολογιστή: χρήση της κοινής',
-          0 => 'Αναμονή σε αυτόν τον υπολογιστή: χωρίς κλείδωμα',
-          final int v => 'Αναμονή σε αυτόν τον υπολογιστή: $v δευτ.',
-        },
-      );
+      lines.add(switch (seconds) {
+        null => 'Αναμονή σε αυτόν τον υπολογιστή: χρήση της κοινής',
+        0 => 'Αναμονή σε αυτόν τον υπολογιστή: χωρίς κλείδωμα',
+        final int v => 'Αναμονή σε αυτόν τον υπολογιστή: $v δευτ.',
+      });
     }
     return lines;
   }

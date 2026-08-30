@@ -337,9 +337,14 @@ class IntegrityService {
     if (number.isEmpty) return;
     final existing = await _users.userPhoneNumbersOrdered(db, userId);
     if (existing.contains(number)) return;
-    await _users.updateUser(userId, {
-      'phones': [...existing, number],
-    }, recordAudit: false, expected: null);
+    await _users.updateUser(
+      userId,
+      {
+        'phones': [...existing, number],
+      },
+      recordAudit: false,
+      expected: null,
+    );
     final ap = await _support.auditPerformingUser();
     await AuditService.log(
       db,
@@ -412,9 +417,12 @@ class IntegrityService {
     Map<String, dynamic>? oldValues,
     Map<String, dynamic>? newValues,
   }) async {
-    await _users.updateUser(userId, {
-      'department_id': departmentId,
-    }, recordAudit: false, expected: null);
+    await _users.updateUser(
+      userId,
+      {'department_id': departmentId},
+      recordAudit: false,
+      expected: null,
+    );
     final ap = await _support.auditPerformingUser();
     await AuditService.log(
       db,

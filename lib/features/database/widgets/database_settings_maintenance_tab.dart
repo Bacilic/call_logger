@@ -41,20 +41,21 @@ class DatabaseSettingsMaintenanceTab extends StatelessWidget {
         // Οι βαριές εργασίες μόνο σε όποιον έχει το δικαίωμα. Ο έλεγχος ήταν
         // ως τώρα ΜΟΝΟ στα κουμπιά που άνοιγαν τον διάλογο· τώρα που το
         // περιεχόμενο ζει εδώ, η καρτέλα τον χρωστά η ίδια.
-        if (PermissionService.instance.can(AppPermission.databaseMaintenance))
-          ...[
-            const SizedBox(height: 20),
-            const Divider(height: 1),
-            const SizedBox(height: 16),
-            Text(
-              'Εργασίες συντήρησης',
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+        if (PermissionService.instance.can(
+          AppPermission.databaseMaintenance,
+        )) ...[
+          const SizedBox(height: 20),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          Text(
+            'Εργασίες συντήρησης',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 8),
-            const DatabaseMaintenanceSections(),
-          ],
+          ),
+          const SizedBox(height: 8),
+          const DatabaseMaintenanceSections(),
+        ],
       ],
     );
   }

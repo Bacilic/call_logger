@@ -92,10 +92,7 @@ class _NoteAndStepsCard extends StatelessWidget {
           ],
           onChanged: (value) {
             if (value != null) {
-              persistSettingInBackground(
-                context,
-                notifier.setNoteType(value),
-              );
+              persistSettingInBackground(context, notifier.setNoteType(value));
             }
           },
         ),
@@ -113,21 +110,19 @@ class _NoteAndStepsCard extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           title: const Text('Ενεργό βήμα κατάστασης (EditTicket)'),
           value: config.enableStateUpdateStep,
-          onChanged: (value) =>
-              persistSettingInBackground(
-                context,
-                notifier.setEnableStateUpdateStep(value),
-              ),
+          onChanged: (value) => persistSettingInBackground(
+            context,
+            notifier.setEnableStateUpdateStep(value),
+          ),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Απομνημόνευση τελευταίων επιλογών φόρμας'),
           value: config.rememberFormSelections,
-          onChanged: (value) =>
-              persistSettingInBackground(
-                context,
-                notifier.setRememberFormSelections(value),
-              ),
+          onChanged: (value) => persistSettingInBackground(
+            context,
+            notifier.setRememberFormSelections(value),
+          ),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -197,11 +192,10 @@ class _ListsAndDefaultsCard extends StatelessWidget {
                 expected: force ? null : expected,
                 force: force,
               ),
-          onDefaultChanged: (value) =>
-              persistSettingInBackground(
-                context,
-                notifier.setDefaultTicketState(value),
-              ),
+          onDefaultChanged: (value) => persistSettingInBackground(
+            context,
+            notifier.setDefaultTicketState(value),
+          ),
         ),
         const SizedBox(height: 12),
         _ListWithDefaultRow(
@@ -234,10 +228,8 @@ class _ListsAndDefaultsCard extends StatelessWidget {
                 expected: force ? null : expected,
                 force: force,
               ),
-          onDefaultChanged: (value) => persistSettingInBackground(
-            context,
-            notifier.setPriority(value),
-          ),
+          onDefaultChanged: (value) =>
+              persistSettingInBackground(context, notifier.setPriority(value)),
         ),
         const SizedBox(height: 12),
         _ListWithDefaultRow(
@@ -252,10 +244,8 @@ class _ListsAndDefaultsCard extends StatelessWidget {
                 expected: force ? null : expected,
                 force: force,
               ),
-          onDefaultChanged: (value) => persistSettingInBackground(
-            context,
-            notifier.setTeam(value),
-          ),
+          onDefaultChanged: (value) =>
+              persistSettingInBackground(context, notifier.setTeam(value)),
         ),
         const SizedBox(height: 14),
         Row(

@@ -63,7 +63,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_switchValue(tester, 'Ενεργός'), isTrue);
-      expect(find.text(kLastAdminArchiveBlockedMessage), findsOneWidget);
+      expect(find.text(kLastAdminDeactivateBlockedMessage), findsOneWidget);
     });
 
     testWidgets('με δεύτερο διαχειριστή οι διακόπτες αλλάζουν κανονικά', (
@@ -79,7 +79,7 @@ void main() {
       expect(_switchValue(tester, 'Διαχειριστής'), isFalse);
       expect(_switchValue(tester, 'Ενεργός'), isFalse);
       expect(find.text(kLastAdminDemoteBlockedMessage), findsNothing);
-      expect(find.text(kLastAdminArchiveBlockedMessage), findsNothing);
+      expect(find.text(kLastAdminDeactivateBlockedMessage), findsNothing);
     });
 
     testWidgets('το ξανα-άναμμα επιτρέπεται πάντα', (tester) async {
@@ -132,8 +132,8 @@ void main() {
       expect(isLastActiveAdmin(varvara, all), isFalse);
     });
 
-    test('ο δεύτερος διαχειριστής είναι αρχειοθετημένος → ναι', () {
-      // Ο αρχειοθετημένος δεν μπορεί να συνδεθεί — δεν μετράει ως δικλείδα.
+    test('ο δεύτερος διαχειριστής είναι απενεργοποιημένος → ναι', () {
+      // Ο απενεργοποιημένος δεν μπορεί να συνδεθεί — δεν μετράει ως δικλείδα.
       final varvara = operator('Βαρβάρα', isAdmin: true);
       final all = [
         varvara,

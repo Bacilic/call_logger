@@ -10,6 +10,7 @@ import '../../../core/database/category_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/search_text_normalizer.dart';
+import '../models/dashboard_filter_model.dart';
 import '../models/dashboard_summary_model.dart';
 import '../models/lansweeper_sync_state.dart';
 
@@ -20,6 +21,9 @@ class HistoryFilterModel {
     this.dateFrom,
     this.dateTo,
     this.category,
+    this.department,
+    this.userName,
+    this.equipmentCode,
     this.onlyWithTask = false,
     this.lansweeperState,
   });
@@ -28,6 +32,15 @@ class HistoryFilterModel {
   final DateTime? dateFrom;
   final DateTime? dateTo;
   final String? category;
+
+  /// Τα τρία φίλτρα οντότητας, με το ίδιο λεξιλόγιο που έχουν τα Στατιστικά.
+  ///
+  /// Υπάρχουν εδώ ώστε το «Προβολή όλων» να έχει πού να τα ακουμπήσει: πριν από
+  /// αυτά, η μετάβαση τα πετούσε και το Ιστορικό άνοιγε με άλλο σύνολο κλήσεων
+  /// από αυτό που έδειχνε η κάρτα.
+  final String? department;
+  final String? userName;
+  final String? equipmentCode;
 
   /// Μόνο κλήσεις με ζωντανή συνδεδεμένη εκκρεμότητα.
   final bool onlyWithTask;
@@ -44,10 +57,16 @@ class HistoryFilterModel {
     DateTime? dateFrom,
     DateTime? dateTo,
     String? category,
+    String? department,
+    String? userName,
+    String? equipmentCode,
     bool? onlyWithTask,
     String? lansweeperState,
     bool clearDateRange = false,
     bool clearCategory = false,
+    bool clearDepartment = false,
+    bool clearUserName = false,
+    bool clearEquipmentCode = false,
     bool clearLansweeperState = false,
   }) {
     return HistoryFilterModel(
@@ -55,6 +74,11 @@ class HistoryFilterModel {
       dateFrom: clearDateRange ? null : (dateFrom ?? this.dateFrom),
       dateTo: clearDateRange ? null : (dateTo ?? this.dateTo),
       category: clearCategory ? null : (category ?? this.category),
+      department: clearDepartment ? null : (department ?? this.department),
+      userName: clearUserName ? null : (userName ?? this.userName),
+      equipmentCode: clearEquipmentCode
+          ? null
+          : (equipmentCode ?? this.equipmentCode),
       onlyWithTask: onlyWithTask ?? this.onlyWithTask,
       lansweeperState: clearLansweeperState
           ? null
@@ -75,6 +99,9 @@ class HistoryFilterModel {
     if (keyword.trim().isNotEmpty) 'αναζήτηση',
     if (dateFrom != null || dateTo != null) 'ημερομηνίες',
     if (category != null && category!.trim().isNotEmpty) 'κατηγορία',
+    if (department != null && department!.trim().isNotEmpty) 'τμήμα',
+    if (userName != null && userName!.trim().isNotEmpty) 'υπάλληλος',
+    if (equipmentCode != null && equipmentCode!.trim().isNotEmpty) 'εξοπλισμός',
     if (onlyWithTask) 'με εκκρεμότητα',
     if (hasLansweeperStateFilter)
       'Lansweeper: ${LansweeperSyncState.labelPlural(lansweeperState)}',
@@ -90,6 +117,9 @@ class HistoryFilterModel {
       dateFrom != null ||
       dateTo != null ||
       (category != null && category!.trim().isNotEmpty) ||
+      (department != null && department!.trim().isNotEmpty) ||
+      (userName != null && userName!.trim().isNotEmpty) ||
+      (equipmentCode != null && equipmentCode!.trim().isNotEmpty) ||
       onlyWithTask ||
       hasLansweeperStateFilter;
 
@@ -124,15 +154,37 @@ class HistoryFilterNotifier extends Notifier<HistoryFilterModel> {
     String keyword = '',
     DateTime? dateFrom,
     DateTime? dateTo,
+    String? department,
+    String? userName,
+    String? equipmentCode,
   }) {
     final before = state.activeFilterLabels;
     state = HistoryFilterModel(
       keyword: keyword,
       dateFrom: dateFrom,
       dateTo: dateTo,
+      department: department,
+      userName: userName,
+      equipmentCode: equipmentCode,
     );
     final after = state.activeFilterLabels.toSet();
     return before.where((label) => !after.contains(label)).toList();
+  }
+
+  /// Μετάβαση από τα Στατιστικά Κλήσεων: το Ιστορικό δείχνει ό,τι έδειχνε η
+  /// κάρτα που πατήθηκε.
+  ///
+  /// Η μετάφραση γράφεται **εδώ** και όχι μέσα στην οθόνη, ώστε να μην μπορεί
+  /// μια μελλοντική κάρτα να ξεχάσει ένα φίλτρο: όποιος στέλνει τον χρήστη στο
+  /// Ιστορικό από τον Πίνακα Ελέγχου περνά από αυτή τη μία πόρτα.
+  List<String> focusFromDashboard(DashboardFilterModel dashboard) {
+    return focus(
+      dateFrom: dashboard.dateFrom,
+      dateTo: dashboard.dateTo,
+      department: dashboard.department,
+      userName: dashboard.userName,
+      equipmentCode: dashboard.equipmentCode,
+    );
   }
 }
 
@@ -251,6 +303,9 @@ final historyCategoryDateCallCountProvider = FutureProvider.autoDispose<int>((
     category: filter.category != null && filter.category!.isEmpty
         ? null
         : filter.category,
+    department: filter.department,
+    userName: filter.userName,
+    equipmentCode: filter.equipmentCode,
   );
 });
 
@@ -281,6 +336,9 @@ final historyCallsProvider =
             ? null
             : filter.category,
         keyword: normalizedKeyword.isEmpty ? null : normalizedKeyword,
+        department: filter.department,
+        userName: filter.userName,
+        equipmentCode: filter.equipmentCode,
         onlyWithTask: filter.onlyWithTask,
         lansweeperState: filter.lansweeperState,
         callIds: query.ids,

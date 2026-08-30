@@ -58,7 +58,7 @@ void main() {
       ]);
     });
 
-    test('ο αρχειοθετημένος διαχειριστής δεν μετράει', () {
+    test('ο απενεργοποιημένος διαχειριστής δεν μετράει', () {
       // Δεν προσφέρεται πουθενά προς επιλογή, άρα δεν ξεκλειδώνει τίποτα.
       final state = AdminPresenceGate.evaluate([
         _operator('Παναγιώτης', isAdmin: true, isActive: false),
@@ -69,7 +69,7 @@ void main() {
       expect(state.candidates.map((o) => o.displayName), ['Βαρβάρα']);
     });
 
-    test('βάση με μόνο αρχειοθετημένα δεν έχει ποιον να ρωτήσει', () {
+    test('βάση με μόνο απενεργοποιημένα δεν έχει ποιον να ρωτήσει', () {
       final state = AdminPresenceGate.evaluate([
         _operator('Παναγιώτης', isActive: false),
       ]);

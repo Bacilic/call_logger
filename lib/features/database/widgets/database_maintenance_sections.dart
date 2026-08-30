@@ -422,175 +422,168 @@ class _DatabaseMaintenanceSectionsState
     // πλέον η καρτέλα που μας φιλοξενεί.
     return Stack(
       children: [
-            SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_banner != null) ...[
-                    Material(
-                      color: _bannerError
-                          ? theme.colorScheme.errorContainer.withValues(
-                              alpha: 0.9,
-                            )
-                          : theme.colorScheme.primaryContainer.withValues(
-                              alpha: 0.55,
-                            ),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Text(
-                          _banner!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: _bannerError
-                                ? theme.colorScheme.onErrorContainer
-                                : theme.colorScheme.onPrimaryContainer,
-                          ),
+        SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_banner != null) ...[
+                Material(
+                  color: _bannerError
+                      ? theme.colorScheme.errorContainer.withValues(alpha: 0.9)
+                      : theme.colorScheme.primaryContainer.withValues(
+                          alpha: 0.55,
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  // Ορίζει τι σβήνεται αυτόματα από το Ιστορικό και πότε. Το
-                  // λάθος εδώ δεν φαίνεται τη στιγμή που γίνεται — φαίνεται
-                  // μήνες μετά, όταν ψάξεις παλιά εγγραφή και δεν υπάρχει πια.
-                  if (PermissionService.instance.can(
-                    AppPermission.manageAuditRetention,
-                  )) ...[
-                    _sectionTitle(
-                      theme,
-                      'Αυτόματη εκκαθάριση audit (retention)',
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Περιορισμός μεγέθους πίνακα audit_log (τοπικές ρυθμίσεις· όχι στο λεξικό).',
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Text(
+                      _banner!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Ενεργή πολιτική retention'),
-                      subtitle: const Text(
-                        'Χρησιμοποιείται για αυτόματη εκκαθάριση κατά την εκκίνηση (αν είναι ενεργό παρακάτω).',
-                      ),
-                      value: _retentionCfg.enabled,
-                      onChanged: _busy
-                          ? null
-                          : (v) => setState(
-                              () => _retentionCfg = _retentionCfg.copyWith(
-                                enabled: v,
-                              ),
-                            ),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Εκκαθάριση κατά την εκκίνηση εφαρμογής',
-                      ),
-                      value: _retentionCfg.purgeOnAppStart,
-                      onChanged: _busy || !_retentionCfg.enabled
-                          ? null
-                          : (v) => setState(
-                              () => _retentionCfg = _retentionCfg.copyWith(
-                                purgeOnAppStart: v,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _retentionDaysController,
-                      enabled: !_busy,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Μέγιστη ηλικία (ημέρες)',
-                        hintText: 'Κενό = χωρίς όριο ηλικίας',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _retentionRowsController,
-                      enabled: !_busy,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Μέγιστο πλήθος γραμμών audit',
-                        hintText: 'Κενό = χωρίς όριο πλήθους',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: _busy ? null : _onSaveRetentionConfig,
-                          icon: const Icon(Icons.save_outlined),
-                          label: const Text('Αποθήκευση ρυθμίσεων'),
-                        ),
-                        FilledButton.tonalIcon(
-                          onPressed: _busy
-                              ? null
-                              : () => _onPurgeAuditRetentionNow(context),
-                          icon: const Icon(Icons.auto_delete_outlined),
-                          label: const Text('Εκκαθάριση τώρα'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                  _sectionTitle(theme, 'Εκκαθάριση'),
-                  const SizedBox(height: 8),
-                  ...DatabaseMaintenanceService.purgeableTablesUiOrder.map(
-                    (t) => _tableSection(context, theme, t),
-                  ),
-                  const SizedBox(height: 16),
-                  _sectionTitle(theme, 'Βελτιστοποίηση'),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilledButton.tonalIcon(
-                        onPressed: _busy ? null : () => _onVacuum(context),
-                        icon: const Icon(Icons.compress),
-                        label: const Text('VACUUM'),
-                      ),
-                      FilledButton.tonalIcon(
-                        onPressed: _busy ? null : () => _onReindex(context),
-                        icon: const Icon(Icons.account_tree_outlined),
-                        label: const Text('Αναδόμηση ευρετηρίων'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
-            if (_busy)
-              const Positioned.fill(
-                child: AbsorbPointer(
-                  child: Center(
-                    child: Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 12),
-                            Text('Παρακαλώ περιμένετε…'),
-                          ],
-                        ),
+                        color: _bannerError
+                            ? theme.colorScheme.onErrorContainer
+                            : theme.colorScheme.onPrimaryContainer,
                       ),
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+              ],
+              // Ορίζει τι σβήνεται αυτόματα από το Ιστορικό και πότε. Το
+              // λάθος εδώ δεν φαίνεται τη στιγμή που γίνεται — φαίνεται
+              // μήνες μετά, όταν ψάξεις παλιά εγγραφή και δεν υπάρχει πια.
+              if (PermissionService.instance.can(
+                AppPermission.manageAuditRetention,
+              )) ...[
+                _sectionTitle(theme, 'Αυτόματη εκκαθάριση audit (retention)'),
+                const SizedBox(height: 8),
+                Text(
+                  'Περιορισμός μεγέθους πίνακα audit_log (τοπικές ρυθμίσεις· όχι στο λεξικό).',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Ενεργή πολιτική retention'),
+                  subtitle: const Text(
+                    'Χρησιμοποιείται για αυτόματη εκκαθάριση κατά την εκκίνηση (αν είναι ενεργό παρακάτω).',
+                  ),
+                  value: _retentionCfg.enabled,
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(
+                          () => _retentionCfg = _retentionCfg.copyWith(
+                            enabled: v,
+                          ),
+                        ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Εκκαθάριση κατά την εκκίνηση εφαρμογής'),
+                  value: _retentionCfg.purgeOnAppStart,
+                  onChanged: _busy || !_retentionCfg.enabled
+                      ? null
+                      : (v) => setState(
+                          () => _retentionCfg = _retentionCfg.copyWith(
+                            purgeOnAppStart: v,
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _retentionDaysController,
+                  enabled: !_busy,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Μέγιστη ηλικία (ημέρες)',
+                    hintText: 'Κενό = χωρίς όριο ηλικίας',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _retentionRowsController,
+                  enabled: !_busy,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Μέγιστο πλήθος γραμμών audit',
+                    hintText: 'Κενό = χωρίς όριο πλήθους',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _busy ? null : _onSaveRetentionConfig,
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('Αποθήκευση ρυθμίσεων'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: _busy
+                          ? null
+                          : () => _onPurgeAuditRetentionNow(context),
+                      icon: const Icon(Icons.auto_delete_outlined),
+                      label: const Text('Εκκαθάριση τώρα'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ],
+              _sectionTitle(theme, 'Εκκαθάριση'),
+              const SizedBox(height: 8),
+              ...DatabaseMaintenanceService.purgeableTablesUiOrder.map(
+                (t) => _tableSection(context, theme, t),
               ),
+              const SizedBox(height: 16),
+              _sectionTitle(theme, 'Βελτιστοποίηση'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: _busy ? null : () => _onVacuum(context),
+                    icon: const Icon(Icons.compress),
+                    label: const Text('VACUUM'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: _busy ? null : () => _onReindex(context),
+                    icon: const Icon(Icons.account_tree_outlined),
+                    label: const Text('Αναδόμηση ευρετηρίων'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+        if (_busy)
+          const Positioned.fill(
+            child: AbsorbPointer(
+              child: Center(
+                child: Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 12),
+                        Text('Παρακαλώ περιμένετε…'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

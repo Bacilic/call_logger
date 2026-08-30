@@ -147,6 +147,5 @@ class CallStaleException implements Exception {
   final CallSaveConflict conflict;
 
   @override
-  String toString() =>
-      'Η κλήση άλλαξε από άλλον χρήστη μετά την ανάγνωσή της.';
+  String toString() => 'Η κλήση άλλαξε από άλλον χρήστη μετά την ανάγνωσή της.';
 }

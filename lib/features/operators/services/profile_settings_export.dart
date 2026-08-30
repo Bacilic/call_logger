@@ -8,6 +8,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/operator_settings_repository.dart';
 import '../../../core/services/current_operator.dart';
 import '../../../core/services/profile_settings.dart';
+import '../../../core/utils/json_document.dart';
 
 /// Επιλογή θέσης αποθήκευσης — αντικαθίσταται στα τεστ.
 typedef ProfileExportSavePathPicker =
@@ -72,7 +73,7 @@ Future<ProfileSettingsExportResult> exportActiveOperatorSettings({
       return const ProfileSettingsExportResult.cancelled();
     }
 
-    final payload = const JsonEncoder.withIndent('  ').convert({
+    final payload = encodeJsonDocument({
       'user': operator.displayName,
       'exported_at': (now ?? DateTime.now()).toIso8601String(),
       'settings': settings,

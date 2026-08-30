@@ -369,8 +369,9 @@ class _UpgradeAppSection extends StatelessWidget {
                 'ξαναγράφει μόνο τα αρχεία της εφαρμογής.',
             child: FilledButton.icon(
               key: const Key('newer_db_upgrade_app_button'),
-              onPressed: () =>
-                  Navigator.of(context).pop(DatabaseNewerVersionChoice.upgradeApp),
+              onPressed: () => Navigator.of(
+                context,
+              ).pop(DatabaseNewerVersionChoice.upgradeApp),
               icon: const Icon(Icons.system_update_alt, size: 18),
               label: Text('Αναβάθμιση στην έκδοση ${available.version}'),
             ),

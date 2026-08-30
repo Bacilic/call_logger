@@ -24,7 +24,8 @@ void main() {
       );
       addTearDown(container.dispose);
       await container.read(lookupServiceProvider.future);
-      await container.read(departmentDirectoryProvider.notifier)
+      await container
+          .read(departmentDirectoryProvider.notifier)
           .loadDepartments();
       return container;
     }
@@ -48,31 +49,34 @@ void main() {
       return Map<String, Object?>.from(rows.first);
     }
 
-    test('το κτίριο που έγραψε ο συνάδελφος επιβιώνει της μαζικής βαφής', () async {
-      final id = await seedDepartment('ΤΕΠ');
-      final container = await openScreen();
-      final notifier = container.read(departmentDirectoryProvider.notifier);
+    test(
+      'το κτίριο που έγραψε ο συνάδελφος επιβιώνει της μαζικής βαφής',
+      () async {
+        final id = await seedDepartment('ΤΕΠ');
+        final container = await openScreen();
+        final notifier = container.read(departmentDirectoryProvider.notifier);
 
-      // Η οθόνη μου κρατά την εικόνα ΠΡΙΝ την αλλαγή του συναδέλφου.
-      final stale = DepartmentModel(id: id, name: 'ΤΕΠ');
+        // Η οθόνη μου κρατά την εικόνα ΠΡΙΝ την αλλαγή του συναδέλφου.
+        final stale = DepartmentModel(id: id, name: 'ΤΕΠ');
 
-      final db = await DatabaseHelper.instance.database;
-      await DepartmentRepository(db).updateDepartment(id, {
-        'building': 'Νέα Πτέρυγα',
-        'notes': 'Μεταφέρθηκε στον 3ο',
-      }, expected: null);
+        final db = await DatabaseHelper.instance.database;
+        await DepartmentRepository(db).updateDepartment(id, {
+          'building': 'Νέα Πτέρυγα',
+          'notes': 'Μεταφέρθηκε στον 3ο',
+        }, expected: null);
 
-      await notifier.setDepartmentsColor(<DepartmentModel>[stale], '#FF0000');
+        await notifier.setDepartmentsColor(<DepartmentModel>[stale], '#FF0000');
 
-      final row = await departmentRow(id);
-      expect(row['color'], '#FF0000', reason: 'το χρώμα γράφτηκε');
-      expect(
-        row['building'],
-        'Νέα Πτέρυγα',
-        reason: 'το κτίριο του συναδέλφου δεν επιτρέπεται να σβηστεί',
-      );
-      expect(row['notes'], 'Μεταφέρθηκε στον 3ο');
-    });
+        final row = await departmentRow(id);
+        expect(row['color'], '#FF0000', reason: 'το χρώμα γράφτηκε');
+        expect(
+          row['building'],
+          'Νέα Πτέρυγα',
+          reason: 'το κτίριο του συναδέλφου δεν επιτρέπεται να σβηστεί',
+        );
+        expect(row['notes'], 'Μεταφέρθηκε στον 3ο');
+      },
+    );
 
     test('βάφει όλα τα τμήματα της επιλογής', () async {
       final first = await seedDepartment('ΤΕΠ');
@@ -89,22 +93,25 @@ void main() {
       expect((await departmentRow(second))['color'], '#00FF00');
     });
 
-    test('το όνομα δεν κρίνεται καν — διπλότυπο δεν μπλοκάρει τη βαφή', () async {
-      final id = await seedDepartment('ΤΕΠ');
-      final container = await openScreen();
-      final notifier = container.read(departmentDirectoryProvider.notifier);
+    test(
+      'το όνομα δεν κρίνεται καν — διπλότυπο δεν μπλοκάρει τη βαφή',
+      () async {
+        final id = await seedDepartment('ΤΕΠ');
+        final container = await openScreen();
+        final notifier = container.read(departmentDirectoryProvider.notifier);
 
-      // Άλλο τμήμα με το ίδιο όνομα δεν μπορεί να υπάρξει· η μπαγιάτικη εικόνα
-      // όμως μπορεί να κουβαλά όνομα που στο μεταξύ πήρε άλλος. Η βαφή δεν
-      // αγγίζει όνομα, άρα δεν έχει λόγο να σταματήσει.
-      final stale = DepartmentModel(id: id, name: 'Γραμματεία');
-      await seedDepartment('Γραμματεία');
+        // Άλλο τμήμα με το ίδιο όνομα δεν μπορεί να υπάρξει· η μπαγιάτικη εικόνα
+        // όμως μπορεί να κουβαλά όνομα που στο μεταξύ πήρε άλλος. Η βαφή δεν
+        // αγγίζει όνομα, άρα δεν έχει λόγο να σταματήσει.
+        final stale = DepartmentModel(id: id, name: 'Γραμματεία');
+        await seedDepartment('Γραμματεία');
 
-      await notifier.setDepartmentsColor(<DepartmentModel>[stale], '#0000FF');
+        await notifier.setDepartmentsColor(<DepartmentModel>[stale], '#0000FF');
 
-      final row = await departmentRow(id);
-      expect(row['color'], '#0000FF');
-      expect(row['name'], 'ΤΕΠ', reason: 'το όνομα έμεινε ανέπαφο');
-    });
+        final row = await departmentRow(id);
+        expect(row['color'], '#0000FF');
+        expect(row['name'], 'ΤΕΠ', reason: 'το όνομα έμεινε ανέπαφο');
+      },
+    );
   });
 }

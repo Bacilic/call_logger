@@ -370,27 +370,30 @@ void main() {
       },
     );
 
-    test('χρήστης με ρητό τικ πλήρους αντιγράφου παίρνει exit backup', () async {
-      final dest = await makeDest('deputy_dest');
+    test(
+      'χρήστης με ρητό τικ πλήρους αντιγράφου παίρνει exit backup',
+      () async {
+        final dest = await makeDest('deputy_dest');
 
-      await _saveBackupSettings(
-        _exitBackupSettings(destinationDirectory: dest),
-      );
-      await _seedPendingChange();
-      CurrentOperator.activate(
-        operatorWith(id: 73, overrides: const {'full_backup': true}),
-      );
+        await _saveBackupSettings(
+          _exitBackupSettings(destinationDirectory: dest),
+        );
+        await _seedPendingChange();
+        CurrentOperator.activate(
+          operatorWith(id: 73, overrides: const {'full_backup': true}),
+        );
 
-      await DatabaseExitBackup.runIfEnabled();
+        await DatabaseExitBackup.runIfEnabled();
 
-      expect(
-        await _listBackupDbFiles(dest),
-        hasLength(1),
-        reason:
-            'Το ρητό τικ δίνει στον εφεδρικό το αντίγραφο του κλεισίματος — '
-            'με τις ΙΔΙΕΣ κοινές ρυθμίσεις που όρισε ο διαχειριστής',
-      );
-    });
+        expect(
+          await _listBackupDbFiles(dest),
+          hasLength(1),
+          reason:
+              'Το ρητό τικ δίνει στον εφεδρικό το αντίγραφο του κλεισίματος — '
+              'με τις ΙΔΙΕΣ κοινές ρυθμίσεις που όρισε ο διαχειριστής',
+        );
+      },
+    );
 
     test('χωρίς αφύλακτες αλλαγές το κλείσιμο δεν παίρνει αντίγραφο', () async {
       final dest = await makeDest('no_pending_dest');
@@ -435,40 +438,43 @@ void main() {
       expect(await _listBackupDbFiles(dest), isEmpty);
     });
 
-    test('το κλείσιμο του εφεδρικού παραχωρεί σε παρόντα διαχειριστή', () async {
-      final dest = await makeDest('deputy_defer_dest');
-      await _saveBackupSettings(
-        _exitBackupSettings(destinationDirectory: dest),
-      );
-      await _seedPendingChange();
+    test(
+      'το κλείσιμο του εφεδρικού παραχωρεί σε παρόντα διαχειριστή',
+      () async {
+        final dest = await makeDest('deputy_defer_dest');
+        await _saveBackupSettings(
+          _exitBackupSettings(destinationDirectory: dest),
+        );
+        await _seedPendingChange();
 
-      final db = await DatabaseHelper.instance.database;
-      await db.insert('operators', {
-        'id': 71,
-        'display_name': 'Διαχειριστής',
-        'is_admin': 1,
-        'is_active': 1,
-        'created_at': '2026-08-20T00:00:00.000',
-      });
-      await db.insert('operator_presence', {
-        'operator_id': 71,
-        'station': 'PC-ADMIN',
-        'last_seen_at': DateTime.now().toIso8601String(),
-        'instance': 'inst-admin',
-      });
-      CurrentOperator.activate(
-        operatorWith(id: 73, overrides: const {'full_backup': true}),
-      );
+        final db = await DatabaseHelper.instance.database;
+        await db.insert('operators', {
+          'id': 71,
+          'display_name': 'Διαχειριστής',
+          'is_admin': 1,
+          'is_active': 1,
+          'created_at': '2026-08-20T00:00:00.000',
+        });
+        await db.insert('operator_presence', {
+          'operator_id': 71,
+          'station': 'PC-ADMIN',
+          'last_seen_at': DateTime.now().toIso8601String(),
+          'instance': 'inst-admin',
+        });
+        CurrentOperator.activate(
+          operatorWith(id: 73, overrides: const {'full_backup': true}),
+        );
 
-      await DatabaseExitBackup.runIfEnabled();
+        await DatabaseExitBackup.runIfEnabled();
 
-      expect(
-        await _listBackupDbFiles(dest),
-        isEmpty,
-        reason:
-            'Ο χρονιστής του παρόντος διαχειριστή θα καλύψει τις αλλαγές — '
-            'το κλείσιμο του εφεδρικού δεν παίρνει αντίγραφο.',
-      );
-    });
+        expect(
+          await _listBackupDbFiles(dest),
+          isEmpty,
+          reason:
+              'Ο χρονιστής του παρόντος διαχειριστή θα καλύψει τις αλλαγές — '
+              'το κλείσιμο του εφεδρικού δεν παίρνει αντίγραφο.',
+        );
+      },
+    );
   });
 }

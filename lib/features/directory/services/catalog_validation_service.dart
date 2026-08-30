@@ -321,7 +321,12 @@ class CatalogValidationService {
     Map<int, List<int>> ownerUserIdsByEquipmentId = const {},
 
     /// Ταυτότητα πράκτορα (Ρυθμίσεις API) για τις ήπιες υποψίες τομέα.
-    String? lansweeperAgentIdentity,
+    ///
+    /// Προεπιλογή «διαβάστηκε και δεν έχει οριστεί»: οι καλούντες που δεν
+    /// ασχολούνται με τον πράκτορα παίρνουν τη σημερινή συμπεριφορά, ενώ
+    /// όποιος τον διαβάζει οφείλει να πει και αν τα κατάφερε.
+    LansweeperAgentIdentity lansweeperAgentIdentity =
+        const LansweeperAgentIdentity.read(null),
   }) {
     final findings = <CatalogValidationFinding>[];
 
@@ -350,7 +355,7 @@ class CatalogValidationService {
     // Μέτρο σύγκρισης τομέα: του πράκτορα αν είναι «τομέας\όνομα», αλλιώς ο
     // πλειοψηφικός τομέας των αναγνωριστικών που ήδη σαρώνονται.
     final referenceDomain = lansweeperReferenceDomain(
-      agentIdentity: lansweeperAgentIdentity,
+      agent: lansweeperAgentIdentity,
       knownIdentities: [
         for (final user in activeUsers) user.lansweeperUsername ?? '',
         for (final department in departments)

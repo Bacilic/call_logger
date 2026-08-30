@@ -99,7 +99,7 @@ List<String> rememberedAfterPick(List<String> current, String picked) {
 /// τη σειρά της μνήμης (τελευταίος πρώτος).
 ///
 /// Ό,τι δεν ταιριάζει αγνοείται σιωπηλά: το προφίλ μπορεί να μετονομάστηκε, να
-/// αρχειοθετήθηκε, ή η βάση να άλλαξε εντελώς.
+/// απενεργοποιήθηκε, ή η βάση να άλλαξε εντελώς.
 List<Operator> rememberedWorkstationProfiles(
   List<String> remembered,
   List<Operator> profiles,

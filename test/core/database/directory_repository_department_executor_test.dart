@@ -107,46 +107,41 @@ void main() {
       },
     );
 
-    test(
-      'ατομικότητα: αποτυχία του Ιστορικού δεν αφήνει εγγραφή χωρίς ίχνος '
-      '(updateDepartment χωρίς executor)',
-      () async {
-        final id = await db.insert(
-          'departments',
-          departmentRow('Γραμματεία ΤΕΠ'),
+    test('ατομικότητα: αποτυχία του Ιστορικού δεν αφήνει εγγραφή χωρίς ίχνος '
+        '(updateDepartment χωρίς executor)', () async {
+      final id = await db.insert(
+        'departments',
+        departmentRow('Γραμματεία ΤΕΠ'),
+      );
+      // Σπάμε το Ιστορικό στη μέση της δουλειάς: κάθε νέο ίχνος αποτυγχάνει.
+      await db.execute(
+        "CREATE TRIGGER break_audit BEFORE INSERT ON audit_log "
+        "BEGIN SELECT RAISE(ABORT, 'σπασμένο Ιστορικό'); END",
+      );
+      try {
+        await expectLater(
+          departments.updateDepartment(id, {
+            'name': 'Γραμματεία ΧΕΙΛ',
+          }, expected: null),
+          throwsA(anything),
         );
-        // Σπάμε το Ιστορικό στη μέση της δουλειάς: κάθε νέο ίχνος αποτυγχάνει.
-        await db.execute(
-          "CREATE TRIGGER break_audit BEFORE INSERT ON audit_log "
-          "BEGIN SELECT RAISE(ABORT, 'σπασμένο Ιστορικό'); END",
-        );
-        try {
-          await expectLater(
-            departments.updateDepartment(
-              id,
-              {'name': 'Γραμματεία ΧΕΙΛ'},
-              expected: null,
-            ),
-            throwsA(anything),
-          );
-        } finally {
-          await db.execute('DROP TRIGGER break_audit');
-        }
+      } finally {
+        await db.execute('DROP TRIGGER break_audit');
+      }
 
-        final rows = await db.query(
-          'departments',
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-        expect(
-          rows.single['name'],
-          'Γραμματεία ΤΕΠ',
-          reason:
-              'φρουρός, εγγραφή και Ιστορικό οφείλουν να γίνονται μονομιάς — '
-              'διακοπή στη μέση δεν αφήνει αλλαγή χωρίς ίχνος',
-        );
-      },
-    );
+      final rows = await db.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      expect(
+        rows.single['name'],
+        'Γραμματεία ΤΕΠ',
+        reason:
+            'φρουρός, εγγραφή και Ιστορικό οφείλουν να γίνονται μονομιάς — '
+            'διακοπή στη μέση δεν αφήνει αλλαγή χωρίς ίχνος',
+      );
+    });
 
     test(
       'executor participation: συμμετοχή σε εξωτερική transaction χωρίς nested transaction',
@@ -163,9 +158,12 @@ void main() {
             '2310111222',
             executor: txn,
           );
-          await departments.updateDepartment(id, {
-            'notes': 'ενημέρωση εντός txn',
-          }, executor: txn, expected: null);
+          await departments.updateDepartment(
+            id,
+            {'notes': 'ενημέρωση εντός txn'},
+            executor: txn,
+            expected: null,
+          );
         });
 
         final deptRows = await db.query(

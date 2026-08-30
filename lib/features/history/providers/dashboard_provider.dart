@@ -376,7 +376,9 @@ final dashboardStatsProvider =
 
 /// Ονόματα τμημάτων για dropdown φίλτρου (ταξινόμηση όπως στη βάση).
 
-final dashboardDepartmentsProvider = FutureProvider.autoDispose<List<String>>((
+/// Ονόματα ενεργών τμημάτων για το φίλτρο — κοινά στα Στατιστικά και στο
+/// Ιστορικό, ώστε οι δύο οθόνες να προσφέρουν την ίδια λίστα επιλογών.
+final callFilterDepartmentsProvider = FutureProvider.autoDispose<List<String>>((
   ref,
 ) async {
   final db = await DatabaseHelper.instance.database;

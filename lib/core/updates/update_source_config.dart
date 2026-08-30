@@ -30,7 +30,19 @@ class UpdateSourceConfig {
     if (user != null && user.isNotEmpty) {
       return user;
     }
+    return readInstallerRecordedFolder();
+  }
 
+  /// Ο φάκελος που κατέγραψε το πρόγραμμα εγκατάστασης δίπλα στο εκτελέσιμο.
+  ///
+  /// Είναι ο φάκελος **από τον οποίο έγινε η εγκατάσταση** — όχι εργοστασιακή
+  /// προεπιλογή και όχι «τελευταία σωστή ρύθμιση». Γράφεται μία φορά, από το
+  /// script εγκατάστασης, και επιβιώνει τις ενημερώσεις: η αποσυμπίεση νέας
+  /// έκδοσης τον παραλείπει ρητά ώστε να μη χαθεί.
+  ///
+  /// `null` όταν το αρχείο λείπει ή δεν έχει έγκυρη διαδρομή — τυπικό σε
+  /// εκτέλεση από τον φάκελο ανάπτυξης, που δεν εγκαταστάθηκε ποτέ.
+  Future<String?> readInstallerRecordedFolder() async {
     final exeDir = _executableDirectoryResolver();
     final jsonPath = p.join(exeDir, updateSourceFileName);
     final fromFile = await _readUpdateSourceJson(jsonPath);

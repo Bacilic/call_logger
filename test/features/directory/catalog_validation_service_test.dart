@@ -4,6 +4,7 @@ import 'package:call_logger/features/directory/models/catalog_validation_finding
 import 'package:call_logger/features/directory/models/catalog_validation_rules.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/services/catalog_validation_service.dart';
+import 'package:call_logger/core/services/lansweeper_identity_diagnosis.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -1443,7 +1444,9 @@ void main() {
           ),
         ],
         equipment: const [],
-        lansweeperAgentIdentity: 'v.drosos@hospkorinthos.gr',
+        lansweeperAgentIdentity: const LansweeperAgentIdentity.read(
+          'v.drosos@hospkorinthos.gr',
+        ),
       );
       expect(findings, hasLength(1));
       expect(findings.single.message, contains('«3gnk»'));

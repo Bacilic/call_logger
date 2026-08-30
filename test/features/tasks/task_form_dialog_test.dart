@@ -9,6 +9,8 @@ import 'package:call_logger/core/providers/spell_check_provider.dart';
 import 'package:call_logger/core/services/spell_check_service.dart';
 import 'package:call_logger/core/widgets/lexicon_spell_text_form_field.dart';
 import 'package:call_logger/core/widgets/resizable_text_area.dart';
+import 'package:call_logger/core/models/operator.dart';
+import 'package:call_logger/features/operators/providers/operator_directory_providers.dart';
 import 'package:call_logger/features/tasks/models/task.dart';
 import 'package:call_logger/features/tasks/models/task_settings_config.dart';
 import 'package:call_logger/features/tasks/providers/task_settings_config_provider.dart';
@@ -65,6 +67,8 @@ class _FormResultHolder {
 Future<_FormResultHolder> _openTaskFormDialog(
   WidgetTester tester, {
   Task? task,
+  Map<int, String> operatorNames = const {},
+  List<Operator>? operators,
 }) async {
   final holder = _FormResultHolder();
 
@@ -86,6 +90,9 @@ Future<_FormResultHolder> _openTaskFormDialog(
         taskSettingsConfigProvider.overrideWith(() {
           return _TestTaskSettingsConfigNotifier();
         }),
+        operatorNamesProvider.overrideWith((ref) async => operatorNames),
+        if (operators != null)
+          allOperatorsProvider.overrideWith((ref) async => operators),
       ],
       child: MaterialApp(
         home: Builder(
@@ -420,6 +427,115 @@ void main() {
       expect(find.text('Με την αποθήκευση:'), findsNothing);
       expect(find.text('Ημερομηνία / ώρα λήξης'), findsOneWidget);
       expect(find.text('Ανοιχτή'), findsOneWidget);
+
+      await tester.tap(find.text('Ακύρωση'));
+      await pumpUntilSettled(tester, steps: 10);
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+  });
+
+  group('showTaskFormDialog δημιουργός', () {
+    setUp(() async {
+      await seedIsolatedTestDatabase();
+    });
+
+    testWidgets('η φόρμα λέει ποιος άνοιξε την εκκρεμότητα και πότε', (
+      tester,
+    ) async {
+      await _openTaskFormDialog(
+        tester,
+        task: Task(
+          id: 8,
+          title: 'Με δημιουργό',
+          dueDate: '2026-06-05T17:00:00.000',
+          status: 'open',
+          createdAt: '2026-06-01T09:15:00.000',
+          createdByOperatorId: 11,
+        ),
+        operatorNames: const {11: 'Βασίλης'},
+      );
+
+      expect(
+        find.text('Δημιουργός: Βασίλης — 01/06/2026 09:15'),
+        findsOneWidget,
+        reason:
+            'Ονομαστική και παράθεση: τα ελληνικά ονόματα δεν κλίνονται από '
+            'τον κώδικα, και το «από τον Βασίλης» θα ήταν χειρότερο.',
+      );
+
+      await tester.tap(find.text('Ακύρωση'));
+      await pumpUntilSettled(tester, steps: 10);
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+
+    testWidgets('χωρίς καταγεγραμμένο δημιουργό μένει μόνο η στιγμή', (
+      tester,
+    ) async {
+      await _openTaskFormDialog(
+        tester,
+        task: Task(
+          id: 9,
+          title: 'Χωρίς δημιουργό',
+          dueDate: '2026-06-05T17:00:00.000',
+          status: 'open',
+          createdAt: '2026-06-01T09:15:00.000',
+        ),
+      );
+
+      expect(
+        find.text('Δημιουργήθηκε: 01/06/2026 09:15'),
+        findsOneWidget,
+        reason:
+            'Το κενό είναι τίμιο: εκκρεμότητες πριν από την καταγραφή του '
+            'χειριστή δεν αποκτούν εκ των υστέρων δημιουργό.',
+      );
+
+      await tester.tap(find.text('Ακύρωση'));
+      await pumpUntilSettled(tester, steps: 10);
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+  });
+
+  group('showTaskFormDialog «Ανάθεση σε» με απενεργοποιημένο υπεύθυνο', () {
+    setUp(() async {
+      await seedIsolatedTestDatabase();
+    });
+
+    testWidgets('το πεδίο δείχνει το όνομά του, όχι τον αριθμό του προφίλ', (
+      tester,
+    ) async {
+      await _openTaskFormDialog(
+        tester,
+        task: Task(
+          id: 10,
+          title: 'Ανατεθειμένη σε απενεργοποιημένο',
+          dueDate: '2026-06-05T17:00:00.000',
+          status: 'open',
+          assignedOperatorId: 22,
+        ),
+        operators: [
+          Operator(
+            id: 11,
+            displayName: 'Βασίλης',
+            createdAt: DateTime(2026, 1, 1),
+          ),
+          Operator(
+            id: 22,
+            displayName: 'Βλάσης',
+            isActive: false,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      );
+
+      expect(
+        find.text('Βλάσης (απενεργοποιημένος)'),
+        findsWidgets,
+        reason:
+            'Το όνομα υπάρχει στα προφίλ — το πεδίο απλώς ρωτούσε μόνο τα '
+            'ενεργά και έπεφτε σε «Χρήστης #22».',
+      );
+      expect(find.textContaining('Χρήστης #22'), findsNothing);
 
       await tester.tap(find.text('Ακύρωση'));
       await pumpUntilSettled(tester, steps: 10);

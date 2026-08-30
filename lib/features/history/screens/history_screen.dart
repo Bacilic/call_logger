@@ -23,7 +23,9 @@ import '../providers/history_application_audit_view_provider.dart';
 import '../../../core/models/owner_filter.dart';
 import '../../../core/widgets/owner_filter_chip.dart';
 import '../providers/call_owner_filter_providers.dart';
+import '../providers/dashboard_provider.dart';
 import '../providers/history_provider.dart';
+import '../widgets/call_entity_filter_fields.dart';
 import '../services/lansweeper_state_actions.dart';
 import '../widgets/lansweeper/lansweeper_report_launcher.dart';
 import '../widgets/call_delete_dialog.dart';
@@ -65,33 +67,6 @@ class HistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
-  static const Duration _debounceDuration = Duration(milliseconds: 350);
-  final TextEditingController _searchController = TextEditingController();
-  Timer? _debounceTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    final filter = ref.read(historyFilterProvider);
-    _searchController.text = filter.keyword;
-  }
-
-  @override
-  void dispose() {
-    _debounceTimer?.cancel();
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  void _onSearchChanged(String value) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(_debounceDuration, () {
-      ref
-          .read(historyFilterProvider.notifier)
-          .update((s) => s.copyWith(keyword: value.trim()));
-    });
-  }
-
   Future<void> _pickDateRange() async {
     final filter = ref.read(historyFilterProvider);
     final now = DateTime.now();
@@ -231,8 +206,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       ref.read(historySearchPrefillIntentProvider.notifier).clear();
       // Ο όρος έρχεται έτοιμος από αλλού: εφαρμόζεται αμέσως, χωρίς την
       // αναμονή πληκτρολόγησης που έχει νόημα μόνο όταν γράφει ο χρήστης.
-      _debounceTimer?.cancel();
-      _searchController.text = keyword;
+      // Το πλαίσιο τον δείχνει επειδή ακολουθεί το φίλτρο — δεν γράφεται
+      // χωριστά, αλλιώς τα δύο θα μπορούσαν να αποκλίνουν.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         ref
@@ -246,6 +221,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final totalCallsAsync = ref.watch(totalCallsCountProvider);
     final asyncCallCount = ref.watch(historyCategoryDateCallCountProvider);
     final asyncCategories = ref.watch(historyCategoriesProvider);
+    final asyncDepartments = ref.watch(callFilterDepartmentsProvider);
     final tableZoom = ref.watch(historyTableZoomProvider);
     final filtersEnabled = totalCallsAsync.maybeWhen(
       data: (count) => count > 0,
@@ -345,50 +321,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final compact = constraints.maxWidth < 980;
-                      final keywordField = TextField(
-                        controller: _searchController,
+                      final keywordField = CallEntityTextFilterField(
+                        icon: Icons.search,
+                        hintText: compact
+                            ? 'Αναζήτηση ιστορικού'
+                            : 'Αναζήτηση (Σε όλα τα πεδία, εκτός από ώρα και διάρκεια)',
+                        clearTooltip: 'Καθαρισμός αναζήτησης',
+                        value: filter.keyword,
                         enabled: filtersEnabled,
-                        onChanged: filtersEnabled ? _onSearchChanged : null,
-                        decoration: InputDecoration(
-                          hintText: compact
-                              ? 'Αναζήτηση ιστορικού'
-                              : 'Αναζήτηση (Σε όλα τα πεδία, εκτός από ώρα και διάρκεια)',
-                          hintMaxLines: 1,
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                            valueListenable: _searchController,
-                            builder: (context, value, _) {
-                              if (value.text.isEmpty) {
-                                return const SizedBox.shrink();
-                              }
-                              return IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: filtersEnabled
-                                    ? () {
-                                        _debounceTimer?.cancel();
-                                        _searchController.clear();
-                                        ref
-                                            .read(
-                                              historyFilterProvider.notifier,
-                                            )
-                                            .update(
-                                              (s) => s.copyWith(keyword: ''),
-                                            );
-                                      }
-                                    : null,
-                                tooltip: 'Καθαρισμός αναζήτησης',
-                              );
-                            },
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                        ),
+                        onChanged: (value) => ref
+                            .read(historyFilterProvider.notifier)
+                            .update((s) => s.copyWith(keyword: value ?? '')),
                       );
                       final categoryDropdown = asyncCategories.when(
                         data: (categories) {
@@ -472,6 +415,75 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                           dateButton,
                           const SizedBox(width: 8),
                           Expanded(child: categoryDropdown),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final departmentField = CallDepartmentFilterField(
+                        departments: asyncDepartments,
+                        value: filter.department,
+                        enabled: filtersEnabled,
+                        onChanged: (value) => ref
+                            .read(historyFilterProvider.notifier)
+                            .update(
+                              (s) => s.copyWith(
+                                department: value,
+                                clearDepartment: value == null,
+                              ),
+                            ),
+                      );
+                      final userField = CallEntityTextFilterField(
+                        label: 'Όνομα Χρήστη',
+                        icon: Icons.person_outline,
+                        value: filter.userName,
+                        enabled: filtersEnabled,
+                        onChanged: (value) => ref
+                            .read(historyFilterProvider.notifier)
+                            .update(
+                              (s) => s.copyWith(
+                                userName: value,
+                                clearUserName: value == null,
+                              ),
+                            ),
+                      );
+                      final equipmentField = CallEntityTextFilterField(
+                        label: 'Εξοπλισμός',
+                        icon: Icons.computer_outlined,
+                        value: filter.equipmentCode,
+                        enabled: filtersEnabled,
+                        onChanged: (value) => ref
+                            .read(historyFilterProvider.notifier)
+                            .update(
+                              (s) => s.copyWith(
+                                equipmentCode: value,
+                                clearEquipmentCode: value == null,
+                              ),
+                            ),
+                      );
+
+                      if (constraints.maxWidth < 720) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            departmentField,
+                            const SizedBox(height: 8),
+                            userField,
+                            const SizedBox(height: 8),
+                            equipmentField,
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: departmentField),
+                          const SizedBox(width: 8),
+                          Expanded(child: userField),
+                          const SizedBox(width: 8),
+                          Expanded(child: equipmentField),
                         ],
                       );
                     },

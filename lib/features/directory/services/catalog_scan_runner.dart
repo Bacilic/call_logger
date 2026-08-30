@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/audit_entity_stamps.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/services/lansweeper_agent_identity_reader.dart';
 import '../../../core/services/lookup_service.dart';
-import '../../../core/services/settings_service.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/catalog_validation_finding.dart';
 import '../providers/catalog_validation_provider.dart';
@@ -66,12 +66,8 @@ class CatalogScanRunner {
     }
 
     // Η ταυτότητα του πράκτορα (Ρυθμίσεις API) τροφοδοτεί τις ήπιες υποψίες
-    // τομέα· χωρίς αυτήν, απλώς δεν υπάρχουν υποψίες.
-    String? agentIdentity;
-    try {
-      agentIdentity = await SettingsService().remoteLansweeper
-          .getLansweeperAgentUsername();
-    } catch (_) {}
+    // τομέα. Όταν ΔΕΝ διαβάζεται, οι υποψίες σιωπούν εντελώς — δεν κρίνονται
+    // με το εφεδρικό μέτρο, που θα μπορούσε να είναι άλλος τομέας.
 
     final findings = service.scan(
       users: directoryNotifier.allUsersForUi,
@@ -79,7 +75,7 @@ class CatalogScanRunner {
       equipment: equipment,
       sharedPhonesByDepartmentId: sharedPhones,
       ownerUserIdsByEquipmentId: owners,
-      lansweeperAgentIdentity: agentIdentity,
+      lansweeperAgentIdentity: await readLansweeperAgentIdentity(),
     );
 
     return _withAuditStamps(findings);

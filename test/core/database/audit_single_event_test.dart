@@ -70,9 +70,14 @@ void main() {
 
         await db.delete('audit_log');
 
-        await users.updateUser(userId, {
-          'phones': [existingPhone, newPhone],
-        }, skipPhonePolicyValidation: true, expected: null);
+        await users.updateUser(
+          userId,
+          {
+            'phones': [existingPhone, newPhone],
+          },
+          skipPhonePolicyValidation: true,
+          expected: null,
+        );
 
         final rows = await allAuditRows();
         expect(rows, hasLength(1));

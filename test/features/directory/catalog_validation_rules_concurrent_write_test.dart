@@ -82,31 +82,37 @@ void main() {
       expect((await stored()).equipmentLatinCodeEnabled, isTrue);
     });
 
-    test('χωρίς αποθηκευμένη τιμή γράφονται οι προεπιλογές με την αλλαγή', () async {
-      await toggle((r) => r.copyWith(emptyDepartmentEnabled: false));
+    test(
+      'χωρίς αποθηκευμένη τιμή γράφονται οι προεπιλογές με την αλλαγή',
+      () async {
+        await toggle((r) => r.copyWith(emptyDepartmentEnabled: false));
 
-      final result = await stored();
-      expect(result.emptyDepartmentEnabled, isFalse);
-      expect(
-        result.internalPhoneDigits,
-        const CatalogValidationRules().internalPhoneDigits,
-        reason: 'ό,τι δεν άγγιξα μένει στην προεπιλογή του',
-      );
-    });
+        final result = await stored();
+        expect(result.emptyDepartmentEnabled, isFalse);
+        expect(
+          result.internalPhoneDigits,
+          const CatalogValidationRules().internalPhoneDigits,
+          reason: 'ό,τι δεν άγγιξα μένει στην προεπιλογή του',
+        );
+      },
+    );
 
-    test('πέντε διαδοχικές αλλαγές συσσωρεύονται, δεν αλληλοσβήνονται', () async {
-      await toggle((r) => r.copyWith(swappedNamesEnabled: false));
-      await toggle((r) => r.copyWith(crossDepartmentPhoneEnabled: false));
-      await toggle((r) => r.copyWith(phoneEquipmentCodeEnabled: false));
-      await toggle((r) => r.copyWith(equipmentMinDigits: 2));
-      await toggle((r) => r.copyWith(personNameAllowedSymbols: '(, -'));
+    test(
+      'πέντε διαδοχικές αλλαγές συσσωρεύονται, δεν αλληλοσβήνονται',
+      () async {
+        await toggle((r) => r.copyWith(swappedNamesEnabled: false));
+        await toggle((r) => r.copyWith(crossDepartmentPhoneEnabled: false));
+        await toggle((r) => r.copyWith(phoneEquipmentCodeEnabled: false));
+        await toggle((r) => r.copyWith(equipmentMinDigits: 2));
+        await toggle((r) => r.copyWith(personNameAllowedSymbols: '(, -'));
 
-      final result = await stored();
-      expect(result.swappedNamesEnabled, isFalse);
-      expect(result.crossDepartmentPhoneEnabled, isFalse);
-      expect(result.phoneEquipmentCodeEnabled, isFalse);
-      expect(result.equipmentMinDigits, 2);
-      expect(result.personNameAllowedSymbols, '(, -');
-    });
+        final result = await stored();
+        expect(result.swappedNamesEnabled, isFalse);
+        expect(result.crossDepartmentPhoneEnabled, isFalse);
+        expect(result.phoneEquipmentCodeEnabled, isFalse);
+        expect(result.equipmentMinDigits, 2);
+        expect(result.personNameAllowedSymbols, '(, -');
+      },
+    );
   });
 }

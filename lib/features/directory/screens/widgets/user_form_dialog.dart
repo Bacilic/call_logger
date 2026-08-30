@@ -11,9 +11,9 @@ import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
+import '../../../../core/services/lansweeper_agent_identity_reader.dart';
 import '../../../../core/services/lansweeper_identity_diagnosis.dart';
 import '../../../../core/services/lookup_service.dart';
-import '../../../../core/services/settings_service.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
@@ -124,7 +124,9 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
 
   /// Ταυτότητα πράκτορα (Ρυθμίσεις API) — μέτρο σύγκρισης για την ήπια
   /// υποψία τομέα στο αναγνωριστικό Lansweeper.
-  String? _lansweeperAgentIdentity;
+  /// Άγνωστη ώσπου να διαβαστεί — δες την ομώνυμη στην καρτέλα τμήματος.
+  LansweeperAgentIdentity _lansweeperAgentIdentity =
+      const LansweeperAgentIdentity.unavailable();
 
   bool get isEdit => widget.initialUser != null && !widget.isClone;
 
@@ -200,14 +202,12 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     });
   }
 
-  /// Αποτυχία φόρτωσης = απλώς καμία πορτοκαλί υποψία τομέα.
+  /// Αποτυχία φόρτωσης = καμία πορτοκαλί υποψία τομέα — ούτε με το εφεδρικό
+  /// μέτρο, που θα μπορούσε να είναι άλλος τομέας από τον πραγματικό.
   Future<void> _loadLansweeperAgentIdentity() async {
-    try {
-      final value = await SettingsService().remoteLansweeper
-          .getLansweeperAgentUsername();
-      if (!mounted) return;
-      setState(() => _lansweeperAgentIdentity = value);
-    } catch (_) {}
+    final identity = await readLansweeperAgentIdentity();
+    if (!mounted) return;
+    setState(() => _lansweeperAgentIdentity = identity);
   }
 
   @override
@@ -748,7 +748,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                           ? lansweeperDomainMismatchHint(
                               text,
                               lansweeperReferenceDomain(
-                                agentIdentity: _lansweeperAgentIdentity,
+                                agent: _lansweeperAgentIdentity,
                                 knownIdentities: [
                                   for (final u in LookupService.instance.users)
                                     u.lansweeperUsername ?? '',

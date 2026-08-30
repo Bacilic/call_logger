@@ -139,7 +139,12 @@ void main() {
 
   group('lansweeperReferenceDomain — το μέτρο σύγκρισης', () {
     test('πράκτορας «τομέας\\όνομα» → ο τομέας του, χωρίς ψηφοφορία', () {
-      expect(lansweeperReferenceDomain(agentIdentity: r'gnk\v.drosos'), 'gnk');
+      expect(
+        lansweeperReferenceDomain(
+          agent: const LansweeperAgentIdentity.read(r'gnk\v.drosos'),
+        ),
+        'gnk',
+      );
     });
 
     test('πράκτορας email → ο πλειοψηφικός τομέας του καταλόγου', () {
@@ -147,7 +152,9 @@ void main() {
       // δεν κουβαλά τομέα NetBIOS — μιλούν τα υπάρχοντα αναγνωριστικά.
       expect(
         lansweeperReferenceDomain(
-          agentIdentity: 'v.drosos@hospkorinthos.gr',
+          agent: const LansweeperAgentIdentity.read(
+            'v.drosos@hospkorinthos.gr',
+          ),
           knownIdentities: [r'gnk\bio1', r'gnk\bio2', r'3gnk\TepPath1'],
         ),
         'gnk',
@@ -198,6 +205,40 @@ void main() {
       expect(lansweeperDomainMismatchHint(r'3gnk\a', ''), isNull);
       expect(lansweeperDomainMismatchHint('a@gnk.gr', 'gnk'), isNull);
       expect(lansweeperDomainMismatchHint('Γραφείο', 'gnk'), isNull);
+    });
+  });
+
+  // Το σενάριο: πράκτορας «gnk\v.drosos» αποθηκευμένος, κατάλογος γεμάτος
+  // «medico\…». Αν η ανάγνωση του πράκτορα αποτύχει, η εφεδρεία «πλειοψηφικός
+  // τομέας» έδινε «medico» — και οι σωστές gnk εγγραφές σημαίνονταν ύποπτες.
+  group('πράκτορας που ΔΕΝ διαβάστηκε', () {
+    test('άγνωστος πράκτορας: κανένα μέτρο σύγκρισης, ούτε με ψηφοφορία', () {
+      expect(
+        lansweeperReferenceDomain(
+          agent: const LansweeperAgentIdentity.unavailable(),
+          knownIdentities: [r'medico\a', r'medico\b', r'medico\c'],
+        ),
+        isNull,
+      );
+    });
+
+    test('πράκτορας που δεν έχει οριστεί: η ψηφοφορία ισχύει κανονικά', () {
+      // Εδώ το «κενό» είναι πραγματικό, όχι άγνωστο — η εφεδρεία είναι σωστή.
+      expect(
+        lansweeperReferenceDomain(
+          agent: const LansweeperAgentIdentity.read(null),
+          knownIdentities: [r'medico\a', r'medico\b', r'medico\c'],
+        ),
+        'medico',
+      );
+    });
+
+    test('οι δύο καταστάσεις δεν είναι η ίδια τιμή', () {
+      const unavailable = LansweeperAgentIdentity.unavailable();
+      const notConfigured = LansweeperAgentIdentity.read(null);
+      expect(unavailable.value, notConfigured.value);
+      expect(unavailable.unavailable, isTrue);
+      expect(notConfigured.unavailable, isFalse);
     });
   });
 }

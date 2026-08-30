@@ -294,39 +294,27 @@ void main() {
 
     test('εξοπλισμός με κλήσεις → μόνο το ιστορικό', () {
       final g = _groups(equipment: EquipmentGroupTier.matchedRecord);
-      final plan = CallsLayoutEngine.build(
-        g,
-        visibility(g, hasCalls: true),
-      );
+      final plan = CallsLayoutEngine.build(g, visibility(g, hasCalls: true));
       expect(plan.allSlots, contains(CallsLayoutSlot.equipmentHistory));
       expect(plan.allSlots, isNot(contains(CallsLayoutSlot.equipmentActions)));
     });
 
     test('καταχωρημένος εξοπλισμός χωρίς καμία κλήση → μόνο οι ενέργειες', () {
       final g = _groups(equipment: EquipmentGroupTier.matchedRecord);
-      final plan = CallsLayoutEngine.build(
-        g,
-        visibility(g, hasCalls: false),
-      );
+      final plan = CallsLayoutEngine.build(g, visibility(g, hasCalls: false));
       expect(plan.allSlots, contains(CallsLayoutSlot.equipmentActions));
       expect(plan.allSlots, isNot(contains(CallsLayoutSlot.equipmentHistory)));
     });
 
     test('εξοπλισμός εκτός καταλόγου (ελεύθερο κείμενο) → οι ενέργειες', () {
       final g = _groups(equipment: EquipmentGroupTier.freeTextOnly);
-      final plan = CallsLayoutEngine.build(
-        g,
-        visibility(g, hasCalls: false),
-      );
+      final plan = CallsLayoutEngine.build(g, visibility(g, hasCalls: false));
       expect(plan.allSlots, contains(CallsLayoutSlot.equipmentActions));
     });
 
     test('χωρίς εξοπλισμό → καμία από τις δύο κάρτες', () {
       final g = _groups(caller: true);
-      final plan = CallsLayoutEngine.build(
-        g,
-        visibility(g, hasCalls: false),
-      );
+      final plan = CallsLayoutEngine.build(g, visibility(g, hasCalls: false));
       expect(plan.allSlots, isNot(contains(CallsLayoutSlot.equipmentActions)));
       expect(plan.allSlots, isNot(contains(CallsLayoutSlot.equipmentHistory)));
     });
@@ -352,10 +340,7 @@ void main() {
 
     test('μόνο εξοπλισμός: οι ενέργειες δίπλα στα εργαλεία απομακρυσμένης', () {
       final g = _groups(equipment: EquipmentGroupTier.freeTextOnly);
-      final plan = CallsLayoutEngine.build(
-        g,
-        visibility(g, hasCalls: false),
-      );
+      final plan = CallsLayoutEngine.build(g, visibility(g, hasCalls: false));
       expect(plan.template, CallsLayoutTemplate.d);
       final firstRow = plan.rows.first.columns
           .map((c) => c.single)
@@ -375,11 +360,7 @@ void main() {
         for (final hasCalls in [true, false]) {
           for (final phone in [true, false]) {
             for (final caller in [true, false]) {
-              final g = _groups(
-                phone: phone,
-                caller: caller,
-                equipment: tier,
-              );
+              final g = _groups(phone: phone, caller: caller, equipment: tier);
               final plan = CallsLayoutEngine.build(
                 g,
                 visibility(g, hasCalls: hasCalls),
@@ -389,7 +370,8 @@ void main() {
                 slots.contains(CallsLayoutSlot.equipmentHistory) &&
                     slots.contains(CallsLayoutSlot.equipmentActions),
                 isFalse,
-                reason: 'tier=$tier hasCalls=$hasCalls phone=$phone '
+                reason:
+                    'tier=$tier hasCalls=$hasCalls phone=$phone '
                     'caller=$caller',
               );
             }

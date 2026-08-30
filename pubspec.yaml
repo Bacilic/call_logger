@@ -97,6 +97,9 @@ flutter:
     # Εικόνες οθόνης εκκίνησης. Ο φάκελος δηλώνεται ολόκληρος: νέα εικόνα
     # μπαίνει στην περιστροφή με απλή αντιγραφή, χωρίς αλλαγή εδώ.
     - assets/splash/
+    # Εικονίδια χρηστών. Ο φάκελος δηλώνεται ολόκληρος για τον ίδιο λόγο με τις
+    # εικόνες εκκίνησης: νέο εικονίδιο μπαίνει με απλή αντιγραφή.
+    - assets/avatars/
     # Inter για widget tests με GoogleFonts.config.allowRuntimeFetching = false
     - assets/fonts/Inter-Regular.ttf
 

@@ -213,7 +213,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  /// Επιστροφή στο Ιστορικό με το πλαίσιο της κάρτας: ίδιο χρονικό διάστημα,
+  /// Επιστροφή στο Ιστορικό με το πλαίσιο της κάρτας: ίδια φίλτρα, ίδιο διάστημα,
   /// καθαρή αναζήτηση ώστε να φανούν όντως όλες οι κλήσεις, και η ταξινόμηση που
   /// αναπαράγει τη σειρά της κάρτας.
   void _openHistoryForCard(HistorySortModel sort) {
@@ -222,7 +222,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.read(historySortProvider.notifier).apply(sort);
     final cleared = ref
         .read(historyFilterProvider.notifier)
-        .focus(dateFrom: dash.dateFrom, dateTo: dash.dateTo);
+        .focusFromDashboard(dash);
     Navigator.of(context).pop();
     showHistoryFiltersClearedSnackBar(messenger, cleared);
   }
@@ -271,7 +271,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .read(dashboardFilterProvider.notifier)
         .activeDatePreset;
     final statsAsync = ref.watch(dashboardStatsProvider);
-    final departmentsAsync = ref.watch(dashboardDepartmentsProvider);
+    final departmentsAsync = ref.watch(callFilterDepartmentsProvider);
     final colors = DashboardPaletteColors.from(_palette);
 
     final dateRangeLabel = _formatDateRange(filter);

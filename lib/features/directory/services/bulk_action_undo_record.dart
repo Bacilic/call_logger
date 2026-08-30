@@ -228,7 +228,8 @@ Future<void> applyBulkActionUndo(
         executor: txn,
         recordAudit: false,
         skipPhonePolicyValidation: true,
-      expected: null,);
+        expected: null,
+      );
     }
 
     for (final entry in record.userNotesBefore.entries) {
@@ -238,7 +239,8 @@ Future<void> applyBulkActionUndo(
         executor: txn,
         recordAudit: false,
         skipPhonePolicyValidation: true,
-      expected: null,);
+        expected: null,
+      );
     }
 
     final created = record.createdDepartmentId;

@@ -18,4 +18,4 @@
 ///
 /// Το ιστορικό των εκδόσεων ζει στο `database_v1_schema.dart`, δίπλα στο
 /// σχήμα που περιγράφει.
-const int kDatabaseSchemaVersion = 56;
+const int kDatabaseSchemaVersion = 57;

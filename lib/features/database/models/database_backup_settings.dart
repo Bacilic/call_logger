@@ -142,9 +142,8 @@ class DatabaseBackupSettings {
 
   /// Η μέγιστη αναμονή δεν μπορεί να είναι μικρότερη από την ελάχιστη
   /// απόσταση — αλλιώς η μία ρύθμιση θα ακύρωνε σιωπηλά την άλλη.
-  int get effectiveMaxWaitMinutes => maxWaitMinutes < minSpacingMinutes
-      ? minSpacingMinutes
-      : maxWaitMinutes;
+  int get effectiveMaxWaitMinutes =>
+      maxWaitMinutes < minSpacingMinutes ? minSpacingMinutes : maxWaitMinutes;
 
   /// Η πιο πρόσφατη στιγμή οποιουδήποτε αντιγράφου (αυτόματου ή χειροκίνητου)
   /// — από αυτήν μετρούν απόσταση και αναμονή.
@@ -359,10 +358,7 @@ class DatabaseBackupSettings {
       retentionQuickMaxCopiesEnabled: b('retentionQuickMaxCopiesEnabled', true),
       retentionQuickMaxCopies: i('retentionQuickMaxCopies', 48).clamp(1, 9999),
       retentionQuickMaxAgeEnabled: b('retentionQuickMaxAgeEnabled', true),
-      retentionQuickMaxAgeDays: i(
-        'retentionQuickMaxAgeDays',
-        7,
-      ).clamp(1, 9999),
+      retentionQuickMaxAgeDays: i('retentionQuickMaxAgeDays', 7).clamp(1, 9999),
       retentionFullMaxCopiesEnabled: b('retentionFullMaxCopiesEnabled', true),
       retentionFullMaxCopies: i('retentionFullMaxCopies', 6).clamp(1, 9999),
     );

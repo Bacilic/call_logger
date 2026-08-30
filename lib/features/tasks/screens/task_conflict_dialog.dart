@@ -71,5 +71,7 @@ Future<TaskConflictChoice?> showTaskConflictDialog(
     takeTheirsLabel: 'Ακύρωσε την αλλαγή μου',
   );
   if (overwrite == null) return null;
-  return overwrite ? TaskConflictChoice.overwrite : TaskConflictChoice.takeFresh;
+  return overwrite
+      ? TaskConflictChoice.overwrite
+      : TaskConflictChoice.takeFresh;
 }

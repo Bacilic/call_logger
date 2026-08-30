@@ -116,6 +116,30 @@ abstract final class BackupScheduleStatusFormatter {
       ? 'Αφύλακτες αλλαγές: καμία — δεν χρειάζεται αντίγραφο.'
       : 'Αφύλακτες αλλαγές: $pendingChanges.';
 
+  /// Η προειδοποίηση όταν τα αυτόματα αντίγραφα είναι κλειστά.
+  ///
+  /// Δύο κανόνες που κρατούν την προειδοποίηση αξιόπιστη:
+  ///
+  /// 1. **Λέει πάντα για ποια βάση μιλά** (όταν ξέρει το όνομά της). Ο χρήστης
+  ///    εναλλάσσει αρχεία· χωρίς όνομα δεν ξέρει ποιο κινδυνεύει.
+  /// 2. **Ισχυρίζεται κοινοχρησία μόνο όταν την έχει δει.** Το επιχείρημα «κι
+  ///    άλλοι υπολογιστές γράφουν εδώ» βαραίνει, αλλά σε τοπική βάση είναι
+  ///    ψέμα — και μια προειδοποίηση που λέει ανακρίβειες παύει να διαβάζεται.
+  ///    Ο λόγος να ανοίξουν τα αντίγραφα δεν εξαρτάται από την κοινοχρησία:
+  ///    οι αλλαγές μένουν αφύλακτες έτσι κι αλλιώς.
+  static String disabledBackupsWarning({
+    String? databaseName,
+    bool isSharedDatabase = false,
+  }) {
+    final name = databaseName?.trim() ?? '';
+    final forBase = name.isEmpty ? '' : ' για τη βάση «$name»';
+    final reason = isSharedDatabase
+        ? 'τη χρησιμοποιούν κι άλλοι υπολογιστές, οπότε προτείνεται η '
+              'ενεργοποίησή τους.'
+        : 'οι αλλαγές δεν φυλάσσονται αυτόματα πουθενά.';
+    return 'Τα αυτόματα αντίγραφα είναι απενεργοποιημένα$forBase — $reason';
+  }
+
   /// Πόσα λεπτά ανοχής πριν το «καθυστερεί»: σε κανονική λειτουργία το
   /// οφειλόμενο αντίγραφο παίρνεται μέσα σε ένα λεπτό από τη μέγιστη αναμονή —
   /// κόκκινο νωρίτερα θα αναβόσβηνε σε κάθε φυσιολογικό κύκλο.
@@ -128,15 +152,18 @@ abstract final class BackupScheduleStatusFormatter {
     required DatabaseBackupSettings settings,
     required int pendingChanges,
     required bool canManageBackups,
+    String? databaseName,
+    bool isSharedDatabase = false,
     DateTime? now,
   }) {
     final current = (now ?? DateTime.now()).toLocal();
 
     if (!settings.backupOnExit) {
       return (
-        text:
-            'Τα αυτόματα αντίγραφα είναι απενεργοποιημένα — για κοινόχρηστη '
-            'βάση προτείνεται η ενεργοποίησή τους.',
+        text: disabledBackupsWarning(
+          databaseName: databaseName,
+          isSharedDatabase: isSharedDatabase,
+        ),
         isWarning: true,
       );
     }

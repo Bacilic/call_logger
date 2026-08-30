@@ -238,9 +238,7 @@ void main() {
                     appVersion: 40,
                     assessment: null,
                     newerInstance: null,
-                    upgradeOffer: offerOf(
-                      AppUpgradeConfidence.resolvesForSure,
-                    ),
+                    upgradeOffer: offerOf(AppUpgradeConfidence.resolvesForSure),
                   );
                 },
                 child: const Text('open'),

@@ -180,6 +180,61 @@ void main() {
       expect(h.isWarning, isTrue);
     });
 
+    test('απενεργοποιημένα: το μήνυμα λέει για ΠΟΙΑ βάση μιλά', () {
+      final h = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(enabled: false),
+        pendingChanges: 10,
+        canManageBackups: false,
+        databaseName: 'Δικτυακή Βάση',
+        now: now,
+      );
+
+      expect(
+        h.text,
+        contains('Δικτυακή Βάση'),
+        reason:
+            'Ο χρήστης εναλλάσσει αρχεία βάσης· προειδοποίηση χωρίς όνομα δεν '
+            'λέει ποιο κινδυνεύει.',
+      );
+    });
+
+    test('απενεργοποιημένα σε βάση που ΔΕΝ έχει δει άλλους υπολογιστές: '
+        'καμία αναφορά σε κοινόχρηστη', () {
+      final h = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(enabled: false),
+        pendingChanges: 10,
+        canManageBackups: false,
+        databaseName: 'Τοπική',
+        isSharedDatabase: false,
+        now: now,
+      );
+
+      expect(
+        h.text,
+        isNot(contains('κοινόχρηστη')),
+        reason:
+            'Το επιχείρημα «είναι κοινόχρηστη» δεν στέκει σε τοπική βάση — και '
+            'μια προειδοποίηση που λέει ανακρίβεια χάνει την αξιοπιστία της.',
+      );
+      expect(h.isWarning, isTrue);
+    });
+
+    test('απενεργοποιημένα σε βάση που έχουν ανοίξει κι άλλοι υπολογιστές: '
+        'το λέει', () {
+      final h = BackupScheduleStatusFormatter.statsBackupHealth(
+        settings: _settings(enabled: false),
+        pendingChanges: 10,
+        canManageBackups: false,
+        databaseName: 'Δικτυακή Βάση',
+        isSharedDatabase: true,
+        now: now,
+      );
+
+      expect(h.text, contains('Δικτυακή Βάση'));
+      expect(h.text, contains('υπολογιστές'));
+      expect(h.isWarning, isTrue);
+    });
+
     test('καμία αλλαγή: ήσυχο πράσινο μήνυμα', () {
       final h = BackupScheduleStatusFormatter.statsBackupHealth(
         settings: _settings(

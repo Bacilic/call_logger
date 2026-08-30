@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lansweeper_department_accounts.dart';
+import '../../../../core/services/lansweeper_agent_identity_reader.dart';
 import '../../../../core/services/lansweeper_identity_diagnosis.dart';
 import '../../../../core/services/lookup_service.dart';
-import '../../../../core/services/settings_service.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/directory_support.dart';
@@ -19,6 +19,7 @@ import '../../building_map/services/building_map_floor_ordering.dart';
 import '../../models/department_model.dart';
 import '../../providers/catalog_validation_provider.dart';
 import '../../providers/department_directory_provider.dart';
+import '../../services/building_map_floor_load_state.dart';
 import '../../services/catalog_validation_service.dart';
 import 'catalog_validation_hint_text.dart';
 import 'department_color_palette.dart';
@@ -150,7 +151,10 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
 
   /// Ταυτότητα πράκτορα (Ρυθμίσεις API) — μέτρο σύγκρισης για τις ήπιες
   /// υποψίες τομέα (πορτοκαλί chip). Null όσο δεν έχει φορτωθεί/οριστεί.
-  String? lansweeperAgentIdentity;
+  /// Άγνωστη ώσπου να διαβαστεί: ώσπου τότε καμία υποψία τομέα, αντί για
+  /// υποψίες κριμένες με το εφεδρικό μέτρο.
+  LansweeperAgentIdentity lansweeperAgentIdentity =
+      const LansweeperAgentIdentity.unavailable();
 
   late Color selectedColor;
 
@@ -179,8 +183,12 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   int? selectedFloorId;
   int? snapFloorId;
 
-  /// True μετά την πρώτη ολοκλήρωση `_loadFloors` (ώστε το dropdown να μη δέχεται `value` πριν υπάρχουν items).
-  bool _floorListLoadCompleted = false;
+  /// Τι ξέρουμε για τις κατόψεις — και ειδικά αν **δεν** τις διαβάσαμε.
+  ///
+  /// Σκέτη σημαία «ολοκληρώθηκε» δεν αρκεί: η αποτυχία ανάγνωσης έμοιαζε με
+  /// άδεια λίστα, ο χαρτογραφημένος όροφος εμφανιζόταν «δεν βρέθηκε κάτοψη»,
+  /// και η επιλογή «— χωρίς —» έσβηνε τη θέση του τμήματος στον χάρτη.
+  BuildingMapFloorLoadState floorLoadState = BuildingMapFloorLoadState.loading;
 
   bool get isEdit => widget.initialDepartment != null && !widget.isClone;
 
@@ -193,7 +201,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   int? _effectiveFloorDropdownValue() {
     final sel = selectedFloorId;
     if (sel == null) return null;
-    if (!_floorListLoadCompleted) return null;
+    if (!floorLoadState.isLoaded) return null;
     if (floors.any((f) => f.id == sel)) return sel;
     return sel;
   }
@@ -212,7 +220,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
         ),
     ];
     final sel = selectedFloorId;
-    if (_floorListLoadCompleted &&
+    if (floorLoadState.isLoaded &&
         sel != null &&
         !floors.any((f) => f.id == sel)) {
       items.add(
@@ -252,21 +260,22 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     });
   }
 
-  /// Φορτώνει την ταυτότητα πράκτορα για τη σύγκριση τομέα. Αποτυχία =
-  /// απλώς καμία πορτοκαλί υποψία — τα chips μένουν πράσινα/κόκκινα.
+  /// Φορτώνει την ταυτότητα πράκτορα για τη σύγκριση τομέα.
+  ///
+  /// Αποτυχία = καμία πορτοκαλί υποψία, και τα chips μένουν πράσινα/κόκκινα.
+  /// Η διαφορά από πριν: η αποτυχία δεν περνά πια για «δεν έχει οριστεί»,
+  /// οπότε δεν ενεργοποιεί την εφεδρεία του πλειοψηφικού τομέα — που θα
+  /// σημάδευε ύποπτες ακριβώς τις σωστές εγγραφές.
   Future<void> _loadLansweeperAgentIdentity() async {
-    try {
-      final value = await SettingsService().remoteLansweeper
-          .getLansweeperAgentUsername();
-      if (!mounted) return;
-      setState(() => lansweeperAgentIdentity = value);
-    } catch (_) {}
+    final identity = await readLansweeperAgentIdentity();
+    if (!mounted) return;
+    setState(() => lansweeperAgentIdentity = identity);
   }
 
   /// Ο τομέας αναφοράς για τα πορτοκαλί chips: του πράκτορα, ή —όταν εκείνος
   /// είναι email— ο πλειοψηφικός τομέας των αναγνωριστικών του καταλόγου.
   String? get lansweeperReferenceDomainForChips => lansweeperReferenceDomain(
-    agentIdentity: lansweeperAgentIdentity,
+    agent: lansweeperAgentIdentity,
     knownIdentities: [
       for (final user in LookupService.instance.users)
         user.lansweeperUsername ?? '',
@@ -432,13 +441,15 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
       if (!mounted) return;
       setState(() {
         floors = list;
-        _floorListLoadCompleted = true;
+        floorLoadState = BuildingMapFloorLoadState.loaded;
       });
     } catch (_) {
+      // Άδεια λίστα ΚΑΙ δηλωμένη αποτυχία: η οθόνη δεν επιτρέπεται να πει
+      // «δεν βρέθηκε κάτοψη» για κάτι που δεν κατάφερε να διαβάσει.
       if (!mounted) return;
       setState(() {
         floors = const [];
-        _floorListLoadCompleted = true;
+        floorLoadState = BuildingMapFloorLoadState.failed;
       });
     }
   }
@@ -959,11 +970,25 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                                 isDense: true,
                               ),
                               items: _floorDropdownItems(),
-                              onChanged: (v) => _onFloorDropdownChanged(v),
+                              // Κλειδωμένο όσο οι κάτοψεις είναι άγνωστες: η
+                              // μόνη διαθέσιμη επιλογή θα ήταν «— χωρίς —»,
+                              // που σβήνει τη θέση στον χάρτη.
+                              onChanged: floorLoadState.allowsFloorChange
+                                  ? (v) => _onFloorDropdownChanged(v)
+                                  : null,
                             ),
                           ),
                         ],
                       ),
+                      if (buildingMapFloorLoadNotice(floorLoadState)
+                          case final notice?) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          notice,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.orange.shade800),
+                        ),
+                      ],
                       if (_floorSubtitleText() != null) ...[
                         const SizedBox(height: 4),
                         Text(

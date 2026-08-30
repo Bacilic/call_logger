@@ -131,9 +131,12 @@ void main() {
 
         await db.delete('audit_log');
 
-        await repo.updateUser(userId, {
-          'phones': <String>[],
-        }, skipPhonePolicyValidation: true, expected: null);
+        await repo.updateUser(
+          userId,
+          {'phones': <String>[]},
+          skipPhonePolicyValidation: true,
+          expected: null,
+        );
 
         final row = await findLinkDeltaAudit(
           userId: userId,
@@ -197,9 +200,14 @@ void main() {
 
         await db.delete('audit_log');
 
-        await repo.updateUser(userId, {
-          'phones': [existingPhone, newPhone],
-        }, skipPhonePolicyValidation: true, expected: null);
+        await repo.updateUser(
+          userId,
+          {
+            'phones': [existingPhone, newPhone],
+          },
+          skipPhonePolicyValidation: true,
+          expected: null,
+        );
 
         final row = await findLinkDeltaAudit(
           userId: userId,

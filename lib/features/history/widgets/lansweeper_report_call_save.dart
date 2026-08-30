@@ -84,12 +84,13 @@ class LansweeperReportCallSave {
   }
 
   /// Η ίδια απόφαση για τα **τρέχοντα** πεδία της φόρμας.
-  String? saveDisabledReason(List<ReportCallItem> selected) => disabledReasonFor(
-    selectedCount: selected.length,
-    notes: host.notesController.text,
-    solution: host.solutionController.text,
-    hasChanges: _hasChanges(selected),
-  );
+  String? saveDisabledReason(List<ReportCallItem> selected) =>
+      disabledReasonFor(
+        selectedCount: selected.length,
+        notes: host.notesController.text,
+        solution: host.solutionController.text,
+        hasChanges: _hasChanges(selected),
+      );
 
   Future<void> saveToCall(List<ReportCallItem> selected) async {
     if (saveDisabledReason(selected) != null) return;

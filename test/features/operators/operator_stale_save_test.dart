@@ -38,7 +38,8 @@ void main() {
 
     /// Στήνει το σενάριο: η καρτέλα του Βλάση είναι ανοιχτή σε δύο οθόνες, και
     /// ο πρώτος διαχειριστής προλαβαίνει να του δώσει δικαίωμα και σήμανση.
-    Future<({Operator stale, Operator afterOther})> openTwiceThenOtherSaves() async {
+    Future<({Operator stale, Operator afterOther})>
+    openTwiceThenOtherSaves() async {
       await management.create(
         displayName: 'Διαχειριστής',
         windowsAccount: 'admin.account',
@@ -93,11 +94,9 @@ void main() {
         isTrue,
         reason: 'Η σήμανση διαχειριστή του πρώτου πρέπει να έχει μείνει',
       );
-      expect(
-        stored.permissionOverrides,
-        {AppPermission.browseDatabase.key: false},
-        reason: 'Το δικαίωμα που έδωσε ο πρώτος πρέπει να έχει μείνει',
-      );
+      expect(stored.permissionOverrides, {
+        AppPermission.browseDatabase.key: false,
+      }, reason: 'Το δικαίωμα που έδωσε ο πρώτος πρέπει να έχει μείνει');
       expect(stored.displayName, 'Βλάσης');
     });
 
@@ -163,32 +162,32 @@ void main() {
 
       expect(result.allowed, isTrue);
       expect(result.conflict, isNull);
-      expect(
-        (await repository.findById(vlasis.id!))!.displayName,
-        'Βλάσης Δ.',
-      );
+      expect((await repository.findById(vlasis.id!))!.displayName, 'Βλάσης Δ.');
     });
 
-    test('ο έλεγχος τελευταίου διαχειριστή κρίνει με τη ΒΑΣΗ, όχι με την οθόνη', () async {
-      // Ο μοναδικός διαχειριστής προάγει τον Βλάση από άλλη οθόνη· η μπαγιάτικη
-      // καρτέλα δεν το ξέρει και πάει να του αφαιρέσει τη σήμανση που δεν
-      // «βλέπει» — χωρίς φρουρό, το προφίλ έχανε τη σήμανση αμίλητα.
-      final scenario = await openTwiceThenOtherSaves();
+    test(
+      'ο έλεγχος τελευταίου διαχειριστή κρίνει με τη ΒΑΣΗ, όχι με την οθόνη',
+      () async {
+        // Ο μοναδικός διαχειριστής προάγει τον Βλάση από άλλη οθόνη· η μπαγιάτικη
+        // καρτέλα δεν το ξέρει και πάει να του αφαιρέσει τη σήμανση που δεν
+        // «βλέπει» — χωρίς φρουρό, το προφίλ έχανε τη σήμανση αμίλητα.
+        final scenario = await openTwiceThenOtherSaves();
 
-      final result = await management.save(
-        scenario.stale,
-        displayName: 'Βλάσης',
-        windowsAccount: null,
-        isAdmin: false,
-        isActive: true,
-        permissionOverrides: const <String, bool>{},
-      );
+        final result = await management.save(
+          scenario.stale,
+          displayName: 'Βλάσης',
+          windowsAccount: null,
+          isAdmin: false,
+          isActive: true,
+          permissionOverrides: const <String, bool>{},
+        );
 
-      expect(result.allowed, isFalse);
-      expect(
-        (await repository.findById(scenario.stale.id!))!.isAdmin,
-        isTrue,
-      );
-    });
+        expect(result.allowed, isFalse);
+        expect(
+          (await repository.findById(scenario.stale.id!))!.isAdmin,
+          isTrue,
+        );
+      },
+    );
   });
 }

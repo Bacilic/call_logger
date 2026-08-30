@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 // ΟΧΙ από το `database_schema_migrations.dart`: εκείνο σέρνει το
 // `app_config` → `path_provider` → `package:flutter` → `dart:ui`, που δεν
 // υπάρχει όταν το εργαλείο τρέχει με σκέτο `dart run`.
+import '../../../core/utils/json_document.dart';
 import '../../../core/database/database_schema_version.dart'
     show kDatabaseSchemaVersion;
 import 'installer_script_builder.dart';
@@ -412,7 +413,7 @@ class ReleasePublisherService {
         // αν αυτό το πακέτο το ξεμπλοκάρει, αντί να το μαντεύει.
         'schemaVersion': kDatabaseSchemaVersion,
       };
-      final manifestJson = const JsonEncoder.withIndent('  ').convert(manifest);
+      final manifestJson = encodeJsonDocument(manifest);
       final versionTmp = File(p.join(currentDir.path, 'version.json.tmp'));
       final versionFinal = File(p.join(currentDir.path, 'version.json'));
       await versionTmp.writeAsString(manifestJson, flush: true);
@@ -642,7 +643,7 @@ class ReleasePublisherService {
     }
 
     await _changelogJsonFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(list),
+      encodeJsonDocument(list),
       flush: true,
     );
   }

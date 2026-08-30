@@ -215,21 +215,24 @@ void main() {
       );
     });
 
-    test('σήμανση χωρίς αριθμό: δεν αγγίζει το ξένο αίτημα, δεν ρωτά', () async {
-      final scenario = await queueReadThenOtherRegisters();
+    test(
+      'σήμανση χωρίς αριθμό: δεν αγγίζει το ξένο αίτημα, δεν ρωτά',
+      () async {
+        final scenario = await queueReadThenOtherRegisters();
 
-      // Η κατάσταση είναι ήδη «καταχωρημένη» και η εγγραφή δεν αγγίζει τον
-      // αριθμό: δεν χάνεται τίποτα, οπότε ένας διάλογος εδώ θα ήταν σκέτος
-      // θόρυβος πάνω στη ρουτίνα των 13:00.
-      await lansweeper.updateLansweeperState(
-        callId: scenario.id,
-        state: LansweeperSyncState.sent,
-        expected: scenario.stale,
-      );
+        // Η κατάσταση είναι ήδη «καταχωρημένη» και η εγγραφή δεν αγγίζει τον
+        // αριθμό: δεν χάνεται τίποτα, οπότε ένας διάλογος εδώ θα ήταν σκέτος
+        // θόρυβος πάνω στη ρουτίνα των 13:00.
+        await lansweeper.updateLansweeperState(
+          callId: scenario.id,
+          state: LansweeperSyncState.sent,
+          expected: scenario.stale,
+        );
 
-      final stored = (await calls.getCallById(scenario.id))!;
-      expect(stored.lansweeperMainTicketId, '8001');
-      expect(stored.lansweeperState, LansweeperSyncState.sent);
-    });
+        final stored = (await calls.getCallById(scenario.id))!;
+        expect(stored.lansweeperMainTicketId, '8001');
+        expect(stored.lansweeperState, LansweeperSyncState.sent);
+      },
+    );
   });
 }

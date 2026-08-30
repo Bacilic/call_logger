@@ -83,6 +83,9 @@ import 'database_schema_version.dart';
 /// από επιβεβαιωμένη εκκίνηση, ώστε τα επαναλαμβανόμενα πατήματα να μην
 /// ανοίγουν αλλεπάλληλες συνεδρίες. Καθαρή προσθήκη με προεπιλογή: παλαιότερη
 /// έκδοση της εφαρμογής γράφει χωρίς τη στήλη και το DEFAULT τη συμπληρώνει.
+/// v57: `operators.avatar_key` — ποιο εικονίδιο φοράει κάθε χρήστης. Καθαρή
+/// προσθήκη με κενή προεπιλογή: παλαιότερη έκδοση της εφαρμογής αγνοεί τη
+/// στήλη και δείχνει αρχικά, όπως έκανε πάντα.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
@@ -121,6 +124,7 @@ const String kCreateOperatorsTable = '''
         is_admin INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1,
         permissions_json TEXT,
+        avatar_key TEXT,
         created_at TEXT NOT NULL
       )
 ''';

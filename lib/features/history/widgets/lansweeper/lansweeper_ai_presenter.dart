@@ -16,7 +16,8 @@ class LansweeperAiPresenter {
       AiFallbackReason.rateLimited => 'εξαντλημένη ποσόστωση (429)',
       AiFallbackReason.overloaded => 'υπερφόρτωση (503)',
       AiFallbackReason.cooldown => 'αναμονή ποσόστωσης (cooldown)',
-      AiFallbackReason.modelNotFound => 'δεν υπάρχει ή δεν είναι διαθέσιμο (404)',
+      AiFallbackReason.modelNotFound =>
+        'δεν υπάρχει ή δεν είναι διαθέσιμο (404)',
       AiFallbackReason.modelFailure => 'σφάλμα μοντέλου',
     };
     return 'Το μοντέλο «$fromModel» ($reasonText). '
@@ -40,9 +41,7 @@ class LansweeperAiPresenter {
   }) {
     final remaining = remainingText(downtime.until, now);
     final usingFallback = activeModel.trim() != downtime.model.trim();
-    final using = usingFallback
-        ? ' Τρέχω στο εφεδρικό «$activeModel».'
-        : '';
+    final using = usingFallback ? ' Τρέχω στο εφεδρικό «$activeModel».' : '';
 
     final when = downtime.blocking
         ? 'Ο διακομιστής το δίνει ξανά $remaining.'

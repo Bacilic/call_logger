@@ -11,6 +11,7 @@ import 'database_settings_panel.dart';
 Future<void> showDatabaseSettingsDialog(
   BuildContext context, {
   required Future<void> Function() onDatabaseLifecycleChanged,
+  int initialTabIndex = 0,
   @visibleForTesting WidgetBuilder? panelBuilder,
 }) {
   return showDialog<void>(
@@ -18,6 +19,7 @@ Future<void> showDatabaseSettingsDialog(
     barrierDismissible: false,
     builder: (_) => DatabaseSettingsDialog(
       onDatabaseLifecycleChanged: onDatabaseLifecycleChanged,
+      initialTabIndex: initialTabIndex,
       panelBuilder: panelBuilder,
     ),
   );
@@ -31,11 +33,15 @@ class DatabaseSettingsDialog extends StatefulWidget {
   const DatabaseSettingsDialog({
     super.key,
     required this.onDatabaseLifecycleChanged,
+    this.initialTabIndex = 0,
     this.panelBuilder,
   });
 
   /// Μετά από επιτυχή αλλαγή διαδρομής ή δημιουργία νέου αρχείου βάσης.
   final Future<void> Function() onDatabaseLifecycleChanged;
+
+  /// Καρτέλα που είναι μπροστά όταν ανοίγει ο διάλογος.
+  final int initialTabIndex;
 
   /// Μόνο για τεστ: ελαφρύ υποκατάστατο του πάνελ. Το πραγματικό πάνελ ανοίγει
   /// τη βάση και διαβάζει αρχεία στο initState, οπότε δεν γίνεται pump σε
@@ -70,6 +76,7 @@ class _DatabaseSettingsDialogState extends State<DatabaseSettingsDialog>
                         DatabaseSettingsPanel(
                           onDatabaseLifecycleChanged:
                               widget.onDatabaseLifecycleChanged,
+                          initialTabIndex: widget.initialTabIndex,
                         ),
                   ),
                 ),

@@ -139,27 +139,30 @@ void main() {
     );
   });
 
-  test('ο εφεδρικός παραχωρεί σε παρόντα διαχειριστή — κανένα αρχείο', () async {
-    await _saveSharedBundle(enabledBundle());
-    await _seedPendingChange();
-    await _insertOperatorRow(71, isAdmin: true);
-    await _insertOperatorRow(72);
-    await _insertFreshPresence(71);
-    CurrentOperator.activate(
-      Operator(
-        id: 72,
-        displayName: 'Εφεδρικός',
-        permissionOverrides: const {'full_backup': true},
-        createdAt: DateTime(2026, 8, 20),
-      ),
-    );
+  test(
+    'ο εφεδρικός παραχωρεί σε παρόντα διαχειριστή — κανένα αρχείο',
+    () async {
+      await _saveSharedBundle(enabledBundle());
+      await _seedPendingChange();
+      await _insertOperatorRow(71, isAdmin: true);
+      await _insertOperatorRow(72);
+      await _insertFreshPresence(71);
+      CurrentOperator.activate(
+        Operator(
+          id: 72,
+          displayName: 'Εφεδρικός',
+          permissionOverrides: const {'full_backup': true},
+          createdAt: DateTime(2026, 8, 20),
+        ),
+      );
 
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
-    await container.read(backupSchedulerProvider.notifier).debugRunTick();
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(backupSchedulerProvider.notifier).debugRunTick();
 
-    expect(await _backupFilesIn(destDir.path), isEmpty);
-  });
+      expect(await _backupFilesIn(destDir.path), isEmpty);
+    },
+  );
 
   test('με τον διαχειριστή απόντα, ο εφεδρικός αναλαμβάνει', () async {
     await _saveSharedBundle(enabledBundle());

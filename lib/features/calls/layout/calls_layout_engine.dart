@@ -69,8 +69,7 @@ class CallsLayoutEngine {
   static bool showEquipmentActions(
     CallsFieldGroups groups,
     CallsLayoutVisibility visibility,
-  ) =>
-      groups.isEquipmentGroupActive && !visibility.hasEquipmentHistoryData;
+  ) => groups.isEquipmentGroupActive && !visibility.hasEquipmentHistoryData;
 
   /// Η στήλη εξοπλισμού μιας γραμμής: ιστορικό ή, εφεδρικά, ενέργειες.
   static List<CallsLayoutColumn> _equipmentPanelColumns(

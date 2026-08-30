@@ -33,7 +33,9 @@ void main() {
   );
 
   Future<RemoteToolFormController> openForm({int waitSeconds = 30}) async {
-    final c = RemoteToolFormController(initialTool: tool(waitSeconds: waitSeconds));
+    final c = RemoteToolFormController(
+      initialTool: tool(waitSeconds: waitSeconds),
+    );
     addTearDown(c.dispose);
     await c.loadLocalOverrides();
     return c;
@@ -135,24 +137,27 @@ void main() {
       expect(await RemoteToolConnectWait.localOverrideSeconds(toolId), isNull);
     });
 
-    test('«χρήση της κοινής διαδρομής» αίρει τη δήλωση, δεν γράφει κενό', () async {
-      await OverridableSettings.setOverride(
-        OverridableSettingKeys.remoteToolExecutablePath.forId(toolId),
-        r'D:\local\mstsc.exe',
-      );
-      final c = await openForm();
+    test(
+      '«χρήση της κοινής διαδρομής» αίρει τη δήλωση, δεν γράφει κενό',
+      () async {
+        await OverridableSettings.setOverride(
+          OverridableSettingKeys.remoteToolExecutablePath.forId(toolId),
+          r'D:\local\mstsc.exe',
+        );
+        final c = await openForm();
 
-      c.useSharedPath();
-      await c.commitLocalOverrides(toolId);
+        c.useSharedPath();
+        await c.commitLocalOverrides(toolId);
 
-      expect(
-        await storedPath(),
-        isNull,
-        reason:
-            'Κενή δηλωμένη παράκαμψη σημαίνει «κανένα πρόγραμμα εδώ» — άλλο '
-            'πράγμα από «ακολουθώ την κοινή».',
-      );
-    });
+        expect(
+          await storedPath(),
+          isNull,
+          reason:
+              'Κενή δηλωμένη παράκαμψη σημαίνει «κανένα πρόγραμμα εδώ» — άλλο '
+              'πράγμα από «ακολουθώ την κοινή».',
+        );
+      },
+    );
 
     test('ρητά κενή διαδρομή γράφεται ως κενή, όχι ως άρση', () async {
       final c = await openForm();
@@ -166,35 +171,35 @@ void main() {
   });
 
   group('Η σύνοψη αποθήκευσης', () {
-    test('αναφέρει την τοπική αλλαγή ακόμη κι αν ο κοινός ορισμός έμεινε ίδιος', () async {
-      final c = await openForm();
-      c.localWaitC.text = '40';
+    test(
+      'αναφέρει την τοπική αλλαγή ακόμη κι αν ο κοινός ορισμός έμεινε ίδιος',
+      () async {
+        final c = await openForm();
+        c.localWaitC.text = '40';
 
-      final message = buildRemoteToolSaveMessage(
-        oldTool: tool(),
-        newTool: c.toRemoteTool(id: toolId),
-        localChanges: c.localOverrideChangeLines(),
-      );
+        final message = buildRemoteToolSaveMessage(
+          oldTool: tool(),
+          newTool: c.toRemoteTool(id: toolId),
+          localChanges: c.localOverrideChangeLines(),
+        );
 
-      expect(message, contains('αυτόν τον υπολογιστή'));
-      expect(message, contains('40'));
-      expect(
-        message,
-        isNot(equals(kSaveConfirmationNoChangesMessage)),
-        reason:
-            'Αλλαγή που αφορά μόνο το μηχάνημά του δεν επιτρέπεται να '
-            'διαβαστεί ως «καμία αλλαγή».',
-      );
-    });
+        expect(message, contains('αυτόν τον υπολογιστή'));
+        expect(message, contains('40'));
+        expect(
+          message,
+          isNot(equals(kSaveConfirmationNoChangesMessage)),
+          reason:
+              'Αλλαγή που αφορά μόνο το μηχάνημά του δεν επιτρέπεται να '
+              'διαβαστεί ως «καμία αλλαγή».',
+        );
+      },
+    );
 
     test('«χωρίς κλείδωμα» λέγεται με λόγια, όχι με μηδενικό', () async {
       final c = await openForm();
       c.localWaitC.text = '0';
 
-      expect(
-        c.localOverrideChangeLines().single,
-        contains('χωρίς κλείδωμα'),
-      );
+      expect(c.localOverrideChangeLines().single, contains('χωρίς κλείδωμα'));
     });
   });
 }

@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/services/settings_service.dart';
 import '../../../core/updates/network_folder_classifier.dart';
+import '../../../core/updates/update_folder_presence.dart';
 import '../../../core/updates/update_source_config.dart';
+import '../../../core/widgets/save_on_focus_loss.dart';
+import '../utils/update_folder_hint.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/search_debouncer.dart';
@@ -19,6 +22,7 @@ class UpdateFolderSettingField extends StatefulWidget {
     this.networkFolderClassifier,
     this.networkClassifyDebounce = const Duration(milliseconds: 400),
     this.pickFolder,
+    this.directoryExists,
   });
 
   /// Εξωτερική επίλυση ενεργής διαδρομής (τεστ / έγχυση).
@@ -33,6 +37,9 @@ class UpdateFolderSettingField extends StatefulWidget {
   /// Προαιρετικός επιλογέας φακέλου (τεστ)· αλλιώς FilePicker.
   final Future<String?> Function()? pickFolder;
 
+  /// Προαιρετικός έλεγχος ύπαρξης φακέλου (τεστ)· αλλιώς το σύστημα αρχείων.
+  final DirectoryExistsProbe? directoryExists;
+
   @override
   State<UpdateFolderSettingField> createState() =>
       _UpdateFolderSettingFieldState();
@@ -42,6 +49,15 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
   final _controller = TextEditingController();
   late final SearchDebouncer _classifyDebouncer;
   bool _showLocalOnlyWarning = false;
+  UpdateFolderPresence _presence = UpdateFolderPresence.unset;
+
+  /// Ο φάκελος που κατέγραψε το πρόγραμμα εγκατάστασης — διαβάζεται μία φορά:
+  /// γράφεται στην εγκατάσταση και δεν αλλάζει όσο τρέχει η εφαρμογή.
+  String? _installerFolder;
+
+  /// Έχει τιμή η **κοινή** ρύθμιση; Διαφορετικό από «το πεδίο δείχνει κάτι»:
+  /// το πεδίο γεμίζει και από τον φάκελο εγκατάστασης.
+  bool _hasSavedSetting = false;
   bool _loading = true;
 
   SettingsService get _settings => widget.settingsService ?? SettingsService();
@@ -72,16 +88,30 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
   }
 
   Future<void> _loadActivePath() async {
+    final saved = (await _sourceConfig.getUserUpdateFolderPath())?.trim();
     final path = await _sourceConfig.resolveUpdateFolderPath() ?? '';
     if (!mounted) return;
     setState(() {
       _controller.text = path;
+      _hasSavedSetting = saved != null && saved.isNotEmpty;
       _loading = false;
     });
     _scheduleClassify();
+    // Ξεχωριστά, ποτέ μπροστά από το πεδίο: η ανάγνωση του αρχείου αγγίζει τον
+    // δίσκο και δεν πρέπει να καθυστερεί την τιμή που ο χρήστης ήρθε να δει.
+    unawaited(_loadInstallerFolder());
+  }
+
+  Future<void> _loadInstallerFolder() async {
+    final folder = await _sourceConfig.readInstallerRecordedFolder();
+    if (!mounted) return;
+    setState(() => _installerFolder = folder);
   }
 
   void _onTextChanged() {
+    // Η γραμμή επεξήγησης αλλάζει μόλις το πεδίο αδειάσει ή ξαναγεμίσει —
+    // χωρίς αναμονή, δεν ρωτά κανέναν.
+    setState(() {});
     _scheduleClassify();
   }
 
@@ -91,9 +121,24 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
       final trimmed = q.trim();
       if (trimmed.isEmpty) {
         if (!isCurrent() || !mounted) return;
-        setState(() => _showLocalOnlyWarning = false);
+        setState(() {
+          _showLocalOnlyWarning = false;
+          _presence = UpdateFolderPresence.unset;
+        });
         return;
       }
+      // Ανεξάρτητα, όχι σε σειρά: η ταξινόμηση ρωτά το δίκτυο και μπορεί να
+      // αργήσει. Αν η μία περίμενε την άλλη, ένας αργός διακομιστής θα
+      // κρατούσε κρυφή και την προειδοποίηση που δεν τον χρειάζεται.
+      unawaited(
+        probeUpdateFolderPresence(trimmed, exists: widget.directoryExists).then(
+          (presence) {
+            if (!isCurrent() || !mounted) return;
+            setState(() => _presence = presence);
+          },
+        ),
+      );
+
       final kind = await _classifier.classify(trimmed);
       if (!isCurrent() || !mounted) return;
       setState(() {
@@ -107,6 +152,10 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
     await _settings.catalogs.setUpdateFolderPath(
       trimmed.isEmpty ? null : trimmed,
     );
+    if (!mounted) return;
+    // Η αποθήκευση αλλάζει την απάντηση στο «ποιον αφορά αυτό;» — η γραμμή
+    // από κάτω πρέπει να το πει αμέσως, όχι στο επόμενο άνοιγμα.
+    setState(() => _hasSavedSetting = trimmed.isNotEmpty);
   }
 
   Future<void> _pickFolder() async {
@@ -147,18 +196,21 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: TextField(
-                key: const Key('settings_update_folder_field'),
-                controller: _controller,
-                enabled: !_loading,
-                decoration: const InputDecoration(
-                  labelText: 'Φάκελος ελέγχου ενημερώσεων',
-                  hintText: r'\\server\share\call_logger_updates',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+              child: SaveOnFocusLoss(
+                onLostFocus: () => unawaited(_persistFromField()),
+                child: TextField(
+                  key: const Key('settings_update_folder_field'),
+                  controller: _controller,
+                  enabled: !_loading,
+                  decoration: const InputDecoration(
+                    labelText: 'Φάκελος ελέγχου ενημερώσεων',
+                    hintText: r'\\server\share\call_logger_updates',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onEditingComplete: () => unawaited(_persistFromField()),
+                  onSubmitted: (_) => unawaited(_persistFromField()),
                 ),
-                onEditingComplete: () => unawaited(_persistFromField()),
-                onSubmitted: (_) => unawaited(_persistFromField()),
               ),
             ),
             const SizedBox(width: 8),
@@ -172,12 +224,44 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Με κενό πεδίο η εφαρμογή χρησιμοποιεί αυτόματα το '
-          'update_source.json δίπλα στο εκτελέσιμο.',
+          UpdateFolderHint.forState(
+            fieldValue: _controller.text,
+            installerFolder: _installerFolder,
+            hasSavedSetting: _hasSavedSetting,
+          ),
+          key: const Key('settings_update_folder_hint'),
           style: theme.textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
+            // Το «κανένας έλεγχος» δεν είναι σφάλμα ρύθμισης, είναι όμως
+            // απώλεια λειτουργίας: ξεχωρίζει χωρίς να φωνάζει κόκκινο.
+            color:
+                UpdateFolderHint.isNoSourceState(
+                  fieldValue: _controller.text,
+                  installerFolder: _installerFolder,
+                )
+                ? scheme.tertiary
+                : scheme.onSurfaceVariant,
           ),
         ),
+        if (_presence == UpdateFolderPresence.missing) ...[
+          const SizedBox(height: 8),
+          Row(
+            key: const Key('settings_update_folder_missing_warning'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.error_outline, size: 16, color: scheme.error),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Ο φάκελος δεν βρέθηκε. Η εφαρμογή δεν θα μπορεί να '
+                  'ελέγξει για νέα έκδοση όσο η διαδρομή δείχνει εκεί.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.error,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
         if (_showLocalOnlyWarning) ...[
           const SizedBox(height: 8),
           Row(

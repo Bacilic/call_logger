@@ -14,6 +14,7 @@ import '../../models/department_model.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import 'department_color_palette.dart';
 import 'department_form_dialog.dart';
+import '../../services/building_map_floor_load_state.dart';
 
 /// Ροή αποθήκευσης της φόρμας τμήματος: μοντέλο, συγκρούσεις κοινόχρηστων,
 /// εγγραφή, επαναφορά διαγραμμένου και μηνύματα επιβεβαίωσης.
@@ -51,10 +52,13 @@ class DepartmentFormSave {
     var equipmentToMoveFromUsers = <String>{};
 
     final ini = host.widget.initialDepartment;
-    final clearBuildingMapPlacement =
-        host.isEdit &&
-        host.selectedFloorId == null &&
-        (host.snapFloorId != null || ini?.floorId != null);
+    final clearBuildingMapPlacement = shouldClearBuildingMapPlacement(
+      isEdit: host.isEdit,
+      selectedFloorId: host.selectedFloorId,
+      snapshotFloorId: host.snapFloorId,
+      initialFloorId: ini?.floorId,
+      floorLoadState: host.floorLoadState,
+    );
 
     // Ό,τι έχει μείνει πληκτρολογημένο χωρίς να γίνει chip μετράει κανονικά —
     // ο χρήστης δεν πρέπει να χάνει γραμμένο αναγνωριστικό επειδή πάτησε

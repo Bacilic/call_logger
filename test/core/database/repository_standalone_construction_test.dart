@@ -398,7 +398,9 @@ void main() {
         throwsA(isA<DepartmentExistsException>()),
       );
 
-      await repo.updateDepartment(id, {'notes': 'Standalone σημείωση'}, expected: null);
+      await repo.updateDepartment(id, {
+        'notes': 'Standalone σημείωση',
+      }, expected: null);
 
       activateTestOperator('Admin Standalone Dept');
 
@@ -658,7 +660,9 @@ void main() {
       );
       expect(reusedId, createdId);
 
-      await departments.updateDepartment(createdId!, {'notes': 'Tier 4d-3'}, expected: null);
+      await departments.updateDepartment(createdId!, {
+        'notes': 'Tier 4d-3',
+      }, expected: null);
       final updated = await departments.getDepartmentRowById(createdId);
       expect(updated!['notes'], 'Tier 4d-3');
 

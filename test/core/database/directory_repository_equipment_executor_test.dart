@@ -113,9 +113,12 @@ void main() {
             executor: txn,
           );
           await repo.replaceEquipmentUsers(id, [userId], executor: txn);
-          await repo.updateEquipment(id, {
-            'notes': 'ενημέρωση εντός txn',
-          }, executor: txn, expected: null);
+          await repo.updateEquipment(
+            id,
+            {'notes': 'ενημέρωση εντός txn'},
+            executor: txn,
+            expected: null,
+          );
         });
 
         final equipRows = await db.query(
@@ -144,7 +147,9 @@ void main() {
         );
         expect(id, greaterThan(0));
 
-        final updated = await repo.updateEquipment(id, {'notes': 'σημείωση'}, expected: null);
+        final updated = await repo.updateEquipment(id, {
+          'notes': 'σημείωση',
+        }, expected: null);
         expect(updated, 1);
 
         final row = await db.query(

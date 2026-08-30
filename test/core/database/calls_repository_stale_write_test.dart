@@ -149,10 +149,7 @@ void main() {
       );
       final fresh = (await calls.getCallById(id))!;
 
-      await calls.updateCall(
-        withIssue(fresh, 'διορθωμένο'),
-        expected: fresh,
-      );
+      await calls.updateCall(withIssue(fresh, 'διορθωμένο'), expected: fresh);
 
       expect((await calls.getCallById(id))!.issue, 'διορθωμένο');
     });
@@ -165,10 +162,7 @@ void main() {
         expected: null,
       );
 
-      expect(
-        (await calls.getCallById(scenario.id))!.issue,
-        'χωρίς αφετηρία',
-      );
+      expect((await calls.getCallById(scenario.id))!.issue, 'χωρίς αφετηρία');
     });
   });
 }

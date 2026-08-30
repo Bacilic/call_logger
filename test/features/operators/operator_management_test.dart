@@ -108,7 +108,7 @@ void main() {
       expect((await repository.findById(admin.id!))!.isAdmin, isTrue);
     });
 
-    test('ο μοναδικός διαχειριστής δεν αρχειοθετείται', () async {
+    test('ο μοναδικός διαχειριστής δεν απενεργοποιείται', () async {
       final admin = await seedAdmin();
 
       final result = await management.save(
@@ -144,10 +144,10 @@ void main() {
       expect((await repository.findById(first.id!))!.isAdmin, isFalse);
     });
 
-    test('ο αρχειοθετημένος διαχειριστής δεν μετράει ως δικλείδα', () async {
-      // Ο Παναγιώτης αποχώρησε και το προφίλ του αρχειοθετήθηκε. Η Βαρβάρα
+    test('ο απενεργοποιημένος διαχειριστής δεν μετράει ως δικλείδα', () async {
+      // Ο Παναγιώτης αποχώρησε και το προφίλ του απενεργοποιήθηκε. Η Βαρβάρα
       // είναι ο μόνος διαχειριστής που μπορεί να συνδεθεί: αν ξεσημανθεί, η
-      // βάση κλειδώνει: ο αρχειοθετημένος δεν προσφέρεται πουθενά προς
+      // βάση κλειδώνει: ο απενεργοποιημένος δεν προσφέρεται πουθενά προς
       // επιλογή, άρα κανείς δεν μπορεί να μπει ως αυτός για να ξεκλειδώσει.
       final varvara = await seedAdmin(name: 'Βαρβάρα');
       final panagiotis = await management.create(
@@ -177,7 +177,7 @@ void main() {
       expect((await repository.findById(varvara.id!))!.isAdmin, isTrue);
     });
 
-    test('ο τελευταίος ενεργός διαχειριστής δεν αρχειοθετείται', () async {
+    test('ο τελευταίος ενεργός διαχειριστής δεν απενεργοποιείται', () async {
       final varvara = await seedAdmin(name: 'Βαρβάρα');
       final panagiotis = await management.create(
         displayName: 'Παναγιώτης',

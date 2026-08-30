@@ -73,4 +73,21 @@ abstract final class NotesSolutionSplit {
 
     return (notes: remaining, movedLine: movedLine);
   }
+
+  /// Η αντίστροφη κίνηση: η λύση επιστρέφει στις σημειώσεις.
+  ///
+  /// Ζει δίπλα στην [extractCurrentLine] επίτηδες — οι δύο κινήσεις είναι το
+  /// ίδιο κουμπί προς τις δύο κατευθύνσεις. Αν χώριζαν, η μία θα μπορούσε να
+  /// αλλάξει χωρίς την άλλη και το «πάτησα κατά λάθος, το ξαναπατώ» θα έπαυε
+  /// σιωπηλά να επιστρέφει το ίδιο κείμενο.
+  ///
+  /// Το κείμενο μπαίνει **ως δική του γραμμή στο τέλος**: δεν κολλάει στη μέση
+  /// άλλης πρότασης και δεν χάνεται ποτέ.
+  static String mergeSolutionBack(String notes, String solution) {
+    final line = solution.trim();
+    if (line.isEmpty) return notes;
+    final base = notes.trimRight();
+    if (base.trim().isEmpty) return line;
+    return '$base\n$line';
+  }
 }

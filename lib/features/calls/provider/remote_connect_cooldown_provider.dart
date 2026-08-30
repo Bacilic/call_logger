@@ -58,8 +58,7 @@ class RemoteConnectCooldownNotifier extends Notifier<Map<String, DateTime>> {
   }) {
     if (wait <= Duration.zero) return;
     final key = keyFor(toolId: toolId, target: target);
-    final next = Map<String, DateTime>.from(state)
-      ..[key] = _now().add(wait);
+    final next = Map<String, DateTime>.from(state)..[key] = _now().add(wait);
     state = _withoutExpired(next);
     _ensureTicking();
   }
@@ -103,7 +102,6 @@ class RemoteConnectCooldownNotifier extends Notifier<Map<String, DateTime>> {
     state = Map<String, DateTime>.from(next);
   }
 }
-
 
 /// Ποιες συνδέσεις βρίσκονται **αυτή τη στιγμή** στη φάση των ελέγχων.
 ///

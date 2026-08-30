@@ -1,0 +1,60 @@
+"""Χτίζει όλα τα εικονίδια χρηστών από τον φάκελο των ωμών εικόνων.
+
+Η αντιστοίχιση γίνεται με το **αναγνωριστικό** που δίνει το εργαλείο στο όνομα
+του αρχείου, γιατί τα ονόματα είναι ακατάληπτα και δεν λένε τι δείχνουν. Κάθε
+γραμμή κρατά και το ζουμ που χρειάστηκε εκείνη η εικόνα: ο αυτόματος εντοπισμός
+κεφαλιού μετρά το πλάτος της πάνω ζώνης, οπότε φτερά, κιθάρες και καπέλα τον
+ξεγελούν προς τα έξω.
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from avatar_prepare import prepare  # noqa: E402
+
+SOURCE = r'F:\flutter_projects\call_logger\assets\avatars'
+
+# αναγνωριστικό αρχείου → (όνομα εικονιδίου, ζουμ, κατακόρυφη μετατόπιση)
+CATALOGUE = {
+    'ChatGPT': ('rockstar_woman', 1.0, 0.0),
+    'a3qs0b': ('angel', 2.05, -0.02),
+    'camvev': ('woman', 1.0, 0.0),
+    'dpgj37': ('rocker', 1.6, 0.0),
+    'fgqbhc': ('doctor', 1.0, 0.0),
+    'ggrzig': ('pirate', 1.0, 0.0),
+    'lelw5n': ('ayeaye', 1.15, 0.02),
+    'mljej6': ('platypus', 1.0, 0.0),
+    'qu9dx3': ('chef', 1.0, 0.0),
+    'r5senq': ('ninja', 1.0, 0.0),
+    'r8l8y8': ('noblewoman', 1.15, 0.03),
+    'sd1dsi': ('footballer', 1.0, 0.0),
+    'vasfpo': ('pirate_woman', 1.1, 0.0),
+    'xah65h': ('gorilla', 1.0, 0.0),
+    'xnmowe': ('hacker', 1.0, 0.0),
+    'xrwakz': ('astronaut', 1.0, 0.0),
+    'yapi62': ('elder', 1.0, 0.0),
+}
+
+
+def build(destination: str) -> list[tuple[str, int]]:
+    os.makedirs(destination, exist_ok=True)
+    built = []
+    for entry in sorted(os.listdir(SOURCE)):
+        if not entry.lower().endswith('.png') or entry.startswith('_'):
+            continue
+        key = next((k for k in CATALOGUE if k in entry), None)
+        if key is None:
+            print(f'ΑΓΝΩΣΤΟ ΑΡΧΕΙΟ: {entry}')
+            continue
+        name, zoom, shift = CATALOGUE[key]
+        target = os.path.join(destination, f'{name}.webp')
+        prepare(os.path.join(SOURCE, entry), target, zoom, shift)
+        built.append((name, os.path.getsize(target) // 1024))
+    return built
+
+
+if __name__ == '__main__':
+    for name, kilobytes in build(sys.argv[1]):
+        print(f'{name:16} {kilobytes:3} KB')

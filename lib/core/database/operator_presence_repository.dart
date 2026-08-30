@@ -56,6 +56,27 @@ class OperatorPresenceRepository {
     );
   }
 
+  /// Από πόσους **διαφορετικούς υπολογιστές** έχει ανοίξει αυτή η βάση.
+  ///
+  /// Το αυθεντικό κριτήριο του «κοινόχρηστη ή όχι». Η διαδρομή του αρχείου και
+  /// το όνομα που της έδωσε ο χρήστης είναι ενδείξεις που μπορεί να πέσουν
+  /// έξω· τα ίχνη σύνδεσης είναι γεγονός γραμμένο μέσα στο ίδιο το αρχείο, και
+  /// ταξιδεύουν μαζί του.
+  ///
+  /// Μετρά **σταθμούς**, όχι γραμμές: δύο προφίλ στον ίδιο υπολογιστή είναι
+  /// ένας υπολογιστής. Και μετρά **ιστορικό**, όχι ζωντανές συνδέσεις — μια
+  /// βάση δεν παύει να είναι κοινόχρηστη επειδή ο συνάδελφος έκλεισε.
+  Future<int> countDistinctStations() async {
+    final rows = await db.rawQuery(
+      'SELECT COUNT(DISTINCT station) AS c FROM $tableName',
+    );
+    if (rows.isEmpty) return 0;
+    final raw = rows.first['c'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw') ?? 0;
+  }
+
   /// Όλα τα σημάδια, νεότερο πρώτο. Ο πίνακας είναι μικροσκοπικός.
   Future<List<OperatorPresence>> getAll() async {
     final rows = await db.query(tableName, orderBy: 'last_seen_at DESC');

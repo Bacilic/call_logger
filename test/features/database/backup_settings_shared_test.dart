@@ -72,12 +72,15 @@ void main() {
   tearDown(CurrentOperator.reset);
 
   group('Το δέμα είναι κοινό (Φάση 2)', () {
-    test('το κλειδί παραμένει το ιστορικό κοινό — παλιές εκδόσεις το διαβάζουν', () {
-      expect(
-        DatabaseBackupSettings.appSettingsKey,
-        'database_backup_settings_v1',
-      );
-    });
+    test(
+      'το κλειδί παραμένει το ιστορικό κοινό — παλιές εκδόσεις το διαβάζουν',
+      () {
+        expect(
+          DatabaseBackupSettings.appSettingsKey,
+          'database_backup_settings_v1',
+        );
+      },
+    );
 
     test('η αλλαγή του διαχειριστή φαίνεται σε όλους', () async {
       final container = ProviderContainer();
@@ -202,95 +205,99 @@ void main() {
       },
     );
 
-    test(
-      'αντίτυπο χωρίς δικαίωμα δεν προωθείται — μόνο καθαρίζεται',
-      () async {
-        final db = await DatabaseHelper.instance.database;
-        await _insertOperatorRow(72);
+    test('αντίτυπο χωρίς δικαίωμα δεν προωθείται — μόνο καθαρίζεται', () async {
+      final db = await DatabaseHelper.instance.database;
+      await _insertOperatorRow(72);
 
-        await SettingsRepository(db).saveSetting(
-          DatabaseBackupSettings.appSettingsKey,
-          _bundleWithFolder(r'D:\koini_alithia'),
-        );
-        final opSettings = OperatorSettingsRepository(db);
-        await opSettings.setValue(
-          72,
-          DatabaseBackupSettings.appSettingsKey,
-          _bundleWithFolder(r'D:\anexousiodotito'),
-        );
+      await SettingsRepository(db).saveSetting(
+        DatabaseBackupSettings.appSettingsKey,
+        _bundleWithFolder(r'D:\koini_alithia'),
+      );
+      final opSettings = OperatorSettingsRepository(db);
+      await opSettings.setValue(
+        72,
+        DatabaseBackupSettings.appSettingsKey,
+        _bundleWithFolder(r'D:\anexousiodotito'),
+      );
 
-        final settings = await ActiveBackupSettings.read();
-        expect(settings.destinationDirectory, r'D:\koini_alithia');
-        expect(
-          await opSettings.getValuesForKey(
-            DatabaseBackupSettings.appSettingsKey,
-          ),
-          isEmpty,
-        );
-      },
-    );
+      final settings = await ActiveBackupSettings.read();
+      expect(settings.destinationDirectory, r'D:\koini_alithia');
+      expect(
+        await opSettings.getValuesForKey(DatabaseBackupSettings.appSettingsKey),
+        isEmpty,
+      );
+    });
   });
 
   group('Ατομική δέσμευση της κοινής ρύθμισης (Φάση 4)', () {
-    test('κερδίζει όποιος βρει το αναμενόμενο ωμό JSON — ο δεύτερος όχι', () async {
-      final db = await DatabaseHelper.instance.database;
-      await SettingsRepository(db).saveSetting(
-        DatabaseBackupSettings.appSettingsKey,
-        _bundleWithFolder(r'D:\arxiki'),
-      );
+    test(
+      'κερδίζει όποιος βρει το αναμενόμενο ωμό JSON — ο δεύτερος όχι',
+      () async {
+        final db = await DatabaseHelper.instance.database;
+        await SettingsRepository(db).saveSetting(
+          DatabaseBackupSettings.appSettingsKey,
+          _bundleWithFolder(r'D:\arxiki'),
+        );
 
-      final gate = await ActiveBackupSettings.readWithRaw();
-      final claimA = gate.settings.copyWith(
-        lastBackupAttempt: DateTime(2026, 8, 24, 12, 0),
-      );
-      expect(
-        await ActiveBackupSettings.tryReplace(
-          expectedRaw: gate.raw,
-          replacement: claimA,
-        ),
-        isTrue,
-      );
+        final gate = await ActiveBackupSettings.readWithRaw();
+        final claimA = gate.settings.copyWith(
+          lastBackupAttempt: DateTime(2026, 8, 24, 12, 0),
+        );
+        expect(
+          await ActiveBackupSettings.tryReplace(
+            expectedRaw: gate.raw,
+            replacement: claimA,
+          ),
+          isTrue,
+        );
 
-      // Δεύτερος διεκδικητής με το ΠΑΛΙΟ αναμενόμενο: χάνει και δεν πατά
-      // την τιμή του πρώτου.
-      final claimB = gate.settings.copyWith(
-        lastBackupAttempt: DateTime(2026, 8, 24, 12, 0, 30),
-      );
-      expect(
-        await ActiveBackupSettings.tryReplace(
-          expectedRaw: gate.raw,
-          replacement: claimB,
-        ),
-        isFalse,
-      );
-      final saved = await ActiveBackupSettings.read();
-      expect(saved.lastBackupAttempt, DateTime(2026, 8, 24, 12, 0));
-    });
+        // Δεύτερος διεκδικητής με το ΠΑΛΙΟ αναμενόμενο: χάνει και δεν πατά
+        // την τιμή του πρώτου.
+        final claimB = gate.settings.copyWith(
+          lastBackupAttempt: DateTime(2026, 8, 24, 12, 0, 30),
+        );
+        expect(
+          await ActiveBackupSettings.tryReplace(
+            expectedRaw: gate.raw,
+            replacement: claimB,
+          ),
+          isFalse,
+        );
+        final saved = await ActiveBackupSettings.read();
+        expect(saved.lastBackupAttempt, DateTime(2026, 8, 24, 12, 0));
+      },
+    );
 
-    test('χωρίς αποθηκευμένη γραμμή: null-αναμενόμενο εισάγει μία φορά', () async {
-      // Το setUp έχει σβήσει το κλειδί — αλλά η readWithRaw γράφει τη σημαία
-      // μετάπτωσης ΧΩΡΙΣ να αγγίζει το δέμα, οπότε το raw μένει null.
-      final gate = await ActiveBackupSettings.readWithRaw();
-      expect(gate.raw, isNull);
+    test(
+      'χωρίς αποθηκευμένη γραμμή: null-αναμενόμενο εισάγει μία φορά',
+      () async {
+        // Το setUp έχει σβήσει το κλειδί — αλλά η readWithRaw γράφει τη σημαία
+        // μετάπτωσης ΧΩΡΙΣ να αγγίζει το δέμα, οπότε το raw μένει null.
+        final gate = await ActiveBackupSettings.readWithRaw();
+        expect(gate.raw, isNull);
 
-      final first = gate.settings.copyWith(destinationDirectory: r'D:\a');
-      expect(
-        await ActiveBackupSettings.tryReplace(
-          expectedRaw: null,
-          replacement: first,
-        ),
-        isTrue,
-      );
-      expect(
-        await ActiveBackupSettings.tryReplace(
-          expectedRaw: null,
-          replacement: gate.settings.copyWith(destinationDirectory: r'D:\b'),
-        ),
-        isFalse,
-        reason: 'Η γραμμή υπάρχει πια — το null-αναμενόμενο δεν ξαναπερνά.',
-      );
-      expect((await ActiveBackupSettings.read()).destinationDirectory, r'D:\a');
-    });
+        final first = gate.settings.copyWith(destinationDirectory: r'D:\a');
+        expect(
+          await ActiveBackupSettings.tryReplace(
+            expectedRaw: null,
+            replacement: first,
+          ),
+          isTrue,
+        );
+        expect(
+          await ActiveBackupSettings.tryReplace(
+            expectedRaw: null,
+            replacement: gate.settings.copyWith(destinationDirectory: r'D:\b'),
+          ),
+          isFalse,
+          reason: 'Η γραμμή υπάρχει πια — το null-αναμενόμενο δεν ξαναπερνά.',
+        );
+        expect(
+          (await ActiveBackupSettings.read()).destinationDirectory,
+          r'D:\a',
+        );
+      },
+    );
 
     test('JSON παλιάς έκδοσης: η δέσμευση συγκρίνει το ΩΜΟ κείμενο', () async {
       final db = await DatabaseHelper.instance.database;
@@ -384,24 +391,21 @@ void main() {
           backupOnExit: true,
         );
 
-    test(
-      'το αντίγραφο πριν από συντήρηση ακολουθεί το κοινό δέμα',
-      () async {
-        final dest = await makeDest('maint_shared_');
-        final db = await DatabaseHelper.instance.database;
-        await SettingsRepository(db).saveSetting(
-          DatabaseBackupSettings.appSettingsKey,
-          enabledBundle(dest).toJsonString(),
-        );
-        CurrentOperator.activate(_operator(962, isAdmin: true));
+    test('το αντίγραφο πριν από συντήρηση ακολουθεί το κοινό δέμα', () async {
+      final dest = await makeDest('maint_shared_');
+      final db = await DatabaseHelper.instance.database;
+      await SettingsRepository(db).saveSetting(
+        DatabaseBackupSettings.appSettingsKey,
+        enabledBundle(dest).toJsonString(),
+      );
+      CurrentOperator.activate(_operator(962, isAdmin: true));
 
-        final result = await DatabaseMaintenanceService()
-            .runPreMaintenanceBackup();
+      final result = await DatabaseMaintenanceService()
+          .runPreMaintenanceBackup();
 
-        expect(result.kind, MaintenanceBackupPrecheck.ok);
-        expect(await backupFilesIn(dest), hasLength(1));
-      },
-    );
+      expect(result.kind, MaintenanceBackupPrecheck.ok);
+      expect(await backupFilesIn(dest), hasLength(1));
+    });
 
     test(
       'τα Στατιστικά βρίσκουν το «τελευταίο αντίγραφο» στον κοινό φάκελο',
@@ -534,33 +538,30 @@ void main() {
       );
     });
 
-    test(
-      'το δέμα των αντιγράφων ΔΕΝ επαναφέρεται πια από παλιά εξαγωγή — '
-      'είναι κοινή ρύθμιση, όχι προσωπική',
-      () async {
-        final db = await DatabaseHelper.instance.database;
-        final dir = Directory.systemTemp.createTempSync('profile_import_');
-        addTearDown(() => dir.deleteSync(recursive: true));
-        final file = await writeExport(dir, {
-          DatabaseBackupSettings.appSettingsKey: _bundleWithFolder(
-            r'D:\apo_palia_exagogi',
-          ),
-        });
+    test('το δέμα των αντιγράφων ΔΕΝ επαναφέρεται πια από παλιά εξαγωγή — '
+        'είναι κοινή ρύθμιση, όχι προσωπική', () async {
+      final db = await DatabaseHelper.instance.database;
+      final dir = Directory.systemTemp.createTempSync('profile_import_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = await writeExport(dir, {
+        DatabaseBackupSettings.appSettingsKey: _bundleWithFolder(
+          r'D:\apo_palia_exagogi',
+        ),
+      });
 
-        CurrentOperator.activate(_operator(953));
-        final result = await importActiveOperatorSettings(
-          pickOpenPath: () async => file,
-        );
+      CurrentOperator.activate(_operator(953));
+      final result = await importActiveOperatorSettings(
+        pickOpenPath: () async => file,
+      );
 
-        expect(result.restoredCount, 0);
-        expect(
-          await OperatorSettingsRepository(
-            db,
-          ).getValue(953, DatabaseBackupSettings.appSettingsKey),
-          isNull,
-        );
-      },
-    );
+      expect(result.restoredCount, 0);
+      expect(
+        await OperatorSettingsRepository(
+          db,
+        ).getValue(953, DatabaseBackupSettings.appSettingsKey),
+        isNull,
+      );
+    });
 
     test('χαλασμένο αρχείο εξηγεί το πρόβλημα, δεν σκάει', () async {
       final dir = Directory.systemTemp.createTempSync('profile_import_');

@@ -8,9 +8,10 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/features/calls/models/call_refined_source.dart';
 import 'package:call_logger/features/calls/provider/call_entry_provider.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
-import 'package:call_logger/features/calls/screens/widgets/notes_sticky_field.dart';
 import 'package:call_logger/features/calls/utils/notes_solution_split.dart';
 import 'package:call_logger/main.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -93,10 +94,7 @@ void main() {
           w is TextField && (w.decoration?.hintText?.contains('Λύση') ?? false),
     );
 
-    Finder solutionChip() => find.descendant(
-      of: find.byType(NotesStickyField),
-      matching: find.text('Λύση'),
-    );
+    Finder solutionChip() => find.byKey(const ValueKey('notes_solution_chip'));
 
     testWidgets(
       'το chip κατεβάζει τη γραμμή του κέρσορα στη ζώνη Λύσης',
@@ -134,6 +132,188 @@ void main() {
           findsOneWidget,
           reason: greekExpectMsg('Η ζώνη Λύσης άνοιξε και είναι ορατή'),
         );
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    testWidgets(
+      'δεύτερο πάτημα κλείνει την άδεια ζώνη — χωρίς κλικ αλλού',
+      (tester) async {
+        // Η εφαρμογή τρέχει σε Windows: εκεί το πάτημα ΕΚΤΟΣ ενός πεδίου
+        // κειμένου του αφαιρεί την εστίαση. Τα widget tests τρέχουν εξ ορισμού
+        // ως Android, όπου αυτό ΔΕΝ συμβαίνει — και χωρίς τη δήλωση ο έλεγχος
+        // δοκιμάζει διαφορετική συνθήκη από αυτή που ζει ο χρήστης.
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        await pumpApp(tester);
+        await expandFormWithPhone(tester);
+
+        // Μοναδική γραμμή: δεν μεταφέρεται, οπότε η ζώνη ανοίγει ΑΔΕΙΑ.
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(notesField(), _kProblemLine);
+        await pumpUntilSettled(tester);
+
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
+        expect(
+          solutionField(),
+          findsOneWidget,
+          reason: greekExpectMsg('Πρώτο πάτημα: η ζώνη άνοιξε'),
+        );
+
+        // ΠΙΣΤΗ ΑΝΑΠΑΡΑΓΩΓΗ: στην πράξη ο κέρσορας βρίσκεται ΜΕΣΑ στο πεδίο
+        // Λύσης όταν πατιέται το κουμπί — το άνοιγμα εκεί στέλνει την εστίαση.
+        // Χωρίς αυτό το βήμα, το πάτημα δεν προκαλεί απώλεια εστίασης και ο
+        // έλεγχος περνά χωρίς να έχει δοκιμάσει τη σωστή κατάσταση.
+        await tester.tap(solutionField());
+        await pumpUntilSettled(tester);
+        final solutionNode = tester
+            .widget<TextField>(solutionField())
+            .focusNode;
+        expect(
+          solutionNode?.hasFocus,
+          isTrue,
+          reason: greekExpectMsg(
+            'Η προϋπόθεση του σεναρίου: ο κέρσορας είναι ΜΕΣΑ στη Λύση',
+          ),
+        );
+
+        // ΠΙΣΤΗ ΑΝΑΠΑΡΑΓΩΓΗ ΤΟΥ ΚΛΙΚ ΜΕ ΠΟΝΤΙΚΙ:
+        // 1) ο δείκτης στέκεται πάνω στο κουμπί (hover),
+        // 2) πατιέται,
+        // 3) μεσολαβεί ΚΑΡΕ — εκεί προλαβαίνει να ξαναχτιστεί η οθόνη,
+        // 4) και μετά αφήνεται.
+        // Το σκέτο `tester.tap` κάνει 2 και 4 στο ίδιο καρέ, οπότε δεν
+        // δοκιμάζει ποτέ αυτό που ζει ο χρήστης.
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        await mouse.addPointer(location: Offset.zero);
+        addTearDown(mouse.removePointer);
+        await mouse.moveTo(tester.getCenter(solutionChip()));
+        await pumpUntilSettled(tester);
+        await mouse.down(tester.getCenter(solutionChip()));
+        await tester.pump();
+        await mouse.up();
+        await pumpUntilSettled(tester);
+
+        expect(
+          solutionField(),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Δεύτερο πάτημα: η άδεια ζώνη κλείνει αμέσως, χωρίς να χρειαστεί '
+            'κλικ σε άλλο σημείο της οθόνης',
+          ),
+        );
+
+        debugDefaultTargetPlatformOverride = null;
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    testWidgets(
+      'κλικ αλλού εξακολουθεί να κλείνει την άδεια ζώνη',
+      (tester) async {
+        // Ο φρουρός που έλυσε το «ανοιγοκλείνει» αναστέλλει τη σύμπτυξη όσο ο
+        // δείκτης είναι πάνω στο κουμπί. Αυτός ο έλεγχος βεβαιώνει ότι ΔΕΝ
+        // σκότωσε τη σύμπτυξη παντού αλλού.
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        await pumpApp(tester);
+        await expandFormWithPhone(tester);
+
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(notesField(), _kProblemLine);
+        await pumpUntilSettled(tester);
+
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
+        expect(solutionField(), findsOneWidget);
+
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+
+        expect(
+          solutionField(),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Άδεια ζώνη που έχασε τον κέρσορα κλείνει μόνη της, όπως πάντα',
+          ),
+        );
+
+        debugDefaultTargetPlatformOverride = null;
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    testWidgets(
+      'με κείμενο, το πάτημα επιστρέφει τη λύση στις σημειώσεις',
+      (tester) async {
+        final container = await pumpApp(tester);
+        await expandFormWithPhone(tester);
+
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(
+          notesField(),
+          _kProblemLine + String.fromCharCode(10) + _kSolutionLine,
+        );
+        await pumpUntilSettled(tester);
+
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
+        expect(container.read(callEntryProvider).solution, _kSolutionLine);
+
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
+
+        final entry = container.read(callEntryProvider);
+        expect(
+          entry.solution,
+          isEmpty,
+          reason: greekExpectMsg('Η λύση άδειασε'),
+        );
+        expect(
+          entry.notes.trim(),
+          _kProblemLine + String.fromCharCode(10) + _kSolutionLine,
+          reason: greekExpectMsg(
+            'Το κείμενο επέστρεψε ολόκληρο στις σημειώσεις, ως δική του γραμμή '
+            '— δεν διαγράφηκε',
+          ),
+        );
+        expect(
+          solutionField(),
+          findsNothing,
+          reason: greekExpectMsg('Και η ζώνη έκλεισε'),
+        );
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    testWidgets(
+      'με άδειες σημειώσεις το chip δεν ανοίγει τη ζώνη',
+      (tester) async {
+        await pumpApp(tester);
+        await expandFormWithPhone(tester);
+
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
+
+        expect(
+          solutionField(),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Χωρίς Περιγραφή δεν υπάρχει πρόβλημα να λυθεί — ίδιο μοτίβο με '
+            'το τικ «Εκκρεμότητα» δίπλα',
+          ),
+        );
+
+        // Το πάτημα αναβοσβήνει το χαρτί ως υπόδειξη: ο χρόνος του
+        // αναβοσβήματος πρέπει να τελειώσει πριν κλείσει ο έλεγχος.
+        await tester.pump(const Duration(milliseconds: 1000));
+        await pumpUntilSettled(tester);
       },
       semanticsEnabled: false,
       timeout: const Timeout(Duration(minutes: 2)),

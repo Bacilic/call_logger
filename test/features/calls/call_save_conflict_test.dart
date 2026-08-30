@@ -26,26 +26,29 @@ void main() {
   final now = DateTime(2026, 8, 24, 13, 12);
   final changedAt = DateTime(2026, 8, 24, 13, 10);
 
-  test('ο συνάδελφος καταχώρησε: το μήνυμα προειδοποιεί για ΔΕΥΤΕΡΟ αίτημα', () {
-    final conflict = CallSaveConflict(
-      expected: call(),
-      fresh: call(state: 'sent', ticket: '8001'),
-      attempted: call(issue: 'διορθωμένο'),
-      changedBy: 'Βλάσης',
-      changedAt: changedAt,
-    );
+  test(
+    'ο συνάδελφος καταχώρησε: το μήνυμα προειδοποιεί για ΔΕΥΤΕΡΟ αίτημα',
+    () {
+      final conflict = CallSaveConflict(
+        expected: call(),
+        fresh: call(state: 'sent', ticket: '8001'),
+        attempted: call(issue: 'διορθωμένο'),
+        changedBy: 'Βλάσης',
+        changedAt: changedAt,
+      );
 
-    expect(conflict.otherRegisteredInLansweeper, isTrue);
-    expect(conflict.headline(now: now), contains('Βλάσης'));
-    expect(conflict.headline(now: now), contains('Lansweeper'));
-    expect(conflict.headline(now: now), contains('13:10'));
-    expect(conflict.overwriteWarning, contains('8001'));
-    expect(
-      conflict.overwriteWarning,
-      contains('ΔΕΥΤΕΡΟ'),
-      reason: 'η μη αναστρέψιμη συνέπεια πρέπει να λέγεται ρητά',
-    );
-  });
+      expect(conflict.otherRegisteredInLansweeper, isTrue);
+      expect(conflict.headline(now: now), contains('Βλάσης'));
+      expect(conflict.headline(now: now), contains('Lansweeper'));
+      expect(conflict.headline(now: now), contains('13:10'));
+      expect(conflict.overwriteWarning, contains('8001'));
+      expect(
+        conflict.overwriteWarning,
+        contains('ΔΕΥΤΕΡΟ'),
+        reason: 'η μη αναστρέψιμη συνέπεια πρέπει να λέγεται ρητά',
+      );
+    },
+  );
 
   test('η αλλαγή γράφεται με τις ετικέτες του Ιστορικού', () {
     final conflict = CallSaveConflict(

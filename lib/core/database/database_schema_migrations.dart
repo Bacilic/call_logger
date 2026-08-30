@@ -16,6 +16,7 @@ import 'database_init_result.dart';
 import 'database_v1_schema.dart';
 import 'dictionary_repository.dart';
 import 'directory_audit_helpers.dart';
+import 'operator_avatar_backfill.dart';
 
 // Ο αριθμός ζει σε δικό του αρχείο χωρίς imports, ώστε το εργαλείο
 // δημοσίευσης να μην σέρνει από εδώ ολόκληρο το Flutter. Προωθείται για να
@@ -272,6 +273,35 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 56 && newVersion >= 56) {
     await migrateDatabaseToV56(db);
   }
+  if (oldVersion < 57 && newVersion >= 57) {
+    await migrateDatabaseToV57(db);
+  }
+}
+
+/// v57: κάθε χρήστης αποκτά το δικό του εικονίδιο.
+///
+/// Η στήλη κρατά **κλειδί καταλόγου** (`gorilla`), όχι διαδρομή αρχείου: έτσι
+/// τα αρχεία μπορούν να μετακινηθούν ή να αλλάξουν μορφή χωρίς να πειραχτεί
+/// καμία εγγραφή.
+///
+/// Τα προφίλ που υπάρχουν ήδη παίρνουν κι αυτά εικονίδιο, εδώ. Χωρίς αυτό, μια
+/// βάση με πέντε συναδέλφους θα έδειχνε πέντε ίδια ανθρωπάκια μέχρι να μπει ο
+/// καθένας στην καρτέλα του — δηλαδή η λειτουργία θα φαινόταν σπασμένη σε
+/// όλους όσους την περίμεναν.
+///
+/// Η ανάθεση σέβεται το ίδιο συμβόλαιο με τη ζωντανή εφαρμογή: **δύο ενεργά
+/// προφίλ δεν κρατούν ποτέ το ίδιο εικονίδιο**, και όταν τα εικονίδια
+/// τελειώσουν τα υπόλοιπα προφίλ μένουν με το κλασικό ανθρωπάκι.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες — η στήλη μπαίνει μόνο αν λείπει,
+/// και το γέμισμα αφορά μόνο όσα προφίλ δεν έχουν ήδη εικονίδιο.
+Future<void> migrateDatabaseToV57(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(operators)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('avatar_key')) {
+    await db.execute('ALTER TABLE operators ADD COLUMN avatar_key TEXT');
+  }
+  await assignAvatarsToExistingOperators(db);
 }
 
 /// v56: πίνακας διακομιστών με στοιχεία διαχειριστή.

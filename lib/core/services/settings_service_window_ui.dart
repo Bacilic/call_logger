@@ -228,6 +228,16 @@ class SettingsServiceWindowUi {
     await ScopedSettings.setBool(ProfileSettingKeys.showDictionaryNav, value);
   }
 
+  /// Εμφάνιση στοιχείου πλοήγησης «Βάση Γνώσης». Προεπιλογή: true.
+  Future<bool> getShowKnowledgeNav() async {
+    return await ScopedSettings.getBool(ProfileSettingKeys.showKnowledgeNav) ??
+        true;
+  }
+
+  Future<void> setShowKnowledgeNav(bool value) async {
+    await ScopedSettings.setBool(ProfileSettingKeys.showKnowledgeNav, value);
+  }
+
   /// Ποια κάρτες εμφανίζονται στην οθόνη κλήσεων. Προεπιλογή: όλες ορατές.
   Future<CallsScreenCardsVisibility> getCallsScreenCardsVisibility() async {
     final raw = await ScopedSettings.getString(

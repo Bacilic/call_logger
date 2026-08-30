@@ -20,8 +20,7 @@ void main() {
       refreshCount = 0;
       busy = false;
       watcher = SharedDatabaseChangeWatcher(
-        readVersion: () async =>
-            versions.isEmpty ? null : versions.removeAt(0),
+        readVersion: () async => versions.isEmpty ? null : versions.removeAt(0),
         onChanged: () async => refreshCount++,
         isBusy: () => busy,
       );
@@ -68,7 +67,11 @@ void main() {
       busy = true;
       await watcher.checkNow();
 
-      expect(refreshCount, 0, reason: 'Ανοιχτός διάλογος — δεν τραβάμε το χαλί');
+      expect(
+        refreshCount,
+        0,
+        reason: 'Ανοιχτός διάλογος — δεν τραβάμε το χαλί',
+      );
       expect(watcher.hasPendingRefresh, isTrue);
 
       busy = false;

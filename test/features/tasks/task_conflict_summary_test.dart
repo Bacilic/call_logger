@@ -7,11 +7,7 @@ import 'package:call_logger/features/tasks/services/task_conflict_summary.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  Task task({
-    required String status,
-    String? solution,
-    int? assignee,
-  }) => Task(
+  Task task({required String status, String? solution, int? assignee}) => Task(
     id: 7,
     title: 'Για δω τι θα δω;',
     dueDate: DateTime(2026, 8, 22, 16, 31).toIso8601String(),

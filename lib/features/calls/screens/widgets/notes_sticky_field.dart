@@ -41,6 +41,18 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
   /// κλείνει μόνη της όταν αδειάσει και χάσει την εστίαση — κλειστή δεν
   /// ξοδεύει χώρο στο χαρτί.
   bool _solutionZoneVisible = false;
+
+  /// Ο δείκτης του ποντικιού στέκεται πάνω στο chip «Λύση».
+  ///
+  /// Φρουρός μιας κούρσας που δεν φαίνεται πουθενά αλλού: στα Windows το κλικ
+  /// αφαιρεί ΠΡΩΤΑ την εστίαση από το πεδίο Λύσης. Ο ακροατής εστίασης έκλεινε
+  /// τότε την άδεια ζώνη, μεσολαβούσε καρέ, το κουμπί ξαναχτιζόταν ως «άνοιγμα»
+  /// — και το πάτημα την ξανάνοιγε ακαριαία. Ο χρήστης έβλεπε το πεδίο να
+  /// αναβοσβήνει και να μένει.
+  ///
+  /// Το hover ορίζεται πολύ πριν από το πάτημα και δεν εξαρτάται από σειρά
+  /// γεγονότων: όσο ο δείκτης είναι εδώ, **μόνο το κουμπί** αποφασίζει.
+  bool _pointerOverSolutionChip = false;
   bool _flashHighlight = false;
   bool _flashPlaying = false;
   Offset? _lastSecondaryPointerGlobal;
@@ -68,10 +80,103 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
   }
 
   void _maybeCollapseSolutionZone() {
+    if (_pointerOverSolutionChip) return;
     if (_solutionFocusNode.hasFocus) return;
     if (_solutionController.text.trim().isNotEmpty) return;
     if (!_solutionZoneVisible || !mounted) return;
     setState(() => _solutionZoneVisible = false);
+  }
+
+  /// Τι θα κάνει το επόμενο πάτημα του chip.
+  SolutionChipAction get _solutionChipAction {
+    if (!_solutionZoneVisible) return SolutionChipAction.open;
+    return _solutionController.text.trim().isEmpty
+        ? SolutionChipAction.close
+        : SolutionChipAction.moveBack;
+  }
+
+  /// Το chip απενεργοποιείται **μόνο** όταν δεν υπάρχει τίποτα να ανοίξει.
+  ///
+  /// Με ανοιχτή ζώνη μένει πάντα ενεργό, ακόμη και με άδειες σημειώσεις: εκεί
+  /// είναι η μόνη έξοδος από μια ζώνη που άνοιξε — και η μόνη διαδρομή που
+  /// επιστρέφει μια λύση γραμμένη πριν από την Περιγραφή.
+  bool get _solutionChipEnabled {
+    if (_solutionZoneVisible) return true;
+    return _controller.text.trim().isNotEmpty;
+  }
+
+  /// Εκτελεί **αυτό που έδειχνε το κουμπί**, όχι ό,τι ισχύει τη στιγμή που
+  /// φτάνει το πάτημα.
+  ///
+  /// Η διαφορά δεν είναι θεωρητική: στα Windows το κλικ αφαιρεί πρώτα την
+  /// εστίαση από το πεδίο Λύσης, ο ακροατής εστίασης κλείνει την άδεια ζώνη,
+  /// και μόνο μετά τρέχει αυτός ο χειριστής. Αν ξαναρωτούσε την κατάσταση, θα
+  /// έβρισκε «κλειστή» και θα την ξανάνοιγε — ο χρήστης θα πατούσε «✕» και δεν
+  /// θα έκλεινε ποτέ. Η ενέργεια έρχεται από το ίδιο το κουμπί, όπως τη
+  /// ζωγράφισε το τελευταίο frame.
+  void _onSolutionChipPressed(SolutionChipAction action) {
+    switch (action) {
+      case SolutionChipAction.open:
+        _activateSolutionZone();
+      case SolutionChipAction.close:
+        _closeSolutionZone();
+      case SolutionChipAction.moveBack:
+        _moveSolutionBackToNotes();
+    }
+  }
+
+  void _onSolutionChipBlocked() => unawaited(_playDoubleFlash());
+
+  /// Κρατά ΜΟΝΟ τη σημαία.
+  ///
+  /// ΠΟΤΕ σύμπτυξη από εδώ: όταν η ζώνη ανοίγει, το νέο πεδίο μπαίνει πάνω από
+  /// το κουμπί και το σπρώχνει προς τα κάτω — ο δείκτης παύει να είναι από
+  /// πάνω του και ο «έφυγε ο δείκτης» πυροδοτούνταν ενώ ο κέρσορας δεν είχε
+  /// προλάβει ακόμη να μπει στο πεδίο. Η ζώνη άνοιγε κι έκλεινε ακαριαία.
+  ///
+  /// Το «κλικ αλλού κλείνει την άδεια ζώνη» δεν χρειάζεται αυτή τη διαδρομή:
+  /// το κάνει ο ακροατής εστίασης, όπως πάντα.
+  void _onSolutionChipHoverChanged(bool hovering) {
+    _pointerOverSolutionChip = hovering;
+  }
+
+  /// Το Ctrl+Enter ανοίγει και κλείνει, αλλά **ποτέ δεν μεταφέρει κείμενο
+  /// πίσω**: η κίνηση που αλλάζει γραμμένο κείμενο μένει συνειδητό κλικ.
+  void _onSolutionShortcut() {
+    if (!_solutionChipEnabled) return;
+    switch (_solutionChipAction) {
+      case SolutionChipAction.open:
+        _activateSolutionZone();
+      case SolutionChipAction.close:
+        _closeSolutionZone();
+      case SolutionChipAction.moveBack:
+        _solutionFocusNode.requestFocus();
+    }
+  }
+
+  void _closeSolutionZone() {
+    if (!mounted) return;
+    if (_solutionZoneVisible) {
+      setState(() => _solutionZoneVisible = false);
+    }
+    _focusNode.requestFocus();
+  }
+
+  /// Η αντίστροφη κίνηση του chip: η λύση ξαναγίνεται γραμμή των σημειώσεων.
+  void _moveSolutionBackToNotes() {
+    final notifier = ref.read(callEntryProvider.notifier);
+    final merged = NotesSolutionSplit.mergeSolutionBack(
+      _controller.text,
+      _solutionController.text,
+    );
+    _controller.value = TextEditingValue(
+      text: merged,
+      selection: TextSelection.collapsed(offset: merged.length),
+    );
+    notifier.setNotes(merged);
+    _solutionController.text = '';
+    notifier.setSolution('');
+    _closeSolutionZone();
   }
 
   /// Άνοιγμα της ζώνης «Λύση» — από το chip ή το Ctrl+Enter.
@@ -414,7 +519,7 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
                       const SingleActivator(
                         LogicalKeyboardKey.enter,
                         control: true,
-                      ): _activateSolutionZone,
+                      ): _onSolutionShortcut,
                     },
                     child: TextField(
                       focusNode: _focusNode,
@@ -511,9 +616,13 @@ class NotesStickyFieldState extends ConsumerState<NotesStickyField> {
                       const Expanded(child: _StickyPendingToggle()),
                       const SizedBox(width: 4),
                       _SolutionChip(
+                        action: _solutionChipAction,
                         active:
                             _solutionZoneVisible || solution.trim().isNotEmpty,
-                        onPressed: _activateSolutionZone,
+                        enabled: _solutionChipEnabled,
+                        onPressed: _onSolutionChipPressed,
+                        onBlocked: _onSolutionChipBlocked,
+                        onHoverChanged: _onSolutionChipHoverChanged,
                       ),
                       const SizedBox(width: 8),
                       // ΕΝΑΣ μετρητής για όλο το χαρτί: περιγραφή και λύση
@@ -598,46 +707,103 @@ class _SolutionZoneHeader extends StatelessWidget {
 ///
 /// Ανοίγει τη ζώνη Λύσης (βλ. [NotesStickyFieldState._activateSolutionZone])·
 /// γεμάτο όταν η κλήση έχει ήδη λύση, περίγραμμα όταν όχι.
-class _SolutionChip extends StatelessWidget {
-  const _SolutionChip({required this.active, required this.onPressed});
+/// Τι θα κάνει το επόμενο πάτημα του chip «Λύση».
+///
+/// Το κουμπί δεν είναι μόνο ένδειξη κατάστασης — είναι ο διακόπτης της. Άρα
+/// οφείλει να δείχνει **τι θα συμβεί**, όχι μόνο πού βρισκόμαστε: το εικονίδιο
+/// αλλάζει μαζί με την ενέργεια, και η υπόδειξη τη γράφει με λέξεις.
+enum SolutionChipAction {
+  /// Η ζώνη είναι κλειστή: το πάτημα την ανοίγει (και κατεβάζει τη γραμμή).
+  open,
 
+  /// Η ζώνη είναι ανοιχτή και άδεια: το πάτημα την εξαφανίζει.
+  close,
+
+  /// Η ζώνη έχει κείμενο: το πάτημα το στέλνει πίσω στις σημειώσεις.
+  moveBack,
+}
+
+class _SolutionChip extends StatelessWidget {
+  const _SolutionChip({
+    required this.action,
+    required this.active,
+    required this.enabled,
+    required this.onPressed,
+    required this.onBlocked,
+    required this.onHoverChanged,
+  });
+
+  final SolutionChipAction action;
   final bool active;
-  final VoidCallback onPressed;
+
+  /// Χωρίς Περιγραφή δεν υπάρχει πρόβλημα να λυθεί — ίδιο μοτίβο με το τικ
+  /// «Εκκρεμότητα» δίπλα: το πάτημα αναβοσβήνει το χαρτί αντί να ανοίξει ζώνη.
+  final bool enabled;
+
+  /// Παίρνει την ενέργεια που **ζωγραφίστηκε**, ώστε το πάτημα να μην μπορεί να
+  /// εκτελέσει κάτι άλλο από αυτό που είδε ο χρήστης.
+  final ValueChanged<SolutionChipAction> onPressed;
+  final VoidCallback onBlocked;
+
+  /// Ο δείκτης μπήκε ή βγήκε από το κουμπί.
+  final ValueChanged<bool> onHoverChanged;
+
+  IconData get _icon => switch (action) {
+    SolutionChipAction.open => Icons.healing,
+    SolutionChipAction.close => Icons.close,
+    SolutionChipAction.moveBack => Icons.arrow_upward,
+  };
+
+  String get _tooltip => switch (action) {
+    SolutionChipAction.open =>
+      'Καταχώρηση λύσης — κατεβαίνει ολόκληρη η γραμμή που γράφεις '
+          '(Ctrl+Enter)',
+    SolutionChipAction.close =>
+      'Εξαφάνιση πεδίου καταχώρησης λύσης (Ctrl+Enter)',
+    SolutionChipAction.moveBack => 'Μεταφορά λύσης στις σημειώσεις',
+  };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
+    final muted = enabled
+        ? theme.colorScheme.onSurfaceVariant
+        : theme.colorScheme.onSurface.withValues(alpha: 0.38);
     return Tooltip(
       waitDuration: const Duration(milliseconds: 600),
-      message: 'Η γραμμή του κέρσορα γίνεται η Λύση της κλήσης (Ctrl+Enter)',
-      child: Material(
-        color: active ? muted : Colors.transparent,
-        shape: StadiumBorder(
-          side: BorderSide(color: muted.withValues(alpha: 0.6)),
-        ),
-        child: InkWell(
-          customBorder: const StadiumBorder(),
-          onTap: onPressed,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.healing,
-                  size: 13,
-                  color: active ? theme.colorScheme.surface : muted,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Λύση',
-                  style: theme.textTheme.bodySmall?.copyWith(
+      message: _tooltip,
+      child: MouseRegion(
+        onEnter: (_) => onHoverChanged(true),
+        onExit: (_) => onHoverChanged(false),
+        child: Material(
+          key: const ValueKey('notes_solution_chip'),
+          color: active ? muted : Colors.transparent,
+          shape: StadiumBorder(
+            side: BorderSide(color: muted.withValues(alpha: 0.6)),
+          ),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: enabled ? () => onPressed(action) : onBlocked,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _icon,
+                    size: 13,
                     color: active ? theme.colorScheme.surface : muted,
-                    fontWeight: FontWeight.w600,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  Text(
+                    'Λύση',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: active ? theme.colorScheme.surface : muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

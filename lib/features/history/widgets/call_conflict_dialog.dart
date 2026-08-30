@@ -26,9 +26,7 @@ Future<CallConflictChoice?> showCallConflictDialog(
   final registered = conflict.otherRegisteredInLansweeper;
   final overwrite = await showStaleWriteConflictDialog(
     context,
-    title: registered
-        ? 'Η κλήση καταχωρήθηκε στο μεταξύ'
-        : 'Κάποιος πρόλαβε',
+    title: registered ? 'Η κλήση καταχωρήθηκε στο μεταξύ' : 'Κάποιος πρόλαβε',
     headline: conflict.headline(now: now),
     warning: conflict.overwriteWarning,
     changedFields: conflict.changedFields,
@@ -37,5 +35,7 @@ Future<CallConflictChoice?> showCallConflictDialog(
         : 'Ακύρωσε την αλλαγή μου',
   );
   if (overwrite == null) return null;
-  return overwrite ? CallConflictChoice.overwrite : CallConflictChoice.keepTheirs;
+  return overwrite
+      ? CallConflictChoice.overwrite
+      : CallConflictChoice.keepTheirs;
 }

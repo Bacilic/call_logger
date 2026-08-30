@@ -6,6 +6,8 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/remote_tools_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../../database/services/active_backup_settings.dart';
+import 'configured_path_scan_result.dart';
+import 'path_fix_destination.dart';
 
 /// Έλεγχος ρυθμισμένων διαδρομών: ποιες από τις διαδρομές που κουβαλούν οι
 /// ρυθμίσεις ΔΕΝ υπάρχουν σε αυτό το μηχάνημα.
@@ -30,7 +32,7 @@ class ConfiguredPathEntry {
     required this.settingName,
     required this.path,
     required this.storedInDatabase,
-    required this.fixLocation,
+    required this.fixDestination,
   });
 
   /// Πώς λέγεται η ρύθμιση για τον χρήστη («Φάκελος αντιγράφων ασφαλείας»).
@@ -42,8 +44,12 @@ class ConfiguredPathEntry {
   /// False = τοπική ρύθμιση αυτού του υπολογιστή (SharedPreferences).
   final bool storedInDatabase;
 
-  /// Πού διορθώνεται («Ρυθμίσεις → Ενημερώσεις»).
-  final String fixLocation;
+  /// Πού διορθώνεται — και, μαζί, πού πηγαίνει το κουμπί μετάβασης.
+  final PathFixDestination fixDestination;
+
+  /// Η οδηγία που διαβάζει ο χρήστης· βγαίνει από τον ίδιο τον προορισμό,
+  /// ώστε τα δύο να μην μπορούν να αποκλίνουν.
+  String get fixLocation => fixDestination.label;
 }
 
 /// Καθαρή αξιολόγηση: κρατά όσες διαδρομές δεν περνούν τον [pathExists].
@@ -90,79 +96,98 @@ Future<bool> _existsAsFileOrDirectory(String path) async {
   return Directory(path).exists();
 }
 
-/// Απογραφή των ρυθμισμένων διαδρομών από βάση και τοπικές ρυθμίσεις.
-Future<List<ConfiguredPathEntry>> loadConfiguredPathEntries() async {
-  final entries = <ConfiguredPathEntry>[];
-
-  // ---- Ρυθμίσεις ΜΕΣΑ στη βάση: ταξιδεύουν δουλειά ↔ σπίτι.
-  try {
-    // Ο φάκελος αντιγράφων του συνδεδεμένου χρήστη — ίδια πύλη με την οθόνη.
-    final backup = await ActiveBackupSettings.read();
-    entries.add(
-      ConfiguredPathEntry(
-        settingName: 'Φάκελος αντιγράφων ασφαλείας',
-        path: backup.destinationDirectory,
-        storedInDatabase: true,
-        fixLocation: 'Βάση Δεδομένων → Ρυθμίσεις βάσης → Φάκελος προορισμού',
-      ),
-    );
-  } catch (_) {
-    // Χωρίς βάση δεν υπάρχουν ρυθμίσεις βάσης να ελεγχθούν.
-  }
-
-  try {
-    final tools = await RemoteToolsRepository(
-      DatabaseHelper.instance,
-    ).getAllNonDeletedTools();
-    for (final tool in tools) {
-      entries.add(
-        ConfiguredPathEntry(
-          settingName: 'Εργαλείο απομακρυσμένης «${tool.name}»',
-          path: tool.executablePath,
-          storedInDatabase: true,
-          fixLocation: 'Ρυθμίσεις → Εργαλεία απομακρυσμένης σύνδεσης',
-        ),
-      );
-    }
-  } catch (_) {}
-
-  // ---- Τοπικές ρυθμίσεις: αφορούν ΜΟΝΟ αυτό το μηχάνημα/προφίλ.
-  final catalogs = SettingsService().catalogs;
-  entries.add(
-    ConfiguredPathEntry(
-      settingName: 'Φάκελος ελέγχου ενημερώσεων',
-      path: (await catalogs.getUpdateFolderPath()) ?? '',
-      storedInDatabase: false,
-      fixLocation: 'Ρυθμίσεις → Ενημερώσεις',
+/// Οι ομάδες διαδρομών προς έλεγχο, με το όνομα που θα δει ο χρήστης αν
+/// κάποια δεν διαβαστεί.
+///
+/// Οι δύο πρώτες ζουν **μέσα στη βάση** και ταξιδεύουν μαζί της· η τρίτη
+/// είναι τοπική. Γι' αυτό ακριβώς χωρίζονται: μια κλειδωμένη βάση χάνει τις
+/// δύο πρώτες και αφήνει την τρίτη να βρεθεί μια χαρά — η κατάσταση που
+/// έβγαζε ψεύτικο «όλα καθαρά».
+List<ConfiguredPathGroup> configuredPathGroups() {
+  return [
+    ConfiguredPathGroup(
+      name: 'ο φάκελος αντιγράφων ασφαλείας',
+      load: () async {
+        // Ο φάκελος αντιγράφων του συνδεδεμένου χρήστη — ίδια πύλη με την οθόνη.
+        final backup = await ActiveBackupSettings.read();
+        return [
+          ConfiguredPathEntry(
+            settingName: 'Φάκελος αντιγράφων ασφαλείας',
+            path: backup.destinationDirectory,
+            storedInDatabase: true,
+            fixDestination: PathFixDestination.backupSettings,
+          ),
+        ];
+      },
     ),
-  );
-  entries.add(
-    ConfiguredPathEntry(
-      settingName: 'Πηγή λεξικού',
-      path: (await catalogs.getDictionarySourcePath()) ?? '',
-      storedInDatabase: false,
-      fixLocation: 'Λεξικό → διαδρομές αρχείων',
+    ConfiguredPathGroup(
+      name: 'τα εργαλεία απομακρυσμένης σύνδεσης',
+      load: () async {
+        final tools = await RemoteToolsRepository(
+          DatabaseHelper.instance,
+        ).getAllNonDeletedTools();
+        return [
+          for (final tool in tools)
+            ConfiguredPathEntry(
+              settingName: 'Εργαλείο απομακρυσμένης «${tool.name}»',
+              path: tool.executablePath,
+              storedInDatabase: true,
+              fixDestination: PathFixDestination.remoteTools,
+            ),
+        ];
+      },
     ),
-  );
-  // Η εξαγωγή είναι ΣΤΟΧΟΣ εγγραφής: το αρχείο δικαιολογημένα λείπει πριν
-  // την πρώτη εξαγωγή — ελέγχεται ο φάκελος που θα τη δεχτεί.
-  final exportPath = ((await catalogs.getDictionaryExportPath()) ?? '').trim();
-  entries.add(
-    ConfiguredPathEntry(
-      settingName: 'Φάκελος εξαγωγής λεξικού',
-      path: exportPath.isEmpty ? '' : p.dirname(exportPath),
-      storedInDatabase: false,
-      fixLocation: 'Λεξικό → διαδρομές αρχείων',
+    ConfiguredPathGroup(
+      name: 'οι τοπικές διαδρομές (ενημερώσεις και λεξικό)',
+      load: () async {
+        final catalogs = SettingsService().catalogs;
+        // Η εξαγωγή είναι ΣΤΟΧΟΣ εγγραφής: το αρχείο δικαιολογημένα λείπει
+        // πριν την πρώτη εξαγωγή — ελέγχεται ο φάκελος που θα τη δεχτεί.
+        final exportPath = ((await catalogs.getDictionaryExportPath()) ?? '')
+            .trim();
+        return [
+          ConfiguredPathEntry(
+            settingName: 'Φάκελος ελέγχου ενημερώσεων',
+            path: (await catalogs.getUpdateFolderPath()) ?? '',
+            storedInDatabase: false,
+            fixDestination: PathFixDestination.updateFolder,
+          ),
+          ConfiguredPathEntry(
+            settingName: 'Πηγή λεξικού',
+            path: (await catalogs.getDictionarySourcePath()) ?? '',
+            storedInDatabase: false,
+            fixDestination: PathFixDestination.dictionaryPaths,
+          ),
+          ConfiguredPathEntry(
+            settingName: 'Φάκελος εξαγωγής λεξικού',
+            path: exportPath.isEmpty ? '' : p.dirname(exportPath),
+            storedInDatabase: false,
+            fixDestination: PathFixDestination.dictionaryPaths,
+          ),
+        ];
+      },
     ),
-  );
-
-  return entries;
+  ];
 }
 
 /// Ένα κλικ: απογραφή + αξιολόγηση με τον πραγματικό έλεγχο ύπαρξης.
-Future<List<ConfiguredPathEntry>> findInvalidConfiguredPaths() {
-  return loadConfiguredPathEntries().then(
-    (entries) =>
-        evaluateConfiguredPaths(entries, configuredPathExistsOnThisMachine),
+///
+/// Ό,τι δεν διαβάστηκε ταξιδεύει μαζί με τα ευρήματα, ώστε η οθόνη να μη
+/// μπορεί να ανακοινώσει «όλες οι διαδρομές βρέθηκαν» για ομάδα που δεν
+/// κοίταξε ποτέ.
+Future<ConfiguredPathScanResult> findInvalidConfiguredPaths({
+  List<ConfiguredPathGroup>? groups,
+  Future<bool> Function(String path)? pathExists,
+}) async {
+  final inventory = await collectConfiguredPaths(
+    groups ?? configuredPathGroups(),
+  );
+  final invalid = await evaluateConfiguredPaths(
+    inventory.entries,
+    pathExists ?? configuredPathExistsOnThisMachine,
+  );
+  return ConfiguredPathScanResult(
+    invalidPaths: invalid,
+    uncheckedGroups: inventory.unreadableGroups,
   );
 }

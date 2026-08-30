@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
-import '../../../core/database/database_helper.dart';
 import '../../../core/widgets/modal_route_tracker.dart';
-import '../../../core/database/settings_repository.dart';
 import '../../../core/widgets/compact_tooltip.dart';
 import '../../../core/widgets/dialog_snackbar_scope.dart';
 import '../../../core/widgets/app_asset_image.dart';
@@ -17,6 +14,7 @@ import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/services/ai_prompt_template_controller.dart';
 import '../../../core/services/lansweeper_department_accounts.dart';
 import '../../../core/services/lansweeper_identity_diagnosis.dart';
+import '../services/lansweeper_ticket_form_prefs.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/widgets/spell_check_controller.dart';
@@ -359,54 +357,30 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
           .hydrationFuture;
     } catch (_) {}
     if (!mounted) return;
-    final config = ref.read(lansweeperTicketSubmitConfigProvider);
-    if (!config.rememberFormSelections) return;
+    if (!ref
+        .read(lansweeperTicketSubmitConfigProvider)
+        .rememberFormSelections) {
+      return;
+    }
 
-    final db = await DatabaseHelper.instance.database;
-    if (!mounted) return;
-    final raw = await SettingsRepository(
-      db,
-    ).getSetting(kLansweeperTicketSubmitFormPrefsSettingKey);
-    if (!mounted || raw == null || raw.trim().isEmpty) return;
-
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return;
-      final map = Map<String, dynamic>.from(decoded);
-      final valuesRaw = map['customFieldValues'];
-      final nextValues = <String, String>{};
-      if (valuesRaw is Map) {
-        valuesRaw.forEach((key, value) {
-          if (key != null) {
-            nextValues[key.toString()] = value?.toString() ?? '';
-          }
-        });
-      }
-      final ticketState = map['ticketState']?.toString();
-      setState(() {
-        customFieldValues
-          ..clear()
-          ..addAll(nextValues);
-        if (ticketState != null && ticketState.trim().isNotEmpty) {
-          selectedTicketState = ticketState.trim();
-        }
-      });
-    } catch (_) {}
+    final prefs = await LansweeperTicketFormPrefs.load();
+    if (!mounted || prefs == null) return;
+    setState(() {
+      customFieldValues
+        ..clear()
+        ..addAll(prefs.customFieldValues);
+      final state = prefs.ticketState;
+      if (state != null) selectedTicketState = state;
+    });
   }
 
   Future<void> persistTicketSubmitFormPrefs() async {
     final config = ref.read(lansweeperTicketSubmitConfigProvider);
     if (!config.rememberFormSelections) return;
-    final payload = <String, dynamic>{
-      'customFieldValues': Map<String, String>.from(customFieldValues),
-      'ticketState': selectedTicketState ?? config.defaultTicketState,
-    };
-    final db = await DatabaseHelper.instance.database;
-    if (!mounted) return;
-    await SettingsRepository(db).saveSetting(
-      kLansweeperTicketSubmitFormPrefsSettingKey,
-      jsonEncode(payload),
-    );
+    await LansweeperTicketFormPrefs(
+      customFieldValues: Map<String, String>.from(customFieldValues),
+      ticketState: selectedTicketState ?? config.defaultTicketState,
+    ).save();
   }
 
   @override
@@ -828,8 +802,8 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                             // αλλιώς ο πλειοψηφικός τομέας του καταλόγου.
                             final requesterReferenceDomain =
                                 lansweeperReferenceDomain(
-                                  agentIdentity: ref.read(
-                                    lansweeperAgentUsernameProvider,
+                                  agent: LansweeperAgentIdentity.read(
+                                    ref.read(lansweeperAgentUsernameProvider),
                                   ),
                                   knownIdentities: [
                                     for (final user

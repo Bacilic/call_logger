@@ -1,155 +1,37 @@
 import 'package:flutter/material.dart';
-
-import '../utils/task_completion_summary.dart';
-import '../utils/task_duration_format.dart';
-import '../../../core/widgets/deleted_catalog_entity_text.dart';
-import '../../../core/widgets/draggable_dialog_shell.dart';
-import '../../../core/widgets/linkable_selectable_text.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/task_save_exception.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-
+import '../../../core/widgets/compact_tooltip.dart';
+import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../operators/providers/operator_directory_providers.dart';
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
 import '../providers/pending_task_delete_provider.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
-import '../widgets/task_due_date_label.dart';
-import '../../../core/widgets/compact_tooltip.dart';
+import '../utils/task_completion_summary.dart';
+import '../widgets/task_card_actions.dart';
+import '../widgets/task_card_callbacks.dart';
+import '../widgets/task_card_quick_actions.dart';
+import '../widgets/task_card_solution_zone.dart';
+import '../widgets/task_card_summary.dart';
 import 'tasks_screen_actions.dart';
 
-/// Περιγραφή εκκρεμότητας: δυναμικό ύψος έως 5 γραμμές, πάνω από 5 → κυλιώμενο πλαίσιο.
+// Οι υποδείξεις για διαγραμμένες οντότητες ζουν πλέον δίπλα στα κουμπιά που
+// τις δείχνουν· μένουν προσβάσιμες από εδώ για όποιον εισάγει την κάρτα.
+export '../widgets/task_card_quick_actions.dart'
+    show
+        kTaskActionCallerMissingHint,
+        kTaskActionDepartmentMissingHint,
+        kTaskActionEquipmentMissingHint;
+
+/// Μία εκκρεμότητα στη λίστα — τρεις ζώνες που συντίθενται εδώ.
 ///
-/// Οι γραμμές με υποδείξεις κανόνων επικύρωσης (γρήγορη καταχώρηση) φεύγουν
-/// από το ελεύθερο κείμενο και αποδίδονται χωριστά, πορτοκαλί — δεν είναι
-/// περιγραφή του χρήστη αλλά σημείωση προς έλεγχο.
-class _TaskDescription extends StatelessWidget {
-  const _TaskDescription({required this.description});
-
-  static const int _maxLines = 5;
-
-  final String description;
-
-  /// Το κείμενο χωρίς το τμήμα υποδείξεων.
-  String get _plainText {
-    final marker = Task.validationHintPrefix.trim();
-    return description
-        .split('\n')
-        .where(
-          (line) =>
-              !line.trimLeft().startsWith(marker) &&
-              line.trim() != Task.validationHintHeader,
-        )
-        .join('\n')
-        .trim();
-  }
-
-  List<String> get _hintLines {
-    final marker = Task.validationHintPrefix.trim();
-    return description
-        .split('\n')
-        .where((line) => line.trimLeft().startsWith(marker))
-        .map((line) => line.trimLeft().replaceFirst(marker, '').trim())
-        .where((line) => line.isNotEmpty)
-        .toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.bodyMedium ?? const TextStyle(fontSize: 14);
-    final hints = _hintLines;
-    final plain = _plainText;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (plain.isNotEmpty) _buildScrollableText(plain, style),
-        if (hints.isNotEmpty) ...[
-          if (plain.isNotEmpty) const SizedBox(height: 8),
-          _ValidationHintBlock(hints: hints),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildScrollableText(String text, TextStyle style) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final textDirection = Directionality.of(context);
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: style),
-          maxLines: null,
-          textDirection: textDirection,
-        );
-        try {
-          painter.layout(maxWidth: constraints.maxWidth);
-          final lineHeight = painter.preferredLineHeight;
-          final lineCount = (painter.height / lineHeight).ceil();
-          if (lineCount <= _maxLines) {
-            return LinkableSelectableText(text: text, style: style);
-          }
-          return SizedBox(
-            height: lineHeight * _maxLines,
-            child: SingleChildScrollView(
-              physics: const ClampingScrollPhysics(),
-              child: LinkableSelectableText(text: text, style: style),
-            ),
-          );
-        } finally {
-          painter.dispose();
-        }
-      },
-    );
-  }
-}
-
-/// Οι υποδείξεις κανόνων μιας γρήγορης καταχώρησης — προειδοποίηση προς
-/// έλεγχο, όχι σφάλμα: ίδιο πορτοκαλί με τις υποδείξεις των φορμών.
-class _ValidationHintBlock extends StatelessWidget {
-  const _ValidationHintBlock({required this.hints});
-
-  final List<String> hints;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = Colors.orange.shade800;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          Task.validationHintHeader,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 2),
-        for (final hint in hints)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning_amber_rounded, size: 14, color: color),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    hint,
-                    style: theme.textTheme.bodySmall?.copyWith(color: color),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
+/// Η κάρτα δεν ζωγραφίζει η ίδια τίποτα: ενώνει τη σύνοψη (τι είναι),
+/// τα σήματα και τις ενέργειες (σε τι κατάσταση είναι, τι της κάνεις), τη
+/// ζώνη λύσης και τις συντομεύσεις καταλόγου. Ό,τι κρατά **κατάσταση** ή
+/// αγγίζει τη βάση μένει εδώ· τα κομμάτια είναι καθαρές απεικονίσεις.
 class TaskCard extends ConsumerStatefulWidget {
   const TaskCard({
     super.key,
@@ -176,6 +58,21 @@ class TaskCard extends ConsumerStatefulWidget {
   final Future<bool> Function()? onEditDepartment;
   final Future<bool> Function()? onEditEquipment;
 
+  /// Οι ενέργειες σε ένα αντικείμενο, για τα κομμάτια της κάρτας.
+  ///
+  /// Το ίδιο το [TaskCard] κρατά τις παραμέτρους ξεχωριστά — έτσι το καλεί
+  /// όλη η εφαρμογή — και τις μαζεύει μόνο όταν τις παραδίδει παρακάτω.
+  TaskCardCallbacks get _callbacks => TaskCardCallbacks(
+    onEdit: onEdit,
+    onAssign: onAssign,
+    onSnooze: onSnooze,
+    onDelete: onDelete,
+    onComplete: onComplete,
+    onEditCaller: onEditCaller,
+    onEditDepartment: onEditDepartment,
+    onEditEquipment: onEditEquipment,
+  );
+
   /// Χρωματική κωδικοποίηση: κόκκινο (καθυστέρηση), πορτοκαλί (υψηλή προτεραιότητα), πράσινο (&lt; 1 ώρα).
   static Color? _cardColor(Task task, ColorScheme scheme) {
     if (task.isOverdue) {
@@ -194,67 +91,6 @@ class TaskCard extends ConsumerStatefulWidget {
     return null;
   }
 
-  static String _relativeCreatedAt(DateTime? createdAt) {
-    if (createdAt == null) return '';
-    final diff = DateTime.now().difference(createdAt);
-    if (diff.inMinutes < 1) return 'μόλις τώρα';
-    if (diff.inHours < 1) return 'πριν ${diff.inMinutes} λεπτά';
-    if (diff.inHours < 24) return 'πριν ${diff.inHours} ώρες';
-    if (diff.inDays == 1) return 'χθες';
-    if (diff.inDays < 7) return '${diff.inDays} μέρες πριν';
-    return DateFormat('dd/MM/yyyy').format(createdAt);
-  }
-
-  static Color _statusChipColor(TaskStatus status, ColorScheme scheme) {
-    return switch (status) {
-      TaskStatus.open => scheme.surfaceContainerHighest,
-      TaskStatus.snoozed => scheme.tertiaryContainer,
-      TaskStatus.closed => scheme.surfaceContainerHighest,
-    };
-  }
-
-  static String _buildStatusTooltip(Task task, TaskStatus status) {
-    final createdAt = task.createdAtDateTime;
-    final completedAt = task.completedAtDateTime;
-    final snoozeEntries = task.snoozeEntries;
-    final lastSnoozeAt = snoozeEntries.isNotEmpty
-        ? snoozeEntries.last.snoozedAt
-        : null;
-
-    switch (status) {
-      case TaskStatus.open:
-        final rel = _relativeCreatedAt(createdAt);
-        return rel.isEmpty ? 'Ανοικτή εκκρεμότητα' : 'Δημιουργία: $rel';
-      case TaskStatus.snoozed:
-        if (snoozeEntries.isEmpty) return 'Αναβληθείσα εκκρεμότητα';
-        final lines = <String>['Αναβολές: ${snoozeEntries.length}'];
-        for (final entry in snoozeEntries.asMap().entries) {
-          final i = entry.key + 1;
-          final line =
-              '$iη: ${DateFormat('dd/MM HH:mm').format(entry.value.snoozedAt)}';
-          final note = entry.value.note?.trim();
-          if (note != null && note.isNotEmpty) {
-            lines.add('$line — λόγος: $note');
-          } else {
-            lines.add(line);
-          }
-        }
-        return lines.join('\n');
-      case TaskStatus.closed:
-        final total = (createdAt != null && completedAt != null)
-            ? durationSince(createdAt, completedAt)
-            : '';
-        final fromLast = (lastSnoozeAt != null && completedAt != null)
-            ? durationSince(lastSnoozeAt, completedAt)
-            : '';
-        if (total.isEmpty && fromLast.isEmpty) {
-          return 'Ολοκληρωμένη εκκρεμότητα';
-        }
-        if (fromLast.isEmpty) return 'Συνολικός χρόνος: $total';
-        return 'Συνολικός χρόνος: $total\nΑπό τελευταία αναβολή: $fromLast';
-    }
-  }
-
   @override
   ConsumerState<TaskCard> createState() => _TaskCardState();
 }
@@ -262,162 +98,100 @@ class TaskCard extends ConsumerStatefulWidget {
 class _TaskCardState extends ConsumerState<TaskCard> {
   bool _showSolution = false;
 
-  static bool _nonEmptyText(String? value) =>
-      value != null && value.trim().isNotEmpty;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final task = widget.task;
+    final status = TaskStatusX.fromString(task.status);
+    final isClosed = status == TaskStatus.closed;
 
-  bool _hasEntityMetadata() {
-    final t = widget.task;
-    return _nonEmptyText(t.userText) ||
-        _nonEmptyText(t.phoneText) ||
-        _nonEmptyText(t.departmentText) ||
-        _nonEmptyText(t.equipmentText);
-  }
+    // Η λύση δείχνεται και σε ξανα-ανοιγμένη εκκρεμότητα: περιγράφει τι είχε
+    // δοκιμαστεί και δεν παύει να ισχύει επειδή το θέμα ξανάνοιξε.
+    final completion = TaskCompletionSummary.of(task);
+    final hasSolution = completion.solution != null;
 
-  /// Σήμα προτεραιότητας δίπλα στην κατάσταση: είναι ιδιότητα της εκκρεμότητας
-  /// και όχι χρόνος, γι' αυτό δεν κάθεται πια κάτω από την ημερομηνία —
-  /// εκεί έσπρωχνε την ημερομηνία εκτός ευθυγράμμισης με τα υπόλοιπα.
-  Widget _buildPriorityBadge(ThemeData theme) {
-    final priority = widget.task.priority ?? 0;
-    if (priority <= 0) return const SizedBox.shrink();
+    final operatorNames = ref.watch(operatorNamesProvider).value;
+    final operatorAvatars =
+        ref.watch(operatorAvatarsProvider).value ?? const <int, String?>{};
+    final disabledOperatorIds =
+        ref.watch(disabledOperatorIdsProvider).value ?? const <int>{};
+    final assignedId = task.assignedOperatorId;
+    final creatorId = task.createdByOperatorId;
 
-    final isCritical = priority > 1;
-    final color = isCritical ? theme.colorScheme.error : Colors.orange.shade700;
+    final pendingDeleteTaskId = ref.watch(pendingTaskDeleteProvider);
+    final isPendingDeleteSelf =
+        pendingDeleteTaskId != null &&
+        task.id != null &&
+        pendingDeleteTaskId == task.id;
 
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          isCritical ? 'Κρίσιμη' : 'Υψηλή',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEntityMetadata(ThemeData theme) {
-    final t = widget.task;
-    final user = t.userText?.trim();
-    final phone = t.phoneText?.trim();
-    final dept = t.departmentText?.trim();
-    final equip = t.equipmentText?.trim();
-
-    final hasUser = user != null && user.isNotEmpty;
-    final hasPhone = phone != null && phone.isNotEmpty;
-    final hasDept = dept != null && dept.isNotEmpty;
-    final hasEquip = equip != null && equip.isNotEmpty;
-
-    if (!hasUser && !hasPhone && !hasDept && !hasEquip) {
-      return const SizedBox.shrink();
-    }
-
-    final onVar = theme.colorScheme.onSurfaceVariant;
-    final textStyle = theme.textTheme.bodySmall?.copyWith(color: onVar);
-
-    Widget row(IconData icon, String text, {bool linkedDeleted = false}) {
-      return Row(
+    Widget card = Card(
+      elevation: 1,
+      color: TaskCard._cardColor(task, theme.colorScheme),
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: onVar),
-          const SizedBox(width: 4),
-          Flexible(
-            child: DeletedCatalogEntityText(
-              text: text,
-              isDeleted: linkedDeleted,
-              style: textStyle,
-              maxLines: 2,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: TaskCardSummary(task: task)),
+                const SizedBox(width: 12),
+                TaskCardActions(
+                  task: task,
+                  callbacks: widget._callbacks,
+                  status: status,
+                  assigneeName: assignedId == null
+                      ? null
+                      : operatorDisplayNameFor(operatorNames, assignedId),
+                  creatorName: creatorId == null
+                      ? null
+                      : operatorDisplayNameFor(operatorNames, creatorId),
+                  operatorAvatars: operatorAvatars,
+                  disabledOperatorIds: disabledOperatorIds,
+                  deleteMenuEnabled: pendingDeleteTaskId == null,
+                  hasSolution: hasSolution,
+                  showSolution: _showSolution,
+                  onToggleSolution: () =>
+                      setState(() => _showSolution = !_showSolution),
+                ),
+              ],
             ),
           ),
+          if (hasSolution && _showSolution)
+            TaskCardSolutionZone(completion: completion, isClosed: isClosed),
+          if (task.isQuickAdd)
+            TaskCardQuickActions(
+              task: task,
+              callbacks: widget._callbacks,
+              onEntityEdited: _handleEntityEdited,
+            ),
         ],
+      ),
+    );
+
+    if (isPendingDeleteSelf) {
+      card = CompactTooltip(
+        message:
+            'Εκκρεμεί η διαγραφή· πατήστε «Αναίρεση» στο μήνυμα κάτω για επαναφορά',
+        child: AbsorbPointer(
+          absorbing: true,
+          child: Opacity(opacity: 0.5, child: card),
+        ),
       );
     }
 
-    return Wrap(
-      spacing: 12.0,
-      runSpacing: 4.0,
-      children: [
-        if (hasUser)
-          row(Icons.person_outline, user, linkedDeleted: t.callerLinkedDeleted),
-        if (hasPhone) row(Icons.phone_outlined, phone),
-        if (hasDept)
-          row(Icons.domain, dept, linkedDeleted: t.departmentLinkedDeleted),
-        if (hasEquip)
-          row(
-            Icons.computer_outlined,
-            equip,
-            linkedDeleted: t.equipmentLinkedDeleted,
-          ),
-      ],
-    );
+    return card;
   }
 
-  Widget _buildQuickActions(ThemeData theme) {
-    final task = widget.task;
-    final actions = <Widget>[
-      if (task.callerId != null && widget.onEditCaller != null)
-        OutlinedButton.icon(
-          onPressed: () async {
-            final result = await widget.onEditCaller!.call();
-            if (!result || !mounted) return;
-            await _handleQuickAddPostSave();
-            if (!mounted) return;
-            await deferTasksProviderInvalidate(ref);
-          },
-          icon: const Icon(Icons.person_outline, size: 16),
-          label: const Text('Επεξεργασία Χρήστη'),
-        ),
-      if (task.departmentId != null && widget.onEditDepartment != null)
-        OutlinedButton.icon(
-          onPressed: () async {
-            final result = await widget.onEditDepartment!.call();
-            if (!result || !mounted) return;
-            await _handleQuickAddPostSave();
-            if (!mounted) return;
-            await deferTasksProviderInvalidate(ref);
-          },
-          icon: const Icon(Icons.domain_outlined, size: 16),
-          label: const Text('Επεξεργασία Τμήματος'),
-        ),
-      if (task.equipmentId != null && widget.onEditEquipment != null)
-        OutlinedButton.icon(
-          onPressed: () async {
-            final result = await widget.onEditEquipment!.call();
-            if (!result || !mounted) return;
-            await _handleQuickAddPostSave();
-            if (!mounted) return;
-            await deferTasksProviderInvalidate(ref);
-          },
-          icon: const Icon(Icons.computer_outlined, size: 16),
-          label: const Text('Επεξεργασία Εξοπλισμού'),
-        ),
-    ];
-
-    if (actions.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Divider(
-            height: 10,
-            thickness: 0.5,
-            color: theme.colorScheme.outlineVariant,
-          ),
-          Wrap(spacing: 8, runSpacing: 8, children: actions),
-        ],
-      ),
-    );
+  /// Μετά από επιτυχή επεξεργασία οντότητας μέσα από τη γρήγορη καταχώρηση.
+  Future<void> _handleEntityEdited() async {
+    if (!mounted) return;
+    await _handleQuickAddPostSave();
+    if (!mounted) return;
+    await deferTasksProviderInvalidate(ref);
   }
 
   Future<void> _handleQuickAddPostSave() async {
@@ -487,287 +261,5 @@ class _TaskCardState extends ConsumerState<TaskCard> {
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final task = widget.task;
-    final cardColor = TaskCard._cardColor(task, theme.colorScheme);
-    final status = TaskStatusX.fromString(task.status);
-    final isSnoozed = status == TaskStatus.snoozed;
-    final isClosed = status == TaskStatus.closed;
-    // Η λύση δείχνεται και σε ξανα-ανοιγμένη εκκρεμότητα: περιγράφει τι είχε
-    // δοκιμαστεί και δεν παύει να ισχύει επειδή το θέμα ξανάνοιξε.
-    final completion = TaskCompletionSummary.of(task);
-    final hasSolution = completion.solution != null;
-
-    final statusLabel = isSnoozed ? 'Αναβληθείσα' : status.displayLabelEl;
-    final statusTooltip = TaskCard._buildStatusTooltip(task, status);
-    final pendingDeleteTaskId = ref.watch(pendingTaskDeleteProvider);
-    final deleteMenuEnabled = pendingDeleteTaskId == null;
-    final isPendingDeleteSelf =
-        pendingDeleteTaskId != null &&
-        task.id != null &&
-        pendingDeleteTaskId == task.id;
-
-    Widget card = Card(
-      elevation: 1,
-      color: cardColor,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        task.displayTitle,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if ((task.isQuickAdd
-                                  ? task.cleanDescription
-                                  : task.description)
-                              ?.isNotEmpty ==
-                          true)
-                        _TaskDescription(
-                          description: task.isQuickAdd
-                              ? task.cleanDescription
-                              : task.description!,
-                        ),
-                      if ((task.isQuickAdd
-                                      ? task.cleanDescription
-                                      : task.description)
-                                  ?.isNotEmpty ==
-                              true &&
-                          _hasEntityMetadata())
-                        const SizedBox(height: 8),
-                      _buildEntityMetadata(theme),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildPriorityBadge(theme),
-                        // Ό,τι δείχνει κατάσταση, την αλλάζει κιόλας: το chip
-                        // του υπευθύνου ανοίγει τον ίδιο επιλογέα με το μενού.
-                        // Απλό κλικ — είναι κουμπί, όχι κείμενο (η ημερομηνία
-                        // δίπλα θέλει διπλό επειδή είναι ετικέτα).
-                        if (task.assignedOperatorId != null)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: Tooltip(
-                              message: widget.onAssign == null
-                                  ? 'Υπεύθυνος'
-                                  : 'Υπεύθυνος — κλικ για αλλαγή ανάθεσης',
-                              preferBelow: false,
-                              child: ActionChip(
-                                avatar: const Icon(
-                                  Icons.person_outline,
-                                  size: 16,
-                                ),
-                                label: Text(
-                                  ref
-                                          .watch(operatorNamesProvider)
-                                          .value?[task.assignedOperatorId] ??
-                                      'Χρήστης #${task.assignedOperatorId}',
-                                  style: theme.textTheme.labelSmall,
-                                ),
-                                onPressed: widget.onAssign,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 0,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                          ),
-                        Tooltip(
-                          message: statusTooltip,
-                          // Πάνω από το chip: από κάτω σκέπαζε το κουμπί «Λύση».
-                          preferBelow: false,
-                          child: Chip(
-                            backgroundColor: TaskCard._statusChipColor(
-                              status,
-                              theme.colorScheme,
-                            ),
-                            label: Text(
-                              statusLabel,
-                              style: theme.textTheme.labelSmall,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 0,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        TaskDueDateLabel(
-                          date: isClosed
-                              ? task.completedAtDateTime
-                              : task.dueDateTime,
-                          pattern: isClosed ? 'dd/MM - HH:mm' : 'dd/MM HH:mm',
-                          fallbackText: task.dueDate,
-                          showRemaining: !isClosed,
-                          onSnooze: isClosed ? null : widget.onSnooze,
-                        ),
-                        const SizedBox(width: 4),
-                        if (widget.onComplete != null && !isClosed)
-                          IconButton(
-                            icon: const Icon(Icons.check_circle_outline),
-                            tooltip: 'Ολοκλήρωση',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: widget.onComplete,
-                          ),
-                        PopupMenuButton<String>(
-                          tooltip: 'Ενέργειες',
-                          onSelected: (value) {
-                            switch (value) {
-                              case 'edit':
-                                widget.onEdit?.call();
-                                break;
-                              case 'assign':
-                                widget.onAssign?.call();
-                                break;
-                              case 'snooze':
-                                widget.onSnooze?.call();
-                                break;
-                              case 'delete':
-                                widget.onDelete?.call();
-                                break;
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Text('Επεξεργασία'),
-                            ),
-                            // Ανάθεση και σε ολοκληρωμένη: το «ποιος το
-                            // έλυσε/το χρεώνεται» διορθώνεται και εκ των
-                            // υστέρων.
-                            if (widget.onAssign != null)
-                              const PopupMenuItem(
-                                value: 'assign',
-                                child: Text('Ανάθεση'),
-                              ),
-                            // Σε ολοκληρωμένη, η αναβολή ζει μέσα στον διάλογο
-                            // επεξεργασίας: χρειάζεται πρώτα απόφαση για το αν
-                            // η εκκρεμότητα ξανανοίγει, και με ποια μορφή.
-                            if (!isClosed)
-                              const PopupMenuItem(
-                                value: 'snooze',
-                                child: Text('Αναβολή'),
-                              ),
-                            PopupMenuItem<String>(
-                              value: 'delete',
-                              enabled: deleteMenuEnabled,
-                              child: const Text('Διαγραφή'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    if (hasSolution)
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 2,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        onPressed: () {
-                          setState(() => _showSolution = !_showSolution);
-                        },
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _showSolution
-                                  ? 'Απόκρυψη λύσης'
-                                  : (isClosed ? 'Λύση' : 'Προηγούμενη λύση'),
-                            ),
-                            const SizedBox(width: 2),
-                            Icon(
-                              _showSolution
-                                  ? Icons.arrow_drop_up
-                                  : Icons.arrow_drop_down,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (hasSolution && _showSolution)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Divider(height: 10, thickness: 0.5, color: Colors.black87),
-                  if (!isClosed && completion.momentLine != null) ...[
-                    Text(
-                      'Προηγούμενη λύση — ${completion.momentLine}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                  ],
-                  LinkableSelectableText(
-                    text: completion.solution!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (task.isQuickAdd) _buildQuickActions(theme),
-        ],
-      ),
-    );
-
-    if (isPendingDeleteSelf) {
-      card = CompactTooltip(
-        message:
-            'Εκκρεμεί η διαγραφή· πατήστε «Αναίρεση» στο μήνυμα κάτω για επαναφορά',
-        child: AbsorbPointer(
-          absorbing: true,
-          child: Opacity(opacity: 0.5, child: card),
-        ),
-      );
-    }
-
-    return card;
   }
 }

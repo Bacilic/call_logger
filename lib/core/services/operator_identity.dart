@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:sqflite_common/sqlite_api.dart';
 
+import '../../features/operators/avatars/operator_avatar_assignment.dart';
 import '../database/operator_audit.dart';
 import '../database/operator_repository.dart';
 import '../models/operator.dart';
@@ -67,7 +68,7 @@ class OperatorIdentity {
     if (account == null) return null;
 
     final existing = await repository.findByWindowsAccount(account);
-    // Το αρχειοθετημένο προφίλ δεν ενεργοποιείται ποτέ — από καμία διαδρομή.
+    // Το απενεργοποιημένο προφίλ δεν ενεργοποιείται ποτέ — από καμία διαδρομή.
     // Η λίστα επιλογής και η μνήμη του σταθμού το κρύβουν ήδη· χωρίς τον ίδιο
     // έλεγχο εδώ, ο υπολογιστής του συναδέλφου που έφυγε θα συνέχιζε να δίνει
     // την ταυτότητά του και οι κλήσεις θα γράφονταν στο όνομά του.
@@ -134,20 +135,27 @@ class OperatorIdentity {
         ? normalizeWindowsAccount(windowsAccount ?? currentWindowsAccount)
         : null;
 
+    final existing = await repository.getAll();
+
     final created = await repository.insert(
       Operator(
         displayName: displayName.trim(),
         windowsAccount: account,
+        // Το εικονίδιο δίνεται και εδώ, όχι μόνο από την οθόνη «Χρήστες»: αυτή
+        // είναι η πύλη από την οποία περνά ο πρώτος κάθε βάσης και όποιος
+        // συστήνεται σε ξένο υπολογιστή. Αν έλειπε, τα μισά προφίλ θα
+        // γεννιούνταν χωρίς πρόσωπο.
+        avatarKey: pickAvatarKey(takenAvatarKeys(existing)),
         // Ο πρώτος που στήνει τη βάση είναι ο διαχειριστής της. Όσο κανένα
         // δικαίωμα δεν επιβάλλεται η σήμανση δεν αλλάζει τίποτα στη χρήση —
         // διορθώνεται από την οθόνη «Χρήστες».
         //
         // Κριτήριο είναι τα **χρησιμοποιήσιμα** προφίλ, όχι όλα όσα υπάρχουν:
-        // βάση όπου έχουν αρχειοθετηθεί τα πάντα δεν έχει κανέναν να ρωτηθεί
+        // βάση όπου έχουν απενεργοποιηθεί τα πάντα δεν έχει κανέναν να ρωτηθεί
         // «ποιος είναι ο διαχειριστής;», οπότε αυτός που συστήνεται τώρα είναι
         // η μόνη διέξοδος. Όταν υπάρχουν ενεργά προφίλ, η σήμανση ΔΕΝ δίνεται
         // σιωπηλά: την αναλαμβάνει η ρητή ερώτηση στο άνοιγμα της βάσης.
-        isAdmin: await repository.countActive() == 0,
+        isAdmin: existing.where((profile) => profile.isActive).isEmpty,
         createdAt: now ?? DateTime.now(),
       ),
     );

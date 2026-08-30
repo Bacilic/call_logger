@@ -93,9 +93,12 @@ void main() {
             phones: ['23453333'],
             executor: txn,
           );
-          await users.updateUser(id, {
-            'notes': 'ενημέρωση εντός txn',
-          }, executor: txn, expected: null);
+          await users.updateUser(
+            id,
+            {'notes': 'ενημέρωση εντός txn'},
+            executor: txn,
+            expected: null,
+          );
         });
 
         final rows = await db.query(

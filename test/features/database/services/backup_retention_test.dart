@@ -90,38 +90,41 @@ void main() {
     expect(names, contains('2026-08-22_10-00_$_base.db'));
   });
 
-  test('η ηλικία των γρήγορων διαγράφει μόνο γρήγορα πέρα από το όριο', () async {
-    await _makeBackupFile(
-      dir,
-      '2026-08-01_10-00',
-      'db',
-      modified: now.subtract(const Duration(days: 20)),
-    );
-    await _makeBackupFile(
-      dir,
-      '2026-08-23_10-00',
-      'db',
-      modified: now.subtract(const Duration(days: 1)),
-    );
-    await _makeBackupFile(
-      dir,
-      '2026-07-01_10-00',
-      'zip',
-      modified: now.subtract(const Duration(days: 54)),
-    );
+  test(
+    'η ηλικία των γρήγορων διαγράφει μόνο γρήγορα πέρα από το όριο',
+    () async {
+      await _makeBackupFile(
+        dir,
+        '2026-08-01_10-00',
+        'db',
+        modified: now.subtract(const Duration(days: 20)),
+      );
+      await _makeBackupFile(
+        dir,
+        '2026-08-23_10-00',
+        'db',
+        modified: now.subtract(const Duration(days: 1)),
+      );
+      await _makeBackupFile(
+        dir,
+        '2026-07-01_10-00',
+        'zip',
+        modified: now.subtract(const Duration(days: 54)),
+      );
 
-    await BackupRetention.apply(
-      destDir: dir,
-      baseName: _base,
-      settings: settingsWith(quickAgeOn: true, quickAgeDays: 7),
-      now: now,
-    );
+      await BackupRetention.apply(
+        destDir: dir,
+        baseName: _base,
+        settings: settingsWith(quickAgeOn: true, quickAgeDays: 7),
+        now: now,
+      );
 
-    final names = _names(dir);
-    expect(names, hasLength(2));
-    expect(names, contains('2026-08-23_10-00_$_base.db'));
-    expect(names, contains('2026-07-01_10-00_$_base.zip'));
-  });
+      final names = _names(dir);
+      expect(names, hasLength(2));
+      expect(names, contains('2026-08-23_10-00_$_base.db'));
+      expect(names, contains('2026-07-01_10-00_$_base.zip'));
+    },
+  );
 
   test('το όριο των πλήρων κρατά τα νεότερα — και ΠΟΤΕ κάτω από ένα', () async {
     for (var i = 0; i < 4; i++) {
@@ -139,10 +142,7 @@ void main() {
       settings: settingsWith(fullCountOn: true, fullCount: 2),
       now: now,
     );
-    expect(
-      _names(dir).where((n) => n.endsWith('.zip')),
-      hasLength(2),
-    );
+    expect(_names(dir).where((n) => n.endsWith('.zip')), hasLength(2));
     expect(_names(dir), contains('2026-08-23_11-00_$_base.zip'));
 
     // Ακόμη και με όριο 0 (κακή ρύθμιση), το πιο πρόσφατο πλήρες επιβιώνει.

@@ -298,8 +298,9 @@ void main() {
       );
       expect(RemoteTool.fromMap(tool.toMap()).connectWaitSeconds, 12);
       expect(
-        RemoteTool.fromMap({...tool.toMap()}..remove('connect_wait_seconds'))
-            .connectWaitSeconds,
+        RemoteTool.fromMap(
+          {...tool.toMap()}..remove('connect_wait_seconds'),
+        ).connectWaitSeconds,
         RemoteTool.defaultConnectWaitSeconds,
         reason:
             'Βάση γραμμένη από παλαιότερη έκδοση δεν έχει τη στήλη· η '

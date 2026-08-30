@@ -94,11 +94,18 @@ class MainShellDestinationContent {
     return _acknowledgedNoticeIdentity != _databaseStateNotice.identity;
   }
 
-  Future<void> _openDatabaseSettingsDialog() async {
+  /// Ανοίγει τις «Ρυθμίσεις βάσης δεδομένων», προαιρετικά σε συγκεκριμένη
+  /// καρτέλα.
+  ///
+  /// Ζει εδώ και όχι στην οθόνη που τον ζητά, γιατί μόνο το κέλυφος κρατά τον
+  /// χειριστή «άλλαξε η βάση»: ανοιγμένος από αλλού με κενό χειριστή, ο
+  /// διάλογος θα άλλαζε αρχείο βάσης χωρίς να το μάθει η υπόλοιπη εφαρμογή.
+  Future<void> openDatabaseSettingsDialog({int initialTabIndex = 0}) async {
     if (!host.mounted) return;
     await showDatabaseSettingsDialog(
       host.context,
       onDatabaseLifecycleChanged: host.widget.onDatabaseReopened ?? () async {},
+      initialTabIndex: initialTabIndex,
     );
   }
 
@@ -115,7 +122,7 @@ class MainShellDestinationContent {
       case MainNavDestination.database:
         return DatabaseBrowserScreen(
           databaseResult: host.widget.databaseResult,
-          onOpenDatabaseSettings: _openDatabaseSettingsDialog,
+          onOpenDatabaseSettings: openDatabaseSettingsDialog,
           onDatabaseReopened: host.widget.onDatabaseReopened,
         );
       case MainNavDestination.dictionary:
@@ -321,7 +328,7 @@ class MainShellDestinationContent {
                 IconButton(
                   tooltip: 'Ρυθμίσεις βάσης δεδομένων',
                   icon: const Icon(Icons.dataset_linked),
-                  onPressed: _openDatabaseSettingsDialog,
+                  onPressed: openDatabaseSettingsDialog,
                 ),
               ],
             ),

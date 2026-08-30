@@ -1,0 +1,214 @@
+"""Ετοιμάζει τα εικονίδια χρηστών από τις ωμές εικόνες του μοντέλου.
+
+Τα βήματα, με τη σειρά:
+
+1. **Σβήσιμο του υδατογραφήματος.** Πέφτει πάντα στην ίδια θέση, κάτω δεξιά.
+   Καλύπτεται με δείγμα από τη γειτονιά **πριν** από κάθε άλλη επεξεργασία:
+   όταν πέφτει πάνω στο πράσινο εξαφανίζεται μαζί του, κι όταν πέφτει πάνω στη
+   φιγούρα παίρνει την υφή του διπλανού της.
+2. **Αφαίρεση του πράσινου φόντου.** Το φόντο ζητήθηκε ως ομοιόμορφο `#00FF00`.
+   Επειδή όμως κάποια εργαλεία το δίνουν με διαβάθμιση ή με σκιά της φιγούρας
+   πάνω του, δεν αρκεί ένα κατώφλι: αφαιρείται μόνο ό,τι είναι πρασινωπό **και**
+   ενώνεται με την άκρη της εικόνας. Έτσι ένα πράσινο μάτι στη μέση του
+   προσώπου δεν γίνεται ποτέ τρύπα.
+3. **Σβήσιμο της πρασινίλας.** Το πράσινο φόντο αφήνει ανταύγεια στα χνούδια και
+   στα φωτεινά χείλη· χωρίς αυτό το βήμα η φιγούρα αποκτά αρρωστημένο
+   περίγραμμα μόλις μπει σε άλλο φόντο.
+4. **Κάδρο στο πρόσωπο.** Το μοντέλο δίνει προτομή με ώμους· χωρίς ζουμ, σε
+   εικονίδιο 24 εικονοστοιχείων το πρόσωπο γίνεται κηλίδα.
+
+Η φιγούρα **δεν** κόβεται σε κύκλο και δεν αποκτά δίσκο φόντου: μένει ελεύθερη
+πάνω σε διαφάνεια, ώστε το σχήμα της να είναι το δικό της.
+"""
+
+import sys
+from collections import deque
+
+import numpy as np
+from PIL import Image, ImageFilter
+
+SIZE = 384
+"""Πλευρά του τελικού εικονιδίου.
+
+Η μεγαλύτερη προβολή στην εφαρμογή είναι ~96 λογικά εικονοστοιχεία· σε οθόνη
+τριπλής πυκνότητας αυτό γίνεται 288. Το 384 αφήνει περιθώριο χωρίς να φουσκώνει
+το πακέτο.
+"""
+
+WATERMARK_BOX = (876, 889, 928, 934)
+"""Πού κάθεται το υδατογράφημα του εργαλείου, σε συντεταγμένες 1024×1024."""
+
+
+def erase_watermark(rgb: np.ndarray) -> np.ndarray:
+    """Καλύπτει το υδατογράφημα με δείγμα από τα αριστερά του.
+
+    Ο δότης είναι μια ίσου μεγέθους λωρίδα αμέσως αριστερά: εκεί βρίσκεται η
+    πλησιέστερη περιοχή με την ίδια υφή, είτε είναι πράσινο φόντο είτε ώμος.
+    """
+    height, width, _ = rgb.shape
+    scale_x, scale_y = width / 1024, height / 1024
+    x0 = int(WATERMARK_BOX[0] * scale_x)
+    y0 = int(WATERMARK_BOX[1] * scale_y)
+    x1 = int(WATERMARK_BOX[2] * scale_x)
+    y1 = int(WATERMARK_BOX[3] * scale_y)
+    span = x1 - x0
+    if x0 - span < 0:
+        return rgb
+
+    # Τι υπάρχει γύρω από το υδατογράφημα; Αν το περίγραμμα του πλαισίου είναι
+    # πράσινο φόντο, το σωστό μπάλωμα είναι σκέτο πράσινο — μια λωρίδα από
+    # δίπλα θα κουβαλούσε κομμάτι της φιγούρας μέσα στο κενό, και θα έμενε ένα
+    # ανεξήγητο τετραγωνάκι στον αέρα.
+    border = np.concatenate(
+        [
+            rgb[y0:y1, max(x0 - 3, 0) : x0].reshape(-1, 3),
+            rgb[y0:y1, x1 : x1 + 3].reshape(-1, 3),
+            rgb[max(y0 - 3, 0) : y0, x0:x1].reshape(-1, 3),
+            rgb[y1 : y1 + 3, x0:x1].reshape(-1, 3),
+        ]
+    )
+    excess = border[:, 1] - np.maximum(border[:, 0], border[:, 2])
+
+    patched = rgb.copy()
+    if (excess > 25).mean() > 0.7:
+        patched[y0:y1, x0:x1] = border[excess > 25].mean(axis=0)
+    else:
+        patched[y0:y1, x0:x1] = rgb[y0:y1, x0 - span : x0]
+    return patched
+
+
+def flood_from_edges(passable: np.ndarray) -> np.ndarray:
+    """Κρατά μόνο ό,τι ενώνεται με την άκρη της εικόνας."""
+    height, width = passable.shape
+    reached = np.zeros((height, width), dtype=bool)
+    queue = deque()
+
+    for x in range(width):
+        for y in (0, height - 1):
+            if passable[y, x] and not reached[y, x]:
+                reached[y, x] = True
+                queue.append((y, x))
+    for y in range(height):
+        for x in (0, width - 1):
+            if passable[y, x] and not reached[y, x]:
+                reached[y, x] = True
+                queue.append((y, x))
+
+    while queue:
+        y, x = queue.popleft()
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            ny, nx = y + dy, x + dx
+            if (
+                0 <= ny < height
+                and 0 <= nx < width
+                and passable[ny, nx]
+                and not reached[ny, nx]
+            ):
+                reached[ny, nx] = True
+                queue.append((ny, nx))
+    return reached
+
+
+def strip_green(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Επιστρέφει (καθαρό χρώμα, διαφάνεια) αφαιρώντας το πράσινο φόντο."""
+    red, green, blue = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    rival = np.maximum(red, blue)
+    excess = green - rival
+
+    # Δύο δρόμοι, γιατί το φόντο εμφανίζεται σε δύο καταστάσεις:
+    #
+    # 1. **Καθαρό κορεσμένο πράσινο**, οπουδήποτε — και μέσα στο δαχτυλίδι του
+    #    φωτοστέφανου ή ανάμεσα στις τούφες των μαλλιών, όπου η διάδοση από την
+    #    άκρη δεν φτάνει ποτέ. Χωρίς αυτόν τον δρόμο, τέτοιες περικυκλωμένες
+    #    περιοχές μένουν ως πράσινες κηλίδες μέσα στη φιγούρα.
+    # 2. **Θολό ή σκιασμένο πράσινο**, μόνο όσο ενώνεται με την άκρη. Εκεί το
+    #    κατώφλι χαλαρώνει, αλλά το ίδιο χαλαρό κατώφλι στη μέση του προσώπου
+    #    θα άνοιγε τρύπα σε κάθε πρασινωπή σκιά.
+    clearly_green = np.clip((excess - 14) / 14.0, 0, 1)
+    edge_linked = np.where(
+        flood_from_edges(excess > 8), np.clip((excess - 10) / 22.0, 0, 1), 0.0
+    )
+    alpha = 1.0 - np.maximum(clearly_green, edge_linked)
+
+    # Σβήσιμο πρασινίλας: όπου το πράσινο ξεπερνά τον αντίπαλό του πάνω στη
+    # ΦΙΓΟΥΡΑ, κατεβαίνει σε φυσιολογικά επίπεδα. Το όριο είναι γενναιόδωρο,
+    # ώστε τα πραγματικά πράσινα των ματιών να επιβιώνουν.
+    spill = np.clip(green - (rival + 12), 0, None)
+    clean = rgb.copy()
+    clean[:, :, 1] = green - spill * 0.9
+    return clean, alpha
+
+
+def face_frame(
+    alpha: np.ndarray,
+    zoom: float = 1.0,
+    shift_y: float = 0.0,
+) -> tuple[int, int, int, int]:
+    """Το τετράγωνο κάδρο που εστιάζει στο κεφάλι της φιγούρας.
+
+    Η ευρετική: το κεφάλι είναι το **στενό** πάνω μέρος της σιλουέτας. Δεν
+    δουλεύει παντού — τα φτερά του αγγέλου και η κιθάρα στην πλάτη του ροκά
+    μετρούν κι αυτά ως πλάτος — γι' αυτό υπάρχει το [zoom], που ρυθμίζεται ανά
+    εικόνα.
+    """
+    solid = alpha > 0.5
+    rows = np.nonzero(solid.any(axis=1))[0]
+    cols = np.nonzero(solid.any(axis=0))[0]
+    if len(rows) == 0 or len(cols) == 0:
+        side = min(alpha.shape)
+        return 0, 0, side, side
+
+    top, bottom = int(rows[0]), int(rows[-1])
+    head_zone = solid[top : top + max(1, int((bottom - top) * 0.42))]
+    head_cols = np.nonzero(head_zone.any(axis=0))[0]
+    if len(head_cols) == 0:
+        head_cols = cols
+
+    head_left, head_right = int(head_cols[0]), int(head_cols[-1])
+    side = int((head_right - head_left) * 1.45 / max(zoom, 0.1))
+    center_x = (head_left + head_right) // 2
+    # Το κεφάλι δεν κάθεται στο κέντρο του κάδρου αλλά λίγο ψηλότερα: έτσι
+    # μπαίνει και λίγος λαιμός, που δίνει την αίσθηση πορτρέτου αντί για
+    # κομμένο κεφάλι.
+    center_y = top + int(side * (0.46 + shift_y))
+
+    x0 = center_x - side // 2
+    y0 = center_y - side // 2
+    return x0, y0, x0 + side, y0 + side
+
+
+def prepare(
+    path_in: str,
+    path_out: str,
+    zoom: float = 1.0,
+    shift_y: float = 0.0,
+    quality: int = 88,
+) -> None:
+    image = Image.open(path_in).convert('RGB')
+    rgb = erase_watermark(np.asarray(image).astype(float))
+
+    clean, alpha = strip_green(rgb)
+
+    out = Image.fromarray(clean.clip(0, 255).astype(np.uint8), 'RGB')
+    mask = Image.fromarray((alpha * 255).astype(np.uint8))
+    # Ελάχιστο θόλωμα: κόβει τα σκαλοπάτια του χείλους χωρίς να φάει λεπτές
+    # τρίχες.
+    mask = mask.filter(ImageFilter.GaussianBlur(0.6))
+    out.putalpha(mask)
+
+    # Το κάδρο μπορεί να βγει έξω από την εικόνα όταν η φιγούρα ακουμπά την
+    # άκρη· το `crop` γεμίζει με διαφάνεια, που είναι ακριβώς το σωστό εδώ.
+    out = out.crop(face_frame(alpha, zoom, shift_y))
+    out = out.resize((SIZE, SIZE), Image.LANCZOS)
+    out.save(path_out, 'WEBP', quality=quality, method=6)
+
+
+if __name__ == '__main__':
+    args = sys.argv[1:]
+    prepare(
+        args[0],
+        args[1],
+        float(args[2]) if len(args) > 2 else 1.0,
+        float(args[3]) if len(args) > 3 else 0.0,
+    )
+    print(args[1])

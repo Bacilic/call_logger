@@ -7,17 +7,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../calls/provider/lookup_provider.dart';
+import '../../tasks/providers/tasks_provider.dart';
 import 'department_directory_provider.dart';
 import 'directory_provider.dart';
 import 'equipment_directory_provider.dart';
 
 /// Ανανέωση lookup cache και sibling καταλόγων μετά από mutation.
+///
+/// Οι Εκκρεμότητες ανανεώνονται **πάντα**, ανεξάρτητα από τις σημαίες: οι
+/// κάρτες τους δείχνουν συνδεδεμένες οντότητες του καταλόγου, οπότε κάθε
+/// διαγραφή ή επαναφορά αλλάζει ό,τι έχουν ήδη ζωγραφίσει.
 Future<void> refreshDirectoryCaches(
   Ref ref, {
   bool users = false,
   bool equipment = false,
   bool departments = false,
 }) async {
+  invalidateTasksAfterDirectoryMutation(ref);
   ref.invalidate(lookupServiceProvider);
   await ref.read(lookupServiceProvider.future);
   if (!ref.mounted) return;

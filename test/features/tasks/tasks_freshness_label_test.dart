@@ -47,10 +47,7 @@ void main() {
 
   test('πάνω από ώρα: γράφεται η ώρα', () {
     expect(
-      tasksFreshnessLabel(
-        lastRead: DateTime(2026, 8, 22, 16, 31),
-        now: now,
-      ),
+      tasksFreshnessLabel(lastRead: DateTime(2026, 8, 22, 16, 31), now: now),
       'Στοιχεία της 16:31',
     );
   });

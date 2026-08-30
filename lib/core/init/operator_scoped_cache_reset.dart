@@ -56,6 +56,7 @@ void invalidateOperatorScopedCaches(WidgetRef ref) {
     ref.invalidate(databaseNavVisibleProvider);
     ref.invalidate(showLampNavProvider);
     ref.invalidate(showDictionaryNavProvider);
+    ref.invalidate(showKnowledgeNavProvider);
     ref.invalidate(callsScreenCardsVisibilityProvider);
     ref.invalidate(showQuickCallFabProvider);
     ref.invalidate(showGlobalCallsToggleProvider);

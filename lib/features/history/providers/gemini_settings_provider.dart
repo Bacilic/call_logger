@@ -127,7 +127,11 @@ final geminiPromptTemplateProvider =
       GeminiPromptTemplateNotifier.new,
     );
 
-/// Προσωπική προεπιλογή προτύπου προτροπής Gemini (`app_settings`, null = δεν έχει οριστεί).
+/// Προσωπική προεπιλογή προτύπου προτροπής Gemini· `null` = δεν έχει οριστεί.
+///
+/// Περνά από τη διαδρομή των προφίλ, όπως ο [GeminiPromptTemplateNotifier]
+/// δίπλα της: όσο έγραφε κατευθείαν στην κοινή θέση, η προτροπή του ενός
+/// συναδέλφου εμφανιζόταν στον άλλον και χανόταν με την πρώτη του αλλαγή.
 class GeminiPromptTemplateUserDefaultNotifier extends Notifier<String?> {
   bool _hydrated = false;
 
@@ -141,27 +145,30 @@ class GeminiPromptTemplateUserDefaultNotifier extends Notifier<String?> {
   }
 
   Future<void> _hydrateFromDb() async {
-    final db = await DatabaseHelper.instance.database;
-    if (!ref.mounted) return;
-    final raw = (await SettingsRepository(
-      db,
-    ).getSetting(kGeminiPromptTemplateUserDefaultSettingKey))?.trim();
+    final raw = (await ScopedSettings.getString(
+      ProfileSettingKeys.geminiPromptTemplateUserDefault,
+    ))?.trim();
     if (!ref.mounted) return;
     state = raw == null || raw.isEmpty ? null : raw;
   }
 
+  /// Κενή τιμή = **σβήσιμο**, όχι σιωπή: ως τώρα η οθόνη έδειχνε καθαρή
+  /// προεπιλογή ενώ η αποθηκευμένη έμενε άθικτη και επέστρεφε στο επόμενο
+  /// άνοιγμα.
   Future<void> setUserDefault(String value) async {
     final normalized = value.trim();
     if (normalized.isEmpty) {
       state = null;
+      await ScopedSettings.remove(
+        ProfileSettingKeys.geminiPromptTemplateUserDefault,
+      );
       return;
     }
     state = normalized;
-    final db = await DatabaseHelper.instance.database;
-    if (!ref.mounted) return;
-    await SettingsRepository(
-      db,
-    ).saveSetting(kGeminiPromptTemplateUserDefaultSettingKey, normalized);
+    await ScopedSettings.setString(
+      ProfileSettingKeys.geminiPromptTemplateUserDefault,
+      normalized,
+    );
   }
 }
 
@@ -342,6 +349,8 @@ final geminiFallbackModelProvider =
     );
 
 /// Αυτόματη επανυποβολή πρότασης ΤΝ μετά από cooldown ποσόστωσης.
+///
+/// Προσωπική: ο διακόπτης του καθενός αφορά μόνο τη δική του δουλειά.
 class GeminiAutoResubmitEnabledNotifier extends Notifier<bool> {
   bool _hydrated = false;
 
@@ -355,22 +364,16 @@ class GeminiAutoResubmitEnabledNotifier extends Notifier<bool> {
   }
 
   Future<void> _hydrateFromDb() async {
-    final db = await DatabaseHelper.instance.database;
+    final raw = await ScopedSettings.getBool(
+      ProfileSettingKeys.geminiAutoResubmit,
+    );
     if (!ref.mounted) return;
-    final raw = await SettingsRepository(
-      db,
-    ).getSetting(kGeminiAutoResubmitSettingKey);
-    if (!ref.mounted) return;
-    state = raw == null ? false : parseBoolAppSetting(raw);
+    state = raw ?? false;
   }
 
   Future<void> setEnabled(bool value) async {
     state = value;
-    final db = await DatabaseHelper.instance.database;
-    if (!ref.mounted) return;
-    await SettingsRepository(
-      db,
-    ).saveSetting(kGeminiAutoResubmitSettingKey, value ? '1' : '0');
+    await ScopedSettings.setBool(ProfileSettingKeys.geminiAutoResubmit, value);
   }
 }
 

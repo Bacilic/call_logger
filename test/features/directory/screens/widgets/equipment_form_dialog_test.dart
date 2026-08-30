@@ -119,7 +119,6 @@ Finder _codeField() => _fieldByLabel('Κωδικός');
 
 Finder _notesField() => _fieldByLabel('Σημειώσεις');
 
-
 Finder _zoneAShowInCall() =>
     find.byWidgetPredicate((w) => w is DropdownButtonFormField<int?>);
 
@@ -211,9 +210,7 @@ Future<void> _openEquipmentFormInDialog(
                         : container
                               .read(equipmentDirectoryProvider)
                               .allItems
-                              .where(
-                                (row) => row.$1.id == initialEquipment.id,
-                              )
+                              .where((row) => row.$1.id == initialEquipment.id)
                               .map((row) => row.$2)
                               .firstOrNull,
                     notifier: notifier,

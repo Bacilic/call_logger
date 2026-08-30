@@ -79,7 +79,8 @@ abstract final class PortableContentFingerprint {
 
     if (settings.effectiveIncludeLampDb(availability)) {
       try {
-        final lampPath = await PortableLampStorage.portableLampDbPathForBackup();
+        final lampPath =
+            await PortableLampStorage.portableLampDbPathForBackup();
         if (lampPath != null) {
           final f = File(lampPath);
           final stat = await f.stat();
@@ -150,9 +151,7 @@ abstract final class PortableContentFingerprint {
         out.add(
           PortableFingerprintEntry(
             kind: kind,
-            name: p
-                .relative(entity.path, from: rootPath)
-                .replaceAll('\\', '/'),
+            name: p.relative(entity.path, from: rootPath).replaceAll('\\', '/'),
             sizeBytes: stat.size,
             modifiedMs: stat.modified.millisecondsSinceEpoch,
           ),

@@ -12,6 +12,7 @@ class MainNavRequest {
     this.callFocusEntityId,
     this.callPrefillDepartmentName,
     this.historyPrefillSearch,
+    this.openDictionarySettings = false,
   });
 
   final MainNavDestination destination;
@@ -33,6 +34,9 @@ class MainNavRequest {
 
   /// Όρος για προσυμπλήρωση της αναζήτησης στο Ιστορικό Κλήσεων.
   final String? historyPrefillSearch;
+
+  /// Ανοίγει τον διάλογο ⚙ του Λεξικού μόλις φορτώσει η οθόνη.
+  final bool openDictionarySettings;
 }
 
 class MainNavRequestNotifier extends Notifier<MainNavRequest?> {

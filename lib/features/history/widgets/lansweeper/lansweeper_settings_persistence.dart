@@ -40,7 +40,10 @@ void persistLansweeperSettings(
   WidgetRef ref,
   LansweeperSettingsValues v,
 ) {
-  persistSettingInBackground(context, ref.read(lansweeperApiUrlProvider.notifier).setApiUrl(v.apiUrl));
+  persistSettingInBackground(
+    context,
+    ref.read(lansweeperApiUrlProvider.notifier).setApiUrl(v.apiUrl),
+  );
   persistSettingInBackground(
     context,
     ref
@@ -53,14 +56,20 @@ void persistLansweeperSettings(
         .read(lansweeperTicketViewUrlProvider.notifier)
         .setTicketViewUrl(v.ticketViewUrl),
   );
-  persistSettingInBackground(context, ref.read(lansweeperApiKeyProvider.notifier).setApiKey(v.apiKey));
+  persistSettingInBackground(
+    context,
+    ref.read(lansweeperApiKeyProvider.notifier).setApiKey(v.apiKey),
+  );
   persistSettingInBackground(
     context,
     ref
         .read(lansweeperAgentUsernameProvider.notifier)
         .setAgentUsername(v.agentUsername),
   );
-  persistSettingInBackground(context, ref.read(geminiApiKeyProvider.notifier).setApiKey(v.geminiApiKey));
+  persistSettingInBackground(
+    context,
+    ref.read(geminiApiKeyProvider.notifier).setApiKey(v.geminiApiKey),
+  );
   persistSettingInBackground(
     context,
     ref

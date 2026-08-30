@@ -7,6 +7,7 @@
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/features/history/widgets/linked_task_details_dialog.dart';
+import 'package:call_logger/features/operators/providers/operator_directory_providers.dart';
 import 'package:call_logger/features/tasks/models/task.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,8 @@ Task _task({
   String? solutionNotes,
   String? createdAt,
   String? updatedAt,
+  int? createdByOperatorId,
+  int? assignedOperatorId,
 }) {
   return Task(
     id: id,
@@ -36,6 +39,8 @@ Task _task({
     solutionNotes: solutionNotes,
     createdAt: createdAt ?? '2026-07-28T18:23:00.000',
     updatedAt: updatedAt,
+    createdByOperatorId: createdByOperatorId,
+    assignedOperatorId: assignedOperatorId,
   );
 }
 
@@ -68,12 +73,18 @@ void main() {
         'phone_text': task.phoneText,
         'department_text': task.departmentText,
         'equipment_text': task.equipmentText,
+        'created_by_operator_id': task.createdByOperatorId,
+        'assigned_operator_id': task.assignedOperatorId,
         'is_deleted': 0,
       });
     });
   }
 
-  Future<void> pumpDialog(WidgetTester tester, Task task) async {
+  Future<void> pumpDialog(
+    WidgetTester tester,
+    Task task, {
+    Map<int, String> operatorNames = const {},
+  }) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -83,7 +94,10 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: callLoggerTestProviderOverrides(),
+        overrides: [
+          ...callLoggerTestProviderOverrides(),
+          operatorNamesProvider.overrideWith((ref) async => operatorNames),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: Builder(
@@ -202,6 +216,52 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Κλείσιμο'));
       await pumpUntilSettled(tester);
       expect(find.text('Συνδεδεμένη εκκρεμότητα'), findsNothing);
+
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+
+    testWidgets('δείχνει ποιος την άνοιξε και ποιος τη χρωστάει', (
+      tester,
+    ) async {
+      final task = _task(
+        id: 6,
+        createdByOperatorId: 11,
+        assignedOperatorId: 22,
+      );
+      await seedTask(tester, task);
+      await pumpDialog(
+        tester,
+        task,
+        operatorNames: const {11: 'Βασίλης', 22: 'Βλάσης'},
+      );
+
+      expect(
+        find.text('Δημιουργός: Βασίλης'),
+        findsOneWidget,
+        reason:
+            'Η μετακίνηση της ευθύνης δεν σβήνει το «από πού ήρθε» — η '
+            'πληροφορία υπήρχε πάντα στη βάση και δεν διαβαζόταν πουθενά.',
+      );
+      expect(
+        find.text('Υπεύθυνος: Βλάσης'),
+        findsOneWidget,
+        reason:
+            'Ο διάλογος ανοίγει ολόκληρη την εκκρεμότητα: θα ήταν παράλογο '
+            'να λέει ποιος την άνοιξε και να σιωπά για το ποιος τη χρωστάει.',
+      );
+
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+
+    testWidgets('χωρίς ανάθεση δεν εμφανίζεται γραμμή υπευθύνου', (
+      tester,
+    ) async {
+      final task = _task(id: 7, createdByOperatorId: 11);
+      await seedTask(tester, task);
+      await pumpDialog(tester, task, operatorNames: const {11: 'Βασίλης'});
+
+      expect(find.textContaining('Υπεύθυνος:'), findsNothing);
+      expect(find.text('Δημιουργός: Βασίλης'), findsOneWidget);
 
       await flushCallLoggerSqfliteLockTimers(tester);
     });
