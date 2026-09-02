@@ -404,7 +404,17 @@ class _EquipmentPrintersDialogState
             children: [
               _buildHeader(theme),
               const Divider(height: 18),
-              Flexible(child: _buildBody(theme)),
+              // ΕΝΑ ΣΗΜΕΙΟ ΚΥΛΙΣΗΣ: το σώμα κυλά ό,τι κι αν δείχνει.
+              //
+              // Το `Flexible` από μόνο του απαιτεί παιδί που ξέρει να
+              // συρρικνωθεί — και μόνο η λίστα εκτυπωτών το ήξερε. Οι
+              // υπόλοιπες καταστάσεις (φόρτωση, σφάλμα, κενό αποτέλεσμα)
+              // είναι στήλες σταθερού ύψους και ξεχείλιζαν μόλις το κείμενο
+              // μεγάλωνε. Τυλίγοντας εδώ, καμία μελλοντική κατάσταση δεν
+              // μπορεί να ξεχάσει την κύλισή της.
+              Flexible(
+                child: SingleChildScrollView(child: _buildBody(theme)),
+              ),
             ],
           ),
         ),
@@ -546,6 +556,9 @@ class _EquipmentPrintersDialogState
 
     return ListView.builder(
       shrinkWrap: true,
+      // Την κύλιση την κάνει ο γονιός (βλ. build): δύο περιοχές κύλισης η μία
+      // μέσα στην άλλη παλεύουν για το ίδιο δάχτυλο.
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: _printers.length,
       itemBuilder: (ctx, i) {
         final sp = _printers[i];

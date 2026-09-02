@@ -29,12 +29,14 @@ import '../../../core/widgets/owner_filter_chip.dart';
 import '../providers/call_owner_filter_providers.dart';
 import '../providers/lansweeper_report_scope_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
+import '../providers/lansweeper_submit_progress_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
 import 'lansweeper/lansweeper_report_call_list.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper/lansweeper_report_range_bar.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
+import 'lansweeper/lansweeper_submit_status.dart';
 import 'lansweeper/lansweeper_sync_form.dart';
 import 'lansweeper/sync_history_list.dart';
 import 'lansweeper_report_ai.dart';
@@ -226,6 +228,13 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     solutionController.addListener(_onFormTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // Η ζώνη κατάστασης ξεκινά καθαρή: το αποτέλεσμα της προηγούμενης
+      // αποστολής αφορούσε άλλη κλήση, άλλης ημέρας. Αποστολή που τρέχει αυτή
+      // τη στιγμή δεν αγγίζεται.
+      //
+      // ΜΕΤΑ το πρώτο καρέ, ποτέ μέσα στο `initState`: η αλλαγή κατάστασης
+      // provider ενόσω χτίζεται το δέντρο ρίχνει ολόκληρη την οθόνη.
+      ref.read(lansweeperSubmitProgressProvider.notifier).reset();
       lansweeperApiUrlController.text = ref.read(lansweeperApiUrlProvider);
       lansweeperTicketFormUrlController.text = ref.read(
         lansweeperTicketFormUrlProvider,
@@ -488,6 +497,244 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     );
     if (tooltip == null) return button;
     return Tooltip(message: tooltip, child: button);
+  }
+
+  /// Η κάρτα των ενεργειών: τι κάνει η αποστολή τώρα, και τα κουμπιά της.
+  ///
+  /// Όλα τα κουμπιά σε **μία** γραμμή, με ό,τι χρησιμοποιείται σπάνια στο
+  /// μενού «⋮»: η «Αντιγραφή & Άνοιγμα Lansweeper» κρατούσε την πιο εμφανή
+  /// θέση της οθόνης — κάτω δεξιά, δίπλα στο «Κλείσιμο» — για μια ενέργεια που
+  /// γίνεται ελάχιστες φορές.
+  Widget _buildActionsCard({
+    required List<ReportCallItem> selected,
+    required ReportCallItem? primarySelected,
+    required AsyncValue<void> syncState,
+    required LansweeperConnectionStatus connectionStatus,
+    required bool connectionReady,
+    required bool canImmediateApiSubmit,
+    required bool canResubmitApi,
+    required bool isPrimaryRegistered,
+    required bool isPrimaryFailed,
+    required bool canOpenTicketForm,
+    required String ticketFormUrl,
+    required bool promptPreviewEnabled,
+    required String? promptPreviewTooltip,
+    required VoidCallback onPreviewPrompt,
+  }) {
+    final submitting = ref.watch(
+      lansweeperSubmitProgressProvider.select((p) => p.isRunning),
+    );
+    final selectedCallId = primarySelected?.call.id;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LansweeperSubmitStatusBar(selectedCallId: selectedCallId),
+            const SizedBox(height: 10),
+            // Μία γραμμή, σμικρυμένη αν δεν χωράει, αντί για αναδίπλωση: τα
+            // κουμπιά δεν επιτρέπεται να αλλάζουν γραμμή ανάλογα με το αν
+            // φαίνεται η «Επαναϋποβολή» — η μνήμη του χεριού είναι μισή
+            // ταχύτητα στη δουλειά.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _wrapOptionalTooltip(
+                    message: isPrimaryRegistered
+                        ? 'Η κλήση είναι ήδη καταχωρημένη'
+                        : null,
+                    child: _wrapLansweeperConnectionTooltip(
+                      status: connectionStatus,
+                      child: FilledButton.icon(
+                        onPressed:
+                            canImmediateApiSubmit && primarySelected != null
+                            ? () => unawaited(
+                                registrationFlow.submitSelected(
+                                  primarySelected,
+                                  selected,
+                                  resubmit: false,
+                                ),
+                              )
+                            : null,
+                        icon: submitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : _connectionAwareIcon(
+                                status: connectionStatus,
+                                icon: Icons.cloud_upload_rounded,
+                              ),
+                        label: submitting
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('Αποστολή…'),
+                                  const SizedBox(width: 6),
+                                  LansweeperSubmitElapsed(
+                                    builder: (context, elapsed) =>
+                                        LansweeperElapsedText(
+                                          milliseconds: elapsed,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodyMedium,
+                                        ),
+                                  ),
+                                ],
+                              )
+                            : const Text('Άμεση Καταχώρηση'),
+                      ),
+                    ),
+                  ),
+                  if (isPrimaryFailed) ...[
+                    const SizedBox(width: 8),
+                    _wrapLansweeperConnectionTooltip(
+                      status: connectionStatus,
+                      child: OutlinedButton.icon(
+                        onPressed: canResubmitApi && primarySelected != null
+                            ? () => unawaited(
+                                registrationFlow.submitSelected(
+                                  primarySelected,
+                                  selected,
+                                  resubmit: true,
+                                ),
+                              )
+                            : null,
+                        icon: _connectionAwareIcon(
+                          status: connectionStatus,
+                          icon: Icons.refresh_rounded,
+                        ),
+                        label: const Text('Επαναϋποβολή'),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: (primarySelected != null && !syncState.isLoading)
+                        ? () => registrationFlow.manualMark(primarySelected)
+                        : null,
+                    icon: const Icon(Icons.edit_note_rounded),
+                    label: const Text('Χειροκίνητη'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildLansweeperStateButton(
+                    selected: selected,
+                    isLoading: syncState.isLoading,
+                    targetState: LansweeperSyncState.excluded,
+                    label: 'Εξαίρεση',
+                    allowWhen: !isPrimaryRegistered,
+                    blockedTooltip: 'Η κλήση είναι ήδη καταχωρημένη',
+                    onPressed: () => registrationFlow.setStateForAllSelected(
+                      selected,
+                      LansweeperSyncState.excluded,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Το «Ακαταχώρητη» έφυγε από εδώ: η αναφορά δείχνει πλέον
+                  // μόνο την ουρά, οπότε το κουμπί θα ήταν μονίμως ανενεργό.
+                  // Η επαναφορά σε ακαταχώρητη γίνεται από το Ιστορικό.
+                  _buildLansweeperStateButton(
+                    selected: selected,
+                    isLoading: syncState.isLoading,
+                    targetState: LansweeperSyncState.sent,
+                    label: 'Καταχωρημένη',
+                    onPressed: () => registrationFlow.setStateForAllSelected(
+                      selected,
+                      LansweeperSyncState.sent,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  _buildOverflowMenu(
+                    selected: selected,
+                    connectionReady: connectionReady,
+                    canOpenTicketForm: canOpenTicketForm,
+                    ticketFormUrl: ticketFormUrl,
+                    promptPreviewEnabled: promptPreviewEnabled,
+                    promptPreviewTooltip: promptPreviewTooltip,
+                    onPreviewPrompt: onPreviewPrompt,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Οι σπάνιες ενέργειες, μαζεμένες πίσω από ένα «⋮».
+  Widget _buildOverflowMenu({
+    required List<ReportCallItem> selected,
+    required bool connectionReady,
+    required bool canOpenTicketForm,
+    required String ticketFormUrl,
+    required bool promptPreviewEnabled,
+    required String? promptPreviewTooltip,
+    required VoidCallback onPreviewPrompt,
+  }) {
+    final hasSelection = selected.isNotEmpty;
+    final hasFormText =
+        titleController.text.trim().isNotEmpty ||
+        notesController.text.trim().isNotEmpty ||
+        solutionController.text.trim().isNotEmpty;
+    final canCopyAndOpen =
+        (hasSelection || hasFormText) && canOpenTicketForm && connectionReady;
+    final totalSelectedSeconds = selected.fold<int>(
+      0,
+      (sum, item) => sum + item.durationSeconds,
+    );
+
+    return PopupMenuButton<String>(
+      tooltip: 'Περισσότερες ενέργειες',
+      icon: const Icon(Icons.more_vert_rounded),
+      onSelected: (value) {
+        switch (value) {
+          case 'copy_open':
+            browserFlow.copyAndOpen(
+              ticketFormUrl: ticketFormUrl,
+              callIds: selected
+                  .map((item) => item.call.id)
+                  .whereType<int>()
+                  .toList(),
+              durationSeconds: hasSelection ? totalSelectedSeconds : null,
+            );
+          case 'preview_prompt':
+            onPreviewPrompt();
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<String>(
+          value: 'copy_open',
+          enabled: canCopyAndOpen,
+          child: const ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.open_in_new_rounded),
+            title: Text('Αντιγραφή & Άνοιγμα Lansweeper'),
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'preview_prompt',
+          enabled: promptPreviewEnabled,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.article_outlined),
+            title: const Text('Προεπισκόπηση προτροπής'),
+            subtitle: promptPreviewEnabled || promptPreviewTooltip == null
+                ? null
+                : Text(promptPreviewTooltip),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildNoCallsInRangeEmptyState(
@@ -986,15 +1233,6 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                                   ),
                                                 )
                                               : null,
-                                          previewDisabledTooltip:
-                                              promptPreviewTooltip,
-                                          onPreviewPrompt: promptPreviewEnabled
-                                              ? () => unawaited(
-                                                  aiFlow.showAiPromptPreview(
-                                                    selected,
-                                                  ),
-                                                )
-                                              : null,
                                           onEditPromptTemplate: () => unawaited(
                                             settingsFlow
                                                 .openAiPromptTemplateEditorDialog(),
@@ -1025,131 +1263,34 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                           ),
                                         ),
                                         const SizedBox(height: 10),
-                                        Card(
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(12),
-                                            child: Wrap(
-                                              spacing: 8,
-                                              runSpacing: 8,
-                                              children: [
-                                                _wrapOptionalTooltip(
-                                                  message: isPrimaryRegistered
-                                                      ? 'Η κλήση είναι ήδη καταχωρημένη'
-                                                      : null,
-                                                  child: _wrapLansweeperConnectionTooltip(
-                                                    status: connectionStatus,
-                                                    child: FilledButton.icon(
-                                                      onPressed:
-                                                          canImmediateApiSubmit
-                                                          ? () => unawaited(
-                                                              registrationFlow
-                                                                  .submitSelected(
-                                                                    primarySelected,
-                                                                    selected,
-                                                                    resubmit:
-                                                                        false,
-                                                                  ),
-                                                            )
-                                                          : null,
-                                                      icon: _connectionAwareIcon(
-                                                        status:
-                                                            connectionStatus,
-                                                        icon: Icons
-                                                            .cloud_upload_rounded,
-                                                      ),
-                                                      label: const Text(
-                                                        'Άμεση Καταχώρηση',
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                if (isPrimaryFailed)
-                                                  _wrapLansweeperConnectionTooltip(
-                                                    status: connectionStatus,
-                                                    child: OutlinedButton.icon(
-                                                      onPressed: canResubmitApi
-                                                          ? () => unawaited(
-                                                              registrationFlow
-                                                                  .submitSelected(
-                                                                    primarySelected,
-                                                                    selected,
-                                                                    resubmit:
-                                                                        true,
-                                                                  ),
-                                                            )
-                                                          : null,
-                                                      icon: _connectionAwareIcon(
-                                                        status:
-                                                            connectionStatus,
-                                                        icon: Icons
-                                                            .refresh_rounded,
-                                                      ),
-                                                      label: const Text(
-                                                        'Επαναϋποβολή',
-                                                      ),
-                                                    ),
-                                                  ),
-                                                OutlinedButton.icon(
-                                                  onPressed:
-                                                      (primarySelected !=
-                                                              null &&
-                                                          !syncState.isLoading)
-                                                      ? () => registrationFlow
-                                                            .manualMark(
-                                                              primarySelected,
-                                                            )
-                                                      : null,
-                                                  icon: const Icon(
-                                                    Icons.edit_note_rounded,
-                                                  ),
-                                                  label: const Text(
-                                                    'Χειροκίνητη Σήμανση',
-                                                  ),
-                                                ),
-                                                _buildLansweeperStateButton(
-                                                  selected: selected,
-                                                  isLoading:
-                                                      syncState.isLoading,
-                                                  targetState:
-                                                      LansweeperSyncState
-                                                          .excluded,
-                                                  label: 'Εξαίρεση',
-                                                  allowWhen:
-                                                      !isPrimaryRegistered,
-                                                  blockedTooltip:
-                                                      'Η κλήση είναι ήδη καταχωρημένη',
-                                                  onPressed: () =>
-                                                      registrationFlow
-                                                          .setStateForAllSelected(
-                                                            selected,
-                                                            LansweeperSyncState
-                                                                .excluded,
-                                                          ),
-                                                ),
-                                                // Το «Ακαταχώρητη» έφυγε από εδώ:
-                                                // η αναφορά δείχνει πλέον μόνο
-                                                // την ουρά, οπότε το κουμπί θα
-                                                // ήταν μονίμως ανενεργό. Η
-                                                // επαναφορά σε ακαταχώρητη
-                                                // γίνεται από το Ιστορικό.
-                                                _buildLansweeperStateButton(
-                                                  selected: selected,
-                                                  isLoading:
-                                                      syncState.isLoading,
-                                                  targetState:
-                                                      LansweeperSyncState.sent,
-                                                  label: 'Καταχωρημένη',
-                                                  onPressed: () =>
-                                                      registrationFlow
-                                                          .setStateForAllSelected(
-                                                            selected,
-                                                            LansweeperSyncState
-                                                                .sent,
-                                                          ),
-                                                ),
-                                              ],
+                                        _buildActionsCard(
+                                          selected: selected,
+                                          primarySelected: primarySelected,
+                                          syncState: syncState,
+                                          connectionStatus: connectionStatus,
+                                          connectionReady: connectionReady,
+                                          canImmediateApiSubmit:
+                                              canImmediateApiSubmit,
+                                          canResubmitApi: canResubmitApi,
+                                          isPrimaryRegistered:
+                                              isPrimaryRegistered,
+                                          isPrimaryFailed: isPrimaryFailed,
+                                          canOpenTicketForm: canOpenTicketForm,
+                                          ticketFormUrl:
+                                              lansweeperTicketFormUrl,
+                                          promptPreviewEnabled:
+                                              promptPreviewEnabled,
+                                          promptPreviewTooltip:
+                                              promptPreviewTooltip,
+                                          onPreviewPrompt: () => unawaited(
+                                            aiFlow.showAiPromptPreview(
+                                              selected,
                                             ),
                                           ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        LansweeperSubmitStepsPanel(
+                                          selectedCallId: selectedCallId,
                                         ),
                                         const SizedBox(height: 10),
                                         linksAsync.when(
@@ -1189,50 +1330,6 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
                     child: const Text('Κλείσιμο'),
-                  ),
-                  callsAsync.maybeWhen(
-                    data: (calls) {
-                      if (calls.isEmpty) return const SizedBox.shrink();
-                      final items = LansweeperReportItemMapper.toItems(calls);
-                      final selected = items
-                          .where((e) => selectedKeys.contains(e.key))
-                          .toList();
-                      final totalSelectedSeconds = selected.fold<int>(
-                        0,
-                        (sum, item) => sum + item.durationSeconds,
-                      );
-                      final hasSelection = selected.isNotEmpty;
-                      final hasFormText =
-                          titleController.text.trim().isNotEmpty ||
-                          notesController.text.trim().isNotEmpty ||
-                          solutionController.text.trim().isNotEmpty;
-                      return _wrapLansweeperConnectionTooltip(
-                        status: connectionStatus,
-                        child: FilledButton.icon(
-                          onPressed:
-                              (hasSelection || hasFormText) &&
-                                  canOpenTicketForm &&
-                                  connectionReady
-                              ? () => browserFlow.copyAndOpen(
-                                  ticketFormUrl: lansweeperTicketFormUrl,
-                                  callIds: selected
-                                      .map((item) => item.call.id)
-                                      .whereType<int>()
-                                      .toList(),
-                                  durationSeconds: hasSelection
-                                      ? totalSelectedSeconds
-                                      : null,
-                                )
-                              : null,
-                          icon: _connectionAwareIcon(
-                            status: connectionStatus,
-                            icon: Icons.open_in_new_rounded,
-                          ),
-                          label: const Text('Αντιγραφή & Άνοιγμα Lansweeper'),
-                        ),
-                      );
-                    },
-                    orElse: () => const SizedBox.shrink(),
                   ),
                 ],
               ),

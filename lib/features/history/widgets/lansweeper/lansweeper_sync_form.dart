@@ -19,13 +19,11 @@ class LansweeperSyncForm extends ConsumerWidget {
     required this.notesController,
     required this.solutionController,
     this.onSuggest,
-    this.onPreviewPrompt,
     this.onEditPromptTemplate,
     this.isSuggesting = false,
     this.suggestModelLabel,
     this.suggestElapsedSeconds,
     this.suggestDisabledTooltip,
-    this.previewDisabledTooltip,
     this.cooldownRemainingSeconds,
     this.cooldownModelLabel,
     this.onCancelAutoResubmit,
@@ -50,7 +48,6 @@ class LansweeperSyncForm extends ConsumerWidget {
   final SpellCheckController notesController;
   final SpellCheckController solutionController;
   final VoidCallback? onSuggest;
-  final VoidCallback? onPreviewPrompt;
   final VoidCallback? onEditPromptTemplate;
   final bool isSuggesting;
   final String? suggestModelLabel;
@@ -59,7 +56,6 @@ class LansweeperSyncForm extends ConsumerWidget {
   /// μοντέλου. Null = δεν τρέχει τίποτα.
   final double? suggestElapsedSeconds;
   final String? suggestDisabledTooltip;
-  final String? previewDisabledTooltip;
   final int? cooldownRemainingSeconds;
   final String? cooldownModelLabel;
   final VoidCallback? onCancelAutoResubmit;
@@ -255,6 +251,39 @@ class LansweeperSyncForm extends ConsumerWidget {
     );
   }
 
+  /// Δύο πεδία ανά γραμμή — το πρώτο στενότερο από το δεύτερο.
+  ///
+  /// Οι λίστες επιλογής της φόρμας ήταν η μία κάτω από την άλλη, καθεμιά σε
+  /// πλήρες πλάτος: η «Κατηγορία αιτήματος» κρατούσε ολόκληρη σειρά για να
+  /// γράψει «Yes». Σε ζεύγη, η φόρμα κερδίζει τόσο ύψος όσο και μια ολόκληρη
+  /// ενότητα, χωρίς να χάσει τίποτα.
+  ///
+  /// Η αναλογία 2:3 δεν είναι διακοσμητική: το δεξί πεδίο κρατά συνήθως τη
+  /// μακριά επιλογή («Hardware στα Endpoints (PCs, Printers κλπ.)») και σε ίσα
+  /// πλάτη θα κοβόταν πρώτο. Μονό πεδίο στο τέλος παίρνει όλο το πλάτος.
+  static List<Widget> _pairFieldsIntoRows(List<Widget> fields) {
+    final rows = <Widget>[];
+    for (var i = 0; i < fields.length; i += 2) {
+      rows.add(const SizedBox(height: 10));
+      final left = fields[i];
+      if (i + 1 >= fields.length) {
+        rows.add(left);
+        continue;
+      }
+      rows.add(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 2, child: left),
+            const SizedBox(width: 10),
+            Expanded(flex: 3, child: fields[i + 1]),
+          ],
+        ),
+      );
+    }
+    return rows;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final inCooldown = cooldownRemainingSeconds != null;
@@ -276,12 +305,6 @@ class LansweeperSyncForm extends ConsumerWidget {
             )
           : const Text('✨', style: TextStyle(fontSize: 16)),
       label: Text(suggestButtonLabel),
-    );
-
-    final previewButton = OutlinedButton.icon(
-      onPressed: isSuggesting || inCooldown ? null : onPreviewPrompt,
-      icon: const Icon(Icons.article_outlined, size: 18),
-      label: const Text('Προεπισκόπηση προτροπής'),
     );
 
     final promptEditorButton = onEditPromptTemplate == null
@@ -338,38 +361,18 @@ class LansweeperSyncForm extends ConsumerWidget {
           ],
         ],
         const Spacer(),
-        if (promptEditorButton != null) ...[
-          promptEditorButton,
-          const SizedBox(width: 4),
-        ],
-        Flexible(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: previewDisabledTooltip != null && onPreviewPrompt == null
-                  ? Tooltip(
-                      message: previewDisabledTooltip!,
-                      child: previewButton,
-                    )
-                  : previewButton,
-            ),
-          ),
-        ),
+        ?promptEditorButton,
       ],
     );
 
     final formConfig = config;
-    final customFieldWidgets = <Widget>[];
+    final fieldWidgets = <Widget>[];
     if (formConfig != null) {
       for (final field in formConfig.customFields) {
         if (!field.showInForm || !field.visible) continue;
-        customFieldWidgets.add(const SizedBox(height: 10));
-        customFieldWidgets.add(_buildCustomField(context, field));
+        fieldWidgets.add(_buildCustomField(context, field));
       }
-      customFieldWidgets.add(const SizedBox(height: 10));
-      customFieldWidgets.add(
+      fieldWidgets.add(
         DropdownButtonFormField<String>(
           key: const ValueKey('lansweeper_ticket_state'),
           isExpanded: true,
@@ -565,7 +568,7 @@ class LansweeperSyncForm extends ConsumerWidget {
                     ),
                 ],
               ),
-            ...customFieldWidgets,
+            ..._pairFieldsIntoRows(fieldWidgets),
           ],
         ),
       ),

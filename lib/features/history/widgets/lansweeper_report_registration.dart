@@ -118,8 +118,6 @@ class LansweeperReportRegistration {
           );
     if (!host.mounted) return;
     if (result.success) {
-      await host.persistTicketSubmitFormPrefs();
-      if (!host.mounted) return;
       // Οι κλήσεις πέρασαν στις Καταχωρημένες — παραμένοντας επιλεγμένες εκεί
       // δεν εξυπηρετούν τίποτα και μπερδεύουν την επόμενη ενέργεια.
       for (final entry in selected) {
@@ -160,6 +158,15 @@ class LansweeperReportRegistration {
           copyText: message,
         );
       }
+      // ΜΕΤΑ το μήνυμα, ποτέ πριν: η αποθήκευση των προτιμήσεων της φόρμας
+      // γράφει στη βάση, και σε κοινόχρηστη βάση αυτό είναι δευτερόλεπτα
+      // δικτύου. Όσο γινόταν πρώτη, ο χρήστης έβλεπε το κουμπί να ξεπαγώνει
+      // και μετά μια σιωπή τριών-πέντε δευτερολέπτων πριν μάθει το αποτέλεσμα —
+      // ακριβώς η εικόνα της κολλημένης εφαρμογής. Το ticket έχει ήδη
+      // δημιουργηθεί· η προτίμηση μπορεί να περιμένει, το μήνυμα όχι.
+      await host.persistTicketSubmitFormPrefs();
+      if (!host.mounted) return;
+
       if (!resubmit && ticketId.isNotEmpty) {
         final openTicketAfterSubmit =
             await readLansweeperOpenTicketAfterApiSubmitSetting();
@@ -169,9 +176,6 @@ class LansweeperReportRegistration {
       }
       return;
     }
-
-    await host.persistTicketSubmitFormPrefs();
-    if (!host.mounted) return;
 
     final failedStep = (result.failedStep ?? '').trim();
     final failureMessage = failedStep.isEmpty
@@ -184,6 +188,11 @@ class LansweeperReportRegistration {
       ),
       copyText: failureMessage,
     );
+
+    // Ίδιος κανόνας με την επιτυχία: η αιτία στην οθόνη πρώτα, η εγγραφή των
+    // προτιμήσεων μετά.
+    await host.persistTicketSubmitFormPrefs();
+    if (!host.mounted) return;
 
     final reportBase = (result.failureReport ?? result.message).trim();
     final reportText = failedStep.isEmpty

@@ -18,7 +18,9 @@ import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../calls/models/call_model.dart';
 import '../../calls/provider/call_mutation_refresh.dart';
+import '../models/lansweeper_submit_progress.dart';
 import '../models/lansweeper_sync_state.dart';
+import 'lansweeper_submit_progress_provider.dart';
 import '../services/lansweeper_registration_conflict.dart';
 import '../services/lansweeper_write_failure.dart';
 
@@ -122,8 +124,14 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
 
     _isRunning = true;
     final criticalOps = ref.read(activeCriticalOperationsProvider.notifier);
+    final progress = ref.read(lansweeperSubmitProgressProvider.notifier);
     criticalOps.begin(CriticalOperation.lansweeperTicketSubmit);
     _publish(const AsyncLoading());
+    // Το αποτέλεσμα που θα μείνει στην οθόνη. Γεμίζει σε κάθε έξοδο της ροής
+    // και σφραγίζεται μία φορά, στο `finally`: όσα σημεία κι αν προστεθούν
+    // αύριο, κανένα δεν μπορεί να αφήσει την ένδειξη να τρέχει για πάντα.
+    var progressSucceeded = false;
+    String? progressSummary;
     try {
       final db = await DatabaseHelper.instance.database;
       final repo = CallsRepository(db);
@@ -195,21 +203,34 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       );
 
       final service = ref.read(lansweeperSyncServiceProvider);
+      final request = LansweeperWorkflowRequest(
+        call: call,
+        title: input.title,
+        problem: input.notes,
+        solution: input.solution,
+        agentUsername: input.agentUsername,
+        durationSeconds: input.durationSeconds,
+        config: config,
+        customFieldValues: input.customFieldValues,
+        targetState: targetState,
+        existingTicketId: existingTicketId,
+        requesterUsername: requesterUsername,
+        assetTarget: assetTarget,
+      );
+      // Η εγγραφή στη βάση μπαίνει στο πλάνο μαζί με τα βήματα του API: για
+      // τον χρήστη είναι κι αυτή αναμονή, και μάλιστα η πιο αθέατη — τρέχει
+      // αφού το ticket έχει ήδη δημιουργηθεί.
+      progress.begin(
+        <String>[
+          ...LansweeperSyncService.plannedStepKeys(request),
+          LansweeperSubmitStepKeys.save,
+        ],
+        creatingTicket: existingTicketId == null,
+        callIds: <int>[callId, ...companionCallIds],
+      );
       final result = await service.submitTicketWorkflow(
-        LansweeperWorkflowRequest(
-          call: call,
-          title: input.title,
-          problem: input.notes,
-          solution: input.solution,
-          agentUsername: input.agentUsername,
-          durationSeconds: input.durationSeconds,
-          config: config,
-          customFieldValues: input.customFieldValues,
-          targetState: targetState,
-          existingTicketId: existingTicketId,
-          requesterUsername: requesterUsername,
-          assetTarget: assetTarget,
-        ),
+        request,
+        onStep: progress.stepStarted,
       );
 
       // CONTRACT: κάθε εγγραφή ΜΕΤΑ από μακρύ `await` (εδώ: το HTTP workflow που
@@ -219,6 +240,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       // με το εισιτήριο ΗΔΗ δημιουργημένο στο Lansweeper, δηλαδή κίνδυνος διπλής
       // αποστολής. (Ο φρουρός εναλλαγής μπλοκάρει ήδη το σενάριο· αυτό εδώ κλείνει
       // τη ρίζα, ώστε να μην εξαρτάται η ορθότητα από τον φρουρό.)
+      progress.stepStarted(LansweeperSubmitStepKeys.save);
       final writeDb = await DatabaseHelper.instance.database;
       final writeRepo = CallsLansweeperRepository(writeDb);
 
@@ -262,6 +284,8 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
             },
           );
         }
+        progressSucceeded = true;
+        progressSummary = 'Καταχωρήθηκε · αίτημα $ticketId';
         _publish(const AsyncData(null));
         _refreshAfterLansweeperMutation();
         return LansweeperCommandResult(
@@ -297,6 +321,9 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           },
         );
       }
+      progressSummary = (result.failedStep ?? '').trim().isEmpty
+          ? 'Αποτυχία: ${result.message}'
+          : 'Αποτυχία στο ${result.failedStep}: ${result.message}';
       _publish(const AsyncData(null));
       _refreshAfterLansweeperMutation();
       return LansweeperCommandResult(
@@ -316,9 +343,11 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         ),
       );
     } on LansweeperSyncPrecheckException catch (e) {
+      progressSummary = 'Αποτυχία: ${e.message}';
       _publish(const AsyncData(null));
       return LansweeperCommandResult(success: false, message: e.message);
     } catch (e, st) {
+      progressSummary = 'Αποτυχία: $e';
       _publish(AsyncError(e, st));
       final db = await DatabaseHelper.instance.database;
       await CallsLansweeperRepository(db).updateLansweeperState(
@@ -340,6 +369,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         ),
       );
     } finally {
+      progress.finish(success: progressSucceeded, summary: progressSummary);
       _isRunning = false;
       criticalOps.end(CriticalOperation.lansweeperTicketSubmit);
     }

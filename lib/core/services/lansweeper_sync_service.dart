@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../features/calls/models/call_model.dart';
+import '../../features/history/models/lansweeper_submit_progress.dart';
 import 'lansweeper_asset_target.dart';
 import 'lansweeper_ticket_requester_fields.dart';
 import 'lansweeper_ticket_submit_config.dart';
@@ -157,9 +158,37 @@ class LansweeperSyncService {
         _defaultRawGetter(settingsService, action, params);
   }
 
+  /// Τα βήματα που **θα** εκτελεστούν για το [request], με τη σειρά τους.
+  ///
+  /// Ζει δίπλα στη ροή που τα εκτελεί επίτηδες: η οθόνη πρέπει να μπορεί να
+  /// πει «βήμα 2 από 5» πριν ξεκινήσει τίποτα, και η μόνη ασφαλής πηγή γι'
+  /// αυτό είναι ο κώδικας που παίρνει τις ίδιες αποφάσεις. Γραμμένο αλλού, θα
+  /// απέκλινε στην πρώτη αλλαγή της ροής.
+  static List<String> plannedStepKeys(LansweeperWorkflowRequest request) {
+    final config = request.config;
+    final existingTicketId = request.existingTicketId?.trim() ?? '';
+    final creatingTicket = existingTicketId.isEmpty;
+    final targetState = request.targetState?.trim() ?? '';
+    return <String>[
+      if ((request.requesterUsername?.trim() ?? '').isNotEmpty)
+        LansweeperSubmitStepKeys.requester,
+      if (creatingTicket) LansweeperSubmitStepKeys.ticket,
+      if (creatingTicket && request.assetTarget != null)
+        LansweeperSubmitStepKeys.asset,
+      if (config.enableAddNoteStep && request.solution.trim().isNotEmpty)
+        LansweeperSubmitStepKeys.note,
+      if (config.enableStateUpdateStep && targetState.isNotEmpty)
+        LansweeperSubmitStepKeys.state,
+    ];
+  }
+
+  /// [onStep] ανακοινώνει το βήμα που **ξεκινά** — τα κλειδιά είναι αυτά του
+  /// [plannedStepKeys]. Καθαρή ενημέρωση οθόνης: αν λείπει, η ροή τρέχει
+  /// ακριβώς όπως πριν.
   Future<LansweeperWorkflowResult> submitTicketWorkflow(
-    LansweeperWorkflowRequest request,
-  ) async {
+    LansweeperWorkflowRequest request, {
+    void Function(String stepKey)? onStep,
+  }) async {
     if (request.agentUsername.trim().isEmpty) {
       throw const LansweeperSyncPrecheckException(
         'Ο πράκτορας API (AgentUsername) είναι υποχρεωτικός.',
@@ -180,6 +209,7 @@ class LansweeperSyncService {
     var requester = agent;
     final candidateRequester = request.requesterUsername?.trim() ?? '';
     if (candidateRequester.isNotEmpty) {
+      onStep?.call(LansweeperSubmitStepKeys.requester);
       if (await _requesterExistsInLansweeper(candidateRequester)) {
         requester = candidateRequester;
       } else {
@@ -213,6 +243,7 @@ class LansweeperSyncService {
         'CustomFields': _encodeCustomFields(config, request.customFieldValues),
       };
 
+      onStep?.call(LansweeperSubmitStepKeys.ticket);
       var addResult = await _postAction('AddTicket', <String, String>{
         ...baseFields,
         ..._ticketIdentityFields(requester, agent),
@@ -274,6 +305,7 @@ class LansweeperSyncService {
 
       final assetTarget = request.assetTarget;
       if (assetTarget != null) {
+        onStep?.call(LansweeperSubmitStepKeys.asset);
         await _attachAssetStep(
           ticketId: ticketId,
           target: assetTarget,
@@ -298,6 +330,7 @@ class LansweeperSyncService {
         ..._requesterFields(request.agentUsername),
       };
 
+      onStep?.call(LansweeperSubmitStepKeys.note);
       final noteResult = await _postAction('AddNote', noteFields);
       rawPayloads['AddNote'] = noteResult.rawPayload;
 
@@ -351,6 +384,7 @@ class LansweeperSyncService {
         ),
       };
 
+      onStep?.call(LansweeperSubmitStepKeys.state);
       final stateResult = await _postAction('EditTicket', stateFields);
       rawPayloads['EditTicket(state)'] = stateResult.rawPayload;
 

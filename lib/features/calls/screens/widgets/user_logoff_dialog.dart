@@ -464,15 +464,19 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
 
     final error = _error;
     if (error != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.error_outline, color: theme.colorScheme.error),
-            const SizedBox(width: 10),
-            Expanded(child: SelectableText(error)),
-          ],
+      // Τα μηνύματα του διακομιστή δεν έχουν όριο μήκους — η λίστα συνεδριών
+      // δίπλα κυλά, αυτό εδώ πρέπει να κυλά κι αυτό.
+      return SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.error_outline, color: theme.colorScheme.error),
+              const SizedBox(width: 10),
+              Expanded(child: SelectableText(error)),
+            ],
+          ),
         ),
       );
     }
