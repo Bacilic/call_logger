@@ -61,6 +61,56 @@ void main() {
       expect((segments.last as PlainLinkableTextSegment).text, ' και δες');
     });
 
+    test('parses quoted UNC path with spaces in folder name', () {
+      final segments = LinkableTextParser.parse(
+        r'Της έστειλα το εξέλ στο "\\gnk.local\Departments\TPO\ΕΛΕΝΗ ΨΑΡΡΑ\DataMed_αιτηματα_2026-09-03.xlsx"',
+      );
+      final link = segments.whereType<LinkLinkableTextSegment>().single;
+      expect(link.kind, LinkableTextKind.uncPath);
+      expect(
+        link.text,
+        r'\\gnk.local\Departments\TPO\ΕΛΕΝΗ ΨΑΡΡΑ\DataMed_αιτηματα_2026-09-03.xlsx',
+      );
+    });
+
+    test('quoted path keeps a spaced folder without file extension', () {
+      final segments = LinkableTextParser.parse(
+        r'Ο φάκελος είναι "\\gnk.local\TPO\ΕΛΕΝΗ ΨΑΡΡΑ" στο δίκτυο',
+      );
+      final link = segments.whereType<LinkLinkableTextSegment>().single;
+      expect(link.text, r'\\gnk.local\TPO\ΕΛΕΝΗ ΨΑΡΡΑ');
+    });
+
+    test('keeps spaced folder when another path segment follows', () {
+      final segments = LinkableTextParser.parse(
+        r'Φάκελος \\gnk.local\TPO\ΕΛΕΝΗ ΨΑΡΡΑ\DataMed.xlsx',
+      );
+      final link = segments.whereType<LinkLinkableTextSegment>().single;
+      expect(link.text, r'\\gnk.local\TPO\ΕΛΕΝΗ ΨΑΡΡΑ\DataMed.xlsx');
+    });
+
+    test('parses local path with greek folder and spaced file name', () {
+      final segments = LinkableTextParser.parse(
+        r'Άνοιξε E:\Έγγραφα\Ανάλυση εξόδων.xlsx και δες',
+      );
+      final link = segments.whereType<LinkLinkableTextSegment>().single;
+      expect(link.kind, LinkableTextKind.localPath);
+      expect(link.text, r'E:\Έγγραφα\Ανάλυση εξόδων.xlsx');
+      expect((segments.last as PlainLinkableTextSegment).text, ' και δες');
+    });
+
+    test('unquoted path without extension stops at the first space', () {
+      final segments = LinkableTextParser.parse(
+        r'Το έβαλα στο \\gnk.local\TPO\ΕΛΕΝΗ ΨΑΡΡΑ και της το είπα',
+      );
+      final link = segments.whereType<LinkLinkableTextSegment>().single;
+      expect(link.text, r'\\gnk.local\TPO\ΕΛΕΝΗ');
+      expect(
+        (segments.last as PlainLinkableTextSegment).text,
+        ' ΨΑΡΡΑ και της το είπα',
+      );
+    });
+
     test('parses multiple links in one line', () {
       final segments = LinkableTextParser.parse(
         'URL https://a.test/x και φάκελος E:\\Data',

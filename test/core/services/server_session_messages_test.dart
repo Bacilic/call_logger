@@ -189,6 +189,45 @@ void main() {
     });
   });
 
+  group('Άρνηση πρόσβασης', () {
+    test('δεν κατηγορεί μόνο τον λογαριασμό', () {
+      // Ο κωδικός 5 έρχεται ΜΕΤΑ από επιτυχημένη σύνδεση: ο λογαριασμός μπορεί
+      // να μην έχει καν ταξιδέψει. Ένα μήνυμα που δείχνει μόνο αυτόν στέλνει
+      // τον χειριστή να ψάχνει κωδικούς για ένα πρόβλημα που είναι αλλού.
+      final msg = ServerSessionMessages.forEnumerate(
+        code: ServerSessionMessages.errorAccessDenied,
+        host: '192.168.13.83',
+        adminUser: 'Administrator',
+      );
+
+      expect(msg, contains('επισκέπτη'));
+      expect(msg, contains('ήδη ανοιχτή σύνδεση'));
+    });
+
+    test('στους εκτυπωτές δείχνει και τη ρύθμιση RPC', () {
+      final msg = ServerSessionMessages.accessDenied(
+        what: 'διαχείρισης εκτυπωτών',
+        host: '192.168.13.83',
+        account: 'Administrator',
+        includePrinterRpcHint: true,
+      );
+
+      expect(msg, contains('RPC'));
+    });
+
+    test('στις συνεδρίες ΔΕΝ μιλά για τη ρύθμιση RPC', () {
+      // Η ρύθμιση αφορά μόνο τους εκτυπωτές. Σε άρνηση τερματισμού συνεδρίας
+      // θα ήταν λάθος ίχνος.
+      final msg = ServerSessionMessages.forLogoff(
+        code: ServerSessionMessages.errorAccessDenied,
+        host: '192.168.13.83',
+        adminUser: 'Administrator',
+      );
+
+      expect(msg, isNot(contains('RPC')));
+    });
+  });
+
   group('Κατάσταση συνεδρίας', () {
     test('μόνο 0 και 4 μας ενδιαφέρουν', () {
       expect(serverSessionStateFromWts(0), ServerSessionState.active);

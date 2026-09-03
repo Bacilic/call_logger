@@ -23,13 +23,43 @@ final class LinkLinkableTextSegment extends LinkableTextSegment {
 abstract final class LinkableTextParser {
   static const _trailingPunctuation = '.,;:!?)»"\'';
 
+  /// Χαρακτήρες που ανοίγουν και κλείνουν παράθεση γύρω από διαδρομή. Το
+  /// «Αντιγραφή ως διαδρομή» των Windows βάζει διπλά εισαγωγικά, οπότε το
+  /// ζεύγος τους είναι το ασφαλέστερο όριο για διαδρομή με κενά.
+  static const _openQuotes = '"\'«“';
+  static const _closeQuotes = '"\'»”';
+
+  /// Η αρχή κάθε διαδρομής: `\\διακομιστής` ή `E:\`.
+  static const _pathPrefix = r'(?:\\\\|[A-Za-z]:\\)';
+
+  /// Ενδιάμεσο τμήμα διαδρομής. Τα κενά επιτρέπονται επειδή το lookahead
+  /// εγγυάται ότι ακολουθεί κι άλλη ανάποδη κάθετος: το τμήμα δεν είναι το
+  /// τελευταίο, άρα δεν μπορεί να καταπιεί το κείμενο που έπεται.
+  static const _innerSegment = r'[^\s\\]+(?: +[^\s\\]+)*(?=\\)';
+
+  /// Τελευταίο τμήμα χωρίς κενά — σταματά στην πρώτη λέξη της πρόζας.
+  static const _plainSegment = r'[^\s\\]+';
+
+  /// Τελευταίο τμήμα με κενά: γίνεται δεκτό μόνο όταν κλείνει σε κατάληξη
+  /// αρχείου, το μόνο σημάδι ότι εκεί τελειώνει η διαδρομή.
+  static const _fileSegment = r'[^\s\\]+(?: +[^\s\\]+){0,4}\.[A-Za-z0-9]{1,8}';
+
+  /// Ιστορικό τελευταίο τμήμα τοπικής διαδρομής: λατινικοί χαρακτήρες με κενά.
+  static const _latinSegment = r'[A-Za-z0-9 .\-()+#&_]+';
+
   /// https/http, UNC (`\\server\share`) και τοπικές διαδρομές (`E:\...`).
+  /// Οι διαδρομές αναγνωρίζονται με τρεις κανόνες, κατά σειρά: μέσα σε
+  /// εισαγωγικά παίρνονται ολόκληρες, ενδιάμεσα τμήματα κρατούν τα κενά τους
+  /// και το τελευταίο τμήμα κρατά κενά μόνο όταν καταλήγει σε αρχείο.
   static final RegExp _pattern = RegExp(
     r'https?://[^\s<>\[\](),]+'
-    r'|'
-    r'\\\\[^\s\\]+(?:\\[^\s\\]+)*'
-    r'|'
-    r'[A-Za-z]:\\(?:[A-Za-z0-9 .\-()+#&_]+(?:\\[A-Za-z0-9 .\-()+#&_]+)*)',
+    '|'
+    '(?<=[$_openQuotes])$_pathPrefix[^$_closeQuotes\\n]+(?=[$_closeQuotes])'
+    '|'
+    '\\\\\\\\(?:$_innerSegment\\\\)*(?:$_fileSegment|$_plainSegment)'
+    '|'
+    '[A-Za-z]:\\\\(?:$_innerSegment\\\\)*'
+    '(?:$_fileSegment|$_latinSegment|$_plainSegment)',
   );
 
   static List<LinkableTextSegment> parse(String input) {

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/managed_server.dart';
 import '../../../../core/providers/servers_provider.dart';
+import '../../../../core/services/server_sessions/printer_rpc_policy.dart';
 import '../../../../core/services/server_sessions/printer_station_matching.dart';
 import '../../../../core/services/server_sessions/server_printer_models.dart';
 import '../../../../core/services/server_sessions/server_session_models.dart';
@@ -78,6 +79,24 @@ class _RestartSpoolerDialogState extends ConsumerState<_RestartSpoolerDialog> {
   /// Η λίστα ήρθε από το μητρώο: το πλήθος εργασιών ΔΕΝ είναι γνωστό.
   bool _limited = false;
 
+  /// Ο κωδικός των Windows πίσω από την περιορισμένη προβολή.
+  int _limitedCode = 0;
+
+  /// Η κοινή εξήγηση της περιορισμένης προβολής — ίδια συνάρτηση με τους
+  /// διαλόγους εκτυπωτών και εκκαθάρισης ουρών, ώστε τα κείμενα να μην
+  /// αποκλίνουν. Χωρίς την προτροπή για επανεκκίνηση: είμαστε ήδη μέσα της.
+  String get _limitedViewText {
+    final policy =
+        ref.watch(printerRpcPolicyProvider).value ??
+        const PrinterRpcPolicyState.unreadable();
+    return policy.limitedPrinterViewMessage(
+      host: widget.server.host,
+      showHint: ref.watch(printersLimitedViewHintProvider).value ?? false,
+      errorCode: _limitedCode,
+      suggestRestart: false,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -126,6 +145,7 @@ class _RestartSpoolerDialogState extends ConsumerState<_RestartSpoolerDialog> {
       _pendingJobs = jobs;
       _printersWithJobs = withJobs;
       _limited = result.isLimited;
+      _limitedCode = result.fallbackCode;
     });
   }
 
@@ -211,11 +231,11 @@ class _RestartSpoolerDialogState extends ConsumerState<_RestartSpoolerDialog> {
                   ServerActionBanner(
                     icon: Icons.info_outline,
                     color: theme.colorScheme.tertiary,
+                    // Η κοινή εξήγηση της περιορισμένης προβολής, χωρίς την
+                    // προτροπή για επανεκκίνηση — είμαστε ήδη μέσα σε αυτήν.
+                    // Από πίσω μπαίνει ο κίνδυνος που αφορά μόνο εδώ.
                     text:
-                        'Δεν μπορούμε να δούμε τι περιμένει στις ουρές: η '
-                        'υπηρεσία εκτυπώσεων δεν απαντά σε αυτόν τον '
-                        'υπολογιστή και η λίστα διαβάστηκε από τις ρυθμίσεις '
-                        'του διακομιστή. Η επανεκκίνηση θα ζητηθεί κανονικά, '
+                        '$_limitedViewText Η επανεκκίνηση θα ζητηθεί κανονικά, '
                         'αλλά χωρίς να ξέρουμε αν κόβεται εκτύπωση.',
                   )
                 else if (_pendingJobs > 0)
@@ -289,6 +309,29 @@ class _OrphanCleanupDialogState extends ConsumerState<_OrphanCleanupDialog> {
   List<ServerPrinter> _orphans = const [];
   int _printerCount = 0;
 
+  /// Η λίστα ήρθε από τις ρυθμίσεις του διακομιστή, όχι από την υπηρεσία.
+  ///
+  /// Τα ονόματα αρκούν για να **βρεθούν** οι ορφανοί — η αντιστοίχιση γίνεται
+  /// με το όνομα και τη συνεδρία, όχι με την ουρά. Η **αφαίρεση** όμως περνά
+  /// από την ίδια υπηρεσία που δεν απαντά, οπότε δεν προσφέρεται.
+  bool _limited = false;
+
+  /// Ο κωδικός των Windows πίσω από την περιορισμένη προβολή.
+  int _limitedCode = 0;
+
+  /// Η κοινή εξήγηση της περιορισμένης προβολής — ίδια συνάρτηση με τους
+  /// υπόλοιπους διαλόγους εκτυπωτών, ώστε τα κείμενα να μην αποκλίνουν.
+  String get _limitedViewText {
+    final policy =
+        ref.watch(printerRpcPolicyProvider).value ??
+        const PrinterRpcPolicyState.unreadable();
+    return policy.limitedPrinterViewMessage(
+      host: widget.server.host,
+      showHint: ref.watch(printersLimitedViewHintProvider).value ?? false,
+      errorCode: _limitedCode,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -342,6 +385,8 @@ class _OrphanCleanupDialogState extends ConsumerState<_OrphanCleanupDialog> {
     setState(() {
       _loading = false;
       _printerCount = printers.printers.length;
+      _limited = printers.isLimited;
+      _limitedCode = printers.fallbackCode;
       _orphans = PrinterStationMatching.orphans(
         printers: printers.printers,
         liveSessionIds: PrinterStationMatching.liveSessionIds(
@@ -433,6 +478,20 @@ class _OrphanCleanupDialogState extends ConsumerState<_OrphanCleanupDialog> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                if (_limited) ...[
+                  const SizedBox(height: 8),
+                  ServerActionBanner(
+                    icon: Icons.info_outline,
+                    color: theme.colorScheme.tertiary,
+                    // Οι ορφανοί εντοπίζονται κανονικά — η αντιστοίχιση θέλει
+                    // ονόματα, όχι ουρές. Η αφαίρεση όμως περνά από την
+                    // υπηρεσία που δεν απαντά, γι' αυτό και το κουμπί σβήνει.
+                    text:
+                        '$_limitedViewText Η αφαίρεση περνά από την ίδια '
+                        'υπηρεσία, οπότε δεν είναι διαθέσιμη τώρα — ο '
+                        'εντοπισμός των ορφανών παραμένει έγκυρος.',
+                  ),
+                ],
                 if (_orphans.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   ConstrainedBox(
@@ -487,7 +546,7 @@ class _OrphanCleanupDialogState extends ConsumerState<_OrphanCleanupDialog> {
             child: const Text('Κλείσιμο'),
           ),
           FilledButton.icon(
-            onPressed: _loading || _working || _orphans.isEmpty
+            onPressed: _loading || _working || _limited || _orphans.isEmpty
                 ? null
                 : _cleanup,
             icon: _working

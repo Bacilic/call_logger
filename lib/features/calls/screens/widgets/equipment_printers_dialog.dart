@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/managed_server.dart';
 import '../../../../core/providers/servers_provider.dart';
+import '../../../../core/services/server_sessions/printer_rpc_policy.dart';
 import '../../../../core/services/server_sessions/printer_station_matching.dart';
 import '../../../../core/services/server_sessions/server_printer_models.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
@@ -62,6 +63,9 @@ class _EquipmentPrintersDialogState
   /// Τότε ξέρουμε ΠΟΙΟΙ εκτυπωτές υπάρχουν, αλλά όχι τι κάνουν.
   bool _limited = false;
 
+  /// Ο κωδικός των Windows πίσω από την περιορισμένη προβολή.
+  int _limitedCode = 0;
+
   /// Λέει η περιορισμένη προβολή πού ενεργοποιείται η πλήρης;
   ///
   /// Προσωπική ρύθμιση: για όποιον θέλει απλώς να δει τους εκτυπωτές, η
@@ -69,6 +73,19 @@ class _EquipmentPrintersDialogState
   /// καλύτερα να έρθει μια στιγμή αργότερα παρά να αναβοσβήσει.
   bool get _showHint =>
       ref.watch(printersLimitedViewHintProvider).value ?? false;
+
+  /// Η εξήγηση της περιορισμένης προβολής — ίδια συνάρτηση με τον διάλογο
+  /// εκκαθάρισης ουρών, ώστε τα δύο κείμενα να μην αποκλίνουν.
+  String get _limitedViewText {
+    final policy =
+        ref.watch(printerRpcPolicyProvider).value ??
+        const PrinterRpcPolicyState.unreadable();
+    return policy.limitedPrinterViewMessage(
+      host: _server?.host ?? '',
+      showHint: _showHint,
+      errorCode: _limitedCode,
+    );
+  }
 
   @override
   void initState() {
@@ -164,6 +181,7 @@ class _EquipmentPrintersDialogState
       _redirectedTotal = printers.printers.where((p) => p.isRedirected).length;
       _sampleNames = printers.printers.take(3).map((p) => p.fullName).toList();
       _limited = printers.isLimited;
+      _limitedCode = printers.fallbackCode;
     });
   }
 
@@ -500,14 +518,7 @@ class _EquipmentPrintersDialogState
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Περιορισμένη προβολή: η υπηρεσία εκτυπώσεων του '
-                      'διακομιστή δεν απαντά σε αυτόν τον υπολογιστή, οπότε η '
-                      'λίστα διαβάστηκε από τις ρυθμίσεις του. Βλέπεις ποιοι '
-                      'εκτυπωτές υπάρχουν, αλλά όχι τι περιμένει στις ουρές — '
-                      'και οι ενέργειες δεν είναι διαθέσιμες.'
-                      '${_showHint ? '\n\nΗ πλήρης προβολή ενεργοποιείται από '
-                                'τον Κατάλογο → Διάφορα → Διακομιστές, στην '
-                                'κάρτα «Κατάσταση αυτού του υπολογιστή».' : ''}',
+                      _limitedViewText,
                       style: theme.textTheme.bodySmall,
                     ),
                   ),

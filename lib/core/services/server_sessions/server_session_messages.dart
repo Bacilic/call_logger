@@ -52,6 +52,41 @@ abstract final class ServerSessionMessages {
   /// οπότε δεν μπορεί να συγκρουστεί με πραγματικό σφάλμα.
   static const int logoffNotVerified = -1;
 
+  /// Η εξήγηση της **άρνησης πρόσβασης** (κωδικός 5), κοινή για κάθε ενέργεια.
+  ///
+  /// Ο κωδικός 5 δεν έρχεται ποτέ από αποτυχημένη σύνδεση: τη στιγμή που
+  /// εμφανίζεται, ο διακομιστής μας έχει ήδη δεχτεί. Γι' αυτό δεν κατηγορεί
+  /// τον λογαριασμό — μπορεί ο λογαριασμός να μην έχει καν ταξιδέψει. Οι τρεις
+  /// αιτίες είναι μετρημένες στους 192.168.13.82/.83:
+  ///  * ο λογαριασμός υπάρχει αλλά δεν είναι διαχειριστής ΕΚΕΙΝΟΥ του
+  ///    διακομιστή — κάθε μηχάνημα έχει δικούς του λογαριασμούς·
+  ///  * ο διακομιστής δεν αναγνώρισε τον λογαριασμό και υποβίβασε τη σύνδεση
+  ///    σε επισκέπτη, οπότε η σύνδεση «πέτυχε» χωρίς κανένα δικαίωμα·
+  ///  * ο υπολογιστής μας έχει ήδη ανοιχτή σύνδεση προς τον ίδιο διακομιστή με
+  ///    άλλα στοιχεία, και τα Windows κρατούν μία ταυτότητα ανά διακομιστή.
+  ///
+  /// Το [includePrinterRpcHint] προσθέτει την τέταρτη αιτία που ισχύει **μόνο**
+  /// για τους εκτυπωτές. Σε άλλη ενέργεια θα ήταν λάθος ίχνος.
+  static String accessDenied({
+    required String what,
+    required String host,
+    required String account,
+    bool includePrinterRpcHint = false,
+  }) {
+    final base =
+        'Ο $host απέρριψε το αίτημα $what (άρνηση πρόσβασης). Η σύνδεση έγινε '
+        'δεκτή, αλλά η εντολή δεν πέρασε ως διαχειριστής. Τρεις συνήθεις '
+        'αιτίες: ο «$account» δεν είναι διαχειριστής ΤΟΥ ΔΙΑΚΟΜΙΣΤΗ $host — '
+        'κάθε διακομιστής έχει δικούς του λογαριασμούς· ο $host δεν αναγνώρισε '
+        'τον λογαριασμό και δέχτηκε τη σύνδεση ως επισκέπτη· ή αυτός ο '
+        'υπολογιστής έχει ήδη ανοιχτή σύνδεση προς τον $host με άλλον '
+        'λογαριασμό, π.χ. κοινόχρηστο φάκελο ή δίσκο δικτύου.';
+    if (!includePrinterRpcHint) return base;
+    return '$base Στους εκτυπωτές παίζει ρόλο και η ρύθμιση RPC αυτού του '
+        'υπολογιστή: δες την κάρτα «Κατάσταση αυτού του υπολογιστή» στον '
+        'Κατάλογο → Διάφορα → Διακομιστές.';
+  }
+
   /// Μήνυμα για αποτυχία σύνδεσης δικτύου προς τον διακομιστή.
   static String forConnect({
     required int code,
@@ -91,9 +126,11 @@ abstract final class ServerSessionMessages {
     required String host,
     required String adminUser,
   }) => switch (code) {
-    errorAccessDenied =>
-      'Ο λογαριασμός «$adminUser» δεν έχει δικαίωμα ανάγνωσης συνεδριών στον '
-          '$host. Χρειάζεται λογαριασμός διαχειριστή ΤΟΥ ΔΙΑΚΟΜΙΣΤΗ.',
+    errorAccessDenied => accessDenied(
+      what: 'ανάγνωσης συνεδριών',
+      host: host,
+      account: adminUser,
+    ),
     rpcServerUnavailable =>
       'Ο διακομιστής $host δεν αποκρίνεται. Πιθανότερη αιτία: λείπει το '
           '«SMB 1.0/CIFS Client» από αυτόν τον υπολογιστή.',
@@ -107,9 +144,11 @@ abstract final class ServerSessionMessages {
     required String host,
     required String adminUser,
   }) => switch (code) {
-    errorAccessDenied =>
-      'Ο λογαριασμός «$adminUser» δεν έχει δικαίωμα τερματισμού συνεδριών στον '
-          '$host. Χρειάζεται λογαριασμός διαχειριστή ΤΟΥ ΔΙΑΚΟΜΙΣΤΗ.',
+    errorAccessDenied => accessDenied(
+      what: 'τερματισμού συνεδρίας',
+      host: host,
+      account: adminUser,
+    ),
     errorCtxWinstationNotFound =>
       'Η συνεδρία δεν υπάρχει πια στον $host — πάτα «Ανανέωση» για να δεις την '
           'τρέχουσα εικόνα.',
@@ -130,9 +169,11 @@ abstract final class ServerSessionMessages {
     required String host,
     required String adminUser,
   }) => switch (code) {
-    errorAccessDenied =>
-      'Ο λογαριασμός «$adminUser» δεν έχει δικαίωμα αποσύνδεσης οθόνης στον '
-          '$host. Χρειάζεται λογαριασμός διαχειριστή ΤΟΥ ΔΙΑΚΟΜΙΣΤΗ.',
+    errorAccessDenied => accessDenied(
+      what: 'αποσύνδεσης οθόνης',
+      host: host,
+      account: adminUser,
+    ),
     errorCtxWinstationNotFound =>
       'Η συνεδρία δεν υπάρχει πια στον $host — πάτα «Ανανέωση» για να δεις την '
           'τρέχουσα εικόνα.',

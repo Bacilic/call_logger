@@ -203,12 +203,20 @@ class ServerPrintersResult {
     required this.printers,
     required this.error,
     required this.source,
+    this.fallbackCode = 0,
   });
 
   const ServerPrintersResult.success(
     List<ServerPrinter> printers, {
     PrinterSource source = PrinterSource.spooler,
-  }) : this._(ok: true, printers: printers, error: null, source: source);
+    int fallbackCode = 0,
+  }) : this._(
+         ok: true,
+         printers: printers,
+         error: null,
+         source: source,
+         fallbackCode: fallbackCode,
+       );
 
   const ServerPrintersResult.failure(String error)
     : this._(
@@ -221,6 +229,15 @@ class ServerPrintersResult {
   final bool ok;
   final List<ServerPrinter> printers;
   final String? error;
+
+  /// Ο κωδικός των Windows που έδιωξε την ανάγνωση στο μητρώο· 0 όταν δεν
+  /// υπήρξε εφεδρεία.
+  ///
+  /// Χωρίς αυτόν η περιορισμένη προβολή ήταν ένα «κάτι δεν πάει καλά» χωρίς
+  /// αιτία: το 1753 (δεν μιλά RPC/TCP), το 1722 (δεν αποκρίνεται καθόλου) και
+  /// το 1801 (δεν δέχεται το όνομα ως print server) θέλουν τελείως
+  /// διαφορετική κίνηση, και η εφαρμογή τα ήξερε — απλώς τα πετούσε.
+  final int fallbackCode;
 
   /// Πληροφορία που ΠΡΕΠΕΙ να φτάσει στην οθόνη: με εφεδρική πηγή, οι ουρές
   /// δείχνουν μηδέν επειδή δεν τις ξέρουμε — όχι επειδή είναι άδειες.

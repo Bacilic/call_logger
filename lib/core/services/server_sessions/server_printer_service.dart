@@ -55,6 +55,7 @@ class ServerPrinterService {
         source: raw.fromRegistry
             ? PrinterSource.registry
             : PrinterSource.spooler,
+        fallbackCode: raw.fromRegistry ? raw.code : 0,
       );
     } on TimeoutException {
       return ServerPrintersResult.failure(_timeoutMessage(h, timeout));
@@ -419,8 +420,15 @@ class ServerPrinterService {
     required String what,
   }) => switch (code) {
     ServerSessionMessages.errorAccessDenied =>
-      'Ο λογαριασμός «$user» δεν έχει δικαίωμα διαχείρισης εκτυπωτών στον '
-          '$host. Χρειάζεται λογαριασμός διαχειριστή ΤΟΥ ΔΙΑΚΟΜΙΣΤΗ.',
+      ServerSessionMessages.accessDenied(
+        what: 'διαχείρισης εκτυπωτών',
+        host: host,
+        account: user,
+        // Μόνο εδώ: η ρύθμιση RPC αφορά αποκλειστικά τους εκτυπωτές, και χωρίς
+        // αυτήν η κλήση ταξιδεύει με την ταυτότητα του συνδεδεμένου χρήστη των
+        // Windows αντί για τον λογαριασμό που άνοιξε η εφαρμογή.
+        includePrinterRpcHint: true,
+      ),
     ServerSessionMessages.rpcServerUnavailable =>
       'Ο διακομιστής $host δεν αποκρίνεται. Αν μόλις έγινε επανεκκίνηση της '
           'ουράς, δώσ\' του λίγα δευτερόλεπτα και πάτα «Ανανέωση».',
@@ -436,8 +444,11 @@ class ServerPrinterService {
     required String adminUser,
   }) => switch (code) {
     ServerSessionMessages.errorAccessDenied =>
-      'Ο λογαριασμός «$adminUser» δεν έχει δικαίωμα διαχείρισης υπηρεσιών στον '
-          '$host. Χρειάζεται λογαριασμός διαχειριστή ΤΟΥ ΔΙΑΚΟΜΙΣΤΗ.',
+      ServerSessionMessages.accessDenied(
+        what: 'διαχείρισης της ουράς εκτυπώσεων',
+        host: host,
+        account: adminUser,
+      ),
     kServiceStopTimedOut =>
       'Η ουρά εκτυπώσεων του $host δεν σταμάτησε εγκαίρως. Συνήθως φταίει '
           'κολλημένη εργασία ή οδηγός εκτυπωτή — δοκίμασε ξανά σε λίγο.',
@@ -457,8 +468,11 @@ class ServerPrinterService {
     required String adminUser,
   }) => switch (code) {
     ServerSessionMessages.errorAccessDenied =>
-      'Ο λογαριασμός «$adminUser» δεν έχει δικαίωμα επανεκκίνησης του $host. '
-          'Χρειάζεται λογαριασμός διαχειριστή ΤΟΥ ΔΙΑΚΟΜΙΣΤΗ.',
+      ServerSessionMessages.accessDenied(
+        what: 'επανεκκίνησης του διακομιστή',
+        host: host,
+        account: adminUser,
+      ),
     1115 => 'Ο $host βρίσκεται ήδη σε διαδικασία τερματισμού.',
     1116 =>
       'Δεν υπάρχει επανεκκίνηση σε εξέλιξη στον $host — δεν υπήρχε τίποτα '
@@ -574,7 +588,9 @@ _PrinterIsolateResult _listPrintersInIsolate(
       return (
         ok: true,
         connectFailed: false,
-        code: 0,
+        // Ο κωδικός της ΑΠΟΤΥΧΗΜΕΝΗΣ ερώτησης στην ουρά, όχι της εφεδρείας
+        // που πέτυχε: αυτός εξηγεί γιατί βλέπουμε μισή εικόνα.
+        code: r.code,
         printers: [
           for (final p in reg.printers)
             (name: p.name, driverName: p.driverName, status: 0, jobCount: 0),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/managed_server.dart';
 import '../../../../core/providers/servers_provider.dart';
+import '../../../../core/services/server_sessions/printer_rpc_policy.dart';
 import '../../../../core/services/server_sessions/server_printer_models.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import 'server_action_banner.dart';
@@ -41,6 +42,9 @@ class _ServerQueueCleanupDialogState
   String? _error;
   String? _done;
   bool _limited = false;
+
+  /// Ο κωδικός των Windows πίσω από την περιορισμένη προβολή.
+  int _limitedCode = 0;
 
   /// Οι εκτυπωτές που έχουν έστω μία εκκρεμή εκτύπωση.
   List<ServerPrinter> _withQueue = const [];
@@ -85,6 +89,7 @@ class _ServerQueueCleanupDialogState
     setState(() {
       _loading = false;
       _limited = result.isLimited;
+      _limitedCode = result.fallbackCode;
       _withQueue = withQueue;
       _selected
         ..clear()
@@ -291,13 +296,19 @@ class _ServerQueueCleanupDialogState
     }
 
     if (_limited) {
+      // Το κείμενο κρίνει την κατάσταση της ρύθμισης RPC: όταν είναι ήδη
+      // περασμένη, η αιτία δεν είναι εδώ αλλά στην ουρά του διακομιστή.
+      final policy =
+          ref.watch(printerRpcPolicyProvider).value ??
+          const PrinterRpcPolicyState.unreadable();
       return ServerActionBanner(
         icon: Icons.info_outline,
         color: theme.colorScheme.tertiary,
-        text:
-            'Δεν μπορούμε να δούμε τις ουρές: η υπηρεσία εκτυπώσεων δεν απαντά '
-            'σε αυτόν τον υπολογιστή. Ενεργοποίησε την πλήρη προβολή από την '
-            'κάρτα «Κατάσταση αυτού του υπολογιστή».',
+        text: policy.limitedPrinterViewMessage(
+          host: widget.server.host,
+          showHint: ref.watch(printersLimitedViewHintProvider).value ?? false,
+          errorCode: _limitedCode,
+        ),
       );
     }
 
