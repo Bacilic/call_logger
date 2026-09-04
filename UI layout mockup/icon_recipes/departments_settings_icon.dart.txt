@@ -1,0 +1,162 @@
+// ΠΡΟΣΩΡΙΝΟ: παράγει το assets/departments_settings.png. Διαγράφεται μετά.
+//   flutter test test/_icon_gen_test.dart
+
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter_test/flutter_test.dart';
+
+const _dark = ui.Color(0xFF4C6472);
+const _light = ui.Color(0xFFAFC4D0);
+const _blue = ui.Color(0xFF1976D2);
+const _white = ui.Color(0xFFFFFFFF);
+
+/// Πλέγμα παραθύρων, κεντραρισμένο οριζόντια στην πρόσοψη.
+void _windows(
+  ui.Canvas canvas, {
+  required double faceLeft,
+  required double faceWidth,
+  required double top,
+  required int columns,
+  required int rows,
+  required double size,
+  required double gapX,
+  required double gapY,
+  required ui.Color color,
+}) {
+  final paint = ui.Paint()..color = color;
+  final gridWidth = columns * size + (columns - 1) * gapX;
+  final left = faceLeft + (faceWidth - gridWidth) / 2;
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < columns; c++) {
+      canvas.drawRRect(
+        ui.RRect.fromRectAndRadius(
+          ui.Rect.fromLTWH(
+            left + c * (size + gapX),
+            top + r * (size + gapY),
+            size,
+            size,
+          ),
+          const ui.Radius.circular(5),
+        ),
+        paint,
+      );
+    }
+  }
+}
+
+void main() {
+  testWidgets('παράγει το εικονίδιο των Τμημάτων', (tester) async {
+    await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+
+      // Κοινή γραμμή έδρασης: τα δύο κτίρια πατούν στο ίδιο επίπεδο χωρίς να
+      // χρειάζεται ζωγραφισμένο έδαφος — που θα περνούσε πίσω από την πινακίδα
+      // και θα ξαναφαινόταν δεξιά της, κομμένο.
+      const baseline = 430.0;
+
+      // Πίσω πτέρυγα, ανοιχτή: ίδια ιεραρχία βάθους με τους διακομιστές.
+      const backLeft = 248.0;
+      const backTop = 92.0;
+      const backW = 178.0;
+
+      canvas.drawRRect(
+        ui.RRect.fromRectAndCorners(
+          const ui.Rect.fromLTWH(backLeft, backTop, backW, baseline - backTop),
+          topLeft: const ui.Radius.circular(18),
+          topRight: const ui.Radius.circular(18),
+        ),
+        ui.Paint()..color = _light,
+      );
+      _windows(
+        canvas,
+        faceLeft: backLeft,
+        faceWidth: backW,
+        top: backTop + 40,
+        columns: 3,
+        rows: 5,
+        size: 28,
+        gapX: 22,
+        gapY: 30,
+        color: _white,
+      );
+
+      // Μπροστινή πτέρυγα, σκούρα.
+      const frontLeft = 80.0;
+      const frontTop = 186.0;
+      const frontW = 214.0;
+
+      canvas.drawRRect(
+        ui.RRect.fromRectAndCorners(
+          const ui.Rect.fromLTWH(
+            frontLeft,
+            frontTop,
+            frontW,
+            baseline - frontTop,
+          ),
+          topLeft: const ui.Radius.circular(18),
+          topRight: const ui.Radius.circular(18),
+        ),
+        ui.Paint()..color = _dark,
+      );
+      _windows(
+        canvas,
+        faceLeft: frontLeft,
+        faceWidth: frontW,
+        top: frontTop + 34,
+        columns: 3,
+        rows: 2,
+        size: 30,
+        gapX: 32,
+        gapY: 34,
+        color: _white,
+      );
+
+      // Είσοδος: το στοιχείο που κάνει τη φόρμα κτίριο και όχι κουτί.
+      canvas.drawRRect(
+        ui.RRect.fromRectAndCorners(
+          const ui.Rect.fromLTWH(
+            frontLeft + frontW / 2 - 29,
+            baseline - 76,
+            58,
+            76,
+          ),
+          topLeft: const ui.Radius.circular(28),
+          topRight: const ui.Radius.circular(28),
+        ),
+        ui.Paint()..color = _white,
+      );
+
+      // Πινακίδα: εδώ ονοματίζονται τα κτίρια. Δαγκώνει τη γωνία της πίσω
+      // πτέρυγας — πρώτα ανοίγει κενό, μετά μπαίνει ο δίσκος.
+      const badgeCenter = ui.Offset(392, 388);
+      canvas.drawCircle(
+        badgeCenter,
+        76,
+        ui.Paint()..blendMode = ui.BlendMode.clear,
+      );
+      canvas.drawCircle(badgeCenter, 66, ui.Paint()..color = _blue);
+
+      final linePaint = ui.Paint()
+        ..color = _white
+        ..style = ui.PaintingStyle.stroke
+        ..strokeWidth = 9
+        ..strokeCap = ui.StrokeCap.round;
+      for (final dy in [-22.0, 0.0, 22.0]) {
+        canvas.drawLine(
+          badgeCenter.translate(-26, dy),
+          badgeCenter.translate(26, dy),
+          linePaint,
+        );
+      }
+
+      final image = await recorder.endRecording().toImage(512, 512);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      final bytes = Uint8List.view(data!.buffer);
+      File('assets/departments_settings.png').writeAsBytesSync(bytes);
+      image.dispose();
+    });
+  });
+}

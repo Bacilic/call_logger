@@ -17,6 +17,7 @@ import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../building_map/services/building_map_floor_ordering.dart';
 import '../../models/department_model.dart';
+import '../../providers/building_catalog_provider.dart';
 import '../../providers/catalog_validation_provider.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../services/building_map_floor_load_state.dart';
@@ -234,6 +235,57 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
       );
     }
     return items;
+  }
+
+  /// Το «Κτίριο» ως επιλογή από τον κοινό κατάλογο.
+  ///
+  /// **Κλειστή λίστα, χωρίς «κανένα»:** νέο κτίριο μπαίνει μόνο από τον
+  /// κατάλογο (Κατάλογος → Διάφορα → Τμήματα), και το κενό δεν επιλέγεται από
+  /// εδώ — τα τμήματα χωρίς κτίριο τα βγάζει ο «Έλεγχος δεδομένων».
+  ///
+  /// Η τιμή γράφεται στον [buildingController] που ήδη υπάρχει, ώστε η
+  /// αποθήκευση και ο φρουρός εξόδου να μη χρειάζεται να ξέρουν τίποτα για το
+  /// αν το πεδίο είναι κείμενο ή λίστα.
+  Widget _buildBuildingField() {
+    final catalogAsync = ref.watch(buildingCatalogProvider);
+    final catalog = catalogAsync.asData?.value ?? const <String>[];
+    final current = buildingController.text.trim();
+
+    // Τιμή που δεν είναι (ακόμη) στον κατάλογο μπαίνει μπροστά αντί να
+    // εξαφανιστεί: αλλιώς ένα άνοιγμα-και-αποθήκευση θα έσβηνε σιωπηλά το
+    // κτίριο του τμήματος πριν προλάβει να οριστεί ο κατάλογος.
+    final matched = matchBuildingInCatalog(current, catalog);
+    final options = <String>[
+      if (current.isNotEmpty && matched == null) current,
+      ...catalog,
+    ];
+    final value = current.isEmpty ? null : (matched ?? current);
+
+    return DropdownButtonFormField<String?>(
+      // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
+      value: value,
+      focusNode: _buildingFocus,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Κτίριο',
+        border: const OutlineInputBorder(),
+        helperText: catalogAsync.isLoading
+            ? 'Φόρτωση κτιρίων…'
+            : (options.isEmpty
+                  ? 'Κανένα κτίριο στη λίστα — Διάφορα → Τμήματα'
+                  : null),
+      ),
+      items: [
+        for (final option in options)
+          DropdownMenuItem<String?>(
+            value: option,
+            child: Text(option, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: options.isEmpty
+          ? null
+          : (v) => setState(() => buildingController.text = v ?? ''),
+    );
   }
 
   /// Υπογραφή των λογαριασμών για τον έλεγχο «άλλαξε κάτι;».
@@ -948,16 +1000,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: LexiconSpellTextFormField(
-                              controller: buildingController,
-                              focusNode: _buildingFocus,
-                              decoration: const InputDecoration(
-                                labelText: 'Κτίριο',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                          ),
+                          Expanded(child: _buildBuildingField()),
                           const SizedBox(width: 12),
                           Expanded(
                             child: DropdownButtonFormField<int?>(

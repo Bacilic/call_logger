@@ -56,6 +56,7 @@ class LampTransferFormFieldSpec {
     this.required = false,
     this.maxLines = 1,
     this.keyboardType = TextInputType.text,
+    this.choice = LampTransferFieldChoice.none,
   });
 
   final String formKey;
@@ -63,6 +64,19 @@ class LampTransferFormFieldSpec {
   final bool required;
   final int maxLines;
   final TextInputType keyboardType;
+
+  /// Ποιαν έτοιμη λίστα διαλέγει το πεδίο, αν διαλέγει.
+  final LampTransferFieldChoice choice;
+}
+
+/// Πεδία που δεν πληκτρολογούνται αλλά διαλέγονται από κατάλογο **αυτής** της
+/// εφαρμογής — όχι από ό,τι έχει η Λάμπα.
+enum LampTransferFieldChoice {
+  none,
+
+  /// Κτίριο από τον κοινό κατάλογο. Το κενό επιτρέπεται: η μεταφορά δεν
+  /// σταματά επειδή δεν αποφασίστηκε ακόμη το κτίριο.
+  building,
 }
 
 /// Αποτέλεσμα προεπισκόπησης μεταφοράς (χωρίς εγγραφή στη βάση).
@@ -155,7 +169,11 @@ List<LampTransferFormFieldSpec> lampTransferFormFieldSpecs(
         label: 'Τμήμα',
         required: true,
       ),
-      LampTransferFormFieldSpec(formKey: 'building', label: 'Κτίριο'),
+      LampTransferFormFieldSpec(
+        formKey: 'building',
+        label: 'Κτίριο',
+        choice: LampTransferFieldChoice.building,
+      ),
       LampTransferFormFieldSpec(
         formKey: 'level',
         label: 'Όροφος',

@@ -60,6 +60,38 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   late Future<MiniMapCardData> _dataFuture;
   MiniMapMode _mode = MiniMapMode.equipment;
 
+  /// Η διαδρομή της κάτοψης, λυμένη **μία φορά ανά αρχείο**.
+  ///
+  /// Η κάρτα παίρνει ως δεδομένα το κείμενο που πληκτρολογεί ο χρήστης στη
+  /// φόρμα κλήσης, οπότε ξαναχτίζεται σε κάθε χαρακτήρα. Όσο η ανάλυση της
+  /// διαδρομής γινόταν μέσα στο χτίσιμο, κάθε πλήκτρο ξεκινούσε νέο ψάξιμο
+  /// αρχείου στον δίσκο — και σε δικτυακό φάκελο κατόψεων, νέο γύρο δικτύου.
+  String? _resolvedForStoredPath;
+  Future<String?>? _floorImageFuture;
+
+  /// Λύνει τη διαδρομή **και** ελέγχει ότι το αρχείο υπάρχει, μακριά από το
+  /// νήμα της οθόνης: ο έλεγχος ύπαρξης ήταν σύγχρονος μέσα στο χτίσιμο, άρα
+  /// πάγωνε την εφαρμογή για όσο απαντούσε ο δίσκος.
+  ///
+  /// Επιστρέφει `null` όταν το αρχείο λείπει.
+  Future<String?> _resolveFloorImage(String storedImagePath) async {
+    final absolute = await BuildingMapStorage.resolveToAbsolute(
+      storedImagePath,
+    );
+    if (absolute.isEmpty) return null;
+    return await File(absolute).exists() ? absolute : null;
+  }
+
+  /// Το αίτημα ανάλυσης για τη [storedImagePath], φτιαγμένο μία φορά.
+  Future<String?> _floorImageFor(String storedImagePath) {
+    if (_resolvedForStoredPath != storedImagePath ||
+        _floorImageFuture == null) {
+      _resolvedForStoredPath = storedImagePath;
+      _floorImageFuture = _resolveFloorImage(storedImagePath);
+    }
+    return _floorImageFuture!;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -247,11 +279,11 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
       return _placeholder(context, 'Δεν βρέθηκε αρχείο κάτοψης.');
     }
 
-    return FutureBuilder<String>(
+    return FutureBuilder<String?>(
       key: ValueKey<String>(storedImagePath),
-      future: BuildingMapStorage.resolveToAbsolute(storedImagePath),
+      future: _floorImageFor(storedImagePath),
       builder: (context, pathSnap) {
-        if (!pathSnap.hasData) {
+        if (pathSnap.connectionState != ConnectionState.done) {
           return const Center(
             child: SizedBox(
               width: 28,
@@ -260,8 +292,8 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
             ),
           );
         }
-        final imagePath = pathSnap.data!;
-        if (imagePath.isEmpty || !File(imagePath).existsSync()) {
+        final imagePath = pathSnap.data;
+        if (imagePath == null) {
           return _placeholder(context, 'Δεν βρέθηκε αρχείο κάτοψης.');
         }
         return _buildMappedFloorPreview(

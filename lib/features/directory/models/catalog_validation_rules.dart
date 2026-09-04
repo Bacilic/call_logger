@@ -30,6 +30,7 @@ class CatalogValidationRules {
     this.crossDepartmentPhoneEnabled = true,
     this.equipmentOwnerDepartmentEnabled = true,
     this.emptyDepartmentEnabled = true,
+    this.departmentBuildingEnabled = true,
     this.lansweeperIdentifierEnabled = true,
   });
 
@@ -105,6 +106,12 @@ class CatalogValidationRules {
   /// ένα τμήμα μπορεί να αδειάσει θεμιτά — αλλά συνήθως θέλει απόφαση.
   final bool emptyDepartmentEnabled;
 
+  /// Τμήμα χωρίς κτίριο. Από τότε που το κτίριο διαλέγεται από κοινό
+  /// κατάλογο, το κενό δεν προκύπτει από πληκτρολόγηση αλλά από απόφαση —
+  /// διαγραφή κτιρίου από τη λίστα, ή μεταφορά από τη Λάμπα που το άφησε για
+  /// αργότερα. Εδώ μαζεύονται όσα περιμένουν ακόμη τη διόρθωσή τους.
+  final bool departmentBuildingEnabled;
+
   /// Μορφή αναγνωριστικών Lansweeper (υπάλληλοι + τμήματα): `τομέας\όνομα`
   /// ή email. Χωρίς σωστή μορφή το αίτημα δεν θα βρει ποτέ τον χρήστη —
   /// ο κριτής είναι ο ΙΔΙΟΣ που προειδοποιεί και στις φόρμες.
@@ -153,6 +160,7 @@ class CatalogValidationRules {
     bool? crossDepartmentPhoneEnabled,
     bool? equipmentOwnerDepartmentEnabled,
     bool? emptyDepartmentEnabled,
+    bool? departmentBuildingEnabled,
     bool? lansweeperIdentifierEnabled,
   }) {
     return CatalogValidationRules(
@@ -191,6 +199,8 @@ class CatalogValidationRules {
           this.equipmentOwnerDepartmentEnabled,
       emptyDepartmentEnabled:
           emptyDepartmentEnabled ?? this.emptyDepartmentEnabled,
+      departmentBuildingEnabled:
+          departmentBuildingEnabled ?? this.departmentBuildingEnabled,
       lansweeperIdentifierEnabled:
           lansweeperIdentifierEnabled ?? this.lansweeperIdentifierEnabled,
     );
@@ -218,6 +228,7 @@ class CatalogValidationRules {
     'cross_department_phone_enabled': crossDepartmentPhoneEnabled,
     'equipment_owner_department_enabled': equipmentOwnerDepartmentEnabled,
     'empty_department_enabled': emptyDepartmentEnabled,
+    'department_building_enabled': departmentBuildingEnabled,
     'lansweeper_identifier_enabled': lansweeperIdentifierEnabled,
   };
 
@@ -347,6 +358,11 @@ class CatalogValidationRules {
         map,
         'empty_department_enabled',
         d.emptyDepartmentEnabled,
+      ),
+      departmentBuildingEnabled: _boolOf(
+        map,
+        'department_building_enabled',
+        d.departmentBuildingEnabled,
       ),
       lansweeperIdentifierEnabled: _boolOf(
         map,

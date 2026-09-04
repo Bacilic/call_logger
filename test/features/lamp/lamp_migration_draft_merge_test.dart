@@ -244,7 +244,10 @@ void main() {
         });
       }
 
-      test('fills empty building/notes from Lamp when updating', () async {
+      // Απόφαση Διευθυντή 03/09/2026: το κτίριο της Λάμπας ΔΕΝ ταξιδεύει. Εκεί
+      // το ίδιο κτίριο γράφεται και «Β» και «B», και τα ονόματά της δεν είναι
+      // ο κατάλογος αυτής της εφαρμογής — το κτίριο διαλέγεται από τη λίστα.
+      test('το κενό κτίριο ΔΕΝ γεμίζει από τη Λάμπα — τα notes ναι', () async {
         await seedExistingDepartment();
 
         final draft = await service.buildDraft(
@@ -257,9 +260,27 @@ void main() {
         );
 
         expect(draft.selectedCandidateId, isNotNull);
-        expect(draft.formValues['building'], 'Κτίριο Λάμπας');
+        expect(draft.formValues['building'], '');
         expect(draft.formValues['level'], '3');
         expect(draft.formValues['name'], departmentName);
+        expect(
+          draft.oldValues['Παλιό κτίριο'],
+          'Κτίριο Λάμπας',
+          reason: 'η τιμή της Λάμπας μένει ορατή ως πληροφορία',
+        );
+      });
+
+      test('νέο τμήμα: το κτίριο ανοίγει άδειο', () async {
+        final draft = await service.buildDraft(
+          target: LampTransferTarget.department,
+          sourceRow: {
+            'office_name': 'Ολοκαίνουριο Τμήμα',
+            'building': 'Β',
+          },
+        );
+
+        expect(draft.selectedCandidateId, isNull);
+        expect(draft.formValues['building'], '');
       });
 
       test('keeps non-empty destination building over Lamp', () async {

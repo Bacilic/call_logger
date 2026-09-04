@@ -465,6 +465,22 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                     ),
                   ),
                   _RuleRow(
+                    enabled: rules.departmentBuildingEnabled,
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(departmentBuildingEnabled: v),
+                    ),
+                    note:
+                        'Το κτίριο διαλέγεται από τη λίστα (Διάφορα → '
+                        'Τμήματα)· κενό μένει όταν σβηστεί ένα κτίριο ή όταν '
+                        'η μεταφορά από τη Λάμπα το άφησε για αργότερα',
+                    example: 'Παράδειγμα υπόδειξης: «Δεν έχει κτίριο»',
+                    child: Text(
+                      'Τμήματα χωρίς κτίριο',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
                     enabled: rules.phoneEquipmentCodeEnabled,
                     onToggle: (v) => _apply(
                       (current) =>

@@ -39,6 +39,23 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
   String? _scheduledResolvePath;
   String _resolvedAbsImgPath = '';
 
+  /// Οι κατόψεις, διαβασμένες **μία φορά ανά ανανέωση**.
+  ///
+  /// Η οθόνη ξαναχτίζεται σε κάθε αλλαγή επιλογής, λειτουργίας ή καταλόγου
+  /// τμημάτων· όσο το ερώτημα φτιαχνόταν μέσα στο χτίσιμο, ξαναρωτούσε τη βάση
+  /// κάθε φορά. Ο [buildingMapFloorReloadSeqProvider] είναι ήδη ο δείκτης
+  /// «κάτι άλλαξε στις κατόψεις» — αυτός κρατά και το αίτημα.
+  int? _floorsForReloadSeq;
+  Future<List<BuildingMapFloor>>? _floorsFuture;
+
+  Future<List<BuildingMapFloor>> _floorsFor(int reloadSeq) {
+    if (_floorsForReloadSeq != reloadSeq || _floorsFuture == null) {
+      _floorsForReloadSeq = reloadSeq;
+      _floorsFuture = widget.repo.maps.listBuildingMapFloors();
+    }
+    return _floorsFuture!;
+  }
+
   @override
   void dispose() {
     _globalSearchController.dispose();
@@ -84,7 +101,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
 
     return FutureBuilder<List<BuildingMapFloor>>(
       key: ValueKey<int>(reloadSeq),
-      future: widget.repo.maps.listBuildingMapFloors(),
+      future: _floorsFor(reloadSeq),
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());

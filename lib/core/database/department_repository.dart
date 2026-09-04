@@ -22,6 +22,24 @@ class DepartmentNameKeyBackfillResult {
   final int alreadyCorrect;
 }
 
+/// Πόσα ενεργά τμήματα ανήκουν σε κάθε κτίριο, και πόσα σε κανένα.
+class BuildingUsage {
+  const BuildingUsage({
+    required this.perBuilding,
+    required this.withoutBuilding,
+  });
+
+  static const empty = BuildingUsage(
+    perBuilding: <String, int>{},
+    withoutBuilding: 0,
+  );
+
+  final Map<String, int> perBuilding;
+  final int withoutBuilding;
+
+  int countFor(String building) => perBuilding[building] ?? 0;
+}
+
 /// Persistence τμημάτων (`departments`).
 class DepartmentRepository {
   DepartmentRepository(this.db, {DirectorySupport? support})
@@ -523,6 +541,108 @@ class DepartmentRepository {
         appliedFields: map,
         details: 'bulkUpdateDepartments ids=${ids.length}',
       );
+    });
+  }
+
+  // ───────────────────────── Κατάλογος κτιρίων ─────────────────────────
+
+  /// Τα κτίρια που χρησιμοποιούν σήμερα τα ενεργά τμήματα, με το πλήθος τους,
+  /// **και** πόσα τμήματα δεν έχουν κτίριο.
+  ///
+  /// Μία ερώτηση για τα δύο, επίτηδες: η οθόνη διαχείρισης τα δείχνει μαζί
+  /// («τόσα τμήματα θα μείνουν χωρίς κτίριο αν το σβήσεις» / «τόσα δεν έχουν
+  /// ήδη»), και δύο ξεχωριστές αναγνώσεις θα μπορούσαν να διαφωνήσουν.
+  Future<BuildingUsage> countDepartmentsPerBuilding({
+    DatabaseExecutor? executor,
+  }) async {
+    final ex = executor ?? db;
+    final rows = await ex.query(
+      'departments',
+      columns: ['building'],
+      where: DirectorySupport.notDeletedClause,
+    );
+    final counts = <String, int>{};
+    var without = 0;
+    for (final row in rows) {
+      final value = (row['building'] as String?)?.trim() ?? '';
+      if (value.isEmpty) {
+        without++;
+        continue;
+      }
+      counts[value] = (counts[value] ?? 0) + 1;
+    }
+    return BuildingUsage(perBuilding: counts, withoutBuilding: without);
+  }
+
+  /// Αδειάζει το κτίριο από όσα ενεργά τμήματα το έχουν — η πράξη που
+  /// ακολουθεί τη διαγραφή ενός κτιρίου από τον κατάλογο.
+  ///
+  /// Επιστρέφει πόσα τμήματα έμειναν χωρίς κτίριο.
+  Future<int> clearBuildingFromDepartments(String building) async {
+    final value = building.trim();
+    if (value.isEmpty) return 0;
+    return _rewriteBuilding(from: value, to: null, action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ');
+  }
+
+  /// Μετονομάζει το κτίριο σε όσα ενεργά τμήματα το έχουν, ώστε η διόρθωση
+  /// στον κατάλογο να μη διχάσει κατάλογο και δεδομένα.
+  ///
+  /// Επιστρέφει πόσα τμήματα ενημερώθηκαν.
+  Future<int> renameBuildingInDepartments({
+    required String from,
+    required String to,
+  }) async {
+    final source = from.trim();
+    final target = to.trim();
+    if (source.isEmpty || target.isEmpty || source == target) return 0;
+    return _rewriteBuilding(
+      from: source,
+      to: target,
+      action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ',
+    );
+  }
+
+  /// Η κοινή εγγραφή των δύο παραπάνω: μία συναλλαγή, ένα ίχνος στο Ιστορικό.
+  Future<int> _rewriteBuilding({
+    required String from,
+    required String? to,
+    required String action,
+  }) async {
+    return db.transaction<int>((txn) async {
+      final rows = await txn.query(
+        'departments',
+        columns: ['id'],
+        where: '${DirectorySupport.notDeletedClause} AND TRIM(building) = ?',
+        whereArgs: [from],
+      );
+      final ids = [
+        for (final row in rows)
+          if (row['id'] case final int id) id,
+      ];
+      if (ids.isEmpty) return 0;
+
+      final changes = <String, dynamic>{'building': to};
+      for (final id in ids) {
+        await txn.update(
+          'departments',
+          changes,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
+      final user = await _support.auditPerformingUser(executor: txn);
+      await AuditService.logBulk(
+        txn,
+        action: action,
+        userPerforming: user,
+        entityType: AuditEntityTypes.bulkDepartments,
+        affectedIds: ids,
+        appliedFields: changes,
+        details: to == null
+            ? 'clearBuildingFromDepartments building=$from ids=${ids.length}'
+            : 'renameBuildingInDepartments $from -> $to ids=${ids.length}',
+      );
+      return ids.length;
     });
   }
 

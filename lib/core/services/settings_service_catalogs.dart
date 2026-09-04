@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
+import '../utils/homoglyph_text_normalizer.dart';
 import 'shared_settings.dart';
 import '../config/audit_retention_config.dart';
 import '../../features/database/debug/publish_cli.dart';
@@ -24,6 +25,7 @@ class SettingsServiceCatalogs {
   static const String _keyDictionarySourcePath = 'dictionary_source_path';
   static const String _keyDictionaryExportPath = 'dictionary_export_path';
   static const String _keyEquipmentTypes = 'equipment_types';
+  static const String _keyBuildingCatalog = 'building_catalog';
   static const String _keyLexiconCategories = 'lexicon_categories';
   static const String _keyCrashLogRetentionCount =
       'crash_log_retention_count_v1';
@@ -313,6 +315,72 @@ class SettingsServiceCatalogs {
     if (list.isEmpty) return ['Υπολογιστής', 'Εκτυπωτής'];
     return list;
   }
+
+  // --- Κατάλογος κτιρίων (app_settings, comma-separated) ---
+
+  /// Τι δείχνει η οθόνη για μια αποθηκευμένη τιμή του καταλόγου κτιρίων.
+  ///
+  /// **Καμία καρφωτή προεπιλογή, σε αντίθεση με τους τύπους εξοπλισμού:** τα
+  /// κτίρια είναι δεδομένο του κάθε νοσοκομείου, όχι κάτι που ξέρει η
+  /// εφαρμογή. Κενή αποθηκευμένη τιμή σημαίνει «δεν έχει οριστεί κατάλογος
+  /// ακόμη», και τότε τον ρόλο του τον παίζουν τα κτίρια που ήδη
+  /// χρησιμοποιούν τα τμήματα (δες `buildingCatalogProvider`).
+  static String effectiveBuildingCatalog(String? stored) =>
+      stored?.trim() ?? '';
+
+  /// Ακατέργαστο string κτιρίων (διαχωρισμένα με κόμμα). Κενό = δεν έχει
+  /// οριστεί κατάλογος.
+  Future<String> getBuildingCatalogRaw() async {
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyBuildingCatalog)
+        : null;
+    return effectiveBuildingCatalog(value);
+  }
+
+  /// Αποθηκεύει τον κατάλογο κτιρίων (comma-separated).
+  ///
+  /// Το [expected] παίζει τον ίδιο ρόλο με της [setEquipmentTypes]: αν κάποιος
+  /// άλλος πρόλαβε να αλλάξει τη λίστα, αποφασίζει ο άνθρωπος αντί να σβηστεί
+  /// σιωπηλά η δουλειά του.
+  Future<void> setBuildingCatalog(
+    String value, {
+    required String? expected,
+  }) async {
+    await _writeGuardedList(
+      key: _keyBuildingCatalog,
+      next: _joinBuildingCatalog(splitBuildingCatalog(value)),
+      expected: expected,
+      effective: effectiveBuildingCatalog,
+    );
+  }
+
+  /// Λίστα κτιρίων όπως είναι αποθηκευμένη. Κενή = δεν έχει οριστεί κατάλογος.
+  Future<List<String>> getBuildingCatalogList() async =>
+      splitBuildingCatalog(await getBuildingCatalogRaw());
+
+  /// Σπάει το αποθηκευμένο κείμενο σε κτίρια, χωρίς κενά και διπλότυπα.
+  ///
+  /// Καθαρή συνάρτηση: τη μοιράζονται η ανάγνωση, η εγγραφή και η οθόνη, ώστε
+  /// να μη διαφωνήσουν ποτέ για το τι είναι «η ίδια λίστα».
+  ///
+  /// Το «ίδιο» κρίνεται με τον **ίδιο** κανόνα που χρησιμοποιεί η οθόνη όταν
+  /// λέει «υπάρχει ήδη»: αγνοώντας πεζά/κεφαλαία, τόνους και αλφάβητο. Με
+  /// σκέτο `toLowerCase()` το «Καινούριο» και το «καινουριο» θα περνούσαν ως
+  /// δύο διαφορετικά κτίρια — ακριβώς το πρόβλημα που λύνει ο κατάλογος.
+  static List<String> splitBuildingCatalog(String? csv) {
+    final out = <String>[];
+    final seen = <String>{};
+    for (final part in (csv ?? '').split(',')) {
+      final value = part.trim();
+      if (value.isEmpty) continue;
+      final key = HomoglyphTextNormalizer.normalizeForComparison(value);
+      if (seen.add(key.isEmpty ? value : key)) out.add(value);
+    }
+    return out;
+  }
+
+  static String _joinBuildingCatalog(List<String> buildings) =>
+      buildings.join(', ');
 
   // --- Κατηγορίες λεξικού (app_settings, comma-separated) ---
 

@@ -811,9 +811,15 @@ class LampMigrationService {
         'notes': _text(row['notes']),
       };
     }
+    // Το κτίριο της Λάμπας ΔΕΝ ταξιδεύει: εκεί το ίδιο κτίριο γράφεται και
+    // «Β» και «B», και τα δεκαπέντε ονόματά της δεν είναι ο κατάλογος αυτής
+    // της εφαρμογής. Το πεδίο ανοίγει άδειο και διαλέγεται από τη λίστα —
+    // επιτρέπεται και κενό, με τη διόρθωση να μένει για αργότερα (το βρίσκει
+    // ο «Έλεγχος δεδομένων»). Η παλιά τιμή φαίνεται στα `oldValues`, ως
+    // πληροφορία.
     final newRecordFormValues = <String, String>{
       'name': oldName,
-      'building': oldBuilding,
+      'building': '',
       'level': oldLevel,
       'phones': oldPhones,
       'notes': '',
@@ -824,7 +830,7 @@ class LampMigrationService {
             destination: candidateFormValues[selected] ?? newRecordFormValues,
             lamp: newRecordFormValues,
             listKeys: const <String>{'phones'},
-            singleValueKeys: const <String>{'building', 'level', 'notes'},
+            singleValueKeys: const <String>{'level', 'notes'},
           );
 
     return LampMigrationDraft(

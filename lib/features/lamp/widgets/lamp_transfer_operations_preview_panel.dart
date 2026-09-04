@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../directory/providers/building_catalog_provider.dart';
 import '../services/lamp_migration_service.dart';
 import '../services/lamp_transfer_preview.dart';
 
@@ -159,32 +161,48 @@ class _SmartTransferField extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        TextFormField(
-          key: Key('transfer_field_${spec.formKey}'),
-          controller: controller,
-          readOnly: readOnly,
-          enabled: !readOnly,
-          maxLines: spec.maxLines,
-          keyboardType: spec.keyboardType,
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(),
-            filled: readOnly,
-            fillColor: readOnly
-                ? scheme.surfaceContainerHighest.withValues(alpha: 0.45)
-                : null,
-            helperText: field.hasWarning
-                ? null
-                : _fieldHelperText(lampHint, readOnly ? destinationHint : null),
-            helperMaxLines: 4,
-            helperStyle: field.hasWarning
-                ? theme.textTheme.bodySmall?.copyWith(color: scheme.error)
-                : theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            errorText: field.hasWarning ? field.warningMessage : null,
-            errorMaxLines: 3,
+        if (spec.choice == LampTransferFieldChoice.building)
+          _BuildingChoiceField(
+            formKey: spec.formKey,
+            controller: controller,
+            readOnly: readOnly,
+            hasWarning: field.hasWarning,
+            warningMessage: field.warningMessage,
+            helperText: _fieldHelperText(
+              lampHint,
+              readOnly ? destinationHint : null,
+            ),
+          )
+        else
+          TextFormField(
+            key: Key('transfer_field_${spec.formKey}'),
+            controller: controller,
+            readOnly: readOnly,
+            enabled: !readOnly,
+            maxLines: spec.maxLines,
+            keyboardType: spec.keyboardType,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              filled: readOnly,
+              fillColor: readOnly
+                  ? scheme.surfaceContainerHighest.withValues(alpha: 0.45)
+                  : null,
+              helperText: field.hasWarning
+                  ? null
+                  : _fieldHelperText(
+                      lampHint,
+                      readOnly ? destinationHint : null,
+                    ),
+              helperMaxLines: 4,
+              helperStyle: field.hasWarning
+                  ? theme.textTheme.bodySmall?.copyWith(color: scheme.error)
+                  : theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              errorText: field.hasWarning ? field.warningMessage : null,
+              errorMaxLines: 3,
+            ),
           ),
-        ),
         if (field.items.isNotEmpty) ...[
           const SizedBox(height: 6),
           Wrap(
@@ -384,4 +402,79 @@ transferFieldActionChipColors(TransferFieldAction action, ColorScheme scheme) {
       foreground: scheme.onErrorContainer,
     ),
   };
+}
+
+/// Το «Κτίριο» της μεταφοράς: επιλογή από τον κατάλογο **αυτής** της
+/// εφαρμογής, ποτέ από τη Λάμπα.
+///
+/// Το κενό είναι θεμιτή επιλογή («— χωρίς —»): η μεταφορά δεν σταματά επειδή
+/// δεν αποφασίστηκε ακόμη το κτίριο· το τμήμα εμφανίζεται μετά στον «Έλεγχο
+/// δεδομένων» ως εκκρεμότητα.
+///
+/// Γράφει στον ίδιο [controller] με τα υπόλοιπα πεδία, ώστε η αποθήκευση της
+/// φόρμας να μη χρειάζεται να ξέρει ότι εδώ υπάρχει λίστα αντί για κείμενο.
+class _BuildingChoiceField extends ConsumerWidget {
+  const _BuildingChoiceField({
+    required this.formKey,
+    required this.controller,
+    required this.readOnly,
+    required this.hasWarning,
+    required this.warningMessage,
+    required this.helperText,
+  });
+
+  final String formKey;
+  final TextEditingController controller;
+  final bool readOnly;
+  final bool hasWarning;
+  final String? warningMessage;
+  final String? helperText;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final catalogAsync = ref.watch(buildingCatalogProvider);
+    final catalog = catalogAsync.asData?.value ?? const <String>[];
+    final current = controller.text.trim();
+
+    final matched = matchBuildingInCatalog(current, catalog);
+    final options = <String>[
+      if (current.isNotEmpty && matched == null) current,
+      ...catalog,
+    ];
+    final value = current.isEmpty ? null : (matched ?? current);
+
+    return DropdownButtonFormField<String?>(
+      key: Key('transfer_field_$formKey'),
+      // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
+      value: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        border: const OutlineInputBorder(),
+        filled: readOnly,
+        fillColor: readOnly
+            ? scheme.surfaceContainerHighest.withValues(alpha: 0.45)
+            : null,
+        helperText: hasWarning
+            ? null
+            : (catalogAsync.isLoading ? 'Φόρτωση κτιρίων…' : helperText),
+        helperMaxLines: 4,
+        helperStyle: theme.textTheme.bodySmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+        errorText: hasWarning ? warningMessage : null,
+        errorMaxLines: 3,
+      ),
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('— χωρίς —')),
+        for (final option in options)
+          DropdownMenuItem<String?>(
+            value: option,
+            child: Text(option, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: readOnly ? null : (v) => controller.text = v ?? '',
+    );
+  }
 }

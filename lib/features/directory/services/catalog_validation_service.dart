@@ -380,6 +380,7 @@ class CatalogValidationService {
       equipment: activeEquipment,
       sharedPhonesByDepartmentId: sharedPhonesByDepartmentId,
     );
+    _addDepartmentBuildingFindings(findings, departments: departments);
     _addPhoneEquipmentCodeFindings(
       findings,
       users: activeUsers,
@@ -635,6 +636,42 @@ class CatalogValidationService {
               entityId: id,
               label: _departmentLabel(department),
               focusedField: 'name',
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Τμήματα χωρίς κτίριο.
+  ///
+  /// Το κτίριο δεν πληκτρολογείται πια — διαλέγεται από κοινό κατάλογο, και η
+  /// φόρμα δεν προσφέρει «κανένα». Άρα ένα κενό κτίριο σημαίνει ότι κάποια
+  /// απόφαση έμεινε στη μέση: σβήστηκε το κτίριο από τη λίστα, ή η μεταφορά
+  /// από τη Λάμπα το άφησε για αργότερα. Εδώ μαζεύονται όλα μαζί, με
+  /// μετάβαση στην καρτέλα του καθενός.
+  void _addDepartmentBuildingFindings(
+    List<CatalogValidationFinding> findings, {
+    required List<DepartmentModel> departments,
+  }) {
+    if (!rules.departmentBuildingEnabled) return;
+
+    for (final department in departments) {
+      final id = department.id;
+      if (id == null) continue;
+      if ((department.building ?? '').trim().isNotEmpty) continue;
+
+      findings.add(
+        CatalogValidationFinding(
+          type: CatalogFindingType.fieldHint,
+          fieldLabel: 'Κτίριο',
+          message: 'Δεν έχει κτίριο',
+          records: [
+            CatalogFindingRecord(
+              kind: CatalogEntityKind.department,
+              entityId: id,
+              label: _departmentLabel(department),
+              focusedField: 'building',
             ),
           ],
         ),

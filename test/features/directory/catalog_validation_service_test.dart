@@ -414,7 +414,10 @@ void main() {
     // Ο κανόνας των κενών τμημάτων ελέγχεται στο δικό του group· εδώ θα ήταν
     // θόρυβος, γιατί τα τεστ στήνουν τμήματα χωρίς εξαρτήματα επίτηδες.
     const service = CatalogValidationService(
-      CatalogValidationRules(emptyDepartmentEnabled: false),
+      CatalogValidationRules(
+        emptyDepartmentEnabled: false,
+        departmentBuildingEnabled: false,
+      ),
     );
 
     UserModel user({
@@ -556,6 +559,7 @@ void main() {
           departmentNameEnabled: false,
           personNameEnabled: false,
           emptyDepartmentEnabled: false,
+          departmentBuildingEnabled: false,
         ),
       );
       final findings = s.scan(
@@ -583,7 +587,74 @@ void main() {
     );
   });
 
+  group('scan — τμήματα χωρίς κτίριο', () {
+    // Ο κανόνας των κενών τμημάτων κλείνει: τα τμήματα εδώ στήνονται χωρίς
+    // εξαρτήματα, και θα πρόσθετε δικό του εύρημα σε κάθε έλεγχο.
+    const service = CatalogValidationService(
+      CatalogValidationRules(emptyDepartmentEnabled: false),
+    );
+
+    test('τμήμα χωρίς κτίριο: εύρημα με εστίαση στο πεδίο', () {
+      final findings = service.scan(
+        users: const [],
+        departments: [DepartmentModel(id: 10, name: 'Ακτινολογικό')],
+        equipment: const [],
+      );
+
+      expect(findings, hasLength(1));
+      final f = findings.single;
+      expect(f.fieldLabel, 'Κτίριο');
+      expect(f.message, 'Δεν έχει κτίριο');
+      expect(f.records.single.entityId, 10);
+      expect(f.records.single.focusedField, 'building');
+    });
+
+    test('κενό και σκέτα κενά μετράνε το ίδιο', () {
+      final findings = service.scan(
+        users: const [],
+        departments: [
+          DepartmentModel(id: 10, name: 'Ακτινολογικό', building: '   '),
+          DepartmentModel(id: 11, name: 'Αιμοδοσία', building: ''),
+        ],
+        equipment: const [],
+      );
+      expect(findings, hasLength(2));
+    });
+
+    test('τμήμα με κτίριο δεν δίνει εύρημα', () {
+      final findings = service.scan(
+        users: const [],
+        departments: [
+          DepartmentModel(id: 10, name: 'Ακτινολογικό', building: 'Καινούριο'),
+        ],
+        equipment: const [],
+      );
+      expect(findings, isEmpty);
+    });
+
+    test('ανενεργός κανόνας: τίποτα', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(
+          emptyDepartmentEnabled: false,
+          departmentBuildingEnabled: false,
+        ),
+      );
+      final findings = s.scan(
+        users: const [],
+        departments: [DepartmentModel(id: 10, name: 'Ακτινολογικό')],
+        equipment: const [],
+      );
+      expect(findings, isEmpty);
+    });
+  });
+
   group('scan — τμήματα χωρίς κανένα εξάρτημα', () {
+    // Ο κανόνας του κτιρίου κλείνει εδώ: τα τμήματα στήνονται χωρίς κτίριο
+    // επίτηδες, και θα πρόσθετε ένα εύρημα σε κάθε έλεγχο.
+    const service = CatalogValidationService(
+      CatalogValidationRules(departmentBuildingEnabled: false),
+    );
+
     UserModel user({required int id, int? departmentId}) {
       return UserModel(id: id, lastName: 'Ψαρρά', departmentId: departmentId);
     }
@@ -692,7 +763,10 @@ void main() {
 
     test('ανενεργός κανόνας: τίποτα', () {
       const s = CatalogValidationService(
-        CatalogValidationRules(emptyDepartmentEnabled: false),
+        CatalogValidationRules(
+          emptyDepartmentEnabled: false,
+          departmentBuildingEnabled: false,
+        ),
       );
       final findings = s.scan(
         users: const [],
@@ -707,7 +781,10 @@ void main() {
     // Ίδιος λόγος με το προηγούμενο group: τα σενάρια εδώ στήνουν τμήματα που
     // συχνά μένουν κενά, και το ζητούμενο είναι η διασταύρωση.
     const service = CatalogValidationService(
-      CatalogValidationRules(emptyDepartmentEnabled: false),
+      CatalogValidationRules(
+        emptyDepartmentEnabled: false,
+        departmentBuildingEnabled: false,
+      ),
     );
 
     UserModel user({
@@ -1146,7 +1223,10 @@ void main() {
 
       test('ανενεργός κανόνας: τίποτα', () {
         const s = CatalogValidationService(
-          CatalogValidationRules(crossDepartmentPhoneEnabled: false),
+          CatalogValidationRules(
+            crossDepartmentPhoneEnabled: false,
+            departmentBuildingEnabled: false,
+          ),
         );
         final findings = s.scan(
           users: [
@@ -1259,7 +1339,10 @@ void main() {
 
       test('ανενεργός κανόνας: τίποτα', () {
         const s = CatalogValidationService(
-          CatalogValidationRules(equipmentOwnerDepartmentEnabled: false),
+          CatalogValidationRules(
+            equipmentOwnerDepartmentEnabled: false,
+            departmentBuildingEnabled: false,
+          ),
         );
         final findings = s.scan(
           users: [user(id: 1, lastName: 'Ψαρρά', departmentId: 10)],
@@ -1419,7 +1502,10 @@ void main() {
     test('scan: πράκτορας-email → μέτρο σύγκρισης ο πλειοψηφικός τομέας — '
         'το 3gnk σημαίνεται', () {
       const s = CatalogValidationService(
-        CatalogValidationRules(emptyDepartmentEnabled: false),
+        CatalogValidationRules(
+          emptyDepartmentEnabled: false,
+          departmentBuildingEnabled: false,
+        ),
       );
       final findings = s.scan(
         users: [
@@ -1493,7 +1579,10 @@ void main() {
 
     test('scan: άκυρος λογαριασμός τμήματος → εύρημα με εστίαση στο πεδίο', () {
       const s = CatalogValidationService(
-        CatalogValidationRules(emptyDepartmentEnabled: false),
+        CatalogValidationRules(
+          emptyDepartmentEnabled: false,
+          departmentBuildingEnabled: false,
+        ),
       );
       final findings = s.scan(
         users: const [],
@@ -1516,7 +1605,10 @@ void main() {
 
     test('scan: έγκυρα αναγνωριστικά παντού → κανένα εύρημα', () {
       const s = CatalogValidationService(
-        CatalogValidationRules(emptyDepartmentEnabled: false),
+        CatalogValidationRules(
+          emptyDepartmentEnabled: false,
+          departmentBuildingEnabled: false,
+        ),
       );
       final findings = s.scan(
         users: [

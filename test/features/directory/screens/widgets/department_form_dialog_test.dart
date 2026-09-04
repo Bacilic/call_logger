@@ -6,12 +6,14 @@
 //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "μικτή σύγκρουση"
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/services/lansweeper_department_accounts.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
+import 'package:call_logger/core/services/settings_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
-import 'package:call_logger/core/widgets/lexicon_spell_text_form_field.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
+import 'package:call_logger/features/directory/providers/building_catalog_provider.dart';
 import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
 import 'package:call_logger/features/directory/screens/widgets/department_form_dialog.dart';
 import 'package:flutter/material.dart';
@@ -60,7 +62,41 @@ Finder _fieldByLabel(String label) {
   );
 }
 
-Finder _buildingField() => _fieldByLabel('Κτίριο');
+/// Το «Κτίριο» δεν πληκτρολογείται πια — διαλέγεται από τον κοινό κατάλογο.
+Finder _buildingDropdown() => find.byType(DropdownButtonFormField<String?>);
+
+/// Ανοίγει τη λίστα κτιρίων και διαλέγει το [name].
+Future<void> _selectBuilding(WidgetTester tester, String name) async {
+  await tester.ensureVisible(_buildingDropdown());
+  await tester.tap(_buildingDropdown());
+  await pumpUntilSettled(tester);
+  await tester.tap(find.text(name).last);
+  await pumpUntilSettled(tester);
+}
+
+/// Ορίζει τον κοινό κατάλογο κτιρίων της βάσης του τεστ.
+///
+/// Χωρίς δηλωμένο πάροχο `app_settings` ο κατάλογος θα ήταν κενός και το
+/// πεδίο δεν θα είχε τίποτα να προσφέρει — όπως ακριβώς και στην εφαρμογή.
+Future<void> _seedBuildingCatalog(List<String> buildings) async {
+  final db = await DatabaseHelper.instance.database;
+  SettingsService.registerAppSettingsProvider(
+    (key) => SettingsRepository(db).getSetting(key),
+    (key, value) => SettingsRepository(db).saveSetting(key, value),
+    (key, change) => SettingsRepository(db).updateSetting(key, change),
+  );
+  await SettingsService().catalogs.setBuildingCatalog(
+    buildings.join(', '),
+    expected: null,
+  );
+}
+
+/// Φορτώνει τον κατάλογο **πριν** χτιστεί η φόρμα.
+///
+/// Ο πάροχος διαβάζει τη βάση, άρα θέλει πραγματικό I/O: μέσα στο pump του
+/// τεστ δεν προχωρά ποτέ, και το πεδίο θα έμενε για πάντα «Φόρτωση κτιρίων…».
+Future<void> _warmBuildingCatalog(ProviderContainer container) =>
+    container.read(buildingCatalogProvider.future);
 
 Finder _departmentNameField() => _fieldByLabel('Όνομα');
 
@@ -419,6 +455,9 @@ void main() {
 
     setUp(() async {
       deptId = await _seedFantasmaMixedSharedAssetsScenario();
+      // Η «αλλαγή κτιρίου» είναι πια επιλογή από τον κατάλογο, όχι κείμενο:
+      // χωρίς κατάλογο δεν υπάρχει τίποτα να διαλέξει ο χρήστης.
+      await _seedBuildingCatalog(['Καινούριο', 'Παλιό']);
     });
 
     testWidgets(
@@ -434,6 +473,8 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(departmentDirectoryProvider.notifier);
           await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _warmBuildingCatalog(container);
           await _openDepartmentFormInDialog(
             tester,
             container,
@@ -467,6 +508,8 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(departmentDirectoryProvider.notifier);
           await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _warmBuildingCatalog(container);
           await _openDepartmentFormInDialog(
             tester,
             container,
@@ -479,8 +522,7 @@ void main() {
           );
         });
 
-        await tester.enterText(_buildingField(), 'Νέο κτίριο');
-        await pumpUntilSettled(tester);
+        await _selectBuilding(tester, 'Καινούριο');
         await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση'));
         await pumpUntilSettled(tester);
 
@@ -509,6 +551,8 @@ void main() {
         await container.read(lookupServiceProvider.future);
         notifier = container.read(departmentDirectoryProvider.notifier);
         await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
         await _openDepartmentFormInDialog(
           tester,
           container,
@@ -521,8 +565,7 @@ void main() {
         );
       });
 
-      await tester.enterText(_buildingField(), 'Νέο κτίριο');
-      await pumpUntilSettled(tester);
+      await _selectBuilding(tester, 'Καινούριο');
       await tester.tapAt(const Offset(8, 8));
       await pumpUntilSettled(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Επεξεργασία').last);
@@ -530,7 +573,7 @@ void main() {
 
       expect(find.text(_kUnsavedChangesPrompt), findsNothing);
       expect(find.text(_kDepartmentFormTitle), findsOneWidget);
-      expect(find.textContaining('Νέο κτίριο'), findsOneWidget);
+      expect(find.text('Καινούριο'), findsWidgets);
     });
 
     testWidgets('επεξεργασία με αλλαγή: «Ακύρωση Αλλαγών» κλείνει τη φόρμα', (
@@ -553,6 +596,8 @@ void main() {
         await container.read(lookupServiceProvider.future);
         notifier = container.read(departmentDirectoryProvider.notifier);
         await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
         await _openDepartmentFormInDialog(
           tester,
           container,
@@ -565,8 +610,7 @@ void main() {
         );
       });
 
-      await tester.enterText(_buildingField(), 'Νέο κτίριο');
-      await pumpUntilSettled(tester);
+      await _selectBuilding(tester, 'Καινούριο');
       await tester.tapAt(const Offset(8, 8));
       await pumpUntilSettled(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Ακύρωση Αλλαγών'));
@@ -588,6 +632,8 @@ void main() {
         await container.read(lookupServiceProvider.future);
         notifier = container.read(departmentDirectoryProvider.notifier);
         await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
         await _openDepartmentFormInDialog(
           tester,
           container,
@@ -616,6 +662,8 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(departmentDirectoryProvider.notifier);
           await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _warmBuildingCatalog(container);
           await _openDepartmentFormInDialog(
             tester,
             container,
@@ -653,6 +701,8 @@ void main() {
         await container.read(lookupServiceProvider.future);
         notifier = container.read(departmentDirectoryProvider.notifier);
         await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
         await _openDepartmentFormInDialog(
           tester,
           container,
@@ -693,6 +743,8 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(departmentDirectoryProvider.notifier);
           await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _warmBuildingCatalog(container);
           await _openDepartmentFormInDialog(
             tester,
             container,
@@ -705,8 +757,7 @@ void main() {
           );
         });
 
-        await tester.enterText(_buildingField(), 'Barrier test');
-        await pumpUntilSettled(tester);
+        await _selectBuilding(tester, 'Καινούριο');
         await tester.tapAt(const Offset(8, 8));
         await pumpUntilSettled(tester);
 
@@ -716,11 +767,11 @@ void main() {
     );
   });
 
-  group('Φόρμα τμήματος — ορθογραφικός έλεγχος', () {
-    // Ο εγγενής ορθογραφικός έλεγχος είναι απενεργοποιημένος στα Windows· το
-    // πεδίο πρέπει να χρησιμοποιεί το πεδίο-συστατικό του Λεξικού.
+  group('Φόρμα τμήματος — το Κτίριο διαλέγεται από τον κατάλογο', () {
     //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "Κτίριο"
-    testWidgets('το «Κτίριο» έχει ορθογραφικό έλεγχο Λεξικού', (tester) async {
+    testWidgets('προσφέρει τα κτίρια του καταλόγου και τίποτα άλλο', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1600, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -736,26 +787,157 @@ void main() {
       late DepartmentDirectoryNotifier notifier;
       await tester.runAsync(() async {
         await seedIsolatedTestDatabase();
+        await _seedBuildingCatalog(['Καινούριο', 'Παλιό']);
         await container.read(lookupServiceProvider.future);
         notifier = container.read(departmentDirectoryProvider.notifier);
         await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
         await _openDepartmentFormInDialog(
           tester,
           container,
           notifier: notifier,
         );
       });
+      await pumpUntilSettled(tester);
 
-      final buildingField = find.ancestor(
-        of: find.text('Κτίριο'),
-        matching: find.byType(LexiconSpellTextFormField),
-      );
+      await tester.ensureVisible(_buildingDropdown());
+      await tester.tap(_buildingDropdown());
+      await pumpUntilSettled(tester);
+
+      expect(find.text('Καινούριο'), findsWidgets);
+      expect(find.text('Παλιό'), findsWidgets);
       expect(
-        buildingField,
-        findsOneWidget,
+        find.byWidgetPredicate(
+          (w) => w is DropdownMenuItem<String?> && w.value == null,
+        ),
+        findsNothing,
         reason:
-            'Το «Κτίριο» πρέπει να χρησιμοποιεί LexiconSpellTextFormField — ο '
-            'εγγενής έλεγχος των Windows δεν λειτουργεί ποτέ',
+            'Κλειστή λίστα: το κενό δεν επιλέγεται από τη φόρμα — τα τμήματα '
+            'χωρίς κτίριο τα βγάζει ο «Έλεγχος δεδομένων»',
+      );
+
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+
+    testWidgets('η επιλογή γράφεται στη βάση', (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      const deptName = 'BuildingChoiceDept';
+      late int deptId;
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await seedIsolatedTestDatabase();
+        await _seedBuildingCatalog(['Καινούριο', 'Παλιό']);
+        final db = await DatabaseHelper.instance.database;
+        deptId = await db.insert('departments', {
+          'name': deptName,
+          'name_key': SearchTextNormalizer.normalizeForSearch(deptName),
+          'color': '#1976D2',
+          'is_deleted': 0,
+        });
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          initialDepartment: DepartmentModel(
+            id: deptId,
+            name: deptName,
+            color: '#1976D2',
+          ),
+          notifier: notifier,
+        );
+      });
+      await pumpUntilSettled(tester);
+
+      await _selectBuilding(tester, 'Παλιό');
+
+      final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await pumpUntilSettled(tester);
+      await _pumpUntilDepartmentSaveCompletes(tester);
+
+      final building = await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        final rows = await db.query(
+          'departments',
+          columns: ['building'],
+          where: 'id = ?',
+          whereArgs: [deptId],
+          limit: 1,
+        );
+        return rows.single['building'] as String?;
+      });
+      expect(
+        building,
+        'Παλιό',
+        reason: greekExpectMsg('Η επιλογή κτιρίου γράφεται στη βάση'),
+      );
+
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+
+    testWidgets('κτίριο εκτός καταλόγου δεν εξαφανίζεται από τη φόρμα', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await seedIsolatedTestDatabase();
+        await _seedBuildingCatalog(['Καινούριο']);
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          initialDepartment: DepartmentModel(
+            id: 4242,
+            name: 'OutOfCatalogDept',
+            color: '#1976D2',
+            building: 'Πτέρυγα Γ',
+          ),
+          notifier: notifier,
+        );
+      });
+      await pumpUntilSettled(tester);
+
+      expect(
+        find.text('Πτέρυγα Γ'),
+        findsWidgets,
+        reason:
+            'Τιμή που λείπει από τον κατάλογο μένει ορατή — αλλιώς ένα '
+            'άνοιγμα-και-αποθήκευση θα την έσβηνε σιωπηλά',
       );
 
       await flushCallLoggerSqfliteLockTimers(tester);
@@ -803,6 +985,8 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(departmentDirectoryProvider.notifier);
           await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _warmBuildingCatalog(container);
           await _openDepartmentFormInDialog(
             tester,
             container,
@@ -887,77 +1071,81 @@ void main() {
       await LookupService.instance.loadFromDatabase();
     });
 
-    testWidgets(
-      'επεξεργασία: το άδειασμα Κτιρίου και Σημειώσεων γράφεται στη βάση',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    // Το Κτίριο δεν αδειάζει πια από τη φόρμα: είναι κλειστή λίστα χωρίς
+    // «κανένα». Το άδειασμα γίνεται ρητά, από τη διαγραφή του κτιρίου στον
+    // κατάλογο (Διάφορα → Τμήματα) — και το φυλάει το
+    // test/features/directory/building_catalog_test.dart.
+    testWidgets('επεξεργασία: το άδειασμα Σημειώσεων γράφεται στη βάση', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
-        );
-        addTearDown(container.dispose);
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
 
-        late DepartmentDirectoryNotifier notifier;
-        await tester.runAsync(() async {
-          await container.read(lookupServiceProvider.future);
-          notifier = container.read(departmentDirectoryProvider.notifier);
-          await notifier.loadDepartments();
-          await _openDepartmentFormInDialog(
-            tester,
-            container,
-            initialDepartment: DepartmentModel(
-              id: deptId,
-              name: deptName,
-              color: '#1976D2',
-              building: 'Κτίριο Α',
-              notes: 'Παλιές σημειώσεις',
-            ),
-            notifier: notifier,
-          );
-        });
-
-        expect(find.text(_kDepartmentFormTitle), findsOneWidget);
-
-        await tester.enterText(_buildingField(), '');
-        await tester.enterText(_fieldByLabel('Σημειώσεις'), '');
-        await pumpUntilSettled(tester);
-
-        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
-        await tester.ensureVisible(saveButton);
-        await tester.tap(saveButton);
-        await pumpUntilSettled(tester);
-        await _pumpUntilDepartmentSaveCompletes(tester);
-
-        final row = await tester.runAsync(() async {
-          final db = await DatabaseHelper.instance.database;
-          final rows = await db.query(
-            'departments',
-            columns: ['building', 'notes'],
-            where: 'id = ?',
-            whereArgs: [deptId],
-            limit: 1,
-          );
-          return rows.single;
-        });
-        expect(
-          (row!['building'] as String?) ?? '',
-          isEmpty,
-          reason: greekExpectMsg('Το άδειασμα του Κτιρίου γράφεται στη βάση'),
-        );
-        expect(
-          (row['notes'] as String?) ?? '',
-          isEmpty,
-          reason: greekExpectMsg(
-            'Το άδειασμα των Σημειώσεων γράφεται στη βάση',
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          initialDepartment: DepartmentModel(
+            id: deptId,
+            name: deptName,
+            color: '#1976D2',
+            building: 'Κτίριο Α',
+            notes: 'Παλιές σημειώσεις',
           ),
+          notifier: notifier,
         );
-      },
-    );
+      });
+
+      expect(find.text(_kDepartmentFormTitle), findsOneWidget);
+
+      await tester.enterText(_fieldByLabel('Σημειώσεις'), '');
+      await pumpUntilSettled(tester);
+
+      final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await pumpUntilSettled(tester);
+      await _pumpUntilDepartmentSaveCompletes(tester);
+
+      final row = await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        final rows = await db.query(
+          'departments',
+          columns: ['building', 'notes'],
+          where: 'id = ?',
+          whereArgs: [deptId],
+          limit: 1,
+        );
+        return rows.single;
+      });
+      expect(
+        (row!['building'] as String?) ?? '',
+        'Κτίριο Α',
+        reason: greekExpectMsg(
+          'Το Κτίριο μένει ως έχει — η φόρμα δεν το αδειάζει',
+        ),
+      );
+      expect(
+        (row['notes'] as String?) ?? '',
+        isEmpty,
+        reason: greekExpectMsg('Το άδειασμα των Σημειώσεων γράφεται στη βάση'),
+      );
+    });
   });
 
   group('Φόρμα τμήματος — αναγνωριστικά Lansweeper', () {
@@ -1016,6 +1204,8 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(departmentDirectoryProvider.notifier);
           await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _warmBuildingCatalog(container);
           await _openDepartmentFormInDialog(
             tester,
             container,
@@ -1082,6 +1272,8 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(departmentDirectoryProvider.notifier);
           await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _warmBuildingCatalog(container);
           await _openDepartmentFormInDialog(
             tester,
             container,
@@ -1156,6 +1348,8 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(departmentDirectoryProvider.notifier);
           await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _warmBuildingCatalog(container);
           await _openDepartmentFormInDialog(
             tester,
             container,
@@ -1218,6 +1412,8 @@ void main() {
         await container.read(lookupServiceProvider.future);
         notifier = container.read(departmentDirectoryProvider.notifier);
         await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
         await _openDepartmentFormInDialog(
           tester,
           container,
@@ -1289,6 +1485,8 @@ void main() {
         await container.read(lookupServiceProvider.future);
         notifier = container.read(departmentDirectoryProvider.notifier);
         await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
         await _openDepartmentFormInDialog(
           tester,
           container,
@@ -1344,6 +1542,7 @@ void main() {
         'is_deleted': 0,
         'map_hidden': 1,
       });
+      await _seedBuildingCatalog(['Καινούριο']);
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
     });
@@ -1363,6 +1562,8 @@ void main() {
           await container.read(lookupServiceProvider.future);
           notifier = container.read(departmentDirectoryProvider.notifier);
           await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _warmBuildingCatalog(container);
           await _openDepartmentFormInDialog(
             tester,
             container,
@@ -1376,8 +1577,7 @@ void main() {
           );
         });
 
-        await tester.enterText(_buildingField(), 'Κτίριο Α');
-        await tester.pump();
+        await _selectBuilding(tester, 'Καινούριο');
 
         final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
         await tester.ensureVisible(saveButton);

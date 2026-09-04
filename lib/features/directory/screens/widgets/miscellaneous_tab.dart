@@ -6,6 +6,7 @@ import '../../providers/remote_tools_view_intent_provider.dart';
 import '../../../operators/screens/operators_management_view.dart';
 import '../../../settings/screens/remote_tools_management_screen.dart';
 import 'categories_tab.dart';
+import 'departments_settings_view.dart';
 import 'servers_management_view.dart';
 import 'validation_rules_view.dart';
 
@@ -16,6 +17,7 @@ enum MiscView {
   validationRules,
   operators,
   servers,
+  departments,
 }
 
 /// Καρτέλα «Διάφορα»: κεντρικό hub με πλοήγηση σε υπο-οθόνες.
@@ -57,7 +59,8 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
         if (_view == MiscView.categories ||
             _view == MiscView.validationRules ||
             _view == MiscView.operators ||
-            _view == MiscView.servers)
+            _view == MiscView.servers ||
+            _view == MiscView.departments)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
             child: Row(
@@ -87,6 +90,7 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
             MiscView.validationRules => const ValidationRulesView(),
             MiscView.operators => const OperatorsManagementView(),
             MiscView.servers => const ServersManagementView(),
+            MiscView.departments => const DepartmentsSettingsView(),
             MiscView.dashboard => const SizedBox.shrink(),
           },
         ),
@@ -122,6 +126,15 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
                   title: 'Απομακρυσμένα Εργαλεία',
                   assetPath: 'assets/remote_tools.png',
                   onTap: () => setState(() => _view = MiscView.remoteTools),
+                ),
+              ),
+              SizedBox(
+                width: cardWidth.clamp(280.0, 520.0),
+                child: _HubNavCard(
+                  title: 'Τμήματα',
+                  assetPath: 'assets/departments_settings.png',
+                  fallbackIcon: Icons.apartment_outlined,
+                  onTap: () => setState(() => _view = MiscView.departments),
                 ),
               ),
               SizedBox(

@@ -12,7 +12,6 @@ import '../../../../core/database/audit_diff_helper.dart';
 import '../../../../core/database/audit_service.dart';
 import '../../../../core/services/save_confirmation_summary.dart';
 import '../../../../core/widgets/audit_summary_rich_text.dart';
-import '../../../../core/services/settings_service.dart';
 import '../../../../core/utils/name_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
@@ -30,6 +29,7 @@ import '../../models/equipment_location_field_state.dart';
 import '../../models/full_location_breadcrumb.dart';
 import '../../providers/catalog_validation_provider.dart';
 import '../../providers/equipment_directory_provider.dart';
+import '../../providers/equipment_types_provider.dart';
 import 'catalog_validation_hint_text.dart';
 import 'equipment_location_follow_row.dart';
 import 'full_location_line.dart';
@@ -475,6 +475,38 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     equipmentCode: codeController.text,
   )?.value;
 
+  /// Ο «Τύπος» ως επιλογή από τον κοινό κατάλογο.
+  ///
+  /// Η λίστα έρχεται από τον [equipmentTypesProvider], που τη διαβάζει **μία
+  /// φορά**: όσο το αίτημα φτιαχνόταν εδώ μέσα, κάθε πλήκτρο στον διπλανό
+  /// «Κωδικό» ξεκινούσε νέο ερώτημα στη βάση.
+  Widget _buildTypeField() {
+    final typesAsync = ref.watch(equipmentTypesProvider);
+    // Όσο φορτώνει, η λίστα είναι άδεια — η αποθηκευμένη τιμή μπαίνει από
+    // κάτω, οπότε το πεδίο δείχνει πάντα τι έχει ο εξοπλισμός.
+    var options = typesAsync.asData?.value ?? const <String>[];
+    if (selectedType != null &&
+        selectedType!.trim().isNotEmpty &&
+        !options.contains(selectedType)) {
+      options = [selectedType!, ...options];
+    }
+    return DropdownButtonFormField<String?>(
+      initialValue: selectedType,
+      focusNode: _typeFocusNode,
+      decoration: const InputDecoration(
+        labelText: 'Τύπος',
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        ...options.map(
+          (o) => DropdownMenuItem<String?>(value: o, child: Text(o)),
+        ),
+        const DropdownMenuItem<String?>(value: null, child: Text('Κανένας')),
+      ],
+      onChanged: (v) => setState(() => selectedType = v),
+    );
+  }
+
   /// null, κενό ή "Κανένα" → null· αλλιώς επιστρέφει το trim string.
   String? _requiredValidator(String? v) =>
       (v?.trim().isEmpty ?? true) ? 'Υποχρεωτικό' : null;
@@ -746,43 +778,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: FutureBuilder<List<String>>(
-                            future: SettingsService().catalogs
-                                .getEquipmentTypesList(),
-                            builder: (context, snapshot) {
-                              var options =
-                                  snapshot.data ?? ['Υπολογιστής', 'Εκτυπωτής'];
-                              if (selectedType != null &&
-                                  selectedType!.trim().isNotEmpty &&
-                                  !options.contains(selectedType)) {
-                                options = [selectedType!, ...options];
-                              }
-                              return DropdownButtonFormField<String?>(
-                                initialValue: selectedType,
-                                focusNode: _typeFocusNode,
-                                decoration: const InputDecoration(
-                                  labelText: 'Τύπος',
-                                  border: OutlineInputBorder(),
-                                ),
-                                items: [
-                                  ...options.map(
-                                    (o) => DropdownMenuItem<String?>(
-                                      value: o,
-                                      child: Text(o),
-                                    ),
-                                  ),
-                                  const DropdownMenuItem<String?>(
-                                    value: null,
-                                    child: Text('Κανένας'),
-                                  ),
-                                ],
-                                onChanged: (v) =>
-                                    setState(() => selectedType = v),
-                              );
-                            },
-                          ),
-                        ),
+                        Expanded(child: _buildTypeField()),
                       ],
                     ),
                     const SizedBox(height: 12),

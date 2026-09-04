@@ -3,6 +3,7 @@ import 'package:call_logger/features/lamp/services/lamp_migration_service.dart';
 import 'package:call_logger/features/lamp/services/lamp_transfer_preview.dart';
 import 'package:call_logger/features/lamp/widgets/lamp_transfer_operations_preview_panel.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -303,14 +304,18 @@ class _ReactiveFormHarnessState extends State<_ReactiveFormHarness> {
       departmentExistsCheck: (_) => false,
     );
 
-    return LampTransferMigrationForm(
-      target: widget.draft.target,
-      preview: preview,
-      controllers: _controllers,
-      saving: false,
-      saveLabel: 'Δημιουργία',
-      onCancel: () {},
-      onSave: widget.onSave ?? () {},
+    // Το «Κτίριο» διαλέγεται από τον κοινό κατάλογο, άρα η φόρμα διαβάζει
+    // provider — χωρίς σκηνή Riverpod δεν χτίζεται καθόλου.
+    return ProviderScope(
+      child: LampTransferMigrationForm(
+        target: widget.draft.target,
+        preview: preview,
+        controllers: _controllers,
+        saving: false,
+        saveLabel: 'Δημιουργία',
+        onCancel: () {},
+        onSave: widget.onSave ?? () {},
+      ),
     );
   }
 }

@@ -99,6 +99,29 @@ class _DatabaseSettingsBackupTabState
   String _currentDbPath = '';
   Future<int> _pendingChangesFuture = Future.value(0);
 
+  /// Τι υπάρχει διαθέσιμο για πλήρες αντίγραφο, ελεγμένο **μία φορά** ανά
+  /// κατάσταση λεξικού.
+  ///
+  /// Ο έλεγχος σαρώνει τρεις φακέλους (κατόψεις, εικόνες εργαλείων, βάση
+  /// Λάμπας). Όσο το αίτημα φτιαχνόταν μέσα στο χτίσιμο της καρτέλας, κάθε
+  /// πάτημα διακόπτη τους ξανασάρωνε όλους — και ο φάκελος της βάσης είναι
+  /// συχνά δικτυακός.
+  bool? _availabilityForLexiconLoaded;
+  Future<PortableBackupAvailability>? _portableAvailabilityFuture;
+
+  Future<PortableBackupAvailability> _portableAvailability({
+    required bool lexiconLoaded,
+  }) {
+    if (_availabilityForLexiconLoaded != lexiconLoaded ||
+        _portableAvailabilityFuture == null) {
+      _availabilityForLexiconLoaded = lexiconLoaded;
+      _portableAvailabilityFuture = PortableBackupAvailability.load(
+        lexiconLoaded: lexiconLoaded,
+      );
+    }
+    return _portableAvailabilityFuture!;
+  }
+
   final FocusNode _destinationFocus = FocusNode();
   final FocusNode _maxCopiesFocus = FocusNode();
   final FocusNode _maxAgeFocus = FocusNode();
@@ -1153,7 +1176,7 @@ class _DatabaseSettingsBackupTabState
               ),
             ),
             FutureBuilder<PortableBackupAvailability>(
-              future: PortableBackupAvailability.load(
+              future: _portableAvailability(
                 lexiconLoaded: ref.watch(coreLexiconProvider).loaded,
               ),
               builder: (context, snapshot) {

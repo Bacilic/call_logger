@@ -8,11 +8,13 @@ import '../../features/calls/provider/lookup_provider.dart';
 import '../../features/calls/provider/smart_entity_selector_provider.dart';
 import '../../features/database/debug/integrity_debug_provider_refresh.dart';
 import '../../features/database/providers/database_browser_stats_provider.dart';
+import '../../features/directory/providers/building_catalog_provider.dart';
 import '../../features/directory/providers/catalog_validation_provider.dart';
 import '../../features/directory/providers/category_directory_provider.dart';
 import '../../features/directory/providers/department_directory_provider.dart';
 import '../../features/directory/providers/directory_provider.dart';
 import '../../features/directory/providers/equipment_directory_provider.dart';
+import '../../features/directory/providers/equipment_types_provider.dart';
 import '../../features/tasks/providers/task_service_provider.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../database/active_database_generation.dart';
@@ -64,6 +66,11 @@ void invalidateDatabaseScopedCaches(WidgetRef ref) {
     ref.invalidate(departmentDirectoryProvider);
     ref.invalidate(equipmentDirectoryProvider);
     ref.invalidate(categoryDirectoryProvider);
+    // Οι κοινοί κατάλογοι (τύποι εξοπλισμού, κτίρια) ζουν στο app_settings
+    // της βάσης — η νέα βάση έχει τους δικούς της.
+    ref.invalidate(equipmentTypesProvider);
+    ref.invalidate(buildingCatalogProvider);
+    ref.invalidate(buildingUsageProvider);
     // Οι κανόνες επικύρωσης ζουν στο app_settings της βάσης — η νέα βάση
     // έχει τους δικούς της. Ο [catalogValidationServiceProvider] τους
     // παρακολουθεί με watch, οπότε η ακύρωση συνοδεύεται ΑΜΕΣΑ από ξέπλυμα

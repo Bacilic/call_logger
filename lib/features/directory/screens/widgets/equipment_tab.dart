@@ -19,6 +19,7 @@ import '../../../calls/models/user_model.dart';
 import '../../models/equipment_column.dart';
 import '../../providers/directory_provider.dart';
 import '../../providers/equipment_directory_provider.dart';
+import '../../providers/equipment_types_provider.dart';
 import '../../providers/bulk_action_undo_provider.dart';
 import '../../../../core/database/equipment_deletion_summary_repository.dart';
 import 'bulk_equipment_edit_dialog.dart';
@@ -158,6 +159,9 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
                     final saved = await showEquipmentSettingsDialog(context);
                     if (!context.mounted) return;
                     if (saved) {
+                      // Η λίστα διαβάζεται μία φορά και κρατιέται· η ανανέωση
+                      // είναι ρητή, εδώ, ώστε η επόμενη φόρμα να δει τη νέα.
+                      ref.invalidate(equipmentTypesProvider);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Οι τύποι εξοπλισμού αποθηκεύτηκαν.'),
