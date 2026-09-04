@@ -43,6 +43,14 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
   bool _working = false;
   String? _error;
 
+  /// Ο διακομιστής δέχτηκε τη σύνδεση αλλά αρνήθηκε την ενέργεια.
+  ///
+  /// Είναι θέμα δικαιωμάτων του λογαριασμού σε **αυτόν** τον διακομιστή, όχι
+  /// της συγκεκριμένης συνεδρίας: η επόμενη προσπάθεια θα σκάσει το ίδιο.
+  /// Όσο ισχύει, τα δύο κουμπιά ενεργειών σβήνουν — αλλιώς μοιάζουν με λύση
+  /// ακριβώς τη στιγμή που το μήνυμα από πάνω λέει ότι απέτυχαν.
+  bool _actionsDenied = false;
+
   /// Το όνομα σταθμού που αντιστοιχεί σε αυτόν τον εξοπλισμό (π.χ. `PC3414`).
   String _stationName = '';
 
@@ -90,6 +98,7 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
       _loading = true;
       _error = null;
       _plan = null;
+      _actionsDenied = false;
     });
 
     final result = await ref
@@ -146,7 +155,12 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
     setState(() => _working = false);
 
     if (!result.ok) {
-      setState(() => _error = result.error);
+      setState(() {
+        _error = result.error;
+        // Η άρνηση δεν είναι της συνεδρίας αλλά του διακομιστή: κάθε επόμενη
+        // προσπάθεια θα σκάσει το ίδιο, οπότε τα κουμπιά σβήνουν.
+        _actionsDenied = result.isAccessDenied;
+      });
       return;
     }
 
@@ -192,7 +206,12 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
     setState(() => _working = false);
 
     if (!result.ok) {
-      setState(() => _error = result.error);
+      setState(() {
+        _error = result.error;
+        // Η άρνηση δεν είναι της συνεδρίας αλλά του διακομιστή: κάθε επόμενη
+        // προσπάθεια θα σκάσει το ίδιο, οπότε τα κουμπιά σβήνουν.
+        _actionsDenied = result.isAccessDenied;
+      });
       return;
     }
 
@@ -374,7 +393,11 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
             label: const Text('Ανανέωση'),
           ),
           FilledButton.icon(
-            onPressed: _selectedSessionId == null || _working || _loading
+            onPressed:
+                _selectedSessionId == null ||
+                    _working ||
+                    _loading ||
+                    _actionsDenied
                 ? null
                 : _disconnect,
             icon: const Icon(Icons.cast_connected_outlined, size: 18),
@@ -384,7 +407,11 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
             style: OutlinedButton.styleFrom(
               foregroundColor: theme.colorScheme.error,
             ),
-            onPressed: _selectedSessionId == null || _working || _loading
+            onPressed:
+                _selectedSessionId == null ||
+                    _working ||
+                    _loading ||
+                    _actionsDenied
                 ? null
                 : _logoff,
             icon: const Icon(Icons.logout, size: 18),
@@ -474,7 +501,31 @@ class _UserLogoffDialogState extends ConsumerState<_UserLogoffDialog> {
             children: [
               Icon(Icons.error_outline, color: theme.colorScheme.error),
               const SizedBox(width: 10),
-              Expanded(child: SelectableText(error)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SelectableText(error),
+                    // Λέγεται μόνο όταν τα κουμπιά όντως σβήνουν, ώστε ο
+                    // χειριστής να μην τα ψάχνει νομίζοντας ότι κόλλησαν.
+                    if (_actionsDenied) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        'Οι ενέργειες σε συνεδρίες αυτού του διακομιστή δεν '
+                        'είναι διαθέσιμες με τον λογαριασμό που έχει '
+                        'καταχωρηθεί: η ανάγνωση της λίστας περνά, το κλείσιμο '
+                        'και η αποσύνδεση όχι. Δοκίμασε άλλον διακομιστή από '
+                        'τον επιλογέα, ή διόρθωσε τα δικαιώματα του '
+                        'λογαριασμού πάνω στον διακομιστή.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
         ),

@@ -9,6 +9,7 @@
 
 import 'package:call_logger/core/models/managed_server.dart';
 import 'package:call_logger/core/services/server_sessions/logoff_target_resolution.dart';
+import 'package:call_logger/core/services/server_sessions/server_session_messages.dart';
 import 'package:call_logger/core/services/server_sessions/server_session_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -115,6 +116,34 @@ void main() {
       );
 
       expect(choice.server?.id, 7);
+    });
+  });
+
+  group('Αποτέλεσμα ενέργειας', () {
+    test('η άρνηση πρόσβασης αναγνωρίζεται από τον κωδικό της', () {
+      // Είναι η διαφορά ανάμεσα σε «ξαναδοκίμασε» και «μην το ξαναδοκιμάσεις»:
+      // η άρνηση αφορά τα δικαιώματα στον διακομιστή, όχι τη συνεδρία.
+      const denied = SessionLogoffResult.failure(
+        'άρνηση',
+        code: ServerSessionMessages.errorAccessDenied,
+      );
+
+      expect(denied.isAccessDenied, isTrue);
+    });
+
+    test('άλλη αποτυχία δεν περνά για άρνηση πρόσβασης', () {
+      const timeout = SessionLogoffResult.failure('δεν απάντησε');
+      const gone = SessionLogoffResult.failure(
+        'χάθηκε',
+        code: ServerSessionMessages.errorCtxWinstationNotFound,
+      );
+
+      expect(timeout.isAccessDenied, isFalse);
+      expect(gone.isAccessDenied, isFalse);
+    });
+
+    test('η επιτυχία δεν είναι ποτέ άρνηση', () {
+      expect(const SessionLogoffResult.success().isAccessDenied, isFalse);
     });
   });
 

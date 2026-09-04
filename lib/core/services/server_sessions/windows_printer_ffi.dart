@@ -723,6 +723,39 @@ abstract final class WindowsPrinterFfi {
     }
   }
 
+  /// Επιτρέπεται η **διαχείριση** μιας υπηρεσίας, χωρίς να την πειράξουμε;
+  ///
+  /// Ζητά από τα Windows να ανοίξουν την υπηρεσία με δικαίωμα διακοπής και
+  /// εκκίνησης, και **σταματά εκεί**: το άνοιγμα από μόνο του απαντά αν ο
+  /// λογαριασμός έχει τα δικαιώματα. Καμία εντολή δεν στέλνεται, καμία ουρά
+  /// δεν σταματά — γι' αυτό ο έλεγχος μπορεί να τρέχει σε ζωντανό διακομιστή.
+  static ({bool ok, int code}) probeServiceControl({
+    required String host,
+    required String serviceName,
+  }) {
+    _warmUp();
+    final machinePtr = '\\\\$host'.toNativeUtf16();
+    final namePtr = serviceName.toNativeUtf16();
+    var scm = 0;
+    var service = 0;
+    try {
+      scm = _openScManager(machinePtr, nullptr, _scManagerConnect);
+      if (scm == 0) return (ok: false, code: _getLastError());
+      service = _openService(
+        scm,
+        namePtr,
+        _serviceQueryStatus | _serviceStart | _serviceStop,
+      );
+      if (service == 0) return (ok: false, code: _getLastError());
+      return (ok: true, code: 0);
+    } finally {
+      if (service != 0) _closeServiceHandle(service);
+      if (scm != 0) _closeServiceHandle(scm);
+      calloc.free(machinePtr);
+      calloc.free(namePtr);
+    }
+  }
+
   /// Η τρέχουσα κατάσταση μιας υπηρεσίας σε απομακρυσμένο μηχάνημα.
   static ({bool ok, int code, int state}) serviceState({
     required String host,

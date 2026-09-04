@@ -5,14 +5,31 @@ String databaseSwitchSuccessMessage(String databasePath) =>
     'Έγινε με επιτυχία η αλλαγή βάσης: $databasePath';
 
 /// Ποια λωρίδα βάσης ζωγραφίζεται στην κορυφή του κελύφους.
-enum TopDatabaseBanner { none, warning, success }
+enum TopDatabaseBanner {
+  none,
 
-/// Η κίτρινη προειδοποίηση ΥΠΕΡΙΣΧΥΕΙ πάντα της πράσινης επιβεβαίωσης,
-/// και οι δύο λωρίδες ΔΕΝ εμφανίζονται ποτέ μαζί.
+  /// Η βάση έπαψε να απαντά — τίποτα από όσα βλέπει ο χειριστής δεν είναι
+  /// αξιόπιστο όσο διαρκεί.
+  unreachable,
+
+  warning,
+  success,
+}
+
+/// **Η σειρά προτεραιότητας είναι η ουσία αυτής της συνάρτησης.**
+///
+/// Η χαμένη βάση υπερισχύει των πάντων: όσο δεν απαντά το αρχείο, μια
+/// προειδοποίηση για «παλιά βάση» ή μια επιβεβαίωση «άλλαξε η βάση» είναι στην
+/// καλύτερη περίπτωση άσχετες και στη χειρότερη παραπλανητικές. Μετά έρχεται η
+/// κίτρινη προειδοποίηση και τελευταία η πράσινη επιβεβαίωση.
+///
+/// Ποτέ δύο λωρίδες μαζί.
 TopDatabaseBanner topDatabaseBanner({
   required bool showStateNotice,
   required bool hasSwitchSuccess,
+  bool isUnreachable = false,
 }) {
+  if (isUnreachable) return TopDatabaseBanner.unreachable;
   if (showStateNotice) return TopDatabaseBanner.warning;
   if (hasSwitchSuccess) return TopDatabaseBanner.success;
   return TopDatabaseBanner.none;

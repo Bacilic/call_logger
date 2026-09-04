@@ -390,6 +390,7 @@ class MainShellState extends ConsumerState<MainShell> {
         ),
       );
     });
+
     final showBadgeAsync = ref.watch(showTasksBadgeProvider);
     final pendingCountAsync = ref.watch(globalPendingTasksCountProvider);
     final showBadge = showBadgeAsync.value ?? true;

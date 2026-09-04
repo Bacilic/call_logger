@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import '../providers/app_instances_provider.dart';
 import '../providers/main_nav_request_provider.dart';
 import '../services/app_instance_registry.dart';
+import '../utils/run_after_next_frame.dart';
+import '../database/database_reachability.dart';
 import '../database/database_state_notice.dart';
 import '../database/database_switch_success_notice.dart';
 import '../services/settings_service.dart';
@@ -41,6 +43,19 @@ class MainShellDestinationContent {
   void initDatabaseStateNotice() {
     _databaseStateNotice = _evaluateCurrentDatabaseNotice();
     unawaited(_loadAcknowledgedDatabaseNoticeIdentity());
+    _watchDatabaseReachability();
+  }
+
+  /// Βάζει τον φύλακα να παρακολουθεί το **τρέχον** αρχείο βάσης.
+  ///
+  /// Η κλήση γίνεται μετά το πρώτο καρέ: ο φύλακας γράφει σε provider, και μια
+  /// εγγραφή μέσα στο χτίσιμο ρίχνει την εφαρμογή.
+  void _watchDatabaseReachability() {
+    final path = host.widget.databaseResult.path;
+    runNowOrAfterFrame(() {
+      if (!host.mounted) return;
+      host.ref.read(databaseReachabilityProvider.notifier).watch(path);
+    });
   }
 
   void syncDatabaseStateNotice(MainShell oldWidget) {
@@ -51,6 +66,7 @@ class MainShellDestinationContent {
         _databaseNoticeDismissedThisSession = false;
       }
       _databaseStateNotice = next;
+      _watchDatabaseReachability();
     }
   }
 
@@ -156,9 +172,11 @@ class MainShellDestinationContent {
     final switchSuccessMessage = host.ref.watch(
       databaseSwitchSuccessNoticeProvider,
     );
+    final reachability = host.ref.watch(databaseReachabilityProvider);
     final topBanner = topDatabaseBanner(
       showStateNotice: _showDatabaseStateNotice,
       hasSwitchSuccess: switchSuccessMessage != null,
+      isUnreachable: reachability == DatabaseReachability.lost,
     );
     final instances = host.ref.watch(appInstancesProvider).value;
     return Column(
@@ -214,6 +232,39 @@ class MainShellDestinationContent {
                   ),
                 ),
             onDismiss: () => unawaited(dismissAppInstancesNotice(host.ref)),
+          ),
+        // Δεν κλείνει με κουμπί, σε αντίθεση με την κίτρινη: όσο η βάση δεν
+        // απαντά, τίποτα από όσα βλέπει ο χειριστής δεν είναι αξιόπιστο. Η
+        // λωρίδα φεύγει μόνη της μόλις το αρχείο ξαναπαντήσει.
+        if (topBanner == TopDatabaseBanner.unreachable)
+          Material(
+            color: Colors.red.shade300,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.cloud_off_outlined,
+                    size: 20,
+                    color: Colors.black87,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Η βάση δεδομένων δεν αποκρίνεται — χάθηκε η πρόσβαση '
+                      'στον φάκελό της. Ό,τι φορτώνει τώρα δεν πρόκειται να '
+                      'ολοκληρωθεί· περίμενε να επανέλθει το δίκτυο ή κλείσε '
+                      'και ξανάνοιξε την εφαρμογή.',
+                      key: const ValueKey('database_unreachable_banner'),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         if (topBanner == TopDatabaseBanner.warning)
           Material(

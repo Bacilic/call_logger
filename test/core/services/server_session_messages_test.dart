@@ -228,6 +228,54 @@ void main() {
     });
   });
 
+  group('Παλιά σύνδεση που δεν έκλεισε', () {
+    test('μόνο τα «σε χρήση» μετρούν ως σύνδεση που επέζησε', () {
+      // Το «δεν υπήρχε σύνδεση» είναι το ΦΥΣΙΟΛΟΓΙΚΟ αποτέλεσμα, όχι πρόβλημα:
+      // αν μετρούσε, θα φωνάζαμε σε κάθε καθαρή εκκίνηση.
+      expect(ServerSessionMessages.staleShareSurvived(0), isFalse);
+      expect(
+        ServerSessionMessages.staleShareSurvived(
+          ServerSessionMessages.errorNotConnected,
+        ),
+        isFalse,
+      );
+      expect(
+        ServerSessionMessages.staleShareSurvived(
+          ServerSessionMessages.errorOpenFiles,
+        ),
+        isTrue,
+      );
+      expect(
+        ServerSessionMessages.staleShareSurvived(
+          ServerSessionMessages.errorDeviceInUse,
+        ),
+        isTrue,
+      );
+    });
+
+    test('όταν επέζησε, η άρνηση το λέει ως γεγονός και όχι ως υποψία', () {
+      final msg = ServerSessionMessages.accessDenied(
+        what: 'τερματισμού συνεδρίας',
+        host: '192.168.13.83',
+        account: 'Administrator',
+        staleShare: true,
+      );
+
+      expect(msg, contains('δεν ήταν δυνατόν να κλείσει'));
+      expect(msg, isNot(contains('Τρεις συνήθεις αιτίες')));
+    });
+
+    test('χωρίς επιβίωση, το μήνυμα μένει ως έχει', () {
+      final msg = ServerSessionMessages.accessDenied(
+        what: 'τερματισμού συνεδρίας',
+        host: '192.168.13.83',
+        account: 'Administrator',
+      );
+
+      expect(msg, contains('Τρεις συνήθεις αιτίες'));
+    });
+  });
+
   group('Κατάσταση συνεδρίας', () {
     test('μόνο 0 και 4 μας ενδιαφέρουν', () {
       expect(serverSessionStateFromWts(0), ServerSessionState.active);

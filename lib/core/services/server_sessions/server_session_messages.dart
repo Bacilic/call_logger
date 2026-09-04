@@ -42,6 +42,18 @@ abstract final class ServerSessionMessages {
   /// Ο διακομιστής RPC δεν αποκρίνεται.
   static const int rpcServerUnavailable = 1722;
 
+  /// `ERROR_NOT_CONNECTED` — δεν υπήρχε σύνδεση να κλείσει.
+  ///
+  /// Είναι το **φυσιολογικό** αποτέλεσμα του καθαρίσματος πριν από κάθε νέα
+  /// σύνδεση, όχι αποτυχία.
+  static const int errorNotConnected = 2250;
+
+  /// `ERROR_OPEN_FILES` — η σύνδεση κρατιέται από ανοιχτά αρχεία.
+  static const int errorOpenFiles = 2401;
+
+  /// `ERROR_DEVICE_IN_USE` — η σύνδεση κρατιέται από άλλη διεργασία.
+  static const int errorDeviceInUse = 2404;
+
   /// Η συνεδρία δεν υπάρχει πια.
   static const int errorCtxWinstationNotFound = 7022;
 
@@ -67,12 +79,27 @@ abstract final class ServerSessionMessages {
   ///
   /// Το [includePrinterRpcHint] προσθέτει την τέταρτη αιτία που ισχύει **μόνο**
   /// για τους εκτυπωτές. Σε άλλη ενέργεια θα ήταν λάθος ίχνος.
+  ///
+  /// Το [staleShare] είναι **γεγονός, όχι υποψία**: μπαίνει true μόνο όταν τα
+  /// Windows απάντησαν ρητά ότι η προηγούμενη σύνδεση δεν έκλεισε. Τότε η
+  /// τρίτη αιτία παύει να είναι μία από τρεις — είναι η απάντηση, και το
+  /// μήνυμα σταματά να στέλνει τον χειριστή να ψάχνει τις άλλες δύο.
   static String accessDenied({
     required String what,
     required String host,
     required String account,
     bool includePrinterRpcHint = false,
+    bool staleShare = false,
   }) {
+    if (staleShare) {
+      return 'Ο $host απέρριψε το αίτημα $what (άρνηση πρόσβασης), και ξέρουμε '
+          'γιατί: αυτός ο υπολογιστής είχε ήδη ανοιχτή σύνδεση προς τον $host '
+          'και δεν ήταν δυνατόν να κλείσει — την κρατούν ανοιχτά αρχεία ή '
+          'κάποιο πρόγραμμα σε χρήση, π.χ. κοινόχρηστος φάκελος ή δίσκος '
+          'δικτύου. Τα Windows κρατούν μία ταυτότητα ανά διακομιστή, οπότε η '
+          'εντολή ταξίδεψε με τα παλιά στοιχεία και όχι με τον «$account». '
+          'Κλείσε ό,τι είναι ανοιχτό από τον $host και δοκίμασε ξανά.';
+    }
     final base =
         'Ο $host απέρριψε το αίτημα $what (άρνηση πρόσβασης). Η σύνδεση έγινε '
         'δεκτή, αλλά η εντολή δεν πέρασε ως διαχειριστής. Τρεις συνήθεις '
@@ -86,6 +113,15 @@ abstract final class ServerSessionMessages {
         'υπολογιστή: δες την κάρτα «Κατάσταση αυτού του υπολογιστή» στον '
         'Κατάλογο → Διάφορα → Διακομιστές.';
   }
+
+  /// Επέζησε παλιά σύνδεση προς τον διακομιστή παρά την προσπάθεια κλεισίματος;
+  ///
+  /// Μόνο δύο κωδικοί το σημαίνουν, και ο διαχωρισμός είναι ουσιώδης: το
+  /// [errorNotConnected] λέει «δεν υπήρχε τίποτα να κλείσω», που είναι η
+  /// συνηθισμένη περίπτωση. Αν μετρούσε κι αυτό, η εφαρμογή θα κατηγορούσε
+  /// μια ανύπαρκτη σύνδεση σε κάθε καθαρή εκκίνηση.
+  static bool staleShareSurvived(int code) =>
+      code == errorOpenFiles || code == errorDeviceInUse;
 
   /// Μήνυμα για αποτυχία σύνδεσης δικτύου προς τον διακομιστή.
   static String forConnect({
@@ -125,11 +161,13 @@ abstract final class ServerSessionMessages {
     required int code,
     required String host,
     required String adminUser,
+    bool staleShare = false,
   }) => switch (code) {
     errorAccessDenied => accessDenied(
       what: 'ανάγνωσης συνεδριών',
       host: host,
       account: adminUser,
+      staleShare: staleShare,
     ),
     rpcServerUnavailable =>
       'Ο διακομιστής $host δεν αποκρίνεται. Πιθανότερη αιτία: λείπει το '
@@ -143,11 +181,13 @@ abstract final class ServerSessionMessages {
     required int code,
     required String host,
     required String adminUser,
+    bool staleShare = false,
   }) => switch (code) {
     errorAccessDenied => accessDenied(
       what: 'τερματισμού συνεδρίας',
       host: host,
       account: adminUser,
+      staleShare: staleShare,
     ),
     errorCtxWinstationNotFound =>
       'Η συνεδρία δεν υπάρχει πια στον $host — πάτα «Ανανέωση» για να δεις την '
@@ -168,11 +208,13 @@ abstract final class ServerSessionMessages {
     required int code,
     required String host,
     required String adminUser,
+    bool staleShare = false,
   }) => switch (code) {
     errorAccessDenied => accessDenied(
       what: 'αποσύνδεσης οθόνης',
       host: host,
       account: adminUser,
+      staleShare: staleShare,
     ),
     errorCtxWinstationNotFound =>
       'Η συνεδρία δεν υπάρχει πια στον $host — πάτα «Ανανέωση» για να δεις την '

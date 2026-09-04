@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/managed_server.dart';
 import '../../../../core/providers/servers_provider.dart';
+import '../../../../core/services/server_sessions/server_connection_check.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 
 /// Φόρμα προσθήκης/επεξεργασίας διακομιστή.
@@ -42,7 +43,15 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
   bool _testing = false;
 
   /// Αποτέλεσμα του τελευταίου ελέγχου: μήνυμα + αν ήταν επιτυχία.
-  ({String text, bool ok})? _testResult;
+  /// Το αποτέλεσμα του ελέγχου, μία γραμμή ανά ικανότητα.
+  ///
+  /// Γεμίζει **προοδευτικά**: σε διακομιστή που δεν αποκρίνεται κάθε έλεγχος
+  /// περιμένει ως το όριό του, και ο χειριστής δεν πρέπει να κοιτά άδεια οθόνη.
+  List<ServerCheckLine> _checks = const [];
+
+  /// Χωριστό από τους ελέγχους: μια αποτυχία αποθήκευσης δεν είναι εύρημα
+  /// για τον διακομιστή και δεν έχει θέση μέσα στη λίστα ικανοτήτων.
+  String? _saveError;
 
   String? _nameError;
   String? _hostError;
@@ -89,28 +98,26 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
     }
     setState(() {
       _testing = true;
-      _testResult = null;
+      _checks = const [];
+      _saveError = null;
     });
 
-    final service = ref.read(serverSessionServiceProvider);
-    final result = await service.listSessions(
+    final checker = ServerConnectionChecker(
+      sessions: ref.read(serverSessionServiceProvider),
+      printers: ref.read(serverPrinterServiceProvider),
+    );
+
+    await for (final lines in checker.run(
       host: _host.text.trim(),
       adminUser: _user.text.trim(),
       adminPassword: _password.text,
-    );
+    )) {
+      if (!mounted) return;
+      setState(() => _checks = lines);
+    }
 
     if (!mounted) return;
-    setState(() {
-      _testing = false;
-      _testResult = result.ok
-          ? (
-              text:
-                  'Ο διακομιστής απάντησε — '
-                  '${result.sessions.length} συνεδρίες.',
-              ok: true,
-            )
-          : (text: result.error ?? 'Άγνωστο σφάλμα.', ok: false);
-    });
+    setState(() => _testing = false);
   }
 
   Future<void> _save() async {
@@ -141,7 +148,7 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _testResult = (text: 'Αποτυχία αποθήκευσης: $e', ok: false);
+        _saveError = 'Αποτυχία αποθήκευσης: $e';
       });
     }
   }
@@ -149,7 +156,6 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final result = _testResult;
 
     return DraggableDialogShell(
       title: Text(_isNew ? 'Νέος διακομιστής' : 'Επεξεργασία διακομιστή'),
@@ -245,17 +251,17 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
                     ),
                   ],
                 ),
-                if (result != null) ...[
+                if (_checks.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  for (final line in _checks) _CheckRow(line: line),
+                ],
+                if (_saveError != null) ...[
                   const SizedBox(height: 10),
                   DecoratedBox(
                     decoration: BoxDecoration(
-                      color: result.ok
-                          ? theme.colorScheme.primaryContainer.withValues(
-                              alpha: 0.5,
-                            )
-                          : theme.colorScheme.errorContainer.withValues(
-                              alpha: 0.5,
-                            ),
+                      color: theme.colorScheme.errorContainer.withValues(
+                        alpha: 0.5,
+                      ),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Padding(
@@ -264,18 +270,14 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Icon(
-                            result.ok
-                                ? Icons.check_circle_outline
-                                : Icons.error_outline,
+                            Icons.error_outline,
                             size: 18,
-                            color: result.ok
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.error,
+                            color: theme.colorScheme.error,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: SelectableText(
-                              result.text,
+                              _saveError!,
                               style: theme.textTheme.bodySmall,
                             ),
                           ),
@@ -296,6 +298,75 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
           FilledButton(
             onPressed: _saving ? null : _save,
             child: Text(_saving ? 'Αποθήκευση…' : 'Αποθήκευση'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Μία γραμμή του ελέγχου: εικονίδιο κατάστασης, τίτλος ικανότητας, λεπτομέρεια.
+///
+/// Η **μερική** επιτυχία έχει δικό της χρώμα και δικό της εικονίδιο επίτηδες:
+/// αν έμοιαζε με τις επιτυχίες, θα ξαναγεννούσε το ψέμα που ήρθε να λύσει ο
+/// έλεγχος — «απάντησε ο διακομιστής» ενώ οι ουρές του δεν διαβάζονται.
+class _CheckRow extends StatelessWidget {
+  const _CheckRow({required this.line});
+
+  final ServerCheckLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final running = line.state == ServerCheckState.running;
+    final color = switch (line.state) {
+      ServerCheckState.passed => theme.colorScheme.primary,
+      ServerCheckState.partial => theme.colorScheme.tertiary,
+      ServerCheckState.failed => theme.colorScheme.error,
+      _ => theme.colorScheme.onSurfaceVariant,
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: running
+                ? const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    switch (line.state) {
+                      ServerCheckState.passed => Icons.check_circle_outline,
+                      ServerCheckState.partial => Icons.info_outline,
+                      ServerCheckState.failed => Icons.cancel_outlined,
+                      _ => Icons.circle_outlined,
+                    },
+                    size: 18,
+                    color: color,
+                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(line.title, style: theme.textTheme.bodyMedium),
+                if (line.detail != null)
+                  SelectableText(
+                    line.detail!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: line.state == ServerCheckState.passed
+                          ? theme.colorScheme.onSurfaceVariant
+                          : color,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),

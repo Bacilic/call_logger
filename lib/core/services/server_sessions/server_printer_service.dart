@@ -279,6 +279,47 @@ class ServerPrinterService {
     }
   }
 
+  /// Επιτρέπεται η διαχείριση της ουράς εκτυπώσεων σε αυτόν τον διακομιστή;
+  ///
+  /// Καθαρός έλεγχος δικαιώματος: ρωτά, δεν πειράζει. Χρησιμοποιείται από τον
+  /// «Έλεγχο σύνδεσης», που τρέχει σε ζωντανούς διακομιστές.
+  Future<ServerActionResult> canManageSpooler({
+    required String host,
+    required String adminUser,
+    required String adminPassword,
+    Duration timeout = defaultTimeout,
+  }) async {
+    final guard = _guard(host, adminUser, adminPassword);
+    if (guard != null) return ServerActionResult.failure(guard);
+
+    final h = host.trim();
+    final u = adminUser.trim();
+    try {
+      final raw = await Isolate.run(
+        () => _probeSpoolerControlInIsolate(h, u, adminPassword),
+      ).timeout(timeout);
+
+      if (!raw.ok) {
+        return ServerActionResult.failure(
+          raw.connectFailed
+              ? ServerSessionMessages.forConnect(
+                  code: raw.code,
+                  host: h,
+                  account: u,
+                )
+              : _serviceMessage(code: raw.code, host: h, adminUser: u),
+        );
+      }
+      return const ServerActionResult.success();
+    } on TimeoutException {
+      return ServerActionResult.failure(_timeoutMessage(h, timeout));
+    } catch (e) {
+      return ServerActionResult.failure(
+        'Απρόσμενο σφάλμα κατά τον έλεγχο της ουράς εκτυπώσεων του $h: $e',
+      );
+    }
+  }
+
   /// Ξεκινά επανεκκίνηση του διακομιστή με προειδοποίηση προς τους χρήστες.
   Future<ServerActionResult> initiateRestart({
     required String host,
@@ -483,6 +524,26 @@ class ServerPrinterService {
   };
 }
 
+({bool ok, bool connectFailed, int code}) _probeSpoolerControlInIsolate(
+  String host,
+  String user,
+  String password,
+) {
+  return _withAdminShare<({bool ok, bool connectFailed, int code})>(
+    host,
+    user,
+    password,
+    () {
+      final r = WindowsPrinterFfi.probeServiceControl(
+        host: host,
+        serviceName: ServerPrinterService.spoolerServiceName,
+      );
+      return (ok: r.ok, connectFailed: false, code: r.code);
+    },
+    (code) => (ok: false, connectFailed: true, code: code),
+  );
+}
+
 typedef _PrinterIsolateResult = ({
   bool ok,
   bool connectFailed,
@@ -518,9 +579,9 @@ T _withAdminShare<T>(
     user: user,
     password: password,
   );
-  if (rc != 0) {
+  if (rc.code != 0) {
     WindowsSessionFfi.disconnectShare(host);
-    return onConnectFailure(rc);
+    return onConnectFailure(rc.code);
   }
   try {
     return body();

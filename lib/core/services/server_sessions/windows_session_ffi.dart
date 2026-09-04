@@ -20,6 +20,8 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 
+import 'server_session_messages.dart';
+
 // --- Δομές -----------------------------------------------------------------
 
 final class _NetResourceW extends Struct {
@@ -223,13 +225,17 @@ abstract final class WindowsSessionFfi {
   /// Καθαρίζει πρώτα τυχόν προηγούμενη σύνδεση: μια ανοιχτή συνεδρία με άλλα
   /// στοιχεία μπλοκάρει τη νέα με σφάλμα 1219, και το σύμπτωμα μοιάζει με
   /// «λάθος κωδικός».
-  static int connectIpcShare({
+  /// Επιστρέφει τον κωδικό της σύνδεσης **και** τι απέγινε η προηγούμενη:
+  /// το [staleShareCode] είναι μη μηδενικό όταν υπήρχε παλιά σύνδεση που δεν
+  /// έκλεισε. Χωρίς αυτό, η αποτυχία του καθαρίσματος περνούσε σιωπηλά και το
+  /// σφάλμα εμφανιζόταν αργότερα ως «άρνηση πρόσβασης» σε λάθος λογαριασμό.
+  static ({int code, int staleShareCode}) connectIpcShare({
     required String host,
     required String user,
     required String password,
   }) {
     final remote = '\\\\$host\\IPC\$';
-    disconnectShare(host);
+    final staleShareCode = disconnectShare(host);
 
     final resource = calloc<_NetResourceW>();
     final remotePtr = remote.toNativeUtf16();
@@ -238,7 +244,10 @@ abstract final class WindowsSessionFfi {
     try {
       resource.ref.dwType = 0; // RESOURCETYPE_ANY
       resource.ref.lpRemoteName = remotePtr;
-      return _wNetAddConnection2(resource, passPtr, userPtr, 0);
+      return (
+        code: _wNetAddConnection2(resource, passPtr, userPtr, 0),
+        staleShareCode: staleShareCode,
+      );
     } finally {
       calloc.free(resource);
       calloc.free(remotePtr);
@@ -251,13 +260,20 @@ abstract final class WindowsSessionFfi {
   ///
   /// Καλείται **πάντα** στο τέλος: δεν μένει ανοιχτή συνεδρία διαχειριστή σε
   /// υπολογιστή γραφείου.
-  static void disconnectShare(String host) {
+  /// Επιστρέφει τον κωδικό που δείχνει **σύνδεση που επέζησε** (ανοιχτά
+  /// αρχεία, συσκευή σε χρήση), ή 0 όταν δεν έμεινε τίποτα ανοιχτό.
+  ///
+  /// Το «δεν υπήρχε σύνδεση» δεν είναι αποτυχία και δεν επιστρέφεται ως τέτοια.
+  static int disconnectShare(String host) {
     _warmUp();
     final ipc = '\\\\$host\\IPC\$'.toNativeUtf16();
     final root = '\\\\$host'.toNativeUtf16();
     try {
-      _wNetCancelConnection2(ipc, 0, 1);
-      _wNetCancelConnection2(root, 0, 1);
+      final ipcCode = _wNetCancelConnection2(ipc, 0, 1);
+      final rootCode = _wNetCancelConnection2(root, 0, 1);
+      if (ServerSessionMessages.staleShareSurvived(ipcCode)) return ipcCode;
+      if (ServerSessionMessages.staleShareSurvived(rootCode)) return rootCode;
+      return 0;
     } finally {
       calloc.free(ipc);
       calloc.free(root);

@@ -1,3 +1,5 @@
+import 'server_session_messages.dart';
+
 /// Κατάσταση συνεδρίας στον διακομιστή, όπως τη δίνει το API των Windows.
 enum ServerSessionState {
   /// Κάποιος δουλεύει τώρα.
@@ -83,16 +85,32 @@ class ServerSessionsResult {
   final String? error;
 }
 
-/// Το αποτέλεσμα ενός τερματισμού.
+/// Το αποτέλεσμα ενός τερματισμού ή μιας αποσύνδεσης οθόνης.
 class SessionLogoffResult {
-  const SessionLogoffResult._({required this.ok, required this.error});
+  const SessionLogoffResult._({
+    required this.ok,
+    required this.error,
+    this.code = 0,
+  });
 
   const SessionLogoffResult.success() : this._(ok: true, error: null);
-  const SessionLogoffResult.failure(String error)
-    : this._(ok: false, error: error);
+  const SessionLogoffResult.failure(String error, {int code = 0})
+    : this._(ok: false, error: error, code: code);
 
   final bool ok;
   final String? error;
+
+  /// Ο κωδικός των Windows· 0 όταν πέτυχε ή όταν δεν προήλθε από το σύστημα.
+  final int code;
+
+  /// Ο διακομιστής μας δέχτηκε, αλλά αρνήθηκε την ενέργεια.
+  ///
+  /// Δεν είναι παροδικό: αφορά τα δικαιώματα του λογαριασμού σε **αυτόν** τον
+  /// διακομιστή, οπότε η ίδια ενέργεια θα ξανααποτύχει σε κάθε συνεδρία του.
+  /// Γι' αυτό η οθόνη σταματά να την προσφέρει, αντί να αφήνει τον χειριστή να
+  /// τη δοκιμάζει ξανά και ξανά νομίζοντας ότι φταίει η συνεδρία.
+  bool get isAccessDenied =>
+      !ok && code == ServerSessionMessages.errorAccessDenied;
 }
 
 /// Κατάσταση του «SMB 1.0/CIFS Client» σε **αυτόν** τον υπολογιστή.

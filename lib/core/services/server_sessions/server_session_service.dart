@@ -59,6 +59,7 @@ class ServerSessionService {
                   code: raw.code,
                   host: h,
                   adminUser: u,
+                  staleShare: raw.staleShare,
                 ),
         );
       }
@@ -126,7 +127,9 @@ class ServerSessionService {
                   code: raw.code,
                   host: h,
                   adminUser: u,
+                  staleShare: raw.staleShare,
                 ),
+          code: raw.code,
         );
       }
       return const SessionLogoffResult.success();
@@ -181,7 +184,9 @@ class ServerSessionService {
                   code: raw.code,
                   host: h,
                   adminUser: u,
+                  staleShare: raw.staleShare,
                 ),
+          code: raw.code,
         );
       }
       return const SessionLogoffResult.success();
@@ -231,6 +236,12 @@ typedef _IsolateResult = ({
   bool connectFailed,
   int code,
   List<RawServerSession> sessions,
+
+  /// Υπήρχε παλιά σύνδεση προς τον διακομιστή που δεν έκλεισε.
+  ///
+  /// Ταξιδεύει ως εδώ γιατί εξηγεί μια άρνηση πρόσβασης που αλλιώς θα φαινόταν
+  /// σφάλμα του λογαριασμού: η εντολή ταξίδεψε με τα παλιά στοιχεία.
+  bool staleShare,
 });
 
 _IsolateResult _enumerateInIsolate(String host, String user, String password) {
@@ -239,10 +250,17 @@ _IsolateResult _enumerateInIsolate(String host, String user, String password) {
     user: user,
     password: password,
   );
-  if (rc != 0) {
+  if (rc.code != 0) {
     WindowsSessionFfi.disconnectShare(host);
-    return (ok: false, connectFailed: true, code: rc, sessions: const []);
+    return (
+      ok: false,
+      connectFailed: true,
+      code: rc.code,
+      sessions: const [],
+      staleShare: ServerSessionMessages.staleShareSurvived(rc.staleShareCode),
+    );
   }
+  final stale = ServerSessionMessages.staleShareSurvived(rc.staleShareCode);
   try {
     final result = WindowsSessionFfi.enumerateSessions(host);
     return (
@@ -250,6 +268,7 @@ _IsolateResult _enumerateInIsolate(String host, String user, String password) {
       connectFailed: false,
       code: result.code,
       sessions: result.sessions,
+      staleShare: stale,
     );
   } finally {
     WindowsSessionFfi.disconnectShare(host);
@@ -267,10 +286,17 @@ _IsolateResult _logoffInIsolate(
     user: user,
     password: password,
   );
-  if (rc != 0) {
+  if (rc.code != 0) {
     WindowsSessionFfi.disconnectShare(host);
-    return (ok: false, connectFailed: true, code: rc, sessions: const []);
+    return (
+      ok: false,
+      connectFailed: true,
+      code: rc.code,
+      sessions: const [],
+      staleShare: ServerSessionMessages.staleShareSurvived(rc.staleShareCode),
+    );
   }
+  final stale = ServerSessionMessages.staleShareSurvived(rc.staleShareCode);
   try {
     final result = WindowsSessionFfi.logoffSession(
       host: host,
@@ -282,6 +308,7 @@ _IsolateResult _logoffInIsolate(
         connectFailed: false,
         code: result.code,
         sessions: const [],
+        staleShare: stale,
       );
     }
 
@@ -297,10 +324,17 @@ _IsolateResult _logoffInIsolate(
           connectFailed: false,
           code: ServerSessionMessages.logoffNotVerified,
           sessions: const [],
+          staleShare: stale,
         );
       }
     }
-    return (ok: true, connectFailed: false, code: 0, sessions: const []);
+    return (
+      ok: true,
+      connectFailed: false,
+      code: 0,
+      sessions: const [],
+      staleShare: stale,
+    );
   } finally {
     WindowsSessionFfi.disconnectShare(host);
   }
@@ -317,10 +351,17 @@ _IsolateResult _disconnectInIsolate(
     user: user,
     password: password,
   );
-  if (rc != 0) {
+  if (rc.code != 0) {
     WindowsSessionFfi.disconnectShare(host);
-    return (ok: false, connectFailed: true, code: rc, sessions: const []);
+    return (
+      ok: false,
+      connectFailed: true,
+      code: rc.code,
+      sessions: const [],
+      staleShare: ServerSessionMessages.staleShareSurvived(rc.staleShareCode),
+    );
   }
+  final stale = ServerSessionMessages.staleShareSurvived(rc.staleShareCode);
   try {
     final result = WindowsSessionFfi.disconnectSession(
       host: host,
@@ -331,6 +372,7 @@ _IsolateResult _disconnectInIsolate(
       connectFailed: false,
       code: result.code,
       sessions: const [],
+      staleShare: stale,
     );
   } finally {
     WindowsSessionFfi.disconnectShare(host);
