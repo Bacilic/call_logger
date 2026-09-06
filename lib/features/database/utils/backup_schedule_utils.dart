@@ -16,17 +16,32 @@ abstract final class BackupScheduleStatus {
   /// ελεγχθεί. Δύο κανόνες:
   ///
   /// 1. **Μιλάμε μόνο για αποτυχίες** — η επιτυχία δεν διακόπτει τον χρήστη.
-  /// 2. **Μία φορά ανά συμβάν.** Ο περιοδικός έλεγχος «αναβαθμίζει» το
-  ///    [failed] σε [folderMissing] μόλις διαπιστώσει ότι λείπει ο φάκελος·
-  ///    είναι η ίδια αποτυχία που μαθαίνει το όνομά της, όχι καινούρια. Χωρίς
-  ///    αυτόν τον κανόνα ο χρήστης έβλεπε δύο διαδοχικούς διαλόγους.
+  /// 2. **Μία φορά ανά συμβάν.** Όσο η προηγούμενη κατάσταση είναι κι αυτή
+  ///    αποτυχία, δεν υπάρχει νέο συμβάν: είναι η ίδια αποτυχία που αλλάζει
+  ///    όνομα. Ο περιοδικός έλεγχος «αναβαθμίζει» το [failed] σε
+  ///    [folderMissing] μόλις διαπιστώσει ότι λείπει ο φάκελος — και η
+  ///    αποτυχημένη δημιουργία φακέλου κάνει το αντίστροφο, γυρίζοντας το
+  ///    [folderMissing] σε [failed].
+  ///
+  ///    Ο παλιός κανόνας έκλεινε **μόνο τη μία** από τις δύο φορές, και η
+  ///    άλλη γεννούσε φαύλο κύκλο: ο χρήστης πατούσε «Δημιουργία εδώ»,
+  ///    η δημιουργία αποτύγχανε, και άνοιγε δεύτερος διάλογος που πρότεινε
+  ///    «Εκτέλεση τώρα» — δηλαδή ξανά το ίδιο που μόλις είχε αποτύχει.
+  ///
+  ///    Ένα νέο συμβάν αναγγέλλεται μόνο αφού η κατάσταση περάσει από
+  ///    [success] ή [none] — που είναι ακριβώς ό,τι κάνουν η επιτυχία και η
+  ///    «Παράβλεψη».
   static bool shouldAnnounce({String? previous, required String? current}) {
     final now = normalize(current);
-    if (now != failed && now != folderMissing) return false;
-    final before = normalize(previous);
-    if (before == now) return false;
-    if (before == failed && now == folderMissing) return false;
-    return true;
+    if (!isFailure(now)) return false;
+    return !isFailure(normalize(previous));
+  }
+
+  /// Είναι αυτή η κατάσταση αποτυχία; Οι δύο μορφές της ([failed] και
+  /// [folderMissing]) είναι το ίδιο συμβάν με διαφορετική λεπτομέρεια.
+  static bool isFailure(String? status) {
+    final s = normalize(status);
+    return s == failed || s == folderMissing;
   }
 
   static String normalize(String? raw) {

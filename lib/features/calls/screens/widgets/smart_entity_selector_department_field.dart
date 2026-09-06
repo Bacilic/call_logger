@@ -10,6 +10,7 @@ import 'smart_entity_selector_anchor_frame.dart';
 import 'smart_entity_selector_conflict_badge.dart';
 import '../../../../core/utils/text_layout_utils.dart';
 import 'inline_field_clear_button.dart';
+import '../../../directory/models/department_kind.dart';
 
 class SmartEntityDepartmentField extends StatefulWidget {
   const SmartEntityDepartmentField({
@@ -110,6 +111,15 @@ class SmartEntityDepartmentFieldState
     final onContentChecked = widget.onContentChecked;
     final nextFocusNode = widget.nextFocusNode;
     final lookupService = widget.lookupService;
+    // Η ετικέτα λέει τι είναι η οντότητα που κούμπωσε: «Εταιρεία» για την
+    // DataMed. Όσο δεν έχει επιλεγεί τίποτα — ή όσο ο κατάλογος φορτώνει — μένει
+    // το γενικό «Τμήμα», που είναι και ο στόχος της αναζήτησης.
+    final departmentLabel =
+        (lookupService?.departmentKindById(
+                  widget.header.selectedDepartmentId,
+                ) ??
+                DepartmentKind.hospital)
+            .entityLabel;
     return SizedBox(
       width: widget.width,
       child: MergeSemantics(
@@ -130,7 +140,7 @@ class SmartEntityDepartmentFieldState
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'Τμήμα',
+                      departmentLabel,
                       style: theme.textTheme.labelMedium,
                       softWrap: true,
                     ),
@@ -325,7 +335,7 @@ class SmartEntityDepartmentFieldState
                         ),
                       );
                       return Semantics(
-                        label: 'Τμήμα',
+                        label: departmentLabel,
                         child: SizedBox(
                           width: width,
                           child: showTooltip

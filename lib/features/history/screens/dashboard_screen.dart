@@ -1,25 +1,21 @@
-import 'dart:async';
-import 'dart:math' as math;
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/calendar_range_picker.dart';
 import '../../../core/widgets/quick_call_fab.dart';
-import '../../../core/utils/user_facing_error_messages.dart';
-import '../models/dashboard_date_preset.dart';
-import '../models/dashboard_filter_model.dart';
 import '../models/dashboard_summary_model.dart';
-import '../providers/dashboard_provider.dart';
 import '../models/lansweeper_report_scope.dart';
+import '../providers/dashboard_provider.dart';
 import '../providers/history_provider.dart';
+import '../services/dashboard_export_launcher.dart';
 import '../utils/history_navigation_feedback.dart';
 import '../widgets/lansweeper/lansweeper_report_launcher.dart';
 import 'dashboard_cards.dart';
-import 'dashboard_filter_pane.dart';
+import 'dashboard_filter_bar.dart';
+import 'dashboard_kpi_cards.dart';
 import 'dashboard_palette_colors.dart';
+import 'dashboard_top_bar.dart';
 import 'dashboard_top_entity_selector.dart';
 
 /// Οθόνη στατιστικών κλήσεων (πίνακας ελέγχου / dashboard).
@@ -31,71 +27,17 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  static const Duration _debounceDuration = Duration(milliseconds: 350);
+  /// Τα χειριστήρια των φίλτρων ξεκινούν ανοιχτά: η οθόνη ανοίγει με φίλτρο
+  /// ημερομηνιών ήδη σε ισχύ, οπότε ο χρήστης πρέπει να μπορεί να το δει και να
+  /// το αλλάξει χωρίς να ψάξει κουμπί.
+  bool _filtersExpanded = true;
 
-  final TextEditingController _keywordController = TextEditingController();
-  final TextEditingController _userController = TextEditingController();
-  final TextEditingController _equipmentController = TextEditingController();
+  /// Οι κατανομές ξεκινούν ανοιχτές — απόφαση χρήστη.
+  bool _showDistributions = true;
 
-  Timer? _debounceTimer;
-  bool _isFilterOpen = false;
-  bool _showMoreSection = false;
   TopEntityMode _topEntityMode = TopEntityMode.department;
-  DashboardPalette _palette = DashboardPalette.classic;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final f = ref.read(dashboardFilterProvider);
-      _keywordController.text = f.keyword;
-      _userController.text = f.userName ?? '';
-      _equipmentController.text = f.equipmentCode ?? '';
-    });
-  }
-
-  @override
-  void dispose() {
-    _debounceTimer?.cancel();
-    _keywordController.dispose();
-    _userController.dispose();
-    _equipmentController.dispose();
-    super.dispose();
-  }
-
-  void _scheduleDebouncedTextFilters() {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(_debounceDuration, () {
-      if (!mounted) return;
-      _pushTextFiltersToProvider();
-    });
-  }
-
-  void _pushTextFiltersToProvider() {
-    final u = _userController.text.trim();
-    final e = _equipmentController.text.trim();
-    ref
-        .read(dashboardFilterProvider.notifier)
-        .update(
-          (s) => s.copyWith(
-            keyword: _keywordController.text,
-            userName: u.isEmpty ? null : u,
-            equipmentCode: e.isEmpty ? null : e,
-            clearUserName: u.isEmpty,
-            clearEquipmentCode: e.isEmpty,
-          ),
-        );
-  }
-
-  void _applyAllFilters() {
-    _debounceTimer?.cancel();
-    _pushTextFiltersToProvider();
-  }
 
   Future<void> _openLansweeperReportDialog() async {
-    _applyAllFilters();
-    if (!mounted) return;
     await openLansweeperReport(
       context,
       ref,
@@ -109,11 +51,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final filter = ref.read(dashboardFilterProvider);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final initialStart = filter.dateFrom ?? today;
-    final initialEnd = filter.dateTo ?? today;
     final result = await showCalendarRangePickerDialog(
       context,
-      initialValue: DateTimeRange(start: initialStart, end: initialEnd),
+      initialValue: DateTimeRange(
+        start: filter.dateFrom ?? today,
+        end: filter.dateTo ?? today,
+      ),
     );
     if (!mounted || result == null) return;
     if (result.wasCleared) {
@@ -127,95 +70,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .setCustomDateRange(range.start, range.end);
   }
 
-  Future<void> _setDatePreset(DashboardDatePreset preset) async {
-    await ref.read(dashboardFilterProvider.notifier).setDatePreset(preset);
-  }
-
-  /// Διάρκεια ανά κλήση — ίδια μορφή με ιστορικό και χρονόμετρο.
-  String _formatCallDurationSeconds(num seconds) =>
-      formatKpiCallDurationSeconds(seconds);
-
-  /// Συνολικές / ημερήσιες διάρκειες — ίδια μορφή με τις υποδείξεις.
-  String _formatAggregateDurationSeconds(num seconds) =>
-      formatKpiAggregateDurationSeconds(seconds);
-
-  String _formatDeltaPercent(num current, num previous) {
-    if (previous == 0) {
-      if (current == 0) return '0.0%';
-      return '100.0%';
+  /// Η εξαγωγή δουλεύει μόνο πάνω σε νούμερα που υπάρχουν ήδη στην οθόνη:
+  /// αλλιώς το αρχείο θα έδειχνε άλλο σύνολο από αυτό που είδε ο χρήστης.
+  Future<void> _export(DashboardExportFormat format) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final data = ref.read(dashboardStatsProvider).asData?.value;
+    if (data == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Τα στατιστικά φορτώνουν ακόμη — δοκιμάστε ξανά.'),
+        ),
+      );
+      return;
     }
-    final delta = ((current - previous) / previous) * 100;
-    final prefix = delta >= 0 ? '+' : '';
-    return '$prefix${delta.toStringAsFixed(1)}%';
+    await exportDashboardStatistics(
+      messenger: messenger,
+      format: format,
+      data: data,
+      filter: ref.read(dashboardFilterProvider),
+    );
   }
 
-  String _formatAvgCallsPerDay(DashboardSummaryModel data) {
-    final avg = data.avgCallsPerActiveDay;
-    if (avg == null) return 'Μ.Ο.: —';
-    return 'Μ.Ο.: ${avg.round()} κλήσεις / ημέρα';
-  }
-
-  String _formatAvgDurationPerDay(DashboardSummaryModel data) {
-    final avg = data.avgDurationSecondsPerActiveDay;
-    if (avg == null) return 'Μ.Ο.: —';
-    return 'Μ.Ο.: ${_formatAggregateDurationSeconds(avg)} / ημέρα';
-  }
-
-  List<String> _callsSparklineTooltips(List<DailyTrendPoint> days) {
-    return days
-        .map((dayPoint) {
-          if (dayPoint.callCount <= 0) return '';
-          final day = DateFormat('dd/MM').format(dayPoint.date);
-          return '$day: ${formatKpiCallCountLabel(dayPoint.callCount)}';
-        })
-        .toList(growable: false);
-  }
-
-  List<String> _durationSparklineTooltips(List<DailyTrendPoint> days) {
-    return days
-        .map((dayPoint) {
-          if (dayPoint.totalDurationSeconds <= 0) return '';
-          final day = DateFormat('dd/MM').format(dayPoint.date);
-          return '$day: ${formatKpiAggregateDurationSeconds(dayPoint.totalDurationSeconds)}';
-        })
-        .toList(growable: false);
-  }
-
-  List<String> _avgCallSparklineTooltips(List<DailyTrendPoint> days) {
-    return days
-        .map((dayPoint) {
-          if (dayPoint.callCount <= 0) return '';
-          final day = DateFormat('dd/MM').format(dayPoint.date);
-          final avgSeconds = dayPoint.totalDurationSeconds / dayPoint.callCount;
-          return '$day: ${formatKpiCallDurationSeconds(avgSeconds)}';
-        })
-        .toList(growable: false);
-  }
-
-  String _formatTopEntityShareSubtitle(int count, int totalCalls) {
-    if (totalCalls <= 0) return '$count κλήσεις';
-    final pct = (count / totalCalls) * 100;
-    return '$count κλήσεις (${pct.toStringAsFixed(1)}% του συνόλου)';
-  }
-
-  List<KpiBarSparklinePoint> _runnerUpBarPoints(
-    KpiAllDatesBarSparklines? bars,
-    TopEntityMode mode,
-  ) {
-    if (bars == null) return const <KpiBarSparklinePoint>[];
-    switch (mode) {
-      case TopEntityMode.department:
-        return bars.departmentCountsRank2To6;
-      case TopEntityMode.caller:
-        return bars.callerCountsRank2To6;
-      case TopEntityMode.issue:
-        return bars.issueCountsRank2To6;
-    }
-  }
-
-  /// Επιστροφή στο Ιστορικό με το πλαίσιο της κάρτας: ίδια φίλτρα, ίδιο διάστημα,
-  /// καθαρή αναζήτηση ώστε να φανούν όντως όλες οι κλήσεις, και η ταξινόμηση που
-  /// αναπαράγει τη σειρά της κάρτας.
+  /// Επιστροφή στο Ιστορικό με το πλαίσιο της κάρτας: ίδια φίλτρα, ίδιο
+  /// διάστημα, καθαρή αναζήτηση ώστε να φανούν όντως όλες οι κλήσεις, και η
+  /// ταξινόμηση που αναπαράγει τη σειρά της κάρτας.
   void _openHistoryForCard(HistorySortModel sort) {
     final dash = ref.read(dashboardFilterProvider);
     final messenger = ScaffoldMessenger.of(context);
@@ -234,47 +112,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     historySortForLongestCalls(ref.read(dashboardLongestCallsModeProvider)),
   );
 
-  KpiTopEntity _resolveTopEntity(DashboardSummaryModel data) {
-    switch (_topEntityMode) {
-      case TopEntityMode.department:
-        final d = data.byDepartment.isNotEmpty ? data.byDepartment.first : null;
-        return KpiTopEntity(
-          title: 'Κορυφαίο Τμήμα',
-          label: d?.name ?? '-',
-          count: d?.count ?? 0,
-          icon: Icons.workspace_premium_rounded,
-        );
-      case TopEntityMode.caller:
-        final c = data.topCallers.isNotEmpty ? data.topCallers.first : null;
-        return KpiTopEntity(
-          title: 'Κορυφαίος Καλών',
-          label: c?.name ?? '-',
-          count: c?.count ?? 0,
-          icon: Icons.person_pin_circle_outlined,
-        );
-      case TopEntityMode.issue:
-        final i = data.byIssue.isNotEmpty ? data.byIssue.first : null;
-        return KpiTopEntity(
-          title: 'Κορυφαία Κατηγορία',
-          label: i?.name ?? '-',
-          count: i?.count ?? 0,
-          icon: Icons.build_circle_outlined,
-        );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final filter = ref.watch(dashboardFilterProvider);
     final activeDatePreset = ref
         .read(dashboardFilterProvider.notifier)
         .activeDatePreset;
     final statsAsync = ref.watch(dashboardStatsProvider);
-    final departmentsAsync = ref.watch(callFilterDepartmentsProvider);
-    final colors = DashboardPaletteColors.from(_palette);
-
-    final dateRangeLabel = _formatDateRange(filter);
+    final palette = ref.watch(dashboardPaletteProvider);
+    final colors = DashboardPaletteColors.from(palette);
 
     return Scaffold(
       backgroundColor: colors.pageBg,
@@ -290,461 +136,139 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
         ),
         child: SafeArea(
-          child: Stack(
-            children: [
-              SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                child: Column(
-                  children: [
-                    _buildTopBar(theme, colors),
-                    const SizedBox(height: 16),
-                    statsAsync.when(
-                      data: (data) {
-                        final topEntity = _resolveTopEntity(data);
-                        final allDatesMode = data.isAllDatesMode;
-                        final allDatesBars = data.allDatesBarSparklines;
-                        return LayoutBuilder(
-                          builder: (context, constraints) {
-                            final width = constraints.maxWidth;
-                            final kpiCrossCount = width >= 1200
-                                ? 4
-                                : width >= 800
-                                ? 2
-                                : 1;
-                            final mainSplit = width >= 1050;
-                            return Column(
-                              children: [
-                                if (data.totalCalls == 0) ...[
-                                  EmptyStateCard(
-                                    message:
-                                        'Δεν βρέθηκαν κλήσεις για τα επιλεγμένα φίλτρα.',
-                                    colors: colors,
-                                  ),
-                                  const SizedBox(height: 12),
-                                ],
-                                KpiGrid(
-                                  crossAxisCount: kpiCrossCount,
-                                  paletteColors: colors,
-                                  cards: [
-                                    KpiCardData(
-                                      title:
-                                          data.totalCallsKpiTitleAllDates() ??
-                                          'Συνολικές κλήσεις · ${filter.kpiTotalCallsRangeTitle()}',
-                                      value: '${data.totalCalls}',
-                                      subtitle: allDatesMode
-                                          ? _formatAvgCallsPerDay(data)
-                                          : '${_formatDeltaPercent(data.totalCalls, data.previousPeriodTotalCalls)} vs ${filter.kpiComparisonRangeHint()}: ${data.previousPeriodTotalCalls}',
-                                      isUp:
-                                          data.totalCalls >=
-                                          data.previousPeriodTotalCalls,
-                                      showTrendIndicator: !allDatesMode,
-                                      useBarSparkline: allDatesMode,
-                                      icon: Icons.call_rounded,
-                                      points: data.sparklineLast7Days
-                                          .map((e) => e.callCount.toDouble())
-                                          .toList(),
-                                      sparklineTooltips:
-                                          _callsSparklineTooltips(
-                                            data.sparklineLast7Days,
-                                          ),
-                                      barPoints:
-                                          allDatesBars?.callsByMonth ??
-                                          const <KpiBarSparklinePoint>[],
-                                      showLansweeperReportBadge: true,
-                                      onTap: _openLansweeperReportDialog,
-                                      colors: colors.kpiBlue,
-                                    ),
-                                    KpiCardData(
-                                      title: 'Συνολική Διάρκεια Κλήσεων',
-                                      value: _formatAggregateDurationSeconds(
-                                        data.totalDurationSeconds,
-                                      ),
-                                      subtitle: allDatesMode
-                                          ? _formatAvgDurationPerDay(data)
-                                          : '${_formatDeltaPercent(data.totalDurationSeconds, data.previousPeriodTotalDurationSeconds)} vs ${filter.kpiComparisonRangeHint()}: ${_formatAggregateDurationSeconds(data.previousPeriodTotalDurationSeconds)}',
-                                      isUp:
-                                          data.totalDurationSeconds >=
-                                          data.previousPeriodTotalDurationSeconds,
-                                      showTrendIndicator: !allDatesMode,
-                                      useBarSparkline: allDatesMode,
-                                      icon: Icons.timer_outlined,
-                                      points: data.sparklineLast7Days
-                                          .map(
-                                            (e) => e.totalDurationSeconds
-                                                .toDouble(),
-                                          )
-                                          .toList(),
-                                      sparklineTooltips:
-                                          _durationSparklineTooltips(
-                                            data.sparklineLast7Days,
-                                          ),
-                                      barPoints:
-                                          allDatesBars
-                                              ?.durationByWeekdayMonToFri ??
-                                          const <KpiBarSparklinePoint>[],
-                                      colors: colors.kpiGreen,
-                                    ),
-                                    KpiCardData(
-                                      title: 'Μέσος Όρος ανά Κλήση',
-                                      value: _formatCallDurationSeconds(
-                                        data.avgDurationSeconds,
-                                      ),
-                                      subtitle: allDatesMode
-                                          ? 'Διάμεσος χρόνος: ${_formatCallDurationSeconds(data.medianDurationSeconds)}'
-                                          : '${_formatDeltaPercent(data.avgDurationSeconds, data.previousPeriodAvgDurationSeconds)} vs ${filter.kpiComparisonRangeHint()}: ${_formatCallDurationSeconds(data.previousPeriodAvgDurationSeconds)}',
-                                      isUp:
-                                          data.avgDurationSeconds >=
-                                          data.previousPeriodAvgDurationSeconds,
-                                      showTrendIndicator: !allDatesMode,
-                                      useBarSparkline: allDatesMode,
-                                      icon: Icons.av_timer_outlined,
-                                      points: data.sparklineLast7Days
-                                          .map(
-                                            (e) => e.callCount == 0
-                                                ? 0.0
-                                                : e.totalDurationSeconds /
-                                                      e.callCount,
-                                          )
-                                          .toList(),
-                                      sparklineTooltips:
-                                          _avgCallSparklineTooltips(
-                                            data.sparklineLast7Days,
-                                          ),
-                                      barPoints:
-                                          allDatesBars?.durationExtremesSix ??
-                                          const <KpiBarSparklinePoint>[],
-                                      colors: colors.kpiOrange,
-                                    ),
-                                    KpiCardData(
-                                      title: topEntity.title,
-                                      value: topEntity.label,
-                                      subtitle: allDatesMode
-                                          ? _formatTopEntityShareSubtitle(
-                                              topEntity.count,
-                                              data.totalCalls,
-                                            )
-                                          : '${topEntity.count} κλήσεις',
-                                      isUp: true,
-                                      showTrendIndicator: !allDatesMode,
-                                      useBarSparkline: allDatesMode,
-                                      icon: topEntity.icon,
-                                      points: data.sparklineLast7Days
-                                          .map((e) => e.callCount.toDouble())
-                                          .toList(),
-                                      sparklineTooltips:
-                                          _callsSparklineTooltips(
-                                            data.sparklineLast7Days,
-                                          ),
-                                      barPoints: _runnerUpBarPoints(
-                                        allDatesBars,
-                                        _topEntityMode,
-                                      ),
-                                      headerTrailing: TopEntityModeSelector(
-                                        mode: _topEntityMode,
-                                        onChanged: (selected) => setState(
-                                          () => _topEntityMode = selected,
-                                        ),
-                                      ),
-                                      colors: colors.kpiPurple,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 18),
-                                if (mainSplit)
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        flex: 4,
-                                        child: TopCallersCard(
-                                          data: data,
-                                          colors: colors,
-                                          onViewAll: _openHistoryForTopCallers,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        flex: 9,
-                                        child: LongestCallsCard(
-                                          data: data,
-                                          topN: filter.topN,
-                                          colors: colors,
-                                          formatDuration:
-                                              _formatCallDurationSeconds,
-                                          formatAggregateDuration:
-                                              _formatAggregateDurationSeconds,
-                                          onTopNChanged: (v) {
-                                            ref
-                                                .read(
-                                                  dashboardFilterProvider
-                                                      .notifier,
-                                                )
-                                                .update(
-                                                  (s) => s.copyWith(topN: v),
-                                                );
-                                          },
-                                          onViewAll:
-                                              _openHistoryForLongestCalls,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                else ...[
-                                  TopCallersCard(
-                                    data: data,
-                                    colors: colors,
-                                    onViewAll: _openHistoryForTopCallers,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  LongestCallsCard(
-                                    data: data,
-                                    topN: filter.topN,
-                                    colors: colors,
-                                    formatDuration: _formatCallDurationSeconds,
-                                    formatAggregateDuration:
-                                        _formatAggregateDurationSeconds,
-                                    onTopNChanged: (v) {
-                                      ref
-                                          .read(
-                                            dashboardFilterProvider.notifier,
-                                          )
-                                          .update((s) => s.copyWith(topN: v));
-                                    },
-                                    onViewAll: _openHistoryForLongestCalls,
-                                  ),
-                                ],
-                                const SizedBox(height: 18),
-                                MoreSection(
-                                  expanded: _showMoreSection,
-                                  onToggle: () => setState(
-                                    () => _showMoreSection = !_showMoreSection,
-                                  ),
-                                  data: data,
-                                  colors: colors,
-                                  formatDuration: _formatCallDurationSeconds,
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                      },
-                      loading: () => LoadingDashboard(colors: colors),
-                      error: (e, _) => ErrorCard(
-                        message:
-                            'Σφάλμα φόρτωσης: ${humanizeUserFacingError(e)}',
-                        colors: colors,
-                      ),
-                    ),
-                  ],
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              children: [
+                DashboardTopBar(
+                  colors: colors,
+                  palette: palette,
+                  filtersExpanded: _filtersExpanded,
+                  onBack: () => Navigator.of(context).maybePop(),
+                  onToggleFilters: () =>
+                      setState(() => _filtersExpanded = !_filtersExpanded),
+                  onExport: _export,
+                  onPaletteChanged: (value) => ref
+                      .read(dashboardPaletteProvider.notifier)
+                      .select(value),
                 ),
-              ),
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 320),
-                curve: Curves.easeOutBack,
-                right: _isFilterOpen ? 20 : -360,
-                top: 90,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 210),
-                  curve: Curves.easeOut,
-                  opacity: _isFilterOpen ? 1 : 0,
-                  child: FilterPane(
-                    paneWidth: math.max(
-                      220,
-                      math.min(330, MediaQuery.sizeOf(context).width - 24),
-                    ),
-                    dateRangeLabel: dateRangeLabel,
-                    keywordController: _keywordController,
-                    userController: _userController,
-                    equipmentController: _equipmentController,
-                    departmentsAsync: departmentsAsync,
-                    selectedDepartment: filter.department,
-                    activeDatePreset: activeDatePreset,
-                    onClose: () => setState(() => _isFilterOpen = false),
-                    onPickDateRange: _pickDateRange,
-                    onSetToday: () => _setDatePreset(DashboardDatePreset.today),
-                    onSetWeek: () => _setDatePreset(DashboardDatePreset.last7),
-                    onSetMonth: () =>
-                        _setDatePreset(DashboardDatePreset.last30),
-                    onSetAll: () => _setDatePreset(DashboardDatePreset.all),
-                    onApply: _applyAllFilters,
-                    onClearAll: () {
-                      _keywordController.clear();
-                      _userController.clear();
-                      _equipmentController.clear();
-                      ref
-                          .read(dashboardFilterProvider.notifier)
-                          .clearAllFilters();
-                    },
-                    onDepartmentChanged: (v) {
-                      ref
-                          .read(dashboardFilterProvider.notifier)
-                          .update(
-                            (s) => s.copyWith(
-                              department: v,
-                              clearDepartment: v == null,
-                            ),
-                          );
-                    },
-                    onChangedText: _scheduleDebouncedTextFilters,
+                const SizedBox(height: 12),
+                DashboardFilterBar(
+                  colors: colors,
+                  filter: filter,
+                  activeDatePreset: activeDatePreset,
+                  controlsExpanded: _filtersExpanded,
+                  onPickDateRange: _pickDateRange,
+                  onSetDatePreset: (preset) => ref
+                      .read(dashboardFilterProvider.notifier)
+                      .setDatePreset(preset),
+                ),
+                const SizedBox(height: 16),
+                statsAsync.when(
+                  data: (data) => _content(data, colors),
+                  loading: () => LoadingDashboard(colors: colors),
+                  error: (e, _) => ErrorCard(
+                    message: 'Σφάλμα φόρτωσης: ${humanizeUserFacingError(e)}',
+                    colors: colors,
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar(ThemeData theme, DashboardPaletteColors colors) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-          decoration: BoxDecoration(
-            color: colors.topBarFill.withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: colors.topBarBorder.withValues(alpha: 0.95),
+              ],
             ),
           ),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      gradient: LinearGradient(
-                        colors: [
-                          colors.topBarLogoBgStart,
-                          colors.topBarLogoBgEnd,
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.call_outlined,
-                      color: colors.topBarLogoIcon,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Στατιστικά Κλήσεων',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                ],
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: theme.colorScheme.outlineVariant),
-                    ),
-                    icon: const Icon(Icons.logout_rounded, size: 18),
-                    label: const Text('Έξοδος'),
-                  ),
-                  PopupMenuButton<DashboardPalette>(
-                    tooltip: 'Παλέτα Χρωμάτων',
-                    initialValue: _palette,
-                    onSelected: (v) => setState(() => _palette = v),
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: DashboardPalette.classic,
-                        child: Text('Κλασικό'),
-                      ),
-                      PopupMenuItem(
-                        value: DashboardPalette.ocean,
-                        child: Text('Ωκεανός'),
-                      ),
-                      PopupMenuItem(
-                        value: DashboardPalette.sunrise,
-                        child: Text('Ανατολή'),
-                      ),
-                      PopupMenuItem(
-                        value: DashboardPalette.forest,
-                        child: Text('Δάσος'),
-                      ),
-                      PopupMenuItem(
-                        value: DashboardPalette.indigoNight,
-                        child: Text('Νυχτερινό ίντιγκο'),
-                      ),
-                    ],
-                    child: OutlinedButton.icon(
-                      onPressed: null,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: theme.colorScheme.onSurface,
-                        side: BorderSide(
-                          color: theme.colorScheme.outlineVariant,
-                        ),
-                        disabledForegroundColor: theme.colorScheme.onSurface,
-                      ),
-                      icon: GradientPaletteIcon(colors: colors),
-                      label: const Text('Χρώματα'),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Η εξαγωγή από την πάνω μπάρα έρχεται.',
-                          ),
-                        ),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: theme.colorScheme.outlineVariant),
-                    ),
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    label: const Text('Γρήγορη Εξαγωγή'),
-                  ),
-                  FilledButton.icon(
-                    onPressed: () =>
-                        setState(() => _isFilterOpen = !_isFilterOpen),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: colors.actionBlue,
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.tune_rounded, size: 18),
-                    label: const Text('Ρυθμίσεις / Φίλτρα'),
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
       ),
     );
   }
 
-  String _formatDateRange(DashboardFilterModel filter) {
-    if (filter.dateFrom != null && filter.dateTo != null) {
-      return '${DateFormat('dd/MM/yyyy').format(filter.dateFrom!)} – ${DateFormat('dd/MM/yyyy').format(filter.dateTo!)}';
-    }
-    if (filter.dateFrom != null) {
-      return 'από ${DateFormat('dd/MM/yyyy').format(filter.dateFrom!)}';
-    }
-    if (filter.dateTo != null) {
-      return 'έως ${DateFormat('dd/MM/yyyy').format(filter.dateTo!)}';
-    }
-    return 'Εύρος ημερομηνιών';
+  Widget _content(DashboardSummaryModel data, DashboardPaletteColors colors) {
+    final filter = ref.watch(dashboardFilterProvider);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final kpiCrossCount = width >= 1200
+            ? 4
+            : width >= 800
+            ? 2
+            : 1;
+        final splitMainRow = width >= 1050;
+
+        return Column(
+          children: [
+            if (data.totalCalls == 0) ...[
+              EmptyStateCard(
+                message: 'Δεν βρέθηκαν κλήσεις για τα επιλεγμένα φίλτρα.',
+                colors: colors,
+              ),
+              const SizedBox(height: 12),
+            ],
+            KpiGrid(
+              crossAxisCount: kpiCrossCount,
+              paletteColors: colors,
+              cards: buildDashboardKpiCards(
+                data: data,
+                filter: filter,
+                colors: colors,
+                topEntityMode: _topEntityMode,
+                onTopEntityModeChanged: (selected) =>
+                    setState(() => _topEntityMode = selected),
+                onLansweeperReportTap: _openLansweeperReportDialog,
+              ),
+            ),
+            const SizedBox(height: 18),
+            if (splitMainRow)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 4, child: _topCallersCard(data, colors)),
+                  const SizedBox(width: 16),
+                  Expanded(flex: 9, child: _longestCallsCard(data, colors)),
+                ],
+              )
+            else ...[
+              _topCallersCard(data, colors),
+              const SizedBox(height: 16),
+              _longestCallsCard(data, colors),
+            ],
+            const SizedBox(height: 18),
+            MoreSection(
+              expanded: _showDistributions,
+              onToggle: () =>
+                  setState(() => _showDistributions = !_showDistributions),
+              data: data,
+              colors: colors,
+              formatDuration: formatDashboardCallDuration,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _topCallersCard(
+    DashboardSummaryModel data,
+    DashboardPaletteColors colors,
+  ) {
+    return TopCallersCard(
+      data: data,
+      colors: colors,
+      onViewAll: _openHistoryForTopCallers,
+    );
+  }
+
+  Widget _longestCallsCard(
+    DashboardSummaryModel data,
+    DashboardPaletteColors colors,
+  ) {
+    return LongestCallsCard(
+      data: data,
+      topN: ref.watch(dashboardFilterProvider).topN,
+      colors: colors,
+      formatDuration: formatDashboardCallDuration,
+      formatAggregateDuration: formatDashboardAggregateDuration,
+      onTopNChanged: (value) => ref
+          .read(dashboardFilterProvider.notifier)
+          .update((s) => s.copyWith(topN: value)),
+      onViewAll: _openHistoryForLongestCalls,
+    );
   }
 }

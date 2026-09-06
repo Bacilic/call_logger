@@ -53,6 +53,7 @@ Future<SharedAssetTransferTarget?> showAssetTransferDialogForItem({
       departments: _selectableDepartments(
         availableDepartments,
         sourceDepartmentId: sourceDepartmentId,
+        isPhone: isPhone,
       ),
       knownDepartments: _knownDepartments(availableDepartments),
       blockedDepartmentNames: blockedDepartmentNames,
@@ -94,6 +95,7 @@ Future<SharedAssetTransferTarget?> showAssetTransferTargetPicker({
 List<DepartmentModel> _selectableDepartments(
   List<DepartmentModel> availableDepartments, {
   int? sourceDepartmentId,
+  bool isPhone = true,
 }) {
   return availableDepartments
       .where(
@@ -101,7 +103,9 @@ List<DepartmentModel> _selectableDepartments(
             d.id != null &&
             (sourceDepartmentId == null || d.id != sourceDepartmentId) &&
             !d.isDeleted &&
-            d.name.trim().isNotEmpty,
+            d.name.trim().isNotEmpty &&
+            // Το τηλέφωνο μιας εταιρείας είναι θεμιτό· ο εξοπλισμός της όχι.
+            (isPhone || d.kind.canOwnEquipment),
       )
       .toList()
     ..sort((a, b) => a.name.compareTo(b.name));

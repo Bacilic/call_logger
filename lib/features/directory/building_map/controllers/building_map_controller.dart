@@ -18,6 +18,7 @@ import '../../../../core/services/building_map_storage.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
+import '../services/building_map_department_eligibility.dart';
 import '../models/building_map_jump_target.dart';
 import '../../screens/widgets/department_color_palette.dart';
 import '../building_map_label_layout.dart';
@@ -114,10 +115,9 @@ class BuildingMapController {
   }
 
   bool draftOverlapsOthers(Rect draft, String sheetStr, int excludeDeptId) {
-    final deps = _ref
-        .read(departmentDirectoryProvider)
-        .allDepartments
-        .where((d) => !d.isDeleted);
+    final deps = departmentsEligibleForBuildingMap(
+      _ref.read(departmentDirectoryProvider).allDepartments,
+    );
     for (final d in deps) {
       if (d.id == excludeDeptId) continue;
       if ((d.mapFloor ?? '') != sheetStr) continue;
@@ -696,11 +696,9 @@ class BuildingMapController {
       previewImageAvailable = await initialImage.exists();
     }
     if (!context.mounted) return;
-    final previewDepartments = _ref
-        .read(departmentDirectoryProvider)
-        .allDepartments
-        .where((d) => !d.isDeleted)
-        .toList();
+    final previewDepartments = departmentsEligibleForBuildingMap(
+      _ref.read(departmentDirectoryProvider).allDepartments,
+    );
 
     final result = await showBuildingMapFloorSheetEditDialog(
       context,
@@ -1070,11 +1068,9 @@ class BuildingMapController {
 
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (!context.mounted) return;
-    final departments = _ref
-        .read(departmentDirectoryProvider)
-        .allDepartments
-        .where((d) => !d.isDeleted)
-        .toList(growable: false);
+    final departments = departmentsEligibleForBuildingMap(
+      _ref.read(departmentDirectoryProvider).allDepartments,
+    );
 
     final candidateDepartmentIds = await _candidateDepartmentIdsFor(
       context,

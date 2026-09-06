@@ -333,6 +333,17 @@ abstract final class ProfileSettingKeys {
     legacySource: ProfileSettingLegacySource.sharedForAdmin,
   );
 
+  /// Η παλέτα χρωμάτων των Στατιστικών Κλήσεων.
+  ///
+  /// **Γεννήθηκε προσωπική.** Ως τώρα η επιλογή ζούσε μόνο στη μνήμη της
+  /// οθόνης και χανόταν με το κλείσιμό της, οπότε δεν υπάρχει παλιά τιμή να
+  /// κληρονομήσει κανείς. Είναι αισθητική προτίμηση του ανθρώπου, όχι ρύθμιση
+  /// της βάσης — ακολουθεί τον χρήστη σε όποιον υπολογιστή καθίσει.
+  static const ProfileSettingKey dashboardPalette = ProfileSettingKey(
+    'dashboard_palette_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
   static const List<ProfileSettingKey> all = [
     showActiveTimer,
     showTasksBadge,
@@ -386,6 +397,7 @@ abstract final class ProfileSettingKeys {
     tasksOwnerFilter,
     historyOwnerFilter,
     lansweeperReportOwnerFilter,
+    dashboardPalette,
   ];
 }
 

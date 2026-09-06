@@ -6,6 +6,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/services/lansweeper_agent_identity_reader.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../calls/provider/lookup_provider.dart';
+import '../../calls/provider/remote_paths_provider.dart';
 import '../models/catalog_validation_finding.dart';
 import '../providers/catalog_validation_provider.dart';
 import '../providers/department_directory_provider.dart';
@@ -76,6 +77,7 @@ class CatalogScanRunner {
       sharedPhonesByDepartmentId: sharedPhones,
       ownerUserIdsByEquipmentId: owners,
       lansweeperAgentIdentity: await readLansweeperAgentIdentity(),
+      remoteTools: await ref.read(remoteToolsCatalogProvider.future),
     );
 
     return _withAuditStamps(findings);

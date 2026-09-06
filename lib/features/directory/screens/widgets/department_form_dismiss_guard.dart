@@ -42,6 +42,7 @@ class DepartmentFormDismissGuard {
     if (currentEquipment.join('|') != host.snapSharedEquipmentCodes.join('|')) {
       return true;
     }
+    if (host.selectedKind != host.snapKind) return true;
     if (host.selectedFloorId != host.snapFloorId) return true;
     if (host.lansweeperAccountsSignature() != host.snapLansweeperAccounts) {
       return true;
@@ -92,6 +93,7 @@ class DepartmentFormDismissGuard {
     if (currentEquipment.join('|') != host.snapSharedEquipmentCodes.join('|')) {
       labels.add('Κοινόχρηστος εξοπλισμός');
     }
+    if (host.selectedKind != host.snapKind) labels.add('Είδος');
     if (host.selectedFloorId != host.snapFloorId) {
       labels.add('Όροφος (κάτοψη)');
     }

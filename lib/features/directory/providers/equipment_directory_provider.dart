@@ -521,7 +521,26 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
                 : _cellTextForColumn(row, col),
             isVisible: state.visibleColumnKeys.contains(col.key),
           ),
+      _lansweeperSearchFact(row.$1),
     ];
+  }
+
+  /// Το αναγνωριστικό με το οποίο ο εξοπλισμός ταξιδεύει στο Lansweeper.
+  ///
+  /// Δεν έχει στήλη στον πίνακα — γι' αυτό μπαίνει χωριστά από τον βρόχο των
+  /// στηλών, ως κρυφό γεγονός.
+  ///
+  /// **Ρωτά την ίδια συνάρτηση που στέλνει την τιμή στο ticket**, αντί να
+  /// διαβάζει το αποθηκευμένο πεδίο. Τα δύο διαφέρουν συχνά: το πεδίο είναι
+  /// συνήθως κενό, και τότε ο κοινός κανόνας παράγει «PC» + κωδικό. Αν η
+  /// αναζήτηση κοίταζε μόνο το πεδίο, η γραφή «PC3184» δεν θα έβρισκε τον
+  /// εξοπλισμό 3184 — παρότι αυτή ακριβώς η τιμή φεύγει προς το Lansweeper.
+  CatalogSearchFact _lansweeperSearchFact(EquipmentModel equipment) {
+    return CatalogSearchFact(
+      label: 'Αναγνωριστικό Lansweeper',
+      text: equipment.lansweeperAssetTargetResolved()?.value ?? '',
+      isVisible: false,
+    );
   }
 
   void filterAndSort() {
@@ -700,6 +719,31 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       if ((row.$1.code ?? '').trim() == c) return true;
     }
     return false;
+  }
+
+  /// Ο κωδικός ΑΛΛΟΥ μηχανήματος που δείχνει τον ίδιο στόχο απομακρυσμένης
+  /// για το ίδιο εργαλείο — `null` όταν η τιμή είναι μοναδική.
+  ///
+  /// Οι ιστορικές τιμές (`__stash_`) δεν μετρούν: δεν είναι ενεργοί στόχοι.
+  /// Η σύγκριση αγνοεί πεζά/κεφαλαία, όπως και οι διευθύνσεις δικτύου.
+  String? equipmentCodeSharingRemoteTarget(
+    String toolParamKey,
+    String value, {
+    int? excludeId,
+  }) {
+    final target = value.trim().toLowerCase();
+    if (target.isEmpty) return null;
+    if (int.tryParse(toolParamKey) == null) return null;
+
+    for (final row in state.allItems) {
+      final item = row.$1;
+      if (excludeId != null && item.id == excludeId) continue;
+      final other = (item.remoteParams[toolParamKey] ?? '').trim();
+      if (other.toLowerCase() != target) continue;
+      final code = (item.code ?? '').trim();
+      return code.isEmpty ? 'χωρίς κωδικό' : code;
+    }
+    return null;
   }
 
   Future<void> addEquipment(EquipmentModel eq, {int? ownerUserId}) async {

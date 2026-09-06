@@ -286,6 +286,13 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
         text: d.groupName ?? '',
         isVisible: false,
       ),
+      // Γράφοντας «Εταιρεία» στην αναζήτηση του Καταλόγου βγαίνουν όλοι οι
+      // εξωτερικοί συνεργάτες μαζί, χωρίς να χρειάζεται νέα στήλη.
+      CatalogSearchFact(
+        label: 'Είδος',
+        text: d.kind.label,
+        isVisible: false,
+      ),
       // Αναγνωριστικά ΚΑΙ ονομασίες μαζί: το «docpath» βρίσκει το τμήμα μέσα
       // από το «gnk\docpath1» χωρίς να χρειάζεται ο τομέας, και το «Γιατρός
       // Παθολογικής» το βρίσκει από την ονομασία που δώσατε εσείς.

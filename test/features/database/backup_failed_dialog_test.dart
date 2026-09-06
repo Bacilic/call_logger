@@ -9,6 +9,7 @@
 //   flutter test test/features/database/backup_failed_dialog_test.dart
 
 import 'package:call_logger/features/database/utils/backup_destination_folder_validator.dart';
+import 'package:call_logger/features/database/utils/backup_destination_reachability.dart';
 import 'package:call_logger/features/database/utils/backup_schedule_utils.dart';
 import 'package:call_logger/features/database/widgets/backup_failed_dialog.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -108,12 +109,103 @@ void main() {
     });
   });
 
+  group('Το κύριο κουμπί δεν υπόσχεται ενέργεια που θα αποτύχει', () {
+    BackupFailedChoice? primary(
+      BackupDestinationValidationKind kind, {
+      required bool creatable,
+    }) => primaryBackupFailedAction(
+      kind: kind,
+      destinationCreatable: creatable,
+    );
+
+    test('φάκελος εντάξει: η επανάληψη έχει νόημα', () {
+      // Η αιτία ήταν αλλού· μόνο εδώ το «Εκτέλεση τώρα» μπορεί να πετύχει.
+      expect(
+        primary(BackupDestinationValidationKind.ok, creatable: true),
+        BackupFailedChoice.runNow,
+      );
+    });
+
+    test('λείπει ο φάκελος αλλά ο προορισμός φτάνεται: δημιουργία', () {
+      expect(
+        primary(
+          BackupDestinationValidationKind.missingDirectory,
+          creatable: true,
+        ),
+        BackupFailedChoice.createAndRun,
+        reason:
+            'Η σκέτη επανάληψη θα ξανα-αποτύγχανε: ο φάκελος λείπει και '
+            'κανείς δεν τον φτιάχνει.',
+      );
+    });
+
+    test('άφταστος προορισμός: ΚΑΜΙΑ κύρια ενέργεια', () {
+      expect(
+        primary(
+          BackupDestinationValidationKind.missingDirectory,
+          creatable: false,
+        ),
+        isNull,
+        reason:
+            'Δικτυακός φάκελος εκτός δικτύου: ούτε η επανάληψη ούτε η '
+            'δημιουργία μπορούν να πετύχουν. Μένει μόνο η αλλαγή φακέλου.',
+      );
+    });
+
+    test('δικαιώματα, αρχείο ή άκυρη διαδρομή: ΚΑΜΙΑ κύρια ενέργεια', () {
+      for (final kind in const [
+        BackupDestinationValidationKind.accessDenied,
+        BackupDestinationValidationKind.notADirectory,
+        BackupDestinationValidationKind.invalidPath,
+      ]) {
+        expect(
+          primary(kind, creatable: true),
+          isNull,
+          reason: 'Τίποτα από όσα κάνει η εφαρμογή δεν λύνει το $kind.',
+        );
+      }
+    });
+  });
+
+  group('Η άφταστη διαδρομή το λέει στον χρήστη', () {
+    test('δικτυακός φάκελος εκτός δικτύου: το εξηγεί', () {
+      final hint = backupUnreachableDestinationHint(
+        BackupDestinationReachability.networkUnreachable,
+      );
+      expect(hint, contains('δικτυακός'));
+      expect(hint, contains('Ορίστε άλλη διαδρομή'));
+    });
+
+    test('προσβάσιμος προορισμός: καμία επιπλέον πρόταση', () {
+      expect(
+        backupUnreachableDestinationHint(
+          BackupDestinationReachability.creatable,
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   group('Μία ειδοποίηση ανά αποτυχία, όχι δύο', () {
     bool announce(String? previous, String current) =>
         BackupScheduleStatus.shouldAnnounce(
           previous: previous,
           current: current,
         );
+
+    test('η υποβάθμιση «λείπει ο φάκελος» → «απέτυχε» ΔΕΝ ξαναρωτά', () {
+      // Ο φαύλος κύκλος που έβλεπε ο χρήστης: πατούσε «Δημιουργία εδώ», η
+      // δημιουργία αποτύγχανε, η κατάσταση γύριζε σε «απέτυχε», και άνοιγε
+      // δεύτερος διάλογος που πρότεινε «Εκτέλεση τώρα» — ξανά το ίδιο που
+      // μόλις είχε αποτύχει.
+      expect(
+        announce(
+          BackupScheduleStatus.folderMissing,
+          BackupScheduleStatus.failed,
+        ),
+        isFalse,
+      );
+    });
 
     test('η αναβάθμιση «απέτυχε» → «λείπει ο φάκελος» ΔΕΝ ξαναρωτά', () {
       // Ο περιοδικός έλεγχος βαφτίζει την ίδια αποτυχία· ο χρήστης έχει ήδη

@@ -9,18 +9,37 @@ class CallsMapGate {
 
   /// ΧΑ ενεργό όταν υπάρχει επιλεγμένο τμήμα/καλών/εξοπλισμός ή όταν το
   /// **επιβεβαιωμένο** τηλέφωνο αντιστοιχεί ακριβώς σε **χαρτογραφημένο** τμήμα.
+  ///
+  /// Εξαίρεση: εταιρεία και εξωτερική μονάδα δεν βρίσκονται σε δικό μας κτίριο
+  /// και δεν πρόκειται ποτέ να αποκτήσουν θέση. Η κάρτα δεν κρύβεται επειδή
+  /// «δεν βρέθηκε» κάτι — δεν έχει νόημα εξαρχής, οπότε φεύγει ολόκληρη αντί να
+  /// πιάνει χώρο για να πει «δεν υπάρχει στον χάρτη».
   static bool isMapActive(
     SmartEntitySelectorState header,
     LookupService? lookup, [
     CallsFieldConfirmations confirmations = CallsFieldConfirmations.empty,
   ]) {
-    if (header.selectedDepartmentId != null) return true;
-    if (header.selectedEquipment?.id != null) return true;
-    if (header.selectedCaller?.id != null) return true;
+    if (header.selectedDepartmentId != null) {
+      return _belongsOnMap(lookup, header.selectedDepartmentId);
+    }
+    if (header.selectedEquipment?.id != null) {
+      return _belongsOnMap(lookup, header.selectedEquipment?.departmentId);
+    }
+    if (header.selectedCaller?.id != null) {
+      return _belongsOnMap(lookup, header.selectedCaller?.departmentId);
+    }
     if (lookup == null) return false;
     final phone = header.selectedPhone?.trim() ?? '';
     if (phone.isEmpty || !confirmations.phone) return false;
     return phoneResolvesToMappedDepartment(lookup, phone);
+  }
+
+  /// Χωρίς κατάλογο δεν ξέρουμε είδος: η κάρτα μένει ορατή, όπως πάντα.
+  /// Οντότητα χωρίς τμήμα (π.χ. καλών χωρίς τμήμα) κρίνεται ως νοσοκομείο —
+  /// η συμπεριφορά που ίσχυε πριν υπάρξει το «Είδος».
+  static bool _belongsOnMap(LookupService? lookup, int? departmentId) {
+    if (lookup == null) return true;
+    return lookup.departmentKindById(departmentId).belongsOnBuildingMap;
   }
 
   static bool phoneResolvesToMappedDepartment(

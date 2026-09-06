@@ -273,8 +273,8 @@ class SmartEntitySelectorLookups {
 
     final rawName =
         user.name ??
-        NameParserUtility.stripParentheticalSuffix(user.fullNameWithDepartment);
-    final strippedName = NameParserUtility.stripParentheticalSuffix(rawName);
+        NameParserUtility.stripDisplayDecorations(user.fullNameWithDepartment);
+    final strippedName = NameParserUtility.stripDisplayDecorations(rawName);
 
     return normalizedQuery ==
         SearchTextNormalizer.normalizeForSearch(strippedName);

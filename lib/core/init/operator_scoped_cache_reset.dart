@@ -84,6 +84,7 @@ void invalidateOperatorScopedCaches(WidgetRef ref) {
     ref.invalidate(dashboardExcludeCallsWithoutCategoryProvider);
     ref.invalidate(dashboardHideUnknownCallerProvider);
     ref.invalidate(dashboardHideUnknownTopCallerProvider);
+    ref.invalidate(dashboardPaletteProvider);
     ref.invalidate(taskAnalyticsDateProvider);
 
     // Λεξικό, εκκρεμότητες, εργαλεία κλήσεων, ΤΝ, Αναφορά Lansweeper.

@@ -69,7 +69,7 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
 
   String _extractDisplayName(String selection) {
     if (selection == 'Άγνωστος') return selection;
-    return NameParserUtility.stripParentheticalSuffix(selection);
+    return NameParserUtility.stripDisplayDecorations(selection);
   }
 
   UserModel? _resolveSelectedUser(

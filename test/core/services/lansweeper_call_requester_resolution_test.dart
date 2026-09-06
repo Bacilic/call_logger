@@ -13,6 +13,7 @@ import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/services/lansweeper_call_requester_resolution.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -59,7 +60,10 @@ void main() {
     await releaseCallLoggerTestDatabase();
   });
 
-  LookupService lookupWith(String? accounts) {
+  LookupService lookupWith(
+    String? accounts, {
+    DepartmentKind kind = DepartmentKind.hospital,
+  }) {
     final svc = LookupService.instance;
     svc.resetForReload();
     svc.injectInMemoryCatalogForTests(
@@ -70,11 +74,29 @@ void main() {
           id: _kPathologyId,
           name: _kPathologyName,
           lansweeperUsernames: accounts,
+          kind: kind,
         ),
       ],
     );
     return svc;
   }
+
+  test('εταιρεία με λογαριασμούς: δεν προτείνεται ποτέ ως αιτών', () async {
+    final options = await resolveLansweeperRequesterForCalls(
+      userRepository: users,
+      lookup: lookupWith(_kOneAccount, kind: DepartmentKind.company),
+      calls: [_call(callerText: 'Άγνωστος')],
+    );
+
+    expect(
+      options.selectedUsername,
+      isNull,
+      reason:
+          'ο εξωτερικός συνεργάτης δεν έχει λογαριασμό στο Lansweeper — αν '
+          'προτεινόταν, το ticket θα έφευγε με αιτούντα που δεν αναγνωρίζεται',
+    );
+    expect(options.isChoosable, isFalse);
+  });
 
   test(
     'κλήση Άγνωστου σε τμήμα με ΕΝΑΝ λογαριασμό: αιτών ο λογαριασμός',

@@ -9,6 +9,8 @@ import '../../../calls/provider/remote_paths_provider.dart';
 import '../../../calls/utils/equipment_remote_param_key.dart';
 import '../../../calls/utils/remote_param_validator.dart';
 import '../../../calls/utils/vnc_remote_target.dart';
+import '../../services/catalog_validation_service.dart';
+import 'catalog_validation_hint_text.dart';
 import 'equipment_form_dialog.dart';
 import 'remote_param_help_text.dart';
 
@@ -126,6 +128,7 @@ class EquipmentFormRemoteParams {
   Widget buildSection(
     List<RemoteToolFormPair> pairs,
     List<RemoteTool> catalog,
+    CatalogValidationService? validation,
   ) {
     final theme = Theme.of(host.context);
     if (pairs.isEmpty) {
@@ -192,12 +195,13 @@ class EquipmentFormRemoteParams {
             key,
             pairs,
             catalog,
+            validation,
             disabled: true,
             historical: true,
           ),
         );
       } else {
-        rows.add(_buildRemoteParamField(key, pairs, catalog));
+        rows.add(_buildRemoteParamField(key, pairs, catalog, validation));
       }
     }
 
@@ -282,10 +286,30 @@ class EquipmentFormRemoteParams {
     );
   }
 
+  /// Ο κωδικός άλλου μηχανήματος που δείχνει τον ίδιο στόχο — `null` όταν η
+  /// τιμή είναι μοναδική, όταν ο κανόνας είναι σβηστός, ή όταν πρόκειται για
+  /// την απομακρυσμένη επιφάνεια των Windows (εκεί η κοινή τιμή είναι θεμιτή).
+  String? _sharedRemoteTargetCode(
+    String paramKey,
+    RemoteTool? tool,
+    String value,
+    CatalogValidationService? validation,
+  ) {
+    if (validation == null || tool == null) return null;
+    if (!validation.rules.duplicateRemoteTargetEnabled) return null;
+    if (tool.role == ToolRole.rdp) return null;
+    return host.widget.notifier.equipmentCodeSharingRemoteTarget(
+      paramKey,
+      value,
+      excludeId: host.widget.initialEquipment?.id,
+    );
+  }
+
   Widget _buildRemoteParamField(
     String paramKey,
     List<RemoteToolFormPair> pairs,
-    List<RemoteTool> catalog, {
+    List<RemoteTool> catalog,
+    CatalogValidationService? validation, {
     bool disabled = false,
     bool historical = false,
   }) {
@@ -311,7 +335,7 @@ class EquipmentFormRemoteParams {
       host.codeController.text.trim(),
       prefix: 'PC',
     );
-    return Opacity(
+    final field = Opacity(
       opacity: disabled ? 0.6 : 1,
       child: TextFormField(
         controller: c,
@@ -380,6 +404,24 @@ class EquipmentFormRemoteParams {
           host.markFormChanged();
         },
       ),
+    );
+
+    // Η ιστορική τιμή δεν είναι ενεργός στόχος — δεν την κατηγορούμε.
+    final sharedWith = historical
+        ? null
+        : _sharedRemoteTargetCode(paramKey, tool, c.text, validation);
+    if (sharedWith == null) return field;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        field,
+        CatalogValidationHintText(
+          hint:
+              'Η ίδια τιμή υπάρχει ήδη στο μηχάνημα «$sharedWith» — '
+              'ένα από τα δύο δείχνει σε λάθος υπολογιστή',
+        ),
+      ],
     );
   }
 

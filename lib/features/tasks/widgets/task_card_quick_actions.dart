@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/compact_tooltip.dart';
+import '../../../core/services/lookup_service.dart';
 import '../models/task.dart';
 import 'task_card_callbacks.dart';
 
@@ -51,7 +52,12 @@ class TaskCardQuickActions extends StatelessWidget {
       if (task.departmentId != null && callbacks.onEditDepartment != null)
         _button(
           icon: Icons.domain_outlined,
-          label: 'Επεξεργασία Τμήματος',
+          // Το κουμπί λέει τι είναι η οντότητα: «Επεξεργασία Εταιρείας» για την
+          // DataMed. Διαγραμμένο τμήμα δεν έχει είδος να δείξει και πέφτει πίσω
+          // στο γενικό «Τμήματος».
+          label:
+              'Επεξεργασία '
+              '${LookupService.instance.departmentKindById(task.departmentId).entityLabelGenitive}',
           linkedDeleted: task.departmentLinkedDeleted,
           missingHint: kTaskActionDepartmentMissingHint,
           onEdit: callbacks.onEditDepartment!,

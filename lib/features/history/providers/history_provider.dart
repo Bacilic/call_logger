@@ -157,6 +157,7 @@ class HistoryFilterNotifier extends Notifier<HistoryFilterModel> {
     String? department,
     String? userName,
     String? equipmentCode,
+    String? category,
   }) {
     final before = state.activeFilterLabels;
     state = HistoryFilterModel(
@@ -166,6 +167,7 @@ class HistoryFilterNotifier extends Notifier<HistoryFilterModel> {
       department: department,
       userName: userName,
       equipmentCode: equipmentCode,
+      category: category,
     );
     final after = state.activeFilterLabels.toSet();
     return before.where((label) => !after.contains(label)).toList();
@@ -184,6 +186,7 @@ class HistoryFilterNotifier extends Notifier<HistoryFilterModel> {
       department: dashboard.department,
       userName: dashboard.userName,
       equipmentCode: dashboard.equipmentCode,
+      category: dashboard.category,
     );
   }
 }

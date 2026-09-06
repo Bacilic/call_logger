@@ -7,6 +7,7 @@ class DashboardFilterModel {
     this.department,
     this.userName,
     this.equipmentCode,
+    this.category,
     this.topN = 5,
   });
 
@@ -16,6 +17,14 @@ class DashboardFilterModel {
   final String? department;
   final String? userName;
   final String? equipmentCode;
+
+  /// Η κατηγορία της κλήσης — κλειστή λίστα, ίδια με του Ιστορικού.
+  ///
+  /// Κρίνεται με το αποθηκευμένο κείμενο της κλήσης, όπως ακριβώς και στο
+  /// Ιστορικό: η μετονομασία κατηγορίας ενημερώνει το κείμενο όλων των
+  /// κλήσεων, οπότε οι δύο οθόνες βλέπουν πάντα το ίδιο σύνολο.
+  final String? category;
+
   final int topN;
 
   DashboardFilterModel copyWith({
@@ -25,11 +34,13 @@ class DashboardFilterModel {
     String? department,
     String? userName,
     String? equipmentCode,
+    String? category,
     int? topN,
     bool clearDateRange = false,
     bool clearDepartment = false,
     bool clearUserName = false,
     bool clearEquipmentCode = false,
+    bool clearCategory = false,
   }) {
     return DashboardFilterModel(
       keyword: keyword ?? this.keyword,
@@ -40,6 +51,7 @@ class DashboardFilterModel {
       equipmentCode: clearEquipmentCode
           ? null
           : (equipmentCode ?? this.equipmentCode),
+      category: clearCategory ? null : (category ?? this.category),
       topN: topN ?? this.topN,
     );
   }
@@ -156,10 +168,25 @@ class DashboardFilterModel {
     final prev = previousComparisonRangeInclusive;
     if (prev != null) {
       if (prev.start == prev.end) {
-        return 'εχθές';
+        return 'χθες';
       }
       return 'προηγ. εύρος (${formatDisplayDate(prev.start)}–${formatDisplayDate(prev.end)})';
     }
-    return 'εχθές';
+    return 'χθες';
+  }
+
+  /// Η ίδια περίοδος σύγκρισης, ειπωμένη με **μήκος αντί για ημερομηνίες**.
+  ///
+  /// Ο υπότιτλος της κάρτας χωρά μία γραμμή. Με τις δύο ημερομηνίες γραμμένες
+  /// ολόκληρες, το κείμενο κοβόταν στη μέση («+107.3% vs προηγ. εύρος (08/0…»)
+  /// και ο αριθμός σύγκρισης — το μόνο που ενδιαφέρει — δεν φαινόταν ποτέ.
+  /// Οι ακριβείς ημερομηνίες μένουν διαθέσιμες στην υπόδειξη της κάρτας.
+  String kpiComparisonRangeShortHint() {
+    final prev = previousComparisonRangeInclusive;
+    if (prev == null) return 'χθες';
+    if (prev.start == prev.end) return 'χθες';
+    final days = prev.end.difference(prev.start).inDays + 1;
+    if (days == 7) return 'προηγ. εβδομάδα';
+    return 'προηγ. $days ημέρες';
   }
 }

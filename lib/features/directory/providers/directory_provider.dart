@@ -335,6 +335,13 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
         text: u.firstName ?? '',
         isVisible: visible(UserDirectoryColumn.firstName.key),
       ),
+      // Το ψευδώνυμο μετράει στην αναζήτηση ακόμη και με κρυμμένη στήλη:
+      // συχνά είναι το ΜΟΝΟ που άκουσε ο χειριστής στο τηλέφωνο.
+      CatalogSearchFact(
+        label: UserDirectoryColumn.nickname.label,
+        text: u.nickname ?? '',
+        isVisible: visible(UserDirectoryColumn.nickname.key),
+      ),
       CatalogSearchFact(
         label: UserDirectoryColumn.phone.label,
         text: u.phoneJoined,
@@ -402,6 +409,9 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
             break;
           case 'first_name':
             cmp = (a.firstName ?? '').compareTo(b.firstName ?? '');
+            break;
+          case 'nickname':
+            cmp = (a.nickname ?? '').compareTo(b.nickname ?? '');
             break;
           case 'phone':
             cmp = a.phoneJoined.compareTo(b.phoneJoined);

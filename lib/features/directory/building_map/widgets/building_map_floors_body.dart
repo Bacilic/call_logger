@@ -11,6 +11,7 @@ import '../controllers/building_map_controller.dart';
 import '../models/building_map_jump_target.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_empty_canvas_message.dart';
+import '../services/building_map_department_eligibility.dart';
 import '../services/building_map_floor_ordering.dart';
 import 'building_map_omnisearch_field.dart';
 import 'building_map_search_unresolved_banner.dart';
@@ -94,9 +95,9 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
     final deptState = ref.watch(departmentDirectoryProvider);
     final sheetId = ref.watch(buildingMapSelectedSheetIdProvider);
 
-    final activeDepartments = deptState.allDepartments
-        .where((d) => !d.isDeleted)
-        .toList();
+    final activeDepartments = departmentsEligibleForBuildingMap(
+      deptState.allDepartments,
+    );
     final controller = ref.read(buildingMapControllerProvider);
 
     return FutureBuilder<List<BuildingMapFloor>>(

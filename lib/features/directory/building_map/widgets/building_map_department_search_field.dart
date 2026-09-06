@@ -6,6 +6,7 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../../core/utils/autocomplete_highlight_scroll.dart';
 import '../../../../core/utils/spell_check.dart';
 import '../../models/department_model.dart';
+import '../services/building_map_department_eligibility.dart';
 
 /// Επιλογή autocomplete: τμήμα καταλόγου + αν είναι τοποθετημένο σε διαθέσιμο φύλλο χάρτη.
 class _DeptMapOption {
@@ -30,7 +31,9 @@ List<_DeptMapOption> _departmentMapOptions({
   required List<BuildingMapFloor> floors,
 }) {
   if (lookup == null || floors.isEmpty) return const [];
-  final searched = lookup.searchDepartments(query.trim());
+  final searched = departmentsEligibleForBuildingMap(
+    lookup.searchDepartments(query.trim()),
+  );
   final opts = searched
       .map(
         (d) => _DeptMapOption(
@@ -174,7 +177,10 @@ class _BuildingMapDepartmentSearchFieldState
     final trimmed = widget.controller.text.trim();
     if (lookup != null && trimmed.isNotEmpty) {
       final byName = lookup.findDepartmentByName(trimmed);
-      if (byName != null) {
+      // Ίδιος κανόνας με τη λίστα προτάσεων: ό,τι δεν ανήκει στην κάτοψη δεν
+      // επιλέγεται ούτε με Enter σε ακριβές όνομα.
+      if (byName != null &&
+          departmentsEligibleForBuildingMap([byName]).isNotEmpty) {
         await _commitOption(
           _DeptMapOption(
             department: byName,

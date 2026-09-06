@@ -102,6 +102,22 @@ class SettingsServiceAnalyticsFilters {
     );
   }
 
+  /// Η παλέτα χρωμάτων των Στατιστικών Κλήσεων — `null` όταν δεν έχει επιλέξει.
+  ///
+  /// Αποθηκεύεται το **όνομα** της παλέτας, όχι η θέση της στη λίστα: μια
+  /// μελλοντική προσθήκη ή αναδιάταξη των παλετών δεν αλλάζει σιωπηλά τα
+  /// χρώματα που διάλεξε ο χρήστης.
+  Future<String?> getDashboardPalette() async {
+    return ScopedSettings.getString(ProfileSettingKeys.dashboardPalette);
+  }
+
+  Future<void> setDashboardPalette(String value) async {
+    await ScopedSettings.setString(
+      ProfileSettingKeys.dashboardPalette,
+      value,
+    );
+  }
+
   /// Τελευταία επιλογή εύρους ημερομηνιών στις αναφορές εκκρεμοτήτων.
   /// Προεπιλογή: `all` (πλήρες εύρος δημιουργίας).
   Future<String> getTaskAnalyticsDatePreset() async {

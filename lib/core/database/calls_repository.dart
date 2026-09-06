@@ -566,6 +566,53 @@ class CallsRepository {
         .toList();
   }
 
+  /// Οι καλούντες που εμφανίζονται στις κλήσεις, με τα τηλέφωνά τους.
+  ///
+  /// Τροφοδοτεί την αυτόματη συμπλήρωση του φίλτρου «υπάλληλος». Επιστρέφονται
+  /// μόνο όσοι έχουν όντως κλήση: μια λίστα με ολόκληρο τον κατάλογο θα πρότεινε
+  /// ονόματα που δίνουν άδεια οθόνη.
+  ///
+  /// Το τηλέφωνο ταξιδεύει μαζί με το όνομα επειδή ο χρήστης συχνά θυμάται τον
+  /// αριθμό αντί για το επώνυμο — έτσι η αναζήτηση «2534» βρίσκει τον άνθρωπο,
+  /// και το φίλτρο εφαρμόζεται με το όνομά του.
+  Future<List<({String name, String phones})>> getCallerFilterOptions() async {
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT $kCallCallerLabelExpr AS caller_name,
+             COALESCE($kCallUserPhoneExpr, '') AS caller_phones
+      FROM calls
+      $kCallEntityFilterJoins
+      WHERE COALESCE(calls.is_deleted, 0) = 0
+      ORDER BY caller_name COLLATE NOCASE
+      ''');
+    return rows
+        .map(
+          (row) => (
+            name: (row['caller_name'] as String?)?.trim() ?? '',
+            phones: (row['caller_phones'] as String?)?.trim() ?? '',
+          ),
+        )
+        .where((option) => option.name.isNotEmpty && option.name != '-')
+        .toList();
+  }
+
+  /// Οι κωδικοί εξοπλισμού που εμφανίζονται στις κλήσεις.
+  ///
+  /// Ίδιος λόγος με τους καλούντες: προτείνονται μόνο κωδικοί που επιστρέφουν
+  /// αποτέλεσμα.
+  Future<List<String>> getEquipmentFilterOptions() async {
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT $kCallEquipmentExpr AS equipment_code
+      FROM calls
+      $kCallEntityFilterJoins
+      WHERE COALESCE(calls.is_deleted, 0) = 0
+      ORDER BY equipment_code COLLATE NOCASE
+      ''');
+    return rows
+        .map((row) => (row['equipment_code'] as String?)?.trim() ?? '')
+        .where((code) => code.isNotEmpty && code != '-')
+        .toList();
+  }
+
   /// True όταν υπάρχει έστω μία κλήση χωρίς καταγεγραμμένο χρήστη.
   Future<bool> hasUnassignedCalls() async {
     final rows = await db.rawQuery(
@@ -621,10 +668,7 @@ class CallsRepository {
       whereClauses.add('calls.date <= ?');
       args.add(dateTo);
     }
-    if (category != null && category.isNotEmpty) {
-      whereClauses.add('calls.category_text = ?');
-      args.add(category);
-    }
+    appendCallCategoryFilter(whereClauses, args, category: category);
     if (keyword != null && keyword.isNotEmpty) {
       whereClauses.add('calls.search_index LIKE ?');
       args.add('%$keyword%');
@@ -731,10 +775,7 @@ $kCallEntityFilterJoins
       whereClauses.add('calls.date <= ?');
       args.add(dateTo);
     }
-    if (category != null && category.isNotEmpty) {
-      whereClauses.add('calls.category_text = ?');
-      args.add(category);
-    }
+    appendCallCategoryFilter(whereClauses, args, category: category);
 
     whereClauses.insert(0, 'COALESCE(calls.is_deleted, 0) = 0');
 

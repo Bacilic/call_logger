@@ -57,7 +57,12 @@ class _BulkEquipmentEditDialogState
 
   List<DepartmentModel> _activeDepartments() {
     return LookupService.instance.departments
-        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
+        .where(
+          (d) =>
+              !d.isDeleted &&
+              d.name.trim().isNotEmpty &&
+              d.kind.canOwnEquipment,
+        )
         .toList();
   }
 

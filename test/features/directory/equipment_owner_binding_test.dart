@@ -6,12 +6,14 @@
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/utils/phone_list_parser.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/screens/widgets/equipment_form_dialog.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _kGrammateia = 10;
 const _kMageireio = 20;
+const _kDataMed = 70;
 
 UserModel _user(int id, String first, String last, {int? deptId}) => UserModel(
   id: id,
@@ -30,11 +32,17 @@ LookupService _catalog() {
       _user(1, 'Αλεξάνδρα', 'Νικολάου', deptId: _kGrammateia),
       _user(2, 'Γιώργος', 'Παππάς', deptId: _kGrammateia),
       _user(3, 'Γιώργος', 'Παππάς', deptId: _kMageireio),
+      _user(4, 'Αντώνης', 'Δαμωράκης', deptId: _kDataMed),
     ],
     equipment: const [],
     departmentRows: [
       DepartmentModel(id: _kGrammateia, name: 'Γραμματεία'),
       DepartmentModel(id: _kMageireio, name: 'Μαγειρείο'),
+      DepartmentModel(
+        id: _kDataMed,
+        name: 'DataMed',
+        kind: DepartmentKind.company,
+      ),
     ],
   );
   return svc;
@@ -48,6 +56,29 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Δέσιμο κατόχου εξοπλισμού', () {
+    // Σενάριο πεδίου 05/09/2026: ο Δαμωράκης της DataMed διαλεγόταν ως κάτοχος
+    // και το τμήμα του εξοπλισμού ακολουθούσε τη θέση του — δηλαδή ο δικός μας
+    // υπολογιστής κατέληγε στην εταιρεία.
+    test('υπάλληλος εταιρείας → ρητό σφάλμα, κανένας κάτοχος', () {
+      final result = _formState().resolveOwnerBinding(
+        'Αντώνης Δαμωράκης',
+        _catalog(),
+      );
+      expect(result.userId, isNull);
+      expect(result.error, isNotNull);
+      expect(result.error, contains('DataMed'));
+    });
+
+    test('υπάλληλος εταιρείας δεν προσφέρεται καν ως κάτοχος', () {
+      final catalog = _catalog();
+      final offered = catalog.users
+          .where((u) => u.id != null && catalog.userCanOwnEquipment(u))
+          .map((u) => u.id)
+          .toList();
+      expect(offered, isNot(contains(4)));
+      expect(offered, containsAll(<int>[1, 2, 3]));
+    });
+
     test('κενό κείμενο → χωρίς κάτοχο, χωρίς σφάλμα', () {
       final result = _formState().resolveOwnerBinding('   ', _catalog());
       expect(result.userId, isNull);

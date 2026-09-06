@@ -482,8 +482,8 @@ class ConflictEngine {
     if (normalizedQuery.isEmpty) return false;
     final rawName =
         user.name ??
-        NameParserUtility.stripParentheticalSuffix(user.fullNameWithDepartment);
-    final stripped = NameParserUtility.stripParentheticalSuffix(rawName);
+        NameParserUtility.stripDisplayDecorations(user.fullNameWithDepartment);
+    final stripped = NameParserUtility.stripDisplayDecorations(rawName);
     return normalizedQuery == SearchTextNormalizer.normalizeForSearch(stripped);
   }
 }

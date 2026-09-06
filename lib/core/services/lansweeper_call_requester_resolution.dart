@@ -68,6 +68,10 @@ Future<LansweeperRequesterOptions> resolveLansweeperRequesterForCalls({
       final department = lookup.findDepartmentByName(call.departmentText ?? '');
       final departmentId = department?.id;
       if (department == null || departmentId == null) continue;
+      // Εξωτερική εταιρεία ή μονάδα δεν έχει λογαριασμό Lansweeper — ούτε η
+      // ίδια ούτε οι άνθρωποί της. Αν έμπαινε στη λίστα, ο επιλογέας αιτούντα
+      // θα πρότεινε κάποιον που το Lansweeper δεν αναγνωρίζει.
+      if (!department.kind.participatesInLansweeper) continue;
       if (!seenDepartments.add(departmentId)) continue;
 
       final accounts = decodeLansweeperAccounts(department.lansweeperUsernames);

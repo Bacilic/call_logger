@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../../core/services/lookup_service.dart';
 import '../../../directory/models/department_model.dart';
 import '../../../directory/providers/department_directory_provider.dart';
 import '../../../directory/providers/directory_provider.dart';
@@ -199,7 +200,9 @@ class UserInfoCard extends ConsumerWidget {
                   _row(
                     theme,
                     Icons.business,
-                    'Τμήμα',
+                    LookupService.instance
+                        .departmentKindById(user.departmentId)
+                        .entityLabel,
                     user.departmentName ?? '–',
                   ),
                   _row(theme, Icons.phone, 'Τηλ.', user.phoneJoined),

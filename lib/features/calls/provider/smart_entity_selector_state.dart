@@ -214,6 +214,23 @@ class SmartEntitySelectorState {
     );
   }
 
+  /// Δέχεται εξοπλισμό το τμήμα που παίζει αυτή τη στιγμή στη φόρμα;
+  ///
+  /// **Μοναδικό σημείο επιβολής** για την οθόνη κλήσεων: εταιρεία και εξωτερική
+  /// μονάδα δεν γίνονται ποτέ κάτοχοι εξοπλισμού. Το πεδίο εξακολουθεί να
+  /// δουλεύει — γράφετε τον κωδικό του μηχανήματος για το οποίο μιλάτε — αλλά
+  /// καμία γρήγορη προσθήκη δεν προσφέρεται να το δέσει εκεί.
+  ///
+  /// Χωρίς κατάλογο δεν ξέρουμε είδος και δεν εμποδίζουμε τίποτα.
+  bool departmentAcceptsEquipment(LookupService? lookup) {
+    if (lookup == null) return true;
+    final departmentId =
+        selectedDepartmentId ??
+        lookup.findDepartmentByName(departmentText.trim())?.id ??
+        selectedCaller?.departmentId;
+    return lookup.departmentKindById(departmentId).canOwnEquipment;
+  }
+
   /// True όταν υπάρχει ήδη γνωστός χρήστης και τουλάχιστον ένα από Τηλέφωνο/Εξοπλισμό έχει τιμή και δεν είναι συσχετισμένο.
   bool needsExistingCallerAssociation(LookupService? lookup) {
     if (selectedCaller == null) return false;
@@ -222,7 +239,10 @@ class SmartEntitySelectorState {
     if (!phoneFilled && !equipmentFilled) return false;
 
     final needsPhone = phoneFilled && !hasPhoneAssociation;
-    final needsEquipment = equipmentFilled && !hasEquipmentAssociation(lookup);
+    final needsEquipment =
+        equipmentFilled &&
+        !hasEquipmentAssociation(lookup) &&
+        departmentAcceptsEquipment(lookup);
 
     return needsPhone || needsEquipment;
   }
@@ -277,6 +297,7 @@ class SmartEntitySelectorState {
 
     final equipmentNeedsShared =
         equipmentCode != null &&
+        departmentAcceptsEquipment(lookup) &&
         (() {
           final usage = lookup.checkEquipmentUsage(equipmentCode);
           if (usage.hasUserOwners) {
@@ -388,7 +409,9 @@ class SmartEntitySelectorState {
   String? associationTooltip(LookupService? lookup) {
     if (!needsAssociation(lookup)) return null;
     final phoneFilled = hasPhoneInput;
-    final equipmentFilled = hasEquipmentInput;
+    // Ό,τι δεν πρόκειται να γραφτεί δεν υπόσχεται το μήνυμα του κουμπιού.
+    final equipmentFilled =
+        hasEquipmentInput && departmentAcceptsEquipment(lookup);
 
     if (needsNewCallerCreation) {
       // Για νέο καλούντα συσχετίζεται ό,τι υπάρχει στη φόρμα (η τιμή

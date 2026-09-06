@@ -16,6 +16,7 @@ import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../building_map/services/building_map_floor_ordering.dart';
+import '../../models/department_kind.dart';
 import '../../models/department_model.dart';
 import '../../providers/building_catalog_provider.dart';
 import '../../providers/catalog_validation_provider.dart';
@@ -159,8 +160,17 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
 
   late Color selectedColor;
 
+  /// Τι είναι το τμήμα: νοσοκομείο, εταιρεία ή εξωτερική μονάδα.
+  ///
+  /// Νέο τμήμα ξεκινά ως «Νοσοκομείο» — είναι η συντριπτική πλειοψηφία των
+  /// καταχωρήσεων, και η ταχύτητα της φόρμας μετράει περισσότερο από τη
+  /// συμμετρία των επιλογών.
+  late DepartmentKind selectedKind;
+  late final DepartmentKind snapKind;
+
   final FocusNode _nameFocus = FocusNode();
   final FocusNode _buildingFocus = FocusNode();
+  final FocusNode _kindFocus = FocusNode();
   final FocusNode _colorFocus = FocusNode();
   final FocusNode _lansweeperAccountsFocus = FocusNode();
   final FocusNode _notesFocus = FocusNode();
@@ -288,6 +298,47 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     );
   }
 
+  /// Το «Είδος» του τμήματος — κλειστή λίστα τριών τιμών.
+  ///
+  /// Δεν απαγορεύει τίποτα· ανοίγει και κλείνει εξαιρέσεις. Η εταιρεία και η
+  /// εξωτερική μονάδα μένουν έξω από την κάτοψη και τα ticket Lansweeper,
+  /// επειδή δεν βρίσκονται μέσα στα κτίριά μας.
+  Widget _buildKindField() {
+    return DropdownButtonFormField<DepartmentKind>(
+      // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
+      value: selectedKind,
+      focusNode: _kindFocus,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Είδος',
+        border: const OutlineInputBorder(),
+        helperText: selectedKind.belongsOnBuildingMap
+            ? null
+            : 'Εκτός κάτοψης και εκτός Lansweeper — οι κλήσεις μετρούν κανονικά',
+      ),
+      items: [
+        for (final kind in DepartmentKind.values)
+          DropdownMenuItem<DepartmentKind>(
+            value: kind,
+            child: Row(
+              children: [
+                Icon(kind.icon, size: 18),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(kind.label, overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+          ),
+      ],
+      onChanged: (v) {
+        if (v == null) return;
+        setState(() => selectedKind = v);
+        notifyFormChanged();
+      },
+    );
+  }
+
   /// Υπογραφή των λογαριασμών για τον έλεγχο «άλλαξε κάτι;».
   String lansweeperAccountsSignature() =>
       lansweeperAccounts.map((a) => a.toInputText()).join('');
@@ -378,6 +429,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     buildingController = SpellCheckController()..text = d?.building ?? '';
     notesController = SpellCheckController()..text = (d?.notes ?? '');
     selectedColor = tryParseDepartmentHex(d?.color) ?? const Color(0xFF1976D2);
+    selectedKind = d?.kind ?? DepartmentKind.hospital;
     hexController = TextEditingController(
       text: colorToDepartmentHex(selectedColor),
     );
@@ -396,6 +448,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     snapBuilding = buildingController.text.trim();
     snapNotes = notesController.text.trim();
     snapColorHex = colorToDepartmentHex(selectedColor);
+    snapKind = selectedKind;
     snapLansweeperAccounts = lansweeperAccountsSignature();
     snapSharedPhones =
         sharedPhones
@@ -475,6 +528,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     notesController.dispose();
     _nameFocus.dispose();
     _buildingFocus.dispose();
+    _kindFocus.dispose();
     _colorFocus.dispose();
     _notesFocus.dispose();
     _lansweeperAccountsFocus.dispose();
@@ -660,11 +714,14 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Ο τίτλος ακολουθεί το «Είδος» που είναι επιλεγμένο τώρα: η καρτέλα της
+    // DataMed δεν λέγεται «τμήμα».
+    final entityGenitive = selectedKind.entityLabelGenitive.toLowerCase();
     final title = isEdit
-        ? 'Επεξεργασία τμήματος'
+        ? 'Επεξεργασία $entityGenitive'
         : widget.isClone
-        ? 'Νέο τμήμα (αντίγραφο)'
-        : 'Νέο τμήμα';
+        ? '${selectedKind.newEntityTitle} (αντίγραφο)'
+        : selectedKind.newEntityTitle;
     // Κανόνες επικύρωσης (υποδείξεις, όχι απαγορεύσεις) — όσο φορτώνουν,
     // απλώς δεν εμφανίζονται υποδείξεις.
     final validation = ref
@@ -738,6 +795,8 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      _buildKindField(),
+                      const SizedBox(height: 12),
                       Text(
                         'Κοινόχρηστα τηλέφωνα',
                         style: Theme.of(context).textTheme.titleSmall,
@@ -810,9 +869,18 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                       // προστεθειμένα μιλά το καθένα με το εικονίδιό του,
                       // οπότε φαίνονται όλα μαζί αντί για ένα τη φορά.
                       CatalogValidationHintText(
-                        hint: validation?.phoneHint(
-                          sharedPhoneInputController.text,
-                        ),
+                        // Στην εταιρεία ένα «σωστό» δικό μας εσωτερικό είναι
+                        // το ίδιο ύποπτο με λάθος μήκος: ή το Είδος είναι
+                        // λάθος, ή γράφτηκε το εσωτερικό του τεχνικού.
+                        hint:
+                            validation?.phoneHint(
+                              sharedPhoneInputController.text,
+                            ) ??
+                            (selectedKind == DepartmentKind.company
+                                ? validation?.companyInternalPhoneHint(
+                                    sharedPhoneInputController.text,
+                                  )
+                                : null),
                       ),
                       const SizedBox(height: 6),
                       Wrap(
@@ -863,168 +931,182 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                               ),
                           avatarIcon: Icons.phone_outlined,
                         ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Κοινόχρηστος εξοπλισμός',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 6),
-                      RawAutocomplete<String>(
-                        textEditingController: sharedEquipmentInputController,
-                        focusNode: sharedEquipmentInputFocus,
-                        optionsBuilder: (value) {
-                          final q = SearchTextNormalizer.normalizeForSearch(
-                            value.text,
-                          );
-                          final all = LookupService.instance
-                              .getAllKnownEquipmentCodes();
-                          if (q.isEmpty) return all;
-                          return all.where(
-                            (v) => SearchTextNormalizer.matchesNormalizedQuery(
-                              v,
-                              q,
-                            ),
-                          );
-                        },
-                        displayStringForOption: (v) => v,
-                        onSelected: (v) =>
-                            sharedLinks.addSharedEquipmentFromInput(v),
-                        fieldViewBuilder: (context, controller, focusNode, _) {
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            decoration: const InputDecoration(
-                              labelText: 'Προσθήκη εξοπλισμού (με κόμμα)',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (_) => sharedLinks.commitDelimitedInput(
-                              controller: sharedEquipmentInputController,
-                              target: sharedEquipmentCodes,
-                              keepLastIncomplete: true,
-                            ),
-                            onSubmitted:
-                                sharedLinks.addSharedEquipmentFromInput,
-                          );
-                        },
-                        optionsViewBuilder: (context, onSelected, options) {
-                          return Align(
-                            alignment: Alignment.topLeft,
-                            child: Material(
-                              elevation: 4,
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 380,
-                                  maxHeight: 200,
-                                ),
-                                child: ListView(
-                                  padding: EdgeInsets.zero,
-                                  shrinkWrap: true,
-                                  children: [
-                                    for (final opt in options)
-                                      ListTile(
-                                        dense: true,
-                                        title: Text(opt),
-                                        onTap: () => onSelected(opt),
+                      // Εταιρεία και εξωτερική μονάδα δεν γίνονται κάτοχοι
+                      // εξοπλισμού: ο κατάλογος μηχανημάτων είναι του
+                      // νοσοκομείου. Η ενότητα φεύγει ολόκληρη, μαζί με το
+                      // υπόμνημα των κατόχων.
+                      if (selectedKind.canOwnEquipment) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Κοινόχρηστος εξοπλισμός',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 6),
+                        RawAutocomplete<String>(
+                          textEditingController: sharedEquipmentInputController,
+                          focusNode: sharedEquipmentInputFocus,
+                          optionsBuilder: (value) {
+                            final q = SearchTextNormalizer.normalizeForSearch(
+                              value.text,
+                            );
+                            final all = LookupService.instance
+                                .getAllKnownEquipmentCodes();
+                            if (q.isEmpty) return all;
+                            return all.where(
+                              (v) =>
+                                  SearchTextNormalizer.matchesNormalizedQuery(
+                                    v,
+                                    q,
+                                  ),
+                            );
+                          },
+                          displayStringForOption: (v) => v,
+                          onSelected: (v) =>
+                              sharedLinks.addSharedEquipmentFromInput(v),
+                          fieldViewBuilder:
+                              (context, controller, focusNode, _) {
+                                return TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Προσθήκη εξοπλισμού (με κόμμα)',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (_) =>
+                                      sharedLinks.commitDelimitedInput(
+                                        controller:
+                                            sharedEquipmentInputController,
+                                        target: sharedEquipmentCodes,
+                                        keepLastIncomplete: true,
                                       ),
-                                  ],
+                                  onSubmitted:
+                                      sharedLinks.addSharedEquipmentFromInput,
+                                );
+                              },
+                          optionsViewBuilder: (context, onSelected, options) {
+                            return Align(
+                              alignment: Alignment.topLeft,
+                              child: Material(
+                                elevation: 4,
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 380,
+                                    maxHeight: 200,
+                                  ),
+                                  child: ListView(
+                                    padding: EdgeInsets.zero,
+                                    shrinkWrap: true,
+                                    children: [
+                                      for (final opt in options)
+                                        ListTile(
+                                          dense: true,
+                                          title: Text(opt),
+                                          onTap: () => onSelected(opt),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                      // Ίδια λογική με τα τηλέφωνα: εδώ μόνο ό,τι γράφεται
-                      // τώρα· τα προστεθειμένα τα λένε τα εικονίδιά τους.
-                      CatalogValidationHintText(
-                        hint: validation?.equipmentCodeFieldHint(
-                          sharedEquipmentInputController.text,
+                            );
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final code in sharedEquipmentCodes)
-                            RemovableSharedChip(
-                              label: code,
-                              diagnosis:
-                                  validation?.equipmentCodeChipDiagnosis(
-                                    code,
-                                  ) ??
-                                  CatalogChipDiagnosis.ok,
-                              isNewlyAdded: !snapSharedEquipmentCodes.contains(
-                                code,
-                              ),
-                              isPendingRemoval: false,
-                              onToggle: () => setState(() {
-                                sharedEquipmentCodes.remove(code);
-                                if (snapSharedEquipmentCodes.contains(code)) {
-                                  _sharedEquipmentPendingRemoval.add(code);
-                                }
-                              }),
-                            ),
-                          for (final code
-                              in (_sharedEquipmentPendingRemoval.toList()
-                                    ..sort())
-                                  .where(
-                                    (x) => !sharedEquipmentCodes.contains(x),
-                                  ))
-                            RemovableSharedChip(
-                              label: code,
-                              isNewlyAdded: false,
-                              isPendingRemoval: true,
-                              onToggle: () => setState(() {
-                                _sharedEquipmentPendingRemoval.remove(code);
-                                if (!sharedEquipmentCodes.contains(code)) {
-                                  sharedEquipmentCodes.add(code);
-                                  sharedEquipmentCodes.sort();
-                                }
-                              }),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      if (widget.initialDepartment?.id != null)
-                        _buildReadOnlyLegend(
-                          context: context,
-                          title:
-                              'Εξοπλισμός Τμήματος (Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
-                          byValueToOwners: LookupService.instance
-                              .getCallerOwnedEquipmentByDepartment(
-                                widget.initialDepartment!.id!,
-                              ),
-                          avatarIcon: Icons.computer_outlined,
-                        ),
-                      const SizedBox(height: 12),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: _buildBuildingField()),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<int?>(
-                              // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
-                              value: _effectiveFloorDropdownValue(),
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                labelText: 'Όροφος (κάτοψη)',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                              items: _floorDropdownItems(),
-                              // Κλειδωμένο όσο οι κάτοψεις είναι άγνωστες: η
-                              // μόνη διαθέσιμη επιλογή θα ήταν «— χωρίς —»,
-                              // που σβήνει τη θέση στον χάρτη.
-                              onChanged: floorLoadState.allowsFloorChange
-                                  ? (v) => _onFloorDropdownChanged(v)
-                                  : null,
-                            ),
+                        // Ίδια λογική με τα τηλέφωνα: εδώ μόνο ό,τι γράφεται
+                        // τώρα· τα προστεθειμένα τα λένε τα εικονίδιά τους.
+                        CatalogValidationHintText(
+                          hint: validation?.equipmentCodeFieldHint(
+                            sharedEquipmentInputController.text,
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final code in sharedEquipmentCodes)
+                              RemovableSharedChip(
+                                label: code,
+                                diagnosis:
+                                    validation?.equipmentCodeChipDiagnosis(
+                                      code,
+                                    ) ??
+                                    CatalogChipDiagnosis.ok,
+                                isNewlyAdded: !snapSharedEquipmentCodes
+                                    .contains(code),
+                                isPendingRemoval: false,
+                                onToggle: () => setState(() {
+                                  sharedEquipmentCodes.remove(code);
+                                  if (snapSharedEquipmentCodes.contains(code)) {
+                                    _sharedEquipmentPendingRemoval.add(code);
+                                  }
+                                }),
+                              ),
+                            for (final code
+                                in (_sharedEquipmentPendingRemoval.toList()
+                                      ..sort())
+                                    .where(
+                                      (x) => !sharedEquipmentCodes.contains(x),
+                                    ))
+                              RemovableSharedChip(
+                                label: code,
+                                isNewlyAdded: false,
+                                isPendingRemoval: true,
+                                onToggle: () => setState(() {
+                                  _sharedEquipmentPendingRemoval.remove(code);
+                                  if (!sharedEquipmentCodes.contains(code)) {
+                                    sharedEquipmentCodes.add(code);
+                                    sharedEquipmentCodes.sort();
+                                  }
+                                }),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (widget.initialDepartment?.id != null)
+                          _buildReadOnlyLegend(
+                            context: context,
+                            title:
+                                'Εξοπλισμός Τμήματος (Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
+                            byValueToOwners: LookupService.instance
+                                .getCallerOwnedEquipmentByDepartment(
+                                  widget.initialDepartment!.id!,
+                                ),
+                            avatarIcon: Icons.computer_outlined,
+                          ),
+                      ],
+                      const SizedBox(height: 12),
+                      // Κτίριο και όροφος αφορούν την κάτοψη του νοσοκομείου.
+                      // Μια εταιρεία ή ένα Κέντρο Υγείας δεν βρίσκεται σε δικό
+                      // μας κτίριο, οπότε τα πεδία δεν έχουν τι να δείξουν.
+                      if (selectedKind.belongsOnBuildingMap)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: _buildBuildingField()),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonFormField<int?>(
+                                // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
+                                value: _effectiveFloorDropdownValue(),
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Όροφος (κάτοψη)',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                items: _floorDropdownItems(),
+                                // Κλειδωμένο όσο οι κάτοψεις είναι άγνωστες: η
+                                // μόνη διαθέσιμη επιλογή θα ήταν «— χωρίς —»,
+                                // που σβήνει τη θέση στον χάρτη.
+                                onChanged: floorLoadState.allowsFloorChange
+                                    ? (v) => _onFloorDropdownChanged(v)
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        ),
                       if (buildingMapFloorLoadNotice(floorLoadState)
-                          case final notice?) ...[
+                          case final notice?
+                          when selectedKind.belongsOnBuildingMap) ...[
                         const SizedBox(height: 4),
                         Text(
                           notice,
@@ -1032,7 +1114,8 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                               ?.copyWith(color: Colors.orange.shade800),
                         ),
                       ],
-                      if (_floorSubtitleText() != null) ...[
+                      if (selectedKind.belongsOnBuildingMap &&
+                          _floorSubtitleText() != null) ...[
                         const SizedBox(height: 4),
                         Text(
                           _floorSubtitleText()!,

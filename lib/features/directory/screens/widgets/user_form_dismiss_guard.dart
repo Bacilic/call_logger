@@ -20,6 +20,9 @@ class UserFormDismissGuard {
 
   bool get isDirty {
     if (host.lastNameController.text.trim() != host.snapLastName) return true;
+    if (host.nicknameController.text.trim() != host.snapNickname) {
+      return true;
+    }
     if (host.firstNameController.text.trim() != host.snapFirstName) {
       return true;
     }

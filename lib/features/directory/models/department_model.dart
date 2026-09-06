@@ -1,3 +1,5 @@
+import 'department_kind.dart';
+
 // Sentinel για [DepartmentModel.copyWith]: διακρίνει «άσε το παλιό» από «βάλε null»
 // σε nullable πεδία. Παράδειγμα: `d.copyWith(mapCustomName: null)` καθαρίζει την
 // επωνυμία χάρτη, ενώ χωρίς το `mapCustomName` η τιμή διατηρείται.
@@ -40,6 +42,7 @@ class DepartmentModel {
     this.lansweeperUsernames,
     this.isDeleted = false,
     this.isHiddenOnMap = false,
+    this.kind = DepartmentKind.hospital,
   });
 
   final int? id;
@@ -89,6 +92,13 @@ class DepartmentModel {
   /// Απόκρυψη τμήματος από τον χάρτη κτιρίου (διατηρεί τη γεωμετρία). Per-department
   /// — καθώς κάθε τμήμα χαρτογραφείται σε ένα μόνο φύλλο μέσω `mapFloor`.
   final bool isHiddenOnMap;
+
+  /// Τι είναι αυτό το τμήμα: του νοσοκομείου, εταιρεία ή εξωτερική μονάδα.
+  ///
+  /// Καθορίζει τις εξαιρέσεις — κάτοψη, Lansweeper, κανόνας «Δεν έχει κτίριο».
+  /// Οι κλήσεις και οι εκκρεμότητες δεν το κοιτούν καθόλου: μια κλήση από την
+  /// DataMed είναι κλήση όπως κάθε άλλη.
+  final DepartmentKind kind;
 
   String get displayName {
     final custom = mapCustomName?.trim();
@@ -167,6 +177,7 @@ class DepartmentModel {
       lansweeperUsernames: map['lansweeper_usernames'] as String?,
       isDeleted: (map['is_deleted'] as int?) == 1,
       isHiddenOnMap: (map['map_hidden'] as int?) == 1,
+      kind: DepartmentKind.fromDbValue(map['kind']),
     );
   }
 
@@ -200,6 +211,7 @@ class DepartmentModel {
     Object? lansweeperUsernames = _unset,
     bool? isDeleted,
     bool? isHiddenOnMap,
+    DepartmentKind? kind,
   }) {
     return DepartmentModel(
       id: identical(id, _unset) ? this.id : id as int?,
@@ -257,6 +269,7 @@ class DepartmentModel {
           : lansweeperUsernames as String?,
       isDeleted: isDeleted ?? this.isDeleted,
       isHiddenOnMap: isHiddenOnMap ?? this.isHiddenOnMap,
+      kind: kind ?? this.kind,
     );
   }
 
@@ -287,6 +300,7 @@ class DepartmentModel {
         'lansweeper_usernames': lansweeperUsernames,
       'is_deleted': isDeleted ? 1 : 0,
       'map_hidden': isHiddenOnMap ? 1 : 0,
+      'kind': kind.dbValue,
     };
   }
 }

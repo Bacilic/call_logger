@@ -31,6 +31,10 @@ abstract final class DatabaseBackupFailureCode {
   static const String folderMissing = 'folder_missing';
 }
 
+/// Συντόμευση για χρήση μέσα στο αρχείο, ώστε οι κλήσεις να μένουν σε μία
+/// γραμμή.
+const String failureCodeFolderMissing = DatabaseBackupFailureCode.folderMissing;
+
 /// Αποτέλεσμα χειροκίνητου ή προγραμματισμένου backup.
 class DatabaseBackupResult {
   const DatabaseBackupResult({
@@ -170,7 +174,9 @@ class DatabaseBackupService {
     bool requireDestination = true,
     BackupAuditTrigger auditTrigger = BackupAuditTrigger.manual,
   }) async {
-    Future<void> auditFailure(String message, {String? failureCode}) =>
+    // Το ημερολόγιο κρατά το μήνυμα, που ήδη λέει τι απέτυχε· ο κωδικός
+    // αποτυχίας ταξιδεύει στο αποτέλεσμα, για τον καλούντα.
+    Future<void> auditFailure(String message) =>
         DatabaseBackupAudit.logRunResult(
           trigger: auditTrigger,
           success: false,
@@ -204,7 +210,16 @@ class DatabaseBackupService {
     } catch (e) {
       final message = 'Δεν ήταν δυνατή η δημιουργία φακέλου: $e';
       await auditFailure(message);
-      return DatabaseBackupResult(success: false, message: message);
+      // Ο κωδικός δηλώνει ΤΙ απέτυχε, όχι μόνο ότι απέτυχε. Χωρίς αυτόν, η
+      // αποτυχημένη δημιουργία φακέλου καταγραφόταν ως σκέτη αποτυχία, η
+      // κατάσταση γύριζε από «λείπει ο φάκελος» σε «απέτυχε», και ο φρουρός
+      // «μία φορά ανά συμβάν» έβλεπε δύο διαφορετικά συμβάντα εκεί που
+      // υπήρχε ένα.
+      return DatabaseBackupResult(
+        success: false,
+        message: message,
+        failureCode: failureCodeFolderMissing,
+      );
     }
 
     final db = await DatabaseHelper.instance.database;

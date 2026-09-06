@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/database_backup_settings_provider.dart';
 import '../services/database_backup_audit.dart';
+import '../utils/backup_destination_reachability.dart';
 import '../utils/backup_location_hints.dart';
 import '../utils/backup_schedule_utils.dart';
 import 'backup_destination_change_flow.dart';
@@ -32,21 +33,34 @@ Future<void> showBackupFolderMissingDialog({
   BackupAuditTrigger auditTrigger = BackupAuditTrigger.scheduledRetry,
   bool dismissSetsStatusNone = true,
   Future<String?> Function()? pickFolder,
+  Future<BackupDestinationReachability> Function(String path)? probeReach,
 }) async {
   final trimmed = folderPath.trim();
   if (trimmed.isEmpty) return;
 
-  // Ο δίσκος πρέπει να υπάρχει ΠΡΙΝ προσφερθεί δημιουργία: σε αποσυνδεδεμένο ή
-  // ανύπαρκτο τόμο η δημιουργία είναι αδύνατη, και η προτροπή δίνει ελπίδα που
-  // δεν υπάρχει. Η εφαρμογή ξέρει ήδη ποιοι τόμοι είναι συνδεδεμένοι.
-  final volumeExists = BackupLocationHints.volumeOfPathExists(trimmed);
+  // Ο προορισμός πρέπει να είναι προσβάσιμος ΠΡΙΝ προσφερθεί δημιουργία: σε
+  // αποσυνδεδεμένο τόμο ή άφταστο δικτυακό φάκελο η δημιουργία είναι αδύνατη,
+  // και η προτροπή δίνει ελπίδα που δεν υπάρχει.
+  final reach = await (probeReach ?? probeBackupDestinationReachability)(
+    trimmed,
+  );
+  if (!context.mounted) return;
+
+  final canCreate = reach.canCreateFolder;
   final driveLetter = BackupLocationHints.windowsDriveLetterFromPath(trimmed);
-  final availableDrives = volumeExists
+  final availableDrives = canCreate
       ? const <String>[]
       : BackupLocationHints.eligibleWindowsBackupDriveLabels();
-  final missingVolumeText = driveLetter == null
-      ? 'Ο δίσκος της διαδρομής δεν είναι διαθέσιμος'
-      : 'Ο δίσκος $driveLetter: δεν υπάρχει ή δεν είναι συνδεδεμένος';
+  final unreachableText = switch (reach) {
+    BackupDestinationReachability.creatable => '',
+    BackupDestinationReachability.networkUnreachable =>
+      'Ο δικτυακός φάκελος δεν απαντά από αυτόν τον υπολογιστή. Πιθανή αιτία: '
+          'δεν υπάρχει σύνδεση στο δίκτυο, ο διακομιστής είναι εκτός, ή ο '
+          'κοινόχρηστος φάκελος δεν υπάρχει πια',
+    BackupDestinationReachability.volumeMissing => driveLetter == null
+        ? 'Ο δίσκος της διαδρομής δεν είναι διαθέσιμος'
+        : 'Ο δίσκος $driveLetter: δεν υπάρχει ή δεν είναι συνδεδεμένος',
+  };
   final availableText = availableDrives.isEmpty
       ? ''
       : 'Διαθέσιμοι δίσκοι: ${availableDrives.join(', ')}.';
@@ -56,18 +70,21 @@ Future<void> showBackupFolderMissingDialog({
     barrierDismissible: false,
     builder: (ctx) => AlertDialog(
       title: const Text('Φάκελος αντιγράφων ασφαλείας'),
-      content: Text(
-        volumeExists
-            ? 'Ο φάκελος δεν βρέθηκε:\n\n$trimmed\n\n'
-                  'Πιθανή αιτία: αποσυνδεδεμένος εξωτερικός δίσκος, διαγραφή '
-                  'ή μετονομασία.\n\n'
-                  'Αν η διαδρομή ισχύει ακόμη, δημιουργήστε τον εδώ. Αν '
-                  'όχι — άλλη βάση, αλλαγμένος δικτυακός τόμος — ορίστε άλλη '
-                  'διαδρομή, αλλιώς τα αντίγραφα θα πάνε σε λάθος σημείο.'
-            : 'Ο φάκελος δεν βρέθηκε:\n\n$trimmed\n\n'
-                  '$missingVolumeText, οπότε ο φάκελος δεν μπορεί να '
-                  'δημιουργηθεί εκεί.\n\n$availableText\n\n'
-                  'Πατήστε «Αλλαγή φακέλου» για να ορίσετε άλλη διαδρομή.',
+      content: SingleChildScrollView(
+        child: Text(
+          canCreate
+              ? 'Ο φάκελος δεν βρέθηκε:\n\n$trimmed\n\n'
+                    'Πιθανή αιτία: αποσυνδεδεμένος εξωτερικός δίσκος, '
+                    'διαγραφή ή μετονομασία.\n\n'
+                    'Αν η διαδρομή ισχύει ακόμη, δημιουργήστε τον εδώ. Αν '
+                    'όχι — άλλη βάση, αλλαγμένος δικτυακός τόμος — ορίστε '
+                    'άλλη διαδρομή, αλλιώς τα αντίγραφα θα πάνε σε λάθος '
+                    'σημείο.'
+              : 'Ο φάκελος δεν βρέθηκε:\n\n$trimmed\n\n'
+                    '$unreachableText, οπότε ο φάκελος δεν μπορεί να '
+                    'δημιουργηθεί εκεί.\n\n$availableText\n\n'
+                    'Πατήστε «Αλλαγή φακέλου» για να ορίσετε άλλη διαδρομή.',
+        ),
       ),
       actions: [
         TextButton(
@@ -84,7 +101,7 @@ Future<void> showBackupFolderMissingDialog({
               Navigator.of(ctx).pop(BackupFolderMissingChoice.changeFolder),
           child: const Text('Αλλαγή φακέλου'),
         ),
-        if (volumeExists)
+        if (canCreate)
           FilledButton(
             onPressed: () =>
                 Navigator.of(ctx).pop(BackupFolderMissingChoice.createHere),

@@ -383,13 +383,19 @@ class TopCallersCard extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Δύο γραμμές αντί για αποσιωπητικά: τα ελληνικά
+                          // ονοματεπώνυμα είναι μακριά και η κάρτα στενή, οπότε
+                          // το κόψιμο έσβηνε ακριβώς το επώνυμο — το μέρος που
+                          // ξεχωρίζει τον έναν άνθρωπο από τον άλλον.
                           Text(
                             c.name,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
+                            softWrap: true,
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
                               fontSize: 13.5,
+                              height: 1.15,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -451,10 +457,11 @@ class TopCallersCard extends ConsumerWidget {
               if (hideUnknown && hiddenUnknown != null)
                 Expanded(
                   child: Text(
-                    '+ ${hiddenUnknown.count} κλήσεις χωρίς καταγεγραμμένο καλούντα',
+                    '+ ${hiddenUnknown.count} κλήσεις χωρίς '
+                    'καταγεγραμμένο καλούντα',
                     style: TextStyle(fontSize: 11, color: colors.kpiSubtitle),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                    softWrap: true,
                   ),
                 ),
             ],
@@ -883,7 +890,7 @@ class CategoryDistributionChartCard extends ConsumerWidget {
     final metric = ref.watch(dashboardIssueMetricProvider);
 
     return ChartCard(
-      title: 'Κατανομή Βλαβών',
+      title: 'Κατανομή ανά κατηγορία',
       fill: colors.chartCardFill,
       border: colors.chartCardBorder,
       titleTrailing: Row(
@@ -991,7 +998,7 @@ class MoreSection extends StatelessWidget {
           Row(
             children: [
               Text(
-                'Περισσότερα...',
+                'Κατανομές',
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),

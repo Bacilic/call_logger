@@ -31,6 +31,7 @@ class UserRepository {
   static const Set<String> _kUserAuditColumns = {
     'first_name',
     'last_name',
+    'nickname',
     'department_id',
     'location',
     'notes',

@@ -412,7 +412,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
   /// εμφάνιση σε λίστες.
   static String _ownerNameKey(String raw) {
     return SearchTextNormalizer.normalizeForSearch(
-      NameParserUtility.stripParentheticalSuffix(raw),
+      NameParserUtility.stripDisplayDecorations(raw),
     );
   }
 
@@ -465,7 +465,19 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
             'Επιλέξτε τον σωστό από τη λίστα.',
       );
     }
-    return (userId: matches.first.id, error: null);
+    final owner = matches.first;
+    if (!lookupService.userCanOwnEquipment(owner)) {
+      final departmentName =
+          lookupService.getDepartmentName(owner.departmentId)?.trim() ?? '';
+      final where = departmentName.isEmpty ? '' : ' («$departmentName»)';
+      return (
+        userId: null,
+        error:
+            'Ο/Η «$text»$where ανήκει σε εξωτερικό συνεργάτη και δεν μπορεί να '
+            'είναι κάτοχος εξοπλισμού του νοσοκομείου.',
+      );
+    }
+    return (userId: owner.id, error: null);
   }
 
   /// Η αυτόματη τιμή που θα σταλεί όταν το πεδίο Lansweeper μείνει κενό —
@@ -824,8 +836,11 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
                         );
                         return pairsAsync.when(
                           data: (pairs) => catalogAsync.when(
-                            data: (catalog) =>
-                                remoteParams.buildSection(pairs, catalog),
+                            data: (catalog) => remoteParams.buildSection(
+                              pairs,
+                              catalog,
+                              validation,
+                            ),
                             loading: () => const Padding(
                               padding: EdgeInsets.symmetric(vertical: 8),
                               child: LinearProgressIndicator(minHeight: 2),
@@ -863,8 +878,12 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
                         return async.when(
                           data: (bundle) {
                             final service = bundle.service;
+                            // Εταιρεία και εξωτερική μονάδα δεν γίνονται
+                            // κάτοχοι εξοπλισμού — δεν προσφέρονται καν.
                             final departmentNames = service.departments
-                                .where((d) => !d.isDeleted)
+                                .where(
+                                  (d) => !d.isDeleted && d.kind.canOwnEquipment,
+                                )
                                 .map((d) => d.name.trim())
                                 .where((name) => name.isNotEmpty)
                                 .toList();
@@ -1170,7 +1189,14 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
                                         value.text.trim(),
                                       );
                                 return users
-                                    .where((u) => u.id != null)
+                                    // Υπάλληλος εταιρείας δεν προσφέρεται ως
+                                    // κάτοχος: ο εξοπλισμός θα ακολουθούσε τη
+                                    // θέση του και θα κατέληγε στην εταιρεία.
+                                    .where(
+                                      (u) =>
+                                          u.id != null &&
+                                          service.userCanOwnEquipment(u),
+                                    )
                                     .map((u) => u.fullNameWithDepartment)
                                     .where(
                                       (option) =>

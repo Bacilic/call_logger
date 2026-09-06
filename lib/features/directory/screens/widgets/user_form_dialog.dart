@@ -13,6 +13,7 @@ import '../../../../core/widgets/resizable_text_area.dart';
 import '../../../../core/widgets/spell_check_controller.dart';
 import '../../../../core/services/lansweeper_agent_identity_reader.dart';
 import '../../../../core/services/lansweeper_identity_diagnosis.dart';
+import '../../../../core/utils/name_parser.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
@@ -97,12 +98,18 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
   late final String snapDepartmentNorm;
   late final String snapLastName;
   late final String snapFirstName;
+  late final String snapNickname;
   late final String snapPhone;
   late final String snapNotes;
   late final String snapLocation;
   late final String snapLansweeperUsername;
   late final TextEditingController lastNameController;
   late final SpellCheckController firstNameController;
+
+  /// Πώς φωνάζουν τον άνθρωπο. Χωρίς ορθογραφικό έλεγχο και χωρίς προτάσεις:
+  /// τα «Γωγώ» και «Σίσυ» δεν είναι λέξεις λεξικού και δεν επαναλαμβάνονται
+  /// αρκετά ώστε μια λίστα προτάσεων να βοηθά.
+  late final TextEditingController nicknameController;
   late final TextEditingController phoneController;
   late final SpellCheckController departmentController;
 
@@ -121,6 +128,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
   final FocusNode _locationFocusNode = FocusNode();
   final FocusNode _notesFocusNode = FocusNode();
   final FocusNode _lansweeperFocusNode = FocusNode();
+  final FocusNode _nicknameFocusNode = FocusNode();
 
   /// Ταυτότητα πράκτορα (Ρυθμίσεις API) — μέτρο σύγκρισης για την ήπια
   /// υποψία τομέα στο αναγνωριστικό Lansweeper.
@@ -129,6 +137,26 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
       const LansweeperAgentIdentity.unavailable();
 
   bool get isEdit => widget.initialUser != null && !widget.isClone;
+
+  /// Γεμίζει τα δύο πεδία με τον διαχωρισμό «(Γωγώ) Γεωργία», όταν η καρτέλα
+  /// ανοίγει από το εύρημα του «Ελέγχου δεδομένων».
+  ///
+  /// **Πρόταση, όχι επέμβαση.** Τίποτα δεν γράφεται στη βάση: ο χρήστης βλέπει
+  /// τα δύο πεδία χωρισμένα και αποφασίζει. Αν φύγει χωρίς αποθήκευση, ο
+  /// φρουρός εξόδου τον ρωτά κανονικά, γιατί τα πεδία διαφέρουν πλέον από τα
+  /// αποτυπώματα της εγγραφής.
+  ///
+  /// Δεν πατά ποτέ πάνω σε συμπληρωμένο ψευδώνυμο.
+  void _proposeNicknameMigration() {
+    if (nicknameController.text.trim().isNotEmpty) return;
+    final split = NameParserUtility.splitNicknameFromName(
+      firstNameController.text,
+    );
+    if (split == null) return;
+    firstNameController.text = split.name;
+    nicknameController.text = split.nickname;
+    _onFieldChanged();
+  }
 
   void _selectAll(TextEditingController c) {
     c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
@@ -140,6 +168,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     final u = widget.initialUser;
     snapLastName = (u?.lastName ?? '').trim();
     snapFirstName = (u?.firstName ?? '').trim();
+    snapNickname = (u?.nickname ?? '').trim();
     snapPhone = PhoneListParser.joinPhones(u?.phones ?? const []);
     snapNotes = (u?.notes ?? '').trim();
     snapLocation = (u?.location ?? '').trim();
@@ -151,6 +180,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
 
     lastNameController = TextEditingController(text: u?.lastName ?? '');
     firstNameController = SpellCheckController()..text = u?.firstName ?? '';
+    nicknameController = TextEditingController(text: u?.nickname ?? '');
     phoneController = TextEditingController(
       text: PhoneListParser.joinPhones(u?.phones ?? const []),
     );
@@ -163,6 +193,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
 
     lastNameController.addListener(_onFieldChanged);
     firstNameController.addListener(_onFieldChanged);
+    nicknameController.addListener(_onFieldChanged);
     phoneController.addListener(_onFieldChanged);
     departmentController.addListener(_onFieldChanged);
     locationController.addListener(_onFieldChanged);
@@ -193,6 +224,11 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
           _lansweeperFocusNode.requestFocus();
           _selectAll(lansweeperUsernameController);
           break;
+        case 'nickname':
+          _proposeNicknameMigration();
+          _nicknameFocusNode.requestFocus();
+          _selectAll(nicknameController);
+          break;
         case 'firstName':
         default:
           _firstNameFocusNode.requestFocus();
@@ -214,6 +250,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
   void dispose() {
     lastNameController.removeListener(_onFieldChanged);
     firstNameController.removeListener(_onFieldChanged);
+    nicknameController.removeListener(_onFieldChanged);
     phoneController.removeListener(_onFieldChanged);
     departmentController.removeListener(_onFieldChanged);
     locationController.removeListener(_onFieldChanged);
@@ -227,9 +264,11 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     _locationFocusNode.dispose();
     _notesFocusNode.dispose();
     _lansweeperFocusNode.dispose();
+    _nicknameFocusNode.dispose();
 
     lastNameController.dispose();
     firstNameController.dispose();
+    nicknameController.dispose();
     phoneController.dispose();
     departmentController.dispose();
     locationController.dispose();
@@ -546,53 +585,93 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                     hint: validation?.personNameHint(lastNameController.text),
                   ),
                   const SizedBox(height: 12),
-                  RawAutocomplete<String>(
-                    textEditingController: firstNameController,
-                    focusNode: _firstNameFocusNode,
-                    optionsBuilder: (textEditingValue) {
-                      if (firstNameOptions.isEmpty) {
-                        return const Iterable<String>.empty();
-                      }
-                      final q = SearchTextNormalizer.normalizeForSearch(
-                        textEditingValue.text,
-                      );
-                      if (q.isEmpty) return firstNameOptions;
-                      return firstNameOptions.where(
-                        (name) => SearchTextNormalizer.matchesNormalizedQuery(
-                          name,
-                          q,
+                  // Όνομα και ψευδώνυμο στην ίδια γραμμή: ανήκουν στο ίδιο
+                  // πράγμα — πώς λέγεται και πώς τον φωνάζουν. Το τύλιγμα σε
+                  // Row είναι ΣΤΑΘΕΡΟ, ποτέ υπό όρους: ένα autocomplete που
+                  // αλλάζει γονιό ξαναστήνεται και χάνει την εστίασή του.
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            RawAutocomplete<String>(
+                              textEditingController: firstNameController,
+                              focusNode: _firstNameFocusNode,
+                              optionsBuilder: (textEditingValue) {
+                                if (firstNameOptions.isEmpty) {
+                                  return const Iterable<String>.empty();
+                                }
+                                final q =
+                                    SearchTextNormalizer.normalizeForSearch(
+                                      textEditingValue.text,
+                                    );
+                                if (q.isEmpty) return firstNameOptions;
+                                return firstNameOptions.where(
+                                  (name) =>
+                                      SearchTextNormalizer.matchesNormalizedQuery(
+                                        name,
+                                        q,
+                                      ),
+                                );
+                              },
+                              displayStringForOption: (option) => option,
+                              onSelected: (selection) {
+                                firstNameController.text = selection;
+                                _onFieldChanged();
+                              },
+                              fieldViewBuilder:
+                                  (context, controller, focusNode, _) {
+                                    return UserFormSmartTextField(
+                                      controller: controller,
+                                      focusNode: focusNode,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Όνομα',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      validator: _requiredValidator,
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      lexiconSpellAssist: true,
+                                      onChanged: (_) => _onFieldChanged(),
+                                    );
+                                  },
+                              optionsViewBuilder:
+                                  (context, onSelected, options) {
+                                    return _nameAutocompleteOptionsView(
+                                      context,
+                                      onSelected,
+                                      options,
+                                    );
+                                  },
+                            ),
+                            CatalogValidationHintText(
+                              hint: validation?.personNameHint(
+                                firstNameController.text,
+                              ),
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                    displayStringForOption: (option) => option,
-                    onSelected: (selection) {
-                      firstNameController.text = selection;
-                      _onFieldChanged();
-                    },
-                    fieldViewBuilder: (context, controller, focusNode, _) {
-                      return UserFormSmartTextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: const InputDecoration(
-                          labelText: 'Όνομα',
-                          border: OutlineInputBorder(),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 4,
+                        child: TextField(
+                          controller: nicknameController,
+                          focusNode: _nicknameFocusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Ψευδώνυμο',
+                            border: OutlineInputBorder(),
+                            helperText: 'Πώς τον φωνάζουν · προαιρετικό',
+                            helperMaxLines: 2,
+                          ),
+                          textCapitalization: TextCapitalization.words,
+                          onChanged: (_) => _onFieldChanged(),
                         ),
-                        validator: _requiredValidator,
-                        textCapitalization: TextCapitalization.words,
-                        lexiconSpellAssist: true,
-                        onChanged: (_) => _onFieldChanged(),
-                      );
-                    },
-                    optionsViewBuilder: (context, onSelected, options) {
-                      return _nameAutocompleteOptionsView(
-                        context,
-                        onSelected,
-                        options,
-                      );
-                    },
-                  ),
-                  CatalogValidationHintText(
-                    hint: validation?.personNameHint(firstNameController.text),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   RawAutocomplete<String>(

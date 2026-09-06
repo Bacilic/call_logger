@@ -10,6 +10,7 @@ import '../utils/department_display_utils.dart';
 import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/equipment_model.dart';
 import '../../features/calls/models/user_model.dart';
+import '../../features/directory/models/department_kind.dart';
 import '../../features/directory/models/department_model.dart';
 
 /// Αποτέλεσμα αναζήτησης: χρήστης και εξοπλισμός του.
@@ -190,6 +191,23 @@ class LookupService {
     return null;
   }
 
+  /// Είδος τμήματος από id — **το μοναδικό σημείο** που το βρίσκουν οι οθόνες.
+  ///
+  /// Άγνωστο ή διαγραμμένο τμήμα διαβάζεται ως τμήμα νοσοκομείου: η λεζάντα
+  /// πέφτει πίσω στο γενικό «Τμήμα» αντί να μιλήσει για εταιρεία που δεν ξέρει.
+  DepartmentKind departmentKindById(int? id) {
+    if (id == null) return DepartmentKind.hospital;
+    return _departmentById(id)?.kind ?? DepartmentKind.hospital;
+  }
+
+  /// Μπορεί αυτός ο υπάλληλος να είναι **κάτοχος** εξοπλισμού;
+  ///
+  /// Ο κατάλογος μηχανημάτων είναι του νοσοκομείου. Ο Δαμωράκης της DataMed
+  /// δεν κρατά δικό μας μηχάνημα — και αν τον διαλέγαμε ως κάτοχο, το τμήμα
+  /// του εξοπλισμού θα ακολουθούσε τη θέση του και θα γινόταν «DataMed».
+  bool userCanOwnEquipment(UserModel user) =>
+      departmentKindById(user.departmentId).canOwnEquipment;
+
   /// Κτίριο τμήματος από id (in-memory [departments]). Null αν λείπει ή είναι κενό.
   String? getDepartmentBuilding(int? id) {
     if (id == null) return null;
@@ -275,6 +293,7 @@ class LookupService {
             (p) => SearchTextNormalizer.matchesNormalizedQuery(p, q),
           );
       return SearchTextNormalizer.matchesNormalizedQuery(u.name ?? '', q) ||
+          SearchTextNormalizer.matchesNormalizedQuery(u.nickname ?? '', q) ||
           phoneMatch ||
           SearchTextNormalizer.matchesNormalizedQuery(
             u.departmentName ?? '',

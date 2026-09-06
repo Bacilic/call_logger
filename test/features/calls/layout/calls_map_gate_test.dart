@@ -5,6 +5,8 @@ import 'package:call_logger/features/calls/layout/calls_layout_engine.dart';
 import 'package:call_logger/features/calls/layout/calls_layout_plan.dart';
 import 'package:call_logger/features/calls/layout/calls_map_gate.dart';
 import 'package:call_logger/features/calls/provider/smart_entity_selector_provider.dart';
+import 'package:call_logger/features/calls/models/user_model.dart';
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,7 +22,70 @@ DepartmentModel _mappedDept({required int id}) {
   );
 }
 
+DepartmentModel _company({required int id}) {
+  return DepartmentModel(id: id, name: 'DataMed', kind: DepartmentKind.company);
+}
+
 void main() {
+  group('CallsMapGate — εταιρείες εκτός κάτοψης', () {
+    LookupService lookupWithCompany() {
+      final lookup = LookupService.forTest();
+      lookup.injectInMemoryCatalogForTests(
+        users: const [],
+        equipment: const [],
+        departmentRows: [_company(id: 70), _mappedDept(id: 5)],
+      );
+      return lookup;
+    }
+
+    test('επιλεγμένη εταιρεία → ΧΑ ανενεργό', () {
+      expect(
+        CallsMapGate.isMapActive(
+          SmartEntitySelectorState(selectedDepartmentId: 70),
+          lookupWithCompany(),
+        ),
+        isFalse,
+      );
+    });
+
+    test('επιλεγμένο τμήμα νοσοκομείου → ΧΑ ενεργό όπως πάντα', () {
+      expect(
+        CallsMapGate.isMapActive(
+          SmartEntitySelectorState(selectedDepartmentId: 5),
+          lookupWithCompany(),
+        ),
+        isTrue,
+      );
+    });
+
+    test('καλών που ανήκει σε εταιρεία → ΧΑ ανενεργό', () {
+      expect(
+        CallsMapGate.isMapActive(
+          SmartEntitySelectorState(
+            selectedCaller: UserModel(
+              id: 1,
+              firstName: 'Αντώνης',
+              lastName: 'Δαμωράκης',
+              departmentId: 70,
+            ),
+          ),
+          lookupWithCompany(),
+        ),
+        isFalse,
+      );
+    });
+
+    test('χωρίς κατάλογο η κάρτα μένει ορατή, όπως πριν', () {
+      expect(
+        CallsMapGate.isMapActive(
+          SmartEntitySelectorState(selectedDepartmentId: 70),
+          null,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('CallsMapGate', () {
     test('τηλέφωνο χωρίς χαρτογραφημένο τμήμα → ΧΑ ανενεργό', () {
       final lookup = LookupService.forTest();

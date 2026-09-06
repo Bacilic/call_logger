@@ -1,7 +1,10 @@
+import 'package:call_logger/core/models/remote_tool.dart';
+import 'package:call_logger/core/models/remote_tool_role.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/directory/models/catalog_validation_finding.dart';
 import 'package:call_logger/features/directory/models/catalog_validation_rules.dart';
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/services/catalog_validation_service.dart';
 import 'package:call_logger/core/services/lansweeper_identity_diagnosis.dart';
@@ -340,7 +343,11 @@ void main() {
         departments: const [],
         equipment: const [],
       );
-      expect(findings, isEmpty);
+      // Ο κανόνας του ονόματος σιωπά — η παρένθεση είναι δηλωμένη εξαίρεση.
+      expect(findings.where((f) => f.fieldLabel == 'Όνομα'), isEmpty);
+      // Το ψευδώνυμο μέσα στο όνομα είναι ΑΛΛΟΣ κανόνας και μιλά κανονικά:
+      // η εξαίρεση λέει «μην κατηγορείς», όχι «μην προτείνεις μεταφορά».
+      expect(findings.where((f) => f.fieldLabel == 'Ψευδώνυμο'), hasLength(1));
     });
   });
 
@@ -413,10 +420,13 @@ void main() {
   group('scan — σάρωση υπαρχόντων δεδομένων', () {
     // Ο κανόνας των κενών τμημάτων ελέγχεται στο δικό του group· εδώ θα ήταν
     // θόρυβος, γιατί τα τεστ στήνουν τμήματα χωρίς εξαρτήματα επίτηδες.
+    // Ίδιος λόγος για τον ορφανό εξοπλισμό: τα σενάρια εδώ αφορούν τα πεδία,
+    // και ο εξοπλισμός στήνεται χωρίς τμήμα ως ουδέτερο σκηνικό.
     const service = CatalogValidationService(
       CatalogValidationRules(
         emptyDepartmentEnabled: false,
         departmentBuildingEnabled: false,
+        equipmentWithoutDepartmentEnabled: false,
       ),
     );
 
@@ -560,6 +570,7 @@ void main() {
           personNameEnabled: false,
           emptyDepartmentEnabled: false,
           departmentBuildingEnabled: false,
+          equipmentWithoutDepartmentEnabled: false,
         ),
       );
       final findings = s.scan(
@@ -607,6 +618,38 @@ void main() {
       expect(f.message, 'Δεν έχει κτίριο');
       expect(f.records.single.entityId, 10);
       expect(f.records.single.focusedField, 'building');
+    });
+
+    test('εταιρεία χωρίς κτίριο: κανένα εύρημα', () {
+      final findings = service.scan(
+        users: const [],
+        departments: [
+          DepartmentModel(
+            id: 10,
+            name: 'DataMed',
+            kind: DepartmentKind.company,
+          ),
+        ],
+        equipment: const [],
+      );
+
+      expect(findings, isEmpty);
+    });
+
+    test('εξωτερική μονάδα χωρίς κτίριο: κανένα εύρημα', () {
+      final findings = service.scan(
+        users: const [],
+        departments: [
+          DepartmentModel(
+            id: 11,
+            name: 'Κέντρο Υγείας Κορίνθου',
+            kind: DepartmentKind.externalUnit,
+          ),
+        ],
+        equipment: const [],
+      );
+
+      expect(findings, isEmpty);
     });
 
     test('κενό και σκέτα κενά μετράνε το ίδιο', () {
@@ -779,11 +822,13 @@ void main() {
 
   group('scan — διασταυρώσεις δεδομένων', () {
     // Ίδιος λόγος με το προηγούμενο group: τα σενάρια εδώ στήνουν τμήματα που
-    // συχνά μένουν κενά, και το ζητούμενο είναι η διασταύρωση.
+    // συχνά μένουν κενά και εξοπλισμό χωρίς τμήμα, και το ζητούμενο είναι η
+    // διασταύρωση — όχι οι ανά-πεδίο κανόνες που θα πρόσθεταν δικά τους.
     const service = CatalogValidationService(
       CatalogValidationRules(
         emptyDepartmentEnabled: false,
         departmentBuildingEnabled: false,
+        equipmentWithoutDepartmentEnabled: false,
       ),
     );
 
@@ -916,7 +961,10 @@ void main() {
 
       test('ανενεργός κανόνας: καμία διασταύρωση', () {
         const s = CatalogValidationService(
-          CatalogValidationRules(phoneEquipmentCodeEnabled: false),
+          CatalogValidationRules(
+            phoneEquipmentCodeEnabled: false,
+            equipmentWithoutDepartmentEnabled: false,
+          ),
         );
         final findings = s.scan(
           users: [
@@ -1342,6 +1390,7 @@ void main() {
           CatalogValidationRules(
             equipmentOwnerDepartmentEnabled: false,
             departmentBuildingEnabled: false,
+            equipmentWithoutDepartmentEnabled: false,
           ),
         );
         final findings = s.scan(
@@ -1630,6 +1679,395 @@ void main() {
         equipment: const [],
       );
       expect(findings, isEmpty);
+    });
+  });
+  group('companyInternalPhoneHint — εταιρεία με δικό μας εσωτερικό', () {
+    test('τετραψήφιο με δικό μας πρόθεμα: υπόδειξη', () {
+      expect(
+        service.companyInternalPhoneHint('2534'),
+        'Το 2534 έχει μορφή δικού μας εσωτερικού — οι εταιρείες '
+        'δεν έχουν εσωτερικά του νοσοκομείου',
+      );
+    });
+
+    test('τετραψήφιο εκτός του δικού μας εύρους: καμία υπόδειξη', () {
+      // Το ίδιο το phoneHint θα το σχολιάσει ως λάθος πρόθεμα· αυτός ο
+      // κανόνας μιλά μόνο για αριθμούς που ΜΟΙΑΖΟΥΝ με δικά μας εσωτερικά.
+      expect(service.companyInternalPhoneHint('3122'), isNull);
+    });
+
+    test('δεκαψήφιο εξωτερικό εταιρείας: καμία υπόδειξη', () {
+      expect(service.companyInternalPhoneHint('2101234567'), isNull);
+    });
+
+    test('κενό ή μη αριθμητικό: καμία υπόδειξη', () {
+      expect(service.companyInternalPhoneHint(''), isNull);
+      expect(service.companyInternalPhoneHint('εσωτ. 2534'), isNull);
+    });
+
+    test('σβηστός διακόπτης: καμία υπόδειξη', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(companyInternalPhoneEnabled: false),
+      );
+      expect(s.companyInternalPhoneHint('2534'), isNull);
+    });
+  });
+
+  group('scan — εξοπλισμός που κατέληξε σε εταιρεία', () {
+    final dataMed = DepartmentModel(
+      id: 70,
+      name: 'DataMed',
+      kind: DepartmentKind.company,
+    );
+    final kentroYgeias = DepartmentModel(
+      id: 71,
+      name: 'ΚΥ Λίμνης',
+      kind: DepartmentKind.externalUnit,
+    );
+
+    test('μηχάνημα που ανήκει σε εταιρεία: εύρημα με την εταιρεία μαζί', () {
+      final findings = service
+          .scan(
+            users: const [],
+            departments: [dataMed],
+            equipment: [
+              EquipmentModel(id: 9, code: '2506', departmentId: 70),
+            ],
+          )
+          .where((f) => f.type == CatalogFindingType.equipmentInCompany)
+          .toList();
+
+      expect(findings, hasLength(1));
+      expect(
+        findings.single.message,
+        'Ανήκει στην εταιρεία «DataMed» — '
+        'ο κατάλογος εξοπλισμού είναι του νοσοκομείου',
+      );
+      expect(findings.single.records, hasLength(2));
+      expect(findings.single.records.first.kind, CatalogEntityKind.equipment);
+      expect(findings.single.records.last.entityId, 70);
+    });
+
+    test('μηχάνημα σε ΕΞΩΤΕΡΙΚΗ ΜΟΝΑΔΑ: κανένα εύρημα', () {
+      final findings = service
+          .scan(
+            users: const [],
+            departments: [kentroYgeias],
+            equipment: [
+              EquipmentModel(id: 9, code: '2506', departmentId: 71),
+            ],
+          )
+          .where((f) => f.type == CatalogFindingType.equipmentInCompany)
+          .toList();
+
+      expect(findings, isEmpty);
+    });
+
+    test('κάτοχος εταιρείας σε δικό μας μηχάνημα: εύρημα', () {
+      final findings = service
+          .scan(
+            users: [
+              UserModel(
+                id: 4,
+                lastName: 'Δαμωράκης',
+                firstName: 'Νίκος',
+                departmentId: 70,
+              ),
+            ],
+            departments: [
+              dataMed,
+              DepartmentModel(id: 12, name: 'Ακτινολογικό'),
+            ],
+            equipment: [
+              EquipmentModel(id: 9, code: '2506', departmentId: 12),
+            ],
+            ownerUserIdsByEquipmentId: const {
+              9: [4],
+            },
+          )
+          .where((f) => f.type == CatalogFindingType.equipmentInCompany)
+          .toList();
+
+      expect(findings, hasLength(1));
+      expect(findings.single.message, contains('Δαμωράκης'));
+      expect(findings.single.message, contains('DataMed'));
+    });
+
+    test('σβηστός διακόπτης: κανένα εύρημα', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(equipmentInCompanyEnabled: false),
+      );
+      final findings = s
+          .scan(
+            users: const [],
+            departments: [dataMed],
+            equipment: [
+              EquipmentModel(id: 9, code: '2506', departmentId: 70),
+            ],
+          )
+          .where((f) => f.type == CatalogFindingType.equipmentInCompany)
+          .toList();
+
+      expect(findings, isEmpty);
+    });
+  });
+
+  group('scan — εξοπλισμός χωρίς τμήμα', () {
+    test('ακέφαλο μηχάνημα: ένα εύρημα με μετάβαση στην καρτέλα του', () {
+      final findings = service
+          .scan(
+            users: const [],
+            departments: const [],
+            equipment: [EquipmentModel(id: 9, code: '2506')],
+          )
+          .where((f) => f.fieldLabel == 'Τμήμα')
+          .toList();
+
+      expect(findings, hasLength(1));
+      expect(findings.single.message, 'Δεν ανήκει σε κανένα τμήμα');
+      expect(findings.single.primary.kind, CatalogEntityKind.equipment);
+      expect(findings.single.primary.entityId, 9);
+    });
+
+    test('μηχάνημα με τμήμα: κανένα εύρημα', () {
+      final findings = service
+          .scan(
+            users: const [],
+            departments: [DepartmentModel(id: 12, name: 'Ακτινολογικό')],
+            equipment: [
+              EquipmentModel(id: 9, code: '2506', departmentId: 12),
+            ],
+          )
+          .where((f) => f.fieldLabel == 'Τμήμα')
+          .toList();
+
+      expect(findings, isEmpty);
+    });
+
+    test('σβηστός διακόπτης: κανένα εύρημα', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(equipmentWithoutDepartmentEnabled: false),
+      );
+      final findings = s
+          .scan(
+            users: const [],
+            departments: const [],
+            equipment: [EquipmentModel(id: 9, code: '2506')],
+          )
+          .where((f) => f.fieldLabel == 'Τμήμα')
+          .toList();
+
+      expect(findings, isEmpty);
+    });
+  });
+
+  group('scan — ίδιος στόχος απομακρυσμένης σε δύο μηχανήματα', () {
+    const anydesk = RemoteTool(
+      id: 3,
+      name: 'AnyDesk',
+      role: ToolRole.anydesk,
+      executablePath: 'anydesk.exe',
+      sortOrder: 1,
+      isActive: true,
+    );
+    const windowsDesktop = RemoteTool(
+      id: 4,
+      name: 'Απομακρυσμένη επιφάνεια',
+      role: ToolRole.rdp,
+      executablePath: 'mstsc.exe',
+      sortOrder: 2,
+      isActive: true,
+    );
+
+    List<CatalogValidationFinding> scanWith(
+      List<EquipmentModel> equipment, {
+      List<RemoteTool> tools = const [anydesk, windowsDesktop],
+      CatalogValidationService with_ = service,
+    }) {
+      return with_
+          .scan(
+            users: const [],
+            departments: const [],
+            equipment: equipment,
+            remoteTools: tools,
+          )
+          .where((f) => f.type == CatalogFindingType.duplicateRemoteTarget)
+          .toList();
+    }
+
+    test('ίδιο αναγνωριστικό AnyDesk σε δύο μηχανήματα: μία κάρτα με τα δύο', () {
+      final findings = scanWith([
+        EquipmentModel(id: 1, code: '2506', remoteParams: const {'3': '123456789'}),
+        EquipmentModel(id: 2, code: '3604', remoteParams: {'3': '123456789'}),
+      ]);
+
+      expect(findings, hasLength(1));
+      expect(
+        findings.single.message,
+        'Το «AnyDesk» δείχνει την ίδια τιμή «123456789» σε 2 μηχανήματα',
+      );
+      expect(findings.single.records.map((r) => r.entityId), [1, 2]);
+    });
+
+    test('η ΑΠΟΜΑΚΡΥΣΜΕΝΗ ΕΠΙΦΑΝΕΙΑ των Windows εξαιρείται', () {
+      final findings = scanWith([
+        EquipmentModel(id: 1, code: '2506', remoteParams: {'4': 'srv-01'}),
+        EquipmentModel(id: 2, code: '3604', remoteParams: {'4': 'srv-01'}),
+      ]);
+
+      expect(findings, isEmpty);
+    });
+
+    test('διαφορετικές τιμές: κανένα εύρημα', () {
+      final findings = scanWith([
+        EquipmentModel(id: 1, code: '2506', remoteParams: {'3': '111'}),
+        EquipmentModel(id: 2, code: '3604', remoteParams: {'3': '222'}),
+      ]);
+
+      expect(findings, isEmpty);
+    });
+
+    test('ιστορική τιμή δεν είναι ενεργός στόχος', () {
+      final findings = scanWith([
+        EquipmentModel(id: 1, code: '2506', remoteParams: const {'3': '123456789'}),
+        EquipmentModel(
+          id: 2,
+          code: '3604',
+          remoteParams: {'__stash_3': '123456789'},
+        ),
+      ]);
+
+      expect(findings, isEmpty);
+    });
+
+    test('χωρίς κατάλογο εργαλείων ο κανόνας σιωπά', () {
+      final findings = scanWith(
+        [
+          EquipmentModel(id: 1, code: '2506', remoteParams: const {'3': '123456789'}),
+          EquipmentModel(id: 2, code: '3604', remoteParams: {'3': '123456789'}),
+        ],
+        tools: const [],
+      );
+
+      expect(findings, isEmpty);
+    });
+
+    test('σβηστός διακόπτης: κανένα εύρημα', () {
+      final findings = scanWith(
+        [
+          EquipmentModel(id: 1, code: '2506', remoteParams: const {'3': '123456789'}),
+          EquipmentModel(id: 2, code: '3604', remoteParams: {'3': '123456789'}),
+        ],
+        with_: const CatalogValidationService(
+          CatalogValidationRules(duplicateRemoteTargetEnabled: false),
+        ),
+      );
+
+      expect(findings, isEmpty);
+    });
+  });
+
+  group('scan — κοινόχρηστα τηλέφωνα στη διασταύρωση τμημάτων', () {
+    List<CatalogValidationFinding> crossFindings({
+      List<UserModel> users = const [],
+      List<DepartmentModel> departments = const [],
+      Map<int, List<String>> shared = const {},
+    }) {
+      return service
+          .scan(
+            users: users,
+            departments: departments,
+            equipment: const [],
+            sharedPhonesByDepartmentId: shared,
+          )
+          .where((f) => f.type == CatalogFindingType.crossDepartmentPhone)
+          .toList();
+    }
+
+    test('ίδιο κοινόχρηστο σε δύο τμήματα: εύρημα με τα δύο τμήματα', () {
+      final findings = crossFindings(
+        departments: [
+          DepartmentModel(id: 12, name: 'Ακτινολογικό'),
+          DepartmentModel(id: 13, name: 'Μικροβιολογικό'),
+        ],
+        shared: const {
+          12: ['2534'],
+          13: ['2534'],
+        },
+      );
+
+      expect(findings, hasLength(1));
+      expect(
+        findings.single.message,
+        'Το 2534 είναι καταχωρημένο σε 2 εγγραφές σε 2 τμήματα',
+      );
+      expect(
+        findings.single.records.map((r) => r.kind),
+        everyElement(CatalogEntityKind.department),
+      );
+    });
+
+    test('κοινόχρηστο τμήματος = προσωπικό υπαλλήλου ΑΛΛΟΥ τμήματος', () {
+      final findings = crossFindings(
+        users: [
+          UserModel(
+            id: 4,
+            lastName: 'Ψαρρά',
+            firstName: 'Σοφία',
+            departmentId: 13,
+            phones: const ['2534'],
+          ),
+        ],
+        departments: [
+          DepartmentModel(id: 12, name: 'Ακτινολογικό'),
+          DepartmentModel(id: 13, name: 'Μικροβιολογικό'),
+        ],
+        shared: const {
+          12: ['2534'],
+        },
+      );
+
+      expect(findings, hasLength(1));
+      expect(findings.single.records, hasLength(2));
+    });
+
+    test('κοινόχρηστο και προσωπικό στο ΙΔΙΟ τμήμα: θεμιτό', () {
+      final findings = crossFindings(
+        users: [
+          UserModel(
+            id: 4,
+            lastName: 'Ψαρρά',
+            firstName: 'Σοφία',
+            departmentId: 12,
+            phones: const ['2534'],
+          ),
+        ],
+        departments: [DepartmentModel(id: 12, name: 'Ακτινολογικό')],
+        shared: const {
+          12: ['2534'],
+        },
+      );
+
+      expect(findings, isEmpty);
+    });
+
+    test('μόνο υπάλληλοι: το μήνυμα λέει ακόμη «υπαλλήλους»', () {
+      final findings = crossFindings(
+        users: [
+          UserModel(id: 4, lastName: 'Ψαρρά', departmentId: 12, phones: const ['2534']),
+          UserModel(id: 5, lastName: 'Δρόσος', departmentId: 13, phones: const ['2534']),
+        ],
+        departments: [
+          DepartmentModel(id: 12, name: 'Ακτινολογικό'),
+          DepartmentModel(id: 13, name: 'Μικροβιολογικό'),
+        ],
+      );
+
+      expect(findings, hasLength(1));
+      expect(
+        findings.single.message,
+        'Το 2534 είναι καταχωρημένο σε 2 υπαλλήλους σε 2 τμήματα',
+      );
     });
   });
 }

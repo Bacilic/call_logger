@@ -42,7 +42,7 @@ class UserSimilarityFinder {
   static ({String firstName, String lastName}) parseCallerText(
     String callerDisplayText,
   ) {
-    final stripped = NameParserUtility.stripParentheticalSuffix(
+    final stripped = NameParserUtility.stripDisplayDecorations(
       callerDisplayText.trim(),
     );
     return NameParserUtility.parse(stripped);

@@ -94,6 +94,7 @@ class DepartmentFormSave {
       directPhones: ini?.directPhones,
       isDeleted: ini?.isDeleted ?? false,
       isHiddenOnMap: ini?.isHiddenOnMap ?? false,
+      kind: host.selectedKind,
     );
 
     try {
@@ -181,29 +182,12 @@ class DepartmentFormSave {
         sharedEquipmentCodes = resolved.acceptedEquipmentCodes;
         phonesToMoveFromUsers = resolved.phonesToMoveFromUsers;
         equipmentToMoveFromUsers = resolved.equipmentToMoveFromUsers;
-        await host.widget.notifier.addDepartment(
-          DepartmentModel(
-            id: null,
-            name: name,
-            building: model.building,
-            color: model.color,
-            notes: model.notes,
-            floorId: model.floorId,
-            groupName: model.groupName,
-            mapFloor: model.mapFloor,
-            mapX: model.mapX,
-            mapY: model.mapY,
-            mapWidth: model.mapWidth,
-            mapHeight: model.mapHeight,
-            mapRotation: model.mapRotation,
-            mapLabelOffsetX: model.mapLabelOffsetX,
-            mapLabelOffsetY: model.mapLabelOffsetY,
-            mapAnchorOffsetX: model.mapAnchorOffsetX,
-            mapAnchorOffsetY: model.mapAnchorOffsetY,
-            mapCustomName: model.mapCustomName,
-            isDeleted: false,
-          ),
-        );
+        // Το ίδιο ακριβώς μοντέλο που χτίστηκε από τη φόρμα — ΟΧΙ αντίγραφο
+        // πεδίο-πεδίο. Το χειροκίνητο αντίγραφο ξεχνούσε ό,τι προστίθετο
+        // αργότερα: τα αναγνωριστικά Lansweeper χάνονταν σιωπηλά σε κάθε νέο
+        // τμήμα, και το είδος θα χανόταν με τον ίδιο τρόπο. Στη δημιουργία το
+        // `model` έχει ήδη `id: null` και `isDeleted: false`.
+        await host.widget.notifier.addDepartment(model);
         final dbDid = await DatabaseHelper.instance.database;
         final did = await DepartmentRepository(
           dbDid,

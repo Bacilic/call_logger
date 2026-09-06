@@ -7,6 +7,7 @@ class UserModel {
     this.id,
     this.firstName,
     this.lastName,
+    this.nickname,
     this.phones = const [],
     this.departmentId,
     this.departmentName,
@@ -19,6 +20,13 @@ class UserModel {
   final int? id;
   final String? firstName;
   final String? lastName;
+
+  /// Πώς φωνάζουν τον άνθρωπο — «Γωγώ» για τη Γεωργία, «Σίσυ» για τη Στεφανία.
+  ///
+  /// Ζει σε δικό του πεδίο, όχι σε παρένθεση μέσα στο [firstName]: εκεί
+  /// χανόταν στους ελέγχους διπλότυπων, που συγκρίνουν το όνομα ολόκληρο και
+  /// έβλεπαν τη «Γεωργία» και την «(Γωγώ) Γεωργία» ως δύο ανθρώπους.
+  final String? nickname;
 
   /// Κανονικοποιημένα τηλέφωνα (από `phones` / `user_phones`).
   final List<String> phones;
@@ -54,9 +62,27 @@ class UserModel {
     return '$f $l'.trim();
   }
 
-  /// Για εμφάνιση σε λίστες (όνομα + τμήμα).
+  /// Το όνομα όπως το αναγνωρίζει ο χειριστής στο τηλέφωνο: «(Γωγώ) Γεωργία
+  /// Παπαγεωργίου». Χωρίς ψευδώνυμο επιστρέφει σκέτο το [name].
+  ///
+  /// **Ξεχωριστό από το [name] επίτηδες.** Το σκέτο όνομα ταξιδεύει σε αιτήματα
+  /// Lansweeper και σε PDF, όπου η παρένθεση δεν έχει θέση. Αυτή η μορφή είναι
+  /// μόνο για τις οθόνες όπου ο χρήστης ψάχνει πρόσωπο — εκεί το ψευδώνυμο
+  /// είναι συχνά το ΜΟΝΟ που άκουσε: «Είμαι η Σίσυ».
+  String? get nameWithNickname {
+    final base = name;
+    final nick = nickname?.trim() ?? '';
+    if (base == null || nick.isEmpty) return base;
+    return '($nick) $base';
+  }
+
+  /// Για εμφάνιση σε λίστες: ψευδώνυμο, όνομα και τμήμα.
+  ///
+  /// «(Γωγώ) Γεωργία Παπαγεωργίου (Ακτινολογικό)» — έτσι συστήνονται στο
+  /// τηλέφωνο, με το ψευδώνυμο πρώτο. Όποιος χρειάζεται σκέτο όνομα από αυτό
+  /// το κείμενο περνά από το [NameParserUtility.stripDisplayDecorations].
   String get fullNameWithDepartment {
-    final n = name?.trim() ?? '';
+    final n = nameWithNickname?.trim() ?? '';
     final d = departmentName?.trim() ?? '';
     if (n.isEmpty) {
       if (d.isNotEmpty) return d;
@@ -80,6 +106,7 @@ class UserModel {
       id: map['id'] as int?,
       firstName: map['first_name'] as String?,
       lastName: map['last_name'] as String?,
+      nickname: map['nickname'] as String?,
       phones: _phonesFromMap(map),
       departmentId: map['department_id'] as int?,
       departmentName: map['department_name'] as String?,
@@ -99,6 +126,9 @@ class UserModel {
       if (id != null) 'id': id,
       if (firstName != null) 'first_name': firstName,
       if (lastName != null) 'last_name': lastName,
+      // Γράφεται ΠΑΝΤΑ, ακόμη και κενό: αλλιώς το σβήσιμο ψευδωνύμου δεν
+      // φτάνει ποτέ στη βάση και η παλιά τιμή επιβιώνει σιωπηλά.
+      'nickname': (nickname?.trim().isEmpty ?? true) ? null : nickname!.trim(),
       'phones': List<String>.from(phones),
       if (departmentId != null) 'department_id': departmentId,
       if (location != null) 'location': location,
@@ -112,6 +142,7 @@ class UserModel {
     int? id,
     String? firstName,
     String? lastName,
+    String? nickname,
     List<String>? phones,
     int? departmentId,
     String? departmentName,
@@ -124,6 +155,7 @@ class UserModel {
       id: id ?? this.id,
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
+      nickname: nickname ?? this.nickname,
       phones: phones ?? this.phones,
       departmentId: departmentId ?? this.departmentId,
       departmentName: departmentName ?? this.departmentName,

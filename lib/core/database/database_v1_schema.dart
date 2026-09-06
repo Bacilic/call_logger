@@ -86,6 +86,10 @@ import 'database_schema_version.dart';
 /// v57: `operators.avatar_key` — ποιο εικονίδιο φοράει κάθε χρήστης. Καθαρή
 /// προσθήκη με κενή προεπιλογή: παλαιότερη έκδοση της εφαρμογής αγνοεί τη
 /// στήλη και δείχνει αρχικά, όπως έκανε πάντα.
+/// v58: `departments.kind` — νοσοκομείο, εταιρεία ή εξωτερική μονάδα.
+/// v59: `users.nickname` — το πώς φωνάζουν τον άνθρωπο, με δικό του πεδίο αντί
+/// για παρένθεση μέσα στο «Όνομα». Καθαρή προσθήκη με κενή προεπιλογή· καμία
+/// υπάρχουσα εγγραφή δεν μεταφέρεται αυτόματα.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
@@ -1313,6 +1317,7 @@ String _fieldLabelForMigration(String entityType, String field) {
     'map_anchor_offset_y': 'μετατοπισης αγκυρας υ',
     'map_custom_name': 'προσαρμοσμενου ονοματος',
     'map_hidden': 'ορατοτητας',
+    'kind': 'ειδους',
   };
   final label = labels[field];
   if (label != null) return label;

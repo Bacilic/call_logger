@@ -28,6 +28,12 @@ class CallsDashboardRepository {
       equipmentCode: filter.equipmentCode,
     );
 
+    appendCallCategoryFilter(
+      whereClausesBase,
+      argsBase,
+      category: filter.category,
+    );
+
     final kw = filter.keyword.trim();
     if (kw.isNotEmpty) {
       final nk = SearchTextNormalizer.normalizeForSearch(kw);
@@ -538,6 +544,8 @@ WHERE ${whereSpark.join(' AND ')}
       userName: filter.userName,
       equipmentCode: filter.equipmentCode,
     );
+
+    appendCallCategoryFilter(whereClauses, args, category: filter.category);
 
     final kw = filter.keyword.trim();
     if (kw.isNotEmpty) {

@@ -1,12 +1,17 @@
 import 'package:characters/characters.dart';
 
+import '../../../core/models/remote_tool.dart';
+import '../../../core/models/remote_tool_role.dart';
 import '../../../core/services/lansweeper_department_accounts.dart';
 import '../../../core/services/lansweeper_identity_diagnosis.dart';
+import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
+import '../../calls/utils/equipment_remote_param_key.dart';
 import '../../calls/models/user_model.dart';
 import '../models/catalog_validation_finding.dart';
 import '../models/catalog_validation_rules.dart';
+import '../models/department_kind.dart';
 import '../models/department_model.dart';
 
 /// Πόσο ύποπτη είναι μια μεμονωμένη τιμή — η κλίμακα που χρωματίζει τα chips.
@@ -213,6 +218,49 @@ class CatalogValidationService {
     return 'Ξεκινά από ψηφίο ή σύμβολο — σωστό μόνο αν πρόκειται για εταιρεία';
   }
 
+  /// Υπόδειξη για «Όνομα» που κουβαλά ψευδώνυμο σε παρένθεση.
+  ///
+  /// Γράφεται με τα δύο κομμάτια χωρισμένα, ώστε ο χρήστης να δει τι θα γίνει
+  /// πριν ανοίξει την καρτέλα.
+  String? nicknameInNameHint(String value) {
+    if (!rules.nicknameInNameEnabled) return null;
+    final split = NameParserUtility.splitNicknameFromName(value);
+    if (split == null) return null;
+    return 'Το «${split.nickname}» μοιάζει με ψευδώνυμο μέσα στο όνομα — '
+        'με δικό του πεδίο, το όνομα μένει «${split.name}»';
+    // Η υπόθεση «πρώτο = ψευδώνυμο» γράφεται ρητά στο μήνυμα: ο χρήστης
+    // βλέπει τι θα μπει πού και ανταλλάσσει στην καρτέλα αν χρειάζεται.
+  }
+
+  /// Υπόδειξη για τηλέφωνο **εταιρείας** που έχει μορφή εσωτερικού.
+  ///
+  /// Τετραψήφιο με πρόθεμα του δικού μας τηλεφωνικού κέντρου μέσα στη DataMed
+  /// σημαίνει σχεδόν πάντα ένα από τα δύο: λάθος Είδος (είναι τμήμα μας και
+  /// δηλώθηκε εταιρεία) ή λάθος αριθμός (γράφτηκε το εσωτερικό του τεχνικού
+  /// αντί για το τηλέφωνο της εταιρείας).
+  ///
+  /// Ζει ΜΟΝΟ στη φόρμα: στη σάρωση δεδομένων δεν μπαίνει, γιατί ο σκοπός
+  /// είναι να πιαστεί τη στιγμή της πληκτρολόγησης, όχι να γεμίσει λίστα.
+  /// Καλείται μόνο όταν το Είδος είναι «Εταιρεία» — την απόφαση αυτή την
+  /// παίρνει η φόρμα, που ξέρει τι έχει επιλεγμένο εκείνη τη στιγμή.
+  String? companyInternalPhoneHint(String value) {
+    if (!rules.companyInternalPhoneEnabled) return null;
+    final v = value.trim();
+    if (v.isEmpty || !_digitsOnly.hasMatch(v)) return null;
+    if (v.length != rules.internalPhoneDigits) return null;
+
+    // Χωρίς κανόνα προθέματος κάθε τετραψήφιο θα ήταν ύποπτο — και τα
+    // τετραψήφια των εταιρειών είναι θεμιτά αν δεν μοιάζουν με δικά μας.
+    if (!rules.internalPrefixEnabled) return null;
+    final prefix = int.tryParse(v.substring(0, 2));
+    if (prefix == null) return null;
+    if (prefix < rules.internalPrefixFrom || prefix > rules.internalPrefixTo) {
+      return null;
+    }
+    return 'Το $v έχει μορφή δικού μας εσωτερικού — οι εταιρείες '
+        'δεν έχουν εσωτερικά του νοσοκομείου';
+  }
+
   /// Υπόδειξη για το αναγνωριστικό Lansweeper ενός υπαλλήλου — το ΣΤΟΧΕΥΜΕΝΟ
   /// μήνυμα της διάγνωσης ([diagnoseLansweeperIdentity]), ίδιο με τη φόρμα.
   /// Κενή τιμή = «χωρίς αναγνωριστικό», απολύτως θεμιτό.
@@ -327,6 +375,11 @@ class CatalogValidationService {
     /// όποιος τον διαβάζει οφείλει να πει και αν τα κατάφερε.
     LansweeperAgentIdentity lansweeperAgentIdentity =
         const LansweeperAgentIdentity.read(null),
+
+    /// Τα ενεργά εργαλεία απομακρυσμένης σύνδεσης, για τον κανόνα του διπλού
+    /// στόχου. Χωρίς αυτά ο κανόνας σιωπά: δεν ξέρουμε ποιο id είναι ποιος
+    /// ρόλος, άρα δεν μπορούμε να εξαιρέσουμε την επιφάνεια των Windows.
+    List<RemoteTool> remoteTools = const [],
   }) {
     final findings = <CatalogValidationFinding>[];
 
@@ -399,6 +452,8 @@ class CatalogValidationService {
     _addCrossDepartmentPhoneFindings(
       findings,
       users: activeUsers,
+      departments: departments,
+      sharedPhonesByDepartmentId: sharedPhonesByDepartmentId,
       departmentNameById: departmentNameById,
       equipmentCodesByUserId: equipmentCodesByUserId,
     );
@@ -409,6 +464,26 @@ class CatalogValidationService {
       ownerUserIdsByEquipmentId: ownerUserIdsByEquipmentId,
       departmentNameById: departmentNameById,
       equipmentCodesByUserId: equipmentCodesByUserId,
+    );
+    _addEquipmentInCompanyFindings(
+      findings,
+      users: activeUsers,
+      departments: departments,
+      equipment: activeEquipment,
+      ownerUserIdsByEquipmentId: ownerUserIdsByEquipmentId,
+      departmentNameById: departmentNameById,
+      equipmentCodesByUserId: equipmentCodesByUserId,
+    );
+    _addEquipmentWithoutDepartmentFindings(
+      findings,
+      equipment: activeEquipment,
+      departmentNameById: departmentNameById,
+    );
+    _addDuplicateRemoteTargetFindings(
+      findings,
+      equipment: activeEquipment,
+      departmentNameById: departmentNameById,
+      remoteTools: remoteTools,
     );
 
     return findings;
@@ -461,6 +536,23 @@ class CatalogValidationService {
           message: lastNameHint,
           focusedField: 'lastName',
         );
+      }
+
+      // Το ψευδώνυμο σε παρένθεση: ξεχωριστό εύρημα, με εστίαση στο νέο πεδίο.
+      // Ελέγχεται μόνο όσο το πεδίο είναι ΚΕΝΟ — αλλιώς η μεταφορά έχει ήδη
+      // γίνει και η παρένθεση που έμεινε σημαίνει κάτι άλλο.
+      if ((user.nickname ?? '').trim().isEmpty) {
+        final nicknameHint = nicknameInNameHint(user.firstName ?? '');
+        if (nicknameHint != null) {
+          add(
+            kind: CatalogEntityKind.user,
+            entityId: user.id!,
+            label: label,
+            fieldLabel: 'Ψευδώνυμο',
+            message: nicknameHint,
+            focusedField: 'nickname',
+          );
+        }
       }
 
       final firstNameHint = personNameHint(user.firstName ?? '');
@@ -659,6 +751,10 @@ class CatalogValidationService {
     for (final department in departments) {
       final id = department.id;
       if (id == null) continue;
+      // Το κτίριο είναι κτίριο **του νοσοκομείου**. Η DataMed και το Κέντρο
+      // Υγείας δεν έχουν θέση στον κατάλογο κτιρίων, οπότε το κενό πεδίο εκεί
+      // είναι η σωστή κατάσταση και όχι εύρημα.
+      if (!department.kind.expectsHospitalBuilding) continue;
       if ((department.building ?? '').trim().isNotEmpty) continue;
 
       findings.add(
@@ -862,13 +958,24 @@ class CatalogValidationService {
     }
   }
 
-  /// Ίδιο τηλέφωνο σε υπαλλήλους ΔΙΑΦΟΡΕΤΙΚΩΝ τμημάτων — σχεδόν πάντα
-  /// μπαγιάτικη εγγραφή μετά από μετακίνηση. Στο ίδιο τμήμα το κοινό
-  /// τηλέφωνο βάρδιας είναι θεμιτό και δεν ελέγχεται. ΜΙΑ κάρτα ανά
-  /// τηλέφωνο, με όλους τους κατόχους του.
+  /// Ίδιο τηλέφωνο σε ΔΙΑΦΟΡΕΤΙΚΑ τμήματα — σχεδόν πάντα μπαγιάτικη εγγραφή
+  /// μετά από μετακίνηση, και η αναγνώριση του καλούντα γίνεται διφορούμενη.
+  ///
+  /// Μετρούν και οι δύο μορφές κατοχής: το **προσωπικό** τηλέφωνο του
+  /// υπαλλήλου και το **κοινόχρηστο** του τμήματος. Το ίδιο σενάριο
+  /// μετακίνησης αφήνει το ίδιο ίχνος και στα δύο, οπότε ένας κανόνας που
+  /// έβλεπε μόνο τα προσωπικά έχανε τη μισή εικόνα.
+  ///
+  /// Μέσα στο ΙΔΙΟ τμήμα τίποτα δεν ελέγχεται: το κοινό τηλέφωνο βάρδιας
+  /// είναι θεμιτό, και το κοινόχρηστο που είναι ταυτόχρονα προσωπικό κάποιου
+  /// του τμήματος είναι πλεονασμός, όχι λάθος.
+  ///
+  /// ΜΙΑ κάρτα ανά τηλέφωνο, με όλες τις εμπλεκόμενες εγγραφές μαζί.
   void _addCrossDepartmentPhoneFindings(
     List<CatalogValidationFinding> findings, {
     required List<UserModel> users,
+    required List<DepartmentModel> departments,
+    required Map<int, List<String>> sharedPhonesByDepartmentId,
     required Map<int, String> departmentNameById,
     required Map<int, List<String>> equipmentCodesByUserId,
   }) {
@@ -884,25 +991,61 @@ class CatalogValidationService {
       }
     }
 
-    final phones = usersByPhone.keys.toList()..sort();
+    final departmentsByPhone = <String, List<DepartmentModel>>{};
+    for (final department in departments) {
+      final id = department.id;
+      if (id == null) continue;
+      for (final phone
+          in sharedPhonesByDepartmentId[id] ?? const <String>[]) {
+        final p = phone.trim();
+        if (p.isEmpty) continue;
+        departmentsByPhone.putIfAbsent(p, () => []).add(department);
+      }
+    }
+
+    final phones = <String>{...usersByPhone.keys, ...departmentsByPhone.keys}
+        .toList()
+      ..sort();
     for (final phone in phones) {
-      final holders = usersByPhone[phone]!;
-      final departmentIds = holders.map((u) => u.departmentId).toSet();
+      final holders = usersByPhone[phone] ?? const <UserModel>[];
+      final owningDepartments =
+          departmentsByPhone[phone] ?? const <DepartmentModel>[];
+
+      final departmentIds = <int>{
+        for (final user in holders) user.departmentId!,
+        for (final department in owningDepartments) department.id!,
+      };
       if (departmentIds.length < 2) continue;
-      holders.sort((a, b) => a.id!.compareTo(b.id!));
+
+      final sortedHolders = [...holders]..sort((a, b) => a.id!.compareTo(b.id!));
+      final sortedDepartments = [...owningDepartments]
+        ..sort((a, b) => a.id!.compareTo(b.id!));
+
+      // Όταν εμπλέκονται και κοινόχρηστα, η λέξη «υπαλλήλους» θα έλεγε ψέματα:
+      // κάποιες από τις εγγραφές είναι τμήματα.
+      final total = sortedHolders.length + sortedDepartments.length;
+      final what = sortedDepartments.isEmpty ? 'υπαλλήλους' : 'εγγραφές';
       findings.add(
         CatalogValidationFinding(
           type: CatalogFindingType.crossDepartmentPhone,
           message:
-              'Το $phone είναι καταχωρημένο σε ${holders.length} υπαλλήλους '
+              'Το $phone είναι καταχωρημένο σε $total $what '
               'σε ${departmentIds.length} τμήματα',
           records: _markNewestUser([
-            for (final user in holders)
+            for (final user in sortedHolders)
               _userRecord(
                 user,
                 focusedField: 'phone',
                 departmentNameById: departmentNameById,
                 equipmentCodesByUserId: equipmentCodesByUserId,
+              ),
+            for (final department in sortedDepartments)
+              _departmentRecord(
+                department,
+                focusedField: 'phones',
+                sharedPhones:
+                    sharedPhonesByDepartmentId[department.id!] ??
+                    const <String>[],
               ),
           ]),
         ),
@@ -976,6 +1119,208 @@ class CatalogValidationService {
                 focusedField: 'department',
                 departmentNameById: departmentNameById,
                 equipmentCodesByUserId: equipmentCodesByUserId,
+              ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Εξοπλισμός που κατέληξε σε **εταιρεία**.
+  ///
+  /// Δύο μονοπάτια οδηγούν εκεί, και τα δύο σιωπηλά: το τμήμα του μηχανήματος
+  /// είναι εταιρεία, ή ο κάτοχός του ανήκει σε εταιρεία. Και τα δύο μπαίνουν
+  /// στην ΙΔΙΑ κάρτα — για τον χρήστη είναι μία απόφαση: «σε ποιον ανήκει
+  /// τελικά αυτό το μηχάνημα;».
+  ///
+  /// Η εξωτερική μονάδα ΔΕΝ ελέγχεται: στα Κέντρα Υγείας τα μηχανήματα είναι
+  /// δικά μας, με δικούς μας κωδικούς και δική μας απομακρυσμένη σύνδεση.
+  void _addEquipmentInCompanyFindings(
+    List<CatalogValidationFinding> findings, {
+    required List<UserModel> users,
+    required List<DepartmentModel> departments,
+    required List<EquipmentModel> equipment,
+    required Map<int, List<int>> ownerUserIdsByEquipmentId,
+    required Map<int, String> departmentNameById,
+    required Map<int, List<String>> equipmentCodesByUserId,
+  }) {
+    if (!rules.equipmentInCompanyEnabled) return;
+
+    final companyById = <int, DepartmentModel>{
+      for (final d in departments)
+        if (d.id != null && d.kind == DepartmentKind.company) d.id!: d,
+    };
+    if (companyById.isEmpty) return;
+
+    final usersById = <int, UserModel>{for (final u in users) u.id!: u};
+
+    for (final item in equipment) {
+      final ownDepartment = companyById[item.departmentId];
+
+      final companyOwners = <UserModel>[];
+      for (final ownerId
+          in ownerUserIdsByEquipmentId[item.id] ?? const <int>[]) {
+        final owner = usersById[ownerId];
+        if (owner == null) continue;
+        if (!companyById.containsKey(owner.departmentId)) continue;
+        companyOwners.add(owner);
+      }
+
+      if (ownDepartment == null && companyOwners.isEmpty) continue;
+      companyOwners.sort((a, b) => a.id!.compareTo(b.id!));
+
+      final String message;
+      if (ownDepartment != null && companyOwners.isNotEmpty) {
+        final people = companyOwners.length == 1 ? 'πρόσωπο' : 'πρόσωπα';
+        message =
+            'Ανήκει στην εταιρεία «${_departmentLabel(ownDepartment)}» και '
+            'είναι χρεωμένος σε ${companyOwners.length} $people εταιρείας';
+      } else if (ownDepartment != null) {
+        message =
+            'Ανήκει στην εταιρεία «${_departmentLabel(ownDepartment)}» — '
+            'ο κατάλογος εξοπλισμού είναι του νοσοκομείου';
+      } else if (companyOwners.length == 1) {
+        final owner = companyOwners.single;
+        final company = departmentNameById[owner.departmentId] ?? 'εταιρεία';
+        message =
+            'Χρεωμένος στην εγγραφή «${_userLabel(owner)}» της εταιρείας '
+            '«$company» — τα δικά μας μηχανήματα δεν χρεώνονται σε εταιρείες';
+      } else {
+        message =
+            'Χρεωμένος σε ${companyOwners.length} πρόσωπα εταιρειών — '
+            'τα δικά μας μηχανήματα δεν χρεώνονται σε εταιρείες';
+      }
+
+      findings.add(
+        CatalogValidationFinding(
+          type: CatalogFindingType.equipmentInCompany,
+          message: message,
+          records: [
+            _equipmentRecord(
+              item,
+              focusedField: 'department',
+              departmentNameById: departmentNameById,
+            ),
+            if (ownDepartment != null)
+              CatalogFindingRecord(
+                kind: CatalogEntityKind.department,
+                entityId: ownDepartment.id!,
+                label: _departmentLabel(ownDepartment),
+                focusedField: 'name',
+                details: DepartmentKind.company.label,
+              ),
+            for (final owner in companyOwners)
+              _userRecord(
+                owner,
+                focusedField: 'department',
+                departmentNameById: departmentNameById,
+                equipmentCodesByUserId: equipmentCodesByUserId,
+              ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Εξοπλισμός χωρίς τμήμα.
+  ///
+  /// Οι φόρμες απαιτούν τμήμα, όμως μια διαγραμμένη καρτέλα τμήματος αφήνει
+  /// πίσω της ακέφαλα μηχανήματα: η βάση μηδενίζει τη στήλη αντί να τα σβήσει.
+  /// Ένα εύρημα ανά μηχάνημα — το καθένα θέλει τη δική του απόφαση.
+  void _addEquipmentWithoutDepartmentFindings(
+    List<CatalogValidationFinding> findings, {
+    required List<EquipmentModel> equipment,
+    required Map<int, String> departmentNameById,
+  }) {
+    if (!rules.equipmentWithoutDepartmentEnabled) return;
+
+    for (final item in equipment) {
+      if (item.departmentId != null) continue;
+      findings.add(
+        CatalogValidationFinding(
+          type: CatalogFindingType.fieldHint,
+          fieldLabel: 'Τμήμα',
+          message: 'Δεν ανήκει σε κανένα τμήμα',
+          records: [
+            _equipmentRecord(
+              item,
+              focusedField: 'department',
+              departmentNameById: departmentNameById,
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Ίδιος στόχος απομακρυσμένης σύνδεσης σε δύο ή περισσότερα μηχανήματα.
+  ///
+  /// Το ίδιο αναγνωριστικό AnyDesk ή η ίδια διεύθυνση VNC σε δύο κωδικούς
+  /// σημαίνει σχεδόν πάντα μπαγιάτικη εγγραφή μετά από αντικατάσταση — και
+  /// τότε ο συνάδελφος συνδέεται σε **ξένο** υπολογιστή νομίζοντας ότι πάει
+  /// στον σωστό.
+  ///
+  /// Η απομακρυσμένη επιφάνεια των Windows εξαιρείται ρητά: εκεί η κοινή τιμή
+  /// είναι θεμιτή και συνηθισμένη.
+  ///
+  /// ΜΙΑ κάρτα ανά διπλή τιμή, με όλα τα μηχανήματα που τη μοιράζονται.
+  void _addDuplicateRemoteTargetFindings(
+    List<CatalogValidationFinding> findings, {
+    required List<EquipmentModel> equipment,
+    required Map<int, String> departmentNameById,
+    required List<RemoteTool> remoteTools,
+  }) {
+    if (!rules.duplicateRemoteTargetEnabled) return;
+    if (remoteTools.isEmpty) return;
+
+    // Μόνο εργαλεία που ξέρουμε: για άγνωστο id δεν ξέρουμε ρόλο, άρα δεν
+    // μπορούμε να πούμε αν η κοινή τιμή είναι θεμιτή.
+    final judgedTools = <int, RemoteTool>{
+      for (final tool in remoteTools)
+        if (tool.role != ToolRole.rdp) tool.id: tool,
+    };
+    if (judgedTools.isEmpty) return;
+
+    // Κλειδί: id εργαλείου + κανονικοποιημένη τιμή. Οι διευθύνσεις δεν
+    // ξεχωρίζουν από πεζά/κεφαλαία, τα αναγνωριστικά AnyDesk είναι αριθμοί.
+    final itemsByTarget = <String, List<EquipmentModel>>{};
+    for (final item in equipment) {
+      for (final entry in item.remoteParams.entries) {
+        if (EquipmentRemoteParamKey.isReservedKey(entry.key)) continue;
+        final toolId = int.tryParse(entry.key);
+        if (toolId == null || !judgedTools.containsKey(toolId)) continue;
+        final value = entry.value.trim();
+        if (value.isEmpty) continue;
+        itemsByTarget
+            .putIfAbsent('$toolId|${value.toLowerCase()}', () => [])
+            .add(item);
+      }
+    }
+
+    final keys = itemsByTarget.keys.toList()..sort();
+    for (final key in keys) {
+      final items = itemsByTarget[key]!;
+      if (items.length < 2) continue;
+      items.sort((a, b) => a.id!.compareTo(b.id!));
+
+      final toolId = int.parse(key.split('|').first);
+      final tool = judgedTools[toolId]!;
+      // Η τιμή γράφεται όπως την πληκτρολόγησε ο χρήστης στο πρώτο μηχάνημα,
+      // όχι κανονικοποιημένη — αλλιώς δεν την αναγνωρίζει στην καρτέλα.
+      final shown = (items.first.remoteParams['$toolId'] ?? '').trim();
+
+      findings.add(
+        CatalogValidationFinding(
+          type: CatalogFindingType.duplicateRemoteTarget,
+          message:
+              'Το «${tool.name}» δείχνει την ίδια τιμή «$shown» σε '
+              '${items.length} μηχανήματα',
+          records: [
+            for (final item in items)
+              _equipmentRecord(
+                item,
+                focusedField: 'code',
+                departmentNameById: departmentNameById,
               ),
           ],
         ),

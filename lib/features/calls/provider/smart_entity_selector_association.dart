@@ -311,11 +311,16 @@ class SmartEntitySelectorAssociation {
     final equipmentRepo = EquipmentRepository(dbAssoc);
     final users = UserRepository(dbAssoc);
     if (state.needsNewCallerCreation) {
-      final name = NameParserUtility.stripParentheticalSuffix(
+      final name = NameParserUtility.stripDisplayDecorations(
         state.normalizedCallerDisplayText,
       );
       final phone = state.selectedPhone?.trim();
-      final equipmentCode = state.equipmentText.trim();
+      // Εταιρεία δεν γίνεται κάτοχος εξοπλισμού: ο νέος καλών δημιουργείται
+      // κανονικά με το τηλέφωνό του, αλλά ο κωδικός του μηχανήματος μένει
+      // αναφορά της κλήσης και δεν δένεται πάνω του.
+      final equipmentCode = state.departmentAcceptsEquipment(lookupForAssoc)
+          ? state.equipmentText.trim()
+          : '';
       final parsed = NameParserUtility.parse(name);
       final deptTextRaw = state.departmentText.trim();
       final departmentExistedBefore =

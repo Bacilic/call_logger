@@ -179,6 +179,17 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
             children: [
               _WarningBanner(theme: theme),
               const SizedBox(height: 12),
+              _StrictnessCard(
+                level: rules.strictnessLevel,
+                // Το πακέτο γράφει ΟΛΟΥΣ τους διακόπτες — και αυτό είναι το
+                // ζητούμενο: «θέλω αυτό το επίπεδο» σημαίνει ότι υπερισχύει
+                // όποιου μεμονωμένου τσεκαρίσματος. Εφαρμόζεται πάντως πάνω
+                // στην αποθηκευμένη εικόνα, οπότε οι αριθμητικές ρυθμίσεις
+                // (και του συναδέλφου) μένουν άθικτες.
+                onPick: (level) =>
+                    _apply((current) => current.withStrictness(level)),
+              ),
+              const SizedBox(height: 12),
               _RuleCard(
                 icon: Icons.phone_outlined,
                 title: 'Τηλέφωνα',
@@ -262,6 +273,24 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                       },
                     ),
                   ),
+                  _RuleRow(
+                    enabled: rules.companyInternalPhoneEnabled,
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(companyInternalPhoneEnabled: v),
+                    ),
+                    note:
+                        'Μόνο στη φόρμα, και μόνο όταν το Είδος είναι '
+                        '«Εταιρεία» — στον «Έλεγχο δεδομένων» δεν εμφανίζεται',
+                    example:
+                        'Παράδειγμα υπόδειξης: «Το 2534 έχει μορφή δικού μας '
+                        'εσωτερικού — οι εταιρείες δεν έχουν εσωτερικά του '
+                        'νοσοκομείου»',
+                    child: Text(
+                      'Εταιρεία με τηλέφωνο σε μορφή εσωτερικού',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -312,6 +341,24 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                     ),
                   ),
                   _RuleRow(
+                    enabled: rules.duplicateRemoteTargetEnabled,
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(duplicateRemoteTargetEnabled: v),
+                    ),
+                    note:
+                        'Η απομακρυσμένη επιφάνεια των Windows εξαιρείται — '
+                        'εκεί η κοινή τιμή είναι θεμιτή. Ελέγχεται και στη '
+                        'φόρμα και στον «Έλεγχο δεδομένων».',
+                    example:
+                        'Παράδειγμα υπόδειξης: «Το «AnyDesk» δείχνει την ίδια '
+                        'τιμή «123456789» σε 2 μηχανήματα»',
+                    child: Text(
+                      'Ίδιος στόχος απομακρυσμένης σε δύο μηχανήματα',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
                     enabled: rules.equipmentForeignCodeEnabled,
                     onToggle: (v) => _apply(
                       (current) =>
@@ -353,6 +400,24 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                 icon: Icons.person_outline,
                 title: 'Υπάλληλοι',
                 children: [
+                  _RuleRow(
+                    enabled: rules.nicknameInNameEnabled,
+                    onToggle: (v) => _apply(
+                      (current) => current.copyWith(nicknameInNameEnabled: v),
+                    ),
+                    note:
+                        'Ελέγχεται μόνο όσο το πεδίο «Ψευδώνυμο» είναι κενό· '
+                        'το εύρημα ανοίγει την καρτέλα με τα δύο κομμάτια ήδη '
+                        'χωρισμένα, για να τα δείτε πριν αποθηκεύσετε',
+                    example:
+                        'Παράδειγμα υπόδειξης: «Το «Γωγώ» μοιάζει με '
+                        'ψευδώνυμο μέσα στο όνομα — με δικό του πεδίο, το '
+                        'όνομα μένει «Γεωργία»»',
+                    child: Text(
+                      'Ψευδώνυμο σε παρένθεση μέσα στο όνομα',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
                   _RuleRow(
                     enabled: rules.personNameEnabled,
                     onToggle: (v) => _apply(
@@ -549,6 +614,41 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
                         '«Χειρουργική»»',
                     child: Text(
                       'Εξοπλισμός χρεωμένος σε υπάλληλο άλλου τμήματος',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
+                    enabled: rules.equipmentInCompanyEnabled,
+                    onToggle: (v) => _apply(
+                      (current) =>
+                          current.copyWith(equipmentInCompanyEnabled: v),
+                    ),
+                    note:
+                        'Οι εξωτερικές μονάδες (Κέντρα Υγείας) δεν '
+                        'ελέγχονται — εκεί τα μηχανήματα είναι δικά μας',
+                    example:
+                        'Παράδειγμα υπόδειξης: «Ανήκει στην εταιρεία '
+                        '«DataMed» — ο κατάλογος εξοπλισμού είναι του '
+                        'νοσοκομείου»',
+                    child: Text(
+                      'Εξοπλισμός που κατέληξε σε εταιρεία',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  _RuleRow(
+                    enabled: rules.equipmentWithoutDepartmentEnabled,
+                    onToggle: (v) => _apply(
+                      (current) => current.copyWith(
+                        equipmentWithoutDepartmentEnabled: v,
+                      ),
+                    ),
+                    note:
+                        'Οι φόρμες ζητούν πάντα τμήμα· κενό μένει όταν '
+                        'διαγραφεί η καρτέλα του τμήματος',
+                    example:
+                        'Παράδειγμα υπόδειξης: «Δεν ανήκει σε κανένα τμήμα»',
+                    child: Text(
+                      'Εξοπλισμός χωρίς τμήμα',
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
@@ -1008,6 +1108,8 @@ class _ConflictCard extends StatelessWidget {
     CatalogFindingType.nameConflict: Icons.swap_horiz_outlined,
     CatalogFindingType.crossDepartmentPhone: Icons.phone_forwarded_outlined,
     CatalogFindingType.equipmentOwnerDepartment: Icons.computer_outlined,
+    CatalogFindingType.equipmentInCompany: Icons.business_outlined,
+    CatalogFindingType.duplicateRemoteTarget: Icons.cast_connected_outlined,
   };
 
   static const _ruleTitles = {
@@ -1017,6 +1119,9 @@ class _ConflictCard extends StatelessWidget {
         'Ίδιο τηλέφωνο σε διαφορετικά τμήματα',
     CatalogFindingType.equipmentOwnerDepartment:
         'Εξοπλισμός σε υπάλληλο άλλου τμήματος',
+    CatalogFindingType.equipmentInCompany: 'Εξοπλισμός σε εταιρεία',
+    CatalogFindingType.duplicateRemoteTarget:
+        'Ίδιος στόχος απομακρυσμένης σε δύο μηχανήματα',
   };
 
   @override
@@ -1181,6 +1286,80 @@ class _RecordChip extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Έτοιμα πακέτα κανόνων — αφετηρία, όχι κλειδαριά.
+///
+/// Το επιλεγμένο επίπεδο δεν αποθηκεύεται: έρχεται υπολογισμένο από τους
+/// ίδιους τους διακόπτες. Μόλις ο χρήστης αλλάξει έναν, κανένα κουμπί δεν
+/// μένει πατημένο και εμφανίζεται το «Προσαρμοσμένο» — και αν κάποτε
+/// ξαναφέρει τους διακόπτες ακριβώς σε ένα πακέτο, το κουμπί ανάβει μόνο του.
+class _StrictnessCard extends StatelessWidget {
+  const _StrictnessCard({required this.level, required this.onPick});
+
+  final CatalogStrictnessLevel? level;
+  final ValueChanged<CatalogStrictnessLevel> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.tune_outlined,
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text('Επίπεδο ελέγχων', style: theme.textTheme.titleSmall),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Χωρίς επιλογή όταν οι διακόπτες δεν ταιριάζουν σε κανένα πακέτο.
+            SegmentedButton<CatalogStrictnessLevel>(
+              segments: [
+                for (final option in CatalogStrictnessLevel.values)
+                  ButtonSegment<CatalogStrictnessLevel>(
+                    value: option,
+                    label: Text(option.label),
+                  ),
+              ],
+              selected: level == null ? const {} : {level!},
+              emptySelectionAllowed: true,
+              showSelectedIcon: false,
+              onSelectionChanged: (picked) {
+                if (picked.isEmpty) return;
+                onPick(picked.first);
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              level?.description ??
+                  'Προσαρμοσμένο — έχετε αλλάξει κανόνες μόνοι σας. '
+                      'Διαλέξτε επίπεδο για να ξεκινήσετε από πακέτο.',
+              style: theme.textTheme.bodySmall?.copyWith(color: muted),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Τα επίπεδα αλλάζουν μόνο ποιοι έλεγχοι είναι ενεργοί. '
+              'Τα ψηφία, τα προθέματα και οι εξαιρέσεις μένουν όπως τα '
+              'έχετε ρυθμίσει.',
+              style: theme.textTheme.bodySmall?.copyWith(color: muted),
+            ),
+          ],
         ),
       ),
     );

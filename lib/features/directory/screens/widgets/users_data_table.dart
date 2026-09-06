@@ -58,6 +58,7 @@ const _defaultWidthsByKey = <String, double>{
   'id': 56.0,
   'last_name': 140.0,
   'first_name': 120.0,
+  'nickname': 110.0,
   'phone': 120.0,
   'department': 140.0,
   'equipment': 140.0,
@@ -775,6 +776,17 @@ class _UsersTableSource extends DataTableSource {
         return DataCell(
           Text(
             user.firstName ?? '',
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: () => _onRowTap?.call(rowIndex),
+          onDoubleTap: () => _onDoubleTap(user, col),
+        );
+      case 'nickname':
+        return DataCell(
+          Text(
+            user.nickname ?? '',
             maxLines: 1,
             softWrap: false,
             overflow: TextOverflow.ellipsis,

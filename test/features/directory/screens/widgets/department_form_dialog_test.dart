@@ -12,6 +12,7 @@ import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/services/settings_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/providers/building_catalog_provider.dart';
 import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
@@ -1612,5 +1613,183 @@ void main() {
         );
       },
     );
+  });
+
+  group('Φόρμα τμήματος — είδος', () {
+    setUp(() async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('user_equipment');
+      await db.delete('user_phones');
+      await db.delete('department_phones');
+      await db.delete('phones');
+      await db.delete('equipment');
+      await db.delete('users');
+      await db.delete('departments');
+      await _seedBuildingCatalog(['Καινούριο']);
+      LookupService.instance.resetForReload();
+      await LookupService.instance.loadFromDatabase();
+    });
+
+    Future<Object?> storedKind(WidgetTester tester, String name) {
+      return tester.runAsync<Object?>(() async {
+        final db = await DatabaseHelper.instance.database;
+        final rows = await db.query(
+          'departments',
+          columns: ['kind'],
+          where: 'name = ?',
+          whereArgs: [name],
+          limit: 1,
+        );
+        return rows.isEmpty ? null : rows.first['kind'];
+      });
+    }
+
+    // Ο τίτλος της φόρμας ακολουθεί το είδος («Νέο τμήμα» / «Νέα εταιρεία»),
+    // οπότε η αναμονή πρέπει να κοιτά τον τίτλο που ΟΝΤΩΣ δείχνει η οθόνη —
+    // αλλιώς θα «τελείωνε» πριν καν ξεκινήσει η αποθήκευση.
+    Future<void> submitNewDepartment(
+      WidgetTester tester, {
+      String formTitle = _kNewDepartmentFormTitle,
+    }) async {
+      expect(find.text(formTitle), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Προσθήκη'));
+      await tester.runAsync(() async {
+        for (var i = 0; i < 40; i++) {
+          if (find.text(formTitle).evaluate().isEmpty) return;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      });
+      expect(find.text(formTitle), findsNothing);
+    }
+
+    Future<void> openNewForm(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _warmBuildingCatalog(container);
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          notifier: notifier,
+        );
+      });
+      await tester.runAsync(() async {
+        for (var i = 0; i < 30; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      });
+      await pumpUntilSettledLong(tester);
+    }
+
+    //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "είδος"
+    testWidgets('νέο τμήμα αποθηκεύεται ως Νοσοκομείο χωρίς καμία επιλογή', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+      await openNewForm(tester, container);
+
+      await tester.enterText(_departmentNameField(), 'Ακτινολογικό');
+      await pumpUntilSettled(tester);
+      await submitNewDepartment(tester);
+
+      expect(
+        await storedKind(tester, 'Ακτινολογικό'),
+        'hospital',
+        reason: greekExpectMsg(
+          'Η προεπιλογή κρατά γρήγορη την καταχώρηση τμήματος νοσοκομείου',
+        ),
+      );
+    });
+
+    //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "είδος"
+    testWidgets('επιλογή «Εταιρεία» φτάνει στη βάση', (tester) async {
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+      await openNewForm(tester, container);
+
+      await tester.enterText(_departmentNameField(), 'DataMed');
+      await pumpUntilSettled(tester);
+
+      final kindField = find.byType(DropdownButtonFormField<DepartmentKind>);
+      expect(kindField, findsOneWidget);
+      await tester.ensureVisible(kindField);
+      await pumpUntilSettled(tester);
+      await tester.tap(kindField);
+      await pumpUntilSettledLong(tester);
+      await tester.tap(find.text('Εταιρεία').last);
+      await pumpUntilSettledLong(tester);
+
+      expect(
+        _buildingDropdown(),
+        findsNothing,
+        reason: greekExpectMsg(
+          'Η εταιρεία δεν βρίσκεται σε κτίριο του νοσοκομείου',
+        ),
+      );
+
+      await submitNewDepartment(tester, formTitle: 'Νέα εταιρεία');
+
+      expect(
+        await storedKind(tester, 'DataMed'),
+        'company',
+        reason: greekExpectMsg('Η εταιρεία πρέπει να αποθηκεύεται ως εταιρεία'),
+      );
+    });
+
+    // Η δημιουργία τμήματος ξανάχτιζε το μοντέλο πεδίο-πεδίο και ξεχνούσε ό,τι
+    // δεν ήταν στη λίστα — τα αναγνωριστικά Lansweeper χάνονταν σιωπηλά.
+    //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "είδος"
+    testWidgets('νέο τμήμα κρατά τα αναγνωριστικά Lansweeper του', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+      await openNewForm(tester, container);
+
+      await tester.enterText(_departmentNameField(), 'Παθολογική');
+      await pumpUntilSettled(tester);
+      final accountsField = _fieldByLabel(
+        'Αναγνωριστικά Lansweeper (με κόμμα)',
+      );
+      await tester.ensureVisible(accountsField);
+      await tester.enterText(accountsField, r'gnk\docpath1');
+      await pumpUntilSettled(tester);
+
+      await submitNewDepartment(tester);
+
+      final stored = await tester.runAsync<Object?>(() async {
+        final db = await DatabaseHelper.instance.database;
+        final rows = await db.query(
+          'departments',
+          columns: ['lansweeper_usernames'],
+          where: 'name = ?',
+          whereArgs: ['Παθολογική'],
+          limit: 1,
+        );
+        return rows.isEmpty ? null : rows.first['lansweeper_usernames'];
+      });
+      expect(
+        decodeLansweeperAccounts(stored as String?).map((a) => a.username),
+        [r'gnk\docpath1'],
+        reason: greekExpectMsg(
+          'Ό,τι γράφτηκε στη φόρμα πρέπει να φτάνει στη βάση και στο νέο τμήμα',
+        ),
+      );
+    });
   });
 }

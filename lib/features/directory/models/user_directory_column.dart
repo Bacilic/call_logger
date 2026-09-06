@@ -20,6 +20,11 @@ class UserDirectoryColumn {
     'Όνομα',
     'first_name',
   );
+  static const nickname = UserDirectoryColumn._(
+    'nickname',
+    'Ψευδώνυμο',
+    'nickname',
+  );
   static const phone = UserDirectoryColumn._('phone', 'Τηλέφωνο', 'phone');
   static const department = UserDirectoryColumn._(
     'department',
@@ -39,6 +44,7 @@ class UserDirectoryColumn {
     id,
     lastName,
     firstName,
+    nickname,
     phone,
     department,
     equipment,
@@ -50,6 +56,7 @@ class UserDirectoryColumn {
     id,
     lastName,
     firstName,
+    nickname,
     phone,
     department,
     equipment,

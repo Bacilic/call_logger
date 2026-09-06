@@ -48,6 +48,7 @@ CREATE TABLE users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   last_name TEXT NOT NULL,
   first_name TEXT NOT NULL,
+  nickname TEXT,
   department_id INTEGER,
   location TEXT,
   notes TEXT,
@@ -150,6 +151,8 @@ CREATE TABLE departments (
   group_name TEXT,
   floor_id INTEGER,
   lansweeper_usernames TEXT,
+  kind TEXT NOT NULL DEFAULT 'hospital',
+  map_hidden INTEGER NOT NULL DEFAULT 0,
   is_deleted INTEGER DEFAULT 0,
   FOREIGN KEY (floor_id) REFERENCES building_map_floors(id) ON DELETE SET NULL
 )

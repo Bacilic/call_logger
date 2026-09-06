@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../features/calls/utils/equipment_remote_param_key.dart';
+import '../../features/directory/models/department_kind.dart';
 import '../../features/database/services/database_backup_audit.dart';
 import '../models/app_permission.dart';
 import '../utils/search_text_normalizer.dart';
@@ -25,6 +26,7 @@ abstract final class AuditDiffHelper {
     'name_key': 'κλειδί ονόματος',
     'first_name': 'όνομα',
     'last_name': 'επώνυμο',
+    'nickname': 'ψευδώνυμο',
     'department_label': 'τμήμα',
     'email': 'email',
     'phone': 'τηλέφωνο',
@@ -102,6 +104,7 @@ abstract final class AuditDiffHelper {
     'map_anchor_offset_y': 'μετατόπιση άγκυρας',
     'map_custom_name': 'προσαρμοσμένο όνομα',
     'map_hidden': 'ορατότητα',
+    'kind': 'είδος',
     'user_text': 'υπάλληλος',
     'duration': 'διάρκεια',
     'is_priority': 'προτεραιότητα',
@@ -138,6 +141,7 @@ abstract final class AuditDiffHelper {
     'name_key': 'κλειδιού ονόματος',
     'first_name': 'ονόματος',
     'last_name': 'επωνύμου',
+    'nickname': 'ψευδωνύμου',
     'department_label': 'τμήματος',
     'email': 'email',
     'phone': 'τηλεφώνου',
@@ -213,6 +217,7 @@ abstract final class AuditDiffHelper {
     'map_anchor_offset_y': 'μετατόπισης άγκυρας Υ',
     'map_custom_name': 'προσαρμοσμένου ονόματος',
     'map_hidden': 'ορατότητας',
+    'kind': 'είδους',
     'user_text': 'υπαλλήλου',
     'duration': 'διάρκειας',
     'is_priority': 'προτεραιότητας',
@@ -247,6 +252,7 @@ abstract final class AuditDiffHelper {
     'name_key': 'κλειδι ονοματος',
     'first_name': 'ονομα',
     'last_name': 'επωνυμο',
+    'nickname': 'ψευδωνυμο',
     'department_label': 'τμημα',
     'email': 'email',
     'phone': 'τηλεφωνο',
@@ -318,6 +324,7 @@ abstract final class AuditDiffHelper {
     'map_anchor_offset_y': 'μετατοπισης αγκυρας υ',
     'map_custom_name': 'προσαρμοσμενου ονοματος',
     'map_hidden': 'ορατοτητας',
+    'kind': 'ειδους',
     'user_text': 'υπαλληλος',
     'duration': 'διαρκεια',
     'is_priority': 'προτεραιοτητα',
@@ -504,6 +511,24 @@ abstract final class AuditDiffHelper {
       final n = value is bool ? (value ? 1 : 0) : int.tryParse('$value') ?? 0;
       if (forSearch) return n != 0 ? 'ναι' : 'οχι';
       return n != 0 ? 'Ναι' : 'Όχι';
+    }
+
+    // Το είδος τμήματος γράφεται ως αγγλικό κλειδί («company»)· στο Ιστορικό
+    // πρέπει να διαβάζεται όπως στη φόρμα («Εταιρεία»).
+    if (field == 'kind') {
+      final label = DepartmentKind.fromDbValue(value).label;
+      if (forSearch) {
+        return label
+            .toLowerCase()
+            .replaceAll('ά', 'α')
+            .replaceAll('έ', 'ε')
+            .replaceAll('ή', 'η')
+            .replaceAll('ί', 'ι')
+            .replaceAll('ό', 'ο')
+            .replaceAll('ύ', 'υ')
+            .replaceAll('ώ', 'ω');
+      }
+      return label;
     }
 
     if (field == 'is_priority') {

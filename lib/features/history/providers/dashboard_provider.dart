@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/calls_dashboard_repository.dart';
 
+import '../../../core/database/calls_repository.dart';
+
 import '../../../core/database/database_helper.dart';
 
 import '../../../core/database/department_repository.dart';
@@ -14,6 +16,10 @@ import '../../../core/database/department_repository.dart';
 import '../../../core/services/settings_service.dart';
 
 import '../../../core/services/settings_service_analytics_filters.dart';
+
+import '../models/dashboard_active_filter.dart';
+
+import '../screens/dashboard_palette_colors.dart';
 
 import '../models/dashboard_date_preset.dart';
 
@@ -198,6 +204,27 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
       customTo: customTo,
     );
   }
+
+  /// Σβήνει **ένα** φίλτρο — η μάρκα του στη λωρίδα των ενεργών.
+  ///
+  /// Το εύρος ημερομηνιών δεν σβήνεται, γίνεται «Όλα»: υπάρχει πάντα κάποιο
+  /// διάστημα, ακόμη κι όταν δεν περιορίζει.
+  Future<void> clearFilter(DashboardFilterKind kind) async {
+    switch (kind) {
+      case DashboardFilterKind.dateRange:
+        await clearDateRange();
+      case DashboardFilterKind.keyword:
+        update((s) => s.copyWith(keyword: ''));
+      case DashboardFilterKind.department:
+        update((s) => s.copyWith(clearDepartment: true));
+      case DashboardFilterKind.userName:
+        update((s) => s.copyWith(clearUserName: true));
+      case DashboardFilterKind.equipmentCode:
+        update((s) => s.copyWith(clearEquipmentCode: true));
+      case DashboardFilterKind.category:
+        update((s) => s.copyWith(clearCategory: true));
+    }
+  }
 }
 
 final dashboardFilterProvider =
@@ -303,6 +330,66 @@ final dashboardHideUnknownTopCallerProvider =
       DashboardHideUnknownTopCallerNotifier.new,
     );
 
+/// Η παλέτα χρωμάτων των Στατιστικών — προσωπική επιλογή, θυμάται τον χρήστη.
+///
+/// Η οθόνη ξεκινά με την προεπιλογή και περνά στην αποθηκευμένη μόλις έρθει από
+/// τον δίσκο. Η ανάγνωση δεν μπλοκάρει το πρώτο σχέδιο: μια αισθητική
+/// προτίμηση δεν αξίζει καθυστέρηση στα νούμερα.
+class DashboardPaletteNotifier extends Notifier<DashboardPalette> {
+  bool _hydrated = false;
+
+  @override
+  DashboardPalette build() {
+    if (!_hydrated) {
+      _hydrated = true;
+
+      Future<void>(_hydrateFromSettings);
+    }
+
+    return DashboardPalette.classic;
+  }
+
+  Future<void> _hydrateFromSettings() async {
+    final stored = await SettingsService().analyticsFilters
+        .getDashboardPalette();
+
+    final palette = decodeDashboardPalette(stored);
+
+    if (!ref.mounted || palette == null) return;
+
+    state = palette;
+  }
+
+  /// Αλλάζει την παλέτα και τη θυμάται — η οθόνη βάφεται πρώτη, η εγγραφή
+  /// αφορά την επόμενη φορά.
+  Future<void> select(DashboardPalette palette) async {
+    if (state == palette) return;
+
+    state = palette;
+
+    await SettingsService().analyticsFilters.setDashboardPalette(palette.name);
+  }
+}
+
+/// Άγνωστο ή κενό αποθηκευμένο κείμενο δίνει `null` — ο καλών κρατά την
+/// προεπιλογή του αντί να μαντέψει παλέτα.
+DashboardPalette? decodeDashboardPalette(String? raw) {
+  final trimmed = (raw ?? '').trim();
+
+  if (trimmed.isEmpty) return null;
+
+  for (final palette in DashboardPalette.values) {
+    if (palette.name == trimmed) return palette;
+  }
+
+  return null;
+}
+
+final dashboardPaletteProvider =
+    NotifierProvider<DashboardPaletteNotifier, DashboardPalette>(
+      DashboardPaletteNotifier.new,
+    );
+
 /// Ποια όψη δείχνει η κάρτα χρόνου — μεμονωμένες κλήσεις ή σύνολο ανά άτομο.
 class DashboardLongestCallsModeNotifier extends Notifier<LongestCallsMode> {
   @override
@@ -363,6 +450,8 @@ final dashboardStatsProvider =
             filter.userName,
 
             filter.equipmentCode,
+
+            filter.category,
           ),
         ),
       );
@@ -389,4 +478,23 @@ final callFilterDepartmentsProvider = FutureProvider.autoDispose<List<String>>((
       .map((r) => (r['name'] as String?)?.trim() ?? '')
       .where((s) => s.isNotEmpty)
       .toList();
+});
+
+/// Οι καλούντες που προτείνει η αυτόματη συμπλήρωση του φίλτρου «υπάλληλος».
+final callFilterCallersProvider =
+    FutureProvider.autoDispose<List<({String name, String phones})>>((
+      ref,
+    ) async {
+      final db = await DatabaseHelper.instance.database;
+
+      return CallsRepository(db).getCallerFilterOptions();
+    });
+
+/// Οι κωδικοί εξοπλισμού που προτείνει η αυτόματη συμπλήρωση του φίλτρου.
+final callFilterEquipmentProvider = FutureProvider.autoDispose<List<String>>((
+  ref,
+) async {
+  final db = await DatabaseHelper.instance.database;
+
+  return CallsRepository(db).getEquipmentFilterOptions();
 });
