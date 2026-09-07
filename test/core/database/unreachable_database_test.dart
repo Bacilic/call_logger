@@ -13,6 +13,7 @@
 import 'dart:async';
 
 import 'package:call_logger/core/database/calls_lansweeper_repository.dart';
+import 'package:call_logger/core/database/timeout_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
@@ -32,9 +33,16 @@ void main() {
     test(
       'η ανάγνωση δεν ολοκληρώνεται ΠΟΤΕ — ούτε με σφάλμα, ούτε με άδειο',
       () async {
-        // Αυτό ΕΙΝΑΙ το σφάλμα, όχι η επιθυμητή συμπεριφορά: η οθόνη που
-        // περιμένει αυτή την απάντηση μένει στο «φορτώνει» για πάντα.
-        final repo = CallsLansweeperRepository(UnreachableDatabase());
+        // Πριν από τη διόρθωση, αυτή η κλήση δεν τελείωνε ΠΟΤΕ και η οθόνη
+        // που την περίμενε έμενε στο «φορτώνει» μέχρι να κλείσει η εφαρμογή.
+        // Η σύνδεση τυλίγεται όπως ακριβώς την τυλίγει η εφαρμογή: το
+        // `DatabaseHelper.database` δεν μοιράζει ποτέ γυμνή σύνδεση.
+        final repo = CallsLansweeperRepository(
+          TimeoutDatabase(
+            UnreachableDatabase(),
+            timeout: const Duration(seconds: 1),
+          ),
+        );
 
         // Μετράει και η επιτυχία και το σφάλμα: το ζητούμενο είναι να
         // ΤΕΛΕΙΩΣΕΙ η αναμονή, με οποιαδήποτε έκβαση.
@@ -60,12 +68,6 @@ void main() {
         );
       },
       timeout: const Timeout(Duration(seconds: 20)),
-      skip: 'Ζωντανό σφάλμα: δεν υπάρχει ακόμη όριο χρόνου στα ερωτήματα.',
-      // ΕΝΕΡΓΟΠΟΙΗΣΕ ΤΟ μόλις μπει όριο χρόνου στα ερωτήματα της βάσης.
-      //
-      // Το τεστ είναι γραμμένο και επαληθευμένο: τρέχει κόκκινο σήμερα, με
-      // ακριβώς το μήνυμα που περιγράφει το σφάλμα. Μένει σημειωμένο ώστε η
-      // σουίτα να μην έχει μόνιμα κόκκινο — όχι επειδή το σφάλμα έκλεισε.
     );
   });
 }

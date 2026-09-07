@@ -12,7 +12,9 @@ import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
 import '../database/database_path_pick_flow.dart';
+import '../database/database_path_resolution.dart';
 import '../database/database_restore_flow.dart';
+import '../services/crash_log_service.dart';
 import '../services/settings_service.dart';
 import '../updates/update_manifest.dart';
 import '../updates/update_providers.dart';
@@ -51,6 +53,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
   late final ScrollController _detailsScrollController;
   List<String> _recentExistingPaths = const <String>[];
   UpdateManifest? _availableInstaller;
+  LocalDatabaseOffer? _localOffer;
 
   /// Εφεδρεία για παλιά αποτελέσματα χωρίς [DatabaseInitResult.recoveryKind].
   bool get _isSchemaMigrationRecoveryMessage {
@@ -140,6 +143,16 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
   bool get _isFileNotFound =>
       widget.result.status == DatabaseStatus.fileNotFound;
 
+  bool get _isNetworkUnreachable =>
+      _effectiveRecoveryKind == DatabaseInitRecoveryKind.networkUnreachable;
+
+  /// Η τοπική βάση προσφέρεται **μόνο αν υπάρχει**.
+  ///
+  /// Η εφαρμογή δεν δημιουργεί βάση από μόνη της: αν δεν υπάρχει αρχείο εκεί,
+  /// το κουμπί θα οδηγούσε κατευθείαν σε δεύτερο σφάλμα.
+  bool get _shouldOfferLocalDatabase =>
+      _isNetworkUnreachable && (_localOffer?.exists ?? false);
+
   bool get _shouldOfferLocateDatabase {
     final kind = _effectiveRecoveryKind;
     return kind == DatabaseInitRecoveryKind.wrongDatabaseLamp ||
@@ -172,6 +185,9 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     super.initState();
     _detailsScrollController = ScrollController();
     _loadRecentExistingPaths();
+    if (_isNetworkUnreachable) {
+      unawaited(_loadLocalDatabaseOffer());
+    }
     if (_isMissingApplicationFile) {
       unawaited(_probeAvailableInstaller());
     }
@@ -189,6 +205,38 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
         unawaited(_offerNewerDatabaseRecovery());
       });
     }
+  }
+
+  Future<void> _loadLocalDatabaseOffer() async {
+    final offer = await localDatabaseOffer();
+    if (!mounted) return;
+    setState(() => _localOffer = offer);
+  }
+
+  /// Δέχεται την τοπική βάση **μόνο για αυτή τη φορά**.
+  ///
+  /// Η ρυθμισμένη διαδρομή δεν αλλάζει: στο επόμενο άνοιγμα η εφαρμογή
+  /// ξαναδοκιμάζει το δίκτυο και, αν απαντήσει, μπαίνει κανονικά — χωρίς ο
+  /// χρήστης να χρειάζεται να θυμηθεί να το γυρίσει πίσω.
+  Future<void> _useLocalDatabaseForThisSession() async {
+    final unreachable = widget.result.path?.trim();
+    final offer = _localOffer;
+    if (unreachable == null || unreachable.isEmpty || offer == null) return;
+    LocalDatabaseSessionFallback.accept(unreachable);
+    // Το ημερολόγιο σφαλμάτων ζει δίπλα στη βάση: χωρίς μετακόμιση θα έμενε
+    // σιωπηλό για όλη τη συνεδρία, δείχνοντας στον φάκελο που δεν απάντησε.
+    await CrashLogService.instanceOrNull?.retargetTo(
+      databasePath: offer.path,
+      retentionCount: await SettingsService().catalogs
+          .getCrashLogRetentionCount(),
+    );
+    await widget.onRetry();
+  }
+
+  static String _formatOfferDate(DateTime moment) {
+    final d = moment.day.toString().padLeft(2, '0');
+    final m = moment.month.toString().padLeft(2, '0');
+    return '$d/$m/${moment.year}';
   }
 
   Future<void> _probeAvailableInstaller() async {
@@ -234,9 +282,17 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
           databasePathsReferToSameFile(path, current)) {
         continue;
       }
+      // Δικτυακή διαδρομή: μπαίνει ΧΩΡΙΣ έλεγχο, επίτηδες.
+      //
+      // Ο έλεγχος είναι σύγχρονος (αποφεύγει εκκρεμή timers στα widget tests)
+      // και σε νεκρό κοινόχρηστο φάκελο θα πάγωνε την ίδια την οθόνη που
+      // υπάρχει για να δώσει διέξοδο. Το να προσφερθεί μια διαδρομή που τελικά
+      // δεν απαντά κοστίζει ένα μήνυμα· το πάγωμα κοστίζει την εφαρμογή.
+      if (AppConfig.isUncDatabasePath(path)) {
+        existing.add(path);
+        continue;
+      }
       try {
-        // Σύγχρονος έλεγχος: αποφεύγει κρέμασμα FakeAsync/timers στα widget tests
-        // και δεν αφήνει εκκρεμή timeout timers.
         if (File(path).existsSync()) {
           existing.add(path);
         }
@@ -684,7 +740,27 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     // τα κενά ανάμεσά τους παρεμβάλλονται στο τέλος, ώστε ένα κρυμμένο κουμπί
     // να μην αφήνει πίσω του αδέσποτο διάστημα.
     final repairInstaller = _availableInstaller;
+    final localOffer = _localOffer;
     final buttons = <Widget>[
+      if (_shouldOfferLocalDatabase && localOffer != null)
+        _tooltipActionButton(
+          label:
+              'Χρήση τοπικής βάσης '
+              '(τελευταία αλλαγή ${_formatOfferDate(localOffer.lastModified!)})',
+          message:
+              'Ανοίγει την τοπική βάση που βρίσκεται στον φάκελο του '
+              'προγράμματος, αντί για τη δικτυακή που δεν απαντά.\n\n'
+              'ΠΡΟΣΟΧΗ: δεν είναι κενή βάση — είναι ένα παλιό αρχείο με δικά '
+              'του δεδομένα. Ό,τι καταγράψετε εκεί ΔΕΝ θα εμφανιστεί στη '
+              'δικτυακή βάση όταν επανέλθει το δίκτυο.\n\n'
+              'Διαδρομή: ${localOffer.path}\n'
+              'Τελευταία αλλαγή: '
+              '${_formatOfferDate(localOffer.lastModified!)}\n\n'
+              'Ισχύει μόνο για αυτή τη φορά: η ρύθμιση της βάσης δεν αλλάζει '
+              'και το επόμενο άνοιγμα ξαναδοκιμάζει το δίκτυο.',
+          icon: Icons.dns_outlined,
+          onPressed: _useLocalDatabaseForThisSession,
+        ),
       if (_isMissingApplicationFile && repairInstaller != null)
         _tooltipActionButton(
           label: repairInstaller.version.isNotEmpty
@@ -935,6 +1011,11 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
                     ? 'Κλείνει την εφαρμογή και την ανοίγει ξανά από την αρχή.\n\n'
                           'Χρησιμοποιήστε το όταν η βάση δεν απάντησε εγκαίρως '
                           '(timeout) και μια απλή επαναδοκιμή δεν αρκεί.'
+                    : _isNetworkUnreachable
+                    ? 'Ξαναδοκιμάζει τη σύνδεση με τη δικτυακή διαδρομή.\n\n'
+                          'Χρησιμοποιήστε το αφού αποκατασταθεί το δίκτυο ή '
+                          'αφού δώσετε τα διαπιστευτήρια που ζητούν τα Windows '
+                          'για τον κοινόχρηστο φάκελο.'
                     : 'Ξαναδοκιμάζει το άνοιγμα της τρέχουσας βάσης χωρίς '
                           'να αλλάξει διαδρομή.\n\n'
                           'Χρήσιμο αν το πρόβλημα ήταν προσωρινό (δίκτυο, '

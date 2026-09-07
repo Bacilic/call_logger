@@ -191,8 +191,14 @@ class AppInitializer {
           progressNotifier?.setStep('Εντοπισμός διεργασίας');
           final configured = await SettingsService().getDatabasePath();
           final resolved = await resolveEffectiveDatabasePath(configured);
-          final diagnostic = await const LockDiagnosticService()
-              .detectLockingProcess(resolved.path);
+          // Άφταστη διαδρομή δεν έχει διεργασία να κλειδώνει: το ερώτημα
+          // «ποιος κρατά το αρχείο;» δεν έχει νόημα όταν δεν φτάνουμε σ' αυτό.
+          final diagnostic =
+              resolved.outcome == DatabasePathResolution.networkUnreachable
+              ? ''
+              : await const LockDiagnosticService().detectLockingProcess(
+                  resolved.pathToOpen,
+                );
           if (diagnostic.trim().isNotEmpty) {
             final details = result.details?.trim();
             final merged = (details == null || details.isEmpty)

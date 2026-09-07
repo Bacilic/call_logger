@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -79,9 +78,14 @@ void flushStartupNoticesToCrashLog() {
   final service = CrashLogService.instanceOrNull;
   if (service == null) return;
 
-  // Αν ο φάκελος logs δεν υπάρχει, θεωρούμε ότι το ημερολόγιο δεν είναι
-  // διαθέσιμο (π.χ. onStartup απέτυχε).
-  if (!Directory(service.logsDirectory).existsSync()) return;
+  // Την ερώτηση «είναι διαθέσιμο το ημερολόγιο;» την απαντά η ίδια η
+  // υπηρεσία, ΟΧΙ το σύστημα αρχείων.
+  //
+  // Ο φάκελος ζει δίπλα στη βάση, άρα μπορεί να είναι σε δίκτυο που δεν
+  // απαντά. Ένας σύγχρονος έλεγχος εκεί δεν μπαίνει σε όριο χρόνου: παγώνει
+  // το νήμα μέχρι να απαντήσουν τα Windows — και επειδή αυτό τρέχει πριν από
+  // το πρώτο καρέ, ο χρήστης βλέπει λευκό παράθυρο χωρίς διέξοδο.
+  if (!service.isDiskAvailable) return;
 
   for (final notice in _startupNotices) {
     service.logError(

@@ -188,7 +188,8 @@ class MainShellDestinationContent {
             padding: const EdgeInsets.symmetric(vertical: 6),
             color: Colors.amber,
             child: Text(
-              'ΛΕΙΤΟΥΡΓΙΑ ΑΝΑΠΤΥΞΗΣ - Τοπική Βάση Δεδομένων',
+              'ΤΟΠΙΚΗ ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ - η δικτυακή δεν ήταν προσβάσιμη. '
+              'Ό,τι καταγράφετε μένει σε αυτόν τον υπολογιστή.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
                 color: Colors.black87,

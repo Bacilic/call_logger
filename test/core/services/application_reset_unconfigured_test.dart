@@ -18,7 +18,7 @@ void main() {
     const placeholder =
         r'C:\AppData\unconfigured\pending_database_connection.db';
     final resolved = await resolveEffectiveDatabasePath(placeholder);
-    expect(resolved.path, placeholder);
+    expect(resolved.pathToOpen, placeholder);
     expect(resolved.usedUncFallback, isFalse);
   });
 

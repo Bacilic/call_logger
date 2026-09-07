@@ -37,6 +37,10 @@ enum DatabaseInitRecoveryKind {
 
   /// Το αρχείο βάσης γράφτηκε από ΝΕΟΤΕΡΗ έκδοση της εφαρμογής.
   databaseNewerThanApp,
+
+  /// Δικτυακή διαδρομή που δεν απαντά: κομμένο δίκτυο, σβηστός διακομιστής,
+  /// ή κοινόχρηστος φάκελος που ζητά διαπιστευτήρια.
+  networkUnreachable,
   generic,
 }
 
@@ -601,6 +605,26 @@ class DatabaseInitResult {
           : 'Δεν βρέθηκε το αρχείο της Βάσης Δεδομένων στη διαδρομή.',
       details: dbPath.isNotEmpty ? 'Διαδρομή: $dbPath' : null,
       path: dbPath.isNotEmpty ? dbPath : null,
+    );
+  }
+
+  /// Η δικτυακή διαδρομή της βάσης δεν απάντησε.
+  ///
+  /// Χωριστή από το «δεν βρέθηκε το αρχείο»: εκεί ξέρουμε ότι το αρχείο λείπει,
+  /// εδώ δεν ξέρουμε τίποτα — το αρχείο μπορεί να είναι μια χαρά και απλώς να
+  /// μη φτάνουμε σ' αυτό. Η διαφορά αλλάζει τη διέξοδο που έχει νόημα να
+  /// προσφερθεί.
+  factory DatabaseInitResult.networkUnreachable(String dbPath) {
+    return DatabaseInitResult(
+      status: DatabaseStatus.accessDenied,
+      message: 'Δεν υπάρχει πρόσβαση στη διαδρομή της Βάσης Δεδομένων.',
+      details:
+          'Διαδρομή: $dbPath\n\n'
+          'Ο κοινόχρηστος φάκελος δεν απάντησε. Συνήθεις αιτίες: δεν υπάρχει '
+          'σύνδεση στο δίκτυο του νοσοκομείου, ο διακομιστής είναι σβηστός, ή '
+          'τα Windows ζητούν διαπιστευτήρια για τον φάκελο.',
+      path: dbPath,
+      recoveryKind: DatabaseInitRecoveryKind.networkUnreachable,
     );
   }
 

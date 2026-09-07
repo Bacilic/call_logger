@@ -8,6 +8,7 @@ import '../../../core/database/database_path_resolution.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/database/audit_service.dart';
 import '../../../core/services/lookup_service.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 
@@ -131,7 +132,11 @@ class IntegrityDebugSeederService {
     } catch (_) {
       final configured = await SettingsService().getDatabasePath();
       final resolved = await resolveEffectiveDatabasePath(configured);
-      final dir = p.dirname(resolved.path);
+      final dir = p.dirname(
+        resolved.outcome == DatabasePathResolution.networkUnreachable
+            ? AppConfig.defaultDbPath
+            : resolved.pathToOpen,
+      );
       if (!await Directory(dir).exists()) {
         await Directory(dir).create(recursive: true);
       }

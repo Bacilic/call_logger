@@ -84,6 +84,23 @@ void main() {
   );
 
   test('Γ: χωρίς διαθέσιμο ημερολόγιο, flush δεν αδειάζει την ουρά', () async {
+    // Η κατάσταση στήνεται ρητά: το «logs» είναι αρχείο, οπότε το στήσιμο
+    // αποτυγχάνει και η υπηρεσία μένει χωρίς δίσκο. Παλιότερα το τεστ
+    // στηριζόταν στο ότι ο φάκελος μιας προηγούμενης δοκιμής είχε σβηστεί από
+    // το tearDown — δηλαδή έλεγχε τη σειρά καθαρισμού, όχι τη συμπεριφορά.
+    final logsFile = File(p.join(tempRoot.path, 'logs'));
+    await logsFile.writeAsString('not a directory');
+
+    await expectLater(
+      () => CrashLogService.initialize(
+        databasePath: p.join(tempRoot.path, 'engine.db'),
+        appVersion: '0.0.0-test',
+        retentionCount: 3,
+      ),
+      throwsA(isA<Exception>()),
+    );
+    expect(CrashLogService.instance.isDiskAvailable, isFalse);
+
     recordStartupNotice(
       'Φάση χωρίς ημερολόγιο',
       StateError('σφάλμα χωρίς I/O'),

@@ -9,6 +9,7 @@ import 'database_helper.dart';
 import 'database_init_progress_provider.dart';
 import 'database_init_result.dart';
 import 'database_init_runner.dart';
+import 'database_path_resolution.dart';
 
 /// Τι διάλεξε ο χρήστης στον επιλογέα διαδρομής βάσης.
 enum DatabasePickKind { databaseFile, backupArchive }
@@ -133,6 +134,10 @@ Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
 
   late DatabaseInitRunnerResult runner;
   try {
+    // Ο χρήστης διαλέγει βάση με τη θέλησή του: μια παλιότερη απάντηση «ναι,
+    // πάμε τοπικά» αφορούσε άλλη στιγμή και δεν επιτρέπεται να απαντήσει
+    // σιωπηλά για λογαριασμό του και σε αυτή την επιλογή.
+    LocalDatabaseSessionFallback.forget();
     await settings.setDatabasePath(trimmed);
     runner = await runInitChecks();
   } catch (e, st) {

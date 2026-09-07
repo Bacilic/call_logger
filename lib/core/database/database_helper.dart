@@ -10,6 +10,7 @@ import '../services/settings_service.dart';
 import '../utils/search_text_normalizer.dart';
 import 'database_access_probe.dart';
 import 'database_busy_timeout.dart';
+import 'timeout_database.dart';
 import 'database_file_classifier.dart';
 import 'database_file_identity.dart';
 import '../init/startup_notices.dart';
@@ -117,6 +118,7 @@ class DatabaseHelper {
   }
 
   Database? _database;
+  Database? _guardedDatabase;
   Future<Database>? _databaseInitializingFuture;
   Completer<Never>? _userAbortCompleter;
   bool _isUsingLocalDb = false;
@@ -152,7 +154,25 @@ class DatabaseHelper {
   Database? get openDatabaseOrNull {
     final db = _database;
     if (db == null || !db.isOpen) return null;
-    return db;
+    return _guarded(db);
+  }
+
+  /// Η σύνδεση όπως τη βλέπει ο υπόλοιπος κώδικας.
+  ///
+  /// Σε δικτυακή βάση βγαίνει **φυλαγμένη με όριο χρόνου**, ώστε κανένα από τα
+  /// 245 σημεία που ζητούν σύνδεση — και κανένα από τα 21 repositories — να μην
+  /// μπορεί να περιμένει για πάντα όταν χαθεί ο κοινόχρηστος φάκελος. Σε τοπική
+  /// βάση βγαίνει ως έχει. Δες [guardDatabaseWithTimeout].
+  Database _guarded(Database raw) {
+    final cached = _guardedDatabase;
+    if (cached != null &&
+        (identical(cached, raw) ||
+            (cached is TimeoutDatabase && identical(cached.inner, raw)))) {
+      return cached;
+    }
+    final guarded = guardDatabaseWithTimeout(raw);
+    _guardedDatabase = guarded;
+    return guarded;
   }
 
   int _connectionGeneration = 0;
@@ -181,10 +201,12 @@ class DatabaseHelper {
   Future<Database> initializeDatabase({
     DatabaseInitProgressNotifier? progressNotifier,
   }) async {
-    if (_database != null && _database!.isOpen) return _database!;
+    if (_database != null && _database!.isOpen) {
+      return _guarded(_database!);
+    }
     final inFlight = _databaseInitializingFuture;
     if (inFlight != null) {
-      return await inFlight;
+      return _guarded(await inFlight);
     }
     _databaseInitializingFuture = _initDatabase(
       progressNotifier: progressNotifier,
@@ -195,7 +217,7 @@ class DatabaseHelper {
       _databaseInitializingFuture = null;
       _userAbortCompleter = null;
     }
-    return _database!;
+    return _guarded(_database!);
   }
 
   /// Κλείνει την τρέχουσα σύνδεση και επαναφέρει την κατάσταση.
@@ -228,6 +250,7 @@ class DatabaseHelper {
       await db.close();
     }
     _database = null;
+    _guardedDatabase = null;
     _databaseInitializingFuture = null;
     _userAbortCompleter = null;
     _isUsingLocalDb = false;
@@ -277,6 +300,7 @@ class DatabaseHelper {
     } catch (e) {
       await db.close();
       _database = null;
+    _guardedDatabase = null;
       throw _enrichSchemaValidationException(e);
     }
     await _captureFileIdentity(dbPath);
@@ -516,7 +540,15 @@ class DatabaseHelper {
     progressNotifier?.setStep('Έλεγχος διαδρομής');
     final configured = await SettingsService().getDatabasePath();
     final resolved = await resolveEffectiveDatabasePath(configured);
-    final dbPath = resolved.path;
+    if (resolved.outcome == DatabasePathResolution.networkUnreachable) {
+      // Δεν αποφασίζουμε εμείς. Παλιότερα εδώ γινόταν σιωπηλή μετάπτωση στην
+      // τοπική βάση — ο χρήστης δούλευε σε άλλα, παλιά δεδομένα χωρίς να το
+      // ζητήσει. Τώρα η απόφαση ανεβαίνει στην οθόνη σφάλματος.
+      throw DatabaseInitException(
+        DatabaseInitResult.networkUnreachable(resolved.unreachablePath!),
+      );
+    }
+    final dbPath = resolved.pathToOpen;
     _isUsingLocalDb = resolved.usedUncFallback;
 
     if (!await File(dbPath).exists()) {
@@ -595,6 +627,7 @@ class DatabaseHelper {
         } catch (e) {
           await db.close();
           _database = null;
+    _guardedDatabase = null;
           throw _enrichSchemaValidationException(e);
         }
         await _captureFileIdentity(dbPath);
@@ -1047,7 +1080,10 @@ class DatabaseHelper {
     try {
       final configured = await SettingsService().getDatabasePath();
       final resolved = await resolveEffectiveDatabasePath(configured);
-      dbPath = resolved.path;
+      if (resolved.outcome == DatabasePathResolution.networkUnreachable) {
+        return const ConnectionCheckResult(success: false, isLocalDev: false);
+      }
+      dbPath = resolved.pathToOpen;
       if (!await File(dbPath).exists()) {
         return const ConnectionCheckResult(success: false, isLocalDev: false);
       }

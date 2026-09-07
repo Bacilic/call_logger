@@ -113,7 +113,23 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
     progressNotifier?.setStep('Έλεγχος διαδρομής', clearDiagnosticInfo: true);
     final configured = await SettingsService().getDatabasePath();
     final resolved = await resolveEffectiveDatabasePath(configured);
-    final dbPath = resolved.path;
+    if (resolved.outcome == DatabasePathResolution.networkUnreachable) {
+      final unreachable = DatabaseInitResult.networkUnreachable(
+        resolved.unreachablePath!,
+      );
+      progressNotifier?.setStep(
+        unreachable.message!,
+        clearSecondsRemaining: true,
+        diagnosticInfo: unreachable.details,
+        kind: StartupStepKind.failed,
+      );
+      return DatabaseInitRunnerResult(
+        result: unreachable,
+        isLocalDevMode: false,
+        missingApplicationFiles: const <String>[],
+      );
+    }
+    final dbPath = resolved.pathToOpen;
 
     if (reuseIfFresh) {
       final remembered = _rememberedResultFor(dbPath);

@@ -1,8 +1,20 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
 /// Καταγραφή σφαλμάτων και καταρρεύσεων σε ημερήσια αρχεία δίπλα στη βάση.
+///
+/// **Ο φάκελος μπορεί να είναι στο δίκτυο.** Ζει δίπλα στη βάση, και η βάση
+/// ζει συχνά σε κοινόχρηστο φάκελο· όταν εκείνος δεν απαντά, κάθε πράξη
+/// αρχείου πάνω του περιμένει τα Windows επ' αόριστον. Επειδή το στήσιμο
+/// τρέχει **πριν** από την πρώτη οθόνη, μια τέτοια αναμονή δεν φαίνεται ως
+/// καθυστέρηση αλλά ως **λευκό παράθυρο χωρίς διέξοδο**.
+///
+/// Γι' αυτό κάθε πράξη έχει όριο χρόνου, και η αποτυχία δεν είναι μοιραία:
+/// η υπηρεσία περνά σε λειτουργία **χωρίς δίσκο** ([isDiskAvailable] false)
+/// και δεν ξαναγγίζει τη διαδρομή — ούτε στη σύγχρονη καταγραφή σφαλμάτων,
+/// που τρέχει στο νήμα της διεπαφής και θα την πάγωνε σε κάθε σφάλμα.
 class CrashLogService {
   CrashLogService({
     required this.logsDirectory,
@@ -28,7 +40,23 @@ class CrashLogService {
     return current;
   }
 
-  final String logsDirectory;
+  /// Μέγιστη αναμονή για κάθε πράξη αρχείου του ημερολογίου.
+  ///
+  /// Ίδιο μέγεθος με τους υπόλοιπους κριτές δικτύου της εφαρμογής: πέρα από
+  /// τρία δευτερόλεπτα η σιωπή δεν διαβάζεται πια ως καθυστέρηση.
+  static const Duration diskProbeTimeout = Duration(seconds: 3);
+
+  /// Ο φάκελος των ημερήσιων αρχείων. Αλλάζει μόνο μέσω [retargetTo].
+  String logsDirectory;
+  bool _diskAvailable = true;
+  String? _diskUnavailableReason;
+
+  /// False όταν ο φάκελος δεν απάντησε: τίποτα δεν γράφεται στον δίσκο.
+  bool get isDiskAvailable => _diskAvailable;
+
+  /// Γιατί σίγησε το ημερολόγιο — για την αναφορά της εκκίνησης.
+  String? get diskUnavailableReason => _diskUnavailableReason;
+
   final String appVersion;
   final DateTime Function() _now;
   final int _maxDetailedRepeats;
@@ -51,34 +79,97 @@ class CrashLogService {
     required String databasePath,
     required String appVersion,
     required int retentionCount,
+    Duration timeout = diskProbeTimeout,
+    Future<void> Function(String directory)? createDirectory,
   }) async {
     // Δεν καταπίνουμε αποτυχίες του initialize: ο καλών πρέπει να δει την
-    // πρωτογενή αιτία (π.χ. logs φάκελος/δικαιώματα).
+    // πρωτογενή αιτία (π.χ. logs φάκελος/δικαιώματα). Η υπηρεσία όμως έχει
+    // ήδη περάσει σε λειτουργία χωρίς δίσκο, ώστε η εκκίνηση να συνεχίσει.
     final logsDir = logsDirectoryForDatabasePath(databasePath);
     final service = CrashLogService(
       logsDirectory: logsDir,
       appVersion: appVersion,
     );
     _instance = service;
-    await service.onStartup(retentionCount: retentionCount);
+    await service.onStartup(
+      retentionCount: retentionCount,
+      timeout: timeout,
+      createDirectory: createDirectory,
+    );
   }
 
-  Future<void> onStartup({required int retentionCount}) async {
+  /// Μετακομίζει το ημερολόγιο δίπλα σε **άλλη** βάση.
+  ///
+  /// Χρειάζεται όταν η εκκίνηση κατέληξε σε διαφορετική βάση από τη
+  /// ρυθμισμένη (π.χ. ο χρήστης δέχτηκε την τοπική επειδή το δίκτυο δεν
+  /// απαντούσε): χωρίς αυτό, το ημερολόγιο θα έμενε σιωπηλό για όλη τη
+  /// συνεδρία, δείχνοντας ακόμη στον φάκελο που δεν απάντησε.
+  Future<void> retargetTo({
+    required String databasePath,
+    required int retentionCount,
+    Duration timeout = diskProbeTimeout,
+    Future<void> Function(String directory)? createDirectory,
+  }) async {
+    final next = logsDirectoryForDatabasePath(databasePath);
+    if (next == logsDirectory && _diskAvailable) return;
+    logsDirectory = next;
+    _diskAvailable = true;
+    _diskUnavailableReason = null;
+    try {
+      await onStartup(
+        retentionCount: retentionCount,
+        timeout: timeout,
+        createDirectory: createDirectory,
+      );
+    } catch (_) {
+      // Η κατάσταση «χωρίς δίσκο» έχει ήδη μπει· η μετακόμιση είναι
+      // νοικοκυριό και δεν επιτρέπεται να ρίξει τη ροή που την κάλεσε.
+    }
+  }
+
+  /// Το [createDirectory] υπάρχει για τα τεστ — αλλιώς ρωτιέται το πραγματικό
+  /// σύστημα αρχείων.
+  Future<void> onStartup({
+    required int retentionCount,
+    Duration timeout = diskProbeTimeout,
+    Future<void> Function(String directory)? createDirectory,
+  }) async {
     // Δεν καταπίνουμε αποτυχίες του onStartup: αν δεν δημιουργηθεί το
     // ημερολόγιο, οι σημειώσεις εκκίνησης πρέπει να μείνουν διαθέσιμες.
-    await Directory(logsDirectory).create(recursive: true);
-    await _purgeOldLogFiles(retentionCount);
-    if (await _sessionLockFile().exists()) {
-      _logPlainMessage(abnormalTerminationMessage, fatal: true);
+    // Πριν ξαναπεταχτούν όμως, σβήνει ο δίσκος: ό,τι ακολουθεί σε αυτή τη
+    // συνεδρία δεν έχει λόγο να ξαναπεριμένει την ίδια διαδρομή.
+    final create =
+        createDirectory ??
+        (String directory) => Directory(directory).create(recursive: true);
+    try {
+      await create(logsDirectory).timeout(timeout);
+      await _purgeOldLogFiles(retentionCount).timeout(timeout);
+      final lock = _sessionLockFile();
+      if (await lock.exists().timeout(timeout)) {
+        _logPlainMessage(abnormalTerminationMessage, fatal: true);
+      }
+      await lock.writeAsString('1', flush: true).timeout(timeout);
+    } catch (error) {
+      _disableDisk(error);
+      rethrow;
     }
-    await _sessionLockFile().writeAsString('1', flush: true);
+  }
+
+  void _disableDisk(Object reason) {
+    _diskAvailable = false;
+    _diskUnavailableReason = reason is TimeoutException
+        ? 'Ο φάκελος «$logsDirectory» δεν απάντησε μέσα σε '
+              '${diskProbeTimeout.inSeconds} δευτερόλεπτα.'
+        : reason.toString();
   }
 
   Future<void> onShutdown() async {
+    if (!_diskAvailable) return;
     try {
       _flushPendingRepeatSummaries();
-      if (await _sessionLockFile().exists()) {
-        await _sessionLockFile().delete();
+      final lock = _sessionLockFile();
+      if (await lock.exists().timeout(diskProbeTimeout)) {
+        await lock.delete().timeout(diskProbeTimeout);
       }
     } catch (_) {}
   }
@@ -106,6 +197,10 @@ class CrashLogService {
     required bool fatal,
     String? diagnostics,
   }) {
+    // Ο φάκελος μπορεί να είναι σε δίκτυο που δεν απαντά. Η δημιουργία είναι
+    // σύγχρονη και τρέχει στο νήμα της διεπαφής: χωρίς αυτή τη γραμμή, ένα
+    // χαμένο δίκτυο θα πάγωνε την εφαρμογή σε **κάθε** σφάλμα που καταγράφεται.
+    if (!_diskAvailable) return;
     Directory(logsDirectory).createSync(recursive: true);
     final key = _dedupKey(error, stack);
     final state = _dedupStates.putIfAbsent(key, _DedupState.new);
@@ -211,7 +306,8 @@ class CrashLogService {
     }
   }
 
-  File _sessionLockFile() => File(p.join(logsDirectory, sessionLockFileName));
+  File _sessionLockFile() =>
+      File(p.join(logsDirectory, sessionLockFileName));
 
   static String _dedupKey(Object error, StackTrace stack) {
     final firstStackLine = stack
