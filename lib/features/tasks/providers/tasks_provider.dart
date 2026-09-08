@@ -146,7 +146,12 @@ class TasksNotifier extends AsyncNotifier<List<Task>> {
     _refreshInFlight = () async {
       state = await AsyncValue.guard(() => service.getFilteredTasks(filter));
       if (state.hasError) {
-        ref.invalidateSelf();
+        // Το σφάλμα ΜΕΝΕΙ ορατό. Παλιότερα εδώ γινόταν `ref.invalidateSelf()`:
+        // η αποτυχία πεταγόταν και ο provider ξαναχτιζόταν από την αρχή, οπότε
+        // ο χειριστής που πατούσε «Επανάληψη» με τη βάση χαμένη ξανάμπαινε σε
+        // πλήρη κύκλο αναμονής χωρίς να μάθει ποτέ ότι η προσπάθειά του
+        // απέτυχε. Η σφραγίδα φρεσκάδας δεν μπαίνει — τα δεδομένα δεν είναι
+        // φρέσκα.
         return;
       }
       // Η σφραγίδα μπαίνει ΕΔΩ, στο ένα σημείο απ' όπου περνούν όλες οι

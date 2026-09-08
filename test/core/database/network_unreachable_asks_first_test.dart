@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// δεδομένα χωρίς να το ξέρει.
 void main() {
   const unreachableUnc = r'\\δεν-υπαρχει-διακομιστης\κοινοχρηστο\call_logger.db';
+  const localDb = r'C:\Users\x\Documents\Call Logger\call_logger.db';
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -38,17 +39,23 @@ void main() {
   });
 
   test('μετά την αποδοχή του χρήστη, ανοίγει η τοπική βάση', () async {
-    LocalDatabaseSessionFallback.accept(unreachableUnc);
+    LocalDatabaseSessionFallback.accept(unreachableUnc, localDb);
 
     final resolved = await resolveEffectiveDatabasePath(unreachableUnc);
 
     expect(resolved.outcome, DatabasePathResolution.resolved);
     expect(resolved.usedUncFallback, isTrue);
-    expect(resolved.pathToOpen, isNot(unreachableUnc));
+    expect(
+      resolved.pathToOpen,
+      localDb,
+      reason:
+          'Άνοιξε άλλη βάση από εκείνη που δέχτηκε ο χρήστης — η '
+          'προσφορά και η ενέργεια απέκλιναν.',
+    );
   });
 
   test('η αποδοχή αφορά ΜΟΝΟ τη διαδρομή για την οποία δόθηκε', () async {
-    LocalDatabaseSessionFallback.accept(unreachableUnc);
+    LocalDatabaseSessionFallback.accept(unreachableUnc, localDb);
 
     const otherUnc = r'\\αλλος-διακομιστης\κοινοχρηστο\call_logger.db';
     final resolved = await resolveEffectiveDatabasePath(otherUnc);

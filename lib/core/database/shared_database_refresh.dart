@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import '../../features/directory/providers/directory_cache_refresh.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../widgets/modal_route_tracker.dart';
 import 'database_helper.dart';
+import 'database_reachability.dart';
 import 'shared_database_change_watcher.dart';
 
 /// Πόσο συχνά ρωτάμε αν έγραψε άλλο μηχάνημα.
@@ -62,6 +64,22 @@ Future<void> refreshSharedDatabaseViews(Ref ref) async {
 /// βρίσκεται σε άλλη οθόνη.
 final sharedDatabaseChangeWatcherProvider =
     Provider<SharedDatabaseChangeWatcher>((ref) {
+      // Η επιστροφή της βάσης είναι αλλαγή σαν κάθε άλλη — απλώς έρχεται
+      // από το δίκτυο και όχι από συνάδελφο. Ο φύλακας τη διαπιστώνει σε
+      // δευτερόλεπτα· χωρίς αυτή τη γραμμή η κόκκινη λωρίδα έσβηνε και οι
+      // οθόνες έμεναν με το σφάλμα τους, λέγοντας «όλα καλά» και δείχνοντας
+      // αποτυχία.
+      //
+      // ΜΟΝΟ στη μετάβαση «χαμένη → εντάξει»: το ξαναφόρτωμα κοστίζει
+      // ερωτήματα και δεν έχει λόγο να τρέχει σε κάθε επιτυχημένο έλεγχο.
+      ref.listen<DatabaseReachability>(databaseReachabilityProvider, (
+        previous,
+        next,
+      ) {
+        if (!isDatabaseReturn(previous, next)) return;
+        unawaited(refreshSharedDatabaseViews(ref));
+      });
+
       final tracker = appModalRouteTracker;
       final watcher = SharedDatabaseChangeWatcher(
         interval: kSharedDatabaseCheckInterval,

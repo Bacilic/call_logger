@@ -56,7 +56,16 @@ class DatabaseAccessProbeReport {
 }
 
 class DatabaseAccessProbe {
-  const DatabaseAccessProbe();
+  const DatabaseAccessProbe({this.totalTimeout = _kProbeTotalTimeout});
+
+  /// Πόσο συνολικά περιμένει ο έλεγχος πριν τα παρατήσει.
+  ///
+  /// Το ένα δευτερόλεπτο είναι επιλογή **της εκκίνησης**: εκεί ο χειριστής
+  /// περιμένει και τα διαγνωστικά είναι πολυτέλεια, όχι προϋπόθεση. Τα τεστ
+  /// κρίνουν **τι αναφέρει** ο έλεγχος και όχι πόσο γρήγορα, και τρέχουν
+  /// δεκάδες παράλληλα σε φορτωμένο μηχάνημα — εκεί το ένα δευτερόλεπτο
+  /// εξαντλείται και η αναφορά βγαίνει άδεια.
+  final Duration totalTimeout;
 
   static const Duration _kProbeTotalTimeout = Duration(milliseconds: 1000);
   static const Duration _kShortStepTimeout = Duration(milliseconds: 250);
@@ -83,7 +92,7 @@ class DatabaseAccessProbe {
 
   Future<DatabaseAccessProbeReport> probe(String dbPath) async {
     final report = await _runProbe(dbPath).timeout(
-      _kProbeTotalTimeout,
+      totalTimeout,
       onTimeout: () => const DatabaseAccessProbeReport(
         findings: <ProbeFinding>[
           ProbeFinding(

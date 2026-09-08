@@ -24,6 +24,7 @@ import 'core/services/app_close_controller.dart';
 import 'core/services/crash_log_service.dart';
 import 'core/services/settings_service.dart';
 import 'core/database/database_file_identity.dart';
+import 'core/database/database_reachability.dart';
 import 'core/database/database_replacement_notice.dart';
 import 'core/errors/app_error_result.dart';
 import 'core/errors/layout_error_diagnostics.dart';
@@ -298,7 +299,11 @@ Future<void> _bootstrapAndRunApp() async {
   // εναλλαγή βάσης. Σφραγίζεται ώστε να επιβιώνει κάθε νέας προσπάθειας.
   journal.sealBootPrefix();
 
-  runApp(const ProviderScope(child: MyApp()));
+  // Ο κανόνας επανάληψης μπαίνει στη ρίζα, στο ένα σημείο απ' όπου
+  // περνούν ΟΛΟΙ οι providers: μια οθόνη δεν έχει τρόπο να τον ξεχάσει.
+  runApp(
+    ProviderScope(retry: databaseAwareRetry, child: const MyApp()),
+  );
 }
 
 class MyApp extends StatelessWidget {

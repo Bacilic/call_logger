@@ -13,6 +13,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Η κατάσταση όπως τη βλέπει ο χειριστής.
@@ -22,6 +23,61 @@ enum DatabaseReachability {
 
   /// Το αρχείο έπαψε να απαντά.
   lost,
+}
+
+/// Η κατάσταση του φύλακα, διαθέσιμη **έξω** από το Riverpod.
+///
+/// Υπάρχει για έναν και μόνο καταναλωτή: τον κανόνα επανάληψης του
+/// `ProviderScope`. Η υπογραφή που ορίζει το Riverpod του δίνει μόνο τον
+/// αριθμό προσπάθειας και το σφάλμα — δεν έχει `ref`, άρα δεν μπορεί να
+/// ρωτήσει τον φύλακα με τον κανονικό τρόπο.
+///
+/// **Ένας γράφει, ένας διαβάζει.** Το γράψιμο ανήκει αποκλειστικά στον
+/// [DatabaseReachabilityNotifier], που είναι ο κάτοχος της κατάστασης· εδώ
+/// απλώς δημοσιεύεται. Καμία άλλη ροή δεν έχει λόγο να το πειράξει.
+class DatabaseReachabilitySignal {
+  DatabaseReachabilitySignal._();
+
+  static DatabaseReachability _state = DatabaseReachability.ok;
+
+  static DatabaseReachability get state => _state;
+
+  /// True όταν ο φύλακας έχει ήδη κρίνει ότι η βάση δεν απαντά.
+  static bool get isLost => _state == DatabaseReachability.lost;
+
+  /// Το γράφει ΜΟΝΟ ο φύλακας.
+  static void publish(DatabaseReachability value) => _state = value;
+
+  /// Μηδενισμός για τα τεστ — η κατάσταση είναι καθολική και δεν επιτρέπεται
+  /// να ταξιδεύει από τον έναν έλεγχο στον επόμενο.
+  static void resetForTest() => _state = DatabaseReachability.ok;
+}
+
+/// Ο κανόνας επανάληψης ολόκληρης της εφαρμογής.
+///
+/// **Το πρόβλημα:** όταν η βάση χάνεται, κάθε ερώτημα αποτυγχάνει αμέσως — και
+/// το Riverpod το ξαναδοκιμάζει δέκα φορές μέσα σε ~38 δευτερόλεπτα. Όσο
+/// κρατούν οι προσπάθειες, η οθόνη δείχνει κύκλο φόρτωσης: ο χειριστής βλέπει
+/// «φορτώνει» κάτω από μια κόκκινη λωρίδα που λέει «δεν αποκρίνεται».
+///
+/// **Η λύση δεν είναι να κοπεί η επανάληψη.** Σε κοινόχρηστη βάση το παροδικό
+/// κλείδωμα λύνεται μόνο του και η επανάληψη το γεφυρώνει σιωπηλά — αυτό
+/// μένει. Ό,τι κόβεται είναι η **άσκοπη** επανάληψη: όταν ο φύλακας έχει ήδη
+/// διαπιστώσει ότι η διαδρομή δεν απαντά, καμία επόμενη προσπάθεια δεν
+/// πρόκειται να πετύχει, και η μόνη τους συνεισφορά είναι να κρύβουν το
+/// σφάλμα από τον χειριστή.
+/// Είναι αυτή η αλλαγή **επιστροφή** της βάσης;
+///
+/// Μόνο η μετάβαση «χαμένη → εντάξει» μετράει. Κάθε επιτυχημένος έλεγχος του
+/// φύλακα περνά από τον ίδιο δρόμο — αν μετρούσαν όλοι, η εφαρμογή θα
+/// ξαναφόρτωνε τις κοινές όψεις κάθε είκοσι δευτερόλεπτα, σε βάση που
+/// μοιράζονται δεκάδες σταθμοί.
+bool isDatabaseReturn(DatabaseReachability? previous, DatabaseReachability next) =>
+    previous == DatabaseReachability.lost && next == DatabaseReachability.ok;
+
+Duration? databaseAwareRetry(int retryCount, Object error) {
+  if (DatabaseReachabilitySignal.isLost) return null;
+  return ProviderContainer.defaultRetry(retryCount, error);
 }
 
 /// Κρατά την ιστορία των ελέγχων και αποφασίζει **πότε** λέμε «χάθηκε».
@@ -120,7 +176,7 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
   void watch(String? databasePath) {
     _timer?.cancel();
     _tracker.record(probeSucceeded: true);
-    state = DatabaseReachability.ok;
+    _publish(DatabaseReachability.ok);
 
     final path = databasePath?.trim() ?? '';
     _watchedPath = path.isEmpty ? null : path;
@@ -145,14 +201,37 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
   Future<void> _runCheck() async {
     final path = _watchedPath;
     if (path == null) return;
-    final ok = await probeDatabaseFile(path);
-    _lastProbeFailed = !ok;
-    final next = _tracker.record(probeSucceeded: ok);
-    if (next != state) state = next;
+    recordProbeResult(succeeded: await probeDatabaseFile(path));
+  }
+
+  /// Καταγράφει το αποτέλεσμα ενός ελέγχου.
+  ///
+  /// Δημόσιο ώστε τα τεστ να περνούν από **την ίδια** διαδρομή με τον
+  /// πραγματικό φύλακα: ένα τεστ που αναπαράγει τα βήματα μόνο του θα φύλαγε
+  /// το αντίγραφό του και όχι τον κώδικα.
+  @visibleForTesting
+  void recordProbeResult({required bool succeeded}) {
+    _lastProbeFailed = !succeeded;
+    final next = _tracker.record(probeSucceeded: succeeded);
+    if (next != state) _publish(next);
+  }
+
+  /// Μία πόρτα για κάθε αλλαγή κατάστασης.
+  ///
+  /// Η κατάσταση ζει σε δύο θέσεις — στον provider για τις οθόνες, και στο
+  /// [DatabaseReachabilitySignal] για τον κανόνα επανάληψης. Αν γράφονταν
+  /// χωριστά, θα αρκούσε ένα ξεχασμένο σημείο για να λέει η μία το αντίθετο
+  /// από την άλλη.
+  void _publish(DatabaseReachability value) {
+    state = value;
+    DatabaseReachabilitySignal.publish(value);
   }
 
   void stop() {
     _timer?.cancel();
     _timer = null;
+    // Χωρίς φύλακα δεν υπάρχει γνώση· η άγνοια δεν επιτρέπεται να κρατά τις
+    // οθόνες σε κατάσταση «χαμένη βάση» για την υπόλοιπη συνεδρία.
+    DatabaseReachabilitySignal.publish(DatabaseReachability.ok);
   }
 }

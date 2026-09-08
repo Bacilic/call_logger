@@ -185,7 +185,13 @@ void main() {
         await db.close();
         await File('$path-journal').writeAsBytes(List<int>.filled(512, 0));
 
-        final report = await const DatabaseAccessProbe().probe(path);
+        // Γενναιόδωρο όριο: το τεστ κρίνει τι βλέπει ο έλεγχος, όχι πόσο
+        // γρήγορα. Με το παραγωγικό ενός δευτερολέπτου, μια φορτωμένη
+        // παράλληλη εκτέλεση έβγαζε άδεια αναφορά και το τεστ κοκκίνιζε
+        // χωρίς να φταίει τίποτα.
+        final report = await const DatabaseAccessProbe(
+          totalTimeout: Duration(seconds: 15),
+        ).probe(path);
 
         expect(report.humanReadable, contains('-journal'));
         expect(

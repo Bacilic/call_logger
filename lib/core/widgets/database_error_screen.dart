@@ -222,7 +222,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     final unreachable = widget.result.path?.trim();
     final offer = _localOffer;
     if (unreachable == null || unreachable.isEmpty || offer == null) return;
-    LocalDatabaseSessionFallback.accept(unreachable);
+    LocalDatabaseSessionFallback.accept(unreachable, offer.path);
     // Το ημερολόγιο σφαλμάτων ζει δίπλα στη βάση: χωρίς μετακόμιση θα έμενε
     // σιωπηλό για όλη τη συνεδρία, δείχνοντας στον φάκελο που δεν απάντησε.
     await CrashLogService.instanceOrNull?.retargetTo(
@@ -662,9 +662,22 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     }
   }
 
+  /// Οι πρόσφατες βάσεις, **χωρίς** εκείνη που ήδη προσφέρει το κουμπί.
+  ///
+  /// Το ίδιο αρχείο δύο φορές — μια με ημερομηνία και μια με σκέτο όνομα —
+  /// μοιάζει με δύο διαφορετικές επιλογές.
+  List<String> get _recentPathsToShow {
+    final offered = _shouldOfferLocalDatabase ? _localOffer?.path : null;
+    if (offered == null) return _recentExistingPaths;
+    return _recentExistingPaths
+        .where((path) => !databasePathsReferToSameFile(path, offered))
+        .toList();
+  }
+
   Widget _buildRecentDatabasesSection(ThemeData theme) {
     if (!_shouldOfferDatabaseActions) return const SizedBox.shrink();
-    if (_recentExistingPaths.isEmpty) {
+    final recentPaths = _recentPathsToShow;
+    if (recentPaths.isEmpty) {
       return const SizedBox.shrink();
     }
     return Column(
@@ -679,7 +692,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
         const SizedBox(height: 8),
         Row(
           children: [
-            for (var i = 0; i < _recentExistingPaths.length; i++) ...[
+            for (var i = 0; i < recentPaths.length; i++) ...[
               if (i > 0) const SizedBox(width: 8),
               Expanded(
                 child: CompactTooltip(
@@ -687,14 +700,14 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
                       'Γρήγορη επιστροφή σε προηγούμενη έγκυρη βάση.\n\n'
                       'Πατήστε για να συνδέσετε ξανά αυτό το αρχείο '
                       '(χωρίς να ανοίξετε τον επιλογέα αρχείων).\n\n'
-                      'Πλήρης διαδρομή:\n${_recentExistingPaths[i]}',
+                      'Πλήρης διαδρομή:\n${recentPaths[i]}',
                   waitDuration: const Duration(milliseconds: 350),
                   child: OutlinedButton.icon(
                     onPressed: () =>
-                        _applyRecentDatabasePath(_recentExistingPaths[i]),
+                        _applyRecentDatabasePath(recentPaths[i]),
                     icon: const Icon(Icons.history, size: 18),
                     label: Text(
-                      p.basename(_recentExistingPaths[i]),
+                      p.basename(recentPaths[i]),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),

@@ -76,20 +76,34 @@ class LocalDatabaseSessionFallback {
   LocalDatabaseSessionFallback._();
 
   static String? _acceptedFor;
+  static String? _localPath;
 
-  /// Ο χρήστης δέχτηκε την τοπική βάση αντί για τη [configuredPath].
-  static void accept(String configuredPath) {
+  /// Ο χρήστης δέχτηκε τη [localPath] στη θέση της [configuredPath].
+  ///
+  /// Η τοπική διαδρομή αποθηκεύεται **μαζί** με την απόφαση, και δεν
+  /// ξαναϋπολογίζεται αργότερα: αλλιώς η βάση που άνοιγε δεν θα ήταν κατ'
+  /// ανάγκη εκείνη που είδε ο χρήστης στο κουμπί.
+  static void accept(String configuredPath, String localPath) {
     _acceptedFor = configuredPath.trim();
+    _localPath = localPath.trim();
   }
 
   /// Ξεχνά την επιλογή — π.χ. όταν αλλάξει η ρυθμισμένη βάση.
   static void forget() {
     _acceptedFor = null;
+    _localPath = null;
   }
 
   static bool isAcceptedFor(String configuredPath) {
     final accepted = _acceptedFor;
     return accepted != null && accepted == configuredPath.trim();
+  }
+
+  /// Η τοπική βάση που δέχτηκε ο χρήστης για τη [configuredPath].
+  static String? acceptedLocalPathFor(String configuredPath) {
+    if (!isAcceptedFor(configuredPath)) return null;
+    final local = _localPath;
+    return (local == null || local.isEmpty) ? null : local;
   }
 }
 
@@ -105,27 +119,63 @@ class LocalDatabaseOffer {
   bool get exists => lastModified != null;
 }
 
-/// Τι υπάρχει σήμερα στην προεπιλεγμένη τοπική διαδρομή.
+/// Η καλύτερη τοπική βάση που μπορεί να προσφερθεί **αυτή τη στιγμή**.
+///
+/// **«Τοπική» δεν είναι μια σταθερή διαδρομή** — είναι η πιο πρόσφατη τοπική
+/// βάση που υπάρχει πραγματικά. Η προεπιλεγμένη διαδρομή είναι συχνά άδεια: σε
+/// εγκατάσταση που δούλεψε πάντα με δικτυακή βάση δεν γράφτηκε ποτέ τίποτα
+/// εκεί, και ένα κουμπί που δείχνει σε κενό δεν είναι διέξοδος.
+///
+/// **Σειρά αναζήτησης:** πρώτα οι πρόσφατες βάσεις (η πιο πρόσφατα
+/// χρησιμοποιημένη πρώτη — είναι εκείνη που ο χρήστης αναγνωρίζει), και ως
+/// τελευταία επιλογή η προεπιλεγμένη διαδρομή.
+///
+/// **Οι δικτυακές διαδρομές αποκλείονται** για δύο λόγους: δεν είναι τοπικές,
+/// και ο έλεγχος ύπαρξης πάνω τους μπορεί να κρεμάσει ακριβώς την οθόνη που
+/// υπάρχει για να δώσει διέξοδο.
 ///
 /// Η ημερομηνία είναι το κρίσιμο: η τοπική βάση **δεν είναι κενή** — είναι ένα
 /// παλιό, αληθινό αρχείο. Χωρίς να φαίνεται πόσο παλιό, ο χρήστης μπορεί να
 /// καταγράφει κλήσεις σε περσινά δεδομένα νομίζοντας ότι δουλεύει κανονικά.
 Future<LocalDatabaseOffer> localDatabaseOffer() async {
-  // Χωρίς όριο χρόνου επίτηδες: η προεπιλεγμένη διαδρομή είναι πάντα τοπικός
-  // δίσκος (δίπλα στο εκτελέσιμο ή στον φάκελο του προφίλ). Ένα χρονόμετρο εδώ
-  // δεν θα προστάτευε από τίποτα και επιβιώνει της οθόνης που το άναψε.
-  final path = AppConfig.defaultDbPath;
+  for (final candidate in [
+    ...await _recentLocalDatabasePaths(),
+    AppConfig.defaultDbPath,
+  ]) {
+    final lastModified = await _lastModifiedOrNull(candidate);
+    if (lastModified != null) {
+      return LocalDatabaseOffer(path: candidate, lastModified: lastModified);
+    }
+  }
+  return LocalDatabaseOffer(path: AppConfig.defaultDbPath, lastModified: null);
+}
+
+/// Οι πρόσφατες βάσεις που είναι **τοπικές**, με τη σειρά χρήσης τους.
+Future<List<String>> _recentLocalDatabasePaths() async {
+  try {
+    final recent = await SettingsService().getRecentDatabasePaths();
+    return recent
+        .map((entry) => entry.trim())
+        .where((entry) => entry.isNotEmpty)
+        .where((entry) => !AppConfig.isUncDatabasePath(entry))
+        .toList();
+  } catch (_) {
+    return const <String>[];
+  }
+}
+
+/// Πότε άλλαξε τελευταία, ή `null` αν δεν υπάρχει.
+///
+/// Χωρίς όριο χρόνου επίτηδες: εδώ φτάνουν μόνο τοπικές διαδρομές, και ένα
+/// χρονόμετρο δεν θα προστάτευε από τίποτα ενώ επιβιώνει της οθόνης που το
+/// άναψε.
+Future<DateTime?> _lastModifiedOrNull(String path) async {
   try {
     final file = File(path);
-    if (!await file.exists()) {
-      return LocalDatabaseOffer(path: path, lastModified: null);
-    }
-    return LocalDatabaseOffer(
-      path: path,
-      lastModified: await file.lastModified(),
-    );
+    if (!await file.exists()) return null;
+    return await file.lastModified();
   } catch (_) {
-    return LocalDatabaseOffer(path: path, lastModified: null);
+    return null;
   }
 }
 
@@ -170,14 +220,12 @@ Future<ResolvedDatabasePath> resolveEffectiveDatabasePath(
     return ResolvedDatabasePath(path: p, usedUncFallback: false);
   }
 
-  if (!LocalDatabaseSessionFallback.isAcceptedFor(p)) {
+  // Ανοίγει **ακριβώς** η βάση που είδε ο χρήστης στο κουμπί. Παλιότερα εδώ
+  // ξαναϋπολογιζόταν η προεπιλεγμένη διαδρομή, οπότε η προσφορά και η ενέργεια
+  // μπορούσαν να δείχνουν σε διαφορετικά αρχεία — και συνήθως έδειχναν.
+  final accepted = LocalDatabaseSessionFallback.acceptedLocalPathFor(p);
+  if (accepted == null) {
     return ResolvedDatabasePath.networkUnreachable(p);
   }
-
-  final local = AppConfig.defaultDbPath;
-  final parent = File(local).parent;
-  if (!await parent.exists()) {
-    await parent.create(recursive: true);
-  }
-  return ResolvedDatabasePath(path: local, usedUncFallback: true);
+  return ResolvedDatabasePath(path: accepted, usedUncFallback: true);
 }
