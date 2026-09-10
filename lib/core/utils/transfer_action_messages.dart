@@ -31,6 +31,29 @@ String sharedDepartmentSource(String? departmentName) {
   return '$name (κοινόχρηστο)';
 }
 
+/// «Αφαίρεση από Σοφία Σπυροπούλου — μένει κοινόχρηστο στο τμήμα «Αιμοδοσία»».
+///
+/// Το άρθρο δένει με τη λέξη «τμήμα», ποτέ με το όνομα: τα ονόματα τμημάτων
+/// έχουν κάθε γένος και μένουν άκλιτα μέσα στα εισαγωγικά τους.
+///
+/// Η αντίστροφη έκβαση από την [removeAndAssignMessage]: εδώ δεν φεύγει ο
+/// αριθμός από το τμήμα, φεύγει ο άνθρωπος από τον αριθμό. Κρατά το ίδιο
+/// μοτίβο «Αφαίρεση από …», ώστε οι δύο επιλογές να διαβάζονται παράλληλα.
+String keepInDepartmentDetachMessage({
+  required String userLabel,
+  String? departmentName,
+}) {
+  final who = userLabel.trim();
+  final removal = who.isEmpty
+      ? 'Αφαίρεση από τον υπάλληλο'
+      : 'Αφαίρεση από $who';
+  final department = departmentName?.trim() ?? '';
+  final stays = department.isEmpty
+      ? 'μένει εκεί που είναι'
+      : 'μένει κοινόχρηστο στο τμήμα «$department»';
+  return '$removal — $stays';
+}
+
 /// «Αφαίρεση από Α (Τμήμα) και από Β (Τμήμα) και σύνδεση με Γ (Τμήμα)».
 ///
 /// Κενός [target] σημαίνει ότι δεν δίνεται σε κανέναν — το μήνυμα το λέει αντί

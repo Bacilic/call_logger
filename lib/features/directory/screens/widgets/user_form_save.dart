@@ -187,12 +187,23 @@ class UserFormSave {
         if (phoneDisconnectBatch == null) return;
       }
 
+      // Η αλλαγή τμήματος ρωτά ΠΡΩΤΗ: αν τα τηλέφωνα μένουν πίσω, δεν
+      // υπάρχει σύγκρουση να λυθεί για αυτά.
+      final phonesStayingBehind = cloneAsNewEmployee
+          ? const <String>{}
+          : await host.phonePolicy.confirmPhoneFateOnDepartmentChange();
+      if (!host.mounted) return;
+      if (phonesStayingBehind == null) return;
+
       final editingUserId =
           host.isEdit && !cloneAsNewEmployee && !host.widget.isClone
           ? host.widget.initialUser?.id
           : null;
       final phoneConflictBatch = await host.phonePolicy
-          .confirmUserPhoneAssignmentConflicts(editingUserId: editingUserId);
+          .confirmUserPhoneAssignmentConflicts(
+            editingUserId: editingUserId,
+            phonesStayingBehind: phonesStayingBehind,
+          );
       if (!host.mounted) return;
       if (phoneConflictBatch == null) return;
 
@@ -200,6 +211,7 @@ class UserFormSave {
         cloneAsNewEmployee: cloneAsNewEmployee,
         phoneDisconnectBatch: phoneDisconnectBatch,
         phoneConflictBatch: phoneConflictBatch,
+        phonesStayingBehind: phonesStayingBehind,
       );
     } on PhoneDepartmentPolicyException catch (e) {
       if (!host.mounted) return;
@@ -273,10 +285,34 @@ class UserFormSave {
     bool cloneAsNewEmployee = false,
     SharedAssetDisconnectBatchResult? phoneDisconnectBatch,
     UserPhoneConflictBatchResult? phoneConflictBatch,
+    Set<String> phonesStayingBehind = const {},
   }) async {
     final db = await DatabaseHelper.instance.database;
     final dir = DepartmentRepository(db);
     final departmentId = await _resolveDepartmentIdForSave(dir);
+
+    // Δύο λόγοι για να μη φτάσει ένα τηλέφωνο στην καρτέλα: ο χρήστης το
+    // άφησε στο τμήμα του λύνοντας σύγκρουση, ή το άφησε πίσω μετακινώντας
+    // τον υπάλληλο. Και στους δύο φεύγει από τη λίστα ΠΡΙΝ γραφτεί — αλλιώς η
+    // επιλογή θα φαινόταν να γίνεται δεκτή και το τηλέφωνο θα γραφόταν έτσι
+    // κι αλλιώς.
+    final phones = PhoneListParser.splitPhones(host.phoneController.text)
+        .where(
+          (p) =>
+              !(phoneConflictBatch?.detaches(p) ?? false) &&
+              !phonesStayingBehind.contains(p.trim()),
+        )
+        .toList();
+
+    // Ό,τι μένει πίσω γίνεται κοινόχρηστο του τμήματος που αφήνει ο
+    // υπάλληλος. Η προσθήκη είναι αθόρυβη όταν ο αριθμός είναι ήδη εκεί.
+    final oldDepartmentId = host.widget.initialUser?.departmentId;
+    if (phonesStayingBehind.isNotEmpty && oldDepartmentId != null) {
+      final repo = PhoneRepository(db);
+      for (final phone in phonesStayingBehind) {
+        await repo.addDepartmentDirectPhone(oldDepartmentId, phone);
+      }
+    }
 
     if (phoneConflictBatch != null && !phoneConflictBatch.isEmpty) {
       await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
@@ -284,6 +320,9 @@ class UserFormSave {
         resolutions: phoneConflictBatch,
         targetDepartmentId: departmentId,
       );
+    }
+    if ((phoneConflictBatch != null && !phoneConflictBatch.isEmpty) ||
+        phonesStayingBehind.isNotEmpty) {
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
     }
@@ -295,7 +334,7 @@ class UserFormSave {
       lastName: host.lastNameController.text.trim(),
       firstName: host.firstNameController.text.trim(),
       nickname: host.nicknameController.text.trim(),
-      phones: PhoneListParser.splitPhones(host.phoneController.text),
+      phones: phones,
       departmentId: departmentId,
       location: host.locationController.text.trim().isEmpty
           ? null

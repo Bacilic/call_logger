@@ -1859,6 +1859,41 @@ void main() {
 
       expect(findings, isEmpty);
     });
+
+    test('κενό τμήμα αλλά κάτοχος με τμήμα: κανένα εύρημα', () {
+      final findings = service
+          .scan(
+            users: [
+              UserModel(id: 4, lastName: 'Ψαρρά', departmentId: 12),
+            ],
+            departments: [DepartmentModel(id: 12, name: 'Ακτινολογικό')],
+            equipment: [EquipmentModel(id: 9, code: '2506')],
+            ownerUserIdsByEquipmentId: const {
+              9: [4],
+            },
+          )
+          .where((f) => f.fieldLabel == 'Τμήμα')
+          .toList();
+
+      expect(findings, isEmpty);
+    });
+
+    test('κενό τμήμα και κάτοχος χωρίς τμήμα: το εύρημα παραμένει', () {
+      final findings = service
+          .scan(
+            users: [UserModel(id: 4, lastName: 'Ψαρρά')],
+            departments: const [],
+            equipment: [EquipmentModel(id: 9, code: '2506')],
+            ownerUserIdsByEquipmentId: const {
+              9: [4],
+            },
+          )
+          .where((f) => f.fieldLabel == 'Τμήμα')
+          .toList();
+
+      expect(findings, hasLength(1));
+      expect(findings.single.primary.entityId, 9);
+    });
   });
 
   group('scan — ίδιος στόχος απομακρυσμένης σε δύο μηχανήματα', () {

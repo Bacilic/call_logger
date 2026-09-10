@@ -476,7 +476,9 @@ class CatalogValidationService {
     );
     _addEquipmentWithoutDepartmentFindings(
       findings,
+      users: activeUsers,
       equipment: activeEquipment,
+      ownerUserIdsByEquipmentId: ownerUserIdsByEquipmentId,
       departmentNameById: departmentNameById,
     );
     _addDuplicateRemoteTargetFindings(
@@ -1227,15 +1229,31 @@ class CatalogValidationService {
   /// Οι φόρμες απαιτούν τμήμα, όμως μια διαγραμμένη καρτέλα τμήματος αφήνει
   /// πίσω της ακέφαλα μηχανήματα: η βάση μηδενίζει τη στήλη αντί να τα σβήσει.
   /// Ένα εύρημα ανά μηχάνημα — το καθένα θέλει τη δική του απόφαση.
+  ///
+  /// Ορφανό είναι το μηχάνημα που δεν ανήκει ΠΟΥΘΕΝΑ: ούτε άμεσα σε τμήμα,
+  /// ούτε έμμεσα μέσω κατόχου. Η κενή στήλη τμήματος από μόνη της δεν αρκεί —
+  /// δεκάδες μηχανήματα είναι χρεωμένα σε υπάλληλο που έχει τμήμα, και για
+  /// αυτά ο κανόνας σιωπά.
   void _addEquipmentWithoutDepartmentFindings(
     List<CatalogValidationFinding> findings, {
+    required List<UserModel> users,
     required List<EquipmentModel> equipment,
+    required Map<int, List<int>> ownerUserIdsByEquipmentId,
     required Map<int, String> departmentNameById,
   }) {
     if (!rules.equipmentWithoutDepartmentEnabled) return;
 
+    final departmentIdByUserId = <int, int?>{
+      for (final u in users) u.id!: u.departmentId,
+    };
+
     for (final item in equipment) {
       if (item.departmentId != null) continue;
+      final belongsThroughOwner =
+          (ownerUserIdsByEquipmentId[item.id] ?? const <int>[]).any(
+            (ownerId) => departmentIdByUserId[ownerId] != null,
+          );
+      if (belongsThroughOwner) continue;
       findings.add(
         CatalogValidationFinding(
           type: CatalogFindingType.fieldHint,

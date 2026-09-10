@@ -138,6 +138,15 @@ class _UserPhoneDepartmentConflictDialogState
     PhoneDepartmentConflict c,
     UserPhoneConflictResolution resolution,
   ) {
+    // Η παραμονή στο τμήμα δεν αγγίζει καμία εγγραφή, οπότε δεν περιγράφεται
+    // από τα effects: έχει δικό της μήνυμα.
+    if (resolution ==
+        UserPhoneConflictResolution.keepInDepartmentDetachFromUser) {
+      return keepInDepartmentDetachMessage(
+        userLabel: widget.userDisplayName,
+        departmentName: c.existingDepartmentName,
+      );
+    }
     final effects = PhoneDepartmentPolicy.resolutionEffects(c, resolution);
     return removeAndAssignMessage(
       sources: [

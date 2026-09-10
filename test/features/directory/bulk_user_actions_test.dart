@@ -144,6 +144,60 @@ void main() {
     );
   }
 
+  group('judgePhoneStayBehind — ο κοινός κανόνας των δύο ροών', () {
+    test('καθαρά προσωπικός αριθμός: αποδεσμεύεται', () {
+      final d = judgePhoneStayBehind(
+        phone: '2200',
+        userName: 'Σοφία Σπυροπούλου',
+        oldDepartmentId: 46,
+      );
+      expect(d.releases, isTrue);
+      expect(d.blockedReason, isNull);
+    });
+
+    test('ήδη κοινόχρηστο ΤΟΥ ΠΑΛΙΟΥ τμήματος: αποδεσμεύεται', () {
+      final d = judgePhoneStayBehind(
+        phone: '2511',
+        userName: 'Σοφία Σπυροπούλου',
+        oldDepartmentId: 46,
+        sharedDepartment: (id: 46, name: 'Αιμοδοσία'),
+      );
+      expect(d.releases, isTrue);
+    });
+
+    test('κοινόχρηστο ΤΡΙΤΟΥ τμήματος: μένει στον υπάλληλο', () {
+      final d = judgePhoneStayBehind(
+        phone: '2511',
+        userName: 'Σοφία Σπυροπούλου',
+        oldDepartmentId: 46,
+        sharedDepartment: (id: 99, name: 'Φαρμακείο'),
+      );
+      expect(d.releases, isFalse);
+      expect(d.blockedReason, contains('Φαρμακείο'));
+    });
+
+    test('το κρατά και άλλος: μένει στον υπάλληλο', () {
+      final d = judgePhoneStayBehind(
+        phone: '2511',
+        userName: 'Σοφία Σπυροπούλου',
+        oldDepartmentId: 46,
+        otherOwnerNames: const ['Γιάννης Γ'],
+      );
+      expect(d.releases, isFalse);
+      expect(d.blockedReason, contains('Γιάννης Γ'));
+    });
+
+    test('χωρίς τμήμα-αφετηρία: δεν υπάρχει πού να μείνει', () {
+      final d = judgePhoneStayBehind(
+        phone: '2200',
+        userName: 'Σοφία Σπυροπούλου',
+        oldDepartmentId: null,
+      );
+      expect(d.releases, isFalse);
+      expect(d.blockedReason, contains('τμήμα-αφετηρία'));
+    });
+  });
+
   group('Σχέδιο μεταφοράς — εξαιρέσεις και μερική μεταφορά', () {
     test('όσοι είναι ήδη στο τμήμα-προορισμό δεν μετακινούνται', () {
       final plan = buildBulkUserTransferPlan(
@@ -186,6 +240,30 @@ void main() {
       expect(plan.exclusions.single.reason, contains('2100'));
       expect(plan.exclusions.single.reason, contains('Γιάννης Γ'));
       expect(bulkTransferConfirmationText(plan), contains('Γιάννης Γ'));
+    });
+
+    test('τηλέφωνο ΗΔΗ κοινόχρηστο του παλιού τμήματος αποδεσμεύεται', () {
+      final plan = buildBulkUserTransferPlan(
+        selectedUsers: [
+          user(1, 'Σοφία', 'Σπυροπούλου', deptId: 10, phones: ['2511']),
+        ],
+        target: const SharedAssetTransferTarget.existing(20),
+        targetDisplayName: 'Μεσογειακή Αναιμία',
+        phoneFate: BulkTransferAssetFate.stayInOldDepartment,
+        equipmentFate: BulkTransferAssetFate.follow,
+        equipmentByUserId: const {},
+        sharing: const BulkAssetSharingInfo(
+          phoneSharedDepartments: {
+            '2511': (id: 10, name: 'Αιμοδοσία'),
+          },
+        ),
+      );
+
+      // «Μένει πίσω» σημαίνει ότι φεύγει από τον άνθρωπο. Το ότι ο αριθμός
+      // είναι ήδη κοινόχρηστος του τμήματος δεν αναιρεί την αποδέσμευση —
+      // απλώς δεν χρειάζεται να ξαναπροστεθεί εκεί.
+      expect(plan.phonesToRelease[1], ['2511']);
+      expect(plan.exclusions, isEmpty);
     });
 
     test('εξοπλισμός με ΜΗ επιλεγμένο συν-κάτοχο εξαιρείται και στις δύο '

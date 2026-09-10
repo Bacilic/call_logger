@@ -34,6 +34,13 @@ enum UserPhoneConflictResolution {
 
   /// Αφαίρεση από τους άλλους κατόχους και σύνδεση με τον υπάλληλο.
   removeFromOtherUsersAndAssign,
+
+  /// Ο αριθμός μένει ακριβώς εκεί που είναι — κοινόχρηστος στο τμήμα του —
+  /// και αποδεσμεύεται από τον υπάλληλο που τον κουβαλά.
+  ///
+  /// Η συνήθης έκβαση όταν μετακινείται άνθρωπος: ο εξοπλισμός ακολουθεί, το
+  /// τηλέφωνο μένει στο τμήμα. Οι μαζικές ροές το προσφέρουν ήδη· εδώ έλειπε.
+  keepInDepartmentDetachFromUser,
 }
 
 /// Αποτέλεσμα επιλογών χρήστη για επίλυση συγκρούσεων.
@@ -41,14 +48,26 @@ class UserPhoneConflictBatchResult {
   const UserPhoneConflictBatchResult({
     this.phonesToTransferShared = const {},
     this.phonesToRemoveFromOtherUsers = const {},
+    this.phonesToDetachFromUser = const {},
   });
 
   /// phone → τμήμα προέλευσης κοινόχρηστου που αφαιρείται.
   final Map<String, int> phonesToTransferShared;
   final Set<String> phonesToRemoveFromOtherUsers;
 
+  /// Αριθμοί που ΔΕΝ πρέπει να καταλήξουν στον υπάλληλο: μένουν εκεί που
+  /// είναι. Δεν αντιστοιχούν σε καμία εγγραφή — ο καλών οφείλει να τους
+  /// αφαιρέσει από ό,τι ετοιμάζεται να γράψει.
+  final Set<String> phonesToDetachFromUser;
+
   bool get isEmpty =>
-      phonesToTransferShared.isEmpty && phonesToRemoveFromOtherUsers.isEmpty;
+      phonesToTransferShared.isEmpty &&
+      phonesToRemoveFromOtherUsers.isEmpty &&
+      phonesToDetachFromUser.isEmpty;
+
+  /// Μένει ο αριθμός εκτός του υπαλλήλου; Κοινή ερώτηση για κάθε πύλη που
+  /// ετοιμάζεται να τον συνδέσει.
+  bool detaches(String phone) => phonesToDetachFromUser.contains(phone.trim());
 }
 
 /// Εξαίρεση όταν η αποθήκευση θα δημιουργούσε cross-department χωρίς επίλυση.
@@ -144,23 +163,41 @@ class PhoneDepartmentPolicy {
     }
   }
 
-  /// Ποιες διέξοδοι προσφέρονται για μια σύγκρουση.
+  /// Ποιες διέξοδοι προσφέρονται για μια σύγκρουση, **με σειρά προτεραιότητας**
+  /// — η πρώτη είναι η συνήθης έκβαση και προεπιλέγεται.
   ///
-  /// Κανόνας: η μεταφορά του κοινόχρηστου υπερισχύει (αφαιρεί ΚΑΙ τους άλλους
-  /// κατόχους — βλ. [resolutionEffects])· η σκέτη αφαίρεση από κατόχους
-  /// προσφέρεται μόνο όταν μεταφορά δεν γίνεται. Κενή λίστα σημαίνει ότι η
-  /// σύγκρουση δεν λύνεται χωρίς τμήμα υπαλλήλου — ο καλών το εξηγεί.
+  /// Κανόνες:
+  /// 1. Όταν ο αριθμός ανήκει σε τμήμα, πρώτη έρχεται η **παραμονή** του εκεί:
+  ///    ο άνθρωπος μετακομίζει, το τηλέφωνο του τμήματος μένει. Ίδια σειρά με
+  ///    τη μαζική μεταφορά υπαλλήλων, ώστε η ίδια απόφαση να μη ζητιέται
+  ///    αλλιώς σε κάθε οθόνη.
+  /// 2. Η μεταφορά του κοινόχρηστου υπερισχύει της σκέτης αφαίρεσης κατόχων
+  ///    (αφαιρεί ΚΑΙ αυτούς — βλ. [resolutionEffects]).
+  /// 3. Η σκέτη αφαίρεση από κατόχους προσφέρεται μόνο όταν μεταφορά δεν
+  ///    γίνεται.
+  ///
+  /// Κενή λίστα σημαίνει ότι η σύγκρουση δεν λύνεται χωρίς τμήμα υπαλλήλου —
+  /// ο καλών το εξηγεί.
   static List<UserPhoneConflictResolution> availableResolutions(
     PhoneDepartmentConflict conflict, {
     required int? targetDepartmentId,
   }) {
-    if (conflict.canTransferSharedLocation && targetDepartmentId != null) {
-      return const [UserPhoneConflictResolution.transferSharedToUserDepartment];
+    final options = <UserPhoneConflictResolution>[];
+    if (conflict.canTransferSharedLocation) {
+      options.add(UserPhoneConflictResolution.keepInDepartmentDetachFromUser);
+      if (targetDepartmentId != null) {
+        // Η μεταφορά καλύπτει και τους άλλους κατόχους, οπότε η σκέτη
+        // αφαίρεσή τους δεν έχει τι να προσθέσει.
+        options.add(
+          UserPhoneConflictResolution.transferSharedToUserDepartment,
+        );
+        return options;
+      }
     }
     if (conflict.hasOtherUserOwners) {
-      return const [UserPhoneConflictResolution.removeFromOtherUsersAndAssign];
+      options.add(UserPhoneConflictResolution.removeFromOtherUsersAndAssign);
     }
-    return const [];
+    return options;
   }
 
   /// Τι αφαιρεί πραγματικά κάθε διέξοδος στη βάση. Κοινή πηγή για τα μηνύματα
@@ -178,6 +215,10 @@ class PhoneDepartmentPolicy {
         );
       case UserPhoneConflictResolution.removeFromOtherUsersAndAssign:
         return (removesSharedDepartment: false, removesOtherUsers: true);
+      case UserPhoneConflictResolution.keepInDepartmentDetachFromUser:
+        // Ο αριθμός μένει άθικτος: καμία εγγραφή δεν πειράζεται. Ό,τι
+        // αλλάζει είναι ότι δεν φτάνει ποτέ στον υπάλληλο.
+        return (removesSharedDepartment: false, removesOtherUsers: false);
     }
   }
 
@@ -190,9 +231,15 @@ class PhoneDepartmentPolicy {
   }) {
     final transfers = <String, int>{};
     final removeFromOthers = <String>{};
+    final detach = <String>{};
     for (final conflict in conflicts) {
       final choice = decisions[conflict.phone];
       if (choice == null) continue;
+      if (choice ==
+          UserPhoneConflictResolution.keepInDepartmentDetachFromUser) {
+        detach.add(conflict.phone.trim());
+        continue;
+      }
       final effects = resolutionEffects(conflict, choice);
       final sourceId = conflict.existingDepartmentId;
       if (effects.removesSharedDepartment && sourceId != null) {
@@ -203,6 +250,7 @@ class PhoneDepartmentPolicy {
     return UserPhoneConflictBatchResult(
       phonesToTransferShared: transfers,
       phonesToRemoveFromOtherUsers: removeFromOthers,
+      phonesToDetachFromUser: detach,
     );
   }
 

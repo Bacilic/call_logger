@@ -72,6 +72,10 @@ class SmartEntitySelectorAssociation {
     );
     if (result == null) return null;
 
+    // «Μένει στο τμήμα του» σημαίνει ότι δεν συνδέεται με τον καλούντα — αλλιώς
+    // η επιλογή θα ζητιόταν και θα αγνοούνταν.
+    if (result.detaches(trimmed)) return null;
+
     await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
       phones: phonesRepo,
       resolutions: result,

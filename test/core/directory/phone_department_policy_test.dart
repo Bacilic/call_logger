@@ -146,25 +146,31 @@ void main() {
 
   group('availableResolutions — ποιες διέξοδοι προσφέρονται', () {
     test(
-      'κοινόχρηστο με τμήμα-στόχο → μόνο μεταφορά, ακόμη και με κατόχους',
+      'κοινόχρηστο με τμήμα-στόχο → παραμονή ΠΡΩΤΗ, μετά η μεταφορά',
       () {
         expect(
           PhoneDepartmentPolicy.availableResolutions(
             sharedWithOwners,
             targetDepartmentId: deptA,
           ),
-          [UserPhoneConflictResolution.transferSharedToUserDepartment],
+          [
+            UserPhoneConflictResolution.keepInDepartmentDetachFromUser,
+            UserPhoneConflictResolution.transferSharedToUserDepartment,
+          ],
         );
       },
     );
 
-    test('κοινόχρηστο με κατόχους χωρίς τμήμα-στόχο → μόνο αφαίρεση', () {
+    test('κοινόχρηστο με κατόχους χωρίς τμήμα-στόχο → παραμονή και αφαίρεση', () {
       expect(
         PhoneDepartmentPolicy.availableResolutions(
           sharedWithOwners,
           targetDepartmentId: null,
         ),
-        [UserPhoneConflictResolution.removeFromOtherUsersAndAssign],
+        [
+          UserPhoneConflictResolution.keepInDepartmentDetachFromUser,
+          UserPhoneConflictResolution.removeFromOtherUsersAndAssign,
+        ],
       );
     });
 
@@ -178,11 +184,26 @@ void main() {
       );
     });
 
-    test('κοινόχρηστο χωρίς κατόχους και χωρίς τμήμα-στόχο → αδιέξοδο', () {
+    test('κοινόχρηστο χωρίς κατόχους και χωρίς τμήμα-στόχο → παραμονή', () {
       expect(
         PhoneDepartmentPolicy.availableResolutions(
           sharedOnly,
           targetDepartmentId: null,
+        ),
+        [UserPhoneConflictResolution.keepInDepartmentDetachFromUser],
+      );
+    });
+
+    test('χωρίς τμήμα και χωρίς κατόχους → καμία διέξοδος', () {
+      const nothing = PhoneDepartmentConflict(
+        phone: phone,
+        hasDepartmentLocationConflict: false,
+        hasOtherUserOwners: false,
+      );
+      expect(
+        PhoneDepartmentPolicy.availableResolutions(
+          nothing,
+          targetDepartmentId: deptA,
         ),
         isEmpty,
       );
@@ -244,6 +265,33 @@ void main() {
 
       expect(result.phonesToTransferShared, {phone: deptB});
       expect(result.phonesToRemoveFromOtherUsers, {phone, '2900'});
+      expect(result.phonesToDetachFromUser, isEmpty);
+    });
+
+    test('η παραμονή στο τμήμα δεν παράγει καμία ενέργεια βάσης', () {
+      final result = PhoneDepartmentPolicy.buildBatchResult(
+        conflicts: const [sharedWithOwners],
+        decisions: {
+          phone: UserPhoneConflictResolution.keepInDepartmentDetachFromUser,
+        },
+      );
+
+      expect(result.phonesToDetachFromUser, {phone});
+      expect(result.phonesToTransferShared, isEmpty);
+      expect(result.phonesToRemoveFromOtherUsers, isEmpty);
+      expect(result.detaches(phone), isTrue);
+      expect(result.isEmpty, isFalse);
+    });
+  });
+
+  group('resolutionEffects — η παραμονή δεν αγγίζει τίποτα', () {
+    test('ούτε το κοινόχρηστο τμήματος ούτε τους άλλους κατόχους', () {
+      final effects = PhoneDepartmentPolicy.resolutionEffects(
+        sharedWithOwners,
+        UserPhoneConflictResolution.keepInDepartmentDetachFromUser,
+      );
+      expect(effects.removesSharedDepartment, isFalse);
+      expect(effects.removesOtherUsers, isFalse);
     });
   });
 }

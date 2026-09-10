@@ -49,18 +49,79 @@ class BulkActionExclusion {
 class BulkAssetSharingInfo {
   const BulkAssetSharingInfo({
     this.phoneOtherUserNames = const {},
-    this.phoneSharedDepartmentNames = const {},
+    this.phoneSharedDepartments = const {},
     this.equipmentOtherUserNames = const {},
   });
 
   /// Αριθμός → ονόματα ΜΗ επιλεγμένων υπαλλήλων που τον έχουν επίσης.
   final Map<String, List<String>> phoneOtherUserNames;
 
-  /// Αριθμός → όνομα τμήματος όταν είναι ήδη κοινόχρηστο τμήματος.
-  final Map<String, String> phoneSharedDepartmentNames;
+  /// Αριθμός → το τμήμα που τον έχει κοινόχρηστο, όνομα ΚΑΙ αναγνωριστικό
+  /// μαζί.
+  ///
+  /// Τα δύο ταξιδεύουν ως ένα επίτηδες: το όνομα φτιάχνει το μήνυμα, το
+  /// αναγνωριστικό κρίνει αν ο αριθμός κάθεται στο τμήμα που ο υπάλληλος
+  /// αφήνει ή σε κάποιο τρίτο. Χωριστοί χάρτες θα επέτρεπαν στον καλούντα να
+  /// γεμίσει τον έναν και να ξεχάσει τον άλλον.
+  final Map<String, ({int id, String name})> phoneSharedDepartments;
 
   /// Αναγνωριστικό εξοπλισμού → ονόματα ΜΗ επιλεγμένων συν-κατόχων.
   final Map<int, List<String>> equipmentOtherUserNames;
+}
+
+/// Απόφαση για ΕΝΑ τηλέφωνο όταν ο κάτοχός του αλλάζει τμήμα και έχει
+/// επιλεγεί «μένουν στο παλιό τμήμα».
+///
+/// [releases] true σημαίνει «αποδεσμεύεται από τον υπάλληλο». Το
+/// [blockedReason] είναι γεμάτο μόνο όταν ΔΕΝ αποδεσμεύεται, και εξηγεί γιατί
+/// με λόγια του χρήστη.
+typedef PhoneStayBehindDecision = ({bool releases, String? blockedReason});
+
+/// Κρίνει αν ένα τηλέφωνο μένει πίσω στο τμήμα που αφήνει ο υπάλληλος.
+///
+/// ΜΟΝΑΔΙΚΟ σημείο του κανόνα: τον καλούν και η μαζική μεταφορά και η φόρμα
+/// ενός υπαλλήλου. Όσο ζούσε μέσα στον βρόχο της μαζικής, η φόρμα δεν τον
+/// είχε καθόλου και ο προσωπικός αριθμός ακολουθούσε σιωπηλά.
+///
+/// Τρεις περιπτώσεις εμποδίζουν την αποδέσμευση:
+/// 1. Τον κρατά και άλλος υπάλληλος — δεν είναι δικός μας να τον δώσουμε.
+/// 2. Κάθεται ήδη σε ΤΡΙΤΟ τμήμα — ένας αριθμός ανήκει μόνο σε ένα τμήμα.
+/// 3. Δεν υπάρχει τμήμα-αφετηρία — δεν υπάρχει πού να μείνει.
+///
+/// Το τηλέφωνο που είναι ήδη κοινόχρηστο ΤΟΥ ΠΑΛΙΟΥ τμήματος αποδεσμεύεται
+/// κανονικά: απλώς δεν χρειάζεται να ξαναπροστεθεί εκεί.
+PhoneStayBehindDecision judgePhoneStayBehind({
+  required String phone,
+  required String userName,
+  required int? oldDepartmentId,
+  List<String> otherOwnerNames = const [],
+  ({int id, String name})? sharedDepartment,
+}) {
+  if (otherOwnerNames.isNotEmpty) {
+    return (
+      releases: false,
+      blockedReason:
+          'Το $phone παραμένει στον υπάλληλο $userName — '
+          'το χρησιμοποιεί και ο ${_joinNames(otherOwnerNames)}.',
+    );
+  }
+  if (sharedDepartment != null && sharedDepartment.id != oldDepartmentId) {
+    return (
+      releases: false,
+      blockedReason:
+          'Το $phone παραμένει στον υπάλληλο $userName — '
+          'είναι ήδη κοινόχρηστο του τμήματος ${sharedDepartment.name}.',
+    );
+  }
+  if (oldDepartmentId == null) {
+    return (
+      releases: false,
+      blockedReason:
+          'Το $phone παραμένει στον υπάλληλο $userName — '
+          'δεν υπάρχει τμήμα-αφετηρία για να γίνει κοινόχρηστο.',
+    );
+  }
+  return (releases: true, blockedReason: null);
 }
 
 /// Εμφανίσιμο όνομα υπαλλήλου για μηνύματα.
@@ -179,40 +240,23 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
       for (final number in u.phones) {
         final n = number.trim();
         if (n.isEmpty) continue;
-        final others = sharing.phoneOtherUserNames[n] ?? const [];
-        final sharedDept = sharing.phoneSharedDepartmentNames[n];
-        if (others.isNotEmpty) {
-          exclusions.add(
-            BulkActionExclusion(
-              isPhone: true,
-              identifier: n,
-              reason:
-                  'Το $n παραμένει στον υπάλληλο $userName — '
-                  'το χρησιμοποιεί και ο ${_joinNames(others)}.',
-            ),
-          );
-        } else if (sharedDept != null) {
-          exclusions.add(
-            BulkActionExclusion(
-              isPhone: true,
-              identifier: n,
-              reason:
-                  'Το $n παραμένει στον υπάλληλο $userName — '
-                  'είναι ήδη κοινόχρηστο του τμήματος $sharedDept.',
-            ),
-          );
-        } else if (u.departmentId == null) {
-          exclusions.add(
-            BulkActionExclusion(
-              isPhone: true,
-              identifier: n,
-              reason:
-                  'Το $n παραμένει στον υπάλληλο $userName — '
-                  'δεν υπάρχει τμήμα-αφετηρία για να γίνει κοινόχρηστο.',
-            ),
-          );
-        } else {
+        final decision = judgePhoneStayBehind(
+          phone: n,
+          userName: userName,
+          oldDepartmentId: u.departmentId,
+          otherOwnerNames: sharing.phoneOtherUserNames[n] ?? const [],
+          sharedDepartment: sharing.phoneSharedDepartments[n],
+        );
+        if (decision.releases) {
           phonesToRelease.putIfAbsent(userId, () => []).add(n);
+        } else {
+          exclusions.add(
+            BulkActionExclusion(
+              isPhone: true,
+              identifier: n,
+              reason: decision.blockedReason!,
+            ),
+          );
         }
       }
     }
@@ -318,22 +362,36 @@ String bulkTransferResultMessage(BulkUserTransferPlan plan) {
         ? 'Μεταφέρθηκε 1 υπάλληλος στο «${plan.targetDisplayName}»'
         : 'Μεταφέρθηκαν $n υπάλληλοι στο «${plan.targetDisplayName}»',
   );
-  if (plan.releasedPhoneCount > 0) {
+  final phoneCount = plan.releasedPhoneCount;
+  if (phoneCount > 0) {
     buf.write(
-      ' · ${plan.releasedPhoneCount} τηλέφωνα έγιναν κοινόχρηστα '
-      'στο παλιό τμήμα',
+      phoneCount == 1
+          ? ' · 1 τηλέφωνο έγινε κοινόχρηστο στο παλιό τμήμα'
+          : ' · $phoneCount τηλέφωνα έγιναν κοινόχρηστα στο παλιό τμήμα',
     );
   }
-  if (plan.followingEquipmentCount > 0) {
-    buf.write(' · ${plan.followingEquipmentCount} εξοπλισμοί ακολούθησαν');
-  }
-  if (plan.releasedEquipmentCount > 0) {
+  final followingCount = plan.followingEquipmentCount;
+  if (followingCount > 0) {
     buf.write(
-      ' · ${plan.releasedEquipmentCount} εξοπλισμοί έμειναν στο παλιό τμήμα',
+      followingCount == 1
+          ? ' · 1 εξοπλισμός ακολούθησε'
+          : ' · $followingCount εξοπλισμοί ακολούθησαν',
+    );
+  }
+  final releasedCount = plan.releasedEquipmentCount;
+  if (releasedCount > 0) {
+    buf.write(
+      releasedCount == 1
+          ? ' · 1 εξοπλισμός έμεινε στο παλιό τμήμα'
+          : ' · $releasedCount εξοπλισμοί έμειναν στο παλιό τμήμα',
     );
   }
   if (plan.exclusions.isNotEmpty) {
-    buf.write(' · ${plan.exclusions.length} εξαιρέσεις');
+    buf.write(
+      plan.exclusions.length == 1
+          ? ' · 1 εξαίρεση'
+          : ' · ${plan.exclusions.length} εξαιρέσεις',
+    );
   }
   buf.write('.');
   return buf.toString();
@@ -401,7 +459,7 @@ BulkUserClearPlan buildBulkUserClearPlan({
         final n = number.trim();
         if (n.isEmpty) continue;
         final others = sharing.phoneOtherUserNames[n] ?? const [];
-        final sharedDept = sharing.phoneSharedDepartmentNames[n];
+        final sharedDept = sharing.phoneSharedDepartments[n]?.name;
         if (others.isNotEmpty) {
           exclusions.add(
             BulkActionExclusion(

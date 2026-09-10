@@ -10,6 +10,7 @@ import '../../providers/directory_provider.dart';
 import '../../services/bulk_user_actions.dart';
 import 'bulk_user_action_call_guard.dart';
 import 'bulk_user_action_pickers.dart';
+import 'phone_fate_on_department_change.dart';
 import 'shared_asset_disconnect_dialog.dart';
 
 /// Μαζικές ενέργειες υπαλλήλων: μεταφορά σε τμήμα, σημειώσεις, καθαρισμός.
@@ -57,7 +58,7 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
     final lookup = LookupService.instance;
     final selectedIds = _selectedIds;
     final phoneOthers = <String, List<String>>{};
-    final phoneDeptNames = <String, String>{};
+    final phoneSharedDepts = <String, ({int id, String name})>{};
     final equipmentOthers = <int, List<String>>{};
 
     for (final u in _users) {
@@ -72,7 +73,10 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
         if (others.isNotEmpty) phoneOthers[n] = others;
         final dept = lookup.getDepartmentByPhone(n);
         final deptName = dept?.name.trim() ?? '';
-        if (deptName.isNotEmpty) phoneDeptNames[n] = deptName;
+        final deptId = dept?.id;
+        if (deptName.isNotEmpty && deptId != null) {
+          phoneSharedDepts[n] = (id: deptId, name: deptName);
+        }
       }
     }
     for (final list in equipmentByUser.values) {
@@ -89,7 +93,7 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
     }
     return BulkAssetSharingInfo(
       phoneOtherUserNames: phoneOthers,
-      phoneSharedDepartmentNames: phoneDeptNames,
+      phoneSharedDepartments: phoneSharedDepts,
       equipmentOtherUserNames: equipmentOthers,
     );
   }
@@ -134,24 +138,7 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
     );
     if (target == null || !mounted) return;
 
-    final phoneFate = await showBulkOptionDialog<BulkTransferAssetFate>(
-      context,
-      title: 'Τηλέφωνα των υπαλλήλων',
-      message: 'Τι θα γίνουν τα προσωπικά τηλέφωνα των μεταφερόμενων;',
-      options: [
-        (
-          'Μένουν στο παλιό τμήμα',
-          'Αποδεσμεύονται από τον υπάλληλο και γίνονται κοινόχρηστα '
-              'του τμήματος που αφήνει.',
-          BulkTransferAssetFate.stayInOldDepartment,
-        ),
-        (
-          'Ακολουθούν τους υπαλλήλους',
-          'Παραμένουν προσωπικά τηλέφωνα των υπαλλήλων στο νέο τμήμα.',
-          BulkTransferAssetFate.follow,
-        ),
-      ],
-    );
+    final phoneFate = await askPhoneFateOnDepartmentChange(context);
     if (phoneFate == null || !mounted) return;
 
     final equipmentFate = await showBulkOptionDialog<BulkTransferAssetFate>(
