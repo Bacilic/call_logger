@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -91,13 +92,17 @@ class NameAutocompleteField extends StatelessWidget {
   }
 }
 
-class ExecutablePathField extends StatelessWidget {
+/// Υπάρχει το αρχείο; Πραγματικός έλεγχος δίσκου — **ασύγχρονος**.
+Future<bool> _fileExistsOnDisk(String path) => File(path).exists();
+
+class ExecutablePathField extends StatefulWidget {
   const ExecutablePathField({
     super.key,
     required this.controller,
     required this.onPick,
     required this.enabled,
     this.isCreate = false,
+    this.checkExists,
   });
 
   final TextEditingController controller;
@@ -107,9 +112,15 @@ class ExecutablePathField extends StatelessWidget {
   /// Στη δημιουργία: ετικέτα με * (υποχρεωτικό πεδίο).
   final bool isCreate;
 
+  /// Μόνο για τα τεστ: πλαστός έλεγχος ύπαρξης, ώστε να μη χρειάζεται δίσκος.
+  final Future<bool> Function(String path)? checkExists;
+
   /// Καταλήξεις που εκτελεί απευθείας το `Process.start` (CreateProcess) στα
   /// Windows. Τα `.bat`/`.cmd` δεν τρέχουν χωρίς shell — θεωρούνται μη έγκυρα εδώ.
   static const _winExecutableExtensions = {'.exe', '.com'};
+
+  /// Πόσο περιμένει να ησυχάσει η πληκτρολόγηση πριν ρωτήσει τον δίσκο.
+  static const Duration probeDelay = Duration(milliseconds: 300);
 
   static bool _isWindowsExecutablePath(String path) {
     final lower = path.toLowerCase();
@@ -120,19 +131,81 @@ class ExecutablePathField extends StatelessWidget {
   }
 
   @override
+  State<ExecutablePathField> createState() => _ExecutablePathFieldState();
+}
+
+class _ExecutablePathFieldState extends State<ExecutablePathField> {
+  Timer? _debounce;
+
+  /// Η διαδρομή που έχει ήδη απαντηθεί, και η απάντησή της.
+  ///
+  /// Όσο η τρέχουσα διαδρομή δεν είναι αυτή, η ένδειξη σιωπά: καλύτερα τίποτα
+  /// για μισό δευτερόλεπτο παρά «δεν βρέθηκε» πάνω σε μισογραμμένη διαδρομή.
+  String? _probedPath;
+  bool _probedExists = false;
+  int _probeSeq = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onPathChanged);
+    _startProbe(widget.controller.text.trim());
+  }
+
+  @override
+  void didUpdateWidget(ExecutablePathField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onPathChanged);
+      widget.controller.addListener(_onPathChanged);
+      _startProbe(widget.controller.text.trim());
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    widget.controller.removeListener(_onPathChanged);
+    super.dispose();
+  }
+
+  /// Η ένδειξη ακολουθεί το ΙΔΙΟ το πεδίο, όχι ό,τι άλλο αλλάζει στη φόρμα.
+  void _onPathChanged() {
+    if (mounted) setState(() {});
+    _debounce?.cancel();
+    final path = widget.controller.text.trim();
+    if (path.isEmpty || path == _probedPath) return;
+    _debounce = Timer(ExecutablePathField.probeDelay, () => _startProbe(path));
+  }
+
+  /// Ρωτά τον δίσκο **μία φορά ανά διαδρομή**, και ποτέ μέσα στο χτίσιμο.
+  Future<void> _startProbe(String path) async {
+    if (path.isEmpty || path == _probedPath) return;
+    final seq = ++_probeSeq;
+    final probe = widget.checkExists ?? _fileExistsOnDisk;
+    final exists = await probe(path);
+    if (!mounted || seq != _probeSeq) return;
+    setState(() {
+      _probedPath = path;
+      _probedExists = exists;
+    });
+  }
+
+  /// `null` όσο δεν ξέρουμε ακόμη τι λέει ο δίσκος για ΑΥΤΗ τη διαδρομή.
+  String? _warningFor(String path) {
+    if (path.isEmpty || path != _probedPath) return null;
+    if (!_probedExists) return 'Το αρχείο δεν βρέθηκε στη διαδρομή.';
+    if (!ExecutablePathField._isWindowsExecutablePath(path)) {
+      return 'Το αρχείο δεν είναι εκτελέσιμο των Windows (αναμένεται .exe).';
+    }
+    return null;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final path = controller.text.trim();
-    String? warningMsg;
-    if (path.isNotEmpty) {
-      final f = File(path);
-      if (!f.existsSync()) {
-        warningMsg = 'Το αρχείο δεν βρέθηκε στη διαδρομή.';
-      } else if (!_isWindowsExecutablePath(path)) {
-        warningMsg =
-            'Το αρχείο δεν είναι εκτελέσιμο των Windows (αναμένεται .exe).';
-      }
-    }
+    final path = widget.controller.text.trim();
+    final warningMsg = _warningFor(path);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -142,12 +215,12 @@ class ExecutablePathField extends StatelessWidget {
           children: [
             Expanded(
               child: TextFormField(
-                controller: controller,
-                enabled: enabled,
+                controller: widget.controller,
+                enabled: widget.enabled,
                 maxLines: 1,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
                 decoration: InputDecoration(
-                  labelText: isCreate
+                  labelText: widget.isCreate
                       ? 'Κοινή διαδρομή εκτελέσιμου *'
                       : 'Κοινή διαδρομή εκτελέσιμου',
                   // Η κοινή διαδρομή αφορά ΟΛΟΥΣ όσοι ανοίγουν τη βάση: μια
@@ -162,7 +235,7 @@ class ExecutablePathField extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'Εντοπισμός αρχείου',
-              onPressed: enabled ? onPick : null,
+              onPressed: widget.enabled ? widget.onPick : null,
               icon: const Icon(Icons.folder_open),
             ),
           ],

@@ -591,6 +591,109 @@ class DepartmentFormSharedLinks {
     );
   }
 
+  /// Ο εξοπλισμός που κρατούν οι **υπάλληλοι** του τμήματος, όταν το Είδος
+  /// δεν επιτρέπει κατοχή εξοπλισμού.
+  ///
+  /// Το μηχάνημα δεν είναι κοινόχρηστο του τμήματος — είναι χρεωμένο σε
+  /// πρόσωπο. Όταν το τμήμα γίνεται εταιρεία, το πρόσωπο γίνεται εξωτερικός
+  /// συνεργάτης, και ο κατάλογος μηχανημάτων είναι του νοσοκομείου: κάθε
+  /// μηχάνημα πρέπει να πάει κάπου αλλού ή να καταργηθεί. Καμία επιλογή
+  /// «μένει εδώ» — ο εξοπλισμός δεν μένει ποτέ ορφανός.
+  ///
+  /// `null` σημαίνει ότι ο χρήστης διέκοψε: η αποθήκευση δεν προχωρά.
+  Future<
+    ({
+      Map<String, int> equipmentTransfers,
+      List<String> equipmentToDelete,
+      Map<String, Set<int>> equipmentOwnersToUnlink,
+    })?
+  >
+  applyKindForbiddenEquipmentRemoval({
+    required int departmentId,
+    required String departmentName,
+  }) async {
+    final lookup = LookupService.instance;
+    final ownersByCode = <String, Set<int>>{};
+    for (final user in lookup.getUsersByDepartment(departmentId)) {
+      final userId = user.id;
+      if (userId == null) continue;
+      for (final item in lookup.findEquipmentsForUser(userId)) {
+        final code = item.code?.trim() ?? '';
+        if (code.isEmpty) continue;
+        ownersByCode.putIfAbsent(code, () => <int>{}).add(userId);
+      }
+    }
+    if (ownersByCode.isEmpty) {
+      return (
+        equipmentTransfers: <String, int>{},
+        equipmentToDelete: <String>[],
+        equipmentOwnersToUnlink: <String, Set<int>>{},
+      );
+    }
+    if (!host.mounted) return null;
+
+    final codes = ownersByCode.keys.toList()..sort((a, b) => a.compareTo(b));
+    final otherDepartments = lookup.departments
+        .where(
+          (d) =>
+              d.id != null &&
+              d.id != departmentId &&
+              !d.isDeleted &&
+              d.name.trim().isNotEmpty,
+        )
+        .toList();
+
+    final batch = await showSharedAssetDisconnectFlow(
+      context: host.context,
+      sourceDepartmentId: departmentId,
+      sourceDepartmentName: departmentName,
+      equipmentCodes: codes,
+      availableDepartments: otherDepartments,
+      mode: SharedAssetDisconnectMode.personalEquipment,
+      allowKeepInDepartment: false,
+    );
+    if (!host.mounted || batch == null) return null;
+
+    final db = await DatabaseHelper.instance.database;
+    final dir = DepartmentRepository(db);
+    final transfers = <String, int>{};
+    final newDeptNames = <String>{...batch.newDepartmentNamesToCreate};
+    for (final newName in newDeptNames) {
+      final createdId = await dir.getOrCreateDepartmentIdByName(newName);
+      if (createdId == null) continue;
+      for (final entry in batch.equipmentTransfers.entries) {
+        if (entry.value.newDepartmentName?.trim() == newName.trim()) {
+          transfers[entry.key] = createdId;
+        }
+      }
+    }
+    for (final entry in batch.equipmentTransfers.entries) {
+      final id = entry.value.departmentId;
+      if (id != null) transfers[entry.key] = id;
+    }
+
+    if (newDeptNames.isNotEmpty) {
+      LookupService.instance.resetForReload();
+      await LookupService.instance.loadFromDatabase();
+      await host.widget.notifier.loadDepartments();
+    }
+
+    // Αποδεσμεύονται μόνο όσα πήραν προορισμό: ό,τι έμεινε αναπάντητο δεν
+    // ξεκρεμιέται από τον κάτοχό του.
+    final decided = <String, Set<int>>{
+      for (final code in codes)
+        if (transfers.containsKey(code) ||
+            batch.equipmentToDelete.contains(code))
+          code: ownersByCode[code]!,
+    };
+
+    return (
+      equipmentTransfers: transfers,
+      equipmentToDelete: batch.equipmentToDelete,
+      equipmentOwnersToUnlink: decided,
+    );
+  }
+
   void addSharedPhonesFromInput(String raw) {
     final incoming = _splitCommaSeparated(raw);
     if (incoming.isEmpty) return;

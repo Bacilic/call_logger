@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/department_model.dart';
 import '../../services/asset_disconnect_models.dart';
+import '../../services/asset_disconnect_texts.dart';
 import '../../services/asset_transfer_target_guard.dart';
 
 /// Sentinel για την επιλογή «δημιουργία νέου τμήματος» στο autocomplete.
@@ -43,17 +44,20 @@ Future<SharedAssetTransferTarget?> showAssetTransferDialogForItem({
   int? sourceDepartmentId,
   required List<DepartmentModel> availableDepartments,
   List<String> blockedDepartmentNames = const [],
+  SharedAssetDisconnectMode mode = SharedAssetDisconnectMode.sharedAsset,
 }) {
   return showDialog<SharedAssetTransferTarget>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) => _SharedAssetTransferDialog(
+      title: transferDialogTitle(isPhone: isPhone, mode: mode),
       isPhone: isPhone,
+      involvesEquipment: !isPhone,
       value: value,
       departments: _selectableDepartments(
         availableDepartments,
         sourceDepartmentId: sourceDepartmentId,
-        isPhone: isPhone,
+        involvesEquipment: !isPhone,
       ),
       knownDepartments: _knownDepartments(availableDepartments),
       blockedDepartmentNames: blockedDepartmentNames,
@@ -66,10 +70,16 @@ Future<SharedAssetTransferTarget?> showAssetTransferDialogForItem({
 /// Το [blockedDepartmentNames] κρατά τα τμήματα που διαγράφονται στην ίδια
 /// πράξη: δεν αρκεί να λείπουν από τον κατάλογο, γιατί ο χρήστης μπορεί να
 /// γράψει το όνομα με το χέρι και να ζητήσει «δημιουργία νέου».
+///
+/// Το [involvesEquipment] είναι **υποχρεωτικό** επίτηδες: κάθε καλών οφείλει
+/// να δηλώσει αν στη μεταφορά υπάρχει έστω ένα μηχάνημα, ώστε οι εταιρείες να
+/// φύγουν από τη λίστα προορισμών. Όσο η δήλωση ήταν προαιρετική, το φίλτρο
+/// ζούσε αντιγραμμένο στους καλούντες και όποιος το ξεχνούσε περνούσε.
 Future<SharedAssetTransferTarget?> showAssetTransferTargetPicker({
   required BuildContext context,
   required String headerLabel,
   required List<DepartmentModel> availableDepartments,
+  required bool involvesEquipment,
   int? sourceDepartmentId,
   List<String> blockedDepartmentNames = const [],
 }) {
@@ -77,11 +87,16 @@ Future<SharedAssetTransferTarget?> showAssetTransferTargetPicker({
     context: context,
     barrierDismissible: false,
     builder: (ctx) => _SharedAssetTransferDialog(
+      title: bulkTransferDialogTitle,
+      // Τα κείμενα του διαλόγου είναι γενικά εδώ (υπάρχει headerLabel)· αυτό
+      // που κρίνει τους προορισμούς είναι το [involvesEquipment].
       isPhone: true,
+      involvesEquipment: involvesEquipment,
       value: '',
       departments: _selectableDepartments(
         availableDepartments,
         sourceDepartmentId: sourceDepartmentId,
+        involvesEquipment: involvesEquipment,
       ),
       knownDepartments: _knownDepartments(availableDepartments),
       headerLabel: headerLabel,
@@ -92,10 +107,14 @@ Future<SharedAssetTransferTarget?> showAssetTransferTargetPicker({
 
 /// Τα τμήματα που μπορούν να επιλεγούν, αλφαβητικά — χωρίς διαγραμμένα,
 /// χωρίς ανώνυμα και χωρίς το τμήμα-πηγή όταν δίνεται.
+///
+/// **Το μοναδικό σημείο** όπου το Είδος κόβει προορισμούς εξοπλισμού: όποιος
+/// ανοίγει επιλογέα μεταφοράς περνά από εδώ, οπότε καμία ροή δεν μπορεί να
+/// προσφέρει εταιρεία για μηχάνημα.
 List<DepartmentModel> _selectableDepartments(
   List<DepartmentModel> availableDepartments, {
+  required bool involvesEquipment,
   int? sourceDepartmentId,
-  bool isPhone = true,
 }) {
   return availableDepartments
       .where(
@@ -105,7 +124,7 @@ List<DepartmentModel> _selectableDepartments(
             !d.isDeleted &&
             d.name.trim().isNotEmpty &&
             // Το τηλέφωνο μιας εταιρείας είναι θεμιτό· ο εξοπλισμός της όχι.
-            (isPhone || d.kind.canOwnEquipment),
+            (!involvesEquipment || d.kind.canOwnEquipment),
       )
       .toList()
     ..sort((a, b) => a.name.compareTo(b.name));
@@ -125,7 +144,9 @@ List<DepartmentModel> _knownDepartments(
 
 class _SharedAssetTransferDialog extends StatefulWidget {
   const _SharedAssetTransferDialog({
+    required this.title,
     required this.isPhone,
+    required this.involvesEquipment,
     required this.value,
     required this.departments,
     required this.knownDepartments,
@@ -133,7 +154,14 @@ class _SharedAssetTransferDialog extends StatefulWidget {
     this.blockedDepartmentNames = const [],
   });
 
+  /// Ο τίτλος ακολουθεί την περίπτωση — τον υπολογίζει ο καλών.
+  final String title;
+
   final bool isPhone;
+
+  /// Κουβαλά η μεταφορά έστω ένα μηχάνημα; Κρίνει ποιοι προορισμοί
+  /// επιτρέπονται — χωριστά από το [isPhone], που κρίνει μόνο τα κείμενα.
+  final bool involvesEquipment;
   final String value;
 
   /// Όσα προσφέρονται στη λίστα.
@@ -195,10 +223,20 @@ class _SharedAssetTransferDialogState
   }
 
   /// Μήνυμα εμποδίου για ό,τι είναι γραμμένο τώρα στο πεδίο.
-  String? get _blockedMessage => blockedTransferTargetMessage(
-    typedName: _departmentController.text,
-    blockedNames: widget.blockedDepartmentNames,
-  );
+  ///
+  /// Δύο εμπόδια, ένα μήνυμα: τμήμα που διαγράφεται στην ίδια πράξη, και
+  /// εταιρεία σε μεταφορά που κουβαλά μηχάνημα. Το δεύτερο χρειάζεται επειδή
+  /// το φίλτρο της λίστας παρακάμπτεται με πληκτρολόγηση του ονόματος.
+  String? get _blockedMessage =>
+      blockedTransferTargetMessage(
+        typedName: _departmentController.text,
+        blockedNames: widget.blockedDepartmentNames,
+      ) ??
+      equipmentForbiddenTargetMessage(
+        typedName: _departmentController.text,
+        involvesEquipment: widget.involvesEquipment,
+        knownDepartments: widget.knownDepartments,
+      );
 
   Iterable<String> _departmentOptions(String query) {
     final q = SearchTextNormalizer.normalizeForSearch(query);
@@ -330,7 +368,7 @@ class _SharedAssetTransferDialogState
     final theme = Theme.of(context);
     final blocked = _blockedMessage;
     return AlertDialog(
-      title: const Text('Μεταφορά κοινόχρηστου'),
+      title: Text(widget.title),
       content: SizedBox(
         width: 420,
         child: Column(

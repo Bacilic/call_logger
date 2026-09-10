@@ -1,6 +1,7 @@
 // Φρουρός επιλογής τμήματος-προορισμού — καθαρή λογική, χωρίς widgets.
 
 import '../../../core/utils/search_text_normalizer.dart';
+import '../models/department_model.dart';
 
 /// Μήνυμα εμποδίου όταν το πληκτρολογημένο [typedName] ταιριάζει με τμήμα που
 /// διαγράφεται στην ίδια πράξη· `null` όταν ο προορισμός είναι θεμιτός.
@@ -24,6 +25,30 @@ String? blockedTransferTargetMessage({
     return 'Το τμήμα «$name» διαγράφεται σε αυτή την πράξη — τα στοιχεία θα '
         'χάνονταν. Διαλέξτε άλλο προορισμό ή αφαιρέστε το από τη λίστα '
         'διαγραφής.';
+  }
+  return null;
+}
+
+/// Μήνυμα εμποδίου όταν ο πληκτρολογημένος προορισμός **δεν επιτρέπεται να
+/// κρατά εξοπλισμό** (τμήμα με Είδος «Εταιρεία»).
+///
+/// Το φίλτρο της λίστας δεν αρκεί: ο χρήστης μπορεί να γράψει το όνομα με το
+/// χέρι, και ο επιλυτής προορισμού είναι *get-or-create* — θα έστελνε σιωπηλά
+/// το μηχάνημα στην εταιρεία που δεν του προσφέραμε ποτέ.
+String? equipmentForbiddenTargetMessage({
+  required String typedName,
+  required bool involvesEquipment,
+  required List<DepartmentModel> knownDepartments,
+}) {
+  if (!involvesEquipment) return null;
+  final typed = SearchTextNormalizer.normalizeForSearch(typedName.trim());
+  if (typed.isEmpty) return null;
+
+  for (final d in knownDepartments) {
+    if (d.kind.canOwnEquipment) continue;
+    if (SearchTextNormalizer.normalizeForSearch(d.name) != typed) continue;
+    return 'Το «${d.name.trim()}» είναι εταιρεία και δεν κρατά δικά μας '
+        'μηχανήματα. Διαλέξτε τμήμα του νοσοκομείου ή εξωτερική μονάδα.';
   }
   return null;
 }

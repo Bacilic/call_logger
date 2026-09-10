@@ -20,6 +20,8 @@ import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/provider/remote_paths_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'test_reporter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riverpod/misc.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -118,6 +120,39 @@ Future<void> pumpUntilSettledLong(WidgetTester tester) async {
     steps: 45,
     step: const Duration(milliseconds: 60),
   );
+}
+
+/// Περιμένει να κλείσει ένας διάλογος που αποθηκεύει σε ΠΡΑΓΜΑΤΙΚΗ βάση.
+///
+/// Το [isOpen] απαντά «είναι ακόμη ανοιχτός;» — τυπικά με έναν finder στον
+/// τίτλο. Επιστρέφει μόλις κλείσει· το [failMessage] βγαίνει μόνο αν δεν
+/// κλείσει ποτέ.
+///
+/// **Γιατί το όριο είναι γενναίο:** εδώ ο χρόνος είναι πραγματικός, όχι
+/// εικονικός — η αναμονή τρέχει με `runAsync`, οπότε ένα φορτωμένο μηχάνημα
+/// την επιμηκύνει. Το όριο ΔΕΝ είναι μέτρο επίδοσης: υπάρχει μόνο για να μην
+/// κρεμάσει η σουίτα. Ένα τεστ που περνά τερματίζει μόλις κλείσει ο διάλογος
+/// και δεν πληρώνει τίποτα από αυτό.
+///
+/// Μετρημένο 10/09/2026: η φόρμα τμήματος θέλει **35 από 40** προσπάθειες σε
+/// ήσυχο μηχάνημα — περιθώριο 250ms. Με φόρτο ξεπερνούσε το όριο και το τεστ
+/// κοκκίνιζε χωρίς να φταίει η δουλειά της ημέρας.
+Future<void> pumpUntilDialogCloses(
+  WidgetTester tester, {
+  required bool Function() isOpen,
+  required String failMessage,
+  Duration step = const Duration(milliseconds: 50),
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  final maxAttempts = timeout.inMilliseconds ~/ step.inMilliseconds;
+  for (var i = 0; i < maxAttempts; i++) {
+    if (!isOpen()) return;
+    await tester.runAsync(() async {
+      await Future<void>.delayed(step);
+    });
+    await tester.pump(step);
+  }
+  fail(greekExpectMsg(failMessage));
 }
 
 /// Περιμένει ολοκλήρωση lookup cache (πραγματικό async I/O).

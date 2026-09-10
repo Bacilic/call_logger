@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../provider/call_entry_provider.dart';
 import '../../layout/calls_field_groups.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/lookup_provider.dart';
 import '../../../../core/providers/call_department_prefill_intent_provider.dart';
+import 'call_entry_selector_hooks.dart';
 import 'caller_quick_add_bindings.dart';
 import 'smart_entity_selector_widget.dart';
 
@@ -250,25 +250,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
               w2: w2,
               wDept: wDept,
               w3: w3,
-              callEntryHooks: SmartEntityCallEntryHooks(
-                syncTimerFromPhoneText: (raw) {
-                  final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
-                  final n = ref.read(callEntryProvider.notifier);
-                  if (digits.isNotEmpty) {
-                    n.startTimerOnce();
-                  } else {
-                    n.resetTimerToStandby();
-                  }
-                },
-                startTimerOnceIfNotRunningWhenAutofill: () {
-                  final n = ref.read(callEntryProvider.notifier);
-                  if (!n.isTimerRunning) {
-                    n.startTimerOnce();
-                  }
-                },
-                resetTimerToStandby: () =>
-                    ref.read(callEntryProvider.notifier).resetTimerToStandby(),
-              ),
+              callEntryHooks: callEntrySelectorHooks(ref),
               trailingRowChildren: [
                 const SizedBox(width: _kHeaderTrailingGap),
                 SizedBox(

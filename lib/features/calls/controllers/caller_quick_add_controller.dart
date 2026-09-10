@@ -17,7 +17,11 @@ abstract class CallerQuickAddPrompts {
   Future<bool> confirmSharedAssetOnConflict(String message);
 
   /// Να γίνει το νέο τμήμα κύριο τμήμα του υπάρχοντος χρήστη;
+  ///
+  /// Το [callerName] είναι το όνομα όπως το βλέπει ο χειριστής (με ψευδώνυμο,
+  /// αν υπάρχει): η ερώτηση αφορά συγκεκριμένο πρόσωπο, όχι «τον χρήστη».
   Future<bool> confirmPrimaryDepartmentChange({
+    required String callerName,
     required String currentDepartmentName,
     required String newDepartmentName,
   });
@@ -170,6 +174,7 @@ class CallerQuickAddController {
     if (currentDepartment.isEmpty) return true;
 
     return prompts.confirmPrimaryDepartmentChange(
+      callerName: (caller?.nameWithNickname ?? caller?.name ?? '').trim(),
       currentDepartmentName: currentDepartment,
       newDepartmentName: selectedDepartment?.name ?? departmentText,
     );

@@ -74,6 +74,9 @@ class ShutdownCoordinator {
 
   static const Duration defaultSafetyTimeout = Duration(seconds: 20);
 
+  /// Πόσο περιμένουμε το [beforeTerminate] πριν προχωρήσουμε στον τερματισμό.
+  static const Duration beforeTerminateTimeout = Duration(seconds: 2);
+
   /// Καθυστέρηση πριν εμφανιστεί η οθόνη προόδου στο UI.
   static const Duration progressRevealDelay = Duration(milliseconds: 500);
 
@@ -104,6 +107,18 @@ class ShutdownCoordinator {
   bool _timedOut = false;
   bool _terminateCalled = false;
   bool _stepsFinished = false;
+
+  /// Ό,τι πρέπει να ΠΡΟΛΑΒΕΙ να ολοκληρωθεί πριν πεθάνει η διεργασία.
+  ///
+  /// Ο τερματισμός είναι `exit(0)` (δες την τεκμηρίωση της κλάσης): σκοτώνει
+  /// τη διεργασία επιτόπου, οπότε ΤΙΠΟΤΑ μετά το [run] δεν εκτελείται — ούτε
+  /// τα `finally` των καλούντων. Ό,τι οφείλει να προλάβει μπαίνει εδώ, και
+  /// τρέχει σε ΚΑΘΕ διαδρομή εξόδου: κανονική ή από το όριο ασφαλείας.
+  ///
+  /// Ο [ShutdownRunner] βάζει εδώ το κλείσιμο της ιχνηλάτησης — αλλιώς το
+  /// προσωρινό αρχείο έμενε ορφανό και η επόμενη εκκίνηση το προήγαγε σε
+  /// «περιστατικό διακοπής» που ποτέ δεν συνέβη.
+  Future<void> Function()? beforeTerminate;
 
   Stream<ShutdownStepEvent> get events => _eventsController.stream;
 
@@ -242,7 +257,21 @@ class ShutdownCoordinator {
   Future<void> _callTerminate() async {
     if (_terminateCalled) return;
     _terminateCalled = true;
+    await _runBeforeTerminate();
     await _terminate();
+  }
+
+  /// Ο τερματισμός δεν αναβάλλεται για κανέναν λόγο.
+  ///
+  /// Το όριο χρόνου φυλάει τα ασύγχρονα μέρη (μετονομασία, σάρωση φακέλου).
+  /// **Δεν** μπορεί να διακόψει σύγχρονη εγγραφή σε παγωμένο δίκτυο — αλλά
+  /// εκεί το κλείσιμο έχει ήδη κολλήσει πολύ νωρίτερα, στα ίδια τα βήματα.
+  Future<void> _runBeforeTerminate() async {
+    final hook = beforeTerminate;
+    if (hook == null) return;
+    try {
+      await hook().timeout(beforeTerminateTimeout);
+    } catch (_) {}
   }
 
   Future<void> _closeEvents() async {

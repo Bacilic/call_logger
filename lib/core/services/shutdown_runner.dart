@@ -55,6 +55,10 @@ class ShutdownRunner {
     if (trace != null) {
       await trace.beginSession();
       trace.listenTo(coordinator.events);
+      // ΠΡΙΝ, όχι μετά: ο συντονιστής τερματίζει με exit(0) μέσα στο run(),
+      // οπότε το `finally` παρακάτω δεν εκτελείται ποτέ στην πραγματική
+      // εφαρμογή. Το `endSession` είναι ακίνδυνο αν κληθεί δεύτερη φορά.
+      coordinator.beforeTerminate = trace.endSession;
     }
 
     try {
@@ -62,6 +66,8 @@ class ShutdownRunner {
       await coordinator.run();
     } finally {
       presenter.onShutdownFinished();
+      // Δίχτυ για τις διαδρομές που ΔΕΝ φτάνουν στον τερματισμό: αποτυχία του
+      // UI πριν καν ξεκινήσουν τα βήματα, και τα τεστ με πλαστό terminate.
       await trace?.endSession();
     }
   }

@@ -610,11 +610,21 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
           )
           .toList();
 
+      // Μία απάντηση για όλα: αν έστω ένα από τα διαγραφόμενα τμήματα κρατά
+      // μηχάνημα, οι εταιρείες φεύγουν από τους προορισμούς — ο ίδιος στόχος
+      // παραλαμβάνει και ανθρώπους και τηλέφωνα και εξοπλισμό.
+      final quickTransferMovesEquipment = toDelete.any(
+        (d) =>
+            d.id != null &&
+            lookup.getSharedEquipmentCodesByDepartment(d.id!).isNotEmpty,
+      );
+
       if (!context.mounted) return false;
       final target = await showAssetTransferTargetPicker(
         context: context,
         headerLabel: departmentQuickTransferHeader(deletingNames),
         availableDepartments: availableDepartments,
+        involvesEquipment: quickTransferMovesEquipment,
         // Κανένα τμήμα-πηγή: όλα τα διαγραφόμενα λείπουν ήδη από τον κατάλογο
         // και είναι απαγορευμένα και στην πληκτρολόγηση.
         blockedDepartmentNames: deletingNames,

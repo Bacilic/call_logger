@@ -680,6 +680,14 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     Map<String, int> equipmentTransfers = const {},
     List<String> phonesToSoftDelete = const [],
     List<String> equipmentToSoftDelete = const [],
+
+    /// Κωδικός εξοπλισμού → οι κάτοχοι που πρέπει να τον αφήσουν.
+    ///
+    /// Χρειάζεται όταν το τμήμα γίνεται εταιρεία: ο εξοπλισμός δεν είναι
+    /// κοινόχρηστος του τμήματος, τον κρατούν οι ΥΠΑΛΛΗΛΟΙ του. Η αποδέσμευση
+    /// μπαίνει στην ίδια συναλλαγή με τη μεταφορά ή τη διαγραφή, ώστε να μη
+    /// μείνει μηχάνημα ξεκρέμαστο αν κάτι διακοπεί στη μέση.
+    Map<String, Set<int>> equipmentOwnersToUnlink = const {},
   }) async {
     _settlePendingBulkUndo();
     final lookup = LookupService.instance;
@@ -770,6 +778,23 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
         );
         await phones.addDepartmentDirectPhone(targetId, phone, executor: txn);
       }
+      for (final entry in equipmentOwnersToUnlink.entries) {
+        final code = entry.key.trim();
+        if (code.isEmpty) continue;
+        final equipmentId = await equipment.getEquipmentIdByCode(
+          code,
+          executor: txn,
+        );
+        if (equipmentId == null) continue;
+        for (final userId in entry.value) {
+          await equipment.unlinkUserFromEquipment(
+            userId,
+            equipmentId,
+            executor: txn,
+          );
+        }
+      }
+
       for (final entry in equipmentTransfers.entries) {
         final code = entry.key.trim();
         final targetId = entry.value;

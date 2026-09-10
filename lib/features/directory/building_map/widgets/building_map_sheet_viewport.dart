@@ -27,6 +27,7 @@ class BuildingMapSheetViewport extends ConsumerStatefulWidget {
     required this.rotRad,
     required this.imgPath,
     required this.imgFile,
+    required this.imgExists,
     required this.decodedSize,
     required this.activeDepartments,
     required this.currentSheetId,
@@ -38,6 +39,13 @@ class BuildingMapSheetViewport extends ConsumerStatefulWidget {
   final double rotRad;
   final String imgPath;
   final File imgFile;
+
+  /// Το απάντησε ο γονέας, μία φορά ανά διαδρομή.
+  ///
+  /// Ο καμβάς ξαναχτίζεται σε κάθε σύρσιμο του ποντικιού· ένας έλεγχος δίσκου
+  /// εδώ σήμαινε ερώτημα στο αρχείο σύστημα δεκάδες φορές το δευτερόλεπτο.
+  final bool imgExists;
+
   final Size? decodedSize;
   final List<DepartmentModel> activeDepartments;
   final int? currentSheetId;
@@ -1263,7 +1271,7 @@ class _BuildingMapSheetViewportState
     final deptToMap = ref.watch(buildingMapSelectedDepartmentIdToMapProvider);
     final w = widget;
 
-    if (!w.imgFile.existsSync()) {
+    if (!w.imgExists) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

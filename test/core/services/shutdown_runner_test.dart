@@ -6,8 +6,11 @@
 //
 //   flutter test test/core/services/shutdown_runner_test.dart
 
+import 'dart:io';
+
 import 'package:call_logger/core/services/shutdown_coordinator.dart';
 import 'package:call_logger/core/services/shutdown_runner.dart';
+import 'package:call_logger/core/services/shutdown_trace_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _RecordingPresenter implements ShutdownUiPresenter {
@@ -100,6 +103,62 @@ void main() {
             'και η οθόνη θα κολλούσε σε ημιτελές κλείσιμο.',
       );
       expect(log, isNot(contains('terminate')));
+    });
+
+    test('ΤΟ ΚΡΙΣΙΜΟ: το ίχνος κλείνει ΠΡΙΝ τον τερματισμό', () async {
+      // Ο τερματισμός είναι `exit(0)`: σκοτώνει τη διεργασία επιτόπου. Ό,τι
+      // μένει για μετά δεν εκτελείται ποτέ — και το προσωρινό αρχείο του
+      // ίχνους μένει ορφανό, για να προαχθεί στην επόμενη εκκίνηση σε
+      // «περιστατικό διακοπής» που δεν συνέβη ποτέ.
+      final tempRoot = await Directory.systemTemp.createTemp(
+        'shutdown_runner_trace_',
+      );
+      addTearDown(() async {
+        try {
+          if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
+        } catch (_) {}
+      });
+      final logsDir = Directory('${tempRoot.path}${Platform.pathSeparator}logs');
+      await logsDir.create(recursive: true);
+
+      List<String> traceFilesNow() => logsDir
+          .listSync()
+          .whereType<File>()
+          .map((f) => f.uri.pathSegments.last)
+          .where((name) => name.startsWith('shutdown_trace_'))
+          .toList();
+
+      final log = <String>[];
+      var filesAtTerminate = <String>['(δεν κλήθηκε ο τερματισμός)'];
+      final coordinator = ShutdownCoordinator(
+        persistWindowBounds: () async => log.add('persist'),
+        walCheckpoint: () async => log.add('wal'),
+        exitBackup: () async => log.add('backup'),
+        closeConnection: () async => log.add('closeDb'),
+        closeCrashLog: () async => log.add('crashLog'),
+        terminate: () {
+          filesAtTerminate = traceFilesNow();
+          log.add('terminate');
+        },
+      );
+
+      await ShutdownRunner(
+        createCoordinator: () => coordinator,
+        createTrace: () async => ShutdownTraceService(
+          logsDirectory: logsDir.path,
+          retentionCount: 5,
+        ),
+        presenter: _RecordingPresenter(log),
+      ).run();
+
+      expect(
+        filesAtTerminate,
+        isEmpty,
+        reason:
+            'Καθαρό και γρήγορο κλείσιμο: τη στιγμή του τερματισμού ο φάκελος '
+            'logs πρέπει να είναι ήδη άδειος από ίχνη — ούτε προσωρινό, ούτε '
+            'αρχείο περιστατικού.',
+      );
     });
 
     test('δεύτερη κλήση run() δεν ξαναξεκινά τον τερματισμό', () async {

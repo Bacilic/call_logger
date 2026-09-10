@@ -12,6 +12,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/services/lookup_service.dart';
 import '../../models/department_model.dart';
 import '../../services/asset_disconnect_link_probe.dart';
 import '../../services/asset_disconnect_models.dart';
@@ -71,6 +72,15 @@ Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
       sourceDepartmentId != null &&
       (sourceDepartmentName?.trim().isNotEmpty ?? false);
 
+  // «Μένει εδώ» για μηχάνημα σημαίνει «χρεώνεται στο τμήμα-πηγή». Όταν εκείνο
+  // είναι εταιρεία, η επιλογή θα έγραφε ακριβώς ό,τι απαγορεύει το Είδος —
+  // οπότε για τον εξοπλισμό της μένουν μόνο η μεταφορά και η διαγραφή.
+  final sourceCanOwnEquipment =
+      sourceDepartmentId != null &&
+      LookupService.instance
+          .departmentKindById(sourceDepartmentId)
+          .canOwnEquipment;
+
   for (final item in items) {
     if (!context.mounted) return null;
 
@@ -80,12 +90,15 @@ Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
               ? SharedAssetDisconnectMode.personalEquipment
               : SharedAssetDisconnectMode.sharedAsset);
 
+    final canKeepThisItem =
+        canKeepInDepartment && (item.isPhone || sourceCanOwnEquipment);
+
     SharedAssetDisconnectItemResult? result;
     final standing = activeSession.standingDecisionFor(item.kind);
     if (standing != null &&
         _standingIsApplicable(
           standing,
-          canKeepInDepartment: canKeepInDepartment,
+          canKeepInDepartment: canKeepThisItem,
         )) {
       result = standing.toItemResult();
     } else {
@@ -98,7 +111,7 @@ Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
         blockedDepartmentNames: blockedDepartmentNames,
         mode: itemMode,
         personalPhoneUserDisplayName: personalPhoneUserDisplayName,
-        canKeepInDepartment: canKeepInDepartment,
+        canKeepInDepartment: canKeepThisItem,
         session: activeSession,
         referenceLookup: referenceLookup,
         historyLookup: historyLookup,

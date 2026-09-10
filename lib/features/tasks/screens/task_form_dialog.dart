@@ -7,6 +7,7 @@ import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../core/widgets/resizable_text_area.dart';
 import '../../../core/widgets/spell_check_controller.dart';
+import '../../calls/layout/calls_field_groups_provider.dart';
 import '../../calls/provider/smart_entity_selector_provider.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../../../core/models/operator.dart';
@@ -60,10 +61,16 @@ class TaskFormResult {
 }
 
 /// Επιστρέφει το αποτέλεσμα της φόρμας ή null αν ακυρώθηκε.
+///
+/// Η φόρμα δανείζεται τα πεδία καλούντα της οθόνης Κλήσεων, γι' αυτό ανοίγει με
+/// **δική της** κατάσταση οθόνης: ό,τι γράφεται εδώ μένει εδώ και πεθαίνει με
+/// τον διάλογο.
 Future<TaskFormResult?> showTaskFormDialog(BuildContext context, {Task? task}) {
   return showDialog<TaskFormResult>(
     context: context,
-    builder: (context) => _TaskFormDialog(task: task),
+    builder: (context) => IsolatedCallsScreenState(
+      child: _TaskFormDialog(task: task),
+    ),
   );
 }
 

@@ -13,6 +13,7 @@ import '../../layout/calls_field_groups_provider.dart';
 import '../../provider/call_entry_provider.dart';
 import '../../provider/call_header_provider.dart';
 import '../../provider/remote_paths_provider.dart';
+import 'call_entry_selector_hooks.dart';
 import 'call_status_bar.dart';
 import 'category_autocomplete_field.dart';
 import 'notes_sticky_field.dart';
@@ -33,14 +34,8 @@ Future<void> showQuickCallDialog(BuildContext context) {
       overrides: [
         callSmartEntityProvider.overrideWith(SmartEntitySelectorNotifier.new),
         callEntryProvider.overrideWith(CallEntryNotifier.new),
-        callsFieldConfirmationsProvider.overrideWith(
-          CallsFieldConfirmationsNotifier.new,
-        ),
-        callsScreenExpandedLatchProvider.overrideWith(
-          CallsScreenExpandedLatchNotifier.new,
-        ),
       ],
-      child: const QuickCallDialog(),
+      child: const IsolatedCallsScreenState(child: QuickCallDialog()),
     ),
   );
 }
@@ -177,33 +172,7 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
                               w2: widths.w2,
                               wDept: widths.wDept,
                               w3: widths.w3,
-                              callEntryHooks: SmartEntityCallEntryHooks(
-                                syncTimerFromPhoneText: (raw) {
-                                  final digits = raw.replaceAll(
-                                    RegExp(r'[^0-9]'),
-                                    '',
-                                  );
-                                  final n = ref.read(
-                                    callEntryProvider.notifier,
-                                  );
-                                  if (digits.isNotEmpty) {
-                                    n.startTimerOnce();
-                                  } else {
-                                    n.resetTimerToStandby();
-                                  }
-                                },
-                                startTimerOnceIfNotRunningWhenAutofill: () {
-                                  final n = ref.read(
-                                    callEntryProvider.notifier,
-                                  );
-                                  if (!n.isTimerRunning) {
-                                    n.startTimerOnce();
-                                  }
-                                },
-                                resetTimerToStandby: () => ref
-                                    .read(callEntryProvider.notifier)
-                                    .resetTimerToStandby(),
-                              ),
+                              callEntryHooks: callEntrySelectorHooks(ref),
                               trailingRowChildren: const [],
                             ),
                           ),

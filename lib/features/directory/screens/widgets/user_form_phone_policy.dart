@@ -2,8 +2,10 @@ import '../../../../core/directory/phone_department_policy.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
+import '../../../calls/models/equipment_model.dart';
 import '../../services/bulk_user_actions.dart';
-import 'phone_fate_on_department_change.dart';
+import '../../services/user_equipment_codes.dart';
+import 'asset_fate_on_department_change.dart';
 import 'shared_asset_disconnect_dialog.dart';
 import 'user_form_dialog.dart';
 import 'user_phone_department_conflict_dialog.dart';
@@ -126,6 +128,59 @@ class UserFormPhonePolicy {
             : null,
       );
       if (decision.releases) stayBehind.add(phone);
+    }
+    return stayBehind;
+  }
+
+  /// Ρωτά τι απογίνεται ο εξοπλισμός όταν αλλάζει το τμήμα, με την ΙΔΙΑ πύλη
+  /// που χρησιμοποιεί η μαζική μεταφορά.
+  ///
+  /// Επιστρέφει τα μηχανήματα που μένουν πίσω — κενή λίστα σημαίνει «όλα
+  /// ακολουθούν». `null` σημαίνει ότι ο χρήστης ακύρωσε.
+  ///
+  /// Ζει εδώ, δίπλα στην αδελφή του για τα τηλέφωνα: είναι μία απόφαση σε δύο
+  /// σκέλη και χωρισμένη θα απέκλινε.
+  Future<List<EquipmentModel>?> confirmEquipmentFateOnDepartmentChange() async {
+    if (!host.isEdit || host.widget.isClone) return const [];
+    if (!departmentChanged) return const [];
+
+    final editingUserId = host.widget.initialUser?.id;
+    if (editingUserId == null) return const [];
+
+    final carried = UserEquipmentCodes.forUser(editingUserId);
+    if (carried.isEmpty) return const [];
+
+    if (!host.mounted) return null;
+    final fate = await askEquipmentFateOnDepartmentChange(
+      host.context,
+      userDisplayName: host.buildUserDisplayName(),
+    );
+    if (fate == null) return null;
+    if (fate == BulkTransferAssetFate.follow) return const [];
+
+    final lookup = LookupService.instance;
+    final oldDepartmentId = host.widget.initialUser?.departmentId;
+    final stayBehind = <EquipmentModel>[];
+    for (final item in carried) {
+      final code = (item.code ?? '').trim();
+      if (code.isEmpty) continue;
+      final itemId = item.id;
+      final others = [
+        if (itemId != null)
+          for (final other in lookup.findUsersForEquipment(itemId))
+            if (other.id != null &&
+                other.id != editingUserId &&
+                !other.isDeleted)
+              bulkUserDisplayName(other),
+      ];
+      final decision = judgeEquipmentStayBehind(
+        code: code,
+        userName: host.buildUserDisplayName(),
+        oldDepartmentId: oldDepartmentId,
+        equipmentDepartmentId: item.departmentId,
+        otherOwnerNames: others,
+      );
+      if (decision.releases) stayBehind.add(item);
     }
     return stayBehind;
   }

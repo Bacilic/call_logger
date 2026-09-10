@@ -8,13 +8,16 @@ import '../../../core/database/department_repository.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/user_repository.dart';
+import '../../../core/directory/department_change_assets.dart';
 import '../../../core/directory/phone_department_policy.dart';
 import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../directory/models/department_model.dart';
 import '../../directory/providers/directory_cache_refresh.dart';
+import '../../directory/screens/widgets/asset_fate_on_department_change.dart';
 import '../../directory/screens/widgets/user_phone_department_conflict_dialog.dart';
+import '../../directory/services/bulk_user_actions.dart';
 import '../../tasks/models/task.dart';
 import '../../directory/providers/catalog_validation_provider.dart';
 import '../../tasks/providers/task_service_provider.dart';
@@ -84,6 +87,110 @@ class SmartEntitySelectorAssociation {
     ref.invalidate(lookupServiceProvider);
     await ref.read(lookupServiceProvider.future);
     return trimmed;
+  }
+
+  /// Ρωτά τι απογίνονται τηλέφωνα και εξοπλισμός όταν ο καλών αλλάζει τμήμα.
+  ///
+  /// Επιστρέφει τι μένει πίσω· `null` σημαίνει «ο χρήστης ακύρωσε» και τότε το
+  /// τμήμα δεν αλλάζει καθόλου.
+  ///
+  /// Χωρίς παλιό τμήμα δεν υπάρχει μεταφορά — η πρώτη ανάθεση περνά αθόρυβα,
+  /// όπως και πριν.
+  Future<({List<String> phones, List<EquipmentModel> equipment})?>
+  _confirmAssetsOnDepartmentChange({
+    required BuildContext? context,
+    required UserModel caller,
+  }) async {
+    final userId = caller.id;
+    final oldDepartmentId = caller.departmentId;
+    if (userId == null || oldDepartmentId == null) {
+      return (phones: const <String>[], equipment: const <EquipmentModel>[]);
+    }
+
+    final lookup = ref.read(lookupServiceProvider).value?.service;
+    final carriedPhones = caller.phones
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
+    final carriedEquipment =
+        lookup?.findEquipmentsForUser(userId) ?? const <EquipmentModel>[];
+    if (carriedPhones.isEmpty && carriedEquipment.isEmpty) {
+      return (phones: const <String>[], equipment: const <EquipmentModel>[]);
+    }
+    // Χωρίς οθόνη δεν υπάρχει ποιον να ρωτήσουμε. Συνειδητή επιλογή: η αλλαγή
+    // τμήματος προχωρά με την προεπιλογή (όλα ακολουθούν) αντί να χαθεί η
+    // πρόθεση του χρήστη επειδή έκλεισε η κλήση στο ενδιάμεσο.
+    if (context == null || !context.mounted) {
+      return (phones: const <String>[], equipment: const <EquipmentModel>[]);
+    }
+
+    final userName = bulkUserDisplayName(caller);
+    final phonesStaying = <String>[];
+    if (carriedPhones.isNotEmpty) {
+      final fate = await askPhoneFateOnDepartmentChange(
+        context,
+        userDisplayName: userName,
+      );
+      if (fate == null) return null;
+      if (fate == BulkTransferAssetFate.stayInOldDepartment) {
+        for (final phone in carriedPhones) {
+          final others = [
+            for (final other in lookup?.findUsersByPhone(phone) ?? const [])
+              if (other.id != null &&
+                  other.id != userId &&
+                  !other.isDeleted)
+                bulkUserDisplayName(other),
+          ];
+          final dept = lookup?.getDepartmentByPhone(phone);
+          final deptId = dept?.id;
+          final deptName = dept?.name.trim() ?? '';
+          final decision = judgePhoneStayBehind(
+            phone: phone,
+            userName: userName,
+            oldDepartmentId: oldDepartmentId,
+            otherOwnerNames: others,
+            sharedDepartment: (deptId != null && deptName.isNotEmpty)
+                ? (id: deptId, name: deptName)
+                : null,
+          );
+          if (decision.releases) phonesStaying.add(phone);
+        }
+      }
+    }
+
+    final equipmentStaying = <EquipmentModel>[];
+    // Ανάμεσα στις δύο ερωτήσεις μεσολάβησε διάλογος: η οθόνη μπορεί να έχει
+    // φύγει, οπότε ο φρουρός ξαναμπαίνει πριν από τη δεύτερη.
+    if (carriedEquipment.isNotEmpty && context.mounted) {
+      final fate = await askEquipmentFateOnDepartmentChange(
+        context,
+        userDisplayName: userName,
+      );
+      if (fate == null) return null;
+      if (fate == BulkTransferAssetFate.stayInOldDepartment) {
+        for (final item in carriedEquipment) {
+          final code = (item.code ?? '').trim();
+          final itemId = item.id;
+          if (code.isEmpty || itemId == null) continue;
+          final others = [
+            for (final other
+                in lookup?.findUsersForEquipment(itemId) ?? const [])
+              if (other.id != null && other.id != userId && !other.isDeleted)
+                bulkUserDisplayName(other),
+          ];
+          final decision = judgeEquipmentStayBehind(
+            code: code,
+            userName: userName,
+            oldDepartmentId: oldDepartmentId,
+            equipmentDepartmentId: item.departmentId,
+            otherOwnerNames: others,
+          );
+          if (decision.releases) equipmentStaying.add(item);
+        }
+      }
+    }
+
+    return (phones: phonesStaying, equipment: equipmentStaying);
   }
 
   /// Μηδενίζει τον κύκλο γρήγορης εκκρεμότητας (νέα φόρμα/καθαρισμός/submit).
@@ -605,17 +712,47 @@ class SmartEntitySelectorAssociation {
           selectedDepartmentId != null &&
           selectedDepartmentId != state.selectedCaller?.departmentId &&
           state.selectedCaller?.id != null) {
-        final updatedMap = Map<String, dynamic>.from(
-          state.selectedCaller!.toMap(),
-        );
-        updatedMap['department_id'] = selectedDepartmentId;
-        await users.updateUser(
-          state.selectedCaller!.id!,
-          updatedMap,
-          expected: null,
-        );
-        updatedDepartmentId = selectedDepartmentId;
-        primaryDepartmentChanged = true;
+        // Ο υπάλληλος μετακομίζει: ρωτιέται τι απογίνονται όσα κουβαλά, με
+        // τους ΙΔΙΟΥΣ οδηγούς που δείχνουν η φόρμα και η μαζική μεταφορά. Η
+        // γρήγορη προσθήκη δεν είναι εξαίρεση — μια σιωπηλή μεταφορά εδώ θα
+        // ήταν τρύπα στα δεδομένα.
+        //
+        // Όταν ο καλών ΔΕΝ είχε τμήμα, δεν υπάρχει μεταφορά αλλά πρώτη
+        // ανάθεση: τίποτα δεν μπορεί να «μείνει πίσω» και δεν ρωτιέται τίποτα.
+        final assetDialogContext = context;
+        final decision =
+            (assetDialogContext != null && !assetDialogContext.mounted)
+            ? null
+            : await _confirmAssetsOnDepartmentChange(
+                context: assetDialogContext,
+                caller: state.selectedCaller!,
+              );
+        if (decision == null) {
+          // Ακύρωση: το τμήμα μένει ως έχει. Η υπόλοιπη συσχέτιση που έγινε
+          // πιο πάνω (τηλέφωνο, εξοπλισμός) δεν αναιρείται.
+          primaryDepartmentChanged = false;
+        } else {
+          final oldDepartmentId = state.selectedCaller!.departmentId;
+          final updatedMap = Map<String, dynamic>.from(
+            state.selectedCaller!.toMap(),
+          );
+          updatedMap['department_id'] = selectedDepartmentId;
+          await users.updateUser(
+            state.selectedCaller!.id!,
+            updatedMap,
+            expected: null,
+          );
+          await applyAssetsStayingBehind(
+            db: dbAssoc,
+            userId: state.selectedCaller!.id!,
+            oldDepartmentId: oldDepartmentId,
+            phones: decision.phones,
+            equipment: decision.equipment,
+            currentPhones: state.selectedCaller!.phones,
+          );
+          updatedDepartmentId = selectedDepartmentId;
+          primaryDepartmentChanged = true;
+        }
       }
 
       final s = state;

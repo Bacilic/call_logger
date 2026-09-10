@@ -41,13 +41,22 @@ class DepartmentFormSave {
             .toSet()
             .toList()
           ..sort((a, b) => a.compareTo(b));
-    var sharedEquipmentCodes =
-        host.sharedEquipmentCodes
-            .map((v) => v.trim())
-            .where((v) => v.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort((a, b) => a.compareTo(b));
+    // Το Είδος αποφασίζει τι επιτρέπεται να κρατά η καρτέλα, και η φόρμα κρύβει
+    // την ενότητα όταν δεν επιτρέπεται. Ό,τι κρύβεται ΔΕΝ γράφεται: αλλιώς η
+    // εταιρεία έμενε σιωπηλά χρεωμένη με μηχανήματα που κανείς δεν βλέπει πια.
+    //
+    // Το άδειασμα περνά από την ίδια πύλη με κάθε άλλη αφαίρεση κοινόχρηστου
+    // (`applySharedOnlyRemovalConfirmations`): ο χρήστης ρωτιέται πού πάει κάθε
+    // μηχάνημα, με τις ίδιες λέξεις που ήδη ξέρει, και χωρίς επιλογή «μένει
+    // εδώ» — ο εξοπλισμός δεν μένει ποτέ ορφανός.
+    var sharedEquipmentCodes = host.selectedKind.canOwnEquipment
+        ? (host.sharedEquipmentCodes
+              .map((v) => v.trim())
+              .where((v) => v.isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort((a, b) => a.compareTo(b)))
+        : <String>[];
     var phonesToMoveFromUsers = <String>{};
     var equipmentToMoveFromUsers = <String>{};
 
@@ -125,6 +134,22 @@ class DepartmentFormSave {
           sharedPhones = confirmed.sharedPhones;
           sharedEquipmentCodes = confirmed.sharedEquipmentCodes;
 
+          // Το ίδιο ερώτημα και για τον εξοπλισμό που κρατούν οι ΥΠΑΛΛΗΛΟΙ
+          // του τμήματος: εκεί το μηχάνημα δεν είναι κοινόχρηστο, είναι
+          // χρεωμένο σε πρόσωπο — και μια εταιρεία δεν κρατά δικά μας
+          // μηχανήματα ούτε έτσι. (Στη δημιουργία δεν χρειάζεται: το καινούριο
+          // τμήμα δεν έχει ακόμη υπαλλήλους.)
+          final personal = host.selectedKind.canOwnEquipment
+              ? null
+              : await host.sharedLinks.applyKindForbiddenEquipmentRemoval(
+                  departmentId: did,
+                  departmentName: name,
+                );
+          if (!host.selectedKind.canOwnEquipment &&
+              (personal == null || !host.mounted)) {
+            return;
+          }
+
           await host.widget.notifier.updateDepartmentSharedAssets(
             did,
             sharedPhones: sharedPhones,
@@ -132,9 +157,17 @@ class DepartmentFormSave {
             phonesToMoveFromUsers: phonesToMoveFromUsers,
             equipmentToMoveFromUsers: equipmentToMoveFromUsers,
             phoneTransfers: confirmed.phoneTransfers,
-            equipmentTransfers: confirmed.equipmentTransfers,
+            equipmentTransfers: {
+              ...confirmed.equipmentTransfers,
+              if (personal != null) ...personal.equipmentTransfers,
+            },
             phonesToSoftDelete: confirmed.phonesToDelete,
-            equipmentToSoftDelete: confirmed.equipmentToDelete,
+            equipmentToSoftDelete: [
+              ...confirmed.equipmentToDelete,
+              if (personal != null) ...personal.equipmentToDelete,
+            ],
+            equipmentOwnersToUnlink:
+                personal?.equipmentOwnersToUnlink ?? const {},
           );
         }
         // Η καρτέλα γράφεται ολόκληρη: αν κάποιος πρόλαβε, ρωτιέται ο άνθρωπος.

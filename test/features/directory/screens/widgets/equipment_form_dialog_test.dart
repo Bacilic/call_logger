@@ -228,22 +228,13 @@ Future<void> _openEquipmentFormInDialog(
   await pumpUntilSettledLong(tester);
 }
 
-Future<void> _pumpUntilEquipmentSaveCompletes(WidgetTester tester) async {
-  const maxAttempts = 40;
-  for (var i = 0; i < maxAttempts; i++) {
-    final formOpen =
+Future<void> _pumpUntilEquipmentSaveCompletes(WidgetTester tester) {
+  return pumpUntilDialogCloses(
+    tester,
+    isOpen: () =>
         find.text(_kNewEquipmentTitle).evaluate().isNotEmpty ||
-        find.text(_kEditEquipmentTitle).evaluate().isNotEmpty;
-    if (!formOpen) return;
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    });
-    await tester.pump(const Duration(milliseconds: 50));
-  }
-  fail(
-    greekExpectMsg(
-      'Η φόρμα εξοπλισμού δεν έκλεισε εγκαίρως μετά την αποθήκευση',
-    ),
+        find.text(_kEditEquipmentTitle).evaluate().isNotEmpty,
+    failMessage: 'Η φόρμα εξοπλισμού δεν έκλεισε εγκαίρως μετά την αποθήκευση',
   );
 }
 

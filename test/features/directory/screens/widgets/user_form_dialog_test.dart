@@ -73,20 +73,13 @@ Future<void> _openUserFormInDialog(
   await pumpUntilSettledLong(tester);
 }
 
-Future<void> _pumpUntilUserSaveCompletes(WidgetTester tester) async {
-  const maxAttempts = 40;
-  for (var i = 0; i < maxAttempts; i++) {
-    final formOpen =
+Future<void> _pumpUntilUserSaveCompletes(WidgetTester tester) {
+  return pumpUntilDialogCloses(
+    tester,
+    isOpen: () =>
         find.text(_kNewUserTitle).evaluate().isNotEmpty ||
-        find.text(_kEditUserTitle).evaluate().isNotEmpty;
-    if (!formOpen) return;
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    });
-    await tester.pump(const Duration(milliseconds: 50));
-  }
-  fail(
-    greekExpectMsg('Η φόρμα χρήστη δεν έκλεισε εγκαίρως μετά την αποθήκευση'),
+        find.text(_kEditUserTitle).evaluate().isNotEmpty,
+    failMessage: 'Η φόρμα χρήστη δεν έκλεισε εγκαίρως μετά την αποθήκευση',
   );
 }
 

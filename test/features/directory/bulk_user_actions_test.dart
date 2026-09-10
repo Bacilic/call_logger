@@ -11,6 +11,7 @@ import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/screens/widgets/shared_asset_disconnect_dialog.dart';
 import 'package:call_logger/features/directory/services/bulk_action_undo_record.dart';
 import 'package:call_logger/features/directory/services/bulk_user_actions.dart';
@@ -198,6 +199,52 @@ void main() {
     });
   });
 
+  group('judgeEquipmentStayBehind — ο κοινός κανόνας του εξοπλισμού', () {
+    test('μηχάνημα με τμήμα: αποδεσμεύεται από τον υπάλληλο', () {
+      final d = judgeEquipmentStayBehind(
+        code: '3564',
+        userName: 'Σοφία Σπυροπούλου',
+        oldDepartmentId: 46,
+        equipmentDepartmentId: 46,
+      );
+      expect(d.releases, isTrue);
+      expect(d.blockedReason, isNull);
+    });
+
+    test('μηχάνημα χωρίς τμήμα αλλά με τμήμα-αφετηρία: αποδεσμεύεται', () {
+      final d = judgeEquipmentStayBehind(
+        code: '3564',
+        userName: 'Σοφία Σπυροπούλου',
+        oldDepartmentId: 46,
+        equipmentDepartmentId: null,
+      );
+      expect(d.releases, isTrue);
+    });
+
+    test('το κρατά και άλλος: μένει ως έχει', () {
+      final d = judgeEquipmentStayBehind(
+        code: '3564',
+        userName: 'Σοφία Σπυροπούλου',
+        oldDepartmentId: 46,
+        equipmentDepartmentId: 46,
+        otherOwnerNames: const ['Γιάννης Γ'],
+      );
+      expect(d.releases, isFalse);
+      expect(d.blockedReason, contains('Γιάννης Γ'));
+    });
+
+    test('ούτε μηχάνημα ούτε υπάλληλος έχουν τμήμα: θα έμενε ορφανό', () {
+      final d = judgeEquipmentStayBehind(
+        code: '3564',
+        userName: 'Σοφία Σπυροπούλου',
+        oldDepartmentId: null,
+        equipmentDepartmentId: null,
+      );
+      expect(d.releases, isFalse);
+      expect(d.blockedReason, contains('ορφανός'));
+    });
+  });
+
   group('Σχέδιο μεταφοράς — εξαιρέσεις και μερική μεταφορά', () {
     test('όσοι είναι ήδη στο τμήμα-προορισμό δεν μετακινούνται', () {
       final plan = buildBulkUserTransferPlan(
@@ -207,6 +254,7 @@ void main() {
         ],
         target: const SharedAssetTransferTarget.existing(20),
         targetDisplayName: 'Αιμοδοσία',
+        targetKind: DepartmentKind.hospital,
         phoneFate: BulkTransferAssetFate.follow,
         equipmentFate: BulkTransferAssetFate.follow,
         equipmentByUserId: const {},
@@ -226,6 +274,7 @@ void main() {
         ],
         target: const SharedAssetTransferTarget.existing(20),
         targetDisplayName: 'Αιμοδοσία',
+        targetKind: DepartmentKind.hospital,
         phoneFate: BulkTransferAssetFate.stayInOldDepartment,
         equipmentFate: BulkTransferAssetFate.follow,
         equipmentByUserId: const {},
@@ -249,6 +298,7 @@ void main() {
         ],
         target: const SharedAssetTransferTarget.existing(20),
         targetDisplayName: 'Μεσογειακή Αναιμία',
+        targetKind: DepartmentKind.hospital,
         phoneFate: BulkTransferAssetFate.stayInOldDepartment,
         equipmentFate: BulkTransferAssetFate.follow,
         equipmentByUserId: const {},
@@ -273,6 +323,7 @@ void main() {
           selectedUsers: [user(1, 'Άννα', 'Α', deptId: 10)],
           target: const SharedAssetTransferTarget.existing(20),
           targetDisplayName: 'Αιμοδοσία',
+          targetKind: DepartmentKind.hospital,
           phoneFate: BulkTransferAssetFate.follow,
           equipmentFate: fate,
           equipmentByUserId: {
@@ -315,6 +366,7 @@ void main() {
           ],
           target: const SharedAssetTransferTarget.createNew('Νέο Παράρτημα'),
           targetDisplayName: 'Νέο Παράρτημα',
+          targetKind: DepartmentKind.hospital,
           phoneFate: BulkTransferAssetFate.stayInOldDepartment,
           equipmentFate: BulkTransferAssetFate.follow,
           equipmentByUserId: {
@@ -396,6 +448,7 @@ void main() {
         selectedUsers: [user(annaId, 'Άννα', 'Α', deptId: oldDept)],
         target: SharedAssetTransferTarget.existing(targetDept),
         targetDisplayName: 'Αιμοδοσία',
+        targetKind: DepartmentKind.hospital,
         phoneFate: BulkTransferAssetFate.follow,
         equipmentFate: BulkTransferAssetFate.stayInOldDepartment,
         equipmentByUserId: {

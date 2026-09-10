@@ -430,6 +430,52 @@ void main() {
     );
 
     testWidgets(
+      'το κόκκινο × αδειάζει και τις σημειώσεις και τη λύση',
+      (tester) async {
+        final container = await pumpApp(tester);
+        await expandFormWithPhone(tester);
+
+        await tester.tap(notesField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(
+          notesField(),
+          _kProblemLine + String.fromCharCode(10) + _kSolutionLine,
+        );
+        await pumpUntilSettled(tester);
+        await tester.tap(solutionChip());
+        await pumpUntilSettled(tester);
+        expect(container.read(callEntryProvider).solution, _kSolutionLine);
+
+        await tester.tap(find.byTooltip('Καθαρισμός όλων των πεδίων'));
+        await pumpUntilSettled(tester);
+
+        final entry = container.read(callEntryProvider);
+        expect(
+          entry.notes,
+          isEmpty,
+          reason: greekExpectMsg(
+            'Το κόκκινο × αφήνει την οθόνη όπως σε καινούρια κλήση: καμία '
+            'σημείωση της προηγούμενης',
+          ),
+        );
+        expect(
+          entry.solution,
+          isEmpty,
+          reason: greekExpectMsg('Μαζί με τις σημειώσεις αδειάζει και η λύση'),
+        );
+        expect(
+          entry.isPending,
+          isFalse,
+          reason: greekExpectMsg(
+            'Ούτε η εκκρεμότητα επιβιώνει στην επόμενη κλήση',
+          ),
+        );
+      },
+      semanticsEnabled: false,
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    testWidgets(
       'ΕΝΑΣ μετρητής για όλο το χαρτί — περιγραφή συν λύση',
       (tester) async {
         await pumpApp(tester);

@@ -5,12 +5,13 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
+import '../../models/department_kind.dart';
 import '../../models/department_model.dart';
 import '../../providers/directory_provider.dart';
 import '../../services/bulk_user_actions.dart';
 import 'bulk_user_action_call_guard.dart';
 import 'bulk_user_action_pickers.dart';
-import 'phone_fate_on_department_change.dart';
+import 'asset_fate_on_department_change.dart';
 import 'shared_asset_disconnect_dialog.dart';
 
 /// Μαζικές ενέργειες υπαλλήλων: μεταφορά σε τμήμα, σημειώσεις, καθαρισμός.
@@ -128,6 +129,14 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
 
   // ─────────────────────────── Μεταφορά σε τμήμα ───────────────────────────
 
+  /// Το Είδος του τμήματος-προορισμού· τμήμα που δημιουργείται τώρα γεννιέται
+  /// πάντα ως τμήμα νοσοκομείου.
+  DepartmentKind _targetKind(SharedAssetTransferTarget target) {
+    final id = target.departmentId;
+    if (id == null) return DepartmentKind.hospital;
+    return LookupService.instance.departmentKindById(id);
+  }
+
   Future<void> _runTransferFlow() async {
     final target = await showAssetTransferTargetPicker(
       context: context,
@@ -135,36 +144,33 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
           ? 'Μεταφορά 1 υπαλλήλου σε τμήμα'
           : 'Μεταφορά ${_users.length} υπαλλήλων σε τμήμα',
       availableDepartments: _activeDepartments(),
+      // Μεταφέρονται άνθρωποι: ο υπάλληλος εξωτερικής εταιρείας είναι θεμιτός.
+      // Ο εξοπλισμός που κουβαλά κρίνεται χωριστά, λίγο πιο κάτω.
+      involvesEquipment: false,
     );
     if (target == null || !mounted) return;
+
+    final targetKind = _targetKind(target);
 
     final phoneFate = await askPhoneFateOnDepartmentChange(context);
     if (phoneFate == null || !mounted) return;
 
-    final equipmentFate = await showBulkOptionDialog<BulkTransferAssetFate>(
-      context,
-      title: 'Εξοπλισμός των υπαλλήλων',
-      message: 'Τι θα γίνει ο εξοπλισμός των μεταφερόμενων;',
-      options: [
-        (
-          'Ακολουθεί στο νέο τμήμα',
-          'Ο εξοπλισμός αλλάζει τμήμα μαζί με τον κάτοχό του.',
-          BulkTransferAssetFate.follow,
-        ),
-        (
-          'Μένει στο παλιό τμήμα',
-          'Αποδεσμεύεται από τον υπάλληλο και παραμένει στο τμήμα που αφήνει.',
-          BulkTransferAssetFate.stayInOldDepartment,
-        ),
-      ],
-    );
-    if (equipmentFate == null || !mounted) return;
+    // Το «ακολουθεί ή μένει;» έχει νόημα μόνο όταν ο προορισμός μπορεί να
+    // κρατά μηχανήματα. Στην εταιρεία δεν μπορεί, και η απάντηση θα ήταν
+    // υπόσχεση που δεν τηρείται — ρωτάμε αντ' αυτής πού πάει το καθένα.
+    var equipmentFate = BulkTransferAssetFate.stayInOldDepartment;
+    if (targetKind.canOwnEquipment) {
+      final picked = await askEquipmentFateOnDepartmentChange(context);
+      if (picked == null || !mounted) return;
+      equipmentFate = picked;
+    }
 
     final equipmentByUser = _equipmentByUserId();
-    final plan = buildBulkUserTransferPlan(
+    var plan = buildBulkUserTransferPlan(
       selectedUsers: _users,
       target: target,
       targetDisplayName: _targetDisplayName(target),
+      targetKind: targetKind,
       phoneFate: phoneFate,
       equipmentFate: equipmentFate,
       equipmentByUserId: equipmentByUser,
@@ -179,6 +185,25 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
             '«${plan.targetDisplayName}».',
       );
       return;
+    }
+
+    // Ο προορισμός δεν κρατά μηχανήματα: μία ερώτηση ανά μηχάνημα, με τις
+    // ίδιες λέξεις που ήδη ξέρει ο χρήστης από τη φόρμα της εταιρείας. Καμία
+    // επιλογή «μένει εδώ» — ο εξοπλισμός δεν μένει ποτέ ορφανός.
+    if (plan.equipmentNeedingNewHome.isNotEmpty) {
+      final codes = <String>[
+        for (final e in plan.equipmentNeedingNewHome)
+          if ((e.code ?? '').trim().isNotEmpty) (e.code ?? '').trim(),
+      ];
+      final batch = await showSharedAssetDisconnectFlow(
+        context: context,
+        equipmentCodes: codes,
+        availableDepartments: _activeDepartments(),
+        mode: SharedAssetDisconnectMode.personalEquipment,
+        allowKeepInDepartment: false,
+      );
+      if (batch == null || !mounted) return;
+      plan = plan.withEquipmentRehoming(batch);
     }
 
     final confirmed = await showBulkConfirmDialog(
@@ -282,6 +307,7 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
               ? 'Μεταφορά τηλεφώνων σε τμήμα'
               : 'Μεταφορά εξοπλισμών σε τμήμα',
           availableDepartments: _activeDepartments(),
+          involvesEquipment: field == BulkClearField.equipment,
         );
         if (target == null || !mounted) return;
         transferTarget = target;

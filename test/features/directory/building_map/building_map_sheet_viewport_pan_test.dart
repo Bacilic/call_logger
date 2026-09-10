@@ -51,6 +51,7 @@ Future<ProviderContainer> _pumpViewport(
       rotRad: 0,
       imgPath: imgFile.path,
       imgFile: imgFile,
+      imgExists: true,
       decodedSize: const Size(400, 250),
       activeDepartments: const [],
       currentSheetId: 1,

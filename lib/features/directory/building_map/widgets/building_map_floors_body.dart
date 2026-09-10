@@ -37,8 +37,16 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
   final FocusNode _globalSearchFocusNode = FocusNode();
 
   String? _scheduledDecodePath;
-  String? _scheduledResolvePath;
+  String? _scheduledResolveRequest;
   String _resolvedAbsImgPath = '';
+
+  /// Υπάρχει η εικόνα της κάτοψης; Απαντιέται **μία φορά** μαζί με τη διαδρομή.
+  ///
+  /// Ο έλεγχος ζούσε μέσα στο χτίσιμο, που τρέχει σε κάθε αλλαγή επιλογής,
+  /// λειτουργίας ή καταλόγου τμημάτων — και σε κάθε κίνηση του δείκτη πάνω στον
+  /// καμβά. Ρωτούσε τον δίσκο κάθε φορά, παγώνοντας την οθόνη όσο απαντούσε·
+  /// με τις κατόψεις σε δικτυακό φάκελο αυτό μετριέται σε δευτερόλεπτα.
+  bool _resolvedImgExists = false;
 
   /// Οι κατόψεις, διαβασμένες **μία φορά ανά ανανέωση**.
   ///
@@ -72,15 +80,24 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
     });
   }
 
-  void _scheduleResolveForCurrentPath(String storedPath) {
-    if (_scheduledResolvePath == storedPath) return;
-    _scheduledResolvePath = storedPath;
+  /// Λύνει τη διαδρομή ΚΑΙ ρωτά αν υπάρχει — εκτός του νήματος της οθόνης.
+  ///
+  /// Το αίτημα κρατά και το [reloadSeq]: όταν ο χρήστης αντικαταστήσει την
+  /// εικόνα κρατώντας το ίδιο όνομα, η ίδια διαδρομή πρέπει να ξαναρωτηθεί.
+  void _scheduleResolveForCurrentPath(String storedPath, int reloadSeq) {
+    final request = '$reloadSeq|$storedPath';
+    if (_scheduledResolveRequest == request) return;
+    _scheduledResolveRequest = request;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final abs = storedPath.trim().isEmpty
           ? ''
           : await BuildingMapStorage.resolveToAbsolute(storedPath);
-      if (!mounted || _scheduledResolvePath != storedPath) return;
-      setState(() => _resolvedAbsImgPath = abs);
+      final exists = abs.isEmpty ? false : await File(abs).exists();
+      if (!mounted || _scheduledResolveRequest != request) return;
+      setState(() {
+        _resolvedAbsImgPath = abs;
+        _resolvedImgExists = exists;
+      });
     });
   }
 
@@ -150,11 +167,10 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
         final sheetStr = currentSheetId?.toString() ?? '';
         final rotRad = (current?.rotationDegrees ?? 0) * math.pi / 180;
         final imgPath = current?.imagePath ?? '';
-        _scheduleResolveForCurrentPath(imgPath);
+        _scheduleResolveForCurrentPath(imgPath, reloadSeq);
         final imgFile = File(_resolvedAbsImgPath);
 
-        final imgExists =
-            _resolvedAbsImgPath.isNotEmpty && imgFile.existsSync();
+        final imgExists = _resolvedAbsImgPath.isNotEmpty && _resolvedImgExists;
         final sz = decodedSize;
         final hasActiveCanvas = current != null && imgExists && sz != null;
 
@@ -245,6 +261,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                           rotRad: rotRad,
                           imgPath: imgPath,
                           imgFile: imgFile,
+                          imgExists: imgExists,
                           decodedSize: decodedSize,
                           activeDepartments: activeDepartments,
                           currentSheetId: currentSheetId,

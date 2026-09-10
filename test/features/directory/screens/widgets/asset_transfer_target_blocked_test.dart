@@ -41,6 +41,7 @@ void main() {
                   context: ctx,
                   headerLabel: 'Πού μεταφέρονται όλα;',
                   availableDepartments: available,
+                  involvesEquipment: false,
                   blockedDepartmentNames: blocked,
                 );
                 closed = true;

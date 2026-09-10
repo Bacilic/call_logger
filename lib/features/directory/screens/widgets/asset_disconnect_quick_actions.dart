@@ -176,6 +176,9 @@ Future<AssetDisconnectStandingDecision?> resolveAssetDisconnectQuickAction({
       context: context,
       headerLabel: 'Μεταφορά ${affected.length} στοιχείων σε ένα τμήμα',
       availableDepartments: availableDepartments,
+      // Μία απάντηση για όλα: αρκεί ΕΝΑ μηχάνημα στη λίστα για να φύγουν οι
+      // εταιρείες από τους προορισμούς — αλλιώς θα το χρέωναν κι αυτό.
+      involvesEquipment: affected.any((i) => !i.isPhone),
       // Στη μαζική μεταφορά ΔΕΝ αποκλείεται κανένα τμήμα-πηγή: όταν τα στοιχεία
       // ανήκουν σε πολλά τμήματα, «μεταφορά εκεί που ήδη ανήκει» είναι ο
       // μόνος τρόπος να μείνει κάτι στη θέση του. Τα τμήματα που ΔΙΑΓΡΑΦΟΝΤΑΙ

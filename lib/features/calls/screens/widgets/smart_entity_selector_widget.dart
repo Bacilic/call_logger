@@ -16,11 +16,22 @@ class SmartEntityCallEntryHooks {
     this.syncTimerFromPhoneText,
     this.startTimerOnceIfNotRunningWhenAutofill,
     this.resetTimerToStandby,
+    this.clearHostFormState,
   });
 
   final void Function(String rawPhoneText)? syncTimerFromPhoneText;
   final VoidCallback? startTimerOnceIfNotRunningWhenAutofill;
+
+  /// Το τηλέφωνο άδειασε: το χρονόμετρο γυρίζει σε αναμονή.
   final VoidCallback? resetTimerToStandby;
+
+  /// Τι σημαίνει «καθαρίστηκαν όλα» για τη φόρμα που φιλοξενεί τα πεδία.
+  ///
+  /// Τα πεδία είναι κοινά, οι φόρμες όχι: η οθόνη Κλήσεων έχει σημειώσεις,
+  /// χρονόμετρο και επιβεβαιώσεις να μηδενίσει· ο διάλογος εκκρεμότητας
+  /// δανείζεται μόνο τα πεδία και δεν έχει τίποτα άλλο να καθαρίσει. Χωρίς
+  /// αυτόν τον διαχωρισμό το ένα σβήνει την κατάσταση του άλλου.
+  final VoidCallback? clearHostFormState;
 }
 
 /// Τηλέφωνο, Καλών, Τμήμα, Εξοπλισμός — Layout orchestrator για τα πεδία της φόρμας.
@@ -168,16 +179,14 @@ class SmartEntitySelectorWidgetState
 
   void requestPhoneFocus() => _phoneFocusNode.requestFocus();
 
-  /// Ίδια συμπεριφορά με το προηγούμενο κουμπί «Καθαρισμός όλων»: controllers + state + timer.
+  /// Το κόκκινο ×: αδειάζει τα πεδία και αφήνει τον ξενιστή να καθαρίσει τα δικά του.
   void performClearAllFields() {
-    ref.read(callsScreenExpandedLatchProvider.notifier).engage();
-    ref.read(callsFieldConfirmationsProvider.notifier).resetAll();
     _phoneController.clear();
     _callerController.clear();
     _departmentController.clear();
     _equipmentController.clear();
     _notifier.clearAll();
-    widget.callEntryHooks.resetTimerToStandby?.call();
+    widget.callEntryHooks.clearHostFormState?.call();
     _phoneFocusNode.requestFocus();
   }
 

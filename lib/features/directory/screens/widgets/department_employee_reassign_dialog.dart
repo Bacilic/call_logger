@@ -118,6 +118,9 @@ class _DepartmentEmployeeReassignDialogState
       context: context,
       headerLabel: 'Πού μεταφέρονται οι επιλεγμένοι ($n);',
       availableDepartments: widget.availableDepartments,
+      // Μεταφέρονται άνθρωποι, όχι μηχανήματα: ο υπάλληλος εξωτερικής
+      // εταιρείας είναι θεμιτός και η εταιρεία μένει στη λίστα.
+      involvesEquipment: false,
       sourceDepartmentId: widget.sourceDepartmentId,
       blockedDepartmentNames: widget.blockedDepartmentNames,
     );

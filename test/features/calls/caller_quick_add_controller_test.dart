@@ -50,6 +50,7 @@ class _FakePrompts implements CallerQuickAddPrompts {
   final List<String> announcements = [];
   int sharedAssetAsks = 0;
   int primaryDepartmentAsks = 0;
+  String? askedPrimaryDepartmentCallerName;
   List<UserSimilarityMatch>? askedUserMatches;
   String? askedDepartmentName;
 
@@ -61,9 +62,11 @@ class _FakePrompts implements CallerQuickAddPrompts {
 
   @override
   Future<bool> confirmPrimaryDepartmentChange({
+    required String callerName,
     required String currentDepartmentName,
     required String newDepartmentName,
   }) async {
+    askedPrimaryDepartmentCallerName = callerName;
     primaryDepartmentAsks++;
     return primaryDepartmentAnswer;
   }
@@ -451,6 +454,11 @@ void main() {
       ).run(lookup);
 
       expect(prompts.primaryDepartmentAsks, 1);
+      expect(
+        prompts.askedPrimaryDepartmentCallerName,
+        'Βαρβάρα',
+        reason: 'η ερώτηση ονομάζει τον υπάλληλο, δεν λέει «ο χρήστης»',
+      );
       expect(actions.associatedWithPrimaryDepartmentUpdate, isTrue);
     });
 

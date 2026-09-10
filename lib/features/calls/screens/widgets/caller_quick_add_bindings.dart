@@ -52,17 +52,22 @@ class CallerQuickAddDialogPrompts implements CallerQuickAddPrompts {
 
   @override
   Future<bool> confirmPrimaryDepartmentChange({
+    required String callerName,
     required String currentDepartmentName,
     required String newDepartmentName,
   }) async {
     if (!context.mounted) return false;
+    final name = callerName.trim();
+    // Το όνομα μένει στην ονομαστική· το άρθρο κρατά και τα δύο γένη, γιατί
+    // ο κατάλογος δεν ξέρει το φύλο του υπαλλήλου.
+    final who = name.isEmpty ? 'Ο υπάλληλος' : 'Ο/Η $name';
     final approved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Αλλαγή κύριου τμήματος'),
         content: Text(
-          'Ο χρήστης έχει κύριο τμήμα "$currentDepartmentName". '
-          'Να γίνει νέο κύριο τμήμα του χρήστη το "$newDepartmentName";',
+          '$who ανήκει στο τμήμα «$currentDepartmentName». '
+          'Να μεταφερθεί στο τμήμα «$newDepartmentName»;',
         ),
         actions: [
           TextButton(

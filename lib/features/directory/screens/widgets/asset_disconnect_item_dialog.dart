@@ -187,6 +187,7 @@ Future<AssetDisconnectItemResolution?> resolveAssetDisconnectItem({
         final target = await showAssetTransferDialogForItem(
           context: context,
           isPhone: isPhone,
+          mode: mode,
           value: item.value,
           sourceDepartmentId: sourceDepartmentId,
           availableDepartments: availableDepartments,

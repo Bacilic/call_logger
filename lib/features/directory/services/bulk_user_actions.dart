@@ -7,6 +7,7 @@ import '../../../core/database/user_repository.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/models/user_model.dart';
+import '../models/department_kind.dart';
 import '../screens/widgets/shared_asset_disconnect_dialog.dart';
 import 'bulk_action_undo_record.dart';
 import 'user_deletion_undo_record.dart';
@@ -124,6 +125,45 @@ PhoneStayBehindDecision judgePhoneStayBehind({
   return (releases: true, blockedReason: null);
 }
 
+/// Κρίνει αν ένα μηχάνημα μένει πίσω στο τμήμα που αφήνει ο υπάλληλος.
+///
+/// Δίδυμο του [judgePhoneStayBehind] και ΜΟΝΑΔΙΚΟ σημείο του κανόνα: τον
+/// καλούν και η μαζική μεταφορά και η φόρμα ενός υπαλλήλου.
+///
+/// Ο κανόνας του πεδίου είναι ο **αντίστροφος** από των τηλεφώνων — ο
+/// εξοπλισμός ακολουθεί τον άνθρωπο — γι' αυτό εδώ κρίνεται μόνο η
+/// λιγότερο συνηθισμένη έκβαση: το «μένει πίσω».
+///
+/// Δύο περιπτώσεις την εμποδίζουν:
+/// 1. Το κρατά και άλλος υπάλληλος — δεν είναι δικό μας να το δώσουμε.
+/// 2. Ούτε το μηχάνημα ούτε ο υπάλληλος έχουν τμήμα — θα έμενε ορφανό, και
+///    ο εξοπλισμός δεν είναι ποτέ ορφανός.
+PhoneStayBehindDecision judgeEquipmentStayBehind({
+  required String code,
+  required String userName,
+  required int? oldDepartmentId,
+  required int? equipmentDepartmentId,
+  List<String> otherOwnerNames = const [],
+}) {
+  if (otherOwnerNames.isNotEmpty) {
+    return (
+      releases: false,
+      blockedReason:
+          'Ο εξοπλισμός $code μένει ως έχει — '
+          'τον χρησιμοποιεί και ο ${_joinNames(otherOwnerNames)}.',
+    );
+  }
+  if (equipmentDepartmentId == null && oldDepartmentId == null) {
+    return (
+      releases: false,
+      blockedReason:
+          'Ο εξοπλισμός $code παραμένει στον υπάλληλο $userName — '
+          'χωρίς τμήμα-αφετηρία θα έμενε ορφανός.',
+    );
+  }
+  return (releases: true, blockedReason: null);
+}
+
 /// Εμφανίσιμο όνομα υπαλλήλου για μηνύματα.
 String bulkUserDisplayName(UserModel u) {
   final name = (u.name ?? '${u.firstName ?? ''} ${u.lastName ?? ''}').trim();
@@ -159,7 +199,9 @@ class BulkUserTransferPlan {
     required this.phonesToRelease,
     required this.equipmentToFollow,
     required this.equipmentToRelease,
+    required this.equipmentNeedingNewHome,
     required this.exclusions,
+    this.equipmentRehoming = const SharedAssetDisconnectBatchResult(),
   });
 
   final SharedAssetTransferTarget target;
@@ -180,7 +222,39 @@ class BulkUserTransferPlan {
   /// παλιό τμήμα.
   final Map<int, List<EquipmentModel>> equipmentToRelease;
 
+  /// Μηχανήματα που **δεν χωράνε** στον προορισμό επειδή το Είδος του δεν
+  /// επιτρέπει κατοχή (εταιρεία) — ούτε ακολουθούν ούτε αποδεσμεύονται σιωπηλά.
+  ///
+  /// Είναι η μοναδική έξοδος του κανόνα: όσο η λίστα δεν είναι κενή, η ροή
+  /// οφείλει να ρωτήσει τον χρήστη πού πάει το καθένα. Χωρίς αυτό, το «ο
+  /// εξοπλισμός ακολουθεί» χρέωνε την DataMed με δικά μας μηχανήματα.
+  final List<EquipmentModel> equipmentNeedingNewHome;
+
   final List<BulkActionExclusion> exclusions;
+
+  /// Οι απαντήσεις του χρήστη για το [equipmentNeedingNewHome]: πού πάει ή τι
+  /// διαγράφεται. Μένει κενό όσο η ερώτηση δεν έχει γίνει.
+  final SharedAssetDisconnectBatchResult equipmentRehoming;
+
+  /// Το ίδιο σχέδιο με τις απαντήσεις «πού πάει το κάθε μηχάνημα» δεμένες.
+  BulkUserTransferPlan withEquipmentRehoming(
+    SharedAssetDisconnectBatchResult batch,
+  ) {
+    return BulkUserTransferPlan(
+      target: target,
+      targetDisplayName: targetDisplayName,
+      phoneFate: phoneFate,
+      equipmentFate: equipmentFate,
+      usersToMove: usersToMove,
+      usersAlreadyInTarget: usersAlreadyInTarget,
+      phonesToRelease: phonesToRelease,
+      equipmentToFollow: equipmentToFollow,
+      equipmentToRelease: equipmentToRelease,
+      equipmentNeedingNewHome: equipmentNeedingNewHome,
+      exclusions: exclusions,
+      equipmentRehoming: batch,
+    );
+  }
 
   bool get hasWork => usersToMove.isNotEmpty;
 
@@ -212,6 +286,13 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
   required BulkTransferAssetFate phoneFate,
   required BulkTransferAssetFate equipmentFate,
   required Map<int, List<EquipmentModel>> equipmentByUserId,
+
+  /// Το Είδος του τμήματος-προορισμού — για νέο τμήμα είναι πάντα νοσοκομείο.
+  ///
+  /// Υποχρεωτικό επίτηδες: ο εξοπλισμός δεν επιτρέπεται να καταλήξει σε τμήμα
+  /// που δεν μπορεί να τον κρατά, και ο μόνος τρόπος να μην το ξεχάσει καμία
+  /// ροή είναι να μην μπορεί να χτίσει σχέδιο χωρίς να το δηλώσει.
+  required DepartmentKind targetKind,
   BulkAssetSharingInfo sharing = const BulkAssetSharingInfo(),
 }) {
   final targetId = target.departmentId;
@@ -229,6 +310,8 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
   final phonesToRelease = <int, List<String>>{};
   final equipmentToFollow = <int, List<EquipmentModel>>{};
   final equipmentToRelease = <int, List<EquipmentModel>>{};
+  final equipmentNeedingNewHome = <EquipmentModel>[];
+  final targetCanOwnEquipment = targetKind.canOwnEquipment;
   final exclusions = <BulkActionExclusion>[];
   final seenEquipmentIds = <int>{};
 
@@ -267,34 +350,41 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
       final code = (e.code ?? '').trim();
       if (code.isEmpty) continue;
       final others = sharing.equipmentOtherUserNames[eqId] ?? const [];
+      final decision = judgeEquipmentStayBehind(
+        code: code,
+        userName: userName,
+        oldDepartmentId: u.departmentId,
+        equipmentDepartmentId: e.departmentId,
+        otherOwnerNames: others,
+      );
+      // Ο συν-κάτοχος εμποδίζει ΚΑΙ τις δύο εκβάσεις: το μηχάνημα δεν είναι
+      // δικό μας ούτε να το πάρουμε ούτε να το αφήσουμε.
       if (others.isNotEmpty) {
         exclusions.add(
           BulkActionExclusion(
             isPhone: false,
             identifier: code,
-            reason:
-                'Ο εξοπλισμός $code μένει ως έχει — '
-                'τον χρησιμοποιεί και ο ${_joinNames(others)}.',
+            reason: decision.blockedReason!,
           ),
         );
         continue;
       }
-      if (equipmentFate == BulkTransferAssetFate.follow) {
+      if (!targetCanOwnEquipment) {
+        // Ό,τι κι αν απάντησε ο χρήστης για την «τύχη», το μηχάνημα δεν πάει
+        // στον προορισμό. Ζητά δική του στέγη, μία ερώτηση ανά μηχάνημα.
+        equipmentNeedingNewHome.add(e);
+      } else if (equipmentFate == BulkTransferAssetFate.follow) {
         equipmentToFollow.putIfAbsent(userId, () => []).add(e);
+      } else if (decision.releases) {
+        equipmentToRelease.putIfAbsent(userId, () => []).add(e);
       } else {
-        if (e.departmentId == null && u.departmentId == null) {
-          exclusions.add(
-            BulkActionExclusion(
-              isPhone: false,
-              identifier: code,
-              reason:
-                  'Ο εξοπλισμός $code παραμένει στον υπάλληλο $userName — '
-                  'χωρίς τμήμα-αφετηρία θα έμενε ορφανός.',
-            ),
-          );
-        } else {
-          equipmentToRelease.putIfAbsent(userId, () => []).add(e);
-        }
+        exclusions.add(
+          BulkActionExclusion(
+            isPhone: false,
+            identifier: code,
+            reason: decision.blockedReason!,
+          ),
+        );
       }
     }
   }
@@ -309,6 +399,7 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
     phonesToRelease: phonesToRelease,
     equipmentToFollow: equipmentToFollow,
     equipmentToRelease: equipmentToRelease,
+    equipmentNeedingNewHome: equipmentNeedingNewHome,
     exclusions: exclusions,
   );
 }
@@ -341,13 +432,26 @@ String bulkTransferConfirmationText(BulkUserTransferPlan plan) {
         : '\nΤα τηλέφωνα μένουν κοινόχρηστα στο παλιό τους τμήμα'
               ' (${plan.releasedPhoneCount} αριθμοί).',
   );
-  buf.write(
-    plan.equipmentFate == BulkTransferAssetFate.follow
-        ? '\nΟι εξοπλισμοί ακολουθούν στο νέο τμήμα'
-              ' (${plan.followingEquipmentCount} εξοπλισμοί).'
-        : '\nΟι εξοπλισμοί αποδεσμεύονται και μένουν στο παλιό τμήμα'
-              ' (${plan.releasedEquipmentCount} εξοπλισμοί).',
-  );
+  if (plan.equipmentNeedingNewHome.isNotEmpty) {
+    // Ο προορισμός δεν κρατά μηχανήματα: η «τύχη» που απαντήθηκε δεν ισχύει
+    // εδώ, και το κείμενο δεν πρέπει να υπόσχεται κάτι που δεν θα γίνει.
+    final count = plan.equipmentNeedingNewHome.length;
+    buf.write(
+      count == 1
+          ? '\nΤο «${plan.targetDisplayName}» δεν κρατά εξοπλισμό: '
+                '1 μηχάνημα παίρνει τον προορισμό που ορίσατε.'
+          : '\nΤο «${plan.targetDisplayName}» δεν κρατά εξοπλισμό: '
+                '$count μηχανήματα παίρνουν τους προορισμούς που ορίσατε.',
+    );
+  } else {
+    buf.write(
+      plan.equipmentFate == BulkTransferAssetFate.follow
+          ? '\nΟι εξοπλισμοί ακολουθούν στο νέο τμήμα'
+                ' (${plan.followingEquipmentCount} εξοπλισμοί).'
+          : '\nΟι εξοπλισμοί αποδεσμεύονται και μένουν στο παλιό τμήμα'
+                ' (${plan.releasedEquipmentCount} εξοπλισμοί).',
+    );
+  }
   for (final ex in plan.exclusions) {
     buf.write('\n• ${ex.reason}');
   }
@@ -673,6 +777,20 @@ Future<List<String>> _userPhonesInTxn(DatabaseExecutor txn, int userId) async {
   ];
 }
 
+Future<Map<String, dynamic>?> _equipmentRowByCodeInTxn(
+  DatabaseExecutor txn,
+  String code,
+) async {
+  final rows = await txn.query(
+    'equipment',
+    columns: ['id', 'code_equipment', 'department_id'],
+    where: 'code_equipment = ? AND ${DirectorySupport.notDeletedClause}',
+    whereArgs: [code],
+    limit: 1,
+  );
+  return rows.isEmpty ? null : rows.first;
+}
+
 Future<Map<String, dynamic>?> _equipmentRowInTxn(
   DatabaseExecutor txn,
   int equipmentId,
@@ -736,12 +854,13 @@ Future<BulkActionUndoRecord> applyBulkUserTransferInTxn(
   final equipment = EquipmentRepository(db);
   final departments = DepartmentRepository(db);
 
-  final (targetId, createdDepartmentId) = await _resolveTransferTargetInTxn(
+  final (targetId, createdByTarget) = await _resolveTransferTargetInTxn(
     txn,
     departments,
     plan.target,
   );
   if (targetId == null) return const BulkActionUndoRecord();
+  var createdDepartmentId = createdByTarget;
 
   final userDepartmentBefore = <int, int?>{};
   final userPhonesBefore = <int, List<String>>{};
@@ -807,6 +926,65 @@ Future<BulkActionUndoRecord> applyBulkUserTransferInTxn(
     }
   }
 
+  // Τα μηχανήματα που δεν χωρούσαν στον προορισμό: ο χρήστης έχει ήδη πει πού
+  // πάει το καθένα. Ο δεσμός με τον κάτοχο λύνεται πάντα — ο άνθρωπος φεύγει
+  // σε τμήμα που δεν κρατά εξοπλισμό, οπότε δεν μπορεί να μείνει χρεωμένος.
+  final softDeletedEquipmentCodes = <String>[];
+  final rehoming = plan.equipmentRehoming;
+  if (plan.equipmentNeedingNewHome.isNotEmpty) {
+    final movedUserIds = [for (final u in plan.usersToMove) u.id!];
+
+    Future<void> unlinkOwners(int equipmentId) async {
+      for (final userId in movedUserIds) {
+        final links = await txn.query(
+          'user_equipment',
+          columns: ['user_id'],
+          where: 'user_id = ? AND equipment_id = ?',
+          whereArgs: [userId, equipmentId],
+          limit: 1,
+        );
+        if (links.isEmpty) continue;
+        await equipment.unlinkUserFromEquipment(userId, equipmentId,
+            executor: txn);
+        unlinked.add(
+          BulkUserEquipmentUnlink(userId: userId, equipmentId: equipmentId),
+        );
+      }
+    }
+
+    for (final entry in rehoming.equipmentTransfers.entries) {
+      final code = entry.key.trim();
+      if (code.isEmpty) continue;
+      final eqRow = await _equipmentRowByCodeInTxn(txn, code);
+      if (eqRow == null) continue;
+      final (toId, createdNow) = await _resolveTransferTargetInTxn(
+        txn,
+        departments,
+        entry.value,
+      );
+      if (toId == null) continue;
+      createdDepartmentId ??= createdNow;
+      await unlinkOwners(eqRow['id'] as int);
+      final before = eqRow['department_id'] as int?;
+      if (before != toId) {
+        equipmentDepartmentBefore[code] = before;
+        equipmentDepartmentAfter[code] = toId;
+        await equipment.updateEquipmentDepartment(code, toId, executor: txn);
+      }
+    }
+
+    for (final raw in rehoming.equipmentToDelete) {
+      final code = raw.trim();
+      if (code.isEmpty) continue;
+      final eqRow = await _equipmentRowByCodeInTxn(txn, code);
+      if (eqRow == null) continue;
+      final eqId = eqRow['id'] as int;
+      await unlinkOwners(eqId);
+      await equipment.deleteEquipments([eqId], executor: txn);
+      softDeletedEquipmentCodes.add(code);
+    }
+  }
+
   return BulkActionUndoRecord(
     userDepartmentBefore: userDepartmentBefore,
     userPhonesBefore: userPhonesBefore,
@@ -814,6 +992,7 @@ Future<BulkActionUndoRecord> applyBulkUserTransferInTxn(
     equipmentDepartmentBefore: equipmentDepartmentBefore,
     equipmentDepartmentAfter: equipmentDepartmentAfter,
     unlinkedUserEquipment: unlinked,
+    softDeletedEquipmentCodes: softDeletedEquipmentCodes,
     createdDepartmentId: createdDepartmentId,
   );
 }

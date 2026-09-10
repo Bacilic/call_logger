@@ -5,6 +5,7 @@ import '../../../../core/database/database_helper.dart';
 import 'directory_conflict_dialog.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/phone_repository.dart';
+import '../../../../core/directory/department_change_assets.dart';
 import '../../../../core/directory/phone_department_policy.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/save_confirmation_summary.dart';
@@ -12,6 +13,7 @@ import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../services/shared_asset_disconnect_apply.dart';
@@ -195,6 +197,12 @@ class UserFormSave {
       if (!host.mounted) return;
       if (phonesStayingBehind == null) return;
 
+      final equipmentStayingBehind = cloneAsNewEmployee
+          ? const <EquipmentModel>[]
+          : await host.phonePolicy.confirmEquipmentFateOnDepartmentChange();
+      if (!host.mounted) return;
+      if (equipmentStayingBehind == null) return;
+
       final editingUserId =
           host.isEdit && !cloneAsNewEmployee && !host.widget.isClone
           ? host.widget.initialUser?.id
@@ -212,6 +220,7 @@ class UserFormSave {
         phoneDisconnectBatch: phoneDisconnectBatch,
         phoneConflictBatch: phoneConflictBatch,
         phonesStayingBehind: phonesStayingBehind,
+        equipmentStayingBehind: equipmentStayingBehind,
       );
     } on PhoneDepartmentPolicyException catch (e) {
       if (!host.mounted) return;
@@ -259,6 +268,8 @@ class UserFormSave {
       context: host.context,
       headerLabel: 'Εκχώρηση του «${host.buildUserDisplayName()}» σε τμήμα',
       availableDepartments: departments,
+      // Ο υπάλληλος, όχι ο εξοπλισμός του: η εταιρεία είναι θεμιτό τμήμα.
+      involvesEquipment: false,
     );
     if (!host.mounted || target == null) return false;
 
@@ -286,6 +297,7 @@ class UserFormSave {
     SharedAssetDisconnectBatchResult? phoneDisconnectBatch,
     UserPhoneConflictBatchResult? phoneConflictBatch,
     Set<String> phonesStayingBehind = const {},
+    List<EquipmentModel> equipmentStayingBehind = const [],
   }) async {
     final db = await DatabaseHelper.instance.database;
     final dir = DepartmentRepository(db);
@@ -304,14 +316,19 @@ class UserFormSave {
         )
         .toList();
 
-    // Ό,τι μένει πίσω γίνεται κοινόχρηστο του τμήματος που αφήνει ο
-    // υπάλληλος. Η προσθήκη είναι αθόρυβη όταν ο αριθμός είναι ήδη εκεί.
+    // Ό,τι μένει πίσω το χειρίζεται η κοινή εκτέλεση — την ίδια καλεί και η
+    // γρήγορη προσθήκη της κλήσης.
     final oldDepartmentId = host.widget.initialUser?.departmentId;
-    if (phonesStayingBehind.isNotEmpty && oldDepartmentId != null) {
-      final repo = PhoneRepository(db);
-      for (final phone in phonesStayingBehind) {
-        await repo.addDepartmentDirectPhone(oldDepartmentId, phone);
-      }
+    final editingId = host.widget.initialUser?.id;
+    if (editingId != null) {
+      await applyAssetsStayingBehind(
+        db: db,
+        userId: editingId,
+        oldDepartmentId: oldDepartmentId,
+        phones: phonesStayingBehind,
+        equipment: equipmentStayingBehind,
+        currentPhones: host.widget.initialUser?.phones ?? const [],
+      );
     }
 
     if (phoneConflictBatch != null && !phoneConflictBatch.isEmpty) {
@@ -322,7 +339,8 @@ class UserFormSave {
       );
     }
     if ((phoneConflictBatch != null && !phoneConflictBatch.isEmpty) ||
-        phonesStayingBehind.isNotEmpty) {
+        phonesStayingBehind.isNotEmpty ||
+        equipmentStayingBehind.isNotEmpty) {
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
     }

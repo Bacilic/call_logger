@@ -7,21 +7,49 @@
 
 import 'asset_disconnect_models.dart';
 
+/// «κοινόχρηστου τηλεφώνου», «προσωπικού εξοπλισμού» — ο προσδιορισμός που
+/// μοιράζονται οι τίτλοι ολόκληρης της ροής.
+///
+/// Γράφεται μία φορά επίτηδες: ο διάλογος της αποδέσμευσης και εκείνος της
+/// μεταφοράς ανοίγουν ο ένας μετά τον άλλο, και δύο χωριστές λίστες θα
+/// απέκλιναν — ο χρήστης θα διάβαζε «προσωπικού» και αμέσως μετά «κοινόχρηστου»
+/// για το ίδιο μηχάνημα.
+String assetKindPhrase({
+  required bool isPhone,
+  required SharedAssetDisconnectMode mode,
+}) {
+  final isPersonal = isPhone
+      ? mode == SharedAssetDisconnectMode.personalPhone
+      : mode == SharedAssetDisconnectMode.personalEquipment;
+  final owner = isPersonal ? 'προσωπικού' : 'κοινόχρηστου';
+  return '$owner ${isPhone ? 'τηλεφώνου' : 'εξοπλισμού'}';
+}
+
 /// Τίτλος του κύριου διαλόγου: κοινόχρηστο ή προσωπικό στοιχείο.
 String disconnectDialogTitle({
   required bool isPhone,
   required SharedAssetDisconnectMode mode,
 }) {
-  if (isPhone && mode == SharedAssetDisconnectMode.personalPhone) {
-    return 'Αποδέσμευση προσωπικού τηλεφώνου';
-  }
-  if (!isPhone && mode == SharedAssetDisconnectMode.personalEquipment) {
-    return 'Αποδέσμευση προσωπικού εξοπλισμού';
-  }
-  return isPhone
-      ? 'Αποδέσμευση κοινόχρηστου τηλεφώνου'
-      : 'Αποδέσμευση κοινόχρηστου εξοπλισμού';
+  return 'Αποδέσμευση ${assetKindPhrase(isPhone: isPhone, mode: mode)}';
 }
+
+/// Τίτλος του διαλόγου προορισμού για ΕΝΑ στοιχείο.
+///
+/// Ακολουθεί την περίπτωση, όπως ο τίτλος της αποδέσμευσης: το προσωπικό
+/// μηχάνημα ενός υπαλλήλου δεν είναι «κοινόχρηστο» επειδή έτυχε να περάσει από
+/// τον ίδιο επιλογέα τμήματος.
+String transferDialogTitle({
+  required bool isPhone,
+  required SharedAssetDisconnectMode mode,
+}) {
+  return 'Μεταφορά ${assetKindPhrase(isPhone: isPhone, mode: mode)}';
+}
+
+/// Τίτλος του διαλόγου προορισμού για ΠΟΛΛΑ στοιχεία.
+///
+/// Ουδέτερος επίτηδες: ο ίδιος επιλογέας μεταφέρει τηλέφωνα, μηχανήματα και
+/// **υπαλλήλους**, και η επικεφαλίδα από κάτω λέει ήδη τι μετακινείται.
+const String bulkTransferDialogTitle = 'Μεταφορά σε τμήμα';
 
 /// Σώμα του κύριου διαλόγου αποδέσμευσης.
 String disconnectDialogContent({

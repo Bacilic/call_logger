@@ -14,6 +14,7 @@ import '../../../core/widgets/resizable_text_area.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
 import '../../calls/models/call_refined_source.dart';
+import '../../calls/layout/calls_field_groups_provider.dart';
 import '../../calls/provider/smart_entity_selector_provider.dart';
 import '../../calls/screens/widgets/smart_entity_selector_widget.dart';
 import '../../tasks/models/task.dart';
@@ -28,12 +29,17 @@ import '../providers/lansweeper_sync_provider.dart';
 import '../services/lansweeper_submission_warnings.dart';
 import 'lansweeper/lansweeper_edit_warning.dart';
 
+/// Η επεξεργασία παλιάς κλήσης δανείζεται τα πεδία καλούντα της οθόνης
+/// Κλήσεων, γι' αυτό ανοίγει με **δική της** κατάσταση οθόνης: διορθώνοντας μια
+/// περσινή κλήση δεν πειράζεις εκείνη που έχεις ανοιχτή τώρα.
 Future<void> showCallEditDialog(BuildContext context, {required int callId}) {
   return showDialog<void>(
     context: context,
     // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
     barrierDismissible: false,
-    builder: (context) => _CallEditDialog(callId: callId),
+    builder: (context) => IsolatedCallsScreenState(
+      child: _CallEditDialog(callId: callId),
+    ),
   );
 }
 

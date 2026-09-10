@@ -57,12 +57,7 @@ class _BulkEquipmentEditDialogState
 
   List<DepartmentModel> _activeDepartments() {
     return LookupService.instance.departments
-        .where(
-          (d) =>
-              !d.isDeleted &&
-              d.name.trim().isNotEmpty &&
-              d.kind.canOwnEquipment,
-        )
+        .where((d) => !d.isDeleted && d.name.trim().isNotEmpty)
         .toList();
   }
 
@@ -99,6 +94,7 @@ class _BulkEquipmentEditDialogState
           ? 'Μεταφορά 1 εξοπλισμού σε τμήμα'
           : 'Μεταφορά ${_rows.length} εξοπλισμών σε τμήμα',
       availableDepartments: _activeDepartments(),
+      involvesEquipment: true,
     );
     if (target == null || !mounted) return;
 
@@ -399,6 +395,7 @@ class _BulkEquipmentEditDialogState
           context: context,
           headerLabel: 'Μεταφορά εξοπλισμών σε τμήμα',
           availableDepartments: _activeDepartments(),
+          involvesEquipment: true,
         );
         if (target == null || !mounted) return;
         transferTarget = target;

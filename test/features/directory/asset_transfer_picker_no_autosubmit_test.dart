@@ -35,6 +35,7 @@ void main() {
                       context: context,
                       headerLabel: 'Μεταφορά δοκιμής',
                       availableDepartments: departments,
+                      involvesEquipment: false,
                     );
                     completed = true;
                   },
@@ -49,7 +50,7 @@ void main() {
       await tester.tap(find.text('Άνοιγμα'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Μεταφορά κοινόχρηστου'), findsOneWidget);
+      expect(find.text('Μεταφορά σε τμήμα'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), 'Πληρ');
       await tester.pump();
@@ -68,7 +69,7 @@ void main() {
       // (α) Η επιλογή δεν κλείνει τον διάλογο ούτε επιστρέφει αποτέλεσμα.
       expect(completed, isFalse);
       expect(result, isNull);
-      expect(find.text('Μεταφορά κοινόχρηστου'), findsOneWidget);
+      expect(find.text('Μεταφορά σε τμήμα'), findsOneWidget);
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         targetDeptName,
@@ -82,7 +83,7 @@ void main() {
       expect(result, isNotNull);
       expect(result!.departmentId, targetDeptId);
       expect(result!.newDepartmentName, isNull);
-      expect(find.text('Μεταφορά κοινόχρηστου'), findsNothing);
+      expect(find.text('Μεταφορά σε τμήμα'), findsNothing);
     },
   );
 }
