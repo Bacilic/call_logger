@@ -8,6 +8,7 @@ import '../../features/directory/providers/category_directory_provider.dart';
 import '../../features/directory/providers/department_directory_provider.dart';
 import '../../features/directory/providers/directory_cache_refresh.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
+import '../services/crash_log_service.dart';
 import '../widgets/modal_route_tracker.dart';
 import 'database_helper.dart';
 import 'database_reachability.dart';
@@ -57,6 +58,27 @@ Future<void> refreshSharedDatabaseViews(Ref ref) async {
   refreshAfterCallMutation(ref);
 }
 
+/// Ξαναφορτώνει τις κοινές όψεις **χωρίς ποτέ να ρίξει την εφαρμογή**.
+///
+/// Το ξαναφόρτωμα είναι **νοικοκυριό**: τρέχει μόνο του, χωρίς ο χειριστής να
+/// το ζητήσει, και η αποτυχία του δεν είναι δική του υπόθεση. Αν η βάση δεν
+/// απαντά, το λέει ήδη η κόκκινη λωρίδα του φύλακα· ένας διάλογος «Άγνωστο
+/// σφάλμα εφαρμογής» δεν προσθέτει τίποτα και διακόπτει τη δουλειά.
+///
+/// **Μία πόρτα, όχι δύο.** Ο φρουρός αλλαγών τύλιγε την κλήση σε `try/catch`,
+/// η επαναφόρτωση στην επιστροφή του δικτύου όχι — και η ίδια συνάρτηση ήταν
+/// ασφαλής από τη μία μεριά και θανατηφόρα από την άλλη. Την ασφάλεια την
+/// κρατά πλέον η ίδια, ώστε κανένας καλών να μην μπορεί να την ξεχάσει.
+///
+/// Το σφάλμα δεν χάνεται: γράφεται στο ημερολόγιο ως **μη μοιραίο**.
+Future<void> refreshSharedDatabaseViewsSafely(Ref ref) async {
+  try {
+    await refreshSharedDatabaseViews(ref);
+  } catch (error, stack) {
+    CrashLogService.instanceOrNull?.logError(error, stack, fatal: false);
+  }
+}
+
 /// Ο φρουρός της κοινόχρηστης βάσης για αυτή τη συνεδρία.
 ///
 /// Στήνεται από το κέλυφος (`main_shell`) ώστε να ζει όσο και η εφαρμογή: ο
@@ -77,7 +99,7 @@ final sharedDatabaseChangeWatcherProvider =
         next,
       ) {
         if (!isDatabaseReturn(previous, next)) return;
-        unawaited(refreshSharedDatabaseViews(ref));
+        unawaited(refreshSharedDatabaseViewsSafely(ref));
       });
 
       final tracker = appModalRouteTracker;
@@ -85,7 +107,7 @@ final sharedDatabaseChangeWatcherProvider =
         interval: kSharedDatabaseCheckInterval,
         readVersion: DatabaseHelper.instance.readDataVersion,
         isBusy: () => tracker.isUserBusy,
-        onChanged: () => refreshSharedDatabaseViews(ref),
+        onChanged: () => refreshSharedDatabaseViewsSafely(ref),
       );
 
       // Στα widget τεστ ο χρόνος είναι πλαστός και τρέχει κατά λεπτά μέσα σε
