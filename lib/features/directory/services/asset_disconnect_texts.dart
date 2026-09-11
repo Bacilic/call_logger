@@ -5,6 +5,7 @@
 // Οι φράσεις της συνεδρίας (μετρητής βημάτων, γραμμή στοιχείου, ακύρωση) ζουν
 // στο asset_disconnect_session.dart, δίπλα στην κατάσταση που περιγράφουν.
 
+import '../models/department_kind.dart';
 import 'asset_disconnect_models.dart';
 
 /// «κοινόχρηστου τηλεφώνου», «προσωπικού εξοπλισμού» — ο προσδιορισμός που
@@ -58,6 +59,7 @@ String disconnectDialogContent({
   required SharedAssetDisconnectMode mode,
   String? sourceDepartmentName,
   String? personalPhoneUserDisplayName,
+  DepartmentKind sourceDepartmentKind = DepartmentKind.hospital,
 }) {
   if (isPhone && mode == SharedAssetDisconnectMode.personalPhone) {
     final userPart = _personalEmployeeQuotedLabel(
@@ -74,9 +76,11 @@ String disconnectDialogContent({
     return 'Ο εξοπλισμός $value πρόκειται να αποσυνδεθεί από τον υπάλληλο$userPart.\n\nΕπιλέξτε ενέργεια:';
   }
   final dept = sourceDepartmentName?.trim() ?? '';
+  // Η καρτέλα ονομάζεται με το Είδος της: η DataMed δεν είναι «τμήμα».
+  final from = sourceDepartmentKind.entityWithArticleAccusative;
   return isPhone
-      ? 'Το κοινόχρηστο τηλέφωνο $value πρόκειται να αποδεσμευτεί από το τμήμα «$dept».\n\nΕπιλέξτε ενέργεια:'
-      : 'Ο κοινόχρηστος εξοπλισμός $value πρόκειται να αποδεσμευτεί από το τμήμα «$dept».\n\nΕπιλέξτε ενέργεια:';
+      ? 'Το κοινόχρηστο τηλέφωνο $value πρόκειται να αποδεσμευτεί από $from «$dept».\n\nΕπιλέξτε ενέργεια:'
+      : 'Ο κοινόχρηστος εξοπλισμός $value πρόκειται να αποδεσμευτεί από $from «$dept».\n\nΕπιλέξτε ενέργεια:';
 }
 
 /// Ετικέτα της επιλογής «παραμονή», με το όνομα του τμήματος όταν υπάρχει.

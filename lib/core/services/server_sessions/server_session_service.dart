@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'admin_share.dart';
 import 'server_session_messages.dart';
 import 'server_session_models.dart';
 import 'windows_session_ffi.dart';
@@ -47,16 +48,17 @@ class ServerSessionService {
         () => _enumerateInIsolate(h, u, adminPassword),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return ServerSessionsResult.failure(
-          raw.connectFailed
+          raw.result.connectFailed
               ? ServerSessionMessages.forConnect(
-                  code: raw.code,
+                  code: raw.result.code,
                   host: h,
                   account: u,
+                  staleShare: raw.staleShare,
                 )
               : ServerSessionMessages.forEnumerate(
-                  code: raw.code,
+                  code: raw.result.code,
                   host: h,
                   adminUser: u,
                   staleShare: raw.staleShare,
@@ -64,7 +66,7 @@ class ServerSessionService {
         );
       }
 
-      final sessions = raw.sessions
+      final sessions = raw.result.sessions
           .map(
             (s) => ServerSession(
               sessionId: s.sessionId,
@@ -115,21 +117,22 @@ class ServerSessionService {
         () => _logoffInIsolate(h, u, adminPassword, sessionId),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return SessionLogoffResult.failure(
-          raw.connectFailed
+          raw.result.connectFailed
               ? ServerSessionMessages.forConnect(
-                  code: raw.code,
+                  code: raw.result.code,
                   host: h,
                   account: u,
+                  staleShare: raw.staleShare,
                 )
               : ServerSessionMessages.forLogoff(
-                  code: raw.code,
+                  code: raw.result.code,
                   host: h,
                   adminUser: u,
                   staleShare: raw.staleShare,
                 ),
-          code: raw.code,
+          code: raw.result.code,
         );
       }
       return const SessionLogoffResult.success();
@@ -172,21 +175,22 @@ class ServerSessionService {
         () => _disconnectInIsolate(h, u, adminPassword, sessionId),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return SessionLogoffResult.failure(
-          raw.connectFailed
+          raw.result.connectFailed
               ? ServerSessionMessages.forConnect(
-                  code: raw.code,
+                  code: raw.result.code,
                   host: h,
                   account: u,
+                  staleShare: raw.staleShare,
                 )
               : ServerSessionMessages.forDisconnect(
-                  code: raw.code,
+                  code: raw.result.code,
                   host: h,
                   adminUser: u,
                   staleShare: raw.staleShare,
                 ),
-          code: raw.code,
+          code: raw.result.code,
         );
       }
       return const SessionLogoffResult.success();
@@ -236,145 +240,107 @@ typedef _IsolateResult = ({
   bool connectFailed,
   int code,
   List<RawServerSession> sessions,
-
-  /// Υπήρχε παλιά σύνδεση προς τον διακομιστή που δεν έκλεισε.
-  ///
-  /// Ταξιδεύει ως εδώ γιατί εξηγεί μια άρνηση πρόσβασης που αλλιώς θα φαινόταν
-  /// σφάλμα του λογαριασμού: η εντολή ταξίδεψε με τα παλιά στοιχεία.
-  bool staleShare,
 });
 
-_IsolateResult _enumerateInIsolate(String host, String user, String password) {
-  final rc = WindowsSessionFfi.connectIpcShare(
+WithAdminShare<_IsolateResult> _enumerateInIsolate(
+  String host,
+  String user,
+  String password,
+) {
+  return AdminShare.run<_IsolateResult>(
     host: host,
     user: user,
     password: password,
+    body: () {
+      final result = WindowsSessionFfi.enumerateSessions(host);
+      return (
+        ok: result.ok,
+        connectFailed: false,
+        code: result.code,
+        sessions: result.sessions,
+      );
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, sessions: const []),
   );
-  if (rc.code != 0) {
-    WindowsSessionFfi.disconnectShare(host);
-    return (
-      ok: false,
-      connectFailed: true,
-      code: rc.code,
-      sessions: const [],
-      staleShare: ServerSessionMessages.staleShareSurvived(rc.staleShareCode),
-    );
-  }
-  final stale = ServerSessionMessages.staleShareSurvived(rc.staleShareCode);
-  try {
-    final result = WindowsSessionFfi.enumerateSessions(host);
-    return (
-      ok: result.ok,
-      connectFailed: false,
-      code: result.code,
-      sessions: result.sessions,
-      staleShare: stale,
-    );
-  } finally {
-    WindowsSessionFfi.disconnectShare(host);
-  }
 }
 
-_IsolateResult _logoffInIsolate(
+WithAdminShare<_IsolateResult> _logoffInIsolate(
   String host,
   String user,
   String password,
   int sessionId,
 ) {
-  final rc = WindowsSessionFfi.connectIpcShare(
+  return AdminShare.run<_IsolateResult>(
     host: host,
     user: user,
     password: password,
-  );
-  if (rc.code != 0) {
-    WindowsSessionFfi.disconnectShare(host);
-    return (
-      ok: false,
-      connectFailed: true,
-      code: rc.code,
-      sessions: const [],
-      staleShare: ServerSessionMessages.staleShareSurvived(rc.staleShareCode),
-    );
-  }
-  final stale = ServerSessionMessages.staleShareSurvived(rc.staleShareCode);
-  try {
-    final result = WindowsSessionFfi.logoffSession(
-      host: host,
-      sessionId: sessionId,
-    );
-    if (!result.ok) {
-      return (
-        ok: false,
-        connectFailed: false,
-        code: result.code,
-        sessions: const [],
-        staleShare: stale,
+    body: () {
+      final result = WindowsSessionFfi.logoffSession(
+        host: host,
+        sessionId: sessionId,
       );
-    }
-
-    // Επαλήθευση: η συνεδρία πρέπει να έχει φύγει από τη λίστα. Το
-    // WTSLogoffSession επιστρέφει επιτυχία μόλις δεχτεί την εντολή.
-    final after = WindowsSessionFfi.enumerateSessions(host);
-    if (after.ok && after.sessions.any((s) => s.sessionId == sessionId)) {
-      final still = after.sessions.firstWhere((s) => s.sessionId == sessionId);
-      // Κατάσταση 4 = αποσυνδεδεμένη: το κλείσιμο ξεκίνησε αλλά δεν τελείωσε.
-      if (still.state != 4) {
+      if (!result.ok) {
         return (
           ok: false,
           connectFailed: false,
-          code: ServerSessionMessages.logoffNotVerified,
-          sessions: const [],
-          staleShare: stale,
+          code: result.code,
+          sessions: const <RawServerSession>[],
         );
       }
-    }
-    return (
-      ok: true,
-      connectFailed: false,
-      code: 0,
-      sessions: const [],
-      staleShare: stale,
-    );
-  } finally {
-    WindowsSessionFfi.disconnectShare(host);
-  }
+
+      // Επαλήθευση: η συνεδρία πρέπει να έχει φύγει από τη λίστα. Το
+      // WTSLogoffSession επιστρέφει επιτυχία μόλις δεχτεί την εντολή.
+      final after = WindowsSessionFfi.enumerateSessions(host);
+      if (after.ok && after.sessions.any((s) => s.sessionId == sessionId)) {
+        final still = after.sessions.firstWhere(
+          (s) => s.sessionId == sessionId,
+        );
+        // Κατάσταση 4 = αποσυνδεδεμένη: το κλείσιμο ξεκίνησε αλλά δεν τελείωσε.
+        if (still.state != 4) {
+          return (
+            ok: false,
+            connectFailed: false,
+            code: ServerSessionMessages.logoffNotVerified,
+            sessions: const <RawServerSession>[],
+          );
+        }
+      }
+      return (
+        ok: true,
+        connectFailed: false,
+        code: 0,
+        sessions: const <RawServerSession>[],
+      );
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, sessions: const []),
+  );
 }
 
-_IsolateResult _disconnectInIsolate(
+WithAdminShare<_IsolateResult> _disconnectInIsolate(
   String host,
   String user,
   String password,
   int sessionId,
 ) {
-  final rc = WindowsSessionFfi.connectIpcShare(
+  return AdminShare.run<_IsolateResult>(
     host: host,
     user: user,
     password: password,
+    body: () {
+      final result = WindowsSessionFfi.disconnectSession(
+        host: host,
+        sessionId: sessionId,
+      );
+      return (
+        ok: result.ok,
+        connectFailed: false,
+        code: result.code,
+        sessions: const <RawServerSession>[],
+      );
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, sessions: const []),
   );
-  if (rc.code != 0) {
-    WindowsSessionFfi.disconnectShare(host);
-    return (
-      ok: false,
-      connectFailed: true,
-      code: rc.code,
-      sessions: const [],
-      staleShare: ServerSessionMessages.staleShareSurvived(rc.staleShareCode),
-    );
-  }
-  final stale = ServerSessionMessages.staleShareSurvived(rc.staleShareCode);
-  try {
-    final result = WindowsSessionFfi.disconnectSession(
-      host: host,
-      sessionId: sessionId,
-    );
-    return (
-      ok: result.ok,
-      connectFailed: false,
-      code: result.code,
-      sessions: const [],
-      staleShare: stale,
-    );
-  } finally {
-    WindowsSessionFfi.disconnectShare(host);
-  }
 }

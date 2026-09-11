@@ -12,6 +12,8 @@ import 'dart:io' show sleep;
 
 import 'package:ffi/ffi.dart';
 
+import 'server_printer_messages.dart';
+
 // --- Δομές -----------------------------------------------------------------
 
 /// `PRINTER_INFO_2W`. Δηλώνονται **όλα** τα πεδία, ακόμη και όσα δεν
@@ -694,7 +696,7 @@ abstract final class WindowsPrinterFfi {
           if (status.ref.currentState == _serviceStopped) break;
         }
         if (status.ref.currentState != _serviceStopped) {
-          return (ok: false, code: kServiceStopTimedOut);
+          return (ok: false, code: ServerPrinterMessages.serviceStopTimedOut);
         }
       }
 
@@ -713,7 +715,7 @@ abstract final class WindowsPrinterFfi {
           return (ok: true, code: 0);
         }
       }
-      return (ok: false, code: kServiceStartTimedOut);
+      return (ok: false, code: ServerPrinterMessages.serviceStartTimedOut);
     } finally {
       if (service != 0) _closeServiceHandle(service);
       if (scm != 0) _closeServiceHandle(scm);
@@ -830,7 +832,3 @@ abstract final class WindowsPrinterFfi {
   static String _readUtf16(Pointer<Utf16> p) =>
       p == nullptr ? '' : p.toDartString().trim();
 }
-
-/// Δικοί μας κωδικοί, αρνητικοί ώστε να μη συγκρούονται με των Windows.
-const int kServiceStopTimedOut = -10;
-const int kServiceStartTimedOut = -11;

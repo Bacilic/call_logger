@@ -81,6 +81,35 @@ void main() {
     return svc;
   }
 
+  test('εταιρεία: ούτε ο ΙΔΙΟΣ ο καλών με δικό του αναγνωριστικό', () async {
+    // Ο Δαμωράκης της DataMed έχει συμπληρωμένο αναγνωριστικό στην καρτέλα
+    // του. Ο κανόνας λέει «ούτε η εταιρεία ούτε οι άνθρωποί της» — αν περνούσε
+    // από εδώ, το ticket θα έφευγε με αιτούντα που το Lansweeper δεν ξέρει.
+    // Ο καλών ζει στην κοινή βάση του αρχείου: φεύγει μαζί με το τεστ,
+    // αλλιώς εμφανίζεται ως «συνάδελφος» στα επόμενα.
+    addTearDown(() async => db.delete('users'));
+    await db.insert('departments', {
+      'id': _kPathologyId,
+      'name': _kPathologyName,
+      'name_key': _kPathologyName.toLowerCase(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    final callerId = await db.insert('users', {
+      'last_name': 'Δαμωράκης',
+      'first_name': 'Γιώργος',
+      'department_id': _kPathologyId,
+      'lansweeper_username': r'gnk\g.damorakis',
+      'is_deleted': 0,
+    });
+
+    final options = await resolveLansweeperRequesterForCalls(
+      userRepository: users,
+      lookup: lookupWith(null, kind: DepartmentKind.company),
+      calls: [_call(callerId: callerId, callerText: 'Γιώργος Δαμωράκης')],
+    );
+
+    expect(options.selectedUsername, isNull);
+  });
+
   test('εταιρεία με λογαριασμούς: δεν προτείνεται ποτέ ως αιτών', () async {
     final options = await resolveLansweeperRequesterForCalls(
       userRepository: users,

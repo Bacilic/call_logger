@@ -288,11 +288,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       ),
       // Γράφοντας «Εταιρεία» στην αναζήτηση του Καταλόγου βγαίνουν όλοι οι
       // εξωτερικοί συνεργάτες μαζί, χωρίς να χρειάζεται νέα στήλη.
-      CatalogSearchFact(
-        label: 'Είδος',
-        text: d.kind.label,
-        isVisible: false,
-      ),
+      CatalogSearchFact(label: 'Είδος', text: d.kind.label, isVisible: false),
       // Αναγνωριστικά ΚΑΙ ονομασίες μαζί: το «docpath» βρίσκει το τμήμα μέσα
       // από το «gnk\docpath1» χωρίς να χρειάζεται ο τομέας, και το «Γιατρός
       // Παθολογικής» το βρίσκει από την ονομασία που δώσατε εσείς.
@@ -534,22 +530,24 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   }
 
   /// Επαναφορά soft-deleted τμήματος με ακριβές όνομα + προαιρετική ενημέρωση πεδίων από τη φόρμα.
-  Future<void> restoreDepartmentByName(
+  Future<int> restoreDepartmentByName(
     String name, {
     String? building,
     String? color,
     String? notes,
   }) async {
     final dbRestoreName = await DatabaseHelper.instance.database;
-    await DepartmentRepository(dbRestoreName).restoreDepartmentByName(
-      name,
-      building: building,
-      color: color,
-      notes: notes,
-    );
+    final restoredId = await DepartmentRepository(dbRestoreName)
+        .restoreDepartmentByName(
+          name,
+          building: building,
+          color: color,
+          notes: notes,
+        );
     await _refreshLookupCache();
     await loadDepartments();
     await refreshDirectoryCaches(ref, users: true, equipment: true);
+    return restoredId;
   }
 
   /// Ό,τι γράφει η καρτέλα τμήματος, σε ΜΙΑ διατύπωση.

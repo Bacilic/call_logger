@@ -436,6 +436,8 @@ void main() {
       String? firstName,
       List<String> phones = const [],
       bool isDeleted = false,
+      int? departmentId,
+      String? lansweeperUsername,
     }) {
       return UserModel(
         id: id,
@@ -443,8 +445,41 @@ void main() {
         firstName: firstName,
         phones: phones,
         isDeleted: isDeleted,
+        departmentId: departmentId,
+        lansweeperUsername: lansweeperUsername,
       );
     }
+
+    test('εταιρεία: ο Έλεγχος δεν ζητά διόρθωση σε ό,τι δεν διαβάζεται', () {
+      // Το Lansweeper αναγνωρίζει μόνο τμήματα του νοσοκομείου. Το πεδίο δεν
+      // εμφανίζεται καν στην καρτέλα εταιρείας, οπότε ένα εύρημα εδώ θα ήταν
+      // αδιέξοδο: ζητά διόρθωση που ο χρήστης δεν μπορεί να κάνει.
+      final findings = service.scan(
+        users: [
+          user(
+            id: 3,
+            lastName: 'Δαμωράκης',
+            firstName: 'Γιώργος',
+            departmentId: 11,
+            lansweeperUsername: r'gnk\',
+          ),
+        ],
+        departments: [
+          DepartmentModel(
+            id: 11,
+            name: 'DataMed',
+            kind: DepartmentKind.company,
+            lansweeperUsernames: r'Α = gnk\bio1, path@ gnk.g',
+          ),
+        ],
+        equipment: const [],
+      );
+
+      expect(
+        findings.where((f) => f.fieldLabel.contains('Lansweeper')),
+        isEmpty,
+      );
+    });
 
     test('καθαρά δεδομένα δίνουν κενή λίστα ευρημάτων', () {
       final findings = service.scan(
@@ -1730,9 +1765,7 @@ void main() {
           .scan(
             users: const [],
             departments: [dataMed],
-            equipment: [
-              EquipmentModel(id: 9, code: '2506', departmentId: 70),
-            ],
+            equipment: [EquipmentModel(id: 9, code: '2506', departmentId: 70)],
           )
           .where((f) => f.type == CatalogFindingType.equipmentInCompany)
           .toList();
@@ -1753,9 +1786,7 @@ void main() {
           .scan(
             users: const [],
             departments: [kentroYgeias],
-            equipment: [
-              EquipmentModel(id: 9, code: '2506', departmentId: 71),
-            ],
+            equipment: [EquipmentModel(id: 9, code: '2506', departmentId: 71)],
           )
           .where((f) => f.type == CatalogFindingType.equipmentInCompany)
           .toList();
@@ -1778,9 +1809,7 @@ void main() {
               dataMed,
               DepartmentModel(id: 12, name: 'Ακτινολογικό'),
             ],
-            equipment: [
-              EquipmentModel(id: 9, code: '2506', departmentId: 12),
-            ],
+            equipment: [EquipmentModel(id: 9, code: '2506', departmentId: 12)],
             ownerUserIdsByEquipmentId: const {
               9: [4],
             },
@@ -1801,9 +1830,7 @@ void main() {
           .scan(
             users: const [],
             departments: [dataMed],
-            equipment: [
-              EquipmentModel(id: 9, code: '2506', departmentId: 70),
-            ],
+            equipment: [EquipmentModel(id: 9, code: '2506', departmentId: 70)],
           )
           .where((f) => f.type == CatalogFindingType.equipmentInCompany)
           .toList();
@@ -1834,9 +1861,7 @@ void main() {
           .scan(
             users: const [],
             departments: [DepartmentModel(id: 12, name: 'Ακτινολογικό')],
-            equipment: [
-              EquipmentModel(id: 9, code: '2506', departmentId: 12),
-            ],
+            equipment: [EquipmentModel(id: 9, code: '2506', departmentId: 12)],
           )
           .where((f) => f.fieldLabel == 'Τμήμα')
           .toList();
@@ -1863,9 +1888,7 @@ void main() {
     test('κενό τμήμα αλλά κάτοχος με τμήμα: κανένα εύρημα', () {
       final findings = service
           .scan(
-            users: [
-              UserModel(id: 4, lastName: 'Ψαρρά', departmentId: 12),
-            ],
+            users: [UserModel(id: 4, lastName: 'Ψαρρά', departmentId: 12)],
             departments: [DepartmentModel(id: 12, name: 'Ακτινολογικό')],
             equipment: [EquipmentModel(id: 9, code: '2506')],
             ownerUserIdsByEquipmentId: const {
@@ -1930,19 +1953,26 @@ void main() {
           .toList();
     }
 
-    test('ίδιο αναγνωριστικό AnyDesk σε δύο μηχανήματα: μία κάρτα με τα δύο', () {
-      final findings = scanWith([
-        EquipmentModel(id: 1, code: '2506', remoteParams: const {'3': '123456789'}),
-        EquipmentModel(id: 2, code: '3604', remoteParams: {'3': '123456789'}),
-      ]);
+    test(
+      'ίδιο αναγνωριστικό AnyDesk σε δύο μηχανήματα: μία κάρτα με τα δύο',
+      () {
+        final findings = scanWith([
+          EquipmentModel(
+            id: 1,
+            code: '2506',
+            remoteParams: const {'3': '123456789'},
+          ),
+          EquipmentModel(id: 2, code: '3604', remoteParams: {'3': '123456789'}),
+        ]);
 
-      expect(findings, hasLength(1));
-      expect(
-        findings.single.message,
-        'Το «AnyDesk» δείχνει την ίδια τιμή «123456789» σε 2 μηχανήματα',
-      );
-      expect(findings.single.records.map((r) => r.entityId), [1, 2]);
-    });
+        expect(findings, hasLength(1));
+        expect(
+          findings.single.message,
+          'Το «AnyDesk» δείχνει την ίδια τιμή «123456789» σε 2 μηχανήματα',
+        );
+        expect(findings.single.records.map((r) => r.entityId), [1, 2]);
+      },
+    );
 
     test('η ΑΠΟΜΑΚΡΥΣΜΕΝΗ ΕΠΙΦΑΝΕΙΑ των Windows εξαιρείται', () {
       final findings = scanWith([
@@ -1964,7 +1994,11 @@ void main() {
 
     test('ιστορική τιμή δεν είναι ενεργός στόχος', () {
       final findings = scanWith([
-        EquipmentModel(id: 1, code: '2506', remoteParams: const {'3': '123456789'}),
+        EquipmentModel(
+          id: 1,
+          code: '2506',
+          remoteParams: const {'3': '123456789'},
+        ),
         EquipmentModel(
           id: 2,
           code: '3604',
@@ -1976,13 +2010,14 @@ void main() {
     });
 
     test('χωρίς κατάλογο εργαλείων ο κανόνας σιωπά', () {
-      final findings = scanWith(
-        [
-          EquipmentModel(id: 1, code: '2506', remoteParams: const {'3': '123456789'}),
-          EquipmentModel(id: 2, code: '3604', remoteParams: {'3': '123456789'}),
-        ],
-        tools: const [],
-      );
+      final findings = scanWith([
+        EquipmentModel(
+          id: 1,
+          code: '2506',
+          remoteParams: const {'3': '123456789'},
+        ),
+        EquipmentModel(id: 2, code: '3604', remoteParams: {'3': '123456789'}),
+      ], tools: const []);
 
       expect(findings, isEmpty);
     });
@@ -1990,7 +2025,11 @@ void main() {
     test('σβηστός διακόπτης: κανένα εύρημα', () {
       final findings = scanWith(
         [
-          EquipmentModel(id: 1, code: '2506', remoteParams: const {'3': '123456789'}),
+          EquipmentModel(
+            id: 1,
+            code: '2506',
+            remoteParams: const {'3': '123456789'},
+          ),
           EquipmentModel(id: 2, code: '3604', remoteParams: {'3': '123456789'}),
         ],
         with_: const CatalogValidationService(
@@ -2089,8 +2128,18 @@ void main() {
     test('μόνο υπάλληλοι: το μήνυμα λέει ακόμη «υπαλλήλους»', () {
       final findings = crossFindings(
         users: [
-          UserModel(id: 4, lastName: 'Ψαρρά', departmentId: 12, phones: const ['2534']),
-          UserModel(id: 5, lastName: 'Δρόσος', departmentId: 13, phones: const ['2534']),
+          UserModel(
+            id: 4,
+            lastName: 'Ψαρρά',
+            departmentId: 12,
+            phones: const ['2534'],
+          ),
+          UserModel(
+            id: 5,
+            lastName: 'Δρόσος',
+            departmentId: 13,
+            phones: const ['2534'],
+          ),
         ],
         departments: [
           DepartmentModel(id: 12, name: 'Ακτινολογικό'),

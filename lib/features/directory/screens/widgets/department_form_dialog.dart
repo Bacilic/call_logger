@@ -924,7 +924,8 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                         _buildReadOnlyLegend(
                           context: context,
                           title:
-                              'Τηλέφωνα Τμήματος (Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
+                              'Τηλέφωνα ${selectedKind.entityLabelGenitive} '
+                              '(Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
                           byValueToOwners: LookupService.instance
                               .getCallerOwnedPhonesByDepartment(
                                 widget.initialDepartment!.id!,
@@ -1067,7 +1068,8 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                           _buildReadOnlyLegend(
                             context: context,
                             title:
-                                'Εξοπλισμός Τμήματος (Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
+                                'Εξοπλισμός ${selectedKind.entityLabelGenitive} '
+                                '(Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
                             byValueToOwners: LookupService.instance
                                 .getCallerOwnedEquipmentByDepartment(
                                   widget.initialDepartment!.id!,
@@ -1269,53 +1271,61 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                         ),
                         onChanged: (_) => notifyFormChanged(),
                       ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: lansweeperAccountInputController,
-                        focusNode: _lansweeperAccountsFocus,
-                        decoration: const InputDecoration(
-                          labelText: 'Αναγνωριστικά Lansweeper (με κόμμα)',
-                          hintText: r'Ονομασία = τομέας\όνομα, ή σκέτο email',
-                          helperText:
-                              'Ποιος χρεώνεται τα αιτήματα του τμήματος όταν ο '
-                              'καλών είναι άγνωστος. Η ονομασία πριν το «=» '
-                              'μένει στην εφαρμογή — στο Lansweeper φεύγει '
-                              'μόνο το αναγνωριστικό.',
-                          helperMaxLines: 3,
-                          border: OutlineInputBorder(),
-                        ),
-                        onSubmitted: (_) => commitLansweeperAccountInput(),
-                        onEditingComplete: commitLansweeperAccountInput,
-                        onChanged: (value) {
-                          if (value.endsWith(',')) {
-                            commitLansweeperAccountInput();
-                            return;
-                          }
-                          notifyFormChanged();
-                        },
-                      ),
-                      if (lansweeperAccounts.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            children: [
-                              for (final account in lansweeperAccounts)
-                                LansweeperAccountChip(
-                                  key: ValueKey(
-                                    'lansweeper_account_${account.username}',
-                                  ),
-                                  account: account,
-                                  referenceDomain:
-                                      lansweeperReferenceDomainForChips,
-                                  onEdit: () => editLansweeperAccount(account),
-                                  onRemove: () =>
-                                      removeLansweeperAccount(account),
-                                ),
-                            ],
+                      // Το Lansweeper ξέρει μόνο λογαριασμούς του νοσοκομείου:
+                      // ούτε η εταιρεία ούτε η εξωτερική μονάδα φτάνουν ποτέ ως
+                      // αιτών. Ό,τι έχει ήδη γραφτεί μένει άθικτο στη βάση —
+                      // απλώς παύει να ζητιέται, όπως ακριβώς γίνεται με το
+                      // Κτίριο και τον Όροφο εκτός κάτοψης.
+                      if (selectedKind.participatesInLansweeper) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: lansweeperAccountInputController,
+                          focusNode: _lansweeperAccountsFocus,
+                          decoration: const InputDecoration(
+                            labelText: 'Αναγνωριστικά Lansweeper (με κόμμα)',
+                            hintText: r'Ονομασία = τομέας\όνομα, ή σκέτο email',
+                            helperText:
+                                'Ποιος χρεώνεται τα αιτήματα όταν ο καλών είναι '
+                                'άγνωστος. Η ονομασία πριν το «=» '
+                                'μένει στην εφαρμογή — στο Lansweeper φεύγει '
+                                'μόνο το αναγνωριστικό.',
+                            helperMaxLines: 3,
+                            border: OutlineInputBorder(),
                           ),
+                          onSubmitted: (_) => commitLansweeperAccountInput(),
+                          onEditingComplete: commitLansweeperAccountInput,
+                          onChanged: (value) {
+                            if (value.endsWith(',')) {
+                              commitLansweeperAccountInput();
+                              return;
+                            }
+                            notifyFormChanged();
+                          },
                         ),
+                        if (lansweeperAccounts.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: [
+                                for (final account in lansweeperAccounts)
+                                  LansweeperAccountChip(
+                                    key: ValueKey(
+                                      'lansweeper_account_${account.username}',
+                                    ),
+                                    account: account,
+                                    referenceDomain:
+                                        lansweeperReferenceDomainForChips,
+                                    onEdit: () =>
+                                        editLansweeperAccount(account),
+                                    onRemove: () =>
+                                        removeLansweeperAccount(account),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ],
                   ),
                 ),

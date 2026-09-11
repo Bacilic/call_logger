@@ -506,6 +506,7 @@ class DepartmentFormSharedLinks {
       ],
       cancelScopeDescription: departmentFormSaveCancelScopeDescription(
         departmentName,
+        kind: host.selectedKind,
       ),
     );
 

@@ -6,6 +6,7 @@ import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/errors/department_exists_exception.dart';
 import '../../../../core/services/lansweeper_department_accounts.dart';
+import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/save_confirmation_summary.dart';
 import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
@@ -288,7 +289,7 @@ class DepartmentFormSave {
         final restore = await showDialog<bool>(
           context: host.context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Τμήμα ως διαγραμμένο'),
+            title: Text(e.kind.deletedEntityTitle),
             content: const Text(
               'Υπάρχει ήδη καταχώρηση με αυτό το όνομα, σημειωμένη ως διαγραμμένη. '
               'Θέλετε να την επαναφέρετε;\n\n'
@@ -310,16 +311,23 @@ class DepartmentFormSave {
         if (!host.mounted) return;
         if (restore == true) {
           try {
-            await host.widget.notifier.restoreDepartmentByName(
-              name,
-              building: building.isEmpty ? null : building,
-              color: color,
-              notes: notes.isEmpty ? null : notes,
-            );
+            final restoredId = await host.widget.notifier
+                .restoreDepartmentByName(
+                  name,
+                  building: building.isEmpty ? null : building,
+                  color: color,
+                  notes: notes.isEmpty ? null : notes,
+                );
             if (!host.mounted) return;
             host.widget.onSaved?.call();
             host.closeForm(true);
-            final restoreMessage = 'Επαναφέρθηκε το τμήμα «$name»';
+            // Το Είδος είναι εκείνο της ΕΠΑΝΑΦΕΡΜΕΝΗΣ καρτέλας, όχι της
+            // επιλογής στη φόρμα: η διαγραμμένη κρατά το δικό της.
+            final restoredKind = LookupService.instance.departmentKindById(
+              restoredId,
+            );
+            final restoreMessage =
+                'Επαναφέρθηκε ${restoredKind.entityWithArticle} «$name»';
             ScaffoldMessenger.of(host.context).showSnackBar(
               SnackBar(
                 content: Text(restoreMessage),

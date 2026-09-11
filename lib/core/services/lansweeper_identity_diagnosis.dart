@@ -322,3 +322,66 @@ String? lansweeperDomainMismatchHint(String value, String? referenceDomain) {
   return 'Ο τομέας «$valueDomain» διαφέρει από τον συνηθισμένο '
       '«$reference» — πιθανό τυπογραφικό';
 }
+
+/// Ο τόνος του υπομνήματος κάτω από το «Αναγνωριστικό Lansweeper».
+enum LansweeperIdentityHintTone {
+  /// Πληροφορία, όχι παρατήρηση.
+  neutral,
+
+  /// Έγκυρο μεν, ύποπτο δε — ήπια επισήμανση.
+  suspicion,
+
+  /// Η τιμή δεν θα βρει τον υπάλληλο.
+  error,
+}
+
+/// Τι λέει το υπόμνημα του πεδίου, και με τι τόνο.
+///
+/// Η **σειρά** είναι η ουσία εδώ. Όταν το τμήμα δεν συμμετέχει στο Lansweeper,
+/// η τιμή δεν διαβάζεται από κανέναν — οπότε κάθε άλλη συμβουλή είναι χαμένος
+/// κόπος: το «το έγραψες λάθος, μήπως εννοούσες Χ;» στέλνει τον χρήστη να
+/// διορθώσει κάτι που δεν πρόκειται να χρησιμοποιηθεί. Γι' αυτό το «δεν θα
+/// χρησιμοποιηθεί» προηγείται και της διάγνωσης και της υποψίας τομέα.
+///
+/// Ζει εδώ και όχι μέσα στη φόρμα: είναι κρίση, όχι διάταξη — και ελέγχεται
+/// χωρίς να στηθεί οθόνη.
+({String text, LansweeperIdentityHintTone tone}) lansweeperIdentityFieldHint({
+  required bool participatesInLansweeper,
+  required String identity,
+  required String? referenceDomain,
+}) {
+  if (!participatesInLansweeper) {
+    return (
+      text:
+          'Το Lansweeper αναγνωρίζει μόνο τμήματα του νοσοκομείου — το '
+          'αναγνωριστικό δεν θα χρησιμοποιηθεί.',
+      tone: LansweeperIdentityHintTone.neutral,
+    );
+  }
+
+  final value = identity.trim();
+  final diagnosis = diagnoseLansweeperIdentity(value);
+  if (value.isNotEmpty && !diagnosis.isValid) {
+    final suggestion = diagnosis.suggestion;
+    return (
+      text: suggestion == null
+          ? '${diagnosis.problem!} — το αίτημα δεν θα βρει τον υπάλληλο.'
+          : '${diagnosis.problem!} — $suggestion',
+      tone: LansweeperIdentityHintTone.error,
+    );
+  }
+
+  if (value.isNotEmpty) {
+    final mismatch = lansweeperDomainMismatchHint(value, referenceDomain);
+    if (mismatch != null) {
+      return (text: '$mismatch.', tone: LansweeperIdentityHintTone.suspicion);
+    }
+  }
+
+  return (
+    text:
+        'Με συμπληρωμένο αναγνωριστικό, ο υπάλληλος καταχωρείται ως αιτών '
+        'στο ticket του Lansweeper.',
+    tone: LansweeperIdentityHintTone.neutral,
+  );
+}

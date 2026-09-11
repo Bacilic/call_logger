@@ -816,55 +816,44 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                   Builder(
                     builder: (context) {
                       // Προειδοποίηση, ποτέ απαγόρευση: ο κατάλογος έχει πάντα
-                      // την εξαίρεση που κανένας κανόνας δεν προέβλεψε.
-                      // Στοχευμένη διάγνωση: λέμε ΤΙ χάλασε (τομέας ή email),
-                      // όχι γενικό «δεν μοιάζει»· και ήπια υποψία όταν ο
-                      // τομέας διαφέρει από του πράκτορα.
-                      final text = lansweeperUsernameController.text.trim();
-                      final diagnosis = diagnoseLansweeperIdentity(text);
-                      final looksWrong = text.isNotEmpty && !diagnosis.isValid;
-                      final mismatch = text.isNotEmpty && diagnosis.isValid
-                          ? lansweeperDomainMismatchHint(
-                              text,
-                              lansweeperReferenceDomain(
-                                agent: _lansweeperAgentIdentity,
-                                knownIdentities: [
-                                  for (final u in LookupService.instance.users)
-                                    u.lansweeperUsername ?? '',
-                                ],
-                              ),
-                            )
-                          : null;
-                      final String helper;
-                      if (looksWrong) {
-                        final suggestion = diagnosis.suggestion;
-                        helper = suggestion == null
-                            ? '${diagnosis.problem!} — το αίτημα δεν θα βρει '
-                                  'τον υπάλληλο.'
-                            : '${diagnosis.problem!} — $suggestion';
-                      } else if (mismatch != null) {
-                        helper = '$mismatch.';
-                      } else {
-                        helper =
-                            'Με συμπληρωμένο αναγνωριστικό, ο υπάλληλος '
-                            'καταχωρείται ως αιτών στο ticket του '
-                            'Lansweeper.';
-                      }
+                      // την εξαίρεση που κανένας κανόνας δεν προέβλεψε. Ποιο
+                      // μήνυμα κερδίζει το κρίνει ΜΙΑ καθαρή συνάρτηση — εδώ
+                      // μένει μόνο το χρώμα.
+                      final department = LookupService.instance
+                          .findDepartmentByName(departmentController.text);
+                      final hint = lansweeperIdentityFieldHint(
+                        // Άγνωστο τμήμα διαβάζεται ως νοσοκομείο: όσο
+                        // πληκτρολογείτε, το υπόμνημα δεν αναβοσβήνει.
+                        participatesInLansweeper:
+                            department?.kind.participatesInLansweeper ?? true,
+                        identity: lansweeperUsernameController.text,
+                        referenceDomain: lansweeperReferenceDomain(
+                          agent: _lansweeperAgentIdentity,
+                          knownIdentities: [
+                            for (final u in LookupService.instance.users)
+                              u.lansweeperUsername ?? '',
+                          ],
+                        ),
+                      );
+                      final helperColor = switch (hint.tone) {
+                        LansweeperIdentityHintTone.error => Theme.of(
+                          context,
+                        ).colorScheme.error,
+                        LansweeperIdentityHintTone.suspicion =>
+                          Colors.orange.shade800,
+                        LansweeperIdentityHintTone.neutral => null,
+                      };
                       return TextFormField(
                         controller: lansweeperUsernameController,
                         focusNode: _lansweeperFocusNode,
                         decoration: InputDecoration(
                           labelText: 'Αναγνωριστικό Lansweeper',
                           hintText: r'τομέας\όνομα.χρήστη ή email',
-                          helperText: helper,
+                          helperText: hint.text,
                           helperMaxLines: 3,
-                          helperStyle: looksWrong
-                              ? TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
-                                )
-                              : mismatch != null
-                              ? TextStyle(color: Colors.orange.shade800)
-                              : null,
+                          helperStyle: helperColor == null
+                              ? null
+                              : TextStyle(color: helperColor),
                           border: const OutlineInputBorder(),
                         ),
                         onChanged: (_) => _onFieldChanged(),

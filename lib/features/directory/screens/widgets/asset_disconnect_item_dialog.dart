@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/services/lookup_service.dart';
 import '../../../../core/widgets/compact_tooltip.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../models/department_model.dart';
@@ -83,6 +84,10 @@ Future<AssetDisconnectItemResolution?> resolveAssetDisconnectItem({
                       sourceDepartmentName: sourceDepartmentName,
                       personalPhoneUserDisplayName:
                           personalPhoneUserDisplayName,
+                      // Το Είδος βγαίνει από το id που ήδη κρατά η ροή:
+                      // η DataMed δεν αποδεσμεύει «από το τμήμα».
+                      sourceDepartmentKind: LookupService.instance
+                          .departmentKindById(sourceDepartmentId),
                     ),
                   ),
                   const SizedBox(height: 16),

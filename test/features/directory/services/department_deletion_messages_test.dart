@@ -2,6 +2,7 @@
 //
 //   flutter test test/features/directory/services/department_deletion_messages_test.dart
 
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/services/department_deletion_messages.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -46,6 +47,38 @@ void main() {
       expect(
         departmentFormSaveCancelScopeDescription(null),
         'η αποθήκευση του τμήματος',
+      );
+    });
+  });
+
+  group('το Είδος της καρτέλας φτάνει στα κείμενα', () {
+    test('η ακύρωση αποθήκευσης ονομάζει την εταιρεία, όχι «τμήμα»', () {
+      expect(
+        departmentFormSaveCancelScopeDescription(
+          'DataMed',
+          kind: DepartmentKind.company,
+        ),
+        'η αποθήκευση της εταιρείας «DataMed»',
+      );
+    });
+
+    test('η εξωτερική μονάδα κλίνεται σωστά', () {
+      expect(
+        departmentFormSaveCancelScopeDescription(
+          'ΚΕΦΙΑΠ',
+          kind: DepartmentKind.externalUnit,
+        ),
+        'η αποθήκευση της εξωτερικής μονάδας «ΚΕΦΙΑΠ»',
+      );
+    });
+
+    test('χωρίς όνομα, το Είδος εξακολουθεί να μετράει', () {
+      expect(
+        departmentFormSaveCancelScopeDescription(
+          '   ',
+          kind: DepartmentKind.company,
+        ),
+        'η αποθήκευση της εταιρείας',
       );
     });
   });

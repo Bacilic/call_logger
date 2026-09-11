@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../errors/department_exists_exception.dart';
+import '../../features/directory/models/department_kind.dart';
 import '../../features/directory/services/directory_save_conflict.dart';
 import 'audit_service.dart';
 import '../utils/department_display_utils.dart';
@@ -201,7 +202,10 @@ class DepartmentRepository {
         );
         if (existing != null) {
           final deleted = (existing['is_deleted'] as int?) == 1;
-          throw DepartmentExistsException(isDeleted: deleted);
+          throw DepartmentExistsException(
+            isDeleted: deleted,
+            kind: DepartmentKind.fromDbValue(existing['kind']),
+          );
         }
         throw DepartmentExistsException(isDeleted: false);
       }
@@ -265,7 +269,7 @@ class DepartmentRepository {
     }
   }
 
-  Future<void> restoreDepartmentByName(
+  Future<int> restoreDepartmentByName(
     String name, {
     String? building,
     String? color,
@@ -311,6 +315,7 @@ class DepartmentRepository {
         );
       }
     });
+    return id;
   }
 
   /// Ενημέρωση τμήματος με προαιρετικό συγχρονισμό ορόφου: προτεραιότητα [drawingFloorId],

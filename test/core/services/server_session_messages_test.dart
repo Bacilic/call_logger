@@ -19,6 +19,7 @@ void main() {
         code: ServerSessionMessages.errorLogonFailure,
         host: '192.168.13.82',
         account: 'Administrator',
+        staleShare: false,
       );
 
       expect(msg, contains('Administrator'));
@@ -30,6 +31,7 @@ void main() {
         code: ServerSessionMessages.errorNetnameDeleted,
         host: '192.168.13.82',
         account: 'Administrator',
+        staleShare: false,
       );
 
       expect(msg, contains('SMB 1.0/CIFS'));
@@ -41,11 +43,13 @@ void main() {
         code: ServerSessionMessages.errorAccountLockedOut,
         host: 'x',
         account: 'a',
+        staleShare: false,
       );
       final expired = ServerSessionMessages.forConnect(
         code: ServerSessionMessages.errorPasswordExpired,
         host: 'x',
         account: 'a',
+        staleShare: false,
       );
 
       expect(locked, contains('κλειδωμένος'));
@@ -58,6 +62,7 @@ void main() {
         code: 4321,
         host: 'x',
         account: 'a',
+        staleShare: false,
       );
 
       expect(msg, contains('4321'));
@@ -229,6 +234,47 @@ void main() {
   });
 
   group('Παλιά σύνδεση που δεν έκλεισε', () {
+    test('η σύνδεση που δεν άνοιξε λέει ΓΙΑΤΙ δεν έκλεισε η παλιά', () {
+      // Ο σταθμός κρατά ανοιχτό κοινόχρηστο φάκελο του .83. Η εφαρμογή το
+      // ΞΕΡΕΙ — τα Windows το απάντησαν ρητά. Άρα δεν στέλνει τον χειριστή σε
+      // επανεκκίνηση: του λέει τι να κλείσει.
+      final msg = ServerSessionMessages.forConnect(
+        code: ServerSessionMessages.errorSessionCredentialConflict,
+        host: '192.168.13.83',
+        account: 'Administrator',
+        staleShare: true,
+      );
+
+      expect(msg, contains('δεν ήταν δυνατόν να κλείσει'));
+      expect(msg, contains('Κλείσε'));
+    });
+
+    test('χωρίς το γεγονός, η ίδια αποτυχία μένει ως έχει', () {
+      final msg = ServerSessionMessages.forConnect(
+        code: ServerSessionMessages.errorSessionCredentialConflict,
+        host: '192.168.13.83',
+        account: 'Administrator',
+        staleShare: false,
+      );
+
+      expect(msg, contains('με άλλον λογαριασμό'));
+      expect(msg, isNot(contains('δεν ήταν δυνατόν να κλείσει')));
+    });
+
+    test('το γεγονός δεν ξεχειλώνει σε άσχετη αποτυχία σύνδεσης', () {
+      // Παλιά σύνδεση που επέζησε ΚΑΙ λάθος κωδικός: η αιτία της αποτυχίας
+      // είναι ο κωδικός, και το μήνυμα δεν πρέπει να δείχνει αλλού.
+      final msg = ServerSessionMessages.forConnect(
+        code: ServerSessionMessages.errorLogonFailure,
+        host: '192.168.13.83',
+        account: 'Administrator',
+        staleShare: true,
+      );
+
+      expect(msg, contains('Λάθος όνομα ή κωδικός'));
+      expect(msg, isNot(contains('δεν ήταν δυνατόν να κλείσει')));
+    });
+
     test('μόνο τα «σε χρήση» μετρούν ως σύνδεση που επέζησε', () {
       // Το «δεν υπήρχε σύνδεση» είναι το ΦΥΣΙΟΛΟΓΙΚΟ αποτέλεσμα, όχι πρόβλημα:
       // αν μετρούσε, θα φωνάζαμε σε κάθε καθαρή εκκίνηση.

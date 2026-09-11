@@ -44,6 +44,39 @@ enum DepartmentKind {
     DepartmentKind.externalUnit => 'Εξωτερικής μονάδας',
   };
 
+  /// Ονομαστική με άρθρο — «Επαναφέρθηκε **η εταιρεία** «DataMed»».
+  ///
+  /// Το άρθρο δεν βγαίνει από τη λέξη: το «τμήμα» είναι ουδέτερο, η «εταιρεία»
+  /// και η «εξωτερική μονάδα» θηλυκά. Γι' αυτό γράφονται ολόκληρες, όπως ήδη
+  /// γίνεται με τον τίτλο νέας εγγραφής.
+  String get entityWithArticle => switch (this) {
+    DepartmentKind.hospital => 'το τμήμα',
+    DepartmentKind.company => 'η εταιρεία',
+    DepartmentKind.externalUnit => 'η εξωτερική μονάδα',
+  };
+
+  /// Αιτιατική με άρθρο — «αποδεσμεύεται από **την εταιρεία** «DataMed»».
+  String get entityWithArticleAccusative => switch (this) {
+    DepartmentKind.hospital => 'το τμήμα',
+    DepartmentKind.company => 'την εταιρεία',
+    DepartmentKind.externalUnit => 'την εξωτερική μονάδα',
+  };
+
+  /// Γενική με άρθρο — «η αποθήκευση **της εταιρείας** «DataMed»».
+  String get entityGenitiveWithArticle => switch (this) {
+    DepartmentKind.hospital => 'του τμήματος',
+    DepartmentKind.company => 'της εταιρείας',
+    DepartmentKind.externalUnit => 'της εξωτερικής μονάδας',
+  };
+
+  /// Τίτλος διαγραμμένης εγγραφής — αλλάζει και το γένος του επιθέτου:
+  /// «Διαγραμμένο τμήμα», αλλά «Διαγραμμένη εταιρεία».
+  String get deletedEntityTitle => switch (this) {
+    DepartmentKind.hospital => 'Διαγραμμένο τμήμα',
+    DepartmentKind.company => 'Διαγραμμένη εταιρεία',
+    DepartmentKind.externalUnit => 'Διαγραμμένη εξωτερική μονάδα',
+  };
+
   /// Τίτλος νέας εγγραφής — γράφεται ολόκληρος επειδή αλλάζει και το γένος:
   /// «Νέο τμήμα», αλλά «Νέα εταιρεία».
   String get newEntityTitle => switch (this) {

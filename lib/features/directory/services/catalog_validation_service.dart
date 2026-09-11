@@ -491,6 +491,17 @@ class CatalogValidationService {
     return findings;
   }
 
+  /// Το τμήμα ενός υπαλλήλου μέσα στη λίστα που σαρώνεται ήδη.
+  static DepartmentModel? _departmentById(
+    List<DepartmentModel> departments,
+    int id,
+  ) {
+    for (final d in departments) {
+      if (d.id == id) return d;
+    }
+    return null;
+  }
+
   /// Οι ανά-πεδίο κανόνες: μία εγγραφή, ένα πεδίο, ένα εύρημα.
   void _addFieldHintFindings(
     List<CatalogValidationFinding> findings, {
@@ -584,33 +595,41 @@ class CatalogValidationService {
         );
       }
 
-      final lansweeperHint = lansweeperUserIdentifierHint(
-        user.lansweeperUsername ?? '',
-      );
-      if (lansweeperHint != null) {
-        add(
-          kind: CatalogEntityKind.user,
-          entityId: user.id!,
-          label: label,
-          fieldLabel: 'Αναγνωριστικό Lansweeper',
-          message: lansweeperHint,
-          focusedField: 'lansweeperUsername',
-        );
-      } else if (rules.lansweeperIdentifierEnabled) {
-        // Έγκυρο μεν, με ύποπτο τομέα δε — ήπια υποψία, όχι λάθος.
-        final mismatch = lansweeperDomainMismatchHint(
+      // Το Lansweeper αναγνωρίζει μόνο τμήματα του νοσοκομείου. Εύρημα σε
+      // καρτέλα που δεν συμμετέχει θα ήταν αδιέξοδο: το πεδίο δεν εμφανίζεται
+      // καν εκεί, οπότε ο χρήστης δεν έχει τρόπο να το διορθώσει.
+      final userDepartment = user.departmentId == null
+          ? null
+          : _departmentById(departments, user.departmentId!);
+      if (userDepartment?.kind.participatesInLansweeper ?? true) {
+        final lansweeperHint = lansweeperUserIdentifierHint(
           user.lansweeperUsername ?? '',
-          lansweeperReferenceDomain,
         );
-        if (mismatch != null) {
+        if (lansweeperHint != null) {
           add(
             kind: CatalogEntityKind.user,
             entityId: user.id!,
             label: label,
             fieldLabel: 'Αναγνωριστικό Lansweeper',
-            message: mismatch,
+            message: lansweeperHint,
             focusedField: 'lansweeperUsername',
           );
+        } else if (rules.lansweeperIdentifierEnabled) {
+          // Έγκυρο μεν, με ύποπτο τομέα δε — ήπια υποψία, όχι λάθος.
+          final mismatch = lansweeperDomainMismatchHint(
+            user.lansweeperUsername ?? '',
+            lansweeperReferenceDomain,
+          );
+          if (mismatch != null) {
+            add(
+              kind: CatalogEntityKind.user,
+              entityId: user.id!,
+              label: label,
+              fieldLabel: 'Αναγνωριστικό Lansweeper',
+              message: mismatch,
+              focusedField: 'lansweeperUsername',
+            );
+          }
         }
       }
     }
@@ -645,31 +664,34 @@ class CatalogValidationService {
         );
       }
 
-      // Ένα εύρημα ΑΝΑ προβληματικό λογαριασμό — κάθε λάθος χωριστά.
-      for (final problem in lansweeperDepartmentAccountProblems(
-        department.lansweeperUsernames,
-      )) {
-        add(
-          kind: CatalogEntityKind.department,
-          entityId: id,
-          label: label,
-          fieldLabel: 'Αναγνωριστικά Lansweeper',
-          message: problem,
-          focusedField: 'lansweeperUsernames',
-        );
-      }
-      for (final mismatch in lansweeperDomainMismatchProblems(
-        department.lansweeperUsernames,
-        lansweeperReferenceDomain,
-      )) {
-        add(
-          kind: CatalogEntityKind.department,
-          entityId: id,
-          label: label,
-          fieldLabel: 'Αναγνωριστικά Lansweeper',
-          message: mismatch,
-          focusedField: 'lansweeperUsernames',
-        );
+      // Ίδιος κανόνας με τους υπαλλήλους, ίδιος λόγος.
+      if (department.kind.participatesInLansweeper) {
+        // Ένα εύρημα ΑΝΑ προβληματικό λογαριασμό — κάθε λάθος χωριστά.
+        for (final problem in lansweeperDepartmentAccountProblems(
+          department.lansweeperUsernames,
+        )) {
+          add(
+            kind: CatalogEntityKind.department,
+            entityId: id,
+            label: label,
+            fieldLabel: 'Αναγνωριστικά Lansweeper',
+            message: problem,
+            focusedField: 'lansweeperUsernames',
+          );
+        }
+        for (final mismatch in lansweeperDomainMismatchProblems(
+          department.lansweeperUsernames,
+          lansweeperReferenceDomain,
+        )) {
+          add(
+            kind: CatalogEntityKind.department,
+            entityId: id,
+            label: label,
+            fieldLabel: 'Αναγνωριστικά Lansweeper',
+            message: mismatch,
+            focusedField: 'lansweeperUsernames',
+          );
+        }
       }
     }
 
@@ -997,17 +1019,17 @@ class CatalogValidationService {
     for (final department in departments) {
       final id = department.id;
       if (id == null) continue;
-      for (final phone
-          in sharedPhonesByDepartmentId[id] ?? const <String>[]) {
+      for (final phone in sharedPhonesByDepartmentId[id] ?? const <String>[]) {
         final p = phone.trim();
         if (p.isEmpty) continue;
         departmentsByPhone.putIfAbsent(p, () => []).add(department);
       }
     }
 
-    final phones = <String>{...usersByPhone.keys, ...departmentsByPhone.keys}
-        .toList()
-      ..sort();
+    final phones = <String>{
+      ...usersByPhone.keys,
+      ...departmentsByPhone.keys,
+    }.toList()..sort();
     for (final phone in phones) {
       final holders = usersByPhone[phone] ?? const <UserModel>[];
       final owningDepartments =
@@ -1019,7 +1041,8 @@ class CatalogValidationService {
       };
       if (departmentIds.length < 2) continue;
 
-      final sortedHolders = [...holders]..sort((a, b) => a.id!.compareTo(b.id!));
+      final sortedHolders = [...holders]
+        ..sort((a, b) => a.id!.compareTo(b.id!));
       final sortedDepartments = [...owningDepartments]
         ..sort((a, b) => a.id!.compareTo(b.id!));
 

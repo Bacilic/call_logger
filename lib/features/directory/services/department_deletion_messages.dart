@@ -1,5 +1,7 @@
 // Καθαρή λογική μηνυμάτων διαγραφής τμήματος (χωρίς widgets/βάση).
 
+import '../models/department_kind.dart';
+
 /// Κεφαλίδα του **ενός** επιλογέα προορισμού στη «Μεταφορά όλων σε ένα τμήμα».
 ///
 /// Με ένα τμήμα ονομάζεται· με πολλά μετριέται. Το όνομα ενός τμήματος όταν
@@ -86,8 +88,12 @@ String? departmentDeletionContextLabel({
 
 /// Τι ακυρώνεται όταν ο χρήστης εγκαταλείπει τη ροή αποδέσμευσης που ανοίγει
 /// κατά την αποθήκευση της φόρμας τμήματος.
-String departmentFormSaveCancelScopeDescription(String? departmentName) {
+String departmentFormSaveCancelScopeDescription(
+  String? departmentName, {
+  DepartmentKind kind = DepartmentKind.hospital,
+}) {
+  final entity = kind.entityGenitiveWithArticle;
   final name = departmentName?.trim() ?? '';
-  if (name.isEmpty) return 'η αποθήκευση του τμήματος';
-  return 'η αποθήκευση του τμήματος «$name»';
+  if (name.isEmpty) return 'η αποθήκευση $entity';
+  return 'η αποθήκευση $entity «$name»';
 }

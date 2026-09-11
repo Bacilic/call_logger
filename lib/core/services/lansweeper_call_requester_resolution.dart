@@ -1,5 +1,6 @@
 import '../database/user_repository.dart';
 import '../../features/calls/models/call_model.dart';
+import '../../features/directory/models/department_kind.dart';
 import 'lansweeper_department_accounts.dart';
 import 'lansweeper_requester_resolution.dart';
 import 'lookup_service.dart';
@@ -39,7 +40,17 @@ Future<LansweeperRequesterOptions> resolveLansweeperRequesterForCalls({
       continue;
     }
     if (!seenCallerIds.add(callerId)) continue;
-    final username = await userRepository.getLansweeperUsernameById(callerId);
+    // Ο ΙΔΙΟΣ κανόνας με τα τμήματα παρακάτω, στο ίδιο σημείο κρίσης:
+    // εξωτερική εταιρεία ή μονάδα δεν έχει λογαριασμό Lansweeper, ούτε η
+    // ίδια ούτε οι άνθρωποί της. Χωρίς αυτόν τον έλεγχο ο συνεργάτης
+    // περνούσε από τον έναν δρόμο ενώ αποκλειόταν από τον άλλον.
+    final callerDepartment = lookup.findDepartmentByName(
+      call.departmentText ?? '',
+    );
+    final callerKind = callerDepartment?.kind ?? DepartmentKind.hospital;
+    final username = callerKind.participatesInLansweeper
+        ? await userRepository.getLansweeperUsernameById(callerId)
+        : null;
     final displayName = (call.callerText ?? '').trim();
     callers.add(
       LansweeperTicketCaller(

@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'admin_share.dart';
 import 'printer_station_matching.dart';
+import 'server_printer_messages.dart';
 import 'server_printer_models.dart';
 import 'server_session_messages.dart';
 import 'windows_printer_ffi.dart';
 import 'windows_registry_printers_ffi.dart';
-import 'windows_session_ffi.dart';
 
 /// Εκτυπωτές, ουρές, υπηρεσία εκτυπώσεων και επανεκκίνηση διακομιστή.
 ///
@@ -38,24 +39,25 @@ class ServerPrinterService {
         () => _listPrintersInIsolate(h, u, adminPassword),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return ServerPrintersResult.failure(
-          _message(
-            connectFailed: raw.connectFailed,
-            code: raw.code,
+          _printerFailure(
+            connectFailed: raw.result.connectFailed,
+            code: raw.result.code,
             host: h,
             user: u,
+            staleShare: raw.staleShare,
             what: 'ανάγνωσης εκτυπωτών',
           ),
         );
       }
 
       return ServerPrintersResult.success(
-        [for (final p in raw.printers) _toPrinter(p)],
-        source: raw.fromRegistry
+        [for (final p in raw.result.printers) _toPrinter(p)],
+        source: raw.result.fromRegistry
             ? PrinterSource.registry
             : PrinterSource.spooler,
-        fallbackCode: raw.fromRegistry ? raw.code : 0,
+        fallbackCode: raw.result.fromRegistry ? raw.result.code : 0,
       );
     } on TimeoutException {
       return ServerPrintersResult.failure(_timeoutMessage(h, timeout));
@@ -85,19 +87,20 @@ class ServerPrinterService {
         () => _listQueueInIsolate(h, u, adminPassword, target),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return PrintQueueResult.failure(
-          _message(
-            connectFailed: raw.connectFailed,
-            code: raw.code,
+          _printerFailure(
+            connectFailed: raw.result.connectFailed,
+            code: raw.result.code,
             host: h,
             user: u,
+            staleShare: raw.staleShare,
             what: 'ανάγνωσης ουράς',
           ),
         );
       }
       return PrintQueueResult.success([
-        for (final j in raw.jobs)
+        for (final j in raw.result.jobs)
           PrintJob(
             jobId: j.jobId,
             document: j.document,
@@ -136,18 +139,19 @@ class ServerPrinterService {
         () => _purgeQueueInIsolate(h, u, adminPassword, target),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return ServerActionResult.failure(
-          _message(
-            connectFailed: raw.connectFailed,
-            code: raw.code,
+          _printerFailure(
+            connectFailed: raw.result.connectFailed,
+            code: raw.result.code,
             host: h,
             user: u,
+            staleShare: raw.staleShare,
             what: 'εκκαθάρισης ουράς',
           ),
         );
       }
-      return ServerActionResult.success(affected: raw.affected);
+      return ServerActionResult.success(affected: raw.result.affected);
     } on TimeoutException {
       return ServerActionResult.failure(_timeoutMessage(h, timeout));
     } catch (e) {
@@ -176,13 +180,14 @@ class ServerPrinterService {
         () => _removePrinterInIsolate(h, u, adminPassword, target),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return ServerActionResult.failure(
-          _message(
-            connectFailed: raw.connectFailed,
-            code: raw.code,
+          _printerFailure(
+            connectFailed: raw.result.connectFailed,
+            code: raw.result.code,
             host: h,
             user: u,
+            staleShare: raw.staleShare,
             what: 'αφαίρεσης εκτυπωτή',
           ),
         );
@@ -219,13 +224,14 @@ class ServerPrinterService {
         () => _resumePrinterInIsolate(h, u, adminPassword, target),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return ServerActionResult.failure(
-          _message(
-            connectFailed: raw.connectFailed,
-            code: raw.code,
+          _printerFailure(
+            connectFailed: raw.result.connectFailed,
+            code: raw.result.code,
             host: h,
             user: u,
+            staleShare: raw.staleShare,
             what: 'ξεπαγώματος εκτυπωτή',
           ),
         );
@@ -260,9 +266,15 @@ class ServerPrinterService {
         () => _restartSpoolerInIsolate(h, u, adminPassword),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return ServerActionResult.failure(
-          _serviceMessage(code: raw.code, host: h, adminUser: u),
+          _spoolerFailure(
+            connectFailed: raw.result.connectFailed,
+            code: raw.result.code,
+            host: h,
+            user: u,
+            staleShare: raw.staleShare,
+          ),
         );
       }
       return const ServerActionResult.success();
@@ -299,15 +311,15 @@ class ServerPrinterService {
         () => _probeSpoolerControlInIsolate(h, u, adminPassword),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return ServerActionResult.failure(
-          raw.connectFailed
-              ? ServerSessionMessages.forConnect(
-                  code: raw.code,
-                  host: h,
-                  account: u,
-                )
-              : _serviceMessage(code: raw.code, host: h, adminUser: u),
+          _spoolerFailure(
+            connectFailed: raw.result.connectFailed,
+            code: raw.result.code,
+            host: h,
+            user: u,
+            staleShare: raw.staleShare,
+          ),
         );
       }
       return const ServerActionResult.success();
@@ -345,9 +357,15 @@ class ServerPrinterService {
         ),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return ServerActionResult.failure(
-          _restartMessage(code: raw.code, host: h, adminUser: u),
+          _restartFailure(
+            connectFailed: raw.result.connectFailed,
+            code: raw.result.code,
+            host: h,
+            user: u,
+            staleShare: raw.staleShare,
+          ),
         );
       }
       return const ServerActionResult.success();
@@ -377,9 +395,15 @@ class ServerPrinterService {
         () => _abortRestartInIsolate(h, u, adminPassword),
       ).timeout(timeout);
 
-      if (!raw.ok) {
+      if (!raw.result.ok) {
         return ServerActionResult.failure(
-          _restartMessage(code: raw.code, host: h, adminUser: u),
+          _restartFailure(
+            connectFailed: raw.result.connectFailed,
+            code: raw.result.code,
+            host: h,
+            user: u,
+            staleShare: raw.staleShare,
+          ),
         );
       }
       return const ServerActionResult.success();
@@ -437,110 +461,87 @@ class ServerPrinterService {
 
   /// Δύο εντελώς διαφορετικές αιτίες, δύο διαφορετικά μηνύματα: «δεν μπήκαμε
   /// καν στον διακομιστή» έναντι «μπήκαμε αλλά η ενέργεια απέτυχε».
-  static String _message({
+  ///
+  /// Κάθε ροή περνά από έναν από τους τρεις φρουρούς. Όλες οι παράμετροι είναι
+  /// υποχρεωτικές επίτηδες: ούτε ο διαχωρισμός της σύνδεσης ούτε το γεγονός της
+  /// παλιάς σύνδεσης που δεν έκλεισε μπορούν να ξεχαστούν από τον καλούντα.
+  static String _printerFailure({
     required bool connectFailed,
     required int code,
     required String host,
     required String user,
+    required bool staleShare,
     required String what,
-  }) {
-    if (connectFailed) {
-      return ServerSessionMessages.forConnect(
-        code: code,
-        host: host,
-        account: user,
-      );
-    }
-    return _printerMessage(code: code, host: host, user: user, what: what);
-  }
+  }) => connectFailed
+      ? ServerSessionMessages.forConnect(
+          code: code,
+          host: host,
+          account: user,
+          staleShare: staleShare,
+        )
+      : ServerPrinterMessages.forPrinterAction(
+          code: code,
+          host: host,
+          account: user,
+          what: what,
+          staleShare: staleShare,
+        );
 
-  static String _printerMessage({
+  static String _spoolerFailure({
+    required bool connectFailed,
     required int code,
     required String host,
     required String user,
-    required String what,
-  }) => switch (code) {
-    ServerSessionMessages.errorAccessDenied =>
-      ServerSessionMessages.accessDenied(
-        what: 'διαχείρισης εκτυπωτών',
-        host: host,
-        account: user,
-        // Μόνο εδώ: η ρύθμιση RPC αφορά αποκλειστικά τους εκτυπωτές, και χωρίς
-        // αυτήν η κλήση ταξιδεύει με την ταυτότητα του συνδεδεμένου χρήστη των
-        // Windows αντί για τον λογαριασμό που άνοιξε η εφαρμογή.
-        includePrinterRpcHint: true,
-      ),
-    ServerSessionMessages.rpcServerUnavailable =>
-      'Ο διακομιστής $host δεν αποκρίνεται. Αν μόλις έγινε επανεκκίνηση της '
-          'ουράς, δώσ\' του λίγα δευτερόλεπτα και πάτα «Ανανέωση».',
-    1801 =>
-      'Ο εκτυπωτής δεν υπάρχει πια στον $host — πάτα «Ανανέωση» για την '
-          'τρέχουσα εικόνα.',
-    _ => 'Αποτυχία $what στον $host (κωδικός σφάλματος $code).',
-  };
+    required bool staleShare,
+  }) => connectFailed
+      ? ServerSessionMessages.forConnect(
+          code: code,
+          host: host,
+          account: user,
+          staleShare: staleShare,
+        )
+      : ServerPrinterMessages.forSpoolerService(
+          code: code,
+          host: host,
+          account: user,
+          staleShare: staleShare,
+        );
 
-  static String _serviceMessage({
+  static String _restartFailure({
+    required bool connectFailed,
     required int code,
     required String host,
-    required String adminUser,
-  }) => switch (code) {
-    ServerSessionMessages.errorAccessDenied =>
-      ServerSessionMessages.accessDenied(
-        what: 'διαχείρισης της ουράς εκτυπώσεων',
-        host: host,
-        account: adminUser,
-      ),
-    kServiceStopTimedOut =>
-      'Η ουρά εκτυπώσεων του $host δεν σταμάτησε εγκαίρως. Συνήθως φταίει '
-          'κολλημένη εργασία ή οδηγός εκτυπωτή — δοκίμασε ξανά σε λίγο.',
-    kServiceStartTimedOut =>
-      'Η ουρά εκτυπώσεων του $host σταμάτησε αλλά ΔΕΝ ξαναξεκίνησε. Χρειάζεται '
-          'άμεσος έλεγχος: όσο είναι σταματημένη, κανείς δεν τυπώνει.',
-    1060 => 'Δεν βρέθηκε υπηρεσία ουράς εκτυπώσεων στον $host.',
-    1722 => 'Ο διακομιστής $host δεν αποκρίνεται.',
-    _ =>
-      'Αποτυχία επανεκκίνησης της ουράς εκτυπώσεων στον $host '
-          '(κωδικός σφάλματος $code).',
-  };
-
-  static String _restartMessage({
-    required int code,
-    required String host,
-    required String adminUser,
-  }) => switch (code) {
-    ServerSessionMessages.errorAccessDenied =>
-      ServerSessionMessages.accessDenied(
-        what: 'επανεκκίνησης του διακομιστή',
-        host: host,
-        account: adminUser,
-      ),
-    1115 => 'Ο $host βρίσκεται ήδη σε διαδικασία τερματισμού.',
-    1116 =>
-      'Δεν υπάρχει επανεκκίνηση σε εξέλιξη στον $host — δεν υπήρχε τίποτα '
-          'να ακυρωθεί.',
-    1722 => 'Ο διακομιστής $host δεν αποκρίνεται.',
-    _ =>
-      'Αποτυχία ενέργειας επανεκκίνησης στον $host (κωδικός σφάλματος $code).',
-  };
+    required String user,
+    required bool staleShare,
+  }) => connectFailed
+      ? ServerSessionMessages.forConnect(
+          code: code,
+          host: host,
+          account: user,
+          staleShare: staleShare,
+        )
+      : ServerPrinterMessages.forRestart(
+          code: code,
+          host: host,
+          account: user,
+          staleShare: staleShare,
+        );
 }
 
-({bool ok, bool connectFailed, int code}) _probeSpoolerControlInIsolate(
-  String host,
-  String user,
-  String password,
-) {
-  return _withAdminShare<({bool ok, bool connectFailed, int code})>(
-    host,
-    user,
-    password,
-    () {
+WithAdminShare<({bool ok, bool connectFailed, int code})>
+_probeSpoolerControlInIsolate(String host, String user, String password) {
+  return AdminShare.run<({bool ok, bool connectFailed, int code})>(
+    host: host,
+    user: user,
+    password: password,
+    body: () {
       final r = WindowsPrinterFfi.probeServiceControl(
         host: host,
         serviceName: ServerPrinterService.spoolerServiceName,
       );
       return (ok: r.ok, connectFailed: false, code: r.code);
     },
-    (code) => (ok: false, connectFailed: true, code: code),
+    onConnectFailure: (code) => (ok: false, connectFailed: true, code: code),
   );
 }
 
@@ -566,30 +567,6 @@ typedef _ActionIsolateResult = ({
   int affected,
 });
 
-/// Ανοίγει τη συνεδρία, τρέχει το [body], και κλείνει **πάντα**.
-T _withAdminShare<T>(
-  String host,
-  String user,
-  String password,
-  T Function() body,
-  T Function(int code) onConnectFailure,
-) {
-  final rc = WindowsSessionFfi.connectIpcShare(
-    host: host,
-    user: user,
-    password: password,
-  );
-  if (rc.code != 0) {
-    WindowsSessionFfi.disconnectShare(host);
-    return onConnectFailure(rc.code);
-  }
-  try {
-    return body();
-  } finally {
-    WindowsSessionFfi.disconnectShare(host);
-  }
-}
-
 /// Κωδικοί που σημαίνουν «η υπηρεσία ουράς δεν μιλά μαζί μας σε αυτό το
 /// κανάλι» — όχι «δεν υπάρχουν εκτυπωτές».
 ///
@@ -599,16 +576,16 @@ T _withAdminShare<T>(
 /// 124: το επίπεδο πληροφορίας δεν υποστηρίζεται από παλιό διακομιστή.
 const Set<int> _spoolerUnreachableCodes = {1753, 1801, 1802, 124, 1723, 1722};
 
-_PrinterIsolateResult _listPrintersInIsolate(
+WithAdminShare<_PrinterIsolateResult> _listPrintersInIsolate(
   String host,
   String user,
   String password,
 ) {
-  return _withAdminShare<_PrinterIsolateResult>(
-    host,
-    user,
-    password,
-    () {
+  return AdminShare.run<_PrinterIsolateResult>(
+    host: host,
+    user: user,
+    password: password,
+    body: () {
       final r = WindowsPrinterFfi.enumeratePrinters(host);
       if (r.ok) {
         return (
@@ -659,7 +636,7 @@ _PrinterIsolateResult _listPrintersInIsolate(
         fromRegistry: true,
       );
     },
-    (code) => (
+    onConnectFailure: (code) => (
       ok: false,
       connectFailed: true,
       code: code,
@@ -669,92 +646,146 @@ _PrinterIsolateResult _listPrintersInIsolate(
   );
 }
 
-_QueueIsolateResult _listQueueInIsolate(
+WithAdminShare<_QueueIsolateResult> _listQueueInIsolate(
   String host,
   String user,
   String password,
   String printerPath,
 ) {
-  return _withAdminShare<_QueueIsolateResult>(host, user, password, () {
-    final r = WindowsPrinterFfi.enumerateJobs(printerPath);
-    return (ok: r.ok, connectFailed: false, code: r.code, jobs: r.jobs);
-  }, (code) => (ok: false, connectFailed: true, code: code, jobs: const []));
+  return AdminShare.run<_QueueIsolateResult>(
+    host: host,
+    user: user,
+    password: password,
+    body: () {
+      final r = WindowsPrinterFfi.enumerateJobs(printerPath);
+      return (ok: r.ok, connectFailed: false, code: r.code, jobs: r.jobs);
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, jobs: const []),
+  );
 }
 
-_ActionIsolateResult _purgeQueueInIsolate(
+WithAdminShare<_ActionIsolateResult> _purgeQueueInIsolate(
   String host,
   String user,
   String password,
   String printerPath,
 ) {
-  return _withAdminShare<_ActionIsolateResult>(host, user, password, () {
-    final r = WindowsPrinterFfi.purgeQueue(printerPath);
-    return (ok: r.ok, connectFailed: false, code: r.code, affected: r.deleted);
-  }, (code) => (ok: false, connectFailed: true, code: code, affected: 0));
+  return AdminShare.run<_ActionIsolateResult>(
+    host: host,
+    user: user,
+    password: password,
+    body: () {
+      final r = WindowsPrinterFfi.purgeQueue(printerPath);
+      return (
+        ok: r.ok,
+        connectFailed: false,
+        code: r.code,
+        affected: r.deleted,
+      );
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, affected: 0),
+  );
 }
 
-_ActionIsolateResult _removePrinterInIsolate(
+WithAdminShare<_ActionIsolateResult> _removePrinterInIsolate(
   String host,
   String user,
   String password,
   String printerPath,
 ) {
-  return _withAdminShare<_ActionIsolateResult>(host, user, password, () {
-    final r = WindowsPrinterFfi.deletePrinter(printerPath);
-    return (ok: r.ok, connectFailed: false, code: r.code, affected: 1);
-  }, (code) => (ok: false, connectFailed: true, code: code, affected: 0));
+  return AdminShare.run<_ActionIsolateResult>(
+    host: host,
+    user: user,
+    password: password,
+    body: () {
+      final r = WindowsPrinterFfi.deletePrinter(printerPath);
+      return (ok: r.ok, connectFailed: false, code: r.code, affected: 1);
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, affected: 0),
+  );
 }
 
-_ActionIsolateResult _restartSpoolerInIsolate(
+WithAdminShare<_ActionIsolateResult> _restartSpoolerInIsolate(
   String host,
   String user,
   String password,
 ) {
-  return _withAdminShare<_ActionIsolateResult>(host, user, password, () {
-    final r = WindowsPrinterFfi.restartService(
-      host: host,
-      serviceName: ServerPrinterService.spoolerServiceName,
-    );
-    return (ok: r.ok, connectFailed: false, code: r.code, affected: 0);
-  }, (code) => (ok: false, connectFailed: true, code: code, affected: 0));
+  return AdminShare.run<_ActionIsolateResult>(
+    host: host,
+    user: user,
+    password: password,
+    body: () {
+      final r = WindowsPrinterFfi.restartService(
+        host: host,
+        serviceName: ServerPrinterService.spoolerServiceName,
+      );
+      return (ok: r.ok, connectFailed: false, code: r.code, affected: 0);
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, affected: 0),
+  );
 }
 
-_ActionIsolateResult _initiateRestartInIsolate(
+WithAdminShare<_ActionIsolateResult> _initiateRestartInIsolate(
   String host,
   String user,
   String password,
   String message,
   int graceSeconds,
 ) {
-  return _withAdminShare<_ActionIsolateResult>(host, user, password, () {
-    final r = WindowsPrinterFfi.initiateRestart(
-      host: host,
-      message: message,
-      graceSeconds: graceSeconds,
-    );
-    return (ok: r.ok, connectFailed: false, code: r.code, affected: 0);
-  }, (code) => (ok: false, connectFailed: true, code: code, affected: 0));
+  return AdminShare.run<_ActionIsolateResult>(
+    host: host,
+    user: user,
+    password: password,
+    body: () {
+      final r = WindowsPrinterFfi.initiateRestart(
+        host: host,
+        message: message,
+        graceSeconds: graceSeconds,
+      );
+      return (ok: r.ok, connectFailed: false, code: r.code, affected: 0);
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, affected: 0),
+  );
 }
 
-_ActionIsolateResult _abortRestartInIsolate(
+WithAdminShare<_ActionIsolateResult> _abortRestartInIsolate(
   String host,
   String user,
   String password,
 ) {
-  return _withAdminShare<_ActionIsolateResult>(host, user, password, () {
-    final r = WindowsPrinterFfi.abortRestart(host);
-    return (ok: r.ok, connectFailed: false, code: r.code, affected: 0);
-  }, (code) => (ok: false, connectFailed: true, code: code, affected: 0));
+  return AdminShare.run<_ActionIsolateResult>(
+    host: host,
+    user: user,
+    password: password,
+    body: () {
+      final r = WindowsPrinterFfi.abortRestart(host);
+      return (ok: r.ok, connectFailed: false, code: r.code, affected: 0);
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, affected: 0),
+  );
 }
 
-_ActionIsolateResult _resumePrinterInIsolate(
+WithAdminShare<_ActionIsolateResult> _resumePrinterInIsolate(
   String host,
   String user,
   String password,
   String printerPath,
 ) {
-  return _withAdminShare<_ActionIsolateResult>(host, user, password, () {
-    final r = WindowsPrinterFfi.resumePrinter(printerPath);
-    return (ok: r.ok, connectFailed: false, code: r.code, affected: 1);
-  }, (code) => (ok: false, connectFailed: true, code: code, affected: 0));
+  return AdminShare.run<_ActionIsolateResult>(
+    host: host,
+    user: user,
+    password: password,
+    body: () {
+      final r = WindowsPrinterFfi.resumePrinter(printerPath);
+      return (ok: r.ok, connectFailed: false, code: r.code, affected: 1);
+    },
+    onConnectFailure: (code) =>
+        (ok: false, connectFailed: true, code: code, affected: 0),
+  );
 }
