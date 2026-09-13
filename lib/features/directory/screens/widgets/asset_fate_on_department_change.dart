@@ -20,6 +20,7 @@ import 'bulk_user_action_pickers.dart';
 /// τμήματος, οπότε ο καθαρά προσωπικός αριθμός ακολουθούσε σιωπηλά.
 Future<BulkTransferAssetFate?> askPhoneFateOnDepartmentChange(
   BuildContext context, {
+
   /// Κενό για τη μαζική ροή· το όνομα του υπαλλήλου στη φόρμα ενός.
   String? userDisplayName,
 }) {
@@ -58,6 +59,7 @@ Future<BulkTransferAssetFate?> askPhoneFateOnDepartmentChange(
 /// «Ακολουθεί» έρχεται πρώτο. Το τηλέφωνο είναι θέση στο γραφείο και μένει.
 Future<BulkTransferAssetFate?> askEquipmentFateOnDepartmentChange(
   BuildContext context, {
+
   /// Κενό για τη μαζική ροή· το όνομα του υπαλλήλου στη φόρμα ενός.
   String? userDisplayName,
 }) {

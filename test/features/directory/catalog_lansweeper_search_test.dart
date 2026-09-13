@@ -242,7 +242,10 @@ void main() {
       notifier.setSearchQuery('PC4021');
       final found = container.read(equipmentDirectoryProvider).filteredItems;
 
-      expect(found.map((row) => row.$1.code), isNot(contains(_kStoredNameCode)));
+      expect(
+        found.map((row) => row.$1.code),
+        isNot(contains(_kStoredNameCode)),
+      );
     });
 
     test('εξοπλισμός: το εύρημα δηλώνεται ως κρυφό πεδίο', () async {

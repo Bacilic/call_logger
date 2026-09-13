@@ -26,11 +26,13 @@ class SettingsServiceCatalogs {
   static const String _keyDictionaryExportPath = 'dictionary_export_path';
   static const String _keyEquipmentTypes = 'equipment_types';
   static const String _keyBuildingCatalog = 'building_catalog';
+  static const String _keyDepartmentGroupCatalog = 'department_group_catalog';
   static const String _keyLexiconCategories = 'lexicon_categories';
   static const String _keyCrashLogRetentionCount =
       'crash_log_retention_count_v1';
   static const String _keyCatalogValidationRules =
       'catalog_validation_rules_v1';
+  static const String _keyLampCrossCheckRules = 'lamp_cross_check_rules_v1';
   static const String _keyPublishCliCommandTemplate =
       'publish_cli_command_template';
   static const String _keyShowUpdateOnStartup = 'show_update_on_startup';
@@ -304,6 +306,27 @@ class SettingsServiceCatalogs {
     return update(_keyCatalogValidationRules, change);
   }
 
+  /// Οι διακόπτες της «Διασταύρωσης με Λάμπα», ως ωμό JSON.
+  ///
+  /// `null` σημαίνει «καμία αποθηκευμένη τιμή» και ο αποκωδικοποιητής δίνει
+  /// τις προεπιλογές, ώστε η οθόνη να δουλεύει χωρίς καμία ρύθμιση.
+  Future<String?> getLampCrossCheckRulesRaw() async {
+    if (_getAppSetting == null) return null;
+    return _getAppSetting!(_keyLampCrossCheckRules);
+  }
+
+  /// **Στοχευμένη αλλαγή** των διακοπτών της διασταύρωσης — ίδιος λόγος με
+  /// τους κανόνες επικύρωσης: δεκαπέντε διακόπτες σε ΕΝΑ κλειδί, οπότε η
+  /// εγγραφή ολόκληρου του JSON από την εικόνα της οθόνης θα έσβηνε ό,τι
+  /// άλλαξε στο μεταξύ ο συνάδελφος.
+  Future<String?> updateLampCrossCheckRulesRaw(
+    String Function(String? current) change,
+  ) async {
+    final update = SettingsService.appSettingUpdater;
+    if (update == null) return null;
+    return update(_keyLampCrossCheckRules, change);
+  }
+
   /// Επιστρέφει λίστα τύπων για dropdown. Αν η ρύθμιση είναι κενή, επιστρέφει ["Υπολογιστής", "Εκτυπωτής"].
   Future<List<String>> getEquipmentTypesList() async {
     final raw = await getEquipmentTypesRaw();
@@ -381,6 +404,61 @@ class SettingsServiceCatalogs {
 
   static String _joinBuildingCatalog(List<String> buildings) =>
       buildings.join(', ');
+
+  // --- Κατάλογος ομάδων τμημάτων (app_settings, comma-separated) ---
+  //
+  // Ίδια μηχανική με τα κτίρια, και για τον ίδιο λόγο: οι ομάδες είναι δεδομένο
+  // του κάθε νοσοκομείου, όχι κάτι που ξέρει η εφαρμογή. Καμία καρφωτή
+  // προεπιλογή — κενή τιμή σημαίνει «δεν έχει οριστεί κατάλογος ακόμη».
+
+  /// Τι δείχνει η οθόνη για μια αποθηκευμένη τιμή του καταλόγου ομάδων.
+  static String effectiveDepartmentGroupCatalog(String? stored) =>
+      stored?.trim() ?? '';
+
+  /// Ακατέργαστο string ομάδων. Κενό = δεν έχει οριστεί κατάλογος.
+  Future<String> getDepartmentGroupCatalogRaw() async {
+    final value = _getAppSetting != null
+        ? await _getAppSetting!(_keyDepartmentGroupCatalog)
+        : null;
+    return effectiveDepartmentGroupCatalog(value);
+  }
+
+  /// Αποθηκεύει τον κατάλογο ομάδων (comma-separated).
+  Future<void> setDepartmentGroupCatalog(
+    String value, {
+    required String? expected,
+  }) async {
+    await _writeGuardedList(
+      key: _keyDepartmentGroupCatalog,
+      next: _joinDepartmentGroupCatalog(splitDepartmentGroupCatalog(value)),
+      expected: expected,
+      effective: effectiveDepartmentGroupCatalog,
+    );
+  }
+
+  /// Λίστα ομάδων όπως είναι αποθηκευμένη. Κενή = δεν έχει οριστεί κατάλογος.
+  Future<List<String>> getDepartmentGroupCatalogList() async =>
+      splitDepartmentGroupCatalog(await getDepartmentGroupCatalogRaw());
+
+  /// Σπάει το αποθηκευμένο κείμενο σε ομάδες, χωρίς κενά και διπλότυπα.
+  ///
+  /// Το «ίδιο» κρίνεται αγνοώντας πεζά/κεφαλαία, τόνους και αλφάβητο — αλλιώς
+  /// «Εργαστήρια» και «Εργαστηρια» θα ήταν δύο ομάδες, ακριβώς το πρόβλημα που
+  /// γεννήθηκε ο κατάλογος για να λύσει.
+  static List<String> splitDepartmentGroupCatalog(String? csv) {
+    final out = <String>[];
+    final seen = <String>{};
+    for (final part in (csv ?? '').split(',')) {
+      final value = part.trim();
+      if (value.isEmpty) continue;
+      final key = HomoglyphTextNormalizer.normalizeForComparison(value);
+      if (seen.add(key.isEmpty ? value : key)) out.add(value);
+    }
+    return out;
+  }
+
+  static String _joinDepartmentGroupCatalog(List<String> groups) =>
+      groups.join(', ');
 
   // --- Κατηγορίες λεξικού (app_settings, comma-separated) ---
 

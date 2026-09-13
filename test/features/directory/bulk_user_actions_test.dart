@@ -303,9 +303,7 @@ void main() {
         equipmentFate: BulkTransferAssetFate.follow,
         equipmentByUserId: const {},
         sharing: const BulkAssetSharingInfo(
-          phoneSharedDepartments: {
-            '2511': (id: 10, name: 'Αιμοδοσία'),
-          },
+          phoneSharedDepartments: {'2511': (id: 10, name: 'Αιμοδοσία')},
         ),
       );
 

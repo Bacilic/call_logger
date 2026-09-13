@@ -69,7 +69,9 @@ Widget _wrap(Widget child, {double width = 1560}) {
       ),
     ],
     child: MaterialApp(
-      home: Scaffold(body: SizedBox(width: width, child: child)),
+      home: Scaffold(
+        body: SizedBox(width: width, child: child),
+      ),
     ),
   );
 }
@@ -182,9 +184,7 @@ void main() {
   });
 
   group('Η πάνω μπάρα', () {
-    testWidgets('η επιστροφή είναι βέλος, όχι κουμπί «Έξοδος»', (
-      tester,
-    ) async {
+    testWidgets('η επιστροφή είναι βέλος, όχι κουμπί «Έξοδος»', (tester) async {
       tester.view.physicalSize = _kWindowSize;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);

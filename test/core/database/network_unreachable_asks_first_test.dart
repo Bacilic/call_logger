@@ -11,7 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// παλιό, αληθινό αρχείο· ο χρήστης μπορούσε να καταγράφει κλήσεις σε λάθος
 /// δεδομένα χωρίς να το ξέρει.
 void main() {
-  const unreachableUnc = r'\\δεν-υπαρχει-διακομιστης\κοινοχρηστο\call_logger.db';
+  const unreachableUnc =
+      r'\\δεν-υπαρχει-διακομιστης\κοινοχρηστο\call_logger.db';
   const localDb = r'C:\Users\x\Documents\Call Logger\call_logger.db';
 
   setUp(() async {
@@ -22,13 +23,16 @@ void main() {
 
   tearDown(LocalDatabaseSessionFallback.forget);
 
-  test('δικτυακή διαδρομή που δεν απαντά δεν μεταπίπτει από μόνη της', () async {
-    final resolved = await resolveEffectiveDatabasePath(unreachableUnc);
+  test(
+    'δικτυακή διαδρομή που δεν απαντά δεν μεταπίπτει από μόνη της',
+    () async {
+      final resolved = await resolveEffectiveDatabasePath(unreachableUnc);
 
-    expect(resolved.outcome, DatabasePathResolution.networkUnreachable);
-    expect(resolved.unreachablePath, unreachableUnc);
-    expect(resolved.usedUncFallback, isFalse);
-  });
+      expect(resolved.outcome, DatabasePathResolution.networkUnreachable);
+      expect(resolved.unreachablePath, unreachableUnc);
+      expect(resolved.usedUncFallback, isFalse);
+    },
+  );
 
   test('χωρίς απόφαση δεν υπάρχει διαδρομή προς άνοιγμα', () async {
     final resolved = await resolveEffectiveDatabasePath(unreachableUnc);

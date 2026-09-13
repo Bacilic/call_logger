@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../layout/calls_field_groups.dart';
 import '../../provider/call_header_provider.dart';
+import '../../../../core/providers/database_settings_route_intent_provider.dart';
 import '../../provider/lookup_provider.dart';
 import '../../../../core/providers/call_department_prefill_intent_provider.dart';
 import 'call_entry_selector_hooks.dart';
@@ -230,14 +231,43 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                           ],
                         ),
                       ),
-                      TextButton(
-                        onPressed: () {
-                          ref.invalidate(lookupServiceProvider);
-                          // Άμεσο flush εκτός build ώστε να μη μείνει «dirty» και
-                          // ξεπλυθεί σύγχρονα στο επόμενο build της οθόνης κλήσεων.
-                          ref.read(lookupServiceProvider);
-                        },
-                        child: const Text('Επαναδοκιμή'),
+                      // Δύο διέξοδοι, γιατί οι αιτίες είναι δύο ειδών: το
+                      // δίκτυο που ξαναήρθε λύνεται με μια επαναδοκιμή, ενώ το
+                      // χαλασμένο αρχείο θέλει άλλη βάση ή επαναφορά. Με μόνο
+                      // την «Επαναδοκιμή» η δεύτερη περίπτωση ήταν αδιέξοδο:
+                      // ξαναφόρτωνε τον ίδιο κατάλογο από την ίδια βάση.
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              ref.invalidate(lookupServiceProvider);
+                              // Άμεσο flush εκτός build ώστε να μη μείνει
+                              // «dirty» και ξεπλυθεί σύγχρονα στο επόμενο build
+                              // της οθόνης κλήσεων.
+                              ref.read(lookupServiceProvider);
+                            },
+                            child: const Text('Επαναδοκιμή'),
+                          ),
+                          TextButton.icon(
+                            key: const ValueKey(
+                              'lookup_error_open_db_settings',
+                            ),
+                            onPressed: () {
+                              // Το άνοιγμα το κάνει το κέλυφος: μόνο εκείνο
+                              // κρατά τον χειριστή «άλλαξε η βάση».
+                              ref
+                                  .read(
+                                    databaseSettingsRouteIntentProvider
+                                        .notifier,
+                                  )
+                                  .open(DatabaseSettingsTab.database);
+                            },
+                            icon: const Icon(Icons.dataset_linked, size: 18),
+                            label: const Text('Ρυθμίσεις βάσης'),
+                          ),
+                        ],
                       ),
                     ],
                   ),

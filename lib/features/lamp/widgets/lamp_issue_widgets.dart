@@ -134,6 +134,9 @@ class LampIssueHelpers {
       LampIssueType.setMasterSelfReference => Icons.link_off_outlined,
       LampIssueType.setMasterCycle => Icons.account_tree_outlined,
       LampIssueType.setMasterMissingTarget => Icons.gps_off_outlined,
+      LampIssueType.mixedScriptAlphabets => Icons.translate_outlined,
+      LampIssueType.mixedScriptBrokenChar => Icons.report_gmailerrorred_outlined,
+      LampIssueType.mixedScriptDigitInGreek => Icons.pin_outlined,
     };
   }
 

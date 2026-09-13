@@ -9,9 +9,6 @@ import '../../../core/widgets/main_nav_destination.dart';
 import '../providers/remote_tools_view_intent_provider.dart';
 import 'path_fix_destination.dart';
 
-/// Καρτέλα «Αντίγραφα ασφαλείας» μέσα στις Ρυθμίσεις βάσης.
-const int _kBackupSettingsTabIndex = 1;
-
 /// Γιατί δεν μπορεί να προσφερθεί η μετάβαση· `null` = μπορεί.
 ///
 /// Μία απόφαση για όλους τους λόγους, ώστε ο καλών να μη μπορεί να ελέγξει το
@@ -52,7 +49,7 @@ void requestPathFixNavigation(WidgetRef ref, PathFixDestination destination) {
       // που μόλις έτρεξε μένει εκεί που τον άφησε ο χρήστης.
       ref
           .read(databaseSettingsRouteIntentProvider.notifier)
-          .openTab(_kBackupSettingsTabIndex);
+          .open(DatabaseSettingsTab.backups);
     case PathFixDestination.remoteTools:
       ref.read(remoteToolsViewRequestProvider.notifier).request();
     case PathFixDestination.updateFolder:

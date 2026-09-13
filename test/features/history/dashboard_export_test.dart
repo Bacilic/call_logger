@@ -202,34 +202,30 @@ void main() {
   });
 
   group('Το αρχείο PDF', () {
-    test(
-      'πίνακας μεγαλύτερος από μία σελίδα μοιράζεται σε σελίδες',
-      () async {
-        // Ο κατάλογος έχει δεκάδες τμήματα· με πραγματικά δεδομένα ο πίνακας
-        // «Ανά τμήμα» ξεπερνά τη μία σελίδα. Όσο ο πίνακας ζούσε μέσα σε
-        // στήλη, το έγγραφο δεν μπορούσε να τον τοποθετήσει και γεννούσε κενές
-        // σελίδες μέχρι να σκάσει — η εξαγωγή αποτύγχανε ολόκληρη.
-        final document = DashboardExportDocument(
-          title: 'Στατιστικά Κλήσεων',
-          rangeLabel: 'Όλες οι ημερομηνίες',
-          generatedAtLabel: '05/09/2026 14:30',
-          activeFilterLabels: const ['Χωρίς φίλτρα — όλες οι κλήσεις'],
-          tables: [
-            DashboardExportTable(
-              title: 'Ανά τμήμα',
-              columns: const ['Τμήμα', 'Κλήσεις', 'Συνολική διάρκεια'],
-              rows: [
-                for (var i = 1; i <= 200; i++)
-                  ['Τμήμα $i', '$i', '$i ω:00λ'],
-              ],
-            ),
-          ],
-        );
-        final font = await File('assets/fonts/Inter-Regular.ttf').readAsBytes();
-        final bytes = await buildDashboardPdf(document, fontData: font);
-        expect(bytes.length, greaterThan(1000));
-      },
-    );
+    test('πίνακας μεγαλύτερος από μία σελίδα μοιράζεται σε σελίδες', () async {
+      // Ο κατάλογος έχει δεκάδες τμήματα· με πραγματικά δεδομένα ο πίνακας
+      // «Ανά τμήμα» ξεπερνά τη μία σελίδα. Όσο ο πίνακας ζούσε μέσα σε
+      // στήλη, το έγγραφο δεν μπορούσε να τον τοποθετήσει και γεννούσε κενές
+      // σελίδες μέχρι να σκάσει — η εξαγωγή αποτύγχανε ολόκληρη.
+      final document = DashboardExportDocument(
+        title: 'Στατιστικά Κλήσεων',
+        rangeLabel: 'Όλες οι ημερομηνίες',
+        generatedAtLabel: '05/09/2026 14:30',
+        activeFilterLabels: const ['Χωρίς φίλτρα — όλες οι κλήσεις'],
+        tables: [
+          DashboardExportTable(
+            title: 'Ανά τμήμα',
+            columns: const ['Τμήμα', 'Κλήσεις', 'Συνολική διάρκεια'],
+            rows: [
+              for (var i = 1; i <= 200; i++) ['Τμήμα $i', '$i', '$i ω:00λ'],
+            ],
+          ),
+        ],
+      );
+      final font = await File('assets/fonts/Inter-Regular.ttf').readAsBytes();
+      final bytes = await buildDashboardPdf(document, fontData: font);
+      expect(bytes.length, greaterThan(1000));
+    });
 
     test('παράγεται με ελληνικά και δεν είναι άδειο', () async {
       final document = buildDashboardExportDocument(

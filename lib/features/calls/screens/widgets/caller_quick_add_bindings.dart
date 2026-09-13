@@ -8,6 +8,7 @@ import '../../../directory/screens/widgets/similar_users_dialog.dart';
 import '../../controllers/caller_quick_add_controller.dart';
 import '../../models/user_model.dart';
 import '../../provider/call_header_provider.dart';
+import 'quick_add_undo_snackbar.dart';
 import '../../provider/smart_entity_selector_state.dart'
     show OrphanQuickAddResult;
 
@@ -19,9 +20,14 @@ class CallerQuickAddDialogPrompts implements CallerQuickAddPrompts {
   const CallerQuickAddDialogPrompts({
     required this.context,
     required this.messenger,
+    required this.ref,
   });
 
   final BuildContext context;
+
+  /// Μόνο για την προσφορά αναίρεσης: το «τι γεννήθηκε» ζει στον notifier, και
+  /// η απόφαση «θα φανεί κουμπί;» είναι του UI — ο controller δεν τη γνωρίζει.
+  final WidgetRef ref;
 
   /// Κρατιέται ΠΡΙΝ από τους διαλόγους: μετά το κλείσιμό τους το context μπορεί
   /// να μην φτάνει πια σε ScaffoldMessenger.
@@ -121,7 +127,30 @@ class CallerQuickAddDialogPrompts implements CallerQuickAddPrompts {
 
   @override
   void announce(String message) {
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    final notifier = ref.read(callHeaderProvider.notifier);
+    if (!notifier.hasQuickAddUndoOffer) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+    // Το snackbar με ενέργειες δεν κλείνει μόνο του σε κάθε πλατφόρμα: η
+    // διάρκεια δηλώνεται ρητά ώστε η προσφορά να μη μείνει για πάντα στην
+    // οθόνη ούτε να φύγει πριν προλάβει ο χρήστης να τη δει.
+    messenger.showSnackBar(
+      SnackBar(
+        content: QuickAddUndoSnackBarContent(
+          message: message,
+          onUndo: () async {
+            final summary = await notifier.undoLastQuickAdd();
+            if (summary == null) return;
+            messenger
+              ..hideCurrentSnackBar()
+              ..showSnackBar(SnackBar(content: Text(summary)));
+          },
+          onDismiss: messenger.hideCurrentSnackBar,
+        ),
+        duration: kQuickAddUndoSnackBarDuration,
+      ),
+    );
   }
 }
 
@@ -174,6 +203,7 @@ CallerQuickAddController buildCallerQuickAddController({
     prompts: CallerQuickAddDialogPrompts(
       context: context,
       messenger: messenger,
+      ref: ref,
     ),
   );
 }

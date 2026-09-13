@@ -27,10 +27,10 @@ void main() {
 
   group('Ποια φίλτρα δηλώνονται ως ενεργά', () {
     test('χωρίς κανένα φίλτρο δεν υπάρχει τίποτα να δείξει', () {
-      expect(describeActiveDashboardFilters(
-        const DashboardFilterModel(),
-        now: now,
-      ), isEmpty);
+      expect(
+        describeActiveDashboardFilters(const DashboardFilterModel(), now: now),
+        isEmpty,
+      );
     });
 
     test(

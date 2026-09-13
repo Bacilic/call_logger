@@ -62,8 +62,11 @@ Future<String?> exportDashboardStatistics({
       bytes: Uint8List(0),
     );
   } on Exception catch (error) {
-    _show(messenger, 'Δεν άνοιξε ο διάλογος αποθήκευσης: '
-        '${humanizeUserFacingError(error)}');
+    _show(
+      messenger,
+      'Δεν άνοιξε ο διάλογος αποθήκευσης: '
+      '${humanizeUserFacingError(error)}',
+    );
     return null;
   }
   if (destination == null) return null;
@@ -75,9 +78,9 @@ Future<String?> exportDashboardStatistics({
       DashboardExportFormat.excel => buildDashboardExcel(document),
       DashboardExportFormat.pdf => await buildDashboardPdf(
         document,
-        fontData: (await (bundle ?? rootBundle).load(kDashboardPdfFontAsset))
-            .buffer
-            .asUint8List(),
+        fontData: (await (bundle ?? rootBundle).load(
+          kDashboardPdfFontAsset,
+        )).buffer.asUint8List(),
       ),
     };
     await File(path).writeAsBytes(bytes, flush: true);

@@ -58,26 +58,25 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
   group('Ο διάλογος «λείπει ο φάκελος»', () {
-    testWidgets(
-      'άφταστος δικτυακός φάκελος: ΔΕΝ προσφέρει δημιουργία',
-      (tester) async {
-        await _pumpFolderMissing(
-          tester,
-          folderPath: _hospitalShare,
-          reach: BackupDestinationReachability.networkUnreachable,
-        );
+    testWidgets('άφταστος δικτυακός φάκελος: ΔΕΝ προσφέρει δημιουργία', (
+      tester,
+    ) async {
+      await _pumpFolderMissing(
+        tester,
+        folderPath: _hospitalShare,
+        reach: BackupDestinationReachability.networkUnreachable,
+      );
 
-        expect(
-          find.text('Δημιουργία εδώ και εκτέλεση'),
-          findsNothing,
-          reason:
-              'Ο κοινόχρηστος δεν απαντά· η δημιουργία θα αποτύγχανε και θα '
-              'έστελνε τον χρήστη στον επόμενο διάλογο.',
-        );
-        expect(find.text('Αλλαγή φακέλου'), findsOneWidget);
-        expect(find.text('Αγνόηση'), findsOneWidget);
-      },
-    );
+      expect(
+        find.text('Δημιουργία εδώ και εκτέλεση'),
+        findsNothing,
+        reason:
+            'Ο κοινόχρηστος δεν απαντά· η δημιουργία θα αποτύγχανε και θα '
+            'έστελνε τον χρήστη στον επόμενο διάλογο.',
+      );
+      expect(find.text('Αλλαγή φακέλου'), findsOneWidget);
+      expect(find.text('Αγνόηση'), findsOneWidget);
+    });
 
     testWidgets('άφταστος δικτυακός φάκελος: λέει ΓΙΑΤΙ', (tester) async {
       await _pumpFolderMissing(
@@ -96,41 +95,39 @@ void main() {
       expect(find.textContaining(_hospitalShare), findsOneWidget);
     });
 
-    testWidgets(
-      'προσβάσιμος προορισμός: η δημιουργία ΠΑΡΑΜΕΝΕΙ',
-      (tester) async {
-        await _pumpFolderMissing(
-          tester,
-          folderPath: r'D:\Backups\call_logger',
-          reach: BackupDestinationReachability.creatable,
-        );
+    testWidgets('προσβάσιμος προορισμός: η δημιουργία ΠΑΡΑΜΕΝΕΙ', (
+      tester,
+    ) async {
+      await _pumpFolderMissing(
+        tester,
+        folderPath: r'D:\Backups\call_logger',
+        reach: BackupDestinationReachability.creatable,
+      );
 
-        expect(
-          find.text('Δημιουργία εδώ και εκτέλεση'),
-          findsOneWidget,
-          reason:
-              'Τοπικός φάκελος που απλώς σβήστηκε: η δημιουργία είναι η '
-              'σωστή και γρήγορη απάντηση.',
-        );
-      },
-    );
+      expect(
+        find.text('Δημιουργία εδώ και εκτέλεση'),
+        findsOneWidget,
+        reason:
+            'Τοπικός φάκελος που απλώς σβήστηκε: η δημιουργία είναι η '
+            'σωστή και γρήγορη απάντηση.',
+      );
+    });
 
-    testWidgets(
-      'αποσυνδεδεμένος δίσκος: ΔΕΝ προσφέρει δημιουργία',
-      (tester) async {
-        await _pumpFolderMissing(
-          tester,
-          folderPath: r'K:\Backups',
-          reach: BackupDestinationReachability.volumeMissing,
-        );
+    testWidgets('αποσυνδεδεμένος δίσκος: ΔΕΝ προσφέρει δημιουργία', (
+      tester,
+    ) async {
+      await _pumpFolderMissing(
+        tester,
+        folderPath: r'K:\Backups',
+        reach: BackupDestinationReachability.volumeMissing,
+      );
 
-        expect(find.text('Δημιουργία εδώ και εκτέλεση'), findsNothing);
-        expect(
-          find.textContaining('Ο δίσκος K: δεν υπάρχει'),
-          findsOneWidget,
-          reason: 'Το γράμμα του δίσκου κατονομάζεται, δεν λέγεται αόριστα.',
-        );
-      },
-    );
+      expect(find.text('Δημιουργία εδώ και εκτέλεση'), findsNothing);
+      expect(
+        find.textContaining('Ο δίσκος K: δεν υπάρχει'),
+        findsOneWidget,
+        reason: 'Το γράμμα του δίσκου κατονομάζεται, δεν λέγεται αόριστα.',
+      );
+    });
   });
 }

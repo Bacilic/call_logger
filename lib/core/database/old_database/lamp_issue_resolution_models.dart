@@ -29,6 +29,18 @@ enum LampIssueType {
   setMasterMissingTarget(
     'set_master_missing_target',
     'Επίλυση · Κύριος εξοπλισμός χωρίς υπαρκτό στόχο',
+  ),
+  mixedScriptAlphabets(
+    'mixed_script_alphabets',
+    'Επίλυση · Ελληνικά και λατινικά μαζί',
+  ),
+  mixedScriptBrokenChar(
+    'mixed_script_broken_char',
+    'Επίλυση · Χαλασμένος χαρακτήρας',
+  ),
+  mixedScriptDigitInGreek(
+    'mixed_script_digit_in_greek',
+    'Επίλυση · Ψηφίο σε ελληνική λέξη',
   );
 
   const LampIssueType(this.issueType, this.label);
@@ -224,6 +236,10 @@ class LampIssueResolutionDecision {
 /// Πράξεις επίλυσης ανεπίλυτων προτάσεων (metadata `operation`).
 abstract final class LampIssueResolutionOperations {
   static const String setFieldManual = 'set_field_manual';
+
+  /// Αντικατάσταση μιας ύποπτης λέξης μέσα σε πεδίο κειμένου οποιουδήποτε
+  /// πίνακα της Λάμπας — η πράξη των αλλοιωμένων χαρακτήρων.
+  static const String replaceMixedScriptWord = 'replace_mixed_script_word';
   static const String clearField = 'clear_field';
   static const String deferIssue = 'defer_issue';
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'database_settings_backup_tab.dart';
+import '../../../core/providers/database_settings_route_intent_provider.dart';
 import 'database_settings_file_tab.dart';
 import 'database_settings_maintenance_tab.dart';
 import 'database_settings_restore_tab.dart';
@@ -27,6 +28,13 @@ class DatabaseSettingsPanel extends StatelessWidget {
   /// 2: Επαναφορά, 3: Συντήρηση). Όποιος έρχεται από αλλού για συγκεκριμένη
   /// ρύθμιση τη βρίσκει χωρίς δεύτερο κλικ.
   final int initialTabIndex;
+
+  IconData _iconFor(DatabaseSettingsTab tab) => switch (tab) {
+    DatabaseSettingsTab.database => Icons.storage,
+    DatabaseSettingsTab.backups => Icons.shield_outlined,
+    DatabaseSettingsTab.restore => Icons.unarchive_outlined,
+    DatabaseSettingsTab.maintenance => Icons.fact_check_outlined,
+  };
 
   Widget _tab(IconData icon, String label) {
     return Tab(
@@ -75,12 +83,14 @@ class DatabaseSettingsPanel extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               TabBar(
-                tabs: [
-                  _tab(Icons.storage, 'Βάση'),
-                  _tab(Icons.shield_outlined, 'Αντίγραφα ασφαλείας'),
-                  _tab(Icons.unarchive_outlined, 'Επαναφορά'),
-                  _tab(Icons.fact_check_outlined, 'Συντήρηση'),
-                ],
+                // Οι ετικέτες έρχονται από το ίδιο σημείο με τους δείκτες:
+                // έτσι μια αναδιάταξη αλλάζει ΚΑΙ τα δύο μαζί ή κανένα.
+                tabs: const [
+                  DatabaseSettingsTab.database,
+                  DatabaseSettingsTab.backups,
+                  DatabaseSettingsTab.restore,
+                  DatabaseSettingsTab.maintenance,
+                ].map((t) => _tab(_iconFor(t), t.label)).toList(),
               ),
               Expanded(
                 child: TabBarView(

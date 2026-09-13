@@ -121,10 +121,7 @@ DashboardExportTable _summaryTable(DashboardSummaryModel data) {
   // περίοδος — χωρίς φίλτρο ημερομηνιών δεν υπάρχει «προηγούμενη».
   if (!data.isAllDatesMode) {
     rows.addAll([
-      [
-        'Κλήσεις προηγούμενης περιόδου',
-        '${data.previousPeriodTotalCalls}',
-      ],
+      ['Κλήσεις προηγούμενης περιόδου', '${data.previousPeriodTotalCalls}'],
       [
         'Μεταβολή κλήσεων',
         formatDashboardDeltaPercent(

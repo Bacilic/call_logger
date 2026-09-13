@@ -11,6 +11,8 @@ import '../../../../core/widgets/section_card.dart';
 import '../../../../core/widgets/settings_list_conflict_dialog.dart';
 import '../../providers/building_catalog_provider.dart';
 import '../../providers/department_directory_provider.dart';
+import 'catalog_entry_row.dart';
+import 'catalog_name_dialog.dart';
 
 /// Οθόνη «Τμήματα» (Κατάλογος → Διάφορα): ο κοινός κατάλογος κτιρίων.
 ///
@@ -198,10 +200,6 @@ class _DepartmentsSettingsViewState
     );
   }
 
-  /// Μικρή φόρμα ονόματος με τον έλεγχο διπλότυπου μέσα της.
-  ///
-  /// Ο έλεγχος αγνοεί αλφάβητο και τόνους: «Β» και «B» είναι το ίδιο κτίριο,
-  /// και το να μπουν και τα δύο στη λίστα θα αναπαρήγαγε το πρόβλημα.
   Future<String?> _askBuildingName({
     required String title,
     required String actionLabel,
@@ -209,59 +207,249 @@ class _DepartmentsSettingsViewState
     String? initial,
     String? allowSelf,
   }) {
-    final controller = TextEditingController(text: initial ?? '');
-    final formKey = GlobalKey<FormState>();
-    return showDialog<String>(
+    return showCatalogNameDialog(
+      context: context,
+      title: title,
+      actionLabel: actionLabel,
+      fieldLabel: 'Όνομα κτιρίου',
+      emptyMessage: 'Δώστε όνομα κτιρίου.',
+      sameEntityPhrase: 'είναι το ίδιο κτίριο.',
+      catalog: catalog,
+      initial: initial,
+      allowSelf: allowSelf,
+    );
+  }
+
+  // ─────────────────────────── Ομάδες ───────────────────────────
+  //
+  // Ίδιο σχήμα με τα κτίρια, στο ΙΔΙΟ State: ο κατάλογος είναι ο κύριος, τα
+  // τμήματα ακολουθούν. Ζουν μαζί επειδή μοιράζονται τη σκηνή — ξεχωριστό
+  // widget με δική του κατάσταση κατέρρεε όταν ο διάλογός του έκλεινε ενώ η
+  // οθόνη από κάτω ξαναχτιζόταν.
+
+  Future<void> _mutateGroups(
+    List<String> Function(List<String> current) change, {
+    Future<String?> Function()? afterSave,
+    String? successMessage,
+  }) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final storedRaw = await readDepartmentGroupCatalogRaw();
+      final current = await ref.read(departmentGroupCatalogProvider.future);
+      final next = sortDepartmentGroups(change(List<String>.from(current)));
+      if (!mounted) return;
+
+      final saved = await saveSettingsListWithConflictPrompt(
+        context,
+        listLabel: 'λίστα ομάδων',
+        save: ({required force}) => writeDepartmentGroupCatalog(
+          next,
+          expected: force ? null : storedRaw,
+        ),
+      );
+      if (!saved) return;
+
+      final extra = afterSave == null ? null : await afterSave();
+      _refreshGroups();
+      if (!mounted) return;
+      final message = [?successMessage, ?extra].join(' ');
+      if (message.isNotEmpty) _say(message);
+    } catch (e) {
+      if (!mounted) return;
+      _say('Αποτυχία: ${humanizeUserFacingError(e)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _refreshGroups() {
+    ref.invalidate(departmentGroupUsageProvider);
+    ref.invalidate(departmentGroupCatalogProvider);
+    ref.invalidate(departmentDirectoryProvider);
+  }
+
+  Future<String?> _askGroupName({
+    required String title,
+    required String actionLabel,
+    required List<String> catalog,
+    String? initial,
+    String? allowSelf,
+  }) {
+    return showCatalogNameDialog(
+      context: context,
+      title: title,
+      actionLabel: actionLabel,
+      fieldLabel: 'Όνομα ομάδας',
+      emptyMessage: 'Δώστε όνομα ομάδας.',
+      sameEntityPhrase: 'είναι η ίδια ομάδα.',
+      catalog: catalog,
+      initial: initial,
+      allowSelf: allowSelf,
+    );
+  }
+
+  Future<void> _addGroup() async {
+    final catalog = await ref.read(departmentGroupCatalogProvider.future);
+    if (!mounted) return;
+    final name = await _askGroupName(
+      title: 'Προσθήκη ομάδας',
+      actionLabel: 'Προσθήκη',
+      catalog: catalog,
+    );
+    if (name == null) return;
+    await _mutateGroups(
+      (current) => [...current, name],
+      successMessage: 'Προστέθηκε η ομάδα «$name».',
+    );
+  }
+
+  Future<void> _renameGroup(String group) async {
+    final catalog = await ref.read(departmentGroupCatalogProvider.future);
+    if (!mounted) return;
+    final name = await _askGroupName(
+      title: 'Μετονομασία ομάδας',
+      actionLabel: 'Μετονομασία',
+      initial: group,
+      catalog: catalog,
+      allowSelf: group,
+    );
+    if (name == null || name == group) return;
+    await _mutateGroups(
+      (current) => [
+        for (final g in current)
+          if (g == group) name else g,
+      ],
+      afterSave: () async {
+        final db = await DatabaseHelper.instance.database;
+        final touched = await DepartmentRepository(
+          db,
+        ).renameGroupInDepartments(from: group, to: name);
+        return touched == 0
+            ? null
+            : 'Ενημερώθηκαν $touched ${touched == 1 ? 'τμήμα' : 'τμήματα'}.';
+      },
+      successMessage: 'Η «$group» έγινε «$name».',
+    );
+  }
+
+  Future<void> _deleteGroup(String group, int usage) async {
+    final theme = Theme.of(context);
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => DraggableDialogShell(
-        title: Text(title),
+        title: const Text('Διαγραφή ομάδας'),
         builder: (titleHandle) => AlertDialog(
           title: titleHandle,
-          content: SizedBox(
-            width: 380,
-            child: Form(
-              key: formKey,
-              child: TextFormField(
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Όνομα κτιρίου',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  final name = (value ?? '').trim();
-                  if (name.isEmpty) return 'Δώστε όνομα κτιρίου.';
-                  final clash = matchBuildingInCatalog(name, catalog);
-                  if (clash == null || clash == allowSelf) return null;
-                  return clash == name
-                      ? 'Υπάρχει ήδη στη λίστα.'
-                      : 'Υπάρχει ήδη ως «$clash» — είναι το ίδιο κτίριο.';
-                },
-                onFieldSubmitted: (_) {
-                  if (formKey.currentState?.validate() ?? false) {
-                    Navigator.of(ctx).pop(controller.text.trim());
-                  }
-                },
-              ),
-            ),
+          content: Text(
+            usage == 0
+                ? 'Να διαγραφεί η ομάδα «$group» από τη λίστα;\n\n'
+                      'Δεν τη χρησιμοποιεί κανένα τμήμα.'
+                : 'Να διαγραφεί η ομάδα «$group» από τη λίστα;\n\n'
+                      '$usage ${usage == 1 ? 'τμήμα θα μείνει' : 'τμήματα θα μείνουν'} '
+                      'χωρίς ομάδα, και θα πέφτουν στα «Λοιπά» του επιλογέα '
+                      'χάρτη μέχρι να τους δοθεί καινούρια.',
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
+              onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('Ακύρωση'),
             ),
             FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(ctx).pop(controller.text.trim());
-                }
-              },
-              child: Text(actionLabel),
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.error,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Διαγραφή'),
             ),
           ],
         ),
       ),
-    ).whenComplete(controller.dispose);
+    );
+    if (confirmed != true) return;
+
+    await _mutateGroups(
+      (current) => [
+        for (final g in current)
+          if (g != group) g,
+      ],
+      afterSave: () async {
+        final db = await DatabaseHelper.instance.database;
+        final cleared = await DepartmentRepository(
+          db,
+        ).clearGroupFromDepartments(group);
+        return cleared == 0
+            ? null
+            : 'Έμειναν χωρίς ομάδα $cleared '
+                  '${cleared == 1 ? 'τμήμα' : 'τμήματα'}.';
+      },
+      successMessage: 'Διαγράφηκε η ομάδα «$group».',
+    );
+  }
+
+  Widget _buildGroupCard() {
+    final theme = Theme.of(context);
+    final catalog =
+        ref.watch(departmentGroupCatalogProvider).asData?.value ??
+        const <String>[];
+    final usage =
+        ref.watch(departmentGroupUsageProvider).asData?.value ??
+        DepartmentGroupUsage.empty;
+
+    return SectionCard(
+      icon: Icons.category_outlined,
+      title: 'Ομάδες',
+      trailing: _canManage
+          ? FilledButton.tonalIcon(
+              onPressed: _busy ? null : _addGroup,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Προσθήκη'),
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Από αυτή τη λίστα διαλέγεις ομάδα στη φόρμα τμήματος. Η ομάδα '
+            'οργανώνει τον επιλογέα του χάρτη σε τίτλους — χωρίς αυτήν το '
+            'τμήμα πέφτει στα «Λοιπά». Η διαγραφή αφήνει χωρίς ομάδα τα '
+            'τμήματά της· η μετονομασία τα ενημερώνει όλα μαζί.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (catalog.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Δεν υπάρχει καμία ομάδα. Πρόσθεσε μία για να μπορούν τα '
+                'τμήματα να ανατεθούν σε ομάδα.',
+              ),
+            )
+          else
+            for (final group in catalog)
+              CatalogEntryRow(
+                name: group,
+                usage: usage.countFor(group),
+                enabled: _canManage && !_busy,
+                onRename: () => _renameGroup(group),
+                onDelete: () => _deleteGroup(group, usage.countFor(group)),
+              ),
+          if (usage.withoutGroup > 0) ...[
+            const SizedBox(height: 12),
+            Text(
+              '${usage.withoutGroup} '
+              '${usage.withoutGroup == 1 ? 'τμήμα του χάρτη δεν ανήκει' : 'τμήματα του χάρτη δεν ανήκουν'} '
+              'σε καμία ομάδα.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -274,20 +462,33 @@ class _DepartmentsSettingsViewState
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
-          child: catalogAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => SectionCard(
-              icon: Icons.error_outline,
-              title: 'Κτίρια',
-              child: Text('Αποτυχία φόρτωσης: ${humanizeUserFacingError(e)}'),
-            ),
-            data: (catalog) => _buildCard(
-              catalog,
-              usageAsync.asData?.value ?? BuildingUsage.empty,
-            ),
+          // Οι δύο κατάλογοι είναι ΑΝΕΞΑΡΤΗΤΟΙ: η κάρτα των ομάδων μένει έξω
+          // από την αναμονή των κτιρίων. Μέσα της, κάθε ξαναφόρτωμα των
+          // κτιρίων θα αντικαθιστούσε όλο το κλαδί με τον δείκτη φόρτωσης και
+          // θα κατέστρεφε την κάρτα ενώ οι παρατηρητές της την ακούνε ακόμη.
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              catalogAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (e, _) => SectionCard(
+                  icon: Icons.error_outline,
+                  title: 'Κτίρια',
+                  child: Text(
+                    'Αποτυχία φόρτωσης: ${humanizeUserFacingError(e)}',
+                  ),
+                ),
+                data: (catalog) => _buildCard(
+                  catalog,
+                  usageAsync.asData?.value ?? BuildingUsage.empty,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildGroupCard(),
+            ],
           ),
         ),
       ),
@@ -330,7 +531,7 @@ class _DepartmentsSettingsViewState
             )
           else
             for (final building in catalog)
-              _BuildingRow(
+              CatalogEntryRow(
                 name: building,
                 usage: usage.countFor(building),
                 enabled: _canManage && !_busy,
@@ -370,52 +571,5 @@ class _DepartmentsSettingsViewState
     return '$missing ${missing == 1 ? 'τμήμα δεν έχει' : 'τμήματα δεν έχουν'} '
         'κτίριο. Τα βρίσκεις ονομαστικά στον «Έλεγχο δεδομένων» των Κανόνων '
         'Επικύρωσης.';
-  }
-}
-
-class _BuildingRow extends StatelessWidget {
-  const _BuildingRow({
-    required this.name,
-    required this.usage,
-    required this.enabled,
-    required this.onRename,
-    required this.onDelete,
-  });
-
-  final String name;
-  final int usage;
-  final bool enabled;
-  final VoidCallback onRename;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(child: Text(name, style: theme.textTheme.bodyLarge)),
-          Text(
-            usage == 0
-                ? 'κανένα τμήμα'
-                : '$usage ${usage == 1 ? 'τμήμα' : 'τμήματα'}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          IconButton(
-            tooltip: 'Μετονομασία',
-            icon: const Icon(Icons.edit_outlined, size: 20),
-            onPressed: enabled ? onRename : null,
-          ),
-          IconButton(
-            tooltip: 'Διαγραφή',
-            icon: const Icon(Icons.delete_outline, size: 20),
-            onPressed: enabled ? onDelete : null,
-          ),
-        ],
-      ),
-    );
   }
 }

@@ -26,7 +26,7 @@ import 'core/services/settings_service.dart';
 import 'core/database/database_file_identity.dart';
 import 'core/database/database_reachability.dart';
 import 'core/database/database_replacement_notice.dart';
-import 'core/errors/app_error_result.dart';
+import 'core/errors/fatal_error_routing.dart';
 import 'core/errors/layout_error_diagnostics.dart';
 import 'core/errors/nonfatal_font_error_classifier.dart';
 import 'core/widgets/crash_restart_notice.dart';
@@ -45,7 +45,7 @@ void _routeFatalErrorToUi(Object exception, StackTrace stack) {
     unawaited(_routeAfterReplacementCheck(exception, stack));
     return;
   }
-  _presentFatalError(AppErrorResult.fromException(exception, stack));
+  _presentFatalError(classifyFatalError(exception, stack));
 }
 
 Future<void> _routeAfterReplacementCheck(
@@ -59,10 +59,10 @@ Future<void> _routeAfterReplacementCheck(
     // Ο έλεγχος δεν επιτρέπεται να καταπιεί το αρχικό σφάλμα.
   }
   if (handled) return;
-  _presentFatalError(AppErrorResult.fromException(exception, stack));
+  _presentFatalError(classifyFatalError(exception, stack));
 }
 
-void _presentFatalError(AppErrorResult result) {
+void _presentFatalError(FatalErrorState result) {
   final phase = WidgetsBinding.instance.schedulerPhase;
   if (phase == SchedulerPhase.persistentCallbacks ||
       phase == SchedulerPhase.midFrameMicrotasks) {
@@ -301,9 +301,7 @@ Future<void> _bootstrapAndRunApp() async {
 
   // Ο κανόνας επανάληψης μπαίνει στη ρίζα, στο ένα σημείο απ' όπου
   // περνούν ΟΛΟΙ οι providers: μια οθόνη δεν έχει τρόπο να τον ξεχάσει.
-  runApp(
-    ProviderScope(retry: databaseAwareRetry, child: const MyApp()),
-  );
+  runApp(ProviderScope(retry: databaseAwareRetry, child: const MyApp()));
 }
 
 class MyApp extends StatelessWidget {

@@ -93,6 +93,10 @@ class _ReportRow extends StatelessWidget {
         Icons.error_rounded,
         theme.colorScheme.error,
       ),
+      RestoreReportStatus.skipped => (
+        Icons.remove_circle_outline_rounded,
+        theme.colorScheme.onSurfaceVariant,
+      ),
     };
 
     return Padding(

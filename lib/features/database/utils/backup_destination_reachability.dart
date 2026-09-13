@@ -53,7 +53,10 @@ String? uncShareRoot(String path) {
       .where((part) => part.isNotEmpty)
       .toList();
   if (parts.length < 2) return null;
-  return r'\\' '${parts[0]}' r'\' '${parts[1]}';
+  return r'\\'
+      '${parts[0]}'
+      r'\'
+      '${parts[1]}';
 }
 
 /// Ο έλεγχος. Το [probeDirectoryExists] υπάρχει για τα τεστ — αλλιώς ρωτιέται

@@ -2,6 +2,55 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+/// Γιατί ο φάκελος δεν έχει να προσφέρει αρχείο επαναφοράς — ή ότι έχει.
+enum BackupFolderSurveyKind {
+  /// Δεν έχει οριστεί φάκελος αντιγράφων.
+  folderNotSet,
+
+  /// Ορίστηκε, αλλά δεν είναι προσβάσιμος τώρα (σβήστηκε, ή άφταστο δίκτυο).
+  folderUnavailable,
+
+  /// Υπάρχει και διαβάζεται, αλλά δεν έχει κανένα `.zip`.
+  noZipFiles,
+
+  /// Υπάρχουν αρχεία προς επαναφορά.
+  ok,
+}
+
+/// Τι βρέθηκε στον φάκελο αντιγράφων, με τη ματιά της επαναφοράς.
+class BackupFolderSurvey {
+  const BackupFolderSurvey({
+    required this.kind,
+    this.totalZipCount = 0,
+    this.matchingZipCount = 0,
+    this.latestZip,
+    this.latestModified,
+    this.latestMatchesCurrentBase = false,
+  });
+
+  final BackupFolderSurveyKind kind;
+
+  /// Όλα τα `.zip` του φακέλου — όποια βάση κι αν αφορούν.
+  final int totalZipCount;
+
+  /// Όσα φέρουν το όνομα της τρέχουσας βάσης. Δεν φιλτράρει τίποτα: μπαίνει
+  /// στο μήνυμα, ώστε ο χρήστης να ξέρει ότι τα υπόλοιπα είναι αλλουνού.
+  final int matchingZipCount;
+
+  /// Το αρχείο που προτείνεται πρώτο: το πιο πρόσφατο **της τρέχουσας βάσης**
+  /// όταν υπάρχει, αλλιώς το πιο πρόσφατο του φακέλου.
+  ///
+  /// Η προτίμηση δεν κρύβει τα υπόλοιπα — το [totalZipCount] τα δηλώνει όλα —
+  /// αλλά απαντά στο σύνηθες: εννέα στις δέκα φορές ο χρήστης θέλει πίσω τη
+  /// βάση που δουλεύει.
+  final File? latestZip;
+  final DateTime? latestModified;
+
+  /// `false` όταν ο φάκελος δεν έχει κανένα αντίγραφο της τρέχουσας βάσης και
+  /// το [latestZip] είναι αναγκαστικά αλλουνού.
+  final bool latestMatchesCurrentBase;
+}
+
 /// Κατάσταση φακέλου προορισμού ως προς ύπαρξη και αρχεία αντιγράφου.
 enum BackupDestinationContentKind {
   /// Δεν έχει οριστεί καθόλου φάκελος προορισμού.
@@ -131,6 +180,26 @@ class BackupDestinationFolderValidator {
       );
     }
 
+    // Ο έλεγχος ΕΙΔΟΥΣ προηγείται της ύπαρξης, και δεν είναι λεπτομέρεια:
+    // το `Directory.existsSync()` απαντά `false` και όταν στη διαδρομή κάθεται
+    // **αρχείο**. Με την ανάποδη σειρά η απάντηση ήταν «λείπει ο φάκελος», ο
+    // καλών πρόσφερε «να τον δημιουργήσω;», και η δημιουργία αποτύγχανε πάνω
+    // στο αρχείο του χρήστη. Το `notADirectory` ήταν νεκρός κώδικας.
+    //
+    // Σιωπηλό σε αποτυχία: σε άφταστη διαδρομή δικτύου το `typeSync` πετάει
+    // όπως και το `existsSync`, και η ταξινόμηση ανήκει στον έλεγχο από κάτω —
+    // εδώ μιλάμε μόνο όταν είμαστε σίγουροι ότι βλέπουμε αρχείο.
+    try {
+      if (FileSystemEntity.typeSync(path, followLinks: true) ==
+          FileSystemEntityType.file) {
+        return const BackupDestinationValidationResult(
+          BackupDestinationValidationKind.notADirectory,
+        );
+      }
+    } on FileSystemException {
+      // Δεν απαντήθηκε το είδος — ο έλεγχος ύπαρξης ξέρει τι να πει.
+    }
+
     bool exists;
     try {
       exists = dir.existsSync();
@@ -235,38 +304,76 @@ class BackupDestinationFolderValidator {
     );
   }
 
-  /// Τελευταίο αρχείο `.zip` αντιγράφου στον φάκελο προορισμού (κατά ημερομηνία τροποποίησης).
-  static Future<File?> findLatestBackupZip({
+  /// Απογραφή ΟΛΩΝ των `.zip` του φακέλου — για την ερώτηση «τι μπορώ να
+  /// επαναφέρω;».
+  ///
+  /// Διαφέρει σκόπιμα από την [inspectDestinationContent], που απαντά στην
+  /// ερώτηση «παίρνονται αντίγραφα της βάσης που δουλεύω τώρα;» και γι' αυτό
+  /// μετρά μόνο όσα φέρουν το όνομά της. Η επαναφορά δεν φιλτράρει με το
+  /// όνομα: ένα αντίγραφο άλλης βάσης είναι εξίσου επαναφέρσιμο, και το
+  /// κρύψιμό του θα έκρυβε δεδομένα που ο χρήστης θέλει πίσω.
+  static Future<BackupFolderSurvey> surveyRestorableZips({
     required String destinationDirectory,
     required String dbBaseName,
   }) async {
     final dest = destinationDirectory.trim();
-    if (dest.isEmpty) return null;
+    if (dest.isEmpty) {
+      return const BackupFolderSurvey(
+        kind: BackupFolderSurveyKind.folderNotSet,
+      );
+    }
 
-    File? latest;
-    DateTime? newest;
+    var total = 0;
+    var matching = 0;
+    File? latestAny;
+    DateTime? newestAny;
+    File? latestMine;
+    DateTime? newestMine;
     try {
       final dir = Directory(dest);
-      if (!await dir.exists()) return null;
+      if (!await dir.exists()) {
+        return const BackupFolderSurvey(
+          kind: BackupFolderSurveyKind.folderUnavailable,
+        );
+      }
 
       await for (final entity in dir.list(followLinks: false)) {
         if (entity is! File) continue;
         final name = p.basename(entity.path);
         if (!name.toLowerCase().endsWith('.zip')) continue;
-        if (!isBackupArtifactFileName(name, dbBaseName)) continue;
+        total++;
+        final matchesBase = isBackupArtifactFileName(name, dbBaseName);
+        if (matchesBase) matching++;
         try {
           final modified = await entity.lastModified();
-          if (newest == null || modified.isAfter(newest)) {
-            newest = modified;
-            latest = entity;
+          if (newestAny == null || modified.isAfter(newestAny)) {
+            newestAny = modified;
+            latestAny = entity;
+          }
+          if (matchesBase &&
+              (newestMine == null || modified.isAfter(newestMine))) {
+            newestMine = modified;
+            latestMine = entity;
           }
         } catch (_) {}
       }
     } on FileSystemException {
-      // Άφταστος προορισμός = δεν υπάρχει αντίγραφο προς εύρεση.
-      return null;
+      return const BackupFolderSurvey(
+        kind: BackupFolderSurveyKind.folderUnavailable,
+      );
     }
-    return latest;
+
+    if (total == 0) {
+      return const BackupFolderSurvey(kind: BackupFolderSurveyKind.noZipFiles);
+    }
+    return BackupFolderSurvey(
+      kind: BackupFolderSurveyKind.ok,
+      totalZipCount: total,
+      matchingZipCount: matching,
+      latestZip: latestMine ?? latestAny,
+      latestModified: newestMine ?? newestAny,
+      latestMatchesCurrentBase: latestMine != null,
+    );
   }
 
   /// Ταιριάζει με τα πρότυπα ονομασίας [DatabaseBackupService].

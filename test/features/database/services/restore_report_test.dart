@@ -16,6 +16,11 @@ List<RestoreReportItem> _build({
   bool lampDbRestored = false,
   bool lampDbFailed = false,
   int imagesRelinked = 0,
+  bool databaseRestored = true,
+  bool mapsSkipped = false,
+  bool toolImagesSkipped = false,
+  bool lexiconSkipped = false,
+  bool lampDbSkipped = false,
 }) => buildRestoreReportItems(
   mapImagesCopied: mapImagesCopied,
   mapImagesFailed: mapImagesFailed,
@@ -26,18 +31,57 @@ List<RestoreReportItem> _build({
   lampDbRestored: lampDbRestored,
   lampDbFailed: lampDbFailed,
   imagesRelinked: imagesRelinked,
+  databaseRestored: databaseRestored,
+  mapsSkipped: mapsSkipped,
+  toolImagesSkipped: toolImagesSkipped,
+  lexiconSkipped: lexiconSkipped,
+  lampDbSkipped: lampDbSkipped,
 );
 
 RestoreReportItem _item(List<RestoreReportItem> items, String label) =>
     items.singleWhere((i) => i.label == label);
 
 void main() {
+  test('η βάση είναι πάντα πρώτη, και επιτυχής όταν επαναφέρθηκε', () {
+    final items = _build();
+    expect(items.first.label, 'Βάση');
+    expect(items.first.status, RestoreReportStatus.success);
+  });
+
+  test('βάση που δεν επιλέχθηκε δεν είναι ούτε σφάλμα ούτε έλλειψη', () {
+    final items = _build(databaseRestored: false);
+    expect(items.first.label, 'Βάση');
+    expect(items.first.status, RestoreReportStatus.skipped);
+    expect(items.first.detail, 'Δεν επιλέχθηκε για επαναφορά');
+  });
+
   test(
-    'η βάση είναι πάντα πρώτη και επιτυχής — η αναφορά χτίζεται μόνο μετά από επιτυχία',
+    'στοιχείο που ξετσεκάρισε ο χρήστης λέει ΓΙΑΤΙ λείπει — δεν το περνά για έλλειψη',
     () {
-      final items = _build();
-      expect(items.first.label, 'Βάση');
-      expect(items.first.status, RestoreReportStatus.success);
+      final items = _build(
+        mapsSkipped: true,
+        toolImagesSkipped: true,
+        lexiconSkipped: true,
+        lampDbSkipped: true,
+      );
+      for (final label in [
+        'Κατόψεις',
+        'Εικονίδια εργαλείων',
+        'Λεξικό',
+        'Βάση Λάμπας',
+      ]) {
+        final item = _item(items, label);
+        expect(item.status, RestoreReportStatus.skipped, reason: label);
+        expect(item.detail, 'Δεν επιλέχθηκε για επαναφορά', reason: label);
+      }
+    },
+  );
+
+  test(
+    'η παράλειψη νικά την αποτυχία στην αναφορά της Λάμπας — δεν αντιγράφηκε καν',
+    () {
+      final items = _build(lampDbSkipped: true, lampDbFailed: true);
+      expect(_item(items, 'Βάση Λάμπας').status, RestoreReportStatus.skipped);
     },
   );
 

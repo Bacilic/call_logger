@@ -70,6 +70,8 @@ void invalidateDatabaseScopedCaches(WidgetRef ref) {
     // της βάσης — η νέα βάση έχει τους δικούς της.
     ref.invalidate(equipmentTypesProvider);
     ref.invalidate(buildingCatalogProvider);
+    ref.invalidate(departmentGroupCatalogProvider);
+    ref.invalidate(departmentGroupUsageProvider);
     ref.invalidate(buildingUsageProvider);
     // Οι κανόνες επικύρωσης ζουν στο app_settings της βάσης — η νέα βάση
     // έχει τους δικούς της. Ο [catalogValidationServiceProvider] τους

@@ -430,9 +430,7 @@ class _EquipmentPrintersDialogState
               // είναι στήλες σταθερού ύψους και ξεχείλιζαν μόλις το κείμενο
               // μεγάλωνε. Τυλίγοντας εδώ, καμία μελλοντική κατάσταση δεν
               // μπορεί να ξεχάσει την κύλισή της.
-              Flexible(
-                child: SingleChildScrollView(child: _buildBody(theme)),
-              ),
+              Flexible(child: SingleChildScrollView(child: _buildBody(theme))),
             ],
           ),
         ),

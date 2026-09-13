@@ -13,7 +13,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// ακριβώς ελέγχει. Αν ένας κανόνας λείπει από εκεί, θα μείνει στην τιμή που
 /// είχε και το πλήθος δεν θα βγει.
 int _enabledCount(CatalogValidationRules rules) {
-  return rules.toJson().entries
+  return rules
+      .toJson()
+      .entries
       .where((e) => e.key.endsWith('_enabled') && e.value == true)
       .length;
 }

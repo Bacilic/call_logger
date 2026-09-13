@@ -37,9 +37,8 @@ Future<void> showCallEditDialog(BuildContext context, {required int callId}) {
     context: context,
     // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
     barrierDismissible: false,
-    builder: (context) => IsolatedCallsScreenState(
-      child: _CallEditDialog(callId: callId),
-    ),
+    builder: (context) =>
+        IsolatedCallsScreenState(child: _CallEditDialog(callId: callId)),
   );
 }
 

@@ -20,7 +20,7 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     // (`lib/core/services/current_operator.dart`) — ζει όσο η διεργασία, ώστε
     // η ένδειξη στη μπάρα να παρακολουθεί ζωντανά την «Αλλαγή χρήστη».
     notDisposed: {
-      'ValueNotifier<AppErrorResult?>': null,
+      'ValueNotifier<FatalErrorState?>': null,
       'ValueNotifier<Operator?>': null,
       'TextPainter': 1,
     },

@@ -90,9 +90,11 @@ class CatalogValidationRules {
     this.equipmentOwnerDepartmentEnabled = true,
     this.emptyDepartmentEnabled = true,
     this.departmentBuildingEnabled = true,
+    this.departmentGroupEnabled = true,
     this.lansweeperIdentifierEnabled = true,
     this.equipmentInCompanyEnabled = true,
     this.equipmentWithoutDepartmentEnabled = true,
+    this.userWithoutDepartmentEnabled = true,
     this.companyInternalPhoneEnabled = true,
     this.duplicateRemoteTargetEnabled = true,
     this.nicknameInNameEnabled = true,
@@ -137,7 +139,8 @@ class CatalogValidationRules {
   final bool departmentNameEnabled;
 
   /// Όνομα/επώνυμο υπαλλήλου να μην ξεκινούν από ψηφίο ή σύμβολο.
-  /// Παραμένει υπόδειξη: υπάρχουν καλούντες-εταιρείες (π.χ. «3π»).
+  /// Παραμένει υπόδειξη, ποτέ φραγμός: η καταχώρηση προχωρά κανονικά και ο
+  /// χρήστης απλώς μαθαίνει ότι οι εταιρείες ζουν στα Τμήματα.
   final bool personNameEnabled;
 
   /// Σύμβολα που επιτρέπονται στην αρχή ονόματος/επωνύμου, χωρισμένα με
@@ -176,6 +179,13 @@ class CatalogValidationRules {
   /// αργότερα. Εδώ μαζεύονται όσα περιμένουν ακόμη τη διόρθωσή τους.
   final bool departmentBuildingEnabled;
 
+  /// Τμήμα του χάρτη χωρίς ομάδα.
+  ///
+  /// Η ομάδα οργανώνει τον επιλογέα της κάτοψης· χωρίς αυτήν το τμήμα πέφτει
+  /// στα «Λοιπά». Δίδυμο του «χωρίς κτίριο», και με την ίδια εξαίρεση: η
+  /// εταιρεία και η εξωτερική μονάδα δεν μπαίνουν στον χάρτη.
+  final bool departmentGroupEnabled;
+
   /// Μορφή αναγνωριστικών Lansweeper (υπάλληλοι + τμήματα): `τομέας\όνομα`
   /// ή email. Χωρίς σωστή μορφή το αίτημα δεν θα βρει ποτέ τον χρήστη —
   /// ο κριτής είναι ο ΙΔΙΟΣ που προειδοποιεί και στις φόρμες.
@@ -195,6 +205,16 @@ class CatalogValidationRules {
   /// κανένας κάτοχος με τμήμα. Το μηχάνημα που ανήκει έμμεσα, μέσω του
   /// ανθρώπου που το κρατά, δεν είναι εύρημα.
   final bool equipmentWithoutDepartmentEnabled;
+
+  /// Υπάλληλος χωρίς τμήμα.
+  ///
+  /// Ήταν ο παλιός τρόπος καταχώρησης εταιρειών, πριν υπάρξει το Είδος —
+  /// σήμερα μια τέτοια καρτέλα είναι είτε ξεχασμένη εταιρεία που θέλει
+  /// μεταφορά στα Τμήματα, είτε άνθρωπος που έχασε το τμήμα του όταν αυτό
+  /// διαγράφηκε. Η εφαρμογή δεν μπορεί να ξεχωρίσει ποιο από τα δύο είναι,
+  /// γι' αυτό **υπενθυμίζει αντί να κατηγορεί**: δείχνει την καρτέλα και ο
+  /// χρήστης αποφασίζει.
+  final bool userWithoutDepartmentEnabled;
 
   /// Τηλέφωνο εσωτερικής μορφής σε **εταιρεία**: τετραψήφιο με πρόθεμα του
   /// τηλεφωνικού μας κέντρου μέσα στην DataMed σημαίνει σχεδόν πάντα λάθος
@@ -351,6 +371,16 @@ class CatalogValidationRules {
     ),
     (
       severity: CatalogRuleSeverity.reminder,
+      isOn: (r) => r.userWithoutDepartmentEnabled,
+      toggled: (r, v) => r.copyWith(userWithoutDepartmentEnabled: v),
+    ),
+    (
+      severity: CatalogRuleSeverity.reminder,
+      isOn: (r) => r.departmentGroupEnabled,
+      toggled: (r, v) => r.copyWith(departmentGroupEnabled: v),
+    ),
+    (
+      severity: CatalogRuleSeverity.reminder,
       isOn: (r) => r.equipmentLatinCodeEnabled,
       toggled: (r, v) => r.copyWith(equipmentLatinCodeEnabled: v),
     ),
@@ -407,9 +437,11 @@ class CatalogValidationRules {
     bool? equipmentOwnerDepartmentEnabled,
     bool? emptyDepartmentEnabled,
     bool? departmentBuildingEnabled,
+    bool? departmentGroupEnabled,
     bool? lansweeperIdentifierEnabled,
     bool? equipmentInCompanyEnabled,
     bool? equipmentWithoutDepartmentEnabled,
+    bool? userWithoutDepartmentEnabled,
     bool? companyInternalPhoneEnabled,
     bool? duplicateRemoteTargetEnabled,
     bool? nicknameInNameEnabled,
@@ -452,6 +484,8 @@ class CatalogValidationRules {
           emptyDepartmentEnabled ?? this.emptyDepartmentEnabled,
       departmentBuildingEnabled:
           departmentBuildingEnabled ?? this.departmentBuildingEnabled,
+      departmentGroupEnabled:
+          departmentGroupEnabled ?? this.departmentGroupEnabled,
       lansweeperIdentifierEnabled:
           lansweeperIdentifierEnabled ?? this.lansweeperIdentifierEnabled,
       equipmentInCompanyEnabled:
@@ -459,6 +493,8 @@ class CatalogValidationRules {
       equipmentWithoutDepartmentEnabled:
           equipmentWithoutDepartmentEnabled ??
           this.equipmentWithoutDepartmentEnabled,
+      userWithoutDepartmentEnabled:
+          userWithoutDepartmentEnabled ?? this.userWithoutDepartmentEnabled,
       companyInternalPhoneEnabled:
           companyInternalPhoneEnabled ?? this.companyInternalPhoneEnabled,
       duplicateRemoteTargetEnabled:
@@ -491,9 +527,11 @@ class CatalogValidationRules {
     'equipment_owner_department_enabled': equipmentOwnerDepartmentEnabled,
     'empty_department_enabled': emptyDepartmentEnabled,
     'department_building_enabled': departmentBuildingEnabled,
+    'department_group_enabled': departmentGroupEnabled,
     'lansweeper_identifier_enabled': lansweeperIdentifierEnabled,
     'equipment_in_company_enabled': equipmentInCompanyEnabled,
     'equipment_without_department_enabled': equipmentWithoutDepartmentEnabled,
+    'user_without_department_enabled': userWithoutDepartmentEnabled,
     'company_internal_phone_enabled': companyInternalPhoneEnabled,
     'duplicate_remote_target_enabled': duplicateRemoteTargetEnabled,
     'nickname_in_name_enabled': nicknameInNameEnabled,
@@ -631,6 +669,11 @@ class CatalogValidationRules {
         'department_building_enabled',
         d.departmentBuildingEnabled,
       ),
+      departmentGroupEnabled: _boolOf(
+        map,
+        'department_group_enabled',
+        d.departmentGroupEnabled,
+      ),
       lansweeperIdentifierEnabled: _boolOf(
         map,
         'lansweeper_identifier_enabled',
@@ -645,6 +688,11 @@ class CatalogValidationRules {
         map,
         'equipment_without_department_enabled',
         d.equipmentWithoutDepartmentEnabled,
+      ),
+      userWithoutDepartmentEnabled: _boolOf(
+        map,
+        'user_without_department_enabled',
+        d.userWithoutDepartmentEnabled,
       ),
       companyInternalPhoneEnabled: _boolOf(
         map,

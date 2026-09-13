@@ -102,6 +102,28 @@ String lampDataIssueMessageDisplayText(String? message) {
   return text;
 }
 
+/// Πώς λέγεται το κλειδί μιας εγγραφής, ανά πίνακα της Λάμπας.
+///
+/// Οι προτάσεις επίλυσης αφορούσαν κάποτε μόνο εξοπλισμό, και η ετικέτα ήταν
+/// καρφωμένη. Από τη στιγμή που ο έλεγχος αλλοιωμένων χαρακτήρων φέρνει
+/// προτάσεις και για γραφεία, ιδιοκτήτες, μοντέλα και συμβάσεις, ένα
+/// «Κωδικός εξοπλισμού=16» θα έστελνε τον χρήστη να ψάξει μηχάνημα που δεν
+/// υπάρχει.
+String lampEntityCodeLabel(String? entityType) {
+  switch (entityType?.trim()) {
+    case 'offices':
+      return 'Κωδικός γραφείου';
+    case 'owners':
+      return 'Κωδικός υπαλλήλου';
+    case 'model':
+      return 'Κωδικός μοντέλου';
+    case 'contracts':
+      return 'Κωδικός σύμβασης';
+    default:
+      return 'Κωδικός εξοπλισμού';
+  }
+}
+
 /// Ελληνικές ετικέτες για `issue_type` στο `data_issues` και στην αναφορά ελέγχου ακεραιότητας.
 String lampDataIssueTypeDisplayLabel(String issueType) {
   switch (issueType) {
@@ -143,6 +165,12 @@ String lampDataIssueTypeDisplayLabel(String issueType) {
       return 'Δίκτυο · Μη έγκυρη μορφή IP';
     case 'network_name_code_mismatch':
       return 'Δίκτυο · Όνομα που δεν ταιριάζει με τον κωδικό';
+    case 'mixed_script_alphabets':
+      return 'Αλλοιωμένοι χαρακτήρες · Ελληνικά και λατινικά μαζί';
+    case 'mixed_script_broken_char':
+      return 'Αλλοιωμένοι χαρακτήρες · Χαλασμένος χαρακτήρας';
+    case 'mixed_script_digit_in_greek':
+      return 'Αλλοιωμένοι χαρακτήρες · Ψηφίο σε ελληνική λέξη';
     default:
       return 'Άγνωστος τύπος προβλήματος ($issueType)';
   }

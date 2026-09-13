@@ -306,8 +306,7 @@ class CrashLogService {
     }
   }
 
-  File _sessionLockFile() =>
-      File(p.join(logsDirectory, sessionLockFileName));
+  File _sessionLockFile() => File(p.join(logsDirectory, sessionLockFileName));
 
   static String _dedupKey(Object error, StackTrace stack) {
     final firstStackLine = stack

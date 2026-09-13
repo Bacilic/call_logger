@@ -21,52 +21,79 @@ Future<DatabaseLabelResult?> showDatabaseLabelDialog({
   required BuildContext context,
   required String? currentLabel,
 }) {
-  final controller = TextEditingController(text: currentLabel ?? '');
   return showDialog<DatabaseLabelResult>(
     context: context,
-    builder: (ctx) {
-      return AlertDialog(
-        title: const Text('Όνομα βάσης'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Το όνομα αποθηκεύεται μέσα στη βάση και ταξιδεύει μαζί της. '
-              'Βοηθά να ξεχωρίζετε ποιο αρχείο κοιτάτε — π.χ. «Παραγωγή ΓΝΚ» '
-              'ή «Δοκιμαστική σπιτιού».',
-              style: Theme.of(ctx).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              maxLength: kDatabaseLabelMaxLength,
-              decoration: const InputDecoration(
-                labelText: 'Όνομα',
-                hintText: 'Παραγωγή ΓΝΚ',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (value) => Navigator.of(
-                ctx,
-              ).pop(DatabaseLabelResult(normalizeDatabaseLabel(value))),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Ακύρωση'),
+    builder: (_) => _DatabaseLabelDialog(currentLabel: currentLabel),
+  );
+}
+
+/// **Ο controller ζει μέσα στο widget, όχι στον καλούντα.** Ένα
+/// `whenComplete(controller.dispose)` θα τον σκότωνε τη στιγμή του `pop`, ενώ
+/// ο διάλογος φεύγει ακόμη με μετάβαση — και το πεδίο, που ξαναχτίζεται στο
+/// μεταξύ, θα ξαναδενόταν σε νεκρό controller και θα έριχνε την εφαρμογή.
+class _DatabaseLabelDialog extends StatefulWidget {
+  const _DatabaseLabelDialog({required this.currentLabel});
+
+  final String? currentLabel;
+
+  @override
+  State<_DatabaseLabelDialog> createState() => _DatabaseLabelDialogState();
+}
+
+class _DatabaseLabelDialogState extends State<_DatabaseLabelDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.currentLabel ?? '',
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save(String value) => Navigator.of(
+    context,
+  ).pop(DatabaseLabelResult(normalizeDatabaseLabel(value)));
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Όνομα βάσης'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Το όνομα αποθηκεύεται μέσα στη βάση και ταξιδεύει μαζί της. '
+            'Βοηθά να ξεχωρίζετε ποιο αρχείο κοιτάτε — π.χ. «Παραγωγή ΓΝΚ» '
+            'ή «Δοκιμαστική σπιτιού».',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(
-              ctx,
-            ).pop(DatabaseLabelResult(normalizeDatabaseLabel(controller.text))),
-            child: const Text('Αποθήκευση'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            maxLength: kDatabaseLabelMaxLength,
+            decoration: const InputDecoration(
+              labelText: 'Όνομα',
+              hintText: 'Παραγωγή ΓΝΚ',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: _save,
           ),
         ],
-      );
-    },
-  ).whenComplete(controller.dispose);
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Ακύρωση'),
+        ),
+        FilledButton(
+          onPressed: () => _save(_controller.text),
+          child: const Text('Αποθήκευση'),
+        ),
+      ],
+    );
+  }
 }

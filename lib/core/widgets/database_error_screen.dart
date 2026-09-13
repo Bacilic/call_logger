@@ -473,6 +473,9 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
           ? target
           : AppConfig.defaultDbPath,
       preselectedZipPath: preselectedZipPath,
+      // Εδώ βρισκόμαστε επειδή η βάση λείπει ή δεν ανοίγει: μια επαναφορά που
+      // αφήνει τη βάση απ' έξω δεν θα έλυνε τίποτα.
+      allowSkippingDatabase: false,
     );
     if (!mounted || result.cancelled) return;
     if (result.failed) return;
@@ -703,8 +706,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
                       'Πλήρης διαδρομή:\n${recentPaths[i]}',
                   waitDuration: const Duration(milliseconds: 350),
                   child: OutlinedButton.icon(
-                    onPressed: () =>
-                        _applyRecentDatabasePath(recentPaths[i]),
+                    onPressed: () => _applyRecentDatabasePath(recentPaths[i]),
                     icon: const Icon(Icons.history, size: 18),
                     label: Text(
                       p.basename(recentPaths[i]),

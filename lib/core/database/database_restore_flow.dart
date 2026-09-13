@@ -15,8 +15,13 @@ import '../../features/database/services/backup_zip_manifest.dart';
 import '../../features/database/services/backup_zip_staging.dart';
 import '../../features/database/services/database_backup_service.dart';
 import '../../features/database/services/database_file_replacement.dart';
+import '../../features/database/services/restore_database_eligibility.dart';
 import '../../features/database/services/restore_plan.dart';
 import '../../features/database/services/restore_report.dart';
+import '../config/app_config.dart' show AppConfig;
+import '../services/building_map_storage.dart';
+import '../services/portable_lamp_storage.dart';
+import '../services/portable_tool_image_storage.dart';
 import '../../features/database/widgets/backup_zip_database_choice_dialog.dart';
 import '../../features/database/widgets/restore_from_backup_dialog.dart';
 import '../../features/database/widgets/restore_report_dialog.dart';
@@ -31,7 +36,8 @@ class RestoreFromBackupZipFlowResult {
       errorMessage = null,
       summaryMessage = null,
       warnings = const <String>[],
-      preRestoreBackupPath = null;
+      preRestoreBackupPath = null,
+      databaseRestored = false;
 
   const RestoreFromBackupZipFlowResult.failed(this.errorMessage)
     : cancelled = false,
@@ -40,7 +46,8 @@ class RestoreFromBackupZipFlowResult {
       pathToOpen = null,
       summaryMessage = null,
       warnings = const <String>[],
-      preRestoreBackupPath = null;
+      preRestoreBackupPath = null,
+      databaseRestored = false;
 
   const RestoreFromBackupZipFlowResult.completed({
     required this.restoredPath,
@@ -48,6 +55,7 @@ class RestoreFromBackupZipFlowResult {
     this.summaryMessage,
     this.warnings = const <String>[],
     this.preRestoreBackupPath,
+    this.databaseRestored = true,
   }) : cancelled = false,
        failed = false,
        errorMessage = null;
@@ -55,6 +63,11 @@ class RestoreFromBackupZipFlowResult {
   final bool cancelled;
   final bool failed;
   final String? restoredPath;
+
+  /// `false` όταν ο χρήστης ζήτησε να επαναφερθούν μόνο συνοδευτικά αρχεία.
+  /// Η βάση τότε μένει η ίδια — αλλά ξανανοίγει, γιατί η επανασύνδεση των
+  /// κατόψεων γράφει μέσα της.
+  final bool databaseRestored;
 
   /// Διαδρομή που πρέπει να ανοίξει ο καλών μέσω του κοινού εκτελεστή.
   /// Σε επιτυχία είναι πάντα ο προορισμός — η βάση που επαναφέρθηκε ανοίγει.
@@ -78,6 +91,7 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
   String? preselectedZipPath,
   RestoreDestinationChoice initialDestination =
       RestoreDestinationChoice.defaultChoice,
+  bool allowSkippingDatabase = true,
 }) async {
   final trimmedCurrent = currentDatabasePath?.trim() ?? '';
   final currentPath = trimmedCurrent.isNotEmpty
@@ -213,7 +227,15 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     return const RestoreFromBackupZipFlowResult.cancelled();
   }
 
-  final decision = await showRestoreFromBackupDialog(
+  final localLampModified = await _localLampDatabaseModified();
+  final localCounts = await _countLocalPortables();
+
+  if (!context.mounted) {
+    await cleanupStagedDatabase(extractedPath);
+    return const RestoreFromBackupZipFlowResult.cancelled();
+  }
+
+  final userSelection = await showRestoreFromBackupDialog(
     context: context,
     currentProfile: currentProfile,
     backupProfile: backupProfile,
@@ -223,12 +245,14 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     initialDestination: initialDestination,
     preferredDatabaseFileName: preferredName,
     backupNameTargetExists: backupNameTargetExists,
-    isFullBackupArchive: inventory.isFullBackupArchive,
-    fullBackupPortablesDescription: inventory.portablePresence
-        .describeFoundPortables(),
+    portablePresence: inventory.portablePresence,
+    allowSkippingDatabase:
+        allowSkippingDatabase && inventory.isFullBackupArchive,
+    localLampDatabaseModified: localLampModified,
+    localCounts: localCounts,
   );
 
-  if (decision == null) {
+  if (userSelection == null) {
     final cleanupMsg = await cleanupStagedDatabase(extractedPath);
     if (cleanupMsg != null && context.mounted) {
       await _showRestoreMessageDialog(
@@ -240,18 +264,23 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     return const RestoreFromBackupZipFlowResult.cancelled();
   }
 
-  final targetPath = resolveRestoreTargetPath(
-    choice: decision,
-    currentDatabasePath: currentPath,
-    backupDatabaseFileName: preferredName,
-  );
+  final restoresDatabase = userSelection.restoresDatabase;
+  final targetPath = restoresDatabase
+      ? resolveRestoreTargetPath(
+          choice: userSelection.destination!,
+          currentDatabasePath: currentPath,
+          backupDatabaseFileName: preferredName,
+        )
+      : currentPath;
 
   if (!context.mounted) {
     await cleanupStagedDatabase(extractedPath);
     return const RestoreFromBackupZipFlowResult.cancelled();
   }
 
-  final restoreLabel = ValueNotifier<String>('Επαναφορά από zip…');
+  final restoreLabel = ValueNotifier<String>(
+    restoresDatabase ? 'Επαναφορά από zip…' : 'Επαναφορά αρχείων…',
+  );
   _showBusyDialog(context, restoreLabel);
   String? preRestorePath;
   final warnings = <String>[...inventory.cleanupWarnings];
@@ -268,7 +297,7 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
 
     final sameAsStaged = _samePath(targetPath, extractedPath);
 
-    if (!sameAsStaged) {
+    if (restoresDatabase && !sameAsStaged) {
       final replacement = await DatabaseFileReplacement.replaceFromFile(
         targetDatabasePath: targetPath,
         sourceDatabasePath: extractedPath,
@@ -282,6 +311,19 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
         failureMessage = message;
       } else {
         preRestorePath = replacement.preRestoreBackupPath;
+        // Τελευταία δικλείδα. Ο κριτής έχει ήδη μιλήσει πριν τον διάλογο, αλλά
+        // το αρχείο μπορεί να άλλαξε στο μεταξύ ή να γράφτηκε μισό. Αν αυτό
+        // που κάθισε στη θέση της βάσης δεν ανοίγει, γυρίζει ΤΩΡΑ πίσω η
+        // προηγούμενη — αλλιώς η εφαρμογή πέφτει πάνω σε βάση που δεν έχει
+        // πού να επιστρέψει.
+        final rollback = await _rollbackIfUnusable(
+          targetPath: targetPath,
+          preRestorePath: preRestorePath,
+        );
+        if (rollback != null) {
+          failureMessage = rollback;
+          preRestorePath = null;
+        }
       }
     }
 
@@ -290,6 +332,8 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
           await DatabaseBackupService.restorePortablesFromBackupZip(
             zipPath,
             restoredDatabasePath: targetPath,
+            selection: userSelection,
+            databaseRestored: restoresDatabase,
           );
       warnings.addAll(portables.warnings);
       summary = portables.message;
@@ -300,7 +344,7 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
       Navigator.of(context, rootNavigator: true).pop();
     }
     restoreLabel.dispose();
-    final keepStaged = _samePath(targetPath, extractedPath);
+    final keepStaged = restoresDatabase && _samePath(targetPath, extractedPath);
     if (!keepStaged) {
       final cleanupMsg = await cleanupStagedDatabase(extractedPath);
       if (cleanupMsg != null) {
@@ -336,7 +380,101 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     summaryMessage: summary,
     warnings: warnings,
     preRestoreBackupPath: preRestorePath,
+    databaseRestored: restoresDatabase,
   );
+}
+
+/// Επαναφέρει την προηγούμενη βάση αν αυτή που μόλις γράφτηκε δεν ανοίγει.
+///
+/// Επιστρέφει το μήνυμα προς τον χρήστη, ή `null` όταν όλα είναι εντάξει.
+Future<String?> _rollbackIfUnusable({
+  required String targetPath,
+  required String? preRestorePath,
+}) async {
+  DatabaseFileProfile profile;
+  try {
+    profile = await profileDatabaseFile(targetPath);
+  } catch (e) {
+    profile = DatabaseFileProfile(
+      kind: DatabaseFileKind.undetermined,
+      failureReason: '$e',
+    );
+  }
+
+  final verdict = judgeBackupDatabase(profile);
+  // Το `restorable` καλύπτει ΚΑΙ τη φθαρμένη βάση που ο χρήστης ενέκρινε ρητά
+  // στη δεύτερη ερώτηση — και σωστά: αυτόματη επαναφορά της προηγούμενης εδώ
+  // θα ακύρωνε σιωπηλά την απόφασή του, τη στιγμή ακριβώς που του είπαμε ότι
+  // αυτό είναι το τελευταίο αντίγραφο που του έμεινε. Η δικλείδα υπάρχει για
+  // ό,τι ΔΕΝ πέρασε από τα μάτια του.
+  if (verdict.restorable) return null;
+
+  final problem =
+      'Η βάση που επαναφέρθηκε δεν μπορεί να ανοίξει: ${verdict.reason}';
+
+  final previous = preRestorePath?.trim() ?? '';
+  if (previous.isEmpty || !await File(previous).exists()) {
+    return '$problem\n\nΔεν βρέθηκε αντίγραφο της προηγούμενης βάσης για '
+        'αυτόματη επαναφορά. Επιλέξτε άλλο αρχείο από τις Ρυθμίσεις βάσης.';
+  }
+
+  try {
+    await File(previous).copy(targetPath);
+    return '$problem\n\nΗ προηγούμενη βάση σας επανήλθε αυτόματα — τίποτα '
+        'δεν χάθηκε. Δοκιμάστε άλλο αρχείο αντιγράφου.';
+  } catch (e) {
+    return '$problem\n\nΗ αυτόματη επαναφορά της προηγούμενης βάσης απέτυχε: '
+        '$e\n\nΤο αρχείο της βρίσκεται στο: $previous';
+  }
+}
+
+/// Πόσα φορητά αρχεία υπάρχουν τώρα στον υπολογιστή.
+///
+/// Τροφοδοτεί την προειδοποίηση «έχετε 14, θα μείνουν 1»: χωρίς αυτά τα
+/// πλήθη η απώλεια κατόψεων και εικονιδίων περνά εντελώς αθόρυβα.
+Future<LocalPortableCounts> _countLocalPortables() async {
+  Future<int> count(Future<List<File>> Function() lister) async {
+    try {
+      return (await lister()).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<int> countDirectory(String path) async {
+    try {
+      final dir = Directory(path);
+      if (!await dir.exists()) return 0;
+      var n = 0;
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is File) n++;
+      }
+      return n;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  return LocalPortableCounts(
+    maps: await count(BuildingMapStorage.listPortableImageFiles),
+    toolImages: await count(PortableToolImageStorage.listPortableImageFiles),
+    lexicon: await countDirectory(AppConfig.portableDictionariesDirectory),
+  );
+}
+
+/// Πότε γράφτηκε η τοπική βάση Λάμπας — για να ξέρει ο διάλογος αν η
+/// επαναφορά θα έσβηνε νεότερη δουλειά. Άγνωστη ημερομηνία δεν είναι σφάλμα:
+/// απλώς δεν εμφανίζεται προειδοποίηση.
+Future<DateTime?> _localLampDatabaseModified() async {
+  try {
+    final path = await PortableLampStorage.portableLampDbPathForBackup();
+    if (path == null || path.trim().isEmpty) return null;
+    final file = File(path.trim());
+    if (!await file.exists()) return null;
+    return await file.lastModified();
+  } catch (_) {
+    return null;
+  }
 }
 
 bool _samePath(String a, String b) {

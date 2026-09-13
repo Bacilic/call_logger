@@ -273,10 +273,7 @@ void main() {
       test('νέο τμήμα: το κτίριο ανοίγει άδειο', () async {
         final draft = await service.buildDraft(
           target: LampTransferTarget.department,
-          sourceRow: {
-            'office_name': 'Ολοκαίνουριο Τμήμα',
-            'building': 'Β',
-          },
+          sourceRow: {'office_name': 'Ολοκαίνουριο Τμήμα', 'building': 'Β'},
         );
 
         expect(draft.selectedCandidateId, isNull);

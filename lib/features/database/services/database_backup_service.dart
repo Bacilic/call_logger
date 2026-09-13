@@ -10,6 +10,7 @@ import '../../../core/database/database_schema_migrations.dart';
 import '../../../core/database/sqlite_types.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/utils/zip_entry_safety.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/services/building_map_storage.dart';
@@ -24,6 +25,7 @@ import 'backup_retention.dart';
 import 'backup_zip_manifest.dart';
 import 'database_backup_audit.dart';
 import 'portable_content_fingerprint.dart';
+import 'restore_selection.dart';
 import 'restore_report.dart';
 
 /// Κωδικοί αποτυχίας backup (για UI / scheduler).
@@ -463,6 +465,11 @@ class DatabaseBackupService {
   ///
   /// Οι αποτυχίες μετριούνται ΑΝΑ κατηγορία — αλλιώς μια αποτυχημένη αντιγραφή
   /// θα εμφανιζόταν ψευδώς ως «δεν βρέθηκε στο αντίγραφο».
+  /// Αντιγράφει τα φορητά αρχεία ενός αντιγράφου στους φακέλους τους.
+  ///
+  /// Δημόσια επειδή οι ρίζες προορισμού δίνονται από τον καλούντα: έτσι η
+  /// συμπεριφορά της —ιδίως ΠΟΥ καταλήγει κάθε εγγραφή— ελέγχεται σε
+  /// προσωρινούς φακέλους, χωρίς να εξαρτάται από τον φάκελο εγκατάστασης.
   static Future<
     ({
       int mapImagesCopied,
@@ -476,12 +483,18 @@ class DatabaseBackupService {
       List<String> warnings,
     })
   >
-  _copyPortableEntriesFromArchive({
+  copyPortableEntriesFromArchive({
     required Archive archive,
     required String mapsRoot,
     required String imagesRoot,
     required String dictionariesRoot,
     required String lampDataBaseRoot,
+    Set<RestorePortablePart> parts = const {
+      RestorePortablePart.maps,
+      RestorePortablePart.toolImages,
+      RestorePortablePart.lexicon,
+      RestorePortablePart.lampDatabase,
+    },
   }) async {
     var mapImagesCopied = 0;
     var mapImagesFailed = 0;
@@ -493,68 +506,87 @@ class DatabaseBackupService {
     var lampDbFailed = false;
     final warnings = <String>[];
 
-    final mapsPrefix = '${BuildingMapStorage.backupZipMapsFolderName}/';
-    final imagesPrefix = '${AppConfig.portableImagesDirName}/';
-    final dictPrefix = '${AppConfig.portableDictionariesDirName}/';
-    final lampPrefix = '${PortableLampStorage.backupZipLampDbFolderName}/';
+    // Τα τέσσερα φορητά τμήματα διαφέρουν μόνο σε τρία πράγματα: από ποιον
+    // φάκελο του zip έρχονται, σε ποιον φάκελο πάνε, και πώς μετριούνται. Ό,τι
+    // άλλο —ο έλεγχος διαδρομής, η δημιουργία φακέλων, η εγγραφή, ο χειρισμός
+    // αποτυχίας— ήταν γραμμένο τέσσερις φορές. Τώρα είναι γραμμένο μία: ο
+    // κανόνας «μένει μέσα στον φάκελό του» δεν μπορεί να ισχύει για τρία από
+    // τα τέσσερα.
+    final destinations =
+        <({String prefix, String root, void Function() copied})>[
+          (
+            prefix: '${BuildingMapStorage.backupZipMapsFolderName}/',
+            root: mapsRoot,
+            copied: () => mapImagesCopied++,
+          ),
+          (
+            prefix: '${AppConfig.portableImagesDirName}/',
+            root: imagesRoot,
+            copied: () => toolImagesCopied++,
+          ),
+          (
+            prefix: '${AppConfig.portableDictionariesDirName}/',
+            root: dictionariesRoot,
+            copied: () => dictionaryFilesCopied++,
+          ),
+          (
+            prefix: '${PortableLampStorage.backupZipLampDbFolderName}/',
+            root: lampDataBaseRoot,
+            copied: () {},
+          ),
+        ];
+
+    void countFailure(String prefix) {
+      if (prefix.startsWith(BuildingMapStorage.backupZipMapsFolderName)) {
+        mapImagesFailed++;
+      } else if (prefix.startsWith(AppConfig.portableImagesDirName)) {
+        toolImagesFailed++;
+      } else if (prefix.startsWith(AppConfig.portableDictionariesDirName)) {
+        dictionaryFilesFailed++;
+      } else {
+        lampDbFailed = true;
+      }
+    }
 
     for (final f in archive.files) {
       if (!f.isFile) continue;
       final name = f.name.replaceAll('\\', '/');
-      try {
-        if (name.startsWith(mapsPrefix)) {
-          final rel = name.substring(mapsPrefix.length);
-          if (rel.isEmpty) continue;
-          await AppConfig.ensureDirectoryExists(mapsRoot);
-          final dest = File(p.join(mapsRoot, rel.replaceAll('/', p.separator)));
-          await dest.parent.create(recursive: true);
-          await dest.writeAsBytes(Uint8List.fromList(f.content), flush: true);
-          mapImagesCopied++;
-        } else if (name.startsWith(imagesPrefix)) {
-          final rel = name.substring(imagesPrefix.length);
-          if (rel.isEmpty) continue;
-          await AppConfig.ensureDirectoryExists(imagesRoot);
-          final dest = File(
-            p.join(imagesRoot, rel.replaceAll('/', p.separator)),
-          );
-          await dest.parent.create(recursive: true);
-          await dest.writeAsBytes(Uint8List.fromList(f.content), flush: true);
-          toolImagesCopied++;
-        } else if (name.startsWith(dictPrefix)) {
-          final rel = name.substring(dictPrefix.length);
-          if (rel.isEmpty) continue;
-          await AppConfig.ensureDirectoryExists(dictionariesRoot);
-          final dest = File(
-            p.join(dictionariesRoot, rel.replaceAll('/', p.separator)),
-          );
-          await dest.parent.create(recursive: true);
-          await dest.writeAsBytes(Uint8List.fromList(f.content), flush: true);
-          dictionaryFilesCopied++;
-        } else if (name.startsWith(lampPrefix)) {
-          final rel = name.substring(lampPrefix.length);
-          if (rel.isEmpty) continue;
-          await AppConfig.ensureDirectoryExists(lampDataBaseRoot);
-          final dest = File(
-            p.join(lampDataBaseRoot, rel.replaceAll('/', p.separator)),
-          );
-          await dest.parent.create(recursive: true);
-          await dest.writeAsBytes(Uint8List.fromList(f.content), flush: true);
-          restoredLampDbPath = dest.path;
-        }
-      } catch (e) {
-        if (name.startsWith(mapsPrefix)) {
-          mapImagesFailed++;
-        } else if (name.startsWith(imagesPrefix)) {
-          toolImagesFailed++;
-        } else if (name.startsWith(dictPrefix)) {
-          dictionaryFilesFailed++;
-        } else if (name.startsWith(lampPrefix)) {
-          lampDbFailed = true;
-        }
-        warnings.add(
-          'Αποτυχία αντιγραφής «${p.basename(name)}»: '
-          '${humanizeUserFacingError(e)}',
-        );
+      if (!restoreEntryIsWanted(name, parts)) continue;
+
+      final slot = destinations
+          .where((d) => name.startsWith(d.prefix))
+          .firstOrNull;
+      if (slot == null) continue;
+
+      final rel = name.substring(slot.prefix.length);
+      if (rel.isEmpty) continue;
+
+      // Ο κριτής πριν από κάθε εγγραφή, χωρίς εξαίρεση. Μια εγγραφή που
+      // δείχνει έξω παραλείπεται και λέγεται — δεν ακυρώνει τις υπόλοιπες,
+      // γιατί η επαναφορά γίνεται σε στιγμή ανάγκης και ό,τι σώζεται μετράει.
+      final target = resolveZipEntryTarget(root: slot.root, entryPath: rel);
+      switch (target) {
+        case RejectedZipEntry(:final reason):
+          countFailure(slot.prefix);
+          warnings.add('Παραλείφθηκε: $reason');
+        case SafeZipEntryTarget(:final absolutePath):
+          try {
+            await AppConfig.ensureDirectoryExists(slot.root);
+            final dest = File(absolutePath);
+            await dest.parent.create(recursive: true);
+            await dest.writeAsBytes(Uint8List.fromList(f.content), flush: true);
+            slot.copied();
+            if (slot.prefix ==
+                '${PortableLampStorage.backupZipLampDbFolderName}/') {
+              restoredLampDbPath = dest.path;
+            }
+          } catch (e) {
+            countFailure(slot.prefix);
+            warnings.add(
+              'Αποτυχία αντιγραφής «${p.basename(name)}»: '
+              '${humanizeUserFacingError(e)}',
+            );
+          }
       }
     }
 
@@ -593,7 +625,17 @@ class DatabaseBackupService {
   static Future<RestorePortablesOutcome> restorePortablesFromBackupZip(
     String zipPath, {
     required String restoredDatabasePath,
+    RestoreSelection? selection,
+    bool databaseRestored = true,
   }) async {
+    final wanted =
+        selection?.parts ??
+        const {
+          RestorePortablePart.maps,
+          RestorePortablePart.toolImages,
+          RestorePortablePart.lexicon,
+          RestorePortablePart.lampDatabase,
+        };
     final warnings = <String>[];
     final zipFile = File(zipPath);
     if (!await zipFile.exists()) {
@@ -613,12 +655,13 @@ class DatabaseBackupService {
       );
     }
 
-    final portable = await _copyPortableEntriesFromArchive(
+    final portable = await copyPortableEntriesFromArchive(
       archive: archive,
       mapsRoot: AppConfig.portableMapsDirectory,
       imagesRoot: AppConfig.portableImagesDirectory,
       dictionariesRoot: AppConfig.portableDictionariesDirectory,
       lampDataBaseRoot: AppConfig.portableDataBaseDirectory,
+      parts: wanted,
     );
     warnings.addAll(portable.warnings);
 
@@ -673,6 +716,11 @@ class DatabaseBackupService {
       lampDbRestored: portable.restoredLampDbPath != null,
       lampDbFailed: portable.lampDbFailed,
       imagesRelinked: relinked,
+      databaseRestored: databaseRestored,
+      mapsSkipped: !wanted.contains(RestorePortablePart.maps),
+      toolImagesSkipped: !wanted.contains(RestorePortablePart.toolImages),
+      lexiconSkipped: !wanted.contains(RestorePortablePart.lexicon),
+      lampDbSkipped: !wanted.contains(RestorePortablePart.lampDatabase),
     );
 
     return RestorePortablesOutcome(

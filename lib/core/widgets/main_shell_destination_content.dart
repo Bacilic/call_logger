@@ -269,7 +269,13 @@ class MainShellDestinationContent {
           ),
         if (topBanner == TopDatabaseBanner.warning)
           Material(
-            color: Colors.amber.shade200,
+            // Η φθορά δεν είναι «προσοχή», είναι «σταμάτα και πάρε αντίγραφο».
+            // Ίδιο κίτρινο με την παλιά βάση θα την έκανε να διαβάζεται σαν
+            // υπενθύμιση νοικοκυριού.
+            color:
+                _databaseStateNotice.kind == DatabaseNoticeKind.corruptedContent
+                ? Colors.red.shade200
+                : Colors.amber.shade200,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(

@@ -118,7 +118,9 @@ void main() {
           if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
         } catch (_) {}
       });
-      final logsDir = Directory('${tempRoot.path}${Platform.pathSeparator}logs');
+      final logsDir = Directory(
+        '${tempRoot.path}${Platform.pathSeparator}logs',
+      );
       await logsDir.create(recursive: true);
 
       List<String> traceFilesNow() => logsDir

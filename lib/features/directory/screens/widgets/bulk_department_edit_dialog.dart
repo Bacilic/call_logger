@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
+import '../../providers/building_catalog_provider.dart';
 import '../../services/bulk_department_actions.dart';
 import 'bulk_user_action_pickers.dart';
 import 'department_color_palette.dart';
@@ -112,8 +113,10 @@ class _BulkDepartmentEditDialogState
   // ─────────────────────────── Ομάδα ───────────────────────────
 
   Future<void> _runGroupFlow() async {
-    final all = ref.read(departmentDirectoryProvider).allDepartments;
-    final suggestions = existingDepartmentGroups(all);
+    // Ο κατάλογος είναι η κλειστή λίστα· η εφεδρεία με τις ομάδες που ήδη
+    // χρησιμοποιούνται καλύπτει τη βάση που δεν έχει ορίσει ακόμη κατάλογο.
+    final suggestions = await ref.read(departmentGroupCatalogProvider.future);
+    if (!mounted) return;
 
     final text = await showDialog<String>(
       context: context,
@@ -455,6 +458,14 @@ class _GroupPickerDialogState extends State<_GroupPickerDialog> {
 
   bool get _canApply => _controller.text.trim().isNotEmpty;
 
+  /// True όταν η γραμμένη τιμή δεν υπάρχει στον κατάλογο — τότε ο χρήστης
+  /// μαθαίνει πού ορίζονται οι ομάδες αντί να γεννήσει σιωπηλά καινούρια.
+  bool get _outsideCatalog {
+    final value = _controller.text.trim();
+    if (value.isEmpty || widget.suggestions.isEmpty) return false;
+    return matchBuildingInCatalog(value, widget.suggestions) == null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -472,17 +483,23 @@ class _GroupPickerDialogState extends State<_GroupPickerDialog> {
                 controller: _controller,
                 autofocus: true,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Ομάδα',
                   hintText: 'π.χ. Εργαστήρια, Κλινικές, Διοίκηση',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  helperText: _outsideCatalog
+                      ? 'Δεν υπάρχει στον κατάλογο — Διάφορα → Τμήματα'
+                      : null,
+                  helperStyle: _outsideCatalog
+                      ? TextStyle(color: theme.colorScheme.error)
+                      : null,
                 ),
                 onChanged: (_) => setState(() {}),
               ),
               if (widget.suggestions.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Υπάρχουσες ομάδες',
+                  'Ομάδες του καταλόγου',
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

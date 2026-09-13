@@ -148,9 +148,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   onToggleFilters: () =>
                       setState(() => _filtersExpanded = !_filtersExpanded),
                   onExport: _export,
-                  onPaletteChanged: (value) => ref
-                      .read(dashboardPaletteProvider.notifier)
-                      .select(value),
+                  onPaletteChanged: (value) =>
+                      ref.read(dashboardPaletteProvider.notifier).select(value),
                 ),
                 const SizedBox(height: 12),
                 DashboardFilterBar(

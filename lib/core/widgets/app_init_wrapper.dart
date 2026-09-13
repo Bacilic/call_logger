@@ -181,7 +181,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       future: _selectableProfiles ??= _loadSelectableProfiles(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const _InitLoadingScreen();
+          return const InitLoadingScreen();
         }
         final selectable = snapshot.data ?? SelectableProfiles.empty;
         return OperatorPickerScreen(
@@ -237,7 +237,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       future: _adminPresence ??= _loadAdminPresence(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const _InitLoadingScreen();
+          return const InitLoadingScreen();
         }
         final presence = snapshot.data ?? AdminPresenceState.fine;
         if (_adminSetupDone || !presence.needsSetup) {
@@ -289,7 +289,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     }
 
     return asyncInit.when(
-      loading: () => const _InitLoadingScreen(),
+      loading: () => const InitLoadingScreen(),
       error: (err, st) {
         final result = DatabaseInitResult.fromException(err, null, st);
         return _buildInitFailureScreen(result: result, dbPath: result.path);
@@ -312,8 +312,14 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   }
 }
 
-class _InitLoadingScreen extends ConsumerWidget {
-  const _InitLoadingScreen();
+/// Η οθόνη που βλέπει ο χειριστής όσο ανοίγει η βάση.
+///
+/// Δημόσια ώστε να μπορεί να ελεγχθεί μόνη της: το σφάλμα που τη γέννησε ήταν
+/// ακριβώς ότι **έσπαγε από το περιεχόμενό της** — με φθαρμένη βάση τα
+/// διαγνωστικά φούσκωναν σε εκατοντάδες γραμμές και η εφαρμογή δεν εκκινούσε
+/// καθόλου, δείχνοντας «Σφάλμα διάταξης» αντί για την αιτία.
+class InitLoadingScreen extends ConsumerWidget {
+  const InitLoadingScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -321,66 +327,72 @@ class _InitLoadingScreen extends ConsumerWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
+      // Κείμενο άγνωστου μήκους δεν μπαίνει ποτέ σε διάταξη που δεν κυλά: τα
+      // διαγνωστικά μεγαλώνουν όσο χειρότερη είναι η βλάβη, και η οθόνη που
+      // αναγγέλλει τη βλάβη δεν επιτρέπεται να είναι το δεύτερο θύμα της.
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 24),
-              const Text('Φόρτωση εφαρμογής...'),
-              const SizedBox(height: 10),
-              if (progress.secondsRemaining != null)
-                Text(
-                  'Προσπάθεια άνοιγμα βάσης σε ${progress.secondsRemaining} δευτερόλεπτα',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 24),
+                const Text('Φόρτωση εφαρμογής...'),
+                const SizedBox(height: 10),
+                if (progress.secondsRemaining != null)
+                  Text(
+                    'Προσπάθεια άνοιγμα βάσης σε ${progress.secondsRemaining} δευτερόλεπτα',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              if (progress.secondsRemaining != null) const SizedBox(height: 10),
-              Text(progress.currentStep, textAlign: TextAlign.center),
-              if (progress.isOpeningAttemptActive) ...[
-                const SizedBox(height: 16),
-                FilledButton.tonalIcon(
-                  onPressed: DatabaseHelper.instance.requestOpeningAbort,
-                  icon: const Icon(Icons.stop_circle_outlined),
-                  label: const Text('Διακοπή τώρα'),
-                ),
-              ],
-              if (progress.diagnosticInfo != null &&
-                  progress.diagnosticInfo!.trim().isNotEmpty) ...[
-                const SizedBox(height: 14),
-                SelectableText(
-                  progress.diagnosticInfo!,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontFamily: 'monospace',
-                    height: 1.35,
+                if (progress.secondsRemaining != null) const SizedBox(height: 10),
+                Text(progress.currentStep, textAlign: TextAlign.center),
+                if (progress.isOpeningAttemptActive) ...[
+                  const SizedBox(height: 16),
+                  FilledButton.tonalIcon(
+                    onPressed: DatabaseHelper.instance.requestOpeningAbort,
+                    icon: const Icon(Icons.stop_circle_outlined),
+                    label: const Text('Διακοπή τώρα'),
                   ),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    await Clipboard.setData(
-                      ClipboardData(text: progress.diagnosticInfo!.trim()),
-                    );
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Τα διαγνωστικά αντιγράφηκαν στο πρόχειρο.',
+                ],
+                if (progress.diagnosticInfo != null &&
+                    progress.diagnosticInfo!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  SelectableText(
+                    progress.diagnosticInfo!,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        ClipboardData(text: progress.diagnosticInfo!.trim()),
+                      );
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Τα διαγνωστικά αντιγράφηκαν στο πρόχειρο.',
+                          ),
+                          behavior: SnackBarBehavior.floating,
                         ),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.copy_outlined),
-                  label: const Text('Αντιγραφή διαγνωστικών'),
-                ),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_outlined),
+                    label: const Text('Αντιγραφή διαγνωστικών'),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

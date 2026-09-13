@@ -41,6 +41,28 @@ class BuildingUsage {
   int countFor(String building) => perBuilding[building] ?? 0;
 }
 
+/// Πόσα τμήματα **του χάρτη** ανήκουν σε κάθε ομάδα, και πόσα σε καμία.
+///
+/// Μετρά μόνο όσα ανήκουν στην κάτοψη: η ομάδα οργανώνει τον επιλογέα του
+/// χάρτη, και η εταιρεία δεν μπαίνει ποτέ σε αυτόν. Χωρίς τον περιορισμό, το
+/// «χωρίς ομάδα» θα φώναζε για καρτέλες που δεν έχουν καν το πεδίο.
+class DepartmentGroupUsage {
+  const DepartmentGroupUsage({
+    required this.perGroup,
+    required this.withoutGroup,
+  });
+
+  static const empty = DepartmentGroupUsage(
+    perGroup: <String, int>{},
+    withoutGroup: 0,
+  );
+
+  final Map<String, int> perGroup;
+  final int withoutGroup;
+
+  int countFor(String group) => perGroup[group] ?? 0;
+}
+
 /// Persistence τμημάτων (`departments`).
 class DepartmentRepository {
   DepartmentRepository(this.db, {DirectorySupport? support})
@@ -577,6 +599,98 @@ class DepartmentRepository {
       counts[value] = (counts[value] ?? 0) + 1;
     }
     return BuildingUsage(perBuilding: counts, withoutBuilding: without);
+  }
+
+  /// Πόσα τμήματα του χάρτη ανήκουν σε κάθε ομάδα (και πόσα σε καμία).
+  ///
+  /// Η βάση της οθόνης διαχείρισης: «τόσα θα μείνουν χωρίς ομάδα αν τη σβήσεις».
+  Future<DepartmentGroupUsage> countDepartmentsPerGroup({
+    DatabaseExecutor? executor,
+  }) async {
+    final ex = executor ?? db;
+    final rows = await ex.query(
+      'departments',
+      columns: ['group_name', 'kind'],
+      where: DirectorySupport.notDeletedClause,
+    );
+    final counts = <String, int>{};
+    var without = 0;
+    for (final row in rows) {
+      if (!DepartmentKind.fromDbValue(row['kind']).belongsOnBuildingMap) {
+        continue;
+      }
+      final value = (row['group_name'] as String?)?.trim() ?? '';
+      if (value.isEmpty) {
+        without++;
+        continue;
+      }
+      counts[value] = (counts[value] ?? 0) + 1;
+    }
+    return DepartmentGroupUsage(perGroup: counts, withoutGroup: without);
+  }
+
+  /// Αδειάζει την ομάδα από όσα ενεργά τμήματα την έχουν — η πράξη που
+  /// ακολουθεί τη διαγραφή μιας ομάδας από τον κατάλογο.
+  Future<int> clearGroupFromDepartments(String group) async {
+    final value = group.trim();
+    if (value.isEmpty) return 0;
+    return _rewriteGroup(from: value, to: null, action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ');
+  }
+
+  /// Μετονομάζει την ομάδα σε όσα ενεργά τμήματα την έχουν, ώστε η διόρθωση
+  /// στον κατάλογο να μη διχάσει κατάλογο και δεδομένα.
+  Future<int> renameGroupInDepartments({
+    required String from,
+    required String to,
+  }) async {
+    final source = from.trim();
+    final target = to.trim();
+    if (source.isEmpty || target.isEmpty || source == target) return 0;
+    return _rewriteGroup(from: source, to: target, action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ');
+  }
+
+  /// Η κοινή εγγραφή των δύο παραπάνω: μία συναλλαγή, ένα ίχνος στο Ιστορικό.
+  Future<int> _rewriteGroup({
+    required String from,
+    required String? to,
+    required String action,
+  }) async {
+    return db.transaction<int>((txn) async {
+      final rows = await txn.query(
+        'departments',
+        columns: ['id'],
+        where: '${DirectorySupport.notDeletedClause} AND TRIM(group_name) = ?',
+        whereArgs: [from],
+      );
+      final ids = [
+        for (final row in rows)
+          if (row['id'] case final int id) id,
+      ];
+      if (ids.isEmpty) return 0;
+
+      final changes = <String, dynamic>{'group_name': to};
+      for (final id in ids) {
+        await txn.update(
+          'departments',
+          changes,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      }
+      final user = await _support.auditPerformingUser(executor: txn);
+      await AuditService.logBulk(
+        txn,
+        action: action,
+        userPerforming: user,
+        entityType: AuditEntityTypes.bulkDepartments,
+        affectedIds: ids,
+        appliedFields: changes,
+        details: to == null
+            ? 'clearGroupFromDepartments group=$from ids=${ids.length}'
+            : 'renameGroupInDepartments $from -> $to ids=${ids.length}',
+      );
+      return ids.length;
+    });
   }
 
   /// Αδειάζει το κτίριο από όσα ενεργά τμήματα το έχουν — η πράξη που

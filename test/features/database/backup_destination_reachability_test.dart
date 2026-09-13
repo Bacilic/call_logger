@@ -103,9 +103,7 @@ void main() {
 
     test('γράμμα δίσκου που δεν υπάρχει: ΔΕΝ δημιουργείται', () async {
       if (!Platform.isWindows) return;
-      final reach = await probeBackupDestinationReachability(
-        r'K:\ανύπαρκτος',
-      );
+      final reach = await probeBackupDestinationReachability(r'K:\ανύπαρκτος');
       expect(reach, BackupDestinationReachability.volumeMissing);
       expect(reach.canCreateFolder, isFalse);
     });

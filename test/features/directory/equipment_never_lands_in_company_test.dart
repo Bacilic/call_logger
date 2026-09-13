@@ -58,7 +58,11 @@ void main() {
     });
   }
 
-  Future<int> insertEquipment(String code, int departmentId, int ownerId) async {
+  Future<int> insertEquipment(
+    String code,
+    int departmentId,
+    int ownerId,
+  ) async {
     final id = await db.insert('equipment', {
       'code_equipment': code,
       'department_id': departmentId,
@@ -70,7 +74,10 @@ void main() {
 
   group('Μαζική μεταφορά υπαλλήλων σε εταιρεία', () {
     test('ο εξοπλισμός δεν ακολουθεί — ζητά νέα στέγη', () async {
-      final klinikh = await insertDepartment('Καρδιολογική', DepartmentKind.hospital);
+      final klinikh = await insertDepartment(
+        'Καρδιολογική',
+        DepartmentKind.hospital,
+      );
       final dataMed = await insertDepartment('DataMed', DepartmentKind.company);
       final annaId = await insertUser('Άννα', 'Αντωνίου', klinikh);
       await insertEquipment('PC-5067', klinikh, annaId);
@@ -101,11 +108,9 @@ void main() {
         isEmpty,
         reason: 'Η εταιρεία δεν κρατά δικά μας μηχανήματα',
       );
-      expect(
-        plan.equipmentNeedingNewHome.map((e) => e.code),
-        ['PC-5067'],
-        reason: 'Το μηχάνημα ζητά ρητή απάντηση «πού πάει»',
-      );
+      expect(plan.equipmentNeedingNewHome.map((e) => e.code), [
+        'PC-5067',
+      ], reason: 'Το μηχάνημα ζητά ρητή απάντηση «πού πάει»');
     });
 
     test('η απάντηση «πού πάει» γράφεται όντως στη βάση', () async {
@@ -135,7 +140,11 @@ void main() {
             equipmentFate: BulkTransferAssetFate.follow,
             equipmentByUserId: {
               annaId: [
-                EquipmentModel(id: eqId, code: 'PC-5067', departmentId: klinikh),
+                EquipmentModel(
+                  id: eqId,
+                  code: 'PC-5067',
+                  departmentId: klinikh,
+                ),
               ],
             },
           ).withEquipmentRehoming(
@@ -185,7 +194,10 @@ void main() {
     });
 
     test('σε τμήμα νοσοκομείου ο εξοπλισμός ακολουθεί κανονικά', () async {
-      final klinikh = await insertDepartment('Καρδιολογική', DepartmentKind.hospital);
+      final klinikh = await insertDepartment(
+        'Καρδιολογική',
+        DepartmentKind.hospital,
+      );
       final tep = await insertDepartment('ΤΕΠ', DepartmentKind.hospital);
       final annaId = await insertUser('Άννα', 'Αντωνίου', klinikh);
       await insertEquipment('PC-5067', klinikh, annaId);

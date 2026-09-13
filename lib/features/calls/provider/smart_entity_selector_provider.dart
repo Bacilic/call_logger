@@ -18,6 +18,7 @@ import 'smart_entity_selector_association.dart';
 import 'smart_entity_selector_lookups.dart';
 import '../models/call_model.dart';
 import 'smart_entity_selector_state.dart';
+import 'quick_add_undo_record.dart';
 
 export 'smart_entity_selector_state.dart';
 
@@ -62,6 +63,14 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
   /// Έως ένα quick task ανά κύκλο φόρμας· set μόνο μετά επιτυχή insert.
   int? associationQuickTaskId;
+
+  /// Τι γέννησε η ΤΕΛΕΥΤΑΙΑ γρήγορη καταχώρηση — η προσφορά αναίρεσης.
+  ///
+  /// Ζει όσο η στιγμή: κάθε νέα καταχώρηση την αντικαθιστά, η υποβολή της
+  /// κλήσης και ο μηδενισμός του κύκλου τη σβήνουν. Δεν ταξιδεύει στην
+  /// εκκρεμότητα — εκείνη ζει μέρες, και μια αναίρεση τριών ημερών θα έσβηνε
+  /// τμήμα που στο μεταξύ απέκτησε ανθρώπους.
+  QuickAddUndoRecord lastQuickAddUndo = QuickAddUndoRecord.empty;
 
   /// True μετά πράσινο (+) που δημιούργησε καλόντα χωρίς τηλέφωνο — το πρώτο
   /// πληκτρολόγημα τηλεφώνου συμπληρώνει, όχι νέο lookup.
@@ -244,6 +253,17 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }) => association.quickAddOrphanToDepartment(
     forceSharedOnConflict: forceSharedOnConflict,
   );
+
+  /// True όσο υπάρχει γρήγορη καταχώρηση που μπορεί να αναιρεθεί.
+  bool get hasQuickAddUndoOffer => lastQuickAddUndo.isNotEmpty;
+
+  /// Σβήνει την προσφορά χωρίς να αναιρέσει τίποτα — η καταχώρηση μένει.
+  ///
+  /// Την καλεί ό,τι κάνει την αναίρεση επικίνδυνη: η υποβολή της κλήσης (που
+  /// πλέον αναφέρει τις νέες καρτέλες) και το κλείσιμο του κύκλου.
+  void settleQuickAddUndoOffer() => lastQuickAddUndo = QuickAddUndoRecord.empty;
+
+  Future<String?> undoLastQuickAdd() => association.undoLastQuickAdd();
 
   Future<String?> associateCurrentIfNeeded({
     bool updatePrimaryDepartment = false,

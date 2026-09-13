@@ -3,6 +3,7 @@
 //   flutter test test/core/database/database_state_notice_test.dart
 
 import 'package:call_logger/core/database/database_file_classifier.dart';
+import 'package:call_logger/core/database/database_integrity_probe.dart';
 import 'package:call_logger/core/database/database_state_notice.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -152,6 +153,75 @@ void main() {
 
       expect(notice.kind, DatabaseNoticeKind.none);
       expect(notice.message, isEmpty);
+    });
+
+    test('φθορά περιεχομένου → δική της ειδοποίηση, με οδηγία', () {
+      final notice = evaluateDatabaseStateNotice(
+        profile: const DatabaseFileProfile(
+          kind: DatabaseFileKind.callLogger,
+          callCount: 496,
+          userCount: 102,
+          phoneCount: 124,
+          equipmentCount: 113,
+          departmentCount: 70,
+          latestCallDate: '2026-07-24',
+          contentIntegrity: DatabaseIntegrityStatus.corrupt,
+        ),
+        dbPath: path,
+        fileModifiedAt: modified,
+        now: now,
+      );
+
+      expect(notice.kind, DatabaseNoticeKind.corruptedContent);
+      expect(notice.message, contains('maria.db'));
+      expect(
+        notice.message,
+        contains('αντίγραφο'),
+        reason:
+            'Η ειδοποίηση λέει ΤΙ να κάνει ο χρήστης, όχι μόνο τι συμβαίνει',
+      );
+    });
+
+    test('η φθορά προηγείται και της ημιτελούς και της παλιάς', () {
+      // Μια βάση μπορεί να είναι ταυτόχρονα άδεια, παλιά ΚΑΙ φθαρμένη. Από τα
+      // τρία, μόνο η φθορά χειροτερεύει όσο ο χρήστης δεν κάνει τίποτα.
+      final notice = evaluateDatabaseStateNotice(
+        profile: const DatabaseFileProfile(
+          kind: DatabaseFileKind.callLogger,
+          callCount: 0,
+          userCount: 0,
+          phoneCount: 0,
+          equipmentCount: 0,
+          departmentCount: 0,
+          latestCallDate: '2020-01-01',
+          contentIntegrity: DatabaseIntegrityStatus.corrupt,
+        ),
+        dbPath: path,
+        fileModifiedAt: modified,
+        now: now,
+      );
+
+      expect(notice.kind, DatabaseNoticeKind.corruptedContent);
+    });
+
+    test('άγνωστη ακεραιότητα ΔΕΝ παράγει ειδοποίηση φθοράς', () {
+      // Ο έλεγχος μπορεί να μην πρόλαβε (αργό δίκτυο) ή να μην έτρεξε. Καμία
+      // από τις δύο περιπτώσεις δεν είναι λόγος να τρομάξει ο χρήστης.
+      final notice = evaluateDatabaseStateNotice(
+        profile: _callLoggerProfile(
+          callCount: 496,
+          userCount: 102,
+          phoneCount: 124,
+          equipmentCount: 113,
+          departmentCount: 70,
+          latestCallDate: '2026-07-24',
+        ),
+        dbPath: path,
+        fileModifiedAt: modified,
+        now: now,
+      );
+
+      expect(notice.kind, DatabaseNoticeKind.none);
     });
 
     test('ημιτελής προηγείται της παλιάς', () {

@@ -280,6 +280,11 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
         }
       });
 
+      // Η κλήση αναφέρει πλέον τις καρτέλες που γέννησε η γρήγορη καταχώρηση:
+      // μια αναίρεση από εδώ και πέρα θα άφηνε την κλήση να δείχνει σε
+      // διαγραμμένες εγγραφές. Η προσφορά αποσύρεται — η καταχώρηση μένει.
+      headerNotifier.settleQuickAddUndoOffer();
+
       final userId = user?.id;
       refreshAfterCallMutation(
         ref,

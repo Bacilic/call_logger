@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/zip_entry_safety.dart';
 import 'update_manifest.dart';
 import 'updater_script_builder.dart';
 
@@ -76,14 +77,25 @@ class UpdateInstallerService {
   ];
 
   /// Δικλείδα ασφαλείας: απαγορευμένοι φάκελοι δεδομένων + διαδρομές διαφυγής.
+  ///
+  /// Οι δύο έλεγχοι απαντούν σε διαφορετικά ερωτήματα και μένουν χωριστοί: ο
+  /// πρώτος ρωτά «βγαίνει η εγγραφή έξω από τον φάκελό της;» (κοινός κανόνας
+  /// με την επαναφορά αντιγράφου), ο δεύτερος «πατά πάνω σε δεδομένα του
+  /// χρήστη;» (αφορά μόνο τα πακέτα ενημέρωσης).
+  ///
+  /// Η αντίδραση εδώ είναι όλα-ή-τίποτα, σε αντίθεση με την επαναφορά που
+  /// παραλείπει τη μία εγγραφή: ένα πακέτο ενημέρωσης το φτιάχνει η ίδια η
+  /// ομάδα, οπότε μια ύποπτη διαδρομή σημαίνει ότι το πακέτο δεν είναι αυτό
+  /// που νομίζαμε — ενώ ένα αντίγραφο ασφαλείας επαναφέρεται σε στιγμή ανάγκης
+  /// και ό,τι σώζεται μετράει.
   static void assertZipIsSafe(Archive archive) {
+    final escaping = firstEscapingEntryName(archive.map((e) => e.name));
+    if (escaping != null) {
+      throw StateError('Το πακετο περιεχει διαδρομη διαφυγης: $escaping');
+    }
+
     for (final entry in archive) {
       final name = entry.name.replaceAll('\\', '/');
-      if (name.contains('..') ||
-          name.startsWith('/') ||
-          RegExp(r'^[A-Za-z]:/').hasMatch(name)) {
-        throw StateError('Το πακετο περιεχει διαδρομη διαφυγης: $name');
-      }
       for (final prefix in forbiddenZipPrefixes) {
         if (name == prefix.substring(0, prefix.length - 1) ||
             name.startsWith(prefix) ||

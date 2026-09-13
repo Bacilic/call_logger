@@ -118,60 +118,54 @@ void main() {
       );
     });
 
-    test(
-      'τα Στατιστικά και το Ιστορικό μετρούν το ίδιο σύνολο',
-      () async {
-        await seedCalls();
-        final stats = await dashboard.getDashboardStatistics(
-          const DashboardFilterModel(category: 'Medico'),
-        );
-        final historyRows = await calls.getHistoryCalls(category: 'Medico');
-        expect(
-          stats.totalCalls,
-          historyRows.length,
-          reason:
-              'Το «Προβολή όλων» περνά από τη μία οθόνη στην άλλη — δύο '
-              'κριτήρια θα άλλαζαν σιωπηλά το σύνολο των κλήσεων.',
-        );
-      },
-    );
+    test('τα Στατιστικά και το Ιστορικό μετρούν το ίδιο σύνολο', () async {
+      await seedCalls();
+      final stats = await dashboard.getDashboardStatistics(
+        const DashboardFilterModel(category: 'Medico'),
+      );
+      final historyRows = await calls.getHistoryCalls(category: 'Medico');
+      expect(
+        stats.totalCalls,
+        historyRows.length,
+        reason:
+            'Το «Προβολή όλων» περνά από τη μία οθόνη στην άλλη — δύο '
+            'κριτήρια θα άλλαζαν σιωπηλά το σύνολο των κλήσεων.',
+      );
+    });
 
-    test(
-      'η μετονομασία κατηγορίας δεν χάνει τις παλιές κλήσεις',
-      () async {
-        await seedCalls();
-        final categories = CategoryRepository(db);
-        final id = await db.insert('categories', {'name': 'Δίκτυο'});
-        await calls.insertCall(
-          CallModel(
-            callerText: 'Ειρήνη Καρυώτη',
-            departmentText: 'Καρδιολογική',
-            category: 'Δίκτυο',
-            categoryId: id,
-            issue: 'Χωρίς σύνδεση',
-            status: 'completed',
-            duration: 60,
-          ),
-        );
+    test('η μετονομασία κατηγορίας δεν χάνει τις παλιές κλήσεις', () async {
+      await seedCalls();
+      final categories = CategoryRepository(db);
+      final id = await db.insert('categories', {'name': 'Δίκτυο'});
+      await calls.insertCall(
+        CallModel(
+          callerText: 'Ειρήνη Καρυώτη',
+          departmentText: 'Καρδιολογική',
+          category: 'Δίκτυο',
+          categoryId: id,
+          issue: 'Χωρίς σύνδεση',
+          status: 'completed',
+          duration: 60,
+        ),
+      );
 
-        await categories.updateCategoryNameAndSyncCalls(
-          id: id,
-          newCanonicalName: 'Δίκτυο & WiFi',
-          rebuildSearchIndexInTxn: (txn, categoryId) async {},
-        );
+      await categories.updateCategoryNameAndSyncCalls(
+        id: id,
+        newCanonicalName: 'Δίκτυο & WiFi',
+        rebuildSearchIndexInTxn: (txn, categoryId) async {},
+      );
 
-        final stats = await dashboard.getDashboardStatistics(
-          const DashboardFilterModel(category: 'Δίκτυο & WiFi'),
-        );
-        expect(
-          stats.totalCalls,
-          1,
-          reason:
-              'Η μετονομασία ενημερώνει το κείμενο κάθε κλήσης· αν το φίλτρο '
-              'έψαχνε αλλού, η κλήση θα εξαφανιζόταν από το φίλτρο ενώ θα '
-              'φαινόταν κανονικά στη λίστα.',
-        );
-      },
-    );
+      final stats = await dashboard.getDashboardStatistics(
+        const DashboardFilterModel(category: 'Δίκτυο & WiFi'),
+      );
+      expect(
+        stats.totalCalls,
+        1,
+        reason:
+            'Η μετονομασία ενημερώνει το κείμενο κάθε κλήσης· αν το φίλτρο '
+            'έψαχνε αλλού, η κλήση θα εξαφανιζόταν από το φίλτρο ενώ θα '
+            'φαινόταν κανονικά στη λίστα.',
+      );
+    });
   });
 }

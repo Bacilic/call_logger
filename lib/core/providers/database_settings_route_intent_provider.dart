@@ -1,5 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// Οι καρτέλες των «Ρυθμίσεων βάσης δεδομένων», με τη σειρά που εμφανίζονται.
+///
+/// Υπάρχει επειδή ο δείκτης της καρτέλας ταξιδεύει ως **γυμνός αριθμός** από
+/// τον καλούντα ως τον διάλογο. Με σκέτο `openTab(1)` σε κάθε σημείο, μια
+/// μελλοντική αναδιάταξη των καρτελών θα έστελνε σιωπηλά τον χειριστή σε λάθος
+/// οθόνη — χωρίς να σπάσει τίποτα και χωρίς να το προσέξει κανείς.
+enum DatabaseSettingsTab {
+  database('Βάση'),
+  backups('Αντίγραφα ασφαλείας'),
+  restore('Επαναφορά'),
+  maintenance('Συντήρηση');
+
+  const DatabaseSettingsTab(this.label);
+
+  /// Η ετικέτα που βλέπει ο χειριστής. Ζει δίπλα στη σειρά ώστε το ένα να
+  /// επαληθεύει το άλλο.
+  final String label;
+}
+
 /// Ποια καρτέλα των «Ρυθμίσεων βάσης δεδομένων» ζητήθηκε — και μια αύξουσα
 /// σφραγίδα, ώστε δύο διαδοχικά αιτήματα για την ίδια καρτέλα να ξεχωρίζουν.
 class DatabaseSettingsRouteRequest {
@@ -35,6 +54,9 @@ class DatabaseSettingsRouteIntentNotifier
       sequence: _sequence,
     );
   }
+
+  /// Προτιμότερο από το [openTab]: ζητά καρτέλα με το όνομά της.
+  void open(DatabaseSettingsTab tab) => openTab(tab.index);
 
   void clear() {
     state = null;

@@ -1,0 +1,137 @@
+// ΠΡΟΣΩΡΙΝΟ: παράγει το assets/lamp_cross_check.png — ο Κατάλογος και η
+// Λάμπα στο ίδιο ύψος, με τα βέλη της αντιπαραβολής ανάμεσά τους.
+// Εγκρίθηκε 12/09/2026. Διαγράφεται μετά την παραγωγή.
+//
+//   flutter test test/_icon_gen_test.dart
+
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter_test/flutter_test.dart';
+
+const _dark = ui.Color(0xFF4C6472);
+const _green = ui.Color(0xFF3FA34D);
+const _yellow = ui.Color(0xFFF7C948);
+const _amber = ui.Color(0xFFF0A020);
+const _white = ui.Color(0xFFFFFFFF);
+
+// Κοινή κορυφή και κοινή γραμμή έδρασης για τις δύο πλευρές: ο Κατάλογος και
+// η Λάμπα πιάνουν το ίδιο ύψος, ώστε καμία να μη φαίνεται δευτερεύουσα.
+const _top = 96.0;
+const _bottom = 416.0;
+
+void main() {
+  testWidgets('προσχέδιο με ισομεγέθη λάμπα', (tester) async {
+    await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+
+      // ---- Αριστερά: ο Κατάλογος.
+      const sheet = ui.Rect.fromLTRB(44, _top, 234, _bottom);
+      canvas.drawRRect(
+        ui.RRect.fromRectAndRadius(sheet, const ui.Radius.circular(22)),
+        ui.Paint()..color = _dark,
+      );
+      final linePaint = ui.Paint()..color = _white;
+      var y = sheet.top + 46;
+      for (final w in const [0.78, 0.58, 0.70, 0.46]) {
+        canvas.drawRRect(
+          ui.RRect.fromRectAndRadius(
+            ui.Rect.fromLTWH(sheet.left + 26, y, (sheet.width - 52) * w, 14),
+            const ui.Radius.circular(7),
+          ),
+          linePaint,
+        );
+        y += 34;
+      }
+
+      // ---- Δεξιά: η Λάμπα, στο ίδιο ύψος με το φύλλο.
+      const bulbRadius = 100.0;
+      const bulb = ui.Offset(375, _top + bulbRadius);
+      final yellowPaint = ui.Paint()..color = _yellow;
+      canvas.drawCircle(bulb, bulbRadius, yellowPaint);
+
+      // Λαιμός: μπαίνει λίγο μέσα στο γυαλί ώστε να μη φαίνεται αρμός.
+      canvas.drawRRect(
+        ui.RRect.fromRectAndRadius(
+          const ui.Rect.fromLTRB(327, 278, 423, 344),
+          const ui.Radius.circular(14),
+        ),
+        yellowPaint,
+      );
+
+      // Κάλυκας: σκουρότερος, με τα σπειρώματα ως λευκές γραμμές.
+      const capRect = ui.Rect.fromLTRB(332, 340, 418, _bottom);
+      canvas.drawRRect(
+        ui.RRect.fromRectAndRadius(capRect, const ui.Radius.circular(18)),
+        ui.Paint()..color = _amber,
+      );
+      for (final dy in [-17.0, 3.0]) {
+        canvas.drawRRect(
+          ui.RRect.fromRectAndRadius(
+            ui.Rect.fromLTWH(capRect.left + 14, capRect.center.dy + dy, 58, 10),
+            const ui.Radius.circular(5),
+          ),
+          linePaint,
+        );
+      }
+
+      // Το νήμα πυρακτώσεως: δύο ποδαράκια από τον λαιμό και το ζιγκ-ζαγκ.
+      canvas.drawPath(
+        ui.Path()
+          ..moveTo(346, 312)
+          ..lineTo(346, 228)
+          ..lineTo(360, 186)
+          ..lineTo(375, 228)
+          ..lineTo(390, 186)
+          ..lineTo(404, 228)
+          ..lineTo(404, 312),
+        ui.Paint()
+          ..color = _white
+          ..style = ui.PaintingStyle.stroke
+          ..strokeWidth = 14
+          ..strokeCap = ui.StrokeCap.round
+          ..strokeJoin = ui.StrokeJoin.round,
+      );
+
+      // ---- Στη μέση: η αντιπαραβολή.
+      const badge = ui.Offset(256, 256);
+      canvas.drawCircle(badge, 84, ui.Paint()..blendMode = ui.BlendMode.clear);
+      canvas.drawCircle(badge, 74, ui.Paint()..color = _green);
+
+      final stroke = ui.Paint()
+        ..color = _white
+        ..style = ui.PaintingStyle.stroke
+        ..strokeWidth = 13
+        ..strokeCap = ui.StrokeCap.round
+        ..strokeJoin = ui.StrokeJoin.round;
+
+      void arrow(double ay, bool toRight) {
+        final x0 = toRight ? 218.0 : 294.0;
+        final x1 = toRight ? 294.0 : 218.0;
+        canvas.drawLine(ui.Offset(x0, ay), ui.Offset(x1, ay), stroke);
+        final dir = toRight ? -1.0 : 1.0;
+        canvas.drawLine(
+          ui.Offset(x1, ay),
+          ui.Offset(x1 + dir * 22, ay - 20),
+          stroke,
+        );
+        canvas.drawLine(
+          ui.Offset(x1, ay),
+          ui.Offset(x1 + dir * 22, ay + 20),
+          stroke,
+        );
+      }
+
+      arrow(226, true);
+      arrow(288, false);
+
+      final image = await recorder.endRecording().toImage(512, 512);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      File('assets/lamp_cross_check.png')
+          .writeAsBytesSync(Uint8List.view(data!.buffer));
+      image.dispose();
+    });
+  });
+}

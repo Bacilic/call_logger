@@ -29,6 +29,41 @@ final buildingUsageProvider = FutureProvider<BuildingUsage>((ref) async {
   return DepartmentRepository(db).countDepartmentsPerBuilding();
 });
 
+/// Ο κατάλογος ομάδων της ΕΝΕΡΓΗΣ βάσης, έτοιμος για τα πεδία επιλογής.
+///
+/// Ίδια εφεδρεία με τα κτίρια, και για τον ίδιο λόγο: μέχρι να οριστεί
+/// κατάλογος, οι ομάδες που ήδη χρησιμοποιούν τα τμήματα είναι η μόνη αλήθεια.
+/// Χωρίς αυτό, η φόρμα θα άνοιγε με άδεια λίστα σε βάση γεμάτη ομάδες — και η
+/// πρώτη αποθήκευση θα έσβηνε την τιμή.
+final departmentGroupCatalogProvider = FutureProvider<List<String>>((
+  ref,
+) async {
+  final stored = await SettingsService().catalogs
+      .getDepartmentGroupCatalogList();
+  if (stored.isNotEmpty) return sortDepartmentGroups(stored);
+  final usage = await ref.watch(departmentGroupUsageProvider.future);
+  return sortDepartmentGroups(usage.perGroup.keys);
+});
+
+/// Πόσα τμήματα του χάρτη ανήκουν σε κάθε ομάδα (και πόσα σε καμία).
+final departmentGroupUsageProvider = FutureProvider<DepartmentGroupUsage>((
+  ref,
+) async {
+  final db = await DatabaseHelper.instance.database;
+  return DepartmentRepository(db).countDepartmentsPerGroup();
+});
+
+/// Αλφαβητική σειρά με τους κανόνες του καταλόγου — ίδια παντού.
+List<String> sortDepartmentGroups(Iterable<String> groups) {
+  final out = groups.map((g) => g.trim()).where((g) => g.isNotEmpty).toList()
+    ..sort(
+      (a, b) => HomoglyphTextNormalizer.normalizeForComparison(
+        a,
+      ).compareTo(HomoglyphTextNormalizer.normalizeForComparison(b)),
+    );
+  return out;
+}
+
 /// Ταξινόμηση κτιρίων για την οθόνη: αλφαβητικά, χωρίς να μετράνε πεζά/κεφαλαία.
 List<String> sortBuildings(Iterable<String> buildings) {
   final list =
@@ -81,3 +116,22 @@ Future<String> readBuildingCatalogRaw() =>
 /// αυτό, όχι με το ωμό κείμενο.
 String effectiveBuildingCatalogText(String? stored) =>
     SettingsServiceCatalogs.effectiveBuildingCatalog(stored);
+
+// --- Οι ίδιοι τρεις βοηθοί για τις ομάδες, ώστε η οθόνη διαχείρισης να
+// --- δουλεύει και τους δύο καταλόγους από το ίδιο σχήμα.
+
+Future<void> writeDepartmentGroupCatalog(
+  List<String> groups, {
+  required String? expected,
+}) async {
+  await SettingsService().catalogs.setDepartmentGroupCatalog(
+    groups.join(', '),
+    expected: expected,
+  );
+}
+
+Future<String> readDepartmentGroupCatalogRaw() =>
+    SettingsService().catalogs.getDepartmentGroupCatalogRaw();
+
+String effectiveDepartmentGroupCatalogText(String? stored) =>
+    SettingsServiceCatalogs.effectiveDepartmentGroupCatalog(stored);

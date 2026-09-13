@@ -3,10 +3,29 @@ import 'dart:io';
 import 'dart:math';
 
 import '../config/app_config.dart';
+import '../services/crash_log_service.dart';
 import 'database_file_bundle.dart';
 import 'database_file_identity.dart';
 import 'database_init_result.dart';
 import 'database_integrity_probe.dart';
+import 'integrity_report_summary.dart';
+
+/// Γράφει το πλήρες κείμενο του ελέγχου ακεραιότητας στο ημερολόγιο σφαλμάτων.
+///
+/// Η οθόνη δείχνει σύνοψη — το τεκμήριο όμως δεν επιτρέπεται να χαθεί: είναι
+/// το μόνο που λέει **ποιες** σελίδες χάλασαν, και το χρειάζεται όποιος
+/// προσπαθήσει να σώσει τα δεδομένα.
+///
+/// Σιωπηλό σε αποτυχία επίτηδες: η καταγραφή είναι παρακολούθημα της
+/// εκκίνησης, και μια εκκίνηση δεν χαλάει επειδή δεν γράφτηκε ένα αρχείο.
+void _archiveIntegrityReportToCrashLog(String report) {
+  CrashLogService.instanceOrNull?.logError(
+    'Ο έλεγχος ακεραιότητας βρήκε χαλασμένο περιεχόμενο στη βάση.',
+    StackTrace.empty,
+    fatal: false,
+    diagnostics: report,
+  );
+}
 
 enum ProbeSeverity { info, warning, error }
 
@@ -56,7 +75,15 @@ class DatabaseAccessProbeReport {
 }
 
 class DatabaseAccessProbe {
-  const DatabaseAccessProbe({this.totalTimeout = _kProbeTotalTimeout});
+  const DatabaseAccessProbe({
+    this.totalTimeout = _kProbeTotalTimeout,
+    this.archiveFullReport = _archiveIntegrityReportToCrashLog,
+  });
+
+  /// Πού πάει το πλήρες κείμενο του ελέγχου ακεραιότητας, όταν δεν χωρά στην
+  /// οθόνη. Ρητή εξάρτηση και όχι σιωπηλό singleton, ώστε τα τεστ να μπορούν
+  /// να **δουν** ότι το τεκμήριο δεν χάθηκε.
+  final void Function(String report) archiveFullReport;
 
   /// Πόσο συνολικά περιμένει ο έλεγχος πριν τα παρατήσει.
   ///
@@ -432,16 +459,27 @@ class DatabaseAccessProbe {
           severity: ProbeSeverity.warning,
           code: 'integrity_inconclusive',
           message: 'Ο έλεγχος ακεραιότητας δεν κατέληξε.',
-          hint: raw,
+          hint: _hintFor(raw),
         );
       case DatabaseIntegrityStatus.corrupt:
         return ProbeFinding(
           severity: ProbeSeverity.error,
           code: 'integrity_failed',
           message: 'Ο έλεγχος ακεραιότητας βρήκε χαλασμένο περιεχόμενο.',
-          hint: (raw == null || raw.isEmpty) ? null : raw,
+          hint: (raw == null || raw.isEmpty) ? null : _hintFor(raw),
         );
     }
+  }
+
+  /// Συνοψίζει το ωμό κείμενο για την οθόνη, φυλάγοντας το πλήρες αλλού.
+  ///
+  /// Η βάση που έσπασε την εκκίνηση έδινε **214 γραμμές** — η οθόνη φόρτωσης
+  /// τις δεχόταν όλες και ξεχείλιζε κατά 831 pixels, αφήνοντας τον χειριστή
+  /// μπροστά σε πορτοκαλί «Σφάλμα διάταξης» χωρίς καμία διέξοδο.
+  String _hintFor(String raw) {
+    final summary = summarizeIntegrityReport(raw);
+    if (summary.wasTrimmed) archiveFullReport(summary.full);
+    return summary.forDisplay;
   }
 
   Future<(ProbeFinding, DatabaseInitResult?)?> _checkReadProbe(

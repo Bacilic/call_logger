@@ -91,8 +91,7 @@ class TimeoutDatabase implements Database {
   Future<T> _bounded<T>(String operation, Future<T> Function() action) {
     return action().timeout(
       timeout,
-      onTimeout: () =>
-          throw DatabaseUnresponsiveException(timeout, operation),
+      onTimeout: () => throw DatabaseUnresponsiveException(timeout, operation),
     );
   }
 
@@ -243,14 +242,11 @@ class TimeoutDatabase implements Database {
       _bounded('rawDelete', () => _inner.rawDelete(sql, arguments));
 
   @override
-  Future<int> delete(
-    String table, {
-    String? where,
-    List<Object?>? whereArgs,
-  }) => _bounded(
-    'delete $table',
-    () => _inner.delete(table, where: where, whereArgs: whereArgs),
-  );
+  Future<int> delete(String table, {String? where, List<Object?>? whereArgs}) =>
+      _bounded(
+        'delete $table',
+        () => _inner.delete(table, where: where, whereArgs: whereArgs),
+      );
 
   // --- Συναλλαγές ---
 
@@ -320,7 +316,8 @@ class _TimeoutBatch implements Batch {
   Future<List<Object?>> apply({bool? noResult, bool? continueOnError}) =>
       _owner._bounded(
         'batch apply',
-        () => _inner.apply(noResult: noResult, continueOnError: continueOnError),
+        () =>
+            _inner.apply(noResult: noResult, continueOnError: continueOnError),
       );
 
   @override

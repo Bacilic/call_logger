@@ -300,7 +300,7 @@ class DatabaseHelper {
     } catch (e) {
       await db.close();
       _database = null;
-    _guardedDatabase = null;
+      _guardedDatabase = null;
       throw _enrichSchemaValidationException(e);
     }
     await _captureFileIdentity(dbPath);
@@ -627,7 +627,7 @@ class DatabaseHelper {
         } catch (e) {
           await db.close();
           _database = null;
-    _guardedDatabase = null;
+          _guardedDatabase = null;
           throw _enrichSchemaValidationException(e);
         }
         await _captureFileIdentity(dbPath);

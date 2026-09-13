@@ -39,8 +39,7 @@ void main() {
   }
 
   group('η προσφορά βρίσκει ό,τι ΥΠΑΡΧΕΙ', () {
-    test('προσφέρεται η πρόσφατη τοπική βάση, όχι η άδεια προεπιλογή',
-        () async {
+    test('προσφέρεται η πρόσφατη τοπική βάση, όχι η άδεια προεπιλογή', () async {
       final existing = await makeDb('call_logger.db');
       await SettingsService().recordVerifiedDatabasePath(existing);
 
@@ -101,8 +100,7 @@ void main() {
   });
 
   group('η προσφορά και η ενέργεια δείχνουν στο ΙΔΙΟ αρχείο', () {
-    const unreachableUnc =
-        r'\\gnk.local\Departments\Data Base\call_logger.db';
+    const unreachableUnc = r'\\gnk.local\Departments\Data Base\call_logger.db';
 
     test('ανοίγει ακριβώς η βάση που δέχτηκε ο χρήστης', () async {
       final offered = await makeDb('call_logger.db');

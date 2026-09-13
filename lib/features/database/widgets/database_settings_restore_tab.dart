@@ -5,6 +5,7 @@ import '../../../core/models/app_permission.dart';
 import '../../../core/services/permission_service.dart';
 import '../utils/backup_restore_tooltip.dart';
 import 'database_settings_switch_flows.dart';
+import 'my_settings_backup_section.dart';
 
 /// Καρτέλα «Επαναφορά»: επαναφορά της βάσης από αντίγραφο ασφαλείας (zip/db).
 ///
@@ -56,9 +57,9 @@ class _DatabaseSettingsRestoreTabState
         ),
         const SizedBox(height: 4),
         Text(
-          'Επιλέγετε αρχείο αντιγράφου (.zip ή .db) και η βάση επαναφέρεται '
-          'στην κατάσταση εκείνης της στιγμής. Η τρέχουσα βάση αντικαθίσταται '
-          '— η επαναφορά αφορά όλους όσους τη μοιράζονται.',
+          'Επιλέγετε αρχείο αντιγράφου (.zip) και διαλέγετε τι θα '
+          'επαναφερθεί. Αν επαναφέρετε τη βάση, η τρέχουσα αντικαθίσταται '
+          '— η αλλαγή αφορά όλους όσους τη μοιράζονται.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -91,6 +92,10 @@ class _DatabaseSettingsRestoreTabState
               ),
             ),
           ),
+        const SizedBox(height: 20),
+        Divider(height: 1, color: theme.colorScheme.outlineVariant),
+        const SizedBox(height: 20),
+        const MySettingsBackupSection(),
       ],
     );
   }

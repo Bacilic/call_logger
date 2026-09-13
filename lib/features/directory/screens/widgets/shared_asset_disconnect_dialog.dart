@@ -96,10 +96,7 @@ Future<SharedAssetDisconnectBatchResult?> showSharedAssetDisconnectFlow({
     SharedAssetDisconnectItemResult? result;
     final standing = activeSession.standingDecisionFor(item.kind);
     if (standing != null &&
-        _standingIsApplicable(
-          standing,
-          canKeepInDepartment: canKeepThisItem,
-        )) {
+        _standingIsApplicable(standing, canKeepInDepartment: canKeepThisItem)) {
       result = standing.toItemResult();
     } else {
       final resolution = await resolveAssetDisconnectItem(

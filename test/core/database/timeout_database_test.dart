@@ -167,16 +167,18 @@ void main() {
       expect(await db.rawQuery('SELECT 1 AS x'), isNotEmpty);
     });
 
-    test('η ίδια σύνδεση δίνει το ίδιο αντικείμενο, όχι καινούριο κάθε φορά',
-        () async {
-      final dbPath = p.join(tempRoot.path, 'call_logger.db');
-      await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
-      await SettingsService().setDatabasePath(dbPath);
+    test(
+      'η ίδια σύνδεση δίνει το ίδιο αντικείμενο, όχι καινούριο κάθε φορά',
+      () async {
+        final dbPath = p.join(tempRoot.path, 'call_logger.db');
+        await DatabaseHelper.instance.createNewDatabaseFile(dbPath);
+        await SettingsService().setDatabasePath(dbPath);
 
-      final first = await DatabaseHelper.instance.database;
-      final second = await DatabaseHelper.instance.database;
+        final first = await DatabaseHelper.instance.database;
+        final second = await DatabaseHelper.instance.database;
 
-      expect(identical(first, second), isTrue);
-    });
+        expect(identical(first, second), isTrue);
+      },
+    );
   });
 }

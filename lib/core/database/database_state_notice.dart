@@ -2,8 +2,18 @@ import 'package:path/path.dart' as p;
 
 import 'database_file_classifier.dart';
 
-/// Είδος προειδοποίησης για ανοιχτή βάση Καταγραφής (παλιά / κενή / ημιτελής).
-enum DatabaseNoticeKind { none, oldDatabase, emptyDatabase }
+/// Είδος προειδοποίησης για ανοιχτή βάση Καταγραφής.
+enum DatabaseNoticeKind {
+  none,
+  oldDatabase,
+  emptyDatabase,
+
+  /// Το ίδιο το SQLite δηλώνει ότι μέρος του αρχείου δεν διαβάζεται.
+  ///
+  /// Προηγείται όλων: μια βάση που φθείρεται δεν είναι «παλιά» ή «ημιτελής»
+  /// — είναι βάση που χάνει δεδομένα όσο μένει σε χρήση.
+  corruptedContent,
+}
 
 /// Ειδοποίηση κατάστασης βάσης για εμφάνιση στη λωρίδα UI.
 class DatabaseStateNotice {
@@ -70,6 +80,18 @@ DatabaseStateNotice evaluateDatabaseStateNotice({
 
   final fileName = p.basename(dbPath);
   final displayName = fileName.isEmpty ? dbPath : fileName;
+
+  // Πρώτο απ' όλα: η φθορά δεν περιμένει στη σειρά πίσω από «παλιά βάση».
+  // Ο χρήστης πρέπει να πάρει αντίγραφο ΤΩΡΑ, όσο ό,τι απομένει διαβάζεται.
+  if (profile.contentIsCorrupt) {
+    return DatabaseStateNotice(
+      kind: DatabaseNoticeKind.corruptedContent,
+      message:
+          'ΦΘΟΡΑ ΣΤΗ ΒΑΣΗ: $displayName — μέρος του αρχείου δεν διαβάζεται. '
+          'Πάρτε αντίγραφο ασφαλείας τώρα και επαναφέρετε από παλαιότερο.',
+      identity: identity,
+    );
+  }
 
   final missing = <String>[];
   if (profile.callCount == 0) missing.add('κλήσεις');

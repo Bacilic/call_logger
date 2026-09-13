@@ -59,13 +59,14 @@ Uint8List buildDashboardExcel(DashboardExportDocument document) {
     final headerRowIndex = sheet.maxRows - 1;
     for (var column = 0; column < table.columns.length; column++) {
       sheet
-          .cell(
-            CellIndex.indexByColumnRow(
-              columnIndex: column,
-              rowIndex: headerRowIndex,
-            ),
-          )
-          .cellStyle = headerStyle;
+              .cell(
+                CellIndex.indexByColumnRow(
+                  columnIndex: column,
+                  rowIndex: headerRowIndex,
+                ),
+              )
+              .cellStyle =
+          headerStyle;
     }
 
     if (table.isEmpty) {
@@ -97,7 +98,9 @@ void _writeDocumentHeader(
   CellStyle headerStyle,
 ) {
   sheet.appendRow([TextCellValue(document.title)]);
-  sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).cellStyle =
+  sheet
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0))
+          .cellStyle =
       titleStyle;
 
   sheet.appendRow([
@@ -116,7 +119,8 @@ void _writeDocumentHeader(
 
   for (var row = 1; row <= 3; row++) {
     sheet
-        .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
-        .cellStyle = headerStyle;
+            .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
+            .cellStyle =
+        headerStyle;
   }
 }

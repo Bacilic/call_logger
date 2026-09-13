@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/database_error_advice.dart';
 import '../../../core/database/database_init_result.dart';
 import '../../../core/services/lookup_service.dart';
 
@@ -14,6 +15,32 @@ class LookupLoadResult {
     this.loadError,
     this.loadErrorDetails,
   });
+
+  /// Μεταφράζει την αποτυχία φόρτωσης σε κείμενο για τη λωρίδα.
+  ///
+  /// Ζει εδώ και όχι μέσα στο σώμα του provider ώστε να ελέγχεται: ό,τι
+  /// διαβάζει ο χειριστής στην κόκκινη λωρίδα της φόρμας κλήσης βγαίνει από
+  /// αυτή τη συνάρτηση, και μόνο από αυτήν.
+  factory LookupLoadResult.fromError(
+    LookupService service,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    final mapped = DatabaseInitResult.fromException(error, null, stackTrace);
+    return LookupLoadResult(
+      service: service,
+      loadError:
+          mapped.message ??
+          mapped.details ??
+          'Αποτυχία φόρτωσης καταλόγου χρηστών/εξοπλισμού.',
+      // Ο χειριστής δεν διάλεξε αρχείο — άνοιξε την εφαρμογή και πήγε να
+      // δουλέψει. Η συμβουλή πρέπει να μιλά γι' αυτό.
+      loadErrorDetails: databaseErrorAdvice(
+        result: mapped,
+        moment: DatabaseErrorMoment.usingTheApp,
+      ),
+    );
+  }
 
   final LookupService service;
   final String? loadError;
@@ -30,19 +57,6 @@ final lookupServiceProvider = FutureProvider<LookupLoadResult>((ref) async {
     await service.loadFromDatabase();
     return LookupLoadResult(service: service);
   } catch (e, st) {
-    final mapped = DatabaseInitResult.fromException(e, null, st);
-    final detailBody = mapped.details?.trim();
-    final orig = mapped.originalExceptionText?.trim();
-    final loadErrorDetails = (detailBody != null && detailBody.isNotEmpty)
-        ? detailBody
-        : (orig != null && orig.isNotEmpty ? orig : null);
-    return LookupLoadResult(
-      service: service,
-      loadError:
-          mapped.message ??
-          mapped.details ??
-          'Αποτυχία φόρτωσης καταλόγου χρηστών/εξοπλισμού.',
-      loadErrorDetails: loadErrorDetails,
-    );
+    return LookupLoadResult.fromError(service, e, st);
   }
 });

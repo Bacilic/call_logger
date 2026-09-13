@@ -64,7 +64,13 @@ Finder _fieldByLabel(String label) {
 }
 
 /// Το «Κτίριο» δεν πληκτρολογείται πια — διαλέγεται από τον κοινό κατάλογο.
-Finder _buildingDropdown() => find.byType(DropdownButtonFormField<String?>);
+///
+/// Η φόρμα έχει ΔΥΟ λίστες κειμένου (Κτίριο και Ομάδα): ο βοηθός στοχεύει την
+/// ετικέτα, αλλιώς θα έπιανε όποια τύχει.
+Finder _buildingDropdown() => find.ancestor(
+  of: find.text('Κτίριο'),
+  matching: find.byType(DropdownButtonFormField<String?>),
+);
 
 /// Ανοίγει τη λίστα κτιρίων και διαλέγει το [name].
 Future<void> _selectBuilding(WidgetTester tester, String name) async {
@@ -2010,6 +2016,110 @@ void main() {
           'Ό,τι γράφτηκε στη φόρμα πρέπει να φτάνει στη βάση και στο νέο τμήμα',
         ),
       );
+    });
+
+    // Το κτίριο και ο όροφος αφορούν την κάτοψη του νοσοκομείου. Η φόρμα τα
+    // κρύβει μόλις το Είδος βγει από τον χάρτη, αλλά έμεναν γραμμένα — και η
+    // λίστα του Καταλόγου τα έδειχνε. Τώρα διαγράφονται, αφού πρώτα ρωτηθεί ο
+    // χρήστης: η θέση στην κάτοψη σχεδιάζεται με το χέρι και δεν χάνεται
+    // σιωπηλά.
+    //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "είδος"
+    testWidgets('αλλαγή σε «Εταιρεία» προειδοποιεί για κτίριο και όροφο', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late int deptId;
+      await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        deptId = await db.insert('departments', {
+          'name': 'Αναισθησιολογικό',
+          'name_key': SearchTextNormalizer.normalizeForSearch(
+            'Αναισθησιολογικό',
+          ),
+          'building': 'Καινούριο',
+          'color': '#33691F',
+          'is_deleted': 0,
+        });
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+      });
+
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          initialDepartment: DepartmentModel(
+            id: deptId,
+            name: 'Αναισθησιολογικό',
+            building: 'Καινούριο',
+            color: '#33691F',
+          ),
+          notifier: notifier,
+        );
+      });
+      await pumpUntilSettledLong(tester);
+
+      final kindField = find.byType(DropdownButtonFormField<DepartmentKind>);
+      await tester.ensureVisible(kindField);
+      await pumpUntilSettled(tester);
+      await tester.tap(kindField);
+      await pumpUntilSettledLong(tester);
+      await tester.tap(find.text('Εταιρεία').last);
+      await pumpUntilSettledLong(tester);
+
+      final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      // Πραγματικός χρόνος: η αποθήκευση αγγίζει τη βάση. Σταματά μόλις
+      // εμφανιστεί η προειδοποίηση — ή μόλις κλείσει η φόρμα, που θα σήμαινε
+      // ότι το κτίριο σβήστηκε σιωπηλά.
+      await tester.runAsync(() async {
+        for (var i = 0; i < 60; i++) {
+          final warned = find
+              .text('Η καρτέλα φεύγει από την κάτοψη')
+              .evaluate()
+              .isNotEmpty;
+          final formOpen =
+              find.text(_kDepartmentFormTitle).evaluate().isNotEmpty ||
+              find.text('Επεξεργασία εταιρείας').evaluate().isNotEmpty;
+          if (warned || !formOpen) return;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      });
+      await tester.pump();
+      await flushCallLoggerSqfliteLockTimers(tester);
+
+      expect(
+        find.text('Η καρτέλα φεύγει από την κάτοψη'),
+        findsOneWidget,
+        reason: greekExpectMsg(
+          'Ό,τι κρύβει το Είδος δεν σβήνεται σιωπηλά: ο χρήστης βλέπει τι '
+          'πρόκειται να χαθεί πριν το εγκρίνει',
+        ),
+      );
+      expect(
+        find.textContaining('Κτίριο: Καινούριο'),
+        findsOneWidget,
+        reason: greekExpectMsg('Η προειδοποίηση ονομάζει ό,τι θα διαγραφεί'),
+      );
+
+      await flushCallLoggerSqfliteLockTimers(tester);
     });
   });
 }

@@ -57,9 +57,10 @@ Future<void> showBackupFolderMissingDialog({
       'Ο δικτυακός φάκελος δεν απαντά από αυτόν τον υπολογιστή. Πιθανή αιτία: '
           'δεν υπάρχει σύνδεση στο δίκτυο, ο διακομιστής είναι εκτός, ή ο '
           'κοινόχρηστος φάκελος δεν υπάρχει πια',
-    BackupDestinationReachability.volumeMissing => driveLetter == null
-        ? 'Ο δίσκος της διαδρομής δεν είναι διαθέσιμος'
-        : 'Ο δίσκος $driveLetter: δεν υπάρχει ή δεν είναι συνδεδεμένος',
+    BackupDestinationReachability.volumeMissing =>
+      driveLetter == null
+          ? 'Ο δίσκος της διαδρομής δεν είναι διαθέσιμος'
+          : 'Ο δίσκος $driveLetter: δεν υπάρχει ή δεν είναι συνδεδεμένος',
   };
   final availableText = availableDrives.isEmpty
       ? ''

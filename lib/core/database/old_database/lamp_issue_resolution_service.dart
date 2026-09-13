@@ -6,6 +6,7 @@ import 'lamp_issue_fk_analyzer.dart';
 import 'lamp_issue_matching_engine.dart';
 import 'lamp_issue_resolution_models.dart';
 import 'lamp_issue_resolution_support.dart';
+import 'lamp_mixed_script_analyzer.dart';
 import 'lamp_placement_catalog.dart';
 import 'resolution_log_entry.dart';
 
@@ -20,6 +21,7 @@ class LampIssueResolutionService {
     _support = LampIssueResolutionSupport(matching);
     _fkAnalyzer = LampIssueFkAnalyzer(matching, _support);
     _duplicateAnalyzers = LampIssueDuplicateAnalyzers(_support);
+    _mixedScriptAnalyzer = LampMixedScriptAnalyzer(_support);
     _applier = LampIssueDecisionApplier(_databaseProvider, matching, _support);
   }
 
@@ -37,6 +39,7 @@ class LampIssueResolutionService {
   late final LampIssueResolutionSupport _support;
   late final LampIssueFkAnalyzer _fkAnalyzer;
   late final LampIssueDuplicateAnalyzers _duplicateAnalyzers;
+  late final LampMixedScriptAnalyzer _mixedScriptAnalyzer;
   late final LampIssueDecisionApplier _applier;
 
   /// Confidence για ταύτιση «το ένα περιέχει το άλλο» (substring containment).
@@ -195,6 +198,12 @@ class LampIssueResolutionService {
         _duplicateAnalyzers.analyzeSetMasterCycles(db),
       LampIssueType.setMasterMissingTarget =>
         _duplicateAnalyzers.analyzeSetMasterMissingTargets(db),
+      LampIssueType.mixedScriptAlphabets ||
+      LampIssueType.mixedScriptBrokenChar ||
+      LampIssueType.mixedScriptDigitInGreek => _mixedScriptAnalyzer.analyze(
+        db,
+        issueType,
+      ),
     };
   }
 

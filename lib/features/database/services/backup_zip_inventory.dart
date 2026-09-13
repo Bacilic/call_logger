@@ -64,34 +64,37 @@ class BackupZipRejectedCandidate {
   final String reason;
 }
 
-/// Τι φορητά τμήματα βρέθηκαν μέσα στο `.zip` (για προειδοποίηση πλήρους αντιγράφου).
+/// Τι φορητά τμήματα βρέθηκαν μέσα στο `.zip`, και πόσα αρχεία το καθένα.
+///
+/// Τα πλήθη δεν είναι διακοσμητικά: ο διάλογος επαναφοράς τα δείχνει δίπλα σε
+/// κάθε επιλογή, ώστε ο χρήστης να ξέρει τι θα φέρει πριν το ζητήσει.
 class BackupZipPortablePresence {
   const BackupZipPortablePresence({
     required this.hasManifest,
-    required this.hasMaps,
-    required this.hasImages,
-    required this.hasDictionaries,
-    required this.hasLampDatabase,
+    this.mapsCount = 0,
+    this.imagesCount = 0,
+    this.dictionariesCount = 0,
+    this.lampDatabaseCount = 0,
+    this.lampDatabaseModified,
   });
 
   final bool hasManifest;
-  final bool hasMaps;
-  final bool hasImages;
-  final bool hasDictionaries;
-  final bool hasLampDatabase;
+  final int mapsCount;
+  final int imagesCount;
+  final int dictionariesCount;
+  final int lampDatabaseCount;
 
-  /// Περιγραφή για τον χρήστη των στοιχείων που θα επαναφερθούν μαζί με τη βάση.
-  String describeFoundPortables() {
-    final parts = <String>[];
-    if (hasMaps) parts.add('κατόψεις');
-    if (hasImages) parts.add('εικονίδια');
-    if (hasDictionaries) parts.add('λεξικό');
-    if (hasLampDatabase) parts.add('βάση Λάμπας');
-    if (parts.isEmpty) return 'φορητά αρχεία της εφαρμογής';
-    if (parts.length == 1) return parts.single;
-    final last = parts.removeLast();
-    return '${parts.join(', ')} και $last';
-  }
+  /// Πότε γράφτηκε η βάση Λάμπας που ταξιδεύει μέσα στο αντίγραφο.
+  ///
+  /// Επιτρέπει στον διάλογο να προειδοποιήσει όταν η τοπική βάση Λάμπας είναι
+  /// **νεότερη** από εκείνη του αντιγράφου — το σενάριο όπου η επαναφορά
+  /// σβήνει δουλειά αντί να τη σώζει.
+  final DateTime? lampDatabaseModified;
+
+  bool get hasMaps => mapsCount > 0;
+  bool get hasImages => imagesCount > 0;
+  bool get hasDictionaries => dictionariesCount > 0;
+  bool get hasLampDatabase => lampDatabaseCount > 0;
 }
 
 /// Απογραφή περιεχομένου αντιγράφου `.zip` ως προς αρχεία βάσης.
@@ -106,10 +109,6 @@ class BackupZipInventory {
     this.cleanupWarnings = const <String>[],
     this.portablePresence = const BackupZipPortablePresence(
       hasManifest: false,
-      hasMaps: false,
-      hasImages: false,
-      hasDictionaries: false,
-      hasLampDatabase: false,
     ),
   });
 
@@ -151,18 +150,24 @@ bool detectFullBackupArchiveStructure(Iterable<String> entryNames) {
           presence.hasLampDatabase);
 }
 
-/// Παρουσία γνωστών φακέλων αντιγράφου και manifest.
-BackupZipPortablePresence detectPortablePresence(Iterable<String> entryNames) {
+/// Παρουσία γνωστών φακέλων αντιγράφου και manifest, με πλήθος αρχείων.
+///
+/// Το [lampDatabaseModified] το δίνει ο καλών που διαβάζει πραγματικό zip —
+/// οι σκέτες ονομασίες εγγραφών δεν κουβαλούν ημερομηνία.
+BackupZipPortablePresence detectPortablePresence(
+  Iterable<String> entryNames, {
+  DateTime? lampDatabaseModified,
+}) {
   final mapsPrefix = '${BuildingMapStorage.backupZipMapsFolderName}/';
   final imagesPrefix = '${AppConfig.portableImagesDirName}/';
   final dictPrefix = '${AppConfig.portableDictionariesDirName}/';
   final lampPrefix = '${PortableLampStorage.backupZipLampDbFolderName}/';
 
   var hasManifest = false;
-  var hasMaps = false;
-  var hasImages = false;
-  var hasDictionaries = false;
-  var hasLampDatabase = false;
+  var mapsCount = 0;
+  var imagesCount = 0;
+  var dictionariesCount = 0;
+  var lampDatabaseCount = 0;
 
   for (final raw in entryNames) {
     final name = raw.replaceAll('\\', '/');
@@ -170,27 +175,26 @@ BackupZipPortablePresence detectPortablePresence(Iterable<String> entryNames) {
       hasManifest = true;
       continue;
     }
-    if (name.startsWith(mapsPrefix) ||
-        name == mapsPrefix.substring(0, mapsPrefix.length - 1)) {
-      hasMaps = true;
-    } else if (name.startsWith(imagesPrefix) ||
-        name == AppConfig.portableImagesDirName) {
-      hasImages = true;
-    } else if (name.startsWith(dictPrefix) ||
-        name == AppConfig.portableDictionariesDirName) {
-      hasDictionaries = true;
-    } else if (name.startsWith(lampPrefix) ||
-        name == PortableLampStorage.backupZipLampDbFolderName) {
-      hasLampDatabase = true;
+    // Η σκέτη εγγραφή φακέλου δηλώνει παρουσία, όχι περιεχόμενο — γι' αυτό
+    // μετρούν μόνο τα ονόματα που συνεχίζουν πέρα από το πρόθεμα.
+    if (name.startsWith(mapsPrefix)) {
+      if (name.length > mapsPrefix.length) mapsCount++;
+    } else if (name.startsWith(imagesPrefix)) {
+      if (name.length > imagesPrefix.length) imagesCount++;
+    } else if (name.startsWith(dictPrefix)) {
+      if (name.length > dictPrefix.length) dictionariesCount++;
+    } else if (name.startsWith(lampPrefix)) {
+      if (name.length > lampPrefix.length) lampDatabaseCount++;
     }
   }
 
   return BackupZipPortablePresence(
     hasManifest: hasManifest,
-    hasMaps: hasMaps,
-    hasImages: hasImages,
-    hasDictionaries: hasDictionaries,
-    hasLampDatabase: hasLampDatabase,
+    mapsCount: mapsCount,
+    imagesCount: imagesCount,
+    dictionariesCount: dictionariesCount,
+    lampDatabaseCount: lampDatabaseCount,
+    lampDatabaseModified: lampDatabaseModified,
   );
 }
 
@@ -228,10 +232,17 @@ Future<BackupZipInventory> inventoryBackupZip(
 
   final listed = <BackupZipListedEntry>[];
   final otherNames = <String>[];
+  final lampPrefix = '${PortableLampStorage.backupZipLampDbFolderName}/';
+  DateTime? lampModified;
   for (final f in archive.files) {
     if (!f.isFile) continue;
     final name = f.name.replaceAll('\\', '/');
     otherNames.add(name);
+    if (name.startsWith(lampPrefix) && f.lastModTime > 0) {
+      lampModified = DateTime.fromMillisecondsSinceEpoch(
+        f.lastModTime * 1000,
+      );
+    }
     if (!name.toLowerCase().endsWith('.db')) continue;
     listed.add(
       BackupZipListedEntry(
@@ -249,6 +260,7 @@ Future<BackupZipInventory> inventoryBackupZip(
     onProgress: onProgress,
     maxCandidatesToCheck: maxCandidatesToCheck,
     workDirectory: workDirectory,
+    lampDatabaseModified: lampModified,
   );
 }
 
@@ -260,12 +272,16 @@ Future<BackupZipInventory> inventoryBackupZipListedEntries({
   void Function(int current, int total)? onProgress,
   int maxCandidatesToCheck = kBackupZipMaxCandidatesToCheck,
   String? workDirectory,
+  DateTime? lampDatabaseModified,
 }) async {
   final allNames = <String>{
     ...otherEntryNames.map((n) => n.replaceAll('\\', '/')),
     ...entries.map((e) => e.entryName.replaceAll('\\', '/')),
   };
-  final portablePresence = detectPortablePresence(allNames);
+  final portablePresence = detectPortablePresence(
+    allNames,
+    lampDatabaseModified: lampDatabaseModified,
+  );
   final isFull = detectFullBackupArchiveStructure(allNames);
 
   final lampPrefix = '${PortableLampStorage.backupZipLampDbFolderName}/';
@@ -410,13 +426,32 @@ void _classifyProfiledCandidate({
 }) {
   switch (profile.kind) {
     case DatabaseFileKind.callLogger:
-    case DatabaseFileKind.incompleteCallLogger:
       eligible.add(
         BackupZipEligibleCandidate(
           entryName: entryName,
           displayName: displayName,
           sizeBytes: sizeBytes,
           profile: profile,
+        ),
+      );
+      return;
+    case DatabaseFileKind.incompleteCallLogger:
+      // Μένει στη λίστα ώστε ο χρήστης να δει ΓΙΑΤΙ δεν του κάνει — αλλά
+      // σημαίνεται, γιατί μια βάση με λειψούς πίνακες δεν ανοίγει ποτέ. Ο
+      // διάλογος επαναφοράς κλειδώνει το κουτάκι της.
+      final missing = profile.missingCoreTables.join(', ');
+      eligible.add(
+        BackupZipEligibleCandidate(
+          entryName: entryName,
+          displayName: displayName,
+          sizeBytes: sizeBytes,
+          profile: profile,
+          checkFailed: true,
+          checkWarning: missing.isEmpty
+              ? 'Ελλιπής βάση της Καταγραφής Κλήσεων — λείπουν βασικοί '
+                    'πίνακες και δεν μπορεί να ανοίξει.'
+              : 'Ελλιπής βάση — λείπουν οι πίνακες: $missing. Δεν μπορεί να '
+                    'ανοίξει.',
         ),
       );
       return;

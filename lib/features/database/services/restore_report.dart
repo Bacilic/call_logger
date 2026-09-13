@@ -15,6 +15,9 @@ enum RestoreReportStatus {
 
   /// Η επαναφορά του στοιχείου απέτυχε (κόκκινο).
   failure,
+
+  /// Ο χρήστης το ξετσεκάρισε — δεν είναι ούτε σφάλμα ούτε έλλειψη (ουδέτερο).
+  skipped,
 }
 
 /// Μία γραμμή της αναφοράς: «Ετικέτα: Τι έγινε».
@@ -33,11 +36,14 @@ class RestoreReportItem {
 const String _notFoundPlural = 'Δεν βρέθηκαν στο συμπιεσμένο αρχείο';
 const String _notFoundSingular = 'Δεν βρέθηκε στο συμπιεσμένο αρχείο';
 
+/// Σταθερό κείμενο για ό,τι ο χρήστης άφησε απ' έξω.
+const String skippedByChoiceDetail = 'Δεν επιλέχθηκε για επαναφορά';
+
 /// Χτίζει τις γραμμές της αναφοράς από τα μετρήσιμα αποτελέσματα.
 ///
-/// Καλείται μόνο μετά από επιτυχή επαναφορά της βάσης — γι' αυτό η πρώτη
-/// γραμμή είναι πάντα «Βάση: Επαναφέρθηκε». Στοιχείο με έστω μία αποτυχία
-/// σημαίνεται κόκκινο· στοιχείο που απλώς δεν υπήρχε στο αντίγραφο, πορτοκαλί.
+/// Στοιχείο με έστω μία αποτυχία σημαίνεται κόκκινο· στοιχείο που απλώς δεν
+/// υπήρχε στο αντίγραφο, πορτοκαλί· στοιχείο που ο χρήστης ξετσεκάρισε,
+/// ουδέτερο — η επιλογή του δεν είναι πρόβλημα προς επίλυση.
 List<RestoreReportItem> buildRestoreReportItems({
   required int mapImagesCopied,
   required int mapImagesFailed,
@@ -48,24 +54,38 @@ List<RestoreReportItem> buildRestoreReportItems({
   required bool lampDbRestored,
   required bool lampDbFailed,
   required int imagesRelinked,
+  bool databaseRestored = true,
+  bool mapsSkipped = false,
+  bool toolImagesSkipped = false,
+  bool lexiconSkipped = false,
+  bool lampDbSkipped = false,
 }) {
   return [
-    const RestoreReportItem(
-      label: 'Βάση',
-      detail: 'Επαναφέρθηκε',
-      status: RestoreReportStatus.success,
-    ),
+    if (databaseRestored)
+      const RestoreReportItem(
+        label: 'Βάση',
+        detail: 'Επαναφέρθηκε',
+        status: RestoreReportStatus.success,
+      )
+    else
+      const RestoreReportItem(
+        label: 'Βάση',
+        detail: skippedByChoiceDetail,
+        status: RestoreReportStatus.skipped,
+      ),
     _countedItem(
       label: 'Κατόψεις',
       copied: mapImagesCopied,
       failed: mapImagesFailed,
       notFoundDetail: _notFoundPlural,
+      skipped: mapsSkipped,
     ),
     _countedItem(
       label: 'Εικονίδια εργαλείων',
       copied: toolImagesCopied,
       failed: toolImagesFailed,
       notFoundDetail: _notFoundPlural,
+      skipped: toolImagesSkipped,
     ),
     _countedItem(
       label: 'Λεξικό',
@@ -73,8 +93,15 @@ List<RestoreReportItem> buildRestoreReportItems({
       failed: dictionaryFilesFailed,
       notFoundDetail: _notFoundSingular,
       unit: 'αρχεία',
+      skipped: lexiconSkipped,
     ),
-    if (lampDbFailed)
+    if (lampDbSkipped)
+      const RestoreReportItem(
+        label: 'Βάση Λάμπας',
+        detail: skippedByChoiceDetail,
+        status: RestoreReportStatus.skipped,
+      )
+    else if (lampDbFailed)
       const RestoreReportItem(
         label: 'Βάση Λάμπας',
         detail: 'Αποτυχία επαναφοράς',
@@ -107,7 +134,15 @@ RestoreReportItem _countedItem({
   required int failed,
   required String notFoundDetail,
   String? unit,
+  bool skipped = false,
 }) {
+  if (skipped) {
+    return RestoreReportItem(
+      label: label,
+      detail: skippedByChoiceDetail,
+      status: RestoreReportStatus.skipped,
+    );
+  }
   String withUnit(int n) => unit == null ? '$n' : '$n $unit';
 
   if (failed > 0) {

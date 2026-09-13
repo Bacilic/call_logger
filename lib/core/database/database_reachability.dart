@@ -72,8 +72,10 @@ class DatabaseReachabilitySignal {
 /// φύλακα περνά από τον ίδιο δρόμο — αν μετρούσαν όλοι, η εφαρμογή θα
 /// ξαναφόρτωνε τις κοινές όψεις κάθε είκοσι δευτερόλεπτα, σε βάση που
 /// μοιράζονται δεκάδες σταθμοί.
-bool isDatabaseReturn(DatabaseReachability? previous, DatabaseReachability next) =>
-    previous == DatabaseReachability.lost && next == DatabaseReachability.ok;
+bool isDatabaseReturn(
+  DatabaseReachability? previous,
+  DatabaseReachability next,
+) => previous == DatabaseReachability.lost && next == DatabaseReachability.ok;
 
 Duration? databaseAwareRetry(int retryCount, Object error) {
   if (DatabaseReachabilitySignal.isLost) return null;

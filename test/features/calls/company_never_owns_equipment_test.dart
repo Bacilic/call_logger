@@ -10,12 +10,19 @@
 // Ολόκληρο αρχείο (από ρίζα έργου):
 //   flutter test test/features/calls/company_never_owns_equipment_test.dart
 
+import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
+import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
+import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/provider/smart_entity_selector_provider.dart';
 import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../test_setup.dart';
 
 const int _kCompanyId = 70;
 const int _kHospitalId = 49;
@@ -171,6 +178,116 @@ void main() {
         isNot(contains('5698')),
         reason: 'ό,τι δεν πρόκειται να γραφτεί δεν ανακοινώνεται',
       );
+    });
+  });
+
+  // Η κρίση «τι θα γραφτεί» ελέγχεται παραπάνω σε καθαρή λογική. Εδώ τρέχει η
+  // ΕΚΤΕΛΕΣΗ πάνω σε πραγματική βάση: ό,τι υπόσχεται η οθόνη είναι ό,τι γράφει
+  // η ροή — αλλιώς οι δύο αποκλίνουν σιωπηλά.
+  group('Η γρήγορη καταχώρηση ορφανών εκτελεί ό,τι κρίθηκε', () {
+    late Database db;
+
+    registerCallLoggerIsolatedDatabaseHooks();
+
+    setUp(() async {
+      await seedIsolatedTestDatabase();
+      db = await DatabaseHelper.instance.database;
+    });
+
+    Future<int> insertDepartment(String name, DepartmentKind kind) {
+      return db.insert('departments', {
+        'name': name,
+        'name_key': SearchTextNormalizer.normalizeForSearch(name),
+        'kind': kind.dbValue,
+        'is_deleted': 0,
+      });
+    }
+
+    Future<int?> departmentIdOfEquipment(String code) async {
+      final rows = await db.query(
+        'equipment',
+        columns: ['department_id'],
+        where: 'code_equipment = ?',
+        whereArgs: [code],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      return rows.first['department_id'] as int?;
+    }
+
+    Future<ProviderContainer> containerReady() async {
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      await container.read(lookupServiceProvider.future);
+      return container;
+    }
+
+    test(
+      'τηλέφωνο εταιρείας μαζί με μηχάνημα: γράφεται μόνο το τηλέφωνο',
+      () async {
+        final companyId = await insertDepartment(
+          'DataMed',
+          DepartmentKind.company,
+        );
+        final container = await containerReady();
+        addTearDown(container.dispose);
+
+        const phone = '2108056700';
+        const equipmentCode = '5698';
+
+        final notifier = container.read(callSmartEntityProvider.notifier);
+        notifier.updateDepartmentText('DataMed');
+        notifier.checkContent(departmentText: 'DataMed');
+        notifier.updatePhone(phone);
+        notifier.checkContent(phoneText: phone);
+        notifier.checkContent(equipmentText: equipmentCode);
+
+        final result = await notifier.quickAddOrphanToDepartment(
+          forceSharedOnConflict: true,
+        );
+
+        expect(result, isNotNull);
+        expect(
+          await departmentIdOfEquipment(equipmentCode),
+          isNot(companyId),
+          reason:
+              'το τηλέφωνο δικαιολογεί τη ροή — το μηχάνημα δεν ακολουθεί '
+              'στην εταιρεία',
+        );
+        expect(
+          result!.successMessage,
+          isNot(contains('εξοπλισμός')),
+          reason: 'το μήνυμα δεν ανακοινώνει καταχώρηση που δεν έγινε',
+        );
+      },
+    );
+
+    test('σε τμήμα νοσοκομείου γράφονται και τα δύο', () async {
+      final hospitalId = await insertDepartment(
+        'Αιματολογικό',
+        DepartmentKind.hospital,
+      );
+      final container = await containerReady();
+      addTearDown(container.dispose);
+
+      const phone = '2534';
+      const equipmentCode = '5067';
+
+      final notifier = container.read(callSmartEntityProvider.notifier);
+      notifier.updateDepartmentText('Αιματολογικό');
+      notifier.checkContent(departmentText: 'Αιματολογικό');
+      notifier.updatePhone(phone);
+      notifier.checkContent(phoneText: phone);
+      notifier.checkContent(equipmentText: equipmentCode);
+
+      final result = await notifier.quickAddOrphanToDepartment(
+        forceSharedOnConflict: true,
+      );
+
+      expect(result, isNotNull);
+      expect(await departmentIdOfEquipment(equipmentCode), hospitalId);
+      expect(result!.successMessage, contains('εξοπλισμός'));
     });
   });
 }

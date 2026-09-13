@@ -265,12 +265,19 @@ class SmartEntitySelectorState {
   bool needsOrphanDepartmentQuickAddResolved(LookupService? lookup) {
     if (!needsOrphanDepartmentQuickAdd) return false;
     if (lookup == null) return true;
-    final flags = _computeOrphanNeedsSharedFlags(lookup);
+    final flags = orphanNeedsSharedFlags(lookup);
     return flags.phoneNeedsShared || flags.equipmentNeedsShared;
   }
 
-  ({bool phoneNeedsShared, bool equipmentNeedsShared})
-  _computeOrphanNeedsSharedFlags(LookupService lookup) {
+  /// Τι ακριβώς θα γραφτεί από τη γρήγορη καταχώρηση ορφανών.
+  ///
+  /// **Μοναδικό σημείο κρίσης**: το ίδιο αποτέλεσμα αποφασίζει αν θα προσφερθεί
+  /// η καταχώρηση, τι υπόσχεται το μήνυμα και τι εκτελείται στη βάση. Όποιος
+  /// ξαναϋπολόγιζε την ίδια ερώτηση μόνος του έχανε τον φρουρό του Είδους: το
+  /// τηλέφωνο δικαιολογούσε τη ροή και το μηχάνημα περνούσε μαζί σε εταιρεία.
+  ({bool phoneNeedsShared, bool equipmentNeedsShared}) orphanNeedsSharedFlags(
+    LookupService lookup,
+  ) {
     final deptText = departmentText.trim();
     final departmentId =
         selectedDepartmentId ?? lookup.findDepartmentByName(deptText)?.id;
@@ -444,7 +451,7 @@ class SmartEntitySelectorState {
 
       final parts = <String>[];
       if (lookup != null) {
-        final flags = _computeOrphanNeedsSharedFlags(lookup);
+        final flags = orphanNeedsSharedFlags(lookup);
         if (flags.phoneNeedsShared) {
           parts.add('τηλέφωνο: ${selectedPhone!.trim()}');
         }

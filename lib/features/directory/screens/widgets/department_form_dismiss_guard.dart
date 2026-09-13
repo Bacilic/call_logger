@@ -17,6 +17,7 @@ class DepartmentFormDismissGuard {
   bool get isDirty {
     if (host.nameController.text.trim() != host.snapName) return true;
     if (host.buildingController.text.trim() != host.snapBuilding) return true;
+    if (host.groupController.text.trim() != host.snapGroup) return true;
     if (host.notesController.text.trim() != host.snapNotes) return true;
     final parsedHex = tryParseDepartmentHex(host.hexController.text.trim());
     final effectiveHex = colorToDepartmentHex(parsedHex ?? host.selectedColor);
@@ -65,6 +66,9 @@ class DepartmentFormDismissGuard {
     if (host.nameController.text.trim() != host.snapName) labels.add('Όνομα');
     if (host.buildingController.text.trim() != host.snapBuilding) {
       labels.add('Κτίριο');
+    }
+    if (host.groupController.text.trim() != host.snapGroup) {
+      labels.add('Ομάδα');
     }
     if (host.notesController.text.trim() != host.snapNotes) {
       labels.add('Σημειώσεις');

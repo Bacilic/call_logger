@@ -32,7 +32,10 @@ String lampProposalPreviewLine(
   LampIssueResolutionProposal p,
   String Function(String?) columnLabel,
 ) {
-  return '- Κωδικός εξοπλισμού=${p.row ?? '-'} πεδίο=${columnLabel(p.column)} · '
+  // Η ονομασία του κλειδιού ακολουθεί τον πίνακα της πρότασης: οι προτάσεις
+  // δεν αφορούν πια μόνο εξοπλισμό.
+  final codeLabel = lampEntityCodeLabel(p.sheet);
+  return '- $codeLabel=${p.row ?? '-'} πεδίο=${columnLabel(p.column)} · '
       '${p.proposedAction.labelEl} · ${p.proposedMatch ?? p.notes}';
 }
 

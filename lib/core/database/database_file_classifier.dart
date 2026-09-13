@@ -1,5 +1,6 @@
 import 'package:sqflite_common/sqflite.dart';
 
+import 'database_integrity_probe.dart';
 import 'settings_repository.dart';
 
 /// Κατηγορία αρχείου SQLite ως προς την εφαρμογή Καταγραφή Κλήσεων / Λάμπα.
@@ -59,6 +60,8 @@ class DatabaseFileProfile {
     this.latestCallDate,
     this.failureReason,
     this.hasDebugScenarioSignature = false,
+    this.contentIntegrity = DatabaseIntegrityStatus.inconclusive,
+    this.integrityDetail,
   });
 
   final DatabaseFileKind kind;
@@ -76,6 +79,23 @@ class DatabaseFileProfile {
   /// True όταν το περιεχόμενο φέρει την υπογραφή του σπορέα «Σενάρια
   /// σφαλμάτων» — τα δεδομένα είναι τεχνητά, όποιο όνομα κι αν έχει το αρχείο.
   final bool hasDebugScenarioSignature;
+
+  /// Τι απάντησε το ίδιο το SQLite για το **περιεχόμενο** του αρχείου.
+  ///
+  /// Ξεχωριστό ερώτημα από το [kind], και δεν το επηρεάζει: οι πίνακες μπορεί
+  /// να είναι όλοι στη θέση τους ενώ οι σελίδες από κάτω έχουν αλλοιωθεί. Η
+  /// προεπιλογή είναι [DatabaseIntegrityStatus.inconclusive] — «δεν ρωτήθηκε»
+  /// και «δεν απαντήθηκε» αξίζουν την ίδια επιφύλαξη, και καμία από τις δύο
+  /// δεν είναι απόδειξη ζημιάς.
+  final DatabaseIntegrityStatus contentIntegrity;
+
+  /// Το **ωμό** κείμενο του SQLite όταν βρέθηκε φθορά. Δεν μεταφράζεται και
+  /// δεν συνοψίζεται: είναι η μόνη πρόταση που λέει τι ακριβώς χάλασε.
+  final String? integrityDetail;
+
+  /// `true` μόνο όταν υπάρχει **απόδειξη** φθοράς — ποτέ από σιωπή.
+  bool get contentIsCorrupt =>
+      contentIntegrity == DatabaseIntegrityStatus.corrupt;
 }
 
 /// Ταξινομεί αρχείο `.db` με άνοιγμα **μόνο για ανάγνωση** (χωρίς version /
@@ -170,11 +190,21 @@ Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
       );
     }
 
+    // Το σχήμα στέκει. Απομένει το ερώτημα που κανένας έλεγχος πινάκων δεν
+    // απαντά: στέκει και το ΠΕΡΙΕΧΟΜΕΝΟ; Ρωτιέται εδώ, στην ήδη ανοιχτή
+    // σύνδεση, γιατί κάθε ροή που κρίνει βάση περνά από αυτό το σημείο — η
+    // επαναφορά, η απογραφή αντιγράφου, η αλλαγή αρχείου, η εκκίνηση. Ένας
+    // έλεγχος παραπάνω εδώ σημαίνει ότι καμία από αυτές δεν μπορεί να τον
+    // ξεχάσει.
+    final integrity = await _readIntegrityQuietly(db);
+
     // Πλήρες βασικό σχήμα: συμπληρώνουμε τα πλήθη που τροφοδοτούν τις
     // προειδοποιήσεις κατάστασης βάσης και τη σύγκριση αντιγράφων.
     return DatabaseFileProfile(
       kind: DatabaseFileKind.callLogger,
       userVersion: userVersion,
+      contentIntegrity: integrity.status,
+      integrityDetail: integrity.rawMessage,
       callCount: await _tryCount(db, 'calls'),
       userCount: await _tryCount(db, 'users'),
       phoneCount: await _tryCount(db, 'phones'),
@@ -196,6 +226,26 @@ Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
         await db.close();
       } catch (_) {}
     }
+  }
+}
+
+/// Ο έλεγχος ακεραιότητας δεν επιτρέπεται να ρίξει την ταξινόμηση ούτε να την
+/// κρεμάσει.
+///
+/// Δύο ξεχωριστοί κίνδυνοι, μία απάντηση: σε κοινόχρηστη βάση δικτύου το
+/// ερώτημα μπορεί να αργήσει πολύ, και σε κλειδωμένη ή χωρίς δικαιώματα
+/// μπορεί να πετάξει. Καμία από τις δύο περιπτώσεις **δεν** είναι απόδειξη
+/// ζημιάς — γι' αυτό και οι δύο καταλήγουν σε `inconclusive` και ο χρήστης
+/// δεν βλέπει τίποτα. Μόνο ρητό «malformed» από το SQLite μετρά.
+Future<DatabaseIntegrityOutcome> _readIntegrityQuietly(Database db) async {
+  try {
+    return await readIntegrityFromOpenDatabase(
+      db,
+    ).timeout(const Duration(seconds: 5));
+  } catch (_) {
+    return const DatabaseIntegrityOutcome(
+      status: DatabaseIntegrityStatus.inconclusive,
+    );
   }
 }
 

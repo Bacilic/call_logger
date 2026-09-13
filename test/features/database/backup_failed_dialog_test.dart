@@ -113,10 +113,8 @@ void main() {
     BackupFailedChoice? primary(
       BackupDestinationValidationKind kind, {
       required bool creatable,
-    }) => primaryBackupFailedAction(
-      kind: kind,
-      destinationCreatable: creatable,
-    );
+    }) =>
+        primaryBackupFailedAction(kind: kind, destinationCreatable: creatable);
 
     test('φάκελος εντάξει: η επανάληψη έχει νόημα', () {
       // Η αιτία ήταν αλλού· μόνο εδώ το «Εκτέλεση τώρα» μπορεί να πετύχει.

@@ -7,6 +7,7 @@ import '../../../operators/screens/operators_management_view.dart';
 import '../../../settings/screens/remote_tools_management_screen.dart';
 import 'categories_tab.dart';
 import 'departments_settings_view.dart';
+import 'lamp_cross_check_view.dart';
 import 'servers_management_view.dart';
 import 'validation_rules_view.dart';
 
@@ -18,6 +19,7 @@ enum MiscView {
   operators,
   servers,
   departments,
+  lampCrossCheck,
 }
 
 /// Καρτέλα «Διάφορα»: κεντρικό hub με πλοήγηση σε υπο-οθόνες.
@@ -60,7 +62,8 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
             _view == MiscView.validationRules ||
             _view == MiscView.operators ||
             _view == MiscView.servers ||
-            _view == MiscView.departments)
+            _view == MiscView.departments ||
+            _view == MiscView.lampCrossCheck)
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
             child: Row(
@@ -91,6 +94,7 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
             MiscView.operators => const OperatorsManagementView(),
             MiscView.servers => const ServersManagementView(),
             MiscView.departments => const DepartmentsSettingsView(),
+            MiscView.lampCrossCheck => const LampCrossCheckView(),
             MiscView.dashboard => const SizedBox.shrink(),
           },
         ),
@@ -152,6 +156,15 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
                   assetPath: 'assets/app_users.png',
                   fallbackIcon: Icons.manage_accounts_outlined,
                   onTap: () => setState(() => _view = MiscView.operators),
+                ),
+              ),
+              SizedBox(
+                width: cardWidth.clamp(280.0, 520.0),
+                child: _HubNavCard(
+                  title: 'Διασταύρωση με Λάμπα',
+                  assetPath: 'assets/lamp_cross_check.png',
+                  fallbackIcon: Icons.compare_arrows,
+                  onTap: () => setState(() => _view = MiscView.lampCrossCheck),
                 ),
               ),
               SizedBox(

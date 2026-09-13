@@ -257,10 +257,21 @@ void main() {
   });
 
   group('personNameHint — όνομα/επώνυμο υπαλλήλου', () {
-    test('ξεκινά από ψηφίο (η εταιρεία «3π»): υπόδειξη, όχι απαγόρευση', () {
+    test('ξεκινά από ψηφίο: υπόδειξη, όχι απαγόρευση', () {
       expect(
         service.personNameHint('3π'),
-        'Ξεκινά από ψηφίο ή σύμβολο — σωστό μόνο αν πρόκειται για εταιρεία',
+        'Ξεκινά από ψηφίο ή σύμβολο — οι εταιρείες καταχωρούνται '
+        'στα Τμήματα, με Είδος «Εταιρεία»',
+      );
+    });
+
+    // Από το v58 η εταιρεία είναι τμήμα με Είδος «Εταιρεία», όχι υπάλληλος.
+    // Η υπόδειξη δεν επιτρέπεται να επικυρώνει την καταργημένη πρακτική.
+    test('δεν παραπέμπει στην καταργημένη «εταιρεία = υπάλληλος»', () {
+      expect(
+        service.personNameHint('3π'),
+        isNot(contains('σωστό μόνο αν')),
+        reason: 'το μήνυμα οδηγεί στη σημερινή μορφή, όχι στην παλιά',
       );
     });
 
@@ -372,8 +383,8 @@ void main() {
           departmentName: '2545',
         ),
         [
-          'Όνομα — Ξεκινά από ψηφίο ή σύμβολο — σωστό μόνο αν πρόκειται '
-              'για εταιρεία',
+          'Όνομα — Ξεκινά από ψηφίο ή σύμβολο — οι εταιρείες '
+              'καταχωρούνται στα Τμήματα, με Είδος «Εταιρεία»',
           'Τηλέφωνο — Το 3122 δεν ξεκινά από 22–29',
           'Τμήμα — Το «2545» μοιάζει με αριθμό ή τηλέφωνο, όχι με όνομα '
               'τμήματος',
@@ -426,7 +437,9 @@ void main() {
       CatalogValidationRules(
         emptyDepartmentEnabled: false,
         departmentBuildingEnabled: false,
+        departmentGroupEnabled: false,
         equipmentWithoutDepartmentEnabled: false,
+        userWithoutDepartmentEnabled: false,
       ),
     );
 
@@ -605,7 +618,9 @@ void main() {
           personNameEnabled: false,
           emptyDepartmentEnabled: false,
           departmentBuildingEnabled: false,
+          departmentGroupEnabled: false,
           equipmentWithoutDepartmentEnabled: false,
+          userWithoutDepartmentEnabled: false,
         ),
       );
       final findings = s.scan(
@@ -635,9 +650,13 @@ void main() {
 
   group('scan — τμήματα χωρίς κτίριο', () {
     // Ο κανόνας των κενών τμημάτων κλείνει: τα τμήματα εδώ στήνονται χωρίς
-    // εξαρτήματα, και θα πρόσθετε δικό του εύρημα σε κάθε έλεγχο.
+    // εξαρτήματα, και θα πρόσθετε δικό του εύρημα σε κάθε έλεγχο. Το ίδιο και
+    // ο αδελφός κανόνας της ομάδας — εδώ κρίνεται το ΚΤΙΡΙΟ.
     const service = CatalogValidationService(
-      CatalogValidationRules(emptyDepartmentEnabled: false),
+      CatalogValidationRules(
+        emptyDepartmentEnabled: false,
+        departmentGroupEnabled: false,
+      ),
     );
 
     test('τμήμα χωρίς κτίριο: εύρημα με εστίαση στο πεδίο', () {
@@ -715,6 +734,8 @@ void main() {
         CatalogValidationRules(
           emptyDepartmentEnabled: false,
           departmentBuildingEnabled: false,
+          departmentGroupEnabled: false,
+          userWithoutDepartmentEnabled: false,
         ),
       );
       final findings = s.scan(
@@ -730,7 +751,10 @@ void main() {
     // Ο κανόνας του κτιρίου κλείνει εδώ: τα τμήματα στήνονται χωρίς κτίριο
     // επίτηδες, και θα πρόσθετε ένα εύρημα σε κάθε έλεγχο.
     const service = CatalogValidationService(
-      CatalogValidationRules(departmentBuildingEnabled: false),
+      CatalogValidationRules(
+        departmentBuildingEnabled: false,
+        departmentGroupEnabled: false,
+      ),
     );
 
     UserModel user({required int id, int? departmentId}) {
@@ -844,6 +868,8 @@ void main() {
         CatalogValidationRules(
           emptyDepartmentEnabled: false,
           departmentBuildingEnabled: false,
+          departmentGroupEnabled: false,
+          userWithoutDepartmentEnabled: false,
         ),
       );
       final findings = s.scan(
@@ -863,7 +889,9 @@ void main() {
       CatalogValidationRules(
         emptyDepartmentEnabled: false,
         departmentBuildingEnabled: false,
+        departmentGroupEnabled: false,
         equipmentWithoutDepartmentEnabled: false,
+        userWithoutDepartmentEnabled: false,
       ),
     );
 
@@ -999,6 +1027,7 @@ void main() {
           CatalogValidationRules(
             phoneEquipmentCodeEnabled: false,
             equipmentWithoutDepartmentEnabled: false,
+            userWithoutDepartmentEnabled: false,
           ),
         );
         final findings = s.scan(
@@ -1145,7 +1174,10 @@ void main() {
 
       test('μόνο διπλότυπα ενεργά: η κάρτα κρατά ΜΟΝΟ τα πιστά διπλότυπα', () {
         const s = CatalogValidationService(
-          CatalogValidationRules(swappedNamesEnabled: false),
+          CatalogValidationRules(
+            swappedNamesEnabled: false,
+            userWithoutDepartmentEnabled: false,
+          ),
         );
         final findings = s.scan(
           users: [
@@ -1169,7 +1201,10 @@ void main() {
         'μόνο αντεστραμμένα ενεργά: το πιστό διπλότυπο δεν βγάζει κάρτα',
         () {
           const s = CatalogValidationService(
-            CatalogValidationRules(duplicateNamesEnabled: false),
+            CatalogValidationRules(
+              duplicateNamesEnabled: false,
+              userWithoutDepartmentEnabled: false,
+            ),
           );
           final duplicatesOnly = s.scan(
             users: [
@@ -1198,6 +1233,7 @@ void main() {
           CatalogValidationRules(
             swappedNamesEnabled: false,
             duplicateNamesEnabled: false,
+            userWithoutDepartmentEnabled: false,
           ),
         );
         final findings = s.scan(
@@ -1309,6 +1345,7 @@ void main() {
           CatalogValidationRules(
             crossDepartmentPhoneEnabled: false,
             departmentBuildingEnabled: false,
+            departmentGroupEnabled: false,
           ),
         );
         final findings = s.scan(
@@ -1425,7 +1462,9 @@ void main() {
           CatalogValidationRules(
             equipmentOwnerDepartmentEnabled: false,
             departmentBuildingEnabled: false,
+            departmentGroupEnabled: false,
             equipmentWithoutDepartmentEnabled: false,
+            userWithoutDepartmentEnabled: false,
           ),
         );
         final findings = s.scan(
@@ -1522,6 +1561,12 @@ void main() {
   // ο κανόνας φέρνει τον ΙΔΙΟ κριτή των φορμών και στη μαζική σάρωση,
   // ώστε τα ήδη περασμένα λάθη να εντοπίζονται με ένα κλικ.
   group('Αναγνωριστικά Lansweeper', () {
+    // Τα σενάρια εδώ στήνουν υπαλλήλους χωρίς τμήμα ως ουδέτερο σκηνικό: το
+    // ζητούμενο είναι το αναγνωριστικό, όχι πού ανήκει ο άνθρωπος.
+    const service = CatalogValidationService(
+      CatalogValidationRules(userWithoutDepartmentEnabled: false),
+    );
+
     test(
       'υπάλληλος: στοχευμένο μήνυμα ανά περίπτωση, έγκυρες/κενό → καμία',
       () {
@@ -1589,6 +1634,8 @@ void main() {
         CatalogValidationRules(
           emptyDepartmentEnabled: false,
           departmentBuildingEnabled: false,
+          departmentGroupEnabled: false,
+          userWithoutDepartmentEnabled: false,
         ),
       );
       final findings = s.scan(
@@ -1666,6 +1713,8 @@ void main() {
         CatalogValidationRules(
           emptyDepartmentEnabled: false,
           departmentBuildingEnabled: false,
+          departmentGroupEnabled: false,
+          userWithoutDepartmentEnabled: false,
         ),
       );
       final findings = s.scan(
@@ -1692,6 +1741,8 @@ void main() {
         CatalogValidationRules(
           emptyDepartmentEnabled: false,
           departmentBuildingEnabled: false,
+          departmentGroupEnabled: false,
+          userWithoutDepartmentEnabled: false,
         ),
       );
       final findings = s.scan(
@@ -1716,6 +1767,91 @@ void main() {
       expect(findings, isEmpty);
     });
   });
+  // Ο ορφανός υπάλληλος ήταν ο παλιός τρόπος καταχώρησης εταιρειών, πριν
+  // υπάρξει το Είδος. Καμία οθόνη δεν τον έδειχνε.
+  //   flutter test test/features/directory/catalog_validation_service_test.dart --plain-name "υπάλληλος χωρίς τμήμα"
+  group('scan — υπάλληλος χωρίς τμήμα', () {
+    const service = CatalogValidationService(
+      CatalogValidationRules(
+        emptyDepartmentEnabled: false,
+        departmentBuildingEnabled: false,
+        departmentGroupEnabled: false,
+        equipmentWithoutDepartmentEnabled: false,
+      ),
+    );
+
+    List<CatalogValidationFinding> scanUsers(List<UserModel> users) {
+      return service
+          .scan(users: users, departments: const [], equipment: const [])
+          .where((f) => f.message == 'Δεν ανήκει σε κανένα τμήμα')
+          .toList();
+    }
+
+    test('ορφανός: ένα εύρημα με μετάβαση στο πεδίο Τμήμα', () {
+      final findings = scanUsers([
+        UserModel(id: 76, lastName: 'Δημητρακοπούλου', firstName: 'Μάντω'),
+      ]);
+
+      expect(findings, hasLength(1));
+      expect(findings.single.fieldLabel, 'Τμήμα');
+      expect(findings.single.records.single.entityId, 76);
+      expect(findings.single.records.single.focusedField, 'department');
+    });
+
+    test('υπάλληλος με τμήμα: κανένα εύρημα', () {
+      final findings = scanUsers([
+        UserModel(
+          id: 1,
+          lastName: 'Ψαρρά',
+          firstName: 'Βαρβάρα',
+          departmentId: 49,
+        ),
+      ]);
+
+      expect(findings, isEmpty);
+    });
+
+    test('ένα εύρημα ανά υπάλληλο — το καθένα θέλει δική του απόφαση', () {
+      final findings = scanUsers([
+        UserModel(id: 1, lastName: 'Πρώτος'),
+        UserModel(id: 2, lastName: 'Δεύτερος'),
+        UserModel(id: 3, lastName: 'Τρίτος', departmentId: 49),
+      ]);
+
+      expect(findings, hasLength(2));
+    });
+
+    test('διαγραμμένος υπάλληλος δεν μετράει', () {
+      final findings = scanUsers([
+        UserModel(id: 1, lastName: 'Σβησμένος', isDeleted: true),
+      ]);
+
+      expect(findings, isEmpty);
+    });
+
+    test('σβηστός διακόπτης: κανένα εύρημα', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(
+          emptyDepartmentEnabled: false,
+          departmentBuildingEnabled: false,
+          departmentGroupEnabled: false,
+          equipmentWithoutDepartmentEnabled: false,
+          userWithoutDepartmentEnabled: false,
+        ),
+      );
+      final findings = s
+          .scan(
+            users: [UserModel(id: 76, lastName: 'Δημητρακοπούλου')],
+            departments: const [],
+            equipment: const [],
+          )
+          .where((f) => f.message == 'Δεν ανήκει σε κανένα τμήμα')
+          .toList();
+
+      expect(findings, isEmpty);
+    });
+  });
+
   group('companyInternalPhoneHint — εταιρεία με δικό μας εσωτερικό', () {
     test('τετραψήφιο με δικό μας πρόθεμα: υπόδειξη', () {
       expect(
@@ -1840,6 +1976,13 @@ void main() {
   });
 
   group('scan — εξοπλισμός χωρίς τμήμα', () {
+    // Ο κάτοχος στήνεται σκόπιμα χωρίς τμήμα· εδώ κρίνεται το ΜΗΧΑΝΗΜΑ, και
+    // ο αδελφός κανόνας του υπαλλήλου θα πρόσθετε δικό του εύρημα στο ίδιο
+    // πεδίο «Τμήμα».
+    const service = CatalogValidationService(
+      CatalogValidationRules(userWithoutDepartmentEnabled: false),
+    );
+
     test('ακέφαλο μηχάνημα: ένα εύρημα με μετάβαση στην καρτέλα του', () {
       final findings = service
           .scan(

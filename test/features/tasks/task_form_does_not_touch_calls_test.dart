@@ -90,11 +90,7 @@ void main() {
           root
               .read(taskSmartEntityProvider.notifier)
               .setCaller(
-                UserModel(
-                  id: 77,
-                  firstName: 'Βαρβάρα',
-                  lastName: 'Νακαστσή',
-                ),
+                UserModel(id: 77, firstName: 'Βαρβάρα', lastName: 'Νακαστσή'),
               );
           await pumpUntilSettledLong(tester);
         });

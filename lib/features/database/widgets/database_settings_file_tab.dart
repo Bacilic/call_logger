@@ -12,11 +12,13 @@ import '../../../core/database/database_path_pick_flow.dart';
 import '../../../core/init/database_switch_guard.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/file_picker_session.dart';
+import '../../../core/utils/greek_date_format.dart';
 import '../../../core/utils/new_database_suggested_file_name.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/compact_tooltip.dart';
 import '../../settings/widgets/create_new_database_dialog.dart';
 import '../services/create_new_database_texts.dart';
+import '../services/pre_restore_snapshot.dart';
 import '../utils/database_path_dropdown_options.dart';
 import 'database_rename_notice_text.dart';
 import 'database_settings_switch_flows.dart';
@@ -45,6 +47,9 @@ class _DatabaseSettingsFileTabState
   bool _currentDbPathExists = false;
   bool _isLoadingDbPath = true;
   String? _dbPathErrorMessage;
+
+  /// Η βάση που φυλάχτηκε πριν από την τελευταία επαναφορά, αν υπάρχει.
+  PreRestoreSnapshot? _preRestore;
 
   // Η κατάσταση της καρτέλας ζει όσο ζει ο διάλογος — όπως όταν όλα τα
   // τμήματα κατοικούσαν σε ένα ενιαίο πάνελ.
@@ -91,9 +96,16 @@ class _DatabaseSettingsFileTabState
           exists = false;
         }
       }
+      // Ό,τι φυλάχτηκε πριν από επαναφορά ζει δίπλα στην τρέχουσα βάση. Το
+      // ψάχνουμε εδώ γιατί εδώ έρχεται ο χειριστής όταν η επαναφορά πήγε
+      // στραβά — και μέχρι τώρα έπρεπε να θυμάται όνομα αρχείου από διάλογο
+      // που είχε ήδη κλείσει.
+      final snapshot = await findLatestPreRestoreSnapshot(path);
+
       final paths = List<String>.from(recent);
       if (mounted) {
         setState(() {
+          _preRestore = snapshot;
           _currentDbPath = path;
           _recentDbPaths = paths;
           _currentDbPathExists = exists;
@@ -284,6 +296,13 @@ class _DatabaseSettingsFileTabState
             ),
           ),
         ],
+        if (_preRestore != null) ...[
+          const SizedBox(height: 16),
+          _PreRestoreCard(
+            snapshot: _preRestore!,
+            onRestore: () => switchToPickedDatabasePath(_preRestore!.path),
+          ),
+        ],
         const SizedBox(height: 16),
         Text(
           'Δημιουργία νέου αρχείου βάσης',
@@ -324,6 +343,76 @@ class _DatabaseSettingsFileTabState
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Η βάση που φυλάχτηκε πριν από την τελευταία επαναφορά, με έναν δρόμο πίσω.
+///
+/// Εμφανίζεται μόνο όταν υπάρχει τέτοιο αρχείο. Δεν είναι προειδοποίηση: τις
+/// περισσότερες φορές η επαναφορά πήγε καλά και η κάρτα είναι απλώς μια
+/// υπενθύμιση ότι τίποτα δεν διαγράφηκε.
+class _PreRestoreCard extends StatelessWidget {
+  const _PreRestoreCard({required this.snapshot, required this.onRestore});
+
+  final PreRestoreSnapshot snapshot;
+  final VoidCallback onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final when = snapshot.savedAt;
+    final time =
+        '${when.hour.toString().padLeft(2, '0')}:'
+        '${when.minute.toString().padLeft(2, '0')}';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.history, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Η βάση πριν από την τελευταία επαναφορά',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          SelectableText(
+            snapshot.fileName,
+            style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Φυλάχτηκε ${formatGreekShortDate(when)}, $time — δεν διαγράφηκε.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('pre_restore_switch_back'),
+              onPressed: onRestore,
+              icon: const Icon(Icons.undo, size: 18),
+              label: const Text('Επιστροφή σε αυτήν'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -205,7 +205,12 @@ class CatalogValidationService {
 
   /// Υπόδειξη για όνομα/επώνυμο υπαλλήλου: να ξεκινά από γράμμα.
   ///
-  /// Παραμένει υπόδειξη — καλούντες-εταιρείες (π.χ. «3π») είναι θεμιτοί.
+  /// **Παραμένει υπόδειξη, ποτέ φραγμός** — η καταχώρηση προχωρά κανονικά.
+  /// Αλλάζει όμως το πού στέλνει: από το v58 η εταιρεία είναι **τμήμα με
+  /// Είδος «Εταιρεία»**, όχι υπάλληλος. Το παλιό κείμενο («σωστό μόνο αν
+  /// πρόκειται για εταιρεία») επικύρωνε την καταργημένη πρακτική — έλεγε
+  /// στον χρήστη ότι η εγγραφή είναι εντάξει εκεί που βρίσκεται.
+  ///
   /// Σύμβολα δηλωμένα στις εξαιρέσεις περνούν καθαρά: το «Όνομα» κρατά
   /// συχνά το πώς φωνάζουν τον άνθρωπο, «(Γωγώ) Γεωργία».
   String? personNameHint(String value) {
@@ -215,7 +220,8 @@ class CatalogValidationService {
     if (rules.personNameAllowedSymbolSet.contains(s.characters.first)) {
       return null;
     }
-    return 'Ξεκινά από ψηφίο ή σύμβολο — σωστό μόνο αν πρόκειται για εταιρεία';
+    return 'Ξεκινά από ψηφίο ή σύμβολο — οι εταιρείες καταχωρούνται '
+        'στα Τμήματα, με Είδος «Εταιρεία»';
   }
 
   /// Υπόδειξη για «Όνομα» που κουβαλά ψευδώνυμο σε παρένθεση.
@@ -434,6 +440,7 @@ class CatalogValidationService {
       sharedPhonesByDepartmentId: sharedPhonesByDepartmentId,
     );
     _addDepartmentBuildingFindings(findings, departments: departments);
+    _addDepartmentGroupFindings(findings, departments: departments);
     _addPhoneEquipmentCodeFindings(
       findings,
       users: activeUsers,
@@ -480,6 +487,12 @@ class CatalogValidationService {
       equipment: activeEquipment,
       ownerUserIdsByEquipmentId: ownerUserIdsByEquipmentId,
       departmentNameById: departmentNameById,
+    );
+    _addUserWithoutDepartmentFindings(
+      findings,
+      users: activeUsers,
+      departmentNameById: departmentNameById,
+      equipmentCodesByUserId: equipmentCodesByUserId,
     );
     _addDuplicateRemoteTargetFindings(
       findings,
@@ -792,6 +805,42 @@ class CatalogValidationService {
               entityId: id,
               label: _departmentLabel(department),
               focusedField: 'building',
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Τμήμα του χάρτη χωρίς ομάδα.
+  ///
+  /// Η ομάδα οργανώνει τον επιλογέα της κάτοψης: χωρίς αυτήν το τμήμα πέφτει
+  /// στα «Λοιπά» και χάνεται μέσα σε δεκάδες άλλα. Δίδυμο του «δεν έχει
+  /// κτίριο», με την ίδια εξαίρεση — η εταιρεία και η εξωτερική μονάδα δεν
+  /// μπαίνουν στον χάρτη, οπότε το κενό πεδίο εκεί είναι η σωστή κατάσταση.
+  void _addDepartmentGroupFindings(
+    List<CatalogValidationFinding> findings, {
+    required List<DepartmentModel> departments,
+  }) {
+    if (!rules.departmentGroupEnabled) return;
+
+    for (final department in departments) {
+      final id = department.id;
+      if (id == null) continue;
+      if (!department.kind.belongsOnBuildingMap) continue;
+      if ((department.groupName ?? '').trim().isNotEmpty) continue;
+
+      findings.add(
+        CatalogValidationFinding(
+          type: CatalogFindingType.fieldHint,
+          fieldLabel: 'Ομάδα',
+          message: 'Δεν ανήκει σε καμία ομάδα',
+          records: [
+            CatalogFindingRecord(
+              kind: CatalogEntityKind.department,
+              entityId: id,
+              label: _departmentLabel(department),
+              focusedField: 'group',
             ),
           ],
         ),
@@ -1287,6 +1336,43 @@ class CatalogValidationService {
               item,
               focusedField: 'department',
               departmentNameById: departmentNameById,
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Υπάλληλος χωρίς τμήμα.
+  ///
+  /// Δύο πράγματα καταλήγουν εδώ, και η εφαρμογή δεν μπορεί να τα ξεχωρίσει:
+  /// η **ξεχασμένη εταιρεία** που καταχωρήθηκε ως υπάλληλος πριν υπάρξει το
+  /// Είδος, και ο **άνθρωπος που έχασε το τμήμα του** όταν εκείνο διαγράφηκε.
+  /// Γι' αυτό ο κανόνας είναι υπενθύμιση: δείχνει την καρτέλα με εστίαση στο
+  /// Τμήμα και ο χρήστης αποφασίζει ποιο από τα δύο είναι.
+  ///
+  /// Ένα εύρημα ανά υπάλληλο — το καθένα θέλει τη δική του απόφαση.
+  void _addUserWithoutDepartmentFindings(
+    List<CatalogValidationFinding> findings, {
+    required List<UserModel> users,
+    required Map<int, String> departmentNameById,
+    required Map<int, List<String>> equipmentCodesByUserId,
+  }) {
+    if (!rules.userWithoutDepartmentEnabled) return;
+
+    for (final user in users) {
+      if (user.departmentId != null) continue;
+      findings.add(
+        CatalogValidationFinding(
+          type: CatalogFindingType.fieldHint,
+          fieldLabel: 'Τμήμα',
+          message: 'Δεν ανήκει σε κανένα τμήμα',
+          records: [
+            _userRecord(
+              user,
+              focusedField: 'department',
+              departmentNameById: departmentNameById,
+              equipmentCodesByUserId: equipmentCodesByUserId,
             ),
           ],
         ),

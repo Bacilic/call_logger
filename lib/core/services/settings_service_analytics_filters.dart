@@ -112,10 +112,7 @@ class SettingsServiceAnalyticsFilters {
   }
 
   Future<void> setDashboardPalette(String value) async {
-    await ScopedSettings.setString(
-      ProfileSettingKeys.dashboardPalette,
-      value,
-    );
+    await ScopedSettings.setString(ProfileSettingKeys.dashboardPalette, value);
   }
 
   /// Τελευταία επιλογή εύρους ημερομηνιών στις αναφορές εκκρεμοτήτων.

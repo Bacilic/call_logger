@@ -944,8 +944,11 @@ Future<BulkActionUndoRecord> applyBulkUserTransferInTxn(
           limit: 1,
         );
         if (links.isEmpty) continue;
-        await equipment.unlinkUserFromEquipment(userId, equipmentId,
-            executor: txn);
+        await equipment.unlinkUserFromEquipment(
+          userId,
+          equipmentId,
+          executor: txn,
+        );
         unlinked.add(
           BulkUserEquipmentUnlink(userId: userId, equipmentId: equipmentId),
         );

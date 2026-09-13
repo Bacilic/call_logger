@@ -72,6 +72,9 @@ Future<DatabaseIntegrityOutcome> runDatabaseIntegrityProbe(
       rawMessage: 'Ο έλεγχος ακεραιότητας δεν πρόλαβε να ολοκληρωθεί.',
     );
   } catch (e) {
+    // Εδώ φτάνει πλέον μόνο η αποτυχία ΑΝΟΙΓΜΑΤΟΣ του αρχείου — το ίδιο το
+    // ερώτημα μεταφράζει τα δικά του σφάλματα παρακάτω. Κρατά την ίδια
+    // διάκριση: ρητό «malformed» είναι απόδειξη, όλα τα άλλα επιφύλαξη.
     final raw = e.toString();
     final corrupt =
         looksLikeCopiedWhileInUseError(raw) || looksLikeCorruptImageError(raw);
@@ -84,6 +87,59 @@ Future<DatabaseIntegrityOutcome> runDatabaseIntegrityProbe(
   }
 }
 
+/// Ο ίδιος έλεγχος πάνω σε **ήδη ανοιχτή** σύνδεση.
+///
+/// Υπάρχει επειδή ο ταξινομητής αρχείων ανοίγει ούτως ή άλλως τη βάση για να
+/// διαβάσει πίνακες και έκδοση: το να ρωτήσει και για την ακεραιότητα εκεί
+/// κοστίζει ένα ερώτημα, ενώ ένας δεύτερος ανιχνευτής θα ξανάνοιγε ολόκληρο
+/// το αρχείο. Η κρίση του «τι σημαίνει η απάντηση» μένει σε ΕΝΑ σημείο —
+/// αλλιώς οι δύο είσοδοι θα απέκλιναν σιωπηλά.
+Future<DatabaseIntegrityOutcome> readIntegrityFromOpenDatabase(
+  Database db,
+) async {
+  final List<Map<String, Object?>> rows;
+  try {
+    rows = await db.rawQuery('PRAGMA quick_check;');
+  } catch (e) {
+    // Σοβαρή φθορά δεν επιστρέφει λίστα ευρημάτων — **πετάει**. Η μετάφραση
+    // ζει εδώ και όχι στον καλούντα, ώστε όποιος ρωτήσει τον έλεγχο να πάρει
+    // την ίδια ετυμηγορία, από όποια είσοδο κι αν μπήκε.
+    final raw = e.toString();
+    final corrupt =
+        looksLikeCopiedWhileInUseError(raw) || looksLikeCorruptImageError(raw);
+    return DatabaseIntegrityOutcome(
+      status: corrupt
+          ? DatabaseIntegrityStatus.corrupt
+          : DatabaseIntegrityStatus.inconclusive,
+      rawMessage: raw,
+    );
+  }
+  final verdict = rows.isEmpty
+      ? ''
+      : (rows.first.values.isEmpty
+            ? ''
+            : rows.first.values.first?.toString().trim() ?? '');
+
+  if (verdict.toLowerCase() == 'ok') {
+    return const DatabaseIntegrityOutcome(status: DatabaseIntegrityStatus.ok);
+  }
+  if (verdict.isEmpty) {
+    return const DatabaseIntegrityOutcome(
+      status: DatabaseIntegrityStatus.inconclusive,
+      rawMessage: 'Το PRAGMA quick_check δεν επέστρεψε απάντηση.',
+    );
+  }
+  // Πολλαπλά ευρήματα: κρατιούνται όλα, αυτούσια.
+  final all = rows
+      .map((r) => r.values.first?.toString().trim() ?? '')
+      .where((v) => v.isNotEmpty)
+      .join('\n');
+  return DatabaseIntegrityOutcome(
+    status: DatabaseIntegrityStatus.corrupt,
+    rawMessage: all.isEmpty ? verdict : all,
+  );
+}
+
 Future<DatabaseIntegrityOutcome> _runIntegrityProbe(
   String dbPath,
   Future<Database> Function(String path) open,
@@ -91,31 +147,7 @@ Future<DatabaseIntegrityOutcome> _runIntegrityProbe(
   Database? db;
   try {
     db = await open(dbPath);
-    final rows = await db.rawQuery('PRAGMA quick_check;');
-    final verdict = rows.isEmpty
-        ? ''
-        : (rows.first.values.isEmpty
-              ? ''
-              : rows.first.values.first?.toString().trim() ?? '');
-
-    if (verdict.toLowerCase() == 'ok') {
-      return const DatabaseIntegrityOutcome(status: DatabaseIntegrityStatus.ok);
-    }
-    if (verdict.isEmpty) {
-      return const DatabaseIntegrityOutcome(
-        status: DatabaseIntegrityStatus.inconclusive,
-        rawMessage: 'Το PRAGMA quick_check δεν επέστρεψε απάντηση.',
-      );
-    }
-    // Πολλαπλά ευρήματα: κρατιούνται όλα, αυτούσια.
-    final all = rows
-        .map((r) => r.values.first?.toString().trim() ?? '')
-        .where((v) => v.isNotEmpty)
-        .join('\n');
-    return DatabaseIntegrityOutcome(
-      status: DatabaseIntegrityStatus.corrupt,
-      rawMessage: all.isEmpty ? verdict : all,
-    );
+    return await readIntegrityFromOpenDatabase(db);
   } finally {
     try {
       await db?.close();

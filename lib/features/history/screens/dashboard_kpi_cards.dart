@@ -75,29 +75,35 @@ String _formatTopEntityShareSubtitle(int count, int totalCalls) {
 }
 
 List<String> _callsSparklineTooltips(List<DailyTrendPoint> days) {
-  return days.map((dayPoint) {
-    if (dayPoint.callCount <= 0) return '';
-    final day = DateFormat('dd/MM').format(dayPoint.date);
-    return '$day: ${formatKpiCallCountLabel(dayPoint.callCount)}';
-  }).toList(growable: false);
+  return days
+      .map((dayPoint) {
+        if (dayPoint.callCount <= 0) return '';
+        final day = DateFormat('dd/MM').format(dayPoint.date);
+        return '$day: ${formatKpiCallCountLabel(dayPoint.callCount)}';
+      })
+      .toList(growable: false);
 }
 
 List<String> _durationSparklineTooltips(List<DailyTrendPoint> days) {
-  return days.map((dayPoint) {
-    if (dayPoint.totalDurationSeconds <= 0) return '';
-    final day = DateFormat('dd/MM').format(dayPoint.date);
-    return '$day: '
-        '${formatKpiAggregateDurationSeconds(dayPoint.totalDurationSeconds)}';
-  }).toList(growable: false);
+  return days
+      .map((dayPoint) {
+        if (dayPoint.totalDurationSeconds <= 0) return '';
+        final day = DateFormat('dd/MM').format(dayPoint.date);
+        return '$day: '
+            '${formatKpiAggregateDurationSeconds(dayPoint.totalDurationSeconds)}';
+      })
+      .toList(growable: false);
 }
 
 List<String> _avgCallSparklineTooltips(List<DailyTrendPoint> days) {
-  return days.map((dayPoint) {
-    if (dayPoint.callCount <= 0) return '';
-    final day = DateFormat('dd/MM').format(dayPoint.date);
-    final avgSeconds = dayPoint.totalDurationSeconds / dayPoint.callCount;
-    return '$day: ${formatKpiCallDurationSeconds(avgSeconds)}';
-  }).toList(growable: false);
+  return days
+      .map((dayPoint) {
+        if (dayPoint.callCount <= 0) return '';
+        final day = DateFormat('dd/MM').format(dayPoint.date);
+        final avgSeconds = dayPoint.totalDurationSeconds / dayPoint.callCount;
+        return '$day: ${formatKpiCallDurationSeconds(avgSeconds)}';
+      })
+      .toList(growable: false);
 }
 
 List<KpiBarSparklinePoint> _runnerUpBarPoints(

@@ -145,34 +145,34 @@ void main() {
   );
 
   group('availableResolutions — ποιες διέξοδοι προσφέρονται', () {
+    test('κοινόχρηστο με τμήμα-στόχο → παραμονή ΠΡΩΤΗ, μετά η μεταφορά', () {
+      expect(
+        PhoneDepartmentPolicy.availableResolutions(
+          sharedWithOwners,
+          targetDepartmentId: deptA,
+        ),
+        [
+          UserPhoneConflictResolution.keepInDepartmentDetachFromUser,
+          UserPhoneConflictResolution.transferSharedToUserDepartment,
+        ],
+      );
+    });
+
     test(
-      'κοινόχρηστο με τμήμα-στόχο → παραμονή ΠΡΩΤΗ, μετά η μεταφορά',
+      'κοινόχρηστο με κατόχους χωρίς τμήμα-στόχο → παραμονή και αφαίρεση',
       () {
         expect(
           PhoneDepartmentPolicy.availableResolutions(
             sharedWithOwners,
-            targetDepartmentId: deptA,
+            targetDepartmentId: null,
           ),
           [
             UserPhoneConflictResolution.keepInDepartmentDetachFromUser,
-            UserPhoneConflictResolution.transferSharedToUserDepartment,
+            UserPhoneConflictResolution.removeFromOtherUsersAndAssign,
           ],
         );
       },
     );
-
-    test('κοινόχρηστο με κατόχους χωρίς τμήμα-στόχο → παραμονή και αφαίρεση', () {
-      expect(
-        PhoneDepartmentPolicy.availableResolutions(
-          sharedWithOwners,
-          targetDepartmentId: null,
-        ),
-        [
-          UserPhoneConflictResolution.keepInDepartmentDetachFromUser,
-          UserPhoneConflictResolution.removeFromOtherUsersAndAssign,
-        ],
-      );
-    });
 
     test('μόνο κάτοχοι → μόνο αφαίρεση', () {
       expect(

@@ -66,9 +66,7 @@ class UserFormPhonePolicy {
 
   /// Άλλαξε το τμήμα σε αυτή την επεξεργασία;
   bool get departmentChanged =>
-      SearchTextNormalizer.normalizeForSearch(
-        host.departmentController.text,
-      ) !=
+      SearchTextNormalizer.normalizeForSearch(host.departmentController.text) !=
       host.snapDepartmentNorm;
 
   /// Τα τηλέφωνα που ο υπάλληλος ΕΙΧΕ ήδη και παραμένουν στο πεδίο.

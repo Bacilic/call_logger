@@ -7,7 +7,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/models/app_permission.dart';
-import 'package:call_logger/features/directory/screens/widgets/validation_rules_view.dart';
+import 'package:call_logger/features/directory/screens/widgets/validation_rules/configured_paths_section.dart';
 import 'package:call_logger/features/directory/services/configured_path_check.dart';
 import 'package:call_logger/features/directory/services/configured_path_scan_result.dart';
 import 'package:call_logger/features/directory/services/path_fix_destination.dart';

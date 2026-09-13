@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:call_logger/features/database/utils/backup_destination_folder_validator.dart';
+import 'package:call_logger/features/database/widgets/backup_failed_dialog.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -18,6 +19,68 @@ void main() {
         expect(result.errorMessage, 'Ο φάκελος δεν υπάρχει');
       },
     );
+
+    // Το `Directory.existsSync()` απαντά `false` και όταν στη διαδρομή κάθεται
+    // αρχείο. Με τον έλεγχο ύπαρξης πρώτο, ο validator έλεγε «λείπει ο
+    // φάκελος», ο καλών πρόσφερε «να τον δημιουργήσω;», και η δημιουργία
+    // αποτύγχανε πάνω στο αρχείο του χρήστη.
+    group('αρχείο στη θέση φακέλου', () {
+      late Directory root;
+      late File file;
+
+      setUp(() {
+        root = Directory.systemTemp.createTempSync('validator_not_a_dir');
+        file = File(p.join(root.path, 'σημειώσεις.txt'))
+          ..writeAsStringSync('x');
+      });
+
+      tearDown(() {
+        if (root.existsSync()) root.deleteSync(recursive: true);
+      });
+
+      test('ταξινομείται ως «δεν είναι φάκελος», όχι ως «λείπει»', () async {
+        final result = await BackupDestinationFolderValidator.validate(
+          file.path,
+        );
+
+        expect(result.kind, BackupDestinationValidationKind.notADirectory);
+        expect(result.errorMessage, 'Η διαδρομή δεν είναι φάκελος');
+      });
+
+      test(
+        'ο διάλογος αποτυχίας ΔΕΝ προσφέρει δημιουργία γι αυτό το είδος',
+        () async {
+          final result = await BackupDestinationFolderValidator.validate(
+            file.path,
+          );
+
+          expect(
+            primaryBackupFailedAction(
+              kind: result.kind,
+              destinationCreatable: true,
+            ),
+            isNull,
+            reason:
+                'Καμία ενέργεια της εφαρμογής δεν λύνει το «υπάρχει αρχείο '
+                'εκεί» — μένει η αλλαγή φακέλου',
+          );
+        },
+      );
+
+      test('η εξήγηση προς τον χρήστη ονομάζει το πραγματικό αίτιο', () async {
+        final result = await BackupDestinationFolderValidator.validate(
+          file.path,
+        );
+
+        expect(
+          backupFailureExplanation(
+            destination: file.path,
+            kind: result.kind,
+          ),
+          contains('δείχνει σε αρχείο'),
+        );
+      });
+    });
 
     test('empty path is ok', () async {
       final result = await BackupDestinationFolderValidator.validate('   ');
@@ -149,16 +212,17 @@ void main() {
       expect(result.kind, BackupDestinationContentKind.folderMissing);
     });
 
-    test('findLatestBackupZip → null αντί για εξαίρεση', () async {
-      final zip = await IOOverrides.runZoned(
-        () => BackupDestinationFolderValidator.findLatestBackupZip(
+    test('surveyRestorableZips → «μη προσβάσιμος» αντί για εξαίρεση', () async {
+      final survey = await IOOverrides.runZoned(
+        () => BackupDestinationFolderValidator.surveyRestorableZips(
           destinationDirectory: unc,
           dbBaseName: 'Hospital',
         ),
         createDirectory: (path) => _UnreachableDirectory(path),
       );
 
-      expect(zip, isNull);
+      expect(survey.kind, BackupFolderSurveyKind.folderUnavailable);
+      expect(survey.totalZipCount, 0);
     });
 
     test('validate → «Ο φάκελος δεν υπάρχει», ίδιο μήνυμα με τον χαμένο '

@@ -16,6 +16,8 @@ import '../../../floor_map/services/floor_color_assignment_service.dart';
 import 'department_color_palette.dart';
 import 'department_form_dialog.dart';
 import '../../services/building_map_floor_load_state.dart';
+import '../../services/building_map_placement_loss.dart';
+import 'bulk_user_action_pickers.dart';
 
 /// Ροή αποθήκευσης της φόρμας τμήματος: μοντέλο, συγκρούσεις κοινόχρηστων,
 /// εγγραφή, επαναφορά διαγραμμένου και μηνύματα επιβεβαίωσης.
@@ -32,6 +34,7 @@ class DepartmentFormSave {
     if (name.isEmpty) return;
 
     final building = host.buildingController.text.trim();
+    final group = host.groupController.text.trim();
     final parsedHex = tryParseDepartmentHex(host.hexController.text.trim());
     final color = colorToDepartmentHex(parsedHex ?? host.selectedColor);
     final notes = host.notesController.text.trim();
@@ -62,13 +65,47 @@ class DepartmentFormSave {
     var equipmentToMoveFromUsers = <String>{};
 
     final ini = host.widget.initialDepartment;
-    final clearBuildingMapPlacement = shouldClearBuildingMapPlacement(
-      isEdit: host.isEdit,
-      selectedFloorId: host.selectedFloorId,
-      snapshotFloorId: host.snapFloorId,
-      initialFloorId: ini?.floorId,
-      floorLoadState: host.floorLoadState,
+
+    // Το Είδος αποφασίζει αν η καρτέλα ανήκει στην κάτοψη. Όταν δεν ανήκει, το
+    // κτίριο, ο όροφος και η θέση στον χάρτη δεν έχουν πια νόημα — και δεν
+    // μένουν γραμμένα: η φόρμα τα έκρυβε, αλλά η λίστα του Καταλόγου τα
+    // έδειχνε, οπότε η καρτέλα έλεγε «εκτός κάτοψης» και ο κατάλογος όροφο.
+    //
+    // Χάνεται όμως δουλειά (η θέση στην κάτοψη σχεδιάζεται με το χέρι), γι'
+    // αυτό ο χρήστης ρωτιέται πρώτα — και μόνο όταν υπάρχει κάτι να χαθεί.
+    final leavesTheBuildingMap = !host.selectedKind.belongsOnBuildingMap;
+    final placementLoss = judgeBuildingMapPlacementLoss(
+      kindBelongsOnMap: host.selectedKind.belongsOnBuildingMap,
+      building: building,
+      floorLabel: _floorLabelForSaveConfirmation(host.selectedFloorId),
+      mapWidth: ini?.mapWidth,
+      mapHeight: ini?.mapHeight,
+      group: group,
     );
+    if (placementLoss.hasAnything) {
+      final approved = await showBulkConfirmDialog(
+        host.context,
+        title: 'Η καρτέλα φεύγει από την κάτοψη',
+        message: buildingMapPlacementLossMessage(
+          departmentName: name,
+          kindLabel: host.selectedKind.label,
+          loss: placementLoss,
+        ),
+        confirmLabel: 'Συνέχεια και διαγραφή',
+      );
+      if (!approved || !host.mounted) return;
+    }
+
+    final effectiveFloorId = leavesTheBuildingMap ? null : host.selectedFloorId;
+    final clearBuildingMapPlacement =
+        leavesTheBuildingMap ||
+        shouldClearBuildingMapPlacement(
+          isEdit: host.isEdit,
+          selectedFloorId: host.selectedFloorId,
+          snapshotFloorId: host.snapFloorId,
+          initialFloorId: ini?.floorId,
+          floorLoadState: host.floorLoadState,
+        );
 
     // Ό,τι έχει μείνει πληκτρολογημένο χωρίς να γίνει chip μετράει κανονικά —
     // ο χρήστης δεν πρέπει να χάνει γραμμένο αναγνωριστικό επειδή πάτησε
@@ -78,14 +115,16 @@ class DepartmentFormSave {
     final model = DepartmentModel(
       id: host.isEdit ? ini?.id : null,
       name: name,
-      building: building.isEmpty ? null : building,
+      building: (leavesTheBuildingMap || building.isEmpty) ? null : building,
       color: color,
       notes: notes.isEmpty ? null : notes,
       lansweeperUsernames: encodeLansweeperAccounts(host.lansweeperAccounts),
-      floorId: host.selectedFloorId,
-      groupName: ini?.groupName,
-      mapFloor: host.selectedFloorId != null
-          ? host.selectedFloorId!.toString()
+      floorId: effectiveFloorId,
+      // Η ομάδα οργανώνει τον επιλογέα του χάρτη: φεύγει μαζί με το κτίριο και
+      // τον όροφο όταν το Είδος βγάζει την καρτέλα από την κάτοψη.
+      groupName: (leavesTheBuildingMap || group.isEmpty) ? null : group,
+      mapFloor: effectiveFloorId != null
+          ? effectiveFloorId.toString()
           : (clearBuildingMapPlacement ? null : ini?.mapFloor),
       mapX: clearBuildingMapPlacement ? null : ini?.mapX,
       mapY: clearBuildingMapPlacement ? null : ini?.mapY,

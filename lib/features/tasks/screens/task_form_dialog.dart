@@ -68,9 +68,8 @@ class TaskFormResult {
 Future<TaskFormResult?> showTaskFormDialog(BuildContext context, {Task? task}) {
   return showDialog<TaskFormResult>(
     context: context,
-    builder: (context) => IsolatedCallsScreenState(
-      child: _TaskFormDialog(task: task),
-    ),
+    builder: (context) =>
+        IsolatedCallsScreenState(child: _TaskFormDialog(task: task)),
   );
 }
 

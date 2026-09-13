@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "call_logger_windows",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run", "-d", "windows", "--no-pub"],
+      "port": 8080
+    }
+  ]
+}

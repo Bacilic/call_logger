@@ -61,13 +61,15 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 200));
   });
 
-  test('η γυμνή εκδοχή ΟΝΤΩΣ πετάει — το δίχτυ δεν είναι διακοσμητικό',
-      () async {
-    // Χωρίς αυτόν τον έλεγχο, ο παραπάνω θα περνούσε ακόμη κι αν το
-    // ξαναφόρτωμα δεν είχε τίποτα να αποτύχει.
-    await expectLater(
-      refreshSharedDatabaseViews(_capturedRef!),
-      throwsA(anything),
-    );
-  });
+  test(
+    'η γυμνή εκδοχή ΟΝΤΩΣ πετάει — το δίχτυ δεν είναι διακοσμητικό',
+    () async {
+      // Χωρίς αυτόν τον έλεγχο, ο παραπάνω θα περνούσε ακόμη κι αν το
+      // ξαναφόρτωμα δεν είχε τίποτα να αποτύχει.
+      await expectLater(
+        refreshSharedDatabaseViews(_capturedRef!),
+        throwsA(anything),
+      );
+    },
+  );
 }

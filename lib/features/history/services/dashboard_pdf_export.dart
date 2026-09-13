@@ -44,7 +44,10 @@ Future<Uint8List> buildDashboardPdf(
               margin: const pw.EdgeInsets.only(bottom: 12),
               child: pw.Text(
                 document.title,
-                style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                style: const pw.TextStyle(
+                  fontSize: 9,
+                  color: PdfColors.grey600,
+                ),
               ),
             ),
       footer: (context) => pw.Container(

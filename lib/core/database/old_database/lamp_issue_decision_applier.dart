@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../utils/mixed_script_detector.dart';
 import '../../utils/name_parser.dart';
 import '../../utils/user_identity_normalizer.dart';
 import 'lamp_database_provider.dart';
@@ -576,6 +577,8 @@ class LampIssueDecisionApplier {
             'σε $scientificValue (καταχώρηση νέου σειριακού).',
           ),
         );
+      case LampIssueResolutionOperations.replaceMixedScriptWord:
+        await _applyMixedScriptReplacement(txn, decision, metadata, emit);
       case LampIssueResolutionOperations.setFieldManual:
         final manualCode = _support.toInt(metadata['code'] ?? proposal.row);
         final manualFkColumn =
@@ -1121,6 +1124,96 @@ class LampIssueDecisionApplier {
   /// Το αρχικό κείμενο κάθε πεδίου καθαρίζεται μόνο όταν το πεδίο πάρει τιμή:
   /// αν ο χρήστης ξέρει το γραφείο αλλά όχι τον κάτοχο, το «Γιατροί
   /// Μαιευτικής» μένει γραμμένο στη στήλη του υπαλλήλου ως ένδειξη.
+  /// Αντικαθιστά μία ύποπτη λέξη μέσα σε πεδίο κειμένου.
+  ///
+  /// Δουλεύει σε **οποιονδήποτε** από τους πίνακες της Λάμπας: ο πίνακας, το
+  /// κλειδί και η στήλη ταξιδεύουν μέσα στα metadata της απόφασης. Η
+  /// αντικατάσταση γίνεται σε όρια λέξης, ώστε η διόρθωση του «ΜΟΤΟΡ» να μην
+  /// αγγίξει το «ΜΟΤΟΡΑΚΙ» της ίδιας πρότασης.
+  ///
+  /// Η τιμή ξαναδιαβάζεται μέσα στη συναλλαγή: αν η λέξη δεν υπάρχει πια,
+  /// κάποιος πρόλαβε να τη διορθώσει και η εγγραφή παραλείπεται αντί να
+  /// γραφτεί από πάνω.
+  Future<void> _applyMixedScriptReplacement(
+    DatabaseExecutor txn,
+    LampIssueResolutionDecision decision,
+    Map<String, Object?> metadata,
+    void Function(ResolutionLogEntry entry) emit,
+  ) async {
+    final table = metadata['table']?.toString();
+    final primaryKey = metadata['primaryKey']?.toString();
+    final column = metadata['column']?.toString();
+    final word = metadata['word']?.toString();
+    final rowId = _support.toInt(metadata['rowId']);
+    // Ο χρήστης μπορεί να έγραψε δική του μορφή· αλλιώς ισχύει η πρόταση.
+    final replacement =
+        decision.textInput?.trim().isNotEmpty == true
+        ? decision.textInput!.trim()
+        : metadata['replacement']?.toString();
+
+    if (table == null ||
+        primaryKey == null ||
+        column == null ||
+        word == null ||
+        rowId == null ||
+        replacement == null ||
+        replacement.isEmpty) {
+      throw StateError('Λείπουν στοιχεία διόρθωσης αλλοιωμένου χαρακτήρα.');
+    }
+    if (!OldEquipmentRepository.kMixedScriptTables.containsKey(table)) {
+      throw StateError('Άγνωστος πίνακας για διόρθωση: $table.');
+    }
+
+    final rows = await txn.query(
+      table,
+      columns: <String>[column],
+      where: '$primaryKey = ?',
+      whereArgs: <Object?>[rowId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      emit(
+        ResolutionLogEntry.info(
+          'Η εγγραφή $table=$rowId δεν βρέθηκε· η διόρθωση παραλείφθηκε.',
+        ),
+      );
+      return;
+    }
+
+    final current = rows.first[column];
+    if (current is! String || !current.contains(word)) {
+      emit(
+        ResolutionLogEntry.info(
+          'Η λέξη «$word» δεν υπάρχει πια στο $table=$rowId· '
+          'η διόρθωση παραλείφθηκε.',
+        ),
+      );
+      return;
+    }
+
+    final updated = applyMixedScriptSuggestion(current, word, replacement);
+    if (updated == current) {
+      emit(
+        ResolutionLogEntry.info(
+          'Καμία αλλαγή στο $table=$rowId πεδίο $column.',
+        ),
+      );
+      return;
+    }
+
+    await txn.update(
+      table,
+      <String, Object?>{column: updated},
+      where: '$primaryKey = ?',
+      whereArgs: <Object?>[rowId],
+    );
+    emit(
+      ResolutionLogEntry.success(
+        'Στο $table=$rowId πεδίο $column: «$word» έγινε «$replacement».',
+      ),
+    );
+  }
+
   Future<void> _applyEquipmentPlacement(
     Transaction txn, {
     required int code,

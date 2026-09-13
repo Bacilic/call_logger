@@ -10,10 +10,10 @@ import '../../../core/database/phone_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/directory/department_change_assets.dart';
 import '../../../core/directory/phone_department_policy.dart';
+import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
-import '../../directory/models/department_model.dart';
 import '../../directory/providers/directory_cache_refresh.dart';
 import '../../directory/screens/widgets/asset_fate_on_department_change.dart';
 import '../../directory/screens/widgets/user_phone_department_conflict_dialog.dart';
@@ -25,6 +25,8 @@ import '../models/equipment_model.dart';
 import '../models/user_model.dart';
 import 'call_mutation_refresh.dart';
 import 'lookup_provider.dart';
+import 'orphan_quick_add_plan.dart';
+import 'quick_add_undo_record.dart';
 import 'smart_entity_selector_provider.dart';
 
 /// Συσχετίσεις, quick-add orphan και γρήγορες εκκρεμότητες.
@@ -136,9 +138,7 @@ class SmartEntitySelectorAssociation {
         for (final phone in carriedPhones) {
           final others = [
             for (final other in lookup?.findUsersByPhone(phone) ?? const [])
-              if (other.id != null &&
-                  other.id != userId &&
-                  !other.isDeleted)
+              if (other.id != null && other.id != userId && !other.isDeleted)
                 bulkUserDisplayName(other),
           ];
           final dept = lookup?.getDepartmentByPhone(phone);
@@ -196,124 +196,95 @@ class SmartEntitySelectorAssociation {
   /// Μηδενίζει τον κύκλο γρήγορης εκκρεμότητας (νέα φόρμα/καθαρισμός/submit).
   void resetQuickTaskCycle() {
     host.associationQuickTaskId = null;
+    host.lastQuickAddUndo = QuickAddUndoRecord.empty;
     host.callerAwaitingPhoneAssociation = false;
     host.clearPendingAuditOrigins();
+  }
+
+  /// Καταχωρεί τηλέφωνο και/ή εξοπλισμό ως κοινόχρηστα ενός τμήματος, όταν η
+  /// φόρμα δεν έχει καλούντα.
+  ///
+  /// Τέσσερα βήματα, με αυστηρή σειρά και χωρισμένες ευθύνες: **τι θα γραφτεί**
+  /// (κρίση), **χρειάζεται έγκριση;** (καθαρός υπολογισμός), **γράψε**, και
+  /// **φινάλε** (ανανέωση, οθόνη, μήνυμα, εκκρεμότητα). Το βήμα της εγγραφής
+  /// δεν κρίνει τίποτα — διαβάζει μόνο το [OrphanQuickAddPlan].
+  /// Αναιρεί ό,τι γέννησε η τελευταία γρήγορη καταχώρηση.
+  ///
+  /// Επιστρέφει το μήνυμα προς τον χρήστη· `null` όταν δεν υπάρχει τίποτα να
+  /// αναιρεθεί (η προσφορά έχει ήδη σβήσει ή δεν δημιουργήθηκε ποτέ τίποτα).
+  ///
+  /// **Φεύγει και η εκκρεμότητα του κύκλου:** θα έμενε να δείχνει σε καρτέλες
+  /// που μόλις σβήστηκαν, δηλαδή υπενθύμιση για δουλειά που δεν υπάρχει.
+  ///
+  /// Η φόρμα γυρίζει στο «πριν»: τα κείμενα που πληκτρολογήσατε μένουν, αλλά η
+  /// ταυτοποίηση φεύγει — ακριβώς η κατάσταση πριν πατήσετε «Προσθήκη».
+  Future<String?> undoLastQuickAdd() async {
+    final record = host.lastQuickAddUndo;
+    if (record.isEmpty) return null;
+    host.lastQuickAddUndo = QuickAddUndoRecord.empty;
+
+    final db = await DatabaseHelper.instance.database;
+    await applyQuickAddUndo(
+      record,
+      executor: db,
+      users: UserRepository(db),
+      phones: PhoneRepository(db),
+      equipment: EquipmentRepository(db),
+      departments: DepartmentRepository(db),
+    );
+
+    final taskId = host.associationQuickTaskId;
+    if (taskId != null) {
+      try {
+        await ref.read(taskServiceProvider).deleteTask(taskId);
+      } catch (e, st) {
+        developer.log(
+          'quick add undo: task delete failed',
+          name: 'SmartEntitySelectorNotifier',
+          error: e,
+          stackTrace: st,
+        );
+      }
+      host.associationQuickTaskId = null;
+      invalidateTaskListProviders(ref);
+    }
+
+    await refreshDirectoryCaches(
+      ref,
+      users: true,
+      equipment: true,
+      departments: true,
+    );
+    if (!ref.mounted) return quickAddUndoSummary(record);
+
+    state = state.copyWith(
+      clearSelectedCaller: true,
+      clearSelectedEquipment: true,
+      callerNoMatch: true,
+    );
+    host.callerAwaitingPhoneAssociation = false;
+    return quickAddUndoSummary(record);
   }
 
   Future<OrphanQuickAddResult?> quickAddOrphanToDepartment({
     bool forceSharedOnConflict = false,
   }) async {
-    final s = state;
-    if (!s.needsOrphanDepartmentQuickAdd) return null;
+    if (!state.needsOrphanDepartmentQuickAdd) return null;
+
     final lookup = (await ref.read(lookupServiceProvider.future)).service;
-    final deptText = s.departmentText.trim();
-    var departmentId = s.selectedDepartmentId;
-    DepartmentModel? selectedDepartment;
-    if (departmentId != null) {
-      for (final d in lookup.departments) {
-        if (d.id == departmentId && !d.isDeleted) {
-          selectedDepartment = d;
-          break;
-        }
-      }
-    } else {
-      selectedDepartment = lookup.findDepartmentByName(deptText);
-      departmentId = selectedDepartment?.id;
-    }
-    final phone = s.selectedPhone?.trim();
-    final equipmentCode = s.equipmentText.trim().isEmpty
-        ? null
-        : s.equipmentText.trim();
+    final plan = await _planOrphanQuickAdd(lookup);
 
-    final dbOrphan = await DatabaseHelper.instance.database;
-    final departmentsOrphan = DepartmentRepository(dbOrphan);
-    final phonesOrphan = PhoneRepository(dbOrphan);
-    final equipmentOrphan = EquipmentRepository(dbOrphan);
-    final deptExistedBefore =
-        deptText.isNotEmpty &&
-        await departmentsOrphan.departmentNameExists(deptText);
-    final phoneExistedBefore = (phone != null && phone.isNotEmpty)
-        ? await phonesOrphan.phoneNumberExists(phone)
-        : true;
-    final equipmentExistedBefore = (equipmentCode != null)
-        ? await equipmentOrphan.equipmentCodeExists(equipmentCode)
-        : true;
-
-    final phoneUsage = (phone != null && phone.isNotEmpty)
-        ? lookup.checkPhoneUsage(phone)
-        : null;
-    final equipmentUsage = (equipmentCode != null)
-        ? lookup.checkEquipmentUsage(equipmentCode)
-        : null;
-
-    final phoneConflict =
-        phoneUsage != null &&
-        (phoneUsage.hasUserOwners ||
-            (phoneUsage.departmentId != null &&
-                departmentId != null &&
-                phoneUsage.departmentId != departmentId));
-    final equipmentConflict =
-        equipmentUsage != null &&
-        (equipmentUsage.hasUserOwners ||
-            (equipmentUsage.departmentId != null &&
-                departmentId != null &&
-                equipmentUsage.departmentId != departmentId));
-    final hasConflict = phoneConflict || equipmentConflict;
-    final phoneNeedsShared =
-        phone != null &&
-        phone.isNotEmpty &&
-        (phoneUsage == null ||
-            phoneUsage.hasUserOwners ||
-            departmentId == null ||
-            phoneUsage.departmentId != departmentId);
-    final equipmentNeedsShared =
-        equipmentCode != null &&
-        (equipmentUsage == null ||
-            equipmentUsage.hasUserOwners ||
-            departmentId == null ||
-            equipmentUsage.departmentId != departmentId);
-    if (hasConflict && !forceSharedOnConflict) {
-      final lines = <String>[
-        'Εντοπίστηκαν πιθανές συγκρούσεις για Shared Policy.',
-      ];
-      if (phoneConflict) {
-        if (phoneUsage.hasUserOwners) {
-          lines.add(
-            'Το τηλέφωνο ${phoneUsage.phone} ανήκει ήδη στους: ${phoneUsage.userNames.join(', ')}.',
-          );
-        }
-        if (phoneUsage.departmentId != null &&
-            phoneUsage.departmentName != null) {
-          lines.add(
-            'Το τηλέφωνο ${phoneUsage.phone} έχει ήδη τοποθεσία τμήμα: ${phoneUsage.departmentName}.',
-          );
-        }
+    if (!forceSharedOnConflict) {
+      final confirmation = orphanQuickAddConflictMessage(plan);
+      if (confirmation != null) {
+        return OrphanQuickAddResult(
+          requiresConfirmation: true,
+          message: confirmation,
+        );
       }
-      if (equipmentConflict) {
-        if (equipmentUsage.hasUserOwners) {
-          lines.add(
-            'Ο εξοπλισμός ${equipmentUsage.code} ανήκει ήδη στους: ${equipmentUsage.userNames.join(', ')}.',
-          );
-        }
-        if (equipmentUsage.departmentId != null &&
-            equipmentUsage.departmentName != null) {
-          lines.add(
-            'Ο εξοπλισμός ${equipmentUsage.code} έχει ήδη τοποθεσία τμήμα: ${equipmentUsage.departmentName}.',
-          );
-        }
-      }
-      lines.add(
-        'Θέλετε να καταχωρηθούν ΚΑΙ ως κοινόχρηστα στο τμήμα ${deptText.isEmpty ? '—' : deptText};',
-      );
-      return OrphanQuickAddResult(
-        requiresConfirmation: true,
-        message: lines.join('\n'),
-      );
     }
 
-    departmentId ??= await departmentsOrphan.getOrCreateDepartmentIdByName(
-      deptText,
-    );
+    final departmentId = await _resolveOrphanDepartmentId(plan);
     if (departmentId == null) {
       return const OrphanQuickAddResult(
         requiresConfirmation: false,
@@ -321,20 +292,105 @@ class SmartEntitySelectorAssociation {
       );
     }
 
-    if (phoneNeedsShared) {
-      await phonesOrphan.updatePhoneDepartment(phone, departmentId);
-    }
-    if (equipmentNeedsShared) {
-      await equipmentOrphan.updateEquipmentDepartment(
-        equipmentCode,
-        departmentId,
-      );
-    }
+    await _writeOrphanShared(plan, departmentId);
+    // Ό,τι γεννήθηκε τώρα μπορεί να αναιρεθεί όσο κρατά η στιγμή. Η κρίση
+    // «υπήρχε πριν;» έχει ήδη γίνει στο πλάνο — εδώ απλώς επιβιώνει.
+    host.lastQuickAddUndo = QuickAddUndoRecord(
+      createdDepartmentId: plan.departmentExistedBefore ? null : departmentId,
+      createdDepartmentName: plan.departmentExistedBefore
+          ? null
+          : plan.departmentText,
+      createdPhone: (plan.phoneNeedsShared && !plan.phoneExistedBefore)
+          ? plan.phone
+          : null,
+      createdEquipmentCode:
+          (plan.equipmentNeedsShared && !plan.equipmentExistedBefore)
+          ? plan.equipmentCode
+          : null,
+    );
+    return _finishOrphanQuickAdd(plan, departmentId);
+  }
 
+  /// Βήμα 1 — τι υπάρχει σήμερα και τι πρόκειται να γραφτεί.
+  ///
+  /// Η απάντηση στο «τι θα γραφτεί» **δεν υπολογίζεται εδώ**: ζητείται από την
+  /// ίδια κρίση που αποφασίζει αν θα εμφανιστεί η γρήγορη καταχώρηση.
+  Future<OrphanQuickAddPlan> _planOrphanQuickAdd(LookupService lookup) async {
+    final s = state;
+    final deptText = s.departmentText.trim();
+    final phoneText = s.selectedPhone?.trim();
+    final phone = (phoneText != null && phoneText.isNotEmpty)
+        ? phoneText
+        : null;
+    final equipmentText = s.equipmentText.trim();
+    final equipmentCode = equipmentText.isEmpty ? null : equipmentText;
+    final needsShared = s.orphanNeedsSharedFlags(lookup);
+
+    final db = await DatabaseHelper.instance.database;
+
+    return OrphanQuickAddPlan(
+      departmentText: deptText,
+      departmentId:
+          s.selectedDepartmentId ?? lookup.findDepartmentByName(deptText)?.id,
+      phone: phone,
+      equipmentCode: equipmentCode,
+      phoneUsage: phone == null ? null : lookup.checkPhoneUsage(phone),
+      equipmentUsage: equipmentCode == null
+          ? null
+          : lookup.checkEquipmentUsage(equipmentCode),
+      phoneNeedsShared: needsShared.phoneNeedsShared,
+      equipmentNeedsShared: needsShared.equipmentNeedsShared,
+      departmentExistedBefore:
+          deptText.isNotEmpty &&
+          await DepartmentRepository(db).departmentNameExists(deptText),
+      phoneExistedBefore: phone == null
+          ? true
+          : await PhoneRepository(db).phoneNumberExists(phone),
+      equipmentExistedBefore: equipmentCode == null
+          ? true
+          : await EquipmentRepository(db).equipmentCodeExists(equipmentCode),
+    );
+  }
+
+  /// Βήμα 2 — το τμήμα της φόρμας, δημιουργημένο αν δεν υπήρχε.
+  Future<int?> _resolveOrphanDepartmentId(OrphanQuickAddPlan plan) async {
+    final known = plan.departmentId;
+    if (known != null) return known;
+    final db = await DatabaseHelper.instance.database;
+    return DepartmentRepository(
+      db,
+    ).getOrCreateDepartmentIdByName(plan.departmentText);
+  }
+
+  /// Βήμα 3 — μόνο οι εγγραφές. Καμία κρίση, κανένα μήνυμα.
+  Future<void> _writeOrphanShared(
+    OrphanQuickAddPlan plan,
+    int departmentId,
+  ) async {
+    if (!plan.writesAnything) return;
+
+    final phone = plan.phone;
+    final equipmentCode = plan.equipmentCode;
+    final db = await DatabaseHelper.instance.database;
+    if (plan.phoneNeedsShared && phone != null) {
+      await PhoneRepository(db).updatePhoneDepartment(phone, departmentId);
+    }
+    if (plan.equipmentNeedsShared && equipmentCode != null) {
+      await EquipmentRepository(
+        db,
+      ).updateEquipmentDepartment(equipmentCode, departmentId);
+    }
+  }
+
+  /// Βήμα 4 — ανανέωση καταλόγων, ενημέρωση της φόρμας, μήνυμα, εκκρεμότητα.
+  Future<OrphanQuickAddResult> _finishOrphanQuickAdd(
+    OrphanQuickAddPlan plan,
+    int departmentId,
+  ) async {
     await refreshDirectoryCaches(
       ref,
-      users: phoneNeedsShared,
-      equipment: equipmentNeedsShared,
+      users: plan.phoneNeedsShared,
+      equipment: plan.equipmentNeedsShared,
       departments: true,
     );
     if (!ref.mounted) {
@@ -343,68 +399,79 @@ class SmartEntitySelectorAssociation {
         message: 'Η συσχέτιση ολοκληρώθηκε αλλά το container δεν είναι ενεργό.',
       );
     }
+
     final refreshed = (await ref.read(lookupServiceProvider.future)).service;
-    final finalDepartment = refreshed.findDepartmentByName(deptText);
+    final finalDepartment = refreshed.findDepartmentByName(plan.departmentText);
     state = state.copyWith(
       selectedDepartmentId: finalDepartment?.id ?? departmentId,
-      departmentText: finalDepartment?.name ?? deptText,
+      departmentText: finalDepartment?.name ?? plan.departmentText,
       callerNoMatch: false,
       equipmentNoMatch: false,
     );
 
-    final added = <String>[];
-    if (phoneNeedsShared) added.add('τηλέφωνο');
-    if (equipmentNeedsShared) added.add('εξοπλισμός');
-    final associationWorkDone = added.isNotEmpty;
-    final success = added.isEmpty
-        ? 'Δεν υπήρχε στοιχείο προς καταχώρηση.'
-        : 'Καταχωρήθηκε ${added.join(' και ')} ως κοινόχρηστο στο τμήμα ${state.departmentText.trim()}.';
+    // Το τμήμα λέγεται πλέον όπως το γράφει ο κατάλογος, όχι όπως πληκτρολογήθηκε.
+    final departmentName = state.departmentText.trim();
+    final success = orphanQuickAddSuccessMessage(
+      phoneWritten: plan.phoneNeedsShared,
+      equipmentWritten: plan.equipmentNeedsShared,
+      departmentName: departmentName,
+    );
 
-    final newEntityEligible =
-        (deptText.isNotEmpty && !deptExistedBefore) ||
-        (phone != null && phone.isNotEmpty && !phoneExistedBefore) ||
-        (equipmentCode != null && !equipmentExistedBefore);
-
-    final resolvedDeptId = finalDepartment?.id ?? departmentId;
-    final equipResolved = (equipmentCode != null && equipmentCode.isNotEmpty)
-        ? refreshed.findEquipmentsByCode(equipmentCode)
-        : const <EquipmentModel>[];
-    final resolvedEquipmentId = equipResolved.isNotEmpty
-        ? equipResolved.first.id
-        : null;
-
-    if (newEntityEligible || host.associationQuickTaskId != null) {
-      try {
-        await _syncAssociationQuickTask(
-          newEntityEligible: newEntityEligible,
-          associationWorkDone: associationWorkDone,
-          summaryText: success,
-          callerName: null,
-          callerId: null,
-          departmentId: resolvedDeptId,
-          equipmentId: resolvedEquipmentId,
-          phoneText: phone,
-          userText: null,
-          equipmentText: equipmentCode,
-          departmentText: state.departmentText.trim().isEmpty
-              ? null
-              : state.departmentText.trim(),
-        );
-      } catch (e, st) {
-        developer.log(
-          'orphan quick add task sync failed',
-          name: 'SmartEntitySelectorNotifier',
-          error: e,
-          stackTrace: st,
-        );
-      }
-    }
+    await _syncOrphanQuickTask(
+      plan: plan,
+      departmentId: finalDepartment?.id ?? departmentId,
+      departmentName: departmentName,
+      refreshed: refreshed,
+      summary: success,
+    );
 
     return OrphanQuickAddResult(
       requiresConfirmation: false,
       message: success,
       successMessage: success,
     );
+  }
+
+  /// Η γρήγορη εκκρεμότητα του κύκλου — υπενθύμιση, ποτέ εμπόδιο.
+  ///
+  /// Η αποτυχία της δεν ακυρώνει καταχώρηση που ήδη γράφτηκε: καταγράφεται και
+  /// η ροή συνεχίζει.
+  Future<void> _syncOrphanQuickTask({
+    required OrphanQuickAddPlan plan,
+    required int departmentId,
+    required String departmentName,
+    required LookupService refreshed,
+    required String summary,
+  }) async {
+    if (!plan.hasNewEntity && host.associationQuickTaskId == null) return;
+
+    final equipmentCode = plan.equipmentCode;
+    final resolved = (equipmentCode != null && equipmentCode.isNotEmpty)
+        ? refreshed.findEquipmentsByCode(equipmentCode)
+        : const <EquipmentModel>[];
+
+    try {
+      await _syncAssociationQuickTask(
+        newEntityEligible: plan.hasNewEntity,
+        associationWorkDone: plan.writesAnything,
+        summaryText: summary,
+        callerName: null,
+        callerId: null,
+        departmentId: departmentId,
+        equipmentId: resolved.isNotEmpty ? resolved.first.id : null,
+        phoneText: plan.phone,
+        userText: null,
+        equipmentText: equipmentCode,
+        departmentText: departmentName.isEmpty ? null : departmentName,
+      );
+    } catch (e, st) {
+      developer.log(
+        'orphan quick add task sync failed',
+        name: 'SmartEntitySelectorNotifier',
+        error: e,
+        stackTrace: st,
+      );
+    }
   }
 
   Future<String?> associateCurrentIfNeeded({
@@ -495,6 +562,21 @@ class SmartEntitySelectorAssociation {
           userId,
           phoneForAssociation,
           equipmentCode.isNotEmpty ? equipmentCode : null,
+        );
+
+        // Η προσφορά αναίρεσης της στιγμής: μόνο ό,τι δεν υπήρχε πριν.
+        host.lastQuickAddUndo = QuickAddUndoRecord(
+          createdUserId: userId,
+          createdUserName: name,
+          createdDepartmentId: departmentExistedBefore ? null : departmentId,
+          createdDepartmentName: departmentExistedBefore ? null : deptTextRaw,
+          createdPhone: (!phoneExistedBefore && parsedPhones.isNotEmpty)
+              ? parsedPhones.first
+              : null,
+          createdEquipmentCode:
+              (!equipmentExistedBefore && equipmentCode.isNotEmpty)
+              ? equipmentCode
+              : null,
         );
 
         final s = state;

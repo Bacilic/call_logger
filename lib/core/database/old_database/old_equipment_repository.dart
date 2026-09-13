@@ -11,6 +11,7 @@ import 'lamp_data_issue_type_labels.dart';
 import 'lamp_db_comparison.dart';
 import 'lamp_excel_parse_int.dart';
 import 'lamp_legacy_issue_type_normalizer.dart';
+import '../../utils/mixed_script_detector.dart';
 import 'lamp_scientific_serial.dart';
 import 'lamp_network_sheet_importer.dart';
 import 'lamp_search_filter_selection.dart';
@@ -1142,6 +1143,12 @@ class OldEquipmentRepository {
         weight: 1,
         runner: _scanNetworkData,
       ),
+      _IntegrityScanStepSpec(
+        id: 'mixed_script',
+        label: 'Έλεγχος αλλοιωμένων χαρακτήρων (ελληνικά / λατινικά)',
+        weight: 3,
+        runner: _scanMixedScript,
+      ),
     ];
   }
 
@@ -1456,6 +1463,112 @@ class OldEquipmentRepository {
           createdAt: createdAt,
         ),
     ];
+  }
+
+  /// Οι πίνακες που σαρώνονται για αλλοιωμένους χαρακτήρες, με το κλειδί τους.
+  ///
+  /// Πέντε πίνακες δεδομένων· τα τεχνικά μητρώα (ευρετήριο, ουρά προβλημάτων,
+  /// ιστορικό εισαγωγών) μένουν έξω: δεν τα διαβάζει άνθρωπος και δεν
+  /// διορθώνονται.
+  static const Map<String, String> kMixedScriptTables = <String, String>{
+    'equipment': 'code',
+    'offices': 'office',
+    'owners': 'owner',
+    'model': 'model',
+    'contracts': 'contract',
+  };
+
+  /// Εντοπίζει ελληνικά ανακατεμένα με λατινικά, χαλασμένους χαρακτήρες και
+  /// ψηφία μέσα σε ελληνικές λέξεις, σε ΟΛΑ τα πεδία κειμένου.
+  ///
+  /// **Οι στήλες `*_original_text` εξαιρούνται.** Κρατούν επίτηδες την ωμή
+  /// τιμή που ήρθε από το Excel, ακριβώς όπως ήταν — εκεί η αλλοίωση είναι
+  /// τεκμήριο, όχι σφάλμα προς διόρθωση.
+  Future<List<Map<String, Object?>>> _scanMixedScript(
+    Database db,
+    String createdAt,
+    OldIntegrityCancellationToken token,
+  ) async {
+    final out = <Map<String, Object?>>[];
+    for (final entry in kMixedScriptTables.entries) {
+      if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+      final table = entry.key;
+      final primaryKey = entry.value;
+      final columns = await _textColumnsOf(db, table);
+      if (columns.isEmpty) continue;
+
+      final rows = await db.query(
+        table,
+        columns: <String>[primaryKey, ...columns],
+      );
+      for (final row in rows) {
+        if (token.isCancelled) throw const _OldIntegrityScanCancelled();
+        final id = _toInt(row[primaryKey]);
+        if (id == null) continue;
+        for (final column in columns) {
+          final value = row[column];
+          if (value is! String) continue;
+          for (final finding in findMixedScriptWords(value)) {
+            out.add(
+              _scanIssue(
+                issueType: _mixedScriptIssueType(finding.kind),
+                entityType: table,
+                message: _mixedScriptMessage(
+                  table: table,
+                  id: id,
+                  column: column,
+                  finding: finding,
+                ),
+                rowNumber: id,
+                columnName: column,
+                rawValue: finding.word,
+                createdAt: createdAt,
+              ),
+            );
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Οι στήλες κειμένου ενός πίνακα, χωρίς το κλειδί και τα `*_original_text`.
+  Future<List<String>> _textColumnsOf(Database db, String table) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    return <String>[
+      for (final column in info)
+        if (_toText(column['type']).toUpperCase().contains('TEXT') &&
+            !_toText(column['name']).endsWith('_original_text'))
+          _toText(column['name']),
+    ];
+  }
+
+  static String _mixedScriptIssueType(MixedScriptKind kind) {
+    return switch (kind) {
+      MixedScriptKind.mixedAlphabets => 'mixed_script_alphabets',
+      MixedScriptKind.brokenCharacter => 'mixed_script_broken_char',
+      MixedScriptKind.digitInsideGreekWord => 'mixed_script_digit_in_greek',
+    };
+  }
+
+  static String _mixedScriptMessage({
+    required String table,
+    required int id,
+    required String column,
+    required MixedScriptFinding finding,
+  }) {
+    final what = switch (finding.kind) {
+      MixedScriptKind.mixedAlphabets =>
+        'Ελληνικά και λατινικά στην ίδια λέξη',
+      MixedScriptKind.brokenCharacter => 'Χαλασμένος χαρακτήρας',
+      MixedScriptKind.digitInsideGreekWord =>
+        'Ψηφίο ανάμεσα σε ελληνικά γράμματα',
+    };
+    final where = '$table=$id πεδίο=$column';
+    final suggestion = finding.suggestion;
+    return suggestion == null
+        ? '$what: «${finding.word}» ($where) — χρειάζεται χειροκίνητη κρίση.'
+        : '$what: «${finding.word}» ($where) — προτείνεται «$suggestion».';
   }
 
   Future<List<Map<String, Object?>>> _scanScientificSerial(

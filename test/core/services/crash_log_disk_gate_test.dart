@@ -29,9 +29,7 @@ void main() {
   test(
     'φάκελος που δεν απαντά ποτέ δεν κρατά την εκκίνηση πάνω από το όριο',
     () async {
-      final service = CrashLogService(
-        logsDirectory: p.join(temp.path, 'logs'),
-      );
+      final service = CrashLogService(logsDirectory: p.join(temp.path, 'logs'));
 
       final stopwatch = Stopwatch()..start();
       await expectLater(
@@ -55,26 +53,28 @@ void main() {
     },
   );
 
-  test('όταν ο δίσκος έχει σβήσει, καμία καταγραφή δεν αγγίζει τη διαδρομή',
-      () async {
-    final unreachable = p.join(temp.path, 'άφταστος', 'logs');
-    final service = CrashLogService(logsDirectory: unreachable);
+  test(
+    'όταν ο δίσκος έχει σβήσει, καμία καταγραφή δεν αγγίζει τη διαδρομή',
+    () async {
+      final unreachable = p.join(temp.path, 'άφταστος', 'logs');
+      final service = CrashLogService(logsDirectory: unreachable);
 
-    await expectLater(
-      service.onStartup(
-        retentionCount: 5,
-        timeout: const Duration(milliseconds: 200),
-        createDirectory: (_) => Completer<void>().future,
-      ),
-      throwsA(isA<TimeoutException>()),
-    );
+      await expectLater(
+        service.onStartup(
+          retentionCount: 5,
+          timeout: const Duration(milliseconds: 200),
+          createDirectory: (_) => Completer<void>().future,
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
 
-    // Μετά τη σίγαση, η καταγραφή σφάλματος δεν δημιουργεί τίποτα: η σύγχρονη
-    // δημιουργία φακέλου τρέχει στο νήμα της διεπαφής και θα την πάγωνε.
-    service.logError(StateError('δοκιμή'), StackTrace.current, fatal: true);
+      // Μετά τη σίγαση, η καταγραφή σφάλματος δεν δημιουργεί τίποτα: η σύγχρονη
+      // δημιουργία φακέλου τρέχει στο νήμα της διεπαφής και θα την πάγωνε.
+      service.logError(StateError('δοκιμή'), StackTrace.current, fatal: true);
 
-    expect(await Directory(unreachable).exists(), isFalse);
-  });
+      expect(await Directory(unreachable).exists(), isFalse);
+    },
+  );
 
   test('όταν ο φάκελος απαντά, το ημερολόγιο δουλεύει κανονικά', () async {
     final logs = p.join(temp.path, 'logs');

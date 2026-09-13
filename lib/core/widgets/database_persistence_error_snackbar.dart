@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../database/database_error_advice.dart';
 import '../database/database_init_result.dart';
 
 /// Τρέχει μια αποθήκευση ρύθμισης **χωρίς να μπλοκάρει τη διεπαφή** και **χωρίς
@@ -42,7 +43,12 @@ void showDatabasePersistenceErrorSnackBar(
   final navigator = Navigator.maybeOf(context, rootNavigator: true);
   final summary = (result.message ?? 'Αποτυχία εγγραφής στη βάση δεδομένων.')
       .trim();
-  final details = result.details?.trim();
+  // Η στιγμή είναι «μόλις πάτησα αποθήκευση»: η συμβουλή της εκκίνησης
+  // («ελέγξτε το αρχείο που διαλέξατε») δεν περιγράφει τίποτα από όσα έκανε.
+  final details = databaseErrorAdvice(
+    result: result,
+    moment: DatabaseErrorMoment.saving,
+  )?.trim();
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Column(

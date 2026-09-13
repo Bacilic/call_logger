@@ -188,9 +188,7 @@ class PhoneDepartmentPolicy {
       if (targetDepartmentId != null) {
         // Η μεταφορά καλύπτει και τους άλλους κατόχους, οπότε η σκέτη
         // αφαίρεσή τους δεν έχει τι να προσθέσει.
-        options.add(
-          UserPhoneConflictResolution.transferSharedToUserDepartment,
-        );
+        options.add(UserPhoneConflictResolution.transferSharedToUserDepartment);
         return options;
       }
     }

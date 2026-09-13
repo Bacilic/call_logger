@@ -1,4 +1,3 @@
-
 import 'package:flutter/foundation.dart';
 
 import '../services/crash_log_service.dart';

@@ -140,6 +140,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   final formKey = GlobalKey<FormState>();
   late final SpellCheckController nameController;
   late final SpellCheckController buildingController;
+  late final SpellCheckController groupController;
   late final SpellCheckController notesController;
   late final TextEditingController hexController;
   late final TextEditingController sharedPhoneInputController;
@@ -170,6 +171,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
 
   final FocusNode _nameFocus = FocusNode();
   final FocusNode _buildingFocus = FocusNode();
+  final FocusNode _groupFocus = FocusNode();
   final FocusNode _kindFocus = FocusNode();
   final FocusNode _colorFocus = FocusNode();
   final FocusNode _lansweeperAccountsFocus = FocusNode();
@@ -184,6 +186,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   final Set<String> _sharedEquipmentPendingRemoval = {};
   late final String snapName;
   late final String snapBuilding;
+  late final String snapGroup;
   late final String snapNotes;
   late final String snapColorHex;
   late final List<String> snapSharedPhones;
@@ -295,6 +298,51 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
       onChanged: options.isEmpty
           ? null
           : (v) => setState(() => buildingController.text = v ?? ''),
+    );
+  }
+
+  /// Το πεδίο «Ομάδα»: κλειστή λίστα από τον κατάλογο, δίδυμο του Κτιρίου.
+  ///
+  /// Τιμή εκτός καταλόγου μπαίνει μπροστά αντί να εξαφανιστεί — αλλιώς ένα
+  /// άνοιγμα-και-αποθήκευση θα έσβηνε σιωπηλά την ομάδα του τμήματος πριν
+  /// προλάβει να οριστεί ο κατάλογος.
+  Widget _buildGroupField() {
+    final catalogAsync = ref.watch(departmentGroupCatalogProvider);
+    final catalog = catalogAsync.asData?.value ?? const <String>[];
+    final current = groupController.text.trim();
+
+    final matched = matchBuildingInCatalog(current, catalog);
+    final options = <String>[
+      if (current.isNotEmpty && matched == null) current,
+      ...catalog,
+    ];
+    final value = current.isEmpty ? null : (matched ?? current);
+
+    return DropdownButtonFormField<String?>(
+      // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
+      value: value,
+      focusNode: _groupFocus,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Ομάδα',
+        border: const OutlineInputBorder(),
+        isDense: true,
+        helperText: catalogAsync.isLoading
+            ? 'Φόρτωση ομάδων…'
+            : (options.isEmpty
+                  ? 'Καμία ομάδα στη λίστα — Διάφορα → Τμήματα'
+                  : null),
+      ),
+      items: [
+        for (final option in options)
+          DropdownMenuItem<String?>(
+            value: option,
+            child: Text(option, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: options.isEmpty
+          ? null
+          : (v) => setState(() => groupController.text = v ?? ''),
     );
   }
 
@@ -427,6 +475,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     final d = widget.initialDepartment;
     nameController = SpellCheckController()..text = d?.name ?? '';
     buildingController = SpellCheckController()..text = d?.building ?? '';
+    groupController = SpellCheckController()..text = d?.groupName ?? '';
     notesController = SpellCheckController()..text = (d?.notes ?? '');
     selectedColor = tryParseDepartmentHex(d?.color) ?? const Color(0xFF1976D2);
     selectedKind = d?.kind ?? DepartmentKind.hospital;
@@ -446,6 +495,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     }
     snapName = nameController.text.trim();
     snapBuilding = buildingController.text.trim();
+    snapGroup = groupController.text.trim();
     snapNotes = notesController.text.trim();
     snapColorHex = colorToDepartmentHex(selectedColor);
     snapKind = selectedKind;
@@ -469,6 +519,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     snapFloorId = initDept?.floorId;
     nameController.addListener(notifyFormChanged);
     buildingController.addListener(notifyFormChanged);
+    groupController.addListener(notifyFormChanged);
     notesController.addListener(notifyFormChanged);
     hexController.addListener(notifyFormChanged);
     sharedPhoneInputFocus.addListener(sharedLinks.onSharedPhoneFocusChanged);
@@ -521,6 +572,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     );
     nameController.dispose();
     buildingController.dispose();
+    groupController.dispose();
     hexController.dispose();
     sharedPhoneInputController.dispose();
     sharedEquipmentInputController.dispose();
@@ -528,6 +580,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     notesController.dispose();
     _nameFocus.dispose();
     _buildingFocus.dispose();
+    _groupFocus.dispose();
     _kindFocus.dispose();
     _colorFocus.dispose();
     _notesFocus.dispose();
@@ -1108,6 +1161,10 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                             ),
                           ],
                         ),
+                      if (selectedKind.belongsOnBuildingMap) ...[
+                        const SizedBox(height: 12),
+                        _buildGroupField(),
+                      ],
                       if (buildingMapFloorLoadNotice(floorLoadState)
                           case final notice?
                           when selectedKind.belongsOnBuildingMap) ...[
