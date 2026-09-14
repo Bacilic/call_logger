@@ -282,6 +282,35 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 59 && newVersion >= 59) {
     await migrateDatabaseToV59(db);
   }
+  if (oldVersion < 60 && newVersion >= 60) {
+    await migrateDatabaseToV60(db);
+  }
+}
+
+/// v60: `operator_presence.app_version` — ποια έκδοση της εφαρμογής τρέχει
+/// κάθε ανοιχτή συνεδρία.
+///
+/// Η λίστα «ποιοι κρατούν τη βάση ανοιχτή τώρα» απαντά και στο ερώτημα που
+/// έρχεται αμέσως μετά: **τρέχουν όλοι την ίδια έκδοση;** Πριν από μια
+/// αναβάθμιση σχήματος αυτό είναι η διαφορά ανάμεσα στο «προχώρα» και στο
+/// «ο συνάδελφος δεν θα μπορεί να ανοίξει τη βάση μετά».
+///
+/// Οι υπάρχουσες γραμμές μένουν με κενή στήλη: κρατούν την τελευταία τους
+/// σύνδεση ως ιστορικό, και η έκδοση συμπληρώνεται μόλις γράψει ο πρώτος
+/// παλμός — δηλαδή μόνο για όποιον έχει όντως την εφαρμογή ανοιχτή.
+///
+/// Καθαρή προσθήκη στήλης: παλαιότερη έκδοση της εφαρμογής που αγνοεί το
+/// `app_version` συνεχίζει να ανοίγει τη βάση και να γράφει κανονικά.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες — η στήλη μπαίνει μόνο αν λείπει.
+Future<void> migrateDatabaseToV60(Database db) async {
+  final info = await db.rawQuery('PRAGMA table_info(operator_presence)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('app_version')) {
+    await db.execute(
+      'ALTER TABLE operator_presence ADD COLUMN app_version TEXT',
+    );
+  }
 }
 
 /// v59: το πώς φωνάζουν τον άνθρωπο αποκτά δικό του πεδίο.

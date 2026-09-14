@@ -7,6 +7,8 @@ import '../../../core/database/lock_diagnostic_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../models/database_integrity_finding.dart';
 import '../models/integrity_fix_models.dart';
+import '../providers/active_sessions_provider.dart';
+import '../services/active_sessions.dart';
 
 /// Επιβεβαίωση μονής ή μαζικής επιδιόρθωσης (confirm-only).
 Future<bool> showIntegrityConfirmDialog(
@@ -116,6 +118,7 @@ Future<bool> showIntegrityLockRetryDialog(
                       'χρησιμοποιείται από άλλη διεργασία.',
             ),
             const SizedBox(height: 16),
+            const _OtherSessionsNotice(),
             _LockDiagnosticSection(dbPath: dbPath),
           ],
         ),
@@ -568,6 +571,68 @@ class _LockDiagnosticSectionState extends State<_LockDiagnosticSection> {
           },
         ),
       ],
+    );
+  }
+}
+
+/// Ποιες **άλλες** εφαρμογές κρατούν τη βάση — η απάντηση που λείπει από το
+/// τοπικό διαγνωστικό.
+///
+/// Το `handle` των Sysinternals βλέπει μόνο διεργασίες **αυτού** του
+/// υπολογιστή, οπότε σε κοινόχρηστη βάση απαντά «κανείς» ενώ το αρχείο το
+/// κρατά συνάδελφος από άλλο μηχάνημα. Τα ίχνη σύνδεσης ζουν μέσα στο ίδιο το
+/// αρχείο και ταξιδεύουν μαζί του, οπότε απαντούν και για το δίκτυο.
+///
+/// Σιωπά όταν δεν έχει τίποτα να πει: κενή λίστα σημαίνει ότι το κλείδωμα
+/// είναι πράγματι τοπικό, και η επόμενη ενότητα το ψάχνει εκεί.
+class _OtherSessionsNotice extends StatefulWidget {
+  const _OtherSessionsNotice();
+
+  @override
+  State<_OtherSessionsNotice> createState() => _OtherSessionsNoticeState();
+}
+
+class _OtherSessionsNoticeState extends State<_OtherSessionsNotice> {
+  late final Future<List<ActiveSession>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = loadActiveSessions();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<List<ActiveSession>>(
+      future: _future,
+      builder: (context, snap) {
+        final sessions = snap.data;
+        if (sessions == null) return const SizedBox.shrink();
+        final others = otherSessions(sessions);
+        if (others.isEmpty) return const SizedBox.shrink();
+
+        final now = DateTime.now();
+        final mine = myAppVersion(sessions);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Η βάση είναι ανοιχτή και από:',
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              for (final session in others)
+                Text(
+                  describeActiveSession(session, now: now, myAppVersion: mine),
+                  style: theme.textTheme.bodySmall,
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

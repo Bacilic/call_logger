@@ -14,6 +14,7 @@ import '../../tasks/providers/tasks_provider.dart';
 import '../providers/database_browser_stats_provider.dart';
 import '../providers/database_maintenance_provider.dart';
 import '../services/database_maintenance_service.dart';
+import 'other_sessions_gate.dart';
 
 const Map<String, String> _kMaintenanceTableLabels = {
   'audit_log': 'Αρχείο καταγραφής (audit)',
@@ -161,11 +162,22 @@ class _DatabaseMaintenanceSectionsState
     });
   }
 
+  /// Η τελετουργία πριν από κάθε μη αναστρέψιμη ενέργεια συντήρησης.
+  ///
+  /// **Ο φρουρός των ανοιχτών συνεδριών ζει εδώ, όχι στα κουμπιά.** Κάθε ροή
+  /// αυτής της οθόνης περνά από εδώ, οπότε καμία δεν μπορεί να ξεχάσει να
+  /// ρωτήσει ποιος άλλος έχει τη βάση ανοιχτή — ούτε αυτές που θα προστεθούν
+  /// αργότερα. Ρωτά **πρώτος**: ο άνθρωπος μαθαίνει ότι υπάρχουν άλλοι μέσα
+  /// πριν ξεκινήσει τη διπλή επιβεβαίωση, όχι στο τέλος της.
   Future<bool> _doubleConfirm(
     BuildContext context, {
     required String title,
     required String body,
   }) async {
+    if (!await confirmDespiteOtherSessions(context, actionLabel: title) ||
+        !context.mounted) {
+      return false;
+    }
     final t = Theme.of(context);
     final first = await showDialog<bool>(
       context: context,

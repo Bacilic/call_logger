@@ -8,6 +8,7 @@ import '../models/database_integrity_report.dart';
 import '../models/integrity_fix_models.dart';
 import '../providers/database_integrity_provider.dart';
 import 'integrity_fix_dialogs.dart';
+import 'other_sessions_gate.dart';
 
 /// Callback για μηνύματα επιτυχίας/σφάλματος μέσα στον διάλογο ακεραιότητας.
 typedef IntegrityFeedbackCallback =
@@ -316,6 +317,16 @@ class _DatabaseIntegrityPanelState
     List<DatabaseIntegrityFinding> findings,
   ) async {
     if (!checkType.allowsBulkFix || findings.length <= 1) return;
+
+    // Μαζική αλλαγή δεδομένων που θα δουν αμέσως και οι υπόλοιποι: πρώτα
+    // λέμε ποιοι είναι μέσα, μετά ζητάμε την επιβεβαίωση.
+    if (!await confirmDespiteOtherSessions(
+          context,
+          actionLabel: 'Μαζική επιδιόρθωση',
+        ) ||
+        !context.mounted) {
+      return;
+    }
 
     final ok = await showIntegrityConfirmDialog(
       context,

@@ -34,6 +34,7 @@ void main() {
       // αυτό το τεστ δεν έχει λόγο να στήσει.
       await onDatabaseUpgradeSquashed(db, 46, 50);
       await migrateDatabaseToV52(db);
+      await migrateDatabaseToV60(db);
       repository = OperatorPresenceRepository(db);
     });
 

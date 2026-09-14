@@ -90,6 +90,9 @@ import 'database_schema_version.dart';
 /// v59: `users.nickname` — το πώς φωνάζουν τον άνθρωπο, με δικό του πεδίο αντί
 /// για παρένθεση μέσα στο «Όνομα». Καθαρή προσθήκη με κενή προεπιλογή· καμία
 /// υπάρχουσα εγγραφή δεν μεταφέρεται αυτόματα.
+/// v60: `operator_presence.app_version` — ποια έκδοση τρέχει κάθε ανοιχτή
+/// συνεδρία. Καθαρή προσθήκη με κενή προεπιλογή· η στήλη γεμίζει μόνη της με
+/// τον πρώτο παλμό κάθε εφαρμογής.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
@@ -177,6 +180,7 @@ const String kCreateOperatorPresenceTable = '''
         station TEXT NOT NULL,
         last_seen_at TEXT NOT NULL,
         instance TEXT,
+        app_version TEXT,
         PRIMARY KEY (operator_id, station)
       )
 ''';

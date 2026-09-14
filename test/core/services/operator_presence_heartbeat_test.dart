@@ -35,6 +35,9 @@ void main() {
       await db.delete(OperatorPresenceRepository.tableName);
       CurrentOperator.reset();
       OperatorPresenceHeartbeat.stationNameReader = () => 'ΔΟΚΙΜΗ-01';
+      OperatorPresenceHeartbeat.instanceIdReader = () => r'C:pp.exe';
+      OperatorPresenceHeartbeat.appVersionReader = () async => '1.60.0';
+      OperatorPresenceHeartbeat.resetAppVersionCache();
     });
 
     tearDown(() {
@@ -45,6 +48,7 @@ void main() {
     tearDownAll(() async {
       OperatorPresenceHeartbeat.stationNameReader = () =>
           Platform.localHostname;
+      OperatorPresenceHeartbeat.resetAppVersionCache();
       await releaseCallLoggerTestDatabase();
     });
 
@@ -124,6 +128,47 @@ void main() {
       await heartbeat.pendingBeat;
 
       expect(await repository.getAll(), isEmpty);
+    });
+
+    test('ο χτύπος γράφει και την έκδοση που τρέχει', () async {
+      CurrentOperator.activate(_operator(7));
+
+      await heartbeat.beatOnce();
+
+      expect((await repository.getAll()).single.appVersion, '1.60.0');
+    });
+
+    test('το κανονικό κλείσιμο παραδίδει το ίχνος αμέσως', () async {
+      // Χωρίς αυτό, ο συνάδελφος που ετοιμάζεται για συντήρηση βλέπει τον
+      // χρήστη «συνδεδεμένο» για όσο κρατά το παράθυρο φρεσκάδας — ακριβώς
+      // τη στιγμή που περιμένει να αδειάσει το πεδίο.
+      CurrentOperator.activate(_operator(7));
+      await heartbeat.beatOnce();
+      expect((await repository.getAll()).single.instance, isNotNull);
+
+      await heartbeat.releaseAndStop();
+
+      final mark = (await repository.getAll()).single;
+      expect(mark.instance, isNull);
+      expect(mark.isOnlineAt(DateTime.now()), isFalse);
+    });
+
+    test('η έκδοση διαβάζεται μία φορά, όχι σε κάθε χτύπο', () async {
+      // Ο χτύπος τρέχει κάθε λεπτό όσο ζει η εφαρμογή: μια κλήση στο σύστημα
+      // ανά χτύπο θα πλήρωνε αιωνίως για μια τιμή που δεν αλλάζει ποτέ.
+      var reads = 0;
+      OperatorPresenceHeartbeat.appVersionReader = () async {
+        reads++;
+        return '1.60.0';
+      };
+      OperatorPresenceHeartbeat.resetAppVersionCache();
+      CurrentOperator.activate(_operator(7));
+
+      await heartbeat.beatOnce();
+      await heartbeat.beatOnce();
+      await heartbeat.beatOnce();
+
+      expect(reads, 1);
     });
   });
 }

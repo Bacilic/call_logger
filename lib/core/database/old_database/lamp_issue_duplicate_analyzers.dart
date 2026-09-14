@@ -290,6 +290,18 @@ class LampIssueDuplicateAnalyzers {
                 'rawSerial': rawSerial,
               },
             ),
+            LampIssueResolutionOption(
+              id: 'scientific_serial_accept_$code',
+              label: 'Αποδοχή ως σωστό · το πρόβλημα κλείνει χωρίς αλλαγή',
+              description:
+                  'Ο σειριακός είναι γνήσιος και τυχαίνει να μοιάζει με '
+                  'επιστημονική μορφή. Δεν αλλάζει τίποτα στα δεδομένα, και '
+                  'ο επόμενος έλεγχος δεν θα τον ξαναφέρει.',
+              action: LampIssueResolutionAction.autoFix,
+              metadata: const <String, Object?>{
+                'operation': 'accept_scientific_serial',
+              },
+            ),
           ],
         ),
       );

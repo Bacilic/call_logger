@@ -72,6 +72,10 @@ class LampIntegrityController {
       if (!host.mounted) return;
       await closeProgressDialog();
       await saveIntegrityStepDurations(scan);
+      // Πριν μετρήσουμε τα καινούρια, φεύγουν όσα έπαψαν να ισχύουν: αλλιώς
+      // ο μετρητής της οθόνης δείχνει προβλήματα που ο οδηγός επίλυσης δεν
+      // έχει πια να προτείνει, και το κουμπί οδηγεί σε άδεια λίστα.
+      await host.shared.repository.dropStaleScientificSerialIssues(dbPath);
       final newIssues = await host.shared.repository.filterToNewDataIssuesOnly(
         dbPath,
         scan.issues,

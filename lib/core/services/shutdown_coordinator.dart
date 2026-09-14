@@ -9,6 +9,7 @@ import '../../features/database/services/database_exit_backup.dart';
 import '../database/database_helper.dart';
 import 'crash_log_service.dart';
 import 'desktop_window_service.dart';
+import 'operator_presence_heartbeat.dart';
 
 /// Φάση γεγονότος ενός βήματος κλεισίματος.
 enum ShutdownStepPhase { started, completed, failed, interrupted }
@@ -53,6 +54,7 @@ class ShutdownStepEvent {
 class ShutdownCoordinator {
   ShutdownCoordinator({
     Future<void> Function()? persistWindowBounds,
+    Future<void> Function()? releasePresence,
     Future<void> Function()? walCheckpoint,
     Future<void> Function()? exitBackup,
     Future<void> Function()? closeConnection,
@@ -63,6 +65,7 @@ class ShutdownCoordinator {
     Future<void> Function(Duration duration)? delay,
   }) : _persistWindowBounds =
            persistWindowBounds ?? _defaultPersistWindowBounds,
+       _releasePresence = releasePresence ?? _defaultReleasePresence,
        _walCheckpoint = walCheckpoint ?? _defaultWalCheckpoint,
        _exitBackup = exitBackup ?? _defaultExitBackup,
        _closeConnection = closeConnection ?? _defaultCloseConnection,
@@ -82,6 +85,7 @@ class ShutdownCoordinator {
 
   static const List<String> stepLabels = [
     'Αποθήκευση θέσης παραθύρου',
+    'Παράδοση συνεδρίας',
     'Συγχώνευση αρχείων βάσης',
     'Αντίγραφο ασφαλείας εξόδου',
     'Κλείσιμο σύνδεσης βάσης',
@@ -89,6 +93,7 @@ class ShutdownCoordinator {
   ];
 
   final Future<void> Function() _persistWindowBounds;
+  final Future<void> Function() _releasePresence;
   final Future<void> Function() _walCheckpoint;
   final Future<void> Function() _exitBackup;
   final Future<void> Function() _closeConnection;
@@ -128,6 +133,7 @@ class ShutdownCoordinator {
 
   List<Future<void> Function()> get _actions => [
     _persistWindowBounds,
+    _releasePresence,
     _walCheckpoint,
     _exitBackup,
     _closeConnection,
@@ -284,6 +290,15 @@ class ShutdownCoordinator {
     try {
       await DesktopWindowService().persistWindowBounds(windowManager);
     } on MissingPluginException catch (_) {}
+  }
+
+  /// Το ίχνος «είμαι εδώ» χάνει τον κάτοχό του όσο η σύνδεση ζει ακόμη.
+  ///
+  /// Πριν από το checkpoint και το αντίγραφο εξόδου επίτηδες: έτσι η
+  /// παράδοση προλαβαίνει να μπει και στο αντίγραφο, αντί να γραφτεί σε βάση
+  /// που ετοιμάζεται να κλείσει.
+  static Future<void> _defaultReleasePresence() async {
+    await OperatorPresenceHeartbeat.instance.releaseAndStop();
   }
 
   static Future<void> _defaultWalCheckpoint() async {

@@ -124,7 +124,15 @@ class _DatabaseSettingsFileTabState
   }
 
   Future<void> _pickDatabasePath() async {
-    if (!await ensureDatabaseSwitchAllowed(context, ref)) return;
+    // Ο επιλογέας δεν αλλάζει τίποτα από μόνος του: για τις ανοιχτές
+    // συνεδρίες ρωτά η ίδια η εναλλαγή, αμέσως μετά την επιλογή.
+    if (!await ensureDatabaseSwitchAllowed(
+      context,
+      ref,
+      askAboutOtherSessions: false,
+    )) {
+      return;
+    }
 
     setState(() {
       _dbPathErrorMessage = null;
@@ -159,7 +167,7 @@ class _DatabaseSettingsFileTabState
           });
         },
       );
-    });
+    }, actionLabel: 'Δημιουργία νέου αρχείου βάσης');
   }
 
   @override

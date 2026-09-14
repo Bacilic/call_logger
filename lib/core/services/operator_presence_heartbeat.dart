@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:package_info_plus/package_info_plus.dart';
+
 import '../config/app_config.dart';
 import '../database/database_helper.dart';
 import '../database/operator_presence_repository.dart';
@@ -79,6 +81,35 @@ class OperatorPresenceHeartbeat {
     }
   }
 
+  /// Ποια έκδοση της εφαρμογής τρέχει. Αντικαθίσταται στα τεστ.
+  static Future<String> Function() appVersionReader = () async {
+    final info = await PackageInfo.fromPlatform();
+    return info.version;
+  };
+
+  /// Η έκδοση, διαβασμένη **μία φορά** και κρατημένη.
+  ///
+  /// Δεν αλλάζει όσο τρέχει η εφαρμογή, και ο χτύπος δεν επιτρέπεται να
+  /// πληρώνει μια κλήση στο σύστημα κάθε λεπτό για να ξαναμάθει το ίδιο.
+  /// Κενή όταν το σύστημα δεν τη δίνει — η έκδοση είναι πληροφορία άνεσης.
+  static String? _cachedAppVersion;
+
+  static Future<String> _appVersion() async {
+    final cached = _cachedAppVersion;
+    if (cached != null) return cached;
+    try {
+      final value = (await appVersionReader()).trim();
+      _cachedAppVersion = value;
+      return value;
+    } catch (_) {
+      _cachedAppVersion = '';
+      return '';
+    }
+  }
+
+  /// Ξεχνά την έκδοση που κρατήθηκε. Υπάρχει για τα τεστ.
+  static void resetAppVersionCache() => _cachedAppVersion = null;
+
   /// Αρχίζει να παρακολουθεί την ταυτότητα και να χτυπά.
   ///
   /// Ασφαλές να κληθεί πολλές φορές — η δεύτερη κλήση δεν κάνει τίποτα.
@@ -89,7 +120,7 @@ class OperatorPresenceHeartbeat {
     _onOperatorChanged();
   }
 
-  /// Σταματά τα πάντα. Καλείται στο κλείσιμο και από τα τεστ.
+  /// Σταματά τα πάντα. Καλείται από τα τεστ και από το [releaseAndStop].
   void stop() {
     _timer?.cancel();
     _timer = null;
@@ -132,8 +163,31 @@ class OperatorPresenceHeartbeat {
         operatorId: operatorId,
         station: station,
         instance: instanceId,
+        appVersion: await _appVersion(),
         at: DateTime.now(),
       );
+    } catch (e, stack) {
+      CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
+    }
+  }
+
+  /// Παραδίδει το ίχνος αυτού του αντιγράφου και σταματά τον χτύπο.
+  ///
+  /// **Μόνο στο κανονικό κλείσιμο.** Χωρίς αυτό, όποιος κλείνει σωστά την
+  /// εφαρμογή εξακολουθεί να μετράει ως ανοιχτή συνεδρία για όσο κρατά το
+  /// παράθυρο φρεσκάδας — και ο συνάδελφος που ετοιμάζεται για συντήρηση
+  /// βλέπει φάντασμα ακριβώς τη στιγμή που περιμένει να αδειάσει το πεδίο.
+  ///
+  /// **Ποτέ μοιραίο**, για τον ίδιο λόγο με τον χτύπο: το κλείσιμο δεν
+  /// σταματά επειδή το δίκτυο δεν απάντησε.
+  Future<void> releaseAndStop() async {
+    stop();
+    final holder = instanceId;
+    if (holder.isEmpty) return;
+    final db = DatabaseHelper.instance.openDatabaseOrNull;
+    if (db == null) return;
+    try {
+      await OperatorPresenceRepository(db).release(instance: holder);
     } catch (e, stack) {
       CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
     }

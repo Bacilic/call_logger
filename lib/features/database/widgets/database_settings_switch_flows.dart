@@ -34,7 +34,13 @@ mixin DatabaseSettingsSwitchFlows<T extends ConsumerStatefulWidget>
   Future<void> switchToPickedDatabasePath(String newPath) async {
     final trimmed = newPath.trim();
     if (trimmed.isEmpty || !mounted) return;
-    if (!await ensureDatabaseSwitchAllowed(context, ref)) return;
+    if (!await ensureDatabaseSwitchAllowed(
+      context,
+      ref,
+      actionLabel: 'Αλλαγή ενεργής βάσης',
+    )) {
+      return;
+    }
     if (!mounted) return;
 
     await runDatabasePathSwitch(path: trimmed, hooks: this);
@@ -66,7 +72,7 @@ mixin DatabaseSettingsSwitchFlows<T extends ConsumerStatefulWidget>
       if (toOpen != null && toOpen.isNotEmpty) {
         await runDatabasePathSwitch(path: toOpen, hooks: this);
       }
-    });
+    }, actionLabel: 'Επαναφορά από αντίγραφο');
   }
 
   @override

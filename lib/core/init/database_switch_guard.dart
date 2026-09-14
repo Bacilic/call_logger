@@ -9,6 +9,7 @@ import '../../features/calls/layout/call_form_clear.dart';
 import '../../features/calls/provider/call_entry_provider.dart';
 import '../../features/calls/provider/smart_entity_selector_provider.dart';
 import '../../features/database/providers/backup_scheduler_provider.dart';
+import '../../features/database/widgets/other_sessions_gate.dart';
 
 /// Είδος εμποδίου πριν την εναλλαγή αρχείου βάσης.
 enum DatabaseSwitchBlockerKind {
@@ -89,8 +90,18 @@ List<DatabaseSwitchBlocker> collectDatabaseSwitchBlockers(WidgetRef ref) {
 /// Καλείται ΜΟΝΟ όταν η εναλλαγή πρόκειται να επιτραπεί (`true`).
 Future<bool> _finalizeAllowedDatabaseSwitch(
   BuildContext context,
-  WidgetRef ref,
-) async {
+  WidgetRef ref, {
+  required String actionLabel,
+  bool askAboutOtherSessions = true,
+}) async {
+  // Πριν από οτιδήποτε άλλο: ποιος άλλος κρατά τη βάση ανοιχτή; Ρωτιέται
+  // **πριν** οριστικοποιηθούν οι εκκρεμείς αναιρέσεις, αλλιώς μια ακύρωση
+  // εδώ θα άφηνε πίσω της ενέργειες που δεν μπορούν πια να αναιρεθούν.
+  if (askAboutOtherSessions &&
+      !await confirmDespiteOtherSessions(context, actionLabel: actionLabel)) {
+    return false;
+  }
+  if (!context.mounted) return false;
   final labels = await ref
       .read(pendingDeferredActionsProvider.notifier)
       .settleAll();
@@ -116,9 +127,16 @@ Future<bool> _finalizeAllowedDatabaseSwitch(
 Future<bool> runGuardedDatabaseSwitch(
   BuildContext context,
   WidgetRef ref,
-  Future<void> Function() action,
-) async {
-  if (!await ensureDatabaseSwitchAllowed(context, ref)) return false;
+  Future<void> Function() action, {
+  String actionLabel = 'Αλλαγή βάσης',
+}) async {
+  if (!await ensureDatabaseSwitchAllowed(
+    context,
+    ref,
+    actionLabel: actionLabel,
+  )) {
+    return false;
+  }
   final ops = ref.read(activeCriticalOperationsProvider.notifier);
   ops.begin(CriticalOperation.databaseSwitch);
   try {
@@ -130,13 +148,25 @@ Future<bool> runGuardedDatabaseSwitch(
 }
 
 /// Επιστρέφει `true` αν επιτρέπεται να προχωρήσει η εναλλαγή βάσης.
+///
+/// Το [askAboutOtherSessions] μπαίνει `false` όταν ο έλεγχος γίνεται **πριν**
+/// από ένα ενδιάμεσο βήμα που δεν αλλάζει τίποτα — τον επιλογέα αρχείου, για
+/// παράδειγμα. Η ίδια η εναλλαγή ξαναρωτά αμέσως μετά, και δύο ίδιοι διάλογοι
+/// στη σειρά μαθαίνουν τον άνθρωπο να τους προσπερνά χωρίς να τους διαβάζει.
 Future<bool> ensureDatabaseSwitchAllowed(
   BuildContext context,
-  WidgetRef ref,
-) async {
+  WidgetRef ref, {
+  String actionLabel = 'Αλλαγή βάσης',
+  bool askAboutOtherSessions = true,
+}) async {
   final blockers = collectDatabaseSwitchBlockers(ref);
   if (blockers.isEmpty) {
-    return _finalizeAllowedDatabaseSwitch(context, ref);
+    return _finalizeAllowedDatabaseSwitch(
+      context,
+      ref,
+      actionLabel: actionLabel,
+      askAboutOtherSessions: askAboutOtherSessions,
+    );
   }
 
   final nonInterruptible = blockers
@@ -207,7 +237,12 @@ Future<bool> ensureDatabaseSwitchAllowed(
         await ref.read(pendingDeferredActionsProvider.notifier).settleAll();
         return true;
       }
-      return _finalizeAllowedDatabaseSwitch(context, ref);
+      return _finalizeAllowedDatabaseSwitch(
+        context,
+        ref,
+        actionLabel: actionLabel,
+        askAboutOtherSessions: askAboutOtherSessions,
+      );
     case _OpenCallFormGuardChoice.goToCall:
       if (context.mounted) {
         Navigator.of(

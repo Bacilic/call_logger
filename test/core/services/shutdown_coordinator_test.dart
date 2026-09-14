@@ -15,6 +15,7 @@ void main() {
 
         final coordinator = ShutdownCoordinator(
           persistWindowBounds: () async => order.add('persist'),
+          releasePresence: () async => order.add('release'),
           walCheckpoint: () async => order.add('wal'),
           exitBackup: () async => order.add('backup'),
           closeConnection: () async => order.add('closeDb'),
@@ -33,7 +34,15 @@ void main() {
 
         expect(
           order,
-          ['persist', 'wal', 'backup', 'closeDb', 'crashLog', 'terminate'],
+          [
+            'persist',
+            'release',
+            'wal',
+            'backup',
+            'closeDb',
+            'crashLog',
+            'terminate',
+          ],
           reason: greekExpectMsg(
             'Η σειρά βημάτων πρέπει να τελειώνει με crash log και μετά terminate',
           ),
@@ -55,7 +64,7 @@ void main() {
 
         expect(
           events.where((e) => e.phase == ShutdownStepPhase.completed).length,
-          5,
+          6,
         );
         expect(
           events.lastWhere((e) => e.phase == ShutdownStepPhase.started).label,
@@ -71,6 +80,7 @@ void main() {
         persistWindowBounds: () async {
           clock = clock.add(const Duration(milliseconds: 12));
         },
+        releasePresence: () async {},
         walCheckpoint: () async {
           clock = clock.add(const Duration(milliseconds: 3));
         },
@@ -97,6 +107,7 @@ void main() {
       final order = <String>[];
       final coordinator = ShutdownCoordinator(
         persistWindowBounds: () async => order.add('persist'),
+        releasePresence: () async => order.add('release'),
         walCheckpoint: () async {
           order.add('wal');
           throw StateError('wal failed');
@@ -114,6 +125,7 @@ void main() {
 
       expect(order, [
         'persist',
+        'release',
         'wal',
         'backup',
         'closeDb',
@@ -140,6 +152,7 @@ void main() {
             clock = clock.add(duration);
           },
           persistWindowBounds: () => hang.future,
+          releasePresence: () async {},
           walCheckpoint: () async {},
           exitBackup: () async {},
           closeConnection: () async {},
@@ -171,12 +184,39 @@ void main() {
       },
     );
 
+    test('η συνεδρία παραδίδεται όσο η σύνδεση με τη βάση ζει ακόμη', () async {
+      // Το ίχνος «είμαι εδώ» γράφεται στην ίδια τη βάση: αν το βήμα έμπαινε
+      // μετά το κλείσιμο της σύνδεσης, η παράδοση δεν θα γραφόταν ποτέ και ο
+      // χρήστης θα έμενε «συνδεδεμένος» επί τρία λεπτά μετά από σωστό κλείσιμο.
+      final order = <String>[];
+      final coordinator = ShutdownCoordinator(
+        persistWindowBounds: () async {},
+        releasePresence: () async => order.add('release'),
+        walCheckpoint: () async {},
+        exitBackup: () async => order.add('backup'),
+        closeConnection: () async => order.add('closeDb'),
+        closeCrashLog: () async {},
+        terminate: () {},
+      );
+
+      await coordinator.run();
+
+      expect(order.indexOf('release'), lessThan(order.indexOf('closeDb')));
+      expect(
+        order.indexOf('release'),
+        lessThan(order.indexOf('backup')),
+        reason: greekExpectMsg(
+          'Η παράδοση πρέπει να προλάβει και το αντίγραφο εξόδου',
+        ),
+      );
+    });
     test(
       'exit(0) δεν καλείται — μόνο η injectable συνάρτηση τερματισμού',
       () async {
         var terminateCalled = false;
         final coordinator = ShutdownCoordinator(
           persistWindowBounds: () async {},
+          releasePresence: () async {},
           walCheckpoint: () async {},
           exitBackup: () async {},
           closeConnection: () async {},

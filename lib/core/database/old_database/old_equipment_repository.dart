@@ -1558,8 +1558,7 @@ class OldEquipmentRepository {
     required MixedScriptFinding finding,
   }) {
     final what = switch (finding.kind) {
-      MixedScriptKind.mixedAlphabets =>
-        'Ελληνικά και λατινικά στην ίδια λέξη',
+      MixedScriptKind.mixedAlphabets => 'Ελληνικά και λατινικά στην ίδια λέξη',
       MixedScriptKind.brokenCharacter => 'Χαλασμένος χαρακτήρας',
       MixedScriptKind.digitInsideGreekWord =>
         'Ψηφίο ανάμεσα σε ελληνικά γράμματα',
@@ -1600,6 +1599,76 @@ class OldEquipmentRepository {
       );
     }
     return out;
+  }
+
+  static String _scientificSerialIssueKey(int? code, String? serial) =>
+      '${code ?? ''}|${serial ?? ''}';
+
+  /// Σβήνει ανοιχτά ευρήματα «επιστημονικής μορφής» που δεν ισχύουν πια.
+  ///
+  /// **Γιατί χρειάζεται:** ο μετρητής της οθόνης διαβάζει κατευθείαν τα
+  /// αποθηκευμένα ευρήματα, ενώ ο οδηγός επίλυσης τα ξαναελέγχει πριν τα
+  /// δείξει. Όταν μια τιμή παύει να είναι πρόβλημα — επειδή διορθώθηκε αλλού,
+  /// ή επειδή ο κανόνας έγινε αυστηρότερος — οι δύο αποκλίνουν: η οθόνη λέει
+  /// «1» και ο οδηγός δεν έχει τίποτα να δείξει. Μετρητής που δεν οδηγεί
+  /// πουθενά είναι χειρότερος από κανέναν μετρητή.
+  ///
+  /// **Δική της σύνδεση, σε λειτουργία εγγραφής.** Η σάρωση ανοίγει τη βάση
+  /// μόνο για ανάγνωση επίτηδες· μια διαγραφή από εκεί μέσα θα σκότωνε το
+  /// βήμα με σφάλμα «read-only» και ο έλεγχος θα φαινόταν χαλασμένος.
+  ///
+  /// Διαγραφή και όχι σήμανση: εύρημα που **έπαψε να ισχύει** δεν είναι
+  /// απόφαση ανθρώπου και δεν έχει αξία ως ιστορικό. Η «Αποδοχή ως σωστό»,
+  /// που είναι απόφαση, μένει άθικτη — αγγίζονται μόνο τα ανοιχτά.
+  ///
+  /// Επιστρέφει πόσα σβήστηκαν.
+  Future<int> dropStaleScientificSerialIssues(String databasePath) async {
+    final path = databasePath.trim();
+    if (path.isEmpty) return 0;
+    await _ensureDataIssueSchemaOnPath(path);
+    final db = await _databaseProvider.open(path, mode: LampDatabaseMode.write);
+
+    final equipment = await db.query(
+      'equipment',
+      columns: <String>['code', 'serial_no'],
+      where: "serial_no IS NOT NULL AND TRIM(serial_no) <> ''",
+    );
+    final stillValid = <String>{
+      for (final row in equipment)
+        if (isScientificSerial(_toText(row['serial_no'])))
+          _scientificSerialIssueKey(
+            _toInt(row['code']),
+            _toText(row['serial_no']),
+          ),
+    };
+
+    final open = await db.query(
+      'data_issues',
+      columns: <String>['id', 'row_number', 'raw_value'],
+      where: 'issue_type = ? AND COALESCE(status, ?) = ?',
+      whereArgs: <Object?>[
+        'serial_scientific_notation',
+        kDataIssueStatusOpen,
+        kDataIssueStatusOpen,
+      ],
+    );
+    final stale = <Object?>[
+      for (final row in open)
+        if (!stillValid.contains(
+          _scientificSerialIssueKey(
+            _toInt(row['row_number']),
+            _toText(row['raw_value']),
+          ),
+        ))
+          row['id'],
+    ];
+    if (stale.isEmpty) return 0;
+    final placeholders = List<String>.filled(stale.length, '?').join(',');
+    return db.delete(
+      'data_issues',
+      where: 'id IN ($placeholders)',
+      whereArgs: stale,
+    );
   }
 
   /// Ελέγχει αν υπάρχει άλλος εξοπλισμός με ίδιο serial_no (read-only).

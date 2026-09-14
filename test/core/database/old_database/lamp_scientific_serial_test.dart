@@ -29,6 +29,37 @@ void main() {
       expect(isScientificSerial('4928'), isFalse);
       expect(isScientificSerial('4,928'), isFalse);
     });
+
+    test(
+      'γνήσιος σειριακός με E ανάμεσα σε ψηφία ΔΕΝ είναι επιστημονική μορφή',
+      () {
+        // Πραγματικό παράδειγμα από τη βάση Λάμπας: κωδικός 1788, EDIMAX
+        // THREE PORTS. Ήταν το ΜΟΝΟ εύρημα του ελέγχου σε 3.155 σειριακούς —
+        // και ήταν λάθος. Παραβιάζει τη μορφή του Excel τρεις φορές: μάντισσα
+        // έξι ψηφίων χωρίς υποδιαστολή, εκθέτης χωρίς πρόσημο, και εκθέτης με
+        // αρχικά μηδενικά.
+        expect(isScientificSerial('310128E000079'), isFalse);
+      },
+    );
+
+    test('απορρίπτει μάντισσα με πάνω από ένα ψηφίο πριν την υποδιαστολή', () {
+      // Το υπολογιστικό φύλλο κανονικοποιεί πάντα σε ένα ψηφίο: 3,10128E+11.
+      expect(isScientificSerial('310128E+11'), isFalse);
+      expect(isScientificSerial('49,28E+11'), isFalse);
+    });
+
+    test('απορρίπτει εκθέτη χωρίς πρόσημο', () {
+      expect(isScientificSerial('4,928E11'), isFalse);
+    });
+
+    test('απορρίπτει εκθέτη με αρχικά μηδενικά', () {
+      expect(isScientificSerial('4,928E+011'), isFalse);
+    });
+
+    test('δέχεται ακέραια μάντισσα ενός ψηφίου', () {
+      // Σπάνιο αλλά θεμιτό: ο αριθμός είναι ακριβώς 4×10¹¹.
+      expect(isScientificSerial('4E+11'), isTrue);
+    });
   });
 
   group('scientificSerialCleanDigits', () {

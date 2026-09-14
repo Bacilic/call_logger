@@ -577,6 +577,23 @@ class LampIssueDecisionApplier {
             'σε $scientificValue (καταχώρηση νέου σειριακού).',
           ),
         );
+      case 'accept_scientific_serial':
+        // Καμία αλλαγή δεδομένων: ο σειριακός είναι γνήσιος και απλώς μοιάζει
+        // με επιστημονική μορφή.
+        //
+        // Η εκκρεμότητα **σημειώνεται**, δεν σβήνεται. Η τιμή μένει στον
+        // εξοπλισμό, οπότε ο σαρωτής θα την ξανασυναντήσει· η σημειωμένη
+        // εγγραφή είναι το μόνο ίχνος ότι κάποιος την ενέκρινε, και ο σαρωτής
+        // τη σέβεται γιατί δεν ξαναγράφει εύρημα που υπάρχει ήδη.
+        await _markIssuesAccepted(
+          txn,
+          proposal.issueIds,
+          note:
+              'Αποδεκτός σειριακός: μοιάζει με επιστημονική μορφή αλλά '
+              'είναι η γνήσια τιμή του κατασκευαστή.',
+          emit: emit,
+        );
+        return const _AppliedDecision(created: false);
       case LampIssueResolutionOperations.replaceMixedScriptWord:
         await _applyMixedScriptReplacement(txn, decision, metadata, emit);
       case LampIssueResolutionOperations.setFieldManual:
@@ -1146,8 +1163,7 @@ class LampIssueDecisionApplier {
     final word = metadata['word']?.toString();
     final rowId = _support.toInt(metadata['rowId']);
     // Ο χρήστης μπορεί να έγραψε δική του μορφή· αλλιώς ισχύει η πρόταση.
-    final replacement =
-        decision.textInput?.trim().isNotEmpty == true
+    final replacement = decision.textInput?.trim().isNotEmpty == true
         ? decision.textInput!.trim()
         : metadata['replacement']?.toString();
 

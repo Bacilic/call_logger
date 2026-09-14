@@ -12,6 +12,7 @@ class OperatorPresence {
     required this.station,
     required this.lastSeenAt,
     this.instance,
+    this.appVersion,
   });
 
   /// Κάθε πότε η ανοιχτή εφαρμογή ξαναγράφει το ίχνος της.
@@ -45,6 +46,13 @@ class OperatorPresence {
   /// κρατούσε το [onlineWindow], στον ίδιο ακριβώς υπολογιστή με τον νέο.
   final String? instance;
 
+  /// Ποια έκδοση της εφαρμογής τρέχει αυτή η συνεδρία.
+  ///
+  /// `null` όταν η γραμμή γράφτηκε πριν από την αναβάθμιση που πρόσθεσε τη
+  /// στήλη, ή όταν το σύστημα δεν έδωσε έκδοση. Είναι πληροφορία άνεσης —
+  /// τίποτα δεν κρίνεται πάνω της, γι' αυτό η απουσία της απλώς δεν γράφεται.
+  final String? appVersion;
+
   /// Θεωρείται συνδεδεμένος τη στιγμή [now];
   ///
   /// Δύο όροι, όχι ένας: το ίχνος πρέπει να είναι **φρέσκο** και να το κρατά
@@ -63,11 +71,13 @@ class OperatorPresence {
     final seen = DateTime.tryParse((map['last_seen_at'] as String?) ?? '');
     if (id is! int || station.isEmpty || seen == null) return null;
     final instance = (map['instance'] as String?)?.trim();
+    final version = (map['app_version'] as String?)?.trim();
     return OperatorPresence(
       operatorId: id,
       station: station,
       lastSeenAt: seen,
       instance: (instance == null || instance.isEmpty) ? null : instance,
+      appVersion: (version == null || version.isEmpty) ? null : version,
     );
   }
 }

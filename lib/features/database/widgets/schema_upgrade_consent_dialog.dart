@@ -11,6 +11,7 @@ import '../../../core/database/database_schema_migrations.dart';
 import '../../../core/database/database_state_notice.dart';
 import '../../../core/services/settings_service.dart';
 import '../services/database_upgrade_copy_service.dart';
+import 'other_sessions_gate.dart';
 
 /// Επιλογή χρήστη στον διάλογο συγκατάθεσης αναβάθμισης σχήματος.
 enum SchemaUpgradeConsentChoice {
@@ -151,6 +152,17 @@ Future<bool> runSchemaUpgradeConsentRecovery({
 }) async {
   final path = (result.path ?? '').trim();
   if (path.isEmpty) return false;
+
+  // Η αναβάθμιση σφραγίζει το αρχείο σε νέα έκδοση: όποιος συνάδελφος τρέχει
+  // παλαιότερη εφαρμογή δεν θα μπορεί να το ανοίξει μετά. Στην εκκίνηση η βάση
+  // δεν είναι ανοιχτή, οπότε η λίστα βγαίνει κενή και ο φρουρός σιωπά μόνος του.
+  if (!await confirmDespiteOtherSessions(
+        context,
+        actionLabel: 'Μόνιμη αναβάθμιση σχήματος',
+      ) ||
+      !context.mounted) {
+    return false;
+  }
 
   final versions = parseSchemaMismatchVersions(result);
   final choice = await askConsent(
