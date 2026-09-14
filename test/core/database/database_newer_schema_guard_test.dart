@@ -1,10 +1,14 @@
-// Φρουρός έκδοσης για βάση ΝΕΟΤΕΡΗ από την εφαρμογή.
+// Φρουρός έκδοσης σχήματος στο άνοιγμα — και προς τις δύο κατευθύνσεις.
 //
 // Το σφάλμα της οθόνης: βάση σε έκδοση 42, εφαρμογή σε 40 → ο χρήστης έβλεπε
 // «Προέκυψε σφάλμα (DatabaseInitException)» με άσχετα διαγνωστικά πρόσβασης,
 // αντί για το σαφές μήνυμα που υπήρχε ήδη γραμμένο. Ο φρουρός πρέπει να
 // σταματά ΠΡΙΝ το άνοιγμα, με το αρχείο ανέγγιχτο, με σαφές μήνυμα και με
 // αξιολόγηση του αν προσφέρεται υποβάθμιση.
+//
+// Δεύτερο σφάλμα (14/09, Δ2): αρχείο με τους πίνακες της εφαρμογής αλλά με
+// ετικέτα έκδοσης 0 περνούσε τον φρουρό ανέπαφο. Το άνοιγμα το εκλάμβανε ως
+// καινούρια βάση και σταματούσε με ωμό «table calls already exists».
 //
 //   flutter test test/core/database/database_newer_schema_guard_test.dart
 
@@ -199,6 +203,50 @@ void main() {
         expect(result.technicalCode, '45→40');
         // Η διαδρομή συμπληρώνεται από το hint όταν λείπει.
         expect(result.path, r'C:\tmp\hosp.db');
+      },
+    );
+  });
+
+  group('αρχείο χωρίς αριθμό έκδοσης', () {
+    test('πίνακες υπάρχουν, ετικέτα 0 → άρνηση στα ελληνικά, αρχείο '
+        'ανέγγιχτο', () async {
+      final dbPath = await _createNewerSchemaDb(
+        tempDir,
+        'αχρονολόγητη.db',
+        fileVersion: 0,
+      );
+
+      final before = await _bytes(dbPath);
+      final runner = await runChecksFor(dbPath);
+      final after = await _bytes(dbPath);
+
+      expect(runner.result.isSuccess, isFalse);
+      expect(
+        runner.result.recoveryKind,
+        DatabaseInitRecoveryKind.corruptedOrMigration,
+        reason: 'Οι διέξοδοι είναι άλλο αρχείο ή επαναφορά από αντίγραφο',
+      );
+      final message = runner.result.message ?? '';
+      expect(message, contains('δεν δηλώνει έκδοση σχήματος'));
+      expect(message, isNot(contains('already exists')));
+      expect(message, isNot(contains('calls')));
+      expect(after, orderedEquals(before));
+    });
+
+    test(
+      'αρχείο SQLite χωρίς πίνακες με ετικέτα 0 είναι νόμιμη νέα βάση',
+      () async {
+        // Η ίδια ετικέτα, εντελώς άλλο πράγμα: εδώ δεν υπάρχει τίποτα να
+        // ξαναφτιαχτεί, και η δημιουργία σχήματος οφείλει να προχωρήσει.
+        final dbPath = p.join(tempDir.path, 'καινούρια.db');
+        final db = await openDatabase(dbPath, singleInstance: false);
+        await db.execute('CREATE TABLE προσωρινός (x INTEGER)');
+        await db.execute('DROP TABLE προσωρινός');
+        await db.close();
+
+        final runner = await runChecksFor(dbPath);
+
+        expect(runner.result.isSuccess, isTrue);
       },
     );
   });

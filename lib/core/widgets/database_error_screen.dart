@@ -78,12 +78,10 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
         msg.contains('αναβάθμιση του σχήματος της βάσης δεδομένων')) {
       return true;
     }
-    final det = widget.result.details ?? '';
-    if (det.contains('Δοκιμάστε να διαγράψετε') &&
-        det.contains('Data Base') &&
-        det.contains('Εντολή SQL (Causing statement)')) {
-      return true;
-    }
+    // Δεν υπάρχει εφεδρεία που να διαβάζει το ΚΕΙΜΕΝΟ της συμβουλής: κάθε
+    // μήνυμα που τη συνοδεύει πιάνεται ήδη παραπάνω, και μια διατύπωση δεν
+    // επιτρέπεται να κρατά την ύπαρξη των κουμπιών διεξόδου — αλλάζοντας
+    // λέξεις θα τα έσβηνε σιωπηλά.
     return false;
   }
 
@@ -858,7 +856,12 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final path = widget.result.path ?? widget.dbPath;
-    final details = widget.result.details?.trim();
+    // Η συμβουλή προς τον χειριστή και τα διαγνωστικά ζουν στο ίδιο πεδίο.
+    // Ως τις 14/09/2026 τυπώνονταν μαζί, οπότε μέσα στη συμβουλή φαίνονταν
+    // αυτούσιοι οι δείκτες («--- Diagnostics ---») και η ωμή εντολή SQL.
+    final split = splitDatabaseDetails(widget.result.details);
+    final details = split.advice;
+    final diagnostics = split.diagnostics;
     final original = widget.result.originalExceptionText?.trim();
     final stack = widget.result.stackTraceText?.trim();
 
@@ -909,13 +912,31 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
                           const SizedBox(height: 18),
                           _buildMissingDatabaseGuidance(theme),
                         ],
-                        if (details != null && details.isNotEmpty) ...[
+                        if (details.isNotEmpty) ...[
                           const SizedBox(height: 16),
                           SelectableText(
                             details,
                             style: theme.textTheme.bodyLarge?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                               height: 1.4,
+                            ),
+                          ),
+                        ],
+                        if (diagnostics.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            'Διαγνωστικά',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          SelectableText(
+                            diagnostics,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontFamily: 'monospace',
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.35,
                             ),
                           ),
                         ],

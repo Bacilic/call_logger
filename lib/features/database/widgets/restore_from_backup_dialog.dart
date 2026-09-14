@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_file_classifier.dart';
+import '../../../core/database/database_open_trial.dart';
 import '../services/backup_zip_inventory.dart';
 import '../services/backup_zip_manifest.dart';
 import '../services/database_file_replacement.dart';
@@ -21,6 +22,7 @@ Future<RestoreSelection?> showRestoreFromBackupDialog({
   required DatabaseFileProfile? currentProfile,
   required DatabaseFileProfile backupProfile,
   required BackupZipManifest manifest,
+  DatabaseOpenTrial? openTrial,
   required String currentDatabasePath,
   required List<RestoreDestinationChoice> availableDestinations,
   required BackupZipPortablePresence portablePresence,
@@ -43,6 +45,7 @@ Future<RestoreSelection?> showRestoreFromBackupDialog({
     builder: (ctx) => _RestoreFromBackupDialog(
       currentProfile: currentProfile,
       backupProfile: backupProfile,
+      openTrial: openTrial,
       manifest: manifest,
       currentDatabasePath: currentDatabasePath,
       availableDestinations: availableDestinations,
@@ -92,6 +95,7 @@ class _RestoreFromBackupDialog extends StatefulWidget {
     required this.currentProfile,
     required this.backupProfile,
     required this.manifest,
+    this.openTrial,
     required this.currentDatabasePath,
     required this.availableDestinations,
     required this.initialDestination,
@@ -105,6 +109,10 @@ class _RestoreFromBackupDialog extends StatefulWidget {
 
   final DatabaseFileProfile? currentProfile;
   final DatabaseFileProfile backupProfile;
+
+  /// Τι απάντησε το δοκιμαστικό άνοιγμα της βάσης του αντιγράφου. `null`
+  /// σημαίνει «δεν έγινε δοκιμή», ποτέ «πέρασε».
+  final DatabaseOpenTrial? openTrial;
   final BackupZipManifest manifest;
   final String currentDatabasePath;
   final List<RestoreDestinationChoice> availableDestinations;
@@ -131,7 +139,10 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
   void initState() {
     super.initState();
     _destination = widget.initialDestination;
-    _verdict = judgeBackupDatabase(widget.backupProfile);
+    _verdict = judgeBackupDatabase(
+      widget.backupProfile,
+      openTrial: widget.openTrial,
+    );
     // Ό,τι θέλει δεύτερη επιβεβαίωση δεν προεπιλέγεται. Η επικίνδυνη ενέργεια
     // απαιτεί κίνηση του χρήστη — δεν του συμβαίνει επειδή πάτησε «Επαναφορά».
     _restoreDatabase = _verdict.restorable && !_verdict.requiresConfirmation;
@@ -185,6 +196,9 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
               Text('Τι θα επαναφερθεί;', style: theme.textTheme.titleSmall),
               const SizedBox(height: 8),
               _buildSelectionList(theme),
+              if (!_verdict.restorable &&
+                  (_verdict.technicalDetail?.trim().isNotEmpty ?? false))
+                _buildRefusalTechnicalDetail(theme),
               const SizedBox(height: 8),
               Text(
                 'Οι προσωπικές σας ρυθμίσεις ταξιδεύουν μέσα στη βάση — '
@@ -306,6 +320,33 @@ class _RestoreFromBackupDialogState extends State<_RestoreFromBackupDialog> {
       RestoreSelection(
         destination: _restoreDatabase ? _destination : null,
         parts: {..._parts},
+      ),
+    );
+  }
+
+  /// Το ωμό κείμενο πίσω από μια άρνηση — ένα πάτημα μακριά.
+  ///
+  /// Ο χρήστης διαβάζει την ελληνική πρόταση και σταματά εκεί. Όποιος κληθεί
+  /// να βοηθήσει χρειάζεται ακριβώς το μήνυμα του SQLite, και είναι η μόνη
+  /// πρόταση που λέει τι ακριβώς σταμάτησε.
+  Widget _buildRefusalTechnicalDetail(ThemeData theme) {
+    return Theme(
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        title: Text('Τεχνικές λεπτομέρειες', style: theme.textTheme.labelLarge),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(
+            _verdict.technicalDetail!.trim(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+              color: theme.colorScheme.onSurfaceVariant,
+              height: 1.35,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -697,6 +738,16 @@ class _SelectionRow extends StatelessWidget {
   }
 }
 
+/// Τι γράφεται όταν η τιμή απλώς λείπει.
+const String dashPlaceholder = '—';
+
+/// Τι γράφεται όταν η τιμή δεν **διαβάστηκε**.
+///
+/// Ξεχωριστό από το [dashPlaceholder] με ρητή απόφαση Διευθυντή (14/09/2026):
+/// ως τότε και τα δύο έβγαιναν «—», και ο χειριστής αποφάσιζε την επαναφορά
+/// χωρίς να ξέρει αν το αντίγραφο είναι άδειο ή σπασμένο.
+const String unreadablePlaceholder = 'δεν διαβάζεται';
+
 class _ComparisonTable extends StatelessWidget {
   const _ComparisonTable({required this.current, required this.backup});
 
@@ -706,13 +757,18 @@ class _ComparisonTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    Widget cell(String text, {bool header = false}) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-      child: Text(
-        text,
-        style: header ? theme.textTheme.labelLarge : theme.textTheme.bodyMedium,
-      ),
-    );
+    Widget cell(String text, {bool header = false, bool unreadable = false}) =>
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+          child: Text(
+            text,
+            style: header
+                ? theme.textTheme.labelLarge
+                : theme.textTheme.bodyMedium?.copyWith(
+                    color: unreadable ? theme.colorScheme.error : null,
+                  ),
+          ),
+        );
 
     return Table(
       columnWidths: const {
@@ -728,19 +784,24 @@ class _ComparisonTable extends StatelessWidget {
             cell(_headerWithVersion('Αντίγραφο', backup), header: true),
           ],
         ),
-        _row('Κλήσεις', current?.callCount, backup.callCount, cell),
-        _row('Υπάλληλοι', current?.userCount, backup.userCount, cell),
+        _row('Κλήσεις', DatabaseProfileMetric.calls, (p) => p.callCount, cell),
+        _row(
+          'Υπάλληλοι',
+          DatabaseProfileMetric.users,
+          (p) => p.userCount,
+          cell,
+        ),
         _row(
           'Εξοπλισμός',
-          current?.equipmentCount,
-          backup.equipmentCount,
+          DatabaseProfileMetric.equipment,
+          (p) => p.equipmentCount,
           cell,
         ),
         TableRow(
           children: [
             cell('Τελευταία κλήση'),
-            cell(_dateOrDash(current?.latestCallDate)),
-            cell(_dateOrDash(backup.latestCallDate)),
+            _dateCell(current, cell),
+            _dateCell(backup, cell),
           ],
         ),
       ],
@@ -749,17 +810,36 @@ class _ComparisonTable extends StatelessWidget {
 
   TableRow _row(
     String label,
-    int? currentValue,
-    int? backupValue,
-    Widget Function(String, {bool header}) cell,
+    DatabaseProfileMetric metric,
+    int? Function(DatabaseFileProfile) value,
+    Widget Function(String, {bool header, bool unreadable}) cell,
   ) {
+    Widget valueCell(DatabaseFileProfile? profile) {
+      if (profile == null) return cell(dashPlaceholder);
+      if (profile.isUnreadable(metric)) {
+        return cell(unreadablePlaceholder, unreadable: true);
+      }
+      final count = value(profile);
+      return cell(count == null ? dashPlaceholder : '$count');
+    }
+
     return TableRow(
-      children: [
-        cell(label),
-        cell(_countOrDash(currentValue)),
-        cell(_countOrDash(backupValue)),
-      ],
+      children: [cell(label), valueCell(current), valueCell(backup)],
     );
+  }
+
+  /// Η ημερομηνία είναι η γραμμή όπου το κενό έχει **δύο** νόμιμες αιτίες:
+  /// «καμία κλήση» σε υγιή βάση, και «δεν διαβάστηκε» σε φθαρμένη.
+  Widget _dateCell(
+    DatabaseFileProfile? profile,
+    Widget Function(String, {bool header, bool unreadable}) cell,
+  ) {
+    if (profile == null) return cell(dashPlaceholder);
+    if (profile.isUnreadable(DatabaseProfileMetric.latestCall)) {
+      return cell(unreadablePlaceholder, unreadable: true);
+    }
+    final trimmed = profile.latestCallDate?.trim() ?? '';
+    return cell(trimmed.isEmpty ? dashPlaceholder : trimmed);
   }
 
   /// «Τρέχουσα (έκδοση 59)» — η ασυμβατότητα σχήματος πρέπει να φαίνεται
@@ -768,12 +848,5 @@ class _ComparisonTable extends StatelessWidget {
     final version = profile?.userVersion;
     if (version == null || version <= 0) return label;
     return '$label (έκδ. $version)';
-  }
-
-  String _countOrDash(int? value) => value == null ? '—' : '$value';
-
-  String _dateOrDash(String? value) {
-    final trimmed = value?.trim() ?? '';
-    return trimmed.isEmpty ? '—' : trimmed;
   }
 }

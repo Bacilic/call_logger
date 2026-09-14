@@ -52,26 +52,32 @@ void main() {
   });
 
   group('όταν δεν υπάρχει αρχείο να προταθεί', () {
-    test('χωρίς ορισμένο φάκελο, το μήνυμα δεν μιλά για φάκελο που δεν υπάρχει', () async {
-      final text = await BackupRestoreTooltipBuilder.build(
-        destinationDirectory: '   ',
-        dbBaseName: 'Hospital',
-      );
-      expect(text, contains('Δεν έχει οριστεί φάκελος'));
-      expect(text, contains(BackupRestoreTooltipBuilder.chooseFreelyHint));
-    });
+    test(
+      'χωρίς ορισμένο φάκελο, το μήνυμα δεν μιλά για φάκελο που δεν υπάρχει',
+      () async {
+        final text = await BackupRestoreTooltipBuilder.build(
+          destinationDirectory: '   ',
+          dbBaseName: 'Hospital',
+        );
+        expect(text, contains('Δεν έχει οριστεί φάκελος'));
+        expect(text, contains(BackupRestoreTooltipBuilder.chooseFreelyHint));
+      },
+    );
 
-    test('φάκελος που δεν υπάρχει ξεχωρίζει από φάκελο χωρίς αντίγραφα', () async {
-      final missing = await BackupRestoreTooltipBuilder.build(
-        destinationDirectory: p.join(_folder.path, 'δεν-υπάρχει'),
-        dbBaseName: 'Hospital',
-      );
-      expect(missing, contains('δεν είναι προσβάσιμος'));
+    test(
+      'φάκελος που δεν υπάρχει ξεχωρίζει από φάκελο χωρίς αντίγραφα',
+      () async {
+        final missing = await BackupRestoreTooltipBuilder.build(
+          destinationDirectory: p.join(_folder.path, 'δεν-υπάρχει'),
+          dbBaseName: 'Hospital',
+        );
+        expect(missing, contains('δεν είναι προσβάσιμος'));
 
-      final empty = await _tooltip();
-      expect(empty, contains('κανένα αρχείο .zip'));
-      expect(empty, isNot(contains('δεν είναι προσβάσιμος')));
-    });
+        final empty = await _tooltip();
+        expect(empty, contains('κανένα αρχείο .zip'));
+        expect(empty, isNot(contains('δεν είναι προσβάσιμος')));
+      },
+    );
 
     test('αρχεία που δεν είναι .zip δεν μετρούν ως αντίγραφα', () async {
       _write('Hospital_2026-09-13_07-15.db');
@@ -79,12 +85,15 @@ void main() {
       expect(await _tooltip(), contains('κανένα αρχείο .zip'));
     });
 
-    test('κάθε αδιέξοδο κλείνει με την παρότρυνση ελεύθερης επιλογής', () async {
-      expect(
-        await _tooltip(),
-        contains(BackupRestoreTooltipBuilder.chooseFreelyHint),
-      );
-    });
+    test(
+      'κάθε αδιέξοδο κλείνει με την παρότρυνση ελεύθερης επιλογής',
+      () async {
+        expect(
+          await _tooltip(),
+          contains(BackupRestoreTooltipBuilder.chooseFreelyHint),
+        );
+      },
+    );
   });
 
   group('το πλήθος μετράει ΟΛΑ τα αντίγραφα, όχι μόνο της τρέχουσας βάσης', () {
@@ -107,14 +116,17 @@ void main() {
       expect(text, contains('κανένα της βάσης «Hospital»'));
     });
 
-    test('όταν όλα αφορούν την τρέχουσα βάση, η διάκριση θα ήταν θόρυβος', () async {
-      _write('Hospital_2026-09-13_07-15.zip');
-      _write('Hospital_2026-09-12_07-15.zip');
+    test(
+      'όταν όλα αφορούν την τρέχουσα βάση, η διάκριση θα ήταν θόρυβος',
+      () async {
+        _write('Hospital_2026-09-13_07-15.zip');
+        _write('Hospital_2026-09-12_07-15.zip');
 
-      final text = await _tooltip();
-      expect(text, contains('2 αντίγραφα στον φάκελο'));
-      expect(text, isNot(contains('της βάσης')));
-    });
+        final text = await _tooltip();
+        expect(text, contains('2 αντίγραφα στον φάκελο'));
+        expect(text, isNot(contains('της βάσης')));
+      },
+    );
   });
 
   group('ποιο αρχείο προτείνεται πρώτο', () {
@@ -156,46 +168,89 @@ void main() {
     });
   });
 
-  group('οι ετικέτες περιεχομένου είναι οι ίδιες με τον διάλογο επαναφοράς', () {
-    test('κάθε φάκελος του αντιγράφου δίνει τη δική του ετικέτα', () async {
-      final zip = _writeZip('Hospital_2026-09-13_07-15.zip', [
-        'Hospital.db',
-        '${BuildingMapStorage.backupZipMapsFolderName}/a.webp',
-        '${AppConfig.portableImagesDirName}/tool.png',
-        '${AppConfig.portableDictionariesDirName}/el.json',
-        '${PortableLampStorage.backupZipLampDbFolderName}/lampa.db',
-      ]);
+  group(
+    'οι ετικέτες περιεχομένου είναι οι ίδιες με τον διάλογο επαναφοράς',
+    () {
+      test('κάθε φάκελος του αντιγράφου δίνει τη δική του ετικέτα', () async {
+        final zip = _writeZip('Hospital_2026-09-13_07-15.zip', [
+          'Hospital.db',
+          '${BuildingMapStorage.backupZipMapsFolderName}/a.webp',
+          '${AppConfig.portableImagesDirName}/tool.png',
+          '${AppConfig.portableDictionariesDirName}/el.json',
+          '${PortableLampStorage.backupZipLampDbFolderName}/lampa.db',
+        ]);
 
-      final labels = await BackupRestoreTooltipBuilder.describeZipRestoreLabels(
-        zip,
+        final contents = await BackupRestoreTooltipBuilder.describeZipContents(
+          zip,
+        );
+        expect(contents.problem, isNull);
+        expect(contents.labels, [
+          'Βάση δεδομένων',
+          'Κατόψεις κτιρίων',
+          'Εικονίδια εργαλείων και χρηστών',
+          'Λεξικό',
+          'Βάση Λάμπας',
+        ]);
+      });
+
+      test('η βάση της Λάμπας δεν περνά για βάση της εφαρμογής', () async {
+        final zip = _writeZip('Hospital_2026-09-13_07-15.zip', [
+          '${PortableLampStorage.backupZipLampDbFolderName}/lampa.db',
+        ]);
+
+        final contents = await BackupRestoreTooltipBuilder.describeZipContents(
+          zip,
+        );
+        expect(contents.labels, ['Βάση Λάμπας']);
+      });
+
+      test(
+        'χαλασμένο αρχείο: η υπόδειξη το λέει, δεν υπόσχεται βάση',
+        () async {
+          // Ως τις 14/09 η λίστα περιεχομένων έβγαινε κενή και μια εφεδρεία
+          // γέμιζε τη θέση με «Βάση δεδομένων» — υπόσχεση για ό,τι ακριβώς δεν
+          // μπορεί να δοθεί. Το τεστ φύλαγε τότε αυτή τη συμπεριφορά.
+          _write('Hospital_2026-09-13_07-15.zip');
+          final text = await _tooltip();
+          expect(text, contains('1 αντίγραφο στον φάκελο'));
+          expect(
+            text,
+            isNot(contains('Βάση δεδομένων')),
+            reason: 'Το αρχείο δεν διαβάζεται — δεν ξέρουμε τι έχει μέσα',
+          );
+          expect(text, isNot(contains('Περιέχει:')));
+          expect(text, contains('δεν έχει τη μορφή'));
+          expect(
+            text,
+            contains(BackupRestoreTooltipBuilder.chooseFreelyHint),
+            reason: 'Η υπόδειξη δεν σταματά χωρίς διέξοδο',
+          );
+        },
       );
-      expect(labels, [
-        'Βάση δεδομένων',
-        'Κατόψεις κτιρίων',
-        'Εικονίδια εργαλείων και χρηστών',
-        'Λεξικό',
-        'Βάση Λάμπας',
-      ]);
-    });
 
-    test('η βάση της Λάμπας δεν περνά για βάση της εφαρμογής', () async {
-      final zip = _writeZip('Hospital_2026-09-13_07-15.zip', [
-        '${PortableLampStorage.backupZipLampDbFolderName}/lampa.db',
-      ]);
+      test('κομμένο zip: η υπόδειξη λέει ότι είναι χαλασμένο', () async {
+        final archive = Archive();
+        archive.addFile(ArchiveFile('Hospital.db', 3, <int>[1, 2, 3]));
+        final bytes = ZipEncoder().encode(archive);
+        File(
+          p.join(_folder.path, 'Hospital_2026-09-13_07-15.zip'),
+        ).writeAsBytesSync(bytes.sublist(0, bytes.length ~/ 2));
 
-      final labels = await BackupRestoreTooltipBuilder.describeZipRestoreLabels(
-        zip,
-      );
-      expect(labels, ['Βάση Λάμπας']);
-    });
+        final text = await _tooltip();
+        expect(text, contains('χαλασμένο'));
+        expect(text, isNot(contains('Βάση δεδομένων')));
+      });
 
-    test('χαλασμένο αρχείο δεν ρίχνει την υπόδειξη', () async {
-      _write('Hospital_2026-09-13_07-15.zip');
-      final text = await _tooltip();
-      expect(text, contains('1 αντίγραφο στον φάκελο'));
-      expect(text, contains('Βάση δεδομένων'));
-    });
-  });
+      test('έγκυρο zip χωρίς τίποτα δικό μας: το λέει κι αυτό', () async {
+        _writeZip('Hospital_2026-09-13_07-15.zip', const <String>[
+          'τυχαίο/αρχείο.txt',
+        ]);
+        final text = await _tooltip();
+        expect(text, contains('δεν περιέχει τίποτα'));
+        expect(text, isNot(contains('Βάση δεδομένων')));
+      });
+    },
+  );
 
   group('η κατάσταση της άλλης καρτέλας ΔΕΝ άλλαξε', () {
     test('εκεί μετρούν μόνο τα αντίγραφα της τρέχουσας βάσης', () async {

@@ -68,5 +68,57 @@ void main() {
       expect(message, startsWith('Απρόβλεπτο σφάλμα. Τεχνικές λεπτομέρειες:'));
       expect(message, contains('xyz_unique_detail_token_for_support'));
     });
+
+    group('φθορά περιεχομένου', () {
+      // Το πραγματικό μήνυμα της οθόνης «Βάση Δεδομένων» (13/09): από πάνω
+      // «η σύνδεση πέτυχε», από κάτω τρεις σειρές αγγλικού SQL.
+      const raw =
+          'SqfliteFfiException(sqlite_error: 11, SqliteException(11): while '
+          'selecting from statement, database disk image is malformed, '
+          'malformed database (code 11) Causing statement: '
+          'SELECT COUNT(*) AS c FROM "audit_log"';
+
+      test('το «malformed» γίνεται ελληνική πρόταση, χωρίς ωμό SQL', () {
+        final message = humanizeUserFacingError(Exception(raw));
+
+        expect(message, contains('δεν διαβάζεται'));
+        expect(message, contains('αντίγραφο ασφαλείας'));
+        for (final word in const <String>[
+          'malformed',
+          'SELECT',
+          'sqlite',
+          'Causing',
+        ]) {
+          expect(message, isNot(contains(word)));
+        }
+      });
+
+      test('δεν ισχυρίζεται ότι η σύνδεση απέτυχε', () {
+        // Η αντίφαση που γέννησε το εύρημα: η σύνδεση ΟΝΤΩΣ πέτυχε. Το
+        // μήνυμα οφείλει να συμφωνεί με την ένδειξη από πάνω, όχι να τη
+        // διαψεύδει.
+        final message = humanizeUserFacingError(Exception(raw));
+        expect(message, startsWith('Η βάση απαντά'));
+      });
+
+      test('δεν ισχυρίζεται την ΑΙΤΙΑ — η ίδια φωνή έχει δύο γονείς', () {
+        // Το ίδιο μήνυμα βγάζει και αρχείο που αντικαταστάθηκε κάτω από
+        // ανοιχτή σύνδεση, που θεραπεύεται με επανεκκίνηση. Η οριστική
+        // ενέργεια μένει δεύτερη και υπό όρο.
+        final message = humanizeUserFacingError(Exception(raw));
+        expect(message, contains('Αν το πρόβλημα συνεχιστεί'));
+        expect(message, isNot(contains('φθορά στο αρχείο')));
+      });
+
+      test('«invalid rootpage»: ίδια οικογένεια, ίδιο μήνυμα', () {
+        final message = humanizeUserFacingError(
+          Exception(
+            'DatabaseException(malformed database schema '
+            '(call_external_links) - invalid rootpage)',
+          ),
+        );
+        expect(message, contains('δεν διαβάζεται'));
+      });
+    });
   });
 }

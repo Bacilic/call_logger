@@ -109,12 +109,20 @@ class OldIntegrityScanResult {
     this.steps = const <OldIntegrityScanStepState>[],
     this.cancelled = false,
     this.stoppedAfterError = false,
+    this.checkedIssueTypes = const <String>{},
   });
 
   final List<Map<String, Object?>> issues;
   final List<OldIntegrityScanStepState> steps;
   final bool cancelled;
   final bool stoppedAfterError;
+
+  /// Τα είδη προβλημάτων για τα οποία το [issues] είναι **πλήρης** εικόνα.
+  ///
+  /// Μόνο βήματα που ολοκληρώθηκαν με επιτυχία μπαίνουν εδώ, και μόνο όσα
+  /// επιστρέφουν ό,τι βρίσκουν χωρίς φίλτρο. Ό,τι λείπει από αυτό το σύνολο
+  /// δεν επιτρέπεται να κριθεί ως ξεπερασμένο: η άγνοια δεν είναι απόδειξη.
+  final Set<String> checkedIssueTypes;
 
   int get totalCount => issues.length;
   int get totalSteps => steps.length;
@@ -1001,11 +1009,20 @@ class OldEquipmentRepository {
       bool cancelled = false,
       bool stoppedAfterError = false,
     }) {
+      // Η απάντηση στο «τι κάλυψε πραγματικά αυτή η σάρωση» χτίζεται εδώ, από
+      // την κατάσταση των ίδιων των βημάτων — όχι από τα ευρήματα, που σε ένα
+      // υγιές αρχείο είναι σωστά άδεια.
+      final checked = <String>{
+        for (var i = 0; i < specs.length && i < steps.length; i++)
+          if (steps[i].status == OldIntegrityStepStatus.success)
+            ...specs[i].ownedIssueTypes,
+      };
       return OldIntegrityScanResult(
         issues: findings,
         steps: List<OldIntegrityScanStepState>.unmodifiable(steps),
         cancelled: cancelled,
         stoppedAfterError: stoppedAfterError,
+        checkedIssueTypes: Set<String>.unmodifiable(checked),
       );
     }
 
@@ -1094,6 +1111,13 @@ class OldEquipmentRepository {
         label:
             'Έλεγχος μη αριθμητικών / ασύμβατων κλειδιών (ίδιο με εισαγωγή Excel)',
         weight: 2,
+        // ΚΕΝΟ, και όχι από παράλειψη: αυτό το βήμα ομαδοποιεί ανά κακή τιμή
+        // και εξαιρεί ρητά ό,τι έχει ήδη καταγραφεί (`existingFkFingerprints`).
+        // Η έξοδός του είναι «μόνο τα νέα», ποτέ πλήρης εικόνα — καθάρισμα με
+        // βάση αυτήν θα έσβηνε κάθε υπάρχον εύρημα κλειδιού. Τα φαντάσματα
+        // αυτών των δύο ειδών τα καθαρίζει ο οδηγός επίλυσης, που ξαναελέγχει
+        // ένα-ένα τα ανοιχτά.
+        ownedIssueTypes: <String>{},
         runner: (db, createdAt, token) => _scanImportParityForeignKeys(
           db,
           createdAt,
@@ -1105,48 +1129,65 @@ class OldEquipmentRepository {
         id: 'duplicate_asset_no',
         label: 'Έλεγχος διπλότυπων αριθμών παγίου',
         weight: 1,
+        ownedIssueTypes: const <String>{'duplicate_asset_no'},
         runner: _scanDuplicateAssets,
       ),
       _IntegrityScanStepSpec(
         id: 'duplicate_model_serial',
         label: 'Έλεγχος διπλότυπων συνδυασμών μοντέλου / σειριακού',
         weight: 1,
+        ownedIssueTypes: const <String>{'duplicate_model_serial'},
         runner: _scanDuplicateModelSerial,
       ),
       _IntegrityScanStepSpec(
         id: 'serial_scientific_notation',
         label: 'Έλεγχος σειριακών σε επιστημονική μορφή',
         weight: 1,
+        ownedIssueTypes: const <String>{'serial_scientific_notation'},
         runner: _scanScientificSerial,
       ),
       _IntegrityScanStepSpec(
         id: 'set_master_self_reference',
         label: 'Έλεγχος κύριου εξοπλισμού που δείχνει στον ίδιο εξοπλισμό',
         weight: 1,
+        ownedIssueTypes: const <String>{'set_master_self_reference'},
         runner: _scanSelfMaster,
       ),
       _IntegrityScanStepSpec(
         id: 'set_master_missing_target',
         label: 'Έλεγχος κύριου εξοπλισμού χωρίς υπαρκτό στόχο',
         weight: 1,
+        ownedIssueTypes: const <String>{'set_master_missing_target'},
         runner: _scanMissingMaster,
       ),
       _IntegrityScanStepSpec(
         id: 'set_master_cycle',
         label: 'Έλεγχος κύκλων ιεραρχίας κύριου εξοπλισμού',
         weight: 4,
+        ownedIssueTypes: const <String>{'set_master_cycle'},
         runner: _scanSetMasterCycles,
       ),
       _IntegrityScanStepSpec(
         id: 'network_data',
         label: 'Έλεγχος δεδομένων δικτύου (IP, ονόματα, μορφή)',
         weight: 1,
+        ownedIssueTypes: const <String>{
+          'network_duplicate_ip',
+          'network_duplicate_name',
+          'network_invalid_ip',
+          'network_name_code_mismatch',
+        },
         runner: _scanNetworkData,
       ),
       _IntegrityScanStepSpec(
         id: 'mixed_script',
         label: 'Έλεγχος αλλοιωμένων χαρακτήρων (ελληνικά / λατινικά)',
         weight: 3,
+        ownedIssueTypes: const <String>{
+          'mixed_script_alphabets',
+          'mixed_script_broken_char',
+          'mixed_script_digit_in_greek',
+        },
         runner: _scanMixedScript,
       ),
     ];
@@ -1601,72 +1642,68 @@ class OldEquipmentRepository {
     return out;
   }
 
-  static String _scientificSerialIssueKey(int? code, String? serial) =>
-      '${code ?? ''}|${serial ?? ''}';
-
-  /// Σβήνει ανοιχτά ευρήματα «επιστημονικής μορφής» που δεν ισχύουν πια.
+  /// Σβήνει τα ανοιχτά ευρήματα σάρωσης που **έπαψαν να ισχύουν**.
   ///
-  /// **Γιατί χρειάζεται:** ο μετρητής της οθόνης διαβάζει κατευθείαν τα
-  /// αποθηκευμένα ευρήματα, ενώ ο οδηγός επίλυσης τα ξαναελέγχει πριν τα
-  /// δείξει. Όταν μια τιμή παύει να είναι πρόβλημα — επειδή διορθώθηκε αλλού,
-  /// ή επειδή ο κανόνας έγινε αυστηρότερος — οι δύο αποκλίνουν: η οθόνη λέει
-  /// «1» και ο οδηγός δεν έχει τίποτα να δείξει. Μετρητής που δεν οδηγεί
-  /// πουθενά είναι χειρότερος από κανέναν μετρητή.
+  /// Ο κατάλογος προβλημάτων είναι εικόνα της βάσης ΤΩΡΑ, όχι αρχείο όσων
+  /// βρέθηκαν κάποτε. Όσο η σάρωση μόνο πρόσθετε, ένα εύρημα που γράφτηκε μία
+  /// φορά έμενε για πάντα: ο μετρητής έδειχνε προβλήματα που ο οδηγός
+  /// επίλυσης δεν είχε πια τι να προτείνει γι' αυτά.
   ///
-  /// **Δική της σύνδεση, σε λειτουργία εγγραφής.** Η σάρωση ανοίγει τη βάση
-  /// μόνο για ανάγνωση επίτηδες· μια διαγραφή από εκεί μέσα θα σκότωνε το
-  /// βήμα με σφάλμα «read-only» και ο έλεγχος θα φαινόταν χαλασμένος.
+  /// Τρεις φρουροί, και κανένας δεν είναι διακοσμητικός:
   ///
-  /// Διαγραφή και όχι σήμανση: εύρημα που **έπαψε να ισχύει** δεν είναι
-  /// απόφαση ανθρώπου και δεν έχει αξία ως ιστορικό. Η «Αποδοχή ως σωστό»,
-  /// που είναι απόφαση, μένει άθικτη — αγγίζονται μόνο τα ανοιχτά.
+  /// - **[checkedIssueTypes]** — μόνο είδη που ένα βήμα ολοκλήρωσε με
+  ///   επιτυχία. Βήμα που ακυρώθηκε ή έσκασε δεν έχει γνώμη, και η σιωπή του
+  ///   δεν σημαίνει «καθάρισε».
+  /// - **`origin = integrity_scan`** — ό,τι δεν γέννησε η σάρωση δεν της
+  ///   ανήκει. Τα ευρήματα της εισαγωγής Excel και τα χειροκίνητα μένουν.
+  /// - **`status = open`** — τα σημειωμένα ως αποδεκτά ή αναβληθέντα είναι
+  ///   **αποφάσεις του χρήστη**, και δεν τις πετάει μια σάρωση.
   ///
-  /// Επιστρέφει πόσα σβήστηκαν.
-  Future<int> dropStaleScientificSerialIssues(String databasePath) async {
+  /// Το [freshIssues] είναι η πλήρης εικόνα των βημάτων που έτρεξαν: ό,τι
+  /// λείπει από εκεί, λείπει επειδή δεν υπάρχει πια.
+  Future<int> dropStaleIntegrityIssues(
+    String databasePath, {
+    required Set<String> checkedIssueTypes,
+    required List<Map<String, Object?>> freshIssues,
+  }) async {
     final path = databasePath.trim();
-    if (path.isEmpty) return 0;
+    if (path.isEmpty || checkedIssueTypes.isEmpty) return 0;
     await _ensureDataIssueSchemaOnPath(path);
     final db = await _databaseProvider.open(path, mode: LampDatabaseMode.write);
 
-    final equipment = await db.query(
-      'equipment',
-      columns: <String>['code', 'serial_no'],
-      where: "serial_no IS NOT NULL AND TRIM(serial_no) <> ''",
-    );
-    final stillValid = <String>{
-      for (final row in equipment)
-        if (isScientificSerial(_toText(row['serial_no'])))
-          _scientificSerialIssueKey(
-            _toInt(row['code']),
-            _toText(row['serial_no']),
-          ),
+    final stillFound = <String>{
+      for (final issue in freshIssues) _dataIssueIdentityKey(issue),
     };
 
+    final placeholders = List<String>.filled(
+      checkedIssueTypes.length,
+      '?',
+    ).join(',');
     final open = await db.query(
       'data_issues',
-      columns: <String>['id', 'row_number', 'raw_value'],
-      where: 'issue_type = ? AND COALESCE(status, ?) = ?',
+      where:
+          'issue_type IN ($placeholders) '
+          'AND COALESCE(status, ?) = ? '
+          'AND COALESCE(origin, ?) = ?',
       whereArgs: <Object?>[
-        'serial_scientific_notation',
+        ...checkedIssueTypes,
         kDataIssueStatusOpen,
         kDataIssueStatusOpen,
+        oldDataIssueOriginIntegrityScan,
+        oldDataIssueOriginIntegrityScan,
       ],
     );
+
     final stale = <Object?>[
       for (final row in open)
-        if (!stillValid.contains(
-          _scientificSerialIssueKey(
-            _toInt(row['row_number']),
-            _toText(row['raw_value']),
-          ),
-        ))
-          row['id'],
+        if (!stillFound.contains(_dataIssueIdentityKey(row))) row['id'],
     ];
     if (stale.isEmpty) return 0;
-    final placeholders = List<String>.filled(stale.length, '?').join(',');
+
+    final idPlaceholders = List<String>.filled(stale.length, '?').join(',');
     return db.delete(
       'data_issues',
-      where: 'id IN ($placeholders)',
+      where: 'id IN ($idPlaceholders)',
       whereArgs: stale,
     );
   }
@@ -2947,12 +2984,21 @@ class _IntegrityScanStepSpec {
     required this.label,
     required this.weight,
     required this.runner,
+    required this.ownedIssueTypes,
   });
 
   final String id;
   final String label;
   final int weight;
   final _IntegrityScanRunner runner;
+
+  /// Ποιων ειδών ευρήματα είναι **αποκλειστική ευθύνη** αυτού του βήματος.
+  ///
+  /// Δηλώνεται ρητά, και δεν συνάγεται από όσα βρήκε το βήμα: ακριβώς όταν
+  /// ένα βήμα γυρίζει μηδέν ευρήματα χρειάζεται να ξέρουμε τι κάλυψε, για να
+  /// φύγουν από τον κατάλογο όσα έπαψαν να ισχύουν. Βήμα που δεν
+  /// ολοκληρώθηκε δεν καθαρίζει τίποτα.
+  final Set<String> ownedIssueTypes;
 }
 
 class _OldIntegrityScanCancelled implements Exception {

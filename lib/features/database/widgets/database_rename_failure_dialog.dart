@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/lock_diagnostic_service.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
+import '../../../core/widgets/raw_error_details_tile.dart';
 import '../services/database_maintenance_service.dart';
 
 /// Διάλογος αποτυχίας μετονομασίας βάσης: όνομα προορισμού αντιγράφου, άνοιγμα φακέλου,
@@ -109,11 +111,17 @@ class _LockDiagnosticSectionState extends State<_LockDiagnosticSection> {
             if (snap.hasError) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Σφάλμα: ${snap.error}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      humanizeUserFacingError(snap.error!),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                    RawErrorDetailsTile(error: snap.error!),
+                  ],
                 ),
               );
             }

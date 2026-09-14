@@ -11,6 +11,60 @@ import 'schema_downgrade_compatibility.dart';
 /// την οθόνη να μη συμφωνούν κατά τύχη.
 const String kDiagnosticsSectionMarker = '--- Diagnostics ---';
 
+/// Ο δείκτης του εντοπισμού κλειδώματος — γραφόταν με το χέρι σε δύο
+/// διαφορετικά αρχεία. Ένα τυπογραφικό στο ένα από τα δύο θα άφηνε το
+/// διαγνωστικό να τυπωθεί μέσα στη συμβουλή, χωρίς κανένα σφάλμα πουθενά.
+const String kLockDiagnosticsSectionMarker = '--- Lock diagnostics ---';
+
+/// Ο δείκτης των σημειώσεων εκκίνησης.
+const String kStartupNoticesSectionMarker = '--- Προειδοποιήσεις εκκίνησης ---';
+
+/// Κάθε δείκτης που χωρίζει τεχνικό υλικό μέσα στο `details`.
+///
+/// Ζουν μαζί επίτηδες: όποιος προσθέσει καινούριο τμήμα και ξεχάσει να το
+/// γράψει εδώ, θα το δει να τυπώνεται αυτούσιο μέσα στη συμβουλή προς τον
+/// χειριστή.
+const List<String> kDetailsSectionMarkers = <String>[
+  kDiagnosticsSectionMarker,
+  kLockDiagnosticsSectionMarker,
+  kStartupNoticesSectionMarker,
+];
+
+/// Τι διαβάζει ο χειριστής και τι ο τεχνικός, από το ίδιο πεδίο `details`.
+///
+/// **Το πρόβλημα που λύνει (14/09/2026):** το `details` κουβαλά δύο εντελώς
+/// διαφορετικά πράγματα — τη συμβουλή προς τον χειριστή και τα διαγνωστικά
+/// που μαζεύτηκαν στον δρόμο. Η οθόνη σφάλματος της εκκίνησης τα τύπωνε
+/// **όλα μαζί**, οπότε μέσα στη συμβουλή φαίνονταν αυτούσιοι οι δείκτες
+/// («--- Diagnostics ---») και η ωμή εντολή SQL. Ο διάλογος έκανε τον
+/// διαχωρισμό μόνος του, γνωρίζοντας έναν μόνο δείκτη από τους τρεις.
+///
+/// Γι' αυτό ο διαχωρισμός ζει **εδώ**, δίπλα σε αυτόν που ενώνει: ένας
+/// κώδικας ξέρει όλους τους δείκτες, και οι δύο οθόνες ρωτούν αυτόν.
+({String advice, String diagnostics}) splitDatabaseDetails(String? details) {
+  final text = details?.trim() ?? '';
+  if (text.isEmpty) return (advice: '', diagnostics: '');
+
+  var cut = -1;
+  var cutMarker = '';
+  for (final marker in kDetailsSectionMarkers) {
+    final index = text.indexOf(marker);
+    if (index < 0) continue;
+    if (cut < 0 || index < cut) {
+      cut = index;
+      cutMarker = marker;
+    }
+  }
+  if (cut < 0) return (advice: text, diagnostics: '');
+
+  // Ο πρώτος δείκτης φεύγει: η οθόνη βάζει τη δική της επικεφαλίδα από πάνω.
+  // Όσοι ακολουθούν μένουν — εκείνοι χωρίζουν τα τμήματα μεταξύ τους.
+  return (
+    advice: text.substring(0, cut).trim(),
+    diagnostics: text.substring(cut + cutMarker.length).trim(),
+  );
+}
+
 /// Κατάσταση αρχικοποίησης / ελέγχου βάσης δεδομένων (fail-fast).
 enum DatabaseStatus {
   success,
@@ -307,7 +361,6 @@ class DatabaseInitResult {
 
     if (DatabaseInitResult._isDatabaseLayerException(error) &&
         DatabaseInitResult._isMigrationError(lower)) {
-      final causing = DatabaseInitResult._extractCausingStatement(raw);
       late final String msg;
       if (DatabaseInitResult._isNoSuchTableError(lower) ||
           DatabaseInitResult._isNoSuchColumnError(lower)) {
@@ -318,15 +371,16 @@ class DatabaseInitResult {
         msg =
             'Προέκυψε πρόβλημα κατά την αναβάθμιση του σχήματος της βάσης δεδομένων.';
       }
+      // Η εντολή SQL που έσκασε ΔΕΝ μπαίνει εδώ: υπάρχει ήδη αυτούσια μέσα
+      // στο «Αρχικό μήνυμα σφάλματος», που δείχνουν και οι δύο οθόνες. Ως
+      // τις 14/09/2026 κολλιόταν στη συμβουλή, οπότε ο χειριστής διάβαζε
+      // «ALTER TABLE audit_log ADD COLUMN entity_type TEXT» ως συνέχεια της
+      // πρότασης που του έλεγε τι να κάνει.
       final suggested = DatabaseInitResult._getSuggestedAction(lower, raw);
-      final composed = DatabaseInitResult._composeDetailsWithCausing(
-        suggested,
-        causing,
-      );
       return build(
         status: DatabaseStatus.applicationError,
         message: msg,
-        details: composed,
+        details: suggested.isEmpty ? null : suggested,
         recoveryKind: DatabaseInitRecoveryKind.corruptedOrMigration,
       );
     }
@@ -521,17 +575,6 @@ class DatabaseInitResult {
     return name.isEmpty ? null : name;
   }
 
-  static String? _extractCausingStatement(String raw) {
-    final m = RegExp(
-      r'Causing statement:\s*([^\n}]+)',
-      caseSensitive: false,
-    ).firstMatch(raw);
-    var s = m?.group(1)?.trim();
-    if (s == null || s.isEmpty) return null;
-    s = s.replaceAll(RegExp(r'[}\],]+$'), '').trim();
-    return s.isEmpty ? null : s;
-  }
-
   static bool _isSqliteLogicErrorCode1(String lower) =>
       lower.contains('sql logic error') && lower.contains('code 1');
 
@@ -557,27 +600,30 @@ class DatabaseInitResult {
     return 'Προέκυψε πρόβλημα κατά την αναβάθμιση της βάσης δεδομένων.';
   }
 
+  /// Τι να κάνει ο χειριστής — με σειρά προτεραιότητας, από το αναστρέψιμο
+  /// προς το οριστικό.
+  ///
+  /// **Γιατί δεν λέει «διαγράψτε» (14/09/2026):** ως τότε και οι δύο
+  /// προτάσεις ζητούσαν διαγραφή του αρχείου βάσης ως ΠΡΩΤΗ ενέργεια, χωρίς
+  /// καν προτροπή να κρατηθεί αντίγραφο. Η ίδια οθόνη όμως προσφέρει από
+  /// κάτω κουμπί «Επαναφορά από αντίγραφο ασφαλείας» — δηλαδή τα λόγια
+  /// αντίφασκαν με τα κουμπιά, και τα λόγια ήταν ο καταστροφικός δρόμος.
+  ///
+  /// Οι ενέργειες **δεν ονομάζονται με ετικέτες κουμπιών**: το ίδιο κείμενο
+  /// εμφανίζεται και στον διάλογο «Η βάση δεν είναι έγκυρη», που έχει μόνο
+  /// «Εντάξει». Ένα κουμπί που ονομάζεται και δεν υπάρχει είναι μήνυμα-ψέμα.
   static String _getSuggestedAction(String lower, String raw) {
     if (_isNoSuchTableError(lower) || _isNoSuchColumnError(lower)) {
-      return 'Δοκιμάστε να διαγράψετε το αρχείο της βάσης δεδομένων '
-          '(βρίσκεται στο φάκελο «Data Base») και να ξεκινήσετε ξανά την εφαρμογή. '
-          'Θα δημιουργηθεί νέα καθαρή βάση.';
+      return 'Μην διαγράψετε το αρχείο της βάσης σας. Η ασφαλής σειρά είναι: '
+          'πρώτα επαναφορά από αντίγραφο ασφαλείας· αν η σωστή βάση βρίσκεται '
+          'αλλού, επιλογή εκείνου του αρχείου· και τελευταία, δημιουργία νέας '
+          'άδειας βάσης, που ξεκινά από το μηδέν.';
     }
     if (_isSqliteLogicErrorCode1(lower) || _isMigrationError(lower)) {
-      return 'Το αρχείο της βάσης μπορεί να είναι κατεστραμμένο. '
-          'Διαγράψτε το και επανεκκινήστε.';
+      return 'Μην διαγράψετε το αρχείο της βάσης σας. Δοκιμάστε πρώτα '
+          'επαναφορά από αντίγραφο ασφαλείας ή επιλογή άλλου αρχείου βάσης.';
     }
     return '';
-  }
-
-  static String? _composeDetailsWithCausing(String suggested, String? causing) {
-    final parts = <String>[];
-    if (suggested.trim().isNotEmpty) parts.add(suggested.trim());
-    if (causing != null && causing.trim().isNotEmpty) {
-      parts.add('Εντολή SQL (Causing statement): ${causing.trim()}');
-    }
-    if (parts.isEmpty) return null;
-    return parts.join('\n\n');
   }
 
   /// Επιτυχής αρχικοποίηση.

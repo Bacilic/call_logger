@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_file_classifier.dart';
+import 'backup_zip_health.dart';
 import 'backup_zip_inventory.dart';
 import 'backup_zip_manifest.dart';
 import 'database_zip_pick_restore.dart';
@@ -69,9 +70,19 @@ Future<BackupZipInspection> extractSelectedBackupZipEntry(
     return const BackupZipInspection.failure('Το αρχείο zip δεν βρέθηκε.');
   }
 
+  final bytes = await zipFile.readAsBytes();
+
+  // Ο ίδιος έλεγχος με την απογραφή: αλλιώς ένα κομμένο zip θα έβγαζε εδώ
+  // «δεν βρέθηκε η επιλεγμένη εγγραφή», που κατηγορεί πάλι λάθος πράγμα.
+  final healthMessage = backupArchiveHealthMessage(
+    inspectBackupArchiveBytes(bytes),
+  );
+  if (healthMessage != null) {
+    return BackupZipInspection.failure(healthMessage);
+  }
+
   Archive archive;
   try {
-    final bytes = await zipFile.readAsBytes();
     archive = ZipDecoder().decodeBytes(bytes);
   } catch (e) {
     return BackupZipInspection.failure(

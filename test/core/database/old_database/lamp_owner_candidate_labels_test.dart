@@ -110,20 +110,27 @@ void main() {
         LampIssueType.nonNumericFk,
       );
 
-      final labels = proposals.single.options
-          .map((o) => o.label)
+      // Ελέγχεται η ΥΠΟΣΧΕΣΗ, όχι η θέση: το γραφείο μπορεί να γράφεται στην
+      // ετικέτα ή στη γραμμή χαρακτηριστικών από κάτω — σημασία έχει ότι ο
+      // χρήστης το βλέπει και ξεχωρίζει τους δύο συνωνύμους.
+      final shown = proposals.single.options
+          .map((o) => '${o.label} ${o.description ?? ''}')
           .toList(growable: false);
 
+      String lineFor(String name) =>
+          shown.firstWhere((line) => line.contains(name), orElse: () => '');
+
       expect(
-        labels,
-        containsAll(<String>[
-          '191 · Παπαβασιλείου Τζένη · γραφείο=Αλλαγή ΜΤΝ',
-          '340 · Παπαβασιλείου Ελένη · γραφείο=Διευθυντής Παιδιατρικής',
-        ]),
+        lineFor('Παπαβασιλείου Τζένη'),
+        contains('Αλλαγή ΜΤΝ'),
         reason: greekExpectMsg(
           'Δύο συνώνυμοι υποψήφιοι χωρίς γραφείο είναι αδιάκριτοι — ο χρήστης '
           'διαλέγει στα τυφλά',
         ),
+      );
+      expect(
+        lineFor('Παπαβασιλείου Ελένη'),
+        contains('Διευθυντής Παιδιατρικής'),
       );
     } finally {
       await db.close();

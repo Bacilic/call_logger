@@ -177,7 +177,11 @@ void main() {
       });
 
       final repository = OldEquipmentRepository();
-      final removed = await repository.dropStaleScientificSerialIssues(dbPath);
+      final removed = await repository.dropStaleIntegrityIssues(
+        dbPath,
+        checkedIssueTypes: const <String>{'serial_scientific_notation'},
+        freshIssues: const <Map<String, Object?>>[],
+      );
 
       expect(removed, 1);
       final left = await withDb((db) => db.query('data_issues'));
@@ -199,7 +203,11 @@ void main() {
     await acceptTheSerial();
 
     final repository = OldEquipmentRepository();
-    final removed = await repository.dropStaleScientificSerialIssues(dbPath);
+    final removed = await repository.dropStaleIntegrityIssues(
+      dbPath,
+      checkedIssueTypes: const <String>{'serial_scientific_notation'},
+      freshIssues: const <Map<String, Object?>>[],
+    );
 
     expect(removed, 0);
     final rows = await withDb((db) => db.query('data_issues'));

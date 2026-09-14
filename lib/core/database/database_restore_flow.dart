@@ -9,6 +9,7 @@ import '../utils/file_picker_initial_directory.dart';
 import '../utils/file_picker_session.dart';
 import 'database_file_classifier.dart';
 import 'database_helper.dart';
+import 'database_open_trial.dart';
 import '../../features/database/services/backup_zip_candidate_selection.dart';
 import '../../features/database/services/backup_zip_inventory.dart';
 import '../../features/database/services/backup_zip_manifest.dart';
@@ -235,10 +236,34 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
     return const RestoreFromBackupZipFlowResult.cancelled();
   }
 
+  // Ό,τι έχει κριθεί ως εδώ βγήκε από ονόματα πινάκων και έναν αριθμό
+  // έκδοσης. Το άνοιγμα όμως κρίνει με άλλο ερώτημα — θα δημιουργήσει σχήμα ή
+  // θα το αναβαθμίσει; — και εκεί έσκαγαν βάσεις που είχαν περάσει καθαρές.
+  // Η απόδειξη δίνεται ΤΩΡΑ, σε αντίγραφο και πριν αντικατασταθεί οτιδήποτε.
+  final trialLabel = ValueNotifier<String>(
+    'Δοκιμαστικό άνοιγμα της βάσης του αντιγράφου…',
+  );
+  _showBusyDialog(context, trialLabel);
+  late final DatabaseOpenTrial openTrial;
+  try {
+    openTrial = await trialOpenDatabase(extractedPath);
+  } finally {
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+    trialLabel.dispose();
+  }
+
+  if (!context.mounted) {
+    await cleanupStagedDatabase(extractedPath);
+    return const RestoreFromBackupZipFlowResult.cancelled();
+  }
+
   final userSelection = await showRestoreFromBackupDialog(
     context: context,
     currentProfile: currentProfile,
     backupProfile: backupProfile,
+    openTrial: openTrial,
     manifest: manifest,
     currentDatabasePath: currentPath,
     availableDestinations: available,

@@ -398,4 +398,142 @@ void main() {
       },
     );
   });
+  group('καμία συμβουλή που καταστρέφει δεδομένα', () {
+    // Το πραγματικό σφάλμα αποτυχημένης αναβάθμισης, όπως το δίνει το SQLite.
+    const rawMissingTable =
+        'SqfliteFfiException(sqlite_error: 1, , SqliteException(1): while '
+        'executing, no such table: audit_log, SQL logic error (code 1)\n'
+        '  Causing statement: ALTER TABLE audit_log ADD COLUMN entity_type '
+        'TEXT, parameters: })';
+
+    const dbPath = r'F:\Data Base\call_logger.db';
+
+    /// Όλο το κείμενο που διαβάζει ο χειριστής στην οθόνη.
+    String screenText(WidgetTester tester) {
+      final fixed = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((t) => t.data)
+          .whereType<String>();
+      final selectable = tester
+          .widgetList<SelectableText>(find.byType(SelectableText))
+          .map((t) => t.data)
+          .whereType<String>();
+      return <String>[...fixed, ...selectable].join('\n');
+    }
+
+    testWidgets('η οθόνη δεν ζητά διαγραφή της βάσης', (tester) async {
+      await _pumpErrorScreen(
+        tester,
+        DatabaseInitResult.fromException(Exception(rawMissingTable), dbPath),
+      );
+
+      final text = screenText(tester);
+      expect(
+        text,
+        isNot(contains('διαγράψετε το αρχείο της βάσης δεδομένων')),
+        reason: 'Η παλιά συμβουλή ήταν μη αναστρέψιμη και πρώτη στη σειρά',
+      );
+      expect(text, isNot(contains('Θα δημιουργηθεί νέα καθαρή βάση')));
+      expect(text, contains('Μην διαγράψετε'));
+      expect(text, contains('επαναφορά από αντίγραφο ασφαλείας'));
+    });
+
+    testWidgets('τα λόγια δεν αντιφάσκουν με τα κουμπιά', (tester) async {
+      await _pumpErrorScreen(
+        tester,
+        DatabaseInitResult.fromException(Exception(rawMissingTable), dbPath),
+      );
+
+      // Η οθόνη προσφέρει τον αναστρέψιμο δρόμο· η συμβουλή τον ονομάζει
+      // πρώτο. Φυλάει και την αφαίρεση της εφεδρείας που κρατούσε αυτά τα
+      // κουμπιά από τη διατύπωση της συμβουλής.
+      expect(_findByLabel('Επαναφορά από αντίγραφο ασφαλείας'), findsOneWidget);
+      expect(_findByLabel('Επιλογή αρχείου βάσης'), findsOneWidget);
+    });
+
+    testWidgets('το ίδιο και σε σφάλμα μετάπτωσης χωρίς όνομα πίνακα', (
+      tester,
+    ) async {
+      await _pumpErrorScreen(
+        tester,
+        DatabaseInitResult.fromException(
+          Exception(
+            'DatabaseException(SqliteException(1): while executing, SQL logic '
+            'error (code 1) duplicate column name: nickname\n'
+            '  Causing statement: ALTER TABLE users ADD COLUMN nickname TEXT)',
+          ),
+          dbPath,
+        ),
+      );
+
+      final text = screenText(tester);
+      expect(text, isNot(contains('Διαγράψτε το και επανεκκινήστε')));
+      expect(text, contains('Μην διαγράψετε'));
+    });
+  });
+  group('τίποτα τεχνικό μέσα στο κείμενο του χειριστή', () {
+    /// Ό,τι διαβάζει ο χειριστής πριν φτάσει στα τεχνικά τμήματα.
+    String adviceOnScreen(WidgetTester tester) {
+      return tester
+          .widgetList<SelectableText>(find.byType(SelectableText))
+          .map((t) => t.data)
+          .whereType<String>()
+          .join('\n');
+    }
+
+    testWidgets('οι δείκτες τμημάτων δεν τυπώνονται ποτέ', (tester) async {
+      await _pumpErrorScreen(
+        tester,
+        DatabaseInitResult(
+          status: DatabaseStatus.corruptedOrInvalid,
+          message: 'Η βάση δεν άνοιξε.',
+          details:
+              'Ελέγξτε τη διαδρομή στις ρυθμίσεις.\n\n'
+              '$kDiagnosticsSectionMarker\n'
+              'Έγκυρη κεφαλίδα SQLite.\n\n'
+              '$kLockDiagnosticsSectionMarker\n'
+              'Το αρχείο το κρατά η διεργασία 15580.',
+          path: r'F:\Data Base\call_logger.db',
+        ),
+      );
+
+      final text = adviceOnScreen(tester);
+      expect(
+        text,
+        isNot(contains(kDiagnosticsSectionMarker)),
+        reason: 'Δείκτης μηχανής, τυπωμένος στα μούτρα του χειριστή',
+      );
+      // Η συμβουλή μένει στη θέση της, τα διαγνωστικά κάτω από ετικέτα.
+      expect(find.textContaining('διαδρομή στις ρυθμίσεις'), findsOneWidget);
+      expect(find.text('Διαγνωστικά'), findsOneWidget);
+      expect(text, contains('15580'));
+    });
+
+    testWidgets('καμία εντολή SQL μέσα στη συμβουλή', (tester) async {
+      await _pumpErrorScreen(
+        tester,
+        DatabaseInitResult.fromException(
+          Exception(
+            'SqfliteFfiException(sqlite_error: 1, , SqliteException(1): while '
+            'executing, no such table: audit_log, SQL logic error (code 1)\n'
+            '  Causing statement: ALTER TABLE audit_log ADD COLUMN '
+            'entity_type TEXT, parameters: })',
+          ),
+          r'F:\Data Base\call_logger.db',
+        ),
+      );
+
+      expect(
+        find.textContaining('Εντολή SQL (Causing statement)'),
+        findsNothing,
+      );
+      // Και δεν χάθηκε: ζει στο ρητά σημασμένο τεχνικό τμήμα.
+      expect(find.text('Αρχικό μήνυμα σφάλματος (runtime)'), findsOneWidget);
+      expect(
+        adviceOnScreen(tester),
+        contains('ALTER TABLE audit_log'),
+        reason: 'Ο τεχνικός το χρειάζεται — αλλού, όχι στη συμβουλή',
+      );
+    });
+  });
 }

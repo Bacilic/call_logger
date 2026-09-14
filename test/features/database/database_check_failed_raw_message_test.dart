@@ -109,4 +109,31 @@ $kDiagnosticsSectionMarker
 
     expect(find.textContaining('Έγκυρη κεφαλίδα SQLite'), findsOneWidget);
   });
+
+  testWidgets('ο εντοπισμός κλειδώματος δεν τυπώνεται μέσα στη συμβουλή', (
+    tester,
+  ) async {
+    // Ο διάλογος γνώριζε έναν μόνο δείκτη τμήματος, οπότε αυτός εδώ περνούσε
+    // αυτούσιος μέσα στο κείμενο που διαβάζει ο χειριστής.
+    final result = DatabaseInitResult(
+      status: DatabaseStatus.accessDenied,
+      message: 'Το αρχείο είναι κλειδωμένο.',
+      details:
+          'Κλείστε άλλα αντίγραφα της εφαρμογής και δοκιμάστε ξανά.'
+          '\n\n$kLockDiagnosticsSectionMarker\n'
+          'Το αρχείο το κρατά η διεργασία 15580.',
+    );
+    await _pump(tester, result);
+
+    expect(find.textContaining('Κλείστε άλλα αντίγραφα'), findsOneWidget);
+    expect(find.textContaining(kLockDiagnosticsSectionMarker), findsNothing);
+    expect(find.textContaining('15580'), findsNothing);
+
+    await tester.tap(
+      find.text(DatabaseCheckFailedContent.technicalSectionLabel),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('15580'), findsOneWidget);
+  });
 }

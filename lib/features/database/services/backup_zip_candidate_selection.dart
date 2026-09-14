@@ -59,6 +59,11 @@ BackupZipCandidateSelection decideBackupZipCandidateSelection(
 }
 
 String _noneFailureMessage(BackupZipInventory inventory) {
+  // Όταν δεν διαβάστηκε το ίδιο το αρχείο, το «δεν βρέθηκε βάση μέσα» θα
+  // κατηγορούσε την επιλογή του χειριστή για κάτι που δεν έφταιξε.
+  final archiveFailure = inventory.archiveFailure;
+  if (archiveFailure != null) return archiveFailure;
+
   final total = inventory.totalDatabaseEntries;
   if (total == 0) {
     return 'Δεν βρέθηκε αρχείο βάσης (.db) μέσα στο zip.';

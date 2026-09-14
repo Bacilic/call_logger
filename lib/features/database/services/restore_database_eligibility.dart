@@ -1,8 +1,10 @@
 import '../../../core/database/database_file_classifier.dart';
+import '../../../core/database/database_open_trial.dart';
+import '../../../core/database/database_schema_version.dart';
 
 /// Αν —και πώς— μια βάση μέσα σε αντίγραφο μπορεί να αντικαταστήσει την ενεργή.
 ///
-/// Δύο κλειδωμένες αποφάσεις, και η διαφορά τους είναι ουσιαστική:
+/// Τρεις κλειδωμένες αποφάσεις, και οι διαφορές τους είναι ουσιαστικές:
 ///
 /// - **Ασύμβατη ή ελλιπής βάση: απαγόρευση** (13/09/2026) — ούτε με
 ///   προειδοποίηση, ούτε με δεύτερη επιβεβαίωση. Μια βάση που δεν ανοίγει δεν
@@ -12,6 +14,10 @@ import '../../../core/database/database_file_classifier.dart';
 ///   (13/09/2026) — εδώ τα δεδομένα υπάρχουν και είναι συνήθως τα περισσότερα.
 ///   Η απαγόρευση θα άφηνε τον χρήστη χωρίς τίποτα ακριβώς τη στιγμή που
 ///   χρειάζεται ό,τι σώζεται.
+/// - **Βάση που αποδεδειγμένα δεν ανοίγει: απαγόρευση** (14/09/2026) — το
+///   δοκιμαστικό άνοιγμα σε αντίγραφο είναι η μόνη ένδειξη που δεν μαντεύει.
+///   Έρχεται ΤΕΛΕΥΤΑΙΟ, ώστε να μην ακυρώνει την απόφαση του χρήστη για τη
+///   φθαρμένη βάση σκάζοντας πάνω στην ίδια ζημιά που εκείνος αποδέχθηκε.
 class RestoreDatabaseVerdict {
   const RestoreDatabaseVerdict.allowed()
     : restorable = true,
@@ -19,10 +25,9 @@ class RestoreDatabaseVerdict {
       reason = null,
       technicalDetail = null;
 
-  const RestoreDatabaseVerdict.blocked(this.reason)
+  const RestoreDatabaseVerdict.blocked(this.reason, {this.technicalDetail})
     : restorable = false,
-      requiresConfirmation = false,
-      technicalDetail = null;
+      requiresConfirmation = false;
 
   /// Επιτρέπεται, αλλά μόνο με ρητή απόφαση του χρήστη.
   ///
@@ -44,7 +49,8 @@ class RestoreDatabaseVerdict {
   /// Τι να διαβάσει ο χρήστης δίπλα στο κουτάκι. `null` όταν όλα είναι εντάξει.
   final String? reason;
 
-  /// Το ωμό κείμενο του SQLite, για τον διάλογο της δεύτερης επιβεβαίωσης.
+  /// Το ωμό κείμενο του SQLite, για τον διάλογο της δεύτερης επιβεβαίωσης ή
+  /// για τις τεχνικές λεπτομέρειες μιας άρνησης.
   /// Δεν μπαίνει ποτέ στο [reason] — εκεί χρειάζεται μία καθαρή πρόταση.
   final String? technicalDetail;
 }
@@ -53,7 +59,11 @@ class RestoreDatabaseVerdict {
 ///
 /// Ο ίδιος κριτής με την αλλαγή βάσης — αλλά καλείται **πριν** αντικατασταθεί
 /// οτιδήποτε, ώστε η απόρριψη να είναι επιλογή του χρήστη και όχι κατάρρευση.
-RestoreDatabaseVerdict judgeBackupDatabase(DatabaseFileProfile? profile) {
+RestoreDatabaseVerdict judgeBackupDatabase(
+  DatabaseFileProfile? profile, {
+  int appSchemaVersion = kDatabaseSchemaVersion,
+  DatabaseOpenTrial? openTrial,
+}) {
   if (profile == null) {
     return const RestoreDatabaseVerdict.blocked(
       'Δεν ήταν δυνατό να διαβαστεί αυτή η βάση.',
@@ -61,6 +71,19 @@ RestoreDatabaseVerdict judgeBackupDatabase(DatabaseFileProfile? profile) {
   }
   switch (profile.kind) {
     case DatabaseFileKind.callLogger:
+      // Πρώτα η έκδοση, και πριν από κάθε άλλη κρίση: μια βάση γραμμένη από
+      // νεότερη εγκατάσταση δεν ανοίγει εδώ με κανέναν τρόπο. Ο φρουρός του
+      // ανοίγματος το έλεγε ήδη — αλλά το έλεγε ΜΕΤΑ, όταν η βάση εργασίας
+      // είχε ήδη αντικατασταθεί. Ό,τι μπορεί να κριθεί πριν από την
+      // αντιγραφή, κρίνεται πριν.
+      final fileVersion = profile.userVersion;
+      if (fileVersion != null && fileVersion > appSchemaVersion) {
+        return RestoreDatabaseVerdict.blocked(
+          'Το αντίγραφο φτιάχτηκε από νεότερη έκδοση της εφαρμογής '
+          '(σχήμα $fileVersion· εδώ διαβάζεται ως την έκδοση '
+          '$appSchemaVersion). Χρειάζεται νεότερη εγκατάσταση για να ανοίξει.',
+        );
+      }
       // Το σχήμα πέρασε. Το περιεχόμενο είναι χωριστό ερώτημα, και μόνο
       // ΑΠΟΔΕΙΞΗ φθοράς μετρά εδώ: αν ο έλεγχος δεν πρόλαβε ή δεν έτρεξε,
       // η βάση δεν κατηγορείται για κάτι που δεν ειπώθηκε.
@@ -70,6 +93,17 @@ RestoreDatabaseVerdict judgeBackupDatabase(DatabaseFileProfile? profile) {
           'Ό,τι σώζεται θα επαναφερθεί, αλλά κάποιες εγγραφές μπορεί να '
           'λείπουν ή να βγάζουν σφάλμα.',
           technicalDetail: profile.integrityDetail,
+        );
+      }
+      // Τελευταίο, γιατί είναι το ακριβότερο και το μόνο που δεν μαντεύει:
+      // το αρχείο άνοιξε ή δεν άνοιξε. Έρχεται ΜΕΤΑ τη φθορά επίτηδες — μια
+      // φθαρμένη βάση παραμένει απόφαση του χρήστη (13/09/2026), και δεν
+      // επιτρέπεται να του την ακυρώσει μια δοκιμή που σκάει πάνω στη ζημιά
+      // που εκείνος έχει ήδη δει και αποδεχθεί.
+      if (openTrial != null && openTrial.provenToFail) {
+        return RestoreDatabaseVerdict.blocked(
+          openTrial.reason,
+          technicalDetail: openTrial.technicalDetail,
         );
       }
       return const RestoreDatabaseVerdict.allowed();

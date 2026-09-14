@@ -71,13 +71,13 @@ class DatabaseCheckFailedContent extends StatelessWidget {
     // Το `details` κουβαλά δύο πράγματα ενωμένα: τη συμβουλή προς τον χρήστη
     // και τα διαγνωστικά. Η συμβουλή μένει ορατή· τα διαγνωστικά είναι τοίχος
     // κειμένου και ανήκουν εκεί που τα ψάχνει όποιος τα χρειάζεται.
-    final parts = (result.details?.trim() ?? '').split(
-      kDiagnosticsSectionMarker,
-    );
-    final advice = parts.first.trim();
-    final diagnostics = parts.length > 1
-        ? parts.sublist(1).join(kDiagnosticsSectionMarker).trim()
-        : '';
+    //
+    // Ο διαχωρισμός γίνεται από τον κοινό κώδικα: εδώ γνωρίζαμε έναν μόνο
+    // δείκτη από τους τρεις, οπότε ο εντοπισμός κλειδώματος τυπωνόταν μέσα
+    // στη συμβουλή.
+    final split = splitDatabaseDetails(result.details);
+    final advice = split.advice;
+    final diagnostics = split.diagnostics;
     final original = result.originalExceptionText?.trim();
     final code = result.technicalCode?.trim();
     final hasTechnical =

@@ -236,9 +236,24 @@ class LampIssueResolutionController {
       );
       if (!host.mounted) return;
       if (proposals.isEmpty) {
+        // Καμία πρόταση σημαίνει κάτι συγκεκριμένο, όχι «δεν ξέρω»: ο
+        // αναλυτής διάβασε ΟΛΑ τα ανοιχτά ευρήματα αυτού του είδους και
+        // ξαναέλεγξε το καθένα πάνω στα σημερινά δεδομένα. Αν δεν επικύρωσε
+        // κανένα, τότε κανένα δεν είναι πια αληθινό πρόβλημα — και δεν έχει
+        // νόημα να μένουν στον μετρητή ως αδιέξοδο.
+        final removed = await host.shared.repository.dropStaleIntegrityIssues(
+          dbPath,
+          checkedIssueTypes: <String>{issueType.issueType},
+          freshIssues: const <Map<String, Object?>>[],
+        );
+        if (removed > 0) await host.loadIssues();
+        if (!host.mounted) return;
+        final label = lampDataIssueTypeDisplayLabel(issueType.issueType);
         host.showSnack(
-          'Δεν υπάρχουν ανοικτές προτάσεις για '
-          '${lampDataIssueTypeDisplayLabel(issueType.issueType)}.',
+          removed > 0
+              ? 'Δεν υπάρχει πια τίποτα προς επίλυση για $label.'
+                    '${staleIssuesRemovedNote(removed)}'
+              : 'Δεν υπάρχουν ανοικτές προτάσεις για $label.',
         );
         return;
       }

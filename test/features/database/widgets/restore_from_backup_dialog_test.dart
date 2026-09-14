@@ -7,6 +7,7 @@
 import 'package:call_logger/core/config/app_config.dart';
 import 'package:call_logger/core/database/database_file_classifier.dart';
 import 'package:call_logger/core/database/database_integrity_probe.dart';
+import 'package:call_logger/core/database/database_schema_version.dart';
 import 'package:call_logger/core/services/building_map_storage.dart';
 import 'package:call_logger/features/database/services/backup_zip_inventory.dart';
 import 'package:call_logger/features/database/services/backup_zip_manifest.dart';
@@ -299,6 +300,39 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
+  group('αντίγραφο από νεότερη έκδοση της εφαρμογής', () {
+    // Το σχήμα είναι πλήρες και το περιεχόμενο υγιές — ό,τι έκρινε ο κριτής
+    // μέχρι πρότινος έλεγε «ναι». Η άρνηση οφείλει να έρθει ΕΔΩ, στον
+    // διάλογο: ένα βήμα αργότερα η ενεργή βάση έχει ήδη αντικατασταθεί.
+    final fromTheFuture = DatabaseFileProfile(
+      kind: DatabaseFileKind.callLogger,
+      userVersion: kDatabaseSchemaVersion + 39,
+      callCount: 496,
+      userCount: 102,
+      latestCallDate: '2026-09-04',
+    );
+
+    testWidgets('το κουτάκι της βάσης είναι κλειδωμένο ΚΛΕΙΣΤΟ', (
+      tester,
+    ) async {
+      await _open(tester, backupProfile: fromTheFuture);
+      const title = 'Βάση δεδομένων — δεν επαναφέρεται';
+      expect(_isChecked(tester, title), isFalse);
+      expect(_isEnabled(tester, title), isFalse);
+    });
+
+    testWidgets('η αιτία λέει ότι χρειάζεται νεότερη εγκατάσταση', (
+      tester,
+    ) async {
+      await _open(tester, backupProfile: fromTheFuture);
+      expect(find.textContaining('νεότερη εγκατάσταση'), findsOneWidget);
+      expect(
+        find.textContaining('${kDatabaseSchemaVersion + 39}'),
+        findsWidgets,
+      );
+    });
+  });
+
   group('ασύμβατη βάση δεν επαναφέρεται με τίποτα', () {
     const incomplete = DatabaseFileProfile(
       kind: DatabaseFileKind.incompleteCallLogger,
@@ -575,6 +609,78 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Επαναφορά από αντίγραφο'), findsNothing);
+    });
+  });
+  group('η σύγκριση ξεχωρίζει το κενό από το «δεν διαβάζεται»', () {
+    /// Φθαρμένο αντίγραφο: κλήσεις και τελευταία κλήση δεν διαβάστηκαν,
+    /// ο εξοπλισμός διαβάστηκε κανονικά. Τα πλήθη είναι μετρημένα σε
+    /// πραγματική φθαρμένη βάση (14/09).
+    const corruptBackup = DatabaseFileProfile(
+      kind: DatabaseFileKind.callLogger,
+      equipmentCount: 400,
+      userCount: 0,
+      contentIntegrity: DatabaseIntegrityStatus.corrupt,
+      integrityDetail: 'database disk image is malformed',
+      unreadableMetrics: <DatabaseProfileMetric>{
+        DatabaseProfileMetric.calls,
+        DatabaseProfileMetric.latestCall,
+      },
+    );
+
+    /// Υγιές αντίγραφο χωρίς καμία κλήση: τα ίδια `null`, άλλη σημασία.
+    const emptyBackup = DatabaseFileProfile(
+      kind: DatabaseFileKind.callLogger,
+      callCount: 0,
+      userCount: 0,
+      equipmentCount: 0,
+    );
+
+    Future<void> showComparison(
+      WidgetTester tester,
+      DatabaseFileProfile backup,
+    ) async {
+      await _open(tester, backupProfile: backup);
+      // Η φθαρμένη βάση δεν προεπιλέγεται — ο τίτλος της γράφει «— προσοχή»
+      // και το κουτάκι ξεκινά άδειο. Ο πίνακας εμφανίζεται μόλις ο χρήστης
+      // ζητήσει ρητά την επαναφορά της.
+      final databaseRow = find.byType(CheckboxListTile).first;
+      if (tester.widget<CheckboxListTile>(databaseRow).value != true) {
+        await tester.tap(databaseRow);
+        await tester.pumpAndSettle();
+      }
+    }
+
+    testWidgets('ό,τι δεν διαβάστηκε το λέει με λέξεις', (tester) async {
+      await showComparison(tester, corruptBackup);
+
+      expect(find.text('Σύγκριση'), findsOneWidget);
+      expect(
+        find.text(unreadablePlaceholder),
+        findsNWidgets(2),
+        reason: 'Κλήσεις και τελευταία κλήση δεν διαβάστηκαν',
+      );
+      expect(
+        find.text('400'),
+        findsOneWidget,
+        reason: 'Ο εξοπλισμός διαβάστηκε — μένει αριθμός',
+      );
+    });
+
+    testWidgets('υγιές αντίγραφο χωρίς κλήσεις κρατά την παύλα', (
+      tester,
+    ) async {
+      await showComparison(tester, emptyBackup);
+
+      expect(
+        find.text(unreadablePlaceholder),
+        findsNothing,
+        reason: 'Τίποτα δεν απέτυχε — απλώς δεν υπάρχουν κλήσεις',
+      );
+      expect(
+        find.text(dashPlaceholder),
+        findsWidgets,
+        reason: 'Η τελευταία κλήση λείπει επειδή δεν έγινε ποτέ καμία',
+      );
     });
   });
 }

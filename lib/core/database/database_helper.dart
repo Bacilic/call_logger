@@ -725,7 +725,17 @@ class DatabaseHelper {
   Future<void> _requireSchemaVersionCompatibility(String dbPath) async {
     final profile = _lastDatabaseProfile;
     final fileVersion = profile?.userVersion;
-    if (fileVersion == null || fileVersion <= 0) return;
+    if (fileVersion == null || fileVersion <= 0) {
+      // Έκδοση 0 σε αρχείο που ΕΧΕΙ ήδη τους πίνακες: το άνοιγμα θα το
+      // περνούσε για καινούρια βάση και θα σταματούσε προσπαθώντας να τους
+      // ξαναφτιάξει, με ωμό αγγλικό SQL. Το κενό αρχείο (νόμιμη δημιουργία
+      // σχήματος) δηλώνει κι εκείνο 0 — γι' αυτό κρίνει το είδος, όχι ο
+      // αριθμός μόνος του.
+      if (profile?.kind == DatabaseFileKind.callLogger) {
+        _rejectUnversionedDatabaseFile(dbPath);
+      }
+      return;
+    }
     if (fileVersion > kDatabaseSchemaVersion) {
       await _rejectNewerDatabaseFile(dbPath, fileVersion);
     }
@@ -767,6 +777,30 @@ class DatabaseHelper {
         path: dbPath,
         recoveryKind: DatabaseInitRecoveryKind.schemaUpgradeConsent,
         technicalCode: '$fileVersion→$kDatabaseSchemaVersion',
+      ),
+    );
+  }
+
+  /// Αρχείο με πίνακες αλλά χωρίς αριθμό έκδοσης: δεν ανοίγει ποτέ, και το
+  /// λέει εδώ — στα ελληνικά και πριν αγγιχτεί οτιδήποτε.
+  Never _rejectUnversionedDatabaseFile(String dbPath) {
+    final fileName = dbPath.split(RegExp(r'[/\\]')).last.trim();
+    final displayName = fileName.isEmpty ? dbPath : fileName;
+    throw DatabaseInitException(
+      DatabaseInitResult(
+        status: DatabaseStatus.corruptedOrInvalid,
+        message:
+            'Το αρχείο «$displayName» έχει τους πίνακες της Καταγραφής '
+            'Κλήσεων αλλά δεν δηλώνει έκδοση σχήματος. Δεν μπορεί να ανοίξει: '
+            'η εφαρμογή το εκλαμβάνει ως καινούρια βάση και σταματά '
+            'προσπαθώντας να δημιουργήσει πίνακες που ήδη υπάρχουν.',
+        details:
+            'Διαδρομή: $dbPath\n'
+            'Έκδοση αρχείου: 0\n'
+            'Έκδοση εφαρμογής: $kDatabaseSchemaVersion',
+        path: dbPath,
+        recoveryKind: DatabaseInitRecoveryKind.corruptedOrMigration,
+        technicalCode: '0→$kDatabaseSchemaVersion',
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../database/database_init_result.dart';
 import '../services/crash_log_service.dart';
 import 'startup_journal.dart';
 
@@ -64,7 +65,7 @@ Future<void> runStartupHousekeeping(
 /// Επιστρέφει `null` αν η ουρά είναι άδεια.
 String? startupNoticesReport() {
   if (_startupNotices.isEmpty) return null;
-  final buf = StringBuffer('--- Προειδοποιήσεις εκκίνησης ---\n');
+  final buf = StringBuffer('$kStartupNoticesSectionMarker\n');
   for (final notice in _startupNotices) {
     buf.writeln('${notice.phase}: ${notice.error}');
   }

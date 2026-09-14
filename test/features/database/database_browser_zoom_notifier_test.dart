@@ -103,4 +103,48 @@ void main() {
     expect(notifier.zoomFor('calls'), 1.5);
     expect(notifier.zoomFor('tasks'), 1.0);
   });
+
+  test('φόρτωση πριν από το πρώτο build της οθόνης (κανείς δεν ακούει ακόμη): '
+      'η τιμή φτάνει, χωρίς σφάλμα «Ref after disposed»', () async {
+    final dbPath = '${tempDir.path}/zoom_no_listener.db';
+    await DatabaseHelper.bindTestDatabaseFile(dbPath);
+    final db = await DatabaseHelper.instance.initializeDatabase();
+    await SettingsRepository(db).saveSetting(_zoomSettingsKey, '{"calls":1.5}');
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    // Καμία συνδρομή: ακριβώς η στιγμή του initState, όπου η οθόνη ζητά τη
+    // φόρτωση πριν προλάβει το πρώτο build να αρχίσει να παρακολουθεί.
+    final notifier = container.read(
+      databaseBrowserZoomByTableProvider.notifier,
+    );
+    await notifier.load();
+
+    expect(container.read(databaseBrowserZoomByTableProvider), {'calls': 1.5});
+  });
+
+  test('η οθόνη ξηλώνεται ενόσω η φόρτωση τρέχει: καμία εξαίρεση, η τιμή '
+      'επιβιώνει για το επόμενο άνοιγμα', () async {
+    final dbPath = '${tempDir.path}/zoom_unmount_midway.db';
+    await DatabaseHelper.bindTestDatabaseFile(dbPath);
+    final db = await DatabaseHelper.instance.initializeDatabase();
+    await SettingsRepository(db).saveSetting(_zoomSettingsKey, '{"calls":1.5}');
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final sub = container.listen(databaseBrowserZoomByTableProvider, (_, _) {});
+    final notifier = container.read(
+      databaseBrowserZoomByTableProvider.notifier,
+    );
+
+    // Η αλλαγή βάσης ξαναφορτώνει και μετά ξηλώνει την οθόνη: η φόρτωση
+    // βρίσκεται στη μέση όταν φεύγει ο τελευταίος ακροατής.
+    final loading = notifier.load();
+    sub.close();
+    await loading;
+
+    expect(container.read(databaseBrowserZoomByTableProvider), {'calls': 1.5});
+  });
 }

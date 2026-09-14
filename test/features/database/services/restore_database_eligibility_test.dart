@@ -11,6 +11,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_file_classifier.dart';
+import 'package:call_logger/core/database/database_schema_version.dart';
 import 'package:call_logger/features/database/services/restore_database_eligibility.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -92,39 +93,41 @@ void main() {
       expect(verdict.requiresConfirmation, isFalse);
     });
 
-    test('βάση με κατεστραμμένο περιεχόμενο ΔΕΝ επαναφέρεται σιωπηλά',
-        () async {
-      final path = await buildDatabase(corrupt: true);
-      final profile = await profileDatabaseFile(path);
+    test(
+      'βάση με κατεστραμμένο περιεχόμενο ΔΕΝ επαναφέρεται σιωπηλά',
+      () async {
+        final path = await buildDatabase(corrupt: true);
+        final profile = await profileDatabaseFile(path);
 
-      // Η παγίδα σε μία γραμμή: το σχήμα είναι άψογο. Ό,τι κρίνει μόνο
-      // πίνακες και έκδοση λέει «ναι» σε ένα αρχείο που δεν διαβάζεται.
-      expect(
-        profile.kind,
-        DatabaseFileKind.callLogger,
-        reason: 'Οι επτά πίνακες υπάρχουν — η φθορά είναι στο περιεχόμενο',
-      );
-      expect(
-        profile.contentIsCorrupt,
-        isTrue,
-        reason: 'Το ίδιο το SQLite το δηλώνει, δεν το συμπεραίνουμε εμείς',
-      );
+        // Η παγίδα σε μία γραμμή: το σχήμα είναι άψογο. Ό,τι κρίνει μόνο
+        // πίνακες και έκδοση λέει «ναι» σε ένα αρχείο που δεν διαβάζεται.
+        expect(
+          profile.kind,
+          DatabaseFileKind.callLogger,
+          reason: 'Οι επτά πίνακες υπάρχουν — η φθορά είναι στο περιεχόμενο',
+        );
+        expect(
+          profile.contentIsCorrupt,
+          isTrue,
+          reason: 'Το ίδιο το SQLite το δηλώνει, δεν το συμπεραίνουμε εμείς',
+        );
 
-      final verdict = judgeBackupDatabase(profile);
-      expect(
-        verdict.requiresConfirmation,
-        isTrue,
-        reason:
-            'Η επαναφορά επιτρέπεται —μπορεί να είναι το μόνο αντίγραφο— '
-            'αλλά ποτέ χωρίς ρητή απόφαση του χρήστη',
-      );
-      expect(verdict.reason, isNotNull);
-      expect(
-        verdict.technicalDetail,
-        isNotNull,
-        reason: 'Το ωμό κείμενο του SQLite ταξιδεύει ως τη δεύτερη ερώτηση',
-      );
-    });
+        final verdict = judgeBackupDatabase(profile);
+        expect(
+          verdict.requiresConfirmation,
+          isTrue,
+          reason:
+              'Η επαναφορά επιτρέπεται —μπορεί να είναι το μόνο αντίγραφο— '
+              'αλλά ποτέ χωρίς ρητή απόφαση του χρήστη',
+        );
+        expect(verdict.reason, isNotNull);
+        expect(
+          verdict.technicalDetail,
+          isNotNull,
+          reason: 'Το ωμό κείμενο του SQLite ταξιδεύει ως τη δεύτερη ερώτηση',
+        );
+      },
+    );
 
     test('φθορά δεν συμπεραίνεται από σιωπή', () {
       // Προφίλ φτιαγμένο χωρίς να τρέξει έλεγχος (π.χ. από τεστ ή από ροή
@@ -142,6 +145,33 @@ void main() {
     );
     expect(judgeBackupDatabase(profile).restorable, isTrue);
     expect(judgeBackupDatabase(profile).reason, isNull);
+  });
+
+  test('βάση ΝΕΟΤΕΡΗΣ έκδοσης απορρίπτεται ΠΡΙΝ γραφτεί πάνω στην ενεργή', () {
+    // Το σενάριο του πεδίου: αντίγραφο φτιαγμένο από νεότερη εγκατάσταση.
+    // Το σχήμα είναι άψογο και το περιεχόμενο υγιές — τίποτα από όσα έκρινε ο
+    // κριτής δεν το σταματούσε. Η απόρριψη ερχόταν αργότερα, από το άνοιγμα,
+    // όταν η βάση εργασίας είχε ήδη αντικατασταθεί.
+    final profile = DatabaseFileProfile(
+      kind: DatabaseFileKind.callLogger,
+      userVersion: kDatabaseSchemaVersion + 1,
+    );
+    final verdict = judgeBackupDatabase(profile);
+    expect(verdict.restorable, isFalse);
+    expect(
+      verdict.requiresConfirmation,
+      isFalse,
+      reason: 'Δεν προσφέρεται ως ρίσκο — καμία νεότερη βάση δεν ανοίγει εδώ',
+    );
+    expect(verdict.reason, contains('${kDatabaseSchemaVersion + 1}'));
+  });
+
+  test('η τρέχουσα έκδοση σχήματος επαναφέρεται κανονικά', () {
+    const profile = DatabaseFileProfile(
+      kind: DatabaseFileKind.callLogger,
+      userVersion: kDatabaseSchemaVersion,
+    );
+    expect(judgeBackupDatabase(profile).restorable, isTrue);
   });
 
   test('παλαιότερη έκδοση σχήματος ΔΕΝ είναι λόγος απόρριψης', () {
@@ -166,32 +196,36 @@ void main() {
     expect(verdict.reason, contains('departments'));
   });
 
-  test('βάση Λάμπας, υβρίδιο, κενό και άγνωστο απορρίπτονται με δικό τους λόγο', () {
-    final reasons = <DatabaseFileKind, String?>{};
-    for (final kind in [
-      DatabaseFileKind.lamp,
-      DatabaseFileKind.hybrid,
-      DatabaseFileKind.empty,
-      DatabaseFileKind.unknown,
-    ]) {
-      final verdict = judgeBackupDatabase(DatabaseFileProfile(kind: kind));
-      expect(verdict.restorable, isFalse, reason: '$kind');
-      expect(verdict.reason, isNotNull, reason: '$kind');
-      reasons[kind] = verdict.reason;
-    }
-    expect(
-      reasons.values.toSet().length,
-      reasons.length,
-      reason: 'Κάθε λόγος απόρριψης λέει κάτι διαφορετικό στον χρήστη',
-    );
-  });
+  test(
+    'βάση Λάμπας, υβρίδιο, κενό και άγνωστο απορρίπτονται με δικό τους λόγο',
+    () {
+      final reasons = <DatabaseFileKind, String?>{};
+      for (final kind in [
+        DatabaseFileKind.lamp,
+        DatabaseFileKind.hybrid,
+        DatabaseFileKind.empty,
+        DatabaseFileKind.unknown,
+      ]) {
+        final verdict = judgeBackupDatabase(DatabaseFileProfile(kind: kind));
+        expect(verdict.restorable, isFalse, reason: '$kind');
+        expect(verdict.reason, isNotNull, reason: '$kind');
+        reasons[kind] = verdict.reason;
+      }
+      expect(
+        reasons.values.toSet().length,
+        reasons.length,
+        reason: 'Κάθε λόγος απόρριψης λέει κάτι διαφορετικό στον χρήστη',
+      );
+    },
+  );
 
-  test('αρχείο που δεν ελέγχθηκε απορρίπτεται — δεν δίνεται το όφελος της αμφιβολίας', () {
-    const profile = DatabaseFileProfile(
-      kind: DatabaseFileKind.undetermined,
-    );
-    expect(judgeBackupDatabase(profile).restorable, isFalse);
-  });
+  test(
+    'αρχείο που δεν ελέγχθηκε απορρίπτεται — δεν δίνεται το όφελος της αμφιβολίας',
+    () {
+      const profile = DatabaseFileProfile(kind: DatabaseFileKind.undetermined);
+      expect(judgeBackupDatabase(profile).restorable, isFalse);
+    },
+  );
 
   test('χωρίς προφίλ καθόλου, δεν επαναφέρεται', () {
     final verdict = judgeBackupDatabase(null);

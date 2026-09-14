@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../utils/user_identity_normalizer.dart';
+import 'lamp_candidate_facets.dart';
 import 'lamp_data_issue_type_labels.dart';
 import 'lamp_issue_matching_engine.dart';
 import 'lamp_issue_resolution_models.dart';
@@ -46,6 +47,10 @@ class LampIssueFkAnalyzer {
         'contract_name',
         'supplier_name',
         'category_name',
+        // Ξεχωρίζουν ομώνυμες συμβάσεις. Συχνά είναι κενές — και τότε φεύγουν
+        // μόνες τους, γιατί ό,τι είναι ίδιο σε όλους δεν τυπώνεται.
+        'start_date',
+        'end_date',
       ],
     );
     final contractDetailsById = <int, _ContractDetailRow>{
@@ -54,6 +59,8 @@ class LampIssueFkAnalyzer {
           _support.toInt(row['contract'])!: _ContractDetailRow(
             id: _support.toInt(row['contract'])!,
             contractName: _support.text(row['contract_name']) ?? '',
+            startDate: _support.text(row['start_date']),
+            endDate: _support.text(row['end_date']),
             supplierName: _support.text(row['supplier_name']),
             categoryName: _support.text(row['category_name']),
           ),
@@ -71,6 +78,12 @@ class LampIssueFkAnalyzer {
         'office_name',
         'department_name',
         'organization_name',
+        // Διαβάζονται για να ΞΕΧΩΡΙΖΟΥΝ ομώνυμα γραφεία στον οδηγό επίλυσης.
+        // Ποια από αυτά θα φανούν κρίνεται ανά λίστα υποψηφίων, όχι εδώ.
+        'responsible',
+        'phones',
+        'building',
+        'level',
       ],
     );
     final officeDetailsById = <int, _OfficeDetailRow>{
@@ -81,6 +94,10 @@ class LampIssueFkAnalyzer {
             officeName: _support.text(row['office_name']),
             departmentName: _support.text(row['department_name']),
             organizationName: _support.text(row['organization_name']),
+            responsibleId: _support.toInt(row['responsible']),
+            phones: _support.text(row['phones']),
+            building: _support.text(row['building']),
+            level: _support.toInt(row['level']),
           ),
     };
     final modelDetailRows = await db.query(
@@ -127,6 +144,56 @@ class LampIssueFkAnalyzer {
           if (id != null && (usage[id] ?? 0) == 0) id,
       };
     }
+
+    // Τα χαρακτηριστικά κάθε γραφείου, μαζεμένα ΟΛΑ. Ποια από αυτά αξίζουν
+    // χώρο στην οθόνη κρίνεται αργότερα, ανά λίστα υποψηφίων: το τμήμα είναι
+    // πολύτιμο όταν οι υποψήφιοι ανήκουν αλλού ο καθένας, και καθαρός θόρυβος
+    // όταν είναι ίδιο και στους πέντε.
+    final ownerFullNameById = <int, String>{
+      for (final row in owners)
+        if (_support.toInt(row['owner']) != null)
+          _support.toInt(row['owner'])!: <String>[
+            ?_support.text(row['last_name']),
+            ?_support.text(row['first_name']),
+          ].join(' ').trim(),
+    };
+    final officeEquipmentCounts = usageByColumn['office'] ?? const <int, int>{};
+    final officeFacetsById = <int, List<LampCandidateFacet>>{
+      for (final row in offices)
+        row.id: _officeFacets(
+          officeDetailsById[row.id],
+          equipmentCount: officeEquipmentCounts[row.id] ?? 0,
+          ownerFullNameById: ownerFullNameById,
+        ),
+    };
+    final contractEquipmentCounts =
+        usageByColumn['contract'] ?? const <int, int>{};
+    final contractFacetsById = <int, List<LampCandidateFacet>>{
+      for (final row in contracts)
+        row.id: _contractFacets(
+          contractDetailsById[row.id],
+          equipmentCount: contractEquipmentCounts[row.id] ?? 0,
+        ),
+    };
+    final modelEquipmentCounts = usageByColumn['model'] ?? const <int, int>{};
+    final ownerEquipmentCountsAll =
+        usageByColumn['owner'] ?? const <int, int>{};
+    final ownerFacetsById = <int, List<LampCandidateFacet>>{
+      for (final row in owners)
+        if (_support.toInt(row['owner']) != null)
+          _support.toInt(row['owner'])!: _ownerFacets(
+            officeDetailsById[_support.toInt(row['office'])],
+            equipmentCount:
+                ownerEquipmentCountsAll[_support.toInt(row['owner'])] ?? 0,
+          ),
+    };
+    final modelFacetsById = <int, List<LampCandidateFacet>>{
+      for (final row in models)
+        row.id: _modelFacets(
+          modelDetailsById[row.id],
+          equipmentCount: modelEquipmentCounts[row.id] ?? 0,
+        ),
+    };
 
     final officeLabelById = <int, String>{
       for (final row in offices)
@@ -332,6 +399,8 @@ class LampIssueFkAnalyzer {
               fuzzyAllowed: true,
               detailedLabelById: officeLabelById,
               unlinkedReferenceIds: unlinkedIdsFor('office'),
+              facetsById: officeFacetsById,
+              equipmentCountById: officeEquipmentCounts,
             ),
           ),
         );
@@ -346,8 +415,8 @@ class LampIssueFkAnalyzer {
               owners: owners,
               ownerLabelById: ownerLabelById,
               unlinkedOwnerIds: unlinkedIdsFor('owner'),
-              ownerEquipmentCounts:
-                  usageByColumn['owner'] ?? const <int, int>{},
+              ownerEquipmentCounts: ownerEquipmentCountsAll,
+              facetsById: ownerFacetsById,
               // Η τιμή του υπαλλήλου είναι συχνά τμήμα ή γραφείο· χρειάζονται
               // τα πραγματικά γραφεία και το πεδίο γραφείου του εξοπλισμού
               // για να δοθεί ο λόγος, χωρίς να αλλάξει τίποτα εκεί.
@@ -374,6 +443,8 @@ class LampIssueFkAnalyzer {
               normalized: normalized,
               references: contracts,
               detailedLabelById: contractLabelById,
+              facetsById: contractFacetsById,
+              equipmentCountById: contractEquipmentCounts,
             ),
           ),
         );
@@ -394,6 +465,8 @@ class LampIssueFkAnalyzer {
               exactAutoConfidence: 96,
               fuzzyAllowed: false,
               detailedLabelById: modelLabelById,
+              facetsById: modelFacetsById,
+              equipmentCountById: modelEquipmentCounts,
             ),
           ),
         );
@@ -475,6 +548,9 @@ class LampIssueFkAnalyzer {
     required bool fuzzyAllowed,
     Map<int, String>? detailedLabelById,
     Set<int> unlinkedReferenceIds = const <int>{},
+    Map<int, List<LampCandidateFacet>> facetsById =
+        const <int, List<LampCandidateFacet>>{},
+    Map<int, int> equipmentCountById = const <int, int>{},
   }) {
     final base = _support.baseProposal(
       issueType,
@@ -492,6 +568,28 @@ class LampIssueFkAnalyzer {
       'labelColumn': labelColumn,
       'createLabel': createLabel,
     };
+
+    // Τι γράφεται κάτω από κάθε υποψήφιο: μόνο όσα τον ξεχωρίζουν ΜΕΣΑ σε
+    // αυτή τη λίστα. Υπολογίζεται μία φορά ανά πρόταση, γιατί η απάντηση
+    // εξαρτάται από το ποιοι είναι οι συνυποψήφιοι.
+    // Ο τίτλος του υποψηφίου μένει σκέτο «κωδικός · όνομα» όταν τα
+    // χαρακτηριστικά κρίνονται χωριστά. Αλλιώς το τμήμα θα τυπωνόταν δύο
+    // φορές — μία προ-ψημένο εδώ, και μία αφού περάσει από το φίλτρο — και
+    // μάλιστα ακόμη κι όταν είναι ίδιο σε όλη τη λίστα.
+    String optionLabel(ReferenceRow match) {
+      if (facetsById.isEmpty) {
+        return _referenceOptionDisplayLabel(
+          match,
+          detailedLabelById: detailedLabelById,
+        );
+      }
+      final name = match.label.trim();
+      return name.isEmpty ? '${match.id}' : '${match.id} · $name';
+    }
+
+    String facetsLine(Iterable<ReferenceRow> shown, int id) =>
+        _facetsLineFor(facetsById, shownIds: shown.map((r) => r.id), id: id);
+
     if (exact.length == 1) {
       final match = exact.single;
       return base(
@@ -517,11 +615,11 @@ class LampIssueFkAnalyzer {
           for (final match in exact)
             LampIssueResolutionOption(
               id: 'fk_${match.id}',
-              label: _referenceOptionDisplayLabel(
-                match,
-                detailedLabelById: detailedLabelById,
-              ),
-              description: 'Ακριβής αντιστοίχιση',
+              label: optionLabel(match),
+              description: <String>[
+                'Ακριβής αντιστοίχιση',
+                ?_nullIfEmpty(facetsLine(exact, match.id)),
+              ].join(' · '),
               action: LampIssueResolutionAction.autoFix,
               proposedId: match.id,
               proposedMatch: match.label,
@@ -551,11 +649,25 @@ class LampIssueFkAnalyzer {
           );
         }
       }
+      // Με ισοπαλία στο σκορ —ο κανόνας και όχι η εξαίρεση, αφού η περιεκτική
+      // αντιστοίχιση δίνει σε όλους την ίδια σταθερά— αποφασίζει ο εξοπλισμός:
+      // το γραφείο που κρατά 14 μηχανήματα είναι πιθανότερο από εκείνο που δεν
+      // κρατά κανένα. Η απόσταση γραμμάτων μένει τελευταία κρίση, για να μην
+      // αλλάζει η σειρά τυχαία μεταξύ δύο εκτελέσεων.
       candidates.sort((a, b) {
         final byScore = b.score.compareTo(a.score);
-        return byScore != 0 ? byScore : a.distance.compareTo(b.distance);
+        if (byScore != 0) return byScore;
+        final byUsage = (equipmentCountById[b.reference.id] ?? 0).compareTo(
+          equipmentCountById[a.reference.id] ?? 0,
+        );
+        if (byUsage != 0) return byUsage;
+        return a.distance.compareTo(b.distance);
       });
       if (candidates.isNotEmpty) {
+        final shortlist = candidates.take(5).toList();
+        final scoresAreTied =
+            shortlist.length > 1 &&
+            shortlist.every((c) => c.score == shortlist.first.score);
         final top = candidates.first;
         return base(
           action: LampIssueResolutionAction.manualReview,
@@ -574,14 +686,20 @@ class LampIssueFkAnalyzer {
             for (final candidate in candidates.take(5))
               LampIssueResolutionOption(
                 id: 'fk_${candidate.reference.id}',
-                label: _referenceOptionDisplayLabel(
-                  candidate.reference,
-                  detailedLabelById: detailedLabelById,
-                ),
-                // Μόνο η ομοιότητα: η απόσταση Levenshtein είναι εσωτερικό
-                // μέγεθος του αλγορίθμου και λέει την ίδια πληροφορία σε
-                // μορφή που δεν βοηθά ανθρώπινη απόφαση.
-                description: 'Ομοιότητα: ${candidate.score}%',
+                label: optionLabel(candidate.reference),
+                // Το ποσοστό μπαίνει ΜΟΝΟ όταν ξεχωρίζει κάποιον. Όταν όλοι
+                // οι υποψήφιοι το έχουν ίδιο —γιατί όλοι περιέχουν την ίδια
+                // λέξη— δεν είναι μέτρηση αλλά σφραγίδα, και η θέση του
+                // ανήκει σε ό,τι πραγματικά βοηθά την απόφαση.
+                description: <String>[
+                  if (!scoresAreTied) 'Ομοιότητα: ${candidate.score}%',
+                  ?_nullIfEmpty(
+                    facetsLine(
+                      candidates.take(5).map((c) => c.reference),
+                      candidate.reference.id,
+                    ),
+                  ),
+                ].join(' · '),
                 action: LampIssueResolutionAction.autoFix,
                 proposedId: candidate.reference.id,
                 proposedMatch: candidate.reference.label,
@@ -999,6 +1117,115 @@ class LampIssueFkAnalyzer {
     return parts.where((p) => p.trim().isNotEmpty).join(' · ');
   }
 
+  /// Όλα όσα ΜΠΟΡΕΙ να ξεχωρίσουν έναν υπάλληλο από έναν ομώνυμό του.
+  ///
+  /// Στη ζωντανή βάση τέσσερις υπάλληλοι λέγονται «Σούκουλη» — δύο από αυτές
+  /// «Σούκουλη Παρασκευή». Το γραφείο τις χωρίζει· όταν κάποτε δεν φτάνει,
+  /// το τμήμα και ο εξοπλισμός είναι εκεί.
+  List<LampCandidateFacet> _ownerFacets(
+    _OfficeDetailRow? office, {
+    required int equipmentCount,
+  }) {
+    return <LampCandidateFacet>[
+      LampCandidateFacet('εξοπλισμοί', '$equipmentCount'),
+      LampCandidateFacet('γραφείο', office?.officeName?.trim() ?? ''),
+      LampCandidateFacet('τμήμα', office?.departmentName?.trim() ?? ''),
+    ];
+  }
+
+  /// Όλα όσα ΜΠΟΡΕΙ να ξεχωρίσουν μια σύμβαση από μια ομώνυμή της.
+  ///
+  /// Στη ζωντανή βάση τρεις συμβάσεις λέγονται «ΕΔΕΤ»: η κατηγορία είναι
+  /// «Δωρεά» και στις τρεις και οι ημερομηνίες κενές, οπότε αυτά φεύγουν μόνα
+  /// τους· ο προμηθευτής ξεχωρίζει τη μία, και τις άλλες δύο μόνο ο
+  /// εξοπλισμός που κρέμεται από την καθεμιά.
+  List<LampCandidateFacet> _contractFacets(
+    _ContractDetailRow? details, {
+    required int equipmentCount,
+  }) {
+    if (details == null) return const <LampCandidateFacet>[];
+    return <LampCandidateFacet>[
+      LampCandidateFacet('εξοπλισμοί', '$equipmentCount'),
+      LampCandidateFacet('προμηθευτής', details.supplierName?.trim() ?? ''),
+      LampCandidateFacet('κατηγορία', details.categoryName?.trim() ?? ''),
+      LampCandidateFacet('από', details.startDate?.trim() ?? ''),
+      LampCandidateFacet('έως', details.endDate?.trim() ?? ''),
+    ];
+  }
+
+  /// Όλα όσα ΜΠΟΡΕΙ να ξεχωρίσουν ένα μοντέλο από ένα ομώνυμό του.
+  ///
+  /// Στη ζωντανή βάση τέσσερα μοντέλα λέγονται «TURBO-X» και έχουν ΟΛΑ τον
+  /// ίδιο κατασκευαστή — το μόνο που τα χωρίζει είναι η υποκατηγορία
+  /// (πληκτρολόγιο, οθόνη, υπολογιστής, ποντίκι), που ως τώρα δεν φαινόταν
+  /// πουθενά ενώ ο κοινός κατασκευαστής τυπωνόταν τέσσερις φορές.
+  List<LampCandidateFacet> _modelFacets(
+    _ModelDetailRow? details, {
+    required int equipmentCount,
+  }) {
+    if (details == null) return const <LampCandidateFacet>[];
+    return <LampCandidateFacet>[
+      LampCandidateFacet('εξοπλισμοί', '$equipmentCount'),
+      LampCandidateFacet('υποκατηγορία', details.subcategoryName?.trim() ?? ''),
+      LampCandidateFacet('κατηγορία', details.categoryName?.trim() ?? ''),
+      LampCandidateFacet(
+        'κατασκευαστής',
+        details.manufacturerName?.trim() ?? '',
+      ),
+    ];
+  }
+
+  /// Όλα όσα ΜΠΟΡΕΙ να ξεχωρίσουν ένα γραφείο από ένα ομώνυμό του.
+  ///
+  /// Η σειρά είναι η σειρά ανάγνωσης: πρώτα ο εξοπλισμός, που απαντά στο
+  /// «ποιο από τα δύο είναι το ζωντανό γραφείο», και μετά τα υπόλοιπα.
+  List<LampCandidateFacet> _officeFacets(
+    _OfficeDetailRow? details, {
+    required int equipmentCount,
+    required Map<int, String> ownerFullNameById,
+  }) {
+    if (details == null) return const <LampCandidateFacet>[];
+    final responsible = details.responsibleId == null
+        ? ''
+        : (ownerFullNameById[details.responsibleId] ?? '');
+    return <LampCandidateFacet>[
+      LampCandidateFacet('εξοπλισμοί', '$equipmentCount'),
+      LampCandidateFacet('υπεύθυνος', responsible),
+      LampCandidateFacet('τηλέφωνο', details.phones?.trim() ?? ''),
+      LampCandidateFacet('τμήμα', details.departmentName?.trim() ?? ''),
+      LampCandidateFacet('κτίριο', details.building?.trim() ?? ''),
+      LampCandidateFacet(
+        'όροφος',
+        details.level == null ? '' : '${details.level}',
+      ),
+    ];
+  }
+
+  /// Η γραμμή χαρακτηριστικών ενός υποψηφίου, κρινόμενη ΜΕΣΑ στη λίστα που
+  /// βλέπει ο χρήστης.
+  ///
+  /// Το [shown] είναι οι συνυποψήφιοι — και έχει σημασία ποιοι ακριβώς: το
+  /// ίδιο γραφείο δίπλα σε άλλους δύο δείχνει άλλα πράγματα απ' ό,τι δίπλα σε
+  /// πέντε. Γι' αυτό δεν προϋπολογίζεται ποτέ.
+  String _facetsLineFor(
+    Map<int, List<LampCandidateFacet>> facetsById, {
+    required Iterable<int> shownIds,
+    required int id,
+  }) {
+    if (facetsById.isEmpty) return '';
+    final scoped = <int, List<LampCandidateFacet>>{
+      for (final shownId in shownIds)
+        if (facetsById.containsKey(shownId)) shownId: facetsById[shownId]!,
+    };
+    final kept = distinguishingFacets(scoped)[id];
+    return kept == null ? '' : candidateFacetsSummary(kept);
+  }
+
+  /// `null` όταν δεν υπάρχει τίποτα να πει — ώστε το κενό να ΕΞΑΦΑΝΙΖΕΤΑΙ από
+  /// τη γραμμή αντί να αφήνει μια ορφανή τελεία.
+  static String? _nullIfEmpty(String value) =>
+      value.trim().isEmpty ? null : value.trim();
+
   String _officeDisplayLabel(_OfficeDetailRow details) =>
       lampOfficeDisplayLabel(
         officeName: details.officeName,
@@ -1039,6 +1266,8 @@ class LampIssueFkAnalyzer {
     required Map<int, String> ownerLabelById,
     required Set<int> unlinkedOwnerIds,
     Map<int, int> ownerEquipmentCounts = const <int, int>{},
+    Map<int, List<LampCandidateFacet>> facetsById =
+        const <int, List<LampCandidateFacet>>{},
     Iterable<LampPlaceRow> placeRows = const <LampPlaceRow>[],
     int? linkedOfficeId,
     String? officeRawValue,
@@ -1073,6 +1302,12 @@ class LampIssueFkAnalyzer {
     /// λέγονται «Παπαβασιλείου» το γραφείο είναι το μόνο κριτήριο επιλογής.
     String labelFor(Map<String, Object?> owner) {
       final id = _support.toInt(owner['owner']);
+      // Με ενεργά χαρακτηριστικά η ετικέτα μένει σκέτο όνομα: το γραφείο
+      // μπαίνει από κάτω ΜΟΝΟ αν ξεχωρίζει κάποιον. Αλλιώς τυπωνόταν και
+      // στους τέσσερις «Σούκουλη» ακόμη κι όταν ήταν το ίδιο.
+      if (facetsById.isNotEmpty) {
+        return _support.ownerLabel(owner);
+      }
       return ownerLabelById[id] ?? _support.ownerLabel(owner);
     }
 
@@ -1184,18 +1419,30 @@ class LampIssueFkAnalyzer {
           ],
         );
       }
+      // Οι συνυποψήφιοι της λίστας — και οι δύο πηγές μαζί, γιατί ο χρήστης
+      // τους βλέπει σε ένα ενιαίο σύνολο και σε σχέση με αυτό κρίνεται τι
+      // ξεχωρίζει τον καθένα.
+      final shownOwnerIds = <int>[
+        for (final m in matches) ?_support.toInt(m['owner']),
+        for (final m in nameFallbackMatches) ?_support.toInt(m['owner']),
+      ];
+
       LampIssueResolutionOption linkOption(
         Map<String, Object?> match, {
         required bool asFirstName,
       }) {
         final ownerId = _support.toInt(match['owner']);
-        final count = equipmentCountText(ownerId);
+        final facets = ownerId == null
+            ? ''
+            : _facetsLineFor(facetsById, shownIds: shownOwnerIds, id: ownerId);
+        final count = facetsById.isEmpty ? equipmentCountText(ownerId) : null;
         return LampIssueResolutionOption(
           id: asFirstName ? 'owner_first_$ownerId' : 'owner_$ownerId',
           label: '$ownerId · ${labelFor(match)}',
           description: <String>[
             if (asFirstName) 'ταιριάζει ως μικρό όνομα',
             ?count,
+            ?_nullIfEmpty(facets),
           ].join(' · '),
           action: LampIssueResolutionAction.autoFix,
           proposedId: ownerId,
@@ -1470,6 +1717,9 @@ class LampIssueFkAnalyzer {
     required String normalized,
     required List<ReferenceRow> references,
     Map<int, String>? detailedLabelById,
+    Map<int, List<LampCandidateFacet>> facetsById =
+        const <int, List<LampCandidateFacet>>{},
+    Map<int, int> equipmentCountById = const <int, int>{},
   }) {
     final raw = _support.text(issue['raw_value']) ?? '';
     final rawId = int.tryParse(raw.trim());
@@ -1521,11 +1771,22 @@ class LampIssueFkAnalyzer {
             for (final match in inName.take(10))
               LampIssueResolutionOption(
                 id: 'contract_${match.id}',
-                label: _referenceOptionDisplayLabel(
-                  match,
-                  detailedLabelById: detailedLabelById,
-                ),
-                description: 'Ακριβής αντιστοίχιση',
+                label: facetsById.isEmpty
+                    ? _referenceOptionDisplayLabel(
+                        match,
+                        detailedLabelById: detailedLabelById,
+                      )
+                    : '${match.id} · ${match.label.trim()}',
+                description: <String>[
+                  'Ακριβής αντιστοίχιση',
+                  ?_nullIfEmpty(
+                    _facetsLineFor(
+                      facetsById,
+                      shownIds: inName.take(10).map((r) => r.id),
+                      id: match.id,
+                    ),
+                  ),
+                ].join(' · '),
                 action: LampIssueResolutionAction.autoFix,
                 proposedId: match.id,
                 proposedMatch: match.label,
@@ -1561,6 +1822,8 @@ class LampIssueFkAnalyzer {
       exactAutoConfidence: 96,
       fuzzyAllowed: false,
       detailedLabelById: detailedLabelById,
+      facetsById: facetsById,
+      equipmentCountById: equipmentCountById,
     );
   }
 }
@@ -1569,12 +1832,16 @@ class _ContractDetailRow {
   const _ContractDetailRow({
     required this.id,
     required this.contractName,
+    this.startDate,
+    this.endDate,
     this.supplierName,
     this.categoryName,
   });
 
   final int id;
   final String contractName;
+  final String? startDate;
+  final String? endDate;
   final String? supplierName;
   final String? categoryName;
 }
@@ -1585,12 +1852,20 @@ class _OfficeDetailRow {
     this.officeName,
     this.departmentName,
     this.organizationName,
+    this.responsibleId,
+    this.phones,
+    this.building,
+    this.level,
   });
 
   final int id;
   final String? officeName;
   final String? departmentName;
   final String? organizationName;
+  final int? responsibleId;
+  final String? phones;
+  final String? building;
+  final int? level;
 }
 
 class _ModelDetailRow {

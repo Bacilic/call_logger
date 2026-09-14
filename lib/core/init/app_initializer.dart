@@ -203,7 +203,7 @@ class AppInitializer {
             final details = result.details?.trim();
             final merged = (details == null || details.isEmpty)
                 ? diagnostic
-                : '$details\n\n--- Lock diagnostics ---\n$diagnostic';
+                : '$details\n\n$kLockDiagnosticsSectionMarker\n$diagnostic';
             result = result.copyWith(details: merged);
             progressNotifier?.setDiagnostic(diagnostic);
           }

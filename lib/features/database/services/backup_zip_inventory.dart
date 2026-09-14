@@ -8,6 +8,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/database/database_file_classifier.dart';
 import '../../../core/services/building_map_storage.dart';
 import '../../../core/services/portable_lamp_storage.dart';
+import 'backup_zip_health.dart';
 import 'backup_zip_manifest.dart';
 
 /// Προφίλ αρχείου βάσης (προεπιλογή: [profileDatabaseFile]).
@@ -107,9 +108,8 @@ class BackupZipInventory {
     this.candidateLimitExceeded = false,
     this.uncheckedCandidateCount = 0,
     this.cleanupWarnings = const <String>[],
-    this.portablePresence = const BackupZipPortablePresence(
-      hasManifest: false,
-    ),
+    this.archiveFailure,
+    this.portablePresence = const BackupZipPortablePresence(hasManifest: false),
   });
 
   final List<BackupZipEligibleCandidate> eligibleCandidates;
@@ -119,10 +119,19 @@ class BackupZipInventory {
   final bool candidateLimitExceeded;
   final int uncheckedCandidateCount;
   final List<String> cleanupWarnings;
+
+  /// Γιατί το ίδιο το αρχείο δεν διαβάστηκε — `null` όταν διαβάστηκε μια χαρά.
+  ///
+  /// Χωριστό από το «δεν βρέθηκε βάση μέσα»: ο αποκωδικοποιητής επιστρέφει
+  /// άδειο αρχειοθέτη τόσο για κομμένο zip όσο και για έγκυρο zip χωρίς
+  /// περιεχόμενο, και τα δύο κατέληγαν στο ίδιο μήνυμα.
+  final String? archiveFailure;
   final BackupZipPortablePresence portablePresence;
 
   /// Σύνοψη τύπου «Βρέθηκαν 7 αρχεία βάσης, 3 είναι βάσεις της εφαρμογής».
   String get summarySentence {
+    final failure = archiveFailure;
+    if (failure != null) return failure;
     final eligible = eligibleCandidates.length;
     final total = totalDatabaseEntries;
     if (total == 0) {
@@ -217,15 +226,35 @@ Future<BackupZipInventory> inventoryBackupZip(
     );
   }
 
+  final bytes = await zipFile.readAsBytes();
+
+  // Πρώτα το ίδιο το αρχείο, και μετά το περιεχόμενό του. Ο αποκωδικοποιητής
+  // δεν ξεχωρίζει το κομμένο zip από το άδειο — και τα δύο του βγαίνουν ως
+  // «κανένα αρχείο μέσα».
+  final health = inspectBackupArchiveBytes(bytes);
+  final healthMessage = backupArchiveHealthMessage(health);
+  if (healthMessage != null) {
+    return BackupZipInventory(
+      eligibleCandidates: const [],
+      rejectedCandidates: const [],
+      isFullBackupArchive: false,
+      totalDatabaseEntries: 0,
+      archiveFailure: healthMessage,
+    );
+  }
+
   Archive archive;
   try {
-    archive = ZipDecoder().decodeBytes(await zipFile.readAsBytes());
+    archive = ZipDecoder().decodeBytes(bytes);
   } catch (e) {
     return BackupZipInventory(
       eligibleCandidates: const [],
       rejectedCandidates: const [],
       isFullBackupArchive: false,
       totalDatabaseEntries: 0,
+      archiveFailure:
+          'Το αντίγραφο δεν μπόρεσε να ανοίξει. Δοκιμάστε παλαιότερο '
+          'αντίγραφο.',
       cleanupWarnings: ['Αποτυχία ανάγνωσης/αποσυμπίεσης zip: $e'],
     );
   }
@@ -239,9 +268,7 @@ Future<BackupZipInventory> inventoryBackupZip(
     final name = f.name.replaceAll('\\', '/');
     otherNames.add(name);
     if (name.startsWith(lampPrefix) && f.lastModTime > 0) {
-      lampModified = DateTime.fromMillisecondsSinceEpoch(
-        f.lastModTime * 1000,
-      );
+      lampModified = DateTime.fromMillisecondsSinceEpoch(f.lastModTime * 1000);
     }
     if (!name.toLowerCase().endsWith('.db')) continue;
     listed.add(

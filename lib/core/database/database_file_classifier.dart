@@ -45,6 +45,22 @@ const List<String> kLampSignatureTables = <String>[
   'data_issues',
 ];
 
+/// Μια μέτρηση του προφίλ που μπορεί να μην έγινε.
+///
+/// Υπάρχει επειδή το `null` δεν αρκεί: σε φθαρμένη βάση το πλήθος κλήσεων
+/// βγαίνει `null` επειδή **δεν διαβάστηκε**, ενώ σε υγιή άδεια βάση η
+/// τελευταία κλήση βγαίνει `null` επειδή **δεν υπάρχει καμία**. Μετρημένο
+/// 14/09/2026: στην ίδια φθαρμένη βάση οι κλήσεις και οι υπάλληλοι γύρισαν
+/// `null`, ενώ ο εξοπλισμός γύρισε 400 και τα τηλέφωνα 0.
+enum DatabaseProfileMetric {
+  calls,
+  users,
+  phones,
+  equipment,
+  departments,
+  latestCall,
+}
+
 /// Προφίλ αρχείου βάσης από ένα πέρασμα μόνο-ανάγνωσης.
 class DatabaseFileProfile {
   const DatabaseFileProfile({
@@ -62,6 +78,7 @@ class DatabaseFileProfile {
     this.hasDebugScenarioSignature = false,
     this.contentIntegrity = DatabaseIntegrityStatus.inconclusive,
     this.integrityDetail,
+    this.unreadableMetrics = const <DatabaseProfileMetric>{},
   });
 
   final DatabaseFileKind kind;
@@ -92,6 +109,16 @@ class DatabaseFileProfile {
   /// Το **ωμό** κείμενο του SQLite όταν βρέθηκε φθορά. Δεν μεταφράζεται και
   /// δεν συνοψίζεται: είναι η μόνη πρόταση που λέει τι ακριβώς χάλασε.
   final String? integrityDetail;
+
+  /// Ποιες μετρήσεις δεν απαντήθηκαν επειδή το αρχείο αντιστάθηκε.
+  ///
+  /// Χωριστό από την τιμή τους: η οθόνη πρέπει να ξεχωρίσει το «κενό» από το
+  /// «δεν διαβάζεται», γιατί πάνω σε αυτή τη διαφορά κρίνεται η επαναφορά.
+  final Set<DatabaseProfileMetric> unreadableMetrics;
+
+  /// `true` όταν αυτή η μέτρηση απέτυχε — όχι όταν απλώς βγήκε άδεια.
+  bool isUnreadable(DatabaseProfileMetric metric) =>
+      unreadableMetrics.contains(metric);
 
   /// `true` μόνο όταν υπάρχει **απόδειξη** φθοράς — ποτέ από σιωπή.
   bool get contentIsCorrupt =>
@@ -200,17 +227,55 @@ Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
 
     // Πλήρες βασικό σχήμα: συμπληρώνουμε τα πλήθη που τροφοδοτούν τις
     // προειδοποιήσεις κατάστασης βάσης και τη σύγκριση αντιγράφων.
+    //
+    // Κάθε μέτρηση που αποτυγχάνει καταγράφεται ονομαστικά: η οθόνη δεν
+    // μπορεί να ξεχωρίσει το «κενό» από το «δεν διαβάζεται» αν φτάσει εκεί
+    // μόνο ένα `null`.
+    final unreadable = <DatabaseProfileMetric>{};
+    final calls = await _tryCount(
+      db,
+      'calls',
+      DatabaseProfileMetric.calls,
+      unreadable,
+    );
+    final users = await _tryCount(
+      db,
+      'users',
+      DatabaseProfileMetric.users,
+      unreadable,
+    );
+    final phones = await _tryCount(
+      db,
+      'phones',
+      DatabaseProfileMetric.phones,
+      unreadable,
+    );
+    final equipment = await _tryCount(
+      db,
+      'equipment',
+      DatabaseProfileMetric.equipment,
+      unreadable,
+    );
+    final departments = await _tryCount(
+      db,
+      'departments',
+      DatabaseProfileMetric.departments,
+      unreadable,
+    );
+    final latest = await _tryLatestCallDate(db, unreadable);
+
     return DatabaseFileProfile(
       kind: DatabaseFileKind.callLogger,
       userVersion: userVersion,
       contentIntegrity: integrity.status,
       integrityDetail: integrity.rawMessage,
-      callCount: await _tryCount(db, 'calls'),
-      userCount: await _tryCount(db, 'users'),
-      phoneCount: await _tryCount(db, 'phones'),
-      equipmentCount: await _tryCount(db, 'equipment'),
-      departmentCount: await _tryCount(db, 'departments'),
-      latestCallDate: await _tryLatestCallDate(db),
+      unreadableMetrics: Set.unmodifiable(unreadable),
+      callCount: calls,
+      userCount: users,
+      phoneCount: phones,
+      equipmentCount: equipment,
+      departmentCount: departments,
+      latestCallDate: latest,
       hasDebugScenarioSignature: tables.contains('app_settings')
           ? await _tryHasDebugScenarioSignature(db)
           : false,
@@ -264,14 +329,26 @@ Future<bool> _hasLampShapedEquipment(Database db) async {
   }
 }
 
-Future<int?> _tryCount(Database db, String table) async {
+/// Μετρά, και **καταγράφει** την αποτυχία αντί να τη σβήνει σε `null`.
+Future<int?> _tryCount(
+  Database db,
+  String table,
+  DatabaseProfileMetric metric,
+  Set<DatabaseProfileMetric> unreadable,
+) async {
   try {
     final rows = await db.rawQuery('SELECT COUNT(*) AS c FROM $table');
-    if (rows.isEmpty) return null;
+    if (rows.isEmpty) {
+      unreadable.add(metric);
+      return null;
+    }
     final value = rows.first['c'];
     if (value is int) return value;
-    return int.tryParse('$value');
+    final parsed = int.tryParse('$value');
+    if (parsed == null) unreadable.add(metric);
+    return parsed;
   } catch (_) {
+    unreadable.add(metric);
     return null;
   }
 }
@@ -290,13 +367,21 @@ Future<bool> _tryHasDebugScenarioSignature(Database db) async {
   }
 }
 
-Future<String?> _tryLatestCallDate(Database db) async {
+/// Η πιο πρόσφατη κλήση — ή `null`, που εδώ έχει **δύο** πιθανές σημασίες.
+///
+/// Κενό αποτέλεσμα σημαίνει «καμία κλήση» και είναι έγκυρη απάντηση· μόνο η
+/// εξαίρεση σημαίνει «δεν διαβάστηκε».
+Future<String?> _tryLatestCallDate(
+  Database db,
+  Set<DatabaseProfileMetric> unreadable,
+) async {
   try {
     final rows = await db.rawQuery('SELECT MAX(date) AS d FROM calls');
     if (rows.isEmpty) return null;
     final value = (rows.first['d'] as String?)?.trim() ?? '';
     return value.isEmpty ? null : value;
   } catch (_) {
+    unreadable.add(DatabaseProfileMetric.latestCall);
     return null;
   }
 }

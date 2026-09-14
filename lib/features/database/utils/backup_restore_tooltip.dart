@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_helper.dart';
 import '../providers/database_backup_settings_provider.dart';
+import '../services/backup_zip_health.dart';
 import '../services/restore_selection.dart';
 import 'backup_destination_folder_validator.dart';
 
@@ -94,9 +95,14 @@ class BackupRestoreTooltipBuilder {
     if (!survey.latestMatchesCurrentBase) {
       buffer.writeln('(δεν είναι αντίγραφο της τρέχουσας βάσης)');
     }
-    buffer.writeln('Περιέχει:');
-    for (final item in await describeZipRestoreLabels(latest.path)) {
-      buffer.writeln('• $item');
+    final contents = await describeZipContents(latest.path);
+    if (contents.problem != null) {
+      buffer.writeln(contents.problem!);
+    } else {
+      buffer.writeln('Περιέχει:');
+      for (final item in contents.labels) {
+        buffer.writeln('• $item');
+      }
     }
     buffer.write(chooseFreelyHint);
     return buffer.toString();
@@ -118,38 +124,82 @@ class BackupRestoreTooltipBuilder {
     return '$totalPart, $mine της βάσης «$base»';
   }
 
-  /// Ετικέτες περιεχομένου που θα επαναφερθούν από συγκεκριμένο zip.
+  /// Τι περιέχει ένα αντίγραφο — ή γιατί δεν μπορούμε να το πούμε.
   ///
   /// Οι ίδιες λέξεις με τη λίστα επιλογής του διαλόγου επαναφοράς: ο χρήστης
   /// δεν πρέπει να μαθαίνει δύο ονόματα για το ίδιο πράγμα.
-  static Future<List<String>> describeZipRestoreLabels(String zipPath) async {
+  ///
+  /// **Καμία εφεδρεία δεν υπόσχεται περιεχόμενο (14/09/2026).** Ως τότε,
+  /// τέσσερις δρόμοι —αρχείο που χάθηκε, zip που δεν διαβάζεται, εξαίρεση,
+  /// και αρχείο χωρίς τίποτα αναγνωρίσιμο μέσα— κατέληγαν όλοι στο ίδιο
+  /// «Βάση δεδομένων». Η εφεδρεία γράφτηκε για την άγνοια· σε καθεμιά από
+  /// αυτές τις τέσσερις περιπτώσεις όμως **ξέρουμε**, και η απάντηση δεν
+  /// είναι «βάση δεδομένων».
+  static Future<BackupZipContents> describeZipContents(String zipPath) async {
     final file = File(zipPath);
-    if (!await file.exists()) return const [restoreDatabaseLabel];
-
-    try {
-      final archive = ZipDecoder().decodeBytes(await file.readAsBytes());
-      final found = <RestorePortablePart>{};
-      var hasDatabase = false;
-
-      for (final entry in archive.files) {
-        if (!entry.isFile) continue;
-        final name = entry.name.replaceAll(r'\', '/');
-        final part = restorePortablePartForEntry(name);
-        if (part != null) {
-          found.add(part);
-        } else if (name.toLowerCase().endsWith('.db')) {
-          hasDatabase = true;
-        }
-      }
-
-      final labels = <String>[
-        if (hasDatabase) restoreDatabaseLabel,
-        for (final part in RestorePortablePart.values)
-          if (found.contains(part)) restorePortablePartLabel(part),
-      ];
-      return labels.isEmpty ? const [restoreDatabaseLabel] : labels;
-    } catch (_) {
-      return const [restoreDatabaseLabel];
+    if (!await file.exists()) {
+      return const BackupZipContents.unreadable('Το αρχείο δεν βρέθηκε πλέον.');
     }
+
+    final List<int> bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } catch (_) {
+      return const BackupZipContents.unreadable(
+        'Το αρχείο δεν μπόρεσε να διαβαστεί.',
+      );
+    }
+
+    final health = backupArchiveHealthShortMessage(
+      inspectBackupArchiveBytes(bytes),
+    );
+    if (health != null) return BackupZipContents.unreadable(health);
+
+    final Archive archive;
+    try {
+      archive = ZipDecoder().decodeBytes(bytes);
+    } catch (_) {
+      return const BackupZipContents.unreadable(
+        'Το αρχείο δεν μπόρεσε να ανοίξει.',
+      );
+    }
+
+    final found = <RestorePortablePart>{};
+    var hasDatabase = false;
+    for (final entry in archive.files) {
+      if (!entry.isFile) continue;
+      final name = entry.name.replaceAll(r'\', '/');
+      final part = restorePortablePartForEntry(name);
+      if (part != null) {
+        found.add(part);
+      } else if (name.toLowerCase().endsWith('.db')) {
+        hasDatabase = true;
+      }
+    }
+
+    final labels = <String>[
+      if (hasDatabase) restoreDatabaseLabel,
+      for (final part in RestorePortablePart.values)
+        if (found.contains(part)) restorePortablePartLabel(part),
+    ];
+    if (labels.isEmpty) {
+      return const BackupZipContents.unreadable(
+        'Το αρχείο δεν περιέχει τίποτα από όσα επαναφέρονται.',
+      );
+    }
+    return BackupZipContents.listed(labels);
   }
+}
+
+/// Τι υπόσχεται ένα αντίγραφο, ή γιατί δεν υπόσχεται τίποτα.
+class BackupZipContents {
+  const BackupZipContents.listed(this.labels) : problem = null;
+
+  const BackupZipContents.unreadable(this.problem) : labels = const <String>[];
+
+  /// Οι ετικέτες περιεχομένου — κενές όταν υπάρχει [problem].
+  final List<String> labels;
+
+  /// Μία φράση για το τι φταίει. `null` όταν το αρχείο διαβάστηκε.
+  final String? problem;
 }

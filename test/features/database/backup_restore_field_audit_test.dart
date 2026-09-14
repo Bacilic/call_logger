@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:call_logger/core/database/database_file_classifier.dart';
 import 'package:call_logger/core/database/database_integrity_probe.dart';
+import 'package:call_logger/core/database/database_open_trial.dart';
 import 'package:call_logger/core/database/database_schema_migrations.dart';
 import 'package:call_logger/features/database/services/backup_zip_candidate_selection.dart';
 import 'package:call_logger/features/database/services/backup_zip_inventory.dart';
@@ -455,13 +456,22 @@ void main() {
       expect(v.restorable, isTrue);
     });
 
-    test('Γ2 · παλαιότερη έκδοση 17', () async {
-      final v = judgeBackupDatabase(await profileOf(17));
+    test('Γ2 · ετικέτα 17 σε σχήμα που δεν είναι του 17', () async {
+      // Τα επτά ονόματα πινάκων λένε «βάση της Καταγραφής». Ο αριθμός λέει
+      // «έκδοση 17». Καμία από τις δύο ενδείξεις δεν ξέρει ότι οι μεταπτώσεις
+      // 18→60 θα ζητήσουν πίνακες που το αρχείο δεν έχει — αυτό το ξέρει μόνο
+      // ένα πραγματικό άνοιγμα.
+      final path = at('έκδοση_17.db');
+      await makeCallLoggerDb(path, version: 17);
+      final profile = await profileDatabaseFile(path);
+      final trial = await trialOpenDatabase(path);
+      final v = judgeBackupDatabase(profile, openTrial: trial);
       note(
-        'Γ2 v17 (παλιά)',
-        v.restorable ? 'ΕΠΙΤΡΕΠΕΤΑΙ — αναβάθμιση από μεταπτώσεις' : 'ΜΠΛΟΚ',
+        'Γ2 v17 με ασύμβατο σχήμα',
+        'χωρίς δοκιμή=${judgeBackupDatabase(profile).restorable ? "ΕΠΙΤΡΕΠΕΤΑΙ" : "ΜΠΛΟΚ"} · '
+            'με δοκιμή=${v.restorable ? "ΕΠΙΤΡΕΠΕΤΑΙ" : "ΜΠΛΟΚ: ${v.reason}"}',
       );
-      expect(v.restorable, isTrue);
+      expect(v.restorable, isFalse);
     });
 
     test('Γ3 · ΝΕΟΤΕΡΗ έκδοση 99 — τι λέει ο κριτής;', () async {
@@ -475,12 +485,22 @@ void main() {
     });
 
     test('Γ4 · έκδοση 0 με πλήρες σχήμα', () async {
-      final profile = await profileOf(0);
-      final v = judgeBackupDatabase(profile);
+      final path = at('έκδοση_0.db');
+      await makeCallLoggerDb(path, version: 0);
+      final profile = await profileDatabaseFile(path);
+      final v = judgeBackupDatabase(
+        profile,
+        openTrial: await trialOpenDatabase(path),
+      );
       note(
         'Γ4 v0 με πλήρεις πίνακες',
         'είδος=${profile.kind} → '
             '${v.restorable ? "ΕΠΙΤΡΕΠΕΤΑΙ" : "ΜΠΛΟΚ: ${v.reason}"}',
+      );
+      expect(
+        v.restorable,
+        isFalse,
+        reason: 'Το άνοιγμα θα την περνούσε για καινούρια και θα έσκαγε',
       );
     });
   });
@@ -923,15 +943,23 @@ void main() {
       note('Ζ6 άνοιγμα μετά την επαναφορά', await openLikeTheApp(path));
     });
 
-    test('Ζ3 · έκδοση 99 από το μέλλον — ο κριτής την πέρασε', () async {
-      final path = at('v99.db');
-      await makeCallLoggerDb(path, version: 99);
-      expect(
-        judgeBackupDatabase(await profileDatabaseFile(path)).restorable,
-        isTrue,
-        reason: 'Ο κριτής της επαναφοράς την επιτρέπει — τι λέει το άνοιγμα;',
+    test('Ζ3 · έκδοση από το μέλλον — ο κριτής τη σταματά πριν την '
+        'αντιγραφή', () async {
+      // Ήταν 99 όταν γράφτηκε ο έλεγχος πεδίου· ο αριθμός κρατιέται σχετικός
+      // ώστε να μένει «από το μέλλον» όσο κι αν ανέβει η τρέχουσα έκδοση.
+      final futureVersion = kDatabaseSchemaVersion + 39;
+      final path = at('v$futureVersion.db');
+      await makeCallLoggerDb(path, version: futureVersion);
+      final verdict = judgeBackupDatabase(await profileDatabaseFile(path));
+      note(
+        'Ζ3 v$futureVersion από το μέλλον',
+        verdict.restorable ? 'ΕΠΙΤΡΕΠΕΤΑΙ' : 'ΜΠΛΟΚ: ${verdict.reason}',
       );
-      note('Ζ3 v99 μετά την επαναφορά', await openLikeTheApp(path));
+      // Η απόρριψη ΠΡΕΠΕΙ να έρχεται από τον κριτή, όχι από το άνοιγμα: ως
+      // εκεί η ενεργή βάση έχει ήδη αντικατασταθεί από το αντίγραφο.
+      expect(verdict.restorable, isFalse);
+      expect(verdict.reason, contains('$futureVersion'));
+      note('Ζ3 τι θα έλεγε το άνοιγμα', await openLikeTheApp(path));
     });
   });
 }

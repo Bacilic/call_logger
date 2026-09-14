@@ -367,5 +367,5 @@ String _mergeDetails(String? current, String diagnostic) {
   final d = diagnostic.trim();
   if (d.isEmpty) return c;
   if (c.isEmpty) return d;
-  return '$c\n\n--- Lock diagnostics ---\n$d';
+  return '$c\n\n$kLockDiagnosticsSectionMarker\n$d';
 }

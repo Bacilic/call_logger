@@ -75,7 +75,11 @@ class LampIntegrityController {
       // Πριν μετρήσουμε τα καινούρια, φεύγουν όσα έπαψαν να ισχύουν: αλλιώς
       // ο μετρητής της οθόνης δείχνει προβλήματα που ο οδηγός επίλυσης δεν
       // έχει πια να προτείνει, και το κουμπί οδηγεί σε άδεια λίστα.
-      await host.shared.repository.dropStaleScientificSerialIssues(dbPath);
+      final dropped = await host.shared.repository.dropStaleIntegrityIssues(
+        dbPath,
+        checkedIssueTypes: scan.checkedIssueTypes,
+        freshIssues: scan.issues,
+      );
       final newIssues = await host.shared.repository.filterToNewDataIssuesOnly(
         dbPath,
         scan.issues,
@@ -85,23 +89,34 @@ class LampIntegrityController {
         steps: scan.steps,
         cancelled: scan.cancelled,
         stoppedAfterError: scan.stoppedAfterError,
+        checkedIssueTypes: scan.checkedIssueTypes,
       );
+
+      // Ένα φινάλε για κάθε δρόμο. Η καταχώρηση των νέων είναι επιλογή του
+      // χρήστη· η εξαφάνιση των ξεπερασμένων ΔΕΝ είναι — έχει ήδη γίνει στη
+      // βάση. Όποια κι αν είναι η απόφασή του, η οθόνη οφείλει να δείχνει την
+      // αλήθεια πριν φύγει από εδώ.
+      Future<void> finish(String message, {bool afterInsert = false}) async {
+        if (afterInsert || dropped > 0) await reloadIssues();
+        if (!host.mounted) return;
+        host.showSnack('$message${staleIssuesRemovedNote(dropped)}');
+      }
+
       if (autoPersist) {
         if (newIssues.isEmpty) {
           final suffix = scan.isPartial ? ' (μερικός έλεγχος)' : '';
-          host.showSnack('Δεν εντοπίστηκαν νέα προβλήματα$suffix.');
+          await finish('Δεν εντοπίστηκαν νέα προβλήματα$suffix.');
           return;
         }
         final inserted = await host.shared.repository.insertDataIssues(
           dbPath,
           newIssues,
         );
-        await reloadIssues();
-        if (!host.mounted) return;
         final suffix = scan.isPartial ? ' από μερικό έλεγχο' : '';
-        host.showSnack(
+        await finish(
           'Καταχωρήθηκαν $inserted νέα προβλήματα$suffix '
           'στον πίνακα ασυμφωνίας δεδομένων.',
+          afterInsert: true,
         );
         return;
       }
@@ -111,7 +126,7 @@ class LampIntegrityController {
       );
       if (persist != true) {
         final suffix = scan.isPartial ? ' (μερική αναφορά)' : '';
-        host.showSnack(
+        await finish(
           'Ο έλεγχος ολοκληρώθηκε χωρίς καταχώρηση στον πίνακα ασυμφωνίας δεδομένων$suffix.',
         );
         return;
@@ -120,11 +135,10 @@ class LampIntegrityController {
         dbPath,
         newIssues,
       );
-      await reloadIssues();
-      if (!host.mounted) return;
       final suffix = scan.isPartial ? ' από μερικό έλεγχο' : '';
-      host.showSnack(
+      await finish(
         'Καταχωρήθηκαν $inserted νέα προβλήματα$suffix στον πίνακα ασυμφωνίας δεδομένων.',
+        afterInsert: true,
       );
     } catch (e) {
       if (!host.mounted) return;

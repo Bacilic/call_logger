@@ -14,6 +14,8 @@ import '../../../core/providers/app_instances_provider.dart';
 import '../../../core/services/app_instance_registry.dart';
 import '../../../core/services/crash_log_service.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
+import '../../../core/widgets/raw_error_details_tile.dart';
 import '../models/database_stats.dart';
 import '../providers/database_browser_stats_provider.dart';
 import '../services/database_stats_service.dart';
@@ -26,11 +28,16 @@ const String _kDatabaseBrowserZoomByTableSettingsKey =
     'database_browser_preview_zoom_by_table';
 
 /// Αποθηκευμένο επίπεδο μεγέθυνσης ανά πίνακα προεπισκόπησης (0.5–2.0· προεπιλογή 1.0).
+///
+/// **Ζει όσο η εφαρμογή, όχι όσο η οθόνη.** Η φόρτωση ξεκινά από το `initState`,
+/// πριν προλάβει το πρώτο build να αρχίσει να παρακολουθεί, και η εναλλαγή
+/// βάσης μπορεί να ξηλώσει την οθόνη ενόσω τρέχει: με `autoDispose` ο
+/// αποθηκευτής πέθαινε στο πρώτο await και η εγγραφή της τιμής έσκαγε, οπότε
+/// το ζουμ του χρήστη γύριζε σιωπηλά στο 100%.
 final databaseBrowserZoomByTableProvider =
-    NotifierProvider.autoDispose<
-      DatabaseBrowserZoomByTableNotifier,
-      Map<String, double>
-    >(DatabaseBrowserZoomByTableNotifier.new);
+    NotifierProvider<DatabaseBrowserZoomByTableNotifier, Map<String, double>>(
+      DatabaseBrowserZoomByTableNotifier.new,
+    );
 
 class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
   @override
@@ -43,6 +50,7 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
       final raw = await SettingsRepository(
         dbZoom,
       ).getSetting(_kDatabaseBrowserZoomByTableSettingsKey);
+      if (!ref.mounted) return;
       if (raw == null || raw.trim().isEmpty) {
         state = {};
         return;
@@ -62,17 +70,18 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
       // Το zoom είναι προαιρετική άνεση — η οθόνη συνεχίζει με 100%,
       // αλλά το σφάλμα (π.χ. χαλασμένο JSON) αφήνει ίχνος στο ημερολόγιο.
       CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
-      state = {};
+      if (ref.mounted) state = {};
     }
   }
 
   double zoomFor(String tableName) => state[tableName] ?? 1.0;
 
-  Future<void> _persist() async {
+  Future<void> _persist(Map<String, double> snapshot) async {
     final dbZoom = await DatabaseHelper.instance.database;
-    await SettingsRepository(
-      dbZoom,
-    ).saveSetting(_kDatabaseBrowserZoomByTableSettingsKey, jsonEncode(state));
+    await SettingsRepository(dbZoom).saveSetting(
+      _kDatabaseBrowserZoomByTableSettingsKey,
+      jsonEncode(snapshot),
+    );
   }
 
   Future<void> setZoomForTable(String tableName, double zoom) async {
@@ -85,7 +94,7 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
     }
     state = next;
     try {
-      await _persist();
+      await _persist(next);
     } catch (e, stack) {
       // Η προβολή έχει ήδη το νέο zoom — μόνο η αποθήκευση απέτυχε.
       CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
@@ -394,11 +403,21 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  'Δεν ήταν δυνατή η φόρτωση στατιστικών: ${statsAsync.error}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onErrorContainer,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Τα στατιστικά δεν φορτώθηκαν. '
+                      '${humanizeUserFacingError(statsAsync.error!)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onErrorContainer,
+                      ),
+                    ),
+                    // Το ωμό κείμενο του SQLite δεν το καταλαβαίνει ο
+                    // χειριστής, αλλά είναι ό,τι θα ζητήσει όποιος κληθεί να
+                    // βοηθήσει. Ένα πάτημα μακριά, ποτέ μέσα στο μήνυμα.
+                    RawErrorDetailsTile(error: statsAsync.error!),
+                  ],
                 ),
               ),
             ],
