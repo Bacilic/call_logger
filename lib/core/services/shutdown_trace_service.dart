@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -6,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'crash_log_service.dart';
 import 'shutdown_coordinator.dart';
 import 'shutdown_trace_incident.dart';
+import 'station_name.dart';
 
 /// Σιωπηλός φρουρός του κλεισίματος.
 ///
@@ -23,19 +25,25 @@ import 'shutdown_trace_incident.dart';
 /// Σε φυσιολογικό κλείσιμο το προσωρινό σβήνεται και ο φάκελος logs μένει
 /// καθαρός. Το κατώφλι είναι το ΙΔΙΟ με αυτό που αποκαλύπτει την οθόνη
 /// προόδου — ένας ορισμός του «αργό» σε όλη την εφαρμογή.
+///
+/// Όταν το ίχνος αξίζει, **δεν γίνεται δικό του αρχείο**: προσαρτάται στο
+/// ημερήσιο αρχείο συνεδριών, κάτω από την εκκίνηση της ίδιας ημέρας. Έτσι η
+/// συνεδρία διαβάζεται ολόκληρη — «άνοιξα στις 8:12 και άργησε η βάση, έκλεισα
+/// στις 16:40 και κόλλησε το αντίγραφο» — αντί για δύο ξένα μεταξύ τους αρχεία.
 class ShutdownTraceService {
   ShutdownTraceService({
     required this.logsDirectory,
-    required this.retentionCount,
+    required this.appendToSessionLog,
     this.slowThreshold = ShutdownCoordinator.progressRevealDelay,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
   final String logsDirectory;
 
-  /// Πόσα αρχεία περιστατικών κρατιούνται. Ακολουθεί τη ρύθμιση των αρχείων
-  /// καταγραφής σφαλμάτων — ένα νούμερο για όλα τα διαγνωστικά αρχεία.
-  final int retentionCount;
+  /// Πού καταλήγει το ίχνος όταν αξίζει να κρατηθεί — το ημερήσιο αρχείο
+  /// συνεδριών του [CrashLogService], που κατέχει τον φάκελο και τον φρουρό
+  /// του δίσκου.
+  final void Function(String text) appendToSessionLog;
 
   /// Πάνω από αυτό το συνολικό όριο το κλείσιμο θεωρείται αργό.
   final Duration slowThreshold;
@@ -50,33 +58,51 @@ class ShutdownTraceService {
   int _slowestStepMs = -1;
   bool _hadFailure = false;
   bool _wasInterrupted = false;
+  bool _keptIncident = false;
 
-  /// Το αρχείο περιστατικού που κρατήθηκε — `null` όσο δεν έχει κριθεί ότι
-  /// αξίζει, και μετά από καθαρό κλείσιμο.
-  File? _incidentFile;
-
-  static const String workingFileName =
-      '${ShutdownTraceIncident.fileNamePrefix}current'
+  /// Το προσωρινό ίχνος του κλεισίματος **αυτού** του σταθμού.
+  ///
+  /// Ο σταθμός μπαίνει στο όνομα για τον ίδιο λόγο που μπαίνει και στο ίχνος
+  /// «τρέχω τώρα»: ο φάκελος είναι κοινός όταν η βάση είναι κοινή. Με κοινό
+  /// όνομα, ένας υπολογιστής που ανοίγει την ώρα που ένας άλλος κλείνει θα
+  /// έβρισκε το **ζωντανό** ίχνος εκείνου και θα το ανακοίνωνε ως διακοπέν
+  /// κλείσιμο — σβήνοντάς το κιόλας.
+  static String get workingFileName =>
+      '${CrashLogService.legacyShutdownTracePrefix}'
+      '${StationName.fileSafe}'
       '${ShutdownTraceIncident.fileNameSuffix}';
 
   static String logsDirectoryForDatabasePath(String databasePath) {
     return CrashLogService.logsDirectoryForDatabasePath(databasePath);
   }
 
-  /// Το αρχείο που κρατήθηκε ως περιστατικό (για τα τεστ και το UI).
-  File? get incidentFile => _incidentFile;
+  /// Στήνει τον ιχνηλάτη πάνω στο ημερολόγιο που ήδη κατέχει τον φάκελο.
+  ///
+  /// `null` όταν δεν υπάρχει ημερολόγιο ή ο φάκελος δεν απαντά: χωρίς δίσκο
+  /// δεν υπάρχει τίποτα να ιχνηλατηθεί, και η αναμονή σε φάκελο που σιωπά
+  /// είναι ακριβώς αυτό που δεν αντέχει η ώρα του κλεισίματος.
+  static ShutdownTraceService? forCrashLog([CrashLogService? service]) {
+    final log = service ?? CrashLogService.instanceOrNull;
+    if (log == null || !log.isDiskAvailable) return null;
+    return ShutdownTraceService(
+      logsDirectory: log.logsDirectory,
+      appendToSessionLog: log.appendSessionText,
+    );
+  }
 
-  /// Αληθές όταν το τρέχον κλείσιμο δικαιολογεί αρχείο.
+  /// Αληθές όταν το ίχνος του τρέχοντος κλεισίματος κρατήθηκε.
+  bool get keptIncident => _keptIncident;
+
+  /// Αληθές όταν το τρέχον κλείσιμο δικαιολογεί καταγραφή.
   bool get isIncident =>
       _hadFailure ||
       _wasInterrupted ||
       _totalMs >= slowThreshold.inMilliseconds;
 
-  /// Ανοίγει το προσωρινό αρχείο και προάγει τυχόν ορφανό προηγούμενο.
+  /// Ανοίγει το προσωρινό αρχείο του τρέχοντος κλεισίματος.
   Future<void> beginSession() async {
     try {
       await Directory(logsDirectory).create(recursive: true);
-      await _promoteOrphanedWorkingFile();
       final file = File(p.join(logsDirectory, workingFileName));
       if (await file.exists()) await file.delete();
       _file = file;
@@ -110,7 +136,7 @@ class ShutdownTraceService {
     } catch (_) {}
   }
 
-  /// Κρατά τα λίγα στοιχεία που χρειάζεται η απόφαση «αξίζει αρχείο;» και η
+  /// Κρατά τα λίγα στοιχεία που χρειάζεται η απόφαση «αξίζει καταγραφή;» και η
   /// σύνοψη προς τον χρήστη — χωρίς να ξαναδιαβάσει ποτέ το αρχείο.
   void _accumulate(ShutdownStepEvent event) {
     switch (event.phase) {
@@ -133,7 +159,7 @@ class ShutdownTraceService {
     }
   }
 
-  /// Κλείνει τη συνεδρία: κρατά το αρχείο ως περιστατικό ή το σβήνει.
+  /// Κλείνει τη συνεδρία: κρατά το ίχνος ως περιστατικό ή το σβήνει.
   Future<void> endSession() async {
     await _subscription?.cancel();
     _subscription = null;
@@ -147,8 +173,8 @@ class ShutdownTraceService {
         if (await file.exists()) await file.delete();
         return;
       }
-      _incidentFile = await _keepAsIncident(file, _buildIncident());
-      await _purgeOldIncidentFiles();
+      await _appendTraceToSessionLog(file, _buildIncident());
+      _keptIncident = true;
     } catch (_) {}
   }
 
@@ -164,66 +190,85 @@ class ShutdownTraceService {
     );
   }
 
-  /// Γράφει τη σύνοψη και μετονομάζει σε αρχείο περιστατικού.
-  Future<File> _keepAsIncident(File file, ShutdownTraceIncident summary) async {
-    file.writeAsStringSync(
-      '${summary.toSummaryLine()}\n',
-      mode: FileMode.append,
-      flush: true,
+  Future<void> _appendTraceToSessionLog(
+    File file,
+    ShutdownTraceIncident summary,
+  ) async {
+    await _writeTraceBlock(
+      body: await file.readAsString(),
+      summary: summary,
+      append: appendToSessionLog,
     );
-    final target = File(
-      p.join(logsDirectory, incidentFileName(summary.occurredAt)),
-    );
-    if (await target.exists()) await target.delete();
-    return file.rename(target.path);
+    try {
+      await file.delete();
+    } catch (_) {}
   }
 
-  static String incidentFileName(DateTime dateTime) {
-    String two(int value) => value.toString().padLeft(2, '0');
-    final date =
-        '${dateTime.year.toString().padLeft(4, '0')}-'
-        '${two(dateTime.month)}-${two(dateTime.day)}';
-    final time =
-        '${two(dateTime.hour)}${two(dateTime.minute)}'
-        '${two(dateTime.second)}';
-    return '${ShutdownTraceIncident.fileNamePrefix}${date}_$time'
-        '${ShutdownTraceIncident.fileNameSuffix}';
+  /// Το κοινό σχήμα του μπλοκ τερματισμού — μία μορφή, δύο καλούντες: το
+  /// κλείσιμο που μόλις έγινε και το ορφανό της προηγούμενης εκτέλεσης.
+  static Future<void> _writeTraceBlock({
+    required String body,
+    required ShutdownTraceIncident summary,
+    required void Function(String text) append,
+  }) async {
+    final stamp = _formatTimestamp(summary.occurredAt);
+    final buffer = StringBuffer()
+      ..writeln('[$stamp] ══ ΤΕΡΜΑΤΙΣΜΟΣ — ΠΕΡΙΣΤΑΤΙΚΟ ══')
+      ..write(body.endsWith('\n') || body.isEmpty ? body : '$body\n')
+      ..writeln(summary.toSummaryLine())
+      ..writeln();
+    append(buffer.toString());
   }
 
   /// Προσωρινό αρχείο από προηγούμενη εκτέλεση = το κλείσιμο δεν ολοκληρώθηκε
   /// ποτέ (η διεργασία πέθανε στη μέση). Αυτό είναι από μόνο του περιστατικό:
   /// κρατιέται, με το τελευταίο βήμα που πρόλαβε να ξεκινήσει.
-  Future<void> _promoteOrphanedWorkingFile() async {
+  ///
+  /// Τρέχει στην **εκκίνηση**, όχι στο επόμενο κλείσιμο. Ένα διακοπέν κλείσιμο
+  /// ανήκει χρονικά πριν από τη συνεδρία που ξεκινά τώρα — και, το κυριότερο,
+  /// έτσι το βλέπει αμέσως η ένδειξη των Ρυθμίσεων. Όσο η προαγωγή γινόταν στο
+  /// επόμενο κλείσιμο, ο χρήστης δεν μάθαινε ποτέ ότι η εφαρμογή σκοτώθηκε.
+  ///
+  /// Επιστρέφει `true` όταν βρήκε πράγματι ορφανό — ένα βήμα εκκίνησης που
+  /// συνήθως δεν έχει δουλειά να κάνει.
+  static Future<bool> promoteOrphanedTrace({
+    required String logsDirectory,
+    required void Function(String text) appendToSessionLog,
+    DateTime Function()? now,
+  }) async {
+    final clock = now ?? DateTime.now;
     final orphan = File(p.join(logsDirectory, workingFileName));
-    if (!await orphan.exists()) return;
+    if (!await orphan.exists()) return false;
     try {
-      final lines = await orphan.readAsLines();
-      // Αν έχει ήδη σύνοψη, κάποιος το άφησε μισοτελειωμένο — δεν το πειράζουμε
-      // δεύτερη φορά, απλώς φεύγει από τη μέση.
+      final content = await orphan.readAsString();
+      final lines = const LineSplitter().convert(content);
+      // Αν έχει ήδη σύνοψη, κάποιος το άφησε μισοτελειωμένο — δεν το
+      // ξαναγράφουμε, απλώς φεύγει από τη μέση.
       final alreadySummarised = lines.any(
         (line) => line.trim().startsWith(ShutdownTraceIncident.summaryPrefix),
       );
-      if (alreadySummarised) {
-        await orphan.delete();
-        return;
+      if (!alreadySummarised) {
+        await _writeTraceBlock(
+          body: content,
+          summary: ShutdownTraceIncident(
+            filePath: '',
+            occurredAt: _lastTimestampIn(lines) ?? clock(),
+            totalMs: 0,
+            slowestStepLabel: _lastStartedStepIn(lines),
+            slowestStepMs: 0,
+            hadFailure: false,
+            wasInterrupted: true,
+          ),
+          append: appendToSessionLog,
+        );
       }
-      await _keepAsIncident(
-        orphan,
-        ShutdownTraceIncident(
-          filePath: '',
-          occurredAt: _lastTimestampIn(lines) ?? _now(),
-          totalMs: 0,
-          slowestStepLabel: _lastStartedStepIn(lines),
-          slowestStepMs: 0,
-          hadFailure: false,
-          wasInterrupted: true,
-        ),
-      );
-      await _purgeOldIncidentFiles();
+      await orphan.delete();
+      return !alreadySummarised;
     } catch (_) {
       try {
         await orphan.delete();
       } catch (_) {}
+      return false;
     }
   }
 
@@ -270,29 +315,5 @@ class ShutdownTraceService {
     return '${now.year.toString().padLeft(4, '0')}-'
         '${two(now.month)}-${two(now.day)} '
         '${two(now.hour)}:${two(now.minute)}:${two(now.second)}';
-  }
-
-  Future<void> _purgeOldIncidentFiles() async {
-    final dir = Directory(logsDirectory);
-    if (!await dir.exists()) return;
-
-    final files = await dir
-        .list()
-        .where(
-          (entity) =>
-              entity is File &&
-              ShutdownTraceIncident.isIncidentFile(entity.path) &&
-              p.basename(entity.path) != workingFileName,
-        )
-        .cast<File>()
-        .toList();
-    if (files.length <= retentionCount) return;
-
-    files.sort((a, b) => p.basename(b.path).compareTo(p.basename(a.path)));
-    for (final file in files.skip(retentionCount)) {
-      try {
-        await file.delete();
-      } catch (_) {}
-    }
   }
 }

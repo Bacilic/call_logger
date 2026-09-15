@@ -16,6 +16,7 @@ import 'core/about/version_display.dart';
 import 'core/config/app_config.dart';
 import 'core/init/startup_engine_failure.dart';
 import 'core/init/startup_journal.dart';
+import 'core/init/startup_journal_writer.dart';
 import 'core/init/startup_notices.dart';
 import 'core/init/startup_window_placement.dart';
 import 'core/updates/update_providers.dart';
@@ -23,6 +24,7 @@ import 'core/utils/windows_cli_error_dialog.dart';
 import 'core/services/app_close_controller.dart';
 import 'core/services/crash_log_service.dart';
 import 'core/services/settings_service.dart';
+import 'core/services/shutdown_trace_service.dart';
 import 'core/database/database_file_identity.dart';
 import 'core/database/database_reachability.dart';
 import 'core/database/database_replacement_notice.dart';
@@ -287,11 +289,31 @@ Future<void> _bootstrapAndRunApp() async {
       appVersion: appVersion,
       retentionCount: await settings.catalogs.getCrashLogRetentionCount(),
     );
+    // Το σημάδι ζωής ξεκινά ρητά, εδώ και πουθενά αλλού: όσο τρέχει, η
+    // απώλειά του λέει πόσο έζησε η εκτέλεση που χάθηκε.
+    CrashLogService.instanceOrNull?.startLivenessHeartbeat();
     logStep.ok();
   } catch (e, st) {
     logStep.warn(e.toString());
     recordStartupNotice('Ημερολόγιο καταρρεύσεων', e, st);
   }
+
+  // Το ίχνος ενός κλεισίματος που δεν πρόλαβε να τελειώσει ανήκει χρονικά
+  // ΠΡΙΝ από τη σημερινή εκκίνηση — και μόνο εδώ προλαβαίνει να το δει η
+  // ένδειξη των Ρυθμίσεων, που ρωτά μία φορά όταν ανοίγει η οθόνη.
+  await runStartupHousekeeping('Έλεγχος προηγούμενου κλεισίματος', () async {
+    final log = CrashLogService.instanceOrNull;
+    if (log == null || !log.isDiskAvailable) return false;
+    return ShutdownTraceService.promoteOrphanedTrace(
+      logsDirectory: log.logsDirectory,
+      appendToSessionLog: log.appendSessionText,
+    );
+  });
+
+  // Από εδώ και πέρα τα βήματα γράφονται και σε αρχείο. Όσα προηγήθηκαν
+  // υπάρχουν ήδη ολόκληρα στη μνήμη και γράφονται αναδρομικά — δεν είχαν πού
+  // να πάνε, γιατί ο φάκελος γίνεται γνωστός μόλις τώρα.
+  StartupJournalWriter.startForApp();
 
   flushStartupNoticesToCrashLog();
 

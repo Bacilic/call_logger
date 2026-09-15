@@ -8,6 +8,7 @@
 
 import 'dart:io';
 
+import 'package:call_logger/core/services/crash_log_service.dart';
 import 'package:call_logger/core/services/shutdown_coordinator.dart';
 import 'package:call_logger/core/services/shutdown_runner.dart';
 import 'package:call_logger/core/services/shutdown_trace_service.dart';
@@ -123,11 +124,17 @@ void main() {
       );
       await logsDir.create(recursive: true);
 
+      // Και τα δύο προθέματα: ούτε προσωρινό ίχνος, ούτε γραμμή στο
+      // ημερήσιο αρχείο συνεδρίας.
       List<String> traceFilesNow() => logsDir
           .listSync()
           .whereType<File>()
           .map((f) => f.uri.pathSegments.last)
-          .where((name) => name.startsWith('shutdown_trace_'))
+          .where(
+            (name) =>
+                name.startsWith(CrashLogService.legacyShutdownTracePrefix) ||
+                name.startsWith(CrashLogService.sessionLogPrefix),
+          )
           .toList();
 
       final log = <String>[];
@@ -148,7 +155,10 @@ void main() {
         createCoordinator: () => coordinator,
         createTrace: () async => ShutdownTraceService(
           logsDirectory: logsDir.path,
-          retentionCount: 5,
+          appendToSessionLog: (text) => File(
+            '${logsDir.path}${Platform.pathSeparator}'
+            '${CrashLogService.sessionLogFileName(DateTime.now())}',
+          ).writeAsStringSync(text, mode: FileMode.append, flush: true),
         ),
         presenter: _RecordingPresenter(log),
       ).run();

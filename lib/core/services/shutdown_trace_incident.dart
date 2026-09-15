@@ -3,12 +3,15 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'crash_log_service.dart';
+
 /// Σύνοψη ενός **προβληματικού** κλεισίματος.
 ///
-/// Ο ιχνηλάτης κρατά αρχείο μόνο όταν κάτι πήγε στραβά (δες
-/// `ShutdownTraceService`). Κάθε τέτοιο αρχείο κλείνει με μία γραμμή
-/// `SUMMARY={json}` — αυτή διαβάζεται εδώ, ώστε οι Ρυθμίσεις να μπορούν να
-/// πουν στον χρήστη τι συνέβη χωρίς να διαβάσουν ολόκληρο το ίχνος.
+/// Ο ιχνηλάτης κρατά ίχνος μόνο όταν κάτι πήγε στραβά (δες
+/// `ShutdownTraceService`), και το προσαρτά στο ημερήσιο αρχείο συνεδριών.
+/// Κάθε τέτοιο μπλοκ κλείνει με μία γραμμή `SUMMARY={json}` — αυτή διαβάζεται
+/// εδώ, ώστε οι Ρυθμίσεις να πουν στον χρήστη τι συνέβη χωρίς να διαβάσουν
+/// ολόκληρο το ίχνος.
 class ShutdownTraceIncident {
   const ShutdownTraceIncident({
     required this.filePath,
@@ -39,7 +42,7 @@ class ShutdownTraceIncident {
   final bool wasInterrupted;
 
   static const String summaryPrefix = 'SUMMARY=';
-  static const String fileNamePrefix = 'shutdown_trace_';
+  static const String fileNamePrefix = CrashLogService.sessionLogPrefix;
   static const String fileNameSuffix = '.log';
 
   String get fileName => p.basename(filePath);
@@ -86,8 +89,10 @@ class ShutdownTraceIncident {
 
   /// Το πιο πρόσφατο περιστατικό στον φάκελο, ή `null` αν δεν υπάρχει κανένα.
   ///
-  /// Τα ονόματα αρχείων φέρουν χρονοσφραγίδα, οπότε η αλφαβητική σειρά είναι
-  /// και χρονολογική· διαβάζεται μόνο το τελευταίο αρχείο, όχι όλα.
+  /// Τα αρχεία συνεδρίας φέρουν την ημερομηνία στο όνομά τους, οπότε η
+  /// αλφαβητική σειρά είναι και χρονολογική. Μέσα στο αρχείο η αναζήτηση πάει
+  /// από το τέλος προς την αρχή: οι περισσότερες γραμμές είναι βήματα
+  /// εκκίνησης, και η σύνοψη που ψάχνουμε κλείνει το τελευταίο κλείσιμο.
   static Future<ShutdownTraceIncident?> findLatest(String logsDirectory) async {
     try {
       final dir = Directory(logsDirectory);
@@ -114,6 +119,7 @@ class ShutdownTraceIncident {
     }
   }
 
+  /// Αρχείο συνεδρίας — εκεί ζουν πλέον οι συνόψεις κλεισίματος.
   static bool isIncidentFile(String path) {
     final name = p.basename(path);
     return name.startsWith(fileNamePrefix) && name.endsWith(fileNameSuffix);

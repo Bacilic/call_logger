@@ -10,7 +10,6 @@ import 'package:window_manager/window_manager.dart';
 import '../../features/database/services/database_exit_backup.dart';
 import '../services/app_close_controller.dart';
 import '../services/desktop_window_service.dart';
-import '../services/settings_service.dart';
 import '../services/shutdown_coordinator.dart';
 import '../services/shutdown_runner.dart';
 import '../services/shutdown_trace_service.dart';
@@ -295,18 +294,15 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   }
 
   /// Ο ιχνηλάτης τρέχει πάντα — δεν έχει διακόπτη, γιατί σε φυσιολογικό
-  /// κλείσιμο δεν αφήνει αρχείο. Κρατά ίχνος μόνο όταν κάτι πάει στραβά.
+  /// κλείσιμο δεν αφήνει τίποτα. Κρατά ίχνος μόνο όταν κάτι πάει στραβά.
+  ///
+  /// Δεν ρωτά τις ρυθμίσεις για τη διαδρομή: ο φάκελος είναι ήδη γνωστός στο
+  /// ημερολόγιο — και είναι ο **σωστός** φάκελος ακόμη κι όταν η εκκίνηση
+  /// κατέληξε σε άλλη βάση από τη ρυθμισμένη. Δύο αναγνώσεις ρυθμίσεων τη
+  /// στιγμή του κλεισίματος ήταν και περιττές και επιρρεπείς σε απόκλιση.
   Future<ShutdownTraceService?> _createTraceService() async {
     try {
-      final settings = SettingsService();
-      final dbPath = await settings.getDatabasePath();
-      if (dbPath.trim().isEmpty) return null;
-      return ShutdownTraceService(
-        logsDirectory: ShutdownTraceService.logsDirectoryForDatabasePath(
-          dbPath,
-        ),
-        retentionCount: await settings.catalogs.getCrashLogRetentionCount(),
-      );
+      return ShutdownTraceService.forCrashLog();
     } catch (_) {
       return null;
     }
