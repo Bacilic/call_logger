@@ -13,6 +13,7 @@ import '../../features/history/providers/dashboard_provider.dart';
 import '../../features/history/providers/gemini_settings_provider.dart';
 import '../../features/history/providers/lansweeper_report_scope_provider.dart';
 import '../../features/tasks/providers/task_analytics_date_provider.dart';
+import '../../features/tasks/providers/task_notifications_provider.dart';
 import '../../features/tasks/providers/task_settings_config_provider.dart';
 import '../providers/settings_provider.dart';
 
@@ -47,6 +48,10 @@ void invalidateOperatorScopedCaches(WidgetRef ref) {
     // Πλευρική μπάρα και ορατότητα στοιχείων — ό,τι βλέπει ο χρήστης αμέσως.
     ref.invalidate(showActiveTimerProvider);
     ref.invalidate(showTasksBadgeProvider);
+    // Ο παραλήπτης των ειδοποιήσεων ΕΙΝΑΙ ο συνδεδεμένος χρήστης: χωρίς αυτό,
+    // ο επόμενος που θα καθίσει θα έβλεπε όσα περίμεναν τον προηγούμενο.
+    ref.invalidate(notifyTaskHandoversProvider);
+    ref.invalidate(taskNotificationsProvider);
     ref.invalidate(enableSpellCheckProvider);
     ref.invalidate(showDatabaseNavProvider);
     // Ρητά, παρότι κρέμεται από το από πάνω: το δικαίωμα Περιήγησης Βάσης δεν

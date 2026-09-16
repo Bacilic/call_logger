@@ -49,6 +49,19 @@ class SettingsServiceWindowUi {
     await ScopedSettings.setBool(ProfileSettingKeys.showTasksBadge, value);
   }
 
+  /// Ειδοποίηση όταν κάποιος άλλος αγγίξει εκκρεμότητα που κατέχω.
+  /// Προεπιλογή: true — η σιωπή είναι επιλογή, όχι αφετηρία.
+  Future<bool> getNotifyTaskHandovers() async {
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.notifyTaskHandovers,
+        ) ??
+        true;
+  }
+
+  Future<void> setNotifyTaskHandovers(bool value) async {
+    await ScopedSettings.setBool(ProfileSettingKeys.notifyTaskHandovers, value);
+  }
+
   /// Εμφάνιση λεζαντών στην πλευρική μπάρα (NavigationRail extended) όταν το πλάτος επιτρέπει.
   /// Προεπιλογή: true.
   Future<bool> getNavRailShowLabels() async {

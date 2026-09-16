@@ -8,7 +8,10 @@ import '../../../calls/models/user_model.dart';
 import '../../models/department_kind.dart';
 import '../../models/department_model.dart';
 import '../../providers/directory_provider.dart';
+import '../../models/catalog_validation_rules.dart';
+import '../../providers/catalog_validation_provider.dart';
 import '../../services/bulk_user_actions.dart';
+import '../../services/phone_transfer_split.dart';
 import 'bulk_user_action_call_guard.dart';
 import 'bulk_user_action_pickers.dart';
 import 'asset_fate_on_department_change.dart';
@@ -152,18 +155,31 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
 
     final targetKind = _targetKind(target);
 
-    final phoneFate = await askPhoneFateOnDepartmentChange(context);
+    // Τα εσωτερικά του κέντρου μας δεν ακολουθούν έξω από το νοσοκομείο: η
+    // ερώτηση τα βγάζει στην άκρη και τα αναγγέλλει, αντί να τα στείλει
+    // σιωπηλά σε τηλεφωνικό κέντρο που δεν τα χτυπά.
+    final phoneSplit = splitPhonesForDepartmentChange(
+      phones: [for (final u in _users) ...u.phones],
+      targetKind: targetKind,
+      rules:
+          ref.read(catalogValidationRulesProvider).value ??
+          const CatalogValidationRules(),
+    );
+    final phoneFate = await askPhoneFateOnDepartmentChange(
+      context,
+      split: phoneSplit,
+      targetKind: targetKind,
+    );
     if (phoneFate == null || !mounted) return;
 
     // Το «ακολουθεί ή μένει;» έχει νόημα μόνο όταν ο προορισμός μπορεί να
-    // κρατά μηχανήματα. Στην εταιρεία δεν μπορεί, και η απάντηση θα ήταν
-    // υπόσχεση που δεν τηρείται — ρωτάμε αντ' αυτής πού πάει το καθένα.
-    var equipmentFate = BulkTransferAssetFate.stayInOldDepartment;
-    if (targetKind.canOwnEquipment) {
-      final picked = await askEquipmentFateOnDepartmentChange(context);
-      if (picked == null || !mounted) return;
-      equipmentFate = picked;
-    }
+    // κρατά μηχανήματα — η ίδια η ερώτηση το κρίνει και απαντά «μένει πίσω»
+    // χωρίς να ενοχλήσει. Το σχέδιο από κάτω ρωτά τότε πού πάει το καθένα.
+    final equipmentFate = await askEquipmentFateOnDepartmentChange(
+      context,
+      targetKind: targetKind,
+    );
+    if (equipmentFate == null || !mounted) return;
 
     final equipmentByUser = _equipmentByUserId();
     var plan = buildBulkUserTransferPlan(

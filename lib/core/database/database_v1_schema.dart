@@ -93,6 +93,12 @@ import 'database_schema_version.dart';
 /// v60: `operator_presence.app_version` — ποια έκδοση τρέχει κάθε ανοιχτή
 /// συνεδρία. Καθαρή προσθήκη με κενή προεπιλογή· η στήλη γεμίζει μόνη της με
 /// τον πρώτο παλμό κάθε εφαρμογής.
+/// v61: `tasks.closed_by_operator_id` — ποιος ολοκλήρωσε την εκκρεμότητα.
+/// Καθαρή προσθήκη με κενή προεπιλογή: οι ήδη κλεισμένες μένουν κενές, γιατί
+/// η απάντηση για εκείνες υπάρχει μόνο στο Ιστορικό και δεν εφευρίσκεται.
+/// v62: `task_notifications` — η ουρά «τι περιμένει να δει ο καθένας» για
+/// αναθέσεις, αφαιρέσεις ανάθεσης και κλεισίματα ξένων εκκρεμοτήτων. Νέος
+/// πίνακας, άδειος: καμία υπάρχουσα εγγραφή δεν γεννά αναδρομικά ειδοποίηση.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
@@ -304,6 +310,9 @@ Future<void> applyDatabaseV1Schema(Database db) async {
     ''');
 
   await db.execute(kCreateTasksTable);
+
+  await db.execute(kCreateTaskNotificationsTable);
+  await db.execute(kCreateTaskNotificationsRecipientIndex);
 
   await db.execute(kCreateKnowledgeBaseTable);
 

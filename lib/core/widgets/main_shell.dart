@@ -40,6 +40,7 @@ import '../services/settings_service.dart';
 import '../about/widgets/version_chip.dart';
 import '../../features/operators/widgets/active_operator_chip.dart';
 import '../../features/operators/widgets/operator_change_refresh_listener.dart';
+import '../../features/tasks/widgets/task_notifications_listener.dart';
 import '../updates/update_periodic_check.dart';
 import '../updates/update_startup_prompt.dart';
 import '../../features/database/debug/release_publish_finished_snackbar.dart';
@@ -566,6 +567,7 @@ class MainShellState extends ConsumerState<MainShell> {
           ),
           const UpdateStartupPromptListener(),
           const OperatorChangeRefreshListener(),
+          const TaskNotificationsListener(),
         ],
       );
     }
@@ -703,6 +705,7 @@ class MainShellState extends ConsumerState<MainShell> {
         ),
         const UpdateStartupPromptListener(),
         const OperatorChangeRefreshListener(),
+        const TaskNotificationsListener(),
       ],
     );
   }

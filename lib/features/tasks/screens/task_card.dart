@@ -117,6 +117,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
         ref.watch(disabledOperatorIdsProvider).value ?? const <int>{};
     final assignedId = task.assignedOperatorId;
     final creatorId = task.createdByOperatorId;
+    final closerId = task.closedByOperatorId;
 
     final pendingDeleteTaskId = ref.watch(pendingTaskDeleteProvider);
     final isPendingDeleteSelf =
@@ -149,6 +150,9 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                   creatorName: creatorId == null
                       ? null
                       : operatorDisplayNameFor(operatorNames, creatorId),
+                  closerName: closerId == null
+                      ? null
+                      : operatorDisplayNameFor(operatorNames, closerId),
                   operatorAvatars: operatorAvatars,
                   disabledOperatorIds: disabledOperatorIds,
                   deleteMenuEnabled: pendingDeleteTaskId == null,

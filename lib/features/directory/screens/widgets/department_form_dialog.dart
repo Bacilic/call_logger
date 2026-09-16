@@ -6,6 +6,8 @@ import '../../../../core/services/lansweeper_department_accounts.dart';
 import '../../../../core/services/lansweeper_agent_identity_reader.dart';
 import '../../../../core/services/lansweeper_identity_diagnosis.dart';
 import '../../../../core/services/lookup_service.dart';
+import '../../../calls/models/user_model.dart';
+import '../../services/kind_change_consequences.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/directory_support.dart';
@@ -351,7 +353,44 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
   /// Δεν απαγορεύει τίποτα· ανοίγει και κλείνει εξαιρέσεις. Η εταιρεία και η
   /// εξωτερική μονάδα μένουν έξω από την κάτοψη και τα ticket Lansweeper,
   /// επειδή δεν βρίσκονται μέσα στα κτίριά μας.
+  /// Τι παύει και τι αρχίζει να ισχύει με το Είδος που είναι επιλεγμένο τώρα.
+  ///
+  /// Μετριέται εδώ και όχι στην αποθήκευση: η στιγμή που ο χρήστης σκέφτεται
+  /// την απόφαση είναι η στιγμή που αλλάζει το πεδίο. Ένας διάλογος στο τέλος
+  /// θα ερχόταν αφού είχε ήδη αποφασίσει.
+  ///
+  /// Η κάτοψη λείπει σκόπιμα: έχει ήδη τον δικό της διάλογο στην αποθήκευση.
+  String? get _kindChangeNote {
+    final departmentId = widget.initialDepartment?.id;
+    final employees = departmentId == null
+        ? const <UserModel>[]
+        : [
+            for (final user in LookupService.instance.users)
+              if (!user.isDeleted && user.departmentId == departmentId) user,
+          ];
+
+    return kindChangeConsequencesMessage(
+      selectedKind: selectedKind,
+      consequences: judgeKindChange(
+        previousKind: snapKind,
+        selectedKind: selectedKind,
+        departmentLansweeperAccounts: lansweeperAccounts.length,
+        employeesInDepartment: employees.length,
+        employeesWithLansweeperAccount: employees
+            .where((u) => (u.lansweeperUsername ?? '').trim().isNotEmpty)
+            .length,
+        buildingIsEmpty: buildingController.text.trim().isEmpty,
+      ),
+    );
+  }
+
   Widget _buildKindField() {
+    // Δύο διαφορετικά πράγματα, με προτεραιότητα στο δεύτερο: το πρώτο
+    // περιγράφει **τι είναι** το επιλεγμένο Είδος και ισχύει πάντα· το δεύτερο
+    // λέει **τι αλλάζει τώρα** και εμφανίζεται μόνο στην αλλαγή. Όταν υπάρχει
+    // το δεύτερο, σκεπάζει το πρώτο — αλλιώς δύο γραμμές θα έλεγαν σχεδόν το
+    // ίδιο, και η σημαντική θα χανόταν στη γενική.
+    final changeNote = _kindChangeNote;
     return DropdownButtonFormField<DepartmentKind>(
       // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
       value: selectedKind,
@@ -360,9 +399,13 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
       decoration: InputDecoration(
         labelText: 'Είδος',
         border: const OutlineInputBorder(),
-        helperText: selectedKind.belongsOnBuildingMap
-            ? null
-            : 'Εκτός κάτοψης και εκτός Lansweeper — οι κλήσεις μετρούν κανονικά',
+        helperText:
+            changeNote ??
+            (selectedKind.belongsOnBuildingMap
+                ? null
+                : 'Εκτός κάτοψης και εκτός Lansweeper — οι κλήσεις μετρούν '
+                      'κανονικά'),
+        helperMaxLines: 3,
       ),
       items: [
         for (final kind in DepartmentKind.values)

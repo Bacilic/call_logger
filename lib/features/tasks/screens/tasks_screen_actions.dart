@@ -23,6 +23,7 @@ import '../providers/task_service_provider.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../widgets/snooze_choice_dialog.dart';
+import 'foreign_task_close_confirm_dialog.dart';
 import 'task_close_dialog.dart';
 import 'task_conflict_dialog.dart';
 import 'task_form_dialog.dart';
@@ -639,6 +640,11 @@ Future<void> completeTask(
   WidgetRef ref,
   Task task,
 ) async {
+  // Η ερώτηση προηγείται του πεδίου λύσης: ένα «όχι» μετά τη συγγραφή της
+  // λύσης θα πετούσε κείμενο που μόλις γράφτηκε.
+  if (!await _confirmForeignAssignee(context, ref, task)) return;
+  if (!context.mounted) return;
+
   final solutionNotes = await showTaskCloseDialog(
     context,
     initialSolutionNotes: task.solutionNotes,
@@ -656,6 +662,40 @@ Future<void> completeTask(
     if (!context.mounted) return;
     _showTaskSaveError(context, e);
   }
+}
+
+/// Ζητά επιβεβαίωση όταν η εκκρεμότητα είναι ανατεθειμένη σε **άλλον**.
+///
+/// Ένα σημείο για κάθε πόρτα κλεισίματος — την οθόνη Εκκρεμότητες και τον
+/// διάλογο συνδεδεμένης εκκρεμότητας του Ιστορικού — ώστε καμιά να μην μπορεί
+/// να την ξεχάσει.
+///
+/// Ρωτά **μόνο όταν υπάρχει ρητή ανάθεση**: η ανανάθετη εκκρεμότητα δεν ανήκει
+/// σε κανέναν, οπότε δεν υπάρχει τίποτα να αναγγελθεί. Χωρίς αναγνωρισμένο
+/// χειριστή ρωτά κι εκεί — δεν μπορούμε να ισχυριστούμε ότι είμαστε ο
+/// ανατεθειμένος όταν δεν ξέρουμε ποιοι είμαστε.
+Future<bool> _confirmForeignAssignee(
+  BuildContext context,
+  WidgetRef ref,
+  Task task,
+) async {
+  final assignedId = task.assignedOperatorId;
+  final active = CurrentOperator.active;
+  if (assignedId == null) return true;
+  if (assignedId == active?.id) return true;
+
+  final names = await ref.read(operatorNamesProvider.future);
+  if (!context.mounted) return false;
+
+  // Σκέτο όνομα ή τίποτα: η παύλα του «άγνωστου» χρήστη δεν είναι όνομα και
+  // δεν μπαίνει σε πρόταση σαν να ήταν.
+  final closer = active?.displayName.trim();
+
+  return confirmClosingForeignTask(
+    context,
+    assigneeName: operatorDisplayNameFor(names, assignedId),
+    closerName: (closer == null || closer.isEmpty) ? null : closer,
+  );
 }
 
 /// Μηνύματα όταν η συνδεδεμένη οντότητα δεν υπάρχει πια στον κατάλογο.

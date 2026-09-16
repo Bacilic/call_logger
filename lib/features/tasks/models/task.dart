@@ -85,6 +85,7 @@ class Task {
     this.completedAt,
     this.createdByOperatorId,
     this.assignedOperatorId,
+    this.closedByOperatorId,
     this.origin = originLegacy,
     this.isDeleted = false,
     this.callerLinkedDeleted = false,
@@ -135,6 +136,14 @@ class Task {
   /// στήλη υπάρχει ήδη ώστε η κοινόχρηστη βάση να μη χρειαστεί δεύτερο γύρο
   /// αναβάθμισης όταν έρθει η διεπαφή της.
   final int? assignedOperatorId;
+
+  /// Ποιος χειριστής ολοκλήρωσε την εκκρεμότητα — `null` όσο είναι ανοιχτή και
+  /// για όσες έκλεισαν πριν υπάρξει η στήλη.
+  ///
+  /// Σφραγίζεται **μόνο στη μετάβαση** προς «ολοκληρωμένη» και δεν σβήνεται
+  /// ποτέ, όπως το [completedAt]: η αναίρεση χρειάζεται να δείχνει ποιος είχε
+  /// κλείσει το θέμα και πότε.
+  final int? closedByOperatorId;
   final String origin;
   final bool isDeleted;
   final bool callerLinkedDeleted;
@@ -182,6 +191,7 @@ class Task {
       completedAt: map['completed_at'] as String?,
       createdByOperatorId: map['created_by_operator_id'] as int?,
       assignedOperatorId: map['assigned_operator_id'] as int?,
+      closedByOperatorId: map['closed_by_operator_id'] as int?,
       origin: normalizeOrigin(map['origin'] as String?),
       isDeleted: (map['is_deleted'] as int?) == 1,
       callerLinkedDeleted: historyEntityIsDeleted(map['caller_is_deleted']),
@@ -219,6 +229,7 @@ class Task {
       if (completedAt != null) 'completed_at': completedAt,
       'created_by_operator_id': createdByOperatorId,
       'assigned_operator_id': assignedOperatorId,
+      'closed_by_operator_id': closedByOperatorId,
       'origin': normalizeOrigin(origin),
       'is_deleted': isDeleted ? 1 : 0,
     };
@@ -249,6 +260,7 @@ class Task {
     int? createdByOperatorId,
     int? assignedOperatorId,
     bool clearAssignedOperator = false,
+    int? closedByOperatorId,
     String? origin,
     bool? isDeleted,
   }) {
@@ -280,6 +292,7 @@ class Task {
       assignedOperatorId: clearAssignedOperator
           ? null
           : (assignedOperatorId ?? this.assignedOperatorId),
+      closedByOperatorId: closedByOperatorId ?? this.closedByOperatorId,
       origin: normalizeOrigin(origin ?? this.origin),
       isDeleted: isDeleted ?? this.isDeleted,
     );
@@ -460,11 +473,13 @@ class Task {
       completedAt: completedAt,
       // Οι σφραγίδες χρήστη ΔΕΝ είναι πεδία φόρμας — αντιγράφονται πάντα.
       // Χωρίς αυτό, η πρώτη αποθήκευση από τη φόρμα θα ξέγραφε σιωπηλά ποιος
-      // άνοιξε την εκκρεμότητα: το toMap γράφει τη στήλη ακόμη και κενή.
+      // άνοιξε και ποιος έκλεισε την εκκρεμότητα: το toMap γράφει τις στήλες
+      // ακόμη και κενές.
       createdByOperatorId: createdByOperatorId,
       assignedOperatorId: clearAssignedOperator
           ? null
           : (assignedOperatorId ?? this.assignedOperatorId),
+      closedByOperatorId: closedByOperatorId,
       origin: origin,
       isDeleted: isDeleted,
       callerLinkedDeleted: callerLinkedDeleted,

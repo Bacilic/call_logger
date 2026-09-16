@@ -19,6 +19,7 @@ class TaskCardActions extends StatelessWidget {
     required this.status,
     required this.assigneeName,
     required this.creatorName,
+    required this.closerName,
     required this.operatorAvatars,
     required this.disabledOperatorIds,
     required this.deleteMenuEnabled,
@@ -38,10 +39,14 @@ class TaskCardActions extends StatelessWidget {
   /// Το όνομα του δημιουργού, ή `null` όταν δεν είναι καταγεγραμμένος.
   final String? creatorName;
 
-  /// Ποιο εικονίδιο φοράει ποιο προφίλ — ολόκληρος ο χάρτης, όχι δύο κλειδιά.
+  /// Το όνομα όποιου ολοκλήρωσε την εκκρεμότητα, ή `null` όσο είναι ανοιχτή
+  /// και για όσες έκλεισαν πριν αρχίσει να καταγράφεται.
+  final String? closerName;
+
+  /// Ποιο εικονίδιο φοράει ποιο προφίλ — ολόκληρος ο χάρτης, όχι τρία κλειδιά.
   ///
-  /// Η κάρτα δείχνει δύο πρόσωπα σήμερα· ο χάρτης κοστίζει το ίδιο με δύο
-  /// αναζητήσεις και δεν θα χρειαστεί νέα παράμετρος όταν προστεθεί τρίτο.
+  /// Ο χάρτης κοστίζει το ίδιο με τρεις αναζητήσεις και δεν θα χρειαστεί νέα
+  /// παράμετρος αν κάποτε η κάρτα δείξει τέταρτο πρόσωπο.
   final Map<int, String?> operatorAvatars;
 
   /// Ποια προφίλ έχουν απενεργοποιηθεί — τα σήματά τους γράφονται πλάγια.
@@ -61,6 +66,22 @@ class TaskCardActions extends StatelessWidget {
   bool get _showCreator =>
       creatorName != null &&
       task.createdByOperatorId != task.assignedOperatorId;
+
+  /// Ποιος χρωστούσε την εκκρεμότητα: ο υπεύθυνος, ή ο δημιουργός όταν δεν
+  /// υπάρχει ανάθεση. Ίδια φόρμουλα με το φίλτρο χρήστη.
+  int? get _responsibleId =>
+      task.assignedOperatorId ?? task.createdByOperatorId;
+
+  /// Ο κλείσας δείχνεται μόνο όταν είναι ΑΛΛΟΣ από αυτόν που τη χρωστούσε —
+  /// αυτό ακριβώς είναι η πληροφορία που έλειπε από την κάρτα.
+  ///
+  /// Και μόνο σε ολοκληρωμένη: η σφραγίδα επιβιώνει της αναίρεσης, όπως η ώρα
+  /// ολοκλήρωσης, αλλά ένα «Έκλεισε: …» πάνω σε ξανα-ανοιγμένη εκκρεμότητα θα
+  /// διαβαζόταν σαν ψέμα. Επανεμφανίζεται μόλις ξανακλείσει.
+  bool get _showCloser =>
+      _isClosed &&
+      closerName != null &&
+      task.closedByOperatorId != _responsibleId;
 
   static String _relativeCreatedAt(DateTime? createdAt) {
     if (createdAt == null) return '';
@@ -179,17 +200,34 @@ class TaskCardActions extends StatelessWidget {
           ],
         ),
         // Δεύτερη σειρά, όχι δίπλα στα υπόλοιπα σήματα: η πάνω σειρά είναι ήδη
-        // γεμάτη με ενέργειες, και ο δημιουργός δεν είναι ενέργεια — είναι
-        // πληροφορία προέλευσης.
-        if (_showCreator)
+        // γεμάτη με ενέργειες, και τα δύο αυτά πρόσωπα δεν είναι ενέργειες —
+        // είναι ιστορικό. Αναδιπλώνονται αντί να στριμώχνονται, γιατί όταν
+        // φαίνονται και τα δύο μαζί δεν χωρούν πάντα σε μία γραμμή.
+        if (_showCreator || _showCloser)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: TaskPersonChip.creator(
-              name: creatorName!,
-              avatarKey: operatorAvatars[task.createdByOperatorId],
-              isDisabledProfile: disabledOperatorIds.contains(
-                task.createdByOperatorId,
-              ),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              alignment: WrapAlignment.end,
+              children: [
+                if (_showCreator)
+                  TaskPersonChip.creator(
+                    name: creatorName!,
+                    avatarKey: operatorAvatars[task.createdByOperatorId],
+                    isDisabledProfile: disabledOperatorIds.contains(
+                      task.createdByOperatorId,
+                    ),
+                  ),
+                if (_showCloser)
+                  TaskPersonChip.closer(
+                    name: closerName!,
+                    avatarKey: operatorAvatars[task.closedByOperatorId],
+                    isDisabledProfile: disabledOperatorIds.contains(
+                      task.closedByOperatorId,
+                    ),
+                  ),
+              ],
             ),
           ),
         if (hasSolution) _buildSolutionToggle(),

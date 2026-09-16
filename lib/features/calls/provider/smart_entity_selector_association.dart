@@ -14,6 +14,9 @@ import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/name_parser.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
+import '../../directory/models/catalog_validation_rules.dart';
+import '../../directory/models/department_kind.dart';
+import '../../directory/services/phone_transfer_split.dart';
 import '../../directory/providers/directory_cache_refresh.dart';
 import '../../directory/screens/widgets/asset_fate_on_department_change.dart';
 import '../../directory/screens/widgets/user_phone_department_conflict_dialog.dart';
@@ -102,6 +105,10 @@ class SmartEntitySelectorAssociation {
   _confirmAssetsOnDepartmentChange({
     required BuildContext? context,
     required UserModel caller,
+
+    /// Πού πάει ο υπάλληλος — το Είδος του προορισμού κρίνει αν ο εξοπλισμός
+    /// επιτρέπεται να τον ακολουθήσει.
+    required int? targetDepartmentId,
   }) async {
     final userId = caller.id;
     final oldDepartmentId = caller.departmentId;
@@ -126,16 +133,41 @@ class SmartEntitySelectorAssociation {
       return (phones: const <String>[], equipment: const <EquipmentModel>[]);
     }
 
+    // Άγνωστο ή νεοσύστατο τμήμα διαβάζεται ως νοσοκομείο — η ίδια παραδοχή
+    // με τη μαζική μεταφορά και τη φόρμα υπαλλήλου.
+    final targetKind =
+        (targetDepartmentId == null
+            ? null
+            : lookup?.departmentKindById(targetDepartmentId)) ??
+        DepartmentKind.hospital;
+
     final userName = bulkUserDisplayName(caller);
     final phonesStaying = <String>[];
     if (carriedPhones.isNotEmpty) {
+      // Τα εσωτερικά του κέντρου μας δεν ακολουθούν έξω από το νοσοκομείο.
+      final split = splitPhonesForDepartmentChange(
+        phones: carriedPhones,
+        targetKind: targetKind,
+        rules:
+            ref.read(catalogValidationRulesProvider).value ??
+            const CatalogValidationRules(),
+      );
       final fate = await askPhoneFateOnDepartmentChange(
         context,
+        split: split,
+        targetKind: targetKind,
         userDisplayName: userName,
+        sourceDepartmentName: lookup?.departments
+            .where((d) => d.id == oldDepartmentId)
+            .firstOrNull
+            ?.name
+            .trim(),
       );
       if (fate == null) return null;
+      // Ό,τι δεν μπορεί να ακολουθήσει μένει πίσω ό,τι κι αν απαντήθηκε.
+      phonesStaying.addAll(split.forcedToStay);
       if (fate == BulkTransferAssetFate.stayInOldDepartment) {
-        for (final phone in carriedPhones) {
+        for (final phone in split.negotiable) {
           final others = [
             for (final other in lookup?.findUsersByPhone(phone) ?? const [])
               if (other.id != null && other.id != userId && !other.isDeleted)
@@ -164,6 +196,7 @@ class SmartEntitySelectorAssociation {
     if (carriedEquipment.isNotEmpty && context.mounted) {
       final fate = await askEquipmentFateOnDepartmentChange(
         context,
+        targetKind: targetKind,
         userDisplayName: userName,
       );
       if (fate == null) return null;
@@ -808,6 +841,7 @@ class SmartEntitySelectorAssociation {
             : await _confirmAssetsOnDepartmentChange(
                 context: assetDialogContext,
                 caller: state.selectedCaller!,
+                targetDepartmentId: selectedDepartmentId,
               );
         if (decision == null) {
           // Ακύρωση: το τμήμα μένει ως έχει. Η υπόλοιπη συσχέτιση που έγινε

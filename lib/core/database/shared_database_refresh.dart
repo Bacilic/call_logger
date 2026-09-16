@@ -7,6 +7,7 @@ import '../../features/calls/provider/call_mutation_refresh.dart';
 import '../../features/directory/providers/category_directory_provider.dart';
 import '../../features/directory/providers/department_directory_provider.dart';
 import '../../features/directory/providers/directory_cache_refresh.dart';
+import '../../features/tasks/providers/task_notifications_provider.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../services/crash_log_service.dart';
 import '../widgets/modal_route_tracker.dart';
@@ -38,6 +39,10 @@ const Duration kSharedDatabaseCheckInterval = Duration(seconds: 12);
 /// τις ακυρώσεις του άλλου πριν προλάβει να τις δει όποιος ακούει.
 Future<void> refreshSharedDatabaseViews(Ref ref) async {
   await ref.read(tasksProvider.notifier).refresh();
+  // Η ανάθεση και το κλείσιμο γίνονται στο μηχάνημα του ΑΛΛΟΥ: αυτός εδώ ο
+  // κύκλος είναι το μόνο σημείο όπου μπορεί να μαθευτεί ζωντανά. Ακύρωση και
+  // όχι φόρτωση — δεν υπάρχει λίστα στην οθόνη να αδειάσει.
+  ref.invalidate(taskNotificationsProvider);
   // Τα τμήματα τροφοδοτούν ΚΑΙ τον χάρτη κτιρίου, όπου η μπαγιάτικη εικόνα δεν
   // κρύβει απλώς τη δουλειά του άλλου: η αυτόματη επιλογή χρώματος ρωτά αυτή τη
   // λίστα για να δώσει «διακριτό» χρώμα στον όροφο, οπότε δύο τμήματα

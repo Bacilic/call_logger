@@ -18,7 +18,11 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../providers/directory_provider.dart';
+import '../../models/catalog_validation_rules.dart';
+import '../../models/department_kind.dart';
 import '../../models/full_location_breadcrumb.dart';
+import '../../services/user_equipment_codes.dart';
+import '../../services/user_move_consequences.dart';
 import 'full_location_line.dart';
 import 'location_field_help_icon.dart';
 import '../../providers/catalog_validation_provider.dart';
@@ -137,6 +141,46 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
       const LansweeperAgentIdentity.unavailable();
 
   bool get isEdit => widget.initialUser != null && !widget.isClone;
+
+  /// Οι τιμές που περιγράφουν το τηλεφωνικό μας κέντρο.
+  ///
+  /// Χρησιμοποιούνται ως **γνώση** (τι μοιάζει με εσωτερικό), όχι ως κανόνας
+  /// προειδοποίησης — γι' αυτό η προεπιλογή όταν δεν έχουν φορτώσει είναι οι
+  /// εργοστασιακές τιμές και όχι «δεν ξέρω».
+  CatalogValidationRules get catalogValidationRules =>
+      ref.read(catalogValidationRulesProvider).value ??
+      const CatalogValidationRules();
+
+  /// Τι αλλάζει για τον άνθρωπο με το τμήμα που είναι γραμμένο τώρα.
+  ///
+  /// Μετριέται εδώ και όχι στην αποθήκευση: η στιγμή που ο χρήστης σκέφτεται
+  /// τη μετακίνηση είναι η στιγμή που πληκτρολογεί το τμήμα. Ένας διάλογος στο
+  /// τέλος θα ερχόταν αφού είχε ήδη αποφασίσει.
+  ///
+  /// Το αναγνωριστικό Lansweeper έχει δική του υπόδειξη ακριβώς από κάτω, οπότε
+  /// η γραμμή δεν επαναλαμβάνει την προς-εταιρεία κατεύθυνσή του — μιλά μόνο
+  /// για τον εξοπλισμό, και για την επιστροφή που ζητά αναγνωριστικό.
+  String? get _departmentMoveNote {
+    final userId = widget.initialUser?.id;
+    if (!isEdit || userId == null) return null;
+
+    final lookup = LookupService.instance;
+    return userMoveConsequencesMessage(
+      targetKind:
+          lookup.findDepartmentByName(departmentController.text)?.kind ??
+          DepartmentKind.hospital,
+      consequences: judgeUserMove(
+        previousKind: lookup.departmentKindById(
+          widget.initialUser?.departmentId,
+        ),
+        targetKind:
+            lookup.findDepartmentByName(departmentController.text)?.kind ??
+            DepartmentKind.hospital,
+        carriedEquipmentCount: UserEquipmentCodes.forUser(userId).length,
+        lansweeperIsEmpty: lansweeperUsernameController.text.trim().isEmpty,
+      ),
+    );
+  }
 
   /// Γεμίζει τα δύο πεδία με τον διαχωρισμό «(Γωγώ) Γεωργία», όταν η καρτέλα
   /// ανοίγει από το εύρημα του «Ελέγχου δεδομένων».
@@ -772,9 +816,11 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                       return UserFormSmartTextField(
                         controller: controller,
                         focusNode: focusNode,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Τμήμα',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
+                          helperText: _departmentMoveNote,
+                          helperMaxLines: 3,
                         ),
                         textCapitalization: TextCapitalization.none,
                         lexiconSpellAssist: true,

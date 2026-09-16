@@ -3,7 +3,9 @@ import '../../../../core/services/lookup_service.dart';
 import '../../../../core/utils/phone_list_parser.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../calls/models/equipment_model.dart';
+import '../../models/department_kind.dart';
 import '../../services/bulk_user_actions.dart';
+import '../../services/phone_transfer_split.dart';
 import '../../services/user_equipment_codes.dart';
 import 'asset_fate_on_department_change.dart';
 import 'shared_asset_disconnect_dialog.dart';
@@ -96,18 +98,50 @@ class UserFormPhonePolicy {
     if (candidates.isEmpty) return const <String>{};
 
     if (!host.mounted) return null;
+    // Τα εσωτερικά του κέντρου μας δεν ακολουθούν έξω από το νοσοκομείο.
+    final split = splitPhonesForDepartmentChange(
+      phones: candidates,
+      targetKind: targetDepartmentKind,
+      rules: host.catalogValidationRules,
+    );
     final fate = await askPhoneFateOnDepartmentChange(
       host.context,
+      split: split,
+      targetKind: targetDepartmentKind,
       userDisplayName: host.buildUserDisplayName(),
+      sourceDepartmentName: host.widget.initialUser?.departmentName,
     );
     if (fate == null) return null;
-    if (fate == BulkTransferAssetFate.follow) return const <String>{};
+    // Ό,τι δεν μπορεί να ακολουθήσει μένει πίσω ακόμη και με «Ακολουθούν»:
+    // η απάντηση αφορά μόνο όσα ρωτήθηκαν.
+    final forced = split.forcedToStay.toSet();
+    return _resolveStayBehind(
+      forced: forced,
+      asked: fate == BulkTransferAssetFate.follow
+          ? const <String>[]
+          : split.negotiable,
+    );
+  }
 
+  /// Ποια τηλέφωνα μένουν τελικά πίσω.
+  ///
+  /// Δύο πηγές με **διαφορετική ισχύ**:
+  ///
+  /// 1. Τα [forced] μένουν πάντα — ο προορισμός δεν μπορεί να τα κρατά, και
+  ///    ο κανόνας «το χρησιμοποιεί και άλλος» δεν τα σώζει: εκείνος κρίνει αν
+  ///    **αξίζει** να αποδεσμευτούν, όχι αν **επιτρέπεται** να ταξιδέψουν. Το
+  ///    κοινό εσωτερικό αποδεσμεύεται από αυτόν τον υπάλληλο και μένει στους
+  ///    υπόλοιπους κατόχους του.
+  /// 2. Τα [asked] περνούν από τον κανόνα, όπως πάντα.
+  Set<String> _resolveStayBehind({
+    required Set<String> forced,
+    required Iterable<String> asked,
+  }) {
     final lookup = LookupService.instance;
     final oldDepartmentId = host.widget.initialUser?.departmentId;
     final editingUserId = host.widget.initialUser?.id;
-    final stayBehind = <String>{};
-    for (final phone in candidates) {
+    final stayBehind = <String>{...forced};
+    for (final phone in asked) {
       final others = [
         for (final other in lookup.findUsersByPhone(phone))
           if (other.id != null && other.id != editingUserId && !other.isDeleted)
@@ -130,6 +164,18 @@ class UserFormPhonePolicy {
     return stayBehind;
   }
 
+  /// Το Είδος του τμήματος στο οποίο πάει ο υπάλληλος.
+  ///
+  /// Διαβάζεται από το **πεδίο** της φόρμας και όχι από την αποθηκευμένη τιμή:
+  /// η απόφαση αφορά εκεί που πάει, όχι εκεί που ήταν. Όνομα που δεν υπάρχει
+  /// ακόμη στον κατάλογο θα γίνει νέο τμήμα του νοσοκομείου — η ίδια παραδοχή
+  /// με τη μαζική μεταφορά.
+  DepartmentKind get targetDepartmentKind =>
+      LookupService.instance
+          .findDepartmentByName(host.departmentController.text)
+          ?.kind ??
+      DepartmentKind.hospital;
+
   /// Ρωτά τι απογίνεται ο εξοπλισμός όταν αλλάζει το τμήμα, με την ΙΔΙΑ πύλη
   /// που χρησιμοποιεί η μαζική μεταφορά.
   ///
@@ -151,6 +197,7 @@ class UserFormPhonePolicy {
     if (!host.mounted) return null;
     final fate = await askEquipmentFateOnDepartmentChange(
       host.context,
+      targetKind: targetDepartmentKind,
       userDisplayName: host.buildUserDisplayName(),
     );
     if (fate == null) return null;

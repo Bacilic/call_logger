@@ -10,6 +10,8 @@ import 'dart:io';
 import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/tasks_repository.dart';
+import 'package:call_logger/core/models/operator.dart';
+import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/features/tasks/models/task.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -372,6 +374,98 @@ void main() {
         final id = await repo.createTask(newTask());
 
         expect((await rowOf(id))['completed_at'], isNull);
+      });
+    });
+
+    group('closed_by_operator_id — ποιος ολοκλήρωσε', () {
+      Future<Map<String, dynamic>> rowOf(int id) async =>
+          (await db.query('tasks', where: 'id = ?', whereArgs: [id])).single;
+
+      Future<Task> taskOf(int id) async => Task.fromMap(await rowOf(id));
+
+      Operator person(int id, String name) =>
+          Operator(id: id, displayName: name, createdAt: DateTime(2026, 1, 1));
+
+      tearDown(CurrentOperator.reset);
+
+      test('closeTask: σφραγίζει τον ενεργό χειριστή', () async {
+        CurrentOperator.activate(person(11, 'Βασίλης'));
+        final id = await repo.createTask(newTask());
+
+        await repo.closeTask(id, 'Αντικαταστάθηκε το τόνερ.');
+
+        expect((await rowOf(id))['closed_by_operator_id'], 11);
+      });
+
+      test('ξένη ανάθεση: σφραγίζεται ο κλείσας, όχι ο υπεύθυνος', () async {
+        CurrentOperator.activate(person(11, 'Βασίλης'));
+        final id = await repo.createTask(newTask());
+        await repo.assignTask(id, 22);
+
+        await repo.closeTask(id, 'Το έλυσα εγώ στη βάρδια μου.');
+
+        final row = await rowOf(id);
+        expect(row['assigned_operator_id'], 22);
+        expect(row['closed_by_operator_id'], 11);
+      });
+
+      test('αναίρεση ολοκλήρωσης: ο κλείσας παραμένει', () async {
+        CurrentOperator.activate(person(11, 'Βασίλης'));
+        final id = await repo.createTask(newTask());
+        await repo.closeTask(id, 'Αντικαταστάθηκε το τόνερ.');
+
+        await repo.updateTask((await taskOf(id)).copyWith(status: 'open'));
+
+        final row = await rowOf(id);
+        expect(row['status'], 'open');
+        expect(
+          row['closed_by_operator_id'],
+          11,
+          reason: 'Η αναίρεση χρειάζεται να δείχνει ποιος είχε κλείσει',
+        );
+      });
+
+      test('επεξεργασία ολοκληρωμένης: ο κλείσας δεν αλλάζει', () async {
+        CurrentOperator.activate(person(11, 'Βασίλης'));
+        final id = await repo.createTask(newTask());
+        await repo.closeTask(id, 'Αντικαταστάθηκε το τόνερ.');
+
+        CurrentOperator.activate(person(22, 'Βλάσης'));
+        await repo.updateTask(
+          (await taskOf(id)).copyWith(title: 'Διορθωμένος τίτλος'),
+        );
+
+        expect((await rowOf(id))['closed_by_operator_id'], 11);
+      });
+
+      test('νέο κλείσιμο μετά από αναίρεση: γράφεται ο νέος', () async {
+        CurrentOperator.activate(person(11, 'Βασίλης'));
+        final id = await repo.createTask(newTask());
+        await repo.closeTask(id, 'Πρώτη λύση.');
+        await repo.updateTask((await taskOf(id)).copyWith(status: 'open'));
+
+        CurrentOperator.activate(person(22, 'Βλάσης'));
+        await repo.closeTask(id, 'Δεύτερη λύση.');
+
+        expect((await rowOf(id))['closed_by_operator_id'], 22);
+      });
+
+      test('χωρίς αναγνωρισμένο χειριστή: μένει κενό', () async {
+        CurrentOperator.reset();
+        final id = await repo.createTask(newTask());
+
+        await repo.closeTask(id, 'Αντικαταστάθηκε το τόνερ.');
+
+        final row = await rowOf(id);
+        expect(row['completed_at'], isNotNull);
+        expect(row['closed_by_operator_id'], isNull);
+      });
+
+      test('ανοιχτή εκκρεμότητα: καμία σφραγίδα', () async {
+        CurrentOperator.activate(person(11, 'Βασίλης'));
+        final id = await repo.createTask(newTask());
+
+        expect((await rowOf(id))['closed_by_operator_id'], isNull);
       });
     });
   });

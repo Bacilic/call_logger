@@ -386,6 +386,28 @@ class CatalogValidationRules {
     ),
   ];
 
+  /// Μοιάζει ο αριθμός με **εσωτερικό του δικού μας τηλεφωνικού κέντρου**;
+  ///
+  /// **Γνώση, όχι κανόνας.** Διαβάζει ΜΟΝΟ τις αριθμητικές τιμές — πλήθος
+  /// ψηφίων και εύρος προθέματος — και ποτέ τους διακόπτες: εκείνοι αποφασίζουν
+  /// αν θα **εμφανιστεί προειδοποίηση**, όχι αν το 2986 είναι εσωτερικό. Οι
+  /// τιμές δεν πειράζονται ούτε από το επίπεδο αυστηρότητας (δες
+  /// [withStrictness]), οπότε η απάντηση είναι πάντα διαθέσιμη.
+  ///
+  /// Γι' αυτό μπορεί να στηριχθεί πάνω της απόφαση που αλλάζει δεδομένα — σε
+  /// αντίθεση με τις υποδείξεις, που σβήνουν με έναν διακόπτη.
+  bool looksLikeHospitalInternalPhone(String phone) {
+    final v = phone.trim();
+    if (v.length != internalPhoneDigits) return false;
+    if (int.tryParse(v) == null) return false;
+
+    final prefixLength = internalPrefixFrom.toString().length;
+    if (v.length < prefixLength) return false;
+    final prefix = int.tryParse(v.substring(0, prefixLength));
+    if (prefix == null) return false;
+    return prefix >= internalPrefixFrom && prefix <= internalPrefixTo;
+  }
+
   /// Οι ίδιοι κανόνες με τους διακόπτες ρυθμισμένους στο πακέτο του [level].
   ///
   /// Οι **αριθμητικές τιμές δεν πειράζονται**: τα ψηφία, το πρόθεμα και τα

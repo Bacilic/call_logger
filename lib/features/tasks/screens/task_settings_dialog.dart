@@ -445,6 +445,29 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text(
+                          'Ειδοποίηση όταν κάποιος αγγίξει εκκρεμότητά μου',
+                        ),
+                        subtitle: const Text(
+                          'Μήνυμα όταν μου ανατεθεί εκκρεμότητα, όταν μου '
+                          'αφαιρεθεί, ή όταν κλείσει κάποιος άλλος μια δική '
+                          'μου. Δεν εμφανίζεται ποτέ πάνω σε ενεργή κλήση.',
+                        ),
+                        value:
+                            ref.watch(notifyTaskHandoversProvider).value ??
+                            true,
+                        onChanged: (value) async {
+                          await _settings.windowUi.setNotifyTaskHandovers(
+                            value,
+                          );
+                          if (!mounted) return;
+                          ref.invalidate(notifyTaskHandoversProvider);
+                          setState(() {});
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
                           'Εμφάνιση μετρητή στο μενού Εκκρεμοτήτων (Badge)',
                         ),
                         subtitle: const Text(

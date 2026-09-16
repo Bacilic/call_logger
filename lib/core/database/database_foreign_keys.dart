@@ -186,9 +186,36 @@ CREATE TABLE tasks (
   is_deleted INTEGER DEFAULT 0,
   created_by_operator_id INTEGER,
   assigned_operator_id INTEGER,
+  closed_by_operator_id INTEGER,
   FOREIGN KEY (call_id) REFERENCES calls(id) ON DELETE SET NULL
 )
 ''';
+
+/// Οι ειδοποιήσεις που περιμένουν έναν άνθρωπο να τις δει.
+///
+/// **Ουρά, όχι ιστορικό.** Η γραμμή σβήνεται μόλις ιδωθεί· το μόνιμο ίχνος του
+/// «ποιος τι έκανε» ζει στο `audit_log` και δεν διπλογράφεται εδώ.
+///
+/// **Χωρίς δεσμό προς `tasks` ή `operators`**, όπως κάθε άλλη αναφορά σε
+/// χειριστή: η ανάγνωση ενώνεται με τους δύο πίνακες και ό,τι δεν βρεθεί απλώς
+/// δεν εμφανίζεται. Ένας δεσμός θα έσερνε τον πίνακα μέσα στο ξαναχτίσιμο των
+/// ξένων κλειδιών χωρίς να λύνει κάτι που δεν λύνει ήδη η ένωση.
+const String kCreateTaskNotificationsTable = '''
+CREATE TABLE IF NOT EXISTS task_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipient_operator_id INTEGER NOT NULL,
+  task_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  actor_operator_id INTEGER,
+  created_at TEXT NOT NULL
+)
+''';
+
+/// Η μόνη ερώτηση που κάνει η εφαρμογή σε αυτόν τον πίνακα: «τι περιμένει
+/// ΕΜΕΝΑ;». Κάθε κύκλος του φρουρού τη ρωτά — αξίζει ευρετήριο.
+const String kCreateTaskNotificationsRecipientIndex =
+    'CREATE INDEX IF NOT EXISTS idx_task_notifications_recipient '
+    'ON task_notifications(recipient_operator_id)';
 
 /// Οι πίνακες που ξαναχτίζονται, με τη σειρά που τους αγγίζει η αναβάθμιση.
 ///

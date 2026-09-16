@@ -8,6 +8,7 @@ import '../../features/tasks/models/task.dart';
 import '../../features/tasks/models/task_analytics_summary.dart';
 import '../../features/tasks/models/task_filter.dart'
     show TaskFilter, TaskSortOption;
+import '../../features/tasks/models/task_notification.dart';
 import '../../features/tasks/models/task_settings_config.dart';
 import '../../features/tasks/services/call_task_solution_bridge.dart';
 import 'calls_repository.dart';
@@ -20,6 +21,7 @@ import 'database_helper.dart';
 import 'directory_support.dart';
 import 'integrity_service.dart';
 import 'settings_repository.dart';
+import 'task_notifications_repository.dart';
 
 /// Κλήση με status pending που δεν έχει αντίστοιχο task.
 class OrphanCall {
@@ -134,6 +136,68 @@ class TasksRepository {
     );
   }
 
+  /// Ποιος κατέχει την εκκρεμότητα: ο υπεύθυνος, ή ο δημιουργός όταν δεν
+  /// υπάρχει ανάθεση.
+  ///
+  /// Ίδια φόρμουλα με το φίλτρο χρήστη και με τα σήματα της κάρτας: η
+  /// ανανάθετη εκκρεμότητα **ανήκει** σε αυτόν που την άνοιξε, και πρέπει να
+  /// μάθει ότι κάποιος την έκλεισε γι' αυτόν.
+  static int? _ownerOf(Map<String, dynamic>? row) {
+    if (row == null) return null;
+    return (row['assigned_operator_id'] as int?) ??
+        (row['created_by_operator_id'] as int?);
+  }
+
+  /// Η μετακίνηση της ευθύνης αναγγέλλεται **και στις δύο κατευθύνσεις**.
+  ///
+  /// Η ανάθεση και η αφαίρεσή της είναι η ίδια πράξη με αντίθετη φορά: ο ένας
+  /// μαθαίνει ότι απέκτησε δουλειά, ο άλλος ότι δεν τη χρωστά πια. Σε
+  /// μεταβίβαση συμβαίνουν ταυτόχρονα, και ειδοποιούνται και οι δύο.
+  ///
+  /// Ένα σημείο για κάθε πύλη που αλλάζει υπεύθυνο — τη γρήγορη ανάθεση του
+  /// μενού, τη φόρμα επεξεργασίας και τη δημιουργία με ανάθεση εξαρχής.
+  static Future<void> _notifyAssignmentChange(
+    DatabaseExecutor executor, {
+    required int taskId,
+    required int? previousOwner,
+    required int? nextOwner,
+  }) async {
+    if (previousOwner == nextOwner) return;
+    final actorId = CurrentOperator.active?.id;
+    await TaskNotificationsRepository.record(
+      executor,
+      recipientOperatorId: nextOwner,
+      taskId: taskId,
+      kind: TaskNotificationKind.assigned,
+      actorOperatorId: actorId,
+    );
+    await TaskNotificationsRepository.record(
+      executor,
+      recipientOperatorId: previousOwner,
+      taskId: taskId,
+      kind: TaskNotificationKind.unassigned,
+      actorOperatorId: actorId,
+    );
+  }
+
+  /// Το κλείσιμο αναγγέλλεται σε όποιον κατείχε την εκκρεμότητα.
+  ///
+  /// Διαβάζει την **παλιά** γραμμή: ο κάτοχος είναι αυτός που τη χρωστούσε
+  /// πριν κλείσει, όχι ό,τι γράφεται μαζί με το κλείσιμο.
+  static Future<void> _notifyClosure(
+    DatabaseExecutor executor, {
+    required int taskId,
+    required Map<String, dynamic>? oldRow,
+  }) async {
+    await TaskNotificationsRepository.record(
+      executor,
+      recipientOperatorId: _ownerOf(oldRow),
+      taskId: taskId,
+      kind: TaskNotificationKind.closed,
+      actorOperatorId: CurrentOperator.active?.id,
+    );
+  }
+
   /// Το όνομα του χειριστή όπως γράφεται στο Ιστορικό — «Χωρίς ανάθεση» για
   /// το κενό, το ωμό id όταν το προφίλ δεν βρίσκεται πια.
   static Future<String> _operatorNameForAudit(
@@ -162,7 +226,7 @@ class TasksRepository {
     await db.transaction((txn) async {
       final rows = await txn.query(
         'tasks',
-        columns: ['assigned_operator_id', 'title'],
+        columns: ['assigned_operator_id', 'created_by_operator_id', 'title'],
         where: 'id = ?',
         whereArgs: [taskId],
         limit: 1,
@@ -170,6 +234,9 @@ class TasksRepository {
       if (rows.isEmpty) return;
       final current = rows.first['assigned_operator_id'] as int?;
       if (current == operatorId) return;
+      // Ο κάτοχος ΠΡΙΝ την αλλαγή: χωρίς ανάθεση, η εκκρεμότητα ανήκει σε
+      // αυτόν που την άνοιξε — κι εκείνος πρέπει να μάθει ότι του την πήραν.
+      final previousOwner = _ownerOf(Map<String, dynamic>.from(rows.first));
 
       await txn.update(
         'tasks',
@@ -179,6 +246,13 @@ class TasksRepository {
         },
         where: 'id = ?',
         whereArgs: [taskId],
+      );
+
+      await _notifyAssignmentChange(
+        txn,
+        taskId: taskId,
+        previousOwner: previousOwner,
+        nextOwner: operatorId ?? (rows.first['created_by_operator_id'] as int?),
       );
 
       final user = await AuditService.performingUser(txn);
@@ -1332,6 +1406,14 @@ class TasksRepository {
     try {
       return await db.transaction((txn) async {
         final id = await txn.insert('tasks', map);
+        // Νέα εκκρεμότητα ανατεθειμένη εξαρχής σε άλλον: δεν υπάρχει
+        // προηγούμενος κάτοχος, οπότε αναγγέλλεται μόνο η μία κατεύθυνση.
+        await _notifyAssignmentChange(
+          txn,
+          taskId: id,
+          previousOwner: null,
+          nextOwner: map['assigned_operator_id'] as int?,
+        );
         await _auditTaskCreate(txn, id, map);
         return id;
       });
@@ -1447,11 +1529,18 @@ class TasksRepository {
     }
   }
 
-  /// Σφραγίζει τη στιγμή ολοκλήρωσης όταν η εγγραφή μόλις έκλεισε.
+  /// Σφραγίζει τη στιγμή ολοκλήρωσης **και τον άνθρωπο** που την έκλεισε.
   ///
   /// Ένα σημείο για όλες τις ροές: η σφραγίδα μπαίνει μόνο στη μετάβαση προς
   /// «ολοκληρωμένη», ώστε μια απλή διόρθωση κειμένου να μη μετακινεί τη στιγμή
   /// της λύσης, και δεν αφαιρείται ποτέ — η αναίρεση χρειάζεται να τη δείξει.
+  ///
+  /// Τα δύο ταξιδεύουν μαζί επειδή απαντούν στο ίδιο ερώτημα — «πότε και από
+  /// ποιον λύθηκε» — και μια μελλοντική ροή κλεισίματος δεν πρέπει να μπορεί να
+  /// θυμηθεί το ένα ξεχνώντας το άλλο.
+  ///
+  /// Χωρίς αναγνωρισμένο χειριστή γράφεται μόνο η ώρα: το κενό είναι τίμιο,
+  /// ενώ ένα τυχαίο id θα ήταν εφεύρεση.
   static void _stampCompletionMoment(
     Map<String, dynamic> map,
     Map<String, dynamic>? oldRow,
@@ -1461,6 +1550,10 @@ class TasksRepository {
     if (map['status'] != closedValue) return;
     if (oldRow != null && oldRow['status'] == closedValue) return;
     map['completed_at'] = nowIso;
+    final operatorId = CurrentOperator.active?.id;
+    if (operatorId != null) {
+      map['closed_by_operator_id'] = operatorId;
+    }
   }
 
   /// Ενημερώνει μια υπάρχουσα εγγραφή στον πίνακα tasks.
@@ -1526,6 +1619,7 @@ class TasksRepository {
             changedAt: actor.at,
           );
         }
+        final wasClosed = oldRow?['status'] == TaskStatus.closed.toDbValue;
         _stampCompletionMoment(map, oldRow, nowIso);
         final n = await txn.update(
           'tasks',
@@ -1534,6 +1628,19 @@ class TasksRepository {
           whereArgs: [tid],
         );
         if (n > 0 && oldRow != null) {
+          await _notifyAssignmentChange(
+            txn,
+            taskId: tid,
+            previousOwner: _ownerOf(oldRow),
+            nextOwner: _ownerOf(map),
+          );
+          // Η φόρμα μπορεί να κλείσει την εκκρεμότητα όπως και ο διάλογος
+          // ολοκλήρωσης. Η αναγγελία κρίνεται από τη ΜΕΤΑΒΑΣΗ και όχι από την
+          // τελική κατάσταση: μια διόρθωση κειμένου σε ήδη κλειστή δεν
+          // ξαναειδοποιεί κανέναν.
+          if (!wasClosed && map['status'] == TaskStatus.closed.toDbValue) {
+            await _notifyClosure(txn, taskId: tid, oldRow: oldRow);
+          }
           await _auditTaskUpdate(txn, tid, oldRow, map);
         }
       });
@@ -1682,6 +1789,12 @@ class TasksRepository {
             callId: linkedCallId,
             taskSolution: solutionNotes,
           );
+        }
+
+        // Η αναγγελία κρίνεται από τη ΜΕΤΑΒΑΣΗ: ξανακλείσιμο ήδη κλειστής
+        // (διόρθωση κειμένου λύσης) δεν ξαναειδοποιεί κανέναν.
+        if (oldStatus != TaskStatus.closed.toDbValue) {
+          await _notifyClosure(txn, taskId: id, oldRow: oldRow);
         }
 
         final user = await AuditService.performingUser(txn);

@@ -16,6 +16,12 @@ final showTasksBadgeProvider = FutureProvider<bool>(
   (ref) => SettingsService().windowUi.getShowTasksBadge(),
 );
 
+/// Ειδοποίηση όταν κάποιος αγγίξει εκκρεμότητα που κατέχω. Invalidate μετά
+/// από τις Ρυθμίσεις Εκκρεμοτήτων — και από το κουτάκι του ίδιου του διαλόγου.
+final notifyTaskHandoversProvider = FutureProvider<bool>(
+  (ref) => SettingsService().windowUi.getNotifyTaskHandovers(),
+);
+
 /// Ορθογραφικός έλεγχος πεδίου σημειώσεων. Invalidate μετά από Ρυθμίσεις.
 final enableSpellCheckProvider = FutureProvider<bool>(
   (ref) => SettingsService().windowUi.getEnableSpellCheck(),

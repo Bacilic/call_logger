@@ -415,6 +415,20 @@ final callEntryProvider = NotifierProvider<CallEntryNotifier, CallEntryState>(
   CallEntryNotifier.new,
 );
 
+/// Βρίσκεται ο χειριστής **μέσα σε κλήση** αυτή τη στιγμή;
+///
+/// Ένας κριτής για όλους: ό,τι δεν επιτρέπεται να διακόψει μια κλήση ρωτά εδώ,
+/// αντί να ξαναφτιάχνει τη συνθήκη — και τότε το ένα σημείο θα ξεχνούσε την
+/// παύση ή ο άλλος τον μηδενισμό.
+///
+/// «Μέσα σε κλήση» σημαίνει ότι το χρονόμετρο ξεκίνησε: είτε τρέχει είτε
+/// σταμάτησε σε παύση με χρόνο επάνω του. Η φόρμα που απλώς άνοιξε δεν είναι
+/// κλήση — κανείς δεν μιλά ακόμη.
+final callEntryHasActiveCallProvider = Provider<bool>((ref) {
+  final state = ref.watch(callEntryProvider);
+  return state.isCallTimerRunning || state.durationSeconds > 0;
+});
+
 /// Πεδία FK + snapshot κειμένου από τη φόρμα Κλήσεων για εισαγωγή εκκρεμότητας.
 ({
   int? callerId,

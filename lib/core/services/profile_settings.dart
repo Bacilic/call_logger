@@ -344,9 +344,20 @@ abstract final class ProfileSettingKeys {
     legacySource: ProfileSettingLegacySource.bornPersonal,
   );
 
+  /// Θέλω να μαθαίνω όταν κάποιος αγγίζει εκκρεμότητα που κατέχω.
+  ///
+  /// **Προσωπική εξαρχής** — δεν έχει προηγούμενη θέση να κληρονομήσει, και
+  /// το «ενοχλείστε ή όχι» είναι απόφαση του ανθρώπου, όχι του υπολογιστή:
+  /// τον ακολουθεί σε όποια θέση καθίσει.
+  static const ProfileSettingKey notifyTaskHandovers = ProfileSettingKey(
+    'notify_task_handovers_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
   static const List<ProfileSettingKey> all = [
     showActiveTimer,
     showTasksBadge,
+    notifyTaskHandovers,
     navRailShowLabels,
     showGlobalCallsDashboard,
     showDatabaseNav,
