@@ -109,49 +109,54 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
   _runDatabaseInitChecksGate = gate.future;
   try {
     await previous;
-
-    progressNotifier?.setStep('Έλεγχος διαδρομής', clearDiagnosticInfo: true);
-    final configured = await SettingsService().getDatabasePath();
-    final resolved = await resolveEffectiveDatabasePath(configured);
-    if (resolved.outcome == DatabasePathResolution.networkUnreachable) {
-      final unreachable = DatabaseInitResult.networkUnreachable(
-        resolved.unreachablePath!,
-      );
-      progressNotifier?.setStep(
-        unreachable.message!,
-        clearSecondsRemaining: true,
-        diagnosticInfo: unreachable.details,
-        kind: StartupStepKind.failed,
-      );
-      return DatabaseInitRunnerResult(
-        result: unreachable,
-        isLocalDevMode: false,
-        missingApplicationFiles: const <String>[],
-      );
-    }
-    final dbPath = resolved.pathToOpen;
-
-    if (reuseIfFresh) {
-      final remembered = _rememberedResultFor(dbPath);
-      if (remembered != null) {
-        progressNotifier?.setStep(
-          'Η αρχικοποίηση ολοκληρώθηκε',
-          clearSecondsRemaining: true,
-          kind: StartupStepKind.completed,
+    // Μία επίλυση για όλη την εκτέλεση: ο έλεγχος που ακολουθεί και το
+    // άνοιγμα της βάσης παρακάτω ρωτούσαν χωριστά το ίδιο πράγμα. Μέσα στην
+    // πύλη η ρυθμισμένη διαδρομή δεν μπορεί να αλλάξει, οπότε η δεύτερη
+    // ερώτηση δεν είχε ποτέ πιθανότητα να δώσει άλλη απάντηση — μόνο να αργήσει.
+    return await withSingleDatabasePathResolution(() async {
+      progressNotifier?.setStep('Έλεγχος διαδρομής', clearDiagnosticInfo: true);
+      final configured = await SettingsService().getDatabasePath();
+      final resolved = await resolveEffectiveDatabasePath(configured);
+      if (resolved.outcome == DatabasePathResolution.networkUnreachable) {
+        final unreachable = DatabaseInitResult.networkUnreachable(
+          resolved.unreachablePath!,
         );
-        return remembered;
+        progressNotifier?.setStep(
+          unreachable.message!,
+          clearSecondsRemaining: true,
+          diagnosticInfo: unreachable.details,
+          kind: StartupStepKind.failed,
+        );
+        return DatabaseInitRunnerResult(
+          result: unreachable,
+          isLocalDevMode: false,
+          missingApplicationFiles: const <String>[],
+        );
       }
-    }
+      final dbPath = resolved.pathToOpen;
 
-    debugDatabaseInitChecksRunCount++;
-    final result = await _runDatabaseInitChecksUnlocked(
-      dbPath: dbPath,
-      closeConnectionFirst: closeConnectionFirst,
-      progressNotifier: progressNotifier,
-      assetIntegrity: assetIntegrity,
-    );
-    _rememberResult(result, dbPath);
-    return result;
+      if (reuseIfFresh) {
+        final remembered = _rememberedResultFor(dbPath);
+        if (remembered != null) {
+          progressNotifier?.setStep(
+            'Η αρχικοποίηση ολοκληρώθηκε',
+            clearSecondsRemaining: true,
+            kind: StartupStepKind.completed,
+          );
+          return remembered;
+        }
+      }
+
+      debugDatabaseInitChecksRunCount++;
+      final result = await _runDatabaseInitChecksUnlocked(
+        dbPath: dbPath,
+        closeConnectionFirst: closeConnectionFirst,
+        progressNotifier: progressNotifier,
+        assetIntegrity: assetIntegrity,
+      );
+      _rememberResult(result, dbPath);
+      return result;
+    });
   } finally {
     gate.complete();
   }

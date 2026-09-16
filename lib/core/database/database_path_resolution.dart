@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../config/app_config.dart';
 import '../services/settings_service.dart';
 
@@ -192,11 +194,92 @@ Future<bool> databaseFileExistsQuick(String dbPath) async {
   }
 }
 
+/// Πόσοι «σκοποί επίλυσης» είναι ανοιχτοί αυτή τη στιγμή.
+///
+/// Μετρητής και όχι σημαία, ώστε να αντέχει φώλιασμα: η εκκίνηση ανοίγει έναν
+/// σκοπό και μέσα της ο εκτελεστής των ελέγχων ανοίγει δεύτερο. Η μνήμη
+/// καθαρίζεται μόνο όταν κλείσει ο **εξωτερικός**.
+int _resolutionScopeDepth = 0;
+
+/// Η ρυθμισμένη διαδρομή για την οποία ισχύει η [_scopedResolution].
+String? _scopedConfiguredPath;
+
+/// Το ήδη υπολογισμένο αποτέλεσμα του τρέχοντος σκοπού.
+ResolvedDatabasePath? _scopedResolution;
+
+/// Εκτελεί το [body] με **μία** επίλυση διαδρομής για όλη του τη διάρκεια.
+///
+/// **Το πρόβλημα που λύνει:** μία εκκίνηση ρωτούσε δύο και τρεις φορές το ίδιο
+/// πράγμα — ο έλεγχος εκκίνησης, το άνοιγμα της βάσης και, σε αποτυχία, το
+/// διαγνωστικό κλειδώματος. Η ερώτηση «υπάρχει το αρχείο;» έχει όριο δύο
+/// δευτερολέπτων σε δικτυακή διαδρομή που δεν απαντά, οπότε η επανάληψη
+/// μεταφραζόταν κατευθείαν σε αναμονή του χρήστη.
+///
+/// **Δεν είναι cache με χρονόμετρο.** Η μνήμη ζει όσο ο σκοπός και ούτε
+/// χιλιοστό παραπάνω: μόλις κλείσει, η επόμενη ερώτηση ξαναρωτά το δίκτυο. Έτσι
+/// μια επαναδοκιμή του χρήστη δεν απαντιέται ποτέ από παλιά γνώση.
+///
+/// **Και δεύτερο κέρδος, πέρα από τον χρόνο:** μέσα στον ίδιο σκοπό όλοι
+/// βλέπουν την **ίδια** απάντηση. Με ασταθές δίκτυο, δύο ξεχωριστές επιλύσεις
+/// μπορούσαν να διαφωνήσουν — ο έλεγχος να βρει τη βάση και το άνοιγμα να μην
+/// τη βρει, μέσα στην ίδια εκκίνηση.
+///
+/// Ο σκοπός ανοίγει μόνο εκεί όπου η ρυθμισμένη διαδρομή **δεν μπορεί** να
+/// αλλάξει ενδιάμεσα. Όποιος επιλύει εκτός σκοπού —τεμπέλικο άνοιγμα από
+/// repository, ανεξάρτητη επαναδοκιμή— υπολογίζει κανονικά από την αρχή.
+Future<T> withSingleDatabasePathResolution<T>(Future<T> Function() body) async {
+  _resolutionScopeDepth++;
+  try {
+    return await body();
+  } finally {
+    _resolutionScopeDepth--;
+    if (_resolutionScopeDepth == 0) {
+      _scopedConfiguredPath = null;
+      _scopedResolution = null;
+    }
+  }
+}
+
+/// Μόνο για τεστ — πόσες φορές υπολογίστηκε όντως επίλυση διαδρομής.
+///
+/// Μετρά τους **υπολογισμούς**, όχι τις κλήσεις: μια κλήση που επαναχρησιμοποιεί
+/// ήδη επιλυμένη διαδρομή δεν αυξάνει τον μετρητή, γιατί ακριβώς αυτό είναι που
+/// ελέγχεται — ότι η ακριβή δουλειά δεν ξαναγίνεται.
+@visibleForTesting
+int debugDatabasePathResolutionCount = 0;
+
 /// Επιλύει την πραγματική διαδρομή ανοίγματος: κενό → προεπιλογή· αν το UNC δεν
 /// υπάρχει/είναι απρόσιτο → προεπιλογή portable δίπλα στο εκτελέσιμο.
 Future<ResolvedDatabasePath> resolveEffectiveDatabasePath(
   String configuredPath,
 ) async {
+  // Η ρυθμισμένη διαδρομή είναι μέρος του κλειδιού: αν κάποιος μέσα στον σκοπό
+  // ρωτήσει για άλλη διαδρομή, παίρνει δική της απάντηση και όχι την αποθηκευμένη.
+  final remembered = _rememberedResolutionFor(configuredPath);
+  if (remembered != null) return remembered;
+
+  final resolved = await _resolveEffectiveDatabasePathUncached(configuredPath);
+  _rememberResolution(configuredPath, resolved);
+  return resolved;
+}
+
+/// Το αποτέλεσμα του τρέχοντος σκοπού, μόνο αν αφορά αυτή τη διαδρομή.
+ResolvedDatabasePath? _rememberedResolutionFor(String configuredPath) {
+  if (_resolutionScopeDepth == 0) return null;
+  if (_scopedConfiguredPath != configuredPath.trim()) return null;
+  return _scopedResolution;
+}
+
+void _rememberResolution(String configuredPath, ResolvedDatabasePath resolved) {
+  if (_resolutionScopeDepth == 0) return;
+  _scopedConfiguredPath = configuredPath.trim();
+  _scopedResolution = resolved;
+}
+
+Future<ResolvedDatabasePath> _resolveEffectiveDatabasePathUncached(
+  String configuredPath,
+) async {
+  debugDatabasePathResolutionCount++;
   if (await SettingsService().isDatabaseUnconfigured()) {
     return ResolvedDatabasePath(
       path: configuredPath.trim(),

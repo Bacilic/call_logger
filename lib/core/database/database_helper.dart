@@ -38,17 +38,6 @@ class DatabaseOpeningAbortedException implements Exception {
   String toString() => message;
 }
 
-/// Αποτέλεσμα ελέγχου σύνδεσης (success + αν χρησιμοποιείται τοπική βάση).
-class ConnectionCheckResult {
-  const ConnectionCheckResult({
-    required this.success,
-    required this.isLocalDev,
-  });
-
-  final bool success;
-  final bool isLocalDev;
-}
-
 /// Singleton helper για πρόσβαση στη SQLite βάση δεδομένων (sqflite_common_ffi).
 /// Υποστηρίζει δυναμική διαδρομή, WAL και έξυπνο fallback σε τοπική βάση.
 class DatabaseHelper {
@@ -1107,40 +1096,6 @@ class DatabaseHelper {
   /// Κανονικοποίηση ονόματος κατηγορίας για σύγκριση διπλοτύπων (τόνοι/κεφαλαία).
   static String normalizeCategoryNameForLookup(String value) =>
       SearchTextNormalizer.normalizeForSearch(value);
-
-  /// Επαληθεύει αν η διαδρομή είναι προσβάσιμη (ίδιο UNC fallback με το [_initDatabase]).
-  Future<ConnectionCheckResult> checkConnection() async {
-    String dbPath = AppConfig.defaultDbPath;
-    try {
-      final configured = await SettingsService().getDatabasePath();
-      final resolved = await resolveEffectiveDatabasePath(configured);
-      if (resolved.outcome == DatabasePathResolution.networkUnreachable) {
-        return const ConnectionCheckResult(success: false, isLocalDev: false);
-      }
-      dbPath = resolved.pathToOpen;
-      if (!await File(dbPath).exists()) {
-        return const ConnectionCheckResult(success: false, isLocalDev: false);
-      }
-
-      // Χωρίς `version:` — το sqflite δεν παρακάμπτει τον χειρισμό έκδοσης σε
-      // readOnly σύνδεση: σε αρχείο με διαφορετικό user_version επιχειρεί
-      // `PRAGMA user_version = N` → SQLITE_READONLY → ψευδής «αποτυχία
-      // σύνδεσης» για απολύτως προσβάσιμη βάση. Το probe δεν μεταναστεύει σχήμα.
-      final db = await openDatabase(
-        dbPath,
-        readOnly: true,
-        singleInstance: false,
-      );
-      await db.rawQuery('PRAGMA quick_check;');
-      await db.close();
-      return ConnectionCheckResult(
-        success: true,
-        isLocalDev: resolved.usedUncFallback,
-      );
-    } catch (_) {
-      return const ConnectionCheckResult(success: false, isLocalDev: false);
-    }
-  }
 }
 
 /// Μήνυμα SnackBar όταν επαναφέρεται διαγραμμένη κατηγορία αντί νέας εγγραφής.

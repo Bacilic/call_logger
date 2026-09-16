@@ -142,7 +142,22 @@ class AppInitializer {
     }
   }
 
+  /// Μία εκκίνηση = **μία** επίλυση διαδρομής βάσης.
+  ///
+  /// Ο σκοπός τυλίγει ολόκληρη την εκκίνηση, όχι μόνο τους ελέγχους: όταν η
+  /// βάση αργεί και η εκκίνηση αποτύχει, το διαγνωστικό «ποια διεργασία κρατά
+  /// το αρχείο» χρειάζεται κι αυτό τη διαδρομή — και την ξαναϋπολόγιζε, με
+  /// δεύτερη αναμονή ακριβώς εκεί που ο χρήστης περίμενε ήδη άδικα.
   static Future<AppInitResult> initialize({
+    DatabaseInitProgressNotifier? progressNotifier,
+  }) {
+    return withSingleDatabasePathResolution(
+      () =>
+          _initializeWithinResolutionScope(progressNotifier: progressNotifier),
+    );
+  }
+
+  static Future<AppInitResult> _initializeWithinResolutionScope({
     DatabaseInitProgressNotifier? progressNotifier,
   }) async {
     try {
