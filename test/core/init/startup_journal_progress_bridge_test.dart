@@ -44,30 +44,21 @@ void main() {
 
   test('η αντίστροφη μέτρηση ενημερώνει μία γραμμή, δεν προσθέτει πέντε', () {
     for (var s = 5; s >= 1; s--) {
-      notifier.setStep(
-        'Προσπάθεια άνοιγμα βάσης σε $s δευτερόλεπτα',
-        secondsRemaining: s,
-      );
+      notifier.setStep(databaseOpenCountdownLabel(s), secondsRemaining: s);
     }
 
     expect(journal.steps.value, hasLength(1));
-    expect(labels().single, 'Προσπάθεια άνοιγμα βάσης σε 1 δευτερόλεπτα');
+    expect(labels().single, databaseOpenCountdownLabel(1));
     expect(journal.steps.value.single.status, StartupStepStatus.running);
   });
 
   test('μετά την αντίστροφη μέτρηση, νέο βήμα ανοίγει κανονικά γραμμή', () {
-    notifier.setStep(
-      'Προσπάθεια άνοιγμα βάσης σε 5 δευτερόλεπτα',
-      secondsRemaining: 5,
-    );
-    notifier.setStep(
-      'Προσπάθεια άνοιγμα βάσης σε 4 δευτερόλεπτα',
-      secondsRemaining: 4,
-    );
+    notifier.setStep(databaseOpenCountdownLabel(5), secondsRemaining: 5);
+    notifier.setStep(databaseOpenCountdownLabel(4), secondsRemaining: 4);
     notifier.setStep('Επικύρωση δομής πινάκων');
 
     expect(labels(), [
-      'Προσπάθεια άνοιγμα βάσης σε 4 δευτερόλεπτα',
+      databaseOpenCountdownLabel(4),
       'Επικύρωση δομής πινάκων',
     ]);
   });
@@ -121,5 +112,25 @@ void main() {
       container.read(databaseInitProgressProvider).isOpeningAttemptActive,
       isTrue,
     );
+  });
+
+  group('databaseOpenCountdownLabel', () {
+    test('το τελευταίο δευτερόλεπτο μιλά στον ενικό', () {
+      expect(
+        databaseOpenCountdownLabel(1),
+        'Προσπάθεια ανοίγματος βάσης σε 1 δευτερόλεπτο',
+      );
+    });
+
+    test('από τα δύο και πάνω, πληθυντικός', () {
+      expect(
+        databaseOpenCountdownLabel(8),
+        'Προσπάθεια ανοίγματος βάσης σε 8 δευτερόλεπτα',
+      );
+      expect(
+        databaseOpenCountdownLabel(0),
+        'Προσπάθεια ανοίγματος βάσης σε 0 δευτερόλεπτα',
+      );
+    });
   });
 }

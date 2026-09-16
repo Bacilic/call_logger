@@ -344,13 +344,14 @@ class InitLoadingScreen extends ConsumerWidget {
                 const SizedBox(height: 10),
                 if (progress.secondsRemaining != null)
                   Text(
-                    'Προσπάθεια άνοιγμα βάσης σε ${progress.secondsRemaining} δευτερόλεπτα',
+                    databaseOpenCountdownLabel(progress.secondsRemaining!),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                if (progress.secondsRemaining != null) const SizedBox(height: 10),
+                if (progress.secondsRemaining != null)
+                  const SizedBox(height: 10),
                 Text(progress.currentStep, textAlign: TextAlign.center),
                 if (progress.isOpeningAttemptActive) ...[
                   const SizedBox(height: 16),

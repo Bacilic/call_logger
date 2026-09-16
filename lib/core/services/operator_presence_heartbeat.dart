@@ -9,6 +9,7 @@ import '../database/operator_presence_repository.dart';
 import '../models/operator_presence.dart';
 import 'crash_log_service.dart';
 import 'current_operator.dart';
+import 'station_name.dart';
 
 /// Αφήνει το ίχνος «είμαι εδώ» για τον συνδεδεμένο χρήστη, από αυτόν τον σταθμό.
 ///
@@ -42,23 +43,18 @@ class OperatorPresenceHeartbeat {
   Future<void>? pendingBeat;
 
   /// Το όνομα του υπολογιστή. Αντικαθίσταται στα τεστ.
-  static String Function() stationNameReader = () {
-    final fromEnvironment = Platform.environment['COMPUTERNAME']?.trim();
-    if (fromEnvironment != null && fromEnvironment.isNotEmpty) {
-      return fromEnvironment;
-    }
-    return Platform.localHostname;
-  };
+  ///
+  /// Προωθεί στο [StationName]: την ίδια απάντηση χρειάζεται και το ημερολόγιο
+  /// σφαλμάτων, που τρέχει πριν υπάρξει βάση. Δύο αντίγραφα του ίδιου
+  /// υπολογισμού θα απέκλιναν σιωπηλά.
+  static String Function() get stationNameReader => StationName.reader;
+
+  static set stationNameReader(String Function() value) {
+    StationName.reader = value;
+  }
 
   /// Ο σταθμός αυτού του αντιγράφου· κενό όταν το σύστημα δεν τον δίνει.
-  static String get stationName {
-    try {
-      return stationNameReader().trim();
-    } catch (_) {
-      // Ο σταθμός είναι πληροφορία άνεσης — η απουσία του δεν σταματά τίποτα.
-      return '';
-    }
-  }
+  static String get stationName => StationName.current;
 
   /// Ποιο **ανοιχτό αντίγραφο** είναι αυτό. Αντικαθίσταται στα τεστ.
   ///

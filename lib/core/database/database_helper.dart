@@ -991,7 +991,7 @@ class DatabaseHelper {
         : timeoutSeconds;
     var remaining = safeTimeout;
     progressNotifier?.setStep(
-      'Προσπάθεια άνοιγμα βάσης σε $remaining δευτερόλεπτα',
+      databaseOpenCountdownLabel(remaining),
       secondsRemaining: remaining,
     );
 
@@ -1003,7 +1003,7 @@ class DatabaseHelper {
           remaining = 0;
         }
         progressNotifier.setStep(
-          'Προσπάθεια άνοιγμα βάσης σε $remaining δευτερόλεπτα',
+          databaseOpenCountdownLabel(remaining),
           secondsRemaining: remaining,
         );
       });
