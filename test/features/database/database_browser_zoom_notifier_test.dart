@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/services/crash_log_service.dart';
+import 'package:call_logger/core/services/profile_settings.dart';
 import 'package:call_logger/features/database/screens/database_browser_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +16,12 @@ import 'package:path/path.dart' as p;
 
 import '../../test_setup.dart';
 
-const _zoomSettingsKey = 'database_browser_preview_zoom_by_table';
+/// Το κλειδί διαβάζεται από τον κατάλογο — όχι γραμμένο δεύτερη φορά εδώ.
+///
+/// Χωρίς συνδεδεμένο χρήστη η πύλη διαβάζει από την κοινή θέση, οπότε το
+/// σπέρνουμε εκεί — αυτό ελέγχουν εδώ τα τεστ.
+final _zoomSettingsKey =
+    ProfileSettingKeys.databaseBrowserPreviewZoomByTable.key;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

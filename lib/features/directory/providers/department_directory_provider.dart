@@ -8,10 +8,11 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/department_repository.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
-import '../../../core/database/settings_repository.dart';
 import '../../../core/errors/department_exists_exception.dart';
 import '../../../core/services/lansweeper_department_accounts.dart';
 import '../../../core/services/lookup_service.dart';
+import '../../../core/services/profile_settings.dart';
+import '../../../core/services/scoped_settings.dart';
 import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/department_floor_sync.dart';
 import '../../calls/provider/lookup_provider.dart';
@@ -24,9 +25,6 @@ import '../services/catalog_search_evaluation.dart';
 import '../services/department_deletion_undo_record.dart';
 import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
-
-const _catalogDepartmentsVisibleColumnsKey =
-    'catalog_departments_visible_columns';
 
 /// Sentinel για [_patch]: κράτα την προηγούμενη τιμή πεδίων που επιτρέπουν explicit null.
 class _PatchKeep {
@@ -165,10 +163,9 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
   }
 
   Future<_DepartmentColumnLayout?> _readColumnLayoutFromSettings() async {
-    final dbCols = await DatabaseHelper.instance.database;
-    final raw = await SettingsRepository(
-      dbCols,
-    ).getSetting(_catalogDepartmentsVisibleColumnsKey);
+    final raw = await ScopedSettings.getString(
+      ProfileSettingKeys.catalogDepartmentsVisibleColumns,
+    );
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseColumnLayoutFromJson(raw);
   }
@@ -185,10 +182,34 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
           if (vis.contains(c.key)) c.key,
       ],
     });
-    final dbPersist = await DatabaseHelper.instance.database;
-    await SettingsRepository(
-      dbPersist,
-    ).saveSetting(_catalogDepartmentsVisibleColumnsKey, payload);
+    await ScopedSettings.setString(
+      ProfileSettingKeys.catalogDepartmentsVisibleColumns,
+      payload,
+    );
+  }
+
+  /// Ξαναδιαβάζει **μόνο τις στήλες** του τρέχοντος χρήστη, κρατώντας τις
+  /// φορτωμένες εγγραφές.
+  ///
+  /// Καλείται στην «Αλλαγή χρήστη»: η βάση δεν άλλαξε, άρα τα δεδομένα
+  /// παραμένουν έγκυρα — αλλάζουν μόνο οι προτιμήσεις προβολής. Σκέτο
+  /// `invalidate` θα άδειαζε τον Κατάλογο μπροστά στα μάτια του χρήστη.
+  ///
+  /// Χωρίς αποθηκευμένη επιλογή, οι στήλες επιστρέφουν στις **προεπιλογές** —
+  /// ποτέ σε αυτές του προηγούμενου χρήστη.
+  Future<void> reloadColumnLayoutForCurrentOperator() async {
+    final parsed = await _readColumnLayoutFromSettings();
+    _columnLayoutHydrated = true;
+    if (!ref.mounted) return;
+    final defaults = DepartmentDirectoryState();
+    _patch(
+      columnOrder: parsed != null
+          ? List<DepartmentDirectoryColumn>.from(parsed.order)
+          : List<DepartmentDirectoryColumn>.from(defaults.columnOrder),
+      visibleColumnKeys: parsed != null
+          ? Set<String>.from(parsed.visible)
+          : Set<String>.from(defaults.visibleColumnKeys),
+    );
   }
 
   Future<void> loadDepartments() async {

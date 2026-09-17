@@ -7,7 +7,6 @@ import '../../../../core/database/user_delete_equipment_policy.dart';
 import '../../../../core/database/user_delete_phone_policy.dart';
 import '../../../../core/database/user_repository.dart';
 import '../../../../core/models/building_map_floor.dart';
-import '../../../../core/database/settings_repository.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../calls/layout/call_form_clear.dart';
@@ -27,9 +26,9 @@ import 'department_rename_guard_dialog.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_model.dart';
 import '../../building_map/providers/building_map_providers.dart';
+import '../../providers/catalog_continuous_scroll_provider.dart';
 import '../../providers/bulk_action_undo_provider.dart';
 import '../../providers/department_directory_provider.dart';
-import '../../providers/directory_provider.dart';
 import 'bulk_department_edit_dialog.dart';
 import 'bulk_undo_bar.dart';
 import 'catalog_column_selector_shell.dart';
@@ -1129,14 +1128,9 @@ class _DepartmentColumnSelectorOverlay extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
             ),
             value: continuousScroll,
-            onChanged: (bool val) async {
-              final db = await DatabaseHelper.instance.database;
-              await SettingsRepository(db).saveSetting(
-                kCatalogContinuousScrollDepartmentsKey,
-                val.toString(),
-              );
-              ref.invalidate(catalogDepartmentsContinuousScrollProvider);
-            },
+            onChanged: (bool val) => ref
+                .read(catalogDepartmentsContinuousScrollProvider.notifier)
+                .setEnabled(val),
           ),
         ],
       ),

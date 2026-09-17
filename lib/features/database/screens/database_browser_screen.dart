@@ -8,11 +8,12 @@ import '../../../core/database/active_database_generation.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_identity_repository.dart';
 import '../../../core/database/database_table_inspection.dart';
-import '../../../core/database/settings_repository.dart';
 import '../../../core/database/database_init_result.dart';
 import '../../../core/providers/app_instances_provider.dart';
 import '../../../core/services/app_instance_registry.dart';
 import '../../../core/services/crash_log_service.dart';
+import '../../../core/services/profile_settings.dart';
+import '../../../core/services/scoped_settings.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/raw_error_details_tile.dart';
@@ -23,11 +24,11 @@ import '../widgets/database_label_dialog.dart';
 import '../widgets/database_stats_card.dart';
 import '../widgets/table_preview_grid.dart';
 
-/// Κλειδί `app_settings` για JSON `{ "όνομα_πίνακα": zoom, ... }` (zoom 0.5–2.0).
-const String _kDatabaseBrowserZoomByTableSettingsKey =
-    'database_browser_preview_zoom_by_table';
-
 /// Αποθηκευμένο επίπεδο μεγέθυνσης ανά πίνακα προεπισκόπησης (0.5–2.0· προεπιλογή 1.0).
+///
+/// **Προσωπικό**: πόσο μεγάλα διαβάζει κανείς είναι δικό του θέμα. Όσο γραφόταν
+/// κατευθείαν στα κοινά — παρά το ότι το κλειδί ήταν δηλωμένο προσωπικό —
+/// ρυθμίζοντας το ζουμ το άλλαζες και για τον συνάδελφο.
 ///
 /// **Ζει όσο η εφαρμογή, όχι όσο η οθόνη.** Η φόρτωση ξεκινά από το `initState`,
 /// πριν προλάβει το πρώτο build να αρχίσει να παρακολουθεί, και η εναλλαγή
@@ -43,13 +44,12 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
   @override
   Map<String, double> build() => {};
 
-  /// Φόρτωση από `app_settings` (καλείται κατά το άνοιγμα της οθόνης).
+  /// Φόρτωση του ζουμ του τρέχοντος χρήστη (καλείται κατά το άνοιγμα της οθόνης).
   Future<void> load() async {
     try {
-      final dbZoom = await DatabaseHelper.instance.database;
-      final raw = await SettingsRepository(
-        dbZoom,
-      ).getSetting(_kDatabaseBrowserZoomByTableSettingsKey);
+      final raw = await ScopedSettings.getString(
+        ProfileSettingKeys.databaseBrowserPreviewZoomByTable,
+      );
       if (!ref.mounted) return;
       if (raw == null || raw.trim().isEmpty) {
         state = {};
@@ -77,9 +77,8 @@ class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
   double zoomFor(String tableName) => state[tableName] ?? 1.0;
 
   Future<void> _persist(Map<String, double> snapshot) async {
-    final dbZoom = await DatabaseHelper.instance.database;
-    await SettingsRepository(dbZoom).saveSetting(
-      _kDatabaseBrowserZoomByTableSettingsKey,
+    await ScopedSettings.setString(
+      ProfileSettingKeys.databaseBrowserPreviewZoomByTable,
       jsonEncode(snapshot),
     );
   }

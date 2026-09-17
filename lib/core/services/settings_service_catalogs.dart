@@ -8,6 +8,8 @@ import 'shared_settings.dart';
 import '../config/audit_retention_config.dart';
 import '../../features/database/debug/publish_cli.dart';
 import 'settings_list_conflict.dart';
+import 'profile_settings.dart';
+import 'scoped_settings.dart';
 import 'settings_service.dart';
 
 /// Κατάλογοι, λεξικό, audit retention και timeout ανοίγματος βάσης.
@@ -35,7 +37,6 @@ class SettingsServiceCatalogs {
   static const String _keyLampCrossCheckRules = 'lamp_cross_check_rules_v1';
   static const String _keyPublishCliCommandTemplate =
       'publish_cli_command_template';
-  static const String _keyShowUpdateOnStartup = 'show_update_on_startup';
 
   static const int defaultCrashLogRetentionCount = 14;
   static const int minCrashLogRetentionCount = 3;
@@ -204,14 +205,19 @@ class SettingsServiceCatalogs {
 
   /// Εμφάνιση αυτόματου μηνύματος διαθέσιμης ενημέρωσης στην εκκίνηση.
   /// Προεπιλογή: true. Δεν επηρεάζει την κόκκινη κουκίδα ούτε τον έλεγχο.
+  ///
+  /// **Προσωπικό**: το πόσο τον ενοχλεί κανείς το μήνυμα είναι δικό του θέμα —
+  /// και τον ακολουθεί σε όποιον υπολογιστή καθίσει. Όσο η τιμή γραφόταν κατευθείαν
+  /// στις τοπικές ρυθμίσεις, έμενε κολλημένη στο μηχάνημα.
   Future<bool> getShowUpdateOnStartup() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefKey(_keyShowUpdateOnStartup)) ?? true;
+    return await ScopedSettings.getBool(
+          ProfileSettingKeys.showUpdateOnStartup,
+        ) ??
+        true;
   }
 
   Future<void> setShowUpdateOnStartup(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(_keyShowUpdateOnStartup), value);
+    await ScopedSettings.setBool(ProfileSettingKeys.showUpdateOnStartup, value);
   }
 
   // --- Τύποι εξοπλισμού (app_settings, comma-separated) ---

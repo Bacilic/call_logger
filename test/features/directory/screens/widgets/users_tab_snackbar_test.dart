@@ -77,9 +77,6 @@ void main() {
             directoryProvider.overrideWith(
               () => _FakeDirectoryNotifier(initial),
             ),
-            catalogUsersContinuousScrollProvider.overrideWith(
-              (ref) async => true,
-            ),
           ],
           child: const MaterialApp(home: _UsersTabHost()),
         ),

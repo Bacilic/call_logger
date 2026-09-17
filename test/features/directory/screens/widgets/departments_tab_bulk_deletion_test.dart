@@ -10,7 +10,6 @@ import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/directory/building_map/providers/building_map_providers.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
-import 'package:call_logger/features/directory/providers/directory_provider.dart';
 import 'package:call_logger/features/directory/screens/widgets/departments_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -92,9 +91,6 @@ Widget _hostWith(DepartmentDirectoryState initial) {
       ...callLoggerTestProviderOverrides(),
       departmentDirectoryProvider.overrideWith(
         () => _FakeDepartmentDirectoryNotifier(initial),
-      ),
-      catalogDepartmentsContinuousScrollProvider.overrideWith(
-        (ref) async => true,
       ),
       buildingMapFloorsCatalogProvider.overrideWith(
         (ref) async => const <BuildingMapFloor>[],

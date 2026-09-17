@@ -6,7 +6,6 @@ import '../../../core/database/database_helper.dart';
 import '../services/directory_save_conflict.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
-import '../../../core/database/settings_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/id_search_query.dart';
@@ -876,54 +875,3 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
 final directoryProvider = NotifierProvider<DirectoryNotifier, DirectoryState>(
   DirectoryNotifier.new,
 );
-
-/// Παλαιό global κλειδί· αν λείπει το per-tab, διαβάζεται για συμβατότητα.
-const kCatalogContinuousScrollLegacyKey = 'catalog_continuous_scroll';
-
-const kCatalogContinuousScrollEquipmentKey =
-    'catalog_continuous_scroll_equipment';
-const kCatalogContinuousScrollUsersKey = 'catalog_continuous_scroll_users';
-const kCatalogContinuousScrollDepartmentsKey =
-    'catalog_continuous_scroll_departments';
-
-Future<bool> _readCatalogContinuousScrollPerTable(
-  SettingsRepository settings,
-  String perTableKey,
-) async {
-  final specific = await settings.getSetting(perTableKey);
-  if (specific != null) return specific == 'true';
-  final legacy = await settings.getSetting(kCatalogContinuousScrollLegacyKey);
-  if (legacy != null) return legacy == 'true';
-  return true;
-}
-
-/// Συνεχής κύλιση πίνακα εξοπλισμού (ανά καρτέλα). Default: true.
-final catalogEquipmentContinuousScrollProvider =
-    FutureProvider.autoDispose<bool>((ref) async {
-      final db = await DatabaseHelper.instance.database;
-      return _readCatalogContinuousScrollPerTable(
-        SettingsRepository(db),
-        kCatalogContinuousScrollEquipmentKey,
-      );
-    });
-
-/// Συνεχής κύλιση πινάκων χρηστών (προσωπικά / κοινόχρηστα). Default: true.
-final catalogUsersContinuousScrollProvider = FutureProvider.autoDispose<bool>((
-  ref,
-) async {
-  final db = await DatabaseHelper.instance.database;
-  return _readCatalogContinuousScrollPerTable(
-    SettingsRepository(db),
-    kCatalogContinuousScrollUsersKey,
-  );
-});
-
-/// Συνεχής κύλιση πίνακα τμημάτων. Default: true.
-final catalogDepartmentsContinuousScrollProvider =
-    FutureProvider.autoDispose<bool>((ref) async {
-      final db = await DatabaseHelper.instance.database;
-      return _readCatalogContinuousScrollPerTable(
-        SettingsRepository(db),
-        kCatalogContinuousScrollDepartmentsKey,
-      );
-    });

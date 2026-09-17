@@ -40,7 +40,11 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
 
   // ─── Γέφυρες για τους συνεργάτες (state/ref του Notifier είναι protected) ───
 
-  /// Πρόσβαση κατάστασης για τους συνεργάτες του επιλογέα — όχι για widgets.
+  /// Πρόσβαση κατάστασης χωρίς `ref` — όχι για widgets.
+  ///
+  /// Τη χρησιμοποιούν οι συνεργάτες του επιλογέα και οι γέφυρες των controllers
+  /// κλήσης, που τρέχουν πέρα από διαλόγους και δεν μπορούν να στηριχτούν σε
+  /// widget που μπορεί να έχει ξηλωθεί μέχρι να τελειώσουν.
   SmartEntitySelectorState get selectorState => state;
   set selectorState(SmartEntitySelectorState value) => state = value;
 

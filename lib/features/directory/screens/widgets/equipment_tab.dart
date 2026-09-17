@@ -7,7 +7,6 @@ import '../../../calls/layout/call_form_clear.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
 import '../../../../core/database/database_helper.dart';
-import '../../../../core/database/settings_repository.dart';
 import '../../../../core/models/app_permission.dart';
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/services/permission_service.dart';
@@ -17,9 +16,9 @@ import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../../../core/widgets/app_asset_image.dart';
 import '../../../calls/models/user_model.dart';
 import '../../models/equipment_column.dart';
-import '../../providers/directory_provider.dart';
 import '../../providers/equipment_directory_provider.dart';
 import '../../providers/equipment_types_provider.dart';
+import '../../providers/catalog_continuous_scroll_provider.dart';
 import '../../providers/bulk_action_undo_provider.dart';
 import '../../../../core/database/equipment_deletion_summary_repository.dart';
 import 'bulk_equipment_edit_dialog.dart';
@@ -565,14 +564,9 @@ class _EquipmentColumnSelectorOverlay extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
             ),
             value: continuousScroll,
-            onChanged: (bool val) async {
-              final db = await DatabaseHelper.instance.database;
-              await SettingsRepository(db).saveSetting(
-                kCatalogContinuousScrollEquipmentKey,
-                val.toString(),
-              );
-              ref.invalidate(catalogEquipmentContinuousScrollProvider);
-            },
+            onChanged: (bool val) => ref
+                .read(catalogEquipmentContinuousScrollProvider.notifier)
+                .setEnabled(val),
           ),
         ],
       ),

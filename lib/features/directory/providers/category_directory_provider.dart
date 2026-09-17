@@ -5,15 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/calls_search_index.dart';
 import '../../../core/database/category_repository.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/settings_repository.dart';
+import '../../../core/services/profile_settings.dart';
+import '../../../core/services/scoped_settings.dart';
 import '../../../core/utils/id_search_query.dart';
 import '../../history/providers/history_provider.dart';
 import '../models/category_directory_column.dart';
 import '../models/category_model.dart';
 import '../services/catalog_search_evaluation.dart';
-
-const _catalogCategoriesVisibleColumnsKey =
-    'catalog_categories_visible_columns';
 
 class _PatchKeep {
   const _PatchKeep();
@@ -140,10 +138,9 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
   }
 
   Future<_CategoryColumnLayout?> _readColumnLayoutFromSettings() async {
-    final db = await DatabaseHelper.instance.database;
-    final raw = await SettingsRepository(
-      db,
-    ).getSetting(_catalogCategoriesVisibleColumnsKey);
+    final raw = await ScopedSettings.getString(
+      ProfileSettingKeys.catalogCategoriesVisibleColumns,
+    );
     if (raw == null || raw.trim().isEmpty) return null;
     return _parseColumnLayoutFromJson(raw);
   }
@@ -158,10 +155,34 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
           if (vis.contains(c.key)) c.key,
       ],
     });
-    final dbSet = await DatabaseHelper.instance.database;
-    await SettingsRepository(
-      dbSet,
-    ).saveSetting(_catalogCategoriesVisibleColumnsKey, payload);
+    await ScopedSettings.setString(
+      ProfileSettingKeys.catalogCategoriesVisibleColumns,
+      payload,
+    );
+  }
+
+  /// Ξαναδιαβάζει **μόνο τις στήλες** του τρέχοντος χρήστη, κρατώντας τις
+  /// φορτωμένες εγγραφές.
+  ///
+  /// Καλείται στην «Αλλαγή χρήστη»: η βάση δεν άλλαξε, άρα τα δεδομένα
+  /// παραμένουν έγκυρα — αλλάζουν μόνο οι προτιμήσεις προβολής. Σκέτο
+  /// `invalidate` θα άδειαζε τον Κατάλογο μπροστά στα μάτια του χρήστη.
+  ///
+  /// Χωρίς αποθηκευμένη επιλογή, οι στήλες επιστρέφουν στις **προεπιλογές** —
+  /// ποτέ σε αυτές του προηγούμενου χρήστη.
+  Future<void> reloadColumnLayoutForCurrentOperator() async {
+    final parsed = await _readColumnLayoutFromSettings();
+    _columnLayoutHydrated = true;
+    if (!ref.mounted) return;
+    final defaults = CategoryDirectoryState();
+    _patch(
+      columnOrder: parsed != null
+          ? List<CategoryDirectoryColumn>.from(parsed.order)
+          : List<CategoryDirectoryColumn>.from(defaults.columnOrder),
+      visibleColumnKeys: parsed != null
+          ? Set<String>.from(parsed.visible)
+          : Set<String>.from(defaults.visibleColumnKeys),
+    );
   }
 
   Future<void> loadCategories() async {

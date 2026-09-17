@@ -20,14 +20,19 @@ class CallerQuickAddDialogPrompts implements CallerQuickAddPrompts {
   const CallerQuickAddDialogPrompts({
     required this.context,
     required this.messenger,
-    required this.ref,
+    required this.headerNotifier,
   });
 
   final BuildContext context;
 
   /// Μόνο για την προσφορά αναίρεσης: το «τι γεννήθηκε» ζει στον notifier, και
   /// η απόφαση «θα φανεί κουμπί;» είναι του UI — ο controller δεν τη γνωρίζει.
-  final WidgetRef ref;
+  ///
+  /// Κρατιέται **ο ίδιος ο notifier**, όχι το `ref` που τον δίνει: η ανακοίνωση
+  /// φτάνει μετά από διαλόγους και εγγραφές στη βάση, οπότε η κεφαλίδα μπορεί να
+  /// έχει ξηλωθεί — και τότε κάθε `ref.read` πετάει. Ο notifier ζει όσο η εφαρμογή
+  /// και διαβάζεται μια φορά στην κατασκευή, όπως και ο [messenger].
+  final CallHeaderNotifier headerNotifier;
 
   /// Κρατιέται ΠΡΙΝ από τους διαλόγους: μετά το κλείσιμό τους το context μπορεί
   /// να μην φτάνει πια σε ScaffoldMessenger.
@@ -127,7 +132,7 @@ class CallerQuickAddDialogPrompts implements CallerQuickAddPrompts {
 
   @override
   void announce(String message) {
-    final notifier = ref.read(callHeaderProvider.notifier);
+    final notifier = headerNotifier;
     if (!notifier.hasQuickAddUndoOffer) {
       messenger.showSnackBar(SnackBar(content: Text(message)));
       return;
@@ -156,36 +161,43 @@ class CallerQuickAddDialogPrompts implements CallerQuickAddPrompts {
 
 /// Σύνδεση των ενεργειών του controller με τον notifier της κεφαλίδας κλήσης.
 class CallHeaderQuickAddActions implements CallerQuickAddActions {
-  const CallHeaderQuickAddActions({required this.ref, required this.context});
+  const CallHeaderQuickAddActions({
+    required this.headerNotifier,
+    required this.context,
+  });
 
-  final WidgetRef ref;
+  /// Ο notifier της κεφαλίδας, διαβασμένος μια φορά στην κατασκευή.
+  ///
+  /// Η ροή της γρήγορης καταχώρησης περνά από πολλούς διαλόγους· μετά από
+  /// καθέναν η κεφαλίδα μπορεί να έχει ξηλωθεί, οπότε κάθε νέα ανάγνωση
+  /// από το `ref` θα πετούσε. Ο notifier ζει όσο η εφαρμογή — δεν χρειάζεται
+  /// να ξαναζητηθεί.
+  final CallHeaderNotifier headerNotifier;
 
   /// Το ίδιο context που δίνει και τους διαλόγους — ο notifier εμφανίζει δικούς
   /// του διαλόγους (συγκρούσεις τηλεφώνου) κατά τη συσχέτιση.
   final BuildContext context;
 
-  CallHeaderNotifier get _notifier => ref.read(callHeaderProvider.notifier);
-
   @override
-  CallHeaderState get header => ref.read(callHeaderProvider);
+  CallHeaderState get header => headerNotifier.selectorState;
 
   @override
   Future<OrphanQuickAddResult?> quickAddOrphan({bool forceShared = false}) {
-    return _notifier.quickAddOrphanToDepartment(
+    return headerNotifier.quickAddOrphanToDepartment(
       forceSharedOnConflict: forceShared,
     );
   }
 
   @override
-  void selectExistingCaller(UserModel user) => _notifier.setCaller(user);
+  void selectExistingCaller(UserModel user) => headerNotifier.setCaller(user);
 
   @override
   void useExistingDepartment(String departmentName) =>
-      _notifier.updateDepartmentText(departmentName);
+      headerNotifier.updateDepartmentText(departmentName);
 
   @override
   Future<String?> associate({required bool updatePrimaryDepartment}) {
-    return _notifier.associateCurrentIfNeeded(
+    return headerNotifier.associateCurrentIfNeeded(
       updatePrimaryDepartment: updatePrimaryDepartment,
       context: context.mounted ? context : null,
     );
@@ -198,12 +210,18 @@ CallerQuickAddController buildCallerQuickAddController({
   required BuildContext context,
   required ScaffoldMessengerState messenger,
 }) {
+  // Μία ανάγνωση του `ref`, εδώ και τώρα: από εκεί και πέρα η ροή κρατά τον
+  // ίδιο τον notifier, όπως κρατά και τον messenger.
+  final headerNotifier = ref.read(callHeaderProvider.notifier);
   return CallerQuickAddController(
-    actions: CallHeaderQuickAddActions(ref: ref, context: context),
+    actions: CallHeaderQuickAddActions(
+      headerNotifier: headerNotifier,
+      context: context,
+    ),
     prompts: CallerQuickAddDialogPrompts(
       context: context,
       messenger: messenger,
-      ref: ref,
+      headerNotifier: headerNotifier,
     ),
   );
 }

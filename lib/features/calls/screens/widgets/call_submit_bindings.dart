@@ -35,21 +35,29 @@ class CallSubmitDialogPrompts implements CallSubmitPrompts {
 }
 
 /// Σύνδεση των ενεργειών υποβολής με τους providers της οθόνης κλήσεων.
+///
+/// Κρατά **τους ίδιους τους notifiers**, όχι το `ref` που τους δίνει: η υποβολή
+/// περνά από τον διάλογο ταυτοποίησης, και όσο αυτός είναι ανοιχτός η φόρμα
+/// μπορεί να ξηλωθεί — και τότε κάθε `ref.read` πετάει. Οι notifiers ζουν όσο η
+/// εφαρμογή και διαβάζονται μια φορά στην κατασκευή.
 class CallEntrySubmitActions implements CallSubmitActions {
-  const CallEntrySubmitActions({required this.ref});
+  const CallEntrySubmitActions({
+    required this.headerNotifier,
+    required this.entryNotifier,
+  });
 
-  final WidgetRef ref;
+  final CallHeaderNotifier headerNotifier;
+  final CallEntryNotifier entryNotifier;
 
   @override
-  CallHeaderState get header => ref.read(callHeaderProvider);
+  CallHeaderState get header => headerNotifier.selectorState;
 
   @override
   void attachExistingCaller(UserModel user) =>
-      ref.read(callHeaderProvider.notifier).attachExistingCallerForSubmit(user);
+      headerNotifier.attachExistingCallerForSubmit(user);
 
   @override
-  Future<bool> submitCall() =>
-      ref.read(callEntryProvider.notifier).submitCall();
+  Future<bool> submitCall() => entryNotifier.submitCall();
 }
 
 /// Έτοιμος controller για το κουμπί «Καταγραφή».
@@ -58,7 +66,10 @@ CallSubmitController buildCallSubmitController({
   required BuildContext context,
 }) {
   return CallSubmitController(
-    actions: CallEntrySubmitActions(ref: ref),
+    actions: CallEntrySubmitActions(
+      headerNotifier: ref.read(callHeaderProvider.notifier),
+      entryNotifier: ref.read(callEntryProvider.notifier),
+    ),
     prompts: CallSubmitDialogPrompts(context: context),
   );
 }

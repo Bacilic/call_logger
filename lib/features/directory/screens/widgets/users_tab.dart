@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/user_form_edit_intent_provider.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
-import '../../../../core/database/settings_repository.dart';
 import '../../../../core/database/user_delete_equipment_policy.dart';
 import '../../../../core/database/user_delete_phone_policy.dart';
 import '../../../calls/layout/call_form_clear.dart';
@@ -15,6 +14,7 @@ import '../../models/department_model.dart';
 import '../../models/non_user_phone_entry.dart';
 import '../../models/user_catalog_mode.dart';
 import '../../models/user_directory_column.dart';
+import '../../providers/catalog_continuous_scroll_provider.dart';
 import '../../providers/bulk_action_undo_provider.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../providers/directory_provider.dart';
@@ -858,13 +858,9 @@ class _UserColumnSelectorOverlay extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
             ),
             value: continuousScroll,
-            onChanged: (bool val) async {
-              final db = await DatabaseHelper.instance.database;
-              await SettingsRepository(
-                db,
-              ).saveSetting(kCatalogContinuousScrollUsersKey, val.toString());
-              ref.invalidate(catalogUsersContinuousScrollProvider);
-            },
+            onChanged: (bool val) => ref
+                .read(catalogUsersContinuousScrollProvider.notifier)
+                .setEnabled(val),
           ),
         ],
       ),

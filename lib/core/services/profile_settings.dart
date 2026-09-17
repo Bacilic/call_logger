@@ -56,6 +56,12 @@ class ProfileSettingKey {
 /// στη Φάση 2 του μηχανισμού αντιγράφων — μία ρύθμιση της βάσης, κοινή για
 /// όλους, ώστε ο εφεδρικός να εκτελεί ό,τι όρισε ο διαχειριστής. Τη μετάπτωση
 /// της επιστροφής την κάνει η πύλη `ActiveBackupSettings`.
+///
+/// Έτσι έφυγαν και οι **ρυθμίσεις εκκρεμοτήτων** (`task_settings_config`, 17/09/2026):
+/// ορίζουν πότε λήγει μια αναβολή, και η ημερομηνία γράφεται στην **κοινή**
+/// εκκρεμότητα. Αν ο καθένας είχε δικό του ωράριο, το ίδιο κουμπί «Αναβολή» θα
+/// έδινε άλλη ημερομηνία ανάλογα με το ποιος το πάτησε. Η ατομική δέσμευση της
+/// `updateTaskSettingsConfig` υπάρχει ακριβώς γιατί η ρύθμιση είναι κοινή.
 abstract final class ProfileSettingKeys {
   // ── Προτιμήσεις εμφάνισης ────────────────────────────────────────────────
   // Σήμερα ζουν στον υπολογιστή: όποιος πρωτοκαθίσει κληρονομεί ό,τι ίσχυε
@@ -318,7 +324,7 @@ abstract final class ProfileSettingKeys {
         legacySource: ProfileSettingLegacySource.sharedForAdmin,
       );
 
-  // ── Λάμπα & Εκκρεμότητες ─────────────────────────────────────────────────
+  // ── Λάμπα ────────────────────────────────────────────────────────────────
 
   static const ProfileSettingKey lampTablesLeftPaneWidth = ProfileSettingKey(
     'lamp_tables_left_pane_width_px',
@@ -327,10 +333,6 @@ abstract final class ProfileSettingKeys {
   static const ProfileSettingKey lampMaxSearchResults = ProfileSettingKey(
     'lamp_max_search_results',
     legacySource: ProfileSettingLegacySource.machine,
-  );
-  static const ProfileSettingKey taskSettingsConfig = ProfileSettingKey(
-    'task_settings_config',
-    legacySource: ProfileSettingLegacySource.sharedForAdmin,
   );
 
   /// Η παλέτα χρωμάτων των Στατιστικών Κλήσεων.
@@ -404,7 +406,6 @@ abstract final class ProfileSettingKeys {
     databaseBrowserPreviewZoomByTable,
     lampTablesLeftPaneWidth,
     lampMaxSearchResults,
-    taskSettingsConfig,
     tasksOwnerFilter,
     historyOwnerFilter,
     lansweeperReportOwnerFilter,

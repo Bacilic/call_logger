@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../config/app_config.dart';
+import '../../services/profile_settings.dart';
+import '../../services/scoped_settings.dart';
 
 /// Τοπικές ρυθμίσεις μόνο για τη «Λάμπα».
 ///
@@ -11,8 +13,6 @@ class LampSettingsStore {
   static const String _excelPathKey = 'lamp_excel_path';
   static const String _readPathKey = 'lamp_old_db_read_path';
   static const String _outputPathKey = 'lamp_old_db_output_path';
-  static const String _tablesPaneWidthKey = 'lamp_tables_left_pane_width_px';
-  static const String _maxSearchResultsKey = 'lamp_max_search_results';
   static const String _integrityStepDurationsMsKey =
       'lamp_integrity_step_durations_ms';
 
@@ -24,17 +24,22 @@ class LampSettingsStore {
   static String _prefKey(String baseKey) =>
       AppConfig.prefixedPreferencesKey(baseKey);
 
+  /// **Προσωπικό**: πόσα αποτελέσματα αντέχει κανείς στην οθόνη είναι δικό
+  /// του θέμα. Τα όρια ισχύουν στην **εγγραφή** κι όχι μόνο στην ανάγνωση.
   Future<int> getMaxSearchResults() async {
-    final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getInt(_prefKey(_maxSearchResultsKey));
+    final v = await ScopedSettings.getInt(
+      ProfileSettingKeys.lampMaxSearchResults,
+    );
     if (v == null) return defaultMaxSearchResults;
     return v.clamp(minMaxSearchResults, maxMaxSearchResults);
   }
 
   Future<void> setMaxSearchResults(int value) async {
-    final prefs = await SharedPreferences.getInstance();
     final clamped = value.clamp(minMaxSearchResults, maxMaxSearchResults);
-    await prefs.setInt(_prefKey(_maxSearchResultsKey), clamped);
+    await ScopedSettings.setInt(
+      ProfileSettingKeys.lampMaxSearchResults,
+      clamped,
+    );
   }
 
   /// Παλιό κλειδί: μονή διαδρομή. Μεταφέρεται αυτόματα σε [read] και [output].
@@ -111,9 +116,12 @@ class LampSettingsStore {
   }
 
   /// Αποθηκευμένο πλάτος λίστας πινάκων (σε px) για την καρτέλα «Πίνακες».
+  ///
+  /// **Προσωπικό**: ο καθένας στήνει τη διάταξη όπως τον βολεύει.
   Future<double?> getTablesPaneWidthPx() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getDouble(_prefKey(_tablesPaneWidthKey));
+    final value = await ScopedSettings.getDouble(
+      ProfileSettingKeys.lampTablesLeftPaneWidth,
+    );
     if (value == null || value.isNaN || !value.isFinite) return null;
     if (value < 120 || value > 1200) return null;
     return value;
@@ -121,9 +129,11 @@ class LampSettingsStore {
 
   Future<void> setTablesPaneWidthPx(double widthPx) async {
     if (widthPx.isNaN || !widthPx.isFinite) return;
-    final prefs = await SharedPreferences.getInstance();
     final clamped = widthPx.clamp(120, 1200).toDouble();
-    await prefs.setDouble(_prefKey(_tablesPaneWidthKey), clamped);
+    await ScopedSettings.setDouble(
+      ProfileSettingKeys.lampTablesLeftPaneWidth,
+      clamped,
+    );
   }
 
   Future<Map<String, int>> getIntegrityStepDurationsMs() async {

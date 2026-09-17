@@ -7,6 +7,9 @@ import '../../features/calls/provider/calls_dashboard_providers.dart';
 import '../../features/calls/provider/remote_paths_provider.dart';
 import '../../features/database/providers/database_backup_settings_provider.dart';
 import '../../features/dictionary/providers/lexicon_list_filters_provider.dart';
+import '../../features/directory/providers/catalog_continuous_scroll_provider.dart';
+import '../../features/directory/providers/category_directory_provider.dart';
+import '../../features/directory/providers/department_directory_provider.dart';
 import '../../features/directory/providers/directory_provider.dart';
 import '../../features/directory/providers/equipment_directory_provider.dart';
 import '../../features/history/providers/dashboard_provider.dart';
@@ -14,7 +17,6 @@ import '../../features/history/providers/gemini_settings_provider.dart';
 import '../../features/history/providers/lansweeper_report_scope_provider.dart';
 import '../../features/tasks/providers/task_analytics_date_provider.dart';
 import '../../features/tasks/providers/task_notifications_provider.dart';
-import '../../features/tasks/providers/task_settings_config_provider.dart';
 import '../providers/settings_provider.dart';
 
 /// Εκκαθάριση των caches που κρατούν **προσωπικές ρυθμίσεις του προηγούμενου
@@ -83,6 +85,22 @@ void invalidateOperatorScopedCaches(WidgetRef ref) {
           .read(equipmentDirectoryProvider.notifier)
           .reloadColumnLayoutForCurrentOperator(),
     );
+    unawaited(
+      ref
+          .read(departmentDirectoryProvider.notifier)
+          .reloadColumnLayoutForCurrentOperator(),
+    );
+    unawaited(
+      ref
+          .read(categoryDirectoryProvider.notifier)
+          .reloadColumnLayoutForCurrentOperator(),
+    );
+
+    // Οι διακόπτες «συνεχής κύλιση» κρατούν **ρύθμιση**, όχι εγγραφές —
+    // η ακύρωση δεν αδειάζει κανέναν πίνακα.
+    ref.invalidate(catalogUsersContinuousScrollProvider);
+    ref.invalidate(catalogDepartmentsContinuousScrollProvider);
+    ref.invalidate(catalogEquipmentContinuousScrollProvider);
 
     // Στατιστικά κλήσεων και εκκρεμοτήτων: φίλτρα ημερομηνιών και διακόπτες.
     ref.invalidate(dashboardFilterProvider);
@@ -92,9 +110,8 @@ void invalidateOperatorScopedCaches(WidgetRef ref) {
     ref.invalidate(dashboardPaletteProvider);
     ref.invalidate(taskAnalyticsDateProvider);
 
-    // Λεξικό, εκκρεμότητες, εργαλεία κλήσεων, ΤΝ, Αναφορά Lansweeper.
+    // Λεξικό, εργαλεία κλήσεων, ΤΝ, Αναφορά Lansweeper.
     ref.invalidate(lexiconListFiltersProvider);
-    ref.invalidate(taskSettingsConfigProvider);
     ref.invalidate(remoteToolsCatalogProvider);
     ref.invalidate(geminiPromptTemplateProvider);
     ref.invalidate(lansweeperReportScopeProvider);
