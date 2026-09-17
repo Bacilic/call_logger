@@ -10,8 +10,6 @@
 /// να βρίσκεται κι αυτή.
 library;
 
-import '../utils/search_text_normalizer.dart';
-
 /// Το τμήμα της κλήσης — από τον κατάλογο, αλλιώς το κείμενο της κλήσης.
 const String kCallDepartmentExpr =
     "COALESCE(departments.name, calls.department_text, '-')";
@@ -54,8 +52,10 @@ const String kCallEntityFilterJoins = '''
 ///
 /// Η σημασία κάθε κριτηρίου είναι σκόπιμα διαφορετική και δεν αλλάζει:
 /// - **τμήμα**: ακριβές ταίριασμα — έρχεται από κλειστή λίστα.
-/// - **υπάλληλος**: όνομα **ή** τηλέφωνο, μερικό — ο χρήστης πληκτρολογεί ό,τι
-///   θυμάται, και συχνά θυμάται το τηλέφωνο αντί για το επώνυμο.
+/// - **καλών**: ακριβές ταίριασμα στο όνομα που δείχνει η κλήση — έρχεται κι
+///   αυτό από κλειστή λίστα. Η αναζήτηση με τηλέφωνο γίνεται μέσα στη λίστα
+///   προτάσεων, όχι εδώ: εκεί ο χρήστης πληκτρολογεί «2534» και διαλέγει τον
+///   άνθρωπο, και το φίλτρο φεύγει με το όνομά του.
 /// - **εξοπλισμός**: μερικός κωδικός — τα «5010» και «501» πρέπει να βρίσκουν.
 void appendCallEntityFilters(
   List<String> whereClauses,
@@ -70,16 +70,15 @@ void appendCallEntityFilters(
     args.add(dept);
   }
 
+  // Ο καλών ταιριάζει με τον ΑΝΘΡΩΠΟ, όχι με λέξη μέσα στην κλήση: το
+  // ευρετήριο αναζήτησης περιέχει περιγραφή, λύση, κατηγορία και τμήμα, οπότε
+  // ένα LIKE εκεί έφερνε κλήσεις όπου το όνομα απλώς αναφερόταν — και δεχόταν
+  // λέξεις που δεν είναι καν άνθρωπος. Η γενική αναζήτηση έχει το δικό της
+  // πεδίο, από πάνω.
   final user = userName?.trim();
   if (user != null && user.isNotEmpty) {
-    final normalized = SearchTextNormalizer.normalizeForSearch(user);
-    if (normalized.isNotEmpty) {
-      whereClauses.add(
-        '(calls.search_index LIKE ? OR $kCallUserPhoneExpr LIKE ?)',
-      );
-      args.add('%$normalized%');
-      args.add('%$normalized%');
-    }
+    whereClauses.add('$kCallCallerLabelExpr = ?');
+    args.add(user);
   }
 
   final code = equipmentCode?.trim();

@@ -1,16 +1,16 @@
-// Οι προειδοποιήσεις μιας καταχώρησης Lansweeper, όπως ξαναδιαβάζονται από το
-// αποθηκευμένο `metadata`.
+// Τι κρύβει το αποθηκευμένο `metadata` μιας καταχώρησης Lansweeper: τις
+// προειδοποιήσεις της αποστολής και το όνομα εκείνου που την έκανε.
 //
 // Δύο πράγματα φυλάει αυτό το αρχείο: ότι καμία μορφή σκουπιδιού στη στήλη δεν
 // ρίχνει την οθόνη, και το συμβόλαιο «μετράει μόνο η τελευταία καταχώρηση του
 // ticket» — αλλιώς μια επανυποβολή που πέτυχε καθαρά θα συνέχιζε να δείχνει το
 // παράπονο της προηγούμενης.
 //
-//   flutter test test/features/history/services/lansweeper_submission_warnings_test.dart
+//   flutter test test/features/history/services/lansweeper_link_metadata_test.dart
 
 import 'dart:convert';
 
-import 'package:call_logger/features/history/services/lansweeper_submission_warnings.dart';
+import 'package:call_logger/features/history/services/lansweeper_link_metadata.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../test_reporter.dart';
@@ -34,6 +34,82 @@ Map<String, dynamic> link({
 }
 
 void main() {
+  group('lansweeperSubmittedByFromMetadata — ποιος το καταχώρησε', () {
+    test('το αποθηκευμένο όνομα επιστρέφεται όπως γράφτηκε', () {
+      final raw = jsonEncode(<String, dynamic>{'submitted_by': 'Βασίλης'});
+      expect(lansweeperSubmittedByFromMetadata(raw), 'Βασίλης');
+    });
+
+    test('χωρίς σφραγίδα η απάντηση είναι null, όχι κενό κείμενο', () {
+      expect(lansweeperSubmittedByFromMetadata(null), isNull);
+      expect(lansweeperSubmittedByFromMetadata(''), isNull);
+      expect(
+        lansweeperSubmittedByFromMetadata(jsonEncode(<String, dynamic>{})),
+        isNull,
+        reason: greekExpectMsg(
+          'Κάθε καταχώρηση πριν υπάρξει η σφραγίδα περνά από εδώ',
+        ),
+      );
+      expect(
+        lansweeperSubmittedByFromMetadata(
+          jsonEncode(<String, dynamic>{'submitted_by': '   '}),
+        ),
+        isNull,
+        reason: greekExpectMsg('Κενό όνομα δεν είναι όνομα'),
+      );
+    });
+
+    test('χαλασμένο περιεχόμενο δεν σκάει — απαντά null', () {
+      expect(lansweeperSubmittedByFromMetadata('{όχι JSON'), isNull);
+      expect(lansweeperSubmittedByFromMetadata(42), isNull);
+    });
+  });
+
+  group('lansweeperSubmittedByForTicket — μετράει η τελευταία καταχώρηση', () {
+    test('το όνομα βγαίνει από τη νεότερη γραμμή αυτού του ticket', () {
+      final links = <Map<String, dynamic>>[
+        <String, dynamic>{
+          'external_id': '17824',
+          'metadata': jsonEncode(<String, dynamic>{'submitted_by': 'Βλάσης'}),
+        },
+        <String, dynamic>{
+          'external_id': '17824',
+          'metadata': jsonEncode(<String, dynamic>{'submitted_by': 'Βασίλης'}),
+        },
+      ];
+      expect(
+        lansweeperSubmittedByForTicket(links: links, ticketId: '17824'),
+        'Βλάσης',
+        reason: greekExpectMsg(
+          'Αν ο συνάδελφος το ξαναέστειλε, δικό του είναι το όνομα',
+        ),
+      );
+    });
+
+    test('άλλο ticket δεν δανείζει το όνομά του', () {
+      final links = <Map<String, dynamic>>[
+        <String, dynamic>{
+          'external_id': '999',
+          'metadata': jsonEncode(<String, dynamic>{'submitted_by': 'Βασίλης'}),
+        },
+      ];
+      expect(
+        lansweeperSubmittedByForTicket(links: links, ticketId: '17824'),
+        isNull,
+      );
+    });
+
+    test('χωρίς αριθμό ticket δεν ψάχνει καν', () {
+      expect(
+        lansweeperSubmittedByForTicket(
+          links: const <Map<String, dynamic>>[],
+          ticketId: null,
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('lansweeperWarningsFromMetadata — καμία μορφή δεν σκάει', () {
     test('null και κενό κείμενο δίνουν κενή λίστα', () {
       expect(lansweeperWarningsFromMetadata(null), isEmpty);

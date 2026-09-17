@@ -11,6 +11,7 @@ import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/core/services/operator_identity.dart';
 import 'package:call_logger/core/services/workstation_operators.dart';
+import 'package:call_logger/features/operators/services/selectable_profiles.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -333,6 +334,99 @@ void main() {
     });
   });
 
+  group('Η επιστροφή από άδεια — ο λογαριασμός Windows διαψεύδει τη μνήμη', () {
+    late Database db;
+    late OperatorRepository repository;
+
+    setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      initSqfliteFfiForTests();
+      db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
+      await onDatabaseUpgradeSquashed(db, 46, 47);
+      await db.execute(kCreateAuditLogTable);
+      repository = OperatorRepository(db);
+      CurrentOperator.reset();
+
+      // Ο υπολογιστής του Βλάση: το προφίλ του είναι δεμένο στον λογαριασμό
+      // του, όπως το έδεσε κάποτε η οθόνη «Χρήστες».
+      await repository.insert(
+        Operator(
+          displayName: 'Βλάσης',
+          windowsAccount: 'vl.oikonomou',
+          createdAt: DateTime(2026, 8, 20),
+        ),
+      );
+      await repository.insert(
+        Operator(
+          displayName: 'Βασίλης',
+          windowsAccount: 'v.drosos',
+          createdAt: DateTime(2026, 8, 20),
+        ),
+      );
+    });
+
+    tearDown(() async {
+      CurrentOperator.reset();
+      await db.close();
+    });
+
+    test(
+      'ο Βλάσης γυρίζει και η εφαρμογή ΡΩΤΑ αντί να τον κάνει Βασίλη',
+      () async {
+        // Ο Βασίλης κάθισε εδώ πέντε μέρες και πάτησε «Εδώ κάθομαι μόνο εγώ»:
+        // ο υπολογιστής θυμάται ΜΟΝΟ αυτόν. Ο Βλάσης ανοίγει τον δικό του
+        // υπολογιστή, με τον δικό του λογαριασμό.
+        final resolved = await OperatorIdentity.resolveAndActivate(
+          db,
+          windowsAccount: 'vl.oikonomou',
+          workstationNames: const <String>['Βασίλης'],
+        );
+
+        expect(
+          resolved,
+          isNull,
+          reason:
+              'Πριν από αυτόν τον έλεγχο η εκκίνηση τον έβαζε μέσα ως Βασίλη, '
+              'και οι κλήσεις του γράφονταν σε άλλο όνομα',
+        );
+        expect(CurrentOperator.active, isNull);
+      },
+    );
+
+    test('η λίστα που θα δει τον βάζει ΠΡΩΤΟ', () async {
+      final selectable = await loadSelectableProfiles(
+        db,
+        workstationNames: const <String>['Βασίλης'],
+        windowsAccount: 'vl.oikonomou',
+      );
+
+      expect(selectable.profiles.first.displayName, 'Βλάσης');
+    });
+
+    test('ο ίδιος ο Βασίλης μπαίνει κανονικά, χωρίς ερώτηση', () async {
+      final resolved = await OperatorIdentity.resolveAndActivate(
+        db,
+        windowsAccount: 'v.drosos',
+        workstationNames: const <String>['Βασίλης'],
+      );
+
+      expect(resolved?.displayName, 'Βασίλης');
+    });
+
+    test('σε κοινόχρηστο λογαριασμό τίποτα δεν αλλάζει', () async {
+      // Ο λογαριασμός δεν ανήκει σε κανένα προφίλ: η μνήμη του σταθμού μένει
+      // η μόνη απάντηση, όπως πάντα.
+      final resolved = await OperatorIdentity.resolveAndActivate(
+        db,
+        windowsAccount: 'tpo.koino',
+        workstationNames: const <String>['Βασίλης'],
+      );
+
+      expect(resolved?.displayName, 'Βασίλης');
+    });
+  });
+
   group('Η σφραγίδα του Ιστορικού', () {
     setUp(CurrentOperator.reset);
     tearDown(CurrentOperator.reset);
@@ -376,9 +470,14 @@ void main() {
       await db.close();
     });
 
-    /// Ο ίδιος άνθρωπος με δύο λογαριασμούς Windows: στη δουλειά «v.drosos»,
-    /// στο σπίτι «bacilic». Το δεύτερο μηχάνημα έχει δικό του προφίλ, οπότε η
-    /// αναγνώριση από τον λογαριασμό τον βάζει πάντα ως λάθος πρόσωπο.
+    /// Δύο προφίλ, το καθένα δεμένο στον δικό του λογαριασμό Windows.
+    ///
+    /// **Τα τεστ εδώ δουλεύουν με λογαριασμό που δεν ανήκει σε κανένα προφίλ**
+    /// («tpo.koino», ο κοινόχρηστος του τμήματος). Αλλιώς θα έμπαινε στη μέση
+    /// ο έλεγχος διάψευσης: όταν ο λογαριασμός δείχνει σε **άλλο** προφίλ από
+    /// αυτό που θυμάται ο σταθμός, η εκκίνηση ρωτά αντί να μαντέψει — δες την
+    /// ομάδα «Η επιστροφή από άδεια». Εδώ το ζητούμενο είναι άλλο: ότι η ρητή
+    /// επιλογή του ανθρώπου επιβιώνει της επανεκκίνησης.
     Future<void> seedTwoProfiles() async {
       await repository.insert(
         Operator(
@@ -400,13 +499,13 @@ void main() {
     test('η αλλαγή χρήστη επιβιώνει της επανεκκίνησης', () async {
       await seedTwoProfiles();
 
-      // Πριν διαλέξει άνθρωπος, αποφασίζει ο λογαριασμός Windows.
+      // Πριν διαλέξει άνθρωπος, ο κοινόχρηστος λογαριασμός δεν λέει τίποτα.
       expect(
-        (await OperatorIdentity.resolveAndActivate(
+        await OperatorIdentity.resolveAndActivate(
           db,
-          windowsAccount: 'bacilic',
-        ))?.displayName,
-        'Bacilic',
+          windowsAccount: 'tpo.koino',
+        ),
+        isNull,
       );
 
       // Ο άνθρωπος διαλέγει ρητά ποιος είναι.
@@ -415,11 +514,11 @@ void main() {
       );
       await OperatorIdentity.chooseForSession(vasilis);
 
-      // Επανεκκίνηση: η επιλογή του νικά τον λογαριασμό Windows.
+      // Επανεκκίνηση: η επιλογή του κρατά, χωρίς δεύτερη ερώτηση.
       expect(
         (await OperatorIdentity.resolveAndActivate(
           db,
-          windowsAccount: 'bacilic',
+          windowsAccount: 'tpo.koino',
         ))?.displayName,
         'Βασίλης',
       );
@@ -435,7 +534,7 @@ void main() {
 
       final resolved = await OperatorIdentity.resolveAndActivate(
         db,
-        windowsAccount: 'bacilic',
+        windowsAccount: 'tpo.koino',
       );
 
       expect(resolved, isNull, reason: 'όπου εναλλάσσονται πρόσωπα, ρωτάει');
@@ -454,7 +553,7 @@ void main() {
       expect(
         (await OperatorIdentity.resolveAndActivate(
           db,
-          windowsAccount: 'bacilic',
+          windowsAccount: 'tpo.koino',
         ))?.displayName,
         'Βασίλης',
       );
@@ -472,6 +571,8 @@ void main() {
           workstationNames: const <String>['Κάποιος Άλλος'],
         ))?.displayName,
         'Bacilic',
+        reason:
+            'Η μνήμη δεν ταίριαξε σε κανέναν, οπότε αποφασίζει ο λογαριασμός',
       );
     });
 

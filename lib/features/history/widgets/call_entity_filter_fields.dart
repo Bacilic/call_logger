@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/user_facing_error_messages.dart';
+import 'audit_filter_autocomplete.dart';
 
 /// Επιλογή τμήματος από κλειστή λίστα — «Όλα τα Τμήματα» σημαίνει χωρίς φίλτρο.
 class CallDepartmentFilterField extends StatelessWidget {
@@ -64,6 +65,63 @@ class CallDepartmentFilterField extends StatelessWidget {
       ),
       error: (e, _) => Text(
         'Σφάλμα φόρτωσης τμημάτων: ${humanizeUserFacingError(e)}',
+        style: TextStyle(color: theme.colorScheme.error),
+      ),
+    );
+  }
+}
+
+/// Επιλογή καλούντα από κλειστή λίστα, με αναζήτηση **και στο τηλέφωνο**.
+///
+/// Είναι φίλτρο, όχι αναζήτηση: ταιριάζει έναν συγκεκριμένο άνθρωπο. Όσο ήταν
+/// ελεύθερο κείμενο, το ερώτημα έψαχνε σε ολόκληρο το κείμενο της κλήσης και
+/// έφερνε κλήσεις όπου ο άνθρωπος απλώς αναφερόταν στην περιγραφή.
+///
+/// Η λίστα περιέχει **κάθε** καλούντα που εμφανίζεται σε κλήση — και όσους
+/// υπάρχουν μόνο ως ελεύθερο κείμενο, χωρίς καρτέλα στον Κατάλογο.
+///
+/// Το τηλέφωνο μπαίνει στην ετικέτα της πρότασης, οπότε η πληκτρολόγηση «2534»
+/// φέρνει τον άνθρωπο και το φίλτρο εφαρμόζεται με το όνομά του.
+class CallCallerFilterField extends StatelessWidget {
+  const CallCallerFilterField({
+    super.key,
+    required this.callers,
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+  });
+
+  final AsyncValue<List<({String name, String phones})>> callers;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return callers.when(
+      data: (options) => AuditFilterAutocomplete(
+        labelText: 'Καλούντας',
+        enabled: enabled,
+        options: [
+          for (final caller in options)
+            AuditFilterAutocompleteOption(
+              value: caller.name,
+              label: caller.phones.isEmpty || caller.phones == '-'
+                  ? caller.name
+                  : '${caller.name} — ${caller.phones}',
+            ),
+        ],
+        selectedValue: value,
+        selectedLabel: value,
+        onSelected: onChanged,
+      ),
+      loading: () => const Padding(
+        padding: EdgeInsets.all(10),
+        child: LinearProgressIndicator(),
+      ),
+      error: (e, _) => Text(
+        'Σφάλμα φόρτωσης καλούντων: ${humanizeUserFacingError(e)}',
         style: TextStyle(color: theme.colorScheme.error),
       ),
     );

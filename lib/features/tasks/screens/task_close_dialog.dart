@@ -1,3 +1,4 @@
+import 'package:call_logger/core/widgets/dialog_scrollable_content.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -103,8 +104,7 @@ class _TaskCloseDialogState extends ConsumerState<_TaskCloseDialog> {
             key: _formKey,
             // Το πεδίο της λύσης μεγαλώνει — χωρίς κύλιση ο διάλογος θα
             // ξεχείλιζε μόλις η σημείωση ξεπερνούσε το ύψος της οθόνης.
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: DialogScrollableContent(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,

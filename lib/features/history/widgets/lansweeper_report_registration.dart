@@ -7,7 +7,7 @@ import '../providers/lansweeper_sync_provider.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
 import '../services/lansweeper_registration_conflict.dart';
 import '../services/lansweeper_write_failure.dart';
-import '../services/lansweeper_submission_warnings.dart';
+import '../services/lansweeper_link_metadata.dart';
 import 'lansweeper_registration_conflict_dialog.dart';
 import 'lansweeper/lansweeper_ai_presenter.dart';
 import 'lansweeper/lansweeper_registration_dialogs.dart';

@@ -155,34 +155,13 @@ class DashboardFilterBar extends ConsumerWidget {
     );
   }
 
-  /// Ο υπάλληλος επιλέγεται από λίστα, αλλά η λίστα ψάχνεται **και με
-  /// τηλέφωνο**: το τηλέφωνο μπαίνει στην ετικέτα της πρότασης, οπότε η
-  /// πληκτρολόγηση «2534» φέρνει τον άνθρωπο και το φίλτρο εφαρμόζεται με το
-  /// όνομά του.
   Widget _callerField(WidgetRef ref) {
-    final callersAsync = ref.watch(callFilterCallersProvider);
-    return callersAsync.when(
-      data: (callers) {
-        return AuditFilterAutocomplete(
-          labelText: 'Υπάλληλος',
-          options: [
-            for (final caller in callers)
-              AuditFilterAutocompleteOption(
-                value: caller.name,
-                label: caller.phones.isEmpty || caller.phones == '-'
-                    ? caller.name
-                    : '${caller.name} — ${caller.phones}',
-              ),
-          ],
-          selectedValue: filter.userName,
-          selectedLabel: filter.userName,
-          onSelected: (value) => _notifier(ref).update(
-            (s) => s.copyWith(userName: value, clearUserName: value == null),
-          ),
-        );
-      },
-      loading: () => const _FilterFieldPlaceholder(label: 'Υπάλληλος'),
-      error: (e, _) => _FilterFieldError(message: humanizeUserFacingError(e)),
+    return CallCallerFilterField(
+      callers: ref.watch(callFilterCallersProvider),
+      value: filter.userName,
+      onChanged: (value) => _notifier(ref).update(
+        (s) => s.copyWith(userName: value, clearUserName: value == null),
+      ),
     );
   }
 

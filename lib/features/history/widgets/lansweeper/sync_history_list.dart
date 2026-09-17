@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../../services/lansweeper_submission_warnings.dart';
+import '../../services/lansweeper_link_metadata.dart';
 
 /// Το ιστορικό αιτημάτων της επιλεγμένης κλήσης, **αναδιπλωμένο**.
 ///

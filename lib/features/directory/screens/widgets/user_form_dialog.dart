@@ -1,3 +1,4 @@
+import 'package:call_logger/core/widgets/dialog_scrollable_content.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -579,8 +580,7 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
           contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 24),
           content: Form(
             key: formKey,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: DialogScrollableContent(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -708,8 +708,6 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
                           decoration: const InputDecoration(
                             labelText: 'Ψευδώνυμο',
                             border: OutlineInputBorder(),
-                            helperText: 'Πώς τον φωνάζουν · προαιρετικό',
-                            helperMaxLines: 2,
                           ),
                           textCapitalization: TextCapitalization.words,
                           onChanged: (_) => _onFieldChanged(),

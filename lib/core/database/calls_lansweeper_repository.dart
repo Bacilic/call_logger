@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../features/history/services/lansweeper_link_metadata.dart';
 import '../../features/history/services/lansweeper_registration_conflict.dart';
+import '../services/current_operator.dart';
 import 'audit_service.dart';
 import 'calls_audit_line.dart';
 import 'calls_search_index.dart';
@@ -409,6 +411,13 @@ class CallsLansweeperRepository {
   }
 
   /// Καταγράφει εξωτερικό link (π.χ. ticket id) για κλήση.
+  ///
+  /// **Η σφραγίδα του χρήστη μπαίνει εδώ, όχι στους καλούντες.** Τρεις δρόμοι
+  /// φτάνουν σε αυτό το σημείο —χειροκίνητη σήμανση, επιτυχής αποστολή, και
+  /// αποτυχία που πρόλαβε να γεννήσει αριθμό— και καθένας τους θα μπορούσε να
+  /// την ξεχάσει. Τότε το όνομα θα εμφανιζόταν σε κάποιες κλήσεις και σε άλλες
+  /// όχι, χωρίς ο χρήστης να μπορεί να καταλάβει γιατί. Μια μελλοντική τέταρτη
+  /// πύλη τη σφραγίζει κι αυτή, χωρίς να ξέρει ότι υπάρχει.
   Future<int> addExternalLink({
     required int callId,
     required String externalId,
@@ -418,13 +427,30 @@ class CallsLansweeperRepository {
     DatabaseExecutor? executor,
   }) async {
     final e = executor ?? db;
+    final stamped = _withSubmittedBy(metadata);
     return e.insert('call_external_links', {
       'call_id': callId,
       'external_id': externalId,
       'provider': provider,
       'created_at': createdAt ?? DateTime.now().toIso8601String(),
-      'metadata': metadata == null ? null : jsonEncode(metadata),
+      'metadata': stamped == null ? null : jsonEncode(stamped),
     });
+  }
+
+  /// Προσθέτει το όνομα του συνδεδεμένου χρήστη στα μεταδεδομένα του link.
+  ///
+  /// Χωρίς αναγνωρισμένο χρήστη επιστρέφει τα μεταδεδομένα **αυτούσια**: ό,τι
+  /// δεν ξέρουμε δεν το γράφουμε, και μια κενή σφραγίδα θα ήταν χειρότερη από
+  /// την απουσία της — θα έμοιαζε με απάντηση.
+  ///
+  /// Ό,τι έδωσε ο καλών μένει ανέγγιχτο· η σφραγίδα μπαίνει δίπλα του.
+  Map<String, dynamic>? _withSubmittedBy(Map<String, dynamic>? metadata) {
+    final name = CurrentOperator.active?.displayName.trim() ?? '';
+    if (name.isEmpty) return metadata;
+    return <String, dynamic>{
+      ...?metadata,
+      kLansweeperSubmittedByMetadataKey: name,
+    };
   }
 
   /// Επιστρέφει το ιστορικό links εξωτερικών συστημάτων για μια κλήση.
