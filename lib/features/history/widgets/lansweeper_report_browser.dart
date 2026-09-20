@@ -6,6 +6,7 @@ import '../../../core/services/lansweeper_sync_service.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
 import 'lansweeper/lansweeper_ai_presenter.dart';
+import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper/lansweeper_browser_launcher.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
 import 'lansweeper_report_dialog.dart';
@@ -79,11 +80,19 @@ class LansweeperReportBrowser {
     );
   }
 
+  /// Δέχεται τις **ίδιες τις κλήσεις**, όχι σκέτα αναγνωριστικά: από αυτές
+  /// βγαίνουν και τα `id` της εγγραφής και ο αυτόματος τίτλος με τον οποίο
+  /// συγκρίνεται ο γραμμένος. Δύο χωριστές παράμετροι θα μπορούσαν κάποτε να
+  /// αναφέρονται σε διαφορετικές κλήσεις.
   Future<void> copyAndOpen({
     required String ticketFormUrl,
-    required List<int> callIds,
+    required List<ReportCallItem> selected,
     int? durationSeconds,
   }) async {
+    final callIds = selected
+        .map((item) => item.call.id)
+        .whereType<int>()
+        .toList();
     if (!LansweeperUrlRules.isBrowserLaunchableUrl(ticketFormUrl)) {
       if (!host.mounted) return;
 
@@ -128,6 +137,15 @@ class LansweeperReportBrowser {
           callIds: callIds,
           problem: notes,
           solution: solution,
+          title: selected.isEmpty
+              ? null
+              : LansweeperSyncService.callTitleToPersist(
+                  title: title,
+                  autoTitle: LansweeperSyncService.autoTicketTitle(
+                    category: selected.first.call.category ?? '',
+                    id: selected.first.call.id,
+                  ),
+                ),
           source: LansweeperAiPresenter.refinedSource(
             aiProblem: host.aiSuggestedNotes,
             aiSolution: host.aiSuggestedSolution,

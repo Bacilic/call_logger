@@ -5,6 +5,9 @@ import '../../../core/config/audit_retention_config.dart';
 import '../../../core/models/app_permission.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/audit_retention_runner.dart';
+import '../../../core/services/audit_retention_plan.dart';
+import 'audit_retention_preview_dialog.dart';
+import 'database_size_health_card.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../audit/providers/audit_providers.dart';
@@ -50,8 +53,17 @@ class _DatabaseMaintenanceSectionsState
   int _auditMonths = 6;
 
   AuditRetentionConfig _retentionCfg = const AuditRetentionConfig();
-  final TextEditingController _retentionDaysController =
+
+  /// Επίπεδο 1 — μετά από πόσες μέρες πετιέται το βοηθητικό κείμενο.
+  final TextEditingController _compactDaysController = TextEditingController();
+
+  /// Επίπεδο 2 — όριο ηλικίας για τις αλλαγές σε καρτέλες.
+  final TextEditingController _operationalDaysController =
       TextEditingController();
+
+  /// Επίπεδο 2 — όριο ηλικίας για κλήσεις, εκκρεμότητες, αντίγραφα.
+  final TextEditingController _volatileDaysController = TextEditingController();
+
   final TextEditingController _retentionRowsController =
       TextEditingController();
 
@@ -63,7 +75,9 @@ class _DatabaseMaintenanceSectionsState
 
   @override
   void dispose() {
-    _retentionDaysController.dispose();
+    _compactDaysController.dispose();
+    _operationalDaysController.dispose();
+    _volatileDaysController.dispose();
     _retentionRowsController.dispose();
     super.dispose();
   }
@@ -73,23 +87,36 @@ class _DatabaseMaintenanceSectionsState
     if (!mounted) return;
     setState(() {
       _retentionCfg = c;
-      _retentionDaysController.text = c.maxAgeDays != null
-          ? '${c.maxAgeDays}'
+      _compactDaysController.text = c.compactSearchTextAfterDays != null
+          ? '${c.compactSearchTextAfterDays}'
+          : '';
+      _operationalDaysController.text = c.operationalMaxAgeDays != null
+          ? '${c.operationalMaxAgeDays}'
+          : '';
+      _volatileDaysController.text = c.volatileMaxAgeDays != null
+          ? '${c.volatileMaxAgeDays}'
           : '';
       _retentionRowsController.text = c.maxRows != null ? '${c.maxRows}' : '';
     });
   }
 
   AuditRetentionConfig _retentionFromForm() {
-    final dRaw = _retentionDaysController.text.trim();
-    final rRaw = _retentionRowsController.text.trim();
-    final d = dRaw.isEmpty ? null : int.tryParse(dRaw);
-    final r = rRaw.isEmpty ? null : int.tryParse(rRaw);
+    int? read(TextEditingController c) {
+      final raw = c.text.trim();
+      return raw.isEmpty ? null : int.tryParse(raw);
+    }
+
+    bool empty(TextEditingController c) => c.text.trim().isEmpty;
+
     return _retentionCfg.copyWith(
-      maxAgeDays: d,
-      maxRows: r,
-      clearMaxAgeDays: dRaw.isEmpty,
-      clearMaxRows: rRaw.isEmpty,
+      compactSearchTextAfterDays: read(_compactDaysController),
+      clearCompactSearchText: empty(_compactDaysController),
+      operationalMaxAgeDays: read(_operationalDaysController),
+      clearOperationalMaxAge: empty(_operationalDaysController),
+      volatileMaxAgeDays: read(_volatileDaysController),
+      clearVolatileMaxAge: empty(_volatileDaysController),
+      maxRows: read(_retentionRowsController),
+      clearMaxRows: empty(_retentionRowsController),
     );
   }
 
@@ -111,31 +138,54 @@ class _DatabaseMaintenanceSectionsState
     });
   }
 
+  /// Εκκαθάριση με προεπισκόπηση: **πρώτα** δείχνει τι θα σβηστεί.
+  ///
+  /// Το σχέδιο που εγκρίνεται είναι **το ίδιο αντικείμενο** που εκτελείται —
+  /// δεν ξαναϋπολογίζεται μετά την έγκριση, ώστε να μη διαφέρει από αυτό που
+  /// είδε ο χειριστής.
   Future<void> _onPurgeAuditRetentionNow(BuildContext context) async {
     final cfg = _retentionFromForm();
-    if (cfg.maxAgeDays == null && cfg.maxRows == null) {
+    if (!cfg.hasAnyPolicy) {
+      _showBanner('Ορίστε τουλάχιστον ένα όριο παραπάνω.', error: true);
+      return;
+    }
+
+    AuditRetentionPlan plan;
+    try {
+      plan = await AuditRetentionRunner.buildPlan(cfg);
+    } catch (e) {
       _showBanner(
-        'Ορίστε τουλάχιστον ημέρες ή μέγιστο πλήθος γραμμών.',
+        'Δεν ήταν δυνατός ο υπολογισμός: ${humanizeUserFacingError(e)}',
         error: true,
       );
       return;
     }
-    final ok = await _doubleConfirm(
-      context,
-      title: 'Εκκαθάριση audit (retention)',
-      body:
-          'Θα εφαρμοστεί η τρέχουσα πολιτική (ηλικία / μέγιστο πλήθος) στον πίνακα audit_log.',
+    if (!context.mounted) return;
+
+    if (plan.isNoOp) {
+      _showBanner('Με αυτά τα όρια δεν υπάρχει τίποτα να καθαριστεί.');
+      return;
+    }
+
+    final approved = await showAuditRetentionPreviewDialog(
+      context: context,
+      plan: plan,
+      exportsBeforePurge: cfg.exportBeforePurge,
     );
-    if (!ok || !context.mounted) return;
+    if (!approved || !context.mounted) return;
+
     await _runGuarded(() async {
       try {
-        final r = await AuditRetentionRunner.applyWithConfig(
-          cfg,
-          ignoreEnabledGate: true,
-        );
+        final r = await AuditRetentionRunner.executePlan(plan, cfg);
         ref.invalidate(auditListProvider);
+        final parts = <String>[];
+        if (r.deleted > 0) parts.add('διαγράφηκαν ${r.deleted} εγγραφές');
+        if (r.compacted > 0) {
+          parts.add('συμπιέστηκαν ${r.compacted} χωρίς απώλεια');
+        }
+        if (r.exportPath != null) parts.add('αντίγραφο: ${r.exportPath}');
         _showBanner(
-          'Διαγράφηκαν ${r.byAge} εγγραφές (ηλικία) και ${r.byTrim} (όριο πλήθους).',
+          parts.isEmpty ? 'Δεν χρειάστηκε καμία αλλαγή.' : parts.join(' · '),
         );
       } catch (e) {
         _showBanner('Σφάλμα: ${humanizeUserFacingError(e)}', error: true);
@@ -468,33 +518,39 @@ class _DatabaseMaintenanceSectionsState
               )) ...[
                 _sectionTitle(theme, 'Αυτόματη εκκαθάριση audit (retention)'),
                 const SizedBox(height: 8),
+                // Η απάντηση στο «πρέπει να ασχοληθώ;» μπαίνει ΠΡΙΝ από τα
+                // όρια: χωρίς αυτήν, ο χειριστής καλείται να ρυθμίσει κάτι
+                // χωρίς να ξέρει αν το χρειάζεται.
+                const DatabaseSizeHealthCard(),
+                const SizedBox(height: 8),
+                // Η ρύθμιση είναι ΚΟΙΝΗ (SharedSettingKeys.auditRetentionConfig)
+                // και το έλεγε «τοπική»: ο χειριστής όριζε 90 ημέρες νομίζοντας
+                // ότι ρυθμίζει τον υπολογιστή του, και η επόμενη εκκίνηση
+                // οποιουδήποτε σταθμού έσβηνε το Ιστορικό όλων.
                 Text(
-                  'Περιορισμός μεγέθους πίνακα audit_log (τοπικές ρυθμίσεις· όχι στο λεξικό).',
+                  'Περιορισμός μεγέθους του πίνακα audit_log. Η πολιτική είναι '
+                  'κοινή για όλους τους σταθμούς — ό,τι ορίσετε εδώ ισχύει για '
+                  'όλους, και η εκκαθάριση σβήνει οριστικά εγγραφές από το '
+                  'Ιστορικό όλων.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 10),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Ενεργή πολιτική retention'),
-                  subtitle: const Text(
-                    'Χρησιμοποιείται για αυτόματη εκκαθάριση κατά την εκκίνηση (αν είναι ενεργό παρακάτω).',
-                  ),
-                  value: _retentionCfg.enabled,
-                  onChanged: _busy
-                      ? null
-                      : (v) => setState(
-                          () => _retentionCfg = _retentionCfg.copyWith(
-                            enabled: v,
-                          ),
-                        ),
-                ),
+                // ΕΝΑΣ διακόπτης, όχι δύο. Ως τις 18/09/2026 υπήρχε από πάνω
+                // και μια «Ενεργή πολιτική retention» που δεν έκανε τίποτα
+                // μόνη της: η εκκαθάριση απαιτούσε ούτως ή άλλως και αυτόν
+                // εδώ, οπότε «αναμμένη πολιτική με σβηστή εκκίνηση» έδειχνε
+                // ενεργή ρύθμιση που δεν επρόκειτο να τρέξει ποτέ.
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Εκκαθάριση κατά την εκκίνηση εφαρμογής'),
+                  subtitle: const Text(
+                    'Σε κάθε άνοιγμα, όποιου σταθμού, εφαρμόζονται τα όρια '
+                    'παρακάτω. Σβηστό: τίποτα δεν διαγράφεται αυτόματα.',
+                  ),
                   value: _retentionCfg.purgeOnAppStart,
-                  onChanged: _busy || !_retentionCfg.enabled
+                  onChanged: _busy
                       ? null
                       : (v) => setState(
                           () => _retentionCfg = _retentionCfg.copyWith(
@@ -502,29 +558,108 @@ class _DatabaseMaintenanceSectionsState
                           ),
                         ),
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _retentionDaysController,
-                  enabled: !_busy,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Μέγιστη ηλικία (ημέρες)',
-                    hintText: 'Κενό = χωρίς όριο ηλικίας',
-                    border: OutlineInputBorder(),
-                    isDense: true,
+                const SizedBox(height: 14),
+
+                // ── Επίπεδο 1: συμπίεση χωρίς απώλεια ──────────────────────
+                _retentionFieldGroup(
+                  theme,
+                  title: 'Συμπίεση παλιών εγγραφών',
+                  description:
+                      'Πετά μόνο το βοηθητικό κείμενο που κρατά η εφαρμογή '
+                      'για γρήγορη αναζήτηση. Καμία εγγραφή δεν σβήνεται και '
+                      'τίποτα δεν χάνεται — μετρημένο, κερδίζει τα δύο τρίτα '
+                      'του χώρου. Οι παλιές εγγραφές γίνονται πιο δύσκολα '
+                      'αναζητήσιμες, και το κείμενο ξαναφτιάχνεται όποτε '
+                      'θέλετε.',
+                  child: TextField(
+                    controller: _compactDaysController,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Μετά από (ημέρες)',
+                      hintText: 'Κενό = ποτέ',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _retentionRowsController,
-                  enabled: !_busy,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Μέγιστο πλήθος γραμμών audit',
-                    hintText: 'Κενό = χωρίς όριο πλήθους',
-                    border: OutlineInputBorder(),
-                    isDense: true,
+
+                // ── Επίπεδο 2: διαβάθμιση ανά είδος ────────────────────────
+                _retentionFieldGroup(
+                  theme,
+                  title: 'Οριστική διαγραφή, ανά είδος εγγραφής',
+                  description:
+                      'Οι δημιουργίες και οι διαγραφές του Καταλόγου '
+                      '(υπάλληλοι, τμήματα, εξοπλισμός, τηλέφωνα) **δεν '
+                      'σβήνονται ποτέ**: είναι η μόνη απάντηση στο «ποιος το '
+                      'έφτιαξε και πότε». Τα παρακάτω όρια αφορούν μόνο τα '
+                      'υπόλοιπα.',
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _volatileDaysController,
+                        enabled: !_busy,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText:
+                              'Κλήσεις, εκκρεμότητες, αντίγραφα (ημέρες)',
+                          hintText:
+                              'Κενό = χωρίς όριο · οι ίδιες οι κλήσεις μένουν '
+                              'άθικτες',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _operationalDaysController,
+                        enabled: !_busy,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Αλλαγές σε καρτέλες (ημέρες)',
+                          hintText:
+                              'Κενό = χωρίς όριο · η σημερινή μορφή της '
+                              'καρτέλας μένει',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _retentionRowsController,
+                        enabled: !_busy,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Μέγιστο συνολικό πλήθος γραμμών',
+                          hintText: 'Κενό = χωρίς όριο πλήθους',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+
+                // ── Επίπεδο 3: δικλείδες ───────────────────────────────────
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Αντίγραφο πριν από κάθε διαγραφή'),
+                  subtitle: Text(
+                    'Ό,τι πρόκειται να σβηστεί γράφεται πρώτα σε αρχείο '
+                    'δίπλα στη βάση. Αν η εγγραφή αποτύχει, δεν σβήνεται '
+                    'τίποτα. Κρατάει πάντα τουλάχιστον '
+                    '${_retentionCfg.minimumRowsFloor} γραμμές, όποια όρια '
+                    'κι αν οριστούν.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  value: _retentionCfg.exportBeforePurge,
+                  onChanged: _busy
+                      ? null
+                      : (v) => setState(
+                          () => _retentionCfg = _retentionCfg.copyWith(
+                            exportBeforePurge: v,
+                          ),
+                        ),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -597,6 +732,41 @@ class _DatabaseMaintenanceSectionsState
             ),
           ),
       ],
+    );
+  }
+
+  /// Μια ομάδα πεδίων της εκκαθάρισης, με τίτλο και εξήγηση από πάνω.
+  ///
+  /// Ζει εδώ ώστε τα τρία επίπεδα να μοιάζουν μεταξύ τους χωρίς να
+  /// επαναληφθεί τρεις φορές η ίδια διάταξη.
+  Widget _retentionFieldGroup(
+    ThemeData theme, {
+    required String title,
+    required String description,
+    required Widget child,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
     );
   }
 

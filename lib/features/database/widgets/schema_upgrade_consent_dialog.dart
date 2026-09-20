@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'database_recovery_progress.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -177,7 +178,11 @@ Future<bool> runSchemaUpgradeConsentRecovery({
     case SchemaUpgradeConsentChoice.cancel:
       return false;
     case SchemaUpgradeConsentChoice.upgradeCopy:
-      final copyResult = await createCopy(path);
+      final copyResult = await withDatabaseRecoveryProgress(
+        context,
+        'Δημιουργείται αντίγραφο της βάσης…',
+        () => createCopy(path),
+      );
       if (!context.mounted) return false;
       if (!copyResult.isSuccess) {
         await showDialog<void>(
@@ -204,7 +209,12 @@ Future<bool> runSchemaUpgradeConsentRecovery({
         copyResult.copyPath!,
       );
       await SettingsService().setSchemaUpgradeConsentIdentity(copyIdentity);
-      final outcome = await openAndVerify(copyResult.copyPath!);
+      if (!context.mounted) return false;
+      final outcome = await withDatabaseRecoveryProgress(
+        context,
+        'Αναβαθμίζεται το αντίγραφο και ελέγχεται…',
+        () => openAndVerify(copyResult.copyPath!),
+      );
       if (!context.mounted) return false;
       if (!outcome.ok) {
         await showDialog<void>(
@@ -230,7 +240,12 @@ Future<bool> runSchemaUpgradeConsentRecovery({
     case SchemaUpgradeConsentChoice.upgradeOriginal:
       final identity = await schemaUpgradeConsentIdentityForPath(path);
       await SettingsService().setSchemaUpgradeConsentIdentity(identity);
-      final outcome = await openAndVerify(path);
+      if (!context.mounted) return false;
+      final outcome = await withDatabaseRecoveryProgress(
+        context,
+        'Αναβαθμίζεται η βάση και ελέγχεται…',
+        () => openAndVerify(path),
+      );
       if (!context.mounted) return false;
       if (!outcome.ok) {
         await showDialog<void>(

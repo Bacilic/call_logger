@@ -37,22 +37,29 @@ Future<BulkTransferAssetFate?> askPhoneFateOnDepartmentChange(
 
   /// Το τμήμα που αφήνει· κενό στη μαζική, όπου δεν είναι ένα.
   String? sourceDepartmentName,
+
+  /// Ό,τι **δεν μπορεί να μείνει πίσω** και γιατί — π.χ. «το χρησιμοποιεί και
+  /// ο Χ». Λέγεται **πριν** την ερώτηση: αλλιώς ο χρήστης απαντά «μένουν» και
+  /// η απάντηση αγνοείται σιωπηλά για εκείνον τον αριθμό.
+  List<String> stayBlockedReasons = const [],
 }) async {
   final forcedNote = forcedPhoneStayMessage(
     split: split,
     targetKind: targetKind,
     sourceDepartmentName: sourceDepartmentName,
   );
+  final blockedNote = _stayBlockedNote(stayBlockedReasons);
 
   // Τίποτα να ρωτηθεί: ό,τι υπήρχε μένει πίσω. Η αναγγελία γίνεται ούτως ή
   // άλλως — σιωπηλή αλλαγή δεδομένων δεν επιτρέπεται επειδή δεν υπήρχε
   // ερώτηση να τη συνοδεύσει.
   if (!split.asksAnything) {
-    if (forcedNote != null && context.mounted) {
+    final note = [?forcedNote, ?blockedNote].join('\n\n');
+    if (note.isNotEmpty && context.mounted) {
       final approved = await showBulkConfirmDialog(
         context,
         title: 'Τηλέφωνα του νοσοκομείου',
-        message: forcedNote,
+        message: note,
         confirmLabel: 'Συνέχεια',
       );
       if (!approved) return null;
@@ -75,6 +82,7 @@ Future<BulkTransferAssetFate?> askPhoneFateOnDepartmentChange(
     // γιατί η ερώτηση αφορά λιγότερα από όσα φαίνονται στην καρτέλα.
     message: [
       ?forcedNote,
+      ?blockedNote,
       _questionLine(
         split: split,
         userDisplayName: who,
@@ -98,6 +106,16 @@ Future<BulkTransferAssetFate?> askPhoneFateOnDepartmentChange(
       ),
     ],
   );
+}
+
+/// Οι λόγοι όσων δεν μπορούν να μείνουν πίσω, σε ένα μπλοκ.
+///
+/// Μπαίνει **πάνω** από την ερώτηση, δίπλα στην αναγγελία των εσωτερικών: ο
+/// χρήστης πρέπει να ξέρει τι δεν πρόκειται να γίνει **πριν** διαλέξει, αντί
+/// να το ανακαλύψει αργότερα — ή ποτέ.
+String? _stayBlockedNote(List<String> reasons) {
+  if (reasons.isEmpty) return null;
+  return reasons.join('\n');
 }
 
 /// Η γραμμή που ρωτά — **ονομάζει τους αριθμούς όταν δεν τους ρωτά όλους**.
@@ -184,21 +202,43 @@ Future<BulkTransferAssetFate?> askEquipmentFateOnDepartmentChange(
 
   /// Κενό για τη μαζική ροή· το όνομα του υπαλλήλου στη φόρμα ενός.
   String? userDisplayName,
-}) {
+
+  /// Ό,τι **δεν μπορεί να μείνει πίσω** και γιατί — ίδιος λόγος ύπαρξης με το
+  /// αντίστοιχο των τηλεφώνων: η εξαίρεση λέγεται πριν, όχι ποτέ.
+  List<String> stayBlockedReasons = const [],
+}) async {
+  final blockedNote = _stayBlockedNote(stayBlockedReasons);
+
   if (!targetKind.canOwnEquipment) {
-    return Future.value(BulkTransferAssetFate.stayInOldDepartment);
+    // Δεν υπάρχει τι να ρωτηθεί, αλλά υπάρχει τι να ειπωθεί: ο προορισμός δεν
+    // κρατά μηχανήματα ΚΑΙ κάποια από αυτά δεν μπορούν ούτε να μείνουν πίσω.
+    if (blockedNote != null && context.mounted) {
+      final approved = await showBulkConfirmDialog(
+        context,
+        title: 'Εξοπλισμός του νοσοκομείου',
+        message: blockedNote,
+        confirmLabel: 'Συνέχεια',
+      );
+      if (!approved) return null;
+    }
+    return BulkTransferAssetFate.stayInOldDepartment;
   }
 
   final who = userDisplayName?.trim() ?? '';
   final singular = who.isNotEmpty;
 
+  if (!context.mounted) return null;
   return showBulkOptionDialog<BulkTransferAssetFate>(
     context,
     title: singular ? 'Εξοπλισμός του υπαλλήλου' : 'Εξοπλισμός των υπαλλήλων',
+    // Πρώτα τι δεν γίνεται, μετά τι ρωτιέται — όπως στα τηλέφωνα.
     // Το άρθρο δένει με τη λέξη «υπαλλήλου», ποτέ με το όνομα.
-    message: singular
-        ? 'Τι θα γίνει ο εξοπλισμός του υπαλλήλου «$who»;'
-        : 'Τι θα γίνει ο εξοπλισμός των μεταφερόμενων;',
+    message: [
+      ?blockedNote,
+      singular
+          ? 'Τι θα γίνει ο εξοπλισμός του υπαλλήλου «$who»;'
+          : 'Τι θα γίνει ο εξοπλισμός των μεταφερόμενων;',
+    ].join('\n\n'),
     options: [
       (
         'Ακολουθεί στο νέο τμήμα',

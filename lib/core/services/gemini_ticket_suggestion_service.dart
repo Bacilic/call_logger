@@ -113,14 +113,9 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
 
   /// Γιατί ο διακομιστής ζήτησε να περιμένουμε, με τα λόγια του χρήστη.
   ///
-  /// Το μήνυμα έλεγε πάντα «αναμονή ποσόστωσης», ακόμη κι όταν η αιτία ήταν
-  /// υπερφόρτωση ή ανύπαρκτο μοντέλο — και ο χρήστης έψαχνε ποσόστωση που δεν
-  /// είχε εξαντληθεί.
-  static String waitReasonText(AiModelDownReason? reason) => switch (reason) {
-    AiModelDownReason.quotaExhausted => 'εξαντλημένη ποσόστωση',
-    AiModelDownReason.modelNotFound => 'μη διαθέσιμο μοντέλο',
-    _ => 'προσωρινή αναμονή',
-  };
+  /// Η ίδια φράση με κάθε άλλη οθόνη που μιλά στην ΤΝ — ζει στο μητρώο υγείας.
+  static String waitReasonText(AiModelDownReason? reason) =>
+      aiModelWaitReasonText(reason);
 
   Never _throwCooldownExhausted(List<String> modelIds) {
     final earliest = cooldownRegistry.earliestAvailable(modelIds);

@@ -125,7 +125,7 @@ class KnowledgeBaseRepository {
     };
 
     return db.transaction<int>((txn) async {
-      final user = await AuditService.performingUser(txn);
+      final user = AuditService.performingUser();
       final id = article.id;
       if (id == null) {
         payload['created_at'] = nowIso;
@@ -207,7 +207,7 @@ class KnowledgeBaseRepository {
       );
       if (rows.isEmpty) return;
       final row = rows.first;
-      final user = await AuditService.performingUser(txn);
+      final user = AuditService.performingUser();
       await txn.delete('knowledge_base', where: 'id = ?', whereArgs: [id]);
       await AuditService.log(
         txn,

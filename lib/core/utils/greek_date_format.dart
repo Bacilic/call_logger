@@ -83,3 +83,29 @@ String formatGreekShortDateFromIso(String isoDate) {
   }
   return formatGreekShortDate(parsed);
 }
+
+/// Χρονοσφραγίδα που λέει «πότε» χωρίς περιττούς αριθμούς — «σήμερα 17:52» ή
+/// «17/09/2026 08:40».
+///
+/// Η ημερομηνία μπαίνει **μόνο όταν προσθέτει κάτι**: για κάτι που έγινε
+/// σήμερα, ο χρήστης θέλει την ώρα και τη διαβάζει αμέσως· η πλήρης
+/// ημερομηνία θα τον έβαζε να τη συγκρίνει με το σημερινό ημερολόγιο για να
+/// καταλάβει ότι μιλάμε για πριν από δέκα λεπτά.
+///
+/// Το [now] υπάρχει για να μπορεί ο έλεγχος να ορίσει «πότε είναι σήμερα» —
+/// αλλιώς το τεστ θα άλλαζε αποτέλεσμα στα μεσάνυχτα.
+String formatGreekTodayAwareTimestamp(DateTime when, {DateTime? now}) {
+  final reference = now ?? DateTime.now();
+  final time =
+      '${when.hour.toString().padLeft(2, '0')}:'
+      '${when.minute.toString().padLeft(2, '0')}';
+  final sameDay =
+      when.year == reference.year &&
+      when.month == reference.month &&
+      when.day == reference.day;
+  if (sameDay) return 'σήμερα $time';
+  final date =
+      '${when.day.toString().padLeft(2, '0')}/'
+      '${when.month.toString().padLeft(2, '0')}/${when.year}';
+  return '$date $time';
+}

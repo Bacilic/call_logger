@@ -27,7 +27,7 @@ import '../models/dashboard_filter_model.dart';
 
 import '../models/dashboard_summary_model.dart';
 
-import '../utils/issue_distribution.dart';
+import '../utils/category_distribution.dart';
 
 /// Notifier για τα κριτήρια φίλτρου του dashboard στατιστικών.
 
@@ -232,7 +232,7 @@ final dashboardFilterProvider =
       DashboardFilterNotifier.new,
     );
 
-/// Τοπική εμφάνιση γραφήματος «Κατανομή Βλαβών» — δεν επηρεάζει [dashboardStatsProvider].
+/// Τοπική εμφάνιση γραφήματος «Κατανομή ανά κατηγορία» — δεν επηρεάζει [dashboardStatsProvider].
 
 /// Διακόπτης εμφάνισης του Πίνακα Ελέγχου που θυμάται την επιλογή του χρήστη.
 ///
@@ -404,19 +404,20 @@ final dashboardLongestCallsModeProvider =
       LongestCallsMode
     >(DashboardLongestCallsModeNotifier.new);
 
-/// Τι μετράει η «Κατανομή Βλαβών» — πλήθος κλήσεων ή συνολικός χρόνος.
-class DashboardIssueMetricNotifier extends Notifier<IssueDistributionMetric> {
+/// Τι μετράει η «Κατανομή ανά κατηγορία» — πλήθος κλήσεων ή συνολικός χρόνος.
+class DashboardCategoryMetricNotifier
+    extends Notifier<CategoryDistributionMetric> {
   @override
-  IssueDistributionMetric build() => IssueDistributionMetric.count;
+  CategoryDistributionMetric build() => CategoryDistributionMetric.count;
 
-  void set(IssueDistributionMetric value) => state = value;
+  void set(CategoryDistributionMetric value) => state = value;
 }
 
-final dashboardIssueMetricProvider =
+final dashboardCategoryMetricProvider =
     NotifierProvider.autoDispose<
-      DashboardIssueMetricNotifier,
-      IssueDistributionMetric
-    >(DashboardIssueMetricNotifier.new);
+      DashboardCategoryMetricNotifier,
+      CategoryDistributionMetric
+    >(DashboardCategoryMetricNotifier.new);
 
 /// Κριτήριο ταξινόμησης της όψης «χρόνος ανά άτομο» (κλικ στις κεφαλίδες).
 class DashboardCallerTimeSortNotifier extends Notifier<CallerTimeSort> {

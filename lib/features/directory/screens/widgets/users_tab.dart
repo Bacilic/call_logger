@@ -27,6 +27,7 @@ import 'bulk_undo_bar.dart';
 import 'bulk_user_edit_dialog.dart';
 import 'catalog_column_selector_shell.dart';
 import 'catalog_search_results_line.dart';
+import 'catalog_selection_bar.dart';
 import 'department_form_dialog.dart';
 import 'non_user_phones_data_table.dart';
 import 'shared_asset_disconnect_dialog.dart';
@@ -35,6 +36,7 @@ import 'catalog_tab_lookup_reload_mixin.dart';
 import 'catalog_search_field_sync.dart';
 import 'users_data_table.dart';
 import '../../../../core/widgets/compact_tooltip.dart';
+import 'bulk_user_action_call_guard.dart';
 
 /// Καρτέλα χρηστών: αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη.
 class UsersTab extends ConsumerStatefulWidget {
@@ -157,6 +159,12 @@ class _UsersTabState extends ConsumerState<UsersTab>
           ),
         ),
         CatalogSearchResultsLine(summary: state.searchSummary),
+        if (personal)
+          CatalogSelectionFilterNotice(
+            active: state.showOnlySelected,
+            shownCount: state.filteredUsers.length,
+            onShowAll: notifier.toggleShowOnlySelected,
+          ),
         const BulkUndoBar(scope: BulkUndoScope.users),
         Expanded(
           child: personal
@@ -189,51 +197,44 @@ class _UsersTabState extends ConsumerState<UsersTab>
                   continuousScroll: continuousScroll,
                 ),
         ),
-        if (personal && state.selectedIds.isNotEmpty) ...[
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Text(
-                  '${state.selectedIds.length} επιλεγμένοι',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(width: 16),
-                FilledButton.tonal(
-                  onPressed: () => _openBulkEdit(context, ref),
-                  child: const Text('Επεξεργασία'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
-                  onPressed: state.selectedIds.length == 1
-                      ? () {
-                          final id = state.selectedIds.single;
-                          final candidates = state.allUsers
-                              .where((u) => u.id == id)
-                              .toList();
-                          if (candidates.isNotEmpty) {
-                            _openForm(
-                              context,
-                              ref,
-                              candidates.first,
-                              isClone: true,
-                            );
-                          }
+        if (personal && state.selectedIds.isNotEmpty)
+          CatalogSelectionBar(
+            selectedCount: state.selectedIds.length,
+            countLabel: 'επιλεγμένοι',
+            showOnlySelected: state.showOnlySelected,
+            searchController: _searchController,
+            onToggleShowOnlySelected: notifier.toggleShowOnlySelected,
+            onClearSelection: notifier.clearSelection,
+            actions: [
+              FilledButton.tonal(
+                onPressed: () => _openBulkEdit(context, ref),
+                child: const Text('Επεξεργασία'),
+              ),
+              FilledButton.tonal(
+                onPressed: state.selectedIds.length == 1
+                    ? () {
+                        final id = state.selectedIds.single;
+                        final candidates = state.allUsers
+                            .where((u) => u.id == id)
+                            .toList();
+                        if (candidates.isNotEmpty) {
+                          _openForm(
+                            context,
+                            ref,
+                            candidates.first,
+                            isClone: true,
+                          );
                         }
-                      : null,
-                  child: const Text('Αντίγραφο'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
-                  onPressed: () => _confirmAndDeleteSelected(context, ref),
-                  child: const Text('Διαγραφή'),
-                ),
-              ],
-            ),
+                      }
+                    : null,
+                child: const Text('Αντίγραφο'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => _confirmAndDeleteSelected(context, ref),
+                child: const Text('Διαγραφή'),
+              ),
+            ],
           ),
-        ],
       ],
     );
   }
@@ -294,6 +295,10 @@ class _UsersTabState extends ConsumerState<UsersTab>
     final selectedUsers = state.allUsers
         .where((u) => u.id != null && state.selectedIds.contains(u.id))
         .toList();
+    // Η διαγραφή είναι μη αναστρέψιμη για την κλήση που τρέχει: αν την αφορά,
+    // ο χειριστής αποφασίζει πρώτα γι' αυτήν.
+    if (!await ensureBulkUserActionAllowed(context, ref, selectedUsers)) return;
+    if (!context.mounted) return;
     final confirmLabels = selectedUsers
         .map(
           (u) => employeeDisplayLabel(

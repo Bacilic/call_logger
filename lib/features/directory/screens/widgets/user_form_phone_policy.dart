@@ -104,64 +104,39 @@ class UserFormPhonePolicy {
       targetKind: targetDepartmentKind,
       rules: host.catalogValidationRules,
     );
+    // Ο κανόνας τρέχει ΠΡΙΝ την ερώτηση: ο λόγος που ένας αριθμός δεν μπορεί
+    // να μείνει πίσω δεν εξαρτάται από την απάντηση, και ο χρήστης πρέπει να
+    // τον ξέρει όσο ακόμη αποφασίζει.
+    final plan = planPhoneStayBehind(
+      phones: split.negotiable,
+      userName: host.buildUserDisplayName(),
+      oldDepartmentId: host.widget.initialUser?.departmentId,
+      editingUserId: host.widget.initialUser?.id,
+      lookup: LookupService.instance,
+    );
+
     final fate = await askPhoneFateOnDepartmentChange(
       host.context,
       split: split,
       targetKind: targetDepartmentKind,
       userDisplayName: host.buildUserDisplayName(),
       sourceDepartmentName: host.widget.initialUser?.departmentName,
+      stayBlockedReasons: plan.blockedReasons,
     );
     if (fate == null) return null;
-    // Ό,τι δεν μπορεί να ακολουθήσει μένει πίσω ακόμη και με «Ακολουθούν»:
-    // η απάντηση αφορά μόνο όσα ρωτήθηκαν.
+    // Δύο πηγές με **διαφορετική ισχύ**:
+    //
+    // 1. Τα forced μένουν πάντα — ο προορισμός δεν μπορεί να τα κρατά, ακόμη
+    //    και με «Ακολουθούν»: η απάντηση αφορά μόνο όσα ρωτήθηκαν. Ο κανόνας
+    //    «το χρησιμοποιεί και άλλος» δεν τα σώζει, γιατί εκείνος κρίνει αν
+    //    **αξίζει** να αποδεσμευτούν, όχι αν **επιτρέπεται** να ταξιδέψουν:
+    //    το κοινό εσωτερικό αποδεσμεύεται από αυτόν τον υπάλληλο και μένει
+    //    στους υπόλοιπους κατόχους του.
+    // 2. Τα ρωτημένα μένουν μόνο αν το επιτρέπει ο κανόνας — και ό,τι δεν το
+    //    επιτρέπει έχει ήδη ειπωθεί, μέσα στον διάλογο από πάνω.
     final forced = split.forcedToStay.toSet();
-    return _resolveStayBehind(
-      forced: forced,
-      asked: fate == BulkTransferAssetFate.follow
-          ? const <String>[]
-          : split.negotiable,
-    );
-  }
-
-  /// Ποια τηλέφωνα μένουν τελικά πίσω.
-  ///
-  /// Δύο πηγές με **διαφορετική ισχύ**:
-  ///
-  /// 1. Τα [forced] μένουν πάντα — ο προορισμός δεν μπορεί να τα κρατά, και
-  ///    ο κανόνας «το χρησιμοποιεί και άλλος» δεν τα σώζει: εκείνος κρίνει αν
-  ///    **αξίζει** να αποδεσμευτούν, όχι αν **επιτρέπεται** να ταξιδέψουν. Το
-  ///    κοινό εσωτερικό αποδεσμεύεται από αυτόν τον υπάλληλο και μένει στους
-  ///    υπόλοιπους κατόχους του.
-  /// 2. Τα [asked] περνούν από τον κανόνα, όπως πάντα.
-  Set<String> _resolveStayBehind({
-    required Set<String> forced,
-    required Iterable<String> asked,
-  }) {
-    final lookup = LookupService.instance;
-    final oldDepartmentId = host.widget.initialUser?.departmentId;
-    final editingUserId = host.widget.initialUser?.id;
-    final stayBehind = <String>{...forced};
-    for (final phone in asked) {
-      final others = [
-        for (final other in lookup.findUsersByPhone(phone))
-          if (other.id != null && other.id != editingUserId && !other.isDeleted)
-            bulkUserDisplayName(other),
-      ];
-      final dept = lookup.getDepartmentByPhone(phone);
-      final deptId = dept?.id;
-      final deptName = dept?.name.trim() ?? '';
-      final decision = judgePhoneStayBehind(
-        phone: phone,
-        userName: host.buildUserDisplayName(),
-        oldDepartmentId: oldDepartmentId,
-        otherOwnerNames: others,
-        sharedDepartment: (deptId != null && deptName.isNotEmpty)
-            ? (id: deptId, name: deptName)
-            : null,
-      );
-      if (decision.releases) stayBehind.add(phone);
-    }
-    return stayBehind;
+    if (fate == BulkTransferAssetFate.follow) return forced;
+    return {...forced, ...plan.staying};
   }
 
   /// Το Είδος του τμήματος στο οποίο πάει ο υπάλληλος.
@@ -194,40 +169,26 @@ class UserFormPhonePolicy {
     final carried = UserEquipmentCodes.forUser(editingUserId);
     if (carried.isEmpty) return const [];
 
+    // Ίδια σειρά με τα τηλέφωνα: πρώτα ο κανόνας, μετά η ερώτηση — ώστε ο
+    // λόγος που ένα μηχάνημα δεν μπορεί να μείνει πίσω να ειπωθεί εγκαίρως.
+    final plan = planEquipmentStayBehind(
+      equipment: carried,
+      userName: host.buildUserDisplayName(),
+      oldDepartmentId: host.widget.initialUser?.departmentId,
+      editingUserId: editingUserId,
+      lookup: LookupService.instance,
+    );
+
     if (!host.mounted) return null;
     final fate = await askEquipmentFateOnDepartmentChange(
       host.context,
       targetKind: targetDepartmentKind,
       userDisplayName: host.buildUserDisplayName(),
+      stayBlockedReasons: plan.blockedReasons,
     );
     if (fate == null) return null;
     if (fate == BulkTransferAssetFate.follow) return const [];
-
-    final lookup = LookupService.instance;
-    final oldDepartmentId = host.widget.initialUser?.departmentId;
-    final stayBehind = <EquipmentModel>[];
-    for (final item in carried) {
-      final code = (item.code ?? '').trim();
-      if (code.isEmpty) continue;
-      final itemId = item.id;
-      final others = [
-        if (itemId != null)
-          for (final other in lookup.findUsersForEquipment(itemId))
-            if (other.id != null &&
-                other.id != editingUserId &&
-                !other.isDeleted)
-              bulkUserDisplayName(other),
-      ];
-      final decision = judgeEquipmentStayBehind(
-        code: code,
-        userName: host.buildUserDisplayName(),
-        oldDepartmentId: oldDepartmentId,
-        equipmentDepartmentId: item.departmentId,
-        otherOwnerNames: others,
-      );
-      if (decision.releases) stayBehind.add(item);
-    }
-    return stayBehind;
+    return plan.staying;
   }
 
   List<String> _phonesToValidateForPolicy() {

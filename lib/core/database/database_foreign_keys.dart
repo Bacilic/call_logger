@@ -187,6 +187,9 @@ CREATE TABLE tasks (
   created_by_operator_id INTEGER,
   assigned_operator_id INTEGER,
   closed_by_operator_id INTEGER,
+  lansweeper_state TEXT NOT NULL DEFAULT 'unsent',
+  lansweeper_main_ticket_id TEXT,
+  lansweeper_last_sync_at TEXT,
   FOREIGN KEY (call_id) REFERENCES calls(id) ON DELETE SET NULL
 )
 ''';

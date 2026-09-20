@@ -484,6 +484,66 @@ void main() {
   });
 
   group('Φόρμα εξοπλισμού — χαρακτηρισμός (widget)', () {
+    // Ο εξοπλισμός κρατά αναγνωριστικά· τα ονόματα τα ξέρει μόνο ο κατάλογος,
+    // που φορτώνει ασύγχρονα. Η συμπλήρωση των δύο πεδίων δεν γίνεται πια όσο
+    // ζωγραφίζεται η οθόνη, οπότε χρειάζεται δικό της τεστ.
+    //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "γεμίζουν από τον κατάλογο"
+    testWidgets(
+      'άνοιγμα σε υπάρχοντα εξοπλισμό: Κάτοχος και Τμήμα γεμίζουν από τον κατάλογο',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          final notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            initialEquipment: await _loadEquipmentByCode(kTestEquipmentCode),
+            notifier: notifier,
+          );
+        });
+
+        await pumpUntilSettledLong(tester);
+        expect(find.text(_kEditEquipmentTitle), findsOneWidget);
+
+        final ownerText = tester
+            .widget<EditableText>(_fieldByLabel('Κάτοχος').first)
+            .controller
+            .text;
+        expect(
+          ownerText,
+          contains(kTestUserLastName),
+          reason: greekExpectMsg(
+            'Το πεδίο Κάτοχος δείχνει τον υπάλληλο του εξοπλισμού',
+          ),
+        );
+
+        final departmentText = tester
+            .widget<EditableText>(_fieldByLabel('Τμήμα').first)
+            .controller
+            .text;
+        expect(
+          departmentText,
+          kTestDepartmentName,
+          reason: greekExpectMsg(
+            'Το πεδίο Τμήμα ακολουθεί το τμήμα του κατόχου',
+          ),
+        );
+      },
+    );
+
     // Ο εγγενής ορθογραφικός έλεγχος είναι απενεργοποιημένος στα Windows· το
     // πεδίο πρέπει να χρησιμοποιεί το πεδίο-συστατικό του Λεξικού.
     //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "Τοποθεσία"

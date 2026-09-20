@@ -199,7 +199,7 @@ DashboardExportTable _byCategoryTable(DashboardSummaryModel data) {
     title: 'Ανά κατηγορία',
     columns: const ['Κατηγορία', 'Κλήσεις', 'Συνολική διάρκεια'],
     rows: [
-      for (final entry in data.byIssue)
+      for (final entry in data.byCategory)
         [
           entry.name,
           '${entry.count}',

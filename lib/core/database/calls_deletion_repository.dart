@@ -243,7 +243,7 @@ class CallsDeletionRepository {
     if (action != 'cascade' && action != 'nullify') {
       throw ArgumentError.value(action, 'action', 'Unsupported tasks action');
     }
-    final user = await AuditService.performingUser(db);
+    final user = AuditService.performingUser();
     await db.transaction((txn) async {
       if (action == 'cascade') {
         final taskIds = await _getTaskIdsLinkedToCall(txn, callId);
@@ -297,7 +297,7 @@ class CallsDeletionRepository {
       }
     }
 
-    final user = await AuditService.performingUser(db);
+    final user = AuditService.performingUser();
     await db.transaction((txn) async {
       final placeholders = List.filled(callIds.length, '?').join(', ');
       if (taskAction == 'cascade') {

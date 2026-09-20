@@ -6,6 +6,7 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/services/gemini_ticket_service.dart';
 import 'package:call_logger/features/history/providers/gemini_settings_provider.dart';
+import 'package:call_logger/core/services/profile_settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -82,7 +83,7 @@ void main() {
           );
           expect(
             await (await _settingsRepo()).getSetting(
-              kGeminiPromptTemplateSettingKey,
+              ProfileSettingKeys.geminiPromptTemplate.key,
             ),
             isNull,
           );
@@ -91,7 +92,7 @@ void main() {
 
       test('διατηρεί αποθηκευμένη τιμή μετά hydrate', () async {
         await (await _settingsRepo()).saveSetting(
-          kGeminiPromptTemplateSettingKey,
+          ProfileSettingKeys.geminiPromptTemplate.key,
           _kCustomPromptTemplate,
         );
 
@@ -133,7 +134,7 @@ void main() {
         );
         expect(
           await (await _settingsRepo()).getSetting(
-            kGeminiPromptTemplateSettingKey,
+            ProfileSettingKeys.geminiPromptTemplate.key,
           ),
           kDefaultAiPromptTemplate,
         );
@@ -301,7 +302,7 @@ void main() {
 
       test('αποθηκεύει και επαναφορτώνει true', () async {
         await (await _settingsRepo()).saveSetting(
-          kGeminiAutoResubmitSettingKey,
+          ProfileSettingKeys.geminiAutoResubmit.key,
           '1',
         );
 
@@ -333,7 +334,7 @@ void main() {
         expect(container.read(geminiAutoResubmitEnabledProvider), isFalse);
         expect(
           await (await _settingsRepo()).getSetting(
-            kGeminiAutoResubmitSettingKey,
+            ProfileSettingKeys.geminiAutoResubmit.key,
           ),
           '0',
         );

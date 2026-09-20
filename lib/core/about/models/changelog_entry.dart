@@ -1,3 +1,5 @@
+import 'package:call_logger/core/about/models/changelog_text_lines.dart';
+
 /// Εγγραφή ιστορικού αλλαγών (changelog) ανά έκδοση.
 class ChangelogEntry {
   static const String unreleasedVersion = 'Unreleased';
@@ -35,14 +37,7 @@ class ChangelogEntry {
       added.length + improvements.length + changed.length + fixed.length;
 
   factory ChangelogEntry.fromJson(Map<String, dynamic> json) {
-    List<String> strings(String key) {
-      final raw = json[key];
-      if (raw == null) return [];
-      if (raw is List) {
-        return raw.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
-      }
-      return [];
-    }
+    List<String> strings(String key) => changelogTextLines(json[key]);
 
     return ChangelogEntry(
       version: json['version']?.toString() ?? '',

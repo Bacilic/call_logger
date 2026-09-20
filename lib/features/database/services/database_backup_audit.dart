@@ -60,7 +60,7 @@ class DatabaseBackupAudit {
   }) async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final user = await AuditService.performingUser(db);
+      final user = AuditService.performingUser();
       final resolvedDetails = details?.trim().isNotEmpty == true
           ? details!.trim()
           : (skipReason != null ? skipReasonMessageEl(skipReason) : null);

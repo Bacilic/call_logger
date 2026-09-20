@@ -17,7 +17,9 @@ import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../services/shared_asset_disconnect_apply.dart';
+import '../../models/department_kind.dart';
 import 'department_transfer_confirm_dialog.dart';
+import '../../providers/directory_provider.dart';
 import 'shared_asset_disconnect_dialog.dart';
 import 'similar_department_suggestion_dialog.dart';
 import 'similar_users_dialog.dart';
@@ -159,12 +161,23 @@ class UserFormSave {
             !host.isEdit ||
             host.widget.isClone ||
             host.initialDepartmentText.trim().isEmpty;
+        final lookup = LookupService.instance;
         final result = await showDepartmentTransferConfirmDialog(
           context: host.context,
           userDisplayName: host.buildUserDisplayName(),
           oldDepartment: host.initialDepartmentText,
           newDepartment: host.departmentController.text,
           newDepartmentExistsInOrg: existsInOrg,
+          // Το Είδος και των δύο άκρων: χωρίς αυτά ο διάλογος δεν ξεχωρίζει
+          // τη μετακίνηση μέσα στο νοσοκομείο από την έξοδο από αυτό.
+          previousKind: lookup.departmentKindById(
+            host.widget.initialUser?.departmentId,
+          ),
+          targetKind:
+              lookup
+                  .findDepartmentByName(host.departmentController.text)
+                  ?.kind ??
+              DepartmentKind.hospital,
           useAddToDepartmentMessage: useAddToDepartmentMessage,
         );
         final effective =
@@ -409,11 +422,21 @@ class UserFormSave {
       if (!host.mounted) return;
       // Η καρτέλα γράφεται ολόκληρη: αν κάποιος πρόλαβε, ρωτιέται ο άνθρωπος
       // αντί να σβηστεί αμίλητα το τμήμα ή το τηλέφωνο που εκείνος άλλαξε.
+      // Η αφετηρία ακολουθεί τις ΔΙΚΕΣ ΜΑΣ εγγραφές: το `applyAssetsStayingBehind`
+      // από πάνω αποδέσμευσε ήδη τα τηλέφωνα που μένουν πίσω, οπότε η εικόνα
+      // της οθόνης δεν περιγράφει πια τη γραμμή. Χωρίς αυτό, ο φρουρός
+      // ανακοίνωνε «Κάποιος πρόλαβε» για δουλειά του ίδιου του χρήστη.
+      final baseline = host.widget.initialUser == null
+          ? null
+          : DirectoryNotifier.userBaselineAfterOwnPhoneWrites(
+              host.widget.initialUser!,
+              releasedPhones: phonesStayingBehind,
+            );
       final saved = await saveDirectoryRecordWithConflictPrompt(
         host.context,
         save: ({required force}) => host.widget.notifier.updateUser(
           user,
-          expected: force ? null : host.widget.initialUser,
+          expected: force ? null : baseline,
           force: force,
         ),
       );

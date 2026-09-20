@@ -12,6 +12,7 @@ import 'call_entity_filters.dart';
 import 'calls_audit_line.dart';
 import 'calls_search_index.dart';
 import 'directory_support.dart';
+import 'call_department_deleted_flag.dart';
 
 /// Εγγραφές και αναγνώσεις του πίνακα `calls` (δημιουργία, ενημέρωση,
 /// κλωνοποίηση, ιστορικό, μετρήσεις).
@@ -81,6 +82,7 @@ class CallsRepository {
       'equipment_text': call.equipmentText,
       'issue': call.issue,
       'solution': call.solution,
+      'title': call.title,
       'refined_source': call.refinedSource,
       'refined_at': call.refinedAt,
       'category_text': call.category,
@@ -128,7 +130,7 @@ class CallsRepository {
       map,
     );
     final id = await executor.insert('calls', map);
-    final user = await AuditService.performingUser(executor);
+    final user = AuditService.performingUser();
     final nv = <String, dynamic>{};
     for (final k in kCallAuditFields) {
       if (map.containsKey(k) && map[k] != null) {
@@ -237,7 +239,7 @@ class CallsRepository {
             }
           }
           if (newDiff.isNotEmpty) {
-            final user = await AuditService.performingUser(txn);
+            final user = AuditService.performingUser();
             final entityName = (await _auditLine.buildCallAuditDisplayLine(
               id,
               executor: txn,
@@ -311,7 +313,7 @@ class CallsRepository {
     );
     if (n == 0) return;
 
-    final user = await AuditService.performingUser(executor);
+    final user = AuditService.performingUser();
     final entityName = (await _auditLine.buildCallAuditDisplayLine(
       callId,
       executor: executor,
@@ -385,7 +387,7 @@ class CallsRepository {
       throw StateError('Call not found: id=$sourceCallId');
     }
     final now = DateTime.now();
-    final user = await AuditService.performingUser(db);
+    final user = AuditService.performingUser();
     final map = <String, dynamic>{
       'date': DateFormat('yyyy-MM-dd').format(now),
       'time': DateFormat('HH:mm').format(now),
@@ -404,10 +406,11 @@ class CallsRepository {
       'lansweeper_state': 'unsent',
       'lansweeper_main_ticket_id': null,
       'lansweeper_last_sync_at': null,
-      // Ο κλώνος κρατά την Περιγραφή ως αφετηρία, αλλά ξεκινά χωρίς λύση και
-      // χωρίς ίχνη εξευγενισμού: εκείνα περιγράφουν το ticket της αρχικής
-      // κλήσης, όχι το νέο περιστατικό που πάει να δουλευτεί εδώ.
+      // Ο κλώνος κρατά την Περιγραφή ως αφετηρία, αλλά ξεκινά χωρίς λύση,
+      // χωρίς τίτλο και χωρίς ίχνη εξευγενισμού: εκείνα περιγράφουν το ticket
+      // της αρχικής κλήσης, όχι το νέο περιστατικό που πάει να δουλευτεί εδώ.
       'solution': null,
+      'title': null,
       'refined_source': null,
       'refined_at': null,
       'is_deleted': 0,
@@ -484,7 +487,8 @@ class CallsRepository {
         END AS caller_text,
         COALESCE(NULLIF(TRIM(calls.department_text), ''), departments.name, '') AS department_text,
         COALESCE(users.is_deleted, 0) AS caller_is_deleted,
-        COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted
+        COALESCE(equipment.is_deleted, 0) AS equipment_is_deleted,
+        $kCallDepartmentIsDeletedSql
       FROM calls
       LEFT JOIN users ON users.id = calls.caller_id
       LEFT JOIN departments ON departments.id = users.department_id

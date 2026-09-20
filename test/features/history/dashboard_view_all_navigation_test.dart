@@ -27,7 +27,7 @@ DashboardSummaryModel summaryWithTopCallers(List<CallerStat> topCallers) =>
       longestCalls: const [],
       hourlyDistribution: const [],
       byDepartment: const [],
-      byIssue: const [],
+      byCategory: const [],
     );
 
 void main() {

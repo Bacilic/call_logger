@@ -39,7 +39,11 @@ class CallsLansweeperRepository {
   /// Τα πεδία του καθαρού κειμένου που αξίζουν καταγραφή. Τα `refined_source` /
   /// `refined_at` μένουν έξω για τον ίδιο λόγο με το `lansweeper_last_sync_at`:
   /// αλλάζουν σε κάθε αποστολή και θα έπνιγαν το Ιστορικό σε θόρυβο.
-  static const List<String> _refinedAuditedFields = ['issue', 'solution'];
+  static const List<String> _refinedAuditedFields = [
+    'issue',
+    'solution',
+    'title',
+  ];
 
   Future<Map<String, Object?>> _readFields(
     DatabaseExecutor e,
@@ -110,7 +114,7 @@ class CallsLansweeperRepository {
     // γεμίζουμε το ιστορικό με εγγραφές που δεν λένε τίποτα.
     if (newValues.isEmpty) return false;
 
-    final user = await AuditService.performingUser(e);
+    final user = AuditService.performingUser();
     final entityName = (await CallsAuditLine(
       db,
     ).buildCallAuditDisplayLine(callId, executor: e)).trim();
@@ -233,12 +237,19 @@ class CallsLansweeperRepository {
   static bool wouldChangeTexts({
     required String problem,
     required String solution,
+    required String? title,
     required String? currentIssue,
     required String? currentSolution,
+    required String? currentTitle,
   }) {
     final trimmedProblem = problem.trim();
     final trimmedSolution = solution.trim();
-    if (trimmedProblem.isEmpty && trimmedSolution.isEmpty) return false;
+    final trimmedTitle = title?.trim() ?? '';
+    if (trimmedProblem.isEmpty &&
+        trimmedSolution.isEmpty &&
+        trimmedTitle.isEmpty) {
+      return false;
+    }
     if (trimmedProblem.isNotEmpty &&
         trimmedProblem != (currentIssue ?? '').trim()) {
       return true;
@@ -247,21 +258,37 @@ class CallsLansweeperRepository {
         trimmedSolution != (currentSolution ?? '').trim()) {
       return true;
     }
+    if (trimmedTitle.isNotEmpty &&
+        trimmedTitle != (currentTitle ?? '').trim()) {
+      return true;
+    }
     return false;
   }
 
+  /// Γράφει στην κλήση τα δουλεμένα κείμενα της φόρμας.
+  ///
+  /// Το [title] είναι **υποχρεωτικό, όχι προαιρετικό**: όλες οι έξοδοι της
+  /// φόρμας περνούν από εδώ, και μια προεπιλογή θα άφηνε όποια ξεχνούσε να τον
+  /// περάσει να δουλεύει σιωπηλά — με τη μισή λειτουργία λειψή. `null` σημαίνει
+  /// ρητά «αυτή η έξοδος δεν έχει τίτλο», όχι «δεν το σκέφτηκα».
   Future<void> saveRefinedTexts({
     required List<int> callIds,
     required String problem,
     required String solution,
+    required String? title,
     required String source,
     String? refinedAt,
   }) async {
     final trimmedProblem = problem.trim();
     final trimmedSolution = solution.trim();
+    final trimmedTitle = title?.trim() ?? '';
     // Άδεια φόρμα δεν σβήνει ό,τι έγραψε προηγούμενη αποστολή — και άδειο
-    // επιμέρους πεδίο δεν αδειάζει ποτέ την Περιγραφή ή τη λύση της κλήσης.
-    if (trimmedProblem.isEmpty && trimmedSolution.isEmpty) return;
+    // επιμέρους πεδίο δεν αδειάζει ποτέ την Περιγραφή, τη λύση ή τον τίτλο.
+    if (trimmedProblem.isEmpty &&
+        trimmedSolution.isEmpty &&
+        trimmedTitle.isEmpty) {
+      return;
+    }
 
     final ids = callIds.toSet().toList()..sort();
     if (ids.isEmpty) return;
@@ -269,6 +296,7 @@ class CallsLansweeperRepository {
     final payload = <String, Object?>{
       if (trimmedProblem.isNotEmpty) 'issue': trimmedProblem,
       if (trimmedSolution.isNotEmpty) 'solution': trimmedSolution,
+      if (trimmedTitle.isNotEmpty) 'title': trimmedTitle,
       'refined_source': source,
       'refined_at': refinedAt ?? DateTime.now().toIso8601String(),
     };
@@ -287,6 +315,20 @@ class CallsLansweeperRepository {
         );
       }
     });
+  }
+
+  /// Ο αριθμός αιτήματος που κρατά ήδη μια κλήση.
+  ///
+  /// `null` σημαίνει και τα δύο «όχι» μαζί — η κλήση δεν υπάρχει, ή υπάρχει και
+  /// δεν έχει σταλεί ποτέ. Ο καλών δεν χρειάζεται να τα ξεχωρίσει: και στις δύο
+  /// περιπτώσεις δεν υπάρχει αίτημα να συγκρουστεί με το επόμενο.
+  Future<String?> ticketIdOf(int callId) async {
+    final row = await _readFields(db, callId, const [
+      'lansweeper_main_ticket_id',
+    ]);
+    final ticketId =
+        (row['lansweeper_main_ticket_id'] as String?)?.trim() ?? '';
+    return ticketId.isEmpty ? null : ticketId;
   }
 
   /// Μέγιστο αριθμητικό Lansweeper ticket id από κλήσεις και ιστορικό links.
@@ -382,30 +424,6 @@ class CallsLansweeperRepository {
         action: lansweeperAuditAction(state),
         expected: expected,
         force: force,
-      ),
-    );
-  }
-
-  /// Ορίζει/ενημερώνει το κύριο ticket Lansweeper μιας κλήσης.
-  Future<void> setLansweeperMainTicket({
-    required int callId,
-    required String? ticketId,
-    String? syncedAt,
-  }) async {
-    await db.transaction(
-      (txn) => _applyAndLog(
-        txn,
-        callId: callId,
-        payload: {
-          'lansweeper_main_ticket_id': ticketId,
-          'lansweeper_last_sync_at':
-              syncedAt ?? DateTime.now().toIso8601String(),
-        },
-        action: 'ΑΛΛΑΓΗ TICKET LANSWEEPER',
-        // Καμία οθόνη δεν καλεί αυτή τη διαδρομή σήμερα, οπότε δεν υπάρχει
-        // αφετηρία να δοθεί. Όποιος τη συνδέσει με ενέργεια χρήστη οφείλει να
-        // περάσει το `expected` — αλλιώς η σήμανση θα γράφει στα τυφλά.
-        expected: null,
       ),
     );
   }

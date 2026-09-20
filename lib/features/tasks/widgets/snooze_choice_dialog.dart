@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/compact_tooltip.dart';
+import '../../../core/widgets/dialog_scrollable_content.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../core/widgets/resizable_text_area.dart';
 import '../../../core/widgets/spell_check_controller.dart';
@@ -152,8 +153,7 @@ class _SnoozeChoiceDialogState extends State<SnoozeChoiceDialog> {
         contentPadding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
         content: SizedBox(
           width: 488,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: DialogScrollableContent(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

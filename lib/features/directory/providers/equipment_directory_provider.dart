@@ -18,6 +18,7 @@ import '../models/equipment_column.dart';
 import '../services/bulk_action_undo_record.dart';
 import '../services/bulk_equipment_actions.dart';
 import '../services/catalog_search_evaluation.dart';
+import '../services/catalog_selection_filter.dart';
 import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
 import '../../../core/services/profile_settings.dart';
@@ -113,6 +114,7 @@ class EquipmentDirectoryState {
     this.sortColumn,
     this.sortAscending = true,
     this.selectedIds = const {},
+    this.showOnlySelected = false,
     this.lastDeleted,
     this.focusedRowIndex,
     this.showBuildingInLocationColumn = true,
@@ -156,6 +158,11 @@ class EquipmentDirectoryState {
   final EquipmentColumn? sortColumn;
   final bool sortAscending;
   final Set<int> selectedIds;
+
+  /// Η λίστα δείχνει μόνο ό,τι έχει επιλεγεί. Σβήνει μόνη της μόλις αδειάσει η
+  /// επιλογή — ο κανόνας ζει στο `catalog_selection_filter.dart`.
+  final bool showOnlySelected;
+
   final List<EquipmentDeleteUndoEntry>? lastDeleted;
   final int? focusedRowIndex;
 
@@ -184,6 +191,7 @@ class EquipmentDirectoryState {
     Object? sortColumn = _kUnsetSort,
     bool? sortAscending,
     Set<int>? selectedIds,
+    bool? showOnlySelected,
     bool clearLastDeleted = false,
     List<EquipmentDeleteUndoEntry>? lastDeleted,
     int? focusedRowIndex,
@@ -201,6 +209,7 @@ class EquipmentDirectoryState {
           : sortColumn as EquipmentColumn?,
       sortAscending: sortAscending ?? this.sortAscending,
       selectedIds: selectedIds ?? this.selectedIds,
+      showOnlySelected: showOnlySelected ?? this.showOnlySelected,
       lastDeleted: clearLastDeleted ? null : (lastDeleted ?? this.lastDeleted),
       focusedRowIndex: focusedRowIndex ?? this.focusedRowIndex,
       showBuildingInLocationColumn:
@@ -574,6 +583,17 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       });
     }
 
+    final selectionFilterOn = catalogSelectionFilterStaysOn(
+      requested: state.showOnlySelected,
+      selectedIds: state.selectedIds,
+    );
+    list = applyCatalogSelectionFilter(
+      list,
+      active: selectionFilterOn,
+      selectedIds: state.selectedIds,
+      idOf: (row) => row.$1.id,
+    );
+
     final len = list.length;
     final idx = state.focusedRowIndex;
     final clamped = idx != null && idx >= len
@@ -582,9 +602,24 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
 
     state = state.copyWith(
       filteredItems: list,
+      showOnlySelected: selectionFilterOn,
       focusedRowIndex: clamped,
       searchSummary: summary,
     );
+  }
+
+  /// Ο διακόπτης «Δείξε μόνο τα επιλεγμένα» της κάτω μπάρας.
+  ///
+  /// Ανάβοντας, **καθαρίζει την αναζήτηση**: το ερώτημα είναι ακριβώς αυτό που
+  /// έκρυψε τις προηγούμενες επιλογές, και το ζητούμενο εδώ είναι να φανεί
+  /// ολόκληρη η συλλογή — όχι η τομή της με μια λέξη που έμεινε γραμμένη.
+  void toggleShowOnlySelected() {
+    final next = !state.showOnlySelected;
+    state = state.copyWith(
+      showOnlySelected: next,
+      searchQuery: next ? '' : state.searchQuery,
+    );
+    filterAndSort();
   }
 
   static int _compareComparable(Comparable? a, Comparable? b) {
@@ -636,10 +671,14 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       next.add(id);
     }
     state = state.copyWith(selectedIds: next);
+    // Με ενεργό το φίλτρο η λίστα ΕΙΝΑΙ η επιλογή: ό,τι ξε-επιλέγεται πρέπει να
+    // φύγει από την οθόνη την ίδια στιγμή.
+    if (state.showOnlySelected) filterAndSort();
   }
 
   void clearSelection() {
     state = state.copyWith(selectedIds: {});
+    if (state.showOnlySelected) filterAndSort();
   }
 
   void updateVisibleColumns(List<EquipmentColumn> newList) {

@@ -10,7 +10,6 @@ import '../config/app_config.dart';
 import '../database/backup_destination_hint.dart';
 import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
-import '../database/database_init_runner.dart';
 import '../database/database_path_pick_flow.dart';
 import '../database/database_path_resolution.dart';
 import '../database/database_restore_flow.dart';
@@ -21,8 +20,8 @@ import '../updates/update_providers.dart';
 import '../utils/database_path_identity.dart';
 import '../utils/user_facing_error_messages.dart';
 import 'compact_tooltip.dart';
-import '../../features/database/widgets/database_check_failed_dialog.dart';
 import '../../features/database/widgets/database_newer_recovery_dialog.dart';
+import '../../features/database/widgets/database_recovery_switch_flows.dart';
 import '../../features/database/widgets/schema_upgrade_consent_dialog.dart';
 import '../../features/settings/widgets/create_new_database_dialog.dart';
 
@@ -49,7 +48,13 @@ class DatabaseErrorScreen extends ConsumerStatefulWidget {
       _DatabaseErrorScreenState();
 }
 
-class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
+class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
+    with DatabaseRecoverySwitchFlows<DatabaseErrorScreen> {
+  /// Η οθόνη υπάρχει για να ξεμπλοκάρει την εκκίνηση: μόλις η βάση ανοίξει,
+  /// το μόνο που χρειάζεται είναι να ξαναδοκιμαστεί η αρχικοποίηση.
+  @override
+  Future<void> onDatabaseRecovered() => widget.onRetry();
+
   late final ScrollController _detailsScrollController;
   List<String> _recentExistingPaths = const <String>[];
   UpdateManifest? _availableInstaller;
@@ -361,15 +366,8 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
     }
 
     // Έλεγχος / αποθήκευση διαδρομής και επανασύνδεση.
-    final outcome = await setAndVerifyDatabasePath(norm);
-    if (!mounted) return;
+    if (!await switchDatabasePath(norm) || !mounted) return;
 
-    if (!outcome.ok) {
-      await _showVerifyFailureDialog(outcome);
-      return;
-    }
-
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
@@ -399,39 +397,8 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
   }
 
   Future<void> _verifyPathAndRetry(String path) async {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            SizedBox(
-              height: 48,
-              width: 48,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            ),
-            SizedBox(width: 24),
-            Expanded(
-              child: Text(
-                'Έλεγχος βάσης δεδομένων…',
-                style: TextStyle(fontSize: 16),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    if (!await switchDatabasePath(path) || !mounted) return;
 
-    final outcome = await setAndVerifyDatabasePath(path);
-    if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pop();
-
-    if (!outcome.ok) {
-      await _showVerifyFailureDialog(outcome);
-      return;
-    }
-
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Η διαδρομή αποθηκεύτηκε. Γίνεται επανασύνδεση…'),
@@ -439,19 +406,6 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen> {
       ),
     );
     await widget.onRetry();
-  }
-
-  Future<void> _showVerifyFailureDialog(
-    ({bool ok, DatabaseInitRunnerResult runner}) outcome,
-  ) async {
-    // Αποτυχία με πραγματική διέξοδο (συγκατάθεση αναβάθμισης, βάση νεότερης
-    // έκδοσης) ΔΕΝ είναι αδιέξοδο — ο κοινός διάλογος δρομολογεί στη ροή
-    // ανάκαμψης αντί για ένα σκέτο «Εντάξει».
-    await showDatabaseCheckFailedDialog(
-      context: context,
-      result: outcome.runner.result,
-      onSuccess: widget.onRetry,
-    );
   }
 
   Future<void> _restoreFromBackup({String? preselectedZipPath}) async {

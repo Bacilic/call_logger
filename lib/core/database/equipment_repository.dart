@@ -386,7 +386,7 @@ class EquipmentRepository {
         whereArgs: [code],
         limit: 1,
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       if (rows.isEmpty) {
         final id = await txn.insert('equipment', {
           'code_equipment': code,
@@ -460,7 +460,7 @@ class EquipmentRepository {
         where: 'id = ?',
         whereArgs: [id],
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
@@ -502,7 +502,7 @@ class EquipmentRepository {
       where: 'equipment_id = ?',
       whereArgs: [eid],
     );
-    final ap = await _support.auditPerformingUser(executor: txn);
+    final ap = _support.auditPerformingUser();
     await AuditService.log(
       txn,
       action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΞΟΠΛΙΣΜΟΥ',
@@ -591,7 +591,7 @@ class EquipmentRepository {
       where: 'user_id = ? AND equipment_id = ?',
       whereArgs: [userId, equipmentId],
     );
-    final ap = await _support.auditPerformingUser(executor: txn);
+    final ap = _support.auditPerformingUser();
     final uSnap = await _linkedEquipmentSnapshotsForUser(txn, userId);
     final eSnap = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
     final uRow = await _support.userRowById(txn, userId);
@@ -665,7 +665,7 @@ class EquipmentRepository {
       limit: 1,
     );
     if (post.isEmpty) return;
-    final ap = await _support.auditPerformingUser(executor: txn);
+    final ap = _support.auditPerformingUser();
     final uSnap = await _linkedEquipmentSnapshotsForUser(txn, userId);
     final eSnap = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
     final uRow = await _support.userRowById(txn, userId);
@@ -740,7 +740,7 @@ class EquipmentRepository {
     final added = afterEq.difference(beforeEq);
     if (added.isEmpty) return;
     await db.transaction((txn) async {
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       final uSnap = await _linkedEquipmentSnapshotsForUser(txn, toUserId);
       final uRow = await _support.userRowById(txn, toUserId);
       await AuditService.log(
@@ -801,7 +801,7 @@ class EquipmentRepository {
     }
     final newU = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
     if (jsonEncode(oldU) == jsonEncode(newU)) return;
-    final ap = await _support.auditPerformingUser(executor: txn);
+    final ap = _support.auditPerformingUser();
     final eRows = await txn.query(
       'equipment',
       columns: ['code_equipment'],
@@ -864,7 +864,7 @@ class EquipmentRepository {
     final map = Map<String, dynamic>.from(row);
     map.remove('id');
     final id = await e.insert('equipment', map);
-    final ap = await _support.auditPerformingUser(executor: executor);
+    final ap = _support.auditPerformingUser();
     final code = (map['code_equipment'] as String?)?.trim() ?? '';
     await AuditService.log(
       e,
@@ -1004,7 +1004,7 @@ class EquipmentRepository {
     if (n <= 0) return 0;
     final diff = _equipmentAuditDiff(oldRow, map);
     if (diff.oldDiff.isNotEmpty) {
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       final code = (oldRow['code_equipment'] as String?)?.trim() ?? '';
       await AuditService.log(
         txn,
@@ -1062,7 +1062,7 @@ class EquipmentRepository {
       for (final id in ids) {
         await txn.update('equipment', map, where: 'id = ?', whereArgs: [id]);
       }
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       await AuditService.logBulk(
         txn,
         action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ',
@@ -1080,7 +1080,7 @@ class EquipmentRepository {
     List<int> ids,
   ) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser(executor: txn);
+    final user = _support.auditPerformingUser();
     for (final id in ids) {
       final codeRows = await txn.query(
         'equipment',
@@ -1131,7 +1131,7 @@ class EquipmentRepository {
     List<int> ids,
   ) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser(executor: txn);
+    final user = _support.auditPerformingUser();
     for (final id in ids) {
       final codeRows = await txn.query(
         'equipment',

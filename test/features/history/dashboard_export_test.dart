@@ -62,8 +62,8 @@ DashboardSummaryModel buildSummary() {
         sumDurationSeconds: 7200,
       ),
     ],
-    byIssue: const [
-      IssueStat(name: 'Medico', count: 53, sumDurationSeconds: 12420),
+    byCategory: const [
+      CategoryStat(name: 'Medico', count: 53, sumDurationSeconds: 12420),
     ],
   );
 }
@@ -157,7 +157,7 @@ void main() {
           longestCalls: const [],
           hourlyDistribution: const [],
           byDepartment: const [],
-          byIssue: const [],
+          byCategory: const [],
         ),
         filter: const DashboardFilterModel(),
         now: now,

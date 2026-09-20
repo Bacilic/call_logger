@@ -5,6 +5,7 @@ import '../../../calls/models/user_model.dart';
 import '../../models/user_directory_column.dart';
 import '../../services/user_equipment_codes.dart';
 import 'catalog_table_hover_focus.dart';
+import 'catalog_select_all_checkbox.dart';
 
 /// Πίνακας χρηστών με σελιδοποίηση, sortable headers, επιλογή γραμμής (αν η στήλη εμφανίζεται), διπλό κλικ = επεξεργασία.
 /// Single tap = toggle επιλογής (μόνο με ορατή στήλη επιλογής), double tap = άνοιγμα modal επεξεργασίας.
@@ -322,26 +323,13 @@ class _UsersDataTableState extends State<UsersDataTable> {
       if (col == UserDirectoryColumn.selection) {
         list.add(
           DataColumn(
-            label: _SelectAllCheckbox(
+            label: CatalogSelectAllCheckbox(
+              visibleIds: [
+                for (final u in widget.users)
+                  if (u.id != null) u.id!,
+              ],
               selectedIds: widget.selectedIds,
-              users: widget.users,
-              onSelectAll: () {
-                for (final u in widget.users) {
-                  if (u.id != null && !widget.selectedIds.contains(u.id)) {
-                    widget.onToggleSelection(u.id!);
-                  }
-                }
-              },
-              onDeselectAll: () {
-                for (final id in widget.selectedIds.toList()) {
-                  widget.onToggleSelection(id);
-                }
-              },
-              allSelected:
-                  widget.users.isNotEmpty &&
-                  widget.users.every(
-                    (u) => u.id != null && widget.selectedIds.contains(u.id),
-                  ),
+              onToggleSelection: widget.onToggleSelection,
             ),
           ),
         );
@@ -650,37 +638,6 @@ class _TableResizeHandleState extends State<_TableResizeHandle> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SelectAllCheckbox extends StatelessWidget {
-  const _SelectAllCheckbox({
-    required this.selectedIds,
-    required this.users,
-    required this.onSelectAll,
-    required this.onDeselectAll,
-    required this.allSelected,
-  });
-
-  final Set<int> selectedIds;
-  final List<UserModel> users;
-  final VoidCallback onSelectAll;
-  final VoidCallback onDeselectAll;
-  final bool allSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Checkbox(
-      value: allSelected,
-      tristate: true,
-      onChanged: (_) {
-        if (allSelected) {
-          onDeselectAll();
-        } else {
-          onSelectAll();
-        }
-      },
     );
   }
 }

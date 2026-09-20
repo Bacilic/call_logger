@@ -12,6 +12,7 @@ import '../../history/providers/history_provider.dart';
 import '../models/category_directory_column.dart';
 import '../models/category_model.dart';
 import '../services/catalog_search_evaluation.dart';
+import '../services/catalog_selection_filter.dart';
 
 class _PatchKeep {
   const _PatchKeep();
@@ -33,6 +34,7 @@ class CategoryDirectoryState {
     this.sortColumn,
     this.sortAscending = true,
     this.selectedIds = const {},
+    this.showOnlySelected = false,
     this.lastDeleted,
     this.focusedRowIndex,
     this.searchSummary = CatalogSearchSummary.empty,
@@ -57,6 +59,11 @@ class CategoryDirectoryState {
   final String? sortColumn;
   final bool sortAscending;
   final Set<int> selectedIds;
+
+  /// Η λίστα δείχνει μόνο ό,τι έχει επιλεγεί. Σβήνει μόνη της μόλις αδειάσει η
+  /// επιλογή — ο κανόνας ζει στο `catalog_selection_filter.dart`.
+  final bool showOnlySelected;
+
   final List<CategoryModel>? lastDeleted;
   final int? focusedRowIndex;
 
@@ -261,6 +268,17 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
         return asc ? cmp : -cmp;
       });
     }
+    final selectionFilterOn = catalogSelectionFilterStaysOn(
+      requested: state.showOnlySelected,
+      selectedIds: state.selectedIds,
+    );
+    list = applyCatalogSelectionFilter(
+      list,
+      active: selectionFilterOn,
+      selectedIds: state.selectedIds,
+      idOf: (c) => c.id,
+    );
+
     final len = list.length;
     final idx = state.focusedRowIndex;
     final clamped = idx != null && idx >= len
@@ -273,6 +291,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
       sortColumn: state.sortColumn,
       sortAscending: state.sortAscending,
       selectedIds: state.selectedIds,
+      showOnlySelected: selectionFilterOn,
       lastDeleted: state.lastDeleted,
       focusedRowIndex: clamped,
       searchSummary: summary,
@@ -288,6 +307,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
     String? sortColumn,
     bool? sortAscending,
     Set<int>? selectedIds,
+    bool? showOnlySelected,
     Object? lastDeleted = _kPatchKeep,
     int? focusedRow,
     bool keepFocusedRow = true,
@@ -301,6 +321,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
       sortColumn: sortColumn ?? state.sortColumn,
       sortAscending: sortAscending ?? state.sortAscending,
       selectedIds: selectedIds ?? state.selectedIds,
+      showOnlySelected: showOnlySelected ?? state.showOnlySelected,
       lastDeleted: identical(lastDeleted, _kPatchKeep)
           ? state.lastDeleted
           : lastDeleted as List<CategoryModel>?,
@@ -339,6 +360,25 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
       next.add(id);
     }
     _patch(selectedIds: next);
+    // Με ενεργό το φίλτρο η λίστα ΕΙΝΑΙ η επιλογή: ό,τι ξε-επιλέγεται πρέπει να
+    // φύγει από την οθόνη την ίδια στιγμή.
+    if (state.showOnlySelected) filterAndSort();
+  }
+
+  void clearSelection() {
+    _patch(selectedIds: {});
+    if (state.showOnlySelected) filterAndSort();
+  }
+
+  /// Ο διακόπτης «Δείξε μόνο τα επιλεγμένα» της κάτω μπάρας.
+  ///
+  /// Ανάβοντας, **καθαρίζει την αναζήτηση**: το ερώτημα είναι ακριβώς αυτό που
+  /// έκρυψε τις προηγούμενες επιλογές, και το ζητούμενο εδώ είναι να φανεί
+  /// ολόκληρη η συλλογή — όχι η τομή της με μια λέξη που έμεινε γραμμένη.
+  void toggleShowOnlySelected() {
+    final next = !state.showOnlySelected;
+    _patch(showOnlySelected: next, searchQuery: next ? '' : state.searchQuery);
+    filterAndSort();
   }
 
   Future<void> reorderCategoryColumns(int oldIndex, int newIndex) async {

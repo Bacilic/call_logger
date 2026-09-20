@@ -3,10 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/ai_model_health_provider.dart';
 import '../../../core/providers/spell_check_provider.dart';
+import '../../../core/services/ai_model_chain_runner.dart';
 import '../../../core/services/gemini_runtime_settings.dart';
-import '../../../core/services/gemini_ticket_service.dart';
-import '../../../core/services/spelling_lookup_gemini_service.dart';
+import '../../../core/services/spelling_lookup_ai_service.dart';
 import '../../../core/widgets/lexicon_spell_menu_helper.dart';
 import '../providers/lexicon_spelling_panel_provider.dart';
 
@@ -179,11 +180,11 @@ class LexiconSpellingPanel extends ConsumerWidget {
 
   Future<void> _askGemini(WidgetRef ref, String query) async {
     final notifier = ref.read(lexiconSpellingPanelProvider.notifier);
+    final registry = ref.read(aiModelCooldownRegistryProvider);
     notifier.setGeminiLoading();
 
     final settings = await GeminiRuntimeSettings.loadFromDatabase();
-    final apiKey = settings.apiKey.trim();
-    if (apiKey.isEmpty) {
+    if (settings.apiKey.trim().isEmpty) {
       notifier.setGeminiError(
         'Δεν έχει οριστεί Gemini API key (Ιστορικό → Lansweeper).',
       );
@@ -191,17 +192,15 @@ class LexiconSpellingPanel extends ConsumerWidget {
     }
 
     try {
-      final result = await SpellingLookupGeminiService.suggest(
-        word: query,
-        apiKey: apiKey,
-        endpoint: settings.endpoint,
-        primaryModel: settings.primaryModel,
+      notifier.setGeminiSuccess(
+        await SpellingLookupAiService.suggest(
+          word: query,
+          settings: settings,
+          registry: registry,
+        ),
       );
-      notifier.setGeminiSuccess(result);
-    } on GeminiException catch (e) {
+    } on AiModelChainException catch (e) {
       notifier.setGeminiError(e.message);
-    } catch (e) {
-      notifier.setGeminiError('$e');
     }
   }
 }

@@ -110,6 +110,6 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.build_outlined));
     await tester.pump();
-    expect(picked, TopEntityMode.issue);
+    expect(picked, TopEntityMode.category);
   });
 }

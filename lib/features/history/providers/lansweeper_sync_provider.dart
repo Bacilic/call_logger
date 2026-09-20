@@ -9,7 +9,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
-import '../../../core/services/lansweeper_call_asset_resolution.dart';
+import '../../../core/services/lansweeper_asset_resolution.dart';
 import '../../../core/services/lansweeper_call_requester_resolution.dart';
 import '../../../core/services/lansweeper_requester_resolution.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
@@ -40,6 +40,7 @@ class LansweeperSubmitInput {
     this.targetTicketState,
     this.config,
     this.requesterUsername,
+    this.attachToTicketId,
   });
 
   final String title;
@@ -60,6 +61,13 @@ class LansweeperSubmitInput {
   /// `null` = η φόρμα δεν είχε άποψη, οπότε αποφασίζει η αυτόματη ιεραρχία.
   /// Κενό κείμενο = ρητή επιλογή «χωρίς αιτούντα» — μπαίνει ο πράκτορας.
   final String? requesterUsername;
+
+  /// Το αίτημα στο οποίο προσγράφεται η δουλειά, αντί να ανοίξει νέο.
+  ///
+  /// Γεμίζει **μόνο** όταν ο χρήστης το διάλεξε μπροστά στον δεσμό: μια
+  /// εκκρεμότητα αυτής της κλήσης έχει ήδη αίτημα, και εκείνος αποφάσισε ότι
+  /// πρόκειται για την ίδια δουλειά.
+  final String? attachToTicketId;
 }
 
 class LansweeperCommandResult {
@@ -158,7 +166,13 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       }
 
       final config = input.config ?? LansweeperTicketSubmitConfig.defaults();
-      final existingTicketIdRaw = (call.lansweeperMainTicketId ?? '').trim();
+      // Η ρητή επιλογή του χρήστη μπροστά στον δεσμό κερδίζει: όταν αποφάσισε
+      // ότι η δουλειά ανήκει στο αίτημα μιας εκκρεμότητας αυτής της κλήσης,
+      // εκείνο ενημερώνεται αντί να ανοίξει δεύτερο για το ίδιο πρόβλημα.
+      final attachTo = input.attachToTicketId?.trim() ?? '';
+      final existingTicketIdRaw = attachTo.isNotEmpty
+          ? attachTo
+          : (call.lansweeperMainTicketId ?? '').trim();
       final existingTicketId = existingTicketIdRaw.isEmpty
           ? null
           : existingTicketIdRaw;
@@ -196,7 +210,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         );
         requesterUsername = resolved.selectedUsername;
       }
-      final assetTarget = await resolveCallLansweeperAsset(
+      final assetTarget = await resolveLansweeperAssetTarget(
         repository: EquipmentRepository(db),
         equipmentId: call.equipmentId,
         equipmentText: call.equipmentText,
@@ -204,12 +218,19 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
 
       final service = ref.read(lansweeperSyncServiceProvider);
       final request = LansweeperWorkflowRequest(
-        call: call,
+        autoSubject: LansweeperSyncService.autoTicketTitle(
+          category: call.category ?? '',
+          id: call.id,
+        ),
         title: input.title,
         problem: input.notes,
         solution: input.solution,
         agentUsername: input.agentUsername,
-        durationSeconds: input.durationSeconds,
+        // Η εφεδρεία ζει εδώ, όχι μέσα στη ροή αποστολής: ο χρόνος της κλήσης
+        // είναι χρόνος **εργασίας** και αξίζει να σταλεί ακόμη κι όταν η φόρμα
+        // δεν τον περάσει. Η ροή δεν ξέρει —ούτε επιτρέπεται να μαντέψει— αν
+        // πίσω της στέκεται κάτι που έχει χρόνο να δώσει.
+        durationSeconds: input.durationSeconds ?? call.duration,
         config: config,
         customFieldValues: input.customFieldValues,
         targetState: targetState,
@@ -252,6 +273,15 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           callIds: <int>[callId, ...companionCallIds],
           problem: input.notes,
           solution: input.solution,
+          // Ο τίτλος που μόλις ταξίδεψε στο ticket μένει και στην κλήση: είναι
+          // η περίληψη που θα δείξει το πρόσφατο ιστορικό.
+          title: LansweeperSyncService.callTitleToPersist(
+            title: input.title,
+            autoTitle: LansweeperSyncService.autoTicketTitle(
+              category: call.category ?? '',
+              id: call.id,
+            ),
+          ),
           source: input.refinedSource,
         );
         await writeRepo.markLansweeperSynced(
@@ -397,6 +427,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
     required List<int> callIds,
     required String problem,
     required String solution,
+    required String? title,
     required String source,
   }) async {
     if (callIds.isEmpty) return;
@@ -405,6 +436,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       callIds: callIds,
       problem: problem,
       solution: solution,
+      title: title,
       source: source,
     );
     _refreshAfterLansweeperMutation();
@@ -709,7 +741,7 @@ final lansweeperTicketPartiesProvider = FutureProvider.autoDispose
 
       final primary = calls.first;
 
-      final asset = (await resolveCallLansweeperAsset(
+      final asset = (await resolveLansweeperAssetTarget(
         repository: EquipmentRepository(db),
         equipmentId: primary.equipmentId,
         equipmentText: primary.equipmentText,

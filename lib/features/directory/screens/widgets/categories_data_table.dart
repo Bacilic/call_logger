@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/category_directory_column.dart';
 import '../../models/category_model.dart';
 import 'catalog_table_hover_focus.dart';
+import 'catalog_select_all_checkbox.dart';
 
 /// Πίνακας κατηγοριών: sort, επιλογή, κύλιση (χωρίς σελιδοποίηση).
 class CategoriesDataTable extends StatefulWidget {
@@ -288,26 +289,13 @@ class _CategoriesDataTableState extends State<CategoriesDataTable> {
       if (col == CategoryDirectoryColumn.selection) {
         list.add(
           DataColumn(
-            label: _CategorySelectAllCheckbox(
+            label: CatalogSelectAllCheckbox(
+              visibleIds: [
+                for (final c in widget.categories)
+                  if (c.id != null) c.id!,
+              ],
               selectedIds: widget.selectedIds,
-              categories: widget.categories,
-              onSelectAll: () {
-                for (final c in widget.categories) {
-                  if (c.id != null && !widget.selectedIds.contains(c.id)) {
-                    widget.onToggleSelection(c.id!);
-                  }
-                }
-              },
-              onDeselectAll: () {
-                for (final id in widget.selectedIds.toList()) {
-                  widget.onToggleSelection(id);
-                }
-              },
-              allSelected:
-                  widget.categories.isNotEmpty &&
-                  widget.categories.every(
-                    (c) => c.id != null && widget.selectedIds.contains(c.id),
-                  ),
+              onToggleSelection: widget.onToggleSelection,
             ),
           ),
         );
@@ -500,37 +488,6 @@ class _TableResizeHandleState extends State<_TableResizeHandle> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _CategorySelectAllCheckbox extends StatelessWidget {
-  const _CategorySelectAllCheckbox({
-    required this.selectedIds,
-    required this.categories,
-    required this.onSelectAll,
-    required this.onDeselectAll,
-    required this.allSelected,
-  });
-
-  final Set<int> selectedIds;
-  final List<CategoryModel> categories;
-  final VoidCallback onSelectAll;
-  final VoidCallback onDeselectAll;
-  final bool allSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Checkbox(
-      value: allSelected,
-      tristate: true,
-      onChanged: (_) {
-        if (allSelected) {
-          onDeselectAll();
-        } else {
-          onSelectAll();
-        }
-      },
     );
   }
 }

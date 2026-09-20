@@ -100,7 +100,13 @@ void main() {
         provider: 'lansweeper',
       );
 
-      await repo.setLansweeperMainTicket(callId: callId, ticketId: '18001');
+      await repo.updateLansweeperState(
+        callId: callId,
+        state: 'sent',
+        ticketId: '18001',
+        updateTicketId: true,
+        expected: null,
+      );
 
       expect(await searchByTicket('18001'), hasLength(1));
       expect(await searchByTicket('17438'), isEmpty);

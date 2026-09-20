@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:call_logger/core/updates/update_package_contents.dart';
 import 'package:call_logger/features/database/debug/release_publisher_service.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -678,7 +679,7 @@ environment:
       bad.addFile(ArchiveFile('call_logger.exe', 2, [0x4D, 0x5A]));
       bad.addFile(ArchiveFile('Data Base/call_logger.db', 1, [1]));
       expect(
-        () => ReleasePublisherService.assertZipHasNoUserData(bad),
+        () => assertNoUserDataEntries(bad.map((e) => e.name)),
         throwsA(isA<StateError>()),
       );
     },

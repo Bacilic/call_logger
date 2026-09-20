@@ -8,6 +8,9 @@ const _guardedRelativePaths = <String>[
   'lib/features/database/widgets/database_maintenance_sections.dart',
   'lib/features/database/widgets/database_settings_panel.dart',
   'lib/core/widgets/database_error_screen.dart',
+  // Προστέθηκε 18/09/2026: έδειχνε ωμή αγγλική εξαίρεση όταν αποτύγχανε η
+  // δημιουργία βάσης, ενώ η δίδυμη οθόνη σφάλματος μετέφραζε σωστά.
+  'lib/features/settings/widgets/pending_reset_database_screen.dart',
   'lib/features/dictionary/screens/dictionary_manager_screen.dart',
   'lib/features/history/widgets/lansweeper_report_dialog.dart',
   'lib/features/history/widgets/audit_entity_side_panel.dart',

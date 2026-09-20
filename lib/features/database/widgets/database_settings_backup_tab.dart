@@ -30,6 +30,7 @@ import 'backup_tab_destination_section.dart';
 import 'backup_tab_form_controllers.dart';
 import 'backup_tab_retention_section.dart';
 import 'backup_tab_schedule_section.dart';
+import 'broken_backup_dialog.dart';
 import 'settings_panel_info_tooltip.dart';
 
 /// Tooltip δίπλα στον διακόπτη αυτόματων αντιγράφων ασφαλείας.
@@ -341,18 +342,19 @@ class _DatabaseSettingsBackupTabState
     final result = await runManualBackup(
       settings: settings,
       inspectDestination: _loadDestinationContent,
-      markBackupTaken: ({
-        required int auditId,
-        required DateTime at,
-        required String? fullFingerprint,
-        required DateTime? fullAt,
-      }) => _notifier.markBackupTaken(
-        auditId: auditId,
-        at: at,
-        manual: true,
-        fullFingerprint: fullFingerprint,
-        fullAt: fullAt,
-      ),
+      markBackupTaken:
+          ({
+            required int auditId,
+            required DateTime at,
+            required String? fullFingerprint,
+            required DateTime? fullAt,
+          }) => _notifier.markBackupTaken(
+            auditId: auditId,
+            at: at,
+            manual: true,
+            fullFingerprint: fullFingerprint,
+            fullAt: fullAt,
+          ),
     );
     if (!mounted) return;
 
@@ -373,6 +375,17 @@ class _DatabaseSettingsBackupTabState
         });
         ref.invalidate(backupRestoreTooltipProvider);
         messenger.showSnackBar(SnackBar(content: Text(result.message!)));
+      case ManualBackupOutcome.verificationFailed:
+        // Ο φάκελος ξαναδιαβάζεται ούτως ή άλλως: το αρχείο άλλαξε όνομα, και
+        // η λίστα αντιγράφων δείχνει ακόμη το παλιό.
+        setState(_reloadDestinationContentFuture);
+        ref.invalidate(backupRestoreTooltipProvider);
+        await showBrokenBackupDialog(
+          context: context,
+          brokenFilePath: result.brokenFilePath!,
+          reason: result.message ?? 'Το αντίγραφο δεν άνοιξε για έλεγχο.',
+        );
+        if (mounted) setState(_reloadDestinationContentFuture);
       case ManualBackupOutcome.failure:
         messenger.showSnackBar(
           SnackBar(

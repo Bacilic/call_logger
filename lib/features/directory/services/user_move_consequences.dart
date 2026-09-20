@@ -85,6 +85,73 @@ String? userMoveConsequencesMessage({
   return parts.isEmpty ? null : parts.join(' · ');
 }
 
+/// Βγάζει αυτή η μετακίνηση τον άνθρωπο **έξω από το νοσοκομείο**;
+///
+/// **Μιλά για μετάβαση, όχι για κατάσταση.** Υπάλληλος που ήταν ήδη σε
+/// εταιρεία και πάει σε άλλη δεν φεύγει τώρα από τον οργανισμό — έχει ήδη
+/// φύγει, και μια προειδοποίηση εκεί θα ήταν θόρυβος. Ίδιος κανόνας με την
+/// [judgeUserMove] ακριβώς από πάνω.
+bool userLeavesHospital({
+  required DepartmentKind previousKind,
+  required DepartmentKind targetKind,
+}) {
+  return previousKind.belongsToHospital && !targetKind.belongsToHospital;
+}
+
+/// Η πρόταση που το λέει, με το όνομα του ανθρώπου μέσα.
+///
+/// **Γιατί ονομάζει τον άνθρωπο:** η επιβεβαίωση γίνεται συνήθως αφού ο
+/// χειριστής έχει ήδη αποφασίσει, και το όνομα είναι το μόνο που τον κάνει να
+/// ξανακοιτάξει. «Ο Αντώνης φεύγει από το νοσοκομείο» διαβάζεται· ένα «η
+/// μετακίνηση αφορά εξωτερικό φορέα» προσπερνιέται.
+///
+/// `null` όταν δεν υπάρχει έξοδος — η πρόταση δεν εμφανίζεται ποτέ «απλώς για
+/// σιγουριά»: μια γραμμή που βγαίνει πάντα παύει να διαβάζεται.
+String? userLeavesHospitalMessage({
+  required DepartmentKind previousKind,
+  required DepartmentKind targetKind,
+  required String targetDepartmentName,
+  String? userDisplayName,
+}) {
+  if (!userLeavesHospital(previousKind: previousKind, targetKind: targetKind)) {
+    return null;
+  }
+
+  final name = userDisplayName?.trim() ?? '';
+  final where = targetDepartmentName.trim();
+  final what = targetKind.entityWithArticle;
+  final place = where.isEmpty ? what : '$what «$where»';
+
+  return name.isEmpty
+      ? 'Προσοχή: $place δεν ανήκει στο νοσοκομείο — ο υπάλληλος παύει να '
+            'είναι εσωτερικός.'
+      : 'Προσοχή: $place δεν ανήκει στο νοσοκομείο — ο/η $name παύει να είναι '
+            'εσωτερικός υπάλληλος.';
+}
+
+/// Η ίδια πρόταση για **πολλούς** ανθρώπους μαζί, στη μαζική μεταφορά.
+///
+/// Ξεχωριστή από τη μονή επειδή εκεί δεν υπάρχει ένα όνομα να ειπωθεί, και
+/// το πλήθος είναι ακριβώς αυτό που πρέπει να τρομάξει: άλλο «ο Αντώνης
+/// φεύγει», άλλο «δώδεκα άνθρωποι φεύγουν».
+String? usersLeaveHospitalMessage({
+  required DepartmentKind targetKind,
+  required String targetDepartmentName,
+  required int count,
+}) {
+  if (targetKind.belongsToHospital || count <= 0) return null;
+
+  final where = targetDepartmentName.trim();
+  final what = targetKind.entityWithArticle;
+  final place = where.isEmpty ? what : '$what «$where»';
+
+  return count == 1
+      ? 'Προσοχή: $place δεν ανήκει στο νοσοκομείο — 1 υπάλληλος παύει να '
+            'είναι εσωτερικός.'
+      : 'Προσοχή: $place δεν ανήκει στο νοσοκομείο — $count υπάλληλοι παύουν '
+            'να είναι εσωτερικοί.';
+}
+
 String _equipmentPhrase({required int count, required DepartmentKind kind}) {
   // Το «μένει στο τμήμα που αφήνει» λέει ακριβώς πού καταλήγει — ένα σκέτο
   // «δεν ακολουθεί» θα άφηνε τον χρήστη να αναρωτιέται αν χάθηκε. Οι δύο

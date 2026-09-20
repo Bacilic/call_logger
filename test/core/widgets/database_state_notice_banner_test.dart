@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:call_logger/core/database/database_file_classifier.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/database_init_result.dart';
+import 'package:call_logger/core/database/database_staleness.dart';
 import 'package:call_logger/core/database/database_state_notice.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/services/settings_service.dart';
@@ -23,7 +24,7 @@ import '../../test_setup.dart';
 
 DatabaseFileProfile _oldProfile() {
   final latest = DateTime.now().subtract(
-    const Duration(days: kOldDatabaseNoticeThresholdDays + 5),
+    const Duration(days: kDefaultDatabaseStalenessDays + 5),
   );
   return DatabaseFileProfile(
     kind: DatabaseFileKind.callLogger,

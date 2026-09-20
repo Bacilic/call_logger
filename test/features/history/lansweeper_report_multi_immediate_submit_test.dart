@@ -43,7 +43,7 @@ const _kEmptyDashboardStats = DashboardSummaryModel(
   longestCalls: <LongestCallEntry>[],
   hourlyDistribution: <HourlyBucket>[],
   byDepartment: <DepartmentStat>[],
-  byIssue: <IssueStat>[],
+  byCategory: <CategoryStat>[],
 );
 
 class _RecordingLansweeperSyncNotifier extends LansweeperSyncNotifier {

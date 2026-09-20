@@ -101,7 +101,11 @@ class LansweeperElapsedText extends StatelessWidget {
 /// ώστε τα κουμπιά από κάτω να μη μετακινούνται τη στιγμή που ο χρήστης πάει
 /// να τα πατήσει.
 class LansweeperSubmitStatusBar extends ConsumerWidget {
-  const LansweeperSubmitStatusBar({this.selectedCallId, super.key});
+  const LansweeperSubmitStatusBar({
+    this.selectedCallId,
+    this.selectedTaskId,
+    super.key,
+  });
 
   /// Ποια κλήση βλέπει αυτή τη στιγμή ο χρήστης.
   ///
@@ -111,10 +115,20 @@ class LansweeperSubmitStatusBar extends ConsumerWidget {
   /// περισσότερο από το ποιανού είναι.
   final int? selectedCallId;
 
+  /// Ποια εκκρεμότητα βλέπει αυτή τη στιγμή ο χρήστης· ο ίδιος κανόνας.
+  ///
+  /// Δοσμένο, κρίνει αυτό: το παράθυρο της εκκρεμότητας δεν έχει καμία σχέση
+  /// με την ουρά της Αναφοράς, και τα δύο αποτελέσματα δεν επιτρέπεται να
+  /// μπερδευτούν.
+  final int? selectedTaskId;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tracked = ref.watch(lansweeperSubmitProgressProvider);
-    final progress = tracked.isRunning || tracked.concernsCall(selectedCallId)
+    final belongsHere = selectedTaskId != null
+        ? tracked.concernsTask(selectedTaskId)
+        : tracked.concernsCall(selectedCallId);
+    final progress = tracked.isRunning || belongsHere
         ? tracked
         : LansweeperSubmitProgress.idle;
     final theme = Theme.of(context);

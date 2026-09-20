@@ -73,7 +73,7 @@ class TasksRepository {
     int id,
     Map<String, dynamic> row,
   ) async {
-    final user = await AuditService.performingUser(executor);
+    final user = AuditService.performingUser();
     final nv = <String, dynamic>{};
     for (final k in _kTaskAuditKeys) {
       if (row.containsKey(k) && row[k] != null) nv[k] = row[k];
@@ -122,7 +122,7 @@ class TasksRepository {
       );
     }
     if (newDiff.isEmpty) return;
-    final user = await AuditService.performingUser(executor);
+    final user = AuditService.performingUser();
     await AuditService.log(
       executor,
       action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΚΚΡΕΜΟΤΗΤΑΣ',
@@ -255,7 +255,7 @@ class TasksRepository {
         nextOwner: operatorId ?? (rows.first['created_by_operator_id'] as int?),
       );
 
-      final user = await AuditService.performingUser(txn);
+      final user = AuditService.performingUser();
       await AuditService.log(
         txn,
         action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΕΚΚΡΕΜΟΤΗΤΑΣ',
@@ -719,6 +719,23 @@ class TasksRepository {
     if (!changed) return false;
     await updateTask(next);
     return true;
+  }
+
+  /// Μία εκκρεμότητα, ξαναδιαβασμένη φρέσκια από τη βάση.
+  ///
+  /// Χρειάζεται όπου η οθόνη κρατά αντίγραφο και κάτι το άλλαξε από άλλη πόρτα
+  /// (π.χ. η αποστολή στο Lansweeper γράφει στήλες που η φόρμα δεν αγγίζει).
+  /// Η διαγραμμένη επιστρέφεται κανονικά: ο καλών ξαναδιαβάζει κάτι που ήδη
+  /// κρατά στα χέρια του και δικαιούται να δει τι απέγινε.
+  Future<Task?> getTaskById(int taskId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [taskId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : Task.fromMap(rows.first);
   }
 
   /// Ζωντανές εκκρεμότητες μιας κλήσης — και οι κλειστές, γιατί η ερώτηση
@@ -1207,14 +1224,14 @@ class TasksRepository {
           .where((t) => t.isNotEmpty)
           .toList();
       for (final token in tokens) {
-        conditions.add('search_index LIKE ?');
+        conditions.add('tasks.search_index LIKE ?');
         args.add('%$token%');
       }
     }
 
     if (includeStatuses && filter.statuses.isNotEmpty) {
       final placeholders = List.filled(filter.statuses.length, '?').join(',');
-      conditions.add('status IN ($placeholders)');
+      conditions.add('tasks.status IN ($placeholders)');
       for (final s in filter.statuses) {
         args.add(s.toDbValue);
       }
@@ -1240,11 +1257,11 @@ class TasksRepository {
     }
 
     if (filter.startDate != null) {
-      conditions.add('due_date >= ?');
+      conditions.add('tasks.due_date >= ?');
       args.add(filter.startDate!.toIso8601String());
     }
     if (filter.endDate != null) {
-      conditions.add('due_date <= ?');
+      conditions.add('tasks.due_date <= ?');
       args.add(filter.endDate!.toIso8601String());
     }
   }
@@ -1359,13 +1376,17 @@ class TasksRepository {
     final where = conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
 
     // Στήλη λήξης στο σχήμα: `due_date` (όχι due_at).
+    // ΚΑΘΕ στήλη γράφεται με πρόθεμα `tasks.`: το ερώτημα ενώνεται με τις
+    // κλήσεις, που έχουν δικές τους `status`, `search_index` και `created_at`.
+    // Χωρίς το πρόθεμα η βάση απαντά «ambiguous column name» και η λίστα μένει
+    // για πάντα στο «Φόρτωση εκκρεμοτήτων…».
     final sortColumn = switch (filter.sortBy) {
-      TaskSortOption.createdAt => 'created_at',
-      TaskSortOption.dueAt => 'due_date',
-      TaskSortOption.priority => 'priority',
-      TaskSortOption.department => 'department_text',
-      TaskSortOption.user => 'user_text',
-      TaskSortOption.equipment => 'equipment_text',
+      TaskSortOption.createdAt => 'tasks.created_at',
+      TaskSortOption.dueAt => 'tasks.due_date',
+      TaskSortOption.priority => 'tasks.priority',
+      TaskSortOption.department => 'tasks.department_text',
+      TaskSortOption.user => 'tasks.user_text',
+      TaskSortOption.equipment => 'tasks.equipment_text',
     };
     final sortDirection = filter.sortAscending ? 'ASC' : 'DESC';
     final orderByClause = 'ORDER BY $sortColumn $sortDirection';
@@ -1374,11 +1395,13 @@ class TasksRepository {
       SELECT tasks.*,
         COALESCE(u.is_deleted, 0) AS caller_is_deleted,
         COALESCE(e.is_deleted, 0) AS equipment_is_deleted,
-        COALESCE(d.is_deleted, 0) AS department_is_deleted
+        COALESCE(d.is_deleted, 0) AS department_is_deleted,
+        c.lansweeper_main_ticket_id AS linked_call_ticket_id
       FROM tasks
       LEFT JOIN users u ON u.id = tasks.caller_id
       LEFT JOIN equipment e ON e.id = tasks.equipment_id
       LEFT JOIN departments d ON d.id = tasks.department_id
+      LEFT JOIN calls c ON c.id = tasks.call_id
       $where $orderByClause
       ''', args);
     return rows.map((row) => Task.fromMap(row)).toList();
@@ -1797,7 +1820,7 @@ class TasksRepository {
           await _notifyClosure(txn, taskId: id, oldRow: oldRow);
         }
 
-        final user = await AuditService.performingUser(txn);
+        final user = AuditService.performingUser();
         await AuditService.log(
           txn,
           action: 'ΚΛΕΙΣΙΜΟ ΕΚΚΡΕΜΟΤΗΤΑΣ',

@@ -37,6 +37,7 @@ class LansweeperSubmitProgressNotifier
     List<String> stepKeys, {
     bool creatingTicket = true,
     List<int> callIds = const <int>[],
+    List<int> taskIds = const <int>[],
   }) {
     _stopwatch
       ..reset()
@@ -51,6 +52,7 @@ class LansweeperSubmitProgressNotifier
       ],
       outcome: LansweeperSubmitOutcome.running,
       callIds: callIds,
+      taskIds: taskIds,
     );
   }
 

@@ -8,6 +8,7 @@ import '../../providers/building_catalog_provider.dart';
 import '../../services/bulk_department_actions.dart';
 import 'bulk_user_action_pickers.dart';
 import 'department_color_palette.dart';
+import 'bulk_department_action_call_guard.dart';
 
 /// Μαζικές ενέργειες τμημάτων: κτίριο, χρώμα, ομάδα, σημειώσεις, απόκρυψη
 /// χάρτη και καθαρισμός πεδίου.
@@ -38,10 +39,18 @@ class _BulkDepartmentEditDialogState
 
   List<DepartmentModel> get _departments => widget.selectedDepartments;
 
+  /// Κάθε ενέργεια του διαλόγου περνά από εδώ — άρα και ο φρουρός μπαίνει εδώ,
+  /// μία φορά, αντί για μία σε κάθε ροή.
   Future<void> _run(Future<void> Function() flow) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
+      final allowed = await ensureBulkDepartmentActionAllowed(
+        context,
+        ref,
+        _departments,
+      );
+      if (!allowed || !mounted) return;
       await flow();
     } finally {
       if (mounted) setState(() => _busy = false);

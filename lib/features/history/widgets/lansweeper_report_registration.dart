@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/database/calls_lansweeper_repository.dart';
+import '../../../core/database/database_helper.dart';
+import '../../../core/database/tasks_lansweeper_repository.dart';
+import '../../../core/services/lansweeper_link_crosscheck.dart';
 import '../../calls/models/call_model.dart';
 import '../models/lansweeper_sync_state.dart';
 import '../providers/lansweeper_settings_provider.dart';
@@ -10,6 +14,7 @@ import '../services/lansweeper_write_failure.dart';
 import '../services/lansweeper_link_metadata.dart';
 import 'lansweeper_registration_conflict_dialog.dart';
 import 'lansweeper/lansweeper_ai_presenter.dart';
+import 'lansweeper/lansweeper_link_choice_dialog.dart';
 import 'lansweeper/lansweeper_registration_dialogs.dart';
 import 'lansweeper/lansweeper_registration_flow.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
@@ -72,6 +77,12 @@ class LansweeperReportRegistration {
       if (confirmed != true) return;
     }
 
+    // Η αντίστροφη φορά του ίδιου ελέγχου που κάνει το παράθυρο της
+    // εκκρεμότητας: μήπως κάποια εκκρεμότητα αυτής της κλήσης έχει ήδη αίτημα;
+    // Κενό σημαίνει «νέο, ξεχωριστό»· `null` σημαίνει ότι ο χρήστης σταμάτησε.
+    final attachToTicketId = await _resolveLinkedTaskTicket(callId);
+    if (attachToTicketId == null || !host.mounted) return;
+
     final notifier = host.ref.read(lansweeperSyncProvider.notifier);
     final durationSeconds = selected.fold<int>(
       0,
@@ -99,6 +110,7 @@ class LansweeperReportRegistration {
       targetTicketState:
           host.selectedTicketState ?? ticketConfig.defaultTicketState,
       requesterUsername: host.selectedRequesterUsername,
+      attachToTicketId: attachToTicketId.isEmpty ? null : attachToTicketId,
     );
     final companionCallIds = selected
         .map((entry) => entry.call.id)
@@ -256,6 +268,49 @@ class LansweeperReportRegistration {
       ticketId: ticketId,
       ticketViewUrlTemplate: host.ref.read(lansweeperTicketViewUrlProvider),
     );
+  }
+
+  /// Ρωτά όταν μια εκκρεμότητα αυτής της κλήσης έχει ήδη αίτημα.
+  ///
+  /// Το κάτοπτρο του ελέγχου που κάνει το παράθυρο της εκκρεμότητας — ίδια
+  /// υπηρεσία, ίδιος διάλογος, αντίστροφη φορά. Επιστρέφει τον αριθμό του
+  /// αιτήματος στο οποίο θα προσγραφεί η κλήση, κενό για νέο ξεχωριστό, ή
+  /// `null` όταν ο χρήστης σταμάτησε την αποστολή.
+  Future<String?> _resolveLinkedTaskTicket(int callId) async {
+    final db = await DatabaseHelper.instance.database;
+    final finding = await LansweeperLinkCrosscheck(
+      calls: CallsLansweeperRepository(db),
+      tasks: TasksLansweeperRepository(db),
+    ).forCall(callId: callId);
+    if (finding == null) return '';
+    if (!host.mounted) return null;
+
+    final viewUrlTemplate = host.ref.read(lansweeperTicketViewUrlProvider);
+    final choice = await showLansweeperLinkChoiceDialog(
+      host.context,
+      finding: finding,
+      canOpenInBrowser:
+          LansweeperUrlRules.buildTicketViewUrl(
+            viewUrlTemplate,
+            finding.ticketId,
+          ) !=
+          null,
+    );
+    if (!host.mounted) return null;
+
+    switch (choice) {
+      case null:
+      case LansweeperLinkChoice.cancel:
+        return null;
+      case LansweeperLinkChoice.openExisting:
+        // Το άνοιγμα ΔΕΝ στέλνει: ο χρήστης πήγε να δει τι υπάρχει ήδη.
+        await host.browserFlow.openTicketViewInBrowser(finding.ticketId);
+        return null;
+      case LansweeperLinkChoice.attachToExisting:
+        return finding.ticketId;
+      case LansweeperLinkChoice.createNew:
+        return '';
+    }
   }
 
   /// Ο κοινός κανόνας ελέγχου διπλού, δεμένος στους διαλόγους αυτής της οθόνης.

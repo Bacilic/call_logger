@@ -49,6 +49,17 @@ class SettingsServiceWindowUi {
     await ScopedSettings.setBool(ProfileSettingKeys.showTasksBadge, value);
   }
 
+  /// Προεπισκόπηση πριν την εκτύπωση εκκρεμότητας. Προεπιλογή: true — το
+  /// χαρτί δεν παίρνεται πίσω, και η ματιά κοστίζει ένα κλικ.
+  Future<bool> getTaskPrintPreview() async {
+    return await ScopedSettings.getBool(ProfileSettingKeys.taskPrintPreview) ??
+        true;
+  }
+
+  Future<void> setTaskPrintPreview(bool value) async {
+    await ScopedSettings.setBool(ProfileSettingKeys.taskPrintPreview, value);
+  }
+
   /// Ειδοποίηση όταν κάποιος άλλος αγγίξει εκκρεμότητα που κατέχω.
   /// Προεπιλογή: true — η σιωπή είναι επιλογή, όχι αφετηρία.
   Future<bool> getNotifyTaskHandovers() async {

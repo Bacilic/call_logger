@@ -25,13 +25,19 @@ enum IntegrityFixUiMode {
   /// Απαιτεί επιλογή χρήστη (αποσύνδεση / νέα τιμή).
   choiceRequired,
 
-  /// Δεν επιτρέπεται inline fix (π.χ. PRAGMA corruption).
+  /// Δεν επιτρέπεται inline fix — η αιτία δεν είναι στα δεδομένα.
+  ///
+  /// Δύο τύποι, για διαφορετικό λόγο ο καθένας: η φθορά του αρχείου θέλει
+  /// επαναφορά από αντίγραφο, και οι παραβιάσεις κανόνων θέλουν διόρθωση στον
+  /// κώδικα που τις γράφει. Σε καμία περίπτωση δεν υπάρχει κουμπί που «το
+  /// φτιάχνει» — και η οθόνη οφείλει να το λέει αντί να προσποιείται.
   blockout,
 }
 
 extension IntegrityCheckTypeFixUi on IntegrityCheckType {
   IntegrityFixUiMode get fixUiMode => switch (this) {
     IntegrityCheckType.pragmaQuickCheck => IntegrityFixUiMode.blockout,
+    IntegrityCheckType.foreignKeyViolations => IntegrityFixUiMode.blockout,
     IntegrityCheckType.orphanPhone => IntegrityFixUiMode.choiceRequired,
     IntegrityCheckType.usersWithoutDepartment =>
       IntegrityFixUiMode.choiceRequired,
@@ -42,14 +48,25 @@ extension IntegrityCheckTypeFixUi on IntegrityCheckType {
 
   bool get allowsBulkFix => fixUiMode == IntegrityFixUiMode.confirmOnly;
 
+  /// Η ετικέτα του κουμπιού όταν δεν υπάρχει επιδιόρθωση να γίνει.
+  ///
+  /// Το κουμπί δεν λέει «Επιδιόρθωση» για κάτι που δεν επιδιορθώνει: ανοίγει
+  /// εξήγηση, και το όνομά του το προαναγγέλλει.
+  String get blockoutButtonLabelEl => switch (this) {
+    IntegrityCheckType.foreignKeyViolations => 'Τι σημαίνει;',
+    _ => 'Οδηγίες ανάκτησης',
+  };
+
   /// Συγκεντρωτικό μήνυμα επιβεβαίωσης bulk (ελληνικά).
   String bulkConfirmMessage(int count) {
     assert(count > 0);
     return switch (this) {
       IntegrityCheckType.callsMissingSearchIndex =>
-        'Θέλετε να αναδημιουργηθεί το ευρετήριο αναζήτησης για τις $count κλήσεις;',
+        'Θέλετε να ξαναχτιστεί το ευρετήριο αναζήτησης για τις $count κλήσεις; '
+            'Η αναζήτηση θα τις βρίσκει ξανά με όλες τις λέξεις τους.',
       IntegrityCheckType.tasksMissingSearchIndex =>
-        'Θέλετε να αναδημιουργηθεί το ευρετήριο αναζήτησης για τις $count εκκρεμότητες;',
+        'Θέλετε να ξαναχτιστεί το ευρετήριο αναζήτησης για τις $count εκκρεμότητες; '
+            'Η αναζήτηση θα τις βρίσκει ξανά με όλες τις λέξεις τους.',
       IntegrityCheckType.departmentsInvalidNameKey =>
         'Θέλετε να διορθωθεί το name_key για τα $count τμήματα;',
       IntegrityCheckType.orphanCallExternalLinks =>

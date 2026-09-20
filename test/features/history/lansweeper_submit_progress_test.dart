@@ -10,18 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:call_logger/core/services/lansweeper_asset_target.dart';
 import 'package:call_logger/core/services/lansweeper_sync_service.dart';
 import 'package:call_logger/core/services/lansweeper_ticket_submit_config.dart';
-import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/history/models/lansweeper_submit_progress.dart';
-
-CallModel _call() => CallModel(
-  id: 1,
-  date: '2026-09-02',
-  time: '10:00',
-  callerText: 'Δοκιμή',
-  phoneText: '2997',
-  issue: 'δεν ανάβει',
-  duration: 180,
-);
 
 LansweeperWorkflowRequest _request({
   String solution = 'έγινε επανεκκίνηση',
@@ -32,7 +21,8 @@ LansweeperWorkflowRequest _request({
   LansweeperTicketSubmitConfig? config,
 }) {
   return LansweeperWorkflowRequest(
-    call: _call(),
+    autoSubject: 'Κλήση #1',
+    durationSeconds: 180,
     title: 'Κλήση #1',
     problem: 'δεν ανάβει',
     solution: solution,
@@ -201,6 +191,36 @@ void main() {
         _request(targetState: ''),
       );
       expect(keys, isNot(contains(LansweeperSubmitStepKeys.state)));
+    });
+  });
+
+  group('ποιανού είναι η αποστολή', () {
+    test('αποστολή εκκρεμότητας δεν εμφανίζεται πάνω σε καμία κλήση', () {
+      const progress = LansweeperSubmitProgress(taskIds: <int>[7]);
+
+      expect(progress.concernsTask(7), isTrue);
+      expect(progress.concernsCall(344), isFalse);
+      expect(
+        progress.concernsCall(null),
+        isFalse,
+        reason:
+            'κενό callIds σημαίνει «όλες οι κλήσεις»· χωρίς τον έλεγχο των '
+            'εκκρεμοτήτων το αποτέλεσμα θα διέρρεε στην Αναφορά',
+      );
+    });
+
+    test('αποστολή κλήσης δεν εμφανίζεται πάνω σε καμία εκκρεμότητα', () {
+      const progress = LansweeperSubmitProgress(callIds: <int>[344]);
+
+      expect(progress.concernsCall(344), isTrue);
+      expect(progress.concernsTask(7), isFalse);
+      expect(progress.concernsTask(null), isFalse);
+    });
+
+    test('άλλη εκκρεμότητα δεν βλέπει ξένο αποτέλεσμα', () {
+      const progress = LansweeperSubmitProgress(taskIds: <int>[7]);
+
+      expect(progress.concernsTask(8), isFalse);
     });
   });
 }

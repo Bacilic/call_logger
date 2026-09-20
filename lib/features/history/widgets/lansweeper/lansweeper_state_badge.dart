@@ -29,12 +29,10 @@ class LansweeperStateBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (state) {
-      LansweeperSyncState.sent => 'Καταχωρημένη',
-      LansweeperSyncState.excluded => 'Εξαιρεσμένη',
-      LansweeperSyncState.failed => 'Αποτυχημένη',
-      _ => 'Ακαταχώρητη',
-    };
+    // Η ετικέτα δεν γράφεται εδώ: ζει σε ένα σημείο μαζί με τον κανόνα
+    // κανονικοποίησης. Όσο ήταν ξαναγραμμένη, η ίδια κατάσταση εμφανιζόταν
+    // «Εξαιρεμένη» στο φίλτρο του Ιστορικού και «Εξαιρεσμένη» εδώ.
+    final label = LansweeperSyncState.label(state);
     final color = switch (state) {
       LansweeperSyncState.sent => Colors.green,
       LansweeperSyncState.excluded => Colors.orange,

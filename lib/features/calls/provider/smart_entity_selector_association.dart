@@ -152,6 +152,16 @@ class SmartEntitySelectorAssociation {
             ref.read(catalogValidationRulesProvider).value ??
             const CatalogValidationRules(),
       );
+      // Ο κανόνας τρέχει ΠΡΙΝ την ερώτηση, ώστε ο λόγος που ένας αριθμός δεν
+      // μπορεί να μείνει πίσω να ειπωθεί όσο ο χρήστης ακόμη αποφασίζει.
+      final plan = planPhoneStayBehind(
+        phones: split.negotiable,
+        userName: userName,
+        oldDepartmentId: oldDepartmentId,
+        editingUserId: userId,
+        lookup: LookupService.instance,
+      );
+
       final fate = await askPhoneFateOnDepartmentChange(
         context,
         split: split,
@@ -162,31 +172,13 @@ class SmartEntitySelectorAssociation {
             .firstOrNull
             ?.name
             .trim(),
+        stayBlockedReasons: plan.blockedReasons,
       );
       if (fate == null) return null;
       // Ό,τι δεν μπορεί να ακολουθήσει μένει πίσω ό,τι κι αν απαντήθηκε.
       phonesStaying.addAll(split.forcedToStay);
       if (fate == BulkTransferAssetFate.stayInOldDepartment) {
-        for (final phone in split.negotiable) {
-          final others = [
-            for (final other in lookup?.findUsersByPhone(phone) ?? const [])
-              if (other.id != null && other.id != userId && !other.isDeleted)
-                bulkUserDisplayName(other),
-          ];
-          final dept = lookup?.getDepartmentByPhone(phone);
-          final deptId = dept?.id;
-          final deptName = dept?.name.trim() ?? '';
-          final decision = judgePhoneStayBehind(
-            phone: phone,
-            userName: userName,
-            oldDepartmentId: oldDepartmentId,
-            otherOwnerNames: others,
-            sharedDepartment: (deptId != null && deptName.isNotEmpty)
-                ? (id: deptId, name: deptName)
-                : null,
-          );
-          if (decision.releases) phonesStaying.add(phone);
-        }
+        phonesStaying.addAll(plan.staying);
       }
     }
 
@@ -194,32 +186,24 @@ class SmartEntitySelectorAssociation {
     // Ανάμεσα στις δύο ερωτήσεις μεσολάβησε διάλογος: η οθόνη μπορεί να έχει
     // φύγει, οπότε ο φρουρός ξαναμπαίνει πριν από τη δεύτερη.
     if (carriedEquipment.isNotEmpty && context.mounted) {
+      // Ίδια σειρά με τα τηλέφωνα: πρώτα ο κανόνας, μετά η ερώτηση.
+      final plan = planEquipmentStayBehind(
+        equipment: carriedEquipment,
+        userName: userName,
+        oldDepartmentId: oldDepartmentId,
+        editingUserId: userId,
+        lookup: LookupService.instance,
+      );
+
       final fate = await askEquipmentFateOnDepartmentChange(
         context,
         targetKind: targetKind,
         userDisplayName: userName,
+        stayBlockedReasons: plan.blockedReasons,
       );
       if (fate == null) return null;
       if (fate == BulkTransferAssetFate.stayInOldDepartment) {
-        for (final item in carriedEquipment) {
-          final code = (item.code ?? '').trim();
-          final itemId = item.id;
-          if (code.isEmpty || itemId == null) continue;
-          final others = [
-            for (final other
-                in lookup?.findUsersForEquipment(itemId) ?? const [])
-              if (other.id != null && other.id != userId && !other.isDeleted)
-                bulkUserDisplayName(other),
-          ];
-          final decision = judgeEquipmentStayBehind(
-            code: code,
-            userName: userName,
-            oldDepartmentId: oldDepartmentId,
-            equipmentDepartmentId: item.departmentId,
-            otherOwnerNames: others,
-          );
-          if (decision.releases) equipmentStaying.add(item);
-        }
+        equipmentStaying.addAll(plan.staying);
       }
     }
 

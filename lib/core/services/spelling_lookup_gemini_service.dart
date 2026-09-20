@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -47,7 +49,10 @@ abstract final class SpellingLookupGeminiService {
 
     final key = apiKey.trim();
     if (key.isEmpty) {
-      throw const GeminiException('Δεν έχει οριστεί Gemini API key.');
+      throw const GeminiException(
+        'Δεν έχει οριστεί Gemini API key.',
+        scope: GeminiFailureScope.infrastructure,
+      );
     }
 
     final resolvedEndpoint = GeminiTicketService.resolveEndpoint(
@@ -57,7 +62,10 @@ abstract final class SpellingLookupGeminiService {
     );
     final uri = Uri.tryParse(resolvedEndpoint);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      throw const GeminiException('Μη έγκυρο URL endpoint Gemini.');
+      throw const GeminiException(
+        'Μη έγκυρο URL endpoint Gemini.',
+        scope: GeminiFailureScope.infrastructure,
+      );
     }
 
     final prompt = _promptTemplate.replaceAll('{Λέξη}', trimmed);
@@ -65,24 +73,44 @@ abstract final class SpellingLookupGeminiService {
     final httpClient = client ?? http.Client();
     final http.Response response;
     try {
-      response = await httpClient
-          .post(
-            uri,
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode(<String, dynamic>{
-              'contents': [
-                <String, dynamic>{
-                  'parts': [
-                    <String, String>{'text': prompt},
-                  ],
+      // Κάθε αποτυχία βγαίνει ως GeminiException με αιτία: έτσι όποιος εκτελεί
+      // την αλυσίδα μοντέλων ξέρει αν αξίζει να δοκιμάσει το επόμενο, και ο
+      // χρήστης δεν βλέπει ποτέ ωμό κείμενο μηχανής.
+      try {
+        response = await httpClient
+            .post(
+              uri,
+              headers: const {'Content-Type': 'application/json'},
+              body: jsonEncode(<String, dynamic>{
+                'contents': [
+                  <String, dynamic>{
+                    'parts': [
+                      <String, String>{'text': prompt},
+                    ],
+                  },
+                ],
+                'generationConfig': <String, String>{
+                  'responseMimeType': 'application/json',
                 },
-              ],
-              'generationConfig': <String, String>{
-                'responseMimeType': 'application/json',
-              },
-            }),
-          )
-          .timeout(const Duration(seconds: 30));
+              }),
+            )
+            .timeout(const Duration(seconds: 30));
+      } on TimeoutException {
+        throw const GeminiException(
+          'Η κλήση Gemini έληξε (timeout).',
+          scope: GeminiFailureScope.model,
+        );
+      } on SocketException catch (e) {
+        throw GeminiException(
+          e.message,
+          scope: GeminiFailureScope.infrastructure,
+        );
+      } on http.ClientException catch (e) {
+        throw GeminiException(
+          e.message,
+          scope: GeminiFailureScope.infrastructure,
+        );
+      }
     } finally {
       if (client == null) httpClient.close();
     }
@@ -94,17 +122,30 @@ abstract final class SpellingLookupGeminiService {
             ? 'Αποτυχία HTTP (${response.statusCode}) κατά την κλήση Gemini.'
             : 'Αποτυχία Gemini (${response.statusCode}): $apiMessage',
         statusCode: response.statusCode,
+        scope: GeminiException.classifyFailureScope(
+          statusCode: response.statusCode,
+          message: apiMessage,
+        ),
+        retryAfter: GeminiException.extractRetryAfterFromErrorBody(
+          response.body,
+        ),
       );
     }
 
     final text = _extractResponseText(response.body);
     if (text == null || text.trim().isEmpty) {
-      throw const GeminiException('Η απάντηση Gemini ήταν κενή.');
+      throw const GeminiException(
+        'Η απάντηση Gemini ήταν κενή.',
+        scope: GeminiFailureScope.model,
+      );
     }
 
     final parsed = _parseSpellingJson(text);
     if (parsed == null) {
-      throw const GeminiException('Μη έγκυρη μορφή JSON στην απάντηση Gemini.');
+      throw const GeminiException(
+        'Μη έγκυρη μορφή JSON στην απάντηση Gemini.',
+        scope: GeminiFailureScope.model,
+      );
     }
 
     return parsed;

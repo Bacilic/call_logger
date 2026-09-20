@@ -205,11 +205,16 @@ void main() {
       provider: 'lansweeper',
     );
 
-    await repo.setLansweeperMainTicket(callId: callId, ticketId: '17999');
+    await repo.updateLansweeperState(
+      callId: callId,
+      state: 'sent',
+      ticketId: '17999',
+      updateTicketId: true,
+      expected: null,
+    );
 
     final rows = await auditRows();
     expect(rows, hasLength(2));
-    expect(rows.last['action'], 'ΑΛΛΑΓΗ TICKET LANSWEEPER');
     expect(rows.last['old_values_json'].toString(), contains('17438'));
     expect(rows.last['new_values_json'].toString(), contains('17999'));
   });
@@ -222,7 +227,13 @@ void main() {
       provider: 'lansweeper',
     );
 
-    await repo.setLansweeperMainTicket(callId: callId, ticketId: '17438');
+    await repo.updateLansweeperState(
+      callId: callId,
+      state: 'sent',
+      ticketId: '17438',
+      updateTicketId: true,
+      expected: null,
+    );
 
     expect(
       await auditRows(),

@@ -15,6 +15,7 @@ class CallModel {
     this.equipmentText,
     this.issue,
     this.solution,
+    this.title,
     this.refinedSource,
     this.refinedAt,
     this.category,
@@ -29,6 +30,7 @@ class CallModel {
     this.isDeleted = false,
     this.callerLinkedDeleted = false,
     this.equipmentLinkedDeleted = false,
+    this.departmentLinkedDeleted = false,
   });
 
   final int? id;
@@ -48,6 +50,13 @@ class CallModel {
 
   /// Τι έγινε για να λυθεί — υπάρχει μόνο εδώ και στο ticket.
   final String? solution;
+
+  /// Η σύντομη περίληψη της κλήσης, όπως γράφτηκε στη φόρμα του Lansweeper.
+  ///
+  /// Null σημαίνει «δεν υπάρχει» — ούτε η ΤΝ ούτε ο χειριστής έγραψαν δικό τους
+  /// τίτλο, ή η κλήση δεν πέρασε ποτέ από τη φόρμα. Τότε οι λίστες δείχνουν την
+  /// Περιγραφή, όπως έκαναν πάντα.
+  final String? title;
 
   /// Πώς προέκυψε η Περιγραφή όταν πέρασε από εξευγενισμό: [CallRefinedSource].
   /// Null σημαίνει «δεν πέρασε ποτέ» — η Περιγραφή είναι ό,τι γράφτηκε στην ώρα
@@ -81,6 +90,15 @@ class CallModel {
   /// Η συνδεδεμένη εγγραφή equipment είναι soft-deleted.
   final bool equipmentLinkedDeleted;
 
+  /// Το τμήμα της κλήσης έχει διαγραφεί από τον Κατάλογο.
+  ///
+  /// **Βγαίνει από το όνομα, όχι από σύνδεση** — η κλήση δεν κρατά
+  /// `department_id`. Ο κανόνας που ξεχωρίζει τη διαγραφή από το ορθογραφικό
+  /// λάθος ζει στο `call_department_deleted_flag.dart`· εδώ φτάνει έτοιμη η
+  /// απάντηση. Μόνο ερωτήματα που τη ζητούν ρητά τη γεμίζουν: για τα υπόλοιπα
+  /// μένει `false`, δηλαδή «δεν ξέρω», που είναι και η ασφαλής σιωπή.
+  final bool departmentLinkedDeleted;
+
   factory CallModel.fromMap(Map<String, dynamic> map) {
     return CallModel(
       id: map['id'] as int?,
@@ -94,6 +112,7 @@ class CallModel {
       equipmentText: map['equipment_text'] as String?,
       issue: map['issue'] as String?,
       solution: map['solution'] as String?,
+      title: map['title'] as String?,
       refinedSource: map['refined_source'] as String?,
       refinedAt: map['refined_at'] as String?,
       category: map['category'] as String? ?? map['category_text'] as String?,
@@ -109,6 +128,9 @@ class CallModel {
       callerLinkedDeleted: historyEntityIsDeleted(map['caller_is_deleted']),
       equipmentLinkedDeleted: historyEntityIsDeleted(
         map['equipment_is_deleted'],
+      ),
+      departmentLinkedDeleted: historyEntityIsDeleted(
+        map['department_is_deleted'],
       ),
     );
   }
@@ -126,6 +148,7 @@ class CallModel {
       if (equipmentText != null) 'equipment_text': equipmentText,
       if (issue != null) 'issue': issue,
       if (solution != null) 'solution': solution,
+      if (title != null) 'title': title,
       if (refinedSource != null) 'refined_source': refinedSource,
       if (refinedAt != null) 'refined_at': refinedAt,
       if (category != null) 'category_text': category,

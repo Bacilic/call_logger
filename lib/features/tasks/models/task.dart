@@ -91,6 +91,10 @@ class Task {
     this.callerLinkedDeleted = false,
     this.equipmentLinkedDeleted = false,
     this.departmentLinkedDeleted = false,
+    this.lansweeperState,
+    this.lansweeperMainTicketId,
+    this.lansweeperLastSyncAt,
+    this.linkedCallTicketId,
   });
 
   final int? id;
@@ -150,6 +154,32 @@ class Task {
   final bool equipmentLinkedDeleted;
   final bool departmentLinkedDeleted;
 
+  /// Πού βρίσκεται η εκκρεμότητα απέναντι στο Lansweeper — μόνο για **ανάγνωση**.
+  ///
+  /// Οι τρεις τιμές γεμίζουν από τη βάση και ταξιδεύουν ως την κάρτα, αλλά
+  /// **δεν γράφονται ποτέ μέσω του μοντέλου**: λείπουν επίτηδες από το
+  /// [toMap], και το [copyWith] τις μεταφέρει χωρίς να δέχεται νέα τιμή.
+  ///
+  /// Ο λόγος είναι η αποθήκευση της φόρμας, που γράφει **ολόκληρη** την
+  /// καρτέλα. Αν οι στήλες έμπαιναν στο [toMap], μια επεξεργασία τίτλου θα
+  /// ξανάγραφε και την κατάσταση από ένα στιγμιότυπο που μπορεί να είναι
+  /// δευτερόλεπτα παλιό — σβήνοντας το αίτημα που μόλις κατέγραψε συνάδελφος
+  /// από άλλον σταθμό. Η μοναδική πόρτα εγγραφής είναι το
+  /// `TasksLansweeperRepository`, με στοχευμένη ενημέρωση αυτών των στηλών.
+  final String? lansweeperState;
+  final String? lansweeperMainTicketId;
+  final String? lansweeperLastSyncAt;
+
+  /// Ο αριθμός αιτήματος **της κλήσης** από την οποία γεννήθηκε η εκκρεμότητα.
+  ///
+  /// Μόνο για ανάγνωση, όπως το [callerLinkedDeleted] και τα αδέλφια του:
+  /// έρχεται από ένωση με τον πίνακα των κλήσεων, δεν ανήκει στη δική της
+  /// γραμμή, και γι' αυτό λείπει από το [toMap].
+  ///
+  /// Υπάρχει για να μη χρειάζεται η κάρτα να **υποθέσει**: αντί για «αν εκείνη
+  /// έχει αίτημα, η αποστολή θα σας ρωτήσει», λέει αν έχει και ποιο.
+  final String? linkedCallTicketId;
+
   static DateTime? _parseDateTime(String? value) {
     if (value == null || value.isEmpty) return null;
     return DateTime.tryParse(value);
@@ -201,6 +231,10 @@ class Task {
       departmentLinkedDeleted: historyEntityIsDeleted(
         map['department_is_deleted'],
       ),
+      lansweeperState: map['lansweeper_state'] as String?,
+      lansweeperMainTicketId: map['lansweeper_main_ticket_id'] as String?,
+      lansweeperLastSyncAt: map['lansweeper_last_sync_at'] as String?,
+      linkedCallTicketId: map['linked_call_ticket_id'] as String?,
     );
   }
 
@@ -295,6 +329,13 @@ class Task {
       closedByOperatorId: closedByOperatorId ?? this.closedByOperatorId,
       origin: normalizeOrigin(origin ?? this.origin),
       isDeleted: isDeleted ?? this.isDeleted,
+      // Ταξιδεύουν αυτούσιες, χωρίς παράμετρο που να τις αλλάζει: μια
+      // επεξεργασία τίτλου δεν επιτρέπεται ούτε να τις χάσει ούτε να τις
+      // ξαναγράψει. Η εγγραφή τους περνά αποκλειστικά από το αποθετήριο.
+      lansweeperState: lansweeperState,
+      lansweeperMainTicketId: lansweeperMainTicketId,
+      lansweeperLastSyncAt: lansweeperLastSyncAt,
+      linkedCallTicketId: linkedCallTicketId,
     );
   }
 

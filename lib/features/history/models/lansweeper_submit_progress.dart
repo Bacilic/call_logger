@@ -108,6 +108,7 @@ class LansweeperSubmitProgress {
     this.summary,
     this.totalMilliseconds,
     this.callIds = const <int>[],
+    this.taskIds = const <int>[],
   });
 
   static const LansweeperSubmitProgress idle = LansweeperSubmitProgress();
@@ -122,6 +123,14 @@ class LansweeperSubmitProgress {
   /// σταλεί ήδη. Το αποτέλεσμα ανήκει σε συγκεκριμένες κλήσεις και δεν
   /// επιτρέπεται να συνοδεύει καμία άλλη.
   final List<int> callIds;
+
+  /// Ποιων εκκρεμοτήτων είναι αυτή η αποστολή.
+  ///
+  /// Γεμάτο σημαίνει «αυτή η αποστολή ανήκει σε εκκρεμότητα» — και τότε καμία
+  /// κλήση δεν την αναγνωρίζει ως δική της. Χωρίς τη διάκριση, το
+  /// «Καταχωρήθηκε · αίτημα 4821» μιας εκκρεμότητας θα εμφανιζόταν πάνω στην
+  /// Αναφορά και θα έδειχνε σαν να στάλθηκε κλήση που δεν στάλθηκε ποτέ.
+  final List<int> taskIds;
 
   /// Η μία γραμμή που μένει στην οθόνη όταν τελειώσει: «Καταχωρήθηκε · αίτημα
   /// 17188» ή η αιτία της αποτυχίας.
@@ -139,8 +148,22 @@ class LansweeperSubmitProgress {
   /// επιτυχή καταχώρηση οι κλήσεις αποεπιλέγονται μόνες τους, και το
   /// αποτέλεσμα πρέπει να προλάβει να διαβαστεί.
   bool concernsCall(int? callId) {
+    // Αποστολή εκκρεμότητας: δεν ανήκει σε καμία κλήση, όσο κενή κι αν είναι η
+    // λίστα των κλήσεων. Χωρίς αυτόν τον έλεγχο το κενό `callIds` θα σήμαινε
+    // «αφορά τους πάντες» και το αποτέλεσμα θα διέρρεε στην Αναφορά.
+    if (taskIds.isNotEmpty) return false;
     if (callId == null || callIds.isEmpty) return true;
     return callIds.contains(callId);
+  }
+
+  /// Αφορά η εικόνα αυτή την [taskId];
+  ///
+  /// Το κάτοπτρο του [concernsCall]: αποστολή κλήσης δεν εμφανίζεται ποτέ πάνω
+  /// σε εκκρεμότητα.
+  bool concernsTask(int? taskId) {
+    if (taskIds.isEmpty) return false;
+    if (taskId == null) return true;
+    return taskIds.contains(taskId);
   }
 
   /// Το βήμα που εκτελείται τώρα· `null` όταν δεν τρέχει κανένα.
@@ -167,6 +190,7 @@ class LansweeperSubmitProgress {
     String? summary,
     int? totalMilliseconds,
     List<int>? callIds,
+    List<int>? taskIds,
   }) {
     return LansweeperSubmitProgress(
       steps: steps ?? this.steps,
@@ -174,6 +198,7 @@ class LansweeperSubmitProgress {
       summary: summary ?? this.summary,
       totalMilliseconds: totalMilliseconds ?? this.totalMilliseconds,
       callIds: callIds ?? this.callIds,
+      taskIds: taskIds ?? this.taskIds,
     );
   }
 
@@ -257,6 +282,7 @@ class LansweeperSubmitProgress {
       summary: summary,
       totalMilliseconds: totalMilliseconds,
       callIds: callIds,
+      taskIds: taskIds,
     );
   }
 }

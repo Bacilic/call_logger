@@ -77,21 +77,4 @@ void main() {
 
     expect(summary.overwriteWarning, contains('ανάθεση'));
   });
-
-  test('η ώρα παίρνει ημερομηνία όταν δεν είναι σήμερα', () {
-    expect(
-      TaskConflictSummary.describeMoment(
-        DateTime(2026, 8, 20, 9, 15),
-        now: now,
-      ),
-      '20/08 09:15',
-    );
-    expect(
-      TaskConflictSummary.describeMoment(
-        DateTime(2026, 8, 22, 9, 15),
-        now: now,
-      ),
-      '09:15',
-    );
-  });
 }

@@ -1,6 +1,7 @@
 import 'package:path/path.dart' as p;
 
 import 'database_file_classifier.dart';
+import 'database_staleness.dart';
 
 /// Είδος προειδοποίησης για ανοιχτή βάση Καταγραφής.
 enum DatabaseNoticeKind {
@@ -30,8 +31,12 @@ class DatabaseStateNotice {
   final String identity;
 }
 
-/// Μοναδικό σημείο ρύθμισης του ορίου «παλιάς» βάσης (ημέρες από την τελευταία κλήση).
-const int kOldDatabaseNoticeThresholdDays = 60;
+/// Το όριο των ημερών **δεν** ζει πια εδώ ως σταθερά.
+///
+/// Ως τις 19/09/2026 ήταν σκληρογραμμένο στις 60 ημέρες, ενώ παράλληλα
+/// υπήρχε δεύτερη ειδοποίηση με δικό της ρυθμιζόμενο όριο. Οι δύο ενοποιήθηκαν:
+/// το κατώφλι έρχεται πλέον ως παράμετρος από τη ρύθμιση του χρήστη, και η
+/// προεπιλογή του ζει στο [kDefaultDatabaseStalenessDays].
 
 /// Σταθερό κλειδί από περιεχόμενο βάσης (όχι μόνο διαδρομή).
 String databaseContentIdentity({
@@ -58,6 +63,7 @@ DatabaseStateNotice evaluateDatabaseStateNotice({
   required String dbPath,
   required DateTime fileModifiedAt,
   required DateTime now,
+  int thresholdDays = kDefaultDatabaseStalenessDays,
 }) {
   final identity = databaseContentIdentity(
     dbPath: dbPath,
@@ -110,20 +116,33 @@ DatabaseStateNotice evaluateDatabaseStateNotice({
     );
   }
 
-  final latest = _tryParseCallDate(profile.latestCallDate);
-  if (latest != null) {
-    final ageDays = now.difference(latest).inDays;
-    if (ageDays >= kOldDatabaseNoticeThresholdDays) {
-      final countLabel = _formatGreekInteger(profile.callCount ?? 0);
-      final dateLabel = _formatDisplayDate(latest);
-      return DatabaseStateNotice(
-        kind: DatabaseNoticeKind.oldDatabase,
-        message:
-            'ΠΑΛΙΑ ΒΑΣΗ: $displayName — $countLabel κλήσεις, '
-            'τελευταία στις $dateLabel',
-        identity: identity,
-      );
-    }
+  // «Πότε δούλεψε κάποιος εδώ» — η πιο πρόσφατη από τις δύο απαντήσεις που
+  // κρατά η βάση για τον εαυτό της. Καθεμιά μόνη της είναι τυφλή κάπου: οι
+  // κλήσεις δεν πιάνουν δουλειά στον Κατάλογο, το Ιστορικό καθαρίζεται
+  // περιοδικά.
+  final verdict = judgeDatabaseStaleness(
+    lastChangeAt: latestDatabaseActivityAt(
+      latestCallDate: profile.latestCallDate,
+      latestAuditAt: profile.latestAuditAt,
+    ),
+    thresholdDays: thresholdDays,
+    now: now,
+  );
+
+  if (verdict.isStale) {
+    final countLabel = _formatGreekInteger(profile.callCount ?? 0);
+    final dateLabel = _formatDisplayDate(verdict.lastChangeAt!);
+    final days = verdict.daysSinceLastChange ?? 0;
+    return DatabaseStateNotice(
+      kind: DatabaseNoticeKind.oldDatabase,
+      // Η διαδρομή μπαίνει στο μήνυμα επίτηδες: η ημερομηνία λέει **ότι**
+      // κάτι δεν πάει καλά, η διαδρομή λέει **ποια βάση** φταίει — και αυτό
+      // ακριβώς έλειπε στο επεισόδιο του «χαμένου» τμήματος (17/07/2026).
+      message:
+          'ΠΑΛΙΑ ΒΑΣΗ: $displayName — καμία αλλαγή εδώ και $days μέρες '
+          '(τελευταία $dateLabel· $countLabel κλήσεις)\n$dbPath',
+      identity: identity,
+    );
   }
 
   return DatabaseStateNotice(
@@ -131,6 +150,26 @@ DatabaseStateNotice evaluateDatabaseStateNotice({
     message: '',
     identity: identity,
   );
+}
+
+/// Η πιο πρόσφατη στιγμή που κάτι συνέβη σε αυτή τη βάση.
+///
+/// Δύο ανεξάρτητες πηγές, γιατί καθεμιά μόνη της έχει ένα τυφλό σημείο:
+/// 1. **Η τελευταία κλήση** δεν αλλάζει ποτέ σε βάση όπου δουλεύεται μόνο ο
+///    Κατάλογος — μια ζωντανή βάση θα φαινόταν νεκρή.
+/// 2. **Η τελευταία εγγραφή Ιστορικού** πιάνει κάθε είδους δουλειά, αλλά το
+///    Ιστορικό καθαρίζεται περιοδικά και μπορεί να μείνει άδειο.
+///
+/// `null` μόνο όταν **καμία** από τις δύο δεν έχει να πει κάτι — και τότε η
+/// βάση δεν κρίνεται καθόλου ως παλιά, γιατί δεν υπάρχει στοιχείο ηλικίας.
+DateTime? latestDatabaseActivityAt({
+  required String? latestCallDate,
+  required DateTime? latestAuditAt,
+}) {
+  final call = _tryParseCallDate(latestCallDate);
+  if (call == null) return latestAuditAt;
+  if (latestAuditAt == null) return call;
+  return latestAuditAt.isAfter(call) ? latestAuditAt : call;
 }
 
 DateTime? _tryParseCallDate(String? raw) {

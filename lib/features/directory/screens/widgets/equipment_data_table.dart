@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/services/default_remote_tool_display.dart';
 import '../../models/equipment_column.dart';
 import 'catalog_table_hover_focus.dart';
+import 'catalog_select_all_checkbox.dart';
 
 const _minColumnWidth = 40.0;
 const _maxColumnWidth = 600.0;
@@ -502,28 +503,13 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       for (final col in widget.visibleColumns)
         if (col.key == 'selection')
           DataColumn(
-            label: _SelectAllCheckbox(
+            label: CatalogSelectAllCheckbox(
+              visibleIds: [
+                for (final row in widget.items)
+                  if (row.$1.id != null) row.$1.id!,
+              ],
               selectedIds: widget.selectedIds,
-              items: widget.items,
-              onSelectAll: () {
-                for (final row in widget.items) {
-                  if (row.$1.id != null &&
-                      !widget.selectedIds.contains(row.$1.id)) {
-                    widget.onToggleSelection(row.$1.id!);
-                  }
-                }
-              },
-              onDeselectAll: () {
-                for (final id in widget.selectedIds.toList()) {
-                  widget.onToggleSelection(id);
-                }
-              },
-              allSelected:
-                  widget.items.isNotEmpty &&
-                  widget.items.every(
-                    (r) =>
-                        r.$1.id != null && widget.selectedIds.contains(r.$1.id),
-                  ),
+              onToggleSelection: widget.onToggleSelection,
             ),
           )
         else
@@ -681,37 +667,6 @@ class _TableResizeHandleState extends State<_TableResizeHandle> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SelectAllCheckbox extends StatelessWidget {
-  const _SelectAllCheckbox({
-    required this.selectedIds,
-    required this.items,
-    required this.onSelectAll,
-    required this.onDeselectAll,
-    required this.allSelected,
-  });
-
-  final Set<int> selectedIds;
-  final List<EquipmentRow> items;
-  final VoidCallback onSelectAll;
-  final VoidCallback onDeselectAll;
-  final bool allSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Checkbox(
-      value: allSelected,
-      tristate: true,
-      onChanged: (_) {
-        if (allSelected) {
-          onDeselectAll();
-        } else {
-          onSelectAll();
-        }
-      },
     );
   }
 }

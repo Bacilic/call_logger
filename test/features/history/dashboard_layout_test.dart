@@ -43,7 +43,7 @@ DashboardSummaryModel _summaryWithLongNames() {
     longestCalls: [],
     hourlyDistribution: [],
     byDepartment: [],
-    byIssue: [],
+    byCategory: [],
   );
 }
 

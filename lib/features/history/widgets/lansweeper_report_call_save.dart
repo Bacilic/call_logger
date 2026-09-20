@@ -48,20 +48,20 @@ class LansweeperReportCallSave {
     return null;
   }
 
-  /// Το κείμενο που θα γραφτεί ως Περιγραφή, με τον τίτλο μπροστά όταν αξίζει.
+  /// Ο τίτλος που θα κρατήσει η κλήση· `null` όταν δεν αξίζει να κρατηθεί.
   ///
   /// Ο αυτόματος τίτλος υπολογίζεται από την **πρώτη** επιλεγμένη κλήση, όπως
   /// και η προσυμπλήρωση του πεδίου: είναι το μέτρο σύγκρισης για το «έγραψε ο
   /// χρήστης δικό του τίτλο;».
-  String _issueFor(List<ReportCallItem> selected) {
+  String? _titleFor(List<ReportCallItem> selected) {
+    if (selected.isEmpty) return null;
     final primary = selected.first.call;
-    return LansweeperSyncService.buildCallIssue(
+    return LansweeperSyncService.callTitleToPersist(
       title: host.titleController.text,
       autoTitle: LansweeperSyncService.autoTicketTitle(
         category: primary.category ?? '',
         id: primary.id,
       ),
-      notes: host.notesController.text,
     );
   }
 
@@ -71,14 +71,17 @@ class LansweeperReportCallSave {
   /// υπολείπεται είναι λόγος να γίνει η εγγραφή.
   bool _hasChanges(List<ReportCallItem> selected) {
     if (selected.isEmpty) return false;
-    final issue = _issueFor(selected);
+    final issue = host.notesController.text;
     final solution = host.solutionController.text;
+    final title = _titleFor(selected);
     return selected.any(
       (item) => CallsLansweeperRepository.wouldChangeTexts(
         problem: issue,
         solution: solution,
+        title: title,
         currentIssue: item.call.issue,
         currentSolution: item.call.solution,
+        currentTitle: item.call.title,
       ),
     );
   }
@@ -103,14 +106,14 @@ class LansweeperReportCallSave {
 
     final notes = host.notesController.text;
     final solution = host.solutionController.text;
-    final issue = _issueFor(selected);
 
     await host.ref
         .read(lansweeperSyncProvider.notifier)
         .persistRefinedTexts(
           callIds: callIds,
-          problem: issue,
+          problem: notes,
           solution: solution,
+          title: _titleFor(selected),
           // Η προέλευση κρίνεται από τα ίδια κείμενα που κρίνει και η αποστολή
           // προς το Lansweeper — ο τίτλος δεν αλλάζει το αν το κείμενο ήρθε από
           // την ΤΝ ή από τα χέρια του χρήστη.

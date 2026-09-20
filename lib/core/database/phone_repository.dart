@@ -85,7 +85,7 @@ class PhoneRepository {
         whereArgs: [pid],
       );
     }
-    final ap = await _support.auditPerformingUser(executor: txn);
+    final ap = _support.auditPerformingUser();
     await AuditService.log(
       txn,
       action: AuditActions.modifyPhone,
@@ -287,7 +287,7 @@ class PhoneRepository {
     if (ids.isEmpty) return;
 
     Future<void> run(DatabaseExecutor txn) async {
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       for (final id in ids) {
         final rows = await txn.query(
           'phones',
@@ -334,7 +334,7 @@ class PhoneRepository {
     if (ids.isEmpty) return;
 
     Future<void> run(DatabaseExecutor txn) async {
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       for (final id in ids) {
         final rows = await txn.query(
           'phones',
@@ -486,7 +486,7 @@ ORDER BY p.number COLLATE NOCASE ASC
       if (beforeDept == departmentId && beforeId != null && dp.isNotEmpty) {
         return;
       }
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: AuditActions.modifyPhone,

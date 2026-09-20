@@ -22,6 +22,7 @@ import '../../../core/database/sqlite_types.dart';
 import '../services/bulk_action_undo_record.dart';
 import '../services/bulk_department_actions.dart';
 import '../services/catalog_search_evaluation.dart';
+import '../services/catalog_selection_filter.dart';
 import '../services/department_deletion_undo_record.dart';
 import 'bulk_action_undo_provider.dart';
 import 'directory_cache_refresh.dart';
@@ -47,6 +48,7 @@ class DepartmentDirectoryState {
     this.sortColumn,
     this.sortAscending = true,
     this.selectedIds = const {},
+    this.showOnlySelected = false,
     this.lastDeleted,
     this.lastDepartmentDeletionUndo,
     this.focusedRowIndex,
@@ -68,6 +70,11 @@ class DepartmentDirectoryState {
   final String? sortColumn;
   final bool sortAscending;
   final Set<int> selectedIds;
+
+  /// Η λίστα δείχνει μόνο ό,τι έχει επιλεγεί. Σβήνει μόνη της μόλις αδειάσει η
+  /// επιλογή — ο κανόνας ζει στο `catalog_selection_filter.dart`.
+  final bool showOnlySelected;
+
   final List<DepartmentModel>? lastDeleted;
 
   /// Φάκελος πλήρους αναίρεσης διαγραφής τμήματος.
@@ -398,6 +405,17 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
         return asc ? cmp : -cmp;
       });
     }
+    final selectionFilterOn = catalogSelectionFilterStaysOn(
+      requested: state.showOnlySelected,
+      selectedIds: state.selectedIds,
+    );
+    list = applyCatalogSelectionFilter(
+      list,
+      active: selectionFilterOn,
+      selectedIds: state.selectedIds,
+      idOf: (d) => d.id,
+    );
+
     final len = list.length;
     final idx = state.focusedRowIndex;
     final clamped = idx != null && idx >= len
@@ -410,6 +428,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       sortColumn: state.sortColumn,
       sortAscending: state.sortAscending,
       selectedIds: state.selectedIds,
+      showOnlySelected: selectionFilterOn,
       lastDeleted: state.lastDeleted,
       lastDepartmentDeletionUndo: state.lastDepartmentDeletionUndo,
       focusedRowIndex: clamped,
@@ -442,6 +461,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     String? sortColumn,
     bool? sortAscending,
     Set<int>? selectedIds,
+    bool? showOnlySelected,
     Object? lastDeleted = _kPatchKeep,
     Object? lastDepartmentDeletionUndo = _kPatchKeep,
     int? focusedRow,
@@ -457,6 +477,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       sortColumn: sortColumn ?? state.sortColumn,
       sortAscending: sortAscending ?? state.sortAscending,
       selectedIds: selectedIds ?? state.selectedIds,
+      showOnlySelected: showOnlySelected ?? state.showOnlySelected,
       lastDeleted: identical(lastDeleted, _kPatchKeep)
           ? state.lastDeleted
           : lastDeleted as List<DepartmentModel>?,
@@ -484,6 +505,25 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
       next.add(id);
     }
     _patch(selectedIds: next);
+    // Με ενεργό το φίλτρο η λίστα ΕΙΝΑΙ η επιλογή: ό,τι ξε-επιλέγεται πρέπει να
+    // φύγει από την οθόνη την ίδια στιγμή.
+    if (state.showOnlySelected) filterAndSort();
+  }
+
+  void clearSelection() {
+    _patch(selectedIds: {});
+    if (state.showOnlySelected) filterAndSort();
+  }
+
+  /// Ο διακόπτης «Δείξε μόνο τα επιλεγμένα» της κάτω μπάρας.
+  ///
+  /// Ανάβοντας, **καθαρίζει την αναζήτηση**: το ερώτημα είναι ακριβώς αυτό που
+  /// έκρυψε τις προηγούμενες επιλογές, και το ζητούμενο εδώ είναι να φανεί
+  /// ολόκληρη η συλλογή — όχι η τομή της με μια λέξη που έμεινε γραμμένη.
+  void toggleShowOnlySelected() {
+    final next = !state.showOnlySelected;
+    _patch(showOnlySelected: next, searchQuery: next ? '' : state.searchQuery);
+    filterAndSort();
   }
 
   Future<void> reorderDepartmentColumns(int oldIndex, int newIndex) async {

@@ -1,4 +1,4 @@
-bool parseBoolAppSetting(String? raw) {
-  final t = (raw ?? '').trim().toLowerCase();
-  return t == '1' || t == 'true' || t == 'yes';
-}
+// Η ανάγνωση λογικών ρυθμίσεων ζει πλέον στο `core` — τη χρειάζονται και
+// υπηρεσίες εκτός Ιστορικού. Η επανεξαγωγή κρατά τους παλιούς καλούντες
+// αμετάβλητους.
+export '../../../core/services/app_settings_bool.dart' show parseBoolAppSetting;

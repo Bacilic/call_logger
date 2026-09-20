@@ -54,6 +54,63 @@ Future<IntegrityFixDecision?> showIntegrityChoiceDialog(
 }
 
 /// Μη απορριπτικός διάλογος για PRAGMA corruption.
+/// Γιατί οι «Παραβιάσεις κανόνων σχέσεων» δεν έχουν κουμπί επιδιόρθωσης.
+///
+/// Δεν είναι αδιέξοδο ούτε φθορά: είναι ένδειξη ότι κάποια ροή του κώδικα
+/// γράφει παρακάμπτοντας τους κανόνες. Το σβήσιμο των γραμμών θα έκρυβε την
+/// αιτία και θα την άφηνε να ξαναγράψει τα ίδια αύριο.
+Future<void> showIntegrityForeignKeyExplanationDialog(
+  BuildContext context,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Παραβιάσεις κανόνων σχέσεων'),
+      content: const SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Η βάση βρήκε εγγραφές που δείχνουν σε άλλες που δεν υπάρχουν. '
+              'Δεν διορθώνονται αυτόματα, και αυτό είναι σκόπιμο.',
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Γιατί δεν υπάρχει κουμπί:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '• Οι κανόνες ισχύουν στη βάση εδώ και καιρό, οπότε τέτοιες '
+              'εγγραφές δεν θα έπρεπε να μπορούν να γραφτούν.',
+            ),
+            Text(
+              '• Αν εμφανίστηκαν, κάποια ροή της εφαρμογής τις γράφει '
+              'παρακάμπτοντας τους κανόνες — η αιτία είναι στον κώδικα.',
+            ),
+            Text(
+              '• Σβήνοντας τις γραμμές θα έφευγε η ένδειξη, όχι η αιτία: '
+              'αύριο θα ξαναγράφονταν οι ίδιες.',
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Τι να κάνετε: αναφέρετέ το, μαζί με το τι κάνατε λίγο πριν '
+              'εμφανιστεί. Τα δεδομένα σας δεν κινδυνεύουν στο μεταξύ.',
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Εντάξει'),
+        ),
+      ],
+    ),
+  );
+}
+
 Future<void> showIntegrityCorruptionBlockoutDialog(BuildContext context) async {
   await showDialog<void>(
     context: context,

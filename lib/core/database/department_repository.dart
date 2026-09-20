@@ -138,7 +138,7 @@ class DepartmentRepository {
 
       final newId = await findId();
       if (newId != null && recordAudit) {
-        final ap = await _support.auditPerformingUser(executor: txn);
+        final ap = _support.auditPerformingUser();
         await AuditService.log(
           txn,
           action: 'ΔΗΜΙΟΥΡΓΙΑ ΤΜΗΜΑΤΟΣ',
@@ -199,7 +199,7 @@ class DepartmentRepository {
     }
     try {
       final id = await e.insert('departments', map);
-      final ap = await _support.auditPerformingUser(executor: executor);
+      final ap = _support.auditPerformingUser();
       final nv = <String, dynamic>{};
       for (final k in map.keys) {
         if (k == 'name_key') continue;
@@ -313,7 +313,7 @@ class DepartmentRepository {
     if ((row['is_deleted'] as int?) != 1) {
       throw StateError('Το τμήμα δεν είναι διαγραμμένο.');
     }
-    final user = await _support.auditPerformingUser();
+    final user = _support.auditPerformingUser();
     final updates = <String, dynamic>{};
     updates['name'] = trimmed;
     updates['name_key'] = key;
@@ -525,7 +525,7 @@ class DepartmentRepository {
       if (diff.oldDiff.isNotEmpty) {
         // Πάντα μέσω του txn: ανάγνωση στο γυμνό db όσο η συναλλαγή είναι
         // ανοιχτή θα περίμενε τη συναλλαγή — δηλαδή για πάντα.
-        final ap = await _support.auditPerformingUser(executor: txn);
+        final ap = _support.auditPerformingUser();
         final dn = (oldRow['name'] as String?)?.trim() ?? '';
         await AuditService.log(
           txn,
@@ -558,7 +558,7 @@ class DepartmentRepository {
       for (final id in ids) {
         await txn.update('departments', map, where: 'id = ?', whereArgs: [id]);
       }
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       await AuditService.logBulk(
         txn,
         action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ',
@@ -677,7 +677,7 @@ class DepartmentRepository {
           whereArgs: [id],
         );
       }
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       await AuditService.logBulk(
         txn,
         action: action,
@@ -749,7 +749,7 @@ class DepartmentRepository {
           whereArgs: [id],
         );
       }
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       await AuditService.logBulk(
         txn,
         action: action,
@@ -776,7 +776,7 @@ class DepartmentRepository {
     if (ids.isEmpty) return;
 
     Future<void> run(DatabaseExecutor txn) async {
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       for (final id in ids) {
         final nameRows = await txn.query(
           'departments',
@@ -818,7 +818,7 @@ class DepartmentRepository {
     if (ids.isEmpty) return;
 
     Future<void> run(DatabaseExecutor txn) async {
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       await _restoreDepartmentsInTxn(txn, ids, user);
     }
 

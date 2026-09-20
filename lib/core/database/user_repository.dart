@@ -258,7 +258,7 @@ class UserRepository {
       await _support.replaceUserPhonesInTxn(txn, id, phones);
     }
     final afterPhoneIds = await _support.userPhoneIds(txn, id);
-    final ap = await _support.auditPerformingUser(executor: txn);
+    final ap = _support.auditPerformingUser();
     final rowSnap = await _support.userRowById(txn, id);
     final nv = _userRowAuditValues(rowSnap ?? {});
     final nums = await _userPhoneNumbersOrdered(txn, id);
@@ -480,7 +480,7 @@ class UserRepository {
 
     final newRow = await _support.userRowById(txn, id);
     final afterPhoneIds = await _support.userPhoneIds(txn, id);
-    final ap = await _support.auditPerformingUser(executor: txn);
+    final ap = _support.auditPerformingUser();
     final oldAudit = oldRow == null
         ? <String, dynamic>{}
         : _userRowAuditValues(oldRow);
@@ -661,7 +661,7 @@ class UserRepository {
           await _support.replaceUserPhonesInTxn(txn, id, list);
         }
       }
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       final fields = Map<String, dynamic>.from(map);
       if (phoneBulk != null) {
         fields['phone'] = phoneBulk;
@@ -825,7 +825,7 @@ class UserRepository {
   }
 
   Future<void> _deleteUsersOn(DatabaseExecutor txn, List<int> ids) async {
-    final user = await _support.auditPerformingUser(executor: txn);
+    final user = _support.auditPerformingUser();
     final phoneIdsByUser = <int, Set<int>>{};
     final equipmentIdsByUser = <int, Set<int>>{};
     for (final uid in ids) {
@@ -911,7 +911,7 @@ class UserRepository {
     final result =
         <int, ({List<String> phoneNumbers, List<int> equipmentIds})>{};
     if (ids.isEmpty) return result;
-    final user = await _support.auditPerformingUser(executor: txn);
+    final user = _support.auditPerformingUser();
     for (final id in ids) {
       final phoneRows = await txn.rawQuery(
         'SELECT p.number AS number FROM user_phones up '
@@ -964,7 +964,7 @@ class UserRepository {
     if (ids.isEmpty) return;
 
     Future<void> run(DatabaseExecutor txn) async {
-      final user = await _support.auditPerformingUser(executor: txn);
+      final user = _support.auditPerformingUser();
       for (final id in ids) {
         final nameRows = await txn.query(
           'users',
@@ -1162,7 +1162,7 @@ class UserRepository {
         auditOriginSuffix,
       );
 
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       final nv = <String, dynamic>{};
       if (phoneChanged) nv['phone_associated'] = trimmedPhone;
       if (equipmentLinked && equipmentIdForAudit != null) {

@@ -8,6 +8,7 @@ class DatabaseStats {
     this.label,
     this.schemaVersion,
     this.lastChangeAt,
+    this.oldestRecordAt,
     this.firstCallDate,
     this.lastCallDate,
     this.reclaimableBytes,
@@ -39,6 +40,12 @@ class DatabaseStats {
   ///
   /// Η πιο γρήγορη απάντηση στο «μήπως άνοιξα παλιό αντίγραφο;».
   final DateTime? lastChangeAt;
+
+  /// Πότε γράφτηκε η παλαιότερη εγγραφή που θυμάται η βάση.
+  ///
+  /// Από αυτήν βγαίνει ο ρυθμός που μεγαλώνει το αρχείο, και από τον
+  /// ρυθμό η εκτίμηση «σε πόσο καιρό φτάνει στο επόμενο όριο».
+  final DateTime? oldestRecordAt;
 
   /// Πρώτη και τελευταία ημέρα με καταγεγραμμένη κλήση — πόση περίοδο καλύπτει
   /// η βάση. Σε αντίθεση με το ιστορικό, οι κλήσεις δεν καθαρίζονται περιοδικά,

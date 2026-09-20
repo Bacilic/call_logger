@@ -30,26 +30,14 @@ const _gatePaths = <String>{
   'lib/core/services/scoped_settings.dart',
 };
 
-/// ΧΡΕΟΣ — γραμμές που υπήρχαν όταν μπήκε ο φρουρός. Η λίστα **αδειάζει**.
+/// ΧΡΕΟΣ — **άδειο**. Τα επτά τελευταία αδρανή διπλόγραφα έφυγαν στις
+/// 18/09/2026 και ο φρουρός φυλάει πλέον χωρίς καμία εξαίρεση.
 ///
-/// ΔΕΝ προστίθενται νέες εγγραφές: αν ο έλεγχος σε έφερε εδώ, πέρασε την
-/// ανάγνωση και την εγγραφή από το `ScopedSettings` αντί να μακρύνεις τη λίστα.
-const _debt = <String, Set<String>>{
-  // ΑΔΡΑΝΗ ΔΙΠΛΟΓΡΑΦΑ — σταθερές που κανείς στο `lib/` δεν χρησιμοποιεί (μόνο
-  // έλεγχοι, ή κανείς). Δεν βλάπτουν σήμερα, αλλά είναι ακριβώς η παγίδα που
-  // έκρυψε τις έξι παραβιάσεις που διορθώθηκαν στις 17/09/2026: έτοιμο ωμό όνομα, έτοιμο για χρήση.
-  'lib/core/database/settings_repository.dart': {
-    'gemini_auto_resubmit',
-    'gemini_prompt_template',
-    'gemini_prompt_template_user_default',
-    'lansweeper_agent_username',
-    'lansweeper_report_range',
-    'lansweeper_ticket_submit_form_prefs',
-  },
-  'lib/features/dictionary/providers/lexicon_list_filters_provider.dart': {
-    'lexicon_list_filters',
-  },
-};
+/// Ο χάρτης μένει εδώ γιατί κρατά τον έλεγχο «μπαγιάτικης εξαίρεσης» ζωντανό:
+/// ό,τι μπει, οφείλει να φύγει. ΔΕΝ προστίθενται νέες εγγραφές — αν ο έλεγχος
+/// σε έφερε εδώ, πέρασε την ανάγνωση και την εγγραφή από το `ScopedSettings`
+/// αντί να μακρύνεις τη λίστα.
+const _debt = <String, Set<String>>{};
 
 /// Τα κλειδιά όπως τα δηλώνει ο κατάλογος, διαβασμένα από την ίδια την πηγή.
 final _keyDeclaration = RegExp("ProfileSettingKey\\(\\s*'([a-z0-9_]+)'");

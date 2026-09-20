@@ -432,13 +432,13 @@ void main() {
     tearDown(CurrentOperator.reset);
 
     test('χωρίς αναγνωρισμένο χρήστη γράφεται παύλα', () async {
-      expect(await AuditService.performingUser(), '—');
+      expect(AuditService.performingUser(), '—');
     });
 
     test('με ενεργό χρήστη γράφεται το όνομά του', () async {
       activateTestOperator('Βασίλης Δρόσος');
 
-      expect(await AuditService.performingUser(), 'Βασίλης Δρόσος');
+      expect(AuditService.performingUser(), 'Βασίλης Δρόσος');
     });
 
     test('κενό όνομα δεν αφήνει κενή σφραγίδα', () async {
@@ -446,7 +446,7 @@ void main() {
         Operator(displayName: '   ', createdAt: DateTime(2026, 1, 1)),
       );
 
-      expect(await AuditService.performingUser(), '—');
+      expect(AuditService.performingUser(), '—');
     });
   });
 

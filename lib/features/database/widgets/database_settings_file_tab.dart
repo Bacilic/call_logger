@@ -22,6 +22,7 @@ import '../services/pre_restore_snapshot.dart';
 import '../utils/database_path_dropdown_options.dart';
 import 'database_rename_notice_text.dart';
 import 'database_settings_switch_flows.dart';
+import 'database_staleness_setting_section.dart';
 
 /// Καρτέλα «Βάση»: διαδρομή αρχείου βάσης και δημιουργία νέου `.db`.
 class DatabaseSettingsFileTab extends ConsumerStatefulWidget {
@@ -311,6 +312,8 @@ class _DatabaseSettingsFileTabState
             onRestore: () => switchToPickedDatabasePath(_preRestore!.path),
           ),
         ],
+        const SizedBox(height: 16),
+        const DatabaseStalenessSettingSection(),
         const SizedBox(height: 16),
         Text(
           'Δημιουργία νέου αρχείου βάσης',

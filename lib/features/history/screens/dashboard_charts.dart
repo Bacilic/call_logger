@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../core/utils/greek_date_format.dart';
 import '../models/dashboard_summary_model.dart';
 import '../utils/hourly_axis_range.dart';
-import '../utils/issue_distribution.dart';
+import '../utils/category_distribution.dart';
 
 /// «1 κλήση» / «5 κλήσεις» — το πλήθος είναι ακέραιος, ποτέ «5.0».
 String callCountLabel(int count) => count == 1 ? '1 κλήση' : '$count κλήσεις';
@@ -651,22 +651,22 @@ class TrendLineChart extends StatelessWidget {
   }
 }
 
-/// Η «Κατανομή Βλαβών» ως λίστα οριζόντιων μπαρών.
+/// Η «Κατανομή ανά κατηγορία» ως λίστα οριζόντιων μπαρών.
 ///
 /// Αντικατέστησε το donut: τα μήκη συγκρίνονται πολύ ευκολότερα από τις γωνίες,
 /// η κάρτα χαμηλώνει στο μισό, και οι στήλες μένουν στοιχισμένες αντί να
 /// σπρώχνονται στο δεξί άκρο από το όνομα.
-class IssueDistributionList extends StatelessWidget {
-  const IssueDistributionList({
+class CategoryDistributionList extends StatelessWidget {
+  const CategoryDistributionList({
     super.key,
-    required this.issues,
+    required this.categories,
     required this.metric,
     required this.barColors,
     required this.mutedColor,
   });
 
-  final List<IssueStat> issues;
-  final IssueDistributionMetric metric;
+  final List<CategoryStat> categories;
+  final CategoryDistributionMetric metric;
   final List<Color> barColors;
   final Color mutedColor;
 
@@ -677,7 +677,7 @@ class IssueDistributionList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final view = buildIssueDistribution(issues, metric);
+    final view = buildCategoryDistribution(categories, metric);
     if (view.isEmpty) {
       return const SizedBox(
         height: 120,
@@ -686,7 +686,7 @@ class IssueDistributionList extends StatelessWidget {
     }
 
     final theme = Theme.of(context);
-    final byCount = metric == IssueDistributionMetric.count;
+    final byCount = metric == CategoryDistributionMetric.count;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -716,11 +716,11 @@ class IssueDistributionList extends StatelessWidget {
 
   Widget _row({
     required ThemeData theme,
-    required IssueDistributionRow row,
+    required CategoryDistributionRow row,
     required Color color,
     required bool byCount,
   }) {
-    final duration = formatIssueChartDurationSeconds(row.durationSeconds);
+    final duration = formatCategoryChartDurationSeconds(row.durationSeconds);
     final primary = byCount ? '${row.count}' : duration;
     final secondary = byCount ? duration : '${row.count}';
     final numeric = theme.textTheme.bodySmall?.copyWith(

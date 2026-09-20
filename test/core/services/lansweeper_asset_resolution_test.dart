@@ -2,14 +2,14 @@
 // του κωδικού, χωρίς σύνδεση στην καρτέλα του Καταλόγου (σενάριο 12/08/2026:
 // κλήση με «470», εξοπλισμός 470 υπαρκτός, ticket χωρίς asset).
 //
-//   flutter test test/core/services/lansweeper_call_asset_resolution_test.dart
+//   flutter test test/core/services/lansweeper_asset_resolution_test.dart
 
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/equipment_repository.dart';
 import 'package:call_logger/core/services/lansweeper_asset_target.dart';
-import 'package:call_logger/core/services/lansweeper_call_asset_resolution.dart';
+import 'package:call_logger/core/services/lansweeper_asset_resolution.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -53,7 +53,7 @@ void main() {
     () async {
       await insertEquipment(code: '470');
 
-      final target = await resolveCallLansweeperAsset(
+      final target = await resolveLansweeperAssetTarget(
         repository: repo,
         equipmentId: null,
         equipmentText: '470',
@@ -69,7 +69,7 @@ void main() {
     () async {
       await insertEquipment(code: '470', assetName: '10.10.5.7');
 
-      final target = await resolveCallLansweeperAsset(
+      final target = await resolveLansweeperAssetTarget(
         repository: repo,
         equipmentId: null,
         equipmentText: '470',
@@ -81,7 +81,7 @@ void main() {
   );
 
   test('κωδικός εκτός Καταλόγου πέφτει στον κανόνα «PC + κωδικός»', () async {
-    final target = await resolveCallLansweeperAsset(
+    final target = await resolveLansweeperAssetTarget(
       repository: repo,
       equipmentId: null,
       equipmentText: '3675',
@@ -94,7 +94,7 @@ void main() {
     final linkedId = await insertEquipment(code: '999', assetName: 'PRINTER-A');
     await insertEquipment(code: '470');
 
-    final target = await resolveCallLansweeperAsset(
+    final target = await resolveLansweeperAssetTarget(
       repository: repo,
       equipmentId: linkedId,
       equipmentText: '470',
@@ -106,7 +106,7 @@ void main() {
   test('διαγραμμένη καρτέλα δεν χρησιμοποιείται — μένει ο κανόνας', () async {
     await insertEquipment(code: '470', assetName: 'OLD-ASSET', isDeleted: true);
 
-    final target = await resolveCallLansweeperAsset(
+    final target = await resolveLansweeperAssetTarget(
       repository: repo,
       equipmentId: null,
       equipmentText: '470',
@@ -117,7 +117,7 @@ void main() {
 
   test('κενό κείμενο χωρίς σύνδεση δεν δίνει εξοπλισμό', () async {
     expect(
-      await resolveCallLansweeperAsset(
+      await resolveLansweeperAssetTarget(
         repository: repo,
         equipmentId: null,
         equipmentText: '   ',
@@ -125,7 +125,7 @@ void main() {
       isNull,
     );
     expect(
-      await resolveCallLansweeperAsset(
+      await resolveLansweeperAssetTarget(
         repository: repo,
         equipmentId: null,
         equipmentText: null,
@@ -135,7 +135,7 @@ void main() {
   });
 
   test('κείμενο που δεν βγάζει έγκυρο στόχο δεν δίνει εξοπλισμό', () async {
-    final target = await resolveCallLansweeperAsset(
+    final target = await resolveLansweeperAssetTarget(
       repository: repo,
       equipmentId: null,
       equipmentText: '12',
@@ -149,7 +149,7 @@ void main() {
   });
 
   test('IPv4 στο κείμενο μένει IPv4', () async {
-    final target = await resolveCallLansweeperAsset(
+    final target = await resolveLansweeperAssetTarget(
       repository: repo,
       equipmentId: null,
       equipmentText: '10.10.201.22',
