@@ -113,6 +113,7 @@ class DatabaseStatsService {
       label: identity.label,
       schemaVersion: identity.schemaVersion,
       lastChangeAt: identity.lastChangeAt,
+      oldestRecordAt: identity.oldestRecordAt,
       firstCallDate: identity.firstCallDate,
       lastCallDate: identity.lastCallDate,
       reclaimableBytes: identity.reclaimableBytes,
@@ -150,6 +151,7 @@ class DatabaseStatsService {
       label: await quiet(repo.readLabel),
       schemaVersion: await quiet(repo.readSchemaVersion),
       lastChangeAt: await quiet(repo.readLastChangeAt),
+      oldestRecordAt: await quiet(repo.readOldestRecordAt),
       firstCallDate: range.first,
       lastCallDate: range.last,
       reclaimableBytes: await quiet(repo.readReclaimableBytes),
@@ -164,6 +166,7 @@ class _DatabaseIdentity {
     this.label,
     this.schemaVersion,
     this.lastChangeAt,
+    this.oldestRecordAt,
     this.firstCallDate,
     this.lastCallDate,
     this.reclaimableBytes,
@@ -173,6 +176,9 @@ class _DatabaseIdentity {
   final String? label;
   final int? schemaVersion;
   final DateTime? lastChangeAt;
+
+  /// Η παλαιότερη εγγραφή που θυμάται η βάση — για τον ρυθμό αύξησης.
+  final DateTime? oldestRecordAt;
   final String? firstCallDate;
   final String? lastCallDate;
   final int? reclaimableBytes;

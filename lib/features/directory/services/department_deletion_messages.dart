@@ -97,3 +97,84 @@ String departmentFormSaveCancelScopeDescription(
   if (name.isEmpty) return 'η αποθήκευση $entity';
   return 'η αποθήκευση $entity «$name»';
 }
+
+// ── Το snackbar μετά τη διαγραφή ─────────────────────────────────────────────
+
+/// Ένας προορισμός μεταφοράς, όπως τον ονομάζει το μήνυμα.
+///
+/// Το [isNew] ξεχωρίζει το τμήμα που μόλις φτιάχτηκε από ένα που προϋπήρχε:
+/// «στο νέο Γραμματεία ΤΕΠ» λέει στον χρήστη ότι η διαγραφή γέννησε τμήμα.
+typedef DepartmentTransferTarget = ({String name, bool isNew});
+
+/// Τα ονόματα των διαγραμμένων τμημάτων, κομμένα ώστε να χωρούν σε μία γραμμή.
+///
+/// Το snackbar είναι μία γραμμή· με δέκα τμήματα τα ονόματα θα την έσπρωχναν
+/// έξω από την οθόνη. Επιστρέφεται και η πλήρης λίστα, για την υπόδειξη.
+({String display, String? allNames}) departmentDeletionNames(
+  List<String> departmentNames, {
+  int maxLength = 70,
+}) {
+  final names = [
+    for (final raw in departmentNames) raw.trim().isEmpty ? '?' : raw,
+  ];
+  if (names.isEmpty) return (display: '', allNames: null);
+
+  var take = 0;
+  var length = 0;
+  for (; take < names.length; take++) {
+    final addition = (take == 0 ? '' : ', ') + names[take];
+    if (length + addition.length > maxLength) break;
+    length += addition.length;
+  }
+  final display = take < names.length
+      ? '${names.sublist(0, take).join(', ')}...'
+      : names.join(', ');
+  return (display: display, allNames: names.join(', '));
+}
+
+/// Το κείμενο του snackbar μετά τη διαγραφή τμημάτων.
+///
+/// Το [fallbackMessage] είναι το μήνυμα της πολιτικής αναίρεσης και μπαίνει
+/// όταν δεν υπάρχει κανένα όνομα να αναφερθεί — τότε το «Το τμήμα Χ
+/// διαγράφηκε» δεν έχει τι να πει.
+///
+/// Η μεταφορά ονομάζει τον προορισμό **μόνο όταν είναι ένας**. Με δύο και πάνω
+/// το μήνυμα θα γινόταν κατάλογος, οπότε λέει μόνο ότι τα στοιχεία δεν χάθηκαν.
+String departmentDeletionSummaryMessage({
+  required String displayNames,
+  required int deletedCount,
+  required List<DepartmentTransferTarget> transferTargets,
+  required bool transferredEmployees,
+  required bool transferredEquipment,
+  required bool transferredPhones,
+  required String fallbackMessage,
+}) {
+  if (displayNames.isEmpty) return fallbackMessage;
+
+  final deletedPart = deletedCount == 1
+      ? 'Το τμήμα $displayNames διαγράφηκε.'
+      : 'Τα τμήματα $displayNames διαγράφηκαν.';
+
+  final movedCategories = <String>[
+    if (transferredEmployees) 'υπαλλήλων',
+    if (transferredEquipment) 'εξοπλισμού',
+    if (transferredPhones) 'τηλεφώνων',
+  ];
+  if (movedCategories.isEmpty) return deletedPart;
+
+  if (transferTargets.length == 1) {
+    final target = transferTargets.first;
+    final kind = target.isNew ? 'νέο' : 'υπάρχον';
+    return '$deletedPart Επιτυχής μεταφορά '
+        '${joinGreekGenitive(movedCategories)} στο $kind ${target.name}.';
+  }
+  return '$deletedPart Τα στοιχεία μεταφέρθηκαν σε άλλα τμήματα.';
+}
+
+/// «υπαλλήλων, εξοπλισμού και τηλεφώνων» — κόμματα ως το τελευταίο, μετά «και».
+String joinGreekGenitive(List<String> items) {
+  if (items.isEmpty) return '';
+  if (items.length == 1) return items.first;
+  if (items.length == 2) return '${items[0]} και ${items[1]}';
+  return '${items.sublist(0, items.length - 1).join(', ')} και ${items.last}';
+}

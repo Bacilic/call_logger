@@ -21,6 +21,7 @@ import '../models/user_directory_column.dart';
 import '../services/bulk_action_undo_record.dart';
 import '../services/bulk_user_actions.dart';
 import '../services/catalog_search_evaluation.dart';
+import '../services/catalog_selection_filter.dart';
 import '../services/user_deletion_undo_record.dart';
 import '../services/user_equipment_codes.dart';
 import 'bulk_action_undo_provider.dart';
@@ -58,6 +59,7 @@ class DirectoryState {
     this.sortColumn,
     this.sortAscending = true,
     this.selectedIds = const {},
+    this.showOnlySelected = false,
     this.lastDeleted,
     this.lastUserDeletionUndo,
     this.focusedRowIndex,
@@ -82,6 +84,11 @@ class DirectoryState {
   final String? sortColumn;
   final bool sortAscending;
   final Set<int> selectedIds;
+
+  /// Η λίστα δείχνει μόνο ό,τι έχει επιλεγεί. Σβήνει μόνη της μόλις αδειάσει η
+  /// επιλογή — ο κανόνας ζει στο `catalog_selection_filter.dart`.
+  final bool showOnlySelected;
+
   final List<UserModel>? lastDeleted;
 
   /// Φάκελος πλήρους αναίρεσης διαγραφής υπαλλήλου (τηλέφωνα/εξοπλισμός).
@@ -117,6 +124,7 @@ class DirectoryState {
     String? sortColumn,
     bool? sortAscending,
     Set<int>? selectedIds,
+    bool? showOnlySelected,
     Object? lastDeleted = _kUnsetLastDeleted,
     Object? lastUserDeletionUndo = _kUnsetDeletionUndo,
     Object? focusedRowIndex = _kUnsetFocus,
@@ -144,6 +152,7 @@ class DirectoryState {
       sortColumn: sortColumn ?? this.sortColumn,
       sortAscending: sortAscending ?? this.sortAscending,
       selectedIds: selectedIds ?? this.selectedIds,
+      showOnlySelected: showOnlySelected ?? this.showOnlySelected,
       lastDeleted: nextLastDeleted,
       lastUserDeletionUndo: nextUndo,
       focusedRowIndex: nextFocus,
@@ -272,6 +281,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       sortColumn: state.sortColumn,
       sortAscending: state.sortAscending,
       selectedIds: state.selectedIds,
+      showOnlySelected: state.showOnlySelected,
       lastDeleted: state.lastDeleted,
       lastUserDeletionUndo: state.lastUserDeletionUndo,
       focusedRowIndex: state.focusedRowIndex,
@@ -292,8 +302,21 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   /// καταγράφει πόσα ευρήματα ταίριαξαν μόνο σε κρυφά πεδία.
   void filterAndSort() {
     final builder = CatalogSearchSummaryBuilder();
-    final users = _filterAndSortPersonalUsers(builder);
     final shared = _filterAndSortSharedPhones(builder);
+
+    // Το φίλτρο «μόνο τα επιλεγμένα» αφορά μόνο τους προσωπικούς υπαλλήλους:
+    // τα κοινόχρηστα τηλέφωνα δεν επιλέγονται καθόλου.
+    final selectionFilterOn = catalogSelectionFilterStaysOn(
+      requested: state.showOnlySelected,
+      selectedIds: state.selectedIds,
+    );
+    final users = applyCatalogSelectionFilter(
+      _filterAndSortPersonalUsers(builder),
+      active: selectionFilterOn,
+      selectedIds: state.selectedIds,
+      idOf: (u) => u.id,
+    );
+
     final len = state.catalogMode == UserCatalogMode.shared
         ? shared.length
         : users.length;
@@ -305,11 +328,26 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     state = state.copyWith(
       filteredUsers: users,
       filteredNonUserPhones: shared,
+      showOnlySelected: selectionFilterOn,
       focusedRowIndex: clamped,
       searchSummary: idQuery.isEmpty
           ? CatalogSearchSummary.empty
           : builder.build(),
     );
+  }
+
+  /// Ο διακόπτης «Δείξε μόνο τα επιλεγμένα» της κάτω μπάρας.
+  ///
+  /// Ανάβοντας, **καθαρίζει την αναζήτηση**: το ερώτημα είναι ακριβώς αυτό που
+  /// έκρυψε τις προηγούμενες επιλογές, και το ζητούμενο εδώ είναι να φανεί
+  /// ολόκληρη η συλλογή — όχι η τομή της με μια λέξη που έμεινε γραμμένη.
+  void toggleShowOnlySelected() {
+    final next = !state.showOnlySelected;
+    state = state.copyWith(
+      showOnlySelected: next,
+      searchQuery: next ? '' : state.searchQuery,
+    );
+    filterAndSort();
   }
 
   /// Γεγονότα χρήστη με τις ετικέτες των στηλών τους· η «Τοποθεσία» και το
@@ -530,10 +568,14 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       next.add(id);
     }
     state = state.copyWith(selectedIds: next);
+    // Με ενεργό το φίλτρο η λίστα ΕΙΝΑΙ η επιλογή: ό,τι ξε-επιλέγεται πρέπει να
+    // φύγει από την οθόνη την ίδια στιγμή.
+    if (state.showOnlySelected) filterAndSort();
   }
 
   void clearSelection() {
     state = state.copyWith(selectedIds: {});
+    if (state.showOnlySelected) filterAndSort();
   }
 
   /// Αλλαγή σειράς στο διάλογος Στήλες (δείκτες χωρίς τη στήλη [UserDirectoryColumn.selection]).
@@ -731,6 +773,34 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
+  }
+
+  /// Η αφετηρία **μετά** τις εγγραφές που έκανε η ίδια η αποθήκευση.
+  ///
+  /// Ο φρουρός φυλάει από ό,τι έγραψαν **άλλοι**. Η αποθήκευση του υπαλλήλου
+  /// όμως αποδεσμεύει πρώτη τα τηλέφωνα που μένουν πίσω στο τμήμα, και γράφει
+  /// μετά την καρτέλα: όταν φτάσει ο φρουρός, η γραμμή έχει ήδη αλλάξει — από
+  /// εμάς. Χωρίς αυτή την ανανέωση, ο χρήστης έβλεπε «Κάποιος πρόλαβε» για
+  /// δουλειά που μόλις έκανε ο ίδιος, με προεπιλεγμένη την ακύρωσή της.
+  ///
+  /// Αφαιρούνται **μόνο** τα [releasedPhones] — ό,τι άλλο κουνήθηκε στο μεταξύ
+  /// παραμένει διένεξη, όπως πρέπει.
+  static UserModel userBaselineAfterOwnPhoneWrites(
+    UserModel expected, {
+    required Set<String> releasedPhones,
+  }) {
+    if (releasedPhones.isEmpty) return expected;
+    final leaving = {
+      for (final p in releasedPhones)
+        if (p.trim().isNotEmpty) p.trim(),
+    };
+    if (leaving.isEmpty) return expected;
+    return expected.copyWith(
+      phones: [
+        for (final p in expected.phones)
+          if (!leaving.contains(p.trim())) p,
+      ],
+    );
   }
 
   /// Η αφετηρία της σύγκρισης, με τα **ίδια κλειδιά** που γράφει η καρτέλα.

@@ -105,7 +105,7 @@ class CategoryRepository {
     final soft = await _findSoftDeletedCategoryRowByNormalizedName(t);
     if (soft != null) {
       final id = soft.id;
-      final user = await _support.auditPerformingUser();
+      final user = _support.auditPerformingUser();
       await db.transaction((txn) async {
         await txn.update(
           'categories',
@@ -144,7 +144,7 @@ class CategoryRepository {
     if (await categoryNormalizedNameTaken(t, excludeId: id)) {
       throw StateError('Υπάρχει ήδη κατηγορία με ισοδύναμο όνομα.');
     }
-    final user = await _support.auditPerformingUser();
+    final user = _support.auditPerformingUser();
     await db.transaction((txn) async {
       await txn.update(
         'categories',
@@ -172,7 +172,7 @@ class CategoryRepository {
 
   Future<void> softDeleteCategories(List<int> ids) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser();
+    final user = _support.auditPerformingUser();
     await db.transaction((txn) async {
       for (final id in ids) {
         final catRows = await txn.query(
@@ -206,7 +206,7 @@ class CategoryRepository {
 
   Future<void> restoreCategories(List<int> ids) async {
     if (ids.isEmpty) return;
-    final user = await _support.auditPerformingUser();
+    final user = _support.auditPerformingUser();
     await db.transaction((txn) async {
       for (final id in ids) {
         final catRows = await txn.query(

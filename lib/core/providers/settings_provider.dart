@@ -16,6 +16,12 @@ final showTasksBadgeProvider = FutureProvider<bool>(
   (ref) => SettingsService().windowUi.getShowTasksBadge(),
 );
 
+/// Προεπισκόπηση πριν την εκτύπωση εκκρεμότητας. Invalidate μετά από τις
+/// Ρυθμίσεις Εκκρεμοτήτων.
+final taskPrintPreviewProvider = FutureProvider<bool>(
+  (ref) => SettingsService().windowUi.getTaskPrintPreview(),
+);
+
 /// Ειδοποίηση όταν κάποιος αγγίξει εκκρεμότητα που κατέχω. Invalidate μετά
 /// από τις Ρυθμίσεις Εκκρεμοτήτων — και από το κουτάκι του ίδιου του διαλόγου.
 final notifyTaskHandoversProvider = FutureProvider<bool>(

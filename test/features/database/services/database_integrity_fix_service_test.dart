@@ -106,6 +106,43 @@ void main() {
       expect(si!.trim(), isNotEmpty);
     });
 
+    // Το κενό ευρετήριο δεν είναι η μόνη βλάβη: ένα γεμάτο ευρετήριο γραμμένο
+    // με παλιότερους κανόνες φαίνεται υγιές και δεν βρίσκεται.
+    test('εντοπίζει και ξαναχτίζει ευρετήριο κλήσης σε παλιό κανόνα', () async {
+      final db = await DatabaseHelper.instance.database;
+      final callId = await db.insert('calls', {
+        'phone_text': '4001',
+        'caller_text': 'Βασίλης Δρόσος',
+        'status': 'completed',
+        // Η μορφή που έγραφε η εφαρμογή πριν τις 30/06/2026: τελικό «ς».
+        'search_index': 'βασιλης δροσος 4001',
+        'lansweeper_state': 'unsent',
+        'is_deleted': 0,
+      });
+
+      final findings = await checkService.runCheck(
+        IntegrityCheckType.callsMissingSearchIndex,
+      );
+      final mine = findings.where((f) => f.affectedId == callId).toList();
+      expect(
+        mine,
+        hasLength(1),
+        reason:
+            'Ο έλεγχος πρέπει να πιάνει και το γεμάτο ευρετήριο που δεν '
+            'συμφωνεί με τους σημερινούς κανόνες.',
+      );
+      expect(mine.first.title, contains('ξεπερασμένο'));
+
+      final result = await fixService.applyFix(
+        mine.first,
+        const IntegrityFixConfirm(),
+      );
+      expect(result.success, isTrue);
+
+      final row = await db.query('calls', where: 'id = ?', whereArgs: [callId]);
+      expect(row.first['search_index'], contains('δροσοσ'));
+    });
+
     test('rebuilds task search_index', () async {
       final db = await DatabaseHelper.instance.database;
       final now = DateTime.now().toIso8601String();
@@ -563,6 +600,52 @@ void main() {
         whereArgs: [DatabaseHelper.auditActionIntegrityFix, deptId],
       );
       expect(audits, isNotEmpty);
+    });
+
+    // Δύο διαγνωστικά δεν διορθώνονται από τα δεδομένα, για διαφορετικό λόγο
+    // το καθένα — και τα δύο οφείλουν να το ΛΕΝΕ, όχι να ανταποκρίνονται με
+    // ψεύτικη επιτυχία που σβήνει το εύρημα από την οθόνη.
+    group('τα δύο που δεν διορθώνονται', () {
+      DatabaseIntegrityFinding findingOf(IntegrityCheckType type) {
+        return DatabaseIntegrityFinding(
+          severity: IntegritySeverity.critical,
+          category: IntegrityCategory.referential,
+          checkType: type,
+          title: type.displayNameEl,
+          description: 'σενάριο ελέγχου',
+        );
+      }
+
+      test('ο έλεγχος SQLite αρνείται ρητά', () async {
+        final result = await fixService.applyFix(
+          findingOf(IntegrityCheckType.pragmaQuickCheck),
+          const IntegrityFixConfirm(),
+        );
+        expect(result, isA<IntegrityFixFailure>());
+      });
+
+      // ΤΟ ΣΦΑΛΜΑ: ο χρήστης πατά «Διόρθωση», η εφαρμογή λέει ότι έγινε, το
+      // εύρημα φεύγει από τη λίστα — και τίποτα δεν άλλαξε.
+      test('οι παραβιάσεις κανόνων ΔΕΝ δηλώνουν ψεύτικη επιτυχία', () async {
+        final result = await fixService.applyFix(
+          findingOf(IntegrityCheckType.foreignKeyViolations),
+          const IntegrityFixConfirm(),
+        );
+        expect(
+          result,
+          isA<IntegrityFixFailure>(),
+          reason:
+              'Ο εκτελεστής δεν αγγίζει τα δεδομένα για αυτόν τον τύπο. Αν '
+              'απαντήσει «επιτυχία», η οθόνη σβήνει το εύρημα σαν λυμένο.',
+        );
+      });
+
+      // Και τα δύο πρέπει να μένουν έξω από τη «Διόρθωση όλων»: εκεί δεν
+      // υπάρχει καν βλέμμα χρήστη να προσέξει ότι κάτι δεν έγινε.
+      test('κανένα από τα δύο δεν μπαίνει στη «Διόρθωση όλων»', () {
+        expect(IntegrityCheckType.pragmaQuickCheck.allowsBulkFix, isFalse);
+        expect(IntegrityCheckType.foreignKeyViolations.allowsBulkFix, isFalse);
+      });
     });
   });
 }

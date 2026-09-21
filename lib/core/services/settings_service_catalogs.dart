@@ -7,6 +7,7 @@ import '../utils/homoglyph_text_normalizer.dart';
 import 'shared_settings.dart';
 import '../config/audit_retention_config.dart';
 import '../../features/database/debug/publish_cli.dart';
+import '../database/database_staleness.dart';
 import 'settings_list_conflict.dart';
 import 'profile_settings.dart';
 import 'scoped_settings.dart';
@@ -146,6 +147,21 @@ class SettingsServiceCatalogs {
     await SharedSettings.write(
       SharedSettingKeys.auditRetentionConfig,
       jsonEncode(config.toJson()),
+    );
+  }
+
+  /// Πόσες μέρες χωρίς καμία εγγραφή κάνουν τη βάση «παλιά».
+  Future<int> getDatabaseStalenessDays() async {
+    final raw = await SharedSettings.read(
+      SharedSettingKeys.databaseStalenessDays,
+    );
+    return normalizeDatabaseStalenessDays(int.tryParse(raw?.trim() ?? ''));
+  }
+
+  Future<void> setDatabaseStalenessDays(int days) async {
+    await SharedSettings.write(
+      SharedSettingKeys.databaseStalenessDays,
+      '${normalizeDatabaseStalenessDays(days)}',
     );
   }
 

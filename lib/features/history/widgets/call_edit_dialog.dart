@@ -1,4 +1,5 @@
 import '../../../core/widgets/dialog_snackbar_scope.dart';
+import 'package:call_logger/core/widgets/dialog_scrollable_content.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -26,7 +27,7 @@ import 'linked_tasks_card.dart';
 import '../providers/history_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_sync_provider.dart';
-import '../services/lansweeper_submission_warnings.dart';
+import '../services/lansweeper_link_metadata.dart';
 import 'lansweeper/lansweeper_edit_warning.dart';
 
 /// Η επεξεργασία παλιάς κλήσης δανείζεται τα πεδία καλούντα της οθόνης
@@ -395,15 +396,24 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     // εκτελείται και άλλοτε όχι αλλάζει το σύνολο των εξαρτήσεων του widget
     // από build σε build. Το ιστορικό είναι μια μικρή τοπική ανάγνωση και
     // δεν κοστίζει τίποτα όταν δεν χρειάζεται.
-    final lansweeperWarnings = ref
+    // Μία ανάγνωση, δύο απαντήσεις: οι προειδοποιήσεις και το όνομα βγαίνουν
+    // από την ΙΔΙΑ γραμμή ιστορικού. Δύο χωριστά `watch` θα μπορούσαν να
+    // πέσουν σε διαφορετικά στιγμιότυπα και να δείξουν το όνομα της μιας
+    // καταχώρησης δίπλα στις προειδοποιήσεις μιας άλλης.
+    final lansweeperLinks = ref
         .watch(callExternalLinksProvider(widget.callId))
         .maybeWhen(
-          data: (links) => lansweeperWarningsForTicket(
-            links: links,
-            ticketId: original?.lansweeperMainTicketId,
-          ),
-          orElse: () => const <String>[],
+          data: (links) => links,
+          orElse: () => const <Map<String, dynamic>>[],
         );
+    final lansweeperWarnings = lansweeperWarningsForTicket(
+      links: lansweeperLinks,
+      ticketId: original?.lansweeperMainTicketId,
+    );
+    final lansweeperSubmittedBy = lansweeperSubmittedByForTicket(
+      links: lansweeperLinks,
+      ticketId: original?.lansweeperMainTicketId,
+    );
 
     return DialogSnackbarScope(
       messengerKey: dialogMessengerKey,
@@ -420,8 +430,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                     height: 280,
                     child: Center(child: CircularProgressIndicator()),
                   )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                : DialogScrollableContent(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -435,6 +444,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                             ),
                             onClone: _cloneCall,
                             cloneBusy: _hardCloneBusy,
+                            submittedBy: lansweeperSubmittedBy,
                             warnings: lansweeperWarnings,
                           ),
                           const SizedBox(height: 12),

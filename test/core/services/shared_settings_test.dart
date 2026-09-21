@@ -117,24 +117,61 @@ void main() {
     test('η αποθήκευση γράφει στα κοινά και τη βλέπουν όλοι', () async {
       CurrentOperator.activate(_operator(1, isAdmin: true));
       await SettingsService().catalogs.setAuditRetentionConfig(
-        const AuditRetentionConfig(enabled: true, maxAgeDays: 90),
+        const AuditRetentionConfig(
+          purgeOnAppStart: true,
+          volatileMaxAgeDays: 90,
+        ),
       );
 
       // Άλλος χρήστης, ίδια βάση: βλέπει την ίδια πολιτική.
       CurrentOperator.activate(_operator(2));
       final loaded = await SettingsService().catalogs.getAuditRetentionConfig();
 
-      expect(loaded.enabled, isTrue);
-      expect(loaded.maxAgeDays, 90);
+      expect(loaded.purgeOnAppStart, isTrue);
+      expect(loaded.volatileMaxAgeDays, 90);
     });
 
     test('χωρίς ρύθμιση πουθενά, καμία εκκαθάριση', () async {
       final loaded = await SettingsService().catalogs.getAuditRetentionConfig();
       expect(
-        loaded.enabled,
+        loaded.purgeOnAppStart,
         isFalse,
         reason: 'Η ασφαλής προεπιλογή δεν σβήνει τίποτα.',
       );
+    });
+
+    // Η παλιά μορφή είχε δύο διακόπτες και απαιτούσε ΚΑΙ ΤΟΥΣ ΔΥΟ. Ο πρώτος
+    // αφαιρέθηκε· ένα αποθηκευμένο «σβηστό» δεν επιτρέπεται να γίνει ξαφνικά
+    // «αναμμένο» επειδή αναβαθμίστηκε η εφαρμογή.
+    test(
+      'παλιά ρύθμιση με σβηστή «ενεργή πολιτική» δεν καθαρίζει μετά την αναβάθμιση',
+      () {
+        final stored = AuditRetentionConfig.fromJsonString(
+          '{"enabled": false, "max_age_days": 90, "purge_on_app_start": true}',
+        );
+
+        expect(
+          stored.purgeOnAppStart,
+          isFalse,
+          reason:
+              'Ο χειριστής είχε αφήσει την πολιτική σβηστή — η αναβάθμιση δεν '
+              'ενεργοποιεί διαγραφές που δεν ζήτησε κανείς.',
+        );
+        // Το παλιό ενιαίο όριο μεταφέρεται και στις δύο αναλώσιμες
+        // κλάσεις: μια πολιτική που είχε οριστεί δεν χαλαρώνει σιωπηλά.
+        expect(stored.volatileMaxAgeDays, 90, reason: 'Τα όρια δεν χάνονται.');
+        expect(stored.operationalMaxAgeDays, 90);
+      },
+    );
+
+    test('παλιά ρύθμιση με αναμμένους και τους δύο διακόπτες καθαρίζει', () {
+      final stored = AuditRetentionConfig.fromJsonString(
+        '{"enabled": true, "max_age_days": 30, "purge_on_app_start": true}',
+      );
+
+      expect(stored.purgeOnAppStart, isTrue);
+      expect(stored.volatileMaxAgeDays, 30);
+      expect(stored.operationalMaxAgeDays, 30);
     });
   });
 

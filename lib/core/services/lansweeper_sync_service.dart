@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../features/calls/models/call_model.dart';
 import '../../features/history/models/lansweeper_submit_progress.dart';
 import 'lansweeper_asset_target.dart';
 import 'lansweeper_ticket_requester_fields.dart';
@@ -50,7 +49,7 @@ class LansweeperSyncPrecheckException implements Exception {
 
 class LansweeperWorkflowRequest {
   const LansweeperWorkflowRequest({
-    required this.call,
+    required this.autoSubject,
     required this.title,
     required this.problem,
     required this.solution,
@@ -64,11 +63,25 @@ class LansweeperWorkflowRequest {
     this.assetTarget,
   });
 
-  final CallModel call;
+  /// Το θέμα που παίρνει το αίτημα όταν ο χρήστης δεν έγραψε δικό του [title].
+  ///
+  /// Έτοιμο κείμενο, όχι οντότητα: η ροή δεν χρειάζεται να ξέρει αν πίσω της
+  /// στέκεται κλήση ή εκκρεμότητα — μόνο τι θα γραφτεί στο `Subject`. Όποιος
+  /// την καλεί εγγυάται ότι δεν είναι κενό.
+  final String autoSubject;
+
   final String title;
   final String problem;
   final String solution;
   final String agentUsername;
+
+  /// Πόση ώρα κράτησε η **εργασία**, όταν αυτό έχει νόημα να σταλεί.
+  ///
+  /// `null` σημαίνει «μη σταλεί καθόλου» — το αίτημα φεύγει χωρίς γραμμή
+  /// χρόνου, όχι με μηδενικό χρόνο. Η ροή **δεν μαντεύει ποτέ** τιμή όταν
+  /// λείπει: η κλήση κρατά χρόνο εργασίας και τον δίνει, ενώ η εκκρεμότητα
+  /// κρατά χρόνο **αναμονής** (μια αλλαγή καλωδίου μπορεί να περιμένει τρεις
+  /// μέρες για μισή ώρα δουλειάς) και δεν έχει τίποτα χρήσιμο να δώσει.
   final int? durationSeconds;
   final LansweeperTicketSubmitConfig config;
   final Map<String, String> customFieldValues;
@@ -199,7 +212,7 @@ class LansweeperSyncService {
     final warnings = <String>[];
     final rawPayloads = <String, dynamic>{};
     final config = request.config;
-    final durationSeconds = request.durationSeconds ?? request.call.duration;
+    final durationSeconds = request.durationSeconds;
 
     // Ο αιτών του εισιτηρίου. Ξεκινά ως ο πράκτορας (σημερινή συμπεριφορά)
     // και γίνεται ο υπάλληλος ΜΟΝΟ αν το SearchUsers τον επιβεβαιώσει: άγνωστο
@@ -233,7 +246,7 @@ class LansweeperSyncService {
       final baseFields = <String, String>{
         'Subject': request.title.trim().isNotEmpty
             ? request.title.trim()
-            : _buildSubject(request.call),
+            : request.autoSubject.trim(),
         'Description': request.problem.trim(),
         if (config.ticketType.trim().isNotEmpty)
           'Type': config.ticketType.trim(),
@@ -680,9 +693,6 @@ class LansweeperSyncService {
     return 'Ολοκληρώθηκαν: ${completedSteps.join(', ')}.';
   }
 
-  String _buildSubject(CallModel call) =>
-      autoTicketTitle(category: call.category ?? '', id: call.id);
-
   /// Ο τίτλος που γεννά μόνη της η εφαρμογή όταν κανείς δεν έγραψε δικό του.
   ///
   /// **Μία πηγή** για δύο ερωτήσεις: με τι προσυμπληρώνεται το πεδίο, και —
@@ -696,36 +706,24 @@ class LansweeperSyncService {
     return trimmed.isEmpty ? 'Κλήση$suffix' : '[$trimmed]$suffix';
   }
 
-  /// Η Περιγραφή που γράφεται στην **κλήση** από το κουμπί αποθήκευσης.
+  /// Ο τίτλος που αξίζει να κρατήσει η **κλήση**· `null` όταν δεν υπάρχει.
   ///
-  /// Ο τίτλος κατεβαίνει ως πρώτη παράγραφος, χωρίς καμία ετικέτα μπροστά —
-  /// διαβάζεται ως η πρώτη φράση του κειμένου, όχι ως πεδίο φόρμας. Δύο όροι
-  /// τον κρατούν έξω:
+  /// **Μία πηγή για κάθε έξοδο της φόρμας.** Ο τίτλος ταξιδεύει σε τέσσερις
+  /// δρόμους — άμεση καταχώρηση, επαναϋποβολή, αντιγραφή & άνοιγμα, αποθήκευση
+  /// στην κλήση — και ο κανόνας «τι είναι περίληψη» πρέπει να είναι ο ίδιος και
+  /// στους τέσσερις: αλλιώς το πρόσφατο ιστορικό θα έδειχνε άλλο πράγμα ανάλογα
+  /// με το ποιο κουμπί πατήθηκε.
   ///
-  /// 1. **Είναι ο αυτόματος** ([autoTicketTitle]) — επαναλαμβάνει τον αριθμό
-  ///    της κλήσης, που η εφαρμογή ήδη ξέρει.
-  /// 2. **Βρίσκεται ήδη εκεί.** Ο τίτλος ξαναφτιάχνεται σε κάθε άνοιγμα, ενώ η
-  ///    Περιγραφή ξαναδιαβάζεται αποθηκευμένη: χωρίς αυτόν τον όρο, δεύτερη
-  ///    αποθήκευση της ίδιας κλήσης θα τον έγραφε δεύτερη φορά, τρίτη τρίτη.
-  ///
-  /// Ισχύει **μόνο** για την αποθήκευση στην κλήση. Οι έξοδοι προς το
-  /// Lansweeper στέλνουν τον τίτλο στο δικό του πεδίο του ticket.
-  static String buildCallIssue({
+  /// **Ο αυτόματος δεν είναι περίληψη.** Το `[Medico] #344` επαναλαμβάνει την
+  /// κατηγορία και τον αριθμό, που η λίστα ξέρει ήδη· αν σωζόταν, το πρόσφατο
+  /// ιστορικό θα γέμιζε με την ίδια φράση τρεις φορές στη σειρά.
+  static String? callTitleToPersist({
     required String title,
     required String autoTitle,
-    required String notes,
   }) {
-    final trimmedTitle = title.trim();
-    final trimmedNotes = notes.trim();
-    if (trimmedTitle.isEmpty || trimmedTitle == autoTitle.trim()) {
-      return trimmedNotes;
-    }
-    if (trimmedNotes.isEmpty) return trimmedTitle;
-    if (trimmedNotes == trimmedTitle ||
-        trimmedNotes.startsWith('$trimmedTitle\n')) {
-      return trimmedNotes;
-    }
-    return '$trimmedTitle\n\n$trimmedNotes';
+    final trimmed = title.trim();
+    if (trimmed.isEmpty || trimmed == autoTitle.trim()) return null;
+    return trimmed;
   }
 
   static String formatCallDurationLabel(int seconds) {

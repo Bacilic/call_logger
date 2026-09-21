@@ -20,6 +20,9 @@ class TaskCardCallbacks {
     this.onEditCaller,
     this.onEditDepartment,
     this.onEditEquipment,
+    this.onSubmitToLansweeper,
+    this.onPrint,
+    this.onSaveAsPdf,
   });
 
   final VoidCallback? onEdit;
@@ -35,4 +38,13 @@ class TaskCardCallbacks {
   final Future<bool> Function()? onEditCaller;
   final Future<bool> Function()? onEditDepartment;
   final Future<bool> Function()? onEditEquipment;
+
+  /// Άνοιγμα του παραθύρου «Αίτημα στο Lansweeper» — δίνεται από την οθόνη.
+  final VoidCallback? onSubmitToLansweeper;
+
+  /// Το φύλλο της εκκρεμότητας στον εκτυπωτή.
+  final VoidCallback? onPrint;
+
+  /// Το ίδιο φύλλο, σε αρχείο.
+  final VoidCallback? onSaveAsPdf;
 }

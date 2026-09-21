@@ -13,6 +13,38 @@ import '../../../../core/widgets/app_asset_image.dart';
 /// Διαβάθμιση εγκυρότητας αιτούντα: εντάξει / ύποπτος τομέας / λάθος μορφή.
 enum _RequesterSeverity { ok, suspect, invalid }
 
+/// Πού αλλού μπορεί να σωθεί το δουλεμένο κείμενο, εκτός από το Lansweeper.
+///
+/// Λίστα και όχι ένα σταθερό κουμπί, γιατί ο προορισμός εξαρτάται από το τι
+/// άνοιξε τη φόρμα: μια κλήση έχει έναν, μια εκκρεμότητα έχει τον εαυτό της
+/// και —όταν γεννήθηκε από κλήση— και εκείνη. Γραμμένο ως σταθερό κείμενο, το
+/// κουμπί θα υποσχόταν «αποθήκευση στην κλήση» ενώ έγραφε αλλού.
+class LansweeperTextSaveTarget {
+  const LansweeperTextSaveTarget({
+    required this.label,
+    required this.message,
+    required this.onSave,
+    required this.disabledReason,
+  });
+
+  final String label;
+
+  /// Τι θα συμβεί, όταν το κουμπί είναι ενεργό.
+  ///
+  /// Λέγεται `message` και όχι `tooltip` επίτηδες: το δεύτερο όνομα ανήκει στις
+  /// παραμέτρους του framework, που τυλίγονται σε σκέτο Tooltip και απλώνουν τη
+  /// μεγάλη πρόταση σε όλο το πλάτος. Εδώ το κείμενο περνά από CompactTooltip.
+  final String message;
+
+  final VoidCallback onSave;
+
+  /// Γιατί δεν μπορεί τώρα· `null` σημαίνει «μπορεί».
+  ///
+  /// Ερώτημα και όχι στιγμιότυπο: το κουμπί ξαναρωτά σε κάθε πληκτρολόγηση,
+  /// ώστε να μην υπόσχεται αποθήκευση που δεν θα άλλαζε τίποτα.
+  final String? Function() disabledReason;
+}
+
 class LansweeperSyncForm extends ConsumerWidget {
   const LansweeperSyncForm({
     required this.titleController,
@@ -34,8 +66,7 @@ class LansweeperSyncForm extends ConsumerWidget {
     this.onTicketStateChanged,
     this.onSaveAsKnowledge,
     this.saveAsKnowledgeDisabledTooltip,
-    this.onSaveToCall,
-    this.saveToCallDisabledReason,
+    this.textSaveTargets = const <LansweeperTextSaveTarget>[],
     this.autoParties,
     this.requesterCandidates = const [],
     this.selectedRequesterUsername,
@@ -72,17 +103,9 @@ class LansweeperSyncForm extends ConsumerWidget {
   /// χωρίς εξήγηση και μοιάζει με βλάβη.
   final String? saveAsKnowledgeDisabledTooltip;
 
-  /// Γράφει τα κείμενα της φόρμας πάνω στην κλήση, χωρίς αίτημα στο Lansweeper·
-  /// `null` κρύβει το κουμπί εντελώς.
-  final VoidCallback? onSaveToCall;
-
-  /// Γιατί δεν γίνεται τώρα· `null` από τη συνάρτηση σημαίνει «γίνεται».
-  ///
-  /// **Συνάρτηση και όχι έτοιμο κείμενο**, σε αντίθεση με το αντίστοιχο της
-  /// γνώσης: η απάντηση εξαρτάται από το τι γράφει αυτή τη στιγμή ο χρήστης
-  /// στα πεδία, και ξαναρωτιέται σε κάθε πληκτρολόγηση. Ένα στιγμιότυπο του
-  /// build θα πάγωνε το κουμπί στην κατάσταση που είχε όταν άνοιξε η οθόνη.
-  final String? Function()? saveToCallDisabledReason;
+  /// Πού αλλού μπορεί να σωθεί το κείμενο, χωρίς αίτημα στο Lansweeper.
+  /// Κενή λίστα = καμία τέτοια έξοδος σε αυτή την οθόνη.
+  final List<LansweeperTextSaveTarget> textSaveTargets;
 
   /// Τι θα μπει αυτόματα στο ticket: αιτών (υπάλληλος) και εξοπλισμός.
   /// Null = δεν έχει φορτώσει ακόμη· η γραμμή δεν εμφανίζεται καθόλου.
@@ -521,8 +544,7 @@ class LansweeperSyncForm extends ConsumerWidget {
             ),
             if (onSaveAsKnowledge != null ||
                 saveAsKnowledgeDisabledTooltip != null ||
-                onSaveToCall != null ||
-                saveToCallDisabledReason != null)
+                textSaveTargets.isNotEmpty)
               Wrap(
                 spacing: 4,
                 children: [
@@ -539,11 +561,11 @@ class LansweeperSyncForm extends ConsumerWidget {
                         label: const Text('Αποθήκευση ως γνώση'),
                       ),
                     ),
-                  if (onSaveToCall != null || saveToCallDisabledReason != null)
-                    // Το κουμπί ακούει το ΙΔΙΟ τα πεδία και ξαναχτίζεται μόνο
-                    // του. Η εναλλακτική —ανανέωση όλου του διαλόγου σε κάθε
-                    // πληκτρολόγηση— θα ξανασχεδίαζε και τη λίστα των κλήσεων,
-                    // που είναι το βαρύ κομμάτι της οθόνης.
+                  // Τα κουμπιά ακούν τα ΙΔΙΑ τα πεδία και ξαναχτίζονται μόνα
+                  // τους. Η εναλλακτική —ανανέωση όλου του διαλόγου σε κάθε
+                  // πληκτρολόγηση— θα ξανασχεδίαζε και τη λίστα των κλήσεων,
+                  // που είναι το βαρύ κομμάτι της οθόνης.
+                  for (final target in textSaveTargets)
                     AnimatedBuilder(
                       animation: Listenable.merge([
                         titleController,
@@ -551,17 +573,13 @@ class LansweeperSyncForm extends ConsumerWidget {
                         solutionController,
                       ]),
                       builder: (context, _) {
-                        final reason = saveToCallDisabledReason?.call();
+                        final reason = target.disabledReason();
                         return CompactTooltip(
-                          message:
-                              reason ??
-                              'Γράφει το κείμενο πάνω στην κλήση, χωρίς να '
-                                  'δημιουργήσει αίτημα — η κλήση μένει '
-                                  'ακαταχώρητη',
+                          message: reason ?? target.message,
                           child: TextButton.icon(
-                            onPressed: reason == null ? onSaveToCall : null,
+                            onPressed: reason == null ? target.onSave : null,
                             icon: const Icon(Icons.save_outlined, size: 18),
-                            label: const Text('Αποθήκευση στην κλήση'),
+                            label: Text(target.label),
                           ),
                         );
                       },

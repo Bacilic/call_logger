@@ -30,8 +30,10 @@ import '../providers/call_owner_filter_providers.dart';
 import '../providers/lansweeper_report_scope_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_submit_progress_provider.dart';
-import '../providers/lansweeper_sync_provider.dart';
+import '../../calls/models/call_model.dart';
+import '../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../providers/lansweeper_ticket_submit_config_provider.dart';
+import '../providers/lansweeper_sync_provider.dart';
 import 'lansweeper/lansweeper_report_call_list.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper/lansweeper_report_range_bar.dart';
@@ -699,10 +701,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
           case 'copy_open':
             browserFlow.copyAndOpen(
               ticketFormUrl: ticketFormUrl,
-              callIds: selected
-                  .map((item) => item.call.id)
-                  .whereType<int>()
-                  .toList(),
+              selected: selected,
               durationSeconds: hasSelection ? totalSelectedSeconds : null,
             );
           case 'preview_prompt':
@@ -734,6 +733,393 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
           ),
         ),
       ],
+    );
+  }
+
+  /// Υπάρχουν κλήσεις στο διάστημα, αλλά το φίλτρο κατάστασης τις έκοψε όλες.
+  ///
+  /// Ξεχωριστό μήνυμα από το «καμία κλήση στο διάστημα»: εκεί φταίει το
+  /// διάστημα, εδώ το φίλτρο — και η διέξοδος είναι άλλη.
+  /// Ο τίτλος του διαλόγου: η λαβή συρσίματος και το κουμπί ρυθμίσεων.
+  ///
+  /// Λαβή είναι **μόνο** ο τίτλος — το κουμπί μένει έξω της, ώστε το πάτημά του
+  /// να μη διαβάζεται ως σύρσιμο.
+  Widget _buildDialogTitle(Widget titleHandle) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(child: titleHandle),
+        CompactTooltip(
+          message:
+              'Ρυθμίσεις Lansweeper (API, φόρμα, πράκτορας, αυτόματη σύνδεση Help Desk)',
+          child: IconButton(
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            onPressed: () {
+              unawaited(settingsFlow.openConnectionSettingsDialog());
+            },
+            icon: AppAssetImage(
+              assetPath: 'assets/lansweeper_settings.png',
+              height: 28,
+              width: 28,
+              filterQuality: FilterQuality.medium,
+              fallbackIcon: Icons.settings,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Η αριστερή στήλη: οι κλήσεις του διαστήματος, ανά καλούντα.
+  ///
+  /// Ό,τι χρειάζεται το ξαναρωτά με `ref.watch` — καλείται μέσα στην ίδια
+  /// ζωγραφική με το `build`, οπότε η παρακολούθηση είναι η ίδια.
+  Widget _buildCallsColumn(BuildContext context, _ReportViewData data) {
+    return Expanded(
+      flex: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Επιλεγμένες: ${data.selected.length} | '
+            'Σύνολο διάρκειας: '
+            '${LansweeperReportItemMapper.totalDurationLabel(data.totalSelectedSeconds)}',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: LansweeperReportCallList(
+              grouped: data.groupedRows,
+              selectedKeys: selectedKeys,
+              totalDurationLabel: LansweeperReportItemMapper.totalDurationLabel,
+              ticketViewUrlTemplate: data.ticketViewUrl,
+              isSyncLoading: data.syncState.isLoading,
+              ticketLinkEnabled: data.connectionReady,
+              onToggleGroup: (groupItems, checked) {
+                selectionFlow.toggleGroup(
+                  groupItems.map((row) => data.itemByKey[row.key]!).toList(),
+                  checked,
+                );
+              },
+              onToggleItem: (row, checked) {
+                selectionFlow.toggleItem(data.itemByKey[row.key]!, checked);
+              },
+              onBadgePressed: (row) {
+                unawaited(
+                  registrationFlow.toggleRegistrationFromBadge(
+                    data.itemByKey[row.key]!,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Η δεξιά στήλη: η φόρμα του ticket, οι ενέργειες και οι σύνδεσμοι.
+  Widget _buildFormColumn(BuildContext context, _ReportViewData data) {
+    return Expanded(
+      flex: 3,
+      child: SingleChildScrollView(
+        // Κενό δεξιά ώστε η μπάρα κύλησης να μην
+        // πέφτει πάνω στα πεδία και στη λαβή τους.
+        padding: const EdgeInsetsDirectional.only(end: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LansweeperSyncForm(
+              titleController: titleController,
+              notesController: notesController,
+              solutionController: solutionController,
+              autoParties: data.autoParties,
+              requesterCandidates:
+                  data.ticketParties?.requester.isChoosable ?? false
+                  ? data.ticketParties!.requester.candidates
+                  : const [],
+              selectedRequesterUsername: data.effectiveRequester,
+              referenceDomain: data.requesterReferenceDomain,
+              onRequesterChanged: (value) =>
+                  setState(() => selectedRequesterUsername = value),
+              config: data.ticketConfig,
+              customFieldValues: customFieldValues,
+              onCustomFieldChanged: (id, value) =>
+                  setState(() => customFieldValues[id] = value),
+              ticketState:
+                  selectedTicketState ?? data.ticketConfig.defaultTicketState,
+              onTicketStateChanged: (value) =>
+                  setState(() => selectedTicketState = value),
+              isSuggesting: aiSuggestRunning,
+              suggestModelLabel: aiSuggestRunning ? aiCurrentModel : null,
+              suggestElapsedSeconds: aiSuggestRunning
+                  ? aiSuggestElapsedSeconds
+                  : null,
+              cooldownRemainingSeconds: data.aiCooldownActive
+                  ? data.aiCooldownSeconds
+                  : null,
+              cooldownModelLabel: data.aiCooldownActive
+                  ? aiCooldownModel
+                  : null,
+              onCancelAutoResubmit: data.aiCooldownActive && aiAutoResubmitArmed
+                  ? aiFlow.cancelAiAutoResubmit
+                  : null,
+              suggestDisabledTooltip: data.aiSuggestTooltip,
+              onSuggest: data.aiSuggestEnabled
+                  ? () => unawaited(aiFlow.suggestWithAi(data.selected))
+                  : null,
+              onEditPromptTemplate: () =>
+                  unawaited(settingsFlow.openAiPromptTemplateEditorDialog()),
+              saveAsKnowledgeDisabledTooltip: knowledgeFlow.saveDisabledReason(
+                data.selected,
+              ),
+              onSaveAsKnowledge:
+                  knowledgeFlow.saveDisabledReason(data.selected) == null
+                  ? () =>
+                        unawaited(knowledgeFlow.saveAsKnowledge(data.selected))
+                  : null,
+              textSaveTargets: [
+                LansweeperTextSaveTarget(
+                  label: 'Αποθήκευση στην κλήση',
+                  message:
+                      'Γράφει το κείμενο πάνω στην κλήση, χωρίς να '
+                      'δημιουργήσει αίτημα — η κλήση μένει ακαταχώρητη',
+                  // Ερώτημα, όχι στιγμιότυπο: το κουμπί
+                  // ξαναρωτά σε κάθε πληκτρολόγηση.
+                  disabledReason: () =>
+                      callSaveFlow.saveDisabledReason(data.selected),
+                  onSave: () =>
+                      unawaited(callSaveFlow.saveToCall(data.selected)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _buildActionsCard(
+              selected: data.selected,
+              primarySelected: data.primarySelected,
+              syncState: data.syncState,
+              connectionStatus: data.connectionStatus,
+              connectionReady: data.connectionReady,
+              canImmediateApiSubmit: data.canImmediateApiSubmit,
+              canResubmitApi: data.canResubmitApi,
+              isPrimaryRegistered: data.isPrimaryRegistered,
+              isPrimaryFailed: data.isPrimaryFailed,
+              canOpenTicketForm: data.canOpenTicketForm,
+              ticketFormUrl: data.ticketFormUrl,
+              promptPreviewEnabled: data.promptPreviewEnabled,
+              promptPreviewTooltip: data.promptPreviewTooltip,
+              onPreviewPrompt: () =>
+                  unawaited(aiFlow.showAiPromptPreview(data.selected)),
+            ),
+            const SizedBox(height: 10),
+            LansweeperSubmitStepsPanel(selectedCallId: data.selectedCallId),
+            const SizedBox(height: 10),
+            data.linksAsync.when(
+              loading: () => const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              ),
+              error: (e, _) => Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'Σφάλμα ιστορικού: ${humanizeUserFacingError(e)}',
+                  ),
+                ),
+              ),
+              data: (links) => SyncHistoryList(links: links),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Το σώμα της αναφοράς όταν οι κλήσεις έχουν φορτώσει.
+  ///
+  /// Ζούσε ως κλειστούρα μέσα στο δέντρο, σε εσοχή 28 επιπέδων: στο βάθος της
+  /// μια γραμμή χωρούσε τρεις λέξεις, και για να βρεθεί το σημείο μιας αλλαγής
+  /// έπρεπε να διαβαστούν εκατό γραμμές. Ό,τι χρειάζεται από τις ρυθμίσεις το
+  /// **ξαναρωτά** με `ref.watch` αντί να το κουβαλά ως παράμετρο — η κλήση
+  /// γίνεται μέσα στην ίδια ζωγραφική, οπότε η παρακολούθηση είναι η ίδια.
+  Widget _buildLoadedReport(
+    BuildContext context,
+    List<CallModel> calls,
+    String reportRangeTitle,
+  ) {
+    final syncState = ref.watch(lansweeperSyncProvider);
+    final connectionStatus = ref.watch(lansweeperConnectionProbeProvider);
+    final geminiApiKey = ref.watch(geminiApiKeyProvider);
+    final ticketConfig = ref.watch(lansweeperTicketSubmitConfigProvider);
+    final lansweeperApiUrl = ref.watch(lansweeperApiUrlProvider);
+    final lansweeperTicketFormUrl = ref.watch(lansweeperTicketFormUrlProvider);
+    final lansweeperTicketViewUrl = ref.watch(lansweeperTicketViewUrlProvider);
+    final connectionReady = _connectionReady(connectionStatus);
+    final canSubmitToApi = LansweeperUrlRules.isApiEndpointUrl(
+      lansweeperApiUrl,
+    );
+    final canOpenTicketForm = LansweeperUrlRules.isBrowserLaunchableUrl(
+      lansweeperTicketFormUrl,
+    );
+
+    final allItems = LansweeperReportItemMapper.toItems(calls);
+    final items = selectionFlow.filterReportItems(allItems);
+    final grouped = LansweeperReportItemMapper.groupByCaller(items);
+    final groupedRows = LansweeperReportItemMapper.groupedRowData(grouped);
+    final itemByKey = {for (final item in items) item.key: item};
+    final selected = items.where((e) => selectedKeys.contains(e.key)).toList();
+    final primarySelected = selectionFlow.primarySelectedItem(items);
+    final isPrimaryRegistered =
+        primarySelected != null &&
+        LansweeperReportItemMapper.isRegisteredCall(primarySelected);
+    final isPrimaryFailed =
+        primarySelected != null &&
+        LansweeperReportItemMapper.isFailedCall(primarySelected);
+    final canImmediateApiSubmit =
+        primarySelected != null &&
+        !syncState.isLoading &&
+        canSubmitToApi &&
+        connectionReady &&
+        !isPrimaryRegistered;
+    final canResubmitApi = canImmediateApiSubmit && isPrimaryFailed;
+    if (primarySelected != null && selected.isNotEmpty) {
+      aiFlow.prefillForm(primarySelected, selected);
+    }
+    final totalSelectedSeconds = selected.fold<int>(
+      0,
+      (sum, item) => sum + item.durationSeconds,
+    );
+    final selectedCallId = primarySelected?.call.id;
+    final geminiKeyReady = geminiApiKey.trim().isNotEmpty;
+    final aiCooldownActive = aiFlow.isAiCooldownActive;
+    final aiCooldownSeconds = aiFlow.aiCooldownRemainingSeconds;
+    final aiSuggestEnabled =
+        selected.isNotEmpty &&
+        geminiKeyReady &&
+        !aiSuggestRunning &&
+        !aiCooldownActive;
+    final aiSuggestTooltip = selected.isEmpty
+        ? 'Επιλέξτε κλήση'
+        : !geminiKeyReady
+        ? 'Ορίστε Gemini API key στις ρυθμίσεις'
+        : aiCooldownActive
+        ? 'Αναμένεται διαθεσιμότητα ποσόστωσης'
+        : null;
+    final promptPreviewEnabled =
+        selected.isNotEmpty && !aiSuggestRunning && !aiCooldownActive;
+    final promptPreviewTooltip = selected.isEmpty
+        ? 'Επιλέξτε κλήση'
+        : aiSuggestRunning
+        ? 'Περιμένετε την ολοκλήρωση της πρότασης'
+        : null;
+    final linksAsync = selectedCallId != null
+        ? ref.watch(callExternalLinksProvider(selectedCallId))
+        : const AsyncData<List<Map<String, dynamic>>>(<Map<String, dynamic>>[]);
+    // Τι θα μπει αυτόματα στο ticket (αιτών,
+    // εξοπλισμός) — null όσο φορτώνει ή χωρίς επιλογή,
+    // οπότε η γραμμή απλώς δεν εμφανίζεται. Το κλειδί
+    // κρατά ΟΛΕΣ τις επιλεγμένες κλήσεις: ο αιτών
+    // μπορεί να προκύψει από τμήμα οποιασδήποτε.
+    final selectedCallIdsKey = selected
+        .map((entry) => entry.call.id)
+        .whereType<int>()
+        .join(',');
+    final ticketParties = selectedCallIdsKey.isEmpty
+        ? null
+        : ref.watch(lansweeperTicketPartiesProvider(selectedCallIdsKey)).value;
+    final effectiveRequester =
+        (selectedRequesterUsername ??
+                ticketParties?.requester.selectedUsername ??
+                '')
+            .trim();
+    final autoParties = ticketParties == null
+        ? null
+        : (
+            requester: effectiveRequester.isEmpty ? null : effectiveRequester,
+            asset: ticketParties.asset,
+          );
+
+    // Μέτρο σύγκρισης για τις πορτοκαλί υποψίες
+    // τομέα: πράκτορας (αν είναι τομέας\όνομα),
+    // αλλιώς ο πλειοψηφικός τομέας του καταλόγου.
+    final requesterReferenceDomain = lansweeperReferenceDomain(
+      agent: LansweeperAgentIdentity.read(
+        ref.read(lansweeperAgentUsernameProvider),
+      ),
+      knownIdentities: [
+        for (final user in LookupService.instance.users)
+          user.lansweeperUsername ?? '',
+        for (final department in LookupService.instance.departments)
+          ...decodeLansweeperAccounts(
+            department.lansweeperUsernames,
+          ).map((account) => account.username),
+      ],
+    );
+
+    if (allItems.isEmpty) {
+      return _buildNoCallsInRangeEmptyState(context, reportRangeTitle);
+    }
+    if (items.isEmpty) {
+      return _buildNoCallsInFilterEmptyState(context);
+    }
+
+    final data = _ReportViewData(
+      groupedRows: groupedRows,
+      itemByKey: itemByKey,
+      selected: selected,
+      primarySelected: primarySelected,
+      totalSelectedSeconds: totalSelectedSeconds,
+      selectedCallId: selectedCallId,
+      isPrimaryRegistered: isPrimaryRegistered,
+      isPrimaryFailed: isPrimaryFailed,
+      canImmediateApiSubmit: canImmediateApiSubmit,
+      canResubmitApi: canResubmitApi,
+      syncState: syncState,
+      connectionStatus: connectionStatus,
+      connectionReady: connectionReady,
+      canOpenTicketForm: canOpenTicketForm,
+      ticketFormUrl: lansweeperTicketFormUrl,
+      ticketViewUrl: lansweeperTicketViewUrl,
+      ticketConfig: ticketConfig,
+      aiCooldownActive: aiCooldownActive,
+      aiCooldownSeconds: aiCooldownSeconds,
+      aiSuggestEnabled: aiSuggestEnabled,
+      aiSuggestTooltip: aiSuggestTooltip,
+      promptPreviewEnabled: promptPreviewEnabled,
+      promptPreviewTooltip: promptPreviewTooltip,
+      linksAsync: linksAsync,
+      ticketParties: ticketParties,
+      effectiveRequester: effectiveRequester,
+      autoParties: autoParties,
+      requesterReferenceDomain: requesterReferenceDomain,
+    );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildCallsColumn(context, data),
+        const SizedBox(width: 10),
+        _buildFormColumn(context, data),
+      ],
+    );
+  }
+
+  Widget _buildNoCallsInFilterEmptyState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Text(
+          'Δεν υπάρχουν κλήσεις στην επιλεγμένη κατηγορία Lansweeper.\n'
+          'Δοκιμάστε άλλο φίλτρο (π.χ. «Όλες»).',
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
     );
   }
 
@@ -810,20 +1196,6 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
             historyDateTo: stats.historyDateTo,
           ),
         );
-    final lansweeperApiUrl = ref.watch(lansweeperApiUrlProvider);
-    final lansweeperTicketFormUrl = ref.watch(lansweeperTicketFormUrlProvider);
-    final lansweeperTicketViewUrl = ref.watch(lansweeperTicketViewUrlProvider);
-    final syncState = ref.watch(lansweeperSyncProvider);
-    final connectionStatus = ref.watch(lansweeperConnectionProbeProvider);
-    final geminiApiKey = ref.watch(geminiApiKeyProvider);
-    final ticketConfig = ref.watch(lansweeperTicketSubmitConfigProvider);
-    final connectionReady = _connectionReady(connectionStatus);
-    final canSubmitToApi = LansweeperUrlRules.isApiEndpointUrl(
-      lansweeperApiUrl,
-    );
-    final canOpenTicketForm = LansweeperUrlRules.isBrowserLaunchableUrl(
-      lansweeperTicketFormUrl,
-    );
     // Το πλήθος της ουράς λέει τη μισή ιστορία μόνο του: «0 από 0» σημαίνει
     // άδειο διάστημα, «0 από 12» σημαίνει τελειωμένη δουλειά.
     final queuedCount = callsAsync.maybeWhen(
@@ -852,35 +1224,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                 overflow: TextOverflow.ellipsis,
               ),
               builder: (titleHandle) => AlertDialog(
-                title: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(child: titleHandle),
-                    CompactTooltip(
-                      message:
-                          'Ρυθμίσεις Lansweeper (API, φόρμα, πράκτορας, αυτόματη σύνδεση Help Desk)',
-                      child: IconButton(
-                        padding: const EdgeInsets.all(4),
-                        constraints: const BoxConstraints(
-                          minWidth: 40,
-                          minHeight: 40,
-                        ),
-                        onPressed: () {
-                          unawaited(
-                            settingsFlow.openConnectionSettingsDialog(),
-                          );
-                        },
-                        icon: AppAssetImage(
-                          assetPath: 'assets/lansweeper_settings.png',
-                          height: 28,
-                          width: 28,
-                          filterQuality: FilterQuality.medium,
-                          fallbackIcon: Icons.settings,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                title: _buildDialogTitle(titleHandle),
                 content: SizedBox(
                   width: 900,
                   height: 560,
@@ -928,399 +1272,11 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                               'Σφάλμα φόρτωσης κλήσεων: ${humanizeUserFacingError(e)}',
                             ),
                           ),
-                          data: (calls) {
-                            final allItems = LansweeperReportItemMapper.toItems(
-                              calls,
-                            );
-                            final items = selectionFlow.filterReportItems(
-                              allItems,
-                            );
-                            final grouped =
-                                LansweeperReportItemMapper.groupByCaller(items);
-                            final groupedRows =
-                                LansweeperReportItemMapper.groupedRowData(
-                                  grouped,
-                                );
-                            final itemByKey = {
-                              for (final item in items) item.key: item,
-                            };
-                            final selected = items
-                                .where((e) => selectedKeys.contains(e.key))
-                                .toList();
-                            final primarySelected = selectionFlow
-                                .primarySelectedItem(items);
-                            final isPrimaryRegistered =
-                                primarySelected != null &&
-                                LansweeperReportItemMapper.isRegisteredCall(
-                                  primarySelected,
-                                );
-                            final isPrimaryFailed =
-                                primarySelected != null &&
-                                LansweeperReportItemMapper.isFailedCall(
-                                  primarySelected,
-                                );
-                            final canImmediateApiSubmit =
-                                primarySelected != null &&
-                                !syncState.isLoading &&
-                                canSubmitToApi &&
-                                connectionReady &&
-                                !isPrimaryRegistered;
-                            final canResubmitApi =
-                                canImmediateApiSubmit && isPrimaryFailed;
-                            if (primarySelected != null &&
-                                selected.isNotEmpty) {
-                              aiFlow.prefillForm(primarySelected, selected);
-                            }
-                            final totalSelectedSeconds = selected.fold<int>(
-                              0,
-                              (sum, item) => sum + item.durationSeconds,
-                            );
-                            final selectedCallId = primarySelected?.call.id;
-                            final geminiKeyReady = geminiApiKey
-                                .trim()
-                                .isNotEmpty;
-                            final aiCooldownActive = aiFlow.isAiCooldownActive;
-                            final aiCooldownSeconds =
-                                aiFlow.aiCooldownRemainingSeconds;
-                            final aiSuggestEnabled =
-                                selected.isNotEmpty &&
-                                geminiKeyReady &&
-                                !aiSuggestRunning &&
-                                !aiCooldownActive;
-                            final aiSuggestTooltip = selected.isEmpty
-                                ? 'Επιλέξτε κλήση'
-                                : !geminiKeyReady
-                                ? 'Ορίστε Gemini API key στις ρυθμίσεις'
-                                : aiCooldownActive
-                                ? 'Αναμένεται διαθεσιμότητα ποσόστωσης'
-                                : null;
-                            final promptPreviewEnabled =
-                                selected.isNotEmpty &&
-                                !aiSuggestRunning &&
-                                !aiCooldownActive;
-                            final promptPreviewTooltip = selected.isEmpty
-                                ? 'Επιλέξτε κλήση'
-                                : aiSuggestRunning
-                                ? 'Περιμένετε την ολοκλήρωση της πρότασης'
-                                : null;
-                            final linksAsync = selectedCallId != null
-                                ? ref.watch(
-                                    callExternalLinksProvider(selectedCallId),
-                                  )
-                                : const AsyncData<List<Map<String, dynamic>>>(
-                                    <Map<String, dynamic>>[],
-                                  );
-                            // Τι θα μπει αυτόματα στο ticket (αιτών,
-                            // εξοπλισμός) — null όσο φορτώνει ή χωρίς επιλογή,
-                            // οπότε η γραμμή απλώς δεν εμφανίζεται. Το κλειδί
-                            // κρατά ΟΛΕΣ τις επιλεγμένες κλήσεις: ο αιτών
-                            // μπορεί να προκύψει από τμήμα οποιασδήποτε.
-                            final selectedCallIdsKey = selected
-                                .map((entry) => entry.call.id)
-                                .whereType<int>()
-                                .join(',');
-                            final ticketParties = selectedCallIdsKey.isEmpty
-                                ? null
-                                : ref
-                                      .watch(
-                                        lansweeperTicketPartiesProvider(
-                                          selectedCallIdsKey,
-                                        ),
-                                      )
-                                      .value;
-                            final effectiveRequester =
-                                (selectedRequesterUsername ??
-                                        ticketParties
-                                            ?.requester
-                                            .selectedUsername ??
-                                        '')
-                                    .trim();
-                            final autoParties = ticketParties == null
-                                ? null
-                                : (
-                                    requester: effectiveRequester.isEmpty
-                                        ? null
-                                        : effectiveRequester,
-                                    asset: ticketParties.asset,
-                                  );
-
-                            // Μέτρο σύγκρισης για τις πορτοκαλί υποψίες
-                            // τομέα: πράκτορας (αν είναι τομέας\όνομα),
-                            // αλλιώς ο πλειοψηφικός τομέας του καταλόγου.
-                            final requesterReferenceDomain =
-                                lansweeperReferenceDomain(
-                                  agent: LansweeperAgentIdentity.read(
-                                    ref.read(lansweeperAgentUsernameProvider),
-                                  ),
-                                  knownIdentities: [
-                                    for (final user
-                                        in LookupService.instance.users)
-                                      user.lansweeperUsername ?? '',
-                                    for (final department
-                                        in LookupService.instance.departments)
-                                      ...decodeLansweeperAccounts(
-                                        department.lansweeperUsernames,
-                                      ).map((account) => account.username),
-                                  ],
-                                );
-
-                            if (allItems.isEmpty) {
-                              return _buildNoCallsInRangeEmptyState(
-                                context,
-                                reportRangeTitle,
-                              );
-                            }
-                            if (items.isEmpty) {
-                              return Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 24,
-                                  ),
-                                  child: Text(
-                                    'Δεν υπάρχουν κλήσεις στην επιλεγμένη κατηγορία '
-                                    'Lansweeper.\n'
-                                    'Δοκιμάστε άλλο φίλτρο (π.χ. «Όλες»).',
-                                    style: Theme.of(context).textTheme.bodyLarge
-                                        ?.copyWith(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.onSurfaceVariant,
-                                        ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              );
-                            }
-
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      Text(
-                                        'Επιλεγμένες: ${selected.length} | '
-                                        'Σύνολο διάρκειας: '
-                                        '${LansweeperReportItemMapper.totalDurationLabel(totalSelectedSeconds)}',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleSmall,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Expanded(
-                                        child: LansweeperReportCallList(
-                                          grouped: groupedRows,
-                                          selectedKeys: selectedKeys,
-                                          totalDurationLabel:
-                                              LansweeperReportItemMapper
-                                                  .totalDurationLabel,
-                                          ticketViewUrlTemplate:
-                                              lansweeperTicketViewUrl,
-                                          isSyncLoading: syncState.isLoading,
-                                          ticketLinkEnabled: connectionReady,
-                                          onToggleGroup: (groupItems, checked) {
-                                            selectionFlow.toggleGroup(
-                                              groupItems
-                                                  .map(
-                                                    (row) =>
-                                                        itemByKey[row.key]!,
-                                                  )
-                                                  .toList(),
-                                              checked,
-                                            );
-                                          },
-                                          onToggleItem: (row, checked) {
-                                            selectionFlow.toggleItem(
-                                              itemByKey[row.key]!,
-                                              checked,
-                                            );
-                                          },
-                                          onBadgePressed: (row) {
-                                            unawaited(
-                                              registrationFlow
-                                                  .toggleRegistrationFromBadge(
-                                                    itemByKey[row.key]!,
-                                                  ),
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  flex: 3,
-                                  child: SingleChildScrollView(
-                                    // Κενό δεξιά ώστε η μπάρα κύλησης να μην
-                                    // πέφτει πάνω στα πεδία και στη λαβή τους.
-                                    padding: const EdgeInsetsDirectional.only(
-                                      end: 14,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        LansweeperSyncForm(
-                                          titleController: titleController,
-                                          notesController: notesController,
-                                          solutionController:
-                                              solutionController,
-                                          autoParties: autoParties,
-                                          requesterCandidates:
-                                              ticketParties
-                                                      ?.requester
-                                                      .isChoosable ??
-                                                  false
-                                              ? ticketParties!
-                                                    .requester
-                                                    .candidates
-                                              : const [],
-                                          selectedRequesterUsername:
-                                              effectiveRequester,
-                                          referenceDomain:
-                                              requesterReferenceDomain,
-                                          onRequesterChanged: (value) =>
-                                              setState(
-                                                () =>
-                                                    selectedRequesterUsername =
-                                                        value,
-                                              ),
-                                          config: ticketConfig,
-                                          customFieldValues: customFieldValues,
-                                          onCustomFieldChanged: (id, value) =>
-                                              setState(
-                                                () => customFieldValues[id] =
-                                                    value,
-                                              ),
-                                          ticketState:
-                                              selectedTicketState ??
-                                              ticketConfig.defaultTicketState,
-                                          onTicketStateChanged: (value) =>
-                                              setState(
-                                                () =>
-                                                    selectedTicketState = value,
-                                              ),
-                                          isSuggesting: aiSuggestRunning,
-                                          suggestModelLabel: aiSuggestRunning
-                                              ? aiCurrentModel
-                                              : null,
-                                          suggestElapsedSeconds:
-                                              aiSuggestRunning
-                                              ? aiSuggestElapsedSeconds
-                                              : null,
-                                          cooldownRemainingSeconds:
-                                              aiCooldownActive
-                                              ? aiCooldownSeconds
-                                              : null,
-                                          cooldownModelLabel: aiCooldownActive
-                                              ? aiCooldownModel
-                                              : null,
-                                          onCancelAutoResubmit:
-                                              aiCooldownActive &&
-                                                  aiAutoResubmitArmed
-                                              ? aiFlow.cancelAiAutoResubmit
-                                              : null,
-                                          suggestDisabledTooltip:
-                                              aiSuggestTooltip,
-                                          onSuggest: aiSuggestEnabled
-                                              ? () => unawaited(
-                                                  aiFlow.suggestWithAi(
-                                                    selected,
-                                                  ),
-                                                )
-                                              : null,
-                                          onEditPromptTemplate: () => unawaited(
-                                            settingsFlow
-                                                .openAiPromptTemplateEditorDialog(),
-                                          ),
-                                          saveAsKnowledgeDisabledTooltip:
-                                              knowledgeFlow.saveDisabledReason(
-                                                selected,
-                                              ),
-                                          onSaveAsKnowledge:
-                                              knowledgeFlow.saveDisabledReason(
-                                                    selected,
-                                                  ) ==
-                                                  null
-                                              ? () => unawaited(
-                                                  knowledgeFlow.saveAsKnowledge(
-                                                    selected,
-                                                  ),
-                                                )
-                                              : null,
-                                          // Ερώτημα, όχι στιγμιότυπο: το κουμπί
-                                          // ξαναρωτά σε κάθε πληκτρολόγηση.
-                                          saveToCallDisabledReason: () =>
-                                              callSaveFlow.saveDisabledReason(
-                                                selected,
-                                              ),
-                                          onSaveToCall: () => unawaited(
-                                            callSaveFlow.saveToCall(selected),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        _buildActionsCard(
-                                          selected: selected,
-                                          primarySelected: primarySelected,
-                                          syncState: syncState,
-                                          connectionStatus: connectionStatus,
-                                          connectionReady: connectionReady,
-                                          canImmediateApiSubmit:
-                                              canImmediateApiSubmit,
-                                          canResubmitApi: canResubmitApi,
-                                          isPrimaryRegistered:
-                                              isPrimaryRegistered,
-                                          isPrimaryFailed: isPrimaryFailed,
-                                          canOpenTicketForm: canOpenTicketForm,
-                                          ticketFormUrl:
-                                              lansweeperTicketFormUrl,
-                                          promptPreviewEnabled:
-                                              promptPreviewEnabled,
-                                          promptPreviewTooltip:
-                                              promptPreviewTooltip,
-                                          onPreviewPrompt: () => unawaited(
-                                            aiFlow.showAiPromptPreview(
-                                              selected,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        LansweeperSubmitStepsPanel(
-                                          selectedCallId: selectedCallId,
-                                        ),
-                                        const SizedBox(height: 10),
-                                        linksAsync.when(
-                                          loading: () => const Card(
-                                            child: Padding(
-                                              padding: EdgeInsets.all(16),
-                                              child: Center(
-                                                child:
-                                                    CircularProgressIndicator(),
-                                              ),
-                                            ),
-                                          ),
-                                          error: (e, _) => Card(
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(12),
-                                              child: Text(
-                                                'Σφάλμα ιστορικού: ${humanizeUserFacingError(e)}',
-                                              ),
-                                            ),
-                                          ),
-                                          data: (links) =>
-                                              SyncHistoryList(links: links),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
+                          data: (calls) => _buildLoadedReport(
+                            context,
+                            calls,
+                            reportRangeTitle,
+                          ),
                         ),
                       ),
                     ],
@@ -1348,4 +1304,82 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       ),
     );
   }
+}
+
+/// Ό,τι υπολογίζεται **μία** φορά ανά ζωγραφική και χρειάζονται οι στήλες.
+///
+/// Υπήρχε ως εικοσιοκτώ τοπικές μεταβλητές μέσα σε μια κλειστούρα 374 γραμμών.
+/// Όσο ζούσαν εκεί, καμία ενότητα του δέντρου δεν μπορούσε να βγει χωρίς να
+/// κουβαλήσει εικοσιοκτώ παραμέτρους μαζί της — γι' αυτό δεν είχε βγει καμία.
+class _ReportViewData {
+  const _ReportViewData({
+    required this.groupedRows,
+    required this.itemByKey,
+    required this.selected,
+    required this.primarySelected,
+    required this.totalSelectedSeconds,
+    required this.selectedCallId,
+    required this.isPrimaryRegistered,
+    required this.isPrimaryFailed,
+    required this.canImmediateApiSubmit,
+    required this.canResubmitApi,
+    required this.syncState,
+    required this.connectionStatus,
+    required this.connectionReady,
+    required this.canOpenTicketForm,
+    required this.ticketFormUrl,
+    required this.ticketViewUrl,
+    required this.ticketConfig,
+    required this.aiCooldownActive,
+    required this.aiCooldownSeconds,
+    required this.aiSuggestEnabled,
+    required this.aiSuggestTooltip,
+    required this.promptPreviewEnabled,
+    required this.promptPreviewTooltip,
+    required this.linksAsync,
+    required this.ticketParties,
+    required this.effectiveRequester,
+    required this.autoParties,
+    required this.requesterReferenceDomain,
+  });
+
+  // ── Οι κλήσεις και η επιλογή ───────────────────────────────────────────────
+  final Map<String, List<LansweeperReportCallRowData>> groupedRows;
+  final Map<String, ReportCallItem> itemByKey;
+  final List<ReportCallItem> selected;
+  final ReportCallItem? primarySelected;
+  final int totalSelectedSeconds;
+  final int? selectedCallId;
+
+  // ── Τι επιτρέπει η κατάσταση της κύριας επιλογής ───────────────────────────
+  final bool isPrimaryRegistered;
+  final bool isPrimaryFailed;
+  final bool canImmediateApiSubmit;
+  final bool canResubmitApi;
+
+  // ── Η σύνδεση με το Lansweeper ─────────────────────────────────────────────
+  final AsyncValue<void> syncState;
+  final LansweeperConnectionStatus connectionStatus;
+  final bool connectionReady;
+  final bool canOpenTicketForm;
+  final String ticketFormUrl;
+  final String ticketViewUrl;
+  final LansweeperTicketSubmitConfig ticketConfig;
+
+  // ── Η τεχνητή νοημοσύνη και η αναμονή ποσόστωσης ───────────────────────────
+  final bool aiCooldownActive;
+
+  /// `null` όταν δεν τρέχει αναμονή ποσόστωσης.
+  final int? aiCooldownSeconds;
+  final bool aiSuggestEnabled;
+  final String? aiSuggestTooltip;
+  final bool promptPreviewEnabled;
+  final String? promptPreviewTooltip;
+
+  // ── Τα «πρόσωπα» του ticket και οι σύνδεσμοι ───────────────────────────────
+  final AsyncValue<List<Map<String, dynamic>>> linksAsync;
+  final LansweeperTicketParties? ticketParties;
+  final String effectiveRequester;
+  final ({String? requester, String? asset})? autoParties;
+  final String? requesterReferenceDomain;
 }

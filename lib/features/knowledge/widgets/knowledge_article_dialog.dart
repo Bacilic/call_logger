@@ -1,3 +1,4 @@
+import 'package:call_logger/core/widgets/dialog_scrollable_content.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -132,8 +133,7 @@ class _KnowledgeArticleDialogState
           contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 24),
           content: SizedBox(
             width: 760,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: DialogScrollableContent(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,

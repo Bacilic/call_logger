@@ -9,6 +9,7 @@ import '../providers/main_nav_request_provider.dart';
 import '../services/app_instance_registry.dart';
 import '../utils/run_after_next_frame.dart';
 import '../database/database_reachability.dart';
+import '../database/database_staleness.dart';
 import '../database/database_state_notice.dart';
 import '../database/database_switch_success_notice.dart';
 import '../services/settings_service.dart';
@@ -40,9 +41,16 @@ class MainShellDestinationContent {
   String? _acknowledgedNoticeIdentity;
   late DatabaseStateNotice _databaseStateNotice;
 
+  /// Το όριο ημερών που όρισε ο χρήστης· ως τη φόρτωσή του ισχύει η προεπιλογή.
+  ///
+  /// Ζει δίπλα στο [_acknowledgedNoticeIdentity] και φορτώνεται μαζί του: και
+  /// τα δύο έρχονται από αποθηκευμένη ρύθμιση, και η λωρίδα μένει κρυφή ώσπου
+  /// να έρθουν — αλλιώς θα φάνταζε με λάθος κατώφλι για ένα καρέ.
+  int _stalenessThresholdDays = kDefaultDatabaseStalenessDays;
+
   void initDatabaseStateNotice() {
     _databaseStateNotice = _evaluateCurrentDatabaseNotice();
-    unawaited(_loadAcknowledgedDatabaseNoticeIdentity());
+    unawaited(_loadDatabaseNoticePreferences());
     _watchDatabaseReachability();
   }
 
@@ -83,16 +91,46 @@ class MainShellDestinationContent {
       dbPath: path,
       fileModifiedAt: modifiedAt,
       now: DateTime.now(),
+      thresholdDays: _stalenessThresholdDays,
     );
   }
 
-  Future<void> _loadAcknowledgedDatabaseNoticeIdentity() async {
-    final value = await SettingsService()
-        .getAcknowledgedDatabaseNoticeIdentity();
-    if (!host.mounted) return;
-    _acknowledgedNoticeIdentity = value;
-    _acknowledgedNoticeLoaded = true;
-    host.notifyShellChanged();
+  /// Φέρνει ό,τι χρειάζεται η λωρίδα από τις ρυθμίσεις — **ανεξάρτητα**.
+  ///
+  /// Τα δύο ζητούμενα δεν περιμένουν το ένα το άλλο, και το πιο αργό δεν
+  /// κρατά όμηρο το γρήγορο: το κατώφλι ζει στην ίδια τη βάση, που μπορεί να
+  /// είναι σε φάκελο δικτύου. Αν το περίμενε σειριακά η λωρίδα, μια βάση που
+  /// αργεί να απαντήσει θα έκρυβε **και την ειδοποίηση φθοράς** — ακριβώς την
+  /// ώρα που ο χειριστής πρέπει να πάρει αντίγραφο.
+  ///
+  /// Γι' αυτό η ορατότητα κρέμεται μόνο από την ταυτότητα του «το είπα ήδη»·
+  /// το κατώφλι, όταν έρθει, απλώς ξανακρίνει.
+  Future<void> _loadDatabaseNoticePreferences() async {
+    final settings = SettingsService();
+
+    unawaited(() async {
+      final acknowledged = await settings
+          .getAcknowledgedDatabaseNoticeIdentity();
+      if (!host.mounted) return;
+      _acknowledgedNoticeIdentity = acknowledged;
+      _acknowledgedNoticeLoaded = true;
+      host.notifyShellChanged();
+    }());
+
+    unawaited(() async {
+      // Σιωπηλή σε αποτυχία: χωρίς τη ρύθμιση ισχύει η προεπιλογή, που είναι
+      // ό,τι ισχύει και σε κάθε νέα εγκατάσταση.
+      int threshold;
+      try {
+        threshold = await settings.catalogs.getDatabaseStalenessDays();
+      } catch (_) {
+        return;
+      }
+      if (!host.mounted || threshold == _stalenessThresholdDays) return;
+      _stalenessThresholdDays = threshold;
+      _databaseStateNotice = _evaluateCurrentDatabaseNotice();
+      host.notifyShellChanged();
+    }());
   }
 
   Future<void> _dismissDatabaseStateNotice() async {

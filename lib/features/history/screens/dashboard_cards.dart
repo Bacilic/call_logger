@@ -8,7 +8,7 @@ import '../../../core/widgets/ellipsis_tooltip_text.dart';
 import '../../../core/widgets/app_asset_image.dart';
 import '../models/dashboard_summary_model.dart';
 import '../providers/dashboard_provider.dart';
-import '../utils/issue_distribution.dart';
+import '../utils/category_distribution.dart';
 import '../widgets/lansweeper/lansweeper_report_launcher.dart';
 import 'dashboard_charts.dart';
 import 'dashboard_palette_colors.dart';
@@ -870,11 +870,11 @@ class LongestCallsCard extends ConsumerWidget {
 class CategoryDistributionChartCard extends ConsumerWidget {
   const CategoryDistributionChartCard({
     super.key,
-    required this.issues,
+    required this.categories,
     required this.colors,
   });
 
-  final List<IssueStat> issues;
+  final List<CategoryStat> categories;
   final DashboardPaletteColors colors;
 
   @override
@@ -882,12 +882,12 @@ class CategoryDistributionChartCard extends ConsumerWidget {
     final excludeCallsWithoutCategory = ref.watch(
       dashboardExcludeCallsWithoutCategoryProvider,
     );
-    final visibleIssues = visibleDashboardIssueStats(
-      issues,
+    final visibleCategories = visibleDashboardCategoryStats(
+      categories,
       excludeCallsWithoutCategory: excludeCallsWithoutCategory,
     );
 
-    final metric = ref.watch(dashboardIssueMetricProvider);
+    final metric = ref.watch(dashboardCategoryMetricProvider);
 
     return ChartCard(
       title: 'Κατανομή ανά κατηγορία',
@@ -896,14 +896,14 @@ class CategoryDistributionChartCard extends ConsumerWidget {
       titleTrailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SegmentedButton<IssueDistributionMetric>(
+          SegmentedButton<CategoryDistributionMetric>(
             segments: const [
               ButtonSegment(
-                value: IssueDistributionMetric.count,
+                value: CategoryDistributionMetric.count,
                 label: Text('Πλήθος'),
               ),
               ButtonSegment(
-                value: IssueDistributionMetric.duration,
+                value: CategoryDistributionMetric.duration,
                 label: Text('Διάρκεια'),
               ),
             ],
@@ -914,7 +914,7 @@ class CategoryDistributionChartCard extends ConsumerWidget {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             onSelectionChanged: (selection) => ref
-                .read(dashboardIssueMetricProvider.notifier)
+                .read(dashboardCategoryMetricProvider.notifier)
                 .set(selection.first),
           ),
           const SizedBox(width: 12),
@@ -956,9 +956,9 @@ class CategoryDistributionChartCard extends ConsumerWidget {
             currentChild ?? const SizedBox.shrink(),
         transitionBuilder: (child, animation) =>
             FadeTransition(opacity: animation, child: child),
-        child: IssueDistributionList(
+        child: CategoryDistributionList(
           key: ValueKey<String>('$excludeCallsWithoutCategory-${metric.name}'),
-          issues: visibleIssues,
+          categories: visibleCategories,
           metric: metric,
           barColors: colors.categoryColors,
           mutedColor: colors.kpiSubtitle,
@@ -985,7 +985,10 @@ class MoreSection extends StatelessWidget {
   final String Function(num) formatDuration;
 
   Widget _categoryDistributionCard() {
-    return CategoryDistributionChartCard(issues: data.byIssue, colors: colors);
+    return CategoryDistributionChartCard(
+      categories: data.byCategory,
+      colors: colors,
+    );
   }
 
   @override

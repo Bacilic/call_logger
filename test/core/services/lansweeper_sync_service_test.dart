@@ -4,7 +4,6 @@ import 'package:call_logger/core/services/lansweeper_asset_target.dart';
 import 'package:call_logger/core/services/lansweeper_sync_service.dart';
 import 'package:call_logger/core/services/lansweeper_ticket_submit_config.dart';
 import 'package:call_logger/core/services/settings_service.dart';
-import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _kTestApiUrl = 'http://10.10.201.22:81/api.aspx';
@@ -62,7 +61,7 @@ LansweeperWorkflowRequest _workflowRequest({
   LansweeperAssetTarget? assetTarget,
 }) {
   return LansweeperWorkflowRequest(
-    call: CallModel(id: 42, category: 'IT'),
+    autoSubject: '[IT] #42',
     title: title,
     problem: problem,
     solution: solution,
@@ -366,6 +365,37 @@ void main() {
         final fields = _fieldsForAction(fakePoster, 'AddNote');
         expect(fields, isNotNull);
         expect(fields!['Text'], contains('Χρόνος: 05:00'));
+      },
+    );
+
+    test(
+      'χωρίς διάρκεια η ροή ΔΕΝ μαντεύει χρόνο — η σημείωση φεύγει σκέτη',
+      () async {
+        await service.submitTicketWorkflow(
+          _workflowRequest(
+            config: LansweeperTicketSubmitConfig.defaults().copyWith(
+              includeNoteTime: true,
+            ),
+            durationSeconds: null,
+          ),
+        );
+
+        final fields = _fieldsForAction(fakePoster, 'AddNote');
+        expect(fields, isNotNull);
+        expect(fields!['Text'], 'Λύση δοκιμής.');
+        expect(fields['Text'], isNot(contains('Χρόνος:')));
+        expect(fields['Text'], isNot(contains('00:00')));
+      },
+    );
+
+    test(
+      'το Subject πέφτει στο autoSubject όταν ο τίτλος είναι κενός',
+      () async {
+        await service.submitTicketWorkflow(_workflowRequest(title: ''));
+
+        final fields = _fieldsForAction(fakePoster, 'AddTicket');
+        expect(fields, isNotNull);
+        expect(fields!['Subject'], '[IT] #42');
       },
     );
   });

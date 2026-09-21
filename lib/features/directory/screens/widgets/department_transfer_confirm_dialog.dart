@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../models/department_kind.dart';
+import '../../services/user_move_consequences.dart';
+
 /// Αποτέλεσμα διαλόγου επιβεβαίωσης αλλαγής τμήματος.
 enum DepartmentTransferDialogResult {
   /// Κλείσιμο χωρίς επιβεβαίωση μεταφοράς (επαναφορά πεδίου τμήματος).
@@ -17,6 +20,13 @@ Future<DepartmentTransferDialogResult?> showDepartmentTransferConfirmDialog({
   required String newDepartment,
   required bool newDepartmentExistsInOrg,
 
+  /// Το Είδος του τμήματος που αφήνει και εκείνου που πάει.
+  ///
+  /// Χωρίς αυτά ο διάλογος λέει τα ίδια ακριβώς λόγια είτε ο άνθρωπος πάει στο
+  /// διπλανό γραφείο είτε φεύγει από το νοσοκομείο.
+  DepartmentKind previousKind = DepartmentKind.hospital,
+  DepartmentKind targetKind = DepartmentKind.hospital,
+
   /// True: μήνυμα «Προσθήκη … σε …» και κουμπιά Προσθήκη / Προσθήκη + Δημιουργία.
   bool useAddToDepartmentMessage = false,
 }) {
@@ -28,6 +38,8 @@ Future<DepartmentTransferDialogResult?> showDepartmentTransferConfirmDialog({
       oldDepartment: oldDepartment,
       newDepartment: newDepartment,
       newDepartmentExistsInOrg: newDepartmentExistsInOrg,
+      previousKind: previousKind,
+      targetKind: targetKind,
       useAddToDepartmentMessage: useAddToDepartmentMessage,
     ),
   );
@@ -39,6 +51,8 @@ class _DepartmentTransferConfirmDialog extends StatefulWidget {
     required this.oldDepartment,
     required this.newDepartment,
     required this.newDepartmentExistsInOrg,
+    required this.previousKind,
+    required this.targetKind,
     required this.useAddToDepartmentMessage,
   });
 
@@ -46,6 +60,8 @@ class _DepartmentTransferConfirmDialog extends StatefulWidget {
   final String oldDepartment;
   final String newDepartment;
   final bool newDepartmentExistsInOrg;
+  final DepartmentKind previousKind;
+  final DepartmentKind targetKind;
   final bool useAddToDepartmentMessage;
 
   @override
@@ -66,6 +82,14 @@ class _DepartmentTransferConfirmDialogState
     final t = widget.newDepartment.trim();
     return t.isEmpty ? '—' : t;
   }
+
+  /// Η γραμμή «φεύγει από το νοσοκομείο» — `null` όταν δεν ισχύει.
+  String? get _leavesHospitalNote => userLeavesHospitalMessage(
+    previousKind: widget.previousKind,
+    targetKind: widget.targetKind,
+    targetDepartmentName: widget.newDepartment,
+    userDisplayName: widget.userDisplayName,
+  );
 
   bool get _needsCreate =>
       widget.newDepartment.trim().isNotEmpty &&
@@ -165,6 +189,41 @@ class _DepartmentTransferConfirmDialogState
                 ),
               ],
             ),
+            if (_leavesHospitalNote != null) ...[
+              const SizedBox(height: 10),
+              // Ακριβώς κάτω από το κουτάκι που πρέπει να τσεκαριστεί: η
+              // πληροφορία που αλλάζει τη σημασία της πράξης οφείλει να
+              // διαβαστεί πριν το τικ, όχι μετά.
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.tertiaryContainer.withValues(
+                    alpha: 0.45,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.logout_outlined,
+                      size: 18,
+                      color: theme.colorScheme.tertiary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _leavesHospitalNote!,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (_needsCreate) ...[
               const SizedBox(height: 8),
               Text(

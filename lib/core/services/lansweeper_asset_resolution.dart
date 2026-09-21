@@ -13,7 +13,7 @@ import 'lansweeper_asset_target.dart';
 ///
 /// Null όταν δεν προκύπτει τίποτα χρήσιμο: το ticket φεύγει χωρίς εξοπλισμό,
 /// χωρίς σφάλμα.
-Future<LansweeperAssetTarget?> resolveCallLansweeperAsset({
+Future<LansweeperAssetTarget?> resolveLansweeperAssetTarget({
   required EquipmentRepository repository,
   required int? equipmentId,
   required String? equipmentText,

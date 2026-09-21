@@ -116,8 +116,8 @@ List<KpiBarSparklinePoint> _runnerUpBarPoints(
       return bars.departmentCountsRank2To6;
     case TopEntityMode.caller:
       return bars.callerCountsRank2To6;
-    case TopEntityMode.issue:
-      return bars.issueCountsRank2To6;
+    case TopEntityMode.category:
+      return bars.categoryCountsRank2To6;
   }
 }
 
@@ -143,8 +143,8 @@ KpiTopEntity resolveDashboardTopEntity(
         count: c?.count ?? 0,
         icon: Icons.person_pin_circle_outlined,
       );
-    case TopEntityMode.issue:
-      final i = data.byIssue.isNotEmpty ? data.byIssue.first : null;
+    case TopEntityMode.category:
+      final i = data.byCategory.isNotEmpty ? data.byCategory.first : null;
       return KpiTopEntity(
         title: 'Κορυφαία Κατηγορία',
         label: i?.name ?? '-',

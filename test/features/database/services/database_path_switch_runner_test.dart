@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:call_logger/core/database/database_init_result.dart';
 import 'package:call_logger/core/database/database_init_runner.dart';
 import 'package:call_logger/features/database/services/database_path_switch_runner.dart';
@@ -130,5 +132,29 @@ void main() {
       'applySwitchToSession',
       'declareSwitchEnd',
     ]);
+  });
+
+  // Ο εκτελεστής αξίζει μόνο αν τον περνούν ΟΛΕΣ οι πύλες εναλλαγής. Έλεγχος
+  // πηγαίου κώδικα και όχι συμπεριφοράς: το ζητούμενο είναι «ποιος ορίζει τη
+  // σειρά των βημάτων», δηλαδή δομή, όχι υπολογισμός.
+  test('καμία οθόνη εναλλαγής δεν ξαναγράφει τη σειρά των βημάτων', () {
+    const gates = [
+      'lib/core/widgets/database_error_screen.dart',
+      'lib/features/settings/widgets/pending_reset_database_screen.dart',
+      'lib/features/database/widgets/database_settings_switch_flows.dart',
+    ];
+    for (final gate in gates) {
+      final source = File(
+        '${Directory.current.path}${Platform.pathSeparator}'
+        '${gate.replaceAll('/', Platform.pathSeparator)}',
+      ).readAsStringSync();
+      expect(
+        source.contains('setAndVerifyDatabasePath'),
+        isFalse,
+        reason:
+            'Το «$gate» επαληθεύει μόνο του τη διαδρομή — έτσι ξαναγεννιέται η '
+            'τετράδα βημάτων που ο εκτελεστής υπάρχει για να επιβάλλει.',
+      );
+    }
   });
 }

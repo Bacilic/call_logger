@@ -7,6 +7,7 @@ import '../../models/department_directory_column.dart';
 import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
 import 'catalog_table_hover_focus.dart';
+import 'catalog_select_all_checkbox.dart';
 
 /// Πίνακας τμημάτων: sort, επιλογή, πληκτρολόγιο όπως οι χρήστες.
 class DepartmentsDataTable extends StatefulWidget {
@@ -336,26 +337,13 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
       if (col == DepartmentDirectoryColumn.selection) {
         list.add(
           DataColumn(
-            label: _DepartmentSelectAllCheckbox(
+            label: CatalogSelectAllCheckbox(
+              visibleIds: [
+                for (final d in widget.departments)
+                  if (d.id != null) d.id!,
+              ],
               selectedIds: widget.selectedIds,
-              departments: widget.departments,
-              onSelectAll: () {
-                for (final d in widget.departments) {
-                  if (d.id != null && !widget.selectedIds.contains(d.id)) {
-                    widget.onToggleSelection(d.id!);
-                  }
-                }
-              },
-              onDeselectAll: () {
-                for (final id in widget.selectedIds.toList()) {
-                  widget.onToggleSelection(id);
-                }
-              },
-              allSelected:
-                  widget.departments.isNotEmpty &&
-                  widget.departments.every(
-                    (d) => d.id != null && widget.selectedIds.contains(d.id),
-                  ),
+              onToggleSelection: widget.onToggleSelection,
             ),
           ),
         );
@@ -669,37 +657,6 @@ class _TableResizeHandleState extends State<_TableResizeHandle> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _DepartmentSelectAllCheckbox extends StatelessWidget {
-  const _DepartmentSelectAllCheckbox({
-    required this.selectedIds,
-    required this.departments,
-    required this.onSelectAll,
-    required this.onDeselectAll,
-    required this.allSelected,
-  });
-
-  final Set<int> selectedIds;
-  final List<DepartmentModel> departments;
-  final VoidCallback onSelectAll;
-  final VoidCallback onDeselectAll;
-  final bool allSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Checkbox(
-      value: allSelected,
-      tristate: true,
-      onChanged: (_) {
-        if (allSelected) {
-          onDeselectAll();
-        } else {
-          onSelectAll();
-        }
-      },
     );
   }
 }

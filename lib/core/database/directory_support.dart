@@ -78,10 +78,8 @@ class DirectorySupport {
   ///
   /// **Δεν έχει δική του απάντηση** — προωθεί στην ίδια πηγή με όλα τα
   /// υπόλοιπα. Δύο σημεία που απαντούν στο ίδιο ερώτημα κάποια μέρα θα
-  /// διαφωνήσουν σιωπηλά. Το [executor] δεν χρησιμοποιείται πια.
-  Future<String> auditPerformingUser({DatabaseExecutor? executor}) {
-    return AuditService.performingUser(executor);
-  }
+  /// διαφωνήσουν σιωπηλά.
+  String auditPerformingUser() => AuditService.performingUser();
 
   String userDisplayNameFromRow(Map<String, dynamic>? r) {
     if (r == null) return '';
@@ -452,7 +450,7 @@ class DirectorySupport {
     );
     if (pr.isEmpty) return;
     final pid = pr.first['id'] as int;
-    final ap = await auditPerformingUser(executor: txn);
+    final ap = auditPerformingUser();
     await AuditService.log(
       txn,
       action: AuditActions.modifyPhone,
@@ -493,7 +491,7 @@ class DirectorySupport {
     );
     if (userRows.isEmpty) return;
     await txn.delete('user_phones', where: 'phone_id = ?', whereArgs: [pid]);
-    final ap = await auditPerformingUser(executor: txn);
+    final ap = auditPerformingUser();
     for (final ur in userRows) {
       final uid = ur['user_id'] as int?;
       if (uid == null) continue;

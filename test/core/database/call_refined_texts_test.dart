@@ -85,6 +85,7 @@ void main() {
         callIds: [callId],
         problem: _kRefinedProblem,
         solution: _kSolution,
+        title: null,
         source: CallRefinedSource.aiEdited,
       );
 
@@ -105,6 +106,7 @@ void main() {
       callIds: [first, second, third],
       problem: _kRefinedProblem,
       solution: _kSolution,
+      title: null,
       source: CallRefinedSource.ai,
     );
 
@@ -121,6 +123,7 @@ void main() {
       callIds: [callId],
       problem: _kRefinedProblem,
       solution: _kSolution,
+      title: null,
       source: CallRefinedSource.ai,
     );
 
@@ -128,6 +131,7 @@ void main() {
       callIds: [callId],
       problem: '   ',
       solution: '',
+      title: null,
       source: CallRefinedSource.manual,
     );
 
@@ -143,6 +147,7 @@ void main() {
       callIds: [callId],
       problem: '',
       solution: _kSolution,
+      title: null,
       source: CallRefinedSource.manual,
     );
 
@@ -162,6 +167,7 @@ void main() {
       callIds: [callId],
       problem: _kRefinedProblem,
       solution: _kSolution,
+      title: null,
       source: CallRefinedSource.ai,
     );
 
@@ -181,6 +187,7 @@ void main() {
         callIds: [callId],
         problem: _kRefinedProblem,
         solution: _kSolution,
+        title: null,
         source: CallRefinedSource.ai,
       );
 
@@ -203,6 +210,7 @@ void main() {
         callIds: [callId],
         problem: _kRefinedProblem,
         solution: _kSolution,
+        title: null,
         source: CallRefinedSource.ai,
       );
     }
@@ -213,6 +221,100 @@ void main() {
       whereArgs: ['ΚΑΘΑΡΟ ΚΕΙΜΕΝΟ ΚΛΗΣΗΣ'],
     );
     expect(logs, hasLength(1));
+  });
+
+  group('ο τίτλος της κλήσης', () {
+    test('γράφεται στο δικό του πεδίο, όχι μέσα στην Περιγραφή', () async {
+      final callId = await insertCall();
+
+      await repo.saveRefinedTexts(
+        callIds: [callId],
+        problem: _kRefinedProblem,
+        solution: _kSolution,
+        title: 'Δεν εκτυπώνει ο εκτυπωτής ετικετών',
+        source: CallRefinedSource.aiEdited,
+      );
+
+      final row = await readCall(callId);
+      expect(row['title'], 'Δεν εκτυπώνει ο εκτυπωτής ετικετών');
+      expect(
+        row['issue'],
+        _kRefinedProblem,
+        reason: 'Η Περιγραφή δεν κουβαλά πια τον τίτλο μπροστά της.',
+      );
+    });
+
+    test('κενός τίτλος δεν σβήνει αυτόν που υπάρχει ήδη', () async {
+      final callId = await insertCall();
+      await repo.saveRefinedTexts(
+        callIds: [callId],
+        problem: _kRefinedProblem,
+        solution: '',
+        title: 'Ο πρώτος τίτλος',
+        source: CallRefinedSource.ai,
+      );
+
+      await repo.saveRefinedTexts(
+        callIds: [callId],
+        problem: 'Νέα περιγραφή',
+        solution: '',
+        title: null,
+        source: CallRefinedSource.manual,
+      );
+
+      expect((await readCall(callId))['title'], 'Ο πρώτος τίτλος');
+      expect((await readCall(callId))['issue'], 'Νέα περιγραφή');
+    });
+
+    test('μόνος του ο τίτλος αρκεί για να γίνει εγγραφή', () async {
+      final callId = await insertCall();
+
+      await repo.saveRefinedTexts(
+        callIds: [callId],
+        problem: '',
+        solution: '',
+        title: 'Μόνο τίτλος',
+        source: CallRefinedSource.manual,
+      );
+
+      final row = await readCall(callId);
+      expect(row['title'], 'Μόνο τίτλος');
+      expect(
+        row['issue'],
+        _kRawIssue,
+        reason: 'Κενή περιγραφή δεν αδειάζει ό,τι υπάρχει.',
+      );
+    });
+
+    test('όλες οι κλήσεις του ίδιου ticket παίρνουν τον ίδιο τίτλο', () async {
+      final first = await insertCall();
+      final second = await insertCall(issue: 'Άλλο πρόβλημα');
+
+      await repo.saveRefinedTexts(
+        callIds: [first, second],
+        problem: _kRefinedProblem,
+        solution: '',
+        title: 'Κοινός τίτλος',
+        source: CallRefinedSource.ai,
+      );
+
+      expect((await readCall(first))['title'], 'Κοινός τίτλος');
+      expect((await readCall(second))['title'], 'Κοινός τίτλος');
+    });
+
+    test('αλλαγμένος μόνο ο τίτλος μετράει ως αλλαγή', () {
+      expect(
+        CallsLansweeperRepository.wouldChangeTexts(
+          problem: 'Δεν τυπώνει',
+          solution: 'Άλλαξα καλώδιο',
+          title: 'Νέος τίτλος',
+          currentIssue: 'Δεν τυπώνει',
+          currentSolution: 'Άλλαξα καλώδιο',
+          currentTitle: 'Παλιός τίτλος',
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('μετάπτωση v43', () {

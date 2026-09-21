@@ -104,6 +104,15 @@ abstract final class ProfileSettingKeys {
     'show_tasks_badge',
     legacySource: ProfileSettingLegacySource.machine,
   );
+
+  /// Προεπισκόπηση πριν σταλεί η εκκρεμότητα στον εκτυπωτή.
+  ///
+  /// Γεννιέται προσωπική: είναι συνήθεια του ανθρώπου, όχι πολιτική του
+  /// τμήματος — άλλος θέλει να δει πρώτα, άλλος ξέρει τι τυπώνει.
+  static const ProfileSettingKey taskPrintPreview = ProfileSettingKey(
+    'task_print_preview',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
   static const ProfileSettingKey navRailShowLabels = ProfileSettingKey(
     'nav_rail_show_labels',
     legacySource: ProfileSettingLegacySource.machine,

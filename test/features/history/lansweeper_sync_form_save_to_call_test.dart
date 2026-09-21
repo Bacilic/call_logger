@@ -43,8 +43,15 @@ void main() {
                 titleController: titleController,
                 notesController: notesController,
                 solutionController: solutionController,
-                onSaveToCall: onSaveToCall,
-                saveToCallDisabledReason: saveToCallDisabledReason,
+                textSaveTargets: [
+                  if (onSaveToCall != null)
+                    LansweeperTextSaveTarget(
+                      label: 'Αποθήκευση στην κλήση',
+                      message: 'Γράφει το κείμενο πάνω στην κλήση',
+                      onSave: onSaveToCall,
+                      disabledReason: saveToCallDisabledReason ?? () => null,
+                    ),
+                ],
               ),
             ),
           ),

@@ -4,6 +4,7 @@
 
 import 'package:call_logger/core/database/database_file_classifier.dart';
 import 'package:call_logger/core/database/database_integrity_probe.dart';
+import 'package:call_logger/core/database/database_staleness.dart';
 import 'package:call_logger/core/database/database_state_notice.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,9 +15,11 @@ DatabaseFileProfile _callLoggerProfile({
   int? equipmentCount,
   int? departmentCount,
   String? latestCallDate,
+  DateTime? latestAuditAt,
 }) {
   return DatabaseFileProfile(
     kind: DatabaseFileKind.callLogger,
+    latestAuditAt: latestAuditAt,
     callCount: callCount,
     userCount: userCount,
     phoneCount: phoneCount,
@@ -96,9 +99,9 @@ void main() {
       );
     });
 
-    test('παλιά βάση ακριβώς στο όριο των 60 ημερών → oldDatabase', () {
+    test('παλιά βάση ακριβώς στο όριο → oldDatabase', () {
       final latest = now.subtract(
-        const Duration(days: kOldDatabaseNoticeThresholdDays),
+        const Duration(days: kDefaultDatabaseStalenessDays),
       );
       final notice = evaluateDatabaseStateNotice(
         profile: _callLoggerProfile(
@@ -124,16 +127,19 @@ void main() {
       expect(
         notice.message,
         contains(
-          'τελευταία στις '
+          'τελευταία '
           '${latest.day.toString().padLeft(2, '0')}/'
           '${latest.month.toString().padLeft(2, '0')}/'
           '${latest.year}',
         ),
       );
+      // Η διαδρομή απαντά στο «ποια βάση φταίει» — το μόνο που έλειπε
+      // στο επεισόδιο του «χαμένου» τμήματος.
+      expect(notice.message, contains(path));
     });
 
     test('φρέσκια βάση → none', () {
-      final latest = now.subtract(const Duration(days: 10));
+      final latest = now.subtract(const Duration(days: 2));
       final notice = evaluateDatabaseStateNotice(
         profile: _callLoggerProfile(
           callCount: 50,
@@ -153,6 +159,79 @@ void main() {
 
       expect(notice.kind, DatabaseNoticeKind.none);
       expect(notice.message, isEmpty);
+    });
+
+    test('το Ιστορικό κρατά ζωντανή βάση που δεν δέχτηκε κλήσεις', () {
+      // Βάση όπου δουλεύεται μόνο ο Κατάλογος: η τελευταία κλήση είναι μηνών,
+      // αλλά κάποιος έγραψε χθες. Με κριτήριο μόνο τις κλήσεις θα φαινόταν
+      // εγκαταλειμμένη.
+      final oldCall = now.subtract(const Duration(days: 200));
+      final notice = evaluateDatabaseStateNotice(
+        profile: _callLoggerProfile(
+          callCount: 50,
+          userCount: 5,
+          phoneCount: 8,
+          equipmentCount: 12,
+          departmentCount: 2,
+          latestCallDate:
+              '${oldCall.year.toString().padLeft(4, '0')}-'
+              '${oldCall.month.toString().padLeft(2, '0')}-'
+              '${oldCall.day.toString().padLeft(2, '0')}',
+          latestAuditAt: now.subtract(const Duration(days: 1)),
+        ),
+        dbPath: path,
+        fileModifiedAt: modified,
+        now: now,
+      );
+
+      expect(notice.kind, DatabaseNoticeKind.none);
+    });
+
+    test('άδειο Ιστορικό δεν ακυρώνει τη μαρτυρία των κλήσεων', () {
+      // Η εκκαθάριση Ιστορικού μπορεί να το αφήσει άδειο· οι κλήσεις μένουν.
+      final recentCall = now.subtract(const Duration(days: 1));
+      final notice = evaluateDatabaseStateNotice(
+        profile: _callLoggerProfile(
+          callCount: 50,
+          userCount: 5,
+          phoneCount: 8,
+          equipmentCount: 12,
+          departmentCount: 2,
+          latestCallDate:
+              '${recentCall.year.toString().padLeft(4, '0')}-'
+              '${recentCall.month.toString().padLeft(2, '0')}-'
+              '${recentCall.day.toString().padLeft(2, '0')}',
+        ),
+        dbPath: path,
+        fileModifiedAt: modified,
+        now: now,
+      );
+
+      expect(notice.kind, DatabaseNoticeKind.none);
+    });
+
+    test('το κατώφλι του χρήστη υπερισχύει της προεπιλογής', () {
+      final latest = now.subtract(const Duration(days: 20));
+      DatabaseStateNotice noticeWith(int days) => evaluateDatabaseStateNotice(
+        profile: _callLoggerProfile(
+          callCount: 50,
+          userCount: 5,
+          phoneCount: 8,
+          equipmentCount: 12,
+          departmentCount: 2,
+          latestCallDate:
+              '${latest.year.toString().padLeft(4, '0')}-'
+              '${latest.month.toString().padLeft(2, '0')}-'
+              '${latest.day.toString().padLeft(2, '0')}',
+        ),
+        dbPath: path,
+        fileModifiedAt: modified,
+        now: now,
+        thresholdDays: days,
+      );
+
+      expect(noticeWith(10).kind, DatabaseNoticeKind.oldDatabase);
+      expect(noticeWith(60).kind, DatabaseNoticeKind.none);
     });
 
     test('φθορά περιεχομένου → δική της ειδοποίηση, με οδηγία', () {

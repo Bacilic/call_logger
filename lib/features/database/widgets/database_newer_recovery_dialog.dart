@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'database_recovery_progress.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -127,7 +128,11 @@ Future<bool> runDatabaseNewerRecovery({
       return true;
 
     case DatabaseNewerVersionChoice.downgradeCopy:
-      final outcome = await downgradeCopyToAppVersion(path);
+      final outcome = await withDatabaseRecoveryProgress(
+        context,
+        'Δημιουργείται αντίγραφο και υποβαθμίζεται…',
+        () => downgradeCopyToAppVersion(path),
+      );
       if (!context.mounted) return false;
       if (!outcome.isSuccess) {
         await _showFailureDialog(
@@ -146,7 +151,11 @@ Future<bool> runDatabaseNewerRecovery({
     case DatabaseNewerVersionChoice.downgradeOriginal:
       final confirmed = await _confirmDowngradeOriginal(context, path);
       if (!context.mounted || !confirmed) return false;
-      final outcome = await downgradeDatabaseFileToAppVersion(path);
+      final outcome = await withDatabaseRecoveryProgress(
+        context,
+        'Υποβαθμίζεται η βάση…',
+        () => downgradeDatabaseFileToAppVersion(path),
+      );
       if (!context.mounted) return false;
       if (!outcome.isSuccess) {
         await _showFailureDialog(
@@ -604,7 +613,11 @@ Future<bool> _openDowngradedPath(
   String dbPath, {
   required Future<void> Function() onSuccess,
 }) async {
-  final outcome = await setAndVerifyDatabasePath(dbPath);
+  final outcome = await withDatabaseRecoveryProgress(
+    context,
+    'Ελέγχεται η υποβαθμισμένη βάση…',
+    () => setAndVerifyDatabasePath(dbPath),
+  );
   if (!context.mounted) return false;
   if (!outcome.ok) {
     await _showFailureDialog(

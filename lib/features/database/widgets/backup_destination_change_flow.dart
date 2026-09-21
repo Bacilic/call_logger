@@ -10,6 +10,7 @@ import '../providers/database_backup_settings_provider.dart';
 import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
 import '../utils/backup_schedule_utils.dart';
+import 'broken_backup_dialog.dart';
 
 /// Η κοινή ροή «άλλαξε φάκελο προορισμού και πάρε αντίγραφο τώρα».
 ///
@@ -91,6 +92,19 @@ Future<void> runBackupAndReport({
   }
 
   if (!context.mounted) return;
+
+  // Το αρχείο υπάρχει στον δίσκο, απλώς δεν άνοιξε: εδώ υπάρχει χρήστης να
+  // αποφασίσει τι θα το κάνει, οπότε παίρνει διάλογο και όχι ένα μήνυμα που
+  // φεύγει σε οκτώ δευτερόλεπτα.
+  if (result.isVerifiedBroken) {
+    await showBrokenBackupDialog(
+      context: context,
+      brokenFilePath: result.brokenArtifactPath!,
+      reason: result.message ?? 'Το αντίγραφο δεν άνοιξε για έλεγχο.',
+    );
+    return;
+  }
+
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(

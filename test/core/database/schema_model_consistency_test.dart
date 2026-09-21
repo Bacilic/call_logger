@@ -25,6 +25,23 @@ const _schemaOnlyColumns = <String, Set<String>>{
   'tasks': {'search_index'},
 };
 
+/// Στήλες που το model **διαβάζει αλλά ποτέ δεν γράφει**.
+///
+/// Διαφέρουν από τις [_schemaOnlyColumns]: εδώ υπάρχει κανονικό πεδίο στο
+/// model και το `fromMap` το γεμίζει — λείπει μόνο από το `toMap`, επίτηδες.
+/// Ο λόγος είναι πάντα ο ίδιος: η φόρμα γράφει την **ολόκληρη** καρτέλα, οπότε
+/// ένα πεδίο που το γεμίζει άλλη πόρτα θα σβηνόταν από κάθε αποθήκευση — εδώ,
+/// η αποστολή του συναδέλφου στο Lansweeper. Γι' αυτό συνεχίζουν να παίρνουν
+/// πραγματική τιμή στον έλεγχο του `fromMap` παρακάτω: η ανάγνωση φυλάγεται
+/// κανονικά, μόνο η εγγραφή εξαιρείται.
+const _readOnlyColumns = <String, Set<String>>{
+  'tasks': {
+    'lansweeper_state',
+    'lansweeper_main_ticket_id',
+    'lansweeper_last_sync_at',
+  },
+};
+
 /// Κλειδιά toMap() που δεν είναι στήλες του πίνακα (M2M / joins).
 const _toMapOnlyKeys = <String, Set<String>>{
   'users': {'phones'},
@@ -86,6 +103,7 @@ void main() {
           equipmentText: 'eq',
           issue: 'issue',
           solution: 'solution',
+          title: 'title',
           refinedSource: CallRefinedSource.ai,
           refinedAt: '2026-01-01T12:00:00',
           category: 'cat',
@@ -208,7 +226,10 @@ void main() {
         final modelColumns = columns.difference(schemaOnly);
         final toMapKeys = pair.sampleToMap().keys.toSet().difference(toMapOnly);
 
-        final missingFromToMap = modelColumns.difference(toMapKeys);
+        final readOnly = _readOnlyColumns[pair.table] ?? const {};
+        final missingFromToMap = modelColumns
+            .difference(toMapKeys)
+            .difference(readOnly);
         final missingFromSchema = toMapKeys.difference(columns);
 
         expect(

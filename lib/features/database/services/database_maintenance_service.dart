@@ -124,7 +124,7 @@ class DatabaseMaintenanceService {
     final repo = await DatabaseMaintenanceRepositoryFactory.fromHelper();
     await repo.vacuum();
     try {
-      final user = await AuditService.performingUser(repo.db);
+      final user = AuditService.performingUser();
       await AuditService.log(
         repo.db,
         action: 'VACUUM ΒΑΣΗΣ',
@@ -139,7 +139,7 @@ class DatabaseMaintenanceService {
     final repo = await DatabaseMaintenanceRepositoryFactory.fromHelper();
     await repo.reindex();
     try {
-      final user = await AuditService.performingUser(repo.db);
+      final user = AuditService.performingUser();
       await AuditService.log(
         repo.db,
         action: 'REINDEX ΒΑΣΗΣ',
@@ -161,7 +161,7 @@ class DatabaseMaintenanceService {
     final n = await DatabaseMaintenanceRepository(db).deleteAllRows(tableName);
     if (tableName != 'audit_log') {
       try {
-        final user = await AuditService.performingUser(db);
+        final user = AuditService.performingUser();
         await AuditService.log(
           db,
           action: 'ΠΛΗΡΗΣ ΕΚΚΑΘΑΡΙΣΗ ΠΙΝΑΚΑ',
@@ -186,7 +186,7 @@ class DatabaseMaintenanceService {
       db,
     ).deleteAuditLogRowsBefore(iso);
     try {
-      final user = await AuditService.performingUser(db);
+      final user = AuditService.performingUser();
       await AuditService.log(
         db,
         action: 'ΕΚΚΑΘΑΡΙΣΗ ΠΑΛΑΙΩΝ ΕΓΓΡΑΦΩΝ AUDIT',
@@ -212,7 +212,7 @@ class DatabaseMaintenanceService {
     ).deleteClosedTasksBefore(closedStatus: closed, isoCutoff: iso);
     if (n > 0) {
       try {
-        final user = await AuditService.performingUser(db);
+        final user = AuditService.performingUser();
         await AuditService.log(
           db,
           action: 'ΔΙΑΓΡΑΦΗ ΠΑΛΑΙΩΝ ΚΛΕΙΣΤΩΝ ΕΚΚΡΕΜΟΤΗΤΩΝ',
@@ -336,7 +336,7 @@ class DatabaseMaintenanceService {
 
     try {
       final dbLog = await DatabaseHelper.instance.database;
-      final user = await AuditService.performingUser(dbLog);
+      final user = AuditService.performingUser();
       await AuditService.log(
         dbLog,
         action: 'ΝΕΑ ΒΑΣΗ ΣΕ ΕΠΙΛΕΓΜΕΝΗ ΔΙΑΔΡΟΜΗ',
@@ -408,7 +408,7 @@ class DatabaseMaintenanceService {
 
     try {
       final dbLog = await DatabaseHelper.instance.database;
-      final user = await AuditService.performingUser(dbLog);
+      final user = AuditService.performingUser();
       await AuditService.log(
         dbLog,
         action: 'ΑΝΤΙΚΑΤΑΣΤΑΣΗ ΤΡΕΧΟΥΣΑΣ ΒΑΣΗΣ ΜΕ ΝΕΑ',

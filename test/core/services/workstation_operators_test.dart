@@ -6,8 +6,22 @@ import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/services/workstation_operators.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Operator _operator(String name, {bool isActive = true}) =>
-    Operator(displayName: name, isActive: isActive, createdAt: DateTime(2026));
+Operator _operator(
+  String name, {
+  bool isActive = true,
+  int? id,
+  String? account,
+}) => Operator(
+  id: id,
+  displayName: name,
+  windowsAccount: account,
+  isActive: isActive,
+  createdAt: DateTime(2026),
+);
+
+/// Ο υπολογιστής του Βλάση: το προφίλ του είναι δεμένο στον λογαριασμό του.
+final _vlasis = _operator('Βλάσης', id: 2, account: 'vl.oikonomou');
+final _vasilis = _operator('Βασίλης', id: 1, account: 'v.drosos');
 
 void main() {
   group('Τι θυμάται ο σταθμός μετά από επιλογή', () {
@@ -93,6 +107,95 @@ void main() {
           const [],
         ).map((o) => o.displayName),
         ['Άννα', 'Βασίλης'],
+      );
+    });
+
+    test('ο άνθρωπος του λογαριασμού Windows μπαίνει πρώτος', () {
+      // Ο Βλάσης γύρισε από άδεια. Ο υπολογιστής θυμάται τον Βασίλη, αλλά
+      // μπροστά στην οθόνη κάθεται εκείνος — και η λίστα το δείχνει.
+      final ordered = orderProfilesForWorkstation(
+        [_operator('Άννα'), _vasilis, _vlasis],
+        const ['Βασίλης'],
+        windowsAccount: 'vl.oikonomou',
+      );
+
+      expect(ordered.map((o) => o.displayName), ['Βλάσης', 'Βασίλης', 'Άννα']);
+    });
+
+    test('κανείς δεν εμφανίζεται δύο φορές', () {
+      final ordered = orderProfilesForWorkstation(
+        [_vasilis, _vlasis],
+        const ['Βασίλης'],
+        windowsAccount: 'v.drosos',
+      );
+
+      expect(ordered.map((o) => o.displayName), ['Βασίλης', 'Βλάσης']);
+    });
+  });
+
+  group('Διαψεύδει ο λογαριασμός Windows τη μνήμη του σταθμού;', () {
+    test('ΝΑΙ όταν δείχνει σε άλλον — το σενάριο της επιστροφής από άδεια', () {
+      expect(
+        workstationMemoryIsContradicted(
+          remembered: _vasilis,
+          profiles: [_vasilis, _vlasis],
+          windowsAccount: 'vl.oikonomou',
+        ),
+        isTrue,
+      );
+    });
+
+    test('ΟΧΙ όταν δείχνει στον ίδιο άνθρωπο', () {
+      expect(
+        workstationMemoryIsContradicted(
+          remembered: _vasilis,
+          profiles: [_vasilis, _vlasis],
+          windowsAccount: 'V.Drosos',
+        ),
+        isFalse,
+      );
+    });
+
+    test('ΟΧΙ όταν ο λογαριασμός δεν ανήκει σε κανένα προφίλ', () {
+      // Ο κοινόχρηστος σταθμός, όπου τα προφίλ είναι αυτόνομα: η εκκίνηση
+      // μένει ακριβώς όπως ήταν.
+      expect(
+        workstationMemoryIsContradicted(
+          remembered: _vasilis,
+          profiles: [_vasilis, _vlasis],
+          windowsAccount: 'tpo.koino',
+        ),
+        isFalse,
+      );
+    });
+
+    test('ΟΧΙ όταν δεν υπάρχει καν λογαριασμός', () {
+      expect(
+        workstationMemoryIsContradicted(
+          remembered: _vasilis,
+          profiles: [_vasilis, _vlasis],
+          windowsAccount: null,
+        ),
+        isFalse,
+      );
+    });
+
+    test('το απενεργοποιημένο προφίλ δεν διαψεύδει κανέναν', () {
+      // Ο Βλάσης έφυγε από το νοσοκομείο και το προφίλ του απενεργοποιήθηκε.
+      // Ο λογαριασμός μπορεί να επιβιώνει στα Windows — δεν σημαίνει τίποτα.
+      final archived = _operator(
+        'Βλάσης',
+        id: 2,
+        account: 'vl.oikonomou',
+        isActive: false,
+      );
+      expect(
+        workstationMemoryIsContradicted(
+          remembered: _vasilis,
+          profiles: [_vasilis, archived],
+          windowsAccount: 'vl.oikonomou',
+        ),
+        isFalse,
       );
     });
   });

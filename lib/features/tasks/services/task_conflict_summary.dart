@@ -1,5 +1,3 @@
-import 'package:intl/intl.dart';
-
 import '../../../core/utils/conflict_actor_text.dart';
 import '../models/task.dart';
 
@@ -28,19 +26,6 @@ class TaskConflictSummary {
   /// Η λύση που υπάρχει **τώρα** στη βάση, αν υπάρχει.
   final String? freshSolution;
 
-  /// Η ώρα γραμμένη όπως τη διαβάζει άνθρωπος: σκέτη ώρα για σήμερα, με
-  /// ημερομηνία για παλιότερα. Το «στις 18:00» για κάτι που έγινε προχθές
-  /// είναι παραπλανητικό.
-  static String describeMoment(DateTime moment, {required DateTime now}) {
-    final sameDay =
-        moment.year == now.year &&
-        moment.month == now.month &&
-        moment.day == now.day;
-    return sameDay
-        ? DateFormat('HH:mm').format(moment)
-        : DateFormat('dd/MM HH:mm').format(moment);
-  }
-
   static TaskConflictSummary of({
     required Task attempted,
     required Task fresh,
@@ -50,9 +35,7 @@ class TaskConflictSummary {
   }) {
     final moment = now ?? DateTime.now();
     final who = conflictActorName(changedBy);
-    final when = changedAt == null
-        ? ''
-        : ' στις ${describeMoment(changedAt, now: moment)}';
+    final when = conflictMomentSuffix(changedAt, now: moment);
 
     final freshStatus = TaskStatusX.fromString(fresh.status);
     final attemptedStatus = TaskStatusX.fromString(attempted.status);

@@ -5,6 +5,7 @@ import 'directory_conflict_dialog.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
+import '../../../../core/widgets/dialog_scrollable_content.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/services/lansweeper_asset_target.dart';
 import '../../../../core/services/lookup_service.dart';
@@ -254,8 +255,13 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
       c.addListener(markFormChanged);
     }
     notesController.addListener(markFormChanged);
+    // Ο κατάλογος φορτώνει ασύγχρονα: ό,τι χρειάζεται ονόματα περιμένει εδώ.
+    ref.listenManual(lookupServiceProvider, (_, _) => refreshFromCatalog());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // Και για την περίπτωση που ο κατάλογος ήταν ήδη φορτωμένος όταν
+      // άνοιξε η φόρμα — τότε ο ακροατής από πάνω δεν έχει τι να αναγγείλει.
+      refreshFromCatalog();
       dismissGuard.tryCaptureFormBaseline();
       _applyRequestedFocus();
     });
@@ -377,6 +383,76 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
       departmentController.text = '';
     }
     locationController.text = (e?.location ?? '').trim();
+  }
+
+  /// Συμπληρώνει από τον κατάλογο ό,τι δεν μπορούσε να ξέρει το [initState].
+  ///
+  /// Τα πεδία Κάτοχος και Τμήμα δείχνουν **ονόματα**, ενώ ο εξοπλισμός κρατά
+  /// αναγνωριστικά· τα ονόματα τα ξέρει μόνο ο κατάλογος, που φορτώνει
+  /// ασύγχρονα. Ώσπου να φτάσει, τα δύο πεδία δεν έχουν τι να δείξουν.
+  ///
+  /// Καλείται από **τρία** σημεία και από πουθενά αλλού: όταν φτάνει ή
+  /// ανανεώνεται ο κατάλογος, μετά το πρώτο καρέ για την περίπτωση που ήταν
+  /// ήδη φορτωμένος, και όταν ο χρήστης διαλέγει κάτοχο. Ποτέ μέσα από
+  /// `build` — η ζωγραφική δεν αλλάζει κατάσταση.
+  void refreshFromCatalog() {
+    if (!mounted) return;
+    final service = ref.read(lookupServiceProvider).asData?.value.service;
+    if (service == null) return;
+    if (_applyCatalogSync(service)) setState(() {});
+    dismissGuard.tryCaptureFormBaseline();
+  }
+
+  /// Οι τέσσερις συμπληρώσεις, με τη σειρά που τις ζητά η φόρμα.
+  ///
+  /// Επιστρέφει `true` όταν άλλαξε κάτι που πρέπει να ξαναζωγραφιστεί.
+  bool _applyCatalogSync(LookupService service) {
+    var changed = false;
+
+    // 1. Το τμήμα του ίδιου του εξοπλισμού — μόνο όσο δεν υπάρχει κάτοχος να
+    //    το υπαγορεύσει· αλλιώς το τμήμα βγαίνει από εκείνον.
+    if (!equipmentDepartmentTextInitialized) {
+      if (widget.initialOwner?.id == null) {
+        final departmentId = widget.initialEquipment?.departmentId;
+        if (departmentId != null) {
+          final name = service.getDepartmentName(departmentId)?.trim() ?? '';
+          if (name.isNotEmpty) departmentController.text = name;
+        }
+      }
+      equipmentDepartmentTextInitialized = true;
+      changed = true;
+    }
+
+    final ownerId = selectedUserId;
+    if (ownerId == null) {
+      _deptLocScheduledForUserId = null;
+      return changed;
+    }
+    final owner = service.findUserById(ownerId);
+
+    // 2. Ο κάτοχος κλειδώνει το τμήμα πάνω του.
+    if (_deptLocScheduledForUserId != ownerId && owner != null) {
+      _deptLocScheduledForUserId = ownerId;
+      _applyDepartmentFromUser(owner);
+      changed = true;
+    }
+
+    // 3. Η αναφορά στη θέση του κατόχου ακολουθεί ό,τι λέει ο κατάλογος.
+    if (locationState.ownerLocation != (owner?.location ?? '').trim()) {
+      syncLocationOwner(owner?.location);
+      changed = true;
+    }
+
+    // 4. Το όνομα του κατόχου στο πεδίο.
+    if (!ownerTextInitialized) {
+      if (owner != null) {
+        ownerController.text = owner.fullNameWithDepartment;
+      }
+      ownerTextInitialized = true;
+      changed = true;
+    }
+
+    return changed;
   }
 
   Widget _departmentAutocompleteOptionsView(
@@ -757,103 +833,84 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
           contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 24),
           content: Form(
             key: _formKey,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              TextFormField(
-                                controller: codeController,
-                                focusNode: _codeFocusNode,
-                                decoration: const InputDecoration(
-                                  labelText: 'Κωδικός',
-                                  border: OutlineInputBorder(),
-                                ),
-                                validator: _requiredValidator,
-                                onChanged: (_) => setState(() {}),
+            child: DialogScrollableContent(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextFormField(
+                              controller: codeController,
+                              focusNode: _codeFocusNode,
+                              decoration: const InputDecoration(
+                                labelText: 'Κωδικός',
+                                border: OutlineInputBorder(),
                               ),
-                              CatalogValidationHintText(
-                                hint: validation?.equipmentCodeFieldHint(
-                                  codeController.text,
-                                ),
+                              validator: _requiredValidator,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            CatalogValidationHintText(
+                              hint: validation?.equipmentCodeFieldHint(
+                                codeController.text,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildTypeField()),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ResizableTextArea(
-                      controller: notesController,
-                      focusNode: _notesFocusNode,
-                      decoration: const InputDecoration(
-                        labelText: 'Σημειώσεις',
-                        border: OutlineInputBorder(),
-                        alignLabelWithHint: true,
                       ),
-                      minLines: 2,
-                      onChanged: (_) => setState(() {}),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildTypeField()),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ResizableTextArea(
+                    controller: notesController,
+                    focusNode: _notesFocusNode,
+                    decoration: const InputDecoration(
+                      labelText: 'Σημειώσεις',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: lansweeperAssetNameController,
-                      decoration: InputDecoration(
-                        labelText: 'Αναγνωριστικό Lansweeper',
-                        hintText:
-                            _lansweeperAutoSuggestion() ?? 'Όνομα asset ή IP',
-                        // Η αυτόματη τιμή γράφεται ΜΕΣΑ στο κείμενο βοήθειας:
-                        // ως υπόδειξη του πεδίου φαίνεται μόνο με εστίαση, και
-                        // η ερώτηση «τι θα σταλεί;» δεν πρέπει να απαιτεί κλικ.
-                        helperText: _lansweeperAutoSuggestion() == null
-                            ? 'Όνομα asset (ή IP) για τη σύνδεση του '
-                                  'εξοπλισμού στο ticket του Lansweeper.'
-                            : 'Κενό = στέλνεται αυτόματα η τιμή '
-                                  '${_lansweeperAutoSuggestion()}',
-                        helperMaxLines: 2,
-                        border: const OutlineInputBorder(),
-                      ),
-                      onChanged: (_) => setState(() {}),
+                    minLines: 2,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: lansweeperAssetNameController,
+                    decoration: InputDecoration(
+                      labelText: 'Αναγνωριστικό Lansweeper',
+                      hintText:
+                          _lansweeperAutoSuggestion() ?? 'Όνομα asset ή IP',
+                      // Η αυτόματη τιμή γράφεται ΜΕΣΑ στο κείμενο βοήθειας:
+                      // ως υπόδειξη του πεδίου φαίνεται μόνο με εστίαση, και
+                      // η ερώτηση «τι θα σταλεί;» δεν πρέπει να απαιτεί κλικ.
+                      helperText: _lansweeperAutoSuggestion() == null
+                          ? 'Όνομα asset (ή IP) για τη σύνδεση του '
+                                'εξοπλισμού στο ticket του Lansweeper.'
+                          : 'Κενό = στέλνεται αυτόματα η τιμή '
+                                '${_lansweeperAutoSuggestion()}',
+                      helperMaxLines: 2,
+                      border: const OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 12),
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final pairsAsync = ref.watch(
-                          remoteToolFormPairsProvider,
-                        );
-                        final catalogAsync = ref.watch(
-                          remoteToolsCatalogProvider,
-                        );
-                        return pairsAsync.when(
-                          data: (pairs) => catalogAsync.when(
-                            data: (catalog) => remoteParams.buildSection(
-                              pairs,
-                              catalog,
-                              validation,
-                            ),
-                            loading: () => const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8),
-                              child: LinearProgressIndicator(minHeight: 2),
-                            ),
-                            error: (err, _) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                'Κατάλογος εργαλείων: $err',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                              ),
-                            ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final pairsAsync = ref.watch(remoteToolFormPairsProvider);
+                      final catalogAsync = ref.watch(
+                        remoteToolsCatalogProvider,
+                      );
+                      return pairsAsync.when(
+                        data: (pairs) => catalogAsync.when(
+                          data: (catalog) => remoteParams.buildSection(
+                            pairs,
+                            catalog,
+                            validation,
                           ),
                           loading: () => const Padding(
                             padding: EdgeInsets.symmetric(vertical: 8),
@@ -862,470 +919,389 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
                           error: (err, _) => Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             child: Text(
-                              'Δεν φορτώθηκαν εργαλεία: $err',
+                              'Κατάλογος εργαλείων: $err',
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.error,
                               ),
                             ),
                           ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final async = ref.watch(lookupServiceProvider);
-                        return async.when(
-                          data: (bundle) {
-                            final service = bundle.service;
-                            // Εταιρεία και εξωτερική μονάδα δεν γίνονται
-                            // κάτοχοι εξοπλισμού — δεν προσφέρονται καν.
-                            final departmentNames = service.departments
-                                .where(
-                                  (d) => !d.isDeleted && d.kind.canOwnEquipment,
-                                )
-                                .map((d) => d.name.trim())
-                                .where((name) => name.isNotEmpty)
-                                .toList();
-                            if (!equipmentDepartmentTextInitialized) {
-                              final hasInitialHolder =
-                                  widget.initialOwner?.id != null;
-                              if (hasInitialHolder) {
-                                equipmentDepartmentTextInitialized = true;
-                              } else {
-                                final did =
-                                    widget.initialEquipment?.departmentId;
-                                if (did != null) {
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (!mounted) return;
-                                    final name =
-                                        LookupService.instance
-                                            .getDepartmentName(did)
-                                            ?.trim() ??
-                                        '';
-                                    if (name.isNotEmpty) {
-                                      departmentController.text = name;
-                                    }
-                                    setState(() {
-                                      equipmentDepartmentTextInitialized = true;
-                                    });
-                                    dismissGuard.tryCaptureFormBaseline();
-                                  });
-                                } else {
-                                  equipmentDepartmentTextInitialized = true;
-                                }
-                              }
-                            }
-                            final holderLocksDeptLoc = selectedUserId != null;
-                            if (holderLocksDeptLoc) {
-                              final uid = selectedUserId!;
-                              if (_deptLocScheduledForUserId != uid) {
-                                final u = service.findUserById(uid);
-                                if (u != null) {
-                                  _deptLocScheduledForUserId = uid;
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (!mounted || selectedUserId != uid) {
-                                      return;
-                                    }
-                                    _applyDepartmentFromUser(u);
-                                    setState(() {});
-                                  });
-                                }
-                              }
-                            } else {
-                              _deptLocScheduledForUserId = null;
-                            }
-                            final owner = selectedUserId == null
-                                ? null
-                                : service.findUserById(selectedUserId!);
-                            if (holderLocksDeptLoc &&
-                                locationState.ownerLocation !=
-                                    (owner?.location ?? '').trim()) {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (!mounted) return;
-                                setState(
-                                  () => syncLocationOwner(owner?.location),
-                                );
-                              });
-                            }
-                            final breadcrumbDeptId =
-                                owner?.departmentId ??
-                                service
-                                    .findDepartmentByName(
-                                      departmentController.text,
-                                    )
-                                    ?.id;
-                            final fullLocation = fullLocationBreadcrumb(
-                              building: service.getDepartmentBuilding(
-                                breadcrumbDeptId,
-                              ),
-                              floor: service.getDepartmentFloor(
-                                breadcrumbDeptId,
-                              ),
-                              department: departmentController.text,
-                              location: holderLocksDeptLoc
-                                  ? effectiveLocationState.displayText
-                                  : locationController.text,
-                            );
-                            // Δύο ανεξάρτητες στήλες: ο διακόπτης ζει κάτω
-                            // από το Τμήμα και η ένδειξη απόκλισης κάτω από
-                            // την Τοποθεσία, ώστε η αναδίπλωσή της να
-                            // απλώνεται στον κενό χώρο χωρίς να σπρώχνει
-                            // τον διακόπτη.
-                            final fieldsRow = Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      RawAutocomplete<String>(
-                                        textEditingController:
-                                            departmentController,
-                                        focusNode: _departmentFocusNode,
-                                        optionsBuilder: (textEditingValue) {
-                                          if (holderLocksDeptLoc) {
-                                            return const Iterable<
-                                              String
-                                            >.empty();
-                                          }
-                                          final q =
-                                              SearchTextNormalizer.normalizeForSearch(
-                                                textEditingValue.text,
-                                              );
-                                          if (q.isEmpty) {
-                                            return departmentNames;
-                                          }
-                                          return departmentNames
-                                              .where(
-                                                (name) =>
-                                                    SearchTextNormalizer.matchesNormalizedQuery(
-                                                      name,
-                                                      q,
-                                                    ),
-                                              )
-                                              .toList();
-                                        },
-                                        displayStringForOption: (option) =>
-                                            option,
-                                        onSelected: (selection) {
-                                          if (!holderLocksDeptLoc) {
-                                            departmentController.text =
-                                                selection;
-                                          }
-                                        },
-                                        fieldViewBuilder:
-                                            (
+                        ),
+                        loading: () => const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                        error: (err, _) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Δεν φορτώθηκαν εργαλεία: $err',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final async = ref.watch(lookupServiceProvider);
+                      return async.when(
+                        data: (bundle) {
+                          final service = bundle.service;
+                          // Εταιρεία και εξωτερική μονάδα δεν γίνονται
+                          // κάτοχοι εξοπλισμού — δεν προσφέρονται καν.
+                          final departmentNames = service.departments
+                              .where(
+                                (d) => !d.isDeleted && d.kind.canOwnEquipment,
+                              )
+                              .map((d) => d.name.trim())
+                              .where((name) => name.isNotEmpty)
+                              .toList();
+                          final holderLocksDeptLoc = selectedUserId != null;
+                          final owner = selectedUserId == null
+                              ? null
+                              : service.findUserById(selectedUserId!);
+                          final breadcrumbDeptId =
+                              owner?.departmentId ??
+                              service
+                                  .findDepartmentByName(
+                                    departmentController.text,
+                                  )
+                                  ?.id;
+                          final fullLocation = fullLocationBreadcrumb(
+                            building: service.getDepartmentBuilding(
+                              breadcrumbDeptId,
+                            ),
+                            floor: service.getDepartmentFloor(breadcrumbDeptId),
+                            department: departmentController.text,
+                            location: holderLocksDeptLoc
+                                ? effectiveLocationState.displayText
+                                : locationController.text,
+                          );
+                          // Δύο ανεξάρτητες στήλες: ο διακόπτης ζει κάτω
+                          // από το Τμήμα και η ένδειξη απόκλισης κάτω από
+                          // την Τοποθεσία, ώστε η αναδίπλωσή της να
+                          // απλώνεται στον κενό χώρο χωρίς να σπρώχνει
+                          // τον διακόπτη.
+                          final fieldsRow = Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    RawAutocomplete<String>(
+                                      textEditingController:
+                                          departmentController,
+                                      focusNode: _departmentFocusNode,
+                                      optionsBuilder: (textEditingValue) {
+                                        if (holderLocksDeptLoc) {
+                                          return const Iterable<String>.empty();
+                                        }
+                                        final q =
+                                            SearchTextNormalizer.normalizeForSearch(
+                                              textEditingValue.text,
+                                            );
+                                        if (q.isEmpty) {
+                                          return departmentNames;
+                                        }
+                                        return departmentNames
+                                            .where(
+                                              (name) =>
+                                                  SearchTextNormalizer.matchesNormalizedQuery(
+                                                    name,
+                                                    q,
+                                                  ),
+                                            )
+                                            .toList();
+                                      },
+                                      displayStringForOption: (option) =>
+                                          option,
+                                      onSelected: (selection) {
+                                        if (!holderLocksDeptLoc) {
+                                          departmentController.text = selection;
+                                        }
+                                      },
+                                      fieldViewBuilder:
+                                          (context, controller, focusNode, _) {
+                                            return TextField(
+                                              controller: controller,
+                                              focusNode: focusNode,
+                                              enabled: !holderLocksDeptLoc,
+                                              decoration: InputDecoration(
+                                                labelText: 'Τμήμα',
+                                                border:
+                                                    const OutlineInputBorder(),
+                                                helperText: holderLocksDeptLoc
+                                                    ? 'Καθορίζεται από τον κάτοχο'
+                                                    : null,
+                                              ),
+                                            );
+                                          },
+                                      optionsViewBuilder:
+                                          (context, onSelected, options) {
+                                            return _departmentAutocompleteOptionsView(
                                               context,
-                                              controller,
-                                              focusNode,
-                                              _,
-                                            ) {
-                                              return TextField(
-                                                controller: controller,
-                                                focusNode: focusNode,
-                                                enabled: !holderLocksDeptLoc,
-                                                decoration: InputDecoration(
-                                                  labelText: 'Τμήμα',
-                                                  border:
-                                                      const OutlineInputBorder(),
-                                                  helperText: holderLocksDeptLoc
-                                                      ? 'Καθορίζεται από τον κάτοχο'
-                                                      : null,
-                                                ),
-                                              );
-                                            },
-                                        optionsViewBuilder:
-                                            (context, onSelected, options) {
-                                              return _departmentAutocompleteOptionsView(
-                                                context,
-                                                onSelected,
-                                                options,
-                                              );
-                                            },
+                                              onSelected,
+                                              options,
+                                            );
+                                          },
+                                    ),
+                                    if (holderLocksDeptLoc)
+                                      EquipmentLocationFollowRow(
+                                        followsOwner: locationFollowsOwner,
+                                        onChanged: setLocationFollowsOwner,
                                       ),
-                                      if (holderLocksDeptLoc)
-                                        EquipmentLocationFollowRow(
-                                          followsOwner: locationFollowsOwner,
-                                          onChanged: setLocationFollowsOwner,
-                                        ),
-                                    ],
-                                  ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  // Η ένδειξη απόκλισης ζει στο helper του
-                                  // πεδίου: αναδιπλώνεται μέσα στο πλάτος του
-                                  // χωρίς να τεντώνει τον διάλογο, όπως θα
-                                  // έκανε ένα ελεύθερο Text.
-                                  child: LexiconSpellTextFormField(
-                                    controller: locationController,
-                                    focusNode: _locationFocusNode,
-                                    readOnly:
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                // Η ένδειξη απόκλισης ζει στο helper του
+                                // πεδίου: αναδιπλώνεται μέσα στο πλάτος του
+                                // χωρίς να τεντώνει τον διάλογο, όπως θα
+                                // έκανε ένα ελεύθερο Text.
+                                child: LexiconSpellTextFormField(
+                                  controller: locationController,
+                                  focusNode: _locationFocusNode,
+                                  readOnly:
+                                      holderLocksDeptLoc &&
+                                      locationFollowsOwner,
+                                  style:
+                                      holderLocksDeptLoc && locationFollowsOwner
+                                      ? TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).disabledColor,
+                                        )
+                                      : null,
+                                  decoration: InputDecoration(
+                                    labelText: 'Τοποθεσία',
+                                    border: const OutlineInputBorder(),
+                                    suffixIcon: const LocationFieldHelpIcon(),
+                                    helperText:
                                         holderLocksDeptLoc &&
-                                        locationFollowsOwner,
-                                    style:
-                                        holderLocksDeptLoc &&
-                                            locationFollowsOwner
-                                        ? TextStyle(
-                                            color: Theme.of(
-                                              context,
-                                            ).disabledColor,
-                                          )
+                                            effectiveLocationState.diverges
+                                        ? '⚠ ${equipmentLocationDivergenceNotice(ownerName: owner?.name ?? '', ownerLocation: owner?.location)}'
                                         : null,
-                                    decoration: InputDecoration(
-                                      labelText: 'Τοποθεσία',
-                                      border: const OutlineInputBorder(),
-                                      suffixIcon: const LocationFieldHelpIcon(),
-                                      helperText:
-                                          holderLocksDeptLoc &&
-                                              effectiveLocationState.diverges
-                                          ? '⚠ ${equipmentLocationDivergenceNotice(ownerName: owner?.name ?? '', ownerLocation: owner?.location)}'
-                                          : null,
-                                      helperMaxLines: 3,
-                                      helperStyle: const TextStyle(
-                                        color: Color(0xFFE65100),
-                                      ),
+                                    helperMaxLines: 3,
+                                    helperStyle: const TextStyle(
+                                      color: Color(0xFFE65100),
                                     ),
                                   ),
                                 ),
-                              ],
-                            );
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                fieldsRow,
-                                FullLocationLine(text: fullLocation),
-                              ],
-                            );
-                          },
-                          loading: () => const Row(
-                            children: [
-                              Expanded(
-                                child: InputDecorator(
-                                  decoration: InputDecoration(
-                                    labelText: 'Τμήμα',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  child: Text('Φόρτωση...'),
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: InputDecorator(
-                                  decoration: InputDecoration(
-                                    labelText: 'Τοποθεσία',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  child: SizedBox.shrink(),
-                                ),
                               ),
                             ],
-                          ),
-                          error: (_, _) => const Row(
+                          );
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: InputDecorator(
-                                  decoration: InputDecoration(
-                                    labelText: 'Τμήμα',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  child: Text('Σφάλμα φόρτωσης'),
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Expanded(child: SizedBox.shrink()),
+                              fieldsRow,
+                              FullLocationLine(text: fullLocation),
                             ],
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final async = ref.watch(lookupServiceProvider);
-                        return async.when(
-                          data: (bundle) {
-                            final service = bundle.service;
-                            if (selectedUserId != null &&
-                                !ownerTextInitialized) {
-                              final u = service.users
-                                  .where((u) => u.id == selectedUserId)
-                                  .firstOrNull;
-                              if (u != null) {
-                                WidgetsBinding.instance.addPostFrameCallback((
-                                  _,
-                                ) {
-                                  if (mounted) {
-                                    ownerController.text =
-                                        u.fullNameWithDepartment;
-                                    setState(() => ownerTextInitialized = true);
-                                    dismissGuard.tryCaptureFormBaseline();
-                                  }
-                                });
-                              } else {
-                                ownerTextInitialized = true;
-                                dismissGuard.tryCaptureFormBaseline();
-                              }
-                            }
-                            final theme = Theme.of(context);
-                            return Autocomplete<String>(
-                              displayStringForOption: (String option) => option,
-                              focusNode: _ownerFocusNode,
-                              textEditingController: ownerController,
-                              optionsBuilder: (TextEditingValue value) {
-                                final q =
-                                    SearchTextNormalizer.normalizeForSearch(
-                                      value.text,
+                          );
+                        },
+                        loading: () => const Row(
+                          children: [
+                            Expanded(
+                              child: InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Τμήμα',
+                                  border: OutlineInputBorder(),
+                                ),
+                                child: Text('Φόρτωση...'),
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Τοποθεσία',
+                                  border: OutlineInputBorder(),
+                                ),
+                                child: SizedBox.shrink(),
+                              ),
+                            ),
+                          ],
+                        ),
+                        error: (_, _) => const Row(
+                          children: [
+                            Expanded(
+                              child: InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Τμήμα',
+                                  border: OutlineInputBorder(),
+                                ),
+                                child: Text('Σφάλμα φόρτωσης'),
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(child: SizedBox.shrink()),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final async = ref.watch(lookupServiceProvider);
+                      return async.when(
+                        data: (bundle) {
+                          final service = bundle.service;
+                          final theme = Theme.of(context);
+                          return Autocomplete<String>(
+                            displayStringForOption: (String option) => option,
+                            focusNode: _ownerFocusNode,
+                            textEditingController: ownerController,
+                            optionsBuilder: (TextEditingValue value) {
+                              final q = SearchTextNormalizer.normalizeForSearch(
+                                value.text,
+                              );
+                              final users = q.isEmpty
+                                  ? service.users
+                                  : service.searchUsersByQuery(
+                                      value.text.trim(),
                                     );
-                                final users = q.isEmpty
-                                    ? service.users
-                                    : service.searchUsersByQuery(
-                                        value.text.trim(),
-                                      );
-                                return users
-                                    // Υπάλληλος εταιρείας δεν προσφέρεται ως
-                                    // κάτοχος: ο εξοπλισμός θα ακολουθούσε τη
-                                    // θέση του και θα κατέληγε στην εταιρεία.
-                                    .where(
-                                      (u) =>
-                                          u.id != null &&
-                                          service.userCanOwnEquipment(u),
-                                    )
-                                    .map((u) => u.fullNameWithDepartment)
-                                    .where(
-                                      (option) =>
-                                          SearchTextNormalizer.matchesNormalizedQuery(
-                                            option,
-                                            q,
+                              return users
+                                  // Υπάλληλος εταιρείας δεν προσφέρεται ως
+                                  // κάτοχος: ο εξοπλισμός θα ακολουθούσε τη
+                                  // θέση του και θα κατέληγε στην εταιρεία.
+                                  .where(
+                                    (u) =>
+                                        u.id != null &&
+                                        service.userCanOwnEquipment(u),
+                                  )
+                                  .map((u) => u.fullNameWithDepartment)
+                                  .where(
+                                    (option) =>
+                                        SearchTextNormalizer.matchesNormalizedQuery(
+                                          option,
+                                          q,
+                                        ),
+                                  )
+                                  .toList();
+                            },
+                            onSelected: (String selection) {
+                              final u = service.users
+                                  .where(
+                                    (user) =>
+                                        user.fullNameWithDepartment ==
+                                        selection,
+                                  )
+                                  .firstOrNull;
+                              if (u != null && u.id != null) {
+                                setState(() {
+                                  selectedUserId = u.id;
+                                  _deptLocScheduledForUserId = u.id;
+                                  ownerController.text =
+                                      u.name ?? u.fullNameWithDepartment;
+                                  _applyDepartmentFromUser(u);
+                                });
+                                // Η θέση του νέου κατόχου έρχεται από τον
+                                // κατάλογο, από την ίδια πόρτα με τα υπόλοιπα.
+                                refreshFromCatalog();
+                              }
+                            },
+                            fieldViewBuilder:
+                                (
+                                  context,
+                                  textController,
+                                  focusNode,
+                                  onFieldSubmitted,
+                                ) {
+                                  return TextField(
+                                    controller: textController,
+                                    focusNode: focusNode,
+                                    decoration: InputDecoration(
+                                      labelText: 'Κάτοχος',
+                                      hintText:
+                                          'Επίλεξε υπάλληλο από τη λίστα ή άφησε κενό (Άγνωστος κάτοχος)',
+                                      hintStyle: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                                .withValues(alpha: 0.7),
                                           ),
-                                    )
-                                    .toList();
-                              },
-                              onSelected: (String selection) {
-                                final u = service.users
-                                    .where(
-                                      (user) =>
-                                          user.fullNameWithDepartment ==
-                                          selection,
-                                    )
-                                    .firstOrNull;
-                                if (u != null && u.id != null) {
-                                  setState(() {
-                                    selectedUserId = u.id;
-                                    _deptLocScheduledForUserId = u.id;
-                                    ownerController.text =
-                                        u.name ?? u.fullNameWithDepartment;
-                                    _applyDepartmentFromUser(u);
-                                  });
-                                }
-                              },
-                              fieldViewBuilder:
-                                  (
-                                    context,
-                                    textController,
-                                    focusNode,
-                                    onFieldSubmitted,
-                                  ) {
-                                    return TextField(
-                                      controller: textController,
-                                      focusNode: focusNode,
-                                      decoration: InputDecoration(
-                                        labelText: 'Κάτοχος',
-                                        hintText:
-                                            'Επίλεξε υπάλληλο από τη λίστα ή άφησε κενό (Άγνωστος κάτοχος)',
-                                        hintStyle: theme.textTheme.bodyMedium
-                                            ?.copyWith(
-                                              color: theme
-                                                  .colorScheme
-                                                  .onSurfaceVariant
-                                                  .withValues(alpha: 0.7),
-                                            ),
-                                        border: const OutlineInputBorder(),
-                                        suffixIcon: Semantics(
-                                          label: 'Καθαρισμός Κατόχου',
-                                          child: IconButton(
-                                            icon: const Icon(
-                                              Icons.close,
-                                              size: 20,
-                                            ),
-                                            onPressed: () {
-                                              textController.clear();
-                                              setState(() {
-                                                selectedUserId = null;
-                                                _deptLocScheduledForUserId =
-                                                    null;
-                                                _applyDepartmentLocationFromEquipment(
-                                                  widget.initialEquipment,
-                                                );
-                                              });
-                                            },
-                                            tooltip: 'Καθαρισμός Κατόχου',
+                                      border: const OutlineInputBorder(),
+                                      suffixIcon: Semantics(
+                                        label: 'Καθαρισμός Κατόχου',
+                                        child: IconButton(
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 20,
                                           ),
+                                          onPressed: () {
+                                            textController.clear();
+                                            setState(() {
+                                              selectedUserId = null;
+                                              _deptLocScheduledForUserId = null;
+                                              _applyDepartmentLocationFromEquipment(
+                                                widget.initialEquipment,
+                                              );
+                                            });
+                                          },
+                                          tooltip: 'Καθαρισμός Κατόχου',
                                         ),
                                       ),
-                                      onChanged: (value) {
-                                        if (value.trim().isEmpty) {
-                                          setState(() {
-                                            selectedUserId = null;
-                                            _deptLocScheduledForUserId = null;
-                                            _applyDepartmentLocationFromEquipment(
-                                              widget.initialEquipment,
-                                            );
-                                          });
-                                          return;
-                                        }
-                                        // Πληκτρολόγηση πάνω σε επιλεγμένο
-                                        // υπάλληλο σπάει το δέσιμο: αλλιώς
-                                        // το τμήμα/τοποθεσία θα έμεναν
-                                        // κλειδωμένα σε άσχετο πρόσωπο.
-                                        final bound = selectedUserId;
-                                        if (bound == null) return;
-                                        final u = service.users
-                                            .where((x) => x.id == bound)
-                                            .firstOrNull;
-                                        if (u == null) return;
-                                        final stillMatches =
-                                            _ownerNameKey(value) ==
-                                            _ownerNameKey(
-                                              u.name ??
-                                                  u.fullNameWithDepartment,
-                                            );
-                                        if (!stillMatches) {
-                                          setState(() {
-                                            selectedUserId = null;
-                                            _deptLocScheduledForUserId = null;
-                                          });
-                                        }
-                                      },
-                                    );
-                                  },
-                            );
-                          },
-                          loading: () => const InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Κάτοχος',
-                              border: OutlineInputBorder(),
-                            ),
-                            child: Text('Φόρτωση...'),
+                                    ),
+                                    onChanged: (value) {
+                                      if (value.trim().isEmpty) {
+                                        setState(() {
+                                          selectedUserId = null;
+                                          _deptLocScheduledForUserId = null;
+                                          _applyDepartmentLocationFromEquipment(
+                                            widget.initialEquipment,
+                                          );
+                                        });
+                                        return;
+                                      }
+                                      // Πληκτρολόγηση πάνω σε επιλεγμένο
+                                      // υπάλληλο σπάει το δέσιμο: αλλιώς
+                                      // το τμήμα/τοποθεσία θα έμεναν
+                                      // κλειδωμένα σε άσχετο πρόσωπο.
+                                      final bound = selectedUserId;
+                                      if (bound == null) return;
+                                      final u = service.users
+                                          .where((x) => x.id == bound)
+                                          .firstOrNull;
+                                      if (u == null) return;
+                                      final stillMatches =
+                                          _ownerNameKey(value) ==
+                                          _ownerNameKey(
+                                            u.name ?? u.fullNameWithDepartment,
+                                          );
+                                      if (!stillMatches) {
+                                        setState(() {
+                                          selectedUserId = null;
+                                          _deptLocScheduledForUserId = null;
+                                        });
+                                      }
+                                    },
+                                  );
+                                },
+                          );
+                        },
+                        loading: () => const InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'Κάτοχος',
+                            border: OutlineInputBorder(),
                           ),
-                          error: (_, e) => const InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Κάτοχος',
-                              border: OutlineInputBorder(),
-                            ),
-                            child: Text('Σφάλμα φόρτωσης'),
+                          child: Text('Φόρτωση...'),
+                        ),
+                        error: (_, e) => const InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'Κάτοχος',
+                            border: OutlineInputBorder(),
                           ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                          child: Text('Σφάλμα φόρτωσης'),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
           ),

@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/zip_entry_safety.dart';
+import 'update_package_contents.dart';
 import 'update_manifest.dart';
 import 'updater_script_builder.dart';
 
@@ -68,14 +69,6 @@ class UpdateInstallerService {
   static const String backupDirName = '.update_backup';
   static const String pendingMarkerName = '.update_pending.json';
 
-  static const List<String> forbiddenZipPrefixes = [
-    'Data Base/',
-    'images/',
-    'maps_images/',
-    'dictionaries/',
-    'logs/',
-  ];
-
   /// Δικλείδα ασφαλείας: απαγορευμένοι φάκελοι δεδομένων + διαδρομές διαφυγής.
   ///
   /// Οι δύο έλεγχοι απαντούν σε διαφορετικά ερωτήματα και μένουν χωριστοί: ο
@@ -91,21 +84,10 @@ class UpdateInstallerService {
   static void assertZipIsSafe(Archive archive) {
     final escaping = firstEscapingEntryName(archive.map((e) => e.name));
     if (escaping != null) {
-      throw StateError('Το πακετο περιεχει διαδρομη διαφυγης: $escaping');
+      throw StateError('Το πακέτο περιέχει διαδρομή διαφυγής: $escaping');
     }
 
-    for (final entry in archive) {
-      final name = entry.name.replaceAll('\\', '/');
-      for (final prefix in forbiddenZipPrefixes) {
-        if (name == prefix.substring(0, prefix.length - 1) ||
-            name.startsWith(prefix) ||
-            name.contains('/$prefix')) {
-          throw StateError(
-            'Το πακετο περιεχει απαγορευμενη εγγραφη δεδομενων χρηστη: $name',
-          );
-        }
-      }
-    }
+    assertNoUserDataEntries(archive.map((e) => e.name));
   }
 
   File get _pendingMarkerFile =>

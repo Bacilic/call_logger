@@ -6,8 +6,6 @@ import '../models/lexicon_list_filters_model.dart';
 import '../../../core/services/profile_settings.dart';
 import '../../../core/services/scoped_settings.dart';
 
-const kLexiconListFiltersSettingKey = 'lexicon_list_filters';
-
 /// Απομνημόνευση φίλτρων λίστας λεξικού (όχι αναζήτηση κειμένου).
 class LexiconListFiltersNotifier extends Notifier<LexiconListFiltersModel> {
   final Completer<void> _hydrationCompleter = Completer<void>();

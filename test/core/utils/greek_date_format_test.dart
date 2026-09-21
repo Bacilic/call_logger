@@ -66,4 +66,42 @@ void main() {
       expect(formatGreekShortDateFromIso('2026-00-10'), '2026-00-10');
     });
   });
+
+  group('formatGreekTodayAwareTimestamp', () {
+    final now = DateTime(2026, 9, 18, 17, 52);
+
+    test('ό,τι έγινε σήμερα δείχνει μόνο την ώρα', () {
+      expect(
+        formatGreekTodayAwareTimestamp(DateTime(2026, 9, 18, 8, 5), now: now),
+        'σήμερα 08:05',
+      );
+    });
+
+    test('η ίδια στιγμή με το τώρα μετράει ως σήμερα', () {
+      expect(formatGreekTodayAwareTimestamp(now, now: now), 'σήμερα 17:52');
+    });
+
+    test('χθεσινό δείχνει ολόκληρη την ημερομηνία', () {
+      expect(
+        formatGreekTodayAwareTimestamp(DateTime(2026, 9, 17, 8, 40), now: now),
+        '17/09/2026 08:40',
+      );
+    });
+
+    // Ίδια ημέρα και μήνας, άλλη χρονιά: η σύγκριση δεν επιτρέπεται να
+    // κοιτάζει μόνο ημέρα/μήνα.
+    test('ίδια ημερομηνία περυσινής χρονιάς δεν είναι «σήμερα»', () {
+      expect(
+        formatGreekTodayAwareTimestamp(DateTime(2025, 9, 18, 17, 52), now: now),
+        '18/09/2025 17:52',
+      );
+    });
+
+    test('μονοψήφια ώρα και ημέρα παίρνουν μηδενικό μπροστά', () {
+      expect(
+        formatGreekTodayAwareTimestamp(DateTime(2026, 1, 3, 9, 7), now: now),
+        '03/01/2026 09:07',
+      );
+    });
+  });
 }

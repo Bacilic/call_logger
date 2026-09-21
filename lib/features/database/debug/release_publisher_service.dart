@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 // ΟΧΙ από το `database_schema_migrations.dart`: εκείνο σέρνει το
 // `app_config` → `path_provider` → `package:flutter` → `dart:ui`, που δεν
 // υπάρχει όταν το εργαλείο τρέχει με σκέτο `dart run`.
+import '../../../core/about/models/changelog_text_lines.dart';
+import '../../../core/updates/update_package_contents.dart';
 import '../../../core/utils/json_document.dart';
 import '../../../core/database/database_schema_version.dart'
     show kDatabaseSchemaVersion;
@@ -115,30 +117,6 @@ class ReleasePublisherService {
 
   static Future<Uint8List> _defaultVerificationReader(String zipPath) =>
       File(zipPath).readAsBytes();
-
-  static const List<String> forbiddenZipPrefixes = [
-    'Data Base/',
-    'images/',
-    'maps_images/',
-    'dictionaries/',
-    'logs/',
-  ];
-
-  /// Δημόσια για τεστ: απορρίπτει zip με φακέλους δεδομένων χρήστη.
-  static void assertZipHasNoUserData(Archive archive) {
-    for (final entry in archive) {
-      final name = entry.name.replaceAll('\\', '/');
-      for (final prefix in forbiddenZipPrefixes) {
-        if (name == prefix.substring(0, prefix.length - 1) ||
-            name.startsWith(prefix) ||
-            name.contains('/$prefix')) {
-          throw StateError(
-            'Το πακέτο περιέχει απαγορευμένη εγγραφή δεδομένων χρήστη: $name',
-          );
-        }
-      }
-    }
-  }
 
   /// Χωρίς εγγραφές: τρέχουσα/επόμενη έκδοση και πλήθος Unreleased.
   /// Ο τύπος αύξησης προκύπτει αυτόματα από το περιεχόμενο του Unreleased.
@@ -343,7 +321,7 @@ class ReleasePublisherService {
       );
 
       try {
-        assertZipHasNoUserData(archive);
+        assertNoUserDataEntries(archive.map((e) => e.name));
       } catch (e) {
         await _restoreProjectFiles(snapshot);
         return ReleasePublishResult(
@@ -590,14 +568,6 @@ class ReleasePublisherService {
     'fixed': <String>[],
   };
 
-  static List<String> _stringList(dynamic raw) {
-    if (raw is! List) return [];
-    return raw
-        .map((e) => e.toString())
-        .where((s) => s.trim().isNotEmpty)
-        .toList();
-  }
-
   Future<void> _sealChangelogJson({
     required VersionBumpKind bumpKind,
     required String version,
@@ -617,7 +587,7 @@ class ReleasePublisherService {
       sealed['version'] = version;
       sealed['date'] = date;
       for (final key in _categoryKeys) {
-        sealed[key] = _stringList(sealed[key]);
+        sealed[key] = changelogTextLines(sealed[key]);
       }
       list[unreleasedIndex] = sealed;
       list.insert(0, _emptyUnreleased());
@@ -634,8 +604,8 @@ class ReleasePublisherService {
       top['version'] = version;
       top['date'] = date;
       for (final key in _categoryKeys) {
-        final existing = _stringList(top[key]);
-        final incoming = _stringList(unreleased[key]);
+        final existing = changelogTextLines(top[key]);
+        final incoming = changelogTextLines(unreleased[key]);
         top[key] = [...existing, ...incoming];
       }
       list[topIndex] = top;

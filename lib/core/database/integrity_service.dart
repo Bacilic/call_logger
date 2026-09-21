@@ -69,7 +69,7 @@ class IntegrityService {
   }
 
   Future<void> softDeleteTask(int id) async {
-    final user = await _support.auditPerformingUser();
+    final user = _support.auditPerformingUser();
     await db.transaction((txn) async {
       final titleRows = await txn.query(
         'tasks',
@@ -107,7 +107,7 @@ class IntegrityService {
     Map<String, dynamic>? oldValues,
     Map<String, dynamic>? newValues,
   }) async {
-    final user = await _support.auditPerformingUser();
+    final user = _support.auditPerformingUser();
     await db.transaction((txn) async {
       final rows = await txn.query(
         'phones',
@@ -171,7 +171,7 @@ class IntegrityService {
         where: 'id = ?',
         whereArgs: [linkId],
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionIntegrityFix,
@@ -199,7 +199,7 @@ class IntegrityService {
         where: 'user_id = ? AND phone_id = ?',
         whereArgs: [userId, phoneId],
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionIntegrityFix,
@@ -227,7 +227,7 @@ class IntegrityService {
         where: 'department_id = ? AND phone_id = ?',
         whereArgs: [departmentId, phoneId],
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionIntegrityFix,
@@ -255,7 +255,7 @@ class IntegrityService {
         where: 'user_id = ? AND equipment_id = ?',
         whereArgs: [userId, equipmentId],
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionIntegrityFix,
@@ -303,7 +303,7 @@ class IntegrityService {
         'department_id': departmentId,
         'phone_id': phoneId,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionIntegrityFix,
@@ -345,7 +345,7 @@ class IntegrityService {
       recordAudit: false,
       expected: null,
     );
-    final ap = await _support.auditPerformingUser();
+    final ap = _support.auditPerformingUser();
     await AuditService.log(
       db,
       action: DatabaseHelper.auditActionIntegrityFix,
@@ -373,7 +373,7 @@ class IntegrityService {
         where: 'id = ?',
         whereArgs: [departmentId],
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionIntegrityFix,
@@ -395,7 +395,7 @@ class IntegrityService {
     Map<String, dynamic>? newValues,
   }) async {
     await _users.deleteUsers([userId]);
-    final ap = await _support.auditPerformingUser();
+    final ap = _support.auditPerformingUser();
     await AuditService.log(
       db,
       action: DatabaseHelper.auditActionIntegrityFix,
@@ -423,7 +423,7 @@ class IntegrityService {
       recordAudit: false,
       expected: null,
     );
-    final ap = await _support.auditPerformingUser();
+    final ap = _support.auditPerformingUser();
     await AuditService.log(
       db,
       action: DatabaseHelper.auditActionIntegrityFix,
@@ -546,7 +546,7 @@ class IntegrityService {
         where: 'id = ?',
         whereArgs: [phoneId],
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionIntegrityFix,
@@ -583,7 +583,7 @@ class IntegrityService {
         where: 'id = ?',
         whereArgs: [equipmentId],
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionIntegrityFix,
@@ -624,7 +624,7 @@ class IntegrityService {
         where: 'id = ?',
         whereArgs: [departmentId],
       );
-      final ap = await _support.auditPerformingUser(executor: txn);
+      final ap = _support.auditPerformingUser();
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionIntegrityFix,

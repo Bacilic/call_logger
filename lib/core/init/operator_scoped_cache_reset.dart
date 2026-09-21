@@ -14,9 +14,11 @@ import '../../features/directory/providers/directory_provider.dart';
 import '../../features/directory/providers/equipment_directory_provider.dart';
 import '../../features/history/providers/dashboard_provider.dart';
 import '../../features/history/providers/gemini_settings_provider.dart';
+import '../../features/history/providers/history_application_audit_view_provider.dart';
 import '../../features/history/providers/lansweeper_report_scope_provider.dart';
 import '../../features/tasks/providers/task_analytics_date_provider.dart';
 import '../../features/tasks/providers/task_notifications_provider.dart';
+import '../providers/history_audit_immersive_provider.dart';
 import '../providers/settings_provider.dart';
 
 /// Εκκαθάριση των caches που κρατούν **προσωπικές ρυθμίσεις του προηγούμενου
@@ -61,6 +63,14 @@ void invalidateOperatorScopedCaches(WidgetRef ref) {
     // υπολογισμού. Χωρίς αυτή τη γραμμή, η φρεσκάδα του θα στηριζόταν σιωπηλά
     // στο ότι κάποιος άλλος ακυρώνει τη ρύθμιση από κάτω του.
     ref.invalidate(databaseNavVisibleProvider);
+    ref.invalidate(applicationAuditVisibleProvider);
+    // Το τικ είναι υπόσχεση: όποιος δεν το έχει δεν μένει σε οθόνη που δεν
+    // δικαιούται, ακόμη κι αν την άνοιξε ο προηγούμενος.
+    closeApplicationAuditIfNotAllowed(
+      allowed: ref.read(applicationAuditVisibleProvider),
+      view: ref.read(historyApplicationAuditViewProvider.notifier),
+      immersive: ref.read(historyAuditImmersiveProvider.notifier),
+    );
     ref.invalidate(showLampNavProvider);
     ref.invalidate(showDictionaryNavProvider);
     ref.invalidate(showKnowledgeNavProvider);

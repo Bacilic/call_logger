@@ -12,6 +12,7 @@ import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/directory_support.dart';
 import '../../../../core/widgets/compact_tooltip.dart';
+import '../../../../core/widgets/dialog_scrollable_content.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
@@ -841,72 +842,207 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
             width: 468,
             child: Form(
               key: formKey,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      RawAutocomplete<String>(
-                        textEditingController: nameController,
-                        focusNode: _nameFocus,
-                        optionsBuilder: (value) =>
-                            _departmentNameAutocompleteOptions(value.text),
-                        displayStringForOption: (v) => v,
-                        onSelected: (selection) {
-                          nameController.text = selection;
-                          notifyFormChanged();
-                        },
-                        fieldViewBuilder: (context, controller, focusNode, _) {
-                          return LexiconSpellTextFormField(
-                            controller: nameController,
-                            focusNode: focusNode,
-                            decoration: const InputDecoration(
-                              labelText: 'Όνομα',
-                              border: OutlineInputBorder(),
+              child: DialogScrollableContent(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    RawAutocomplete<String>(
+                      textEditingController: nameController,
+                      focusNode: _nameFocus,
+                      optionsBuilder: (value) =>
+                          _departmentNameAutocompleteOptions(value.text),
+                      displayStringForOption: (v) => v,
+                      onSelected: (selection) {
+                        nameController.text = selection;
+                        notifyFormChanged();
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, _) {
+                        return LexiconSpellTextFormField(
+                          controller: nameController,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Όνομα',
+                            border: OutlineInputBorder(),
+                          ),
+                          textCapitalization: TextCapitalization.words,
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Απαιτείται όνομα';
+                            }
+                            return null;
+                          },
+                          onChanged: (_) => notifyFormChanged(),
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return _departmentNameAutocompleteOptionsView(
+                          context,
+                          onSelected,
+                          options,
+                        );
+                      },
+                    ),
+                    CatalogValidationHintText(
+                      hint: validation?.departmentNameHint(nameController.text),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildKindField(),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Κοινόχρηστα τηλέφωνα',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    RawAutocomplete<String>(
+                      textEditingController: sharedPhoneInputController,
+                      focusNode: sharedPhoneInputFocus,
+                      optionsBuilder: (value) {
+                        final q = SearchTextNormalizer.normalizeForSearch(
+                          value.text,
+                        );
+                        final all = LookupService.instance.getAllKnownPhones();
+                        if (q.isEmpty) return all;
+                        return all.where(
+                          (v) =>
+                              SearchTextNormalizer.matchesNormalizedQuery(v, q),
+                        );
+                      },
+                      displayStringForOption: (v) => v,
+                      onSelected: (v) =>
+                          sharedLinks.addSharedPhonesFromInput(v),
+                      fieldViewBuilder: (context, controller, focusNode, _) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'Προσθήκη τηλεφώνων (με κόμμα)',
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (_) => sharedLinks.commitDelimitedInput(
+                            controller: sharedPhoneInputController,
+                            target: sharedPhones,
+                            keepLastIncomplete: true,
+                          ),
+                          onSubmitted: sharedLinks.addSharedPhonesFromInput,
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxWidth: 380,
+                                maxHeight: 200,
+                              ),
+                              child: ListView(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                children: [
+                                  for (final opt in options)
+                                    ListTile(
+                                      dense: true,
+                                      title: Text(opt),
+                                      onTap: () => onSelected(opt),
+                                    ),
+                                ],
+                              ),
                             ),
-                            textCapitalization: TextCapitalization.words,
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) {
-                                return 'Απαιτείται όνομα';
+                          ),
+                        );
+                      },
+                    ),
+                    // Μόνο για ό,τι πληκτρολογείται τώρα: για τα ήδη
+                    // προστεθειμένα μιλά το καθένα με το εικονίδιό του,
+                    // οπότε φαίνονται όλα μαζί αντί για ένα τη φορά.
+                    CatalogValidationHintText(
+                      // Στην εταιρεία ένα «σωστό» δικό μας εσωτερικό είναι
+                      // το ίδιο ύποπτο με λάθος μήκος: ή το Είδος είναι
+                      // λάθος, ή γράφτηκε το εσωτερικό του τεχνικού.
+                      hint:
+                          validation?.phoneHint(
+                            sharedPhoneInputController.text,
+                          ) ??
+                          (selectedKind == DepartmentKind.company
+                              ? validation?.companyInternalPhoneHint(
+                                  sharedPhoneInputController.text,
+                                )
+                              : null),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final p in sharedPhones)
+                          RemovableSharedChip(
+                            label: p,
+                            diagnosis:
+                                validation?.phoneChipDiagnosis(p) ??
+                                CatalogChipDiagnosis.ok,
+                            isNewlyAdded: !snapSharedPhones.contains(p),
+                            isPendingRemoval: false,
+                            onToggle: () => setState(() {
+                              sharedPhones.remove(p);
+                              if (snapSharedPhones.contains(p)) {
+                                _sharedPhonesPendingRemoval.add(p);
                               }
-                              return null;
-                            },
-                            onChanged: (_) => notifyFormChanged(),
-                          );
-                        },
-                        optionsViewBuilder: (context, onSelected, options) {
-                          return _departmentNameAutocompleteOptionsView(
-                            context,
-                            onSelected,
-                            options,
-                          );
-                        },
+                            }),
+                          ),
+                        for (final p
+                            in (_sharedPhonesPendingRemoval.toList()..sort())
+                                .where((x) => !sharedPhones.contains(x)))
+                          RemovableSharedChip(
+                            label: p,
+                            isNewlyAdded: false,
+                            isPendingRemoval: true,
+                            onToggle: () => setState(() {
+                              _sharedPhonesPendingRemoval.remove(p);
+                              if (!sharedPhones.contains(p)) {
+                                sharedPhones.add(p);
+                                sharedPhones.sort();
+                              }
+                            }),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (widget.initialDepartment?.id != null)
+                      _buildReadOnlyLegend(
+                        context: context,
+                        title:
+                            'Τηλέφωνα ${selectedKind.entityLabelGenitive} '
+                            '(Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
+                        byValueToOwners: LookupService.instance
+                            .getCallerOwnedPhonesByDepartment(
+                              widget.initialDepartment!.id!,
+                            ),
+                        avatarIcon: Icons.phone_outlined,
                       ),
-                      CatalogValidationHintText(
-                        hint: validation?.departmentNameHint(
-                          nameController.text,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildKindField(),
+                    // Η εταιρεία δεν γίνεται κάτοχος εξοπλισμού: ο κατάλογος
+                    // μηχανημάτων είναι του νοσοκομείου. Η εξωτερική μονάδα
+                    // ΓΙΝΕΤΑΙ — στα Κέντρα Υγείας τα μηχανήματα είναι δικά
+                    // μας. Η ενότητα φεύγει ολόκληρη, μαζί με το υπόμνημα
+                    // των κατόχων, και ό,τι κρύβεται δεν αποθηκεύεται:
+                    // η αποθήκευση ρωτά πού πάει κάθε μηχάνημα.
+                    if (selectedKind.canOwnEquipment) ...[
                       const SizedBox(height: 12),
                       Text(
-                        'Κοινόχρηστα τηλέφωνα',
+                        'Κοινόχρηστος εξοπλισμός',
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 6),
                       RawAutocomplete<String>(
-                        textEditingController: sharedPhoneInputController,
-                        focusNode: sharedPhoneInputFocus,
+                        textEditingController: sharedEquipmentInputController,
+                        focusNode: sharedEquipmentInputFocus,
                         optionsBuilder: (value) {
                           final q = SearchTextNormalizer.normalizeForSearch(
                             value.text,
                           );
                           final all = LookupService.instance
-                              .getAllKnownPhones();
+                              .getAllKnownEquipmentCodes();
                           if (q.isEmpty) return all;
                           return all.where(
                             (v) => SearchTextNormalizer.matchesNormalizedQuery(
@@ -917,21 +1053,22 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                         },
                         displayStringForOption: (v) => v,
                         onSelected: (v) =>
-                            sharedLinks.addSharedPhonesFromInput(v),
+                            sharedLinks.addSharedEquipmentFromInput(v),
                         fieldViewBuilder: (context, controller, focusNode, _) {
                           return TextField(
                             controller: controller,
                             focusNode: focusNode,
                             decoration: const InputDecoration(
-                              labelText: 'Προσθήκη τηλεφώνων (με κόμμα)',
+                              labelText: 'Προσθήκη εξοπλισμού (με κόμμα)',
                               border: OutlineInputBorder(),
                             ),
                             onChanged: (_) => sharedLinks.commitDelimitedInput(
-                              controller: sharedPhoneInputController,
-                              target: sharedPhones,
+                              controller: sharedEquipmentInputController,
+                              target: sharedEquipmentCodes,
                               keepLastIncomplete: true,
                             ),
-                            onSubmitted: sharedLinks.addSharedPhonesFromInput,
+                            onSubmitted:
+                                sharedLinks.addSharedEquipmentFromInput,
                           );
                         },
                         optionsViewBuilder: (context, onSelected, options) {
@@ -961,55 +1098,52 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                           );
                         },
                       ),
-                      // Μόνο για ό,τι πληκτρολογείται τώρα: για τα ήδη
-                      // προστεθειμένα μιλά το καθένα με το εικονίδιό του,
-                      // οπότε φαίνονται όλα μαζί αντί για ένα τη φορά.
+                      // Ίδια λογική με τα τηλέφωνα: εδώ μόνο ό,τι γράφεται
+                      // τώρα· τα προστεθειμένα τα λένε τα εικονίδιά τους.
                       CatalogValidationHintText(
-                        // Στην εταιρεία ένα «σωστό» δικό μας εσωτερικό είναι
-                        // το ίδιο ύποπτο με λάθος μήκος: ή το Είδος είναι
-                        // λάθος, ή γράφτηκε το εσωτερικό του τεχνικού.
-                        hint:
-                            validation?.phoneHint(
-                              sharedPhoneInputController.text,
-                            ) ??
-                            (selectedKind == DepartmentKind.company
-                                ? validation?.companyInternalPhoneHint(
-                                    sharedPhoneInputController.text,
-                                  )
-                                : null),
+                        hint: validation?.equipmentCodeFieldHint(
+                          sharedEquipmentInputController.text,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          for (final p in sharedPhones)
+                          for (final code in sharedEquipmentCodes)
                             RemovableSharedChip(
-                              label: p,
+                              label: code,
                               diagnosis:
-                                  validation?.phoneChipDiagnosis(p) ??
+                                  validation?.equipmentCodeChipDiagnosis(
+                                    code,
+                                  ) ??
                                   CatalogChipDiagnosis.ok,
-                              isNewlyAdded: !snapSharedPhones.contains(p),
+                              isNewlyAdded: !snapSharedEquipmentCodes.contains(
+                                code,
+                              ),
                               isPendingRemoval: false,
                               onToggle: () => setState(() {
-                                sharedPhones.remove(p);
-                                if (snapSharedPhones.contains(p)) {
-                                  _sharedPhonesPendingRemoval.add(p);
+                                sharedEquipmentCodes.remove(code);
+                                if (snapSharedEquipmentCodes.contains(code)) {
+                                  _sharedEquipmentPendingRemoval.add(code);
                                 }
                               }),
                             ),
-                          for (final p
-                              in (_sharedPhonesPendingRemoval.toList()..sort())
-                                  .where((x) => !sharedPhones.contains(x)))
+                          for (final code
+                              in (_sharedEquipmentPendingRemoval.toList()
+                                    ..sort())
+                                  .where(
+                                    (x) => !sharedEquipmentCodes.contains(x),
+                                  ))
                             RemovableSharedChip(
-                              label: p,
+                              label: code,
                               isNewlyAdded: false,
                               isPendingRemoval: true,
                               onToggle: () => setState(() {
-                                _sharedPhonesPendingRemoval.remove(p);
-                                if (!sharedPhones.contains(p)) {
-                                  sharedPhones.add(p);
-                                  sharedPhones.sort();
+                                _sharedEquipmentPendingRemoval.remove(code);
+                                if (!sharedEquipmentCodes.contains(code)) {
+                                  sharedEquipmentCodes.add(code);
+                                  sharedEquipmentCodes.sort();
                                 }
                               }),
                             ),
@@ -1020,414 +1154,262 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
                         _buildReadOnlyLegend(
                           context: context,
                           title:
-                              'Τηλέφωνα ${selectedKind.entityLabelGenitive} '
+                              'Εξοπλισμός ${selectedKind.entityLabelGenitive} '
                               '(Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
                           byValueToOwners: LookupService.instance
-                              .getCallerOwnedPhonesByDepartment(
+                              .getCallerOwnedEquipmentByDepartment(
                                 widget.initialDepartment!.id!,
                               ),
-                          avatarIcon: Icons.phone_outlined,
+                          avatarIcon: Icons.computer_outlined,
                         ),
-                      // Η εταιρεία δεν γίνεται κάτοχος εξοπλισμού: ο κατάλογος
-                      // μηχανημάτων είναι του νοσοκομείου. Η εξωτερική μονάδα
-                      // ΓΙΝΕΤΑΙ — στα Κέντρα Υγείας τα μηχανήματα είναι δικά
-                      // μας. Η ενότητα φεύγει ολόκληρη, μαζί με το υπόμνημα
-                      // των κατόχων, και ό,τι κρύβεται δεν αποθηκεύεται:
-                      // η αποθήκευση ρωτά πού πάει κάθε μηχάνημα.
-                      if (selectedKind.canOwnEquipment) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          'Κοινόχρηστος εξοπλισμός',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 6),
-                        RawAutocomplete<String>(
-                          textEditingController: sharedEquipmentInputController,
-                          focusNode: sharedEquipmentInputFocus,
-                          optionsBuilder: (value) {
-                            final q = SearchTextNormalizer.normalizeForSearch(
-                              value.text,
-                            );
-                            final all = LookupService.instance
-                                .getAllKnownEquipmentCodes();
-                            if (q.isEmpty) return all;
-                            return all.where(
-                              (v) =>
-                                  SearchTextNormalizer.matchesNormalizedQuery(
-                                    v,
-                                    q,
-                                  ),
-                            );
-                          },
-                          displayStringForOption: (v) => v,
-                          onSelected: (v) =>
-                              sharedLinks.addSharedEquipmentFromInput(v),
-                          fieldViewBuilder:
-                              (context, controller, focusNode, _) {
-                                return TextField(
-                                  controller: controller,
-                                  focusNode: focusNode,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Προσθήκη εξοπλισμού (με κόμμα)',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  onChanged: (_) =>
-                                      sharedLinks.commitDelimitedInput(
-                                        controller:
-                                            sharedEquipmentInputController,
-                                        target: sharedEquipmentCodes,
-                                        keepLastIncomplete: true,
-                                      ),
-                                  onSubmitted:
-                                      sharedLinks.addSharedEquipmentFromInput,
-                                );
-                              },
-                          optionsViewBuilder: (context, onSelected, options) {
-                            return Align(
-                              alignment: Alignment.topLeft,
-                              child: Material(
-                                elevation: 4,
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 380,
-                                    maxHeight: 200,
-                                  ),
-                                  child: ListView(
-                                    padding: EdgeInsets.zero,
-                                    shrinkWrap: true,
-                                    children: [
-                                      for (final opt in options)
-                                        ListTile(
-                                          dense: true,
-                                          title: Text(opt),
-                                          onTap: () => onSelected(opt),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        // Ίδια λογική με τα τηλέφωνα: εδώ μόνο ό,τι γράφεται
-                        // τώρα· τα προστεθειμένα τα λένε τα εικονίδιά τους.
-                        CatalogValidationHintText(
-                          hint: validation?.equipmentCodeFieldHint(
-                            sharedEquipmentInputController.text,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            for (final code in sharedEquipmentCodes)
-                              RemovableSharedChip(
-                                label: code,
-                                diagnosis:
-                                    validation?.equipmentCodeChipDiagnosis(
-                                      code,
-                                    ) ??
-                                    CatalogChipDiagnosis.ok,
-                                isNewlyAdded: !snapSharedEquipmentCodes
-                                    .contains(code),
-                                isPendingRemoval: false,
-                                onToggle: () => setState(() {
-                                  sharedEquipmentCodes.remove(code);
-                                  if (snapSharedEquipmentCodes.contains(code)) {
-                                    _sharedEquipmentPendingRemoval.add(code);
-                                  }
-                                }),
-                              ),
-                            for (final code
-                                in (_sharedEquipmentPendingRemoval.toList()
-                                      ..sort())
-                                    .where(
-                                      (x) => !sharedEquipmentCodes.contains(x),
-                                    ))
-                              RemovableSharedChip(
-                                label: code,
-                                isNewlyAdded: false,
-                                isPendingRemoval: true,
-                                onToggle: () => setState(() {
-                                  _sharedEquipmentPendingRemoval.remove(code);
-                                  if (!sharedEquipmentCodes.contains(code)) {
-                                    sharedEquipmentCodes.add(code);
-                                    sharedEquipmentCodes.sort();
-                                  }
-                                }),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        if (widget.initialDepartment?.id != null)
-                          _buildReadOnlyLegend(
-                            context: context,
-                            title:
-                                'Εξοπλισμός ${selectedKind.entityLabelGenitive} '
-                                '(Πέρασμα του ποντικιού για προβολή υπαλλήλου)',
-                            byValueToOwners: LookupService.instance
-                                .getCallerOwnedEquipmentByDepartment(
-                                  widget.initialDepartment!.id!,
-                                ),
-                            avatarIcon: Icons.computer_outlined,
-                          ),
-                      ],
-                      const SizedBox(height: 12),
-                      // Κτίριο και όροφος αφορούν την κάτοψη του νοσοκομείου.
-                      // Μια εταιρεία ή ένα Κέντρο Υγείας δεν βρίσκεται σε δικό
-                      // μας κτίριο, οπότε τα πεδία δεν έχουν τι να δείξουν.
-                      if (selectedKind.belongsOnBuildingMap)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: _buildBuildingField()),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: DropdownButtonFormField<int?>(
-                                // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
-                                value: _effectiveFloorDropdownValue(),
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                  labelText: 'Όροφος (κάτοψη)',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                                items: _floorDropdownItems(),
-                                // Κλειδωμένο όσο οι κάτοψεις είναι άγνωστες: η
-                                // μόνη διαθέσιμη επιλογή θα ήταν «— χωρίς —»,
-                                // που σβήνει τη θέση στον χάρτη.
-                                onChanged: floorLoadState.allowsFloorChange
-                                    ? (v) => _onFloorDropdownChanged(v)
-                                    : null,
-                              ),
-                            ),
-                          ],
-                        ),
-                      if (selectedKind.belongsOnBuildingMap) ...[
-                        const SizedBox(height: 12),
-                        _buildGroupField(),
-                      ],
-                      if (buildingMapFloorLoadNotice(floorLoadState)
-                          case final notice?
-                          when selectedKind.belongsOnBuildingMap) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          notice,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: Colors.orange.shade800),
-                        ),
-                      ],
-                      if (selectedKind.belongsOnBuildingMap &&
-                          _floorSubtitleText() != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          _floorSubtitleText()!,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Text(
-                        'Χρώμα',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
+                    ],
+                    const SizedBox(height: 12),
+                    // Κτίριο και όροφος αφορούν την κάτοψη του νοσοκομείου.
+                    // Μια εταιρεία ή ένα Κέντρο Υγείας δεν βρίσκεται σε δικό
+                    // μας κτίριο, οπότε τα πεδία δεν έχουν τι να δείξουν.
+                    if (selectedKind.belongsOnBuildingMap)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: DepartmentColorPalette(
-                              compact: true,
-                              showHeading: false,
-                              host: _paletteHost,
-                              selected: selectedColor,
-                              onColorSelected: (c) {
-                                setState(() {
-                                  selectedColor = c;
-                                  hexController.text = colorToDepartmentHex(c);
-                                });
-                              },
-                            ),
-                          ),
+                          Expanded(child: _buildBuildingField()),
                           const SizedBox(width: 12),
-                          SizedBox(
-                            width: 156,
-                            child: Builder(
-                              builder: (context) {
-                                final rawHex = hexController.text.trim();
-                                final parsedHex = tryParseDepartmentHex(rawHex);
-                                final hasInvalidHex =
-                                    rawHex.isNotEmpty && parsedHex == null;
-                                return Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    TextFormField(
-                                      controller: hexController,
-                                      focusNode: _colorFocus,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Δεκαεξαδικός (Hex)',
-                                        hintText: '#RRGGBB',
-                                        border: OutlineInputBorder(),
-                                        isDense: true,
-                                      ),
-                                      style: TextStyle(
-                                        color: hasInvalidHex
-                                            ? Theme.of(
-                                                context,
-                                              ).colorScheme.error
-                                            : null,
-                                      ),
-                                      textCapitalization:
-                                          TextCapitalization.characters,
-                                      onChanged: (_) => setState(() {}),
-                                      validator: (v) {
-                                        if (v == null || v.trim().isEmpty) {
-                                          return 'Εισάγετε hex χρώματος';
-                                        }
-                                        if (tryParseDepartmentHex(v.trim()) ==
-                                            null) {
-                                          return 'Μη έγκυρο (π.χ. #1976D2)';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        onTap: hasInvalidHex
-                                            ? null
-                                            : _openColorPickerFromPreview,
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: Tooltip(
-                                          message: hasInvalidHex
-                                              ? 'Διορθώστε το hex'
-                                              : 'Επιλογέας χρώματος',
-                                          child: Container(
-                                            height: 22,
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  parsedHex ??
-                                                  Colors.transparent,
-                                              border: Border.all(
-                                                color: hasInvalidHex
-                                                    ? Theme.of(
-                                                        context,
-                                                      ).colorScheme.error
-                                                    : Theme.of(context)
-                                                          .colorScheme
-                                                          .outlineVariant,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            alignment: Alignment.center,
-                                            child: hasInvalidHex
-                                                ? Icon(
-                                                    Icons.error_outline,
-                                                    size: 14,
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).colorScheme.error,
-                                                  )
-                                                : Icon(
-                                                    Icons.palette_outlined,
-                                                    size: 14,
-                                                    color:
-                                                        (parsedHex ??
-                                                                    Colors.grey)
-                                                                .computeLuminance() >
-                                                            0.55
-                                                        ? Colors.black54
-                                                        : Colors.white70,
-                                                  ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
+                          Expanded(
+                            child: DropdownButtonFormField<int?>(
+                              // ignore: deprecated_member_use — controlled selection (Flutter 3.33+ προτείνει initialValue μόνο για uncontrolled)
+                              value: _effectiveFloorDropdownValue(),
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Όροφος (κάτοψη)',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: _floorDropdownItems(),
+                              // Κλειδωμένο όσο οι κάτοψεις είναι άγνωστες: η
+                              // μόνη διαθέσιμη επιλογή θα ήταν «— χωρίς —»,
+                              // που σβήνει τη θέση στον χάρτη.
+                              onChanged: floorLoadState.allowsFloorChange
+                                  ? (v) => _onFloorDropdownChanged(v)
+                                  : null,
                             ),
                           ),
                         ],
                       ),
+                    if (selectedKind.belongsOnBuildingMap) ...[
                       const SizedBox(height: 12),
-                      ResizableTextArea(
-                        controller: notesController,
-                        focusNode: _notesFocus,
-                        decoration: const InputDecoration(
-                          labelText: 'Σημειώσεις',
-                          border: OutlineInputBorder(),
-                          alignLabelWithHint: true,
-                        ),
-                        onChanged: (_) => notifyFormChanged(),
-                      ),
-                      // Το Lansweeper ξέρει μόνο λογαριασμούς του νοσοκομείου:
-                      // ούτε η εταιρεία ούτε η εξωτερική μονάδα φτάνουν ποτέ ως
-                      // αιτών. Ό,τι έχει ήδη γραφτεί μένει άθικτο στη βάση —
-                      // απλώς παύει να ζητιέται, όπως ακριβώς γίνεται με το
-                      // Κτίριο και τον Όροφο εκτός κάτοψης.
-                      if (selectedKind.participatesInLansweeper) ...[
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: lansweeperAccountInputController,
-                          focusNode: _lansweeperAccountsFocus,
-                          decoration: const InputDecoration(
-                            labelText: 'Αναγνωριστικά Lansweeper (με κόμμα)',
-                            hintText: r'Ονομασία = τομέας\όνομα, ή σκέτο email',
-                            helperText:
-                                'Ποιος χρεώνεται τα αιτήματα όταν ο καλών είναι '
-                                'άγνωστος. Η ονομασία πριν το «=» '
-                                'μένει στην εφαρμογή — στο Lansweeper φεύγει '
-                                'μόνο το αναγνωριστικό.',
-                            helperMaxLines: 3,
-                            border: OutlineInputBorder(),
-                          ),
-                          onSubmitted: (_) => commitLansweeperAccountInput(),
-                          onEditingComplete: commitLansweeperAccountInput,
-                          onChanged: (value) {
-                            if (value.endsWith(',')) {
-                              commitLansweeperAccountInput();
-                              return;
-                            }
-                            notifyFormChanged();
-                          },
-                        ),
-                        if (lansweeperAccounts.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: [
-                                for (final account in lansweeperAccounts)
-                                  LansweeperAccountChip(
-                                    key: ValueKey(
-                                      'lansweeper_account_${account.username}',
-                                    ),
-                                    account: account,
-                                    referenceDomain:
-                                        lansweeperReferenceDomainForChips,
-                                    onEdit: () =>
-                                        editLansweeperAccount(account),
-                                    onRemove: () =>
-                                        removeLansweeperAccount(account),
-                                  ),
-                              ],
-                            ),
-                          ),
-                      ],
+                      _buildGroupField(),
                     ],
-                  ),
+                    if (buildingMapFloorLoadNotice(floorLoadState)
+                        case final notice?
+                        when selectedKind.belongsOnBuildingMap) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        notice,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ],
+                    if (selectedKind.belongsOnBuildingMap &&
+                        _floorSubtitleText() != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _floorSubtitleText()!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Text(
+                      'Χρώμα',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: DepartmentColorPalette(
+                            compact: true,
+                            showHeading: false,
+                            host: _paletteHost,
+                            selected: selectedColor,
+                            onColorSelected: (c) {
+                              setState(() {
+                                selectedColor = c;
+                                hexController.text = colorToDepartmentHex(c);
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          width: 156,
+                          child: Builder(
+                            builder: (context) {
+                              final rawHex = hexController.text.trim();
+                              final parsedHex = tryParseDepartmentHex(rawHex);
+                              final hasInvalidHex =
+                                  rawHex.isNotEmpty && parsedHex == null;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  TextFormField(
+                                    controller: hexController,
+                                    focusNode: _colorFocus,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Δεκαεξαδικός (Hex)',
+                                      hintText: '#RRGGBB',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    style: TextStyle(
+                                      color: hasInvalidHex
+                                          ? Theme.of(context).colorScheme.error
+                                          : null,
+                                    ),
+                                    textCapitalization:
+                                        TextCapitalization.characters,
+                                    onChanged: (_) => setState(() {}),
+                                    validator: (v) {
+                                      if (v == null || v.trim().isEmpty) {
+                                        return 'Εισάγετε hex χρώματος';
+                                      }
+                                      if (tryParseDepartmentHex(v.trim()) ==
+                                          null) {
+                                        return 'Μη έγκυρο (π.χ. #1976D2)';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: hasInvalidHex
+                                          ? null
+                                          : _openColorPickerFromPreview,
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Tooltip(
+                                        message: hasInvalidHex
+                                            ? 'Διορθώστε το hex'
+                                            : 'Επιλογέας χρώματος',
+                                        child: Container(
+                                          height: 22,
+                                          decoration: BoxDecoration(
+                                            color:
+                                                parsedHex ?? Colors.transparent,
+                                            border: Border.all(
+                                              color: hasInvalidHex
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).colorScheme.error
+                                                  : Theme.of(context)
+                                                        .colorScheme
+                                                        .outlineVariant,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: hasInvalidHex
+                                              ? Icon(
+                                                  Icons.error_outline,
+                                                  size: 14,
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.error,
+                                                )
+                                              : Icon(
+                                                  Icons.palette_outlined,
+                                                  size: 14,
+                                                  color:
+                                                      (parsedHex ?? Colors.grey)
+                                                              .computeLuminance() >
+                                                          0.55
+                                                      ? Colors.black54
+                                                      : Colors.white70,
+                                                ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ResizableTextArea(
+                      controller: notesController,
+                      focusNode: _notesFocus,
+                      decoration: const InputDecoration(
+                        labelText: 'Σημειώσεις',
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                      ),
+                      onChanged: (_) => notifyFormChanged(),
+                    ),
+                    // Το Lansweeper ξέρει μόνο λογαριασμούς του νοσοκομείου:
+                    // ούτε η εταιρεία ούτε η εξωτερική μονάδα φτάνουν ποτέ ως
+                    // αιτών. Ό,τι έχει ήδη γραφτεί μένει άθικτο στη βάση —
+                    // απλώς παύει να ζητιέται, όπως ακριβώς γίνεται με το
+                    // Κτίριο και τον Όροφο εκτός κάτοψης.
+                    if (selectedKind.participatesInLansweeper) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: lansweeperAccountInputController,
+                        focusNode: _lansweeperAccountsFocus,
+                        decoration: const InputDecoration(
+                          labelText: 'Αναγνωριστικά Lansweeper (με κόμμα)',
+                          hintText: r'Ονομασία = τομέας\όνομα, ή σκέτο email',
+                          helperText:
+                              'Ποιος χρεώνεται τα αιτήματα όταν ο καλών είναι '
+                              'άγνωστος. Η ονομασία πριν το «=» '
+                              'μένει στην εφαρμογή — στο Lansweeper φεύγει '
+                              'μόνο το αναγνωριστικό.',
+                          helperMaxLines: 3,
+                          border: OutlineInputBorder(),
+                        ),
+                        onSubmitted: (_) => commitLansweeperAccountInput(),
+                        onEditingComplete: commitLansweeperAccountInput,
+                        onChanged: (value) {
+                          if (value.endsWith(',')) {
+                            commitLansweeperAccountInput();
+                            return;
+                          }
+                          notifyFormChanged();
+                        },
+                      ),
+                      if (lansweeperAccounts.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              for (final account in lansweeperAccounts)
+                                LansweeperAccountChip(
+                                  key: ValueKey(
+                                    'lansweeper_account_${account.username}',
+                                  ),
+                                  account: account,
+                                  referenceDomain:
+                                      lansweeperReferenceDomainForChips,
+                                  onEdit: () => editLansweeperAccount(account),
+                                  onRemove: () =>
+                                      removeLansweeperAccount(account),
+                                ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ],
                 ),
               ),
             ),

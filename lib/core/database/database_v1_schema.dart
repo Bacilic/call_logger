@@ -99,6 +99,10 @@ import 'database_schema_version.dart';
 /// v62: `task_notifications` — η ουρά «τι περιμένει να δει ο καθένας» για
 /// αναθέσεις, αφαιρέσεις ανάθεσης και κλεισίματα ξένων εκκρεμοτήτων. Νέος
 /// πίνακας, άδειος: καμία υπάρχουσα εγγραφή δεν γεννά αναδρομικά ειδοποίηση.
+/// v65: `tasks.lansweeper_state` / `lansweeper_main_ticket_id` /
+/// `lansweeper_last_sync_at` — η εκκρεμότητα θυμάται πλέον αν έγινε αίτημα στο
+/// Lansweeper, όπως ήδη θυμάται η κλήση. Καθαρές προσθήκες· οι υπάρχουσες
+/// ξεκινούν «ακαταχώρητες», που είναι η αλήθεια για όλες τους.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
@@ -239,6 +243,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         equipment_text TEXT,
         issue TEXT,
         solution TEXT,
+        title TEXT,
         refined_source TEXT,
         refined_at TEXT,
         category_text TEXT,
@@ -320,9 +325,18 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)',
   );
+  // Το φίλτρο του Ιστορικού διαλέγει είδος ή ενέργεια ΚΑΙ ταξινομεί κατά
+  // χρόνο. Ένα ευρετήριο μόνο στη στήλη του φίλτρου αφήνει τη βάση να
+  // ταξινομεί στο χέρι: μετρημένο σε 200.000 γραμμές, 249 ms αντί για 0,3 ms.
+  // Η χρονική στήλη μέσα στο ίδιο ευρετήριο δίνει τη σειρά δωρεάν.
   await db.execute(
-    'CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)',
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_action_timestamp ON audit_log(action, timestamp)',
   );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_entity_type_timestamp ON audit_log(entity_type, timestamp)',
+  );
+  // Μένει για το «ιστορικό αυτής της καρτέλας», που ψάχνει συγκεκριμένο
+  // entity_id — εκεί το παραπάνω δεν βοηθά.
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_audit_log_entity_type_entity_id ON audit_log(entity_type, entity_id)',
   );
@@ -832,9 +846,18 @@ Future<void> migrateDatabaseToV18(Database db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)',
   );
+  // Το φίλτρο του Ιστορικού διαλέγει είδος ή ενέργεια ΚΑΙ ταξινομεί κατά
+  // χρόνο. Ένα ευρετήριο μόνο στη στήλη του φίλτρου αφήνει τη βάση να
+  // ταξινομεί στο χέρι: μετρημένο σε 200.000 γραμμές, 249 ms αντί για 0,3 ms.
+  // Η χρονική στήλη μέσα στο ίδιο ευρετήριο δίνει τη σειρά δωρεάν.
   await db.execute(
-    'CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)',
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_action_timestamp ON audit_log(action, timestamp)',
   );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_entity_type_timestamp ON audit_log(entity_type, timestamp)',
+  );
+  // Μένει για το «ιστορικό αυτής της καρτέλας», που ψάχνει συγκεκριμένο
+  // entity_id — εκεί το παραπάνω δεν βοηθά.
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_audit_log_entity_type_entity_id ON audit_log(entity_type, entity_id)',
   );

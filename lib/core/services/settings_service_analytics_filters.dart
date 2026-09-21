@@ -53,7 +53,7 @@ class SettingsServiceAnalyticsFilters {
     }
   }
 
-  /// Απόκρυψη κλήσεων χωρίς κατηγορία στο γράφημα «Κατανομή Βλαβών». Προεπιλογή: false.
+  /// Απόκρυψη κλήσεων χωρίς κατηγορία στο γράφημα «Κατανομή ανά κατηγορία». Προεπιλογή: false.
   Future<bool> getDashboardExcludeCallsWithoutCategory() async {
     return await ScopedSettings.getBool(
           ProfileSettingKeys.dashboardExcludeCallsWithoutCategory,

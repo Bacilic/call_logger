@@ -5,6 +5,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import 'audit_diff_helper.dart';
 import 'database_table_labels.dart';
 import '../services/current_operator.dart';
+import '../config/audit_retention_class.dart';
 import '../utils/search_text_normalizer.dart';
 
 /// Κεντρική εγγραφή στον πίνακα `audit_log` (μόνο από εδώ).
@@ -18,13 +19,12 @@ class AuditService {
   /// Η ταυτότητα έρχεται από τον [CurrentOperator], που την ορίζει μία φορά
   /// στην εκκίνηση. Όσο δεν έχει αναγνωριστεί κανείς, η στήλη γράφει παύλα.
   ///
-  /// Το [executor] δεν χρησιμοποιείται πια και δεν χρειάζεται να δίνεται: η
-  /// απάντηση δεν αγγίζει τη βάση. Μένει προαιρετικό ώστε να μη χρειαστεί να
-  /// ξαναγραφτούν δεκάδες σημεία κλήσης — και επειδή δεν ρωτά τη βάση, παύει
-  /// να υπάρχει και ο κίνδυνος κλειδώματος μέσα σε ανοιχτό transaction.
-  static Future<String> performingUser([DatabaseExecutor? executor]) async {
-    return CurrentOperator.auditName;
-  }
+  /// **Δεν αγγίζει τη βάση** — γι' αυτό δεν δέχεται σύνδεση και δεν επιστρέφει
+  /// υπόσχεση. Και τα δύο τα δεχόταν κάποτε, και όσο έμεναν στην υπογραφή
+  /// έλεγαν στον αναγνώστη το αντίθετο από ό,τι συμβαίνει: ότι η απάντηση
+  /// κρίνεται από τη συγκεκριμένη συναλλαγή. Επειδή δεν ρωτά τη βάση, δεν
+  /// υπάρχει ούτε κίνδυνος κλειδώματος μέσα σε ανοιχτό transaction.
+  static String performingUser() => CurrentOperator.auditName;
 
   /// Εισαγωγή μίας γραμμής audit μέσα σε transaction ή απευθείας.
   static Future<void> log(
@@ -618,7 +618,7 @@ class AuditService {
     if (ids.isEmpty) return 0;
     final uniqueIds = ids.toSet().toList()..sort();
     final placeholders = List.filled(uniqueIds.length, '?').join(',');
-    final user = await performingUser(_db);
+    final user = performingUser();
     return _db.transaction((txn) async {
       final removed = await txn.rawDelete(
         'DELETE FROM audit_log WHERE id IN ($placeholders)',
@@ -725,17 +725,126 @@ class AuditService {
     );
   }
 
-  /// Διαγραφή των παλαιότερων γραμμών ώστε να μείνουν το πολύ [keep] (νεότερες πρώτες).
+  /// Πόσες γραμμές **μιας κλάσης** είναι παλαιότερες από [cutoff].
+  ///
+  /// Η προεπισκόπηση και η διαγραφή ρωτούν από το ίδιο σημείο: δύο χωριστά
+  /// ερωτήματα θα απέκλιναν και ο χειριστής θα ενέκρινε ένα νούμερο ενώ θα
+  /// εκτελούνταν άλλο.
+  Future<int> countOlderThanInClass(
+    AuditRetentionClass retentionClass,
+    DateTime cutoff,
+  ) async {
+    final clause = auditRetentionClassClause(retentionClass);
+    final rows = await _db.rawQuery(
+      'SELECT COUNT(*) AS c FROM audit_log '
+      'WHERE timestamp < ? AND (${clause.sql})',
+      [cutoff.toIso8601String(), ...clause.args],
+    );
+    return _firstCount(rows);
+  }
+
+  /// Διαγραφή των παλαιότερων γραμμών **μιας κλάσης**.
+  Future<int> deleteOlderThanInClass(
+    AuditRetentionClass retentionClass,
+    DateTime cutoff,
+  ) async {
+    final clause = auditRetentionClassClause(retentionClass);
+    return _db.rawDelete(
+      'DELETE FROM audit_log WHERE timestamp < ? AND (${clause.sql})',
+      [cutoff.toIso8601String(), ...clause.args],
+    );
+  }
+
+  /// Επιστρέφει ολόκληρες τις γραμμές που θα σβηστούν — για την εξαγωγή.
+  Future<List<Map<String, Object?>>> rowsOlderThanInClass(
+    AuditRetentionClass retentionClass,
+    DateTime cutoff,
+  ) async {
+    final clause = auditRetentionClassClause(retentionClass);
+    return _db.rawQuery(
+      'SELECT * FROM audit_log WHERE timestamp < ? AND (${clause.sql}) '
+      'ORDER BY timestamp ASC, id ASC',
+      [cutoff.toIso8601String(), ...clause.args],
+    );
+  }
+
+  /// Πλήθος γραμμών ανά κλάση — η εικόνα που δείχνει η οθόνη συντήρησης.
+  Future<Map<AuditRetentionClass, int>> countByRetentionClass() async {
+    final out = <AuditRetentionClass, int>{};
+    for (final value in AuditRetentionClass.values) {
+      final clause = auditRetentionClassClause(value);
+      final rows = await _db.rawQuery(
+        'SELECT COUNT(*) AS c FROM audit_log WHERE ${clause.sql}',
+        clause.args,
+      );
+      out[value] = _firstCount(rows);
+    }
+    return out;
+  }
+
+  /// **Επίπεδο 1 — συμπίεση χωρίς απώλεια.**
+  ///
+  /// Πετά το παραγόμενο κείμενο αναζήτησης από εγγραφές παλαιότερες του
+  /// [cutoff]. Καμία γραμμή δεν χάνεται και **καμία πληροφορία**: το κείμενο
+  /// είναι κανονικοποιημένο αντίγραφο των υπόλοιπων πεδίων και ξαναχτίζεται
+  /// με το [rebuildAllSearchTexts].
+  ///
+  /// Μετρημένο σε βάση 200.000 γραμμών: 312 MB → 121 MB.
+  ///
+  /// Το τίμημα είναι μόνο ταχύτητα: η αναζήτηση δεν βρίσκει πια τις παλιές
+  /// εγγραφές από το ευρετήριο κειμένου.
+  Future<int> compactSearchTextOlderThan(DateTime cutoff) async {
+    return _db.rawUpdate(
+      "UPDATE audit_log SET search_text = NULL "
+      "WHERE timestamp < ? AND search_text IS NOT NULL",
+      [cutoff.toIso8601String()],
+    );
+  }
+
+  /// Πόσες γραμμές θα πετούσαν το κείμενό τους με αυτό το όριο.
+  Future<int> countCompactableOlderThan(DateTime cutoff) async {
+    final rows = await _db.rawQuery(
+      'SELECT COUNT(*) AS c FROM audit_log '
+      'WHERE timestamp < ? AND search_text IS NOT NULL',
+      [cutoff.toIso8601String()],
+    );
+    return _firstCount(rows);
+  }
+
+  static int _firstCount(List<Map<String, Object?>> rows) {
+    if (rows.isEmpty) return 0;
+    final raw = rows.first['c'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse('$raw') ?? 0;
+  }
+
+  /// Διαγραφή των παλαιότερων γραμμών ώστε να μείνουν το πολύ [keep].
+  ///
+  /// **Οι μόνιμες εγγραφές δεν μετρούν και δεν σβήνονται.** Το όριο πλήθους
+  /// κόβει οριζόντια και αγνοεί το τι είναι η κάθε γραμμή· αν του επιτρεπόταν
+  /// να αγγίξει τις δημιουργίες Καταλόγου, θα παρέκαμπτε σιωπηλά ολόκληρη τη
+  /// διαβάθμιση — ένα «κράτα 1.000 γραμμές» θα έσβηνε το «ποιος έφτιαξε αυτό
+  /// το τμήμα» επειδή έτυχε να είναι παλιό.
   Future<int> trimToMaxRows(int keep) async {
     if (keep <= 0) return 0;
-    final c = await _db.rawQuery('SELECT COUNT(*) AS c FROM audit_log');
-    final nRaw = c.isEmpty ? 0 : c.first['c'];
-    final n = nRaw is int ? nRaw : (nRaw is num ? nRaw.toInt() : 0);
+    final permanent = auditRetentionClassClause(AuditRetentionClass.permanent);
+    final erasable = 'NOT (${permanent.sql})';
+
+    final c = await _db.rawQuery(
+      'SELECT COUNT(*) AS c FROM audit_log WHERE $erasable',
+      permanent.args,
+    );
+    final n = _firstCount(c);
     if (n <= keep) return 0;
+
     final toRemove = n - keep;
     return _db.rawDelete(
-      'DELETE FROM audit_log WHERE id IN (SELECT id FROM audit_log ORDER BY timestamp ASC, id ASC LIMIT ?)',
-      [toRemove],
+      'DELETE FROM audit_log WHERE id IN ('
+      '  SELECT id FROM audit_log WHERE $erasable '
+      '  ORDER BY timestamp ASC, id ASC LIMIT ?'
+      ')',
+      [...permanent.args, toRemove],
     );
   }
 }

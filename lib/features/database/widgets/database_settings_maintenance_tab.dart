@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/app_permission.dart';
+import '../../../core/utils/greek_date_format.dart';
 import '../../../core/services/permission_service.dart';
 import '../providers/database_integrity_provider.dart';
 import 'database_integrity_panel.dart';
@@ -61,6 +62,9 @@ class DatabaseSettingsMaintenanceTab extends StatelessWidget {
   }
 }
 
+String _countLabel(int count, String singular, String plural) =>
+    '$count ${count == 1 ? singular : plural}';
+
 class _IntegrityLaunchSection extends ConsumerWidget {
   const _IntegrityLaunchSection();
 
@@ -71,12 +75,19 @@ class _IntegrityLaunchSection extends ConsumerWidget {
 
     String? statusHint;
     if (integrityState is DatabaseIntegritySuccess) {
-      if (!integrityState.report.hasFindings) {
-        statusHint = 'Τελευταίος έλεγχος: δεν εντοπίστηκαν προβλήματα.';
+      final report = integrityState.report;
+      // Πότε έγινε ο έλεγχος. Χωρίς αυτό η γραμμή δεν ξεχωρίζει τον έλεγχο
+      // που μόλις έτρεξε από εκείνον που έμεινε ανοιχτός από το πρωί — και
+      // ένα «δεν εντοπίστηκαν προβλήματα» δύο ωρών παλιό δεν λέει τίποτα για
+      // το τώρα.
+      final when = formatGreekTodayAwareTimestamp(report.checkedAt);
+      if (!report.hasFindings) {
+        statusHint = 'Τελευταίος έλεγχος $when: δεν εντοπίστηκαν προβλήματα.';
       } else {
         statusHint =
-            'Τελευταίος έλεγχος: ${integrityState.report.findings.length} ευρήματα '
-            '(${integrityState.report.criticalCount} κρίσιμα).';
+            'Τελευταίος έλεγχος $when: '
+            '${_countLabel(report.findings.length, 'εύρημα', 'ευρήματα')} '
+            '(${_countLabel(report.criticalCount, 'κρίσιμο', 'κρίσιμα')}).';
       }
     } else if (integrityState is DatabaseIntegrityError) {
       statusHint = 'Τελευταίος έλεγχος απέτυχε.';

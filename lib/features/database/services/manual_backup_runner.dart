@@ -13,16 +13,28 @@ enum ManualBackupOutcome {
   /// Ο φάκελος προορισμού λείπει — άνοιξε τον διάλογο ανάκτησης.
   folderMissing,
 
+  /// Το αρχείο γράφτηκε αλλά δεν άνοιξε στον έλεγχο, και σημαδεύτηκε ως
+  /// χαλασμένο — ρώτα τον χρήστη αν θέλει να το σβήσει.
+  ///
+  /// Ξεχωριστή έκβαση από το [failure] γιατί υπάρχει **αρχείο στον δίσκο**:
+  /// μια αποτυχία εγγραφής δεν αφήνει τίποτα για το οποίο να αποφασίσει
+  /// κανείς, ενώ εδώ η απόφαση είναι δική του.
+  verificationFailed,
+
   /// Απέτυχε για άλλο λόγο — δείξε το μήνυμα ως σφάλμα.
   failure,
 }
 
 /// Το αποτέλεσμα, χωρίς καμία γνώση διεπαφής.
 class ManualBackupResult {
-  const ManualBackupResult(this.outcome, {this.message});
+  const ManualBackupResult(this.outcome, {this.message, this.brokenFilePath});
 
   final ManualBackupOutcome outcome;
   final String? message;
+
+  /// Πού κατέληξε το σημαδεμένο αρχείο, όταν η έκβαση είναι
+  /// [ManualBackupOutcome.verificationFailed].
+  final String? brokenFilePath;
 }
 
 /// Παίρνει χειροκίνητο αντίγραφο και **προχωρά το σημάδι των αλλαγών**.
@@ -36,8 +48,7 @@ class ManualBackupResult {
 /// χρήστης να μη δει «αποτυχία» για κάτι που ήταν γνωστό εξαρχής.
 Future<ManualBackupResult> runManualBackup({
   required DatabaseBackupSettings settings,
-  required Future<BackupDestinationContentResult> Function()
-  inspectDestination,
+  required Future<BackupDestinationContentResult> Function() inspectDestination,
   required Future<void> Function({
     required int auditId,
     required DateTime at,
@@ -63,6 +74,13 @@ Future<ManualBackupResult> runManualBackup({
     if (result.failureCode == DatabaseBackupFailureCode.folderMissing &&
         destination.isNotEmpty) {
       return const ManualBackupResult(ManualBackupOutcome.folderMissing);
+    }
+    if (result.isVerifiedBroken) {
+      return ManualBackupResult(
+        ManualBackupOutcome.verificationFailed,
+        message: result.message,
+        brokenFilePath: result.brokenArtifactPath,
+      );
     }
     return ManualBackupResult(
       ManualBackupOutcome.failure,

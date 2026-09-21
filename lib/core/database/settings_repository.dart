@@ -4,29 +4,17 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 const String kLansweeperUrlSettingKey = 'lansweeper_url';
 const String kLansweeperApiUrlSettingKey = 'lansweeper_api_url';
 const String kLansweeperApiKeySettingKey = 'lansweeper_api_key';
-const String kLansweeperAgentUsernameSettingKey = 'lansweeper_agent_username';
 const String kLansweeperTicketViewUrlSettingKey = 'lansweeper_ticket_view_url';
 const String kLansweeperOpenTicketAfterApiSubmitSettingKey =
     'lansweeper_open_ticket_after_api_submit';
 const String kLansweeperTicketSubmitConfigSettingKey =
     'lansweeper_ticket_submit_config';
-const String kLansweeperTicketSubmitFormPrefsSettingKey =
-    'lansweeper_ticket_submit_form_prefs';
 
-/// Το διάστημα που είχε επιλεγμένο τελευταία η Αναφορά Lansweeper.
-///
-/// Μετά την αφαίρεση της μπάρας καταστάσεων το διάστημα είναι η μοναδική
-/// ρύθμιση της αναφοράς, οπότε αξίζει να επιβιώνει μεταξύ ανοιγμάτων.
-const String kLansweeperReportRangeSettingKey = 'lansweeper_report_range';
 const String kGeminiApiKeySettingKey = 'gemini_api_key';
-const String kGeminiPromptTemplateSettingKey = 'gemini_prompt_template';
-const String kGeminiPromptTemplateUserDefaultSettingKey =
-    'gemini_prompt_template_user_default';
 const String kGeminiEndpointSettingKey = 'gemini_endpoint';
 const String kGeminiPrimaryModelSettingKey = 'gemini_primary_model';
 const String kGeminiFallbackEnabledSettingKey = 'gemini_fallback_enabled';
 const String kGeminiFallbackModelSettingKey = 'gemini_fallback_model';
-const String kGeminiAutoResubmitSettingKey = 'gemini_auto_resubmit';
 const String kGeminiModelsProbeCacheSettingKey = 'gemini_models_probe_cache';
 
 /// Υπογραφή του σπορέα «Σενάρια σφαλμάτων» ΜΕΣΑ στη δοκιμαστική βάση.

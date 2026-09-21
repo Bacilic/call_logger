@@ -124,26 +124,82 @@ List<Operator> rememberedWorkstationProfiles(
   return matched;
 }
 
-/// Σειρά εμφάνισης στον επιλογέα: πρώτα όσοι έχουν δουλέψει εδώ (τελευταίος
-/// πρώτος), μετά οι υπόλοιποι όπως ήρθαν από τη βάση.
+/// Το **ενεργό** προφίλ που είναι δεμένο σε αυτόν τον λογαριασμό Windows.
 ///
-/// Όταν ο σταθμός ρωτά, ρωτά επειδή εναλλάσσονται άνθρωποι — και ο πιθανότερος
-/// είναι αυτός που κάθισε τελευταίος.
+/// `null` όταν ο λογαριασμός δεν αντιστοιχεί σε κανέναν — η συνηθισμένη
+/// περίπτωση σε κοινόχρηστο σταθμό, όπου τα προφίλ είναι αυτόνομα.
+///
+/// Δουλεύει πάνω σε λίστα που έχει ήδη διαβαστεί, ώστε η εκκίνηση να μη ρωτά
+/// τη βάση δεύτερη φορά για κάτι που μόλις κατέβασε.
+Operator? activeProfileForWindowsAccount(
+  List<Operator> profiles,
+  String? account,
+) {
+  final wanted = normalizeWindowsAccount(account);
+  if (wanted == null) return null;
+  for (final profile in profiles) {
+    if (!profile.isActive) continue;
+    if (profile.windowsAccount == wanted) return profile;
+  }
+  return null;
+}
+
+/// Αρκεί η μνήμη του σταθμού, ή τη διαψεύδει ο λογαριασμός Windows;
+///
+/// **Το σενάριο που το γέννησε:** ο Βασίλης κάθεται πέντε μέρες στον
+/// υπολογιστή του Βλάση όσο εκείνος λείπει, και πατά «Εδώ κάθομαι μόνο εγώ»
+/// για να σταματήσουν οι ερωτήσεις. Ο Βλάσης γυρίζει, ανοίγει τον δικό του
+/// υπολογιστή με τον δικό του λογαριασμό — και η εφαρμογή τον έβαζε μέσα **ως
+/// Βασίλη**, σιωπηλά. Οι κλήσεις του γράφονταν σε άλλο όνομα μέχρι να το
+/// προσέξει.
+///
+/// Η πληροφορία υπήρχε από την αρχή: ο λογαριασμός Windows είναι δεμένος στο
+/// προφίλ του Βλάση. Απλώς κανείς δεν τη ρωτούσε, γιατί η μνήμη του σταθμού
+/// απαντούσε πρώτη και έκλεινε το ερώτημα.
+///
+/// Επιστρέφει `true` **μόνο** στη διαφωνία: όταν ο λογαριασμός δείχνει σε άλλο
+/// ενεργό προφίλ από αυτό που θυμάται ο σταθμός. Χωρίς δεμένο λογαριασμό, ή
+/// όταν δείχνει στον ίδιο άνθρωπο, η εκκίνηση μένει ακριβώς όπως ήταν.
+bool workstationMemoryIsContradicted({
+  required Operator remembered,
+  required List<Operator> profiles,
+  required String? windowsAccount,
+}) {
+  final byAccount = activeProfileForWindowsAccount(profiles, windowsAccount);
+  if (byAccount == null) return false;
+  if (byAccount.id != null && remembered.id != null) {
+    return byAccount.id != remembered.id;
+  }
+  return SearchTextNormalizer.normalizeForSearch(byAccount.displayName) !=
+      SearchTextNormalizer.normalizeForSearch(remembered.displayName);
+}
+
+/// Σειρά εμφάνισης στον επιλογέα: πρώτος ο άνθρωπος του λογαριασμού Windows,
+/// μετά όσοι έχουν δουλέψει εδώ (τελευταίος πρώτος), μετά οι υπόλοιποι.
+///
+/// Όταν ο σταθμός ρωτά, ρωτά επειδή εναλλάσσονται άνθρωποι. Ο λογαριασμός
+/// Windows λέει ποιος έκανε είσοδο **τώρα**, ενώ η μνήμη λέει ποιος καθόταν
+/// **κάποτε** — η φρέσκια ένδειξη είναι καλύτερη εικασία από την ιστορική, και
+/// γι' αυτό προηγείται.
 List<Operator> orderProfilesForWorkstation(
   List<Operator> profiles,
-  List<String> remembered,
-) {
+  List<String> remembered, {
+  String? windowsAccount,
+}) {
+  final byAccount = activeProfileForWindowsAccount(profiles, windowsAccount);
   final known = rememberedWorkstationProfiles(remembered, profiles);
-  final knownKeys = <String>{
-    for (final profile in known)
-      SearchTextNormalizer.normalizeForSearch(profile.displayName),
-  };
-  return <Operator>[
-    ...known,
-    for (final profile in profiles)
-      if (!knownKeys.contains(
-        SearchTextNormalizer.normalizeForSearch(profile.displayName),
-      ))
-        profile,
-  ];
+  final placed = <String>{};
+
+  String keyOf(Operator profile) =>
+      SearchTextNormalizer.normalizeForSearch(profile.displayName);
+
+  final ordered = <Operator>[];
+  void add(Operator profile) {
+    if (placed.add(keyOf(profile))) ordered.add(profile);
+  }
+
+  if (byAccount != null) add(byAccount);
+  known.forEach(add);
+  profiles.forEach(add);
+  return ordered;
 }

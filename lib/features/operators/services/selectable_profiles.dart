@@ -44,11 +44,12 @@ class SelectableProfiles {
 /// Η [now] δίνεται ρητά ώστε το «συνδεδεμένος τώρα» να κρίνεται με τη στιγμή
 /// της ανάγνωσης και όχι με δεύτερο ρολόι μέσα στο `build`.
 ///
-/// Τα [workstationNames] δίνονται μόνο από ελέγχους.
+/// Τα [workstationNames] και το [windowsAccount] δίνονται μόνο από ελέγχους.
 Future<SelectableProfiles> loadSelectableProfiles(
   DatabaseExecutor db, {
   DateTime? now,
   List<String>? workstationNames,
+  String? windowsAccount,
 }) async {
   final all = await OperatorRepository(db).getAll();
   final remembered = workstationNames ?? await WorkstationOperators.names();
@@ -67,6 +68,7 @@ Future<SelectableProfiles> loadSelectableProfiles(
     profiles: orderProfilesForWorkstation(
       OperatorIdentity.selectableFrom(all),
       remembered,
+      windowsAccount: windowsAccount ?? OperatorIdentity.currentWindowsAccount,
     ),
     presence: describeOperatorPresenceByOperator(marks, now ?? DateTime.now()),
     workstationProfiles: rememberedWorkstationProfiles(remembered, all),

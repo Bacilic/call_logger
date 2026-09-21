@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/widgets/compact_tooltip.dart';
+import '../../../core/widgets/dialog_scrollable_content.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../core/widgets/resizable_text_area.dart';
@@ -607,10 +608,8 @@ class _TaskFormDialogState extends ConsumerState<_TaskFormDialog> {
           width: dialogWidth + _kDialogHorizontalPadding * 2,
           child: Form(
             key: _formKey,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _kDialogHorizontalPadding,
-              ),
+            child: DialogScrollableContent(
+              horizontalPadding: _kDialogHorizontalPadding,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,

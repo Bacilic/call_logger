@@ -33,9 +33,10 @@ extension IntegrityCheckTypeLabels on IntegrityCheckType {
     IntegrityCheckType.pragmaQuickCheck => 'Έλεγχος SQLite (PRAGMA)',
     IntegrityCheckType.orphanPhone => 'Ορφανά τηλέφωνα',
     IntegrityCheckType.phoneInvalidDepartment => 'Τηλέφωνα με ανύπαρκτο τμήμα',
-    IntegrityCheckType.callsMissingSearchIndex => 'Κλήσεις χωρίς ευρετήριο',
+    IntegrityCheckType.callsMissingSearchIndex =>
+      'Κλήσεις με ελλιπές ή ξεπερασμένο ευρετήριο',
     IntegrityCheckType.tasksMissingSearchIndex =>
-      'Εκκρεμότητες χωρίς ευρετήριο',
+      'Εκκρεμότητες με ελλιπές ή ξεπερασμένο ευρετήριο',
     IntegrityCheckType.usersWithoutDepartment => 'Χρήστες χωρίς τμήμα',
     IntegrityCheckType.usersInvalidDepartment =>
       'Χρήστες σε διαγραμμένο/ανύπαρκτο τμήμα',

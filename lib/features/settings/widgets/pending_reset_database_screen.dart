@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/database_init_result.dart';
 import '../../../core/database/database_path_pick_flow.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/services/application_reset_service.dart';
 import '../../../features/directory/screens/widgets/department_palette_store.dart';
-import '../../database/widgets/database_check_failed_dialog.dart';
+import '../../database/widgets/database_recovery_switch_flows.dart';
 import 'create_new_database_dialog.dart';
 
 /// Οθόνη μετά την επαναφορά: επιλογή/δημιουργία βάσης ή αναίρεση (rollback).
@@ -25,8 +25,26 @@ class PendingResetDatabaseScreen extends ConsumerStatefulWidget {
 }
 
 class _PendingResetDatabaseScreenState
-    extends ConsumerState<PendingResetDatabaseScreen> {
+    extends ConsumerState<PendingResetDatabaseScreen>
+    with DatabaseRecoverySwitchFlows<PendingResetDatabaseScreen> {
   bool _busy = false;
+
+  /// Μόλις η βάση ανοίξει, το κέλυφος αναλαμβάνει — η οθόνη έχει τελειώσει.
+  @override
+  Future<void> onDatabaseRecovered() => widget.onLifecycleChanged();
+
+  /// Η οθόνη έχει **δικό της** σημάδι απασχόλησης: ο κύκλος μέσα στο κουμπί.
+  /// Ένας αποκλειστικός διάλογος από πάνω θα ήταν δεύτερη ένδειξη για το ίδιο
+  /// πράγμα, σε οθόνη που δεν έχει τίποτα άλλο να δείξει.
+  @override
+  Future<void> showVerifyingIndicator() async {
+    if (mounted) setState(() => _busy = true);
+  }
+
+  @override
+  Future<void> hideVerifyingIndicator() async {
+    if (mounted) setState(() => _busy = false);
+  }
 
   Future<void> _rollbackAndExit() async {
     if (_busy) return;
@@ -75,18 +93,8 @@ class _PendingResetDatabaseScreenState
       return;
     }
 
-    setState(() => _busy = true);
-    try {
-      final outcome = await setAndVerifyDatabasePath(picked.path.trim());
-      if (!mounted) return;
-      if (!outcome.ok) {
-        await _showDbError(outcome.runner.result);
-        return;
-      }
-      await widget.onLifecycleChanged();
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    if (!await switchDatabasePath(picked.path) || !mounted) return;
+    await widget.onLifecycleChanged();
   }
 
   Future<void> _createNewDatabase() async {
@@ -126,35 +134,23 @@ class _PendingResetDatabaseScreenState
     setState(() => _busy = true);
     try {
       await DatabaseHelper.instance.createNewDatabaseFile(norm);
-      final outcome = await setAndVerifyDatabasePath(norm);
-      if (!mounted) return;
-      if (!outcome.ok) {
-        await _showDbError(outcome.runner.result);
-        return;
-      }
-      await widget.onLifecycleChanged();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Αποτυχία δημιουργίας νέας βάσης: $e'),
+          content: Text(
+            'Αποτυχία δημιουργίας νέας βάσης: ${humanizeUserFacingError(e)}',
+          ),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
+      return;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
 
-  Future<void> _showDbError(DatabaseInitResult result) async {
-    // Ίδια αρχή με την οθόνη σφάλματος: όσα σφάλματα έχουν διέξοδο
-    // (συγκατάθεση αναβάθμισης, βάση νεότερης έκδοσης) παίρνουν τις
-    // κανονικές επιλογές τους αντί για αδιέξοδο.
-    await showDatabaseCheckFailedDialog(
-      context: context,
-      result: result,
-      onSuccess: widget.onLifecycleChanged,
-    );
+    if (!await switchDatabasePath(norm) || !mounted) return;
+    await widget.onLifecycleChanged();
   }
 
   @override

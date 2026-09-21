@@ -19,6 +19,8 @@ Future<void> _pumpWarning(
   required String? ticketId,
   String? template = _template,
   List<String> warnings = const <String>[],
+  String? submittedBy,
+  bool registered = true,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -28,6 +30,8 @@ Future<void> _pumpWarning(
           ticketViewUrlTemplate: template,
           onClone: () {},
           cloneBusy: false,
+          registered: registered,
+          submittedBy: submittedBy,
           warnings: warnings,
         ),
       ),
@@ -37,6 +41,58 @@ Future<void> _pumpWarning(
 }
 
 void main() {
+  group('ποιος την καταχώρησε', () {
+    test('το όνομα ακολουθεί τον αριθμό, χωρισμένο με τελίτσα', () {
+      expect(
+        lansweeperEditWarningTrailing(submittedBy: 'Βασίλης'),
+        ' · Βασίλης',
+        reason: greekExpectMsg(
+          'Ονομαστική, χωρίς κλίση: «από τον Βασίλη» δεν παράγεται από κώδικα',
+        ),
+      );
+    });
+
+    test('χωρίς όνομα η γραμμή μένει ακριβώς όπως ήταν', () {
+      expect(lansweeperEditWarningTrailing(), '');
+      expect(lansweeperEditWarningTrailing(submittedBy: null), '');
+      expect(
+        lansweeperEditWarningTrailing(submittedBy: '   '),
+        '',
+        reason: greekExpectMsg('Οι παλιές καταχωρήσεις δεν δείχνουν τίποτα'),
+      );
+    });
+
+    test('στην ακαταχώρητη με κρατημένο αριθμό το όνομα ΔΕΝ μπαίνει', () {
+      final trailing = lansweeperEditWarningTrailing(
+        registered: false,
+        submittedBy: 'Βασίλης',
+      );
+      expect(
+        trailing.contains('Βασίλης'),
+        isFalse,
+        reason: greekExpectMsg(
+          'Εκεί η γραμμή μιλά για την ΕΠΟΜΕΝΗ αποστολή, όχι για το παρελθόν',
+        ),
+      );
+      expect(trailing.contains('επόμενη αποστολή'), isTrue);
+    });
+
+    testWidgets('το όνομα φτάνει στην οθόνη δίπλα στον αριθμό', (tester) async {
+      await _pumpWarning(tester, ticketId: '17824', submittedBy: 'Βασίλης');
+      expect(
+        find.textContaining('Βασίλης', findRichText: true),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('χωρίς σφραγίδα δεν εμφανίζεται τελίτσα-φάντασμα', (
+      tester,
+    ) async {
+      await _pumpWarning(tester, ticketId: '17824');
+      expect(find.textContaining(' · ', findRichText: true), findsNothing);
+    });
+  });
+
   group('διατύπωση', () {
     test('με αριθμό ticket η φράση ανοίγει για τον σύνδεσμο', () {
       expect(

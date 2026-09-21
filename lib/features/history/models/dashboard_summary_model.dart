@@ -36,8 +36,8 @@ class DepartmentStat {
 }
 
 /// Στατιστικά ανά κατηγορία προβλήματος (`categories` / `calls.category_text`).
-class IssueStat {
-  const IssueStat({
+class CategoryStat {
+  const CategoryStat({
     required this.name,
     required this.count,
     required this.sumDurationSeconds,
@@ -196,7 +196,7 @@ class KpiAllDatesBarSparklines {
     required this.durationExtremesSix,
     required this.departmentCountsRank2To6,
     required this.callerCountsRank2To6,
-    required this.issueCountsRank2To6,
+    required this.categoryCountsRank2To6,
   });
 
   /// Σύνολο κλήσεων ανά μήνα (χρονολογική σειρά).
@@ -215,7 +215,7 @@ class KpiAllDatesBarSparklines {
   final List<KpiBarSparklinePoint> callerCountsRank2To6;
 
   /// Κλήσεις βλαβών θέσεων 2–6.
-  final List<KpiBarSparklinePoint> issueCountsRank2To6;
+  final List<KpiBarSparklinePoint> categoryCountsRank2To6;
 }
 
 String formatKpiCallCountLabel(num count) {
@@ -231,8 +231,8 @@ String formatKpiCallDurationSeconds(num seconds) =>
 String formatKpiAggregateDurationSeconds(num seconds) =>
     formatAggregateDurationSeconds(seconds, ifMissing: '0δ');
 
-/// Συνολική διάρκεια στη λεζάντα «Κατανομή Βλαβών» — ίδια μορφή με τα σύνολα.
-String formatIssueChartDurationSeconds(num seconds) =>
+/// Συνολική διάρκεια στη λεζάντα «Κατανομή ανά κατηγορία» — ίδια μορφή με τα σύνολα.
+String formatCategoryChartDurationSeconds(num seconds) =>
     formatAggregateDurationSeconds(seconds, ifMissing: '0δ');
 
 String formatKpiMonthCallsTooltip(String monthKey, num count) {
@@ -322,8 +322,8 @@ List<KpiBarSparklinePoint> runnerUpPointsFromCallerStats(
   );
 }
 
-List<KpiBarSparklinePoint> runnerUpPointsFromIssueStats(
-  List<IssueStat> stats,
+List<KpiBarSparklinePoint> runnerUpPointsFromCategoryStats(
+  List<CategoryStat> stats,
   int take,
 ) {
   return padBarSparklinePoints(
@@ -341,16 +341,16 @@ List<KpiBarSparklinePoint> runnerUpPointsFromIssueStats(
   );
 }
 
-/// Τοπικό φίλτρο κατηγοριών για το γράφημα «Κατανομή Βλαβών» (χωρίς επανάληψη SQL).
-List<IssueStat> visibleDashboardIssueStats(
-  List<IssueStat> issues, {
+/// Τοπικό φίλτρο κατηγοριών για το γράφημα «Κατανομή ανά κατηγορία» (χωρίς επανάληψη SQL).
+List<CategoryStat> visibleDashboardCategoryStats(
+  List<CategoryStat> categories, {
   required bool excludeCallsWithoutCategory,
 }) {
   if (!excludeCallsWithoutCategory) {
-    return issues;
+    return categories;
   }
-  return issues
-      .where((issue) => issue.name != kDashboardNoCategoryLabel)
+  return categories
+      .where((category) => category.name != kDashboardNoCategoryLabel)
       .toList(growable: false);
 }
 
@@ -385,7 +385,7 @@ class DashboardSummaryModel {
     this.callerTimeTotals = const <CallerTimeStat>[],
     required this.hourlyDistribution,
     required this.byDepartment,
-    required this.byIssue,
+    required this.byCategory,
   });
 
   final int totalCalls;
@@ -463,5 +463,5 @@ class DashboardSummaryModel {
   final List<HourlyBucket> hourlyDistribution;
 
   final List<DepartmentStat> byDepartment;
-  final List<IssueStat> byIssue;
+  final List<CategoryStat> byCategory;
 }

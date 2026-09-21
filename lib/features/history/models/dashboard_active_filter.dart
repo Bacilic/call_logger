@@ -86,7 +86,7 @@ List<DashboardActiveFilter> describeActiveDashboardFilters(
     active.add(
       DashboardActiveFilter(
         kind: DashboardFilterKind.userName,
-        label: 'Υπάλληλος: $userName',
+        label: 'Καλούντας: $userName',
       ),
     );
   }

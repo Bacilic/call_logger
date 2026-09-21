@@ -50,10 +50,23 @@ abstract final class SharedSettingKeys {
     'department_custom_palette_slots_v2',
   );
 
+  /// Πόσες μέρες χωρίς καμία εγγραφή κάνουν τη βάση «παλιά».
+  ///
+  /// **Γιατί κοινό:** η ηλικία των δεδομένων είναι ιδιότητα της ίδιας της
+  /// βάσης, όχι του ματιού που την κοιτά — αν είναι στάσιμη, είναι στάσιμη για
+  /// όλους όσοι την ανοίγουν.
+  ///
+  /// Γεννιέται κοινό, οπότε δεν έχει τοπική τιμή να ανεβάσει.
+  static const SharedSettingKey databaseStalenessDays = SharedSettingKey(
+    'database_staleness_days_v1',
+    migratesFromMachine: false,
+  );
+
   static const List<SharedSettingKey> all = [
     auditRetentionConfig,
     updateFolderPath,
     departmentPaletteSlots,
+    databaseStalenessDays,
   ];
 }
 

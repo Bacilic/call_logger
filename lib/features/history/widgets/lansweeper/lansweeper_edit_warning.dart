@@ -45,15 +45,32 @@ String lansweeperEditWarningHeadline({
   return 'Η κλήση έχει καταχωρηθεί στο Lansweeper — ticket';
 }
 
-/// Το κείμενο **μετά** τον αριθμό — μόνο για την ακαταχώρητη με κρατημένο id.
+/// Το κείμενο **μετά** τον αριθμό.
 ///
-/// Λέει το πράγμα που καθορίζει την επόμενη κίνηση: ο φυλαγμένος αριθμός δεν
-/// είναι ανάμνηση, είναι οδηγία. Χωρίς αυτόν η επόμενη αποστολή θα άνοιγε
-/// **δεύτερο** αίτημα για την ίδια κλήση.
-String lansweeperEditWarningTrailing({bool registered = true}) {
-  if (registered) return '';
-  return ' — η επόμενη αποστολή θα ενημερώσει αυτό το αίτημα αντί να ανοίξει '
-      'νέο.';
+/// Δύο διαφορετικά πράγματα, ποτέ μαζί:
+///
+/// 1. **Ακαταχώρητη με κρατημένο id** — λέει το πράγμα που καθορίζει την
+///    επόμενη κίνηση: ο φυλαγμένος αριθμός δεν είναι ανάμνηση, είναι οδηγία.
+///    Χωρίς αυτόν η επόμενη αποστολή θα άνοιγε **δεύτερο** αίτημα.
+/// 2. **Καταχωρημένη** — ποιος την καταχώρησε, όταν το ξέρουμε.
+///
+/// Το όνομα λείπει σκόπιμα από την πρώτη περίπτωση: εκεί η γραμμή μιλά για το
+/// **μέλλον** (τι θα κάνει η επόμενη αποστολή), και ένα όνομα από το παρελθόν
+/// θα διαβαζόταν σαν να αφορά αυτό που πρόκειται να γίνει.
+///
+/// Το [submittedBy] μπαίνει στην **ονομαστική**, όπως ζει στο προφίλ. Καμία
+/// προσπάθεια κλίσης: τα ελληνικά ονόματα δεν κλίνονται από κώδικα χωρίς να
+/// βγουν τέρατα στα μισά από αυτά.
+String lansweeperEditWarningTrailing({
+  bool registered = true,
+  String? submittedBy,
+}) {
+  if (!registered) {
+    return ' — η επόμενη αποστολή θα ενημερώσει αυτό το αίτημα αντί να ανοίξει '
+        'νέο.';
+  }
+  final who = submittedBy?.trim() ?? '';
+  return who.isEmpty ? '' : ' · $who';
 }
 
 class LansweeperEditWarning extends StatelessWidget {
@@ -64,10 +81,17 @@ class LansweeperEditWarning extends StatelessWidget {
     required this.onClone,
     required this.cloneBusy,
     this.registered = true,
+    this.submittedBy,
     this.warnings = const <String>[],
   });
 
   final String? ticketId;
+
+  /// Ποιος έκανε την καταχώρηση· `null` όταν δεν καταγράφηκε.
+  ///
+  /// Είναι η κανονική κατάσταση για κάθε κλήση που καταχωρήθηκε πριν αρχίσει
+  /// να φυλάγεται το όνομα — εκεί η γραμμή μένει ακριβώς όπως ήταν.
+  final String? submittedBy;
 
   /// Μετριέται η κλήση ως καταχωρημένη; `false` όταν επαναφέρθηκε σε
   /// ακαταχώρητη κρατώντας τον αριθμό του αιτήματος.
@@ -126,6 +150,7 @@ class LansweeperEditWarning extends StatelessWidget {
               ticketViewUrlTemplate: ticketViewUrlTemplate,
               trailingText: lansweeperEditWarningTrailing(
                 registered: registered,
+                submittedBy: submittedBy,
               ),
               style: theme.textTheme.bodyMedium,
             ),

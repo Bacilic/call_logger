@@ -40,7 +40,12 @@ void main() {
       final idxNames = idx.map((r) => r['name'] as String).toSet();
       expect(idxNames, contains('idx_audit_log_entity_type_entity_id'));
       expect(idxNames, contains('idx_audit_log_timestamp'));
-      expect(idxNames, contains('idx_audit_log_action'));
+      // Από την v64 τα φίλτρα του Ιστορικού κρατούν και τη χρονική σειρά μέσα
+      // στο ίδιο ευρετήριο: το σκέτο `idx_audit_log_action` καλύπτεται πλήρως
+      // από το `(action, timestamp)` και αφαιρέθηκε ως περιττό.
+      expect(idxNames, contains('idx_audit_log_action_timestamp'));
+      expect(idxNames, contains('idx_audit_log_entity_type_timestamp'));
+      expect(idxNames, isNot(contains('idx_audit_log_action')));
     } finally {
       await db.close();
     }

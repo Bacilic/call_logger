@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/widgets/compact_tooltip.dart';
+import '../../history/models/lansweeper_sync_state.dart';
+import '../../history/widgets/lansweeper/lansweeper_state_badge.dart';
 import '../models/task.dart';
 import '../utils/task_duration_format.dart';
 import 'task_card_callbacks.dart';
@@ -17,6 +20,7 @@ class TaskCardActions extends StatelessWidget {
     required this.task,
     required this.callbacks,
     required this.status,
+    this.ticketViewUrlTemplate,
     required this.assigneeName,
     required this.creatorName,
     required this.closerName,
@@ -32,6 +36,12 @@ class TaskCardActions extends StatelessWidget {
   final Task task;
   final TaskCardCallbacks callbacks;
   final TaskStatus status;
+
+  /// Το πρότυπο URL προβολής αιτήματος, από τις ρυθμίσεις Lansweeper.
+  ///
+  /// Χωρίς αυτό ο σύνδεσμος δίπλα στο σήμα δεν εμφανίζεται — ο αριθμός μένει
+  /// ορατός, αλλά δεν υπόσχεται άνοιγμα που δεν μπορεί να γίνει.
+  final String? ticketViewUrlTemplate;
 
   /// Το όνομα του υπευθύνου, ή `null` όταν δεν υπάρχει ανάθεση.
   final String? assigneeName;
@@ -58,6 +68,19 @@ class TaskCardActions extends StatelessWidget {
   final VoidCallback onToggleSolution;
 
   bool get _isClosed => status == TaskStatus.closed;
+
+  String get _lansweeperState =>
+      LansweeperSyncState.normalize(task.lansweeperState);
+
+  bool get _hasTicket => (task.lansweeperMainTicketId ?? '').trim().isNotEmpty;
+
+  /// Φαίνεται το σήμα Lansweeper;
+  ///
+  /// **Μόνο όταν λέει κάτι.** Η εκκρεμότητα δεν είναι ουρά που πρέπει να
+  /// αδειάσει: ένα «Ακαταχώρητη» σε κάθε κάρτα θα ήταν θόρυβος που κρύβει τις
+  /// λίγες που όντως έχουν αίτημα.
+  bool get _showLansweeperBadge =>
+      _hasTicket || _lansweeperState == LansweeperSyncState.failed;
 
   /// Ο δημιουργός δείχνεται μόνο όταν είναι ΑΛΛΟΣ από τον υπεύθυνο: όταν
   /// ταυτίζονται, το ίδιο όνομα δύο φορές δεν προσθέτει πληροφορία. Χωρίς
@@ -203,7 +226,12 @@ class TaskCardActions extends StatelessWidget {
         // γεμάτη με ενέργειες, και τα δύο αυτά πρόσωπα δεν είναι ενέργειες —
         // είναι ιστορικό. Αναδιπλώνονται αντί να στριμώχνονται, γιατί όταν
         // φαίνονται και τα δύο μαζί δεν χωρούν πάντα σε μία γραμμή.
-        if (_showCreator || _showCloser)
+        // Δεύτερη σειρά: ό,τι είναι ΠΛΗΡΟΦΟΡΙΑ και όχι ενέργεια — ποιος την
+        // άνοιξε, ποιος την έκλεισε, από πού ήρθε, πού κατέληξε.
+        if (_showCreator ||
+            _showCloser ||
+            task.callId != null ||
+            _showLansweeperBadge)
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Wrap(
@@ -227,11 +255,57 @@ class TaskCardActions extends StatelessWidget {
                       task.closedByOperatorId,
                     ),
                   ),
+                if (task.callId != null) _buildCallLinkChip(theme),
+                if (_showLansweeperBadge)
+                  LansweeperStateBadge(
+                    state: _lansweeperState,
+                    ticketId: task.lansweeperMainTicketId,
+                    ticketViewUrlTemplate: ticketViewUrlTemplate,
+                    inline: true,
+                  ),
               ],
             ),
           ),
         if (hasSolution) _buildSolutionToggle(),
       ],
+    );
+  }
+
+  /// «Από κλήση #344» — από πού γεννήθηκε η εκκρεμότητα.
+  ///
+  /// Δεν είναι κουμπί: ο δεσμός εξηγεί την προέλευση, δεν υπόσχεται πλοήγηση
+  /// που δεν υπάρχει. Το ξέρει η φόρμα αποστολής και ο έλεγχος διπλού
+  /// αιτήματος· ως τώρα ήταν το μόνο σημείο που δεν το έλεγε στον άνθρωπο.
+  Widget _buildCallLinkChip(ThemeData theme) {
+    final color = theme.colorScheme.onSurfaceVariant;
+    // Ό,τι ξέρουμε, το λέμε. Ο αριθμός αιτήματος της κλήσης έρχεται μαζί με
+    // την εκκρεμότητα, οπότε η υπόδειξη δεν έχει λόγο να υποθέτει «αν εκείνη
+    // έχει αίτημα…» — ξέρει αν έχει, και ποιο.
+    final callTicket = (task.linkedCallTicketId ?? '').trim();
+    return CompactTooltip(
+      message:
+          'Η εκκρεμότητα γεννήθηκε από την κλήση #${task.callId}.\n'
+          '${callTicket.isEmpty ? 'Η κλήση δεν έχει καταχωρηθεί ακόμα ως αίτημα στο Lansweeper.' : 'Η κλήση έχει καταχωρηθεί στο Lansweeper ως αίτημα '
+                    '#$callTicket — η αποστολή θα σας ρωτήσει αν θέλετε νέο '
+                    'ξεχωριστό αίτημα ή σημείωση σε εκείνο.'}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.phone_in_talk_outlined, size: 13, color: color),
+            const SizedBox(width: 4),
+            Text(
+              'από κλήση #${task.callId}',
+              style: theme.textTheme.labelSmall?.copyWith(color: color),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -297,6 +371,15 @@ class TaskCardActions extends StatelessWidget {
           case 'snooze':
             callbacks.onSnooze?.call();
             break;
+          case 'lansweeper':
+            callbacks.onSubmitToLansweeper?.call();
+            break;
+          case 'print':
+            callbacks.onPrint?.call();
+            break;
+          case 'pdf':
+            callbacks.onSaveAsPdf?.call();
+            break;
           case 'delete':
             callbacks.onDelete?.call();
             break;
@@ -313,6 +396,24 @@ class TaskCardActions extends StatelessWidget {
         // ποια μορφή.
         if (!_isClosed)
           const PopupMenuItem(value: 'snooze', child: Text('Αναβολή')),
+        // Και σε ολοκληρωμένη: η δουλειά μπορεί να έγινε, αλλά το helpdesk να
+        // θέλει ακόμη το ίχνος της. Το κείμενο αλλάζει μόλις υπάρχει αίτημα,
+        // ώστε να μη μοιάζει ότι θα ανοίξει δεύτερο.
+        if (callbacks.onSubmitToLansweeper != null)
+          PopupMenuItem<String>(
+            value: 'lansweeper',
+            child: Text(
+              _hasTicket
+                  ? 'Αίτημα Lansweeper #${task.lansweeperMainTicketId!.trim()}…'
+                  : 'Αίτημα στο Lansweeper…',
+            ),
+          ),
+        // Το φύλλο τυπώνεται σε όποια κατάσταση κι αν είναι η εκκρεμότητα:
+        // μια ολοκληρωμένη τυπώνεται εξίσου, με τη λύση και τις αναβολές της.
+        if (callbacks.onPrint != null)
+          const PopupMenuItem(value: 'print', child: Text('Εκτύπωση…')),
+        if (callbacks.onSaveAsPdf != null)
+          const PopupMenuItem(value: 'pdf', child: Text('Αποθήκευση ως PDF…')),
         PopupMenuItem<String>(
           value: 'delete',
           enabled: deleteMenuEnabled,

@@ -364,10 +364,14 @@ class _RecentCallDataRow extends StatelessWidget {
         ),
         SizedBox(width: _kGlobalRecentDeptLeadingGap),
         Expanded(
-          child: Text(
-            displayOrDash(call.departmentText),
+          // Το τμήμα ακολουθεί τον καλούντα: ίδιο σήμα, ίδιο widget. Ήταν το
+          // μόνο από τα τρία που δεν έλεγε ότι έχει πάψει να υπάρχει, και γι'
+          // αυτό η διαγραφή του περνούσε αθόρυβα.
+          child: DeletedCatalogEntityText(
+            text: displayOrDash(call.departmentText),
+            isDeleted: call.departmentLinkedDeleted,
             style: theme.textTheme.bodySmall,
-            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
       ],

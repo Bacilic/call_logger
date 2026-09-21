@@ -151,7 +151,7 @@ void main() {
       final settings = SettingsService();
 
       await settings.catalogs.setAuditRetentionConfig(
-        const AuditRetentionConfig(maxAgeDays: 45, maxRows: 5000),
+        const AuditRetentionConfig(volatileMaxAgeDays: 45, maxRows: 5000),
       );
 
       final prefs = await SharedPreferences.getInstance();
@@ -175,12 +175,12 @@ void main() {
       final settings = SettingsService();
 
       await settings.catalogs.setAuditRetentionConfig(
-        const AuditRetentionConfig(maxAgeDays: 10, maxRows: 100),
+        const AuditRetentionConfig(volatileMaxAgeDays: 10, maxRows: 100),
       );
 
       expect(store.containsKey('audit_retention_config_v1'), isTrue);
       final read = await settings.catalogs.getAuditRetentionConfig();
-      expect(read.maxAgeDays, 10);
+      expect(read.volatileMaxAgeDays, 10);
     });
   });
 }

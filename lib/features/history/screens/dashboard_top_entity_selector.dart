@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Οι τρεις όψεις της κάρτας «Κορυφαίο …» του Πίνακα Ελέγχου.
-enum TopEntityMode { department, caller, issue }
+enum TopEntityMode { department, caller, category }
 
 /// Επιλογέας όψης, πάνω στην ίδια την κάρτα.
 ///
@@ -36,7 +36,7 @@ class TopEntityModeSelector extends StatelessWidget {
           tooltip: 'Κορυφαίος Καλών',
         ),
         ButtonSegment(
-          value: TopEntityMode.issue,
+          value: TopEntityMode.category,
           icon: Icon(Icons.build_outlined, size: 17),
           tooltip: 'Κορυφαία Κατηγορία',
         ),

@@ -39,9 +39,18 @@ class DatabaseIntegrityFixService {
     IntegrityFixDecision decision, {
     int autoRetryAttempt = 0,
   }) async {
+    // Ό,τι δεν διορθώνεται από τα δεδομένα απαντά **άρνηση**, ποτέ επιτυχία:
+    // η οθόνη σβήνει το εύρημα μόλις ακούσει «έγινε», και τότε ο χρήστης
+    // πιστεύει ότι λύθηκε κάτι που δεν αγγίχτηκε καν.
     if (finding.checkType == IntegrityCheckType.pragmaQuickCheck) {
       return const IntegrityFixFailure(
         'Δεν επιτρέπεται inline επιδιόρθωση PRAGMA corruption.',
+      );
+    }
+    if (finding.checkType == IntegrityCheckType.foreignKeyViolations) {
+      return const IntegrityFixFailure(
+        'Οι παραβιάσεις κανόνων σχέσεων δεν διορθώνονται από τα δεδομένα: '
+        'δείχνουν ροή του κώδικα που γράφει παρακάμπτοντας τους κανόνες.',
       );
     }
 
@@ -279,7 +288,7 @@ class DatabaseIntegrityFixService {
     final oldIndex = row['search_index'];
     await searchIndex.rebuildSearchIndexForCallId(callId);
     await db.transaction((txn) async {
-      final ap = await AuditService.performingUser(txn);
+      final ap = AuditService.performingUser();
       final pack = _audit.simpleAction(
         details: 'Αναδημιουργία ευρετηρίου αναζήτησης για κλήση ID $callId',
         oldValues: {'search_index': oldIndex},
@@ -312,7 +321,7 @@ class DatabaseIntegrityFixService {
     final title = row['title']?.toString();
     await tasks.rebuildSearchIndexForTaskId(taskId);
     await db.transaction((txn) async {
-      final ap = await AuditService.performingUser(txn);
+      final ap = AuditService.performingUser();
       final pack = _audit.simpleAction(
         details:
             'Αναδημιουργία ευρετηρίου αναζήτησης για εκκρεμότητα ID $taskId',
@@ -437,7 +446,7 @@ class DatabaseIntegrityFixService {
         newCallId,
       );
       if (oldRow == null) return;
-      final ap = await AuditService.performingUser(txn);
+      final ap = AuditService.performingUser();
       final pack = _audit.fkChange(
         entityLabel: 'Εκκρεμότητα ID $taskId',
         fieldLabel: 'call_id',
@@ -581,7 +590,7 @@ class DatabaseIntegrityFixService {
         newValue,
       );
       if (oldRow == null) return;
-      final ap = await AuditService.performingUser(txn);
+      final ap = AuditService.performingUser();
       final pack = _audit.fkChange(
         entityLabel: 'Κλήση ID $callId',
         fieldLabel: field,
@@ -628,7 +637,7 @@ class DatabaseIntegrityFixService {
         newValue,
       );
       if (oldRow == null) return;
-      final ap = await AuditService.performingUser(txn);
+      final ap = AuditService.performingUser();
       final pack = _audit.fkChange(
         entityLabel: 'Εκκρεμότητα ID $taskId',
         fieldLabel: field,
@@ -662,7 +671,7 @@ class DatabaseIntegrityFixService {
     await db.transaction((txn) async {
       final oldRow = await dir.integritySyncTaskTimestamps(txn, taskId);
       if (oldRow == null) return;
-      final ap = await AuditService.performingUser(txn);
+      final ap = AuditService.performingUser();
       final created = oldRow['created_at'];
       final pack = _audit.simpleAction(
         details:
@@ -701,7 +710,7 @@ class DatabaseIntegrityFixService {
       );
       if (rows.isEmpty) return;
       await AuditService.rebuildAndPersistSearchText(txn, auditId);
-      final ap = await AuditService.performingUser(txn);
+      final ap = AuditService.performingUser();
       final pack = _audit.simpleAction(
         details: 'Ανακατασκευή search_text για audit ID $auditId',
         oldValues: {'search_text': rows.first['search_text']},

@@ -25,6 +25,7 @@ import 'bulk_equipment_edit_dialog.dart';
 import 'bulk_undo_bar.dart';
 import 'catalog_column_selector_shell.dart';
 import 'catalog_search_results_line.dart';
+import 'catalog_selection_bar.dart';
 import 'equipment_data_table.dart';
 import 'equipment_deletion_preview_dialog.dart';
 import 'equipment_delete_countdown_snackbar.dart';
@@ -32,6 +33,7 @@ import 'equipment_form_dialog.dart';
 import 'catalog_tab_lookup_reload_mixin.dart';
 import 'catalog_search_field_sync.dart';
 import 'equipment_settings_dialog.dart';
+import 'bulk_equipment_action_call_guard.dart';
 
 /// Καρτέλα εξοπλισμού: mirror του UsersTab – αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη, μαζική επεξεργασία.
 class EquipmentTab extends ConsumerStatefulWidget {
@@ -181,6 +183,11 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
           ),
         ),
         CatalogSearchResultsLine(summary: state.searchSummary),
+        CatalogSelectionFilterNotice(
+          active: state.showOnlySelected,
+          shownCount: state.filteredItems.length,
+          onShowAll: notifier.toggleShowOnlySelected,
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(
@@ -269,52 +276,45 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
             },
           ),
         ),
-        if (state.selectedIds.isNotEmpty) ...[
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Text(
-                  '${state.selectedIds.length} επιλεγμένοι',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(width: 16),
-                FilledButton.tonal(
-                  onPressed: () => _openBulkEdit(context, ref),
-                  child: const Text('Επεξεργασία'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
-                  onPressed: state.selectedIds.length == 1
-                      ? () {
-                          final id = state.selectedIds.single;
-                          final candidates = state.allItems
-                              .where((r) => r.$1.id == id)
-                              .toList();
-                          if (candidates.isNotEmpty) {
-                            _openForm(
-                              context,
-                              ref,
-                              candidates.first.$1,
-                              initialOwner: candidates.first.$2,
-                              isClone: true,
-                            );
-                          }
+        if (state.selectedIds.isNotEmpty)
+          CatalogSelectionBar(
+            selectedCount: state.selectedIds.length,
+            countLabel: 'επιλεγμένοι',
+            showOnlySelected: state.showOnlySelected,
+            searchController: _searchController,
+            onToggleShowOnlySelected: notifier.toggleShowOnlySelected,
+            onClearSelection: notifier.clearSelection,
+            actions: [
+              FilledButton.tonal(
+                onPressed: () => _openBulkEdit(context, ref),
+                child: const Text('Επεξεργασία'),
+              ),
+              FilledButton.tonal(
+                onPressed: state.selectedIds.length == 1
+                    ? () {
+                        final id = state.selectedIds.single;
+                        final candidates = state.allItems
+                            .where((r) => r.$1.id == id)
+                            .toList();
+                        if (candidates.isNotEmpty) {
+                          _openForm(
+                            context,
+                            ref,
+                            candidates.first.$1,
+                            initialOwner: candidates.first.$2,
+                            isClone: true,
+                          );
                         }
-                      : null,
-                  child: const Text('Αντίγραφο'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
-                  onPressed: () => _confirmAndDeleteSelected(context, ref),
-                  child: const Text('Διαγραφή'),
-                ),
-              ],
-            ),
+                      }
+                    : null,
+                child: const Text('Αντίγραφο'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => _confirmAndDeleteSelected(context, ref),
+                child: const Text('Διαγραφή'),
+              ),
+            ],
           ),
-        ],
       ],
     );
   }
@@ -376,6 +376,15 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
     final state = ref.read(equipmentDirectoryProvider);
     if (state.selectedIds.isEmpty) return;
     final ids = state.selectedIds.toList();
+    // Η διαγραφή είναι μη αναστρέψιμη για την κλήση που τρέχει: αν την αφορά,
+    // ο χειριστής αποφασίζει πρώτα γι' αυτήν.
+    final selectedRows = state.allItems
+        .where((r) => r.$1.id != null && state.selectedIds.contains(r.$1.id))
+        .toList();
+    if (!await ensureBulkEquipmentActionAllowed(context, ref, selectedRows)) {
+      return;
+    }
+    if (!context.mounted) return;
 
     // Χωρίς σκληρό όριο πλέον: τα ερωτήματα είναι σταθερά σε πλήθος, οπότε ο
     // χρήστης βλέπει ΤΙ διαγράφει ακόμα και με δεκάδες επιλεγμένα — πριν, πάνω

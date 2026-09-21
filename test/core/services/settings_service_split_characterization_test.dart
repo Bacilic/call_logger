@@ -28,6 +28,28 @@ void main() {
       expect(await settings.windowUi.getShowActiveTimer(), isFalse);
     });
 
+    test('window_ui: η προεπισκόπηση εκτύπωσης ξεκινά ΑΝΑΜΜΕΝΗ', () async {
+      // Το κλειδί γεννήθηκε προσωπικό: χωρίς συνδεδεμένο χρήστη πέφτει στα
+      // κοινά, οπότε το τεστ χρειάζεται αποθήκη που πράγματι κρατά.
+      final store = <String, String>{};
+      SettingsService.registerAppSettingsProvider(
+        (key) async => store[key],
+        (key, value) async => store[key] = value,
+        (key, change) async => store[key] = change(store[key]),
+      );
+      final settings = SettingsService();
+
+      expect(
+        await settings.windowUi.getTaskPrintPreview(),
+        isTrue,
+        reason: 'το χαρτί δεν παίρνεται πίσω· η ματιά είναι η αφετηρία',
+      );
+      await settings.windowUi.setTaskPrintPreview(false);
+      expect(await settings.windowUi.getTaskPrintPreview(), isFalse);
+      await settings.windowUi.setTaskPrintPreview(true);
+      expect(await settings.windowUi.getTaskPrintPreview(), isTrue);
+    });
+
     test('analytics_filters: get/set dashboard date preset', () async {
       final settings = SettingsService();
       expect(await settings.analyticsFilters.getDashboardDatePreset(), 'today');

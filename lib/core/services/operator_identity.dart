@@ -27,11 +27,17 @@ class OperatorIdentity {
   /// Δύο ερωτήματα, με αυτή τη σειρά:
   ///
   /// 1. **Ποιοι έχουν δουλέψει σε αυτόν τον σταθμό;** Ένας ⇒ αυτός είναι, χωρίς
-  ///    ερώτηση. Δύο ή περισσότεροι ⇒ `null`, δηλαδή ρωτά ο άνθρωπος: όπου
-  ///    εναλλάσσονται πρόσωπα, καμία εικασία δεν είναι αρκετά καλή.
+  ///    ερώτηση — **εκτός αν τον διαψεύδει ο λογαριασμός Windows**. Δύο ή
+  ///    περισσότεροι ⇒ `null`, δηλαδή ρωτά ο άνθρωπος: όπου εναλλάσσονται
+  ///    πρόσωπα, καμία εικασία δεν είναι αρκετά καλή.
   /// 2. **Ποιον λέει ο λογαριασμός Windows;** Μόνο όταν ο σταθμός δεν θυμάται
   ///    κανέναν — πρώτη εκκίνηση, ή μετά από αλλαγή βάσης που δεν ξέρει αυτά
   ///    τα ονόματα.
+  ///
+  /// **Η διάψευση του βήματος 1** καλύπτει τον συνάδελφο που γυρίζει από άδεια
+  /// και βρίσκει τον υπολογιστή του να θυμάται κάποιον άλλον. Ο λογαριασμός
+  /// Windows είναι δεμένος στο δικό του προφίλ — η εφαρμογή το ήξερε πάντα,
+  /// απλώς δεν το ρωτούσε. Δες `workstationMemoryIsContradicted`.
   ///
   /// Επιστρέφει `null` όταν δεν καταλήγει σε ένα πρόσωπο — τότε αποφασίζει ο
   /// άνθρωπος, από την οθόνη επιλογής.
@@ -49,22 +55,29 @@ class OperatorIdentity {
     CurrentOperator.reset();
 
     final repository = OperatorRepository(db);
+    final rawAccount = windowsAccount ?? currentWindowsAccount;
     final remembered = workstationNames ?? await WorkstationOperators.names();
     if (remembered.isNotEmpty) {
-      final known = rememberedWorkstationProfiles(
-        remembered,
-        await repository.getAll(),
-      );
+      final all = await repository.getAll();
+      final known = rememberedWorkstationProfiles(remembered, all);
       if (known.length > 1) return null;
       if (known.length == 1) {
+        // Ο σταθμός θυμάται έναν — αλλά ο λογαριασμός Windows μπορεί να λέει
+        // ότι μπροστά στην οθόνη κάθεται άλλος. Τότε δεν μαντεύουμε: ρωτάμε,
+        // με τον άνθρωπο του λογαριασμού πρώτο στη λίστα.
+        if (workstationMemoryIsContradicted(
+          remembered: known.single,
+          profiles: all,
+          windowsAccount: rawAccount,
+        )) {
+          return null;
+        }
         CurrentOperator.activate(known.single);
         return known.single;
       }
     }
 
-    final account = normalizeWindowsAccount(
-      windowsAccount ?? currentWindowsAccount,
-    );
+    final account = normalizeWindowsAccount(rawAccount);
     if (account == null) return null;
 
     final existing = await repository.findByWindowsAccount(account);

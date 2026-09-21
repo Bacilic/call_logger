@@ -229,6 +229,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     );
     final databaseDisplayName = ref.watch(historyDatabaseDisplayNameProvider);
     final appAudit = ref.watch(historyApplicationAuditViewProvider);
+    // Το watch γίνεται άνευ όρων, έξω από κάθε `if`: ένα watch που άλλοτε
+    // εκτελείται και άλλοτε όχι αλλάζει το σύνολο των εξαρτήσεων του widget
+    // από build σε build.
+    final mayViewAudit = ref.watch(applicationAuditVisibleProvider);
     final immersive = ref.watch(historyAuditImmersiveProvider);
     final selectedCallIds = ref.watch(historySelectedCallIdsProvider);
 
@@ -298,10 +302,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   : null,
               icon: const Icon(Icons.analytics_outlined),
             ),
-            _auditToggleButton(
-              tooltip: 'Εναλλαγή σε ιστορικό εφαρμογής (audit)',
-              backToCallHistory: false,
-            ),
+            // Χωρίς το δικαίωμα το κουμπί **λείπει**, δεν γκριζάρει: γκρίζο
+            // κουμπί είναι πρόσκληση να ρωτήσει κανείς «γιατί δεν μπορώ».
+            if (mayViewAudit)
+              _auditToggleButton(
+                tooltip: 'Εναλλαγή σε ιστορικό εφαρμογής (audit)',
+                backToCallHistory: false,
+              ),
           ],
         ),
       ),
@@ -435,9 +442,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                               ),
                             ),
                       );
-                      final userField = CallEntityTextFilterField(
-                        label: 'Όνομα Χρήστη',
-                        icon: Icons.person_outline,
+                      final userField = CallCallerFilterField(
+                        callers: ref.watch(callFilterCallersProvider),
                         value: filter.userName,
                         enabled: filtersEnabled,
                         onChanged: (value) => ref
@@ -489,104 +495,122 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     },
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  // Δύο ομάδες: φίλτρα αριστερά, μέγεθος πίνακα δεξιά.
+                  // Wrap αντί για Row με Spacer — στο πιο στενό παράθυρο
+                  // οι δύο ομάδες δεν χωρούν στην ίδια σειρά, οπότε η
+                  // δεξιά κατεβαίνει από κάτω αντί να βγει εκτός οθόνης.
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      asyncCalls.when(
-                        data: (rows) => _HistoryCountLabel(
-                          shownCount: rows.length,
-                          searching: filter.keyword.trim().isNotEmpty,
-                          totalWithoutKeyword: asyncCallCount.maybeWhen(
-                            data: (count) => count,
-                            orElse: () => null,
-                          ),
-                        ),
-                        loading: () => SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        error: (_, _) => const SizedBox.shrink(),
-                      ),
-                      const SizedBox(width: 16),
-                      _CallLinkFilterChip(
-                        label: 'Με εκκρεμότητα',
-                        icon: Icons.task_alt,
-                        selected: filter.onlyWithTask,
-                        enabled: filtersEnabled,
-                        onChanged: (value) => ref
-                            .read(historyFilterProvider.notifier)
-                            .update((s) => s.copyWith(onlyWithTask: value)),
-                      ),
-                      const SizedBox(width: 8),
-                      _LansweeperStateFilterChip(
-                        selectedState: filter.lansweeperState,
-                        enabled: filtersEnabled,
-                        onChanged: (value) => ref
-                            .read(historyFilterProvider.notifier)
-                            .update(
-                              (s) => value == null
-                                  ? s.copyWith(clearLansweeperState: true)
-                                  : s.copyWith(lansweeperState: value),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          asyncCalls.when(
+                            data: (rows) => _HistoryCountLabel(
+                              shownCount: rows.length,
+                              searching: filter.keyword.trim().isNotEmpty,
+                              totalWithoutKeyword: asyncCallCount.maybeWhen(
+                                data: (count) => count,
+                                orElse: () => null,
+                              ),
                             ),
+                            loading: () => SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            error: (_, _) => const SizedBox.shrink(),
+                          ),
+                          _CallLinkFilterChip(
+                            label: 'Με εκκρεμότητα',
+                            icon: Icons.task_alt,
+                            selected: filter.onlyWithTask,
+                            enabled: filtersEnabled,
+                            onChanged: (value) => ref
+                                .read(historyFilterProvider.notifier)
+                                .update((s) => s.copyWith(onlyWithTask: value)),
+                          ),
+                          _LansweeperStateFilterChip(
+                            selectedState: filter.lansweeperState,
+                            enabled: filtersEnabled,
+                            onChanged: (value) => ref
+                                .read(historyFilterProvider.notifier)
+                                .update(
+                                  (s) => value == null
+                                      ? s.copyWith(clearLansweeperState: true)
+                                      : s.copyWith(lansweeperState: value),
+                                ),
+                          ),
+                          OwnerFilterChip(
+                            tooltip: 'Ποιος κατέγραψε την κλήση',
+                            options:
+                                ref.watch(callOwnerOptionsProvider).value ??
+                                const [],
+                            current:
+                                ref.watch(historyOwnerFilterProvider).value ??
+                                OwnerFilter.everyone,
+                            enabled: filtersEnabled,
+                            onSelected: (value) => ref
+                                .read(historyOwnerFilterProvider.notifier)
+                                .select(value),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      OwnerFilterChip(
-                        tooltip: 'Ποιος κατέγραψε την κλήση',
-                        options:
-                            ref.watch(callOwnerOptionsProvider).value ??
-                            const [],
-                        current:
-                            ref.watch(historyOwnerFilterProvider).value ??
-                            OwnerFilter.everyone,
-                        enabled: filtersEnabled,
-                        onSelected: (value) => ref
-                            .read(historyOwnerFilterProvider.notifier)
-                            .select(value),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: 'Σμίκρυνση',
-                        icon: const Icon(Icons.zoom_out),
-                        onPressed: filtersEnabled
-                            ? () => ref
-                                  .read(historyTableZoomProvider.notifier)
-                                  .zoomOut()
-                            : null,
-                      ),
-                      IconButton(
-                        tooltip: 'Επαναφορά μεγέθους (100%)',
-                        icon: const Icon(Icons.restart_alt),
-                        onPressed: filtersEnabled
-                            ? () => ref
-                                  .read(historyTableZoomProvider.notifier)
-                                  .reset()
-                            : null,
-                      ),
-                      IconButton(
-                        tooltip: 'Μεγέθυνση',
-                        icon: const Icon(Icons.zoom_in),
-                        onPressed: filtersEnabled
-                            ? () => ref
-                                  .read(historyTableZoomProvider.notifier)
-                                  .zoomIn()
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Μέγεθος πίνακα',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${(tableZoom * 100).round()}%',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Σμίκρυνση',
+                            icon: const Icon(Icons.zoom_out),
+                            onPressed: filtersEnabled
+                                ? () => ref
+                                      .read(historyTableZoomProvider.notifier)
+                                      .zoomOut()
+                                : null,
+                          ),
+                          IconButton(
+                            tooltip: 'Επαναφορά μεγέθους (100%)',
+                            icon: const Icon(Icons.restart_alt),
+                            onPressed: filtersEnabled
+                                ? () => ref
+                                      .read(historyTableZoomProvider.notifier)
+                                      .reset()
+                                : null,
+                          ),
+                          IconButton(
+                            tooltip: 'Μεγέθυνση',
+                            icon: const Icon(Icons.zoom_in),
+                            onPressed: filtersEnabled
+                                ? () => ref
+                                      .read(historyTableZoomProvider.notifier)
+                                      .zoomIn()
+                                : null,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Μέγεθος πίνακα',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${(tableZoom * 100).round()}%',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

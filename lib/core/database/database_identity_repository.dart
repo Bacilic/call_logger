@@ -48,6 +48,32 @@ class DatabaseIdentityRepository {
     return DateTime.tryParse('${rows.first['v'] ?? ''}');
   }
 
+  /// Από πότε ζει αυτή η βάση — η παλαιότερη εγγραφή που θυμάται.
+  ///
+  /// Χρησιμεύει για τον **ρυθμό** που μεγαλώνει: μέγεθος διά ημέρες ζωής.
+  /// Παίρνει το παλαιότερο από τα δύο ίχνη που κρατά η βάση, γιατί καθένα
+  /// μόνο του μπορεί να κοπεί — το Ιστορικό από την εκκαθάριση, οι κλήσεις
+  /// από μια βάση όπου δουλεύεται μόνο ο Κατάλογος. Το παλαιότερο δίνει τον
+  /// πιο συντηρητικό ρυθμό, δηλαδή την πιο μακρινή προθεσμία.
+  Future<DateTime?> readOldestRecordAt() async {
+    DateTime? oldest;
+    for (final sql in const [
+      'SELECT MIN(timestamp) AS v FROM audit_log',
+      'SELECT MIN(date) AS v FROM calls',
+    ]) {
+      try {
+        final rows = await db.rawQuery(sql);
+        if (rows.isEmpty) continue;
+        final parsed = DateTime.tryParse('${rows.first['v'] ?? ''}');
+        if (parsed == null) continue;
+        if (oldest == null || parsed.isBefore(oldest)) oldest = parsed;
+      } catch (_) {
+        // Πίνακας που λείπει σε παλιό σχήμα δεν ακυρώνει τον άλλο.
+      }
+    }
+    return oldest;
+  }
+
   /// Πρώτη και τελευταία ημέρα με καταγεγραμμένη κλήση.
   ///
   /// Οι κλήσεις —σε αντίθεση με το ιστορικό— δεν καθαρίζονται περιοδικά, οπότε

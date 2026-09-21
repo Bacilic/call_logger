@@ -1,9 +1,10 @@
-// Τι γράφεται στην ΠΕΡΙΓΡΑΦΗ της κλήσης όταν πατηθεί «Αποθήκευση στην κλήση».
+// Τι κρατά η κλήση από τη φόρμα του Lansweeper όταν πατηθεί μία από τις
+// εξόδους της.
 //
-// Το επίμαχο σημείο δεν είναι η μορφή του κειμένου αλλά **ποιος τίτλος
-// κατεβαίνει και πόσες φορές**: ο τίτλος ξαναφτιάχνεται σε κάθε άνοιγμα του
-// διαλόγου, ενώ η Περιγραφή ξαναδιαβάζεται αποθηκευμένη — χωρίς φρουρό, κάθε
-// αποθήκευση της ίδιας κλήσης θα πρόσθετε άλλη μία φορά τον ίδιο τίτλο.
+// Το επίμαχο σημείο είναι **ποιος τίτλος αξίζει να κρατηθεί**: το πεδίο
+// προσυμπληρώνεται σε κάθε άνοιγμα με τον αυτόματο «[Κατηγορία] #id», που δεν
+// είναι περίληψη — αν σωζόταν, το πρόσφατο ιστορικό θα γέμιζε με την ίδια
+// φράση τρεις φορές στη σειρά.
 //
 //   flutter test test/core/services/lansweeper_call_issue_test.dart
 
@@ -12,87 +13,65 @@ import 'package:call_logger/core/services/lansweeper_sync_service.dart';
 import 'package:call_logger/features/history/widgets/lansweeper_report_call_save.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-String _issue({
-  required String title,
-  required String autoTitle,
-  required String notes,
-}) => LansweeperSyncService.buildCallIssue(
-  title: title,
-  autoTitle: autoTitle,
-  notes: notes,
-);
-
 void main() {
-  group('Ο τίτλος στην περιγραφή της κλήσης', () {
-    test(
-      'ουσιαστικός τίτλος κατεβαίνει ως πρώτη παράγραφος, χωρίς ετικέτα',
-      () {
-        final result = _issue(
-          title: 'Ο εκτυπωτής δεν τραβά χαρτί',
-          autoTitle: 'Κλήση #344',
-          notes: 'Τι θα γίνει με τη λύση;',
-        );
-
-        expect(
-          result,
-          'Ο εκτυπωτής δεν τραβά χαρτί\n\nΤι θα γίνει με τη λύση;',
-        );
-        expect(result.toLowerCase(), isNot(contains('τίτλος')));
-        expect(result, startsWith('Ο εκτυπωτής'));
-      },
-    );
-
-    test('ο αυτόματος τίτλος ΔΕΝ κατεβαίνει — δεν λέει τίποτα νέο', () {
-      final result = _issue(
-        title: 'Κλήση #344',
-        autoTitle: 'Κλήση #344',
-        notes: 'Τι θα γίνει με τη λύση;',
-      );
-
-      expect(result, 'Τι θα γίνει με τη λύση;');
-      expect(result, isNot(contains('#344')));
-    });
-
-    test('ο αυτόματος τίτλος με κατηγορία επίσης δεν κατεβαίνει', () {
-      final auto = LansweeperSyncService.autoTicketTitle(
-        category: 'Εκτυπωτές',
-        id: 344,
-      );
-
-      expect(auto, '[Εκτυπωτές] #344');
-      expect(_issue(title: auto, autoTitle: auto, notes: 'Κάτι'), 'Κάτι');
-    });
-
-    test('δεύτερη αποθήκευση δεν ξαναγράφει τον τίτλο', () {
-      const title = 'Ο εκτυπωτής δεν τραβά χαρτί';
-      final first = _issue(
-        title: title,
-        autoTitle: 'Κλήση #344',
-        notes: 'Τι θα γίνει με τη λύση;',
-      );
-      // Δεύτερο άνοιγμα: η Περιγραφή έρχεται από τη βάση (περιέχει ήδη τον
-      // τίτλο), ενώ ο τίτλος ξαναγεννιέται ίδιος.
-      final second = _issue(
-        title: title,
-        autoTitle: 'Κλήση #344',
-        notes: first,
-      );
-
-      expect(second, first);
-      expect(title.allMatches(second).length, 1);
-    });
-
-    test('κενή περιγραφή: μένει μόνο ο τίτλος, χωρίς κενές γραμμές', () {
+  group('Ποιος τίτλος αξίζει να κρατηθεί στην κλήση', () {
+    test('ουσιαστικός τίτλος κρατιέται αυτούσιος', () {
       expect(
-        _issue(title: 'Χαλασμένο πληκτρολόγιο', autoTitle: 'Κλήση', notes: ''),
-        'Χαλασμένο πληκτρολόγιο',
+        LansweeperSyncService.callTitleToPersist(
+          title: 'Δυσκολία ανεύρεσης αναφοράς για κάγκελα',
+          autoTitle: '[Medico] #344',
+        ),
+        'Δυσκολία ανεύρεσης αναφοράς για κάγκελα',
       );
     });
 
-    test('κενός τίτλος: η περιγραφή μένει ανέπαφη', () {
+    test('ο αυτόματος τίτλος ΔΕΝ κρατιέται — δεν λέει τίποτα νέο', () {
       expect(
-        _issue(title: '   ', autoTitle: 'Κλήση #1', notes: 'Μόνο περιγραφή'),
-        'Μόνο περιγραφή',
+        LansweeperSyncService.callTitleToPersist(
+          title: '[Medico] #344',
+          autoTitle: '[Medico] #344',
+        ),
+        isNull,
+      );
+    });
+
+    test('ο αυτόματος χωρίς κατηγορία επίσης δεν κρατιέται', () {
+      expect(
+        LansweeperSyncService.callTitleToPersist(
+          title: 'Κλήση #12',
+          autoTitle: 'Κλήση #12',
+        ),
+        isNull,
+      );
+    });
+
+    test('κενός τίτλος δίνει null, όχι κενό κείμενο', () {
+      expect(
+        LansweeperSyncService.callTitleToPersist(
+          title: '   ',
+          autoTitle: '[Medico] #344',
+        ),
+        isNull,
+      );
+    });
+
+    test('τα κενά γύρω από τον τίτλο κόβονται', () {
+      expect(
+        LansweeperSyncService.callTitleToPersist(
+          title: '  Δεν τυπώνει  ',
+          autoTitle: '',
+        ),
+        'Δεν τυπώνει',
+      );
+    });
+
+    test('ο αυτόματος αναγνωρίζεται και με κενά γύρω του', () {
+      expect(
+        LansweeperSyncService.callTitleToPersist(
+          title: '[Medico] #344',
+          autoTitle: '  [Medico] #344  ',
+        ),
+        isNull,
       );
     });
   });
@@ -165,8 +144,10 @@ void main() {
         CallsLansweeperRepository.wouldChangeTexts(
           problem: 'Δεν τυπώνει',
           solution: 'Άλλαξα καλώδιο',
+          title: null,
           currentIssue: 'Δεν τυπώνει',
           currentSolution: 'Άλλαξα καλώδιο',
+          currentTitle: null,
         ),
         isFalse,
       );
@@ -177,8 +158,10 @@ void main() {
         CallsLansweeperRepository.wouldChangeTexts(
           problem: '  Δεν τυπώνει  ',
           solution: '',
+          title: null,
           currentIssue: 'Δεν τυπώνει',
           currentSolution: 'Άλλαξα καλώδιο',
+          currentTitle: null,
         ),
         isFalse,
       );
@@ -189,8 +172,10 @@ void main() {
         CallsLansweeperRepository.wouldChangeTexts(
           problem: 'Δεν τυπώνει καθόλου',
           solution: 'Άλλαξα καλώδιο',
+          title: null,
           currentIssue: 'Δεν τυπώνει',
           currentSolution: 'Άλλαξα καλώδιο',
+          currentTitle: null,
         ),
         isTrue,
       );
@@ -201,8 +186,10 @@ void main() {
         CallsLansweeperRepository.wouldChangeTexts(
           problem: 'Δεν τυπώνει',
           solution: 'Άλλαξα και τον οδηγό',
+          title: null,
           currentIssue: 'Δεν τυπώνει',
           currentSolution: 'Άλλαξα καλώδιο',
+          currentTitle: null,
         ),
         isTrue,
       );
@@ -214,8 +201,10 @@ void main() {
         CallsLansweeperRepository.wouldChangeTexts(
           problem: 'Δεν τυπώνει',
           solution: '',
+          title: null,
           currentIssue: 'Δεν τυπώνει',
           currentSolution: 'Άλλαξα καλώδιο',
+          currentTitle: null,
         ),
         isFalse,
       );
@@ -228,8 +217,10 @@ void main() {
           CallsLansweeperRepository.wouldChangeTexts(
             problem: 'Δεν τυπώνει',
             solution: '',
+            title: null,
             currentIssue: null,
             currentSolution: null,
+            currentTitle: null,
           ),
           isTrue,
         );
@@ -241,8 +232,10 @@ void main() {
         CallsLansweeperRepository.wouldChangeTexts(
           problem: '   ',
           solution: '',
+          title: null,
           currentIssue: 'Κάτι',
           currentSolution: 'Κάτι',
+          currentTitle: null,
         ),
         isFalse,
       );

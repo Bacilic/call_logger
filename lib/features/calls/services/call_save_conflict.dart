@@ -1,6 +1,7 @@
 import '../../../core/database/audit_diff_helper.dart';
 import '../../../core/database/audit_service.dart';
 import '../../../core/database/calls_audit_line.dart';
+import '../../../core/utils/conflict_actor_text.dart';
 import '../models/call_model.dart';
 
 /// Η κλήση άλλαξε από άλλον, μετά την ανάγνωσή της.
@@ -102,14 +103,11 @@ class CallSaveConflict {
   /// «Ο χρήστης «Βασίλης» άλλαξε αυτή την κλήση στις 13:10.»
   String headline({DateTime? now}) {
     final moment = now ?? DateTime.now();
-    final who = (changedBy == null || changedBy!.trim().isEmpty)
-        ? 'Κάποιος άλλος'
-        : 'Ο χρήστης «${changedBy!.trim()}»';
-    final when = changedAt == null ? '' : ' στις ${_stamp(changedAt!, moment)}';
     final verb = otherRegisteredInLansweeper
         ? 'καταχώρησε αυτή την κλήση στο Lansweeper'
         : 'άλλαξε αυτή την κλήση';
-    return '$who $verb$when.';
+    return '${conflictActorName(changedBy)} $verb'
+        '${conflictMomentSuffix(changedAt, now: moment)}.';
   }
 
   /// Τι χάνεται αν κρατήσω τη δική μου εικόνα.
@@ -127,16 +125,6 @@ class CallSaveConflict {
     }
     return 'Αν κρατήσετε τη δική σας εικόνα, θα χαθεί ό,τι άλλαξε: '
         '${fields.join(', ')}.';
-  }
-
-  static String _stamp(DateTime moment, DateTime now) {
-    String two(int v) => v.toString().padLeft(2, '0');
-    final time = '${two(moment.hour)}:${two(moment.minute)}';
-    final sameDay =
-        moment.year == now.year &&
-        moment.month == now.month &&
-        moment.day == now.day;
-    return sameDay ? time : '${two(moment.day)}/${two(moment.month)} $time';
   }
 }
 

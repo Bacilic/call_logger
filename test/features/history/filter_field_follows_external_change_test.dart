@@ -29,7 +29,7 @@ void main() {
             builder: (context, setState) {
               setFromOutside = (value) => setState(() => initial = value);
               return CallEntityTextFilterField(
-                label: 'Όνομα Χρήστη',
+                label: 'Καλούντας',
                 icon: Icons.person_outline,
                 value: initial,
                 onChanged: (value) => setState(() => initial = value),

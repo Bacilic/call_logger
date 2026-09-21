@@ -280,12 +280,20 @@ class _DatabaseIntegrityPanelState
     BuildContext context,
     DatabaseIntegrityFinding finding,
   ) async {
-    if (finding.checkType == IntegrityCheckType.pragmaQuickCheck) {
-      await showIntegrityCorruptionBlockoutDialog(context);
+    final uiMode = finding.checkType.fixUiMode;
+
+    // Ό,τι δεν διορθώνεται εξηγείται. Ο έλεγχος γίνεται στον **τρόπο** και όχι
+    // σε έναν συγκεκριμένο τύπο: έτσι ένας νέος τύπος χωρίς επιδιόρθωση παίρνει
+    // τη σωστή συμπεριφορά μόλις δηλωθεί, χωρίς να το θυμηθεί κανείς εδώ.
+    if (uiMode == IntegrityFixUiMode.blockout) {
+      if (finding.checkType == IntegrityCheckType.foreignKeyViolations) {
+        await showIntegrityForeignKeyExplanationDialog(context);
+      } else {
+        await showIntegrityCorruptionBlockoutDialog(context);
+      }
       return;
     }
 
-    final uiMode = finding.checkType.fixUiMode;
     IntegrityFixDecision? decision;
 
     if (uiMode == IntegrityFixUiMode.confirmOnly) {
@@ -573,7 +581,8 @@ class _FindingTile extends StatelessWidget {
         ? '${DatabaseIntegrityReport.entityLabelEl(finding.affectedEntity)} #${finding.affectedId}'
         : null;
 
-    final isBlockout = finding.checkType == IntegrityCheckType.pragmaQuickCheck;
+    final isBlockout =
+        finding.checkType.fixUiMode == IntegrityFixUiMode.blockout;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
@@ -618,7 +627,11 @@ class _FindingTile extends StatelessWidget {
               )
             : TextButton(
                 onPressed: onFix,
-                child: Text(isBlockout ? 'Οδηγίες ανάκτησης' : 'Επιδιόρθωση'),
+                child: Text(
+                  isBlockout
+                      ? finding.checkType.blockoutButtonLabelEl
+                      : 'Επιδιόρθωση',
+                ),
               ),
       ),
     );

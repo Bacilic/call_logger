@@ -22,7 +22,7 @@ abstract final class OperatorAudit {
     await AuditService.log(
       db,
       action: AuditActions.createOperator,
-      userPerforming: await AuditService.performingUser(db),
+      userPerforming: AuditService.performingUser(),
       entityType: AuditEntityTypes.operatorProfile,
       entityId: created.id,
       entityName: created.displayName,
@@ -64,7 +64,7 @@ abstract final class OperatorAudit {
     await AuditService.log(
       db,
       action: AuditActions.modifyOperator,
-      userPerforming: await AuditService.performingUser(db),
+      userPerforming: AuditService.performingUser(),
       entityType: AuditEntityTypes.operatorProfile,
       entityId: after.id ?? before.id,
       entityName: after.displayName,

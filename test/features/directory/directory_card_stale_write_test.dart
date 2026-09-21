@@ -11,6 +11,7 @@ import 'package:call_logger/core/database/department_repository.dart';
 import 'package:call_logger/core/database/equipment_repository.dart';
 import 'package:call_logger/core/database/user_repository.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
+import 'package:call_logger/core/directory/department_change_assets.dart';
 import 'package:call_logger/features/directory/providers/directory_provider.dart';
 import 'package:call_logger/features/directory/services/directory_save_conflict.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -173,6 +174,142 @@ void main() {
       }, expected: asFormSawIt);
 
       expect((await rowById('users', id))['first_name'], 'Σοφια');
+    });
+
+    // Η αποθήκευση του υπαλλήλου αποδεσμεύει ΠΡΩΤΗ τα τηλέφωνα που μένουν
+    // πίσω και γράφει ΜΕΤΑ την καρτέλα. Ο φρουρός φυλάει από ξένες αλλαγές —
+    // η δική μας, δύο γραμμές πιο πάνω, δεν είναι ξένη.
+    test(
+      'η αποδέσμευση που κάνει η ΙΔΙΑ η αποθήκευση δεν είναι διένεξη',
+      () async {
+        final id = await users.insertUserFromMap({
+          'first_name': 'Σοφία',
+          'last_name': 'Ψαρρά',
+          'phones': const <String>['2534', '2565'],
+        });
+        final asFormSawIt = UserModel(
+          id: id,
+          firstName: 'Σοφία',
+          lastName: 'Ψαρρά',
+          phones: const <String>['2534', '2565'],
+        );
+
+        // Βήμα 1 της αποθήκευσης: το 2565 μένει στο τμήμα που αφήνει.
+        await applyAssetsStayingBehind(
+          db: db,
+          userId: id,
+          oldDepartmentId: null,
+          phones: const <String>{'2565'},
+          currentPhones: const <String>['2534', '2565'],
+        );
+
+        // Η αφετηρία της οθόνης έχει ακόμη ΚΑΙ ΤΑ ΔΥΟ: αν πάει έτσι στον
+        // φρουρό, κατηγορεί τον ίδιο τον χρήστη.
+        await expectLater(
+          () => users.updateUser(id, {
+            'first_name': 'Σοφία',
+            'phones': const <String>['2534'],
+          }, expected: DirectoryNotifier.userConflictBaseline(asFormSawIt)),
+          throwsA(isA<DirectoryStaleException>()),
+          reason:
+              'Αυτό ΕΙΝΑΙ το σφάλμα: η αφετηρία δεν ξέρει ότι το 2565 το '
+              'αποδέσμευσε η ίδια η αποθήκευση.',
+        );
+
+        // Με την αφετηρία ανανεωμένη από τις δικές μας εγγραφές, η αποθήκευση
+        // περνά κανονικά.
+        await users.updateUser(
+          id,
+          {
+            'first_name': 'Σοφια',
+            'phones': const <String>['2534'],
+          },
+          expected: DirectoryNotifier.userConflictBaseline(
+            DirectoryNotifier.userBaselineAfterOwnPhoneWrites(
+              asFormSawIt,
+              releasedPhones: const <String>{'2565'},
+            ),
+          ),
+        );
+
+        expect((await rowById('users', id))['first_name'], 'Σοφια');
+        expect(await users.userPhoneNumbersOrdered(db, id), <String>['2534']);
+      },
+    );
+
+    // Ξένη αλλαγή ΜΕΣΑ στα τηλέφωνα που δεν αποδεσμεύσαμε πρέπει να μπλοκάρει
+    // κανονικά — η ανανέωση της αφετηρίας δεν επιτρέπεται να τυφλώσει τον
+    // φρουρό.
+    test(
+      'ξένη αλλαγή τηλεφώνου μπλοκάρει ακόμη κι όταν εμείς αποδεσμεύσαμε άλλο',
+      () async {
+        final id = await users.insertUserFromMap({
+          'first_name': 'Σοφία',
+          'last_name': 'Ψαρρά',
+          'phones': const <String>['2534', '2565'],
+        });
+        final asFormSawIt = UserModel(
+          id: id,
+          firstName: 'Σοφία',
+          lastName: 'Ψαρρά',
+          phones: const <String>['2534', '2565'],
+        );
+
+        // Εμείς αποδεσμεύουμε το 2565· ο συνάδελφος προσθέτει το 2599.
+        await applyAssetsStayingBehind(
+          db: db,
+          userId: id,
+          oldDepartmentId: null,
+          phones: const <String>{'2565'},
+          currentPhones: const <String>['2534', '2565'],
+        );
+        await users.updateUser(id, {
+          'phones': const <String>['2534', '2599'],
+        }, expected: null);
+
+        await expectLater(
+          () => users.updateUser(
+            id,
+            {
+              'first_name': 'Σοφία',
+              'phones': const <String>['2534'],
+            },
+            expected: DirectoryNotifier.userConflictBaseline(
+              DirectoryNotifier.userBaselineAfterOwnPhoneWrites(
+                asFormSawIt,
+                releasedPhones: const <String>{'2565'},
+              ),
+            ),
+          ),
+          throwsA(isA<DirectoryStaleException>()),
+          reason: 'Το 2599 δεν το γράψαμε εμείς — αυτή είναι αληθινή διένεξη.',
+        );
+      },
+    );
+
+    // Ο φρουρός της προηγούμενης δοκιμής αξίζει μόνο αν τον ΚΑΛΕΙ η φόρμα.
+    // Έλεγχος πηγαίου κώδικα και όχι συμπεριφοράς: το ζητούμενο είναι «ποιος
+    // δίνει την αφετηρία», δηλαδή σύνδεση, όχι υπολογισμός.
+    test('η αποθήκευση υπαλλήλου δεν δίνει ωμή την εικόνα της οθόνης', () {
+      final source = File(
+        '${Directory.current.path}${Platform.pathSeparator}'
+        'lib${Platform.pathSeparator}features${Platform.pathSeparator}'
+        'directory${Platform.pathSeparator}screens${Platform.pathSeparator}'
+        'widgets${Platform.pathSeparator}user_form_save.dart',
+      ).readAsStringSync();
+
+      expect(
+        source.contains('userBaselineAfterOwnPhoneWrites'),
+        isTrue,
+        reason:
+            'Η αφετηρία πρέπει να περνά από την ανανέωση — αλλιώς ο φρουρός '
+            'ξανακατηγορεί τον χρήστη για τη δική του αποδέσμευση.',
+      );
+      expect(
+        source.contains('expected: force ? null : host.widget.initialUser'),
+        isFalse,
+        reason: 'Αυτή ήταν ακριβώς η γραμμή που γεννούσε την ψεύτικη διένεξη.',
+      );
     });
 
     test('με force γράφεται η δική μου εικόνα', () async {

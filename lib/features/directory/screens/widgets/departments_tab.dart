@@ -33,11 +33,13 @@ import 'bulk_department_edit_dialog.dart';
 import 'bulk_undo_bar.dart';
 import 'catalog_column_selector_shell.dart';
 import 'catalog_search_results_line.dart';
+import 'catalog_selection_bar.dart';
 import 'department_form_dialog.dart';
 import 'departments_data_table.dart';
 import '../../building_map/screens/building_map_dialog.dart';
 import 'catalog_tab_lookup_reload_mixin.dart';
 import 'catalog_search_field_sync.dart';
+import 'bulk_department_action_call_guard.dart';
 
 /// Καρτέλα τμημάτων: αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη.
 class DepartmentsTab extends ConsumerStatefulWidget {
@@ -139,6 +141,11 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
           ),
         ),
         CatalogSearchResultsLine(summary: state.searchSummary),
+        CatalogSelectionFilterNotice(
+          active: state.showOnlySelected,
+          shownCount: state.filteredDepartments.length,
+          onShowAll: notifier.toggleShowOnlySelected,
+        ),
         const BulkUndoBar(scope: BulkUndoScope.departments),
         Expanded(
           child: DepartmentsDataTable(
@@ -159,51 +166,44 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
             continuousScroll: continuousScroll,
           ),
         ),
-        if (state.selectedIds.isNotEmpty) ...[
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Text(
-                  '${state.selectedIds.length} επιλεγμένα',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(width: 16),
-                FilledButton.tonal(
-                  onPressed: () => _openBulkEdit(context, ref),
-                  child: const Text('Επεξεργασία'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
-                  onPressed: state.selectedIds.length == 1
-                      ? () {
-                          final id = state.selectedIds.single;
-                          final candidates = state.allDepartments
-                              .where((d) => d.id == id)
-                              .toList();
-                          if (candidates.isNotEmpty) {
-                            _openForm(
-                              context,
-                              ref,
-                              candidates.first,
-                              isClone: true,
-                            );
-                          }
+        if (state.selectedIds.isNotEmpty)
+          CatalogSelectionBar(
+            selectedCount: state.selectedIds.length,
+            countLabel: 'επιλεγμένα',
+            showOnlySelected: state.showOnlySelected,
+            searchController: _searchController,
+            onToggleShowOnlySelected: notifier.toggleShowOnlySelected,
+            onClearSelection: notifier.clearSelection,
+            actions: [
+              FilledButton.tonal(
+                onPressed: () => _openBulkEdit(context, ref),
+                child: const Text('Επεξεργασία'),
+              ),
+              FilledButton.tonal(
+                onPressed: state.selectedIds.length == 1
+                    ? () {
+                        final id = state.selectedIds.single;
+                        final candidates = state.allDepartments
+                            .where((d) => d.id == id)
+                            .toList();
+                        if (candidates.isNotEmpty) {
+                          _openForm(
+                            context,
+                            ref,
+                            candidates.first,
+                            isClone: true,
+                          );
                         }
-                      : null,
-                  child: const Text('Αντίγραφο'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
-                  onPressed: () => _confirmAndDeleteSelected(context, ref),
-                  child: const Text('Διαγραφή'),
-                ),
-              ],
-            ),
+                      }
+                    : null,
+                child: const Text('Αντίγραφο'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => _confirmAndDeleteSelected(context, ref),
+                child: const Text('Διαγραφή'),
+              ),
+            ],
           ),
-        ],
       ],
     );
   }
@@ -264,6 +264,20 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
     BuildContext context,
     WidgetRef ref,
   ) async {
+    // Ο φρουρός ρωτά ΜΙΑ φορά, έξω από τον βρόχο: οι επόμενοι γύροι είναι
+    // συνέχεια της ίδιας απόφασης, και μια ερώτηση ανά γύρο θα ήταν τιμωρία
+    // για όποιον αφαιρεί τμήματα και ξαναπροσπαθεί.
+    final state = ref.read(departmentDirectoryProvider);
+    final selected = state.allDepartments
+        .where(
+          (d) =>
+              d.id != null && !d.isDeleted && state.selectedIds.contains(d.id),
+        )
+        .toList();
+    if (!await ensureBulkDepartmentActionAllowed(context, ref, selected)) {
+      return;
+    }
+
     while (true) {
       if (!context.mounted) return;
       final retry = await _runDepartmentDeletionRound(context, ref);
@@ -902,23 +916,10 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
     if (!context.mounted) return false;
     final deleted = ref.read(departmentDirectoryProvider).lastDeleted ?? [];
     final deletedCount = deleted.length;
-    final names = deleted
-        .map((d) => d.name.trim().isEmpty ? '?' : d.name)
-        .toList();
-    const maxNamesLength = 70;
-    final namesPart = names.join(', ');
-    var take = 0;
-    var len = 0;
-    for (; take < names.length; take++) {
-      final add = (take == 0 ? '' : ', ') + names[take];
-      if (len + add.length > maxNamesLength) break;
-      len += add.length;
-    }
-    final truncated = take < names.length;
-    final displayNames = truncated
-        ? '${names.sublist(0, take).join(', ')}...'
-        : namesPart;
-    final tooltipAllNames = names.isEmpty ? null : names.join(', ');
+    final shownNames = departmentDeletionNames([
+      for (final d in deleted) d.name,
+    ]);
+    final tooltipAllNames = shownNames.allNames;
 
     final undoPolicy = resolveDepartmentDeletionUndo(
       deletedDepartmentCount: deletedCount,
@@ -965,29 +966,15 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
     }
     final transferredEmployees = movedEmployeeCount > 0;
 
-    final String message;
-    if (names.isEmpty) {
-      message = undoPolicy.snackbarMessage;
-    } else {
-      final deletedPart = deletedCount == 1
-          ? 'Το τμήμα $displayNames διαγράφηκε.'
-          : 'Τα τμήματα $displayNames διαγράφηκαν.';
-      final movedCategories = <String>[
-        if (transferredEmployees) 'υπαλλήλων',
-        if (transferredEquipment) 'εξοπλισμού',
-        if (transferredPhones) 'τηλεφώνων',
-      ];
-      var movePart = '';
-      if (movedCategories.isNotEmpty && transferTargets.length == 1) {
-        final target = transferTargets.values.first;
-        final kind = target.isNew ? 'νέο' : 'υπάρχον';
-        movePart =
-            ' Επιτυχής μεταφορά ${_joinGreekGenitive(movedCategories)} στο $kind ${target.name}.';
-      } else if (movedCategories.isNotEmpty) {
-        movePart = ' Τα στοιχεία μεταφέρθηκαν σε άλλα τμήματα.';
-      }
-      message = '$deletedPart$movePart';
-    }
+    final message = departmentDeletionSummaryMessage(
+      displayNames: shownNames.display,
+      deletedCount: deletedCount,
+      transferTargets: transferTargets.values.toList(),
+      transferredEmployees: transferredEmployees,
+      transferredEquipment: transferredEquipment,
+      transferredPhones: transferredPhones,
+      fallbackMessage: undoPolicy.snackbarMessage,
+    );
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
@@ -1017,13 +1004,6 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
 }
 
 /// Ένωση με ελληνικά κόμματα και «και» πριν το τελευταίο («α, β και γ»).
-String _joinGreekGenitive(List<String> items) {
-  if (items.isEmpty) return '';
-  if (items.length == 1) return items.first;
-  if (items.length == 2) return '${items[0]} και ${items[1]}';
-  return '${items.sublist(0, items.length - 1).join(', ')} και ${items.last}';
-}
-
 class _DepartmentColumnSelectorOverlay extends ConsumerWidget {
   const _DepartmentColumnSelectorOverlay({required this.onClose});
 

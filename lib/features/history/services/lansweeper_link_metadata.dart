@@ -1,5 +1,5 @@
-// Οι προειδοποιήσεις μιας καταχώρησης Lansweeper, όπως τις ξαναδιαβάζει η
-// εφαρμογή αργότερα (χωρίς widgets/βάση).
+// Τι κρύβει το `metadata` μιας καταχώρησης Lansweeper, όπως το ξαναδιαβάζει
+// η εφαρμογή αργότερα (χωρίς widgets/βάση).
 //
 // Η ροή αποστολής παράγει ήδη προειδοποιήσεις — «ο αιτών δεν βρέθηκε, αιτών
 // καταχωρήθηκε ο πράκτορας» — και τις αποθηκεύει στο `metadata` του
@@ -11,11 +11,26 @@
 // επεξεργασίας κλήσης, ιστορικό tickets). Η αποκωδικοποίηση ζει εδώ **μία**
 // φορά: τρεις χωριστές αναγνώσεις του ίδιου JSON θα απέκλιναν σιωπηλά, με
 // πράσινα τεστ σε κάθε πλευρά.
+//
+// Το ίδιο `metadata` κρατά και **ποιος** έκανε την καταχώρηση. Ίδια φύση με
+// τις προειδοποιήσεις: πληροφορία της στιγμής της αποστολής που πρέπει να
+// ξαναβρίσκεται μήνες μετά, όταν κάποιος ρωτά «τι έγινε με αυτό το ticket;».
+// Γι' αυτό διαβάζεται από εδώ και όχι από δεύτερο αρχείο — δύο σημεία που
+// ξέρουν το ίδιο σχήμα κάποτε διαφωνούν.
 
 import 'dart:convert';
 
 /// Το κλειδί των προειδοποιήσεων μέσα στο `metadata` του εξωτερικού link.
 const String kLansweeperWarningsMetadataKey = 'warnings';
+
+/// Το κλειδί του **ονόματος** εκείνου που έκανε την καταχώρηση.
+///
+/// Αποθηκεύεται **όνομα, όχι κωδικός χειριστή** — όπως και στο Ιστορικό
+/// Εφαρμογής. Είναι σφραγίδα του τι ίσχυε τότε: αν αύριο μετονομαστεί ένα
+/// προφίλ, η παλιά καταχώρηση συνεχίζει να λέει την αλήθεια της ημέρας της.
+/// Ένας κωδικός θα απαιτούσε και ένωση με τον πίνακα χειριστών σε κάθε άνοιγμα
+/// καρτέλας, για πληροφορία που δεν αλλάζει ποτέ.
+const String kLansweeperSubmittedByMetadataKey = 'submitted_by';
 
 /// Οι προειδοποιήσεις που κρύβει το ωμό `metadata` μιας γραμμής.
 ///
@@ -34,6 +49,37 @@ List<String> lansweeperWarningsFromMetadata(Object? metadataRaw) {
     if (text.isNotEmpty) warnings.add(text);
   }
   return warnings;
+}
+
+/// Ποιος έκανε την καταχώρηση, όπως το κρύβει το ωμό `metadata` μιας γραμμής.
+///
+/// `null` σημαίνει «δεν καταγράφηκε» — και είναι η **κανονική** απάντηση για
+/// κάθε καταχώρηση που έγινε πριν υπάρξει αυτή η σφραγίδα, ή από μηχάνημα
+/// χωρίς αναγνωρισμένο χρήστη. Ό,τι δεν ξέρουμε δεν το λέμε.
+String? lansweeperSubmittedByFromMetadata(Object? metadataRaw) {
+  final decoded = _decodeMetadata(metadataRaw);
+  if (decoded == null) return null;
+  final name = decoded[kLansweeperSubmittedByMetadataKey]?.toString().trim();
+  return (name == null || name.isEmpty) ? null : name;
+}
+
+/// Ποιος έκανε την **πιο πρόσφατη** καταχώρηση για το [ticketId].
+///
+/// Ίδιο συμβόλαιο με τις προειδοποιήσεις: μετράει μόνο η τελευταία γραμμή
+/// αυτού του ticket. Αν ο συνάδελφος το ξαναέστειλε, το όνομά του είναι η
+/// σωστή απάντηση στο «ποιος το άγγιξε» — όχι το δικό μας από χθες.
+String? lansweeperSubmittedByForTicket({
+  required List<Map<String, dynamic>> links,
+  required String? ticketId,
+}) {
+  final wanted = ticketId?.trim() ?? '';
+  if (wanted.isEmpty) return null;
+  for (final row in links) {
+    final externalId = (row['external_id']?.toString() ?? '').trim();
+    if (externalId != wanted) continue;
+    return lansweeperSubmittedByFromMetadata(row['metadata']);
+  }
+  return null;
 }
 
 /// Οι προειδοποιήσεις της **πιο πρόσφατης** καταχώρησης για το [ticketId].

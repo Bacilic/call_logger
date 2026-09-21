@@ -6,6 +6,7 @@ import '../../models/category_model.dart';
 import '../../providers/category_directory_provider.dart';
 import 'catalog_column_selector_shell.dart';
 import 'catalog_search_results_line.dart';
+import 'catalog_selection_bar.dart';
 import 'categories_data_table.dart';
 import 'category_form_dialog.dart';
 import 'category_undo_snackbar.dart';
@@ -88,6 +89,11 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
           ),
         ),
         CatalogSearchResultsLine(summary: state.searchSummary),
+        CatalogSelectionFilterNotice(
+          active: state.showOnlySelected,
+          shownCount: state.filteredCategories.length,
+          onShowAll: notifier.toggleShowOnlySelected,
+        ),
         Expanded(
           child: CategoriesDataTable(
             categories: state.filteredCategories,
@@ -103,26 +109,21 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
             onRequestDelete: () => _confirmAndDeleteSelected(context, ref),
           ),
         ),
-        if (state.selectedIds.isNotEmpty) ...[
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Text(
-                  '${state.selectedIds.length} επιλεγμένα',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(width: 16),
-                FilledButton.tonal(
-                  onPressed: () => _confirmAndDeleteSelected(context, ref),
-                  child: const Text('Διαγραφή'),
-                ),
-              ],
-            ),
+        if (state.selectedIds.isNotEmpty)
+          CatalogSelectionBar(
+            selectedCount: state.selectedIds.length,
+            countLabel: 'επιλεγμένα',
+            showOnlySelected: state.showOnlySelected,
+            searchController: _searchController,
+            onToggleShowOnlySelected: notifier.toggleShowOnlySelected,
+            onClearSelection: notifier.clearSelection,
+            actions: [
+              FilledButton.tonal(
+                onPressed: () => _confirmAndDeleteSelected(context, ref),
+                child: const Text('Διαγραφή'),
+              ),
+            ],
           ),
-        ],
       ],
     );
   }

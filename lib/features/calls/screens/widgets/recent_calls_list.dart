@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/main_nav_request_provider.dart';
+import '../../../../core/widgets/compact_tooltip.dart';
 import '../../../../core/widgets/linkable_text.dart';
 import '../../../../core/widgets/main_nav_destination.dart';
 import '../../../history/providers/history_provider.dart';
@@ -13,6 +14,7 @@ import '../../models/call_model.dart';
 import '../../models/user_model.dart';
 import '../../provider/calls_dashboard_providers.dart';
 import '../../../../core/utils/text_layout_utils.dart';
+import 'recent_call_line_texts.dart';
 
 /// Λέξη-κλειδί για αναζήτηση ιστορικού: όνομα, αλλιώς πρώτο μη κενό τηλέφωνο.
 String _recentCallsHistorySearchKeyword(UserModel user) {
@@ -29,10 +31,9 @@ String _recentCallsListClipboardText(UserModel user, List<CallModel> calls) {
   final name = (user.name ?? '').trim().isEmpty ? '—' : user.name!.trim();
   final buf = StringBuffer()..writeln('Πρόσφατο ιστορικό Υπαλλήλου: $name');
   for (final c in calls) {
-    final line = (c.issue ?? '').trim();
-    buf.writeln(
-      '${c.date ?? ''} ${c.time ?? ''}\t${line.isEmpty ? '—' : line}',
-    );
+    // Ό,τι αντιγράφεται είναι ό,τι διαβάζεται: η ίδια συνάρτηση κρίνει και τα
+    // δύο, ώστε η επικόλληση να μη δείχνει άλλο κείμενο από την οθόνη.
+    buf.writeln('${c.date ?? ''} ${c.time ?? ''}\t${recentCallLineText(c)}');
   }
   return buf.toString().trimRight();
 }
@@ -70,9 +71,11 @@ double _recentCallsSmartCardWidth(
       style: dateStyle,
       textScaler: textScaler,
     );
-    final issue = (c.issue ?? '').trim();
+    // Το πλάτος μετριέται πάνω σε ό,τι θα φανεί πράγματι: με τον τίτλο στη θέση
+    // της Περιγραφής, η μέτρηση στο παλιό κείμενο θα άνοιγε την κάρτα για
+    // γράμματα που δεν εμφανίζονται πουθενά.
     final issueW = singleLineTextWidth(
-      text: issue.isEmpty ? '—' : issue,
+      text: recentCallLineText(c),
       style: issueStyle,
       textScaler: textScaler,
     );
@@ -230,14 +233,7 @@ class RecentCallsList extends ConsumerWidget {
                                   style: theme.textTheme.bodySmall,
                                 ),
                                 const SizedBox(width: 12),
-                                Expanded(
-                                  child: LinkableText(
-                                    text: c.issue ?? '—',
-                                    style: theme.textTheme.bodyMedium,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
+                                Expanded(child: _RecentCallLine(call: c)),
                               ],
                             ),
                           ),
@@ -260,5 +256,29 @@ class RecentCallsList extends ConsumerWidget {
       ),
       error: (_, _) => const SizedBox.shrink(),
     );
+  }
+}
+
+/// Μία γραμμή του πρόσφατου ιστορικού: η περίληψη, με το πλήρες κείμενο στην
+/// υπόδειξη.
+///
+/// Η υπόδειξη μπαίνει **μόνο όταν έχει κάτι παραπάνω να πει** — αλλιώς θα
+/// εμφανιζόταν ένα πλαίσιο που επαναλαμβάνει τη γραμμή από κάτω της.
+class _RecentCallLine extends StatelessWidget {
+  const _RecentCallLine({required this.call});
+
+  final CallModel call;
+
+  @override
+  Widget build(BuildContext context) {
+    final line = LinkableText(
+      text: recentCallLineText(call),
+      style: Theme.of(context).textTheme.bodyMedium,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+    final tooltip = recentCallTooltipText(call);
+    if (tooltip.isEmpty) return line;
+    return CompactTooltip(message: tooltip, child: line);
   }
 }

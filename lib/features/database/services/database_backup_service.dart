@@ -2,11 +2,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:intl/intl.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import '../../../core/database/database_maintenance_repository.dart';
-import '../../../core/database/database_schema_migrations.dart';
 import '../../../core/database/sqlite_types.dart';
 
 import '../../../core/config/app_config.dart';
@@ -16,13 +13,15 @@ import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/services/building_map_storage.dart';
 import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/portable_lamp_storage.dart';
-import '../../../core/services/portable_tool_image_storage.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../models/database_backup_settings.dart';
 import '../utils/backup_destination_folder_validator.dart';
 import '../utils/portable_backup_availability.dart';
+import 'backup_artifact_naming.dart';
+import 'backup_completion_message.dart';
+import 'backup_portable_bundle.dart';
 import 'backup_retention.dart';
-import 'backup_zip_manifest.dart';
+import 'backup_verification.dart';
 import 'database_backup_audit.dart';
 import 'portable_content_fingerprint.dart';
 import 'restore_selection.dart';
@@ -46,12 +45,24 @@ class DatabaseBackupResult {
     this.failureCode,
     this.isFullBackup = false,
     this.portableFingerprint,
+    this.brokenArtifactPath,
   });
 
   final bool success;
   final String? outputPath;
   final String? message;
   final String? failureCode;
+
+  /// Το αντίγραφο γράφτηκε αλλά δεν πέρασε τον έλεγχο, και το αρχείο φέρει
+  /// πλέον τη σήμανση «ΧΑΛΑΣΜΕΝΟ» στο όνομά του.
+  ///
+  /// Χωρίζεται από το σκέτο [success] γιατί ο παραλήπτης είναι άλλος: εδώ
+  /// υπάρχει **αρχείο στον δίσκο** για το οποίο ο χειριστής μπορεί να
+  /// αποφασίσει, ενώ μια αποτυχία εγγραφής δεν αφήνει τίποτα πίσω της.
+  bool get isVerifiedBroken => brokenArtifactPath != null;
+
+  /// Πού κατέληξε το σημαδεμένο αρχείο· `null` σε κάθε άλλη έκβαση.
+  final String? brokenArtifactPath;
 
   /// True όταν το αντίγραφο ήταν ΠΛΗΡΕΣ (.zip με φορητά) — Φάση 5.
   final bool isFullBackup;
@@ -235,6 +246,23 @@ class DatabaseBackupService {
     );
   }
 
+  /// Ενορχηστρώνει τη δημιουργία ενός αντιγράφου, με δεσμευτική σειρά βημάτων.
+  ///
+  /// Κάθε βήμα ζει στο δικό του αρχείο· εδώ φαίνεται μόνο **η σειρά**, που
+  /// είναι και το μόνο πράγμα που δεν επιτρέπεται να αλλάξει κατά λάθος:
+  ///
+  /// 1. **ονόματα** — υπολογίζονται μία φορά, ώστε `.db` και `.zip` να μη
+  ///    διαφωνούν αν το λεπτό αλλάξει στη μέση,
+  /// 2. **αντιγραφή της βάσης** με `VACUUM INTO`,
+  /// 3. **απόφαση πλήρες/γρήγορο** από το αποτύπωμα των φορητών,
+  /// 4. **συμπίεση** μαζί με τα φορητά, όταν το αντίγραφο βγαίνει πλήρες,
+  /// 5. **επαλήθευση** — και σήμανση του αρχείου αν δεν περάσει,
+  /// 6. **εκκαθάριση** παλαιών αντιγράφων,
+  /// 7. **μήνυμα** από ό,τι πράγματι έγινε.
+  ///
+  /// Η **επαλήθευση πριν από την εκκαθάριση** δεν είναι προτίμηση ύφους: ένα
+  /// χαλασμένο αντίγραφο που μετρά ως έγκυρο σπρώχνει παλαιότερα υγιή έξω από
+  /// τα όρια διατήρησης, και η ζημιά γίνεται διπλή.
   static Future<DatabaseBackupResult> _executeBackup({
     required DatabaseBackupSettings settings,
     required String dest,
@@ -251,16 +279,16 @@ class DatabaseBackupService {
           outputPath: outputPath,
         );
 
-    final destDir = Directory(dest);
-    final stamp = DateFormat('yyyy-MM-dd_HH-mm').format(DateTime.now());
-    final stem =
-        settings.namingFormat == DatabaseBackupNamingFormat.dateTimeThenBase
-        ? '${stamp}_$baseName'
-        : '${baseName}_$stamp';
-    final dbFileName = '$stem.db';
+    // ── 1. Ονόματα ──────────────────────────────────────────────────────
+    final paths = resolveBackupArtifactPaths(
+      destinationDirectory: dest,
+      baseName: baseName,
+      namingFormat: settings.namingFormat,
+      now: DateTime.now(),
+    );
+    final outDbFile = File(paths.databasePath);
 
-    final outDbPath = p.join(dest, dbFileName);
-    final outDbFile = File(outDbPath);
+    // ── 2. Αντιγραφή της βάσης ──────────────────────────────────────────
     try {
       if (await outDbFile.exists()) {
         await outDbFile.delete();
@@ -274,16 +302,19 @@ class DatabaseBackupService {
     try {
       await DatabaseBackupRepository(
         db,
-      ).vacuumInto(_sqlitePathLiteral(outDbPath));
+      ).vacuumInto(_sqlitePathLiteral(paths.databasePath));
     } catch (e) {
       try {
         if (await outDbFile.exists()) await outDbFile.delete();
-      } catch (_) {}
+      } catch (_) {
+        // Το μισογραμμένο αρχείο δεν εμποδίζει την αναφορά της αποτυχίας.
+      }
       final message = 'Το VACUUM INTO απέτυχε: $e';
       await auditFailure(message);
       return DatabaseBackupResult(success: false, message: message);
     }
 
+    // ── 3. Πλήρες ή γρήγορο; ────────────────────────────────────────────
     final portableAvailability = await PortableBackupAvailability.load(
       lexiconLoaded: CoreLexiconService.instance.state.loaded,
     );
@@ -303,112 +334,82 @@ class DatabaseBackupService {
       );
       isFull = settings.lastFullBackupFingerprint != currentFingerprint;
     }
-    var finalPath = outDbPath;
+
+    // ── 4. Συμπίεση με τα φορητά ────────────────────────────────────────
+    var finalPath = paths.databasePath;
+    var includedParts = const <String>[];
+    final missingParts = <String>[];
 
     if (isFull) {
-      final zipPath = p.join(dest, '$stem.zip');
       try {
-        final archive = Archive();
-        final dbBytes = await outDbFile.readAsBytes();
-        archive.addFile(
-          ArchiveFile(
-            BuildingMapStorage.backupZipDbFileName,
-            dbBytes.length,
-            dbBytes,
-          ),
+        final bundle = await writeFullBackupArchive(
+          archivePath: paths.archivePath,
+          databaseFilePath: paths.databasePath,
+          sourceDatabasePath: db.path,
+          settings: settings,
+          availability: portableAvailability,
         );
-        // Manifest στη ρίζα: παλιότερες εκδόσεις αγνοούν μη-.db εγγραφές
-        // κατά την επιλογή βάσης της επαναφοράς.
-        archive.addFile(
-          BackupZipManifest.toArchiveFile(await _buildBackupManifest(db.path)),
-        );
+        includedParts = bundle.includedParts;
+        missingParts.addAll(bundle.missingParts);
 
-        if (settings.effectiveIncludeMapImagesInBackup(portableAvailability)) {
-          await _addFilesToArchive(
-            archive,
-            await BuildingMapStorage.listPortableImageFiles(),
-            BuildingMapStorage.backupZipMapsFolderName,
-          );
-        }
-
-        if (settings.effectiveIncludeToolImages(portableAvailability)) {
-          await _addFilesToArchive(
-            archive,
-            await PortableToolImageStorage.listPortableImageFiles(),
-            AppConfig.portableImagesDirName,
-          );
-        }
-
-        if (settings.effectiveIncludeLexicon(portableAvailability)) {
-          await _addDirectoryTreeToArchive(
-            archive,
-            AppConfig.portableDictionariesDirectory,
-            AppConfig.portableDictionariesDirName,
-          );
-        }
-
-        if (settings.effectiveIncludeLampDb(portableAvailability)) {
-          final lampPath =
-              await PortableLampStorage.portableLampDbPathForBackup();
-          if (lampPath != null) {
-            try {
-              final bytes = await File(lampPath).readAsBytes();
-              final entryName = p.posix.join(
-                PortableLampStorage.backupZipLampDbFolderName,
-                p.basename(lampPath),
-              );
-              archive.addFile(ArchiveFile(entryName, bytes.length, bytes));
-            } catch (_) {}
-          }
-        }
-
-        final zipped = ZipEncoder().encode(archive);
-        await File(zipPath).writeAsBytes(zipped, flush: true);
         try {
           await outDbFile.delete();
-        } catch (_) {}
-        finalPath = zipPath;
+        } catch (_) {
+          // Το ενδιάμεσο .db δίπλα στο .zip είναι ακαταστασία, όχι βλάβη.
+        }
+        finalPath = paths.archivePath;
       } catch (e) {
+        // Το ενδιάμεσο `.db` **δεν** σβήνεται: είναι πλήρες αντίγραφο της
+        // βάσης και ο χειριστής πρέπει να ξέρει ότι το έχει.
         final message = 'Η συμπίεση zip (βάση + φορητά αρχεία) απέτυχε: $e';
-        await auditFailure(message, outputPath: outDbPath);
+        await auditFailure(message, outputPath: paths.databasePath);
         return DatabaseBackupResult(
           success: false,
           message: message,
-          outputPath: outDbPath,
+          outputPath: paths.databasePath,
         );
       }
     }
 
+    // ── 5. Επαλήθευση ───────────────────────────────────────────────────
+    final verification = await verifyBackupArtifact(finalPath);
+    if (verification.isBroken) {
+      final markedPath = await markBackupArtifactAsBroken(finalPath);
+      final message = buildBrokenBackupMessage(
+        reason: verification.message,
+        wasMarked: markedPath != null,
+        rawDetail: verification.rawDetail,
+      );
+      await auditFailure(message, outputPath: markedPath ?? finalPath);
+      return DatabaseBackupResult(
+        success: false,
+        message: message,
+        outputPath: markedPath ?? finalPath,
+        brokenArtifactPath: markedPath,
+      );
+    }
+
+    // ── 6. Εκκαθάριση παλαιών ───────────────────────────────────────────
     try {
       await BackupRetention.apply(
-        destDir: destDir,
+        destDir: Directory(dest),
         baseName: baseName,
         settings: settings,
       );
-    } catch (_) {}
-
-    final parts = <String>[];
-    if (isFull) {
-      if (settings.effectiveIncludeMapImagesInBackup(portableAvailability)) {
-        parts.add('εικόνες χαρτών');
-      }
-      if (settings.effectiveIncludeToolImages(portableAvailability)) {
-        parts.add('εικονίδια εργαλείων');
-      }
-      if (settings.effectiveIncludeLexicon(portableAvailability)) {
-        parts.add('λεξικό');
-      }
-      if (settings.effectiveIncludeLampDb(portableAvailability)) {
-        parts.add('βάση Λάμπας');
-      }
+    } catch (e) {
+      // Η εκκαθάριση δεν ρίχνει το αντίγραφο — αυτό έχει ήδη γραφτεί και
+      // επαληθευτεί. Σιωπηλή όμως δεν μένει: ένας φάκελος που δεν αδειάζει
+      // ποτέ γεμίζει τον δίσκο χωρίς καμία ένδειξη.
+      missingParts.add('εκκαθάριση παλαιών αντιγράφων ($e)');
     }
-    final tail = parts.isEmpty ? '' : ' (${parts.join(', ')})';
-    final message = isFull
-        ? 'Το πλήρες αντίγραφο ολοκληρώθηκε$tail.'
-        : (wantBundle
-              ? 'Το γρήγορο αντίγραφο ολοκληρώθηκε — τα φορητά αρχεία δεν '
-                    'έχουν αλλάξει από το τελευταίο πλήρες.'
-              : 'Το αντίγραφο ολοκληρώθηκε.');
+
+    // ── 7. Μήνυμα ───────────────────────────────────────────────────────
+    final message = buildBackupCompletionMessage(
+      isFull: isFull,
+      wantsBundle: wantBundle,
+      includedParts: includedParts,
+      missingParts: missingParts,
+    );
     await DatabaseBackupAudit.logRunResult(
       trigger: auditTrigger,
       success: true,
@@ -423,42 +424,6 @@ class DatabaseBackupService {
       isFullBackup: isFull,
       portableFingerprint: isFull ? currentFingerprint : null,
     );
-  }
-
-  static Future<void> _addFilesToArchive(
-    Archive archive,
-    List<File> files,
-    String zipFolderName,
-  ) async {
-    for (final file in files) {
-      try {
-        final bytes = await file.readAsBytes();
-        final entryName = p.posix.join(zipFolderName, p.basename(file.path));
-        archive.addFile(ArchiveFile(entryName, bytes.length, bytes));
-      } catch (_) {}
-    }
-  }
-
-  static Future<void> _addDirectoryTreeToArchive(
-    Archive archive,
-    String rootDir,
-    String zipFolderName,
-  ) async {
-    final dir = Directory(rootDir);
-    if (!await dir.exists()) return;
-    final rootNorm = p.normalize(rootDir);
-    await for (final entity in dir.list(recursive: true, followLinks: false)) {
-      if (entity is! File) continue;
-      try {
-        final rel = p.relative(entity.path, from: rootNorm);
-        final entryName = p.posix.join(
-          zipFolderName,
-          rel.replaceAll('\\', '/'),
-        );
-        final bytes = await entity.readAsBytes();
-        archive.addFile(ArchiveFile(entryName, bytes.length, bytes));
-      } catch (_) {}
-    }
   }
 
   /// Αντιγραφή φορητών αρχείων από το αρχείο zip (κατόψεις, εικονίδια, λεξικό, Λάμπα).
@@ -604,21 +569,6 @@ class DatabaseBackupService {
   }
 
   /// Δημιουργεί manifest για εγγραφή στο zip (ανεκτικό σε αποτυχία PackageInfo).
-  static Future<BackupZipManifest> _buildBackupManifest(String dbPath) async {
-    String appVersion = 'unknown';
-    try {
-      final info = await PackageInfo.fromPlatform();
-      appVersion = info.version;
-    } catch (_) {}
-    return BackupZipManifest(
-      originalDatabasePath: p.normalize(p.absolute(dbPath)),
-      databaseFileName: p.basename(dbPath),
-      createdAt: DateTime.now().toUtc(),
-      appVersion: appVersion,
-      schemaVersion: kDatabaseSchemaVersion,
-    );
-  }
-
   /// Επαναφέρει μόνο φορητά αρχεία και επανασύνδεση κατόψεων (χωρίς εγγραφή βάσης).
   ///
   /// Χρησιμοποιείται όταν η βάση έχει ήδη τοποθετηθεί από staging/αντικατάσταση.

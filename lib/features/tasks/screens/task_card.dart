@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/task_save_exception.dart';
 import '../../../core/widgets/compact_tooltip.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
+import '../../../core/providers/settings_provider.dart';
+import '../../history/providers/lansweeper_settings_provider.dart';
 import '../../operators/providers/operator_directory_providers.dart';
 import '../models/task.dart';
 import '../models/task_settings_config.dart';
@@ -16,6 +20,9 @@ import '../widgets/task_card_callbacks.dart';
 import '../widgets/task_card_quick_actions.dart';
 import '../widgets/task_card_solution_zone.dart';
 import '../widgets/task_card_summary.dart';
+import '../services/task_print_launcher.dart';
+import '../widgets/task_print_preview_dialog.dart';
+import '../widgets/task_lansweeper_dialog.dart';
 import 'tasks_screen_actions.dart';
 
 // Οι υποδείξεις για διαγραμμένες οντότητες ζουν πλέον δίπλα στα κουμπιά που
@@ -62,7 +69,15 @@ class TaskCard extends ConsumerStatefulWidget {
   ///
   /// Το ίδιο το [TaskCard] κρατά τις παραμέτρους ξεχωριστά — έτσι το καλεί
   /// όλη η εφαρμογή — και τις μαζεύει μόνο όταν τις παραδίδει παρακάτω.
-  TaskCardCallbacks get _callbacks => TaskCardCallbacks(
+  ///
+  /// Η αποστολή στο Lansweeper δίνεται από **την ίδια την κάρτα** και όχι από
+  /// την οθόνη: δεν χρειάζεται τίποτα που να μην έχει ήδη εδώ, και ένα ακόμη
+  /// πέρασμα μέσα από κάθε καλούντα θα ήταν καθαρός θόρυβος.
+  TaskCardCallbacks _callbacksWith({
+    VoidCallback? onSubmitToLansweeper,
+    VoidCallback? onPrint,
+    VoidCallback? onSaveAsPdf,
+  }) => TaskCardCallbacks(
     onEdit: onEdit,
     onAssign: onAssign,
     onSnooze: onSnooze,
@@ -71,6 +86,9 @@ class TaskCard extends ConsumerStatefulWidget {
     onEditCaller: onEditCaller,
     onEditDepartment: onEditDepartment,
     onEditEquipment: onEditEquipment,
+    onSubmitToLansweeper: onSubmitToLansweeper,
+    onPrint: onPrint,
+    onSaveAsPdf: onSaveAsPdf,
   );
 
   /// Χρωματική κωδικοποίηση: κόκκινο (καθυστέρηση), πορτοκαλί (υψηλή προτεραιότητα), πράσινο (&lt; 1 ώρα).
@@ -98,6 +116,40 @@ class TaskCard extends ConsumerStatefulWidget {
 class _TaskCardState extends ConsumerState<TaskCard> {
   bool _showSolution = false;
 
+  /// Στέλνει το φύλλο στον εκτυπωτή — με ή χωρίς στάση στην προεπισκόπηση.
+  ///
+  /// Και οι δύο δρόμοι καταλήγουν στο **ίδιο** παράθυρο των Windows με τα ίδια
+  /// bytes· η ρύθμιση αλλάζει μόνο αν μεσολαβεί μια ματιά.
+  Future<void> _printSheet() async {
+    final withPreview = ref.read(taskPrintPreviewProvider).value ?? true;
+    if (withPreview) {
+      await showTaskPrintPreviewDialog(context, task: widget.task);
+      return;
+    }
+    // Ο messenger κρατιέται ΠΡΙΝ από το await: το παράθυρο εκτύπωσης κρατά
+    // αρκετή ώρα ώστε η κάρτα να έχει φύγει όταν τελειώσει, και ένας
+    // `context` που δεν ζει πια δεν εμφανίζει τίποτα.
+    final messenger = ScaffoldMessenger.of(context);
+    await sendSheetToPrinter(
+      messenger: messenger,
+      task: widget.task,
+      bytes: await buildTaskSheetBytes(widget.task),
+    );
+  }
+
+  /// Γράφει το ίδιο φύλλο σε αρχείο.
+  Future<void> _saveSheetAsPdf() async {
+    final messenger = ScaffoldMessenger.of(context);
+    await saveTaskSheetAsPdf(messenger: messenger, task: widget.task);
+  }
+
+  /// Ανοίγει το παράθυρο αποστολής και ανανεώνει τη λίστα αν κάτι άλλαξε.
+  Future<void> _openLansweeperDialog() async {
+    final sent = await showTaskLansweeperDialog(context, task: widget.task);
+    if (!mounted || !sent) return;
+    ref.invalidate(tasksProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -118,6 +170,17 @@ class _TaskCardState extends ConsumerState<TaskCard> {
     final assignedId = task.assignedOperatorId;
     final creatorId = task.createdByOperatorId;
     final closerId = task.closedByOperatorId;
+
+    final ticketViewUrlTemplate = ref.watch(lansweeperTicketViewUrlProvider);
+    // Χωρίς αναγνωριστικό δεν υπάρχει εκκρεμότητα να σταλεί: η κάρτα
+    // ζωγραφίζεται και για εγγραφή που δεν έχει ακόμη αποθηκευτεί.
+    final callbacks = widget._callbacksWith(
+      onSubmitToLansweeper: task.id == null
+          ? null
+          : () => unawaited(_openLansweeperDialog()),
+      onPrint: task.id == null ? null : () => unawaited(_printSheet()),
+      onSaveAsPdf: task.id == null ? null : () => unawaited(_saveSheetAsPdf()),
+    );
 
     final pendingDeleteTaskId = ref.watch(pendingTaskDeleteProvider);
     final isPendingDeleteSelf =
@@ -142,7 +205,8 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                 const SizedBox(width: 12),
                 TaskCardActions(
                   task: task,
-                  callbacks: widget._callbacks,
+                  callbacks: callbacks,
+                  ticketViewUrlTemplate: ticketViewUrlTemplate,
                   status: status,
                   assigneeName: assignedId == null
                       ? null
@@ -169,7 +233,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
           if (task.isQuickAdd)
             TaskCardQuickActions(
               task: task,
-              callbacks: widget._callbacks,
+              callbacks: callbacks,
               onEntityEdited: _handleEntityEdited,
             ),
         ],

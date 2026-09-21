@@ -4,10 +4,12 @@ import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/sqlite_types.dart';
 import '../../../core/database/user_repository.dart';
+import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/models/user_model.dart';
 import '../models/department_kind.dart';
+import 'user_move_consequences.dart';
 import '../screens/widgets/shared_asset_disconnect_dialog.dart';
 import 'bulk_action_undo_record.dart';
 import 'user_deletion_undo_record.dart';
@@ -103,7 +105,7 @@ PhoneStayBehindDecision judgePhoneStayBehind({
       releases: false,
       blockedReason:
           'Το $phone παραμένει στον υπάλληλο $userName — '
-          'το χρησιμοποιεί και ο ${_joinNames(otherOwnerNames)}.',
+          'το χρησιμοποιεί επίσης: ${_joinNames(otherOwnerNames)}.',
     );
   }
   if (sharedDepartment != null && sharedDepartment.id != oldDepartmentId) {
@@ -123,6 +125,102 @@ PhoneStayBehindDecision judgePhoneStayBehind({
     );
   }
   return (releases: true, blockedReason: null);
+}
+
+/// Το σχέδιο για **όλα** τα τηλέφωνα ενός υπαλλήλου που αλλάζει τμήμα.
+///
+/// Το [blockedReasons] είναι ο λόγος που ΔΕΝ πραγματοποιήθηκε το «μένουν
+/// πίσω», σε λόγια του χρήστη — ένας ανά αριθμό που εμποδίστηκε.
+typedef PhoneStayBehindPlan = ({
+  Set<String> staying,
+  List<String> blockedReasons,
+});
+
+/// Το ίδιο για τον εξοπλισμό.
+typedef EquipmentStayBehindPlan = ({
+  List<EquipmentModel> staying,
+  List<String> blockedReasons,
+});
+
+/// Τρέχει τον [judgePhoneStayBehind] για μια ολόκληρη λίστα και κρατά **και
+/// τους λόγους** όσων εμποδίστηκαν.
+///
+/// **Γιατί επιστρέφει και τα δύο:** ο κανόνας παρήγαγε πάντα τον λόγο, αλλά οι
+/// καλούντες τον πετούσαν — έγραφαν `if (decision.releases) …` και η εξαίρεση
+/// γινόταν σιωπηλή. Ο τύπος επιστροφής δεν αφήνει πια τον λόγο να χαθεί κατά
+/// λάθος: όποιος τον αγνοήσει, το κάνει βλέποντάς τον.
+///
+/// Η αναζήτηση συν-κατόχων και κοινόχρηστου τμήματος γίνεται **εδώ** και όχι
+/// στον καλούντα: ήταν γραμμένη δύο φορές, ολόιδια, και θα απέκλινε.
+PhoneStayBehindPlan planPhoneStayBehind({
+  required Iterable<String> phones,
+  required String userName,
+  required int? oldDepartmentId,
+  required int? editingUserId,
+  required LookupService lookup,
+}) {
+  final staying = <String>{};
+  final blockedReasons = <String>[];
+  for (final phone in phones) {
+    final others = [
+      for (final other in lookup.findUsersByPhone(phone))
+        if (other.id != null && other.id != editingUserId && !other.isDeleted)
+          bulkUserDisplayName(other),
+    ];
+    final dept = lookup.getDepartmentByPhone(phone);
+    final deptId = dept?.id;
+    final deptName = dept?.name.trim() ?? '';
+    final decision = judgePhoneStayBehind(
+      phone: phone,
+      userName: userName,
+      oldDepartmentId: oldDepartmentId,
+      otherOwnerNames: others,
+      sharedDepartment: (deptId != null && deptName.isNotEmpty)
+          ? (id: deptId, name: deptName)
+          : null,
+    );
+    if (decision.releases) {
+      staying.add(phone);
+    } else {
+      blockedReasons.add(decision.blockedReason!);
+    }
+  }
+  return (staying: staying, blockedReasons: blockedReasons);
+}
+
+/// Δίδυμο του [planPhoneStayBehind] για τον εξοπλισμό — ίδιος λόγος ύπαρξης.
+EquipmentStayBehindPlan planEquipmentStayBehind({
+  required Iterable<EquipmentModel> equipment,
+  required String userName,
+  required int? oldDepartmentId,
+  required int? editingUserId,
+  required LookupService lookup,
+}) {
+  final staying = <EquipmentModel>[];
+  final blockedReasons = <String>[];
+  for (final item in equipment) {
+    final code = (item.code ?? '').trim();
+    final itemId = item.id;
+    if (code.isEmpty || itemId == null) continue;
+    final others = [
+      for (final other in lookup.findUsersForEquipment(itemId))
+        if (other.id != null && other.id != editingUserId && !other.isDeleted)
+          bulkUserDisplayName(other),
+    ];
+    final decision = judgeEquipmentStayBehind(
+      code: code,
+      userName: userName,
+      oldDepartmentId: oldDepartmentId,
+      equipmentDepartmentId: item.departmentId,
+      otherOwnerNames: others,
+    );
+    if (decision.releases) {
+      staying.add(item);
+    } else {
+      blockedReasons.add(decision.blockedReason!);
+    }
+  }
+  return (staying: staying, blockedReasons: blockedReasons);
 }
 
 /// Κρίνει αν ένα μηχάνημα μένει πίσω στο τμήμα που αφήνει ο υπάλληλος.
@@ -150,7 +248,7 @@ PhoneStayBehindDecision judgeEquipmentStayBehind({
       releases: false,
       blockedReason:
           'Ο εξοπλισμός $code μένει ως έχει — '
-          'τον χρησιμοποιεί και ο ${_joinNames(otherOwnerNames)}.',
+          'τον χρησιμοποιεί επίσης: ${_joinNames(otherOwnerNames)}.',
     );
   }
   if (equipmentDepartmentId == null && oldDepartmentId == null) {
@@ -179,6 +277,12 @@ String bulkUserNamesPreview(Iterable<UserModel> users) {
   return '${names.take(5).join(', ')} +$rest ακόμη';
 }
 
+/// Ενώνει ονόματα κατόχων για τα μηνύματα εξαίρεσης.
+///
+/// **Γιατί η φράση από πάνω λέει «επίσης:» και όχι «και ο»:** η εφαρμογή δεν
+/// ξέρει το φύλο των υπαλλήλων και δεν πρέπει να χρειαστεί να το μάθει γι'
+/// αυτό. Το σταθερό αρσενικό άρθρο έγραφε «ο Γεωργία Νέζη» — μετρημένο στη
+/// ζωντανή εφαρμογή 18/09/2026. Η άνω τελεία δεν έχει φύλο.
 String _joinNames(List<String> names) {
   if (names.length <= 2) return names.join(' και ');
   return '${names.take(2).join(', ')} κ.ά.';
@@ -192,6 +296,7 @@ class BulkUserTransferPlan {
   const BulkUserTransferPlan({
     required this.target,
     required this.targetDisplayName,
+    required this.targetKind,
     required this.phoneFate,
     required this.equipmentFate,
     required this.usersToMove,
@@ -206,6 +311,10 @@ class BulkUserTransferPlan {
 
   final SharedAssetTransferTarget target;
   final String targetDisplayName;
+
+  /// Το Είδος του προορισμού — το κείμενο επιβεβαίωσης το χρειάζεται για να
+  /// πει αν οι άνθρωποι βγαίνουν από το νοσοκομείο.
+  final DepartmentKind targetKind;
   final BulkTransferAssetFate phoneFate;
   final BulkTransferAssetFate equipmentFate;
   final List<UserModel> usersToMove;
@@ -243,6 +352,7 @@ class BulkUserTransferPlan {
     return BulkUserTransferPlan(
       target: target,
       targetDisplayName: targetDisplayName,
+      targetKind: targetKind,
       phoneFate: phoneFate,
       equipmentFate: equipmentFate,
       usersToMove: usersToMove,
@@ -392,6 +502,7 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
   return BulkUserTransferPlan(
     target: target,
     targetDisplayName: targetDisplayName,
+    targetKind: targetKind,
     phoneFate: phoneFate,
     equipmentFate: equipmentFate,
     usersToMove: usersToMove,
@@ -416,6 +527,14 @@ String bulkTransferConfirmationText(BulkUserTransferPlan plan) {
   final names = bulkUserNamesPreview(plan.usersToMove);
   if (names.isNotEmpty) buf.write(': $names');
   buf.write('.');
+  // Πρώτο απ' όλα όσα ακολουθούν: το ότι οι άνθρωποι φεύγουν από τον
+  // οργανισμό βαραίνει περισσότερο από την τύχη των τηλεφώνων τους.
+  final leaving = usersLeaveHospitalMessage(
+    targetKind: plan.targetKind,
+    targetDepartmentName: plan.targetDisplayName,
+    count: plan.usersToMove.length,
+  );
+  if (leaving != null) buf.write('\n$leaving');
   if (plan.target.departmentId == null) {
     buf.write('\nΤο τμήμα «${plan.targetDisplayName}» θα δημιουργηθεί τώρα.');
   }
@@ -571,7 +690,7 @@ BulkUserClearPlan buildBulkUserClearPlan({
               identifier: n,
               reason:
                   'Το $n δεν καθαρίζεται — '
-                  'το χρησιμοποιεί και ο ${_joinNames(others)}.',
+                  'το χρησιμοποιεί επίσης: ${_joinNames(others)}.',
             ),
           );
         } else if (sharedDept != null) {
@@ -619,7 +738,7 @@ BulkUserClearPlan buildBulkUserClearPlan({
                 identifier: code,
                 reason:
                     'Ο εξοπλισμός $code δεν καθαρίζεται — '
-                    'τον χρησιμοποιεί και ο ${_joinNames(others)}.',
+                    'τον χρησιμοποιεί επίσης: ${_joinNames(others)}.',
               ),
             );
           }

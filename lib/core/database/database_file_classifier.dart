@@ -74,6 +74,7 @@ class DatabaseFileProfile {
     this.equipmentCount,
     this.departmentCount,
     this.latestCallDate,
+    this.latestAuditAt,
     this.failureReason,
     this.hasDebugScenarioSignature = false,
     this.contentIntegrity = DatabaseIntegrityStatus.inconclusive,
@@ -91,6 +92,17 @@ class DatabaseFileProfile {
   final int? equipmentCount;
   final int? departmentCount;
   final String? latestCallDate;
+
+  /// Πότε γράφτηκε τελευταία φορά **οτιδήποτε** σε αυτή τη βάση, κατά το
+  /// Ιστορικό της εφαρμογής.
+  ///
+  /// Συμπληρώνει το [latestCallDate], δεν το αντικαθιστά: καθένα από τα δύο
+  /// είναι τυφλό σε ένα σενάριο. Μια βάση όπου δουλεύεται μόνο ο Κατάλογος δεν
+  /// αποκτά ποτέ νεότερη κλήση, ενώ το Ιστορικό καθαρίζεται περιοδικά και
+  /// μπορεί να μείνει άδειο. «Πότε δούλεψε κάποιος εδώ» το απαντά **η πιο
+  /// πρόσφατη από τις δύο**.
+  final DateTime? latestAuditAt;
+
   final String? failureReason;
 
   /// True όταν το περιεχόμενο φέρει την υπογραφή του σπορέα «Σενάρια
@@ -263,6 +275,7 @@ Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
       unreadable,
     );
     final latest = await _tryLatestCallDate(db, unreadable);
+    final latestAudit = await _tryLatestAuditAt(db);
 
     return DatabaseFileProfile(
       kind: DatabaseFileKind.callLogger,
@@ -276,6 +289,7 @@ Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
       equipmentCount: equipment,
       departmentCount: departments,
       latestCallDate: latest,
+      latestAuditAt: latestAudit,
       hasDebugScenarioSignature: tables.contains('app_settings')
           ? await _tryHasDebugScenarioSignature(db)
           : false,
@@ -371,6 +385,21 @@ Future<bool> _tryHasDebugScenarioSignature(Database db) async {
 ///
 /// Κενό αποτέλεσμα σημαίνει «καμία κλήση» και είναι έγκυρη απάντηση· μόνο η
 /// εξαίρεση σημαίνει «δεν διαβάστηκε».
+/// Πότε γράφτηκε τελευταία φορά κάτι στο Ιστορικό αυτής της βάσης.
+///
+/// Δεν σημειώνει «μη αναγνώσιμο» σε αποτυχία: το Ιστορικό είναι συμπληρωματικό
+/// στοιχείο ηλικίας, όχι μετρικό που δείχνεται σε πίνακα — μια βάση παλαιού
+/// σχήματος χωρίς `audit_log` δεν είναι ελλιπής, απλώς δεν έχει να πει κάτι.
+Future<DateTime?> _tryLatestAuditAt(Database db) async {
+  try {
+    final rows = await db.rawQuery('SELECT MAX(timestamp) AS v FROM audit_log');
+    if (rows.isEmpty) return null;
+    return DateTime.tryParse('${rows.first['v'] ?? ''}');
+  } catch (_) {
+    return null;
+  }
+}
+
 Future<String?> _tryLatestCallDate(
   Database db,
   Set<DatabaseProfileMetric> unreadable,

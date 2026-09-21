@@ -481,6 +481,26 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
                           setState(() {});
                         },
                       ),
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Προεπισκόπηση πριν την εκτύπωση εκκρεμότητας',
+                        ),
+                        subtitle: const Text(
+                          'Δείχνει το φύλλο όπως θα βγει στο χαρτί, με κουμπί '
+                          'εκτύπωσης μέσα του. Κλειστό, η «Εκτύπωση…» πάει '
+                          'κατευθείαν στο παράθυρο των Windows.',
+                        ),
+                        value:
+                            ref.watch(taskPrintPreviewProvider).value ?? true,
+                        onChanged: (value) async {
+                          await _settings.windowUi.setTaskPrintPreview(value);
+                          if (!mounted) return;
+                          ref.invalidate(taskPrintPreviewProvider);
+                          setState(() {});
+                        },
+                      ),
                     ],
                   ),
                 ),

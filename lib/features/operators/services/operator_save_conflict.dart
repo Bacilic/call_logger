@@ -1,4 +1,5 @@
 import '../../../core/models/operator.dart';
+import '../../../core/utils/conflict_actor_text.dart';
 
 /// Η καρτέλα χρήστη άλλαξε από άλλον, μετά την ανάγνωσή της.
 ///
@@ -64,16 +65,10 @@ class OperatorSaveConflict {
   bool get hasChanges => changedFields.isNotEmpty;
 
   /// «Ο χρήστης «Βασίλης» άλλαξε την καρτέλα του Βλάση στις 18:00.»
-  ///
-  /// Η ώρα γράφεται σκέτη για σήμερα και με ημερομηνία για παλιότερα: το «στις
-  /// 18:00» για κάτι που έγινε προχθές είναι παραπλανητικό.
   String headline({DateTime? now}) {
     final moment = now ?? DateTime.now();
-    final who = (changedBy == null || changedBy!.trim().isEmpty)
-        ? 'Κάποιος άλλος'
-        : 'Ο χρήστης «${changedBy!.trim()}»';
-    final when = changedAt == null ? '' : ' στις ${_stamp(changedAt!, moment)}';
-    return '$who άλλαξε την καρτέλα «${fresh.displayName}»$when.';
+    return '${conflictActorName(changedBy)} άλλαξε την καρτέλα '
+        '«${fresh.displayName}»${conflictMomentSuffix(changedAt, now: moment)}.';
   }
 
   /// Τι χάνεται αν κρατήσω τη δική μου εικόνα.
@@ -84,16 +79,6 @@ class OperatorSaveConflict {
     }
     return 'Αν κρατήσετε τη δική σας εικόνα, θα χαθεί ό,τι άλλαξε: '
         '${fields.join(', ')}.';
-  }
-
-  static String _stamp(DateTime moment, DateTime now) {
-    String two(int v) => v.toString().padLeft(2, '0');
-    final time = '${two(moment.hour)}:${two(moment.minute)}';
-    final sameDay =
-        moment.year == now.year &&
-        moment.month == now.month &&
-        moment.day == now.day;
-    return sameDay ? time : '${two(moment.day)}/${two(moment.month)} $time';
   }
 
   static bool _samePermissions(Map<String, bool> a, Map<String, bool> b) {

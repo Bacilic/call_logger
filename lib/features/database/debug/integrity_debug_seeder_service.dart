@@ -201,6 +201,17 @@ class IntegrityDebugSeederService {
     }
   }
 
+  /// Φυτεύει τα σενάρια ελαττωμάτων σε **υπάρχουσα** βάση, χωρίς να την
+  /// ενεργοποιήσει.
+  ///
+  /// Δημόσια για τα τεστ κάλυψης: ο έλεγχος ακεραιότητας αποδεικνύεται πάνω
+  /// στα **ίδια** σενάρια που βλέπει ο χρήστης όταν πατά «Σενάρια σφαλμάτων».
+  /// Ένα τεστ που έστηνε δικά του ελαττώματα θα φύλαγε ένα αντίγραφο, και το
+  /// αντίγραφο θα ξέμενε την πρώτη φορά που θα άλλαζε ο σπορέας.
+  @visibleForTesting
+  Future<void> seedIntegrityErrorsInto(String dbPath) =>
+      _seedIntegrityErrors(dbPath);
+
   Future<void> _seedIntegrityErrors(String dbPath) async {
     final db = await openDatabase(dbPath, singleInstance: false);
     try {

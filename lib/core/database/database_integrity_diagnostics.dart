@@ -3,6 +3,8 @@ import 'package:sqflite_common/sqflite.dart';
 import '../../features/database/models/database_integrity_finding.dart';
 import '../../features/database/models/database_integrity_report.dart';
 import '../utils/search_text_normalizer.dart';
+import '../../features/tasks/models/task.dart';
+import 'calls_search_index.dart';
 import 'database_foreign_keys.dart';
 import 'database_helper.dart';
 import 'database_table_labels.dart';
@@ -449,55 +451,90 @@ WHERE COALESCE(e.is_deleted, 0) = 0
         .toList();
   }
 
+  /// Ευρετήριο κλήσης που λείπει **ή** που δεν συμφωνεί με τους σημερινούς
+  /// κανόνες κανονικοποίησης.
+  ///
+  /// Το κενό ευρετήριο δεν είναι η μόνη βλάβη: όταν αλλάζει ο κανόνας —
+  /// όπως στις 30/06/2026, που το τελικό «ς» άρχισε να γράφεται «σ» — τα ήδη
+  /// αποθηκευμένα ευρετήρια μένουν στην παλιά γλώσσα και η αναζήτηση παύει να
+  /// τα βρίσκει, ενώ φαίνονται μια χαρά γεμάτα. Γι' αυτό συγκρίνουμε με ό,τι
+  /// θα χτιζόταν σήμερα, όπως ακριβώς κάνει ο έλεγχος του `name_key`.
   static Future<List<DatabaseIntegrityFinding>> _checkCallsMissingSearchIndex(
     Database db,
   ) async {
+    final findings = <DatabaseIntegrityFinding>[];
+    final index = CallsSearchIndex(db);
     final rows = await db.rawQuery('''
-SELECT c.id
+SELECT c.*
 FROM calls c
 WHERE $_activeCalls
-  AND (c.search_index IS NULL OR TRIM(c.search_index) = '')
 ''');
-    return rows
-        .map(
-          (r) => DatabaseIntegrityFinding(
-            severity: IntegritySeverity.warning,
-            category: IntegrityCategory.searchIndex,
-            checkType: IntegrityCheckType.callsMissingSearchIndex,
-            title: 'Κλήση χωρίς ευρετήριο αναζήτησης',
-            description: 'Η κλήση δεν έχει ευρετήριο αναζήτησης.',
-            affectedId: r['id'] as int?,
-            affectedEntity: 'calls',
-            context: {'call_id': r['id']},
-          ),
-        )
-        .toList();
+    for (final r in rows) {
+      final stored = (r['search_index'] as String? ?? '').trim();
+      final expected = await index.buildCallSearchIndex(
+        db,
+        Map<String, dynamic>.from(r),
+      );
+      if (stored == expected) continue;
+      findings.add(
+        DatabaseIntegrityFinding(
+          severity: IntegritySeverity.warning,
+          category: IntegrityCategory.searchIndex,
+          checkType: IntegrityCheckType.callsMissingSearchIndex,
+          title: stored.isEmpty
+              ? 'Κλήση χωρίς ευρετήριο αναζήτησης'
+              : 'Κλήση με ξεπερασμένο ευρετήριο αναζήτησης',
+          description: stored.isEmpty
+              ? 'Η κλήση δεν έχει ευρετήριο αναζήτησης.'
+              : 'Το ευρετήριο της κλήσης γράφτηκε με παλιότερους κανόνες '
+                    'και η αναζήτηση δεν τη βρίσκει με όλες τις λέξεις της.',
+          affectedId: r['id'] as int?,
+          affectedEntity: 'calls',
+          context: {'call_id': r['id']},
+        ),
+      );
+    }
+    return findings;
   }
 
+  /// Ίδιος κανόνας με τις κλήσεις: λείπει **ή** δεν συμφωνεί με τους
+  /// σημερινούς κανόνες κανονικοποίησης.
   static Future<List<DatabaseIntegrityFinding>> _checkTasksMissingSearchIndex(
     Database db,
   ) async {
+    final findings = <DatabaseIntegrityFinding>[];
     final rows = await db.rawQuery('''
-SELECT t.id, t.title
+SELECT t.*
 FROM tasks t
 WHERE $_activeTasks
-  AND (t.search_index IS NULL OR TRIM(t.search_index) = '')
 ''');
-    return rows
-        .map(
-          (r) => DatabaseIntegrityFinding(
-            severity: IntegritySeverity.warning,
-            category: IntegrityCategory.searchIndex,
-            checkType: IntegrityCheckType.tasksMissingSearchIndex,
-            title: 'Εκκρεμότητα χωρίς ευρετήριο αναζήτησης',
-            description:
-                'Η εκκρεμότητα «${r['title'] ?? ''}» δεν έχει ευρετήριο αναζήτησης.',
-            affectedId: r['id'] as int?,
-            affectedEntity: 'tasks',
-            context: {'task_id': r['id']},
-          ),
-        )
-        .toList();
+    for (final r in rows) {
+      final stored = (r['search_index'] as String? ?? '').trim();
+      final expected = SearchTextNormalizer.normalizeForSearch(
+        Task.fromMap(r).combinedSearchText,
+      );
+      if (stored == expected) continue;
+      final title = r['title'] ?? '';
+      findings.add(
+        DatabaseIntegrityFinding(
+          severity: IntegritySeverity.warning,
+          category: IntegrityCategory.searchIndex,
+          checkType: IntegrityCheckType.tasksMissingSearchIndex,
+          title: stored.isEmpty
+              ? 'Εκκρεμότητα χωρίς ευρετήριο αναζήτησης'
+              : 'Εκκρεμότητα με ξεπερασμένο ευρετήριο αναζήτησης',
+          description: stored.isEmpty
+              ? 'Η εκκρεμότητα «$title» δεν έχει ευρετήριο αναζήτησης.'
+              : 'Το ευρετήριο της εκκρεμότητας «$title» γράφτηκε με '
+                    'παλιότερους κανόνες και η αναζήτηση δεν τη βρίσκει με '
+                    'όλες τις λέξεις της.',
+          affectedId: r['id'] as int?,
+          affectedEntity: 'tasks',
+          context: {'task_id': r['id']},
+        ),
+      );
+    }
+    return findings;
   }
 
   static Future<List<DatabaseIntegrityFinding>> _checkUsersWithoutDepartment(
