@@ -290,7 +290,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   decoration: InputDecoration(
                     labelText: 'Timeout (δευτερόλεπτα)',
                     helperText:
-                        'Εύρος: 3-60. Προεπιλογή: ${AppConfig.databaseOpenTimeoutSeconds}',
+                        'Εύρος: 3-60. Προεπιλογή: ${AppConfig.databaseOpenTimeoutSeconds}. '
+                        'Σε βάση δικτύου ισχύει μεγαλύτερο ελάχιστο, ώστε να προλαβαίνει '
+                        'η αναμονή όταν τη βάση την κρατά συνάδελφος.',
                     errorText: timeoutError,
                   ),
                 ),

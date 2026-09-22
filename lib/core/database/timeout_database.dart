@@ -22,6 +22,7 @@ import 'dart:async';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../config/app_config.dart';
+import 'database_busy_timeout.dart';
 
 /// Πόσο περιμένει ένα ερώτημα πριν τα παρατήσει.
 ///
@@ -68,11 +69,23 @@ bool databaseNeedsTimeoutGuard(String dbPath) =>
 ///
 /// Επιστρέφει την ίδια τη σύνδεση όταν δεν χρειάζεται φύλακας — ένα περίβλημα
 /// που δεν προστατεύει από τίποτα είναι μόνο ένα χρονόμετρο ανά ερώτημα.
-Database guardDatabaseWithTimeout(
-  Database raw, {
-  Duration timeout = kDatabaseQueryTimeout,
-}) => databaseNeedsTimeoutGuard(raw.path)
-    ? TimeoutDatabase(raw, timeout: timeout)
+/// Πόσο περιμένει **ένα ερώτημα** σε αυτή τη διαδρομή.
+///
+/// Το [kDatabaseQueryTimeout] είναι η αφετηρία, αλλά ουδέποτε μικρότερο από την
+/// αναμονή κλειδώματος: ένα ερώτημα που παρατάει στα 10 ενώ η βάση έχει εντολή
+/// να περιμένει 15 αποτυγχάνει ενώ η αναμονή του τρέχει ακόμη — ακριβώς τα
+/// `insert operator_presence` που γέμιζαν το ημερολόγιο στις 21/09/2026.
+Duration resolveDatabaseQueryTimeout(String dbPath) {
+  final floor = minimumWaitBudget(dbPath);
+  return kDatabaseQueryTimeout > floor ? kDatabaseQueryTimeout : floor;
+}
+
+Database guardDatabaseWithTimeout(Database raw, {Duration? timeout}) =>
+    databaseNeedsTimeoutGuard(raw.path)
+    ? TimeoutDatabase(
+        raw,
+        timeout: timeout ?? resolveDatabaseQueryTimeout(raw.path),
+      )
     : raw;
 
 /// Τυλίγει μια [Database] ώστε κάθε ασύγχρονη πράξη της να έχει όριο χρόνου.

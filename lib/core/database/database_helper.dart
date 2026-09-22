@@ -975,9 +975,14 @@ class DatabaseHelper {
     required int maxAttempts,
     DatabaseInitProgressNotifier? progressNotifier,
   }) async {
-    final safeTimeout = timeoutSeconds <= 0
-        ? AppConfig.databaseOpenTimeoutSeconds
-        : timeoutSeconds;
+    // Η ρύθμιση του χρήστη περνά από το δάπεδο της αναμονής κλειδώματος:
+    // ανοίγματα που παρατούσαν πριν τελειώσει η αναμονή εμφανίζονταν ως
+    // «η βάση δεν απάντησε», ενώ η βάση απλώς ήταν στιγμιαία πιασμένη.
+    final openBudget = resolveDatabaseOpenTimeout(
+      targetPath,
+      configuredSeconds: timeoutSeconds,
+    );
+    final safeTimeout = openBudget.inSeconds;
     var remaining = safeTimeout;
     progressNotifier?.setStep(
       databaseOpenCountdownLabel(remaining),
@@ -1018,7 +1023,7 @@ class DatabaseHelper {
         onOpen: applyLexiconOpenNormalizations,
       );
       final timeoutFuture = openFuture.timeout(
-        Duration(seconds: safeTimeout),
+        openBudget,
         onTimeout: () {
           throw TimeoutException(
             'openDatabase timed out after ${safeTimeout}s '

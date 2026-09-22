@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:sqflite_common/sqflite.dart';
 
+import 'database_busy_timeout.dart';
 import 'database_integrity_probe.dart';
 import 'settings_repository.dart';
+import 'timeout_database.dart';
 
 /// Κατηγορία αρχείου SQLite ως προς την εφαρμογή Καταγραφή Κλήσεων / Λάμπα.
 enum DatabaseFileKind {
@@ -155,144 +159,59 @@ classifyDatabaseFileWithReason(String dbPath) async {
   return (kind: profile.kind, failureReason: profile.failureReason);
 }
 
+/// Πόσο περιμένει ολόκληρη η ταξινόμηση πριν τα παρατήσει.
+///
+/// ΔΕΝ είναι άθροισμα των επιμέρους ορίων: εννέα ερωτήματα επί δέκα δευτερόλεπτα
+/// το καθένα θα κρατούσαν την οθόνη εκκίνησης ενάμισι λεπτό. Σε υγιή βάση — ακόμη και
+/// δικτυακή — η ταξινόμηση τελειώνει σε δευτερόλεπτα.
+///
+/// Προκύπτει από την αναμονή κλειδώματος της διαδρομής, όχι από σταθερά: σταθερή
+/// τιμή ίση με την αναμονή θα έκοβε την ταξινόμηση τη στιγμή που η βάση ελευθερώνεται.
+Duration resolveDatabaseProfileTimeout(String dbPath) =>
+    minimumWaitBudget(dbPath);
+
+/// Πώς ανοίγει η σύνδεση ταξινόμησης — εναλλάξιμο μόνο σε ελέγχους.
+typedef ReadOnlyDatabaseOpener = Future<Database> Function(String dbPath);
+
+Future<Database> _openReadOnly(String dbPath) =>
+    openDatabase(dbPath, readOnly: true, singleInstance: false);
+
 /// Διαβάζει το αρχείο μία φορά (read-only) και επιστρέφει πλήρες προφίλ.
-Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
+///
+/// **Δεν κρεμάει ποτέ.** Σε κοινόχρηστη βάση που κρατά κλειδωμένη άλλος σταθμός,
+/// κάθε ερώτημα μπορεί να περιμένει για πάντα — και μαζί του η οθόνη εκκίνησης, χωρίς
+/// μήνυμα και χωρίς διέξοδο (αναφορά 21/09/2026). Δύο φύλακες, γιατί το κρέμασμα
+/// μπορεί να συμβεί και πριν φτάσει το πρώτο ερώτημα:
+/// ο [kDatabaseProfileTimeout] στη **διαδικασία** και ο `guardDatabaseWithTimeout` σε
+/// **κάθε ερώτημα**, όπως σε κάθε άλλη σύνδεση σε δικτυακή βάση.
+///
+/// Η αναμονή **δεν είναι απόδειξη ζημιάς**: το αποτέλεσμα είναι
+/// [DatabaseFileKind.undetermined] με γραμμένο τον λόγο, και η εκκίνηση
+/// συνεχίζει στους δικούς της φύλακες (διαγνωστικός έλεγχος, άνοιγμα με όριο
+/// χρόνου και επαναλήψεις), που ξέρουν να δείξουν μήνυμα.
+Future<DatabaseFileProfile> profileDatabaseFile(
+  String dbPath, {
+  Duration? timeout,
+  ReadOnlyDatabaseOpener? openReadOnly,
+}) async {
+  final budget = timeout ?? resolveDatabaseProfileTimeout(dbPath);
   Database? db;
   try {
-    db = await openDatabase(dbPath, readOnly: true, singleInstance: false);
-
-    final tableRows = await db.rawQuery(
-      "SELECT name FROM sqlite_master "
-      "WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'",
-    );
-    final tables = <String>{
-      for (final row in tableRows)
-        ((row['name'] as String?)?.trim().toLowerCase() ?? ''),
-    }..removeWhere((name) => name.isEmpty);
-
-    // Διαβάζουμε το user_version ως μέρος της ταξινόμησης (χωρίς εγγραφή).
-    final versionRows = await db.rawQuery('PRAGMA user_version');
-    final userVersion = versionRows.isEmpty
-        ? null
-        : versionRows.first['user_version'] as int?;
-
-    final hasCalls = tables.contains('calls');
-    final lampTableHits = kLampSignatureTables
-        .where((name) => tables.contains(name))
-        .length;
-    // Η Λάμπα μπορεί να αναγνωριστεί ΚΑΙ από μόνο τον `equipment`: το δικό της
-    // έχει κλειδί `code`, ενώ ο ομώνυμος πίνακας της Καταγραφής έχει πάντα
-    // `code_equipment`. Χωρίς αυτόν τον έλεγχο ένα απόσπασμα της Λάμπας με
-    // μόνο τον εξοπλισμό θα περνούσε ως «άγνωστο σχήμα».
-    final hasLampShapedEquipment = tables.contains('equipment')
-        ? await _hasLampShapedEquipment(db)
-        : false;
-    final hasLampSignature = lampTableHits >= 2 || hasLampShapedEquipment;
-
-    if (hasCalls && hasLampSignature) {
-      return DatabaseFileProfile(
-        kind: DatabaseFileKind.hybrid,
-        hasLampSignature: true,
-        userVersion: userVersion,
-      );
-    }
-
-    if (hasLampSignature) {
-      return DatabaseFileProfile(
-        kind: DatabaseFileKind.lamp,
-        hasLampSignature: true,
-        userVersion: userVersion,
-      );
-    }
-
-    if (hasCalls) {
-      final missing = kCallLoggerCoreTables
-          .where((name) => !tables.contains(name))
-          .toList(growable: false);
-      if (missing.isNotEmpty) {
-        return DatabaseFileProfile(
-          kind: DatabaseFileKind.incompleteCallLogger,
-          missingCoreTables: missing,
-          userVersion: userVersion,
-        );
-      }
-    } else {
-      if (tables.isNotEmpty) {
-        return DatabaseFileProfile(
-          kind: DatabaseFileKind.unknown,
-          userVersion: userVersion,
-        );
-      }
-      return DatabaseFileProfile(
-        kind: DatabaseFileKind.empty,
-        userVersion: userVersion,
-      );
-    }
-
-    // Το σχήμα στέκει. Απομένει το ερώτημα που κανένας έλεγχος πινάκων δεν
-    // απαντά: στέκει και το ΠΕΡΙΕΧΟΜΕΝΟ; Ρωτιέται εδώ, στην ήδη ανοιχτή
-    // σύνδεση, γιατί κάθε ροή που κρίνει βάση περνά από αυτό το σημείο — η
-    // επαναφορά, η απογραφή αντιγράφου, η αλλαγή αρχείου, η εκκίνηση. Ένας
-    // έλεγχος παραπάνω εδώ σημαίνει ότι καμία από αυτές δεν μπορεί να τον
-    // ξεχάσει.
-    final integrity = await _readIntegrityQuietly(db);
-
-    // Πλήρες βασικό σχήμα: συμπληρώνουμε τα πλήθη που τροφοδοτούν τις
-    // προειδοποιήσεις κατάστασης βάσης και τη σύγκριση αντιγράφων.
-    //
-    // Κάθε μέτρηση που αποτυγχάνει καταγράφεται ονομαστικά: η οθόνη δεν
-    // μπορεί να ξεχωρίσει το «κενό» από το «δεν διαβάζεται» αν φτάσει εκεί
-    // μόνο ένα `null`.
-    final unreadable = <DatabaseProfileMetric>{};
-    final calls = await _tryCount(
-      db,
-      'calls',
-      DatabaseProfileMetric.calls,
-      unreadable,
-    );
-    final users = await _tryCount(
-      db,
-      'users',
-      DatabaseProfileMetric.users,
-      unreadable,
-    );
-    final phones = await _tryCount(
-      db,
-      'phones',
-      DatabaseProfileMetric.phones,
-      unreadable,
-    );
-    final equipment = await _tryCount(
-      db,
-      'equipment',
-      DatabaseProfileMetric.equipment,
-      unreadable,
-    );
-    final departments = await _tryCount(
-      db,
-      'departments',
-      DatabaseProfileMetric.departments,
-      unreadable,
-    );
-    final latest = await _tryLatestCallDate(db, unreadable);
-    final latestAudit = await _tryLatestAuditAt(db);
-
+    final open = openReadOnly ?? _openReadOnly;
+    final opened = await open(dbPath).timeout(budget);
+    // Κάθε ερώτημα αποκτά όριο όταν η βάση ζει στο δίκτυο.
+    db = guardDatabaseWithTimeout(opened);
+    // Όλα τα ερωτήματα μαζί έχουν ΕΝΑ όριο: εννέα επιμέρους ορίων θα
+    // αθροίζονταν σε ενάμισι λεπτό αναμονής μπροστά στα μάτια του χρήστη.
+    return await _collectProfile(db).timeout(budget);
+  } on TimeoutException {
+    // Γραμμένο για τα μάτια του χρήστη: αυτός ο λόγος φτάνει στην οθόνη
+    // εκκίνησης ως διαγνωστικό μήνυμα.
     return DatabaseFileProfile(
-      kind: DatabaseFileKind.callLogger,
-      userVersion: userVersion,
-      contentIntegrity: integrity.status,
-      integrityDetail: integrity.rawMessage,
-      unreadableMetrics: Set.unmodifiable(unreadable),
-      callCount: calls,
-      userCount: users,
-      phoneCount: phones,
-      equipmentCount: equipment,
-      departmentCount: departments,
-      latestCallDate: latest,
-      latestAuditAt: latestAudit,
-      hasDebugScenarioSignature: tables.contains('app_settings')
-          ? await _tryHasDebugScenarioSignature(db)
-          : false,
+      kind: DatabaseFileKind.undetermined,
+      failureReason:
+          'η βάση δεν απάντησε μέσα σε ${budget.inSeconds} δευτερόλεπτα. Συνήθως την κρατά άλλος '
+          'υπολογιστής ή έχει χαθεί η πρόσβαση στον φάκελό της.',
     );
   } catch (e) {
     return DatabaseFileProfile(
@@ -300,9 +219,11 @@ Future<DatabaseFileProfile> profileDatabaseFile(String dbPath) async {
       failureReason: e.toString(),
     );
   } finally {
+    // Το κλείσιμο δεν επιτρέπεται να κρεμάσει ότι μόλις γλίτωσε το όριο: συνδεδεμένη
+    // σύνδεση που μένει ανοιχτή κρατά κλείδωμα και εμποδίζει τους υπόλοιπους.
     if (db != null && db.isOpen) {
       try {
-        await db.close();
+        await db.close().timeout(const Duration(seconds: 5));
       } catch (_) {}
     }
   }
@@ -413,4 +334,144 @@ Future<String?> _tryLatestCallDate(
     unreadable.add(DatabaseProfileMetric.latestCall);
     return null;
   }
+}
+
+/// Τα ερωτήματα της ταξινόμησης, πάνω σε ήδη ανοιχτή και φυλαγμένη σύνδεση.
+///
+/// Ξεχωριστή από την [profileDatabaseFile] ώστε να μπορεί να μπει συνολικό όριο
+/// χρόνου γύρω τους — και να κλείσει η σύνδεση αμέσως μόλις λήξει.
+Future<DatabaseFileProfile> _collectProfile(Database db) async {
+  final tableRows = await db.rawQuery(
+    "SELECT name FROM sqlite_master "
+    "WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'",
+  );
+  final tables = <String>{
+    for (final row in tableRows)
+      ((row['name'] as String?)?.trim().toLowerCase() ?? ''),
+  }..removeWhere((name) => name.isEmpty);
+
+  // Διαβάζουμε το user_version ως μέρος της ταξινόμησης (χωρίς εγγραφή).
+  final versionRows = await db.rawQuery('PRAGMA user_version');
+  final userVersion = versionRows.isEmpty
+      ? null
+      : versionRows.first['user_version'] as int?;
+
+  final hasCalls = tables.contains('calls');
+  final lampTableHits = kLampSignatureTables
+      .where((name) => tables.contains(name))
+      .length;
+  // Η Λάμπα μπορεί να αναγνωριστεί ΚΑΙ από μόνο τον `equipment`: το δικό της
+  // έχει κλειδί `code`, ενώ ο ομώνυμος πίνακας της Καταγραφής έχει πάντα
+  // `code_equipment`. Χωρίς αυτόν τον έλεγχο ένα απόσπασμα της Λάμπας με
+  // μόνο τον εξοπλισμό θα περνούσε ως «άγνωστο σχήμα».
+  final hasLampShapedEquipment = tables.contains('equipment')
+      ? await _hasLampShapedEquipment(db)
+      : false;
+  final hasLampSignature = lampTableHits >= 2 || hasLampShapedEquipment;
+
+  if (hasCalls && hasLampSignature) {
+    return DatabaseFileProfile(
+      kind: DatabaseFileKind.hybrid,
+      hasLampSignature: true,
+      userVersion: userVersion,
+    );
+  }
+
+  if (hasLampSignature) {
+    return DatabaseFileProfile(
+      kind: DatabaseFileKind.lamp,
+      hasLampSignature: true,
+      userVersion: userVersion,
+    );
+  }
+
+  if (hasCalls) {
+    final missing = kCallLoggerCoreTables
+        .where((name) => !tables.contains(name))
+        .toList(growable: false);
+    if (missing.isNotEmpty) {
+      return DatabaseFileProfile(
+        kind: DatabaseFileKind.incompleteCallLogger,
+        missingCoreTables: missing,
+        userVersion: userVersion,
+      );
+    }
+  } else {
+    if (tables.isNotEmpty) {
+      return DatabaseFileProfile(
+        kind: DatabaseFileKind.unknown,
+        userVersion: userVersion,
+      );
+    }
+    return DatabaseFileProfile(
+      kind: DatabaseFileKind.empty,
+      userVersion: userVersion,
+    );
+  }
+
+  // Το σχήμα στέκει. Απομένει το ερώτημα που κανένας έλεγχος πινάκων δεν
+  // απαντά: στέκει και το ΠΕΡΙΕΧΟΜΕΝΟ; Ρωτιέται εδώ, στην ήδη ανοιχτή
+  // σύνδεση, γιατί κάθε ροή που κρίνει βάση περνά από αυτό το σημείο — η
+  // επαναφορά, η απογραφή αντιγράφου, η αλλαγή αρχείου, η εκκίνηση. Ένας
+  // έλεγχος παραπάνω εδώ σημαίνει ότι καμία από αυτές δεν μπορεί να τον
+  // ξεχάσει.
+  final integrity = await _readIntegrityQuietly(db);
+
+  // Πλήρες βασικό σχήμα: συμπληρώνουμε τα πλήθη που τροφοδοτούν τις
+  // προειδοποιήσεις κατάστασης βάσης και τη σύγκριση αντιγράφων.
+  //
+  // Κάθε μέτρηση που αποτυγχάνει καταγράφεται ονομαστικά: η οθόνη δεν
+  // μπορεί να ξεχωρίσει το «κενό» από το «δεν διαβάζεται» αν φτάσει εκεί
+  // μόνο ένα `null`.
+  final unreadable = <DatabaseProfileMetric>{};
+  final calls = await _tryCount(
+    db,
+    'calls',
+    DatabaseProfileMetric.calls,
+    unreadable,
+  );
+  final users = await _tryCount(
+    db,
+    'users',
+    DatabaseProfileMetric.users,
+    unreadable,
+  );
+  final phones = await _tryCount(
+    db,
+    'phones',
+    DatabaseProfileMetric.phones,
+    unreadable,
+  );
+  final equipment = await _tryCount(
+    db,
+    'equipment',
+    DatabaseProfileMetric.equipment,
+    unreadable,
+  );
+  final departments = await _tryCount(
+    db,
+    'departments',
+    DatabaseProfileMetric.departments,
+    unreadable,
+  );
+  final latest = await _tryLatestCallDate(db, unreadable);
+  final latestAudit = await _tryLatestAuditAt(db);
+
+  return DatabaseFileProfile(
+    kind: DatabaseFileKind.callLogger,
+    userVersion: userVersion,
+    contentIntegrity: integrity.status,
+    integrityDetail: integrity.rawMessage,
+    unreadableMetrics: Set.unmodifiable(unreadable),
+    callCount: calls,
+    userCount: users,
+    phoneCount: phones,
+    equipmentCount: equipment,
+    departmentCount: departments,
+    latestCallDate: latest,
+    latestAuditAt: latestAudit,
+    hasDebugScenarioSignature: tables.contains('app_settings')
+        ? await _tryHasDebugScenarioSignature(db)
+        : false,
+  );
 }

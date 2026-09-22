@@ -120,6 +120,41 @@ void main() {
       expect(previous.isOnlineAt(now), isFalse);
     });
 
+    test('η παράδοση γίνεται στην αλλαγή χρήστη, όχι σε κάθε χτύπο', () async {
+      // Η παράδοση είναι δεύτερη εγγραφή. Στο δίκτυο κάθε εγγραφή κοστίζει
+      // ~2,4 δευτερόλεπτα κλειδωμένης κοινής βάσης, και ο χτύπος τρέχει κάθε
+      // λεπτό — δεν επιτρέπεται να την πληρώνει όταν δεν άλλαξε τίποτα.
+      heartbeat.start();
+      CurrentOperator.activate(_operator(3));
+      await heartbeat.pendingBeat;
+      CurrentOperator.activate(_operator(4));
+      await heartbeat.pendingBeat;
+
+      // Κάποιος άλλος διεκδικεί ξανά το ίδιο αντίγραφο.
+      await db.update(
+        OperatorPresenceRepository.tableName,
+        {'instance': r'C:pp.exe'},
+        where: 'operator_id = ?',
+        whereArgs: [3],
+      );
+
+      // Περιοδικός χτύπος: καμία αλλαγή ταυτότητας, καμία παράδοση.
+      await heartbeat.beatOnce();
+
+      final rows = await db.query(
+        OperatorPresenceRepository.tableName,
+        where: 'operator_id = ?',
+        whereArgs: [3],
+      );
+      expect(
+        rows.single['instance'],
+        r'C:pp.exe',
+        reason:
+            'Ο περιοδικός χτύπος λέει μόνο «είμαι εδώ». Η παράδοση ανήκει στη '
+            'στιγμή που αλλάζει ο χρήστης.',
+      );
+    });
+
     test('μετά το stop, η αλλαγή χρήστη δεν γράφει πια', () async {
       heartbeat.start();
       heartbeat.stop();

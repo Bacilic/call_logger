@@ -30,33 +30,57 @@ class OperatorPresenceRepository {
   /// Η παράδοση κοιτάζει το αντίγραφο και όχι τον σταθμό: δύο εφαρμογές
   /// ανοιχτές στον ίδιο υπολογιστή (π.χ. η κανονική και η δοκιμαστική) είναι
   /// δύο αληθινές παρουσίες, και δεν επιτρέπεται να σβήνουν η μία την άλλη.
+  ///
+  /// **Όλα σε μία συναλλαγή, επίτηδες.** Σε βάση πάνω από κοινόχρηστο φάκελο το
+  /// κόστος πληρώνεται **ανά συναλλαγή**, όχι ανά δεδομένο: κάθε μία φτιάχνει,
+  /// συγχρονίζει και σβήνει το αρχείο ημερολογίου. Μετρημένο στην πραγματική
+  /// βάση 21/09/2026: μία συναλλαγή 2,4 δευτ., δύο διαδοχικές 4,9 δευτ., οι
+  /// ίδιες δύο εντολές μαζί 2,4 δευτ. Ο χτύπος τρέχει κάθε λεπτό από κάθε
+  /// σταθμό, οπότε η διαφορά είναι μόνιμη διαμάχη για το κλείδωμα.
+  ///
+  /// Το [handOverOtherOperators] ζητά **και** την παράδοση. Χρειάζεται μόνο
+  /// όταν άλλαξε ο χρήστης· στους περιοδικούς χτύπους είναι δεύτερη εγγραφή
+  /// που δεν βρίσκει ποτέ τίποτα να αλλάξει.
   Future<void> touch({
     required int operatorId,
     required String station,
     required DateTime at,
     String? instance,
     String? appVersion,
+    bool handOverOtherOperators = true,
   }) async {
     final name = station.trim();
     if (name.isEmpty) return;
     final holder = instance?.trim();
     final version = appVersion?.trim();
 
-    await db.insert(tableName, {
-      'operator_id': operatorId,
-      'station': name,
-      'last_seen_at': at.toIso8601String(),
-      'instance': (holder == null || holder.isEmpty) ? null : holder,
-      'app_version': (version == null || version.isEmpty) ? null : version,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    Future<void> write(DatabaseExecutor target) async {
+      await target.insert(tableName, {
+        'operator_id': operatorId,
+        'station': name,
+        'last_seen_at': at.toIso8601String(),
+        'instance': (holder == null || holder.isEmpty) ? null : holder,
+        'app_version': (version == null || version.isEmpty) ? null : version,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
 
-    if (holder == null || holder.isEmpty) return;
-    await db.update(
-      tableName,
-      {'instance': null},
-      where: 'instance = ? AND operator_id <> ?',
-      whereArgs: [holder, operatorId],
-    );
+      if (!handOverOtherOperators) return;
+      if (holder == null || holder.isEmpty) return;
+      await target.update(
+        tableName,
+        {'instance': null},
+        where: 'instance = ? AND operator_id <> ?',
+        whereArgs: [holder, operatorId],
+      );
+    }
+
+    // Όταν ο καλών μας έδωσε ήδη ανοιχτή συναλλαγή, γράφουμε μέσα της: μια
+    // δεύτερη φωλιασμένη συναλλαγή θα περίμενε τον εαυτό της.
+    final executor = db;
+    if (executor is Database) {
+      await executor.transaction(write);
+      return;
+    }
+    await write(executor);
   }
 
   /// Από πόσους **διαφορετικούς υπολογιστές** έχει ανοίξει αυτή η βάση.

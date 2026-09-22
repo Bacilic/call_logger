@@ -35,6 +35,16 @@ class OperatorPresenceHeartbeat {
   Timer? _timer;
   bool _listening = false;
 
+  /// Εκκρεμεί παράδοση του αντιγράφου από προηγούμενο χρήστη;
+  ///
+  /// Η παράδοση έχει νόημα **μόνο** όταν άλλαξε η ταυτότητα — σε κάθε άλλο
+  /// χτύπο είναι δεύτερη εγγραφή που δεν βρίσκει τίποτα να αλλάξει, και στο
+  /// δίκτυο κάθε εγγραφή κοστίζει ~2,4 δευτερόλεπτα κλειδωμένης βάσης.
+  ///
+  /// Μένει σηκωμένη ώσπου να **πετύχει** ένας χτύπος: αν ο πρώτος χαθεί σε
+  /// πεσμένο δίκτυο, την αναλαμβάνει ο επόμενος αντί να ξεχαστεί.
+  bool _handoverPending = true;
+
   /// Ο χτύπος που τρέχει αυτή τη στιγμή, αν τρέχει.
   ///
   /// Υπάρχει ώστε ο έλεγχος να περιμένει το **πραγματικό** γράψιμο αντί για
@@ -129,6 +139,7 @@ class OperatorPresenceHeartbeat {
   void _onOperatorChanged() {
     _timer?.cancel();
     _timer = null;
+    _handoverPending = true;
     if (CurrentOperator.active?.id == null) return;
 
     // Αμέσως, ώστε η αλλαγή χρήστη να φαίνεται στους άλλους χωρίς αναμονή.
@@ -154,6 +165,7 @@ class OperatorPresenceHeartbeat {
     final db = DatabaseHelper.instance.openDatabaseOrNull;
     if (db == null) return;
 
+    final handOver = _handoverPending;
     try {
       await OperatorPresenceRepository(db).touch(
         operatorId: operatorId,
@@ -161,7 +173,9 @@ class OperatorPresenceHeartbeat {
         instance: instanceId,
         appVersion: await _appVersion(),
         at: DateTime.now(),
+        handOverOtherOperators: handOver,
       );
+      if (handOver) _handoverPending = false;
     } catch (e, stack) {
       CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
     }

@@ -18,6 +18,40 @@ int resolveDatabaseBusyTimeoutMs(String dbPath) =>
     ? AppConfig.databaseBusyTimeoutNetworkMs
     : AppConfig.databaseBusyTimeoutLocalMs;
 
+/// Πόσο περιθώριο πάνω από την αναμονή κλειδώματος.
+///
+/// Η αναμονή τελειώνει όταν η βάση ελευθερωθεί — και τότε αρχίζει η ίδια η πράξη,
+/// που στο δίκτυο θέλει κι αυτή τον χρόνο της. Όριο ακριβώς ίσο με την αναμονή
+/// θα έκοβε την πράξη τη στιγμή που επιτέλους μπόρεσε να ξεκινήσει.
+const int kLockWaitHeadroomMs = 3000;
+
+/// Το **δάπεδο** κάθε ορίου που περιμένει τη βάση σε αυτή τη διαδρομή.
+///
+/// **Το συμβόλαιο:** όποιος ζητά αναμονή, δίνει και τον χρόνο να γίνει. Όσο οι
+/// δύο αριθμοί έζησαν χωριστά, το άνοιγμα (8 δευτ.) και κάθε ερώτημα (10 δευτ.)
+/// έκοβαν την αναμονή των 15 δευτερολέπτων στη μέση: η SQLite περίμενε όπως της
+/// ζητήθηκε και παρατούσε άλλος για λογαριασμό της (αναφορά 21/09/2026).
+///
+/// Είναι **δάπεδο, όχι ταβάνι**: όποιος θέλει να περιμένει περισσότερο, περιμένει.
+Duration minimumWaitBudget(String dbPath) => Duration(
+  milliseconds: resolveDatabaseBusyTimeoutMs(dbPath) + kLockWaitHeadroomMs,
+);
+
+/// Πόσο περιμένει το άνοιγμα της βάσης σε αυτή τη διαδρομή.
+///
+/// Το [configuredSeconds] είναι η ρύθμιση του χρήστη από τις Επιλογές. Γίνεται σεβαστή
+/// όταν ζητά περισσότερο — αλλά δεν επιτρέπεται να σπάσει το συμβόλαιο: μικρή
+/// τιμή θα ξανέφερνε το ίδιο σφάλμα, σιωπηλά και από την οθόνη των Ρυθμίσεων.
+Duration resolveDatabaseOpenTimeout(String dbPath, {int? configuredSeconds}) {
+  final floor = minimumWaitBudget(dbPath);
+  final requested = Duration(
+    seconds: (configuredSeconds != null && configuredSeconds > 0)
+        ? configuredSeconds
+        : AppConfig.databaseOpenTimeoutSeconds,
+  );
+  return requested > floor ? requested : floor;
+}
+
 /// Δίνει στη σύνδεση [db] την αναμονή που ταιριάζει στη διαδρομή [dbPath].
 ///
 /// Μπαίνει στο `onConfigure`, δηλαδή **πριν** από κάθε δημιουργία ή μετάπτωση
