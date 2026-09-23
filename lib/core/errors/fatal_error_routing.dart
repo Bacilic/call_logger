@@ -1,4 +1,7 @@
+import 'package:sqflite_common/sqlite_api.dart' show DatabaseException;
+
 import '../database/database_init_result.dart';
+import '../database/timeout_database.dart' show DatabaseUnresponsiveException;
 import 'app_error_result.dart';
 
 /// Τι μοιραίο συνέβη — και ποια οθόνη ξέρει να το χειριστεί.
@@ -31,6 +34,39 @@ class GeneralFatalError extends FatalErrorState {
 /// χωρίς το ξετύλιγμα, το ίδιο σφάλμα θα κατέληγε άλλοτε στη σωστή οθόνη και
 /// άλλοτε στη γενική, ανάλογα με το ποιος το ζήτησε.
 const int _maxUnwrapDepth = 5;
+
+/// Είναι το [error] **παροδική** απώλεια της βάσης — δεν απάντησε εγκαίρως,
+/// ήταν κλειδωμένη, ή το δίκτυο κόπηκε για λίγο;
+///
+/// Τέτοιο σφάλμα που φτάνει ως την κορυφή **δεν** δικαιολογεί την πλήρη οθόνη
+/// «Σφάλμα εφαρμογής»: η βάση επανέρχεται μόνη της (επαληθευμένο με πραγματική
+/// διακοπή δικτύου) και ο φύλακας δείχνει ήδη λωρίδα που εξηγεί τι συμβαίνει.
+/// Η οθόνη πετούσε τον χειριστή έξω από τη δουλειά του για μια διακοπή λίγων
+/// δευτερολέπτων — «το βλέπω συνέχεια στη δουλειά», 23/09/2026.
+///
+/// **Εκτός** μένει η αποτυχία ανοίγματος της βάσης ([DatabaseInitException]):
+/// εκείνη έχει τη δική της οθόνη με πραγματικές διεξόδους.
+///
+/// Η αναγνώριση γίνεται από τον **τύπο** και τον **κωδικό** του SQLite, όχι
+/// από το κείμενο: busy (5), locked (6), I/O (10, με όλες τις παραλλαγές του).
+bool isTransientDatabaseFailure(Object error) {
+  if (_findDatabaseFailure(error) != null) return false;
+  Object? current = error;
+  for (var depth = 0; depth < _maxUnwrapDepth && current != null; depth++) {
+    if (current is DatabaseUnresponsiveException) return true;
+    if (current is DatabaseException) {
+      final code = current.getResultCode();
+      if (code != null && _transientSqliteCodes.contains(code & 0xff)) {
+        return true;
+      }
+    }
+    current = _innerCause(current);
+  }
+  return false;
+}
+
+/// SQLITE_BUSY, SQLITE_LOCKED, SQLITE_IOERR — οι βασικοί κωδικοί (χαμηλό byte).
+const Set<int> _transientSqliteCodes = {5, 6, 10};
 
 /// Σε ποια οθόνη ανήκει το [error].
 ///

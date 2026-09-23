@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
@@ -35,15 +36,59 @@ final activeOperatorsProvider = FutureProvider.autoDispose<List<Operator>>((
 /// Για την εμφάνιση — τα σήματα προσώπου στην κάρτα. Περιλαμβάνει και τα
 /// απενεργοποιημένα: μια εκκρεμότητα ανατεθειμένη σε προφίλ που μετά
 /// απενεργοποιήθηκε πρέπει να συνεχίσει να λέει σε ποιον ανήκει.
+///
+/// **Αποτυχημένη ανάγνωση δεν σβήνει ονόματα που ξέραμε.** Όταν η βάση μένει
+/// κλειδωμένη — π.χ. αντίγραφο ασφαλείας από άλλον σταθμό — η ανάγνωση
+/// αποτυγχάνει, και οι κάρτες έδειχναν «Χρήστης #2» αντί για το όνομα που
+/// είχε διαβαστεί λεπτά πριν. Τότε επιστρέφονται τα τελευταία γνωστά ονόματα
+/// **της ίδιας βάσης**· χωρίς προηγούμενη επιτυχία το σφάλμα περνά κανονικά.
 final operatorNamesProvider = FutureProvider.autoDispose<Map<int, String>>((
   ref,
 ) async {
-  final all = await ref.watch(allOperatorsProvider.future);
-  return {
-    for (final operator in all)
-      if (operator.id != null) operator.id!: operator.displayName,
-  };
+  final databasePath = DatabaseHelper.instance.openedDatabasePath;
+  try {
+    final all = await ref.watch(allOperatorsProvider.future);
+    final names = {
+      for (final operator in all)
+        if (operator.id != null) operator.id!: operator.displayName,
+    };
+    LastKnownOperatorNames.remember(databasePath, names);
+    return names;
+  } catch (_) {
+    final known = LastKnownOperatorNames.forDatabase(databasePath);
+    if (known != null) return known;
+    rethrow;
+  }
 });
+
+/// Τα τελευταία ονόματα χρηστών που διαβάστηκαν με επιτυχία — **ανά βάση**.
+///
+/// Ζει έξω από τους providers επίτηδες: εκείνοι είναι `autoDispose` και
+/// ξεχνούν τα πάντα μόλις κλείσει η οθόνη, ενώ η γνώση «ο #2 είναι ο
+/// Βασίλης» ισχύει για όλη τη συνεδρία. Κλειδί η διαδρομή, ώστε μετά από
+/// αλλαγή βάσης να μη δανειστεί ποτέ ονόματα της άλλης.
+class LastKnownOperatorNames {
+  LastKnownOperatorNames._();
+
+  static String? _databasePath;
+  static Map<int, String>? _names;
+
+  static void remember(String? databasePath, Map<int, String> names) {
+    _databasePath = databasePath;
+    _names = Map.unmodifiable(names);
+  }
+
+  static Map<int, String>? forDatabase(String? databasePath) =>
+      _names != null && _databasePath == databasePath ? _names : null;
+
+  /// Η γνώση είναι καθολική και δεν επιτρέπεται να ταξιδεύει από τον έναν
+  /// έλεγχο στον επόμενο.
+  @visibleForTesting
+  static void resetForTest() {
+    _databasePath = null;
+    _names = null;
+  }
+}
 
 /// Το εικονίδιο ΟΛΩΝ των προφίλ ανά id — δίδυμο του [operatorNamesProvider].
 ///

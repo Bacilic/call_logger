@@ -117,6 +117,15 @@ class DatabaseInitProgressNotifier extends Notifier<DatabaseInitProgressState> {
     );
   }
 
+  /// Συμπληρώνει την ανοιχτή γραμμή του ημερολογίου με ό,τι μετρήθηκε μέσα
+  /// της — π.χ. «Έλεγχος τύπου αρχείου βάσης — στιγμιότυπο 17,0 MB, κλείδωμα
+  /// 1,4 δευτ.». Η οθόνη εκκίνησης δεν αλλάζει· αλλάζει μόνο το ημερολόγιο.
+  void annotateStep(String detail) {
+    final step = state.currentStep;
+    if (step.isEmpty || detail.trim().isEmpty) return;
+    _openStep?.relabel('$step — ${detail.trim()}');
+  }
+
   void setDiagnostic(String? diagnosticInfo) {
     if (diagnosticInfo == null || diagnosticInfo.trim().isEmpty) return;
     state = state.copyWith(diagnosticInfo: diagnosticInfo.trim());

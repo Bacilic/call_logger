@@ -5,9 +5,15 @@
 //
 //   flutter test test/core/database/database_reachability_test.dart
 
+import 'dart:io';
+
 import 'package:call_logger/core/database/database_reachability.dart';
 import 'package:call_logger/core/database/database_switch_success_notice.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../test_setup.dart';
 
 void main() {
   group('Πότε λέμε ότι χάθηκε η βάση', () {
@@ -78,6 +84,144 @@ void main() {
         topDatabaseBanner(showStateNotice: false, hasSwitchSuccess: false),
         TopDatabaseBanner.none,
       );
+    });
+  });
+
+  group('Πότε λέμε ότι η βάση είναι απασχολημένη', () {
+    // Το αρχείο απαντά, αλλά η βάση μένει κλειδωμένη — π.χ. αντίγραφο
+    // ασφαλείας από άλλον σταθμό. Ο φύλακας του αρχείου έλεγε «όλα καλά», και
+    // ο χειριστής έβλεπε «Χρήστης #2» χωρίς καμία εξήγηση.
+    test('μία κλειδωμένη μέτρηση ΔΕΝ ανάβει λωρίδα', () {
+      // Κάθε κανονική εγγραφή κλειδώνει τη βάση για κλάσματα δευτερολέπτου.
+      final tracker = DatabaseReachabilityTracker();
+
+      expect(
+        tracker.recordSample(DatabaseProbeSample.locked),
+        DatabaseReachability.ok,
+      );
+    });
+
+    test('δύο συνεχόμενες κλειδωμένες μετρήσεις: απασχολημένη', () {
+      final tracker = DatabaseReachabilityTracker();
+
+      tracker.recordSample(DatabaseProbeSample.locked);
+
+      expect(
+        tracker.recordSample(DatabaseProbeSample.locked),
+        DatabaseReachability.busy,
+      );
+    });
+
+    test('η ελευθέρωση σβήνει αμέσως τη λωρίδα', () {
+      final tracker = DatabaseReachabilityTracker()
+        ..recordSample(DatabaseProbeSample.locked)
+        ..recordSample(DatabaseProbeSample.locked);
+
+      expect(
+        tracker.recordSample(DatabaseProbeSample.ok),
+        DatabaseReachability.ok,
+      );
+    });
+
+    test('κλειδωμένη και μετά άφταστη: μετρά μόνο η απώλεια', () {
+      // Δύο διαφορετικές αιτίες δεν αθροίζονται σε συναγερμό.
+      final tracker = DatabaseReachabilityTracker()
+        ..recordSample(DatabaseProbeSample.locked);
+
+      expect(
+        tracker.recordSample(DatabaseProbeSample.unreachable),
+        DatabaseReachability.ok,
+      );
+      expect(
+        tracker.recordSample(DatabaseProbeSample.unreachable),
+        DatabaseReachability.lost,
+      );
+    });
+
+    test('η λήξη της απασχόλησης είναι επιστροφή — οι οθόνες ξαναρωτούν', () {
+      // Όσο η βάση ήταν κλειδωμένη, ερωτήματα μπορεί να έληξαν· χωρίς
+      // ξαναφόρτωμα οι οθόνες θα έμεναν με το σφάλμα τους.
+      expect(
+        isDatabaseReturn(DatabaseReachability.busy, DatabaseReachability.ok),
+        isTrue,
+      );
+      expect(
+        isDatabaseReturn(DatabaseReachability.ok, DatabaseReachability.ok),
+        isFalse,
+      );
+    });
+
+    test('η απασχολημένη βάση ΔΕΝ σταματά τις επαναλήψεις', () {
+      // Το κλείδωμα λύνεται μόνο του· η επανάληψη το γεφυρώνει σιωπηλά.
+      DatabaseReachabilitySignal.publish(DatabaseReachability.busy);
+      addTearDown(DatabaseReachabilitySignal.resetForTest);
+
+      expect(databaseAwareRetry(0, Exception('database is locked')), isNotNull);
+    });
+  });
+
+  group('Ποια λωρίδα κερδίζει όταν η βάση είναι απασχολημένη', () {
+    test('η χαμένη βάση υπερισχύει της απασχολημένης', () {
+      expect(
+        topDatabaseBanner(
+          showStateNotice: false,
+          hasSwitchSuccess: false,
+          isUnreachable: true,
+          isBusy: true,
+        ),
+        TopDatabaseBanner.unreachable,
+      );
+    });
+
+    test('η απασχολημένη υπερισχύει της προειδοποίησης και της επιτυχίας', () {
+      expect(
+        topDatabaseBanner(
+          showStateNotice: true,
+          hasSwitchSuccess: true,
+          isBusy: true,
+        ),
+        TopDatabaseBanner.busy,
+      );
+    });
+  });
+
+  group('Ο έλεγχος κλειδώματος', () {
+    late Directory dir;
+    late String path;
+
+    setUpAll(initSqfliteFfiForTests);
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('reachability_lock_test');
+      path = p.join(dir.path, 'vasi.db');
+      final db = await openDatabase(path, singleInstance: false);
+      await db.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)');
+      await db.close();
+    });
+
+    tearDown(() async {
+      if (await dir.exists()) await dir.delete(recursive: true);
+    });
+
+    test('ελεύθερη βάση: καμία ένδειξη', () async {
+      expect(await probeDatabaseLock(path), DatabaseProbeSample.ok);
+    });
+
+    test('βάση που την κρατά κάποιος για εγγραφή: κλειδωμένη', () async {
+      final holder = await openDatabase(path, singleInstance: false);
+      addTearDown(holder.close);
+      await holder.execute('BEGIN EXCLUSIVE');
+      addTearDown(() => holder.execute('COMMIT'));
+
+      expect(await probeDatabaseLock(path), DatabaseProbeSample.locked);
+    });
+
+    test('αρχείο που δεν ανοίγει ως βάση: ΔΕΝ λέγεται απασχολημένο', () async {
+      // Άλλο πρόβλημα, με δικό του φρουρό — εδώ θα ήταν ψέμα.
+      final text = p.join(dir.path, 'keimeno.db');
+      await File(text).writeAsString('απλό κείμενο\n' * 100);
+
+      expect(await probeDatabaseLock(text), DatabaseProbeSample.ok);
     });
   });
 

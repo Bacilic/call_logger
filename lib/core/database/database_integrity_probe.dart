@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:sqflite_common/sqflite.dart';
 
-import 'database_busy_timeout.dart';
 import 'database_file_identity.dart';
+import 'database_snapshot.dart';
+
+export 'database_snapshot.dart' show DatabaseSnapshotStats;
 
 /// Ετυμηγορία ελέγχου ακεραιότητας περιεχομένου.
 enum DatabaseIntegrityStatus {
@@ -25,26 +27,28 @@ enum DatabaseIntegrityStatus {
 /// οθόνη. Το περιστατικό που γέννησε αυτό το αρχείο ήταν ακριβώς η απώλειά
 /// της — ο χρήστης είδε οκτώ «[OK]» και ένα «φαίνεται κατεστραμμένο».
 class DatabaseIntegrityOutcome {
-  const DatabaseIntegrityOutcome({required this.status, this.rawMessage});
+  const DatabaseIntegrityOutcome({
+    required this.status,
+    this.rawMessage,
+    this.snapshot,
+  });
 
   final DatabaseIntegrityStatus status;
   final String? rawMessage;
 
-  bool get isCorrupt => status == DatabaseIntegrityStatus.corrupt;
-}
+  /// Τι κόστισε το στιγμιότυπο πάνω στο οποίο έγινε ο έλεγχος — `null` όταν
+  /// ο έλεγχος έγινε απευθείας στο αρχείο (βάση σε WAL) ή δεν έφτασε ως εκεί.
+  final DatabaseSnapshotStats? snapshot;
 
-Future<Database> _openReadOnly(String path) => openDatabase(
-  path,
-  // Χωρίς `version:` — αλλιώς το sqflite επιχειρεί `PRAGMA user_version = N`
-  // πάνω σε readOnly σύνδεση και παίρνει SQLITE_READONLY, δίνοντας ψευδή
-  // «αποτυχία» για απολύτως υγιή βάση άλλης έκδοσης σχήματος. Ο έλεγχος
-  // ακεραιότητας δεν μεταναστεύει σχήμα.
-  readOnly: true,
-  singleInstance: false,
-  // Σε κοινόχρηστη βάση ακόμη και η ανάγνωση συναντά κλειδώματα: χωρίς
-  // αναμονή, ο έλεγχος θα ανέφερε «δεν κατέληξε» κάθε φορά που κάποιος γράφει.
-  onConfigure: (db) => applyDatabaseBusyTimeout(db, path),
-);
+  bool get isCorrupt => status == DatabaseIntegrityStatus.corrupt;
+
+  DatabaseIntegrityOutcome _withSnapshot(DatabaseSnapshotStats stats) =>
+      DatabaseIntegrityOutcome(
+        status: status,
+        rawMessage: rawMessage,
+        snapshot: stats,
+      );
+}
 
 /// Ρωτά το ίδιο το SQLite αν το περιεχόμενο του αρχείου στέκει.
 ///
@@ -52,8 +56,14 @@ Future<Database> _openReadOnly(String path) => openDatabase(
 /// υπόλοιπα ελέγχουν αν το αρχείο υπάρχει, διαβάζεται και γράφεται — εδώ
 /// ελέγχεται αν αυτό που περιέχει είναι συνεπής βάση.
 ///
-/// Μετρημένο, όχι υποθετικό: `quick_check` σε τοπική βάση 10 MB κοστίζει
-/// ~31 ms. Γι' αυτό τρέχει κανονικά και δεν φυλάγεται για ώρα ανάγκης.
+/// **Ο έλεγχος γίνεται πάνω σε στιγμιότυπο** (`takeDatabaseSnapshot`), όχι
+/// πάνω στο ίδιο το αρχείο. Η παλιά παραδοχή — «`quick_check` σε βάση 10 MB
+/// κοστίζει ~31 ms, άρα τρέχει κανονικά» — μετρήθηκε σε **τοπική** βάση. Σε
+/// κοινόχρηστη βάση με δεύτερο σταθμό ανοιχτό το ίδιο ερώτημα κόστισε 20
+/// δευτερόλεπτα, κάθε φορά (23/09/2026): τα Windows δεν κρατούν πια το αρχείο
+/// στη μνήμη, και κάθε σελίδα ταξιδεύει χωριστά. Το στιγμιότυπο φέρνει τα
+/// ίδια ακριβώς bytes με λίγα μεγάλα ταξίδια, και ο έλεγχος τρέχει τοπικά,
+/// ξανά στα ~31 ms. Η ετυμηγορία είναι η ίδια· αλλάζει μόνο ο δρόμος.
 ///
 /// Αποτυχία ανοίγματος δεν σημαίνει αυτόματα ζημιά: μια υγιής βάση WAL σε
 /// φάκελο χωρίς δικαίωμα εγγραφής επίσης δεν ανοίγει. Γι' αυτό
@@ -62,19 +72,30 @@ Future<Database> _openReadOnly(String path) => openDatabase(
 Future<DatabaseIntegrityOutcome> runDatabaseIntegrityProbe(
   String dbPath, {
   Duration timeout = const Duration(seconds: 5),
-  Future<Database> Function(String path) open = _openReadOnly,
+  Future<Database> Function(String path) open =
+      openDatabaseReadOnlyWithBusyTimeout,
 }) async {
+  // Το ίδιο όριο φτάνει και ΜΕΣΑ στο στιγμιότυπο: όταν λήξει, η αντιγραφή
+  // σταματά και αφήνει το κλείδωμα — δεν συνεχίζει στο παρασκήνιο να κρατά
+  // την ουρά πίσω της.
+  final deadline = DateTime.now().add(timeout);
   try {
-    return await _runIntegrityProbe(dbPath, open).timeout(timeout);
+    return await _runIntegrityProbeOnSnapshot(
+      dbPath,
+      open,
+      deadline,
+    ).timeout(timeout);
   } on TimeoutException {
     return const DatabaseIntegrityOutcome(
       status: DatabaseIntegrityStatus.inconclusive,
       rawMessage: 'Ο έλεγχος ακεραιότητας δεν πρόλαβε να ολοκληρωθεί.',
     );
   } catch (e) {
-    // Εδώ φτάνει πλέον μόνο η αποτυχία ΑΝΟΙΓΜΑΤΟΣ του αρχείου — το ίδιο το
-    // ερώτημα μεταφράζει τα δικά του σφάλματα παρακάτω. Κρατά την ίδια
-    // διάκριση: ρητό «malformed» είναι απόδειξη, όλα τα άλλα επιφύλαξη.
+    // Εδώ φτάνει μόνο η αποτυχία ΑΝΟΙΓΜΑΤΟΣ ή ΣΤΙΓΜΙΟΤΥΠΟΥ του αρχείου (π.χ.
+    // «file is not a database», χαλασμένος κατάλογος πινάκων, κομμένο δίκτυο
+    // στη μέση της αντιγραφής) — το ίδιο το ερώτημα μεταφράζει τα δικά του
+    // σφάλματα παρακάτω. Κρατά την ίδια διάκριση: ρητό «malformed» είναι
+    // απόδειξη, όλα τα άλλα επιφύλαξη.
     final raw = e.toString();
     final corrupt =
         looksLikeCopiedWhileInUseError(raw) || looksLikeCorruptImageError(raw);
@@ -87,14 +108,14 @@ Future<DatabaseIntegrityOutcome> runDatabaseIntegrityProbe(
   }
 }
 
-/// Ο ίδιος έλεγχος πάνω σε **ήδη ανοιχτή** σύνδεση.
+/// Το ίδιο το ερώτημα, πάνω σε ανοιχτή σύνδεση — και η κρίση του «τι σημαίνει
+/// η απάντηση», σε ΕΝΑ σημείο.
 ///
-/// Υπάρχει επειδή ο ταξινομητής αρχείων ανοίγει ούτως ή άλλως τη βάση για να
-/// διαβάσει πίνακες και έκδοση: το να ρωτήσει και για την ακεραιότητα εκεί
-/// κοστίζει ένα ερώτημα, ενώ ένας δεύτερος ανιχνευτής θα ξανάνοιγε ολόκληρο
-/// το αρχείο. Η κρίση του «τι σημαίνει η απάντηση» μένει σε ΕΝΑ σημείο —
-/// αλλιώς οι δύο είσοδοι θα απέκλιναν σιωπηλά.
-Future<DatabaseIntegrityOutcome> readIntegrityFromOpenDatabase(
+/// Εσωτερικό επίτηδες: καλείται μόνο πάνω στο τοπικό στιγμιότυπο (ή, για βάση
+/// σε WAL, στο ίδιο το αρχείο). Ένας καλών που θα το έτρεχε πάνω σε σύνδεση
+/// κοινόχρηστης βάσης θα ξαναδιάβαζε ολόκληρο το αρχείο σελίδα-σελίδα από το
+/// δίκτυο — ακριβώς ό,τι κόστιζε 20 δευτερόλεπτα στην εκκίνηση.
+Future<DatabaseIntegrityOutcome> _readIntegrityFromOpenDatabase(
   Database db,
 ) async {
   final List<Map<String, Object?>> rows;
@@ -140,6 +161,33 @@ Future<DatabaseIntegrityOutcome> readIntegrityFromOpenDatabase(
   );
 }
 
+Future<DatabaseIntegrityOutcome> _runIntegrityProbeOnSnapshot(
+  String dbPath,
+  Future<Database> Function(String path) open,
+  DateTime deadline,
+) async {
+  final DatabaseSnapshot snapshot;
+  try {
+    snapshot = await takeDatabaseSnapshot(
+      dbPath,
+      openSource: open,
+      deadline: deadline,
+    );
+  } on DatabaseSnapshotUnsupported {
+    // Βάση που δεν ζει ολόκληρη στο κύριο αρχείο της (WAL): ο παλιός δρόμος.
+    return _runIntegrityProbe(dbPath, open);
+  }
+  try {
+    final outcome = await _runIntegrityProbe(
+      snapshot.path,
+      openDatabaseReadOnlyWithBusyTimeout,
+    );
+    return outcome._withSnapshot(snapshot.stats);
+  } finally {
+    await snapshot.dispose();
+  }
+}
+
 Future<DatabaseIntegrityOutcome> _runIntegrityProbe(
   String dbPath,
   Future<Database> Function(String path) open,
@@ -147,7 +195,7 @@ Future<DatabaseIntegrityOutcome> _runIntegrityProbe(
   Database? db;
   try {
     db = await open(dbPath);
-    return await readIntegrityFromOpenDatabase(db);
+    return await _readIntegrityFromOpenDatabase(db);
   } finally {
     try {
       await db?.close();

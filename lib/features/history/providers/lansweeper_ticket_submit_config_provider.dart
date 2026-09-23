@@ -6,6 +6,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/services/lansweeper_ticket_submit_config.dart';
 import '../../../core/services/settings_list_conflict.dart';
+import '../../../core/utils/background_task.dart';
 
 /// Απομνημόνευση παραμετροποίησης πολυβηματικής καταχώρησης Lansweeper.
 class LansweeperTicketSubmitConfigNotifier
@@ -17,7 +18,7 @@ class LansweeperTicketSubmitConfigNotifier
 
   @override
   LansweeperTicketSubmitConfig build() {
-    Future<void>(_hydrateFromDb);
+    runBackgroundTask(Future<void>(_hydrateFromDb));
     return LansweeperTicketSubmitConfig.defaults();
   }
 

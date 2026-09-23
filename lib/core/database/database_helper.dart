@@ -858,6 +858,8 @@ class DatabaseHelper {
     progressNotifier?.setStep('Έλεγχος τύπου αρχείου βάσης');
     final profile = await profileDatabaseFile(dbPath);
     _lastDatabaseProfile = profile;
+    final snapshot = profile.integritySnapshot;
+    if (snapshot != null) progressNotifier?.annotateStep(snapshot.summary);
     final kind = profile.kind;
     if (kind == DatabaseFileKind.callLogger || kind == DatabaseFileKind.empty) {
       return kind;

@@ -24,6 +24,7 @@ import '../../features/database/widgets/database_newer_recovery_dialog.dart';
 import '../../features/database/widgets/database_recovery_switch_flows.dart';
 import '../../features/database/widgets/schema_upgrade_consent_dialog.dart';
 import '../../features/settings/widgets/create_new_database_dialog.dart';
+import '../utils/background_task.dart';
 
 /// Οθόνη σφάλματος βάσης / γενικού σφάλματος.
 /// Λεπτομερή ελληνικά μηνύματα, επιλέξιμο κείμενο, αντιγραφή πλήρους αναφοράς.
@@ -189,10 +190,10 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
     _detailsScrollController = ScrollController();
     _loadRecentExistingPaths();
     if (_isNetworkUnreachable) {
-      unawaited(_loadLocalDatabaseOffer());
+      runBackgroundTask(_loadLocalDatabaseOffer());
     }
     if (_isMissingApplicationFile) {
-      unawaited(_probeAvailableInstaller());
+      runBackgroundTask(_probeAvailableInstaller());
     }
     if (_effectiveRecoveryKind ==
         DatabaseInitRecoveryKind.schemaUpgradeConsent) {

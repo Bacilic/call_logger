@@ -41,6 +41,7 @@ import '../../calls/models/call_refined_source.dart';
 import '../models/task.dart';
 import '../providers/task_lansweeper_submit_provider.dart';
 import '../services/task_lansweeper_form_seed.dart';
+import '../../../core/utils/background_task.dart';
 
 /// Ανοίγει το παράθυρο αποστολής για την [task].
 ///
@@ -122,8 +123,8 @@ class _TaskLansweeperDialogState extends ConsumerState<TaskLansweeperDialog>
     titleController.text = seed.title;
     notesController.text = seed.problem;
     solutionController.text = seed.solution;
-    unawaited(_loadParties());
-    unawaited(_loadLinkedCall());
+    runBackgroundTask(_loadParties());
+    runBackgroundTask(_loadLinkedCall());
   }
 
   @override

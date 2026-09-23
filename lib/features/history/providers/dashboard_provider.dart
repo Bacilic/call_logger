@@ -28,6 +28,7 @@ import '../models/dashboard_filter_model.dart';
 import '../models/dashboard_summary_model.dart';
 
 import '../utils/category_distribution.dart';
+import '../../../core/utils/background_task.dart';
 
 /// Notifier για τα κριτήρια φίλτρου του dashboard στατιστικών.
 
@@ -47,7 +48,7 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
     if (!_hydrated) {
       _hydrated = true;
 
-      Future<void>(_hydrateFromSettings);
+      runBackgroundTask(Future<void>(_hydrateFromSettings));
     }
 
     return DashboardDatePreset.applyToFilter(
@@ -253,7 +254,7 @@ abstract class PersistedDashboardToggle extends Notifier<bool> {
   bool build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromSettings);
+      runBackgroundTask(Future<void>(_hydrateFromSettings));
     }
     return false;
   }
@@ -343,7 +344,7 @@ class DashboardPaletteNotifier extends Notifier<DashboardPalette> {
     if (!_hydrated) {
       _hydrated = true;
 
-      Future<void>(_hydrateFromSettings);
+      runBackgroundTask(Future<void>(_hydrateFromSettings));
     }
 
     return DashboardPalette.classic;

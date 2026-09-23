@@ -4,6 +4,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/settings_repository.dart';
 import '../../../core/services/settings_service.dart';
 import '../widgets/lansweeper/lansweeper_url_rules.dart';
+import '../../../core/utils/background_task.dart';
 import 'app_settings_bool.dart';
 
 /// URL τελικού σημείου API Lansweeper (`api.aspx`) — μόνο για Άμεση καταχώρηση.
@@ -14,7 +15,7 @@ class LansweeperApiUrlNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return '';
   }
@@ -64,7 +65,7 @@ class LansweeperTicketFormUrlNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return kDefaultLansweeperUrl;
   }
@@ -115,7 +116,7 @@ class LansweeperTicketViewUrlNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return kDefaultLansweeperTicketViewUrl;
   }
@@ -158,7 +159,7 @@ class LansweeperApiKeyNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return '';
   }
@@ -207,7 +208,7 @@ class LansweeperAgentUsernameNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return '';
   }
@@ -251,7 +252,7 @@ class LansweeperOpenTicketAfterApiSubmitNotifier extends Notifier<bool> {
   bool build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return false;
   }

@@ -299,8 +299,9 @@ class DatabaseBackupService {
       return DatabaseBackupResult(success: false, message: message);
     }
 
+    DatabaseSnapshotStats? snapshotStats;
     try {
-      await DatabaseBackupRepository(
+      snapshotStats = await DatabaseBackupRepository(
         db,
       ).vacuumInto(_sqlitePathLiteral(paths.databasePath));
     } catch (e) {
@@ -410,10 +411,15 @@ class DatabaseBackupService {
       includedParts: includedParts,
       missingParts: missingParts,
     );
+    // Το Ιστορικό κρατά και πόσο κράτησε το κλείδωμα των συναδέλφων — η
+    // μόνη μέτρηση που λέει, σε κάθε μηχάνημα και δίκτυο, αν το αντίγραφο
+    // πάγωσε κάποιον. Η οθόνη δείχνει μόνο το μήνυμα.
     await DatabaseBackupAudit.logRunResult(
       trigger: auditTrigger,
       success: true,
-      message: message,
+      message: snapshotStats == null
+          ? message
+          : '$message (${snapshotStats.summary})',
       destination: dest,
       outputPath: finalPath,
     );

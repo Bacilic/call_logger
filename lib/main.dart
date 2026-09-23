@@ -36,6 +36,7 @@ import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
 import 'core/widgets/global_fatal_error_notifier.dart';
 import 'core/widgets/modal_route_tracker.dart';
+import 'core/widgets/transient_database_notice.dart';
 
 void _routeFatalErrorToUi(Object exception, StackTrace stack) {
   // Το «disk image is malformed» έχει δύο πολύ διαφορετικές αιτίες: φθαρμένο
@@ -101,8 +102,21 @@ bool _platformAsyncErrorHandler(Object error, StackTrace stack) {
     CrashLogService.instanceOrNull?.logError(error, stack, fatal: false);
     return true;
   }
+  if (_handledAsTransientDatabaseFailure(error, stack)) return true;
   CrashLogService.instanceOrNull?.logError(error, stack, fatal: true);
   _routeFatalErrorToUi(error, stack);
+  return true;
+}
+
+/// Η βάση δεν απάντησε για λίγο: μικρό μήνυμα, όχι πλήρης οθόνη σφάλματος.
+///
+/// Η βάση επανέρχεται μόνη της και ο φύλακας δείχνει ήδη λωρίδα· η οθόνη
+/// «Σφάλμα εφαρμογής» πετούσε τον χειριστή έξω από τη δουλειά του για μια
+/// διακοπή λίγων δευτερολέπτων.
+bool _handledAsTransientDatabaseFailure(Object error, StackTrace stack) {
+  if (!isTransientDatabaseFailure(error)) return false;
+  CrashLogService.instanceOrNull?.logError(error, stack, fatal: false);
+  announceTransientDatabaseFailure();
   return true;
 }
 
@@ -111,6 +125,7 @@ void _rootZoneErrorHandler(Object error, StackTrace stack) {
     CrashLogService.instanceOrNull?.logError(error, stack, fatal: false);
     return;
   }
+  if (_handledAsTransientDatabaseFailure(error, stack)) return;
   if (!_isNonFatalFrameworkNoise(error)) {
     CrashLogService.instanceOrNull?.logError(error, stack, fatal: true);
   }
@@ -340,6 +355,9 @@ class MyApp extends StatelessWidget {
     final colorScheme = ColorScheme.fromSeed(seedColor: Colors.deepPurple);
     return MaterialApp(
       title: 'Καταγραφή Κλήσεων',
+      // Για μηνύματα που γεννιούνται έξω από οθόνη (καθολικός χειριστής
+      // σφαλμάτων) — δες `announceTransientDatabaseFailure`.
+      scaffoldMessengerKey: appScaffoldMessengerKey,
       // Μετρά τους ανοιχτούς διαλόγους: η αυτόματη ανανέωση της κοινόχρηστης
       // βάσης περιμένει όσο ο χρήστης δουλεύει πάνω σε κάτι.
       navigatorObservers: [appModalRouteTracker],

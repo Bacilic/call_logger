@@ -15,14 +15,32 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite_common/sqflite.dart';
 
 /// Η κατάσταση όπως τη βλέπει ο χειριστής.
 enum DatabaseReachability {
   /// Το αρχείο απαντά.
   ok,
 
+  /// Το αρχείο απαντά, αλλά η βάση μένει **κλειδωμένη** — π.χ. μεγάλη
+  /// εγγραφή ή αντίγραφο ασφαλείας από άλλον σταθμό. Οι φορτώσεις και οι
+  /// αποθηκεύσεις περιμένουν· μετά από αρκετή αναμονή μπορεί να αποτύχουν.
+  busy,
+
   /// Το αρχείο έπαψε να απαντά.
   lost,
+}
+
+/// Τι βρήκε **ένας** έλεγχος του φύλακα.
+enum DatabaseProbeSample {
+  /// Το αρχείο απαντά και η βάση δεν είναι κλειδωμένη.
+  ok,
+
+  /// Το αρχείο απαντά, αλλά η βάση είναι κλειδωμένη αυτή τη στιγμή.
+  locked,
+
+  /// Το αρχείο δεν απαντά.
+  unreachable,
 }
 
 /// Η κατάσταση του φύλακα, διαθέσιμη **έξω** από το Riverpod.
@@ -68,44 +86,72 @@ class DatabaseReachabilitySignal {
 /// σφάλμα από τον χειριστή.
 /// Είναι αυτή η αλλαγή **επιστροφή** της βάσης;
 ///
-/// Μόνο η μετάβαση «χαμένη → εντάξει» μετράει. Κάθε επιτυχημένος έλεγχος του
-/// φύλακα περνά από τον ίδιο δρόμο — αν μετρούσαν όλοι, η εφαρμογή θα
-/// ξαναφόρτωνε τις κοινές όψεις κάθε είκοσι δευτερόλεπτα, σε βάση που
-/// μοιράζονται δεκάδες σταθμοί.
+/// Μόνο η μετάβαση «χαμένη ή απασχολημένη → εντάξει» μετράει. Κάθε
+/// επιτυχημένος έλεγχος του φύλακα περνά από τον ίδιο δρόμο — αν μετρούσαν
+/// όλοι, η εφαρμογή θα ξαναφόρτωνε τις κοινές όψεις κάθε είκοσι
+/// δευτερόλεπτα, σε βάση που μοιράζονται δεκάδες σταθμοί. Η απασχολημένη
+/// βάση μετρά κι αυτή: όσο ήταν κλειδωμένη, ερωτήματα μπορεί να έληξαν, και
+/// οι οθόνες τους θα έμεναν με το σφάλμα αν δεν ξαναρωτούσαν.
 bool isDatabaseReturn(
   DatabaseReachability? previous,
   DatabaseReachability next,
-) => previous == DatabaseReachability.lost && next == DatabaseReachability.ok;
+) =>
+    previous != null &&
+    previous != DatabaseReachability.ok &&
+    next == DatabaseReachability.ok;
 
 Duration? databaseAwareRetry(int retryCount, Object error) {
   if (DatabaseReachabilitySignal.isLost) return null;
   return ProviderContainer.defaultRetry(retryCount, error);
 }
 
-/// Κρατά την ιστορία των ελέγχων και αποφασίζει **πότε** λέμε «χάθηκε».
+/// Κρατά την ιστορία των ελέγχων και αποφασίζει **πότε** λέμε «χάθηκε» ή
+/// «απασχολημένη».
 ///
-/// **Δύο συνεχόμενες αποτυχίες, όχι μία.** Μια στιγμιαία αναλαμπή του δικτύου
+/// **Δύο συνεχόμενες μετρήσεις, όχι μία.** Μια στιγμιαία αναλαμπή του δικτύου
 /// δεν πρέπει να πετά κόκκινη λωρίδα στα μούτρα του χειριστή τη στιγμή που
-/// γράφει μια κλήση. Η επιστροφή όμως είναι **άμεση**: μία επιτυχία αρκεί —
-/// όταν το δίκτυο γυρίσει, δεν έχει νόημα να κρατάμε τον συναγερμό.
+/// γράφει μια κλήση — και κάθε κανονική εγγραφή κλειδώνει τη βάση για
+/// κλάσματα δευτερολέπτου. Η επιστροφή όμως είναι **άμεση**: μία επιτυχία
+/// αρκεί — όταν το εμπόδιο φύγει, δεν έχει νόημα να κρατάμε τη λωρίδα.
+///
+/// Οι δύο αιτίες μετρούν **χωριστά**: μία κλειδωμένη και μία άφταστη μέτρηση
+/// δεν αθροίζονται σε συναγερμό.
 class DatabaseReachabilityTracker {
   DatabaseReachabilityTracker({this.failuresBeforeAlarm = 2});
 
-  /// Πόσες συνεχόμενες αποτυχίες χρειάζονται πριν σημάνει ο συναγερμός.
+  /// Πόσες συνεχόμενες ίδιες μετρήσεις χρειάζονται πριν ανάψει λωρίδα.
   final int failuresBeforeAlarm;
 
   int _consecutiveFailures = 0;
+  int _consecutiveLocked = 0;
 
-  DatabaseReachability get state => _consecutiveFailures >= failuresBeforeAlarm
-      ? DatabaseReachability.lost
-      : DatabaseReachability.ok;
+  DatabaseReachability get state {
+    if (_consecutiveFailures >= failuresBeforeAlarm) {
+      return DatabaseReachability.lost;
+    }
+    if (_consecutiveLocked >= failuresBeforeAlarm) {
+      return DatabaseReachability.busy;
+    }
+    return DatabaseReachability.ok;
+  }
+
+  /// Καταγράφει το αποτέλεσμα ενός ελέγχου αρχείου (χωρίς έλεγχο κλειδώματος).
+  DatabaseReachability record({required bool probeSucceeded}) => recordSample(
+    probeSucceeded ? DatabaseProbeSample.ok : DatabaseProbeSample.unreachable,
+  );
 
   /// Καταγράφει το αποτέλεσμα ενός ελέγχου και επιστρέφει τη νέα κατάσταση.
-  DatabaseReachability record({required bool probeSucceeded}) {
-    if (probeSucceeded) {
-      _consecutiveFailures = 0;
-    } else if (_consecutiveFailures < failuresBeforeAlarm) {
-      _consecutiveFailures++;
+  DatabaseReachability recordSample(DatabaseProbeSample sample) {
+    switch (sample) {
+      case DatabaseProbeSample.ok:
+        _consecutiveFailures = 0;
+        _consecutiveLocked = 0;
+      case DatabaseProbeSample.locked:
+        _consecutiveFailures = 0;
+        if (_consecutiveLocked < failuresBeforeAlarm) _consecutiveLocked++;
+      case DatabaseProbeSample.unreachable:
+        _consecutiveLocked = 0;
+        if (_consecutiveFailures < failuresBeforeAlarm) _consecutiveFailures++;
     }
     return state;
   }
@@ -136,6 +182,52 @@ Future<bool> probeDatabaseFile(
   }
 }
 
+/// Είναι η βάση κλειδωμένη **αυτή τη στιγμή**; Ρωτά χωρίς να περιμένει.
+///
+/// Ο έλεγχος του αρχείου ([probeDatabaseFile]) απαντά «υπάρχει και
+/// διαβάζεται» — και σε κλειδωμένη βάση λέει «όλα καλά». Έτσι, όσο κάποιος
+/// άλλος σταθμός κρατούσε τη βάση (μετρημένο 23/09/2026: 12 δευτερόλεπτα για
+/// ένα αντίγραφο ασφαλείας), οι οθόνες έδειχναν «Χρήστης #2» και καμία λωρίδα
+/// δεν εξηγούσε γιατί.
+///
+/// Ανοίγει δική του σύνδεση **χωρίς αναμονή κλειδώματος**: μια ανάγνωση που
+/// βρίσκει τη βάση πιασμένη απαντά αμέσως «κλειδωμένη» αντί να περιμένει. Ό,τι
+/// άλλο στραβό βρει (αρχείο που δεν είναι βάση, δικαιώματα) **δεν** το λέει
+/// απασχόληση — έχει δικό του φρουρό, και εδώ θα ήταν ψέμα.
+Future<DatabaseProbeSample> probeDatabaseLock(
+  String path, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  if (path.trim().isEmpty) return DatabaseProbeSample.ok;
+  Database? db;
+  try {
+    return await () async {
+      final opened = await openDatabase(
+        path,
+        readOnly: true,
+        singleInstance: false,
+      );
+      db = opened;
+      await opened.rawQuery('SELECT count(*) FROM sqlite_master');
+      return DatabaseProbeSample.ok;
+    }().timeout(timeout);
+  } on TimeoutException {
+    // Ούτε μια ανάγνωση του καταλόγου δεν πρόλαβε: για τον χειριστή, η βάση
+    // δεν απαντά αυτή τη στιγμή. (Το άφταστο αρχείο το έχει ήδη πιάσει ο
+    // έλεγχος αρχείου, που τρέχει πρώτος.)
+    return DatabaseProbeSample.locked;
+  } catch (e) {
+    final lower = e.toString().toLowerCase();
+    final locked =
+        lower.contains('database is locked') || lower.contains('sqlite_busy');
+    return locked ? DatabaseProbeSample.locked : DatabaseProbeSample.ok;
+  } finally {
+    try {
+      await db?.close();
+    } catch (_) {}
+  }
+}
+
 /// Η κατάσταση που βλέπει το κέλυφος. Δεν είναι autoDispose: ο φύλακας πρέπει
 /// να επιζεί κάθε αλλαγής οθόνης.
 final databaseReachabilityProvider =
@@ -161,7 +253,7 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
   static const Duration alertInterval = Duration(seconds: 5);
 
   Duration get _nextDelay =>
-      _lastProbeFailed || state == DatabaseReachability.lost
+      _lastProbeFailed || state != DatabaseReachability.ok
       ? alertInterval
       : calmInterval;
 
@@ -203,7 +295,11 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
   Future<void> _runCheck() async {
     final path = _watchedPath;
     if (path == null) return;
-    recordProbeResult(succeeded: await probeDatabaseFile(path));
+    if (!await probeDatabaseFile(path)) {
+      recordSample(DatabaseProbeSample.unreachable);
+      return;
+    }
+    recordSample(await probeDatabaseLock(path));
   }
 
   /// Καταγράφει το αποτέλεσμα ενός ελέγχου.
@@ -212,9 +308,15 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
   /// πραγματικό φύλακα: ένα τεστ που αναπαράγει τα βήματα μόνο του θα φύλαγε
   /// το αντίγραφό του και όχι τον κώδικα.
   @visibleForTesting
-  void recordProbeResult({required bool succeeded}) {
-    _lastProbeFailed = !succeeded;
-    final next = _tracker.record(probeSucceeded: succeeded);
+  void recordProbeResult({required bool succeeded}) => recordSample(
+    succeeded ? DatabaseProbeSample.ok : DatabaseProbeSample.unreachable,
+  );
+
+  /// Όπως [recordProbeResult], με όλες τις εκβάσεις ενός ελέγχου.
+  @visibleForTesting
+  void recordSample(DatabaseProbeSample sample) {
+    _lastProbeFailed = sample != DatabaseProbeSample.ok;
+    final next = _tracker.recordSample(sample);
     if (next != state) _publish(next);
   }
 

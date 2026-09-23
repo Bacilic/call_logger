@@ -83,6 +83,7 @@ class DatabaseFileProfile {
     this.hasDebugScenarioSignature = false,
     this.contentIntegrity = DatabaseIntegrityStatus.inconclusive,
     this.integrityDetail,
+    this.integritySnapshot,
     this.unreadableMetrics = const <DatabaseProfileMetric>{},
   });
 
@@ -125,6 +126,10 @@ class DatabaseFileProfile {
   /// Το **ωμό** κείμενο του SQLite όταν βρέθηκε φθορά. Δεν μεταφράζεται και
   /// δεν συνοψίζεται: είναι η μόνη πρόταση που λέει τι ακριβώς χάλασε.
   final String? integrityDetail;
+
+  /// Πόσο κόστισε το στιγμιότυπο του ελέγχου ακεραιότητας — για το ημερολόγιο
+  /// εκκίνησης, ώστε σε κάθε μηχάνημα να φαίνεται πόσο κράτησε το κλείδωμα.
+  final DatabaseSnapshotStats? integritySnapshot;
 
   /// Ποιες μετρήσεις δεν απαντήθηκαν επειδή το αρχείο αντιστάθηκε.
   ///
@@ -203,7 +208,7 @@ Future<DatabaseFileProfile> profileDatabaseFile(
     db = guardDatabaseWithTimeout(opened);
     // Όλα τα ερωτήματα μαζί έχουν ΕΝΑ όριο: εννέα επιμέρους ορίων θα
     // αθροίζονταν σε ενάμισι λεπτό αναμονής μπροστά στα μάτια του χρήστη.
-    return await _collectProfile(db).timeout(budget);
+    return await _collectProfile(db, dbPath).timeout(budget);
   } on TimeoutException {
     // Γραμμένο για τα μάτια του χρήστη: αυτός ο λόγος φτάνει στην οθόνη
     // εκκίνησης ως διαγνωστικό μήνυμα.
@@ -237,11 +242,14 @@ Future<DatabaseFileProfile> profileDatabaseFile(
 /// μπορεί να πετάξει. Καμία από τις δύο περιπτώσεις **δεν** είναι απόδειξη
 /// ζημιάς — γι' αυτό και οι δύο καταλήγουν σε `inconclusive` και ο χρήστης
 /// δεν βλέπει τίποτα. Μόνο ρητό «malformed» από το SQLite μετρά.
-Future<DatabaseIntegrityOutcome> _readIntegrityQuietly(Database db) async {
+///
+/// Ρωτά με τη **διαδρομή** και όχι πάνω στην ανοιχτή σύνδεση ταξινόμησης: ο
+/// έλεγχος γίνεται σε στιγμιότυπο, ώστε σε κοινόχρηστη βάση να μη διαβάζεται
+/// ολόκληρο το αρχείο σελίδα-σελίδα μέσα από το δίκτυο (20 δευτερόλεπτα με
+/// δεύτερο σταθμό ανοιχτό, μετρημένο 23/09/2026).
+Future<DatabaseIntegrityOutcome> _readIntegrityQuietly(String dbPath) async {
   try {
-    return await readIntegrityFromOpenDatabase(
-      db,
-    ).timeout(const Duration(seconds: 5));
+    return await runDatabaseIntegrityProbe(dbPath);
   } catch (_) {
     return const DatabaseIntegrityOutcome(
       status: DatabaseIntegrityStatus.inconclusive,
@@ -340,7 +348,7 @@ Future<String?> _tryLatestCallDate(
 ///
 /// Ξεχωριστή από την [profileDatabaseFile] ώστε να μπορεί να μπει συνολικό όριο
 /// χρόνου γύρω τους — και να κλείσει η σύνδεση αμέσως μόλις λήξει.
-Future<DatabaseFileProfile> _collectProfile(Database db) async {
+Future<DatabaseFileProfile> _collectProfile(Database db, String dbPath) async {
   final tableRows = await db.rawQuery(
     "SELECT name FROM sqlite_master "
     "WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'",
@@ -410,12 +418,12 @@ Future<DatabaseFileProfile> _collectProfile(Database db) async {
   }
 
   // Το σχήμα στέκει. Απομένει το ερώτημα που κανένας έλεγχος πινάκων δεν
-  // απαντά: στέκει και το ΠΕΡΙΕΧΟΜΕΝΟ; Ρωτιέται εδώ, στην ήδη ανοιχτή
-  // σύνδεση, γιατί κάθε ροή που κρίνει βάση περνά από αυτό το σημείο — η
+  // απαντά: στέκει και το ΠΕΡΙΕΧΟΜΕΝΟ; Ρωτιέται εδώ γιατί κάθε ροή που
+  // κρίνει βάση περνά από αυτό το σημείο — η
   // επαναφορά, η απογραφή αντιγράφου, η αλλαγή αρχείου, η εκκίνηση. Ένας
   // έλεγχος παραπάνω εδώ σημαίνει ότι καμία από αυτές δεν μπορεί να τον
   // ξεχάσει.
-  final integrity = await _readIntegrityQuietly(db);
+  final integrity = await _readIntegrityQuietly(dbPath);
 
   // Πλήρες βασικό σχήμα: συμπληρώνουμε τα πλήθη που τροφοδοτούν τις
   // προειδοποιήσεις κατάστασης βάσης και τη σύγκριση αντιγράφων.
@@ -462,6 +470,7 @@ Future<DatabaseFileProfile> _collectProfile(Database db) async {
     userVersion: userVersion,
     contentIntegrity: integrity.status,
     integrityDetail: integrity.rawMessage,
+    integritySnapshot: integrity.snapshot,
     unreadableMetrics: Set.unmodifiable(unreadable),
     callCount: calls,
     userCount: users,

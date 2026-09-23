@@ -24,6 +24,7 @@ import '../utils/backup_destination_folder_validator.dart';
 import '../utils/backup_location_hints.dart';
 import '../utils/backup_restore_tooltip.dart';
 import '../utils/portable_backup_availability.dart';
+import '../../../core/utils/background_task.dart';
 import 'backup_folder_missing_dialog.dart';
 import 'backup_tab_contents_section.dart';
 import 'backup_tab_destination_section.dart';
@@ -111,7 +112,7 @@ class _DatabaseSettingsBackupTabState
       if (!mounted) return;
       _fields.syncFromSettings(ref.read(databaseBackupSettingsProvider));
     });
-    unawaited(_loadCurrentDbPath());
+    runBackgroundTask(_loadCurrentDbPath());
     _scheduleStatusRefreshTimer = Timer.periodic(const Duration(seconds: 30), (
       _,
     ) {
@@ -432,7 +433,7 @@ class _DatabaseSettingsBackupTabState
     // υποδείξεις τοποθεσίας και το όνομα αρχείου μιλούν πάντα για την ενεργή.
     ref.listen<int>(activeDatabaseGenerationProvider, (_, _) {
       if (!mounted) return;
-      unawaited(_loadCurrentDbPath());
+      runBackgroundTask(_loadCurrentDbPath());
       setState(() {
         _reloadLocationAndWarningFutures();
         _reloadPendingChangesFuture();

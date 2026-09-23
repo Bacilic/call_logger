@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/services/settings_service.dart';
 import '../../../core/database/database_staleness.dart';
+import '../../../core/utils/background_task.dart';
 
 /// Το όριο των ημερών πέρα από το οποίο μια βάση θεωρείται στάσιμη.
 ///
@@ -30,7 +31,7 @@ class _DatabaseStalenessSettingSectionState
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    runBackgroundTask(_load());
   }
 
   @override

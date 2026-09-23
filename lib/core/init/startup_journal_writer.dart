@@ -155,7 +155,11 @@ class StartupJournalWriter {
       ..write(_stamp())
       ..write(' ')
       ..write(marker.padRight(12))
-      ..write(step.label.padRight(46))
+      // Μακριά ετικέτα (π.χ. με το κόστος του στιγμιότυπου) δεν κολλά στη
+      // διάρκεια: «…κλείδωμα 1,3 δευτ.2,2 δευτ.» διαβαζόταν σαν ένας αριθμός.
+      ..write(
+        step.label.length >= 46 ? '${step.label} ' : step.label.padRight(46),
+      )
       ..write(durationPart)
       ..writeln();
     final detail = _flatten(step.detail);

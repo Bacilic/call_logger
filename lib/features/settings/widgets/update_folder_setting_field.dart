@@ -12,6 +12,7 @@ import '../utils/update_folder_hint.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/search_debouncer.dart';
+import '../../../core/utils/background_task.dart';
 
 /// Πεδίο «Φάκελος ελέγχου ενημερώσεων» για τις Ρυθμίσεις.
 class UpdateFolderSettingField extends StatefulWidget {
@@ -76,7 +77,7 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
     super.initState();
     _classifyDebouncer = SearchDebouncer(delay: widget.networkClassifyDebounce);
     _controller.addListener(_onTextChanged);
-    unawaited(_loadActivePath());
+    runBackgroundTask(_loadActivePath());
   }
 
   @override
@@ -99,7 +100,7 @@ class _UpdateFolderSettingFieldState extends State<UpdateFolderSettingField> {
     _scheduleClassify();
     // Ξεχωριστά, ποτέ μπροστά από το πεδίο: η ανάγνωση του αρχείου αγγίζει τον
     // δίσκο και δεν πρέπει να καθυστερεί την τιμή που ο χρήστης ήρθε να δει.
-    unawaited(_loadInstallerFolder());
+    runBackgroundTask(_loadInstallerFolder());
   }
 
   Future<void> _loadInstallerFolder() async {

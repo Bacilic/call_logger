@@ -6,6 +6,7 @@ import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/services/settings_service.dart';
 import '../models/call_model.dart';
+import '../../../core/utils/background_task.dart';
 
 /// Τελευταίες κλήσεις ανά caller_id (limit 3).
 final recentCallsProvider = FutureProvider.family<List<CallModel>, int>((
@@ -51,7 +52,7 @@ class ShowGlobalCallsToggleNotifier extends Notifier<bool> {
   bool build() {
     if (!_loadedFromStorage) {
       _loadedFromStorage = true;
-      unawaited(_hydrateFromStorage());
+      runBackgroundTask(_hydrateFromStorage());
     }
     return true;
   }

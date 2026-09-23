@@ -20,6 +20,7 @@ import '../../settings/widgets/create_new_database_dialog.dart';
 import '../services/create_new_database_texts.dart';
 import '../services/pre_restore_snapshot.dart';
 import '../utils/database_path_dropdown_options.dart';
+import '../../../core/utils/background_task.dart';
 import 'database_rename_notice_text.dart';
 import 'database_settings_switch_flows.dart';
 import 'database_staleness_setting_section.dart';
@@ -64,7 +65,7 @@ class _DatabaseSettingsFileTabState
   @override
   void initState() {
     super.initState();
-    unawaited(_loadDatabasePathSection());
+    runBackgroundTask(_loadDatabasePathSection());
   }
 
   @override
@@ -178,7 +179,7 @@ class _DatabaseSettingsFileTabState
     // Η βάση μπορεί να αλλάξει και από άλλη καρτέλα (π.χ. επαναφορά) — το
     // σήμα γενιάς ξαναφορτώνει τη λίστα διαδρομών.
     ref.listen<int>(activeDatabaseGenerationProvider, (_, _) {
-      unawaited(_loadDatabasePathSection());
+      runBackgroundTask(_loadDatabasePathSection());
     });
     return Column(
       mainAxisSize: MainAxisSize.min,

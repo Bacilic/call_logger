@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/lexicon_list_filters_model.dart';
 import '../../../core/services/profile_settings.dart';
 import '../../../core/services/scoped_settings.dart';
+import '../../../core/utils/background_task.dart';
 
 /// Απομνημόνευση φίλτρων λίστας λεξικού (όχι αναζήτηση κειμένου).
 class LexiconListFiltersNotifier extends Notifier<LexiconListFiltersModel> {
@@ -15,7 +16,7 @@ class LexiconListFiltersNotifier extends Notifier<LexiconListFiltersModel> {
 
   @override
   LexiconListFiltersModel build() {
-    Future<void>(_hydrateFromDb);
+    runBackgroundTask(Future<void>(_hydrateFromDb));
     return const LexiconListFiltersModel();
   }
 

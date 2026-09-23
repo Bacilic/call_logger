@@ -1,4 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
 
 /// Το ίχνος «τρέχω τώρα» μιας εκτέλεσης της εφαρμογής.
 ///
@@ -106,4 +110,51 @@ class SessionLivenessMark {
   static String _plural(int count, String singular, String plural) {
     return count == 1 ? '1 $singular' : '$count $plural';
   }
+}
+
+/// Διαβάζει τα ίχνη «τρέχω τώρα» **όλων** των σταθμών από τον φάκελο logs
+/// δίπλα στη βάση.
+///
+/// Είναι η μόνη γνώση για το «ποιος άλλος κρατά τη βάση» που υπάρχει **χωρίς**
+/// ανοιχτή βάση — γράφεται από κάθε εφαρμογή πριν καν ανοίξει τη βάση της.
+/// Περιλαμβάνει και το κοινό `session.lock` της παλιάς εποχής: το γράφει
+/// ακριβώς ο συνάδελφος με την παλιότερη εφαρμογή.
+///
+/// Δεν κρίνει φρεσκάδα — επιστρέφει ό,τι βρει. Φάκελος που δεν απαντά ή δεν
+/// υπάρχει δίνει κενή λίστα, ποτέ σφάλμα και ποτέ κρέμασμα: σε κοινόχρηστο
+/// φάκελο που χάθηκε, ο καλών ρωτά ακριβώς τη στιγμή που ο χρήστης προσπαθεί
+/// να διορθώσει κάτι.
+Future<List<SessionLivenessMark>> readSessionLivenessMarks(
+  String logsDirectory, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  final marks = <SessionLivenessMark>[];
+  try {
+    await () async {
+      final entries = await Directory(logsDirectory).list().toList();
+      for (final entry in entries) {
+        if (entry is! File ||
+            !_isLivenessMarkFileName(p.basename(entry.path))) {
+          continue;
+        }
+        try {
+          final mark = SessionLivenessMark.decode(await entry.readAsString());
+          if (mark != null) marks.add(mark);
+        } catch (_) {
+          // Ένα ίχνος που δεν διαβάζεται δεν κρύβει τα υπόλοιπα.
+        }
+      }
+    }().timeout(timeout);
+  } catch (_) {
+    // Φάκελος που δεν υπάρχει ή δεν απαντά: ό,τι μαζεύτηκε ως εκεί.
+  }
+  return marks;
+}
+
+/// `session_<σταθμός>.lock` ή το παλιό κοινό `session.lock` — όχι τα
+/// ημερήσια `session_<ημερομηνία>.log`.
+bool _isLivenessMarkFileName(String name) {
+  final lower = name.toLowerCase();
+  if (lower == 'session.lock') return true;
+  return lower.startsWith('session_') && lower.endsWith('.lock');
 }

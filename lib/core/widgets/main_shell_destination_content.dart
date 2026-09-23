@@ -23,6 +23,7 @@ import '../../features/history/screens/history_screen.dart';
 import '../../features/knowledge/screens/knowledge_screen.dart';
 import '../../features/lamp/screens/lamp_screen.dart';
 import '../../features/tasks/screens/tasks_screen.dart';
+import '../utils/background_task.dart';
 import 'main_nav_destination.dart';
 import 'main_shell.dart';
 
@@ -50,7 +51,7 @@ class MainShellDestinationContent {
 
   void initDatabaseStateNotice() {
     _databaseStateNotice = _evaluateCurrentDatabaseNotice();
-    unawaited(_loadDatabaseNoticePreferences());
+    runBackgroundTask(_loadDatabaseNoticePreferences());
     _watchDatabaseReachability();
   }
 
@@ -108,7 +109,7 @@ class MainShellDestinationContent {
   Future<void> _loadDatabaseNoticePreferences() async {
     final settings = SettingsService();
 
-    unawaited(() async {
+    runBackgroundTask(() async {
       final acknowledged = await settings
           .getAcknowledgedDatabaseNoticeIdentity();
       if (!host.mounted) return;
@@ -117,7 +118,7 @@ class MainShellDestinationContent {
       host.notifyShellChanged();
     }());
 
-    unawaited(() async {
+    runBackgroundTask(() async {
       // Σιωπηλή σε αποτυχία: χωρίς τη ρύθμιση ισχύει η προεπιλογή, που είναι
       // ό,τι ισχύει και σε κάθε νέα εγκατάσταση.
       int threshold;
@@ -215,6 +216,7 @@ class MainShellDestinationContent {
       showStateNotice: _showDatabaseStateNotice,
       hasSwitchSuccess: switchSuccessMessage != null,
       isUnreachable: reachability == DatabaseReachability.lost,
+      isBusy: reachability == DatabaseReachability.busy,
     );
     final instances = host.ref.watch(appInstancesProvider).value;
     return Column(
@@ -295,6 +297,39 @@ class MainShellDestinationContent {
                       'ολοκληρωθεί· περίμενε να επανέλθει το δίκτυο ή κλείσε '
                       'και ξανάνοιξε την εφαρμογή.',
                       key: const ValueKey('database_unreachable_banner'),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        // Όπως η κόκκινη, δεν κλείνει με κουμπί: φεύγει μόνη της μόλις η
+        // βάση ελευθερωθεί. Δεν υπόσχεται ότι οι αποθηκεύσεις «θα γίνουν» —
+        // μια εγγραφή που περιμένει πάνω από το όριο αποτυγχάνει, και ο
+        // χειριστής πρέπει να ξέρει ότι ίσως χρειαστεί να την ξαναδοκιμάσει.
+        if (topBanner == TopDatabaseBanner.busy)
+          Material(
+            color: Colors.amber.shade300,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.hourglass_top_outlined,
+                    size: 20,
+                    color: Colors.black87,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Η βάση δεδομένων είναι απασχολημένη — οι φορτώσεις και '
+                      'οι αποθηκεύσεις θα καθυστερήσουν. Αν κάποια αποθήκευση '
+                      'αποτύχει, ξαναδοκίμασε μόλις φύγει αυτή η λωρίδα.',
+                      key: const ValueKey('database_busy_banner'),
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         color: Colors.black87,
                         fontWeight: FontWeight.w600,

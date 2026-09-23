@@ -6,10 +6,19 @@ import 'package:path/path.dart' as p;
 ///
 /// Σειρά: αν υπάρχει αρχείο → φάκελος του· αν υπάρχει φάκελος → αυτός·
 /// ανάβασμα γονέων μέχρι πρώτο υπάρχοντα κατάλογο· τελευταία λύση `C:\`.
+///
+/// Ο επιλογέας των Windows δέχεται μόνο διαδρομή που ξεκινά από γράμμα δίσκου
+/// ή από `\\διακομιστή\κοινόχρηστο`. Σε οτιδήποτε άλλο (π.χ. `.` από κείμενο
+/// σαν «POPINIO\φάκελος», ή `\Windows`) πετά «Η παράμετρος είναι εσφαλμένη»
+/// και η εξαίρεση ρίχνει ολόκληρη την εφαρμογή — γι' αυτό τέτοιο κείμενο
+/// πέφτει κατευθείαν στο `C:\`.
 String? initialDirectoryForFilePicker(String? pathHint) {
-  final raw = pathHint?.trim() ?? '';
-  if (raw.isEmpty) {
-    return r'C:\';
+  const fallback = r'C:\';
+  // Κάθετοι → ανάποδες πριν από κάθε άλλη πράξη: με κάθετους το `p.normalize`
+  // κόβει τη μία από τις δύο αρχικές ενός `//διακομιστής/κοινόχρηστο`.
+  final raw = (pathHint?.trim() ?? '').replaceAll('/', r'\');
+  if (!_shellRoot.hasMatch(raw)) {
+    return fallback;
   }
   try {
     final f = File(raw);
@@ -38,5 +47,9 @@ String? initialDirectoryForFilePicker(String? pathHint) {
       dir = parent;
     }
   } catch (_) {}
-  return r'C:\';
+  return fallback;
 }
+
+/// `X:\…` ή `\\διακομιστής\κοινόχρηστο…` — οι μόνες μορφές που ανοίγει ο
+/// επιλογέας των Windows.
+final RegExp _shellRoot = RegExp(r'^([A-Za-z]:\\|\\\\[^\\]+\\[^\\]+)');

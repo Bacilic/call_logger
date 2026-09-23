@@ -1,4 +1,5 @@
 import '../../../core/models/operator_presence.dart';
+import '../../../core/services/session_liveness_mark.dart';
 
 /// Ένα ίχνος παρουσίας μαζί με το όνομα του ανθρώπου, όπως έρχεται από τη βάση.
 typedef PresenceWithName = ({OperatorPresence presence, String? operatorName});
@@ -61,11 +62,51 @@ List<ActiveSession> activeSessions({
       ),
     );
   }
-  out.sort((a, b) {
+  return _sortedMineFirst(out);
+}
+
+/// Οι συνεδρίες όπως τις λένε τα ίχνη «τρέχω τώρα» του φακέλου logs — η πηγή
+/// όταν η βάση **δεν** είναι ανοιχτή (π.χ. αναβάθμιση σχήματος στην εκκίνηση).
+///
+/// Φτωχότερη από τη βάση, αλλά αρκετή για τον φρουρό: σταθμός, έκδοση, πόσο
+/// πρόσφατα. Δεν ξέρει **ποιος** κάθεται στον σταθμό, και δεν ξεχωρίζει δύο
+/// εφαρμογές στον ίδιο υπολογιστή (το ίχνος είναι ένα ανά σταθμό) — γι' αυτό
+/// «δικό μου» είναι ό,τι γράφτηκε από τον δικό μου σταθμό.
+///
+/// Φρεσκάδα: ο **ίδιος** κανόνας με την παρουσία στη βάση
+/// ([OperatorPresence.onlineWindow]). Ίχνος που έπαψε να ανανεώνεται είναι
+/// κατάρρευση, όχι συνάδελφος.
+List<ActiveSession> activeSessionsFromLivenessMarks({
+  required List<SessionLivenessMark> marks,
+  required DateTime now,
+  required String myStation,
+}) {
+  final me = myStation.trim().toLowerCase();
+  final out = <ActiveSession>[];
+  for (final mark in marks) {
+    if (now.difference(mark.lastSeen) >= OperatorPresence.onlineWindow) {
+      continue;
+    }
+    final station = mark.station.trim();
+    final version = mark.version.trim();
+    out.add(
+      ActiveSession(
+        station: station.isEmpty ? 'άγνωστος σταθμός' : station,
+        lastSeenAt: mark.lastSeen,
+        appVersion: version.isEmpty ? null : version,
+        isMine: me.isNotEmpty && station.toLowerCase() == me,
+      ),
+    );
+  }
+  return _sortedMineFirst(out);
+}
+
+List<ActiveSession> _sortedMineFirst(List<ActiveSession> sessions) {
+  sessions.sort((a, b) {
     if (a.isMine != b.isMine) return a.isMine ? -1 : 1;
     return b.lastSeenAt.compareTo(a.lastSeenAt);
   });
-  return out;
+  return sessions;
 }
 
 /// Μόνο οι **άλλοι** — αυτό ρωτά ο φρουρός πριν από επικίνδυνη συντήρηση.

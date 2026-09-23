@@ -8,6 +8,7 @@ import '../../../core/services/gemini_api_key_resolution.dart';
 import '../../../core/services/overridable_settings.dart';
 import '../../../core/services/profile_settings.dart';
 import '../../../core/services/scoped_settings.dart';
+import '../../../core/utils/background_task.dart';
 
 class GeminiApiKeyNotifier extends Notifier<String> {
   bool _hydrated = false;
@@ -16,7 +17,7 @@ class GeminiApiKeyNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return '';
   }
@@ -96,7 +97,7 @@ class GeminiPromptTemplateNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return kDefaultAiPromptTemplate;
   }
@@ -139,7 +140,7 @@ class GeminiPromptTemplateUserDefaultNotifier extends Notifier<String?> {
   String? build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return null;
   }
@@ -185,7 +186,7 @@ class GeminiEndpointNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return kDefaultGeminiEndpoint;
   }
@@ -229,7 +230,7 @@ class GeminiPrimaryModelNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return kDefaultGeminiPrimaryModel;
   }
@@ -276,7 +277,7 @@ class GeminiFallbackEnabledNotifier extends Notifier<bool> {
   bool build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return true;
   }
@@ -314,7 +315,7 @@ class GeminiFallbackModelNotifier extends Notifier<String> {
   String build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return kDefaultGeminiFallbackModel;
   }
@@ -358,7 +359,7 @@ class GeminiAutoResubmitEnabledNotifier extends Notifier<bool> {
   bool build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return false;
   }
@@ -390,7 +391,7 @@ class GeminiModelsProbeCacheNotifier extends Notifier<GeminiModelsProbeCache?> {
   GeminiModelsProbeCache? build() {
     if (!_hydrated) {
       _hydrated = true;
-      Future<void>(_hydrateFromDb);
+      runBackgroundTask(Future<void>(_hydrateFromDb));
     }
     return null;
   }
