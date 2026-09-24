@@ -519,7 +519,10 @@ class _TaskLansweeperDialogState extends ConsumerState<TaskLansweeperDialog>
                     ],
                   ),
                   const SizedBox(height: 10),
-                  LansweeperSubmitStatusBar(selectedTaskId: task.id),
+                  LansweeperSubmitStatusBar(
+                    connection: connectionStatus,
+                    selectedTaskId: task.id,
+                  ),
                 ],
               ),
             ),

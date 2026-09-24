@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/lansweeper_connection_status.dart';
 import '../../models/lansweeper_submit_progress.dart';
 import '../../providers/lansweeper_submit_progress_provider.dart';
 
@@ -102,10 +103,19 @@ class LansweeperElapsedText extends StatelessWidget {
 /// να τα πατήσει.
 class LansweeperSubmitStatusBar extends ConsumerWidget {
   const LansweeperSubmitStatusBar({
+    required this.connection,
     this.selectedCallId,
     this.selectedTaskId,
     super.key,
   });
+
+  /// Η κατάσταση σύνδεσης, **περασμένη από τον διάλογο** και όχι διαβασμένη εδώ.
+  ///
+  /// Η γραμμή είναι widget παρουσίασης: αν διάβαζε μόνη της τον φρουρό, κάθε
+  /// οθόνη που τη δείχνει θα ξεκινούσε δικτυακό έλεγχο χωρίς να το ζητήσει —
+  /// και κάθε τεστ που τη χτίζει θα περίμενε αληθινό διακομιστή. Ο διάλογος
+  /// κρατά ούτως ή άλλως την κατάσταση· εδώ απλώς φτάνει.
+  final LansweeperConnectionStatus connection;
 
   /// Ποια κλήση βλέπει αυτή τη στιγμή ο χρήστης.
   ///
@@ -134,16 +144,31 @@ class LansweeperSubmitStatusBar extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
+    // Το «Έτοιμη για αποστολή» δεν λέγεται πριν επιβεβαιωθεί η σύνδεση: όσο ο
+    // φρουρός ελέγχει ή βρίσκει τον διακομιστή κλειστό, η γραμμή υποσχόταν
+    // ετοιμότητα που το κλειδωμένο κουμπί από κάτω διέψευδε.
     final (
       Color accent,
       IconData? icon,
       String text,
     ) = switch (progress.outcome) {
-      LansweeperSubmitOutcome.idle => (
-        theme.textTheme.bodySmall?.color ?? scheme.outline,
-        Icons.cloud_queue_rounded,
-        'Έτοιμη για αποστολή',
-      ),
+      LansweeperSubmitOutcome.idle => switch (connection) {
+        LansweeperConnectionAvailable() => (
+          theme.textTheme.bodySmall?.color ?? scheme.outline,
+          Icons.cloud_queue_rounded,
+          'Έτοιμη για αποστολή',
+        ),
+        LansweeperConnectionChecking() => (
+          theme.textTheme.bodySmall?.color ?? scheme.outline,
+          Icons.cloud_sync_rounded,
+          'Έλεγχος σύνδεσης με το Lansweeper…',
+        ),
+        LansweeperConnectionUnavailable() => (
+          scheme.error,
+          Icons.cloud_off_rounded,
+          'Ο διακομιστής Lansweeper δεν απαντά',
+        ),
+      },
       LansweeperSubmitOutcome.running => (
         scheme.primary,
         null,

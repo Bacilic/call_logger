@@ -42,6 +42,7 @@ class TaskNotification {
     required this.taskTitle,
     required this.createdAt,
     this.actorOperatorId,
+    this.closureNote,
   });
 
   final int id;
@@ -52,6 +53,22 @@ class TaskNotification {
 
   /// Ποιος το έκανε· `null` όταν η πράξη έγινε χωρίς αναγνωρισμένο χειριστή.
   final int? actorOperatorId;
+
+  /// **Γιατί** έκλεισε — η λύση που έγραψε ο συνάδελφος τη στιγμή που έκλεινε.
+  ///
+  /// Δεν αποθηκεύεται εδώ και δεν χρειάστηκε νέο πεδίο: ο λόγος ζει πάνω στην
+  /// ίδια την εκκρεμότητα (`solution_notes`), γραμμένος μέσα στην ίδια
+  /// συναλλαγή με το κλείσιμο. Έρχεται μαζί με τον τίτλο, από το ίδιο ερώτημα.
+  ///
+  /// `null` ή κενό σε κάθε άλλο είδος ειδοποίησης, και όταν ο συνάδελφος
+  /// έκλεισε χωρίς να γράψει τίποτα.
+  final String? closureNote;
+
+  /// Ο λόγος, μόνο όταν υπάρχει πραγματικά κάτι να διαβαστεί.
+  String? get visibleClosureNote {
+    final note = closureNote?.trim() ?? '';
+    return note.isEmpty ? null : note;
+  }
 
   static TaskNotification? fromMap(Map<String, dynamic> map) {
     final id = map['id'] as int?;
@@ -65,6 +82,7 @@ class TaskNotification {
       taskTitle: (map['title'] as String?)?.trim() ?? '',
       createdAt: DateTime.tryParse((map['created_at'] as String?) ?? ''),
       actorOperatorId: map['actor_operator_id'] as int?,
+      closureNote: map['solution_notes'] as String?,
     );
   }
 }

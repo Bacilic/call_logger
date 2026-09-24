@@ -10,6 +10,7 @@ import '../../features/directory/providers/directory_cache_refresh.dart';
 import '../../features/tasks/providers/task_notifications_provider.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../services/crash_log_service.dart';
+import '../services/operator_profile_refresh.dart';
 import '../widgets/modal_route_tracker.dart';
 import 'database_helper.dart';
 import 'database_reachability.dart';
@@ -38,6 +39,17 @@ const Duration kSharedDatabaseCheckInterval = Duration(seconds: 12);
 /// όσα απλώς ακυρώνονται. Έτσι η αναμονή του ενός δεν προλαβαίνει να ξεπλύνει
 /// τις ακυρώσεις του άλλου πριν προλάβει να τις δει όποιος ακούει.
 Future<void> refreshSharedDatabaseViews(Ref ref) async {
+  // ΠΡΩΤΑ η ταυτότητα, και για δύο λόγους.
+  //
+  // Πρώτον, τα δικαιώματα κρίνουν τι επιτρέπεται να δει ο χρήστης: αν πρώτα
+  // φορτώσουμε τις λίστες και μετά μάθουμε ότι του αφαιρέθηκε πρόσβαση, η
+  // οθόνη θα έχει ήδη δείξει ό,τι δεν δικαιούται.
+  //
+  // Δεύτερον, είναι το φθηνότερο βήμα του κύκλου — μία γραμμή με πρωτεύον
+  // κλειδί — και σταματά αμέσως αν δεν άλλαξε τίποτα. Δεν προστίθεται
+  // χρονόμετρο ούτε νέα αφορμή: ο κύκλος τρέχει ήδη, απλώς ρωτά και αυτό.
+  await refreshCurrentOperatorProfileSafely();
+  if (!ref.mounted) return;
   await ref.read(tasksProvider.notifier).refresh();
   // Η ανάθεση και το κλείσιμο γίνονται στο μηχάνημα του ΑΛΛΟΥ: αυτός εδώ ο
   // κύκλος είναι το μόνο σημείο όπου μπορεί να μαθευτεί ζωντανά. Ακύρωση και

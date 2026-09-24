@@ -13,6 +13,11 @@ import 'package:call_logger/core/database/shared_database_refresh.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/history/providers/history_provider.dart';
 import 'package:call_logger/core/database/department_repository.dart';
+import 'package:call_logger/core/database/operator_repository.dart';
+import 'package:call_logger/core/models/app_permission.dart';
+import 'package:call_logger/core/models/operator.dart';
+import 'package:call_logger/core/services/current_operator.dart';
+import 'package:call_logger/core/services/permission_service.dart';
 import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
 import 'package:call_logger/features/directory/providers/directory_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_report_scope_provider.dart';
@@ -119,6 +124,47 @@ void main() {
         reason:
             'ο χάρτης κρίνει θέσεις ΚΑΙ χρώματα από αυτή τη λίστα· μπαγιάτικη '
             'δίνει σε δύο τμήματα το ίδιο «διακριτό» χρώμα',
+      );
+    });
+
+    test('φτάνει και στα δικαιώματα του συνδεδεμένου χρήστη', () async {
+      // Το σενάριο: ο διαχειριστής ανοίγει στον Βλάση το «Ιστορικό Εφαρμογής»
+      // από τον δικό του σταθμό, ενώ ο Βλάσης δουλεύει με την εφαρμογή
+      // ανοιχτή. Όσο η ταυτότητα έλειπε από την εμβέλεια, δεν το μάθαινε ποτέ.
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+      container.read(_refCaptureProvider);
+
+      final db = await DatabaseHelper.instance.database;
+      final repository = OperatorRepository(db);
+      final vlasis = await repository.insert(
+        Operator(displayName: 'Βλάσης', createdAt: DateTime(2026, 9, 1)),
+      );
+      CurrentOperator.activate(vlasis);
+      addTearDown(CurrentOperator.reset);
+
+      expect(
+        PermissionService.instance.can(AppPermission.viewApplicationAudit),
+        isFalse,
+      );
+
+      await repository.update(
+        vlasis.copyWith(
+          permissionOverrides: {AppPermission.viewApplicationAudit.key: true},
+        ),
+        expected: vlasis,
+      );
+
+      await refreshSharedDatabaseViews(_capturedRef!);
+
+      expect(
+        PermissionService.instance.can(AppPermission.viewApplicationAudit),
+        isTrue,
+        reason:
+            'η προστασία που δεν ενημερώνεται δεν είναι προστασία — ούτε όταν '
+            'δίνεται πρόσβαση, ούτε όταν αφαιρείται',
       );
     });
 

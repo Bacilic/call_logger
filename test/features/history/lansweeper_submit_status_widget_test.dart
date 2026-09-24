@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:call_logger/features/history/models/lansweeper_connection_status.dart';
 import 'package:call_logger/features/history/models/lansweeper_submit_progress.dart';
 import 'package:call_logger/features/history/providers/lansweeper_submit_progress_provider.dart';
 import 'package:call_logger/features/history/widgets/lansweeper/lansweeper_submit_status.dart';
@@ -30,13 +31,57 @@ LansweeperSubmitProgressNotifier _notifier(WidgetTester tester) {
 
 void main() {
   group('Ζώνη κατάστασης αποστολής', () {
-    testWidgets('χωρίς αποστολή δηλώνει ετοιμότητα', (tester) async {
-      await tester.pumpWidget(_host(const LansweeperSubmitStatusBar()));
+    testWidgets('χωρίς αποστολή και με ελεγμένη σύνδεση δηλώνει ετοιμότητα', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const LansweeperSubmitStatusBar(
+            connection: LansweeperConnectionAvailable(),
+          ),
+        ),
+      );
       expect(find.text('Έτοιμη για αποστολή'), findsOneWidget);
     });
 
+    testWidgets('όσο ελέγχεται η σύνδεση ΔΕΝ υπόσχεται ετοιμότητα', (
+      tester,
+    ) async {
+      // Η γραμμή έλεγε «Έτοιμη για αποστολή» ενώ το κουμπί από κάτω ήταν
+      // κλειδωμένο επειδή η σύνδεση δεν είχε επιβεβαιωθεί ακόμη.
+      await tester.pumpWidget(
+        _host(
+          const LansweeperSubmitStatusBar(
+            connection: LansweeperConnectionChecking(),
+          ),
+        ),
+      );
+      expect(find.text('Έτοιμη για αποστολή'), findsNothing);
+      expect(find.textContaining('Έλεγχος σύνδεσης'), findsOneWidget);
+    });
+
+    testWidgets('με τον διακομιστή κλειστό το λέει αντί για ετοιμότητα', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          const LansweeperSubmitStatusBar(
+            connection: LansweeperConnectionUnavailable('όποια αιτία'),
+          ),
+        ),
+      );
+      expect(find.text('Έτοιμη για αποστολή'), findsNothing);
+      expect(find.textContaining('δεν απαντά'), findsOneWidget);
+    });
+
     testWidgets('όσο τρέχει λέει ποιο βήμα και πόσα συνολικά', (tester) async {
-      await tester.pumpWidget(_host(const LansweeperSubmitStatusBar()));
+      await tester.pumpWidget(
+        _host(
+          const LansweeperSubmitStatusBar(
+            connection: LansweeperConnectionAvailable(),
+          ),
+        ),
+      );
       final notifier = _notifier(tester);
 
       notifier.begin(const [
@@ -63,7 +108,13 @@ void main() {
     testWidgets('το αποτέλεσμα και ο χρόνος μένουν μετά το τέλος', (
       tester,
     ) async {
-      await tester.pumpWidget(_host(const LansweeperSubmitStatusBar()));
+      await tester.pumpWidget(
+        _host(
+          const LansweeperSubmitStatusBar(
+            connection: LansweeperConnectionAvailable(),
+          ),
+        ),
+      );
       final notifier = _notifier(tester);
 
       notifier.begin(const [LansweeperSubmitStepKeys.ticket]);
@@ -80,7 +131,13 @@ void main() {
     });
 
     testWidgets('η αποτυχία λέει την αιτία της', (tester) async {
-      await tester.pumpWidget(_host(const LansweeperSubmitStatusBar()));
+      await tester.pumpWidget(
+        _host(
+          const LansweeperSubmitStatusBar(
+            connection: LansweeperConnectionAvailable(),
+          ),
+        ),
+      );
       final notifier = _notifier(tester);
 
       notifier.begin(const [LansweeperSubmitStepKeys.ticket]);
@@ -127,7 +184,12 @@ void main() {
   group('Το αποτέλεσμα ανήκει στην κλήση του', () {
     testWidgets('δεν συνοδεύει άλλη κλήση', (tester) async {
       await tester.pumpWidget(
-        _host(const LansweeperSubmitStatusBar(selectedCallId: 9)),
+        _host(
+          const LansweeperSubmitStatusBar(
+            connection: LansweeperConnectionAvailable(),
+            selectedCallId: 9,
+          ),
+        ),
       );
       final notifier = _notifier(tester);
 
@@ -159,7 +221,12 @@ void main() {
 
     testWidgets('φαίνεται στην κλήση που στάλθηκε', (tester) async {
       await tester.pumpWidget(
-        _host(const LansweeperSubmitStatusBar(selectedCallId: 5)),
+        _host(
+          const LansweeperSubmitStatusBar(
+            connection: LansweeperConnectionAvailable(),
+            selectedCallId: 5,
+          ),
+        ),
       );
       final notifier = _notifier(tester);
 
@@ -177,7 +244,13 @@ void main() {
     testWidgets('χωρίς επιλογή το αποτέλεσμα μένει να διαβαστεί', (
       tester,
     ) async {
-      await tester.pumpWidget(_host(const LansweeperSubmitStatusBar()));
+      await tester.pumpWidget(
+        _host(
+          const LansweeperSubmitStatusBar(
+            connection: LansweeperConnectionAvailable(),
+          ),
+        ),
+      );
       final notifier = _notifier(tester);
 
       notifier.begin(

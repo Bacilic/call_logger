@@ -186,8 +186,12 @@ class _TaskNotificationsDialogState
         actions: [
           TextButton(
             onPressed: () => _close(openTasks: true),
+            // Δύο διαφορετικές υποσχέσεις, γιατί δύο διαφορετικά πράγματα
+            // συμβαίνουν: με μία ειδοποίηση ανοίγει η ίδια η εκκρεμότητα, με
+            // πολλές δεν υπάρχει μία να ανοίξει. Ο πληθυντικός έλεγε
+            // «Άνοιγμα» και απλώς άλλαζε οθόνη.
             child: Text(
-              _isSingle ? 'Άνοιγμα εκκρεμότητας' : 'Άνοιγμα Εκκρεμοτήτων',
+              _isSingle ? 'Άνοιγμα εκκρεμότητας' : 'Μετάβαση στις Εκκρεμότητες',
             ),
           ),
           FilledButton(
@@ -231,6 +235,7 @@ class _NotificationTile extends StatelessWidget {
     final theme = Theme.of(context);
     final at = notification.createdAt;
     final when = at == null ? '' : ' · ${DateFormat('dd/MM HH:mm').format(at)}';
+    final closureNote = notification.visibleClosureNote;
     // Χωρίς αναγνωρισμένο δράστη μένει το γεγονός σκέτο: μια παύλα στη θέση
     // του ονόματος δεν προσθέτει τίποτα.
     final who = actorName == null ? _verb : '$_verb: $actorName';
@@ -272,6 +277,20 @@ class _NotificationTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                // Το «γιατί», όταν ο συνάδελφος το έγραψε. Χωρίς αυτό η
+                // ειδοποίηση ανήγγειλε το γεγονός και κρατούσε τον λόγο του
+                // για τον εαυτό της.
+                if (closureNote != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    closureNote,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),

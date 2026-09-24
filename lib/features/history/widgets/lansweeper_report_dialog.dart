@@ -38,6 +38,7 @@ import 'lansweeper/lansweeper_report_call_list.dart';
 import 'lansweeper/lansweeper_report_item_mapper.dart';
 import 'lansweeper/lansweeper_report_range_bar.dart';
 import 'lansweeper/lansweeper_url_rules.dart';
+import 'lansweeper/lansweeper_submit_block_reason.dart';
 import 'lansweeper/lansweeper_submit_status.dart';
 import 'lansweeper/lansweeper_sync_form.dart';
 import 'lansweeper/sync_history_list.dart';
@@ -256,9 +257,15 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         geminiFallbackModelProvider,
       );
       if (!mounted) return;
-      unawaited(
-        ref.read(lansweeperConnectionProbeProvider.notifier).ensureCheck(),
-      );
+      // Ο έλεγχος σύνδεσης **δεν** ξεκινά από εδώ.
+      //
+      // Στο πρώτο καρέ οι κλήσεις φορτώνουν ακόμη, άρα κανένα widget δεν
+      // παρακολουθεί τον φρουρό: γεννιόταν χωρίς ακροατή, πέθαινε μέσα στην
+      // αναμονή του δικτύου, και η απάντηση πεταγόταν σιωπηλά. Όταν αργότερα
+      // χτίζονταν τα κουμπιά, γεννιόταν νέος φρουρός στο «ελέγχω» που δεν τον
+      // ξυπνούσε πια κανείς — και η Άμεση Καταχώρηση έμενε κλειδωμένη.
+      //
+      // Πλέον ξεκινά μόνος του μόλις τον ζητήσει οθόνη που τον κρατά ζωντανή.
       unawaited(hydrateTicketSubmitFormPrefs());
     });
     _lansweeperApiUrlSub = ref.listenManual<String>(lansweeperApiUrlProvider, (
@@ -341,10 +348,10 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     required LansweeperConnectionStatus status,
     required Widget child,
   }) {
-    if (status case LansweeperConnectionUnavailable(:final reason)) {
-      return Tooltip(message: reason, child: child);
-    }
-    return child;
+    return _wrapOptionalTooltip(
+      message: lansweeperConnectionBlockReason(status),
+      child: child,
+    );
   }
 
   Widget _connectionAwareIcon({
@@ -514,6 +521,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     required LansweeperConnectionStatus connectionStatus,
     required bool connectionReady,
     required bool canImmediateApiSubmit,
+    required String? immediateSubmitBlockReason,
     required bool canResubmitApi,
     required bool isPrimaryRegistered,
     required bool isPrimaryFailed,
@@ -533,7 +541,10 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            LansweeperSubmitStatusBar(selectedCallId: selectedCallId),
+            LansweeperSubmitStatusBar(
+              connection: connectionStatus,
+              selectedCallId: selectedCallId,
+            ),
             const SizedBox(height: 10),
             // Μία γραμμή, σμικρυμένη αν δεν χωράει, αντί για αναδίπλωση: τα
             // κουμπιά δεν επιτρέπεται να αλλάζουν γραμμή ανάλογα με το αν
@@ -546,53 +557,48 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _wrapOptionalTooltip(
-                    message: isPrimaryRegistered
-                        ? 'Η κλήση είναι ήδη καταχωρημένη'
-                        : null,
-                    child: _wrapLansweeperConnectionTooltip(
-                      status: connectionStatus,
-                      child: FilledButton.icon(
-                        onPressed:
-                            canImmediateApiSubmit && primarySelected != null
-                            ? () => unawaited(
-                                registrationFlow.submitSelected(
-                                  primarySelected,
-                                  selected,
-                                  resubmit: false,
-                                ),
-                              )
-                            : null,
-                        icon: submitting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : _connectionAwareIcon(
-                                status: connectionStatus,
-                                icon: Icons.cloud_upload_rounded,
+                    // Η ίδια απόφαση κρίνει και το κλείδωμα και την εξήγηση:
+                    // κανένα πάτημα δεν μένει αναπάντητο.
+                    message: immediateSubmitBlockReason,
+                    child: FilledButton.icon(
+                      onPressed:
+                          canImmediateApiSubmit && primarySelected != null
+                          ? () => unawaited(
+                              registrationFlow.submitSelected(
+                                primarySelected,
+                                selected,
+                                resubmit: false,
                               ),
-                        label: submitting
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Text('Αποστολή…'),
-                                  const SizedBox(width: 6),
-                                  LansweeperSubmitElapsed(
-                                    builder: (context, elapsed) =>
-                                        LansweeperElapsedText(
-                                          milliseconds: elapsed,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodyMedium,
-                                        ),
-                                  ),
-                                ],
-                              )
-                            : const Text('Άμεση Καταχώρηση'),
-                      ),
+                            )
+                          : null,
+                      icon: submitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : _connectionAwareIcon(
+                              status: connectionStatus,
+                              icon: Icons.cloud_upload_rounded,
+                            ),
+                      label: submitting
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Αποστολή…'),
+                                const SizedBox(width: 6),
+                                LansweeperSubmitElapsed(
+                                  builder: (context, elapsed) =>
+                                      LansweeperElapsedText(
+                                        milliseconds: elapsed,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodyMedium,
+                                      ),
+                                ),
+                              ],
+                            )
+                          : const Text('Άμεση Καταχώρηση'),
                     ),
                   ),
                   if (isPrimaryFailed) ...[
@@ -902,6 +908,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
               connectionStatus: data.connectionStatus,
               connectionReady: data.connectionReady,
               canImmediateApiSubmit: data.canImmediateApiSubmit,
+              immediateSubmitBlockReason: data.immediateSubmitBlockReason,
               canResubmitApi: data.canResubmitApi,
               isPrimaryRegistered: data.isPrimaryRegistered,
               isPrimaryFailed: data.isPrimaryFailed,
@@ -978,12 +985,16 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     final isPrimaryFailed =
         primarySelected != null &&
         LansweeperReportItemMapper.isFailedCall(primarySelected);
-    final canImmediateApiSubmit =
-        primarySelected != null &&
-        !syncState.isLoading &&
-        canSubmitToApi &&
-        connectionReady &&
-        !isPrimaryRegistered;
+    // ΜΙΑ απόφαση για το κλείδωμα και την εξήγησή του: ό,τι εμποδίζει το κουμπί
+    // το λέει και η υπόδειξη πάνω του.
+    final immediateSubmitBlockReason = lansweeperImmediateSubmitBlockReason(
+      hasSelection: primarySelected != null,
+      isRegistered: isPrimaryRegistered,
+      apiUrlValid: canSubmitToApi,
+      connection: connectionStatus,
+      busy: syncState.isLoading,
+    );
+    final canImmediateApiSubmit = immediateSubmitBlockReason == null;
     final canResubmitApi = canImmediateApiSubmit && isPrimaryFailed;
     if (primarySelected != null && selected.isNotEmpty) {
       aiFlow.prefillForm(primarySelected, selected);
@@ -1076,6 +1087,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       isPrimaryRegistered: isPrimaryRegistered,
       isPrimaryFailed: isPrimaryFailed,
       canImmediateApiSubmit: canImmediateApiSubmit,
+      immediateSubmitBlockReason: immediateSubmitBlockReason,
       canResubmitApi: canResubmitApi,
       syncState: syncState,
       connectionStatus: connectionStatus,
@@ -1322,6 +1334,7 @@ class _ReportViewData {
     required this.isPrimaryRegistered,
     required this.isPrimaryFailed,
     required this.canImmediateApiSubmit,
+    required this.immediateSubmitBlockReason,
     required this.canResubmitApi,
     required this.syncState,
     required this.connectionStatus,
@@ -1355,6 +1368,9 @@ class _ReportViewData {
   final bool isPrimaryRegistered;
   final bool isPrimaryFailed;
   final bool canImmediateApiSubmit;
+
+  /// Γιατί δεν επιτρέπεται· `null` όταν επιτρέπεται. Ίδια πηγή με το παραπάνω.
+  final String? immediateSubmitBlockReason;
   final bool canResubmitApi;
 
   // ── Η σύνδεση με το Lansweeper ─────────────────────────────────────────────

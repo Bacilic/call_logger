@@ -19,6 +19,7 @@ TaskNotification _notification({
   TaskNotificationKind kind = TaskNotificationKind.assigned,
   int? actorId = 22,
   String title = 'Δεν τυπώνει ο εκτυπωτής του ΤΕΠ',
+  String? closureNote,
 }) => TaskNotification(
   id: id,
   taskId: id,
@@ -26,6 +27,7 @@ TaskNotification _notification({
   taskTitle: title,
   createdAt: DateTime(2026, 9, 14, 9, 12),
   actorOperatorId: actorId,
+  closureNote: closureNote,
 );
 
 void main() {
@@ -117,9 +119,48 @@ void main() {
 
       expect(find.text('Άνοιγμα εκκρεμότητας'), findsOneWidget);
     });
+
+    testWidgets('κλείσιμο: φαίνεται ΚΑΙ ο λόγος, όχι μόνο το γεγονός', (
+      tester,
+    ) async {
+      await open(tester, [
+        _notification(
+          id: 1,
+          kind: TaskNotificationKind.closed,
+          closureNote: 'Αντικαταστάθηκε το τύμπανο',
+        ),
+      ]);
+
+      expect(find.text('Αντικαταστάθηκε το τύμπανο'), findsOneWidget);
+    });
+
+    testWidgets('κλείσιμο χωρίς λόγο: τίποτα δεν προστίθεται', (tester) async {
+      // Κενό κείμενο δεν είναι λόγος: μια άδεια γραμμή κάτω από τον τίτλο
+      // μοιάζει με σφάλμα εμφάνισης.
+      await open(tester, [
+        _notification(
+          id: 1,
+          kind: TaskNotificationKind.closed,
+          closureNote: '   ',
+        ),
+      ]);
+
+      expect(find.text('   '), findsNothing);
+    });
   });
 
   group('Πολλά μαζί', () {
+    testWidgets('το κουμπί δεν υπόσχεται άνοιγμα όταν είναι πολλές', (
+      tester,
+    ) async {
+      // Με πολλές δεν υπάρχει μία εκκρεμότητα να ανοίξει — η ετικέτα λέει
+      // αυτό που όντως συμβαίνει.
+      await open(tester, [_notification(id: 1), _notification(id: 2)]);
+
+      expect(find.text('Μετάβαση στις Εκκρεμότητες'), findsOneWidget);
+      expect(find.text('Άνοιγμα εκκρεμότητας'), findsNothing);
+    });
+
     testWidgets('τίτλος απουσίας και σύνοψη ανά είδος', (tester) async {
       await open(tester, [
         _notification(id: 1),
@@ -132,7 +173,7 @@ void main() {
         find.text('2 ανατέθηκαν σε εσάς · 1 δική σας έκλεισε'),
         findsOneWidget,
       );
-      expect(find.text('Άνοιγμα Εκκρεμοτήτων'), findsOneWidget);
+      expect(find.text('Μετάβαση στις Εκκρεμότητες'), findsOneWidget);
     });
 
     testWidgets('πάνω από πέντε: δείχνει πέντε και συνοψίζει τα υπόλοιπα', (

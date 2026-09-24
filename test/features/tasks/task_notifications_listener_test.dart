@@ -13,6 +13,7 @@ import 'package:call_logger/features/tasks/models/task_notification.dart';
 import 'package:call_logger/features/tasks/providers/task_notifications_provider.dart';
 import 'package:call_logger/features/tasks/widgets/task_notifications_listener.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -133,5 +134,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(_kDialogTitle), findsOneWidget);
+  });
+
+  testWidgets('κλείσιμο με Escape: ο διάλογος ΔΕΝ ξαναπετάγεται', (
+    tester,
+  ) async {
+    // Το πιο ενοχλητικό σκέλος του σφάλματος: ο διάλογος έκλεινε κανονικά,
+    // αλλά το επόμενο build έβλεπε την ίδια μη άδεια ουρά και τον ξανάνοιγε —
+    // και ο άνθρωπος δεν μπορούσε να τον ξεφορτωθεί με τίποτα.
+    final container = await pump(tester, pending: [_notification()]);
+    expect(find.text(_kDialogTitle), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(find.text(_kDialogTitle), findsNothing);
+
+    // Ο κύκλος φρεσκάδας ξαναδιαβάζει την ουρά κάθε λεπτό — και η ουρά είναι
+    // ακόμη γεμάτη, αφού το Escape σκόπιμα δεν σβήνει τίποτα. Ακριβώς εδώ ο
+    // διάλογος ξαναπεταγόταν, ξανά και ξανά.
+    container.invalidate(taskNotificationsProvider);
+    await tester.pumpAndSettle();
+
+    expect(find.text(_kDialogTitle), findsNothing);
   });
 }

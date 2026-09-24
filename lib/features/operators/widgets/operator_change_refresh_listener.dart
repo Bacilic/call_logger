@@ -40,7 +40,9 @@ class _OperatorChangeRefreshListenerState
 
   void _onOperatorChanged() {
     if (!mounted) return;
-    invalidateOperatorScopedCaches(ref);
+    // Η αιτία ταξιδεύει μαζί με την αλλαγή: «κάθισε άλλος» ξαναδιαβάζει τα
+    // πάντα, «άλλαξαν τα δικαιώματά του από αλλού» μόνο τα δικαιώματα.
+    invalidateOperatorScopedCaches(ref, cause: CurrentOperator.lastChangeCause);
   }
 
   @override

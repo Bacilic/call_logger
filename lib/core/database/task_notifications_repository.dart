@@ -41,6 +41,10 @@ class TaskNotificationsRepository {
 
   /// Τι περιμένει αυτόν τον άνθρωπο, νεότερο πρώτα.
   ///
+  /// Μαζί με τον τίτλο έρχεται και η **λύση** — ο λόγος που έκλεισε, γραμμένος
+  /// μέσα στην ίδια συναλλαγή με το κλείσιμο. Χωρίς αυτήν, η ειδοποίηση έλεγε
+  /// ότι κάτι δικό σου έκλεισε χωρίς να λέει ποτέ γιατί.
+  ///
   /// Η ένωση με τα `tasks` δίνει τον **τωρινό** τίτλο και ταυτόχρονα φιλτράρει:
   /// εκκρεμότητα που διαγράφηκε ή χάθηκε δεν έχει τίποτα να αναγγείλει, και η
   /// ειδοποίησή της απλώς δεν εμφανίζεται.
@@ -48,7 +52,7 @@ class TaskNotificationsRepository {
     final db = await _db;
     final rows = await db.rawQuery(
       'SELECT n.id, n.task_id, n.kind, n.actor_operator_id, n.created_at, '
-      't.title '
+      't.title, t.solution_notes '
       'FROM task_notifications n '
       'JOIN tasks t ON t.id = n.task_id '
       'WHERE n.recipient_operator_id = ? '

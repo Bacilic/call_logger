@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/lansweeper_agent_api_probe.dart';
 import '../../../../core/services/lansweeper_ticket_requester_fields.dart';
+import '../../providers/lansweeper_connection_probe_provider.dart';
 import 'lansweeper_settings_card.dart';
 
 /// Καρτέλα «Σύνδεση API»: στοιχεία Ticket API και πράκτορας/αιτών.
-class LansweeperSettingsApiTab extends StatefulWidget {
+class LansweeperSettingsApiTab extends ConsumerStatefulWidget {
   const LansweeperSettingsApiTab({
     required this.apiUrlController,
     required this.apiKeyController,
@@ -26,11 +28,12 @@ class LansweeperSettingsApiTab extends StatefulWidget {
   final VoidCallback onApiHelpLink;
 
   @override
-  State<LansweeperSettingsApiTab> createState() =>
+  ConsumerState<LansweeperSettingsApiTab> createState() =>
       _LansweeperSettingsApiTabState();
 }
 
-class _LansweeperSettingsApiTabState extends State<LansweeperSettingsApiTab> {
+class _LansweeperSettingsApiTabState
+    extends ConsumerState<LansweeperSettingsApiTab> {
   bool _obscureApiKey = true;
   bool _agentProbeRunning = false;
   bool? _agentProbeOk;
@@ -53,6 +56,13 @@ class _LansweeperSettingsApiTabState extends State<LansweeperSettingsApiTab> {
       _agentProbeOk = result.ok;
       _agentProbeMessage = result.message;
     });
+    // Ο έλεγχος αυτός μίλησε στο ίδιο το Lansweeper και δημιούργησε πραγματικό
+    // αίτημα — απόδειξη ισχυρότερη από κάθε ping. Χωρίς αυτή τη γραμμή, ο
+    // χρήστης έβλεπε πράσινο «ο πράκτορας αναγνωρίστηκε» και από κάτω έναν
+    // έλεγχο σύνδεσης που δεν τελείωνε ποτέ.
+    if (result.ok) {
+      ref.read(lansweeperConnectionProbeProvider.notifier).markAvailable();
+    }
   }
 
   Widget _buildApiConnectionCard() {

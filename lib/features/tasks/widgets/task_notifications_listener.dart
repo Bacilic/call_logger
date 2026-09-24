@@ -3,14 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/providers/main_nav_request_provider.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/current_operator.dart';
 import '../../../core/services/settings_service.dart';
-import '../../../core/widgets/main_nav_destination.dart';
 import '../../calls/provider/call_entry_provider.dart';
 import '../models/task_notification.dart';
 import '../providers/task_notifications_provider.dart';
+import '../services/task_notification_navigation.dart';
 import 'task_notifications_dialog.dart';
 
 /// Δείχνει τι περιμένει τον χειριστή, σε **όποια οθόνη κι αν βρίσκεται**.
@@ -42,6 +41,19 @@ class _TaskNotificationsListenerState
     extends ConsumerState<TaskNotificationsListener> {
   bool _dialogOpen = false;
 
+  /// Ειδοποιήσεις που δείχτηκαν ήδη και **δεν** σβήστηκαν.
+  ///
+  /// Χωρίς αυτό ο διάλογος δεν έφευγε ποτέ από την οθόνη: μόλις έκλεινε, το
+  /// `build` ξανάβλεπε την ίδια μη άδεια λίστα και τον ξανάνοιγε. Συνέβαινε σε
+  /// δύο δρόμους — με Escape ή κλικ έξω (όπου σκόπιμα δεν σβήνεται τίποτα),
+  /// και όταν η διαγραφή δεν γινόταν γιατί δεν υπήρχε αναγνωρισμένος χρήστης.
+  ///
+  /// **Μνήμη συνεδρίας, όχι απόφαση.** Δεν γράφεται πουθενά: στην επόμενη
+  /// εκκίνηση οι ειδοποιήσεις ξαναεμφανίζονται κανονικά, γιατί το «δεν
+  /// απάντησα τώρα» δεν σημαίνει «μην με ξαναρωτήσεις ποτέ» — αυτό το λέει
+  /// μόνο το κουτάκι στον διάλογο.
+  final Set<int> _shownWithoutAnswer = <int>{};
+
   Future<void> _maybeShow(List<TaskNotification> notifications) async {
     if (_dialogOpen || notifications.isEmpty) return;
     if (!mounted) return;
@@ -52,7 +64,12 @@ class _TaskNotificationsListenerState
         context,
         notifications: notifications,
       );
-      if (result == null) return;
+      if (result == null) {
+        // Έκλεισε χωρίς απάντηση: τίποτα δεν σβήνεται, αλλά ούτε ξαναρωτά
+        // αμέσως. Η επόμενη εκκίνηση θα τις ξαναδείξει.
+        _shownWithoutAnswer.addAll(notifications.map((n) => n.id));
+        return;
+      }
 
       // Σβήνει ΟΛΕΣ, και τις κρυμμένες πίσω από το «και Ν ακόμη»: το «Εντάξει»
       // σημαίνει «τα είδα». Πρώτα η διαγραφή και μετά η πλοήγηση — αλλιώς μια
@@ -63,6 +80,10 @@ class _TaskNotificationsListenerState
             .read(taskNotificationsRepositoryProvider)
             .clearFor(operatorId);
         ref.invalidate(taskNotificationsProvider);
+      } else {
+        // Χωρίς αναγνωρισμένο χρήστη δεν υπάρχει ουρά να αδειάσει — αλλά ο
+        // άνθρωπος απάντησε, και ο διάλογος δεν επιτρέπεται να ξαναπεταχτεί.
+        _shownWithoutAnswer.addAll(notifications.map((n) => n.id));
       }
 
       if (result.silenceFuture) {
@@ -71,18 +92,7 @@ class _TaskNotificationsListenerState
       }
 
       if (!result.openTasks || !mounted) return;
-      // Με μία ειδοποίηση πάμε στην ίδια την κάρτα· με πολλές, στη λίστα —
-      // η εστίαση σε μία από τις πέντε θα ήταν αυθαίρετη επιλογή.
-      ref
-          .read(mainNavRequestProvider.notifier)
-          .request(
-            MainNavRequest(
-              destination: MainNavDestination.tasks,
-              taskFocusEntityId: notifications.length == 1
-                  ? notifications.single.taskId
-                  : null,
-            ),
-          );
+      await openTaskFromNotifications(context, ref, notifications);
     } finally {
       _dialogOpen = false;
     }
@@ -99,10 +109,15 @@ class _TaskNotificationsListenerState
         ref.watch(taskNotificationsProvider).value ??
         const <TaskNotification>[];
 
-    if (!onCall && enabled && pending.isNotEmpty && !_dialogOpen) {
+    // Ό,τι δείχτηκε και δεν απαντήθηκε δεν ξαναρωτά σε αυτή τη συνεδρία.
+    final unanswered = pending
+        .where((n) => !_shownWithoutAnswer.contains(n.id))
+        .toList();
+
+    if (!onCall && enabled && unanswered.isNotEmpty && !_dialogOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        unawaited(_maybeShow(pending));
+        unawaited(_maybeShow(unanswered));
       });
     }
 

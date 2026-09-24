@@ -20,6 +20,7 @@ import '../../features/tasks/providers/task_analytics_date_provider.dart';
 import '../../features/tasks/providers/task_notifications_provider.dart';
 import '../providers/history_audit_immersive_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/current_operator.dart';
 
 /// Εκκαθάριση των caches που κρατούν **προσωπικές ρυθμίσεις του προηγούμενου
 /// χρήστη**, μετά από «Αλλαγή χρήστη».
@@ -45,9 +46,37 @@ import '../providers/settings_provider.dart';
 /// που κρατούν **ρύθμιση**. Όποιος κρατά **δεδομένα** (οι καρτέλες Καταλόγου)
 /// ανανεώνεται με στοχευμένη κλήση που ξαναδιαβάζει τις προτιμήσεις και αφήνει
 /// τις εγγραφές στη θέση τους — η βάση δεν άλλαξε, μόνο ο χρήστης.
-void invalidateOperatorScopedCaches(WidgetRef ref) {
+///
+/// **Δύο αφορμές, δύο εμβέλειες** ([cause]):
+///
+/// - `identitySwitched` — κάθισε άλλος άνθρωπος. Ξαναδιαβάζονται όλα, και οι
+///   οθόνες που δεν δικαιούται κλείνουν.
+/// - `profileRefreshed` — ο διαχειριστής άλλαξε κάτι από άλλον σταθμό, αλλά
+///   στην καρέκλα κάθεται ο ίδιος. Ανανεώνονται **μόνο τα δικαιώματα**: οι
+///   προσωπικές του ρυθμίσεις δεν άλλαξαν, και καμία ανοιχτή οθόνη δεν του
+///   κλείνει στη μέση της δουλειάς του. Έτσι η ανανέωση κοστίζει δύο ακυρώσεις
+///   αντί για είκοσι πέντε συν τέσσερις επαναφορτώσεις στηλών — και μπορεί να
+///   τρέχει με τον κύκλο φρεσκάδας χωρίς να βαραίνει τίποτα.
+void invalidateOperatorScopedCaches(
+  WidgetRef ref, {
+  OperatorChangeCause cause = OperatorChangeCause.identitySwitched,
+}) {
   void run() {
     if (!ref.context.mounted) return;
+
+    // Τα δικαιώματα δεν είναι providers — διαβάζονται από τον συνδεδεμένο
+    // χρήστη τη στιγμή του υπολογισμού. Ακυρώνονται και στις δύο αφορμές:
+    // είναι το μόνο που αλλάζει όταν μιλά ο διαχειριστής από αλλού.
+    ref.invalidate(databaseNavVisibleProvider);
+    ref.invalidate(applicationAuditVisibleProvider);
+
+    if (cause == OperatorChangeCause.profileRefreshed) {
+      // Και τίποτα άλλο. Ο ίδιος άνθρωπος κάθεται: οι προτιμήσεις του ισχύουν,
+      // οι πίνακές του δεν ξαναφορτώνονται, και ό,τι έχει ανοιχτό μένει
+      // ανοιχτό. Το νέο δικαίωμα κρίνει την επόμενη φορά που θα ζητηθεί η
+      // πόρτα — τα δικαιώματα σταματούν το λάθος, όχι τη δουλειά.
+      return;
+    }
 
     // Πλευρική μπάρα και ορατότητα στοιχείων — ό,τι βλέπει ο χρήστης αμέσως.
     ref.invalidate(showActiveTimerProvider);
@@ -57,13 +86,11 @@ void invalidateOperatorScopedCaches(WidgetRef ref) {
     ref.invalidate(notifyTaskHandoversProvider);
     ref.invalidate(taskNotificationsProvider);
     ref.invalidate(enableSpellCheckProvider);
+    // Ξανά μετά τη ρύθμιση από κάτω του: το `databaseNavVisibleProvider`
+    // συνδυάζει προτίμηση ΚΑΙ δικαίωμα, οπότε η ακύρωση της προτίμησης πρέπει
+    // να ακολουθηθεί από δική του — αλλιώς κρατά το παλιό αποτέλεσμα.
     ref.invalidate(showDatabaseNavProvider);
-    // Ρητά, παρότι κρέμεται από το από πάνω: το δικαίωμα Περιήγησης Βάσης δεν
-    // είναι provider — διαβάζεται από τον συνδεδεμένο χρήστη τη στιγμή του
-    // υπολογισμού. Χωρίς αυτή τη γραμμή, η φρεσκάδα του θα στηριζόταν σιωπηλά
-    // στο ότι κάποιος άλλος ακυρώνει τη ρύθμιση από κάτω του.
     ref.invalidate(databaseNavVisibleProvider);
-    ref.invalidate(applicationAuditVisibleProvider);
     // Το τικ είναι υπόσχεση: όποιος δεν το έχει δεν μένει σε οθόνη που δεν
     // δικαιούται, ακόμη κι αν την άνοιξε ο προηγούμενος.
     closeApplicationAuditIfNotAllowed(
