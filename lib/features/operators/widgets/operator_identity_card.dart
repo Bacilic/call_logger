@@ -19,6 +19,7 @@ class OperatorIdentityCard extends StatelessWidget {
     this.extraTags = const <String>[],
     this.trailing,
     this.onTap,
+    this.lockedNote,
   });
 
   final Operator operator;
@@ -32,10 +33,21 @@ class OperatorIdentityCard extends StatelessWidget {
   final Widget? trailing;
   final VoidCallback? onTap;
 
+  /// Γιατί αυτή η κάρτα δεν πατιέται — π.χ. «Συνδεδεμένος τώρα στον ΣΤΑΘΜΟ-7».
+  ///
+  /// **Αντικαθιστά** τις γραμμές [presence]: λέει ήδη ποιος τον κρατά και πού.
+  ///
+  /// Όταν δοθεί, η κάρτα σβήνει και **αγνοεί** το [onTap]: το κλείδωμα δεν
+  /// επιτρέπεται να εξαρτάται από το αν ο καλών θυμήθηκε να μην περάσει
+  /// χειρισμό πατήματος. Το προφίλ παραμένει ορατό — ο άνθρωπος πρέπει να
+  /// βλέπει ότι υπάρχει και γιατί δεν προσφέρεται.
+  final String? lockedNote;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = !operator.isActive;
+    final locked = lockedNote != null;
+    final muted = !operator.isActive || locked;
     final titleColor = muted ? theme.colorScheme.onSurfaceVariant : null;
 
     final subtitle = operator.windowsAccount == null
@@ -45,7 +57,7 @@ class OperatorIdentityCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
-        onTap: onTap,
+        onTap: locked ? null : onTap,
         // Το εικονίδιο πατά κατευθείαν στην κάρτα, χωρίς χρωματιστό δίσκο από
         // κάτω: οι φιγούρες είναι σχεδιασμένες να στέκονται μόνες τους, και ο
         // δίσκος θα έκοβε ό,τι ξεπερνά τον κύκλο — καπέλα, φτερά, αυτιά.
@@ -94,30 +106,56 @@ class OperatorIdentityCard extends StatelessWidget {
                 ),
               ],
             ),
-            for (final line in presence)
+            // Η εξήγηση του κλειδώματος **αντικαθιστά** τις γραμμές σύνδεσης:
+            // λέει ήδη ποιος τον κρατά και πού, και μια δεύτερη γραμμή που
+            // επαναλαμβάνει τον ίδιο σταθμό κάνει την κάρτα να φλυαρεί.
+            if (!locked)
+              for (final line in presence)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    children: [
+                      Icon(
+                        line.online
+                            ? Icons.circle
+                            : Icons.history_toggle_off_outlined,
+                        size: line.online ? 9 : 15,
+                        color: line.online
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                      SizedBox(width: line.online ? 7 : 4),
+                      Flexible(
+                        child: Text(
+                          line.text,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: line.online
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            if (lockedNote != null)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Row(
                   children: [
                     Icon(
-                      line.online
-                          ? Icons.circle
-                          : Icons.history_toggle_off_outlined,
-                      size: line.online ? 9 : 15,
-                      color: line.online
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
+                      Icons.lock_outline,
+                      size: 15,
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
-                    SizedBox(width: line.online ? 7 : 4),
+                    const SizedBox(width: 4),
                     Flexible(
                       child: Text(
-                        line.text,
+                        lockedNote!,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: line.online
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

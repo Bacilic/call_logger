@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/database/database_helper.dart';
-import '../../../core/database/operator_presence_repository.dart';
 import '../../../core/database/operator_repository.dart';
 import '../../../core/models/operator.dart';
 import '../../../core/models/operator_presence.dart';
@@ -9,6 +8,7 @@ import '../../../core/services/current_operator.dart';
 import '../../../core/services/permission_service.dart';
 import '../services/operator_management.dart';
 import '../services/operator_presence_summary.dart';
+import '../services/presence_read.dart';
 import '../widgets/operator_conflict_dialog.dart';
 import '../widgets/operator_form_dialog.dart';
 import '../widgets/operator_identity_card.dart';
@@ -34,11 +34,15 @@ class _ProfilesSnapshot {
     required this.operators,
     required this.presence,
     required this.readAt,
+    this.presenceUnavailable = false,
   });
 
   final List<Operator> operators;
   final Map<int, List<OperatorPresence>> presence;
   final DateTime readAt;
+
+  /// Τα ίχνη δεν διαβάστηκαν — η κάρτα το λέει αντί να γράψει «ποτέ».
+  final bool presenceUnavailable;
 }
 
 class _OperatorsManagementViewState extends State<OperatorsManagementView> {
@@ -59,18 +63,12 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
     final db = await DatabaseHelper.instance.database;
     final operators = await OperatorManagement(OperatorRepository(db)).load();
 
-    // Τα ίχνη σύνδεσης είναι πληροφορία άνεσης: αν λείπει ο πίνακας (βάση από
-    // παλαιότερη έκδοση που δεν αναβαθμίστηκε ακόμη) η οθόνη δείχνει κανονικά
-    // τους χρήστες, απλώς χωρίς γραμμή σύνδεσης.
-    var marks = const <OperatorPresence>[];
-    try {
-      marks = await OperatorPresenceRepository(db).getAll();
-    } catch (_) {
-      marks = const <OperatorPresence>[];
-    }
+    // Η ίδια ανάγνωση με τον επιλογέα ταυτότητας, από ένα σημείο: ξεχωρίζει τη
+    // βάση που δεν έχει ακόμη τον πίνακα από την ανάγνωση που απέτυχε.
+    final read = await readOperatorPresence(db);
 
     final byOperator = <int, List<OperatorPresence>>{};
-    for (final mark in marks) {
+    for (final mark in read.marks) {
       byOperator.putIfAbsent(mark.operatorId, () => []).add(mark);
     }
 
@@ -78,6 +76,7 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
       operators: operators,
       presence: byOperator,
       readAt: DateTime.now(),
+      presenceUnavailable: read.unavailable,
     );
   }
 
@@ -288,6 +287,7 @@ class _OperatorsManagementViewState extends State<OperatorsManagementView> {
                     presence: describeOperatorPresence(
                       marks,
                       data?.readAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+                      unavailable: data?.presenceUnavailable ?? false,
                     ),
                     extraTags: [
                       if (isCurrent) 'Εσείς',

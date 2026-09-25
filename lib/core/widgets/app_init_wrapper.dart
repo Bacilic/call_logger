@@ -20,9 +20,9 @@ import '../services/current_operator.dart';
 import '../services/operator_identity.dart';
 import '../utils/run_after_next_frame.dart';
 import '../../features/operators/screens/admin_setup_screen.dart';
-import '../../features/operators/screens/operator_picker_screen.dart';
 import '../../features/operators/services/admin_presence_gate.dart';
 import '../../features/operators/services/selectable_profiles.dart';
+import '../../features/operators/widgets/refreshing_operator_picker.dart';
 import '../../features/settings/widgets/pending_reset_database_screen.dart';
 import 'app_shortcuts.dart';
 import 'database_error_screen.dart';
@@ -69,9 +69,20 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   /// True μόλις ο χρήστης δηλώσει ποιος είναι — ή όταν δεν χρειάστηκε να ρωτηθεί.
   bool _operatorChosen = false;
 
-  /// Τα προφίλ προς επιλογή, φορτωμένα **μία φορά**: χωρίς αυτό, κάθε
-  /// ξαναχτίσιμο θα ξεκινούσε νέα ανάγνωση και η λίστα θα αναβόσβηνε.
-  Future<SelectableProfiles>? _selectableProfiles;
+  /// Η επαναφορά του παραθύρου, μόλις ξεκινήσει. `null` όσο δεν έχει ζητηθεί.
+  ///
+  /// Κρατιέται ως Future και όχι ως σημαία, ώστε η ομαλή έξοδος της κάρτας
+  /// εκκίνησης να **περιμένει** την ίδια επαναφορά που μπορεί να έχει ήδη
+  /// ξεκινήσει άλλη οθόνη, αντί να ζητήσει δεύτερη.
+  Future<void>? _windowRestore;
+
+  /// Ποια «γενιά» επιλογέα δείχνουμε — αυξάνει σε κάθε αλλαγή βάσης.
+  ///
+  /// Ο επιλογέας κρατά πλέον μόνος του τη φόρτωσή του και την ανανεώνει όσο
+  /// είναι στην οθόνη: ένα προφίλ κλειδωμένο επειδή το κρατά άλλος υπολογιστής
+  /// πρέπει να ξεκλειδώνει **μόνο του** μόλις εκείνος κλείσει. Αλλάζοντας το
+  /// κλειδί, η νέα βάση παίρνει καθαρό επιλογέα αντί για τα παλιά προφίλ.
+  int _pickerGeneration = 0;
 
   /// Η κατάσταση των διαχειριστών της βάσης, με τον ίδιο κανόνα μιας φοράς.
   Future<AdminPresenceState>? _adminPresence;
@@ -93,7 +104,7 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       if (!mounted) return;
       setState(() {
         _operatorChosen = false;
-        _selectableProfiles = null;
+        _pickerGeneration++;
         _adminPresence = null;
         _adminSetupDone = false;
       });
@@ -117,16 +128,37 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   /// χρονικό όριο εγγυάται ότι η εφαρμογή ανοίγει ούτως ή άλλως.
   Future<void> _leaveSplash() async {
     if (!mounted) return;
+    await _restoreWindowOnce();
+    if (!mounted) return;
+    setState(() => _splashDone = true);
+  }
+
+  /// Η φάση 2 του παραθύρου — **μία φορά ανά εκτέλεση**, όποια πόρτα κι αν
+  /// χρησιμοποιηθεί.
+  ///
+  /// Δεν κρέμεται πια από την ομαλή έξοδο της κάρτας εκκίνησης. Η κάρτα
+  /// παρακάμπτεται σε δύο πραγματικές περιπτώσεις — όταν η αρχικοποίηση
+  /// αποτυγχάνει ή ζητά συγκατάθεση, και όταν εκκρεμεί επαναφορά βάσης — και
+  /// τότε η οθόνη που έπαιρνε τη θέση της ζωγραφιζόταν σε παράθυρο 691×480,
+  /// δηλαδή στο 75% του ελαχίστου για το οποίο είναι σχεδιασμένη η διεπαφή.
+  /// Χειρότερα: μαζί με την επαναφορά παρακαμπτόταν και το `setMinimumSize`,
+  /// οπότε τίποτα δεν εμπόδιζε το παράθυρο να μείνει εκεί.
+  ///
+  /// Η αποτυχία ή η αργοπορία δεν κρατά την πόρτα κλειστή: το χρονικό όριο
+  /// εγγυάται ότι η εφαρμογή ανοίγει ούτως ή άλλως.
+  Future<void> _restoreWindowOnce() {
+    final started = _windowRestore;
+    if (started != null) return started;
     final restore =
         widget.windowRestorer ??
         StartupWindowPlacement.restoreApplicationWindow;
-    try {
-      await restore().timeout(kWindowRestoreTimeout);
-    } catch (e, st) {
-      recordStartupNotice('Επαναφορά μεγέθους παραθύρου', e, st);
-    }
-    if (!mounted) return;
-    setState(() => _splashDone = true);
+    return _windowRestore = () async {
+      try {
+        await restore().timeout(kWindowRestoreTimeout);
+      } catch (e, st) {
+        recordStartupNotice('Επαναφορά μεγέθους παραθύρου', e, st);
+      }
+    }();
   }
 
   Future<void> _retryAppInitialization() async {
@@ -177,34 +209,26 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   Widget? _buildOperatorPickerIfNeeded() {
     if (CurrentOperator.active != null) return null;
 
-    return FutureBuilder<SelectableProfiles>(
-      future: _selectableProfiles ??= _loadSelectableProfiles(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const InitLoadingScreen();
-        }
-        final selectable = snapshot.data ?? SelectableProfiles.empty;
-        return OperatorPickerScreen(
-          profiles: selectable.profiles,
-          presence: selectable.presence,
-          suggestedName: OperatorIdentity.suggestedDisplayName(),
-          hasWindowsAccount: OperatorIdentity.suggestedDisplayName().isNotEmpty,
-          onPick: (operator) async {
-            await OperatorIdentity.chooseForSession(operator);
-            if (!mounted) return;
-            setState(() => _operatorChosen = true);
-          },
-          onCreate: (displayName, bindCurrentAccount) async {
-            final db = await DatabaseHelper.instance.database;
-            await OperatorIdentity.createAndActivate(
-              db,
-              displayName: displayName,
-              bindCurrentAccount: bindCurrentAccount,
-            );
-            if (!mounted) return;
-            setState(() => _operatorChosen = true);
-          },
+    // Κλειδί δεμένο στη βάση: μετά από αλλαγή βάσης ο επιλογέας ξαναστήνεται
+    // από την αρχή, αντί να κρατήσει τα προφίλ της προηγούμενης.
+    return RefreshingOperatorPicker(
+      key: ValueKey(_pickerGeneration),
+      loadProfiles: _loadSelectableProfiles,
+      loading: const InitLoadingScreen(),
+      onPick: (operator) async {
+        await OperatorIdentity.chooseForSession(operator);
+        if (!mounted) return;
+        setState(() => _operatorChosen = true);
+      },
+      onCreate: (displayName, bindCurrentAccount) async {
+        final db = await DatabaseHelper.instance.database;
+        await OperatorIdentity.createAndActivate(
+          db,
+          displayName: displayName,
+          bindCurrentAccount: bindCurrentAccount,
         );
+        if (!mounted) return;
+        setState(() => _operatorChosen = true);
       },
     );
   }
@@ -261,6 +285,22 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
 
   @override
   Widget build(BuildContext context) {
+    final screen = _buildScreen();
+
+    // **Ένα σημείο επιβολής, στην έξοδο.** Ό,τι δεν είναι η κάρτα εκκίνησης
+    // ζει σε παράθυρο μεγέθους εργασίας — και η επαναφορά δεν μπορεί να
+    // ξεχαστεί από την επόμενη οθόνη που θα προστεθεί εδώ, όπως ξεχάστηκε
+    // από την οθόνη σφάλματος και από την εκκρεμή επαναφορά βάσης.
+    //
+    // Χωρίς οθόνες εκκίνησης (έλεγχοι) δεν υπήρξε ποτέ φάση 1, οπότε δεν
+    // υπάρχει και τίποτα να επαναφερθεί.
+    if (widget.showStartupScreens && screen is! StartupSplashScreen) {
+      unawaited(_restoreWindowOnce());
+    }
+    return screen;
+  }
+
+  Widget _buildScreen() {
     // Άλλαξε η ενεργή βάση: ό,τι απάντησε ο χρήστης αφορούσε την προηγούμενη.
     ref.listen<int>(activeDatabaseGenerationProvider, (previous, next) {
       if (previous == next) return;

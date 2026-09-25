@@ -33,6 +33,18 @@ void main() {
     expect(lines.single.text, 'Δεν έχει συνδεθεί ποτέ');
   });
 
+  test('χωρίς ίχνη επειδή η ανάγνωση απέτυχε: δεν λέμε «ποτέ»', () {
+    // Μια στιγμιαία πτώση του κοινόχρηστου φακέλου δεν επιτρέπεται να
+    // μεταφραστεί σε ισχυρισμό: ο συνάδελφος που δουλεύει αυτή τη στιγμή
+    // δίπλα δεν είναι άνθρωπος που δεν μπήκε ποτέ στην εφαρμογή.
+    final lines = describeOperatorPresence(const [], _now, unavailable: true);
+
+    expect(lines, hasLength(1));
+    expect(lines.single.online, isFalse);
+    expect(lines.single.text, isNot(contains('ποτέ')));
+    expect(lines.single.text, 'Η κατάσταση σύνδεσης δεν είναι διαθέσιμη');
+  });
+
   test('φρέσκο ίχνος: συνδεδεμένος τώρα, με τον σταθμό', () {
     final lines = describeOperatorPresence([
       _mark('ΤΠΕ-03', const Duration(seconds: 20)),

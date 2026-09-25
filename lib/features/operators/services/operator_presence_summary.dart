@@ -45,11 +45,25 @@ Map<int, List<OperatorPresenceLine>> describeOperatorPresenceByOperator(
 ///    ανοιχτοί, γιατί το ίδιο προφίλ μπορεί να δουλεύει από δύο θέσεις.
 /// 3. **Μόνο παλιά ίχνη** → μόνο το πιο πρόσφατο. Το «πού ήταν πριν από έναν
 ///    μήνα» δεν ενδιαφέρει κανέναν και θα γέμιζε την κάρτα.
+///
+/// Με [unavailable] η απουσία ιχνών σημαίνει «δεν διαβάστηκαν», όχι «δεν
+/// υπάρχουν»: χωρίς τη διάκριση, μια στιγμιαία πτώση δικτύου έγραφε κάτω από
+/// κάθε προφίλ «Δεν έχει συνδεθεί ποτέ» — και ο συνάδελφος που δούλευε εκείνη
+/// τη στιγμή δίπλα εμφανιζόταν ως άνθρωπος που δεν μπήκε ποτέ στην εφαρμογή.
 List<OperatorPresenceLine> describeOperatorPresence(
   List<OperatorPresence> marks,
-  DateTime now,
-) {
+  DateTime now, {
+  bool unavailable = false,
+}) {
   if (marks.isEmpty) {
+    if (unavailable) {
+      return const [
+        OperatorPresenceLine(
+          online: false,
+          text: 'Η κατάσταση σύνδεσης δεν είναι διαθέσιμη',
+        ),
+      ];
+    }
     return const [
       OperatorPresenceLine(online: false, text: 'Δεν έχει συνδεθεί ποτέ'),
     ];

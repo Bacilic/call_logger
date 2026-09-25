@@ -4,9 +4,12 @@ import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../features/operators/avatars/operator_avatar_assignment.dart';
 import '../database/operator_audit.dart';
+import '../database/operator_presence_repository.dart';
 import '../database/operator_repository.dart';
 import '../models/operator.dart';
 import 'current_operator.dart';
+import 'operator_presence_heartbeat.dart';
+import 'profile_availability.dart';
 import 'workstation_operators.dart';
 
 /// Ποιος κάθεται μπροστά στην οθόνη — αναγνώριση χωρίς κωδικούς.
@@ -46,11 +49,17 @@ class OperatorIdentity {
   /// άλλα, και μια αποτυχία δεν επιτρέπεται να αφήσει ενεργό τον χρήστη της
   /// προηγούμενης βάσης.
   ///
-  /// Τα [windowsAccount] και [workstationNames] δίνονται μόνο από ελέγχους.
+  /// **Δεν μπαίνει σιωπηλά σε προφίλ που κρατά άλλος υπολογιστής.** Είναι η
+  /// μόνη πόρτα χωρίς ανθρώπινο μάτι, και ένας κανόνας που ισχύει παντού εκτός
+  /// από εκεί δεν είναι κανόνας.
+  ///
+  /// Τα [windowsAccount], [workstationNames] και [now] δίνονται μόνο από
+  /// ελέγχους.
   static Future<Operator?> resolveAndActivate(
     DatabaseExecutor db, {
     String? windowsAccount,
     List<String>? workstationNames,
+    DateTime? now,
   }) async {
     CurrentOperator.reset();
 
@@ -72,6 +81,7 @@ class OperatorIdentity {
         )) {
           return null;
         }
+        if (await _isOpenElsewhere(db, known.single, now: now)) return null;
         CurrentOperator.activate(known.single);
         return known.single;
       }
@@ -86,9 +96,45 @@ class OperatorIdentity {
     // έλεγχο εδώ, ο υπολογιστής του συναδέλφου που έφυγε θα συνέχιζε να δίνει
     // την ταυτότητά του και οι κλήσεις θα γράφονταν στο όνομά του.
     if (existing == null || !existing.isActive) return null;
+    if (await _isOpenElsewhere(db, existing, now: now)) return null;
 
     CurrentOperator.activate(existing);
     return existing;
+  }
+
+  /// Το κρατά ήδη άλλο ανοιχτό αντίγραφο; Τότε **δεν μπαίνουμε σιωπηλά**.
+  ///
+  /// Η αυτόματη αναγνώριση είναι η μόνη πόρτα που δεν περνά από τα μάτια του
+  /// ανθρώπου: χωρίς αυτόν τον έλεγχο, ο ίδιος λογαριασμός Windows σε δύο
+  /// υπολογιστές θα παρέκαμπτε τον κανόνα χωρίς να το πάρει κανείς είδηση.
+  ///
+  /// Ένα `true` **δεν** σημαίνει άρνηση εισόδου: σημαίνει ότι εμφανίζεται η
+  /// οθόνη επιλογής, όπου ο άνθρωπος βλέπει την κλειδωμένη κάρτα και τον λόγο.
+  /// Και το προφίλ διαχειριστή σταματά εδώ, γιατί η εξαίρεσή του είναι ρητή
+  /// πράξη ανθρώπου — δεν δίνεται από μια αυτόματη είσοδο.
+  ///
+  /// **Ποτέ μοιραίο:** αν τα ίχνη δεν διαβάζονται, η άγνοια πέφτει στην πλευρά
+  /// που δεν εμποδίζει. Μια βάση που δεν απαντά έχει δικά της μηνύματα.
+  static Future<bool> _isOpenElsewhere(
+    DatabaseExecutor db,
+    Operator candidate, {
+    DateTime? now,
+  }) async {
+    final id = candidate.id;
+    if (id == null) return false;
+    try {
+      final marks = await OperatorPresenceRepository(db).forOperator(id);
+      final state = profileAvailability(
+        profiles: [candidate],
+        marks: marks,
+        now: now ?? DateTime.now(),
+        myInstance: OperatorPresenceHeartbeat.instanceId,
+      );
+      return (state[id] ?? ProfileAvailability.free).kind !=
+          ProfileLockKind.free;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Τα προφίλ που προσφέρονται προς επιλογή — μόνο τα ενεργά, **και ποτέ

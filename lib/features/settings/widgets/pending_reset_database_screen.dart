@@ -159,58 +159,63 @@ class _PendingResetDatabaseScreenState
 
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(
-                    Icons.restart_alt,
-                    size: 48,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Ξεκίνα από την αρχή',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+        // Κυλά, όπως και η οθόνη φόρτωσης: αυτή η οθόνη παρακάμπτει την κάρτα
+        // εκκίνησης, άρα μπορεί να βρεθεί σε παράθυρο μικρότερο από το
+        // ελάχιστο της διεπαφής προτού προλάβει να επανέλθει.
+        child: SingleChildScrollView(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Icon(
+                      Icons.restart_alt,
+                      size: 48,
+                      color: theme.colorScheme.primary,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Η εφαρμογή αποσυνδέθηκε από την προηγούμενη βάση. '
-                    'Επιλέξτε υπάρχουσα βάση ή δημιουργήστε νέα κενή. '
-                    'Αν ακυρώσετε, θα επανέλθουν οι προηγούμενες ρυθμίσεις.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge?.copyWith(height: 1.45),
-                  ),
-                  const SizedBox(height: 28),
-                  if (_busy)
-                    const Center(child: CircularProgressIndicator())
-                  else ...[
-                    FilledButton.icon(
-                      onPressed: _findDatabase,
-                      icon: const Icon(Icons.folder_open_outlined),
-                      label: const Text('Εύρεση βάσης'),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Ξεκίνα από την αρχή',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    FilledButton.tonalIcon(
-                      onPressed: _createNewDatabase,
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('Δημιουργία νέας βάσης'),
+                    Text(
+                      'Η εφαρμογή αποσυνδέθηκε από την προηγούμενη βάση. '
+                      'Επιλέξτε υπάρχουσα βάση ή δημιουργήστε νέα κενή. '
+                      'Αν ακυρώσετε, θα επανέλθουν οι προηγούμενες ρυθμίσεις.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(height: 1.45),
                     ),
-                    const SizedBox(height: 20),
-                    OutlinedButton(
-                      onPressed: _rollbackAndExit,
-                      child: const Text('Ακύρωση — επαναφορά ρυθμίσεων'),
-                    ),
+                    const SizedBox(height: 28),
+                    if (_busy)
+                      const Center(child: CircularProgressIndicator())
+                    else ...[
+                      FilledButton.icon(
+                        onPressed: _findDatabase,
+                        icon: const Icon(Icons.folder_open_outlined),
+                        label: const Text('Εύρεση βάσης'),
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.tonalIcon(
+                        onPressed: _createNewDatabase,
+                        icon: const Icon(Icons.add_circle_outline),
+                        label: const Text('Δημιουργία νέας βάσης'),
+                      ),
+                      const SizedBox(height: 20),
+                      OutlinedButton(
+                        onPressed: _rollbackAndExit,
+                        child: const Text('Ακύρωση — επαναφορά ρυθμίσεων'),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

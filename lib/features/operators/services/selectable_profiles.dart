@@ -1,19 +1,22 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
-import '../../../core/database/operator_presence_repository.dart';
 import '../../../core/database/operator_repository.dart';
 import '../../../core/models/operator.dart';
-import '../../../core/models/operator_presence.dart';
 import '../../../core/services/operator_identity.dart';
+import '../../../core/services/operator_presence_heartbeat.dart';
 import '../../../core/services/workstation_operators.dart';
 import 'operator_presence_summary.dart';
+import 'presence_read.dart';
+import '../../../core/services/profile_availability.dart';
 
 /// Ό,τι χρειάζεται ο επιλογέας ταυτότητας, διαβασμένο μαζί σε μία στιγμή.
 class SelectableProfiles {
   const SelectableProfiles({
     required this.profiles,
     required this.presence,
+    this.availability = const <int, ProfileAvailability>{},
     this.workstationProfiles = const <Operator>[],
+    this.presenceUnavailable = false,
   });
 
   static const empty = SelectableProfiles(
@@ -28,11 +31,20 @@ class SelectableProfiles {
   /// Γραμμές σύνδεσης ανά προφίλ, έτοιμες προς εμφάνιση.
   final Map<int, List<OperatorPresenceLine>> presence;
 
+  /// Ποια προφίλ κρατά αυτή τη στιγμή **άλλο** ανοιχτό αντίγραφο της εφαρμογής.
+  final Map<int, ProfileAvailability> availability;
+
   /// Ποιους θυμάται αυτός ο υπολογιστής — **μαζί με τον ήδη συνδεδεμένο**.
   ///
   /// Απαντά στο «γιατί με ρωτά κάθε φορά»: δύο ή περισσότεροι εδώ σημαίνει ότι
   /// η εκκίνηση δεν μπορεί να μαντέψει και ρωτά.
   final List<Operator> workstationProfiles;
+
+  /// Η ανάγνωση των ιχνών απέτυχε — άρα **κανένα κλείδωμα δεν είναι γνωστό**.
+  ///
+  /// Η άγνοια πέφτει στην πλευρά που δεν εμποδίζει: τα προφίλ προσφέρονται
+  /// κανονικά, αλλά η οθόνη το λέει αντί να παριστάνει ότι ξέρει.
+  final bool presenceUnavailable;
 }
 
 /// Φορτώνει προφίλ **και** ίχνη σύνδεσης για τον επιλογέα ταυτότητας.
@@ -44,33 +56,36 @@ class SelectableProfiles {
 /// Η [now] δίνεται ρητά ώστε το «συνδεδεμένος τώρα» να κρίνεται με τη στιγμή
 /// της ανάγνωσης και όχι με δεύτερο ρολόι μέσα στο `build`.
 ///
-/// Τα [workstationNames] και το [windowsAccount] δίνονται μόνο από ελέγχους.
+/// Τα [workstationNames], το [windowsAccount] και το [instanceId] δίνονται μόνο
+/// από ελέγχους.
 Future<SelectableProfiles> loadSelectableProfiles(
   DatabaseExecutor db, {
   DateTime? now,
   List<String>? workstationNames,
   String? windowsAccount,
+  String? instanceId,
 }) async {
   final all = await OperatorRepository(db).getAll();
   final remembered = workstationNames ?? await WorkstationOperators.names();
 
-  // Τα ίχνη σύνδεσης είναι πληροφορία άνεσης: αν λείπει ο πίνακας (βάση από
-  // παλαιότερη έκδοση που δεν αναβαθμίστηκε ακόμη) ο επιλογέας δείχνει κανονικά
-  // τα προφίλ, απλώς χωρίς γραμμή σύνδεσης.
-  var marks = const <OperatorPresence>[];
-  try {
-    marks = await OperatorPresenceRepository(db).getAll();
-  } catch (_) {
-    marks = const <OperatorPresence>[];
-  }
+  final read = await readOperatorPresence(db);
+  final at = now ?? DateTime.now();
+  final offered = orderProfilesForWorkstation(
+    OperatorIdentity.selectableFrom(all),
+    remembered,
+    windowsAccount: windowsAccount ?? OperatorIdentity.currentWindowsAccount,
+  );
 
   return SelectableProfiles(
-    profiles: orderProfilesForWorkstation(
-      OperatorIdentity.selectableFrom(all),
-      remembered,
-      windowsAccount: windowsAccount ?? OperatorIdentity.currentWindowsAccount,
+    profiles: offered,
+    presence: describeOperatorPresenceByOperator(read.marks, at),
+    availability: profileAvailability(
+      profiles: offered,
+      marks: read.marks,
+      now: at,
+      myInstance: instanceId ?? OperatorPresenceHeartbeat.instanceId,
     ),
-    presence: describeOperatorPresenceByOperator(marks, now ?? DateTime.now()),
     workstationProfiles: rememberedWorkstationProfiles(remembered, all),
+    presenceUnavailable: read.unavailable,
   );
 }

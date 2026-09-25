@@ -13,6 +13,7 @@
 
 import 'dart:async';
 
+import 'package:call_logger/core/init/app_init_provider.dart';
 import 'package:call_logger/core/init/startup_journal.dart';
 import 'package:call_logger/core/widgets/app_init_wrapper.dart';
 import 'package:call_logger/core/widgets/startup_splash_screen.dart';
@@ -118,4 +119,45 @@ void main() {
 
     await tester.pump(const Duration(seconds: 11));
   }, semanticsEnabled: false);
+
+  testWidgets(
+    'όταν η αρχικοποίηση αποτυγχάνει, το παράθυρο επανέρχεται ΠΑΡΟΛΟ που η '
+    'κάρτα παρακάμπτεται',
+    (tester) async {
+      // Το συμβόλαιο: κάθε έξοδος προς οθόνη κελύφους ή σφάλματος ζει σε
+      // παράθυρο μεγέθους εργασίας. Όσο η επαναφορά κρεμόταν αποκλειστικά από
+      // την ομαλή έξοδο της κάρτας, η οθόνη σφάλματος ζωγραφιζόταν σε παράθυρο
+      // στο 75% του ελαχίστου — και το ελάχιστο δεν οριζόταν ποτέ.
+      var restoreRequested = false;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appInitProvider.overrideWith(
+              (ref) async => throw StateError('η βάση δεν άνοιξε'),
+            ),
+          ],
+          child: MaterialApp(
+            home: AppInitWrapper(
+              windowRestorer: () async {
+                restoreRequested = true;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(StartupSplashScreen), findsNothing);
+      expect(
+        restoreRequested,
+        isTrue,
+        reason:
+            'η οθόνη σφάλματος δεν επιτρέπεται να μείνει στο μέγεθος της '
+            'κάρτας εκκίνησης',
+      );
+    },
+    semanticsEnabled: false,
+  );
 }

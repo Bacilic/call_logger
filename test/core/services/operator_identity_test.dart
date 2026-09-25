@@ -6,10 +6,12 @@
 import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/core/database/database_schema_migrations.dart';
 import 'package:call_logger/core/database/database_v1_schema.dart';
+import 'package:call_logger/core/database/operator_presence_repository.dart';
 import 'package:call_logger/core/database/operator_repository.dart';
 import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/core/services/operator_identity.dart';
+import 'package:call_logger/core/services/operator_presence_heartbeat.dart';
 import 'package:call_logger/core/services/workstation_operators.dart';
 import 'package:call_logger/features/operators/services/selectable_profiles.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -584,6 +586,140 @@ void main() {
       await OperatorIdentity.resolveAndActivate(db, windowsAccount: 'bacilic');
 
       expect(await WorkstationOperators.names(), isEmpty);
+    });
+  });
+
+  group('Η αυτόματη αναγνώριση δεν μπαίνει σε προφίλ ανοιχτό αλλού', () {
+    late Database db;
+
+    const myInstance = 'C:/app.exe|dev';
+    const otherInstance = 'C:/app.exe|prod';
+    final now = DateTime(2026, 9, 24, 12, 0);
+
+    setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      initSqfliteFfiForTests();
+      db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
+      await onDatabaseUpgradeSquashed(db, 46, 47);
+      await db.execute(kCreateAuditLogTable);
+      await db.execute(kCreateOperatorPresenceTable);
+      OperatorPresenceHeartbeat.instanceIdReader = () => myInstance;
+      CurrentOperator.reset();
+    });
+
+    tearDown(() async {
+      OperatorPresenceHeartbeat.instanceIdReader = () => '';
+      CurrentOperator.reset();
+      await db.close();
+    });
+
+    /// Το προφίλ που θα αναγνωριστεί αυτόματα από τον λογαριασμό Windows.
+    ///
+    /// Πρώτα γεννιέται ένα άλλο: ο πρώτος κάθε βάσης γίνεται αυτόματα
+    /// διαχειριστής, και το τεστ θέλει να κρίνει τον **απλό** χρήστη.
+    Future<Operator> seedBoundProfile({bool asAdmin = false}) async {
+      if (!asAdmin) {
+        await OperatorIdentity.createAndActivate(
+          db,
+          displayName: 'Πρώτος',
+          bindCurrentAccount: false,
+          now: DateTime(2026, 9, 23),
+        );
+        CurrentOperator.reset();
+        await WorkstationOperators.keepOnly('');
+      }
+      final created = await OperatorIdentity.createAndActivate(
+        db,
+        displayName: 'Βασίλης',
+        bindCurrentAccount: true,
+        windowsAccount: 'VDrosos',
+        now: DateTime(2026, 9, 24),
+      );
+      CurrentOperator.reset();
+      await WorkstationOperators.keepOnly('');
+      expect(created.isAdmin, asAdmin);
+      return created;
+    }
+
+    Future<void> markOpen(
+      int operatorId, {
+      required String instance,
+      required String station,
+      required DateTime at,
+    }) => OperatorPresenceRepository(db).touch(
+      operatorId: operatorId,
+      station: station,
+      instance: instance,
+      at: at,
+      handOverOtherOperators: false,
+    );
+
+    Future<Operator?> resolve() => OperatorIdentity.resolveAndActivate(
+      db,
+      windowsAccount: 'VDrosos',
+      workstationNames: const <String>[],
+      now: now,
+    );
+
+    test(
+      'προφίλ που κρατά άλλος υπολογιστής ΔΕΝ ενεργοποιείται σιωπηλά',
+      () async {
+        final profile = await seedBoundProfile();
+        await markOpen(
+          profile.id!,
+          instance: otherInstance,
+          station: 'POPINIO',
+          at: now,
+        );
+
+        expect(
+          await resolve(),
+          isNull,
+          reason: 'εμφανίζεται η οθόνη επιλογής, με την κάρτα κλειδωμένη',
+        );
+        expect(CurrentOperator.active, isNull);
+      },
+    );
+
+    test('ίχνος του ίδιου αντιγράφου δεν εμποδίζει την είσοδο', () async {
+      // Κατάρρευση και άμεση επανεκκίνηση στον ίδιο υπολογιστή: ο άνθρωπος
+      // δεν κλειδώνεται έξω από τον εαυτό του.
+      final profile = await seedBoundProfile();
+      await markOpen(
+        profile.id!,
+        instance: myInstance,
+        station: 'PICINIO',
+        at: now,
+      );
+
+      expect((await resolve())?.id, profile.id);
+    });
+
+    test('παλιό ίχνος δεν εμποδίζει την είσοδο', () async {
+      final profile = await seedBoundProfile();
+      await markOpen(
+        profile.id!,
+        instance: otherInstance,
+        station: 'POPINIO',
+        at: now.subtract(const Duration(hours: 3)),
+      );
+
+      expect((await resolve())?.id, profile.id);
+    });
+
+    test('ούτε το προφίλ διαχειριστή μπαίνει χωρίς ρητή επιβεβαίωση', () async {
+      // Η εξαίρεση του διαχειριστή είναι πράξη ανθρώπου — δεν δίνεται από
+      // αυτόματη είσοδο που κανείς δεν βλέπει.
+      final profile = await seedBoundProfile(asAdmin: true);
+      await markOpen(
+        profile.id!,
+        instance: otherInstance,
+        station: 'POPINIO',
+        at: now,
+      );
+
+      expect(await resolve(), isNull);
     });
   });
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
 import '../services/operator_presence_summary.dart';
+import '../../../core/services/profile_availability.dart';
 import '../widgets/operator_picker_body.dart';
 
 /// «Ποιος είστε;» — η οθόνη που εμφανίζεται όταν ο λογαριασμός Windows δεν
@@ -17,6 +18,9 @@ class OperatorPickerScreen extends StatelessWidget {
     required this.onPick,
     required this.onCreate,
     this.presence = const <int, List<OperatorPresenceLine>>{},
+    this.availability = const <int, ProfileAvailability>{},
+    this.presenceUnavailable = false,
+    this.confirmAdminOverride,
     this.suggestedName = '',
     this.hasWindowsAccount = true,
   });
@@ -26,6 +30,16 @@ class OperatorPickerScreen extends StatelessWidget {
 
   /// Γραμμές σύνδεσης ανά προφίλ — βλ. [OperatorPickerBody.presence].
   final Map<int, List<OperatorPresenceLine>> presence;
+
+  /// Ποια προφίλ κρατά άλλο ανοιχτό αντίγραφο — βλ. [OperatorPickerBody].
+  final Map<int, ProfileAvailability> availability;
+
+  /// Τα ίχνη δεν διαβάστηκαν — άρα κανένα κλείδωμα δεν είναι γνωστό.
+  final bool presenceUnavailable;
+
+  /// Η ρητή συγκατάθεση για προφίλ διαχειριστή που κρατιέται αλλού.
+  final Future<bool> Function(Operator operator, String station)?
+  confirmAdminOverride;
 
   final Future<void> Function(Operator operator) onPick;
 
@@ -78,6 +92,9 @@ class OperatorPickerScreen extends StatelessWidget {
                 OperatorPickerBody(
                   profiles: profiles,
                   presence: presence,
+                  availability: availability,
+                  presenceUnavailable: presenceUnavailable,
+                  confirmAdminOverride: confirmAdminOverride,
                   onPick: onPick,
                   onCreate: onCreate,
                   suggestedName: suggestedName,

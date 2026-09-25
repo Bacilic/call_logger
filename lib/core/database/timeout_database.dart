@@ -21,6 +21,8 @@ import 'dart:async';
 
 import 'package:sqflite_common/sqlite_api.dart';
 
+import 'database_stall.dart';
+
 import '../config/app_config.dart';
 import 'database_busy_timeout.dart';
 
@@ -43,11 +45,17 @@ class DatabaseUnresponsiveException implements Exception {
   /// Ποια πράξη κόλλησε — μπαίνει στο μήνυμα ώστε το ημερολόγιο να λέει κάτι.
   final String operation;
 
+  /// **Δύο αιτίες, όχι μία.** Η παλιά διατύπωση έλεγε μόνο «χάθηκε η πρόσβαση
+  /// στον φάκελο» — και στη δοκιμή πεδίου της 24/09 αυτό ήταν ψέμα: ο φάκελος
+  /// απαντούσε κανονικά, νεκρή ήταν η σύνδεση της εφαρμογής. Η δεύτερη αιτία
+  /// έχει **άλλη διέξοδο**, γι' αυτό λέγεται ρητά αντί να μαντεύεται.
   @override
   String toString() =>
       'Η βάση δεδομένων δεν απάντησε μέσα σε ${timeout.inSeconds} '
-      'δευτερόλεπτα ($operation). Πιθανή αιτία: χάθηκε η πρόσβαση στον φάκελο '
-      'της βάσης.';
+      'δευτερόλεπτα ($operation). Είτε χάθηκε η πρόσβαση στον φάκελό της, '
+      'είτε η σύνδεση αυτής της εφαρμογής έπαψε να αποκρίνεται μετά από '
+      'διακοπή του δικτύου — τότε χρειάζεται κλείσιμο και νέο άνοιγμα της '
+      'εφαρμογής.';
 }
 
 /// Χρειάζεται φύλακα η βάση σε αυτή τη διαδρομή;
@@ -101,11 +109,31 @@ class TimeoutDatabase implements Database {
   /// ελέγχους κατάστασης. Τα repositories δεν έχουν λόγο να τη ζητήσουν.
   Database get inner => _inner;
 
-  Future<T> _bounded<T>(String operation, Future<T> Function() action) {
-    return action().timeout(
-      timeout,
-      onTimeout: () => throw DatabaseUnresponsiveException(timeout, operation),
-    );
+  /// **Εδώ γεννιέται η γνώση «κάτι με μπλοκάρει τώρα».**
+  ///
+  /// Κάθε πράξη της εφαρμογής περνά από αυτό το σημείο, και μόνο εδώ φαίνεται
+  /// ότι μια πραγματική εγγραφή δεν πέρασε. Ο φύλακας της βάσης ρωτά με
+  /// ανάγνωση, και το αποκλειστικό κλείδωμα τις αφήνει να περνούν — χωρίς
+  /// αυτή την αναφορά έλεγε «όλα καλά» τη στιγμή που μια αποθήκευση πέθαινε.
+  ///
+  /// **Μόνο δύο εκβάσεις αναφέρονται:** το όριο χρόνου και η πιασμένη βάση.
+  /// Ένα λάθος ερώτημα ή μια στήλη που λείπει δεν λένε τίποτα για τη
+  /// διαθεσιμότητα, και μια λωρίδα «απασχολημένη» θα έστελνε τον χειριστή να
+  /// περιμένει κάτι που δεν πρόκειται να αλλάξει.
+  Future<T> _bounded<T>(String operation, Future<T> Function() action) async {
+    try {
+      return await action().timeout(
+        timeout,
+        onTimeout: () =>
+            throw DatabaseUnresponsiveException(timeout, operation),
+      );
+    } on DatabaseUnresponsiveException {
+      DatabaseStallReports.report();
+      rethrow;
+    } catch (e) {
+      if (isDatabaseLockedError(e)) DatabaseStallReports.report();
+      rethrow;
+    }
   }
 
   // --- Ιδιότητες: σύγχρονες, περνούν αυτούσιες ---

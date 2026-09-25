@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/operator.dart';
 import '../services/operator_presence_summary.dart';
+import '../../../core/services/profile_availability.dart';
 import 'operator_identity_card.dart';
 
 /// Το κοινό σώμα επιλογής χρήστη: λίστα ενεργών προφίλ ή φόρμα δημιουργίας.
@@ -18,6 +19,9 @@ class OperatorPickerBody extends StatefulWidget {
     required this.onPick,
     required this.onCreate,
     this.presence = const <int, List<OperatorPresenceLine>>{},
+    this.availability = const <int, ProfileAvailability>{},
+    this.presenceUnavailable = false,
+    this.confirmAdminOverride,
     this.suggestedName = '',
     this.hasWindowsAccount = true,
   });
@@ -31,6 +35,22 @@ class OperatorPickerBody extends StatefulWidget {
   /// να μη διαλέγει κανείς στα τυφλά, αλλά η στιγμή τελευταίας σύνδεσης είναι
   /// συχνά το στοιχείο που ξεχωρίζει δύο συναδέλφους στον ίδιο υπολογιστή.
   final Map<int, List<OperatorPresenceLine>> presence;
+
+  /// Ποια προφίλ κρατά αυτή τη στιγμή άλλο ανοιχτό αντίγραφο της εφαρμογής.
+  ///
+  /// Το κλειδωμένο προφίλ **φαίνεται** και δεν πατιέται: αν έλειπε από τη
+  /// λίστα, ο άνθρωπος θα νόμιζε ότι διαγράφηκε.
+  final Map<int, ProfileAvailability> availability;
+
+  /// Τα ίχνη δεν διαβάστηκαν — άρα κανένα κλείδωμα δεν είναι γνωστό.
+  final bool presenceUnavailable;
+
+  /// Η ρητή συγκατάθεση για προφίλ διαχειριστή που κρατιέται αλλού.
+  ///
+  /// `null` σημαίνει «χωρίς ερώτηση» — έτσι ένα τεστ ή μια οθόνη χωρίς
+  /// `Navigator` δεν χρειάζεται να στήσει διάλογο για να δουλέψει.
+  final Future<bool> Function(Operator operator, String station)?
+  confirmAdminOverride;
 
   /// Ασύγχρονο: η επιλογή δεν αλλάζει μόνο την ταυτότητα της συνεδρίας — τη
   /// σημειώνει και στη μνήμη του υπολογιστή, ώστε να επιβιώσει της εκκίνησης.
@@ -75,7 +95,19 @@ class _OperatorPickerBodyState extends State<OperatorPickerBody> {
 
   /// Το κλείδωμα εμποδίζει δεύτερη επιλογή όσο γράφεται η πρώτη — δύο γρήγορα
   /// κλικ σε διαφορετικά ονόματα θα άφηναν τον σταθμό να θυμάται λάθος.
+  ///
+  /// Το προφίλ διαχειριστή που κρατιέται αλλού ρωτά **πριν** κλειδώσει η
+  /// οθόνη: μια άκυρη απάντηση πρέπει να αφήνει τη λίστα όπως τη βρήκε.
   Future<void> _pick(Operator profile) async {
+    final state = availabilityFor(widget.availability, profile);
+    if (state.isLocked) return;
+    if (state.needsAdminConfirmation) {
+      final confirm = widget.confirmAdminOverride;
+      if (confirm != null) {
+        final proceed = await confirm(profile, state.station ?? '');
+        if (!proceed || !mounted) return;
+      }
+    }
     setState(() => _busy = true);
     await widget.onPick(profile);
   }
@@ -114,8 +146,19 @@ class _OperatorPickerBodyState extends State<OperatorPickerBody> {
           operator: profile,
           presence:
               widget.presence[profile.id] ?? const <OperatorPresenceLine>[],
+          lockedNote: _lockedNote(profile),
           onTap: _busy ? null : () => unawaited(_pick(profile)),
         ),
+      if (widget.presenceUnavailable) ...[
+        const SizedBox(height: 4),
+        Text(
+          'Η κατάσταση σύνδεσης δεν διαβάστηκε — δεν μπορεί να ελεγχθεί αν '
+          'κάποιο προφίλ είναι ήδη συνδεδεμένο σε άλλον υπολογιστή.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
       const SizedBox(height: 8),
       TextButton.icon(
         onPressed: _busy ? null : () => setState(() => _creating = true),
@@ -123,6 +166,21 @@ class _OperatorPickerBodyState extends State<OperatorPickerBody> {
         label: const Text('Δεν είμαι στη λίστα'),
       ),
     ];
+  }
+
+  /// Η εξήγηση κάτω από την κλειδωμένη κάρτα — `null` όταν είναι ελεύθερη.
+  ///
+  /// Αντικαθιστά τη γραμμή «Συνδεδεμένος τώρα», δεν προστίθεται σε αυτήν.
+  ///
+  /// Λέει και **τι να κάνει** ο άνθρωπος: ένα «δεν γίνεται» χωρίς διέξοδο
+  /// στέλνει τον χρήστη να ψάχνει, ή να νομίζει ότι χάλασε κάτι.
+  String? _lockedNote(Operator profile) {
+    final state = availabilityFor(widget.availability, profile);
+    if (!state.isLocked) return null;
+    final station = state.station ?? '';
+    final where = station.isEmpty ? 'σε άλλον υπολογιστή' : 'στον $station';
+    return 'Συνδεδεμένος τώρα $where — κλείστε την εφαρμογή εκεί ή κάντε '
+        'Αλλαγή χρήστη.';
   }
 
   List<Widget> _buildCreateForm(ThemeData theme) {

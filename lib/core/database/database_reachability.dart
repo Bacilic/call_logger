@@ -17,6 +17,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common/sqflite.dart';
 
+import 'database_helper.dart';
+import 'database_stall.dart';
+
 /// Η κατάσταση όπως τη βλέπει ο χειριστής.
 enum DatabaseReachability {
   /// Το αρχείο απαντά.
@@ -29,6 +32,15 @@ enum DatabaseReachability {
 
   /// Το αρχείο έπαψε να απαντά.
   lost,
+
+  /// Το αρχείο απαντά, αλλά η **σύνδεση που κρατά η εφαρμογή** έχει πεθάνει.
+  ///
+  /// Ξεχωριστή κατάσταση επειδή αλλάζει τι μπορεί να κάνει ο άνθρωπος: το
+  /// χαμένο δίκτυο επανέρχεται μόνο του και η αναμονή έχει νόημα· η νεκρή
+  /// σύνδεση **δεν ζωντανεύει ποτέ** — μετρημένο στο πεδίο, πάνω από είκοσι
+  /// λεπτά. Η μόνη διέξοδος είναι νέο άνοιγμα της εφαρμογής, και η λωρίδα
+  /// οφείλει να το λέει αντί να υπόσχεται επιστροφή που δεν θα έρθει.
+  staleConnection,
 }
 
 /// Τι βρήκε **ένας** έλεγχος του φύλακα.
@@ -41,6 +53,9 @@ enum DatabaseProbeSample {
 
   /// Το αρχείο δεν απαντά.
   unreachable,
+
+  /// Η σύνδεση που κρατά η εφαρμογή δεν αποκρίνεται πια.
+  staleConnection,
 }
 
 /// Η κατάσταση του φύλακα, διαθέσιμη **έξω** από το Riverpod.
@@ -61,7 +76,12 @@ class DatabaseReachabilitySignal {
   static DatabaseReachability get state => _state;
 
   /// True όταν ο φύλακας έχει ήδη κρίνει ότι η βάση δεν απαντά.
-  static bool get isLost => _state == DatabaseReachability.lost;
+  ///
+  /// Περιλαμβάνει και τη νεκρή σύνδεση: εκεί καμία επανάληψη δεν πρόκειται
+  /// να πετύχει, και η μόνη τους συνεισφορά θα ήταν να κρύβουν το σφάλμα.
+  static bool get isLost =>
+      _state == DatabaseReachability.lost ||
+      _state == DatabaseReachability.staleConnection;
 
   /// Το γράφει ΜΟΝΟ ο φύλακας.
   static void publish(DatabaseReachability value) => _state = value;
@@ -124,10 +144,32 @@ class DatabaseReachabilityTracker {
 
   int _consecutiveFailures = 0;
   int _consecutiveLocked = 0;
+  int _consecutiveStale = 0;
 
+  /// Ως πότε **δεν** πιστεύουμε μια επιτυχημένη ανάγνωση.
+  ///
+  /// Μπαίνει μόνο όταν μια πραγματική πράξη μπλοκαρίστηκε — δες
+  /// [recordRealStall].
+  DateTime? _stallFloorUntil;
+
+  /// Πόσο κρατά η λωρίδα μετά από πραγματική αποτυχία, ό,τι κι αν λέει η
+  /// ανάγνωση του φύλακα.
+  ///
+  /// **Γιατί χρειάζεται πάτωμα:** η ανάγνωση περνά μέσα από το κλείδωμα, οπότε
+  /// ο επόμενος έλεγχος (σε πέντε δευτερόλεπτα) θα έσβηνε τη λωρίδα ενώ το
+  /// εμπόδιο κρατά ακόμη — και η υπόσχεσή της, «ξαναδοκίμασε μόλις φύγει αυτή
+  /// η λωρίδα», θα γινόταν ψέμα. Είκοσι δευτερόλεπτα καλύπτουν με άνεση το
+  /// μετρημένο αντίγραφο ασφαλείας συναδέλφου (12'').
+  static const Duration realStallFloor = Duration(seconds: 20);
+
+  /// Η σειρά είναι προτεραιότητα: το χαμένο αρχείο είναι η βαρύτερη είδηση,
+  /// μετά η νεκρή σύνδεση, και τελευταία η απασχόληση που λύνεται μόνη της.
   DatabaseReachability get state {
     if (_consecutiveFailures >= failuresBeforeAlarm) {
       return DatabaseReachability.lost;
+    }
+    if (_consecutiveStale >= failuresBeforeAlarm) {
+      return DatabaseReachability.staleConnection;
     }
     if (_consecutiveLocked >= failuresBeforeAlarm) {
       return DatabaseReachability.busy;
@@ -140,18 +182,63 @@ class DatabaseReachabilityTracker {
     probeSucceeded ? DatabaseProbeSample.ok : DatabaseProbeSample.unreachable,
   );
 
+  /// Μια **πραγματική** πράξη της εφαρμογής μπλοκαρίστηκε.
+  ///
+  /// **Μία φτάνει.** Τα δείγματα του φύλακα θέλουν δύο επιβεβαιώσεις επειδή
+  /// είναι εικασίες από απόσταση· αυτό δεν είναι εικασία, είναι ζημιά που ήδη
+  /// έγινε — κάποιος περίμενε ως το όριο και έχασε την αποθήκευσή του.
+  ///
+  /// **Κίτρινη, ποτέ πορτοκαλί.** Το ίδιο όριο χτυπά και σε κλείδωμα
+  /// συναδέλφου και σε νεκρή σύνδεση. Η δεύτερη έχει ήδη τον δικό της,
+  /// αξιόπιστο κριτή (την επιμονή της σιωπής) και θα υπερισχύσει μόνη της·
+  /// μια εικασία από εδώ θα ζητούσε επανεκκίνηση σε κάθε αργό αντίγραφο.
+  DatabaseReachability recordRealStall(DateTime now) {
+    // Η βαρύτερη είδηση δεν υποβαθμίζεται: όταν η σύνδεση έχει ήδη κριθεί
+    // νεκρή (ή ο φάκελος χαμένος) κάθε πράξη αποτυγχάνει και κάθε μία θα
+    // ανέφερε — η λωρίδα με τη σωστή διέξοδο πρέπει να μείνει.
+    if (_consecutiveFailures >= failuresBeforeAlarm ||
+        _consecutiveStale >= failuresBeforeAlarm) {
+      return state;
+    }
+    _consecutiveFailures = 0;
+    _consecutiveStale = 0;
+    _consecutiveLocked = failuresBeforeAlarm;
+    _stallFloorUntil = now.add(realStallFloor);
+    return state;
+  }
+
   /// Καταγράφει το αποτέλεσμα ενός ελέγχου και επιστρέφει τη νέα κατάσταση.
-  DatabaseReachability recordSample(DatabaseProbeSample sample) {
+  ///
+  /// Το [now] υπάρχει για το πάτωμα του [recordRealStall] — και μόνο γι' αυτό.
+  DatabaseReachability recordSample(
+    DatabaseProbeSample sample, {
+    DateTime? now,
+  }) {
     switch (sample) {
       case DatabaseProbeSample.ok:
+        final floor = _stallFloorUntil;
+        if (floor != null && (now ?? DateTime.now()).isBefore(floor)) {
+          // Η ανάγνωση περνά μέσα από το κλείδωμα· δεν αποδεικνύει τίποτα.
+          return state;
+        }
+        _stallFloorUntil = null;
         _consecutiveFailures = 0;
         _consecutiveLocked = 0;
+        _consecutiveStale = 0;
       case DatabaseProbeSample.locked:
         _consecutiveFailures = 0;
+        _consecutiveStale = 0;
         if (_consecutiveLocked < failuresBeforeAlarm) _consecutiveLocked++;
       case DatabaseProbeSample.unreachable:
+        _stallFloorUntil = null;
         _consecutiveLocked = 0;
+        _consecutiveStale = 0;
         if (_consecutiveFailures < failuresBeforeAlarm) _consecutiveFailures++;
+      case DatabaseProbeSample.staleConnection:
+        _stallFloorUntil = null;
+        _consecutiveFailures = 0;
+        _consecutiveLocked = 0;
+        if (_consecutiveStale < failuresBeforeAlarm) _consecutiveStale++;
     }
     return state;
   }
@@ -217,14 +304,62 @@ Future<DatabaseProbeSample> probeDatabaseLock(
     // έλεγχος αρχείου, που τρέχει πρώτος.)
     return DatabaseProbeSample.locked;
   } catch (e) {
-    final lower = e.toString().toLowerCase();
-    final locked =
-        lower.contains('database is locked') || lower.contains('sqlite_busy');
-    return locked ? DatabaseProbeSample.locked : DatabaseProbeSample.ok;
+    return isDatabaseLockedError(e)
+        ? DatabaseProbeSample.locked
+        : DatabaseProbeSample.ok;
   } finally {
     try {
       await db?.close();
     } catch (_) {}
+  }
+}
+
+/// Πώς κρίνεται ένα σφάλμα που ήρθε από τη **ζωντανή** σύνδεση.
+///
+/// **Γιατί χρειάζεται δική του κρίση:** το ερώτημα είναι ένα `PRAGMA` που δεν
+/// διαβάζει δεδομένα και δεν έχει σύνταξη να αποτύχει. Ό,τι επιστρέψει σφάλμα
+/// αφορά την ίδια τη σύνδεση, όχι το ερώτημα — γι' αυτό η άγνωστη αιτία
+/// κρίνεται **άφταστη** και όχι «εντάξει». Ο φύλακας θέλει ούτως ή άλλως δύο
+/// συνεχόμενες μετρήσεις για να ανάψει λωρίδα, οπότε ένα μεμονωμένο περίεργο
+/// σφάλμα δεν πετά κόκκινο στα μούτρα του χειριστή.
+///
+/// Η μόνη εξαίρεση είναι το **κλείδωμα**: λύνεται μόνο του, και έχει δική του
+/// λωρίδα. Αν μπερδευόταν με τη νεκρή σύνδεση, κάθε αντίγραφο ασφαλείας
+/// συναδέλφου θα έδειχνε «χάθηκε η βάση».
+DatabaseProbeSample classifyLiveConnectionError(Object error) =>
+    isDatabaseLockedError(error)
+    ? DatabaseProbeSample.locked
+    : DatabaseProbeSample.staleConnection;
+
+/// Ρωτά τη **σύνδεση που χρησιμοποιεί η εφαρμογή** αν ζει ακόμη.
+///
+/// **Το κενό που κλείνει:** οι άλλοι δύο έλεγχοι του φύλακα ρωτούν το αρχείο
+/// και ανοίγουν καινούργια σύνδεση. Και τα δύο πετυχαίνουν όταν η πραγματική
+/// σύνδεση έχει πεθάνει — μετρημένο στο πεδίο 23/09/2026: επί είκοσι λεπτά
+/// κάθε εγγραφή απέτυχε με «disk I/O error (code 1802)», ενώ το αρχείο
+/// απαντούσε και μια νέα σύνδεση δούλευε αμέσως.
+///
+/// Επιστρέφει `null` όταν **δεν υπάρχει** ανοιχτή σύνδεση: τότε δεν υπάρχει
+/// τίποτα να κριθεί, και οι υπόλοιποι έλεγχοι αναλαμβάνουν.
+///
+/// Το ερώτημα είναι το φθηνότερο που υπάρχει — ένα `PRAGMA` που δεν διαβάζει
+/// δεδομένα — και τρέχει πάνω σε ήδη ανοιχτή σύνδεση.
+Future<DatabaseProbeSample?> probeLiveConnection(
+  DatabaseExecutor? db, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  if (db == null) return null;
+  try {
+    return await () async {
+      await db.rawQuery('PRAGMA data_version');
+      return DatabaseProbeSample.ok;
+    }().timeout(timeout);
+  } on TimeoutException {
+    // «Η βάση δεν απάντησε σε 18 δευτερόλεπτα»: για τον χειριστή, η σύνδεση
+    // δεν αποκρίνεται. Το κλείδωμα απαντά με σφάλμα, δεν σιωπά.
+    return DatabaseProbeSample.staleConnection;
+  } catch (e) {
+    return classifyLiveConnectionError(e);
   }
 }
 
@@ -259,8 +394,33 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
 
   @override
   DatabaseReachability build() {
-    ref.onDispose(() => _timer?.cancel());
+    ref.onDispose(() {
+      _timer?.cancel();
+      _watchedPath = null;
+      DatabaseStallReports.listen(null);
+    });
     return DatabaseReachability.ok;
+  }
+
+  /// Η ώρα, από ένα σημείο — ώστε τα τεστ να ορίζουν το πάτωμα της λωρίδας.
+  @visibleForTesting
+  DateTime Function() now = DateTime.now;
+
+  /// Μια πραγματική πράξη της εφαρμογής μόλις μπλοκαρίστηκε.
+  ///
+  /// **Γιατί ακούμε αντί να ρωτάμε:** το ερώτημα του φύλακα είναι ανάγνωση, και
+  /// ένα αποκλειστικό κλείδωμα τις αφήνει να περνούν — μετρημένο στο πεδίο
+  /// 24/09, όπου ο διπλανός σταθμός έχασε εγγραφή ενώ ο φύλακας έλεγε «όλα
+  /// καλά». Η πράξη που κόλλησε είναι ο μόνος μάρτυρας που ρώτησε με τον
+  /// σωστό τρόπο.
+  void _onRealStall() {
+    if (_watchedPath == null) return;
+    final next = _tracker.recordRealStall(now());
+    _lastProbeFailed = true;
+    if (next != state) _publish(next);
+    // Ο ρυθμός πυκνώνει αμέσως: η επιστροφή πρέπει να πιαστεί γρήγορα, και ο
+    // επόμενος έλεγχος αποφασίζει αν πρόκειται για κάτι βαρύτερο.
+    _scheduleNext();
   }
 
   /// Ξεκινά τον περιοδικό έλεγχο για τη συγκεκριμένη διαδρομή.
@@ -269,6 +429,8 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
   /// να μη μείνουν δύο να ρωτούν διαφορετικά αρχεία.
   void watch(String? databasePath) {
     _timer?.cancel();
+    DatabaseStallReports.listen(_onRealStall);
+    _liveSilentStreak = 0;
     _tracker.record(probeSucceeded: true);
     _publish(DatabaseReachability.ok);
 
@@ -292,14 +454,86 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
     });
   }
 
+  /// Από πού έρχεται η σύνδεση που χρησιμοποιεί η εφαρμογή.
+  ///
+  /// Αντικαθίσταται στα τεστ: η πραγματική ζητά ανοιχτή βάση, και μέσα σε
+  /// `testWidgets` ένα άνοιγμα δεν ολοκληρώνεται ποτέ.
+  @visibleForTesting
+  DatabaseExecutor? Function() liveConnection = () =>
+      DatabaseHelper.instance.openDatabaseOrNull;
+
+  /// Πόσες συνεχόμενες φορές σώπασε η **δική μας** σύνδεση.
+  ///
+  /// Μετριέται χωριστά από την τελική κατάσταση, και είναι ο μόνος τρόπος να
+  /// ξεχωρίσει το προσωρινό από το μόνιμο (δες [_runCheck]).
+  int _liveSilentStreak = 0;
+
+  /// Πόση επίμονη σιωπή της δικής μας σύνδεσης σημαίνει «πέθανε».
+  ///
+  /// Τρία δείγματα, και μετά την πρώτη αποτυχία ο ρυθμός είναι πέντε
+  /// δευτερόλεπτα: ο άνθρωπος μαθαίνει την αλήθεια μέσα σε ~15 δευτερόλεπτα,
+  /// ενώ ένα κλείδωμα συναδέλφου (μετρημένο: 12 δευτερόλεπτα για αντίγραφο)
+  /// προλαβαίνει να λυθεί και να μη χαρακτηριστεί ποτέ νεκρό.
+  static const int silentBeatsBeforeStale = 3;
+
+  /// **Ο κριτής είναι η ΕΠΙΜΟΝΗ, όχι το κλείδωμα** — μάθημα της δοκιμής
+  /// πεδίου 24/09, δεύτερος γύρος.
+  ///
+  /// Η προφανής ιδέα ήταν να ρωτηθεί μια καινούργια σύνδεση: αν εκείνη ανοίγει
+  /// ενώ η δική μας σωπαίνει, φταίει η δική μας. **Δεν δουλεύει:** η νεκρή
+  /// λαβή εξακολουθεί να κρατά κλειδώματα στο αρχείο, οπότε η καινούργια
+  /// σύνδεση βρίσκει τη βάση «κλειδωμένη» — από εμάς τους ίδιους — και η
+  /// εφαρμογή έδειχνε «απασχολημένη» επ' άπειρον μετά την επαναφορά του
+  /// δικτύου.
+  ///
+  /// Ο χρόνος τα ξεχωρίζει καθαρά: το κλείδωμα του συναδέλφου λύνεται σε
+  /// δευτερόλεπτα, η νεκρή σύνδεση **ποτέ**. Γι' αυτό μετράει η σιωπή της
+  /// δικής μας σύνδεσης, και μόνο όταν επιμείνει κερδίζει κάθε άλλη εξήγηση.
+  ///
+  /// Η σειρά:
+  /// 1. **Απαντά το αρχείο;** Όχι ⇒ χάθηκε ο φάκελος.
+  /// 2. **Έχει ήδη κριθεί νεκρή;** Τότε δεν την ξαναρωτάμε — κάθε ερώτημα
+  ///    στοιβάζεται πίσω από τη λειτουργία που κρέμεται.
+  /// 3. **Ζει η δική μας σύνδεση;** Ναι ⇒ όλα καλά. Όχι ⇒ μετρά η σιωπή.
+  /// 4. **Επέμεινε η σιωπή;** Ναι ⇒ νεκρή σύνδεση, ό,τι κι αν λέει το
+  ///    κλείδωμα. Όχι ⇒ ρωτάμε το κλείδωμα, που ίσως εξηγεί την καθυστέρηση.
   Future<void> _runCheck() async {
     final path = _watchedPath;
     if (path == null) return;
     if (!await probeDatabaseFile(path)) {
+      _liveSilentStreak = 0;
       recordSample(DatabaseProbeSample.unreachable);
       return;
     }
-    recordSample(await probeDatabaseLock(path));
+
+    if (state == DatabaseReachability.staleConnection) {
+      recordSample(DatabaseProbeSample.staleConnection);
+      return;
+    }
+
+    final live = await probeLiveConnection(liveConnection());
+    if (live == DatabaseProbeSample.ok) {
+      _liveSilentStreak = 0;
+      recordSample(DatabaseProbeSample.ok);
+      return;
+    }
+    if (live == null) {
+      // Δεν υπάρχει ανοιχτή σύνδεση να κριθεί — δεν είναι σιωπή, είναι απουσία.
+      _liveSilentStreak = 0;
+      recordSample(await probeDatabaseLock(path));
+      return;
+    }
+
+    _liveSilentStreak++;
+    if (_liveSilentStreak >= silentBeatsBeforeStale) {
+      recordSample(DatabaseProbeSample.staleConnection);
+      return;
+    }
+
+    // Όσο η σιωπή είναι νεαρή, το κλείδωμα είναι η πιο πιθανή εξήγηση και
+    // έχει τη δική του, ηπιότερη λωρίδα.
+    final lock = await probeDatabaseLock(path);
+    recordSample(lock != DatabaseProbeSample.ok ? lock : live);
   }
 
   /// Καταγράφει το αποτέλεσμα ενός ελέγχου.
@@ -316,7 +550,7 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
   @visibleForTesting
   void recordSample(DatabaseProbeSample sample) {
     _lastProbeFailed = sample != DatabaseProbeSample.ok;
-    final next = _tracker.recordSample(sample);
+    final next = _tracker.recordSample(sample, now: now());
     if (next != state) _publish(next);
   }
 
@@ -334,6 +568,8 @@ class DatabaseReachabilityNotifier extends Notifier<DatabaseReachability> {
   void stop() {
     _timer?.cancel();
     _timer = null;
+    _watchedPath = null;
+    DatabaseStallReports.listen(null);
     // Χωρίς φύλακα δεν υπάρχει γνώση· η άγνοια δεν επιτρέπεται να κρατά τις
     // οθόνες σε κατάσταση «χαμένη βάση» για την υπόλοιπη συνεδρία.
     DatabaseReachabilitySignal.publish(DatabaseReachability.ok);

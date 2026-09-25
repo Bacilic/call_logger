@@ -137,13 +137,29 @@ void main() {
         await tester.tap(
           find.widgetWithText(FilledButton, 'Κλείσιμο εκκρεμότητας'),
         );
-        // Μέσα σε runAsync οι πραγματικές ασύγχρονες κλήσεις (βάση) τρέχουν
-        // κανονικά — δίνουμε χρόνο στην αλυσίδα του _onComplete να ολοκληρωθεί.
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-        await pumpUntilSettled(tester, steps: 60);
-        expect(find.byType(AlertDialog), findsNothing);
-        await container.read(tasksProvider.future);
       });
+
+      // Περιμένουμε το ΓΕΓΟΝΟΣ (ο διάλογος έκλεισε), όχι το ρολόι.
+      //
+      // Η παλιά μορφή ήταν σταθερή αναμονή 200ms συν εξήντα βήματα των 60ms:
+      // περιθώριο που φτάνει σε ήσυχο μηχάνημα και εξαντλείται όταν τρέχει
+      // ολόκληρος ο φάκελος, γιατί η εγγραφή στη βάση είναι πραγματικό I/O.
+      // Το ίδιο μετρήθηκε στη φόρμα τμήματος στις 10/09 — δες
+      // [pumpUntilDialogCloses].
+      //
+      // Κερδίζει και το snackbar: η αναμονή σταματά μόλις κλείσει ο διάλογος
+      // αντί να προχωρήσει 3,6 δευτερόλεπτα εικονικού χρόνου, οπότε το μήνυμα
+      // δεν προλαβαίνει να σβήσει μόνο του πριν το δει ο έλεγχος.
+      await pumpUntilDialogCloses(
+        tester,
+        isOpen: () =>
+            find.text('Ολοκλήρωση εκκρεμότητας').evaluate().isNotEmpty,
+        failMessage:
+            'ο διάλογος ολοκλήρωσης δεν έκλεισε — η εγγραφή στη βάση δεν '
+            'ολοκληρώθηκε',
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      await tester.runAsync(() => container.read(tasksProvider.future));
 
       // Το snackbar εμφανίζεται ΜΟΝΟ αν η αλυσίδα του _onComplete έφτασε ως το τέλος.
       expect(find.text('Εκκρεμότητα ολοκληρώθηκε.'), findsOneWidget);
