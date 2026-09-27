@@ -12,6 +12,7 @@ import '../../../core/utils/call_duration_format.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/resizable_text_area.dart';
+import '../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../../calls/models/call_model.dart';
 import '../../calls/models/call_refined_source.dart';
@@ -54,6 +55,7 @@ class _CallEditDialog extends ConsumerStatefulWidget {
 
 class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     with DialogSnackbarHost {
+  late final SpellCheckController _titleController;
   late final SpellCheckController _issueController;
   late final SpellCheckController _solutionController;
   final TextEditingController _durationController = TextEditingController();
@@ -82,6 +84,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
   @override
   void initState() {
     super.initState();
+    _titleController = SpellCheckController();
     _issueController = SpellCheckController();
     _solutionController = SpellCheckController();
     _load();
@@ -89,6 +92,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
 
   @override
   void dispose() {
+    _titleController.dispose();
     _issueController.dispose();
     _solutionController.dispose();
     _durationController.dispose();
@@ -123,6 +127,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     await ref.read(historyEditSmartEntityProvider.notifier).loadFromCall(call);
     if (!mounted) return;
     _original = call;
+    _titleController.text = call.title ?? '';
     _issueController.text = call.issue ?? '';
     _solutionController.text = call.solution ?? '';
     _durationController.text = call.duration?.toString() ?? '';
@@ -243,6 +248,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
     final phoneRaw = selector.selectedPhone?.trim() ?? '';
     final departmentRaw = selector.departmentText.trim();
     final equipmentRaw = selector.equipmentText.trim();
+    final titleRaw = _titleController.text.trim();
     final issueRaw = _issueController.text.trim();
     final solutionRaw = _solutionController.text.trim();
     final categoryRaw = _categoryText.trim();
@@ -293,6 +299,15 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       refinedAt: refinedAt,
       category: categoryRaw.isEmpty ? null : categoryRaw,
       categoryId: _categoryId,
+      // Ό,τι δεν επεξεργάζεται αυτή η καρτέλα ακολουθεί το πρωτότυπο, ΠΑΝΤΑ:
+      // το αντικείμενο χτίζεται από την αρχή και γράφεται ολόκληρο, οπότε ένα
+      // πεδίο που λείπει από εδώ δεν μένει ως έχει — μηδενίζεται στη βάση.
+      //
+      // Ο τίτλος έχει πλέον δικό του πεδίο, και **εδώ το κενό σημαίνει κενό**:
+      // είναι το μόνο σημείο όπου ο χειριστής μπορεί να αναιρέσει έναν τίτλο.
+      // Η φόρμα του Lansweeper κρατά τον αντίθετο κανόνα επίτηδες — εκεί το
+      // άδειο πεδίο δεν σβήνει ό,τι έγραψε προηγούμενη αποστολή.
+      title: titleRaw.isEmpty ? null : titleRaw,
       status: _original!.status,
       duration: duration,
       isPriority: _original!.isPriority,
@@ -615,6 +630,19 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
                           ),
                           const SizedBox(height: 4),
                         ],
+                        // Πάνω από την Περιγραφή, επειδή αυτό ακριβώς είναι: η
+                        // περίληψή της, που δείχνει η λίστα στη θέση της.
+                        LexiconSpellTextFormField(
+                          controller: _titleController,
+                          decoration: const InputDecoration(
+                            labelText: 'Τίτλος',
+                            helperText:
+                                'Η περίληψη που δείχνει η λίστα. '
+                                'Κενό = δείχνει την περιγραφή.',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         ResizableTextArea(
                           controller: _issueController,
                           minLines: 2,

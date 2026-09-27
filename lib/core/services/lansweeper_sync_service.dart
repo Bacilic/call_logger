@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../features/history/models/lansweeper_submit_progress.dart';
+import 'lansweeper_api_uri.dart';
 import 'lansweeper_asset_target.dart';
 import 'lansweeper_ticket_requester_fields.dart';
 import 'lansweeper_ticket_submit_config.dart';
@@ -581,30 +582,27 @@ class LansweeperSyncService {
         (await settingsService.remoteLansweeper.getLansweeperApiKey())
             ?.trim() ??
         '';
-    if (apiUrl.isEmpty) {
-      throw const LansweeperSyncException(
-        'Δεν έχει οριστεί Lansweeper API URL.',
-      );
-    }
-    if (apiKey.isEmpty) {
-      throw const LansweeperSyncException(
-        'Δεν έχει οριστεί Lansweeper API key.',
-      );
-    }
-
-    final baseUri = Uri.tryParse(apiUrl);
-    if (baseUri == null || !baseUri.hasScheme || baseUri.host.isEmpty) {
-      throw LansweeperSyncException('Μη έγκυρο Lansweeper API URL: $apiUrl');
-    }
-
-    return baseUri.replace(
-      queryParameters: <String, String>{
-        ...baseUri.queryParameters,
-        'action': action,
-        'key': apiKey,
-        ...extraQueryParams,
-      },
+    final result = buildLansweeperApiActionUri(
+      apiUrl: apiUrl,
+      apiKey: apiKey,
+      action: action,
+      extraQueryParams: extraQueryParams,
     );
+    final uri = result.uri;
+    if (uri != null) return uri;
+
+    // Εδώ μιλάμε για ρύθμιση της βάσης, όχι για πεδίο οθόνης.
+    throw switch (result.problem!) {
+      LansweeperApiUriProblem.missingUrl => const LansweeperSyncException(
+        'Δεν έχει οριστεί Lansweeper API URL.',
+      ),
+      LansweeperApiUriProblem.missingKey => const LansweeperSyncException(
+        'Δεν έχει οριστεί Lansweeper API key.',
+      ),
+      LansweeperApiUriProblem.invalidUrl => LansweeperSyncException(
+        'Μη έγκυρο Lansweeper API URL: $apiUrl',
+      ),
+    };
   }
 
   static Future<LansweeperRawResponse> _defaultRawPoster(

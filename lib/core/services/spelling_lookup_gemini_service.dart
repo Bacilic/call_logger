@@ -55,13 +55,13 @@ abstract final class SpellingLookupGeminiService {
       );
     }
 
-    final resolvedEndpoint = GeminiTicketService.resolveEndpoint(
+    final target = GeminiTicketService.resolveCallTarget(
       endpoint: endpoint,
       apiKey: key,
       primaryModel: primaryModel,
     );
-    final uri = Uri.tryParse(resolvedEndpoint);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    final uri = target.uri;
+    if (!uri.hasScheme || uri.host.isEmpty) {
       throw const GeminiException(
         'Μη έγκυρο URL endpoint Gemini.',
         scope: GeminiFailureScope.infrastructure,
@@ -80,7 +80,7 @@ abstract final class SpellingLookupGeminiService {
         response = await httpClient
             .post(
               uri,
-              headers: const {'Content-Type': 'application/json'},
+              headers: target.headers,
               body: jsonEncode(<String, dynamic>{
                 'contents': [
                   <String, dynamic>{

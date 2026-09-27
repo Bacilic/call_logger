@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../providers/active_sessions_provider.dart';
 import '../services/active_sessions.dart';
+import '../services/other_sessions_visibility.dart';
 
 /// Ρωτά «ποιος άλλος έχει τη βάση ανοιχτή;» πριν από επικίνδυνη ενέργεια.
 ///
@@ -22,7 +23,16 @@ Future<bool> confirmDespiteOtherSessions(
   BuildContext context, {
   required String actionLabel,
   Future<List<ActiveSession>> Function()? loadSessions,
+  bool Function()? canObserve,
 }) async {
+  // Η άγνοια δεν είναι «κανείς άλλος». Όταν ο φάκελος των ιχνών δεν απαντά, η
+  // λίστα βγαίνει κενή για λάθος λόγο — και ο φρουρός θα άφηνε να περάσει
+  // ακριβώς η ενέργεια που υπάρχει για να σταματήσει.
+  if (!(canObserve ?? canObserveOtherSessions)()) {
+    if (!context.mounted) return false;
+    return _confirmWithoutVisibility(context, actionLabel: actionLabel);
+  }
+
   final sessions = await (loadSessions ?? loadActiveSessions)();
   final others = otherSessions(sessions);
   if (others.isEmpty) return true;
@@ -99,6 +109,48 @@ Future<bool> confirmDespiteOtherSessions(
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Συνέχεια παρ\' όλα αυτά'),
+          ),
+        ],
+      );
+    },
+  );
+  return proceed == true;
+}
+
+/// Όταν τα ίχνη δεν διαβάζονται: λέει ότι **δεν ξέρει**, αντί να πει «κανείς».
+///
+/// Η αναβάθμιση σχήματος δεν αναιρείται. Ένα σιωπηλό «προχώρα» εδώ σημαίνει
+/// ότι ο χρήστης αποφασίζει χωρίς να ξέρει πως αποφασίζει.
+Future<bool> _confirmWithoutVisibility(
+  BuildContext context, {
+  required String actionLabel,
+}) async {
+  final proceed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      final theme = Theme.of(ctx);
+      return AlertDialog(
+        icon: Icon(
+          Icons.help_outline_rounded,
+          color: theme.colorScheme.tertiary,
+        ),
+        title: const Text('Δεν φαίνεται ποιος άλλος δουλεύει'),
+        content: Text(
+          'Ο φάκελος όπου οι υπολογιστές αφήνουν το ίχνος τους δεν απαντά, '
+          'οπότε η εφαρμογή δεν μπορεί να δει αν κάποιος συνάδελφος έχει τη '
+          'βάση ανοιχτή αυτή τη στιγμή.\n\n'
+          'Η ενέργεια «$actionLabel» δεν αναιρείται. Αν κάποιος δουλεύει, θα '
+          'τον βρει στη μέση.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Ακύρωση'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Συνέχεια χωρίς έλεγχο'),
           ),
         ],
       );

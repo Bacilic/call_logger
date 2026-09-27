@@ -63,10 +63,15 @@ Future<List<ActiveSession>> _activeSessionsFromLivenessMarks({
   required String? logsDirectory,
 }) async {
   if (logsDirectory == null || logsDirectory.trim().isEmpty) return const [];
+  // Ποια βάση κρατάμε και ποιο αντίγραφο είμαστε: τα ξέρει το ημερολόγιο, που
+  // στήνεται δίπλα στη βάση πριν καν εκείνη ανοίξει.
+  final log = CrashLogService.instanceOrNull;
   return activeSessionsFromLivenessMarks(
     marks: await readSessionLivenessMarks(logsDirectory),
     now: now,
     myStation: StationName.current,
+    myDatabase: log?.databaseFileName,
+    myInstance: log?.instanceId,
   );
 }
 

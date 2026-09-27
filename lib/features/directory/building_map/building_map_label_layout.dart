@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/department_model.dart';
+import 'building_map_effective_shape.dart';
 import 'providers/building_map_providers.dart';
 
 /// Μέγιστες γραμμές ετικέτας χάρτη (συμπ. ρητές αλλαγές γραμμής με Shift+Enter).
@@ -338,41 +339,25 @@ MapLabelLayout? computeMapLabelLayout({
   /// Κείμενο ετικέτας (π.χ. τοπικό draft πριν την αποθήκευση στο ✓).
   String? labelTextOverride,
 }) {
-  if ((dep.mapFloor ?? '') != sheetIdString) return null;
+  final shape = resolveMapDepartmentShape(
+    dep: dep,
+    sheetIdString: sheetIdString,
+    draftShape: draftShape,
+    toolMode: toolMode,
+    highlightDepartmentId: highlightDepartmentId,
+  );
+  if (shape == null) return null;
 
-  final draft = draftShape;
-  final isEditingSelectedDraft =
-      toolMode == MapToolMode.edit &&
-      draft != null &&
-      highlightDepartmentId != null &&
-      dep.id == highlightDepartmentId;
-
-  final nx = isEditingSelectedDraft ? draft.x : dep.mapX;
-  final ny = isEditingSelectedDraft ? draft.y : dep.mapY;
-  final nw = isEditingSelectedDraft ? draft.width : dep.mapWidth;
-  final nh = isEditingSelectedDraft ? draft.height : dep.mapHeight;
-  if (nx == null || ny == null || nw == null || nh == null) return null;
-  if (nw <= 0 || nh <= 0) return null;
-
-  final effectiveLabelOffsetX = isEditingSelectedDraft
-      ? draft.labelOffsetX
-      : dep.mapLabelOffsetX;
-  final effectiveLabelOffsetY = isEditingSelectedDraft
-      ? draft.labelOffsetY
-      : dep.mapLabelOffsetY;
-
-  final effectiveLabelWidth = isEditingSelectedDraft
-      ? draft.labelWidth
-      : effectiveMapLabelWidth(dep.mapLabelWidth);
-  final effectiveLabelHeight = isEditingSelectedDraft
-      ? draft.labelHeight
-      : effectiveMapLabelHeight(dep.mapLabelHeight);
+  final effectiveLabelOffsetX = shape.labelOffsetX;
+  final effectiveLabelOffsetY = shape.labelOffsetY;
+  final effectiveLabelWidth = shape.labelWidth;
+  final effectiveLabelHeight = shape.labelHeight;
 
   final r = Rect.fromLTWH(
-    nx * canvasSize.width,
-    ny * canvasSize.height,
-    nw * canvasSize.width,
-    nh * canvasSize.height,
+    shape.x * canvasSize.width,
+    shape.y * canvasSize.height,
+    shape.width * canvasSize.width,
+    shape.height * canvasSize.height,
   );
 
   final labelCenterBeforeSheetRotation = Offset(
@@ -386,9 +371,7 @@ MapLabelLayout? computeMapLabelLayout({
     sheetRotationRadians,
   );
 
-  final effectiveFontScale = isEditingSelectedDraft
-      ? draft.labelFontScale
-      : effectiveMapLabelFontScale(dep.mapLabelFontScale);
+  final effectiveFontScale = shape.labelFontScale;
   final maxFontSize = computeBuildingMapLabelFontSize(
     canvasSize,
     effectiveFontScale,

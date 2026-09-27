@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 
 import '../config/app_config.dart';
 import '../utils/file_picker_initial_directory.dart';
@@ -26,6 +25,7 @@ import '../services/portable_tool_image_storage.dart';
 import '../../features/database/widgets/backup_zip_database_choice_dialog.dart';
 import '../../features/database/widgets/restore_from_backup_dialog.dart';
 import '../../features/database/widgets/restore_report_dialog.dart';
+import '../utils/file_path_identity.dart';
 
 /// Αποτέλεσμα της ενορχηστρωμένης ροής επαναφοράς από `.zip`.
 class RestoreFromBackupZipFlowResult {
@@ -320,7 +320,7 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
       closeFailure = e;
     }
 
-    final sameAsStaged = _samePath(targetPath, extractedPath);
+    final sameAsStaged = pathsReferToSameFile(targetPath, extractedPath);
 
     if (restoresDatabase && !sameAsStaged) {
       final replacement = await DatabaseFileReplacement.replaceFromFile(
@@ -369,7 +369,8 @@ Future<RestoreFromBackupZipFlowResult> runRestoreFromBackupZipFlow({
       Navigator.of(context, rootNavigator: true).pop();
     }
     restoreLabel.dispose();
-    final keepStaged = restoresDatabase && _samePath(targetPath, extractedPath);
+    final keepStaged =
+        restoresDatabase && pathsReferToSameFile(targetPath, extractedPath);
     if (!keepStaged) {
       final cleanupMsg = await cleanupStagedDatabase(extractedPath);
       if (cleanupMsg != null) {
@@ -500,12 +501,6 @@ Future<DateTime?> _localLampDatabaseModified() async {
   } catch (_) {
     return null;
   }
-}
-
-bool _samePath(String a, String b) {
-  final na = p.normalize(p.absolute(a)).replaceAll('/', '\\').toLowerCase();
-  final nb = p.normalize(p.absolute(b)).replaceAll('/', '\\').toLowerCase();
-  return na == nb;
 }
 
 Future<String?> _pickZipPath(

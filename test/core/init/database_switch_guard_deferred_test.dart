@@ -108,7 +108,11 @@ void main() {
       tester,
       container,
       onTrigger: (context, ref) async {
-        allowed = await ensureDatabaseSwitchAllowed(context, ref);
+        allowed = await ensureDatabaseSwitchAllowed(
+          context,
+          ref,
+          canObserveOtherStations: () => true,
+        );
       },
     );
 
@@ -139,7 +143,11 @@ void main() {
         tester,
         container,
         onTrigger: (context, ref) async {
-          allowed = await ensureDatabaseSwitchAllowed(context, ref);
+          allowed = await ensureDatabaseSwitchAllowed(
+            context,
+            ref,
+            canObserveOtherStations: () => true,
+          );
         },
       );
 
@@ -174,7 +182,11 @@ void main() {
       tester,
       container,
       onTrigger: (context, ref) async {
-        allowed = await ensureDatabaseSwitchAllowed(context, ref);
+        allowed = await ensureDatabaseSwitchAllowed(
+          context,
+          ref,
+          canObserveOtherStations: () => true,
+        );
       },
     );
 

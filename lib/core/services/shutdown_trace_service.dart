@@ -4,7 +4,10 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'package:path_provider/path_provider.dart';
+
 import 'crash_log_service.dart';
+import 'operator_presence_heartbeat.dart';
 import 'shutdown_coordinator.dart';
 import 'shutdown_trace_incident.dart';
 import 'station_name.dart';
@@ -32,13 +35,21 @@ import 'station_name.dart';
 /// στις 16:40 και κόλλησε το αντίγραφο» — αντί για δύο ξένα μεταξύ τους αρχεία.
 class ShutdownTraceService {
   ShutdownTraceService({
-    required this.logsDirectory,
+    required this.workingDirectory,
     required this.appendToSessionLog,
     this.slowThreshold = ShutdownCoordinator.progressRevealDelay,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
-  final String logsDirectory;
+  /// Πού ζει το **προσωρινό** ίχνος όσο γράφεται — τοπικά, ποτέ στο δίκτυο.
+  ///
+  /// Κάθε γραμμή είναι ξεχωριστή σύγχρονη εγγραφή που περιμένει να πατήσει
+  /// δίσκο, αλλιώς ένα ίχνος που σκοτώθηκε στη μέση δεν θα έλεγε τίποτα. Σε
+  /// δικτυακό φάκελο αυτό κόστισε **6,2 δευτερόλεπτα για οκτώ γραμμές** σε
+  /// μετρημένο κλείσιμο — περισσότερο από όλη τη δουλειά που κατέγραφαν. Το
+  /// τελικό ίχνος φεύγει κανονικά στο κοινό ημερήσιο αρχείο, μία φορά, μέσω
+  /// του [appendToSessionLog]: αλλάζει μόνο πού περιμένει ενδιάμεσα.
+  final String workingDirectory;
 
   /// Πού καταλήγει το ίχνος όταν αξίζει να κρατηθεί — το ημερήσιο αρχείο
   /// συνεδριών του [CrashLogService], που κατέχει τον φάκελο και τον φρουρό
@@ -67,13 +78,31 @@ class ShutdownTraceService {
   /// όνομα, ένας υπολογιστής που ανοίγει την ώρα που ένας άλλος κλείνει θα
   /// έβρισκε το **ζωντανό** ίχνος εκείνου και θα το ανακοίνωνε ως διακοπέν
   /// κλείσιμο — σβήνοντάς το κιόλας.
+  /// Η **εκτέλεση** μπαίνει κι αυτή στο όνομα, ένα επίπεδο πιο μέσα: δύο
+  /// αντίγραφα στον ίδιο υπολογιστή (η κανονική έκδοση και η δοκιμαστική) θα
+  /// μοιραζόταν ένα αρχείο τώρα που ο φάκελος είναι τοπικός. Η ταυτότητα μένει
+  /// σταθερή από άνοιγμα σε άνοιγμα, οπότε το ίχνος που έμεινε στη μέση το
+  /// βρίσκει η επόμενη εκκίνηση του ίδιου αντιγράφου.
   static String get workingFileName =>
+      '${CrashLogService.legacyShutdownTracePrefix}'
+      '${StationName.fileSafe}_'
+      '${CrashLogService.instanceSlug(OperatorPresenceHeartbeat.instanceId)}'
+      '${ShutdownTraceIncident.fileNameSuffix}';
+
+  /// Το όνομα της εποχής που το προσωρινό ίχνος ζούσε στον κοινό φάκελο.
+  ///
+  /// Δεν ψάχνεται παντού: **μόνο** στην παλιά του θέση, και μόνο για να
+  /// μετακομίσει μία τελευταία φορά. Φέρει τον σταθμό μας, οπότε δεν κινδυνεύει
+  /// να αρπάξει το ζωντανό ίχνος γείτονα που κλείνει αυτή τη στιγμή.
+  static String get legacySharedWorkingFileName =>
       '${CrashLogService.legacyShutdownTracePrefix}'
       '${StationName.fileSafe}'
       '${ShutdownTraceIncident.fileNameSuffix}';
 
-  static String logsDirectoryForDatabasePath(String databasePath) {
-    return CrashLogService.logsDirectoryForDatabasePath(databasePath);
+  /// Ο τοπικός φάκελος του προσωρινού ίχνους: `%AppData%\…\shutdown`.
+  static Future<String> localWorkingDirectory() async {
+    final support = await getApplicationSupportDirectory();
+    return p.join(support.path, 'shutdown');
   }
 
   /// Στήνει τον ιχνηλάτη πάνω στο ημερολόγιο που ήδη κατέχει τον φάκελο.
@@ -81,11 +110,21 @@ class ShutdownTraceService {
   /// `null` όταν δεν υπάρχει ημερολόγιο ή ο φάκελος δεν απαντά: χωρίς δίσκο
   /// δεν υπάρχει τίποτα να ιχνηλατηθεί, και η αναμονή σε φάκελο που σιωπά
   /// είναι ακριβώς αυτό που δεν αντέχει η ώρα του κλεισίματος.
-  static ShutdownTraceService? forCrashLog([CrashLogService? service]) {
+  static Future<ShutdownTraceService?> forCrashLog([
+    CrashLogService? service,
+  ]) async {
     final log = service ?? CrashLogService.instanceOrNull;
     if (log == null || !log.isDiskAvailable) return null;
+    // Αν ο τοπικός φάκελος δεν απαντήσει, το ίχνος γράφεται όπου έγραφε πάντα:
+    // αργά, αλλά καλύτερα από καθόλου ίχνος.
+    String working;
+    try {
+      working = await localWorkingDirectory();
+    } catch (_) {
+      working = log.logsDirectory;
+    }
     return ShutdownTraceService(
-      logsDirectory: log.logsDirectory,
+      workingDirectory: working,
       appendToSessionLog: log.appendSessionText,
     );
   }
@@ -102,8 +141,8 @@ class ShutdownTraceService {
   /// Ανοίγει το προσωρινό αρχείο του τρέχοντος κλεισίματος.
   Future<void> beginSession() async {
     try {
-      await Directory(logsDirectory).create(recursive: true);
-      final file = File(p.join(logsDirectory, workingFileName));
+      await Directory(workingDirectory).create(recursive: true);
+      final file = File(p.join(workingDirectory, workingFileName));
       if (await file.exists()) await file.delete();
       _file = file;
       _appendLine('=== shutdown trace start ===');
@@ -232,12 +271,35 @@ class ShutdownTraceService {
   /// Επιστρέφει `true` όταν βρήκε πράγματι ορφανό — ένα βήμα εκκίνησης που
   /// συνήθως δεν έχει δουλειά να κάνει.
   static Future<bool> promoteOrphanedTrace({
-    required String logsDirectory,
+    required String workingDirectory,
     required void Function(String text) appendToSessionLog,
+    String? legacySharedDirectory,
     DateTime Function()? now,
   }) async {
     final clock = now ?? DateTime.now;
-    final orphan = File(p.join(logsDirectory, workingFileName));
+    var promoted = await _promoteOne(
+      File(p.join(workingDirectory, workingFileName)),
+      appendToSessionLog: appendToSessionLog,
+      clock: clock,
+    );
+    // Η παλιά θέση σαρώνεται μετά, και μόνο μία φορά: ό,τι έμεινε εκεί από
+    // προηγούμενη έκδοση δεν επιτρέπεται να μείνει αδιάβαστο για πάντα.
+    if (legacySharedDirectory != null) {
+      final movedIn = await _promoteOne(
+        File(p.join(legacySharedDirectory, legacySharedWorkingFileName)),
+        appendToSessionLog: appendToSessionLog,
+        clock: clock,
+      );
+      promoted = promoted || movedIn;
+    }
+    return promoted;
+  }
+
+  static Future<bool> _promoteOne(
+    File orphan, {
+    required void Function(String text) appendToSessionLog,
+    required DateTime Function() clock,
+  }) async {
     if (!await orphan.exists()) return false;
     try {
       final content = await orphan.readAsString();

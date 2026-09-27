@@ -220,23 +220,75 @@ void main() {
   group('LansweeperAiPresenter.prefillTitle', () {
     test('κενή κατηγορία + id -> Κλήση #<id>', () {
       expect(
-        LansweeperAiPresenter.prefillTitle(category: '', id: 42),
+        LansweeperAiPresenter.prefillTitle(
+          storedTitle: null,
+          category: '',
+          id: 42,
+        ),
         'Κλήση #42',
       );
     });
 
     test('κατηγορία + id -> [<cat>] #<id>', () {
       expect(
-        LansweeperAiPresenter.prefillTitle(category: 'Hardware', id: 7),
+        LansweeperAiPresenter.prefillTitle(
+          storedTitle: null,
+          category: 'Hardware',
+          id: 7,
+        ),
         '[Hardware] #7',
       );
     });
 
     test('κενή κατηγορία χωρίς id -> Κλήση', () {
       expect(
-        LansweeperAiPresenter.prefillTitle(category: '', id: null),
+        LansweeperAiPresenter.prefillTitle(
+          storedTitle: null,
+          category: '',
+          id: null,
+        ),
         'Κλήση',
       );
+    });
+
+    test('ο αποθηκευμένος τίτλος της κλήσης νικά τον αυτόματο', () {
+      // Το σενάριο της #18: ο χειριστής έγραψε δικό του τίτλο και πάτησε
+      // «Αποθήκευση στην κλήση». Γυρίζοντας στην ίδια κλήση οφείλει να τον
+      // ξαναβρεί — όπως ήδη ξαναβρίσκει την περιγραφή και τη λύση.
+      expect(
+        LansweeperAiPresenter.prefillTitle(
+          storedTitle: 'Κλήση #18 - Με τίτλο',
+          category: '',
+          id: 18,
+        ),
+        'Κλήση #18 - Με τίτλο',
+      );
+    });
+
+    test('αποθηκευμένος τίτλος με κενά στις άκρες καθαρίζεται', () {
+      expect(
+        LansweeperAiPresenter.prefillTitle(
+          storedTitle: '  Αντικατάσταση τροφοδοτικού  ',
+          category: 'Hardware',
+          id: 7,
+        ),
+        'Αντικατάσταση τροφοδοτικού',
+      );
+    });
+
+    test('κενός ή λευκός αποθηκευμένος τίτλος πέφτει πίσω στον αυτόματο', () {
+      // Κλήση που δεν πήρε ποτέ δικό της τίτλο: η φόρμα δεν ανοίγει άδεια.
+      for (final stored in <String?>[null, '', '   ']) {
+        expect(
+          LansweeperAiPresenter.prefillTitle(
+            storedTitle: stored,
+            category: 'Medico',
+            id: 344,
+          ),
+          '[Medico] #344',
+          reason: 'Για stored = ${stored == null ? 'null' : '"$stored"'}',
+        );
+      }
     });
   });
 

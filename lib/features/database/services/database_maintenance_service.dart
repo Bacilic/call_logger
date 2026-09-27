@@ -11,6 +11,7 @@ import '../../tasks/models/task.dart';
 import 'active_backup_settings.dart';
 import 'database_backup_audit.dart';
 import 'database_backup_service.dart';
+import '../../../core/utils/file_path_identity.dart';
 
 /// Αποτέλεσμα προσπάθειας αντιγράφου πριν από επικίνδυνη ενέργεια.
 enum MaintenanceBackupPrecheck {
@@ -278,7 +279,7 @@ class DatabaseMaintenanceService {
     }
 
     final dbPath = (await DatabaseHelper.instance.database).path;
-    if (!_sameResolvedPath(dbPath, configuredPath)) {
+    if (!pathsReferToSameFile(dbPath, configuredPath)) {
       return ReplaceDatabaseResult.failure(
         'Η ενεργή βάση (${p.basename(dbPath)}) δεν ταιριάζει με τη ρυθμισμένη διαδρομή.',
       );
@@ -289,7 +290,7 @@ class DatabaseMaintenanceService {
       return const ReplaceDatabaseResult.failure('Κενή διαδρομή προορισμού.');
     }
 
-    if (_sameResolvedPath(normTarget, dbPath)) {
+    if (pathsReferToSameFile(normTarget, dbPath)) {
       return replaceCurrentDatabaseWithNew();
     }
 
@@ -361,7 +362,7 @@ class DatabaseMaintenanceService {
     }
 
     final dbPath = (await DatabaseHelper.instance.database).path;
-    if (!_sameResolvedPath(dbPath, configuredPath)) {
+    if (!pathsReferToSameFile(dbPath, configuredPath)) {
       return ReplaceDatabaseResult.failure(
         'Η ενεργή βάση (${p.basename(dbPath)}) δεν ταιριάζει με τη ρυθμισμένη διαδρομή.',
       );
@@ -420,15 +421,6 @@ class DatabaseMaintenanceService {
     } catch (_) {}
 
     return const ReplaceDatabaseResult.success();
-  }
-
-  static bool _sameResolvedPath(String a, String b) {
-    final na = p.normalize(a);
-    final nb = p.normalize(b);
-    if (Platform.isWindows) {
-      return na.toLowerCase() == nb.toLowerCase();
-    }
-    return na == nb;
   }
 
   /// Άνοιγμα εξερευνητή αρχείων στη θέση αρχείου (Windows: `/select`, macOS: `-R`).

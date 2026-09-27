@@ -130,7 +130,12 @@ void main() {
         home: (context, ref) => Scaffold(
           body: TextButton(
             onPressed: () async {
-              allowed = await ensureDatabaseSwitchAllowed(context, ref);
+              allowed = await ensureDatabaseSwitchAllowed(
+                context,
+                ref,
+                // Τα ίχνη των σταθμών δεν αφορούν αυτά τα τεστ.
+                canObserveOtherStations: () => true,
+              );
             },
             child: const Text('trigger'),
           ),
@@ -170,7 +175,12 @@ void main() {
         home: (context, ref) => Scaffold(
           body: TextButton(
             onPressed: () async {
-              allowed = await ensureDatabaseSwitchAllowed(context, ref);
+              allowed = await ensureDatabaseSwitchAllowed(
+                context,
+                ref,
+                // Τα ίχνη των σταθμών δεν αφορούν αυτά τα τεστ.
+                canObserveOtherStations: () => true,
+              );
             },
             child: const Text('trigger'),
           ),

@@ -54,6 +54,7 @@ Future<ProviderContainer> _pumpViewport(
       imgExists: true,
       decodedSize: const Size(400, 250),
       activeDepartments: const [],
+      floors: const [],
       currentSheetId: 1,
       onFloorsChanged: () {},
     ),

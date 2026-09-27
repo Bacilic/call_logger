@@ -37,26 +37,3 @@ String? buildingMapFloorLoadNotice(BuildingMapFloorLoadState state) {
           'αλλάξετε.',
   };
 }
-
-/// Πρέπει η αποθήκευση να σβήσει τη θέση του τμήματος στον χάρτη κτιρίου;
-///
-/// Σβήνει **μόνο** όταν ο χρήστης αφαίρεσε ηθελημένα τον όροφο από μια
-/// καρτέλα που τον είχε — και μόνο με **διαβασμένες** κατόψεις. Με άγνωστες,
-/// το κενό πεδίο δεν είναι επιλογή του χρήστη αλλά συνέπεια της αποτυχίας:
-/// σβήνοντας τότε, θα χανόταν θέση, διαστάσεις και περιστροφή επειδή η βάση
-/// ήταν στιγμιαία απασχολημένη.
-///
-/// Δεύτερη γραμμή άμυνας πίσω από το κλειδωμένο πεδίο — η επιλογή δεν φτάνει
-/// καν εδώ, αλλά η αποθήκευση δεν στηρίζεται σε αυτό.
-bool shouldClearBuildingMapPlacement({
-  required bool isEdit,
-  required int? selectedFloorId,
-  required int? snapshotFloorId,
-  required int? initialFloorId,
-  required BuildingMapFloorLoadState floorLoadState,
-}) {
-  if (!isEdit) return false;
-  if (!floorLoadState.isLoaded) return false;
-  if (selectedFloorId != null) return false;
-  return snapshotFloorId != null || initialFloorId != null;
-}

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/gemini_ticket_service.dart';
+import '../../../../core/utils/secret_bearing_url.dart';
 import '../../providers/gemini_settings_provider.dart';
 import 'gemini_model_field.dart';
 import 'lansweeper_settings_card.dart';
@@ -98,6 +99,13 @@ class _LansweeperSettingsAiTabState
   }
 
   Widget _buildKeyAndEndpointCard(BuildContext context) {
+    // Το κλειδί της ΤΝ μπαίνει ως παράμετρος μέσα στη διεύθυνση — ίδιο
+    // συμβόλαιο με το κλειδί Lansweeper, ίδιος φρουρός.
+    final insecureEndpointWarning = insecureSecretUrlWarning(
+      widget.geminiEndpointController.text,
+      secretLabel: 'το κλειδί της Τεχνητής Νοημοσύνης',
+    );
+
     return LansweeperSettingsCard(
       icon: Icons.key_rounded,
       title: 'Κλειδί & διεύθυνση',
@@ -144,17 +152,31 @@ class _LansweeperSettingsAiTabState
         const SizedBox(height: 8),
         TextFormField(
           controller: widget.geminiEndpointController,
-          onChanged: (_) => widget.onSettingsChanged(),
+          onChanged: (_) {
+            widget.onSettingsChanged();
+            setState(() {});
+          },
           decoration: const InputDecoration(
             labelText: 'Διεύθυνση κλήσης API του Gemini',
-            hintText:
-                '…/models/{προτεύων μοντέλο}:generateContent?key={κλειδί API}',
+            hintText: '…/models/{προτεύων μοντέλο}:generateContent',
             helperText:
-                'Χρησιμοποιήστε {προτεύων μοντέλο} και {κλειδί API} ως placeholders.',
+                'Χρησιμοποιήστε {προτεύων μοντέλο} ως placeholder. Το κλειδί '
+                'δεν μπαίνει εδώ — στέλνεται ξεχωριστά και δεν εμφανίζεται '
+                'ποτέ στη διεύθυνση.',
             border: OutlineInputBorder(),
             isDense: true,
           ),
         ),
+        if (insecureEndpointWarning != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              insecureEndpointWarning,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
       ],
     );
   }

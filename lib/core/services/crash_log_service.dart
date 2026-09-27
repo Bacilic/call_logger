@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'operator_presence_heartbeat.dart';
 import 'session_liveness_mark.dart';
 import 'station_name.dart';
 
@@ -23,18 +27,53 @@ class CrashLogService {
     required this.logsDirectory,
     this.appVersion = 'unknown',
     DateTime Function()? now,
+    String? databaseFileName,
+    String? instanceId,
     this._maxDetailedRepeats = 20,
     this._repeatSummaryInterval = 100,
-  }) : _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now,
+       databaseFileName = databaseFileName?.trim(),
+       instanceId = (instanceId ?? OperatorPresenceHeartbeat.instanceId).trim();
 
-  /// Το όνομα του ίχνους «τρέχω τώρα» **αυτού** του σταθμού.
+  /// **Το όνομα αρχείου** της βάσης που κρατά αυτή η εκτέλεση.
+  ///
+  /// Το ίχνος το κουβαλά ώστε ο φρουρός της αναβάθμισης να ξεχωρίζει ποιος
+  /// κρατά **αυτή** τη βάση από ποιον δουλεύει στη διπλανή: ο φάκελος `logs`
+  /// είναι ένας για όλες τις βάσεις του ίδιου καταλόγου.
+  String? databaseFileName;
+
+  /// Ποιο ανοιχτό αντίγραφο της εφαρμογής είναι αυτό.
+  ///
+  /// Μένει σταθερό από εκκίνηση σε εκκίνηση (διαδρομή εκτελέσιμου + προφίλ),
+  /// ώστε το ίχνος να **ξαναγράφεται** αντί να συσσωρεύεται — και να διαφέρει
+  /// ανάμεσα στην κανονική και τη δοκιμαστική έκδοση του ίδιου υπολογιστή.
+  final String instanceId;
+
+  /// Το όνομα του ίχνους «τρέχω τώρα» **αυτής** της εκτέλεσης.
   ///
   /// Ο σταθμός μπαίνει στο όνομα επειδή ο φάκελος ζει δίπλα στη βάση, και η
   /// βάση είναι συχνά κοινόχρηστη: ένα κοινό αρχείο θα σήμαινε ότι το άνοιγμα
   /// του ενός υπολογιστή διαβάζει το ίχνος του άλλου ως δική του κατάρρευση —
   /// και ότι το σβήνει, χάνοντας την ανίχνευση της πραγματικής.
-  static String sessionLockFileNameFor(String station) =>
-      'session_$station.lock';
+  ///
+  /// Η **εκτέλεση** μπαίνει για τον ίδιο ακριβώς λόγο, ένα επίπεδο πιο μέσα:
+  /// δύο αντίγραφα στον ίδιο υπολογιστή (η κανονική έκδοση και η δοκιμαστική)
+  /// έκαναν μεταξύ τους ό,τι έκαναν κάποτε δύο υπολογιστές μεταξύ τους.
+  /// Μπαίνει ως σύντομη αποτύπωση, γιατί η ταυτότητα είναι ολόκληρη διαδρομή
+  /// και οι διαδρομές των Windows έχουν όριο μήκους.
+  static String sessionLockFileNameFor(String station, [String instance = '']) {
+    final run = instance.trim();
+    if (run.isEmpty) return 'session_$station.lock';
+    return 'session_${station}_${instanceSlug(run)}.lock';
+  }
+
+  /// Οκτώ δεκαεξαδικά ψηφία από την ταυτότητα της εκτέλεσης.
+  ///
+  /// Σταθερή αποτύπωση, όχι `hashCode`: το `hashCode` των συμβολοσειρών δεν
+  /// εγγυάται την ίδια τιμή σε άλλη έκδοση του SDK, και μια αλλαγή του θα
+  /// άφηνε το προηγούμενο ίχνος ορφανό στον κοινόχρηστο φάκελο για πάντα.
+  static String instanceSlug(String instanceId) =>
+      sha1.convert(utf8.encode(instanceId)).toString().substring(0, 8);
 
   /// Το κοινό αρχείο της παλιάς εποχής, όταν όλοι οι σταθμοί μοιράζονταν ένα
   /// ίχνος. **Δεν το αγγίζουμε**: σε φάκελο όπου κάποιος σταθμός τρέχει ακόμη
@@ -131,6 +170,7 @@ class CrashLogService {
     final service = CrashLogService(
       logsDirectory: logsDir,
       appVersion: appVersion,
+      databaseFileName: p.basename(p.normalize(databasePath)),
     );
     _instance = service;
     await service.onStartup(
@@ -163,6 +203,10 @@ class CrashLogService {
       } catch (_) {}
     }
     logsDirectory = next;
+    // Η μετακόμιση αλλάζει ΚΑΙ τη βάση που κρατάμε: αν έμενε η προηγούμενη, το
+    // νέο ίχνος θα δήλωνε αρχείο που δεν αγγίζουμε πια, και ο φρουρός της
+    // αναβάθμισης θα έψαχνε λάθος συναδέλφους.
+    databaseFileName = p.basename(p.normalize(databasePath));
     _diskAvailable = true;
     _diskUnavailableReason = null;
     try {
@@ -220,15 +264,50 @@ class CrashLogService {
         fatal: true,
       );
     }
+    await _retireMarkFromPreviousNamingScheme(timeout);
     _currentMark = SessionLivenessMark(
       station: StationName.current,
       version: appVersion,
       startedAt: _now(),
       lastSeen: _now(),
+      database: databaseFileName,
+      instance: instanceId.isEmpty ? null : instanceId,
     );
     await lock
         .writeAsString(_currentMark!.encode(), flush: true)
         .timeout(timeout);
+  }
+
+  /// Μαζεύει το ίχνος που άφησε αυτό το αντίγραφο **πριν** μπει η εκτέλεση
+  /// στο όνομα του αρχείου.
+  ///
+  /// Χωρίς αυτό το `session_<σταθμός>.lock` της προηγούμενης έκδοσης δεν θα
+  /// ανοιγόταν ποτέ ξανά: θα έμενε για πάντα στον κοινόχρηστο φάκελο, και για
+  /// τρία λεπτά μετά από κάθε εκκίνηση θα περνούσε για ζωντανός συνάδελφος.
+  ///
+  /// Ο έλεγχος του σταθμού είναι απαραίτητος: το ίδιο αρχείο σε σταθμό που
+  /// τρέχει ακόμη παλιά εφαρμογή είναι **ζωντανό** ίχνος, και δεν το αγγίζουμε.
+  Future<void> _retireMarkFromPreviousNamingScheme(Duration timeout) async {
+    if (instanceId.isEmpty) return;
+    final legacy = File(
+      p.join(logsDirectory, sessionLockFileNameFor(StationName.fileSafe)),
+    );
+    try {
+      if (!await legacy.exists().timeout(timeout)) return;
+      final previous = SessionLivenessMark.decode(
+        await legacy.readAsString().timeout(timeout),
+      );
+      // Ίχνος με δηλωμένη εκτέλεση δεν ανήκει στην παλιά ονοματοδοσία — κάποιος
+      // άλλος το έγραψε εκεί, και δεν είναι δικό μας να το κρίνουμε.
+      if (previous?.instance != null) return;
+      _logPlainMessage(
+        previous?.describeLostRun() ?? abnormalTerminationMessage,
+        fatal: true,
+      );
+      await legacy.delete().timeout(timeout);
+    } catch (_) {
+      // Η εκκαθάριση είναι ευγένεια προς τον φάκελο, όχι προϋπόθεση εκκίνησης.
+    }
   }
 
   /// Ξεκινά το περιοδικό σημάδι ζωής.
@@ -259,6 +338,10 @@ class CrashLogService {
       _currentMark = mark;
     } catch (_) {}
   }
+
+  /// Θέτει την κατάσταση «χωρίς δίσκο» χωρίς να χρειαστεί απρόσιτος φάκελος.
+  @visibleForTesting
+  void disableDiskForTest(Object reason) => _disableDisk(reason);
 
   void _disableDisk(Object reason) {
     _diskAvailable = false;
@@ -484,8 +567,12 @@ class CrashLogService {
   /// αρχεία του φακέλου· ο ίδιος ο ιχνηλάτης χτίζει πάνω του το δικό του όνομα.
   static const String legacyShutdownTracePrefix = 'shutdown_trace_';
 
-  File _sessionLockFile() =>
-      File(p.join(logsDirectory, sessionLockFileNameFor(StationName.fileSafe)));
+  File _sessionLockFile() => File(
+    p.join(
+      logsDirectory,
+      sessionLockFileNameFor(StationName.fileSafe, instanceId),
+    ),
+  );
 
   static String _dedupKey(Object error, StackTrace stack) {
     final firstStackLine = stack

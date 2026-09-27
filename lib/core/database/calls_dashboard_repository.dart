@@ -544,6 +544,7 @@ class CallsDashboardRepository {
         calls.equipment_text,
         calls.issue,
         calls.solution,
+        calls.title,
         calls.refined_source,
         calls.refined_at,
         calls.category_text,

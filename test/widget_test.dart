@@ -1,6 +1,7 @@
 // Βασικά widget tests με απομονωμένη βάση (βλ. test_setup / docs/TESTING_EL.md).
 //
-// Για πλήκτρα: πάντα keyUp μετά το keyDown — βλ. docs/KEYBOARD_AND_FOCUS.md.
+// Για πλήκτρα: πάντα keyUp ΜΕΤΑ το keyDown (sendKeyDownEvent → sendKeyUpEvent),
+// αλλιώς το πάτημα μένει «κολλημένο» και το επόμενο test ξεκινά με πατημένο πλήκτρο.
 //
 // Ολόκληρο αρχείο (από ρίζα έργου):
 //   flutter test test/widget_test.dart

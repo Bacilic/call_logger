@@ -5,7 +5,9 @@ import '../../../../core/utils/natural_string_compare.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
+import '../services/building_map_department_pick_outcome.dart';
 import '../services/building_map_floor_ordering.dart';
+import 'department_selection_card.dart';
 
 /// Πλέγμα (HUD) επιλογής τμήματος πάνω από τον καμβά· αναζήτηση και ομαδοποίηση.
 class DepartmentSelectionOverlay extends StatefulWidget {
@@ -20,7 +22,7 @@ class DepartmentSelectionOverlay extends StatefulWidget {
   final List<DepartmentModel> activeDepartments;
   final List<BuildingMapFloor> floors;
   final VoidCallback onClose;
-  final void Function(int departmentId) onSelectDepartment;
+  final void Function(DepartmentModel department) onSelectDepartment;
 
   @override
   State<DepartmentSelectionOverlay> createState() =>
@@ -151,6 +153,7 @@ class _DepartmentSelectionOverlayState
     final theme = Theme.of(context);
     final filtered = _filtered();
     final sections = _sections(filtered);
+    final floorById = {for (final f in widget.floors) f.id: f};
 
     return Material(
       color: Colors.black54,
@@ -232,6 +235,32 @@ class _DepartmentSelectionOverlayState
                                 },
                               ),
                             ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_outline,
+                                    size: 15,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Τα σημειωμένα τμήματα είναι ήδη σχεδιασμένα — '
+                                      'πατώντας τα πηγαίνεις στη θέση τους. Τα υπόλοιπα '
+                                      'δεν έχουν θέση στον χάρτη.',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             Expanded(
                               child: filtered.isEmpty
                                   ? Center(
@@ -281,56 +310,24 @@ class _DepartmentSelectionOverlayState
                                                       crossAxisCount: cols,
                                                       mainAxisSpacing: 6,
                                                       crossAxisSpacing: 6,
-                                                      childAspectRatio: 2.4,
+                                                      // Δύο γραμμές ονόματος
+                                                      // συν τη γραμμή θέσης.
+                                                      childAspectRatio: 1.8,
                                                     ),
                                                 delegate: SliverChildBuilderDelegate((
                                                   context,
                                                   index,
                                                 ) {
                                                   final d = sec.deps[index];
-                                                  final mapped = d.isMapped;
-                                                  return Opacity(
-                                                    opacity: mapped ? 0.52 : 1,
-                                                    child: Card(
-                                                      margin: EdgeInsets.zero,
-                                                      child: InkWell(
-                                                        onTap: () => widget
-                                                            .onSelectDepartment(
-                                                              d.id!,
-                                                            ),
-                                                        child: Padding(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 6,
-                                                                vertical: 4,
-                                                              ),
-                                                          child: Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            mainAxisAlignment:
-                                                                MainAxisAlignment
-                                                                    .center,
-                                                            children: [
-                                                              Text(
-                                                                d.name,
-                                                                maxLines: 2,
-                                                                softWrap: true,
-                                                                style: theme
-                                                                    .textTheme
-                                                                    .bodyMedium
-                                                                    ?.copyWith(
-                                                                      fontStyle:
-                                                                          mapped
-                                                                          ? FontStyle.italic
-                                                                          : FontStyle.normal,
-                                                                    ),
-                                                              ),
-                                                            ],
-                                                          ),
+                                                  return DepartmentSelectionCard(
+                                                    department: d,
+                                                    placementFloorLabel:
+                                                        buildingMapPlacementFloorLabel(
+                                                          department: d,
+                                                          floorById: floorById,
                                                         ),
-                                                      ),
-                                                    ),
+                                                    onTap: () => widget
+                                                        .onSelectDepartment(d),
                                                   );
                                                 }, childCount: sec.deps.length),
                                               ),

@@ -30,6 +30,17 @@ String colorToDepartmentHex(Color c) {
       .toUpperCase();
 }
 
+/// Το χρώμα περιοχής ενός τμήματος, προσαρμοσμένο ώστε να διαβάζεται ως κείμενο
+/// πάνω στην επιφάνεια του θέματος: τα πολύ ανοιχτά σκουραίνουν στο φωτεινό
+/// θέμα, τα πολύ σκούρα ανοίγουν στο σκοτεινό.
+Color readableDepartmentTextColor(Color color, ThemeData theme) {
+  final hsl = HSLColor.fromColor(color);
+  final bounded = theme.brightness == Brightness.dark
+      ? hsl.lightness.clamp(0.62, 1.0)
+      : hsl.lightness.clamp(0.0, 0.42);
+  return hsl.withLightness(bounded).toColor();
+}
+
 bool sameDepartmentRgb(Color a, Color b) =>
     colorToDepartmentHex(a) == colorToDepartmentHex(b);
 

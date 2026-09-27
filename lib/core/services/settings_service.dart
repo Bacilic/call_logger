@@ -3,7 +3,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
-import '../utils/database_path_identity.dart';
+import '../utils/file_path_identity.dart';
 import 'app_instance_registry.dart';
 
 import 'settings_service_analytics_filters.dart';
@@ -345,7 +345,7 @@ class SettingsService {
     if (trimmed.isEmpty) return;
     final list = prefs.getStringList(_prefKey(_keyRecentPaths)) ?? [];
     final updated = list
-        .where((entry) => !databasePathsReferToSameFile(entry, trimmed))
+        .where((entry) => !pathsReferToSameFile(entry, trimmed))
         .toList();
     await prefs.setStringList(_prefKey(_keyRecentPaths), updated);
   }
@@ -354,7 +354,7 @@ class SettingsService {
     final list = prefs.getStringList(_prefKey(_keyRecentPaths)) ?? [];
     final updated = [
       path,
-      ...list.where((entry) => !databasePathsReferToSameFile(entry, path)),
+      ...list.where((entry) => !pathsReferToSameFile(entry, path)),
     ].take(_maxRecentPaths).toList();
     await prefs.setStringList(_prefKey(_keyRecentPaths), updated);
   }

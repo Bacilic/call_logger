@@ -10,6 +10,8 @@ import '../services/startup_asset_integrity_service.dart';
 import 'database_file_classifier.dart';
 import 'database_helper.dart';
 import 'remote_tools_repository.dart';
+import '../services/crash_log_service.dart';
+import 'operator_settings_repository.dart';
 import 'settings_repository.dart';
 import 'database_init_result.dart';
 import 'database_init_progress_provider.dart';
@@ -32,6 +34,30 @@ Future<String> _appSettingsUpdate(
 ) async {
   final db = await DatabaseHelper.instance.database;
   return SettingsRepository(db).updateSetting(key, change);
+}
+
+/// Σφραγίζει τα μυστικά που γράφτηκαν πριν μπει το σφράγισμα.
+///
+/// **Δίχτυ πίσω από τη μετάπτωση v67, όχι αντίγραφό της.** Τη δουλειά την
+/// κάνει η μετάπτωση· αν όμως εκείνη αποτύχει στη μέση (κλειδωμένη βάση,
+/// δίκτυο που έπεσε), η έκδοση έχει ήδη ανέβει και δεν ξανατρέχει ποτέ — τα
+/// κλειδιά θα έμεναν ακάλυπτα για πάντα. Εδώ ξαναδοκιμάζει σε κάθε άνοιγμα,
+/// και ό,τι φέρει ήδη σφραγίδα προσπερνιέται.
+///
+/// Δεν ρίχνει ποτέ την εκκίνηση, αλλά η αποτυχία **καταγράφεται** — αν
+/// σιωπούσε, τα κλειδιά θα έμεναν ακάλυπτα χωρίς κανείς να το μάθει.
+Future<void> _sealStoredSecrets() async {
+  try {
+    final db = await DatabaseHelper.instance.database;
+    await SettingsRepository(db).sealUnsealedSecrets();
+    await OperatorSettingsRepository(db).sealUnsealedSecrets();
+  } catch (e, st) {
+    CrashLogService.instance.logError(
+      StateError('Το σφράγισμα των αποθηκευμένων κλειδιών απέτυχε: $e'),
+      st,
+      fatal: false,
+    );
+  }
 }
 
 /// Αλυσίδα σειριοποίησης: νέες κλήσεις περιμένουν την προηγούμενη να τελειώσει.
@@ -252,6 +278,7 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
               DatabaseHelper.instance,
             ).migrateLegacyFieldsToArguments();
           } catch (_) {}
+          await _sealStoredSecrets();
           isLocalDevMode = DatabaseHelper.instance.isUsingLocalDb;
           progressNotifier?.setStep('Έλεγχος υγείας βάσης');
           final health = await DatabaseHelper.instance.checkDatabaseHealth();

@@ -30,6 +30,16 @@ const String kDefaultGeminiFallbackModel = 'gemini-2.5-flash-lite';
 const String kGeminiModelsListUrl =
     'https://generativelanguage.googleapis.com/v1beta/models';
 
+/// Πού και πώς στέλνεται μια κλήση προς την ΤΝ.
+///
+/// Η διεύθυνση είναι ασφαλής να εμφανιστεί οπουδήποτε· οι κεφαλίδες όχι.
+class GeminiCallTarget {
+  const GeminiCallTarget({required this.uri, required this.headers});
+
+  final Uri uri;
+  final Map<String, String> headers;
+}
+
 /// Μοντέλο κειμένου Gemini από τη λίστα API.
 class GeminiTextModel {
   const GeminiTextModel({required this.id, required this.displayName});
@@ -356,9 +366,37 @@ abstract final class GeminiTicketService {
     return template;
   }
 
-  static String resolveEndpoint({
+  /// Η διεύθυνση της κλήσης μαζί με τις κεφαλίδες της.
+  ///
+  /// **Το κλειδί δεν μπαίνει ποτέ στη διεύθυνση.** Η διεύθυνση καταλήγει σε
+  /// μηνύματα σφάλματος, σε αρχεία καταγραφής και στην οθόνη των Ρυθμίσεων —
+  /// το πρότυπό της το γράφει ο ίδιος ο χρήστης. Όσο το κλειδί ζούσε μέσα
+  /// της, ταξίδευε παντού μαζί της. Η Google δέχεται την κεφαλίδα
+  /// `x-goog-api-key`, οπότε εκεί ζει τώρα.
+  ///
+  /// Το παλιό placeholder συνεχίζει να αναγνωρίζεται, και η παράμετρος `key`
+  /// αφαιρείται όπως κι αν γράφτηκε — ακόμη κι αν κάποιος είχε κολλήσει το
+  /// κλειδί του με το χέρι μέσα στο πρότυπο.
+  static GeminiCallTarget resolveCallTarget({
     required String endpoint,
     required String apiKey,
+    String? primaryModel,
+  }) {
+    return GeminiCallTarget(
+      uri: _withoutKeyParameter(
+        resolveEndpointForModel(endpoint: endpoint, primaryModel: primaryModel),
+      ),
+      headers: apiHeaders(apiKey),
+    );
+  }
+
+  /// Το πρότυπο με το μοντέλο συμπληρωμένο — **χωρίς κλειδί**.
+  ///
+  /// Υπάρχει για όποιον χρειάζεται τη διεύθυνση ως κείμενο (π.χ. για να
+  /// δοκιμάσει διαδοχικά μοντέλα). Ό,τι επιστρέφει είναι ασφαλές να
+  /// εμφανιστεί σε μήνυμα ή σε αρχείο καταγραφής.
+  static String resolveEndpointForModel({
+    required String endpoint,
     String? primaryModel,
   }) {
     var template = normalizeEndpointTemplate(endpoint);
@@ -366,7 +404,42 @@ abstract final class GeminiTicketService {
     if (model.isNotEmpty && template.contains(kGeminiPrimaryModelPlaceholder)) {
       template = template.replaceAll(kGeminiPrimaryModelPlaceholder, model);
     }
-    return template.replaceAll(kGeminiApiKeyPlaceholder, apiKey.trim());
+    // Το placeholder φεύγει: αφήνει `key=` κενό, που καθαρίζεται στην κλήση.
+    return template.replaceAll(kGeminiApiKeyPlaceholder, '');
+  }
+
+  /// Η διεύθυνση της λίστας μοντέλων — ίδιος κανόνας.
+  static GeminiCallTarget modelsListTarget({
+    required String apiKey,
+    String pageToken = '',
+  }) {
+    final base = Uri.parse(kGeminiModelsListUrl);
+    return GeminiCallTarget(
+      uri: pageToken.trim().isEmpty
+          ? base
+          : base.replace(
+              queryParameters: <String, String>{'pageToken': pageToken.trim()},
+            ),
+      headers: apiHeaders(apiKey),
+    );
+  }
+
+  /// Οι κεφαλίδες κάθε κλήσης προς την ΤΝ — εδώ, και μόνο εδώ, ζει το κλειδί.
+  static Map<String, String> apiHeaders(String apiKey) => {
+    'Content-Type': 'application/json',
+    'x-goog-api-key': apiKey.trim(),
+  };
+
+  /// Η ίδια διεύθυνση χωρίς την παράμετρο `key`, όποια κι αν ήταν η τιμή της.
+  static Uri _withoutKeyParameter(String url) {
+    final parsed = Uri.tryParse(url);
+    if (parsed == null) return Uri.parse(url);
+    if (!parsed.hasQuery) return parsed;
+    final kept = Map<String, String>.from(parsed.queryParameters)
+      ..removeWhere((name, _) => name.toLowerCase() == 'key');
+    return kept.isEmpty
+        ? parsed.replace(query: '')
+        : parsed.replace(queryParameters: kept);
   }
 
   static final RegExp _modelPattern = RegExp(r'models/([^:/?]+)');
@@ -435,14 +508,9 @@ abstract final class GeminiTicketService {
 
     try {
       do {
-        final uri = Uri.parse(kGeminiModelsListUrl).replace(
-          queryParameters: <String, String>{
-            'key': key,
-            if (pageToken.isNotEmpty) 'pageToken': pageToken,
-          },
-        );
+        final target = modelsListTarget(apiKey: key, pageToken: pageToken);
         final response = await httpClient
-            .get(uri)
+            .get(target.uri, headers: target.headers)
             .timeout(const Duration(seconds: 20));
         if (response.statusCode < 200 || response.statusCode >= 300) {
           final apiMessage = _extractApiErrorMessage(response.body);
@@ -686,13 +754,13 @@ abstract final class GeminiTicketService {
       );
     }
 
-    final resolvedEndpoint = resolveEndpoint(
+    final target = resolveCallTarget(
       endpoint: endpoint,
       apiKey: key,
       primaryModel: modelFromEndpoint(endpoint),
     );
-    final uri = Uri.tryParse(resolvedEndpoint);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    final uri = target.uri;
+    if (!uri.hasScheme || uri.host.isEmpty) {
       throw const GeminiException(
         'Μη έγκυρο URL endpoint Gemini.',
         scope: GeminiFailureScope.infrastructure,
@@ -718,7 +786,7 @@ abstract final class GeminiTicketService {
         response = await httpClient
             .post(
               uri,
-              headers: const {'Content-Type': 'application/json'},
+              headers: target.headers,
               body: jsonEncode(<String, dynamic>{
                 'contents': [
                   <String, dynamic>{

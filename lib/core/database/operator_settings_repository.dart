@@ -1,5 +1,7 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
+import 'settings_secret_sealing.dart';
+
 /// Persistence των προσωπικών ρυθμίσεων κάθε χρήστη (πίνακας
 /// `operator_settings`, key-value ανά προφίλ).
 ///
@@ -25,7 +27,11 @@ class OperatorSettingsRepository {
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return rows.first['value'] as String?;
+    final stored = rows.first['value'] as String?;
+    if (stored == null || !kSealedOperatorSettingKeys.contains(key)) {
+      return stored;
+    }
+    return unsealSettingValue(stored);
   }
 
   /// Γράφει (ή αντικαθιστά) την τιμή του [key] για τον χρήστη [operatorId].
@@ -33,8 +39,38 @@ class OperatorSettingsRepository {
     await db.insert(tableName, {
       'operator_id': operatorId,
       'key': key,
-      'value': value,
+      'value': kSealedOperatorSettingKeys.contains(key)
+          ? sealSettingValue(value)
+          : value,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Σφραγίζει όσα προσωπικά μυστικά γράφτηκαν πριν μπει το σφράγισμα.
+  ///
+  /// Ακίνδυνο να ξανατρέξει· επιστρέφει πόσα σφραγίστηκαν, για το ίχνος.
+  Future<int> sealUnsealedSecrets() async {
+    var sealed = 0;
+    for (final key in kSealedOperatorSettingKeys) {
+      final rows = await db.query(
+        tableName,
+        columns: ['operator_id', 'value'],
+        where: 'key = ?',
+        whereArgs: [key],
+      );
+      for (final row in rows) {
+        final stored = row['value'] as String?;
+        if (stored == null || stored.isEmpty) continue;
+        if (isSealedSettingValue(stored)) continue;
+        await db.update(
+          tableName,
+          {'value': sealSettingValue(stored)},
+          where: 'operator_id = ? AND key = ?',
+          whereArgs: [row['operator_id'], key],
+        );
+        sealed++;
+      }
+    }
+    return sealed;
   }
 
   /// Σβήνει την τιμή του [key] για τον χρήστη [operatorId] — «δεν έχω δική

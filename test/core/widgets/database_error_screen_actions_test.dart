@@ -122,10 +122,13 @@ void main() {
     }
 
     for (final kind in DatabaseInitRecoveryKind.values) {
-      // Το missingApplicationFile είναι η εξαίρεση: δεν φταίει η βάση, οπότε
-      // οι διέξοδοι βάσης κρύβονται. Το φυλάει το group «λείπει αρχείο
-      // εγκατάστασης» παρακάτω.
+      // Δύο εξαιρέσεις, με τον ίδιο λόγο: δεν φταίει η βάση, οπότε οι διέξοδοι
+      // βάσης κρύβονται. Τις φυλάνε τα δικά τους groups παρακάτω.
       if (kind == DatabaseInitRecoveryKind.missingApplicationFile) continue;
+      if (kind ==
+          DatabaseInitRecoveryKind.schemaUpgradeBlockedByOtherStations) {
+        continue;
+      }
 
       testWidgets('recoveryKind.$kind: βασικά κουμπιά διάσωσης πάντα παρόντα', (
         tester,
@@ -149,6 +152,65 @@ void main() {
         }
       });
     }
+  });
+
+  // Η βάση είναι η σωστή και δεν της λείπει τίποτα: απλώς δεν επιτρέπεται να
+  // αναβαθμιστεί όσο δουλεύουν ακόμη συνάδελφοι. Η μόνη ενέργεια που βγάζει
+  // νόημα είναι η αναμονή — κάθε άλλη οδηγεί αλλού.
+  group('η αναβάθμιση μπλοκάρεται από άλλους σταθμούς', () {
+    DatabaseInitResult blockedResult() => const DatabaseInitResult(
+      status: DatabaseStatus.corruptedOrInvalid,
+      message:
+          'Δεν είναι δυνατή η αναβάθμιση της βάσης: Ένας άλλος υπολογιστής '
+          'έχει τη βάση ανοιχτή αυτή τη στιγμή.',
+      path: r'C:\data\call_logger.db',
+      recoveryKind:
+          DatabaseInitRecoveryKind.schemaUpgradeBlockedByOtherStations,
+    );
+
+    testWidgets('καμία ενέργεια που θα άλλαζε ή θα έφτιαχνε βάση', (
+      tester,
+    ) async {
+      await _pumpErrorScreen(tester, blockedResult());
+
+      expect(
+        _findByLabel('Δημιουργία νέας βάσης'),
+        findsNothing,
+        reason:
+            'Η κοινή βάση είναι σωστή και γεμάτη — ένα κουμπί που φτιάχνει '
+            'άδεια δίπλα σε αυτό το μήνυμα είναι πρόσκληση να χαθεί.',
+      );
+      expect(_findByLabel('Επιλογή αρχείου βάσης'), findsNothing);
+      expect(_findByLabel('Επαναφορά από αντίγραφο ασφαλείας'), findsNothing);
+    });
+
+    testWidgets('προσφέρεται Επαναδοκιμή, ΟΧΙ Επανεκκίνηση', (tester) async {
+      await _pumpErrorScreen(tester, blockedResult());
+
+      expect(
+        _findByLabel('Επαναδοκιμή'),
+        findsOneWidget,
+        reason:
+            'Μόλις κλείσουν οι συνάδελφοι η πόρτα ανοίγει χωρίς να ξεκινήσει '
+            'η εφαρμογή από την αρχή.',
+      );
+      expect(_findByLabel('Επανεκκίνηση εφαρμογής'), findsNothing);
+    });
+
+    testWidgets('η οθόνη δεν λέει πουθενά «σφάλμα»', (tester) async {
+      // Δεν συνέβη σφάλμα: η βάση είναι σωστή, τα δεδομένα ακέραια, και ο
+      // φρουρός μόλις προστάτευσε τους συναδέλφους. Ένα «Σφάλμα» εδώ στέλνει
+      // τον χρήστη να ψάξει βλάβη που δεν υπάρχει.
+      await _pumpErrorScreen(tester, blockedResult());
+
+      expect(find.text('Η αναβάθμιση περιμένει'), findsOneWidget);
+      expect(find.text('Σφάλμα'), findsNothing);
+      expect(
+        find.textContaining(RegExp('σφάλμα', caseSensitive: false)),
+        findsNothing,
+        reason: 'ούτε στα κουμπιά — η «Αντιγραφή» αλλάζει κι αυτή λόγια',
+      );
+    });
   });
 
   // Η βάση είναι μια χαρά — έσπασε η ΕΓΚΑΤΑΣΤΑΣΗ (π.χ. το antivirus έσβησε το

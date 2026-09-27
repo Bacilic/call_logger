@@ -86,6 +86,60 @@ void main() {
       await tester.pumpAndSettle();
       expect(result, isFalse);
     });
+
+    testWidgets('ήδη σχεδιασμένο αλλού: μετάβαση, μετακίνηση και ακύρωση', (
+      tester,
+    ) async {
+      BuildingMapMappedDepartmentChoice? result;
+      var opened = 0;
+      await _pumpHost(tester, (context) async {
+        opened++;
+        result = await showBuildingMapMappedDepartmentChoiceDialog(
+          context,
+          departmentName: 'Μαγειρείο',
+          itsFloorLabel: 'Ισόγειο',
+          currentFloorLabel: '1ος',
+        );
+      });
+      expect(find.textContaining('«Μαγειρείο»'), findsOneWidget);
+      expect(find.textContaining('«Ισόγειο»'), findsWidgets);
+
+      await tester.tap(find.text('Μετάβαση στον όροφο «Ισόγειο»'));
+      await tester.pumpAndSettle();
+      expect(result, BuildingMapMappedDepartmentChoice.goToItsFloor);
+
+      await tester.tap(find.text(_kOpenButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Μετακίνηση στον όροφο «1ος»'));
+      await tester.pumpAndSettle();
+      expect(result, BuildingMapMappedDepartmentChoice.moveToCurrentFloor);
+
+      await tester.tap(find.text(_kOpenButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Άκυρο'));
+      await tester.pumpAndSettle();
+      expect(result, isNull);
+      expect(opened, 3);
+    });
+
+    testWidgets('μετακίνηση σε άλλον όροφο: ονομάζει και τους δύο ορόφους', (
+      tester,
+    ) async {
+      bool? result;
+      await _pumpHost(tester, (context) async {
+        result = await showBuildingMapMovePlacementConfirmDialog(
+          context,
+          departmentName: 'Μαγειρείο',
+          fromFloorLabel: 'Ισόγειο',
+          toFloorLabel: '1ος',
+        );
+      });
+      expect(find.textContaining('«Ισόγειο»'), findsOneWidget);
+      expect(find.textContaining('«1ος»'), findsOneWidget);
+      await tester.tap(find.text('Μετακίνηση'));
+      await tester.pumpAndSettle();
+      expect(result, isTrue);
+    });
   });
 
   group('Επιλογείς άλματος', () {

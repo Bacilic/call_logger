@@ -83,7 +83,7 @@ void main() {
   }) {
     final clock = now ?? fixedNow;
     return ShutdownTraceService(
-      logsDirectory: logsDir.path,
+      workingDirectory: logsDir.path,
       appendToSessionLog: appenderFor(clock),
       slowThreshold: slowThreshold,
       now: () => clock,
@@ -305,7 +305,7 @@ void main() {
 
         final nextBoot = DateTime(2026, 8, 10, 8, 0, 0);
         final promoted = await ShutdownTraceService.promoteOrphanedTrace(
-          logsDirectory: logsDir.path,
+          workingDirectory: logsDir.path,
           appendToSessionLog: appenderFor(nextBoot),
           now: () => nextBoot,
         );
@@ -342,7 +342,7 @@ void main() {
         );
 
         final promoted = await ShutdownTraceService.promoteOrphanedTrace(
-          logsDirectory: logsDir.path,
+          workingDirectory: logsDir.path,
           appendToSessionLog: appenderFor(fixedNow),
         );
 
@@ -361,7 +361,7 @@ void main() {
 
     test('καθαρός φάκελος: η προαγωγή δεν βρίσκει τίποτα', () async {
       final promoted = await ShutdownTraceService.promoteOrphanedTrace(
-        logsDirectory: logsDir.path,
+        workingDirectory: logsDir.path,
         appendToSessionLog: appenderFor(fixedNow),
       );
       expect(promoted, isFalse);

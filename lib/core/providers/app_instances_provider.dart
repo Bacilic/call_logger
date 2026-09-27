@@ -7,6 +7,7 @@ import '../config/app_config.dart';
 import '../database/database_v1_schema.dart';
 import '../services/app_instance_registry.dart';
 import '../services/settings_service.dart';
+import '../utils/file_path_identity.dart';
 
 /// Κατάσταση αντιγράφων της εφαρμογής, έτοιμη για προβολή.
 class AppInstancesStatus {
@@ -37,8 +38,7 @@ class AppInstancesStatus {
   bool get isSharedWithOthers => others.isNotEmpty;
 
   bool isCurrent(AppInstanceRecord record) =>
-      record.executablePath.trim().toLowerCase() ==
-      currentExecutablePath.trim().toLowerCase();
+      pathsReferToSameFile(record.executablePath, currentExecutablePath);
 }
 
 /// Καταγράφει το τρέχον αντίγραφο και επιστρέφει την κατάσταση του μητρώου.

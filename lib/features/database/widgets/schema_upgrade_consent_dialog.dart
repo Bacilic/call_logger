@@ -150,6 +150,7 @@ Future<bool> runSchemaUpgradeConsentRecovery({
       createUpgradeCopy,
   SchemaUpgradeOpenAndVerify openAndVerify = setAndVerifyDatabasePath,
   SchemaUpgradeConsentPrompt askConsent = _askConsentViaDialog,
+  bool Function()? canObserveOtherStations,
 }) async {
   final path = (result.path ?? '').trim();
   if (path.isEmpty) return false;
@@ -161,6 +162,7 @@ Future<bool> runSchemaUpgradeConsentRecovery({
   if (!await confirmDespiteOtherSessions(
         context,
         actionLabel: 'Μόνιμη αναβάθμιση σχήματος',
+        canObserve: canObserveOtherStations,
       ) ||
       !context.mounted) {
     return false;

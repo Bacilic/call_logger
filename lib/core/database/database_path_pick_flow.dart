@@ -151,8 +151,14 @@ Future<({bool ok, DatabaseInitRunnerResult runner})> setAndVerifyDatabasePath(
     try {
       await DatabaseHelper.instance.closeConnection();
     } catch (_) {}
-    if (runner.result.recoveryKind !=
-        DatabaseInitRecoveryKind.schemaUpgradeConsent) {
+    // Δύο αποτυχίες αφήνουν τη διαδρομή στις πρόσφατες, γιατί σε καμία δεν
+    // φταίει το αρχείο: η αναβάθμιση που περιμένει συγκατάθεση, και η
+    // αναβάθμιση που μπλοκάρεται επειδή δουλεύουν ακόμη άλλοι σταθμοί. Και στις
+    // δύο ο χρήστης θα ξαναδοκιμάσει την ίδια βάση σε λίγο· ένα «ξέχνα την» θα
+    // τον έβαζε να την ψάχνει από την αρχή.
+    final kind = runner.result.recoveryKind;
+    if (kind != DatabaseInitRecoveryKind.schemaUpgradeConsent &&
+        kind != DatabaseInitRecoveryKind.schemaUpgradeBlockedByOtherStations) {
       await settings.forgetRecentDatabasePath(trimmed);
     }
     if (!wasUnconfigured && previous != null) {
