@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../utils/file_path_identity.dart';
+
 /// Ένα αντίγραφο της εφαρμογής που έχει τρέξει σε αυτόν τον υπολογιστή.
 class AppInstanceRecord {
   const AppInstanceRecord({
@@ -71,7 +73,7 @@ class AppInstanceRegistry {
 
     final updated = <AppInstanceRecord>[
       for (final record in known)
-        if (!_samePath(record.executablePath, current)) record,
+        if (!pathsReferToSameFile(record.executablePath, current)) record,
       AppInstanceRecord(
         executablePath: current,
         version: version.trim(),
@@ -91,7 +93,7 @@ class AppInstanceRegistry {
     final current = currentExecutablePath.trim();
     return List.unmodifiable([
       for (final record in all)
-        if (!_samePath(record.executablePath, current)) record,
+        if (!pathsReferToSameFile(record.executablePath, current)) record,
     ]);
   }
 
@@ -101,9 +103,11 @@ class AppInstanceRegistry {
   /// ξανατρέχει κάποιο. Έτσι η ειδοποίηση που έκλεισε ο χρήστης δεν
   /// ξαναεμφανίζεται για το ίδιο σύνολο, αλλά ξαναχτυπά σε νέο αντίγραφο.
   static String signature(List<AppInstanceRecord> all) {
-    final paths = [
-      for (final record in all) record.executablePath.trim().toLowerCase(),
-    ]..sort();
+    // Το ίδιο κλειδί με τη σύγκριση: αν η υπογραφή κανονικοποιούσε αλλιώς, δύο
+    // γραφές της ίδιας εγκατάστασης θα μετριούνταν ως δύο και η ειδοποίηση θα
+    // ξαναχτυπούσε για σύνολο που δεν άλλαξε.
+    final paths = [for (final record in all) filePathKey(record.executablePath)]
+      ..sort();
     return paths.join('|');
   }
 
@@ -147,7 +151,4 @@ class AppInstanceRegistry {
       return const <AppInstanceRecord>[];
     }
   }
-
-  static bool _samePath(String a, String b) =>
-      a.trim().toLowerCase() == b.trim().toLowerCase();
 }

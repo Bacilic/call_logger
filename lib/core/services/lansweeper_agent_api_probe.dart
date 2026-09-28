@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'lansweeper_api_uri.dart';
 import 'lansweeper_ticket_requester_fields.dart';
 
 /// Αποτέλεσμα δοκιμής πράκτορα μέσω Ticket API (`AddTicket`).
@@ -53,21 +54,20 @@ abstract final class LansweeperAgentApiProbe {
       );
     }
 
-    final baseUri = Uri.tryParse(url);
-    if (baseUri == null || !baseUri.hasScheme || baseUri.host.isEmpty) {
+    final built = buildLansweeperApiActionUri(
+      apiUrl: url,
+      apiKey: key,
+      action: 'AddTicket',
+    );
+    final uri = built.uri;
+    if (uri == null) {
+      // Τα κενά πεδία έχουν ήδη απαντηθεί παραπάνω με τη γλώσσα της οθόνης·
+      // εδώ μένει μόνο η άκυρη διεύθυνση.
       return LansweeperAgentApiProbeResult(
         ok: false,
         message: 'Μη έγκυρο Lansweeper API URL: $url',
       );
     }
-
-    final uri = baseUri.replace(
-      queryParameters: <String, String>{
-        ...baseUri.queryParameters,
-        'action': 'AddTicket',
-        'key': key,
-      },
-    );
 
     final form = <String, String>{
       'Subject': _probeSubject,

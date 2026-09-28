@@ -24,6 +24,8 @@ class SessionLivenessMark {
     required this.version,
     required this.startedAt,
     required this.lastSeen,
+    this.database,
+    this.instance,
   });
 
   final String station;
@@ -33,11 +35,34 @@ class SessionLivenessMark {
   /// Πότε η εκτέλεση έδωσε τελευταία σημάδι ζωής.
   final DateTime lastSeen;
 
+  /// **Το όνομα αρχείου** της βάσης που κρατά η εκτέλεση — όχι η διαδρομή.
+  ///
+  /// Η διαδρομή θα ήταν λάθος ταυτότητα: ο ένας σταθμός βλέπει την ίδια βάση
+  /// ως `\\POPINIO\CallLogger\…` και ο άλλος ως `D:\CallLogger\…`, οπότε δύο
+  /// συνάδελφοι στο ίδιο αρχείο θα φαίνονταν σε διαφορετικά. Το ίχνος όμως ζει
+  /// **μέσα** στον φάκελο της βάσης: όποιος γράφει εκεί βλέπει ήδη τον ίδιο
+  /// φάκελο, άρα το μόνο που τους ξεχωρίζει είναι το όνομα του αρχείου.
+  ///
+  /// `null` σε ίχνος παλαιότερης έκδοσης, που δεν το κρατούσε.
+  final String? database;
+
+  /// Ποιο **ανοιχτό αντίγραφο** έγραψε το ίχνος.
+  ///
+  /// Δύο εφαρμογές στον ίδιο υπολογιστή (η κανονική και η δοκιμαστική) είναι
+  /// δύο διαφορετικές εκτελέσεις πάνω στο ίδιο αρχείο βάσης, και καμία δεν
+  /// επιτρέπεται να περάσει το ίχνος της άλλης για δικό της.
+  ///
+  /// `null` σε ίχνος παλαιότερης έκδοσης· τότε η μόνη ταυτότητα είναι ο
+  /// σταθμός, όπως ήταν.
+  final String? instance;
+
   SessionLivenessMark seenAt(DateTime now) => SessionLivenessMark(
     station: station,
     version: version,
     startedAt: startedAt,
     lastSeen: now,
+    database: database,
+    instance: instance,
   );
 
   String encode() => jsonEncode({
@@ -45,6 +70,8 @@ class SessionLivenessMark {
     'version': version,
     'startedAt': startedAt.toIso8601String(),
     'lastSeen': lastSeen.toIso8601String(),
+    if (database != null) 'database': database,
+    if (instance != null) 'instance': instance,
   });
 
   /// Διαβάζει ίχνος. `null` όταν λείπει, είναι αλλοιωμένο, ή γράφτηκε από
@@ -67,10 +94,51 @@ class SessionLivenessMark {
         version: decoded['version']?.toString() ?? '',
         startedAt: startedAt,
         lastSeen: lastSeen,
+        database: _nonEmpty(decoded['database']),
+        instance: _nonEmpty(decoded['instance']),
       );
     } on FormatException {
       return null;
     }
+  }
+
+  /// Κρατά αυτό το ίχνος τη βάση με το όνομα [databaseFileName];
+  ///
+  /// Σύγκριση χωρίς πεζά/κεφαλαία: τα Windows δεν ξεχωρίζουν το «Hospital.db»
+  /// από το «hospital.db», και δύο ίχνη με άλλη γραφή είναι ο ίδιος άνθρωπος.
+  ///
+  /// **Η άγνοια απαντά «ναι».** Όταν λείπει το όνομα — από τη δική μας πλευρά ή
+  /// από το ίχνος, που μπορεί να γράφτηκε από παλαιότερη έκδοση — δεν έχουμε
+  /// λόγο να αποκλείσουμε κανέναν. Ένα «όχι» εδώ θα έκανε αόρατο ακριβώς τον
+  /// συνάδελφο που κάθε φρουρός ψάχνει.
+  bool holdsDatabase(String? databaseFileName) {
+    final mine = databaseFileName?.trim().toLowerCase() ?? '';
+    final theirs = database?.trim().toLowerCase() ?? '';
+    if (mine.isEmpty || theirs.isEmpty) return true;
+    return mine == theirs;
+  }
+
+  /// Είναι αυτό το ίχνος της **δικής μας** εκτέλεσης;
+  ///
+  /// Όταν και οι δύο πλευρές δηλώνουν εκτέλεση, εκείνη αποφασίζει: δύο
+  /// αντίγραφα στον ίδιο υπολογιστή είναι δύο διαφορετικοί κάτοχοι του αρχείου,
+  /// και κανένα δεν επιτρέπεται να περάσει το ίχνος του άλλου για δικό του.
+  /// Χωρίς δηλωμένη εκτέλεση (ίχνος παλαιότερης έκδοσης) η μόνη ταυτότητα που
+  /// υπάρχει είναι ο σταθμός, όπως ήταν.
+  bool isSameRunAs({required String station, String? instance}) {
+    final myRun = instance?.trim() ?? '';
+    final theirRun = this.instance?.trim() ?? '';
+    if (myRun.isNotEmpty && theirRun.isNotEmpty) return myRun == theirRun;
+    final me = station.trim().toLowerCase();
+    return me.isNotEmpty && this.station.trim().toLowerCase() == me;
+  }
+
+  /// Κενό και «λείπει» είναι το ίδιο πράγμα: ένα πεδίο που γράφτηκε άδειο δεν
+  /// ταυτοποιεί τίποτα, και η διάκριση θα γεννούσε δύο δρόμους για την ίδια
+  /// άγνοια.
+  static String? _nonEmpty(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
   }
 
   /// Το μήνυμα που διαβάζει ο χρήστης στο ημερολόγιο σφαλμάτων.

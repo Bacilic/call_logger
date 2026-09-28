@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/utils/file_picker_session.dart';
 import '../../../../core/utils/picker_location_memory.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/department_repository.dart';
@@ -19,6 +20,8 @@ import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
 import '../services/building_map_department_eligibility.dart';
+import '../services/building_map_department_pick_outcome.dart';
+import '../services/building_map_placement_replacement.dart';
 import '../models/building_map_jump_target.dart';
 import '../../screens/widgets/department_color_palette.dart';
 import '../building_map_label_layout.dart';
@@ -193,15 +196,54 @@ class BuildingMapController {
     }
   }
 
+  /// Ερώτηση πριν από μετακόμιση σε άλλο φύλλο. Η μετακίνηση μέσα στο ίδιο
+  /// φύλλο περνά σιωπηλά — ο χρήστης βλέπει και την παλιά και τη νέα θέση.
+  Future<bool> confirmPlacementReplacementIfNeeded(
+    BuildContext context, {
+    required DepartmentModel dept,
+    required int floorId,
+    required List<BuildingMapFloor> floors,
+  }) async {
+    final replacement = resolveBuildingMapPlacementReplacement(
+      department: dept,
+      targetSheetId: floorId,
+    );
+    if (!replacement.movesFromAnotherSheet) return true;
+    return showBuildingMapMovePlacementConfirmDialog(
+      context,
+      departmentName: dept.displayName,
+      fromFloorLabel: _floorLabel(replacement.previousFloorId, floors),
+      toFloorLabel: _floorLabel(floorId, floors),
+    );
+  }
+
+  String _floorLabel(int? floorId, List<BuildingMapFloor> floors) {
+    if (floorId == null) return 'άγνωστο φύλλο';
+    for (final f in floors) {
+      if (f.id == floorId) return buildingMapFloorDisplayLabel(f);
+    }
+    return 'Όροφος #$floorId';
+  }
+
   Future<void> commitDraftToDatabase({
     required BuildContext context,
     required DraftDepartmentShape draft,
     required DepartmentModel dept,
     required int floorId,
+    required List<BuildingMapFloor> floors,
   }) async {
     final draftRect = draft.rect;
     final sheetStr = floorId.toString();
     if (!await confirmOverlapIfNeeded(context, draftRect, sheetStr, dept.id!)) {
+      return;
+    }
+    if (!context.mounted) return;
+    if (!await confirmPlacementReplacementIfNeeded(
+      context,
+      dept: dept,
+      floorId: floorId,
+      floors: floors,
+    )) {
       return;
     }
     if (!context.mounted) return;
@@ -537,6 +579,116 @@ class BuildingMapController {
         );
   }
 
+  /// Επιλογή τμήματος στην κατάσταση που αντιστοιχεί στο τι έχει ήδη ο χάρτης:
+  /// σχεδίαση όταν δεν έχει θέση, επεξεργασία όταν έχει θέση εδώ.
+  void _selectDepartmentForSheet({
+    required int departmentId,
+    required List<DepartmentModel> departments,
+    required int floorId,
+    required bool asExistingPlacement,
+  }) {
+    _ref
+        .read(buildingMapSelectedDepartmentIdToMapProvider.notifier)
+        .setDept(departmentId);
+    syncDraftWithSelectedDepartment(
+      departments: departments,
+      departmentId: departmentId,
+      floorId: floorId,
+    );
+    if (asExistingPlacement) {
+      _ref
+          .read(buildingMapEditFromSelectionTapProvider.notifier)
+          .setValue(true);
+      _ref.read(buildingMapToolProvider.notifier).setMode(MapToolMode.edit);
+      return;
+    }
+    _ref.read(buildingMapDraftShapeProvider.notifier).clear();
+    _ref.read(buildingMapEditFromSelectionTapProvider.notifier).clear();
+    _ref.read(buildingMapToolProvider.notifier).setMode(MapToolMode.draw);
+  }
+
+  /// Εφαρμόζει την επιλογή τμήματος από τη λίστα «Επιλογή τμήματος».
+  ///
+  /// Συμβόλαιο: η επιλογή δεν ξεκινά ποτέ σιωπηλά νέα σχεδίαση για τμήμα που
+  /// έχει ήδη θέση — ή το δείχνει εκεί που είναι, ή ρωτά.
+  Future<void> applyDepartmentPickFromList({
+    required BuildContext context,
+    required DepartmentModel department,
+    required List<DepartmentModel> departments,
+    required List<BuildingMapFloor> floors,
+    required int currentSheetId,
+  }) async {
+    final deptId = department.id;
+    if (deptId == null) return;
+    final pick = resolveBuildingMapDepartmentPick(
+      department: department,
+      currentSheetId: currentSheetId,
+      floors: floors,
+    );
+
+    switch (pick.action) {
+      case BuildingMapDepartmentPickAction.drawHere:
+        _selectDepartmentForSheet(
+          departmentId: deptId,
+          departments: departments,
+          floorId: currentSheetId,
+          asExistingPlacement: false,
+        );
+      case BuildingMapDepartmentPickAction.editHere:
+        _selectDepartmentForSheet(
+          departmentId: deptId,
+          departments: departments,
+          floorId: currentSheetId,
+          asExistingPlacement: true,
+        );
+      case BuildingMapDepartmentPickAction.orphanedPlacement:
+        _selectDepartmentForSheet(
+          departmentId: deptId,
+          departments: departments,
+          floorId: currentSheetId,
+          asExistingPlacement: false,
+        );
+        _showMapSnack(
+          context,
+          'Το τμήμα «${department.displayName}» δείχνει σε όροφο που δεν υπάρχει '
+          'πια. Σχεδίασέ το εδώ για να αποκτήσει ξανά θέση.',
+        );
+      case BuildingMapDepartmentPickAction.askFloorChoice:
+        final choice = await showBuildingMapMappedDepartmentChoiceDialog(
+          context,
+          departmentName: department.displayName,
+          itsFloorLabel: pick.otherFloorLabel ?? 'άλλος όροφος',
+          currentFloorLabel: _floorLabel(currentSheetId, floors),
+        );
+        if (choice == null || !context.mounted) return;
+        switch (choice) {
+          case BuildingMapMappedDepartmentChoice.goToItsFloor:
+            await jumpToMappedDepartment(
+              department: department,
+              floors: floors,
+              departments: departments,
+            );
+            _selectDepartmentForSheet(
+              departmentId: deptId,
+              departments: departments,
+              floorId: pick.otherFloorId!,
+              asExistingPlacement: true,
+            );
+          case BuildingMapMappedDepartmentChoice.moveToCurrentFloor:
+            _selectDepartmentForSheet(
+              departmentId: deptId,
+              departments: departments,
+              floorId: currentSheetId,
+              asExistingPlacement: false,
+            );
+            _showMapSnack(
+              context,
+              'Σχεδίασε τη νέα θέση και πάτησε ✓ για να ολοκληρωθεί η μετακίνηση.',
+            );
+        }
+    }
+  }
+
   Future<String?> _ingestPickedImagePath(
     BuildContext context,
     String srcPath, {
@@ -599,6 +751,13 @@ class BuildingMapController {
   /// του χάρτη (όχι στην καθολική «τελευταία θέση» των Windows) και τον
   /// θυμάται μετά από επιτυχή επιλογή. null σε ακύρωση.
   Future<String?> _pickFloorSheetImagePath() async {
+    final session = await FilePickerSession.run(_pickFloorSheetImagePathImpl);
+    // Το δεύτερο κλικ εστίασε τον ήδη ανοιχτό διάλογο — καμία νέα επιλογή.
+    if (session.refocusedExisting) return null;
+    return session.value;
+  }
+
+  Future<String?> _pickFloorSheetImagePathImpl() async {
     const memory = PickerLocationMemory('building_map_image');
     final picked = await FilePicker.pickFile(
       type: FileType.image,

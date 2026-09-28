@@ -93,12 +93,17 @@ Future<bool> _finalizeAllowedDatabaseSwitch(
   WidgetRef ref, {
   required String actionLabel,
   bool askAboutOtherSessions = true,
+  bool Function()? canObserveOtherStations,
 }) async {
   // Πριν από οτιδήποτε άλλο: ποιος άλλος κρατά τη βάση ανοιχτή; Ρωτιέται
   // **πριν** οριστικοποιηθούν οι εκκρεμείς αναιρέσεις, αλλιώς μια ακύρωση
   // εδώ θα άφηνε πίσω της ενέργειες που δεν μπορούν πια να αναιρεθούν.
   if (askAboutOtherSessions &&
-      !await confirmDespiteOtherSessions(context, actionLabel: actionLabel)) {
+      !await confirmDespiteOtherSessions(
+        context,
+        actionLabel: actionLabel,
+        canObserve: canObserveOtherStations,
+      )) {
     return false;
   }
   if (!context.mounted) return false;
@@ -129,11 +134,13 @@ Future<bool> runGuardedDatabaseSwitch(
   WidgetRef ref,
   Future<void> Function() action, {
   String actionLabel = 'Αλλαγή βάσης',
+  bool Function()? canObserveOtherStations,
 }) async {
   if (!await ensureDatabaseSwitchAllowed(
     context,
     ref,
     actionLabel: actionLabel,
+    canObserveOtherStations: canObserveOtherStations,
   )) {
     return false;
   }
@@ -158,6 +165,7 @@ Future<bool> ensureDatabaseSwitchAllowed(
   WidgetRef ref, {
   String actionLabel = 'Αλλαγή βάσης',
   bool askAboutOtherSessions = true,
+  bool Function()? canObserveOtherStations,
 }) async {
   final blockers = collectDatabaseSwitchBlockers(ref);
   if (blockers.isEmpty) {
@@ -166,6 +174,7 @@ Future<bool> ensureDatabaseSwitchAllowed(
       ref,
       actionLabel: actionLabel,
       askAboutOtherSessions: askAboutOtherSessions,
+      canObserveOtherStations: canObserveOtherStations,
     );
   }
 
@@ -242,6 +251,7 @@ Future<bool> ensureDatabaseSwitchAllowed(
         ref,
         actionLabel: actionLabel,
         askAboutOtherSessions: askAboutOtherSessions,
+        canObserveOtherStations: canObserveOtherStations,
       );
     case _OpenCallFormGuardChoice.goToCall:
       if (context.mounted) {

@@ -4,26 +4,17 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/file_picker_initial_directory.dart';
-
-/// Διάλογος αποθήκευσης για εξαγωγή χάρτη.
-///
-/// Επιλογή τύπου σε [AlertDialog] και μετά `FilePicker.saveFile`
-/// με ένα φίλτρο τη φορά (ώστε να μην εμφανίζονται και οι τρεις επεκτάσεις μαζί).
-Future<String?> promptBuildingMapExportSavePath({
-  required BuildContext context,
-  required String sanitizedBaseName,
-  required String? initialDirectoryPath,
-}) async {
-  return _promptExportSavePath(
-    context: context,
-    sanitizedBaseName: sanitizedBaseName,
-    initialDirectoryPath: initialDirectoryPath,
-  );
-}
+import '../../../../core/utils/file_picker_session.dart';
 
 enum _ExportKind { png, jpeg }
 
-Future<String?> _promptExportSavePath({
+/// Διάλογος αποθήκευσης για εξαγωγή χάρτη.
+///
+/// Επιλογή τύπου σε [AlertDialog] και μετά `FilePicker.saveFile` με ένα φίλτρο
+/// τη φορά (ώστε να μην εμφανίζονται και οι τρεις επεκτάσεις μαζί). Ο επιλογέας
+/// περνά από τον [FilePickerSession]: δεύτερο κλικ εστιάζει τον ήδη ανοιχτό
+/// διάλογο αντί να ανοίξει δεύτερο.
+Future<String?> promptBuildingMapExportSavePath({
   required BuildContext context,
   required String sanitizedBaseName,
   required String? initialDirectoryPath,
@@ -63,13 +54,19 @@ Future<String?> _promptExportSavePath({
   final ext = kind == _ExportKind.png ? 'png' : 'jpg';
   final suggested = '$sanitizedBaseName.$ext';
 
-  final saved = await FilePicker.saveFile(
-    dialogTitle: 'Εξαγωγή χάρτη ορόφου',
-    fileName: suggested,
-    initialDirectory: initialDir,
-    type: FileType.custom,
-    allowedExtensions: kind == _ExportKind.png ? const ['png'] : const ['jpg'],
-    bytes: Uint8List(0),
+  final session = await FilePickerSession.run(
+    () async => FilePicker.saveFile(
+      dialogTitle: 'Εξαγωγή χάρτη ορόφου',
+      fileName: suggested,
+      initialDirectory: initialDir,
+      type: FileType.custom,
+      allowedExtensions: kind == _ExportKind.png
+          ? const ['png']
+          : const ['jpg'],
+      bytes: Uint8List(0),
+    ),
   );
-  return saved?.toFilePath();
+  // Το δεύτερο κλικ εστίασε τον ήδη ανοιχτό διάλογο — καμία νέα διαδρομή.
+  if (session.refocusedExisting) return null;
+  return session.value?.toFilePath();
 }

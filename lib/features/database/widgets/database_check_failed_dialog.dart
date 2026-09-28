@@ -33,10 +33,20 @@ Future<bool> showDatabaseCheckFailedDialog({
     );
   }
 
+  // Ο τίτλος δεν κατηγορεί το αρχείο όταν το αρχείο δεν φταίει: στο μπλόκο της
+  // αναβάθμισης η βάση είναι απόλυτα έγκυρη και απλώς περιμένει να κλείσουν οι
+  // συνάδελφοι. Ένα «δεν είναι έγκυρη» εκεί θα έστελνε τον χρήστη να ψάχνει
+  // βλάβη που δεν υπάρχει.
+  final title =
+      result.recoveryKind ==
+          DatabaseInitRecoveryKind.schemaUpgradeBlockedByOtherStations
+      ? 'Η αναβάθμιση της βάσης δεν μπορεί να γίνει τώρα'
+      : 'Η βάση δεν είναι έγκυρη';
+
   await showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Η βάση δεν είναι έγκυρη'),
+      title: Text(title),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(

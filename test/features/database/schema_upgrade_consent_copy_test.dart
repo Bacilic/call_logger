@@ -107,6 +107,7 @@ void main() {
         final dbPath = await _createOldSchemaDb(tempDir, 'old_schema.db');
         final ok = await runSchemaUpgradeConsentRecovery(
           context: ctx,
+          canObserveOtherStations: () => true,
           result: _schemaMismatchResult(dbPath),
           onSuccess: () async => successCalls++,
           askConsent: (_, _, _, _) async =>
@@ -159,6 +160,7 @@ void main() {
         final dbPath = await _createOldSchemaDb(tempDir, 'old_schema.db');
         final ok = await runSchemaUpgradeConsentRecovery(
           context: ctx,
+          canObserveOtherStations: () => true,
           result: _schemaMismatchResult(dbPath),
           onSuccess: () async {},
           askConsent: (_, _, _, _) async =>
@@ -194,6 +196,9 @@ void main() {
       final dbPath = await _createOldSchemaDb(tempDir, 'old_schema.db');
       final ok = await runSchemaUpgradeConsentRecovery(
         context: ctx,
+        // Τα ίχνη των σταθμών δεν αφορούν αυτά τα τεστ: δηλώνουμε ρητά
+        // ότι φαίνονται, ώστε να μη μεσολαβήσει ο φρουρός της άγνοιας.
+        canObserveOtherStations: () => true,
         result: _schemaMismatchResult(dbPath),
         onSuccess: () async {},
         askConsent: (_, _, _, _) async => SchemaUpgradeConsentChoice.cancel,

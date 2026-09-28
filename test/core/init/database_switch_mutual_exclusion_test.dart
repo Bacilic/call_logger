@@ -60,6 +60,7 @@ void main() {
                 .read(activeCriticalOperationsProvider)
                 .contains(CriticalOperation.databaseSwitch);
           },
+          canObserveOtherStations: () => true,
         );
 
         expect(ran, isTrue);
@@ -88,6 +89,7 @@ void main() {
             tester.element(find.byType(SizedBox)),
             ref,
             () async => throw StateError('αποτυχία εναλλαγής'),
+            canObserveOtherStations: () => true,
           ),
           throwsStateError,
         );
@@ -116,6 +118,7 @@ void main() {
           tester.element(find.byType(SizedBox)),
           ref,
           () async => actionRan = true,
+          canObserveOtherStations: () => true,
         );
         await tester.pumpAndSettle();
         await tester.tap(find.text('Εντάξει, θα περιμένω'));

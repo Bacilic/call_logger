@@ -45,6 +45,8 @@ void main() {
       String primaryModel = '',
       String fallbackModel = '',
       bool fallbackEnabled = false,
+      String apiUrl = 'http://test/api.aspx',
+      String geminiEndpoint = '',
     }) async {
       tester.view.physicalSize = const Size(1400, 1000);
       tester.view.devicePixelRatio = 1.0;
@@ -77,7 +79,7 @@ void main() {
           child: MaterialApp(
             home: Scaffold(
               body: LansweeperConnectionSettingsDialog(
-                apiUrlController: ctrl('http://test/api.aspx'),
+                apiUrlController: ctrl(apiUrl),
                 ticketFormUrlController: ctrl('http://test/NewTicket.aspx'),
                 ticketViewUrlController: ctrl(
                   'http://test/ticket.aspx?tid={tid}',
@@ -85,7 +87,7 @@ void main() {
                 apiKeyController: ctrl('test-key'),
                 agentUsernameController: ctrl('gnk\\v.drosos'),
                 geminiApiKeyController: ctrl(),
-                geminiEndpointController: ctrl(),
+                geminiEndpointController: ctrl(geminiEndpoint),
                 geminiPrimaryModelController: ctrl(primaryModel),
                 geminiFallbackModelController: ctrl(fallbackModel),
                 onSettingsChanged: () {},
@@ -120,6 +122,69 @@ void main() {
         );
       },
     );
+
+    // Το κλειδί ταξιδεύει ΜΕΣΑ στη διεύθυνση: με http το διαβάζει όποιος
+    // παρακολουθεί τη σύνδεση. Η εφαρμογή προειδοποιεί — δεν απαγορεύει.
+    testWidgets('http στο URL API: προειδοποιεί για το εκτεθειμένο κλειδί', (
+      tester,
+    ) async {
+      await pumpDialog(tester, apiUrl: 'http://10.10.201.22:81/api.aspx');
+
+      expect(
+        find.textContaining('το κλειδί API ταξιδεύει αναγνώσιμο'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('https στο URL API: καμία προειδοποίηση', (tester) async {
+      await pumpDialog(tester, apiUrl: 'https://10.10.201.22/api.aspx');
+
+      expect(find.textContaining('ταξιδεύει αναγνώσιμο'), findsNothing);
+    });
+
+    testWidgets('η προειδοποίηση δεν εμποδίζει την αποθήκευση', (tester) async {
+      await pumpDialog(tester, apiUrl: 'http://10.10.201.22:81/api.aspx');
+
+      // Το πεδίο μένει κανονικά επεξεργάσιμο και ο έλεγχος πράκτορα ενεργός —
+      // η προειδοποίηση συμβουλεύει, δεν κλειδώνει.
+      final field = tester.widget<TextFormField>(
+        find.ancestor(
+          of: find.text('http://10.10.201.22:81/api.aspx'),
+          matching: find.byType(TextFormField),
+        ),
+      );
+      expect(field.enabled, isNot(false));
+      final probeButton = tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.text('Έλεγχος πράκτορα API'),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      expect(probeButton.onPressed, isNotNull);
+    });
+
+    testWidgets('http στη διεύθυνση της ΤΝ: προειδοποιεί κι εκεί', (
+      tester,
+    ) async {
+      await pumpDialog(
+        tester,
+        geminiEndpoint:
+            'http://gemini.local/v1/models/{μοντέλο}'
+            ':generateContent?key={κλειδί API}',
+      );
+
+      await tester.tap(find.text('Τεχνητή Νοημοσύνη'));
+      await pumpUntilSettled(tester);
+
+      expect(
+        find.textContaining(
+          'το κλειδί της Τεχνητής Νοημοσύνης ταξιδεύει αναγνώσιμο',
+        ),
+        findsOneWidget,
+      );
+
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
 
     testWidgets(
       'πάτημα «Help Desk / Browser» εμφανίζει τα πεδία browser και η κατάσταση παραμένει ορατή',

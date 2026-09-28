@@ -18,15 +18,7 @@ import '../../database/providers/database_maintenance_provider.dart';
 import '../../database/services/create_new_database_texts.dart';
 import '../../database/widgets/database_rename_failure_dialog.dart';
 import '../../database/widgets/database_rename_notice_text.dart';
-
-bool _sameResolvedPath(String a, String b) {
-  final na = path.normalize(a);
-  final nb = path.normalize(b);
-  if (Platform.isWindows) {
-    return na.toLowerCase() == nb.toLowerCase();
-  }
-  return na == nb;
-}
+import '../../../core/utils/file_path_identity.dart';
 
 /// Έλεγχος διαδρομής μετά το σύστημα «Αποθήκευση ως».
 String? validateNewDatabaseSavePath(String raw) {
@@ -189,7 +181,7 @@ class CreateNewDatabaseFlow {
       return;
     }
 
-    if (exists && !_sameResolvedPath(norm, currentDbForCompare)) {
+    if (exists && !pathsReferToSameFile(norm, currentDbForCompare)) {
       if (!context.mounted) return;
       await showDialog<void>(
         context: context,

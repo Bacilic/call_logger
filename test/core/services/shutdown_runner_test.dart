@@ -154,7 +154,7 @@ void main() {
       await ShutdownRunner(
         createCoordinator: () => coordinator,
         createTrace: () async => ShutdownTraceService(
-          logsDirectory: logsDir.path,
+          workingDirectory: logsDir.path,
           appendToSessionLog: (text) => File(
             '${logsDir.path}${Platform.pathSeparator}'
             '${CrashLogService.sessionLogFileName(DateTime.now())}',

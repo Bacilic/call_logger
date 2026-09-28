@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/lansweeper_agent_api_probe.dart';
+import '../../../../core/utils/secret_bearing_url.dart';
 import '../../../../core/services/lansweeper_ticket_requester_fields.dart';
 import '../../providers/lansweeper_connection_probe_provider.dart';
 import 'lansweeper_settings_card.dart';
@@ -65,21 +66,41 @@ class _LansweeperSettingsApiTabState
     }
   }
 
-  Widget _buildApiConnectionCard() {
+  Widget _buildApiConnectionCard(BuildContext context) {
+    // Το κλειδί ταξιδεύει ΜΕΣΑ στη διεύθυνση, ως παράμετρος — με http το
+    // διαβάζει όποιος παρακολουθεί τη σύνδεση.
+    final insecureUrlWarning = insecureSecretUrlWarning(
+      widget.apiUrlController.text,
+      secretLabel: 'το κλειδί API',
+    );
+
     return LansweeperSettingsCard(
       icon: Icons.power_rounded,
       title: 'Σύνδεση API (Ticket API)',
       children: [
         TextFormField(
           controller: widget.apiUrlController,
-          onChanged: (_) => widget.onLansweeperUrlChanged(),
+          onChanged: (_) {
+            widget.onLansweeperUrlChanged();
+            setState(() {});
+          },
           decoration: const InputDecoration(
             labelText: 'URL API (api.aspx)',
-            hintText: 'http://[διακομιστής]:[πύλη]/api.aspx',
+            hintText: 'https://[διακομιστής]:[πύλη]/api.aspx',
             border: OutlineInputBorder(),
             isDense: true,
           ),
         ),
+        if (insecureUrlWarning != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              insecureUrlWarning,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
@@ -189,7 +210,7 @@ class _LansweeperSettingsApiTabState
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: _buildApiConnectionCard()),
+        Expanded(child: _buildApiConnectionCard(context)),
         const SizedBox(width: 14),
         Expanded(child: _buildAgentCard(context)),
       ],

@@ -17,7 +17,16 @@
     (περνάει τα επιπλέον ορίσματα στο `flutter test`, π.χ. `...ps1 test/widget_test.dart`).  
     Αν το αρχείο είναι **κλειδωμένο** (access denied), κλείστε διεργασίες Flutter/Dart και ξανατρέξτε, ή μετά το κλείσιμο:  
     `pwsh -File scripts/flutter_test_windows.ps1 -Clean` (τρέχει `flutter clean` πριν τα τεστ).
-  - **Αλλιώς:** κλείστε άλλες διεργασίες που κρατούν το DLL (τρέχουσα εφαρμογή, δεύτερο `flutter test`, debug) και μετά `flutter clean` ή χειροκίνητη διαγραφή του `build/native_assets/windows/sqlite3.dll`.
+  - **Όταν το DLL μένει κλειδωμένο:** υπάρχει έτοιμο εργαλείο —
+    `pwsh -NoProfile -File scripts/terminate_dartvm_delete_sqlite3_dll.ps1`
+    Τερματίζει τα `dartvm.exe`, **ρωτά ξεχωριστά** για κάθε άλλη διεργασία που φορτώνει το DLL,
+    και διαγράφει το `build/native_assets/windows/sqlite3.dll` μαζί με τον φάκελο
+    `.dart_tool/hooks_runner/sqlite3`. Δεν κλείνει τίποτα άσκοπα: αν λείπει ένας από τους δύο
+    στόχους, δεν τερματίζει καμία διεργασία. Με `-DryRun` δείχνει τι θα έκανε χωρίς να το κάνει.
+  - **Χειροκίνητα, αν προτιμάτε:** κλείστε τις διεργασίες που κρατούν το DLL (τρέχουσα εφαρμογή,
+    δεύτερο `flutter test`, debug) και μετά `flutter clean` ή διαγραφή του
+    `build/native_assets/windows/sqlite3.dll`. Σκοτώνετε **κατά PID**, ποτέ κατά όνομα — το όνομα
+    `dart` παρασύρει και τους μακρόβιους analysis servers.
 
 ### Αρχεία `flutter_XX.log` στη ρίζα
 
@@ -31,16 +40,21 @@
 ## Εντολές
 
 ```bash
-# Όλα τα unit/widget tests (φάκελος test/)
-flutter test
-
-# Συγκεκριμένο αρχείο ή feature scope (βλ. docs/scope_map.md)
+# Συγκεκριμένο αρχείο ή φάκελος περιοχής (ο φάκελος test/ καθρεφτίζει το lib/)
 flutter test test/features/calls/call_form_test.dart
 flutter test test/features/calls/
 
 # Συγκεκριμένη δοκιμή με το όνομά της
 flutter test --plain-name "Η εφαρμογή εμφανίζει το κύριο κέλυφος και τα πεδία εισαγωγής κλήσης"
+
+# Πολλές διαδρομές μαζί, σε ΜΙΑ εκτέλεση
+flutter test test/features/calls/ test/core/services/lookup_service_test.dart
 ```
+
+> **Το σκέτο `flutter test` (χωρίς διαδρομή) δεν τρέχει στην καθημερινή δουλειά.** Σαρώνει
+> ολόκληρη τη σουίτα — πάνω από 850 αρχεία, ~3 λεπτά στο γρήγορο μηχάνημα και ~18 στο αργό.
+> Τρέχει **μία φορά ανά συνεδρία, στο κλείσιμο, και μόνο στο γρήγορο μηχάνημα**. Όσο δουλεύεις,
+> τρέχεις ονομαστικά τα αρχεία που σχετίζονται με ό,τι άλλαξες.
 
 ## Σταθεροποίηση UI στα widget tests
 

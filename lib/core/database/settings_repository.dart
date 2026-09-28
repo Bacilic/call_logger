@@ -1,5 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'settings_secret_sealing.dart';
+
 /// Κλειδί αποθήκευσης για URL Lansweeper στο `app_settings`.
 const String kLansweeperUrlSettingKey = 'lansweeper_url';
 const String kLansweeperApiUrlSettingKey = 'lansweeper_api_url';
@@ -66,7 +68,9 @@ class SettingsRepository {
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return rows.first['value'] as String?;
+    final stored = rows.first['value'] as String?;
+    if (stored == null || !kSealedSettingKeys.contains(key)) return stored;
+    return unsealSettingValue(stored);
   }
 
   Future<void> saveSetting(
@@ -78,7 +82,9 @@ class SettingsRepository {
     await _ensureTable(executor: e);
     await e.insert('app_settings', {
       'key': key,
-      'value': value,
+      'value': kSealedSettingKeys.contains(key)
+          ? sealSettingValue(value)
+          : value,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -95,6 +101,17 @@ class SettingsRepository {
     String newValue, {
     DatabaseExecutor? executor,
   }) async {
+    // Η σφραγίδα αλλάζει σε κάθε εγγραφή, ώστε η ίδια τιμή να μη φαίνεται ίδια
+    // στη βάση. Άρα η σύγκριση «είναι ακόμη αυτό που διάβασα;» δεν μπορεί να
+    // πετύχει ποτέ για σφραγισμένο κλειδί — και θα αποτύγχανε σιωπηλά.
+    if (kSealedSettingKeys.contains(key)) {
+      throw ArgumentError.value(
+        key,
+        'key',
+        'Η ατομική αντικατάσταση δεν υποστηρίζεται για σφραγισμένη ρύθμιση· '
+            'χρησιμοποίησε saveSetting.',
+      );
+    }
     final e = executor ?? db;
     await _ensureTable(executor: e);
     if (expectedValue == null) {
@@ -109,6 +126,37 @@ class SettingsRepository {
       [newValue, key, expectedValue],
     );
     return updated > 0;
+  }
+
+  /// Σφραγίζει όσα μυστικά γράφτηκαν πριν μπει το σφράγισμα.
+  ///
+  /// Τρέχει στην εκκίνηση και είναι ακίνδυνο να ξανατρέξει: ό,τι φέρει ήδη
+  /// σφραγίδα προσπερνιέται. Επιστρέφει πόσα σφραγίστηκαν, για το ίχνος.
+  Future<int> sealUnsealedSecrets({DatabaseExecutor? executor}) async {
+    final e = executor ?? db;
+    await _ensureTable(executor: e);
+    var sealed = 0;
+    for (final key in kSealedSettingKeys) {
+      final rows = await e.query(
+        'app_settings',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: [key],
+        limit: 1,
+      );
+      if (rows.isEmpty) continue;
+      final stored = rows.first['value'] as String?;
+      if (stored == null || stored.isEmpty) continue;
+      if (isSealedSettingValue(stored)) continue;
+      await e.update(
+        'app_settings',
+        {'value': sealSettingValue(stored)},
+        where: 'key = ?',
+        whereArgs: [key],
+      );
+      sealed++;
+    }
+    return sealed;
   }
 
   /// Πόσες φορές ξαναδοκιμάζει η [updateSetting] όταν χάσει τη δέσμευση.

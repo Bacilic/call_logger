@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -180,6 +181,20 @@ List<String> _orderedTableNames(List<String> raw) {
 }
 
 /// Οθόνη Βάσης Δεδομένων: λίστα πινάκων και προεπισκόπηση σε μορφή πίνακα (Excel-like).
+/// Πόσο ύψος κρατούν πάντα οι λίστες πινάκων, όσο κι αν ψηλώσει η κεφαλίδα.
+///
+/// Χωρίς αυτό το δάπεδο η κάρτα στατιστικών σε στενό παράθυρο έσπρωχνε τις
+/// λίστες εκτός οθόνης. Με αυτό, φαίνονται πάντα τουλάχιστον τρεις-τέσσερις
+/// γραμμές — αρκετές για να καταλάβει κανείς ότι υπάρχει λίστα και να κυλήσει.
+const double _kMinTableListHeight = 200;
+
+/// Το ελάχιστο μερίδιο της οθόνης που κρατά η κεφαλίδα σε πολύ χαμηλό παράθυρο.
+///
+/// Δικλείδα για την αντίστροφη ακρότητα: χωρίς αυτήν, σε ύψος μικρότερο από το
+/// δάπεδο των λιστών η κεφαλίδα θα συρρικνωνόταν στο μηδέν και η κάρτα με την
+/// ταυτότητα της βάσης θα εξαφανιζόταν εντελώς.
+const double _kMinHeaderShare = 0.35;
+
 class DatabaseBrowserScreen extends ConsumerStatefulWidget {
   const DatabaseBrowserScreen({
     super.key,
@@ -774,59 +789,87 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     final left = ordered.sublist(0, mid);
     final right = ordered.sublist(mid);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildStatsErrorBanner(context, theme, statsAsync),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    // Η κεφαλίδα (κάρτα στατιστικών + αντίγραφα) δεν έχει σταθερό ύψος: κάτω
+    // από 900 pixels πλάτους η κάρτα βάζει τις δύο στήλες της τη μία κάτω από
+    // την άλλη και σχεδόν διπλασιάζεται. Σε στενό παράθυρο ζητούσε περισσότερο
+    // ύψος απ' όσο υπάρχει, και η οθόνη έσπαγε με «RenderFlex overflowed» —
+    // μετρημένο: 97 pixels σε παράθυρο 926 και 125 σε 640, που είναι το
+    // **ελάχιστο** που επιτρέπει η ίδια η εφαρμογή.
+    //
+    // Ο κανόνας εδώ: οι λίστες των πινάκων κρατούν πάντα ένα χρηστικό ύψος, και
+    // ό,τι περισσεύει το παίρνει η κεφαλίδα. Όταν δεν της φτάνει, κυλάει η ίδια
+    // αντί να σπρώξει τα πάντα έξω από την οθόνη.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxHeaderHeight = math.max(
+          constraints.maxHeight * _kMinHeaderShare,
+          constraints.maxHeight - _kMinTableListHeight,
+        );
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: DatabaseStatsCard(
-                  databaseResult: widget.databaseResult,
-                  statsAsync: statsAsync,
-                  expanded: _statsCardExpanded,
-                  onToggleExpanded: () {
-                    unawaited(_toggleStatsCardExpanded());
-                  },
-                  onEditLabel: (current) {
-                    unawaited(_editDatabaseLabel(current));
-                  },
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeaderHeight),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildStatsErrorBanner(context, theme, statsAsync),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: DatabaseStatsCard(
+                              databaseResult: widget.databaseResult,
+                              statsAsync: statsAsync,
+                              expanded: _statsCardExpanded,
+                              onToggleExpanded: () {
+                                unawaited(_toggleStatsCardExpanded());
+                              },
+                              onEditLabel: (current) {
+                                unawaited(_editDatabaseLabel(current));
+                              },
+                            ),
+                          ),
+                          _databaseToolbarActions(),
+                        ],
+                      ),
+                      _buildAppInstancesCard(theme),
+                    ],
+                  ),
                 ),
               ),
-              _databaseToolbarActions(),
+              const SizedBox(height: 16),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          for (final name in left)
+                            _buildTableListTile(context, name, statsAsync),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          for (final name in right)
+                            _buildTableListTile(context, name, statsAsync),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-          _buildAppInstancesCard(theme),
-          const SizedBox(height: 16),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: ListView(
-                    children: [
-                      for (final name in left)
-                        _buildTableListTile(context, name, statsAsync),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ListView(
-                    children: [
-                      for (final name in right)
-                        _buildTableListTile(context, name, statsAsync),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

@@ -16,6 +16,7 @@ import '../../../core/updates/update_dialogs.dart';
 import '../../../core/updates/update_providers.dart';
 import '../services/database_downgrade_service.dart';
 import '../services/database_upgrade_copy_service.dart';
+import '../../../core/utils/file_path_identity.dart';
 import 'schema_upgrade_consent_dialog.dart' show parseSchemaMismatchVersions;
 
 /// Επιλογή χρήστη στον διάλογο «βάση νεότερης έκδοσης».
@@ -207,7 +208,7 @@ Future<AppInstanceRecord?> findNewerAppInstance({
 
   String currentExecutable = '';
   try {
-    currentExecutable = Platform.resolvedExecutable.trim().toLowerCase();
+    currentExecutable = Platform.resolvedExecutable;
   } catch (_) {}
 
   final known = await SettingsService().getKnownAppInstances();
@@ -215,7 +216,7 @@ Future<AppInstanceRecord?> findNewerAppInstance({
   for (final record in known) {
     final schema = record.schemaVersion;
     if (schema == null || schema < minimumSchemaVersion) continue;
-    if (record.executablePath.trim().toLowerCase() == currentExecutable) {
+    if (pathsReferToSameFile(record.executablePath, currentExecutable)) {
       continue;
     }
     try {

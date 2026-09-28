@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/models/building_map_floor.dart';
 import '../../models/department_model.dart';
 import '../../screens/widgets/department_color_palette.dart';
 import '../building_map_geometry.dart';
@@ -15,6 +16,7 @@ import '../building_map_label_layout.dart';
 import '../building_map_sheet_export_key.dart';
 import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
+import '../services/building_map_placement_replacement.dart';
 import 'building_map_fill_color_dialog.dart';
 import 'building_map_sheet_painter.dart';
 
@@ -30,6 +32,7 @@ class BuildingMapSheetViewport extends ConsumerStatefulWidget {
     required this.imgExists,
     required this.decodedSize,
     required this.activeDepartments,
+    required this.floors,
     required this.currentSheetId,
     required this.onFloorsChanged,
   });
@@ -48,6 +51,9 @@ class BuildingMapSheetViewport extends ConsumerStatefulWidget {
 
   final Size? decodedSize;
   final List<DepartmentModel> activeDepartments;
+
+  /// Κατάλογος φύλλων — ονοματίζει ορόφους στα μηνύματα αντικατάστασης θέσης.
+  final List<BuildingMapFloor> floors;
   final int? currentSheetId;
   final VoidCallback onFloorsChanged;
 
@@ -1831,7 +1837,16 @@ class _BuildingMapSheetViewportState
                                         },
                                       ),
                                       IconButton(
-                                        tooltip: 'Επιβεβαίωση draft',
+                                        tooltip:
+                                            selectedDept != null &&
+                                                resolveBuildingMapPlacementReplacement(
+                                                  department: selectedDept,
+                                                  targetSheetId:
+                                                      w.currentSheetId ?? -1,
+                                                ).replacesPlacementOnThisSheet
+                                            ? 'Αποθήκευση — αντικαθιστά την '
+                                                  'αποθηκευμένη θέση σε αυτό το φύλλο'
+                                            : 'Επιβεβαίωση draft',
                                         visualDensity: VisualDensity.compact,
                                         icon: const Icon(Icons.check),
                                         onPressed: !hasChanges
@@ -1856,6 +1871,7 @@ class _BuildingMapSheetViewportState
                                                       dept: selectedDept!,
                                                       floorId:
                                                           w.currentSheetId!,
+                                                      floors: w.floors,
                                                     );
                                                 if (context.mounted) {
                                                   setState(() {});

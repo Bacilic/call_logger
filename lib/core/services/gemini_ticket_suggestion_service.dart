@@ -163,10 +163,8 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
       (
         model: trimmedPrimary,
 
-        endpoint: GeminiTicketService.resolveEndpoint(
+        endpoint: GeminiTicketService.resolveEndpointForModel(
           endpoint: endpointTemplate,
-
-          apiKey: trimmedKey,
 
           primaryModel: trimmedPrimary,
         ),
@@ -178,9 +176,8 @@ class GeminiTicketSuggestionService implements AiTicketSuggestionService {
         trimmedFallback != trimmedPrimary) {
       attempts.add((
         model: trimmedFallback,
-        endpoint: GeminiTicketService.resolveEndpoint(
+        endpoint: GeminiTicketService.resolveEndpointForModel(
           endpoint: endpointTemplate,
-          apiKey: trimmedKey,
           primaryModel: trimmedFallback,
         ),
       ));

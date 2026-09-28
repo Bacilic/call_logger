@@ -66,10 +66,17 @@ class BuildingMapEditToolbar extends ConsumerWidget {
       }
     }
 
+    // Η επεξεργασία υπάρχοντος σχήματος ανήκει στην Επιλογή: ο χρήστης δεν
+    // σχεδιάζει κάτι νέο, διορθώνει κάτι που υπάρχει ήδη.
+    final editingExistingPlacement =
+        toolMode == MapToolMode.edit &&
+        ref.watch(buildingMapEditFromSelectionTapProvider);
+
     Widget toggles = ToggleButtons(
       isSelected: [
-        toolMode == MapToolMode.select,
-        toolMode == MapToolMode.draw || toolMode == MapToolMode.edit,
+        toolMode == MapToolMode.select || editingExistingPlacement,
+        (toolMode == MapToolMode.draw || toolMode == MapToolMode.edit) &&
+            !editingExistingPlacement,
       ],
       onPressed: (index) {
         // Η ρητή αλλαγή εργαλείου δηλώνει πρόθεση επιλογής/σχεδίασης —

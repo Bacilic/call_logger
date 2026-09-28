@@ -264,6 +264,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                           imgExists: imgExists,
                           decodedSize: decodedSize,
                           activeDepartments: activeDepartments,
+                          floors: floors,
                           currentSheetId: currentSheetId,
                           onFloorsChanged: onFloorsMutated,
                         ),
@@ -325,33 +326,20 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                                     .read(buildingMapToolProvider.notifier)
                                     .setMode(MapToolMode.draw);
                               },
-                              onSelectDepartment: (id) {
-                                ref
-                                    .read(
-                                      buildingMapSelectedDepartmentIdToMapProvider
-                                          .notifier,
-                                    )
-                                    .setDept(id);
-                                controller.syncDraftWithSelectedDepartment(
-                                  departments: activeDepartments,
-                                  departmentId: id,
-                                  floorId: currentSheetId,
-                                );
-                                final draftAfter = ref.read(
-                                  buildingMapDraftShapeProvider,
-                                );
-                                final nextMode = draftAfter != null
-                                    ? MapToolMode.edit
-                                    : MapToolMode.draw;
+                              onSelectDepartment: (department) async {
                                 ref
                                     .read(
                                       buildingMapDeptSelectionHudVisibleProvider
                                           .notifier,
                                     )
                                     .setVisible(false);
-                                ref
-                                    .read(buildingMapToolProvider.notifier)
-                                    .setMode(nextMode);
+                                await controller.applyDepartmentPickFromList(
+                                  context: context,
+                                  department: department,
+                                  departments: activeDepartments,
+                                  floors: floors,
+                                  currentSheetId: currentSheetId,
+                                );
                               },
                             ),
                           ),

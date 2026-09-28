@@ -225,20 +225,35 @@ class DatabaseReachabilityTracker {
         _consecutiveFailures = 0;
         _consecutiveLocked = 0;
         _consecutiveStale = 0;
+      // Κάθε δείγμα προβλήματος μετρά ΠΡΩΤΑ για τον εαυτό του και σβήνει τις
+      // άλλες ενδείξεις ΜΟΝΟ αφού φτάσει το δικό του κατώφλι.
+      //
+      // Πριν από αυτό ο μηδενισμός γινόταν αμέσως, οπότε το πρώτο δείγμα
+      // έριχνε την κατάσταση σε «εντάξει»: ο παλιός μετρητής μηδενιζόταν και ο
+      // νέος έμενε στο 1, κάτω από το κατώφλι των δύο. Μέσα σε κλείδωμα ο
+      // έλεγχος του αρχείου χτυπά συχνά το όριο χρόνου του, οπότε αρκούσε ένα
+      // τέτοιο δείγμα για να σβήσει η κίτρινη λωρίδα — και, στην αντίστροφη
+      // σειρά, η ΚΟΚΚΙΝΗ του χαμένου φακέλου.
       case DatabaseProbeSample.locked:
-        _consecutiveFailures = 0;
-        _consecutiveStale = 0;
         if (_consecutiveLocked < failuresBeforeAlarm) _consecutiveLocked++;
+        if (_consecutiveLocked >= failuresBeforeAlarm) {
+          _consecutiveFailures = 0;
+          _consecutiveStale = 0;
+        }
       case DatabaseProbeSample.unreachable:
-        _stallFloorUntil = null;
-        _consecutiveLocked = 0;
-        _consecutiveStale = 0;
         if (_consecutiveFailures < failuresBeforeAlarm) _consecutiveFailures++;
+        if (_consecutiveFailures >= failuresBeforeAlarm) {
+          _stallFloorUntil = null;
+          _consecutiveLocked = 0;
+          _consecutiveStale = 0;
+        }
       case DatabaseProbeSample.staleConnection:
-        _stallFloorUntil = null;
-        _consecutiveFailures = 0;
-        _consecutiveLocked = 0;
         if (_consecutiveStale < failuresBeforeAlarm) _consecutiveStale++;
+        if (_consecutiveStale >= failuresBeforeAlarm) {
+          _stallFloorUntil = null;
+          _consecutiveFailures = 0;
+          _consecutiveLocked = 0;
+        }
     }
     return state;
   }

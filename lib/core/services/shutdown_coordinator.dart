@@ -36,6 +36,23 @@ class ShutdownStepEvent {
       phase == ShutdownStepPhase.interrupted;
 }
 
+/// Ένα βήμα με δικό του παράθυρο χρόνου το ξεπέρασε.
+///
+/// Είναι **αποτυχία βήματος**, όχι διακοπή του κλεισίματος: η ουρά συνεχίζει
+/// στα επόμενα βήματα. Το μήνυμα γράφεται στο ίχνος, οπότε λέει τι συνέβη σε
+/// γλώσσα που διαβάζεται — όχι «Future not completed».
+class ShutdownStepBudgetExceeded implements Exception {
+  const ShutdownStepBudgetExceeded(this.label, this.budget);
+
+  final String label;
+  final Duration budget;
+
+  @override
+  String toString() =>
+      'Το βήμα «$label» ξεπέρασε το δικό του παράθυρο των '
+      '${budget.inSeconds} δευτερολέπτων και δεν το περιμένουμε άλλο.';
+}
+
 /// Συντονιστής διαδοχικών βημάτων κλεισίματος με γεγονότα προόδου.
 ///
 /// ΙΣΤΟΡΙΚΟ / ΓΙΑΤΙ (μη το «διορθώσεις» ως κακή πρακτική):
@@ -92,6 +109,37 @@ class ShutdownCoordinator {
     'Κλείσιμο ημερολογίου καταγραφής',
   ];
 
+  /// Πόσο χρόνο **δικό του** παίρνει το αντίγραφο εξόδου.
+  ///
+  /// Με δικτυακή βάση το αντίγραφο ξαναγράφει τη βάση καθαρή στον προορισμό:
+  /// 15 MB πάνω από δίκτυο θέλουν δεκαέξι δευτερόλεπτα σε μετρημένο κλείσιμο.
+  /// Όσο μοιραζόταν το [safetyTimeout] με τα άλλα πέντε βήματα, έπαιρνε ό,τι
+  /// περίσσευε — και ό,τι περίσσευε δεν αρκούσε.
+  static const Duration exitBackupBudget = Duration(seconds: 20);
+
+  /// Το δικό του παράθυρο κάθε βήματος, ή `null` όταν μοιράζεται το γενικό.
+  ///
+  /// Παράλληλη με τις [stepLabels] επίτηδες, με έλεγχο μήκους στο [run]: ένα
+  /// βήμα που προστίθεται στη μία λίστα και ξεχνιέται στην άλλη σκάει αμέσως,
+  /// αντί να κληρονομήσει σιωπηλά λάθος όριο.
+  /// Η θέση του βήματος που σβήνει το σημάδι «τρέχω τώρα».
+  ///
+  /// Δεν χρειάζεται τη βάση — χρειάζεται μια στιγμή. Όσο περίμενε στην ουρά
+  /// πίσω από το αντίγραφο, μια διακοπή το άφηνε ανεκτέλεστο: η επόμενη
+  /// εκκίνηση ανήγγελλε μη ομαλό κλείσιμο, και ο φρουρός της αναβάθμισης έβλεπε
+  /// στον διπλανό υπολογιστή σταθμό-φάντασμα επί τρία λεπτά. Γι' αυτό τρέχει
+  /// εγγυημένα σε **κάθε** διαδρομή εξόδου — δες [_runGuaranteedSteps].
+  static const int closeCrashLogStep = 5;
+
+  static const List<Duration?> stepOwnBudgets = [
+    null, // Αποθήκευση θέσης παραθύρου
+    null, // Παράδοση συνεδρίας
+    null, // Συγχώνευση αρχείων βάσης
+    exitBackupBudget, // Αντίγραφο ασφαλείας εξόδου
+    null, // Κλείσιμο σύνδεσης βάσης
+    null, // Κλείσιμο ημερολογίου καταγραφής
+  ];
+
   final Future<void> Function() _persistWindowBounds;
   final Future<void> Function() _releasePresence;
   final Future<void> Function() _walCheckpoint;
@@ -112,6 +160,19 @@ class ShutdownCoordinator {
   bool _timedOut = false;
   bool _terminateCalled = false;
   bool _stepsFinished = false;
+
+  /// Ο γενικός φρουρός, με προθεσμία που μετακινείται.
+  ///
+  /// Το [_guardGeneration] είναι απαραίτητο επειδή η προθεσμία επεκτείνεται εν
+  /// κινήσει: το παλιό χρονόμετρο δεν πάντα ακυρώνεται (στα τεστ ο χρόνος
+  /// έρχεται από έξω), οπότε ό,τι ξυπνά με παλιά γενιά αγνοείται.
+  Timer? _safetyTimer;
+  DateTime? _guardDeadline;
+  int _guardGeneration = 0;
+  Completer<void>? _timeoutTrigger;
+
+  /// Ποια βήματα πρόλαβαν να τερματίσουν — με επιτυχία ή με αποτυχία.
+  final Set<int> _finishedSteps = {};
 
   /// Ό,τι πρέπει να ΠΡΟΛΑΒΕΙ να ολοκληρωθεί πριν πεθάνει η διεργασία.
   ///
@@ -141,44 +202,38 @@ class ShutdownCoordinator {
   ];
 
   Future<void> run() async {
+    assert(
+      stepOwnBudgets.length == stepLabels.length,
+      'Κάθε βήμα κλεισίματος οφείλει να δηλώνει αν έχει δικό του παράθυρο.',
+    );
     _timedOut = false;
     _terminateCalled = false;
     _stepsFinished = false;
     _currentStepIndex = null;
     _stepInFlight = false;
+    _finishedSteps.clear();
 
-    final timeoutTrigger = Completer<void>();
+    assert(
+      stepLabels[closeCrashLogStep] == 'Κλείσιμο ημερολογίου καταγραφής',
+      'Το εγγυημένο βήμα δείχνει σε άλλη θέση από αυτή που περιγράφει.',
+    );
+
+    final trigger = Completer<void>();
+    _timeoutTrigger = trigger;
+    // Ο φρουρός οπλίζεται ΠΡΙΝ ξεκινήσει το πρώτο βήμα: αλλιώς η πρώτη δουλειά
+    // θα έτρεχε αφύλακτη, και είναι αυτή που αγγίζει πρώτη το δίκτυο.
+    _armSafetyGuard(safetyTimeout);
+
     final stepsFuture = _runAllSteps();
-
-    // Χρησιμοποιούμε Timer όταν το delay είναι το προεπιλεγμένο, ώστε να
-    // ακυρώνεται και να μην μένουν pending timers στα τεστ.
-    Timer? safetyTimer;
-    if (_useCancellableSafetyTimer) {
-      safetyTimer = Timer(safetyTimeout, () {
-        if (!_stepsFinished && !timeoutTrigger.isCompleted) {
-          _timedOut = true;
-          timeoutTrigger.complete();
-        }
-      });
-    } else {
-      unawaited(
-        _delay(safetyTimeout).then((_) {
-          if (!_stepsFinished && !timeoutTrigger.isCompleted) {
-            _timedOut = true;
-            timeoutTrigger.complete();
-          }
-        }),
-      );
-    }
 
     await Future.any([
       stepsFuture.then((_) {
         _stepsFinished = true;
-        safetyTimer?.cancel();
+        _cancelSafetyGuard();
       }),
-      timeoutTrigger.future,
+      trigger.future,
     ]);
-    safetyTimer?.cancel();
+    _cancelSafetyGuard();
 
     if (_timedOut) {
       final index = _currentStepIndex;
@@ -215,6 +270,10 @@ class ShutdownCoordinator {
     _currentStepIndex = index;
     _stepInFlight = true;
     final label = stepLabels[index];
+    final budget = stepOwnBudgets[index];
+    // Πρώτα η προθεσμία, μετά το γεγονός έναρξης: το βήμα δεν επιτρέπεται να
+    // τρέξει ούτε μια στιγμή με το ρολόι των άλλων.
+    if (budget != null) _extendSafetyGuard(budget);
     _emit(
       ShutdownStepEvent(
         stepIndex: index,
@@ -225,7 +284,12 @@ class ShutdownCoordinator {
 
     final startedAt = _now();
     try {
-      await action();
+      if (budget == null) {
+        await action();
+      } else {
+        await _awaitWithin(action(), budget, label);
+      }
+      _finishedSteps.add(index);
       if (_timedOut) return;
       final durationMs = _now().difference(startedAt).inMilliseconds;
       _emit(
@@ -237,6 +301,7 @@ class ShutdownCoordinator {
         ),
       );
     } catch (error) {
+      _finishedSteps.add(index);
       if (_timedOut) return;
       final durationMs = _now().difference(startedAt).inMilliseconds;
       _emit(
@@ -254,6 +319,98 @@ class ShutdownCoordinator {
     }
   }
 
+  /// Περιμένει το [action] ως το [budget] — με το ΙΔΙΟ ρολόι που φυλάει το
+  /// γενικό όριο, ώστε ένα τεστ να ορίζει και τις δύο άκρες του χρόνου.
+  ///
+  /// Η δουλειά **δεν** ακυρώνεται: μια αντιγραφή που τρέχει μέσα στη βάση δεν
+  /// σταματά επειδή σταματήσαμε να την περιμένουμε. Ο τερματισμός τη σκοτώνει
+  /// λίγο αργότερα — γι' αυτό το παράθυρο είναι γενναιόδωρο.
+  Future<void> _awaitWithin(
+    Future<void> action,
+    Duration budget,
+    String label,
+  ) async {
+    var settled = false;
+    Object? failure;
+    StackTrace? failureStack;
+    final done = action.then<void>(
+      (_) => settled = true,
+      onError: (Object error, StackTrace stack) {
+        settled = true;
+        failure = error;
+        failureStack = stack;
+      },
+    );
+
+    final window = _sleep(budget);
+    try {
+      await Future.any([done, window.future]);
+    } finally {
+      window.cancel();
+    }
+
+    if (!settled) throw ShutdownStepBudgetExceeded(label, budget);
+    final error = failure;
+    if (error != null) {
+      Error.throwWithStackTrace(error, failureStack ?? StackTrace.current);
+    }
+  }
+
+  /// Μία αναμονή, ακυρώσιμη, στο ρολόι του κλεισίματος.
+  ({Future<void> future, void Function() cancel}) _sleep(Duration duration) {
+    final completer = Completer<void>();
+    void wake() {
+      if (!completer.isCompleted) completer.complete();
+    }
+
+    if (_useCancellableSafetyTimer) {
+      final timer = Timer(duration, wake);
+      return (future: completer.future, cancel: timer.cancel);
+    }
+    unawaited(_delay(duration).then((_) => wake()));
+    return (future: completer.future, cancel: () {});
+  }
+
+  void _armSafetyGuard(Duration remaining) {
+    _safetyTimer?.cancel();
+    _safetyTimer = null;
+    final generation = ++_guardGeneration;
+    final window = remaining.isNegative ? Duration.zero : remaining;
+    _guardDeadline = _now().add(window);
+    if (_useCancellableSafetyTimer) {
+      _safetyTimer = Timer(window, () => _fireSafetyGuard(generation));
+    } else {
+      unawaited(_delay(window).then((_) => _fireSafetyGuard(generation)));
+    }
+  }
+
+  /// Μετακινεί την προθεσμία μπροστά κατά το παράθυρο ενός βήματος.
+  ///
+  /// Έτσι το γενικό όριο σταματά να μετρά δουλειά που έχει δικό της χρόνο: ό,τι
+  /// απέμενε πριν από το βήμα, απομένει και μετά.
+  void _extendSafetyGuard(Duration extra) {
+    final deadline = _guardDeadline;
+    if (deadline == null) return;
+    final left = deadline.difference(_now());
+    _armSafetyGuard((left.isNegative ? Duration.zero : left) + extra);
+  }
+
+  void _cancelSafetyGuard() {
+    _guardGeneration++;
+    _safetyTimer?.cancel();
+    _safetyTimer = null;
+    _guardDeadline = null;
+  }
+
+  void _fireSafetyGuard(int generation) {
+    if (generation != _guardGeneration) return;
+    if (_stepsFinished) return;
+    final trigger = _timeoutTrigger;
+    if (trigger == null || trigger.isCompleted) return;
+    _timedOut = true;
+    trigger.complete();
+  }
+
   void _emit(ShutdownStepEvent event) {
     if (!_eventsController.isClosed) {
       _eventsController.add(event);
@@ -263,8 +420,25 @@ class ShutdownCoordinator {
   Future<void> _callTerminate() async {
     if (_terminateCalled) return;
     _terminateCalled = true;
+    await _runGuaranteedSteps();
     await _runBeforeTerminate();
     await _terminate();
+  }
+
+  /// Ό,τι δεν πρόλαβε η ουρά και δεν επιτρέπεται να χαθεί.
+  ///
+  /// Σφιχτό όριο, γιατί εδώ έχουμε ήδη αποφασίσει να πεθάνουμε: ένα βήμα που
+  /// κρεμάει δεν παίρνει δεύτερη παράταση. Το βήμα είναι ακίνδυνο αν τρέξει
+  /// δεύτερη φορά — σβήνει ένα αρχείο που μπορεί να μην υπάρχει πια.
+  Future<void> _runGuaranteedSteps() async {
+    if (_finishedSteps.contains(closeCrashLogStep)) return;
+    try {
+      await _awaitWithin(
+        _closeCrashLog(),
+        beforeTerminateTimeout,
+        stepLabels[closeCrashLogStep],
+      );
+    } catch (_) {}
   }
 
   /// Ο τερματισμός δεν αναβάλλεται για κανέναν λόγο.

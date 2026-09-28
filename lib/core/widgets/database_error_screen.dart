@@ -17,7 +17,7 @@ import '../services/crash_log_service.dart';
 import '../services/settings_service.dart';
 import '../updates/update_manifest.dart';
 import '../updates/update_providers.dart';
-import '../utils/database_path_identity.dart';
+import '../utils/file_path_identity.dart';
 import '../utils/user_facing_error_messages.dart';
 import 'compact_tooltip.dart';
 import '../../features/database/widgets/database_newer_recovery_dialog.dart';
@@ -35,6 +35,7 @@ class DatabaseErrorScreen extends ConsumerStatefulWidget {
     required this.dbPath,
     required this.onRetry,
     @visibleForTesting this.probeAvailableInstallerForTest,
+    @visibleForTesting this.startRecoveryForTest,
   });
 
   final DatabaseInitResult result;
@@ -43,6 +44,13 @@ class DatabaseErrorScreen extends ConsumerStatefulWidget {
 
   /// Παράκαμψη ελέγχου διαθέσιμου installer (μόνο για τεστ).
   final Future<UpdateManifest?> Function()? probeAvailableInstallerForTest;
+
+  /// Παράκαμψη της αυτόματης διεξόδου (μόνο για τεστ).
+  ///
+  /// Οι πραγματικές διέξοδοι ανοίγουν διαλόγους και ρωτούν τη βάση· ένα τεστ
+  /// που θέλει να δει **ότι ξεκίνησαν** δεν πρέπει να εξαρτάται από αυτά.
+  @visibleForTesting
+  final void Function(DatabaseInitRecoveryKind kind)? startRecoveryForTest;
 
   @override
   ConsumerState<DatabaseErrorScreen> createState() =>
@@ -132,10 +140,55 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
   bool get _isMissingApplicationFile =>
       _effectiveRecoveryKind == DatabaseInitRecoveryKind.missingApplicationFile;
 
+  /// Η κορυφή της οθόνης λέει **τι συνέβη**, και δεν φωνάζει «βλάβη» όταν δεν
+  /// υπάρχει βλάβη.
+  ///
+  /// Το μπλόκο της αναβάθμισης είναι φρουρός που έκανε τη δουλειά του: η βάση
+  /// είναι σωστή, τα δεδομένα ακέραια, και η μόνη ενέργεια είναι η αναμονή. Ένα
+  /// κόκκινο «Σφάλμα» εκεί στέλνει τον χρήστη να ψάξει βλάβη που δεν υπάρχει —
+  /// και, χειρότερα, τον πείθει ότι κάτι χάλασε τη στιγμή που τον προστατεύσαμε.
+  /// Η βάση είναι σωστή και τα δεδομένα ακέραια — λείπει μόνο η απόφαση του
+  /// χρήστη. Ένα κόκκινο «Σφάλμα» εδώ τον στέλνει να ψάξει βλάβη που δεν
+  /// υπάρχει, και τον κάνει να διστάσει μπροστά σε μια απλή συγκατάθεση.
+  bool get _isSchemaUpgradeAwaitingConsent =>
+      _effectiveRecoveryKind == DatabaseInitRecoveryKind.schemaUpgradeConsent;
+
+  /// Ό,τι αφορά αναβάθμιση σχήματος: φρουρός που έκανε τη δουλειά του, όχι
+  /// βλάβη. Κοινή όψη, διαφορετικό κείμενο.
+  bool get _isSchemaUpgradeNotice =>
+      _isSchemaUpgradeBlocked || _isSchemaUpgradeAwaitingConsent;
+
+  IconData get _headlineIcon {
+    if (_isSchemaUpgradeBlocked) return Icons.hourglass_top_rounded;
+    if (_isSchemaUpgradeAwaitingConsent) return Icons.upgrade_rounded;
+    return Icons.error_outline;
+  }
+
+  String get _headlineText {
+    if (_isSchemaUpgradeBlocked) return 'Η αναβάθμιση περιμένει';
+    if (_isSchemaUpgradeAwaitingConsent) return 'Η βάση θέλει αναβάθμιση';
+    return 'Σφάλμα';
+  }
+
+  Color _headlineColor(ThemeData theme) => _isSchemaUpgradeNotice
+      ? theme.colorScheme.tertiary
+      : theme.colorScheme.error;
+
+  /// Η αναβάθμιση σχήματος σταμάτησε επειδή δουλεύουν ακόμη άλλοι σταθμοί.
+  bool get _isSchemaUpgradeBlocked =>
+      _effectiveRecoveryKind ==
+      DatabaseInitRecoveryKind.schemaUpgradeBlockedByOtherStations;
+
   /// Κάθε σφάλμα προσφέρει ΜΟΝΟ τη δική του διέξοδο: όταν λείπει αρχείο της
   /// εγκατάστασης, η βάση είναι μια χαρά και κάθε ενέργεια πάνω της αποτυγχάνει
   /// — η «Δημιουργία νέας βάσης» θα έσκαγε με το ίδιο ακριβώς σφάλμα.
-  bool get _shouldOfferDatabaseActions => !_isMissingApplicationFile;
+  ///
+  /// Το ίδιο, για αντίστροφο λόγο, όταν η αναβάθμιση μπλοκάρεται από άλλους
+  /// σταθμούς: η βάση είναι η σωστή και δεν της λείπει τίποτα. Η μόνη ενέργεια
+  /// που βγάζει νόημα είναι η αναμονή, και μια «Δημιουργία νέας βάσης» δίπλα σε
+  /// αυτό το μήνυμα είναι πρόσκληση να χαθεί η κοινή βάση για μια άδεια.
+  bool get _shouldOfferDatabaseActions =>
+      !_isMissingApplicationFile && !_isSchemaUpgradeBlocked;
 
   /// Η «Επαναδοκιμή» ξαναπροσπαθεί μόνο το άνοιγμα της βάσης· η μηχανή SQLite
   /// φορτώνεται μία φορά στην εκκίνηση, οπότε χωρίς επανεκκίνηση το σφάλμα
@@ -189,26 +242,60 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
     super.initState();
     _detailsScrollController = ScrollController();
     _loadRecentExistingPaths();
+    _startRecoveryForCurrentResult();
+  }
+
+  /// Η οθόνη επιβιώνει της αποτυχίας που τη γέννησε.
+  ///
+  /// Μια επαναδοκιμή μπορεί να φέρει **άλλο** σφάλμα χωρίς η οθόνη να
+  /// ξαναχτιστεί: κλειστό δίκτυο → επιλογή τοπικής βάσης → «η βάση θέλει
+  /// αναβάθμιση». Όσο οι διέξοδοι ξεκινούσαν μόνο στη γέννηση, το κείμενο
+  /// άλλαζε και ο χρήστης έμενε με κόκκινο «Σφάλμα» και κανένα κουμπί.
+  @override
+  void didUpdateWidget(covariant DatabaseErrorScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_recoveryFingerprint(oldWidget.result) ==
+        _recoveryFingerprint(widget.result)) {
+      return;
+    }
+    // Ό,τι είχε βρεθεί για το προηγούμενο σφάλμα δεν αφορά το καινούριο.
+    _availableInstaller = null;
+    _localOffer = null;
+    _loadRecentExistingPaths();
+    _startRecoveryForCurrentResult();
+  }
+
+  /// Ταυτότητα του σφάλματος — αλλάζει μόνο όταν αλλάζει πραγματικά η αιτία,
+  /// ώστε μια ανανέωση του γονέα να μην ξαναπροσφέρει τον ίδιο διάλογο.
+  static String _recoveryFingerprint(DatabaseInitResult result) =>
+      '${result.recoveryKind}|${result.status}|${result.path}'
+      '|${result.technicalCode}|${result.message}';
+
+  void _startRecoveryForCurrentResult() {
     if (_isNetworkUnreachable) {
       runBackgroundTask(_loadLocalDatabaseOffer());
     }
     if (_isMissingApplicationFile) {
       runBackgroundTask(_probeAvailableInstaller());
     }
-    if (_effectiveRecoveryKind ==
-        DatabaseInitRecoveryKind.schemaUpgradeConsent) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        unawaited(_offerSchemaUpgradeConsent());
-      });
+    final kind = _effectiveRecoveryKind;
+    if (kind != DatabaseInitRecoveryKind.schemaUpgradeConsent &&
+        kind != DatabaseInitRecoveryKind.databaseNewerThanApp) {
+      return;
     }
-    if (_effectiveRecoveryKind ==
-        DatabaseInitRecoveryKind.databaseNewerThanApp) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        unawaited(_offerNewerDatabaseRecovery());
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final forTest = widget.startRecoveryForTest;
+      if (forTest != null) {
+        forTest(kind);
+        return;
+      }
+      unawaited(
+        kind == DatabaseInitRecoveryKind.schemaUpgradeConsent
+            ? _offerSchemaUpgradeConsent()
+            : _offerNewerDatabaseRecovery(),
+      );
+    });
   }
 
   Future<void> _loadLocalDatabaseOffer() async {
@@ -252,6 +339,61 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
     setState(() => _availableInstaller = manifest);
   }
 
+  /// Η λίστα των υπολογιστών που κρατούν τη βάση, σε πλαίσιο.
+  ///
+  /// Τίτλος και περιεχόμενο μαζί: η επικεφαλίδα εξηγεί τι είναι η λίστα, και το
+  /// πλαίσιο τη σηκώνει πάνω από τα διαγνωστικά που ακολουθούν.
+  Widget _buildOpenApplicationsBox(ThemeData theme, String details) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.tertiary.withValues(alpha: 0.45),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.desktop_windows_outlined,
+                size: 18,
+                color: theme.colorScheme.tertiary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Ανοιχτές εφαρμογές αυτή τη στιγμή',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SelectableText(
+            details,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurface,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Η ένδειξη είναι ίχνος, όχι βεβαιότητα: μετά από απότομο κλείσιμο '
+            'ή πτώση δικτύου κάποιος μπορεί να φαίνεται εδώ ως τρία λεπτά.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _offerSchemaUpgradeConsent() async {
     await runSchemaUpgradeConsentRecovery(
       context: context,
@@ -283,7 +425,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
       if (path.isEmpty) continue;
       if (current != null &&
           current.isNotEmpty &&
-          databasePathsReferToSameFile(path, current)) {
+          pathsReferToSameFile(path, current)) {
         continue;
       }
       // Δικτυακή διαδρομή: μπαίνει ΧΩΡΙΣ έλεγχο, επίτηδες.
@@ -626,7 +768,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
     final offered = _shouldOfferLocalDatabase ? _localOffer?.path : null;
     if (offered == null) return _recentExistingPaths;
     return _recentExistingPaths
-        .where((path) => !databasePathsReferToSameFile(path, offered))
+        .where((path) => !pathsReferToSameFile(path, offered))
         .toList();
   }
 
@@ -827,17 +969,13 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(
-                Icons.error_outline,
-                size: 56,
-                color: theme.colorScheme.error,
-              ),
+              Icon(_headlineIcon, size: 56, color: _headlineColor(theme)),
               const SizedBox(height: 16),
               Text(
-                'Σφάλμα',
+                _headlineText,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.error,
+                  color: _headlineColor(theme),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -869,13 +1007,20 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
                         ],
                         if (details.isNotEmpty) ...[
                           const SizedBox(height: 16),
-                          SelectableText(
-                            details,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              height: 1.4,
+                          // Στο μπλόκο της αναβάθμισης τα «details» ΕΙΝΑΙ η
+                          // απάντηση στο μόνο ερώτημα του χρήστη — ποιον να
+                          // κλείσει. Μπαίνουν σε πλαίσιο αντί για γκρίζα ψιλά,
+                          // ώστε να τα βρίσκει το μάτι με τη μία.
+                          if (_isSchemaUpgradeBlocked)
+                            _buildOpenApplicationsBox(theme, details)
+                          else
+                            SelectableText(
+                              details,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                height: 1.4,
+                              ),
                             ),
-                          ),
                         ],
                         if (diagnostics.isNotEmpty) ...[
                           const SizedBox(height: 16),
@@ -913,7 +1058,12 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
                             ),
                           ),
                         ],
-                        if (widget.result.technicalCode != null &&
+                        // Ο «κωδικός» του μπλόκου είναι το «65→66», που το
+                        // μήνυμα λέει ήδη με λόγια. Τυπωμένος εδώ διαβάζεται ως
+                        // κωδικός βλάβης προς αναφορά — ακριβώς το αντίθετο από
+                        // το μήνυμα που θέλουμε να περάσει.
+                        if (!_isSchemaUpgradeBlocked &&
+                            widget.result.technicalCode != null &&
                             widget.result.technicalCode!.trim().isNotEmpty) ...[
                           const SizedBox(height: 12),
                           Text(
@@ -974,16 +1124,26 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
               ),
               const SizedBox(height: 16),
               CompactTooltip(
-                message:
-                    'Αντιγράφει στο πρόχειρο ολόκληρη την τεχνική αναφορά '
-                    '(μήνυμα, διαδρομή, runtime σφάλμα, stack trace).\n\n'
-                    'Χρήσιμο όταν χρειάζεται να στείλετε το πρόβλημα για '
-                    'διάγνωση ή υποστήριξη.',
+                message: _isSchemaUpgradeBlocked
+                    ? 'Αντιγράφει στο πρόχειρο ολόκληρη την τεχνική αναφορά '
+                          '(μήνυμα, διαδρομή, εκδόσεις, ανοιχτές '
+                          'εφαρμογές).\n\n'
+                          'Χρήσιμο αν θέλετε να στείλετε σε συνάδελφο τι '
+                          'ακριβώς περιμένει η εφαρμογή.'
+                    : 'Αντιγράφει στο πρόχειρο ολόκληρη την τεχνική αναφορά '
+                          '(μήνυμα, διαδρομή, runtime σφάλμα, stack '
+                          'trace).\n\n'
+                          'Χρήσιμο όταν χρειάζεται να στείλετε το πρόβλημα '
+                          'για διάγνωση ή υποστήριξη.',
                 waitDuration: const Duration(milliseconds: 350),
                 child: FilledButton.tonalIcon(
                   onPressed: () => _copyFullReport(context),
                   icon: const Icon(Icons.copy),
-                  label: const Text('Αντιγραφή πλήρους σφάλματος'),
+                  label: Text(
+                    _isSchemaUpgradeBlocked
+                        ? 'Αντιγραφή πλήρων στοιχείων'
+                        : 'Αντιγραφή πλήρους σφάλματος',
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1002,6 +1162,13 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
                     ? 'Κλείνει την εφαρμογή και την ανοίγει ξανά από την αρχή.\n\n'
                           'Χρησιμοποιήστε το όταν η βάση δεν απάντησε εγκαίρως '
                           '(timeout) και μια απλή επαναδοκιμή δεν αρκεί.'
+                    : _isSchemaUpgradeBlocked
+                    ? 'Ξαναρωτά ποιοι υπολογιστές έχουν τη βάση ανοιχτή.\n\n'
+                          'Πατήστε το αφού κλείσουν οι εφαρμογές που '
+                          'αναφέρονται πιο πάνω. Η ένδειξη μπορεί να δείχνει '
+                          'κάποιον ως ανοιχτό για δύο-τρία λεπτά μετά από '
+                          'απότομο κλείσιμο ή πτώση δικτύου — τότε αρκεί να '
+                          'ξαναπατήσετε σε λίγο.'
                     : _isNetworkUnreachable
                     ? 'Ξαναδοκιμάζει τη σύνδεση με τη δικτυακή διαδρομή.\n\n'
                           'Χρησιμοποιήστε το αφού αποκατασταθεί το δίκτυο ή '

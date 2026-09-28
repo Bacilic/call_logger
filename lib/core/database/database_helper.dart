@@ -6,8 +6,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../config/app_config.dart';
 import '../services/crash_log_service.dart';
+import '../services/session_liveness_mark.dart';
 import '../services/settings_service.dart';
 import '../utils/search_text_normalizer.dart';
+import '../utils/file_path_identity.dart';
 import 'database_access_probe.dart';
 import 'database_busy_timeout.dart';
 import 'timeout_database.dart';
@@ -22,6 +24,7 @@ import 'database_lock_recovery.dart';
 import 'database_schema_migrations.dart';
 import 'database_state_notice.dart';
 import 'lock_diagnostic_service.dart';
+import 'schema_upgrade_station_guard.dart';
 import 'schema_downgrade_compatibility.dart';
 import 'database_path_resolution.dart';
 import 'database_table_inspection.dart';
@@ -63,6 +66,14 @@ class DatabaseHelper {
   static void resetTestOpenSimulation() {
     testSimulatedRetriableOpenFailures = 0;
   }
+
+  /// «Ποιος άλλος σταθμός κρατά τη βάση;» — αντικαθίσταται στα τεστ.
+  ///
+  /// Η παραγωγή ρωτά πάντα τα ίχνη του φακέλου logs
+  /// ([otherStationsHoldingDatabase]). Τα τεστ δίνουν απάντηση χωρίς αρχεία,
+  /// ώστε ο κανόνας να ελέγχεται χωρίς κοινόχρηστο φάκελο.
+  @visibleForTesting
+  Future<List<SessionLivenessMark>> Function()? otherStationsProbeForTest;
 
   static final DatabaseHelper _instance = DatabaseHelper._();
 
@@ -707,8 +718,10 @@ class DatabaseHelper {
   /// και αξιολόγηση υποβάθμισης — χωρίς διαγνωστικά πρόσβασης, χωρίς
   /// επαναδοκιμές, χωρίς να ανοίξει το αρχείο για εγγραφή.
   ///
-  /// Αρχείο ΠΑΛΑΙΟΤΕΡΟ: συγκατάθεση πριν από μόνιμη αναβάθμιση σε ΝΕΑ
-  /// διαδρομή. Η ίδια διαδρομή με την τελευταία επιτυχημένη
+  /// Αρχείο ΠΑΛΑΙΟΤΕΡΟ: πρώτα ο φρουρός των σταθμών — όσο άλλος υπολογιστής
+  /// κρατά τη βάση ανοιχτή, η αναβάθμιση **απαγορεύεται** και δεν προσφέρεται
+  /// διαφυγή. Αν κανείς άλλος δεν είναι μέσα, ζητείται συγκατάθεση για μόνιμη
+  /// αναβάθμιση σε ΝΕΑ διαδρομή· η ίδια διαδρομή με την τελευταία επιτυχημένη
   /// (`getLastOpenedDatabasePath`) προχωρά σιωπηλά — δικλείδα για την
   /// καθημερινή βάση παραγωγής.
   Future<void> _requireSchemaVersionCompatibility(String dbPath) async {
@@ -730,9 +743,15 @@ class DatabaseHelper {
     }
     if (fileVersion >= kDatabaseSchemaVersion) return;
 
+    // Ο φρουρός των σταθμών προηγείται ΚΑΙ της δικλείδας της καθημερινής βάσης
+    // ΚΑΙ της αποθηκευμένης συγκατάθεσης: η συγκατάθεση απαντά «θέλω να
+    // αναβαθμιστεί αυτό το αρχείο», όχι «θέλω να αναβαθμιστεί τώρα που μέσα
+    // δουλεύουν άλλοι».
+    await _rejectSchemaUpgradeWhileOtherStationsHold(dbPath, fileVersion);
+
     final settings = SettingsService();
     final lastOpened = await settings.getLastOpenedDatabasePath();
-    if (lastOpened != null && _sameDatabasePath(lastOpened, dbPath)) {
+    if (lastOpened != null && pathsReferToSameFile(lastOpened, dbPath)) {
       return;
     }
 
@@ -765,6 +784,44 @@ class DatabaseHelper {
             'Έκδοση εφαρμογής: $kDatabaseSchemaVersion',
         path: dbPath,
         recoveryKind: DatabaseInitRecoveryKind.schemaUpgradeConsent,
+        technicalCode: '$fileVersion→$kDatabaseSchemaVersion',
+      ),
+    );
+  }
+
+  /// Απαγορεύει τη μόνιμη αναβάθμιση όσο άλλος σταθμός κρατά τη βάση.
+  ///
+  /// **Απαγόρευση, όχι προειδοποίηση.** Η αναβάθμιση δεν αναιρείται: σφραγίζει
+  /// το αρχείο σε νέα έκδοση και αφήνει έξω κάθε εφαρμογή παλαιότερης έκδοσης.
+  /// Ένα κουμπί «Συνέχεια παρ' όλα αυτά» εδώ θα μπορούσε μόνο να βλάψει.
+  ///
+  /// **Κανείς άλλος μέσα, καμία ενόχληση.** Όποιος δουλεύει μόνος δεν βλέπει
+  /// τίποτα — η ροή συνεχίζει ακριβώς όπως πριν.
+  Future<void> _rejectSchemaUpgradeWhileOtherStationsHold(
+    String dbPath,
+    int fileVersion,
+  ) async {
+    final probe = otherStationsProbeForTest ?? otherStationsHoldingDatabase;
+    final holders = await probe();
+    if (holders.isEmpty) return;
+
+    final now = DateTime.now();
+    throw DatabaseInitException(
+      DatabaseInitResult(
+        status: DatabaseStatus.corruptedOrInvalid,
+        message: schemaUpgradeBlockedMessage(
+          fileVersion: fileVersion,
+          appVersion: kDatabaseSchemaVersion,
+          stationCount: holders.length,
+        ),
+        // ΜΟΝΟ η λίστα: η διαδρομή και οι δύο εκδόσεις λέγονται ήδη από το
+        // μήνυμα και από το τμήμα «Διαδρομή» της οθόνης. Τυπωμένες και εδώ,
+        // έσπρωχναν προς τα κάτω τη μόνη γραμμή που χρειάζεται ο άνθρωπος:
+        // ποιον να κλείσει.
+        details: describeStationsHoldingDatabase(holders, now: now),
+        path: dbPath,
+        recoveryKind:
+            DatabaseInitRecoveryKind.schemaUpgradeBlockedByOtherStations,
         technicalCode: '$fileVersion→$kDatabaseSchemaVersion',
       ),
     );
@@ -831,15 +888,6 @@ class DatabaseHelper {
         schemaDowngrade: assessment,
       ),
     );
-  }
-
-  bool _sameDatabasePath(String a, String b) {
-    final na = a.trim().replaceAll('/', r'\');
-    final nb = b.trim().replaceAll('/', r'\');
-    if (Platform.isWindows) {
-      return na.toLowerCase() == nb.toLowerCase();
-    }
-    return na == nb;
   }
 
   /// Ταξινόμηση αρχείου πριν το άνοιγμα με version/onCreate — αποτρέπει εγγραφή

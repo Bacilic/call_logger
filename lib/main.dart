@@ -320,7 +320,9 @@ Future<void> _bootstrapAndRunApp() async {
     final log = CrashLogService.instanceOrNull;
     if (log == null || !log.isDiskAvailable) return false;
     return ShutdownTraceService.promoteOrphanedTrace(
-      logsDirectory: log.logsDirectory,
+      workingDirectory: await ShutdownTraceService.localWorkingDirectory(),
+      // Η παλιά θέση, για ένα ίχνος που έμεινε εκεί από προηγούμενη έκδοση.
+      legacySharedDirectory: log.logsDirectory,
       appendToSessionLog: log.appendSessionText,
     );
   });

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/database/database_file_bundle.dart';
 import '../../../core/database/database_file_classifier.dart';
+import '../../../core/utils/file_path_identity.dart';
 
 /// Ταξινομητής αρχείου βάσης (προεπιλογή: [classifyDatabaseFile]).
 typedef DatabaseFileClassifierFn =
@@ -96,7 +97,7 @@ class DatabaseFileReplacement {
   }) async {
     final target = p.normalize(p.absolute(targetDatabasePath));
     final source = p.normalize(p.absolute(sourceDatabasePath));
-    if (_samePath(target, source)) {
+    if (pathsReferToSameFile(target, source)) {
       return const DatabaseFileReplacementResult.success();
     }
 
@@ -187,12 +188,6 @@ class DatabaseFileReplacement {
         'Αποτυχία εγγραφής βάσης στον προορισμό: $e',
       );
     }
-  }
-
-  static bool _samePath(String a, String b) {
-    final na = p.normalize(a).replaceAll('/', '\\').toLowerCase();
-    final nb = p.normalize(b).replaceAll('/', '\\').toLowerCase();
-    return na == nb;
   }
 
   static Future<void> _defaultCommitTemp(String from, String to) =>

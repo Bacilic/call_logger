@@ -302,7 +302,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   /// στιγμή του κλεισίματος ήταν και περιττές και επιρρεπείς σε απόκλιση.
   Future<ShutdownTraceService?> _createTraceService() async {
     try {
-      return ShutdownTraceService.forCrashLog();
+      return await ShutdownTraceService.forCrashLog();
     } catch (_) {
       return null;
     }

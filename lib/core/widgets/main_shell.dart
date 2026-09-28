@@ -37,6 +37,7 @@ import 'main_shell_nav_icons.dart';
 import 'quick_call_fab.dart';
 import '../services/current_operator.dart';
 import '../services/settings_service.dart';
+import 'silent_log_chip.dart';
 import '../about/widgets/version_chip.dart';
 import '../../features/operators/widgets/active_operator_chip.dart';
 import '../../features/operators/widgets/operator_change_refresh_listener.dart';
@@ -681,6 +682,7 @@ class MainShellState extends ConsumerState<MainShell> {
                       ),
                     ),
                   ),
+                  SilentLogChip(extended: railExtended),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: ActiveOperatorChip(extended: railExtended),

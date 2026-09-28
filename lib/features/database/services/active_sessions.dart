@@ -69,9 +69,16 @@ List<ActiveSession> activeSessions({
 /// όταν η βάση **δεν** είναι ανοιχτή (π.χ. αναβάθμιση σχήματος στην εκκίνηση).
 ///
 /// Φτωχότερη από τη βάση, αλλά αρκετή για τον φρουρό: σταθμός, έκδοση, πόσο
-/// πρόσφατα. Δεν ξέρει **ποιος** κάθεται στον σταθμό, και δεν ξεχωρίζει δύο
-/// εφαρμογές στον ίδιο υπολογιστή (το ίχνος είναι ένα ανά σταθμό) — γι' αυτό
-/// «δικό μου» είναι ό,τι γράφτηκε από τον δικό μου σταθμό.
+/// πρόσφατα. Δεν ξέρει **ποιος** κάθεται στον σταθμό.
+///
+/// **Μόνο όσοι κρατούν ΤΗ ΔΙΚΗ ΜΑΣ βάση.** Ο φάκελος `logs` είναι ένας για όλες
+/// τις βάσεις του ίδιου καταλόγου, οπότε χωρίς αυτό το φίλτρο ο συνάδελφος που
+/// δουλεύει στη διπλανή βάση θα εμφανιζόταν σαν να κρατά τη δική μας. Ίχνος που
+/// δεν δηλώνει βάση (παλαιότερη έκδοση) μετράει — η άγνοια δεν κρύβει κανέναν.
+///
+/// **«Δικό μου» είναι η δική μου ΕΚΤΕΛΕΣΗ**, όχι ο σταθμός μου: η δοκιμαστική
+/// έκδοση δίπλα στην κανονική είναι δεύτερος κάτοχος του αρχείου, και ο
+/// συντηρητής πρέπει να τη δει πριν αγγίξει τη βάση.
 ///
 /// Φρεσκάδα: ο **ίδιος** κανόνας με την παρουσία στη βάση
 /// ([OperatorPresence.onlineWindow]). Ίχνος που έπαψε να ανανεώνεται είναι
@@ -80,13 +87,15 @@ List<ActiveSession> activeSessionsFromLivenessMarks({
   required List<SessionLivenessMark> marks,
   required DateTime now,
   required String myStation,
+  String? myDatabase,
+  String? myInstance,
 }) {
-  final me = myStation.trim().toLowerCase();
   final out = <ActiveSession>[];
   for (final mark in marks) {
     if (now.difference(mark.lastSeen) >= OperatorPresence.onlineWindow) {
       continue;
     }
+    if (!mark.holdsDatabase(myDatabase)) continue;
     final station = mark.station.trim();
     final version = mark.version.trim();
     out.add(
@@ -94,7 +103,7 @@ List<ActiveSession> activeSessionsFromLivenessMarks({
         station: station.isEmpty ? 'άγνωστος σταθμός' : station,
         lastSeenAt: mark.lastSeen,
         appVersion: version.isEmpty ? null : version,
-        isMine: me.isNotEmpty && station.toLowerCase() == me,
+        isMine: mark.isSameRunAs(station: myStation, instance: myInstance),
       ),
     );
   }

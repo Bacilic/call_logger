@@ -15,8 +15,9 @@ import '../../models/department_model.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import 'department_color_palette.dart';
 import 'department_form_dialog.dart';
-import '../../services/building_map_floor_load_state.dart';
 import '../../services/building_map_placement_loss.dart';
+import '../../services/department_floor_change_outcome.dart';
+import 'department_floor_change_dialog.dart';
 import 'bulk_user_action_pickers.dart';
 
 /// Ροή αποθήκευσης της φόρμας τμήματος: μοντέλο, συγκρούσεις κοινόχρηστων,
@@ -97,15 +98,37 @@ class DepartmentFormSave {
     }
 
     final effectiveFloorId = leavesTheBuildingMap ? null : host.selectedFloorId;
-    final clearBuildingMapPlacement =
-        leavesTheBuildingMap ||
-        shouldClearBuildingMapPlacement(
-          isEdit: host.isEdit,
-          selectedFloorId: host.selectedFloorId,
-          snapshotFloorId: host.snapFloorId,
-          initialFloorId: ini?.floorId,
-          floorLoadState: host.floorLoadState,
-        );
+    final placementFloorId = int.tryParse(ini?.mapFloor?.trim() ?? '');
+    final floorChange = resolveDepartmentFloorChange(
+      isEdit: host.isEdit,
+      leavesTheBuildingMap: leavesTheBuildingMap,
+      selectedFloorId: host.selectedFloorId,
+      snapshotFloorId: host.snapFloorId,
+      initialFloorId: ini?.floorId,
+      hasDrawnPlacement: ini?.isMapped ?? false,
+      placementFloorId: placementFloorId,
+      floorLoadState: host.floorLoadState,
+    );
+
+    // Η καρτέλα δεν δείχνει κάτοψη: χωρίς αυτή την ερώτηση το ορθογώνιο θα
+    // ταξίδευε αυτούσιο σε σχέδιο που ο χρήστης δεν είδε ποτέ.
+    var clearBuildingMapPlacement =
+        floorChange == DepartmentFloorChangeAction.clearPlacement;
+    var movesPlacementToNewFloor = false;
+    if (floorChange == DepartmentFloorChangeAction.askMoveOrClear) {
+      final choice = await showDepartmentFloorChangeDialog(
+        host.context,
+        departmentName: name,
+        fromFloorLabel:
+            _floorLabelForSaveConfirmation(placementFloorId) ?? 'άγνωστος',
+        toFloorLabel:
+            _floorLabelForSaveConfirmation(host.selectedFloorId) ?? 'άγνωστος',
+      );
+      if (choice == null || !host.mounted) return;
+      clearBuildingMapPlacement =
+          choice == DepartmentFloorChangeChoice.clearPlacement;
+      movesPlacementToNewFloor = !clearBuildingMapPlacement;
+    }
 
     // Ό,τι έχει μείνει πληκτρολογημένο χωρίς να γίνει chip μετράει κανονικά —
     // ο χρήστης δεν πρέπει να χάνει γραμμένο αναγνωριστικό επειδή πάτησε
@@ -233,14 +256,26 @@ class DepartmentFormSave {
           );
           return;
         }
-        if (clearBuildingMapPlacement && ini?.id != null) {
-          final fid = int.tryParse(ini!.mapFloor?.trim() ?? '');
-          final removedHex = tryParseDepartmentHex(ini.color);
-          if (fid != null && removedHex != null) {
-            FloorColorAssignmentService.instance.removeColorFromFloor(
-              fid,
-              removedHex,
-            );
+        // Το χρώμα ακολουθεί τη σχεδίαση. Είτε σβήνει είτε μετακομίζει,
+        // ελευθερώνεται από τον παλιό όροφο — και στη μεταφορά δηλώνεται στον
+        // νέο, αλλιώς δύο τμήματα της ίδιας κάτοψης θα έπαιρναν το ίδιο.
+        final placementLeavesOldFloor =
+            clearBuildingMapPlacement || movesPlacementToNewFloor;
+        if (placementLeavesOldFloor && ini?.id != null) {
+          final hex = tryParseDepartmentHex(ini!.color);
+          if (hex != null) {
+            if (placementFloorId != null) {
+              FloorColorAssignmentService.instance.removeColorFromFloor(
+                placementFloorId,
+                hex,
+              );
+            }
+            if (movesPlacementToNewFloor && effectiveFloorId != null) {
+              FloorColorAssignmentService.instance.overrideColor(
+                effectiveFloorId,
+                hex,
+              );
+            }
           }
         }
       } else {

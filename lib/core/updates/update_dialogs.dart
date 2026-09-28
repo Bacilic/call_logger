@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../about/providers/changelog_provider.dart';
+import '../../features/database/widgets/schema_changing_update_notice.dart';
 import '../utils/greek_date_format.dart';
 import 'update_check_result.dart';
 import 'update_installer_service.dart';
@@ -94,6 +95,12 @@ Future<void> runUpdatePrepareFlow(
   BuildContext context,
   UpdateManifest manifest,
 ) async {
+  // Ένα σημείο για όλες τις πόρτες: εκκίνηση, Ιστορικό Αλλαγών, οθόνη
+  // σφάλματος βάσης. Όποια πόρτα προστεθεί αργότερα κληρονομεί τον φρουρό
+  // χωρίς να τον ξαναγράψει.
+  if (!await confirmSchemaChangingUpdate(context, manifest)) return;
+  if (!context.mounted) return;
+
   final container = ProviderScope.containerOf(context);
   final progress = ValueNotifier<String>('Προετοιμασία…');
 

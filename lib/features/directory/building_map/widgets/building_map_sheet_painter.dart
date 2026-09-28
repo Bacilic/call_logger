@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../building_map_effective_shape.dart';
 import '../building_map_label_layout.dart';
 import '../providers/building_map_providers.dart';
 import '../../models/department_model.dart';
@@ -183,48 +184,35 @@ class BuildingMapSheetPainter extends CustomPainter {
     canvas.translate(-cx, -cy);
 
     for (final d in departments) {
-      if ((d.mapFloor ?? '') != sheetIdString) continue;
       if (d.id != null && hiddenDepartmentIds.contains(d.id)) continue;
+      final shape = resolveMapDepartmentShape(
+        dep: d,
+        sheetIdString: sheetIdString,
+        draftShape: draftShape,
+        toolMode: toolMode,
+        highlightDepartmentId: highlightDepartmentId,
+      );
+      if (shape == null) continue;
       final isEditingSelectedDraft =
-          toolMode == MapToolMode.edit &&
-          draftShape != null &&
-          highlightDepartmentId != null &&
-          d.id == highlightDepartmentId;
-      final nx = isEditingSelectedDraft ? draftShape!.x : d.mapX;
-      final ny = isEditingSelectedDraft ? draftShape!.y : d.mapY;
-      final nw = isEditingSelectedDraft ? draftShape!.width : d.mapWidth;
-      final nh = isEditingSelectedDraft ? draftShape!.height : d.mapHeight;
-      if (nx == null || ny == null || nw == null || nh == null) continue;
-      if (nw <= 0 || nh <= 0) continue;
-      final effectiveRotation = isEditingSelectedDraft
-          ? draftShape!.rotation
-          : d.mapRotation;
-      final effectiveLabelOffsetX = isEditingSelectedDraft
-          ? draftShape!.labelOffsetX
-          : d.mapLabelOffsetX;
-      final effectiveLabelOffsetY = isEditingSelectedDraft
-          ? draftShape!.labelOffsetY
-          : d.mapLabelOffsetY;
-      final effectiveAnchorOffsetX = isEditingSelectedDraft
-          ? draftShape!.anchorOffsetX
-          : d.mapAnchorOffsetX;
-      final effectiveAnchorOffsetY = isEditingSelectedDraft
-          ? draftShape!.anchorOffsetY
-          : d.mapAnchorOffsetY;
-      final effectiveFontScale = isEditingSelectedDraft
-          ? draftShape!.labelFontScale
-          : effectiveMapLabelFontScale(d.mapLabelFontScale);
-      final effectiveLabelWidth = isEditingSelectedDraft
-          ? draftShape!.labelWidth
-          : effectiveMapLabelWidth(d.mapLabelWidth);
-      final effectiveLabelHeight = isEditingSelectedDraft
-          ? draftShape!.labelHeight
-          : effectiveMapLabelHeight(d.mapLabelHeight);
+          shape.isDraftGoverned && toolMode == MapToolMode.edit;
+      // Στη Σχεδίαση το ίδιο το σχήμα το ζωγραφίζει το πορτοκαλί προσχέδιο
+      // παρακάτω· εδώ χρειαζόμαστε μόνο την ετικέτα του, ώστε το όνομα να
+      // φαίνεται από τη στιγμή που ορίζεται το ορθογώνιο.
+      final drawsDepartmentRect =
+          !(shape.isDraftGoverned && toolMode == MapToolMode.draw);
+      final effectiveRotation = shape.rotation;
+      final effectiveLabelOffsetX = shape.labelOffsetX;
+      final effectiveLabelOffsetY = shape.labelOffsetY;
+      final effectiveAnchorOffsetX = shape.anchorOffsetX;
+      final effectiveAnchorOffsetY = shape.anchorOffsetY;
+      final effectiveFontScale = shape.labelFontScale;
+      final effectiveLabelWidth = shape.labelWidth;
+      final effectiveLabelHeight = shape.labelHeight;
       final r = Rect.fromLTWH(
-        nx * size.width,
-        ny * size.height,
-        nw * size.width,
-        nh * size.height,
+        shape.x * size.width,
+        shape.y * size.height,
+        shape.width * size.width,
+        shape.height * size.height,
       );
       final isHovered =
           toolMode == MapToolMode.select && hoveredDepartmentId == d.id;
@@ -260,13 +248,15 @@ class BuildingMapSheetPainter extends CustomPainter {
           border: Paint()..color = Colors.transparent,
         );
       }
-      _drawRotatedRect(
-        canvas: canvas,
-        rect: r,
-        radians: effectiveRotation,
-        fill: paint,
-        border: border,
-      );
+      if (drawsDepartmentRect) {
+        _drawRotatedRect(
+          canvas: canvas,
+          rect: r,
+          radians: effectiveRotation,
+          fill: paint,
+          border: border,
+        );
+      }
       final labelCenter = Offset(
         r.center.dx + ((effectiveLabelOffsetX ?? 0.0) * size.width),
         r.center.dy + ((effectiveLabelOffsetY ?? 0.0) * size.height),

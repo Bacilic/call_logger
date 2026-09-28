@@ -8,6 +8,8 @@ import 'audit_diff_helper.dart';
 import 'audit_service.dart';
 import 'calls_search_index.dart';
 import 'knowledge_base_repository.dart';
+import 'operator_settings_repository.dart';
+import 'settings_repository.dart';
 import '../../features/knowledge/models/knowledge_article.dart';
 import '../../features/tasks/models/task.dart';
 import '../utils/lexicon_word_metrics.dart';
@@ -306,6 +308,27 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 66 && newVersion >= 66) {
     await migrateDatabaseToV66(db);
   }
+  if (oldVersion < 67 && newVersion >= 67) {
+    await migrateDatabaseToV67(db);
+  }
+}
+
+/// v67: τα κλειδιά API παύουν να είναι αναγνώσιμα μέσα στο αρχείο της βάσης.
+///
+/// Σφραγίζει ό,τι γράφτηκε πριν μπει το σφράγισμα — τα δύο κοινά κλειδιά και
+/// το προσωπικό κλειδί ΤΝ κάθε χρήστη. Από εδώ και πέρα το σφράγισμα γίνεται
+/// στην ίδια την εγγραφή, οπότε αυτή η μετάπτωση αφορά μόνο το παρελθόν.
+///
+/// **Η ανεβασμένη έκδοση είναι μέρος της δουλειάς, όχι τυπικότητα.** Ένας
+/// σταθμός με παλιότερη εφαρμογή θα διάβαζε τη σφραγισμένη τιμή σαν να ήταν
+/// το κλειδί και θα την έστελνε στο Lansweeper. Με την αύξηση, ο φρουρός
+/// «νεότερο αρχείο» τον σταματά και του λέει να ενημερωθεί.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες — ό,τι φέρει ήδη σφραγίδα
+/// προσπερνιέται.
+Future<void> migrateDatabaseToV67(Database db) async {
+  await SettingsRepository(db).sealUnsealedSecrets();
+  await OperatorSettingsRepository(db).sealUnsealedSecrets();
 }
 
 /// v66: η κλήση θυμάται τον τίτλο της.

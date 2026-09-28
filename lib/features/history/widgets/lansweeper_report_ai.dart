@@ -37,7 +37,10 @@ class LansweeperReportAi {
     if (host.lastPrefilledKey == signature) return;
     host.lastPrefilledKey = signature;
 
+    // Ο τίτλος έρχεται από την πρώτη κλήση, όχι συνδυασμένος: το αίτημα έχει
+    // έναν τίτλο, και η πρώτη κλήση είναι αυτή που το ονοματίζει.
     final title = LansweeperAiPresenter.prefillTitle(
+      storedTitle: primary.call.title,
       category: (primary.call.category ?? '').trim(),
       id: primary.call.id,
     );

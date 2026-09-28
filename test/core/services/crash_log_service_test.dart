@@ -14,6 +14,9 @@ void main() {
   final fixedNow = DateTime(2026, 7, 11, 9, 41, 0);
 
   const thisStation = 'ΣΤΑΘΜΟΣ-ΔΟΚΙΜΗΣ';
+  // Ρητή ταυτότητα εκτέλεσης: η προεπιλογή διαβάζει τη διαδρομή του
+  // εκτελέσιμου, οπότε το όνομα του αρχείου θα άλλαζε ανά μηχάνημα.
+  const thisInstance = 'ΑΝΤΙΓΡΑΦΟ-ΔΟΚΙΜΗΣ';
 
   setUp(() async {
     // Καρφωμένος σταθμός: το όνομα του ίχνους εξαρτάται από αυτόν, και ένα
@@ -27,6 +30,7 @@ void main() {
       logsDirectory: logsDir.path,
       appVersion: '0.22.2-test',
       now: () => fixedNow,
+      instanceId: thisInstance,
     );
   });
 
@@ -37,8 +41,14 @@ void main() {
     }
   });
 
-  /// Το ίχνος «τρέχω τώρα» αυτού του σταθμού.
+  /// Το ίχνος «τρέχω τώρα» αυτής της εκτέλεσης.
   File lockFile() => File(
+    '${logsDir.path}${Platform.pathSeparator}'
+    '${CrashLogService.sessionLockFileNameFor(thisStation, thisInstance)}',
+  );
+
+  /// Το ίχνος όπως το ονόμαζε η έκδοση ΠΡΙΝ μπει η εκτέλεση στο όνομα.
+  File legacyLockFile() => File(
     '${logsDir.path}${Platform.pathSeparator}'
     '${CrashLogService.sessionLockFileNameFor(thisStation)}',
   );
@@ -306,6 +316,14 @@ void main() {
           reason: greekExpectMsg('Η χαμένη εκτέλεση είναι κρίσιμο συμβάν'),
         );
         expect(lockFile().existsSync(), isTrue);
+        final mark = SessionLivenessMark.decode(lockFile().readAsStringSync());
+        expect(
+          mark?.instance,
+          thisInstance,
+          reason: greekExpectMsg(
+            'Το νέο ίχνος δηλώνει ποια εκτέλεση το έγραψε',
+          ),
+        );
       },
     );
 
@@ -328,6 +346,37 @@ void main() {
         expect(content, contains('σταθμός PC-3'));
         expect(content, contains('ξεκίνησε 11/07/2026 08:12'));
         expect(content, contains('6 ώρες και 41 λεπτά'));
+      },
+    );
+
+    test(
+      'onStartup — το ίχνος της ΠΡΟΗΓΟΥΜΕΝΗΣ ονοματοδοσίας αναφέρεται και μαζεύεται',
+      () async {
+        // Η έκδοση πριν μπει η εκτέλεση στο όνομα άφηνε «session_<σταθμός>.lock».
+        // Χωρίς μάζεμα θα έμενε για πάντα στον κοινόχρηστο φάκελο, και για τρία
+        // λεπτά μετά από κάθε εκκίνηση θα περνούσε για ζωντανός συνάδελφος.
+        await legacyLockFile().writeAsString(
+          SessionLivenessMark(
+            station: thisStation,
+            version: '0.55.0',
+            startedAt: DateTime(2026, 9, 20, 9, 0),
+            lastSeen: DateTime(2026, 9, 20, 9, 45),
+          ).encode(),
+        );
+
+        await service.onStartup(retentionCount: 14);
+
+        expect(
+          legacyLockFile().existsSync(),
+          isFalse,
+          reason: greekExpectMsg('Το ίχνος της παλιάς μορφής δεν μένει πίσω'),
+        );
+        expect(lockFile().existsSync(), isTrue);
+        expect(
+          todayLogFile().readAsStringSync(),
+          contains('έκδοση 0.55.0'),
+          reason: greekExpectMsg('Η χαμένη εκτέλεση εξακολουθεί να αναφέρεται'),
+        );
       },
     );
 

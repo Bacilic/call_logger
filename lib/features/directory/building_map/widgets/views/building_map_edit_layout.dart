@@ -4,14 +4,41 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../core/models/building_map_floor.dart';
 import '../../../models/department_model.dart';
 import '../../providers/building_map_providers.dart';
+import '../../services/building_map_floor_ordering.dart';
+import '../../services/building_map_placement_replacement.dart';
 import '../building_map_edit_toolbar.dart';
 
 /// Στήλη στοιχείων επεξεργασίας: μπάρα εργαλείων, επιλογή τμήματος.
-String _departmentName(List<DepartmentModel> departments, int id) {
+DepartmentModel? _departmentById(List<DepartmentModel> departments, int id) {
   for (final d in departments) {
-    if (d.id == id) return d.name;
+    if (d.id == id) return d;
   }
-  return 'Τμήμα #$id';
+  return null;
+}
+
+/// Τι θα πάθει η αποθηκευμένη θέση αν σχεδιάσεις τώρα — `null` όταν δεν
+/// υπάρχει τίποτα να αντικατασταθεί.
+String? _placementWarning(
+  DepartmentModel dept,
+  int? currentSheetId,
+  List<BuildingMapFloor> floors,
+) {
+  if (currentSheetId == null) return null;
+  final replacement = resolveBuildingMapPlacementReplacement(
+    department: dept,
+    targetSheetId: currentSheetId,
+  );
+  if (replacement.replacesPlacementOnThisSheet) {
+    return ' — έχει ήδη θέση εδώ· νέα σχεδίαση την αντικαθιστά';
+  }
+  if (!replacement.movesFromAnotherSheet) return null;
+  for (final f in floors) {
+    if (f.id == replacement.previousFloorId) {
+      return ' — είναι σχεδιασμένο στον όροφο «${buildingMapFloorDisplayLabel(f)}»·'
+          ' η σχεδίαση εδώ το μετακομίζει';
+    }
+  }
+  return ' — δείχνει σε όροφο που δεν υπάρχει πια';
 }
 
 class BuildingMapEditLayout extends ConsumerWidget {
@@ -33,6 +60,12 @@ class BuildingMapEditLayout extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final deptToMap = ref.watch(buildingMapSelectedDepartmentIdToMapProvider);
+    final selected = deptToMap == null
+        ? null
+        : _departmentById(activeDepartments, deptToMap);
+    final warning = selected == null
+        ? null
+        : _placementWarning(selected, currentSheetId, floors);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -63,12 +96,19 @@ class BuildingMapEditLayout extends ConsumerWidget {
                         TextSpan(
                           text: deptToMap == null
                               ? 'Κανένα'
-                              : _departmentName(activeDepartments, deptToMap),
+                              : (selected?.name ?? 'Τμήμα #$deptToMap'),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
+                        if (warning != null)
+                          TextSpan(
+                            text: warning,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
                       ],
                     ),
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),

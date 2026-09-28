@@ -41,6 +41,9 @@ Future<void> _pumpGate(
                 context,
                 actionLabel: actionLabel,
                 loadSessions: () async => sessions,
+                // Αυτά τα τεστ φυλάνε τι κάνει ο φρουρός ΟΤΑΝ βλέπει· η
+                // περίπτωση της άγνοιας έχει το δικό της αρχείο.
+                canObserve: () => true,
               );
               onResult(ok);
             },
