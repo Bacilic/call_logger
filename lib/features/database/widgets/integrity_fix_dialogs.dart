@@ -11,6 +11,7 @@ import '../models/database_integrity_finding.dart';
 import '../models/integrity_fix_models.dart';
 import '../providers/active_sessions_provider.dart';
 import '../services/active_sessions.dart';
+import '../../../core/database/database_v1_schema.dart';
 
 /// Επιβεβαίωση μονής ή μαζικής επιδιόρθωσης (confirm-only).
 Future<bool> showIntegrityConfirmDialog(
@@ -691,7 +692,12 @@ class _OtherSessionsNoticeState extends State<_OtherSessionsNotice> {
               const SizedBox(height: 4),
               for (final session in others)
                 Text(
-                  describeActiveSession(session, now: now, myAppVersion: mine),
+                  describeActiveSession(
+                    session,
+                    now: now,
+                    myAppVersion: mine,
+                    databaseSchemaVersion: databaseSchemaVersionV1,
+                  ),
                   style: theme.textTheme.bodySmall,
                 ),
             ],

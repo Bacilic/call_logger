@@ -13,6 +13,7 @@ class LinkableText extends StatefulWidget {
     this.maxLines,
     this.overflow,
     this.targetOpener,
+    this.askBeforeOpening,
   });
 
   final String text;
@@ -22,6 +23,10 @@ class LinkableText extends StatefulWidget {
   final TextOverflow? overflow;
   final LinkableTargetOpener? targetOpener;
 
+  /// Αν θα ερωτηθεί ο χρήστης πριν ανοίξει σύνδεσμος· null = η προσωπική
+  /// ρύθμιση. Υπάρχει για τα τεστ, όπως και ο [targetOpener].
+  final AskBeforeOpeningLinksFn? askBeforeOpening;
+
   @override
   State<LinkableText> createState() => LinkableTextState();
 }
@@ -29,6 +34,7 @@ class LinkableText extends StatefulWidget {
 class LinkableTextState extends State<LinkableText> {
   late final LinkableSpanEngine _engine = LinkableSpanEngine(
     targetOpener: widget.targetOpener,
+    askBeforeOpening: widget.askBeforeOpening,
   );
 
   @override

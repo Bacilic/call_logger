@@ -33,7 +33,13 @@ void main() {
       final opener = LinkableTargetOpener(launchUrl: urlRecorder.launch);
 
       await tester.pumpWidget(
-        _wrap(LinkableText(text: 'Σημείωση: $url', targetOpener: opener)),
+        _wrap(
+          LinkableText(
+            text: 'Σημείωση: $url',
+            targetOpener: opener,
+            askBeforeOpening: () async => false,
+          ),
+        ),
       );
 
       final state = tester.state<LinkableTextState>(find.byType(LinkableText));
@@ -51,7 +57,13 @@ void main() {
       final opener = LinkableTargetOpener(launchUrl: urlRecorder.launch);
 
       await tester.pumpWidget(
-        _wrap(LinkableText(text: 'Δες $url εδώ', targetOpener: opener)),
+        _wrap(
+          LinkableText(
+            text: 'Δες $url εδώ',
+            targetOpener: opener,
+            askBeforeOpening: () async => false,
+          ),
+        ),
       );
 
       final richText = tester.widget<RichText>(find.byType(RichText));
@@ -93,6 +105,117 @@ void main() {
       final richText = tester.widget<RichText>(find.byType(RichText));
       expect(richText.maxLines, 2);
       expect(richText.overflow, TextOverflow.ellipsis);
+    });
+  });
+
+  group('LinkableText — ερώτηση πριν από το άνοιγμα', () {
+    testWidgets(
+      'διαδρομή δικτύου: η ερώτηση δείχνει τον προορισμό και η Ακύρωση δεν '
+      'αγγίζει καθόλου τη διαδρομή',
+      (tester) async {
+        const path = r'\\XENOS-PC\share\file.txt';
+        final probed = <String>[];
+        final opener = LinkableTargetOpener(
+          fileExists: (p) async {
+            probed.add(p);
+            return true;
+          },
+          directoryExists: (p) async {
+            probed.add(p);
+            return false;
+          },
+          revealFileInExplorer: (p) async => probed.add('reveal:$p'),
+          openFolderInExplorer: (p) async => probed.add('open:$p'),
+        );
+
+        await tester.pumpWidget(
+          _wrap(
+            LinkableText(
+              text: 'Δες το $path',
+              targetOpener: opener,
+              askBeforeOpening: () async => true,
+            ),
+          ),
+        );
+
+        final state = tester.state<LinkableTextState>(
+          find.byType(LinkableText),
+        );
+        final tap = state.triggerLinkTap(path);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Σύνδεση σε υπολογιστή του δικτύου;'), findsOneWidget);
+        expect(find.text(path), findsOneWidget);
+        expect(find.textContaining('«XENOS-PC»'), findsOneWidget);
+
+        await tester.tap(find.text('Ακύρωση'));
+        await tester.pumpAndSettle();
+        await tap;
+
+        expect(
+          probed,
+          isEmpty,
+          reason:
+              'με την Ακύρωση ο υπολογιστής δεν πρέπει να επικοινωνήσει '
+              'καθόλου με το ξένο μηχάνημα — ούτε για έλεγχο ύπαρξης',
+        );
+      },
+    );
+
+    testWidgets('ιστοσελίδα: το «Άνοιγμα» ανοίγει τον σύνδεσμο', (
+      tester,
+    ) async {
+      const url = 'https://example.com/ticket/5';
+      final urlRecorder = _RecordingUrlOpener();
+      final opener = LinkableTargetOpener(launchUrl: urlRecorder.launch);
+
+      await tester.pumpWidget(
+        _wrap(
+          LinkableText(
+            text: 'Σημείωση: $url',
+            targetOpener: opener,
+            askBeforeOpening: () async => true,
+          ),
+        ),
+      );
+
+      final state = tester.state<LinkableTextState>(find.byType(LinkableText));
+      final tap = state.triggerLinkTap(url);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Άνοιγμα ιστοσελίδας;'), findsOneWidget);
+      expect(urlRecorder.launchedUri, isNull);
+
+      await tester.tap(find.text('Άνοιγμα'));
+      await tester.pumpAndSettle();
+      await tap;
+
+      expect(urlRecorder.launchedUri, Uri.parse(url));
+    });
+
+    testWidgets('με κλειστή την ερώτηση ανοίγει κατευθείαν, χωρίς διάλογο', (
+      tester,
+    ) async {
+      const url = 'https://example.com/direct';
+      final urlRecorder = _RecordingUrlOpener();
+      final opener = LinkableTargetOpener(launchUrl: urlRecorder.launch);
+
+      await tester.pumpWidget(
+        _wrap(
+          LinkableText(
+            text: 'Σημείωση: $url',
+            targetOpener: opener,
+            askBeforeOpening: () async => false,
+          ),
+        ),
+      );
+
+      final state = tester.state<LinkableTextState>(find.byType(LinkableText));
+      await state.triggerLinkTap(url);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(urlRecorder.launchedUri, Uri.parse(url));
     });
   });
 }

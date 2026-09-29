@@ -14,6 +14,8 @@ import '../services/shutdown_coordinator.dart';
 import '../services/shutdown_runner.dart';
 import '../services/shutdown_trace_service.dart';
 import '../services/crash_log_service.dart';
+import '../services/station_name.dart';
+import '../services/station_shutdown_request.dart';
 import '../database/database_file_classifier.dart';
 import '../database/database_helper.dart';
 import '../database/database_init_result.dart';
@@ -25,6 +27,7 @@ import '../../features/history/widgets/lansweeper/lansweeper_report_launcher.dar
 import 'app_keyboard_shortcuts.dart';
 import 'main_shell.dart';
 import 'shutdown_progress_screen.dart';
+import 'shutdown_request_notice.dart';
 
 /// Root-level Shortcuts και Actions για την εφαρμογή.
 /// Κρατά σε state το τρέχον αποτέλεσμα βάσης και ξανατρέχει τους ελέγχους
@@ -87,6 +90,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
         windowManager.addListener(this);
       } on MissingPluginException catch (_) {}
       appCloseController.registerUiHandler(_onCloseRequestedFromUi);
+      _listenForShutdownRequests();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _warnIfMissingStartupAssets();
       });
@@ -104,6 +108,32 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
       );
     });
     HardwareKeyboard.instance.addHandler(_handleGlobalShortcutKey);
+  }
+
+  /// Αναλαμβάνει να απαντά σε αιτήματα κλεισίματος από άλλους σταθμούς.
+  ///
+  /// **Εδώ και όχι στην εκκίνηση.** Το κέλυφος υπάρχει ακριβώς όσο η εφαρμογή
+  /// κρατά τη βάση ανοιχτή — που είναι ακριβώς όσο εμποδίζει την αναβάθμιση
+  /// κάποιου άλλου. Σε οθόνη σφάλματος βάσης δεν υπάρχει κέλυφος, δεν υπάρχει
+  /// ανοιχτή βάση, και δεν υπάρχει λόγος να κλείσει κανείς.
+  void _listenForShutdownRequests() {
+    CrashLogService.instanceOrNull?.onShutdownRequested = (request) async {
+      if (!mounted) return;
+      await showShutdownRequestNotice(
+        context,
+        request: request,
+        onDenied: () async {
+          final log = CrashLogService.instanceOrNull;
+          if (log == null) return;
+          await writeShutdownDenial(
+            logsDirectory: log.logsDirectory,
+            myStation: StationName.fileSafe,
+            myInstance: log.instanceId,
+            now: DateTime.now(),
+          );
+        },
+      );
+    };
   }
 
   /// Μη-μπλοκάρουσα ανακοίνωση όταν λείπουν μη-μοιραία αρχεία πόρων.
@@ -197,6 +227,10 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
       // Αποσύρεται μόνο ο δανεισμένος χειριστής· το `preventClose` παραμένει
       // οπλισμένο και ο AppCloseController αναλαμβάνει από εδώ και πέρα.
       appCloseController.unregisterUiHandler(_onCloseRequestedFromUi);
+      // Χωρίς κέλυφος κανείς δεν μπορεί να δείξει την ειδοποίηση. Η απόσυρση
+      // ξαναγράφει το ίχνος ώστε να δηλώνει «δεν ακούω» — ο αιτών βλέπει την
+      // αλήθεια αντί για αντίστροφη μέτρηση που δεν θα τελειώσει ποτέ.
+      CrashLogService.instanceOrNull?.onShutdownRequested = null;
       try {
         windowManager.removeListener(this);
       } on MissingPluginException catch (_) {}

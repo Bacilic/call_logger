@@ -60,6 +60,18 @@ class SettingsServiceWindowUi {
     await ScopedSettings.setBool(ProfileSettingKeys.taskPrintPreview, value);
   }
 
+  /// Ερώτηση πριν ανοίξει σύνδεσμος ή διαδρομή από σημείωση. Προεπιλογή: true
+  /// — μια διαδρομή δικτύου συστήνει τον υπολογιστή στο ξένο μηχάνημα μόλις
+  /// την αγγίξουμε, οπότε ο προορισμός κρίνεται πριν, όχι μετά.
+  Future<bool> getConfirmLinkOpen() async {
+    return await ScopedSettings.getBool(ProfileSettingKeys.confirmLinkOpen) ??
+        true;
+  }
+
+  Future<void> setConfirmLinkOpen(bool value) async {
+    await ScopedSettings.setBool(ProfileSettingKeys.confirmLinkOpen, value);
+  }
+
   /// Ειδοποίηση όταν κάποιος άλλος αγγίξει εκκρεμότητα που κατέχω.
   /// Προεπιλογή: true — η σιωπή είναι επιλογή, όχι αφετηρία.
   Future<bool> getNotifyTaskHandovers() async {

@@ -62,6 +62,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isLoadingSettings = true;
   bool _showActiveTimer = true;
   bool _showEmptyRemoteLaunchers = true;
+  bool _confirmLinkOpen = true;
   bool _enableSpellCheck = true;
   bool _showDatabaseNav = true;
   bool _showLampNav = true;
@@ -149,6 +150,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final showActiveTimer = await _settings.windowUi.getShowActiveTimer();
       final showEmptyRemoteLaunchers = await _settings.remoteLansweeper
           .getCallsShowEmptyRemoteLaunchers();
+      final confirmLinkOpen = await _settings.windowUi.getConfirmLinkOpen();
       final enableSpellCheck = await _settings.windowUi.getEnableSpellCheck();
       final showDatabaseNav = await _settings.windowUi.getShowDatabaseNav();
       final showLampNav = await _settings.windowUi.getShowLampNav();
@@ -186,6 +188,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         setState(() {
           _showActiveTimer = showActiveTimer;
           _showEmptyRemoteLaunchers = showEmptyRemoteLaunchers;
+          _confirmLinkOpen = confirmLinkOpen;
           _enableSpellCheck = enableSpellCheck;
           _showDatabaseNav = showDatabaseNav;
           _showLampNav = showLampNav;
@@ -799,6 +802,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               subtitle: const Text(
                 'Μικρά εικονίδια δίπλα στα εργαλεία απομακρυσμένης σύνδεσης για άνοιγμα της εφαρμογής χωρίς στόχο από την κλήση.',
+              ),
+            ),
+            SwitchListTile(
+              value: _confirmLinkOpen,
+              secondary: Icon(Icons.link, color: theme.colorScheme.primary),
+              onChanged: _isLoadingSettings
+                  ? null
+                  : (value) async {
+                      await _settings.windowUi.setConfirmLinkOpen(value);
+                      if (mounted) setState(() => _confirmLinkOpen = value);
+                    },
+              title: const Text('Ερώτηση πριν από το άνοιγμα συνδέσμων'),
+              subtitle: const Text(
+                'Πριν ανοίξει σύνδεσμος ή διαδρομή από σημείωση, εμφανίζεται ο πλήρης προορισμός για επιβεβαίωση.',
               ),
             ),
             AnimatedContainer(

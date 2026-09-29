@@ -5,6 +5,7 @@ import '../../../core/database/operator_presence_repository.dart';
 import '../../../core/services/crash_log_service.dart';
 import '../../../core/services/operator_presence_heartbeat.dart';
 import '../../../core/services/session_liveness_mark.dart';
+import '../../../core/services/known_schema_ceilings.dart';
 import '../../../core/services/station_name.dart';
 import '../services/active_sessions.dart';
 
@@ -39,6 +40,7 @@ Future<List<ActiveSession>> loadActiveSessions({
   String? logsDirectory,
 }) async {
   final at = now ?? DateTime.now();
+  const ceilingOf = KnownSchemaCeilings.forVersion;
   try {
     final db = DatabaseHelper.instance.openDatabaseOrNull;
     if (db != null) {
@@ -47,6 +49,7 @@ Future<List<ActiveSession>> loadActiveSessions({
         marks: marks,
         now: at,
         myInstance: OperatorPresenceHeartbeat.instanceId,
+        schemaCeilingOf: ceilingOf,
       );
     }
   } catch (_) {
@@ -55,12 +58,14 @@ Future<List<ActiveSession>> loadActiveSessions({
   return _activeSessionsFromLivenessMarks(
     now: at,
     logsDirectory: logsDirectory ?? _defaultLogsDirectory(),
+    schemaCeilingOf: ceilingOf,
   );
 }
 
 Future<List<ActiveSession>> _activeSessionsFromLivenessMarks({
   required DateTime now,
   required String? logsDirectory,
+  int? Function(String?)? schemaCeilingOf,
 }) async {
   if (logsDirectory == null || logsDirectory.trim().isEmpty) return const [];
   // Ποια βάση κρατάμε και ποιο αντίγραφο είμαστε: τα ξέρει το ημερολόγιο, που
@@ -72,6 +77,7 @@ Future<List<ActiveSession>> _activeSessionsFromLivenessMarks({
     myStation: StationName.current,
     myDatabase: log?.databaseFileName,
     myInstance: log?.instanceId,
+    schemaCeilingOf: schemaCeilingOf,
   );
 }
 

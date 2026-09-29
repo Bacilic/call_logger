@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/calls/provider/call_mutation_refresh.dart';
 import '../../features/directory/providers/category_directory_provider.dart';
 import '../../features/directory/providers/department_directory_provider.dart';
+import '../../features/database/providers/active_sessions_provider.dart';
+import '../../features/database/providers/database_browser_stats_provider.dart';
 import '../../features/directory/providers/directory_cache_refresh.dart';
 import '../../features/tasks/providers/task_notifications_provider.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
@@ -14,6 +17,7 @@ import '../services/operator_profile_refresh.dart';
 import '../widgets/modal_route_tracker.dart';
 import 'database_helper.dart';
 import 'database_reachability.dart';
+import 'refresh_throttle.dart';
 import 'shared_database_change_watcher.dart';
 
 /// Πόσο συχνά ρωτάμε αν έγραψε άλλο μηχάνημα.
@@ -73,6 +77,49 @@ Future<void> refreshSharedDatabaseViews(Ref ref) async {
   if (!ref.mounted) return;
   // Ιστορικό, Στατιστικά, ουρά Αναφοράς Lansweeper και πρόσφατες κλήσεις μαζί.
   refreshAfterCallMutation(ref);
+  refreshSharedDatabaseIdentityViews(ref);
+}
+
+/// Πόσο αραιά επιτρέπεται να ξαναμετρηθεί ολόκληρη η βάση.
+///
+/// Τα στατιστικά μετρούν τις γραμμές **κάθε** πίνακα με χωριστό ερώτημα και
+/// σαρώνουν τον φάκελο των αντιγράφων. Με τον ρυθμό των αλλαγών (12'') η ίδια
+/// δουλειά θα έτρεχε εκατοντάδες φορές την ώρα πάνω από το δίκτυο, για νούμερα
+/// που δεν κρίνουν καμία απόφαση.
+const Duration kDatabaseStatsMinimumGap = Duration(minutes: 1);
+
+final RefreshThrottle _statsThrottle = RefreshThrottle(
+  minimumGap: kDatabaseStatsMinimumGap,
+);
+
+/// Ξεχνά τον ρυθμό — η επόμενη ανανέωση στατιστικών περνά αμέσως.
+///
+/// Καλείται όταν αλλάζει η ίδια η βάση: τα νούμερα της προηγούμενης δεν αφορούν
+/// το νέο αρχείο, και μια αναμονή γι' αυτά θα κρατούσε ξένη εικόνα στην οθόνη.
+void resetSharedDatabaseStatsThrottle() => _statsThrottle.reset();
+
+/// Μόνο για τα τεστ: ο ρυθμιστής που φράζει τα στατιστικά.
+@visibleForTesting
+RefreshThrottle get databaseStatsThrottleForTest => _statsThrottle;
+
+/// Ό,τι λέει **ποια** βάση κοιτάμε και **ποιος άλλος** είναι μέσα της.
+///
+/// Χωριστά από τις λίστες παραπάνω, γιατί απαντά σε άλλο ερώτημα και κοστίζει
+/// αλλιώς:
+///
+/// 1. **Οι ανοιχτές συνεδρίες ανανεώνονται πάντα.** Είναι μία ανάγνωση
+///    παρουσίας, και είναι η γραμμή που κρίνει αν πρέπει να τρέξεις σε
+///    συνάδελφο πριν κλείσει την εφαρμογή του — π.χ. όταν η βάση αναβαθμίστηκε
+///    και η έκδοσή του δεν τη διαβάζει πια.
+/// 2. **Τα στατιστικά ανανεώνονται αραιά**, γιατί η μέτρηση όλων των πινάκων
+///    είναι ακριβή και τα νούμερά της δεν κρίνουν τίποτα.
+///
+/// **Και τα δύο είναι `autoDispose`**, που είναι ο φυσικός φρουρός του κόστους:
+/// όταν η οθόνη της βάσης δεν είναι ανοιχτή, δεν υπάρχει τίποτα να ανανεωθεί
+/// και η κλήση δεν πληρώνει απολύτως τίποτα.
+void refreshSharedDatabaseIdentityViews(Ref ref) {
+  ref.invalidate(activeSessionsProvider);
+  if (_statsThrottle.allow()) ref.invalidate(databaseBrowserStatsProvider);
 }
 
 /// Ξαναφορτώνει τις κοινές όψεις **χωρίς ποτέ να ρίξει την εφαρμογή**.

@@ -5,20 +5,16 @@ import '../../../../core/database/audit_service.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/errors/department_exists_exception.dart';
-import '../../../../core/services/lansweeper_department_accounts.dart';
-import '../../../../core/services/lookup_service.dart';
 import '../../../../core/services/save_confirmation_summary.dart';
 import '../../../../core/widgets/audit_summary_rich_text.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../building_map/services/building_map_floor_ordering.dart';
-import '../../models/department_model.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import 'department_color_palette.dart';
 import 'department_form_dialog.dart';
-import '../../services/building_map_placement_loss.dart';
-import '../../services/department_floor_change_outcome.dart';
-import 'department_floor_change_dialog.dart';
-import 'bulk_user_action_pickers.dart';
+import 'department_save_map_questions.dart';
+import 'department_save_model_builder.dart';
+import 'department_save_name_conflict.dart';
 
 /// Ροή αποθήκευσης της φόρμας τμήματος: μοντέλο, συγκρούσεις κοινόχρηστων,
 /// εγγραφή, επαναφορά διαγραμμένου και μηνύματα επιβεβαίωσης.
@@ -67,106 +63,37 @@ class DepartmentFormSave {
 
     final ini = host.widget.initialDepartment;
 
-    // Το Είδος αποφασίζει αν η καρτέλα ανήκει στην κάτοψη. Όταν δεν ανήκει, το
-    // κτίριο, ο όροφος και η θέση στον χάρτη δεν έχουν πια νόημα — και δεν
-    // μένουν γραμμένα: η φόρμα τα έκρυβε, αλλά η λίστα του Καταλόγου τα
-    // έδειχνε, οπότε η καρτέλα έλεγε «εκτός κάτοψης» και ο κατάλογος όροφο.
-    //
-    // Χάνεται όμως δουλειά (η θέση στην κάτοψη σχεδιάζεται με το χέρι), γι'
-    // αυτό ο χρήστης ρωτιέται πρώτα — και μόνο όταν υπάρχει κάτι να χαθεί.
-    final leavesTheBuildingMap = !host.selectedKind.belongsOnBuildingMap;
-    final placementLoss = judgeBuildingMapPlacementLoss(
-      kindBelongsOnMap: host.selectedKind.belongsOnBuildingMap,
+    // Οι ερωτήσεις της κάτοψης προηγούνται κάθε εγγραφής: ό,τι κι αν απαντηθεί,
+    // ως εδώ δεν έχει γραφτεί τίποτα και μια ακύρωση δεν αφήνει ίχνος.
+    final placement = await askDepartmentMapPlacement(
+      host,
+      name: name,
       building: building,
-      floorLabel: _floorLabelForSaveConfirmation(host.selectedFloorId),
-      mapWidth: ini?.mapWidth,
-      mapHeight: ini?.mapHeight,
       group: group,
+      initial: ini,
+      floorLabel: _floorLabelForSaveConfirmation,
     );
-    if (placementLoss.hasAnything) {
-      final approved = await showBulkConfirmDialog(
-        host.context,
-        title: 'Η καρτέλα φεύγει από την κάτοψη',
-        message: buildingMapPlacementLossMessage(
-          departmentName: name,
-          kindLabel: host.selectedKind.label,
-          loss: placementLoss,
-        ),
-        confirmLabel: 'Συνέχεια και διαγραφή',
-      );
-      if (!approved || !host.mounted) return;
-    }
+    if (placement.cancelled) return;
 
-    final effectiveFloorId = leavesTheBuildingMap ? null : host.selectedFloorId;
-    final placementFloorId = int.tryParse(ini?.mapFloor?.trim() ?? '');
-    final floorChange = resolveDepartmentFloorChange(
-      isEdit: host.isEdit,
-      leavesTheBuildingMap: leavesTheBuildingMap,
-      selectedFloorId: host.selectedFloorId,
-      snapshotFloorId: host.snapFloorId,
-      initialFloorId: ini?.floorId,
-      hasDrawnPlacement: ini?.isMapped ?? false,
-      placementFloorId: placementFloorId,
-      floorLoadState: host.floorLoadState,
-    );
-
-    // Η καρτέλα δεν δείχνει κάτοψη: χωρίς αυτή την ερώτηση το ορθογώνιο θα
-    // ταξίδευε αυτούσιο σε σχέδιο που ο χρήστης δεν είδε ποτέ.
-    var clearBuildingMapPlacement =
-        floorChange == DepartmentFloorChangeAction.clearPlacement;
-    var movesPlacementToNewFloor = false;
-    if (floorChange == DepartmentFloorChangeAction.askMoveOrClear) {
-      final choice = await showDepartmentFloorChangeDialog(
-        host.context,
-        departmentName: name,
-        fromFloorLabel:
-            _floorLabelForSaveConfirmation(placementFloorId) ?? 'άγνωστος',
-        toFloorLabel:
-            _floorLabelForSaveConfirmation(host.selectedFloorId) ?? 'άγνωστος',
-      );
-      if (choice == null || !host.mounted) return;
-      clearBuildingMapPlacement =
-          choice == DepartmentFloorChangeChoice.clearPlacement;
-      movesPlacementToNewFloor = !clearBuildingMapPlacement;
-    }
+    final effectiveFloorId = placement.effectiveFloorId;
+    final placementFloorId = placement.placementFloorId;
+    final clearBuildingMapPlacement = placement.clearPlacement;
+    final movesPlacementToNewFloor = placement.movesPlacementToNewFloor;
 
     // Ό,τι έχει μείνει πληκτρολογημένο χωρίς να γίνει chip μετράει κανονικά —
     // ο χρήστης δεν πρέπει να χάνει γραμμένο αναγνωριστικό επειδή πάτησε
     // «Αποθήκευση» χωρίς να πατήσει πρώτα Enter.
     host.commitLansweeperAccountInput();
 
-    final model = DepartmentModel(
-      id: host.isEdit ? ini?.id : null,
+    final model = buildDepartmentModelToSave(
+      host,
       name: name,
-      building: (leavesTheBuildingMap || building.isEmpty) ? null : building,
+      building: building,
+      group: group,
       color: color,
-      notes: notes.isEmpty ? null : notes,
-      lansweeperUsernames: encodeLansweeperAccounts(host.lansweeperAccounts),
-      floorId: effectiveFloorId,
-      // Η ομάδα οργανώνει τον επιλογέα του χάρτη: φεύγει μαζί με το κτίριο και
-      // τον όροφο όταν το Είδος βγάζει την καρτέλα από την κάτοψη.
-      groupName: (leavesTheBuildingMap || group.isEmpty) ? null : group,
-      mapFloor: effectiveFloorId != null
-          ? effectiveFloorId.toString()
-          : (clearBuildingMapPlacement ? null : ini?.mapFloor),
-      mapX: clearBuildingMapPlacement ? null : ini?.mapX,
-      mapY: clearBuildingMapPlacement ? null : ini?.mapY,
-      mapWidth: clearBuildingMapPlacement ? null : ini?.mapWidth,
-      mapHeight: clearBuildingMapPlacement ? null : ini?.mapHeight,
-      mapRotation: clearBuildingMapPlacement ? 0.0 : (ini?.mapRotation ?? 0.0),
-      mapLabelOffsetX: clearBuildingMapPlacement ? null : ini?.mapLabelOffsetX,
-      mapLabelOffsetY: clearBuildingMapPlacement ? null : ini?.mapLabelOffsetY,
-      mapAnchorOffsetX: clearBuildingMapPlacement
-          ? null
-          : ini?.mapAnchorOffsetX,
-      mapAnchorOffsetY: clearBuildingMapPlacement
-          ? null
-          : ini?.mapAnchorOffsetY,
-      mapCustomName: clearBuildingMapPlacement ? null : ini?.mapCustomName,
-      directPhones: ini?.directPhones,
-      isDeleted: ini?.isDeleted ?? false,
-      isHiddenOnMap: ini?.isHiddenOnMap ?? false,
-      kind: host.selectedKind,
+      notes: notes,
+      initial: ini,
+      placement: placement,
     );
 
     try {
@@ -358,94 +285,14 @@ class DepartmentFormSave {
       host.closeForm(true);
       showSaveConfirmationSnackBar(host.context, saveMessage);
     } on DepartmentExistsException catch (e) {
-      if (!host.mounted) return;
-      if (e.isDeleted) {
-        final restore = await showDialog<bool>(
-          context: host.context,
-          builder: (ctx) => AlertDialog(
-            title: Text(e.kind.deletedEntityTitle),
-            content: const Text(
-              'Υπάρχει ήδη καταχώρηση με αυτό το όνομα, σημειωμένη ως διαγραμμένη. '
-              'Θέλετε να την επαναφέρετε;\n\n'
-              'Τα πεδία κτίριο, χρώμα και σημειώσεις από τη φόρμα θα εφαρμοστούν μετά την επαναφορά. '
-              'Αν δεν πρόκειται για το ίδιο τμήμα, πατήστε «Άκυρο» και δώστε νέο, διακριτό όνομα (π.χ. «Μαγειρείο 2026»).',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Άκυρο'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Επαναφορά'),
-              ),
-            ],
-          ),
-        );
-        if (!host.mounted) return;
-        if (restore == true) {
-          try {
-            final restoredId = await host.widget.notifier
-                .restoreDepartmentByName(
-                  name,
-                  building: building.isEmpty ? null : building,
-                  color: color,
-                  notes: notes.isEmpty ? null : notes,
-                );
-            if (!host.mounted) return;
-            host.widget.onSaved?.call();
-            host.closeForm(true);
-            // Το Είδος είναι εκείνο της ΕΠΑΝΑΦΕΡΜΕΝΗΣ καρτέλας, όχι της
-            // επιλογής στη φόρμα: η διαγραμμένη κρατά το δικό της.
-            final restoredKind = LookupService.instance.departmentKindById(
-              restoredId,
-            );
-            final restoreMessage =
-                'Επαναφέρθηκε ${restoredKind.entityWithArticle} «$name»';
-            ScaffoldMessenger.of(host.context).showSnackBar(
-              SnackBar(
-                content: Text(restoreMessage),
-                duration: saveConfirmationSnackBarDuration(restoreMessage),
-              ),
-            );
-          } catch (err, st) {
-            if (!host.mounted) return;
-            showDatabasePersistenceErrorSnackBar(host.context, err, st);
-          }
-        }
-      } else {
-        await showDialog<void>(
-          context: host.context,
-          builder: (ctx) {
-            final example = suggestDistinctDepartmentNameExample(name);
-            final bodyStyle = Theme.of(ctx).textTheme.bodyMedium;
-            return AlertDialog(
-              title: const Text('Όνομα σε χρήση'),
-              content: Text.rich(
-                TextSpan(
-                  style: bodyStyle,
-                  children: [
-                    const TextSpan(text: 'Υπάρχει ήδη τμήμα με το όνομα '),
-                    TextSpan(
-                      text: name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const TextSpan(text: '. Δώστε νέο διακριτικό όνομα (π.χ. '),
-                    TextSpan(text: '«$example»'),
-                    const TextSpan(text: ').'),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          },
-        );
-      }
+      await handleDepartmentNameConflict(
+        host,
+        e,
+        name: name,
+        building: building,
+        color: color,
+        notes: notes,
+      );
     } on StateError catch (e) {
       if (!host.mounted) return;
       ScaffoldMessenger.of(

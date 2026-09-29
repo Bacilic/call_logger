@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 import '../../features/database/services/database_maintenance_service.dart';
+import '../services/crash_log_service.dart';
 import '../utils/linkable_text_parser.dart';
 
 /// Αποτέλεσμα προσπάθειας ανοίγματος συνδέσμου ή διαδρομής.
@@ -26,6 +27,7 @@ typedef DirectoryExistsFn = Future<bool> Function(String path);
 typedef RevealFileInExplorerFn = Future<void> Function(String path);
 typedef OpenFolderInExplorerFn = Future<void> Function(String path);
 typedef LaunchUrlFn = Future<bool> Function(Uri uri);
+typedef LogOpenErrorFn = void Function(Object error, StackTrace stack);
 
 /// Κοινός βοηθός ανοίγματος URL, UNC και τοπικών διαδρομών Windows.
 class LinkableTargetOpener {
@@ -35,6 +37,7 @@ class LinkableTargetOpener {
     RevealFileInExplorerFn? revealFileInExplorer,
     OpenFolderInExplorerFn? openFolderInExplorer,
     LaunchUrlFn? launchUrl,
+    LogOpenErrorFn? logError,
     this.filesystemProbeTimeout = const Duration(seconds: 5),
   }) : _fileExists = fileExists ?? ((path) => File(path).exists()),
        _directoryExists =
@@ -50,13 +53,20 @@ class LinkableTargetOpener {
            ((uri) => url_launcher.launchUrl(
              uri,
              mode: url_launcher.LaunchMode.externalApplication,
-           ));
+           )),
+       _logError = logError ?? _logToCrashLog;
 
   final FileExistsFn _fileExists;
   final DirectoryExistsFn _directoryExists;
   final RevealFileInExplorerFn _revealFileInExplorer;
   final OpenFolderInExplorerFn _openFolderInExplorer;
   final LaunchUrlFn _launchUrl;
+  final LogOpenErrorFn _logError;
+
+  /// Ο χρήστης βλέπει μόνο «Αποτυχία ανοίγματος»· η αιτία μένει στο αρχείο
+  /// σφαλμάτων, αλλιώς δεν υπάρχει τρόπος να μάθουμε τι έφταιξε.
+  static void _logToCrashLog(Object error, StackTrace stack) =>
+      CrashLogService.instanceOrNull?.logError(error, stack, fatal: false);
 
   /// Μέγιστη αναμονή για τους ελέγχους ύπαρξης αρχείου/φακέλου. Οι δικτυακές
   /// (UNC) διαδρομές προς διακομιστή που δεν αποκρίνεται μπορούν να αργήσουν
@@ -97,7 +107,8 @@ class LinkableTargetOpener {
         case LinkableTextKind.localPath:
           return await _openFilesystemPath(target);
       }
-    } catch (_) {
+    } catch (e, st) {
+      _logError(e, st);
       return (result: LinkOpenResult.error, osMessage: null);
     }
   }

@@ -9,6 +9,7 @@ import '../providers/active_sessions_provider.dart';
 import '../services/active_sessions.dart';
 import '../services/database_stats_service.dart';
 import 'backup_health_stat_rows.dart';
+import '../../../core/database/database_v1_schema.dart';
 
 /// Η κάρτα «Στατιστικά Βάσης Δεδομένων» στην κορυφή της οθόνης περιήγησης.
 ///
@@ -462,11 +463,29 @@ class _OpenNowRow extends ConsumerWidget {
           for (final session in sessions)
             Padding(
               padding: const EdgeInsets.only(top: 2, left: 14),
-              child: Text(
-                describeActiveSession(session, now: now, myAppVersion: mine),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              child: Builder(
+                builder: (_) {
+                  // Ο σταθμός που θα μείνει έξω δεν επιτρέπεται να διαβάζεται
+                  // σαν μία ακόμη γκρίζα γραμμή: είναι η μόνη από τις οθόνες
+                  // που απαιτεί ενέργεια πριν κλείσει ο συνάδελφος.
+                  final lockedOut = session.cannotReopenSchema(
+                    databaseSchemaVersionV1,
+                  );
+                  return Text(
+                    describeActiveSession(
+                      session,
+                      now: now,
+                      myAppVersion: mine,
+                      databaseSchemaVersion: databaseSchemaVersionV1,
+                    ),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: lockedOut
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.onSurfaceVariant,
+                      fontWeight: lockedOut ? FontWeight.w600 : null,
+                    ),
+                  );
+                },
               ),
             ),
         ],

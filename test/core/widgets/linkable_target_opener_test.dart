@@ -119,6 +119,25 @@ void main() {
     });
   });
 
+  group('LinkableTargetOpener — απρόβλεπτη αποτυχία', () {
+    test('η αιτία καταγράφεται και ο χρήστης παίρνει γενικό μήνυμα', () async {
+      final cause = StateError('ο browser δεν ξεκίνησε');
+      final logged = <Object>[];
+      final opener = LinkableTargetOpener(
+        launchUrl: (_) async => throw cause,
+        logError: (error, _) => logged.add(error),
+      );
+
+      final outcome = await opener.open(
+        target: 'https://example.com/x',
+        kind: LinkableTextKind.url,
+      );
+
+      expect(outcome.result, LinkOpenResult.error);
+      expect(logged, [same(cause)]);
+    });
+  });
+
   group('LinkableTargetOpener.messageFor', () {
     test('το μήνυμα των Windows προτιμάται όταν υπάρχει', () {
       final message = LinkableTargetOpener.messageFor((

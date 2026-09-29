@@ -11,12 +11,17 @@ class LinkableSelectableText extends StatefulWidget {
     this.style,
     this.linkStyle,
     this.targetOpener,
+    this.askBeforeOpening,
   });
 
   final String text;
   final TextStyle? style;
   final TextStyle? linkStyle;
   final LinkableTargetOpener? targetOpener;
+
+  /// Αν θα ερωτηθεί ο χρήστης πριν ανοίξει σύνδεσμος· null = η προσωπική
+  /// ρύθμιση. Υπάρχει για τα τεστ, όπως και ο [targetOpener].
+  final AskBeforeOpeningLinksFn? askBeforeOpening;
 
   @override
   State<LinkableSelectableText> createState() => LinkableSelectableTextState();
@@ -25,6 +30,7 @@ class LinkableSelectableText extends StatefulWidget {
 class LinkableSelectableTextState extends State<LinkableSelectableText> {
   late final LinkableSpanEngine _engine = LinkableSpanEngine(
     targetOpener: widget.targetOpener,
+    askBeforeOpening: widget.askBeforeOpening,
   );
 
   @override

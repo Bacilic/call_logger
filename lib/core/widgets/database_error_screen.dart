@@ -23,6 +23,7 @@ import 'compact_tooltip.dart';
 import '../../features/database/widgets/database_newer_recovery_dialog.dart';
 import '../../features/database/widgets/database_recovery_switch_flows.dart';
 import '../../features/database/widgets/schema_upgrade_consent_dialog.dart';
+import '../../features/database/widgets/schema_upgrade_waiting_panel.dart';
 import '../../features/settings/widgets/create_new_database_dialog.dart';
 import '../utils/background_task.dart';
 
@@ -337,61 +338,6 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
     final manifest = await probe();
     if (!mounted) return;
     setState(() => _availableInstaller = manifest);
-  }
-
-  /// Η λίστα των υπολογιστών που κρατούν τη βάση, σε πλαίσιο.
-  ///
-  /// Τίτλος και περιεχόμενο μαζί: η επικεφαλίδα εξηγεί τι είναι η λίστα, και το
-  /// πλαίσιο τη σηκώνει πάνω από τα διαγνωστικά που ακολουθούν.
-  Widget _buildOpenApplicationsBox(ThemeData theme, String details) {
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: theme.colorScheme.tertiary.withValues(alpha: 0.45),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.desktop_windows_outlined,
-                size: 18,
-                color: theme.colorScheme.tertiary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Ανοιχτές εφαρμογές αυτή τη στιγμή',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: theme.colorScheme.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SelectableText(
-            details,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurface,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Η ένδειξη είναι ίχνος, όχι βεβαιότητα: μετά από απότομο κλείσιμο '
-            'ή πτώση δικτύου κάποιος μπορεί να φαίνεται εδώ ως τρία λεπτά.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _offerSchemaUpgradeConsent() async {
@@ -1005,22 +951,23 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
                           const SizedBox(height: 18),
                           _buildMissingDatabaseGuidance(theme),
                         ],
-                        if (details.isNotEmpty) ...[
+                        // Στο μπλόκο της αναβάθμισης η λίστα είναι η απάντηση
+                        // στο μόνο ερώτημα του χρήστη — ποιον να κλείσει — και
+                        // ζει σε δικό της ζωντανό πλαίσιο: ξαναρωτά τον φάκελο
+                        // μόνη της και φέρνει τα κουμπιά του αιτήματος, ώστε να
+                        // φαίνεται το πεδίο να αδειάζει χωρίς «Επαναδοκιμή».
+                        if (_isSchemaUpgradeBlocked) ...[
                           const SizedBox(height: 16),
-                          // Στο μπλόκο της αναβάθμισης τα «details» ΕΙΝΑΙ η
-                          // απάντηση στο μόνο ερώτημα του χρήστη — ποιον να
-                          // κλείσει. Μπαίνουν σε πλαίσιο αντί για γκρίζα ψιλά,
-                          // ώστε να τα βρίσκει το μάτι με τη μία.
-                          if (_isSchemaUpgradeBlocked)
-                            _buildOpenApplicationsBox(theme, details)
-                          else
-                            SelectableText(
-                              details,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                                height: 1.4,
-                              ),
+                          const SchemaUpgradeWaitingPanel(),
+                        ] else if (details.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          SelectableText(
+                            details,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.4,
                             ),
+                          ),
                         ],
                         if (diagnostics.isNotEmpty) ...[
                           const SizedBox(height: 16),

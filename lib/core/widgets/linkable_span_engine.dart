@@ -1,18 +1,32 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../services/crash_log_service.dart';
+import '../services/settings_service.dart';
 import '../utils/linkable_text_parser.dart';
+import 'link_open_confirmation_dialog.dart';
 import 'linkable_target_opener.dart';
+
+/// Διαβάζει αν ο χρήστης θέλει ερώτηση πριν ανοίξει σύνδεσμος.
+typedef AskBeforeOpeningLinksFn = Future<bool> Function();
 
 /// Κοινή μηχανή των widgets συνδέσμων (LinkableText, LinkableSelectableText):
 /// χτίζει τα spans με τους αναγνωρισμένους συνδέσμους, κρατά τον κύκλο ζωής
 /// των recognizers και ανοίγει τον σύνδεσμο δείχνοντας το αποτέλεσμα σε
 /// snackbar. Ο κάτοχος (State) οφείλει να καλέσει [dispose].
+///
+/// Κάθε σύνδεσμος περνά από εδώ, οπότε εδώ ζει και η ερώτηση πριν από το
+/// άνοιγμα: ο προορισμός γράφτηκε από άνθρωπο και μπορεί να δείχνει σε ξένο
+/// μηχάνημα.
 class LinkableSpanEngine {
-  LinkableSpanEngine({LinkableTargetOpener? targetOpener})
-    : _targetOpener = targetOpener ?? LinkableTargetOpener();
+  LinkableSpanEngine({
+    LinkableTargetOpener? targetOpener,
+    AskBeforeOpeningLinksFn? askBeforeOpening,
+  }) : _targetOpener = targetOpener ?? LinkableTargetOpener(),
+       _askBeforeOpening = askBeforeOpening ?? _readAskBeforeOpening;
 
   final LinkableTargetOpener _targetOpener;
+  final AskBeforeOpeningLinksFn _askBeforeOpening;
   final List<TapGestureRecognizer> _recognizers = [];
 
   /// Προεπιλεγμένο στυλ συνδέσμου όταν το widget δεν ορίζει δικό του.
@@ -62,6 +76,19 @@ class LinkableSpanEngine {
     String target,
     LinkableTextKind kind,
   ) async {
+    // Η ερώτηση προηγείται και του ελέγχου ύπαρξης: σε διαδρομή δικτύου, ήδη
+    // ο έλεγχος συνδέει τον υπολογιστή με το μηχάνημα του προορισμού.
+    if (await _askBeforeOpening()) {
+      if (!context.mounted) return;
+      final confirmed = await showLinkOpenConfirmationDialog(
+        context,
+        target: target,
+        kind: kind,
+      );
+      if (!confirmed) return;
+    }
+    if (!context.mounted) return;
+
     final outcome = await _targetOpener.open(target: target, kind: kind);
     if (!context.mounted) return;
 
@@ -91,6 +118,17 @@ class LinkableSpanEngine {
 
   void dispose() {
     _disposeRecognizers();
+  }
+
+  /// Αν η ρύθμιση δεν διαβάζεται (π.χ. η βάση δεν απαντά), ρωτάμε: η σιωπηλή
+  /// παράλειψη της ερώτησης είναι ακριβώς ο κίνδυνος που αποτρέπει.
+  static Future<bool> _readAskBeforeOpening() async {
+    try {
+      return await SettingsService().windowUi.getConfirmLinkOpen();
+    } catch (e, st) {
+      CrashLogService.instanceOrNull?.logError(e, st, fatal: false);
+      return true;
+    }
   }
 
   void _disposeRecognizers() {

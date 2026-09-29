@@ -46,7 +46,11 @@ void main() {
 
       await tester.pumpWidget(
         _wrap(
-          LinkableSelectableText(text: 'Δες το $url εδώ', targetOpener: opener),
+          LinkableSelectableText(
+            text: 'Δες το $url εδώ',
+            targetOpener: opener,
+            askBeforeOpening: () async => false,
+          ),
         ),
       );
 
@@ -77,6 +81,7 @@ void main() {
             LinkableSelectableText(
               text: 'Άνοιξε $missingPath τώρα',
               targetOpener: opener,
+              askBeforeOpening: () async => false,
             ),
           ),
         );

@@ -17,6 +17,7 @@ class ActiveSession {
     required this.isMine,
     this.operatorName,
     this.appVersion,
+    this.schemaCeiling,
   });
 
   /// Το όνομα του υπολογιστή.
@@ -30,8 +31,33 @@ class ActiveSession {
   /// Ποια έκδοση τρέχει· `null` για ίχνη γραμμένα πριν από την v60.
   final String? appVersion;
 
+  /// Έως ποιο σχήμα βάσης διαβάζει αυτή η συνεδρία, αν το ξέρουμε.
+  ///
+  /// `null` = **άγνωστο**, και τότε δεν λέγεται τίποτα: η έκδοση δεν έχει
+  /// τρέξει ποτέ σε αυτόν τον υπολογιστή, οπότε δεν υπάρχει τρόπος να ξέρουμε
+  /// το ταβάνι της χωρίς να το μαντέψουμε.
+  final int? schemaCeiling;
+
   /// Είναι αυτό το ίδιο αντίγραφο της εφαρμογής που ρωτά.
   final bool isMine;
+
+  /// Θα μείνει αυτή η συνεδρία έξω από τη βάση όπως είναι τώρα;
+  ///
+  /// **Το ερώτημα αφορά το ΞΑΝΑ-άνοιγμα.** Η εφαρμογή του συναδέλφου κρατά τη
+  /// βάση ανοιχτή αυτή τη στιγμή — αυτό δεν αμφισβητείται. Το ερώτημα είναι αν
+  /// θα μπορέσει να ξαναμπεί μόλις την κλείσει, τώρα που το αρχείο σφραγίστηκε
+  /// σε σχήμα που η έκδοσή της δεν γνωρίζει.
+  ///
+  /// Ποτέ για τη δική μας συνεδρία: η βάση είναι ανοιχτή από εμάς, άρα η
+  /// απάντηση είναι εξ ορισμού «ναι μπορώ» και μια προειδοποίηση εκεί θα ήταν
+  /// αντίφαση με την ίδια την οθόνη που τη δείχνει.
+  bool cannotReopenSchema(int? databaseSchemaVersion) {
+    if (isMine) return false;
+    final ceiling = schemaCeiling;
+    final required = databaseSchemaVersion;
+    if (ceiling == null || required == null) return false;
+    return ceiling < required;
+  }
 }
 
 /// Οι συνεδρίες που κρατούν τη βάση τη στιγμή [now].
@@ -46,6 +72,7 @@ List<ActiveSession> activeSessions({
   required List<PresenceWithName> marks,
   required DateTime now,
   required String myInstance,
+  int? Function(String? appVersion)? schemaCeilingOf,
 }) {
   final holder = myInstance.trim();
   final out = <ActiveSession>[];
@@ -58,6 +85,7 @@ List<ActiveSession> activeSessions({
         operatorName: mark.operatorName,
         lastSeenAt: p.lastSeenAt,
         appVersion: p.appVersion,
+        schemaCeiling: schemaCeilingOf?.call(p.appVersion),
         isMine: holder.isNotEmpty && p.instance == holder,
       ),
     );
@@ -89,6 +117,7 @@ List<ActiveSession> activeSessionsFromLivenessMarks({
   required String myStation,
   String? myDatabase,
   String? myInstance,
+  int? Function(String? appVersion)? schemaCeilingOf,
 }) {
   final out = <ActiveSession>[];
   for (final mark in marks) {
@@ -103,6 +132,7 @@ List<ActiveSession> activeSessionsFromLivenessMarks({
         station: station.isEmpty ? 'άγνωστος σταθμός' : station,
         lastSeenAt: mark.lastSeen,
         appVersion: version.isEmpty ? null : version,
+        schemaCeiling: schemaCeilingOf?.call(version.isEmpty ? null : version),
         isMine: mark.isSameRunAs(station: myStation, instance: myInstance),
       ),
     );
@@ -158,6 +188,7 @@ String describeActiveSession(
   ActiveSession session, {
   required DateTime now,
   String? myAppVersion,
+  int? databaseSchemaVersion,
 }) {
   final parts = <String>[session.station];
 
@@ -175,8 +206,34 @@ String describeActiveSession(
     parts.add('έκδοση $version');
   }
 
+  // Η προειδοποίηση μπαίνει **εδώ** και όχι σε κάθε οθόνη χωριστά: την ίδια
+  // γραμμή τυπώνουν πέντε σημεία, και μια σύγκριση αντιγραμμένη πέντε φορές θα
+  // απέκλινε σιωπηλά. Η έκδοση γράφεται πάντα μαζί της, ακόμη κι όταν ταυτίζεται
+  // με τη δική μας: χωρίς αυτήν ο χρήστης διαβάζει «δεν θα μπορεί» και δεν έχει
+  // τον αριθμό που το εξηγεί.
+  if (session.cannotReopenSchema(databaseSchemaVersion)) {
+    if (version != null &&
+        version.isNotEmpty &&
+        !parts.contains('έκδοση $version')) {
+      parts.add('έκδοση $version');
+    }
+    parts.add('δεν θα μπορεί να ξανανοίξει τη βάση');
+  }
+
   return parts.join(' · ');
 }
+
+/// Οι συνεδρίες που θα μείνουν έξω από τη βάση μόλις την κλείσουν.
+///
+/// Καθαρή συνάρτηση για όποια οθόνη θέλει να **ξεχωρίσει** τις προβληματικές
+/// αντί απλώς να τις περιγράψει — π.χ. να τις χρωματίσει ή να δείξει σύνοψη.
+List<ActiveSession> sessionsLockedOutBySchema(
+  List<ActiveSession> sessions,
+  int? databaseSchemaVersion,
+) => [
+  for (final s in sessions)
+    if (s.cannotReopenSchema(databaseSchemaVersion)) s,
+];
 
 /// Πόσο πριν γράφτηκε το ίχνος, σε λέξεις.
 ///

@@ -1371,5 +1371,86 @@ void main() {
       },
       semanticsEnabled: false,
     );
+
+    // Σενάριο: τηλέφωνο τμήματος με δύο υπαλλήλους (όπως Αξονικός 2855) —
+    // κλικ στον Καλούντα δείχνει και τους δύο, όπως ο εξοπλισμός του τμήματος.
+    testWidgets(
+      'ορφανό τηλέφωνο τμήματος με δύο υπαλλήλους: κλικ στον Καλούντα τους δείχνει',
+      (tester) async {
+        _configureDesktopViewport(tester);
+
+        await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          for (final (first, last) in const [
+            ('Σούλα', 'Σουλιώτη'),
+            ('Τίνα', 'Γεωργάκη'),
+          ]) {
+            await db.insert('users', {
+              'first_name': first,
+              'last_name': last,
+              'department_id': deptId,
+              'is_deleted': 0,
+            });
+          }
+          LookupService.instance.resetForReload();
+          await LookupService.instance.loadFromDatabase();
+        });
+
+        await _loadCallFormApp(tester);
+        await _enterPhoneDigitsAndRunLookup(tester, _kOrphanDepartmentPhone);
+
+        final header = await _readCallHeaderState(tester);
+        expect(header.selectedDepartmentId, deptId);
+        expect(
+          header.callerNoMatch,
+          isFalse,
+          reason: greekExpectMsg(
+            'Το τμήμα έχει υπαλλήλους — δεν είναι «Καμία αντιστοιχία»',
+          ),
+        );
+        expect(
+          header.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Με δύο υποψηφίους δεν διαλέγει κανέναν'),
+        );
+
+        await tester.tap(_callLoggerCallerTextField());
+        await pumpUntilSettled(tester);
+
+        for (final name in const ['Σούλα Σουλιώτη', 'Τίνα Γεωργάκη']) {
+          final tile = find.descendant(
+            of: find.byType(SmartEntityCallerSuggestionList),
+            matching: find.textContaining(name),
+          );
+          await _pumpUntilFinderVisible(
+            tester,
+            tile,
+            failDescription:
+                '«$name» δεν εμφανίστηκε στη λίστα του Καλούντα μετά το '
+                'τηλέφωνο τμήματος $_kOrphanDepartmentPhone',
+          );
+        }
+
+        // Η επιλογή από τη λίστα δένει τον καλούντα χωρίς να αγγίξει ό,τι
+        // ήδη ισχύει: το τηλέφωνο που γράφτηκε και το τμήμα του.
+        await tester.tap(
+          find
+              .descendant(
+                of: find.byType(SmartEntityCallerSuggestionList),
+                matching: find.textContaining('Τίνα Γεωργάκη'),
+              )
+              .first,
+        );
+        await pumpUntilSettled(tester);
+
+        final afterPick = await _readCallHeaderState(tester);
+        expect(afterPick.selectedCaller?.name, 'Τίνα Γεωργάκη');
+        expect(afterPick.selectedPhone, _kOrphanDepartmentPhone);
+        expect(afterPick.selectedDepartmentId, deptId);
+
+        await _finishCallFormWidgetTest(tester);
+      },
+      semanticsEnabled: false,
+    );
   });
 }

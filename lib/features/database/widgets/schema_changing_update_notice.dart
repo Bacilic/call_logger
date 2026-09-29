@@ -5,6 +5,7 @@ import '../../../core/database/database_identity_repository.dart';
 import '../../../core/updates/update_manifest.dart';
 import '../providers/active_sessions_provider.dart';
 import '../services/active_sessions.dart';
+import '../../../core/database/database_v1_schema.dart';
 
 /// Αλλάζει αυτή η ενημέρωση τη δομή της κοινής βάσης;
 ///
@@ -137,6 +138,7 @@ Future<bool> confirmSchemaChangingUpdate(
                                 session,
                                 now: now,
                                 myAppVersion: mine,
+                                databaseSchemaVersion: databaseSchemaVersionV1,
                               ),
                               style: theme.textTheme.bodySmall,
                             ),

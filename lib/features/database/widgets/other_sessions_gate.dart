@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../providers/active_sessions_provider.dart';
 import '../services/active_sessions.dart';
 import '../services/other_sessions_visibility.dart';
+import '../../../core/database/database_v1_schema.dart';
 
 /// Ρωτά «ποιος άλλος έχει τη βάση ανοιχτή;» πριν από επικίνδυνη ενέργεια.
 ///
@@ -83,6 +84,7 @@ Future<bool> confirmDespiteOtherSessions(
                             session,
                             now: now,
                             myAppVersion: mine,
+                            databaseSchemaVersion: databaseSchemaVersionV1,
                           ),
                           style: theme.textTheme.bodySmall,
                         ),

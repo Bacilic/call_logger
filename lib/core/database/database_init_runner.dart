@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../init/startup_engine_failure.dart';
+import '../init/startup_step_failure.dart';
 import '../init/startup_structural_check.dart';
 import '../services/settings_service.dart';
 import '../services/startup_asset_integrity_service.dart';
@@ -52,10 +53,29 @@ Future<void> _sealStoredSecrets() async {
     await SettingsRepository(db).sealUnsealedSecrets();
     await OperatorSettingsRepository(db).sealUnsealedSecrets();
   } catch (e, st) {
-    CrashLogService.instance.logError(
-      StateError('Το σφράγισμα των αποθηκευμένων κλειδιών απέτυχε: $e'),
+    reportStartupStepFailure(
+      'Το σφράγισμα των αποθηκευμένων κλειδιών απέτυχε',
+      e,
       st,
-      fatal: false,
+    );
+  }
+}
+
+/// Μεταφέρει τα παλιά πεδία των εργαλείων απομακρυσμένης σύνδεσης στη νέα μορφή.
+///
+/// Η αποτυχία δεν σταματά την εκκίνηση, αλλά **γράφεται**: ένα εργαλείο που
+/// έμεινε με παλιά πεδία εμφανίζεται αργότερα ως «δεν δουλεύει το AnyDesk»,
+/// χωρίς κανένα ίχνος που να δείχνει προς την πραγματική αιτία.
+Future<void> _migrateRemoteToolFields() async {
+  try {
+    await RemoteToolsRepository(
+      DatabaseHelper.instance,
+    ).migrateLegacyFieldsToArguments();
+  } catch (e, st) {
+    reportStartupStepFailure(
+      'Η μετάπτωση των πεδίων απομακρυσμένης σύνδεσης απέτυχε',
+      e,
+      st,
     );
   }
 }
@@ -161,6 +181,21 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
       }
       final dbPath = resolved.pathToOpen;
 
+      // **Το ημερολόγιο ακολουθεί τη βάση, και το κάνει ΕΔΩ.**
+      //
+      // Ο φάκελος των ιχνών ζει δίπλα στη βάση, και μαζί του ταξιδεύει η
+      // απάντηση στο «ποιος άλλος την κρατά τώρα;». Όσο η μετακόμιση ζούσε
+      // μόνο στην οθόνη σφάλματος, η αλλαγή βάσης άφηνε το ημερολόγιο να
+      // δείχνει στην **προηγούμενη**: ο φρουρός της αναβάθμισης ρωτούσε λάθος
+      // φάκελο, δεν έβρισκε κανέναν, και η μόνιμη αναβάθμιση σχήματος περνούσε
+      // σιωπηλά κάτω από ανοιχτή εφαρμογή συναδέλφου (εύρημα πεδίου 28/09).
+      //
+      // Εδώ και όχι στην εκκαθάριση των caches: αυτό το σημείο είναι το μόνο
+      // απ' όπου περνούν **όλες** οι ροές που ανοίγουν βάση — εκκίνηση, αλλαγή
+      // διαδρομής, επαναδοκιμή — και είναι **πριν** από κάθε έλεγχο, άρα πριν
+      // από τον φρουρό που χρειάζεται τον σωστό φάκελο για να απαντήσει.
+      await _followDatabaseWithCrashLog(dbPath);
+
       if (reuseIfFresh) {
         final remembered = _rememberedResultFor(dbPath);
         if (remembered != null) {
@@ -185,6 +220,29 @@ Future<DatabaseInitRunnerResult> runDatabaseInitChecks({
     });
   } finally {
     gate.complete();
+  }
+}
+
+/// Μετακομίζει το ημερολόγιο δίπλα στη βάση που πρόκειται να ανοίξει.
+///
+/// **Ποτέ μοιραίο.** Το ημερολόγιο είναι διαγνωστική υποδομή: ένας φάκελος που
+/// δεν απαντά δεν επιτρέπεται να εμποδίσει το άνοιγμα της βάσης. Η ίδια η
+/// μετακόμιση κρατά ήδη την κατάσταση «χωρίς δίσκο» όταν αποτύχει, οπότε εδώ
+/// μένει μόνο ο τελευταίος φρουρός για ό,τι απρόβλεπτο.
+///
+/// Όταν ο φάκελος είναι ήδη ο σωστός — η συνήθης περίπτωση κάθε εκκίνησης — η
+/// μετακόμιση επιστρέφει αμέσως χωρίς να αγγίξει τίποτα.
+Future<void> _followDatabaseWithCrashLog(String dbPath) async {
+  final log = CrashLogService.instanceOrNull;
+  if (log == null) return;
+  try {
+    await log.retargetTo(
+      databasePath: dbPath,
+      retentionCount: await SettingsService().catalogs
+          .getCrashLogRetentionCount(),
+    );
+  } catch (_) {
+    // Η βάση ανοίγει ακόμη κι όταν το ημερολόγιο δεν μπόρεσε να ακολουθήσει.
   }
 }
 
@@ -273,11 +331,7 @@ Future<DatabaseInitRunnerResult> _runDatabaseInitChecksUnlocked({
             _appSettingsSet,
             _appSettingsUpdate,
           );
-          try {
-            await RemoteToolsRepository(
-              DatabaseHelper.instance,
-            ).migrateLegacyFieldsToArguments();
-          } catch (_) {}
+          await _migrateRemoteToolFields();
           await _sealStoredSecrets();
           isLocalDevMode = DatabaseHelper.instance.isUsingLocalDb;
           progressNotifier?.setStep('Έλεγχος υγείας βάσης');

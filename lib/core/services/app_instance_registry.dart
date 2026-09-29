@@ -86,6 +86,33 @@ class AppInstanceRegistry {
   }
 
   /// Τα υπόλοιπα αντίγραφα — όσα δεν είναι το τρέχον.
+  /// Έως ποιο σχήμα βάσης διαβάζει η έκδοση [version], αν το ξέρουμε.
+  ///
+  /// **Το ταβάνι είναι ιδιότητα του build, όχι του υπολογιστή.** Αν η 0.57.1
+  /// διαβάζει έως το 66 εδώ, διαβάζει έως το 66 και στον σταθμό του συναδέλφου:
+  /// είναι ο ίδιος μεταγλωττισμένος αριθμός. Γι' αυτό το τοπικό μητρώο μπορεί
+  /// να απαντήσει για **ξένους** σταθμούς, από τους οποίους ξέρουμε μόνο τον
+  /// αριθμό έκδοσης — χωρίς νέα στήλη στη βάση και χωρίς να περιμένουμε να
+  /// αναβαθμιστούν όλοι.
+  ///
+  /// `null` όταν αυτή η έκδοση δεν έχει τρέξει ποτέ σε αυτόν τον υπολογιστή, ή
+  /// όταν η εγγραφή της είναι από παλαιότερη έκδοση που δεν κατέγραφε ταβάνι.
+  /// **Η άγνοια δεν μαντεύεται**: μια προειδοποίηση χτισμένη σε εικασία θα
+  /// έστελνε τον χρήστη να κυνηγήσει πρόβλημα που ίσως δεν υπάρχει.
+  static int? schemaCeilingForVersion(
+    List<AppInstanceRecord> known,
+    String? version,
+  ) {
+    final wanted = version?.trim() ?? '';
+    if (wanted.isEmpty) return null;
+    for (final record in known) {
+      if (record.version.trim() != wanted) continue;
+      final ceiling = record.schemaVersion;
+      if (ceiling != null) return ceiling;
+    }
+    return null;
+  }
+
   static List<AppInstanceRecord> others(
     List<AppInstanceRecord> all,
     String currentExecutablePath,

@@ -18,6 +18,7 @@ import '../../features/directory/providers/equipment_types_provider.dart';
 import '../../features/tasks/providers/task_service_provider.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import '../database/active_database_generation.dart';
+import '../database/shared_database_refresh.dart';
 
 /// Εκκαθάριση Riverpod caches που κρατούν δεδομένα της προηγούμενης βάσης.
 ///
@@ -42,6 +43,9 @@ import '../database/active_database_generation.dart';
 void invalidateDatabaseScopedCaches(WidgetRef ref) {
   void run() {
     if (!ref.context.mounted) return;
+    // Ο ρυθμός των στατιστικών αφορούσε την ΠΡΟΗΓΟΥΜΕΝΗ βάση: χωρίς μηδενισμό,
+    // η νέα θα περίμενε ως ένα λεπτό δείχνοντας τα νούμερα της παλιάς.
+    resetSharedDatabaseStatsThrottle();
     ref.invalidate(databaseBrowserStatsProvider);
     // Η υπογραφή του σπορέα ζει ΜΕΣΑ στη βάση: μετά την αλλαγή, η οθόνη
     // σεναρίων πρέπει να ξαναρωτήσει τη νέα και όχι να θυμάται την παλιά.

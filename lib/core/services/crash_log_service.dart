@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'operator_presence_heartbeat.dart';
 import 'session_liveness_mark.dart';
 import 'station_name.dart';
+import 'station_shutdown_request.dart';
 
 /// Καταγραφή σφαλμάτων και καταρρεύσεων σε ημερήσια αρχεία δίπλα στη βάση.
 ///
@@ -94,6 +95,18 @@ class CrashLogService {
   static CrashLogService? _instance;
 
   static CrashLogService? get instanceOrNull => _instance;
+
+  /// Ξεχνά το καθολικό στιγμιότυπο. **Μόνο για τα τεστ.**
+  ///
+  /// Χωρίς αυτό, ένας έλεγχος που στήνει το ημερολόγιο το αφήνει στημένο για
+  /// όλους τους επόμενους του αρχείου — και η συμπεριφορά «τι γίνεται όταν το
+  /// ημερολόγιο ΛΕΙΠΕΙ» γίνεται αδύνατο να ελεγχθεί χωρίς να εξαρτάται από τη
+  /// σειρά εκτέλεσης.
+  @visibleForTesting
+  static void resetForTest() {
+    _instance?.stopLivenessHeartbeat();
+    _instance = null;
+  }
 
   static CrashLogService get instance {
     final current = _instance;
@@ -272,6 +285,10 @@ class CrashLogService {
       lastSeen: _now(),
       database: databaseFileName,
       instance: instanceId.isEmpty ? null : instanceId,
+      // Το ίχνος δηλώνει ό,τι **ισχύει**, όχι ό,τι υπόσχεται η έκδοση: όσο δεν
+      // έχει δοθεί χειριστής, κανείς δεν θα δει σημείωμα, και ο αιτών πρέπει να
+      // το ξέρει αντί να μετρά αντίστροφα στο κενό.
+      listensForShutdownRequests: onShutdownRequested != null,
     );
     await lock
         .writeAsString(_currentMark!.encode(), flush: true)
@@ -319,12 +336,105 @@ class CrashLogService {
   void startLivenessHeartbeat() {
     stopLivenessHeartbeat();
     if (!_diskAvailable) return;
-    _livenessTimer = Timer.periodic(livenessInterval, (_) => _markAlive());
+    _livenessTimer = Timer.periodic(livenessInterval, (_) => _pulse());
   }
 
   void stopLivenessHeartbeat() {
     _livenessTimer?.cancel();
     _livenessTimer = null;
+  }
+
+  /// Τι κάνει η εφαρμογή όταν κάποιος της ζητά να κλείσει.
+  ///
+  /// Δίνεται από έξω ώστε το ημερολόγιο να μη μάθει ποτέ τι σημαίνει «κλείσιμο
+  /// εφαρμογής»: η δουλειά του είναι τα αρχεία, και μια υπηρεσία που ξέρει και
+  /// τα δύο θα ήταν αδύνατο να ελεγχθεί χωρίς δέντρο widget.
+  ///
+  /// `null` όσο κανείς δεν ακούει — και τότε το ίχνος **δεν** δηλώνει ότι
+  /// ακούει, ώστε ο αιτών να μην περιμένει απάντηση που δεν θα έρθει.
+  Future<void> Function(StationShutdownRequest request)?
+  get onShutdownRequested => _onShutdownRequested;
+
+  Future<void> Function(StationShutdownRequest request)? _onShutdownRequested;
+
+  /// **Η ανάθεση ξαναγράφει το ίχνος αμέσως.**
+  ///
+  /// Το ίχνος γεννιέται στην εκκίνηση, πολύ πριν στηθεί το κέλυφος που ακούει.
+  /// Χωρίς αυτή την ενημέρωση θα έμενε να δηλώνει «δεν ακούω» ως τον πρώτο
+  /// παλμό — ένα ολόκληρο λεπτό κατά το οποίο ο συνάδελφος θα διάβαζε ότι
+  /// χρειάζεται τηλέφωνο, ενώ η εφαρμογή ήδη άκουγε.
+  set onShutdownRequested(
+    Future<void> Function(StationShutdownRequest request)? handler,
+  ) {
+    final changed = (_onShutdownRequested != null) != (handler != null);
+    _onShutdownRequested = handler;
+    if (!changed) return;
+    final mark = _currentMark;
+    if (mark == null) return;
+    _currentMark = SessionLivenessMark(
+      station: mark.station,
+      version: mark.version,
+      startedAt: mark.startedAt,
+      lastSeen: mark.lastSeen,
+      database: mark.database,
+      instance: mark.instance,
+      listensForShutdownRequests: handler != null,
+    );
+    _markAlive();
+  }
+
+  /// **Ένας παλμός, δύο πράξεις.** Το ίχνος γράφεται και, στην ίδια στιγμή,
+  /// ρωτιέται ο φάκελος αν κάποιος ζήτησε κλείσιμο.
+  ///
+  /// Η κοινή στιγμή δεν είναι οικονομία, είναι **προϋπόθεση ακρίβειας**: ο
+  /// αιτών προβλέπει πότε θα δούμε το σημείωμά του προσθέτοντας ένα λεπτό στο
+  /// «τελευταίο σημάδι ζωής» που διαβάζει. Αν ο έλεγχος είχε δικό του χρονιστή,
+  /// η φάση του θα διέφερε και η πρόβλεψη θα ήταν εικασία.
+  void _pulse() {
+    _markAlive();
+    if (onShutdownRequested == null) return;
+    unawaited(_checkForShutdownRequest());
+  }
+
+  /// Ένα «υπάρχεις;» σε γνωστό όνομα αρχείου — ποτέ σάρωση φακέλου.
+  ///
+  /// Ποτέ δύο έλεγχοι μαζί: σε αργό δικτυακό φάκελο ένας έλεγχος μπορεί να
+  /// κρατήσει περισσότερο από το διάστημα, και ο επόμενος παραλείπεται αντί να
+  /// στοιβαχτεί.
+  bool _checkingShutdownRequest = false;
+
+  Future<void> _checkForShutdownRequest() async {
+    if (_checkingShutdownRequest || !_diskAvailable) return;
+    _checkingShutdownRequest = true;
+    try {
+      final request = await readShutdownRequestForMe(
+        logsDirectory: logsDirectory,
+        myStation: StationName.fileSafe,
+        myInstance: instanceId,
+        myDatabase: databaseFileName,
+        now: _now(),
+        timeout: diskProbeTimeout,
+      );
+      if (request == null) return;
+      // **Καταναλώνεται μόλις διαβαστεί, πριν γίνει οτιδήποτε μαζί του.**
+      // Το σημείωμα είναι ερέθισμα μιας χρήσης. Αν το αφήναμε στον δίσκο ώσπου
+      // να τιμηθεί, μια κατάρρευση ή ένα βίαιο κλείσιμο στη μέση του διαλόγου
+      // θα το άφηνε εκεί — και η επόμενη εκκίνηση θα το ξανάβρισκε και θα
+      // ξανάκλεινε αμέσως, εγκλωβίζοντας τον συνάδελφο έξω από τη δουλειά του.
+      await clearShutdownRequestForMe(
+        logsDirectory: logsDirectory,
+        myStation: StationName.fileSafe,
+        myInstance: instanceId,
+        timeout: diskProbeTimeout,
+      );
+      await onShutdownRequested?.call(request);
+    } catch (e, stack) {
+      // Ο φρουρός δεν ρίχνει ποτέ την εφαρμογή: μια αποτυχία εδώ σημαίνει απλώς
+      // ότι το αίτημα θα ξαναβρεθεί στον επόμενο παλμό.
+      logError(e, stack, fatal: false);
+    } finally {
+      _checkingShutdownRequest = false;
+    }
   }
 
   /// Ανανεώνει το «μέχρι πότε ζούσα». Σιωπηλή αποτυχία: το σημάδι ζωής είναι

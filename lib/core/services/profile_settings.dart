@@ -113,6 +113,15 @@ abstract final class ProfileSettingKeys {
     'task_print_preview',
     legacySource: ProfileSettingLegacySource.bornPersonal,
   );
+
+  /// Ερώτηση πριν ανοίξει σύνδεσμος ή διαδρομή από σημείωση.
+  ///
+  /// Γεννιέται προσωπική: όποιος ανοίγει συνεχώς τις ίδιες γνωστές διαδρομές
+  /// την κλείνει μία φορά, χωρίς να την κλείσει και για τον συνάδελφο.
+  static const ProfileSettingKey confirmLinkOpen = ProfileSettingKey(
+    'confirm_link_open_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
   static const ProfileSettingKey navRailShowLabels = ProfileSettingKey(
     'nav_rail_show_labels',
     legacySource: ProfileSettingLegacySource.machine,
@@ -369,6 +378,7 @@ abstract final class ProfileSettingKeys {
     showActiveTimer,
     showTasksBadge,
     notifyTaskHandovers,
+    confirmLinkOpen,
     navRailShowLabels,
     showGlobalCallsDashboard,
     showDatabaseNav,

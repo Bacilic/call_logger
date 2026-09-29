@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../config/app_config.dart';
 import '../database/database_v1_schema.dart';
 import '../services/app_instance_registry.dart';
+import '../services/known_schema_ceilings.dart';
 import '../services/settings_service.dart';
 import '../utils/file_path_identity.dart';
 
@@ -74,6 +75,10 @@ final appInstancesProvider = FutureProvider<AppInstancesStatus>((ref) async {
     schemaVersion: databaseSchemaVersionV1,
   );
   await settings.setKnownAppInstances(updated);
+  // Η φόρτωση των ανοιχτών συνεδριών χρειάζεται το ταβάνι σχήματος κάθε
+  // έκδοσης, αλλά τρέχει σε διαδρομή που δεν επιτρέπεται να περιμένει κανένα
+  // κανάλι συστήματος. Το μητρώο διαβάστηκε ήδη εδώ· το αφήνουμε έτοιμο.
+  KnownSchemaCeilings.remember(updated);
 
   final others = AppInstanceRegistry.others(updated, executablePath);
   final dismissed = await settings.getDismissedAppInstancesSignature();

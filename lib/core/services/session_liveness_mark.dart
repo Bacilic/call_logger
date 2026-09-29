@@ -26,6 +26,7 @@ class SessionLivenessMark {
     required this.lastSeen,
     this.database,
     this.instance,
+    this.listensForShutdownRequests = false,
   });
 
   final String station;
@@ -56,6 +57,16 @@ class SessionLivenessMark {
   /// σταθμός, όπως ήταν.
   final String? instance;
 
+  /// Κοιτάζει αυτή η εκτέλεση για αιτήματα κλεισίματος;
+  ///
+  /// **Η δήλωση δεν είναι διακοσμητική.** Ο αιτών υπολογίζει από το [lastSeen]
+  /// πότε ο παραλήπτης θα δει το σημείωμά του, και του το δείχνει ως αντίστροφη
+  /// μέτρηση. Για εκτέλεση που δεν ακούει, εκείνη η μέτρηση θα ήταν ψέμα του
+  /// χειρότερου είδους: θα τον κρατούσε να περιμένει μήνυμα που δεν πρόκειται
+  /// να φτάσει. Εκδόσεις παλαιότερες από τη λειτουργία δεν γράφουν το πεδίο,
+  /// οπότε το `false` λέει ακριβώς την αλήθεια γι' αυτές — θέλουν τηλέφωνο.
+  final bool listensForShutdownRequests;
+
   SessionLivenessMark seenAt(DateTime now) => SessionLivenessMark(
     station: station,
     version: version,
@@ -63,6 +74,7 @@ class SessionLivenessMark {
     lastSeen: now,
     database: database,
     instance: instance,
+    listensForShutdownRequests: listensForShutdownRequests,
   );
 
   String encode() => jsonEncode({
@@ -72,6 +84,7 @@ class SessionLivenessMark {
     'lastSeen': lastSeen.toIso8601String(),
     if (database != null) 'database': database,
     if (instance != null) 'instance': instance,
+    if (listensForShutdownRequests) 'listensForShutdownRequests': true,
   });
 
   /// Διαβάζει ίχνος. `null` όταν λείπει, είναι αλλοιωμένο, ή γράφτηκε από
@@ -96,6 +109,8 @@ class SessionLivenessMark {
         lastSeen: lastSeen,
         database: _nonEmpty(decoded['database']),
         instance: _nonEmpty(decoded['instance']),
+        listensForShutdownRequests:
+            decoded['listensForShutdownRequests'] == true,
       );
     } on FormatException {
       return null;

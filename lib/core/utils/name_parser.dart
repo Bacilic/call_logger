@@ -79,10 +79,31 @@ class NameParserUtility {
     // Το τμήμα κλείνει ΠΑΝΤΑ το κείμενο, οπότε κόβεται από το τέλος. Με
     // κόψιμο στην πρώτη « (» το «Βίκυ (Βασιλική) Κίτσιου (Γραφείο)» θα
     // κατέληγε σκέτο «Βίκυ» — χαμένο επώνυμο, και νέος καλών χωρίς αυτό.
-    if (!v.endsWith(')')) return v;
-    final open = v.lastIndexOf(' (');
-    if (open <= 0) return v;
+    //
+    // Κόβεται ΟΛΗ η ομάδα που κλείνει το κείμενο, μαζί με τις παρενθέσεις του
+    // ίδιου του ονόματος του τμήματος: με κόψιμο στην τελευταία « (» το
+    // «Γεωργία Τσίλη (Διοικητής (Γραμματεία))» γινόταν «Γεωργία Τσίλη
+    // (Διοικητής» — κανένας υπάλληλος δεν ταίριαζε.
+    final open = _openingOfTrailingGroup(v);
+    if (open == null || open <= 0 || v[open - 1] != ' ') return v;
     return v.substring(0, open).trim();
+  }
+
+  /// Η θέση της « (» που ταιριάζει με την « )» στο τέλος του [value]· null
+  /// όταν το κείμενο δεν κλείνει με παρένθεση ή οι παρενθέσεις δεν ισορροπούν.
+  static int? _openingOfTrailingGroup(String value) {
+    if (!value.endsWith(')')) return null;
+    var depth = 0;
+    for (var i = value.length - 1; i >= 0; i--) {
+      final c = value[i];
+      if (c == ')') {
+        depth++;
+      } else if (c == '(') {
+        depth--;
+        if (depth == 0) return i;
+      }
+    }
+    return null;
   }
 
   /// Κανονικοποιεί το [fullName] (trim, πολλαπλά κενά → ένα) και το χωρίζει σε όνομα/επώνυμο.
