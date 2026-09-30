@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_service.dart';
 import '../../../core/database/old_database/resolution_log_entry.dart';
 import '../../../core/utils/picker_location_memory.dart';
+import '../../../core/utils/file_picker_session.dart';
 
 /// Μορφή εκτιμώμενου χρόνου ολοκλήρωσης ως λεπτά:δευτερόλεπτα.
 String lampResolutionEtaText(Duration remaining) {
@@ -343,14 +344,16 @@ class _LampResolutionProgressDialogState
     setState(() => _exporting = true);
     try {
       const memory = PickerLocationMemory('lamp_resolution_report');
-      final path = (await FilePicker.saveFile(
-        dialogTitle: 'Εξαγωγή αναφοράς επίλυσης',
-        fileName: 'resolution_log_${_timestampForFileName()}.txt',
-        type: FileType.custom,
-        allowedExtensions: const <String>['txt'],
-        initialDirectory: await memory.initialDirectory(),
-        bytes: Uint8List(0),
-      ))?.toFilePath();
+      final path = (await FilePickerSession.run(
+        () async => FilePicker.saveFile(
+          dialogTitle: 'Εξαγωγή αναφοράς επίλυσης',
+          fileName: 'resolution_log_${_timestampForFileName()}.txt',
+          type: FileType.custom,
+          allowedExtensions: const <String>['txt'],
+          initialDirectory: await memory.initialDirectory(),
+          bytes: Uint8List(0),
+        ),
+      )).value?.toFilePath();
       if (!mounted) return;
       if (path == null) {
         setState(() => _exporting = false);

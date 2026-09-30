@@ -4,6 +4,7 @@ import '../../features/knowledge/models/knowledge_article.dart';
 import '../../features/knowledge/services/knowledge_matcher.dart';
 import '../utils/search_text_normalizer.dart';
 import 'audit_service.dart';
+import 'sql_like.dart';
 
 /// Repository της Βάσης Γνώσης (πίνακας `knowledge_base`).
 ///
@@ -52,8 +53,8 @@ class KnowledgeBaseRepository {
     if (normalized.isNotEmpty) {
       for (final token in normalized.split(' ')) {
         if (token.isEmpty) continue;
-        clauses.add('kb.search_index LIKE ?');
-        args.add('%$token%');
+        clauses.add('kb.search_index ${SqlLike.op}');
+        args.add(SqlLike.contains(token));
       }
     }
     if (categoryId != null) {

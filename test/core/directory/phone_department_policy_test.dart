@@ -174,6 +174,20 @@ void main() {
       },
     );
 
+    test('νέο τμήμα που θα δημιουργηθεί → προσφέρεται και η μεταφορά', () {
+      expect(
+        PhoneDepartmentPolicy.availableResolutions(
+          sharedWithOwners,
+          targetDepartmentId: null,
+          targetIsNewDepartment: true,
+        ),
+        [
+          UserPhoneConflictResolution.keepInDepartmentDetachFromUser,
+          UserPhoneConflictResolution.transferSharedToUserDepartment,
+        ],
+      );
+    });
+
     test('μόνο κάτοχοι → μόνο αφαίρεση', () {
       expect(
         PhoneDepartmentPolicy.availableResolutions(

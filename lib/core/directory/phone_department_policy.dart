@@ -178,14 +178,18 @@ class PhoneDepartmentPolicy {
   ///
   /// Κενή λίστα σημαίνει ότι η σύγκρουση δεν λύνεται χωρίς τμήμα υπαλλήλου —
   /// ο καλών το εξηγεί.
+  ///
+  /// [targetIsNewDepartment]: το τμήμα-στόχος θα δημιουργηθεί μετά την ερώτηση
+  /// (γρήγορη προσθήκη νέου καλούντα)· η μεταφορά εκεί προσφέρεται κανονικά.
   static List<UserPhoneConflictResolution> availableResolutions(
     PhoneDepartmentConflict conflict, {
     required int? targetDepartmentId,
+    bool targetIsNewDepartment = false,
   }) {
     final options = <UserPhoneConflictResolution>[];
     if (conflict.canTransferSharedLocation) {
       options.add(UserPhoneConflictResolution.keepInDepartmentDetachFromUser);
-      if (targetDepartmentId != null) {
+      if (targetDepartmentId != null || targetIsNewDepartment) {
         // Η μεταφορά καλύπτει και τους άλλους κατόχους, οπότε η σκέτη
         // αφαίρεσή τους δεν έχει τι να προσθέσει.
         options.add(UserPhoneConflictResolution.transferSharedToUserDepartment);

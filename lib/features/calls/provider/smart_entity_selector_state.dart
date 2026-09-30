@@ -191,11 +191,25 @@ class SmartEntitySelectorState {
 
   String get anydeskTargetDisplay => resolvedAnyDeskTarget ?? '—';
 
-  bool get hasPhoneAssociation {
+  /// Ανήκει ήδη το τηλέφωνο στον καλούντα — προσωπικά **ή** ως κοινό
+  /// τηλέφωνο του τμήματός του;
+  ///
+  /// Το κοινό τηλέφωνο του τμήματος δεν προτείνεται ποτέ για προσθήκη: θα
+  /// γινόταν και προσωπικό του καλούντα, και κάθε επόμενη κλήση από εκεί θα
+  /// συμπλήρωνε αυτόματα εκείνον αντί να δείχνει όλους τους συναδέλφους.
+  bool hasPhoneAssociation(LookupService? lookup) {
     final callerPhone = selectedCaller?.phoneJoined ?? '';
     final selPhone = selectedPhone?.trim() ?? '';
     if (selPhone.isEmpty) return false;
-    return PhoneListParser.containsPhone(callerPhone, selPhone);
+    if (PhoneListParser.containsPhone(callerPhone, selPhone)) return true;
+    final departmentId = selectedCaller?.departmentId;
+    if (lookup == null || departmentId == null) return false;
+    return PhoneListParser.containsPhone(
+      PhoneListParser.joinPhones(
+        lookup.getDirectPhonesByDepartment(departmentId),
+      ),
+      selPhone,
+    );
   }
 
   /// [lookup]: για έλεγχο M2M (`user_equipment`) όταν υπάρχει επιλεγμένος εξοπλισμός με id.
@@ -207,6 +221,16 @@ class SmartEntitySelectorState {
     if (lookup != null && selectedEquipment?.id != null && callerId != null) {
       final owners = lookup.findUsersForEquipment(selectedEquipment!.id!);
       if (owners.any((u) => u.id == callerId)) return true;
+    }
+    // Κοινόχρηστος εξοπλισμός του τμήματος του καλούντα: η σύνδεση υπάρχει
+    // ήδη μέσω του τμήματος, δεν προτείνεται να δεθεί σε πρόσωπο.
+    final departmentId = selectedCaller!.departmentId;
+    if (lookup != null && departmentId != null) {
+      final shared = lookup.getSharedEquipmentCodesByDepartment(departmentId);
+      final code = selectedEquipment?.code?.trim();
+      if (shared.contains(text) || (code != null && shared.contains(code))) {
+        return true;
+      }
     }
 
     return equipmentCandidates.any(
@@ -238,7 +262,7 @@ class SmartEntitySelectorState {
     final equipmentFilled = equipmentText.trim().isNotEmpty;
     if (!phoneFilled && !equipmentFilled) return false;
 
-    final needsPhone = phoneFilled && !hasPhoneAssociation;
+    final needsPhone = phoneFilled && !hasPhoneAssociation(lookup);
     final needsEquipment =
         equipmentFilled &&
         !hasEquipmentAssociation(lookup) &&
@@ -412,6 +436,49 @@ class SmartEntitySelectorState {
     return Colors.green;
   }
 
+  /// Η λέξη του «+»: «Προσθήκη» όταν δημιουργείται έστω και κάτι καινούριο,
+  /// «Μεταβολή» όταν αλλάζουν **μόνο** σχέσεις ανάμεσα σε όσα υπάρχουν ήδη.
+  ///
+  /// Η μικτή περίπτωση (νέο στοιχείο μαζί με αλλαγή σχέσεων) είναι
+  /// «Προσθήκη»: το σκέλος που αγγίζει ξένα δεδομένα ρωτιέται ούτως ή άλλως
+  /// ρητά πριν γίνει. Το χρώμα μένει ξεχωριστή διάσταση ([associationColor]).
+  String associationLabel(LookupService? lookup) =>
+      _associationCreatesSomething(lookup) ? 'Προσθήκη' : 'Μεταβολή';
+
+  bool _associationCreatesSomething(LookupService? lookup) {
+    // Χωρίς κατάλογο δεν ξέρουμε τι υπάρχει: η συνηθισμένη λέξη.
+    if (lookup == null || needsNewCallerCreation) return true;
+    final phone = selectedPhone?.trim() ?? '';
+    final equipment = equipmentText.trim();
+    final department = departmentText.trim();
+
+    bool phoneIsNew() {
+      final usage = lookup.checkPhoneUsage(phone);
+      return !usage.hasUserOwners && !usage.hasDepartmentLocation;
+    }
+
+    bool equipmentIsNew() => lookup.findEquipmentsByCode(equipment).isEmpty;
+    bool departmentIsNew() =>
+        department.isNotEmpty &&
+        lookup.findDepartmentByName(department) == null;
+
+    if (selectedCaller == null) {
+      // Γρήγορη προσθήκη σε τμήμα χωρίς καλούντα.
+      return (phone.isNotEmpty && phoneIsNew()) ||
+          (equipment.isNotEmpty && equipmentIsNew()) ||
+          departmentIsNew();
+    }
+    // Ίδια κριτήρια με τη συσχέτιση: μετρά μόνο ό,τι πρόκειται να γραφτεί.
+    final linksPhone = phone.isNotEmpty && !hasPhoneAssociation(lookup);
+    final linksEquipment =
+        equipment.isNotEmpty &&
+        !hasEquipmentAssociation(lookup) &&
+        departmentAcceptsEquipment(lookup);
+    return (linksPhone && phoneIsNew()) ||
+        (linksEquipment && equipmentIsNew()) ||
+        (hasPendingDepartmentChange && departmentIsNew());
+  }
+
   /// Τι ακριβώς θα συμβεί είτε για υπάρχοντα χρήστη είτε για νέο καλούντα.
   String? associationTooltip(LookupService? lookup) {
     if (!needsAssociation(lookup)) return null;
@@ -470,7 +537,7 @@ class SmartEntitySelectorState {
 
     final name = selectedCaller?.name ?? 'άγνωστος';
     final parts = <String>[];
-    if (phoneFilled && !hasPhoneAssociation) {
+    if (phoneFilled && !hasPhoneAssociation(lookup)) {
       parts.add('τηλεφώνου: ${selectedPhone!.trim()}');
     }
     if (equipmentFilled && !hasEquipmentAssociation(lookup)) {

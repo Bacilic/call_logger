@@ -13,6 +13,7 @@ import 'calls_audit_line.dart';
 import 'calls_search_index.dart';
 import 'directory_support.dart';
 import 'call_department_deleted_flag.dart';
+import 'sql_like.dart';
 
 /// Εγγραφές και αναγνώσεις του πίνακα `calls` (δημιουργία, ενημέρωση,
 /// κλωνοποίηση, ιστορικό, μετρήσεις).
@@ -674,8 +675,8 @@ class CallsRepository {
     }
     appendCallCategoryFilter(whereClauses, args, category: category);
     if (keyword != null && keyword.isNotEmpty) {
-      whereClauses.add('calls.search_index LIKE ?');
-      args.add('%$keyword%');
+      whereClauses.add('calls.search_index ${SqlLike.op}');
+      args.add(SqlLike.contains(keyword));
     }
     // Δύο διαφορετικά «#id» δεν μπορούν να δείχνουν την ίδια γραμμή: το ΚΑΙ
     // αδειάζει το αποτέλεσμα, ακριβώς όπως στον Κατάλογο.

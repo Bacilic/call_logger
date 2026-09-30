@@ -10,6 +10,8 @@
 /// να βρίσκεται κι αυτή.
 library;
 
+import 'sql_like.dart';
+
 /// Το τμήμα της κλήσης — από τον κατάλογο, αλλιώς το κείμενο της κλήσης.
 const String kCallDepartmentExpr =
     "COALESCE(departments.name, calls.department_text, '-')";
@@ -83,8 +85,8 @@ void appendCallEntityFilters(
 
   final code = equipmentCode?.trim();
   if (code != null && code.isNotEmpty) {
-    whereClauses.add('$kCallEquipmentExpr LIKE ?');
-    args.add('%$code%');
+    whereClauses.add('$kCallEquipmentExpr ${SqlLike.op}');
+    args.add(SqlLike.contains(code));
   }
 }
 

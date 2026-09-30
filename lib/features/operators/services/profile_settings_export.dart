@@ -9,19 +9,22 @@ import '../../../core/database/operator_settings_repository.dart';
 import '../../../core/services/current_operator.dart';
 import '../../../core/services/profile_settings.dart';
 import '../../../core/utils/json_document.dart';
+import '../../../core/utils/file_picker_session.dart';
 
 /// Επιλογή θέσης αποθήκευσης — αντικαθίσταται στα τεστ.
 typedef ProfileExportSavePathPicker =
     Future<String?> Function(String suggestedFileName);
 
 Future<String?> _pickSavePathWithSystemDialog(String suggestedFileName) async {
-  final uri = await FilePicker.saveFile(
-    dialogTitle: 'Αντίγραφο των ρυθμίσεών μου',
-    fileName: suggestedFileName,
-    type: FileType.custom,
-    allowedExtensions: const ['json'],
-    bytes: Uint8List(0),
-  );
+  final uri = (await FilePickerSession.run(
+    () async => FilePicker.saveFile(
+      dialogTitle: 'Αντίγραφο των ρυθμίσεών μου',
+      fileName: suggestedFileName,
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+      bytes: Uint8List(0),
+    ),
+  )).value;
   return uri?.toFilePath();
 }
 
@@ -91,11 +94,13 @@ Future<ProfileSettingsExportResult> exportActiveOperatorSettings({
 typedef ProfileImportOpenPathPicker = Future<String?> Function();
 
 Future<String?> _pickOpenPathWithSystemDialog() async {
-  final file = await FilePicker.pickFile(
-    dialogTitle: 'Επαναφορά των ρυθμίσεών μου',
-    type: FileType.custom,
-    allowedExtensions: const ['json'],
-  );
+  final file = (await FilePickerSession.run(
+    () async => FilePicker.pickFile(
+      dialogTitle: 'Επαναφορά των ρυθμίσεών μου',
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+    ),
+  )).value;
   return file?.path;
 }
 

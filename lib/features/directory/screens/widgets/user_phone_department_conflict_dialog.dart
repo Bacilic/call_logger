@@ -14,6 +14,9 @@ Future<UserPhoneConflictBatchResult?> showUserPhoneDepartmentConflictDialog(
   required String userDisplayName,
   required String targetDepartmentName,
   int? targetDepartmentId,
+
+  /// Το τμήμα του υπαλλήλου θα δημιουργηθεί μετά την ερώτηση.
+  bool targetIsNewDepartment = false,
 }) {
   if (conflicts.isEmpty) {
     return Future.value(const UserPhoneConflictBatchResult());
@@ -27,6 +30,7 @@ Future<UserPhoneConflictBatchResult?> showUserPhoneDepartmentConflictDialog(
       userDisplayName: userDisplayName,
       targetDepartmentName: targetDepartmentName,
       targetDepartmentId: targetDepartmentId,
+      targetIsNewDepartment: targetIsNewDepartment,
     ),
   );
 }
@@ -37,12 +41,14 @@ class _UserPhoneDepartmentConflictDialog extends StatefulWidget {
     required this.userDisplayName,
     required this.targetDepartmentName,
     required this.targetDepartmentId,
+    required this.targetIsNewDepartment,
   });
 
   final List<PhoneDepartmentConflict> conflicts;
   final String userDisplayName;
   final String targetDepartmentName;
   final int? targetDepartmentId;
+  final bool targetIsNewDepartment;
 
   @override
   State<_UserPhoneDepartmentConflictDialog> createState() =>
@@ -60,6 +66,7 @@ class _UserPhoneDepartmentConflictDialogState
     return PhoneDepartmentPolicy.availableResolutions(
       c,
       targetDepartmentId: widget.targetDepartmentId,
+      targetIsNewDepartment: widget.targetIsNewDepartment,
     );
   }
 

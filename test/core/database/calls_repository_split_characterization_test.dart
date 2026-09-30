@@ -202,5 +202,60 @@ void main() {
       expect(rows.length, 1);
       expect(rows.single['issue'], contains(marker));
     });
+
+    group('το % στην αναζήτηση είναι «τοις εκατό», όχι «οτιδήποτε»', () {
+      Future<void> seedPercentCalls() async {
+        // Πραγματικό μοτίβο της βάσης: το 2250 έχει «50» μέσα του, αλλά
+        // κανένα «50%».
+        await repo.insertCall(
+          CallModel(
+            date: '2025-07-10',
+            time: '12:00',
+            issue: 'medico άγνωστος 2250 καρδιολογική',
+            duration: 15,
+          ),
+        );
+        await repo.insertCall(
+          CallModel(
+            date: '2025-07-10',
+            time: '13:00',
+            issue: 'γέμισμα μελανιού 50% στον εκτυπωτή',
+            duration: 20,
+          ),
+        );
+      }
+
+      test('Ιστορικό Κλήσεων: «50%» βρίσκει μόνο όποια γράφει «50%»', () async {
+        await seedPercentCalls();
+        final rows = await repo.getHistoryCalls(
+          keyword: SearchTextNormalizer.normalizeForSearch('50%'),
+        );
+        expect(rows.map((r) => r['issue']), [
+          'γέμισμα μελανιού 50% στον εκτυπωτή',
+        ]);
+      });
+
+      test('Ιστορικό Κλήσεων: σκέτο «%» δεν φέρνει όλες τις κλήσεις', () async {
+        await seedPercentCalls();
+        final rows = await repo.getHistoryCalls(
+          keyword: SearchTextNormalizer.normalizeForSearch('%'),
+        );
+        expect(rows, hasLength(1));
+      });
+
+      test('πίνακας ελέγχου: «50%» μετρά μόνο όποια γράφει «50%»', () async {
+        await seedPercentCalls();
+        final calls = await dashboard.getDashboardCalls(
+          DashboardFilterModel(
+            dateFrom: DateTime(2025, 7, 10),
+            dateTo: DateTime(2025, 7, 10),
+            keyword: '50%',
+          ),
+        );
+        expect(calls.map((c) => c.issue), [
+          'γέμισμα μελανιού 50% στον εκτυπωτή',
+        ]);
+      });
+    });
   });
 }

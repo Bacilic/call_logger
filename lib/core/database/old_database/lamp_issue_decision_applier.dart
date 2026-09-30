@@ -60,10 +60,7 @@ class LampIssueDecisionApplier {
         final changed = await db.transaction<_AppliedDecision>((txn) async {
           return _applyDecision(txn, decision, emit: emit);
         });
-        if (changed.unresolved) {
-          // Μερική εφαρμογή: γράφτηκε το γραφείο, ο υπάλληλος λείπει ακόμη.
-          unresolved++;
-        } else if (changed.created) {
+        if (changed.created) {
           created++;
         } else if (decision.option != null) {
           manualApplied++;
@@ -269,21 +266,15 @@ class LampIssueDecisionApplier {
         if (code == null || placement == null) {
           throw StateError('Ο ορισμός τοποθέτησης απαιτεί γραφείο.');
         }
-        await _applyEquipmentPlacement(
+        final ownerCreated = await _applyEquipmentPlacement(
           txn,
           code: code,
           placement: placement,
           emit: emit,
         );
-        // Ο υπάλληλος είναι προαιρετικός: όταν λείπει, το γραφείο γράφτηκε
-        // αλλά το πρόβλημα του υπαλλήλου παραμένει ανοιχτό για αργότερα.
-        if (placement.ownerId == null) {
-          await _closeIssuesForField(txn, code, 'office', emit: emit);
-          return const _AppliedDecision(created: false, unresolved: true);
-        }
         await _closeIssuesForField(txn, code, 'owner', emit: emit);
         await _closeIssuesForField(txn, code, 'office', emit: emit);
-        return const _AppliedDecision(created: false);
+        return _AppliedDecision(created: ownerCreated);
       case 'update_equipment_fk':
         final code = proposal.row;
         final fkColumn = metadata['fkColumn']?.toString();
@@ -1230,12 +1221,28 @@ class LampIssueDecisionApplier {
     );
   }
 
-  Future<void> _applyEquipmentPlacement(
+  /// Γράφει γραφείο και υπάλληλο· επιστρέφει `true` όταν δημιουργήθηκε νέος
+  /// υπάλληλος.
+  ///
+  /// Ο νέος υπάλληλος μπαίνει στο γραφείο που μόλις ορίστηκε. Αν υπάρχει ήδη
+  /// κάποιος με το ίδιο ονοματεπώνυμο, συνδέεται εκείνος αντί να γραφτεί
+  /// δεύτερη φορά ο ίδιος άνθρωπος.
+  Future<bool> _applyEquipmentPlacement(
     Transaction txn, {
     required int code,
     required LampPlacementInput placement,
     required ResolutionLogSink emit,
   }) async {
+    final lastName = placement.newOwnerLastName?.trim() ?? '';
+    final firstName = placement.newOwnerFirstName?.trim() ?? '';
+    final wantsNewOwner = lastName.isNotEmpty && firstName.isNotEmpty;
+    if (placement.ownerId == null && !wantsNewOwner) {
+      throw StateError(
+        'Ο ορισμός τοποθέτησης απαιτεί υπάλληλο: στη Λάμπα κάθε εξοπλισμός '
+        'χρεώνεται σε πρόσωπο.',
+      );
+    }
+
     await txn.update(
       'equipment',
       <String, Object?>{
@@ -1256,15 +1263,37 @@ class LampIssueDecisionApplier {
       ),
     );
 
-    final ownerId = placement.ownerId;
+    var ownerId = placement.ownerId;
+    var created = false;
     if (ownerId == null) {
-      emit(
-        ResolutionLogEntry.info(
-          'Δεν δόθηκε υπάλληλος για τον εξοπλισμό $code· το πρόβλημα '
-          'παραμένει ανοιχτό και το αρχικό κείμενο διατηρείται.',
-        ),
+      ownerId = await _existingOwnerIdByIdentity(
+        txn,
+        lastName: lastName,
+        firstName: firstName,
       );
-      return;
+      if (ownerId != null) {
+        emit(
+          ResolutionLogEntry.success(
+            'Ο υπάλληλος $lastName $firstName υπάρχει ήδη (id=$ownerId)· '
+            'συνδέεται χωρίς νέα δημιουργία.',
+          ),
+        );
+      } else {
+        ownerId = await _nextId(txn, 'owners', 'owner');
+        await txn.insert('owners', <String, Object?>{
+          'owner': ownerId,
+          'last_name': lastName,
+          'first_name': firstName,
+          'office': placement.officeId,
+        });
+        created = true;
+        emit(
+          ResolutionLogEntry.success(
+            'Δημιουργήθηκε νέος υπάλληλος: id=$ownerId, επώνυμο=$lastName, '
+            'μικρό όνομα=$firstName, γραφείο=$officeDisplay.',
+          ),
+        );
+      }
     }
     await _updateEquipmentOwner(
       txn,
@@ -1273,6 +1302,7 @@ class LampIssueDecisionApplier {
       clearOriginalText: true,
       emit: emit,
     );
+    return created;
   }
 
   /// Δημιουργεί σύμβαση και επιστρέφει το αναγνωριστικό της.
@@ -1500,11 +1530,7 @@ class LampIssueDecisionApplier {
 }
 
 class _AppliedDecision {
-  const _AppliedDecision({required this.created, this.unresolved = false});
+  const _AppliedDecision({required this.created});
 
   final bool created;
-
-  /// Η ενέργεια εφαρμόστηκε εν μέρει και το πρόβλημα μένει ανοιχτό — ορισμός
-  /// γραφείου χωρίς υπάλληλο.
-  final bool unresolved;
 }

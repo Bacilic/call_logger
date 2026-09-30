@@ -7,6 +7,7 @@ import 'database_table_labels.dart';
 import '../services/current_operator.dart';
 import '../config/audit_retention_class.dart';
 import '../utils/search_text_normalizer.dart';
+import 'sql_like.dart';
 
 /// Κεντρική εγγραφή στον πίνακα `audit_log` (μόνο από εδώ).
 class AuditService {
@@ -413,11 +414,11 @@ class AuditService {
     String word,
   ) {
     clauses.add(
-      "(COALESCE(search_text, '') LIKE ? OR COALESCE(search_text, '') LIKE ? OR COALESCE(search_text, '') LIKE ? OR COALESCE(search_text, '') = ?)",
+      "(COALESCE(search_text, '') ${SqlLike.op} OR COALESCE(search_text, '') ${SqlLike.op} OR COALESCE(search_text, '') ${SqlLike.op} OR COALESCE(search_text, '') = ?)",
     );
-    clauseArgs.add('$word %');
-    clauseArgs.add('% $word %');
-    clauseArgs.add('% $word');
+    clauseArgs.add(SqlLike.startsWith('$word '));
+    clauseArgs.add(SqlLike.contains(' $word '));
+    clauseArgs.add(SqlLike.endsWith(' $word'));
     clauseArgs.add(word);
   }
 
@@ -427,10 +428,10 @@ class AuditService {
     String variant,
   ) {
     clauses.add(
-      "(COALESCE(search_text, '') LIKE ? OR COALESCE(search_text, '') LIKE ?)",
+      "(COALESCE(search_text, '') ${SqlLike.op} OR COALESCE(search_text, '') ${SqlLike.op})",
     );
-    clauseArgs.add('$variant%');
-    clauseArgs.add('% $variant%');
+    clauseArgs.add(SqlLike.startsWith(variant));
+    clauseArgs.add(SqlLike.contains(' $variant'));
   }
 
   static void _appendSearchTextKeywordClause(
@@ -452,8 +453,8 @@ class AuditService {
       final stem = normalizedToken.substring(0, normalizedToken.length - 1);
       // Η πλήρης λέξη του χρήστη ταιριάζει ΠΑΝΤΑ (π.χ. «θεσησ» μέσα στο
       // «αλλαγη θεσησ x») — η ρίζα είναι μόνο επιπλέον ανοχή πτώσης.
-      clauses.add("COALESCE(search_text, '') LIKE ?");
-      clauseArgs.add('%$normalizedToken%');
+      clauses.add("COALESCE(search_text, '') ${SqlLike.op}");
+      clauseArgs.add(SqlLike.contains(normalizedToken));
       if (stem.length >= 4) {
         _appendExactWordClause(clauses, clauseArgs, stem);
         for (final variant in _wordPrefixVariants(stem)) {
@@ -462,8 +463,8 @@ class AuditService {
         }
       }
     } else {
-      clauses.add("COALESCE(search_text, '') LIKE ?");
-      clauseArgs.add('%$normalizedToken%');
+      clauses.add("COALESCE(search_text, '') ${SqlLike.op}");
+      clauseArgs.add(SqlLike.contains(normalizedToken));
 
       for (final variant in _wordPrefixVariants(normalizedToken)) {
         if (variant == normalizedToken) continue;

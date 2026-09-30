@@ -18,6 +18,7 @@ import '../screens/dashboard_top_bar.dart';
 import 'dashboard_excel_export.dart';
 import 'dashboard_export_document.dart';
 import 'dashboard_pdf_export.dart';
+import '../../../core/utils/file_picker_session.dart';
 
 /// Η γραμματοσειρά που ενσωματώνεται στο PDF.
 ///
@@ -54,13 +55,15 @@ Future<String?> exportDashboardStatistics({
 
   final Uri? destination;
   try {
-    destination = await FilePicker.saveFile(
-      dialogTitle: 'Εξαγωγή στατιστικών κλήσεων',
-      fileName: suggestedName,
-      type: FileType.custom,
-      allowedExtensions: [extension],
-      bytes: Uint8List(0),
-    );
+    destination = (await FilePickerSession.run(
+      () async => FilePicker.saveFile(
+        dialogTitle: 'Εξαγωγή στατιστικών κλήσεων',
+        fileName: suggestedName,
+        type: FileType.custom,
+        allowedExtensions: [extension],
+        bytes: Uint8List(0),
+      ),
+    )).value;
   } on Exception catch (error) {
     _show(
       messenger,

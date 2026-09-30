@@ -20,6 +20,7 @@ import '../../history/services/dashboard_export_launcher.dart';
 import '../models/task.dart';
 import 'task_pdf_export.dart';
 import 'task_print_document.dart';
+import '../../../core/utils/file_picker_session.dart';
 
 /// Η γραμματοσειρά που ενσωματώνεται στο PDF.
 ///
@@ -75,13 +76,15 @@ Future<String?> saveTaskSheetAsPdf({
 }) async {
   final Uri? destination;
   try {
-    destination = await FilePicker.saveFile(
-      dialogTitle: 'Αποθήκευση εκκρεμότητας ως PDF',
-      fileName: taskPrintFileName(task),
-      type: FileType.custom,
-      allowedExtensions: const ['pdf'],
-      bytes: Uint8List(0),
-    );
+    destination = (await FilePickerSession.run(
+      () async => FilePicker.saveFile(
+        dialogTitle: 'Αποθήκευση εκκρεμότητας ως PDF',
+        fileName: taskPrintFileName(task),
+        type: FileType.custom,
+        allowedExtensions: const ['pdf'],
+        bytes: Uint8List(0),
+      ),
+    )).value;
   } on Exception catch (error) {
     _show(
       messenger,

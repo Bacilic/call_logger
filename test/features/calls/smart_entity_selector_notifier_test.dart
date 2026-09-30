@@ -3279,4 +3279,115 @@ void main() {
       });
     },
   );
+
+  group('ετικέτα του «+»: «Προσθήκη» ή «Μεταβολή»', () {
+    const leaves = 64;
+    const biochemistry = 59;
+
+    Future<ProviderContainer> catalog() => _containerWithCatalog(
+      users: [
+        _u(
+          id: 83,
+          first: 'Βασιλική',
+          last: 'Κόικα',
+          phone: '2519',
+          departmentId: leaves,
+        ),
+        _u(
+          id: 7,
+          first: 'Ελένη',
+          last: 'Πλακογιάννη',
+          departmentId: biochemistry,
+        ),
+      ],
+      equipment: [EquipmentModel(id: 263, code: '2263', type: 'PC')],
+      departments: [
+        DepartmentModel(id: leaves, name: 'Άδειες'),
+        DepartmentModel(id: biochemistry, name: 'Βιοχημικό'),
+      ],
+      userToEquipmentIds: {
+        7: [263],
+      },
+    );
+
+    String labelAfter(
+      ProviderContainer container,
+      void Function(SmartEntitySelectorNotifier n, LookupService lookup) fill,
+    ) {
+      final lookup = container.read(lookupServiceProvider).value!.service;
+      final n = container.read(callSmartEntityProvider.notifier);
+      fill(n, lookup);
+      final state = container.read(callSmartEntityProvider);
+      expect(state.needsAssociation(lookup), isTrue);
+      return state.associationLabel(lookup);
+    }
+
+    test('υπάρχων εξοπλισμός σε υπάρχοντα υπάλληλο → «Μεταβολή»', () async {
+      final container = await catalog();
+      addTearDown(container.dispose);
+      expect(
+        labelAfter(container, (n, lookup) {
+          n.setCaller(lookup.findUserById(83));
+          n.checkContent(equipmentText: '2263');
+        }),
+        'Μεταβολή',
+        reason: greekExpectMsg(
+          'Δεν δημιουργείται τίποτα — αλλάζει μόνο ποιος κατέχει τον 2263',
+        ),
+      );
+    });
+
+    test('σκέτη αλλαγή σε υπαρκτό τμήμα → «Μεταβολή»', () async {
+      final container = await catalog();
+      addTearDown(container.dispose);
+      expect(
+        labelAfter(container, (n, lookup) {
+          n.setCaller(lookup.findUserById(83));
+          n.selectDepartment(lookup.findDepartmentByName('Βιοχημικό')!);
+        }),
+        'Μεταβολή',
+      );
+    });
+
+    test('νέος εξοπλισμός σε υπάρχοντα υπάλληλο → «Προσθήκη»', () async {
+      final container = await catalog();
+      addTearDown(container.dispose);
+      expect(
+        labelAfter(container, (n, lookup) {
+          n.setCaller(lookup.findUserById(83));
+          n.checkContent(equipmentText: '3000');
+        }),
+        'Προσθήκη',
+      );
+    });
+
+    test('μικτό: νέος εξοπλισμός ΚΑΙ αλλαγή τμήματος → «Προσθήκη»', () async {
+      final container = await catalog();
+      addTearDown(container.dispose);
+      expect(
+        labelAfter(container, (n, lookup) {
+          n.setCaller(lookup.findUserById(83));
+          n.selectDepartment(lookup.findDepartmentByName('Βιοχημικό')!);
+          n.checkContent(equipmentText: '3000');
+        }),
+        'Προσθήκη',
+        reason: greekExpectMsg(
+          'Η νέα καταχώρηση νικά· η αλλαγή τμήματος ρωτιέται ούτως ή άλλως',
+        ),
+      );
+    });
+
+    test('νέος καλών → «Προσθήκη»', () async {
+      final container = await catalog();
+      addTearDown(container.dispose);
+      expect(
+        labelAfter(container, (n, lookup) {
+          n.updateCallerDisplayText('Νέα Υπάλληλος');
+          n.checkContent(callerText: 'Νέα Υπάλληλος');
+          n.checkContent(equipmentText: '2263');
+        }),
+        'Προσθήκη',
+      );
+    });
+  });
 }

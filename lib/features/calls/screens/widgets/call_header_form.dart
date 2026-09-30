@@ -174,7 +174,7 @@ class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
                                 visualDensity: VisualDensity.compact,
                               ),
                               child: Text(
-                                'Προσθήκη',
+                                header.associationLabel(lookupService),
                                 style: theme.textTheme.labelLarge?.copyWith(
                                   color: header.associationColor(lookupService),
                                   fontWeight: FontWeight.w600,

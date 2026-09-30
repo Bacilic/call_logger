@@ -22,6 +22,7 @@ import 'directory_support.dart';
 import 'integrity_service.dart';
 import 'settings_repository.dart';
 import 'task_notifications_repository.dart';
+import 'sql_like.dart';
 
 /// Κλήση με status pending που δεν έχει αντίστοιχο task.
 class OrphanCall {
@@ -1224,8 +1225,8 @@ class TasksRepository {
           .where((t) => t.isNotEmpty)
           .toList();
       for (final token in tokens) {
-        conditions.add('tasks.search_index LIKE ?');
-        args.add('%$token%');
+        conditions.add('tasks.search_index ${SqlLike.op}');
+        args.add(SqlLike.contains(token));
       }
     }
 

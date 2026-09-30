@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../config/app_config.dart';
 import '../services/dictionary_service.dart';
 import '../utils/lexicon_word_metrics.dart';
+import 'sql_like.dart';
 
 /// Εγγραφή προσωπικού λεξικού: κανονικοποιημένο κλειδί + μορφή εμφάνισης.
 class UserLexiconEntry {
@@ -488,14 +489,14 @@ class DictionaryRepository {
     final args = <Object?>[];
     final fullWhere = StringBuffer('1=1');
     if (normalizedSearch != null && normalizedSearch.trim().isNotEmpty) {
-      fullWhere.write(' AND f.normalized_word LIKE ?');
-      args.add('%${normalizedSearch.trim()}%');
+      fullWhere.write(' AND f.normalized_word ${SqlLike.op}');
+      args.add(SqlLike.contains(normalizedSearch.trim()));
     }
 
     final draftWhere = StringBuffer('1=1');
     if (normalizedSearch != null && normalizedSearch.trim().isNotEmpty) {
-      draftWhere.write(' AND u.word LIKE ?');
-      args.add('%${normalizedSearch.trim()}%');
+      draftWhere.write(' AND u.word ${SqlLike.op}');
+      args.add(SqlLike.contains(normalizedSearch.trim()));
     }
 
     var innerSelect =

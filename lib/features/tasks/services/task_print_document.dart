@@ -102,8 +102,10 @@ TaskPrintDocument buildTaskPrintDocument(Task task) {
   final dateTime = DateFormat('dd/MM/yyyy HH:mm');
   final completion = TaskCompletionSummary.of(task);
 
+  // Κείμενο επικολλημένο από email φέρνει αλλαγές γραμμής των Windows· η
+  // γραμματοσειρά του PDF δεν έχει σχήμα για το «\r» και το ζωγραφίζει κουτάκι.
   String? clean(String? value) {
-    final trimmed = value?.trim() ?? '';
+    final trimmed = (value ?? '').replaceAll(RegExp(r'\r\n?'), '\n').trim();
     return trimmed.isEmpty ? null : trimmed;
   }
 
@@ -125,13 +127,13 @@ TaskPrintDocument buildTaskPrintDocument(Task task) {
     description: clean(task.description) ?? '',
     fields: [
       if (clean(task.userText) != null)
-        TaskPrintField('Ποιος', task.userText!.trim()),
+        TaskPrintField('Ποιος', clean(task.userText)!),
       if (clean(task.departmentText) != null)
-        TaskPrintField('Πού', task.departmentText!.trim()),
+        TaskPrintField('Πού', clean(task.departmentText)!),
       if (clean(task.phoneText) != null)
-        TaskPrintField('Τηλέφωνο', task.phoneText!.trim(), emphasized: true),
+        TaskPrintField('Τηλέφωνο', clean(task.phoneText)!, emphasized: true),
       if (clean(task.equipmentText) != null)
-        TaskPrintField('Εξοπλισμός', task.equipmentText!.trim()),
+        TaskPrintField('Εξοπλισμός', clean(task.equipmentText)!),
     ],
     snoozes: [
       for (final (index, entry) in task.snoozeEntries.indexed)
@@ -142,7 +144,7 @@ TaskPrintDocument buildTaskPrintDocument(Task task) {
           note: clean(entry.note),
         ),
     ],
-    previousSolution: completion.solution,
+    previousSolution: clean(completion.solution),
     completionLine: completion.momentLine != null
         ? 'Ολοκληρώθηκε ${completion.momentLine}'
         : null,

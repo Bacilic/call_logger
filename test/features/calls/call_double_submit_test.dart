@@ -9,6 +9,7 @@ import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/provider/call_entry_provider.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/main.dart';
+import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -97,7 +98,11 @@ Future<void> _fillValidCallForm(
 Future<int> _countCallsWithMarker(String marker) async {
   final db = await DatabaseHelper.instance.database;
   final repo = CallsRepository(db);
-  final rows = await repo.getHistoryCalls(keyword: marker);
+  // Όπως η οθόνη του Ιστορικού: η λέξη-κλειδί περνά πρώτα από τον
+  // κανονικοποιητή (το «_» γίνεται κενό, όπως και στο αποθηκευμένο ευρετήριο).
+  final rows = await repo.getHistoryCalls(
+    keyword: SearchTextNormalizer.normalizeForSearch(marker),
+  );
   return rows.length;
 }
 

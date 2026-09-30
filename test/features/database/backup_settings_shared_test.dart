@@ -515,6 +515,27 @@ void main() {
       );
     });
 
+    test('επαναφέρει και την «Προεπισκόπηση πριν την εκτύπωση»', () async {
+      final db = await DatabaseHelper.instance.database;
+      final dir = Directory.systemTemp.createTempSync('profile_import_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = await writeExport(dir, {'task_print_preview': 'false'});
+
+      CurrentOperator.activate(_operator(953));
+      final result = await importActiveOperatorSettings(
+        pickOpenPath: () async => file,
+      );
+
+      expect(result.restoredCount, 1);
+      expect(
+        await OperatorSettingsRepository(
+          db,
+        ).getValue(953, 'task_print_preview'),
+        'false',
+        reason: 'Ως τώρα προσπερνιόταν σιωπηλά ως «άγνωστο» κλειδί.',
+      );
+    });
+
     test('αγνοεί κλειδιά που η έκδοση δεν αναγνωρίζει', () async {
       final db = await DatabaseHelper.instance.database;
       final dir = Directory.systemTemp.createTempSync('profile_import_');

@@ -21,6 +21,7 @@ import '../../../core/services/core_lexicon_validation.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/picker_location_memory.dart';
+import '../../../core/utils/file_picker_session.dart';
 
 /// Tooltip για το κουμπί «Επανέλεγχος Γλωσσών».
 const _languageRecalcInfoTooltip =
@@ -281,14 +282,16 @@ class _DictionarySettingsDialogState
 
   Future<void> _pickSaveSourcePath() async {
     const memory = PickerLocationMemory('lexicon_txt');
-    final r = await FilePicker.pickFile(
-      dialogTitle: 'Αρχείο λεξικού-πυρήνα (TXT)',
-      type: FileType.custom,
-      allowedExtensions: const ['txt'],
-      initialDirectory: await memory.initialDirectory(
-        pathHint: _sourcePathCtrl.text,
+    final r = (await FilePickerSession.run(
+      () async => FilePicker.pickFile(
+        dialogTitle: 'Αρχείο λεξικού-πυρήνα (TXT)',
+        type: FileType.custom,
+        allowedExtensions: const ['txt'],
+        initialDirectory: await memory.initialDirectory(
+          pathHint: _sourcePathCtrl.text,
+        ),
       ),
-    );
+    )).value;
     final p = r?.path;
     if (p == null) return;
     await memory.remember(p);
@@ -338,14 +341,16 @@ class _DictionarySettingsDialogState
         ? existing.replaceAll(r'\', '/').split('/').last
         : await _defaultExportFileName();
 
-    final p = (await FilePicker.saveFile(
-      dialogTitle: 'Αρχείο εξαγωγής Compile (TXT)',
-      fileName: fileName,
-      initialDirectory: await _exportPickerInitialDirectory(),
-      type: FileType.custom,
-      allowedExtensions: const ['txt'],
-      bytes: Uint8List(0),
-    ))?.toFilePath();
+    final p = (await FilePickerSession.run(
+      () async => FilePicker.saveFile(
+        dialogTitle: 'Αρχείο εξαγωγής Compile (TXT)',
+        fileName: fileName,
+        initialDirectory: await _exportPickerInitialDirectory(),
+        type: FileType.custom,
+        allowedExtensions: const ['txt'],
+        bytes: Uint8List(0),
+      ),
+    )).value?.toFilePath();
     if (p == null) return;
     _exportPathCtrl.text = p;
     await _saveExportPath();

@@ -20,7 +20,12 @@ abstract class CallerQuickAddPrompts {
   ///
   /// Το [callerName] είναι το όνομα όπως το βλέπει ο χειριστής (με ψευδώνυμο,
   /// αν υπάρχει): η ερώτηση αφορά συγκεκριμένο πρόσωπο, όχι «τον χρήστη».
-  Future<bool> confirmPrimaryDepartmentChange({
+  ///
+  /// `true` = «Ναι», `false` = «Όχι» (καταχωρούνται τα υπόλοιπα, χωρίς
+  /// μεταφορά), `null` = ο διάλογος έκλεισε χωρίς απάντηση (κλικ έξω, Esc) —
+  /// **ακύρωση όλης της καταχώρησης**. Το «Όχι» εδώ δεν είναι ακύρωση, γι' αυτό
+  /// το κλείσιμο δεν επιτρέπεται να διαβαστεί ως «Όχι».
+  Future<bool?> confirmPrimaryDepartmentChange({
     required String callerName,
     required String currentDepartmentName,
     required String newDepartmentName,
@@ -119,6 +124,8 @@ class CallerQuickAddController {
     }
 
     final updatePrimaryDepartment = await _resolvePrimaryDepartment(lookup);
+    // Κλείσιμο του διαλόγου χωρίς απάντηση: τίποτα δεν γράφεται.
+    if (updatePrimaryDepartment == null) return;
     if (!await _resolveSimilarCallers(lookup)) return;
     if (!await _resolveSimilarDepartments(lookup)) return;
 
@@ -151,8 +158,9 @@ class CallerQuickAddController {
 
   /// Επιστρέφει αν το τμήμα της κλήσης θα γίνει κύριο τμήμα του καλούντα.
   ///
-  /// Άγνωστη απάντηση (κλείσιμο διαλόγου) σημαίνει «όχι» — η ροή δεν διακόπτεται.
-  Future<bool> _resolvePrimaryDepartment(LookupService? lookup) async {
+  /// `null` όταν ο διάλογος έκλεισε χωρίς απάντηση: η καταχώρηση ακυρώνεται
+  /// ολόκληρη, γιατί το «Όχι» εδώ σημαίνει «συνέχισε χωρίς μεταφορά».
+  Future<bool?> _resolvePrimaryDepartment(LookupService? lookup) async {
     final header = actions.header;
     final caller = header.selectedCaller;
     final departmentText = header.departmentText.trim();

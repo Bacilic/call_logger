@@ -38,6 +38,7 @@ import '../providers/lexicon_spelling_panel_provider.dart';
 import '../widgets/dictionary_grid_row.dart';
 import '../widgets/dictionary_settings_dialog.dart';
 import '../widgets/lexicon_spelling_panel.dart';
+import '../../../core/utils/file_picker_session.dart';
 
 const _kLexiconLangAssetAll = 'assets/greek_english.png';
 const _kLexiconLangAssetMix = 'assets/greek_english_mix.png';
@@ -674,11 +675,13 @@ class _DictionaryManagerScreenState
 
   Future<void> _importTxtFile() async {
     const memory = PickerLocationMemory('lexicon_txt');
-    final r = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['txt'],
-      initialDirectory: await memory.initialDirectory(),
-    );
+    final r = (await FilePickerSession.run(
+      () async => FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['txt'],
+        initialDirectory: await memory.initialDirectory(),
+      ),
+    )).value;
     final path = r?.path;
     if (path == null) return;
     await memory.remember(path);

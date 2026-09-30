@@ -392,6 +392,7 @@ abstract final class ProfileSettingKeys {
     enableSpellCheck,
     showUpdateOnStartup,
     printersLimitedViewHint,
+    taskPrintPreview,
     dashboardDatePreset,
     dashboardDateFrom,
     dashboardDateTo,

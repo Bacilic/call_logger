@@ -62,12 +62,12 @@ class CallerQuickAddDialogPrompts implements CallerQuickAddPrompts {
   }
 
   @override
-  Future<bool> confirmPrimaryDepartmentChange({
+  Future<bool?> confirmPrimaryDepartmentChange({
     required String callerName,
     required String currentDepartmentName,
     required String newDepartmentName,
   }) async {
-    if (!context.mounted) return false;
+    if (!context.mounted) return null;
     final name = callerName.trim();
     // Το όνομα μένει στην ονομαστική· το άρθρο κρατά και τα δύο γένη, γιατί
     // ο κατάλογος δεν ξέρει το φύλο του υπαλλήλου.
@@ -92,7 +92,8 @@ class CallerQuickAddDialogPrompts implements CallerQuickAddPrompts {
         ],
       ),
     );
-    return approved ?? false;
+    // Κλικ έξω ή Esc: `null` — ακύρωση, ΟΧΙ «Όχι».
+    return approved;
   }
 
   @override

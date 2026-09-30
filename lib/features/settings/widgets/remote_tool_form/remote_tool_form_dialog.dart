@@ -21,6 +21,7 @@ import 'remote_tool_form_sort.dart';
 import 'remote_tool_test_panel.dart';
 import '../../../../core/services/portable_tool_image_storage.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
+import '../../../../core/utils/file_picker_session.dart';
 
 enum _SoftDeletedNameChoice { restore, keepSameName }
 
@@ -77,11 +78,13 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
 
   Future<void> _pickExecutable() async {
     final initial = initialDirectoryForFilePicker(_ctrl.pathC.text);
-    final r = await FilePicker.pickFile(
-      type: FileType.any,
-      dialogTitle: 'Εκτελέσιμο',
-      initialDirectory: initial,
-    );
+    final r = (await FilePickerSession.run(
+      () async => FilePicker.pickFile(
+        type: FileType.any,
+        dialogTitle: 'Εκτελέσιμο',
+        initialDirectory: initial,
+      ),
+    )).value;
     final p = r?.path;
     if (p != null) {
       _ctrl.pathC.text = p;
@@ -92,22 +95,26 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
   /// να μην μπερδεύονται τα δύο πεδία.
   Future<String?> _pickLocalExecutableOverride() async {
     final initial = initialDirectoryForFilePicker(_ctrl.pathC.text);
-    final r = await FilePicker.pickFile(
-      type: FileType.any,
-      dialogTitle: 'Εκτελέσιμο σε αυτόν τον υπολογιστή',
-      initialDirectory: initial,
-    );
+    final r = (await FilePickerSession.run(
+      () async => FilePicker.pickFile(
+        type: FileType.any,
+        dialogTitle: 'Εκτελέσιμο σε αυτόν τον υπολογιστή',
+        initialDirectory: initial,
+      ),
+    )).value;
     return r?.path;
   }
 
   Future<void> _pickIcon() async {
     final initial = initialDirectoryForFilePicker(_ctrl.iconC.text);
-    final r = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: ['png', 'svg', 'ico'],
-      dialogTitle: 'Εικονίδιο εργαλείου',
-      initialDirectory: initial,
-    );
+    final r = (await FilePickerSession.run(
+      () async => FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['png', 'svg', 'ico'],
+        dialogTitle: 'Εικονίδιο εργαλείου',
+        initialDirectory: initial,
+      ),
+    )).value;
     final picked = r?.path;
     if (picked == null) return;
     if (!mounted) return;

@@ -55,29 +55,66 @@ void main() {
     ],
   );
 
-  Future<({int? officeId, int? ownerId})> pump(
+  /// Στήνει τα πεδία και επιστρέφει πάντα την τρέχουσα κατάσταση.
+  Future<LampPlacementDraft Function()> pump(
     WidgetTester tester, {
     int? officeId,
   }) async {
-    var current = (officeId: officeId, ownerId: null as int?);
+    var current = LampPlacementDraft(officeId: officeId);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: StatefulBuilder(
             builder: (context, setState) => LampPlacementFields(
               catalog: catalog,
-              officeId: current.officeId,
-              ownerId: current.ownerId,
-              onChanged: ({officeId, ownerId}) => setState(
-                () => current = (officeId: officeId, ownerId: ownerId),
-              ),
+              draft: current,
+              onChanged: (draft) => setState(() => current = draft),
             ),
           ),
         ),
       ),
     );
-    return current;
+    return () => current;
   }
+
+  Finder ownerField() => find.descendant(
+    of: find.byKey(const Key('lamp_placement_owner_field')),
+    matching: find.byType(TextField),
+  );
+
+  group('η απόφαση που βγαίνει από τα πεδία', () {
+    test('μόνο γραφείο δεν αρκεί — ο υπάλληλος είναι υποχρεωτικός', () {
+      expect(const LampPlacementDraft(officeId: 27).toInput(), isNull);
+    });
+
+    test('υπάρχων υπάλληλος από τη λίστα', () {
+      final input = const LampPlacementDraft(
+        officeId: 27,
+        ownerId: 81,
+      ).toInput();
+      expect(input?.officeId, 27);
+      expect(input?.ownerId, 81);
+    });
+
+    test('νέος υπάλληλος θέλει και επώνυμο και όνομα', () {
+      const onlySurname = LampPlacementDraft(
+        officeId: 27,
+        creatingOwner: true,
+        newOwnerLastName: 'Παπαδοπούλου',
+      );
+      expect(onlySurname.toInput(), isNull);
+
+      final input = const LampPlacementDraft(
+        officeId: 27,
+        creatingOwner: true,
+        newOwnerLastName: ' Παπαδοπούλου ',
+        newOwnerFirstName: 'Θάνια',
+      ).toInput();
+      expect(input?.ownerId, isNull);
+      expect(input?.newOwnerLastName, 'Παπαδοπούλου');
+      expect(input?.newOwnerFirstName, 'Θάνια');
+    });
+  });
 
   testWidgets('το πεδίο υπαλλήλου είναι κλειδωμένο χωρίς γραφείο', (
     tester,
@@ -117,9 +154,8 @@ void main() {
         home: Scaffold(
           body: LampPlacementFields(
             catalog: catalog,
-            officeId: null,
-            ownerId: null,
-            onChanged: ({officeId, ownerId}) => reported = officeId,
+            draft: const LampPlacementDraft(),
+            onChanged: (draft) => reported = draft.officeId,
           ),
         ),
       ),
@@ -175,16 +211,14 @@ void main() {
   testWidgets('η αλλαγή γραφείου μηδενίζει τον ήδη επιλεγμένο υπάλληλο', (
     tester,
   ) async {
-    ({int? officeId, int? ownerId})? last;
+    LampPlacementDraft? last;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: LampPlacementFields(
             catalog: catalog,
-            officeId: 27,
-            ownerId: 81,
-            onChanged: ({officeId, ownerId}) =>
-                last = (officeId: officeId, ownerId: ownerId),
+            draft: const LampPlacementDraft(officeId: 27, ownerId: 81),
+            onChanged: (draft) => last = draft,
           ),
         ),
       ),
@@ -208,6 +242,64 @@ void main() {
       reason: greekExpectMsg(
         'Ο προηγούμενος υπάλληλος ανήκε σε άλλο τμήμα — αν έμενε, θα '
         'γραφόταν σιωπηλά λάθος ζεύγος',
+      ),
+    );
+  });
+
+  testWidgets(
+    'όνομα που δεν υπάρχει προσφέρει «Νέος υπάλληλος» με δύο κουτάκια',
+    (tester) async {
+      final current = await pump(tester, officeId: 27);
+
+      await tester.tap(ownerField());
+      await tester.enterText(ownerField(), 'Θάνια');
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('lamp_placement_new_owner_option')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(current().creatingOwner, isTrue);
+      expect(current().toInput(), isNull);
+
+      await tester.enterText(
+        find.byKey(const Key('lamp_placement_new_owner_last_name')),
+        'Παπαδοπούλου',
+      );
+      await tester.enterText(
+        find.byKey(const Key('lamp_placement_new_owner_first_name')),
+        'Θάνια',
+      );
+      await tester.pump();
+
+      final input = current().toInput();
+      expect(input?.officeId, 27);
+      expect(input?.newOwnerLastName, 'Παπαδοπούλου');
+      expect(input?.newOwnerFirstName, 'Θάνια');
+    },
+  );
+
+  testWidgets('αλλαγή κειμένου μετά την επιλογή ακυρώνει τον υπάλληλο', (
+    tester,
+  ) async {
+    final current = await pump(tester, officeId: 27);
+
+    await tester.tap(ownerField());
+    await tester.enterText(ownerField(), 'Καμπ');
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Καμπάς Νικόλαος').last);
+    await tester.pumpAndSettle();
+    expect(current().ownerId, 81);
+
+    await tester.enterText(ownerField(), 'Καμπάς Νίκος');
+    await tester.pump();
+
+    expect(
+      current().toInput(),
+      isNull,
+      reason: greekExpectMsg(
+        'Το όνομα στο πεδίο και ο υπάλληλος που θα γραφτεί πρέπει να '
+        'συμφωνούν — αλλιώς αποθηκεύεται κάποιος που δεν φαίνεται',
       ),
     );
   });

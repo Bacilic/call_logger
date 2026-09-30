@@ -6,6 +6,7 @@ import '../../features/history/models/dashboard_filter_model.dart';
 import '../../features/history/models/dashboard_summary_model.dart';
 import '../utils/search_text_normalizer.dart';
 import 'call_entity_filters.dart';
+import 'sql_like.dart';
 
 /// Στατιστικά και λίστες κλήσεων για τον πίνακα ελέγχου (μόνο αναγνώσεις).
 class CallsDashboardRepository {
@@ -91,8 +92,8 @@ class CallsDashboardRepository {
     if (keyword.isNotEmpty) {
       final normalized = SearchTextNormalizer.normalizeForSearch(keyword);
       if (normalized.isNotEmpty) {
-        baseWhere.add('calls.search_index LIKE ?');
-        baseArgs.add('%$normalized%');
+        baseWhere.add('calls.search_index ${SqlLike.op}');
+        baseArgs.add(SqlLike.contains(normalized));
       }
     }
 
@@ -515,8 +516,8 @@ class CallsDashboardRepository {
     if (kw.isNotEmpty) {
       final nk = SearchTextNormalizer.normalizeForSearch(kw);
       if (nk.isNotEmpty) {
-        whereClauses.add('calls.search_index LIKE ?');
-        args.add('%$nk%');
+        whereClauses.add('calls.search_index ${SqlLike.op}');
+        args.add(SqlLike.contains(nk));
       }
     }
 

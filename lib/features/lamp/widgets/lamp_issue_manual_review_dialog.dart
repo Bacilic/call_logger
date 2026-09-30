@@ -86,8 +86,7 @@ class _LampIssueManualReviewDialogState
       <int, TextEditingController>{};
 
   /// Τι διάλεξε ο χρήστης στα δύο πεδία τοποθέτησης, ανά πρόταση.
-  final Map<int, ({int? officeId, int? ownerId})> _placements =
-      <int, ({int? officeId, int? ownerId})>{};
+  final Map<int, LampPlacementDraft> _placements = <int, LampPlacementDraft>{};
 
   /// Προμηθευτής και κατηγορία για τη δημιουργία σύμβασης, ανά πρόταση.
   final Map<int, ({int? supplierId, int? categoryId})> _contracts =
@@ -163,13 +162,8 @@ class _LampIssueManualReviewDialogState
                     serialExistsChecker: widget.serialExistsChecker,
                     placementCatalog: widget.placementCatalog,
                     placement: _placements[sourceIndex],
-                    onPlacementChanged: ({officeId, ownerId}) {
-                      setState(
-                        () => _placements[sourceIndex] = (
-                          officeId: officeId,
-                          ownerId: ownerId,
-                        ),
-                      );
+                    onPlacementChanged: (draft) {
+                      setState(() => _placements[sourceIndex] = draft);
                     },
                     contractSelection: _contracts[sourceIndex],
                     onContractChanged: ({supplierId, categoryId}) {
@@ -274,13 +268,14 @@ class _LampIssueManualReviewDialogState
 
   /// Έτοιμη προς εφαρμογή: αποφασισμένη **και** συμπληρωμένη.
   ///
-  /// Ο ορισμός τοποθέτησης χωρίς γραφείο δεν είναι απόφαση — αλλιώς το κουμπί
-  /// θα ενεργοποιούνταν σε μια επιλογή που δεν έχει τι να γράψει.
+  /// Ο ορισμός τοποθέτησης χωρίς γραφείο **και** υπάλληλο δεν είναι απόφαση —
+  /// αλλιώς το κουμπί θα ενεργοποιούνταν σε μια επιλογή που δεν έχει τι να
+  /// γράψει. Στη Λάμπα κάθε εξοπλισμός χρεώνεται σε πρόσωπο.
   bool _isReadyDecision(int index) {
     final option = _selectedOptions[index];
     if (!_isDecidedOption(option)) return false;
     if (option!.requiresPlacementInput) {
-      return _placements[index]?.officeId != null;
+      return _placements[index]?.toInput() != null;
     }
     // Η σύμβαση χρειάζεται τουλάχιστον όνομα· ο προμηθευτής και η κατηγορία
     // μπορούν να συμπληρωθούν αργότερα.
@@ -358,10 +353,7 @@ class _LampIssueManualReviewDialogState
     LampIssueResolutionOption option,
   ) {
     if (!option.requiresPlacementInput) return null;
-    final placement = _placements[index];
-    final officeId = placement?.officeId;
-    if (officeId == null) return null;
-    return LampPlacementInput(officeId: officeId, ownerId: placement?.ownerId);
+    return _placements[index]?.toInput();
   }
 
   LampContractInput? _contractInputFor(
@@ -404,8 +396,8 @@ class _ManualReviewCard extends StatefulWidget {
   final ValueChanged<LampIssueResolutionOption?> onChanged;
   final LampSerialExistsChecker? serialExistsChecker;
   final LampPlacementCatalog placementCatalog;
-  final ({int? officeId, int? ownerId})? placement;
-  final void Function({int? officeId, int? ownerId}) onPlacementChanged;
+  final LampPlacementDraft? placement;
+  final ValueChanged<LampPlacementDraft> onPlacementChanged;
   final ({int? supplierId, int? categoryId})? contractSelection;
   final void Function({int? supplierId, int? categoryId}) onContractChanged;
   final TextEditingController seriesTemplateController;
@@ -858,8 +850,8 @@ class _ManualReviewCardState extends State<_ManualReviewCard> {
                           child: LampPlacementFields(
                             key: Key('lamp_placement_${widget.index}'),
                             catalog: widget.placementCatalog,
-                            officeId: widget.placement?.officeId,
-                            ownerId: widget.placement?.ownerId,
+                            draft:
+                                widget.placement ?? const LampPlacementDraft(),
                             onChanged: widget.onPlacementChanged,
                           ),
                         ),

@@ -9,6 +9,7 @@ import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/directory/department_change_assets.dart';
+import '../../../core/directory/equipment_department_policy.dart';
 import '../../../core/directory/phone_department_policy.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/name_parser.dart';
@@ -26,6 +27,7 @@ import '../../directory/providers/catalog_validation_provider.dart';
 import '../../tasks/providers/task_service_provider.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
+import '../screens/widgets/equipment_owner_move_dialog.dart';
 import 'call_mutation_refresh.dart';
 import 'lookup_provider.dart';
 import 'orphan_quick_add_plan.dart';
@@ -46,29 +48,47 @@ class SmartEntitySelectorAssociation {
 
   Ref get ref => host.selectorRef;
 
-  /// Εμφανίζει τον υπάρχοντα διάλογο σύγκρουσης αν χρειάζεται· επιστρέφει το
-  /// τηλέφωνο προς σύνδεση ή null αν ο χρήστης ακύρωσε / δεν υπάρχει context.
-  Future<String?> _confirmAndPreparePhoneAssociation({
+  /// Ρωτά για τη σύγκρουση τηλεφώνου, αν υπάρχει — **χωρίς να γράψει τίποτα**.
+  /// Η απάντηση εφαρμόζεται με [_applyPhoneResolutions], αφού έχουν γίνει όλες
+  /// οι ερωτήσεις του «+».
+  ///
+  /// Δύο διαφορετικές απαντήσεις «χωρίς τηλέφωνο», που δεν επιτρέπεται να
+  /// μπερδευτούν:
+  /// - `phone == null` — ο χρήστης διάλεξε ρητά να μείνει το τηλέφωνο εκεί που
+  ///   είναι· η υπόλοιπη καταχώρηση συνεχίζει.
+  /// - `cancelled` — «Ακύρωση» ή καμία οθόνη για να ρωτηθεί· ο καλών δεν
+  ///   γράφει **τίποτα**.
+  ///
+  /// [targetIsNewDepartment]: το τμήμα του υπαλλήλου θα δημιουργηθεί μετά την
+  /// ερώτηση — η μεταφορά του τηλεφώνου εκεί προσφέρεται κανονικά.
+  Future<
+    ({bool cancelled, String? phone, UserPhoneConflictBatchResult? resolutions})
+  >
+  _askPhoneAssociation({
     required BuildContext? context,
-    required PhoneRepository phonesRepo,
     required String phone,
     required int? targetDepartmentId,
     required int? editingUserId,
     required String userDisplayName,
     required String targetDepartmentName,
+    bool targetIsNewDepartment = false,
   }) async {
     final trimmed = phone.trim();
-    if (trimmed.isEmpty) return null;
+    if (trimmed.isEmpty) {
+      return (cancelled: false, phone: null, resolutions: null);
+    }
 
     final conflicts = PhoneDepartmentPolicy.findConflictsForUserAssignment(
       phones: [trimmed],
       targetDepartmentId: targetDepartmentId,
       editingUserId: editingUserId,
     );
-    if (conflicts.isEmpty) return trimmed;
+    if (conflicts.isEmpty) {
+      return (cancelled: false, phone: trimmed, resolutions: null);
+    }
 
     if (context == null || !context.mounted) {
-      return null;
+      return (cancelled: true, phone: null, resolutions: null);
     }
 
     final result = await showUserPhoneDepartmentConflictDialog(
@@ -77,21 +97,109 @@ class SmartEntitySelectorAssociation {
       userDisplayName: userDisplayName,
       targetDepartmentName: targetDepartmentName,
       targetDepartmentId: targetDepartmentId,
+      targetIsNewDepartment: targetIsNewDepartment,
     );
-    if (result == null) return null;
+    if (result == null) {
+      return (cancelled: true, phone: null, resolutions: null);
+    }
 
     // «Μένει στο τμήμα του» σημαίνει ότι δεν συνδέεται με τον καλούντα — αλλιώς
     // η επιλογή θα ζητιόταν και θα αγνοούνταν.
-    if (result.detaches(trimmed)) return null;
+    if (result.detaches(trimmed)) {
+      return (cancelled: false, phone: null, resolutions: null);
+    }
+    return (cancelled: false, phone: trimmed, resolutions: result);
+  }
 
+  /// Εξοπλισμός που ανήκει σε υπάλληλο **άλλου** τμήματος: ρητή ερώτηση πριν
+  /// γραφτεί οτιδήποτε — για υπάρχοντα **και** για νέο καλούντα.
+  ///
+  /// `cancelled` = δεν απαντήθηκε «Ναι, μεταφορά» (ή δεν υπάρχει οθόνη για να
+  /// ρωτηθεί): ο καλών δεν γράφει **τίποτα**. Με «Ναι» επιστρέφονται οι
+  /// κάτοχοι που θα αφαιρεθούν με [_releaseMovedEquipment].
+  ///
+  /// [newOwnerId] είναι `null` για νέο καλούντα· [targetDepartmentId] `null`
+  /// για νέο ή κενό τμήμα (τότε κάθε κάτοχος με τμήμα είναι ξένος).
+  Future<_EquipmentMove> _askEquipmentMove({
+    required BuildContext? context,
+    required LookupService? lookup,
+    required String equipmentCode,
+    required int? newOwnerId,
+    required int? targetDepartmentId,
+    required String newOwnerName,
+  }) async {
+    const nothingToMove = (
+      cancelled: false,
+      equipmentId: null,
+      ownersToRelease: <UserModel>[],
+    );
+    final code = equipmentCode.trim();
+    if (lookup == null || code.isEmpty) return nothingToMove;
+    final existing = lookup.findEquipmentsByCode(code);
+    final equipmentId = existing.isEmpty ? null : existing.first.id;
+    if (equipmentId == null) return nothingToMove;
+    final foreignOwners = equipmentOwnersInOtherDepartments(
+      owners: lookup.findUsersForEquipment(equipmentId),
+      newOwnerId: newOwnerId,
+      targetDepartmentId: targetDepartmentId,
+    );
+    if (foreignOwners.isEmpty) return nothingToMove;
+
+    final approved = (context == null || !context.mounted)
+        ? null
+        : await showEquipmentOwnerMoveDialog(
+            context: context,
+            equipmentCode: code,
+            currentOwnerLabels: [
+              for (final owner in foreignOwners) _ownerLabel(owner, lookup),
+            ],
+            newOwnerName: newOwnerName,
+          );
+    if (approved != true) {
+      return (
+        cancelled: true,
+        equipmentId: null,
+        ownersToRelease: const <UserModel>[],
+      );
+    }
+    return (
+      cancelled: false,
+      equipmentId: equipmentId,
+      ownersToRelease: foreignOwners,
+    );
+  }
+
+  /// Μεταφορά, όχι μοιρασιά: ο εξοπλισμός φεύγει από τους κατόχους του άλλου
+  /// τμήματος, αφού ο χρήστης απάντησε ρητά «Ναι». Καλείται **μετά** τη
+  /// σύνδεση με τον νέο κάτοχο, ώστε ο εξοπλισμός να μη μείνει ποτέ ορφανός.
+  Future<void> _releaseMovedEquipment(
+    EquipmentRepository equipmentRepo,
+    _EquipmentMove move,
+  ) async {
+    final equipmentId = move.equipmentId;
+    if (equipmentId == null) return;
+    for (final owner in move.ownersToRelease) {
+      final ownerId = owner.id;
+      if (ownerId == null) continue;
+      await equipmentRepo.unlinkUserFromEquipment(ownerId, equipmentId);
+    }
+  }
+
+  /// Εφαρμόζει την απάντηση του [_askPhoneAssociation] — μόνο αφού έχουν
+  /// απαντηθεί όλες οι ερωτήσεις και υπάρχει πια το τμήμα-στόχος.
+  Future<void> _applyPhoneResolutions({
+    required PhoneRepository phonesRepo,
+    required UserPhoneConflictBatchResult? resolutions,
+    required int? targetDepartmentId,
+  }) async {
+    if (resolutions == null) return;
     await PhoneDepartmentPolicy.applyUserPhoneConflictResolutions(
       phones: phonesRepo,
-      resolutions: result,
+      resolutions: resolutions,
       targetDepartmentId: targetDepartmentId,
     );
     ref.invalidate(lookupServiceProvider);
     await ref.read(lookupServiceProvider.future);
-    return trimmed;
   }
 
   /// Ρωτά τι απογίνονται τηλέφωνα και εξοπλισμός όταν ο καλών αλλάζει τμήμα.
@@ -534,40 +642,62 @@ class SmartEntitySelectorAssociation {
           (state.departmentText.trim().isNotEmpty && lookup != null
               ? lookup.findDepartmentByName(state.departmentText)?.id
               : null);
-      if (departmentId == null && state.departmentText.trim().isNotEmpty) {
-        departmentId = await departments.getOrCreateDepartmentIdByName(
-          state.departmentText.trim(),
-        );
-      }
+      final createsDepartment =
+          departmentId == null && state.departmentText.trim().isNotEmpty;
       try {
+        // Οι ερωτήσεις γίνονται ΠΡΙΝ δημιουργηθεί οτιδήποτε — και το νέο
+        // τμήμα: η «Ακύρωση» αφήνει τη βάση ανέγγιχτη.
+        final moveDialogContext = context;
+        if (moveDialogContext != null && !moveDialogContext.mounted) {
+          return null;
+        }
+        final equipmentMove = await _askEquipmentMove(
+          context: moveDialogContext,
+          lookup: lookup,
+          equipmentCode: equipmentCode,
+          newOwnerId: null,
+          targetDepartmentId: departmentId,
+          newOwnerName: name,
+        );
+        if (equipmentMove.cancelled) return null;
         var parsedPhones = PhoneListParser.splitPhones(phone);
         String? phoneForAssociation = phone;
+        UserPhoneConflictBatchResult? phoneResolutions;
         if (parsedPhones.isNotEmpty) {
           final dialogContext = context;
-          if (dialogContext != null && !dialogContext.mounted) {
+          if (dialogContext != null && !dialogContext.mounted) return null;
+          final prepared = await _askPhoneAssociation(
+            context: dialogContext,
+            phone: parsedPhones.first,
+            targetDepartmentId: departmentId,
+            targetIsNewDepartment: createsDepartment,
+            editingUserId: null,
+            userDisplayName: name,
+            targetDepartmentName: departmentId != null
+                ? (lookup?.departmentIdToName[departmentId] ?? deptTextRaw)
+                : deptTextRaw,
+          );
+          if (prepared.cancelled) return null;
+          phoneResolutions = prepared.resolutions;
+          final preparedPhone = prepared.phone;
+          if (preparedPhone == null) {
             parsedPhones = <String>[];
             phoneForAssociation = null;
           } else {
-            final prepared = await _confirmAndPreparePhoneAssociation(
-              context: dialogContext,
-              phonesRepo: phones,
-              phone: parsedPhones.first,
-              targetDepartmentId: departmentId,
-              editingUserId: null,
-              userDisplayName: name,
-              targetDepartmentName: departmentId != null
-                  ? (lookup?.departmentIdToName[departmentId] ?? deptTextRaw)
-                  : deptTextRaw,
-            );
-            if (prepared == null) {
-              parsedPhones = <String>[];
-              phoneForAssociation = null;
-            } else {
-              parsedPhones = PhoneListParser.splitPhones(prepared);
-              phoneForAssociation = prepared;
-            }
+            parsedPhones = PhoneListParser.splitPhones(preparedPhone);
+            phoneForAssociation = preparedPhone;
           }
         }
+        if (createsDepartment) {
+          departmentId = await departments.getOrCreateDepartmentIdByName(
+            state.departmentText.trim(),
+          );
+        }
+        await _applyPhoneResolutions(
+          phonesRepo: phones,
+          resolutions: phoneResolutions,
+          targetDepartmentId: departmentId,
+        );
         final userId = await users.insertUser(
           firstName: parsed.firstName,
           lastName: parsed.lastName,
@@ -580,6 +710,7 @@ class SmartEntitySelectorAssociation {
           phoneForAssociation,
           equipmentCode.isNotEmpty ? equipmentCode : null,
         );
+        await _releaseMovedEquipment(equipmentRepo, equipmentMove);
 
         // Η προσφορά αναίρεσης της στιγμής: μόνο ό,τι δεν υπήρχε πριν.
         host.lastQuickAddUndo = QuickAddUndoRecord(
@@ -707,6 +838,12 @@ class SmartEntitySelectorAssociation {
                 : 'Δημιουργήθηκε νέος εξοπλισμός: $equipmentCode',
           );
         }
+        if (equipmentMove.ownersToRelease.isNotEmpty) {
+          lines.add(
+            'Ο εξοπλισμός $equipmentCode αφαιρέθηκε από: '
+            '${equipmentMove.ownersToRelease.map((o) => o.name ?? '').join(', ')}',
+          );
+        }
         // Αν υπάρχει επιπλέον "τεχνικό" tooltip μήνυμα, το αφήνουμε στο τέλος ως περίληψη.
         final summary = msg?.trim();
         if (summary != null && summary.isNotEmpty) {
@@ -727,7 +864,7 @@ class SmartEntitySelectorAssociation {
 
     if (state.selectedCaller?.id == null) return null;
     final userId = state.selectedCaller!.id!;
-    final phone = state.hasPhoneAssociation
+    final phone = state.hasPhoneAssociation(lookupForAssoc)
         ? null
         : state.selectedPhone?.trim();
     final eqCode = state.hasEquipmentAssociation(lookupForAssoc)
@@ -756,12 +893,62 @@ class SmartEntitySelectorAssociation {
         !await departments.departmentNameExists(deptTrimAssoc);
     final newEntityEligible =
         newPhoneRow || newEquipmentRow || newDepartmentRow;
+    // Κρατιέται ΠΡΙΝ από κάθε αλλαγή: μετά την εγγραφή ο καλών έχει ήδη το
+    // νέο τμήμα και η γραμμή δεν θα έβγαινε. Μπαίνει στο μήνυμα μόνο αν η
+    // μεταφορά έγινε πράγματι.
+    final departmentChangeLine = state.pendingDepartmentChangeTooltip(
+      lookupForAssoc,
+    );
+    final callerNameForMessage = state.selectedCaller?.name ?? 'άγνωστος';
     try {
+      // Εξοπλισμός που ανήκει σε υπάλληλο άλλου τμήματος: ρητή ερώτηση πριν
+      // γραφτεί οτιδήποτε. Χωρίς «Ναι» η καταχώρηση ακυρώνεται ολόκληρη.
+      final moveDialogContext = context;
+      if (moveDialogContext != null && !moveDialogContext.mounted) return null;
+      final equipmentMove = await _askEquipmentMove(
+        context: moveDialogContext,
+        lookup: lookupForAssoc,
+        equipmentCode: hadEqWork ? eqCode : '',
+        newOwnerId: userId,
+        targetDepartmentId: effectiveUpdatePrimaryDepartment
+            ? (state.selectedDepartmentId ??
+                  lookupForAssoc?.findDepartmentByName(deptTrimAssoc)?.id)
+            : state.selectedCaller?.departmentId,
+        newOwnerName: callerNameForMessage,
+      );
+      if (equipmentMove.cancelled) return null;
+      final ownersToRelease = equipmentMove.ownersToRelease;
+
+      // Αλλαγή κύριου τμήματος: «τι απογίνονται όσα κουβαλά» ρωτιέται ΕΔΩ,
+      // πριν από κάθε εγγραφή — η «Ακύρωση» του αφήνει τη βάση ανέγγιχτη.
+      // Νέο τμήμα (χωρίς id ακόμη) διαβάζεται ως νοσοκομείο από την ερώτηση.
+      final caller = state.selectedCaller!;
+      final knownTargetDepartmentId =
+          state.selectedDepartmentId ??
+          (deptTrimAssoc.isEmpty
+              ? null
+              : lookupForAssoc?.findDepartmentByName(deptTrimAssoc)?.id);
+      final movesDepartment =
+          effectiveUpdatePrimaryDepartment &&
+          deptTrimAssoc.isNotEmpty &&
+          (knownTargetDepartmentId == null ||
+              knownTargetDepartmentId != caller.departmentId);
+      ({List<String> phones, List<EquipmentModel> equipment})? stayingBehind;
+      if (movesDepartment) {
+        final dialogContext = context;
+        if (dialogContext != null && !dialogContext.mounted) return null;
+        stayingBehind = await _confirmAssetsOnDepartmentChange(
+          context: dialogContext,
+          caller: caller,
+          targetDepartmentId: knownTargetDepartmentId,
+        );
+        if (stayingBehind == null) return null;
+      }
+
       String? phoneToLink = phone;
       if (phoneToLink != null && phoneToLink.isNotEmpty) {
-        final caller = state.selectedCaller;
         final targetDeptId =
-            caller?.departmentId ??
+            caller.departmentId ??
             state.selectedDepartmentId ??
             (state.departmentText.trim().isNotEmpty && lookupForAssoc != null
                 ? lookupForAssoc.findDepartmentByName(state.departmentText)?.id
@@ -771,25 +958,32 @@ class SmartEntitySelectorAssociation {
                   state.departmentText.trim())
             : state.departmentText.trim();
         final dialogContext = context;
-        if (dialogContext != null && !dialogContext.mounted) {
-          phoneToLink = null;
-        } else {
-          phoneToLink = await _confirmAndPreparePhoneAssociation(
-            context: dialogContext,
-            phonesRepo: phones,
-            phone: phoneToLink,
-            targetDepartmentId: targetDeptId,
-            editingUserId: userId,
-            userDisplayName: caller?.name ?? state.callerDisplayText.trim(),
-            targetDepartmentName: targetDeptName,
-          );
-        }
+        if (dialogContext != null && !dialogContext.mounted) return null;
+        final prepared = await _askPhoneAssociation(
+          context: dialogContext,
+          phone: phoneToLink,
+          targetDepartmentId: targetDeptId,
+          editingUserId: userId,
+          userDisplayName: caller.name ?? state.callerDisplayText.trim(),
+          targetDepartmentName: targetDeptName,
+        );
+        // «Ακύρωση» στη σύγκρουση: τίποτα δεν γράφεται, ούτε ο εξοπλισμός.
+        if (prepared.cancelled) return null;
+        phoneToLink = prepared.phone;
+        // Τελευταία ερώτηση του «+»: από εδώ και κάτω αρχίζουν οι εγγραφές.
+        await _applyPhoneResolutions(
+          phonesRepo: phones,
+          resolutions: prepared.resolutions,
+          targetDepartmentId: targetDeptId,
+        );
       }
       await users.updateAssociationsIfNeeded(
         userId,
         phoneToLink,
         eqCode?.isNotEmpty == true ? eqCode : null,
       );
+      await _releaseMovedEquipment(equipmentRepo, equipmentMove);
+      final phoneLinked = phoneToLink != null && phoneToLink.isNotEmpty;
 
       final lookup = ref.read(lookupServiceProvider).value?.service;
       var selectedDepartmentId =
@@ -807,52 +1001,30 @@ class SmartEntitySelectorAssociation {
             .getOrCreateDepartmentIdByName(state.departmentText.trim());
       }
 
-      if (effectiveUpdatePrimaryDepartment &&
+      // Η ερώτηση «τι απογίνονται όσα κουβαλά» έγινε ήδη, πριν από κάθε
+      // εγγραφή (δες πιο πάνω)· εδώ εφαρμόζεται μόνο η απάντηση.
+      final decision = stayingBehind;
+      if (decision != null &&
           selectedDepartmentId != null &&
           selectedDepartmentId != state.selectedCaller?.departmentId &&
           state.selectedCaller?.id != null) {
-        // Ο υπάλληλος μετακομίζει: ρωτιέται τι απογίνονται όσα κουβαλά, με
-        // τους ΙΔΙΟΥΣ οδηγούς που δείχνουν η φόρμα και η μαζική μεταφορά. Η
-        // γρήγορη προσθήκη δεν είναι εξαίρεση — μια σιωπηλή μεταφορά εδώ θα
-        // ήταν τρύπα στα δεδομένα.
-        //
-        // Όταν ο καλών ΔΕΝ είχε τμήμα, δεν υπάρχει μεταφορά αλλά πρώτη
-        // ανάθεση: τίποτα δεν μπορεί να «μείνει πίσω» και δεν ρωτιέται τίποτα.
-        final assetDialogContext = context;
-        final decision =
-            (assetDialogContext != null && !assetDialogContext.mounted)
-            ? null
-            : await _confirmAssetsOnDepartmentChange(
-                context: assetDialogContext,
-                caller: state.selectedCaller!,
-                targetDepartmentId: selectedDepartmentId,
-              );
-        if (decision == null) {
-          // Ακύρωση: το τμήμα μένει ως έχει. Η υπόλοιπη συσχέτιση που έγινε
-          // πιο πάνω (τηλέφωνο, εξοπλισμός) δεν αναιρείται.
-          primaryDepartmentChanged = false;
-        } else {
-          final oldDepartmentId = state.selectedCaller!.departmentId;
-          final updatedMap = Map<String, dynamic>.from(
-            state.selectedCaller!.toMap(),
-          );
-          updatedMap['department_id'] = selectedDepartmentId;
-          await users.updateUser(
-            state.selectedCaller!.id!,
-            updatedMap,
-            expected: null,
-          );
-          await applyAssetsStayingBehind(
-            db: dbAssoc,
-            userId: state.selectedCaller!.id!,
-            oldDepartmentId: oldDepartmentId,
-            phones: decision.phones,
-            equipment: decision.equipment,
-            currentPhones: state.selectedCaller!.phones,
-          );
-          updatedDepartmentId = selectedDepartmentId;
-          primaryDepartmentChanged = true;
-        }
+        final oldDepartmentId = state.selectedCaller!.departmentId;
+        // Γράφεται ΜΟΝΟ το τμήμα. Ολόκληρη η καρτέλα από τη μνήμη της
+        // φόρμας θα έσβηνε ό,τι δεν κρατά εκείνη (ψευδώνυμο) και θα
+        // ξεδένε το τηλέφωνο που μόλις συνδέθηκε πιο πάνω.
+        await users.updateUser(state.selectedCaller!.id!, <String, dynamic>{
+          'department_id': selectedDepartmentId,
+        }, expected: null);
+        await applyAssetsStayingBehind(
+          db: dbAssoc,
+          userId: state.selectedCaller!.id!,
+          oldDepartmentId: oldDepartmentId,
+          phones: decision.phones,
+          equipment: decision.equipment,
+          currentPhones: state.selectedCaller!.phones,
+        );
+        updatedDepartmentId = selectedDepartmentId;
+        primaryDepartmentChanged = true;
       }
 
       final s = state;
@@ -868,23 +1040,17 @@ class SmartEntitySelectorAssociation {
         }
       }
       state = state.copyWith(
-        selectedCaller: UserModel(
-          id: s.selectedCaller?.id,
-          firstName: s.selectedCaller?.firstName,
-          lastName: s.selectedCaller?.lastName,
+        // Αντίγραφο με ΟΛΑ τα στοιχεία του καλούντα: ό,τι έλειπε εδώ
+        // (ψευδώνυμο, τοποθεσία, Lansweeper) χανόταν στην επόμενη εγγραφή.
+        selectedCaller: s.selectedCaller!.copyWith(
           phones: updatedPhones,
           departmentId: updatedDepartmentId,
           // Αλλαγή κύριου τμήματος: νέο όνομα από lookup ή από το πεδίο
           // (το φρεσκοδημιουργημένο τμήμα λείπει ακόμα από το cache).
           departmentName: !primaryDepartmentChanged
-              ? s.selectedCaller?.departmentName
-              : (updatedDepartmentId == null
-                    ? null
-                    : (lookup?.departmentIdToName[updatedDepartmentId] ??
-                          (s.departmentText.trim().isNotEmpty
-                              ? s.departmentText.trim()
-                              : ''))),
-          notes: s.selectedCaller?.notes,
+              ? null
+              : (lookup?.departmentIdToName[updatedDepartmentId] ??
+                    s.departmentText.trim()),
         ),
         selectedDepartmentId: primaryDepartmentChanged
             ? updatedDepartmentId
@@ -925,11 +1091,27 @@ class SmartEntitySelectorAssociation {
       if (matchedEquipment.isNotEmpty) {
         state = state.copyWith(selectedEquipment: matchedEquipment.first);
       }
+      // Το μήνυμα περιγράφει ό,τι ΕΓΙΝΕ, όχι ό,τι προβλεπόταν πριν από τις
+      // ερωτήσεις: ένα «Όχι» στη μεταφορά δεν αφήνει γραμμή αλλαγής τμήματος.
+      final addedParts = <String>[
+        if (phoneLinked) 'τηλεφώνου: $phoneToLink',
+        if (hadEqWork) 'εξοπλισμού: $eqCode',
+      ];
+      final resultLines = <String>[
+        if (addedParts.isNotEmpty)
+          'Προσθήκη ${addedParts.join(' και ')} στο $callerNameForMessage',
+        if (ownersToRelease.isNotEmpty)
+          'Ο εξοπλισμός $eqCode αφαιρέθηκε από: '
+              '${ownersToRelease.map((o) => o.name ?? '').join(', ')}',
+        if (primaryDepartmentChanged && departmentChangeLine != null)
+          departmentChangeLine,
+      ];
+      final resultMessage = resultLines.isEmpty ? null : resultLines.join('\n');
       await _syncAssociationQuickTask(
         newEntityEligible: newEntityEligible,
         associationWorkDone:
-            hadPhoneWork || hadEqWork || primaryDepartmentChanged,
-        summaryText: msg,
+            phoneLinked || hadEqWork || primaryDepartmentChanged,
+        summaryText: resultMessage,
         callerName: s.selectedCaller?.name ?? s.callerDisplayText.trim(),
         callerId: s.selectedCaller?.id,
         departmentId: resolvedDepartmentId,
@@ -946,9 +1128,7 @@ class SmartEntitySelectorAssociation {
             : s.departmentText.trim(),
       );
       await host.trackDerivativeAuditsSince(auditSince);
-      return (hadPhoneWork || hadEqWork || primaryDepartmentChanged)
-          ? (msg ?? 'Προστέθηκε.')
-          : null;
+      return resultMessage;
     } catch (e) {
       return 'Σφάλμα αποθήκευσης: ${humanizeUserFacingError(e)}';
     }
@@ -1089,4 +1269,22 @@ class SmartEntitySelectorAssociation {
           categoryName: Task.quickAddCategoryEl,
         );
   }
+}
+
+/// Η απάντηση στην ερώτηση «Εξοπλισμός άλλου τμήματος — να μεταφερθεί;».
+typedef _EquipmentMove = ({
+  bool cancelled,
+  int? equipmentId,
+  List<UserModel> ownersToRelease,
+});
+
+/// «Ελένη Πλακογιάννη (Βιοϊατρική)» — το τμήμα είναι ο λόγος της ερώτησης.
+String _ownerLabel(UserModel owner, LookupService lookup) {
+  final name = (owner.name ?? '').trim();
+  final department =
+      (owner.departmentName ??
+              lookup.departmentIdToName[owner.departmentId] ??
+              '')
+          .trim();
+  return department.isEmpty ? name : '$name ($department)';
 }

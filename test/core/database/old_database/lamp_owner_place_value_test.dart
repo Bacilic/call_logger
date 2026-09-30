@@ -266,39 +266,87 @@ void main() {
       expect(row['owner_original_text'], isNull);
     });
 
-    test('μόνο γραφείο: το πρόβλημα υπαλλήλου μένει ανοιχτό', () async {
+    test(
+      'νέος υπάλληλος δημιουργείται στο γραφείο και χρεώνεται τον εξοπλισμό',
+      () async {
+        final proposal = await seedAndAnalyze(rawValue: 'Θάνια');
+
+        await LampIssueResolutionService().applySingleDecision(
+          databasePath: dbPath,
+          decision: LampIssueResolutionDecision(
+            proposal: proposal,
+            option: placementOption(proposal),
+            placementInput: const LampPlacementInput(
+              officeId: 27,
+              newOwnerLastName: 'Παπαδοπούλου',
+              newOwnerFirstName: 'Θάνια',
+            ),
+          ),
+        );
+
+        final row = await equipmentRow();
+        expect(row['office'], 27);
+        expect(row['owner_original_text'], isNull);
+
+        await LampDatabaseProvider.instance.close();
+        final db = await openDatabase(dbPath, singleInstance: false);
+        try {
+          final owner = (await db.query(
+            'owners',
+            where: 'owner = ?',
+            whereArgs: <Object?>[row['owner']],
+          )).single;
+          expect(owner['last_name'], 'Παπαδοπούλου');
+          expect(owner['first_name'], 'Θάνια');
+          expect(
+            owner['office'],
+            27,
+            reason: greekExpectMsg(
+              'Ο νέος υπάλληλος ανήκει στο γραφείο που μόλις ορίστηκε',
+            ),
+          );
+          final open = await db.query(
+            'data_issues',
+            where: "row_number = 5034 AND status = 'open'",
+          );
+          expect(
+            open,
+            isEmpty,
+            reason: greekExpectMsg(
+              'Το όνομα που έγραψε ο χρήστης δεν αγνοείται — αλλιώς το '
+              'πρόβλημα ξαναεμφανίζεται στον επόμενο έλεγχο',
+            ),
+          );
+        } finally {
+          await db.close();
+        }
+      },
+    );
+
+    test('νέος υπάλληλος που υπάρχει ήδη δεν γράφεται δεύτερη φορά', () async {
       final proposal = await seedAndAnalyze(rawValue: 'Γιατροί Μαιευτικής');
 
-      final result = await LampIssueResolutionService().applySingleDecision(
+      await LampIssueResolutionService().applySingleDecision(
         databasePath: dbPath,
         decision: LampIssueResolutionDecision(
           proposal: proposal,
           option: placementOption(proposal),
-          placementInput: const LampPlacementInput(officeId: 27),
+          placementInput: const LampPlacementInput(
+            officeId: 27,
+            newOwnerLastName: 'Καμπάς',
+            newOwnerFirstName: 'Νικόλαος',
+          ),
         ),
       );
 
       final row = await equipmentRow();
-      expect(row['office'], 27);
-      expect(row['owner'], isNull);
-      expect(
-        row['owner_original_text'],
-        'Γιατροί Μαιευτικής',
-        reason: greekExpectMsg(
-          'Μισή σωστή πληροφορία αξίζει περισσότερο από καμία — το κείμενο '
-          'μένει για να ξαναδουλευτεί το πρόβλημα αργότερα',
-        ),
-      );
-      expect(result.unresolved, 1);
+      expect(row['owner'], 81);
 
       await LampDatabaseProvider.instance.close();
       final db = await openDatabase(dbPath, singleInstance: false);
       try {
-        final open = await db.query(
-          'data_issues',
-          where: "column_name = 'owner' AND status = 'open'",
-        );
-        expect(open, hasLength(1));
+        final owners = await db.query('owners', where: "last_name = 'Καμπάς'");
+        expect(owners, hasLength(1));
       } finally {
         await db.close();
       }

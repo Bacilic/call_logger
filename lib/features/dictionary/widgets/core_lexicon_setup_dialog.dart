@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/utils/picker_location_memory.dart';
+import '../../../core/utils/file_picker_session.dart';
 
 /// Εμφανίζει διάλογο ρύθμισης πυρήνα· `true` αν φορτώθηκε επιτυχώς.
 Future<bool> showCoreLexiconSetupDialog({
@@ -77,12 +78,14 @@ class _CoreLexiconSetupDialogState
 
   Future<void> _pickExternalFile() async {
     const memory = PickerLocationMemory('lexicon_txt');
-    final r = await FilePicker.pickFile(
-      dialogTitle: 'Επιλογή αρχείου λεξικού-πυρήνα (.txt)',
-      type: FileType.custom,
-      allowedExtensions: const ['txt'],
-      initialDirectory: await memory.initialDirectory(),
-    );
+    final r = (await FilePickerSession.run(
+      () async => FilePicker.pickFile(
+        dialogTitle: 'Επιλογή αρχείου λεξικού-πυρήνα (.txt)',
+        type: FileType.custom,
+        allowedExtensions: const ['txt'],
+        initialDirectory: await memory.initialDirectory(),
+      ),
+    )).value;
     final path = r?.path;
     if (path == null || !mounted) return;
     await memory.remember(path);

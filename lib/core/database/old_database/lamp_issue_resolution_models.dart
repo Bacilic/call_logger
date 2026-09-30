@@ -124,13 +124,29 @@ class LampIssueResolutionOption {
 }
 
 /// Τι διάλεξε ο χρήστης στα δύο πεδία τοποθέτησης.
+///
+/// Ο υπάλληλος είναι **υποχρεωτικός**: στη Λάμπα κάθε εξοπλισμός χρεώνεται σε
+/// πρόσωπο. Δίνεται είτε ως υπάρχων ([ownerId]) είτε ως νέος
+/// ([newOwnerLastName] και [newOwnerFirstName]) — ποτέ και τα δύο.
 class LampPlacementInput {
-  const LampPlacementInput({required this.officeId, this.ownerId});
+  const LampPlacementInput({
+    required this.officeId,
+    this.ownerId,
+    this.newOwnerLastName,
+    this.newOwnerFirstName,
+  }) : assert(
+         (ownerId != null) !=
+             (newOwnerLastName != null && newOwnerFirstName != null),
+       );
 
   final int officeId;
 
-  /// `null` όταν ο χρήστης ξέρει το γραφείο αλλά όχι τον κάτοχο.
+  /// Υπάρχων υπάλληλος από τη λίστα.
   final int? ownerId;
+
+  /// Νέος υπάλληλος, που δεν υπάρχει ακόμη στη Λάμπα.
+  final String? newOwnerLastName;
+  final String? newOwnerFirstName;
 }
 
 /// Τα στοιχεία μιας νέας σύμβασης, όπως τα συμπλήρωσε ο χρήστης.

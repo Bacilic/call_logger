@@ -22,6 +22,7 @@ import 'database_v1_schema.dart';
 import 'dictionary_repository.dart';
 import 'directory_audit_helpers.dart';
 import 'operator_avatar_backfill.dart';
+import 'sql_like.dart';
 
 // Ο αριθμός ζει σε δικό του αρχείο χωρίς imports, ώστε το εργαλείο
 // δημοσίευσης να μην σέρνει από εδώ ολόκληρο το Flutter. Προωθείται για να
@@ -1588,8 +1589,8 @@ Future<void> migrateDatabaseToV32(Database db) async {
   final rows = await db.query(
     'audit_log',
     columns: ['id', 'action', 'details'],
-    where: 'action LIKE ?',
-    whereArgs: ['$legacyPrefix%'],
+    where: 'action ${SqlLike.op}',
+    whereArgs: [SqlLike.startsWith(legacyPrefix)],
   );
   if (rows.isEmpty) return;
 

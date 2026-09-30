@@ -7,11 +7,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
+import '../models/task_personal_settings.dart';
 import '../models/task_settings_config.dart';
 import '../providers/task_settings_config_provider.dart';
 import '../ui/task_due_option_tooltips.dart';
 
-/// Διάλογος γενικών ρυθμίσεων εκκρεμοτήτων (`app_settings`).
+/// Διάλογος ρυθμίσεων εκκρεμοτήτων, σε δύο φανερές ομάδες: **κοινές για
+/// όλους** (`app_settings`) και **δικές μου** (προσωπικές του χρήστη).
+///
+/// Και οι δύο ομάδες ζουν σε πρόχειρο και γράφονται **μόνο** στο
+/// «Αποθήκευση»· η «Ακύρωση» δεν αφήνει καμία αλλαγή πίσω της.
 class TaskSettingsDialog extends ConsumerStatefulWidget {
   const TaskSettingsDialog({super.key});
 
@@ -26,6 +31,8 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
   late final TextEditingController _maxDaysController;
   TaskSettingsConfig? _draft;
   TaskSettingsConfig? _initial;
+  TaskPersonalSettings? _personal;
+  TaskPersonalSettings? _personalInitial;
   bool _loading = true;
 
   static const String _msgInvalidDaysFormat =
@@ -39,12 +46,15 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
     _maxDaysController = TextEditingController();
     _maxDaysController.addListener(_onMaxDaysTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final personal = await _loadPersonal();
       try {
         final c = await ref.read(taskSettingsConfigProvider.future);
         if (!mounted) return;
         setState(() {
           _draft = c;
           _initial = c;
+          _personal = personal;
+          _personalInitial = personal;
           _maxDaysController.text = c.maxSnoozeDays.toString();
           _loading = false;
         });
@@ -54,6 +64,8 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
         setState(() {
           _draft = fallback;
           _initial = fallback;
+          _personal = personal;
+          _personalInitial = personal;
           _maxDaysController.text = fallback.maxSnoozeDays.toString();
           _loading = false;
         });
@@ -65,6 +77,36 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
   void dispose() {
     _maxDaysController.dispose();
     super.dispose();
+  }
+
+  Future<TaskPersonalSettings> _loadPersonal() async {
+    final ui = _settings.windowUi;
+    return TaskPersonalSettings(
+      notifyHandovers: await ui.getNotifyTaskHandovers(),
+      showBadge: await ui.getShowTasksBadge(),
+      printPreview: await ui.getTaskPrintPreview(),
+    );
+  }
+
+  /// Γράφει μόνο τους προσωπικούς διακόπτες που άλλαξαν, και ενημερώνει όσα
+  /// σημεία της εφαρμογής τους δείχνουν.
+  Future<void> _savePersonal(
+    TaskPersonalSettings from,
+    TaskPersonalSettings to,
+  ) async {
+    final ui = _settings.windowUi;
+    if (to.notifyHandovers != from.notifyHandovers) {
+      await ui.setNotifyTaskHandovers(to.notifyHandovers);
+      ref.invalidate(notifyTaskHandoversProvider);
+    }
+    if (to.showBadge != from.showBadge) {
+      await ui.setShowTasksBadge(to.showBadge);
+      ref.invalidate(showTasksBadgeProvider);
+    }
+    if (to.printPreview != from.printPreview) {
+      await ui.setTaskPrintPreview(to.printPreview);
+      ref.invalidate(taskPrintPreviewProvider);
+    }
   }
 
   String _formatTime(TimeOfDay t) =>
@@ -101,6 +143,17 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
   }
 
   List<String> _buildChanges() {
+    final personal = _personal;
+    final personalInitial = _personalInitial;
+    return [
+      ..._buildSharedChanges(),
+      if (personal != null && personalInitial != null)
+        ...personal.changesFrom(personalInitial),
+    ];
+  }
+
+  /// Αλλαγές στις **κοινές** ρυθμίσεις — αυτές που βλέπουν όλοι.
+  List<String> _buildSharedChanges() {
     final initial = _initial;
     final draft = _draft;
     if (initial == null || draft == null) return const [];
@@ -208,6 +261,32 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
     if (picked != null) onDone(picked);
   }
 
+  /// Επικεφαλίδα ομάδας: ποιον αφορούν οι ρυθμίσεις από κάτω.
+  Widget _groupTitle(String title, String subtitle) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _sectionTitle(String text) {
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 8),
@@ -234,9 +313,16 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
     try {
       // Γράφεται μόνο ό,τι άλλαξε από τη στιγμή που άνοιξε ο διάλογος: ό,τι
       // άγγιξε στο μεταξύ ο συνάδελφος στα υπόλοιπα πεδία δεν επανέρχεται.
-      await ref
-          .read(taskSettingsConfigProvider.notifier)
-          .saveChanges(from: baseline, to: updated);
+      if (_buildSharedChanges().isNotEmpty) {
+        await ref
+            .read(taskSettingsConfigProvider.notifier)
+            .saveChanges(from: baseline, to: updated);
+      }
+      final personal = _personal;
+      final personalInitial = _personalInitial;
+      if (personal != null && personalInitial != null) {
+        await _savePersonal(personalInitial, personal);
+      }
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
@@ -290,14 +376,22 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
           builder: (titleHandle) => AlertDialog(
             title: titleHandle,
             content: SizedBox(
-              width: 440,
+              // 440 για το περιεχόμενο + 16 για τη λωρίδα της μπάρας κύλισης.
+              width: 456,
               child: Form(
                 key: _formKey,
                 child: SingleChildScrollView(
+                  // Λωρίδα για τη μπάρα κύλισης: χωρίς αυτήν η μπάρα κάθεται
+                  // πάνω στα εικονίδια και στους διακόπτες της δεξιάς άκρης.
+                  padding: const EdgeInsets.only(right: 16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      _groupTitle(
+                        'Κοινές για όλους',
+                        'Αλλάζουν για όλους τους συναδέλφους, σε κάθε υπολογιστή.',
+                      ),
                       _sectionTitle('Ωράριο εκκρεμοτήτων'),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -441,7 +535,11 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
                               _draft = _draft?.copyWith(autoCloseQuickAdds: v),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const Divider(height: 32),
+                      _groupTitle(
+                        'Δικές μου',
+                        'Μόνο για εσάς — δεν αλλάζουν τίποτα στους συναδέλφους.',
+                      ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text(
@@ -452,17 +550,12 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
                           'αφαιρεθεί, ή όταν κλείσει κάποιος άλλος μια δική '
                           'μου. Δεν εμφανίζεται ποτέ πάνω σε ενεργή κλήση.',
                         ),
-                        value:
-                            ref.watch(notifyTaskHandoversProvider).value ??
-                            true,
-                        onChanged: (value) async {
-                          await _settings.windowUi.setNotifyTaskHandovers(
-                            value,
-                          );
-                          if (!mounted) return;
-                          ref.invalidate(notifyTaskHandoversProvider);
-                          setState(() {});
-                        },
+                        value: _personal?.notifyHandovers ?? true,
+                        onChanged: (value) => setState(
+                          () => _personal = _personal?.copyWith(
+                            notifyHandovers: value,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       SwitchListTile(
@@ -473,13 +566,11 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
                         subtitle: const Text(
                           'Εμφανίζει στο πλαϊνό μενού το πλήθος ανοιχτών και αναβεβλημένων εκκρεμοτήτων.',
                         ),
-                        value: ref.watch(showTasksBadgeProvider).value ?? true,
-                        onChanged: (value) async {
-                          await _settings.windowUi.setShowTasksBadge(value);
-                          if (!mounted) return;
-                          ref.invalidate(showTasksBadgeProvider);
-                          setState(() {});
-                        },
+                        value: _personal?.showBadge ?? true,
+                        onChanged: (value) => setState(
+                          () =>
+                              _personal = _personal?.copyWith(showBadge: value),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       SwitchListTile(
@@ -492,14 +583,12 @@ class _TaskSettingsDialogState extends ConsumerState<TaskSettingsDialog>
                           'εκτύπωσης μέσα του. Κλειστό, η «Εκτύπωση…» πάει '
                           'κατευθείαν στο παράθυρο των Windows.',
                         ),
-                        value:
-                            ref.watch(taskPrintPreviewProvider).value ?? true,
-                        onChanged: (value) async {
-                          await _settings.windowUi.setTaskPrintPreview(value);
-                          if (!mounted) return;
-                          ref.invalidate(taskPrintPreviewProvider);
-                          setState(() {});
-                        },
+                        value: _personal?.printPreview ?? true,
+                        onChanged: (value) => setState(
+                          () => _personal = _personal?.copyWith(
+                            printPreview: value,
+                          ),
+                        ),
                       ),
                     ],
                   ),

@@ -184,4 +184,23 @@ void main() {
       expect(doc.sinceLastSnoozeLine, startsWith('Από την τελευταία αναβολή:'));
     });
   });
+
+  group('κείμενο επικολλημένο από email', () {
+    test('οι αλλαγές γραμμής των Windows δεν τυπώνονται ως κουτάκια', () {
+      final doc = buildTaskPrintDocument(
+        _task(
+          description: 'εξετάσεις:\r\n\r\nGNKOR19855\t03/09/2021\r\nGNKOR20462',
+          solutionNotes: 'έγινε\rανάκτηση',
+          status: 'done',
+          completedAt: '2026-09-03T10:00:00.000',
+        ),
+      );
+
+      expect(
+        doc.description,
+        'εξετάσεις:\n\nGNKOR19855\t03/09/2021\nGNKOR20462',
+      );
+      expect(doc.previousSolution, 'έγινε\nανάκτηση');
+    });
+  });
 }

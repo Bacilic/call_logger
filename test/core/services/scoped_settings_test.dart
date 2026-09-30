@@ -7,6 +7,8 @@
 //
 //   flutter test test/core/services/scoped_settings_test.dart
 
+import 'dart:io';
+
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/operator_settings_repository.dart';
 import 'package:call_logger/core/database/settings_repository.dart';
@@ -233,6 +235,41 @@ void main() {
   });
 
   group('Ο κατάλογος κλειδιών', () {
+    // Η δήλωση και η λίστα `all` γράφονται με το χέρι σε δύο σημεία: ό,τι
+    // λείπει από τη λίστα δεν επαναφέρεται και ξεφεύγει από κάθε έλεγχο που
+    // περνά από αυτήν. Η Dart δεν απαριθμεί μόνη της τις σταθερές μιας κλάσης,
+    // οπότε ο φρουρός διαβάζει τη δήλωση από την πηγή.
+    for (final catalog in const [
+      ('lib/core/services/profile_settings.dart', 'ProfileSettingKey'),
+      ('lib/core/services/shared_settings.dart', 'SharedSettingKey'),
+      ('lib/core/services/overridable_settings.dart', 'OverridableSettingKey'),
+    ]) {
+      final (path, type) = catalog;
+      test('κάθε δηλωμένο $type είναι μέσα στον κατάλογο', () {
+        final source = File(path).readAsStringSync();
+        final declared = RegExp(
+          'static const $type (\\w+)',
+        ).allMatches(source).map((m) => m.group(1)!).toSet();
+        final listStart = source.indexOf('static const List<$type> all = [');
+        expect(listStart, isNot(-1), reason: '$path: λείπει η λίστα all');
+        final listed = RegExp(r'(\w+),')
+            .allMatches(
+              source.substring(listStart, source.indexOf('];', listStart)),
+            )
+            .map((m) => m.group(1)!)
+            .toSet();
+
+        expect(declared, isNotEmpty);
+        expect(
+          declared.difference(listed),
+          isEmpty,
+          reason:
+              '$path: δηλωμένα αλλά εκτός της λίστας all — όποια ροή περνά '
+              'από τη λίστα (π.χ. η επαναφορά ρυθμίσεων) θα τα προσπερνούσε.',
+        );
+      });
+    }
+
     test('δεν έχει διπλά κλειδιά', () {
       final keys = ProfileSettingKeys.all.map((k) => k.key).toList();
       expect(

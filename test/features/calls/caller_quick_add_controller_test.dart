@@ -43,7 +43,9 @@ class _FakePrompts implements CallerQuickAddPrompts {
   });
 
   final bool sharedAssetAnswer;
-  final bool primaryDepartmentAnswer;
+
+  /// `null` = ο διάλογος έκλεισε με κλικ έξω ή Esc.
+  final bool? primaryDepartmentAnswer;
   final SimilarUsersDialogResult? usersAnswer;
   final SimilarDepartmentDialogResult? departmentsAnswer;
 
@@ -61,7 +63,7 @@ class _FakePrompts implements CallerQuickAddPrompts {
   }
 
   @override
-  Future<bool> confirmPrimaryDepartmentChange({
+  Future<bool?> confirmPrimaryDepartmentChange({
     required String callerName,
     required String currentDepartmentName,
     required String newDepartmentName,
@@ -489,6 +491,43 @@ void main() {
       expect(prompts.primaryDepartmentAsks, 1);
       expect(actions.associatedWithPrimaryDepartmentUpdate, isFalse);
       expect(actions.associateCalled, isTrue);
+    });
+  });
+
+  group('κλείσιμο του διαλόγου κύριου τμήματος', () {
+    test('κλικ έξω ακυρώνει ολόκληρη την καταχώρηση', () async {
+      final caller = _user(
+        id: 83,
+        firstName: 'Βασιλική',
+        departmentId: 64,
+        departmentName: 'Άδειες',
+      );
+      final actions = _FakeActions(
+        initialHeader: CallHeaderState(
+          selectedCaller: caller,
+          callerDisplayText: 'Βασιλική Κόικα',
+          departmentText: 'Βιοχημικό',
+        ),
+      );
+      final prompts = _FakePrompts(primaryDepartmentAnswer: null);
+      final lookup = _FakeLookup(
+        depts: [DepartmentModel(id: 59, name: 'Βιοχημικό')],
+      );
+
+      await CallerQuickAddController(
+        actions: actions,
+        prompts: prompts,
+      ).run(lookup);
+
+      expect(prompts.primaryDepartmentAsks, 1);
+      expect(
+        actions.associateCalled,
+        isFalse,
+        reason:
+            'Κλικ έξω από διάλογο δεν είναι «Όχι» — είναι ακύρωση, και δεν '
+            'γράφεται τίποτα: ούτε εξοπλισμός, ούτε τηλέφωνο',
+      );
+      expect(prompts.announcements, isEmpty);
     });
   });
 
