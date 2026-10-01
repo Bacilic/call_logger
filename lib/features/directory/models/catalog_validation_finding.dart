@@ -25,6 +25,16 @@ enum CatalogFindingType {
   duplicateRemoteTarget,
 }
 
+/// Οι κάρτες που δέχονται «Σωστό»: η σύμπτωση μπορεί να είναι αληθινή, και
+/// μια απόφαση του χρήστη πρέπει να μη χρειάζεται να ξαναπαρθεί.
+///
+/// Επίτηδες ΕΚΤΟΣ: το «Ίδιο τηλέφωνο σε διαφορετικά τμήματα» — ένας αριθμός
+/// δεν μπορεί να χτυπά σε δύο τμήματα, άρα είναι πάντα λάθος.
+const Set<CatalogFindingType> kAcceptableCatalogFindingTypes = {
+  CatalogFindingType.phoneEquipmentCode,
+  CatalogFindingType.nameConflict,
+};
+
 /// Μία εμπλεκόμενη εγγραφή ενός ευρήματος.
 ///
 /// Στα ευρήματα-διενέξεις κάθε κάρτα κουβαλά ΟΛΕΣ τις εμπλεκόμενες εγγραφές
@@ -91,6 +101,7 @@ class CatalogValidationFinding {
     required this.message,
     required this.records,
     this.fieldLabel = '',
+    this.subject = '',
   });
 
   final CatalogFindingType type;
@@ -106,6 +117,24 @@ class CatalogValidationFinding {
   /// στις διενέξεις.
   final List<CatalogFindingRecord> records;
 
+  /// Η τιμή που αφορά το εύρημα, όπου δεν φαίνεται από τις εγγραφές (π.χ.
+  /// ο κοινός αριθμός «2589»). Κενό όταν οι εγγραφές αρκούν.
+  final String subject;
+
+  /// Το αποτύπωμα με το οποίο θυμάται ο κατάλογος ότι η περίπτωση κρίθηκε
+  /// σωστή — `null` στα ευρήματα που δεν δέχονται αποδοχή.
+  ///
+  /// Δένεται με τις **συγκεκριμένες** εγγραφές: αν ο ίδιος αριθμός περάσει σε
+  /// άλλον υπάλληλο, ή εμφανιστεί τρίτη συνώνυμη, το αποτύπωμα αλλάζει και η
+  /// κάρτα ξαναβγαίνει — είναι νέα κατάσταση που δεν έχει κρίνει κανείς.
+  String? get acceptKey {
+    if (!kAcceptableCatalogFindingTypes.contains(type)) return null;
+    final ids = [
+      for (final record in records) '${record.kind.name}:${record.entityId}',
+    ]..sort();
+    return '${type.name}|$subject|${ids.join(',')}';
+  }
+
   /// Αληθές όταν το εύρημα είναι διένεξη μεταξύ εγγραφών.
   bool get isConflict => records.length > 1;
 
@@ -118,6 +147,7 @@ class CatalogValidationFinding {
       message: message,
       fieldLabel: fieldLabel,
       records: next,
+      subject: subject,
     );
   }
 }

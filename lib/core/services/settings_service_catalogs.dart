@@ -36,6 +36,8 @@ class SettingsServiceCatalogs {
   static const String _keyCatalogValidationRules =
       'catalog_validation_rules_v1';
   static const String _keyLampCrossCheckRules = 'lamp_cross_check_rules_v1';
+  static const String _keyCatalogAcceptedFindings =
+      'catalog_accepted_findings_v1';
   static const String _keyPublishCliCommandTemplate =
       'publish_cli_command_template';
 
@@ -326,6 +328,25 @@ class SettingsServiceCatalogs {
     final update = SettingsService.appSettingUpdater;
     if (update == null) return null;
     return update(_keyCatalogValidationRules, change);
+  }
+
+  /// Τα ευρήματα του «Ελέγχου δεδομένων» που κρίθηκαν σωστά, ως ωμό JSON.
+  ///
+  /// Ζουν στη βάση, ώστε η απόφαση να ισχύει για όλους τους σταθμούς.
+  Future<String?> getCatalogAcceptedFindingsRaw() async {
+    if (_getAppSetting == null) return null;
+    return _getAppSetting!(_keyCatalogAcceptedFindings);
+  }
+
+  /// **Στοχευμένη αλλαγή** της λίστας αποδεκτών — ίδιος λόγος με τους
+  /// κανόνες: δύο σταθμοί που αποδέχονται ταυτόχρονα δεν σβήνουν ο ένας την
+  /// απόφαση του άλλου.
+  Future<String?> updateCatalogAcceptedFindingsRaw(
+    String Function(String? current) change,
+  ) async {
+    final update = SettingsService.appSettingUpdater;
+    if (update == null) return null;
+    return update(_keyCatalogAcceptedFindings, change);
   }
 
   /// Οι διακόπτες της «Διασταύρωσης με Λάμπα», ως ωμό JSON.

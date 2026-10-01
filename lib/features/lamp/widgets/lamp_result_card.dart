@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/database/old_database/old_equipment_repository.dart'
+    show lampAcceptedNoteKey;
+
 const _kCardPadding = EdgeInsets.all(18);
 const _kSectionSpacing = 16.0;
 const _kRowSpacing = 7.0;
@@ -354,6 +357,7 @@ class EquipmentViewModel {
           fieldKey: 'ip_address',
           value: _text(row['ip_address']),
           autofocus: true,
+          note: _acceptedNote(row, 'ip_address'),
         ),
         EditableInfoField(
           label: 'VLAN',
@@ -369,6 +373,7 @@ class EquipmentViewModel {
           label: 'Hostname',
           fieldKey: 'network_name',
           value: _text(row['network_name']),
+          note: _acceptedNote(row, 'network_name'),
         ),
         EditableInfoField(
           label: 'Περιγραφή',
@@ -385,10 +390,18 @@ class EquipmentViewModel {
       ],
       items: _items(<InfoItem>[
         InfoItem(label: 'Κόμβος', value: _text(row['network_node'])),
-        InfoItem(label: 'IP', value: _text(row['ip_address'])),
+        InfoItem(
+          label: 'IP',
+          value: _text(row['ip_address']),
+          note: _acceptedNote(row, 'ip_address'),
+        ),
         InfoItem(label: 'VLAN', value: _text(row['network_vlan'])),
         InfoItem(label: 'MAC', value: _text(row['network_mac'])),
-        InfoItem(label: 'Hostname', value: _text(row['network_name'])),
+        InfoItem(
+          label: 'Hostname',
+          value: _text(row['network_name']),
+          note: _acceptedNote(row, 'network_name'),
+        ),
         InfoItem(
           label: 'Περιγραφή',
           value: _text(row['network_description']),
@@ -706,6 +719,13 @@ class EquipmentViewModel {
     return text == null || text.isEmpty ? null : text;
   }
 
+  /// «✓ Αποδεκτό: …» όταν η τιμή της στήλης έχει κριθεί αποδεκτή στον έλεγχο
+  /// προβλημάτων — η Λάμπα δεν διορθώνεται, άρα η εξήγηση συνοδεύει την τιμή.
+  static String? _acceptedNote(Map<String, Object?> row, String column) {
+    final note = _text(row[lampAcceptedNoteKey(column)]);
+    return note == null ? null : '✓ Αποδεκτό: $note';
+  }
+
   static String? _firstText(Object? first, [Object? second, Object? third]) {
     return _text(first) ?? _text(second) ?? _text(third);
   }
@@ -805,11 +825,19 @@ class InfoSectionData {
 }
 
 class InfoItem {
-  const InfoItem({required this.label, required this.value, this.maxLines = 1});
+  const InfoItem({
+    required this.label,
+    required this.value,
+    this.maxLines = 1,
+    this.note,
+  });
 
   final String label;
   final String? value;
   final int maxLines;
+
+  /// Επεξηγηματική γραμμή κάτω από την τιμή — μόνο για ανάγνωση.
+  final String? note;
 }
 
 enum EditableFieldType { text, email, date, number, phone, code }
@@ -822,6 +850,7 @@ class EditableInfoField {
     this.type = EditableFieldType.text,
     this.maxLines = 1,
     this.autofocus = false,
+    this.note,
   });
 
   final String label;
@@ -830,6 +859,9 @@ class EditableInfoField {
   final EditableFieldType type;
   final int maxLines;
   final bool autofocus;
+
+  /// Επεξηγηματική γραμμή κάτω από το πεδίο — μόνο για ανάγνωση.
+  final String? note;
 }
 
 class EquipmentResultCard extends StatefulWidget {
@@ -1496,6 +1528,8 @@ class _EditField extends StatelessWidget {
         validator: validator,
         decoration: InputDecoration(
           labelText: field.label,
+          helperText: field.note,
+          helperMaxLines: 3,
           border: const OutlineInputBorder(),
           suffixIcon: onPickDate == null
               ? null
@@ -1528,10 +1562,31 @@ class _InfoItemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CopyableField(
+    final field = CopyableField(
       label: item.label,
       value: item.value ?? '',
       maxLines: item.maxLines,
+    );
+    final note = item.note;
+    if (note == null) return field;
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        field,
+        Padding(
+          padding: const EdgeInsets.only(left: _kLabelWidth, right: 30),
+          child: Text(
+            note,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

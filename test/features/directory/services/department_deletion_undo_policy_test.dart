@@ -10,7 +10,7 @@ void main() {
         movedOrDeletedAssetCount: 0,
       );
       expect(one.canOfferUndo, isTrue);
-      expect(one.snackbarMessage, 'Σημειώθηκαν ως διαγραμμένα 1 τμήμα.');
+      expect(one.snackbarMessage, 'Σημειώθηκε ως διαγραμμένο 1 τμήμα.');
 
       final many = resolveDepartmentDeletionUndo(
         deletedDepartmentCount: 3,

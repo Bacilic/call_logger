@@ -8,6 +8,8 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../../../core/utils/greek_date_format.dart';
+import '../../../../../core/widgets/compact_tooltip.dart';
+import '../../../models/catalog_accepted_findings.dart';
 import '../../../models/catalog_validation_finding.dart';
 import '../../../services/configured_path_scan_result.dart';
 import 'configured_paths_section.dart';
@@ -31,9 +33,12 @@ class CatalogScanSection extends StatelessWidget {
     super.key,
     required this.scanning,
     required this.findings,
+    required this.accepted,
     required this.pathScan,
     required this.onScan,
     required this.onOpenRecord,
+    required this.onAccept,
+    required this.onRestore,
   });
 
   final bool scanning;
@@ -44,10 +49,19 @@ class CatalogScanSection extends StatelessWidget {
   final Future<void> Function() onScan;
   final Future<void> Function(CatalogFindingRecord record) onOpenRecord;
 
+  /// Οι περιπτώσεις που κρίθηκαν σωστές — φεύγουν από τα ανοιχτά.
+  final CatalogAcceptedFindings accepted;
+  final Future<void> Function(CatalogValidationFinding finding) onAccept;
+  final Future<void> Function(CatalogValidationFinding finding) onRestore;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final results = findings;
+    final all = findings;
+    final split = all == null ? null : accepted.partition(all);
+    final results = split?.open;
+    final acceptedResults =
+        split?.accepted ?? const <CatalogValidationFinding>[];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -105,12 +119,26 @@ class CatalogScanSection extends StatelessWidget {
             const SizedBox(height: 8),
             for (final finding in results)
               if (finding.isConflict)
-                _ConflictCard(finding: finding, onOpenRecord: onOpenRecord)
+                _ConflictCard(
+                  finding: finding,
+                  onOpenRecord: onOpenRecord,
+                  onAccept: finding.acceptKey == null
+                      ? null
+                      : () => onAccept(finding),
+                )
               else
                 _FindingTile(
                   finding: finding,
                   onTap: () => onOpenRecord(finding.primary),
                 ),
+          ],
+          if (acceptedResults.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _AcceptedSection(
+              findings: acceptedResults,
+              onOpenRecord: onOpenRecord,
+              onRestore: onRestore,
+            ),
           ],
           if (pathScan != null) ...[
             const SizedBox(height: 16),
@@ -162,14 +190,70 @@ class _FindingTile extends StatelessWidget {
   }
 }
 
+/// Οι περιπτώσεις που κρίθηκαν σωστές — κλειστή ενότητα στο τέλος, ώστε οι
+/// αποφάσεις να μην εξαφανίζονται χωρίς ίχνος και να αναιρούνται.
+class _AcceptedSection extends StatelessWidget {
+  const _AcceptedSection({
+    required this.findings,
+    required this.onOpenRecord,
+    required this.onRestore,
+  });
+
+  final List<CatalogValidationFinding> findings;
+  final Future<void> Function(CatalogFindingRecord record) onOpenRecord;
+  final Future<void> Function(CatalogValidationFinding finding) onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ExpansionTile(
+        leading: Icon(
+          Icons.task_alt_outlined,
+          color: theme.colorScheme.primary,
+        ),
+        title: Text('Αποδεκτά (${findings.length})'),
+        subtitle: Text(
+          'Κρίθηκαν σωστά — ξαναεμφανίζονται μόνο αν αλλάξουν οι εγγραφές '
+          'τους.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        children: [
+          for (final finding in findings)
+            _ConflictCard(
+              finding: finding,
+              onOpenRecord: onOpenRecord,
+              onRestore: () => onRestore(finding),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Κάρτα διένεξης: κεφαλίδα κανόνα + όλες οι εμπλεκόμενες εγγραφές ως
 /// επιλέξιμα chips. Ο χρήστης αποφασίζει ΠΟΙΑ εγγραφή θα διορθώσει
 /// βλέποντας τα στοιχεία και τις χρονοσφραγίδες όλων μαζί.
 class _ConflictCard extends StatelessWidget {
-  const _ConflictCard({required this.finding, required this.onOpenRecord});
+  const _ConflictCard({
+    required this.finding,
+    required this.onOpenRecord,
+    this.onAccept,
+    this.onRestore,
+  });
 
   final CatalogValidationFinding finding;
   final Future<void> Function(CatalogFindingRecord record) onOpenRecord;
+
+  /// «Σωστό» — μόνο στις κάρτες που δέχονται αποδοχή.
+  final VoidCallback? onAccept;
+
+  /// «Επαναφορά» — μόνο στις κάρτες της ενότητας «Αποδεκτά».
+  final VoidCallback? onRestore;
 
   static const _ruleIcons = {
     CatalogFindingType.phoneEquipmentCode: Icons.phonelink_erase_outlined,
@@ -231,6 +315,26 @@ class _ConflictCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onAccept != null)
+                  CompactTooltip(
+                    message:
+                        'Η περίπτωση είναι σωστή — δεν θα ξαναεμφανιστεί, '
+                        'εκτός αν αλλάξουν οι εγγραφές της',
+                    child: TextButton.icon(
+                      onPressed: onAccept,
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Σωστό'),
+                    ),
+                  ),
+                if (onRestore != null)
+                  CompactTooltip(
+                    message: 'Επιστροφή της κάρτας στις ανοιχτές περιπτώσεις',
+                    child: TextButton.icon(
+                      onPressed: onRestore,
+                      icon: const Icon(Icons.undo, size: 18),
+                      label: const Text('Επαναφορά'),
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 8),

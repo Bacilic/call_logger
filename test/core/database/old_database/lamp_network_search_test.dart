@@ -75,6 +75,78 @@ void main() {
       },
     );
 
+    test('η αιτιολογία «Αποδοχή ως έχει» φτάνει στη γραμμή του εξοπλισμού, '
+        'μόνο για αποδεκτά ευρήματα δικτύου', () async {
+      await seedWithNetworkFields();
+      final db = await openDatabase(dbPath, singleInstance: false);
+      try {
+        await db.execute(
+          'ALTER TABLE data_issues ADD COLUMN resolution_note TEXT',
+        );
+        Future<void> issue(
+          int code,
+          String type,
+          String column,
+          String status,
+          String note,
+        ) => db.insert('data_issues', <String, Object?>{
+          'row_number': code,
+          'column_name': column,
+          'raw_value': 'x',
+          'issue_type': type,
+          'created_at': '2026-10-01',
+          'status': status,
+          'resolution_note': note,
+        });
+        await issue(
+          3900,
+          'network_duplicate_name',
+          'network_name',
+          'accepted',
+          'Νεμέα',
+        );
+        // Ίδια αιτιολογία από δεύτερο εύρημα της ίδιας στήλης: μία φορά.
+        await issue(
+          3900,
+          'network_name_code_mismatch',
+          'network_name',
+          'accepted',
+          'Νεμέα',
+        );
+        // Ανοιχτό εύρημα: δεν είναι απόφαση, δεν εμφανίζεται.
+        await issue(3900, 'network_duplicate_ip', 'ip_address', 'open', 'όχι');
+        // Άλλου είδους πρόβλημα: row_number δεν σημαίνει κωδικό εξοπλισμού.
+        await issue(
+          100,
+          'duplicate_model_serial',
+          'serial_no',
+          'accepted',
+          'όχι',
+        );
+      } finally {
+        await db.close();
+      }
+
+      final result = await repository.globalSearch(
+        dbPath,
+        'PR3900',
+        maxDisplay: 10,
+      );
+      final row = result.rows.single;
+      expect(row[lampAcceptedNoteKey('network_name')], 'Νεμέα');
+      expect(row[lampAcceptedNoteKey('ip_address')], isNull);
+
+      final other = await repository.globalSearch(
+        dbPath,
+        'Οθόνη LG',
+        maxDisplay: 10,
+      );
+      expect(
+        other.rows.single.keys.where((k) => k.endsWith('_accepted_note')),
+        isEmpty,
+      );
+    });
+
     test('παλιά βάση χωρίς στήλες δικτύου: η αναζήτηση δεν σπάει', () async {
       // Παλιό σχήμα: όλοι οι πίνακες ως έχουν, αλλά equipment ΧΩΡΙΣ τις
       // στήλες δικτύου (όπως βάσεις πριν από τον εμπλουτισμό).

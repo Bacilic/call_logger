@@ -77,6 +77,20 @@ void main() {
     expect(saved, [12]);
   });
 
+  testWidgets('η οθόνη κλείνει ενώ γράφεις: η τιμή αποθηκεύεται', (
+    tester,
+  ) async {
+    await pumpField(tester);
+    await tester.enterText(find.byType(TextField).first, '12');
+    await tester.pump();
+
+    // Επιστροφή στις κάρτες των «Διαφόρων» χωρίς Enter.
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pump();
+
+    expect(saved, [12]);
+  });
+
   testWidgets('τιμή πάνω από το όριο προσαρμόζεται και φαίνεται', (
     tester,
   ) async {
@@ -265,6 +279,30 @@ void main() {
 
       await tester.tap(find.byKey(const Key('αλλού')));
       await tester.pump();
+      expect(savedText, ['(, -, .']);
+    });
+
+    testWidgets('η οθόνη κλείνει ενώ γράφεις: το κείμενο αποθηκεύεται', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CommitTextField(
+              controller: text,
+              focusNode: textNode,
+              width: 140,
+              onCommitted: savedText.add,
+            ),
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField), '(, -, .');
+      await tester.pump();
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pump();
+
       expect(savedText, ['(, -, .']);
     });
   });

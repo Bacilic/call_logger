@@ -1,3 +1,5 @@
+import '../../../core/utils/count_phrase.dart';
+
 /// Αποτέλεσμα πολιτικής αναίρεσης μετά από διαγραφή τμήματος.
 typedef DepartmentDeletionUndoDecision = ({
   bool canOfferUndo,
@@ -10,9 +12,11 @@ DepartmentDeletionUndoDecision resolveDepartmentDeletionUndo({
   required int movedEmployeeCount,
   required int movedOrDeletedAssetCount,
 }) {
-  final label = deletedDepartmentCount == 1 ? 'τμήμα' : 'τμήματα';
-  final baseMessage =
-      'Σημειώθηκαν ως διαγραμμένα $deletedDepartmentCount $label.';
+  final baseMessage = byCount(
+    deletedDepartmentCount,
+    one: 'Σημειώθηκε ως διαγραμμένο 1 τμήμα.',
+    many: 'Σημειώθηκαν ως διαγραμμένα $deletedDepartmentCount τμήματα.',
+  );
 
   if (movedEmployeeCount == 0 && movedOrDeletedAssetCount == 0) {
     return (canOfferUndo: true, snackbarMessage: baseMessage);

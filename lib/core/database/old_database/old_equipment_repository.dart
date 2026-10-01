@@ -24,6 +24,19 @@ const String kDataIssueStatusOpen = 'open';
 const String kDataIssueStatusDeferred = 'deferred';
 const String kDataIssueStatusAccepted = 'accepted';
 
+/// Τα ευρήματα του ελέγχου δικτύου: ένα ανά εξοπλισμό (`row_number` = code),
+/// δεμένο με τη στήλη που αφορά (`column_name`).
+const Set<String> kLampNetworkScanIssueTypes = <String>{
+  'network_duplicate_ip',
+  'network_duplicate_name',
+  'network_invalid_ip',
+  'network_name_code_mismatch',
+};
+
+/// Το κλειδί της γραμμής αναζήτησης που κουβαλά την αιτιολογία «Αποδοχή ως
+/// έχει» για μια στήλη δικτύου — π.χ. `network_name_accepted_note`.
+String lampAcceptedNoteKey(String column) => '${column}_accepted_note';
+
 /// Αποτέλεσμα αναζήτησης: εμφανιζόμενες γραμμές + συνολικός αριθμός ταιριασμάτων.
 class OldEquipmentSearchResult {
   const OldEquipmentSearchResult({
@@ -1171,12 +1184,7 @@ class OldEquipmentRepository {
         id: 'network_data',
         label: 'Έλεγχος δεδομένων δικτύου (IP, ονόματα, μορφή)',
         weight: 1,
-        ownedIssueTypes: const <String>{
-          'network_duplicate_ip',
-          'network_duplicate_name',
-          'network_invalid_ip',
-          'network_name_code_mismatch',
-        },
+        ownedIssueTypes: kLampNetworkScanIssueTypes,
         runner: _scanNetworkData,
       ),
       _IntegrityScanStepSpec(
@@ -2377,11 +2385,66 @@ class OldEquipmentRepository {
   Future<_SearchCacheEntry> _buildCache(String databasePath) async {
     final db = await _databaseProvider.open(databasePath);
     final rows = await _loadSourceRows(db);
-    final indexedRows = rows.map(_mapToIndexedRow).toList(growable: false);
+    final notes = await _loadAcceptedNetworkNotes(db);
+    final indexedRows = rows
+        .map((row) {
+          final rowNotes = notes[_toInt(row['code'])];
+          if (rowNotes == null) return _mapToIndexedRow(row);
+          return _mapToIndexedRow(<String, Object?>{
+            ...row,
+            for (final entry in rowNotes.entries)
+              lampAcceptedNoteKey(entry.key): entry.value,
+          });
+        })
+        .toList(growable: false);
     return _SearchCacheEntry(
       rows: indexedRows,
       unlinked: await _loadUnlinkedEntities(db),
     );
+  }
+
+  /// Οι αιτιολογίες «Αποδοχή ως έχει» των ευρημάτων δικτύου, ανά κωδικό
+  /// εξοπλισμού και στήλη — ώστε η κάρτα να δείχνει γιατί μια τιμή κρίθηκε
+  /// αποδεκτή. Η Λάμπα είναι ιστορικό αρχείο και δεν διορθώνεται· η απόφαση
+  /// ζει μόνο στην ουρά προβλημάτων, και από εκεί τη διαβάζουμε.
+  ///
+  /// Βάση χωρίς στήλη αιτιολογίας (καμία αποδοχή ακόμη) δίνει κενό χάρτη.
+  /// Δύο αποδεκτά ευρήματα στην ίδια στήλη ενώνονται, χωρίς επαναλήψεις.
+  Future<Map<int, Map<String, String>>> _loadAcceptedNetworkNotes(
+    Database db,
+  ) async {
+    final columns = await _dataIssueColumnNames(db);
+    if (!columns.contains('resolution_note') || !columns.contains('status')) {
+      return const <int, Map<String, String>>{};
+    }
+    final types = kLampNetworkScanIssueTypes.toList(growable: false);
+    final rows = await db.query(
+      'data_issues',
+      columns: <String>['row_number', 'column_name', 'resolution_note'],
+      where:
+          'status = ? AND issue_type IN (${List.filled(types.length, '?').join(', ')}) '
+          "AND TRIM(COALESCE(resolution_note, '')) <> ''",
+      whereArgs: <Object?>[kDataIssueStatusAccepted, ...types],
+      orderBy: 'id',
+    );
+    final collected = <int, Map<String, List<String>>>{};
+    for (final row in rows) {
+      final code = _toInt(row['row_number']);
+      final column = _normalizeText(row['column_name']);
+      final note = _normalizeText(row['resolution_note']);
+      if (code == null || column == null || note == null) continue;
+      final list = collected
+          .putIfAbsent(code, () => <String, List<String>>{})
+          .putIfAbsent(column, () => <String>[]);
+      if (!list.contains(note)) list.add(note);
+    }
+    return <int, Map<String, String>>{
+      for (final entry in collected.entries)
+        entry.key: <String, String>{
+          for (final column in entry.value.entries)
+            column.key: column.value.join(' · '),
+        },
+    };
   }
 
   /// Φορτώνει τις οντότητες που δεν έχουν κανέναν συνδεδεμένο εξοπλισμό.

@@ -39,7 +39,9 @@ class StatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final base = tone == StatusBannerTone.warning ? Colors.orange : Colors.green;
+    final base = tone == StatusBannerTone.warning
+        ? Colors.orange
+        : Colors.green;
     final foreground = base.shade800;
     final headline = title;
 
@@ -213,10 +215,7 @@ class RuleCard extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 4),
-            for (final child in children) ...[
-              const Divider(height: 12),
-              child,
-            ],
+            for (final child in children) ...[const Divider(height: 12), child],
           ],
         ),
       ),
@@ -550,6 +549,9 @@ class _CommitTextFieldState extends State<CommitTextField> {
   @override
   void dispose() {
     widget.focusNode.removeListener(_onFocusChanged);
+    // Η οθόνη κλείνει ενώ γράφεις (Επιστροφή, άλλη καρτέλα, πλαϊνό μενού):
+    // ειδοποίηση απώλειας εστίασης δεν θα έρθει ποτέ, άρα αποθηκεύουμε εδώ.
+    _commit();
     super.dispose();
   }
 
@@ -636,6 +638,9 @@ class _CommitNumberBoxState extends State<_CommitNumberBox> {
   void dispose() {
     widget.focusNode.removeListener(_onFocusChanged);
     widget.controller.removeListener(_onTextChanged);
+    // Ίδιος λόγος με το [CommitTextField]: το κλείσιμο της οθόνης δεν
+    // φέρνει ποτέ απώλεια εστίασης στο πεδίο.
+    _commit();
     super.dispose();
   }
 

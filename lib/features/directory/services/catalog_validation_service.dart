@@ -926,6 +926,7 @@ class CatalogValidationService {
               'Το $code είναι καταχωρημένος κωδικός εξοπλισμού — '
               'ίσως γράφτηκε σε λάθος πεδίο',
           records: records,
+          subject: code,
         ),
       );
     }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/category_directory_column.dart';
 import '../../models/category_model.dart';
 import '../../providers/category_directory_provider.dart';
+import '../../services/category_deletion_messages.dart';
 import 'catalog_column_selector_shell.dart';
 import 'catalog_search_results_line.dart';
 import 'catalog_selection_bar.dart';
@@ -168,8 +169,8 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Διαγραφή κατηγοριών'),
-        content: Text('Μόνιμη σήμανση ως διαγραμμένα για $count κατηγορίες;'),
+        title: Text(categoryDeleteDialogTitle(count)),
+        content: Text(categoryDeleteConfirmMessage(count)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -203,11 +204,10 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
     final displayNames = truncated
         ? '${names.sublist(0, take).join(', ')}...'
         : names.join(', ');
-    final isOne = deletedCount == 1;
-    final label = isOne ? 'κατηγορία' : 'κατηγορίες';
-    final message = names.isEmpty
-        ? 'Σημειώθηκαν ως διαγραμμένα $deletedCount $label.'
-        : 'Σημειώθηκαν ως διαγραμμένα $deletedCount $label: $displayNames';
+    final message = categoryDeletedMessage(
+      deletedCount,
+      names.isEmpty ? '' : displayNames,
+    );
     final tooltipAllNames = names.isEmpty ? null : names.join(', ');
 
     CategoryUndoSnackBar.show(

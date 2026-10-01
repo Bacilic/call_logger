@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/settings_service.dart';
+import '../../models/catalog_accepted_findings.dart';
 import '../../models/catalog_validation_finding.dart';
 import '../../models/catalog_validation_rules.dart';
 import '../../providers/catalog_validation_provider.dart';
+import '../../services/catalog_finding_acceptance.dart';
 import '../../services/catalog_scan_runner.dart';
 import '../../services/configured_path_check.dart';
 import '../../services/configured_path_scan_result.dart';
+import 'misc_leave_guards.dart';
 import 'validation_rules/catalog_scan_section.dart';
 import 'validation_rules/validation_rule_cards.dart';
 import 'validation_rules/validation_rule_field_controllers.dart';
@@ -42,13 +45,47 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
   ConfiguredPathScanResult? _pathScan;
   bool _scanning = false;
 
+  /// Οι περιπτώσεις που κρίθηκαν σωστές — διαβάζονται σε κάθε έλεγχο, ώστε
+  /// να φαίνονται και οι αποφάσεις άλλου σταθμού.
+  CatalogAcceptedFindings _accepted = CatalogAcceptedFindings.none;
+
   final ValidationRuleFieldControllers _fields =
       ValidationRuleFieldControllers();
+
+  /// Αποθηκεύσεις που δεν έχουν τελειώσει ακόμη — η έξοδος τις περιμένει.
+  final Set<Future<void>> _savesInFlight = <Future<void>>{};
+
+  /// Κρατιέται από πριν: μια αποθήκευση μπορεί να τελειώσει αφού κλείσει η
+  /// οθόνη, και οι φόρμες πρέπει παρ' όλα αυτά να δουν τους νέους κανόνες.
+  late ProviderContainer _container;
+
+  MiscLeaveGuards? _leaveGuards;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _container = ProviderScope.containerOf(context, listen: false);
+    final guards = MiscLeaveScope.maybeOf(context);
+    if (!identical(guards, _leaveGuards)) {
+      _leaveGuards?.remove(_settleBeforeLeaving);
+      _leaveGuards = guards?..add(_settleBeforeLeaving);
+    }
+  }
+
+  /// Φρουρός εξόδου: ό,τι γράφεται εκείνη τη στιγμή σε πεδίο αποθηκεύεται, και
+  /// η έξοδος περιμένει να γραφτεί — ώστε ξαναμπαίνοντας να το δεις.
+  Future<bool> _settleBeforeLeaving() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    // Η απώλεια εστίασης φτάνει στα πεδία σε επόμενο microtask.
+    await Future<void>.delayed(Duration.zero);
+    await Future.wait(List<Future<void>>.of(_savesInFlight));
+    return true;
   }
 
   Future<void> _load() async {
@@ -62,6 +99,7 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
 
   @override
   void dispose() {
+    _leaveGuards?.remove(_settleBeforeLeaving);
     _fields.dispose();
     super.dispose();
   }
@@ -77,7 +115,13 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
   ///
   /// Η οθόνη δείχνει μετά ό,τι όντως αποθηκεύτηκε, άρα βλέπει και τις ξένες
   /// αλλαγές χωρίς να χρειάζεται να ξανανοίξει.
-  Future<void> _apply(ValidationRuleChange change) async {
+  Future<void> _apply(ValidationRuleChange change) {
+    final save = _save(change);
+    _savesInFlight.add(save);
+    return save.whenComplete(() => _savesInFlight.remove(save));
+  }
+
+  Future<void> _save(ValidationRuleChange change) async {
     setState(() {
       // Τα ευρήματα προήλθαν από τους ΠΑΛΙΟΥΣ κανόνες — παύουν να ισχύουν.
       _findings = null;
@@ -90,15 +134,16 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
         .updateCatalogValidationRulesRaw(
           (raw) => change(CatalogValidationRules.fromRawJson(raw)).toRawJson(),
         );
-    if (!mounted) return;
-    if (storedRaw != null) {
+    if (mounted && storedRaw != null) {
       setState(() => _rules = CatalogValidationRules.fromRawJson(storedRaw));
     }
-    ref.invalidate(catalogValidationRulesProvider);
+    // Μέσω του container και όχι του ref: η αποθήκευση μπορεί να τελειώσει
+    // αφού έκλεισε η οθόνη, και οι φόρμες πρέπει να δουν τον νέο κανόνα.
+    _container.invalidate(catalogValidationRulesProvider);
     // Ο service παρακολουθεί τους κανόνες με watch: χωρίς άμεσο ξέπλυμα η
     // αλυσίδα μένει «dirty» (καμία φόρμα ανοιχτή εδώ) και ξεπλένεται σύγχρονα
     // μέσα στο build της επόμενης φόρμας καταλόγου → «setState during build».
-    flushCatalogValidationProviderChain(ref);
+    flushCatalogValidationProviderChainOn(_container);
   }
 
   /// Με [recheckPaths]: false κρατούνται τα προηγούμενα ευρήματα διαδρομών.
@@ -108,17 +153,36 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
     setState(() => _scanning = true);
     try {
       final findings = await CatalogScanRunner.scan(ref);
+      final accepted = await CatalogFindingAcceptance.load();
       final pathScan = recheckPaths
           ? await findInvalidConfiguredPaths()
           : _pathScan;
       if (!mounted) return;
       setState(() {
         _findings = findings;
+        _accepted = accepted;
         _pathScan = pathScan;
       });
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
+  }
+
+  /// «Σωστό»: η περίπτωση φεύγει από τα ανοιχτά και δεν ξαναβγαίνει, όσο
+  /// μένουν ίδιες οι εγγραφές της.
+  Future<void> _acceptFinding(CatalogValidationFinding finding) async {
+    final key = finding.acceptKey;
+    if (key == null) return;
+    final stored = await CatalogFindingAcceptance.accept(key);
+    if (mounted) setState(() => _accepted = stored);
+  }
+
+  /// «Επαναφορά»: η αποδοχή ήταν λάθος — η κάρτα επιστρέφει στα ανοιχτά.
+  Future<void> _restoreFinding(CatalogValidationFinding finding) async {
+    final key = finding.acceptKey;
+    if (key == null) return;
+    final stored = await CatalogFindingAcceptance.restore(key);
+    if (mounted) setState(() => _accepted = stored);
   }
 
   /// Άνοιγμα της καρτέλας μιας εγγραφής ευρήματος· μετά το κλείσιμο ο
@@ -177,9 +241,12 @@ class _ValidationRulesViewState extends ConsumerState<ValidationRulesView> {
               CatalogScanSection(
                 scanning: _scanning,
                 findings: _findings,
+                accepted: _accepted,
                 pathScan: _pathScan,
                 onScan: _runScan,
                 onOpenRecord: _openRecord,
+                onAccept: _acceptFinding,
+                onRestore: _restoreFinding,
               ),
             ],
           ),

@@ -216,6 +216,65 @@ class SmartEntitySelectorLookups {
     _autofillDepartmentPhoneIfEmpty(lookup, departmentId);
   }
 
+  /// Το τμήμα που ανήκουν **όλοι** οι [users], ή `null` αν κάποιος δεν έχει
+  /// τμήμα ή αν διαφέρουν.
+  int? _sharedDepartmentIdOf(List<UserModel> users) {
+    if (users.isEmpty || users.any((u) => u.departmentId == null)) return null;
+    final ids = users.map((u) => u.departmentId!).toSet();
+    return ids.length == 1 ? ids.single : null;
+  }
+
+  /// **Μοναδικό** σημείο του κανόνα «όλα δείχνουν ένα τμήμα» για ομάδα
+  /// ανθρώπων (κοινό τηλέφωνο, εξοπλισμός πολλών κατόχων): όταν ανήκουν όλοι
+  /// στο ίδιο τμήμα, αυτό συμπληρώνεται — μόνο σε **κενό** πεδίο Τμήματος.
+  void _autofillSharedDepartmentIfEmpty(
+    List<UserModel> users,
+    LookupService lookup,
+  ) {
+    if (state.departmentText.trim().isNotEmpty ||
+        state.selectedDepartmentId != null) {
+      return;
+    }
+    final departmentId = _sharedDepartmentIdOf(users);
+    if (departmentId == null) return;
+    final name = lookup.departmentIdToName[departmentId];
+    if (name == null) return;
+    state = state.copyWith(
+      departmentText: name,
+      selectedDepartmentId: departmentId,
+    );
+  }
+
+  /// Υπόδειξη τηλεφώνου για **ομάδα κατόχων** (εξοπλισμός πολλών κατόχων):
+  /// ο ίδιος κανόνας με τον έναν κάτοχο — πρώτα τα δικά τους νούμερα, και
+  /// μόνο όταν δεν μοιράζονται κανένα, τα τηλέφωνα του τμήματος.
+  ///
+  /// «Δικά τους» = όσα έχουν **όλοι** (π.χ. το τηλέφωνο της βάρδιας): ένας
+  /// αριθμός που έχει μόνο ο ένας θα πρότεινε στα τυφλά έναν από τους δύο.
+  void _autofillPhoneForSharedOwners(
+    List<UserModel> owners,
+    LookupService lookup,
+  ) {
+    if (!_canAutofillPhone() || owners.isEmpty) return;
+    final common =
+        owners
+            .skip(1)
+            .fold<Set<String>>(
+              owners.first.phones.map((p) => p.trim()).toSet(),
+              (acc, u) =>
+                  acc.intersection(u.phones.map((p) => p.trim()).toSet()),
+            )
+          ..remove('');
+    if (common.isNotEmpty) {
+      applyPhoneCandidatesFromLookup(common.toList());
+      return;
+    }
+    final departmentId =
+        state.selectedDepartmentId ?? _sharedDepartmentIdOf(owners);
+    if (departmentId == null) return;
+    _autofillDepartmentPhoneIfEmpty(lookup, departmentId);
+  }
+
   /// Επαναφέρει τους **υποψήφιους** υπαλλήλους του τμήματος σε άδειο πεδίο
   /// καλούντα — συμμετρικά με τηλέφωνο και εξοπλισμό.
   ///
@@ -434,27 +493,7 @@ class SmartEntitySelectorLookups {
   /// Κοινό τηλέφωνο πολλών κατόχων: η λίστα τους γίνεται υποψήφιοι καλούντες.
   /// Το τμήμα συμπληρώνεται μόνο όταν όλοι ανήκουν στο ίδιο.
   void _applySharedPhoneOwners(List<UserModel> users, LookupService lookup) {
-    final sharedDeptIds = users
-        .map((u) => u.departmentId)
-        .whereType<int>()
-        .toSet();
-    final allShareSameDepartment =
-        users.every((u) => u.departmentId != null) && sharedDeptIds.length == 1;
-    final sharedDeptId = allShareSameDepartment ? sharedDeptIds.single : null;
-    final sharedDeptName = sharedDeptId == null
-        ? null
-        : lookup.departmentIdToName[sharedDeptId];
-    final canAutofillSharedDepartment =
-        state.departmentText.trim().isEmpty &&
-        state.selectedDepartmentId == null;
-    final departmentText =
-        (canAutofillSharedDepartment && sharedDeptName != null)
-        ? sharedDeptName
-        : state.departmentText;
-    final selectedDepartmentId =
-        (canAutofillSharedDepartment && sharedDeptId != null)
-        ? sharedDeptId
-        : state.selectedDepartmentId;
+    _autofillSharedDepartmentIfEmpty(users, lookup);
 
     // Αν ο ήδη δεμένος καλούντας είναι ένας από τους κατόχους, μην τον
     // ξεδέσεις (κοινόχρηστο τηλέφωνο βάρδιας μετά από autofill εξοπλισμού).
@@ -467,8 +506,6 @@ class SmartEntitySelectorLookups {
         callerCandidates: [],
         isPhoneAmbiguous: false,
         callerNoMatch: false,
-        departmentText: departmentText,
-        selectedDepartmentId: selectedDepartmentId,
       );
       return;
     }
@@ -483,8 +520,6 @@ class SmartEntitySelectorLookups {
       isEquipmentAmbiguous: false,
       callerNoMatch: false,
       equipmentNoMatch: false,
-      departmentText: departmentText,
-      selectedDepartmentId: selectedDepartmentId,
     );
   }
 
@@ -728,9 +763,12 @@ class SmartEntitySelectorLookups {
             : <UserModel>[];
 
         // Πολλαπλοί κάτοχοι → λίστα candidates, ποτέ αυτόματη επιλογή
-        // του πρώτου. Δεν αλλάζουμε καλούντα/τμήμα/τηλέφωνο αυτόματα όταν η
-        // αντιστοίχιση κατόχου είναι ασαφής.
+        // του πρώτου. Ό,τι όμως μοιράζονται ΟΛΟΙ δεν είναι ασαφές: το κοινό
+        // τμήμα και το κοινό τηλέφωνο συμπληρώνονται σε κενά πεδία, όπως με
+        // έναν κάτοχο. Κάτοχοι έξω από το ήδη κλειδωμένο τμήμα δεν προτείνουν
+        // τηλέφωνο — το ίδιο κριτήριο με τον έναν κάτοχο παρακάτω.
         if (owners.length > 1) {
+          final lockedDepartmentId = state.selectedDepartmentId;
           if (state.callerDisplayText.trim().isEmpty) {
             state = state.copyWith(
               callerCandidates: owners,
@@ -738,6 +776,13 @@ class SmartEntitySelectorLookups {
               callerNoMatch: false,
               isPhoneAmbiguous: false,
             );
+          }
+          _autofillSharedDepartmentIfEmpty(owners, lookup);
+          final ownersOutsideLocked =
+              lockedDepartmentId != null &&
+              owners.any((u) => u.departmentId != lockedDepartmentId);
+          if (!ownersOutsideLocked) {
+            _autofillPhoneForSharedOwners(owners, lookup);
           }
           return;
         }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/directory_tab_intent_provider.dart';
+import '../providers/misc_dashboard_request_provider.dart';
 import 'widgets/miscellaneous_tab.dart';
 import 'widgets/departments_tab.dart';
 import 'widgets/equipment_tab.dart';
@@ -22,6 +23,10 @@ class _DirectoryScreenState extends ConsumerState<DirectoryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
+  /// Η καρτέλα όπου βρισκόταν ο χρήστης πριν από το τελευταίο πάτημα — για να
+  /// ξεχωρίζει το «ξαναπάτησα την ίδια» από τη «μόλις ήρθα εδώ».
+  int _settledIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -32,9 +37,18 @@ class _DirectoryScreenState extends ConsumerState<DirectoryScreen>
   /// Φεύγοντας από «Διάφορα», το SnackBar (π.χ. αναίρεση διαγραφής) κλείνει ως επιβεβαίωση.
   void _onDirectoryTabChanged() {
     if (_tabController.indexIsChanging) return;
+    _settledIndex = _tabController.index;
     if (_tabController.index != kDirectoryCategoriesTabIndex) {
       ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
     }
+  }
+
+  /// Νέο πάτημα της ήδη ενεργής «Διάφορα» = επιστροφή στις κάρτες της, όπως
+  /// οι άλλες καρτέλες φέρνουν πάντα στη δική τους οθόνη.
+  void _onTabTapped(int index) {
+    if (index != kDirectoryCategoriesTabIndex) return;
+    if (_settledIndex != kDirectoryCategoriesTabIndex) return;
+    ref.read(miscDashboardRequestProvider.notifier).request();
   }
 
   @override
@@ -63,6 +77,7 @@ class _DirectoryScreenState extends ConsumerState<DirectoryScreen>
           titleSpacing: 0,
           bottom: TabBar(
             controller: _tabController,
+            onTap: _onTabTapped,
             tabs: const [
               Tab(text: 'Υπάλληλοι'),
               Tab(text: 'Τμήματα'),

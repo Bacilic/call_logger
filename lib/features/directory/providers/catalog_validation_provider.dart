@@ -35,9 +35,27 @@ final catalogValidationServiceProvider =
 /// ανοιχτή), ξεπλένεται σύγχρονα μέσα στο επόμενο build που θα τη διαβάσει →
 /// «setState() called during build».
 void flushCatalogValidationProviderChain(WidgetRef ref) {
+  _flushCatalogValidationChain(() {
+    if (!ref.context.mounted) return null;
+    return ProviderScope.containerOf(ref.context, listen: false);
+  });
+}
+
+/// Το ίδιο ξέπλυμα χωρίς οθόνη: για αποθήκευση που ολοκληρώθηκε αφού έκλεισε
+/// η οθόνη που την ξεκίνησε — οι φόρμες πρέπει να δουν τους νέους κανόνες.
+void flushCatalogValidationProviderChainOn(ProviderContainer container) {
+  _flushCatalogValidationChain(() => container);
+}
+
+/// Το [containerWhenRun] δίνει το container τη στιγμή του ξεπλύματος, ή
+/// `null` όταν δεν έχει πια νόημα (η οθόνη έκλεισε).
+void _flushCatalogValidationChain(
+  ProviderContainer? Function() containerWhenRun,
+) {
   void run() {
-    if (!ref.context.mounted) return;
-    _readCatalogValidationChain(ref);
+    final container = containerWhenRun();
+    if (container == null) return;
+    _readCatalogValidationChain(container);
   }
 
   final phase = SchedulerBinding.instance.schedulerPhase;
@@ -52,7 +70,7 @@ void flushCatalogValidationProviderChain(WidgetRef ref) {
 }
 
 // Η αλυσίδα σε ΕΝΑ σημείο: αν προστεθεί κρίκος, ενημερώνεται μόνο εδώ.
-void _readCatalogValidationChain(WidgetRef ref) {
-  ref.read(catalogValidationRulesProvider);
-  ref.read(catalogValidationServiceProvider);
+void _readCatalogValidationChain(ProviderContainer container) {
+  container.read(catalogValidationRulesProvider);
+  container.read(catalogValidationServiceProvider);
 }

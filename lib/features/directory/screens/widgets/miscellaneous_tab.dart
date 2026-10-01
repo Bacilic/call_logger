@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widgets/app_asset_image.dart';
+import '../../providers/misc_dashboard_request_provider.dart';
 import '../../providers/remote_tools_view_intent_provider.dart';
 import '../../../operators/screens/operators_management_view.dart';
 import '../../../settings/screens/remote_tools_management_screen.dart';
 import 'categories_tab.dart';
 import 'departments_settings_view.dart';
 import 'lamp_cross_check_view.dart';
+import 'misc_leave_guards.dart';
 import 'servers_management_view.dart';
 import 'validation_rules_view.dart';
 
@@ -36,11 +38,30 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
   /// Αφετηρία των αιτημάτων μετάβασης: ό,τι ζητήθηκε πριν χτιστεί η καρτέλα
   /// δεν είναι δικό της αίτημα.
   late int _remoteToolsRequestBaseline;
+  late int _dashboardRequestBaseline;
+
+  final MiscLeaveGuards _leaveGuards = MiscLeaveGuards();
+  bool _leaving = false;
 
   @override
   void initState() {
     super.initState();
     _remoteToolsRequestBaseline = ref.read(remoteToolsViewRequestProvider);
+    _dashboardRequestBaseline = ref.read(miscDashboardRequestProvider);
+  }
+
+  /// **Ο μοναδικός δρόμος** από υπο-οθόνη προς τις κάρτες: πρώτα οι φρουροί
+  /// εξόδου της οθόνης (π.χ. αποθήκευση ό,τι γράφεται εκείνη τη στιγμή), και
+  /// μόνο αν συμφωνήσουν όλοι, η αλλαγή οθόνης.
+  Future<void> _returnToDashboard() async {
+    if (_view == MiscView.dashboard || _leaving) return;
+    _leaving = true;
+    try {
+      if (!await _leaveGuards.canLeave() || !mounted) return;
+      setState(() => _view = MiscView.dashboard);
+    } finally {
+      _leaving = false;
+    }
   }
 
   @override
@@ -49,6 +70,11 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
       if (next <= _remoteToolsRequestBaseline) return;
       _remoteToolsRequestBaseline = next;
       setState(() => _view = MiscView.remoteTools);
+    });
+    ref.listen<int>(miscDashboardRequestProvider, (previous, next) {
+      if (next <= _dashboardRequestBaseline) return;
+      _dashboardRequestBaseline = next;
+      _returnToDashboard();
     });
 
     if (_view == MiscView.dashboard) {
@@ -71,7 +97,7 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
                 IconButton(
                   icon: const Icon(Icons.arrow_back),
                   tooltip: 'Επιστροφή στο hub',
-                  onPressed: () => setState(() => _view = MiscView.dashboard),
+                  onPressed: _returnToDashboard,
                 ),
                 Text(
                   'Επιστροφή',
@@ -83,20 +109,22 @@ class _MiscellaneousTabState extends ConsumerState<MiscellaneousTab> {
             ),
           ),
         Expanded(
-          child: switch (_view) {
-            MiscView.categories => const CategoriesView(),
-            MiscView.remoteTools => RemoteToolsManagementScreen(
-              embedded: true,
-              onBackToDashboard: () =>
-                  setState(() => _view = MiscView.dashboard),
-            ),
-            MiscView.validationRules => const ValidationRulesView(),
-            MiscView.operators => const OperatorsManagementView(),
-            MiscView.servers => const ServersManagementView(),
-            MiscView.departments => const DepartmentsSettingsView(),
-            MiscView.lampCrossCheck => const LampCrossCheckView(),
-            MiscView.dashboard => const SizedBox.shrink(),
-          },
+          child: MiscLeaveScope(
+            guards: _leaveGuards,
+            child: switch (_view) {
+              MiscView.categories => const CategoriesView(),
+              MiscView.remoteTools => RemoteToolsManagementScreen(
+                embedded: true,
+                onBackToDashboard: _returnToDashboard,
+              ),
+              MiscView.validationRules => const ValidationRulesView(),
+              MiscView.operators => const OperatorsManagementView(),
+              MiscView.servers => const ServersManagementView(),
+              MiscView.departments => const DepartmentsSettingsView(),
+              MiscView.lampCrossCheck => const LampCrossCheckView(),
+              MiscView.dashboard => const SizedBox.shrink(),
+            },
+          ),
         ),
       ],
     );

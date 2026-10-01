@@ -60,6 +60,30 @@ void main() {
       expect(network.recordId, 3900);
     });
 
+    test('η αιτιολογία αποδοχής συνοδεύει το Hostname στην κάρτα και στον '
+        'διάλογο επεξεργασίας, χωρίς να γίνεται επεξεργάσιμο πεδίο', () {
+      final vm = EquipmentViewModel.fromRow(<String, Object?>{
+        ...rowWithNetwork(),
+        'network_name_accepted_note': 'Νεμέα',
+      });
+      final network = vm.sections.singleWhere(
+        (s) => s.type == InfoSectionType.network,
+      );
+      final item = network.items.singleWhere((i) => i.label == 'Hostname');
+      expect(item.value, 'PR3900');
+      expect(item.note, '✓ Αποδεκτό: Νεμέα');
+      final field = network.editableFields.singleWhere(
+        (f) => f.fieldKey == 'network_name',
+      );
+      expect(field.note, '✓ Αποδεκτό: Νεμέα');
+      expect(
+        network.editableFields.any((f) => f.fieldKey.contains('accepted')),
+        isFalse,
+      );
+      // Μόνο η στήλη που κρίθηκε φέρει τη γραμμή.
+      expect(network.items.singleWhere((i) => i.label == 'IP').note, isNull);
+    });
+
     test('χωρίς δεδομένα δικτύου η κάρτα Δίκτυο δεν εμφανίζεται', () {
       final row = rowWithNetwork()
         ..removeWhere((key, _) => key.startsWith('network_'))

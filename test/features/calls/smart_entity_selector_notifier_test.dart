@@ -663,6 +663,101 @@ void main() {
       },
     );
 
+    // Εξοπλισμός με δύο κατόχους (3180): το τμήμα συμπληρώνεται μόνο όταν
+    // ανήκουν και οι δύο στο ίδιο — όπως στο κοινό τηλέφωνο πολλών κατόχων.
+    group('performEquipmentLookupByCode: πολλοί κάτοχοι', () {
+      Future<ProviderContainer> twoOwners({
+        int secondDept = 21,
+        String? firstPhone,
+        String? secondPhone,
+      }) {
+        return _containerWithCatalog(
+          users: [
+            _u(
+              id: 36,
+              first: 'Αλέκα',
+              last: 'Λιαχοπούλου',
+              phone: firstPhone,
+              departmentId: 21,
+            ),
+            _u(
+              id: 87,
+              first: 'Αργυρώ',
+              last: 'Ελπίδη',
+              phone: secondPhone,
+              departmentId: secondDept,
+            ),
+          ],
+          equipment: [_e(id: 3180, code: '3180')],
+          departments: [
+            DepartmentModel(id: 21, name: 'Γραμματεία ΤΕΠ'),
+            DepartmentModel(id: 7, name: 'Καρδιολογική'),
+          ],
+          userToEquipmentIds: {
+            36: [3180],
+            87: [3180],
+          },
+        );
+      }
+
+      SmartEntitySelectorState lookup3180(ProviderContainer container) {
+        container
+            .read(callSmartEntityProvider.notifier)
+            .performEquipmentLookupByCode('3180');
+        return container.read(callSmartEntityProvider);
+      }
+
+      test('κοινό τμήμα κατόχων → συμπληρώνεται το τμήμα', () async {
+        final container = await twoOwners();
+        addTearDown(container.dispose);
+        final s = lookup3180(container);
+        expect(s.callerCandidates.map((u) => u.id), unorderedEquals([36, 87]));
+        expect(s.selectedCaller, isNull);
+        expect(s.selectedDepartmentId, 21);
+        expect(s.departmentText, 'Γραμματεία ΤΕΠ');
+      });
+
+      test('κάτοχοι σε διαφορετικά τμήματα → το τμήμα μένει κενό', () async {
+        final container = await twoOwners(secondDept: 7);
+        addTearDown(container.dispose);
+        final s = lookup3180(container);
+        expect(s.selectedDepartmentId, isNull);
+        expect(s.departmentText, isEmpty);
+      });
+
+      test('κοινό τηλέφωνο κατόχων → συμπληρώνεται αυτό', () async {
+        final container = await twoOwners(
+          firstPhone: '2576',
+          secondPhone: '2576',
+        );
+        addTearDown(container.dispose);
+        expect(lookup3180(container).selectedPhone, '2576');
+      });
+
+      test('τηλέφωνο που έχει μόνο ο ένας κάτοχος δεν προτείνεται', () async {
+        final container = await twoOwners(
+          firstPhone: '2916, 2566',
+          secondPhone: '2916',
+        );
+        addTearDown(container.dispose);
+        final s = lookup3180(container);
+        expect(s.selectedPhone, '2916');
+        expect(s.phoneCandidates, isEmpty);
+      });
+
+      test('κανένα κοινό τηλέφωνο → λίστα με τα τηλέφωνα του τμήματος, '
+          'χωρίς επιλογή', () async {
+        final container = await twoOwners(
+          firstPhone: '1111',
+          secondPhone: '2222',
+        );
+        addTearDown(container.dispose);
+        final s = lookup3180(container);
+        expect(s.selectedPhone ?? '', isEmpty);
+        expect(s.phoneCandidates, unorderedEquals(['1111', '2222']));
+      });
+    });
+
     // Prefix που ταιριάζει σε πολλούς εξοπλισμούς → isEquipmentAmbiguous + candidates.
     //   flutter test test/features/calls/smart_entity_selector_notifier_test.dart --plain-name "performEquipmentLookupByCode: πολλαπλά → ασάφεια εξοπλισμού"
     test(
