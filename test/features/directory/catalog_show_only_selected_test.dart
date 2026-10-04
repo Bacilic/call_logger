@@ -180,7 +180,8 @@ void main() {
         home: Scaffold(
           body: CatalogSelectionBar(
             selectedCount: 5,
-            countLabel: 'επιλεγμένοι',
+            countLabelOne: 'επιλεγμένος',
+            countLabelMany: 'επιλεγμένοι',
             showOnlySelected: showOnlySelected,
             searchController: controller,
             onToggleShowOnlySelected: onToggle ?? () {},

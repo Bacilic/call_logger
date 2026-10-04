@@ -205,5 +205,59 @@ void main() {
       },
       semanticsEnabled: false,
     );
+
+    // Ένα μόνο σβησμένο γράμμα και έξοδος: παλιότερα το λύσιμο άδειαζε το
+    // κείμενο της φόρμας, και στην έξοδο το πεδίο άδειαζε κι αυτό.
+    testWidgets(
+      'αλλαγμένο κείμενο σε δεμένο καλούντα → λύνεται και το κείμενο μένει',
+      (tester) async {
+        _configureDesktopViewport(tester);
+        await _pumpCallLoggerApp(tester);
+
+        await tester.tap(_callerTextField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(_callerTextField(), _kFullCallerName);
+        await tester.pump();
+        await tester.tap(_departmentTextField());
+        await tester.pump();
+        var header = await _readHeader(tester);
+        expect(header.selectedCaller, isNotNull);
+
+        final edited = _kFullCallerName.substring(
+          0,
+          _kFullCallerName.length - 1,
+        );
+        await tester.tap(_callerTextField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(_callerTextField(), edited);
+        await tester.pump();
+
+        await tester.tap(_departmentTextField());
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump();
+        expect(
+          tester.widget<TextField>(_callerTextField()).controller!.text,
+          edited,
+          reason: greekExpectMsg('Το πεδίο δεν αδειάζει στην έξοδο'),
+        );
+        header = await _readHeader(tester);
+        expect(
+          header.selectedCaller,
+          isNull,
+          reason: greekExpectMsg('Το κείμενο δεν ταιριάζει πια — λύνεται'),
+        );
+        expect(
+          header.callerDisplayText,
+          edited,
+          reason: greekExpectMsg(
+            'Η φόρμα κρατά ό,τι γράφει το πεδίο — αυτό θα καταγραφεί',
+          ),
+        );
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+      semanticsEnabled: false,
+    );
   });
 }

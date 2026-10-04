@@ -671,8 +671,16 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     );
   }
 
+  /// Κάθε αλλαγή κειμένου του Καλούντα περνά από εδώ — πληκτρολόγηση ή
+  /// επιλογή από λίστα. Κείμενο που δεν ονομάζει πια τον δεμένο υπάλληλο τον
+  /// λύνει· το κείμενο γράφεται ΜΕΤΑ το λύσιμο, γιατί το [setCaller] αδειάζει
+  /// το πεδίο και θα έσβηνε ό,τι μόλις έγραψε ο χρήστης.
   void updateCallerDisplayText(String text) {
-    // Η πληκτρολόγηση δεν αγγίζει δείκτες — μόνο η επικύρωση.
+    final bound = state.selectedCaller;
+    if (bound != null && !_textNamesCaller(text, bound)) {
+      setCaller(null);
+    }
+    // Πέρα από το λύσιμο, η πληκτρολόγηση δεν αγγίζει δείκτες — μόνο η επικύρωση.
     state = state.copyWith(callerDisplayText: text);
     if (text.trim().isEmpty) {
       // Άδειασμα με backspace: ίδια συμπεριφορά με το κουμπί «×».
@@ -681,6 +689,12 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       );
       _refreshConflictsWithoutAnchor();
     }
+  }
+
+  static bool _textNamesCaller(String text, UserModel caller) {
+    final t = text.trim();
+    return t == caller.name?.trim() ||
+        t == caller.fullNameWithDepartment.trim();
   }
 
   void clearCaller() {
@@ -701,21 +715,36 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     _refreshConflictsWithoutAnchor();
   }
 
-  void updateDepartmentText(String text) {
+  /// Το τμήμα που λέγεται **ακριβώς** [text] — το κριτήριο που κλειδώνει το
+  /// πεδίο Τμήμα, είτε γράφεται είτε κατοχυρώνεται.
+  DepartmentModel? _departmentExactlyNamed(String text) {
     final trimmed = text.trim();
-    int? matchedDepartmentId;
-    if (trimmed.isNotEmpty) {
-      final lookup = ref.read(lookupServiceProvider).value?.service;
-      if (lookup != null) {
-        final normalized = SearchTextNormalizer.normalizeForSearch(trimmed);
-        for (final dep in lookup.departments) {
-          if (SearchTextNormalizer.normalizeForSearch(dep.name) == normalized) {
-            matchedDepartmentId = dep.id;
-            break;
-          }
-        }
+    if (trimmed.isEmpty) return null;
+    final lookup = ref.read(lookupServiceProvider).value?.service;
+    if (lookup == null) return null;
+    final normalized = SearchTextNormalizer.normalizeForSearch(trimmed);
+    for (final dep in lookup.departments) {
+      if (SearchTextNormalizer.normalizeForSearch(dep.name) == normalized) {
+        return dep;
       }
     }
+    return null;
+  }
+
+  /// Κατοχύρωση (Enter) κειμένου που γράφτηκε στο πεδίο Τμήμα: όταν ταυτίζεται
+  /// με τμήμα, ισοδυναμεί με την επιλογή του από τη λίστα — ένα αναγνωρισμένο
+  /// τμήμα φέρνει τους υποψήφιούς του όποιος κι αν είναι ο δρόμος. Επιστρέφει
+  /// το τμήμα, ή `null` όταν το κείμενο δεν είναι τμήμα (τότε δεν αλλάζει τίποτα).
+  DepartmentModel? commitTypedDepartment(String text) {
+    final dept = _departmentExactlyNamed(text);
+    if (dept == null) return null;
+    selectDepartment(dept);
+    return dept;
+  }
+
+  void updateDepartmentText(String text) {
+    final trimmed = text.trim();
+    final int? matchedDepartmentId = _departmentExactlyNamed(trimmed)?.id;
     // Όταν το κείμενο δεν ταιριάζει σε γνωστό τμήμα, μηδενίζουμε το id·
     // αλλιώς μένει stale id (π.χ. από autofill) και το hasPendingDepartmentChange
     // συγκρίνει λάθος μόνο ids → κρύβεται το «Προσθήκη».
@@ -808,11 +837,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }
 
   void setEquipment(EquipmentModel? value) {
-    final text = value == null
-        ? ''
-        : (value.code?.trim().isNotEmpty == true
-              ? value.code!.trim()
-              : value.displayLabel.trim());
+    final text = value?.selectorFieldText ?? '';
     state = state.copyWith(
       selectedEquipment: value,
       clearSelectedEquipment: value == null,
@@ -821,6 +846,20 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       isEquipmentAmbiguous: false,
       equipmentNoMatch: false,
     );
+  }
+
+  /// Η πληκτρολόγηση στο πεδίο Εξοπλισμού: άδειο πεδίο καθαρίζει, κείμενο που
+  /// δεν είναι πια αυτό του δεμένου εξοπλισμού τον λύνει.
+  void updateEquipmentText(String text) {
+    if (text.trim().isEmpty) {
+      clearEquipment();
+      return;
+    }
+    final bound = state.selectedEquipment;
+    if (bound != null && text != bound.selectorFieldText) {
+      clearEquipment();
+    }
+    checkContent(equipmentText: text);
   }
 
   void clearEquipment() {

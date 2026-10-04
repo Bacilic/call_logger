@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../core/config/app_config.dart';
 import '../../../core/database/database_file_bundle.dart';
 import '../../../core/database/database_lock_recovery.dart';
+import '../../../core/utils/disk_free_space.dart';
 
 /// Αποτέλεσμα δημιουργίας αντιγράφου προς αναβάθμιση σχήματος.
 class UpgradeCopyResult {
@@ -105,12 +105,8 @@ Future<UpgradeCopyResult> createUpgradeCopy(
   );
 
   final requiredBytes = await _bytesNeededForCopy(sourceDbPath);
-  final freeBytes = await _tryGetFreeBytes(dir);
-  // Μόνο αξιόπιστες μετρήσεις (>= 1 MiB). Μικρά νούμερα είναι θόρυβος ανάλυσης
-  // (π.χ. διαχωριστικά χιλιάδων στο fsutil) και δεν μπλοκάρουν την αντιγραφή.
-  if (freeBytes != null &&
-      freeBytes >= 1024 * 1024 &&
-      freeBytes < requiredBytes) {
+  final freeBytes = freeBytesOnLocalDrive(dir);
+  if (freeBytes != null && freeBytes < requiredBytes) {
     return UpgradeCopyResult.failure(
       'Δεν υπάρχει επαρκής ελεύθερος χώρος για αντίγραφο '
       '(χρειάζονται περίπου ${_formatBytes(requiredBytes)}, '
@@ -151,38 +147,6 @@ Future<int> _bytesNeededForCopy(String sourceDbPath) async {
   }
   // Μικρό περιθώριο για μεταδεδομένα συστήματος αρχείων.
   return total + (256 * 1024);
-}
-
-Future<int?> _tryGetFreeBytes(String directoryPath) async {
-  if (!Platform.isWindows) return null;
-  if (AppConfig.isUncDatabasePath(directoryPath)) return null;
-  final drive = _windowsDrive(directoryPath);
-  if (drive == null) return null;
-  try {
-    final result = await Process.run('fsutil', <String>[
-      'volume',
-      'diskfree',
-      drive,
-    ], runInShell: true).timeout(const Duration(seconds: 3));
-    if (result.exitCode != 0) return null;
-    final out = (result.stdout as String).replaceAll(',', '');
-    final matches = RegExp(r'(\d+)').allMatches(out).toList();
-    if (matches.isEmpty) return null;
-    // Το πρώτο μεγάλο νούμερο είναι τα ελεύθερα bytes (τα μικρά είναι θόρυβος).
-    for (final match in matches) {
-      final value = int.tryParse(match.group(1)!);
-      if (value != null && value >= 1024 * 1024) return value;
-    }
-    return int.tryParse(matches.first.group(1)!);
-  } catch (_) {
-    return null;
-  }
-}
-
-String? _windowsDrive(String path) {
-  final match = RegExp(r'^([A-Za-z]:)').firstMatch(path.trim());
-  if (match == null) return null;
-  return '${match.group(1)}\\';
 }
 
 String _formatBytes(int bytes) {

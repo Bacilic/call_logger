@@ -930,29 +930,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           'Ενεργοποιήστε πρώτα τον ορθογραφικό έλεγχο για να εμφανιστεί.',
               ),
             ),
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            Text(
-              'Επαναφορά εφαρμογής',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.error,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.restart_alt, color: theme.colorScheme.error),
-              title: const Text('Ξεκίνα από την αρχή (Επαναφορά ρυθμίσεων)'),
-              subtitle: const Text(
-                'Αποσύνδεση από την τρέχουσα βάση και επαναφορά τοπικών ρυθμίσεων. '
-                'Τα αρχεία .db στο δίσκο δεν διαγράφονται.',
-              ),
-              onTap: _isLoadingSettings
-                  ? null
-                  : () => StartFromBeginningFlow.run(context, ref),
-            ),
+            ApplicationResetSection(enabled: !_isLoadingSettings),
           ],
         ),
       ),

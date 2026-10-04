@@ -113,7 +113,8 @@ class _CategoriesViewState extends ConsumerState<CategoriesView> {
         if (state.selectedIds.isNotEmpty)
           CatalogSelectionBar(
             selectedCount: state.selectedIds.length,
-            countLabel: 'επιλεγμένα',
+            countLabelOne: 'επιλεγμένη',
+            countLabelMany: 'επιλεγμένες',
             showOnlySelected: state.showOnlySelected,
             searchController: _searchController,
             onToggleShowOnlySelected: notifier.toggleShowOnlySelected,

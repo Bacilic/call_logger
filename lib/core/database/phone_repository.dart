@@ -503,6 +503,85 @@ ORDER BY p.number COLLATE NOCASE ASC
     });
   }
 
+  /// Οι υπάλληλοι που κρατούν τον αριθμό.
+  Future<List<int>> holderUserIds(
+    String phoneNumber, {
+    DatabaseExecutor? executor,
+  }) async {
+    final t = phoneNumber.trim();
+    if (t.isEmpty) return const [];
+    final rows = await (executor ?? db).rawQuery(
+      'SELECT up.user_id FROM user_phones up '
+      'JOIN phones p ON p.id = up.phone_id WHERE p.number = ?',
+      [t],
+    );
+    return [
+      for (final r in rows)
+        if (r['user_id'] is int) r['user_id'] as int,
+    ];
+  }
+
+  /// Τα τμήματα που έχουν τον αριθμό κοινόχρηστο.
+  Future<Set<int>> sharedDepartmentIds(
+    String phoneNumber, {
+    DatabaseExecutor? executor,
+  }) async {
+    final t = phoneNumber.trim();
+    if (t.isEmpty) return const {};
+    final rows = await (executor ?? db).rawQuery(
+      'SELECT dp.department_id AS d FROM department_phones dp '
+      'JOIN phones p ON p.id = dp.phone_id WHERE p.number = ? '
+      'UNION SELECT department_id AS d FROM phones '
+      'WHERE number = ? AND department_id IS NOT NULL',
+      [t, t],
+    );
+    return {
+      for (final r in rows)
+        if (r['d'] is int) r['d'] as int,
+    };
+  }
+
+  /// Λύνει τον αριθμό από **έναν** υπάλληλο· οι υπόλοιποι κάτοχοι μένουν.
+  Future<void> unlinkPhoneFromUser(
+    int userId,
+    String phoneNumber, {
+    DatabaseExecutor? executor,
+  }) async {
+    Future<void> run(DatabaseExecutor txn) async {
+      final t = phoneNumber.trim();
+      if (t.isEmpty) return;
+      final rows = await txn.query(
+        'phones',
+        columns: ['id'],
+        where: 'number = ?',
+        whereArgs: [t],
+        limit: 1,
+      );
+      final pid = rows.isEmpty ? null : rows.first['id'] as int?;
+      if (pid == null) return;
+      final removed = await txn.delete(
+        'user_phones',
+        where: 'user_id = ? AND phone_id = ?',
+        whereArgs: [userId, pid],
+      );
+      if (removed == 0) return;
+      await AuditService.log(
+        txn,
+        action: AuditActions.modifyPhone,
+        userPerforming: _support.auditPerformingUser(),
+        details: 'phones id=$pid (αφαίρεση από υπάλληλο $userId)',
+        entityType: AuditEntityTypes.phone,
+        entityId: pid,
+        entityName: t,
+        oldValues: {'linked_user_id': userId},
+        newValues: {'linked_user_id': null},
+      );
+    }
+
+    if (executor != null) return run(executor);
+    await db.transaction(run);
+  }
+
   Future<void> removePhoneFromAllUsers(
     String phoneNumber, {
     DatabaseExecutor? executor,

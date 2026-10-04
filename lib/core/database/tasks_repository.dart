@@ -11,6 +11,7 @@ import '../../features/tasks/models/task_filter.dart'
 import '../../features/tasks/models/task_notification.dart';
 import '../../features/tasks/models/task_settings_config.dart';
 import '../../features/tasks/services/call_task_solution_bridge.dart';
+import '../../features/tasks/utils/task_overdue_timeline.dart';
 import 'calls_repository.dart';
 import '../errors/task_save_exception.dart';
 import '../errors/task_stale_exception.dart';
@@ -760,22 +761,6 @@ class TasksRepository {
     return rows.map((row) => Task.fromMap(row)).toList();
   }
 
-  Future<List<Task>> getOverdueTasks() async {
-    final db = await _db;
-    final rows = await db.rawQuery(
-      "SELECT * FROM tasks WHERE status = 'open' AND due_date < datetime('now') AND COALESCE(is_deleted, 0) = 0 ORDER BY due_date ASC",
-    );
-    return rows.map((row) => Task.fromMap(row)).toList();
-  }
-
-  Future<List<Task>> getUpcomingTasks({int limit = 50}) async {
-    final db = await _db;
-    final rows = await db.rawQuery(
-      "SELECT * FROM tasks WHERE status = 'open' AND due_date >= datetime('now') AND COALESCE(is_deleted, 0) = 0 ORDER BY due_date ASC LIMIT $limit",
-    );
-    return rows.map((row) => Task.fromMap(row)).toList();
-  }
-
   /// Συνολικό πλήθος εκκρεμοτήτων `open` + `snoozed` (για badge μενού).
   Future<int> getGlobalPendingTasksCount() async {
     final db = await _db;
@@ -896,6 +881,36 @@ class TasksRepository {
         endExclusiveIso,
       ],
     );
+    // Η τύχη όσων ΑΝΟΙΞΑΝ στο διάστημα, ως το τέλος του: ολοκληρώθηκαν,
+    // ακυρώθηκαν ή εκκρεμούν. Τα ποσοστά βγαίνουν από αυτές και μόνο, οπότε
+    // δεν ξεπερνούν ποτέ το 100% — όσο κι αν κλείσουν παλιότερες.
+    final openedRows = await db.rawQuery(
+      "SELECT COUNT(*) AS opened, "
+      "COALESCE(SUM(CASE WHEN COALESCE(t.is_deleted, 0) = 0 "
+      "AND t.status = 'closed' AND $_completionMoment < ? "
+      "THEN 1 ELSE 0 END), 0) AS closed, "
+      "COALESCE(SUM(CASE WHEN COALESCE(t.is_deleted, 0) = 1 AND COALESCE(("
+      "SELECT MIN(a.timestamp) FROM audit_log a "
+      "WHERE a.entity_type = ? AND a.action = ? AND a.entity_id = t.id"
+      "), '') < ? THEN 1 ELSE 0 END), 0) AS cancelled "
+      "FROM tasks t WHERE t.created_at >= ? AND t.created_at < ?",
+      [
+        endExclusiveIso,
+        AuditEntityTypes.task,
+        DatabaseHelper.auditActionDelete,
+        endExclusiveIso,
+        startIso,
+        endExclusiveIso,
+      ],
+    );
+    int openedCount(String column) {
+      final n = openedRows.isEmpty ? null : openedRows.first[column];
+      return n is int ? n : (n is num ? n.toInt() : 0);
+    }
+
+    final openedInRange = openedCount('opened');
+    final openedThenClosed = openedCount('closed');
+    final openedThenCancelled = openedCount('cancelled');
     final overdueActiveCount = await countByQuery(
       "SELECT COUNT(*) AS count FROM tasks "
       "WHERE status IN ('open', 'snoozed') AND COALESCE(is_deleted, 0) = 0 "
@@ -1017,12 +1032,12 @@ class TasksRepository {
     final overdueRateRange = createdInRangeCount == 0
         ? 0.0
         : (overdueInRangeCount / createdInRangeCount) * 100;
-    final completionRateInRange = createdInRangeCount == 0
+    final completionRateInRange = openedInRange == 0
         ? 0.0
-        : (closedInRangeCount / createdInRangeCount) * 100;
-    final cancellationRateInRange = createdInRangeCount == 0
+        : (openedThenClosed / openedInRange) * 100;
+    final cancellationRateInRange = openedInRange == 0
         ? 0.0
-        : (cancelledInRangeCount / createdInRangeCount) * 100;
+        : (openedThenCancelled / openedInRange) * 100;
 
     return TaskAnalyticsSummary(
       rangeStart: start,
@@ -1046,7 +1061,7 @@ class TasksRepository {
       sparklineClosed: sparkData.closed,
       sparklineCancelled: sparkData.cancelled,
       sparklineOverdue: sparkData.overdue,
-      sparklineCompletionRate: sparkData.completionRate,
+      sparklineSnoozes: sparkData.snoozes,
     );
   }
 
@@ -1125,7 +1140,7 @@ class TasksRepository {
       List<double> closed,
       List<double> cancelled,
       List<double> overdue,
-      List<double> completionRate,
+      List<double> snoozes,
     })
   >
   _buildSparklines(
@@ -1164,20 +1179,63 @@ class TasksRepository {
         endExclusiveIso,
       ],
     );
+    // Όσες εκκρεμούσαν έστω και μία μέρα του παραθύρου — και όσες έκλεισαν ή
+    // διαγράφηκαν αργότερα: εκείνες τις μέρες ήταν ακόμη ανοιχτές. Η κρίση
+    // ανά μέρα γίνεται παρακάτω, χωρίς νέο ερώτημα.
+    final overdueRows = await db.rawQuery(
+      "SELECT * FROM ("
+      "SELECT t.created_at, t.due_date, t.snooze_history_json, t.status, "
+      "COALESCE(t.is_deleted, 0) AS deleted, "
+      "CASE WHEN t.status = 'closed' THEN $_completionMoment END "
+      "AS completed_moment, "
+      "CASE WHEN COALESCE(t.is_deleted, 0) = 1 THEN ("
+      "SELECT MIN(a.timestamp) FROM audit_log a "
+      "WHERE a.entity_type = ? AND a.action = ? AND a.entity_id = t.id"
+      ") END AS deleted_moment "
+      "FROM tasks t WHERE t.created_at < ?"
+      ") WHERE (deleted = 0 AND (status IN ('open', 'snoozed') "
+      "OR completed_moment >= ?)) "
+      "OR (deleted = 1 AND deleted_moment >= ?)",
+      [
+        AuditEntityTypes.task,
+        DatabaseHelper.auditActionDelete,
+        endExclusiveIso,
+        startIso,
+        startIso,
+      ],
+    );
+    final overdueTimelines = [
+      for (final row in overdueRows) ?_overdueTimelineFrom(row),
+    ];
     final createdByDay = _countMapByDay(createdRows);
     final closedByDay = _countMapByDay(closedRows);
     final cancelledByDay = _countMapByDay(cancelledRows);
+    final snoozeRows = await db.rawQuery(
+      "SELECT snooze_history_json FROM tasks "
+      "WHERE COALESCE(is_deleted, 0) = 0 "
+      "AND COALESCE(snooze_history_json, '') <> '' AND created_at < ?",
+      [endExclusiveIso],
+    );
+    final snoozesByDay = <String, int>{};
+    for (final row in snoozeRows) {
+      for (final snooze in TaskSnoozeEntry.parseHistory(
+        row['snooze_history_json'] as String?,
+      )) {
+        final key = _dayKey(snooze.snoozedAt);
+        snoozesByDay[key] = (snoozesByDay[key] ?? 0) + 1;
+      }
+    }
 
     final active = <double>[];
     final closed = <double>[];
     final cancelled = <double>[];
     final overdue = <double>[];
-    final completionRate = <double>[];
+    final snoozes = <double>[];
     var running = 0.0;
     final totalDays = end.difference(start).inDays + 1;
     for (var i = 0; i < totalDays; i++) {
       final day = start.add(Duration(days: i));
-      final dayEndIso = day.add(const Duration(days: 1)).toIso8601String();
+      final dayEnd = day.add(const Duration(days: 1));
       final key = _dayKey(day);
       final cCreated = (createdByDay[key] ?? 0).toDouble();
       final cClosed = (closedByDay[key] ?? 0).toDouble();
@@ -1187,16 +1245,19 @@ class TasksRepository {
       active.add(running);
       closed.add(cClosed);
       cancelled.add(cCancelled);
-      completionRate.add(cCreated <= 0 ? 0 : (cClosed / cCreated) * 100);
-      final overdueRows = await db.rawQuery(
-        "SELECT COUNT(*) AS count FROM tasks "
-        "WHERE status IN ('open', 'snoozed') AND COALESCE(is_deleted, 0) = 0 "
-        "AND created_at < ? AND due_date < ?",
-        [dayEndIso, dayEndIso],
-      );
-      final n = overdueRows.isEmpty ? 0 : overdueRows.first['count'];
+      snoozes.add((snoozesByDay[key] ?? 0).toDouble());
       overdue.add(
-        (n is int ? n : (n is num ? n.toInt() : int.tryParse('$n') ?? 0))
+        overdueTimelines
+            .where(
+              (t) => TaskOverdueTimeline.wasOverdueAt(
+                dayEnd,
+                createdAt: t.createdAt,
+                endedAt: t.endedAt,
+                currentDue: t.currentDue,
+                snoozes: t.snoozes,
+              ),
+            )
+            .length
             .toDouble(),
       );
     }
@@ -1205,7 +1266,37 @@ class TasksRepository {
       closed: closed,
       cancelled: cancelled,
       overdue: overdue,
-      completionRate: completionRate,
+      snoozes: snoozes,
+    );
+  }
+
+  /// Τα στοιχεία που χρειάζεται η κρίση «ήταν καθυστερημένη εκείνη τη μέρα;».
+  /// Εγγραφή χωρίς αναγνώσιμη ημερομηνία δημιουργίας δεν μετρά.
+  static ({
+    DateTime createdAt,
+    DateTime? endedAt,
+    DateTime? currentDue,
+    List<TaskSnoozeEntry> snoozes,
+  })?
+  _overdueTimelineFrom(Map<String, Object?> row) {
+    DateTime? parse(Object? v) =>
+        v == null ? null : DateTime.tryParse(v.toString());
+    final createdAt = parse(row['created_at']);
+    if (createdAt == null) return null;
+    final completed = parse(row['completed_moment']);
+    final deleted = parse(row['deleted_moment']);
+    final endedAt = completed == null
+        ? deleted
+        : (deleted != null && deleted.isBefore(completed)
+              ? deleted
+              : completed);
+    return (
+      createdAt: createdAt,
+      endedAt: endedAt,
+      currentDue: parse(row['due_date']),
+      snoozes: TaskSnoozeEntry.parseHistory(
+        row['snooze_history_json'] as String?,
+      ),
     );
   }
 

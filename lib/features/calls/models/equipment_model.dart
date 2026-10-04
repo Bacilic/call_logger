@@ -66,6 +66,13 @@ class EquipmentModel {
     return t.isEmpty ? c : (c.isEmpty ? t : '$c ($t)');
   }
 
+  /// Το κείμενο που γράφει στο πεδίο Εξοπλισμού της κλήσης η επιλογή του:
+  /// ο κωδικός, ή η ετικέτα όταν κωδικός δεν υπάρχει.
+  String get selectorFieldText {
+    final c = code?.trim() ?? '';
+    return c.isNotEmpty ? c : displayLabel;
+  }
+
   String? paramForTool(RemoteTool tool) {
     final v = remoteParams[tool.id.toString()]?.trim();
     if (v != null && v.isNotEmpty) return v;
@@ -218,6 +225,11 @@ class EquipmentModel {
     };
   }
 
+  /// Αντίγραφο με αλλαγμένα πεδία. **Δεν μπορεί να σβήσει πεδίο:** το κενό
+  /// (`null`) σημαίνει «κράτα την παλιά τιμή», οπότε `copyWith(location: null)`
+  /// αφήνει την τοποθεσία ως είχε — σιωπηλά. Αν χρειαστεί μηδενισμός, ακολούθησε
+  /// το μοτίβο του [DepartmentModel.copyWith], που ξεχωρίζει το «δεν το άγγιξα»
+  /// από το «θέλω να το σβήσω».
   EquipmentModel copyWith({
     int? id,
     String? code,

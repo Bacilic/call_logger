@@ -364,45 +364,22 @@ class Task {
           : null);
 
   /// Ιστορικό αναβολών (συμβατό με παλιό format λίστας από ISO strings).
-  /// Νέο format: [{"snoozedAt":"...","dueAt":"..."}].
-  List<TaskSnoozeEntry> get snoozeEntries {
-    final raw = snoozeHistoryJson;
-    if (raw == null || raw.trim().isEmpty) return const [];
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return const [];
-      final entries = <TaskSnoozeEntry>[];
-      for (final item in decoded) {
-        if (item is Map) {
-          final map = Map<String, dynamic>.from(item);
-          final snoozedAt = _parseDateTime(map['snoozedAt']?.toString());
-          final dueAt = _parseDateTime(map['dueAt']?.toString());
-          final noteRaw = map['note']?.toString().trim();
-          final note = (noteRaw != null && noteRaw.isNotEmpty) ? noteRaw : null;
-          if (snoozedAt != null) {
-            entries.add(
-              TaskSnoozeEntry(snoozedAt: snoozedAt, dueAt: dueAt, note: note),
-            );
-          }
-          continue;
-        }
-        final asDate = DateTime.tryParse(item.toString());
-        if (asDate != null) {
-          // Backward compatibility: παλιό format όπου το item ήταν το νέο due date.
-          entries.add(TaskSnoozeEntry(snoozedAt: asDate, dueAt: asDate));
-        }
-      }
-      return entries;
-    } catch (_) {
-      return const [];
-    }
-  }
+  List<TaskSnoozeEntry> get snoozeEntries =>
+      TaskSnoozeEntry.parseHistory(snoozeHistoryJson);
 
   List<DateTime> get snoozeHistory =>
       snoozeEntries.map((e) => e.dueAt ?? e.snoozedAt).toList();
 
   /// Επιστρέφει νέο Task με append στο ιστορικό αναβολών.
-  Task addSnoozeEntry(DateTime date, {String? note}) {
+  ///
+  /// [replacedDue] είναι η προθεσμία που ίσχυε **πριν** την αναβολή: η
+  /// αναβολή την αντικαθιστά στη στήλη, και χωρίς αυτήν τα στατιστικά δεν
+  /// ξέρουν αν η εκκρεμότητα ήταν καθυστερημένη τις προηγούμενες μέρες.
+  Task addSnoozeEntry(
+    DateTime date, {
+    String? note,
+    required String? replacedDue,
+  }) {
     final trimmedNote = note?.trim();
     final effectiveNote = (trimmedNote != null && trimmedNote.isNotEmpty)
         ? trimmedNote
@@ -410,17 +387,10 @@ class Task {
     final entry = TaskSnoozeEntry(
       snoozedAt: DateTime.now(),
       dueAt: date,
+      replacedDueAt: _parseDateTime(replacedDue),
       note: effectiveNote,
     );
-    final next = [...snoozeEntries, entry]
-        .map(
-          (e) => {
-            'snoozedAt': e.snoozedAt.toIso8601String(),
-            if (e.dueAt != null) 'dueAt': e.dueAt!.toIso8601String(),
-            if (e.note != null) 'note': e.note,
-          },
-        )
-        .toList();
+    final next = [...snoozeEntries, entry].map((e) => e.toJson()).toList();
     return copyWith(snoozeHistoryJson: jsonEncode(next));
   }
 
@@ -437,11 +407,7 @@ class Task {
       final effectiveNote = (trimmed != null && trimmed.isNotEmpty)
           ? trimmed
           : null;
-      next.add({
-        'snoozedAt': entry.snoozedAt.toIso8601String(),
-        if (entry.dueAt != null) 'dueAt': entry.dueAt!.toIso8601String(),
-        'note': ?effectiveNote,
-      });
+      next.add(entry.withNote(effectiveNote).toJson());
     }
     return copyWith(snoozeHistoryJson: jsonEncode(next));
   }
@@ -568,9 +534,76 @@ class Task {
 }
 
 class TaskSnoozeEntry {
-  const TaskSnoozeEntry({required this.snoozedAt, this.dueAt, this.note});
+  const TaskSnoozeEntry({
+    required this.snoozedAt,
+    this.dueAt,
+    this.replacedDueAt,
+    this.note,
+  });
 
   final DateTime snoozedAt;
+
+  /// Η νέα προθεσμία που έδωσε η αναβολή.
   final DateTime? dueAt;
+
+  /// Η προθεσμία που ίσχυε πριν την αναβολή· κενή στις αναβολές που
+  /// γράφτηκαν πριν αρχίσει να καταγράφεται.
+  final DateTime? replacedDueAt;
+
   final String? note;
+
+  TaskSnoozeEntry withNote(String? value) => TaskSnoozeEntry(
+    snoozedAt: snoozedAt,
+    dueAt: dueAt,
+    replacedDueAt: replacedDueAt,
+    note: value,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'snoozedAt': snoozedAt.toIso8601String(),
+    if (dueAt != null) 'dueAt': dueAt!.toIso8601String(),
+    if (replacedDueAt != null)
+      'replacedDueAt': replacedDueAt!.toIso8601String(),
+    'note': ?note,
+  };
+
+  /// Νέο format: `[{"snoozedAt":"...","dueAt":"...","replacedDueAt":"..."}]`·
+  /// το παλιό ήταν λίστα από σκέτες ημερομηνίες (η νέα προθεσμία).
+  static List<TaskSnoozeEntry> parseHistory(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      final entries = <TaskSnoozeEntry>[];
+      for (final item in decoded) {
+        if (item is Map) {
+          final map = Map<String, dynamic>.from(item);
+          final snoozedAt = _parse(map['snoozedAt']);
+          final noteRaw = map['note']?.toString().trim();
+          final note = (noteRaw != null && noteRaw.isNotEmpty) ? noteRaw : null;
+          if (snoozedAt != null) {
+            entries.add(
+              TaskSnoozeEntry(
+                snoozedAt: snoozedAt,
+                dueAt: _parse(map['dueAt']),
+                replacedDueAt: _parse(map['replacedDueAt']),
+                note: note,
+              ),
+            );
+          }
+          continue;
+        }
+        final asDate = DateTime.tryParse(item.toString());
+        if (asDate != null) {
+          entries.add(TaskSnoozeEntry(snoozedAt: asDate, dueAt: asDate));
+        }
+      }
+      return entries;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static DateTime? _parse(Object? value) =>
+      value == null ? null : DateTime.tryParse(value.toString());
 }

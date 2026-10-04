@@ -364,7 +364,11 @@ Future<void> editTask(BuildContext context, WidgetRef ref, Task task) async {
           ref,
           result
               .copyWith(status: TaskStatus.snoozed.toDbValue)
-              .addSnoozeEntry(due, note: formResult.snoozeReason),
+              .addSnoozeEntry(
+                due,
+                note: formResult.snoozeReason,
+                replacedDue: task.dueDate,
+              ),
           expected: task,
         );
         if (!context.mounted || !snoozedAgain) return;
@@ -486,7 +490,7 @@ Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
           dueDate: newDue.toIso8601String(),
           status: TaskStatus.snoozed.toDbValue,
         )
-        .addSnoozeEntry(newDue, note: snoozeNote);
+        .addSnoozeEntry(newDue, note: snoozeNote, replacedDue: task.dueDate);
     try {
       final snoozed = await saveTaskGuarded(
         context,
@@ -545,7 +549,7 @@ Future<void> snoozeTask(BuildContext context, WidgetRef ref, Task task) async {
         dueDate: newDue.toIso8601String(),
         status: TaskStatus.snoozed.toDbValue,
       )
-      .addSnoozeEntry(newDue, note: snoozeNote);
+      .addSnoozeEntry(newDue, note: snoozeNote, replacedDue: task.dueDate);
   try {
     final snoozed = await saveTaskGuarded(
       context,

@@ -1,3 +1,4 @@
+import '../../../core/utils/count_phrase.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/models/building_map_floor.dart';
@@ -235,17 +236,16 @@ String buildTransferActionSummary(LampTransferPreview preview) {
   }
 
   final parts = <String>[];
-  void addPart(TransferFieldAction action, String label) {
-    final count = counts[action];
-    if (count == null || count == 0) return;
-    parts.add(count == 1 ? '1 $label' : '$count $label');
+  for (final action in const [
+    TransferFieldAction.created,
+    TransferFieldAction.updated,
+    TransferFieldAction.linked,
+    TransferFieldAction.unlinked,
+    TransferFieldAction.unchanged,
+  ]) {
+    final count = counts[action] ?? 0;
+    if (count > 0) parts.add(transferActionCountLabel(action, count));
   }
-
-  addPart(TransferFieldAction.created, 'νέα');
-  addPart(TransferFieldAction.updated, 'τροποποιήσεις');
-  addPart(TransferFieldAction.linked, 'συνδέσεις');
-  addPart(TransferFieldAction.unlinked, 'αποσυνδέσεις');
-  addPart(TransferFieldAction.unchanged, 'αμετάβλητα');
 
   final entityLead = switch (preview.result.mainEntityMode) {
     TransferEntityMode.newEntry =>
@@ -258,6 +258,19 @@ String buildTransferActionSummary(LampTransferPreview preview) {
     return 'Έτοιμο για αποθήκευση: $entityLead';
   }
   return 'Έτοιμο για αποθήκευση: $entityLead · ${parts.join(', ')}';
+}
+
+/// Το πλήθος μιας ενέργειας μεταφοράς με το ουσιαστικό στον σωστό αριθμό:
+/// «1 τροποποίηση» / «3 τροποποιήσεις».
+String transferActionCountLabel(TransferFieldAction action, int count) {
+  final (one, many) = switch (action) {
+    TransferFieldAction.created => ('νέο', 'νέα'),
+    TransferFieldAction.updated => ('τροποποίηση', 'τροποποιήσεις'),
+    TransferFieldAction.linked => ('σύνδεση', 'συνδέσεις'),
+    TransferFieldAction.unlinked => ('αποσύνδεση', 'αποσυνδέσεις'),
+    TransferFieldAction.unchanged => ('αμετάβλητο', 'αμετάβλητα'),
+  };
+  return '$count ${byCount(count, one: one, many: many)}';
 }
 
 String transferEntityModeLabel(TransferEntityMode mode) => switch (mode) {

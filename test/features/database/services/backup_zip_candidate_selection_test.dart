@@ -82,4 +82,24 @@ void main() {
     expect(decision.requiresUserChoice, isTrue);
     expect(decision.selected, isNull);
   });
+  test('ένα μόνο αρχείο βάσης → η περίληψη στον ενικό', () {
+    final one = BackupZipInventory(
+      eligibleCandidates: [_eligible('call_logger.db')],
+      rejectedCandidates: const [],
+      isFullBackupArchive: false,
+      totalDatabaseEntries: 1,
+    );
+    expect(one.summarySentence, 'Βρέθηκε 1 αρχείο βάσης.');
+
+    const none = BackupZipInventory(
+      eligibleCandidates: [],
+      rejectedCandidates: [],
+      isFullBackupArchive: false,
+      totalDatabaseEntries: 1,
+    );
+    expect(
+      none.summarySentence,
+      'Βρέθηκε 1 αρχείο βάσης, δεν είναι βάση της εφαρμογής.',
+    );
+  });
 }

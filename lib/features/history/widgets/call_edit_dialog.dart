@@ -314,6 +314,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
       lansweeperState: _original!.lansweeperState,
       lansweeperMainTicketId: _original!.lansweeperMainTicketId,
       lansweeperLastSyncAt: _original!.lansweeperLastSyncAt,
+      createdByOperatorId: _original!.createdByOperatorId,
       isDeleted: _original!.isDeleted,
     );
 
@@ -355,8 +356,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
         newMap: updated.toMap(),
         isNew: false,
       );
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
+      closeDialogWithSnackBar(
         SnackBar(
           content: Text(saveMessage),
           duration: saveConfirmationSnackBarDuration(saveMessage),
@@ -383,8 +383,7 @@ class _CallEditDialogState extends ConsumerState<_CallEditDialog>
           .read(historyCallActionsServiceProvider)
           .cloneCall(widget.callId);
       if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
+      closeDialogWithSnackBar(
         SnackBar(content: Text('Δημιουργήθηκε κλωνοποιημένη κλήση (#$id).')),
       );
     } catch (e) {

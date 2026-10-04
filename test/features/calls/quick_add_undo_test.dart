@@ -206,5 +206,99 @@ void main() {
         reason: 'η απόσυρση δεν αναιρεί — η καταχώρηση μένει',
       );
     });
+
+    /// Εγγραφή που αποτυγχάνει όπως σε κλειδωμένη βάση.
+    Future<void> refuse(String name, String event, String table) => db.execute(
+      'CREATE TRIGGER $name BEFORE $event ON $table '
+      "BEGIN SELECT RAISE(ABORT, 'database is locked'); END",
+    );
+
+    test(
+      'κοινόχρηστα: αποτυχία στη μέση λέγεται, και η φόρμα ξέρει το νέο τμήμα',
+      () async {
+        final container = await containerReady();
+        addTearDown(container.dispose);
+        await refuse('refuse_phone_insert', 'INSERT', 'phones');
+        await refuse('refuse_phone_update', 'UPDATE', 'phones');
+        addTearDown(() async {
+          await db.execute('DROP TRIGGER IF EXISTS refuse_phone_insert');
+          await db.execute('DROP TRIGGER IF EXISTS refuse_phone_update');
+        });
+
+        final notifier = container.read(callSmartEntityProvider.notifier);
+        notifier.updateDepartmentText('Ακτινολογικό');
+        notifier.checkContent(departmentText: 'Ακτινολογικό');
+        notifier.updatePhone('5555');
+        notifier.checkContent(phoneText: '5555');
+        final result = await notifier.quickAddOrphanToDepartment(
+          forceSharedOnConflict: true,
+        );
+
+        expect(result?.failed, isTrue, reason: 'η αποτυχία δεν περνά σιωπηλά');
+        expect(result?.message, startsWith('Σφάλμα αποθήκευσης'));
+        expect(await deletedFlagOfDepartment('Ακτινολογικό'), 0);
+        final lookup = container.read(lookupServiceProvider).value!.service;
+        expect(
+          lookup.findDepartmentByName('Ακτινολογικό'),
+          isNotNull,
+          reason: 'το τμήμα πρόλαβε να δημιουργηθεί — η φόρμα το ξέρει',
+        );
+      },
+    );
+
+    test(
+      'αναίρεση: αποτυχία στη μέση λέγεται, και η φόρμα ξέρει τι σβήστηκε',
+      () async {
+        final container = await containerReady();
+        addTearDown(container.dispose);
+        await quickAddOrphan(
+          container,
+          department: 'Ακτινολογικό',
+          phone: '5555',
+        );
+        expect(
+          container
+              .read(lookupServiceProvider)
+              .value!
+              .service
+              .checkPhoneUsage('5555')
+              .departmentId,
+          isNotNull,
+        );
+        // Το τηλέφωνο σβήνεται, το τμήμα όχι.
+        await refuse('refuse_department_update', 'UPDATE', 'departments');
+        addTearDown(
+          () => db.execute('DROP TRIGGER IF EXISTS refuse_department_update'),
+        );
+
+        final notifier = container.read(callSmartEntityProvider.notifier);
+        final summary = await notifier.undoLastQuickAdd();
+
+        expect(summary, startsWith('Η αναίρεση δεν ολοκληρώθηκε: '));
+        expect(
+          summary,
+          endsWith(
+            'Ό,τι πρόλαβε να σβηστεί έμεινε σβησμένο — ελέγξτε τον Κατάλογο.',
+          ),
+        );
+        expect(await deletedFlagOfPhone('5555'), 1);
+        expect(await deletedFlagOfDepartment('Ακτινολογικό'), 0);
+        expect(
+          container
+              .read(lookupServiceProvider)
+              .value!
+              .service
+              .checkPhoneUsage('5555')
+              .departmentId,
+          isNull,
+          reason: 'ο κατάλογος ξαναδιαβάστηκε — το σβησμένο τηλέφωνο λείπει',
+        );
+        expect(
+          notifier.hasQuickAddUndoOffer,
+          isFalse,
+          reason: 'απόφαση Διευθυντή: καμία δεύτερη προσπάθεια',
+        );
+      },
+    );
   });
 }

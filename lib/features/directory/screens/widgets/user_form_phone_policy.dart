@@ -85,17 +85,27 @@ class UserFormPhonePolicy {
     ];
   }
 
-  /// Ρωτά τι απογίνονται τα τηλέφωνα όταν αλλάζει το τμήμα, με την ΙΔΙΑ πύλη
-  /// που χρησιμοποιεί η μαζική μεταφορά.
+  /// Ρωτά τι απογίνονται τα τηλέφωνα όταν αλλάζει το τμήμα, με τις ΙΔΙΕΣ
+  /// ερωτήσεις που κάνει και το «+» της φόρμας κλήσης.
   ///
-  /// Επιστρέφει τους αριθμούς που μένουν πίσω — κενό σύνολο σημαίνει «όλα
-  /// ακολουθούν». `null` σημαίνει ότι ο χρήστης ακύρωσε.
-  Future<Set<String>?> confirmPhoneFateOnDepartmentChange() async {
-    if (!host.isEdit || host.widget.isClone) return const <String>{};
-    if (!departmentChanged) return const <String>{};
+  /// Κενές λίστες σημαίνουν «όλα ακολουθούν». `null` σημαίνει ότι ο χρήστης
+  /// ακύρωσε.
+  ///
+  /// Κοινό τηλέφωνο (το κρατούν και συνάδελφοι) ρωτιέται **μία** φορά, στο
+  /// «Κοινό τηλέφωνο» — όχι στη γενική ερώτηση ούτε στη «Σύγκρουση τοποθεσίας
+  /// τηλεφώνου» (αποφάσεις Διευθυντή 04/10).
+  Future<PhoneDepartmentChangeAnswer?>
+  confirmPhoneFateOnDepartmentChange() async {
+    const nothing = (
+      staying: <String>{},
+      leftWithCoOwners: <String>{},
+      takenFromCoOwners: <String>{},
+    );
+    if (!host.isEdit || host.widget.isClone) return nothing;
+    if (!departmentChanged) return nothing;
 
     final candidates = _phonesThatCouldStayBehind();
-    if (candidates.isEmpty) return const <String>{};
+    if (candidates.isEmpty) return nothing;
 
     if (!host.mounted) return null;
     // Τα εσωτερικά του κέντρου μας δεν ακολουθούν έξω από το νοσοκομείο.
@@ -114,29 +124,15 @@ class UserFormPhonePolicy {
       editingUserId: host.widget.initialUser?.id,
       lookup: LookupService.instance,
     );
-
-    final fate = await askPhoneFateOnDepartmentChange(
+    return askPhonesOnDepartmentChange(
       host.context,
       split: split,
+      plan: plan,
       targetKind: targetDepartmentKind,
       userDisplayName: host.buildUserDisplayName(),
       sourceDepartmentName: host.widget.initialUser?.departmentName,
-      stayBlockedReasons: plan.blockedReasons,
+      targetDepartmentName: host.departmentController.text.trim(),
     );
-    if (fate == null) return null;
-    // Δύο πηγές με **διαφορετική ισχύ**:
-    //
-    // 1. Τα forced μένουν πάντα — ο προορισμός δεν μπορεί να τα κρατά, ακόμη
-    //    και με «Ακολουθούν»: η απάντηση αφορά μόνο όσα ρωτήθηκαν. Ο κανόνας
-    //    «το χρησιμοποιεί και άλλος» δεν τα σώζει, γιατί εκείνος κρίνει αν
-    //    **αξίζει** να αποδεσμευτούν, όχι αν **επιτρέπεται** να ταξιδέψουν:
-    //    το κοινό εσωτερικό αποδεσμεύεται από αυτόν τον υπάλληλο και μένει
-    //    στους υπόλοιπους κατόχους του.
-    // 2. Τα ρωτημένα μένουν μόνο αν το επιτρέπει ο κανόνας — και ό,τι δεν το
-    //    επιτρέπει έχει ήδη ειπωθεί, μέσα στον διάλογο από πάνω.
-    final forced = split.forcedToStay.toSet();
-    if (fate == BulkTransferAssetFate.follow) return forced;
-    return {...forced, ...plan.staying};
   }
 
   /// Το Είδος του τμήματος στο οποίο πάει ο υπάλληλος.
@@ -151,23 +147,29 @@ class UserFormPhonePolicy {
           ?.kind ??
       DepartmentKind.hospital;
 
-  /// Ρωτά τι απογίνεται ο εξοπλισμός όταν αλλάζει το τμήμα, με την ΙΔΙΑ πύλη
-  /// που χρησιμοποιεί η μαζική μεταφορά.
+  /// Ρωτά τι απογίνεται ο εξοπλισμός όταν αλλάζει το τμήμα, με τις ΙΔΙΕΣ
+  /// ερωτήσεις που κάνει και το «+» της φόρμας κλήσης.
   ///
-  /// Επιστρέφει τα μηχανήματα που μένουν πίσω — κενή λίστα σημαίνει «όλα
+  /// Επιστρέφει τι μένει πίσω και ποια κοινά μηχανήματα ακολουθούν παίρνοντάς
+  /// τα από τους υπόλοιπους κατόχους· κενές λίστες σημαίνουν «όλα
   /// ακολουθούν». `null` σημαίνει ότι ο χρήστης ακύρωσε.
   ///
   /// Ζει εδώ, δίπλα στην αδελφή του για τα τηλέφωνα: είναι μία απόφαση σε δύο
   /// σκέλη και χωρισμένη θα απέκλινε.
-  Future<List<EquipmentModel>?> confirmEquipmentFateOnDepartmentChange() async {
-    if (!host.isEdit || host.widget.isClone) return const [];
-    if (!departmentChanged) return const [];
+  Future<EquipmentDepartmentChangeAnswer?>
+  confirmEquipmentFateOnDepartmentChange() async {
+    const nothing = (
+      staying: <EquipmentModel>[],
+      takenFromCoOwners: <EquipmentModel>[],
+    );
+    if (!host.isEdit || host.widget.isClone) return nothing;
+    if (!departmentChanged) return nothing;
 
     final editingUserId = host.widget.initialUser?.id;
-    if (editingUserId == null) return const [];
+    if (editingUserId == null) return nothing;
 
     final carried = UserEquipmentCodes.forUser(editingUserId);
-    if (carried.isEmpty) return const [];
+    if (carried.isEmpty) return nothing;
 
     // Ίδια σειρά με τα τηλέφωνα: πρώτα ο κανόνας, μετά η ερώτηση — ώστε ο
     // λόγος που ένα μηχάνημα δεν μπορεί να μείνει πίσω να ειπωθεί εγκαίρως.
@@ -180,15 +182,14 @@ class UserFormPhonePolicy {
     );
 
     if (!host.mounted) return null;
-    final fate = await askEquipmentFateOnDepartmentChange(
+    return askEquipmentOnDepartmentChange(
       host.context,
+      plan: plan,
       targetKind: targetDepartmentKind,
       userDisplayName: host.buildUserDisplayName(),
-      stayBlockedReasons: plan.blockedReasons,
+      sourceDepartmentName: host.initialDepartmentText.trim(),
+      targetDepartmentName: host.departmentController.text.trim(),
     );
-    if (fate == null) return null;
-    if (fate == BulkTransferAssetFate.follow) return const [];
-    return plan.staying;
   }
 
   List<String> _phonesToValidateForPolicy() {
@@ -208,13 +209,14 @@ class UserFormPhonePolicy {
 
   Future<UserPhoneConflictBatchResult?> confirmUserPhoneAssignmentConflicts({
     required int? editingUserId,
-    Set<String> phonesStayingBehind = const {},
+    Set<String> phonesAlreadyDecided = const {},
   }) async {
-    // Ό,τι μένει πίσω δεν πάει στον υπάλληλο, άρα δεν συγκρούεται με τίποτα:
-    // δεύτερη ερώτηση για το ίδιο τηλέφωνο θα ήταν σύγχυση.
+    // Ό,τι αποφασίστηκε ήδη στην αλλαγή τμήματος (μένει πίσω, μένει στους
+    // συναδέλφους, τους παίρνεται) δεν ξαναρωτιέται: δεύτερη ερώτηση για το
+    // ίδιο τηλέφωνο θα ήταν σύγχυση.
     final phones = [
       for (final p in _phonesToValidateForPolicy())
-        if (!phonesStayingBehind.contains(p.trim())) p,
+        if (!phonesAlreadyDecided.contains(p.trim())) p,
     ];
     if (phones.isEmpty) return const UserPhoneConflictBatchResult();
 

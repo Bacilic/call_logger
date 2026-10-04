@@ -216,6 +216,31 @@ class SmartEntitySelectorLookups {
     _autofillDepartmentPhoneIfEmpty(lookup, departmentId);
   }
 
+  /// **Μοναδικό** σημείο του κανόνα «το τμήμα νικά»: με αναγνωρισμένο τμήμα
+  /// στη φόρμα (όποιος κι αν το συμπλήρωσε), ένα τηλέφωνο ή ένας εξοπλισμός
+  /// δεν φέρνει ανθρώπους άλλου τμήματος — ούτε ως συμπλήρωση ούτε ως λίστα.
+  /// Η ασυμφωνία φαίνεται μόνο στους δείκτες διένεξης. Χωρίς τμήμα περνούν
+  /// όλοι.
+  List<UserModel> _withinLockedDepartment(List<UserModel> users) {
+    final lockedDepartmentId = state.selectedDepartmentId;
+    if (lockedDepartmentId == null) return users;
+    return users.where((u) => u.departmentId == lockedDepartmentId).toList();
+  }
+
+  bool _isOutsideLockedDepartment(int departmentId) {
+    final lockedDepartmentId = state.selectedDepartmentId;
+    return lockedDepartmentId != null && departmentId != lockedDepartmentId;
+  }
+
+  /// Το στοιχείο ανήκει σε άλλο τμήμα από το κλειδωμένο, ή δεν υπάρχει στη
+  /// βάση: ο Καλούντας και ο Εξοπλισμός συμπεριφέρονται σαν να είχε
+  /// συμπληρωθεί μόνο το τμήμα — δείχνουν τους υποψήφιους **του** σε κενά
+  /// πεδία, χωρίς να γράψουν τιμή. Χωρίς κλειδωμένο τμήμα δεν κάνει τίποτα.
+  void _showLockedDepartmentCandidates(LookupService lookup) {
+    restoreDepartmentCallerCandidatesIfNeeded(lookup);
+    restoreDepartmentEquipmentCandidatesIfNeeded(lookup);
+  }
+
   /// Το τμήμα που ανήκουν **όλοι** οι [users], ή `null` αν κάποιος δεν έχει
   /// τμήμα ή αν διαφέρουν.
   int? _sharedDepartmentIdOf(List<UserModel> users) {
@@ -404,11 +429,21 @@ class SmartEntitySelectorLookups {
   /// Διανομέας της αναζήτησης τηλεφώνου: ποιοι έχουν αυτό το τηλέφωνο
   /// αποφασίζει ποια περίπτωση ισχύει. Κάθε περίπτωση ζει σε δική της μέθοδο,
   /// ώστε ένα σφάλμα στη μία να μην κρύβεται μέσα στις άλλες.
+  ///
+  /// Μετρούν μόνο οι κάτοχοι του κλειδωμένου τμήματος: κοινό τηλέφωνο με
+  /// έναν κάτοχο μέσα στο τμήμα είναι η περίπτωση του ενός κατόχου.
   void _applyPhoneLookupWithCatalog(String digits, LookupService lookup) {
     host.runExclusiveLookup(SelectorField.phone, () {
-      final users = lookup.findUsersByPhone(digits);
-      if (users.isEmpty) {
+      final allOwners = lookup.findUsersByPhone(digits);
+      final users = _withinLockedDepartment(allOwners);
+      if (allOwners.isEmpty) {
         _applyPhoneWithoutOwner(digits, lookup);
+      } else if (users.isEmpty) {
+        _applyPhoneWithoutOwner(
+          digits,
+          lookup,
+          ownedOutsideLockedDepartment: true,
+        );
       } else if (users.length == 1) {
         _applySinglePhoneOwner(digits, users.first);
       } else {
@@ -417,9 +452,20 @@ class SmartEntitySelectorLookups {
     });
   }
 
-  /// Τηλέφωνο χωρίς προσωπικό κάτοχο: ίσως τηλέφωνο τμήματος, ίσως άγνωστο.
-  void _applyPhoneWithoutOwner(String digits, LookupService lookup) {
-    final orphanDept = lookup.getDepartmentByPhone(digits);
+  /// Τηλέφωνο που δεν δίνει κάτοχο σε αυτή τη φόρμα: ίσως τηλέφωνο τμήματος,
+  /// ίσως άγνωστο — ή τηλέφωνο που ανήκει σε άλλο τμήμα από το κλειδωμένο
+  /// ([ownedOutsideLockedDepartment], ή τηλέφωνο τμήματος άλλου τμήματος).
+  void _applyPhoneWithoutOwner(
+    String digits,
+    LookupService lookup, {
+    bool ownedOutsideLockedDepartment = false,
+  }) {
+    final orphanDept = ownedOutsideLockedDepartment
+        ? null
+        : lookup.getDepartmentByPhone(digits);
+    final belongsToAnotherDepartment =
+        ownedOutsideLockedDepartment ||
+        (orphanDept?.id != null && _isOutsideLockedDepartment(orphanDept!.id!));
     final canAutofillDepartment =
         state.departmentText.trim().isEmpty &&
         state.selectedDepartmentId == null;
@@ -447,7 +493,8 @@ class SmartEntitySelectorLookups {
       clearSelectedEquipment: !hasManualEquipmentSelection,
       isPhoneAmbiguous: false,
       isEquipmentAmbiguous: false,
-      callerNoMatch: true,
+      // Τηλέφωνο άλλου τμήματος ΕΧΕΙ αντιστοιχία — απλώς δεν φέρνει κανέναν.
+      callerNoMatch: !belongsToAnotherDepartment,
       equipmentNoMatch: false,
       departmentText: (orphanDept != null && canAutofillDepartment)
           ? orphanDept.name
@@ -456,6 +503,12 @@ class SmartEntitySelectorLookups {
           ? orphanDept.id
           : state.selectedDepartmentId,
     );
+    // Ούτε τηλέφωνο άλλου τμήματος ούτε άγνωστο τηλέφωνο λένε ποιος καλεί:
+    // το λέει το τμήμα της φόρμας, αν υπάρχει.
+    if (belongsToAnotherDepartment || orphanDept?.id == null) {
+      _showLockedDepartmentCandidates(lookup);
+      return;
+    }
     if (orphanDept?.id != null) {
       _applyDepartmentCallerLookup(lookup, orphanDept!.id!);
       _applyDepartmentEquipmentLookup(lookup, orphanDept.id!);
@@ -758,17 +811,23 @@ class SmartEntitySelectorLookups {
           equipmentNoMatch: false,
         );
 
-        final owners = equipment.id != null
+        final allOwners = equipment.id != null
             ? lookup.findUsersForEquipment(equipment.id!)
             : <UserModel>[];
+        final owners = _withinLockedDepartment(allOwners);
+
+        // Όλοι οι κάτοχοι ανήκουν σε άλλο τμήμα από το κλειδωμένο: κανένας
+        // δεν συμπληρώνεται ούτε προτείνεται, ούτε το τηλέφωνό τους.
+        if (owners.isEmpty && allOwners.isNotEmpty) {
+          restoreDepartmentCallerCandidatesIfNeeded(lookup);
+          return;
+        }
 
         // Πολλαπλοί κάτοχοι → λίστα candidates, ποτέ αυτόματη επιλογή
         // του πρώτου. Ό,τι όμως μοιράζονται ΟΛΟΙ δεν είναι ασαφές: το κοινό
         // τμήμα και το κοινό τηλέφωνο συμπληρώνονται σε κενά πεδία, όπως με
-        // έναν κάτοχο. Κάτοχοι έξω από το ήδη κλειδωμένο τμήμα δεν προτείνουν
-        // τηλέφωνο — το ίδιο κριτήριο με τον έναν κάτοχο παρακάτω.
+        // έναν κάτοχο.
         if (owners.length > 1) {
-          final lockedDepartmentId = state.selectedDepartmentId;
           if (state.callerDisplayText.trim().isEmpty) {
             state = state.copyWith(
               callerCandidates: owners,
@@ -778,12 +837,7 @@ class SmartEntitySelectorLookups {
             );
           }
           _autofillSharedDepartmentIfEmpty(owners, lookup);
-          final ownersOutsideLocked =
-              lockedDepartmentId != null &&
-              owners.any((u) => u.departmentId != lockedDepartmentId);
-          if (!ownersOutsideLocked) {
-            _autofillPhoneForSharedOwners(owners, lookup);
-          }
+          _autofillPhoneForSharedOwners(owners, lookup);
           return;
         }
 
@@ -808,14 +862,10 @@ class SmartEntitySelectorLookups {
           return;
         }
 
+        // Ένας κάτοχος (ή ο μόνος του κλειδωμένου τμήματος): αυτός είναι ο
+        // καλών — αλλά μόνο σε κενά πεδία.
         final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
-        final canAutofillCaller = state.callerDisplayText.trim().isEmpty;
-        // «κλειδωμένο» τμήμα = συμπληρωμένο πεδίο (isFilled) με ταυτοποιημένο id.
-        final hasLockedDepartmentSelection = state.selectedDepartmentId != null;
-        final isCallerOutsideSelectedDepartment =
-            hasLockedDepartmentSelection &&
-            user.departmentId != state.selectedDepartmentId;
-        if (canAutofillCaller && !isCallerOutsideSelectedDepartment) {
+        if (state.callerDisplayText.trim().isEmpty) {
           state = state.copyWith(
             selectedCaller: user,
             callerCandidates: [],
@@ -835,15 +885,7 @@ class SmartEntitySelectorLookups {
             selectedDepartmentId: user.departmentId,
           );
         }
-
-        // Ο φραγμός του κλειδωμένου τμήματος κρίνει τη **σχέση** (είναι ο
-        // κάτοχος εκτός του κλειδωμένου τμήματος;) και όχι την ύπαρξη
-        // κλειδώματος: κάτοχος που ανήκει στο ήδη επιλεγμένο τμήμα δίνει
-        // απολύτως έγκυρο τηλέφωνο — το ίδιο κριτήριο με τη συμπλήρωση του
-        // καλούντα παραπάνω.
-        if (!isCallerOutsideSelectedDepartment) {
-          _autofillPhoneForCommittedUser(user, lookup);
-        }
+        _autofillPhoneForCommittedUser(user, lookup);
       },
       onBeforeRecompute: () {
         final lookupForRestore = ref.read(lookupServiceProvider).value?.service;

@@ -162,7 +162,11 @@ class SmartEntitySelectorWidgetState
     final conf = ref.read(callsFieldConfirmationsProvider.notifier);
     final header = ref.read(widget.provider);
     if (_equipmentController.text.trim().isNotEmpty) conf.confirmEquipment();
-    if (header.selectedDepartmentId != null) conf.confirmDepartment();
+    // Το πεδίο Τμήμα καλεί αυτόν τον έλεγχο σε κάθε γράμμα· όσο έχει την
+    // εστίαση, η επιβεβαίωση περιμένει την έξοδο από το πεδίο.
+    if (header.selectedDepartmentId != null && !_departmentFocusNode.hasFocus) {
+      conf.confirmDepartment();
+    }
     if (header.selectedCaller?.id != null) conf.confirmCaller();
   }
 
@@ -178,6 +182,41 @@ class SmartEntitySelectorWidgetState
   }
 
   void requestPhoneFocus() => _phoneFocusNode.requestFocus();
+
+  FocusNode _focusNodeFor(SelectorField field) => switch (field) {
+    SelectorField.phone => _phoneFocusNode,
+    SelectorField.caller => _callerFocusNode,
+    SelectorField.department => _departmentFocusNode,
+    SelectorField.equipment => _equipmentFocusNode,
+  };
+
+  /// Το πεδίο που κρατά αυτή τη στιγμή την εστίαση, αν κάποιο την κρατά.
+  SelectorField? get _focusedField {
+    for (final field in SelectorField.values) {
+      if (_focusNodeFor(field).hasFocus) return field;
+    }
+    return null;
+  }
+
+  /// Όταν η φόρμα ξαναχτίζεται αλλού (η οθόνη Κλήσεων περνά από τη
+  /// συμπτυγμένη στην αναπτυγμένη όψη και πίσω), η παλιά φεύγει παίρνοντας
+  /// μαζί της την εστίαση. Η νέα την παραλαμβάνει στο **ίδιο** πεδίο, ώστε ο
+  /// κέρσορας να μη χάνεται κάτω από τα χέρια του χρήστη.
+  ///
+  /// Αγνοεί εστίαση που δεν βρίσκεται σε άλλον επιλογέα του ίδιου provider.
+  void takeOverFocusFromOutgoingForm() {
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    final outgoing = focusedContext
+        ?.findAncestorStateOfType<SmartEntitySelectorWidgetState>();
+    if (outgoing == null ||
+        identical(outgoing, this) ||
+        outgoing.widget.provider != widget.provider) {
+      return;
+    }
+    final field = outgoing._focusedField;
+    if (field == null) return;
+    _focusNodeFor(field).requestFocus();
+  }
 
   /// Το κόκκινο ×: αδειάζει τα πεδία και αφήνει τον ξενιστή να καθαρίσει τα δικά του.
   void performClearAllFields() {
@@ -224,8 +263,11 @@ class SmartEntitySelectorWidgetState
           next.selectedCaller?.id != previous?.selectedCaller?.id) {
         ref.read(callsFieldConfirmationsProvider.notifier).confirmCaller();
       }
+      // Όπως το τηλέφωνο: όσο γράφεται το τμήμα, η επιβεβαίωση περιμένει το
+      // Enter, την επιλογή από τη λίστα ή την έξοδο από το πεδίο.
       if (next.selectedDepartmentId != null &&
-          next.selectedDepartmentId != previous?.selectedDepartmentId) {
+          next.selectedDepartmentId != previous?.selectedDepartmentId &&
+          !_departmentFocusNode.hasFocus) {
         ref.read(callsFieldConfirmationsProvider.notifier).confirmDepartment();
       }
       if (next.selectedEquipment != null &&

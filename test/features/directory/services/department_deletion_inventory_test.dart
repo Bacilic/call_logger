@@ -58,7 +58,7 @@ void main() {
       );
       final withoutLines = withoutOwned.buildSummaryLines();
       expect(withoutLines, hasLength(1));
-      expect(withoutLines.single, isNot(contains('θα τους ακολουθήσουν')));
+      expect(withoutLines.single, isNot(contains('ακολουθήσουν')));
 
       const withPhones = DepartmentDeletionInventory(
         departmentId: 1,
@@ -69,10 +69,7 @@ void main() {
         sharedPhones: [],
         sharedEquipmentCodes: [],
       );
-      expect(
-        withPhones.buildSummaryLines().single,
-        contains('θα τους ακολουθήσουν'),
-      );
+      expect(withPhones.buildSummaryLines().single, contains('ακολουθήσουν'));
 
       const withEquipment = DepartmentDeletionInventory(
         departmentId: 1,
@@ -85,8 +82,22 @@ void main() {
       );
       expect(
         withEquipment.buildSummaryLines().single,
-        contains('θα τους ακολουθήσουν'),
+        contains('ακολουθήσουν'),
       );
+    });
+
+    test('ένας υπάλληλος με δικά του στοιχεία → η φράση στον ενικό', () {
+      const one = DepartmentDeletionInventory(
+        departmentId: 1,
+        departmentName: 'Τμήμα Α',
+        employeeNames: ['Άλφα'],
+        employeeOwnedPhoneCount: 1,
+        employeeOwnedEquipmentCount: 0,
+        sharedPhones: [],
+        sharedEquipmentCodes: [],
+      );
+      expect(one.buildSummaryLines().single, contains('θα τον ακολουθήσουν'));
+      expect(one.buildSummaryLines().single, contains('αν μεταφερθεί'));
     });
 
     test('κοινόχρηστα → hasSharedAssets και σωστός πληθυντικός', () {

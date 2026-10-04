@@ -177,17 +177,6 @@ void main() {
       expect(d.blockedReason, contains('Φαρμακείο'));
     });
 
-    test('το κρατά και άλλος: μένει στον υπάλληλο', () {
-      final d = judgePhoneStayBehind(
-        phone: '2511',
-        userName: 'Σοφία Σπυροπούλου',
-        oldDepartmentId: 46,
-        otherOwnerNames: const ['Γιάννης Γ'],
-      );
-      expect(d.releases, isFalse);
-      expect(d.blockedReason, contains('Γιάννης Γ'));
-    });
-
     test('χωρίς τμήμα-αφετηρία: δεν υπάρχει πού να μείνει', () {
       final d = judgePhoneStayBehind(
         phone: '2200',
@@ -221,18 +210,6 @@ void main() {
       expect(d.releases, isTrue);
     });
 
-    test('το κρατά και άλλος: μένει ως έχει', () {
-      final d = judgeEquipmentStayBehind(
-        code: '3564',
-        userName: 'Σοφία Σπυροπούλου',
-        oldDepartmentId: 46,
-        equipmentDepartmentId: 46,
-        otherOwnerNames: const ['Γιάννης Γ'],
-      );
-      expect(d.releases, isFalse);
-      expect(d.blockedReason, contains('Γιάννης Γ'));
-    });
-
     test('ούτε μηχάνημα ούτε υπάλληλος έχουν τμήμα: θα έμενε ορφανό', () {
       final d = judgeEquipmentStayBehind(
         code: '3564',
@@ -246,6 +223,58 @@ void main() {
   });
 
   group('Σχέδιο μεταφοράς — εξαιρέσεις και μερική μεταφορά', () {
+    // Ο προορισμός δεν κρατά εσωτερικά του νοσοκομείου: το 2534 μένει πίσω
+    // ακόμη και με «Ακολουθούν» — αυτό λέει ήδη ο διάλογος (04/10).
+    test('εταιρεία με «Ακολουθούν»: το εσωτερικό μένει στο παλιό τμήμα', () {
+      final plan = buildBulkUserTransferPlan(
+        selectedUsers: [
+          user(
+            1,
+            'Μαρία',
+            'Νακαστσή',
+            deptId: 10,
+            phones: ['2534', '6971234567'],
+          ),
+        ],
+        target: const SharedAssetTransferTarget.existing(30),
+        targetDisplayName: 'DataMed',
+        targetKind: DepartmentKind.company,
+        phoneFate: BulkTransferAssetFate.follow,
+        equipmentFate: BulkTransferAssetFate.follow,
+        equipmentByUserId: const {},
+        phonesThatCannotFollow: const {'2534'},
+      );
+      expect(plan.phonesToRelease[1], ['2534']);
+      expect(
+        bulkTransferConfirmationText(plan),
+        contains('Το 2534 είναι εσωτερικό του νοσοκομείου και δεν ακολουθεί'),
+      );
+    });
+
+    test('κοινό εσωτερικό σε εταιρεία: μένει χωρίς ερώτηση', () {
+      final plan = buildBulkUserTransferPlan(
+        selectedUsers: [
+          user(1, 'Μαρία', 'Νακαστσή', deptId: 10, phones: ['2534']),
+        ],
+        target: const SharedAssetTransferTarget.existing(30),
+        targetDisplayName: 'DataMed',
+        targetKind: DepartmentKind.company,
+        phoneFate: BulkTransferAssetFate.follow,
+        equipmentFate: BulkTransferAssetFate.follow,
+        equipmentByUserId: const {},
+        sharing: const BulkAssetSharingInfo(
+          phoneOtherUserNames: {
+            '2534': ['Διακομοπούλου'],
+          },
+        ),
+        sharedPhoneFate: SharedAssetFate.movesWithOwner,
+        phonesThatCannotFollow: const {'2534'},
+      );
+      expect(plan.sharedPhones, isEmpty, reason: 'Δεν ρωτιέται');
+      expect(plan.phonesTakenFromCoOwners, isEmpty);
+      expect(plan.phonesToRelease[1], ['2534']);
+    });
+
     test('όσοι είναι ήδη στο τμήμα-προορισμό δεν μετακινούνται', () {
       final plan = buildBulkUserTransferPlan(
         selectedUsers: [
@@ -267,28 +296,62 @@ void main() {
       );
     });
 
-    test('τηλέφωνο κοινό με ΜΗ επιλεγμένο εξαιρείται ονομαστικά', () {
-      final plan = buildBulkUserTransferPlan(
-        selectedUsers: [
-          user(1, 'Άννα', 'Α', deptId: 10, phones: ['2100', '2200']),
-        ],
-        target: const SharedAssetTransferTarget.existing(20),
-        targetDisplayName: 'Αιμοδοσία',
-        targetKind: DepartmentKind.hospital,
+    // Κοινό τηλέφωνο (το κρατά και κάποιος που ΔΕΝ μεταφέρεται): ρωτιέται η
+    // τύχη του ίδιου του αριθμού — απόφαση Διευθυντή 04/10.
+    BulkUserTransferPlan sharedPhonePlan(
+      SharedAssetFate fate, {
+      BulkTransferAssetFate phoneFate = BulkTransferAssetFate.follow,
+    }) => buildBulkUserTransferPlan(
+      selectedUsers: [
+        user(1, 'Μαρία', 'Νακαστσή', deptId: 10, phones: ['2534', '2200']),
+      ],
+      target: const SharedAssetTransferTarget.existing(20),
+      targetDisplayName: 'Άδειες',
+      targetKind: DepartmentKind.hospital,
+      phoneFate: phoneFate,
+      equipmentFate: BulkTransferAssetFate.follow,
+      equipmentByUserId: const {},
+      sharing: const BulkAssetSharingInfo(
+        phoneOtherUserNames: {
+          '2534': ['Διακομοπούλου'],
+        },
+      ),
+      sharedPhoneFate: fate,
+    );
+
+    test('κοινό τηλέφωνο: δεν μπλοκάρεται, ρωτιέται', () {
+      final plan = sharedPhonePlan(
+        SharedAssetFate.staysInDepartment,
         phoneFate: BulkTransferAssetFate.stayInOldDepartment,
-        equipmentFate: BulkTransferAssetFate.follow,
-        equipmentByUserId: const {},
-        sharing: const BulkAssetSharingInfo(
-          phoneOtherUserNames: {
-            '2100': ['Γιάννης Γ'],
-          },
-        ),
       );
+      expect(plan.sharedPhones.single.phone, '2534');
+      expect(plan.sharedPhones.single.otherOwnerNames, ['Διακομοπούλου']);
+      expect(plan.exclusions, isEmpty);
+      // Το δικό της τηλέφωνο κρίνεται κανονικά από τη γενική απάντηση.
       expect(plan.phonesToRelease[1], ['2200']);
-      expect(plan.exclusions, hasLength(1));
-      expect(plan.exclusions.single.reason, contains('2100'));
-      expect(plan.exclusions.single.reason, contains('Γιάννης Γ'));
-      expect(bulkTransferConfirmationText(plan), contains('Γιάννης Γ'));
+    });
+
+    test('κοινό τηλέφωνο «παραμένει»: φεύγει μόνο από τη μεταφερόμενη, '
+        'και με «ακολουθούν» για τα υπόλοιπα', () {
+      final plan = sharedPhonePlan(SharedAssetFate.staysInDepartment);
+      expect(plan.phonesLeftWithCoOwners[1], ['2534']);
+      expect(plan.phonesToRelease, isEmpty);
+      expect(plan.phonesTakenFromCoOwners, isEmpty);
+      expect(
+        bulkTransferConfirmationText(plan),
+        contains('Το κοινό τηλέφωνο (2534) παραμένει στο τμήμα του'),
+      );
+    });
+
+    test('κοινό τηλέφωνο «μεταφέρεται»: μένει στη μεταφερόμενη, φεύγει από '
+        'τους άλλους', () {
+      final plan = sharedPhonePlan(SharedAssetFate.movesWithOwner);
+      expect(plan.phonesLeftWithCoOwners, isEmpty);
+      expect(plan.phonesTakenFromCoOwners, {'2534'});
+      expect(
+        bulkTransferConfirmationText(plan),
+        contains('μεταφέρεται και φεύγει από: Διακομοπούλου'),
+      );
     });
 
     test('τηλέφωνο ΗΔΗ κοινόχρηστο του παλιού τμήματος αποδεσμεύεται', () {
@@ -314,34 +377,233 @@ void main() {
       expect(plan.exclusions, isEmpty);
     });
 
-    test('εξοπλισμός με ΜΗ επιλεγμένο συν-κάτοχο εξαιρείται και στις δύο '
-        'τύχες', () {
-      for (final fate in BulkTransferAssetFate.values) {
-        final plan = buildBulkUserTransferPlan(
-          selectedUsers: [user(1, 'Άννα', 'Α', deptId: 10)],
+    // Κοινό μηχάνημα (τα κρατά και κάποιος που ΔΕΝ μεταφέρεται): ρωτιέται η
+    // τύχη του ίδιου του μηχανήματος — απόφαση Διευθυντή 03/10.
+    BulkUserTransferPlan sharedPlan(SharedAssetFate fate) =>
+        buildBulkUserTransferPlan(
+          selectedUsers: [user(1, 'Μαρία', 'Νακαστσή', deptId: 10)],
           target: const SharedAssetTransferTarget.existing(20),
-          targetDisplayName: 'Αιμοδοσία',
+          targetDisplayName: 'Άδειες',
           targetKind: DepartmentKind.hospital,
           phoneFate: BulkTransferAssetFate.follow,
-          equipmentFate: fate,
+          // Η γενική απάντηση δεν αγγίζει τα κοινά μηχανήματα.
+          equipmentFate: BulkTransferAssetFate.follow,
           equipmentByUserId: {
-            1: [EquipmentModel(id: 7, code: '3564', departmentId: 10)],
+            1: [EquipmentModel(id: 7, code: '3140', departmentId: 10)],
           },
           sharing: const BulkAssetSharingInfo(
             equipmentOtherUserNames: {
-              7: ['Γιάννης Γ'],
+              7: ['Διακομοπούλου'],
             },
           ),
+          sharedEquipmentFate: fate,
         );
-        expect(plan.equipmentToFollow, isEmpty, reason: '$fate');
-        expect(plan.equipmentToRelease, isEmpty, reason: '$fate');
-        expect(plan.exclusions.single.reason, contains('3564'));
-        expect(plan.exclusions.single.reason, contains('Γιάννης Γ'));
-      }
+
+    test('κοινό μηχάνημα: δεν μπλοκάρεται, ρωτιέται', () {
+      final plan = sharedPlan(SharedAssetFate.staysInDepartment);
+      expect(plan.sharedEquipment.single.equipment.code, '3140');
+      expect(plan.sharedEquipment.single.otherOwnerNames, ['Διακομοπούλου']);
+      expect(plan.exclusions, isEmpty);
+    });
+
+    test('κοινό μηχάνημα «παραμένει»: φεύγει μόνο από τη μεταφερόμενη', () {
+      final plan = sharedPlan(SharedAssetFate.staysInDepartment);
+      expect(plan.equipmentToRelease[1]!.single.code, '3140');
+      expect(plan.equipmentToFollow, isEmpty);
+      expect(plan.equipmentTakenFromCoOwners, isEmpty);
+      expect(
+        bulkTransferConfirmationText(plan),
+        contains('Ο κοινός εξοπλισμός (3140) παραμένει στο τμήμα του'),
+      );
+    });
+
+    test('κοινό μηχάνημα «μεταφέρεται»: ακολουθεί, φεύγει από τους άλλους', () {
+      final plan = sharedPlan(SharedAssetFate.movesWithOwner);
+      expect(plan.equipmentToFollow[1]!.single.code, '3140');
+      expect(plan.equipmentToRelease, isEmpty);
+      expect(plan.equipmentTakenFromCoOwners, {7});
+      expect(
+        bulkTransferConfirmationText(plan),
+        contains('μεταφέρεται και φεύγει από: Διακομοπούλου'),
+      );
     });
   });
 
   group('Μεταφορά — εφαρμογή και πλήρης αναίρεση', () {
+    // Το 2534 όπως στη βάση του σπιτιού: κοινόχρηστο της Γραμματείας και
+    // προσωπικό δύο υπαλλήλων της.
+    Future<({int secretariat, int leaves, int nakastsi, int diakomopoulou})>
+    seedSharedPhone() async {
+      final secretariat = await insertDepartment('Γραμματεία ΤΕΠ');
+      final leaves = await insertDepartment('Άδειες');
+      final nakastsi = await insertUser(
+        firstName: 'Μαρία',
+        lastName: 'Νακαστσή',
+        departmentId: secretariat,
+        phones: ['2534'],
+      );
+      final diakomopoulou = await insertUser(
+        firstName: 'Ελένη',
+        lastName: 'Διακομοπούλου',
+        departmentId: secretariat,
+        phones: ['2534'],
+      );
+      await PhoneRepository(db).addDepartmentDirectPhone(secretariat, '2534');
+      return (
+        secretariat: secretariat,
+        leaves: leaves,
+        nakastsi: nakastsi,
+        diakomopoulou: diakomopoulou,
+      );
+    }
+
+    Future<BulkActionUndoRecord> transferSharedPhone(
+      ({int secretariat, int leaves, int nakastsi, int diakomopoulou}) ids,
+      SharedAssetFate fate,
+    ) async {
+      final plan = buildBulkUserTransferPlan(
+        selectedUsers: [
+          user(
+            ids.nakastsi,
+            'Μαρία',
+            'Νακαστσή',
+            deptId: ids.secretariat,
+            phones: ['2534'],
+          ),
+        ],
+        target: SharedAssetTransferTarget.existing(ids.leaves),
+        targetDisplayName: 'Άδειες',
+        targetKind: DepartmentKind.hospital,
+        phoneFate: BulkTransferAssetFate.follow,
+        equipmentFate: BulkTransferAssetFate.follow,
+        equipmentByUserId: const {},
+        sharing: BulkAssetSharingInfo(
+          phoneOtherUserNames: const {
+            '2534': ['Διακομοπούλου'],
+          },
+          phoneSharedDepartments: {
+            '2534': (id: ids.secretariat, name: 'Γραμματεία ΤΕΠ'),
+          },
+        ),
+        sharedPhoneFate: fate,
+      );
+      late BulkActionUndoRecord record;
+      await db.transaction((txn) async {
+        record = await applyBulkUserTransferInTxn(txn, db, plan);
+      });
+      return record;
+    }
+
+    Future<Set<int>> phoneDepartments() =>
+        PhoneRepository(db).sharedDepartmentIds('2534');
+
+    test('κοινό τηλέφωνο «παραμένει»: φεύγει από τη μεταφερόμενη, μένει στη '
+        'συνάδελφο και στο τμήμα, η αναίρεση το επιστρέφει', () async {
+      final ids = await seedSharedPhone();
+      final record = await transferSharedPhone(
+        ids,
+        SharedAssetFate.staysInDepartment,
+      );
+
+      expect(await userPhones(ids.nakastsi), isEmpty);
+      expect(await userPhones(ids.diakomopoulou), ['2534']);
+      expect(await phoneDepartments(), {ids.secretariat});
+
+      await applyBulkActionUndo(db, record);
+      expect(await userPhones(ids.nakastsi), ['2534']);
+      expect(await userPhones(ids.diakomopoulou), ['2534']);
+      expect(await phoneDepartments(), {ids.secretariat});
+    });
+
+    test(
+      'κοινό τηλέφωνο «μεταφέρεται»: φεύγει από τη συνάδελφο, γίνεται '
+      'κοινόχρηστο του νέου τμήματος, η αναίρεση τα επιστρέφει όλα',
+      () async {
+        final ids = await seedSharedPhone();
+        final record = await transferSharedPhone(
+          ids,
+          SharedAssetFate.movesWithOwner,
+        );
+
+        expect(await userPhones(ids.nakastsi), ['2534']);
+        expect(await userPhones(ids.diakomopoulou), isEmpty);
+        expect(await phoneDepartments(), {ids.leaves});
+
+        await applyBulkActionUndo(db, record);
+        expect(await userPhones(ids.nakastsi), ['2534']);
+        expect(await userPhones(ids.diakomopoulou), ['2534']);
+        expect(await phoneDepartments(), {ids.secretariat});
+      },
+    );
+
+    test(
+      'κοινό μηχάνημα «μεταφέρεται»: φεύγει από τη συν-κάτοχο, η αναίρεση το επιστρέφει',
+      () async {
+        final secretariat = await insertDepartment('Γραμματεία');
+        final leaves = await insertDepartment('Άδειες');
+        final nakastsi = await insertUser(
+          firstName: 'Μαρία',
+          lastName: 'Νακαστσή',
+          departmentId: secretariat,
+        );
+        final diakomopoulou = await insertUser(
+          firstName: 'Ελένη',
+          lastName: 'Διακομοπούλου',
+          departmentId: secretariat,
+        );
+        final eqId = await insertEquipment(
+          '3140',
+          departmentId: secretariat,
+          ownerIds: [nakastsi, diakomopoulou],
+        );
+
+        final plan = buildBulkUserTransferPlan(
+          selectedUsers: [
+            user(nakastsi, 'Μαρία', 'Νακαστσή', deptId: secretariat),
+          ],
+          target: SharedAssetTransferTarget.existing(leaves),
+          targetDisplayName: 'Άδειες',
+          targetKind: DepartmentKind.hospital,
+          phoneFate: BulkTransferAssetFate.follow,
+          equipmentFate: BulkTransferAssetFate.follow,
+          equipmentByUserId: {
+            nakastsi: [
+              EquipmentModel(id: eqId, code: '3140', departmentId: secretariat),
+            ],
+          },
+          sharing: BulkAssetSharingInfo(
+            equipmentOtherUserNames: {
+              eqId: ['Διακομοπούλου'],
+            },
+          ),
+          sharedEquipmentFate: SharedAssetFate.movesWithOwner,
+        );
+
+        late BulkActionUndoRecord record;
+        await db.transaction((txn) async {
+          record = await applyBulkUserTransferInTxn(txn, db, plan);
+        });
+
+        Future<List<Object?>> owners() async => (await db.query(
+          'user_equipment',
+          where: 'equipment_id = ?',
+          whereArgs: [eqId],
+        )).map((r) => r['user_id']).toList();
+        Future<Object?> department() async => (await db.query(
+          'equipment',
+          where: 'id = ?',
+          whereArgs: [eqId],
+        )).single['department_id'];
+
+        expect(await owners(), [nakastsi]);
+        expect(await department(), leaves);
+
+        await applyBulkActionUndo(db, record);
+        expect((await owners())..sort(), [nakastsi, diakomopoulou]..sort());
+        expect(await department(), secretariat);
+      },
+    );
+
     test(
       'νέο τμήμα, τηλέφωνα μένουν κοινόχρηστα, εξοπλισμός ακολουθεί',
       () async {

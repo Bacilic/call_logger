@@ -1938,6 +1938,299 @@ void main() {
       },
     );
 
+    // Οι ερωτήσεις της αποθήκευσης έρχονται με σειρά, και ΚΑΜΙΑ εγγραφή δεν
+    // γίνεται πριν απαντηθεί και η τελευταία: «Ακύρωση» στη δεύτερη ερώτηση
+    // αφήνει ανέγγιχτο και ό,τι απαντήθηκε στην πρώτη.
+    //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "είδος"
+    testWidgets(
+      'οι ερωτήσεις με σειρά: «Ακύρωση» στη δεύτερη δεν γράφει την πρώτη',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late int deptId;
+        late int userId;
+        await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          deptId = await db.insert('departments', {
+            'name': 'Αναισθησιολογικό',
+            'name_key': SearchTextNormalizer.normalizeForSearch(
+              'Αναισθησιολογικό',
+            ),
+            'color': '#33691F',
+            'is_deleted': 0,
+          });
+          // Κοινόχρηστο του τμήματος — η πρώτη ερώτηση.
+          await db.insert('equipment', {
+            'code_equipment': '25067',
+            'department_id': deptId,
+            'is_deleted': 0,
+          });
+          // Χρεωμένο σε υπάλληλο του τμήματος — η δεύτερη ερώτηση.
+          userId = await db.insert('users', {
+            'first_name': 'Μαρία',
+            'last_name': 'Ορφανού',
+            'department_id': deptId,
+            'is_deleted': 0,
+          });
+          final equipmentId = await db.insert('equipment', {
+            'code_equipment': '3731',
+            'is_deleted': 0,
+          });
+          await db.insert('user_equipment', {
+            'user_id': userId,
+            'equipment_id': equipmentId,
+          });
+          LookupService.instance.resetForReload();
+          await LookupService.instance.loadFromDatabase();
+        });
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: 'Αναισθησιολογικό',
+              color: '#33691F',
+            ),
+            notifier: notifier,
+          );
+        });
+        await pumpUntilSettledLong(tester);
+
+        final kindField = find.byType(DropdownButtonFormField<DepartmentKind>);
+        await tester.ensureVisible(kindField);
+        await pumpUntilSettled(tester);
+        await tester.tap(kindField);
+        await pumpUntilSettledLong(tester);
+        await tester.tap(find.text('Εταιρεία').last);
+        await pumpUntilSettledLong(tester);
+
+        // Πραγματικός χρόνος: κάθε βήμα αγγίζει τη βάση.
+        Future<void> waitFor(String text) => tester.runAsync(() async {
+          for (var i = 0; i < 60; i++) {
+            if (find.text(text).evaluate().isNotEmpty) return;
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton);
+
+        await waitFor('Αποδέσμευση κοινόχρηστου εξοπλισμού');
+        expect(
+          find.text('Αποδέσμευση προσωπικού εξοπλισμού'),
+          findsNothing,
+          reason: greekExpectMsg('Πρώτα ρωτιέται το κοινόχρηστο μηχάνημα'),
+        );
+        await tester.tap(find.text('Διαγραφή'));
+        await waitFor('Ναι, κατάργηση');
+        await tester.tap(find.text('Ναι, κατάργηση'));
+
+        await waitFor('Αποδέσμευση προσωπικού εξοπλισμού');
+        expect(
+          find.text('Αποδέσμευση προσωπικού εξοπλισμού'),
+          findsOneWidget,
+          reason: greekExpectMsg('Δεύτερο ρωτιέται το μηχάνημα του υπαλλήλου'),
+        );
+        // Η «Ακύρωση» του διαλόγου — η φόρμα από κάτω έχει τη δική της.
+        await tester.tap(find.widgetWithText(TextButton, 'Ακύρωση').last);
+        await tester.runAsync(() async {
+          for (var i = 0; i < 20; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        if (find.text('Ακύρωση όλων').evaluate().isNotEmpty) {
+          await tester.tap(find.text('Ακύρωση όλων'));
+          await tester.runAsync(() async {
+            for (var i = 0; i < 20; i++) {
+              await Future<void>.delayed(const Duration(milliseconds: 50));
+              await tester.pump(const Duration(milliseconds: 50));
+            }
+          });
+        }
+        await flushCallLoggerSqfliteLockTimers(tester);
+
+        expect(
+          find.text('Επεξεργασία εταιρείας'),
+          findsOneWidget,
+          reason: greekExpectMsg('Η φόρμα μένει ανοιχτή μετά την ακύρωση'),
+        );
+        final stored = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final dept = (await db.query(
+            'departments',
+            where: 'id = ?',
+            whereArgs: [deptId],
+          )).single;
+          final shared = (await db.query(
+            'equipment',
+            where: "code_equipment = '25067'",
+          )).single;
+          final owners = await db.rawQuery(
+            'SELECT ue.user_id FROM user_equipment ue '
+            'JOIN equipment e ON e.id = ue.equipment_id '
+            "WHERE e.code_equipment = '3731'",
+          );
+          return (dept: dept, shared: shared, owners: owners);
+        });
+        expect(
+          stored!.dept['kind'],
+          isNot('company'),
+          reason: greekExpectMsg('Το Είδος δεν άλλαξε'),
+        );
+        expect(
+          stored.shared['is_deleted'],
+          0,
+          reason: greekExpectMsg(
+            'Η «Διαγραφή» της πρώτης ερώτησης δεν εφαρμόστηκε — η ακύρωση '
+            'στη δεύτερη ακυρώνει όλη την αποθήκευση',
+          ),
+        );
+        expect(stored.shared['department_id'], deptId);
+        expect(stored.owners.map((r) => r['user_id']), [userId]);
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+    );
+
+    // Δύο σταθμοί: ο συνάδελφος άλλαξε την καρτέλα στο μεταξύ. «Ακύρωσε την
+    // αλλαγή μου» σημαίνει ότι ΤΙΠΟΤΑ δεν γράφεται — ούτε τα κοινόχρηστα.
+    //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "είδος"
+    testWidgets(
+      'διένεξη με συνάδελφο: «Ακύρωσε την αλλαγή μου» δεν γράφει τα κοινόχρηστα',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late int deptId;
+        await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          deptId = await db.insert('departments', {
+            'name': 'Παθολογική',
+            'name_key': SearchTextNormalizer.normalizeForSearch('Παθολογική'),
+            'color': '#33691F',
+            'is_deleted': 0,
+          });
+          LookupService.instance.resetForReload();
+          await LookupService.instance.loadFromDatabase();
+        });
+
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: 'Παθολογική',
+              color: '#33691F',
+            ),
+            notifier: notifier,
+          );
+        });
+        await pumpUntilSettledLong(tester);
+
+        await tester.ensureVisible(_sharedEquipmentInputField());
+        await tester.tap(_sharedEquipmentInputField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(_sharedEquipmentInputField(), '4100');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await pumpUntilSettledLong(tester);
+        expect(find.widgetWithText(InputChip, '4100'), findsOneWidget);
+
+        // Ο συνάδελφος, από άλλο σταθμό, αλλάζει τις σημειώσεις.
+        await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'departments',
+            {'notes': 'Αλλαγή συναδέλφου'},
+            where: 'id = ?',
+            whereArgs: [deptId],
+          );
+        });
+
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton);
+        await tester.runAsync(() async {
+          for (var i = 0; i < 60; i++) {
+            if (find.text('Ακύρωσε την αλλαγή μου').evaluate().isNotEmpty) {
+              return;
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        expect(
+          find.text('Ακύρωσε την αλλαγή μου'),
+          findsOneWidget,
+          reason: greekExpectMsg('Η διένεξη ρωτιέται'),
+        );
+        await tester.tap(find.text('Ακύρωσε την αλλαγή μου'));
+        await tester.runAsync(() async {
+          for (var i = 0; i < 20; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        await flushCallLoggerSqfliteLockTimers(tester);
+
+        final stored = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final dept = (await db.query(
+            'departments',
+            where: 'id = ?',
+            whereArgs: [deptId],
+          )).single;
+          final equipment = await db.query(
+            'equipment',
+            where: "code_equipment = '4100' AND COALESCE(is_deleted, 0) = 0",
+          );
+          return (dept: dept, equipment: equipment);
+        });
+        expect(stored!.dept['notes'], 'Αλλαγή συναδέλφου');
+        expect(
+          stored.equipment.where((r) => r['department_id'] == deptId),
+          isEmpty,
+          reason: greekExpectMsg(
+            '«Η αποθήκευση ακυρώθηκε» σημαίνει ότι ούτε τα κοινόχρηστα γράφτηκαν',
+          ),
+        );
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+    );
+
     //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "είδος"
     testWidgets('επιλογή «Εταιρεία» φτάνει στη βάση', (tester) async {
       final container = ProviderContainer(

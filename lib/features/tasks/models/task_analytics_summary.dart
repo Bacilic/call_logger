@@ -51,7 +51,7 @@ class TaskAnalyticsSummary {
     required this.sparklineClosed,
     required this.sparklineCancelled,
     required this.sparklineOverdue,
-    required this.sparklineCompletionRate,
+    required this.sparklineSnoozes,
   });
 
   final DateTime rangeStart;
@@ -75,5 +75,7 @@ class TaskAnalyticsSummary {
   final List<double> sparklineClosed;
   final List<double> sparklineCancelled;
   final List<double> sparklineOverdue;
-  final List<double> sparklineCompletionRate;
+
+  /// Αναβολές που έγιναν την κάθε μέρα.
+  final List<double> sparklineSnoozes;
 }

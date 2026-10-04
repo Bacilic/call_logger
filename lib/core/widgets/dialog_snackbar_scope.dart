@@ -54,6 +54,21 @@ mixin DialogSnackbarHost<T extends StatefulWidget> on State<T> {
     if (root != null) _replaceCurrent(root, toShow);
   }
 
+  /// Κλείνει τον διάλογο και δείχνει το μήνυμα στην **οθόνη από κάτω**.
+  ///
+  /// Για μηνύματα που πρέπει να φανούν *αφού* κλείσει ο διάλογος («Κλήση
+  /// αποθηκεύτηκε»). Ο messenger της οθόνης βρίσκεται **πριν** το κλείσιμο και
+  /// από το `context` του ίδιου του State — που κάθεται πάνω από το
+  /// [DialogSnackbarScope] του διαλόγου. Ένα `context` από μέσα στον διάλογο
+  /// (π.χ. ενός `LayoutBuilder`) βρίσκει τον τοπικό messenger, που πεθαίνει με
+  /// τον διάλογο, και το μήνυμα χάνεται χωρίς να φανεί ποτέ.
+  void closeDialogWithSnackBar<R>(SnackBar snackBar, {R? result}) {
+    if (!mounted) return;
+    final screenMessenger = ScaffoldMessenger.maybeOf(context);
+    Navigator.of(context).pop(result);
+    if (screenMessenger != null) _replaceCurrent(screenMessenger, snackBar);
+  }
+
   /// Το νέο μήνυμα παίρνει **αμέσως** τη θέση του προηγούμενου.
   ///
   /// Ο [ScaffoldMessenger] βάζει από μόνος του τα μηνύματα σε ουρά. Σε

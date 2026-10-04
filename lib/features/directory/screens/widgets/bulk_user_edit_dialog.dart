@@ -154,16 +154,27 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
     if (target == null || !mounted) return;
 
     final targetKind = _targetKind(target);
+    final equipmentByUser = _equipmentByUserId();
+    final sharing = _sharingInfo(equipmentByUser);
 
     // Τα εσωτερικά του κέντρου μας δεν ακολουθούν έξω από το νοσοκομείο: η
-    // ερώτηση τα βγάζει στην άκρη και τα αναγγέλλει, αντί να τα στείλει
-    // σιωπηλά σε τηλεφωνικό κέντρο που δεν τα χτυπά.
-    final phoneSplit = splitPhonesForDepartmentChange(
+    // ερώτηση τα βγάζει στην άκρη και τα αναγγέλλει, και το σχέδιο τα κρατά
+    // πίσω ό,τι κι αν απαντηθεί. Τα κοινά τηλέφωνα (τα κρατά και κάποιος που
+    // μένει) δεν ρωτιούνται εδώ: έχουν δική τους ερώτηση, πιο κάτω — κάθε
+    // αριθμός ρωτιέται μία φορά. Το αναγκαστικό νικά το κοινό.
+    final fullSplit = splitPhonesForDepartmentChange(
       phones: [for (final u in _users) ...u.phones],
       targetKind: targetKind,
       rules:
           ref.read(catalogValidationRulesProvider).value ??
           const CatalogValidationRules(),
+    );
+    final phoneSplit = PhoneTransferSplit(
+      forcedToStay: fullSplit.forcedToStay,
+      negotiable: [
+        for (final p in fullSplit.negotiable)
+          if (!sharing.phoneOtherUserNames.containsKey(p.trim())) p,
+      ],
     );
     final phoneFate = await askPhoneFateOnDepartmentChange(
       context,
@@ -181,8 +192,10 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
     );
     if (equipmentFate == null || !mounted) return;
 
-    final equipmentByUser = _equipmentByUserId();
-    var plan = buildBulkUserTransferPlan(
+    BulkUserTransferPlan buildPlan({
+      SharedAssetFate sharedPhoneFate = SharedAssetFate.staysInDepartment,
+      SharedAssetFate sharedEquipmentFate = SharedAssetFate.staysInDepartment,
+    }) => buildBulkUserTransferPlan(
       selectedUsers: _users,
       target: target,
       targetDisplayName: _targetDisplayName(target),
@@ -190,8 +203,14 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
       phoneFate: phoneFate,
       equipmentFate: equipmentFate,
       equipmentByUserId: equipmentByUser,
-      sharing: _sharingInfo(equipmentByUser),
+      sharing: sharing,
+      sharedPhoneFate: sharedPhoneFate,
+      sharedEquipmentFate: sharedEquipmentFate,
+      phonesThatCannotFollow: {
+        for (final p in fullSplit.forcedToStay) p.trim(),
+      },
     );
+    var plan = buildPlan();
     if (!plan.hasWork) {
       await showBulkInfoDialog(
         context,
@@ -202,6 +221,33 @@ class _BulkUserEditDialogState extends ConsumerState<BulkUserEditDialog> {
       );
       return;
     }
+
+    // Κοινά τηλέφωνα και μηχανήματα (τα κρατά και κάποιος που δεν
+    // μεταφέρεται): ΜΙΑ ερώτηση για όλα τα τηλέφωνα και ΜΙΑ για όλα τα
+    // μηχανήματα, για την τύχη του ίδιου του πράγματος — και το σχέδιο
+    // ξαναχτίζεται με τις απαντήσεις.
+    var sharedPhoneFate = SharedAssetFate.staysInDepartment;
+    if (plan.sharedPhones.isNotEmpty) {
+      final fate = await askSharedPhoneFateForMany(
+        context,
+        shared: plan.sharedPhones,
+      );
+      if (fate == null || !mounted) return;
+      sharedPhoneFate = fate;
+    }
+    var sharedEquipmentFate = SharedAssetFate.staysInDepartment;
+    if (plan.sharedEquipment.isNotEmpty && targetKind.canOwnEquipment) {
+      final fate = await askSharedEquipmentFateForMany(
+        context,
+        shared: plan.sharedEquipment,
+      );
+      if (fate == null || !mounted) return;
+      sharedEquipmentFate = fate;
+    }
+    plan = buildPlan(
+      sharedPhoneFate: sharedPhoneFate,
+      sharedEquipmentFate: sharedEquipmentFate,
+    );
 
     // Ο προορισμός δεν κρατά μηχανήματα: μία ερώτηση ανά μηχάνημα, με τις
     // ίδιες λέξεις που ήδη ξέρει ο χρήστης από τη φόρμα της εταιρείας. Καμία

@@ -706,6 +706,22 @@ void main() {
         deptId,
         reason: greekExpectMsg('Το id τμήματος συγχρονίζεται στο state'),
       );
+      expect(
+        tester
+            .widget<EditableText>(
+              find.descendant(
+                of: find.byType(SmartEntityEquipmentField),
+                matching: find.byType(EditableText),
+              ),
+            )
+            .focusNode
+            .hasFocus,
+        isTrue,
+        reason: greekExpectMsg(
+          'Μετά την επιλογή από τη λίστα ο κέρσορας είναι στον Εξοπλισμό, '
+          'και μένει εκεί όταν η φόρμα ανεβαίνει στην κορυφή',
+        ),
+      );
       reporter.logStepDone('Τμήμα επιλέχθηκε — state ενημερώθηκε');
 
       // —— Έλεγχος: λίστα εξοπλισμού ——
@@ -826,6 +842,95 @@ void main() {
         'Επιλογή τμήματος — εξοπλισμός και τηλέφωνα εμφανίζονται σωστά στη φόρμα',
       );
     }, semanticsEnabled: false);
+
+    // Σενάριο: ολόκληρο το όνομα του τμήματος + Enter, χωρίς επιλογή από τη
+    // λίστα — ίδιο αποτέλεσμα με το κλικ στη λίστα.
+    //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "Enter"
+    testWidgets(
+      'πληκτρολόγηση ονόματος τμήματος + Enter: έρχονται οι υποψήφιοι όπως με '
+      'την επιλογή από τη λίστα',
+      (tester) async {
+        _configureDesktopViewport(tester);
+        await _loadCallFormApp(tester);
+
+        final deptField = _callLoggerDepartmentTextField();
+        await tester.tap(deptField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(deptField, _kFantasmaDepartmentName);
+        await pumpUntilSettled(tester);
+        expect(
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: find.byType(SmartEntityDepartmentField),
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .focusNode
+              .hasFocus,
+          isTrue,
+          reason: greekExpectMsg(
+            'Όσο γράφετε το τμήμα, η φόρμα δεν μετακινείται και η εστίαση '
+            'μένει στο πεδίο — αλλιώς το Enter δεν φτάνει πουθενά',
+          ),
+        );
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await pumpUntilSettled(tester);
+
+        final header = await _readCallHeaderState(tester);
+        expect(header.selectedDepartmentId, deptId);
+        expect(
+          header.callerDisplayText,
+          '$_kMariaFirstName $_kMariaLastName',
+          reason: greekExpectMsg(
+            'Ο μοναδικός υπάλληλος του τμήματος συμπληρώνεται, όπως με το κλικ',
+          ),
+        );
+        expect(
+          header.equipmentCandidates,
+          isNotEmpty,
+          reason: greekExpectMsg(
+            'Οι υποψήφιοι εξοπλισμού του τμήματος έρχονται',
+          ),
+        );
+        expect(
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: find.byType(SmartEntityEquipmentField),
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .focusNode
+              .hasFocus,
+          isTrue,
+          reason: greekExpectMsg(
+            'Μετά το Enter ο κέρσορας είναι στον Εξοπλισμό, και μένει εκεί '
+            'όταν η φόρμα ανεβαίνει στην κορυφή',
+          ),
+        );
+
+        // Ο χρήστης σβήνει τον καλούντα που ήρθε αυτόματα, και ξαναπατά
+        // Enter στο Τμήμα χωρίς να το αλλάξει: ό,τι έσβησε δεν επανέρχεται.
+        await tester.enterText(_callLoggerCallerTextField(), '');
+        await pumpUntilSettled(tester);
+        await tester.showKeyboard(deptField);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await pumpUntilSettled(tester);
+        final afterSecondEnter = await _readCallHeaderState(tester);
+        expect(
+          afterSecondEnter.callerDisplayText,
+          isEmpty,
+          reason: greekExpectMsg(
+            'Enter σε τμήμα που δεν άλλαξε δεν ξαναφέρνει τον καλούντα που '
+            'σβήστηκε',
+          ),
+        );
+
+        await _finishCallFormWidgetTest(tester);
+      },
+      semanticsEnabled: false,
+    );
 
     // Σενάριο: επιλογή τμήματος → καθαρισμός τμήματος → χωρίς φιλτραρισμένες λίστες / κόκκινο Χ.
     //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "καθαρισμό τμήματος"

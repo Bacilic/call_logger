@@ -6,6 +6,7 @@
 import 'dart:convert';
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/models/remote_tool_role.dart';
 import 'package:call_logger/core/widgets/info_hint_icon.dart';
@@ -175,6 +176,20 @@ Future<void> _seedEquipmentWithRemoteParams({
     'type': 'Desktop',
     'remote_params': jsonEncode(remoteParams),
     'default_remote_tool': defaultRemoteTool,
+    'is_deleted': 0,
+  });
+  LookupService.instance.resetForReload();
+  await LookupService.instance.loadFromDatabase();
+}
+
+/// Μηχάνημα χωρίς παραμέτρους απομακρυσμένης, όπως το γράφει η ίδια η
+/// εφαρμογή (κενό, όχι «{}»). Το «{}» δεν υπάρχει σε πραγματική βάση και θα
+/// έβγαζε ψεύτικη διένεξη «παράμετροι απομακρυσμένης».
+Future<void> _seedPlainEquipment(String code) async {
+  final db = await DatabaseHelper.instance.database;
+  await db.insert('equipment', {
+    'code_equipment': code,
+    'type': 'Desktop',
     'is_deleted': 0,
   });
   LookupService.instance.resetForReload();
@@ -541,6 +556,532 @@ void main() {
             'Το πεδίο Τμήμα ακολουθεί το τμήμα του κατόχου',
           ),
         );
+      },
+    );
+
+    // Δύο σταθμοί: ο συνάδελφος άλλαξε την καρτέλα στο μεταξύ. «Ακύρωσε την
+    // αλλαγή μου» σημαίνει ότι ΤΙΠΟΤΑ δεν γράφεται — ούτε το νέο τμήμα που
+    // πληκτρολογήθηκε.
+    //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "διένεξη με συνάδελφο"
+    testWidgets(
+      'διένεξη με συνάδελφο: «Ακύρωσε την αλλαγή μου» δεν δημιουργεί το νέο τμήμα',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentModel initial;
+        await tester.runAsync(() async {
+          await _seedPlainEquipment('EQ-CONFLICT-1');
+          await container.read(lookupServiceProvider.future);
+          final notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          initial = await _loadEquipmentByCode('EQ-CONFLICT-1');
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            initialEquipment: initial,
+            notifier: notifier,
+          );
+        });
+        await pumpUntilSettledLong(tester);
+        expect(find.text(_kEditEquipmentTitle), findsOneWidget);
+
+        await tester.enterText(_fieldByLabel('Τμήμα').first, 'Ακτινολογικό');
+        await pumpUntilSettled(tester);
+
+        // Ο συνάδελφος, από άλλο σταθμό, αλλάζει τις σημειώσεις.
+        await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'equipment',
+            {'notes': 'Αλλαγή συναδέλφου'},
+            where: 'id = ?',
+            whereArgs: [initial.id],
+          );
+        });
+
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton);
+        await tester.runAsync(() async {
+          for (var i = 0; i < 60; i++) {
+            if (find.text('Ακύρωσε την αλλαγή μου').evaluate().isNotEmpty) {
+              return;
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        expect(
+          find.text('Ακύρωσε την αλλαγή μου'),
+          findsOneWidget,
+          reason: greekExpectMsg('Η διένεξη ρωτιέται'),
+        );
+        await tester.tap(find.text('Ακύρωσε την αλλαγή μου'));
+        await tester.runAsync(() async {
+          for (var i = 0; i < 20; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        await flushCallLoggerSqfliteLockTimers(tester);
+
+        final stored = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final row = (await db.query(
+            'equipment',
+            where: 'id = ?',
+            whereArgs: [initial.id],
+          )).single;
+          final newDepartment = await db.query(
+            'departments',
+            where: "name = 'Ακτινολογικό'",
+          );
+          return (row: row, newDepartment: newDepartment);
+        });
+        expect(stored!.row['notes'], 'Αλλαγή συναδέλφου');
+        expect(
+          stored.newDepartment,
+          isEmpty,
+          reason: greekExpectMsg(
+            '«Η αποθήκευση ακυρώθηκε» σημαίνει ότι ούτε το νέο τμήμα γράφτηκε',
+          ),
+        );
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+    );
+
+    // Μηχάνημα με ΔΥΟ κατόχους: η καρτέλα δείχνει έναν. Χωρίς να αλλάξει
+    // κανείς άλλος τίποτα, η αποθήκευση δεν πρέπει να ρωτά «Κάποιος πρόλαβε».
+    //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "δύο κατόχους"
+    testWidgets('μηχάνημα με δύο κατόχους: καμία ψεύτικη διένεξη', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late EquipmentModel initial;
+      await tester.runAsync(() async {
+        await _seedPlainEquipment('EQ-TWO-OWNERS');
+        final db = await DatabaseHelper.instance.database;
+        final eqId =
+            (await db.query(
+                  'equipment',
+                  where: "code_equipment = 'EQ-TWO-OWNERS'",
+                )).single['id']
+                as int;
+        final dept = (await db.query('departments', limit: 1)).single['id'];
+        for (final last in ['Νακαστσή', 'Διακομοπούλου']) {
+          final uid = await db.insert('users', {
+            'first_name': 'Μαρία',
+            'last_name': last,
+            'department_id': dept,
+            'is_deleted': 0,
+          });
+          await db.insert('user_equipment', {
+            'user_id': uid,
+            'equipment_id': eqId,
+          });
+        }
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+        await container.read(lookupServiceProvider.future);
+        final notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
+        initial = await _loadEquipmentByCode('EQ-TWO-OWNERS');
+        await _openEquipmentFormInDialog(
+          tester,
+          container,
+          initialEquipment: initial,
+          notifier: notifier,
+        );
+      });
+      await pumpUntilSettledLong(tester);
+
+      await tester.enterText(_notesField(), 'Μόνο δική μου αλλαγή');
+      await pumpUntilSettled(tester);
+      final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await tester.runAsync(() async {
+        for (var i = 0; i < 60; i++) {
+          if (find.text('Κάποιος πρόλαβε').evaluate().isNotEmpty) return;
+          if (find.text(_kEditEquipmentTitle).evaluate().isEmpty) return;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      });
+      await flushCallLoggerSqfliteLockTimers(tester);
+
+      expect(
+        find.text('Κάποιος πρόλαβε'),
+        findsNothing,
+        reason: greekExpectMsg(
+          'Κανείς άλλος δεν άλλαξε τίποτα — η ερώτηση διένεξης είναι ψεύτικη',
+        ),
+      );
+      expect(find.text(_kEditEquipmentTitle), findsNothing);
+      final stored = await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        final row = (await db.query(
+          'equipment',
+          where: "code_equipment = 'EQ-TWO-OWNERS'",
+        )).single;
+        final owners = await db.rawQuery(
+          'SELECT u.last_name FROM user_equipment ue '
+          'JOIN users u ON u.id = ue.user_id WHERE ue.equipment_id = ? '
+          'ORDER BY u.last_name',
+          [row['id']],
+        );
+        return (row: row, owners: owners);
+      });
+      expect(stored!.row['notes'], 'Μόνο δική μου αλλαγή');
+      expect(
+        stored.owners.map((r) => r['last_name']),
+        ['Διακομοπούλου', 'Νακαστσή'],
+        reason: greekExpectMsg(
+          'Η καρτέλα δείχνει έναν κάτοχο — ο δεύτερος δεν χάνεται',
+        ),
+      );
+    });
+
+    // Κοινό μηχάνημα: ο κάτοχος που φαίνεται αλλάζει σε υπάλληλο ΑΛΛΟΥ
+    // τμήματος — ρωτιέται η τύχη του μηχανήματος (απόφαση Διευθυντή 03/10).
+    //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "κάτοχος σε άλλο τμήμα"
+    Future<({int eq, int newOwner, List<int> oldOwners})> changeOwnerAcross(
+      WidgetTester tester, {
+      required String tag,
+      required String answer,
+    }) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late ({int eq, int newOwner, List<int> oldOwners}) ids;
+      late String newOwnerName;
+      await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        Future<int> department(String name) => db.insert('departments', {
+          'name': name,
+          'name_key': SearchTextNormalizer.normalizeForSearch(name),
+          'is_deleted': 0,
+        });
+        final secretariat = await department('Γραμματεία $tag');
+        final leaves = await department('Άδειες $tag');
+        Future<int> person(String last, int dept) => db.insert('users', {
+          'first_name': 'Μαρία',
+          'last_name': '$last $tag',
+          'department_id': dept,
+          'is_deleted': 0,
+        });
+        final nakastsi = await person('Νακαστσή', secretariat);
+        final diakomopoulou = await person('Διακομοπούλου', secretariat);
+        final newOwner = await person('Κακαβελάκη', leaves);
+        await _seedPlainEquipment('3140-$tag');
+        final eq =
+            (await db.query(
+                  'equipment',
+                  where: 'code_equipment = ?',
+                  whereArgs: ['3140-$tag'],
+                )).single['id']
+                as int;
+        for (final owner in [nakastsi, diakomopoulou]) {
+          await db.insert('user_equipment', {
+            'user_id': owner,
+            'equipment_id': eq,
+          });
+        }
+        ids = (
+          eq: eq,
+          newOwner: newOwner,
+          oldOwners: [nakastsi, diakomopoulou],
+        );
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+        await container.read(lookupServiceProvider.future);
+        newOwnerName = LookupService.instance.findUserById(newOwner)!.name!;
+        final notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
+        await _openEquipmentFormInDialog(
+          tester,
+          container,
+          initialEquipment: await _loadEquipmentByCode('3140-$tag'),
+          notifier: notifier,
+        );
+      });
+      await pumpUntilSettledLong(tester);
+
+      await tester.enterText(_fieldByLabel('Κάτοχος').first, newOwnerName);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await pumpUntilSettledLong(tester);
+      final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await tester.runAsync(() async {
+        for (var i = 0; i < 60; i++) {
+          if (find.text('Κοινός εξοπλισμός').evaluate().isNotEmpty) return;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      });
+      expect(
+        find.textContaining('μοιράζεται με:'),
+        findsOneWidget,
+        reason: greekExpectMsg('Η τύχη του κοινού μηχανήματος ρωτιέται'),
+      );
+      await tester.tap(find.text(answer).last);
+      await tester.runAsync(() async {
+        for (var i = 0; i < 40; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      });
+      await flushCallLoggerSqfliteLockTimers(tester);
+      return ids;
+    }
+
+    Future<List<Object?>> ownersOf(WidgetTester tester, int eq) async =>
+        (await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          return (await db.query(
+            'user_equipment',
+            where: 'equipment_id = ?',
+            whereArgs: [eq],
+            orderBy: 'user_id',
+          )).map((r) => r['user_id']).toList();
+        }))!;
+
+    testWidgets('κάτοχος σε άλλο τμήμα: «Μεταφορά» κρατά μόνο τον νέο', (
+      tester,
+    ) async {
+      final ids = await changeOwnerAcross(
+        tester,
+        tag: 'X1',
+        answer: 'Μεταφορά',
+      );
+      expect(await ownersOf(tester, ids.eq), [ids.newOwner]);
+      expect(find.text(_kEditEquipmentTitle), findsNothing);
+    });
+
+    testWidgets('κάτοχος σε άλλο τμήμα: «Ακύρωση» δεν γράφει τίποτα', (
+      tester,
+    ) async {
+      final ids = await changeOwnerAcross(tester, tag: 'X2', answer: 'Ακύρωση');
+      expect(await ownersOf(tester, ids.eq), ids.oldOwners);
+      expect(
+        find.text(_kEditEquipmentTitle),
+        findsOneWidget,
+        reason: greekExpectMsg('Πίσω στη φόρμα'),
+      );
+    });
+
+    // Η απόρριψη διπλότυπου γίνεται πριν από κάθε εγγραφή: το νέο τμήμα που
+    // γράφτηκε στη φόρμα δεν δημιουργείται για αποθήκευση που απορρίπτεται.
+    //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "διπλότυπος κωδικός"
+    testWidgets('διπλότυπος κωδικός: η απόρριψη δεν αφήνει πίσω νέο τμήμα', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late EquipmentModel initial;
+      await tester.runAsync(() async {
+        await _seedPlainEquipment('EQ-DUP-A');
+        await _seedPlainEquipment('EQ-DUP-B');
+        await container.read(lookupServiceProvider.future);
+        final notifier = container.read(equipmentDirectoryProvider.notifier);
+        await notifier.load();
+        initial = await _loadEquipmentByCode('EQ-DUP-A');
+        await _openEquipmentFormInDialog(
+          tester,
+          container,
+          initialEquipment: initial,
+          notifier: notifier,
+        );
+      });
+      await pumpUntilSettledLong(tester);
+
+      await tester.enterText(_codeField(), 'EQ-DUP-B');
+      await tester.enterText(_fieldByLabel('Τμήμα').first, 'Ακτινολογικό');
+      await pumpUntilSettled(tester);
+
+      final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await tester.runAsync(() async {
+        for (var i = 0; i < 40; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      });
+      await flushCallLoggerSqfliteLockTimers(tester);
+
+      expect(
+        find.text(
+          'Υπάρχει ήδη εξοπλισμός με αυτόν τον κωδικό. Διορθώστε τα δεδομένα.',
+        ),
+        findsOneWidget,
+      );
+      final newDepartment = await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        return db.query('departments', where: "name = 'Ακτινολογικό'");
+      });
+      expect(
+        newDepartment,
+        isEmpty,
+        reason: greekExpectMsg(
+          'Αποθήκευση που απορρίπτεται δεν αφήνει πίσω νέο τμήμα',
+        ),
+      );
+
+      await flushCallLoggerSqfliteLockTimers(tester);
+    });
+
+    // «Κράτα τη δική μου αλλαγή»: η ερώτηση γίνεται μία φορά, και η
+    // αποθήκευση ολοκληρώνεται χωρίς δεύτερη.
+    //   flutter test test/features/directory/screens/widgets/equipment_form_dialog_test.dart --plain-name "διένεξη με συνάδελφο"
+    testWidgets(
+      'διένεξη με συνάδελφο: «Κράτα τη δική μου αλλαγή» αποθηκεύει με μία ερώτηση',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late EquipmentModel initial;
+        await tester.runAsync(() async {
+          await _seedPlainEquipment('EQ-CONFLICT-2');
+          await container.read(lookupServiceProvider.future);
+          final notifier = container.read(equipmentDirectoryProvider.notifier);
+          await notifier.load();
+          initial = await _loadEquipmentByCode('EQ-CONFLICT-2');
+          await _openEquipmentFormInDialog(
+            tester,
+            container,
+            initialEquipment: initial,
+            notifier: notifier,
+          );
+        });
+        await pumpUntilSettledLong(tester);
+        expect(find.text(_kEditEquipmentTitle), findsOneWidget);
+
+        await tester.enterText(_fieldByLabel('Τμήμα').first, 'Ακτινολογικό');
+        await pumpUntilSettled(tester);
+
+        // Ο συνάδελφος, από άλλο σταθμό, αλλάζει τις σημειώσεις.
+        await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'equipment',
+            {'notes': 'Αλλαγή συναδέλφου'},
+            where: 'id = ?',
+            whereArgs: [initial.id],
+          );
+        });
+
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton);
+        await tester.runAsync(() async {
+          for (var i = 0; i < 60; i++) {
+            if (find.text('Ακύρωσε την αλλαγή μου').evaluate().isNotEmpty) {
+              return;
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        expect(
+          find.text('Ακύρωσε την αλλαγή μου'),
+          findsOneWidget,
+          reason: greekExpectMsg('Η διένεξη ρωτιέται'),
+        );
+        await tester.tap(find.text('Κράτα τη δική μου αλλαγή'));
+        await tester.runAsync(() async {
+          for (var i = 0; i < 60; i++) {
+            if (find.text(_kEditEquipmentTitle).evaluate().isEmpty) return;
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        expect(
+          find.text('Κράτα τη δική μου αλλαγή'),
+          findsNothing,
+          reason: greekExpectMsg('Η διένεξη δεν ρωτιέται δεύτερη φορά'),
+        );
+        expect(
+          find.text(_kEditEquipmentTitle),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Η αποθήκευση ολοκληρώθηκε και η φόρμα έκλεισε',
+          ),
+        );
+        await flushCallLoggerSqfliteLockTimers(tester);
+
+        final stored = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final row = (await db.query(
+            'equipment',
+            where: 'id = ?',
+            whereArgs: [initial.id],
+          )).single;
+          final newDepartment = await db.query(
+            'departments',
+            where: "name = 'Ακτινολογικό'",
+          );
+          return (row: row, newDepartment: newDepartment);
+        });
+        expect(
+          stored!.row['notes'] ?? '',
+          isNot('Αλλαγή συναδέλφου'),
+          reason: greekExpectMsg('Η δική μου εικόνα γράφτηκε από πάνω'),
+        );
+        expect(stored.newDepartment, hasLength(1));
+        expect(stored.row['department_id'], stored.newDepartment.single['id']);
+
+        await flushCallLoggerSqfliteLockTimers(tester);
       },
     );
 

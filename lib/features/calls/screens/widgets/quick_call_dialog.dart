@@ -87,14 +87,13 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
     );
   }
 
-  Future<void> _submit(BuildContext context) async {
+  Future<void> _submit() async {
     final notifier = ref.read(callEntryProvider.notifier);
     try {
       final ok = await notifier.submitCall();
-      if (!context.mounted) return;
+      if (!mounted) return;
       if (ok) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        closeDialogWithSnackBar(
           const SnackBar(
             content: Text('Κλήση αποθηκεύτηκε (γρήγορη καταγραφή)'),
           ),
@@ -105,10 +104,10 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
         );
       }
     } on CallSaveException catch (e) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       showDialogSnackBar(SnackBar(content: Text(e.message)));
     } on TaskSaveException catch (e) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       showDialogSnackBar(SnackBar(content: Text(e.message)));
     }
   }
@@ -201,7 +200,7 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
                               final submitButton = _SubmitButton(
                                 header: header,
                                 isSubmitting: isSubmitting,
-                                onSubmit: () => _submit(context),
+                                onSubmit: _submit,
                               );
                               if (rowConstraints.maxWidth < 520) {
                                 return Column(

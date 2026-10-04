@@ -1,3 +1,4 @@
+import '../../../../core/utils/count_phrase.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -74,13 +75,16 @@ Future<DuplicateTicketAction> showLansweeperDuplicateTicketDialog(
   required String ticketId,
   String? ticketViewUrlTemplate,
 }) async {
-  final callsLabel = count == 1 ? 'άλλη κλήση' : 'άλλες κλήσεις';
   return await showDialog<DuplicateTicketAction>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Ίδιο Ticket ID'),
           content: LansweeperTicketRichText(
-            leadingText: 'Υπάρχουν $count $callsLabel καταχωρημένες με ticket ',
+            leadingText: byCount(
+              count,
+              one: 'Υπάρχει 1 άλλη κλήση καταχωρημένη με ticket ',
+              many: 'Υπάρχουν $count άλλες κλήσεις καταχωρημένες με ticket ',
+            ),
             ticketId: ticketId,
             ticketViewUrlTemplate: ticketViewUrlTemplate,
             trailingText:

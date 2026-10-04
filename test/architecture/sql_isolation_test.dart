@@ -20,8 +20,6 @@ const _structuredApiDebtPaths = <String>{
   // 7 αναγνώσεις προεπισκόπησης οντοτήτων audit — υποψήφιο για μετακόμιση
   // ολόκληρο ως repository (κάνει ΜΟΝΟ queries).
   'lib/features/audit/services/audit_entity_preview_resolver.dart',
-  // Ανάγνωση μεταδεδομένων επαναφοράς από app_settings.
-  'lib/core/services/backup_reset_metadata.dart',
   // Ανάγνωση/ενημέρωση διαδρομών εικόνων χάρτη (building_map_floors).
   'lib/core/services/building_map_storage.dart',
   // Αναγνώσεις λεξικών + batch εισαγωγές συσσωρευτή.

@@ -105,4 +105,35 @@ void main() {
       ),
     );
   });
+
+  test('κάθε πεδίο που συγκρίνει το μήνυμα αποθήκευσης το δίνει η καρτέλα', () {
+    // Το μήνυμα «Αποθηκεύτηκε — κλήση …» συγκρίνει πρωτότυπο και νέο ολόκληρα.
+    // Ο δημιουργός της κλήσης δεν γράφεται ποτέ σε ενημέρωση, άρα ο φρουρός
+    // της βάσης δεν τον βλέπει — όμως όσο έλειπε από την καρτέλα, κάθε
+    // αποθήκευση ανέφερε ψευδώς «created_by_operator_id: 1 → —».
+    final source = File(
+      'lib/features/calls/models/call_model.dart',
+    ).readAsStringSync();
+    final start = source.indexOf('Map<String, dynamic> toMap()');
+    expect(start, greaterThan(-1), reason: 'Το toMap μετακόμισε.');
+    final body = source.substring(start, source.indexOf('\n  }', start));
+    final properties = {
+      for (final m in RegExp(r"'\w+':\s*(\w+)").allMatches(body)) m.group(1)!,
+    }..remove('id');
+
+    final block = _editDialogUpdateBlock();
+    final missing = [
+      for (final property in properties)
+        if (!RegExp('\\b$property:').hasMatch(block)) property,
+    ]..sort();
+
+    expect(
+      missing,
+      isEmpty,
+      reason: greekExpectMsg(
+        'Πεδία που λείπουν από την καρτέλα — το μήνυμα αποθήκευσης θα τα '
+        'αναφέρει ως αλλαγμένα: ${missing.join(', ')}',
+      ),
+    );
+  });
 }

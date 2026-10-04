@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../calls/models/equipment_model.dart';
 import '../../models/department_kind.dart';
 import '../../services/bulk_user_actions.dart';
 import '../../services/phone_transfer_split.dart';
@@ -252,4 +253,307 @@ Future<BulkTransferAssetFate?> askEquipmentFateOnDepartmentChange(
       ),
     ],
   );
+}
+
+/// «Κοινός εξοπλισμός» — ένας από τους κατόχους του αλλάζει τμήμα.
+///
+/// Η ερώτηση αφορά την τύχη του **μηχανήματος**, όχι του υπαλλήλου (απόφαση
+/// Διευθυντή 03/10): συνήθως το κοινό μηχάνημα μένει στο τμήμα του, γι' αυτό
+/// η παραμονή έρχεται πρώτη. `null` = «Ακύρωση».
+///
+/// Τα ονόματα μπαίνουν σε εισαγωγικά ή μετά από άνω-κάτω τελεία: η εφαρμογή
+/// δεν ξέρει το φύλο των υπαλλήλων, οπότε δεν γράφει «η Νακαστσή».
+Future<SharedAssetFate?> askSharedEquipmentFate(
+  BuildContext context, {
+  required SharedEquipment shared,
+  required String userDisplayName,
+  required String? sourceDepartmentName,
+  required String targetDepartmentName,
+}) {
+  final code = (shared.equipment.code ?? '').trim();
+  final others = shared.otherOwnerNames.join(', ');
+  final source = sourceDepartmentName?.trim() ?? '';
+  return showBulkOptionDialog<SharedAssetFate>(
+    context,
+    title: 'Κοινός εξοπλισμός',
+    message: [
+      'Ο υπάλληλος «$userDisplayName» μεταφέρεται στο τμήμα '
+          '«$targetDepartmentName».',
+      'Ο εξοπλισμός $code μοιράζεται με: $others.',
+      'Τι γίνεται ο εξοπλισμός $code;',
+    ].join('\n\n'),
+    options: [
+      (
+        source.isEmpty
+            ? 'Παραμένει στο τμήμα του'
+            : 'Παραμένει στο τμήμα «$source»',
+        'Φεύγει από: $userDisplayName· το κρατούν: $others.',
+        SharedAssetFate.staysInDepartment,
+      ),
+      (
+        'Μεταφέρεται στο τμήμα «$targetDepartmentName»',
+        'Ακολουθεί: $userDisplayName· φεύγει από: $others.',
+        SharedAssetFate.movesWithOwner,
+      ),
+    ],
+  );
+}
+
+/// Η ίδια ερώτηση στη μαζική μεταφορά: **μία** για όλα τα κοινά μηχανήματα
+/// (απόφαση Διευθυντή 03/10). `null` = «Ακύρωση».
+Future<SharedAssetFate?> askSharedEquipmentFateForMany(
+  BuildContext context, {
+  required List<SharedEquipment> shared,
+}) {
+  final codes = sharedEquipmentCodesText(shared);
+  return showBulkOptionDialog<SharedAssetFate>(
+    context,
+    title: 'Κοινός εξοπλισμός',
+    message:
+        'Ο κοινός εξοπλισμός ($codes) παραμένει στο τμήμα του ή '
+        'μεταφέρεται;',
+    options: const [
+      (
+        'Παραμένει στο τμήμα του',
+        'Φεύγει μόνο από τους μεταφερόμενους· τον κρατούν οι υπόλοιποι '
+            'κάτοχοι.',
+        SharedAssetFate.staysInDepartment,
+      ),
+      (
+        'Μεταφέρεται',
+        'Ακολουθεί τους μεταφερόμενους· φεύγει από τους υπόλοιπους '
+            'κατόχους.',
+        SharedAssetFate.movesWithOwner,
+      ),
+    ],
+  );
+}
+
+/// Τι γίνεται ο εξοπλισμός ενός υπαλλήλου που αλλάζει τμήμα.
+///
+/// [staying]: φεύγουν από τον υπάλληλο και μένουν στο παλιό τμήμα.
+/// [takenFromCoOwners]: κοινά μηχανήματα που τον ακολουθούν — φεύγουν από
+/// τους υπόλοιπους κατόχους. Ό,τι δεν είναι σε καμία λίστα ακολουθεί.
+typedef EquipmentDepartmentChangeAnswer = ({
+  List<EquipmentModel> staying,
+  List<EquipmentModel> takenFromCoOwners,
+});
+
+/// Όλες οι ερωτήσεις εξοπλισμού ενός υπαλλήλου που αλλάζει τμήμα, με σειρά:
+/// πρώτα η γενική («ακολουθεί ή μένει;») για τα **δικά του** μηχανήματα,
+/// μετά μία ερώτηση για κάθε **κοινό** μηχάνημα. `null` = «Ακύρωση» σε
+/// κάποια από αυτές.
+///
+/// Την καλούν η καρτέλα υπαλλήλου και το «+» της φόρμας κλήσης — ίδιες
+/// ερωτήσεις, ίδια σειρά.
+Future<EquipmentDepartmentChangeAnswer?> askEquipmentOnDepartmentChange(
+  BuildContext context, {
+  required EquipmentStayBehindPlan plan,
+  required DepartmentKind targetKind,
+  required String userDisplayName,
+  required String? sourceDepartmentName,
+  required String targetDepartmentName,
+}) async {
+  final staying = <EquipmentModel>[];
+  final taken = <EquipmentModel>[];
+
+  final hasOwnEquipment =
+      plan.staying.isNotEmpty || plan.blockedReasons.isNotEmpty;
+  if (hasOwnEquipment) {
+    if (!context.mounted) return null;
+    final fate = await askEquipmentFateOnDepartmentChange(
+      context,
+      targetKind: targetKind,
+      userDisplayName: userDisplayName,
+      stayBlockedReasons: plan.blockedReasons,
+    );
+    if (fate == null) return null;
+    if (fate == BulkTransferAssetFate.stayInOldDepartment) {
+      staying.addAll(plan.staying);
+    }
+  }
+
+  for (final shared in plan.shared) {
+    // Προορισμός που δεν κρατά εξοπλισμό: το μηχάνημα δεν μπορεί να πάει
+    // εκεί — μένει στο τμήμα του, χωρίς ερώτηση.
+    if (!targetKind.canOwnEquipment) {
+      staying.add(shared.equipment);
+      continue;
+    }
+    if (!context.mounted) return null;
+    final fate = await askSharedEquipmentFate(
+      context,
+      shared: shared,
+      userDisplayName: userDisplayName,
+      sourceDepartmentName: sourceDepartmentName,
+      targetDepartmentName: targetDepartmentName,
+    );
+    if (fate == null) return null;
+    if (fate == SharedAssetFate.staysInDepartment) {
+      staying.add(shared.equipment);
+    } else {
+      taken.add(shared.equipment);
+    }
+  }
+  return (staying: staying, takenFromCoOwners: taken);
+}
+
+/// «Κοινό τηλέφωνο» — ένας από τους κατόχους του αλλάζει τμήμα.
+///
+/// Δίδυμο του [askSharedEquipmentFate] (απόφαση Διευθυντή 04/10): η ερώτηση
+/// αφορά την τύχη του **αριθμού**, γιατί ένας αριθμός ανήκει σε ένα τμήμα.
+/// `null` = «Ακύρωση».
+Future<SharedAssetFate?> askSharedPhoneFate(
+  BuildContext context, {
+  required SharedPhone shared,
+  required String userDisplayName,
+  required String? sourceDepartmentName,
+  required String targetDepartmentName,
+}) {
+  final phone = shared.phone;
+  final others = shared.otherOwnerNames.join(', ');
+  final source = sourceDepartmentName?.trim() ?? '';
+  return showBulkOptionDialog<SharedAssetFate>(
+    context,
+    title: 'Κοινό τηλέφωνο',
+    message: [
+      'Ο υπάλληλος «$userDisplayName» μεταφέρεται στο τμήμα '
+          '«$targetDepartmentName».',
+      'Το τηλέφωνο $phone μοιράζεται με: $others.',
+      'Τι γίνεται το τηλέφωνο $phone;',
+    ].join('\n\n'),
+    options: [
+      (
+        source.isEmpty
+            ? 'Παραμένει στο τμήμα του'
+            : 'Παραμένει στο τμήμα «$source»',
+        'Φεύγει από: $userDisplayName· το κρατούν: $others.',
+        SharedAssetFate.staysInDepartment,
+      ),
+      (
+        'Μεταφέρεται στο τμήμα «$targetDepartmentName»',
+        'Ακολουθεί: $userDisplayName· φεύγει από: $others.',
+        SharedAssetFate.movesWithOwner,
+      ),
+    ],
+  );
+}
+
+/// Η ίδια ερώτηση στη μαζική μεταφορά: **μία** για όλα τα κοινά τηλέφωνα
+/// (απόφαση Διευθυντή 04/10). `null` = «Ακύρωση».
+Future<SharedAssetFate?> askSharedPhoneFateForMany(
+  BuildContext context, {
+  required List<SharedPhone> shared,
+}) {
+  final numbers = sharedPhoneNumbersText(shared);
+  final one = shared.length == 1;
+  return showBulkOptionDialog<SharedAssetFate>(
+    context,
+    title: 'Κοινό τηλέφωνο',
+    message: one
+        ? 'Το κοινό τηλέφωνο ($numbers) παραμένει στο τμήμα του ή '
+              'μεταφέρεται;'
+        : 'Τα κοινά τηλέφωνα ($numbers) παραμένουν στο τμήμα τους ή '
+              'μεταφέρονται;',
+    options: [
+      (
+        one ? 'Παραμένει στο τμήμα του' : 'Παραμένουν στο τμήμα τους',
+        one
+            ? 'Φεύγει μόνο από τους μεταφερόμενους· το κρατούν οι υπόλοιποι '
+                  'κάτοχοι.'
+            : 'Φεύγουν μόνο από τους μεταφερόμενους· τα κρατούν οι υπόλοιποι '
+                  'κάτοχοι.',
+        SharedAssetFate.staysInDepartment,
+      ),
+      (
+        one ? 'Μεταφέρεται' : 'Μεταφέρονται',
+        one
+            ? 'Ακολουθεί τους μεταφερόμενους· φεύγει από τους υπόλοιπους '
+                  'κατόχους.'
+            : 'Ακολουθούν τους μεταφερόμενους· φεύγουν από τους υπόλοιπους '
+                  'κατόχους.',
+        SharedAssetFate.movesWithOwner,
+      ),
+    ],
+  );
+}
+
+/// Τι γίνονται τα τηλέφωνα ενός υπαλλήλου που αλλάζει τμήμα.
+///
+/// [staying]: φεύγουν από τον υπάλληλο και γίνονται κοινόχρηστα του παλιού
+/// τμήματος. [leftWithCoOwners]: κοινά τηλέφωνα που φεύγουν από τον υπάλληλο
+/// και μένουν στους συναδέλφους. [takenFromCoOwners]: κοινά τηλέφωνα που τον
+/// ακολουθούν — φεύγουν από τους συναδέλφους. Ό,τι δεν είναι σε καμία λίστα
+/// ακολουθεί.
+typedef PhoneDepartmentChangeAnswer = ({
+  Set<String> staying,
+  Set<String> leftWithCoOwners,
+  Set<String> takenFromCoOwners,
+});
+
+/// Όλες οι ερωτήσεις τηλεφώνων ενός υπαλλήλου που αλλάζει τμήμα, με σειρά:
+/// πρώτα η γενική («μένουν ή ακολουθούν;») για τα **δικά του** τηλέφωνα, μετά
+/// μία ερώτηση για κάθε **κοινό** τηλέφωνο. Κάθε αριθμός ρωτιέται μία φορά.
+/// `null` = «Ακύρωση» σε κάποια από αυτές.
+///
+/// Την καλούν η καρτέλα υπαλλήλου και το «+» της φόρμας κλήσης — ίδιες
+/// ερωτήσεις, ίδια σειρά, όπως και ο δίδυμος [askEquipmentOnDepartmentChange].
+Future<PhoneDepartmentChangeAnswer?> askPhonesOnDepartmentChange(
+  BuildContext context, {
+
+  /// Ποια τηλέφωνα μπορούν να ακολουθήσουν και ποια μένουν αναγκαστικά.
+  required PhoneTransferSplit split,
+
+  /// Ο κανόνας για τα διαπραγματεύσιμα του [split] — ξεχωρίζει τα κοινά.
+  required PhoneStayBehindPlan plan,
+  required DepartmentKind targetKind,
+  required String userDisplayName,
+  required String? sourceDepartmentName,
+  required String targetDepartmentName,
+}) async {
+  final sharedNumbers = {for (final s in plan.shared) s.phone.trim()};
+  final ownSplit = PhoneTransferSplit(
+    forcedToStay: split.forcedToStay,
+    negotiable: [
+      for (final p in split.negotiable)
+        if (!sharedNumbers.contains(p.trim())) p,
+    ],
+  );
+  final staying = {for (final p in split.forcedToStay) p.trim()};
+  final left = <String>{};
+  final taken = <String>{};
+
+  if (ownSplit.asksAnything || ownSplit.hasForced) {
+    if (!context.mounted) return null;
+    final fate = await askPhoneFateOnDepartmentChange(
+      context,
+      split: ownSplit,
+      targetKind: targetKind,
+      userDisplayName: userDisplayName,
+      sourceDepartmentName: sourceDepartmentName,
+      stayBlockedReasons: plan.blockedReasons,
+    );
+    if (fate == null) return null;
+    if (fate == BulkTransferAssetFate.stayInOldDepartment) {
+      staying.addAll(plan.staying);
+    }
+  }
+
+  for (final shared in plan.shared) {
+    if (!context.mounted) return null;
+    final fate = await askSharedPhoneFate(
+      context,
+      shared: shared,
+      userDisplayName: userDisplayName,
+      sourceDepartmentName: sourceDepartmentName,
+      targetDepartmentName: targetDepartmentName,
+    );
+    if (fate == null) return null;
+    if (fate == SharedAssetFate.staysInDepartment) {
+      left.add(shared.phone.trim());
+    } else {
+      taken.add(shared.phone.trim());
+    }
+  }
+  return (staying: staying, leftWithCoOwners: left, takenFromCoOwners: taken);
 }

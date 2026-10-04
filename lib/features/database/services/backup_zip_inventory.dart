@@ -1,3 +1,4 @@
+import '../../../core/utils/count_phrase.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -138,11 +139,19 @@ class BackupZipInventory {
       return 'Δεν βρέθηκε κανένα αρχείο βάσης (.db) μέσα στο αντίγραφο.';
     }
     if (eligible == 0) {
-      return 'Βρέθηκαν $total αρχεία βάσης, κανένα δεν είναι βάση της εφαρμογής.';
+      return byCount(
+        total,
+        one: 'Βρέθηκε 1 αρχείο βάσης, δεν είναι βάση της εφαρμογής.',
+        many:
+            'Βρέθηκαν $total αρχεία βάσης, κανένα δεν είναι βάση της εφαρμογής.',
+      );
     }
     if (eligible == total) {
-      return 'Βρέθηκαν $total αρχεία βάσης'
-          '${eligible == 1 ? '' : ', όλα βάσεις της εφαρμογής'}.';
+      return byCount(
+        total,
+        one: 'Βρέθηκε 1 αρχείο βάσης.',
+        many: 'Βρέθηκαν $total αρχεία βάσης, όλα βάσεις της εφαρμογής.',
+      );
     }
     return 'Βρέθηκαν $total αρχεία βάσης, $eligible '
         '${eligible == 1 ? 'είναι βάση' : 'είναι βάσεις'} της εφαρμογής.';

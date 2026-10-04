@@ -7,8 +7,10 @@
 //
 //   flutter test test/core/database/tasks_analytics_completion_moment_test.dart
 
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/tasks_repository.dart';
 import 'package:flutter/material.dart' show DateTimeRange;
@@ -200,5 +202,212 @@ void main() {
         );
       },
     );
+  });
+
+  group('καμπύλη καθυστερημένων ανά ημέρα', () {
+    Future<void> insertTask({
+      required String status,
+      required DateTime createdAt,
+      DateTime? dueDate,
+      bool deleted = false,
+    }) async {
+      await db.insert('tasks', {
+        'title': 'Εκκρεμότητα $status',
+        'status': status,
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': createdAt.toIso8601String(),
+        'due_date': dueDate?.toIso8601String(),
+        'is_deleted': deleted ? 1 : 0,
+      });
+    }
+
+    // Κάθε μέρα μετρά όσες είναι ΣΗΜΕΡΑ ανοιχτές ή σε αναβολή, είχαν ήδη
+    // δημιουργηθεί και η προθεσμία τους είχε περάσει ως το τέλος της μέρας.
+    test('ΦΩΤΟΓΡΑΦΙΑ — οι μετρήσεις της εβδομάδας', () async {
+      // Καθυστερημένη πριν ξεκινήσει η εβδομάδα: μετρά όλες τις μέρες.
+      await insertTask(
+        status: 'open',
+        createdAt: DateTime(2026, 2, 20, 9),
+        dueDate: DateTime(2026, 2, 25, 12),
+      );
+      // Σε αναβολή, η προθεσμία περνά στις 3/3.
+      await insertTask(
+        status: 'snoozed',
+        createdAt: DateTime(2026, 3, 1, 8),
+        dueDate: DateTime(2026, 3, 3, 10),
+      );
+      // Η προθεσμία είναι πριν τη δημιουργία: μετρά από τη μέρα δημιουργίας.
+      await insertTask(
+        status: 'open',
+        createdAt: DateTime(2026, 3, 5, 9),
+        dueDate: DateTime(2026, 3, 4, 9),
+      );
+      // Προθεσμία ακριβώς στα μεσάνυχτα της 6/3: δεν μετρά στις 5/3.
+      await insertTask(
+        status: 'open',
+        createdAt: DateTime(2026, 3, 1),
+        dueDate: DateTime(2026, 3, 6),
+      );
+      // Δεν μετρούν ποτέ: κλειστή, διαγραμμένη, χωρίς προθεσμία, μελλοντική.
+      await insertTask(
+        status: 'closed',
+        createdAt: DateTime(2026, 2, 20),
+        dueDate: DateTime(2026, 2, 25),
+      );
+      await insertTask(
+        status: 'open',
+        createdAt: DateTime(2026, 2, 20),
+        dueDate: DateTime(2026, 2, 25),
+        deleted: true,
+      );
+      await insertTask(status: 'open', createdAt: DateTime(2026, 2, 20));
+      await insertTask(
+        status: 'open',
+        createdAt: DateTime(2026, 3, 1),
+        dueDate: DateTime(2026, 3, 10),
+      );
+
+      final summary = await repo.getTaskAnalytics(
+        DateTimeRange(start: DateTime(2026, 3, 1), end: DateTime(2026, 3, 7)),
+      );
+
+      expect(summary.sparklineOverdue, [1, 1, 2, 2, 3, 4, 4]);
+    });
+
+    // Προθεσμία 2/3, ολοκλήρωση 5/3 το μεσημέρι: καθυστερημένη 2/3–4/3 και
+    // μέρος της 5/3· στο τέλος της 5/3 έχει πια κλείσει.
+    test('όποια έκλεισε αργότερα μετρά τις μέρες που ήταν ανοιχτή', () async {
+      await db.insert('tasks', {
+        'title': 'Έκλεισε με καθυστέρηση',
+        'status': 'closed',
+        'created_at': DateTime(2026, 2, 27).toIso8601String(),
+        'due_date': DateTime(2026, 3, 2, 10).toIso8601String(),
+        'completed_at': DateTime(2026, 3, 5, 12).toIso8601String(),
+        'updated_at': DateTime(2026, 3, 5, 12).toIso8601String(),
+        'is_deleted': 0,
+      });
+
+      final summary = await repo.getTaskAnalytics(
+        DateTimeRange(start: DateTime(2026, 3, 1), end: DateTime(2026, 3, 7)),
+      );
+
+      expect(summary.sparklineOverdue, [0, 1, 1, 1, 0, 0, 0]);
+    });
+
+    test('όποια διαγράφηκε αργότερα μετρά ως τη διαγραφή', () async {
+      final id = await db.insert('tasks', {
+        'title': 'Ακυρώθηκε με καθυστέρηση',
+        'status': 'open',
+        'created_at': DateTime(2026, 2, 27).toIso8601String(),
+        'updated_at': DateTime(2026, 2, 27).toIso8601String(),
+        'due_date': DateTime(2026, 3, 2, 10).toIso8601String(),
+        'is_deleted': 1,
+      });
+      await db.insert('audit_log', {
+        'entity_type': AuditEntityTypes.task,
+        'entity_id': id,
+        'action': DatabaseHelper.auditActionDelete,
+        'timestamp': DateTime(2026, 3, 4, 9).toIso8601String(),
+      });
+
+      final summary = await repo.getTaskAnalytics(
+        DateTimeRange(start: DateTime(2026, 3, 1), end: DateTime(2026, 3, 7)),
+      );
+
+      expect(summary.sparklineOverdue, [0, 1, 1, 0, 0, 0, 0]);
+    });
+  });
+
+  group('ποσοστά ολοκλήρωσης και ακύρωσης', () {
+    final week = DateTimeRange(
+      start: DateTime(2026, 3, 1),
+      end: DateTime(2026, 3, 7),
+    );
+
+    Future<int> insert({
+      required String status,
+      required DateTime createdAt,
+      DateTime? completedAt,
+      bool deleted = false,
+    }) => db.insert('tasks', {
+      'title': 'Εκκρεμότητα',
+      'status': status,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': (completedAt ?? createdAt).toIso8601String(),
+      'completed_at': completedAt?.toIso8601String(),
+      'is_deleted': deleted ? 1 : 0,
+    });
+
+    // Άνοιξαν τρεις μέσα στην εβδομάδα: μία έκλεισε, μία ακυρώθηκε, μία
+    // εκκρεμεί. Έκλεισαν και δύο παλιότερες — δεν ανήκουν στις τρεις.
+    test(
+      'μετρούν από όσες άνοιξαν στο διάστημα — ποτέ πάνω από 100%',
+      () async {
+        await insert(
+          status: 'closed',
+          createdAt: DateTime(2026, 3, 2, 9),
+          completedAt: DateTime(2026, 3, 3, 9),
+        );
+        await insert(status: 'open', createdAt: DateTime(2026, 3, 2, 10));
+        final cancelledId = await insert(
+          status: 'open',
+          createdAt: DateTime(2026, 3, 2, 11),
+          deleted: true,
+        );
+        await db.insert('audit_log', {
+          'entity_type': AuditEntityTypes.task,
+          'entity_id': cancelledId,
+          'action': DatabaseHelper.auditActionDelete,
+          'timestamp': DateTime(2026, 3, 4, 9).toIso8601String(),
+        });
+        for (final day in [3, 4]) {
+          await insert(
+            status: 'closed',
+            createdAt: DateTime(2026, 2, 20),
+            completedAt: DateTime(2026, 3, day, 12),
+          );
+        }
+
+        final summary = await repo.getTaskAnalytics(week);
+
+        expect(
+          summary.closedInRangeCount,
+          3,
+          reason: 'το μεγάλο νούμερο μένει',
+        );
+        expect(summary.completionRateInRange, closeTo(100 / 3, 0.01));
+        expect(summary.cancellationRateInRange, closeTo(100 / 3, 0.01));
+      },
+    );
+  });
+
+  group('καμπύλη αναβολών ανά ημέρα', () {
+    // Δύο αναβολές στις 2/3, μία στις 5/3· μία στις 25/2 είναι έξω από την
+    // εβδομάδα, και η αναβολή διαγραμμένης εκκρεμότητας δεν μετρά.
+    test('μετρά τις αναβολές της κάθε μέρας', () async {
+      String history(List<DateTime> moments) => jsonEncode([
+        for (final m in moments)
+          {'snoozedAt': m.toIso8601String(), 'dueAt': m.toIso8601String()},
+      ]);
+      Future<void> insert(List<DateTime> snoozes, {bool deleted = false}) =>
+          db.insert('tasks', {
+            'title': 'Με αναβολές',
+            'status': 'snoozed',
+            'created_at': DateTime(2026, 2, 20).toIso8601String(),
+            'updated_at': DateTime(2026, 2, 20).toIso8601String(),
+            'snooze_history_json': history(snoozes),
+            'is_deleted': deleted ? 1 : 0,
+          });
+
+      await insert([DateTime(2026, 2, 25, 9), DateTime(2026, 3, 2, 9)]);
+      await insert([DateTime(2026, 3, 2, 15), DateTime(2026, 3, 5, 10)]);
+      await insert([DateTime(2026, 3, 4, 10)], deleted: true);
+
+      final summary = await repo.getTaskAnalytics(
+        DateTimeRange(start: DateTime(2026, 3, 1), end: DateTime(2026, 3, 7)),
+      );
+
+      expect(summary.sparklineSnoozes, [0, 2, 0, 0, 1, 0, 0]);
+    });
   });
 }

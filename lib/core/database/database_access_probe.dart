@@ -9,6 +9,7 @@ import 'database_file_identity.dart';
 import 'database_init_result.dart';
 import 'database_integrity_probe.dart';
 import 'integrity_report_summary.dart';
+import '../utils/disk_free_space.dart';
 
 /// Γράφει το πλήρες κείμενο του ελέγχου ακεραιότητας στο ημερολόγιο σφαλμάτων.
 ///
@@ -721,9 +722,12 @@ class DatabaseAccessProbe {
   Future<List<ProbeFinding>> _checkWindowsAttributes(String dbPath) async {
     if (!Platform.isWindows) return const <ProbeFinding>[];
     try {
-      final result = await Process.run('attrib', <String>[
+      // Χωρίς κέλυφος: η διαδρομή φτάνει ως όρισμα, όποιους χαρακτήρες κι αν
+      // έχει. Με κέλυφος, ένα `&` στη διαδρομή την έκοβε και το υπόλοιπο
+      // εκτελούνταν ως εντολή.
+      final result = await Process.run('attrib.exe', <String>[
         dbPath,
-      ], runInShell: true).timeout(_kShortStepTimeout);
+      ]).timeout(_kShortStepTimeout);
       if (result.exitCode != 0) return const <ProbeFinding>[];
       final output = (result.stdout as String).trim().toUpperCase();
       final findings = <ProbeFinding>[];
@@ -754,13 +758,13 @@ class DatabaseAccessProbe {
   Future<List<ProbeFinding>> _checkDuplicateInstances() async {
     if (!Platform.isWindows) return const <ProbeFinding>[];
     try {
-      final result = await Process.run('tasklist', <String>[
+      final result = await Process.run('tasklist.exe', <String>[
         '/fo',
         'csv',
         '/nh',
         '/fi',
         'IMAGENAME eq call_logger.exe',
-      ], runInShell: true).timeout(_kShortStepTimeout);
+      ]).timeout(_kShortStepTimeout);
       if (result.exitCode != 0) return const <ProbeFinding>[];
       final out = (result.stdout as String).trim();
       if (out.isEmpty || out.toLowerCase().contains('no tasks are running')) {
@@ -794,32 +798,18 @@ class DatabaseAccessProbe {
     final drive = _extractWindowsDrive(dbPath);
     if (drive == null) return const <ProbeFinding>[];
 
-    try {
-      final result = await Process.run('fsutil', <String>[
-        'volume',
-        'diskfree',
-        drive,
-      ], runInShell: true).timeout(_kShortStepTimeout);
-      if (result.exitCode != 0) return const <ProbeFinding>[];
-      final out = (result.stdout as String);
-      final allMatches = RegExp(r'(\d+)').allMatches(out).toList();
-      if (allMatches.isEmpty) return const <ProbeFinding>[];
-      final freeBytes = int.tryParse(allMatches.first.group(1)!);
-      if (freeBytes == null) return const <ProbeFinding>[];
-      if (freeBytes >= _kLowDiskSpaceThresholdBytes) {
-        return const <ProbeFinding>[];
-      }
-      return <ProbeFinding>[
-        ProbeFinding(
-          severity: ProbeSeverity.warning,
-          code: 'low_disk_space',
-          message:
-              'Χαμηλός ελεύθερος χώρος στον δίσκο ($drive): ${_formatBytes(freeBytes)}.',
-        ),
-      ];
-    } catch (_) {
+    final freeBytes = freeBytesOnLocalDrive(dbPath);
+    if (freeBytes == null || freeBytes >= _kLowDiskSpaceThresholdBytes) {
       return const <ProbeFinding>[];
     }
+    return <ProbeFinding>[
+      ProbeFinding(
+        severity: ProbeSeverity.warning,
+        code: 'low_disk_space',
+        message:
+            'Χαμηλός ελεύθερος χώρος στον δίσκο ($drive): ${_formatBytes(freeBytes)}.',
+      ),
+    ];
   }
 
   Future<(ProbeFinding, DatabaseInitResult?)?> _checkUncReachability(

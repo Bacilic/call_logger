@@ -6,6 +6,10 @@
 //      πεδίο)· δύο και πάνω = λίστα υποψηφίων.
 //   2. Ο φραγμός του κλειδωμένου τμήματος κρίνει τη ΣΧΕΣΗ (είναι ο κάτοχος
 //      εκτός του τμήματος;) και όχι την ύπαρξη κλειδώματος.
+//   3. Το τμήμα νικά: με αναγνωρισμένο τμήμα, τηλέφωνο ή εξοπλισμός δεν
+//      φέρνει ανθρώπους άλλου τμήματος — ούτε ως συμπλήρωση ούτε ως λίστα.
+//      Ο Καλούντας δείχνει τους υπαλλήλους του τμήματος της φόρμας, και η
+//      ασυμφωνία φαίνεται στους δείκτες διένεξης.
 //
 //   flutter test test/features/calls/smart_entity_single_phone_autofill_test.dart
 
@@ -257,7 +261,282 @@ Future<ProviderContainer> _containerOwnerWithTwoPhones() async {
   return container;
 }
 
+/// Σενάριο «το τμήμα νικά»: η φόρμα έχει τμήμα «Παθολογική», και τα στοιχεία
+/// που γράφονται ανήκουν (όλα ή εν μέρει) στο «Χρηματικό».
+const _kPathologyId = 10;
+const _kPathologyName = 'Παθολογική';
+const _kAnnaId = 101;
+const _kVasilisId = 102;
+const _kFinanceId = 11;
+const _kMariaId = 111;
+const _kKostasId = 112;
+const _kMariaPhone = '3111';
+const _kMariaEquipmentCode = '7111';
+const _kFinanceDepartmentPhone = '3858';
+const _kFinanceSharedEquipmentCode = '7799';
+const _kMixedSharedPhone = '3519';
+const _kMixedOwnersEquipmentCode = '7140';
+const _kVasilisPhone = '3002';
+
+Future<ProviderContainer> _containerDepartmentWins() async {
+  final svc = LookupService.instance;
+  svc.resetForReload();
+  svc.injectInMemoryCatalogForTests(
+    users: [
+      _user(
+        id: _kAnnaId,
+        first: 'Άννα',
+        last: 'Παθολόγου',
+        phone: '3001, $_kMixedSharedPhone',
+        departmentId: _kPathologyId,
+      ),
+      _user(
+        id: _kVasilisId,
+        first: 'Βασίλης',
+        last: 'Παθολόγου',
+        phone: _kVasilisPhone,
+        departmentId: _kPathologyId,
+      ),
+      _user(
+        id: _kMariaId,
+        first: 'Μαρία',
+        last: 'Ταμία',
+        phone: _kMariaPhone,
+        departmentId: _kFinanceId,
+      ),
+      _user(
+        id: _kKostasId,
+        first: 'Κώστας',
+        last: 'Ταμίας',
+        phone: _kMixedSharedPhone,
+        departmentId: _kFinanceId,
+      ),
+    ],
+    equipment: [
+      EquipmentModel(
+        id: 7111,
+        code: _kMariaEquipmentCode,
+        type: 'PC',
+        departmentId: _kFinanceId,
+      ),
+      EquipmentModel(
+        id: 7799,
+        code: _kFinanceSharedEquipmentCode,
+        type: 'Εκτυπωτής',
+        departmentId: _kFinanceId,
+      ),
+      EquipmentModel(
+        id: 7140,
+        code: _kMixedOwnersEquipmentCode,
+        type: 'PC',
+        departmentId: _kPathologyId,
+      ),
+    ],
+    departmentRows: [
+      DepartmentModel(id: _kPathologyId, name: _kPathologyName),
+      DepartmentModel(id: _kFinanceId, name: 'Χρηματικό'),
+    ],
+    userToEquipmentIds: {
+      _kMariaId: [7111, 7140],
+      _kVasilisId: [7140],
+    },
+    departmentDirectPhones: {
+      _kFinanceId: [_kFinanceDepartmentPhone],
+    },
+  );
+  final container = ProviderContainer(
+    overrides: [
+      lookupServiceProvider.overrideWith(
+        (ref) async => LookupLoadResult(service: svc),
+      ),
+    ],
+  );
+  await container.read(lookupServiceProvider.future);
+  return container;
+}
+
+SmartEntitySelectorNotifier _pathologySelected(ProviderContainer container) {
+  final n = container.read(callSmartEntityProvider.notifier);
+  n.selectDepartment(DepartmentModel(id: _kPathologyId, name: _kPathologyName));
+  return n;
+}
+
 void main() {
+  group('Το τμήμα νικά — τίποτα από άλλο τμήμα δεν συμπληρώνεται', () {
+    test('τηλέφωνο με κάτοχο άλλου τμήματος → ο Καλούντας δείχνει το τμήμα της '
+        'φόρμας και η ασυμφωνία φαίνεται', () async {
+      final container = await _containerDepartmentWins();
+      addTearDown(container.dispose);
+      final n = _pathologySelected(container);
+
+      n.updatePhone(_kMariaPhone);
+      n.performPhoneLookup(_kMariaPhone);
+      final s = container.read(callSmartEntityProvider);
+
+      expect(
+        s.selectedCaller,
+        isNull,
+        reason: greekExpectMsg(
+          'Η κάτοχος του Χρηματικού δεν έρχεται σε φόρμα της Παθολογικής',
+        ),
+      );
+      expect(s.callerDisplayText.trim(), isEmpty);
+      expect(
+        s.callerCandidates.map((u) => u.id).toSet(),
+        {_kAnnaId, _kVasilisId},
+        reason: greekExpectMsg(
+          'Ο Καλούντας προτείνει τους υπαλλήλους της Παθολογικής',
+        ),
+      );
+      expect(
+        s.equipmentText,
+        isNot(_kMariaEquipmentCode),
+        reason: greekExpectMsg('Ούτε ο εξοπλισμός της κατόχου έρχεται'),
+      );
+      expect(s.selectedDepartmentId, _kPathologyId);
+      expect(
+        s.conflictSeverityFor(SelectorField.phone),
+        ConflictSeverity.mismatch,
+        reason: greekExpectMsg('Το τηλέφωνο δείχνει τη διένεξη με το τμήμα'),
+      );
+      expect(
+        s.conflictSeverityFor(SelectorField.department),
+        ConflictSeverity.mismatch,
+        reason: greekExpectMsg('Και το τμήμα δείχνει τη διένεξη'),
+      );
+    });
+
+    test(
+      'τηλέφωνο τμήματος άλλου τμήματος → ούτε οι υπάλληλοι ούτε ο εξοπλισμός '
+      'του έρχονται',
+      () async {
+        final container = await _containerDepartmentWins();
+        addTearDown(container.dispose);
+        final n = _pathologySelected(container);
+
+        n.updatePhone(_kFinanceDepartmentPhone);
+        n.performPhoneLookup(_kFinanceDepartmentPhone);
+        final s = container.read(callSmartEntityProvider);
+
+        expect(s.selectedCaller, isNull);
+        expect(
+          s.callerCandidates.map((u) => u.id).toSet(),
+          {_kAnnaId, _kVasilisId},
+          reason: greekExpectMsg(
+            'Η λίστα είναι της Παθολογικής, όχι του Χρηματικού',
+          ),
+        );
+        expect(
+          s.equipmentCandidates.map((e) => e.code),
+          isNot(contains(_kFinanceSharedEquipmentCode)),
+          reason: greekExpectMsg('Ο εξοπλισμός του Χρηματικού δεν προτείνεται'),
+        );
+        expect(s.selectedDepartmentId, _kPathologyId);
+        expect(
+          s.conflictSeverityFor(SelectorField.phone),
+          ConflictSeverity.mismatch,
+        );
+      },
+    );
+
+    test(
+      'άγνωστο τηλέφωνο → ο Καλούντας κρατά τους υπαλλήλους του τμήματος',
+      () async {
+        final container = await _containerDepartmentWins();
+        addTearDown(container.dispose);
+        final n = _pathologySelected(container);
+
+        n.updatePhone('2509');
+        n.performPhoneLookup('2509');
+        final s = container.read(callSmartEntityProvider);
+
+        expect(
+          s.callerCandidates.map((u) => u.id).toSet(),
+          {_kAnnaId, _kVasilisId},
+          reason: greekExpectMsg(
+            'Το άγνωστο τηλέφωνο δεν λέει ποιος καλεί — το τμήμα το λέει',
+          ),
+        );
+        expect(
+          s.callerNoMatch,
+          isFalse,
+          reason: greekExpectMsg(
+            'Όχι «Καμία αντιστοιχία» όσο το τμήμα έχει ανθρώπους',
+          ),
+        );
+        expect(
+          s.equipmentText,
+          _kMixedOwnersEquipmentCode,
+          reason: greekExpectMsg(
+            'Ο μοναδικός εξοπλισμός του τμήματος, που μπήκε με την επιλογή '
+            'τμήματος, δεν χάνεται',
+          ),
+        );
+      },
+    );
+
+    test(
+      'άγνωστος εξοπλισμός → ο Καλούντας κρατά τους υπαλλήλους του τμήματος',
+      () async {
+        final container = await _containerDepartmentWins();
+        addTearDown(container.dispose);
+        final n = _pathologySelected(container);
+
+        n.performEquipmentLookupByCode('99999');
+        final s = container.read(callSmartEntityProvider);
+
+        expect(s.callerCandidates.map((u) => u.id).toSet(), {
+          _kAnnaId,
+          _kVasilisId,
+        });
+        expect(s.callerNoMatch, isFalse);
+      },
+    );
+
+    test(
+      'κοινό τηλέφωνο με κατόχους δύο τμημάτων → μένει μόνο όποιος ανήκει στο '
+      'τμήμα της φόρμας',
+      () async {
+        final container = await _containerDepartmentWins();
+        addTearDown(container.dispose);
+        final n = _pathologySelected(container);
+
+        n.updatePhone(_kMixedSharedPhone);
+        n.performPhoneLookup(_kMixedSharedPhone);
+        final s = container.read(callSmartEntityProvider);
+
+        expect(
+          s.selectedCaller?.id,
+          _kAnnaId,
+          reason: greekExpectMsg(
+            'Από τους δύο κατόχους μόνο η Άννα είναι της Παθολογικής — '
+            'ένας μένει, άρα συμπληρώνεται',
+          ),
+        );
+        expect(s.callerCandidates, isEmpty);
+      },
+    );
+
+    test('εξοπλισμός με κατόχους δύο τμημάτων → μένει μόνο όποιος ανήκει στο '
+        'τμήμα της φόρμας, μαζί με το τηλέφωνό του', () async {
+      final container = await _containerDepartmentWins();
+      addTearDown(container.dispose);
+      final n = _pathologySelected(container);
+
+      n.performEquipmentLookupByCode(_kMixedOwnersEquipmentCode);
+      final s = container.read(callSmartEntityProvider);
+
+      expect(
+        s.selectedCaller?.id,
+        _kVasilisId,
+        reason: greekExpectMsg(
+          'Η κάτοχος του Χρηματικού δεν προτείνεται· ο Βασίλης μένει μόνος',
+        ),
+      );
+      expect(s.selectedPhone, _kVasilisPhone);
+    });
+  });
+
   group('Η στενότερη πηγή υποψηφίων κερδίζει', () {
     test(
       'κάτοχος με 2 τηλέφωνα σε τμήμα με 4 → μόνο τα δικά του στη λίστα',

@@ -3321,6 +3321,7 @@ void main() {
           await dirNotifier.updateEquipment(
             equipment.copyWith(code: newCode),
             expected: null,
+            ownersAtOpen: dirNotifier.cardOwnersAtOpen(equipment.id),
           );
 
           container.invalidate(lookupServiceProvider);
@@ -3483,6 +3484,58 @@ void main() {
         }),
         'Προσθήκη',
       );
+    });
+  });
+
+  group('αλλαγμένο κείμενο λύνει τον δεμένο', () {
+    final sofia = _u(id: 21, first: 'Σοφία', last: 'Αλεξίου', phone: '2541');
+    final pc = _e(id: 31, code: '3101');
+
+    Future<ProviderContainer> catalog() =>
+        _containerWithCatalog(users: [sofia], equipment: [pc], departments: []);
+
+    test('καλών: άλλο κείμενο → λύνεται, το κείμενο μένει', () async {
+      final container = await catalog();
+      addTearDown(container.dispose);
+      final n = container.read(callSmartEntityProvider.notifier);
+      n.setCaller(sofia);
+
+      n.updateCallerDisplayText('${sofia.name} Χ');
+
+      final s = container.read(callSmartEntityProvider);
+      expect(s.selectedCaller, isNull);
+      expect(
+        s.callerDisplayText,
+        '${sofia.name} Χ',
+        reason: greekExpectMsg('Το λύσιμο δεν σβήνει ό,τι γράφτηκε'),
+      );
+    });
+
+    test('καλών: όνομα ή όνομα με τμήμα → μένει δεμένος', () async {
+      final container = await catalog();
+      addTearDown(container.dispose);
+      final n = container.read(callSmartEntityProvider.notifier);
+      n.setCaller(sofia);
+
+      n.updateCallerDisplayText(' ${sofia.name} ');
+      expect(container.read(callSmartEntityProvider).selectedCaller?.id, 21);
+      n.updateCallerDisplayText(sofia.fullNameWithDepartment);
+      expect(container.read(callSmartEntityProvider).selectedCaller?.id, 21);
+    });
+
+    test('εξοπλισμός: άλλο κείμενο → λύνεται, ίδιο → μένει', () async {
+      final container = await catalog();
+      addTearDown(container.dispose);
+      final n = container.read(callSmartEntityProvider.notifier);
+      n.setEquipment(pc);
+
+      n.updateEquipmentText('3101');
+      expect(container.read(callSmartEntityProvider).selectedEquipment?.id, 31);
+
+      n.updateEquipmentText('31012');
+      final s = container.read(callSmartEntityProvider);
+      expect(s.selectedEquipment, isNull);
+      expect(s.equipmentText, '31012');
     });
   });
 }

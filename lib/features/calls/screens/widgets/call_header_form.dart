@@ -6,6 +6,7 @@ import '../../provider/call_header_provider.dart';
 import '../../../../core/providers/database_settings_route_intent_provider.dart';
 import '../../provider/lookup_provider.dart';
 import '../../../../core/providers/call_department_prefill_intent_provider.dart';
+import '../../../../core/utils/run_after_next_frame.dart';
 import 'call_entry_selector_hooks.dart';
 import 'caller_quick_add_bindings.dart';
 import 'smart_entity_selector_widget.dart';
@@ -57,6 +58,17 @@ class CallHeaderForm extends ConsumerStatefulWidget {
 class _CallHeaderFormState extends ConsumerState<CallHeaderForm> {
   final GlobalKey<SmartEntitySelectorWidgetState> _selectorKey =
       GlobalKey<SmartEntitySelectorWidgetState>();
+
+  @override
+  void initState() {
+    super.initState();
+    // Η οθόνη Κλήσεων φτιάχνει νέα φόρμα σε κάθε αλλαγή όψης· η παλιά μένει
+    // ορατή όσο διαρκεί η μετάβαση και κρατά ακόμη την εστίαση.
+    runAfterNextFrame(() {
+      if (!mounted) return;
+      _selectorKey.currentState?.takeOverFocusFromOutgoingForm();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

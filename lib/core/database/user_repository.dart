@@ -421,26 +421,51 @@ class UserRepository {
     required Object? phonesRaw,
     required Map<String, Object?> expected,
   }) async {
-    final currentRow = await _support.userRowById(txn, id);
-    if (currentRow == null) return;
     final tracksPhones = expected.containsKey('phones');
+    final conflict = await _userConflict(
+      txn,
+      id,
+      expected: expected,
+      attempted: <String, Object?>{
+        ...map,
+        if (tracksPhones && phonesRaw != null)
+          'phones': phonesFingerprint(_phoneListOf(phonesRaw)),
+      },
+    );
+    if (conflict != null) throw DirectoryStaleException(conflict);
+  }
+
+  /// Η διένεξη που θα σταματούσε μια ολόκληρη εγγραφή της καρτέλας —
+  /// **χωρίς να γράψει τίποτα**.
+  ///
+  /// Για αποθηκεύσεις που γράφουν κι άλλα πριν από την καρτέλα: η ερώτηση
+  /// «Κάποιος πρόλαβε» πρέπει να γίνει πριν από εκείνα, αλλιώς η «ακύρωση»
+  /// βρίσκει τη δουλειά ήδη μισογραμμένη. Κρίνονται όλα τα πεδία της
+  /// αφετηρίας, γιατί η καρτέλα τα γράφει όλα.
+  Future<DirectorySaveConflict?> staleConflict(
+    int id, {
+    required Map<String, Object?> expected,
+  }) => _userConflict(db, id, expected: expected, attempted: expected);
+
+  Future<DirectorySaveConflict?> _userConflict(
+    DatabaseExecutor e,
+    int id, {
+    required Map<String, Object?> expected,
+    required Map<String, Object?> attempted,
+  }) async {
+    final currentRow = await _support.userRowById(e, id);
+    if (currentRow == null) return null;
     final fresh = <String, Object?>{
       ...currentRow,
-      if (tracksPhones)
-        'phones': phonesFingerprint(await _userPhoneNumbersOrdered(txn, id)),
+      if (expected.containsKey('phones'))
+        'phones': phonesFingerprint(await _userPhoneNumbersOrdered(e, id)),
     };
-    final attempted = <String, Object?>{
-      ...map,
-      if (tracksPhones && phonesRaw != null)
-        'phones': phonesFingerprint(_phoneListOf(phonesRaw)),
-    };
-    final conflict = DirectorySaveConflict.between(
+    return DirectorySaveConflict.between(
       entityType: AuditEntityTypes.user,
       expected: expected,
       fresh: fresh,
       attempted: attempted,
     );
-    if (conflict != null) throw DirectoryStaleException(conflict);
   }
 
   Future<int> _updateUserInTxn(

@@ -284,6 +284,26 @@ void main() {
       expect(prompts.announcements, ['Προστέθηκε ως κοινόχρηστο.']);
       expect(actions.associateCalled, isFalse);
     });
+
+    test('η αποτυχία ανακοινώνεται', () async {
+      final actions = _FakeActions(
+        initialHeader: CallHeaderState(
+          departmentText: 'Εφημερείο ΤΕΠ',
+          selectedPhone: '2201',
+        ),
+        orphanPreview: const OrphanQuickAddResult.failed(
+          'Σφάλμα αποθήκευσης: κλειδωμένη βάση',
+        ),
+      );
+      final prompts = _FakePrompts(sharedAssetAnswer: true);
+
+      await CallerQuickAddController(
+        actions: actions,
+        prompts: prompts,
+      ).run(null);
+
+      expect(prompts.announcements, ['Σφάλμα αποθήκευσης: κλειδωμένη βάση']);
+    });
   });
 
   group('παρόμοιοι καλούντες', () {

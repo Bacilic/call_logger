@@ -7,8 +7,13 @@ import 'calls_field_confirmations.dart';
 class CallsMapGate {
   const CallsMapGate._();
 
-  /// ΧΑ ενεργό όταν υπάρχει επιλεγμένο τμήμα/καλών/εξοπλισμός ή όταν το
-  /// **επιβεβαιωμένο** τηλέφωνο αντιστοιχεί ακριβώς σε **χαρτογραφημένο** τμήμα.
+  /// ΧΑ ενεργό όταν υπάρχει **επιβεβαιωμένο** τμήμα, επιλεγμένος καλών /
+  /// εξοπλισμός, ή όταν το **επιβεβαιωμένο** τηλέφωνο αντιστοιχεί ακριβώς σε
+  /// **χαρτογραφημένο** τμήμα.
+  ///
+  /// Το τμήμα αναγνωρίζεται ήδη όσο γράφεται (για τον κανόνα «το τμήμα νικά»)·
+  /// αν άνοιγε ο χάρτης εκείνη τη στιγμή, η φόρμα θα μετακινούνταν κάτω από τα
+  /// χέρια του χρήστη και το πεδίο θα έχανε την εστίαση πριν από το Enter.
   ///
   /// Εξαίρεση: εταιρεία και εξωτερική μονάδα δεν βρίσκονται σε δικό μας κτίριο
   /// και δεν πρόκειται ποτέ να αποκτήσουν θέση. Η κάρτα δεν κρύβεται επειδή
@@ -19,7 +24,7 @@ class CallsMapGate {
     LookupService? lookup, [
     CallsFieldConfirmations confirmations = CallsFieldConfirmations.empty,
   ]) {
-    if (header.selectedDepartmentId != null) {
+    if (header.selectedDepartmentId != null && confirmations.department) {
       return _belongsOnMap(lookup, header.selectedDepartmentId);
     }
     if (header.selectedEquipment?.id != null) {

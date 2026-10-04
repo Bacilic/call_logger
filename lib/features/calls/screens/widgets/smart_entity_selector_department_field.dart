@@ -42,6 +42,12 @@ class SmartEntityDepartmentField extends StatefulWidget {
 class SmartEntityDepartmentFieldState
     extends State<SmartEntityDepartmentField> {
   bool _isKeyboardPreview = false;
+
+  /// Γράφτηκε κάτι στο πεδίο μετά την τελευταία κατοχύρωση; Μόνο τότε το
+  /// Enter κατοχυρώνει το κείμενο ως τμήμα. Ένα Enter σε τμήμα που δεν
+  /// άλλαξε απλώς προχωρά — αλλιώς θα ξαναέφερνε ό,τι έσβησε ο χρήστης στα
+  /// υπόλοιπα πεδία (π.χ. τον εξοπλισμό του τμήματος).
+  bool _typedSinceCommit = false;
   int _keyboardOptionIndex = -1;
   int _lastAutoScrollIndex = -1;
   String _typedQuery = '';
@@ -91,11 +97,16 @@ class SmartEntityDepartmentFieldState
   }
 
   void _commitDepartmentSelection(DepartmentModel selection) {
+    widget.notifier.selectDepartment(selection);
+    _showCommittedDepartment(selection);
+  }
+
+  void _showCommittedDepartment(DepartmentModel selection) {
+    _typedSinceCommit = false;
     _keyboardOptionIndex = -1;
     _lastAutoScrollIndex = -1;
     _isKeyboardPreview = false;
     _setControllerText(widget.controller, selection.name);
-    widget.notifier.selectDepartment(selection);
     widget.onContentChecked();
     widget.nextFocusNode.requestFocus();
   }
@@ -314,6 +325,7 @@ class SmartEntityDepartmentFieldState
                               return;
                             }
                             _typedQuery = value;
+                            _typedSinceCommit = true;
                             _keyboardOptionIndex = -1;
                             _lastAutoScrollIndex = -1;
                             notifier.updateDepartmentText(value);
@@ -327,6 +339,15 @@ class SmartEntityDepartmentFieldState
                               _commitDepartmentSelection(
                                 options[_keyboardOptionIndex],
                               );
+                              return;
+                            }
+                            final typed = _typedSinceCommit
+                                ? notifier.commitTypedDepartment(
+                                    textController.text,
+                                  )
+                                : null;
+                            if (typed != null) {
+                              _showCommittedDepartment(typed);
                               return;
                             }
                             onContentChecked();

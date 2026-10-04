@@ -895,6 +895,10 @@ class EquipmentRepository {
     return const <int>[];
   }
 
+  /// Οι κάτοχοι (id υπαλλήλων) ενός μηχανήματος.
+  Future<List<int>> ownerIdsOf(int equipmentId) =>
+      _equipmentOwnerIdsInTxn(db, equipmentId);
+
   Future<List<int>> _equipmentOwnerIdsInTxn(
     DatabaseExecutor txn,
     int equipmentId,
@@ -957,6 +961,53 @@ class EquipmentRepository {
     );
   }
 
+  /// Η διένεξη που θα σταματούσε μια ολόκληρη εγγραφή της καρτέλας —
+  /// **χωρίς να γράψει τίποτα**.
+  ///
+  /// Για αποθηκεύσεις που γράφουν κι άλλα πριν από την καρτέλα (π.χ. νέο
+  /// τμήμα): η ερώτηση «Κάποιος πρόλαβε» πρέπει να γίνει πριν από εκείνα,
+  /// αλλιώς η «ακύρωση» βρίσκει τη δουλειά ήδη μισογραμμένη. Κρίνονται όλα
+  /// τα πεδία της αφετηρίας, γιατί η καρτέλα τα γράφει όλα.
+  Future<DirectorySaveConflict?> staleConflict(
+    int id, {
+    required Map<String, Object?> expected,
+  }) async {
+    final rows = await db.query(
+      'equipment',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _equipmentConflict(
+      db,
+      id,
+      rows.first,
+      expected: expected,
+      attempted: expected,
+    );
+  }
+
+  Future<DirectorySaveConflict?> _equipmentConflict(
+    DatabaseExecutor e,
+    int id,
+    Map<String, Object?> currentRow, {
+    required Map<String, Object?> expected,
+    required Map<String, Object?> attempted,
+  }) async {
+    final fresh = <String, Object?>{
+      ...currentRow,
+      if (expected.containsKey('owner'))
+        'owner': ownersFingerprint(await _equipmentOwnerIdsInTxn(e, id)),
+    };
+    return DirectorySaveConflict.between(
+      entityType: AuditEntityTypes.equipment,
+      expected: expected,
+      fresh: fresh,
+      attempted: attempted,
+    );
+  }
+
   Future<int> _updateEquipmentInTxn(
     DatabaseExecutor txn,
     int id,
@@ -974,22 +1025,16 @@ class EquipmentRepository {
     if (oldRows.isEmpty) return 0;
     final oldRow = oldRows.first;
     if (!force && expected != null) {
-      final tracksOwner = expected.containsKey('owner');
-      final fresh = <String, Object?>{
-        ...oldRow,
-        if (tracksOwner)
-          'owner': ownersFingerprint(await _equipmentOwnerIdsInTxn(txn, id)),
-      };
-      final attempted = <String, Object?>{
-        ...map,
-        if (tracksOwner && ownerRaw != null)
-          'owner': ownersFingerprint(_ownerIdListOf(ownerRaw)),
-      };
-      final conflict = DirectorySaveConflict.between(
-        entityType: AuditEntityTypes.equipment,
+      final conflict = await _equipmentConflict(
+        txn,
+        id,
+        oldRow,
         expected: expected,
-        fresh: fresh,
-        attempted: attempted,
+        attempted: <String, Object?>{
+          ...map,
+          if (expected.containsKey('owner') && ownerRaw != null)
+            'owner': ownersFingerprint(_ownerIdListOf(ownerRaw)),
+        },
       );
       if (conflict != null) throw DirectoryStaleException(conflict);
     }

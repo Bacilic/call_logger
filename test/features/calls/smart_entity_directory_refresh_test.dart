@@ -4,6 +4,7 @@
 //   flutter test test/features/calls/smart_entity_directory_refresh_test.dart
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
@@ -279,6 +280,75 @@ void main() {
         container.dispose();
       },
     );
+    test(
+      'αποτυχία στη μέση του «+»: η φόρμα ξέρει ό,τι πρόλαβε να γραφτεί',
+      () async {
+        await AssociationTwoStepRunner.resetCatalog();
+        final db = await DatabaseHelper.instance.database;
+        Future<int> department(String name) => db.insert('departments', {
+          'name': name,
+          'name_key': SearchTextNormalizer.normalizeForSearch(name),
+          'is_deleted': 0,
+        });
+        final secretariatId = await department('Γραμματεία');
+        await department('Παθολογική');
+        final userId = await db.insert('users', {
+          'first_name': 'Γεωργία',
+          'last_name': 'Παπαγεωργίου',
+          'department_id': secretariatId,
+          'is_deleted': 0,
+        });
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        final lookup = (await container.read(
+          lookupServiceProvider.future,
+        )).service;
+        final notifier = container.read(callSmartEntityProvider.notifier);
+
+        notifier.updatePhone('2999');
+        notifier.checkContent(phoneText: '2999');
+        notifier.setCaller(lookup.findUserById(userId));
+        notifier.selectDepartment(lookup.findDepartmentByName('Παθολογική')!);
+        // Η αλλαγή τμήματος αποτυγχάνει — όπως σε κλειδωμένη βάση — αφού
+        // το τηλέφωνο έχει ήδη συνδεθεί.
+        await db.execute(
+          'CREATE TRIGGER refuse_department_change '
+          'BEFORE UPDATE OF department_id ON users '
+          "BEGIN SELECT RAISE(ABORT, 'database is locked'); END",
+        );
+        try {
+          final message = await notifier.associateCurrentIfNeeded(
+            updatePrimaryDepartment: true,
+          );
+          expect(message, startsWith('Σφάλμα αποθήκευσης'));
+        } finally {
+          await db.execute('DROP TRIGGER IF EXISTS refuse_department_change');
+        }
+
+        final linked = await db.rawQuery(
+          'SELECT 1 FROM user_phones up JOIN phones p ON p.id = up.phone_id '
+          "WHERE up.user_id = ? AND p.number = '2999'",
+          [userId],
+        );
+        expect(linked, hasLength(1), reason: 'το τηλέφωνο πρόλαβε να γραφτεί');
+        final lookupAfter = container
+            .read(lookupServiceProvider)
+            .value!
+            .service;
+        expect(
+          lookupAfter.findUsersByPhone('2999').map((u) => u.id),
+          contains(userId),
+          reason:
+              'Ο κατάλογος της φόρμας ξαναδιαβάζεται μετά την αποτυχία — '
+              'αλλιώς το επόμενο «+» ρωτά ξανά για ό,τι ήδη υπάρχει',
+        );
+
+        container.dispose();
+      },
+    );
   });
 
   group('Smart entity — κοινόχρηστα του τμήματος του καλούντα', () {
@@ -412,6 +482,8 @@ void main() {
         'user_id': plakogianni,
         'equipment_id': eq,
       });
+      // 2600: ελεύθερο τηλέφωνο, χωρίς κάτοχο και χωρίς τμήμα.
+      await db.insert('phones', {'number': '2600'});
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
       final container = ProviderContainer(
@@ -515,5 +587,174 @@ void main() {
         container.dispose();
       },
     );
+
+    // Κοινό μηχάνημα και αλλαγή τμήματος χωρίς οθόνη για ερώτηση: ισχύει η
+    // συνηθισμένη απάντηση — το μηχάνημα μένει στο τμήμα του (03/10).
+    test(
+      'αλλαγή τμήματος χωρίς οθόνη: το κοινό μηχάνημα μένει στο τμήμα του',
+      () async {
+        final seeded = await seed();
+        final container = seeded.container;
+        final db = await DatabaseHelper.instance.database;
+        final leaves = (await db.query(
+          'departments',
+          where: "name = 'Άδειες'",
+        )).single['id'];
+        final colleague = await db.insert('users', {
+          'first_name': 'Ελένη',
+          'last_name': 'Συνάδελφος',
+          'department_id': leaves,
+          'is_deleted': 0,
+        });
+        final shared = await db.insert('equipment', {
+          'code_equipment': 'SH-1',
+          'department_id': leaves,
+          'is_deleted': 0,
+        });
+        for (final owner in [seeded.koika, colleague]) {
+          await db.insert('user_equipment', {
+            'user_id': owner,
+            'equipment_id': shared,
+          });
+        }
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+        container.invalidate(lookupServiceProvider);
+        final lookup = (await container.read(
+          lookupServiceProvider.future,
+        )).service;
+        final notifier = container.read(callSmartEntityProvider.notifier);
+        notifier.setCaller(lookup.findUserById(seeded.koika));
+        notifier.selectDepartment(lookup.findDepartmentByName('Βιοχημικό')!);
+        notifier.checkContent(equipmentText: '3000');
+
+        await notifier.associateCurrentIfNeeded(updatePrimaryDepartment: true);
+
+        final owners = (await db.query(
+          'user_equipment',
+          where: 'equipment_id = ?',
+          whereArgs: [shared],
+        )).map((r) => r['user_id']).toList();
+        expect(owners, [
+          colleague,
+        ], reason: 'Μένει στο τμήμα του, με τη συνάδελφο — όχι μοιρασμένο');
+        container.dispose();
+      },
+    );
+
+    // Το ίδιο για κοινό τηλέφωνο (04/10): χωρίς οθόνη ο αριθμός μένει στους
+    // συναδέλφους, αντί να ακολουθήσει και να μοιραστεί σε δύο τμήματα.
+    test(
+      'αλλαγή τμήματος χωρίς οθόνη: το κοινό τηλέφωνο μένει στη συνάδελφο',
+      () async {
+        final seeded = await seed();
+        final container = seeded.container;
+        final db = await DatabaseHelper.instance.database;
+        final leaves = (await db.query(
+          'departments',
+          where: "name = 'Άδειες'",
+        )).single['id'];
+        final colleague = await db.insert('users', {
+          'first_name': 'Ελένη',
+          'last_name': 'Συνάδελφος',
+          'department_id': leaves,
+          'is_deleted': 0,
+        });
+        final phone = await db.insert('phones', {'number': '2534'});
+        for (final owner in [seeded.koika, colleague]) {
+          await db.insert('user_phones', {'user_id': owner, 'phone_id': phone});
+        }
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+        container.invalidate(lookupServiceProvider);
+        final lookup = (await container.read(
+          lookupServiceProvider.future,
+        )).service;
+        final notifier = container.read(callSmartEntityProvider.notifier);
+        notifier.setCaller(lookup.findUserById(seeded.koika));
+        notifier.selectDepartment(lookup.findDepartmentByName('Βιοχημικό')!);
+        notifier.checkContent(equipmentText: '3000');
+
+        await notifier.associateCurrentIfNeeded(updatePrimaryDepartment: true);
+
+        final holders = await PhoneRepository(db).holderUserIds('2534');
+        expect(holders, [
+          colleague,
+        ], reason: 'Μένει στο τμήμα του, με τη συνάδελφο — όχι μοιρασμένο');
+        container.dispose();
+      },
+    );
+
+    test('νέος καλών σε νέο τμήμα: το μήνυμα απαριθμεί ό,τι έγινε, η αναίρεση '
+        'μόνο ό,τι γεννήθηκε', () async {
+      final seeded = await seed();
+      final container = seeded.container;
+      final notifier = container.read(callSmartEntityProvider.notifier);
+      notifier.updateCallerDisplayText('Μαρία Δαμανάκη');
+      notifier.checkContent(callerText: 'Μαρία Δαμανάκη');
+      notifier.updateDepartmentText('Ακτινολογικό');
+      notifier.checkContent(departmentText: 'Ακτινολογικό');
+      notifier.updatePhone('2600');
+      notifier.checkContent(phoneText: '2600');
+      notifier.checkContent(equipmentText: '5555');
+
+      final message = await notifier.associateCurrentIfNeeded();
+
+      expect(message!.split('\n').take(4).toList(), [
+        'Δημιουργήθηκε νέος χρήστης Μαρία Δαμανάκη στο τμήμα: Ακτινολογικό',
+        'Δημιουργήθηκε νέο τμήμα: Ακτινολογικό',
+        'Συσχετίστηκε τηλέφωνο: 2600',
+        'Δημιουργήθηκε νέος εξοπλισμός: 5555',
+      ]);
+      final undo = notifier.lastQuickAddUndo;
+      expect(undo.createdUserId, isNotNull);
+      expect(undo.createdDepartmentName, 'Ακτινολογικό');
+      expect(
+        undo.createdPhone,
+        isNull,
+        reason: 'Το 2600 υπήρχε πριν — η αναίρεση δεν το σβήνει',
+      );
+      expect(undo.createdEquipmentCode, '5555');
+
+      final db = await DatabaseHelper.instance.database;
+      final user = (await db.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [undo.createdUserId],
+      )).single;
+      expect(user['department_id'], undo.createdDepartmentId);
+      final state = container.read(callSmartEntityProvider);
+      expect(state.selectedCaller?.id, undo.createdUserId);
+      expect(state.selectedEquipment?.id, isNotNull);
+      container.dispose();
+    });
+
+    test('νέος καλών σε υπάρχον τμήμα: το τμήμα δεν δημιουργείται ούτε '
+        'αναιρείται, το νέο τηλέφωνο ναι', () async {
+      final seeded = await seed();
+      final container = seeded.container;
+      final lookup = (await container.read(
+        lookupServiceProvider.future,
+      )).service;
+      final notifier = container.read(callSmartEntityProvider.notifier);
+      notifier.updateCallerDisplayText('Μαρία Δαμανάκη');
+      notifier.checkContent(callerText: 'Μαρία Δαμανάκη');
+      notifier.selectDepartment(lookup.findDepartmentByName('Άδειες')!);
+      notifier.updatePhone('2700');
+      notifier.checkContent(phoneText: '2700');
+
+      final message = await notifier.associateCurrentIfNeeded();
+
+      expect(message!.split('\n').take(2).toList(), [
+        'Δημιουργήθηκε νέος χρήστης Μαρία Δαμανάκη στο τμήμα: Άδειες',
+        'Δημιουργήθηκε νέο τηλέφωνο: 2700',
+      ]);
+      expect(message, isNot(contains('νέο τμήμα')));
+      final undo = notifier.lastQuickAddUndo;
+      expect(undo.createdDepartmentId, isNull);
+      expect(undo.createdPhone, '2700');
+      expect(undo.createdEquipmentCode, isNull);
+      container.dispose();
+    });
   });
 }

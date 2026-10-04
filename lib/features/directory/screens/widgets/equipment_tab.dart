@@ -279,7 +279,8 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
         if (state.selectedIds.isNotEmpty)
           CatalogSelectionBar(
             selectedCount: state.selectedIds.length,
-            countLabel: 'επιλεγμένοι',
+            countLabelOne: 'επιλεγμένο',
+            countLabelMany: 'επιλεγμένα',
             showOnlySelected: state.showOnlySelected,
             searchController: _searchController,
             onToggleShowOnlySelected: notifier.toggleShowOnlySelected,

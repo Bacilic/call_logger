@@ -119,6 +119,7 @@ class EquipmentDirectoryState {
     this.focusedRowIndex,
     this.showBuildingInLocationColumn = true,
     this.searchSummary = CatalogSearchSummary.empty,
+    this.ownerIdsByEquipment = const {},
     List<EquipmentColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) : columnOrder = _normalizeColumnOrder(columnOrder),
@@ -178,6 +179,11 @@ class EquipmentDirectoryState {
   /// Σύνοψη τρέχουσας αναζήτησης (πλήθος + ευρήματα σε κρυφά πεδία).
   final CatalogSearchSummary searchSummary;
 
+  /// **Όλοι** οι κάτοχοι κάθε μηχανήματος, ταξινομημένοι. Η γραμμή του
+  /// πίνακα δείχνει τον πρώτο· η καρτέλα χρειάζεται και τους υπόλοιπους, για
+  /// να τους κρατήσει όπως είναι.
+  final Map<int, List<int>> ownerIdsByEquipment;
+
   /// Ορατές στήλες κατά [columnOrder].
   List<EquipmentColumn> get orderedVisibleColumns => [
     for (final c in columnOrder)
@@ -197,6 +203,7 @@ class EquipmentDirectoryState {
     int? focusedRowIndex,
     bool? showBuildingInLocationColumn,
     CatalogSearchSummary? searchSummary,
+    Map<int, List<int>>? ownerIdsByEquipment,
     List<EquipmentColumn>? columnOrder,
     Set<String>? visibleColumnKeys,
   }) {
@@ -215,6 +222,7 @@ class EquipmentDirectoryState {
       showBuildingInLocationColumn:
           showBuildingInLocationColumn ?? this.showBuildingInLocationColumn,
       searchSummary: searchSummary ?? this.searchSummary,
+      ownerIdsByEquipment: ownerIdsByEquipment ?? this.ownerIdsByEquipment,
       columnOrder: columnOrder ?? this.columnOrder,
       visibleColumnKeys: visibleColumnKeys ?? this.visibleColumnKeys,
     );
@@ -494,6 +502,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       final sortCol = _resolveSortColumn(parsed.sortKey);
       state = state.copyWith(
         allItems: items,
+        ownerIdsByEquipment: equipmentIdToUserIds,
         columnOrder: parsed.order,
         visibleColumnKeys: parsed.visible,
         sortColumn: sortCol,
@@ -503,6 +512,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     } else {
       state = state.copyWith(
         allItems: items,
+        ownerIdsByEquipment: equipmentIdToUserIds,
         showBuildingInLocationColumn: showBuildingInLocation,
       );
     }
@@ -805,19 +815,53 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     ..['notes'] = eq.notes
     ..['type'] = eq.type;
 
+  /// Οι κάτοχοι του μηχανήματος τη στιγμή που ανοίγει η καρτέλα — **όλοι**,
+  /// όχι μόνο ο [shownOwnerId] που δείχνει. Χωρίς αυτούς, μηχάνημα με δύο
+  /// κατόχους φαινόταν «αλλαγμένο από άλλον» σε κάθε αποθήκευση, και το
+  /// «Κράτα τη δική μου αλλαγή» έσβηνε σιωπηλά τον δεύτερο κάτοχο.
+  List<int> cardOwnersAtOpen(int? equipmentId, {int? shownOwnerId}) {
+    final loaded = equipmentId == null
+        ? const <int>[]
+        : state.ownerIdsByEquipment[equipmentId] ?? const <int>[];
+    if (shownOwnerId != null && !loaded.contains(shownOwnerId)) {
+      return List<int>.unmodifiable([...loaded, shownOwnerId]..sort());
+    }
+    return List<int>.unmodifiable(loaded);
+  }
+
+  /// Οι κάτοχοι μετά την αποθήκευση της καρτέλας: αλλάζει **μόνο** ο κάτοχος
+  /// που δείχνει η καρτέλα ([shown] → [chosen])· οι υπόλοιποι μένουν όπως
+  /// ήταν (απόφαση Διευθυντή 03/10).
+  static List<int> ownersAfterCardEdit({
+    required List<int> atOpen,
+    required int? shown,
+    required int? chosen,
+  }) {
+    final owners = [...atOpen];
+    if (shown != null) owners.remove(shown);
+    if (chosen != null && !owners.contains(chosen)) owners.add(chosen);
+    return owners..sort();
+  }
+
   /// Αποθηκεύει την καρτέλα εξοπλισμού.
   ///
   /// Το [expected] είναι η καρτέλα **όπως τη φόρτωσε η φόρμα**, και το
-  /// [expectedOwnerUserId] η χρέωση που έδειχνε η ίδια στιγμή. Η χρέωση μπαίνει
+  /// [ownersAtOpen] **όλοι** οι κάτοχοι εκείνη τη στιγμή. Η χρέωση μπαίνει
   /// στη σύγκριση όπως όλα τα άλλα: η καρτέλα την ξαναγράφει ολόκληρη, οπότε
   /// χωρίς αφετηρία μια διόρθωση σημειώσεων θα ξεχρέωνε αμίλητα τον υπάλληλο
-  /// που μόλις χρέωσε ο συνάδελφος.
+  /// που μόλις χρέωσε ο συνάδελφος. Από τους κατόχους αλλάζει μόνο ο
+  /// [shownOwnerUserId] → [ownerUserId]· βλ. [ownersAfterCardEdit].
   Future<void> updateEquipment(
     EquipmentModel eq, {
     required EquipmentModel? expected,
+    required List<int> ownersAtOpen,
     bool force = false,
     int? ownerUserId,
-    int? expectedOwnerUserId,
+    int? shownOwnerUserId,
+
+    /// Ο χρήστης απάντησε «Μεταφορά» στο «Κοινό μηχάνημα»: το μηχάνημα πάει
+    /// στον [ownerUserId] και φεύγει από τους υπόλοιπους κατόχους.
+    bool releaseOtherOwners = false,
   }) async {
     _settlePendingBulkUndo();
     if (eq.id == null) {
@@ -834,19 +878,17 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
         eq.id!,
         <String, dynamic>{
           ...equipmentWriteMap(eq),
-          'owner': _ownerIdsOf(ownerUserId),
+          'owner': releaseOtherOwners
+              ? <int>[?ownerUserId]
+              : ownersAfterCardEdit(
+                  atOpen: ownersAtOpen,
+                  shown: shownOwnerUserId,
+                  chosen: ownerUserId,
+                ),
         },
-        // Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
-        // κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
-        // ξεχάστηκε σε δεύτερο κατάλογο.
         expected: expected == null
             ? null
-            : <String, Object?>{
-                ...equipmentWriteMap(expected),
-                'owner': EquipmentRepository.ownersFingerprint(
-                  _ownerIdsOf(expectedOwnerUserId),
-                ),
-              },
+            : _conflictBaseline(expected, ownersAtOpen),
         force: force,
       );
     } on DirectoryStaleException {
@@ -856,9 +898,31 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     await _afterEquipmentMutation();
   }
 
-  /// Η χρέωση ως λίστα — ένας κάτοχος ή κανένας.
-  static List<int> _ownerIdsOf(int? ownerUserId) =>
-      ownerUserId != null ? <int>[ownerUserId] : const <int>[];
+  /// Άλλαξε κάποιος άλλος την καρτέλα από τότε που άνοιξε η φόρμα; Μόνο
+  /// ανάγνωση — για την ερώτηση «Κάποιος πρόλαβε» **πριν** από τις εγγραφές
+  /// της αποθήκευσης.
+  Future<DirectorySaveConflict?> equipmentStaleConflict(
+    EquipmentModel expected, {
+    required List<int> ownersAtOpen,
+  }) async {
+    final id = expected.id;
+    if (id == null) return null;
+    final db = await DatabaseHelper.instance.database;
+    return EquipmentRepository(
+      db,
+    ).staleConflict(id, expected: _conflictBaseline(expected, ownersAtOpen));
+  }
+
+  /// Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
+  /// κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
+  /// ξεχάστηκε σε δεύτερο κατάλογο.
+  static Map<String, Object?> _conflictBaseline(
+    EquipmentModel expected,
+    List<int> ownersAtOpen,
+  ) => <String, Object?>{
+    ...equipmentWriteMap(expected),
+    'owner': EquipmentRepository.ownersFingerprint(ownersAtOpen),
+  };
 
   /// Διαγράφει την επιλογή, ή μόνο τα [onlyIds] όταν δίνονται.
   ///

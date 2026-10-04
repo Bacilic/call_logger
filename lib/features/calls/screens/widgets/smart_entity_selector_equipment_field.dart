@@ -67,7 +67,7 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
     final selected = widget.header.selectedEquipment;
     // Αποφυγή περιττού lookup όταν το κείμενο ταιριάζει ήδη με την επιλεγμένη
     // οντότητα (η τιμή του πεδίου είναι η αλήθεια).
-    if (selected != null && query == _equipmentFieldText(selected)) {
+    if (selected != null && query == selected.selectorFieldText) {
       return;
     }
     widget.notifier.performEquipmentLookupByCode(query);
@@ -186,16 +186,13 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
     return _querySuggestions(header, lookupService, _typedQuery);
   }
 
-  static String _equipmentFieldText(EquipmentModel e) =>
-      e.code?.trim().isNotEmpty == true ? e.code!.trim() : e.displayLabel;
-
   void _selectEquipment(
     EquipmentModel equipment, {
     bool fromCustomList = false,
   }) {
     _isSelectingEquipment = true;
     if (fromCustomList) _justSelectedFromCustomList = true;
-    final fieldText = _equipmentFieldText(equipment);
+    final fieldText = equipment.selectorFieldText;
     _setControllerText(widget.controller, fieldText);
     widget.notifier.setEquipment(equipment);
     widget.notifier.checkContent(equipmentText: fieldText);
@@ -234,10 +231,10 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
     // είναι κενό· ποτέ δεν αντικαθιστούμε κείμενο που έχει ήδη ο χρήστης.
     if (sel != null &&
         widget.controller.text.trim().isEmpty &&
-        _equipmentFieldText(sel).isNotEmpty) {
+        sel.selectorFieldText.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _setControllerText(widget.controller, _equipmentFieldText(sel));
+          _setControllerText(widget.controller, sel.selectorFieldText);
         }
       });
     }
@@ -470,9 +467,8 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                                     _isKeyboardPreview = true;
                                     _setControllerText(
                                       textController,
-                                      _equipmentFieldText(
-                                        overlayEquipments[_keyboardOptionIndex],
-                                      ),
+                                      overlayEquipments[_keyboardOptionIndex]
+                                          .selectorFieldText,
                                     );
                                     return KeyEventResult.handled;
                                   }
@@ -490,9 +486,8 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                                     _isKeyboardPreview = true;
                                     _setControllerText(
                                       textController,
-                                      _equipmentFieldText(
-                                        overlayEquipments[_keyboardOptionIndex],
-                                      ),
+                                      overlayEquipments[_keyboardOptionIndex]
+                                          .selectorFieldText,
                                     );
                                     return KeyEventResult.handled;
                                   }
@@ -529,9 +524,8 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                                   _isKeyboardPreview = true;
                                   _setControllerText(
                                     textController,
-                                    _equipmentFieldText(
-                                      options[_keyboardOptionIndex],
-                                    ),
+                                    options[_keyboardOptionIndex]
+                                        .selectorFieldText,
                                   );
                                   return KeyEventResult.handled;
                                 }
@@ -547,9 +541,8 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                                   _isKeyboardPreview = true;
                                   _setControllerText(
                                     textController,
-                                    _equipmentFieldText(
-                                      options[_keyboardOptionIndex],
-                                    ),
+                                    options[_keyboardOptionIndex]
+                                        .selectorFieldText,
                                   );
                                   return KeyEventResult.handled;
                                 }
@@ -616,20 +609,12 @@ class _SmartEntityEquipmentFieldState extends State<SmartEntityEquipmentField> {
                                   _typedQuery = value;
                                   _keyboardOptionIndex = -1;
                                   _lastAutoScrollIndex = -1;
-                                  if (value.trim().isEmpty) {
-                                    notifier.clearEquipment();
-                                    return;
-                                  }
-                                  if (_isSelectingEquipment) {
+                                  if (_isSelectingEquipment &&
+                                      value.trim().isNotEmpty) {
                                     notifier.checkContent(equipmentText: value);
                                     return;
                                   }
-                                  final selected = header.selectedEquipment;
-                                  if (selected != null &&
-                                      value != _equipmentFieldText(selected)) {
-                                    notifier.clearEquipment();
-                                  }
-                                  notifier.checkContent(equipmentText: value);
+                                  notifier.updateEquipmentText(value);
                                 },
                                 onSubmitted: (_) {
                                   final options = _equipmentKeyboardOptions(

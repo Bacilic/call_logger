@@ -1,3 +1,4 @@
+import '../../../core/utils/count_phrase.dart';
 import '../../../core/services/lookup_service.dart';
 import 'bulk_deletion_summary.dart';
 
@@ -42,8 +43,13 @@ class DepartmentDeletionInventory {
       final noun = employeeCount == 1 ? 'υπάλληλος' : 'υπάλληλοι';
       var line = '$employeeCount $noun';
       if (employeeOwnedPhoneCount + employeeOwnedEquipmentCount > 0) {
-        line +=
-            ' — ο εξοπλισμός και τα τηλέφωνά τους θα τους ακολουθήσουν αν μεταφερθούν';
+        line += byCount(
+          employeeCount,
+          one:
+              ' — ο εξοπλισμός και τα τηλέφωνά του θα τον ακολουθήσουν αν μεταφερθεί',
+          many:
+              ' — ο εξοπλισμός και τα τηλέφωνά τους θα τους ακολουθήσουν αν μεταφερθούν',
+        );
       }
       lines.add(line);
     }

@@ -664,9 +664,17 @@ class OrphanQuickAddResult {
     required this.requiresConfirmation,
     required this.message,
     this.successMessage,
-  });
+  }) : failed = false;
+
+  /// Η καταχώρηση σταμάτησε στη μέση· το [message] λέει γιατί και
+  /// ανακοινώνεται όπως το μήνυμα επιτυχίας.
+  const OrphanQuickAddResult.failed(this.message)
+    : requiresConfirmation = false,
+      successMessage = null,
+      failed = true;
 
   final bool requiresConfirmation;
   final String message;
   final String? successMessage;
+  final bool failed;
 }

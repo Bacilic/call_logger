@@ -43,6 +43,7 @@ void main() {
         CallsMapGate.isMapActive(
           SmartEntitySelectorState(selectedDepartmentId: 70),
           lookupWithCompany(),
+          const CallsFieldConfirmations(department: true),
         ),
         isFalse,
       );
@@ -53,10 +54,24 @@ void main() {
         CallsMapGate.isMapActive(
           SmartEntitySelectorState(selectedDepartmentId: 5),
           lookupWithCompany(),
+          const CallsFieldConfirmations(department: true),
         ),
         isTrue,
       );
     });
+
+    test(
+      'τμήμα που αναγνωρίστηκε όσο γράφεται, χωρίς επιβεβαίωση → ΧΑ ανενεργό',
+      () {
+        expect(
+          CallsMapGate.isMapActive(
+            SmartEntitySelectorState(selectedDepartmentId: 5),
+            lookupWithCompany(),
+          ),
+          isFalse,
+        );
+      },
+    );
 
     test('καλών που ανήκει σε εταιρεία → ΧΑ ανενεργό', () {
       expect(
@@ -80,6 +95,7 @@ void main() {
         CallsMapGate.isMapActive(
           SmartEntitySelectorState(selectedDepartmentId: 70),
           null,
+          const CallsFieldConfirmations(department: true),
         ),
         isTrue,
       );

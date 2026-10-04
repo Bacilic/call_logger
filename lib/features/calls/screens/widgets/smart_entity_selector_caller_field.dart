@@ -743,16 +743,6 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                                   notifier.clearCaller();
                                 } else {
                                   notifier.updateCallerDisplayText(value);
-                                  if (header.selectedCaller != null) {
-                                    final n = header.selectedCaller!.name;
-                                    final f = header
-                                        .selectedCaller!
-                                        .fullNameWithDepartment;
-                                    if (value.trim() != n &&
-                                        value.trim() != f) {
-                                      notifier.updateSelectedCaller(null);
-                                    }
-                                  }
                                 }
                               },
                               onSubmitted: (_) {

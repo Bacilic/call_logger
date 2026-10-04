@@ -169,7 +169,8 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
         if (state.selectedIds.isNotEmpty)
           CatalogSelectionBar(
             selectedCount: state.selectedIds.length,
-            countLabel: 'επιλεγμένα',
+            countLabelOne: 'επιλεγμένο',
+            countLabelMany: 'επιλεγμένα',
             showOnlySelected: state.showOnlySelected,
             searchController: _searchController,
             onToggleShowOnlySelected: notifier.toggleShowOnlySelected,

@@ -25,6 +25,7 @@ class BulkActionUndoRecord {
     this.userDepartmentBefore = const {},
     this.userPhonesBefore = const {},
     this.phoneDeptAdds = const [],
+    this.phoneDeptRemovals = const [],
     this.equipmentDepartmentBefore = const {},
     this.equipmentDepartmentAfter = const {},
     this.unlinkedUserEquipment = const [],
@@ -40,6 +41,10 @@ class BulkActionUndoRecord {
   final Map<int, int?> userDepartmentBefore;
   final Map<int, List<String>> userPhonesBefore;
   final List<PhoneDeptAdd> phoneDeptAdds;
+
+  /// Κοινόχρηστα τμήματος που αφαιρέθηκαν (το κοινό τηλέφωνο ακολούθησε τον
+  /// μεταφερόμενο) — η αναίρεση τα ξαναπροσθέτει.
+  final List<PhoneDeptAdd> phoneDeptRemovals;
 
   /// code_equipment → τμήμα ΠΡΙΝ την αλλαγή (null = ήταν χωρίς τμήμα).
   final Map<String, int?> equipmentDepartmentBefore;
@@ -70,6 +75,7 @@ class BulkActionUndoRecord {
       userDepartmentBefore.isEmpty &&
       userPhonesBefore.isEmpty &&
       phoneDeptAdds.isEmpty &&
+      phoneDeptRemovals.isEmpty &&
       equipmentDepartmentBefore.isEmpty &&
       unlinkedUserEquipment.isEmpty &&
       softDeletedPhoneNumbers.isEmpty &&
@@ -213,6 +219,16 @@ Future<void> applyBulkActionUndo(
       await phones.removeDepartmentDirectPhone(
         add.departmentId,
         add.phoneNumber,
+        executor: txn,
+      );
+    }
+
+    // ΜΕΤΑ την αφαίρεση των προσθηκών: ο αριθμός γυρίζει στο τμήμα που τον
+    // είχε, αφού έχει φύγει από εκείνο όπου πήγε.
+    for (final removal in record.phoneDeptRemovals) {
+      await phones.addDepartmentDirectPhone(
+        removal.departmentId,
+        removal.phoneNumber,
         executor: txn,
       );
     }

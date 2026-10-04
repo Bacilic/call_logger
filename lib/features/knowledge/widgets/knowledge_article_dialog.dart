@@ -101,8 +101,7 @@ class _KnowledgeArticleDialogState
           .read(knowledgeActionsProvider.notifier)
           .save(updated);
       if (!mounted) return;
-      Navigator.of(context).pop(id);
-      ScaffoldMessenger.of(context).showSnackBar(
+      closeDialogWithSnackBar(
         SnackBar(
           content: Text(
             _isNew
@@ -110,6 +109,7 @@ class _KnowledgeArticleDialogState
                 : 'Το άρθρο ενημερώθηκε.',
           ),
         ),
+        result: id,
       );
     } catch (e) {
       if (!mounted) return;

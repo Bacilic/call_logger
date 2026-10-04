@@ -9,6 +9,7 @@ import '../../../../core/widgets/dialog_scrollable_content.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/services/lansweeper_asset_target.dart';
 import '../../../../core/services/lookup_service.dart';
+import 'bulk_user_action_pickers.dart';
 import '../../../../core/database/audit_diff_helper.dart';
 import '../../../../core/database/audit_service.dart';
 import '../../../../core/services/save_confirmation_summary.dart';
@@ -207,6 +208,10 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     return EquipmentRemoteParamKey.withExclusiveToolId(out, effectiveId);
   }
 
+  /// **Όλοι** οι κάτοχοι τη στιγμή που άνοιξε η καρτέλα — η καρτέλα δείχνει
+  /// μόνο τον πρώτο, αλλά τους κρατά όλους όπως ήταν.
+  late final List<int> _ownersAtOpen;
+
   @override
   void initState() {
     super.initState();
@@ -232,6 +237,10 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     locationController = SpellCheckController()
       ..text = locationState.displayText;
     selectedUserId = widget.initialOwner?.id;
+    _ownersAtOpen = widget.notifier.cardOwnersAtOpen(
+      e?.id,
+      shownOwnerId: widget.initialOwner?.id,
+    );
     final typeRaw = e?.type?.trim() ?? '';
     selectedType = typeRaw.isEmpty ? null : typeRaw;
     // Το «κύριο» εργαλείο είναι πλέον υπολογιζόμενο (σειρά προτεραιότητας) — δεν
@@ -612,6 +621,46 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     }
   }
 
+  /// Ο κάτοχος που φαίνεται αλλάζει σε υπάλληλο **άλλου** τμήματος, ενώ το
+  /// μηχάνημα το κρατούν κι άλλοι στο τμήμα τους: ένα μηχάνημα δεν ανήκει σε
+  /// δύο τμήματα, οπότε ρωτιέται αν μεταφέρεται και φεύγει από εκείνους.
+  ///
+  /// `false` = δεν χρειάζεται ερώτηση· `true` = «Μεταφορά»· `null` = «Άκυρο».
+  Future<bool?> _confirmMoveAwayFromCoOwners({
+    required int? chosenOwnerId,
+    required String code,
+  }) async {
+    final shown = widget.initialOwner?.id;
+    if (chosenOwnerId == null || chosenOwnerId == shown) return false;
+    final lookup = LookupService.instance;
+    final chosen = lookup.findUserById(chosenOwnerId);
+    final targetDepartmentId = chosen?.departmentId;
+    final others = [
+      for (final id in _ownersAtOpen)
+        if (id != shown && id != chosenOwnerId) ?lookup.findUserById(id),
+    ];
+    final elsewhere = others
+        .where((u) => u.departmentId != targetDepartmentId)
+        .toList();
+    if (elsewhere.isEmpty) return false;
+
+    final names = [
+      for (final u in elsewhere) (u.name ?? '').trim(),
+    ].where((n) => n.isNotEmpty).join(', ');
+    final targetName =
+        lookup.getDepartmentName(targetDepartmentId)?.trim() ?? '';
+    if (!mounted) return null;
+    final approved = await showBulkConfirmDialog(
+      context,
+      title: 'Κοινός εξοπλισμός',
+      message:
+          'Ο εξοπλισμός $code μοιράζεται με: $names — μεταφέρεται στο '
+          'τμήμα «$targetName» και φεύγει από τους υπόλοιπους κατόχους;',
+      confirmLabel: 'Μεταφορά',
+    );
+    return approved ? true : null;
+  }
+
   Future<void> _savePersist() async {
     final asyncLookup = ref.read(lookupServiceProvider);
     final lookup = asyncLookup.value?.service;
@@ -630,6 +679,54 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     }
     final userId = ownerBinding.userId;
     final code = codeController.text.trim();
+
+    // Κάθε απόρριψη γίνεται ΠΡΙΝ από την πρώτη εγγραφή (παρακάτω μπορεί να
+    // δημιουργηθεί νέο τμήμα) — και πριν από την ερώτηση διένεξης: δεν έχει
+    // νόημα να ρωτηθεί κάτι για αποθήκευση που δεν θα γίνει.
+    if (widget.notifier.hasDuplicateCode(
+      code,
+      excludeId: isEdit ? widget.initialEquipment?.id : null,
+    )) {
+      _showRejectionSnackBar(
+        const SnackBar(
+          content: Text(
+            'Υπάρχει ήδη εξοπλισμός με αυτόν τον κωδικό. Διορθώστε τα δεδομένα.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // «Κάποιος πρόλαβε;» ρωτιέται ΠΡΙΝ από την πρώτη εγγραφή: αμέσως παρακάτω
+    // μπορεί να δημιουργηθεί νέο τμήμα, και μια «ακύρωση» μετά από αυτό δεν
+    // θα ακύρωνε τίποτα.
+    var keepMine = false;
+    final initial = widget.initialEquipment;
+    if (isEdit && initial != null) {
+      final answer = await askDirectoryConflictBeforeWrites(
+        context,
+        probe: () => widget.notifier.equipmentStaleConflict(
+          initial,
+          ownersAtOpen: _ownersAtOpen,
+        ),
+      );
+      if (!mounted) return;
+      if (answer == DirectoryConflictAnswer.keepTheirs) {
+        showDirectorySaveCancelledSnackBar(context);
+        return;
+      }
+      keepMine = answer == DirectoryConflictAnswer.keepMine;
+    }
+
+    // Κοινό μηχάνημα που αλλάζει κάτοχο προς άλλο τμήμα: ρωτιέται η τύχη του
+    // μηχανήματος, πριν από κάθε εγγραφή. «Άκυρο» = πίσω στη φόρμα.
+    final releaseOtherOwners = await _confirmMoveAwayFromCoOwners(
+      chosenOwnerId: userId,
+      code: codeController.text.trim(),
+    );
+    if (releaseOtherOwners == null || !mounted) return;
+
     final typeVal = selectedType?.trim() ?? '';
     final deptText = departmentController.text.trim();
     final int? equipmentDepartmentId;
@@ -664,41 +761,25 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
           : lansweeperAssetNameController.text.trim(),
     );
     if (isEdit) {
-      if (equipment.id != null &&
-          widget.notifier.hasDuplicateCode(code, excludeId: equipment.id)) {
-        if (!mounted) return;
-        _showRejectionSnackBar(
-          const SnackBar(
-            content: Text(
-              'Υπάρχει ήδη εξοπλισμός με αυτόν τον κωδικό. Διορθώστε τα δεδομένα.',
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-      // Η καρτέλα γράφεται ολόκληρη: αν κάποιος πρόλαβε, ρωτιέται ο άνθρωπος.
+      // Η διένεξη ρωτήθηκε ήδη πριν από τις εγγραφές. Ο φρουρός εδώ πιάνει
+      // μόνο όποιον πρόλαβε στο ελάχιστο διάστημα από τότε — εκτός αν ο
+      // χρήστης απάντησε ήδη «Κράτα τη δική μου αλλαγή».
       if (!mounted) return;
       final saved = await saveDirectoryRecordWithConflictPrompt(
         context,
         save: ({required force}) => widget.notifier.updateEquipment(
           equipment,
-          expected: force ? null : widget.initialEquipment,
-          force: force,
+          expected: force || keepMine ? null : widget.initialEquipment,
+          force: force || keepMine,
+          ownersAtOpen: _ownersAtOpen,
           ownerUserId: userId,
-          expectedOwnerUserId: widget.initialOwner?.id,
+          shownOwnerUserId: widget.initialOwner?.id,
+          releaseOtherOwners: releaseOtherOwners,
         ),
       );
       if (!mounted) return;
       if (!saved) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Η αποθήκευση ακυρώθηκε — η καρτέλα κρατά τα στοιχεία του '
-              'συναδέλφου. Κλείστε την και ανοίξτε την ξανά για να τα δείτε.',
-            ),
-          ),
-        );
+        showDirectorySaveCancelledSnackBar(context);
         return;
       }
       final savedMessage = await _buildEditSaveConfirmationMessage(
@@ -727,18 +808,6 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
       widget.onSaved?.call();
       closeForm(true);
       showSaveConfirmationSnackBar(context, savedMessage);
-      return;
-    }
-    if (widget.notifier.hasDuplicateCode(code)) {
-      if (!mounted) return;
-      _showRejectionSnackBar(
-        const SnackBar(
-          content: Text(
-            'Υπάρχει ήδη εξοπλισμός με αυτόν τον κωδικό. Διορθώστε τα δεδομένα.',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
       return;
     }
     await widget.notifier.addEquipment(equipment, ownerUserId: userId);

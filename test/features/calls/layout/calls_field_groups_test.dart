@@ -77,10 +77,10 @@ void main() {
       expect(groups.isCallerGroupActive, isFalse);
     });
 
-    test('department id activates map', () {
+    test('confirmed department id activates map', () {
       final groups = CallsFieldGroupsResolver.resolve(
         _header(departmentId: 3),
-        CallsFieldConfirmations.empty,
+        const CallsFieldConfirmations(department: true),
       );
       expect(groups.isMapActive, isTrue);
     });

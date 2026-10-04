@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/app_permission.dart';
 import '../../../core/providers/main_nav_request_provider.dart';
 import '../../../core/services/application_reset_service.dart';
-import '../../../core/services/backup_reset_metadata.dart';
+import '../../../core/services/permission_service.dart';
+import '../../../core/services/settings_service.dart';
 import '../../../core/widgets/main_nav_destination.dart';
 import '../../../features/calls/provider/call_entry_provider.dart';
 import '../../../features/calls/provider/call_header_provider.dart';
@@ -24,6 +26,55 @@ bool hasOpenCallSession(CallEntryState entry, SmartEntitySelectorState header) {
   if (header.selectedCaller != null) return true;
   if (header.selectedEquipment != null) return true;
   return false;
+}
+
+/// Η ενότητα «Επαναφορά εφαρμογής» των Ρυθμίσεων — επικεφαλίδα και κουμπί.
+///
+/// Χωρίς το δικαίωμα [AppPermission.resetApplication] **δεν υπάρχει καθόλου**,
+/// ούτε η επικεφαλίδα: γκρίζο κουμπί θα ήταν πρόσκληση να ρωτήσει κανείς
+/// «γιατί δεν μπορώ», όπως στο Ιστορικό Εφαρμογής.
+class ApplicationResetSection extends ConsumerWidget {
+  const ApplicationResetSection({super.key, this.enabled = true});
+
+  /// `false` όσο φορτώνουν ακόμη οι ρυθμίσεις της οθόνης.
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!PermissionService.instance.can(AppPermission.resetApplication)) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 32),
+        const Divider(),
+        const SizedBox(height: 16),
+        Text(
+          'Επαναφορά εφαρμογής',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.error,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(Icons.restart_alt, color: theme.colorScheme.error),
+          title: const Text('Ξεκίνα από την αρχή (Επαναφορά ρυθμίσεων)'),
+          subtitle: const Text(
+            'Ο υπολογιστής ξεχνά τη βάση και τις ρυθμίσεις του και ξεκινά σαν '
+            'πρώτη φορά. Δεν σβήνεται τίποτα από τη βάση.',
+          ),
+          onTap: enabled
+              ? () => StartFromBeginningFlow.run(context, ref)
+              : null,
+        ),
+      ],
+    );
+  }
 }
 
 /// Ροή «Ξεκίνα από την αρχή» από τις Γενικές ρυθμίσεις.
@@ -94,7 +145,7 @@ class StartFromBeginningFlow {
       if (skip != true || !context.mounted) return;
     }
 
-    final backupMeta = await BackupResetMetadataReader.read(ref: ref);
+    final databasePath = await SettingsService().getDatabasePath();
     if (!context.mounted) return;
 
     final confirmed = await showDialog<bool>(
@@ -102,7 +153,7 @@ class StartFromBeginningFlow {
       builder: (ctx) => AlertDialog(
         title: const Text('Ξεκίνα από την αρχή'),
         content: SingleChildScrollView(
-          child: _ResetWarningBody(backupMeta: backupMeta),
+          child: _ResetWarningBody(databasePath: databasePath),
         ),
         actions: [
           TextButton(
@@ -129,79 +180,60 @@ class StartFromBeginningFlow {
 }
 
 class _ResetWarningBody extends StatelessWidget {
-  const _ResetWarningBody({required this.backupMeta});
+  const _ResetWarningBody({required this.databasePath});
 
-  final BackupResetMetadata backupMeta;
+  /// Η βάση από την οποία αποσυνδέεται ο υπολογιστής — χωρίς αυτήν, όποιος
+  /// δεν ξέρει τη δικτυακή διαδρομή δεν μπορεί να ξανασυνδεθεί.
+  final String databasePath;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bodyStyle = theme.textTheme.bodyMedium?.copyWith(height: 1.45);
+    final headingStyle = bodyStyle?.copyWith(fontWeight: FontWeight.w600);
+
+    Widget bullet(String line) => Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• '),
+          Expanded(child: Text(line, style: bodyStyle)),
+        ],
+      ),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Αποσυνδέεστε από τα παρακάτω δεδομένα (δεν διαγράφονται από το δίσκο):',
-          style: bodyStyle?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 12),
-        ...const [
-          'Χρήστες, τμήματα, εξοπλισμός και κατάλογος',
-          'Χάρτες κτιρίου (δεν θα φαίνονται μέχρι σύνδεση σε σχετική βάση)',
-          'Παλιά βάση Λάμπα — διαδρομές και ρυθμίσεις (όχι τα αρχεία .db)',
-          'Απομακρυσμένα εργαλεία, Lansweeper, ρυθμίσεις απομακρυσμένης σύνδεσης',
-          'Εκκρεμότητες, ιστορικό κλήσεων, καταγραφές audit',
-          'Ορθογραφία και λεξικό',
-          'Παλέτα χρωμάτων τμημάτων',
-          'Όλες οι τοπικές ρυθμίσεις εφαρμογής (σαν πρώτη εκτέλεση)',
-        ].map(
-          (line) => Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('• '),
-                Expanded(child: Text(line, style: bodyStyle)),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Σε κοινόχρηστη (δικτυακή) βάση, οι άλλοι χρήστες συνεχίζουν κανονικά — '
-          'επηρεάζεται μόνο αυτή η εγκατάσταση.',
-          style: bodyStyle,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Τα αρχεία .db στο δίσκο δεν διαγράφονται. '
-          'Αν ξαναεπιλέξετε την ίδια βάση, όλα τα δεδομένα θα επανέλθουν. '
-          'Μπορείτε να δημιουργήσετε νέα κενή βάση στον ίδιο φάκελο '
-          '(π.χ. call_logger_reset.db) και να εναλλάσσεστε ανάμεσα σε αρχεία.',
-          style: bodyStyle,
-        ),
-        if (backupMeta.hasBackupFolder) ...[
-          const SizedBox(height: 12),
-          Text(
-            backupMeta.latestBackupLabel == null
-                ? 'Διατηρούνται αντίγραφα ασφαλείας στο φάκελο: '
-                      '${backupMeta.destinationFolderName}.'
-                : 'Διατηρούνται αντίγραφα ασφαλείας στο φάκελο: '
-                      '${backupMeta.destinationFolderName} — πιο πρόσφατο: '
-                      '${backupMeta.latestBackupLabel}.',
-            style: bodyStyle,
-          ),
-        ],
+        Text('Τι θα γίνει σε αυτόν τον υπολογιστή:', style: headingStyle),
         const SizedBox(height: 8),
-        Text(
-          'Η επαναφορά από zip γίνεται ξεχωριστά από τον πίνακα βάσης δεδομένων.',
-          style: bodyStyle?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontSize: 12,
-          ),
+        bullet(
+          'Αποσυνδέεται από τη βάση και σας ζητά αμέσως να διαλέξετε βάση· '
+          'εκεί μπορείτε ακόμη να πατήσετε «Ακύρωση» και να γυρίσουν όλα '
+          'όπως ήταν.',
         ),
+        bullet(
+          'Οι ρυθμίσεις που κρατά αυτός ο υπολογιστής γυρίζουν στις αρχικές, '
+          'σαν πρώτη εγκατάσταση.',
+        ),
+        const SizedBox(height: 12),
+        Text('Τι ΔΕΝ αλλάζει:', style: headingStyle),
+        const SizedBox(height: 8),
+        bullet(
+          'Δεν σβήνεται τίποτα. Κλήσεις, Κατάλογος, εκκρεμότητες, ιστορικό και '
+          'οι ρυθμίσεις που ζουν στη βάση μένουν όπως είναι.',
+        ),
+        bullet('Οι άλλοι υπολογιστές συνεχίζουν κανονικά.'),
+        const SizedBox(height: 12),
+        Text(
+          'Σημειώστε πού βρίσκεται η βάση — θα τη χρειαστείτε για να '
+          'ξανασυνδεθείτε:',
+          style: bodyStyle,
+        ),
+        const SizedBox(height: 4),
+        SelectableText(databasePath, style: headingStyle),
       ],
     );
   }

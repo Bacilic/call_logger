@@ -200,7 +200,8 @@ class _UsersTabState extends ConsumerState<UsersTab>
         if (personal && state.selectedIds.isNotEmpty)
           CatalogSelectionBar(
             selectedCount: state.selectedIds.length,
-            countLabel: 'επιλεγμένοι',
+            countLabelOne: 'επιλεγμένος',
+            countLabelMany: 'επιλεγμένοι',
             showOnlySelected: state.showOnlySelected,
             searchController: _searchController,
             onToggleShowOnlySelected: notifier.toggleShowOnlySelected,

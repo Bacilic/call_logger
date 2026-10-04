@@ -8,6 +8,7 @@ import 'package:call_logger/core/utils/phone_list_parser.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
+import 'package:call_logger/features/directory/providers/equipment_directory_provider.dart';
 import 'package:call_logger/features/directory/screens/widgets/equipment_form_dialog.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -151,6 +152,34 @@ void main() {
       final result = _formState().resolveOwnerBinding('Οποιοσδήποτε', null);
       expect(result.userId, isNull);
       expect(result.error, isNotNull);
+    });
+  });
+
+  // Η καρτέλα δείχνει έναν κάτοχο· οι υπόλοιποι μένουν όπως είναι (απόφαση
+  // Διευθυντή 03/10 — το 3140 έχει δύο κατόχους).
+  //   flutter test test/features/directory/equipment_owner_binding_test.dart --plain-name "κάτοχος που φαίνεται"
+  group('Πολλοί κάτοχοι: αλλάζει μόνο ο κάτοχος που φαίνεται', () {
+    List<int> after({required int? shown, required int? chosen}) =>
+        EquipmentDirectoryNotifier.ownersAfterCardEdit(
+          atOpen: const [3, 7],
+          shown: shown,
+          chosen: chosen,
+        );
+
+    test('καμία αλλαγή κατόχου → μένουν και οι δύο', () {
+      expect(after(shown: 3, chosen: 3), [3, 7]);
+    });
+
+    test('άλλος κάτοχος στη θέση του φαινόμενου → ο δεύτερος μένει', () {
+      expect(after(shown: 3, chosen: 9), [7, 9]);
+    });
+
+    test('σβήσιμο του κατόχου → φεύγει μόνο ο φαινόμενος', () {
+      expect(after(shown: 3, chosen: null), [7]);
+    });
+
+    test('ο δεύτερος κάτοχος επιλέγεται → δεν διπλογράφεται', () {
+      expect(after(shown: 3, chosen: 7), [7]);
     });
   });
 }

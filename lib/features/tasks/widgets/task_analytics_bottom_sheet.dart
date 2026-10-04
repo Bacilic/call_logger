@@ -287,7 +287,7 @@ class _TaskAnalyticsBody extends StatelessWidget {
                           'Μ. χρόνος ολοκλήρωσης: ${_formatDuration(summary.avgCompletionSeconds)}',
                       color: _palette.softAmber,
                       icon: Icons.snooze_outlined,
-                      sparkline: summary.sparklineCompletionRate,
+                      sparkline: summary.sparklineSnoozes,
                     ),
                   ])
                     SizedBox(
@@ -556,6 +556,8 @@ class _BacklogAreaChart extends StatelessWidget {
         .map((e) => e.runningDelta.abs())
         .fold<int>(1, (a, b) => math.max(a, b))
         .toDouble();
+    final labelInterval = math.max(1, (points.length / 6).floor());
+    final lastIndex = points.length - 1;
     return SizedBox(
       height: 240,
       child: LineChart(
@@ -582,14 +584,25 @@ class _BacklogAreaChart extends StatelessWidget {
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                interval: math.max(1, (points.length / 6).floor()).toDouble(),
-                getTitlesWidget: (value, _) {
+                interval: labelInterval.toDouble(),
+                getTitlesWidget: (value, meta) {
                   final index = value.toInt();
                   if (index < 0 || index >= points.length) {
                     return const SizedBox.shrink();
                   }
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
+                  // Η τελευταία ημέρα παίρνει ετικέτα πάντα· όταν πέφτει
+                  // κοντά στην προηγούμενη κανονική, θα την πατούσε.
+                  if (index == lastIndex &&
+                      index % labelInterval != 0 &&
+                      index % labelInterval < labelInterval / 2) {
+                    return const SizedBox.shrink();
+                  }
+                  // Οι ετικέτες των άκρων μετακινούνται προς τα μέσα αντί
+                  // να κόβονται στη μέση από το όριο του γραφήματος.
+                  return SideTitleWidget(
+                    meta: meta,
+                    space: 6,
+                    fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
                     child: Text(
                       DateFormat('dd/MM').format(points[index].date),
                       style: const TextStyle(fontSize: 10),
@@ -635,6 +648,14 @@ class _BacklogAreaChart extends StatelessWidget {
 class _OriginDonutChart extends StatelessWidget {
   const _OriginDonutChart({required this.data});
 
+  static const double _centerSpaceRadius = 52;
+
+  /// Ορθογώνιο που χωρά ολόκληρο μέσα στον κύκλο της τρύπας.
+  static const double _centerLabelWidth = 84;
+  static const double _centerLabelMaxHeight = 60;
+
+  static const double _minPercentForSliceTitle = 10;
+
   final List<TaskAnalyticsOriginSlice> data;
 
   @override
@@ -664,7 +685,7 @@ class _OriginDonutChart extends StatelessWidget {
             children: [
               PieChart(
                 PieChartData(
-                  centerSpaceRadius: 52,
+                  centerSpaceRadius: _centerSpaceRadius,
                   sectionsSpace: 2,
                   sections: data
                       .map(
@@ -673,6 +694,9 @@ class _OriginDonutChart extends StatelessWidget {
                               colors[slice.origin] ?? const Color(0xFF94A3B8),
                           value: slice.count.toDouble(),
                           title: '${slice.percent.toStringAsFixed(0)}%',
+                          // Σε στενή φέτα το ποσοστό δεν χωράει και πατά στις
+                          // γειτονικές· διαβάζεται από το υπόμνημα.
+                          showTitle: slice.percent >= _minPercentForSliceTitle,
                           radius: 54,
                           titleStyle: const TextStyle(
                             color: Colors.white,
@@ -684,22 +708,37 @@ class _OriginDonutChart extends StatelessWidget {
                       .toList(),
                 ),
               ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _TaskAnalyticsBody._localizedOriginLabel(dominant.origin),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+              // Το κείμενο μένει μέσα στην τρύπα: αναδιπλώνεται στο πλάτος της
+              // και, αν ακόμη δεν χωρά, μικραίνει.
+              ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: _centerLabelWidth,
+                  maxHeight: _centerLabelMaxHeight,
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: SizedBox(
+                    width: _centerLabelWidth,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _TaskAnalyticsBody._localizedOriginLabel(
+                            dominant.origin,
+                          ),
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          '${dominant.percent.toStringAsFixed(1)}%',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFF64748B)),
+                        ),
+                      ],
                     ),
                   ),
-                  Text(
-                    '${dominant.percent.toStringAsFixed(1)}%',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
@@ -732,7 +771,9 @@ class _OriginDonutChart extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text('${slice.count}'),
+                      Text(
+                        '${slice.count} · ${slice.percent.toStringAsFixed(1)}%',
+                      ),
                     ],
                   ),
                 ),

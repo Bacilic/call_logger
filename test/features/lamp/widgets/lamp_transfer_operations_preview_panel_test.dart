@@ -48,6 +48,34 @@ void main() {
     });
   });
 
+  test('πλήθος ενεργειών Λάμπας → σωστός αριθμός στο ένα και στα πολλά', () {
+    expect(
+      transferActionCountLabel(TransferFieldAction.updated, 1),
+      '1 τροποποίηση',
+    );
+    expect(
+      transferActionCountLabel(TransferFieldAction.updated, 3),
+      '3 τροποποιήσεις',
+    );
+    expect(transferActionCountLabel(TransferFieldAction.created, 1), '1 νέο');
+    expect(
+      transferActionCountLabel(TransferFieldAction.linked, 1),
+      '1 σύνδεση',
+    );
+    expect(
+      transferActionCountLabel(TransferFieldAction.unlinked, 1),
+      '1 αποσύνδεση',
+    );
+    expect(
+      transferActionCountLabel(TransferFieldAction.unchanged, 1),
+      '1 αμετάβλητο',
+    );
+    expect(
+      transferActionCountLabel(TransferFieldAction.unchanged, 2),
+      '2 αμετάβλητα',
+    );
+  });
+
   group('LampTransferMigrationForm', () {
     testWidgets(
       'Scrollbar δένει ρητό ScrollController με τη λίστα πεδίων (Windows-safe)',

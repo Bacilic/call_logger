@@ -141,8 +141,7 @@ class CallerQuickAddController {
     if (preview == null) return;
 
     if (!preview.requiresConfirmation) {
-      final message = preview.successMessage;
-      if (message != null) prompts.announce(message);
+      _announceOrphanOutcome(preview);
       return;
     }
 
@@ -151,8 +150,13 @@ class CallerQuickAddController {
     );
     if (!approved) return;
 
-    final applied = await actions.quickAddOrphan(forceShared: true);
-    final message = applied?.successMessage;
+    _announceOrphanOutcome(await actions.quickAddOrphan(forceShared: true));
+  }
+
+  /// Επιτυχία ή αποτυχία λέγονται και οι δύο — η αποτυχία δεν περνά σιωπηλά.
+  void _announceOrphanOutcome(OrphanQuickAddResult? result) {
+    if (result == null) return;
+    final message = result.failed ? result.message : result.successMessage;
     if (message != null) prompts.announce(message);
   }
 

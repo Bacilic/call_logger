@@ -11,6 +11,8 @@ import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../test_reporter.dart';
+
 const _kPhone = '2531';
 const _kDeptA = 1;
 const _kDeptB = 2;
@@ -116,7 +118,14 @@ void main() {
 
       expect(s.selectedDepartmentId, _kDeptB);
       expect(s.departmentText, _kDeptBName);
-      expect(s.callerCandidates, hasLength(2));
+      expect(
+        s.callerCandidates,
+        isEmpty,
+        reason: greekExpectMsg(
+          'Το τμήμα νικά: οι κάτοχοι του Φαρμακείου δεν προτείνονται σε φόρμα '
+          'του Χειρουργείου',
+        ),
+      );
     });
   });
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/count_phrase.dart';
+
 /// Η κάτω μπάρα που εμφανίζεται όταν υπάρχει επιλογή σε καρτέλα του Καταλόγου.
 ///
 /// Ήταν γραμμένη τέσσερις φορές, μία σε κάθε καρτέλα, με διαφορά μόνο στο
@@ -9,7 +11,8 @@ class CatalogSelectionBar extends StatelessWidget {
   const CatalogSelectionBar({
     super.key,
     required this.selectedCount,
-    required this.countLabel,
+    required this.countLabelOne,
+    required this.countLabelMany,
     required this.showOnlySelected,
     required this.searchController,
     required this.onToggleShowOnlySelected,
@@ -19,8 +22,11 @@ class CatalogSelectionBar extends StatelessWidget {
 
   final int selectedCount;
 
-  /// Το ουσιαστικό στο σωστό γένος: «επιλεγμένοι» ή «επιλεγμένα».
-  final String countLabel;
+  /// Η μετοχή για ακριβώς ένα στοιχείο, στο σωστό γένος: «επιλεγμένη».
+  final String countLabelOne;
+
+  /// Η μετοχή για κάθε άλλο πλήθος: «επιλεγμένες».
+  final String countLabelMany;
 
   final bool showOnlySelected;
 
@@ -56,7 +62,7 @@ class CatalogSelectionBar extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
-                '$selectedCount $countLabel',
+                '$selectedCount ${byCount(selectedCount, one: countLabelOne, many: countLabelMany)}',
                 key: const Key('catalog_selection_count'),
                 style: theme.textTheme.bodyMedium,
               ),

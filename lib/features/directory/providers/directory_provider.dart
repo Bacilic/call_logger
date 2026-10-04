@@ -634,10 +634,15 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 
   /// Έλεγχος διπλότυπου με φρέσκο lookup cache (πριν από αποθήκευση).
+  ///
+  /// [equipmentLeaving]: μηχανήματα που η ίδια αποθήκευση θα αφήσει πίσω στο
+  /// παλιό τμήμα — δεν μετρούν στον υπάλληλο. Έτσι ο έλεγχος γίνεται **πριν**
+  /// από κάθε εγγραφή και κρίνει την καρτέλα όπως θα είναι μετά.
   Future<bool> hasDuplicateUserFresh(
     UserModel u, {
     int? excludeId,
     int? mirrorEquipmentFromUserId,
+    Iterable<EquipmentModel> equipmentLeaving = const [],
   }) async {
     await _refreshLookupCache();
     if (!ref.mounted) return false;
@@ -645,6 +650,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
       u,
       excludeId: excludeId,
       mirrorEquipmentFromUserId: mirrorEquipmentFromUserId,
+      equipmentLeaving: equipmentLeaving,
     );
   }
 
@@ -652,6 +658,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     UserModel u, {
     int? excludeId,
     int? mirrorEquipmentFromUserId,
+    Iterable<EquipmentModel> equipmentLeaving = const [],
   }) {
     final nameKey = UserIdentityNormalizer.identityKeyForPerson(
       u.firstName,
@@ -661,7 +668,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     final candidateEquip = _equipmentCodeKeySet(
       userId: u.id,
       mirrorEquipmentFromUserId: mirrorEquipmentFromUserId,
-    );
+    )..removeAll(equipmentLeaving.map(_equipmentCodeKey));
     for (final existing in state.allUsers) {
       if (excludeId != null && existing.id == excludeId) continue;
       final eKey = UserIdentityNormalizer.identityKeyForPerson(
@@ -773,6 +780,18 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     await _refreshLookupCache();
     await loadUsers();
     await refreshDirectoryCaches(ref, equipment: true);
+  }
+
+  /// Άλλαξε κάποιος άλλος την καρτέλα από τότε που άνοιξε η φόρμα; Μόνο
+  /// ανάγνωση — για την ερώτηση «Κάποιος πρόλαβε» **πριν** από τις εγγραφές
+  /// της αποθήκευσης (ό,τι μένει πίσω, νέο τμήμα, συγκρούσεις τηλεφώνου).
+  Future<DirectorySaveConflict?> userStaleConflict(UserModel expected) async {
+    final id = expected.id;
+    if (id == null) return null;
+    final db = await DatabaseHelper.instance.database;
+    return UserRepository(
+      db,
+    ).staleConflict(id, expected: userConflictBaseline(expected));
   }
 
   /// Η αφετηρία **μετά** τις εγγραφές που έκανε η ίδια η αποθήκευση.

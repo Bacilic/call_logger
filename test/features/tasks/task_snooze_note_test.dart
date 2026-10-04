@@ -20,7 +20,11 @@ void main() {
   group('TaskSnoozeEntry note', () {
     test('addSnoozeEntry με note αποθηκεύει note στο entry και στο JSON', () {
       final due = DateTime(2026, 5, 27, 10, 0);
-      final updated = _baseTask().addSnoozeEntry(due, note: 'κάτι');
+      final updated = _baseTask().addSnoozeEntry(
+        due,
+        note: 'κάτι',
+        replacedDue: null,
+      );
 
       expect(updated.snoozeEntries.last.note, 'κάτι');
 
@@ -35,7 +39,11 @@ void main() {
         final due = DateTime(2026, 5, 27, 10, 0);
 
         for (final note in [null, '', '   ', '\t\n']) {
-          final updated = _baseTask().addSnoozeEntry(due, note: note);
+          final updated = _baseTask().addSnoozeEntry(
+            due,
+            note: note,
+            replacedDue: null,
+          );
           expect(updated.snoozeEntries.last.note, isNull);
 
           final decoded = jsonDecode(updated.snoozeHistoryJson!) as List;
@@ -66,9 +74,38 @@ void main() {
       final updated = _baseTask().addSnoozeEntry(
         due,
         note: 'περιμένω απάντηση πελάτη',
+        replacedDue: null,
       );
 
       expect(updated.combinedSearchText, contains('περιμένω απάντηση πελάτη'));
+    });
+  });
+
+  group('η προθεσμία που αντικατέστησε η αναβολή', () {
+    test('κρατιέται στο ιστορικό', () {
+      final task = _baseTask();
+      final updated = task.addSnoozeEntry(
+        DateTime(2026, 5, 27, 10),
+        replacedDue: task.dueDate,
+      );
+
+      expect(
+        updated.snoozeEntries.last.replacedDueAt,
+        DateTime(2026, 5, 26, 17),
+      );
+    });
+
+    test('δεν χάνεται όταν διορθώνεται η σημείωση', () {
+      final task = _baseTask();
+      final updated = task
+          .addSnoozeEntry(DateTime(2026, 5, 27, 10), replacedDue: task.dueDate)
+          .withUpdatedSnoozeNotes(['νέα σημείωση']);
+
+      expect(updated.snoozeEntries.last.note, 'νέα σημείωση');
+      expect(
+        updated.snoozeEntries.last.replacedDueAt,
+        DateTime(2026, 5, 26, 17),
+      );
     });
   });
 }

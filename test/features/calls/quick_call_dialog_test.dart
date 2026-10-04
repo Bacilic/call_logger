@@ -221,5 +221,71 @@ void main() {
       expect(_quickCallDialog(), findsNothing);
       await flushCallLoggerSqfliteLockTimers(tester);
     }, semanticsEnabled: false);
+
+    testWidgets(
+      'επιτυχής καταγραφή: ο διάλογος κλείνει και το μήνυμα επιτυχίας μένει ορατό',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        addTearDown(() async {
+          await _dismissQuickCallDialog(tester);
+        });
+
+        await _pumpCallLoggerApp(tester);
+        await _goToHistory(tester);
+        await _invokeQuickCaptureIntent(tester);
+        expect(_quickCallDialog(), findsOneWidget);
+
+        final phoneField = find.descendant(
+          of: _quickCallDialog(),
+          matching: callLoggerPhoneTextField(),
+        );
+        await tester.tap(phoneField);
+        await pumpUntilSettled(tester);
+        await tester.enterText(phoneField, kTestPhoneDigits);
+        await pumpUntilSettled(tester);
+
+        final submitFinder = find.descendant(
+          of: _quickCallDialog(),
+          matching: find.widgetWithText(ElevatedButton, 'Καταγραφή'),
+        );
+        expect(
+          tester.widget<ElevatedButton>(submitFinder).onPressed,
+          isNotNull,
+        );
+
+        // Η υποβολή ανοίγει συναλλαγή sqflite· έξω από `runAsync` η απάντηση
+        // του FFI δεν φτάνει ποτέ και το τεστ κρεμάει.
+        await tester.runAsync(() async {
+          await tester.tap(submitFinder);
+          for (
+            var i = 0;
+            i < 20 && _quickCallDialog().evaluate().isNotEmpty;
+            i++
+          ) {
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+            await tester.pump();
+          }
+        });
+        await tester.pump(const Duration(milliseconds: 500));
+        await pumpUntilSettled(tester);
+
+        expect(_quickCallDialog(), findsNothing);
+        expect(
+          find.text('Κλήση αποθηκεύτηκε (γρήγορη καταγραφή)'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Το μήνυμα επιτυχίας πρέπει να επιζεί του κλεισίματος του διαλόγου',
+          ),
+        );
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+      semanticsEnabled: false,
+    );
   });
 }

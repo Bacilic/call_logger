@@ -4,6 +4,7 @@ import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/sqlite_types.dart';
 import '../../../core/database/user_repository.dart';
+import '../../../core/directory/department_change_assets.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/search_text_normalizer.dart';
 import '../../calls/models/equipment_model.dart';
@@ -12,6 +13,7 @@ import '../models/department_kind.dart';
 import 'user_move_consequences.dart';
 import '../screens/widgets/shared_asset_disconnect_dialog.dart';
 import 'bulk_action_undo_record.dart';
+import 'phone_transfer_split.dart';
 import 'user_deletion_undo_record.dart';
 
 /// Τύχη τηλεφώνων/εξοπλισμού στη μαζική μεταφορά υπαλλήλων σε τμήμα.
@@ -86,28 +88,22 @@ typedef PhoneStayBehindDecision = ({bool releases, String? blockedReason});
 /// ενός υπαλλήλου. Όσο ζούσε μέσα στον βρόχο της μαζικής, η φόρμα δεν τον
 /// είχε καθόλου και ο προσωπικός αριθμός ακολουθούσε σιωπηλά.
 ///
-/// Τρεις περιπτώσεις εμποδίζουν την αποδέσμευση:
-/// 1. Τον κρατά και άλλος υπάλληλος — δεν είναι δικός μας να τον δώσουμε.
-/// 2. Κάθεται ήδη σε ΤΡΙΤΟ τμήμα — ένας αριθμός ανήκει μόνο σε ένα τμήμα.
-/// 3. Δεν υπάρχει τμήμα-αφετηρία — δεν υπάρχει πού να μείνει.
+/// Δύο περιπτώσεις εμποδίζουν την αποδέσμευση:
+/// 1. Κάθεται ήδη σε ΤΡΙΤΟ τμήμα — ένας αριθμός ανήκει μόνο σε ένα τμήμα.
+/// 2. Δεν υπάρχει τμήμα-αφετηρία — δεν υπάρχει πού να μείνει.
 ///
 /// Το τηλέφωνο που είναι ήδη κοινόχρηστο ΤΟΥ ΠΑΛΙΟΥ τμήματος αποδεσμεύεται
 /// κανονικά: απλώς δεν χρειάζεται να ξαναπροστεθεί εκεί.
+///
+/// Τηλέφωνο που το κρατούν και συνάδελφοι **δεν** περνά από εδώ: για αυτό
+/// ρωτιέται η τύχη του ίδιου του αριθμού ([SharedPhone]). Ως 04/10 ο κανόνας
+/// το «μπλόκαρε», και ο αριθμός κατέληγε μοιρασμένος σε δύο τμήματα.
 PhoneStayBehindDecision judgePhoneStayBehind({
   required String phone,
   required String userName,
   required int? oldDepartmentId,
-  List<String> otherOwnerNames = const [],
   ({int id, String name})? sharedDepartment,
 }) {
-  if (otherOwnerNames.isNotEmpty) {
-    return (
-      releases: false,
-      blockedReason:
-          'Το $phone παραμένει στον υπάλληλο $userName — '
-          'το χρησιμοποιεί επίσης: ${_joinNames(otherOwnerNames)}.',
-    );
-  }
   if (sharedDepartment != null && sharedDepartment.id != oldDepartmentId) {
     return (
       releases: false,
@@ -130,16 +126,43 @@ PhoneStayBehindDecision judgePhoneStayBehind({
 /// Το σχέδιο για **όλα** τα τηλέφωνα ενός υπαλλήλου που αλλάζει τμήμα.
 ///
 /// Το [blockedReasons] είναι ο λόγος που ΔΕΝ πραγματοποιήθηκε το «μένουν
-/// πίσω», σε λόγια του χρήστη — ένας ανά αριθμό που εμποδίστηκε.
+/// πίσω», σε λόγια του χρήστη — ένας ανά αριθμό που εμποδίστηκε. Τα **κοινά**
+/// τηλέφωνα (τα κρατούν και συνάδελφοι) δεν κρίνονται εδώ: η τύχη τους
+/// ρωτιέται χωριστά ([SharedAssetFate]).
 typedef PhoneStayBehindPlan = ({
   Set<String> staying,
   List<String> blockedReasons,
+  List<SharedPhone> shared,
 });
 
-/// Το ίδιο για τον εξοπλισμό.
+/// Κοινό τηλέφωνο και τα ονόματα των **υπόλοιπων** κατόχων του.
+typedef SharedPhone = ({String phone, List<String> otherOwnerNames});
+
+/// Το ίδιο για τον εξοπλισμό. Τα **κοινά** μηχανήματα (τα κρατά και άλλος)
+/// δεν κρίνονται εδώ: η τύχη τους ρωτιέται χωριστά ([SharedAssetFate]).
 typedef EquipmentStayBehindPlan = ({
   List<EquipmentModel> staying,
   List<String> blockedReasons,
+  List<SharedEquipment> shared,
+});
+
+/// Η τύχη ενός κοινού μηχανήματος ή τηλεφώνου όταν ένας από τους κατόχους
+/// του αλλάζει τμήμα (αποφάσεις Διευθυντή 03/10 και 04/10: η ερώτηση αφορά
+/// το **ίδιο το πράγμα**, όχι τον υπάλληλο).
+enum SharedAssetFate {
+  /// Μένει στο τμήμα του· φεύγει μόνο από όποιον μετακινείται. Η
+  /// συνηθισμένη απάντηση — και η προεπιλογή όταν δεν υπάρχει οθόνη.
+  staysInDepartment,
+
+  /// Ακολουθεί όποιον μετακινείται· φεύγει από τους υπόλοιπους κατόχους,
+  /// γιατί ούτε μηχάνημα ούτε αριθμός ανήκει σε δύο τμήματα.
+  movesWithOwner,
+}
+
+/// Κοινό μηχάνημα και τα ονόματα των **υπόλοιπων** κατόχων του.
+typedef SharedEquipment = ({
+  EquipmentModel equipment,
+  List<String> otherOwnerNames,
 });
 
 /// Τρέχει τον [judgePhoneStayBehind] για μια ολόκληρη λίστα και κρατά **και
@@ -161,12 +184,17 @@ PhoneStayBehindPlan planPhoneStayBehind({
 }) {
   final staying = <String>{};
   final blockedReasons = <String>[];
+  final shared = <SharedPhone>[];
   for (final phone in phones) {
     final others = [
       for (final other in lookup.findUsersByPhone(phone))
         if (other.id != null && other.id != editingUserId && !other.isDeleted)
           bulkUserDisplayName(other),
     ];
+    if (others.isNotEmpty) {
+      shared.add((phone: phone, otherOwnerNames: others));
+      continue;
+    }
     final dept = lookup.getDepartmentByPhone(phone);
     final deptId = dept?.id;
     final deptName = dept?.name.trim() ?? '';
@@ -174,7 +202,6 @@ PhoneStayBehindPlan planPhoneStayBehind({
       phone: phone,
       userName: userName,
       oldDepartmentId: oldDepartmentId,
-      otherOwnerNames: others,
       sharedDepartment: (deptId != null && deptName.isNotEmpty)
           ? (id: deptId, name: deptName)
           : null,
@@ -185,7 +212,7 @@ PhoneStayBehindPlan planPhoneStayBehind({
       blockedReasons.add(decision.blockedReason!);
     }
   }
-  return (staying: staying, blockedReasons: blockedReasons);
+  return (staying: staying, blockedReasons: blockedReasons, shared: shared);
 }
 
 /// Δίδυμο του [planPhoneStayBehind] για τον εξοπλισμό — ίδιος λόγος ύπαρξης.
@@ -198,6 +225,7 @@ EquipmentStayBehindPlan planEquipmentStayBehind({
 }) {
   final staying = <EquipmentModel>[];
   final blockedReasons = <String>[];
+  final shared = <SharedEquipment>[];
   for (final item in equipment) {
     final code = (item.code ?? '').trim();
     final itemId = item.id;
@@ -207,12 +235,15 @@ EquipmentStayBehindPlan planEquipmentStayBehind({
         if (other.id != null && other.id != editingUserId && !other.isDeleted)
           bulkUserDisplayName(other),
     ];
+    if (others.isNotEmpty) {
+      shared.add((equipment: item, otherOwnerNames: others));
+      continue;
+    }
     final decision = judgeEquipmentStayBehind(
       code: code,
       userName: userName,
       oldDepartmentId: oldDepartmentId,
       equipmentDepartmentId: item.departmentId,
-      otherOwnerNames: others,
     );
     if (decision.releases) {
       staying.add(item);
@@ -220,7 +251,7 @@ EquipmentStayBehindPlan planEquipmentStayBehind({
       blockedReasons.add(decision.blockedReason!);
     }
   }
-  return (staying: staying, blockedReasons: blockedReasons);
+  return (staying: staying, blockedReasons: blockedReasons, shared: shared);
 }
 
 /// Κρίνει αν ένα μηχάνημα μένει πίσω στο τμήμα που αφήνει ο υπάλληλος.
@@ -232,25 +263,18 @@ EquipmentStayBehindPlan planEquipmentStayBehind({
 /// εξοπλισμός ακολουθεί τον άνθρωπο — γι' αυτό εδώ κρίνεται μόνο η
 /// λιγότερο συνηθισμένη έκβαση: το «μένει πίσω».
 ///
-/// Δύο περιπτώσεις την εμποδίζουν:
-/// 1. Το κρατά και άλλος υπάλληλος — δεν είναι δικό μας να το δώσουμε.
-/// 2. Ούτε το μηχάνημα ούτε ο υπάλληλος έχουν τμήμα — θα έμενε ορφανό, και
-///    ο εξοπλισμός δεν είναι ποτέ ορφανός.
+/// Την εμποδίζει μόνο ένα πράγμα: ούτε το μηχάνημα ούτε ο υπάλληλος έχουν
+/// τμήμα — θα έμενε ορφανό, και ο εξοπλισμός δεν είναι ποτέ ορφανός.
+///
+/// Μηχάνημα που το κρατά και άλλος **δεν** περνά από εδώ: για αυτό ρωτιέται
+/// η τύχη του ίδιου του μηχανήματος ([SharedAssetFate]). Ως 03/10 ο
+/// κανόνας το «μπλόκαρε», και το μηχάνημα κατέληγε μοιρασμένο σε δύο τμήματα.
 PhoneStayBehindDecision judgeEquipmentStayBehind({
   required String code,
   required String userName,
   required int? oldDepartmentId,
   required int? equipmentDepartmentId,
-  List<String> otherOwnerNames = const [],
 }) {
-  if (otherOwnerNames.isNotEmpty) {
-    return (
-      releases: false,
-      blockedReason:
-          'Ο εξοπλισμός $code μένει ως έχει — '
-          'τον χρησιμοποιεί επίσης: ${_joinNames(otherOwnerNames)}.',
-    );
-  }
   if (equipmentDepartmentId == null && oldDepartmentId == null) {
     return (
       releases: false,
@@ -307,6 +331,12 @@ class BulkUserTransferPlan {
     required this.equipmentNeedingNewHome,
     required this.exclusions,
     this.equipmentRehoming = const SharedAssetDisconnectBatchResult(),
+    this.sharedEquipment = const [],
+    this.sharedEquipmentFate = SharedAssetFate.staysInDepartment,
+    this.sharedPhones = const [],
+    this.sharedPhoneFate = SharedAssetFate.staysInDepartment,
+    this.phonesLeftWithCoOwners = const {},
+    this.phonesKeptByRule = const [],
   });
 
   final SharedAssetTransferTarget target;
@@ -345,6 +375,52 @@ class BulkUserTransferPlan {
   /// διαγράφεται. Μένει κενό όσο η ερώτηση δεν έχει γίνει.
   final SharedAssetDisconnectBatchResult equipmentRehoming;
 
+  /// Κοινά μηχανήματα: τα κρατά και κάποιος που **δεν** μεταφέρεται. Η τύχη
+  /// τους ρωτιέται με μία ερώτηση για όλα ([sharedEquipmentFate]).
+  final List<SharedEquipment> sharedEquipment;
+
+  /// Η απάντηση για τα [sharedEquipment] — προεπιλογή «παραμένουν».
+  final SharedAssetFate sharedEquipmentFate;
+
+  /// Κοινά τηλέφωνα: τα κρατά και κάποιος που **δεν** μεταφέρεται. Η τύχη
+  /// τους ρωτιέται με μία ερώτηση για όλα ([sharedPhoneFate]), ανεξάρτητα από
+  /// την απάντηση «μένουν ή ακολουθούν» για τα υπόλοιπα.
+  final List<SharedPhone> sharedPhones;
+
+  /// Η απάντηση για τα [sharedPhones] — προεπιλογή «παραμένουν».
+  final SharedAssetFate sharedPhoneFate;
+
+  /// userId → κοινά τηλέφωνα που φεύγουν από τον μεταφερόμενο και μένουν
+  /// στους υπόλοιπους κατόχους. **Δεν** γίνονται κοινόχρηστα του τμήματος:
+  /// ανήκουν ήδη σε ανθρώπους που μένουν εκεί.
+  final Map<int, List<String>> phonesLeftWithCoOwners;
+
+  /// Τηλέφωνα που μένουν πίσω επειδή ο προορισμός δεν μπορεί να τα κρατά
+  /// (εσωτερικά του νοσοκομείου, όταν οι άνθρωποι φεύγουν από αυτό) — ό,τι
+  /// κι αν απαντήθηκε. Είναι ήδη μέσα στο [phonesToRelease]· η λίστα υπάρχει
+  /// για να το πει το κείμενο επιβεβαίωσης.
+  final List<String> phonesKeptByRule;
+
+  /// Τα κοινά τηλέφωνα που ακολουθούν τους μεταφερόμενους — από αυτά
+  /// φεύγουν οι υπόλοιποι κάτοχοι.
+  Set<String> get phonesTakenFromCoOwners =>
+      sharedPhoneFate == SharedAssetFate.movesWithOwner
+      ? {for (final s in sharedPhones) s.phone}
+      : const <String>{};
+
+  Set<int> get _sharedIds => {
+    for (final s in sharedEquipment)
+      if (s.equipment.id != null) s.equipment.id!,
+  };
+
+  /// Τα κοινά μηχανήματα που ακολουθούν τους μεταφερόμενους — από αυτά
+  /// φεύγουν οι υπόλοιποι κάτοχοι.
+  Set<int> get equipmentTakenFromCoOwners =>
+      sharedEquipmentFate == SharedAssetFate.movesWithOwner &&
+          targetKind.canOwnEquipment
+      ? _sharedIds
+      : const <int>{};
+
   /// Το ίδιο σχέδιο με τις απαντήσεις «πού πάει το κάθε μηχάνημα» δεμένες.
   BulkUserTransferPlan withEquipmentRehoming(
     SharedAssetDisconnectBatchResult batch,
@@ -363,6 +439,12 @@ class BulkUserTransferPlan {
       equipmentNeedingNewHome: equipmentNeedingNewHome,
       exclusions: exclusions,
       equipmentRehoming: batch,
+      sharedEquipment: sharedEquipment,
+      sharedEquipmentFate: sharedEquipmentFate,
+      sharedPhones: sharedPhones,
+      sharedPhoneFate: sharedPhoneFate,
+      phonesLeftWithCoOwners: phonesLeftWithCoOwners,
+      phonesKeptByRule: phonesKeptByRule,
     );
   }
 
@@ -372,16 +454,23 @@ class BulkUserTransferPlan {
     for (final list in phonesToRelease.values) list.length,
   ].fold(0, (a, b) => a + b);
 
-  int get followingEquipmentCount => _uniqueEquipmentCount(equipmentToFollow);
+  /// Τα μετρητά αφορούν τα **μη κοινά** μηχανήματα· τα κοινά έχουν δική
+  /// τους γραμμή στο κείμενο, με δική τους απάντηση.
+  int get followingEquipmentCount =>
+      _uniqueEquipmentCount(equipmentToFollow, except: _sharedIds);
 
-  int get releasedEquipmentCount => _uniqueEquipmentCount(equipmentToRelease);
+  int get releasedEquipmentCount =>
+      _uniqueEquipmentCount(equipmentToRelease, except: _sharedIds);
 
-  static int _uniqueEquipmentCount(Map<int, List<EquipmentModel>> byUser) {
+  static int _uniqueEquipmentCount(
+    Map<int, List<EquipmentModel>> byUser, {
+    Set<int> except = const {},
+  }) {
     final seen = <int>{};
     for (final list in byUser.values) {
       for (final e in list) {
         final id = e.id;
-        if (id != null) seen.add(id);
+        if (id != null && !except.contains(id)) seen.add(id);
       }
     }
     return seen.length;
@@ -404,6 +493,19 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
   /// ροή είναι να μην μπορεί να χτίσει σχέδιο χωρίς να το δηλώσει.
   required DepartmentKind targetKind,
   BulkAssetSharingInfo sharing = const BulkAssetSharingInfo(),
+
+  /// Η απάντηση για τα κοινά μηχανήματα. Η ροή χτίζει πρώτα το σχέδιο με την
+  /// προεπιλογή, ρωτά αν [BulkUserTransferPlan.sharedEquipment] δεν είναι
+  /// κενό, και ξαναχτίζει με την απάντηση.
+  SharedAssetFate sharedEquipmentFate = SharedAssetFate.staysInDepartment,
+
+  /// Η απάντηση για τα κοινά τηλέφωνα — ίδιος κύκλος με τα κοινά μηχανήματα.
+  SharedAssetFate sharedPhoneFate = SharedAssetFate.staysInDepartment,
+
+  /// Τηλέφωνα που ο προορισμός δεν μπορεί να κρατά (τα εσωτερικά του
+  /// νοσοκομείου, όταν οι άνθρωποι φεύγουν από αυτό): μένουν πίσω ό,τι κι
+  /// αν απαντήθηκε — ο διάλογος το έχει ήδη αναγγείλει.
+  Set<String> phonesThatCannotFollow = const {},
 }) {
   final targetId = target.departmentId;
   final usersToMove = <UserModel>[];
@@ -424,20 +526,46 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
   final targetCanOwnEquipment = targetKind.canOwnEquipment;
   final exclusions = <BulkActionExclusion>[];
   final seenEquipmentIds = <int>{};
+  final sharedEquipment = <SharedEquipment>[];
+  final seenSharedIds = <int>{};
+  final sharedPhones = <SharedPhone>[];
+  final seenSharedPhones = <String>{};
+  final phonesLeftWithCoOwners = <int, List<String>>{};
+  final phonesKeptByRule = <String>[];
 
   for (final u in usersToMove) {
     final userId = u.id!;
     final userName = bulkUserDisplayName(u);
 
-    if (phoneFate == BulkTransferAssetFate.stayInOldDepartment) {
-      for (final number in u.phones) {
-        final n = number.trim();
-        if (n.isEmpty) continue;
+    for (final number in u.phones) {
+      final n = number.trim();
+      if (n.isEmpty) continue;
+      // Ό,τι δεν μπορεί να ακολουθήσει μένει πίσω πριν από κάθε άλλη κρίση —
+      // και πριν από την ερώτηση του κοινού τηλεφώνου: ένα «Μεταφέρεται» δεν
+      // στέλνει εσωτερικό του νοσοκομείου σε εταιρεία.
+      if (phonesThatCannotFollow.contains(n)) {
+        phonesToRelease.putIfAbsent(userId, () => []).add(n);
+        if (!phonesKeptByRule.contains(n)) phonesKeptByRule.add(n);
+        continue;
+      }
+      final others = sharing.phoneOtherUserNames[n] ?? const <String>[];
+      // Κοινό τηλέφωνο: ρωτιέται η τύχη του ίδιου του αριθμού, όποια κι αν
+      // είναι η απάντηση για τα υπόλοιπα. Μένει → φεύγει από **κάθε**
+      // μεταφερόμενο· ακολουθεί → φεύγει από τους υπόλοιπους κατόχους.
+      if (others.isNotEmpty) {
+        if (seenSharedPhones.add(n)) {
+          sharedPhones.add((phone: n, otherOwnerNames: others));
+        }
+        if (sharedPhoneFate == SharedAssetFate.staysInDepartment) {
+          phonesLeftWithCoOwners.putIfAbsent(userId, () => []).add(n);
+        }
+        continue;
+      }
+      if (phoneFate == BulkTransferAssetFate.stayInOldDepartment) {
         final decision = judgePhoneStayBehind(
           phone: n,
           userName: userName,
           oldDepartmentId: u.departmentId,
-          otherOwnerNames: sharing.phoneOtherUserNames[n] ?? const [],
           sharedDepartment: sharing.phoneSharedDepartments[n],
         );
         if (decision.releases) {
@@ -456,29 +584,35 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
 
     for (final e in equipmentByUserId[userId] ?? const <EquipmentModel>[]) {
       final eqId = e.id;
-      if (eqId == null || !seenEquipmentIds.add(eqId)) continue;
+      if (eqId == null) continue;
       final code = (e.code ?? '').trim();
       if (code.isEmpty) continue;
       final others = sharing.equipmentOtherUserNames[eqId] ?? const [];
+      // Κοινό μηχάνημα: ρωτιέται η τύχη του ίδιου του μηχανήματος. Μένει
+      // στο τμήμα του → φεύγει από **κάθε** μεταφερόμενο κάτοχο· ακολουθεί →
+      // αλλάζει τμήμα μία φορά, και φεύγει από τους υπόλοιπους κατόχους.
+      if (others.isNotEmpty) {
+        final firstTime = seenSharedIds.add(eqId);
+        if (firstTime) {
+          sharedEquipment.add((equipment: e, otherOwnerNames: others));
+        }
+        final moves =
+            targetCanOwnEquipment &&
+            sharedEquipmentFate == SharedAssetFate.movesWithOwner;
+        if (!moves) {
+          equipmentToRelease.putIfAbsent(userId, () => []).add(e);
+        } else if (firstTime) {
+          equipmentToFollow.putIfAbsent(userId, () => []).add(e);
+        }
+        continue;
+      }
+      if (!seenEquipmentIds.add(eqId)) continue;
       final decision = judgeEquipmentStayBehind(
         code: code,
         userName: userName,
         oldDepartmentId: u.departmentId,
         equipmentDepartmentId: e.departmentId,
-        otherOwnerNames: others,
       );
-      // Ο συν-κάτοχος εμποδίζει ΚΑΙ τις δύο εκβάσεις: το μηχάνημα δεν είναι
-      // δικό μας ούτε να το πάρουμε ούτε να το αφήσουμε.
-      if (others.isNotEmpty) {
-        exclusions.add(
-          BulkActionExclusion(
-            isPhone: false,
-            identifier: code,
-            reason: decision.blockedReason!,
-          ),
-        );
-        continue;
-      }
       if (!targetCanOwnEquipment) {
         // Ό,τι κι αν απάντησε ο χρήστης για την «τύχη», το μηχάνημα δεν πάει
         // στον προορισμό. Ζητά δική του στέγη, μία ερώτηση ανά μηχάνημα.
@@ -512,7 +646,30 @@ BulkUserTransferPlan buildBulkUserTransferPlan({
     equipmentToRelease: equipmentToRelease,
     equipmentNeedingNewHome: equipmentNeedingNewHome,
     exclusions: exclusions,
+    sharedEquipment: sharedEquipment,
+    sharedEquipmentFate: sharedEquipmentFate,
+    sharedPhones: sharedPhones,
+    sharedPhoneFate: sharedPhoneFate,
+    phonesLeftWithCoOwners: phonesLeftWithCoOwners,
+    phonesKeptByRule: phonesKeptByRule,
   );
+}
+
+/// «2534, 2531» — οι αριθμοί των κοινών τηλεφώνων, για ερώτηση και κείμενο.
+String sharedPhoneNumbersText(List<SharedPhone> shared) {
+  final numbers = [for (final s in shared) s.phone];
+  if (numbers.length <= 4) return numbers.join(', ');
+  return '${numbers.take(4).join(', ')}…';
+}
+
+/// «3140, 3180» — οι κωδικοί των κοινών μηχανημάτων, για ερώτηση και κείμενο.
+String sharedEquipmentCodesText(List<SharedEquipment> shared) {
+  final codes = [
+    for (final s in shared)
+      if ((s.equipment.code ?? '').trim().isNotEmpty) s.equipment.code!.trim(),
+  ];
+  if (codes.length <= 4) return codes.join(', ');
+  return '${codes.take(4).join(', ')}…';
 }
 
 /// Κείμενο επιβεβαίωσης ΠΡΙΝ την εκτέλεση της μεταφοράς: τι θα συμβεί σε ποιους.
@@ -551,6 +708,15 @@ String bulkTransferConfirmationText(BulkUserTransferPlan plan) {
         : '\nΤα τηλέφωνα μένουν κοινόχρηστα στο παλιό τους τμήμα'
               ' (${plan.releasedPhoneCount} αριθμοί).',
   );
+  // Η ίδια αναγγελία με την ερώτηση: το «ακολουθούν» από πάνω δεν ισχύει
+  // για αυτά, και το κείμενο δεν υπόσχεται κάτι που δεν θα γίνει.
+  if (plan.phoneFate == BulkTransferAssetFate.follow) {
+    final kept = forcedPhoneStayMessage(
+      split: PhoneTransferSplit(forcedToStay: plan.phonesKeptByRule),
+      targetKind: plan.targetKind,
+    );
+    if (kept != null) buf.write('\n$kept.');
+  }
   if (plan.equipmentNeedingNewHome.isNotEmpty) {
     // Ο προορισμός δεν κρατά μηχανήματα: η «τύχη» που απαντήθηκε δεν ισχύει
     // εδώ, και το κείμενο δεν πρέπει να υπόσχεται κάτι που δεν θα γίνει.
@@ -570,6 +736,47 @@ String bulkTransferConfirmationText(BulkUserTransferPlan plan) {
           : '\nΟι εξοπλισμοί αποδεσμεύονται και μένουν στο παλιό τμήμα'
                 ' (${plan.releasedEquipmentCount} εξοπλισμοί).',
     );
+  }
+  if (plan.sharedEquipment.isNotEmpty) {
+    final codes = sharedEquipmentCodesText(plan.sharedEquipment);
+    if (plan.equipmentTakenFromCoOwners.isNotEmpty) {
+      final others = {
+        for (final s in plan.sharedEquipment) ...s.otherOwnerNames,
+      }.toList();
+      buf.write(
+        '\nΟ κοινός εξοπλισμός ($codes) μεταφέρεται και φεύγει από: '
+        '${_joinNames(others)}.',
+      );
+    } else {
+      buf.write(
+        '\nΟ κοινός εξοπλισμός ($codes) παραμένει στο τμήμα του και '
+        'φεύγει μόνο από τους μεταφερόμενους.',
+      );
+    }
+  }
+  if (plan.sharedPhones.isNotEmpty) {
+    final numbers = sharedPhoneNumbersText(plan.sharedPhones);
+    final one = plan.sharedPhones.length == 1;
+    if (plan.phonesTakenFromCoOwners.isNotEmpty) {
+      final others = {
+        for (final s in plan.sharedPhones) ...s.otherOwnerNames,
+      }.toList();
+      buf.write(
+        one
+            ? '\nΤο κοινό τηλέφωνο ($numbers) μεταφέρεται και φεύγει από: '
+                  '${_joinNames(others)}.'
+            : '\nΤα κοινά τηλέφωνα ($numbers) μεταφέρονται και φεύγουν από: '
+                  '${_joinNames(others)}.',
+      );
+    } else {
+      buf.write(
+        one
+            ? '\nΤο κοινό τηλέφωνο ($numbers) παραμένει στο τμήμα του και '
+                  'φεύγει μόνο από τους μεταφερόμενους.'
+            : '\nΤα κοινά τηλέφωνα ($numbers) παραμένουν στο τμήμα τους και '
+                  'φεύγουν μόνο από τους μεταφερόμενους.',
+      );
+    }
   }
   for (final ex in plan.exclusions) {
     buf.write('\n• ${ex.reason}');
@@ -995,18 +1202,27 @@ Future<BulkActionUndoRecord> applyBulkUserTransferInTxn(
     final oldDept = row['department_id'] as int?;
     userDepartmentBefore[userId] = oldDept;
 
+    // Δύο λόγοι να φύγει ένας αριθμός από τον μεταφερόμενο: μένει πίσω ως
+    // κοινόχρηστος του τμήματος, ή μένει στους συναδέλφους που τον κρατούν
+    // ήδη — τότε δεν προστίθεται στο τμήμα.
     final toRelease = plan.phonesToRelease[userId] ?? const <String>[];
-    if (toRelease.isNotEmpty && oldDept != null) {
+    final leftWithCoOwners =
+        plan.phonesLeftWithCoOwners[userId] ?? const <String>[];
+    if (toRelease.isNotEmpty || leftWithCoOwners.isNotEmpty) {
       final before = await _userPhonesInTxn(txn, userId);
       userPhonesBefore[userId] = before;
       final remaining = [
         for (final n in before)
-          if (!toRelease.contains(n)) n,
+          if (!toRelease.contains(n) && !leftWithCoOwners.contains(n)) n,
       ];
       await users.replaceUserPhones(userId, remaining, executor: txn);
-      for (final n in toRelease) {
-        await phones.addDepartmentDirectPhone(oldDept, n, executor: txn);
-        phoneDeptAdds.add(PhoneDeptAdd(departmentId: oldDept, phoneNumber: n));
+      if (oldDept != null) {
+        for (final n in toRelease) {
+          await phones.addDepartmentDirectPhone(oldDept, n, executor: txn);
+          phoneDeptAdds.add(
+            PhoneDeptAdd(departmentId: oldDept, phoneNumber: n),
+          );
+        }
       }
     }
 
@@ -1041,6 +1257,70 @@ Future<BulkActionUndoRecord> applyBulkUserTransferInTxn(
         equipmentDepartmentBefore[code] = null;
         equipmentDepartmentAfter[code] = oldDept;
         await equipment.updateEquipmentDepartment(code, oldDept, executor: txn);
+      }
+    }
+  }
+
+  // Κοινά τηλέφωνα που ακολουθούν τους μεταφερόμενους: φεύγουν από τους
+  // κατόχους που ΔΕΝ μεταφέρονται, και το κοινόχρηστο τμήματος πάει στον
+  // προορισμό — ένας αριθμός δεν ανήκει σε δύο τμήματα. Κάθε αλλαγή μπαίνει
+  // στο πακέτο αναίρεσης.
+  final phoneDeptRemovals = <PhoneDeptAdd>[];
+  final takenPhones = plan.phonesTakenFromCoOwners;
+  if (takenPhones.isNotEmpty) {
+    // Όσοι επιλέχθηκαν αλλά είναι ήδη στον προορισμό κρατούν κι αυτοί τον
+    // αριθμό: βρίσκονται εκεί που πηγαίνει.
+    final keepers = {
+      for (final u in [...plan.usersToMove, ...plan.usersAlreadyInTarget])
+        if (u.id != null) u.id!,
+    };
+    for (final n in takenPhones) {
+      for (final holder in await phones.holderUserIds(n, executor: txn)) {
+        if (keepers.contains(holder)) continue;
+        userPhonesBefore[holder] ??= await _userPhonesInTxn(txn, holder);
+      }
+      final taken = await takePhoneFromCoOwners(
+        executor: txn,
+        phoneRepo: phones,
+        phone: n,
+        keepingUserIds: keepers,
+        newDepartmentId: targetId,
+      );
+      for (final departmentId in taken.removedFromDepartmentIds) {
+        phoneDeptRemovals.add(
+          PhoneDeptAdd(departmentId: departmentId, phoneNumber: n),
+        );
+      }
+      if (taken.addedToNewDepartment) {
+        phoneDeptAdds.add(PhoneDeptAdd(departmentId: targetId, phoneNumber: n));
+      }
+    }
+  }
+
+  // Κοινά μηχανήματα που ακολουθούν τους μεταφερόμενους: φεύγουν από τους
+  // κατόχους που ΔΕΝ μεταφέρονται — ένα μηχάνημα δεν ανήκει σε δύο τμήματα.
+  // Κάθε αφαίρεση μπαίνει στο πακέτο αναίρεσης.
+  final takenFromCoOwners = plan.equipmentTakenFromCoOwners;
+  if (takenFromCoOwners.isNotEmpty) {
+    final movedUserIds = {for (final u in plan.usersToMove) u.id!};
+    for (final equipmentId in takenFromCoOwners) {
+      final links = await txn.query(
+        'user_equipment',
+        columns: ['user_id'],
+        where: 'equipment_id = ?',
+        whereArgs: [equipmentId],
+      );
+      for (final link in links) {
+        final ownerId = link['user_id'] as int?;
+        if (ownerId == null || movedUserIds.contains(ownerId)) continue;
+        await equipment.unlinkUserFromEquipment(
+          ownerId,
+          equipmentId,
+          executor: txn,
+        );
+        unlinked.add(
+          BulkUserEquipmentUnlink(userId: ownerId, equipmentId: equipmentId),
+        );
       }
     }
   }
@@ -1111,6 +1391,7 @@ Future<BulkActionUndoRecord> applyBulkUserTransferInTxn(
     userDepartmentBefore: userDepartmentBefore,
     userPhonesBefore: userPhonesBefore,
     phoneDeptAdds: phoneDeptAdds,
+    phoneDeptRemovals: phoneDeptRemovals,
     equipmentDepartmentBefore: equipmentDepartmentBefore,
     equipmentDepartmentAfter: equipmentDepartmentAfter,
     unlinkedUserEquipment: unlinked,

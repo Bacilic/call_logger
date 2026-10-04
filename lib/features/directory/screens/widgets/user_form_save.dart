@@ -18,6 +18,7 @@ import '../../../calls/models/user_model.dart';
 import '../../../calls/provider/lookup_provider.dart';
 import '../../services/shared_asset_disconnect_apply.dart';
 import '../../models/department_kind.dart';
+import 'asset_fate_on_department_change.dart';
 import 'department_transfer_confirm_dialog.dart';
 import '../../providers/directory_provider.dart';
 import 'shared_asset_disconnect_dialog.dart';
@@ -204,17 +205,24 @@ class UserFormSave {
 
       // Η αλλαγή τμήματος ρωτά ΠΡΩΤΗ: αν τα τηλέφωνα μένουν πίσω, δεν
       // υπάρχει σύγκρουση να λυθεί για αυτά.
-      final phonesStayingBehind = cloneAsNewEmployee
-          ? const <String>{}
+      final phoneAnswer = cloneAsNewEmployee
+          ? (
+              staying: const <String>{},
+              leftWithCoOwners: const <String>{},
+              takenFromCoOwners: const <String>{},
+            )
           : await host.phonePolicy.confirmPhoneFateOnDepartmentChange();
       if (!host.mounted) return;
-      if (phonesStayingBehind == null) return;
+      if (phoneAnswer == null) return;
 
-      final equipmentStayingBehind = cloneAsNewEmployee
-          ? const <EquipmentModel>[]
+      final equipmentAnswer = cloneAsNewEmployee
+          ? (
+              staying: const <EquipmentModel>[],
+              takenFromCoOwners: const <EquipmentModel>[],
+            )
           : await host.phonePolicy.confirmEquipmentFateOnDepartmentChange();
       if (!host.mounted) return;
-      if (equipmentStayingBehind == null) return;
+      if (equipmentAnswer == null) return;
 
       final editingUserId =
           host.isEdit && !cloneAsNewEmployee && !host.widget.isClone
@@ -223,7 +231,11 @@ class UserFormSave {
       final phoneConflictBatch = await host.phonePolicy
           .confirmUserPhoneAssignmentConflicts(
             editingUserId: editingUserId,
-            phonesStayingBehind: phonesStayingBehind,
+            phonesAlreadyDecided: {
+              ...phoneAnswer.staying,
+              ...phoneAnswer.leftWithCoOwners,
+              ...phoneAnswer.takenFromCoOwners,
+            },
           );
       if (!host.mounted) return;
       if (phoneConflictBatch == null) return;
@@ -232,8 +244,9 @@ class UserFormSave {
         cloneAsNewEmployee: cloneAsNewEmployee,
         phoneDisconnectBatch: phoneDisconnectBatch,
         phoneConflictBatch: phoneConflictBatch,
-        phonesStayingBehind: phonesStayingBehind,
-        equipmentStayingBehind: equipmentStayingBehind,
+        phoneAnswer: phoneAnswer,
+        equipmentStayingBehind: equipmentAnswer.staying,
+        equipmentTakenFromCoOwners: equipmentAnswer.takenFromCoOwners,
       );
     } on PhoneDepartmentPolicyException catch (e) {
       if (!host.mounted) return;
@@ -309,25 +322,69 @@ class UserFormSave {
     bool cloneAsNewEmployee = false,
     SharedAssetDisconnectBatchResult? phoneDisconnectBatch,
     UserPhoneConflictBatchResult? phoneConflictBatch,
-    Set<String> phonesStayingBehind = const {},
+    PhoneDepartmentChangeAnswer phoneAnswer = (
+      staying: const <String>{},
+      leftWithCoOwners: const <String>{},
+      takenFromCoOwners: const <String>{},
+    ),
     List<EquipmentModel> equipmentStayingBehind = const [],
+    List<EquipmentModel> equipmentTakenFromCoOwners = const [],
   }) async {
-    final db = await DatabaseHelper.instance.database;
-    final dir = DepartmentRepository(db);
-    final departmentId = await _resolveDepartmentIdForSave(dir);
-
     // Δύο λόγοι για να μη φτάσει ένα τηλέφωνο στην καρτέλα: ο χρήστης το
-    // άφησε στο τμήμα του λύνοντας σύγκρουση, ή το άφησε πίσω μετακινώντας
-    // τον υπάλληλο. Και στους δύο φεύγει από τη λίστα ΠΡΙΝ γραφτεί — αλλιώς η
-    // επιλογή θα φαινόταν να γίνεται δεκτή και το τηλέφωνο θα γραφόταν έτσι
-    // κι αλλιώς.
+    // άφησε στο τμήμα του λύνοντας σύγκρουση, ή το άφησε πίσω (ή στους
+    // συναδέλφους) μετακινώντας τον υπάλληλο. Και στους δύο φεύγει από τη
+    // λίστα ΠΡΙΝ γραφτεί — αλλιώς η επιλογή θα φαινόταν να γίνεται δεκτή και
+    // το τηλέφωνο θα γραφόταν έτσι κι αλλιώς.
+    final releasedPhones = {
+      ...phoneAnswer.staying,
+      ...phoneAnswer.leftWithCoOwners,
+    };
     final phones = PhoneListParser.splitPhones(host.phoneController.text)
         .where(
           (p) =>
               !(phoneConflictBatch?.detaches(p) ?? false) &&
-              !phonesStayingBehind.contains(p.trim()),
+              !releasedPhones.contains(p.trim()),
         )
         .toList();
+
+    // Κάθε απόρριψη γίνεται ΠΡΙΝ από την πρώτη εγγραφή — και πριν από την
+    // ερώτηση διένεξης: δεν έχει νόημα να ρωτηθεί κάτι για αποθήκευση που
+    // δεν θα γίνει. Το τμήμα δεν μετρά στο «ίδιος υπάλληλος», οπότε δεν
+    // χρειάζεται να υπάρχει ακόμη.
+    if (await _rejectedAsDuplicate(
+      _userFromForm(
+        phones: phones,
+        departmentId: null,
+        cloneAsNewEmployee: cloneAsNewEmployee,
+      ),
+      cloneAsNewEmployee: cloneAsNewEmployee,
+      equipmentLeaving: equipmentStayingBehind,
+    )) {
+      return;
+    }
+    if (!host.mounted) return;
+
+    // «Κάποιος πρόλαβε;» ρωτιέται ΠΡΙΝ από την πρώτη εγγραφή: από εδώ και κάτω
+    // γράφονται νέο τμήμα, ό,τι μένει πίσω και οι συγκρούσεις τηλεφώνου, και
+    // μια «ακύρωση» μετά από αυτά δεν θα ακύρωνε τίποτα.
+    var keepMine = false;
+    final initialUser = host.widget.initialUser;
+    if (host.isEdit && !cloneAsNewEmployee && initialUser != null) {
+      final answer = await askDirectoryConflictBeforeWrites(
+        host.context,
+        probe: () => host.widget.notifier.userStaleConflict(initialUser),
+      );
+      if (!host.mounted) return;
+      if (answer == DirectoryConflictAnswer.keepTheirs) {
+        showDirectorySaveCancelledSnackBar(host.context);
+        return;
+      }
+      keepMine = answer == DirectoryConflictAnswer.keepMine;
+    }
+
+    final db = await DatabaseHelper.instance.database;
+    final dir = DepartmentRepository(db);
+    final departmentId = await _resolveDepartmentIdForSave(dir);
 
     // Ό,τι μένει πίσω το χειρίζεται η κοινή εκτέλεση — την ίδια καλεί και η
     // γρήγορη προσθήκη της κλήσης.
@@ -338,9 +395,13 @@ class UserFormSave {
         db: db,
         userId: editingId,
         oldDepartmentId: oldDepartmentId,
-        phones: phonesStayingBehind,
+        phones: phoneAnswer.staying,
         equipment: equipmentStayingBehind,
         currentPhones: host.widget.initialUser?.phones ?? const [],
+        equipmentTakenFromCoOwners: equipmentTakenFromCoOwners,
+        newDepartmentId: departmentId,
+        phonesLeftWithCoOwners: phoneAnswer.leftWithCoOwners,
+        phonesTakenFromCoOwners: phoneAnswer.takenFromCoOwners,
       );
     }
 
@@ -352,45 +413,23 @@ class UserFormSave {
       );
     }
     if ((phoneConflictBatch != null && !phoneConflictBatch.isEmpty) ||
-        phonesStayingBehind.isNotEmpty ||
-        equipmentStayingBehind.isNotEmpty) {
+        releasedPhones.isNotEmpty ||
+        phoneAnswer.takenFromCoOwners.isNotEmpty ||
+        equipmentStayingBehind.isNotEmpty ||
+        equipmentTakenFromCoOwners.isNotEmpty) {
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
     }
 
-    final user = UserModel(
-      id: (host.isEdit && !cloneAsNewEmployee)
-          ? host.widget.initialUser?.id
-          : null,
-      lastName: host.lastNameController.text.trim(),
-      firstName: host.firstNameController.text.trim(),
-      nickname: host.nicknameController.text.trim(),
+    final user = _userFromForm(
       phones: phones,
       departmentId: departmentId,
-      location: host.locationController.text.trim().isEmpty
-          ? null
-          : host.locationController.text.trim(),
-      notes: host.notesController.text.trim().isEmpty
-          ? null
-          : host.notesController.text.trim(),
-      // Πάντα string (και κενό): το toMap παραλείπει τα null, οπότε μόνο έτσι
-      // καθαρίζει η αποθηκευμένη τιμή όταν σβηστεί το πεδίο.
-      lansweeperUsername: host.lansweeperUsernameController.text.trim(),
+      cloneAsNewEmployee: cloneAsNewEmployee,
     );
 
     if (host.isEdit && cloneAsNewEmployee) {
       final sourceId = host.widget.initialUser?.id;
       if (sourceId == null) return;
-      if (await host.widget.notifier.hasDuplicateUserFresh(
-        user,
-        mirrorEquipmentFromUserId: sourceId,
-      )) {
-        if (!host.mounted) return;
-        ScaffoldMessenger.of(
-          host.context,
-        ).showSnackBar(_kUserFormDuplicateSnack);
-        return;
-      }
       await host.widget.notifier.addUserCloningEquipmentFrom(user, sourceId);
       host.ref.invalidate(lookupServiceProvider);
       await host.ref.read(lookupServiceProvider.future);
@@ -408,20 +447,10 @@ class UserFormSave {
     }
 
     if (host.isEdit) {
-      if (user.id != null &&
-          await host.widget.notifier.hasDuplicateUserFresh(
-            user,
-            excludeId: user.id,
-          )) {
-        if (!host.mounted) return;
-        ScaffoldMessenger.of(
-          host.context,
-        ).showSnackBar(_kUserFormDuplicateSnack);
-        return;
-      }
       if (!host.mounted) return;
-      // Η καρτέλα γράφεται ολόκληρη: αν κάποιος πρόλαβε, ρωτιέται ο άνθρωπος
-      // αντί να σβηστεί αμίλητα το τμήμα ή το τηλέφωνο που εκείνος άλλαξε.
+      // Η διένεξη ρωτήθηκε ήδη πριν από τις εγγραφές. Ο φρουρός εδώ πιάνει
+      // μόνο όποιον πρόλαβε στο ελάχιστο διάστημα από τότε — εκτός αν ο
+      // χρήστης απάντησε ήδη «Κράτα τη δική μου αλλαγή».
       // Η αφετηρία ακολουθεί τις ΔΙΚΕΣ ΜΑΣ εγγραφές: το `applyAssetsStayingBehind`
       // από πάνω αποδέσμευσε ήδη τα τηλέφωνα που μένουν πίσω, οπότε η εικόνα
       // της οθόνης δεν περιγράφει πια τη γραμμή. Χωρίς αυτό, ο φρουρός
@@ -430,26 +459,19 @@ class UserFormSave {
           ? null
           : DirectoryNotifier.userBaselineAfterOwnPhoneWrites(
               host.widget.initialUser!,
-              releasedPhones: phonesStayingBehind,
+              releasedPhones: releasedPhones,
             );
       final saved = await saveDirectoryRecordWithConflictPrompt(
         host.context,
         save: ({required force}) => host.widget.notifier.updateUser(
           user,
-          expected: force ? null : baseline,
-          force: force,
+          expected: force || keepMine ? null : baseline,
+          force: force || keepMine,
         ),
       );
       if (!host.mounted) return;
       if (!saved) {
-        ScaffoldMessenger.of(host.context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Η αποθήκευση ακυρώθηκε — η καρτέλα κρατά τα στοιχεία του '
-              'συναδέλφου. Κλείστε την και ανοίξτε την ξανά για να τα δείτε.',
-            ),
-          ),
-        );
+        showDirectorySaveCancelledSnackBar(host.context);
         return;
       }
       if (phoneDisconnectBatch != null) {
@@ -484,11 +506,6 @@ class UserFormSave {
       showSaveConfirmationSnackBar(host.context, saveMessage);
       return;
     }
-    if (await host.widget.notifier.hasDuplicateUserFresh(user)) {
-      if (!host.mounted) return;
-      ScaffoldMessenger.of(host.context).showSnackBar(_kUserFormDuplicateSnack);
-      return;
-    }
     await host.widget.notifier.addUser(user);
     host.ref.invalidate(lookupServiceProvider);
     await host.ref.read(lookupServiceProvider.future);
@@ -503,6 +520,71 @@ class UserFormSave {
     host.widget.onSaved?.call();
     host.closeForm(true);
     showSaveConfirmationSnackBar(host.context, saveMessage);
+  }
+
+  /// Η καρτέλα όπως θα γραφτεί. Το [departmentId] είναι `null` για τον έλεγχο
+  /// διπλότυπου, που γίνεται πριν δημιουργηθεί (αν χρειάζεται) το τμήμα.
+  UserModel _userFromForm({
+    required List<String> phones,
+    required int? departmentId,
+    required bool cloneAsNewEmployee,
+  }) {
+    final location = host.locationController.text.trim();
+    final notes = host.notesController.text.trim();
+    return UserModel(
+      id: (host.isEdit && !cloneAsNewEmployee)
+          ? host.widget.initialUser?.id
+          : null,
+      lastName: host.lastNameController.text.trim(),
+      firstName: host.firstNameController.text.trim(),
+      nickname: host.nicknameController.text.trim(),
+      phones: phones,
+      departmentId: departmentId,
+      location: location.isEmpty ? null : location,
+      notes: notes.isEmpty ? null : notes,
+      // Πάντα string (και κενό): το toMap παραλείπει τα null, οπότε μόνο έτσι
+      // καθαρίζει η αποθηκευμένη τιμή όταν σβηστεί το πεδίο.
+      lansweeperUsername: host.lansweeperUsernameController.text.trim(),
+    );
+  }
+
+  /// «Υπάρχει ήδη ο ίδιος υπάλληλος» — ένας έλεγχος για τις τρεις διαδρομές
+  /// (επεξεργασία, νέος από αντίγραφο, νέος). Δείχνει το μήνυμα και επιστρέφει
+  /// `true` όταν η αποθήκευση πρέπει να σταματήσει.
+  ///
+  /// [equipmentLeaving]: ό,τι η αποθήκευση θα αφήσει πίσω στο παλιό τμήμα —
+  /// ο έλεγχος κρίνει την καρτέλα όπως θα είναι **μετά**.
+  Future<bool> _rejectedAsDuplicate(
+    UserModel candidate, {
+    required bool cloneAsNewEmployee,
+    required List<EquipmentModel> equipmentLeaving,
+  }) async {
+    final notifier = host.widget.notifier;
+    final bool duplicate;
+    if (host.isEdit && cloneAsNewEmployee) {
+      final sourceId = host.widget.initialUser?.id;
+      duplicate =
+          sourceId != null &&
+          await notifier.hasDuplicateUserFresh(
+            candidate,
+            mirrorEquipmentFromUserId: sourceId,
+          );
+    } else if (host.isEdit) {
+      duplicate =
+          candidate.id != null &&
+          await notifier.hasDuplicateUserFresh(
+            candidate,
+            excludeId: candidate.id,
+            equipmentLeaving: equipmentLeaving,
+          );
+    } else {
+      duplicate = await notifier.hasDuplicateUserFresh(candidate);
+    }
+    if (!duplicate) return false;
+    if (host.mounted) {
+      ScaffoldMessenger.of(host.context).showSnackBar(_kUserFormDuplicateSnack);
+    }
+    return true;
   }
 
   Map<String, dynamic> _userMapForSaveConfirmation(

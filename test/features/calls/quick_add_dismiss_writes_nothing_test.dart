@@ -196,6 +196,60 @@ void main() {
     },
   );
 
+  testWidgets(
+    '«Μένει στο τμήμα»: ο υπάλληλος μετακινείται, το τηλέφωνό του μένει πίσω',
+    (tester) async {
+      final seeded = (await tester.runAsync(_seed))!;
+      final notifier = seeded.container.read(callSmartEntityProvider.notifier);
+      final lookup = LookupService.instance;
+      notifier.setCaller(lookup.findUserById(seeded.koika));
+      notifier.selectDepartment(lookup.findDepartmentByName('Βιοχημικό')!);
+      notifier.checkContent(equipmentText: '3000');
+
+      final message = await _associateAndAnswer(
+        tester,
+        seeded,
+        answer: (tester) => tester.tap(find.textContaining('Μένει στο')),
+        updatePrimaryDepartment: true,
+      );
+
+      expect(message, contains('3000'));
+      expect(message, contains('Αλλαγή τμήματος'));
+      await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        Future<Object?> departmentOf(String sql, List<Object?> args) async =>
+            (await db.rawQuery(sql, args)).single['name'];
+        expect(
+          await departmentOf(
+            'SELECT d.name FROM users u JOIN departments d '
+            'ON d.id = u.department_id WHERE u.id = ?',
+            [seeded.koika],
+          ),
+          'Βιοχημικό',
+        );
+        expect(
+          await departmentOf(
+            'SELECT d.name FROM phones p JOIN departments d '
+            "ON d.id = p.department_id WHERE p.number = '2519'",
+            [],
+          ),
+          'Άδειες',
+          reason: 'Μένει κοινόχρηστο του τμήματος που αφήνει',
+        );
+        expect(
+          await db.rawQuery(
+            'SELECT 1 FROM user_phones up JOIN phones p ON p.id = up.phone_id '
+            "WHERE up.user_id = ? AND p.number = '2519'",
+            [seeded.koika],
+          ),
+          isEmpty,
+        );
+        expect(await _equipmentOf(seeded.koika), ['3000']);
+      });
+      seeded.container.dispose();
+    },
+  );
+
   group('νέος καλών σε νέο τμήμα, με κοινό τηλέφωνο άλλου τμήματος', () {
     void fillNewCaller(_Seeded seeded) {
       final notifier = seeded.container.read(callSmartEntityProvider.notifier);
@@ -284,6 +338,52 @@ void main() {
           whereArgs: [user['id'], phone['id']],
         );
         expect(linked, hasLength(1));
+      });
+      seeded.container.dispose();
+    });
+
+    testWidgets('«μένει στο τμήμα του»: το μήνυμα δεν λέει ότι συνδέθηκε', (
+      tester,
+    ) async {
+      final seeded = (await tester.runAsync(_seed))!;
+      fillNewCaller(seeded);
+
+      final message = await _associateAndAnswer(
+        tester,
+        seeded,
+        answer: (tester) async {
+          final options = find.descendant(
+            of: find.byType(Dialog),
+            matching: find.byWidgetPredicate((w) => w is RadioListTile),
+          );
+          await tester.tap(options.first);
+          await tester.pump();
+          await tester.tap(find.text('Επιβεβαίωση'));
+        },
+      );
+
+      expect(message, contains('Δημιουργήθηκε νέος χρήστης'));
+      expect(
+        message,
+        isNot(contains('2858')),
+        reason: 'Το τηλέφωνο έμεινε στο Χρηματικό — το μήνυμα λέει ό,τι έγινε',
+      );
+      await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        final user = (await db.query(
+          'users',
+          where: "first_name = 'Νέα' OR last_name = 'Νέα'",
+        )).single;
+        expect(
+          await db.query(
+            'user_phones',
+            where: 'user_id = ?',
+            whereArgs: [user['id']],
+          ),
+          isEmpty,
+        );
+        final task = (await db.query('tasks')).single;
+        expect(task['description'] as String, isNot(contains('2858')));
       });
       seeded.container.dispose();
     });
