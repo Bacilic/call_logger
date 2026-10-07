@@ -161,11 +161,16 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     }();
   }
 
-  Future<void> _retryAppInitialization() async {
+  /// Το [failedDatabasePath] είναι η βάση που απέτυχε — από αυτήν κρίνεται
+  /// αν η επαναδοκιμή είναι αλλαγή βάσης ή η ίδια βάση ξανά.
+  Future<void> _retryAppInitialization({String? failedDatabasePath}) async {
     // Η επαναδοκιμή τρέχει ολόκληρη ακόμη κι αν το widget φύγει στο μεταξύ:
     // διακοπή στη μέση θα άφηνε τη βάση κλειστή. Το `mounted` φυλάει μόνο την
     // προβολή του μηνύματος.
-    final outcome = await runAppInitRetry(ref: ref);
+    final outcome = await runAppInitRetry(
+      ref: ref,
+      failedDatabasePath: failedDatabasePath,
+    );
     if (outcome.succeeded || !mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -190,7 +195,9 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
         return DatabaseErrorScreen(
           result: result,
           dbPath: dbPath,
-          onRetry: _retryAppInitialization,
+          onRetry: () => _retryAppInitialization(
+            failedDatabasePath: result.path ?? dbPath,
+          ),
         );
       },
     );
@@ -337,6 +344,12 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
       data: (initResult) {
         if (initResult.success) {
           if (!widget.showStartupScreens) return _buildShell(initResult);
+          // Νέα αρχικοποίηση σε εξέλιξη (αλλαγή βάσης): το «πέτυχε» εδώ είναι
+          // της ΠΡΟΗΓΟΥΜΕΝΗΣ βάσης, και η αναγνώριση του χρήστη έχει ήδη
+          // μηδενίσει την ταυτότητα για να ξαναψάξει στη νέα. Αν κρίναμε τώρα,
+          // το «κανένας χρήστης» θα έδειχνε για δευτερόλεπτα το «Ποιος είστε;»
+          // σε κάποιον που η νέα βάση γνωρίζει. Η ερώτηση περιμένει την απάντηση.
+          if (asyncInit.isLoading) return const InitLoadingScreen();
           if (!_operatorChosen) {
             final picker = _buildOperatorPickerIfNeeded();
             if (picker != null) return picker;

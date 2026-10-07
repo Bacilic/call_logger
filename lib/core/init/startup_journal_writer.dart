@@ -1,13 +1,13 @@
 import '../services/crash_log_service.dart';
+import '../services/log_record.dart';
 import '../services/shutdown_trace_incident.dart';
-import '../services/station_name.dart';
 import 'startup_journal.dart';
 
 /// Ο παραλήπτης του [StartupJournal] στον δίσκο.
 ///
 /// Τα ίδια βήματα που κυλούν στην οθόνη εκκίνησης καταλήγουν και στο ημερήσιο
-/// αρχείο συνεδριών, δίπλα στα αρχεία σφαλμάτων — ώστε το «γιατί άργησε
-/// σήμερα;» να έχει απάντηση και την επόμενη μέρα.
+/// αρχείο καταγραφής, δίπλα στα σφάλματα — ώστε το «γιατί άργησε σήμερα;» να
+/// έχει απάντηση και την επόμενη μέρα.
 ///
 /// **Γράφει βήμα-βήμα, όχι στο τέλος.** Αν η εκκίνηση πεθάνει στη μέση, το
 /// αρχείο δείχνει ως πού έφτασε· μια εγγραφή «στο τέλος» δεν θα υπήρχε καν.
@@ -15,6 +15,11 @@ import 'startup_journal.dart';
 /// **Γράφει μόνο κλειστά βήματα.** Το ημερολόγιο ειδοποιεί σε κάθε αλλαγή,
 /// και μια αντίστροφη μέτρηση αλλάζει το κείμενο του ίδιου βήματος δεκάδες
 /// φορές· θα γέμιζε το αρχείο με το ίδιο βήμα ξανά και ξανά.
+///
+/// Κάθε εγγραφή φέρει τη **φάση** της (`begin`, `step`, `retry`, `reinit`,
+/// `end`) στα
+/// δεδομένα της, ώστε όποιος διαβάζει να μετρά εκκινήσεις και να βρίσκει τον
+/// χρόνο τους χωρίς να ψάχνει λέξεις στο κείμενο.
 class StartupJournalWriter {
   StartupJournalWriter({
     required this.append,
@@ -24,9 +29,10 @@ class StartupJournalWriter {
   }) : _journal = journal ?? StartupJournal.instance,
        _now = now ?? DateTime.now;
 
-  /// Πού καταλήγει το κείμενο. Στην εφαρμογή είναι το ημερήσιο αρχείο
-  /// συνεδριών του [CrashLogService]· στα τεστ, μια μνήμη.
-  final void Function(String text) append;
+  /// Πού καταλήγουν οι εγγραφές. Στην εφαρμογή είναι το ημερήσιο αρχείο του
+  /// [CrashLogService], που τις σφραγίζει με σταθμό και έκδοση· στα τεστ, μια
+  /// μνήμη.
+  final void Function(LogRecord record) append;
 
   final String appVersion;
   final StartupJournal _journal;
@@ -40,8 +46,9 @@ class StartupJournalWriter {
   int _totalMs = 0;
   bool _attached = false;
   bool _sealedOnce = false;
+  bool _lastAttemptSucceeded = false;
 
-  /// Μέγιστο μήκος λεπτομέρειας σφάλματος στη γραμμή του βήματος.
+  /// Μέγιστο μήκος λεπτομέρειας σφάλματος στην εγγραφή του βήματος.
   ///
   /// Η πλήρης αιτία, με τη στοίβα της, είναι ήδη στο ημερολόγιο σφαλμάτων
   /// μέσω των σημειώσεων εκκίνησης. Εδώ χρειάζεται μόνο όσο αρκεί για να
@@ -59,7 +66,7 @@ class StartupJournalWriter {
     if (service == null) return;
     _instance?.detach();
     _instance = StartupJournalWriter(
-      append: service.appendSessionText,
+      append: service.appendRecord,
       appVersion: service.appVersion,
     )..attach();
   }
@@ -73,12 +80,11 @@ class StartupJournalWriter {
   void attach() {
     if (_attached) return;
     _attached = true;
-    // Ο σταθμός στην κεφαλίδα: όταν η βάση είναι κοινόχρηστη, το αρχείο της
-    // ημέρας δέχεται τις εκκινήσεις όλων των υπολογιστών, και χωρίς αυτόν οι
-    // δύο γραμμές χρόνου μπλέκονται σε μία δυσανάγνωστη.
-    final station = StationName.current;
-    final who = station.isEmpty ? '' : ' · $station';
-    append('${_stamp()} ══ ΕΚΚΙΝΗΣΗ v$appVersion$who ══\n');
+    _write(
+      LogSeverity.info,
+      'ΕΚΚΙΝΗΣΗ v$appVersion',
+      data: const {'phase': 'begin'},
+    );
     _journal.steps.addListener(_onStepsChanged);
     _onStepsChanged();
   }
@@ -89,15 +95,32 @@ class StartupJournalWriter {
     _journal.steps.removeListener(_onStepsChanged);
   }
 
-  /// Δηλώνει νέα προσπάθεια αρχικοποίησης.
+  /// Δηλώνει νέα αρχικοποίηση.
   ///
   /// Το ημερολόγιο γυρίζει πίσω στο προοίμιο σε κάθε «Επανάληψη», αλλά το
-  /// αρχείο δεν γυρίζει: χωρίς αυτή τη γραμμή τα ίδια βήματα θα φαίνονταν
+  /// αρχείο δεν γυρίζει: χωρίς αυτή την εγγραφή τα ίδια βήματα θα φαίνονταν
   /// γραμμένα δύο και τρεις φορές, σαν να έγιναν πράγματι τόσες.
+  ///
+  /// **Η αιτία κρίνεται από την προηγούμενη έκβαση.** Μετά από αποτυχία, είναι
+  /// νέα προσπάθεια. Μετά από επιτυχία, η εφαρμογή ήταν ήδη έτοιμη — άρα άλλαξε
+  /// η βάση (αλλαγή βάσης, επαναφορά αντιγράφου, «ξεκίνα από την αρχή»). Ως
+  /// «προσπάθεια» θα έκανε μια επιτυχημένη εκκίνηση να μοιάζει αποτυχημένη.
   void beginAttempt() {
     if (!_attached) return;
     if (_sealedOnce) {
-      append('${_stamp()} ── νέα προσπάθεια ──\n');
+      if (_lastAttemptSucceeded) {
+        _write(
+          LogSeverity.info,
+          'νέα αρχικοποίηση — άλλαξε η βάση',
+          data: const {'phase': 'reinit'},
+        );
+      } else {
+        _write(
+          LogSeverity.info,
+          'νέα προσπάθεια εκκίνησης',
+          data: const {'phase': 'retry'},
+        );
+      }
     }
     _writtenCount = _journal.steps.value.length;
     _totalMs = 0;
@@ -109,13 +132,15 @@ class StartupJournalWriter {
     _flushClosedSteps();
     _flushUnfinishedSteps();
     final total = ShutdownTraceIncident.formatDuration(_totalMs);
-    append(
+    _write(
+      success ? LogSeverity.info : LogSeverity.warning,
       success
-          ? '${_stamp()} ══ ΕΤΟΙΜΗ — σύνολο βημάτων $total ══\n\n'
-          : '${_stamp()} ══ Η ΕΚΚΙΝΗΣΗ ΔΕΝ ΟΛΟΚΛΗΡΩΘΗΚΕ — '
-                'σύνολο βημάτων $total ══\n\n',
+          ? 'ΕΤΟΙΜΗ — σύνολο βημάτων $total'
+          : 'Η ΕΚΚΙΝΗΣΗ ΔΕΝ ΟΛΟΚΛΗΡΩΘΗΚΕ — σύνολο βημάτων $total',
+      data: {'phase': 'end', 'success': success, 'total_ms': _totalMs},
     );
     _sealedOnce = true;
+    _lastAttemptSucceeded = success;
   }
 
   void _onStepsChanged() => _flushClosedSteps();
@@ -129,7 +154,7 @@ class StartupJournalWriter {
     while (_writtenCount < steps.length) {
       final step = steps[_writtenCount];
       if (step.status == StartupStepStatus.running) return;
-      append(_formatStep(step));
+      _writeStep(step);
       _totalMs += step.duration?.inMilliseconds ?? 0;
       _writtenCount++;
     }
@@ -140,40 +165,56 @@ class StartupJournalWriter {
   void _flushUnfinishedSteps() {
     final steps = _journal.steps.value;
     while (_writtenCount < steps.length) {
-      append(_formatStep(steps[_writtenCount], unfinished: true));
+      _writeStep(steps[_writtenCount], unfinished: true);
       _writtenCount++;
     }
   }
 
-  String _formatStep(StartupStep step, {bool unfinished = false}) {
-    final marker = unfinished ? 'ΗΜΙΤΕΛΕΣ' : _markerFor(step.status);
-    final duration = step.duration;
-    final durationPart = duration == null
-        ? ''
-        : ShutdownTraceIncident.formatDuration(duration.inMilliseconds);
-    final buffer = StringBuffer()
-      ..write(_stamp())
-      ..write(' ')
-      ..write(marker.padRight(12))
-      // Μακριά ετικέτα (π.χ. με το κόστος του στιγμιότυπου) δεν κολλά στη
-      // διάρκεια: «…κλείδωμα 1,3 δευτ.2,2 δευτ.» διαβαζόταν σαν ένας αριθμός.
-      ..write(
-        step.label.length >= 46 ? '${step.label} ' : step.label.padRight(46),
-      )
-      ..write(durationPart)
-      ..writeln();
-    final detail = _flatten(step.detail);
-    if (detail != null) buffer.writeln('${' ' * 35}↳ $detail');
-    return buffer.toString();
+  void _writeStep(StartupStep step, {bool unfinished = false}) {
+    final status = unfinished ? 'unfinished' : step.status.name;
+    _write(
+      _severityFor(step.status, unfinished: unfinished),
+      step.label,
+      details: _flatten(step.detail),
+      data: {
+        'phase': 'step',
+        'status': status,
+        if (step.duration != null) 'ms': step.duration!.inMilliseconds,
+      },
+    );
   }
 
-  static String _markerFor(StartupStepStatus status) => switch (status) {
-    StartupStepStatus.ok => 'ΕΝΤΑΞΕΙ',
-    StartupStepStatus.skipped => 'ΠΑΡΑΛΕΙΨΗ',
-    StartupStepStatus.warning => 'ΠΡΟΕΙΔΟΠ.',
-    StartupStepStatus.failed => 'ΑΠΟΤΥΧΙΑ',
-    StartupStepStatus.running => 'ΤΡΕΧΕΙ',
-  };
+  static LogSeverity _severityFor(
+    StartupStepStatus status, {
+    required bool unfinished,
+  }) {
+    if (unfinished) return LogSeverity.nonCritical;
+    return switch (status) {
+      StartupStepStatus.ok => LogSeverity.info,
+      StartupStepStatus.skipped => LogSeverity.info,
+      StartupStepStatus.running => LogSeverity.info,
+      StartupStepStatus.warning => LogSeverity.warning,
+      StartupStepStatus.failed => LogSeverity.nonCritical,
+    };
+  }
+
+  void _write(
+    LogSeverity severity,
+    String message, {
+    String? details,
+    Map<String, Object?> data = const {},
+  }) {
+    append(
+      LogRecord(
+        time: _now(),
+        kind: LogKind.startup,
+        severity: severity,
+        message: message,
+        details: details,
+        data: data,
+      ),
+    );
+  }
 
   static String? _flatten(String? detail) {
     if (detail == null) return null;
@@ -181,13 +222,5 @@ class StartupJournalWriter {
     if (single.isEmpty) return null;
     if (single.length <= _maxDetailLength) return single;
     return '${single.substring(0, _maxDetailLength)}…';
-  }
-
-  String _stamp() {
-    final now = _now();
-    String two(int value) => value.toString().padLeft(2, '0');
-    return '[${now.year.toString().padLeft(4, '0')}-'
-        '${two(now.month)}-${two(now.day)} '
-        '${two(now.hour)}:${two(now.minute)}:${two(now.second)}]';
   }
 }

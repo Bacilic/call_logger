@@ -163,6 +163,8 @@ class _LansweeperSettingsAiTabState
                 'Χρησιμοποιήστε {προτεύων μοντέλο} ως placeholder. Το κλειδί '
                 'δεν μπαίνει εδώ — στέλνεται ξεχωριστά και δεν εμφανίζεται '
                 'ποτέ στη διεύθυνση.',
+            // Η οδηγία είναι τρεις γραμμές· με μία κοβόταν στη λέξη «κλειδί».
+            helperMaxLines: 4,
             border: OutlineInputBorder(),
             isDense: true,
           ),

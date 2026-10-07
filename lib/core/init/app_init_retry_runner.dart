@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/database_helper.dart';
+import '../utils/file_path_identity.dart';
 import '../providers/application_reset_provider.dart';
 import '../services/settings_service.dart';
 import '../utils/user_facing_error_messages.dart';
@@ -43,7 +44,14 @@ String composeAppInitRetryFailureMessage({
 ///
 /// Δεν δέχεται [BuildContext] και δεν εμφανίζει μηνύματα — η προβολή του
 /// αποτελέσματος είναι δουλειά του καλούντος widget.
-Future<AppInitRetryOutcome> runAppInitRetry({required WidgetRef ref}) async {
+///
+/// Το [failedDatabasePath] είναι η βάση της αποτυχίας που οδήγησε εδώ — `null`
+/// όταν δεν είναι γνωστή. Από αυτήν κρίνεται αν η επαναδοκιμή είναι αλλαγή
+/// βάσης ή απλώς η ίδια βάση ξανά.
+Future<AppInitRetryOutcome> runAppInitRetry({
+  required WidgetRef ref,
+  required String? failedDatabasePath,
+}) async {
   Object? closeFailure;
   try {
     await DatabaseHelper.instance.closeConnection();
@@ -66,7 +74,14 @@ Future<AppInitRetryOutcome> runAppInitRetry({required WidgetRef ref}) async {
   ref.invalidate(applicationResetPendingProvider);
 
   try {
-    await completeDatabaseSwitch(ref: ref, path: path);
+    await completeDatabaseSwitch(
+      ref: ref,
+      path: path,
+      showSuccessNotice: _isDatabaseChange(
+        failedPath: failedDatabasePath,
+        configuredPath: path,
+      ),
+    );
   } catch (e) {
     return AppInitRetryOutcome.failure(
       composeAppInitRetryFailureMessage(
@@ -77,4 +92,21 @@ Future<AppInitRetryOutcome> runAppInitRetry({required WidgetRef ref}) async {
   }
 
   return const AppInitRetryOutcome.success();
+}
+
+/// Η πράσινη «αλλαγή βάσης» βγαίνει μόνο όταν η ρυθμισμένη βάση είναι **άλλη**
+/// από εκείνη που απέτυχε.
+///
+/// Η απλή «Επαναδοκιμή» και η «Χρήση τοπικής βάσης» αφήνουν τη ρυθμισμένη
+/// διαδρομή ίδια — η πρώτη απλώς ξεκινά την εφαρμογή, η δεύτερη ανοίγει την
+/// τοπική, που την ανακοινώνει η κίτρινη λωρίδα. Μόνο η επιλογή άλλης βάσης
+/// από την οθόνη σφάλματος είναι αλλαγή. Χωρίς γνωστή βάση αποτυχίας,
+/// σιωπή: προτιμότερη από μια ανακοίνωση που μπορεί να είναι ψέμα.
+bool _isDatabaseChange({
+  required String? failedPath,
+  required String configuredPath,
+}) {
+  final failed = failedPath?.trim() ?? '';
+  if (failed.isEmpty) return false;
+  return !pathsReferToSameFile(failed, configuredPath);
 }

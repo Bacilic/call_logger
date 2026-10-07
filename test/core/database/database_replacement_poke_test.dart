@@ -9,7 +9,7 @@
 //   flutter test test/core/database/database_replacement_poke_test.dart
 
 import 'package:call_logger/core/database/database_replacement_notice.dart';
-import 'package:call_logger/core/database/database_replacement_watchdog.dart';
+import 'package:call_logger/core/utils/one_shot_periodic_detector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,7 +20,7 @@ ProviderContainer _containerWith({
   return ProviderContainer(
     overrides: [
       databaseReplacementWatchdogProvider.overrideWith((ref) {
-        final watchdog = DatabaseReplacementWatchdog(
+        final watchdog = OneShotPeriodicDetector(
           interval: const Duration(days: 1), // μόνο χειροκίνητοι έλεγχοι εδώ
           detect: detect,
           onDetected: onDetected,

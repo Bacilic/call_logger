@@ -14,12 +14,15 @@ import '../../../core/providers/settings_route_intent_provider.dart';
 import '../../../core/services/crash_log_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/shutdown_trace_incident.dart';
+import '../../../core/services/station_name.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/widgets/save_on_focus_loss.dart';
 import '../../../core/services/spell_check_activation.dart';
 import '../../database/services/database_maintenance_service.dart';
+import '../../diagnostics/diagnostics_export_flow.dart';
+import '../../diagnostics/models/diagnostics_export_options.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
 import '../widgets/shutdown_incident_notice.dart';
@@ -78,6 +81,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   WindowPlacementMode _windowPlacementMode = WindowPlacementMode.alwaysCenter;
   int _crashLogRetentionCount = SettingsService.defaultCrashLogRetentionCount;
   String _logsDirectoryPath = '';
+  String _databasePath = '';
 
   /// Η ενότητα «Ενημερώσεις», ώστε να μπορεί να κυλήσει μπροστά.
   final GlobalKey _updatesSectionKey = GlobalKey();
@@ -174,11 +178,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final logsDirectoryPath = databasePath.trim().isEmpty
           ? ''
           : CrashLogService.logsDirectoryForDatabasePath(databasePath);
-      // Ο ιχνηλάτης κλεισίματος αφήνει αρχείο μόνο όταν κάτι πήγε στραβά —
+      // Ο ιχνηλάτης κλεισίματος αφήνει εγγραφή μόνο όταν κάτι πήγε στραβά —
       // αν υπάρχει, το λέμε εδώ αντί να περιμένουμε να το βρει ο χρήστης.
+      // Μόνο του δικού μας υπολογιστή: ο φάκελος είναι κοινός με τους
+      // συναδέλφους όταν η βάση είναι κοινή.
       final shutdownIncident = logsDirectoryPath.isEmpty
           ? null
-          : await ShutdownTraceIncident.findLatest(logsDirectoryPath);
+          : await ShutdownTraceIncident.findLatest(
+              logsDirectoryPath,
+              station: StationName.current,
+            );
       var dictionaryNavVisible = showDictionaryNav;
       if (!enableSpellCheck && dictionaryNavVisible) {
         await _settings.windowUi.setShowDictionaryNav(false);
@@ -202,6 +211,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _crashLogRetentionCount = crashLogRetention;
           _showUpdateOnStartup = showUpdateOnStartup;
           _logsDirectoryPath = logsDirectoryPath;
+          _databasePath = databasePath;
           _shutdownIncident = shutdownIncident;
           if (!_crashLogRetentionFocus.hasFocus) {
             _crashLogRetentionController.text = crashLogRetention.toString();
@@ -236,20 +246,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _crashLogRetentionController.text = normalized.toString();
   }
 
-  /// Ανοίγει το αρχείο ιχνηλάτησης του τελευταίου προβληματικού κλεισίματος.
-  Future<void> _openShutdownIncidentFile() async {
-    final path = _shutdownIncident?.filePath.trim() ?? '';
-    if (path.isEmpty) return;
-    try {
-      await DatabaseMaintenanceService.openFileInDefaultApp(path);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Αποτυχία ανοίγματος του αρχείου ιχνηλάτησης.'),
-        ),
-      );
-    }
+  /// Εξαγωγή διαγνωστικών — όλα, ή μόνο η ημέρα ενός περιστατικού.
+  Future<void> _exportDiagnostics({DiagnosticsExportOptions? preset}) {
+    return runDiagnosticsExport(
+      context: context,
+      logsDirectory: _logsDirectoryPath,
+      databasePath: _databasePath,
+      preset: preset,
+    );
   }
 
   Future<void> _openLogsFolderInExplorer() async {
@@ -595,7 +599,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          'Αρχεία καταγραφής σφαλμάτων που διατηρούνται ',
+                          'Ημέρες καταγραφής που διατηρούνται ',
                           style: theme.textTheme.bodyLarge,
                         ),
                         SizedBox(
@@ -636,7 +640,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: _logsDirectoryPath.trim().isEmpty
                   ? Text(
                       'Ο φάκελος logs δημιουργείται δίπλα στο αρχείο βάσης '
-                      'δεδομένων (π.χ. errors_YYYY-MM-DD.log).',
+                      'δεδομένων (ένα αρχείο ανά ημέρα).',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -667,10 +671,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ],
                     ),
             ),
+            if (_logsDirectoryPath.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: _exportDiagnostics,
+                    icon: const Icon(Icons.file_download_outlined, size: 18),
+                    label: const Text('Εξαγωγή διαγνωστικών…'),
+                  ),
+                ),
+              ),
             if (_shutdownIncident != null)
               ShutdownIncidentNotice(
                 incident: _shutdownIncident!,
-                onOpenFile: _openShutdownIncidentFile,
+                onExport: () => _exportDiagnostics(
+                  preset: incidentPreset(_shutdownIncident!.occurredAt),
+                ),
               ),
             if (Platform.isWindows) ...[
               const SizedBox(height: 32),

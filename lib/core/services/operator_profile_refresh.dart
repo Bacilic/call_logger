@@ -1,9 +1,9 @@
+import '../utils/background_task.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../database/database_helper.dart';
 import '../database/operator_repository.dart';
 import '../models/operator.dart';
-import 'crash_log_service.dart';
 import 'current_operator.dart';
 
 /// Άλλαξε κάτι που **φαίνεται στην οθόνη ή κρίνει δικαίωμα**;
@@ -72,12 +72,15 @@ Future<bool> refreshCurrentOperatorProfile(DatabaseExecutor db) async {
 /// όλων των υπολοίπων — τμημάτων, καταλόγου, κλήσεων. Η ταυτότητα είναι ένα
 /// από τα πολλά που ανανεώνονται· δεν είναι φύλακας κανενός από αυτά.
 ///
-/// Το σφάλμα δεν χάνεται: γράφεται στο ημερολόγιο ως **μη μοιραίο**.
+/// Το σφάλμα δεν χάνεται: γράφεται στο ημερολόγιο ως **μη μοιραίο** — εκτός
+/// αν την ανανέωση την πρόλαβε κλείσιμο της σύνδεσης (δες
+/// [logBackgroundFailure]).
 Future<void> refreshCurrentOperatorProfileSafely() async {
+  final connection = currentConnectionGeneration();
   try {
     final db = await DatabaseHelper.instance.database;
     await refreshCurrentOperatorProfile(db);
   } catch (error, stack) {
-    CrashLogService.instanceOrNull?.logError(error, stack, fatal: false);
+    logBackgroundFailure(error, stack, startedOnConnection: connection);
   }
 }

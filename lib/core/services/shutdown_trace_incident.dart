@@ -1,20 +1,19 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
 import 'crash_log_service.dart';
+import 'log_record.dart';
 
 /// Σύνοψη ενός **προβληματικού** κλεισίματος.
 ///
 /// Ο ιχνηλάτης κρατά ίχνος μόνο όταν κάτι πήγε στραβά (δες
-/// `ShutdownTraceService`), και το προσαρτά στο ημερήσιο αρχείο συνεδριών.
-/// Κάθε τέτοιο μπλοκ κλείνει με μία γραμμή `SUMMARY={json}` — αυτή διαβάζεται
-/// εδώ, ώστε οι Ρυθμίσεις να πουν στον χρήστη τι συνέβη χωρίς να διαβάσουν
-/// ολόκληρο το ίχνος.
+/// `ShutdownTraceService`), και το γράφει ως εγγραφή [LogKind.shutdown] στο
+/// ημερήσιο αρχείο. Τα στοιχεία της σύνοψης ζουν στα δομημένα δεδομένα της
+/// εγγραφής — αυτά διαβάζονται εδώ, ώστε οι Ρυθμίσεις να πουν στον χρήστη τι
+/// συνέβη χωρίς να διαβάσουν ολόκληρο το ίχνος.
 class ShutdownTraceIncident {
   const ShutdownTraceIncident({
-    required this.filePath,
     required this.occurredAt,
     required this.totalMs,
     required this.slowestStepLabel,
@@ -22,9 +21,6 @@ class ShutdownTraceIncident {
     required this.hadFailure,
     required this.wasInterrupted,
   });
-
-  /// Πλήρης διαδρομή του αρχείου ιχνηλάτησης.
-  final String filePath;
 
   final DateTime occurredAt;
 
@@ -41,11 +37,8 @@ class ShutdownTraceIncident {
   /// Το κλείσιμο κόπηκε από το όριο ασφαλείας — κολλημένο βήμα.
   final bool wasInterrupted;
 
-  static const String summaryPrefix = 'SUMMARY=';
-  static const String fileNamePrefix = CrashLogService.sessionLogPrefix;
+  /// Η κατάληξη των προσωρινών ιχνών κλεισίματος (τοπικά αρχεία κειμένου).
   static const String fileNameSuffix = '.log';
-
-  String get fileName => p.basename(filePath);
 
   Map<String, Object?> toJson() => {
     'occurred_at': occurredAt.toIso8601String(),
@@ -56,51 +49,65 @@ class ShutdownTraceIncident {
     'was_interrupted': wasInterrupted,
   };
 
-  String toSummaryLine() => '$summaryPrefix${jsonEncode(toJson())}';
+  /// Η εγγραφή που κρατά το περιστατικό στο ημερήσιο αρχείο. Ο σταθμός δεν
+  /// μπαίνει εδώ: τον σφραγίζει το ημερολόγιο τη στιγμή της εγγραφής.
+  LogRecord toRecord({required String trace}) {
+    return LogRecord(
+      time: occurredAt,
+      kind: LogKind.shutdown,
+      severity: hadFailure || wasInterrupted
+          ? LogSeverity.nonCritical
+          : LogSeverity.warning,
+      message: describeEvent(),
+      details: trace,
+      data: toJson(),
+    );
+  }
 
-  /// Διαβάζει τη γραμμή σύνοψης. `null` αν λείπει ή είναι αλλοιωμένη — ένα
-  /// μισογραμμένο αρχείο (η εφαρμογή σκοτώθηκε στη μέση) δεν είναι λόγος
-  /// να σκάσει η οθόνη Ρυθμίσεων.
-  static ShutdownTraceIncident? parseSummaryLine(String line, String filePath) {
-    final trimmed = line.trim();
-    if (!trimmed.startsWith(summaryPrefix)) return null;
-    try {
-      final decoded = jsonDecode(trimmed.substring(summaryPrefix.length));
-      if (decoded is! Map<String, Object?>) return null;
-      final occurredAt = DateTime.tryParse(
-        decoded['occurred_at']?.toString() ?? '',
-      );
-      if (occurredAt == null) return null;
-      return ShutdownTraceIncident(
-        filePath: filePath,
-        occurredAt: occurredAt,
-        totalMs: _intOf(decoded['total_ms']),
-        slowestStepLabel: decoded['slowest_step']?.toString() ?? '',
-        slowestStepMs: _intOf(decoded['slowest_ms']),
-        hadFailure: decoded['had_failure'] == true,
-        wasInterrupted: decoded['was_interrupted'] == true,
-      );
-    } on FormatException {
-      return null;
-    }
+  /// Το περιστατικό μιας εγγραφής κλεισίματος. `null` για κάθε άλλη εγγραφή,
+  /// ή όταν τα στοιχεία λείπουν — μια αλλοιωμένη εγγραφή δεν είναι λόγος να
+  /// σκάσει η οθόνη Ρυθμίσεων.
+  static ShutdownTraceIncident? fromRecord(LogRecord record) {
+    if (record.kind != LogKind.shutdown) return null;
+    final data = record.data;
+    final occurredAt =
+        DateTime.tryParse(data['occurred_at']?.toString() ?? '') ?? record.time;
+    return ShutdownTraceIncident(
+      occurredAt: occurredAt,
+      totalMs: _intOf(data['total_ms']),
+      slowestStepLabel: data['slowest_step']?.toString() ?? '',
+      slowestStepMs: _intOf(data['slowest_ms']),
+      hadFailure: data['had_failure'] == true,
+      wasInterrupted: data['was_interrupted'] == true,
+    );
   }
 
   static int _intOf(Object? value) => value is int ? value : 0;
 
-  /// Το πιο πρόσφατο περιστατικό στον φάκελο, ή `null` αν δεν υπάρχει κανένα.
+  /// Το πιο πρόσφατο περιστατικό **του [station]** στον φάκελο, ή `null`.
   ///
-  /// Τα αρχεία συνεδρίας φέρουν την ημερομηνία στο όνομά τους, οπότε η
+  /// Ο φάκελος είναι κοινός όταν η βάση είναι κοινή: χωρίς το φίλτρο, η
+  /// ένδειξη ενός υπολογιστή θα έδειχνε την αργή έξοδο του συναδέλφου σαν
+  /// δική του.
+  ///
+  /// Τα ημερήσια αρχεία φέρουν την ημερομηνία στο όνομά τους, οπότε η
   /// αλφαβητική σειρά είναι και χρονολογική. Μέσα στο αρχείο η αναζήτηση πάει
-  /// από το τέλος προς την αρχή: οι περισσότερες γραμμές είναι βήματα
-  /// εκκίνησης, και η σύνοψη που ψάχνουμε κλείνει το τελευταίο κλείσιμο.
-  static Future<ShutdownTraceIncident?> findLatest(String logsDirectory) async {
+  /// από το τέλος προς την αρχή: το τελευταίο κλείσιμο είναι προς το τέλος.
+  static Future<ShutdownTraceIncident?> findLatest(
+    String logsDirectory, {
+    required String station,
+  }) async {
     try {
       final dir = Directory(logsDirectory);
       if (!await dir.exists()) return null;
 
       final files = await dir
           .list()
-          .where((entity) => entity is File && isIncidentFile(entity.path))
+          .where(
+            (entity) =>
+                entity is File &&
+                CrashLogService.isDailyLogFileName(p.basename(entity.path)),
+          )
           .cast<File>()
           .toList();
       if (files.isEmpty) return null;
@@ -109,7 +116,9 @@ class ShutdownTraceIncident {
       for (final file in files) {
         final lines = await file.readAsLines();
         for (final line in lines.reversed) {
-          final incident = parseSummaryLine(line, file.path);
+          final record = LogRecord.tryParse(line);
+          if (record == null || record.station != station) continue;
+          final incident = fromRecord(record);
           if (incident != null) return incident;
         }
       }
@@ -119,10 +128,17 @@ class ShutdownTraceIncident {
     }
   }
 
-  /// Αρχείο συνεδρίας — εκεί ζουν πλέον οι συνόψεις κλεισίματος.
-  static bool isIncidentFile(String path) {
-    final name = p.basename(path);
-    return name.startsWith(fileNamePrefix) && name.endsWith(fileNameSuffix);
+  /// Το συμβάν όπως το διαβάζει όποιος ξεφυλλίζει το αρχείο — χωρίς το
+  /// «προηγούμενο» της ένδειξης, που έχει νόημα μόνο στην επόμενη εκκίνηση.
+  String describeEvent() {
+    if (wasInterrupted) {
+      return 'Το κλείσιμο διακόπηκε στο βήμα «$slowestStepLabel».';
+    }
+    if (hadFailure) {
+      return 'Στο κλείσιμο απέτυχε το βήμα «$slowestStepLabel».';
+    }
+    return 'Αργό κλείσιμο: ${formatDuration(totalMs)}, το πιο αργό βήμα '
+        '«$slowestStepLabel».';
   }
 
   /// Το μήνυμα που διαβάζει ο χρήστης στις Ρυθμίσεις.

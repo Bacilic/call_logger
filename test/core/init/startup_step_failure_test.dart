@@ -56,7 +56,7 @@ void main() {
     );
     final files = await logs
         .list()
-        .where((e) => e is File && e.path.contains('errors_'))
+        .where((e) => e is File && e.path.contains('events_'))
         .cast<File>()
         .toList();
 
@@ -88,7 +88,7 @@ void main() {
     );
     final files = await logs
         .list()
-        .where((e) => e is File && e.path.contains('errors_'))
+        .where((e) => e is File && e.path.contains('events_'))
         .cast<File>()
         .toList();
     final written = await files.first.readAsString();

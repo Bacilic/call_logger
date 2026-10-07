@@ -5,6 +5,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/services/crash_log_service.dart';
+import 'package:call_logger/core/services/log_record.dart';
 import 'package:call_logger/core/services/shutdown_coordinator.dart';
 import 'package:call_logger/core/services/shutdown_trace_service.dart';
 import 'package:call_logger/core/services/station_name.dart';
@@ -46,16 +47,14 @@ void main() {
           .toList()
         ..sort();
 
-  void appendToShared(String text) {
-    File(
-      '${sharedLogs.path}${Platform.pathSeparator}'
-      '${CrashLogService.sessionLogFileName(fixedNow)}',
-    ).writeAsStringSync(text, mode: FileMode.append, flush: true);
-  }
+  void appendToShared(LogRecord record) => CrashLogService(
+    logsDirectory: sharedLogs.path,
+    now: () => fixedNow,
+  ).appendRecord(record);
 
   ShutdownTraceService serviceUnderTest() => ShutdownTraceService(
     workingDirectory: localWork.path,
-    appendToSessionLog: appendToShared,
+    appendRecord: appendToShared,
     now: () => fixedNow,
   );
 
@@ -149,7 +148,7 @@ void main() {
 
       final promoted = await ShutdownTraceService.promoteOrphanedTrace(
         workingDirectory: localWork.path,
-        appendToSessionLog: appendToShared,
+        appendRecord: appendToShared,
         now: () => fixedNow,
       );
 
@@ -175,7 +174,7 @@ void main() {
         final promoted = await ShutdownTraceService.promoteOrphanedTrace(
           workingDirectory: localWork.path,
           legacySharedDirectory: sharedLogs.path,
-          appendToSessionLog: appendToShared,
+          appendRecord: appendToShared,
           now: () => fixedNow,
         );
 
@@ -198,7 +197,7 @@ void main() {
       final promoted = await ShutdownTraceService.promoteOrphanedTrace(
         workingDirectory: localWork.path,
         legacySharedDirectory: sharedLogs.path,
-        appendToSessionLog: appendToShared,
+        appendRecord: appendToShared,
         now: () => fixedNow,
       );
 
@@ -216,7 +215,7 @@ void main() {
       final promoted = await ShutdownTraceService.promoteOrphanedTrace(
         workingDirectory: localWork.path,
         legacySharedDirectory: sharedLogs.path,
-        appendToSessionLog: appendToShared,
+        appendRecord: appendToShared,
         now: () => fixedNow,
       );
 

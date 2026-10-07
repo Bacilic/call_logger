@@ -133,7 +133,7 @@ void main() {
           .where(
             (name) =>
                 name.startsWith(CrashLogService.legacyShutdownTracePrefix) ||
-                name.startsWith(CrashLogService.sessionLogPrefix),
+                CrashLogService.isDailyLogFileName(name),
           )
           .toList();
 
@@ -155,10 +155,9 @@ void main() {
         createCoordinator: () => coordinator,
         createTrace: () async => ShutdownTraceService(
           workingDirectory: logsDir.path,
-          appendToSessionLog: (text) => File(
-            '${logsDir.path}${Platform.pathSeparator}'
-            '${CrashLogService.sessionLogFileName(DateTime.now())}',
-          ).writeAsStringSync(text, mode: FileMode.append, flush: true),
+          appendRecord: CrashLogService(
+            logsDirectory: logsDir.path,
+          ).appendRecord,
         ),
         presenter: _RecordingPresenter(log),
       ).run();

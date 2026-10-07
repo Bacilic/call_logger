@@ -1,3 +1,4 @@
+import '../utils/background_task.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -12,7 +13,6 @@ import '../../features/database/providers/database_browser_stats_provider.dart';
 import '../../features/directory/providers/directory_cache_refresh.dart';
 import '../../features/tasks/providers/task_notifications_provider.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
-import '../services/crash_log_service.dart';
 import '../services/operator_profile_refresh.dart';
 import '../widgets/modal_route_tracker.dart';
 import 'database_helper.dart';
@@ -134,12 +134,15 @@ void refreshSharedDatabaseIdentityViews(Ref ref) {
 /// ασφαλής από τη μία μεριά και θανατηφόρα από την άλλη. Την ασφάλεια την
 /// κρατά πλέον η ίδια, ώστε κανένας καλών να μην μπορεί να την ξεχάσει.
 ///
-/// Το σφάλμα δεν χάνεται: γράφεται στο ημερολόγιο ως **μη μοιραίο**.
+/// Το σφάλμα δεν χάνεται: γράφεται στο ημερολόγιο ως **μη μοιραίο** — εκτός
+/// αν την ανανέωση την πρόλαβε κλείσιμο της σύνδεσης (δες
+/// [logBackgroundFailure]).
 Future<void> refreshSharedDatabaseViewsSafely(Ref ref) async {
+  final connection = currentConnectionGeneration();
   try {
     await refreshSharedDatabaseViews(ref);
   } catch (error, stack) {
-    CrashLogService.instanceOrNull?.logError(error, stack, fatal: false);
+    logBackgroundFailure(error, stack, startedOnConnection: connection);
   }
 }
 

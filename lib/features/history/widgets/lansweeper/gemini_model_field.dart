@@ -52,9 +52,17 @@ class GeminiModelsSection extends ConsumerStatefulWidget {
 class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
   static const Duration _probeStaleAfter = Duration(days: 90);
   static const Duration _typedQuotaProbeDebounce = Duration(milliseconds: 400);
-  static const String _typedQuotaWarningMessage =
-      'Το μοντέλο που καταχωρήσατε δεν έχει διαθέσιμη ποσόστωση (> 0). '
-      'Μπορείτε να το κρατήσετε.';
+
+  /// Ονομάζει το πεδίο και το μοντέλο: τα δύο πεδία είναι το ένα κάτω από το
+  /// άλλο, και ένα σκέτο «το μοντέλο» δεν έλεγε σε ποιο από τα δύο αναφέρεται.
+  static String _quotaWarningMessage(_GeminiModelSlot slot, String modelId) {
+    final role = switch (slot) {
+      _GeminiModelSlot.primary => 'κύριο',
+      _GeminiModelSlot.fallback => 'εφεδρικό',
+    };
+    return 'Το $role μοντέλο «$modelId» δεν έχει διαθέσιμη ποσόστωση (> 0). '
+        'Μπορείτε να το κρατήσετε.';
+  }
 
   List<GeminiTextModel> _allModels = <GeminiTextModel>[];
   List<GeminiTextModel> _availableModels = <GeminiTextModel>[];
@@ -579,7 +587,7 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              _typedQuotaWarningMessage,
+              _quotaWarningMessage(slot, failedId),
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: Colors.red.shade900),
@@ -856,7 +864,7 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
           slot: _GeminiModelSlot.fallback,
           labelText: 'Εφεδρικό μοντέλο',
           helperText: widget.fallbackEnabled
-              ? 'Χρησιμοποιείται σε 503 (υπερφόρτωση).'
+              ? 'Χρησιμοποιείται όταν το κύριο μοντέλο δεν είναι διαθέσιμο.'
               : 'Απενεργοποιημένο.',
           pickerTitle: 'Επιλογή εφεδρικού μοντέλου',
           enabled: widget.fallbackEnabled,

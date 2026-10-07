@@ -8,9 +8,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/database_init_result.dart';
 import 'package:call_logger/core/database/timeout_database.dart';
 import 'package:call_logger/core/errors/fatal_error_routing.dart';
+import 'package:call_logger/core/services/crash_log_service.dart';
+import 'package:call_logger/core/services/log_record.dart';
 import 'package:call_logger/core/utils/background_task.dart';
 import 'package:call_logger/core/widgets/transient_database_notice.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -131,6 +134,79 @@ void main() {
       await done.future;
 
       expect(escaped, isEmpty);
+    });
+  });
+
+  group('Αποτυχία που την πρόλαβε κλείσιμο της σύνδεσης', () {
+    late Directory dir;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('background_closed_');
+      await CrashLogService.initialize(
+        databasePath: p.join(dir.path, 'vasi.db'),
+        appVersion: 'test',
+        retentionCount: 14,
+      );
+    });
+
+    tearDown(() async {
+      CrashLogService.resetForTest();
+      try {
+        await dir.delete(recursive: true);
+      } catch (_) {}
+    });
+
+    /// Πόσα σφάλματα γράφτηκαν στο ημερολόγιο.
+    Future<int> loggedErrors() async {
+      final logs = Directory(p.join(dir.path, 'logs'));
+      if (!logs.existsSync()) return 0;
+      var count = 0;
+      for (final file in logs.listSync().whereType<File>()) {
+        for (final line in await file.readAsLines()) {
+          if (LogRecord.tryParse(line)?.kind == LogKind.error) count++;
+        }
+      }
+      return count;
+    }
+
+    /// Εργασία που αποτυγχάνει μόλις της το πεις — όπως η φόρτωση υπαλλήλων
+    /// που έπεσε πάνω σε κλειστή βάση στις 19:43:08.
+    Future<void> runAndFail({required bool closeConnectionMeanwhile}) async {
+      final release = Completer<void>();
+      final finished = Completer<void>();
+      runBackgroundTask(
+        release.future.then<void>((_) {
+          finished.complete();
+          throw Exception('DatabaseException(error database_closed)');
+        }),
+      );
+      if (closeConnectionMeanwhile) {
+        await DatabaseHelper.instance.closeConnection();
+      }
+      release.complete();
+      await finished.future;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+
+    test(
+      'κλείσιμο σύνδεσης στη μέση της εργασίας: δεν γράφεται ψεύτικο σφάλμα',
+      () async {
+        await runAndFail(closeConnectionMeanwhile: true);
+
+        expect(
+          await loggedErrors(),
+          0,
+          reason:
+              'Η εφαρμογή έκλεινε (ή άλλαζε βάση) — η εργασία διακόπηκε, δεν '
+              'απέτυχε. Ως «σφάλμα» θολώνει κάθε εξαγωγή διαγνωστικών.',
+        );
+      },
+    );
+
+    test('χωρίς κλείσιμο, η πραγματική αποτυχία γράφεται κανονικά', () async {
+      await runAndFail(closeConnectionMeanwhile: false);
+
+      expect(await loggedErrors(), 1);
     });
   });
 }

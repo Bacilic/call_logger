@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:call_logger/core/services/crash_log_service.dart';
+import 'package:call_logger/core/services/log_record.dart';
 import 'package:call_logger/core/services/shutdown_coordinator.dart';
 import 'package:call_logger/core/services/shutdown_trace_incident.dart';
 import 'package:call_logger/core/services/shutdown_trace_service.dart';
@@ -46,7 +48,7 @@ void main() {
       ..sort();
   }
 
-  List<String> sessionFiles() => filesNamed(CrashLogService.sessionLogPrefix);
+  List<String> sessionFiles() => filesNamed(CrashLogService.logFilePrefix);
 
   List<String> workingFiles() =>
       filesNamed(CrashLogService.legacyShutdownTracePrefix);
@@ -65,16 +67,19 @@ void main() {
 
   /// Πόσα μπλοκ τερματισμού έχουν γραφτεί συνολικά. Τα περιστατικά της ίδιας
   /// ημέρας μοιράζονται αρχείο, οπότε το πλήθος αρχείων δεν τα μετρά πια.
-  int incidentBlocks() => 'ΤΕΡΜΑΤΙΣΜΟΣ'.allMatches(sessionContent()).length;
+  int incidentBlocks() => const LineSplitter()
+      .convert(sessionContent())
+      .map(LogRecord.tryParse)
+      .where((record) => record?.kind == LogKind.shutdown)
+      .length;
 
-  /// Ο παραλήπτης που στην εφαρμογή είναι το ημερήσιο αρχείο συνεδριών.
-  void Function(String) appenderFor(DateTime when) {
-    return (String text) {
-      File(
-        '${logsDir.path}${Platform.pathSeparator}'
-        '${CrashLogService.sessionLogFileName(when)}',
-      ).writeAsStringSync(text, mode: FileMode.append, flush: true);
-    };
+  /// Ο παραλήπτης της εφαρμογής: το ημερολόγιο, που σφραγίζει τον σταθμό.
+  void Function(LogRecord) appenderFor(DateTime when) {
+    return CrashLogService(
+      logsDirectory: logsDir.path,
+      appVersion: '1.0.0',
+      now: () => when,
+    ).appendRecord;
   }
 
   ShutdownTraceService service({
@@ -84,7 +89,7 @@ void main() {
     final clock = now ?? fixedNow;
     return ShutdownTraceService(
       workingDirectory: logsDir.path,
-      appendToSessionLog: appenderFor(clock),
+      appendRecord: appenderFor(clock),
       slowThreshold: slowThreshold,
       now: () => clock,
     );
@@ -168,7 +173,7 @@ void main() {
         );
         await trace.endSession();
 
-        expect(sessionFiles(), ['session_2026-08-09.log']);
+        expect(sessionFiles(), ['events_2026-08-09.jsonl']);
         expect(
           workingFiles(),
           isEmpty,
@@ -180,7 +185,10 @@ void main() {
         expect(content, contains('Αντίγραφο ασφαλείας εξόδου'));
         expect(content, contains('durationMs=900'));
 
-        final incident = await ShutdownTraceIncident.findLatest(logsDir.path);
+        final incident = await ShutdownTraceIncident.findLatest(
+          logsDir.path,
+          station: StationName.current,
+        );
         expect(incident, isNotNull);
         expect(incident!.totalMs, 920);
         expect(incident.slowestStepLabel, 'Αντίγραφο ασφαλείας εξόδου');
@@ -229,7 +237,10 @@ void main() {
         await trace.endSession();
 
         expect(incidentBlocks(), 1);
-        final incident = await ShutdownTraceIncident.findLatest(logsDir.path);
+        final incident = await ShutdownTraceIncident.findLatest(
+          logsDir.path,
+          station: StationName.current,
+        );
         expect(incident!.hadFailure, isTrue);
         expect(incident.slowestStepLabel, 'Κλείσιμο σύνδεσης βάσης');
         expect(incident.describe(), contains('απέτυχε το βήμα'));
@@ -258,7 +269,10 @@ void main() {
         await trace.endSession();
 
         expect(incidentBlocks(), 1);
-        final incident = await ShutdownTraceIncident.findLatest(logsDir.path);
+        final incident = await ShutdownTraceIncident.findLatest(
+          logsDir.path,
+          station: StationName.current,
+        );
         expect(incident!.wasInterrupted, isTrue);
         expect(incident.slowestStepLabel, 'Αντίγραφο ασφαλείας εξόδου');
         expect(incident.describe(), contains('διακόπηκε στο βήμα'));
@@ -306,7 +320,7 @@ void main() {
         final nextBoot = DateTime(2026, 8, 10, 8, 0, 0);
         final promoted = await ShutdownTraceService.promoteOrphanedTrace(
           workingDirectory: logsDir.path,
-          appendToSessionLog: appenderFor(nextBoot),
+          appendRecord: appenderFor(nextBoot),
           now: () => nextBoot,
         );
 
@@ -320,7 +334,10 @@ void main() {
         expect(workingFiles(), isEmpty);
         expect(incidentBlocks(), 1);
 
-        final incident = await ShutdownTraceIncident.findLatest(logsDir.path);
+        final incident = await ShutdownTraceIncident.findLatest(
+          logsDir.path,
+          station: StationName.current,
+        );
         expect(incident!.wasInterrupted, isTrue);
         expect(
           incident.slowestStepLabel,
@@ -343,7 +360,7 @@ void main() {
 
         final promoted = await ShutdownTraceService.promoteOrphanedTrace(
           workingDirectory: logsDir.path,
-          appendToSessionLog: appenderFor(fixedNow),
+          appendRecord: appenderFor(fixedNow),
         );
 
         expect(promoted, isFalse);
@@ -362,7 +379,7 @@ void main() {
     test('καθαρός φάκελος: η προαγωγή δεν βρίσκει τίποτα', () async {
       final promoted = await ShutdownTraceService.promoteOrphanedTrace(
         workingDirectory: logsDir.path,
-        appendToSessionLog: appenderFor(fixedNow),
+        appendRecord: appenderFor(fixedNow),
       );
       expect(promoted, isFalse);
       expect(sessionFiles(), isEmpty);
@@ -371,19 +388,28 @@ void main() {
     test(
       'εκκίνηση και τερματισμός της ίδιας ημέρας μοιράζονται ΕΝΑ αρχείο',
       () async {
-        appenderFor(fixedNow)('[2026-08-09 08:12:33] ══ ΕΚΚΙΝΗΣΗ v1.0.0 ══\n');
+        appenderFor(fixedNow)(
+          LogRecord(
+            time: DateTime(2026, 8, 9, 8, 12, 33),
+            kind: LogKind.startup,
+            severity: LogSeverity.info,
+            message: 'ΕΚΚΙΝΗΣΗ v1.0.0',
+          ),
+        );
         final trace = service();
         await trace.beginSession();
         runStep(trace, index: 0, label: 'Βήμα', durationMs: 900);
         await trace.endSession();
 
-        expect(sessionFiles(), ['session_2026-08-09.log']);
-        final content = sessionContent();
-        expect(content, contains('ΕΚΚΙΝΗΣΗ'));
-        expect(content, contains('ΤΕΡΜΑΤΙΣΜΟΣ'));
+        expect(sessionFiles(), ['events_2026-08-09.jsonl']);
+        final kinds = const LineSplitter()
+            .convert(sessionContent())
+            .map(LogRecord.tryParse)
+            .map((record) => record!.kind)
+            .toList();
         expect(
-          content.indexOf('ΕΚΚΙΝΗΣΗ'),
-          lessThan(content.indexOf('ΤΕΡΜΑΤΙΣΜΟΣ')),
+          kinds,
+          [LogKind.startup, LogKind.shutdown],
           reason: greekExpectMsg(
             'Η σειρά του αρχείου είναι η σειρά του χρόνου',
           ),
@@ -394,12 +420,24 @@ void main() {
 
   group('ShutdownTraceIncident', () {
     test('καθαρός φάκελος: κανένα περιστατικό', () async {
-      expect(await ShutdownTraceIncident.findLatest(logsDir.path), isNull);
+      expect(
+        await ShutdownTraceIncident.findLatest(
+          logsDir.path,
+          station: StationName.current,
+        ),
+        isNull,
+      );
     });
 
     test('ανύπαρκτος φάκελος δεν σκάει', () async {
       final missing = '${tempRoot.path}${Platform.pathSeparator}δεν-υπάρχει';
-      expect(await ShutdownTraceIncident.findLatest(missing), isNull);
+      expect(
+        await ShutdownTraceIncident.findLatest(
+          missing,
+          station: StationName.current,
+        ),
+        isNull,
+      );
     });
 
     test('επιστρέφει το ΠΙΟ ΠΡΟΣΦΑΤΟ όταν υπάρχουν πολλά', () async {
@@ -414,7 +452,10 @@ void main() {
         await trace.endSession();
       }
 
-      final incident = await ShutdownTraceIncident.findLatest(logsDir.path);
+      final incident = await ShutdownTraceIncident.findLatest(
+        logsDir.path,
+        station: StationName.current,
+      );
       expect(incident!.slowestStepLabel, 'Βήμα 9');
       expect(incident.occurredAt, DateTime(2026, 8, 9, 18, 0, 0));
     });
@@ -437,19 +478,64 @@ void main() {
           await trace.endSession();
         }
 
-        final incident = await ShutdownTraceIncident.findLatest(logsDir.path);
+        final incident = await ShutdownTraceIncident.findLatest(
+          logsDir.path,
+          station: StationName.current,
+        );
         expect(incident!.slowestStepLabel, 'Βήμα 18');
       },
     );
 
     test('αλλοιωμένη σύνοψη δεν ρίχνει την οθόνη — απλώς αγνοείται', () async {
       final file = File(
-        '${logsDir.path}${Platform.pathSeparator}session_2026-08-09.log',
+        '${logsDir.path}${Platform.pathSeparator}events_2026-08-09.jsonl',
       );
+      // Μισογραμμένη εγγραφή — η εφαρμογή σκοτώθηκε τη στιγμή της εγγραφής.
       await file.writeAsString(
-        '[2026-08-09 12:00:00] κάτι\nSUMMARY={σκουπίδια',
+        '{"time":"2026-08-09T12:00:00","station":"$thisStation",'
+        '"kind":"shutdown","severity":"warn',
       );
-      expect(await ShutdownTraceIncident.findLatest(logsDir.path), isNull);
+      expect(
+        await ShutdownTraceIncident.findLatest(
+          logsDir.path,
+          station: StationName.current,
+        ),
+        isNull,
+      );
+    });
+
+    test('σε κοινό φάκελο, η ένδειξη διαβάζει ΜΟΝΟ τα κλεισίματα του δικού της '
+        'υπολογιστή', () async {
+      StationName.reader = () => 'POPINIO';
+      final popinio = service(now: DateTime(2026, 8, 9, 18, 0, 0));
+      await popinio.beginSession();
+      runStep(popinio, index: 0, label: 'Βήμα του POPINIO', durationMs: 900);
+      await popinio.endSession();
+
+      StationName.reader = () => 'PICINIO';
+      final incident = await ShutdownTraceIncident.findLatest(
+        logsDir.path,
+        station: StationName.current,
+      );
+
+      expect(
+        incident,
+        isNull,
+        reason: greekExpectMsg(
+          'Ο PICINIO δεν έκλεισε ποτέ αργά — η αργή έξοδος είναι του POPINIO',
+        ),
+      );
+
+      StationName.reader = () => 'POPINIO';
+      final own = await ShutdownTraceIncident.findLatest(
+        logsDir.path,
+        station: StationName.current,
+      );
+      expect(
+        own?.slowestStepLabel,
+        'Βήμα του POPINIO',
+        reason: greekExpectMsg('Ο POPINIO βλέπει κανονικά τη δική του έξοδο'),
+      );
     });
 
     test('μορφοποίηση χρόνου: ms κάτω από το δευτερόλεπτο, δευτ. από πάνω', () {
@@ -462,7 +548,6 @@ void main() {
 
     test('το μήνυμα καθυστέρησης ονομάζει χρόνο και βήμα', () {
       final incident = ShutdownTraceIncident(
-        filePath: 'C:/logs/session_2026-08-09.log',
         occurredAt: fixedNow,
         totalMs: 1240,
         slowestStepLabel: 'Αντίγραφο ασφαλείας εξόδου',
@@ -475,12 +560,10 @@ void main() {
         'Στο προηγούμενο κλείσιμο της εφαρμογής εντοπίστηκε καθυστέρηση '
         '1,2 δευτ. στο βήμα «Αντίγραφο ασφαλείας εξόδου».',
       );
-      expect(incident.fileName, 'session_2026-08-09.log');
     });
 
     test('η διακοπή υπερισχύει της αποτυχίας στο μήνυμα', () {
       final incident = ShutdownTraceIncident(
-        filePath: 'x.log',
         occurredAt: fixedNow,
         totalMs: 20000,
         slowestStepLabel: 'Αντίγραφο ασφαλείας εξόδου',

@@ -13,10 +13,13 @@
 
 import 'dart:async';
 
+import 'package:call_logger/core/database/database_init_result.dart';
 import 'package:call_logger/core/init/app_init_provider.dart';
+import 'package:call_logger/core/init/app_initializer.dart';
 import 'package:call_logger/core/init/startup_journal.dart';
 import 'package:call_logger/core/widgets/app_init_wrapper.dart';
 import 'package:call_logger/core/widgets/startup_splash_screen.dart';
+import 'package:call_logger/features/operators/widgets/refreshing_operator_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -157,6 +160,68 @@ void main() {
             'η οθόνη σφάλματος δεν επιτρέπεται να μείνει στο μέγεθος της '
             'κάρτας εκκίνησης',
       );
+    },
+    semanticsEnabled: false,
+  );
+
+  testWidgets(
+    'αλλαγή βάσης: το «Ποιος είστε;» περιμένει να τελειώσει η αναγνώριση',
+    (tester) async {
+      // Το σφάλμα πεδίου: μετά από «Μετάβαση στη δικτυακή βάση» ο επιλογέας
+      // χρήστη αναβόσβηνε για δευτερόλεπτα — η οθόνη έκρινε με το «πέτυχε» της
+      // προηγούμενης βάσης, ενώ η αναγνώριση είχε ήδη μηδενίσει την ταυτότητα.
+      StartupJournal.instance.begin('Άνοιγμα βάσης δεδομένων').ok();
+      resetTestOperator();
+      addTearDown(resetTestOperator);
+      final success = AppInitResult(
+        result: DatabaseInitResult.success(),
+        isLocalDevMode: false,
+        spellCheckReady: true,
+      );
+      final secondInit = Completer<AppInitResult>();
+      var inits = 0;
+      final container = ProviderContainer(
+        overrides: [
+          appInitProvider.overrideWith((ref) {
+            inits++;
+            return inits == 1 ? Future.value(success) : secondInit.future;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(home: AppInitWrapper(windowRestorer: () async {})),
+        ),
+      );
+      await _letSplashFinishSpeaking(tester);
+      expect(
+        find.byType(RefreshingOperatorPicker),
+        findsOneWidget,
+        reason: 'Η βάση δεν γνωρίζει κανέναν — η ερώτηση είναι δικαιολογημένη',
+      );
+
+      // Η αλλαγή βάσης ξαναξεκινά την αρχικοποίηση· η αναγνώριση τρέχει ακόμη.
+      container.invalidate(appInitProvider);
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byType(RefreshingOperatorPicker),
+        findsNothing,
+        reason: 'Καμία ερώτηση πριν απαντήσει η αναγνώριση της νέας βάσης',
+      );
+      expect(find.byType(InitLoadingScreen), findsOneWidget);
+
+      // Η νέα βάση απάντησε χωρίς να βρει τον χρήστη: τώρα, και μόνο τώρα.
+      secondInit.complete(success);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(RefreshingOperatorPicker), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 11));
     },
     semanticsEnabled: false,
   );

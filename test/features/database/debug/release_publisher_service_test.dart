@@ -9,6 +9,21 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+/// Η παγίδα του διπλού κλειδιού: εγγραφή γραμμένη σε δεύτερο «fixed» της
+/// ίδιας κάρτας. Η ανάγνωση κρατά μόνο το δεύτερο.
+const _duplicateKeyChangelog =
+    '[\n'
+    '  {\n'
+    '    "version": "Unreleased",\n'
+    '    "date": "",\n'
+    '    "added": ["Νέο feature δοκιμής"],\n'
+    '    "improvements": [],\n'
+    '    "changed": [],\n'
+    '    "fixed": ["Πρώτη διόρθωση"],\n'
+    '    "fixed": ["Δεύτερη διόρθωση"]\n'
+    '  }\n'
+    ']\n';
+
 void main() {
   late Directory tempRoot;
   late Directory projectRoot;
@@ -156,6 +171,41 @@ environment:
     ).readAsString();
     expect(pubspec, contains('version: 0.23.1+31'));
   });
+
+  test(
+    'διπλό κλειδί στο changelog: άρνηση με τη γραμμή, κανένα αρχείο δεν αλλάζει',
+    () async {
+      // Η παγίδα: εγγραφή γραμμένη σε δεύτερο «fixed» της ίδιας κάρτας. Η
+      // ανάγνωση κρατά μόνο το δεύτερο, και η σφράγιση θα έσβηνε οριστικά τις
+      // εγγραφές του πρώτου.
+      const changelog = _duplicateKeyChangelog;
+      await writeProjectFiles(changelogJson: changelog, pubspec: samplePubspec);
+      var processCalls = 0;
+      final service = buildService(
+        processRunner: (_, _, {workingDirectory, onOutput}) async {
+          processCalls++;
+          return 0;
+        },
+      );
+
+      final result = await service.publish();
+
+      expect(result.status, ReleasePublishStatus.failure);
+      expect(result.message, contains('«fixed» στη γραμμή 9'));
+      expect(processCalls, 0, reason: 'Καμία μεταγλώττιση');
+      expect(
+        await File(
+          p.join(projectRoot.path, 'assets', 'changelog.json'),
+        ).readAsString(),
+        changelog,
+        reason: 'Και η «Πρώτη διόρθωση» μένει στο αρχείο, να διορθωθεί',
+      );
+      expect(
+        await File(p.join(projectRoot.path, 'pubspec.yaml')).readAsString(),
+        contains('version: 0.23.1+31'),
+      );
+    },
+  );
 
   test('added → minor: creates new card and resets Unreleased', () async {
     await writeProjectFiles(
@@ -686,6 +736,34 @@ environment:
   );
 
   group('rebuildCurrentVersion', () {
+    test(
+      'διπλό κλειδί στο changelog: άρνηση, χωρίς νέο κτίσιμο ή μεταγλώττιση',
+      () async {
+        await writeProjectFiles(
+          changelogJson: _duplicateKeyChangelog,
+          pubspec: samplePubspec,
+        );
+        var processCalls = 0;
+        final service = buildService(
+          processRunner: (_, _, {workingDirectory, onOutput}) async {
+            processCalls++;
+            return 0;
+          },
+        );
+
+        final result = await service.rebuildCurrentVersion();
+
+        expect(result.status, ReleasePublishStatus.failure);
+        expect(result.message, contains('«fixed» στη γραμμή 9'));
+        expect(processCalls, 0, reason: 'Καμία μεταγλώττιση');
+        expect(
+          await File(p.join(projectRoot.path, 'pubspec.yaml')).readAsString(),
+          contains('version: 0.23.1+31'),
+          reason: 'Ο αριθμός κτισίματος δεν αυξήθηκε',
+        );
+      },
+    );
+
     test(
       'keeps version label and changelog untouched, bumps only the build',
       () async {

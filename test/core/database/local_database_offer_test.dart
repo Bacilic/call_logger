@@ -126,4 +126,36 @@ void main() {
       expect(resolved.outcome, DatabasePathResolution.networkUnreachable);
     });
   });
+
+  group('η αποδοχή κρατά μέχρι να την αλλάξει ο χρήστης', () {
+    test('η βάση που ξαναπαντά ΔΕΝ ακυρώνει σιωπηλά την αποδοχή', () async {
+      // Η «δικτυακή» που επανήλθε: υπάρχει πια στον δίσκο.
+      final networkBack = await makeDb('diktyaki.db');
+      final local = await makeDb('topiki.db');
+      LocalDatabaseSessionFallback.accept(networkBack, local);
+
+      final resolved = await resolveEffectiveDatabasePath(networkBack);
+
+      expect(
+        resolved.pathToOpen,
+        local,
+        reason:
+            'Μόλις ο διακομιστής ξαναπαντούσε, το επόμενο ξανάνοιγμα περνούσε '
+            'σιωπηλά στη δικτυακή βάση, αφήνοντας πίσω ό,τι γράφτηκε τοπικά.',
+      );
+      expect(resolved.usedUncFallback, isTrue);
+    });
+
+    test('μετά τη ρητή επιστροφή ανοίγει ξανά η δικτυακή', () async {
+      final networkBack = await makeDb('diktyaki.db');
+      final local = await makeDb('topiki.db');
+      LocalDatabaseSessionFallback.accept(networkBack, local);
+
+      LocalDatabaseSessionFallback.forget();
+      final resolved = await resolveEffectiveDatabasePath(networkBack);
+
+      expect(resolved.pathToOpen, networkBack);
+      expect(resolved.usedUncFallback, isFalse);
+    });
+  });
 }

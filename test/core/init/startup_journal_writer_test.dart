@@ -1,5 +1,6 @@
 import 'package:call_logger/core/init/startup_journal.dart';
 import 'package:call_logger/core/init/startup_journal_writer.dart';
+import 'package:call_logger/core/services/log_record.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../test_reporter.dart';
@@ -8,14 +9,14 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late StartupJournal journal;
-  late StringBuffer sink;
+  late List<LogRecord> sink;
   late StartupJournalWriter writer;
 
   setUp(() {
     journal = StartupJournal.instance..reset();
-    sink = StringBuffer();
+    sink = [];
     writer = StartupJournalWriter(
-      append: sink.write,
+      append: sink.add,
       appVersion: '1.0.0',
       journal: journal,
       now: () => DateTime(2026, 9, 15, 8, 12, 33),
@@ -27,8 +28,21 @@ void main() {
     journal.reset();
   });
 
-  /// Πόσες φορές εμφανίζεται το κείμενο στο αρχείο.
-  int occurrences(String needle) => needle.allMatches(sink.toString()).length;
+  /// Πόσες εγγραφές αναφέρουν το κείμενο, στο μήνυμα ή στη λεπτομέρεια.
+  int occurrences(String needle) => sink
+      .where(
+        (record) =>
+            record.message.contains(needle) ||
+            (record.details ?? '').contains(needle),
+      )
+      .length;
+
+  /// Η εγγραφή του βήματος με αυτή την ετικέτα.
+  LogRecord stepRecord(String label) =>
+      sink.singleWhere((record) => record.message == label);
+
+  Iterable<LogRecord> phase(String name) =>
+      sink.where((record) => record.data['phase'] == name);
 
   group('StartupJournalWriter · τι φτάνει στο αρχείο', () {
     test('το βήμα γράφεται μόλις κλείσει, όχι όσο τρέχει', () {
@@ -43,7 +57,7 @@ void main() {
 
       step.ok();
       expect(occurrences('Άνοιγμα βάσης δεδομένων'), 1);
-      expect(sink.toString(), contains('ΕΝΤΑΞΕΙ'));
+      expect(stepRecord('Άνοιγμα βάσης δεδομένων').data['status'], 'ok');
     });
 
     test('η αλλαγή κειμένου σε βήμα που τρέχει ΔΕΝ γεννά εγγραφές', () {
@@ -59,7 +73,7 @@ void main() {
         1,
         reason: greekExpectMsg(
           'Η αντίστροφη μέτρηση αλλάζει το ίδιο βήμα δεκάδες φορές — το '
-          'αρχείο κρατά μία γραμμή, την τελική',
+          'αρχείο κρατά μία εγγραφή, την τελική',
         ),
       );
     });
@@ -73,9 +87,24 @@ void main() {
       expect(occurrences('Φόρτωση μηχανής SQLite'), 1);
       expect(occurrences('Προετοιμασία παραθύρου'), 1);
       expect(
-        sink.toString(),
-        contains('ΕΚΚΙΝΗΣΗ v1.0.0'),
-        reason: greekExpectMsg('Η κεφαλίδα ανοίγει το μπλοκ της συνεδρίας'),
+        sink.first.data['phase'],
+        'begin',
+        reason: greekExpectMsg('Η αρχή της εκκίνησης ανοίγει το μπλοκ'),
+      );
+      expect(sink.first.message, contains('ΕΚΚΙΝΗΣΗ v1.0.0'));
+    });
+
+    test('κάθε εγγραφή είναι εγγραφή εκκίνησης', () {
+      writer.attach();
+      journal.begin('Πρώτο').ok();
+      writer.sealAttempt(success: true);
+
+      expect(
+        sink.map((record) => record.kind).toSet(),
+        {LogKind.startup},
+        reason: greekExpectMsg(
+          'Η εξαγωγή μετρά τις εκκινήσεις από το είδος, όχι από λέξεις',
+        ),
       );
     });
 
@@ -95,15 +124,16 @@ void main() {
           'Το αρχείο τις κρατά — απαντούν στο «γιατί δεν έγινε;»',
         ),
       );
-      expect(sink.toString(), contains('ΠΑΡΑΛΕΙΨΗ'));
+      expect(stepRecord('Μεταφορά ορόφων τμημάτων').data['status'], 'skipped');
     });
 
     test('η προειδοποίηση κουβαλά την αιτία της', () {
       writer.attach();
       journal.begin('Έλεγχος ενημέρωσης').warn('το δίκτυο δεν απάντησε');
 
-      expect(sink.toString(), contains('ΠΡΟΕΙΔΟΠ.'));
-      expect(sink.toString(), contains('το δίκτυο δεν απάντησε'));
+      final record = stepRecord('Έλεγχος ενημέρωσης');
+      expect(record.severity, LogSeverity.warning);
+      expect(record.details, 'το δίκτυο δεν απάντησε');
     });
 
     test('η πολύγραμμη αιτία ισοπεδώνεται σε μία γραμμή', () {
@@ -112,13 +142,10 @@ void main() {
           .begin('Άνοιγμα βάσης')
           .fail('πρώτη γραμμή\nδεύτερη γραμμή\n   τρίτη');
 
-      final detailLines = sink
-          .toString()
-          .split('\n')
-          .where((line) => line.contains('πρώτη γραμμή'))
-          .toList();
-      expect(detailLines, hasLength(1));
-      expect(detailLines.single, contains('τρίτη'));
+      expect(
+        stepRecord('Άνοιγμα βάσης').details,
+        'πρώτη γραμμή δεύτερη γραμμή τρίτη',
+      );
     });
 
     test(
@@ -144,9 +171,29 @@ void main() {
           ),
         );
         expect(occurrences('Άνοιγμα βάσης δεδομένων'), 2);
-        expect(occurrences('νέα προσπάθεια'), 1);
+        expect(phase('retry'), hasLength(1));
       },
     );
+
+    test('νέα αρχικοποίηση μετά από ΕΠΙΤΥΧΙΑ είναι αλλαγή βάσης, όχι '
+        'νέα προσπάθεια', () {
+      journal.sealBootPrefix();
+      writer.attach();
+      journal.begin('Άνοιγμα βάσης δεδομένων').ok();
+      writer.sealAttempt(success: true);
+
+      journal.rewindToBootPrefix();
+      writer.beginAttempt();
+
+      expect(
+        phase('retry'),
+        isEmpty,
+        reason: greekExpectMsg(
+          'Η πρώτη αρχικοποίηση πέτυχε — η δεύτερη δεν είναι επανάληψη',
+        ),
+      );
+      expect(phase('reinit'), hasLength(1));
+    });
 
     test('η πρώτη προσπάθεια ΔΕΝ γράφει «νέα προσπάθεια»', () {
       journal.sealBootPrefix();
@@ -154,7 +201,7 @@ void main() {
       journal.rewindToBootPrefix();
       writer.beginAttempt();
 
-      expect(occurrences('νέα προσπάθεια'), 0);
+      expect(phase('retry'), isEmpty);
     });
 
     test('βήμα που δεν έκλεισε ποτέ γράφεται ρητά ως ημιτελές', () {
@@ -162,18 +209,23 @@ void main() {
       journal.begin('Άνοιγμα βάσης δεδομένων');
       writer.sealAttempt(success: false);
 
-      expect(sink.toString(), contains('ΗΜΙΤΕΛΕΣ'));
       expect(occurrences('Άνοιγμα βάσης δεδομένων'), 1);
+      expect(
+        stepRecord('Άνοιγμα βάσης δεδομένων').data['status'],
+        'unfinished',
+      );
     });
 
-    test('το κλείσιμο αναφέρει το άθροισμα των βημάτων', () {
+    test('το κλείσιμο αναφέρει έκβαση και άθροισμα των βημάτων', () {
       writer.attach();
       journal.begin('Πρώτο').ok();
       journal.note('Δεύτερο');
       writer.sealAttempt(success: true);
 
-      expect(sink.toString(), contains('ΕΤΟΙΜΗ'));
-      expect(sink.toString(), contains('σύνολο βημάτων'));
+      final end = phase('end').single;
+      expect(end.data['success'], isTrue);
+      expect(end.data['total_ms'], isA<int>());
+      expect(end.message, contains('σύνολο βημάτων'));
     });
 
     test('μετά το ξήλωμα ο γραφέας δεν ακούει πια το ημερολόγιο', () {

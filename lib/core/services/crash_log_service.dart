@@ -6,12 +6,19 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'log_record.dart';
 import 'operator_presence_heartbeat.dart';
 import 'session_liveness_mark.dart';
 import 'station_name.dart';
 import 'station_shutdown_request.dart';
 
-/// Καταγραφή σφαλμάτων και καταρρεύσεων σε ημερήσια αρχεία δίπλα στη βάση.
+/// Καταγραφή σφαλμάτων, εκκινήσεων και κλεισιμάτων σε ημερήσια αρχεία δίπλα
+/// στη βάση — μία εγγραφή [LogRecord] ανά γραμμή.
+///
+/// **Το μοναδικό σημείο που γράφει στα αρχεία καταγραφής.** Εδώ σφραγίζεται
+/// κάθε εγγραφή με τον σταθμό και την έκδοση: ο φάκελος είναι κοινός όταν η
+/// βάση είναι κοινή, και μια εγγραφή χωρίς σταθμό δεν ξεχωρίζει από τις
+/// εγγραφές των συναδέλφων.
 ///
 /// **Ο φάκελος μπορεί να είναι στο δίκτυο.** Ζει δίπλα στη βάση, και η βάση
 /// ζει συχνά σε κοινόχρηστο φάκελο· όταν εκείνος δεν απαντά, κάθε πράξη
@@ -148,14 +155,26 @@ class CrashLogService {
     return p.join(p.dirname(p.normalize(databasePath)), 'logs');
   }
 
+  /// Το ημερήσιο αρχείο: σφάλματα, εκκινήσεις και προβληματικά κλεισίματα
+  /// της ημέρας, όλων των σταθμών, με τη σειρά που συνέβησαν.
   static String dailyLogFileName(DateTime dateTime) {
-    return '$_errorLogPrefix${_dateStamp(dateTime)}$_logSuffix';
+    return '$logFilePrefix${_dateStamp(dateTime)}$logFileSuffix';
   }
 
-  /// Το ημερήσιο αρχείο συνεδριών: εκκινήσεις και προβληματικά κλεισίματα της
-  /// ημέρας, με τη σειρά που συνέβησαν.
-  static String sessionLogFileName(DateTime dateTime) {
-    return '$sessionLogPrefix${_dateStamp(dateTime)}$_logSuffix';
+  /// Αληθές για τα ημερήσια αρχεία της τρέχουσας μορφής.
+  static bool isDailyLogFileName(String fileName) =>
+      _dailyLogFileName.hasMatch(fileName);
+
+  /// Η ημέρα ενός ημερήσιου αρχείου — της τρέχουσας ή της παλιάς μορφής.
+  /// `null` για κάθε άλλο αρχείο του φακέλου.
+  static DateTime? dayOfLogFile(String fileName) {
+    final match = _anyDatedLogFileName.firstMatch(fileName);
+    if (match == null) return null;
+    return DateTime(
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+      int.parse(match.group(3)!),
+    );
   }
 
   static String _dateStamp(DateTime dateTime) {
@@ -165,9 +184,35 @@ class CrashLogService {
     return '$y-$m-$d';
   }
 
-  static const String sessionLogPrefix = 'session_';
-  static const String _errorLogPrefix = 'errors_';
-  static const String _logSuffix = '.log';
+  static const String logFilePrefix = 'events_';
+  static const String logFileSuffix = '.jsonl';
+
+  static final RegExp _dailyLogFileName = RegExp(
+    '^$logFilePrefix'
+    r'\d{4}-\d{2}-\d{2}\.jsonl$',
+  );
+
+  /// Οι δύο οικογένειες της παλιάς μορφής κειμένου: σφάλματα και συνεδρίες σε
+  /// χωριστά αρχεία. Δεν γράφονται πια· διαβάζονται όσο ζουν και σβήνονται
+  /// όταν παλιώσουν. Σε φάκελο όπου κάποιος σταθμός τρέχει ακόμη παλιά
+  /// έκδοση, εκείνος συνεχίζει να τα γράφει — γι' αυτό σβήνονται με την
+  /// ηλικία τους, όχι όλα μαζί.
+  static const String legacyErrorLogPrefix = 'errors_';
+  static const String legacySessionLogPrefix = 'session_';
+
+  static final RegExp _legacyDailyLogFileName = RegExp(
+    '^(?:$legacyErrorLogPrefix|$legacySessionLogPrefix)'
+    r'\d{4}-\d{2}-\d{2}\.log$',
+  );
+
+  /// Αληθές για τα ημερήσια αρχεία της παλιάς μορφής κειμένου.
+  static bool isLegacyDailyLogFileName(String fileName) =>
+      _legacyDailyLogFileName.hasMatch(fileName);
+
+  static final RegExp _anyDatedLogFileName = RegExp(
+    '^(?:$logFilePrefix|$legacyErrorLogPrefix|$legacySessionLogPrefix)'
+    r'(\d{4})-(\d{2})-(\d{2})\.(?:jsonl|log)$',
+  );
 
   static Future<void> initialize({
     required String databasePath,
@@ -207,6 +252,17 @@ class CrashLogService {
   }) async {
     final next = logsDirectoryForDatabasePath(databasePath);
     if (next == logsDirectory && _diskAvailable) return;
+    final previous = logsDirectory;
+    // Η συνεδρία δεν τελειώνει — μετακομίζει. Ο παλιός φάκελος το μαθαίνει,
+    // αλλιώς η εξαγωγή του τη δείχνει «κλεισμένη ομαλά».
+    if (next != previous) {
+      appendRecord(
+        _sessionRecord(
+          'η συνεδρία συνεχίζει δίπλα σε άλλη βάση',
+          data: {'phase': 'moved', 'to': next},
+        ),
+      );
+    }
     // Το ίχνος ανήκει στη συνεδρία, όχι στον φάκελο: αν μείνει πίσω στον
     // παλιό, η επόμενη εκκίνηση που θα δει εκείνον τον φάκελο θα αναφέρει
     // κατάρρευση που δεν έγινε ποτέ.
@@ -228,11 +284,37 @@ class CrashLogService {
         timeout: timeout,
         createDirectory: createDirectory,
       );
+      // Η αρχή της συνεδρίας γράφτηκε σε άλλον φάκελο (ή πουθενά, αν ο ίδιος
+      // φάκελος δεν απαντούσε). Χωρίς αυτή την εγγραφή η εξαγωγή αυτού του
+      // φακέλου δεν βρίσκει τη συνεδρία — και χάνει μαζί της το κλείσιμο και
+      // τα σφάλματά της.
+      appendRecord(
+        _sessionRecord(
+          'ΣΥΝΕΧΕΙΑ συνεδρίας v$appVersion — η καταγραφή συνεχίζει σε αυτόν '
+          'τον φάκελο',
+          data: {
+            'phase': 'begin',
+            'continued': true,
+            if (next != previous) 'from': previous,
+          },
+        ),
+      );
     } catch (_) {
       // Η κατάσταση «χωρίς δίσκο» έχει ήδη μπει· η μετακόμιση είναι
       // νοικοκυριό και δεν επιτρέπεται να ρίξει τη ροή που την κάλεσε.
     }
   }
+
+  LogRecord _sessionRecord(
+    String message, {
+    required Map<String, Object?> data,
+  }) => LogRecord(
+    time: _now(),
+    kind: LogKind.startup,
+    severity: LogSeverity.info,
+    message: message,
+    data: data,
+  );
 
   /// Το [createDirectory] υπάρχει για τα τεστ — αλλιώς ρωτιέται το πραγματικό
   /// σύστημα αρχείων.
@@ -272,10 +354,7 @@ class CrashLogService {
       // Ίχνος που δεν διαβάζεται (αλλοιωμένο, ή γραμμένο από έκδοση που δεν
       // κρατούσε τίποτα) εξακολουθεί να είναι είδηση: κάτι χάθηκε. Λέμε ό,τι
       // ξέρουμε, χωρίς να εφευρίσκουμε λεπτομέρειες.
-      _logPlainMessage(
-        previous?.describeLostRun() ?? abnormalTerminationMessage,
-        fatal: true,
-      );
+      _recordLostRun(previous);
     }
     await _retireMarkFromPreviousNamingScheme(timeout);
     _currentMark = SessionLivenessMark(
@@ -317,10 +396,7 @@ class CrashLogService {
       // Ίχνος με δηλωμένη εκτέλεση δεν ανήκει στην παλιά ονοματοδοσία — κάποιος
       // άλλος το έγραψε εκεί, και δεν είναι δικό μας να το κρίνουμε.
       if (previous?.instance != null) return;
-      _logPlainMessage(
-        previous?.describeLostRun() ?? abnormalTerminationMessage,
-        fatal: true,
-      );
+      _recordLostRun(previous);
       await legacy.delete().timeout(timeout);
     } catch (_) {
       // Η εκκαθάριση είναι ευγένεια προς τον φάκελο, όχι προϋπόθεση εκκίνησης.
@@ -535,57 +611,78 @@ class CrashLogService {
     }
   }
 
-  void _logPlainMessage(String message, {required bool fatal}) {
-    _writeDetailedEntry(message: message, stack: null, fatal: fatal);
+  /// Η εκτέλεση που χάθηκε. Ίχνος που δεν διαβάζεται εξακολουθεί να είναι
+  /// είδηση: λέμε ό,τι ξέρουμε, χωρίς να εφευρίσκουμε λεπτομέρειες.
+  void _recordLostRun(SessionLivenessMark? previous) {
+    _appendToDailyLog(
+      LogRecord(
+        time: _now(),
+        kind: LogKind.abnormalEnd,
+        severity: LogSeverity.critical,
+        message: previous?.describeLostRun() ?? abnormalTerminationMessage,
+        data: {
+          if (previous != null) ...{
+            'lost_version': previous.version,
+            'started_at': previous.startedAt.toIso8601String(),
+            'last_seen': previous.lastSeen.toIso8601String(),
+          },
+        },
+      ),
+    );
   }
 
   void _writeDetailedEntry({
     required String message,
-    StackTrace? stack,
+    required StackTrace stack,
     required bool fatal,
     String? diagnostics,
   }) {
-    final buffer = StringBuffer()
-      ..writeln(_formatHeader(fatal: fatal))
-      ..writeln(message);
-    if (diagnostics != null && diagnostics.trim().isNotEmpty) {
-      buffer.writeln(diagnostics.trim());
-    }
-    if (stack != null) {
-      buffer.write(stack);
-    }
-    buffer.writeln('\n');
-    _appendToDailyLog(buffer.toString());
+    final details = [
+      if (diagnostics != null && diagnostics.trim().isNotEmpty)
+        diagnostics.trim(),
+      stack.toString().trimRight(),
+    ].where((part) => part.isNotEmpty).join('\n');
+    _appendToDailyLog(
+      LogRecord(
+        time: _now(),
+        kind: LogKind.error,
+        severity: fatal ? LogSeverity.critical : LogSeverity.nonCritical,
+        message: message,
+        details: details,
+      ),
+    );
   }
 
   void _writeRepeatSummary(int count, String dedupKey) {
     final preview = dedupKey.split('\n').first;
-    final buffer = StringBuffer()
-      ..writeln(_formatHeader(fatal: false))
-      ..writeln('επαναλήφθηκε $count φορές — $preview')
-      ..writeln();
-    _appendToDailyLog(buffer.toString());
+    _appendToDailyLog(
+      LogRecord(
+        time: _now(),
+        kind: LogKind.repeat,
+        severity: LogSeverity.nonCritical,
+        message: 'επαναλήφθηκε $count φορές — $preview',
+        // Το σφάλμα ως πεδίο, ώστε η εξαγωγή να προσθέτει τις επαναλήψεις στο
+        // σωστό σφάλμα χωρίς να ψάχνει μέσα στη διατύπωση του μηνύματος.
+        data: {'count': count, 'error': preview},
+      ),
+    );
   }
 
-  String _formatHeader({required bool fatal}) {
-    final now = _now();
-    final stamp =
-        '${now.year.toString().padLeft(4, '0')}-'
-        '${now.month.toString().padLeft(2, '0')}-'
-        '${now.day.toString().padLeft(2, '0')} '
-        '${now.hour.toString().padLeft(2, '0')}:'
-        '${now.minute.toString().padLeft(2, '0')}:'
-        '${now.second.toString().padLeft(2, '0')}';
-    final severity = fatal ? 'ΚΡΙΣΙΜΟ' : 'ΜΗ-ΚΡΙΣΙΜΟ';
-    return '[$stamp] v$appVersion $severity';
+  void _appendToDailyLog(LogRecord record) {
+    final stamped = record.stamped(
+      station: StationName.current,
+      version: appVersion,
+    );
+    final file = File(p.join(logsDirectory, dailyLogFileName(stamped.time)));
+    file.writeAsStringSync(
+      '${stamped.toJsonLine()}\n',
+      mode: FileMode.append,
+      flush: true,
+    );
   }
 
-  void _appendToDailyLog(String chunk) {
-    final file = File(p.join(logsDirectory, dailyLogFileName(_now())));
-    file.writeAsStringSync(chunk, mode: FileMode.append, flush: true);
-  }
-
-  /// Προσαρτά κείμενο στο **ημερήσιο αρχείο συνεδριών**.
+  /// Προσαρτά μια εγγραφή άλλης πηγής (εκκίνηση, κλείσιμο) στο ημερήσιο
+  /// αρχείο, σφραγισμένη με τον σταθμό και την έκδοση.
   ///
   /// Περνά από τον ίδιο φρουρό με τα σφάλματα: όταν ο φάκελος δεν απάντησε,
   /// τίποτα δεν αγγίζει τη διαδρομή. Ο λόγος που ο παραλήπτης ζει **εδώ** κι
@@ -596,19 +693,21 @@ class CrashLogService {
   ///
   /// Η αποτυχία καταπίνεται σκόπιμα: ο καταγραφέας δεν ρίχνει ποτέ αυτό που
   /// καταγράφει — ούτε την εκκίνηση, ούτε το κλείσιμο.
-  void appendSessionText(String text) {
+  void appendRecord(LogRecord record) {
     if (!_diskAvailable) return;
-    if (text.isEmpty) return;
     try {
       Directory(logsDirectory).createSync(recursive: true);
-      final file = File(p.join(logsDirectory, sessionLogFileName(_now())));
-      file.writeAsStringSync(text, mode: FileMode.append, flush: true);
+      _appendToDailyLog(record);
     } catch (_) {}
   }
 
-  /// Κρατά τα [retentionCount] πιο πρόσφατα αρχεία **ανά οικογένεια** — τα
-  /// σφάλματα και οι συνεδρίες μετρούν χωριστά, ώστε μια πολυήμερη σειρά
-  /// σφαλμάτων να μη σβήνει το ιστορικό εκκινήσεων.
+  /// Κρατά τα [retentionCount] πιο πρόσφατα ημερήσια αρχεία — δηλαδή τις
+  /// τελευταίες τόσες **ημέρες με καταγραφές**. Ένας υπολογιστής που έμεινε
+  /// κλειστός μια εβδομάδα δεν χάνει έτσι το ιστορικό του.
+  ///
+  /// Τα αρχεία της παλιάς μορφής δεν πληθαίνουν πια, οπότε δεν θα έφταναν
+  /// ποτέ το όριο πλήθους: σβήνονται όταν γίνουν παλαιότερα από τόσες
+  /// ημερολογιακές ημέρες.
   ///
   /// Μαζεύει επίσης τα αρχεία ιχνηλάτησης κλεισίματος της παλιάς εποχής, όταν
   /// το κάθε περιστατικό έπαιρνε δικό του αρχείο. Πλέον προσαρτώνται στο
@@ -623,22 +722,35 @@ class CrashLogService {
         .where((entity) => entity is File)
         .cast<File>()
         .toList();
-    await _purgeFamily(entries, _errorLogPrefix, retentionCount);
-    await _purgeFamily(entries, sessionLogPrefix, retentionCount);
+    await _purgeDailyLogs(entries, retentionCount);
+    await _purgeLegacyDailyLogs(entries, retentionCount);
     await _purgeLegacyShutdownTraces(entries);
   }
 
-  Future<void> _purgeFamily(
+  Future<void> _purgeLegacyDailyLogs(
     List<File> entries,
-    String prefix,
     int retentionCount,
   ) async {
+    final today = _now();
+    final oldestKept = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(Duration(days: retentionCount - 1));
+    for (final file in entries) {
+      final name = p.basename(file.path);
+      if (!isLegacyDailyLogFileName(name)) continue;
+      final day = dayOfLogFile(name);
+      if (day == null || !day.isBefore(oldestKept)) continue;
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _purgeDailyLogs(List<File> entries, int retentionCount) async {
     final files = entries
-        .where(
-          (file) =>
-              p.basename(file.path).startsWith(prefix) &&
-              p.basename(file.path).endsWith(_logSuffix),
-        )
+        .where((file) => isDailyLogFileName(p.basename(file.path)))
         .toList();
     if (files.length <= retentionCount) return;
 

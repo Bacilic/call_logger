@@ -96,6 +96,10 @@ class LocalDatabaseSessionFallback {
     _localPath = null;
   }
 
+  /// Η δικτυακή διαδρομή που αντικαταστάθηκε από την τοπική — `null` όσο δεν
+  /// υπάρχει τέτοια απόφαση. Τη ρωτά ο φρουρός επανόδου του δικτύου.
+  static String? get acceptedNetworkPath => _acceptedFor;
+
   static bool isAcceptedFor(String configuredPath) {
     final accepted = _acceptedFor;
     return accepted != null && accepted == configuredPath.trim();
@@ -291,6 +295,17 @@ Future<ResolvedDatabasePath> _resolveEffectiveDatabasePathUncached(
       ? AppConfig.defaultDbPath
       : configuredPath.trim();
 
+  // Η απόφαση «τοπική βάση γι' αυτή τη φορά» ισχύει μέχρι να την αλλάξει ο
+  // ίδιος ο χρήστης — και ρωτιέται ΠΡΙΝ από το δίκτυο. Αλλιώς, μόλις ο
+  // διακομιστής ξαναπαντούσε, το επόμενο τυχαίο ξανάνοιγμα (π.χ. η έξοδος από
+  // τις Ρυθμίσεις) μετέφερε σιωπηλά την εφαρμογή στη δικτυακή βάση, αφήνοντας
+  // πίσω ό,τι γράφτηκε τοπικά χωρίς λέξη. Την επιστροφή την προτείνει πλέον ο
+  // φρουρός επανόδου και την αποφασίζει ο χρήστης.
+  final accepted = LocalDatabaseSessionFallback.acceptedLocalPathFor(p);
+  if (accepted != null) {
+    return ResolvedDatabasePath(path: accepted, usedUncFallback: true);
+  }
+
   if (await databaseFileExistsQuick(p)) {
     return ResolvedDatabasePath(path: p, usedUncFallback: false);
   }
@@ -303,12 +318,5 @@ Future<ResolvedDatabasePath> _resolveEffectiveDatabasePathUncached(
     return ResolvedDatabasePath(path: p, usedUncFallback: false);
   }
 
-  // Ανοίγει **ακριβώς** η βάση που είδε ο χρήστης στο κουμπί. Παλιότερα εδώ
-  // ξαναϋπολογιζόταν η προεπιλεγμένη διαδρομή, οπότε η προσφορά και η ενέργεια
-  // μπορούσαν να δείχνουν σε διαφορετικά αρχεία — και συνήθως έδειχναν.
-  final accepted = LocalDatabaseSessionFallback.acceptedLocalPathFor(p);
-  if (accepted == null) {
-    return ResolvedDatabasePath.networkUnreachable(p);
-  }
-  return ResolvedDatabasePath(path: accepted, usedUncFallback: true);
+  return ResolvedDatabasePath.networkUnreachable(p);
 }

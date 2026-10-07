@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'crash_log_service.dart';
+import 'log_record.dart';
 import 'operator_presence_heartbeat.dart';
 import 'shutdown_coordinator.dart';
 import 'shutdown_trace_incident.dart';
@@ -29,14 +30,14 @@ import 'station_name.dart';
 /// καθαρός. Το κατώφλι είναι το ΙΔΙΟ με αυτό που αποκαλύπτει την οθόνη
 /// προόδου — ένας ορισμός του «αργό» σε όλη την εφαρμογή.
 ///
-/// Όταν το ίχνος αξίζει, **δεν γίνεται δικό του αρχείο**: προσαρτάται στο
-/// ημερήσιο αρχείο συνεδριών, κάτω από την εκκίνηση της ίδιας ημέρας. Έτσι η
+/// Όταν το ίχνος αξίζει, **δεν γίνεται δικό του αρχείο**: γίνεται μία εγγραφή
+/// στο ημερήσιο αρχείο, μετά την εκκίνηση της ίδιας ημέρας. Έτσι η
 /// συνεδρία διαβάζεται ολόκληρη — «άνοιξα στις 8:12 και άργησε η βάση, έκλεισα
 /// στις 16:40 και κόλλησε το αντίγραφο» — αντί για δύο ξένα μεταξύ τους αρχεία.
 class ShutdownTraceService {
   ShutdownTraceService({
     required this.workingDirectory,
-    required this.appendToSessionLog,
+    required this.appendRecord,
     this.slowThreshold = ShutdownCoordinator.progressRevealDelay,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
@@ -48,13 +49,13 @@ class ShutdownTraceService {
   /// δικτυακό φάκελο αυτό κόστισε **6,2 δευτερόλεπτα για οκτώ γραμμές** σε
   /// μετρημένο κλείσιμο — περισσότερο από όλη τη δουλειά που κατέγραφαν. Το
   /// τελικό ίχνος φεύγει κανονικά στο κοινό ημερήσιο αρχείο, μία φορά, μέσω
-  /// του [appendToSessionLog]: αλλάζει μόνο πού περιμένει ενδιάμεσα.
+  /// του [appendRecord]: αλλάζει μόνο πού περιμένει ενδιάμεσα.
   final String workingDirectory;
 
   /// Πού καταλήγει το ίχνος όταν αξίζει να κρατηθεί — το ημερήσιο αρχείο
-  /// συνεδριών του [CrashLogService], που κατέχει τον φάκελο και τον φρουρό
-  /// του δίσκου.
-  final void Function(String text) appendToSessionLog;
+  /// του [CrashLogService], που κατέχει τον φάκελο, τον φρουρό του δίσκου και
+  /// τη σφραγίδα του σταθμού.
+  final void Function(LogRecord record) appendRecord;
 
   /// Πάνω από αυτό το συνολικό όριο το κλείσιμο θεωρείται αργό.
   final Duration slowThreshold;
@@ -125,7 +126,7 @@ class ShutdownTraceService {
     }
     return ShutdownTraceService(
       workingDirectory: working,
-      appendToSessionLog: log.appendSessionText,
+      appendRecord: log.appendRecord,
     );
   }
 
@@ -212,14 +213,13 @@ class ShutdownTraceService {
         if (await file.exists()) await file.delete();
         return;
       }
-      await _appendTraceToSessionLog(file, _buildIncident());
+      await _appendTraceToLog(file, _buildIncident());
       _keptIncident = true;
     } catch (_) {}
   }
 
   ShutdownTraceIncident _buildIncident() {
     return ShutdownTraceIncident(
-      filePath: '',
       occurredAt: _now(),
       totalMs: _totalMs,
       slowestStepLabel: _slowestStepLabel,
@@ -229,35 +229,19 @@ class ShutdownTraceService {
     );
   }
 
-  Future<void> _appendTraceToSessionLog(
+  Future<void> _appendTraceToLog(
     File file,
     ShutdownTraceIncident summary,
   ) async {
-    await _writeTraceBlock(
-      body: await file.readAsString(),
-      summary: summary,
-      append: appendToSessionLog,
-    );
+    appendRecord(summary.toRecord(trace: await file.readAsString()));
     try {
       await file.delete();
     } catch (_) {}
   }
 
-  /// Το κοινό σχήμα του μπλοκ τερματισμού — μία μορφή, δύο καλούντες: το
-  /// κλείσιμο που μόλις έγινε και το ορφανό της προηγούμενης εκτέλεσης.
-  static Future<void> _writeTraceBlock({
-    required String body,
-    required ShutdownTraceIncident summary,
-    required void Function(String text) append,
-  }) async {
-    final stamp = _formatTimestamp(summary.occurredAt);
-    final buffer = StringBuffer()
-      ..writeln('[$stamp] ══ ΤΕΡΜΑΤΙΣΜΟΣ — ΠΕΡΙΣΤΑΤΙΚΟ ══')
-      ..write(body.endsWith('\n') || body.isEmpty ? body : '$body\n')
-      ..writeln(summary.toSummaryLine())
-      ..writeln();
-    append(buffer.toString());
-  }
+  /// Η γραμμή σύνοψης που έγραφαν οι παλιές εκδόσεις μέσα στο προσωρινό
+  /// ίχνος. Αν βρεθεί σε ορφανό, το περιστατικό έχει ήδη καταγραφεί.
+  static const String _legacySummaryPrefix = 'SUMMARY=';
 
   /// Προσωρινό αρχείο από προηγούμενη εκτέλεση = το κλείσιμο δεν ολοκληρώθηκε
   /// ποτέ (η διεργασία πέθανε στη μέση). Αυτό είναι από μόνο του περιστατικό:
@@ -272,14 +256,14 @@ class ShutdownTraceService {
   /// συνήθως δεν έχει δουλειά να κάνει.
   static Future<bool> promoteOrphanedTrace({
     required String workingDirectory,
-    required void Function(String text) appendToSessionLog,
+    required void Function(LogRecord record) appendRecord,
     String? legacySharedDirectory,
     DateTime Function()? now,
   }) async {
     final clock = now ?? DateTime.now;
     var promoted = await _promoteOne(
       File(p.join(workingDirectory, workingFileName)),
-      appendToSessionLog: appendToSessionLog,
+      appendRecord: appendRecord,
       clock: clock,
     );
     // Η παλιά θέση σαρώνεται μετά, και μόνο μία φορά: ό,τι έμεινε εκεί από
@@ -287,7 +271,7 @@ class ShutdownTraceService {
     if (legacySharedDirectory != null) {
       final movedIn = await _promoteOne(
         File(p.join(legacySharedDirectory, legacySharedWorkingFileName)),
-        appendToSessionLog: appendToSessionLog,
+        appendRecord: appendRecord,
         clock: clock,
       );
       promoted = promoted || movedIn;
@@ -297,7 +281,7 @@ class ShutdownTraceService {
 
   static Future<bool> _promoteOne(
     File orphan, {
-    required void Function(String text) appendToSessionLog,
+    required void Function(LogRecord record) appendRecord,
     required DateTime Function() clock,
   }) async {
     if (!await orphan.exists()) return false;
@@ -307,22 +291,18 @@ class ShutdownTraceService {
       // Αν έχει ήδη σύνοψη, κάποιος το άφησε μισοτελειωμένο — δεν το
       // ξαναγράφουμε, απλώς φεύγει από τη μέση.
       final alreadySummarised = lines.any(
-        (line) => line.trim().startsWith(ShutdownTraceIncident.summaryPrefix),
+        (line) => line.trim().startsWith(_legacySummaryPrefix),
       );
       if (!alreadySummarised) {
-        await _writeTraceBlock(
-          body: content,
-          summary: ShutdownTraceIncident(
-            filePath: '',
-            occurredAt: _lastTimestampIn(lines) ?? clock(),
-            totalMs: 0,
-            slowestStepLabel: _lastStartedStepIn(lines),
-            slowestStepMs: 0,
-            hadFailure: false,
-            wasInterrupted: true,
-          ),
-          append: appendToSessionLog,
+        final summary = ShutdownTraceIncident(
+          occurredAt: _lastTimestampIn(lines) ?? clock(),
+          totalMs: 0,
+          slowestStepLabel: _lastStartedStepIn(lines),
+          slowestStepMs: 0,
+          hadFailure: false,
+          wasInterrupted: true,
         );
+        appendRecord(summary.toRecord(trace: content));
       }
       await orphan.delete();
       return !alreadySummarised;

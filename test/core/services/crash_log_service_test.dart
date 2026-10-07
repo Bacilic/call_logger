@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/services/crash_log_service.dart';
+import 'package:call_logger/core/services/log_record.dart';
 import 'package:call_logger/core/services/session_liveness_mark.dart';
 import 'package:call_logger/core/services/station_name.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,6 +58,25 @@ void main() {
     '${logsDir.path}${Platform.pathSeparator}${CrashLogService.dailyLogFileName(fixedNow)}',
   );
 
+  /// Οι εγγραφές της ημέρας, με τη σειρά που γράφτηκαν.
+  List<LogRecord> todayRecords() => todayLogFile()
+      .readAsLinesSync()
+      .map(LogRecord.tryParse)
+      .whereType<LogRecord>()
+      .toList();
+
+  Iterable<LogRecord> recordsOf(LogKind kind) =>
+      todayRecords().where((record) => record.kind == kind);
+
+  List<String> dailyFiles(bool Function(String name) keep) =>
+      logsDir
+          .listSync()
+          .whereType<File>()
+          .map((f) => f.uri.pathSegments.last)
+          .where(keep)
+          .toList()
+        ..sort();
+
   Object sampleError([String message = 'Δοκιμαστικό σφάλμα']) =>
       Exception(message);
 
@@ -75,29 +95,43 @@ void main() {
       );
     });
 
-    test('dailyLogFileName — errors_YYYY-MM-DD.log', () {
+    test('dailyLogFileName — events_YYYY-MM-DD.jsonl', () {
       expect(
         CrashLogService.dailyLogFileName(fixedNow),
-        'errors_2026-07-11.log',
+        'events_2026-07-11.jsonl',
       );
     });
 
-    test('logError — μορφή εγγραφής με ημερομηνία, έκδοση και ένδειξη', () {
-      service.logError(
-        sampleError('Σφάλμα δοκιμής'),
-        sampleStack(),
-        fatal: false,
-      );
+    test(
+      'logError — μία εγγραφή με ώρα, ΣΤΑΘΜΟ, έκδοση, βαρύτητα και στοίβα',
+      () {
+        service.logError(
+          sampleError('Σφάλμα δοκιμής'),
+          sampleStack(),
+          fatal: false,
+        );
 
-      final content = todayLogFile().readAsStringSync();
-      expect(
-        content,
-        contains('[2026-07-11 09:41:00] v0.22.2-test ΜΗ-ΚΡΙΣΙΜΟ'),
-      );
-      expect(content, contains('Exception: Σφάλμα δοκιμής'));
-      expect(content, contains('#0      main.<fn> (file:///test.dart:10:5)'));
-      expect(content, endsWith('\n\n'));
-    });
+        final records = todayRecords();
+        expect(records, hasLength(1));
+        final record = records.single;
+        expect(record.time, fixedNow);
+        expect(
+          record.station,
+          thisStation,
+          reason: greekExpectMsg(
+            'Στον κοινό φάκελο, η εγγραφή λέει από ποιον υπολογιστή ήρθε',
+          ),
+        );
+        expect(record.version, '0.22.2-test');
+        expect(record.kind, LogKind.error);
+        expect(record.severity, LogSeverity.nonCritical);
+        expect(record.message, 'Exception: Σφάλμα δοκιμής');
+        expect(
+          record.details,
+          contains('#0      main.<fn> (file:///test.dart:10:5)'),
+        );
+      },
+    );
 
     test('logError — τα συνοδευτικά μπαίνουν στην εγγραφή', () {
       service.logError(
@@ -109,25 +143,23 @@ void main() {
             'debugCreator: Column ← Padding ← CallsScreen',
       );
 
-      final content = todayLogFile().readAsStringSync();
-      expect(content, contains('debugCreator: Column ← Padding ← CallsScreen'));
-      expect(content, contains('Φάση: during layout'));
+      final details = todayRecords().single.details;
+      expect(details, contains('debugCreator: Column ← Padding ← CallsScreen'));
+      expect(details, contains('Φάση: during layout'));
     });
 
     test('logError — χωρίς συνοδευτικά η εγγραφή μένει όπως ήταν', () {
       service.logError(sampleError('Απλό'), sampleStack(), fatal: false);
 
-      final content = todayLogFile().readAsStringSync();
-      expect(content, contains('Exception: Απλό'));
-      expect(content, contains('#0      main.<fn>'));
+      final record = todayRecords().single;
+      expect(record.message, 'Exception: Απλό');
+      expect(record.details, contains('#0      main.<fn>'));
     });
 
-    test('logError — ΚΡΙΣΙΜΟ για fatal σφάλματα', () {
+    test('logError — κρίσιμη βαρύτητα για fatal σφάλματα', () {
       service.logError(sampleError('Κρίσιμο'), sampleStack(), fatal: true);
 
-      final content = todayLogFile().readAsStringSync();
-      expect(content, contains('ΚΡΙΣΙΜΟ'));
-      expect(content, isNot(contains('ΜΗ-ΚΡΙΣΙΜΟ')));
+      expect(todayRecords().single.severity, LogSeverity.critical);
     });
 
     test(
@@ -138,9 +170,10 @@ void main() {
         }
         await service.onShutdown();
 
-        final content = todayLogFile().readAsStringSync();
-        expect(content.split('#0      main.<fn>').length - 1, 20);
-        expect(content, contains('επαναλήφθηκε 5 φορές'));
+        expect(recordsOf(LogKind.error), hasLength(20));
+        final repeat = recordsOf(LogKind.repeat).single;
+        expect(repeat.message, contains('επαναλήφθηκε 5 φορές'));
+        expect(repeat.data['count'], 5);
       },
     );
 
@@ -151,75 +184,81 @@ void main() {
           service.logError(sampleError(), sampleStack(), fatal: false);
         }
 
-        final content = todayLogFile().readAsStringSync();
-        expect(content, contains('επαναλήφθηκε 100 φορές'));
+        expect(
+          recordsOf(LogKind.repeat).single.message,
+          contains('επαναλήφθηκε 100 φορές'),
+        );
       },
     );
 
     test(
-      'onStartup — εκκαθάριση παλαιότερων errors_*.log σύμφωνα με τη ρύθμιση',
+      'onStartup — κρατά τις τελευταίες Ν ΗΜΕΡΕΣ ΜΕ ΚΑΤΑΓΡΑΦΕΣ, όχι ημερολογιακές',
       () async {
         for (final day in ['01', '02', '03', '04', '05']) {
           await File(
-            '${logsDir.path}${Platform.pathSeparator}errors_2026-06-$day.log',
-          ).writeAsString('παλιό');
+            '${logsDir.path}${Platform.pathSeparator}events_2026-06-$day.jsonl',
+          ).writeAsString('');
         }
 
         await service.onStartup(retentionCount: 3);
 
-        final remaining =
-            logsDir
-                .listSync()
-                .whereType<File>()
-                .map((f) => f.uri.pathSegments.last)
-                .where((name) => name.startsWith('errors_'))
-                .toList()
-              ..sort();
-        expect(remaining, [
-          'errors_2026-06-03.log',
-          'errors_2026-06-04.log',
-          'errors_2026-06-05.log',
-        ]);
+        expect(
+          dailyFiles(CrashLogService.isDailyLogFileName),
+          [
+            'events_2026-06-03.jsonl',
+            'events_2026-06-04.jsonl',
+            'events_2026-06-05.jsonl',
+          ],
+          reason: greekExpectMsg(
+            'Υπολογιστής κλειστός έναν μήνα δεν χάνει το ιστορικό του',
+          ),
+        );
       },
     );
 
-    test('onStartup — τα αρχεία συνεδρίας έχουν ΔΙΚΗ ΤΟΥΣ διατήρηση', () async {
-      for (final day in ['01', '02', '03', '04', '05']) {
-        await File(
-          '${logsDir.path}${Platform.pathSeparator}errors_2026-06-$day.log',
-        ).writeAsString('παλιό σφάλμα');
-        await File(
-          '${logsDir.path}${Platform.pathSeparator}session_2026-06-$day.log',
-        ).writeAsString('παλιά συνεδρία');
-      }
+    test(
+      'onStartup — τα αρχεία της ΠΑΛΙΑΣ μορφής σβήνονται όταν παλιώσουν',
+      () async {
+        for (final day in ['05', '06', '07', '08', '09', '10', '11']) {
+          for (final prefix in ['errors_', 'session_']) {
+            await File(
+              '${logsDir.path}${Platform.pathSeparator}$prefix'
+              '2026-07-$day.log',
+            ).writeAsString('παλιά μορφή');
+          }
+        }
+        final liveMark = File(
+          '${logsDir.path}${Platform.pathSeparator}'
+          '${CrashLogService.sessionLockFileNameFor('ΑΛΛΟΣ-ΣΤΑΘΜΟΣ')}',
+        )..writeAsStringSync('ζωντανό ίχνος');
 
-      await service.onStartup(retentionCount: 3);
+        await service.onStartup(retentionCount: 3);
 
-      List<String> remaining(String prefix) =>
-          logsDir
-              .listSync()
-              .whereType<File>()
-              .map((f) => f.uri.pathSegments.last)
-              // Μόνο ημερολόγια: το ίχνος «τρέχω τώρα» μοιράζεται το
-              // πρόθεμα αλλά δεν είναι αρχείο ημέρας.
-              .where((name) => name.startsWith(prefix) && name.endsWith('.log'))
-              .toList()
-            ..sort();
-
-      expect(
-        remaining('session_'),
-        [
-          'session_2026-06-03.log',
-          'session_2026-06-04.log',
-          'session_2026-06-05.log',
-        ],
-        reason: greekExpectMsg(
-          'Οι δύο οικογένειες μετρούν χωριστά — μια πολυήμερη σειρά '
-          'σφαλμάτων δεν σβήνει το ιστορικό εκκινήσεων',
-        ),
-      );
-      expect(remaining('errors_'), hasLength(3));
-    });
+        expect(
+          dailyFiles(CrashLogService.isLegacyDailyLogFileName),
+          [
+            'errors_2026-07-09.log',
+            'errors_2026-07-10.log',
+            'errors_2026-07-11.log',
+            'session_2026-07-09.log',
+            'session_2026-07-10.log',
+            'session_2026-07-11.log',
+          ],
+          reason: greekExpectMsg(
+            'Δεν πληθαίνουν πια, οπότε σβήνονται με την ηλικία τους — όχι '
+            'όλα μαζί, γιατί σταθμός με παλιά έκδοση τα γράφει ακόμη',
+          ),
+        );
+        expect(
+          liveMark.existsSync(),
+          isTrue,
+          reason: greekExpectMsg(
+            'Το ίχνος «τρέχω τώρα» μοιράζεται το πρόθεμα αλλά δεν είναι '
+            'αρχείο ημέρας — δεν αγγίζεται',
+          ),
+        );
+      },
+    );
 
     test(
       'onStartup — μαζεύονται ΜΟΝΟ τα παλιά περιστατικά κλεισίματος',
@@ -267,14 +306,25 @@ void main() {
       },
     );
 
-    test('sessionLogFileName — session_YYYY-MM-DD.log', () {
-      expect(
-        CrashLogService.sessionLogFileName(fixedNow),
-        'session_2026-07-11.log',
-      );
-    });
+    test(
+      'appendRecord — η εγγραφή άλλης πηγής σφραγίζεται με σταθμό και έκδοση',
+      () {
+        service.appendRecord(
+          LogRecord(
+            time: fixedNow,
+            kind: LogKind.startup,
+            severity: LogSeverity.info,
+            message: 'ΕΚΚΙΝΗΣΗ',
+          ),
+        );
 
-    test('appendSessionText — σιωπά όταν ο φάκελος δεν απάντησε', () async {
+        final record = todayRecords().single;
+        expect(record.station, thisStation);
+        expect(record.version, '0.22.2-test');
+      },
+    );
+
+    test('appendRecord — σιωπά όταν ο φάκελος δεν απάντησε', () async {
       final broken = CrashLogService(
         logsDirectory:
             '${tempRoot.path}${Platform.pathSeparator}δεν-υπάρχει'
@@ -291,7 +341,14 @@ void main() {
       } catch (_) {}
 
       expect(broken.isDiskAvailable, isFalse);
-      broken.appendSessionText('δεν πρέπει να φτάσει πουθενά');
+      broken.appendRecord(
+        LogRecord(
+          time: fixedNow,
+          kind: LogKind.startup,
+          severity: LogSeverity.info,
+          message: 'δεν πρέπει να φτάσει πουθενά',
+        ),
+      );
       expect(
         Directory(broken.logsDirectory).existsSync(),
         isFalse,
@@ -308,11 +365,11 @@ void main() {
 
         await service.onStartup(retentionCount: 14);
 
-        final content = todayLogFile().readAsStringSync();
-        expect(content, contains(CrashLogService.abnormalTerminationMessage));
+        final lost = recordsOf(LogKind.abnormalEnd).single;
+        expect(lost.message, CrashLogService.abnormalTerminationMessage);
         expect(
-          content,
-          contains('ΚΡΙΣΙΜΟ'),
+          lost.severity,
+          LogSeverity.critical,
           reason: greekExpectMsg('Η χαμένη εκτέλεση είναι κρίσιμο συμβάν'),
         );
         expect(lockFile().existsSync(), isTrue);
@@ -341,11 +398,19 @@ void main() {
 
         await service.onStartup(retentionCount: 14);
 
-        final content = todayLogFile().readAsStringSync();
-        expect(content, contains('έκδοση 0.46.0'));
-        expect(content, contains('σταθμός PC-3'));
-        expect(content, contains('ξεκίνησε 11/07/2026 08:12'));
-        expect(content, contains('6 ώρες και 41 λεπτά'));
+        final lost = recordsOf(LogKind.abnormalEnd).single;
+        expect(lost.message, contains('έκδοση 0.46.0'));
+        expect(lost.message, contains('σταθμός PC-3'));
+        expect(lost.message, contains('ξεκίνησε 11/07/2026 08:12'));
+        expect(lost.message, contains('6 ώρες και 41 λεπτά'));
+        expect(
+          lost.data['last_seen'],
+          DateTime(2026, 7, 11, 14, 53).toIso8601String(),
+          reason: greekExpectMsg(
+            'Η τελευταία στιγμή ζωής μένει ως στοιχείο, ώστε να συγκριθεί '
+            'με τα συμβάντα των Windows της ίδιας ώρας',
+          ),
+        );
       },
     );
 
@@ -436,8 +501,10 @@ void main() {
       await service.onShutdown();
 
       expect(lockFile().existsSync(), isFalse);
-      final content = todayLogFile().readAsStringSync();
-      expect(content, contains('επαναλήφθηκε 5 φορές'));
+      expect(
+        recordsOf(LogKind.repeat).single.message,
+        contains('επαναλήφθηκε 5 φορές'),
+      );
     });
 
     test('fail-safe — εξαίρεση μέσα στο service δεν διαδίδεται', () {

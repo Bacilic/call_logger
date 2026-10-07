@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:call_logger/core/database/schema_upgrade_station_guard.dart';
 import 'package:call_logger/core/services/crash_log_service.dart';
+import 'package:call_logger/core/services/log_record.dart';
 import 'package:call_logger/core/services/session_liveness_mark.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -34,6 +35,19 @@ void main() {
       retentionCount: 5,
     );
   });
+
+  /// Οι εγγραφές εκκίνησης που βρίσκονται στον φάκελο καταγραφής της βάσης.
+  List<LogRecord> startupRecordsOf(String databasePath) {
+    final dir = Directory(logsOf(databasePath));
+    if (!dir.existsSync()) return const [];
+    return [
+      for (final file in dir.listSync().whereType<File>())
+        if (CrashLogService.isDailyLogFileName(p.basename(file.path)))
+          for (final line in file.readAsLinesSync())
+            if (LogRecord.tryParse(line) case final record?)
+              if (record.kind == LogKind.startup) record,
+    ];
+  }
 
   tearDown(() async {
     CrashLogService.instanceOrNull?.stopLivenessHeartbeat();
@@ -118,5 +132,52 @@ void main() {
 
     expect(log.logsDirectory, before);
     expect(log.databaseFileName, 'Hospital.db');
+  });
+
+  group('Η συνεδρία ακολουθεί το ημερολόγιο στον νέο φάκελο', () {
+    test('ο νέος φάκελος μαθαίνει ότι εκεί συνεχίζει συνεδρία', () async {
+      await CrashLogService.instance.retargetTo(
+        databasePath: secondDatabase,
+        retentionCount: 5,
+      );
+
+      final begins = startupRecordsOf(
+        secondDatabase,
+      ).where((r) => r.data['phase'] == 'begin');
+      expect(
+        begins,
+        hasLength(1),
+        reason:
+            'Χωρίς αρχή στον νέο φάκελο, η εξαγωγή του δεν βρίσκει τη '
+            'συνεδρία — και χάνει μαζί της κλείσιμο και σφάλματα',
+      );
+      expect(begins.single.data['continued'], isTrue);
+    });
+
+    test('ο παλιός φάκελος μαθαίνει ότι η συνεδρία έφυγε', () async {
+      await CrashLogService.instance.retargetTo(
+        databasePath: secondDatabase,
+        retentionCount: 5,
+      );
+
+      expect(
+        startupRecordsOf(
+          firstDatabase,
+        ).where((r) => r.data['phase'] == 'moved'),
+        hasLength(1),
+        reason:
+            'Αλλιώς η συνεδρία φαίνεται εκεί «κλεισμένη ομαλά», ενώ '
+            'συνέχισε σε άλλη βάση',
+      );
+    });
+
+    test('ίδιος φάκελος: καμία εγγραφή μετακόμισης', () async {
+      await CrashLogService.instance.retargetTo(
+        databasePath: firstDatabase,
+        retentionCount: 5,
+      );
+
+      expect(startupRecordsOf(firstDatabase), isEmpty);
+    });
   });
 }

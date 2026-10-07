@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:call_logger/core/services/gemini_ticket_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   group('GeminiException.extractRetryAfterFromErrorBody', () {
@@ -153,6 +155,118 @@ void main() {
       expect(normalized.description, contains('Πρόβλημα πρόσβασης'));
       expect(normalized.description, isNot(contains('Λύση:')));
       expect(normalized.solution, contains('Επαναφορά κωδικού'));
+    });
+  });
+
+  group('«Έλεγχος μοντέλων»', () {
+    // Επτά μοντέλα· όσα έχουν «zero» στο όνομα απαντούν «ποσόστωση 0». Οι
+    // καθυστερήσεις είναι ανάποδες της σειράς, ώστε τα τελευταία να
+    // απαντούν πρώτα — το αποτέλεσμα δεν επιτρέπεται να εξαρτάται από αυτό.
+    const ids = ['m1', 'm2-zero', 'm3', 'm4', 'm5-zero', 'm6', 'm7'];
+
+    ({
+      http.Client client,
+      Map<String, int> asked,
+      List<Uri> lists,
+      int Function() peak,
+    })
+    fakeGoogle() {
+      final asked = <String, int>{};
+      final lists = <Uri>[];
+      var running = 0;
+      var peak = 0;
+      final client = MockClient((request) async {
+        if (request.method == 'GET') {
+          lists.add(request.url);
+          return http.Response(
+            jsonEncode({
+              'models': [
+                for (final id in ids)
+                  {
+                    'name': 'models/$id',
+                    'displayName': id,
+                    'supportedGenerationMethods': ['generateContent'],
+                  },
+              ],
+            }),
+            200,
+          );
+        }
+        final id = RegExp(r'models/([^:]+):').firstMatch(request.url.path)![1]!;
+        asked[id] = (asked[id] ?? 0) + 1;
+        running++;
+        if (running > peak) peak = running;
+        await Future<void>.delayed(
+          Duration(milliseconds: 5 * (ids.length - ids.indexOf(id))),
+        );
+        running--;
+        if (id.contains('zero')) {
+          return http.Response(
+            jsonEncode({
+              'error': {'message': 'Quota exceeded, limit: 0'},
+            }),
+            429,
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'candidates': [
+              {
+                'content': {
+                  'parts': [
+                    {
+                      'text':
+                          '{"title":"OK","description":"OK","solution":"OK"}',
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      return (client: client, asked: asked, lists: lists, peak: () => peak);
+    }
+
+    test(
+      'κάθε μοντέλο ρωτιέται μία φορά, παράλληλα, με σταθερό αποτέλεσμα',
+      () async {
+        final google = fakeGoogle();
+
+        final result = await GeminiTicketService.probeModelsWithQuota(
+          apiKey: 'ΚΛΕΙΔΙ',
+          client: google.client,
+        );
+
+        expect(google.asked, {for (final id in ids) id: 1});
+        expect(result.availableModels.map((m) => m.id), [
+          'm1',
+          'm3',
+          'm4',
+          'm6',
+          'm7',
+        ]);
+        expect(result.totalChecked, ids.length);
+        expect(google.peak(), greaterThan(1), reason: 'Όχι ένα-ένα');
+        expect(google.peak(), lessThanOrEqualTo(kGeminiProbeConcurrency));
+      },
+    );
+
+    test('η λίστα μοντέλων έρχεται με μία ερώτηση', () async {
+      final google = fakeGoogle();
+
+      await GeminiTicketService.listTextModels(
+        apiKey: 'ΚΛΕΙΔΙ',
+        client: google.client,
+      );
+
+      expect(google.lists, hasLength(1));
+      expect(
+        google.lists.single.queryParameters['pageSize'],
+        '$kGeminiModelsPageSize',
+      );
     });
   });
 }

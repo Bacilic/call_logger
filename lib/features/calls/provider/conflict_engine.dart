@@ -91,6 +91,7 @@ class ConflictEngine {
     if (filled.length >= 2) {
       _evaluateAllPairs();
       _addNotInDatabaseLines();
+      _addBelongsToLines();
     }
     return ConflictComputation(conflicts: _materialize(), filledFields: filled);
   }
@@ -369,6 +370,45 @@ class ConflictEngine {
         const _Reason(
           severity: ConflictSeverity.unknown,
           message: _kNotInDatabase,
+          counterpart: null,
+          isTrailing: true,
+        ),
+      );
+    }
+  }
+
+  /// «Ανήκει στο τμήμα: …» — μία φορά ανά πεδίο, ώστε ο χειριστής να μη
+  /// χρειάζεται να ψάξει πού ανήκει η τιμή που δεν δένει.
+  ///
+  /// Μπαίνει **μόνο** σε πεδίο που έχει ήδη γραμμές: είναι πληροφορία για τη
+  /// διένεξη, όχι δείκτης. Γι' αυτό παίρνει την ήπια σοβαρότητα — δεν αλλάζει
+  /// ποτέ το χρώμα του θαυμαστικού. Δεν συνυπάρχει με το «Δεν είναι
+  /// καταχωρημένο»: άγνωστη τιμή δεν έχει τμήμα.
+  void _addBelongsToLines() {
+    final departmentIdsByField = {
+      SelectorField.phone: _phoneDeptIds,
+      SelectorField.caller: _callerDeptIds,
+      SelectorField.equipment: _equipmentDeptIds,
+    };
+    for (final MapEntry(key: field, value: ids)
+        in departmentIdsByField.entries) {
+      if (!_isKnown(field) || (_out[field]?.isEmpty ?? true)) continue;
+      final names =
+          {
+            for (final id in ids) lookup.getDepartmentName(id)?.trim() ?? '',
+          }.where((n) => n.isNotEmpty).toList()..sort(
+            (a, b) => SearchTextNormalizer.normalizeForSearch(
+              a,
+            ).compareTo(SearchTextNormalizer.normalizeForSearch(b)),
+          );
+      if (names.isEmpty) continue;
+      final label = names.length == 1
+          ? 'Ανήκει στο τμήμα'
+          : 'Ανήκει στα τμήματα';
+      _out[field]!.add(
+        _Reason(
+          severity: ConflictSeverity.unknown,
+          message: '$label: ${names.join(', ')}',
           counterpart: null,
           isTrailing: true,
         ),

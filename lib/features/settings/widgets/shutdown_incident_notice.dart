@@ -4,18 +4,21 @@ import '../../../core/services/shutdown_trace_incident.dart';
 
 /// Ειδοποίηση για το τελευταίο προβληματικό κλείσιμο της εφαρμογής.
 ///
-/// Εμφανίζεται ΜΟΝΟ όταν ο ιχνηλάτης άφησε αρχείο — δηλαδή όταν κάτι πήγε
+/// Εμφανίζεται ΜΟΝΟ όταν ο ιχνηλάτης άφησε εγγραφή — δηλαδή όταν κάτι πήγε
 /// στραβά. Στη φυσιολογική ζωή της εφαρμογής η ενότητα «Καταγραφή σφαλμάτων»
 /// δεν δείχνει τίποτα εδώ.
+///
+/// Οι λεπτομέρειες δεν ανοίγουν ως ωμό αρχείο: τα ημερήσια αρχεία γράφονται
+/// για να τα διαβάζει η εξαγωγή, όχι το μάτι.
 class ShutdownIncidentNotice extends StatelessWidget {
   const ShutdownIncidentNotice({
     super.key,
     required this.incident,
-    required this.onOpenFile,
+    required this.onExport,
   });
 
   final ShutdownTraceIncident incident;
-  final VoidCallback onOpenFile;
+  final VoidCallback onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +51,7 @@ class ShutdownIncidentNotice extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        'Ανοίξτε το αρχείο για λεπτομέρειες: ',
+                        'Για λεπτομέρειες: ',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -56,9 +59,9 @@ class ShutdownIncidentNotice extends StatelessWidget {
                       MouseRegion(
                         cursor: SystemMouseCursors.click,
                         child: GestureDetector(
-                          onTap: onOpenFile,
+                          onTap: onExport,
                           child: Text(
-                            incident.fileName,
+                            'Εξαγωγή αυτού του περιστατικού',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.primary,
                               decoration: TextDecoration.underline,

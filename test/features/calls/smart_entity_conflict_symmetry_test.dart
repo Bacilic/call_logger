@@ -24,6 +24,12 @@ const _kAktinologiko = 50;
 const _kAktinologikoName = 'Ακτινολογικό';
 const _kMageireio = 60;
 const _kMageireioName = 'Μαγειρείο';
+const _kPathologiki = 70;
+const _kPathologikiName = 'Παθολογική';
+const _kPaidiatriki = 80;
+const _kPaidiatrikiName = 'Παιδιατρική';
+const _kXeirourgiki = 90;
+const _kXeirourgikiName = 'Χειρουργική';
 
 List<DepartmentModel> _allDepartments() => [
   DepartmentModel(id: _kKinisi, name: _kKinisiName),
@@ -31,6 +37,9 @@ List<DepartmentModel> _allDepartments() => [
   DepartmentModel(id: _kGrammateia, name: _kGrammateiaName),
   DepartmentModel(id: _kAktinologiko, name: _kAktinologikoName),
   DepartmentModel(id: _kMageireio, name: _kMageireioName),
+  DepartmentModel(id: _kPathologiki, name: _kPathologikiName),
+  DepartmentModel(id: _kPaidiatriki, name: _kPaidiatrikiName),
+  DepartmentModel(id: _kXeirourgiki, name: _kXeirourgikiName),
 ];
 
 // ───────────────────────────── Οντότητες ─────────────────────────────
@@ -176,6 +185,7 @@ void main() {
       ]);
       expect(s.conflictTooltipFor(SelectorField.caller)!.split('\n'), [
         'Αλεξάνδρα Νικολάου — δεν σχετίζεται με το τηλέφωνο 2543',
+        'Ανήκει στο τμήμα: Γραφείο Κίνησης',
       ], reason: 'Ο καλούντας δένει με το τμήμα και τον εξοπλισμό του');
       expect(
         s.conflictSeverityFor(SelectorField.department),
@@ -219,6 +229,7 @@ void main() {
         expect(s.conflictTooltipFor(SelectorField.caller)!.split('\n'), [
           'Αλεξάνδρα Νικολάου — δεν σχετίζεται με το τηλέφωνο 2543',
           'Αλεξάνδρα Νικολάου — δεν ανήκει στο τμήμα Αιμοδοσία',
+          'Ανήκει στο τμήμα: Γραφείο Κίνησης',
         ]);
         expect(s.conflictTooltipFor(SelectorField.department)!.split('\n'), [
           'Τμήμα Αιμοδοσία — δεν σχετίζεται με το τηλέφωνο 2543',
@@ -252,8 +263,8 @@ void main() {
         'Δεν είναι καταχωρημένο στη βάση',
       ], reason: '§Α.7: πρώτη η άγκυρα (τηλέφωνο), τελευταία η μονομερής');
       expect(
-        s.conflictTooltipFor(SelectorField.caller)!.split('\n').length,
-        3,
+        s.conflictTooltipFor(SelectorField.caller)!.split('\n').last,
+        'Ανήκει στο τμήμα: Γραφείο Κίνησης',
         reason: 'Ο καλούντας υπάρχει — καμία γραμμή «δεν είναι καταχωρημένο»',
       );
     });
@@ -602,7 +613,13 @@ void main() {
       );
       expect(s.conflictTooltipFor(SelectorField.caller)!.split('\n'), [
         'Γιώργος Παππάς — δεν σχετίζεται με τον εξοπλισμό 4040',
+        'Ανήκει στα τμήματα: Γραμματεία, Μαγειρείο',
       ], reason: 'Μόνο αυτή η σχέση λείπει — οι άλλες δύο δένουν');
+      expect(
+        s.conflictTooltipFor(SelectorField.equipment)!.split('\n').last,
+        'Ανήκει στα τμήματα: Ακτινολογικό, Γραμματεία',
+        reason: 'Δύο κάτοχοι σε δύο τμήματα — και τα δύο, με αλφαβητική σειρά',
+      );
       expect(s.anchorField, SelectorField.equipment);
     });
 
@@ -622,6 +639,74 @@ void main() {
         SelectorField.phone,
         reason: 'Η άγκυρα περνά στο επόμενο κατά σειρά επικύρωσης (§Α.6)',
       );
+    });
+  });
+
+  // ═══════════════════ Πού ανήκει η τιμή που δεν δένει ═══════════════════
+  group('«Ανήκει στο τμήμα» — η διένεξη λέει και πού ανήκει η τιμή', () {
+    /// 2421 κοινόχρηστο της Παιδιατρικής · 3164 της Χειρουργικής.
+    Future<ProviderContainer> world() => _openContainer(
+      users: const [],
+      equipment: [
+        EquipmentModel(id: 110, code: '3164', departmentId: _kXeirourgiki),
+      ],
+      departmentPhones: {
+        _kPaidiatriki: ['2421'],
+      },
+    );
+
+    test(
+      'τηλέφωνο και εξοπλισμός άλλων τμημάτων σε φόρμα Παθολογικής',
+      () async {
+        final c = await world();
+        addTearDown(c.dispose);
+
+        _commitPhone(c, '2421');
+        _commitDepartment(c, _kPathologiki, _kPathologikiName);
+        _commitEquipment(c, '3164');
+
+        final s = _read(c);
+        expect(s.conflictTooltipFor(SelectorField.phone)!.split('\n'), [
+          'Τηλέφωνο 2421 — δεν σχετίζεται με το τμήμα Παθολογική',
+          'Τηλέφωνο 2421 — δεν σχετίζεται με τον εξοπλισμό 3164',
+          'Ανήκει στο τμήμα: Παιδιατρική',
+        ]);
+        expect(s.conflictTooltipFor(SelectorField.equipment)!.split('\n'), [
+          'Εξοπλισμός 3164 — δεν σχετίζεται με το τηλέφωνο 2421',
+          'Εξοπλισμός 3164 — δεν σχετίζεται με το τμήμα Παθολογική',
+          'Ανήκει στο τμήμα: Χειρουργική',
+        ]);
+        expect(
+          s.conflictTooltipFor(SelectorField.department),
+          isNot(contains('Ανήκει')),
+          reason: 'Το πεδίο «Τμήμα» δεν επαναλαμβάνει όσα λένε τα άλλα πεδία',
+        );
+      },
+    );
+
+    test('η γραμμή δεν ανάβει θαυμαστικό ούτε αλλάζει το χρώμα του', () async {
+      final c = await world();
+      addTearDown(c.dispose);
+
+      _commitPhone(c, '2421');
+      _commitDepartment(c, _kPaidiatriki, _kPaidiatrikiName);
+      expect(
+        _read(c).hasAnyConflict,
+        isFalse,
+        reason: 'Τηλέφωνο και τμήμα δένουν — καμία γραμμή «Ανήκει»',
+      );
+
+      _commitEquipment(c, '3164');
+      final s = _read(c);
+      expect(
+        s.conflictSeverityFor(SelectorField.phone),
+        ConflictSeverity.mismatch,
+        reason: 'Δύο γνωστά που δεν δένουν μένουν κόκκινα',
+      );
+      expect(s.conflictTooltipFor(SelectorField.phone)!.split('\n'), [
+        'Τηλέφωνο 2421 — δεν σχετίζεται με τον εξοπλισμό 3164',
+        'Ανήκει στο τμήμα: Παιδιατρική',
+      ], reason: 'Η γραμμή μπαίνει ακόμη κι όταν η διένεξη δεν αφορά τμήμα');
     });
   });
 }

@@ -47,6 +47,7 @@ import '../updates/update_startup_prompt.dart';
 import '../../features/database/debug/release_publish_finished_snackbar.dart';
 import '../../features/tasks/providers/tasks_provider.dart';
 import 'compact_tooltip.dart';
+import 'local_database_banner.dart';
 
 /// Κύριο κέλυφος εφαρμογής: πλευρική πλοήγηση και περιοχή περιεχομένου.
 class MainShell extends ConsumerStatefulWidget {
@@ -327,6 +328,24 @@ class MainShellState extends ConsumerState<MainShell> {
   /// προορισμούς, άρα ίδιο σημάδι στο πέρασμα του ποντικιού, ίδιο ύψος και
   /// λεζάντα αγκυρωμένη στο εικονίδιο. Δεν επιλέγεται ποτέ: το `selectedIndex`
   /// δείχνει πάντα σε πραγματικό προορισμό.
+  /// Η λωρίδα της τοπικής βάσης, μικρή: σβησμένο σύννεφο σε κόκκινο. Το κλικ
+  /// την ξαναανοίγει.
+  NavigationRailDestination _localDatabaseRailDestination() {
+    final error = Theme.of(context).colorScheme.error;
+    return NavigationRailDestination(
+      icon: Tooltip(
+        waitDuration: const Duration(milliseconds: 300),
+        message: kLocalDatabaseMarkTooltip,
+        child: Icon(
+          Icons.cloud_off,
+          color: error,
+          key: const ValueKey('nav_rail_local_database'),
+        ),
+      ),
+      label: Text(kLocalDatabaseMarkLabel, style: TextStyle(color: error)),
+    );
+  }
+
   NavigationRailDestination _settingsRailDestination() {
     return NavigationRailDestination(
       icon: Tooltip(
@@ -529,12 +548,20 @@ class MainShellState extends ConsumerState<MainShell> {
         Theme.of(context).textTheme.labelMedium ??
         const TextStyle();
 
+    // Η μικρή λωρίδα της τοπικής βάσης ζει στη μπάρα: τη βλέπουν όλοι, σε
+    // κάθε οθόνη — και όσοι δεν έχουν το κουμπί «Βάση Δεδομένων».
+    final showLocalDatabaseMark =
+        widget.isLocalDevMode &&
+        ref.watch(localDatabaseIndicatorProvider) ==
+            LocalDatabaseIndicator.mark;
+
     // Το πλάτος της μπάρας ακολουθεί την πιο μακριά λεζάντα που είναι όντως
     // ορατή — άρα προσαρμόζεται μόνο του όταν κρύβονται/εμφανίζονται κουμπιά.
     final railExtendedWidth = mainNavRailExtendedWidth(
       labels: [
         for (final d in visibleDestinations) d.label,
         kMainNavSettingsLabel,
+        if (showLocalDatabaseMark) kLocalDatabaseMarkLabel,
       ],
       style: railLabelStyle,
       textScaler: MediaQuery.textScalerOf(context),
@@ -563,6 +590,7 @@ class MainShellState extends ConsumerState<MainShell> {
                 dictionaryImmersive
                     ? MainNavDestination.dictionary
                     : MainNavDestination.history,
+                railVisible: false,
               ),
             ),
           ),
@@ -638,11 +666,21 @@ class MainShellState extends ConsumerState<MainShell> {
                                   ? 0
                                   : selectedRailIndex,
                               onDestinationSelected: (index) {
-                                // Οι Ρυθμίσεις είναι το τελευταίο κουμπί της λίστας αλλά
-                                // δεν είναι προορισμός: ανοίγουν δική τους οθόνη και δεν
-                                // μένουν ποτέ επιλεγμένες.
-                                if (index >= visibleDestinations.length) {
+                                // Οι Ρυθμίσεις (και, όταν υπάρχει, το σημάδι
+                                // της τοπικής βάσης) είναι κουμπιά της λίστας
+                                // αλλά όχι προορισμοί: δεν μένουν ποτέ
+                                // επιλεγμένα.
+                                if (index == visibleDestinations.length) {
                                   unawaited(_openSettingsScreen());
+                                  return;
+                                }
+                                if (index > visibleDestinations.length) {
+                                  ref
+                                      .read(
+                                        localDatabaseBannerCollapsedProvider
+                                            .notifier,
+                                      )
+                                      .expand();
                                   return;
                                 }
                                 unawaited(
@@ -675,6 +713,8 @@ class MainShellState extends ConsumerState<MainShell> {
                                         showLampReadPathWarning,
                                   ),
                                 _settingsRailDestination(),
+                                if (showLocalDatabaseMark)
+                                  _localDatabaseRailDestination(),
                               ],
                             ),
                           ),

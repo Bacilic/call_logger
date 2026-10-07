@@ -81,6 +81,26 @@ class _ProjectFileSnapshot {
   final Uint8List pubspec;
 }
 
+/// Το `changelog.json` έχει διπλό κλειδί — η δημοσίευση αρνείται.
+///
+/// Το κείμενο είναι το μήνυμα που βλέπει ο χρήστης στην αποτυχία, γι' αυτό
+/// χωρίς πρόθεμα τύπου όπως «Bad state:».
+class ChangelogDuplicateKeysException implements Exception {
+  const ChangelogDuplicateKeysException(this.duplicates);
+
+  final List<({String key, int line})> duplicates;
+
+  @override
+  String toString() {
+    final where = duplicates
+        .map((d) => '«${d.key}» στη γραμμή ${d.line}')
+        .join(', ');
+    return 'Το changelog.json έχει διπλό κλειδί: $where. Το δεύτερο θα '
+        'έσβηνε σιωπηλά το πρώτο και οι εγγραφές του θα χάνονταν. Η '
+        'δημοσίευση δεν έγινε — διορθώστε το αρχείο και ξαναδοκιμάστε.';
+  }
+}
+
 /// Τελετή δημοσίευσης έκδοσης (debug) — χωρίς UI και χωρίς SQL.
 class ReleasePublisherService {
   ReleasePublisherService({
@@ -235,6 +255,10 @@ class ReleasePublisherService {
   Future<ReleasePublishResult> rebuildCurrentVersion() async {
     _ProjectFileSnapshot? snapshot;
     try {
+      // Το ιστορικό δεν ξαναγράφεται εδώ, αλλά πακετάρεται όπως είναι: με
+      // διπλό κλειδί, το Ιστορικό Αλλαγών της εφαρμογής θα έδειχνε μόνο το
+      // δεύτερο. Η ίδια άρνηση με τη δημοσίευση, πριν αγγίξουμε τίποτα.
+      await _readChangelogJson();
       snapshot = await _snapshotProjectFiles();
       final current = await _readPubspecVersion();
       final nextBuild = current.build + 1;
@@ -552,9 +576,17 @@ class ReleasePublisherService {
   }
 
   Future<List<dynamic>> _readChangelogJson() async {
-    final raw = jsonDecode(await _changelogJsonFile.readAsString());
+    final text = await _changelogJsonFile.readAsString();
+    final raw = jsonDecode(text);
     if (raw is! List) {
       throw StateError('Το changelog.json δεν είναι πίνακας.');
+    }
+    // Ο αποκωδικοποιητής κράτησε σιωπηλά το δεύτερο διπλό κλειδί· η σφράγιση
+    // θα το έγραφε πίσω και το πρώτο θα χανόταν οριστικά. Πριν αγγίξουμε
+    // τίποτα, λοιπόν: άρνηση, με τις γραμμές για διόρθωση.
+    final duplicates = findDuplicateJsonKeys(text);
+    if (duplicates.isNotEmpty) {
+      throw ChangelogDuplicateKeysException(duplicates);
     }
     return raw;
   }

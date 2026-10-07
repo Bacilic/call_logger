@@ -1,10 +1,11 @@
-// Ο περιοδικός φρουρός αντικατάστασης αρχείου βάσης.
+// Ο περιοδικός ανιχνευτής μιας φοράς — ο μηχανισμός πίσω από τον φρουρό
+// αντικατάστασης αρχείου βάσης και τον φρουρό επανόδου της δικτυακής βάσης.
 //
-//   flutter test test/core/database/database_replacement_watchdog_test.dart
+//   flutter test test/core/utils/one_shot_periodic_detector_test.dart
 
 import 'dart:io';
 
-import 'package:call_logger/core/database/database_replacement_watchdog.dart';
+import 'package:call_logger/core/utils/one_shot_periodic_detector.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,7 +14,7 @@ void main() {
     var checks = 0;
     var alarms = 0;
     fakeAsync((async) {
-      DatabaseReplacementWatchdog(
+      OneShotPeriodicDetector(
         interval: const Duration(seconds: 10),
         detect: () async {
           checks++;
@@ -31,9 +32,9 @@ void main() {
 
   test('φωνάζει μία φορά και σταματά', () {
     var alarms = 0;
-    late DatabaseReplacementWatchdog watchdog;
+    late OneShotPeriodicDetector watchdog;
     fakeAsync((async) {
-      watchdog = DatabaseReplacementWatchdog(
+      watchdog = OneShotPeriodicDetector(
         interval: const Duration(seconds: 10),
         detect: () async => true,
         onDetected: () async => alarms++,
@@ -51,7 +52,7 @@ void main() {
     var running = 0;
     var maxConcurrent = 0;
     fakeAsync((async) {
-      DatabaseReplacementWatchdog(
+      OneShotPeriodicDetector(
         interval: const Duration(seconds: 10),
         detect: () async {
           running++;
@@ -73,7 +74,7 @@ void main() {
   test('σφάλμα στην ανίχνευση δεν φτάνει ποτέ στον χρήστη', () {
     var alarms = 0;
     fakeAsync((async) {
-      DatabaseReplacementWatchdog(
+      OneShotPeriodicDetector(
         interval: const Duration(seconds: 10),
         detect: () async => throw const FileSystemException('άφταστο δίκτυο'),
         onDetected: () async => alarms++,
@@ -88,7 +89,7 @@ void main() {
   test('μετά το stop δεν ξαναρωτά', () {
     var checks = 0;
     fakeAsync((async) {
-      final watchdog = DatabaseReplacementWatchdog(
+      final watchdog = OneShotPeriodicDetector(
         interval: const Duration(seconds: 10),
         detect: () async {
           checks++;

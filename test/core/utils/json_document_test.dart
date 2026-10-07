@@ -39,7 +39,50 @@ void main() {
     });
   });
 
+  group('findDuplicateJsonKeys', () {
+    test('βρίσκει το δεύτερο κλειδί στην ίδια κάρτα, με τη γραμμή του', () {
+      const text =
+          '[\n'
+          '  {\n'
+          '    "version": "Unreleased",\n'
+          '    "fixed": ["α"],\n'
+          '    "fixed": ["β"]\n'
+          '  }\n'
+          ']\n';
+
+      expect(findDuplicateJsonKeys(text), [(key: 'fixed', line: 5)]);
+    });
+
+    test('το ίδιο κλειδί σε διαφορετικές κάρτες ΔΕΝ είναι διπλό', () {
+      const text =
+          '[{"version": "Unreleased", "fixed": []},'
+          ' {"version": "0.61.0", "fixed": []}]';
+
+      expect(findDuplicateJsonKeys(text), isEmpty);
+    });
+
+    test('κείμενο εγγραφής που μοιάζει με κλειδί δεν μετρά', () {
+      const text =
+          '{"fixed": ["\\"fixed\\": μια εγγραφή, με κόμμα"],'
+          ' "added": ["fixed"]}';
+
+      expect(findDuplicateJsonKeys(text), isEmpty);
+    });
+  });
+
   group('Το αρχείο του έργου', () {
+    test('το assets/changelog.json δεν έχει διπλά κλειδιά', () {
+      final text = File('assets/changelog.json').readAsStringSync();
+
+      expect(
+        findDuplicateJsonKeys(text),
+        isEmpty,
+        reason:
+            'Διπλό κλειδί σβήνει σιωπηλά τις εγγραφές του πρώτου — π.χ. '
+            'εγγραφή σε κάρτα που μόλις σφραγίστηκε.',
+      );
+    });
+
     test('το assets/changelog.json τελειώνει με νέα γραμμή', () {
       final file = File('assets/changelog.json');
       expect(

@@ -115,6 +115,43 @@ void main() {
       await _flushSqfliteLockTimers(tester);
     });
 
+    testWidgets(
+      'τοπική βάση: το «Χ» βάζει σημάδι στη μπάρα, το κλικ ξαναφέρνει τη λωρίδα',
+      (tester) async {
+        // Χωρίς το κουμπί «Βάση Δεδομένων» — όπως το βλέπουν οι συνάδελφοι
+        // που δεν είναι διαχειριστές. Το σημάδι οφείλει να φαίνεται κι εκεί.
+        await _pumpShell(
+          tester,
+          showLampNav: true,
+          showDatabaseNav: false,
+          enableSpellCheck: true,
+        );
+        const banner = ValueKey('local_database_banner');
+        const mark = ValueKey('nav_rail_local_database');
+        expect(find.byKey(banner), findsOneWidget);
+        expect(find.byKey(mark), findsNothing);
+
+        await tester.tap(
+          find.byKey(const ValueKey('local_database_banner_collapse')),
+        );
+        await pumpUntilSettled(tester);
+        expect(find.byKey(banner), findsNothing);
+        expect(find.byKey(mark), findsOneWidget);
+
+        // Το σημάδι κάθεται κάτω από τις Ρυθμίσεις: εκείνες ανοίγουν ακόμη.
+        await _openSettings(tester);
+        await _closeSettings(tester);
+        expect(find.byKey(mark), findsOneWidget);
+
+        await tester.tap(find.byKey(mark));
+        await pumpUntilSettled(tester);
+        expect(find.byKey(banner), findsOneWidget);
+        expect(find.byKey(mark), findsNothing);
+
+        await _flushSqfliteLockTimers(tester);
+      },
+    );
+
     testWidgets('η ρύθμιση απόκρυψης της Βάσης υπάρχει όταν επιτρέπεται', (
       tester,
     ) async {

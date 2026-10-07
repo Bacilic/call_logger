@@ -25,10 +25,23 @@ const String kDefaultGeminiEndpoint =
     'https://generativelanguage.googleapis.com/v1beta/models/$kGeminiPrimaryModelPlaceholder:generateContent?key=$kGeminiApiKeyPlaceholder';
 
 /// Προεπιλεγμένο εφεδρικό μοντέλο (fallback) σε περίπτωση 503.
-const String kDefaultGeminiFallbackModel = 'gemini-2.5-flash-lite';
+///
+/// Ψευδώνυμο που ακολουθεί πάντα το τρέχον Flash-Lite της Google: από
+/// 18/09/2026 τα μοντέλα 2.5 δίνονται μόνο σε όσους τα χρησιμοποιούσαν ήδη,
+/// οπότε ένα νέο κλειδί μπορεί να μην έχει πρόσβαση σε σταθερό όνομα 2.5.
+const String kDefaultGeminiFallbackModel = 'gemini-flash-lite-latest';
 
 const String kGeminiModelsListUrl =
     'https://generativelanguage.googleapis.com/v1beta/models';
+
+/// Το μέγιστο που δέχεται η Google ανά σελίδα λίστας μοντέλων: όλη η λίστα
+/// έρχεται με μία ερώτηση αντί για σελίδες.
+const int kGeminiModelsPageSize = 1000;
+
+/// Πόσα μοντέλα ελέγχονται ταυτόχρονα στον «Έλεγχο μοντέλων». Κάθε μοντέλο
+/// έχει δική του ποσόστωση, οπότε ο παράλληλος έλεγχος δεν τρώει από το
+/// όριο κάποιου άλλου· το ταβάνι κρατά ήπιο τον φόρτο στη σύνδεση.
+const int kGeminiProbeConcurrency = 5;
 
 /// Πού και πώς στέλνεται μια κλήση προς την ΤΝ.
 ///
@@ -413,13 +426,14 @@ abstract final class GeminiTicketService {
     required String apiKey,
     String pageToken = '',
   }) {
-    final base = Uri.parse(kGeminiModelsListUrl);
+    final token = pageToken.trim();
     return GeminiCallTarget(
-      uri: pageToken.trim().isEmpty
-          ? base
-          : base.replace(
-              queryParameters: <String, String>{'pageToken': pageToken.trim()},
-            ),
+      uri: Uri.parse(kGeminiModelsListUrl).replace(
+        queryParameters: <String, String>{
+          'pageSize': '$kGeminiModelsPageSize',
+          if (token.isNotEmpty) 'pageToken': token,
+        },
+      ),
       headers: apiHeaders(apiKey),
     );
   }
@@ -597,18 +611,35 @@ abstract final class GeminiTicketService {
       var checked = 0;
       final totalSteps = models.length + extrasToProbe;
 
+      // Κάθε μοντέλο ρωτιέται ακριβώς μία φορά, όπως πριν — απλώς ως
+      // [kGeminiProbeConcurrency] μαζί αντί για ένα-ένα. Οι απαντήσεις
+      // μπαίνουν στη θέση του μοντέλου τους, ώστε η σειρά του αποτελέσματος να
+      // μην εξαρτάται από το ποιο απάντησε πρώτο.
+      final okByIndex = List<bool>.filled(models.length, false);
+      var nextIndex = 0;
+      Future<void> worker() async {
+        while (nextIndex < models.length) {
+          final index = nextIndex++;
+          final model = models[index];
+          final result = await probeModel(
+            apiKey: key,
+            model: model.id,
+            endpointTemplate: endpointTemplate,
+            client: httpClient,
+          );
+          okByIndex[index] = result.ok;
+          checked++;
+          onProgress?.call(checked, totalSteps, model.id);
+        }
+      }
+
+      await Future.wait([
+        for (var w = 0; w < kGeminiProbeConcurrency && w < models.length; w++)
+          worker(),
+      ]);
       for (var i = 0; i < models.length; i++) {
-        final model = models[i];
-        checked++;
-        onProgress?.call(checked, totalSteps, model.id);
-        final result = await probeModel(
-          apiKey: key,
-          model: model.id,
-          endpointTemplate: endpointTemplate,
-          client: httpClient,
-        );
-        probeOkById[model.id] = result.ok;
-        if (result.ok) available.add(model);
+        probeOkById[models[i].id] = okByIndex[i];
+        if (okByIndex[i]) available.add(models[i]);
       }
 
       final warnings = <GeminiTypedModelQuotaWarning>[];

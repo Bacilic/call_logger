@@ -323,7 +323,7 @@ Future<void> _bootstrapAndRunApp() async {
       workingDirectory: await ShutdownTraceService.localWorkingDirectory(),
       // Η παλιά θέση, για ένα ίχνος που έμεινε εκεί από προηγούμενη έκδοση.
       legacySharedDirectory: log.logsDirectory,
-      appendToSessionLog: log.appendSessionText,
+      appendRecord: log.appendRecord,
     );
   });
 

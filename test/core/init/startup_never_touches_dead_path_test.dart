@@ -61,7 +61,7 @@ void main() {
       // Τίποτα δεν γράφτηκε στον φάκελο που δεν απαντά.
       final written = await logs
           .list()
-          .where((e) => p.basename(e.path).startsWith('errors_'))
+          .where((e) => p.basename(e.path).startsWith('events_'))
           .toList();
       expect(written, isEmpty);
 
@@ -85,7 +85,7 @@ void main() {
     final logs = Directory(p.join(temp.path, 'logs'));
     final written = await logs
         .list()
-        .where((e) => p.basename(e.path).startsWith('errors_'))
+        .where((e) => p.basename(e.path).startsWith('events_'))
         .toList();
     expect(written, isNotEmpty);
   });

@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'database_helper.dart';
-import 'database_replacement_watchdog.dart';
+import '../utils/one_shot_periodic_detector.dart';
 
 /// Κάθε πότε ρωτά ο φρουρός αν το αρχείο βάσης είναι ακόμα το ίδιο.
 ///
@@ -48,7 +48,7 @@ class DatabaseReplacementNoticeNotifier extends Notifier<String?> {
 /// πριν από κάθε `ref` και πρέπει να μπορεί να ρωτήσει «μήπως αυτό το σφάλμα
 /// είναι η αντικατάσταση;» τη στιγμή που συμβαίνει. Κάτοχος παραμένει ο
 /// [databaseReplacementWatchdogProvider], που τον στήνει και τον ξηλώνει.
-DatabaseReplacementWatchdog? _activeWatchdog;
+OneShotPeriodicDetector? _activeWatchdog;
 
 /// Ζητά άμεσο έλεγχο, εκτός σειράς. Επιστρέφει `true` όταν η αντικατάσταση
 /// επιβεβαιώθηκε και ο φρουρός ανέλαβε — οπότε ο καλών δεν έχει τίποτα να πει.
@@ -70,7 +70,7 @@ Future<bool> pokeDatabaseReplacementWatchdog() async {
 /// σε σφάλματα που δεν χειρίζεται κανείς.
 void registerActiveDatabaseReplacementWatchdog(
   Ref ref,
-  DatabaseReplacementWatchdog watchdog,
+  OneShotPeriodicDetector watchdog,
 ) {
   _activeWatchdog = watchdog;
   ref.onDispose(() {
@@ -85,21 +85,22 @@ void registerActiveDatabaseReplacementWatchdog(
 /// αναμονή —η αποσύνδεση χωρίς checkpoint, που σταματά τη ζημιά— και **στο UI**
 /// μένει μόνο η ανακοίνωση. Έτσι η προστασία δεν εξαρτάται από το αν υπάρχει
 /// κάποιος να πατήσει «Εντάξει».
-final databaseReplacementWatchdogProvider =
-    Provider<DatabaseReplacementWatchdog>((ref) {
-      final helper = DatabaseHelper.instance;
-      final watchdog = DatabaseReplacementWatchdog(
-        interval: kDatabaseReplacementCheckInterval,
-        detect: helper.databaseFileWasReplaced,
-        onDetected: () async {
-          final path = helper.openedDatabasePath;
-          // ΠΡΩΤΑ η αποσύνδεση: όσο η σύνδεση ζει, κάθε εγγραφή πηγαίνει σε βάση
-          // που δεν βρίσκεται πια εκεί. Το ίδιο το κλείσιμο ξέρει να μη γράψει
-          // τίποτα πάνω σε αντικατεστημένο αρχείο.
-          await helper.closeConnection();
-          ref.read(databaseReplacementNoticeProvider.notifier).show(path);
-        },
-      )..start();
-      registerActiveDatabaseReplacementWatchdog(ref, watchdog);
-      return watchdog;
-    });
+final databaseReplacementWatchdogProvider = Provider<OneShotPeriodicDetector>((
+  ref,
+) {
+  final helper = DatabaseHelper.instance;
+  final watchdog = OneShotPeriodicDetector(
+    interval: kDatabaseReplacementCheckInterval,
+    detect: helper.databaseFileWasReplaced,
+    onDetected: () async {
+      final path = helper.openedDatabasePath;
+      // ΠΡΩΤΑ η αποσύνδεση: όσο η σύνδεση ζει, κάθε εγγραφή πηγαίνει σε βάση
+      // που δεν βρίσκεται πια εκεί. Το ίδιο το κλείσιμο ξέρει να μη γράψει
+      // τίποτα πάνω σε αντικατεστημένο αρχείο.
+      await helper.closeConnection();
+      ref.read(databaseReplacementNoticeProvider.notifier).show(path);
+    },
+  )..start();
+  registerActiveDatabaseReplacementWatchdog(ref, watchdog);
+  return watchdog;
+});

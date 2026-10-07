@@ -12,6 +12,8 @@ import '../database/database_reachability.dart';
 import '../database/database_staleness.dart';
 import '../database/database_state_notice.dart';
 import '../database/database_switch_success_notice.dart';
+import '../init/database_switch_guard.dart';
+import '../init/network_database_return.dart';
 import '../services/settings_service.dart';
 import '../../features/calls/screens/calls_screen.dart';
 import '../../features/database/debug/error_scenarios_screen.dart';
@@ -24,6 +26,7 @@ import '../../features/knowledge/screens/knowledge_screen.dart';
 import '../../features/lamp/screens/lamp_screen.dart';
 import '../../features/tasks/screens/tasks_screen.dart';
 import '../utils/background_task.dart';
+import 'local_database_banner.dart';
 import 'main_nav_destination.dart';
 import 'main_shell.dart';
 
@@ -164,6 +167,30 @@ class MainShellDestinationContent {
     );
   }
 
+  /// «Μετάβαση στη δικτυακή βάση» από τη λωρίδα της τοπικής — πίσω από τον
+  /// ίδιο φρουρό με κάθε αλλαγή βάσης (π.χ. αντίγραφο σε εξέλιξη).
+  Future<void> _returnToNetworkDatabase() async {
+    if (!host.mounted) return;
+    final messenger = ScaffoldMessenger.of(host.context);
+    NetworkDatabaseReturnOutcome? outcome;
+    await runGuardedDatabaseSwitch(host.context, host.ref, () async {
+      outcome = await returnToNetworkDatabase(
+        ref: host.ref,
+        onDatabaseReopened: host.widget.onDatabaseReopened,
+      );
+    }, actionLabel: kReturnToNetworkDatabaseLink);
+    final reason = outcome?.errorMessage;
+    if (reason == null) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Η μετάβαση στη δικτυακή βάση δεν έγινε — συνεχίζετε στην τοπική.\n'
+          '$reason',
+        ),
+      ),
+    );
+  }
+
   Widget _contentForDestination(MainNavDestination dest) {
     switch (dest) {
       case MainNavDestination.calls:
@@ -206,7 +233,12 @@ class MainShellDestinationContent {
     );
   }
 
-  Widget destinationContentColumn(MainNavDestination dest) {
+  /// Το [railVisible] είναι `false` στις οθόνες πλήρους έκτασης (Λεξικό,
+  /// Ιστορικό) όπου η πλευρική μπάρα δεν φαίνεται.
+  Widget destinationContentColumn(
+    MainNavDestination dest, {
+    bool railVisible = true,
+  }) {
     final context = host.context;
     final switchSuccessMessage = host.ref.watch(
       databaseSwitchSuccessNoticeProvider,
@@ -223,20 +255,16 @@ class MainShellDestinationContent {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (host.widget.isLocalDevMode)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            color: Colors.amber,
-            child: Text(
-              'ΤΟΠΙΚΗ ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ - η δικτυακή δεν ήταν προσβάσιμη. '
-              'Ό,τι καταγράφετε μένει σε αυτόν τον υπολογιστή.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Colors.black87,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+        // Χωρίς ορατή μπάρα δεν υπάρχει πού να μικρύνει: η λωρίδα μένει
+        // ολόκληρη, ώστε η τοπική βάση να μη δουλεύει ποτέ χωρίς ένδειξη.
+        if (host.widget.isLocalDevMode &&
+            (!railVisible ||
+                host.ref.watch(localDatabaseIndicatorProvider) ==
+                    LocalDatabaseIndicator.banner))
+          LocalDatabaseBanner(
+            onOpenDatabaseSettings: openDatabaseSettingsDialog,
+            onReturnToNetwork: _returnToNetworkDatabase,
+            canCollapse: railVisible,
           ),
         // Ξεχωριστή λωρίδα από την «τοπική βάση» από πάνω: εκείνη σημαίνει
         // «η δικτυακή διαδρομή δεν ήταν προσβάσιμη», αυτή «τα δεδομένα που

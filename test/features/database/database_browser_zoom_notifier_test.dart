@@ -51,8 +51,8 @@ void main() {
         .whereType<File>()
         .where(
           (f) =>
-              p.basename(f.path).startsWith('errors_') &&
-              p.basename(f.path).endsWith('.log'),
+              p.basename(f.path).startsWith('events_') &&
+              p.basename(f.path).endsWith('.jsonl'),
         )
         .toList();
   }

@@ -9,6 +9,7 @@ import '../../features/database/widgets/backup_failed_dialog.dart';
 import '../../features/database/widgets/backup_folder_missing_dialog.dart';
 import '../errors/fatal_error_routing.dart';
 import '../init/app_init_retry_runner.dart';
+import '../services/settings_service.dart';
 import 'database_error_screen.dart';
 import 'fatal_error_screen.dart';
 import 'global_fatal_error_notifier.dart';
@@ -85,9 +86,11 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
 
     return ValueListenableBuilder<FatalErrorState?>(
       valueListenable: globalFatalErrorNotifier,
-      builder: (context, fatal, _) =>
-          screenForFatalError(fatal, child: child, onRetryDatabase: () =>
-              _retryDatabase(context, ref)),
+      builder: (context, fatal, _) => screenForFatalError(
+        fatal,
+        child: child,
+        onRetryDatabase: () => _retryDatabase(context, ref),
+      ),
     );
   }
 
@@ -103,7 +106,19 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
     // ξαναχτίζει την οθόνη, και το context μπορεί να μην είναι πια το ίδιο.
     final messenger = ScaffoldMessenger.maybeOf(context);
     final errorColor = Theme.of(context).colorScheme.error;
-    final outcome = await runAppInitRetry(ref: ref);
+    // Η οθόνη ξαναδοκιμάζει πάντα την ίδια, ρυθμισμένη βάση: δεν είναι αλλαγή
+    // βάσης, άρα καμία πράσινη ανακοίνωση. Αν η διαδρομή δεν διαβάζεται, η
+    // επαναδοκιμή το αναφέρει μόνη της — εδώ η άγνοια σημαίνει απλώς σιωπή.
+    String? failedPath;
+    try {
+      failedPath = await SettingsService().getDatabasePath();
+    } catch (_) {
+      failedPath = null;
+    }
+    final outcome = await runAppInitRetry(
+      ref: ref,
+      failedDatabasePath: failedPath,
+    );
     if (outcome.succeeded) {
       globalFatalErrorNotifier.value = null;
       return;
