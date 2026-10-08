@@ -117,7 +117,7 @@ class LansweeperReportRegistration {
         .whereType<int>()
         .where((id) => id != callId)
         .toList();
-    final result = resubmit
+    var result = resubmit
         ? await notifier.resubmitCall(
             callId: callId,
             input: input,
@@ -129,6 +129,25 @@ class LansweeperReportRegistration {
             companionCallIds: companionCallIds,
           );
     if (!host.mounted) return;
+    // Το κρατημένο αίτημα σβήστηκε από το Lansweeper: η επανάληψη θα χτυπούσε
+    // ξανά στο ίδιο κενό, ενώ ένα νέο αίτημα λύνει το πρόβλημα. Ρωτάμε πριν —
+    // το ίδιο μήνυμα βγαίνει και από λάθος αριθμό. Με «Όχι» ισχύει η κανονική
+    // αναφορά αποτυχίας παρακάτω.
+    if (!result.success && result.ticketNotFound) {
+      final createNew = await showLansweeperTicketNotFoundDialog(
+        host.context,
+        ticketId: (result.ticketId ?? '').trim(),
+      );
+      if (!host.mounted) return;
+      if (createNew) {
+        result = await notifier.submitCall(
+          callId: callId,
+          input: input.asNewTicket(),
+          companionCallIds: companionCallIds,
+        );
+        if (!host.mounted) return;
+      }
+    }
     if (result.success) {
       // Οι κλήσεις πέρασαν στις Καταχωρημένες — παραμένοντας επιλεγμένες εκεί
       // δεν εξυπηρετούν τίποτα και μπερδεύουν την επόμενη ενέργεια.

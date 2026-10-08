@@ -36,6 +36,26 @@ class _RecordingPoster {
   }
 }
 
+class _TicketGoneOncePoster extends _RecordingPoster {
+  bool _answeredGone = false;
+
+  @override
+  Future<LansweeperRawResponse> call(
+    String action,
+    Map<String, String> fields,
+  ) async {
+    if (!_answeredGone && action == 'AddNote') {
+      _answeredGone = true;
+      calls.add((action: action, fields: Map<String, String>.from(fields)));
+      return const LansweeperRawResponse(
+        200,
+        '{"Success":false,"Message":"No ticket found. The creation was unsuccessful"}',
+      );
+    }
+    return super.call(action, fields);
+  }
+}
+
 ProviderContainer _workflowTestContainer(_RecordingPoster poster) {
   return ProviderContainer(
     overrides: [
@@ -223,6 +243,51 @@ void main() {
         final db = await DatabaseHelper.instance.database;
         final call = await CallsRepository(db).getCallById(callId);
         expect(call!.lansweeperMainTicketId, _kExistingTicketId);
+      },
+    );
+
+    test(
+      'κρατημένο αίτημα που σβήστηκε από το Lansweeper: η αποτυχία λέει «δεν βρέθηκε», η αποστολή ως νέο ανοίγει νέο αίτημα και το παλιό μένει στο ιστορικό',
+      () async {
+        final gonePoster = _TicketGoneOncePoster();
+        final callId = await _seedWorkflowCall(
+          lansweeperMainTicketId: _kExistingTicketId,
+        );
+        final container = _workflowTestContainer(gonePoster);
+        addTearDown(container.dispose);
+        container.listen(lansweeperSyncProvider, (_, _) {});
+        final notifier = container.read(lansweeperSyncProvider.notifier);
+
+        final failed = await notifier.submitCall(
+          callId: callId,
+          input: _kDefaultSubmitInput,
+        );
+        expect(failed.success, isFalse);
+        expect(failed.ticketNotFound, isTrue);
+
+        final retried = await notifier.submitCall(
+          callId: callId,
+          input: _kDefaultSubmitInput.asNewTicket(),
+        );
+        expect(retried.success, isTrue);
+        expect(retried.ticketCreated, isTrue);
+        expect(retried.ticketId, _kFakeTicketId);
+        expect(
+          gonePoster.calls.where((call) => call.action == 'AddTicket'),
+          hasLength(1),
+        );
+
+        final db = await DatabaseHelper.instance.database;
+        final call = await CallsRepository(db).getCallById(callId);
+        expect(call!.lansweeperMainTicketId, _kFakeTicketId);
+        expect(call.lansweeperState, LansweeperSyncState.sent);
+        final history = await CallsLansweeperRepository(
+          db,
+        ).getCallExternalLinks(callId, provider: 'lansweeper');
+        expect(
+          history.map((row) => row['external_id']),
+          containsAll(<String>[_kExistingTicketId, _kFakeTicketId]),
+        );
       },
     );
 

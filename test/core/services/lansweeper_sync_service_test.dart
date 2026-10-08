@@ -332,6 +332,72 @@ void main() {
       },
     );
 
+    // Το αίτημα που κρατά η κλήση σβήστηκε από το Lansweeper. Μήνυμα όπως το
+    // επιστρέφει το πραγματικό API (07/10/2026).
+    const noteTicketGone = LansweeperRawResponse(
+      200,
+      '{"Success":false,"Message":"No ticket found. The creation was unsuccessful"}',
+    );
+    const editTicketGone = LansweeperRawResponse(
+      200,
+      '{"Success":false,"Message":"No ticket found. The update was unsuccessful"}',
+    );
+
+    test(
+      'υπάρχον αίτημα που σβήστηκε: η αποτυχία δηλώνει «δεν βρέθηκε» και δεν δοκιμάζεται εφεδρεία πάνω σε ανύπαρκτο αίτημα',
+      () async {
+        fakePoster = _RecordingFakePoster(responses: const [noteTicketGone]);
+        service = LansweeperSyncService(poster: fakePoster.call);
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(existingTicketId: '18151'),
+        );
+
+        expect(result.success, isFalse);
+        expect(result.ticketNotFound, isTrue);
+        expect(result.ticketId, '18151');
+        expect(fakePoster.calls.map((c) => c.action), ['AddNote']);
+      },
+    );
+
+    test(
+      'υπάρχον αίτημα που σβήστηκε, χωρίς βήμα σημείωσης: το «δεν βρέθηκε» αναγνωρίζεται και στην αλλαγή κατάστασης',
+      () async {
+        fakePoster = _RecordingFakePoster(responses: const [editTicketGone]);
+        service = LansweeperSyncService(poster: fakePoster.call);
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(
+            existingTicketId: '18151',
+            config: LansweeperTicketSubmitConfig.defaults().copyWith(
+              enableAddNoteStep: false,
+            ),
+          ),
+        );
+
+        expect(result.success, isFalse);
+        expect(result.ticketNotFound, isTrue);
+      },
+    );
+
+    test(
+      'υπάρχον αίτημα, άλλη αποτυχία σημείωσης: η εφεδρεία μένει όπως ήταν και δεν δηλώνεται «δεν βρέθηκε»',
+      () async {
+        fakePoster = _RecordingFakePoster(
+          responses: const [failure, successOnly, successOnly],
+        );
+        service = LansweeperSyncService(poster: fakePoster.call);
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(existingTicketId: '18151'),
+        );
+
+        expect(result.success, isTrue);
+        expect(result.ticketNotFound, isFalse);
+        expect(result.completedSteps, contains('EditTicket(fallback)'));
+      },
+    );
+
     test(
       'όταν includeNoteTime=false, το Text του AddNote ΔΕΝ περιέχει «Χρόνος:»',
       () async {

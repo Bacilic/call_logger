@@ -107,10 +107,20 @@ class LansweeperWorkflowResult {
     this.warnings = const [],
     this.failedStep,
     this.rawPayloads,
+    this.ticketNotFound = false,
   });
 
   final bool success;
   final String? ticketId;
+
+  /// `true` όταν η ροή πήγε να συνεχίσει σε αίτημα που **προϋπήρχε** και το
+  /// Lansweeper απάντησε ότι δεν υπάρχει — συνήθως επειδή σβήστηκε από εκεί.
+  ///
+  /// Ξεχωρίζει από κάθε άλλη αποτυχία επειδή έχει άλλη διέξοδο: η επανάληψη
+  /// θα ξαναχτυπήσει στο ίδιο κενό, ενώ ένα νέο αίτημα λύνει το πρόβλημα. Την
+  /// απόφαση για νέο αίτημα την παίρνει ο χρήστης, όχι η ροή — το ίδιο μήνυμα
+  /// βγαίνει και από λάθος αριθμό.
+  final bool ticketNotFound;
 
   /// `true` όταν το αίτημα δημιουργήθηκε **σε αυτή τη ροή**.
   ///
@@ -350,6 +360,20 @@ class LansweeperSyncService {
 
       if (noteResult.success) {
         completedSteps.add('AddNote');
+      } else if (!ticketCreatedHere &&
+          isTicketNotFoundMessage(noteResult.message)) {
+        // Η εφεδρεία γράφει στο ίδιο αίτημα· πάνω σε αίτημα που δεν υπάρχει
+        // θα αποτύχει με το ίδιο μήνυμα και θα έκρυβε την πραγματική αιτία.
+        return LansweeperWorkflowResult(
+          success: false,
+          message: noteResult.message,
+          ticketId: resolvedTicketId,
+          completedSteps: completedSteps,
+          warnings: warnings,
+          failedStep: 'AddNote',
+          rawPayloads: rawPayloads,
+          ticketNotFound: true,
+        );
       } else {
         final fallbackFields = <String, String>{
           'TicketID': resolvedTicketId,
@@ -413,6 +437,9 @@ class LansweeperSyncService {
           warnings: warnings,
           failedStep: 'EditTicket',
           rawPayloads: rawPayloads,
+          ticketNotFound:
+              !ticketCreatedHere &&
+              isTicketNotFoundMessage(stateResult.message),
         );
       }
     }
@@ -690,6 +717,15 @@ class LansweeperSyncService {
     }
     return 'Ολοκληρώθηκαν: ${completedSteps.join(', ')}.';
   }
+
+  /// Λέει το μήνυμα του Lansweeper ότι το αίτημα δεν υπάρχει;
+  ///
+  /// Το API δεν δίνει κωδικό σφάλματος, μόνο κείμενο — και το ίδιο κείμενο
+  /// επιστρέφουν και το `AddNote` («…The creation was unsuccessful») και το
+  /// `EditTicket` («…The update was unsuccessful»). Γι' αυτό ταιριάζει μόνο η
+  /// κοινή αρχή, χωρίς διάκριση πεζών-κεφαλαίων.
+  static bool isTicketNotFoundMessage(String? message) =>
+      (message ?? '').toLowerCase().contains('no ticket found');
 
   /// Ο τίτλος που γεννά μόνη της η εφαρμογή όταν κανείς δεν έγραψε δικό του.
   ///

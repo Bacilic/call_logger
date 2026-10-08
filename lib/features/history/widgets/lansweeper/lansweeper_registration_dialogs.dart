@@ -14,7 +14,10 @@ Future<bool> showLansweeperResubmitConfirmDialog(BuildContext context) async {
     builder: (ctx) => AlertDialog(
       title: const Text('Επαναϋποβολή'),
       content: const Text(
-        'Η κλήση έχει ήδη κύριο Ticket ID. Θέλεις να γίνει νέα καταχώρηση;',
+        'Η κλήση είναι ήδη συνδεδεμένη με αίτημα του Lansweeper. Η αποστολή '
+        'θα συμπληρώσει εκείνο το αίτημα — δεν ανοίγει νέο.\n\n'
+        'Για νέο αίτημα, κάνε πρώτα «Επαναφορά σε ακαταχώρητη» και διάλεξε '
+        '«Νέο αίτημα».',
       ),
       actions: [
         TextButton(
@@ -33,6 +36,12 @@ Future<bool> showLansweeperResubmitConfirmDialog(BuildContext context) async {
 
 /// Ο αριθμός γίνεται σύνδεσμος επειδή ο χρήστης καλείται να **αποφασίσει** για
 /// αυτό το ticket: για να κρίνει αν το κρατά, θέλει να δει τι είναι.
+///
+/// Τα κουμπιά λένε τι θα κάνει η **επόμενη αποστολή**, όχι τι παθαίνει ο
+/// αριθμός. Τα παλιά «Διατήρηση id» / «Μηδενισμός id» διαβάζονταν ως «κράτα
+/// το για ιστορικό» / «σβήσ' το από παντού» — και έστελναν τη δουλειά σε
+/// αίτημα που ο χρήστης είχε σβήσει από το Lansweeper. Το ιστορικό tickets της
+/// κλήσης μένει ανέπαφο και με τις δύο επιλογές· γι' αυτό το λέει ρητά.
 Future<UnsentTicketChoice?> showLansweeperUnsentTicketChoiceDialog(
   BuildContext context, {
   required String storedTicket,
@@ -43,10 +52,18 @@ Future<UnsentTicketChoice?> showLansweeperUnsentTicketChoiceDialog(
     builder: (ctx) => AlertDialog(
       title: const Text('Ακαταχώρητη κλήση'),
       content: LansweeperTicketRichText(
-        leadingText: 'Η κλήση έχει καταχωρηθεί με id: ',
+        leadingText: 'Η κλήση είναι συνδεδεμένη με το αίτημα ',
         ticketId: storedTicket,
         ticketViewUrlTemplate: ticketViewUrlTemplate,
-        trailingText: ' στο Lansweeper.\n\nΤι θέλεις να γίνει με το ticket id;',
+        trailingText:
+            ' του Lansweeper.\n\n'
+            'Πού να πάει η επόμενη αποστολή;\n'
+            '• Νέο αίτημα — αν το $storedTicket σβήστηκε ή αφορά άλλο '
+            'περιστατικό.\n'
+            '• Ίδιο αίτημα — αν το $storedTicket υπάρχει ακόμη και θέλεις να '
+            'συμπληρωθεί.\n\n'
+            'Σε κάθε περίπτωση το $storedTicket μένει στο ιστορικό tickets της '
+            'κλήσης.',
         style: Theme.of(ctx).textTheme.bodyMedium,
       ),
       actions: [
@@ -55,16 +72,51 @@ Future<UnsentTicketChoice?> showLansweeperUnsentTicketChoiceDialog(
           child: const Text('Άκυρο'),
         ),
         OutlinedButton(
-          onPressed: () => Navigator.of(ctx).pop(UnsentTicketChoice.clear),
-          child: const Text('Μηδενισμός id'),
+          onPressed: () => Navigator.of(ctx).pop(UnsentTicketChoice.retain),
+          child: Text('Ίδιο αίτημα ($storedTicket)'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(ctx).pop(UnsentTicketChoice.retain),
-          child: const Text('Διατήρηση id'),
+          onPressed: () => Navigator.of(ctx).pop(UnsentTicketChoice.clear),
+          child: const Text('Νέο αίτημα'),
         ),
       ],
     ),
   );
+}
+
+/// Το κρατημένο αίτημα δεν υπάρχει πια στο Lansweeper. `true` = αποστολή ως
+/// νέο αίτημα.
+///
+/// Ερώτηση και όχι αυτόματη κίνηση: το ίδιο μήνυμα του Lansweeper βγαίνει και
+/// από λάθος αριθμό ή από αίτημα που δεν φαίνεται στον λογαριασμό του API, και
+/// τότε ένα αθόρυβο νέο αίτημα θα ήταν διπλό.
+Future<bool> showLansweeperTicketNotFoundDialog(
+  BuildContext context, {
+  required String ticketId,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Το αίτημα δεν βρέθηκε'),
+      content: Text(
+        'Το Lansweeper απάντησε ότι το αίτημα $ticketId δεν υπάρχει — '
+        'πιθανότατα σβήστηκε από εκεί.\n\n'
+        'Να σταλεί η κλήση ως νέο αίτημα; Το $ticketId μένει στο ιστορικό '
+        'tickets της κλήσης.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Όχι'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('Νέο αίτημα'),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
 }
 
 /// Ο αριθμός γίνεται σύνδεσμος επειδή η απόφαση «πρόσθεση ή αλλαγή id» απαιτεί

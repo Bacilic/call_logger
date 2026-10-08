@@ -41,6 +41,7 @@ class LansweeperSubmitInput {
     this.config,
     this.requesterUsername,
     this.attachToTicketId,
+    this.forceNewTicket = false,
   });
 
   final String title;
@@ -68,6 +69,28 @@ class LansweeperSubmitInput {
   /// εκκρεμότητα αυτής της κλήσης έχει ήδη αίτημα, και εκείνος αποφάσισε ότι
   /// πρόκειται για την ίδια δουλειά.
   final String? attachToTicketId;
+
+  /// Ανοίγει νέο αίτημα ακόμη κι όταν η κλήση κρατά αριθμό αιτήματος.
+  ///
+  /// Γεμίζει **μόνο** όταν ο χρήστης το ζήτησε, αφού το Lansweeper απάντησε ότι
+  /// το κρατημένο αίτημα δεν υπάρχει. Ο παλιός αριθμός δεν σβήνεται από πουθενά:
+  /// μένει στο ιστορικό tickets της κλήσης, και ο νέος παίρνει τη θέση του
+  /// κύριου μόλις καταχωρηθεί.
+  final bool forceNewTicket;
+
+  LansweeperSubmitInput asNewTicket() => LansweeperSubmitInput(
+    title: title,
+    notes: notes,
+    solution: solution,
+    agentUsername: agentUsername,
+    refinedSource: refinedSource,
+    durationSeconds: durationSeconds,
+    customFieldValues: customFieldValues,
+    targetTicketState: targetTicketState,
+    config: config,
+    requesterUsername: requesterUsername,
+    forceNewTicket: true,
+  );
 }
 
 class LansweeperCommandResult {
@@ -81,9 +104,14 @@ class LansweeperCommandResult {
     this.warnings = const <String>[],
     this.completedSteps = const <String>[],
     this.failedStep,
+    this.ticketNotFound = false,
   });
 
   final bool success;
+
+  /// Το κρατημένο αίτημα δεν υπάρχει πια στο Lansweeper — η οθόνη προσφέρει
+  /// αποστολή ως νέο, αντί για σκέτο τεχνικό σφάλμα.
+  final bool ticketNotFound;
   final String message;
   final String? ticketId;
 
@@ -170,7 +198,9 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       // ότι η δουλειά ανήκει στο αίτημα μιας εκκρεμότητας αυτής της κλήσης,
       // εκείνο ενημερώνεται αντί να ανοίξει δεύτερο για το ίδιο πρόβλημα.
       final attachTo = input.attachToTicketId?.trim() ?? '';
-      final existingTicketIdRaw = attachTo.isNotEmpty
+      final existingTicketIdRaw = input.forceNewTicket
+          ? ''
+          : attachTo.isNotEmpty
           ? attachTo
           : (call.lansweeperMainTicketId ?? '').trim();
       final existingTicketId = existingTicketIdRaw.isEmpty
@@ -364,6 +394,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         warnings: result.warnings,
         completedSteps: result.completedSteps,
         failedStep: result.failedStep,
+        ticketNotFound: result.ticketNotFound,
         failureReport: _buildFailureReport(
           stage: result.failedStep ?? 'workflow',
           callId: callId,

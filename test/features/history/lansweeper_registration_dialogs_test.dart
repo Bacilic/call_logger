@@ -86,6 +86,49 @@ void main() {
     });
   });
 
+  group('showLansweeperTicketNotFoundDialog', () {
+    testWidgets('«Νέο αίτημα» δίνει true', (tester) async {
+      bool? result;
+
+      await _pumpDialogHost(
+        tester,
+        onOpen: (context) async {
+          result = await showLansweeperTicketNotFoundDialog(
+            context,
+            ticketId: '18151',
+          );
+        },
+      );
+      await _openDialog(tester);
+
+      expect(find.text('Το αίτημα δεν βρέθηκε'), findsOneWidget);
+      await tester.tap(find.text('Νέο αίτημα'));
+      await pumpUntilSettled(tester);
+
+      expect(result, isTrue);
+    });
+
+    testWidgets('«Όχι» δίνει false', (tester) async {
+      bool? result;
+
+      await _pumpDialogHost(
+        tester,
+        onOpen: (context) async {
+          result = await showLansweeperTicketNotFoundDialog(
+            context,
+            ticketId: '18151',
+          );
+        },
+      );
+      await _openDialog(tester);
+
+      await tester.tap(find.text('Όχι'));
+      await pumpUntilSettled(tester);
+
+      expect(result, isFalse);
+    });
+  });
+
   group('σύνδεσμος ticket στους διαλόγους απόφασης', () {
     // Και στους δύο ο χρήστης καλείται να αποφασίσει ΓΙΑ αυτό το ticket, οπότε
     // ο αριθμός πρέπει να το ανοίγει: αλλιώς αποφασίζει στα τυφλά.
@@ -179,7 +222,9 @@ void main() {
   });
 
   group('showLansweeperUnsentTicketChoiceDialog', () {
-    testWidgets('εμφανίζει storedTicket και επιστρέφει clear', (tester) async {
+    testWidgets('εμφανίζει storedTicket και το «Νέο αίτημα» δίνει clear', (
+      tester,
+    ) async {
       UnsentTicketChoice? result;
 
       await _pumpDialogHost(
@@ -196,13 +241,13 @@ void main() {
       expect(find.text('Ακαταχώρητη κλήση'), findsOneWidget);
       expect(find.textContaining('#17132'), findsOneWidget);
 
-      await tester.tap(find.text('Μηδενισμός id'));
+      await tester.tap(find.text('Νέο αίτημα'));
       await pumpUntilSettled(tester);
 
       expect(result, UnsentTicketChoice.clear);
     });
 
-    testWidgets('«Διατήρηση id» δίνει retain', (tester) async {
+    testWidgets('«Ίδιο αίτημα» δίνει retain', (tester) async {
       UnsentTicketChoice? result;
 
       await _pumpDialogHost(
@@ -216,7 +261,7 @@ void main() {
       );
       await _openDialog(tester);
 
-      await tester.tap(find.text('Διατήρηση id'));
+      await tester.tap(find.text('Ίδιο αίτημα (999)'));
       await pumpUntilSettled(tester);
 
       expect(result, UnsentTicketChoice.retain);
