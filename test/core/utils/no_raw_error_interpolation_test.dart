@@ -12,6 +12,11 @@ const _guardedRelativePaths = <String>[
   // δημιουργία βάσης, ενώ η δίδυμη οθόνη σφάλματος μετέφραζε σωστά.
   'lib/features/settings/widgets/pending_reset_database_screen.dart',
   'lib/features/dictionary/screens/dictionary_manager_screen.dart',
+  // Προστέθηκαν 11/10/2026: τα μηνύματα της οθόνης λεξικού μετακόμισαν εδώ
+  // με τη διάσπασή της — χωρίς αυτές τις γραμμές ο φρουρός θα έχανε σιωπηλά
+  // ό,τι φύλαγε.
+  'lib/features/dictionary/screens/dictionary_manager_actions.dart',
+  'lib/features/dictionary/widgets/add_custom_words_dialog.dart',
   'lib/features/history/widgets/lansweeper_report_dialog.dart',
   'lib/features/history/widgets/audit_entity_side_panel.dart',
   'lib/features/history/widgets/application_audit_tab.dart',

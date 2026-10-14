@@ -68,6 +68,44 @@ class DateParserUtil {
     return (DateTimeRange(start: actualStart, end: actualEnd), null);
   }
 
+  /// Μία ημερομηνία από πεδίο που δέχεται **μόνο** ημερομηνία.
+  ///
+  /// Δέχεται τη μορφή αποθήκευσης (`2026-03-05`) και ό,τι δέχεται και το
+  /// πεδίο εύρους για μία μέρα (`5/3/2026`, `5/3/26`, `5/3`). Κενό → (null,
+  /// null). Ημερομηνία που δεν υπάρχει ή κείμενο που δεν είναι ημερομηνία →
+  /// μήνυμα· ποτέ σιωπηλή «διόρθωση» του 31/02 σε 3 Μαρτίου.
+  static (DateTime?, String?) parseSingleDate(String input) {
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return (null, null);
+
+    final iso = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(trimmed);
+    if (iso != null) {
+      return _validDate(
+        int.parse(iso.group(1)!),
+        int.parse(iso.group(2)!),
+        int.parse(iso.group(3)!),
+      );
+    }
+    // Όπως στο πεδίο εύρους: χωρίς «/» δεν είναι ημερομηνία (ένας σκέτος
+    // αριθμός δεν διαβάζεται σιωπηλά ως «η 5η του μήνα»).
+    if (!RegExp(r'^\d{1,2}[/\\]\d{1,2}([/\\]\d+)?$').hasMatch(trimmed)) {
+      return (null, invalidDateMessage);
+    }
+    final now = DateTime.now();
+    return _parseCluster(trimmed, now.year, now.month);
+  }
+
+  /// Μήνυμα για κείμενο που δεν είναι ημερομηνία.
+  static const String invalidDateMessage = 'Μη έγκυρη ημερομηνία.';
+
+  static (DateTime?, String?) _validDate(int year, int month, int day) {
+    final res = DateTime(year, month, day);
+    if (res.year != year || res.month != month || res.day != day) {
+      return (null, 'Δεν υπάρχει αυτή η μέρα');
+    }
+    return (res, null);
+  }
+
   /// Επιστρέφει (DateTime?, errorMessage?).
   /// 3 ψηφία έτους -> "Μη έγκυρο έτος".
   /// Άκυρη ημέρα -> "Δεν υπάρχει αυτή η μέρα".

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -13,174 +12,18 @@ import '../../../core/database/database_init_result.dart';
 import '../../../core/providers/app_instances_provider.dart';
 import '../../../core/services/app_instance_registry.dart';
 import '../../../core/services/crash_log_service.dart';
-import '../../../core/services/profile_settings.dart';
-import '../../../core/services/scoped_settings.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/raw_error_details_tile.dart';
 import '../models/database_stats.dart';
+import '../models/database_table_catalog.dart';
 import '../providers/database_browser_stats_provider.dart';
+import '../providers/database_browser_zoom_provider.dart';
 import '../services/database_stats_service.dart';
 import '../widgets/database_label_dialog.dart';
 import '../widgets/database_stats_card.dart';
 import '../widgets/table_preview_grid.dart';
 
-/// Αποθηκευμένο επίπεδο μεγέθυνσης ανά πίνακα προεπισκόπησης (0.5–2.0· προεπιλογή 1.0).
-///
-/// **Προσωπικό**: πόσο μεγάλα διαβάζει κανείς είναι δικό του θέμα. Όσο γραφόταν
-/// κατευθείαν στα κοινά — παρά το ότι το κλειδί ήταν δηλωμένο προσωπικό —
-/// ρυθμίζοντας το ζουμ το άλλαζες και για τον συνάδελφο.
-///
-/// **Ζει όσο η εφαρμογή, όχι όσο η οθόνη.** Η φόρτωση ξεκινά από το `initState`,
-/// πριν προλάβει το πρώτο build να αρχίσει να παρακολουθεί, και η εναλλαγή
-/// βάσης μπορεί να ξηλώσει την οθόνη ενόσω τρέχει: με `autoDispose` ο
-/// αποθηκευτής πέθαινε στο πρώτο await και η εγγραφή της τιμής έσκαγε, οπότε
-/// το ζουμ του χρήστη γύριζε σιωπηλά στο 100%.
-final databaseBrowserZoomByTableProvider =
-    NotifierProvider<DatabaseBrowserZoomByTableNotifier, Map<String, double>>(
-      DatabaseBrowserZoomByTableNotifier.new,
-    );
-
-class DatabaseBrowserZoomByTableNotifier extends Notifier<Map<String, double>> {
-  @override
-  Map<String, double> build() => {};
-
-  /// Φόρτωση του ζουμ του τρέχοντος χρήστη (καλείται κατά το άνοιγμα της οθόνης).
-  Future<void> load() async {
-    try {
-      final raw = await ScopedSettings.getString(
-        ProfileSettingKeys.databaseBrowserPreviewZoomByTable,
-      );
-      if (!ref.mounted) return;
-      if (raw == null || raw.trim().isEmpty) {
-        state = {};
-        return;
-      }
-      final decoded = jsonDecode(raw) as Map<String, dynamic>;
-      final out = <String, double>{};
-      for (final e in decoded.entries) {
-        final z = (e.value as num?)?.toDouble();
-        if (z == null) continue;
-        final clamped = z.clamp(0.5, 2.0);
-        if ((clamped - 1.0).abs() >= 0.001) {
-          out[e.key] = clamped;
-        }
-      }
-      state = out;
-    } catch (e, stack) {
-      // Το zoom είναι προαιρετική άνεση — η οθόνη συνεχίζει με 100%,
-      // αλλά το σφάλμα (π.χ. χαλασμένο JSON) αφήνει ίχνος στο ημερολόγιο.
-      CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
-      if (ref.mounted) state = {};
-    }
-  }
-
-  double zoomFor(String tableName) => state[tableName] ?? 1.0;
-
-  Future<void> _persist(Map<String, double> snapshot) async {
-    await ScopedSettings.setString(
-      ProfileSettingKeys.databaseBrowserPreviewZoomByTable,
-      jsonEncode(snapshot),
-    );
-  }
-
-  Future<void> setZoomForTable(String tableName, double zoom) async {
-    final z = zoom.clamp(0.5, 2.0);
-    final next = Map<String, double>.from(state);
-    if ((z - 1.0).abs() < 0.001) {
-      next.remove(tableName);
-    } else {
-      next[tableName] = z;
-    }
-    state = next;
-    try {
-      await _persist(next);
-    } catch (e, stack) {
-      // Η προβολή έχει ήδη το νέο zoom — μόνο η αποθήκευση απέτυχε.
-      CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
-    }
-  }
-
-  Future<void> zoomOutFor(String tableName) {
-    return setZoomForTable(tableName, zoomFor(tableName) - 0.1);
-  }
-
-  Future<void> zoomInFor(String tableName) {
-    return setZoomForTable(tableName, zoomFor(tableName) + 0.1);
-  }
-
-  Future<void> resetFor(String tableName) {
-    return setZoomForTable(tableName, 1.0);
-  }
-}
-
-/// Αγγλικά ονόματα πινάκων → φιλικά ελληνικά για το UI.
-const Map<String, String> _kTableDisplayNames = {
-  'app_settings': 'Ρυθμίσεις εφαρμογής',
-  'tasks': 'Εκκρεμότητες',
-  'calls': 'Κλήσεις',
-  'users': 'Χρήστες',
-  'equipment': 'Εξοπλισμός',
-  'departments': 'Τμήματα',
-  'categories': 'Κατηγορίες',
-  'audit_log': 'Αρχείο καταγραφής (audit)',
-  'phones': 'Τηλέφωνα',
-  'user_phones': 'Συσχέτιση χρήστη–τηλεφώνου',
-  'department_phones': 'Συσχέτιση τμήματος–τηλεφώνου',
-  'user_equipment': 'Συσχέτιση χρήστη–εξοπλισμού',
-  'knowledge_base': 'Βάση Γνώσης',
-  'remote_tools': 'Εργαλεία απομακρυσμένης επιφάνειας',
-  'remote_tool_args': 'Ορίσματα απομακρυσμένου εργαλείου',
-  'user_dictionary': 'Προσωπικό λεξικό',
-  'full_dictionary': 'Πλήρες λεξικό (συσσωρευτής)',
-};
-
-String _displayNameForTable(String tableName) =>
-    _kTableDisplayNames[tableName] ?? tableName;
-
-/// Σειρά πινάκων όπως η πλευρική μπάρα της εφαρμογής: Κλήσεις → Εκκρεμότητες →
-/// Κατάλογος → (Ιστορικό: ίδια δεδομένα με `calls`) → ρυθμίσεις/εποπτεία.
-const List<String> _kMenuTableOrder = [
-  // Κλήσεις
-  'calls',
-  'categories',
-  // Εκκρεμότητες
-  'tasks',
-  // Κατάλογος
-  'users',
-  'departments',
-  'equipment',
-  'phones',
-  'user_phones',
-  'department_phones',
-  'user_equipment',
-  // Βάση Δεδομένων / λοιπά
-  'app_settings',
-  'audit_log',
-  'knowledge_base',
-  'remote_tools',
-  'remote_tool_args',
-  'user_dictionary',
-  'full_dictionary',
-];
-
-List<String> _orderedTableNames(List<String> raw) {
-  final orderMap = {
-    for (var i = 0; i < _kMenuTableOrder.length; i++) _kMenuTableOrder[i]: i,
-  };
-  final copy = List<String>.from(raw);
-  copy.sort((a, b) {
-    final ia = orderMap[a];
-    final ib = orderMap[b];
-    if (ia != null && ib != null) return ia.compareTo(ib);
-    if (ia != null) return -1;
-    if (ib != null) return 1;
-    return a.compareTo(b);
-  });
-  return copy;
-}
-
-/// Οθόνη Βάσης Δεδομένων: λίστα πινάκων και προεπισκόπηση σε μορφή πίνακα (Excel-like).
 /// Πόσο ύψος κρατούν πάντα οι λίστες πινάκων, όσο κι αν ψηλώσει η κεφαλίδα.
 ///
 /// Χωρίς αυτό το δάπεδο η κάρτα στατιστικών σε στενό παράθυρο έσπρωχνε τις
@@ -195,6 +38,7 @@ const double _kMinTableListHeight = 200;
 /// ταυτότητα της βάσης θα εξαφανιζόταν εντελώς.
 const double _kMinHeaderShare = 0.35;
 
+/// Οθόνη Βάσης Δεδομένων: λίστα πινάκων και προεπισκόπηση σε μορφή πίνακα (Excel-like).
 class DatabaseBrowserScreen extends ConsumerStatefulWidget {
   const DatabaseBrowserScreen({
     super.key,
@@ -629,7 +473,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     // Επιλεγμένος πίνακας: εμφάνιση προεπισκόψης (Excel-like)
     if (_selectedTable != null) {
       final selected = _selectedTable!;
-      final displayName = _displayNameForTable(selected);
+      final displayName = databaseTableDisplayName(selected);
       final tableZoom = zoomByTable[selected] ?? 1.0;
 
       return Column(
@@ -784,7 +628,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     }
 
     // Λίστα πινάκων: δύο στήλες, σειρά όπως το μενού (μισά αριστερά, μισά δεξιά).
-    final ordered = _orderedTableNames(_tableNames);
+    final ordered = orderDatabaseTableNames(_tableNames);
     final mid = (ordered.length + 1) ~/ 2;
     final left = ordered.sublist(0, mid);
     final right = ordered.sublist(mid);
@@ -879,7 +723,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     AsyncValue<DatabaseStats> statsAsync,
   ) {
     final theme = Theme.of(context);
-    final display = _displayNameForTable(name);
+    final display = databaseTableDisplayName(name);
     final stats = statsAsync.asData?.value;
     final count = stats?.rowCountsByTable[name];
     final grey = theme.colorScheme.onSurfaceVariant.withValues(

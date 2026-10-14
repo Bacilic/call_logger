@@ -410,4 +410,176 @@ void main() {
       expect(summary.sparklineSnoozes, [0, 2, 0, 0, 1, 0, 0]);
     });
   });
+
+  group('ΦΩΤΟΓΡΑΦΙΑ — ολόκληρη η αναφορά', () {
+    // Μικτό σύνολο: κάθε προέλευση, κάθε κατάσταση, μία ακυρωμένη, παλιές
+    // εγγραφές πριν από το διάστημα. Όλες οι ημερομηνίες είναι περασμένες,
+    // οπότε και οι μετρήσεις «τώρα» δεν εξαρτώνται από το πότε τρέχει.
+    Future<void> seedMixedWeek() async {
+      String history(List<DateTime> moments) => jsonEncode([
+        for (final m in moments)
+          {'snoozedAt': m.toIso8601String(), 'dueAt': m.toIso8601String()},
+      ]);
+      Future<int> insert(Map<String, Object?> values) => db.insert('tasks', {
+        'title': 'Εκκρεμότητα',
+        'is_deleted': 0,
+        ...values,
+      });
+
+      await insert({
+        'status': 'open',
+        'origin': 'manual_fab',
+        'created_at': DateTime(2026, 3, 2, 10).toIso8601String(),
+        'updated_at': DateTime(2026, 3, 2, 10).toIso8601String(),
+        'due_date': DateTime(2026, 3, 3, 9).toIso8601String(),
+        'snooze_history_json': history([DateTime(2026, 3, 2, 12)]),
+      });
+      await insert({
+        'status': 'closed',
+        'origin': 'call_linked',
+        'created_at': DateTime(2026, 3, 1, 9).toIso8601String(),
+        'updated_at': DateTime(2026, 3, 3, 15).toIso8601String(),
+        'completed_at': DateTime(2026, 3, 3, 15).toIso8601String(),
+        'due_date': DateTime(2026, 3, 2, 9).toIso8601String(),
+      });
+      await insert({
+        'status': 'snoozed',
+        'origin': 'quick_add',
+        'created_at': DateTime(2026, 3, 4, 8).toIso8601String(),
+        'updated_at': DateTime(2026, 3, 4, 8).toIso8601String(),
+        'due_date': DateTime(2026, 3, 10, 9).toIso8601String(),
+        'snooze_history_json': history([
+          DateTime(2026, 3, 4, 9),
+          DateTime(2026, 3, 6, 9),
+        ]),
+      });
+      await insert({
+        'status': 'open',
+        'origin': null,
+        'created_at': DateTime(2026, 3, 5, 11).toIso8601String(),
+        'updated_at': DateTime(2026, 3, 5, 11).toIso8601String(),
+      });
+      final cancelledId = await insert({
+        'status': 'open',
+        'origin': 'call_linked',
+        'created_at': DateTime(2026, 3, 3, 10).toIso8601String(),
+        'updated_at': DateTime(2026, 3, 3, 10).toIso8601String(),
+        'due_date': DateTime(2026, 3, 4, 10).toIso8601String(),
+        'is_deleted': 1,
+      });
+      await db.insert('audit_log', {
+        'entity_type': AuditEntityTypes.task,
+        'entity_id': cancelledId,
+        'action': DatabaseHelper.auditActionDelete,
+        'timestamp': DateTime(2026, 3, 6, 9).toIso8601String(),
+      });
+      await insert({
+        'status': 'closed',
+        'origin': 'manual_fab',
+        'created_at': DateTime(2026, 2, 10, 9).toIso8601String(),
+        'updated_at': DateTime(2026, 3, 2, 16).toIso8601String(),
+        'completed_at': DateTime(2026, 3, 2, 16).toIso8601String(),
+      });
+      await insert({
+        'status': 'open',
+        'origin': '',
+        'created_at': DateTime(2026, 2, 15, 9).toIso8601String(),
+        'updated_at': DateTime(2026, 2, 15, 9).toIso8601String(),
+        'due_date': DateTime(2026, 2, 16, 9).toIso8601String(),
+      });
+    }
+
+    test('κάθε αριθμός, ποσοστό και καμπύλη μένει ίδιος', () async {
+      await seedMixedWeek();
+
+      final s = await repo.getTaskAnalytics(
+        DateTimeRange(start: DateTime(2026, 3, 1), end: DateTime(2026, 3, 7)),
+      );
+
+      final dump = [
+        'range ${s.rangeStart.toIso8601String()} ${s.rangeEnd.toIso8601String()}',
+        'active ${s.activeNowCount} ${s.activeCreatedInRangeCount}',
+        'created ${s.createdInRangeCount} closed ${s.closedInRangeCount} '
+            'cancelled ${s.cancelledInRangeCount}',
+        'overdue ${s.overdueActiveCount} ${s.overdueInRangeCount} '
+            '${s.overdueRateActive.toStringAsFixed(3)} '
+            '${s.overdueRateRange.toStringAsFixed(3)}',
+        'rates ${s.completionRateInRange.toStringAsFixed(3)} '
+            '${s.cancellationRateInRange.toStringAsFixed(3)}',
+        'avg ${s.avgCompletionSeconds.toStringAsFixed(1)} '
+            '${s.avgSnoozesPerTask.toStringAsFixed(3)}',
+        for (final o in s.originDistribution)
+          'origin ${o.origin} ${o.label} ${o.count} '
+              '${o.percent.toStringAsFixed(3)}',
+        for (final b in s.backlogGrowth)
+          'backlog ${b.date.day} ${b.createdCount} ${b.closedCount} '
+              '${b.delta} ${b.runningDelta}',
+        'spark active ${s.sparklineActive}',
+        'spark closed ${s.sparklineClosed}',
+        'spark cancelled ${s.sparklineCancelled}',
+        'spark overdue ${s.sparklineOverdue}',
+        'spark snoozes ${s.sparklineSnoozes}',
+      ];
+
+      expect(dump, [
+        'range 2026-03-01T00:00:00.000 2026-03-07T00:00:00.000',
+        'active 4 3',
+        'created 4 closed 2 cancelled 1',
+        'overdue 3 3 75.000 75.000',
+        'rates 20.000 20.000',
+        'avg 973800.0 0.750',
+        'origin call_linked Από κλήση 1 25.000',
+        'origin legacy Legacy 1 25.000',
+        'origin manual_fab Χειροκίνητη 1 25.000',
+        'origin quick_add Quick add 1 25.000',
+        'backlog 1 1 0 1 1',
+        'backlog 2 1 1 0 1',
+        'backlog 3 0 1 -1 0',
+        'backlog 4 1 0 1 1',
+        'backlog 5 1 0 1 2',
+        'backlog 6 0 0 0 2',
+        'backlog 7 0 0 0 2',
+        'spark active [1.0, 1.0, 0.0, 1.0, 2.0, 2.0, 2.0]',
+        'spark closed [0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0]',
+        'spark cancelled [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]',
+        'spark overdue [1.0, 2.0, 2.0, 3.0, 3.0, 2.0, 2.0]',
+        'spark snoozes [0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]',
+      ]);
+    });
+
+    // Η καμπύλη ξεκινά από το μηδέν και δεν κατεβαίνει κάτω από αυτό: ένα
+    // κλείσιμο πριν από κάθε άνοιγμα της εβδομάδας δεν αφήνει ίχνος.
+    test('η καμπύλη ενεργών δεν πέφτει κάτω από το μηδέν', () async {
+      await db.insert('tasks', {
+        'title': 'Παλιά, έκλεισε την πρώτη μέρα',
+        'status': 'closed',
+        'created_at': DateTime(2026, 2, 1, 9).toIso8601String(),
+        'updated_at': DateTime(2026, 3, 1, 10).toIso8601String(),
+        'completed_at': DateTime(2026, 3, 1, 10).toIso8601String(),
+        'is_deleted': 0,
+      });
+      await db.insert('tasks', {
+        'title': 'Νέα, άνοιξε τη δεύτερη μέρα',
+        'status': 'open',
+        'created_at': DateTime(2026, 3, 2, 9).toIso8601String(),
+        'updated_at': DateTime(2026, 3, 2, 9).toIso8601String(),
+        'is_deleted': 0,
+      });
+
+      final s = await repo.getTaskAnalytics(
+        DateTimeRange(start: DateTime(2026, 3, 1), end: DateTime(2026, 3, 7)),
+      );
+
+      expect(s.sparklineActive, [0, 1, 1, 1, 1, 1, 1]);
+    });
+
+    test('το εύρος ημερομηνιών δημιουργίας', () async {
+      await seedMixedWeek();
+
+      final span = await repo.getTaskCreationDateSpan();
+
+      expect(span.start, DateTime(2026, 2, 10));
+      expect(span.end, DateTime(2026, 3, 5));
+    });
+  });
 }

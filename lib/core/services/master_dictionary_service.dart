@@ -229,7 +229,6 @@ class MasterDictionaryService {
         language ?? DictionaryRepository.detectDictionaryLanguage(displayWord);
     final d = await _dict();
     await d.upsertFullFromUserDraft(
-      normalizedKey: normalizedKey,
       displayWord: displayWord,
       category: category,
       language: lang,

@@ -1,5 +1,5 @@
 import 'package:call_logger/features/lamp/controllers/lamp_search_controller.dart';
-import 'package:call_logger/features/lamp/widgets/lamp_result_card.dart';
+import 'package:call_logger/features/lamp/models/lamp_equipment_view_model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

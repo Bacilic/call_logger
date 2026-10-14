@@ -4,6 +4,7 @@ import 'package:call_logger/core/services/crash_log_service.dart';
 import 'package:call_logger/core/services/log_record.dart';
 import 'package:call_logger/core/services/session_liveness_mark.dart';
 import 'package:call_logger/core/services/station_name.dart';
+import 'package:call_logger/core/services/station_shutdown_request.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../test_reporter.dart';
@@ -520,6 +521,117 @@ void main() {
       );
       expect(() => broken.onStartup(retentionCount: 14), throwsA(anything));
       expect(broken.onShutdown, returnsNormally);
+    });
+  });
+
+  group('Σημάδι ζωής — ο παλμός του λεπτού', () {
+    late DateTime clock;
+    late CrashLogService live;
+
+    setUp(() {
+      clock = fixedNow;
+      live = CrashLogService(
+        logsDirectory: logsDir.path,
+        appVersion: '0.22.2-test',
+        now: () => clock,
+        instanceId: thisInstance,
+        databaseFileName: 'hospital.db',
+      );
+    });
+
+    SessionLivenessMark readMark() =>
+        SessionLivenessMark.decode(lockFile().readAsStringSync())!;
+
+    File requestFile() => File(
+      '${logsDir.path}${Platform.pathSeparator}'
+      '${shutdownRequestFileNameFor(StationName.fileSafe, thisInstance)}',
+    );
+
+    Future<void> sendRequest() async {
+      final sent = await writeShutdownRequest(
+        logsDirectory: logsDir.path,
+        toStation: StationName.fileSafe,
+        toInstance: thisInstance,
+        request: StationShutdownRequest(
+          fromStation: 'ΣΥΝΑΔΕΛΦΟΣ',
+          requestedAt: clock,
+          immediate: false,
+          database: 'hospital.db',
+        ),
+      );
+      expect(sent, isTrue);
+    }
+
+    test('κάθε παλμός ανανεώνει την ώρα στο ίχνος, όχι την έναρξη', () async {
+      await live.onStartup(retentionCount: 14);
+      clock = fixedNow.add(const Duration(minutes: 7));
+
+      await live.pulseForTest();
+
+      final mark = readMark();
+      expect(mark.lastSeen, fixedNow.add(const Duration(minutes: 7)));
+      expect(mark.startedAt, fixedNow);
+      expect(mark.database, 'hospital.db');
+    });
+
+    test(
+      'η ανάθεση ακροατή το δηλώνει στο ίχνος αμέσως, χωρίς παλμό',
+      () async {
+        await live.onStartup(retentionCount: 14);
+        expect(readMark().listensForShutdownRequests, isFalse);
+
+        live.onShutdownRequested = (_) async {};
+
+        expect(readMark().listensForShutdownRequests, isTrue);
+
+        live.onShutdownRequested = null;
+
+        expect(readMark().listensForShutdownRequests, isFalse);
+      },
+    );
+
+    test('χωρίς ακροατή το σημείωμα κλεισίματος μένει ανέγγιχτο', () async {
+      await live.onStartup(retentionCount: 14);
+      await sendRequest();
+
+      await live.pulseForTest();
+
+      expect(requestFile().existsSync(), isTrue);
+    });
+
+    test('το σημείωμα σβήνεται ΠΡΙΝ εκτελεστεί το κλείσιμο', () async {
+      await live.onStartup(retentionCount: 14);
+      await sendRequest();
+      StationShutdownRequest? received;
+      bool? fileExistedWhileHandling;
+      live.onShutdownRequested = (request) async {
+        received = request;
+        fileExistedWhileHandling = requestFile().existsSync();
+      };
+
+      await live.pulseForTest();
+
+      expect(received?.fromStation, 'ΣΥΝΑΔΕΛΦΟΣ');
+      expect(fileExistedWhileHandling, isFalse);
+      expect(requestFile().existsSync(), isFalse);
+    });
+
+    test('χωρίς δίσκο ο παλμός δεν αγγίζει ίχνος ούτε σημείωμα', () async {
+      await live.onStartup(retentionCount: 14);
+      await sendRequest();
+      final before = lockFile().readAsStringSync();
+      var handled = false;
+      live.onShutdownRequested = (_) async => handled = true;
+      final afterListen = lockFile().readAsStringSync();
+      live.disableDiskForTest('δοκιμή');
+      clock = fixedNow.add(const Duration(minutes: 3));
+
+      await live.pulseForTest();
+
+      expect(afterListen, isNot(before));
+      expect(lockFile().readAsStringSync(), afterListen);
+      expect(handled, isFalse);
+      expect(requestFile().existsSync(), isTrue);
     });
   });
 }

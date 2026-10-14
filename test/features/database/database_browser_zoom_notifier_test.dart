@@ -9,7 +9,7 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/services/crash_log_service.dart';
 import 'package:call_logger/core/services/profile_settings.dart';
-import 'package:call_logger/features/database/screens/database_browser_screen.dart';
+import 'package:call_logger/features/database/providers/database_browser_zoom_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

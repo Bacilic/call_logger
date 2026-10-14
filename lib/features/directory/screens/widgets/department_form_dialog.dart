@@ -1,3 +1,21 @@
+// ΑΞΙΟΛΟΓΗΘΗΚΕ ΓΙΑ ΔΙΑΣΠΑΣΗ — Η ΦΟΡΜΑ ΜΕΝΕΙ ΩΣ ΕΧΕΙ (11/10/2026).
+//
+// Ρόλος: ένας — τα πεδία της φόρμας τμήματος και η κατάστασή τους: Όνομα,
+// Είδος, κοινόχρηστα, Κτίριο/Όροφος/Ομάδα, Χρώμα, Σημειώσεις, λογαριασμοί
+// Lansweeper, το τι φαίνεται ανάλογα με το Είδος, και η αρχική φωτογραφία των
+// τιμών για τον έλεγχο «άλλαξε κάτι;».
+//
+// Γιατί δεν διασπάστηκε: όλα τα πεδία μοιράζονται την ίδια κατάσταση — την
+// αρχική φωτογραφία και το επιλεγμένο Είδος, που κρύβει και δείχνει ολόκληρες
+// ενότητες — και τα ίδια πεδία τα διαβάζουν ο φρουρός κλεισίματος και η
+// αποθήκευση. Ό,τι απαντούσε σε δικό του ερώτημα ζει ήδη σε δικό του αρχείο:
+// φρουρός κλεισίματος, κοινόχρηστα, αποθήκευση, ερωτήσεις χάρτη, κατασκευή
+// μοντέλου, σύγκρουση ονόματος, τα «κουτάκια» της φόρμας.
+//
+// Τι θα το άλλαζε: ερώτημα βάσης ή κανόνας επιχείρησης γραμμένος εδώ (αντί σε
+// repository/υπηρεσία), υπολογισμός που μπορεί να γραφτεί χωρίς τη φόρμα, ή
+// αυτοτελές widget/διάλογος με δική του κατάσταση — τότε ξαναξετάζεται.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,7 +29,6 @@ import '../../services/kind_change_consequences.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/directory_support.dart';
-import '../../../../core/widgets/compact_tooltip.dart';
 import '../../../../core/widgets/dialog_scrollable_content.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
@@ -29,59 +46,13 @@ import '../../services/catalog_validation_service.dart';
 import 'catalog_validation_hint_text.dart';
 import 'department_color_palette.dart';
 import 'department_color_picker_dialog.dart';
+import 'department_form_chips.dart';
 import 'department_form_dismiss_guard.dart';
 import 'department_form_save.dart';
 import 'department_form_shared_links.dart';
 import 'department_palette_actions.dart';
 import 'department_palette_host.dart';
 import 'department_palette_store.dart';
-
-const _kDepartmentDistinctSuffixLetters = <String>[
-  'Α',
-  'Β',
-  'Γ',
-  'Δ',
-  'Ε',
-  'Ζ',
-  'Η',
-  'Θ',
-  'Ι',
-  'Κ',
-  'Λ',
-  'Μ',
-  'Ν',
-  'Ξ',
-  'Ο',
-  'Π',
-  'Ρ',
-  'Σ',
-  'Τ',
-  'Υ',
-  'Φ',
-  'Χ',
-  'Ψ',
-  'Ω',
-];
-
-/// Παράδειγμα διακριτού ονόματος τμήματος (π.χ. «Μαγειρείο Α») όταν υπάρχει σύγκρουση.
-String suggestDistinctDepartmentNameExample(String name) {
-  final base = name.trim();
-  if (base.isEmpty) return 'Τμήμα Α';
-  final lookup = LookupService.instance;
-  for (final letter in _kDepartmentDistinctSuffixLetters) {
-    final candidate = '$base $letter';
-    if (lookup.findDepartmentByName(candidate) == null) {
-      return candidate;
-    }
-  }
-  for (var i = 2; i <= 99; i++) {
-    final candidate = '$base $i';
-    if (lookup.findDepartmentByName(candidate) == null) {
-      return candidate;
-    }
-  }
-  return '$base Α';
-}
 
 /// Διάλογος προσθήκης / επεξεργασίας / αντιγράφου τμήματος.
 class DepartmentFormDialog extends ConsumerStatefulWidget {
@@ -1429,144 +1400,5 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
         ),
       ),
     );
-  }
-}
-
-/// Chip κοινόχρηστου τηλεφώνου/εξοπλισμού: ενεργό, νεοπροστεθέν ή προς αφαίρεση.
-/// Chip λογαριασμού Lansweeper με σήμανση εγκυρότητας:
-/// 🟩 έγκυρο · 🟧 έγκυρο με ύποπτο τομέα (διαφέρει από του πράκτορα) ·
-/// 🟥 άκυρο, με το ΣΤΟΧΕΥΜΕΝΟ λάθος στο tooltip (οικονομία χώρου — δεν
-/// υπάρχει πια συγκεντρωτικό κόκκινο κείμενο κάτω από τα chips).
-///
-/// Κλικ στο σώμα = επεξεργασία (το κείμενο επιστρέφει στο πεδίο)· το X
-/// παραμένει η αφαίρεση.
-class LansweeperAccountChip extends StatelessWidget {
-  const LansweeperAccountChip({
-    super.key,
-    required this.account,
-    required this.referenceDomain,
-    required this.onEdit,
-    required this.onRemove,
-  });
-
-  final LansweeperAccount account;
-
-  /// Τομέας αναφοράς για την πορτοκαλί υποψία (βλ.
-  /// [lansweeperReferenceDomain]) — null = χωρίς μέτρο σύγκρισης.
-  final String? referenceDomain;
-  final VoidCallback onEdit;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final diagnosis = diagnoseLansweeperIdentity(account.username);
-    final mismatch = diagnosis.isValid
-        ? lansweeperDomainMismatchHint(account.username, referenceDomain)
-        : null;
-
-    final Color background;
-    final String statusLine;
-    if (!diagnosis.isValid) {
-      background = Colors.red.shade100;
-      statusLine = diagnosis.suggestion == null
-          ? diagnosis.problem!
-          : '${diagnosis.problem!}\n${diagnosis.suggestion!}';
-    } else if (mismatch != null) {
-      background = Colors.orange.shade100;
-      statusLine = mismatch;
-    } else {
-      background = Colors.lightGreen.shade100;
-      statusLine = diagnosis.kind == LansweeperIdentityKind.email
-          ? 'Έγκυρο email'
-          : 'Έγκυρο αναγνωριστικό τομέα';
-    }
-
-    return CompactTooltip(
-      message:
-          '$statusLine\n\nΚλικ για επεξεργασία — το κείμενο '
-          'επιστρέφει στο πεδίο',
-      waitDuration: const Duration(milliseconds: 350),
-      child: InputChip(
-        label: Text(account.toInputText()),
-        backgroundColor: background,
-        onPressed: onEdit,
-        deleteIcon: const Icon(Icons.cancel),
-        deleteButtonTooltipMessage: 'Διαγραφή',
-        onDeleted: onRemove,
-      ),
-    );
-  }
-}
-
-class RemovableSharedChip extends StatelessWidget {
-  const RemovableSharedChip({
-    super.key,
-    required this.label,
-    required this.isNewlyAdded,
-    required this.isPendingRemoval,
-    required this.onToggle,
-    this.onPressed,
-    this.diagnosis = CatalogChipDiagnosis.ok,
-  });
-
-  final String label;
-  final bool isNewlyAdded;
-  final bool isPendingRemoval;
-  final VoidCallback onToggle;
-
-  /// Προαιρετικό κλικ στο σώμα του chip (π.χ. «φέρε το προς επεξεργασία»).
-  /// Το X παραμένει η διαγραφή/αναίρεση, ανεξάρτητα από αυτό.
-  final VoidCallback? onPressed;
-
-  /// Πόσο ύποπτη είναι η τιμή. Φοριέται ως **εικονίδιο**, όχι ως φόντο: το
-  /// φόντο μιλά ήδη για την κατάσταση του chip (πράσινο = μόλις προστέθηκε,
-  /// κόκκινο = θα αφαιρεθεί) και δύο νοήματα στο ίδιο χρώμα θα ακύρωναν
-  /// και τα δύο.
-  final CatalogChipDiagnosis diagnosis;
-
-  @override
-  Widget build(BuildContext context) {
-    final chip = InputChip(
-      onPressed: onPressed,
-      avatar: _severityIcon(),
-      label: Text(
-        label,
-        style: isPendingRemoval
-            ? const TextStyle(decoration: TextDecoration.lineThrough)
-            : null,
-      ),
-      backgroundColor: isPendingRemoval
-          ? Colors.red.shade100
-          : (isNewlyAdded ? Colors.lightGreen.shade100 : null),
-      deleteIcon: Icon(isPendingRemoval ? Icons.undo : Icons.cancel),
-      deleteButtonTooltipMessage: isPendingRemoval
-          ? 'Θα αφαιρεθεί στην αποθήκευση — κλικ για επαναφορά'
-          : 'Διαγραφή',
-      onDeleted: onToggle,
-    );
-
-    if (!diagnosis.hasRemark) return chip;
-    return CompactTooltip(
-      message: diagnosis.message,
-      waitDuration: const Duration(milliseconds: 350),
-      child: chip,
-    );
-  }
-
-  /// Το σπάνιο ψιθυρίζει, το απίθανο μιλά — καμία ένδειξη για το συνηθισμένο.
-  Widget? _severityIcon() {
-    return switch (diagnosis.severity) {
-      CatalogChipSeverity.ok => null,
-      CatalogChipSeverity.suspicious => Icon(
-        Icons.info_outline,
-        size: 18,
-        color: Colors.orange.shade800,
-      ),
-      CatalogChipSeverity.wrong => Icon(
-        Icons.error_outline,
-        size: 18,
-        color: Colors.red.shade700,
-      ),
-    };
   }
 }

@@ -189,6 +189,47 @@ void main() {
 
       await finishInteraction(tester);
     });
+
+    testWidgets(
+      'η αλλαγή χειριστή αδειάζει την επιλογή — η μόνιμη διαγραφή δεν '
+      'φτάνει σε εγγραφές που δεν φαίνονται',
+      (tester) async {
+        await pumpAuditTab(tester);
+
+        // Η πρώτη γραμμή είναι του «tester»· το κουτάκι 0 είναι το «όλα».
+        await tester.tap(find.byType(Checkbox).at(1));
+        await tester.pumpAndSettle();
+        expect(find.text('Επιλεγμένες: 1'), findsOneWidget);
+
+        await tester.tap(performerField());
+        await tester.pumpAndSettle();
+        await tester.enterText(performerField(), 'Βασίλ');
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('1 εγγραφές'), findsOneWidget);
+        expect(find.text('Επιλεγμένες: 0'), findsOneWidget);
+
+        await finishInteraction(tester);
+      },
+    );
+  });
+
+  test('κάθε πεδίο του φίλτρου μετρά στη σύγκριση «άλλαξε το φίλτρο;»', () {
+    const base = AuditFilterModel(keyword: 'α');
+    expect(base.copyWith(), base, reason: 'ίδιο φίλτρο, ίδια επιλογή');
+    final variants = <String, AuditFilterModel>{
+      'λέξη-κλειδί': base.copyWith(keyword: 'β'),
+      'ενέργεια': base.copyWith(action: 'ΔΗΜΙΟΥΡΓΙΑ'),
+      'τύπος': base.copyWith(entityType: AuditEntityTypes.user),
+      'χειριστής': base.copyWith(userPerforming: 'Βασίλης'),
+      'από': base.copyWith(dateFrom: DateTime(2026, 1, 1)),
+      'έως': base.copyWith(dateTo: DateTime(2026, 1, 2)),
+    };
+    for (final e in variants.entries) {
+      expect(e.value == base, isFalse, reason: e.key);
+    }
   });
 
   group('ApplicationAuditTab autocomplete φίλτρα', () {

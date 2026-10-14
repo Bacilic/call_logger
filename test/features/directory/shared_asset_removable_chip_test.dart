@@ -2,7 +2,7 @@
 //
 //   flutter test test/features/directory/shared_asset_removable_chip_test.dart
 
-import 'package:call_logger/features/directory/screens/widgets/department_form_dialog.dart';
+import 'package:call_logger/features/directory/screens/widgets/department_form_chips.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

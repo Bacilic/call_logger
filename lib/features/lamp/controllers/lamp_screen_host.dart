@@ -9,7 +9,7 @@ import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/lamp_network_issue_resolution_service.dart';
 import '../../../core/database/old_database/old_excel_importer.dart';
 import '../services/lamp_migration_service.dart';
-import '../widgets/lamp_result_card.dart';
+import '../models/lamp_equipment_view_model.dart';
 
 /// Κοινή κατάσταση και υπηρεσίες που μοιράζονται οι controllers της Λάμπας.
 class LampScreenShared {

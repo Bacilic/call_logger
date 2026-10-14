@@ -10,6 +10,18 @@ import 'database_helper.dart';
 import 'directory_support.dart';
 
 /// Persistence εξοπλισμού (`equipment`, `user_equipment`).
+///
+/// **Αξιολογήθηκε για διάσπαση (13/10/2026) — μένει ως έχει.** Ένας ρόλος:
+/// ό,τι γράφεται και διαβάζεται για τον εξοπλισμό και τους κατόχους του —
+/// αναγνώσεις, αναφορές σε κλήσεις/εκκρεμότητες, τμήμα, σύνδεση/αποσύνδεση
+/// κατόχων, ενημέρωση καρτέλας με φρουρό διένεξης, μαζικά, διαγραφή/επαναφορά.
+/// Δεν χωρίζεται γιατί οι εγγραφές κατόχων και καρτέλας μοιράζονται τα ίδια
+/// εργαλεία (κάτοχοι, στιγμιότυπα Ιστορικού, αποτύπωμα κατόχων). Η σύνοψη
+/// μαζικής διαγραφής ζει ήδη χωριστά· τα ερωτήματα των εργαλείων απομακρυσμένης
+/// σύνδεσης μένουν εδώ γιατί διαβάζουν τον πίνακα του εξοπλισμού.
+///
+/// **Η ετυμηγορία παύει να ισχύει** αν μπει εδώ κώδικας εμφάνισης, καθαρός
+/// υπολογισμός χωρίς βάση, ή δουλειά πινάκων που δεν αφορούν εξοπλισμό.
 class EquipmentRepository {
   EquipmentRepository(this.db, {DirectorySupport? support})
     : _support = support ?? DirectorySupport(db);
@@ -716,17 +728,19 @@ class EquipmentRepository {
     );
   }
 
+  /// Αντιγράφει τις συνδέσεις εξοπλισμού σε νέο υπάλληλο — συνδέσεις και
+  /// Ιστορικό σε **μία** συναλλαγή, ώστε να μη μείνει σύνδεση χωρίς ίχνος.
   Future<void> copyUserEquipmentLinks(int fromUserId, int toUserId) async {
     if (fromUserId == toUserId) return;
-    final rows = await db.query(
-      'user_equipment',
-      columns: ['equipment_id'],
-      where: 'user_id = ?',
-      whereArgs: [fromUserId],
-    );
-    if (rows.isEmpty) return;
-    final beforeEq = await _equipmentIdsForUser(db, toUserId);
     await db.transaction((txn) async {
+      final rows = await txn.query(
+        'user_equipment',
+        columns: ['equipment_id'],
+        where: 'user_id = ?',
+        whereArgs: [fromUserId],
+      );
+      if (rows.isEmpty) return;
+      final beforeEq = await _equipmentIdsForUser(txn, toUserId);
       for (final r in rows) {
         final eid = r['equipment_id'] as int?;
         if (eid == null) continue;
@@ -735,11 +749,9 @@ class EquipmentRepository {
           'equipment_id': eid,
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
-    });
-    final afterEq = await _equipmentIdsForUser(db, toUserId);
-    final added = afterEq.difference(beforeEq);
-    if (added.isEmpty) return;
-    await db.transaction((txn) async {
+      final afterEq = await _equipmentIdsForUser(txn, toUserId);
+      final added = afterEq.difference(beforeEq);
+      if (added.isEmpty) return;
       final ap = _support.auditPerformingUser();
       final uSnap = await _linkedEquipmentSnapshotsForUser(txn, toUserId);
       final uRow = await _support.userRowById(txn, toUserId);
@@ -1137,6 +1149,12 @@ class EquipmentRepository {
       final code = codeRows.isEmpty
           ? null
           : (codeRows.first['code_equipment'] as String?)?.trim();
+      final lostOwners = await _support.describeLostUsersInTxn(
+        txn,
+        linkTable: 'user_equipment',
+        linkColumn: 'equipment_id',
+        id: id,
+      );
       await txn.delete(
         'user_equipment',
         where: 'equipment_id = ?',
@@ -1152,7 +1170,10 @@ class EquipmentRepository {
         txn,
         action: DatabaseHelper.auditActionDelete,
         userPerforming: user,
-        details: 'equipment id=$id',
+        details: DirectorySupport.mergeAuditDetailLines(
+          'equipment id=$id',
+          lostOwners,
+        ),
         entityType: AuditEntityTypes.equipment,
         entityId: id,
         entityName: code != null && code.isNotEmpty ? code : null,

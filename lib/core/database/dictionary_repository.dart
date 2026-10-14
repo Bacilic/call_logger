@@ -301,15 +301,7 @@ class DictionaryRepository {
       final m = LexiconWordMetrics.compute(w);
       row['letters_count'] = m.lettersCount;
       row['diacritic_mark_count'] = m.diacriticMarkCount;
-      final dupRows = await db.rawQuery(
-        'SELECT id, word FROM ${AppConfig.fullDictionaryTable} WHERE word = ? AND id != ? LIMIT 2',
-        [w, id],
-      );
-      if (dupRows.isNotEmpty) {
-        throw Exception(
-          'Η λέξη "$w" υπάρχει ήδη στο λεξικό. Χρησιμοποίησε διαφορετική μορφή ή διέγραψε πρώτα την υπάρχουσα εγγραφή.',
-        );
-      }
+      await _ensureWordFree(w, exceptId: id);
     }
     await db.update(
       AppConfig.fullDictionaryTable,
@@ -319,24 +311,42 @@ class DictionaryRepository {
     );
   }
 
+  /// Μια λέξη του Πλήρους Λεξικού δεν αντικαθιστά σιωπηλά άλλη: η στήλη
+  /// `word` είναι μοναδική, και η αντικατάσταση θα έσβηνε κατηγορία και
+  /// προέλευση της υπάρχουσας.
+  Future<void> _ensureWordFree(String word, {int? exceptId}) async {
+    final dupRows = await db.rawQuery(
+      'SELECT id FROM ${AppConfig.fullDictionaryTable} '
+      'WHERE word = ? AND id != ? LIMIT 1',
+      [word, exceptId ?? -1],
+    );
+    if (dupRows.isNotEmpty) {
+      throw Exception(
+        'Η λέξη "$word" υπάρχει ήδη στο λεξικό. Χρησιμοποίησε διαφορετική μορφή ή διέγραψε πρώτα την υπάρχουσα εγγραφή.',
+      );
+    }
+  }
+
+  /// Προάγει πρόχειρη λέξη στο Πλήρες Λεξικό, με κλειδί από τη **νέα**
+  /// ορθογραφία — όπως η μετονομασία λέξης που είναι ήδη εκεί.
   Future<void> upsertFullFromUserDraft({
-    required String normalizedKey,
     required String displayWord,
     required String category,
     required String language,
     String source = 'user',
   }) async {
     final w = displayWord.trim();
+    await _ensureWordFree(w);
     final m = LexiconWordMetrics.compute(w);
     await db.insert(AppConfig.fullDictionaryTable, {
       'word': w,
-      'normalized_word': normalizedKey,
+      'normalized_word': DictionaryService.canonicalLexiconKey(w),
       'source': source,
       'language': language,
       'category': category,
       'letters_count': m.lettersCount,
       'diacritic_mark_count': m.diacriticMarkCount,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
   }
 
   Future<List<String>> getDictionaryExportDisplayLinesOrdered() async {

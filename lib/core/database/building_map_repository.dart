@@ -23,6 +23,23 @@ class BuildingMapRepository {
     _updateDepartment = fn;
   }
 
+  /// Οι τρέχουσες τιμές των [columns] του τμήματος — για στιγμιότυπο
+  /// αναίρεσης πριν από μια ενέργεια χάρτη. Κενό αν το τμήμα δεν υπάρχει.
+  Future<Map<String, Object?>> readDepartmentColumns(
+    int departmentId,
+    Iterable<String> columns,
+  ) async {
+    final rows = await db.query(
+      'departments',
+      columns: columns.toList(),
+      where: 'id = ?',
+      whereArgs: [departmentId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return const {};
+    return Map<String, Object?>.from(rows.first);
+  }
+
   /// Πυρήνας «τοποθέτησης χάρτη» (χωρίς `floor_id`, `color`): οι στήλες
   /// με τις προεπιλογές τους όταν αφαιρείται εντελώς το τμήμα από τον χάρτη.
   static const Map<String, dynamic> _kBuildingMapPlacementClearedDefaults =

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../models/department_model.dart';
 import '../../screens/widgets/department_color_palette.dart';
+import '../building_map_draft_geometry.dart';
 import '../building_map_geometry.dart';
 import '../building_map_label_layout.dart';
 import '../building_map_sheet_export_key.dart';
@@ -72,7 +73,6 @@ class _BuildingMapSheetViewportState
   /// Μετατόπιση εργαλειοθήκης (από σύρσιμο χρήστη).
   Offset _toolbarDragOffset = Offset.zero;
 
-  static const double _kMinDraftSize = 0.005;
   static const Duration _kLabelDoubleTapGap = Duration(milliseconds: 400);
   static const double _kLabelDoubleTapSlopPx = 28;
 
@@ -111,56 +111,6 @@ class _BuildingMapSheetViewportState
   CustomMouseCursor? _nativeSelectHandCursor;
   CustomMouseCursor? _nativeDrawCrossCursor;
   CustomMouseCursor? _nativeGrabCursor;
-
-  Rect _resolvePencilHitRect({
-    required Rect raw,
-    required Rect textRect,
-    required Size canvasSize,
-  }) {
-    const edgePadding = 4.0;
-    const textGap = 3.0;
-    bool rectOutOfBounds(Rect r) {
-      return r.left < edgePadding ||
-          r.top < edgePadding ||
-          r.right > (canvasSize.width - edgePadding) ||
-          r.bottom > (canvasSize.height - edgePadding);
-    }
-
-    final inlineTop = textRect.center.dy - (raw.height / 2);
-    final inlineRect = Rect.fromLTWH(
-      textRect.right + textGap,
-      inlineTop,
-      raw.width,
-      raw.height,
-    );
-
-    var desiredLeft = inlineRect.left;
-    var desiredTop = inlineRect.top;
-
-    // Ειδικός κανόνας μόνο όταν η default inline θέση βγαίνει εκτός καμβά.
-    if (rectOutOfBounds(inlineRect)) {
-      desiredLeft = textRect.right - raw.width;
-      desiredTop = textRect.top - raw.height - textGap;
-      if (desiredTop < edgePadding) {
-        desiredTop = textRect.bottom + textGap;
-      }
-    }
-
-    final maxLeft = math.max(
-      edgePadding,
-      canvasSize.width - raw.width - edgePadding,
-    );
-    final maxTop = math.max(
-      edgePadding,
-      canvasSize.height - raw.height - edgePadding,
-    );
-    return Rect.fromLTWH(
-      desiredLeft.clamp(edgePadding, maxLeft).toDouble(),
-      desiredTop.clamp(edgePadding, maxTop).toDouble(),
-      raw.width,
-      raw.height,
-    );
-  }
 
   /// Δεν επιτρέπεται [FocusNode.dispose] μέσα στο [FocusNode.notifyListeners] (blur, ✓ που αρπάζει focus).
   void _scheduleDisposeMapNameField(TextEditingController? c, FocusNode? f) {
@@ -352,57 +302,13 @@ class _BuildingMapSheetViewportState
   }
 
   bool _hasDraftChanges(DepartmentModel dept, DraftDepartmentShape draft) {
-    if ((dept.mapFloor ?? '') != widget.sheetStr) return true;
-    if (!dept.isMapped) return true;
-
-    bool approxEq(double? a, double? b) {
-      if (a == null && b == null) return true;
-      if (a == null || b == null) return false;
-      return (a - b).abs() < 1e-5;
-    }
-
-    if (!approxEq(dept.mapX, draft.x)) return true;
-    if (!approxEq(dept.mapY, draft.y)) return true;
-    if (!approxEq(dept.mapWidth, draft.width)) return true;
-    if (!approxEq(dept.mapHeight, draft.height)) return true;
-    if (!approxEq(dept.mapRotation, draft.rotation)) return true;
-
-    final labelOffsetX = dept.mapLabelOffsetX ?? 0.0;
-    final draftLabelOffsetX = draft.labelOffsetX ?? 0.0;
-    if (!approxEq(labelOffsetX, draftLabelOffsetX)) return true;
-
-    final labelOffsetY = dept.mapLabelOffsetY ?? 0.0;
-    final draftLabelOffsetY = draft.labelOffsetY ?? 0.0;
-    if (!approxEq(labelOffsetY, draftLabelOffsetY)) return true;
-
-    final anchorOffsetX = dept.mapAnchorOffsetX ?? 0.0;
-    final draftAnchorOffsetX = draft.anchorOffsetX ?? 0.0;
-    if (!approxEq(anchorOffsetX, draftAnchorOffsetX)) return true;
-
-    final anchorOffsetY = dept.mapAnchorOffsetY ?? 0.0;
-    final draftAnchorOffsetY = draft.anchorOffsetY ?? 0.0;
-    if (!approxEq(anchorOffsetY, draftAnchorOffsetY)) return true;
-
-    if (!approxEq(
-      effectiveMapLabelFontScale(dept.mapLabelFontScale),
-      draft.labelFontScale,
+    if (draftShapeDiffersFromSaved(
+      dept: dept,
+      draft: draft,
+      sheetStr: widget.sheetStr,
     )) {
       return true;
     }
-
-    if (!approxEq(
-      effectiveMapLabelWidth(dept.mapLabelWidth),
-      draft.labelWidth,
-    )) {
-      return true;
-    }
-    if (!approxEq(
-      effectiveMapLabelHeight(dept.mapLabelHeight),
-      draft.labelHeight,
-    )) {
-      return true;
-    }
-
     String? edited;
     if (_mapDisplayNameEditing &&
         _mapDisplayNameDeptId == dept.id &&
@@ -587,320 +493,12 @@ class _BuildingMapSheetViewportState
     if (mounted) setState(() {});
   }
 
-  Offset _rotateAroundCenter(Offset point, Offset center, double radians) {
-    final dx = point.dx - center.dx;
-    final dy = point.dy - center.dy;
-    final c = math.cos(radians);
-    final s = math.sin(radians);
-    return Offset(
-      center.dx + (dx * c) - (dy * s),
-      center.dy + (dx * s) + (dy * c),
-    );
-  }
-
-  Offset _pointOnRotatedRectBoundaryToward({
-    required Rect rect,
-    required double rotation,
-    required Offset targetPoint,
-  }) {
-    final center = rect.center;
-    final targetLocal = _rotateAroundCenter(targetPoint, center, -rotation);
-    final vx = targetLocal.dx - center.dx;
-    final vy = targetLocal.dy - center.dy;
-    if (vx == 0 && vy == 0) {
-      return _rotateAroundCenter(Offset(center.dx, rect.top), center, rotation);
-    }
-    final halfW = rect.width / 2;
-    final halfH = rect.height / 2;
-    final sx = vx == 0 ? double.infinity : (halfW / vx.abs());
-    final sy = vy == 0 ? double.infinity : (halfH / vy.abs());
-    final s = math.min(sx, sy);
-    final edgeLocal = Offset(center.dx + (vx * s), center.dy + (vy * s));
-    return _rotateAroundCenter(edgeLocal, center, rotation);
-  }
-
-  Offset _draftLabelCenter(DraftDepartmentShape draft, Size canvasSize) {
-    return Offset(
-      (draft.x + (draft.width / 2)) * canvasSize.width +
-          ((draft.labelOffsetX ?? 0.0) * canvasSize.width),
-      (draft.y + (draft.height / 2)) * canvasSize.height +
-          ((draft.labelOffsetY ?? 0.0) * canvasSize.height),
-    );
-  }
-
-  Offset _draftAnchorPoint(DraftDepartmentShape draft, Size canvasSize) {
-    final rect = Rect.fromLTWH(
-      draft.x * canvasSize.width,
-      draft.y * canvasSize.height,
-      draft.width * canvasSize.width,
-      draft.height * canvasSize.height,
-    );
-    if (draft.anchorOffsetX != null && draft.anchorOffsetY != null) {
-      return Offset(
-        rect.center.dx + (draft.anchorOffsetX! * canvasSize.width),
-        rect.center.dy + (draft.anchorOffsetY! * canvasSize.height),
-      );
-    }
-    final labelCenter = _draftLabelCenter(draft, canvasSize);
-    return _pointOnRotatedRectBoundaryToward(
-      rect: rect,
-      rotation: draft.rotation,
-      targetPoint: labelCenter,
-    );
-  }
-
-  DraftDepartmentShape _resizeLabelBoxFromHandle({
-    required DraftDepartmentShape startDraft,
-    required EditHandleType handle,
-    required Offset localPositionCanvas,
-    required Size canvasSize,
-    required double sheetRotationRad,
-    required String labelText,
-  }) {
-    final minWidth = computeMinMapLabelBoxWidthForText(labelText);
-    final sheetCenter = Offset(canvasSize.width / 2, canvasSize.height / 2);
-    final labelCenter = _rotateAroundCenter(
-      _draftLabelCenter(startDraft, canvasSize),
-      sheetCenter,
-      sheetRotationRad,
-    );
-    var newW = startDraft.labelWidth;
-    var newH = startDraft.labelHeight;
-    switch (handle) {
-      case EditHandleType.labelBoxTopLeft:
-        newW = math.max(
-          minWidth,
-          2 * (labelCenter.dx - localPositionCanvas.dx),
-        );
-        newH = math.max(
-          kBuildingMapLabelMinHeight,
-          2 * (labelCenter.dy - localPositionCanvas.dy),
-        );
-        break;
-      case EditHandleType.labelBoxTopRight:
-        newW = math.max(
-          minWidth,
-          2 * (localPositionCanvas.dx - labelCenter.dx),
-        );
-        newH = math.max(
-          kBuildingMapLabelMinHeight,
-          2 * (labelCenter.dy - localPositionCanvas.dy),
-        );
-        break;
-      case EditHandleType.labelBoxBottomLeft:
-        newW = math.max(
-          minWidth,
-          2 * (labelCenter.dx - localPositionCanvas.dx),
-        );
-        newH = math.max(
-          kBuildingMapLabelMinHeight,
-          2 * (localPositionCanvas.dy - labelCenter.dy),
-        );
-        break;
-      case EditHandleType.labelBoxBottomRight:
-        newW = math.max(
-          minWidth,
-          2 * (localPositionCanvas.dx - labelCenter.dx),
-        );
-        newH = math.max(
-          kBuildingMapLabelMinHeight,
-          2 * (localPositionCanvas.dy - labelCenter.dy),
-        );
-        break;
-      default:
-        break;
-    }
-    return startDraft.copyWith(
-      labelWidth: newW.clamp(minWidth, 2000.0),
-      labelHeight: newH.clamp(kBuildingMapLabelMinHeight, 2000.0),
-    );
-  }
-
-  EditHandleType _hitTestDraftHandle(
-    DraftDepartmentShape draft,
-    Offset localPosition,
-    Size canvasSize,
-    double sheetRotationRad,
-  ) {
-    final rect = Rect.fromLTWH(
-      draft.x * canvasSize.width,
-      draft.y * canvasSize.height,
-      draft.width * canvasSize.width,
-      draft.height * canvasSize.height,
-    );
-    final center = rect.center;
-    final sheetCenter = Offset(canvasSize.width / 2, canvasSize.height / 2);
-    final corners =
-        <EditHandleType, Offset>{
-          EditHandleType.topLeft: rect.topLeft,
-          EditHandleType.topRight: rect.topRight,
-          EditHandleType.bottomLeft: rect.bottomLeft,
-          EditHandleType.bottomRight: rect.bottomRight,
-        }.map((key, value) {
-          final onMap = _rotateAroundCenter(value, center, draft.rotation);
-          return MapEntry(
-            key,
-            _rotateAroundCenter(onMap, sheetCenter, sheetRotationRad),
-          );
-        });
-    const handleRadius = 12.0;
-    final labelCenter = _rotateAroundCenter(
-      _draftLabelCenter(draft, canvasSize),
-      sheetCenter,
-      sheetRotationRad,
-    );
-    final halfW = draft.labelWidth / 2;
-    final halfH = draft.labelHeight / 2;
-    final labelBoxCorners = <EditHandleType, Offset>{
-      EditHandleType.labelBoxTopLeft: labelCenter + Offset(-halfW, -halfH),
-      EditHandleType.labelBoxTopRight: labelCenter + Offset(halfW, -halfH),
-      EditHandleType.labelBoxBottomLeft: labelCenter + Offset(-halfW, halfH),
-      EditHandleType.labelBoxBottomRight: labelCenter + Offset(halfW, halfH),
-    };
-    for (final entry in labelBoxCorners.entries) {
-      if ((entry.value - localPosition).distance <= handleRadius) {
-        return entry.key;
-      }
-    }
-    if ((labelCenter - localPosition).distance <= handleRadius) {
-      return EditHandleType.label;
-    }
-    final anchorPoint = _rotateAroundCenter(
-      _draftAnchorPoint(draft, canvasSize),
-      sheetCenter,
-      sheetRotationRad,
-    );
-    if ((anchorPoint - localPosition).distance <= handleRadius) {
-      return EditHandleType.anchor;
-    }
-    for (final entry in corners.entries) {
-      if ((entry.value - localPosition).distance <= handleRadius) {
-        return entry.key;
-      }
-    }
-
-    final rotateHandle = _rotateAroundCenter(
-      _rotateAroundCenter(
-        Offset(rect.center.dx, rect.top - 24),
-        center,
-        draft.rotation,
-      ),
-      sheetCenter,
-      sheetRotationRad,
-    );
-    if ((rotateHandle - localPosition).distance <= 14) {
-      return EditHandleType.rotate;
-    }
-
-    final unrotatedLocal = inverseRotateAroundCenter(
-      localPosition,
-      canvasSize,
-      sheetRotationRad,
-    );
-    final normalizedPoint = Offset(
-      (unrotatedLocal.dx / canvasSize.width).clamp(0.0, 1.0).toDouble(),
-      (unrotatedLocal.dy / canvasSize.height).clamp(0.0, 1.0).toDouble(),
-    );
-    final localPoint = _rotateAroundCenter(
-      normalizedPoint,
-      draft.center,
-      -draft.rotation,
-    );
-    if (draft.rect.contains(localPoint)) {
-      return EditHandleType.move;
-    }
-    return EditHandleType.none;
-  }
-
-  DraftDepartmentShape _resizeDraftFromHandle({
-    required DraftDepartmentShape startDraft,
-    required EditHandleType handle,
-    required Offset currentNormalized,
-  }) {
-    final startRect = startDraft.rect;
-    final center = startDraft.center;
-    final currentLocal = _rotateAroundCenter(
-      currentNormalized,
-      center,
-      -startDraft.rotation,
-    );
-    const minEdge = _kMinDraftSize;
-
-    double left = startRect.left;
-    double top = startRect.top;
-    double right = startRect.right;
-    double bottom = startRect.bottom;
-
-    switch (handle) {
-      case EditHandleType.topLeft:
-        left = math.min(currentLocal.dx, right - minEdge);
-        top = math.min(currentLocal.dy, bottom - minEdge);
-        break;
-      case EditHandleType.topRight:
-        right = math.max(currentLocal.dx, left + minEdge);
-        top = math.min(currentLocal.dy, bottom - minEdge);
-        break;
-      case EditHandleType.bottomLeft:
-        left = math.min(currentLocal.dx, right - minEdge);
-        bottom = math.max(currentLocal.dy, top + minEdge);
-        break;
-      case EditHandleType.bottomRight:
-        right = math.max(currentLocal.dx, left + minEdge);
-        bottom = math.max(currentLocal.dy, top + minEdge);
-        break;
-      case EditHandleType.none:
-      case EditHandleType.rotate:
-      case EditHandleType.move:
-      case EditHandleType.label:
-      case EditHandleType.anchor:
-      case EditHandleType.labelBoxTopLeft:
-      case EditHandleType.labelBoxTopRight:
-      case EditHandleType.labelBoxBottomLeft:
-      case EditHandleType.labelBoxBottomRight:
-        break;
-    }
-
-    return startDraft.copyWith(
-      x: left.clamp(0.0, 1.0).toDouble(),
-      y: top.clamp(0.0, 1.0).toDouble(),
-      width: (right - left).clamp(minEdge, 1.0).toDouble(),
-      height: (bottom - top).clamp(minEdge, 1.0).toDouble(),
-    );
-  }
-
-  Offset _localToNormalized(
-    Offset localInImageStack,
-    Size box,
-    double rotationRad,
-  ) {
-    final inv = inverseRotateAroundCenter(localInImageStack, box, rotationRad);
-    final nx = (inv.dx / box.width).clamp(0.0, 1.0).toDouble();
-    final ny = (inv.dy / box.height).clamp(0.0, 1.0).toDouble();
-    return Offset(nx, ny);
-  }
-
-  bool _pointInsideDepartmentRect({
-    required Offset pointNormalized,
-    required DraftDepartmentShape departmentShape,
-  }) {
-    final localPoint = _rotateAroundCenter(
-      pointNormalized,
-      departmentShape.center,
-      -departmentShape.rotation,
-    );
-    return departmentShape.rect.contains(localPoint);
-  }
-
   DepartmentModel? _hitTestDepartmentAtLocalPosition({
     required Offset localPosition,
     required Size imageSize,
     required double rotationRad,
   }) {
-    final normalized = _localToNormalized(
-      localPosition,
-      imageSize,
-      rotationRad,
-    );
+    final normalized = localToNormalized(localPosition, imageSize, rotationRad);
     final deps = widget.activeDepartments.reversed;
     for (final dep in deps) {
       if ((dep.mapFloor ?? '') != widget.sheetStr) continue;
@@ -918,7 +516,7 @@ class _BuildingMapSheetViewportState
         height: nh,
         rotation: dep.mapRotation,
       );
-      if (_pointInsideDepartmentRect(
+      if (pointInsideDepartmentRect(
         pointNormalized: normalized,
         departmentShape: shape,
       )) {
@@ -962,7 +560,7 @@ class _BuildingMapSheetViewportState
     required DraftDepartmentShape? draft,
   }) {
     final local = event.localPosition;
-    final normalized = _localToNormalized(local, imageSize, rotationRad);
+    final normalized = localToNormalized(local, imageSize, rotationRad);
 
     if (event.buttons == kSecondaryMouseButton &&
         widget.currentSheetId != null) {
@@ -1058,7 +656,7 @@ class _BuildingMapSheetViewportState
         }
       }
 
-      final hit = _hitTestDraftHandle(draft, local, imageSize, rotationRad);
+      final hit = hitTestDraftHandle(draft, local, imageSize, rotationRad);
       if (hit == EditHandleType.none) return;
       setState(() {
         _activeHandle = hit;
@@ -1094,7 +692,7 @@ class _BuildingMapSheetViewportState
     required bool drawEnabled,
   }) {
     final local = event.localPosition;
-    final currentNorm = _localToNormalized(local, imageSize, rotationRad);
+    final currentNorm = localToNormalized(local, imageSize, rotationRad);
 
     if (toolMode == MapToolMode.draw && drawEnabled && _rubberStart != null) {
       ref
@@ -1114,94 +712,6 @@ class _BuildingMapSheetViewportState
 
     final startDraft = _editDraftStart!;
     switch (_activeHandle) {
-      case EditHandleType.move:
-        final delta = currentNorm - _editPointerStart!;
-        final newX = (startDraft.x + delta.dx)
-            .clamp(0.0, 1.0 - startDraft.width)
-            .toDouble();
-        final newY = (startDraft.y + delta.dy)
-            .clamp(0.0, 1.0 - startDraft.height)
-            .toDouble();
-        // Διατηρούμε σταθερή την απόλυτη θέση ετικέτας στον καμβά: offset − εφαρμοσμένη μετατόπιση.
-        final appliedDx = newX - startDraft.x;
-        final appliedDy = newY - startDraft.y;
-        ref
-            .read(buildingMapDraftShapeProvider.notifier)
-            .setDraft(
-              startDraft.copyWith(
-                x: newX,
-                y: newY,
-                labelOffsetX: ((startDraft.labelOffsetX ?? 0) - appliedDx)
-                    .clamp(-4.0, 4.0),
-                labelOffsetY: ((startDraft.labelOffsetY ?? 0) - appliedDy)
-                    .clamp(-4.0, 4.0),
-              ),
-            );
-        break;
-      case EditHandleType.label:
-        final centerX = startDraft.x + (startDraft.width / 2);
-        final centerY = startDraft.y + (startDraft.height / 2);
-        ref
-            .read(buildingMapDraftShapeProvider.notifier)
-            .setDraft(
-              startDraft.copyWith(
-                labelOffsetX: (currentNorm.dx - centerX)
-                    .clamp(-1.0, 1.0)
-                    .toDouble(),
-                labelOffsetY: (currentNorm.dy - centerY)
-                    .clamp(-1.0, 1.0)
-                    .toDouble(),
-              ),
-            );
-        break;
-      case EditHandleType.anchor:
-        final centerX = startDraft.x + (startDraft.width / 2);
-        final centerY = startDraft.y + (startDraft.height / 2);
-        ref
-            .read(buildingMapDraftShapeProvider.notifier)
-            .setDraft(
-              startDraft.copyWith(
-                anchorOffsetX: (currentNorm.dx - centerX)
-                    .clamp(-1.0, 1.0)
-                    .toDouble(),
-                anchorOffsetY: (currentNorm.dy - centerY)
-                    .clamp(-1.0, 1.0)
-                    .toDouble(),
-              ),
-            );
-        break;
-      case EditHandleType.rotate:
-        final center = startDraft.center;
-        final startAngle = math.atan2(
-          _editPointerStart!.dy - center.dy,
-          _editPointerStart!.dx - center.dx,
-        );
-        final currentAngle = math.atan2(
-          currentNorm.dy - center.dy,
-          currentNorm.dx - center.dx,
-        );
-        ref
-            .read(buildingMapDraftShapeProvider.notifier)
-            .setDraft(
-              startDraft.copyWith(
-                rotation: startDraft.rotation + (currentAngle - startAngle),
-              ),
-            );
-        break;
-      case EditHandleType.topLeft:
-      case EditHandleType.topRight:
-      case EditHandleType.bottomLeft:
-      case EditHandleType.bottomRight:
-        ref
-            .read(buildingMapDraftShapeProvider.notifier)
-            .setDraft(
-              _resizeDraftFromHandle(
-                startDraft: startDraft,
-                handle: _activeHandle,
-                currentNormalized: currentNorm,
-              ),
-            );
-        break;
       case EditHandleType.labelBoxTopLeft:
       case EditHandleType.labelBoxTopRight:
       case EditHandleType.labelBoxBottomLeft:
@@ -1216,7 +726,7 @@ class _BuildingMapSheetViewportState
         final labelText = selectedDept != null
             ? _effectiveMapLabelTextForDepartment(selectedDept)
             : '';
-        final resized = _resizeLabelBoxFromHandle(
+        final resized = resizeLabelBoxFromHandle(
           startDraft: startDraft,
           handle: _activeHandle,
           localPositionCanvas: local,
@@ -1232,7 +742,16 @@ class _BuildingMapSheetViewportState
               labelText: labelText,
             );
         break;
-      case EditHandleType.none:
+      default:
+        final next = dragDraftWithHandle(
+          startDraft: startDraft,
+          handle: _activeHandle,
+          pointerStartNormalized: _editPointerStart!,
+          currentNormalized: currentNorm,
+        );
+        if (next != null) {
+          ref.read(buildingMapDraftShapeProvider.notifier).setDraft(next);
+        }
         break;
     }
   }
@@ -1249,8 +768,8 @@ class _BuildingMapSheetViewportState
         _rubberStart = null;
       });
       if (draft == null ||
-          draft.width < _kMinDraftSize ||
-          draft.height < _kMinDraftSize) {
+          draft.width < kBuildingMapMinDraftSize ||
+          draft.height < kBuildingMapMinDraftSize) {
         ref.read(buildingMapDraftShapeProvider.notifier).clear();
         ref.read(buildingMapEditFromSelectionTapProvider.notifier).clear();
         return;
@@ -1384,7 +903,7 @@ class _BuildingMapSheetViewportState
       if (mapLabelLayout != null) {
         final raw = mapLabelLayout.pencilHitRect;
         final textRect = mapLabelLayout.textAndUnderlineHitRect;
-        final resolved = _resolvePencilHitRect(
+        final resolved = resolvePencilHitRect(
           raw: raw,
           textRect: textRect,
           canvasSize: sz,
@@ -1577,7 +1096,7 @@ class _BuildingMapSheetViewportState
                           builder: (context) {
                             final pencilRect =
                                 effectivePencilRect ??
-                                _resolvePencilHitRect(
+                                resolvePencilHitRect(
                                   raw: mapLabelLayout!.pencilHitRect,
                                   textRect:
                                       mapLabelLayout.textAndUnderlineHitRect,
@@ -1705,7 +1224,7 @@ class _BuildingMapSheetViewportState
                               draftShape.center.dx * sz.width,
                               draftShape.center.dy * sz.height,
                             );
-                            final screenCenter = _rotateAroundCenter(
+                            final screenCenter = rotateAroundCenter(
                               mapCenter,
                               sheetCenter,
                               effectiveRotRad,

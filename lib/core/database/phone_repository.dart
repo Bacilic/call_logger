@@ -298,6 +298,15 @@ class PhoneRepository {
         );
         if (rows.isEmpty) continue;
         final number = (rows.first['number'] as String?)?.trim() ?? '';
+        final lostLinks = [
+          ...await _support.describeLostUsersInTxn(
+            txn,
+            linkTable: 'user_phones',
+            linkColumn: 'phone_id',
+            id: id,
+          ),
+          ...await _support.describeLostDepartmentsOfPhoneInTxn(txn, id),
+        ];
         await txn.delete(
           'department_phones',
           where: 'phone_id = ?',
@@ -314,7 +323,10 @@ class PhoneRepository {
           txn,
           action: DatabaseHelper.auditActionDelete,
           userPerforming: user,
-          details: 'phones id=$id',
+          details: DirectorySupport.mergeAuditDetailLines(
+            'phones id=$id',
+            lostLinks,
+          ),
           entityType: AuditEntityTypes.phone,
           entityId: id,
           entityName: number.isEmpty ? null : number,

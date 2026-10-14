@@ -24,3 +24,15 @@ Rect normalizedRectFromCorners(Offset a, Offset b) {
   final bottom = math.max(a.dy, b.dy);
   return Rect.fromLTRB(left, top, right, bottom);
 }
+
+/// Περιστροφή σημείου γύρω από κέντρο, κατά τη φορά του καμβά.
+Offset rotateAroundCenter(Offset point, Offset center, double radians) {
+  final dx = point.dx - center.dx;
+  final dy = point.dy - center.dy;
+  final c = math.cos(radians);
+  final s = math.sin(radians);
+  return Offset(
+    center.dx + (dx * c) - (dy * s),
+    center.dy + (dx * s) + (dy * c),
+  );
+}

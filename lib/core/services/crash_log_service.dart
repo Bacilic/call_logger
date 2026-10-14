@@ -1,13 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'log_file_names.dart';
 import 'log_record.dart';
+import 'log_retention.dart';
 import 'operator_presence_heartbeat.dart';
+import 'session_liveness_keeper.dart';
 import 'session_liveness_mark.dart';
 import 'station_name.dart';
 import 'station_shutdown_request.dart';
@@ -30,6 +31,11 @@ import 'station_shutdown_request.dart';
 /// η υπηρεσία περνά σε λειτουργία **χωρίς δίσκο** ([isDiskAvailable] false)
 /// και δεν ξαναγγίζει τη διαδρομή — ούτε στη σύγχρονη καταγραφή σφαλμάτων,
 /// που τρέχει στο νήμα της διεπαφής και θα την πάγωνε σε κάθε σφάλμα.
+///
+/// **Ο μοναδικός κάτοχος του φακέλου `logs`:** αυτός κρίνει τη διαθεσιμότητα,
+/// αυτός μετακομίζει ([retargetTo]). Τρεις συνεργάτες δουλεύουν πάντα μέσα από
+/// αυτόν — [LogFileNames] (πώς λέγεται κάθε αρχείο), [LogRetention] (τι
+/// σβήνεται) και [SessionLivenessKeeper] (το ίχνος «τρέχω τώρα» και ο παλμός).
 class CrashLogService {
   CrashLogService({
     required this.logsDirectory,
@@ -57,37 +63,20 @@ class CrashLogService {
   /// ανάμεσα στην κανονική και τη δοκιμαστική έκδοση του ίδιου υπολογιστή.
   final String instanceId;
 
-  /// Το όνομα του ίχνους «τρέχω τώρα» **αυτής** της εκτέλεσης.
-  ///
-  /// Ο σταθμός μπαίνει στο όνομα επειδή ο φάκελος ζει δίπλα στη βάση, και η
-  /// βάση είναι συχνά κοινόχρηστη: ένα κοινό αρχείο θα σήμαινε ότι το άνοιγμα
-  /// του ενός υπολογιστή διαβάζει το ίχνος του άλλου ως δική του κατάρρευση —
-  /// και ότι το σβήνει, χάνοντας την ανίχνευση της πραγματικής.
-  ///
-  /// Η **εκτέλεση** μπαίνει για τον ίδιο ακριβώς λόγο, ένα επίπεδο πιο μέσα:
-  /// δύο αντίγραφα στον ίδιο υπολογιστή (η κανονική έκδοση και η δοκιμαστική)
-  /// έκαναν μεταξύ τους ό,τι έκαναν κάποτε δύο υπολογιστές μεταξύ τους.
-  /// Μπαίνει ως σύντομη αποτύπωση, γιατί η ταυτότητα είναι ολόκληρη διαδρομή
-  /// και οι διαδρομές των Windows έχουν όριο μήκους.
-  static String sessionLockFileNameFor(String station, [String instance = '']) {
-    final run = instance.trim();
-    if (run.isEmpty) return 'session_$station.lock';
-    return 'session_${station}_${instanceSlug(run)}.lock';
-  }
+  /// Το όνομα του ίχνους «τρέχω τώρα» μιας εκτέλεσης — δες
+  /// [LogFileNames.sessionLockFileNameFor].
+  static String sessionLockFileNameFor(
+    String station, [
+    String instance = '',
+  ]) => LogFileNames.sessionLockFileNameFor(station, instance);
 
-  /// Οκτώ δεκαεξαδικά ψηφία από την ταυτότητα της εκτέλεσης.
-  ///
-  /// Σταθερή αποτύπωση, όχι `hashCode`: το `hashCode` των συμβολοσειρών δεν
-  /// εγγυάται την ίδια τιμή σε άλλη έκδοση του SDK, και μια αλλαγή του θα
-  /// άφηνε το προηγούμενο ίχνος ορφανό στον κοινόχρηστο φάκελο για πάντα.
+  /// Δες [LogFileNames.instanceSlug].
   static String instanceSlug(String instanceId) =>
-      sha1.convert(utf8.encode(instanceId)).toString().substring(0, 8);
+      LogFileNames.instanceSlug(instanceId);
 
-  /// Το κοινό αρχείο της παλιάς εποχής, όταν όλοι οι σταθμοί μοιράζονταν ένα
-  /// ίχνος. **Δεν το αγγίζουμε**: σε φάκελο όπου κάποιος σταθμός τρέχει ακόμη
-  /// παλιότερη έκδοση, το αρχείο αυτό είναι ζωντανό ίχνος εκείνου. Σβήνει
-  /// μόνο του, από τον τελευταίο μη αναβαθμισμένο σταθμό που θα κλείσει.
-  static const String legacySharedSessionLockFileName = 'session.lock';
+  /// Δες [LogFileNames.legacySharedSessionLockFileName].
+  static const String legacySharedSessionLockFileName =
+      LogFileNames.legacySharedSessionLockFileName;
 
   static const String abnormalTerminationMessage =
       'Η προηγούμενη εκτέλεση δεν τερμάτισε ομαλά (πιθανή κατάρρευση χωρίς ίχνη).';
@@ -145,74 +134,43 @@ class CrashLogService {
   final int _maxDetailedRepeats;
   final int _repeatSummaryInterval;
 
+  /// Το ρολόι της υπηρεσίας — το ίδιο για κάθε συνεργάτη, ώστε τα τεστ να
+  /// ορίζουν τον χρόνο σε ένα σημείο.
+  DateTime clock() => _now();
+
   final Map<String, _DedupState> _dedupStates = {};
 
-  /// Το ίχνος αυτής της εκτέλεσης, όπως γράφτηκε τελευταία φορά.
-  SessionLivenessMark? _currentMark;
-  Timer? _livenessTimer;
+  late final SessionLivenessKeeper _liveness = SessionLivenessKeeper(this);
 
-  static String logsDirectoryForDatabasePath(String databasePath) {
-    return p.join(p.dirname(p.normalize(databasePath)), 'logs');
-  }
+  /// Δες [LogFileNames.logsDirectoryForDatabasePath].
+  static String logsDirectoryForDatabasePath(String databasePath) =>
+      LogFileNames.logsDirectoryForDatabasePath(databasePath);
 
-  /// Το ημερήσιο αρχείο: σφάλματα, εκκινήσεις και προβληματικά κλεισίματα
-  /// της ημέρας, όλων των σταθμών, με τη σειρά που συνέβησαν.
-  static String dailyLogFileName(DateTime dateTime) {
-    return '$logFilePrefix${_dateStamp(dateTime)}$logFileSuffix';
-  }
+  /// Δες [LogFileNames.dailyLogFileName].
+  static String dailyLogFileName(DateTime dateTime) =>
+      LogFileNames.dailyLogFileName(dateTime);
 
-  /// Αληθές για τα ημερήσια αρχεία της τρέχουσας μορφής.
+  /// Δες [LogFileNames.isDailyLogFileName].
   static bool isDailyLogFileName(String fileName) =>
-      _dailyLogFileName.hasMatch(fileName);
+      LogFileNames.isDailyLogFileName(fileName);
 
-  /// Η ημέρα ενός ημερήσιου αρχείου — της τρέχουσας ή της παλιάς μορφής.
-  /// `null` για κάθε άλλο αρχείο του φακέλου.
-  static DateTime? dayOfLogFile(String fileName) {
-    final match = _anyDatedLogFileName.firstMatch(fileName);
-    if (match == null) return null;
-    return DateTime(
-      int.parse(match.group(1)!),
-      int.parse(match.group(2)!),
-      int.parse(match.group(3)!),
-    );
-  }
+  /// Δες [LogFileNames.dayOfLogFile].
+  static DateTime? dayOfLogFile(String fileName) =>
+      LogFileNames.dayOfLogFile(fileName);
 
-  static String _dateStamp(DateTime dateTime) {
-    final y = dateTime.year.toString().padLeft(4, '0');
-    final m = dateTime.month.toString().padLeft(2, '0');
-    final d = dateTime.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
-  }
+  static const String logFilePrefix = LogFileNames.logFilePrefix;
+  static const String logFileSuffix = LogFileNames.logFileSuffix;
+  static const String legacyErrorLogPrefix = LogFileNames.legacyErrorLogPrefix;
+  static const String legacySessionLogPrefix =
+      LogFileNames.legacySessionLogPrefix;
 
-  static const String logFilePrefix = 'events_';
-  static const String logFileSuffix = '.jsonl';
-
-  static final RegExp _dailyLogFileName = RegExp(
-    '^$logFilePrefix'
-    r'\d{4}-\d{2}-\d{2}\.jsonl$',
-  );
-
-  /// Οι δύο οικογένειες της παλιάς μορφής κειμένου: σφάλματα και συνεδρίες σε
-  /// χωριστά αρχεία. Δεν γράφονται πια· διαβάζονται όσο ζουν και σβήνονται
-  /// όταν παλιώσουν. Σε φάκελο όπου κάποιος σταθμός τρέχει ακόμη παλιά
-  /// έκδοση, εκείνος συνεχίζει να τα γράφει — γι' αυτό σβήνονται με την
-  /// ηλικία τους, όχι όλα μαζί.
-  static const String legacyErrorLogPrefix = 'errors_';
-  static const String legacySessionLogPrefix = 'session_';
-
-  static final RegExp _legacyDailyLogFileName = RegExp(
-    '^(?:$legacyErrorLogPrefix|$legacySessionLogPrefix)'
-    r'\d{4}-\d{2}-\d{2}\.log$',
-  );
-
-  /// Αληθές για τα ημερήσια αρχεία της παλιάς μορφής κειμένου.
+  /// Δες [LogFileNames.isLegacyDailyLogFileName].
   static bool isLegacyDailyLogFileName(String fileName) =>
-      _legacyDailyLogFileName.hasMatch(fileName);
+      LogFileNames.isLegacyDailyLogFileName(fileName);
 
-  static final RegExp _anyDatedLogFileName = RegExp(
-    '^(?:$logFilePrefix|$legacyErrorLogPrefix|$legacySessionLogPrefix)'
-    r'(\d{4})-(\d{2})-(\d{2})\.(?:jsonl|log)$',
-  );
+  /// Δες [LogFileNames.legacyShutdownTracePrefix].
+  static const String legacyShutdownTracePrefix =
+      LogFileNames.legacyShutdownTracePrefix;
 
   static Future<void> initialize({
     required String databasePath,
@@ -268,7 +226,7 @@ class CrashLogService {
     // κατάρρευση που δεν έγινε ποτέ.
     if (_diskAvailable) {
       try {
-        await _removeLivenessMark();
+        await _liveness.remove();
       } catch (_) {}
     }
     logsDirectory = next;
@@ -332,198 +290,35 @@ class CrashLogService {
         (String directory) => Directory(directory).create(recursive: true);
     try {
       await create(logsDirectory).timeout(timeout);
-      await _purgeOldLogFiles(retentionCount).timeout(timeout);
-      await _reportAndReplaceLivenessMark(timeout);
+      await LogRetention.purge(
+        logsDirectory: logsDirectory,
+        retentionCount: retentionCount,
+        now: _now,
+      ).timeout(timeout);
+      await _liveness.reportAndReplace(timeout);
     } catch (error) {
       _disableDisk(error);
       rethrow;
     }
   }
 
-  /// Αναφέρει την εκτέλεση που χάθηκε, αν χάθηκε, και αφήνει το ίχνος της νέας.
-  ///
-  /// Το ίχνος που βρίσκεται εδώ είναι **μόνο** δικό μας: το όνομα του αρχείου
-  /// φέρει τον σταθμό. Ίχνη άλλων σταθμών δεν διαβάζονται και δεν σβήνονται —
-  /// ανήκουν σε εκτελέσεις που ίσως τρέχουν αυτή τη στιγμή.
-  Future<void> _reportAndReplaceLivenessMark(Duration timeout) async {
-    final lock = _sessionLockFile();
-    if (await lock.exists().timeout(timeout)) {
-      final previous = SessionLivenessMark.decode(
-        await lock.readAsString().timeout(timeout),
-      );
-      // Ίχνος που δεν διαβάζεται (αλλοιωμένο, ή γραμμένο από έκδοση που δεν
-      // κρατούσε τίποτα) εξακολουθεί να είναι είδηση: κάτι χάθηκε. Λέμε ό,τι
-      // ξέρουμε, χωρίς να εφευρίσκουμε λεπτομέρειες.
-      _recordLostRun(previous);
-    }
-    await _retireMarkFromPreviousNamingScheme(timeout);
-    _currentMark = SessionLivenessMark(
-      station: StationName.current,
-      version: appVersion,
-      startedAt: _now(),
-      lastSeen: _now(),
-      database: databaseFileName,
-      instance: instanceId.isEmpty ? null : instanceId,
-      // Το ίχνος δηλώνει ό,τι **ισχύει**, όχι ό,τι υπόσχεται η έκδοση: όσο δεν
-      // έχει δοθεί χειριστής, κανείς δεν θα δει σημείωμα, και ο αιτών πρέπει να
-      // το ξέρει αντί να μετρά αντίστροφα στο κενό.
-      listensForShutdownRequests: onShutdownRequested != null,
-    );
-    await lock
-        .writeAsString(_currentMark!.encode(), flush: true)
-        .timeout(timeout);
-  }
+  /// Ξεκινά το περιοδικό σημάδι ζωής — δες [SessionLivenessKeeper.start].
+  void startLivenessHeartbeat() => _liveness.start();
 
-  /// Μαζεύει το ίχνος που άφησε αυτό το αντίγραφο **πριν** μπει η εκτέλεση
-  /// στο όνομα του αρχείου.
-  ///
-  /// Χωρίς αυτό το `session_<σταθμός>.lock` της προηγούμενης έκδοσης δεν θα
-  /// ανοιγόταν ποτέ ξανά: θα έμενε για πάντα στον κοινόχρηστο φάκελο, και για
-  /// τρία λεπτά μετά από κάθε εκκίνηση θα περνούσε για ζωντανός συνάδελφος.
-  ///
-  /// Ο έλεγχος του σταθμού είναι απαραίτητος: το ίδιο αρχείο σε σταθμό που
-  /// τρέχει ακόμη παλιά εφαρμογή είναι **ζωντανό** ίχνος, και δεν το αγγίζουμε.
-  Future<void> _retireMarkFromPreviousNamingScheme(Duration timeout) async {
-    if (instanceId.isEmpty) return;
-    final legacy = File(
-      p.join(logsDirectory, sessionLockFileNameFor(StationName.fileSafe)),
-    );
-    try {
-      if (!await legacy.exists().timeout(timeout)) return;
-      final previous = SessionLivenessMark.decode(
-        await legacy.readAsString().timeout(timeout),
-      );
-      // Ίχνος με δηλωμένη εκτέλεση δεν ανήκει στην παλιά ονοματοδοσία — κάποιος
-      // άλλος το έγραψε εκεί, και δεν είναι δικό μας να το κρίνουμε.
-      if (previous?.instance != null) return;
-      _recordLostRun(previous);
-      await legacy.delete().timeout(timeout);
-    } catch (_) {
-      // Η εκκαθάριση είναι ευγένεια προς τον φάκελο, όχι προϋπόθεση εκκίνησης.
-    }
-  }
+  void stopLivenessHeartbeat() => _liveness.stop();
 
-  /// Ξεκινά το περιοδικό σημάδι ζωής.
-  ///
-  /// **Ρητό, όχι αυτόματο στο [onStartup]:** τα τεστ στήνουν την υπηρεσία
-  /// συνεχώς, και ένας χρονιστής που ξεκινά μόνος του θα κρεμούσε ελέγχους με
-  /// πλαστό ρολόι ή θα διέρρεε πέρα από το τέλος τους. Στην εφαρμογή καλείται
-  /// μία φορά, αμέσως μετά το άνοιγμα του ημερολογίου.
-  void startLivenessHeartbeat() {
-    stopLivenessHeartbeat();
-    if (!_diskAvailable) return;
-    _livenessTimer = Timer.periodic(livenessInterval, (_) => _pulse());
-  }
-
-  void stopLivenessHeartbeat() {
-    _livenessTimer?.cancel();
-    _livenessTimer = null;
-  }
-
-  /// Τι κάνει η εφαρμογή όταν κάποιος της ζητά να κλείσει.
-  ///
-  /// Δίνεται από έξω ώστε το ημερολόγιο να μη μάθει ποτέ τι σημαίνει «κλείσιμο
-  /// εφαρμογής»: η δουλειά του είναι τα αρχεία, και μια υπηρεσία που ξέρει και
-  /// τα δύο θα ήταν αδύνατο να ελεγχθεί χωρίς δέντρο widget.
-  ///
-  /// `null` όσο κανείς δεν ακούει — και τότε το ίχνος **δεν** δηλώνει ότι
-  /// ακούει, ώστε ο αιτών να μην περιμένει απάντηση που δεν θα έρθει.
+  /// Τι κάνει η εφαρμογή όταν κάποιος της ζητά να κλείσει — δες
+  /// [SessionLivenessKeeper.onShutdownRequested].
   Future<void> Function(StationShutdownRequest request)?
-  get onShutdownRequested => _onShutdownRequested;
+  get onShutdownRequested => _liveness.onShutdownRequested;
 
-  Future<void> Function(StationShutdownRequest request)? _onShutdownRequested;
-
-  /// **Η ανάθεση ξαναγράφει το ίχνος αμέσως.**
-  ///
-  /// Το ίχνος γεννιέται στην εκκίνηση, πολύ πριν στηθεί το κέλυφος που ακούει.
-  /// Χωρίς αυτή την ενημέρωση θα έμενε να δηλώνει «δεν ακούω» ως τον πρώτο
-  /// παλμό — ένα ολόκληρο λεπτό κατά το οποίο ο συνάδελφος θα διάβαζε ότι
-  /// χρειάζεται τηλέφωνο, ενώ η εφαρμογή ήδη άκουγε.
   set onShutdownRequested(
     Future<void> Function(StationShutdownRequest request)? handler,
-  ) {
-    final changed = (_onShutdownRequested != null) != (handler != null);
-    _onShutdownRequested = handler;
-    if (!changed) return;
-    final mark = _currentMark;
-    if (mark == null) return;
-    _currentMark = SessionLivenessMark(
-      station: mark.station,
-      version: mark.version,
-      startedAt: mark.startedAt,
-      lastSeen: mark.lastSeen,
-      database: mark.database,
-      instance: mark.instance,
-      listensForShutdownRequests: handler != null,
-    );
-    _markAlive();
-  }
+  ) => _liveness.onShutdownRequested = handler;
 
-  /// **Ένας παλμός, δύο πράξεις.** Το ίχνος γράφεται και, στην ίδια στιγμή,
-  /// ρωτιέται ο φάκελος αν κάποιος ζήτησε κλείσιμο.
-  ///
-  /// Η κοινή στιγμή δεν είναι οικονομία, είναι **προϋπόθεση ακρίβειας**: ο
-  /// αιτών προβλέπει πότε θα δούμε το σημείωμά του προσθέτοντας ένα λεπτό στο
-  /// «τελευταίο σημάδι ζωής» που διαβάζει. Αν ο έλεγχος είχε δικό του χρονιστή,
-  /// η φάση του θα διέφερε και η πρόβλεψη θα ήταν εικασία.
-  void _pulse() {
-    _markAlive();
-    if (onShutdownRequested == null) return;
-    unawaited(_checkForShutdownRequest());
-  }
-
-  /// Ένα «υπάρχεις;» σε γνωστό όνομα αρχείου — ποτέ σάρωση φακέλου.
-  ///
-  /// Ποτέ δύο έλεγχοι μαζί: σε αργό δικτυακό φάκελο ένας έλεγχος μπορεί να
-  /// κρατήσει περισσότερο από το διάστημα, και ο επόμενος παραλείπεται αντί να
-  /// στοιβαχτεί.
-  bool _checkingShutdownRequest = false;
-
-  Future<void> _checkForShutdownRequest() async {
-    if (_checkingShutdownRequest || !_diskAvailable) return;
-    _checkingShutdownRequest = true;
-    try {
-      final request = await readShutdownRequestForMe(
-        logsDirectory: logsDirectory,
-        myStation: StationName.fileSafe,
-        myInstance: instanceId,
-        myDatabase: databaseFileName,
-        now: _now(),
-        timeout: diskProbeTimeout,
-      );
-      if (request == null) return;
-      // **Καταναλώνεται μόλις διαβαστεί, πριν γίνει οτιδήποτε μαζί του.**
-      // Το σημείωμα είναι ερέθισμα μιας χρήσης. Αν το αφήναμε στον δίσκο ώσπου
-      // να τιμηθεί, μια κατάρρευση ή ένα βίαιο κλείσιμο στη μέση του διαλόγου
-      // θα το άφηνε εκεί — και η επόμενη εκκίνηση θα το ξανάβρισκε και θα
-      // ξανάκλεινε αμέσως, εγκλωβίζοντας τον συνάδελφο έξω από τη δουλειά του.
-      await clearShutdownRequestForMe(
-        logsDirectory: logsDirectory,
-        myStation: StationName.fileSafe,
-        myInstance: instanceId,
-        timeout: diskProbeTimeout,
-      );
-      await onShutdownRequested?.call(request);
-    } catch (e, stack) {
-      // Ο φρουρός δεν ρίχνει ποτέ την εφαρμογή: μια αποτυχία εδώ σημαίνει απλώς
-      // ότι το αίτημα θα ξαναβρεθεί στον επόμενο παλμό.
-      logError(e, stack, fatal: false);
-    } finally {
-      _checkingShutdownRequest = false;
-    }
-  }
-
-  /// Ανανεώνει το «μέχρι πότε ζούσα». Σιωπηλή αποτυχία: το σημάδι ζωής είναι
-  /// διαγνωστική άνεση και δεν επιτρέπεται να διακόψει τη δουλειά του χρήστη.
-  void _markAlive() {
-    if (!_diskAvailable) return;
-    final mark = _currentMark?.seenAt(_now());
-    if (mark == null) return;
-    try {
-      _sessionLockFile().writeAsStringSync(mark.encode(), flush: true);
-      _currentMark = mark;
-    } catch (_) {}
-  }
+  /// Ένας παλμός κατά παραγγελία — τα τεστ δεν περιμένουν ένα λεπτό.
+  @visibleForTesting
+  Future<void> pulseForTest() => _liveness.pulse();
 
   /// Θέτει την κατάσταση «χωρίς δίσκο» χωρίς να χρειαστεί απρόσιτος φάκελος.
   @visibleForTesting
@@ -542,15 +337,8 @@ class CrashLogService {
     if (!_diskAvailable) return;
     try {
       _flushPendingRepeatSummaries();
-      await _removeLivenessMark();
+      await _liveness.remove();
     } catch (_) {}
-  }
-
-  Future<void> _removeLivenessMark() async {
-    final lock = _sessionLockFile();
-    if (await lock.exists().timeout(diskProbeTimeout)) {
-      await lock.delete().timeout(diskProbeTimeout);
-    }
   }
 
   /// Καταγράφει ένα σφάλμα.
@@ -613,7 +401,10 @@ class CrashLogService {
 
   /// Η εκτέλεση που χάθηκε. Ίχνος που δεν διαβάζεται εξακολουθεί να είναι
   /// είδηση: λέμε ό,τι ξέρουμε, χωρίς να εφευρίσκουμε λεπτομέρειες.
-  void _recordLostRun(SessionLivenessMark? previous) {
+  ///
+  /// Την καλεί το [SessionLivenessKeeper] όταν βρίσκει ίχνος της προηγούμενης
+  /// εκτέλεσης· η εγγραφή όμως γίνεται εδώ, από τον κάτοχο του φακέλου.
+  void recordLostRun(SessionLivenessMark? previous) {
     _appendToDailyLog(
       LogRecord(
         time: _now(),
@@ -700,101 +491,6 @@ class CrashLogService {
       _appendToDailyLog(record);
     } catch (_) {}
   }
-
-  /// Κρατά τα [retentionCount] πιο πρόσφατα ημερήσια αρχεία — δηλαδή τις
-  /// τελευταίες τόσες **ημέρες με καταγραφές**. Ένας υπολογιστής που έμεινε
-  /// κλειστός μια εβδομάδα δεν χάνει έτσι το ιστορικό του.
-  ///
-  /// Τα αρχεία της παλιάς μορφής δεν πληθαίνουν πια, οπότε δεν θα έφταναν
-  /// ποτέ το όριο πλήθους: σβήνονται όταν γίνουν παλαιότερα από τόσες
-  /// ημερολογιακές ημέρες.
-  ///
-  /// Μαζεύει επίσης τα αρχεία ιχνηλάτησης κλεισίματος της παλιάς εποχής, όταν
-  /// το κάθε περιστατικό έπαιρνε δικό του αρχείο. Πλέον προσαρτώνται στο
-  /// αρχείο συνεδρίας της ημέρας τους, οπότε όσα έμειναν δεν τα διαβάζει
-  /// κανείς — και χωρίς αυτή τη γραμμή δεν θα τα έσβηνε ποτέ κανείς.
-  Future<void> _purgeOldLogFiles(int retentionCount) async {
-    final dir = Directory(logsDirectory);
-    if (!await dir.exists()) return;
-
-    final entries = await dir
-        .list()
-        .where((entity) => entity is File)
-        .cast<File>()
-        .toList();
-    await _purgeDailyLogs(entries, retentionCount);
-    await _purgeLegacyDailyLogs(entries, retentionCount);
-    await _purgeLegacyShutdownTraces(entries);
-  }
-
-  Future<void> _purgeLegacyDailyLogs(
-    List<File> entries,
-    int retentionCount,
-  ) async {
-    final today = _now();
-    final oldestKept = DateTime(
-      today.year,
-      today.month,
-      today.day,
-    ).subtract(Duration(days: retentionCount - 1));
-    for (final file in entries) {
-      final name = p.basename(file.path);
-      if (!isLegacyDailyLogFileName(name)) continue;
-      final day = dayOfLogFile(name);
-      if (day == null || !day.isBefore(oldestKept)) continue;
-      try {
-        await file.delete();
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _purgeDailyLogs(List<File> entries, int retentionCount) async {
-    final files = entries
-        .where((file) => isDailyLogFileName(p.basename(file.path)))
-        .toList();
-    if (files.length <= retentionCount) return;
-
-    files.sort((a, b) => p.basename(b.path).compareTo(p.basename(a.path)));
-    for (final file in files.skip(retentionCount)) {
-      try {
-        await file.delete();
-      } catch (_) {}
-    }
-  }
-
-  /// Σβήνει **μόνο** τα αρχεία περιστατικών της παλιάς εποχής — αυτά που
-  /// φέρουν ημερομηνία στο όνομά τους.
-  ///
-  /// Τα προσωρινά ίχνη εργασίας δεν αγγίζονται ποτέ, ούτε τα δικά μας ούτε
-  /// άλλου σταθμού: όταν υπάρχουν, είτε ανήκουν σε κλείσιμο που πέθανε στη
-  /// μέση και περιμένει να προαχθεί, είτε — σε κοινόχρηστο φάκελο — σε
-  /// υπολογιστή που **αυτή τη στιγμή** κλείνει.
-  Future<void> _purgeLegacyShutdownTraces(List<File> entries) async {
-    for (final file in entries) {
-      if (!_legacyIncidentFileName.hasMatch(p.basename(file.path))) continue;
-      try {
-        await file.delete();
-      } catch (_) {}
-    }
-  }
-
-  static final RegExp _legacyIncidentFileName = RegExp(
-    '^$legacyShutdownTracePrefix'
-    r'\d{4}-\d{2}-\d{2}(_[\d-]+)?'
-    r'\.log$',
-  );
-
-  /// Το πρόθεμα των αρχείων ιχνηλάτησης κλεισίματος. Ζει εδώ επειδή η
-  /// εκκαθάριση είναι το μόνο σημείο που τα χρειάζεται μαζί με τα υπόλοιπα
-  /// αρχεία του φακέλου· ο ίδιος ο ιχνηλάτης χτίζει πάνω του το δικό του όνομα.
-  static const String legacyShutdownTracePrefix = 'shutdown_trace_';
-
-  File _sessionLockFile() => File(
-    p.join(
-      logsDirectory,
-      sessionLockFileNameFor(StationName.fileSafe, instanceId),
-    ),
-  );
 
   static String _dedupKey(Object error, StackTrace stack) {
     final firstStackLine = stack

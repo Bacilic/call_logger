@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/equipment_repository.dart';
+import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/database/user_repository.dart';
+import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/core/database/audit_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -33,6 +36,7 @@ void main() {
       await db.delete('user_phones');
       await db.delete('phones');
       await db.delete('equipment');
+      await db.delete('department_phones');
       await db.delete('users');
       repo = UserRepository(db);
     });
@@ -220,6 +224,92 @@ void main() {
         expect(newV?['linked_phone_numbers'], [existingPhone, newPhone]);
       },
     );
+
+    group('κάθε διαγραφή γράφει τι χάθηκε στο Ιστορικό', () {
+      late int userId;
+      late int phoneId;
+      late int equipmentId;
+      late int deptId;
+
+      setUp(() async {
+        deptId = await db.insert('departments', {
+          'name': 'Μισθοδοσία',
+          'name_key': SearchTextNormalizer.normalizeForSearch('Μισθοδοσία'),
+          'is_deleted': 0,
+        });
+        userId = await db.insert('users', {
+          'first_name': 'Γιώργος',
+          'last_name': 'Παπαδόπουλος',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
+        phoneId = await db.insert('phones', {
+          'number': '2101',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
+        await db.insert('user_phones', {
+          'user_id': userId,
+          'phone_id': phoneId,
+        });
+        await db.insert('department_phones', {
+          'department_id': deptId,
+          'phone_id': phoneId,
+        });
+        equipmentId = await db.insert('equipment', {
+          'code_equipment': 'PC-77',
+          'department_id': deptId,
+          'is_deleted': 0,
+        });
+        await db.insert('user_equipment', {
+          'user_id': userId,
+          'equipment_id': equipmentId,
+        });
+        await db.delete('audit_log');
+      });
+
+      Future<String> detailsOf(String entityType, int id) async {
+        final rows = await db.query(
+          'audit_log',
+          where: 'entity_type = ? AND entity_id = ? AND action = ?',
+          whereArgs: [entityType, id, DatabaseHelper.auditActionDelete],
+        );
+        expect(rows, hasLength(1));
+        return rows.single['details'] as String? ?? '';
+      }
+
+      test('υπάλληλοι που φεύγουν μαζί με το τμήμα τους', () async {
+        await db.transaction((txn) => repo.deleteUsersInTxn(txn, [userId]));
+
+        final details = await detailsOf(AuditEntityTypes.user, userId);
+        expect(details, contains('Αποσύνδεση τηλεφώνου 2101'));
+        expect(details, contains('Αποσύνδεση εξοπλισμού PC-77'));
+      });
+
+      test('διαγραφή εξοπλισμού: ποιον κάτοχο έχασε', () async {
+        await EquipmentRepository(db).deleteEquipments([equipmentId]);
+
+        final details = await detailsOf(
+          AuditEntityTypes.equipment,
+          equipmentId,
+        );
+        expect(
+          details,
+          contains('Αποσύνδεση από υπάλληλο Γιώργος Παπαδόπουλος'),
+        );
+      });
+
+      test('διαγραφή τηλεφώνου: ποιον υπάλληλο και ποιο τμήμα έχασε', () async {
+        await PhoneRepository(db).softDeletePhones([phoneId]);
+
+        final details = await detailsOf(AuditEntityTypes.phone, phoneId);
+        expect(
+          details,
+          contains('Αποσύνδεση από υπάλληλο Γιώργος Παπαδόπουλος'),
+        );
+        expect(details, contains('Αποσύνδεση από τμήμα Μισθοδοσία'));
+      });
+    });
 
     test('entityName fallback #id όταν λείπει ετικέτα στη βάση', () async {
       final equipmentId = await db.insert('equipment', {

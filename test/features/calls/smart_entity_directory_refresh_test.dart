@@ -756,5 +756,64 @@ void main() {
       expect(undo.createdEquipmentCode, isNull);
       container.dispose();
     });
+
+    test('δύο «+» στον ίδιο κύκλο: μία εκκρεμότητα, που συμπληρώνεται '
+        'με ό,τι έγινε τη δεύτερη φορά', () async {
+      final seeded = await seed();
+      final container = seeded.container;
+      final lookup = (await container.read(
+        lookupServiceProvider.future,
+      )).service;
+      final leaves = lookup.findDepartmentByName('Άδειες')!;
+      final notifier = container.read(callSmartEntityProvider.notifier);
+      notifier.updateCallerDisplayText('Μαρία Δαμανάκη');
+      notifier.checkContent(callerText: 'Μαρία Δαμανάκη');
+      notifier.selectDepartment(leaves);
+      notifier.updatePhone('2700');
+      notifier.checkContent(phoneText: '2700');
+
+      await notifier.associateCurrentIfNeeded();
+
+      final db = await DatabaseHelper.instance.database;
+      final createdUserId = notifier.lastQuickAddUndo.createdUserId;
+      final first = (await db.query('tasks')).single;
+      expect(
+        first['description'],
+        '[QUICK_ADD] Δημιουργήθηκε νέος χρήστης Μαρία Δαμανάκη στο τμήμα: '
+        'Άδειες\nΔημιουργήθηκε νέο τηλέφωνο: 2700',
+      );
+      expect(first['origin'], 'quick_add');
+      expect(first['priority'], 2);
+      expect(first['caller_id'], createdUserId);
+      expect(first['department_id'], leaves.id);
+      expect(first['equipment_id'], isNull);
+      expect(first['phone_text'], '2700');
+      expect(first['user_text'], 'Μαρία Δαμανάκη');
+      expect(first['department_text'], 'Άδειες');
+      expect(first['equipment_text'], isNull);
+
+      // Ο καλών υπάρχει πλέον: το δεύτερο «+» περνά από τη ροή υπάρχοντος.
+      notifier.checkContent(equipmentText: '6000');
+      final second = await notifier.associateCurrentIfNeeded();
+
+      expect(second, 'Προσθήκη εξοπλισμού: 6000 στο Μαρία Δαμανάκη');
+      final rows = await db.query('tasks');
+      expect(rows, hasLength(1), reason: 'Μία εκκρεμότητα ανά κύκλο');
+      final merged = rows.single;
+      expect(
+        merged['description'],
+        '[QUICK_ADD] Δημιουργήθηκε νέος χρήστης Μαρία Δαμανάκη στο τμήμα: '
+        'Άδειες\nΔημιουργήθηκε νέο τηλέφωνο: 2700\n'
+        'Προσθήκη εξοπλισμού: 6000 στο Μαρία Δαμανάκη',
+      );
+      final equipment = (await db.query(
+        'equipment',
+        where: "code_equipment = '6000'",
+      )).single;
+      expect(merged['equipment_id'], equipment['id']);
+      expect(merged['equipment_text'], '6000');
+      expect(merged['caller_id'], createdUserId);
+      container.dispose();
+    });
   });
 }

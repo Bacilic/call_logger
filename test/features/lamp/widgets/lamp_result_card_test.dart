@@ -192,6 +192,177 @@ void main() {
     expect(find.text('new@example.gr'), findsOneWidget);
   });
 
+  group('διάλογος επεξεργασίας — τι στέλνεται για αποθήκευση', () {
+    Future<List<Map<String, Object?>>> openEquipmentEditor(
+      WidgetTester tester,
+    ) async {
+      final saved = <Map<String, Object?>>[];
+      await _pumpCard(
+        tester,
+        width: 1300,
+        row: _fullRow,
+        onSaveSection:
+            ({
+              required id,
+              required sectionType,
+              required updatedFields,
+            }) async {
+              saved.add({
+                'id': id,
+                'section': sectionType.name,
+                ...updatedFields,
+              });
+              return const EquipmentSectionSaveResult(success: true);
+            },
+      );
+      await tester.tap(find.byTooltip('Επεξεργασία ΕΞΟΠΛΙΣΜΟΣ'));
+      await tester.pumpAndSettle();
+      return saved;
+    }
+
+    Future<void> type(WidgetTester tester, String label, String text) async {
+      await tester.enterText(find.widgetWithText(TextFormField, label), text);
+      await tester.pump();
+    }
+
+    Future<void> pressSave(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('κωδικοί, ημερομηνίες και κενά μετατρέπονται πριν σταλούν', (
+      tester,
+    ) async {
+      final saved = await openEquipmentEditor(tester);
+      await type(tester, 'Κωδ. μοντέλου', ' 7 ');
+      await type(tester, 'Κωδ. κατάστασης', '');
+      await type(tester, 'Παραλαβή', '05/03/2024');
+      await type(tester, 'Εγγύηση', '31/03/2026');
+      await type(tester, 'Περιγραφή', '');
+      await type(tester, 'Κόστος', ' 12 ');
+      // Η «Συντήρηση» είναι πεδίο κειμένου: το «αύριο» εκεί είναι θεμιτό.
+      await type(tester, 'Συντήρηση', 'αύριο');
+      await pressSave(tester);
+
+      // Μόνο τα αλλαγμένα πεδία· οι ημερομηνίες στη μορφή αποθήκευσης.
+      expect(saved, [
+        {
+          'id': 1001,
+          'section': 'equipment',
+          'description': null,
+          'model_id': 7,
+          'maintenance_contract': 'αύριο',
+          'receiving_date': '2024-03-05',
+          'end_of_guarantee_date': '2026-03-31',
+          'cost': '12',
+        },
+      ]);
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+
+    testWidgets('ημερομηνία που δεν υπάρχει δεν φτάνει στην αποθήκευση', (
+      tester,
+    ) async {
+      final saved = await openEquipmentEditor(tester);
+      await type(tester, 'Εγγύηση', '31/02/2026');
+      await pressSave(tester);
+
+      expect(saved, isEmpty);
+      expect(find.text('Δεν υπάρχει αυτή η μέρα'), findsOneWidget);
+    });
+
+    testWidgets('κείμενο σε πεδίο ημερομηνίας δεν φτάνει στην αποθήκευση', (
+      tester,
+    ) async {
+      final saved = await openEquipmentEditor(tester);
+      await type(tester, 'Παραλαβή', 'abc');
+      await pressSave(tester);
+
+      expect(saved, isEmpty);
+      expect(find.text('Μη έγκυρη ημερομηνία.'), findsOneWidget);
+    });
+
+    testWidgets('μη αριθμητικός κωδικός δεν φτάνει στην αποθήκευση', (
+      tester,
+    ) async {
+      final saved = await openEquipmentEditor(tester);
+      await type(tester, 'Κωδ. μοντέλου', 'abc');
+      await pressSave(tester);
+
+      expect(saved, isEmpty);
+      expect(find.text('Μη έγκυρος κωδικός.'), findsOneWidget);
+    });
+
+    testWidgets('κενός κύριος κωδικός δεν φτάνει στην αποθήκευση', (
+      tester,
+    ) async {
+      final saved = await openEquipmentEditor(tester);
+      await type(tester, 'Κωδικός', '');
+      await pressSave(tester);
+
+      expect(saved, isEmpty);
+      expect(find.text('Ο κωδικός δεν μπορεί να είναι κενός.'), findsOneWidget);
+    });
+
+    testWidgets('λήξη εγγύησης πριν την παραλαβή δεν φτάνει στην αποθήκευση', (
+      tester,
+    ) async {
+      final saved = await openEquipmentEditor(tester);
+      await type(tester, 'Εγγύηση', '01/01/2020');
+      await pressSave(tester);
+
+      expect(saved, isEmpty);
+      expect(
+        find.text('Η λήξη δεν μπορεί να προηγείται της παραλαβής.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      'Escape με αλλαγές ρωτά, και η απόρριψη κλείνει χωρίς αποθήκευση',
+      (tester) async {
+        final saved = await openEquipmentEditor(tester);
+        await type(tester, 'Serial No', 'SN-X');
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.text('Απόρριψη αλλαγών;'), findsOneWidget);
+        await tester.tap(find.widgetWithText(FilledButton, 'Απόρριψη'));
+        await tester.pumpAndSettle();
+
+        expect(saved, isEmpty);
+        expect(find.text('Επεξεργασία ΕΞΟΠΛΙΣΜΟΣ'), findsNothing);
+        expect(find.text('SN123456789'), findsOneWidget);
+      },
+    );
+
+    testWidgets('αποτυχία αποθήκευσης κρατά τον διάλογο ανοιχτό με μήνυμα', (
+      tester,
+    ) async {
+      await _pumpCard(
+        tester,
+        width: 1300,
+        row: _fullRow,
+        onSaveSection:
+            ({
+              required id,
+              required sectionType,
+              required updatedFields,
+            }) async => const EquipmentSectionSaveResult(
+              success: false,
+              message: 'Η Λάμπα δεν απάντησε.',
+            ),
+      );
+      await tester.tap(find.byTooltip('Επεξεργασία ΕΞΟΠΛΙΣΜΟΣ'));
+      await tester.pumpAndSettle();
+      await type(tester, 'Serial No', 'SN-X');
+      await pressSave(tester);
+
+      expect(find.text('Η Λάμπα δεν απάντησε.'), findsOneWidget);
+      expect(find.text('Επεξεργασία ΕΞΟΠΛΙΣΜΟΣ'), findsOneWidget);
+      expect(find.text('SN123456789'), findsOneWidget);
+    });
+  });
+
   testWidgets('Lamp result card golden desktop baseline', (tester) async {
     await _pumpCard(tester, width: 1300, row: _fullRow);
 

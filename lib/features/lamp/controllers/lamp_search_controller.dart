@@ -8,7 +8,7 @@ import '../../../core/database/old_database/lamp_search_filter_selection.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/lamp_unlinked_entities.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
-import '../widgets/lamp_result_card.dart';
+import '../models/lamp_equipment_view_model.dart';
 import 'lamp_path_management.dart';
 import 'lamp_screen_host.dart';
 import 'lamp_search_outcome_message.dart';

@@ -1,3 +1,22 @@
+// ΑΞΙΟΛΟΓΗΘΗΚΕ ΓΙΑ ΔΙΑΣΠΑΣΗ — Ο ΣΥΝΤΟΝΙΣΜΟΣ ΜΕΝΕΙ ΩΣ ΕΧΕΙ (11/10/2026).
+//
+// Ρόλος: ένας — ο συντονισμός κάθε ενέργειας του χρήστη στον χάρτη κτιρίου:
+// τι ρωτάμε (διάλογοι), τι γράφουμε (μέσω των repositories), τι ανανεώνουμε
+// (καταστάσεις του χάρτη και του Καταλόγου). Τέσσερις ομάδες ενεργειών:
+// επιλογή φύλλου/τμήματος, αποθήκευση θέσης τμήματος, διαχείριση φύλλων,
+// μετάβαση από αναζήτηση.
+//
+// Γιατί δεν διασπάστηκε: οι ομάδες μοιράζονται την ίδια κατάσταση και τα ίδια
+// βήματα — η διαχείριση φύλλων και η μετάβαση από αναζήτηση στηρίζονται
+// συνεχώς στην αλλαγή φύλλου, στον συγχρονισμό προσχεδίου και στη φόρτωση
+// εικόνας. Χωρισμένες σε αρχεία θα ξαναρωτούσαν τον χειριστή για όλα. Οι
+// αποφάσεις (επιλογή τμήματος, μετακόμιση, χρώμα στο ✓, πού πηγαίνει η
+// αναζήτηση) και οι διάλογοι ζουν ήδη σε δικά τους αρχεία, με τεστ.
+//
+// Τι θα το άλλαζε: απόφαση ή υπολογισμός που μπορεί να γραφτεί χωρίς βάση και
+// διάλογο (θα έβγαινε δίπλα στις αδελφές του στο services/), ωμό ερώτημα SQL,
+// ή κατασκευή διεπαφής εδώ — τότε ξαναξετάζεται από την αρχή.
+
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -6,6 +25,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/utils/department_floor_sync.dart';
 import '../../../../core/utils/file_picker_session.dart';
 import '../../../../core/utils/picker_location_memory.dart';
 import '../../../../core/database/building_map_repository.dart';
@@ -19,6 +39,7 @@ import '../../../../core/services/building_map_storage.dart';
 import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
+import '../services/building_map_commit_color_plan.dart';
 import '../services/building_map_department_eligibility.dart';
 import '../services/building_map_department_pick_outcome.dart';
 import '../services/building_map_placement_replacement.dart';
@@ -30,6 +51,7 @@ import '../widgets/building_map_commit_color_dialog.dart';
 import '../widgets/building_map_confirm_dialogs.dart';
 import '../widgets/building_map_floor_delete_dialog.dart';
 import '../services/building_map_floor_ordering.dart';
+import '../services/building_map_jump_fallback.dart';
 import '../widgets/building_map_floor_sheet_add_dialog.dart';
 import '../widgets/building_map_floor_sheet_edit_dialog.dart';
 import '../widgets/building_map_jump_pick_dialogs.dart';
@@ -39,7 +61,6 @@ final buildingMapControllerProvider = Provider<BuildingMapController>(
   (ref) => BuildingMapController(ref),
 );
 
-/// Επιλογή διαγραφής εικόνας από το διάλογο διαγραφής φύλλου.
 /// Συντονισμός βάσης, αποθήκευσης εικόνων και καταστάσεων Riverpod για τον χάρτη κτιρίου.
 class BuildingMapController {
   BuildingMapController(this._ref);
@@ -267,48 +288,34 @@ class BuildingMapController {
       sheetStr,
       dept.id,
     );
-    final previousFloorStr = dept.mapFloor?.trim();
-    final previousFloorId = int.tryParse(previousFloorStr ?? '');
-    final movingToNewFloor =
-        previousFloorStr != null && previousFloorStr != sheetStr;
-    final existingColor = dept.color?.trim();
-    final shouldKeepCurrentColor =
-        previousFloorStr == sheetStr &&
-        dept.isMapped &&
-        existingColor != null &&
-        existingColor.isNotEmpty;
+    final colorPlan = resolveBuildingMapCommitColorPlan(
+      dept: dept,
+      sheetStr: sheetStr,
+    );
 
     void removeOldFloorColorIfMoved() {
-      if (movingToNewFloor && previousFloorId != null) {
-        final oldColor = tryParseDepartmentHex(existingColor);
-        if (oldColor != null) {
-          FloorColorAssignmentService.instance.removeColorFromFloor(
-            previousFloorId,
-            oldColor,
-          );
-        }
+      final previousFloorId = colorPlan.releaseFromFloorId;
+      final oldColor = colorPlan.currentColor;
+      if (previousFloorId != null && oldColor != null) {
+        FloorColorAssignmentService.instance.removeColorFromFloor(
+          previousFloorId,
+          oldColor,
+        );
       }
     }
 
     String? colorHex;
 
-    if (shouldKeepCurrentColor) {
-      colorHex = null;
-    } else if (existingColor == null || existingColor.isEmpty) {
-      final picked = FloorColorAssignmentService.instance.getNextDistinctColor(
-        floorId,
-        additionalUsed: additionalUsed,
-      );
-      colorHex = colorToDepartmentHex(picked);
-      removeOldFloorColorIfMoved();
-    } else {
-      final currentParsed = tryParseDepartmentHex(existingColor);
-      if (currentParsed == null) {
+    switch (colorPlan.action) {
+      case BuildingMapCommitColorAction.keepCurrent:
+        colorHex = null;
+      case BuildingMapCommitColorAction.assignNew:
         final picked = FloorColorAssignmentService.instance
             .getNextDistinctColor(floorId, additionalUsed: additionalUsed);
         colorHex = colorToDepartmentHex(picked);
         removeOldFloorColorIfMoved();
-      } else {
+      case BuildingMapCommitColorAction.askUser:
+        final currentParsed = colorPlan.currentColor!;
         final suggested = FloorColorAssignmentService.instance
             .peekNextDistinctColor(floorId, additionalUsed: additionalUsed);
         if (!context.mounted) return;
@@ -335,24 +342,8 @@ class BuildingMapController {
           );
           removeOldFloorColorIfMoved();
         }
-      }
     }
 
-    _ref
-        .read(buildingMapUndoProvider.notifier)
-        .captureFromValues(
-          departmentId: dept.id!,
-          mapFloor: dept.mapFloor,
-          mapX: dept.mapX,
-          mapY: dept.mapY,
-          mapWidth: dept.mapWidth,
-          mapHeight: dept.mapHeight,
-          mapRotation: dept.mapRotation,
-          mapLabelOffsetX: dept.mapLabelOffsetX,
-          mapLabelOffsetY: dept.mapLabelOffsetY,
-          mapAnchorOffsetX: dept.mapAnchorOffsetX,
-          mapAnchorOffsetY: dept.mapAnchorOffsetY,
-        );
     final db = await DatabaseHelper.instance.database;
     final updates = <String, dynamic>{
       'map_x': draft.x,
@@ -373,13 +364,20 @@ class BuildingMapController {
     if (colorHex != null) {
       updates['color'] = colorHex;
     }
+    await _captureUndo(
+      dept.id!,
+      DepartmentFloorSync.mergeFloorContext(
+        updates,
+        drawingFloorId: floorId,
+      ).keys,
+    );
     await DepartmentRepository(db).saveDepartmentWithFloorContext(
       dept.id!,
       updates,
       drawingFloorId: floorId,
     );
-    if (shouldKeepCurrentColor) {
-      final keep = tryParseDepartmentHex(existingColor);
+    if (colorPlan.action == BuildingMapCommitColorAction.keepCurrent) {
+      final keep = colorPlan.currentColor;
       if (keep != null) {
         FloorColorAssignmentService.instance.overrideColor(floorId, keep);
       }
@@ -463,7 +461,7 @@ class BuildingMapController {
     }
   }
 
-  /// Διαγράφει τη χαρτογράφηση του τμήματος στο τρέχον φύλλο (χωρίς διάλογο επιβεβαίωσης).
+  /// Διαγράφει τη χαρτογράφηση του τμήματος στο τρέχον φύλλο, αφού ρωτήσει τον χρήστη.
   Future<void> removeDepartmentFromFloorAfterConfirm({
     required BuildContext context,
     required DepartmentModel dept,
@@ -484,31 +482,16 @@ class BuildingMapController {
     );
     if (!go || !context.mounted) return;
 
-    _ref
-        .read(buildingMapUndoProvider.notifier)
-        .captureFromValues(
-          departmentId: dept.id!,
-          mapFloor: dept.mapFloor,
-          mapX: dept.mapX,
-          mapY: dept.mapY,
-          mapWidth: dept.mapWidth,
-          mapHeight: dept.mapHeight,
-          mapRotation: dept.mapRotation,
-          mapLabelOffsetX: dept.mapLabelOffsetX,
-          mapLabelOffsetY: dept.mapLabelOffsetY,
-          mapAnchorOffsetX: dept.mapAnchorOffsetX,
-          mapAnchorOffsetY: dept.mapAnchorOffsetY,
-        );
+    final cleared = BuildingMapRepository.clearedBuildingMapPlacementColumns(
+      clearFloorId: true,
+      clearDepartmentHex: true,
+    );
+    await _captureUndo(dept.id!, cleared.keys);
     final db = await DatabaseHelper.instance.database;
     final removedColor = tryParseDepartmentHex(dept.color);
-    await DepartmentRepository(db).updateDepartment(
-      dept.id!,
-      BuildingMapRepository.clearedBuildingMapPlacementColumns(
-        clearFloorId: true,
-        clearDepartmentHex: true,
-      ),
-      expected: null,
-    );
+    await DepartmentRepository(
+      db,
+    ).updateDepartment(dept.id!, cleared, expected: null);
     final fid = int.tryParse(sheetStr);
     if (fid != null && removedColor != null) {
       FloorColorAssignmentService.instance.removeColorFromFloor(
@@ -973,22 +956,35 @@ class BuildingMapController {
     _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
   }
 
+  /// Κρατά τις τιμές που έχουν **τώρα** οι [columns] — ακριβώς όσες θα
+  /// γράψει η ενέργεια που ακολουθεί, ώστε η Αναίρεση να τις φέρει όλες πίσω.
+  Future<void> _captureUndo(int departmentId, Iterable<String> columns) async {
+    final db = await DatabaseHelper.instance.database;
+    final values = await BuildingMapRepository(
+      db,
+    ).readDepartmentColumns(departmentId, columns);
+    if (values.isEmpty) return;
+    _ref
+        .read(buildingMapUndoProvider.notifier)
+        .capture(
+          BuildingMapUndoSnapshot(departmentId: departmentId, values: values),
+        );
+  }
+
   Future<void> undoLastGeometry(BuildContext context) async {
     final snap = _ref.read(buildingMapUndoProvider);
     if (snap == null) return;
     final db = await DatabaseHelper.instance.database;
-    await DepartmentRepository(db).updateDepartment(snap.departmentId, {
-      'map_floor': snap.mapFloor,
-      'map_x': snap.mapX,
-      'map_y': snap.mapY,
-      'map_width': snap.mapWidth,
-      'map_height': snap.mapHeight,
-      'map_rotation': snap.mapRotation,
-      'map_label_offset_x': snap.mapLabelOffsetX,
-      'map_label_offset_y': snap.mapLabelOffsetY,
-      'map_anchor_offset_x': snap.mapAnchorOffsetX,
-      'map_anchor_offset_y': snap.mapAnchorOffsetY,
-    }, expected: null);
+    await DepartmentRepository(
+      db,
+    ).updateDepartment(snap.departmentId, snap.values, expected: null);
+    // Το χρώμα που επιστρέφει ξαναπιάνει τη θέση του στον όροφο, ώστε το
+    // επόμενο τμήμα να μην πάρει το ίδιο.
+    final floorId = snap.values['floor_id'] as int?;
+    final color = tryParseDepartmentHex(snap.values['color'] as String?);
+    if (floorId != null && color != null) {
+      FloorColorAssignmentService.instance.overrideColor(floorId, color);
+    }
     _ref.read(buildingMapUndoProvider.notifier).clear();
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (context.mounted) {
@@ -1086,17 +1082,12 @@ class BuildingMapController {
     );
     if (department == null) return;
 
-    final mapFloor = department.mapFloor?.trim();
-    final mappedFloorId = mapFloor == null ? null : int.tryParse(mapFloor);
-    final isMapped =
-        department.mapX != null &&
-        department.mapY != null &&
-        (department.mapWidth ?? 0) > 0 &&
-        (department.mapHeight ?? 0) > 0 &&
-        mappedFloorId != null &&
-        floors.any((f) => f.id == mappedFloorId);
+    final outcome = resolveBuildingMapJumpFallback(
+      department: department,
+      floors: floors,
+    );
 
-    if (isMapped) {
+    if (outcome.isMapped) {
       _ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
       await jumpToMappedDepartment(
         department: department,
@@ -1106,17 +1097,7 @@ class BuildingMapController {
       return;
     }
 
-    int? fallbackFloorId;
-    final preferredFloorId = department.floorId;
-    if (preferredFloorId != null &&
-        floors.any((f) => f.id == preferredFloorId)) {
-      fallbackFloorId = preferredFloorId;
-    } else if (mappedFloorId != null &&
-        floors.any((f) => f.id == mappedFloorId)) {
-      fallbackFloorId = mappedFloorId;
-    } else if (floors.isNotEmpty) {
-      fallbackFloorId = floors.first.id;
-    }
+    final fallbackFloorId = outcome.fallbackFloorId;
     if (fallbackFloorId == null) return;
     await selectFloorFromList(
       fallbackFloorId,
@@ -1127,25 +1108,7 @@ class BuildingMapController {
         .read(buildingMapSelectedDepartmentIdToMapProvider.notifier)
         .setDept(departmentId);
 
-    BuildingMapFloor? fallbackFloor;
-    for (final f in floors) {
-      if (f.id == fallbackFloorId) {
-        fallbackFloor = f;
-        break;
-      }
-    }
-    final deptName = department.displayName;
-    final String message;
-    if (preferredFloorId != null &&
-        fallbackFloorId == preferredFloorId &&
-        fallbackFloor != null) {
-      message =
-          'Το τμήμα «$deptName» βρίσκεται στον όροφο '
-          '«${buildingMapFloorDisplayLabel(fallbackFloor)}», αλλά δεν έχει '
-          'σχεδιαστεί ακόμα στον χάρτη.';
-    } else {
-      message = 'Το τμήμα «$deptName» δεν έχει καταχωρημένη θέση στον χάρτη.';
-    }
+    final message = outcome.message!;
     _ref
         .read(buildingMapSearchUnresolvedNoticeProvider.notifier)
         .setNotice(

@@ -309,6 +309,51 @@ class DirectorySupport {
     return lines;
   }
 
+  /// «Αποσύνδεση από υπάλληλο …» για κάθε ενεργό υπάλληλο που συνδέεται με
+  /// την εγγραφή [id] μέσω του [linkTable] — **πριν** σβηστούν οι συνδέσεις.
+  ///
+  /// Για διαγραφές τηλεφώνου ή εξοπλισμού: η εγγραφή που χάνεται γράφει στο
+  /// δικό της Ιστορικό ποιους ανθρώπους άφησε πίσω.
+  Future<List<String>> describeLostUsersInTxn(
+    DatabaseExecutor txn, {
+    required String linkTable,
+    required String linkColumn,
+    required int id,
+  }) async {
+    final rows = await txn.rawQuery(
+      'SELECT u.first_name, u.last_name FROM $linkTable l '
+      'JOIN users u ON u.id = l.user_id '
+      'WHERE l.$linkColumn = ? AND COALESCE(u.is_deleted, 0) = 0 '
+      'ORDER BY u.last_name, u.first_name',
+      [id],
+    );
+    return [
+      for (final r in rows)
+        if (userDisplayNameFromRow(r).isNotEmpty)
+          'Αποσύνδεση από υπάλληλο ${userDisplayNameFromRow(r)}',
+    ];
+  }
+
+  /// «Αποσύνδεση από τμήμα …» για κάθε ενεργό τμήμα που έχει το τηλέφωνο
+  /// [phoneId] ως κοινόχρηστο — **πριν** σβηστούν οι συνδέσεις.
+  Future<List<String>> describeLostDepartmentsOfPhoneInTxn(
+    DatabaseExecutor txn,
+    int phoneId,
+  ) async {
+    final rows = await txn.rawQuery(
+      'SELECT d.name FROM department_phones dp '
+      'JOIN departments d ON d.id = dp.department_id '
+      'WHERE dp.phone_id = ? AND COALESCE(d.is_deleted, 0) = 0 '
+      'ORDER BY d.name',
+      [phoneId],
+    );
+    return [
+      for (final r in rows)
+        if (((r['name'] as String?)?.trim() ?? '').isNotEmpty)
+          'Αποσύνδεση από τμήμα ${(r['name'] as String).trim()}',
+    ];
+  }
+
   static String _userEntityLinkDetailLine(
     String entityType,
     String label, {

@@ -6,6 +6,53 @@ import '../../../../core/services/save_confirmation_summary.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import 'department_form_dialog.dart';
 
+const _kDepartmentDistinctSuffixLetters = <String>[
+  'Α',
+  'Β',
+  'Γ',
+  'Δ',
+  'Ε',
+  'Ζ',
+  'Η',
+  'Θ',
+  'Ι',
+  'Κ',
+  'Λ',
+  'Μ',
+  'Ν',
+  'Ξ',
+  'Ο',
+  'Π',
+  'Ρ',
+  'Σ',
+  'Τ',
+  'Υ',
+  'Φ',
+  'Χ',
+  'Ψ',
+  'Ω',
+];
+
+/// Παράδειγμα διακριτού ονόματος τμήματος (π.χ. «Μαγειρείο Α») όταν υπάρχει σύγκρουση.
+String suggestDistinctDepartmentNameExample(String name) {
+  final base = name.trim();
+  if (base.isEmpty) return 'Τμήμα Α';
+  final lookup = LookupService.instance;
+  for (final letter in _kDepartmentDistinctSuffixLetters) {
+    final candidate = '$base $letter';
+    if (lookup.findDepartmentByName(candidate) == null) {
+      return candidate;
+    }
+  }
+  for (var i = 2; i <= 99; i++) {
+    final candidate = '$base $i';
+    if (lookup.findDepartmentByName(candidate) == null) {
+      return candidate;
+    }
+  }
+  return '$base Α';
+}
+
 /// Τι κάνει η αποθήκευση όταν το όνομα **υπάρχει ήδη**.
 ///
 /// Δύο εντελώς διαφορετικές καταστάσεις πίσω από την ίδια εξαίρεση:

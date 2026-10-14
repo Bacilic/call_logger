@@ -1208,31 +1208,32 @@ Future<BulkActionUndoRecord> applyBulkUserTransferInTxn(
     final toRelease = plan.phonesToRelease[userId] ?? const <String>[];
     final leftWithCoOwners =
         plan.phonesLeftWithCoOwners[userId] ?? const <String>[];
+    List<String>? remaining;
     if (toRelease.isNotEmpty || leftWithCoOwners.isNotEmpty) {
       final before = await _userPhonesInTxn(txn, userId);
       userPhonesBefore[userId] = before;
-      final remaining = [
+      remaining = [
         for (final n in before)
           if (!toRelease.contains(n) && !leftWithCoOwners.contains(n)) n,
       ];
-      await users.replaceUserPhones(userId, remaining, executor: txn);
-      if (oldDept != null) {
-        for (final n in toRelease) {
-          await phones.addDepartmentDirectPhone(oldDept, n, executor: txn);
-          phoneDeptAdds.add(
-            PhoneDeptAdd(departmentId: oldDept, phoneNumber: n),
-          );
-        }
-      }
     }
 
+    // Τμήμα και τηλέφωνα σε ΜΙΑ αποθήκευση: το Ιστορικό του υπαλλήλου γράφει
+    // μαζί την αλλαγή τμήματος και ποιο τηλέφωνο έφυγε.
     await users.updateUser(
       userId,
-      {'department_id': targetId},
+      {'department_id': targetId, 'phones': ?remaining},
       executor: txn,
       skipPhonePolicyValidation: true,
       expected: null,
     );
+
+    if (remaining != null && oldDept != null) {
+      for (final n in toRelease) {
+        await phones.addDepartmentDirectPhone(oldDept, n, executor: txn);
+        phoneDeptAdds.add(PhoneDeptAdd(departmentId: oldDept, phoneNumber: n));
+      }
+    }
 
     for (final e in plan.equipmentToFollow[userId] ?? const []) {
       final eqRow = await _equipmentRowInTxn(txn, e.id!);
@@ -1504,7 +1505,15 @@ Future<BulkActionUndoRecord> applyBulkUserClearInTxn(
           for (final n in before)
             if (!toClear.contains(n)) n,
         ];
-        await users.replaceUserPhones(userId, remaining, executor: txn);
+        // Από την κανονική αποθήκευση, ώστε το Ιστορικό να γράψει ποιο
+        // τηλέφωνο έφυγε από τον υπάλληλο.
+        await users.updateUser(
+          userId,
+          {'phones': remaining},
+          executor: txn,
+          skipPhonePolicyValidation: true,
+          expected: null,
+        );
 
         UserModel? owner;
         for (final u in plan.users) {

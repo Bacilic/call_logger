@@ -15,6 +15,17 @@ import 'department_repository.dart';
 import 'directory_support.dart';
 
 /// Persistence χρηστών (`users`, `user_phones`, `user_equipment`).
+///
+/// **Αξιολογήθηκε για διάσπαση (13/10/2026) — μένει ως έχει.** Ένας ρόλος:
+/// ό,τι γράφεται και διαβάζεται για τους υπαλλήλους και τις συνδέσεις τους
+/// (τηλέφωνα, εξοπλισμός) — αναγνώσεις, δημιουργία, ενημέρωση με φρουρό
+/// διένεξης, μαζική ενημέρωση, διαγραφή/επαναφορά, «τι μένει χωρίς κάτοχο»,
+/// σύνδεση από κλήση. Δεν χωρίζεται γιατί εγγραφές, έλεγχος διένεξης και
+/// διαγραφή μοιράζονται τα ίδια εργαλεία (συνδέσεις του υπαλλήλου, στιγμιότυπα
+/// Ιστορικού, αποτύπωμα τηλεφώνων)· ο κανόνας «τηλέφωνο–τμήμα» ζει ήδη αλλού.
+///
+/// **Η ετυμηγορία παύει να ισχύει** αν μπει εδώ κώδικας εμφάνισης, καθαρός
+/// υπολογισμός χωρίς βάση, ή δουλειά πινάκων που δεν αφορούν υπαλλήλους.
 class UserRepository {
   UserRepository(
     this.db, {
@@ -39,6 +50,12 @@ class UserRepository {
     'is_deleted',
   };
 
+  /// Αντικαθιστά τα τηλέφωνα του υπαλλήλου.
+  ///
+  /// Με [executor] γράφει **χωρίς ίχνος στο Ιστορικό** — προορίζεται για
+  /// αναιρέσεις, που επαναφέρουν ό,τι είχε καταγραφεί ήδη. Μια ενέργεια που
+  /// αφαιρεί τηλέφωνο περνά από την [updateUser] με `phones`, ώστε το
+  /// Ιστορικό να γράψει ποιο τηλέφωνο έφυγε.
   Future<void> replaceUserPhones(
     int userId,
     List<String> numbers, {
@@ -931,12 +948,15 @@ class UserRepository {
   /// Διαγράφει (soft) υπαλλήλους ΜΕΣΑ σε δοσμένο [txn] και επιστρέφει, ανά
   /// υπάλληλο, τα πρωτότυπα τηλέφωνα (αριθμοί) και equipment ids ώστε να μπορεί
   /// να αναιρεθεί πλήρως η σύνδεσή τους αργότερα.
+  ///
+  /// Η ίδια η διαγραφή είναι η [deleteUsers] — μία διαγραφή υπαλλήλου, με το
+  /// Ιστορικό να γράφει ποια τηλέφωνα και ποιον εξοπλισμό έχασε. Εδώ μόνο
+  /// φωτογραφίζονται πρώτα οι συνδέσεις για την αναίρεση.
   Future<Map<int, ({List<String> phoneNumbers, List<int> equipmentIds})>>
   deleteUsersInTxn(DatabaseExecutor txn, List<int> ids) async {
     final result =
         <int, ({List<String> phoneNumbers, List<int> equipmentIds})>{};
     if (ids.isEmpty) return result;
-    final user = _support.auditPerformingUser();
     for (final id in ids) {
       final phoneRows = await txn.rawQuery(
         'SELECT p.number AS number FROM user_phones up '
@@ -948,40 +968,9 @@ class UserRepository {
           .where((n) => n.isNotEmpty)
           .toList();
       final equipmentIds = (await _equipmentIdsForUser(txn, id)).toList();
-      final nameRows = await txn.query(
-        'users',
-        columns: ['first_name', 'last_name'],
-        where: 'id = ?',
-        whereArgs: [id],
-        limit: 1,
-      );
-      final fn = nameRows.isEmpty
-          ? ''
-          : (nameRows.first['first_name'] as String?)?.trim() ?? '';
-      final ln = nameRows.isEmpty
-          ? ''
-          : (nameRows.first['last_name'] as String?)?.trim() ?? '';
-      final displayName = '$fn $ln'.trim();
-
-      await txn.delete('user_phones', where: 'user_id = ?', whereArgs: [id]);
-      await txn.delete('user_equipment', where: 'user_id = ?', whereArgs: [id]);
-      await txn.update(
-        'users',
-        {'is_deleted': 1},
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-      await AuditService.log(
-        txn,
-        action: DatabaseHelper.auditActionDelete,
-        userPerforming: user,
-        details: 'users id=$id',
-        entityType: AuditEntityTypes.user,
-        entityId: id,
-        entityName: displayName.isEmpty ? null : displayName,
-      );
       result[id] = (phoneNumbers: phoneNumbers, equipmentIds: equipmentIds);
     }
+    await _deleteUsersOn(txn, ids);
     return result;
   }
 

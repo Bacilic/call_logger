@@ -12,66 +12,29 @@ import '../../../../core/models/building_map_floor.dart';
 import '../building_map_label_layout.dart';
 import '../models/building_map_jump_target.dart';
 
-/// Undo ενός βήματος: στιγμιότυπο γεωμετρίας τμήματος πριν την τελευταία εγγραφή.
+/// Undo ενός βήματος: οι τιμές που είχαν, πριν από την τελευταία ενέργεια
+/// χάρτη, **ακριβώς** οι στήλες που έγραψε εκείνη η ενέργεια.
+///
+/// Όχι σταθερή λίστα πεδίων: η αφαίρεση από τον χάρτη σβήνει επωνυμία, μέγεθος
+/// ετικέτας, «κρυμμένο», όροφο φόρμας και χρώμα — μια λίστα μόνο με τη
+/// γεωμετρία έφερνε πίσω μισό τμήμα.
 @immutable
 class BuildingMapUndoSnapshot {
-  const BuildingMapUndoSnapshot({
+  BuildingMapUndoSnapshot({
     required this.departmentId,
-    required this.mapFloor,
-    required this.mapX,
-    required this.mapY,
-    required this.mapWidth,
-    required this.mapHeight,
-    required this.mapRotation,
-    required this.mapLabelOffsetX,
-    required this.mapLabelOffsetY,
-    required this.mapAnchorOffsetX,
-    required this.mapAnchorOffsetY,
-  });
+    required Map<String, Object?> values,
+  }) : values = Map.unmodifiable(values);
 
   final int departmentId;
-  final String? mapFloor;
-  final double? mapX;
-  final double? mapY;
-  final double? mapWidth;
-  final double? mapHeight;
-  final double mapRotation;
-  final double? mapLabelOffsetX;
-  final double? mapLabelOffsetY;
-  final double? mapAnchorOffsetX;
-  final double? mapAnchorOffsetY;
+  final Map<String, Object?> values;
 }
 
 class BuildingMapUndoController extends Notifier<BuildingMapUndoSnapshot?> {
   @override
   BuildingMapUndoSnapshot? build() => null;
 
-  void captureFromValues({
-    required int departmentId,
-    required String? mapFloor,
-    required double? mapX,
-    required double? mapY,
-    required double? mapWidth,
-    required double? mapHeight,
-    required double mapRotation,
-    required double? mapLabelOffsetX,
-    required double? mapLabelOffsetY,
-    required double? mapAnchorOffsetX,
-    required double? mapAnchorOffsetY,
-  }) {
-    state = BuildingMapUndoSnapshot(
-      departmentId: departmentId,
-      mapFloor: mapFloor,
-      mapX: mapX,
-      mapY: mapY,
-      mapWidth: mapWidth,
-      mapHeight: mapHeight,
-      mapRotation: mapRotation,
-      mapLabelOffsetX: mapLabelOffsetX,
-      mapLabelOffsetY: mapLabelOffsetY,
-      mapAnchorOffsetX: mapAnchorOffsetX,
-      mapAnchorOffsetY: mapAnchorOffsetY,
-    );
+  void capture(BuildingMapUndoSnapshot snapshot) {
+    state = snapshot;
   }
 
   void clear() {

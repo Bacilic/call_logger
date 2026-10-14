@@ -254,6 +254,34 @@ void main() {
       );
     });
 
+    test('copyUserEquipmentLinks: αν δεν γραφτεί το Ιστορικό, δεν μένουν '
+        'συνδέσεις χωρίς ίχνος', () async {
+      final eqId = await repo.insertEquipmentFromMap(equipmentRow('PC-ATOM'));
+      await db.insert('user_equipment', {
+        'user_id': userId,
+        'equipment_id': eqId,
+      });
+      await db.execute(
+        "CREATE TRIGGER break_audit BEFORE INSERT ON audit_log "
+        "BEGIN SELECT RAISE(ABORT, 'σπασμένο Ιστορικό'); END",
+      );
+      try {
+        await expectLater(
+          repo.copyUserEquipmentLinks(userId, userId2),
+          throwsA(anything),
+        );
+      } finally {
+        await db.execute('DROP TRIGGER IF EXISTS break_audit');
+      }
+
+      final links = await db.query(
+        'user_equipment',
+        where: 'user_id = ?',
+        whereArgs: [userId2],
+      );
+      expect(links, isEmpty);
+    });
+
     test('copyUserEquipmentLinks', () async {
       final eqId = await repo.insertEquipmentFromMap(equipmentRow('PC-COPY'));
       await db.insert('user_equipment', {

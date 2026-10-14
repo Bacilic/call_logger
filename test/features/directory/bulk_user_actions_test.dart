@@ -5,6 +5,7 @@
 
 import 'dart:io';
 
+import 'package:call_logger/core/database/audit_service.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/phone_repository.dart';
 import 'package:call_logger/core/database/user_repository.dart';
@@ -125,6 +126,17 @@ void main() {
       limit: 1,
     );
     return rows.first;
+  }
+
+  /// Όλες οι γραμμές Ιστορικού του υπαλλήλου, ενωμένες — για «γράφτηκε τι χάθηκε;».
+  Future<List<String>> userAuditDetails(int id) async {
+    final rows = await db.query(
+      'audit_log',
+      columns: ['details'],
+      where: 'entity_type = ? AND entity_id = ?',
+      whereArgs: [AuditEntityTypes.user, id],
+    );
+    return [for (final r in rows) r['details'] as String? ?? ''];
   }
 
   UserModel user(
@@ -497,6 +509,19 @@ void main() {
     Future<Set<int>> phoneDepartments() =>
         PhoneRepository(db).sharedDepartmentIds('2534');
 
+    test('η μεταφορά γράφει στο Ιστορικό το τηλέφωνο που έφυγε, μαζί με '
+        'την αλλαγή τμήματος, σε μία εγγραφή', () async {
+      final ids = await seedSharedPhone();
+      await db.delete('audit_log');
+      await transferSharedPhone(ids, SharedAssetFate.staysInDepartment);
+
+      final lines = await userAuditDetails(ids.nakastsi);
+      expect(lines, hasLength(1));
+      expect(lines.single, contains('Αποσύνδεση τηλεφώνου 2534'));
+      final row = await userRow(ids.nakastsi);
+      expect(row['department_id'], ids.leaves);
+    });
+
     test('κοινό τηλέφωνο «παραμένει»: φεύγει από τη μεταφερόμενη, μένει στη '
         'συνάδελφο και στο τμήμα, η αναίρεση το επιστρέφει', () async {
       final ids = await seedSharedPhone();
@@ -846,6 +871,31 @@ void main() {
       await applyBulkActionUndo(db, record);
       expect(await userPhones(annaId), ['2100', '2200']);
     });
+
+    test(
+      'ο καθαρισμός τηλεφώνων γράφει στο Ιστορικό ποιο τηλέφωνο έφυγε',
+      () async {
+        final deptId = await insertDepartment('Γραμματεία');
+        final annaId = await insertUser(
+          firstName: 'Άννα',
+          lastName: 'Α',
+          departmentId: deptId,
+          phones: ['2100'],
+        );
+        final plan = buildBulkUserClearPlan(
+          selectedUsers: [
+            user(annaId, 'Άννα', 'Α', deptId: deptId, phones: ['2100']),
+          ],
+          field: BulkClearField.phones,
+          fate: BulkClearFate.shareInOwnDepartment,
+        );
+        await db.delete('audit_log');
+        await db.transaction((txn) => applyBulkUserClearInTxn(txn, db, plan));
+
+        final lines = await userAuditDetails(annaId);
+        expect(lines.join(' | '), contains('Αποσύνδεση τηλεφώνου 2100'));
+      },
+    );
 
     test(
       'αποδέσμευση τηλεφώνων ως κοινόχρηστα στο τμήμα του υπαλλήλου',

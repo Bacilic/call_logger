@@ -46,6 +46,31 @@ class AuditFilterModel {
     );
   }
 
+  /// Ίδια φίλτρα ⇔ ίδιες γραμμές στη λίστα.
+  ///
+  /// Η οθόνη συγκρίνει ολόκληρο το φίλτρο για να ξέρει αν η επιλογή προς
+  /// διαγραφή ισχύει ακόμη. Κάθε νέο πεδίο μπαίνει **και εδώ** — αλλιώς η
+  /// αλλαγή του αφήνει επιλεγμένες εγγραφές που δεν φαίνονται πια.
+  @override
+  bool operator ==(Object other) =>
+      other is AuditFilterModel &&
+      other.keyword == keyword &&
+      other.action == action &&
+      other.entityType == entityType &&
+      other.userPerforming == userPerforming &&
+      other.dateFrom == dateFrom &&
+      other.dateTo == dateTo;
+
+  @override
+  int get hashCode => Object.hash(
+    keyword,
+    action,
+    entityType,
+    userPerforming,
+    dateFrom,
+    dateTo,
+  );
+
   /// Έναρξη ημέρας (τοπική) για `timestamp >=`.
   String? get dateFromInclusiveIso {
     if (dateFrom == null) return null;
