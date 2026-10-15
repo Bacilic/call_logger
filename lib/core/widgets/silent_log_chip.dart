@@ -12,8 +12,9 @@ import 'compact_tooltip.dart';
 /// άλλους. Μια στιγμιαία ειδοποίηση θα χανόταν· η κατάσταση διαρκεί, άρα και
 /// η ένδειξη.
 ///
-/// Εμφανίζεται **μόνο όσο κρατά η σιωπή**: μόλις το ημερολόγιο μετακομίσει σε
-/// φάκελο που απαντά, εξαφανίζεται μόνη της.
+/// Εμφανίζεται **μόνο όσο κρατά η σιωπή**, από τη στιγμή που ξεκινά: μόλις το
+/// ημερολόγιο ξαναγράψει (ο φάκελος γύρισε, ή μετακόμισε σε φάκελο που
+/// απαντά), εξαφανίζεται μόνη της.
 class SilentLogChip extends StatelessWidget {
   const SilentLogChip({super.key, required this.extended, this.serviceForTest});
 
@@ -26,17 +27,22 @@ class SilentLogChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final service = serviceForTest ?? CrashLogService.instanceOrNull;
-    if (service == null || service.isDiskAvailable) {
-      return const SizedBox.shrink();
-    }
+    if (service == null) return const SizedBox.shrink();
+    return ValueListenableBuilder<bool>(
+      valueListenable: service.diskAvailability,
+      builder: (context, available, _) => available
+          ? const SizedBox.shrink()
+          : _buildIndicator(context, service.diskUnavailableReason),
+    );
+  }
 
+  Widget _buildIndicator(BuildContext context, String? reason) {
     final theme = Theme.of(context);
     final color = theme.colorScheme.tertiary;
-    final reason = service.diskUnavailableReason;
 
     return CompactTooltip(
       message:
-          'Ο φάκελος καταγραφής δεν απαντά, οπότε για αυτή τη συνεδρία:\n'
+          'Ο φάκελος καταγραφής δεν απαντά, οπότε προς το παρόν:\n'
           '• τα σφάλματα δεν καταγράφονται πουθενά\n'
           '• οι συνάδελφοι δεν βλέπουν ότι δουλεύεις\n'
           '• ο έλεγχος «ποιος άλλος έχει τη βάση» δεν λειτουργεί'

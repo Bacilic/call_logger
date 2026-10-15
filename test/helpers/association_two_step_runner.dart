@@ -6,6 +6,7 @@ import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/provider/smart_entity_selector_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod/misc.dart' show Override;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'association_two_step_scenarios.dart';
@@ -91,7 +92,9 @@ class AssociationTwoStepRunner {
     await LookupService.instance.loadFromDatabase();
   }
 
-  static Future<ProviderContainer> createContainer() async {
+  static Future<ProviderContainer> createContainer({
+    List<Override> overrides = const [],
+  }) async {
     final container = ProviderContainer(
       overrides: [
         lookupServiceProvider.overrideWith((ref) async {
@@ -100,6 +103,7 @@ class AssociationTwoStepRunner {
           await service.loadFromDatabase();
           return LookupLoadResult(service: service);
         }),
+        ...overrides,
       ],
     );
     await container.read(lookupServiceProvider.future);

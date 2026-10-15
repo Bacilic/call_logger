@@ -50,6 +50,7 @@ void main() {
       StateError('database is locked'),
       StackTrace.current,
     );
+    await CrashLogService.instance.pendingWrites;
 
     final logs = Directory(
       CrashLogService.logsDirectoryForDatabasePath('${root.path}/Hospital.db'),
@@ -82,6 +83,7 @@ void main() {
       'δίσκος γεμάτος',
       StackTrace.current,
     );
+    await CrashLogService.instance.pendingWrites;
 
     final logs = Directory(
       CrashLogService.logsDirectoryForDatabasePath('${root.path}/Hospital.db'),

@@ -298,10 +298,8 @@ class SmartEntitySelectorAssociation {
     );
   }
 
-  /// Η γρήγορη εκκρεμότητα του κύκλου — υπενθύμιση, ποτέ εμπόδιο.
-  ///
-  /// Η αποτυχία της δεν ακυρώνει καταχώρηση που ήδη γράφτηκε: καταγράφεται και
-  /// η ροή συνεχίζει.
+  /// Η γρήγορη εκκρεμότητα του κύκλου — υπενθύμιση, ποτέ εμπόδιο: την
+  /// αποτυχία της την απορροφά το [AssociationQuickTask.sync].
   Future<void> _syncOrphanQuickTask({
     required OrphanQuickAddPlan plan,
     required int departmentId,
@@ -316,28 +314,19 @@ class SmartEntitySelectorAssociation {
         ? refreshed.findEquipmentsByCode(equipmentCode)
         : const <EquipmentModel>[];
 
-    try {
-      await quickTask.sync(
-        newEntityEligible: plan.hasNewEntity,
-        associationWorkDone: plan.writesAnything,
-        summaryText: summary,
-        callerName: null,
-        callerId: null,
-        departmentId: departmentId,
-        equipmentId: resolved.isNotEmpty ? resolved.first.id : null,
-        phoneText: plan.phone,
-        userText: null,
-        equipmentText: equipmentCode,
-        departmentText: departmentName.isEmpty ? null : departmentName,
-      );
-    } catch (e, st) {
-      developer.log(
-        'orphan quick add task sync failed',
-        name: 'SmartEntitySelectorNotifier',
-        error: e,
-        stackTrace: st,
-      );
-    }
+    await quickTask.sync(
+      newEntityEligible: plan.hasNewEntity,
+      associationWorkDone: plan.writesAnything,
+      summaryText: summary,
+      callerName: null,
+      callerId: null,
+      departmentId: departmentId,
+      equipmentId: resolved.isNotEmpty ? resolved.first.id : null,
+      phoneText: plan.phone,
+      userText: null,
+      equipmentText: equipmentCode,
+      departmentText: departmentName.isEmpty ? null : departmentName,
+    );
   }
 
   /// Το «+» της φόρμας κλήσης: καταχωρεί στον κατάλογο ό,τι η φόρμα ξέρει

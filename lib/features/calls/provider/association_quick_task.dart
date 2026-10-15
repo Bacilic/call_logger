@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../directory/providers/catalog_validation_provider.dart';
@@ -19,7 +21,49 @@ class AssociationQuickTask {
   Ref get ref => host.selectorRef;
 
   /// Μία γρήγορη εκκρεμότητα ανά κύκλο: δημιουργία ή append/merge στην υπάρχουσα.
+  ///
+  /// **Υπενθύμιση, ποτέ εμπόδιο:** καλείται αφού η καταχώρηση έχει ήδη
+  /// γραφτεί, οπότε η αποτυχία της καταγράφεται για διάγνωση και δεν φτάνει
+  /// ποτέ στον καλούντα — αλλιώς το «+» θα έλεγε «Σφάλμα αποθήκευσης» για
+  /// κάτι που αποθηκεύτηκε, και θα χανόταν και το ίχνος στο Ιστορικό.
   Future<void> sync({
+    required bool newEntityEligible,
+    required bool associationWorkDone,
+    required String? summaryText,
+    required String? callerName,
+    required int? callerId,
+    required int? departmentId,
+    required int? equipmentId,
+    String? phoneText,
+    String? userText,
+    String? equipmentText,
+    String? departmentText,
+  }) async {
+    try {
+      await _syncOrThrow(
+        newEntityEligible: newEntityEligible,
+        associationWorkDone: associationWorkDone,
+        summaryText: summaryText,
+        callerName: callerName,
+        callerId: callerId,
+        departmentId: departmentId,
+        equipmentId: equipmentId,
+        phoneText: phoneText,
+        userText: userText,
+        equipmentText: equipmentText,
+        departmentText: departmentText,
+      );
+    } catch (e, st) {
+      developer.log(
+        'quick add task sync failed',
+        name: 'SmartEntitySelectorNotifier',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  Future<void> _syncOrThrow({
     required bool newEntityEligible,
     required bool associationWorkDone,
     required String? summaryText,
@@ -95,7 +139,13 @@ class AssociationQuickTask {
         departmentName: departmentName,
         equipmentCode: equipmentCode,
       );
-    } catch (_) {
+    } catch (e, st) {
+      developer.log(
+        'quick add validation hints unavailable',
+        name: 'SmartEntitySelectorNotifier',
+        error: e,
+        stackTrace: st,
+      );
       return const [];
     }
   }

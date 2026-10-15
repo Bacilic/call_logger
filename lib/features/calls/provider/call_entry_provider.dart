@@ -176,7 +176,7 @@ class CallEntryNotifier extends Notifier<CallEntryState> {
   ///   1. Πράσινο (+) `associateCurrentIfNeeded` → παράγωγες εγγραφές audit → `_pendingAuditOriginRows`
   ///   2. `submitCall` → `insertCallOnExecutor` (κύρια ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ) → `stampPendingAuditOriginsForCall`
   ///   3. `submitOnlyPending` → `createFromCallOnExecutor` → `stampPendingAuditOriginsForTask`
-  ///   4. Γρήγορη εκκρεμότητα συσχέτισης (`_syncAssociationQuickTask`) → ίδιο pending μέχρι submit εκκρεμότητας/κλήσης
+  ///   4. Γρήγορη εκκρεμότητα συσχέτισης (`AssociationQuickTask.sync`) → ίδιο pending μέχρι submit εκκρεμότητας/κλήσης
   ///
   /// CONTRACT (μην αλλοιωθεί):
   /// - Η submit ροή ΠΟΤΕ δεν δημιουργεί/ενημερώνει οντότητες καταλόγου (users/phones/equipment/departments).

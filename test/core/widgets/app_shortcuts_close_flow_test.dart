@@ -1,12 +1,23 @@
 import 'dart:async';
 
+import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/database_init_result.dart';
+import 'package:call_logger/core/services/app_close_controller.dart';
+import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/core/services/shutdown_coordinator.dart';
+import 'package:call_logger/core/widgets/app_shortcuts.dart';
+import 'package:call_logger/core/widgets/main_shell.dart';
 import 'package:call_logger/core/widgets/shutdown_progress_screen.dart';
+import 'package:call_logger/features/calls/models/call_model.dart';
+import 'package:call_logger/features/calls/provider/calls_dashboard_providers.dart';
+import 'package:call_logger/features/tasks/providers/tasks_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../test_reporter.dart';
+import '../../test_setup.dart';
 
 /// Ελέγχει ότι η ροή κλεισίματος εκτελεί τα βήματα με τη σωστή σειρά.
 void main() {
@@ -82,6 +93,77 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
       },
     );
+  });
+
+  /// Μετρημένο 14/10/2026 με σβηστό διακομιστή: το κλείσιμο ξανάστηνε την
+  /// κύρια οθόνη από την αρχή, και το στήσιμό της (ανάγνωση του αρχείου της
+  /// βάσης στο δίκτυο) πάγωσε την εφαρμογή για 56 δευτερόλεπτα.
+  group('το κλείσιμο στο πραγματικό κέλυφος', () {
+    registerCallLoggerIsolatedDatabaseHooks();
+
+    setUpAll(() async {
+      LookupService.instance.resetForReload();
+      await LookupService.instance.loadFromDatabase();
+    });
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      appCloseController.resetForTesting();
+    });
+
+    tearDown(appCloseController.resetForTesting);
+
+    testWidgets('η κύρια οθόνη δεν ξαναστήνεται όταν ξεκινά το κλείσιμο', (
+      tester,
+    ) async {
+      final path = (await DatabaseHelper.instance.database).path;
+      final hang = Completer<void>();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...callLoggerTestProviderOverrides(),
+            globalRecentCallsProvider.overrideWith(
+              (ref) async => const <CallModel>[],
+            ),
+            globalPendingTasksCountProvider.overrideWith((ref) async => 0),
+          ],
+          child: MaterialApp(
+            home: AppShortcuts(
+              initialDatabaseResult: DatabaseInitResult.success(path),
+              initialIsLocalDevMode: false,
+              shutdownCoordinatorFactory: () => ShutdownCoordinator(
+                persistWindowBounds: () => hang.future,
+                walCheckpoint: () async {},
+                exitBackup: () async {},
+                closeConnection: () async {},
+                closeCrashLog: () async {},
+                terminate: () {},
+                delay: (_) => Completer<void>().future,
+              ),
+              shutdownTraceFactory: () async => null,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      final before = tester.state(find.byType(MainShell));
+
+      appCloseController.handleCloseRequest();
+      await tester.pump();
+
+      expect(
+        identical(tester.state(find.byType(MainShell)), before),
+        isTrue,
+        reason: greekExpectMsg(
+          'Η κύρια οθόνη μένει όπως ήταν· στήσιμο από την αρχή ξανατρέχει '
+          'τη δουλειά της εκκίνησης τη στιγμή που η βάση ίσως λείπει',
+        ),
+      );
+
+      hang.complete();
+      await tester.pump(const Duration(seconds: 11));
+    });
   });
 }
 

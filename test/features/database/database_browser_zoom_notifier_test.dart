@@ -79,6 +79,7 @@ void main() {
 
     expect(container.read(databaseBrowserZoomByTableProvider), isEmpty);
 
+    await CrashLogService.instance.pendingWrites;
     final logs = await errorLogFiles(dbPath);
     final contents = [for (final f in logs) await f.readAsString()].join('\n');
     expect(

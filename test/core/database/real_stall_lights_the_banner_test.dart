@@ -174,5 +174,36 @@ void main() {
 
       expect(tracker.recordRealStall(t0), DatabaseReachability.staleConnection);
     });
+
+    test(
+      'η πραγματική αποτυχία δεν μηδενίζει τη νεκρή σύνδεση που χτίζεται',
+      () {
+        // Πεδίο 14/10: ο POPINIO ξανάναψε, η σύνδεση έμενε νεκρή, και κάθε
+        // φόρτωση που έληγε στα 18 δευτερόλεπτα έσβηνε το μέτρημα — η κίτρινη
+        // λωρίδα έμενε επ' αόριστον αντί για την πορτοκαλί.
+        final tracker = DatabaseReachabilityTracker()
+          ..recordSample(DatabaseProbeSample.staleConnection, now: t0)
+          ..recordRealStall(t0);
+
+        expect(
+          tracker.recordSample(DatabaseProbeSample.staleConnection, now: t0),
+          DatabaseReachability.staleConnection,
+        );
+      },
+    );
+
+    test(
+      'η πραγματική αποτυχία δεν μηδενίζει τον χαμένο φάκελο που χτίζεται',
+      () {
+        final tracker = DatabaseReachabilityTracker()
+          ..recordSample(DatabaseProbeSample.unreachable, now: t0)
+          ..recordRealStall(t0);
+
+        expect(
+          tracker.recordSample(DatabaseProbeSample.unreachable, now: t0),
+          DatabaseReachability.lost,
+        );
+      },
+    );
   });
 }

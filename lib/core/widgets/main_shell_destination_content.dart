@@ -52,7 +52,13 @@ class MainShellDestinationContent {
   /// να έρθουν — αλλιώς θα φάνταζε με λάθος κατώφλι για ένα καρέ.
   int _stalenessThresholdDays = kDefaultDatabaseStalenessDays;
 
+  /// Η ώρα τελευταίας αλλαγής του αρχείου βάσης — `null` όσο δεν έχει έρθει
+  /// ή όταν δεν διαβάστηκε.
+  DateTime? _fileModifiedAt;
+  bool _fileModifiedAtLoaded = false;
+
   void initDatabaseStateNotice() {
+    _loadFileModifiedAt();
     _databaseStateNotice = _evaluateCurrentDatabaseNotice();
     runBackgroundTask(_loadDatabaseNoticePreferences());
     _watchDatabaseReachability();
@@ -73,6 +79,9 @@ class MainShellDestinationContent {
   void syncDatabaseStateNotice(MainShell oldWidget) {
     if (oldWidget.databaseProfile != host.widget.databaseProfile ||
         oldWidget.databaseResult.path != host.widget.databaseResult.path) {
+      if (oldWidget.databaseResult.path != host.widget.databaseResult.path) {
+        _loadFileModifiedAt();
+      }
       final next = _evaluateCurrentDatabaseNotice();
       if (next.identity != _databaseStateNotice.identity) {
         _databaseNoticeDismissedThisSession = false;
@@ -82,18 +91,42 @@ class MainShellDestinationContent {
     }
   }
 
+  /// Διαβάζει την ώρα του αρχείου βάσης **στο παρασκήνιο**, με όριο χρόνου.
+  ///
+  /// Το αρχείο ζει συχνά σε φάκελο δικτύου. Η σύγχρονη ανάγνωση που υπήρχε
+  /// εδώ πάγωσε την εφαρμογή για 56 δευτερόλεπτα με σβηστό διακομιστή
+  /// (μετρημένο 14/10/2026). Η ώρα χρειάζεται μόνο για την ταυτότητα του «το
+  /// είπα ήδη» — η κρίση «παλιά βάση» δεν την αγγίζει — οπότε η λωρίδα απλώς
+  /// περιμένει να έρθει, όπως περιμένει και τις ρυθμίσεις της.
+  void _loadFileModifiedAt() {
+    final path = host.widget.databaseResult.path?.trim() ?? '';
+    _fileModifiedAt = null;
+    _fileModifiedAtLoaded = path.isEmpty;
+    if (path.isEmpty) return;
+    runBackgroundTask(() async {
+      DateTime? modifiedAt;
+      try {
+        modifiedAt = await File(
+          path,
+        ).lastModified().timeout(const Duration(seconds: 3));
+      } catch (_) {
+        // Άγνωστη ώρα: η ταυτότητα παίρνει το μηδέν, όπως πάντα σε αποτυχία.
+      }
+      final current = host.widget.databaseResult.path?.trim() ?? '';
+      if (!host.mounted || current != path) return;
+      _fileModifiedAt = modifiedAt;
+      _fileModifiedAtLoaded = true;
+      _databaseStateNotice = _evaluateCurrentDatabaseNotice();
+      host.notifyShellChanged();
+    }());
+  }
+
   DatabaseStateNotice _evaluateCurrentDatabaseNotice() {
     final path = host.widget.databaseResult.path?.trim() ?? '';
-    var modifiedAt = DateTime.fromMillisecondsSinceEpoch(0);
-    if (path.isNotEmpty) {
-      try {
-        modifiedAt = File(path).lastModifiedSync();
-      } catch (_) {}
-    }
     return evaluateDatabaseStateNotice(
       profile: host.widget.databaseProfile,
       dbPath: path,
-      fileModifiedAt: modifiedAt,
+      fileModifiedAt: _fileModifiedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
       now: DateTime.now(),
       thresholdDays: _stalenessThresholdDays,
     );
@@ -146,7 +179,7 @@ class MainShellDestinationContent {
   }
 
   bool get _showDatabaseStateNotice {
-    if (!_acknowledgedNoticeLoaded) return false;
+    if (!_acknowledgedNoticeLoaded || !_fileModifiedAtLoaded) return false;
     if (_databaseStateNotice.kind == DatabaseNoticeKind.none) return false;
     if (_databaseNoticeDismissedThisSession) return false;
     return _acknowledgedNoticeIdentity != _databaseStateNotice.identity;

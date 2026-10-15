@@ -72,7 +72,6 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
   AppLifecycleListener? _appLifecycleListener;
   bool _windowCloseHandling = false;
   bool _showShutdownProgress = false;
-  ShutdownCoordinator? _activeShutdownCoordinator;
   Timer? _shutdownRevealTimer;
   bool _shutdownStillRunning = false;
 
@@ -192,6 +191,9 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   bool _handleGlobalShortcutKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
+    // Μέσα στο κλείσιμο καμία συντόμευση δεν ανοίγει τίποτα: το πληκτρολόγιο
+    // φτάνει εδώ απευθείας, παρακάμπτοντας το στρώμα που καλύπτει την οθόνη.
+    if (appCloseController.isClosing) return true;
 
     final keyboard = HardwareKeyboard.instance;
     Intent? matched;
@@ -298,16 +300,15 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   // --- ShutdownUiPresenter: μόνο παρουσίαση, καμία ενορχήστρωση ---
 
+  /// Η οθόνη προόδου ζει στο στρώμα πάνω από όλη την εφαρμογή
+  /// ([AppClosingShield]), όχι εδώ: εδώ θα έμενε κάτω από τους διαλόγους.
   @override
   void onShutdownStarted(ShutdownCoordinator coordinator) {
-    if (mounted) {
-      setState(() => _activeShutdownCoordinator = coordinator);
-    } else {
-      _activeShutdownCoordinator = coordinator;
-    }
+    appCloseController.publishProgress(coordinator);
     _shutdownStillRunning = true;
     _shutdownRevealTimer = scheduleShutdownProgressReveal(
       onReveal: () {
+        appCloseController.revealProgress();
         if (!mounted) return;
         setState(() => _showShutdownProgress = true);
       },
@@ -315,8 +316,8 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     );
   }
 
-  /// Ένα frame ώστε το Offstage ShutdownProgressScreen να συνδεθεί στο stream
-  /// πριν ξεκινήσουν τα γεγονότα των βημάτων.
+  /// Ένα frame ώστε η αόρατη οθόνη προόδου να συνδεθεί στο stream πριν
+  /// ξεκινήσουν τα γεγονότα των βημάτων.
   @override
   Future<void> awaitNextFrame() => WidgetsBinding.instance.endOfFrame;
 
@@ -390,8 +391,10 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
 
   @override
   Widget build(BuildContext context) {
-    final coordinator = _activeShutdownCoordinator;
-    final shell = Shortcuts(
+    // Μόλις φανεί η οθόνη προόδου, το κέλυφος φεύγει. Ως τότε μένει στη θέση
+    // του — ίδια θέση στο δέντρο, ώστε να μη στηθεί ποτέ από την αρχή.
+    if (_showShutdownProgress) return const SizedBox.shrink();
+    return Shortcuts(
       shortcuts: _shortcuts,
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -416,21 +419,6 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
           onDatabaseReopened: _recheckDatabase,
         ),
       ),
-    );
-
-    if (coordinator == null) return shell;
-
-    // Η οθόνη προόδου μένει στο δέντρο (Offstage) ώστε να συλλέγει γεγονότα
-    // από την αρχή· γίνεται ορατή μόνο μετά το κατώφλι των 500 ms.
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (!_showShutdownProgress) shell,
-        Offstage(
-          offstage: !_showShutdownProgress,
-          child: ShutdownProgressScreen(events: coordinator.events),
-        ),
-      ],
     );
   }
 }

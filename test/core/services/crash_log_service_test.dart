@@ -105,12 +105,13 @@ void main() {
 
     test(
       'logError — μία εγγραφή με ώρα, ΣΤΑΘΜΟ, έκδοση, βαρύτητα και στοίβα',
-      () {
+      () async {
         service.logError(
           sampleError('Σφάλμα δοκιμής'),
           sampleStack(),
           fatal: false,
         );
+        await service.pendingWrites;
 
         final records = todayRecords();
         expect(records, hasLength(1));
@@ -134,7 +135,7 @@ void main() {
       },
     );
 
-    test('logError — τα συνοδευτικά μπαίνουν στην εγγραφή', () {
+    test('logError — τα συνοδευτικά μπαίνουν στην εγγραφή', () async {
       service.logError(
         sampleError('A RenderFlex overflowed by 25 pixels'),
         StackTrace.empty,
@@ -143,22 +144,25 @@ void main() {
             'Φάση: during layout\n'
             'debugCreator: Column ← Padding ← CallsScreen',
       );
+      await service.pendingWrites;
 
       final details = todayRecords().single.details;
       expect(details, contains('debugCreator: Column ← Padding ← CallsScreen'));
       expect(details, contains('Φάση: during layout'));
     });
 
-    test('logError — χωρίς συνοδευτικά η εγγραφή μένει όπως ήταν', () {
+    test('logError — χωρίς συνοδευτικά η εγγραφή μένει όπως ήταν', () async {
       service.logError(sampleError('Απλό'), sampleStack(), fatal: false);
+      await service.pendingWrites;
 
       final record = todayRecords().single;
       expect(record.message, 'Exception: Απλό');
       expect(record.details, contains('#0      main.<fn>'));
     });
 
-    test('logError — κρίσιμη βαρύτητα για fatal σφάλματα', () {
+    test('logError — κρίσιμη βαρύτητα για fatal σφάλματα', () async {
       service.logError(sampleError('Κρίσιμο'), sampleStack(), fatal: true);
+      await service.pendingWrites;
 
       expect(todayRecords().single.severity, LogSeverity.critical);
     });
@@ -180,10 +184,11 @@ void main() {
 
     test(
       'dedup — γραμμή σύνοψης ανά 100 επαναλήψεις ενώ τρέχει η εφαρμογή',
-      () {
+      () async {
         for (var i = 0; i < 120; i++) {
           service.logError(sampleError(), sampleStack(), fatal: false);
         }
+        await service.pendingWrites;
 
         expect(
           recordsOf(LogKind.repeat).single.message,
@@ -309,8 +314,8 @@ void main() {
 
     test(
       'appendRecord — η εγγραφή άλλης πηγής σφραγίζεται με σταθμό και έκδοση',
-      () {
-        service.appendRecord(
+      () async {
+        await service.appendRecord(
           LogRecord(
             time: fixedNow,
             kind: LogKind.startup,
@@ -342,7 +347,7 @@ void main() {
       } catch (_) {}
 
       expect(broken.isDiskAvailable, isFalse);
-      broken.appendRecord(
+      await broken.appendRecord(
         LogRecord(
           time: fixedNow,
           kind: LogKind.startup,
@@ -581,10 +586,12 @@ void main() {
         expect(readMark().listensForShutdownRequests, isFalse);
 
         live.onShutdownRequested = (_) async {};
+        await live.pendingWrites;
 
         expect(readMark().listensForShutdownRequests, isTrue);
 
         live.onShutdownRequested = null;
+        await live.pendingWrites;
 
         expect(readMark().listensForShutdownRequests, isFalse);
       },
@@ -622,6 +629,7 @@ void main() {
       final before = lockFile().readAsStringSync();
       var handled = false;
       live.onShutdownRequested = (_) async => handled = true;
+      await live.pendingWrites;
       final afterListen = lockFile().readAsStringSync();
       live.disableDiskForTest('δοκιμή');
       clock = fixedNow.add(const Duration(minutes: 3));

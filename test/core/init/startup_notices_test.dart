@@ -69,6 +69,7 @@ void main() {
 
       recordStartupNotice('Δοκιμή φάσης', StateError('σκόπιμη αποτυχία'));
       flushStartupNoticesToCrashLog();
+      await CrashLogService.instance.pendingWrites;
 
       final logsDir = CrashLogService.logsDirectoryForDatabasePath(
         databasePath,

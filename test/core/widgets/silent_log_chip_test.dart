@@ -22,8 +22,13 @@ Future<void> _pump(
   await tester.pump();
 }
 
-CrashLogService _service() =>
-    CrashLogService(logsDirectory: r'\\popinio\CallLogger\Data Base\logs');
+CrashLogService _service() {
+  final service = CrashLogService(
+    logsDirectory: r'\\popinio\CallLogger\Data Base\logs',
+  );
+  addTearDown(service.dispose);
+  return service;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +44,19 @@ void main() {
     service.disableDiskForTest('Η διαδρομή του δικτύου δεν εντοπίστηκε');
 
     await _pump(tester, service: service);
+
+    expect(find.text('Χωρίς καταγραφή'), findsOneWidget);
+  });
+
+  testWidgets('σιωπή στη μέση της δουλειάς: η ένδειξη ανάβει αμέσως', (
+    tester,
+  ) async {
+    final service = _service();
+    await _pump(tester, service: service);
+    expect(find.text('Χωρίς καταγραφή'), findsNothing);
+
+    service.disableDiskForTest('ο διακομιστής σβήστηκε');
+    await tester.pump();
 
     expect(find.text('Χωρίς καταγραφή'), findsOneWidget);
   });

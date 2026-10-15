@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:call_logger/core/services/app_close_controller.dart';
 import 'package:call_logger/core/updates/update_installer_service.dart';
 import 'package:call_logger/core/updates/update_manifest.dart';
 import 'package:call_logger/core/updates/update_providers.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -219,6 +222,65 @@ void main() {
       await assertUserDataUntouched();
     },
   );
+
+  // Μέχρι 15/10/2026 η «Επανεκκίνηση τώρα» τερμάτιζε επιτόπου, και κάθε
+  // ενημέρωση γραφόταν στο ημερολόγιο ως «ΑΠΟΤΟΜΟ ΤΕΛΟΣ».
+  test('«Επανεκκίνηση τώρα» με την εφαρμογή σε λειτουργία: κλείνει με τον '
+      'κανονικό τρόπο, χωρίς ερώτηση', () async {
+    final released = await writeReleaseZip(
+      files: [
+        ArchiveFile('call_logger.exe', 2, [0x4D, 0x5A]),
+      ],
+    );
+    var normalCloses = 0;
+    var questions = 0;
+    final controller =
+        AppCloseController(runShutdown: () async => normalCloses++)
+          ..confirmUserClose = () async {
+            questions++;
+            return true;
+          };
+    addTearDown(controller.dispose);
+    final launched = <List<String>>[];
+    final service = UpdateInstallerService(
+      installDirectory: installDir.path,
+      resolveUpdateFolder: () async => updateFolder.path,
+      currentPid: () => 4242,
+      clock: () => DateTime(2026, 7, 19),
+      isDevelopmentBuild: () => false,
+      launchDetached: (exe, args, {workingDirectory}) async {
+        launched.add([exe, ...args]);
+      },
+      terminateApp: () => closeAppForUpdate(controller: controller),
+    );
+    await service.prepareUpdate(released.manifest);
+
+    // Δεν επιστρέφει ποτέ: το κλείσιμο τελειώνει με το τέλος της διεργασίας.
+    unawaited(service.launchPendingUpdate());
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (normalCloses == 0 && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    expect(launched, isNotEmpty, reason: 'ο updater ξεκινά πρώτος');
+    expect(normalCloses, 1);
+    expect(controller.isClosing, isTrue);
+    expect(questions, 0, reason: 'το κλείσιμο το αποφάσισε ήδη ο χρήστης');
+  });
+
+  test('η ενημέρωση από την εφαρμογή σε λειτουργία κλείνει με τον κανονικό '
+      'τρόπο, όχι επιτόπου', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    expect(
+      identical(
+        container.read(updateInstallerServiceProvider).terminateApp,
+        closeAppForUpdate,
+      ),
+      isTrue,
+    );
+  });
 
   test(
     'applyPendingUpdateOnStartup launches when pending, skips in dev',

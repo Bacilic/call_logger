@@ -25,8 +25,11 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     // `ValueNotifier<Operator?>`: singleton ταυτότητας χρήστη
     // (`lib/core/services/current_operator.dart`) — ζει όσο η διεργασία, ώστε
     // η ένδειξη στη μπάρα να παρακολουθεί ζωντανά την «Αλλαγή χρήστη».
+    // `ValueNotifier<AppClosingState>`: η κατάσταση κλεισίματος της διεργασίας
+    // (`lib/core/services/app_close_controller.dart`) — ζει όσο η εφαρμογή.
     notDisposed: {
       'ValueNotifier<FatalErrorState?>': null,
+      'ValueNotifier<AppClosingState>': null,
       'ValueNotifier<Operator?>': null,
       'TextPainter': 1,
     },

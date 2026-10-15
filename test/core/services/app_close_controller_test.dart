@@ -7,6 +7,8 @@
 //
 //   flutter test test/core/services/app_close_controller_test.dart
 
+import 'dart:async';
+
 import 'package:call_logger/core/services/app_close_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -87,6 +89,40 @@ void main() {
 
       expect(controller.hasUiHandler, isFalse);
       expect(controller.isInstalled, isFalse);
+    });
+
+    test('δεύτερο «Χ» όσο φαίνεται η ερώτηση δεν ρωτά ξανά', () async {
+      var asked = 0;
+      var shutdownRuns = 0;
+      final answer = Completer<bool>();
+      final controller =
+          AppCloseController(runShutdown: () async => shutdownRuns++)
+            ..confirmUserClose = () {
+              asked++;
+              return answer.future;
+            };
+      addTearDown(controller.dispose);
+
+      final first = controller.handleUserCloseRequest();
+      await controller.handleUserCloseRequest();
+      answer.complete(true);
+      await first;
+
+      expect(asked, 1);
+      expect(shutdownRuns, 1);
+    });
+
+    test('ερώτηση που αποτυγχάνει δεν κρατά τον χρήστη μέσα', () async {
+      var shutdownRuns = 0;
+      final controller = AppCloseController(
+        runShutdown: () async => shutdownRuns++,
+      )..confirmUserClose = () async => throw StateError('δοκιμή');
+      addTearDown(controller.dispose);
+
+      await controller.handleUserCloseRequest();
+
+      expect(shutdownRuns, 1);
+      expect(controller.isClosing, isTrue);
     });
   });
 }

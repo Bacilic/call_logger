@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/app_config.dart';
+import '../services/app_close_controller.dart';
 import '../services/settings_service.dart';
 import 'build_environment.dart';
 import 'update_check_result.dart';
@@ -76,7 +78,14 @@ final pendingUpdateProvider = FutureProvider<bool>((ref) async {
 });
 
 /// Κατασκευή του πραγματικού installer service (κοινή για provider + startup).
-UpdateInstallerService buildDefaultUpdateInstallerService() {
+///
+/// Το [terminateApp] λέει πώς κλείνει η εφαρμογή αφού ξεκινήσει ο updater —
+/// και διαφέρει ανάλογα με το **πότε**: στην εκκίνηση δεν έχει ανοίξει ακόμη
+/// τίποτα ([exitBeforeAnythingOpened]), ενώ με την εφαρμογή σε λειτουργία
+/// χρειάζεται το κανονικό κλείσιμο ([closeAppForUpdate]).
+UpdateInstallerService buildDefaultUpdateInstallerService({
+  AppTerminator terminateApp = closeAppForUpdate,
+}) {
   final config = UpdateSourceConfig(
     getUserUpdateFolderPath: () =>
         SettingsService().catalogs.getUpdateFolderPath(),
@@ -95,10 +104,29 @@ UpdateInstallerService buildDefaultUpdateInstallerService() {
         workingDirectory: workingDirectory,
       );
     },
-    terminateApp: () async {
-      exit(0);
-    },
+    terminateApp: terminateApp,
   );
+}
+
+/// Η εφαρμογή δουλεύει: κλείνει με τον **κανονικό** τρόπο, όπως με το «Χ».
+///
+/// Μέχρι 15/10/2026 η «Επανεκκίνηση τώρα» τερμάτιζε επιτόπου: το σημάδι ζωής
+/// έμενε πίσω και κάθε ενημέρωση γραφόταν ως «ΑΠΟΤΟΜΟ ΤΕΛΟΣ», ο χρήστης
+/// φαινόταν συνδεδεμένος ως τη λήξη, η βάση δεν έκλεινε, και το αντίγραφο
+/// εξόδου δεν γινόταν. Ο updater έχει ήδη ξεκινήσει και περιμένει (έως 90″)
+/// να κλείσει η διεργασία· το κανονικό κλείσιμο χωρά άνετα.
+///
+/// Χωρίς ερώτηση για ανοιχτό διάλογο: το κλείσιμο το αποφάσισε ήδη ο χρήστης.
+/// Δεν επιστρέφει ποτέ — το κλείσιμο τελειώνει με το τέλος της διεργασίας.
+Future<void> closeAppForUpdate({AppCloseController? controller}) {
+  (controller ?? appCloseController).handleCloseRequest();
+  return Completer<void>().future;
+}
+
+/// Στην εκκίνηση, πριν ανοίξει βάση, ημερολόγιο ή παράθυρο: δεν υπάρχει τίποτα
+/// να κλείσει, και ο τερματισμός γίνεται επιτόπου.
+Future<void> exitBeforeAnythingOpened() async {
+  exit(0);
 }
 
 final updateInstallerServiceProvider = Provider<UpdateInstallerService>((ref) {
@@ -131,7 +159,9 @@ Future<bool> maybeApplyPendingUpdateOnStartup() async {
   if (!Platform.isWindows) return false;
   try {
     return await applyPendingUpdateOnStartup(
-      buildDefaultUpdateInstallerService(),
+      buildDefaultUpdateInstallerService(
+        terminateApp: exitBeforeAnythingOpened,
+      ),
     );
   } catch (_) {
     return false;

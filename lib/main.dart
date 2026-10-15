@@ -32,8 +32,10 @@ import 'core/errors/fatal_error_routing.dart';
 import 'core/errors/layout_error_diagnostics.dart';
 import 'core/errors/nonfatal_font_error_classifier.dart';
 import 'core/widgets/crash_restart_notice.dart';
+import 'core/widgets/app_closing_shield.dart';
 import 'core/widgets/app_init_wrapper.dart';
 import 'core/widgets/app_shell_with_global_fatal_error.dart';
+import 'core/widgets/close_with_open_dialog_question.dart';
 import 'core/widgets/global_fatal_error_notifier.dart';
 import 'core/widgets/modal_route_tracker.dart';
 import 'core/widgets/transient_database_notice.dart';
@@ -256,6 +258,9 @@ Future<void> _bootstrapAndRunApp() async {
       // μία φορά εδώ ώστε το X/Alt+F4 να λειτουργεί σε ΟΠΟΙΑΔΗΠΟΤΕ οθόνη —
       // και στις οθόνες σφάλματος που αντικαθιστούν το κύριο κέλυφος.
       await appCloseController.install();
+      // Το «Χ» με ανοιχτό διάλογο ρωτά πριν κλείσει η εφαρμογή.
+      appCloseController.confirmUserClose = () =>
+          confirmCloseWithOpenDialog(appModalRouteTracker);
       try {
         if (AppConfig.hasActiveProfile) {
           await wm.setTitle(
@@ -363,6 +368,10 @@ class MyApp extends StatelessWidget {
       // Μετρά τους ανοιχτούς διαλόγους: η αυτόματη ανανέωση της κοινόχρηστης
       // βάσης περιμένει όσο ο χρήστης δουλεύει πάνω σε κάτι.
       navigatorObservers: [appModalRouteTracker],
+      // Πάνω από τον πλοηγό — άρα και πάνω από κάθε διάλογο: από τη στιγμή που
+      // ξεκινά το κλείσιμο, τίποτα από κάτω δεν πατιέται.
+      builder: (context, child) =>
+          AppClosingShield(child: child ?? const SizedBox.shrink()),
       locale: const Locale('el'),
       supportedLocales: const [Locale('el', 'GR'), Locale('en', 'US')],
       localizationsDelegates: const [

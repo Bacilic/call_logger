@@ -39,7 +39,7 @@ class SessionLivenessKeeper {
       // Ίχνος που δεν διαβάζεται (αλλοιωμένο, ή γραμμένο από έκδοση που δεν
       // κρατούσε τίποτα) εξακολουθεί να είναι είδηση: κάτι χάθηκε. Λέμε ό,τι
       // ξέρουμε, χωρίς να εφευρίσκουμε λεπτομέρειες.
-      host.recordLostRun(previous);
+      await host.recordLostRun(previous);
     }
     await _retireMarkFromPreviousNamingScheme(timeout);
     _currentMark = SessionLivenessMark(
@@ -84,7 +84,7 @@ class SessionLivenessKeeper {
       // Ίχνος με δηλωμένη εκτέλεση δεν ανήκει στην παλιά ονοματοδοσία — κάποιος
       // άλλος το έγραψε εκεί, και δεν είναι δικό μας να το κρίνουμε.
       if (previous?.instance != null) return;
-      host.recordLostRun(previous);
+      await host.recordLostRun(previous);
       await legacy.delete().timeout(timeout);
     } catch (_) {
       // Η εκκαθάριση είναι ευγένεια προς τον φάκελο, όχι προϋπόθεση εκκίνησης.
@@ -147,7 +147,7 @@ class SessionLivenessKeeper {
       instance: mark.instance,
       listensForShutdownRequests: handler != null,
     );
-    _markAlive();
+    unawaited(_markAlive());
   }
 
   /// **Ένας παλμός, δύο πράξεις.** Το ίχνος γράφεται και, στην ίδια στιγμή,
@@ -157,10 +157,28 @@ class SessionLivenessKeeper {
   /// αιτών προβλέπει πότε θα δούμε το σημείωμά του προσθέτοντας ένα λεπτό στο
   /// «τελευταίο σημάδι ζωής» που διαβάζει. Αν ο έλεγχος είχε δικό του χρονιστή,
   /// η φάση του θα διέφερε και η πρόβλεψη θα ήταν εικασία.
+  ///
+  /// **Όσο το ημερολόγιο σιωπά, ο παλμός ρωτά αν ο φάκελος γύρισε** — με την
+  /// ίδια εγγραφή του ίχνους, που αν πετύχει ξαναζωντανεύει την καταγραφή.
   Future<void> pulse() async {
-    _markAlive();
+    if (host.isDiskAvailable) {
+      await _markAlive();
+    } else if (!await _tryResume()) {
+      return;
+    }
     if (onShutdownRequested == null) return;
     await _checkForShutdownRequest();
+  }
+
+  Future<bool> _tryResume() async {
+    final mark = _currentMark?.seenAt(host.clock());
+    if (mark == null) return false;
+    final resumed = await host.tryResumeDisk(
+      _sessionLockFile().path,
+      mark.encode(),
+    );
+    if (resumed) _currentMark = mark;
+    return resumed;
   }
 
   /// Ένα «υπάρχεις;» σε γνωστό όνομα αρχείου — ποτέ σάρωση φακέλου.
@@ -204,16 +222,15 @@ class SessionLivenessKeeper {
     }
   }
 
-  /// Ανανεώνει το «μέχρι πότε ζούσα». Σιωπηλή αποτυχία: το σημάδι ζωής είναι
-  /// διαγνωστική άνεση και δεν επιτρέπεται να διακόψει τη δουλειά του χρήστη.
-  void _markAlive() {
+  /// Ανανεώνει το «μέχρι πότε ζούσα» μέσα από την ουρά του ημερολογίου: το
+  /// σημάδι ζωής είναι διαγνωστική άνεση και δεν επιτρέπεται να κρατήσει την
+  /// οθόνη. Αν ο φάκελος δεν απαντήσει, σιγεί όλο το ημερολόγιο.
+  Future<void> _markAlive() async {
     if (!host.isDiskAvailable) return;
     final mark = _currentMark?.seenAt(host.clock());
     if (mark == null) return;
-    try {
-      _sessionLockFile().writeAsStringSync(mark.encode(), flush: true);
-      _currentMark = mark;
-    } catch (_) {}
+    _currentMark = mark;
+    await host.writeLivenessMark(_sessionLockFile().path, mark.encode());
   }
 
   /// Σβήνει το ίχνος — στο ομαλό κλείσιμο και πριν από κάθε μετακόμιση.

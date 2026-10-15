@@ -80,6 +80,7 @@ void main() {
 
     recordStartupNotice('Δοκιμή', StateError('κάτι'), StackTrace.current);
     flushStartupNoticesToCrashLog();
+    await CrashLogService.instance.pendingWrites;
 
     expect(startupNoticesReport(), isNull);
     final logs = Directory(p.join(temp.path, 'logs'));

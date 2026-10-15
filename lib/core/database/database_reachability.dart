@@ -200,8 +200,12 @@ class DatabaseReachabilityTracker {
         _consecutiveStale >= failuresBeforeAlarm) {
       return state;
     }
-    _consecutiveFailures = 0;
-    _consecutiveStale = 0;
+    // Ούτε η βαρύτερη κρίση που ΧΤΙΖΕΤΑΙ σβήνει. Ως 15/10/2026 το μέτρημα
+    // μηδενιζόταν εδώ: μετά την επιστροφή σβηστού διακομιστή κάθε φόρτωση που
+    // έληγε ακύρωνε το μισό «νεκρή», και όσο η λωρίδα έλεγε «απασχολημένη»
+    // οι οθόνες ξαναδοκίμαζαν — η κίτρινη τρεφόταν από τον εαυτό της και η
+    // πορτοκαλί δεν άναβε ποτέ. Η προτεραιότητα του [state] αφήνει τη
+    // βαρύτερη να υπερισχύσει μόλις φτάσει το κατώφλι της.
     _consecutiveLocked = failuresBeforeAlarm;
     _stallFloorUntil = now.add(realStallFloor);
     return state;

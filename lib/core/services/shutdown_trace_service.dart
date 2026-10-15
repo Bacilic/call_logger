@@ -55,7 +55,7 @@ class ShutdownTraceService {
   /// Πού καταλήγει το ίχνος όταν αξίζει να κρατηθεί — το ημερήσιο αρχείο
   /// του [CrashLogService], που κατέχει τον φάκελο, τον φρουρό του δίσκου και
   /// τη σφραγίδα του σταθμού.
-  final void Function(LogRecord record) appendRecord;
+  final FutureOr<void> Function(LogRecord record) appendRecord;
 
   /// Πάνω από αυτό το συνολικό όριο το κλείσιμο θεωρείται αργό.
   final Duration slowThreshold;
@@ -233,7 +233,7 @@ class ShutdownTraceService {
     File file,
     ShutdownTraceIncident summary,
   ) async {
-    appendRecord(summary.toRecord(trace: await file.readAsString()));
+    await appendRecord(summary.toRecord(trace: await file.readAsString()));
     try {
       await file.delete();
     } catch (_) {}
@@ -256,7 +256,7 @@ class ShutdownTraceService {
   /// συνήθως δεν έχει δουλειά να κάνει.
   static Future<bool> promoteOrphanedTrace({
     required String workingDirectory,
-    required void Function(LogRecord record) appendRecord,
+    required FutureOr<void> Function(LogRecord record) appendRecord,
     String? legacySharedDirectory,
     DateTime Function()? now,
   }) async {
@@ -281,7 +281,7 @@ class ShutdownTraceService {
 
   static Future<bool> _promoteOne(
     File orphan, {
-    required void Function(LogRecord record) appendRecord,
+    required FutureOr<void> Function(LogRecord record) appendRecord,
     required DateTime Function() clock,
   }) async {
     if (!await orphan.exists()) return false;
@@ -302,7 +302,7 @@ class ShutdownTraceService {
           hadFailure: false,
           wasInterrupted: true,
         );
-        appendRecord(summary.toRecord(trace: content));
+        await appendRecord(summary.toRecord(trace: content));
       }
       await orphan.delete();
       return !alreadySummarised;

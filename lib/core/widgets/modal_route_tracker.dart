@@ -13,7 +13,15 @@ import 'package:flutter/material.dart';
 /// Μετρά μόνο [PopupRoute] (διάλογοι, μενού, φύλλα): η κανονική πλοήγηση
 /// ανάμεσα σε οθόνες δεν είναι «απασχόληση».
 class ModalRouteTracker extends NavigatorObserver {
-  int _openCount = 0;
+  /// Οι ανοιχτοί διάλογοι, με τη σειρά που άνοιξαν — ο τελευταίος είναι αυτός
+  /// που βλέπει ο χρήστης.
+  final List<Route<dynamic>> _open = <Route<dynamic>>[];
+
+  /// Υπάρχει ανοιχτός διάλογος — η ερώτηση του «Χ» πριν το κλείσιμο.
+  bool get hasOpenDialog => _open.isNotEmpty;
+
+  /// Ο διάλογος στην κορυφή, `null` όταν δεν υπάρχει κανένας.
+  Route<dynamic>? get topDialog => _open.isEmpty ? null : _open.last;
 
   /// Καλείται όταν κλείσει ο **τελευταίος** ανοιχτός διάλογος.
   ///
@@ -36,47 +44,48 @@ class ModalRouteTracker extends NavigatorObserver {
 
   /// Δουλεύει τώρα ο χρήστης πάνω σε κάτι που δεν πρέπει να διακοπεί;
   bool get isUserBusy {
-    if (_openCount == 0) return false;
+    if (_open.isEmpty) return false;
     final tolerant = refreshTolerantWhile;
     // Μόνο όταν ο ανεκτικός διάλογος είναι ο ΜΟΝΟΣ ανοιχτός: ένας δεύτερος από
     // πάνω του (επιβεβαίωση, φόρμα, επιλογέας) σημαίνει ότι ο χρήστης όντως
     // δουλεύει, ό,τι κι αν λέει ο από κάτω.
-    if (tolerant != null && _openCount == 1 && tolerant()) return false;
+    if (tolerant != null && _open.length == 1 && tolerant()) return false;
     return true;
   }
 
   bool _counts(Route<dynamic>? route) => route is PopupRoute;
 
-  void _release() {
-    if (_openCount == 0) return;
-    _openCount--;
-    if (_openCount == 0) onAllClosed?.call();
+  void _release(Route<dynamic> route) {
+    if (!_open.remove(route)) return;
+    if (_open.isEmpty) onAllClosed?.call();
   }
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (_counts(route)) _openCount++;
+    if (_counts(route)) _open.add(route);
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (_counts(route)) _release();
+    if (_counts(route)) _release(route);
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (_counts(route)) _release();
+    if (_counts(route)) _release(route);
   }
 
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    final was = _counts(oldRoute);
-    final now = _counts(newRoute);
-    if (was && !now) {
-      _release();
-    } else if (!was && now) {
-      _openCount++;
+    if (oldRoute != null && _counts(oldRoute)) {
+      final index = _open.indexOf(oldRoute);
+      if (index >= 0 && newRoute != null && _counts(newRoute)) {
+        _open[index] = newRoute;
+        return;
+      }
+      _release(oldRoute);
     }
+    if (newRoute != null && _counts(newRoute)) _open.add(newRoute);
   }
 }
 

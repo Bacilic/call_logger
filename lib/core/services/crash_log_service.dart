@@ -29,8 +29,14 @@ import 'station_shutdown_request.dart';
 ///
 /// Γι' αυτό κάθε πράξη έχει όριο χρόνου, και η αποτυχία δεν είναι μοιραία:
 /// η υπηρεσία περνά σε λειτουργία **χωρίς δίσκο** ([isDiskAvailable] false)
-/// και δεν ξαναγγίζει τη διαδρομή — ούτε στη σύγχρονη καταγραφή σφαλμάτων,
-/// που τρέχει στο νήμα της διεπαφής και θα την πάγωνε σε κάθε σφάλμα.
+/// και δεν ξαναγγίζει τη διαδρομή.
+///
+/// **Καμία εγγραφή δεν γίνεται στο νήμα της οθόνης.** Όλες περνούν από μία
+/// ουρά ([_enqueueWrite]): μία-μία, στο παρασκήνιο, με όριο χρόνου. Μετρημένο
+/// 14/10/2026 με σβηστό διακομιστή: μία σύγχρονη εγγραφή πάγωσε την εφαρμογή
+/// για πάνω από 45 δευτερόλεπτα, με μαύρο παράθυρο και «Δεν αποκρίνεται».
+/// Η πρώτη αποτυχία σιγεί το ημερολόγιο, και ο παλμός του λεπτού δοκιμάζει
+/// να το ξαναζωντανέψει ([tryResumeDisk]) μόλις ο φάκελος απαντήσει ξανά.
 ///
 /// **Ο μοναδικός κάτοχος του φακέλου `logs`:** αυτός κρίνει τη διαθεσιμότητα,
 /// αυτός μετακομίζει ([retargetTo]). Τρεις συνεργάτες δουλεύουν πάντα μέσα από
@@ -45,7 +51,10 @@ class CrashLogService {
     String? instanceId,
     this._maxDetailedRepeats = 20,
     this._repeatSummaryInterval = 100,
+    LogFileWriter? writeFile,
+    this._writeTimeout = backgroundWriteTimeout,
   }) : _now = now ?? DateTime.now,
+       _writeFile = writeFile ?? _writeToDisk,
        databaseFileName = databaseFileName?.trim(),
        instanceId = (instanceId ?? OperatorPresenceHeartbeat.instanceId).trim();
 
@@ -100,8 +109,17 @@ class CrashLogService {
   /// σειρά εκτέλεσης.
   @visibleForTesting
   static void resetForTest() {
-    _instance?.stopLivenessHeartbeat();
+    _instance?.dispose();
     _instance = null;
+  }
+
+  /// Σταματά τον παλμό και αφήνει όσους ακούν τη διαθεσιμότητα του δίσκου.
+  ///
+  /// Στην εφαρμογή το ημερολόγιο ζει όσο η διεργασία· το χρειάζονται τα τεστ,
+  /// που στήνουν δικό τους σε κάθε έλεγχο.
+  void dispose() {
+    stopLivenessHeartbeat();
+    _diskAvailability.dispose();
   }
 
   static CrashLogService get instance {
@@ -118,6 +136,15 @@ class CrashLogService {
   /// τρία δευτερόλεπτα η σιωπή δεν διαβάζεται πια ως καθυστέρηση.
   static const Duration diskProbeTimeout = Duration(seconds: 3);
 
+  /// Μέγιστη αναμονή για μια εγγραφή **της ουράς**, αφού η οθόνη έχει ανοίξει.
+  ///
+  /// Μεγαλύτερο από το [diskProbeTimeout] επίτηδες: εδώ δεν περιμένει κανείς,
+  /// οπότε το όριο κρίνει μόνο πότε λέμε «ο φάκελος χάθηκε». Μετρημένο
+  /// 14/10/2026: στην εκκίνηση, η αντιγραφή του στιγμιότυπου της βάσης (16 MB
+  /// από τον POPINIO) καθυστέρησε μια εγγραφή πάνω από τρία δευτερόλεπτα, και
+  /// το ημερολόγιο σίγησε για 47 δευτερόλεπτα με τον φάκελο ζωντανό.
+  static const Duration backgroundWriteTimeout = Duration(seconds: 15);
+
   /// Ο φάκελος των ημερήσιων αρχείων. Αλλάζει μόνο μέσω [retargetTo].
   String logsDirectory;
   bool _diskAvailable = true;
@@ -125,6 +152,33 @@ class CrashLogService {
 
   /// False όταν ο φάκελος δεν απάντησε: τίποτα δεν γράφεται στον δίσκο.
   bool get isDiskAvailable => _diskAvailable;
+
+  /// Το [isDiskAvailable] για όποιον πρέπει να δει την αλλαγή τη στιγμή που
+  /// γίνεται — η ένδειξη «Χωρίς καταγραφή» ανάβει και σβήνει μόνη της.
+  ValueListenable<bool> get diskAvailability => _diskAvailability;
+  final ValueNotifier<bool> _diskAvailability = ValueNotifier<bool>(true);
+
+  /// Σίγησε στη μέση της δουλειάς, άρα ο παλμός δοκιμάζει να συνεχίσει.
+  ///
+  /// Η σιωπή της **εκκίνησης** μένει για όλη τη συνεδρία, όπως πάντα: εκεί
+  /// δεν γράφτηκε ποτέ το ίχνος «τρέχω τώρα», και μια συνέχεια χωρίς αυτό θα
+  /// έδειχνε στους συναδέλφους εκτέλεση που δεν ανακοινώθηκε ποτέ.
+  bool _canResume = false;
+  DateTime? _silentSince;
+  bool _resuming = false;
+
+  final LogFileWriter _writeFile;
+  final Duration _writeTimeout;
+
+  /// Η ουρά των εγγραφών: η επόμενη ξεκινά όταν τελειώσει η προηγούμενη.
+  Future<void> _queue = Future<void>.value();
+
+  /// Αλλάζει σε κάθε μετακόμιση: μια εγγραφή του παλιού φακέλου που αποτύχει
+  /// αργότερα δεν σιγεί τον καινούργιο.
+  int _generation = 0;
+
+  /// Ολοκληρώνεται όταν γραφτεί ό,τι έχει ήδη μπει στην ουρά.
+  Future<void> get pendingWrites => _queue;
 
   /// Γιατί σίγησε το ημερολόγιο — για την αναφορά της εκκίνησης.
   String? get diskUnavailableReason => _diskUnavailableReason;
@@ -214,7 +268,7 @@ class CrashLogService {
     // Η συνεδρία δεν τελειώνει — μετακομίζει. Ο παλιός φάκελος το μαθαίνει,
     // αλλιώς η εξαγωγή του τη δείχνει «κλεισμένη ομαλά».
     if (next != previous) {
-      appendRecord(
+      await appendRecord(
         _sessionRecord(
           'η συνεδρία συνεχίζει δίπλα σε άλλη βάση',
           data: {'phase': 'moved', 'to': next},
@@ -234,8 +288,8 @@ class CrashLogService {
     // νέο ίχνος θα δήλωνε αρχείο που δεν αγγίζουμε πια, και ο φρουρός της
     // αναβάθμισης θα έψαχνε λάθος συναδέλφους.
     databaseFileName = p.basename(p.normalize(databasePath));
-    _diskAvailable = true;
-    _diskUnavailableReason = null;
+    _generation++;
+    _setDiskAvailable();
     try {
       await onStartup(
         retentionCount: retentionCount,
@@ -246,7 +300,7 @@ class CrashLogService {
       // φάκελος δεν απαντούσε). Χωρίς αυτή την εγγραφή η εξαγωγή αυτού του
       // φακέλου δεν βρίσκει τη συνεδρία — και χάνει μαζί της το κλείσιμο και
       // τα σφάλματά της.
-      appendRecord(
+      await appendRecord(
         _sessionRecord(
           'ΣΥΝΕΧΕΙΑ συνεδρίας v$appVersion — η καταγραφή συνεχίζει σε αυτόν '
           'τον φάκελο',
@@ -326,17 +380,133 @@ class CrashLogService {
 
   void _disableDisk(Object reason) {
     _diskAvailable = false;
+    _canResume = false;
     _diskUnavailableReason = reason is TimeoutException
         ? 'Ο φάκελος «$logsDirectory» δεν απάντησε μέσα σε '
-              '${diskProbeTimeout.inSeconds} δευτερόλεπτα.'
+              '${(reason.duration ?? _writeTimeout).inSeconds} δευτερόλεπτα.'
         : reason.toString();
+    _diskAvailability.value = false;
   }
+
+  /// Μια εγγραφή στη μέση της δουλειάς δεν απάντησε: σιωπή, με δυνατότητα
+  /// συνέχειας.
+  void _suspendDisk(Object reason) {
+    if (!_diskAvailable) return;
+    _disableDisk(reason);
+    _canResume = true;
+    _silentSince = _now();
+  }
+
+  void _setDiskAvailable() {
+    _diskAvailable = true;
+    _canResume = false;
+    _silentSince = null;
+    _diskUnavailableReason = null;
+    _diskAvailability.value = true;
+  }
+
+  /// Μία εγγραφή στην ουρά. Η διαδρομή κρίνεται **τώρα**, όχι όταν έρθει η
+  /// σειρά της: μια μετακόμιση στο μεταξύ δεν τη στέλνει σε άλλον φάκελο.
+  ///
+  /// Δεν πετά ποτέ· η αποτυχία της σιγεί το ημερολόγιο ([_suspendDisk]).
+  Future<void> _enqueueWrite(
+    String path,
+    String content, {
+    required bool append,
+  }) {
+    if (!_diskAvailable) return Future<void>.value();
+    final generation = _generation;
+    final next = _queue.then((_) async {
+      if (!_diskAvailable && generation == _generation) return;
+      Future<void>? write;
+      try {
+        write = _writeFile(path, content, append: append);
+        await write.timeout(_writeTimeout);
+      } catch (error) {
+        if (generation != _generation) return;
+        _suspendDisk(error);
+        if (error is TimeoutException && write != null) {
+          _resumeIfLateWriteLands(write, generation);
+        }
+      }
+    });
+    _queue = next;
+    return next;
+  }
+
+  /// Μια εγγραφή που απλώς άργησε δεν σημαίνει χαμένο φάκελο: αν τελικά
+  /// πετύχει, η καταγραφή συνεχίζει αμέσως, χωρίς να περιμένει τον παλμό.
+  void _resumeIfLateWriteLands(Future<void> write, int generation) {
+    unawaited(
+      write.then((_) {
+        if (generation == _generation && _canResume) _resume();
+      }, onError: (Object _) {}),
+    );
+  }
+
+  /// Γράφει το ίχνος «τρέχω τώρα» μέσα από την ουρά.
+  Future<void> writeLivenessMark(String path, String content) =>
+      _enqueueWrite(path, content, append: false);
+
+  /// Ο φάκελος απαντά ξανά; Δοκιμάζει γράφοντας το ίχνος «τρέχω τώρα».
+  ///
+  /// Μόνο μετά από σιωπή στη μέση της δουλειάς — δες [_canResume]. Ποτέ δύο
+  /// δοκιμές μαζί: σε σβηστό διακομιστή η μία κρατά ως το όριο των Windows —
+  /// στο παρασκήνιο, χωρίς να περιμένει τίποτα η οθόνη.
+  Future<bool> tryResumeDisk(
+    String livenessPath,
+    String livenessContent,
+  ) async {
+    if (_diskAvailable) return true;
+    if (!_canResume || _resuming) return false;
+    _resuming = true;
+    final generation = _generation;
+    try {
+      await _writeFile(
+        livenessPath,
+        livenessContent,
+        append: false,
+      ).timeout(_writeTimeout);
+    } catch (_) {
+      return false;
+    } finally {
+      _resuming = false;
+    }
+    if (generation != _generation || _diskAvailable) return _diskAvailable;
+    _resume();
+    return true;
+  }
+
+  /// Η καταγραφή συνεχίζει, και το ημερολόγιο λέει από πότε σιωπούσε.
+  void _resume() {
+    final silentSince = _silentSince;
+    _setDiskAvailable();
+    unawaited(
+      appendRecord(
+        _sessionRecord(
+          'Η καταγραφή συνεχίζει — ο φάκελος δεν απαντούσε'
+          '${silentSince == null ? '' : ' από ${_clockTime(silentSince)}'}',
+          data: {
+            'phase': 'resumed',
+            if (silentSince != null)
+              'silent_since': silentSince.toIso8601String(),
+          },
+        ),
+      ),
+    );
+  }
+
+  static String _clockTime(DateTime time) =>
+      '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}';
 
   Future<void> onShutdown() async {
     stopLivenessHeartbeat();
     if (!_diskAvailable) return;
+    _flushPendingRepeatSummaries();
+    await pendingWrites;
+    if (!_diskAvailable) return;
     try {
-      _flushPendingRepeatSummaries();
       await _liveness.remove();
     } catch (_) {}
   }
@@ -364,11 +534,9 @@ class CrashLogService {
     required bool fatal,
     String? diagnostics,
   }) {
-    // Ο φάκελος μπορεί να είναι σε δίκτυο που δεν απαντά. Η δημιουργία είναι
-    // σύγχρονη και τρέχει στο νήμα της διεπαφής: χωρίς αυτή τη γραμμή, ένα
-    // χαμένο δίκτυο θα πάγωνε την εφαρμογή σε **κάθε** σφάλμα που καταγράφεται.
+    // Χωρίς δίσκο ούτε μετριούνται οι επαναλήψεις: η σύνοψή τους θα έλεγε
+    // «επαναλήφθηκε» για εγγραφές που δεν γράφτηκαν ποτέ.
     if (!_diskAvailable) return;
-    Directory(logsDirectory).createSync(recursive: true);
     final key = _dedupKey(error, stack);
     final state = _dedupStates.putIfAbsent(key, _DedupState.new);
 
@@ -404,8 +572,8 @@ class CrashLogService {
   ///
   /// Την καλεί το [SessionLivenessKeeper] όταν βρίσκει ίχνος της προηγούμενης
   /// εκτέλεσης· η εγγραφή όμως γίνεται εδώ, από τον κάτοχο του φακέλου.
-  void recordLostRun(SessionLivenessMark? previous) {
-    _appendToDailyLog(
+  Future<void> recordLostRun(SessionLivenessMark? previous) {
+    return _appendToDailyLog(
       LogRecord(
         time: _now(),
         kind: LogKind.abnormalEnd,
@@ -459,15 +627,29 @@ class CrashLogService {
     );
   }
 
-  void _appendToDailyLog(LogRecord record) {
+  Future<void> _appendToDailyLog(LogRecord record) {
     final stamped = record.stamped(
       station: StationName.current,
       version: appVersion,
     );
-    final file = File(p.join(logsDirectory, dailyLogFileName(stamped.time)));
-    file.writeAsStringSync(
+    return _enqueueWrite(
+      p.join(logsDirectory, dailyLogFileName(stamped.time)),
       '${stamped.toJsonLine()}\n',
-      mode: FileMode.append,
+      append: true,
+    );
+  }
+
+  /// Η πραγματική εγγραφή: ασύγχρονη, ώστε το όριο χρόνου να την πιάνει.
+  static Future<void> _writeToDisk(
+    String path,
+    String content, {
+    required bool append,
+  }) async {
+    final file = File(path);
+    await file.parent.create(recursive: true);
+    await file.writeAsString(
+      content,
+      mode: append ? FileMode.append : FileMode.write,
       flush: true,
     );
   }
@@ -483,13 +665,16 @@ class CrashLogService {
   /// Δεύτερος κάτοχος θα ξανάκανε τα τρία, και κάποια στιγμή θα ξέχναγε το ένα.
   ///
   /// Η αποτυχία καταπίνεται σκόπιμα: ο καταγραφέας δεν ρίχνει ποτέ αυτό που
-  /// καταγράφει — ούτε την εκκίνηση, ούτε το κλείσιμο.
-  void appendRecord(LogRecord record) {
-    if (!_diskAvailable) return;
+  /// καταγράφει — ούτε την εκκίνηση, ούτε το κλείσιμο. Όποιος πρέπει να
+  /// ξέρει ότι η εγγραφή έφτασε (το ίχνος κλεισίματος, λίγο πριν τερματιστεί
+  /// η διεργασία) περιμένει το αποτέλεσμα.
+  Future<void> appendRecord(LogRecord record) {
+    if (!_diskAvailable) return Future<void>.value();
     try {
-      Directory(logsDirectory).createSync(recursive: true);
-      _appendToDailyLog(record);
-    } catch (_) {}
+      return _appendToDailyLog(record);
+    } catch (_) {
+      return Future<void>.value();
+    }
   }
 
   static String _dedupKey(Object error, StackTrace stack) {
@@ -501,6 +686,11 @@ class CrashLogService {
     return '${error.toString()}\n$firstStackLine';
   }
 }
+
+/// Πώς γράφεται ένα αρχείο του ημερολογίου — αντικαθίσταται στα τεστ με
+/// φάκελο που δεν απαντά.
+typedef LogFileWriter =
+    Future<void> Function(String path, String content, {required bool append});
 
 class _DedupState {
   int detailedCount = 0;

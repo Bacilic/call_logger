@@ -64,6 +64,11 @@ Future<void> _pumpShell(
     ),
   );
   await tester.pump();
+  // Η ώρα του αρχείου βάσης διαβάζεται στο παρασκήνιο, με πραγματικό I/O που
+  // το ψεύτικο ρολόι του τεστ δεν προωθεί: της δίνουμε πραγματικό χρόνο.
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 50)),
+  );
   await tester.pump(const Duration(milliseconds: 100));
 }
 
