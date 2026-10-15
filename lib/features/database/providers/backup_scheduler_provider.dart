@@ -11,6 +11,7 @@ import '../../../core/models/app_permission.dart';
 import '../../../core/providers/active_critical_operations_provider.dart';
 import '../../../core/services/current_operator.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/utils/background_task.dart';
 import '../models/database_backup_settings.dart';
 import '../services/active_backup_settings.dart';
 import '../services/backup_responsibility.dart';
@@ -49,13 +50,28 @@ class BackupSchedulerNotifier extends Notifier<int> {
     return 0;
   }
 
-  /// Φόρτωση ρυθμίσεων, έλεγχος φακέλου προορισμού, εκκίνηση περιοδικού ελέγχου.
+  /// Φόρτωση ρυθμίσεων, εκκίνηση περιοδικού ελέγχου, και έλεγχος φακέλου
+  /// προορισμού **στο παρασκήνιο**.
+  ///
+  /// Ο έλεγχος του φακέλου δεν περιμένεται: ο φάκελος είναι συνήθως δικτυακός,
+  /// και όταν δεν απαντά τα Windows θέλουν ~2,7 δευτ. για να το πουν (μετρημένο
+  /// 15/10/2026, φάκελος του νοσοκομείου ανοιγμένος από το σπίτι). Τόσο
+  /// κρατούσε κάθε άνοιγμα της εφαρμογής για μια ένδειξη κατάστασης που
+  /// κανείς δεν διαβάζει πριν ανοίξει η οθόνη. Ο έλεγχος γίνεται κανονικά —
+  /// απλώς η ένδειξη ενημερώνεται λίγο μετά το άνοιγμα.
   Future<void> checkStartupAndStart() async {
     await ref.read(databaseBackupSettingsProvider.notifier).load();
     final settings = ref.read(databaseBackupSettingsProvider);
-    await checkDestinationFolderStatus(settings);
     startTimer();
+    _destinationCheck = checkDestinationFolderStatus(settings);
+    runBackgroundTask(_destinationCheck!);
   }
+
+  Future<void>? _destinationCheck;
+
+  /// Ο τελευταίος έλεγχος φακέλου που ξεκίνησε η [checkStartupAndStart].
+  @visibleForTesting
+  Future<void>? get debugDestinationCheck => _destinationCheck;
 
   void startTimer() {
     _timer?.cancel();

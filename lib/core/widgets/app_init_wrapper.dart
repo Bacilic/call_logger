@@ -324,7 +324,17 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
     // Η οθόνη εκκίνησης μένει μπροστά όσο τρέχει η αρχικοποίηση ΚΑΙ όσο έχει
     // ακόμη βήματα να δείξει. Η αποτυχία την παρακάμπτει αμέσως: μπροστά σε
     // σφάλμα, ο χρήστης θέλει τα διαγνωστικά, όχι την εικόνα της ημέρας.
-    final failed = asyncInit.hasError || asyncInit.value?.success == false;
+    //
+    // Η αποτυχία μετρά μόνο όταν είναι **τρέχουσα**. Όσο ξανατρέχει η
+    // αρχικοποίηση (ο χρήστης πάτησε κουμπί στην οθόνη σφάλματος), η
+    // προηγούμενη αποτυχία είναι παλιά γνώση: αν την πιστεύαμε, η οθόνη
+    // σφάλματος θα έμενε ακίνητη όσο ανοίγει η βάση (μετρημένο 15/10/2026: 3,2
+    // δευτ. για την τοπική) και ο χρήστης θα ξαναπατούσε νομίζοντας ότι το
+    // κλικ δεν πέρασε. Η κάρτα εκκίνησης δείχνει αμέσως ότι κάτι γίνεται, και
+    // ο ελάχιστος χρόνος της τρέχει μαζί με την αναμονή, όχι μετά από αυτήν.
+    final retrying = asyncInit.isLoading;
+    final failed =
+        !retrying && (asyncInit.hasError || asyncInit.value?.success == false);
     if (widget.showStartupScreens && !_splashDone && !failed) {
       return StartupSplashScreen(
         // Η έκδοση διαβάστηκε ήδη στην εκκίνηση για το ημερολόγιο σφαλμάτων —
@@ -334,6 +344,12 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
         onFinished: () => unawaited(_leaveSplash()),
       );
     }
+
+    // Ίδιος κανόνας όταν η κάρτα έχει ήδη φύγει (αποτυχία μετά από αλλαγή
+    // βάσης): η επαναδοκιμή δείχνει φόρτωση, όχι το παλιό σφάλμα.
+    final previouslyFailed =
+        asyncInit.hasError || asyncInit.value?.success == false;
+    if (retrying && previouslyFailed) return const InitLoadingScreen();
 
     return asyncInit.when(
       loading: () => const InitLoadingScreen(),

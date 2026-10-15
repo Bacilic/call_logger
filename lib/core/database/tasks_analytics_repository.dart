@@ -150,13 +150,30 @@ class TasksAnalyticsRepository {
       "AND due_date < ?",
       [nowIso],
     );
-    final overdueInRangeCount = await countByQuery(
-      "SELECT COUNT(*) AS count FROM tasks "
+    // Καθυστερημένη του διαστήματος = έμεινε ανοιχτή μετά από κάποια προθεσμία
+    // της. Όχι «η προθεσμία είναι πριν από τώρα»: μια εκκρεμότητα που έκλεισε
+    // εγκαίρως έχει κι αυτή περασμένη προθεσμία, και δεν άργησε.
+    final rangeTaskRows = await db.rawQuery(
+      "SELECT due_date, snooze_history_json, "
+      "CASE WHEN status = 'closed' THEN $_completionMoment END "
+      "AS completed_moment "
+      "FROM tasks "
       "WHERE COALESCE(is_deleted, 0) = 0 "
-      "AND created_at >= ? AND created_at < ? "
-      "AND due_date < ?",
-      [startIso, endExclusiveIso, nowIso],
+      "AND created_at >= ? AND created_at < ?",
+      [startIso, endExclusiveIso],
     );
+    final overdueInRangeCount = rangeTaskRows.where((row) {
+      DateTime? parse(Object? v) =>
+          v == null ? null : DateTime.tryParse(v.toString());
+      return TaskOverdueTimeline.wasEverOverdue(
+        now: now,
+        endedAt: parse(row['completed_moment']),
+        currentDue: parse(row['due_date']),
+        snoozes: TaskSnoozeEntry.parseHistory(
+          row['snooze_history_json'] as String?,
+        ),
+      );
+    }).length;
 
     final avgCompletionRows = await db.rawQuery(
       "SELECT AVG((julianday($_completionMoment) - julianday(created_at)) * 86400.0) AS avg_seconds "
@@ -383,14 +400,6 @@ class TasksAnalyticsRepository {
   }) async {
     final startIso = start.toIso8601String();
     final endExclusiveIso = end.add(const Duration(days: 1)).toIso8601String();
-    final createdRows = await db.rawQuery(
-      "SELECT SUBSTR(created_at, 1, 10) AS day, COUNT(*) AS count "
-      "FROM tasks "
-      "WHERE COALESCE(is_deleted, 0) = 0 "
-      "AND created_at >= ? AND created_at < ? "
-      "GROUP BY SUBSTR(created_at, 1, 10)",
-      [startIso, endExclusiveIso],
-    );
     final closedRows = await db.rawQuery(
       "SELECT SUBSTR($_completionMoment, 1, 10) AS day, COUNT(*) AS count "
       "FROM tasks "
@@ -413,8 +422,9 @@ class TasksAnalyticsRepository {
       ],
     );
     // Όσες εκκρεμούσαν έστω και μία μέρα του παραθύρου — και όσες έκλεισαν ή
-    // διαγράφηκαν αργότερα: εκείνες τις μέρες ήταν ακόμη ανοιχτές. Η κρίση
-    // ανά μέρα γίνεται παρακάτω, χωρίς νέο ερώτημα.
+    // διαγράφηκαν αργότερα: εκείνες τις μέρες ήταν ακόμη ανοιχτές. Από αυτές
+    // κρίνονται, ανά μέρα και χωρίς νέο ερώτημα, και η καμπύλη ενεργών και η
+    // καμπύλη καθυστερημένων.
     final overdueRows = await db.rawQuery(
       "SELECT * FROM ("
       "SELECT t.created_at, t.due_date, t.snooze_history_json, t.status, "
@@ -437,10 +447,9 @@ class TasksAnalyticsRepository {
         startIso,
       ],
     );
-    final overdueTimelines = [
+    final timelines = [
       for (final row in overdueRows) ?_overdueTimelineFrom(row),
     ];
-    final createdByDay = _countMapByDay(createdRows);
     final closedByDay = _countMapByDay(closedRows);
     final cancelledByDay = _countMapByDay(cancelledRows);
     final snoozeRows = await db.rawQuery(
@@ -464,23 +473,30 @@ class TasksAnalyticsRepository {
     final cancelled = <double>[];
     final overdue = <double>[];
     final snoozes = <double>[];
-    var running = 0.0;
     final totalDays = end.difference(start).inDays + 1;
     for (var i = 0; i < totalDays; i++) {
       final day = start.add(Duration(days: i));
       final dayEnd = day.add(const Duration(days: 1));
       final key = _dayKey(day);
-      final cCreated = (createdByDay[key] ?? 0).toDouble();
       final cClosed = (closedByDay[key] ?? 0).toDouble();
       final cCancelled = (cancelledByDay[key] ?? 0).toDouble();
-      running += cCreated - cClosed;
-      if (running < 0) running = 0;
-      active.add(running);
+      active.add(
+        timelines
+            .where(
+              (t) => TaskOverdueTimeline.wasOpenAt(
+                dayEnd,
+                createdAt: t.createdAt,
+                endedAt: t.endedAt,
+              ),
+            )
+            .length
+            .toDouble(),
+      );
       closed.add(cClosed);
       cancelled.add(cCancelled);
       snoozes.add((snoozesByDay[key] ?? 0).toDouble());
       overdue.add(
-        overdueTimelines
+        timelines
             .where(
               (t) => TaskOverdueTimeline.wasOverdueAt(
                 dayEnd,

@@ -18,15 +18,16 @@
 // Καταγεγραμμένα στο roadmap.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../models/department_directory_column.dart';
 import '../../models/department_floor_display_extension.dart';
 import '../../models/department_model.dart';
-import 'catalog_table_hover_focus.dart';
+import '../../../../core/widgets/keyboard_row_navigation.dart';
+import '../../../../core/widgets/row_navigation_logic.dart';
 import 'catalog_select_all_checkbox.dart';
+import 'catalog_table_support.dart';
 
 /// Πίνακας τμημάτων: sort, επιλογή, πληκτρολόγιο όπως οι χρήστες.
 class DepartmentsDataTable extends StatefulWidget {
@@ -98,7 +99,7 @@ Color? _parseHexColor(String? s) {
 
 class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
   final _source = _DepartmentsTableSource();
-  final FocusNode _tableFocusNode = FocusNode();
+  final RowKeys _rowKeys = RowKeys();
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
   final Map<String, double> _columnWidths = Map<String, double>.from(
@@ -110,7 +111,6 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
   void dispose() {
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
-    _tableFocusNode.dispose();
     super.dispose();
   }
 
@@ -135,6 +135,10 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
     setState(() => _columnWidths[col.key] = w);
   }
 
+  /// Το id της γραμμής [index], ή `null` αν δεν υπάρχει (π.χ. η λίστα μίκρυνε).
+  int? _rowIdAt(int? index) =>
+      catalogRowIdAt(widget.departments, index, (d) => d.id);
+
   @override
   void didUpdateWidget(DepartmentsDataTable oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -155,6 +159,17 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
       ),
     );
     if (!widget.continuousScroll) {
+      final focus = widget.focusedRowIndex;
+      if (focus != null &&
+          focus != oldWidget.focusedRowIndex &&
+          focus >= 0 &&
+          focus < widget.departments.length) {
+        _pagedFirstRowIndex = pageStartShowingRow(
+          focusedRow: focus,
+          pageSize: _rowsPerPage,
+          currentStart: _pagedFirstRowIndex,
+        );
+      }
       _clampPagedFirstRowIndex();
     }
   }
@@ -170,8 +185,7 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
     }
   }
 
-  Color? get _focusHighlightColor =>
-      Theme.of(context).colorScheme.surfaceContainerHighest;
+  Color? get _focusHighlightColor => catalogFocusedRowColor(context);
 
   int _sortedVisibleColumnIndex() {
     final sc = widget.sortColumn;
@@ -271,84 +285,6 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
     );
   }
 
-  TableRow _dataRowToTableRow(BuildContext context, DataRow dataRow) {
-    final theme = Theme.of(context);
-    final dataTableTheme = theme.dataTableTheme;
-    final rowColor = dataRow.selected
-        ? (dataTableTheme.dataRowColor?.resolve({WidgetState.selected}) ??
-              theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
-        : dataTableTheme.dataRowColor?.resolve({WidgetState.selected});
-    return TableRow(
-      decoration: BoxDecoration(color: rowColor),
-      children: [
-        for (final cell in dataRow.cells)
-          TableCell(
-            verticalAlignment: TableCellVerticalAlignment.middle,
-            child: InkWell(
-              onTap: cell.onTap,
-              onDoubleTap: cell.onDoubleTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: cell.child,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = event.logicalKey;
-    final rows = widget.departments;
-    final len = rows.length;
-    if (len == 0) return KeyEventResult.ignored;
-    final onSetFocus = widget.onSetFocusedRowIndex;
-    final current = widget.focusedRowIndex;
-
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (onSetFocus != null) {
-        final next = current == null ? 0 : (current + 1).clamp(0, len - 1);
-        onSetFocus(next);
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (onSetFocus != null) {
-        final next = current == null
-            ? len - 1
-            : (current - 1).clamp(0, len - 1);
-        onSetFocus(next);
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.space) {
-      if (widget.selectedIds.length > 1 && widget.onRequestBulkEdit != null) {
-        widget.onRequestBulkEdit!();
-      } else {
-        final idx = current ?? 0;
-        if (idx >= 0 && idx < len) {
-          widget.onEditDepartment(rows[idx]);
-        }
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.delete ||
-        key == LogicalKeyboardKey.backspace) {
-      if (widget.selectedIds.isNotEmpty) {
-        widget.onRequestDelete?.call();
-      }
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
   List<DataColumn> _buildDataColumns(ThemeData theme) {
     final cols = widget.visibleColumns;
     final list = <DataColumn>[];
@@ -397,6 +333,7 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
     required Map<int, TableColumnWidth> columnWidths,
     required double tableWidth,
     Widget? bottomBar,
+    int firstRowIndex = 0,
   }) {
     final dataTableTheme = theme.dataTableTheme;
     final headingHeight = dataTableTheme.headingRowHeight ?? 56.0;
@@ -434,7 +371,12 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
                     columnWidths: columnWidths,
                     defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     children: [
-                      for (final row in rows) _dataRowToTableRow(context, row),
+                      for (var i = 0; i < rows.length; i++)
+                        catalogTableRow(
+                          context,
+                          rows[i],
+                          rowKey: _rowKeys.keyFor(firstRowIndex + i),
+                        ),
                     ],
                   ),
                 ),
@@ -614,18 +556,39 @@ class _DepartmentsDataTableState extends State<DepartmentsDataTable> {
             maxHeight: constraints.maxHeight,
             columnWidths: columnWidths,
             tableWidth: tableWidth,
+            firstRowIndex: start,
             bottomBar: _paginationBar(context, theme),
           );
         }
 
-        return Focus(
-          focusNode: _tableFocusNode,
-          onKeyEvent: _handleKey,
-          child: MouseRegion(
-            onEnter: (_) =>
-                requestCatalogTableKeyboardFocusOnHover(_tableFocusNode),
-            child: tableContent,
+        _rowKeys.retainFirst(widget.departments.length);
+        return KeyboardRowNavigation(
+          rowCount: widget.departments.length,
+          focusedRowIndex: widget.focusedRowIndex,
+          onFocusRow: (i) => widget.onSetFocusedRowIndex?.call(i),
+          pageStep: widget.continuousScroll
+              ? kDefaultRowPageStep
+              : _rowsPerPage,
+          onRevealRow: (i, {required movingDown}) =>
+              _rowKeys.reveal(i, movingDown: movingDown),
+          onOpen: (focused) => catalogOpenFromKeyboard<DepartmentModel>(
+            rows: widget.departments,
+            focusedIndex: focused,
+            selectedCount: widget.selectedIds.length,
+            onBulkEdit: widget.onRequestBulkEdit,
+            onEdit: widget.onEditDepartment,
           ),
+          onToggleRow: (i) {
+            final id = _rowIdAt(i);
+            if (id != null) widget.onToggleSelection(id);
+          },
+          onDelete: (focused) => catalogDeleteFromKeyboard(
+            selectedIds: widget.selectedIds,
+            focusedId: _rowIdAt(focused),
+            onToggleSelection: widget.onToggleSelection,
+            onRequestDelete: widget.onRequestDelete,
+          ),
+          child: tableContent,
         );
       },
     );

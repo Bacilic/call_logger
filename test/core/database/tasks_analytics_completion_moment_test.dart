@@ -411,6 +411,71 @@ void main() {
     });
   });
 
+  group('καθυστερημένες του διαστήματος', () {
+    final week = DateTimeRange(
+      start: DateTime(2026, 3, 1),
+      end: DateTime(2026, 3, 7),
+    );
+
+    Future<void> insertTask({
+      required String status,
+      required DateTime due,
+      DateTime? completedAt,
+    }) async {
+      await db.insert('tasks', {
+        'title': 'Εκκρεμότητα',
+        'status': status,
+        'is_deleted': 0,
+        'created_at': DateTime(2026, 3, 1, 9).toIso8601String(),
+        'updated_at': (completedAt ?? DateTime(2026, 3, 1, 9))
+            .toIso8601String(),
+        'completed_at': completedAt?.toIso8601String(),
+        'due_date': due.toIso8601String(),
+      });
+    }
+
+    test(
+      'εκκρεμότητα που έκλεισε ΕΓΚΑΙΡΩΣ δεν μετρά στις καθυστερημένες',
+      () async {
+        // Προθεσμία 10/3, έκλεισε 5/3 — σήμερα η προθεσμία έχει περάσει.
+        await insertTask(
+          status: 'closed',
+          due: DateTime(2026, 3, 10),
+          completedAt: DateTime(2026, 3, 5),
+        );
+
+        final s = await repo.getTaskAnalytics(week);
+
+        expect(s.createdInRangeCount, 1);
+        expect(s.overdueInRangeCount, 0);
+        expect(s.overdueRateRange, 0);
+      },
+    );
+
+    test(
+      'όσες έμειναν ανοιχτές μετά την προθεσμία τους μετρούν, οι άλλες όχι',
+      () async {
+        await insertTask(
+          status: 'closed',
+          due: DateTime(2026, 3, 10),
+          completedAt: DateTime(2026, 3, 5),
+        );
+        await insertTask(
+          status: 'closed',
+          due: DateTime(2026, 3, 2),
+          completedAt: DateTime(2026, 3, 3),
+        );
+        await insertTask(status: 'open', due: DateTime(2026, 3, 4));
+
+        final s = await repo.getTaskAnalytics(week);
+
+        expect(s.createdInRangeCount, 3);
+        expect(s.overdueInRangeCount, 2);
+        expect(s.overdueRateRange, closeTo(66.667, 0.001));
+      },
+    );
+  });
+
   group('ΦΩΤΟΓΡΑΦΙΑ — ολόκληρη η αναφορά', () {
     // Μικτό σύνολο: κάθε προέλευση, κάθε κατάσταση, μία ακυρωμένη, παλιές
     // εγγραφές πριν από το διάστημα. Όλες οι ημερομηνίες είναι περασμένες,
@@ -539,7 +604,7 @@ void main() {
         'backlog 5 1 0 1 2',
         'backlog 6 0 0 0 2',
         'backlog 7 0 0 0 2',
-        'spark active [1.0, 1.0, 0.0, 1.0, 2.0, 2.0, 2.0]',
+        'spark active [3.0, 3.0, 3.0, 4.0, 5.0, 4.0, 4.0]',
         'spark closed [0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0]',
         'spark cancelled [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]',
         'spark overdue [1.0, 2.0, 2.0, 3.0, 3.0, 2.0, 2.0]',
@@ -547,30 +612,54 @@ void main() {
       ]);
     });
 
-    // Η καμπύλη ξεκινά από το μηδέν και δεν κατεβαίνει κάτω από αυτό: ένα
-    // κλείσιμο πριν από κάθε άνοιγμα της εβδομάδας δεν αφήνει ίχνος.
-    test('η καμπύλη ενεργών δεν πέφτει κάτω από το μηδέν', () async {
-      await db.insert('tasks', {
-        'title': 'Παλιά, έκλεισε την πρώτη μέρα',
-        'status': 'closed',
-        'created_at': DateTime(2026, 2, 1, 9).toIso8601String(),
-        'updated_at': DateTime(2026, 3, 1, 10).toIso8601String(),
-        'completed_at': DateTime(2026, 3, 1, 10).toIso8601String(),
-        'is_deleted': 0,
-      });
-      await db.insert('tasks', {
-        'title': 'Νέα, άνοιξε τη δεύτερη μέρα',
-        'status': 'open',
-        'created_at': DateTime(2026, 3, 2, 9).toIso8601String(),
-        'updated_at': DateTime(2026, 3, 2, 9).toIso8601String(),
-        'is_deleted': 0,
-      });
+    // Η καμπύλη δείχνει τον πραγματικό όγκο ανοιχτών στο τέλος κάθε ημέρας.
+    test(
+      'η καμπύλη ενεργών μετρά ό,τι ήταν ανοιχτό στο τέλος κάθε ημέρας',
+      () async {
+        await db.insert('tasks', {
+          'title': 'Παλιά, έκλεισε την πρώτη μέρα',
+          'status': 'closed',
+          'created_at': DateTime(2026, 2, 1, 9).toIso8601String(),
+          'updated_at': DateTime(2026, 3, 1, 10).toIso8601String(),
+          'completed_at': DateTime(2026, 3, 1, 10).toIso8601String(),
+          'is_deleted': 0,
+        });
+        await db.insert('tasks', {
+          'title': 'Νέα, άνοιξε τη δεύτερη μέρα',
+          'status': 'open',
+          'created_at': DateTime(2026, 3, 2, 9).toIso8601String(),
+          'updated_at': DateTime(2026, 3, 2, 9).toIso8601String(),
+          'is_deleted': 0,
+        });
+
+        final s = await repo.getTaskAnalytics(
+          DateTimeRange(start: DateTime(2026, 3, 1), end: DateTime(2026, 3, 7)),
+        );
+
+        expect(s.sparklineActive, [0, 1, 1, 1, 1, 1, 1]);
+      },
+    );
+
+    test('εκκρεμότητες που άνοιξαν ΠΡΙΝ το διάστημα μετράνε στον όγκο της '
+        'καμπύλης, και ένα κλείσιμο τον κατεβάζει', () async {
+      // Τρεις παλιές εκκρεμότητες, ανοιχτές από πριν. Η μία κλείνει στις 3/3.
+      for (final closesOn3rd in [false, false, true]) {
+        await db.insert('tasks', {
+          'title': 'Παλιά εκκρεμότητα',
+          'status': closesOn3rd ? 'closed' : 'open',
+          'created_at': DateTime(2026, 2, 1, 9).toIso8601String(),
+          'updated_at': DateTime(2026, 2, 1, 9).toIso8601String(),
+          if (closesOn3rd)
+            'completed_at': DateTime(2026, 3, 3, 12).toIso8601String(),
+          'is_deleted': 0,
+        });
+      }
 
       final s = await repo.getTaskAnalytics(
         DateTimeRange(start: DateTime(2026, 3, 1), end: DateTime(2026, 3, 7)),
       );
 
-      expect(s.sparklineActive, [0, 1, 1, 1, 1, 1, 1]);
+      expect(s.sparklineActive, [3, 3, 2, 2, 2, 2, 2]);
     });
 
     test('το εύρος ημερομηνιών δημιουργίας', () async {

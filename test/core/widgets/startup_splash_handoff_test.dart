@@ -18,6 +18,7 @@ import 'package:call_logger/core/init/app_init_provider.dart';
 import 'package:call_logger/core/init/app_initializer.dart';
 import 'package:call_logger/core/init/startup_journal.dart';
 import 'package:call_logger/core/widgets/app_init_wrapper.dart';
+import 'package:call_logger/core/widgets/database_error_screen.dart';
 import 'package:call_logger/core/widgets/startup_splash_screen.dart';
 import 'package:call_logger/features/operators/widgets/refreshing_operator_picker.dart';
 import 'package:flutter/material.dart';
@@ -220,6 +221,60 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.byType(RefreshingOperatorPicker), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 11));
+    },
+    semanticsEnabled: false,
+  );
+
+  testWidgets(
+    'επαναδοκιμή από την οθόνη σφάλματος: η κάρτα εκκίνησης εμφανίζεται '
+    'αμέσως, και νέα αποτυχία ξαναφέρνει την οθόνη σφάλματος',
+    (tester) async {
+      // Το σφάλμα πεδίου (15/10/2026): μετά το «Χρήση τοπικής βάσης» η οθόνη
+      // σφάλματος έμενε ακίνητη για 3,2 δευτερόλεπτα όσο άνοιγε η βάση, και ο
+      // χρήστης ξαναπατούσε νομίζοντας ότι το κλικ δεν πέρασε.
+      final failure = AppInitResult(
+        result: const DatabaseInitResult(
+          status: DatabaseStatus.accessDenied,
+          message: 'Δοκιμαστική αποτυχία',
+        ),
+        isLocalDevMode: false,
+      );
+      final secondInit = Completer<AppInitResult>();
+      var inits = 0;
+      final container = ProviderContainer(
+        overrides: [
+          appInitProvider.overrideWith((ref) {
+            inits++;
+            return inits == 1 ? Future.value(failure) : secondInit.future;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(home: AppInitWrapper(windowRestorer: () async {})),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(DatabaseErrorScreen), findsOneWidget);
+
+      container.invalidate(appInitProvider);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(DatabaseErrorScreen), findsNothing);
+      expect(find.byType(StartupSplashScreen), findsOneWidget);
+
+      secondInit.complete(failure);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(DatabaseErrorScreen), findsOneWidget);
+      expect(find.byType(StartupSplashScreen), findsNothing);
 
       await tester.pump(const Duration(seconds: 11));
     },

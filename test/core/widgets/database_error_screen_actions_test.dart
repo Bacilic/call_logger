@@ -2,6 +2,7 @@
 //
 //   flutter test test/core/widgets/database_error_screen_actions_test.dart
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_init_result.dart';
@@ -596,6 +597,57 @@ void main() {
         contains('ALTER TABLE audit_log'),
         reason: 'Ο τεχνικός το χρειάζεται — αλλού, όχι στη συμβουλή',
       );
+    });
+  });
+
+  group('ένα πάτημα, μία εκτέλεση', () {
+    // Το σφάλμα πεδίου (15/10/2026): το άνοιγμα της βάσης κρατά δευτερόλεπτα,
+    // η οθόνη δεν έδειχνε τίποτα, και ο χρήστης πατούσε τρεις-τέσσερις φορές —
+    // κάθε πάτημα ξεκινούσε ξανά από την αρχή το άνοιγμα.
+    testWidgets('όσο τρέχει η επαναδοκιμή, δεύτερο πάτημα δεν την ξεκινά ξανά '
+        'και οι άλλες διέξοδοι κλειδώνουν', (tester) async {
+      final pending = Completer<void>();
+      var retries = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: DatabaseErrorScreen(
+              result: const DatabaseInitResult(
+                status: DatabaseStatus.accessDenied,
+                message: 'Δοκιμαστικό μήνυμα',
+                path: r'C:\data\call_logger.db',
+              ),
+              dbPath: r'C:\data\call_logger.db',
+              onRetry: () {
+                retries++;
+                return pending.future;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(_findByLabel('Επαναδοκιμή'));
+      await tester.pump();
+      await tester.tap(_findByLabel('Επαναδοκιμή'), warnIfMissed: false);
+      await tester.pump();
+
+      expect(retries, 1);
+      expect(
+        tester
+            .widget<OutlinedButton>(_findByLabel('Επιλογή αρχείου βάσης'))
+            .onPressed,
+        isNull,
+      );
+
+      // Αν η επαναδοκιμή τελειώσει χωρίς να φύγει η οθόνη, οι διέξοδοι
+      // ξανανοίγουν — αλλιώς ο χρήστης θα έμενε κλειδωμένος έξω.
+      pending.complete();
+      await tester.pump();
+      await tester.tap(_findByLabel('Επαναδοκιμή'));
+      await tester.pump();
+      expect(retries, 2);
     });
   });
 }

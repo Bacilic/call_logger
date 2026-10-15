@@ -70,6 +70,36 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
   UpdateManifest? _availableInstaller;
   LocalDatabaseOffer? _localOffer;
 
+  /// Ποια ενέργεια της οθόνης τρέχει — `null` όσο η οθόνη περιμένει τον χρήστη.
+  ///
+  /// Το άνοιγμα μιας βάσης κρατά δευτερόλεπτα (μετρημένο 15/10/2026: 3,2 για
+  /// την τοπική, με τον διακομιστή σβηστό). Χωρίς ορατή απάντηση στο κλικ ο
+  /// χρήστης ξαναπατούσε, και κάθε πάτημα ξεκινούσε από την αρχή το άνοιγμα
+  /// ενώ το προηγούμενο ήταν ακόμη στη μέση.
+  String? _busyAction;
+
+  bool get _isBusy => _busyAction != null;
+
+  /// Τρέχει μία ενέργεια τη φορά: όσο διαρκεί, το κουμπί της δείχνει πρόοδο
+  /// και τα υπόλοιπα κλειδώνουν.
+  Future<void> _runExclusive(String id, Future<void> Function() action) async {
+    if (_isBusy) return;
+    setState(() => _busyAction = id);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _busyAction = null);
+    }
+  }
+
+  /// Το εικονίδιο ενός κουμπιού: ένδειξη προόδου όσο τρέχει η ενέργειά του.
+  Widget _actionIcon(String id, IconData icon) => _busyAction == id
+      ? const SizedBox.square(
+          dimension: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        )
+      : Icon(icon, size: 18);
+
   /// Εφεδρεία για παλιά αποτελέσματα χωρίς [DatabaseInitResult.recoveryKind].
   bool get _isSchemaMigrationRecoveryMessage {
     if (_shouldOfferRestartFromText) return false;
@@ -262,6 +292,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
     // Ό,τι είχε βρεθεί για το προηγούμενο σφάλμα δεν αφορά το καινούριο.
     _availableInstaller = null;
     _localOffer = null;
+    _busyAction = null;
     _loadRecentExistingPaths();
     _startRecoveryForCurrentResult();
   }
@@ -747,8 +778,16 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
                       'Πλήρης διαδρομή:\n${recentPaths[i]}',
                   waitDuration: const Duration(milliseconds: 350),
                   child: OutlinedButton.icon(
-                    onPressed: () => _applyRecentDatabasePath(recentPaths[i]),
-                    icon: const Icon(Icons.history, size: 18),
+                    onPressed: _isBusy
+                        ? null
+                        : () => _runExclusive(
+                            'recent:${recentPaths[i]}',
+                            () => _applyRecentDatabasePath(recentPaths[i]),
+                          ),
+                    icon: _actionIcon(
+                      'recent:${recentPaths[i]}',
+                      Icons.history,
+                    ),
                     label: Text(
                       p.basename(recentPaths[i]),
                       overflow: TextOverflow.ellipsis,
@@ -765,23 +804,26 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
   }
 
   Widget _tooltipActionButton({
+    required String id,
     required String label,
     required String message,
     required IconData icon,
-    required VoidCallback onPressed,
+    required Future<void> Function() onPressed,
+    String? busyLabel,
   }) {
+    final busy = _busyAction == id;
     return Expanded(
       child: CompactTooltip(
         message: message,
         waitDuration: const Duration(milliseconds: 350),
         child: OutlinedButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon, size: 18),
+          onPressed: _isBusy ? null : () => _runExclusive(id, onPressed),
+          icon: _actionIcon(id, icon),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           ),
           label: Text(
-            label,
+            busy && busyLabel != null ? busyLabel : label,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
@@ -800,6 +842,8 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
     final buttons = <Widget>[
       if (_shouldOfferLocalDatabase && localOffer != null)
         _tooltipActionButton(
+          id: 'local',
+          busyLabel: 'Άνοιγμα τοπικής βάσης…',
           label:
               'Χρήση τοπικής βάσης '
               '(τελευταία αλλαγή ${_formatOfferDate(localOffer.lastModified!)})',
@@ -819,6 +863,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
         ),
       if (_isMissingApplicationFile && repairInstaller != null)
         _tooltipActionButton(
+          id: 'repair',
           label: repairInstaller.version.isNotEmpty
               ? 'Επιδιόρθωση εγκατάστασης (${repairInstaller.version})'
               : 'Επιδιόρθωση εγκατάστασης',
@@ -835,6 +880,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
         ),
       if (_shouldOfferDatabaseActions)
         _tooltipActionButton(
+          id: 'pick',
           label: 'Επιλογή αρχείου βάσης',
           message:
               'Ανοίγει το παράθυρο των Windows για να διαλέξετε ένα υπάρχον '
@@ -846,6 +892,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
         ),
       if (_shouldOfferRestoreFromBackup)
         _tooltipActionButton(
+          id: 'restore',
           label: 'Επαναφορά από αντίγραφο ασφαλείας',
           message:
               'Ανοίγει επιλογέα για αρχείο .zip αντιγράφου ασφαλείας και '
@@ -855,10 +902,11 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
               'Χρησιμοποιήστε το όταν το τρέχον αρχείο είναι λάθος ή '
               'κατεστραμμένο και έχετε πρόσφατο αντίγραφο ασφαλείας.',
           icon: Icons.settings_backup_restore,
-          onPressed: _restoreFromBackup,
+          onPressed: () => _restoreFromBackup(),
         ),
       if (_shouldOfferDatabaseActions)
         _tooltipActionButton(
+          id: 'create',
           label: 'Δημιουργία νέας βάσης',
           message:
               'Δημιουργεί ένα ολοκαίνουργιο, κενό αρχείο βάσης (χωρίς παλιά '
@@ -870,6 +918,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
         ),
       if (_shouldOfferLocateDatabase)
         _tooltipActionButton(
+          id: 'locate',
           label: 'Εμφάνιση φακέλου βάσης',
           message:
               'Ανοίγει τον Εξερευνητή αρχείων των Windows στον φάκελο του '
@@ -1128,16 +1177,25 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
                           'επιλέξτε άλλο αρχείο ή πρόσφατη βάση.',
                 waitDuration: const Duration(milliseconds: 350),
                 child: OutlinedButton.icon(
-                  onPressed: () async {
-                    if (_shouldOfferRestart) {
-                      await _restartApplication(context);
-                      return;
-                    }
-                    await widget.onRetry();
-                  },
-                  icon: Icon(
-                    _shouldOfferRestart ? Icons.restart_alt : Icons.refresh,
-                  ),
+                  onPressed: _isBusy
+                      ? null
+                      : () => _runExclusive('retry', () async {
+                          if (_shouldOfferRestart) {
+                            await _restartApplication(context);
+                            return;
+                          }
+                          await widget.onRetry();
+                        }),
+                  icon: _busyAction == 'retry'
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          _shouldOfferRestart
+                              ? Icons.restart_alt
+                              : Icons.refresh,
+                        ),
                   label: Text(
                     _shouldOfferRestart
                         ? 'Επανεκκίνηση εφαρμογής'

@@ -17,12 +17,13 @@
 // δουλειά των τεσσάρων, όχι ως διάσπαση αυτού.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../../core/services/default_remote_tool_display.dart';
 import '../../models/equipment_column.dart';
-import 'catalog_table_hover_focus.dart';
+import '../../../../core/widgets/keyboard_row_navigation.dart';
+import '../../../../core/widgets/row_navigation_logic.dart';
 import 'catalog_select_all_checkbox.dart';
+import 'catalog_table_support.dart';
 
 const _minColumnWidth = 40.0;
 const _maxColumnWidth = 600.0;
@@ -90,7 +91,7 @@ class EquipmentDataTable extends StatefulWidget {
 
 class _EquipmentDataTableState extends State<EquipmentDataTable> {
   final _source = _EquipmentTableSource();
-  final FocusNode _tableFocusNode = FocusNode();
+  final RowKeys _rowKeys = RowKeys();
   final ScrollController _verticalScrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
   final Map<String, double> _dataColumnWidths = {};
@@ -124,13 +125,16 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
   void dispose() {
     _verticalScrollController.dispose();
     _horizontalScrollController.dispose();
-    _tableFocusNode.dispose();
     super.dispose();
   }
 
   void _onRowTap(int index) {
     widget.onSetFocusedRowIndex?.call(index);
   }
+
+  /// Το id της γραμμής [index], ή `null` αν δεν υπάρχει (π.χ. η λίστα μίκρυνε).
+  int? _rowIdAt(int? index) =>
+      catalogRowIdAt(widget.items, index, (row) => row.$1.id);
 
   @override
   void didUpdateWidget(EquipmentDataTable oldWidget) {
@@ -154,15 +158,16 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       ),
     );
     if (!widget.continuousScroll) {
-      final newFocus = widget.focusedRowIndex;
-      if (newFocus != null && newFocus != oldWidget.focusedRowIndex) {
-        final n = widget.items.length;
-        if (n > 0 && newFocus >= 0 && newFocus < n) {
-          final pageStart = (newFocus ~/ _rowsPerPage) * _rowsPerPage;
-          if (pageStart != _pagedFirstRowIndex) {
-            setState(() => _pagedFirstRowIndex = pageStart);
-          }
-        }
+      final focus = widget.focusedRowIndex;
+      if (focus != null &&
+          focus != oldWidget.focusedRowIndex &&
+          focus >= 0 &&
+          focus < widget.items.length) {
+        _pagedFirstRowIndex = pageStartShowingRow(
+          focusedRow: focus,
+          pageSize: _rowsPerPage,
+          currentStart: _pagedFirstRowIndex,
+        );
       }
       _clampPagedFirstRowIndex();
     }
@@ -179,8 +184,7 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
     }
   }
 
-  Color? get _focusHighlightColor =>
-      Theme.of(context).colorScheme.surfaceContainerHighest;
+  Color? get _focusHighlightColor => catalogFocusedRowColor(context);
 
   /// Πλάγιο, αχνό κείμενο για placeholder «Χωρίς κάτοχο» (δεν είναι πραγματική εγγραφή).
   TextStyle _styleForEmptyOwnerCell(BuildContext context) {
@@ -190,52 +194,6 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       fontStyle: FontStyle.italic,
       color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
     );
-  }
-
-  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = event.logicalKey;
-    final items = widget.items;
-    final len = items.length;
-    if (len == 0) return KeyEventResult.ignored;
-    final onSetFocus = widget.onSetFocusedRowIndex;
-    final current = widget.focusedRowIndex;
-
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (onSetFocus != null) {
-        final next = current == null ? 0 : (current + 1).clamp(0, len - 1);
-        onSetFocus(next);
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (onSetFocus != null) {
-        final next = current == null
-            ? len - 1
-            : (current - 1).clamp(0, len - 1);
-        onSetFocus(next);
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.space) {
-      if (widget.selectedIds.length > 1 && widget.onRequestBulkEdit != null) {
-        widget.onRequestBulkEdit!();
-      } else {
-        final idx = current ?? 0;
-        if (idx >= 0 && idx < len) {
-          widget.onEditEquipment(items[idx]);
-        }
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.delete ||
-        key == LogicalKeyboardKey.backspace) {
-      if (widget.selectedIds.isNotEmpty) {
-        widget.onRequestDelete?.call();
-      }
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
   }
 
   Widget _buildStickyHeader(
@@ -327,38 +285,6 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
     );
   }
 
-  TableRow _dataRowToTableRow(BuildContext context, DataRow dataRow) {
-    final theme = Theme.of(context);
-    final dataTableTheme = theme.dataTableTheme;
-    final rowColor = dataRow.selected
-        ? (dataTableTheme.dataRowColor?.resolve({WidgetState.selected}) ??
-              theme.colorScheme.primaryContainer.withValues(alpha: 0.3))
-        : dataTableTheme.dataRowColor?.resolve({WidgetState.selected});
-    return TableRow(
-      decoration: BoxDecoration(color: rowColor),
-      children: [
-        for (final cell in dataRow.cells)
-          TableCell(
-            verticalAlignment: TableCellVerticalAlignment.middle,
-            child: InkWell(
-              onTap: cell.onTap,
-              onDoubleTap: cell.onDoubleTap,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: cell.child,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
   Widget _wrapEquipmentScrollableTable({
     required BuildContext context,
     required ThemeData theme,
@@ -368,6 +294,7 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
     required Map<int, TableColumnWidth> columnWidths,
     required double tableWidth,
     Widget? bottomBar,
+    int firstRowIndex = 0,
   }) {
     final dataTableTheme = theme.dataTableTheme;
     final headingHeight = dataTableTheme.headingRowHeight ?? 56.0;
@@ -407,7 +334,12 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
                     columnWidths: columnWidths,
                     defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                     children: [
-                      for (final row in rows) _dataRowToTableRow(context, row),
+                      for (var i = 0; i < rows.length; i++)
+                        catalogTableRow(
+                          context,
+                          rows[i],
+                          rowKey: _rowKeys.keyFor(firstRowIndex + i),
+                        ),
                     ],
                   ),
                 ),
@@ -587,53 +519,72 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
         (columns.length - 1) * columnSpacing +
         horizontalMargin * 2;
 
-    return Focus(
-      focusNode: _tableFocusNode,
-      onKeyEvent: _handleKey,
-      child: MouseRegion(
-        onEnter: (_) =>
-            requestCatalogTableKeyboardFocusOnHover(_tableFocusNode),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final Widget tableContent;
-            if (widget.continuousScroll) {
-              final rows = <DataRow>[];
-              for (var i = 0; i < _source.rowCount; i++) {
-                final row = _source.getRow(i);
-                if (row != null) rows.add(row);
-              }
-              tableContent = _wrapEquipmentScrollableTable(
-                context: context,
-                theme: theme,
-                columns: columns,
-                rows: rows,
-                maxHeight: constraints.maxHeight,
-                columnWidths: columnWidths,
-                tableWidth: tableWidth,
-              );
-            } else {
-              _clampPagedFirstRowIndex();
-              final n = widget.items.length;
-              final start = n == 0 ? 0 : _pagedFirstRowIndex;
-              final pageRows = <DataRow>[];
-              for (var i = start; i < n && i < start + _rowsPerPage; i++) {
-                final row = _source.getRow(i);
-                if (row != null) pageRows.add(row);
-              }
-              tableContent = _wrapEquipmentScrollableTable(
-                context: context,
-                theme: theme,
-                columns: columns,
-                rows: pageRows,
-                maxHeight: constraints.maxHeight,
-                columnWidths: columnWidths,
-                tableWidth: tableWidth,
-                bottomBar: _equipmentPaginationBar(context, theme),
-              );
+    _rowKeys.retainFirst(widget.items.length);
+    return KeyboardRowNavigation(
+      rowCount: widget.items.length,
+      focusedRowIndex: widget.focusedRowIndex,
+      onFocusRow: (i) => widget.onSetFocusedRowIndex?.call(i),
+      pageStep: widget.continuousScroll ? kDefaultRowPageStep : _rowsPerPage,
+      onRevealRow: (i, {required movingDown}) =>
+          _rowKeys.reveal(i, movingDown: movingDown),
+      onOpen: (focused) => catalogOpenFromKeyboard<EquipmentRow>(
+        rows: widget.items,
+        focusedIndex: focused,
+        selectedCount: widget.selectedIds.length,
+        onBulkEdit: widget.onRequestBulkEdit,
+        onEdit: widget.onEditEquipment,
+      ),
+      onToggleRow: (i) {
+        final id = _rowIdAt(i);
+        if (id != null) widget.onToggleSelection(id);
+      },
+      onDelete: (focused) => catalogDeleteFromKeyboard(
+        selectedIds: widget.selectedIds,
+        focusedId: _rowIdAt(focused),
+        onToggleSelection: widget.onToggleSelection,
+        onRequestDelete: widget.onRequestDelete,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final Widget tableContent;
+          if (widget.continuousScroll) {
+            final rows = <DataRow>[];
+            for (var i = 0; i < _source.rowCount; i++) {
+              final row = _source.getRow(i);
+              if (row != null) rows.add(row);
             }
-            return tableContent;
-          },
-        ),
+            tableContent = _wrapEquipmentScrollableTable(
+              context: context,
+              theme: theme,
+              columns: columns,
+              rows: rows,
+              maxHeight: constraints.maxHeight,
+              columnWidths: columnWidths,
+              tableWidth: tableWidth,
+            );
+          } else {
+            _clampPagedFirstRowIndex();
+            final n = widget.items.length;
+            final start = n == 0 ? 0 : _pagedFirstRowIndex;
+            final pageRows = <DataRow>[];
+            for (var i = start; i < n && i < start + _rowsPerPage; i++) {
+              final row = _source.getRow(i);
+              if (row != null) pageRows.add(row);
+            }
+            tableContent = _wrapEquipmentScrollableTable(
+              context: context,
+              theme: theme,
+              columns: columns,
+              rows: pageRows,
+              maxHeight: constraints.maxHeight,
+              columnWidths: columnWidths,
+              tableWidth: tableWidth,
+              firstRowIndex: start,
+              bottomBar: _equipmentPaginationBar(context, theme),
+            );
+          }
+          return tableContent;
+        },
       ),
     );
   }
