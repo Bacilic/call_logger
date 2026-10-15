@@ -6,7 +6,10 @@ import 'package:path/path.dart' as p;
 import 'update_check_result.dart';
 import 'update_manifest.dart';
 
-/// Έλεγχος νέας έκδοσης από κοινόχρηστο φάκελο (σιωπηλή αποτυχία).
+/// Έλεγχος νέας έκδοσης από κοινόχρηστο φάκελο.
+///
+/// Δεν πετάει ποτέ· κάθε αποτυχία επιστρέφεται με την αιτία της
+/// ([UpdateCheckResult.failure]), ώστε το UI να μπορεί να την πει.
 class UpdateService {
   UpdateService({
     required this.resolveUpdateFolder,
@@ -31,7 +34,7 @@ class UpdateService {
   /// διαβάζουν το πραγματικό.
   final DateTime Function() clock;
 
-  /// Κάθε αποτυχία → [UpdateCheckResult.none] χωρίς εξαίρεση προς τα έξω.
+  /// Κάθε αποτυχία → [UpdateCheckResult.failed] χωρίς εξαίρεση προς τα έξω.
   Future<UpdateCheckResult> checkForUpdate() async {
     if (isDevelopmentBuild()) {
       return const UpdateCheckResult.none();
@@ -39,10 +42,11 @@ class UpdateService {
     try {
       return await _check().timeout(
         timeout,
-        onTimeout: () => const UpdateCheckResult.none(),
+        onTimeout: () =>
+            const UpdateCheckResult.failed(UpdateCheckFailure.timedOut),
       );
     } catch (_) {
-      return const UpdateCheckResult.none();
+      return const UpdateCheckResult.failed(UpdateCheckFailure.unexpected);
     }
   }
 
@@ -75,17 +79,37 @@ class UpdateService {
   }
 
   Future<UpdateCheckResult> _check() async {
-    final folder = (await resolveUpdateFolder())?.trim();
+    final String? folder;
+    try {
+      folder = (await resolveUpdateFolder())?.trim();
+    } catch (_) {
+      return const UpdateCheckResult.failed(
+        UpdateCheckFailure.settingsUnreadable,
+      );
+    }
     if (folder == null || folder.isEmpty) {
-      return const UpdateCheckResult.none();
+      return const UpdateCheckResult.failed(
+        UpdateCheckFailure.noFolderConfigured,
+      );
     }
 
     final versionPath = p.join(folder, 'current', 'version.json');
-    final raw = await readFileAsString(versionPath);
-    final decoded = jsonDecode(raw);
-    final manifest = UpdateManifest.fromJson(decoded);
+    final String raw;
+    try {
+      raw = await readFileAsString(versionPath);
+    } catch (_) {
+      return const UpdateCheckResult.failed(
+        UpdateCheckFailure.folderUnreadable,
+      );
+    }
+    final UpdateManifest? manifest;
+    try {
+      manifest = UpdateManifest.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return const UpdateCheckResult.failed(UpdateCheckFailure.manifestInvalid);
+    }
     if (manifest == null) {
-      return const UpdateCheckResult.none();
+      return const UpdateCheckResult.failed(UpdateCheckFailure.manifestInvalid);
     }
 
     final (currentVersion, currentBuild) = await getCurrentVersion();

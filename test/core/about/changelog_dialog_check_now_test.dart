@@ -126,4 +126,28 @@ void main() {
     // Το κουμπί όμως υπάρχει — μπορεί να πυροδοτήσει τον πρώτο πραγματικό έλεγχο.
     expect(find.byKey(const Key('changelog_check_now_button')), findsOneWidget);
   });
+
+  testWidgets('αποτυχημένος έλεγχος: η ετικέτα λέει ότι απέτυχε και γιατί', (
+    tester,
+  ) async {
+    await pumpDialog(
+      tester,
+      updateResult: const UpdateCheckResult.failed(
+        UpdateCheckFailure.settingsUnreadable,
+      ),
+    );
+
+    final status = tester.widget<Text>(
+      find.byKey(const Key('changelog_update_check_status')),
+    );
+    expect(
+      status.data,
+      startsWith('Δεν είναι δυνατός ο έλεγχος νέας έκδοσης, επειδή '),
+      reason: greekExpectMsg(
+        'Με νεκρή σύνδεση βάσης το «Έλεγχος τώρα» έμενε βουβό — έμοιαζε χαλασμένο',
+      ),
+    );
+    expect(status.data, endsWith(UpdateCheckFailure.settingsUnreadable.reason));
+    expect(status.data, isNot(contains('Είστε ενημερωμένοι')));
+  });
 }

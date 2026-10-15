@@ -208,9 +208,9 @@ class ChangelogDialog extends ConsumerWidget {
 
 /// Λιτή κατάσταση του ελέγχου ενημέρωσης δίπλα στο «Έλεγχος τώρα».
 ///
-/// Σιωπά όταν έλεγχος δεν έχει γίνει πραγματικά ([UpdateCheckResult.checkedAt]
-/// κενό — build ανάπτυξης, χωρίς φάκελο, αποτυχία): δεν ισχυριζόμαστε
-/// «Είστε ενημερωμένοι» χωρίς να έχουμε κοιτάξει.
+/// Σιωπά μόνο όταν ο έλεγχος σκόπιμα δεν έγινε (build ανάπτυξης). Αποτυχία
+/// λέγεται με την αιτία της — ένα κουμπί που μετά το πάτημα δεν δείχνει
+/// τίποτα μοιάζει χαλασμένο. Ποτέ «Είστε ενημερωμένοι» χωρίς να κοιτάξαμε.
 class _UpdateCheckStatusLabel extends StatelessWidget {
   const _UpdateCheckStatusLabel({required this.checking, required this.result});
 
@@ -227,6 +227,16 @@ class _UpdateCheckStatusLabel extends StatelessWidget {
     if (checking) {
       text = 'Έλεγχος…';
     } else {
+      final failure = result?.failure;
+      if (failure != null) {
+        return Text(
+          'Δεν είναι δυνατός ο έλεγχος νέας έκδοσης, επειδή ${failure.reason}',
+          key: const Key('changelog_update_check_status'),
+          style: style?.copyWith(color: Theme.of(context).colorScheme.error),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        );
+      }
       final checkedAt = result?.checkedAt;
       if (checkedAt == null) {
         return const SizedBox.shrink();

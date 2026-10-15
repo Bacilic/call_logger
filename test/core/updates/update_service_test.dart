@@ -58,6 +58,8 @@ void main() {
       expect(result.manifest, isNull);
       expect(resolveCalls, 0);
       expect(readCalls, 0);
+      // Το build ανάπτυξης δεν είναι αποτυχία: καμία αιτία να ειπωθεί.
+      expect(result.failure, isNull);
     },
   );
 
@@ -86,7 +88,7 @@ void main() {
     expect(result.latestVersion, '0.24.0');
   });
 
-  test('inaccessible folder → silently no update', () async {
+  test('inaccessible folder → no update, failure names the folder', () async {
     final service = buildService(
       resolveFolder: () async => p.join(tempDir.path, 'missing_share'),
       readFile: (path) async => throw const FileSystemException('missing'),
@@ -96,18 +98,49 @@ void main() {
 
     expect(result.updateAvailable, isFalse);
     expect(result.manifest, isNull);
+    expect(result.checkedAt, isNull);
+    expect(result.failure, UpdateCheckFailure.folderUnreadable);
   });
 
-  test('null config (checks disabled) → silently no update', () async {
-    final service = buildService(
-      resolveFolder: () async => null,
-      readFile: (_) async => throw StateError('should not read'),
-    );
+  test(
+    'null config (no folder anywhere) → failure noFolderConfigured',
+    () async {
+      final service = buildService(
+        resolveFolder: () async => null,
+        readFile: (_) async => throw StateError('should not read'),
+      );
 
-    final result = await service.checkForUpdate();
+      final result = await service.checkForUpdate();
 
-    expect(result.updateAvailable, isFalse);
-  });
+      expect(result.updateAvailable, isFalse);
+      expect(result.failure, UpdateCheckFailure.noFolderConfigured);
+    },
+  );
+
+  // Η ρύθμιση του φακέλου ζει στη βάση· με νεκρή σύνδεση η ανάγνωσή της
+  // πετάει. Μέχρι 15/10/2026 αυτό γινόταν σιωπηλό «τίποτα» και το «Έλεγχος
+  // τώρα» έμοιαζε να μην κάνει απολύτως τίποτα.
+  test(
+    'settings read throws (dead database) → failure settingsUnreadable',
+    () async {
+      var readCalls = 0;
+      final service = buildService(
+        resolveFolder: () async =>
+            throw StateError('database connection is closed'),
+        readFile: (_) async {
+          readCalls++;
+          return '{}';
+        },
+      );
+
+      final result = await service.checkForUpdate();
+
+      expect(result.updateAvailable, isFalse);
+      expect(result.checkedAt, isNull);
+      expect(result.failure, UpdateCheckFailure.settingsUnreadable);
+      expect(readCalls, 0);
+    },
+  );
 
   test('newer version → updateAvailable true', () async {
     final currentDir = Directory(p.join(tempDir.path, 'current'));
@@ -133,6 +166,7 @@ void main() {
     expect(result.updateAvailable, isTrue);
     expect(result.latestVersion, '0.24.0');
     expect(result.manifest?.build, 32);
+    expect(result.failure, isNull);
     // Κανονική αναβάθμιση (μεγαλύτερη ετικέτα ΚΑΙ build): καμία επεξήγηση.
     expect(result.needsVersionLabelExplanation, isFalse);
     expect(result.versionLabelRelation, UpdateVersionLabelRelation.higher);
@@ -272,9 +306,10 @@ void main() {
     final result = await service.checkForUpdate();
 
     expect(result.updateAvailable, isFalse);
+    expect(result.failure, UpdateCheckFailure.timedOut);
   });
 
-  test('broken JSON → silently no update', () async {
+  test('broken JSON → failure manifestInvalid', () async {
     final currentDir = Directory(p.join(tempDir.path, 'current'));
     await currentDir.create(recursive: true);
     await File(
@@ -289,5 +324,6 @@ void main() {
     final result = await service.checkForUpdate();
 
     expect(result.updateAvailable, isFalse);
+    expect(result.failure, UpdateCheckFailure.manifestInvalid);
   });
 }

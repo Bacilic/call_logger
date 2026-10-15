@@ -17,6 +17,28 @@ enum UpdateVersionLabelRelation {
   lower,
 }
 
+/// Γιατί ο έλεγχος νέας έκδοσης δεν ολοκληρώθηκε.
+///
+/// Το [reason] συμπληρώνει την πρόταση «Δεν είναι δυνατός ο έλεγχος νέας
+/// έκδοσης, επειδή …».
+enum UpdateCheckFailure {
+  /// Η ρύθμιση του φακέλου ζει στη βάση — με νεκρή σύνδεση δεν διαβάζεται.
+  settingsUnreadable(
+    'δεν διαβάστηκε η ρύθμιση του φακέλου ενημερώσεων από τη βάση δεδομένων',
+  ),
+  noFolderConfigured('δεν έχει οριστεί φάκελος ενημερώσεων'),
+  folderUnreadable(
+    'ο φάκελος ενημερώσεων δεν απαντά ή δεν περιέχει το version.json',
+  ),
+  manifestInvalid('το version.json του φακέλου ενημερώσεων δεν είναι έγκυρο'),
+  timedOut('ο φάκελος ενημερώσεων δεν απάντησε εγκαίρως'),
+  unexpected('παρουσιάστηκε απρόσμενο σφάλμα');
+
+  const UpdateCheckFailure(this.reason);
+
+  final String reason;
+}
+
 /// Αποτέλεσμα ελέγχου διαθέσιμης ενημέρωσης.
 class UpdateCheckResult {
   const UpdateCheckResult({
@@ -26,9 +48,20 @@ class UpdateCheckResult {
     this.currentVersion,
     this.currentBuild,
     this.checkedAt,
-  });
+  }) : failure = null;
 
+  /// Έλεγχος που σκόπιμα δεν έγινε (build ανάπτυξης) — δεν είναι αποτυχία.
   const UpdateCheckResult.none()
+    : updateAvailable = false,
+      latestVersion = null,
+      manifest = null,
+      currentVersion = null,
+      currentBuild = null,
+      checkedAt = null,
+      failure = null;
+
+  /// Έλεγχος που επιχειρήθηκε και δεν ολοκληρώθηκε, με την αιτία του.
+  const UpdateCheckResult.failed(UpdateCheckFailure this.failure)
     : updateAvailable = false,
       latestVersion = null,
       manifest = null,
@@ -44,6 +77,10 @@ class UpdateCheckResult {
   /// έλεγχος δεν έγινε πραγματικά (build ανάπτυξης, χωρίς φάκελο, αποτυχία) —
   /// τότε το UI δεν ισχυρίζεται «ελέγχθηκε» κάτι που δεν συνέβη.
   final DateTime? checkedAt;
+
+  /// Η αιτία όταν ο έλεγχος επιχειρήθηκε και απέτυχε· `null` σε επιτυχία και
+  /// σε έλεγχο που σκόπιμα δεν έγινε.
+  final UpdateCheckFailure? failure;
 
   /// Ετικέτα έκδοσης της εγκατεστημένης εφαρμογής τη στιγμή του ελέγχου.
   final String? currentVersion;
