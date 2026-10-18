@@ -269,18 +269,14 @@ class CatalogValidationService {
   /// παίρνει η φόρμα, που ξέρει τι έχει επιλεγμένο εκείνη τη στιγμή.
   String? companyInternalPhoneHint(String value) {
     if (!rules.companyInternalPhoneEnabled) return null;
-    final v = value.trim();
-    if (v.isEmpty || !_digitsOnly.hasMatch(v)) return null;
-    if (v.length != rules.internalPhoneDigits) return null;
-
     // Χωρίς κανόνα προθέματος κάθε τετραψήφιο θα ήταν ύποπτο — και τα
     // τετραψήφια των εταιρειών είναι θεμιτά αν δεν μοιάζουν με δικά μας.
     if (!rules.internalPrefixEnabled) return null;
-    final prefix = int.tryParse(v.substring(0, 2));
-    if (prefix == null) return null;
-    if (prefix < rules.internalPrefixFrom || prefix > rules.internalPrefixTo) {
-      return null;
-    }
+    final v = value.trim();
+    if (!_digitsOnly.hasMatch(v)) return null;
+    // Η ΜΙΑ απάντηση «μοιάζει με δικό μας εσωτερικό;» — με το μήκος του
+    // προθέματος από τις ρυθμίσεις, όχι καρφωμένο εδώ.
+    if (!rules.looksLikeHospitalInternalPhone(v)) return null;
     return 'Το $v έχει μορφή δικού μας εσωτερικού — οι εταιρείες '
         'δεν έχουν εσωτερικά του νοσοκομείου';
   }

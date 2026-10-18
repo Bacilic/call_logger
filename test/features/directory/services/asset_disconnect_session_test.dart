@@ -296,6 +296,32 @@ void main() {
       session.markResolved(const AssetDisconnectItem.phone('2510'));
       expect(session.commonRemainingDepartmentName, 'Άδειες');
     });
+
+    // Αιμοδοσία: αφαιρείται το 2948 και τρία μηχανήματα. Το τηλέφωνο μπορεί να
+    // μείνει, τα μηχανήματα όχι — άρα «Παραμονή — όλα» θα υποσχόταν κάτι που
+    // ισχύει μόνο για το ένα από τα τέσσερα.
+    test('«παραμονή για όλα» μόνο όταν όλα τα υπόλοιπα μπορούν να μείνουν', () {
+      final session = AssetDisconnectSession(
+        items: const [
+          AssetDisconnectItem.phone(
+            '2948',
+            departmentId: 46,
+            departmentName: 'Αιμοδοσία',
+          ),
+          AssetDisconnectItem.equipment(
+            '3696',
+            departmentId: 46,
+            departmentName: 'Αιμοδοσία',
+            canStay: false,
+          ),
+        ],
+      );
+
+      expect(session.canKeepEverything(canKeepInDepartment: true), isFalse);
+      session.markResolved(const AssetDisconnectItem.equipment('3696'));
+      expect(session.canKeepEverything(canKeepInDepartment: true), isTrue);
+      expect(session.canKeepEverything(canKeepInDepartment: false), isFalse);
+    });
   });
 
   group('μηνύματα «τι πρόκειται να συμβεί»', () {

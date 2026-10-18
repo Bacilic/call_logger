@@ -67,12 +67,6 @@ class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
     await _update((current) => current.copyWith(namingFormat: value));
   }
 
-  Future<void> setIncludeMapImagesInBackup(bool value) async {
-    await _update(
-      (current) => current.copyWith(includeMapImagesInBackup: value),
-    );
-  }
-
   Future<void> setIncludeToolImages(bool value) async {
     await _update((current) => current.copyWith(includeToolImages: value));
   }

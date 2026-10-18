@@ -1,3 +1,4 @@
+import '../../utils/display_text_sort.dart';
 import '../../utils/search_text_normalizer.dart';
 import 'lamp_database_provider.dart';
 import 'lamp_issue_decision_applier.dart';
@@ -95,7 +96,7 @@ class LampIssueResolutionService {
         ),
       );
     }
-    offices.sort((a, b) => a.officeName.compareTo(b.officeName));
+    offices.sort((a, b) => compareDisplayText(a.officeName, b.officeName));
 
     final countRows = await db.rawQuery(
       'SELECT owner, COUNT(*) AS total FROM equipment '
@@ -133,7 +134,7 @@ class LampIssueResolutionService {
         ),
       );
     }
-    owners.sort((a, b) => a.name.compareTo(b.name));
+    owners.sort((a, b) => compareDisplayText(a.name, b.name));
 
     // Προμηθευτές και κατηγορίες δεν έχουν δικούς τους πίνακες: τα ζεύγη
     // «αναγνωριστικό — όνομα» ζουν μέσα στις συμβάσεις και εξάγονται από εκεί.
@@ -164,7 +165,7 @@ class LampIssueResolutionService {
       return <LampContractLookupEntry>[
         for (final entry in source.entries)
           LampContractLookupEntry(id: entry.key, name: entry.value),
-      ]..sort((a, b) => a.name.compareTo(b.name));
+      ]..sort((a, b) => compareDisplayText(a.name, b.name));
     }
 
     return LampPlacementCatalog(

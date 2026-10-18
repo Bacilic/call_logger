@@ -5,10 +5,14 @@ enum DepartmentFloorChangeAction {
   /// Τίποτα δεν αλλάζει — ο όροφος έμεινε ίδιος, ή δεν υπάρχει σχέδιο.
   keepPlacement,
 
-  /// Η σχεδίαση σβήνεται χωρίς ερώτηση: ο χρήστης αφαίρεσε τον όροφο, ή το
-  /// Είδος έβγαλε την καρτέλα από την κάτοψη. Και στις δύο περιπτώσεις έχει
-  /// ήδη ρωτηθεί αλλού.
+  /// Η θέση σβήνεται χωρίς ερώτηση: το Είδος έβγαλε την καρτέλα από την
+  /// κάτοψη (ο χρήστης έχει ήδη ρωτηθεί), ή ο όροφος αφαιρέθηκε από τμήμα που
+  /// δεν είχε σχεδίαση — δεν χάνεται τίποτα ορατό.
   clearPlacement,
+
+  /// Ο όροφος αφαιρέθηκε από **σχεδιασμένο** τμήμα: η σχεδίαση χάνεται
+  /// οριστικά, άρα ο χρήστης επιβεβαιώνει πριν γραφτεί οτιδήποτε.
+  confirmClearPlacement,
 
   /// Ο όροφος άλλαξε σε άλλον ΚΑΙ υπάρχει σχέδιο — ο χρήστης αποφασίζει αν
   /// θα ταξιδέψει μαζί ή θα σβηστεί.
@@ -44,9 +48,12 @@ DepartmentFloorChangeAction resolveDepartmentFloorChange({
 
   // Ηθελημένη αφαίρεση ορόφου από καρτέλα που τον είχε.
   if (selectedFloorId == null) {
-    return (snapshotFloorId != null || initialFloorId != null)
-        ? DepartmentFloorChangeAction.clearPlacement
-        : DepartmentFloorChangeAction.keepPlacement;
+    if (snapshotFloorId == null && initialFloorId == null) {
+      return DepartmentFloorChangeAction.keepPlacement;
+    }
+    return hasDrawnPlacement
+        ? DepartmentFloorChangeAction.confirmClearPlacement
+        : DepartmentFloorChangeAction.clearPlacement;
   }
 
   // Χωρίς σχέδιο δεν υπάρχει τίποτα να χαθεί ή να ταξιδέψει.
@@ -56,4 +63,22 @@ DepartmentFloorChangeAction resolveDepartmentFloorChange({
   }
 
   return DepartmentFloorChangeAction.askMoveOrClear;
+}
+
+/// Το κείμενο της επιβεβαίωσης όταν σχεδιασμένο τμήμα μένει χωρίς όροφο.
+///
+/// Λέει ρητά και τα δύο: ότι η θέση χάνεται, και ότι **δεν** επανέρχεται αν
+/// ξαναδηλωθεί ο όροφος — η εφαρμογή δεν την κρατά πουθενά.
+String departmentFloorRemovalMessage({
+  required String departmentName,
+  required String? floorLabel,
+}) {
+  final where = floorLabel == null
+      ? 'στον χάρτη του νοσοκομείου'
+      : 'στην κάτοψη του ορόφου «$floorLabel»';
+  return 'Το τμήμα «$departmentName» είναι σχεδιασμένο $where και μένει '
+      'χωρίς όροφο.\n\n'
+      'Με την αποθήκευση η σχεδίασή του στον χάρτη θα διαγραφεί οριστικά.\n\n'
+      'Αν αργότερα ξαναδηλώσετε όροφο, η παλιά θέση δεν θα επανέλθει· το '
+      'τμήμα θα χρειαστεί να σχεδιαστεί ξανά από τον χάρτη.';
 }

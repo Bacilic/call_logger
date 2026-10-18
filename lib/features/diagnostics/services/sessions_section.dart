@@ -158,10 +158,14 @@ void writeSessionsSection(StringBuffer out, AppSessions all) {
       ..writeln();
     return;
   }
+  // Η ώρα εδώ είναι η στιγμή που το εντόπισε η επόμενη εκκίνηση· στο
+  // χρονολόγιο μπαίνει η στιγμή του τελευταίου σημαδιού ζωής. Κάθε ώρα λέει
+  // ποια είναι — αλλιώς οι δύο μοιάζουν με δύο διαφορετικά συμβάντα.
   for (final record in all.orphanEnds) {
     out.writeln(
       '- ${reportMoment(record.time)} · ${record.station} · ΑΠΟΤΟΜΟ ΤΕΛΟΣ '
-      'εκτέλεσης χωρίς καταγεγραμμένη εκκίνηση: ${record.message}',
+      '(εντοπίστηκε) εκτέλεσης χωρίς καταγεγραμμένη εκκίνηση: '
+      '${record.message}',
     );
   }
   for (final session in all.sessions) {
@@ -211,7 +215,7 @@ List<(DateTime, String)> sessionTimelineEntries(AppSessions all) => [
       DateTime.tryParse(record.data['last_seen']?.toString() ?? '') ??
           record.time,
       '${record.station} · ΑΠΟΤΟΜΟ ΤΕΛΟΣ εκτέλεσης χωρίς καταγεγραμμένη '
-          'εκκίνηση',
+          'εκκίνηση (τελευταίο σημάδι ζωής)',
     ),
   for (final session in all.sessions) ...[
     (

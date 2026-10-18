@@ -22,10 +22,12 @@ import '../../../core/services/core_lexicon_service.dart';
 import '../../../core/services/dictionary_service.dart';
 import '../../../core/services/master_dictionary_service.dart';
 import '../../../core/utils/lexicon_word_metrics.dart';
+import '../../../core/utils/user_facing_error_messages.dart';
 import '../dictionary_table_layout.dart';
 import '../providers/dictionary_layout_provider.dart';
 import '../models/lexicon_list_filters_model.dart';
 import '../models/lexicon_row_filter.dart';
+import '../services/lexicon_list_loader.dart';
 import '../services/lexicon_list_query.dart';
 import '../providers/lexicon_list_filters_provider.dart';
 import '../providers/lexicon_scroll_provider.dart';
@@ -145,6 +147,8 @@ class DictionaryManagerScreenState
   final _horizontalTableScroll = ScrollController();
   final _verticalTableScroll = ScrollController();
 
+  /// Μόνο η πιο πρόσφατη φόρτωση γράφει στη λίστα.
+  final _listLoader = LexiconListLoader();
   int _totalCount = 0;
   List<Map<String, dynamic>> _rows = [];
   bool _loading = true;
@@ -373,50 +377,54 @@ class DictionaryManagerScreenState
           src.map((r) => Map<String, dynamic>.from(r)).toList(growable: true);
 
       if (append) {
-        final rows = await query.page(
-          dictLex,
-          limit: pageSize,
+        final rows = await _listLoader.loadMore(
           offset: _rows.length,
+          page: (offset) =>
+              query.page(dictLex, limit: pageSize, offset: offset),
         );
-        if (mounted) {
-          setState(() {
-            if (rows.isEmpty) {
-              _totalCount = _rows.length;
-            } else {
-              _rows = [..._rows, ...mutableRows(rows)];
-            }
-            _loadingMore = false;
-          });
-          _scheduleContinuousViewportFillAfterLoad();
-        }
-      } else {
-        final count = await query.count(dictLex);
-        var page = filters.page;
-        if (!continuous) {
-          final maxPage = count == 0 ? 0 : ((count - 1) ~/ pageSize);
-          if (page > maxPage) {
-            page = maxPage;
-            await ref
-                .read(lexiconListFiltersProvider.notifier)
-                .setPage(maxPage);
+        // Άλλαξε το φίλτρο όσο φόρτωνε: η παρτίδα ανήκει στην παλιά λίστα.
+        if (rows == null || !mounted) return;
+        setState(() {
+          if (rows.isEmpty) {
+            _totalCount = _rows.length;
+          } else {
+            _rows = [..._rows, ...mutableRows(rows)];
           }
-        }
-        final offset = continuous ? 0 : page * pageSize;
-        final rows = await query.page(dictLex, limit: pageSize, offset: offset);
-        if (mounted) {
-          setState(() {
-            _totalCount = count;
-            _rows = mutableRows(rows);
-            _loading = false;
-            _loadingMore = false;
-          });
-          _scheduleContinuousViewportFillAfterLoad();
-        }
+          _loadingMore = false;
+        });
+        _scheduleContinuousViewportFillAfterLoad();
+      } else {
+        final result = await _listLoader.reload(
+          count: () => query.count(dictLex),
+          offsetFor: (count) async {
+            if (continuous) return 0;
+            var page = filters.page;
+            final maxPage = count == 0 ? 0 : ((count - 1) ~/ pageSize);
+            if (page > maxPage) {
+              page = maxPage;
+              await ref
+                  .read(lexiconListFiltersProvider.notifier)
+                  .setPage(maxPage);
+            }
+            return page * pageSize;
+          },
+          page: (offset) =>
+              query.page(dictLex, limit: pageSize, offset: offset),
+        );
+        // Μια νεότερη φόρτωση την πρόλαβε: εκείνη θα γράψει τη λίστα.
+        if (result == null || !mounted) return;
+        setState(() {
+          _totalCount = result.totalCount;
+          _rows = mutableRows(result.rows);
+          _loading = false;
+          _loadingMore = false;
+        });
+        _scheduleContinuousViewportFillAfterLoad();
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _loadError = '$e';
+          _loadError = humanizeUserFacingError(e);
           _loading = false;
           _loadingMore = false;
         });

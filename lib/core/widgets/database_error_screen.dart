@@ -13,6 +13,7 @@ import '../database/database_init_result.dart';
 import '../database/database_path_pick_flow.dart';
 import '../database/database_path_resolution.dart';
 import '../database/database_restore_flow.dart';
+import '../services/app_restart.dart';
 import '../services/crash_log_service.dart';
 import '../services/settings_service.dart';
 import '../updates/update_manifest.dart';
@@ -379,6 +380,28 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
     );
   }
 
+  /// «Επαναδοκιμή»: ξαναρωτά ό,τι μπορεί να έχει αλλάξει από την προηγούμενη
+  /// φορά.
+  ///
+  /// Όταν η βάση είναι από νεότερη έκδοση, το άνοιγμα δίνει **το ίδιο**
+  /// σφάλμα — αλλά ο φάκελος ενημερώσεων μπορεί να έχει πια το πακέτο που
+  /// τη διαβάζει. Ο διάλογος ανοίγει μόνος του μόνο όταν αλλάζει το σφάλμα,
+  /// οπότε εδώ ξανανοίγει ρητά, με νέο έλεγχο του φακέλου. Πεδίο 17/10/2026:
+  /// δημοσίευση της 0.63.0 ενώ το POPINIO περίμενε — χωρίς αυτό, η
+  /// αναβάθμιση φαινόταν μόνο με επανεκκίνηση της εφαρμογής.
+  Future<void> _retry() async {
+    final before = _recoveryFingerprint(widget.result);
+    await widget.onRetry();
+    if (!mounted) return;
+    // Διαφορετικό σφάλμα: τη διέξοδό του την ξεκίνησε ήδη η αλλαγή της οθόνης.
+    if (_recoveryFingerprint(widget.result) != before) return;
+    if (_effectiveRecoveryKind !=
+        DatabaseInitRecoveryKind.databaseNewerThanApp) {
+      return;
+    }
+    _startRecoveryForCurrentResult();
+  }
+
   Future<void> _offerNewerDatabaseRecovery() async {
     await runDatabaseNewerRecovery(
       context: context,
@@ -719,12 +742,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
 
   Future<void> _restartApplication(BuildContext context) async {
     try {
-      await Process.start(
-        Platform.resolvedExecutable,
-        Platform.executableArguments,
-        mode: ProcessStartMode.detached,
-      );
-      exit(0);
+      await restartApplication();
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1184,7 +1202,7 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
                             await _restartApplication(context);
                             return;
                           }
-                          await widget.onRetry();
+                          await _retry();
                         }),
                   icon: _busyAction == 'retry'
                       ? const SizedBox.square(

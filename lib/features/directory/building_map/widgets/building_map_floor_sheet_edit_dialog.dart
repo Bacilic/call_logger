@@ -34,11 +34,15 @@ typedef PickFloorSheetImagePath = Future<String?> Function();
 /// Διάλογος «Επεξεργασία κάτοψης»: όνομα, περιοχή, αλλαγή εικόνας με
 /// προεπισκόπηση. Επιστρέφει null σε ακύρωση· η «Αποθήκευση» ενεργοποιείται
 /// μόνο όταν υπάρχει πραγματική αλλαγή και μη κενό όνομα.
+///
+/// Όταν επιλεγεί νέα εικόνα, η τρέχουσα και η νέα δείχνονται **δίπλα-δίπλα**:
+/// η κάτοψη είναι κοινή για όλους τους σταθμούς, και το λάθος αρχείο (το
+/// υπόγειο στη θέση του 2ου) πρέπει να φαίνεται πριν φτάσει παντού.
 Future<BuildingMapFloorSheetEditResult?> showBuildingMapFloorSheetEditDialog(
   BuildContext context, {
   required BuildingMapFloor floor,
   required List<DepartmentModel> previewDepartments,
-  required bool initialPreviewImageAvailable,
+  required String currentImagePath,
   required PickFloorSheetImagePath pickImagePath,
 }) {
   return showDialog<BuildingMapFloorSheetEditResult>(
@@ -46,7 +50,7 @@ Future<BuildingMapFloorSheetEditResult?> showBuildingMapFloorSheetEditDialog(
     builder: (_) => BuildingMapFloorSheetEditDialog(
       floor: floor,
       previewDepartments: previewDepartments,
-      initialPreviewImageAvailable: initialPreviewImageAvailable,
+      currentImagePath: currentImagePath,
       pickImagePath: pickImagePath,
     ),
   );
@@ -57,13 +61,15 @@ class BuildingMapFloorSheetEditDialog extends StatefulWidget {
     super.key,
     required this.floor,
     required this.previewDepartments,
-    required this.initialPreviewImageAvailable,
+    required this.currentImagePath,
     required this.pickImagePath,
   });
 
   final BuildingMapFloor floor;
   final List<DepartmentModel> previewDepartments;
-  final bool initialPreviewImageAvailable;
+
+  /// Το τοπικό αρχείο της τρέχουσας κάτοψης· κενό όταν δεν έχει ανέβει.
+  final String currentImagePath;
   final PickFloorSheetImagePath pickImagePath;
 
   @override
@@ -80,8 +86,8 @@ class _BuildingMapFloorSheetEditDialogState
   final _labelFocus = FocusNode();
 
   String? _pickedSrcPath;
-  late bool _previewImageAvailable = widget.initialPreviewImageAvailable;
-  late bool _showDepartmentsOnPreview = widget.initialPreviewImageAvailable;
+  late bool _previewImageAvailable = widget.currentImagePath.isNotEmpty;
+  late bool _showDepartmentsOnPreview = _previewImageAvailable;
 
   @override
   void dispose() {
@@ -123,6 +129,28 @@ class _BuildingMapFloorSheetEditDialogState
     );
   }
 
+  Widget _preview(String imagePath, {double? maxWidth}) {
+    return BuildingMapFloorEditPreview(
+      imagePath: imagePath,
+      floorId: widget.floor.id,
+      rotationDegrees: widget.floor.rotationDegrees,
+      showDepartments: _showDepartmentsOnPreview,
+      departments: widget.previewDepartments,
+      maxWidth: maxWidth,
+    );
+  }
+
+  Widget _captioned(String caption, Widget child) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(caption, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 4),
+        child,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -161,13 +189,27 @@ class _BuildingMapFloorSheetEditDialogState
               label: const Text('Αλλαγή κάτοψης'),
             ),
             const SizedBox(height: 12),
-            BuildingMapFloorEditPreview(
-              imagePath: _pickedSrcPath ?? widget.floor.imagePath,
-              floorId: widget.floor.id,
-              rotationDegrees: widget.floor.rotationDegrees,
-              showDepartments: _showDepartmentsOnPreview,
-              departments: widget.previewDepartments,
-            ),
+            if (_pickedSrcPath == null)
+              _preview(widget.currentImagePath)
+            else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _captioned(
+                      'Τρέχουσα',
+                      _preview(widget.currentImagePath, maxWidth: 250),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _captioned(
+                      'Νέα',
+                      _preview(_pickedSrcPath!, maxWidth: 250),
+                    ),
+                  ),
+                ],
+              ),
             CompactTooltip(
               message:
                   'Η προβολή τμημάτων είναι μόνο για την εκκαθάριση της '

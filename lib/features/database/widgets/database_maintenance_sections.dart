@@ -9,6 +9,7 @@ import '../../../core/services/audit_retention_plan.dart';
 import 'audit_retention_preview_dialog.dart';
 import 'database_size_health_card.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/database/database_table_labels.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../audit/providers/audit_providers.dart';
 import '../../calls/provider/lookup_provider.dart';
@@ -18,13 +19,6 @@ import '../providers/database_browser_stats_provider.dart';
 import '../providers/database_maintenance_provider.dart';
 import '../services/database_maintenance_service.dart';
 import 'other_sessions_gate.dart';
-
-const Map<String, String> _kMaintenanceTableLabels = {
-  'audit_log': 'Αρχείο καταγραφής (audit)',
-  'tasks': 'Εκκρεμότητες',
-  'knowledge_base': 'Βάση Γνώσης',
-  'user_dictionary': 'Προσωπικό λεξικό',
-};
 
 /// Οι ενότητες συντήρησης της βάσης: εκκαθάριση ιστορικού, VACUUM, αναδόμηση
 /// ευρετηρίων.
@@ -379,7 +373,7 @@ class _DatabaseMaintenanceSectionsState
   }
 
   Future<void> _onClearTableFull(BuildContext context, String table) async {
-    final label = _kMaintenanceTableLabels[table] ?? table;
+    final label = databaseTableLabelEl(table);
     if (!await _ensureBackupOrWarn(context) || !context.mounted) return;
     final ok = await _doubleConfirm(
       context,
@@ -781,7 +775,7 @@ class _DatabaseMaintenanceSectionsState
   }
 
   Widget _tableSection(BuildContext context, ThemeData theme, String table) {
-    final label = _kMaintenanceTableLabels[table] ?? table;
+    final label = databaseTableLabelEl(table);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       elevation: 0,

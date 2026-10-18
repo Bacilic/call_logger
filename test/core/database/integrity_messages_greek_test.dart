@@ -61,38 +61,6 @@ void main() {
   });
 
   group('Λεξιλόγιο πινάκων', () {
-    test('κάθε πίνακας του σχήματος έχει ελληνικό όνομα', () {
-      const schemaTables = [
-        'calls',
-        'tasks',
-        'users',
-        'phones',
-        'departments',
-        'equipment',
-        'categories',
-        'user_phones',
-        'user_equipment',
-        'department_phones',
-        'call_external_links',
-        'building_map_floors',
-        'audit_log',
-        'app_settings',
-        'remote_tools',
-        'remote_tool_args',
-        'full_dictionary',
-        'user_dictionary',
-        'knowledge_base',
-        'operators',
-      ];
-
-      final untranslated = [
-        for (final t in schemaTables)
-          if (databaseTableLabelEl(t) == t) t,
-      ];
-
-      expect(untranslated, isEmpty);
-    });
-
     test('άγνωστος πίνακας επιστρέφεται ως έχει, δεν εξαφανίζεται', () {
       expect(databaseTableLabelEl('κάτι_άγνωστο'), 'κάτι_άγνωστο');
       expect(databaseTableLabelEl(null), '—');

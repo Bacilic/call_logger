@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   const availability = PortableBackupAvailability(
-    hasMapImages: false,
     hasToolImages: true,
     hasLoadedLexicon: false,
     hasLampDbInPortableDataBase: false,

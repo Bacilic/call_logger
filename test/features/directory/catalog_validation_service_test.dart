@@ -1882,6 +1882,20 @@ void main() {
       );
       expect(s.companyInternalPhoneHint('2534'), isNull);
     });
+
+    // Ο έλεγχος της εταιρείας ρωτά τη ΜΙΑ απάντηση «μοιάζει με δικό μας
+    // εσωτερικό;» — δεν ξέρει μόνος του πόσα ψηφία έχει το πρόθεμα.
+    test('τριψήφιο πρόθεμα από τις ρυθμίσεις: υπόδειξη', () {
+      const s = CatalogValidationService(
+        CatalogValidationRules(
+          internalPhoneDigits: 5,
+          internalPrefixFrom: 220,
+          internalPrefixTo: 299,
+        ),
+      );
+      expect(s.companyInternalPhoneHint('22015'), isNotNull);
+      expect(s.companyInternalPhoneHint('31015'), isNull);
+    });
   });
 
   group('scan — εξοπλισμός που κατέληξε σε εταιρεία', () {

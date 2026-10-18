@@ -349,7 +349,11 @@ class DepartmentFormSave {
     required List<String> sharedPhones,
     required List<String> sharedEquipmentCodes,
   }) {
-    final map = Map<String, dynamic>.from(source);
+    // Η γεωμετρία του χάρτη δεν είναι πεδία της φόρμας: όταν η θέση σβήνει,
+    // θα γέμιζε το μήνυμα με «θέση», «πλάτος», «περιστροφή» σε ωμούς αριθμούς.
+    // Ο όροφος λέγεται μία φορά, με το όνομά του, από το `floor_id`.
+    final map = Map<String, dynamic>.from(source)
+      ..removeWhere((key, _) => _kMapGeometryKeys.contains(key));
     map['shared_phones'] = [...sharedPhones]..sort();
     map['shared_equipment_codes'] = [...sharedEquipmentCodes]..sort();
     if (map.containsKey('floor_id')) {
@@ -370,6 +374,23 @@ class DepartmentFormSave {
     return '$floorId';
   }
 }
+
+/// Στήλες θέσης στον χάρτη που δεν εμφανίζονται στο μήνυμα αποθήκευσης.
+const _kMapGeometryKeys = {
+  'map_floor',
+  'map_x',
+  'map_y',
+  'map_width',
+  'map_height',
+  'map_rotation',
+  'map_label_offset_x',
+  'map_label_offset_y',
+  'map_anchor_offset_x',
+  'map_anchor_offset_y',
+  'map_label_font_scale',
+  'map_label_width',
+  'map_label_height',
+};
 
 /// Τα κοινόχρηστα της καρτέλας: όπως ζητήθηκαν, ή όπως τελικά γράφτηκαν.
 typedef _SharedAssets = ({List<String> phones, List<String> equipment});

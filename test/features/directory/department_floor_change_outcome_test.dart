@@ -122,6 +122,22 @@ void main() {
       );
     });
 
+    // Η «Καρδιολογική», σχεδιασμένη στον 2ο, παίρνει όροφο «— χωρίς —»: η
+    // σχεδίαση χάνεται οριστικά, άρα ο χρήστης ρωτιέται πριν την αποθήκευση —
+    // όπως ήδη στην αλλαγή σε άλλον όροφο και στην αλλαγή Είδους.
+    test('σχεδιασμένο τμήμα χάνει τον όροφο: ζητά επιβεβαίωση', () {
+      expect(
+        _resolve(
+          selectedFloorId: null,
+          snapshotFloorId: 2,
+          initialFloorId: 2,
+          hasDrawnPlacement: true,
+          placementFloorId: 2,
+        ),
+        DepartmentFloorChangeAction.confirmClearPlacement,
+      );
+    });
+
     test('νέο τμήμα δεν έχει τίποτα να σβήσει', () {
       expect(
         _resolve(isEdit: false, selectedFloorId: null),

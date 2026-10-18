@@ -22,7 +22,6 @@ class DatabaseBackupSettings {
   const DatabaseBackupSettings({
     required this.destinationDirectory,
     required this.namingFormat,
-    required this.includeMapImagesInBackup,
     required this.includeToolImages,
     required this.includeLexicon,
     required this.includeLampDb,
@@ -54,9 +53,6 @@ class DatabaseBackupSettings {
 
   final String destinationDirectory;
   final DatabaseBackupNamingFormat namingFormat;
-
-  /// Συμπερίληψη φακέλου `maps_images` στο zip (με `call_logger.db` εσωτερικά).
-  final bool includeMapImagesInBackup;
 
   /// Συμπερίληψη φακέλου `images/` (εικονίδια εργαλείων).
   final bool includeToolImages;
@@ -117,7 +113,6 @@ class DatabaseBackupSettings {
   static DatabaseBackupSettings defaults() => const DatabaseBackupSettings(
     destinationDirectory: '',
     namingFormat: DatabaseBackupNamingFormat.dateTimeThenBase,
-    includeMapImagesInBackup: false,
     includeToolImages: true,
     includeLexicon: false,
     includeLampDb: false,
@@ -157,23 +152,15 @@ class DatabaseBackupSettings {
 
   /// Προτίμηση χρήστη: κάποιο portable περιεχόμενο επιλέχθηκε (χωρίς έλεγχο διαθεσιμότητας).
   bool get includesPortableBundleInZip =>
-      includeMapImagesInBackup ||
-      includeToolImages ||
-      includeLexicon ||
-      includeLampDb;
+      includeToolImages || includeLexicon || includeLampDb;
 
   /// Ενεργή συμπερίληψη portable bundle: προτίμηση ΚΑΙ διαθέσιμο περιεχόμενο.
   bool effectiveIncludesPortableBundleInZip(
     PortableBackupAvailability availability,
   ) =>
-      effectiveIncludeMapImagesInBackup(availability) ||
       effectiveIncludeToolImages(availability) ||
       effectiveIncludeLexicon(availability) ||
       effectiveIncludeLampDb(availability);
-
-  bool effectiveIncludeMapImagesInBackup(
-    PortableBackupAvailability availability,
-  ) => includeMapImagesInBackup && availability.hasMapImages;
 
   bool effectiveIncludeToolImages(PortableBackupAvailability availability) =>
       includeToolImages && availability.hasToolImages;
@@ -197,7 +184,6 @@ class DatabaseBackupSettings {
   DatabaseBackupSettings copyWith({
     String? destinationDirectory,
     DatabaseBackupNamingFormat? namingFormat,
-    bool? includeMapImagesInBackup,
     bool? includeToolImages,
     bool? includeLexicon,
     bool? includeLampDb,
@@ -224,8 +210,6 @@ class DatabaseBackupSettings {
     return DatabaseBackupSettings(
       destinationDirectory: destinationDirectory ?? this.destinationDirectory,
       namingFormat: namingFormat ?? this.namingFormat,
-      includeMapImagesInBackup:
-          includeMapImagesInBackup ?? this.includeMapImagesInBackup,
       includeToolImages: includeToolImages ?? this.includeToolImages,
       includeLexicon: includeLexicon ?? this.includeLexicon,
       includeLampDb: includeLampDb ?? this.includeLampDb,
@@ -264,7 +248,6 @@ class DatabaseBackupSettings {
   Map<String, dynamic> toJson() => {
     'destinationDirectory': destinationDirectory,
     'namingFormat': namingFormat.index,
-    'includeMapImagesInBackup': includeMapImagesInBackup,
     'includeToolImages': includeToolImages,
     'includeLexicon': includeLexicon,
     'includeLampDb': includeLampDb,
@@ -328,7 +311,6 @@ class DatabaseBackupSettings {
     return DatabaseBackupSettings(
       destinationDirectory: s('destinationDirectory', ''),
       namingFormat: DatabaseBackupNamingFormat.values[nf],
-      includeMapImagesInBackup: b('includeMapImagesInBackup', false),
       includeToolImages: b('includeToolImages', true),
       includeLexicon: b('includeLexicon', true),
       includeLampDb: b('includeLampDb', true),
@@ -384,7 +366,6 @@ class DatabaseBackupSettings {
     final o = other;
     return o.destinationDirectory == destinationDirectory &&
         o.namingFormat == namingFormat &&
-        o.includeMapImagesInBackup == includeMapImagesInBackup &&
         o.includeToolImages == includeToolImages &&
         o.includeLexicon == includeLexicon &&
         o.includeLampDb == includeLampDb &&
@@ -411,7 +392,6 @@ class DatabaseBackupSettings {
   int get hashCode => Object.hashAll([
     destinationDirectory,
     namingFormat,
-    includeMapImagesInBackup,
     includeToolImages,
     includeLexicon,
     includeLampDb,

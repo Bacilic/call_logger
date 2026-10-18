@@ -13,9 +13,11 @@ import '../../../core/services/lansweeper_department_accounts.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/services/profile_settings.dart';
 import '../../../core/services/scoped_settings.dart';
+import '../../../core/utils/display_text_sort.dart';
 import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/department_floor_sync.dart';
 import '../../calls/provider/lookup_provider.dart';
+import '../models/catalog_column_layout.dart';
 import '../models/department_directory_column.dart';
 import '../models/department_model.dart';
 import '../../../core/database/sqlite_types.dart';
@@ -34,10 +36,8 @@ class _PatchKeep {
 
 const _kPatchKeep = _PatchKeep();
 
-typedef _DepartmentColumnLayout = ({
-  List<DepartmentDirectoryColumn> order,
-  Set<String> visible,
-});
+typedef _DepartmentColumnLayout =
+    CatalogColumnLayout<DepartmentDirectoryColumn>;
 
 /// Κατάσταση καταλόγου τμημάτων.
 class DepartmentDirectoryState {
@@ -107,74 +107,16 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     if (!ref.mounted) return;
   }
 
-  _DepartmentColumnLayout? _parseColumnLayoutFromJson(String raw) {
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        final o = decoded['order'];
-        final v = decoded['visible'];
-        final rawOrder = <DepartmentDirectoryColumn>[];
-        if (o is List) {
-          for (final e in o) {
-            if (e is! String) continue;
-            final c = DepartmentDirectoryColumn.fromKey(e);
-            if (c != null) rawOrder.add(c);
-          }
-        }
-        final seenKeys = <String>{};
-        final order = <DepartmentDirectoryColumn>[];
-        for (final c in rawOrder) {
-          if (seenKeys.add(c.key)) order.add(c);
-        }
-        for (final c in DepartmentDirectoryColumn.all) {
-          if (!seenKeys.contains(c.key)) order.add(c);
-        }
-        Set<String> visible;
-        if (v is List && v.isNotEmpty) {
-          visible = {};
-          for (final e in v) {
-            if (e is String && DepartmentDirectoryColumn.fromKey(e) != null) {
-              visible.add(e);
-            }
-          }
-          if (visible.isEmpty) {
-            visible = {for (final c in order) c.key};
-          }
-        } else {
-          visible = {for (final c in order) c.key};
-        }
-        return (
-          order: DepartmentDirectoryColumn.pinSelectionFirst(order),
-          visible: visible,
-        );
-      }
-      if (decoded is List) {
-        final ordered = <DepartmentDirectoryColumn>[];
-        final seen = <String>{};
-        for (final e in decoded) {
-          if (e is! String) continue;
-          final c = DepartmentDirectoryColumn.fromKey(e);
-          if (c != null && seen.add(c.key)) ordered.add(c);
-        }
-        if (ordered.isEmpty) return null;
-        for (final c in DepartmentDirectoryColumn.all) {
-          if (!seen.contains(c.key)) ordered.add(c);
-        }
-        return (
-          order: DepartmentDirectoryColumn.pinSelectionFirst(ordered),
-          visible: Set<String>.from(seen),
-        );
-      }
-    } catch (_) {}
-    return null;
-  }
-
   Future<_DepartmentColumnLayout?> _readColumnLayoutFromSettings() async {
     final raw = await ScopedSettings.getString(
       ProfileSettingKeys.catalogDepartmentsVisibleColumns,
     );
     if (raw == null || raw.trim().isEmpty) return null;
-    return _parseColumnLayoutFromJson(raw);
+    return parseCatalogColumnLayoutJson(
+      raw,
+      all: DepartmentDirectoryColumn.all,
+      defaultVisible: {for (final c in DepartmentDirectoryColumn.all) c.key},
+    );
   }
 
   Future<void> _persistDepartmentColumnLayout(
@@ -358,17 +300,13 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
             cmp = (a.id ?? 0).compareTo(b.id ?? 0);
             break;
           case 'name':
-            cmp = a.name.compareTo(b.name);
-            break;
+            return compareDisplayText(a.name, b.name, ascending: asc);
           case 'building':
-            cmp = (a.building ?? '').compareTo(b.building ?? '');
-            break;
+            return compareDisplayText(a.building, b.building, ascending: asc);
           case 'color':
-            cmp = (a.color ?? '').compareTo(b.color ?? '');
-            break;
+            return compareDisplayText(a.color, b.color, ascending: asc);
           case 'notes':
-            cmp = (a.notes ?? '').compareTo(b.notes ?? '');
-            break;
+            return compareDisplayText(a.notes, b.notes, ascending: asc);
           case 'phones':
             final aPhones = LookupService.instance
                 .getPhonesByDepartment(a.id ?? -1)
@@ -376,8 +314,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
             final bPhones = LookupService.instance
                 .getPhonesByDepartment(b.id ?? -1)
                 .join(', ');
-            cmp = aPhones.compareTo(bPhones);
-            break;
+            return compareDisplayText(aPhones, bPhones, ascending: asc);
           case 'equipment':
             final aEquipment = LookupService.instance
                 .getAllEquipmentByDepartment(a.id ?? -1)
@@ -397,8 +334,7 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
                 )
                 .where((v) => v.isNotEmpty)
                 .join(', ');
-            cmp = aEquipment.compareTo(bEquipment);
-            break;
+            return compareDisplayText(aEquipment, bEquipment, ascending: asc);
           default:
             cmp = 0;
         }
@@ -681,13 +617,11 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
         map,
         // Η αφετηρία χτίζεται από την ΙΔΙΑ συνάρτηση με ό,τι γράφεται: έτσι τα
         // κλειδιά ταιριάζουν πάντα και κανένα πεδίο δεν μένει αφύλακτο επειδή
-        // ξεχάστηκε σε δεύτερο κατάλογο.
-        expected: expected == null
-            ? null
-            : departmentWriteMap(
-                expected,
-                clearBuildingMapPlacement: clearBuildingMapPlacement,
-              ),
+        // ξεχάστηκε σε δεύτερο κατάλογο. Χωρίς το σβήσιμο της θέσης όμως: η
+        // αφετηρία είναι ό,τι διάβασε η φόρμα, ποτέ ό,τι σκοπεύει να γράψει —
+        // αλλιώς οι στήλες που σβήνει η ίδια η εγγραφή (π.χ. πλάτος ετικέτας
+        // 150 → κενό) διαβάζονται ως αλλαγή άλλου σταθμού.
+        expected: expected == null ? null : departmentWriteMap(expected),
         force: force,
       );
     } on DirectoryStaleException {
@@ -893,38 +827,6 @@ class DepartmentDirectoryNotifier extends Notifier<DepartmentDirectoryState> {
     });
 
     await _refreshLookupCache();
-    await loadDepartments();
-    await refreshDirectoryCaches(ref, users: true, equipment: true);
-  }
-
-  Future<void> deleteSelected() async {
-    _settlePendingBulkUndo();
-    if (state.selectedIds.isEmpty) return;
-    final toDelete = state.allDepartments
-        .where(
-          (d) =>
-              d.id != null && !d.isDeleted && state.selectedIds.contains(d.id),
-        )
-        .toList();
-    if (toDelete.isEmpty) return;
-    final ids = toDelete.map((d) => d.id!).toList();
-    final dbDel = await DatabaseHelper.instance.database;
-    await DepartmentRepository(dbDel).softDeleteDepartments(ids);
-    await _refreshLookupCache();
-    if (!ref.mounted) return;
-    state = DepartmentDirectoryState(
-      allDepartments: state.allDepartments,
-      filteredDepartments: state.filteredDepartments,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: {},
-      lastDeleted: toDelete,
-      lastDepartmentDeletionUndo: null,
-      focusedRowIndex: state.focusedRowIndex,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
     await loadDepartments();
     await refreshDirectoryCaches(ref, users: true, equipment: true);
   }

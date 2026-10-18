@@ -8,6 +8,7 @@ import '../../../core/database/equipment_repository.dart';
 import '../../../core/database/phone_repository.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/services/lookup_service.dart';
+import '../../../core/utils/display_text_sort.dart';
 import '../../../core/utils/id_search_query.dart';
 import '../../../core/utils/phone_list_parser.dart';
 import '../../../core/utils/user_identity_normalizer.dart';
@@ -16,7 +17,7 @@ import '../../calls/models/user_model.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../models/non_user_phone_entry.dart';
 import '../models/user_catalog_mode.dart';
-import '../models/user_column_layout.dart';
+import '../models/catalog_column_layout.dart';
 import '../models/user_directory_column.dart';
 import '../services/bulk_action_undo_record.dart';
 import '../services/bulk_user_actions.dart';
@@ -190,12 +191,17 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     ref.read(pendingBulkUndoProvider.notifier).settleSilently();
   }
 
-  Future<UserColumnLayout?> _readColumnLayoutFromSettings() async {
+  Future<CatalogColumnLayout<UserDirectoryColumn>?>
+  _readColumnLayoutFromSettings() async {
     final raw = await ScopedSettings.getString(
       ProfileSettingKeys.catalogUsersVisibleColumns,
     );
     if (raw == null || raw.trim().isEmpty) return null;
-    return parseUserColumnLayoutJson(raw);
+    return parseCatalogColumnLayoutJson(
+      raw,
+      all: UserDirectoryColumn.all,
+      defaultVisible: {for (final c in UserDirectoryColumn.all) c.key},
+    );
   }
 
   Future<void> _persistUserColumnLayout(DirectoryState s) async {
@@ -242,7 +248,7 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
   }
 
   Future<void> loadUsers() async {
-    UserColumnLayout? parsed;
+    CatalogColumnLayout<UserDirectoryColumn>? parsed;
     if (!_columnLayoutHydrated) {
       parsed = await _readColumnLayoutFromSettings();
       _columnLayoutHydrated = true;
@@ -442,28 +448,31 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
             cmp = ((a.id ?? 0).compareTo(b.id ?? 0));
             break;
           case 'last_name':
-            cmp = (a.lastName ?? '').compareTo(b.lastName ?? '');
-            break;
+            return compareDisplayText(a.lastName, b.lastName, ascending: asc);
           case 'first_name':
-            cmp = (a.firstName ?? '').compareTo(b.firstName ?? '');
-            break;
+            return compareDisplayText(a.firstName, b.firstName, ascending: asc);
           case 'nickname':
-            cmp = (a.nickname ?? '').compareTo(b.nickname ?? '');
-            break;
+            return compareDisplayText(a.nickname, b.nickname, ascending: asc);
           case 'phone':
-            cmp = a.phoneJoined.compareTo(b.phoneJoined);
-            break;
+            return compareDisplayText(
+              a.phoneJoined,
+              b.phoneJoined,
+              ascending: asc,
+            );
           case 'department':
-            cmp = (a.departmentName ?? '').compareTo(b.departmentName ?? '');
-            break;
+            return compareDisplayText(
+              a.departmentName,
+              b.departmentName,
+              ascending: asc,
+            );
           case 'equipment':
-            cmp = UserEquipmentCodes.textForUser(
-              a.id,
-            ).compareTo(UserEquipmentCodes.textForUser(b.id));
-            break;
+            return compareDisplayText(
+              UserEquipmentCodes.textForUser(a.id),
+              UserEquipmentCodes.textForUser(b.id),
+              ascending: asc,
+            );
           case 'notes':
-            cmp = (a.notes ?? '').compareTo(b.notes ?? '');
-            break;
+            return compareDisplayText(a.notes, b.notes, ascending: asc);
           default:
             cmp = 0;
         }
@@ -499,20 +508,13 @@ class DirectoryNotifier extends Notifier<DirectoryState> {
     if (col != null && col.isNotEmpty) {
       list = List<NonUserPhoneEntry>.from(list);
       list.sort((a, b) {
-        int cmp;
-        switch (col) {
-          case 'phone':
-            cmp = a.number.toLowerCase().compareTo(b.number.toLowerCase());
-            break;
-          case 'department':
-            cmp = a.departmentLabel.toLowerCase().compareTo(
-              b.departmentLabel.toLowerCase(),
-            );
-            break;
-          default:
-            cmp = a.number.toLowerCase().compareTo(b.number.toLowerCase());
-        }
-        return asc ? cmp : -cmp;
+        return col == 'department'
+            ? compareDisplayText(
+                a.departmentLabel,
+                b.departmentLabel,
+                ascending: asc,
+              )
+            : compareDisplayText(a.number, b.number, ascending: asc);
       });
     }
     return list;

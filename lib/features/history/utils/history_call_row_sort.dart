@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/display_text_sort.dart';
+
 import '../models/lansweeper_sync_state.dart';
 
 /// Ανάγνωση και ταξινόμηση των γραμμών του πίνακα Ιστορικού κλήσεων, όπως
@@ -93,6 +95,9 @@ List<Map<String, dynamic>> sortHistoryCallRows(
   list.sort((a, b) {
     final va = historyCallSortValue(a, columnIndex);
     final vb = historyCallSortValue(b, columnIndex);
+    if (va is String && vb is String) {
+      return compareDisplayText(va, vb, ascending: ascending);
+    }
     final c = va.compareTo(vb);
     return ascending ? c : -c;
   });

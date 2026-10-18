@@ -20,6 +20,7 @@ class ShutdownTraceIncident {
     required this.slowestStepMs,
     required this.hadFailure,
     required this.wasInterrupted,
+    this.trace = '',
   });
 
   final DateTime occurredAt;
@@ -36,6 +37,9 @@ class ShutdownTraceIncident {
 
   /// Το κλείσιμο κόπηκε από το όριο ασφαλείας — κολλημένο βήμα.
   final bool wasInterrupted;
+
+  /// Το πλήρες ίχνος, γραμμή-γραμμή — κενό όταν δεν είναι γνωστό.
+  final String trace;
 
   /// Η κατάληξη των προσωρινών ιχνών κλεισίματος (τοπικά αρχεία κειμένου).
   static const String fileNameSuffix = '.log';
@@ -69,9 +73,23 @@ class ShutdownTraceIncident {
   /// σκάσει η οθόνη Ρυθμίσεων.
   static ShutdownTraceIncident? fromRecord(LogRecord record) {
     if (record.kind != LogKind.shutdown) return null;
-    final data = record.data;
+    return fromJson(
+      record.data,
+      fallbackTime: record.time,
+      trace: record.details ?? '',
+    );
+  }
+
+  /// Το αντίστροφο του [toJson] — και για τη σύνοψη που μένει μέσα σε τοπικό
+  /// ίχνος όταν το ημερολόγιο δεν απάντησε στο κλείσιμο.
+  static ShutdownTraceIncident fromJson(
+    Map<String, Object?> data, {
+    required DateTime fallbackTime,
+    String trace = '',
+  }) {
     final occurredAt =
-        DateTime.tryParse(data['occurred_at']?.toString() ?? '') ?? record.time;
+        DateTime.tryParse(data['occurred_at']?.toString() ?? '') ??
+        fallbackTime;
     return ShutdownTraceIncident(
       occurredAt: occurredAt,
       totalMs: _intOf(data['total_ms']),
@@ -79,6 +97,7 @@ class ShutdownTraceIncident {
       slowestStepMs: _intOf(data['slowest_ms']),
       hadFailure: data['had_failure'] == true,
       wasInterrupted: data['was_interrupted'] == true,
+      trace: trace,
     );
   }
 

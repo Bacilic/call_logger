@@ -58,6 +58,16 @@ String humanizeUserFacingError(Object error) {
   }
 
   final details = error.toString();
+
+  // Τα δικά μας μηνύματα είναι ήδη ελληνικά και γραμμένα για τον χρήστη
+  // («Η λέξη υπάρχει ήδη…»)· περνούν αυτούσια, χωρίς το «Exception:». Τα ξένα
+  // (SQL, δίκτυο, πλατφόρμα) είναι αγγλικά και πέφτουν στο γενικό μήνυμα.
+  final own = details.replaceFirst(RegExp(r'^(Exception|Bad state): '), '');
+  if (_greekLetter.hasMatch(own)) return own;
+
   final clipped = details.length <= 120 ? details : details.substring(0, 120);
   return 'Απρόβλεπτο σφάλμα. Τεχνικές λεπτομέρειες: $clipped';
 }
+
+/// Ελληνικό γράμμα, με ή χωρίς πολυτονικό.
+final RegExp _greekLetter = RegExp('[Ͱ-Ͽἀ-῿]');

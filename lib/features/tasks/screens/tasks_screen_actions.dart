@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/errors/task_deleted_elsewhere_exception.dart';
 import '../../../core/errors/task_save_exception.dart';
 import '../../../core/errors/task_stale_exception.dart';
 import '../../../core/services/save_confirmation_summary.dart';
@@ -71,6 +72,12 @@ Future<bool> _writeTaskGuarded(
   try {
     await write(false);
     return true;
+  } on TaskDeletedElsewhereException catch (e) {
+    // Δεν υπάρχει τίποτα να αποφασίσει ο χρήστης: η εκκρεμότητα δεν υπάρχει
+    // πια. Το μήνυμα το λέει, και η λίστα ξαναδιαβάζεται ώστε να φύγει.
+    if (context.mounted) _showTaskSaveError(context, e);
+    await ref.read(tasksProvider.notifier).refresh();
+    return false;
   } on TaskStaleException catch (conflict) {
     if (!context.mounted) return false;
     final choice = await showTaskConflictDialog(context, conflict);

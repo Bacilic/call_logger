@@ -409,25 +409,28 @@ class CrashLogService {
   /// σειρά της: μια μετακόμιση στο μεταξύ δεν τη στέλνει σε άλλον φάκελο.
   ///
   /// Δεν πετά ποτέ· η αποτυχία της σιγεί το ημερολόγιο ([_suspendDisk]).
-  Future<void> _enqueueWrite(
+  /// Επιστρέφει αν η εγγραφή έφτασε πράγματι στον δίσκο.
+  Future<bool> _enqueueWrite(
     String path,
     String content, {
     required bool append,
   }) {
-    if (!_diskAvailable) return Future<void>.value();
+    if (!_diskAvailable) return Future<bool>.value(false);
     final generation = _generation;
     final next = _queue.then((_) async {
-      if (!_diskAvailable && generation == _generation) return;
+      if (!_diskAvailable && generation == _generation) return false;
       Future<void>? write;
       try {
         write = _writeFile(path, content, append: append);
         await write.timeout(_writeTimeout);
+        return true;
       } catch (error) {
-        if (generation != _generation) return;
+        if (generation != _generation) return false;
         _suspendDisk(error);
         if (error is TimeoutException && write != null) {
           _resumeIfLateWriteLands(write, generation);
         }
+        return false;
       }
     });
     _queue = next;
@@ -627,7 +630,7 @@ class CrashLogService {
     );
   }
 
-  Future<void> _appendToDailyLog(LogRecord record) {
+  Future<bool> _appendToDailyLog(LogRecord record) {
     final stamped = record.stamped(
       station: StationName.current,
       version: appVersion,
@@ -664,16 +667,17 @@ class CrashLogService {
   /// όταν η εκκίνηση καταλήξει σε άλλη βάση από τη ρυθμισμένη ([retargetTo]).
   /// Δεύτερος κάτοχος θα ξανάκανε τα τρία, και κάποια στιγμή θα ξέχναγε το ένα.
   ///
-  /// Η αποτυχία καταπίνεται σκόπιμα: ο καταγραφέας δεν ρίχνει ποτέ αυτό που
-  /// καταγράφει — ούτε την εκκίνηση, ούτε το κλείσιμο. Όποιος πρέπει να
-  /// ξέρει ότι η εγγραφή έφτασε (το ίχνος κλεισίματος, λίγο πριν τερματιστεί
-  /// η διεργασία) περιμένει το αποτέλεσμα.
-  Future<void> appendRecord(LogRecord record) {
-    if (!_diskAvailable) return Future<void>.value();
+  /// Η αποτυχία δεν πετιέται: ο καταγραφέας δεν ρίχνει ποτέ αυτό που
+  /// καταγράφει — ούτε την εκκίνηση, ούτε το κλείσιμο. Επιστρέφει όμως **αν η
+  /// εγγραφή γράφτηκε**: όποιος σβήνει την πηγή της αφού την καταγράψει (το
+  /// ίχνος κλεισίματος) οφείλει να ξέρει ότι έφτασε — αλλιώς ένα ημερολόγιο
+  /// που σιωπά παίρνει μαζί του και το μόνο αντίγραφο.
+  Future<bool> appendRecord(LogRecord record) {
+    if (!_diskAvailable) return Future<bool>.value(false);
     try {
       return _appendToDailyLog(record);
     } catch (_) {
-      return Future<void>.value();
+      return Future<bool>.value(false);
     }
   }
 

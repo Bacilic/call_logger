@@ -46,24 +46,57 @@ abstract final class TaskDueDateCalculator {
     );
   }
 
-  /// Επιλογή «Μέσα στο ωράριο» (`kDayEnd`): αν η [base] την ίδια ημερολογιακή ημέρα
-  /// βρίσκεται από [nextBusinessHour] έως [dayEndTime] (συμπεριλαμβανομένων), +1 ώρα·
-  /// αλλιώς επόμενη εργάσιμη στην [nextBusinessHour]. Αν το ωράριο δεν είναι έγκυρο
-  /// (λήξη πριν την έναρξη), εφαρμόζεται +1 ώρα.
+  /// Επιλογή «Μέσα στο ωράριο» (`kDayEnd`): **μία ώρα εργασίας**, μετρημένη
+  /// μόνο μέσα στο ωράριο (απόφαση Διευθυντή 17/10/2026).
+  /// - Μέσα στο ωράριο: +1 ώρα· ό,τι περισσεύει μετά τη λήξη συνεχίζει από
+  ///   την έναρξη της επόμενης εργάσιμης (12:30 → αύριο 08:30).
+  /// - Πριν ανοίξει, σε εργάσιμη: σήμερα, έναρξη +1 ώρα.
+  /// - Στη λήξη ή μετά, και Σάββατο/Κυριακή: επόμενη εργάσιμη, έναρξη +1 ώρα.
+  /// - Το Σαββατοκύριακο μένει **πάντα** εκτός, ανεξάρτητα από τη ρύθμιση
+  ///   παράλειψης — αυτή αφορά μόνο την «Επόμενη εργάσιμη».
+  ///
+  /// Αν το ωράριο δεν είναι έγκυρο (λήξη πριν την έναρξη), +1 ώρα.
   static DateTime _withinScheduleOrNextBusinessDue(
     TaskSettingsConfig config,
     DateTime base,
   ) {
-    final dayStart = DateTime(base.year, base.month, base.day);
-    final startToday = _atTimeOnDay(dayStart, config.nextBusinessHour);
-    final endToday = _atTimeOnDay(dayStart, config.dayEndTime);
+    final today = DateTime(base.year, base.month, base.day);
+    final startToday = _atTimeOnDay(today, config.nextBusinessHour);
+    final endToday = _atTimeOnDay(today, config.dayEndTime);
     if (!endToday.isAfter(startToday)) {
       return base.add(const Duration(hours: 1));
     }
-    if (!base.isBefore(startToday) && !base.isAfter(endToday)) {
-      return base.add(const Duration(hours: 1));
+
+    var day = today;
+    var from = base;
+    if (_isWeekend(day) || !base.isBefore(endToday)) {
+      day = _nextWeekday(day);
+      from = _atTimeOnDay(day, config.nextBusinessHour);
+    } else if (base.isBefore(startToday)) {
+      from = startToday;
     }
-    return _nextBusinessMorningDateTime(config, base);
+
+    var remaining = const Duration(hours: 1);
+    while (true) {
+      final end = _atTimeOnDay(day, config.dayEndTime);
+      final available = end.difference(from);
+      if (remaining <= available) return from.add(remaining);
+      remaining -= available;
+      day = _nextWeekday(day);
+      from = _atTimeOnDay(day, config.nextBusinessHour);
+    }
+  }
+
+  static bool _isWeekend(DateTime day) =>
+      day.weekday == DateTime.saturday || day.weekday == DateTime.sunday;
+
+  /// Η επόμενη ημέρα Δευτέρα–Παρασκευή μετά την [day].
+  static DateTime _nextWeekday(DateTime day) {
+    var next = DateTime(day.year, day.month, day.day + 1);
+    while (_isWeekend(next)) {
+      next = DateTime(next.year, next.month, next.day + 1);
+    }
+    return next;
   }
 
   /// Επόμενη ημέρα (ημερολογιακά μετά την ημέρα του [base]) στην [nextBusinessHour], με παράλειψη Σ/Κ αν [skipWeekends].

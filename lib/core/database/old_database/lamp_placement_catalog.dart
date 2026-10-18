@@ -13,6 +13,7 @@
 /// βάση — και μέσα σε κάθε ομάδα προηγείται όποιος χρεώνεται περισσότερα.
 library;
 
+import '../../utils/display_text_sort.dart';
 import '../../utils/text_similarity.dart';
 
 class LampPlacementOffice {
@@ -211,7 +212,7 @@ class LampPlacementCatalog {
     // διευθυντής ή η προϊσταμένη του τμήματος.
     int byEquipment(LampPlacementOwner a, LampPlacementOwner b) {
       final byCount = b.equipmentCount.compareTo(a.equipmentCount);
-      return byCount != 0 ? byCount : a.name.compareTo(b.name);
+      return byCount != 0 ? byCount : compareDisplayText(a.name, b.name);
     }
 
     inOffice.sort(byEquipment);

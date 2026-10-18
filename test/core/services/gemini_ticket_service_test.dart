@@ -162,7 +162,8 @@ void main() {
     // Επτά μοντέλα· όσα έχουν «zero» στο όνομα απαντούν «ποσόστωση 0». Οι
     // καθυστερήσεις είναι ανάποδες της σειράς, ώστε τα τελευταία να
     // απαντούν πρώτα — το αποτέλεσμα δεν επιτρέπεται να εξαρτάται από αυτό.
-    const ids = ['m1', 'm2-zero', 'm3', 'm4', 'm5-zero', 'm6', 'm7'];
+    // Όσα έχουν «busy» απαντούν «503 — υπερφόρτωση»: προσωρινό, όχι ποσόστωση 0.
+    const ids = ['m1', 'm2-zero', 'm3', 'm4', 'm5-zero', 'm6', 'm7', 'm8-busy'];
 
     ({
       http.Client client,
@@ -200,6 +201,14 @@ void main() {
           Duration(milliseconds: 5 * (ids.length - ids.indexOf(id))),
         );
         running--;
+        if (id.contains('busy')) {
+          return http.Response(
+            jsonEncode({
+              'error': {'message': 'The model is overloaded (high demand).'},
+            }),
+            503,
+          );
+        }
         if (id.contains('zero')) {
           return http.Response(
             jsonEncode({
@@ -253,6 +262,38 @@ void main() {
         expect(google.peak(), lessThanOrEqualTo(kGeminiProbeConcurrency));
       },
     );
+
+    test('υπερφορτωμένο μοντέλο: προσωρινό, όχι «χωρίς ποσόστωση»', () async {
+      final google = fakeGoogle();
+
+      final result = await GeminiTicketService.probeModelsWithQuota(
+        apiKey: 'ΚΛΕΙΔΙ',
+        typedPrimaryModel: 'm8-busy',
+        client: google.client,
+      );
+
+      expect(result.busyModels.map((m) => m.id), ['m8-busy']);
+      expect(
+        result.availableModels.map((m) => m.id),
+        isNot(contains('m8-busy')),
+      );
+      final warning = result.typedModelWarnings.single;
+      expect(warning.temporary, isTrue);
+      expect(warning.message, isNot(contains('ποσόστωση')));
+    });
+
+    test('ποσόστωση 0: η μόνη περίπτωση «χωρίς ποσόστωση»', () async {
+      final google = fakeGoogle();
+
+      final result = await GeminiTicketService.probeModelsWithQuota(
+        apiKey: 'ΚΛΕΙΔΙ',
+        typedPrimaryModel: 'm2-zero',
+        client: google.client,
+      );
+
+      expect(result.busyModels.map((m) => m.id), isNot(contains('m2-zero')));
+      expect(result.typedModelWarnings.single.temporary, isFalse);
+    });
 
     test('η λίστα μοντέλων έρχεται με μία ερώτηση', () async {
       final google = fakeGoogle();

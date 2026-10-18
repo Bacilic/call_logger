@@ -1040,6 +1040,148 @@ void main() {
         expect(row?['is_deleted'], 0);
       },
     );
+
+    // Σχεδιασμένο τμήμα που μένει «— χωρίς —» όροφο χάνει οριστικά τη
+    // σχεδίασή του — άρα η Αποθήκευση ρωτά πρώτα, και η «Ακύρωση» δεν γράφει
+    // τίποτα.
+    //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "χωρίς όροφο"
+    testWidgets(
+      'σχεδιασμένο τμήμα χωρίς όροφο: η Αποθήκευση προειδοποιεί, η Ακύρωση δεν γράφει τίποτα',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late int floorId;
+        late int deptId;
+        late DepartmentDirectoryNotifier notifier;
+        await tester.runAsync(() async {
+          await seedIsolatedTestDatabase();
+          floorId = await seedCharacterizationFloor();
+          final db = await DatabaseHelper.instance.database;
+          deptId = await db.insert('departments', {
+            'name': kCharSplitDeptName,
+            'name_key': SearchTextNormalizer.normalizeForSearch(
+              kCharSplitDeptName,
+            ),
+            'color': '#33691F',
+            'floor_id': floorId,
+            'map_floor': floorId.toString(),
+            'map_x': 0.1,
+            'map_y': 0.1,
+            'map_width': 0.2,
+            'map_height': 0.2,
+            'is_deleted': 0,
+          });
+          LookupService.instance.resetForReload();
+          await LookupService.instance.loadFromDatabase();
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(departmentDirectoryProvider.notifier);
+          await notifier.loadDepartments();
+          await _warmBuildingCatalog(container);
+          await _openDepartmentFormInDialog(
+            tester,
+            container,
+            initialDepartment: DepartmentModel(
+              id: deptId,
+              name: kCharSplitDeptName,
+              color: '#33691F',
+              floorId: floorId,
+              mapFloor: floorId.toString(),
+              mapX: 0.1,
+              mapY: 0.1,
+              mapWidth: 0.2,
+              mapHeight: 0.2,
+            ),
+            notifier: notifier,
+          );
+        });
+        await tester.runAsync(() async {
+          for (var i = 0; i < 30; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        await pumpUntilSettledLong(tester);
+
+        final floorDropdownFinder = floorDropdown();
+        await tester.ensureVisible(floorDropdownFinder);
+        await pumpUntilSettled(tester);
+        await tester.tap(floorDropdownFinder);
+        await pumpUntilSettled(tester);
+        await tester.tap(find.text('— χωρίς —').last);
+        await pumpUntilSettled(tester);
+
+        const warningTitle = 'Η σχεδίαση στον χάρτη θα διαγραφεί';
+        final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton);
+        await tester.runAsync(() async {
+          for (var i = 0; i < 60; i++) {
+            final warned = find.text(warningTitle).evaluate().isNotEmpty;
+            final formOpen = find
+                .text(_kDepartmentFormTitle)
+                .evaluate()
+                .isNotEmpty;
+            if (warned || !formOpen) return;
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+        });
+        await tester.pump();
+
+        expect(
+          find.text(warningTitle),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Η σχεδίαση δεν σβήνεται σιωπηλά: ο χρήστης ρωτιέται πριν χαθεί',
+          ),
+        );
+        expect(
+          find.textContaining('δεν θα επανέλθει'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Η προειδοποίηση λέει ότι η θέση δεν γυρίζει με τον όροφο',
+          ),
+        );
+
+        await tester.tap(
+          find.descendant(
+            of: find.ancestor(
+              of: find.text(warningTitle),
+              matching: find.byType(AlertDialog),
+            ),
+            matching: find.widgetWithText(TextButton, 'Ακύρωση'),
+          ),
+        );
+        await pumpUntilSettled(tester);
+
+        expect(find.text(warningTitle), findsNothing);
+        expect(find.text(_kDepartmentFormTitle), findsOneWidget);
+        final row = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'departments',
+            where: 'id = ?',
+            whereArgs: [deptId],
+            limit: 1,
+          );
+          return rows.first;
+        });
+        expect(row?['floor_id'], floorId);
+        expect(row?['map_width'], 0.2);
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+    );
   });
 
   group('Φόρμα τμήματος — άδειασμα πεδίων', () {

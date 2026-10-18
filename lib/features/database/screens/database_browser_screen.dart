@@ -118,7 +118,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = humanizeUserFacingError(e);
           _loading = false;
         });
       }
@@ -166,7 +166,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
       if (mounted) {
         setState(() {
           _previewLoading = false;
-          _error = e.toString();
+          _error = humanizeUserFacingError(e);
         });
       }
     }
@@ -197,7 +197,7 @@ class _DatabaseBrowserScreenState extends ConsumerState<DatabaseBrowserScreen> {
       });
     } catch (e) {
       if (mounted) {
-        setState(() => _error = e.toString());
+        setState(() => _error = humanizeUserFacingError(e));
       }
     } finally {
       _loadingMoreRows = false;

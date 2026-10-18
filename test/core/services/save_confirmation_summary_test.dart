@@ -81,16 +81,19 @@ void main() {
       expect(message, kSaveConfirmationNoChangesMessage);
     });
 
-    test('κλειδί μόνο στο oldMap — δεν παράγει γραμμή αλλαγής', () {
+    // Τα μοντέλα παραλείπουν από την εικόνα τους ό,τι είναι κενό: πεδίο που
+    // υπάρχει μόνο στην παλιά εικόνα είναι πεδίο που ΑΔΕΙΑΣΕ — π.χ. το κτίριο
+    // της Αιμοδοσίας όταν έγινε εταιρεία.
+    test('κλειδί μόνο στο oldMap — λέει ότι το πεδίο άδειασε', () {
       final message = buildSaveConfirmationMessage(
         entityType: 'department',
-        entityLabel: 'Πληροφορική',
-        oldMap: const {'name': 'Πληροφορική', 'building': 'Κτίριο Α'},
-        newMap: const {'name': 'Πληροφορική'},
+        entityLabel: 'Αιμοδοσία',
+        oldMap: const {'name': 'Αιμοδοσία', 'building': 'Καινούριο'},
+        newMap: const {'name': 'Αιμοδοσία'},
         isNew: false,
       );
 
-      expect(message, kSaveConfirmationNoChangesMessage);
+      expect(message, contains('κτίριο: Καινούριο → —'));
     });
 
     test('λίστα phones — λέει τι αφαιρέθηκε, όχι όλη τη λίστα δύο φορές', () {

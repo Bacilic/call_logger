@@ -1,5 +1,4 @@
 import '../../../core/services/log_record.dart';
-import '../../../core/services/crash_log_service.dart';
 import '../models/diagnostics_export_options.dart';
 import '../models/windows_events.dart';
 import 'log_archive_reader.dart';
@@ -42,7 +41,6 @@ String buildDiagnosticsReport({
 }) {
   final selected = archive.records.where(options.includes).toList();
   final errorGroups = _groupErrors(selected);
-  final legacyErrorFiles = _legacyErrorFiles(archive, options);
   // Οι συνεδρίες χτίζονται από **όλες** τις εγγραφές της περιόδου: ένα
   // απότομο τέλος χρειάζεται την εκκίνηση στην οποία ανήκει, ακόμη κι αν οι
   // εκκινήσεις δεν ζητήθηκαν ως περιεχόμενο.
@@ -60,10 +58,10 @@ String buildDiagnosticsReport({
   final out = StringBuffer();
 
   _writeHeader(out, archive, options, context);
-  _writeSummary(out, selected, options, legacyErrorFiles.length);
+  _writeSummary(out, selected, options);
   if (options.contents.contains(DiagnosticsContent.criticalErrors) ||
       options.contents.contains(DiagnosticsContent.nonCriticalErrors)) {
-    _writeErrors(out, errorGroups, legacyErrorFiles.length);
+    _writeErrors(out, errorGroups);
   }
   if (sessions != null) writeSessionsSection(out, sessions);
   if (options.contents.contains(DiagnosticsContent.shutdowns)) {
@@ -86,7 +84,6 @@ String buildDiagnosticsReport({
         appGaps: gaps,
       ),
   ]);
-  _writeLegacyAppendix(out, legacyErrorFiles);
   return out.toString();
 }
 
@@ -154,7 +151,6 @@ void _writeSummary(
   StringBuffer out,
   List<LogRecord> selected,
   DiagnosticsExportOptions options,
-  int legacyErrorFileCount,
 ) {
   final columns = <(String, int Function(Iterable<LogRecord>))>[
     if (options.contents.contains(DiagnosticsContent.startups))
@@ -193,15 +189,6 @@ void _writeSummary(
     out.writeln(
       '| $station | ${columns.map((c) => c.$2(ofStation)).join(' | ')} |',
     );
-  }
-  if (legacyErrorFileCount > 0) {
-    out
-      ..writeln()
-      ..writeln(
-        'Η σύνοψη μετρά **μόνο τη νέα μορφή** καταγραφής. Για την ίδια περίοδο '
-        'υπάρχουν και $legacyErrorFileCount αρχεία σφαλμάτων παλιάς μορφής, '
-        'ωμά στο παράρτημα — δεν μετρώνται εδώ.',
-      );
   }
   out.writeln();
 }
@@ -266,22 +253,13 @@ Map<String, _ErrorGroup> _groupErrors(List<LogRecord> selected) {
   return groups;
 }
 
-void _writeErrors(
-  StringBuffer out,
-  Map<String, _ErrorGroup> groups,
-  int legacyErrorFileCount,
-) {
+void _writeErrors(StringBuffer out, Map<String, _ErrorGroup> groups) {
   out
     ..writeln('## Διαφορετικά σφάλματα')
     ..writeln();
   if (groups.isEmpty) {
     out
-      ..writeln(
-        legacyErrorFileCount > 0
-            ? 'Κανένα σφάλμα στη νέα μορφή — δείτε και το παράρτημα παλιάς '
-                  'μορφής.'
-            : 'Κανένα σφάλμα στην περίοδο.',
-      )
+      ..writeln('Κανένα σφάλμα στην περίοδο.')
       ..writeln();
     return;
   }
@@ -381,41 +359,6 @@ String? _timelineLine(LogRecord record, Map<String, _ErrorGroup> groups) =>
       LogKind.repeat => record.message,
       LogKind.shutdown => 'ΚΛΕΙΣΙΜΟ: ${record.message}',
     };
-
-/// Μόνο τα παλιά αρχεία σφαλμάτων της περιόδου: εκεί είναι η ουσία. Τα παλιά
-/// αρχεία συνεδριών είναι πίνακες βημάτων εκκίνησης — μετρημένα, το 80% του
-/// παραρτήματος — και τις εκκινήσεις τις συνοψίζει ήδη η νέα μορφή.
-List<LegacyLogFile> _legacyErrorFiles(
-  LogArchive archive,
-  DiagnosticsExportOptions options,
-) => archive.legacyFiles
-    .where(
-      (file) =>
-          file.name.startsWith(CrashLogService.legacyErrorLogPrefix) &&
-          options.coversDay(file.day),
-    )
-    .toList();
-
-void _writeLegacyAppendix(StringBuffer out, List<LegacyLogFile> files) {
-  if (files.isEmpty) return;
-  out
-    ..writeln('## Παράρτημα — σφάλματα παλιάς μορφής')
-    ..writeln()
-    ..writeln(
-      'Γραμμένα από έκδοση πριν από τη μορφή μίας εγγραφής ανά γραμμή. '
-      'Μπαίνουν **ωμά, χωρίς φίλτρο υπολογιστή ή περιεχομένου**: οι παλιές '
-      'εγγραφές σφαλμάτων δεν έγραφαν σταθμό. Τα παλιά αρχεία συνεδριών '
-      '(βήματα εκκίνησης) μένουν έξω.',
-    )
-    ..writeln();
-  for (final file in files) {
-    out
-      ..writeln('### ${file.name}')
-      ..writeln()
-      ..writeln(fenced(trimStackRuns(file.content.trimRight(), 40)))
-      ..writeln();
-  }
-}
 
 String _errorKey(LogRecord record) =>
     '${record.message}\n${firstLineOf(record.details)}';

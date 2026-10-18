@@ -22,6 +22,7 @@ import 'core/init/startup_window_placement.dart';
 import 'core/updates/update_providers.dart';
 import 'core/utils/windows_cli_error_dialog.dart';
 import 'core/services/app_close_controller.dart';
+import 'core/services/app_restart.dart';
 import 'core/services/crash_log_service.dart';
 import 'core/services/settings_service.dart';
 import 'core/services/shutdown_trace_service.dart';
@@ -159,6 +160,21 @@ Future<void> main(List<String> arguments) async {
             : null,
       );
       profileStep.ok();
+
+      // Επανεκκίνηση από την ίδια την εφαρμογή: η παλιά κλείνει κανονικά, και
+      // μόνο όταν τελειώσει προχωρά η νέα — αλλιώς θα έβρισκε το σημάδι ζωής
+      // της ζωντανό και θα το κατέγραφε ως «ΑΠΟΤΟΜΟ ΤΕΛΟΣ».
+      final previousProcess = AppConfig.waitForProcessId;
+      if (previousProcess != null) {
+        final waitStep = journal.begin(
+          'Αναμονή κλεισίματος της προηγούμενης εφαρμογής',
+        );
+        if (await waitUntilProcessGone(previousProcess)) {
+          waitStep.ok();
+        } else {
+          waitStep.warn('Δεν έκλεισε μέσα στο όριο — η εκκίνηση συνεχίζει.');
+        }
+      }
 
       // Εκκρεμής ενημέρωση: αν υπάρχει έτοιμο πακέτο από προηγούμενη «Αναμονή»,
       // εφάρμοσέ το τώρα (εκκίνηση updater + κλείσιμο) πριν φορτώσει η εφαρμογή.
@@ -326,8 +342,6 @@ Future<void> _bootstrapAndRunApp() async {
     if (log == null || !log.isDiskAvailable) return false;
     return ShutdownTraceService.promoteOrphanedTrace(
       workingDirectory: await ShutdownTraceService.localWorkingDirectory(),
-      // Η παλιά θέση, για ένα ίχνος που έμεινε εκεί από προηγούμενη έκδοση.
-      legacySharedDirectory: log.logsDirectory,
       appendRecord: log.appendRecord,
     );
   });

@@ -29,11 +29,13 @@ import '../services/directory_save_conflict.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/user_repository.dart';
 import '../../../core/services/settings_service.dart';
+import '../../../core/utils/display_text_sort.dart';
 import '../../../core/utils/id_search_query.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/provider/lookup_provider.dart';
 import '../../calls/models/user_model.dart';
 import '../../../core/database/sqlite_types.dart';
+import '../models/catalog_column_layout.dart';
 import '../models/equipment_column.dart';
 import '../services/bulk_action_undo_record.dart';
 import '../services/bulk_equipment_actions.dart';
@@ -92,12 +94,12 @@ String _equipmentDeleteFeedbackLine({
   }
   if (owner != null) {
     final n = (owner.name ?? '').trim().isEmpty ? 'χρήστη' : owner.name!.trim();
-    return 'Διαγράφηκε οριστικά ο εξοπλισμός: $code από τον $n και τον οργανισμό σας';
+    return 'Διαγράφηκε ο εξοπλισμός: $code από τον $n και τον οργανισμό σας';
   }
   final dept = (departmentName ?? '').trim().isEmpty
       ? 'τμήμα'
       : departmentName!.trim();
-  return 'Διαγράφηκε οριστικά ο εξοπλισμός: $code από το $dept';
+  return 'Διαγράφηκε ο εξοπλισμός: $code από το $dept';
 }
 
 /// Ενσωματώνει νέα σειρά ορατών στηλών (π.χ. chips) στη [columnOrder] χωρίς να ανακατεύει τις κρυφές.
@@ -306,73 +308,23 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
   }
 
   _EquipmentColumnLayout? _parseEquipmentLayoutFromJson(String raw) {
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        final o = decoded['order'];
-        final v = decoded['visible'];
-        final rawOrder = <EquipmentColumn>[];
-        if (o is List) {
-          for (final e in o) {
-            if (e is! String) continue;
-            final c = EquipmentColumn.fromKey(e);
-            if (c != null) rawOrder.add(c);
-          }
-        }
-        final seenKeys = <String>{};
-        final order = <EquipmentColumn>[];
-        for (final c in rawOrder) {
-          if (seenKeys.add(c.key)) order.add(c);
-        }
-        for (final c in EquipmentColumn.all) {
-          if (!seenKeys.contains(c.key)) order.add(c);
-        }
-        Set<String> visible;
-        if (v is List && v.isNotEmpty) {
-          visible = {};
-          for (final e in v) {
-            if (e is String && EquipmentColumn.fromKey(e) != null) {
-              visible.add(e);
-            }
-          }
-          if (visible.isEmpty) {
-            visible = {for (final c in order) c.key};
-          }
-        } else {
-          visible = {for (final c in order) c.key};
-        }
-        final sk = decoded['sortColumn'];
-        final sortKey = sk is String ? sk : null;
-        final sa = decoded['sortAscending'];
-        final sortAscending = sa is bool ? sa : true;
-        return (
-          order: EquipmentColumn.pinSelectionFirst(order),
-          visible: visible,
-          sortKey: sortKey,
-          sortAscending: sortAscending,
-        );
-      }
-      if (decoded is List) {
-        final ordered = <EquipmentColumn>[];
-        final seen = <String>{};
-        for (final e in decoded) {
-          if (e is! String) continue;
-          final c = EquipmentColumn.fromKey(e);
-          if (c != null && seen.add(c.key)) ordered.add(c);
-        }
-        if (ordered.isEmpty) return null;
-        for (final c in EquipmentColumn.all) {
-          if (!seen.contains(c.key)) ordered.add(c);
-        }
-        return (
-          order: EquipmentColumn.pinSelectionFirst(ordered),
-          visible: Set<String>.from(seen),
-          sortKey: null,
-          sortAscending: true,
-        );
-      }
-    } catch (_) {}
-    return null;
+    final columns = parseCatalogColumnLayoutJson(
+      raw,
+      all: EquipmentColumn.all,
+      defaultVisible: {for (final c in EquipmentColumn.defaults) c.key},
+    );
+    if (columns == null) return null;
+    // Μόνο ο Εξοπλισμός θυμάται και την ταξινόμηση· η παλιά μορφή σκέτης
+    // λίστας δεν την είχε.
+    final decoded = jsonDecode(raw);
+    final sk = decoded is Map ? decoded['sortColumn'] : null;
+    final sa = decoded is Map ? decoded['sortAscending'] : null;
+    return (
+      order: columns.order,
+      visible: columns.visible,
+      sortKey: sk is String ? sk : null,
+      sortAscending: sa is bool ? sa : true,
+    );
   }
 
   Future<_EquipmentColumnLayout?> _readEquipmentLayoutFromSettings() async {
@@ -608,8 +560,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
       list.sort((a, b) {
         final va = _sortComparableForRow(a, col);
         final vb = _sortComparableForRow(b, col);
-        final cmp = _compareComparable(va, vb);
-        return asc ? cmp : -cmp;
+        return _compareComparable(va, vb, ascending: asc);
       });
     }
 
@@ -652,13 +603,25 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
     filterAndSort();
   }
 
-  static int _compareComparable(Comparable? a, Comparable? b) {
+  /// Κείμενα με τη μία σειρά της εφαρμογής· οι απούσες τιμές μένουν στο
+  /// τέλος και στη φθίνουσα σειρά.
+  static int _compareComparable(
+    Comparable? a,
+    Comparable? b, {
+    required bool ascending,
+  }) {
+    if ((a == null || a is String) && (b == null || b is String)) {
+      return compareDisplayText(
+        a as String?,
+        b as String?,
+        ascending: ascending,
+      );
+    }
     if (a == null && b == null) return 0;
     if (a == null) return 1;
     if (b == null) return -1;
-    if (a is String && b is String) return a.compareTo(b);
-    if (a is num && b is num) return a.compareTo(b);
-    return a.compareTo(b);
+    final cmp = a.compareTo(b);
+    return ascending ? cmp : -cmp;
   }
 
   void setFocusedRowIndex(int? index) {
@@ -991,7 +954,7 @@ class EquipmentDirectoryNotifier extends Notifier<EquipmentDirectoryState> {
               ownerSnapshot: null,
               unlinkedUserId: null,
               feedbackLine:
-                  'Διαγράφηκε οριστικά ο εξοπλισμός: $code από τον οργανισμό σας',
+                  'Διαγράφηκε ο εξοπλισμός: $code από τον οργανισμό σας',
             ),
           );
           continue;

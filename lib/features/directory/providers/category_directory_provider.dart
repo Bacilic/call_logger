@@ -7,8 +7,10 @@ import '../../../core/database/category_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/services/profile_settings.dart';
 import '../../../core/services/scoped_settings.dart';
+import '../../../core/utils/display_text_sort.dart';
 import '../../../core/utils/id_search_query.dart';
 import '../../history/providers/history_provider.dart';
+import '../models/catalog_column_layout.dart';
 import '../models/category_directory_column.dart';
 import '../models/category_model.dart';
 import '../services/catalog_search_evaluation.dart';
@@ -20,10 +22,7 @@ class _PatchKeep {
 
 const _kPatchKeep = _PatchKeep();
 
-typedef _CategoryColumnLayout = ({
-  List<CategoryDirectoryColumn> order,
-  Set<String> visible,
-});
+typedef _CategoryColumnLayout = CatalogColumnLayout<CategoryDirectoryColumn>;
 
 /// Κατάσταση καταλόγου κατηγοριών.
 class CategoryDirectoryState {
@@ -93,63 +92,19 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
     ref.invalidate(historyCategoryDateCallCountProvider);
   }
 
-  _CategoryColumnLayout? _parseColumnLayoutFromJson(String raw) {
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        final o = decoded['order'];
-        final v = decoded['visible'];
-        final rawOrder = <CategoryDirectoryColumn>[];
-        if (o is List) {
-          for (final e in o) {
-            if (e is! String) continue;
-            final c = CategoryDirectoryColumn.fromKey(e);
-            if (c != null) rawOrder.add(c);
-          }
-        }
-        final seenKeys = <String>{};
-        final order = <CategoryDirectoryColumn>[];
-        for (final c in rawOrder) {
-          if (seenKeys.add(c.key)) order.add(c);
-        }
-        for (final c in CategoryDirectoryColumn.all) {
-          if (!seenKeys.contains(c.key)) order.add(c);
-        }
-        Set<String> visible;
-        if (v is List && v.isNotEmpty) {
-          visible = {};
-          for (final e in v) {
-            if (e is String && CategoryDirectoryColumn.fromKey(e) != null) {
-              visible.add(e);
-            }
-          }
-          if (visible.isEmpty) {
-            visible = {
-              CategoryDirectoryColumn.selection.key,
-              CategoryDirectoryColumn.name.key,
-            };
-          }
-        } else {
-          visible = {
-            CategoryDirectoryColumn.selection.key,
-            CategoryDirectoryColumn.name.key,
-          };
-        }
-        return (
-          order: CategoryDirectoryColumn.pinSelectionFirst(order),
-          visible: visible,
-        );
-      }
-    } catch (_) {}
-    return null;
-  }
-
   Future<_CategoryColumnLayout?> _readColumnLayoutFromSettings() async {
     final raw = await ScopedSettings.getString(
       ProfileSettingKeys.catalogCategoriesVisibleColumns,
     );
     if (raw == null || raw.trim().isEmpty) return null;
-    return _parseColumnLayoutFromJson(raw);
+    return parseCatalogColumnLayoutJson(
+      raw,
+      all: CategoryDirectoryColumn.all,
+      defaultVisible: {
+        CategoryDirectoryColumn.selection.key,
+        CategoryDirectoryColumn.name.key,
+      },
+    );
   }
 
   Future<void> _persistCategoryColumnLayout(CategoryDirectoryState s) async {
@@ -260,8 +215,7 @@ class CategoryDirectoryNotifier extends Notifier<CategoryDirectoryState> {
             cmp = (a.id ?? 0).compareTo(b.id ?? 0);
             break;
           case 'name':
-            cmp = a.name.compareTo(b.name);
-            break;
+            return compareDisplayText(a.name, b.name, ascending: asc);
           default:
             cmp = 0;
         }

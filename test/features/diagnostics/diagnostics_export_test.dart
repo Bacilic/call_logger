@@ -61,11 +61,7 @@ DiagnosticsExportOptions _options({
 
 String _build(List<LogRecord> records, DiagnosticsExportOptions options) =>
     buildDiagnosticsReport(
-      archive: LogArchive(
-        records: records,
-        legacyFiles: const [],
-        unreadableLines: 0,
-      ),
+      archive: LogArchive(records: records, unreadableLines: 0),
       options: options,
       context: _context,
     );
@@ -158,7 +154,6 @@ void main() {
       final report = buildDiagnosticsReport(
         archive: LogArchive(
           records: [_record(DateTime(2026, 10, 3), 'PICINIO', LogKind.error)],
-          legacyFiles: const [],
           unreadableLines: 2,
         ),
         options: _options(from: DateTime(2026, 9, 1)),
@@ -235,46 +230,6 @@ void main() {
       );
     });
 
-    test('στο παράρτημα μπαίνουν μόνο τα παλιά σφάλματα της περιόδου', () {
-      final report = buildDiagnosticsReport(
-        archive: LogArchive(
-          records: const [],
-          legacyFiles: [
-            LegacyLogFile(
-              name: 'errors_2026-10-02.log',
-              day: DateTime(2026, 10, 2),
-              content: '[2026-10-02 10:00:00] v0.60.0 ΚΡΙΣΙΜΟ\nπαλιό σφάλμα',
-            ),
-            LegacyLogFile(
-              name: 'session_2026-10-02.log',
-              day: DateTime(2026, 10, 2),
-              content: '[2026-10-02 08:00:00] ΕΝΤΑΞΕΙ  Φόρτωση μηχανής SQLite',
-            ),
-            LegacyLogFile(
-              name: 'errors_2026-09-01.log',
-              day: DateTime(2026, 9, 1),
-              content: 'εκτός περιόδου',
-            ),
-          ],
-          unreadableLines: 0,
-        ),
-        options: _options(),
-        context: _context,
-      );
-
-      expect(report, contains('## Παράρτημα — σφάλματα παλιάς μορφής'));
-      expect(report, contains('παλιό σφάλμα'));
-      expect(report, isNot(contains('εκτός περιόδου')));
-      expect(
-        report,
-        isNot(contains('Φόρτωση μηχανής SQLite')),
-        reason: greekExpectMsg(
-          'Τα παλιά αρχεία συνεδριών ήταν το 80% του παραρτήματος· τις '
-          'εκκινήσεις τις συνοψίζει ήδη η νέα μορφή',
-        ),
-      );
-    });
-
     test('χωρίς κανένα συμβάν, το λέει ρητά', () {
       final report = _build(const [], _options());
 
@@ -296,7 +251,7 @@ void main() {
     });
 
     test(
-      'διαβάζει και τις δύο μορφές και προσπερνά τη μισογραμμένη γραμμή',
+      'διαβάζει μόνο την τρέχουσα μορφή και προσπερνά τη μισογραμμένη γραμμή',
       () async {
         final good = _record(
           DateTime(2026, 10, 4, 9),
@@ -318,10 +273,13 @@ void main() {
         expect(archive.records, hasLength(1));
         expect(archive.unreadableLines, 1);
         expect(archive.stations, ['POPINIO']);
-        expect(archive.legacyFiles.map((f) => f.name), [
-          'session_2026-10-03.log',
-        ]);
-        expect(archive.oldestDay, DateTime(2026, 10, 3));
+        expect(
+          archive.oldestDay,
+          DateTime(2026, 10, 4),
+          reason: greekExpectMsg(
+            'Τα αρχεία παλιάς μορφής δεν διαβάζονται — ούτε για την ημερομηνία',
+          ),
+        );
       },
     );
 
@@ -452,7 +410,6 @@ void main() {
               message: 'Η προηγούμενη εκτέλεση δεν τερμάτισε ομαλά',
             ),
           ],
-          legacyFiles: const [],
           unreadableLines: 0,
         ),
         options: _options(),
@@ -522,7 +479,6 @@ void main() {
             data: {'last_seen': DateTime(2026, 10, 3, 22).toIso8601String()},
           ),
         ],
-        legacyFiles: const [],
         unreadableLines: 0,
       ),
       options: _options(),
@@ -680,6 +636,36 @@ void main() {
       );
     });
 
+    // Το ίδιο απότομο τέλος έχει δύο ώρες: πότε σταμάτησε η εφαρμογή
+    // (τελευταίο σημάδι ζωής) και πότε το κατάλαβε η επόμενη εκκίνηση. Κάθε
+    // ώρα λέει ποια είναι — αλλιώς το 07:52:24 και το 07:52:59 μοιάζουν με
+    // δύο διαφορετικά συμβάντα.
+    test('απότομο τέλος χωρίς καταγεγραμμένη εκκίνηση: κάθε ώρα λέει τι '
+        'μετρά', () {
+      final report = _build([
+        lost(
+          DateTime(2026, 10, 4, 7, 52, 59),
+          DateTime(2026, 10, 4, 7, 52, 24),
+        ),
+      ], _options());
+
+      expect(
+        report.substring(
+          report.indexOf('## Συνεδρίες'),
+          report.indexOf('## Χρονολόγιο'),
+        ),
+        contains('04/10/2026 07:52:59 · PICINIO · ΑΠΟΤΟΜΟ ΤΕΛΟΣ (εντοπίστηκε)'),
+      );
+      final timeline = report.substring(report.indexOf('## Χρονολόγιο'));
+      expect(
+        timeline,
+        contains(
+          '04/10/2026 07:52:24 · PICINIO · ΑΠΟΤΟΜΟ ΤΕΛΟΣ εκτέλεσης χωρίς '
+          'καταγεγραμμένη εκκίνηση (τελευταίο σημάδι ζωής)',
+        ),
+      );
+    });
+
     String sessionsOf(String report) => report.substring(
       report.indexOf('## Συνεδρίες'),
       report.indexOf('## Χρονολόγιο'),
@@ -804,7 +790,6 @@ void main() {
             lost(DateTime(2026, 10, 4, 12, 30), DateTime(2026, 10, 4, 12, 5)),
             begin(DateTime(2026, 10, 4, 12, 30)),
           ],
-          legacyFiles: const [],
           unreadableLines: 0,
         ),
         options: _options(),
@@ -841,44 +826,6 @@ void main() {
 
       expect(timeline, isNot(contains('03/10/2026 22:00:00')));
       expect(timeline, contains('04/10/2026 12:06:00 · WINDOWS'));
-    });
-
-    test('η σύνοψη λέει ότι τα σφάλματα παλιάς μορφής δεν μετρώνται', () {
-      final report = buildDiagnosticsReport(
-        archive: LogArchive(
-          records: const [],
-          legacyFiles: [
-            LegacyLogFile(
-              name: 'errors_2026-10-04.log',
-              day: DateTime(2026, 10, 4),
-              content: 'παλιό σφάλμα',
-            ),
-          ],
-          unreadableLines: 0,
-        ),
-        options: _options(),
-        context: _context,
-      );
-
-      expect(report, contains('μετρά **μόνο τη νέα μορφή**'));
-      expect(report, contains('Κανένα σφάλμα στη νέα μορφή'));
-    });
-
-    test('οι στοίβες κόβονται, το υπόλοιπο κείμενο μένει', () {
-      final text = [
-        '[2026-10-04 12:00:17] v0.60.0 ΜΗ-ΚΡΙΣΙΜΟ',
-        'type Null is not a subtype',
-        for (var i = 0; i < 100; i++) '#$i      Frame.layout (x.dart:$i)',
-        '',
-        '[2026-10-04 12:05:00] v0.60.0 ΚΡΙΣΙΜΟ',
-      ].join('\n');
-
-      final trimmed = trimStackRuns(text, 40);
-
-      expect(trimmed, contains('#39 '));
-      expect(trimmed, isNot(contains('#40 ')));
-      expect(trimmed, contains('… (+60 γραμμές στοίβας)'));
-      expect(trimmed, contains('[2026-10-04 12:05:00] v0.60.0 ΚΡΙΣΙΜΟ'));
     });
 
     test('τα Windows 11 λέγονται Windows 11', () {

@@ -66,6 +66,104 @@ Rect resolvePencilHitRect({
   );
 }
 
+/// Η επωνυμία χάρτη που γράφεται στη βάση για το [editedText]: κενό ή ταύτιση
+/// με το κανονικό όνομα → null (ο χάρτης δείχνει το όνομα του τμήματος).
+String? resolveMapCustomName({
+  required String editedText,
+  required String canonicalName,
+}) {
+  final trimmed = editedText.trim();
+  if (trimmed.isEmpty || trimmed == canonicalName.trim()) return null;
+  return trimmed;
+}
+
+/// True όταν η αποθήκευση του [editedText] θα άλλαζε την επωνυμία χάρτη του τμήματος.
+bool mapDisplayNameDiffersFromSaved({
+  required DepartmentModel dept,
+  required String editedText,
+}) {
+  return resolveMapCustomName(
+        editedText: editedText,
+        canonicalName: dept.name,
+      ) !=
+      resolveMapCustomName(
+        editedText: dept.mapCustomName ?? '',
+        canonicalName: dept.name,
+      );
+}
+
+/// True όταν το ✓ του προσχεδίου έχει κάτι να αποθηκεύσει: το τμήμα είναι
+/// ακόμη στον χάρτη ([dept] όχι null) και άλλαξε το σχήμα ή η επωνυμία του.
+/// Τμήμα που έφυγε από τον χάρτη (π.χ. το διέγραψε άλλος σταθμός) δεν
+/// αποθηκεύεται — άρα δεν υπάρχει αλλαγή να επιβεβαιωθεί.
+bool draftHasChangesToSave({
+  required DepartmentModel? dept,
+  required DraftDepartmentShape draft,
+  required String sheetStr,
+  required String? editedMapName,
+}) {
+  if (dept == null) return false;
+  if (draftShapeDiffersFromSaved(
+    dept: dept,
+    draft: draft,
+    sheetStr: sheetStr,
+  )) {
+    return true;
+  }
+  return editedMapName != null &&
+      mapDisplayNameDiffersFromSaved(dept: dept, editedText: editedMapName);
+}
+
+/// Τι αποθήκευσε η εγγραφή επωνυμίας χάρτη.
+enum MapDisplayNameSaved {
+  /// Γράφτηκε προσαρμοσμένη επωνυμία.
+  custom,
+
+  /// Η επωνυμία επανήλθε στο κανονικό όνομα του τμήματος.
+  resetToName,
+}
+
+/// Τι γράφει το ✓ του προσχεδίου: μόνο ό,τι άλλαξε. Η θέση που δεν άλλαξε
+/// δεν ξαναγράφεται — αλλιώς μια σκέτη αλλαγή επωνυμίας θα περνούσε από την
+/// ερώτηση χρώματος ορόφου και θα ανακοίνωνε «θέση» που δεν άγγιξε κανείς.
+({bool saveName, bool savePlacement}) planDraftConfirm({
+  required DepartmentModel dept,
+  required DraftDepartmentShape draft,
+  required String sheetStr,
+  required String? editedMapName,
+}) {
+  return (
+    saveName:
+        editedMapName != null &&
+        mapDisplayNameDiffersFromSaved(dept: dept, editedText: editedMapName),
+    savePlacement: draftShapeDiffersFromSaved(
+      dept: dept,
+      draft: draft,
+      sheetStr: sheetStr,
+    ),
+  );
+}
+
+/// Το ένα μήνυμα του ✓: ονομάζει ακριβώς ό,τι αποθηκεύτηκε. [nameSaved]
+/// `null` όταν η επωνυμία δεν γράφτηκε.
+String draftConfirmMessage({
+  required bool placementSaved,
+  required MapDisplayNameSaved? nameSaved,
+}) {
+  return switch ((placementSaved, nameSaved)) {
+    (true, null) => 'Αποθηκεύτηκε η θέση στο χάρτη.',
+    (true, MapDisplayNameSaved.custom) =>
+      'Αποθηκεύτηκαν η θέση και η επωνυμία χάρτη.',
+    (true, MapDisplayNameSaved.resetToName) =>
+      'Αποθηκεύτηκε η θέση στο χάρτη· η επωνυμία επανήλθε στο όνομα '
+          'τμήματος.',
+    (false, MapDisplayNameSaved.custom) => 'Αποθηκεύτηκε η επωνυμία χάρτη.',
+    (false, MapDisplayNameSaved.resetToName) =>
+      'Η επωνυμία χάρτη επανήλθε στο όνομα τμήματος.',
+    (false, null) => '',
+  };
+}
+
 /// True όταν το σχήμα του προσχεδίου διαφέρει από την αποθηκευμένη θέση του
 /// τμήματος σε αυτό το φύλλο (θέση, μέγεθος, περιστροφή, ετικέτα, άγκυρα).
 bool draftShapeDiffersFromSaved({

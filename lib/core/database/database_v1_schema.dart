@@ -103,7 +103,33 @@ import 'database_schema_version.dart';
 /// `lansweeper_last_sync_at` — η εκκρεμότητα θυμάται πλέον αν έγινε αίτημα στο
 /// Lansweeper, όπως ήδη θυμάται η κλήση. Καθαρές προσθήκες· οι υπάρχουσες
 /// ξεκινούν «ακαταχώρητες», που είναι η αλήθεια για όλες τους.
+/// v68: `building_map_floor_images` — η εικόνα κάθε κάτοψης ζει πια μέσα στη
+/// βάση, ώστε όλοι οι σταθμοί να βλέπουν την ίδια. Νέος πίνακας, άδειος: τις
+/// σημερινές εικόνες τις ανεβάζει ρητά ο διαχειριστής.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
+
+/// Η εικόνα κάθε κάτοψης ορόφου — **μία και κοινή για όλους τους σταθμούς**.
+///
+/// Χωριστός πίνακας και όχι στήλες του `building_map_floors`, επίτηδες: η λίστα
+/// ορόφων διαβάζεται συχνά και από το δίκτυο, ενώ η εικόνα (εκατοντάδες KB)
+/// χρειάζεται μόνο όταν άλλαξε. Ό,τι ζει στον ίδιο πίνακα με τη λίστα θα
+/// ταξίδευε με κάθε ανάγνωσή της από ένα ξεχασμένο `SELECT *`.
+///
+/// Το `previous_*` κρατά την αμέσως προηγούμενη εικόνα για την «Επαναφορά
+/// προηγούμενης κάτοψης». Το `image_hash` είναι το αποτύπωμα των bytes: με
+/// αυτό κάθε σταθμός ξέρει αν η τοπική του μνήμη είναι ακόμη η σωστή εικόνα.
+///
+/// **Χωρίς δεσμό ξένου κλειδιού**, όπως οι άλλες προσθήκες: η διαγραφή ορόφου
+/// σβήνει ρητά και τη γραμμή της εικόνας του.
+const String kCreateBuildingMapFloorImagesTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_floor_images (
+        floor_id INTEGER PRIMARY KEY,
+        image_data BLOB NOT NULL,
+        image_hash TEXT NOT NULL,
+        previous_image_data BLOB,
+        previous_image_hash TEXT
+      )
+    ''';
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
 ///
@@ -305,6 +331,8 @@ Future<void> applyDatabaseV1Schema(Database db) async {
         rotation_degrees REAL NOT NULL DEFAULT 0
       )
     ''');
+
+  await db.execute(kCreateBuildingMapFloorImagesTable);
 
   await db.execute('''
       CREATE TABLE categories (

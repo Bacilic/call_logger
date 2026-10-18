@@ -183,71 +183,24 @@ void main() {
   });
 
   group('Διάλογος «Διαγραφή ορόφου»', () {
-    testWidgets('με εικόνα στον δίσκο: ο διακόπτης ενεργός, η ενεργοποίησή '
-        'του γυρίζει deleteImageFile=true', (tester) async {
-      BuildingMapFloorDeleteChoice? choice;
+    testWidgets('η «Διαγραφή» επιβεβαιώνει', (tester) async {
+      bool? go;
       await _pumpHost(tester, (context) async {
-        choice = await showBuildingMapFloorDeleteDialog(
-          context,
-          displayImagePath: r'C:\maps\2ος.png',
-          imageFileExists: true,
-          showMissingImageNote: false,
-        );
+        go = await showBuildingMapFloorDeleteDialog(context);
       });
-      expect(find.text(r'C:\maps\2ος.png'), findsOneWidget);
-
-      await tester.tap(find.byType(SwitchListTile));
-      await tester.pumpAndSettle();
-      expect(
-        find.text('Η εικόνα του χάρτη θα διαγραφεί οριστικά από το δίσκο.'),
-        findsOneWidget,
-      );
-
       await tester.tap(find.text('Διαγραφή'));
       await tester.pumpAndSettle();
-      expect(choice, isNotNull);
-      expect(choice!.deleteImageFile, isTrue);
+      expect(go, isTrue);
     });
 
-    testWidgets('χωρίς εικόνα: ο διακόπτης ανενεργός και η «Διαγραφή» '
-        'επιστρέφει deleteImageFile=false', (tester) async {
-      BuildingMapFloorDeleteChoice? choice;
+    testWidgets('το «Άκυρο» δεν διαγράφει', (tester) async {
+      bool? go;
       await _pumpHost(tester, (context) async {
-        choice = await showBuildingMapFloorDeleteDialog(
-          context,
-          displayImagePath: null,
-          imageFileExists: false,
-          showMissingImageNote: true,
-        );
-      });
-      expect(
-        find.text('Το αρχείο εικόνας δεν βρέθηκε στο δίσκο.'),
-        findsOneWidget,
-      );
-      final tile = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
-      expect(tile.onChanged, isNull);
-
-      await tester.tap(find.text('Διαγραφή'));
-      await tester.pumpAndSettle();
-      expect(choice, isNotNull);
-      expect(choice!.deleteImageFile, isFalse);
-    });
-
-    testWidgets('το «Άκυρο» επιστρέφει null', (tester) async {
-      BuildingMapFloorDeleteChoice? choice = const BuildingMapFloorDeleteChoice(
-        deleteImageFile: true,
-      );
-      await _pumpHost(tester, (context) async {
-        choice = await showBuildingMapFloorDeleteDialog(
-          context,
-          displayImagePath: null,
-          imageFileExists: false,
-          showMissingImageNote: false,
-        );
+        go = await showBuildingMapFloorDeleteDialog(context);
       });
       await tester.tap(find.text('Άκυρο'));
       await tester.pumpAndSettle();
-      expect(choice, isNull);
+      expect(go, isFalse);
     });
   });
 }

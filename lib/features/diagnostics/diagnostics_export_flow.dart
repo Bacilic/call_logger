@@ -10,7 +10,6 @@ import '../../core/services/crash_log_service.dart';
 import '../../core/services/station_name.dart';
 import '../../core/utils/file_picker_session.dart';
 import '../../core/utils/user_facing_error_messages.dart';
-import 'models/diagnostics_export_options.dart';
 import 'models/windows_events.dart';
 import 'services/diagnostics_report_builder.dart';
 import 'services/log_archive_reader.dart';
@@ -54,17 +53,6 @@ String? _desktopDirectory() {
   return null;
 }
 
-/// Τα φίλτρα για «αυτό το περιστατικό»: η ημέρα του, ο υπολογιστής μας, όλο
-/// το περιεχόμενο — ώστε να φαίνεται και τι έγινε γύρω του.
-DiagnosticsExportOptions incidentPreset(DateTime occurredAt) =>
-    DiagnosticsExportOptions(
-      from: occurredAt,
-      to: occurredAt,
-      stations: {StationName.current},
-      contents: {...DiagnosticsContent.values},
-      windows: WindowsEventsOptions(levels: {...WindowsEventLevel.selectable}),
-    );
-
 /// «Εξαγωγή διαγνωστικών»: διαβάζει τα αρχεία, ρωτά φίλτρα και θέση, γράφει
 /// ένα αρχείο markdown και λέει στον χρήστη πού.
 ///
@@ -74,7 +62,6 @@ Future<void> runDiagnosticsExport({
   required BuildContext context,
   required String logsDirectory,
   required String databasePath,
-  DiagnosticsExportOptions? preset,
   DiagnosticsSavePathPicker pickSavePath = _pickWithSystemDialog,
   Future<WindowsEventsReport> Function(WindowsEventsRequest request)
       readWindows =
@@ -105,7 +92,6 @@ Future<void> runDiagnosticsExport({
     thisStation: station,
     oldestDay: archive.oldestDay,
     today: today,
-    initial: preset,
   );
   if (options == null) return;
 

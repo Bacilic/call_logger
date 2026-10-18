@@ -34,37 +34,6 @@ String oneLine(String text, {int max = 240}) {
   return '${single.substring(0, max)}…';
 }
 
-/// Κόβει κάθε συνεχόμενη στοίβα κλήσεων (γραμμές `#0`, `#1`, …) στις
-/// πρώτες [keep] γραμμές. Τα πρώτα πλαίσια λένε πού έγινε το σφάλμα· τα
-/// εκατό επόμενα είναι το framework που το μετέφερε.
-String trimStackRuns(String text, int keep) {
-  final frame = RegExp(r'^#\d+\s');
-  final out = <String>[];
-  var run = 0;
-  var dropped = 0;
-  void flush() {
-    if (dropped > 0) out.add('… (+$dropped γραμμές στοίβας)');
-    run = 0;
-    dropped = 0;
-  }
-
-  for (final line in text.split('\n')) {
-    if (frame.hasMatch(line)) {
-      run++;
-      if (run <= keep) {
-        out.add(line);
-      } else {
-        dropped++;
-      }
-      continue;
-    }
-    flush();
-    out.add(line);
-  }
-  flush();
-  return out.join('\n');
-}
-
 /// Η έκδοση των Windows όπως τη διαβάζει άνθρωπος.
 ///
 /// Τα Windows 11 δηλώνουν ακόμη «Windows 10» στο όνομά τους· τα ξεχωρίζει

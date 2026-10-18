@@ -90,18 +90,6 @@ Future<BackupBundleOutcome> writeFullBackupArchive({
     if (verdict.missing != null) missing.add(verdict.missing!);
   }
 
-  if (settings.effectiveIncludeMapImagesInBackup(availability)) {
-    record(
-      'εικόνες χαρτών',
-      'δεν βρέθηκε καμία',
-      await _addFilesToArchive(
-        archive,
-        await BuildingMapStorage.listPortableImageFiles(),
-        BuildingMapStorage.backupZipMapsFolderName,
-      ),
-    );
-  }
-
   if (settings.effectiveIncludeToolImages(availability)) {
     record(
       'εικονίδια εργαλείων',

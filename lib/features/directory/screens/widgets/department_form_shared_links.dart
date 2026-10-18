@@ -497,11 +497,13 @@ class DepartmentFormSharedLinks {
             departmentId: departmentId,
             departmentName: departmentName,
           ),
+        // Ο εξοπλισμός που αφαιρείται δεν «μένει» ποτέ — βλ. τη ροή του πιο κάτω.
         for (final code in sharedOnlyEqRemoved)
           AssetDisconnectItem.equipment(
             code,
             departmentId: departmentId,
             departmentName: departmentName,
+            canStay: false,
           ),
       ],
       cancelScopeDescription: departmentFormSaveCancelScopeDescription(

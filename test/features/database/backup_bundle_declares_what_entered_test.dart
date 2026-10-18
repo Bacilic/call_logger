@@ -12,9 +12,8 @@ import 'package:call_logger/features/database/utils/portable_backup_availability
 import 'package:flutter_test/flutter_test.dart';
 
 /// Ο χρήστης έχει ζητήσει **όλα** τα φορητά, και η διαθεσιμότητα λέει ότι
-/// υπάρχουν — δηλαδή η ρύθμιση είναι αναμμένη και για τα τέσσερα.
+/// υπάρχουν — δηλαδή η ρύθμιση είναι αναμμένη και για τα τρία.
 const _availability = PortableBackupAvailability(
-  hasMapImages: true,
   hasToolImages: true,
   hasLoadedLexicon: true,
   hasLampDbInPortableDataBase: false,
@@ -42,7 +41,6 @@ void main() {
       databaseFilePath: dbPath,
       sourceDatabasePath: dbPath,
       settings: DatabaseBackupSettings.defaults().copyWith(
-        includeMapImagesInBackup: true,
         includeToolImages: true,
         includeLexicon: true,
         includeLampDb: true,
@@ -60,23 +58,15 @@ void main() {
     'κομμάτι που δεν έβαλε ΚΑΝΕΝΑ αρχείο δεν δηλώνεται ως περιεχόμενο',
     () async {
       // Οι φάκελοι των φορητών δεν υπάρχουν στο περιβάλλον του τεστ, οπότε
-      // καμία εικόνα και κανένα λεξικό δεν μπαίνει στο zip. Η λίστα
+      // κανένα εικονίδιο και κανένα λεξικό δεν μπαίνει στο zip. Η λίστα
       // περιεχομένων δεν επιτρέπεται να τα ονομάσει.
       final outcome = await pack();
-      final entries = entriesOf('${dir.path}/backup.zip');
-
-      expect(
-        entries.any((e) => e.startsWith('maps_images/')),
-        isFalse,
-        reason: 'προϋπόθεση: καμία εικόνα χάρτη δεν μπήκε',
-      );
 
       expect(
         outcome.includedParts,
-        isNot(contains('εικόνες χαρτών')),
+        isNot(contains('εικονίδια εργαλείων')),
         reason: 'δηλώθηκε περιεχόμενο που δεν μπήκε ποτέ μέσα',
       );
-      expect(outcome.includedParts, isNot(contains('εικονίδια εργαλείων')));
       expect(outcome.includedParts, isNot(contains('λεξικό')));
     },
   );

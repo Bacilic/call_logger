@@ -1,9 +1,11 @@
+import 'catalog_column_layout.dart';
 import 'department_model.dart';
 
 /// Ορισμός στήλης πίνακα τμημάτων (κατάλογος): κλειδί, ετικέτα, ταξινόμηση.
-class DepartmentDirectoryColumn {
+class DepartmentDirectoryColumn implements CatalogColumn {
   const DepartmentDirectoryColumn._(this.key, this.label, this.sortKey);
 
+  @override
   final String key;
   final String label;
   final String? sortKey;

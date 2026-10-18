@@ -39,6 +39,11 @@ class BuildingMapFloorsMenuButton extends ConsumerWidget {
           onFloorsChanged();
           return;
         }
+        if (code == 'upload') {
+          await controller.uploadLocalFloorPlans(context);
+          onFloorsChanged();
+          return;
+        }
         final parts = code.split(':');
         if (parts.length != 2) return;
         final cmd = parts[0];
@@ -55,61 +60,103 @@ class BuildingMapFloorsMenuButton extends ConsumerWidget {
           case 'edit':
             await controller.editFloorSheet(context, floor);
             onFloorsChanged();
+          case 'revert':
+            await controller.revertFloorImage(context, floor);
+            onFloorsChanged();
           case 'delete':
-            await controller.deleteFloorSheet(context, id, floor.imagePath);
+            await controller.deleteFloorSheet(context, id);
             onFloorsChanged();
         }
       },
-      itemBuilder: (ctx) => [
-        PopupMenuItem<String>(
-          value: 'add',
-          child: Row(
-            children: [
-              Icon(
-                Icons.add_photo_alternate_outlined,
-                size: 20,
-                color: Theme.of(ctx).colorScheme.primary,
-              ),
-              const SizedBox(width: 10),
-              const Expanded(child: Text('Προσθήκη νέας κάτοψης')),
-            ],
-          ),
-        ),
-        if (sorted.isNotEmpty) const PopupMenuDivider(),
-        ...sorted.map((f) {
-          final label = buildingMapFloorDisplayLabel(f);
-          return PopupMenuItem<String>(
-            value: 'pick:${f.id}',
-            padding: EdgeInsets.zero,
-            child: InkWell(
-              onTap: () => Navigator.pop(ctx, 'pick:${f.id}'),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Text(label, overflow: TextOverflow.ellipsis),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Επεξεργασία',
-                    icon: const Icon(Icons.edit_outlined, size: 20),
-                    onPressed: () => Navigator.pop(ctx, 'edit:${f.id}'),
-                  ),
-                  IconButton(
-                    tooltip: 'Διαγραφή',
-                    icon: const Icon(Icons.delete_outline, size: 20),
-                    onPressed: () => Navigator.pop(ctx, 'delete:${f.id}'),
-                  ),
-                ],
+      itemBuilder: (ctx) {
+        // Ρωτιέται σε κάθε άνοιγμα του μενού: η «Αλλαγή χρήστη» αλλάζει την
+        // απάντηση ζωντανά. Χωρίς το δικαίωμα το μενού μένει μόνο επιλογέας
+        // ορόφου — τα κουμπιά κρύβονται, δεν γκριζάρουν.
+        final canManage = controller.canManageFloorPlans;
+        final anyNotUploaded = floors.any((f) => !f.hasImage);
+        return [
+          if (canManage)
+            _actionItem(
+              ctx,
+              value: 'add',
+              icon: Icons.add_photo_alternate_outlined,
+              label: 'Προσθήκη νέας κάτοψης',
+            ),
+          if (canManage && anyNotUploaded)
+            _actionItem(
+              ctx,
+              value: 'upload',
+              icon: Icons.cloud_upload_outlined,
+              label: 'Ανέβασμα κατόψεων στη βάση',
+            ),
+          if (canManage && sorted.isNotEmpty) const PopupMenuDivider(),
+          ...sorted.map((f) => _floorItem(ctx, f, canManage: canManage)),
+        ];
+      },
+    );
+  }
+
+  PopupMenuItem<String> _actionItem(
+    BuildContext ctx, {
+    required String value,
+    required IconData icon,
+    required String label,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Theme.of(ctx).colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label)),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _floorItem(
+    BuildContext ctx,
+    BuildingMapFloor f, {
+    required bool canManage,
+  }) {
+    final label = buildingMapFloorDisplayLabel(f);
+    return PopupMenuItem<String>(
+      value: 'pick:${f.id}',
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: () => Navigator.pop(ctx, 'pick:${f.id}'),
+        child: Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Text(label, overflow: TextOverflow.ellipsis),
               ),
             ),
-          );
-        }),
-      ],
+            if (canManage) ...[
+              IconButton(
+                tooltip: 'Επεξεργασία',
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                onPressed: () => Navigator.pop(ctx, 'edit:${f.id}'),
+              ),
+              if (f.hasPreviousImage)
+                IconButton(
+                  tooltip: 'Επαναφορά προηγούμενης κάτοψης',
+                  icon: const Icon(Icons.history, size: 20),
+                  onPressed: () => Navigator.pop(ctx, 'revert:${f.id}'),
+                ),
+              IconButton(
+                tooltip: 'Διαγραφή',
+                icon: const Icon(Icons.delete_outline, size: 20),
+                onPressed: () => Navigator.pop(ctx, 'delete:${f.id}'),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

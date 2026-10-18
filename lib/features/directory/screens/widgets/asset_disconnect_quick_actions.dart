@@ -49,10 +49,13 @@ class AssetDisconnectQuickActionsSection extends StatelessWidget {
     final equipmentCount = session.remainingEquipmentCount;
     final mixed = phoneCount > 0 && equipmentCount > 0;
 
-    // «Παραμονή για όλα» μόνο όταν τα υπόλοιπα είναι όντως στο ίδιο τμήμα:
-    // ένα τηλέφωνο των Αδειών δεν «παραμένει» στην Ψυχιατρική.
+    // «Παραμονή για όλα» μόνο όταν τα υπόλοιπα είναι όντως στο ίδιο τμήμα
+    // (ένα τηλέφωνο των Αδειών δεν «παραμένει» στην Ψυχιατρική) και όταν
+    // κάθε ένα επιτρέπεται να μείνει.
     final commonDept = session.commonRemainingDepartmentName;
-    final canKeepEverything = canKeepInDepartment && commonDept != null;
+    final canKeepEverything = session.canKeepEverything(
+      canKeepInDepartment: canKeepInDepartment,
+    );
 
     return Padding(
       padding: const EdgeInsets.only(top: 16),
@@ -101,7 +104,7 @@ class AssetDisconnectQuickActionsSection extends StatelessWidget {
               onTap: () =>
                   onIntent(AssetDisconnectQuickActionIntent.deleteEquipment),
             ),
-          if (canKeepEverything)
+          if (canKeepEverything && commonDept != null)
             AssetDisconnectActionEntry(
               icon: Icons.check_circle_outline,
               label: 'Παραμονή στο $commonDept — όλα ($remaining)',

@@ -4,7 +4,10 @@ import '../../../core/config/app_config.dart';
 import '../models/database_backup_settings.dart';
 import '../utils/portable_backup_availability.dart';
 
-/// «Τι μπαίνει στο πλήρες αντίγραφο»: οι τέσσερις διακόπτες των φορητών.
+/// «Τι μπαίνει στο πλήρες αντίγραφο»: οι τρεις διακόπτες των φορητών.
+///
+/// Οι κατόψεις δεν έχουν διακόπτη: ζουν μέσα στη βάση, οπότε κάθε αντίγραφο
+/// τις περιέχει ήδη.
 ///
 /// Κάθε διακόπτης είναι ανενεργός όταν δεν υπάρχει τίποτα να μπει — με
 /// υπόδειξη που λέει γιατί, αντί να αφήνει τον χρήστη να πατά κάτι που δεν
@@ -14,7 +17,6 @@ class BackupTabContentsSection extends StatelessWidget {
     super.key,
     required this.settings,
     required this.availabilityFuture,
-    required this.onToggleMapImages,
     required this.onToggleToolImages,
     required this.onToggleLexicon,
     required this.onToggleLampDb,
@@ -22,7 +24,6 @@ class BackupTabContentsSection extends StatelessWidget {
 
   final DatabaseBackupSettings settings;
   final Future<PortableBackupAvailability> availabilityFuture;
-  final ValueChanged<bool> onToggleMapImages;
   final ValueChanged<bool> onToggleToolImages;
   final ValueChanged<bool> onToggleLexicon;
   final ValueChanged<bool> onToggleLampDb;
@@ -57,16 +58,6 @@ class BackupTabContentsSection extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                PortableBackupSwitch(
-                  title: 'Συμπερίληψη εικόνων χαρτών',
-                  subtitle: Text(
-                    PortableBackupAvailability.mapsImagesSubtitle(),
-                  ),
-                  value: settings.includeMapImagesInBackup,
-                  enabled: avail?.hasMapImages ?? false,
-                  disabledTooltip: 'Δεν υπάρχουν αποθηκευμένες εικόνες χαρτών',
-                  onChanged: onToggleMapImages,
-                ),
                 PortableBackupSwitch(
                   title: 'Εικονίδια εργαλείων',
                   subtitle: Text(

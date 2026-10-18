@@ -260,4 +260,156 @@ void main() {
       );
     });
   });
+
+  group('Αλλάζει η επωνυμία χάρτη;', () {
+    final withCustom = DepartmentModel(
+      id: 1,
+      name: 'Ακτινολογικό',
+      mapCustomName: 'Ακτινο',
+    );
+    final withoutCustom = DepartmentModel(id: 1, name: 'Ακτινολογικό');
+
+    bool differs(DepartmentModel dept, String text) =>
+        mapDisplayNameDiffersFromSaved(dept: dept, editedText: text);
+
+    test('επιστροφή στο κανονικό όνομα: αλλαγή', () {
+      expect(differs(withCustom, 'Ακτινολογικό'), isTrue);
+    });
+
+    test('άδειασμα του πεδίου: αλλαγή', () {
+      expect(differs(withCustom, ''), isTrue);
+    });
+
+    test('νέα επωνυμία: αλλαγή', () {
+      expect(differs(withCustom, 'Ακτινολ.'), isTrue);
+    });
+
+    test('ίδια επωνυμία με κενά στις άκρες: καμία αλλαγή', () {
+      expect(differs(withCustom, ' Ακτινο '), isFalse);
+    });
+
+    test('χωρίς επωνυμία, κανονικό όνομα ή κενό: καμία αλλαγή', () {
+      expect(differs(withoutCustom, 'Ακτινολογικό'), isFalse);
+      expect(differs(withoutCustom, '  '), isFalse);
+    });
+  });
+
+  group('Έχει το ✓ κάτι να αποθηκεύσει;', () {
+    test('τμήμα που έφυγε από τον χάρτη: όχι, ακόμη και με νέα επωνυμία', () {
+      expect(
+        draftHasChangesToSave(
+          dept: null,
+          draft: draft,
+          sheetStr: '3',
+          editedMapName: 'Ακτινο',
+        ),
+        isFalse,
+      );
+    });
+
+    test('ίδιο σχήμα, επιστροφή επωνυμίας στο κανονικό όνομα: ναι', () {
+      final dept = DepartmentModel(
+        id: 1,
+        name: 'Ακτινολογικό',
+        mapCustomName: 'Ακτινο',
+        mapFloor: '3',
+        mapX: 0.2,
+        mapY: 0.25,
+        mapWidth: 0.2,
+        mapHeight: 0.25,
+        mapLabelOffsetY: 0.2,
+      );
+      expect(
+        draftHasChangesToSave(
+          dept: dept,
+          draft: draft,
+          sheetStr: '3',
+          editedMapName: null,
+        ),
+        isFalse,
+      );
+      expect(
+        draftHasChangesToSave(
+          dept: dept,
+          draft: draft,
+          sheetStr: '3',
+          editedMapName: 'Ακτινολογικό',
+        ),
+        isTrue,
+      );
+    });
+  });
+
+  group('Το ✓ αποθηκεύει μόνο ό,τι άλλαξε', () {
+    // Τμήμα αποθηκευμένο ακριβώς στο σχήμα του προσχεδίου, με επωνυμία.
+    final saved = DepartmentModel(
+      id: 1,
+      name: 'Καρδιολογική',
+      mapCustomName: 'Καρδιολογική 3',
+      mapFloor: '3',
+      mapX: 0.2,
+      mapY: 0.25,
+      mapWidth: 0.2,
+      mapHeight: 0.25,
+      mapLabelOffsetY: 0.2,
+    );
+
+    test('μόνο η επωνυμία άλλαξε → δεν ξαναγράφεται η θέση', () {
+      final plan = planDraftConfirm(
+        dept: saved,
+        draft: draft,
+        sheetStr: '3',
+        editedMapName: 'Καρδιολογική',
+      );
+      expect(plan.saveName, isTrue);
+      expect(plan.savePlacement, isFalse);
+    });
+
+    test('μόνο η θέση άλλαξε → δεν ξαναγράφεται η επωνυμία', () {
+      final plan = planDraftConfirm(
+        dept: saved,
+        draft: draft.copyWith(x: 0.3),
+        sheetStr: '3',
+        editedMapName: 'Καρδιολογική 3',
+      );
+      expect(plan.saveName, isFalse);
+      expect(plan.savePlacement, isTrue);
+    });
+
+    test('ένα μήνυμα που ονομάζει ό,τι αποθηκεύτηκε', () {
+      expect(
+        draftConfirmMessage(placementSaved: true, nameSaved: null),
+        'Αποθηκεύτηκε η θέση στο χάρτη.',
+      );
+      expect(
+        draftConfirmMessage(
+          placementSaved: false,
+          nameSaved: MapDisplayNameSaved.resetToName,
+        ),
+        'Η επωνυμία χάρτη επανήλθε στο όνομα τμήματος.',
+      );
+      expect(
+        draftConfirmMessage(
+          placementSaved: false,
+          nameSaved: MapDisplayNameSaved.custom,
+        ),
+        'Αποθηκεύτηκε η επωνυμία χάρτη.',
+      );
+      expect(
+        draftConfirmMessage(
+          placementSaved: true,
+          nameSaved: MapDisplayNameSaved.custom,
+        ),
+        'Αποθηκεύτηκαν η θέση και η επωνυμία χάρτη.',
+      );
+      expect(
+        draftConfirmMessage(
+          placementSaved: true,
+          nameSaved: MapDisplayNameSaved.resetToName,
+        ),
+        'Αποθηκεύτηκε η θέση στο χάρτη· η επωνυμία επανήλθε στο όνομα '
+        'τμήματος.',
+      );
+    });
+  });
 }

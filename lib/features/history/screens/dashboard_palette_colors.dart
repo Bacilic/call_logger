@@ -50,6 +50,11 @@ class DashboardPaletteColors {
     required this.chartCardFill,
     required this.chartCardBorder,
     required this.chartGridLine,
+    required this.departmentChipBg,
+    required this.departmentChipFg,
+    required this.filterChipBg,
+    required this.filterChipFg,
+    required this.filterChipSelectedBg,
   });
 
   final KpiTone kpiBlue;
@@ -82,6 +87,29 @@ class DashboardPaletteColors {
   final Color chartCardFill;
   final Color chartCardBorder;
   final Color chartGridLine;
+
+  /// Το τσιπ τμήματος: ένα χρώμα για όλα τα τμήματα, της παλέτας.
+  final Color departmentChipBg;
+  final Color departmentChipFg;
+
+  /// Τα κουμπιά-φίλτρα («Σήμερα», «7 ημέρες»…) και οι διακόπτες της οθόνης.
+  final Color filterChipBg;
+  final Color filterChipFg;
+  final Color filterChipSelectedBg;
+
+  /// Το θέμα της οθόνης με τα χρώματα της παλέτας: κουμπιά, φίλτρα και
+  /// διακόπτες βάφονται από εδώ, ώστε η παλέτα να αλλάζει ΟΛΑ τα χρώματα και
+  /// όχι μόνο το φόντο (απόφαση Διευθυντή 18/10/2026).
+  ThemeData applyTo(ThemeData base) {
+    return base.copyWith(
+      colorScheme: base.colorScheme.copyWith(
+        primary: filterChipSelectedBg,
+        onPrimary: Colors.white,
+        secondaryContainer: filterChipBg,
+        onSecondaryContainer: filterChipFg,
+      ),
+    );
+  }
 
   Color rankColor(int index) => rankSwatches[index % rankSwatches.length];
 
@@ -157,38 +185,43 @@ class DashboardPaletteColors {
           chartCardFill: Color(0xFFFFFFFF),
           chartCardBorder: Color(0xFFE2E8F0),
           chartGridLine: Color(0xFFE5EAF6),
+          departmentChipBg: Color(0xFFE0E7FF),
+          departmentChipFg: Color(0xFF3730A3),
+          filterChipBg: Color(0xFFECE6F7),
+          filterChipFg: Color(0xFF4A3D6E),
+          filterChipSelectedBg: Color(0xFF5B4A8B),
         );
       case DashboardPalette.ocean:
         return const DashboardPaletteColors(
           kpiBlue: KpiTone(
-            surface: Color(0xFFEFF8FF),
-            iconSurface: Color(0xFFD8EEFF),
-            iconColor: Color(0xFF0284C7),
+            surface: Color(0xFFEAF6FD),
+            iconSurface: Color(0xFFCFE9F9),
+            iconColor: Color(0xFF0369A1),
             valueColor: Color(0xFF0369A1),
-            sparkColor: Color(0xFF0EA5E9),
+            sparkColor: Color(0xFF0369A1),
           ),
           kpiGreen: KpiTone(
-            surface: Color(0xFFEDFBF7),
-            iconSurface: Color(0xFFD2F6EC),
-            iconColor: Color(0xFF0D9488),
+            surface: Color(0xFFE6F8F5),
+            iconSurface: Color(0xFFC8EFE8),
+            iconColor: Color(0xFF0F766E),
             valueColor: Color(0xFF0F766E),
-            sparkColor: Color(0xFF14B8A6),
+            sparkColor: Color(0xFF0F766E),
           ),
           kpiOrange: KpiTone(
-            surface: Color(0xFFFFF7ED),
-            iconSurface: Color(0xFFFFEDD5),
-            iconColor: Color(0xFFEA580C),
-            valueColor: Color(0xFFC2410C),
-            sparkColor: Color(0xFFF97316),
+            surface: Color(0xFFE5F7FA),
+            iconSurface: Color(0xFFC5EDF3),
+            iconColor: Color(0xFF0E7490),
+            valueColor: Color(0xFF0E7490),
+            sparkColor: Color(0xFF0E7490),
           ),
           kpiPurple: KpiTone(
-            surface: Color(0xFFF4F4FF),
-            iconSurface: Color(0xFFE9E8FF),
-            iconColor: Color(0xFF6366F1),
-            valueColor: Color(0xFF4F46E5),
-            sparkColor: Color(0xFF6366F1),
+            surface: Color(0xFFEAEFFB),
+            iconSurface: Color(0xFFD4DDF6),
+            iconColor: Color(0xFF1E40AF),
+            valueColor: Color(0xFF1E40AF),
+            sparkColor: Color(0xFF1E40AF),
           ),
-          actionBlue: Color(0xFF0284C7),
+          actionBlue: Color(0xFF0369A1),
           pageBg: Color(0xFFE8F5FB),
           pageGradientStart: Color(0xFFDCF0FA),
           pageGradientEnd: Color(0xFFF3FBFE),
@@ -228,38 +261,43 @@ class DashboardPaletteColors {
           chartCardFill: Color(0xFFF8FDFF),
           chartCardBorder: Color(0xFFC7E2EE),
           chartGridLine: Color(0xFFDAEAF4),
+          departmentChipBg: Color(0xFFCCFBF1),
+          departmentChipFg: Color(0xFF115E59),
+          filterChipBg: Color(0xFFD7EFF6),
+          filterChipFg: Color(0xFF164E63),
+          filterChipSelectedBg: Color(0xFF0E7490),
         );
       case DashboardPalette.sunrise:
         return const DashboardPaletteColors(
           kpiBlue: KpiTone(
-            surface: Color(0xFFF1F7FF),
-            iconSurface: Color(0xFFDDEBFF),
-            iconColor: Color(0xFF2563EB),
-            valueColor: Color(0xFF1E40AF),
-            sparkColor: Color(0xFF3B82F6),
+            surface: Color(0xFFFFF1EE),
+            iconSurface: Color(0xFFFFDCD3),
+            iconColor: Color(0xFFC2410C),
+            valueColor: Color(0xFFC2410C),
+            sparkColor: Color(0xFFC2410C),
           ),
           kpiGreen: KpiTone(
-            surface: Color(0xFFF4FDF4),
-            iconSurface: Color(0xFFDCFCE7),
-            iconColor: Color(0xFF16A34A),
-            valueColor: Color(0xFF166534),
-            sparkColor: Color(0xFF22C55E),
+            surface: Color(0xFFFFF8E8),
+            iconSurface: Color(0xFFFEECCB),
+            iconColor: Color(0xFFB45309),
+            valueColor: Color(0xFFB45309),
+            sparkColor: Color(0xFFB45309),
           ),
           kpiOrange: KpiTone(
-            surface: Color(0xFFFFF6EC),
-            iconSurface: Color(0xFFFFEDD5),
-            iconColor: Color(0xFFF97316),
-            valueColor: Color(0xFFEA580C),
-            sparkColor: Color(0xFFF59E0B),
+            surface: Color(0xFFFFF0F3),
+            iconSurface: Color(0xFFFFD9E2),
+            iconColor: Color(0xFFBE123C),
+            valueColor: Color(0xFFBE123C),
+            sparkColor: Color(0xFFBE123C),
           ),
           kpiPurple: KpiTone(
-            surface: Color(0xFFFFF0FA),
-            iconSurface: Color(0xFFFCE7F3),
-            iconColor: Color(0xFFDB2777),
-            valueColor: Color(0xFFBE185D),
-            sparkColor: Color(0xFFEC4899),
+            surface: Color(0xFFFDF0F8),
+            iconSurface: Color(0xFFFADBEE),
+            iconColor: Color(0xFFA21CAF),
+            valueColor: Color(0xFFA21CAF),
+            sparkColor: Color(0xFFA21CAF),
           ),
-          actionBlue: Color(0xFF1D4ED8),
+          actionBlue: Color(0xFFC2410C),
           pageBg: Color(0xFFFFF7F2),
           pageGradientStart: Color(0xFFFFEDE5),
           pageGradientEnd: Color(0xFFFFFAF6),
@@ -299,38 +337,43 @@ class DashboardPaletteColors {
           chartCardFill: Color(0xFFFFFFFF),
           chartCardBorder: Color(0xFFF0D9CE),
           chartGridLine: Color(0xFFF5E6DD),
+          departmentChipBg: Color(0xFFFFE4E6),
+          departmentChipFg: Color(0xFF9F1239),
+          filterChipBg: Color(0xFFFDE5D8),
+          filterChipFg: Color(0xFF7C2D12),
+          filterChipSelectedBg: Color(0xFFC2410C),
         );
       case DashboardPalette.forest:
         return const DashboardPaletteColors(
           kpiBlue: KpiTone(
-            surface: Color(0xFFE8F1FF),
-            iconSurface: Color(0xFFD4E4FF),
-            iconColor: Color(0xFF1D4ED8),
-            valueColor: Color(0xFF1E3A8A),
-            sparkColor: Color(0xFF2563EB),
+            surface: Color(0xFFE6F6EC),
+            iconSurface: Color(0xFFC8ECD5),
+            iconColor: Color(0xFF15803D),
+            valueColor: Color(0xFF15803D),
+            sparkColor: Color(0xFF15803D),
           ),
           kpiGreen: KpiTone(
-            surface: Color(0xFFDFF7EC),
-            iconSurface: Color(0xFFB7F0D1),
-            iconColor: Color(0xFF047857),
-            valueColor: Color(0xFF065F46),
-            sparkColor: Color(0xFF10B981),
+            surface: Color(0xFFF1F7E4),
+            iconSurface: Color(0xFFE0EEC2),
+            iconColor: Color(0xFF4D7C0F),
+            valueColor: Color(0xFF4D7C0F),
+            sparkColor: Color(0xFF4D7C0F),
           ),
           kpiOrange: KpiTone(
-            surface: Color(0xFFFFF4E6),
-            iconSurface: Color(0xFFFFE8CC),
-            iconColor: Color(0xFFC2410C),
-            valueColor: Color(0xFF9A3412),
-            sparkColor: Color(0xFFEA580C),
+            surface: Color(0xFFE6F5F2),
+            iconSurface: Color(0xFFC6E9E2),
+            iconColor: Color(0xFF0F766E),
+            valueColor: Color(0xFF0F766E),
+            sparkColor: Color(0xFF0F766E),
           ),
           kpiPurple: KpiTone(
-            surface: Color(0xFFF3E8FF),
-            iconSurface: Color(0xFFE9D5FF),
-            iconColor: Color(0xFF6D28D9),
-            valueColor: Color(0xFF5B21B6),
-            sparkColor: Color(0xFF9333EA),
+            surface: Color(0xFFF7F1E7),
+            iconSurface: Color(0xFFECDFC8),
+            iconColor: Color(0xFF92400E),
+            valueColor: Color(0xFF92400E),
+            sparkColor: Color(0xFF92400E),
           ),
-          actionBlue: Color(0xFF047857),
+          actionBlue: Color(0xFF15803D),
           pageBg: Color(0xFFECF8F1),
           pageGradientStart: Color(0xFFE0F4E8),
           pageGradientEnd: Color(0xFFF4FBF6),
@@ -370,36 +413,41 @@ class DashboardPaletteColors {
           chartCardFill: Color(0xFFF6FBF8),
           chartCardBorder: Color(0xFFC5DCCC),
           chartGridLine: Color(0xFFD6E8DD),
+          departmentChipBg: Color(0xFFDCFCE7),
+          departmentChipFg: Color(0xFF166534),
+          filterChipBg: Color(0xFFD9EEDF),
+          filterChipFg: Color(0xFF14532D),
+          filterChipSelectedBg: Color(0xFF166534),
         );
       case DashboardPalette.indigoNight:
         return const DashboardPaletteColors(
           kpiBlue: KpiTone(
-            surface: Color(0xFFEAEEFC),
+            surface: Color(0xFFECEEFD),
             iconSurface: Color(0xFFD8DDFA),
-            iconColor: Color(0xFF4338CA),
+            iconColor: Color(0xFF3730A3),
             valueColor: Color(0xFF3730A3),
-            sparkColor: Color(0xFF4F46E5),
+            sparkColor: Color(0xFF3730A3),
           ),
           kpiGreen: KpiTone(
-            surface: Color(0xFFECFDF5),
-            iconSurface: Color(0xFFD1FAE5),
-            iconColor: Color(0xFF059669),
-            valueColor: Color(0xFF047857),
-            sparkColor: Color(0xFF10B981),
+            surface: Color(0xFFF3EEFE),
+            iconSurface: Color(0xFFE4DAFC),
+            iconColor: Color(0xFF6D28D9),
+            valueColor: Color(0xFF6D28D9),
+            sparkColor: Color(0xFF6D28D9),
           ),
           kpiOrange: KpiTone(
-            surface: Color(0xFFFFF5F1),
-            iconSurface: Color(0xFFFFE4D6),
-            iconColor: Color(0xFFEA580C),
-            valueColor: Color(0xFFC2410C),
-            sparkColor: Color(0xFFF97316),
+            surface: Color(0xFFEEF0FF),
+            iconSurface: Color(0xFFDCDFFD),
+            iconColor: Color(0xFF4F46E5),
+            valueColor: Color(0xFF4F46E5),
+            sparkColor: Color(0xFF4F46E5),
           ),
           kpiPurple: KpiTone(
-            surface: Color(0xFFF5F2FF),
-            iconSurface: Color(0xFFEDE9FE),
-            iconColor: Color(0xFF7C3AED),
-            valueColor: Color(0xFF6D28D9),
-            sparkColor: Color(0xFF8B5CF6),
+            surface: Color(0xFFEFF1F6),
+            iconSurface: Color(0xFFDDE2EC),
+            iconColor: Color(0xFF334155),
+            valueColor: Color(0xFF334155),
+            sparkColor: Color(0xFF334155),
           ),
           actionBlue: Color(0xFF4338CA),
           pageBg: Color(0xFFEDEDFA),
@@ -441,6 +489,11 @@ class DashboardPaletteColors {
           chartCardFill: Color(0xFFFAFAFF),
           chartCardBorder: Color(0xFFD4D4EA),
           chartGridLine: Color(0xFFDADAE8),
+          departmentChipBg: Color(0xFFE0E7FF),
+          departmentChipFg: Color(0xFF3730A3),
+          filterChipBg: Color(0xFFE3E3F8),
+          filterChipFg: Color(0xFF312E81),
+          filterChipSelectedBg: Color(0xFF4338CA),
         );
     }
   }

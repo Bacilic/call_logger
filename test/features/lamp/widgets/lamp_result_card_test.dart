@@ -192,6 +192,30 @@ void main() {
     expect(find.text('new@example.gr'), findsOneWidget);
   });
 
+  testWidgets(
+    'το μολύβι επεξεργασίας ανοίγει τον διάλογο και σε πολύ στενό πλάτος',
+    (tester) async {
+      await _pumpCard(
+        tester,
+        width: 300,
+        row: _fullRow,
+        onSaveSection:
+            ({
+              required id,
+              required sectionType,
+              required updatedFields,
+            }) async => const EquipmentSectionSaveResult(success: true),
+      );
+
+      await tester.ensureVisible(find.byTooltip('Επεξεργασία ΙΔΙΟΚΤΗΤΗΣ'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Επεξεργασία ΙΔΙΟΚΤΗΤΗΣ'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, 'Αποθήκευση'), findsOneWidget);
+    },
+  );
+
   group('διάλογος επεξεργασίας — τι στέλνεται για αποθήκευση', () {
     Future<List<Map<String, Object?>>> openEquipmentEditor(
       WidgetTester tester,

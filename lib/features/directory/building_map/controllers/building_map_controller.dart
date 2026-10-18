@@ -18,6 +18,9 @@
 // ή κατασκευή διεπαφής εδώ — τότε ξαναξετάζεται από την αρχή.
 
 import 'dart:async';
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
@@ -31,7 +34,9 @@ import '../../../../core/utils/picker_location_memory.dart';
 import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/omnisearch_service.dart';
+import '../../../../core/models/app_permission.dart';
 import '../../../../core/models/building_map_floor.dart';
+import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../calls/models/equipment_model.dart';
 import '../../../calls/models/user_model.dart';
@@ -40,22 +45,29 @@ import '../../../floor_map/services/floor_color_assignment_service.dart';
 import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
 import '../services/building_map_commit_color_plan.dart';
+import '../services/building_map_department_bulk_actions.dart';
 import '../services/building_map_department_eligibility.dart';
+import '../services/building_map_foreign_change.dart';
+import '../../../../core/widgets/stale_write_conflict_dialog.dart';
 import '../services/building_map_department_pick_outcome.dart';
 import '../services/building_map_placement_replacement.dart';
 import '../models/building_map_jump_target.dart';
 import '../../screens/widgets/department_color_palette.dart';
+import '../building_map_draft_geometry.dart';
 import '../building_map_label_layout.dart';
 import '../providers/building_map_providers.dart';
 import '../widgets/building_map_commit_color_dialog.dart';
 import '../widgets/building_map_confirm_dialogs.dart';
 import '../widgets/building_map_floor_delete_dialog.dart';
 import '../services/building_map_floor_ordering.dart';
+import '../services/floor_plan_image_cache.dart';
+import '../services/floor_plan_image_encoder.dart';
 import '../services/building_map_jump_fallback.dart';
 import '../widgets/building_map_floor_sheet_add_dialog.dart';
 import '../widgets/building_map_floor_sheet_edit_dialog.dart';
 import '../widgets/building_map_jump_pick_dialogs.dart';
-import '../widgets/building_map_portable_image_copy_dialog.dart';
+import '../widgets/building_map_floor_upload_report_dialog.dart';
+import '../../../../core/utils/user_facing_error_messages.dart';
 
 final buildingMapControllerProvider = Provider<BuildingMapController>(
   (ref) => BuildingMapController(ref),
@@ -72,31 +84,57 @@ class BuildingMapController {
 
   void resetSession() {
     appliedInitialFloorSync = false;
+    _decodeKey = null;
   }
 
-  Future<void> decodeImageForPath(String imagePath) async {
+  /// Η εικόνα της οποίας το μέγεθος ζητήθηκε **τελευταία**.
+  String? _decodeKey;
+  bool _decoding = false;
+
+  /// Μετρά το μέγεθος της κάτοψης στο τοπικό αρχείο [filePath].
+  ///
+  /// **Μία ανάγνωση ανά εικόνα:** η οθόνη ζητά το μέγεθος σε κάθε ξαναχτίσιμο
+  /// όσο λείπει· ίδιο αίτημα ενώ τρέχει ή αφού απαντήθηκε δεν ξαναδιαβάζει.
+  ///
+  /// **Το μέγεθος ανήκει στην εικόνα του:** όταν ο χρήστης αλλάξει όροφο πριν
+  /// τελειώσει η μέτρηση, η παλιά απάντηση πετιέται — αλλιώς ο νέος όροφος θα
+  /// ζωγραφιζόταν με τις διαστάσεις του προηγούμενου, με τα τμήματα σε λάθος
+  /// θέσεις. Το όνομα του τοπικού αρχείου είναι το αποτύπωμα των bytes, άρα
+  /// ίδιο κλειδί σημαίνει ίδια εικόνα.
+  Future<void> decodeImageFile(String? filePath) async {
     final decoded = _ref.read(buildingMapDecodedImageSizeProvider.notifier);
-    if (imagePath.isEmpty) {
-      decoded.setSize(null);
+    final key = filePath ?? '';
+    if (key == _decodeKey &&
+        (_decoding || _ref.read(buildingMapDecodedImageSizeProvider) != null)) {
       return;
     }
-    final f = await BuildingMapStorage.fileForStoredPath(imagePath);
-    if (!await f.exists()) {
-      decoded.setSize(null);
-      return;
-    }
+    _decodeKey = key;
+    decoded.setSize(null);
+    if (key.isEmpty) return;
+
+    _decoding = true;
+    Size? size;
     try {
-      final bytes = await f.readAsBytes();
+      final bytes = await File(key).readAsBytes();
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
-      final sz = Size(
-        frame.image.width.toDouble(),
-        frame.image.height.toDouble(),
-      );
-      decoded.setSize(sz);
+      size = Size(frame.image.width.toDouble(), frame.image.height.toDouble());
+      frame.image.dispose();
     } catch (_) {
-      decoded.setSize(null);
+      // Χωρίς μέγεθος ο καμβάς δείχνει «φόρτωση»· η επόμενη αλλαγή εικόνας
+      // (νέο αποτύπωμα) ξαναδοκιμάζει.
+    } finally {
+      if (_decodeKey == key) _decoding = false;
     }
+    if (_decodeKey != key) return;
+    decoded.setSize(size);
+  }
+
+  /// Κατεβάζει (αν χρειάζεται) την κάτοψη του [floor] και μετρά το μέγεθός της.
+  Future<void> decodeImageForFloor(BuildingMapFloor? floor) async {
+    if (floor == null) return decodeImageFile(null);
+    final file = await FloorPlanImageCache.instance.fileFor(floor);
+    await decodeImageFile(file?.path);
   }
 
   Future<void> syncSheetSelection(List<BuildingMapFloor> floors) async {
@@ -112,7 +150,7 @@ class BuildingMapController {
       (fl) => fl?.id == sid,
       orElse: () => null,
     );
-    await decodeImageForPath(sheet?.imagePath ?? '');
+    await decodeImageForFloor(sheet);
   }
 
   Future<void> selectFloorFromList(
@@ -131,11 +169,12 @@ class BuildingMapController {
     _ref.read(buildingMapEditFromSelectionTapProvider.notifier).clear();
     _ref.read(buildingMapSearchRevealedDepartmentIdProvider.notifier).clear();
     _ref.read(buildingMapToolProvider.notifier).setMode(MapToolMode.select);
-    final path = floors
-        .cast<BuildingMapFloor?>()
-        .firstWhere((fl) => fl?.id == floorId, orElse: () => null)
-        ?.imagePath;
-    await decodeImageForPath(path ?? '');
+    await decodeImageForFloor(
+      floors.cast<BuildingMapFloor?>().firstWhere(
+        (fl) => fl?.id == floorId,
+        orElse: () => null,
+      ),
+    );
   }
 
   bool draftOverlapsOthers(Rect draft, String sheetStr, int excludeDeptId) {
@@ -198,6 +237,13 @@ class BuildingMapController {
     if (dept.id == null) return;
     final old = tryParseDepartmentHex(dept.color);
     final hex = colorToDepartmentHex(newColor);
+    if (!await _beforeMapWrite(
+      context,
+      [dept.id!],
+      const ['color', 'floor_id'],
+    )) {
+      return;
+    }
     final db = await DatabaseHelper.instance.database;
     await DepartmentRepository(
       db,
@@ -246,7 +292,65 @@ class BuildingMapController {
     return 'Όροφος #$floorId';
   }
 
-  Future<void> commitDraftToDatabase({
+  /// Το ✓ του προσχεδίου: γράφει μόνο ό,τι άλλαξε (επωνυμία, θέση ή και τα
+  /// δύο) και το λέει με **ένα** μήνυμα. Επιστρέφει τι έγινε με την επωνυμία
+  /// (`null` αν δεν γράφτηκε), ώστε η οθόνη να καθαρίσει την τοπική της.
+  Future<MapDisplayNameSaved?> confirmDraft({
+    required BuildContext context,
+    required DraftDepartmentShape draft,
+    required DepartmentModel dept,
+    required int floorId,
+    required List<BuildingMapFloor> floors,
+    required String? editedMapName,
+  }) async {
+    final plan = planDraftConfirm(
+      dept: dept,
+      draft: draft,
+      sheetStr: floorId.toString(),
+      editedMapName: editedMapName,
+    );
+    MapDisplayNameSaved? nameSaved;
+    if (plan.saveName) {
+      nameSaved = await saveDepartmentMapDisplayName(
+        context: context,
+        departmentId: dept.id!,
+        canonicalDepartmentName: dept.name,
+        editedText: editedMapName!,
+        announce: false,
+      );
+      if (nameSaved == null || !context.mounted) return nameSaved;
+    }
+    var placementSaved = false;
+    if (plan.savePlacement) {
+      placementSaved = await _commitDraftPlacement(
+        context: context,
+        draft: draft,
+        dept: dept,
+        floorId: floorId,
+        floors: floors,
+      );
+    } else if (nameSaved != null) {
+      _finishDraftEditing();
+    }
+    if (!context.mounted || (!placementSaved && nameSaved == null)) {
+      return nameSaved;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          draftConfirmMessage(
+            placementSaved: placementSaved,
+            nameSaved: nameSaved,
+          ),
+        ),
+      ),
+    );
+    return nameSaved;
+  }
+
+  /// Γράφει τη θέση του προσχεδίου. `false` όταν ο χρήστης ακύρωσε κάποια
+  /// ερώτηση στη διαδρομή ή η εγγραφή δεν επιτράπηκε.
+  Future<bool> _commitDraftPlacement({
     required BuildContext context,
     required DraftDepartmentShape draft,
     required DepartmentModel dept,
@@ -256,18 +360,18 @@ class BuildingMapController {
     final draftRect = draft.rect;
     final sheetStr = floorId.toString();
     if (!await confirmOverlapIfNeeded(context, draftRect, sheetStr, dept.id!)) {
-      return;
+      return false;
     }
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
     if (!await confirmPlacementReplacementIfNeeded(
       context,
       dept: dept,
       floorId: floorId,
       floors: floors,
     )) {
-      return;
+      return false;
     }
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
 
     final manualFloorId = dept.floorId;
     if (manualFloorId != null && manualFloorId != floorId && context.mounted) {
@@ -318,16 +422,16 @@ class BuildingMapController {
         final currentParsed = colorPlan.currentColor!;
         final suggested = FloorColorAssignmentService.instance
             .peekNextDistinctColor(floorId, additionalUsed: additionalUsed);
-        if (!context.mounted) return;
+        if (!context.mounted) return false;
         final choice = await showBuildingMapCommitColorDialog(
           context,
           departmentName: dept.name,
           currentColor: currentParsed,
           suggestedColor: suggested,
         );
-        if (!context.mounted) return;
+        if (!context.mounted) return false;
         if (choice == null) {
-          return;
+          return false;
         }
         if (choice) {
           final picked = FloorColorAssignmentService.instance
@@ -364,13 +468,17 @@ class BuildingMapController {
     if (colorHex != null) {
       updates['color'] = colorHex;
     }
-    await _captureUndo(
-      dept.id!,
-      DepartmentFloorSync.mergeFloorContext(
-        updates,
-        drawingFloorId: floorId,
-      ).keys,
-    );
+    if (!context.mounted ||
+        !await _beforeMapWrite(
+          context,
+          [dept.id!],
+          DepartmentFloorSync.mergeFloorContext(
+            updates,
+            drawingFloorId: floorId,
+          ).keys,
+        )) {
+      return false;
+    }
     await DepartmentRepository(db).saveDepartmentWithFloorContext(
       dept.id!,
       updates,
@@ -383,17 +491,18 @@ class BuildingMapController {
       }
     }
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
+    _finishDraftEditing();
+    return true;
+  }
+
+  /// Κλείνει το προσχέδιο και γυρίζει στο εργαλείο από όπου ξεκίνησε.
+  void _finishDraftEditing() {
     final backToSelection = _ref.read(buildingMapEditFromSelectionTapProvider);
     _ref.read(buildingMapDraftShapeProvider.notifier).clear();
     _ref.read(buildingMapEditFromSelectionTapProvider.notifier).clear();
     _ref
         .read(buildingMapToolProvider.notifier)
         .setMode(backToSelection ? MapToolMode.select : MapToolMode.draw);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Αποθηκεύτηκε η θέση στο χάρτη.')),
-      );
-    }
   }
 
   /// Ενημέρωση διαστάσεων πλαισίου ετικέτας στο draft κατά τη διάρκεια resize.
@@ -432,33 +541,104 @@ class BuildingMapController {
         .setDraft(draft.copyWith(labelFontScale: next));
   }
 
+  /// Κρύβει ή εμφανίζει τμήματα στην κάτοψη — ένα ή πολλά, μία ενέργεια.
+  Future<void> setDepartmentsHiddenOnMap(
+    BuildContext context,
+    Iterable<int> departmentIds, {
+    required bool hidden,
+  }) async {
+    final ids = departmentIds.toList(growable: false);
+    if (ids.isEmpty) return;
+    if (!await _beforeMapWrite(context, ids, const ['map_hidden'])) return;
+    final db = await DatabaseHelper.instance.database;
+    final repo = DepartmentRepository(db);
+    await db.transaction(
+      (txn) => setDepartmentsHiddenOnMapInTxn(
+        txn,
+        repository: repo,
+        departmentIds: ids,
+        hidden: hidden,
+      ),
+    );
+    await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
+  }
+
+  /// Αφαιρεί πολλά τμήματα από το φύλλο [floorId] σε μία συναλλαγή.
+  ///
+  /// Τα χρώματα ελευθερώνονται **μετά** την επιτυχή εγγραφή: το μητρώο
+  /// χρωμάτων ζει στη μνήμη και δεν γυρίζει πίσω μαζί με τη συναλλαγή.
+  Future<void> removeDepartmentsFromFloor(
+    BuildContext context,
+    List<DepartmentModel> departments, {
+    required int floorId,
+  }) async {
+    if (departments.isEmpty) return;
+    if (!await _beforeMapWrite(
+      context,
+      [for (final d in departments) ?d.id],
+      BuildingMapRepository.clearedBuildingMapPlacementColumns(
+        clearFloorId: true,
+        clearDepartmentHex: true,
+      ).keys,
+    )) {
+      return;
+    }
+    final db = await DatabaseHelper.instance.database;
+    final repo = DepartmentRepository(db);
+    final releasedColors = await db.transaction(
+      (txn) => removeDepartmentsFromFloorInTxn(
+        txn,
+        repository: repo,
+        departments: departments,
+      ),
+    );
+    for (final color in releasedColors) {
+      FloorColorAssignmentService.instance.removeColorFromFloor(floorId, color);
+    }
+    await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
+  }
+
   /// Αποθηκεύει το προσαρμοσμένο όνομα εμφάνισης στο χάρτη (`map_custom_name`).
   /// Κενό ή ταύτιση με το κανονικό όνομα τμήματος → NULL στη βάση (χρήση `name`).
-  Future<void> saveDepartmentMapDisplayName({
+  ///
+  /// Με [announce] `false` δεν δείχνει δικό του μήνυμα — το λέει ο καλών
+  /// μαζί με ό,τι άλλο αποθήκευσε. Επιστρέφει `null` όταν δεν γράφτηκε.
+  Future<MapDisplayNameSaved?> saveDepartmentMapDisplayName({
     required BuildContext context,
     required int departmentId,
     required String canonicalDepartmentName,
     required String editedText,
+    bool announce = true,
   }) async {
-    final trimmed = editedText.trim();
-    final canon = canonicalDepartmentName.trim();
-    final String? custom = trimmed.isEmpty || trimmed == canon ? null : trimmed;
+    final custom = resolveMapCustomName(
+      editedText: editedText,
+      canonicalName: canonicalDepartmentName,
+    );
+    if (!await _beforeMapWrite(
+      context,
+      [departmentId],
+      const ['map_custom_name'],
+    )) {
+      return null;
+    }
     final db = await DatabaseHelper.instance.database;
     await DepartmentRepository(db).updateDepartment(departmentId, {
       'map_custom_name': custom,
     }, expected: null);
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
-    if (context.mounted) {
+    final saved = custom == null
+        ? MapDisplayNameSaved.resetToName
+        : MapDisplayNameSaved.custom;
+    if (announce && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            custom == null
-                ? 'Η επωνυμία χάρτη επανήλθε στο όνομα τμήματος.'
-                : 'Αποθηκεύτηκε η επωνυμία χάρτη.',
+            draftConfirmMessage(placementSaved: false, nameSaved: saved),
           ),
         ),
       );
     }
+    return saved;
   }
 
   /// Διαγράφει τη χαρτογράφηση του τμήματος στο τρέχον φύλλο, αφού ρωτήσει τον χρήστη.
@@ -486,7 +666,7 @@ class BuildingMapController {
       clearFloorId: true,
       clearDepartmentHex: true,
     );
-    await _captureUndo(dept.id!, cleared.keys);
+    if (!await _beforeMapWrite(context, [dept.id!], cleared.keys)) return;
     final db = await DatabaseHelper.instance.database;
     final removedColor = tryParseDepartmentHex(dept.color);
     await DepartmentRepository(
@@ -672,63 +852,13 @@ class BuildingMapController {
     }
   }
 
-  Future<String?> _ingestPickedImagePath(
-    BuildContext context,
-    String srcPath, {
-    required String floorLabel,
-  }) async {
-    var responded = false;
-    var copyToPortable = true;
-    String? targetFileName;
-    ingestLoop:
-    while (true) {
-      final result = await BuildingMapStorage.ingestPickedImage(
-        srcPath,
-        userRespondedToPortablePrompt: responded,
-        copyToPortable: copyToPortable,
-        targetFileName: targetFileName,
-      );
-      if (result.ok && result.storedRelativePath != null) {
-        return result.storedRelativePath;
-      }
-      if (result.needsPortableConfirmation) {
-        if (!context.mounted) return null;
-        final choice = await showBuildingMapPortableImageCopyDialog(
-          context,
-          sourceImagePath: srcPath,
-        );
-        if (choice == null) return null;
-        responded = true;
-        copyToPortable = choice.copyToPortable;
-        targetFileName = choice.fileName;
-        continue ingestLoop;
-      }
-      if (result.errorMessage != null && context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(result.errorMessage!)));
-      }
-      return null;
-    }
-  }
-
-  /// Αντικατάσταση εικόνας στο **υπάρχον** φύλλο (διατήρηση γεωμετρίας τμημάτων).
-  Future<void> replaceFloorSheetImageById(
-    BuildContext context,
-    int floorId,
-  ) async {
-    final db = await DatabaseHelper.instance.database;
-    final floors = await BuildingMapRepository(db).listBuildingMapFloors();
-    BuildingMapFloor? floor;
-    for (final f in floors) {
-      if (f.id == floorId) {
-        floor = f;
-        break;
-      }
-    }
-    if (floor == null || !context.mounted) return;
-    await replaceFloorSheetImage(context, floor);
-  }
+  /// Έχει ο χρήστης το δικαίωμα «Διαχείριση κατόψεων»;
+  ///
+  /// Ρωτιέται σε **κάθε** ενέργεια και όχι μία φορά: η «Αλλαγή χρήστη» αλλάζει
+  /// την απάντηση ζωντανά. Οι οθόνες κρύβουν τα κουμπιά με την ίδια ερώτηση·
+  /// ο έλεγχος εδώ είναι η δεύτερη γραμμή, για όποια πόρτα ξεχάσει να τα κρύψει.
+  bool get canManageFloorPlans =>
+      PermissionService.instance.can(AppPermission.manageFloorPlans);
 
   /// Κοινός επιλογέας εικόνας κάτοψης: ανοίγει στον τελευταίο φάκελο εικόνων
   /// του χάρτη (όχι στην καθολική «τελευταία θέση» των Windows) και τον
@@ -752,72 +882,53 @@ class BuildingMapController {
     return srcPath;
   }
 
-  Future<void> replaceFloorSheetImage(
+  /// Διαβάζει την εικόνα του [file] και τη μετατρέπει στη μορφή της βάσης.
+  ///
+  /// Η μετατροπή γίνεται σε δικό της νήμα: μια μεγάλη κάτοψη θέλει
+  /// δευτερόλεπτα, και η οθόνη δεν πρέπει να παγώσει όσο κρατά.
+  static Future<Uint8List> _encodeFloorPlanFile(File file) async {
+    final source = await file.readAsBytes();
+    return Isolate.run(() => encodeFloorPlanImage(source));
+  }
+
+  /// Όπως το [_encodeFloorPlanFile], με μήνυμα στον χρήστη αν η εικόνα δεν
+  /// διαβάζεται· `null` τότε.
+  Future<Uint8List?> _encodePickedImage(
     BuildContext context,
-    BuildingMapFloor floor,
+    String srcPath,
   ) async {
-    final srcPath = await _pickFloorSheetImagePath();
-    if (srcPath == null || !context.mounted) return;
-
-    final stored = await _ingestPickedImagePath(
-      context,
-      srcPath,
-      floorLabel: floor.label,
-    );
-    if (stored == null || !context.mounted) return;
-
     try {
-      final db = await DatabaseHelper.instance.database;
-      final previousPath = floor.imagePath;
-      await BuildingMapRepository(db).updateBuildingMapFloor(
-        floor.id,
-        rotationDegrees: floor.rotationDegrees,
-        imagePath: stored,
+      return await _encodeFloorPlanFile(File(srcPath));
+    } on FloorPlanImageUnreadable catch (e) {
+      _showMapSnack(context, humanizeUserFacingError(e));
+    } on FileSystemException catch (e) {
+      _showMapSnack(
+        context,
+        'Η εικόνα δεν διαβάστηκε: ${e.osError?.message ?? e.message}',
       );
-      if (previousPath != stored) {
-        await BuildingMapStorage.deleteStoredImageBestEffort(previousPath);
-      }
-      final sel = _ref.read(buildingMapSelectedSheetIdProvider);
-      if (sel == floor.id) {
-        await decodeImageForPath(stored);
-      }
-      _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Η κάτοψη ενημερώθηκε.')));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Αποτυχία ενημέρωσης κάτοψης: $e')),
-        );
-      }
     }
+    return null;
   }
 
   Future<void> addFloorSheet(BuildContext context) async {
+    if (!canManageFloorPlans) return;
     final srcPath = await _pickFloorSheetImagePath();
     if (srcPath == null || !context.mounted) return;
 
     final result = await showBuildingMapFloorSheetAddDialog(context);
     if (result == null || !context.mounted) return;
 
-    final copied = await _ingestPickedImagePath(
-      context,
-      srcPath,
-      floorLabel: result.label,
-    );
-    if (copied == null || !context.mounted) return;
+    final image = await _encodePickedImage(context, srcPath);
+    if (image == null || !context.mounted) return;
 
     final db = await DatabaseHelper.instance.database;
     final maps = BuildingMapRepository(db);
     final id = await maps.insertBuildingMapFloor(
       label: result.label,
       floorGroup: result.floorGroup,
-      copiedImagePath: copied,
       rotationDegrees: 0,
     );
+    await maps.saveFloorImage(id, image);
     _ref.read(buildingMapSelectedSheetIdProvider.notifier).setSheet(id);
     final floors = await maps.listBuildingMapFloors();
     if (!context.mounted) return;
@@ -826,17 +937,25 @@ class BuildingMapController {
     _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
   }
 
+  /// Ο διάλογος «Επεξεργασία κάτοψης» για τον όροφο [floorId] — π.χ. από την
+  /// ένδειξη «Η κάτοψη δεν έχει ανέβει ακόμη» του καμβά.
+  Future<void> editFloorSheetById(BuildContext context, int floorId) async {
+    final db = await DatabaseHelper.instance.database;
+    final floors = await BuildingMapRepository(db).listBuildingMapFloors();
+    final floor = floors.cast<BuildingMapFloor?>().firstWhere(
+      (f) => f?.id == floorId,
+      orElse: () => null,
+    );
+    if (floor == null || !context.mounted) return;
+    await editFloorSheet(context, floor);
+  }
+
   Future<void> editFloorSheet(
     BuildContext context,
     BuildingMapFloor floor,
   ) async {
-    var previewImageAvailable = false;
-    if (floor.imagePath.trim().isNotEmpty) {
-      final initialImage = await BuildingMapStorage.fileForStoredPath(
-        floor.imagePath,
-      );
-      previewImageAvailable = await initialImage.exists();
-    }
+    if (!canManageFloorPlans) return;
+    final current = await FloorPlanImageCache.instance.fileFor(floor);
     if (!context.mounted) return;
     final previewDepartments = departmentsEligibleForBuildingMap(
       _ref.read(departmentDirectoryProvider).allDepartments,
@@ -846,64 +965,114 @@ class BuildingMapController {
       context,
       floor: floor,
       previewDepartments: previewDepartments,
-      initialPreviewImageAvailable: previewImageAvailable,
+      currentImagePath: current?.path ?? '',
       pickImagePath: _pickFloorSheetImagePath,
     );
     if (result == null || !context.mounted) return;
 
-    var imagePathUpdate = floor.imagePath;
-    final previousPath = floor.imagePath;
+    Uint8List? image;
     if (result.pickedSrcPath != null) {
-      final ingested = await _ingestPickedImagePath(
-        context,
-        result.pickedSrcPath!,
-        floorLabel: result.label,
-      );
-      if (ingested == null) return;
-      imagePathUpdate = ingested;
+      image = await _encodePickedImage(context, result.pickedSrcPath!);
+      if (image == null) return;
     }
 
     final db = await DatabaseHelper.instance.database;
-    await BuildingMapRepository(db).updateBuildingMapFloor(
+    final maps = BuildingMapRepository(db);
+    await maps.updateBuildingMapFloor(
       floor.id,
-      rotationDegrees: floor.rotationDegrees,
       label: result.label,
       floorGroup: result.floorGroupRaw,
-      imagePath: result.pickedSrcPath != null ? imagePathUpdate : null,
     );
-    if (result.pickedSrcPath != null && previousPath != imagePathUpdate) {
-      await BuildingMapStorage.deleteStoredImageBestEffort(previousPath);
-    }
-
-    final sel = _ref.read(buildingMapSelectedSheetIdProvider);
-    if (sel == floor.id) {
-      await decodeImageForPath(imagePathUpdate);
+    if (image != null) {
+      await maps.saveFloorImage(floor.id, image);
     }
     _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
+    if (image != null && context.mounted) {
+      _showMapSnack(
+        context,
+        'Η κάτοψη ενημερώθηκε για όλους τους σταθμούς. Η προηγούμενη '
+        'επανέρχεται με «Επαναφορά προηγούμενης κάτοψης».',
+      );
+    }
   }
 
-  Future<void> deleteFloorSheet(
+  /// «Επαναφορά προηγούμενης κάτοψης»: ανταλλάσσει τρέχουσα και προηγούμενη.
+  ///
+  /// Χωρίς ερώτηση επιβεβαίωσης, επίτηδες: τίποτα δεν χάνεται — μια δεύτερη
+  /// επαναφορά φέρνει πίσω αυτήν που μόλις αντικαταστάθηκε.
+  Future<void> revertFloorImage(
     BuildContext context,
-    int sheetId,
-    String imagePath,
+    BuildingMapFloor floor,
   ) async {
-    final trimmedPath = imagePath.trim();
-    String? resolvedImagePath;
-    var imageFileExists = false;
-    if (trimmedPath.isNotEmpty) {
-      final imageFile = await BuildingMapStorage.fileForStoredPath(trimmedPath);
-      resolvedImagePath = imageFile.path;
-      imageFileExists = await imageFile.exists();
+    if (!canManageFloorPlans) return;
+    final db = await DatabaseHelper.instance.database;
+    final swapped = await BuildingMapRepository(
+      db,
+    ).swapFloorImageWithPrevious(floor.id);
+    _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
+    if (!context.mounted) return;
+    _showMapSnack(
+      context,
+      swapped
+          ? 'Επανήλθε η προηγούμενη κάτοψη του ορόφου «${floor.label}». '
+                'Με νέα επαναφορά επιστρέφει αυτή που αντικαταστάθηκε.'
+          : 'Δεν υπάρχει προηγούμενη κάτοψη για τον όροφο «${floor.label}».',
+    );
+  }
+
+  /// «Ανέβασμα κατόψεων στη βάση»: για κάθε όροφο που δεν έχει ακόμη εικόνα
+  /// στη βάση, ανεβάζει την παλιά τοπική εικόνα **αυτού** του σταθμού.
+  ///
+  /// Ρητή ενέργεια του διαχειριστή, επίτηδες (απόφαση Διευθυντή 17/10/2026):
+  /// κάθε σταθμός μπορεί να έχει άλλη εικόνα για τον ίδιο όροφο, και ποια
+  /// είναι η σωστή το ξέρει μόνο εκείνος. Όροφοι που έχουν ήδη εικόνα δεν
+  /// αγγίζονται ποτέ.
+  Future<void> uploadLocalFloorPlans(BuildContext context) async {
+    if (!canManageFloorPlans) return;
+    final db = await DatabaseHelper.instance.database;
+    final maps = BuildingMapRepository(db);
+    final floors = await maps.listBuildingMapFloors();
+
+    final uploaded = <String>[];
+    final notFound = <String>[];
+    final unreadable = <String>[];
+    for (final floor in floors) {
+      if (floor.hasImage) continue;
+      final label = buildingMapFloorDisplayLabel(floor);
+      final stored = floor.imagePath.trim();
+      final file = stored.isEmpty
+          ? null
+          : File(await BuildingMapStorage.resolveToAbsolute(stored));
+      if (file == null || !await file.exists()) {
+        notFound.add(label);
+        continue;
+      }
+      try {
+        await maps.saveFloorImage(floor.id, await _encodeFloorPlanFile(file));
+        uploaded.add(label);
+      } on FloorPlanImageUnreadable {
+        unreadable.add(label);
+      } on FileSystemException {
+        unreadable.add(label);
+      }
     }
 
+    if (uploaded.isNotEmpty) {
+      _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
+    }
     if (!context.mounted) return;
-    final choice = await showBuildingMapFloorDeleteDialog(
+    await showFloorPlanUploadReportDialog(
       context,
-      displayImagePath: resolvedImagePath,
-      imageFileExists: imageFileExists,
-      showMissingImageNote: !imageFileExists && trimmedPath.isNotEmpty,
+      uploaded: uploaded,
+      notFound: notFound,
+      unreadable: unreadable,
     );
-    if (choice == null || !context.mounted) return;
+  }
+
+  Future<void> deleteFloorSheet(BuildContext context, int sheetId) async {
+    if (!canManageFloorPlans) return;
+    final go = await showBuildingMapFloorDeleteDialog(context);
+    if (!go || !context.mounted) return;
     try {
       final db = await DatabaseHelper.instance.database;
       final departments = DepartmentRepository(db);
@@ -915,40 +1084,32 @@ class BuildingMapController {
             departments.updateDepartment(id, values, expected: null),
       );
       await maps.deleteBuildingMapFloorClearingDepartmentMaps(sheetId);
-      var imageRemoved = false;
-      if (choice.deleteImageFile) {
-        imageRemoved = await BuildingMapStorage.deleteStoredImageBestEffort(
-          imagePath,
-        );
-      }
+      // Η διαγραφή ορόφου δεν αναιρείται (η κάτοψη χάθηκε μαζί του)· μια
+      // παλιότερη Αναίρεση θα έβαζε τμήμα σε όροφο που δεν υπάρχει πια.
+      _ref.read(buildingMapUndoProvider.notifier).clear();
       _ref.read(buildingMapSelectedSheetIdProvider.notifier).setSheet(null);
       appliedInitialFloorSync = false;
       _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
       await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
       if (context.mounted) {
-        final tail = choice.deleteImageFile
-            ? (imageRemoved
-                  ? ' Η εικόνα διαγράφηκε από το δίσκο.'
-                  : ' Η εικόνα δεν διαγράφηκε (αρχείο δεν βρέθηκε ή σφάλμα εγγραφής).')
-            : '';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Το φύλλο διαγράφηκε και καθαρίστηκαν οι θέσεις χάρτη των σχετικών τμημάτων.$tail',
-            ),
-          ),
+        _showMapSnack(
+          context,
+          'Ο όροφος διαγράφηκε μαζί με την κάτοψή του, και καθαρίστηκαν οι '
+          'θέσεις χάρτη των σχετικών τμημάτων.',
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
+        _showMapSnack(
           context,
-        ).showSnackBar(SnackBar(content: Text('Αποτυχία διαγραφής: $e')));
+          'Αποτυχία διαγραφής: ${humanizeUserFacingError(e)}',
+        );
       }
     }
   }
 
   Future<void> applySheetRotation(int sheetId, double degrees) async {
+    if (!canManageFloorPlans) return;
     final db = await DatabaseHelper.instance.database;
     await BuildingMapRepository(
       db,
@@ -956,34 +1117,121 @@ class BuildingMapController {
     _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
   }
 
-  /// Κρατά τις τιμές που έχουν **τώρα** οι [columns] — ακριβώς όσες θα
-  /// γράψει η ενέργεια που ακολουθεί, ώστε η Αναίρεση να τις φέρει όλες πίσω.
-  Future<void> _captureUndo(int departmentId, Iterable<String> columns) async {
-    final db = await DatabaseHelper.instance.database;
-    final values = await BuildingMapRepository(
-      db,
-    ).readDepartmentColumns(departmentId, columns);
-    if (values.isEmpty) return;
-    _ref
-        .read(buildingMapUndoProvider.notifier)
-        .capture(
-          BuildingMapUndoSnapshot(departmentId: departmentId, values: values),
+  /// Το βήμα πριν από **κάθε** εγγραφή του χάρτη σε τμήματα.
+  ///
+  /// 1. **Διένεξη:** άλλαξε άλλος σταθμός, στις ίδιες στήλες, κάτι που ο
+  ///    χάρτης δεν έχει δει; Τότε ρωτά «Κάποιος πρόλαβε», όπως οι καρτέλες
+  ///    του Καταλόγου. Ο χάρτης μένει ακίνητος στην επεξεργασία (απόφαση
+  ///    25/08/2026)· η ερώτηση εμποδίζει μόνο τη σιωπηλή απώλεια.
+  /// 2. **Αναίρεση:** στιγμιότυπο των στηλών πριν γραφτούν.
+  ///
+  /// Επιστρέφει `false` όταν ο χρήστης κράτησε την αλλαγή του συναδέλφου:
+  /// τότε δεν γράφεται τίποτα, και ο χάρτης ξαναδιαβάζει τα τμήματα ώστε να
+  /// τη δείχνει.
+  Future<bool> _beforeMapWrite(
+    BuildContext context,
+    Iterable<int> departmentIds,
+    Iterable<String> columns,
+  ) async {
+    final ids = departmentIds.toList(growable: false);
+    final cols = columns.toList(growable: false);
+    final seenById = {
+      for (final d in _ref.read(departmentDirectoryProvider).allDepartments)
+        if (d.id != null && ids.contains(d.id)) d.id!: d,
+    };
+    final repo = DepartmentRepository(await DatabaseHelper.instance.database);
+    var keepTheirs = false;
+    for (final id in ids) {
+      final seen = seenById[id];
+      if (seen == null) continue;
+      final fresh = await repo.getDepartmentRowById(id);
+      if (fresh == null) continue;
+      final conflict = buildingMapForeignChange(
+        seen: seen,
+        freshRow: fresh,
+        columns: cols,
+      );
+      if (conflict == null) continue;
+      final actor = await repo.lastActorFor(id);
+      if (!context.mounted) return false;
+      final overwrite = await showStaleWriteConflictDialog(
+        context,
+        headline: buildingMapConflictHeadline(
+          departmentName: seen.displayName,
+          changedBy: actor.who,
+          changedAt: actor.at,
+          now: DateTime.now(),
+        ),
+        warning: conflict.overwriteWarning,
+        changedFields: conflict.changedFields,
+      );
+      keepTheirs = overwrite != true;
+      break;
+    }
+    if (keepTheirs) {
+      await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
+      if (context.mounted) {
+        _showMapSnack(
+          context,
+          'Η αλλαγή ακυρώθηκε — ο χάρτης δείχνει τώρα την αλλαγή του '
+          'συναδέλφου.',
         );
+      }
+      return false;
+    }
+    await _captureUndo(ids, cols);
+    return true;
+  }
+
+  /// Κρατά τις τιμές που έχουν **τώρα** οι [columns] των [departmentIds] —
+  /// ακριβώς όσες θα γράψει η ενέργεια που ακολουθεί, ώστε η Αναίρεση να τις
+  /// φέρει όλες πίσω.
+  ///
+  /// **Κάθε** ενέργεια χάρτη που γράφει τμήματα περνά από εδώ πριν γράψει:
+  /// η Αναίρεση αναιρεί την τελευταία ενέργεια — μια ενέργεια που δεν
+  /// κρατούσε στιγμιότυπο άφηνε ενεργό το στιγμιότυπο μιας παλιότερης.
+  Future<void> _captureUndo(
+    Iterable<int> departmentIds,
+    Iterable<String> columns,
+  ) async {
+    final db = await DatabaseHelper.instance.database;
+    final repo = BuildingMapRepository(db);
+    final snapshot = <int, Map<String, Object?>>{};
+    for (final id in departmentIds) {
+      final values = await repo.readDepartmentColumns(id, columns);
+      if (values.isNotEmpty) snapshot[id] = values;
+    }
+    final undo = _ref.read(buildingMapUndoProvider.notifier);
+    if (snapshot.isEmpty) {
+      undo.clear();
+    } else {
+      undo.capture(BuildingMapUndoSnapshot(snapshot));
+    }
   }
 
   Future<void> undoLastGeometry(BuildContext context) async {
     final snap = _ref.read(buildingMapUndoProvider);
     if (snap == null) return;
     final db = await DatabaseHelper.instance.database;
-    await DepartmentRepository(
-      db,
-    ).updateDepartment(snap.departmentId, snap.values, expected: null);
+    final repo = DepartmentRepository(db);
+    await db.transaction((txn) async {
+      for (final entry in snap.valuesByDepartment.entries) {
+        await repo.updateDepartment(
+          entry.key,
+          entry.value,
+          executor: txn,
+          expected: null,
+        );
+      }
+    });
     // Το χρώμα που επιστρέφει ξαναπιάνει τη θέση του στον όροφο, ώστε το
     // επόμενο τμήμα να μην πάρει το ίδιο.
-    final floorId = snap.values['floor_id'] as int?;
-    final color = tryParseDepartmentHex(snap.values['color'] as String?);
-    if (floorId != null && color != null) {
-      FloorColorAssignmentService.instance.overrideColor(floorId, color);
+    for (final values in snap.valuesByDepartment.values) {
+      final floorId = values['floor_id'] as int?;
+      final color = tryParseDepartmentHex(values['color'] as String?);
+      if (floorId != null && color != null) {
+        FloorColorAssignmentService.instance.overrideColor(floorId, color);
+      }
     }
     _ref.read(buildingMapUndoProvider.notifier).clear();
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();

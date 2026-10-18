@@ -1,9 +1,11 @@
+import 'catalog_column_layout.dart';
 import '../../calls/models/user_model.dart';
 
 /// Ορισμός στήλης πίνακα χρηστών (κατάλογος): κλειδί, ετικέτα, ταξινόμηση.
-class UserDirectoryColumn {
+class UserDirectoryColumn implements CatalogColumn {
   const UserDirectoryColumn._(this.key, this.label, this.sortKey);
 
+  @override
   final String key;
   final String label;
   final String? sortKey;

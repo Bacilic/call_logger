@@ -838,7 +838,7 @@ class LongestCallsCard extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  DataCell(DepartmentPill(name: r.department)),
+                  DataCell(DepartmentPill(name: r.department, colors: colors)),
                   DataCell(
                     SizedBox(
                       width: 220,
@@ -1119,26 +1119,19 @@ class MoreSection extends StatelessWidget {
   }
 }
 
+/// Το τσιπ τμήματος. Ένα χρώμα για όλα τα τμήματα, αυτό της παλέτας — το
+/// όνομα δεν το επηρεάζει (ως 18/10/2026 το «λογ»/«πωλ» στο όνομα έδινε άλλο
+/// χρώμα, υπόλειμμα προτύπου εταιρείας χωρίς νόημα για το νοσοκομείο).
 class DepartmentPill extends StatelessWidget {
-  const DepartmentPill({super.key, required this.name});
+  const DepartmentPill({super.key, required this.name, required this.colors});
 
   final String name;
+  final DashboardPaletteColors colors;
 
   @override
   Widget build(BuildContext context) {
-    final lower = name.toLowerCase();
-    Color bg;
-    Color fg;
-    if (lower.contains('λογ') || lower.contains('account')) {
-      bg = const Color(0xFFEDE9FE);
-      fg = const Color(0xFF5B21B6);
-    } else if (lower.contains('πωλ') || lower.contains('sales')) {
-      bg = const Color(0xFFFFF1DF);
-      fg = const Color(0xFFB45309);
-    } else {
-      bg = const Color(0xFFDCFCE7);
-      fg = const Color(0xFF166534);
-    }
+    final bg = colors.departmentChipBg;
+    final fg = colors.departmentChipFg;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(

@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
-import '../../../../core/services/building_map_storage.dart';
+import '../../../directory/building_map/services/floor_plan_image_cache.dart';
 import '../../../../core/widgets/app_asset_image.dart';
 import '../../../directory/building_map/models/building_map_jump_target.dart';
 import '../../../directory/building_map/screens/building_map_dialog.dart';
@@ -60,34 +60,21 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   late Future<MiniMapCardData> _dataFuture;
   MiniMapMode _mode = MiniMapMode.equipment;
 
-  /// Η διαδρομή της κάτοψης, λυμένη **μία φορά ανά αρχείο**.
+  /// Το τοπικό αρχείο της κάτοψης, ζητημένο **μία φορά ανά εικόνα**.
   ///
   /// Η κάρτα παίρνει ως δεδομένα το κείμενο που πληκτρολογεί ο χρήστης στη
-  /// φόρμα κλήσης, οπότε ξαναχτίζεται σε κάθε χαρακτήρα. Όσο η ανάλυση της
-  /// διαδρομής γινόταν μέσα στο χτίσιμο, κάθε πλήκτρο ξεκινούσε νέο ψάξιμο
-  /// αρχείου στον δίσκο — και σε δικτυακό φάκελο κατόψεων, νέο γύρο δικτύου.
-  String? _resolvedForStoredPath;
+  /// φόρμα κλήσης, οπότε ξαναχτίζεται σε κάθε χαρακτήρα. Ένα νέο αίτημα σε
+  /// κάθε πλήκτρο θα ξανάψαχνε τον δίσκο κάθε φορά. Η πρώτη λήψη από τη βάση
+  /// γίνεται στο παρασκήνιο· η φόρμα κλήσης δεν την περιμένει ποτέ.
+  String? _requestedImageHash;
   Future<String?>? _floorImageFuture;
 
-  /// Λύνει τη διαδρομή **και** ελέγχει ότι το αρχείο υπάρχει, μακριά από το
-  /// νήμα της οθόνης: ο έλεγχος ύπαρξης ήταν σύγχρονος μέσα στο χτίσιμο, άρα
-  /// πάγωνε την εφαρμογή για όσο απαντούσε ο δίσκος.
-  ///
-  /// Επιστρέφει `null` όταν το αρχείο λείπει.
-  Future<String?> _resolveFloorImage(String storedImagePath) async {
-    final absolute = await BuildingMapStorage.resolveToAbsolute(
-      storedImagePath,
-    );
-    if (absolute.isEmpty) return null;
-    return await File(absolute).exists() ? absolute : null;
-  }
-
-  /// Το αίτημα ανάλυσης για τη [storedImagePath], φτιαγμένο μία φορά.
-  Future<String?> _floorImageFor(String storedImagePath) {
-    if (_resolvedForStoredPath != storedImagePath ||
-        _floorImageFuture == null) {
-      _resolvedForStoredPath = storedImagePath;
-      _floorImageFuture = _resolveFloorImage(storedImagePath);
+  Future<String?> _floorImageFor(BuildingMapFloor floor) {
+    if (_requestedImageHash != floor.imageHash || _floorImageFuture == null) {
+      _requestedImageHash = floor.imageHash;
+      _floorImageFuture = FloorPlanImageCache.instance
+          .fileFor(floor)
+          .then((file) => file?.path);
     }
     return _floorImageFuture!;
   }
@@ -274,14 +261,14 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
     if (floor == null) {
       return _placeholder(context, 'Δεν υπάρχει διαθέσιμο φύλλο χάρτη.');
     }
-    final storedImagePath = floor.imagePath.trim();
-    if (storedImagePath.isEmpty) {
-      return _placeholder(context, 'Δεν βρέθηκε αρχείο κάτοψης.');
+    final imageHash = floor.imageHash;
+    if (imageHash == null) {
+      return _placeholder(context, 'Η κάτοψη δεν έχει ανέβει ακόμη.');
     }
 
     return FutureBuilder<String?>(
-      key: ValueKey<String>(storedImagePath),
-      future: _floorImageFor(storedImagePath),
+      key: ValueKey<String>(imageHash),
+      future: _floorImageFor(floor),
       builder: (context, pathSnap) {
         if (pathSnap.connectionState != ConnectionState.done) {
           return const Center(
@@ -294,7 +281,7 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
         }
         final imagePath = pathSnap.data;
         if (imagePath == null) {
-          return _placeholder(context, 'Δεν βρέθηκε αρχείο κάτοψης.');
+          return _placeholder(context, 'Η κάτοψη δεν φορτώθηκε από τη βάση.');
         }
         return _buildMappedFloorPreview(
           context,

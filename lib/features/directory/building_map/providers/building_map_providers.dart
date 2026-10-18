@@ -18,15 +18,19 @@ import '../models/building_map_jump_target.dart';
 /// Όχι σταθερή λίστα πεδίων: η αφαίρεση από τον χάρτη σβήνει επωνυμία, μέγεθος
 /// ετικέτας, «κρυμμένο», όροφο φόρμας και χρώμα — μια λίστα μόνο με τη
 /// γεωμετρία έφερνε πίσω μισό τμήμα.
+///
+/// Ένα στιγμιότυπο μπορεί να καλύπτει **πολλά** τμήματα: η μαζική αφαίρεση ή
+/// απόκρυψη από τη λίστα ορόφου είναι μία ενέργεια, άρα αναιρείται ολόκληρη.
 @immutable
 class BuildingMapUndoSnapshot {
-  BuildingMapUndoSnapshot({
-    required this.departmentId,
-    required Map<String, Object?> values,
-  }) : values = Map.unmodifiable(values);
+  BuildingMapUndoSnapshot(Map<int, Map<String, Object?>> valuesByDepartment)
+    : valuesByDepartment = Map.unmodifiable({
+        for (final entry in valuesByDepartment.entries)
+          entry.key: Map<String, Object?>.unmodifiable(entry.value),
+      });
 
-  final int departmentId;
-  final Map<String, Object?> values;
+  /// Για κάθε τμήμα, οι τιμές που είχε πριν από την ενέργεια.
+  final Map<int, Map<String, Object?>> valuesByDepartment;
 }
 
 class BuildingMapUndoController extends Notifier<BuildingMapUndoSnapshot?> {

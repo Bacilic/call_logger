@@ -48,6 +48,7 @@ import 'calls_field_groups.dart';
 import 'calls_field_groups_provider.dart';
 import 'calls_layout_engine.dart';
 import 'calls_layout_plan.dart';
+import 'calls_layout_rows.dart';
 
 /// Expanded layout shell driven by [CallsLayoutEngine] plan.
 class CallsScreenLayout extends ConsumerWidget {
@@ -373,27 +374,17 @@ class _ExpandedPlanBody extends ConsumerWidget {
     );
 
     final plan = CallsLayoutEngine.build(groups, visibility);
-    final width = MediaQuery.sizeOf(context).width - 32;
-
-    return Column(
-      children: [
-        for (final row in plan.rows)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: _LayoutRowWidget(
-              row: row,
-              isNarrowViewport: callsLayoutShouldStackRow(
-                contentWidth: width,
-                row: row,
-              ),
-              header: header,
-              tools: tools,
-              cardsVis: cardsVis,
-              selectedEquipmentCode: selectedEquipmentCode,
-              showRemoteButtons: showRemoteButtons,
-            ),
-          ),
-      ],
+    return CallsLayoutRows(
+      rows: plan.rows,
+      rowBuilder: (row, stacked) => _LayoutRowWidget(
+        row: row,
+        isNarrowViewport: stacked,
+        header: header,
+        tools: tools,
+        cardsVis: cardsVis,
+        selectedEquipmentCode: selectedEquipmentCode,
+        showRemoteButtons: showRemoteButtons,
+      ),
     );
   }
 }

@@ -1,124 +1,30 @@
 import 'package:flutter/material.dart';
 
-/// Επιλογή διαγραφής φύλλου κάτοψης (τι αποφάσισε ο χρήστης στον διάλογο).
-class BuildingMapFloorDeleteChoice {
-  const BuildingMapFloorDeleteChoice({required this.deleteImageFile});
-
-  final bool deleteImageFile;
-}
-
-/// Διάλογος «Διαγραφή ορόφου»: επιβεβαίωση + διακόπτης οριστικής διαγραφής
-/// του αρχείου εικόνας από τον δίσκο. Επιστρέφει null σε ακύρωση.
-Future<BuildingMapFloorDeleteChoice?> showBuildingMapFloorDeleteDialog(
-  BuildContext context, {
-  required String? displayImagePath,
-  required bool imageFileExists,
-  required bool showMissingImageNote,
-}) {
-  return showDialog<BuildingMapFloorDeleteChoice>(
+/// Διάλογος «Διαγραφή ορόφου». `true` μόνο με ρητό «Διαγραφή».
+///
+/// Η εικόνα της κάτοψης ζει στη βάση και φεύγει μαζί με τον όροφο — δεν
+/// υπάρχει πια χωριστό αρχείο στον δίσκο να ρωτηθεί αν θα κρατηθεί.
+Future<bool> showBuildingMapFloorDeleteDialog(BuildContext context) async {
+  final go = await showDialog<bool>(
     context: context,
-    builder: (_) => BuildingMapFloorDeleteDialog(
-      displayImagePath: displayImagePath,
-      imageFileExists: imageFileExists,
-      showMissingImageNote: showMissingImageNote,
-    ),
-  );
-}
-
-class BuildingMapFloorDeleteDialog extends StatefulWidget {
-  const BuildingMapFloorDeleteDialog({
-    super.key,
-    required this.displayImagePath,
-    required this.imageFileExists,
-    required this.showMissingImageNote,
-  });
-
-  /// Πλήρης διαδρομή της εικόνας για εμφάνιση· null όταν δεν υπάρχει εικόνα.
-  final String? displayImagePath;
-
-  /// Ενεργοποιεί τον διακόπτη διαγραφής αρχείου.
-  final bool imageFileExists;
-
-  /// Σημείωση «το αρχείο εικόνας δεν βρέθηκε στο δίσκο».
-  final bool showMissingImageNote;
-
-  @override
-  State<BuildingMapFloorDeleteDialog> createState() =>
-      _BuildingMapFloorDeleteDialogState();
-}
-
-class _BuildingMapFloorDeleteDialogState
-    extends State<BuildingMapFloorDeleteDialog> {
-  var _deleteImageFile = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final errorColor = Theme.of(context).colorScheme.error;
-    final displayImagePath = widget.displayImagePath;
-    return AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       title: const Text('Διαγραφή ορόφου'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Να διαγραφεί το φύλλο κάτοψης;\n\n'
-              'Ο σχεδιασμός στο χάρτη για τα τμήματα που δένονται σε αυτό το φύλλο '
-              'θα χαθεί: η θέση και η περιοχή στο χάρτη θα μηδενιστούν.',
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Διαγραφή αρχείου εικόνας από το δίσκο'),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_deleteImageFile)
-                    Text(
-                      'Η εικόνα του χάρτη θα διαγραφεί οριστικά από το δίσκο.',
-                      style: TextStyle(color: errorColor),
-                    )
-                  else
-                    const Text(
-                      'Από προεπιλογή η εικόνα διατηρείται στον φάκελο της εφαρμογής.',
-                    ),
-                  if (displayImagePath != null &&
-                      displayImagePath.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      displayImagePath,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ] else if (widget.showMissingImageNote) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Το αρχείο εικόνας δεν βρέθηκε στο δίσκο.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-              value: _deleteImageFile,
-              onChanged: widget.imageFileExists
-                  ? (v) => setState(() => _deleteImageFile = v)
-                  : null,
-            ),
-          ],
-        ),
+      content: const Text(
+        'Να διαγραφεί ο όροφος μαζί με την κάτοψή του;\n\n'
+        'Ο σχεδιασμός στο χάρτη για τα τμήματα που δένονται σε αυτόν τον όροφο '
+        'θα χαθεί: η θέση και η περιοχή στο χάρτη θα μηδενιστούν.',
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(dialogContext, false),
           child: const Text('Άκυρο'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            BuildingMapFloorDeleteChoice(deleteImageFile: _deleteImageFile),
-          ),
+          onPressed: () => Navigator.pop(dialogContext, true),
           child: const Text('Διαγραφή'),
         ),
       ],
-    );
-  }
+    ),
+  );
+  return go ?? false;
 }

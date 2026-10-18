@@ -5,37 +5,66 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Η οθόνη του αιτούντα: ποιον βλέπει, σε ποιον στέλνει, και τι μαθαίνει πίσω.
+///
+/// Ο «κοινός φάκελος» είναι εδώ ένας χάρτης: ό,τι στέλνει η οθόνη μπαίνει σε
+/// αυτόν, και ό,τι μαζεύει ο παραλήπτης βγαίνει — όπως στο δίκτυο.
 void main() {
+  final now = DateTime(2026, 9, 28, 10, 0, 17);
+
   SessionLivenessMark holder({
     String station = 'PC922',
     String instance = 'run-a',
     bool listens = true,
+    DateTime? startedAt,
     DateTime? lastSeen,
   }) => SessionLivenessMark(
     station: station,
     version: '0.58.0',
-    startedAt: DateTime(2026, 9, 28, 8),
+    startedAt: startedAt ?? DateTime(2026, 9, 28, 8),
     lastSeen: lastSeen ?? DateTime(2026, 9, 28, 10),
     instance: instance,
     listensForShutdownRequests: listens,
   );
 
+  late Map<String, StationShutdownRequest> folder;
+  late List<String> sentTo;
+  late List<SessionLivenessMark> holders;
+
+  String keyOf(SessionLivenessMark h) => '${h.station}|${h.instance}';
+
+  setUp(() {
+    folder = {};
+    sentTo = [];
+    holders = [holder()];
+  });
+
   Future<void> pump(
     WidgetTester tester, {
-    required List<SessionLivenessMark> holders,
-    Future<bool> Function(SessionLivenessMark, bool)? sendRequest,
+    String? Function(SessionLivenessMark, bool)? failSend,
     Future<StationShutdownReply?> Function(SessionLivenessMark)? takeDenial,
-    DateTime? now,
+    Duration refreshInterval = const Duration(seconds: 5),
   }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: SchemaUpgradeWaitingPanel(
             loadHolders: () async => holders,
-            sendRequest: sendRequest ?? (_, _) async => true,
+            sendRequest: (h, immediate) async {
+              final failure = failSend?.call(h, immediate);
+              if (failure != null) return failure;
+              sentTo.add('${h.station}|$immediate');
+              folder[keyOf(h)] = StationShutdownRequest(
+                fromStation: 'PC901',
+                requestedAt: now,
+                immediate: immediate,
+              );
+              return null;
+            },
+            pendingRequest: (h) async => folder[keyOf(h)],
             takeDenial: takeDenial ?? (_) async => null,
-            now: () => now ?? DateTime(2026, 9, 28, 10, 0, 17),
+            now: () => now,
             myStation: 'PC901',
+            refreshInterval: refreshInterval,
           ),
         ),
       ),
@@ -43,22 +72,27 @@ void main() {
     await tester.pump();
   }
 
+  Future<void> nextRefresh(WidgetTester tester) async {
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+  }
+
+  ButtonStyleButton button(WidgetTester tester, String label) =>
+      tester.widget<ButtonStyleButton>(
+        find.ancestor(
+          of: find.text(label),
+          matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+        ),
+      );
+
   testWidgets('δείχνει ποιος κρατά τη βάση', (tester) async {
-    await pump(tester, holders: [holder()]);
+    await pump(tester);
 
     expect(find.textContaining('PC922'), findsWidgets);
   });
 
   testWidgets('το αίτημα φτάνει στον σταθμό που ακούει', (tester) async {
-    final sentTo = <String>[];
-    await pump(
-      tester,
-      holders: [holder()],
-      sendRequest: (h, immediate) async {
-        sentTo.add('${h.station}|$immediate');
-        return true;
-      },
-    );
+    await pump(tester);
 
     await tester.tap(find.text('Αίτημα κλεισίματος'));
     await tester.pump();
@@ -67,15 +101,7 @@ void main() {
   });
 
   testWidgets('το άμεσο κλείσιμο στέλνει άλλο είδος αιτήματος', (tester) async {
-    final sentTo = <String>[];
-    await pump(
-      tester,
-      holders: [holder()],
-      sendRequest: (h, immediate) async {
-        sentTo.add('${h.station}|$immediate');
-        return true;
-      },
-    );
+    await pump(tester);
 
     await tester.tap(find.text('Άμεσο κλείσιμο'));
     await tester.pump();
@@ -86,106 +112,202 @@ void main() {
   testWidgets('μετά την αποστολή λέει πότε θα δει ο συνάδελφος το αίτημα', (
     tester,
   ) async {
-    await pump(tester, holders: [holder()]);
+    await pump(tester);
 
     await tester.tap(find.text('Αίτημα κλεισίματος'));
     await tester.pump();
 
-    expect(find.textContaining('θα δει το αίτημα σε 0:43'), findsOneWidget);
+    expect(find.textContaining('PC922 θα το δει σε 0:43'), findsOneWidget);
+  });
+
+  testWidgets('στο άμεσο κλείσιμο λέει πότε θα ΚΛΕΙΣΕΙ η εφαρμογή — ο '
+      'συνάδελφος δεν βλέπει αίτημα να απαντήσει', (tester) async {
+    await pump(tester);
+
+    await tester.tap(find.text('Άμεσο κλείσιμο'));
+    await tester.pump();
+
+    expect(
+      find.textContaining('η εφαρμογή του PC922 θα κλείσει σε 0:43'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('θα το δει'), findsNothing);
+  });
+
+  testWidgets('μετά το αίτημα το κουμπί του μένει γκρίζο, το άμεσο κλείσιμο '
+      'μένει διαθέσιμο για κλιμάκωση', (tester) async {
+    await pump(tester);
+
+    await tester.tap(find.text('Αίτημα κλεισίματος'));
+    await tester.pump();
+    await nextRefresh(tester);
+
+    expect(button(tester, 'Αίτημα κλεισίματος').onPressed, isNull);
+    expect(button(tester, 'Άμεσο κλείσιμο').onPressed, isNotNull);
+
+    await tester.tap(find.text('Άμεσο κλείσιμο'));
+    await tester.pump();
+
+    expect(sentTo, ['PC922|false', 'PC922|true']);
+    expect(button(tester, 'Άμεσο κλείσιμο').onPressed, isNull);
+  });
+
+  testWidgets('δεύτερο πάτημα δεν ξαναστέλνει', (tester) async {
+    await pump(tester);
+
+    await tester.tap(find.text('Άμεσο κλείσιμο'));
+    await tester.pump();
+    await tester.tap(find.text('Άμεσο κλείσιμο'));
+    await tester.pump();
+
+    expect(sentTo, ['PC922|true']);
+  });
+
+  testWidgets('όταν ο συνάδελφος μαζέψει το αίτημα, η οθόνη λέει ότι το είδε', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('Αίτημα κλεισίματος'));
+    await tester.pump();
+
+    folder.clear();
+    await nextRefresh(tester);
+
+    expect(find.textContaining('PC922 είδε το αίτημα'), findsOneWidget);
+  });
+
+  testWidgets('ξανάνοιγμα της οθόνης: το αίτημα που περιμένει στον φάκελο '
+      'φαίνεται, και δεν προσφέρεται να ξανασταλεί', (tester) async {
+    folder[keyOf(holders.single)] = StationShutdownRequest(
+      fromStation: 'PC901',
+      requestedAt: now,
+      immediate: false,
+    );
+
+    await pump(tester);
+
+    expect(find.textContaining('PC922 θα το δει σε 0:43'), findsOneWidget);
+    expect(button(tester, 'Αίτημα κλεισίματος').onPressed, isNull);
+  });
+
+  testWidgets('ο συνάδελφος ξανάνοιξε την εφαρμογή του: κανένα «Στάλθηκε» '
+      'για αίτημα που δεν του στάλθηκε ποτέ', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('Άμεσο κλείσιμο'));
+    await tester.pump();
+
+    // Το PC922 μάζεψε το αίτημα, έκλεισε, και ξανάνοιξε — ίδια ταυτότητα
+    // εφαρμογής, νέα εκκίνηση.
+    folder.clear();
+    holders = [holder(startedAt: DateTime(2026, 9, 28, 10, 0, 5))];
+    await nextRefresh(tester);
+
+    expect(find.textContaining('Στάλθηκε'), findsNothing);
+    expect(find.textContaining('θα κλείσει'), findsNothing);
+    expect(find.text('Μπορεί να λάβει αίτημα κλεισίματος.'), findsOneWidget);
+    expect(button(tester, 'Άμεσο κλείσιμο').onPressed, isNotNull);
+  });
+
+  testWidgets('πέρασε η ώρα και ο συνάδελφος δεν το είδε: το λέει', (
+    tester,
+  ) async {
+    holders = [holder(lastSeen: DateTime(2026, 9, 28, 9, 58))];
+    folder[keyOf(holders.single)] = StationShutdownRequest(
+      fromStation: 'PC901',
+      requestedAt: now,
+      immediate: false,
+    );
+
+    await pump(tester);
+
+    expect(find.textContaining('δεν το έχει δει ακόμη'), findsOneWidget);
   });
 
   testWidgets('σταθμός με παλιά έκδοση δεν παίρνει αίτημα', (tester) async {
-    final sentTo = <String>[];
-    await pump(
-      tester,
-      holders: [holder(listens: false)],
-      sendRequest: (h, _) async {
-        sentTo.add(h.station);
-        return true;
-      },
-    );
+    holders = [holder(listens: false)];
+    await pump(tester);
 
-    expect(find.textContaining('Παλιά έκδοση'), findsOneWidget);
+    expect(find.textContaining('παλιά έκδοση'), findsWidgets);
     // Χωρίς κανέναν που να ακούει, δεν προσφέρεται καν κουμπί.
     expect(find.text('Αίτημα κλεισίματος'), findsNothing);
     expect(sentTo, isEmpty);
   });
 
+  testWidgets('εφαρμογή που μόλις ξεκίνησε δεν βαφτίζεται «παλιά έκδοση»', (
+    tester,
+  ) async {
+    holders = [
+      holder(listens: false, startedAt: DateTime(2026, 9, 28, 10, 0, 10)),
+    ];
+    await pump(tester);
+
+    expect(find.textContaining('ξεκινά ακόμη'), findsOneWidget);
+    expect(find.textContaining('παλιά έκδοση'), findsNothing);
+  });
+
   testWidgets(
     'όταν κάποιος ακούει και κάποιος όχι, το αίτημα πάει μόνο στον πρώτο',
     (tester) async {
-      final sentTo = <String>[];
-      await pump(
-        tester,
-        holders: [
-          holder(station: 'PC922', instance: 'a'),
-          holder(station: 'PC777', instance: 'b', listens: false),
-        ],
-        sendRequest: (h, _) async {
-          sentTo.add(h.station);
-          return true;
-        },
-      );
+      holders = [
+        holder(station: 'PC922', instance: 'a'),
+        holder(station: 'PC777', instance: 'b', listens: false),
+      ];
+      await pump(tester);
 
       await tester.tap(find.text('Αίτημα κλεισίματος'));
       await tester.pump();
 
-      expect(sentTo, ['PC922']);
+      expect(sentTo, ['PC922|false']);
     },
   );
 
-  testWidgets('η άρνηση του συναδέλφου φτάνει στην οθόνη', (tester) async {
+  testWidgets('η άρνηση του συναδέλφου φτάνει στην οθόνη και ξαναζωντανεύει '
+      'το κουμπί', (tester) async {
+    StationShutdownReply? denial;
+    await pump(tester, takeDenial: (h) async => denial);
+
+    await tester.tap(find.text('Αίτημα κλεισίματος'));
+    await tester.pump();
+    // Ο συνάδελφος μάζεψε το αίτημα και είπε «όχι τώρα».
+    folder.clear();
+    denial = StationShutdownReply(
+      fromStation: 'PC922',
+      repliedAt: DateTime(2026, 9, 28, 10, 0, 10),
+    );
+    await nextRefresh(tester);
+
+    expect(find.textContaining('αρνήθηκε'), findsOneWidget);
+    expect(button(tester, 'Αίτημα κλεισίματος').onPressed, isNotNull);
+  });
+
+  testWidgets('φάκελος που δεν δέχτηκε το αίτημα λέει γιατί', (tester) async {
     await pump(
       tester,
-      holders: [holder()],
-      takeDenial: (h) async => StationShutdownReply(
-        fromStation: h.station,
-        repliedAt: DateTime(2026, 9, 28, 10, 0, 10),
-      ),
+      failSend: (_, _) => 'ο κοινός φάκελος δεν απάντησε εγκαίρως',
     );
 
     await tester.tap(find.text('Αίτημα κλεισίματος'));
     await tester.pump();
-    // Ο επόμενος γύρος ανανέωσης μαζεύει την απάντηση.
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pump();
 
-    expect(find.textContaining('αρνήθηκε'), findsOneWidget);
-  });
-
-  testWidgets('φάκελος που δεν δέχτηκε το αίτημα το λέει', (tester) async {
-    await pump(tester, holders: [holder()], sendRequest: (_, _) async => false);
-
-    await tester.tap(find.text('Αίτημα κλεισίματος'));
-    await tester.pump();
-
-    expect(find.textContaining('δεν στάλθηκε'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'δεν στάλθηκε: ο κοινός φάκελος δεν απάντησε εγκαίρως',
+      ),
+      findsOneWidget,
+    );
+    expect(button(tester, 'Αίτημα κλεισίματος').onPressed, isNotNull);
   });
 
   testWidgets('όταν αδειάσει το πεδίο, το λέει καθαρά', (tester) async {
-    await pump(tester, holders: const []);
+    holders = const [];
+    await pump(tester);
 
     expect(find.textContaining('Κανείς άλλος δεν κρατά'), findsOneWidget);
     expect(find.text('Αίτημα κλεισίματος'), findsNothing);
   });
 
   testWidgets('η λίστα ανανεώνεται μόνη της χωρίς Επαναδοκιμή', (tester) async {
-    var holders = [holder()];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SchemaUpgradeWaitingPanel(
-            loadHolders: () async => holders,
-            sendRequest: (_, _) async => true,
-            takeDenial: (_) async => null,
-            now: () => DateTime(2026, 9, 28, 10, 0, 17),
-            myStation: 'PC901',
-            refreshInterval: const Duration(seconds: 2),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
+    await pump(tester, refreshInterval: const Duration(seconds: 2));
     expect(find.textContaining('PC922'), findsWidgets);
 
     // Ο συνάδελφος έκλεισε την εφαρμογή του.
