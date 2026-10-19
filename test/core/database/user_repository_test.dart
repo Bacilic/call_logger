@@ -473,5 +473,17 @@ void main() {
         expect(row.single['notes'], isNull);
       },
     );
+
+    test('τα ονόματα για το Ιστορικό γράφονται «Όνομα Επώνυμο», όπως οι '
+        'εγγραφές του ίδιου υπαλλήλου', () async {
+      final id = await db.insert('users', {
+        'first_name': 'Βαρβάρα',
+        'last_name': 'Παπαδοπούλου',
+      });
+
+      final names = await repo.getUserDisplayNamesByIds([id]);
+
+      expect(names[id], 'Βαρβάρα Παπαδοπούλου');
+    });
   });
 }

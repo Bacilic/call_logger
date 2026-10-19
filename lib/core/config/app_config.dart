@@ -9,6 +9,7 @@ class CliArgumentsParseResult {
     this.profile,
     this.invalidParameter,
     this.restartedAfterCrash = false,
+    this.waitForProcessId,
   });
 
   /// Έγκυρο όνομα προφίλ, null στην παραγωγική εκτέλεση χωρίς `--profile`.
@@ -20,6 +21,10 @@ class CliArgumentsParseResult {
   /// True όταν η εφαρμογή επανεκκινήθηκε από τα Windows μετά από κατάρρευση.
   final bool restartedAfterCrash;
 
+  /// Η διεργασία που πρέπει να τελειώσει πριν ξεκινήσει αυτή — όταν η
+  /// εφαρμογή ξανανοίγει από τη δική της «Επανεκκίνηση».
+  final int? waitForProcessId;
+
   bool get isValid => invalidParameter == null;
 
   String buildErrorMessage() {
@@ -29,15 +34,18 @@ class CliArgumentsParseResult {
         'Επιτρεπόμενες:\n'
         '--profile <όνομα> ή --profile=<όνομα>\n'
         '(όνομα: γράμματα, αριθμοί, _, -)\n'
-        '--restarted-after-crash';
+        '--restarted-after-crash\n'
+        '--after-exit-of=<αριθμός διεργασίας>';
   }
 
   static CliArgumentsParseResult success({
     String? profile,
     bool restartedAfterCrash = false,
+    int? waitForProcessId,
   }) => CliArgumentsParseResult._(
     profile: profile,
     restartedAfterCrash: restartedAfterCrash,
+    waitForProcessId: waitForProcessId,
   );
 
   static CliArgumentsParseResult failure(String invalidParameter) =>
@@ -84,6 +92,13 @@ class AppConfig {
   /// True όταν η εφαρμογή επανεκκινήθηκε αυτόματα μετά από κατάρρευση/κόλλημα.
   static bool wasRestartedAfterCrash = false;
 
+  /// Τα ορίσματα με τα οποία ξεκίνησε η εφαρμογή — τα ξαναπερνά η
+  /// «Επανεκκίνηση», ώστε η νέα να ανοίξει στο ίδιο προφίλ.
+  static List<String> launchArguments = const [];
+
+  /// Η διεργασία που πρέπει να τελειώσει πριν προχωρήσει η εκκίνηση.
+  static int? waitForProcessId;
+
   /// Προεπιλεγμένη διαδρομή βάσης όταν τρέχει CLI προφίλ (μετά [initializeProfileStorage]).
   static String? _profileDefaultDbPath;
 
@@ -94,7 +109,7 @@ class AppConfig {
   }
 
   /// Επικυρώνει CLI ορίσματα. Κενή λίστα = παραγωγή.
-  /// Επιτρέπονται `--profile` και `--restarted-after-crash`.
+  /// Επιτρέπονται `--profile`, `--restarted-after-crash` και `--after-exit-of`.
   static CliArgumentsParseResult validateCliArguments(List<String> arguments) {
     if (arguments.isEmpty) {
       return CliArgumentsParseResult.success();
@@ -102,11 +117,23 @@ class AppConfig {
 
     String? profile;
     var restartedAfterCrash = false;
+    int? waitForProcessId;
     var i = 0;
     while (i < arguments.length) {
       final arg = arguments[i];
       if (arg == '--restarted-after-crash') {
         restartedAfterCrash = true;
+        i += 1;
+        continue;
+      }
+
+      const afterExitPrefix = '--after-exit-of=';
+      if (arg.startsWith(afterExitPrefix)) {
+        final id = int.tryParse(arg.substring(afterExitPrefix.length));
+        if (id == null || id <= 0 || waitForProcessId != null) {
+          return CliArgumentsParseResult.failure(arg);
+        }
+        waitForProcessId = id;
         i += 1;
         continue;
       }
@@ -152,6 +179,7 @@ class AppConfig {
     return CliArgumentsParseResult.success(
       profile: profile,
       restartedAfterCrash: restartedAfterCrash,
+      waitForProcessId: waitForProcessId,
     );
   }
 
@@ -194,6 +222,8 @@ class AppConfig {
       'Τα CLI ορίσματα πρέπει να έχουν επικυρωθεί πριν την εκκίνηση.',
     );
     wasRestartedAfterCrash = result.restartedAfterCrash;
+    launchArguments = List.unmodifiable(arguments);
+    waitForProcessId = result.waitForProcessId;
     final profile = resolveProfileName(
       arguments,
       defaultProfileWhenAbsent: defaultProfileWhenAbsent,

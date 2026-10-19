@@ -190,6 +190,27 @@ Future<bool> writeShutdownRequest({
   required String toInstance,
   required StationShutdownRequest request,
   Duration timeout = const Duration(seconds: 3),
+}) async =>
+    await sendShutdownRequest(
+      logsDirectory: logsDirectory,
+      toStation: toStation,
+      toInstance: toInstance,
+      request: request,
+      timeout: timeout,
+    ) ==
+    null;
+
+/// Όπως το [writeShutdownRequest], αλλά λέει **γιατί** απέτυχε: `null` όταν
+/// το σημείωμα έφτασε στον δίσκο, αλλιώς η αιτία σε λόγια του χρήστη.
+///
+/// Ο αιτών τη δείχνει κάτω από τον σταθμό. Ένα σκέτο «απέτυχε» θα τον άφηνε
+/// να μαντεύει αν φταίει το δίκτυο, ο φάκελος ή τα δικαιώματα των Windows.
+Future<String?> sendShutdownRequest({
+  required String logsDirectory,
+  required String toStation,
+  required String toInstance,
+  required StationShutdownRequest request,
+  Duration timeout = const Duration(seconds: 3),
 }) async {
   final target = File(
     p.join(logsDirectory, shutdownRequestFileNameFor(toStation, toInstance)),
@@ -198,8 +219,8 @@ Future<bool> writeShutdownRequest({
   try {
     await staging.writeAsString(request.encode(), flush: true).timeout(timeout);
     await staging.rename(target.path).timeout(timeout);
-    return true;
-  } catch (_) {
+    return null;
+  } catch (e) {
     // Ο φάκελος δεν απάντησε. Ο αιτών το μαθαίνει και μπορεί να σηκώσει
     // τηλέφωνο — μια αποτυχία εδώ δεν επιτρέπεται να ρίξει την οθόνη του.
     try {
@@ -207,8 +228,53 @@ Future<bool> writeShutdownRequest({
     } catch (_) {
       // Το προσωρινό αρχείο είναι σκουπίδι, όχι πρόβλημα: λήγει με τον φάκελο.
     }
-    return false;
+    return shutdownRequestFailureReason(e);
   }
+}
+
+/// Η αιτία μιας αποτυχημένης αποστολής, γραμμένη για τον χρήστη.
+String shutdownRequestFailureReason(Object error) {
+  if (error is TimeoutException) {
+    return 'ο κοινός φάκελος δεν απάντησε εγκαίρως';
+  }
+  if (error is FileSystemException) {
+    final detail = error.osError?.message.trim() ?? '';
+    return detail.isEmpty
+        ? 'ο κοινός φάκελος δεν δέχτηκε την εγγραφή'
+        : 'ο κοινός φάκελος δεν δέχτηκε την εγγραφή ($detail)';
+  }
+  return '$error';
+}
+
+/// Το σημείωμα που **περιμένει ακόμη** τον παραλήπτη, χωρίς να το αγγίξει.
+///
+/// Είναι η μνήμη του αιτούντα: η οθόνη αναμονής ρωτά τον φάκελο αντί να
+/// θυμάται τι έστειλε. Έτσι η εικόνα επιβιώνει όταν ο αιτών κλείσει και
+/// ξανανοίξει την εφαρμογή του — το σημείωμα είναι ακόμη εκεί, και ο
+/// παραλήπτης θα το βρει. Όταν λείψει, ο παραλήπτης το μάζεψε.
+///
+/// **Μόνο ανάγνωση:** το σημείωμα ανήκει στον παραλήπτη. Ληγμένο σημείωμα
+/// απαντά `null` (δεν θα τιμηθεί ποτέ), αλλά το σβήνει ο ίδιος ο παραλήπτης.
+///
+/// **Φάκελος που δεν απαντά πετά, δεν απαντά `null`.** Το `null` σημαίνει «ο
+/// παραλήπτης το μάζεψε»· αν το έλεγε και ένας χαμένος φάκελος, η οθόνη θα
+/// ανακοίνωνε ότι ο συνάδελφος είδε αίτημα που ίσως δεν έφτασε ποτέ.
+Future<StationShutdownRequest?> pendingShutdownRequestFor({
+  required String logsDirectory,
+  required String toStation,
+  required String toInstance,
+  required DateTime now,
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  final file = File(
+    p.join(logsDirectory, shutdownRequestFileNameFor(toStation, toInstance)),
+  );
+  if (!await file.exists().timeout(timeout)) return null;
+  final request = StationShutdownRequest.decode(
+    await file.readAsString().timeout(timeout),
+  );
+  if (request == null || !request.isFreshAt(now)) return null;
+  return request;
 }
 
 /// Το σημείωμα που περιμένει **εμένα**, αν περιμένει.

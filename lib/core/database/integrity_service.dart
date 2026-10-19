@@ -81,12 +81,16 @@ class IntegrityService {
       final taskTitle = titleRows.isEmpty
           ? null
           : (titleRows.first['title'] as String?)?.trim();
-      await txn.update(
+      // Μόνο η πραγματική μετάβαση γράφεται: αν δύο σταθμοί διαγράψουν
+      // σχεδόν ταυτόχρονα, ο δεύτερος δεν αφήνει δεύτερη «διαγραφή» στο
+      // Ιστορικό για κάτι που είχε ήδη γίνει.
+      final changed = await txn.update(
         'tasks',
         {'is_deleted': 1},
-        where: 'id = ?',
+        where: 'id = ? AND COALESCE(is_deleted, 0) = 0',
         whereArgs: [id],
       );
+      if (changed == 0) return;
       await AuditService.log(
         txn,
         action: DatabaseHelper.auditActionDelete,

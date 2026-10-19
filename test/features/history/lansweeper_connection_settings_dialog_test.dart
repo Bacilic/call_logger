@@ -2,6 +2,7 @@
 //
 //   flutter test test/features/history/lansweeper_connection_settings_dialog_test.dart
 
+import 'package:call_logger/core/services/gemini_ticket_service.dart';
 import 'package:call_logger/features/history/providers/gemini_settings_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_connection_probe_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_ticket_submit_config_provider.dart';
@@ -16,6 +17,16 @@ import 'lansweeper_report_test_doubles.dart';
 class _GeminiFallbackEnabledOnNotifier extends GeminiFallbackEnabledNotifier {
   @override
   bool build() => true;
+}
+
+class _NoAutoResubmit extends GeminiAutoResubmitEnabledNotifier {
+  @override
+  bool build() => false;
+}
+
+class _NoProbeCache extends GeminiModelsProbeCacheNotifier {
+  @override
+  GeminiModelsProbeCache? build() => null;
 }
 
 void main() {
@@ -47,8 +58,9 @@ void main() {
       bool fallbackEnabled = false,
       String apiUrl = 'http://test/api.aspx',
       String geminiEndpoint = '',
+      Size window = const Size(1400, 1000),
     }) async {
-      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.physicalSize = window;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
         tester.view.resetPhysicalSize();
@@ -64,6 +76,12 @@ void main() {
           lansweeperTicketSubmitConfigProvider.overrideWith(
             FixedLansweeperTicketSubmitConfigNotifier.new,
           ),
+          // Όλες οι καρτέλες χτίζονται από την αρχή (ο διάλογος μετρά την πιο
+          // ψηλή), άρα και οι ρυθμίσεις ΤΝ που αλλιώς θα διάβαζαν τη βάση.
+          geminiApiKeyProvider.overrideWith(FixedGeminiApiKeyNotifier.new),
+          geminiEndpointProvider.overrideWith(FixedGeminiEndpointNotifier.new),
+          geminiAutoResubmitEnabledProvider.overrideWith(_NoAutoResubmit.new),
+          geminiModelsProbeCacheProvider.overrideWith(_NoProbeCache.new),
           geminiFallbackEnabledProvider.overrideWith(
             fallbackEnabled
                 ? _GeminiFallbackEnabledOnNotifier.new
@@ -125,6 +143,37 @@ void main() {
 
     // Το κλειδί ταξιδεύει ΜΕΣΑ στη διεύθυνση: με http το διαβάζει όποιος
     // παρακολουθεί τη σύνδεση. Η εφαρμογή προειδοποιεί — δεν απαγορεύει.
+    /// Πόσο κυλά το σώμα των καρτελών· 0 = όλα φαίνονται.
+    double hiddenBelow(WidgetTester tester) {
+      final scrollable = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      return scrollable.position.maxScrollExtent;
+    }
+
+    testWidgets(
+      'με χώρο στο παράθυρο: η «Τεχνητή Νοημοσύνη» φαίνεται ολόκληρη χωρίς κύλιση',
+      (tester) async {
+        await pumpDialog(tester, window: const Size(1400, 1300));
+        await tester.tap(find.text('Τεχνητή Νοημοσύνη'));
+        await pumpUntilSettled(tester);
+        expect(hiddenBelow(tester), 0);
+      },
+    );
+
+    testWidgets('σε μικρό παράθυρο ο διάλογος χωρά και κυλά', (tester) async {
+      await pumpDialog(tester, window: const Size(1000, 600));
+      await tester.tap(find.text('Τεχνητή Νοημοσύνη'));
+      await pumpUntilSettled(tester);
+      expect(hiddenBelow(tester), greaterThan(0));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('http στο URL API: προειδοποιεί για το εκτεθειμένο κλειδί', (
       tester,
     ) async {

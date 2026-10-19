@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/building_map_floor.dart';
@@ -83,18 +86,101 @@ class BuildingMapRepository {
     return map;
   }
 
+  /// Οι κατόψεις με το **αποτύπωμα** της εικόνας τους — ποτέ τα ίδια τα bytes.
+  ///
+  /// Οι στήλες γράφονται ρητά: η λίστα διαβάζεται συχνά από το δίκτυο, και ένα
+  /// `SELECT *` πάνω στη σύνδεση με τις εικόνες θα κουβαλούσε εκατοντάδες KB σε
+  /// κάθε άνοιγμα του χάρτη.
   Future<List<BuildingMapFloor>> listBuildingMapFloors() async {
-    final rows = await db.query(
-      'building_map_floors',
-      orderBy: 'sort_order ASC, id ASC',
-    );
+    final rows = await db.rawQuery('''
+      SELECT f.id, f.sort_order, f.label, f.floor_group, f.image_path,
+             f.rotation_degrees, i.image_hash, i.previous_image_hash
+      FROM building_map_floors f
+      LEFT JOIN building_map_floor_images i ON i.floor_id = f.id
+      ORDER BY f.sort_order ASC, f.id ASC
+    ''');
     return rows.map(BuildingMapFloor.fromMap).toList();
+  }
+
+  /// Τα bytes της εικόνας του ορόφου, μαζί με το αποτύπωμά τους· `null` όταν
+  /// η κάτοψη δεν έχει ανέβει.
+  Future<({Uint8List bytes, String hash})?> readFloorImage(int floorId) async {
+    final rows = await db.query(
+      'building_map_floor_images',
+      columns: ['image_data', 'image_hash'],
+      where: 'floor_id = ?',
+      whereArgs: [floorId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final data = rows.first['image_data'];
+    final hash = rows.first['image_hash'] as String?;
+    if (data is! Uint8List || hash == null) return null;
+    return (bytes: data, hash: hash);
+  }
+
+  /// Αποθηκεύει νέα εικόνα κάτοψης· η τρέχουσα γίνεται «προηγούμενη».
+  ///
+  /// Επιστρέφει το αποτύπωμα της νέας εικόνας. Αν τα bytes είναι ίδια με την
+  /// τρέχουσα, τίποτα δεν αλλάζει — αλλιώς ένα δεύτερο ανέβασμα της ίδιας
+  /// εικόνας θα έσβηνε την πραγματική προηγούμενη.
+  Future<String> saveFloorImage(int floorId, Uint8List bytes) async {
+    final hash = floorImageHash(bytes);
+    await db.transaction((txn) async {
+      final rows = await txn.query(
+        'building_map_floor_images',
+        columns: ['image_data', 'image_hash'],
+        where: 'floor_id = ?',
+        whereArgs: [floorId],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
+        await txn.insert('building_map_floor_images', {
+          'floor_id': floorId,
+          'image_data': bytes,
+          'image_hash': hash,
+        });
+        return;
+      }
+      if (rows.first['image_hash'] == hash) return;
+      await txn.update(
+        'building_map_floor_images',
+        {
+          'previous_image_data': rows.first['image_data'],
+          'previous_image_hash': rows.first['image_hash'],
+          'image_data': bytes,
+          'image_hash': hash,
+        },
+        where: 'floor_id = ?',
+        whereArgs: [floorId],
+      );
+    });
+    return hash;
+  }
+
+  /// Ανταλλάσσει τρέχουσα και προηγούμενη εικόνα. Η ίδια ενέργεια ξανά φέρνει
+  /// πίσω αυτήν που μόλις αντικαταστάθηκε — η επαναφορά δεν χάνει τίποτα.
+  ///
+  /// `false` όταν δεν υπάρχει προηγούμενη εικόνα.
+  Future<bool> swapFloorImageWithPrevious(int floorId) async {
+    final changed = await db.rawUpdate(
+      '''
+      UPDATE building_map_floor_images
+      SET image_data = previous_image_data,
+          image_hash = previous_image_hash,
+          previous_image_data = image_data,
+          previous_image_hash = image_hash
+      WHERE floor_id = ? AND previous_image_data IS NOT NULL
+      ''',
+      [floorId],
+    );
+    return changed > 0;
   }
 
   Future<int> insertBuildingMapFloor({
     required String label,
     String? floorGroup,
-    required String copiedImagePath,
+    String copiedImagePath = '',
     required double rotationDegrees,
   }) async {
     final res = await db.rawQuery(
@@ -182,6 +268,15 @@ class BuildingMapRepository {
       if (deptId == null) continue;
       await updateDepartment(deptId, cleared);
     }
+    await db.delete(
+      'building_map_floor_images',
+      where: 'floor_id = ?',
+      whereArgs: [id],
+    );
     await db.delete('building_map_floors', where: 'id = ?', whereArgs: [id]);
   }
 }
+
+/// Το αποτύπωμα των bytes μιας εικόνας κάτοψης — ίδια bytes, ίδιο αποτύπωμα σε
+/// κάθε σταθμό. Με αυτό ονομάζεται και το τοπικό αντίγραφο κάθε σταθμού.
+String floorImageHash(Uint8List bytes) => sha1.convert(bytes).toString();

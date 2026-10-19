@@ -1,5 +1,5 @@
 // Ταξινόμηση του πίνακα Ιστορικού κλήσεων: τι τιμή παίρνει κάθε γραμμή ανά
-// στήλη και με ποια σειρά βγαίνουν. Τιμές από εκτέλεση του σημερινού κώδικα.
+// στήλη και με ποια σειρά βγαίνουν.
 //
 //   flutter test test/features/history/history_call_row_sort_test.dart
 
@@ -77,14 +77,11 @@ void main() {
     ]);
   });
 
-  test(
-    'κείμενα συγκρίνονται χαρακτήρα-χαρακτήρα: τονισμένο κεφαλαίο πριν από το Α',
-    () {
-      // Φωτογραφία της σημερινής συμπεριφοράς (δες Πρόχειρο στις Βελτιώσεις).
-      expect(ids(sortHistoryCallRows(rows, 1, true)), [2, 1, 3, 4]);
-      expect(ids(sortHistoryCallRows(rows, 3, true)), [3, 2, 1, 4]);
-    },
-  );
+  test('κείμενα: η «Όλγα» στο Ο, τα κενά στο τέλος και στις δύο φορές', () {
+    expect(ids(sortHistoryCallRows(rows, 1, true)), [1, 3, 2, 4]);
+    expect(ids(sortHistoryCallRows(rows, 1, false)), [2, 3, 1, 4]);
+    expect(ids(sortHistoryCallRows(rows, 3, true)), [1, 4, 2, 3]);
+  });
 
   test(
     'διάρκεια: αριθμός και αριθμητικό κείμενο μετρούν, τα υπόλοιπα = -1',

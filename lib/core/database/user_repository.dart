@@ -68,8 +68,9 @@ class UserRepository {
     await updateUser(userId, {'phones': numbers}, expected: null);
   }
 
-  /// Ονόματα εμφάνισης («Επώνυμο Όνομα») για τα δοσμένα ids — και διαγραμμένων:
-  /// οι εγγραφές audit αναφέρουν χρήστες που μπορεί να μην υπάρχουν πια.
+  /// Ονόματα εμφάνισης («Όνομα Επώνυμο», όπως σε όλη την εφαρμογή) για τα
+  /// δοσμένα ids — και διαγραμμένων: οι εγγραφές audit αναφέρουν χρήστες που
+  /// μπορεί να μην υπάρχουν πια.
   Future<Map<int, String>> getUserDisplayNamesByIds(Iterable<int> ids) async {
     final idList = ids.toSet().toList();
     if (idList.isEmpty) return const <int, String>{};
@@ -84,9 +85,7 @@ class UserRepository {
     for (final row in rows) {
       final id = row['id'] as int?;
       if (id == null) continue;
-      final lastName = (row['last_name'] as String?)?.trim() ?? '';
-      final firstName = (row['first_name'] as String?)?.trim() ?? '';
-      final name = '$lastName $firstName'.trim();
+      final name = _support.userDisplayNameFromRow(row);
       if (name.isNotEmpty) out[id] = name;
     }
     return out;

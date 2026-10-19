@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/tasks_repository.dart';
+import 'package:call_logger/core/errors/task_deleted_elsewhere_exception.dart';
 import 'package:call_logger/core/errors/task_stale_exception.dart';
 import 'package:call_logger/features/tasks/models/task.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -119,6 +120,33 @@ void main() {
 
       final row = await readTask(scenario.id);
       expect(row.status, TaskStatus.open.toDbValue);
+    });
+
+    test('updateTask: διαγραμμένη από άλλον σταθμό δεν ανασταίνεται', () async {
+      final id = await repo.createTask(
+        Task(
+          title: 'Εκτυπωτής Γραμματείας ΤΕΠ',
+          dueDate: DateTime(2026, 10, 17, 10).toIso8601String(),
+          status: 'open',
+        ),
+      );
+      // Η εικόνα που κρατά η φόρμα επεξεργασίας του σταθμού Α.
+      final open = await readTask(id);
+
+      // Ο σταθμός Β τη διαγράφει.
+      await repo.deleteTask(id);
+
+      await expectLater(
+        () => repo.updateTask(
+          open.copyWith(title: 'Εκτυπωτής Γραμματείας ΤΕΠ — νέο τόνερ'),
+          expected: open,
+        ),
+        throwsA(isA<TaskDeletedElsewhereException>()),
+      );
+
+      final row = await readTask(id);
+      expect(row.isDeleted, isTrue, reason: 'Η διαγραφή πρέπει να μείνει');
+      expect(row.title, 'Εκτυπωτής Γραμματείας ΤΕΠ');
     });
 
     test('updateTask: χωρίς διένεξη γράφει κανονικά', () async {

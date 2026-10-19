@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
-import '../../../../core/services/building_map_storage.dart';
 import '../../providers/department_directory_provider.dart';
 import '../controllers/building_map_controller.dart';
 import '../models/building_map_jump_target.dart';
@@ -13,6 +12,7 @@ import '../providers/building_map_providers.dart';
 import 'building_map_empty_canvas_message.dart';
 import '../services/building_map_department_eligibility.dart';
 import '../services/building_map_floor_ordering.dart';
+import '../services/floor_plan_image_cache.dart';
 import 'building_map_omnisearch_field.dart';
 import 'building_map_search_unresolved_banner.dart';
 import 'building_map_sheet_viewport.dart';
@@ -36,17 +36,19 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
   final TextEditingController _globalSearchController = TextEditingController();
   final FocusNode _globalSearchFocusNode = FocusNode();
 
-  String? _scheduledDecodePath;
   String? _scheduledResolveRequest;
-  String _resolvedAbsImgPath = '';
 
-  /// Υπάρχει η εικόνα της κάτοψης; Απαντιέται **μία φορά** μαζί με τη διαδρομή.
+  /// Το τοπικό αρχείο της κάτοψης· κενό όσο δεν υπάρχει (δεν ανέβηκε ή δεν
+  /// κατέβηκε ακόμη). Λύνεται **μία φορά ανά εικόνα**, έξω από το χτίσιμο.
   ///
   /// Ο έλεγχος ζούσε μέσα στο χτίσιμο, που τρέχει σε κάθε αλλαγή επιλογής,
   /// λειτουργίας ή καταλόγου τμημάτων — και σε κάθε κίνηση του δείκτη πάνω στον
-  /// καμβά. Ρωτούσε τον δίσκο κάθε φορά, παγώνοντας την οθόνη όσο απαντούσε·
-  /// με τις κατόψεις σε δικτυακό φάκελο αυτό μετριέται σε δευτερόλεπτα.
-  bool _resolvedImgExists = false;
+  /// καμβά. Ρωτούσε τον δίσκο κάθε φορά, παγώνοντας την οθόνη όσο απαντούσε.
+  String _resolvedAbsImgPath = '';
+
+  /// Η κάτοψη του τρέχοντος ορόφου έρχεται ακόμη — ο καμβάς δείχνει «φόρτωση»
+  /// και όχι «δεν έχει ανέβει».
+  bool _resolving = false;
 
   /// Οι κατόψεις, διαβασμένες **μία φορά ανά ανανέωση**.
   ///
@@ -72,32 +74,28 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
     super.dispose();
   }
 
-  void _scheduleDecodeForCurrentPath(String imgPath) {
-    if (_scheduledDecodePath == imgPath) return;
-    _scheduledDecodePath = imgPath;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(buildingMapControllerProvider).decodeImageForPath(imgPath);
-    });
-  }
-
-  /// Λύνει τη διαδρομή ΚΑΙ ρωτά αν υπάρχει — εκτός του νήματος της οθόνης.
+  /// Φέρνει το τοπικό αρχείο της κάτοψης και μετρά το μέγεθός της — εκτός
+  /// του νήματος της οθόνης, μία φορά ανά εικόνα.
   ///
-  /// Το αίτημα κρατά και το [reloadSeq]: όταν ο χρήστης αντικαταστήσει την
-  /// εικόνα κρατώντας το ίδιο όνομα, η ίδια διαδρομή πρέπει να ξαναρωτηθεί.
-  void _scheduleResolveForCurrentPath(String storedPath, int reloadSeq) {
-    final request = '$reloadSeq|$storedPath';
+  /// Το αίτημα κρατά το αποτύπωμα της εικόνας: μόλις ανέβει νέα κάτοψη (εδώ ή
+  /// σε άλλον σταθμό), το αποτύπωμα αλλάζει και η νέα εικόνα κατεβαίνει.
+  void _scheduleResolveForFloor(BuildingMapFloor? floor) {
+    final request = '${floor?.id}|${floor?.imageHash}';
     if (_scheduledResolveRequest == request) return;
     _scheduledResolveRequest = request;
+    // Η εικόνα του προηγούμενου ορόφου δεν μένει στην οθόνη όσο έρχεται η νέα.
+    _resolvedAbsImgPath = '';
+    _resolving = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final abs = storedPath.trim().isEmpty
-          ? ''
-          : await BuildingMapStorage.resolveToAbsolute(storedPath);
-      final exists = abs.isEmpty ? false : await File(abs).exists();
+      final file = floor == null
+          ? null
+          : await FloorPlanImageCache.instance.fileFor(floor);
       if (!mounted || _scheduledResolveRequest != request) return;
       setState(() {
-        _resolvedAbsImgPath = abs;
-        _resolvedImgExists = exists;
+        _resolvedAbsImgPath = file?.path ?? '';
+        _resolving = false;
       });
+      await ref.read(buildingMapControllerProvider).decodeImageFile(file?.path);
     });
   }
 
@@ -166,15 +164,14 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
 
         final sheetStr = currentSheetId?.toString() ?? '';
         final rotRad = (current?.rotationDegrees ?? 0) * math.pi / 180;
-        final imgPath = current?.imagePath ?? '';
-        _scheduleResolveForCurrentPath(imgPath, reloadSeq);
-        final imgFile = File(_resolvedAbsImgPath);
+        _scheduleResolveForFloor(current);
+        final imgPath = _resolvedAbsImgPath;
+        final imgFile = File(imgPath);
 
-        final imgExists = _resolvedAbsImgPath.isNotEmpty && _resolvedImgExists;
+        final imgExists = imgPath.isNotEmpty || _resolving;
         final sz = decodedSize;
-        final hasActiveCanvas = current != null && imgExists && sz != null;
-
-        _scheduleDecodeForCurrentPath(imgPath);
+        final hasActiveCanvas =
+            current != null && imgPath.isNotEmpty && sz != null;
 
         final sheetDropdownPlaceholder = InputDecorator(
           decoration: const InputDecoration(
@@ -262,6 +259,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                           imgPath: imgPath,
                           imgFile: imgFile,
                           imgExists: imgExists,
+                          imageUploaded: current?.hasImage ?? false,
                           decodedSize: decodedSize,
                           activeDepartments: activeDepartments,
                           floors: floors,
@@ -283,7 +281,9 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                                 child: MapRotationPod(
                                   rotationDegrees:
                                       dragRotation ?? current!.rotationDegrees,
-                                  enabled: hasActiveCanvas,
+                                  enabled:
+                                      hasActiveCanvas &&
+                                      controller.canManageFloorPlans,
                                   onRotationChanged: (v) {
                                     ref
                                         .read(

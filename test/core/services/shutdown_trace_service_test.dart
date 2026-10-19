@@ -74,7 +74,7 @@ void main() {
       .length;
 
   /// Ο παραλήπτης της εφαρμογής: το ημερολόγιο, που σφραγίζει τον σταθμό.
-  void Function(LogRecord) appenderFor(DateTime when) {
+  Future<bool> Function(LogRecord) appenderFor(DateTime when) {
     return CrashLogService(
       logsDirectory: logsDir.path,
       appVersion: '1.0.0',
@@ -375,6 +375,134 @@ void main() {
         expect(sessionFiles(), isEmpty);
       },
     );
+
+    // Ο POPINIO σβήνει, το κλείσιμο αργεί περιμένοντας τη βάση, και το
+    // ημερολόγιο (στον POPINIO) δεν γράφει τίποτα. Το ίχνος σβηνόταν παρ' όλα
+    // αυτά — χανόταν ακριβώς το κλείσιμο που χρειάζεται διάγνωση.
+    group('ημερολόγιο που δεν απαντά', () {
+      Future<void> unreachableWriter(
+        String path,
+        String content, {
+        required bool append,
+      }) async {
+        throw const FileSystemException('ο διακομιστής δεν απαντά');
+      }
+
+      ShutdownTraceService serviceWithDeadLog() => ShutdownTraceService(
+        workingDirectory: logsDir.path,
+        appendRecord: CrashLogService(
+          logsDirectory: logsDir.path,
+          appVersion: '1.0.0',
+          now: () => fixedNow,
+          writeFile: unreachableWriter,
+        ).appendRecord,
+        now: () => fixedNow,
+      );
+
+      test('αργό κλείσιμο: το ίχνος ΜΕΝΕΙ στον δίσκο', () async {
+        final trace = serviceWithDeadLog();
+        await trace.beginSession();
+        runStep(trace, index: 0, label: 'Παράδοση συνεδρίας', durationMs: 900);
+        await trace.endSession();
+
+        expect(
+          workingFiles(),
+          [ShutdownTraceService.workingFileName],
+          reason: greekExpectMsg(
+            'Το ίχνος σβήνεται μόνο αφού γραφτεί στο ημερολόγιο',
+          ),
+        );
+        expect(trace.keptIncident, isFalse);
+      });
+
+      test(
+        'η επόμενη εκκίνηση το γράφει ως ΑΡΓΟ κλείσιμο, όχι διακοπή',
+        () async {
+          final trace = serviceWithDeadLog();
+          await trace.beginSession();
+          runStep(
+            trace,
+            index: 0,
+            label: 'Παράδοση συνεδρίας',
+            durationMs: 900,
+          );
+          await trace.endSession();
+
+          final nextBoot = DateTime(2026, 8, 10, 8, 0, 0);
+          final promoted = await ShutdownTraceService.promoteOrphanedTrace(
+            workingDirectory: logsDir.path,
+            appendRecord: appenderFor(nextBoot),
+            now: () => nextBoot,
+          );
+
+          expect(promoted, isTrue);
+          expect(workingFiles(), isEmpty);
+          final incident = await ShutdownTraceIncident.findLatest(
+            logsDir.path,
+            station: StationName.current,
+          );
+          expect(
+            incident!.wasInterrupted,
+            isFalse,
+            reason: greekExpectMsg(
+              'Το κλείσιμο ολοκληρώθηκε — απλώς άργησε· δεν κόπηκε στη μέση',
+            ),
+          );
+          expect(incident.totalMs, 900);
+          expect(incident.slowestStepLabel, 'Παράδοση συνεδρίας');
+        },
+      );
+
+      test(
+        'το επόμενο κλείσιμο γράφει το ίχνος πριν το αντικαταστήσει',
+        () async {
+          final silent = serviceWithDeadLog();
+          await silent.beginSession();
+          runStep(
+            silent,
+            index: 0,
+            label: 'Παράδοση συνεδρίας',
+            durationMs: 900,
+          );
+          await silent.endSession();
+
+          // Η εκκίνηση στο μεταξύ δεν το έγραψε (σιωπούσε κι εκεί το
+          // ημερολόγιο)· το επόμενο κλείσιμο βρίσκει το ημερολόγιο ζωντανό.
+          final next = service(now: DateTime(2026, 8, 10, 17, 0, 0));
+          await next.beginSession();
+
+          expect(incidentBlocks(), 1);
+          final incident = await ShutdownTraceIncident.findLatest(
+            logsDir.path,
+            station: StationName.current,
+          );
+          expect(incident!.slowestStepLabel, 'Παράδοση συνεδρίας');
+          expect(incident.wasInterrupted, isFalse);
+        },
+      );
+
+      test('ορφανό ίχνος: η εκκίνηση δεν το σβήνει αν δεν γράφτηκε', () async {
+        final crashed = service();
+        await crashed.beginSession();
+        runStep(crashed, index: 0, label: 'Βήμα', durationMs: 4);
+        // Χωρίς endSession — η εφαρμογή σκοτώθηκε στη μέση του κλεισίματος.
+
+        final promoted = await ShutdownTraceService.promoteOrphanedTrace(
+          workingDirectory: logsDir.path,
+          appendRecord: CrashLogService(
+            logsDirectory: logsDir.path,
+            appVersion: '1.0.0',
+            now: () => fixedNow,
+            writeFile: unreachableWriter,
+          ).appendRecord,
+        );
+
+        expect(promoted, isFalse);
+        expect(workingFiles(), [
+          ShutdownTraceService.workingFileName,
+        ], reason: greekExpectMsg('Μένει για την επόμενη εκκίνηση'));
+      });
+    });
 
     test('καθαρός φάκελος: η προαγωγή δεν βρίσκει τίποτα', () async {
       final promoted = await ShutdownTraceService.promoteOrphanedTrace(

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../../core/config/app_config.dart';
-import '../../../core/services/building_map_storage.dart';
 import '../../../core/services/portable_lamp_storage.dart';
 import '../../../core/services/portable_tool_image_storage.dart';
 import '../models/database_backup_settings.dart';
@@ -26,8 +25,8 @@ class PortableFingerprintEntry {
   String get line => '$kind|$name|$sizeBytes|$modifiedMs';
 }
 
-/// Το «δακτυλικό αποτύπωμα» των φορητών αρχείων (κατόψεις, εικονίδια, λεξικό,
-/// βάση Λάμπας): ονόματα, μεγέθη και ώρες τροποποίησης — ΟΧΙ περιεχόμενο.
+/// Το «δακτυλικό αποτύπωμα» των φορητών αρχείων (εικονίδια, λεξικό, βάση
+/// Λάμπας — οι κατόψεις ζουν πια μέσα στη βάση): ονόματα, μεγέθη και ώρες τροποποίησης — ΟΧΙ περιεχόμενο.
 ///
 /// Κοστίζει χιλιοστά του δευτερολέπτου και απαντά στο ερώτημα της Φάσης 5:
 /// «άλλαξε κάτι από όσα μπαίνουν στο πλήρες αντίγραφο;». Ίδιο αποτύπωμα ⇒
@@ -43,17 +42,6 @@ abstract final class PortableContentFingerprint {
     required PortableBackupAvailability availability,
   }) async {
     final entries = <PortableFingerprintEntry>[];
-
-    if (settings.effectiveIncludeMapImagesInBackup(availability)) {
-      try {
-        entries.addAll(
-          await _fromFiles(
-            'maps',
-            await BuildingMapStorage.listPortableImageFiles(),
-          ),
-        );
-      } catch (_) {}
-    }
 
     if (settings.effectiveIncludeToolImages(availability)) {
       try {

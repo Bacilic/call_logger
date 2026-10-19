@@ -13,6 +13,7 @@ import '../../features/tasks/models/task_settings_config.dart';
 import '../../features/tasks/services/call_task_solution_bridge.dart';
 import '../../features/tasks/utils/task_due_date_calculator.dart';
 import 'calls_repository.dart';
+import '../errors/task_deleted_elsewhere_exception.dart';
 import '../errors/task_save_exception.dart';
 import '../errors/task_stale_exception.dart';
 import '../services/current_operator.dart';
@@ -116,6 +117,9 @@ class TasksRepository {
     final oldDiff = <String, dynamic>{};
     final newDiff = <String, dynamic>{};
     for (final k in _kTaskAuditKeys) {
+      // Πεδίο που δεν γράφτηκε δεν άλλαξε (π.χ. το «διαγραμμένη», που η
+      // επεξεργασία δεν αγγίζει ποτέ).
+      if (!newMap.containsKey(k)) continue;
       final a = oldRow[k];
       final b = newMap[k];
       if ('${a ?? ''}' != '${b ?? ''}') {
@@ -1134,6 +1138,10 @@ class TasksRepository {
     if (!await _hasSnoozeHistoryColumn(db)) {
       map.remove('snooze_history_json');
     }
+    // Η επεξεργασία δεν αποφασίζει ποτέ αν η εκκρεμότητα είναι διαγραμμένη:
+    // η καρτέλα γράφεται ολόκληρη, και το «όχι διαγραμμένη» της φόρμας θα
+    // ανέσταινε μια εκκρεμότητα που διέγραψε άλλος σταθμός στο μεταξύ.
+    map.remove('is_deleted');
     final nowIso = DateTime.now().toIso8601String();
     map['updated_at'] = nowIso;
     for (final field in _kUserClearableFields) {
@@ -1156,6 +1164,9 @@ class TasksRepository {
         final oldRow = oldRows.isEmpty
             ? null
             : Map<String, dynamic>.from(oldRows.first);
+        if (oldRow != null && oldRow['is_deleted'] == 1) {
+          throw TaskDeletedElsewhereException();
+        }
         // Ο φρουρός μπαίνει ΕΔΩ και όχι στον καλούντα: η γραμμή έχει μόλις
         // διαβαστεί μέσα στη συναλλαγή, οπότε η σύγκριση είναι ατομική — δεν
         // υπάρχει παράθυρο ανάμεσα στον έλεγχο και στην εγγραφή.
@@ -1361,6 +1372,7 @@ class TasksRepository {
           details: 'tasks id=$id',
           entityType: AuditEntityTypes.task,
           entityId: id,
+          entityName: oldRow?['title']?.toString(),
           oldValues: oldStatus != null ? {'status': oldStatus} : null,
           newValues: {'status': 'closed', 'solution_notes': solutionNotes},
         );

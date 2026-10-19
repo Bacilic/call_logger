@@ -316,7 +316,7 @@ class _IntegrityChoiceDialogState extends State<_IntegrityChoiceDialog> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = '$e';
+          _error = humanizeUserFacingError(e);
         });
       }
     }

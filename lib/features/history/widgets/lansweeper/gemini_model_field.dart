@@ -78,8 +78,22 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
         'Μπορείτε να το κρατήσετε.';
   }
 
+  static String _busyWarningMessage(_GeminiModelSlot slot, String modelId) {
+    final role = switch (slot) {
+      _GeminiModelSlot.primary => 'κύριο',
+      _GeminiModelSlot.fallback => 'εφεδρικό',
+    };
+    return 'Το $role μοντέλο «$modelId» είναι προσωρινά υπερφορτωμένο — '
+        'δοκιμάστε αργότερα. Μπορείτε να το κρατήσετε.';
+  }
+
   List<GeminiTextModel> _allModels = <GeminiTextModel>[];
   List<GeminiTextModel> _availableModels = <GeminiTextModel>[];
+
+  /// Όσα δεν απάντησαν για προσωρινό λόγο: μένουν στη λίστα επιλογής με
+  /// ένδειξη και ξαναελέγχονται — ποτέ δεν κρίνονται «χωρίς ποσόστωση».
+  List<GeminiTextModel> _busyModels = <GeminiTextModel>[];
+  Set<String> get _busyModelIds => {for (final m in _busyModels) m.id};
   bool _loadingModels = false;
   bool _probing = false;
   String? _statusMessage;
@@ -98,7 +112,9 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
       <_GeminiModelSlot, String>{};
 
   List<GeminiTextModel> get _pickerModels =>
-      _availableModels.isNotEmpty ? _availableModels : _allModels;
+      _availableModels.isNotEmpty || _busyModels.isNotEmpty
+      ? [..._availableModels, ..._busyModels]
+      : _allModels;
 
   String get _primaryValue => widget.primaryModelController.text.trim();
   String get _fallbackValue => widget.fallbackModelController.text.trim();
@@ -128,9 +144,43 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
     setState(() {
       _probeResult = cache.result;
       _availableModels = cache.result.availableModels;
+      _busyModels = cache.result.busyModels;
       _probeCheckedAt = cache.checkedAt;
       _syncQuotaWarningsFromProbeResult(cache.result);
     });
+    unawaited(_recheckBusyModels());
+  }
+
+  /// Τα προσωρινά υπερφορτωμένα ξαναελέγχονται κάθε φορά που ανοίγει η
+  /// ενότητα. Η απάντηση αλλάζει μόνο την εικόνα της οθόνης: η αποθηκευμένη
+  /// «Τελευταίος έλεγχος» αφορά ολόκληρη τη λίστα και δεν μετακινείται.
+  Future<void> _recheckBusyModels() async {
+    final apiKey = widget.apiKeyController.text.trim();
+    if (apiKey.isEmpty || _busyModels.isEmpty) return;
+    for (final model in List<GeminiTextModel>.of(_busyModels)) {
+      final result = await GeminiTicketService.probeModel(
+        apiKey: apiKey,
+        model: model.id,
+        endpointTemplate: widget.endpointTemplate,
+      );
+      if (!mounted) return;
+      if (result.temporary) continue;
+      setState(() {
+        _busyModels = [
+          for (final m in _busyModels)
+            if (m.id != model.id) m,
+        ];
+        _modelQuotaOkCache[model.id] = result.ok;
+        if (result.ok) {
+          _availableModels = [..._availableModels, model]
+            ..sort((a, b) => a.id.compareTo(b.id));
+        }
+        for (final slot in _GeminiModelSlot.values) {
+          if (_failedQuotaModelBySlot[slot] != model.id) continue;
+          if (result.ok) _failedQuotaModelBySlot.remove(slot);
+        }
+      });
+    }
   }
 
   String _valueFor(_GeminiModelSlot slot) {
@@ -142,6 +192,8 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
       _modelQuotaOkCache[model.id] = true;
     }
     for (final warning in result.typedModelWarnings) {
+      // Το προσωρινό δεν μνημονεύεται: την επόμενη φορά ρωτιέται ξανά.
+      if (warning.temporary) continue;
       _modelQuotaOkCache[warning.modelId] = false;
     }
 
@@ -240,8 +292,21 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
     if (!mounted || generation != _typedQuotaProbeGeneration) return;
     if (_valueFor(slot) != modelId) return;
 
-    _modelQuotaOkCache[modelId] = result.ok;
+    if (!result.temporary) _modelQuotaOkCache[modelId] = result.ok;
     setState(() {
+      if (result.temporary) {
+        if (!_busyModelIds.contains(modelId)) {
+          _busyModels = [
+            ..._busyModels,
+            GeminiTextModel(id: modelId, displayName: modelId),
+          ];
+        }
+      } else {
+        _busyModels = [
+          for (final m in _busyModels)
+            if (m.id != modelId) m,
+        ];
+      }
       if (result.ok) {
         _failedQuotaModelBySlot.remove(slot);
       } else {
@@ -334,121 +399,104 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
     );
   }
 
+  /// Επιλογή από λίστα ή chip: το μοντέλο μπαίνει αμέσως, με τον ίδιο
+  /// κανόνα «Ίδιο μοντέλο» που ισχύει και για την πληκτρολόγηση.
   Future<void> _assignModel(String modelId, _GeminiModelSlot slot) async {
     final trimmed = modelId.trim();
     if (trimmed.isEmpty) return;
-
-    final targetCtrl = _controllerFor(slot);
-    final previousTarget = _lastCommittedFor(slot);
-    final otherSlot = _otherSlot(slot);
-    final otherValue = _controllerFor(otherSlot).text.trim();
-
-    if (widget.fallbackEnabled &&
-        otherValue.isNotEmpty &&
-        otherValue == trimmed &&
-        slot != otherSlot) {
-      _resolvingDuplicate = true;
-      targetCtrl.text = previousTarget;
-      final action = await _showDuplicateDialog(
-        modelId: trimmed,
-        existingSlot: otherSlot,
-      );
-      _resolvingDuplicate = false;
-      if (!mounted ||
-          action == null ||
-          action == _DuplicateModelAction.cancel) {
-        setState(() {});
-        return;
-      }
-      if (action == _DuplicateModelAction.replace) {
-        targetCtrl.text = trimmed;
-        _controllerFor(otherSlot).text = '';
-        _commitSlot(slot, trimmed);
-        _commitSlot(otherSlot, '');
-        _clearSlotQuotaWarning(otherSlot);
-      } else {
-        targetCtrl.text = trimmed;
-        _commitSlot(slot, trimmed);
-        if (!mounted) return;
-        await _openModelPicker(
-          slot: otherSlot,
-          title: otherSlot == _GeminiModelSlot.primary
-              ? 'Επιλογή κύριου μοντέλου'
-              : 'Επιλογή εφεδρικού μοντέλου',
-          excludeModelId: trimmed,
-        );
-      }
-    } else {
-      targetCtrl.text = trimmed;
-      _commitSlot(slot, trimmed);
-    }
-
-    if (!mounted) return;
-    widget.onChanged();
-    _scheduleTypedQuotaProbe(slot);
+    _controllerFor(slot).text = trimmed;
+    await _placeModel(trimmed, slot);
   }
 
-  Future<void> _handleFieldChange(String value, _GeminiModelSlot slot) async {
-    if (_resolvingDuplicate) return;
-
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      _commitSlot(slot, '');
-      _typedQuotaProbeTimer?.cancel();
-      _clearSlotQuotaWarning(slot);
-      widget.onChanged();
-      return;
-    }
-
+  /// Ο ΕΝΑΣ κανόνας «Ίδιο μοντέλο», για λίστα και πληκτρολόγηση μαζί: αν το
+  /// [modelId] είναι ήδη το μοντέλο του άλλου πεδίου, ο χρήστης διαλέγει
+  /// αντικατάσταση, άλλο μοντέλο ή ακύρωση· η ακύρωση επαναφέρει το πεδίο
+  /// στην τελευταία τιμή που είχε δεχτεί.
+  Future<void> _placeModel(String modelId, _GeminiModelSlot slot) async {
     final otherSlot = _otherSlot(slot);
-    final otherValue = _controllerFor(otherSlot).text.trim();
+    final distinct = geminiPrimaryFallbackModelsAreDistinct(
+      primaryModel: slot == _GeminiModelSlot.primary
+          ? modelId
+          : _controllerFor(otherSlot).text,
+      fallbackModel: slot == _GeminiModelSlot.fallback
+          ? modelId
+          : _controllerFor(otherSlot).text,
+      fallbackEnabled: widget.fallbackEnabled,
+    );
 
-    if (widget.fallbackEnabled &&
-        otherValue.isNotEmpty &&
-        otherValue == trimmed) {
-      final previous = _lastCommittedFor(slot);
-      _resolvingDuplicate = true;
-      _controllerFor(slot).text = previous;
-      final action = await _showDuplicateDialog(
-        modelId: trimmed,
-        existingSlot: otherSlot,
-      );
-      _resolvingDuplicate = false;
-      if (!mounted) return;
-      if (action == null || action == _DuplicateModelAction.cancel) {
-        setState(() {});
-        return;
-      }
-      if (action == _DuplicateModelAction.replace) {
-        _controllerFor(slot).text = trimmed;
-        _controllerFor(otherSlot).text = '';
-        _commitSlot(slot, trimmed);
-        _commitSlot(otherSlot, '');
-        _clearSlotQuotaWarning(otherSlot);
-      } else {
-        _controllerFor(slot).text = trimmed;
-        _commitSlot(slot, trimmed);
-        await _openModelPicker(
-          slot: otherSlot,
-          title: otherSlot == _GeminiModelSlot.primary
-              ? 'Επιλογή κύριου μοντέλου'
-              : 'Επιλογή εφεδρικού μοντέλου',
-          excludeModelId: trimmed,
-        );
-      }
+    if (distinct) {
+      _commitSlot(slot, modelId);
       if (!mounted) return;
       widget.onChanged();
       _scheduleTypedQuotaProbe(slot);
-      if (action == _DuplicateModelAction.replace) {
-        _scheduleTypedQuotaProbe(otherSlot);
-      }
       return;
     }
 
-    _commitSlot(slot, trimmed);
+    final targetCtrl = _controllerFor(slot);
+    _resolvingDuplicate = true;
+    targetCtrl.text = _lastCommittedFor(slot);
+    final action = await _showDuplicateDialog(
+      modelId: modelId,
+      existingSlot: otherSlot,
+    );
+    _resolvingDuplicate = false;
+    if (!mounted) return;
+    if (action == null || action == _DuplicateModelAction.cancel) {
+      setState(() {});
+      widget.onChanged();
+      return;
+    }
+    targetCtrl.text = modelId;
+    _commitSlot(slot, modelId);
+    if (action == _DuplicateModelAction.replace) {
+      _controllerFor(otherSlot).text = '';
+      _commitSlot(otherSlot, '');
+      _clearSlotQuotaWarning(otherSlot);
+    } else {
+      await _openModelPicker(
+        slot: otherSlot,
+        title: otherSlot == _GeminiModelSlot.primary
+            ? 'Επιλογή κύριου μοντέλου'
+            : 'Επιλογή εφεδρικού μοντέλου',
+        excludeModelId: modelId,
+      );
+    }
     if (!mounted) return;
     widget.onChanged();
     _scheduleTypedQuotaProbe(slot);
+    if (action == _DuplicateModelAction.replace) {
+      _scheduleTypedQuotaProbe(otherSlot);
+    }
+  }
+
+  /// Κάθε πλήκτρο: μόνο ενημέρωση. Η σύγκριση με το άλλο πεδίο περιμένει να
+  /// τελειώσει η πληκτρολόγηση ([_completeField]) — αλλιώς το
+  /// «gemini-2.5-flash-lite» δεν γραφόταν ποτέ, γιατί στο «…flash» ταυτιζόταν
+  /// με το κύριο και η ερώτηση άνοιγε στη μέση.
+  void _handleFieldChange(String value, _GeminiModelSlot slot) {
+    if (_resolvingDuplicate) return;
+    if (value.trim().isEmpty) {
+      _commitSlot(slot, '');
+      _typedQuotaProbeTimer?.cancel();
+      _clearSlotQuotaWarning(slot);
+    } else {
+      _scheduleTypedQuotaProbe(slot);
+    }
+    widget.onChanged();
+  }
+
+  /// Το πεδίο τελείωσε (Enter ή έξοδος): τότε κρίνεται το «Ίδιο μοντέλο».
+  /// Την αποθήκευση τη φυλάει ήδη ο διάλογος ρυθμίσεων, που δεν κλείνει με
+  /// δύο ίδια μοντέλα.
+  Future<void> _completeField(_GeminiModelSlot slot) async {
+    if (_resolvingDuplicate) return;
+    final trimmed = _controllerFor(slot).text.trim();
+    if (trimmed == _lastCommittedFor(slot)) return;
+    if (trimmed.isEmpty) {
+      _commitSlot(slot, '');
+      return;
+    }
+    await _placeModel(trimmed, slot);
   }
 
   Future<void> _loadModels() async {
@@ -505,6 +553,7 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
       _probeResult = null;
       _probeProgress = null;
       _availableModels = <GeminiTextModel>[];
+      _busyModels = <GeminiTextModel>[];
     });
 
     if (_allModels.isEmpty && !_loadingModels) {
@@ -540,6 +589,7 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
       _probeProgress = null;
       _probeResult = result;
       _availableModels = result.availableModels;
+      _busyModels = result.busyModels;
       _probeCheckedAt = savedCache?.checkedAt ?? _probeCheckedAt;
       _statusMessage = result.totalChecked > 0 ? null : result.message;
       _syncQuotaWarningsFromProbeResult(result);
@@ -573,7 +623,11 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
 
     final selected = await showDialog<String>(
       context: context,
-      builder: (ctx) => _GeminiModelPickerDialog(title: title, models: models),
+      builder: (ctx) => _GeminiModelPickerDialog(
+        title: title,
+        models: models,
+        busyModelIds: _busyModelIds,
+      ),
     );
     if (!mounted || selected == null) return;
     await _assignModel(selected, slot);
@@ -601,7 +655,9 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              _quotaWarningMessage(slot, failedId),
+              _busyModelIds.contains(failedId)
+                  ? _busyWarningMessage(slot, failedId)
+                  : _quotaWarningMessage(slot, failedId),
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: Colors.red.shade900),
@@ -642,24 +698,32 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
     required bool enabled,
   }) {
     final controller = _controllerFor(slot);
-    return TextFormField(
-      controller: controller,
-      enabled: enabled,
-      onChanged: (value) => unawaited(_handleFieldChange(value, slot)),
-      decoration: InputDecoration(
-        labelText: labelText,
-        hintText: 'π.χ. $kDefaultGeminiFallbackModel',
-        helperText: helperText,
-        helperMaxLines: helperText == null ? null : 4,
-        border: const OutlineInputBorder(),
-        isDense: true,
-        suffixIcon: IconButton(
-          tooltip: 'Λίστα μοντέλων',
-          onPressed: !enabled || _loadingModels
-              ? null
-              : () =>
-                    unawaited(_openModelPicker(slot: slot, title: pickerTitle)),
-          icon: const Icon(Icons.list_alt_rounded, size: 20),
+    return Focus(
+      skipTraversal: true,
+      onFocusChange: (hasFocus) {
+        if (!hasFocus) unawaited(_completeField(slot));
+      },
+      child: TextFormField(
+        controller: controller,
+        enabled: enabled,
+        onChanged: (value) => _handleFieldChange(value, slot),
+        onFieldSubmitted: (_) => unawaited(_completeField(slot)),
+        decoration: InputDecoration(
+          labelText: labelText,
+          hintText: 'π.χ. $kDefaultGeminiFallbackModel',
+          helperText: helperText,
+          helperMaxLines: helperText == null ? null : 4,
+          border: const OutlineInputBorder(),
+          isDense: true,
+          suffixIcon: IconButton(
+            tooltip: 'Λίστα μοντέλων',
+            onPressed: !enabled || _loadingModels
+                ? null
+                : () => unawaited(
+                    _openModelPicker(slot: slot, title: pickerTitle),
+                  ),
+            icon: const Icon(Icons.list_alt_rounded, size: 20),
+          ),
         ),
       ),
     );
@@ -830,6 +894,16 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
                 ],
               ),
             ],
+            if (_busyModels.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Προσωρινά υπερφορτωμένα — δοκιμάστε αργότερα: '
+                '${_busyModels.map((m) => m.id).join(', ')}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: onSurfaceVariant),
+              ),
+            ],
           ],
         ),
       ),
@@ -968,10 +1042,15 @@ class _GeminiModelsSectionState extends ConsumerState<GeminiModelsSection> {
 }
 
 class _GeminiModelPickerDialog extends StatefulWidget {
-  const _GeminiModelPickerDialog({required this.title, required this.models});
+  const _GeminiModelPickerDialog({
+    required this.title,
+    required this.models,
+    this.busyModelIds = const {},
+  });
 
   final String title;
   final List<GeminiTextModel> models;
+  final Set<String> busyModelIds;
 
   @override
   State<_GeminiModelPickerDialog> createState() =>
@@ -1033,7 +1112,11 @@ class _GeminiModelPickerDialogState extends State<_GeminiModelPickerDialog> {
                         return ListTile(
                           dense: true,
                           title: Text(model.id),
-                          subtitle: Text(model.displayName),
+                          subtitle: Text(
+                            widget.busyModelIds.contains(model.id)
+                                ? 'Προσωρινά υπερφορτωμένο — δοκιμάστε αργότερα'
+                                : model.displayName,
+                          ),
                           onTap: () => Navigator.of(ctx).pop(model.id),
                         );
                       },

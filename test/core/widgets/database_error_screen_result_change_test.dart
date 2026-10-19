@@ -37,6 +37,17 @@ DatabaseInitResult _needsSchemaUpgrade() => DatabaseInitResult(
   technicalCode: '66→67',
 );
 
+DatabaseInitResult _databaseNewer() => DatabaseInitResult(
+  status: DatabaseStatus.corruptedOrInvalid,
+  message:
+      'Το αρχείο «Hospital.db» είναι στην έκδοση 68. Αυτή η εφαρμογή '
+      'διαβάζει έως την έκδοση 67.',
+  details: 'Έκδοση αρχείου: 68\nΈκδοση εφαρμογής: 67',
+  path: r'\\popinio\CallLogger\Data Base\Hospital.db',
+  recoveryKind: DatabaseInitRecoveryKind.databaseNewerThanApp,
+  technicalCode: '68→67',
+);
+
 class _Host extends StatefulWidget {
   const _Host({super.key, required this.initial, required this.onRecovery});
 
@@ -118,6 +129,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(started, hasLength(1));
+  });
+
+  testWidgets('βάση νεότερης έκδοσης: η «Επαναδοκιμή» ξαναρωτά για '
+      'ενημέρωση, ακόμη κι όταν το σφάλμα μένει ίδιο', (tester) async {
+    // Σενάριο πεδίου 17/10/2026: POPINIO με 0.61.0, βάση 68 → «Κλείσιμο» του
+    // διαλόγου → δημοσίευση 0.63.0 από άλλον σταθμό → «Επαναδοκιμή» στο
+    // POPINIO δεν έκανε τίποτα· η αναβάθμιση φάνηκε μόνο με επανεκκίνηση.
+    await pumpHost(tester, _databaseNewer());
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(started, [DatabaseInitRecoveryKind.databaseNewerThanApp]);
+
+    await tester.tap(find.text('Επαναδοκιμή'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(started, [
+      DatabaseInitRecoveryKind.databaseNewerThanApp,
+      DatabaseInitRecoveryKind.databaseNewerThanApp,
+    ], reason: 'ο διάλογος ξαναρωτά τον φάκελο ενημερώσεων');
   });
 
   testWidgets('η αναμονή συγκατάθεσης ΔΕΝ παρουσιάζεται ως βλάβη', (

@@ -63,10 +63,18 @@ class GeminiTextModel {
 
 /// Αποτέλεσμα δοκιμαστικής κλήσης μοντέλου.
 class GeminiModelProbeResult {
-  const GeminiModelProbeResult({required this.ok, required this.message});
+  const GeminiModelProbeResult({
+    required this.ok,
+    required this.message,
+    this.temporary = false,
+  });
 
   final bool ok;
   final String message;
+
+  /// Η αποτυχία είναι προσωρινή (υπερφόρτωση, λήξη χρόνου, δίκτυο) — όχι
+  /// «ποσόστωση 0». Ένας επόμενος έλεγχος μπορεί να πετύχει.
+  final bool temporary;
 }
 
 /// Προειδοποίηση για πληκτρολογημένο κύριο/εφεδρικό μοντέλο χωρίς ποσόστωση.
@@ -75,11 +83,15 @@ class GeminiTypedModelQuotaWarning {
     required this.modelId,
     required this.slotLabel,
     required this.message,
+    this.temporary = false,
   });
 
   final String modelId;
   final String slotLabel;
   final String message;
+
+  /// Προσωρινή αποτυχία — δεν σημαίνει ότι το μοντέλο δεν έχει ποσόστωση.
+  final bool temporary;
 }
 
 /// Αποτέλεσμα μαζικού ελέγχου ποσόστωσης μοντέλων.
@@ -89,9 +101,15 @@ class GeminiModelsQuotaProbeResult {
     required this.totalChecked,
     required this.message,
     this.typedModelWarnings = const [],
+    this.busyModels = const [],
   });
 
   final List<GeminiTextModel> availableModels;
+
+  /// Μοντέλα που δεν απάντησαν αυτή τη φορά για προσωρινό λόγο. Μένουν στη
+  /// λίστα επιλογής με ένδειξη και ξαναελέγχονται — δεν θεωρούνται «χωρίς
+  /// ποσόστωση» (απόφαση Διευθυντή 17/10/2026).
+  final List<GeminiTextModel> busyModels;
   final int totalChecked;
   final String message;
   final List<GeminiTypedModelQuotaWarning> typedModelWarnings;
@@ -130,6 +148,22 @@ class GeminiModelsProbeCache {
         }
       }
 
+      final busy = <GeminiTextModel>[];
+      final busyRaw = decoded['busyModels'];
+      if (busyRaw is List) {
+        for (final item in busyRaw) {
+          if (item is! Map) continue;
+          final id = item['id']?.toString().trim() ?? '';
+          if (id.isEmpty) continue;
+          busy.add(
+            GeminiTextModel(
+              id: id,
+              displayName: (item['displayName'] as String? ?? id).trim(),
+            ),
+          );
+        }
+      }
+
       final totalChecked = decoded['totalChecked'];
       final message = decoded['message']?.toString().trim() ?? '';
       final warnings = <GeminiTypedModelQuotaWarning>[];
@@ -144,6 +178,7 @@ class GeminiModelsProbeCache {
           warnings.add(
             GeminiTypedModelQuotaWarning(
               modelId: modelId,
+              temporary: item['temporary'] == true,
               slotLabel: slotLabel.isEmpty ? 'μοντέλο' : slotLabel,
               message: warningMessage.isEmpty
                   ? 'Το μοντέλο «$modelId» δεν έχει διαθέσιμη ποσόστωση (> 0).'
@@ -164,6 +199,7 @@ class GeminiModelsProbeCache {
               ? '${models.length} διαθέσιμα μοντέλα κειμένου.'
               : message,
           typedModelWarnings: warnings,
+          busyModels: busy,
         ),
       );
     } catch (_) {
@@ -180,12 +216,20 @@ class GeminiModelsProbeCache {
         for (final model in result.availableModels)
           <String, String>{'id': model.id, 'displayName': model.displayName},
       ],
+      // Τα προσωρινά αποθηκεύονται μόνο για να μείνουν στη λίστα επιλογής·
+      // η οθόνη τα ξαναελέγχει κάθε φορά που ανοίγει, δεν είναι «αλήθεια»
+      // 90 ημερών.
+      'busyModels': [
+        for (final model in result.busyModels)
+          <String, String>{'id': model.id, 'displayName': model.displayName},
+      ],
       'typedModelWarnings': [
         for (final warning in result.typedModelWarnings)
-          <String, String>{
+          <String, Object>{
             'modelId': warning.modelId,
             'slotLabel': warning.slotLabel,
             'message': warning.message,
+            'temporary': warning.temporary,
           },
       ],
     });
@@ -616,6 +660,7 @@ abstract final class GeminiTicketService {
       // μπαίνουν στη θέση του μοντέλου τους, ώστε η σειρά του αποτελέσματος να
       // μην εξαρτάται από το ποιο απάντησε πρώτο.
       final okByIndex = List<bool>.filled(models.length, false);
+      final busyByIndex = List<bool>.filled(models.length, false);
       var nextIndex = 0;
       Future<void> worker() async {
         while (nextIndex < models.length) {
@@ -628,6 +673,7 @@ abstract final class GeminiTicketService {
             client: httpClient,
           );
           okByIndex[index] = result.ok;
+          busyByIndex[index] = result.temporary;
           checked++;
           onProgress?.call(checked, totalSteps, model.id);
         }
@@ -637,18 +683,27 @@ abstract final class GeminiTicketService {
         for (var w = 0; w < kGeminiProbeConcurrency && w < models.length; w++)
           worker(),
       ]);
+      final busy = <GeminiTextModel>[];
+      final busyIds = <String>{};
       for (var i = 0; i < models.length; i++) {
         probeOkById[models[i].id] = okByIndex[i];
         if (okByIndex[i]) available.add(models[i]);
+        if (busyByIndex[i]) {
+          busy.add(models[i]);
+          busyIds.add(models[i].id);
+        }
       }
 
       final warnings = <GeminiTypedModelQuotaWarning>[];
 
       for (final entry in typedEntries) {
         var ok = probeOkById[entry.id];
-        String failureMessage =
-            'Το πληκτρολογημένο ${entry.slot} μοντέλο «${entry.id}» '
-            'δεν έχει διαθέσιμη ποσόστωση (> 0).';
+        var temporary = busyIds.contains(entry.id);
+        String failureMessage = temporary
+            ? 'Το πληκτρολογημένο ${entry.slot} μοντέλο «${entry.id}» '
+                  'είναι προσωρινά υπερφορτωμένο — δοκιμάστε αργότερα.'
+            : 'Το πληκτρολογημένο ${entry.slot} μοντέλο «${entry.id}» '
+                  'δεν έχει διαθέσιμη ποσόστωση (> 0).';
 
         if (ok == null) {
           checked++;
@@ -661,6 +716,11 @@ abstract final class GeminiTicketService {
           );
           ok = result.ok;
           probeOkById[entry.id] = ok;
+          temporary = result.temporary;
+          if (temporary && !busyIds.contains(entry.id)) {
+            busyIds.add(entry.id);
+            busy.add(GeminiTextModel(id: entry.id, displayName: entry.id));
+          }
           if (!ok) failureMessage = result.message;
         }
 
@@ -677,15 +737,18 @@ abstract final class GeminiTicketService {
               modelId: entry.id,
               slotLabel: entry.slot,
               message: '$failureMessage Μπορείτε να το κρατήσετε.',
+              temporary: temporary,
             ),
           );
         }
       }
 
       available.sort((a, b) => a.id.compareTo(b.id));
+      busy.sort((a, b) => a.id.compareTo(b.id));
 
       return GeminiModelsQuotaProbeResult(
         availableModels: available,
+        busyModels: busy,
         totalChecked: checked,
         typedModelWarnings: warnings,
         message: available.isEmpty
@@ -754,6 +817,13 @@ abstract final class GeminiTicketService {
               '(ποσόστωση 0). Επιλέξτε άλλο μοντέλο.',
         );
       }
+      if (isTemporaryProbeFailure(e)) {
+        return GeminiModelProbeResult(
+          ok: false,
+          temporary: true,
+          message: temporaryUnavailableMessage(modelId),
+        );
+      }
       return GeminiModelProbeResult(ok: false, message: e.message);
     } catch (e) {
       return GeminiModelProbeResult(
@@ -761,6 +831,24 @@ abstract final class GeminiTicketService {
         message: e.toString().replaceFirst('Exception: ', ''),
       );
     }
+  }
+
+  /// Η ένδειξη ενός μοντέλου που δεν απάντησε για προσωρινό λόγο.
+  static String temporaryUnavailableMessage(String modelId) =>
+      'Το μοντέλο «$modelId» είναι προσωρινά υπερφορτωμένο — '
+      'δοκιμάστε αργότερα.';
+
+  /// Προσωρινή αποτυχία: υπερφόρτωση ή όριο ανά λεπτό (429 χωρίς
+  /// «limit: 0»), σφάλμα του διακομιστή της Google, λήξη χρόνου ή δίκτυο.
+  /// Μόνο το «limit: 0» σημαίνει «χωρίς ποσόστωση».
+  static bool isTemporaryProbeFailure(GeminiException e) {
+    final status = e.statusCode;
+    if (status == null) {
+      return e.message.contains('(timeout)') ||
+          e.scope == GeminiFailureScope.infrastructure;
+    }
+    if (status == 429) return !e.message.contains('limit: 0');
+    return status == 500 || status == 502 || status == 503 || status == 504;
   }
 
   static Future<({String title, String description, String solution})> suggest({

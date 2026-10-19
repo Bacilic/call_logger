@@ -21,6 +21,7 @@ class AssetDisconnectItem {
     this.ownerName,
     this.departmentId,
     this.departmentName,
+    this.canStay = true,
   });
 
   const AssetDisconnectItem.phone(
@@ -28,6 +29,7 @@ class AssetDisconnectItem {
     this.ownerName,
     this.departmentId,
     this.departmentName,
+    this.canStay = true,
   }) : kind = AssetDisconnectItemKind.phone;
 
   const AssetDisconnectItem.equipment(
@@ -35,6 +37,7 @@ class AssetDisconnectItem {
     this.ownerName,
     this.departmentId,
     this.departmentName,
+    this.canStay = true,
   }) : kind = AssetDisconnectItemKind.equipment;
 
   final AssetDisconnectItemKind kind;
@@ -45,6 +48,11 @@ class AssetDisconnectItem {
 
   final int? departmentId;
   final String? departmentName;
+
+  /// `false` όταν το στοιχείο δεν επιτρέπεται να «μείνει» στο τμήμα του —
+  /// π.χ. κοινόχρηστος εξοπλισμός που αφαιρείται: δεν μένει ποτέ χωρίς
+  /// απόφαση μεταφοράς ή διαγραφής.
+  final bool canStay;
 
   bool get isPhone => kind == AssetDisconnectItemKind.phone;
 }
@@ -224,6 +232,16 @@ class AssetDisconnectSession {
     final name = _pending.first.departmentName?.trim() ?? '';
     return name.isEmpty ? null : name;
   }
+
+  /// Προσφέρεται «Παραμονή — όλα»;
+  ///
+  /// Μόνο όταν η ροή επιτρέπει παραμονή, τα υπόλοιπα μοιράζονται ένα τμήμα
+  /// **και** κάθε ένα από αυτά επιτρέπεται να μείνει. Αλλιώς η επιλογή θα
+  /// υποσχόταν «όλα» και θα ίσχυε μόνο για μερικά — τα υπόλοιπα θα ξαναρωτιόνταν.
+  bool canKeepEverything({required bool canKeepInDepartment}) =>
+      canKeepInDepartment &&
+      commonRemainingDepartmentName != null &&
+      _pending.every((i) => i.canStay);
 
   /// Πόσα διαφορετικά τμήματα καλύπτουν τα υπόλοιπα στοιχεία.
   int get remainingDepartmentCount =>

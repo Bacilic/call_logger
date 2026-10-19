@@ -52,6 +52,7 @@ Future<ProviderContainer> _pumpViewport(
       imgPath: imgFile.path,
       imgFile: imgFile,
       imgExists: true,
+      imageUploaded: true,
       decodedSize: const Size(400, 250),
       activeDepartments: const [],
       floors: const [],

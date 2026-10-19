@@ -26,33 +26,6 @@ class _FakeDepartmentDirectoryNotifier extends DepartmentDirectoryNotifier {
   Future<void> loadDepartments() async {}
 
   @override
-  Future<void> deleteSelected() async {
-    if (state.selectedIds.isEmpty) return;
-    final toDelete = state.allDepartments
-        .where(
-          (d) =>
-              d.id != null && !d.isDeleted && state.selectedIds.contains(d.id),
-        )
-        .toList();
-    if (toDelete.isEmpty) return;
-    final remaining = state.allDepartments
-        .where((d) => d.id == null || !state.selectedIds.contains(d.id))
-        .toList();
-    state = DepartmentDirectoryState(
-      allDepartments: remaining,
-      filteredDepartments: remaining,
-      searchQuery: state.searchQuery,
-      sortColumn: state.sortColumn,
-      sortAscending: state.sortAscending,
-      selectedIds: {},
-      lastDeleted: toDelete,
-      focusedRowIndex: null,
-      columnOrder: state.columnOrder,
-      visibleColumnKeys: state.visibleColumnKeys,
-    );
-  }
-
-  @override
   Future<void> undoLastDelete() async {
     state = DepartmentDirectoryState(
       allDepartments: state.allDepartments,

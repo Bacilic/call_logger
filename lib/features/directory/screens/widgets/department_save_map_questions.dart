@@ -51,7 +51,8 @@ class DepartmentMapPlacementDecision {
 ///    χρήστης ρωτιέται πριν χαθεί η δουλειά του.
 /// 2. **«Μεταφορά ή σβήσιμο;»** — όταν αλλάζει όροφος και υπάρχει σχεδιασμένο
 ///    ορθογώνιο. Χωρίς την ερώτηση, το ορθογώνιο θα ταξίδευε αυτούσιο σε σχέδιο
-///    που ο χρήστης δεν είδε ποτέ.
+///    που ο χρήστης δεν είδε ποτέ. Όταν ο όροφος γίνεται «— χωρίς —», η
+///    ερώτηση στενεύει σε επιβεβαίωση: δεν υπάρχει πού να ταξιδέψει.
 ///
 /// **Καμία εγγραφή δεν γίνεται εδώ.** Η συνάρτηση μόνο ρωτά και επιστρέφει την
 /// απόφαση· έτσι κάθε «Άκυρο» αφήνει τη βάση ανέπαφη εξ ορισμού, αντί να
@@ -106,6 +107,22 @@ Future<DepartmentMapPlacementDecision> askDepartmentMapPlacement(
   var clearPlacement =
       floorChange == DepartmentFloorChangeAction.clearPlacement;
   var movesPlacementToNewFloor = false;
+
+  if (floorChange == DepartmentFloorChangeAction.confirmClearPlacement) {
+    final approved = await showBulkConfirmDialog(
+      host.context,
+      title: 'Η σχεδίαση στον χάρτη θα διαγραφεί',
+      message: departmentFloorRemovalMessage(
+        departmentName: name,
+        floorLabel: floorLabel(placementFloorId),
+      ),
+      confirmLabel: 'Συνέχεια και διαγραφή',
+    );
+    if (!approved || !host.mounted) {
+      return const DepartmentMapPlacementDecision.cancelled();
+    }
+    clearPlacement = true;
+  }
 
   if (floorChange == DepartmentFloorChangeAction.askMoveOrClear) {
     final choice = await showDepartmentFloorChangeDialog(

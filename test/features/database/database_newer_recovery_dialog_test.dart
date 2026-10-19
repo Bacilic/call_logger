@@ -20,6 +20,7 @@ void main() {
     required SchemaDowngradeAssessment? assessment,
     AppInstanceRecord? newerInstance,
     AppUpgradeOffer? upgradeOffer,
+    String? upgradeUnavailableReason,
   }) async {
     DatabaseNewerVersionChoice? captured;
     await tester.pumpWidget(
@@ -37,6 +38,7 @@ void main() {
                     assessment: assessment,
                     newerInstance: newerInstance,
                     upgradeOffer: upgradeOffer,
+                    upgradeUnavailableReason: upgradeUnavailableReason,
                   );
                 },
                 child: const Text('open'),
@@ -277,14 +279,20 @@ void main() {
     expect(find.textContaining('χωρίς εγγύηση'), findsOneWidget);
   });
 
-  testWidgets('χωρίς διαθέσιμο πακέτο δεν υπάρχει κουμπί αναβάθμισης', (
+  testWidgets('χωρίς διαθέσιμο πακέτο: κανένα κουμπί, και λέγεται γιατί', (
     tester,
   ) async {
-    await pumpDialog(tester, assessment: null);
+    await pumpDialog(
+      tester,
+      assessment: null,
+      upgradeUnavailableReason:
+          'Δεν είναι δυνατός ο έλεγχος νέας έκδοσης, επειδή ο φάκελος '
+          'ενημερώσεων δεν απάντησε εγκαίρως.',
+    );
 
     expect(find.byKey(const Key('newer_db_upgrade_app_button')), findsNothing);
     expect(
-      find.textContaining('Δεν βρέθηκε νεότερο πακέτο εγκατάστασης'),
+      find.textContaining('ο φάκελος ενημερώσεων δεν απάντησε εγκαίρως'),
       findsOneWidget,
     );
   });

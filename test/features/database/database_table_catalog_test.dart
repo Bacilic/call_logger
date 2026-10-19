@@ -27,20 +27,16 @@ void main() {
       'tasks',
       'users',
       'app_settings',
+      'operators',
       'full_dictionary',
       'alpha_unknown',
-      'operators',
       'zeta_unknown',
     ]);
   });
 
-  test('ελληνικό όνομα όπου υπάρχει, αλλιώς το όνομα του πίνακα', () {
-    expect(databaseTableDisplayName('calls'), 'Κλήσεις');
-    expect(databaseTableDisplayName('audit_log'), 'Αρχείο καταγραφής (audit)');
-    expect(
-      databaseTableDisplayName('user_phones'),
-      'Συσχέτιση χρήστη–τηλεφώνου',
-    );
-    expect(databaseTableDisplayName('operators'), 'operators');
+  test('η οθόνη μιλά με το κοινό λεξιλόγιο: προσωπικό ≠ χρήστες εφαρμογής', () {
+    expect(databaseTableDisplayName('users'), 'Υπάλληλοι');
+    expect(databaseTableDisplayName('operators'), 'Χρήστες');
+    expect(databaseTableDisplayName('άγνωστος'), 'άγνωστος');
   });
 }

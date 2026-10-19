@@ -22,9 +22,9 @@ import '../../../core/widgets/save_on_focus_loss.dart';
 import '../../../core/services/spell_check_activation.dart';
 import '../../database/services/database_maintenance_service.dart';
 import '../../diagnostics/diagnostics_export_flow.dart';
-import '../../diagnostics/models/diagnostics_export_options.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
+import '../widgets/shutdown_incident_dialog.dart';
 import '../widgets/shutdown_incident_notice.dart';
 import '../widgets/start_from_beginning_flow.dart';
 import '../widgets/update_folder_setting_field.dart';
@@ -247,12 +247,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   /// Εξαγωγή διαγνωστικών — όλα, ή μόνο η ημέρα ενός περιστατικού.
-  Future<void> _exportDiagnostics({DiagnosticsExportOptions? preset}) {
+  Future<void> _exportDiagnostics() {
     return runDiagnosticsExport(
       context: context,
       logsDirectory: _logsDirectoryPath,
       databasePath: _databasePath,
-      preset: preset,
     );
   }
 
@@ -686,9 +685,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             if (_shutdownIncident != null)
               ShutdownIncidentNotice(
                 incident: _shutdownIncident!,
-                onExport: () => _exportDiagnostics(
-                  preset: incidentPreset(_shutdownIncident!.occurredAt),
-                ),
+                onShowDetails: () =>
+                    showShutdownIncidentDialog(context, _shutdownIncident!),
               ),
             if (Platform.isWindows) ...[
               const SizedBox(height: 32),

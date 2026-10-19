@@ -748,18 +748,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                             ),
                             const Spacer(),
                             FilledButton.icon(
-                              onPressed: () async {
-                                await showCallBulkDeleteDialog(
-                                  context,
-                                  callIds: visibleSelectedIds.toList(),
-                                );
-                                if (!mounted) return;
-                                ref
-                                    .read(
-                                      historySelectedCallIdsProvider.notifier,
-                                    )
-                                    .clear();
-                              },
+                              onPressed: () => showCallBulkDeleteDialog(
+                                context,
+                                callIds: visibleSelectedIds.toList(),
+                              ),
                               icon: const Icon(Icons.delete_sweep_outlined),
                               label: const Text('Μαζική διαγραφή'),
                             ),

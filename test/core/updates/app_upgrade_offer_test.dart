@@ -6,6 +6,7 @@
 //   flutter test test/core/updates/app_upgrade_offer_test.dart
 
 import 'package:call_logger/core/updates/app_upgrade_offer.dart';
+import 'package:call_logger/core/updates/update_check_result.dart';
 import 'package:call_logger/core/updates/update_manifest.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -102,5 +103,77 @@ void main() {
 
     expect(offer, isNotNull);
     expect(offer!.confidence, AppUpgradeConfidence.likelyResolves);
+  });
+
+  group('χωρίς προσφορά λέγεται και γιατί', () {
+    UpdateCheckResult checked(UpdateManifest m) => UpdateCheckResult(
+      updateAvailable: false,
+      manifest: m,
+      currentVersion: '0.29.0',
+      currentBuild: 290,
+    );
+
+    test('αποτυχημένος έλεγχος → η αιτία, όπως στο «Έλεγχος τώρα»', () {
+      final probe = appUpgradeProbeFromCheck(
+        const UpdateCheckResult.failed(UpdateCheckFailure.folderUnreadable),
+        fileSchemaVersion: 54,
+      );
+
+      expect(probe.offer, isNull);
+      expect(
+        probe.unavailableReason,
+        'Δεν είναι δυνατός ο έλεγχος νέας έκδοσης, επειδή '
+        '${UpdateCheckFailure.folderUnreadable.reason}.',
+      );
+    });
+
+    test('δοκιμαστική έκδοση → το λέει, δεν ισχυρίζεται ότι έψαξε', () {
+      final probe = appUpgradeProbeFromCheck(
+        const UpdateCheckResult.none(),
+        fileSchemaVersion: 54,
+      );
+
+      expect(probe.offer, isNull);
+      expect(probe.unavailableReason, contains('δοκιμαστική έκδοση'));
+    });
+
+    test('πακέτο όχι νεότερο → ονομάζει την έκδοση του φακέλου', () {
+      final probe = appUpgradeProbeFromCheck(
+        checked(manifest(version: '0.29.0', build: 290)),
+        fileSchemaVersion: 54,
+      );
+
+      expect(probe.offer, isNull);
+      expect(
+        probe.unavailableReason,
+        'Ο φάκελος ενημερώσεων έχει την έκδοση 0.29.0, που δεν είναι '
+        'νεότερη από αυτή που τρέχει εδώ.',
+      );
+    });
+
+    test('νεότερο πακέτο που δεν φτάνει τη βάση → λέει ως πού διαβάζει', () {
+      final probe = appUpgradeProbeFromCheck(
+        checked(manifest(schemaVersion: 53)),
+        fileSchemaVersion: 54,
+      );
+
+      expect(probe.offer, isNull);
+      expect(
+        probe.unavailableReason,
+        'Η έκδοση 0.30.0 του φακέλου ενημερώσεων διαβάζει βάσεις έως την '
+        'έκδοση 53, ενώ αυτή η βάση είναι στην έκδοση 54 — η αναβάθμιση '
+        'δεν θα βοηθούσε.',
+      );
+    });
+
+    test('με προσφορά δεν υπάρχει αιτία απουσίας', () {
+      final probe = appUpgradeProbeFromCheck(
+        checked(manifest(schemaVersion: 54)),
+        fileSchemaVersion: 54,
+      );
+
+      expect(probe.offer, isNotNull);
+      expect(probe.unavailableReason, isNull);
+    });
   });
 }

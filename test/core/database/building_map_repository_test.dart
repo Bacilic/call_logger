@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:call_logger/core/database/building_map_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
@@ -32,6 +33,7 @@ void main() {
       await seedIsolatedTestDatabase();
       await db.delete('departments');
       await db.delete('building_map_floors');
+      await db.delete('building_map_floor_images');
       departments = DepartmentRepository(db);
       repo = BuildingMapRepository(db, DirectorySupport(db));
       repo.bindUpdateDepartment((deptId, fields) async {
@@ -205,6 +207,79 @@ void main() {
         expect(dept['color'], '#FF0000');
       },
     );
+
+    group('η εικόνα της κάτοψης ζει στη βάση', () {
+      final first = Uint8List.fromList([1, 2, 3]);
+      final second = Uint8List.fromList([4, 5, 6, 7]);
+
+      Future<int> floor() =>
+          repo.insertBuildingMapFloor(label: '2ος', rotationDegrees: 0);
+
+      test('όροφος χωρίς εικόνα: «δεν έχει ανέβει»', () async {
+        await floor();
+        final listed = (await repo.listBuildingMapFloors()).single;
+        expect(listed.hasImage, isFalse);
+        expect(listed.hasPreviousImage, isFalse);
+      });
+
+      test('η εικόνα που ανέβηκε διαβάζεται ακέραια, και η λίστα δείχνει '
+          'το αποτύπωμά της', () async {
+        final id = await floor();
+        final hash = await repo.saveFloorImage(id, first);
+
+        final listed = (await repo.listBuildingMapFloors()).single;
+        expect(listed.imageHash, hash);
+        expect(listed.hasPreviousImage, isFalse);
+        final read = await repo.readFloorImage(id);
+        expect(read!.bytes, first);
+        expect(read.hash, hash);
+      });
+
+      test('νέα εικόνα: η παλιά γίνεται «προηγούμενη», και η επαναφορά τη '
+          'φέρνει πίσω χωρίς να χαθεί η νέα', () async {
+        final id = await floor();
+        await repo.saveFloorImage(id, first);
+        await repo.saveFloorImage(id, second);
+        expect(
+          (await repo.listBuildingMapFloors()).single.hasPreviousImage,
+          isTrue,
+        );
+
+        expect(await repo.swapFloorImageWithPrevious(id), isTrue);
+        expect((await repo.readFloorImage(id))!.bytes, first);
+
+        expect(await repo.swapFloorImageWithPrevious(id), isTrue);
+        expect((await repo.readFloorImage(id))!.bytes, second);
+      });
+
+      test(
+        'ίδια εικόνα δεύτερη φορά δεν σβήνει την πραγματική προηγούμενη',
+        () async {
+          final id = await floor();
+          await repo.saveFloorImage(id, first);
+          await repo.saveFloorImage(id, second);
+          await repo.saveFloorImage(id, Uint8List.fromList(second));
+
+          await repo.swapFloorImageWithPrevious(id);
+          expect((await repo.readFloorImage(id))!.bytes, first);
+        },
+      );
+
+      test('επαναφορά χωρίς προηγούμενη: τίποτα δεν αλλάζει', () async {
+        final id = await floor();
+        await repo.saveFloorImage(id, first);
+        expect(await repo.swapFloorImageWithPrevious(id), isFalse);
+        expect((await repo.readFloorImage(id))!.bytes, first);
+      });
+
+      test('η διαγραφή ορόφου παίρνει μαζί και την εικόνα του', () async {
+        final id = await floor();
+        await repo.saveFloorImage(id, first);
+        await repo.deleteBuildingMapFloorClearingDepartmentMaps(id);
+        expect(await repo.readFloorImage(id), isNull);
+        expect(await db.query('building_map_floor_images'), isEmpty);
+      });
+    });
 
     test(
       'static clearedBuildingMapPlacementColumns / buildingMapPlacementColumnNames',

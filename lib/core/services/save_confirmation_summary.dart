@@ -26,8 +26,11 @@ String buildSaveConfirmationMessage({
     return 'Δημιουργήθηκε $noun «$label»';
   }
 
-  final newKeys = newMap.keys.toSet();
-  final orderedKeys = AuditDiffHelper.orderedDiffKeys(entityType, newKeys);
+  // Και τα κλειδιά της παλιάς εικόνας: τα μοντέλα παραλείπουν ό,τι είναι
+  // κενό, οπότε πεδίο που άδειασε υπάρχει ΜΟΝΟ στην παλιά — και χωρίς αυτά
+  // το μήνυμα σιωπούσε για κάθε άδειασμα («κτίριο: Καινούριο → —»).
+  final keys = {...oldMap.keys, ...newMap.keys};
+  final orderedKeys = AuditDiffHelper.orderedDiffKeys(entityType, keys);
   final changeLines = <String>[];
 
   // Η μετονομασία μπαίνει πρώτη και ξεχωριστά: είναι η μία αλλαγή που αλλάζει
@@ -42,7 +45,7 @@ String buildSaveConfirmationMessage({
 
   for (final key in orderedKeys) {
     if (renameFields.contains(key)) continue;
-    if (AuditDiffHelper.shouldSkipDerivativeField(key, newKeys)) continue;
+    if (AuditDiffHelper.shouldSkipDerivativeField(key, keys)) continue;
     final oldValue = oldMap[key];
     final newValue = newMap[key];
     if (!AuditService.shouldIncludeFieldInAuditDiff(key, oldValue, newValue)) {

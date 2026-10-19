@@ -1,3 +1,4 @@
+import 'catalog_column_layout.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../calls/models/equipment_model.dart';
 import '../../calls/models/user_model.dart';
@@ -100,9 +101,10 @@ String equipmentOwnDepartmentName(EquipmentRow row) {
 }
 
 /// Ορισμός στηλών πίνακα εξοπλισμού με key, label, displayValue και sortValue.
-class EquipmentColumn {
+class EquipmentColumn implements CatalogColumn {
   EquipmentColumn(this.key, this.label, this.displayValue, this.sortValue);
 
+  @override
   final String key;
   final String label;
   final String Function(EquipmentRow row) displayValue;

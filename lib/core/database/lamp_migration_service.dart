@@ -4,6 +4,7 @@ import '../directory/phone_department_policy.dart';
 import '../models/building_map_floor.dart';
 import '../services/lookup_service.dart';
 import '../utils/department_floor_sync.dart';
+import '../utils/display_text_sort.dart';
 import '../utils/lamp_floor_resolver.dart';
 import '../utils/name_parser.dart';
 import '../utils/phone_list_parser.dart';
@@ -1906,7 +1907,7 @@ class LampMigrationService {
     scored.sort((a, b) {
       final byConfidence = b.confidence.compareTo(a.confidence);
       if (byConfidence != 0) return byConfidence;
-      return a.label.compareTo(b.label);
+      return compareDisplayText(a.label, b.label);
     });
     final filtered = scored
         .where(

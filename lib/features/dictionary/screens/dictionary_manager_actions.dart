@@ -39,11 +39,7 @@ class DictionaryManagerActions {
 
   MasterDictionaryService get _master => host.master;
 
-  String _addCustomWordErrorMessage(Object e) {
-    final s = e.toString();
-    const p = 'Exception: ';
-    return s.startsWith(p) ? s.substring(p.length) : s;
-  }
+  String _addCustomWordErrorMessage(Object e) => humanizeUserFacingError(e);
 
   Future<void> openAddCustomWordDialog() async {
     List<String> categories;
@@ -276,14 +272,7 @@ class DictionaryManagerActions {
       );
     } catch (e) {
       if (context.mounted) {
-        final raw = e.toString();
-        const exPrefix = 'Exception: ';
-        const statePrefix = 'Bad state: ';
-        final msg = raw.startsWith(exPrefix)
-            ? raw.substring(exPrefix.length)
-            : raw.startsWith(statePrefix)
-            ? raw.substring(statePrefix.length)
-            : raw;
+        final msg = humanizeUserFacingError(e);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(msg)));

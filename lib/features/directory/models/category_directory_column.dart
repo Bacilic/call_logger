@@ -1,9 +1,11 @@
+import 'catalog_column_layout.dart';
 import 'category_model.dart';
 
 /// Ορισμός στήλης πίνακα κατηγοριών (κατάλογος).
-class CategoryDirectoryColumn {
+class CategoryDirectoryColumn implements CatalogColumn {
   const CategoryDirectoryColumn._(this.key, this.label, this.sortKey);
 
+  @override
   final String key;
   final String label;
   final String? sortKey;

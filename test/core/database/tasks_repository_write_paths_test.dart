@@ -468,5 +468,50 @@ void main() {
         expect((await rowOf(id))['closed_by_operator_id'], isNull);
       });
     });
+
+    test(
+      'δεύτερη διαγραφή της ίδιας εκκρεμότητας: μία εγγραφή στο Ιστορικό',
+      () async {
+        final id = await repo.createTask(
+          Task(
+            title: 'Εκτυπωτής Γραμματείας ΤΕΠ',
+            dueDate: DateTime(2026, 10, 17, 10).toIso8601String(),
+            status: 'open',
+          ),
+        );
+        // Δύο σταθμοί πατούν «Διαγραφή» σχεδόν ταυτόχρονα.
+        await repo.deleteTask(id);
+        await repo.deleteTask(id);
+
+        final deletions = await db.query(
+          'audit_log',
+          where: 'entity_type = ? AND entity_id = ? AND action = ?',
+          whereArgs: [
+            AuditEntityTypes.task,
+            id,
+            DatabaseHelper.auditActionDelete,
+          ],
+        );
+        expect(deletions, hasLength(1));
+      },
+    );
+
+    test('κλείσιμο: η εγγραφή Ιστορικού γράφει ποια εκκρεμότητα', () async {
+      final id = await repo.createTask(
+        Task(
+          title: 'Εκτυπωτής Γραμματείας ΤΕΠ',
+          dueDate: DateTime(2026, 10, 17, 10).toIso8601String(),
+          status: 'open',
+        ),
+      );
+      await repo.closeTask(id, 'Άλλαξε το τόνερ.');
+
+      final closes = await db.query(
+        'audit_log',
+        where: 'entity_type = ? AND entity_id = ? AND action = ?',
+        whereArgs: [AuditEntityTypes.task, id, 'ΚΛΕΙΣΙΜΟ ΕΚΚΡΕΜΟΤΗΤΑΣ'],
+      );
+      expect(closes.single['entity_name'], 'Εκτυπωτής Γραμματείας ΤΕΠ');
+    });
   });
 }

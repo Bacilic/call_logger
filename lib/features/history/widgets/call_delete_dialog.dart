@@ -5,6 +5,7 @@ import '../../../core/database/call_deletion_impact.dart';
 import '../../../core/providers/pending_deferred_actions_provider.dart';
 import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../providers/history_call_actions_provider.dart';
+import '../providers/history_provider.dart';
 import '../services/call_deletion_messages.dart';
 import 'call_deletion_dialog_parts.dart';
 import 'deferred_deletion_snackbar.dart';
@@ -243,6 +244,10 @@ class _CallBulkDeleteDialogState extends ConsumerState<_CallBulkDeleteDialog> {
     final messenger = ScaffoldMessenger.of(context);
     final hard = _hardDelete;
     final callIds = List<int>.of(widget.callIds);
+    // Η επιλογή καθαρίζει μόνο εδώ, στην επιβεβαίωση: η «Ακύρωση» ή το
+    // κλείσιμο του διαλόγου αφήνουν τις κλήσεις τσεκαρισμένες. Ούτε η
+    // «Αναίρεση» της μέτρησης την ξαναφέρνει — οι κλήσεις μένουν χωρίς τσεκ.
+    ref.read(historySelectedCallIdsProvider.notifier).clear();
     Navigator.of(context).pop();
 
     final count = callIds.length;

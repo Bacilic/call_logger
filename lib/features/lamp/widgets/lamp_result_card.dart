@@ -89,6 +89,14 @@ class _EquipmentResultCardState extends State<EquipmentResultCard> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final maxWidth = constraints.maxWidth;
+              // Ίδιες ενέργειες σε κάθε πλάτος: η διάταξη αλλάζει, το τι
+              // μπορεί να κάνει ο χρήστης όχι.
+              final onEditSection = widget.onSaveSection == null
+                  ? null
+                  : _editSection;
+              final onTransferSection = widget.onTransferSection == null
+                  ? null
+                  : _transferSection;
               if (sections.isEmpty) {
                 return Text(
                   'Δεν υπάρχουν διαθέσιμες πληροφορίες.',
@@ -96,17 +104,16 @@ class _EquipmentResultCardState extends State<EquipmentResultCard> {
                 );
               }
               if (!maxWidth.isFinite || maxWidth < _kFallbackMinWidth) {
+                // Σταθερό πλάτος, όχι ελάχιστο: μέσα σε οριζόντια κύλιση το
+                // πλάτος είναι άπειρο και η κάρτα δεν μπορεί να σχεδιαστεί.
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minWidth: _kFallbackMinWidth,
-                    ),
+                  child: SizedBox(
+                    width: _kFallbackMinWidth,
                     child: _VerticalSections(
                       sections: sections,
-                      onTransferSection: widget.onTransferSection == null
-                          ? null
-                          : _transferSection,
+                      onEditSection: onEditSection,
+                      onTransferSection: onTransferSection,
                     ),
                   ),
                 );
@@ -114,12 +121,8 @@ class _EquipmentResultCardState extends State<EquipmentResultCard> {
               if (maxWidth >= _kDesktopBreakpoint) {
                 return _DesktopSections(
                   sections: sections,
-                  onEditSection: widget.onSaveSection == null
-                      ? null
-                      : _editSection,
-                  onTransferSection: widget.onTransferSection == null
-                      ? null
-                      : _transferSection,
+                  onEditSection: onEditSection,
+                  onTransferSection: onTransferSection,
                 );
               }
               if (maxWidth >= _kTabletBreakpoint) {
@@ -127,22 +130,14 @@ class _EquipmentResultCardState extends State<EquipmentResultCard> {
                   sections: sections,
                   columns: maxWidth >= 1000 ? 3 : 2,
                   maxWidth: maxWidth,
-                  onEditSection: widget.onSaveSection == null
-                      ? null
-                      : _editSection,
-                  onTransferSection: widget.onTransferSection == null
-                      ? null
-                      : _transferSection,
+                  onEditSection: onEditSection,
+                  onTransferSection: onTransferSection,
                 );
               }
               return _VerticalSections(
                 sections: sections,
-                onEditSection: widget.onSaveSection == null
-                    ? null
-                    : _editSection,
-                onTransferSection: widget.onTransferSection == null
-                    ? null
-                    : _transferSection,
+                onEditSection: onEditSection,
+                onTransferSection: onTransferSection,
               );
             },
           ),

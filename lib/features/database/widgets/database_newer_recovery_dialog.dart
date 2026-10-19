@@ -12,6 +12,7 @@ import '../../../core/database/schema_downgrade_compatibility.dart';
 import '../../../core/services/app_instance_registry.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/updates/app_upgrade_offer.dart';
+import '../../../core/updates/update_check_result.dart';
 import '../../../core/updates/update_dialogs.dart';
 import '../../../core/updates/update_providers.dart';
 import '../services/database_downgrade_service.dart';
@@ -69,10 +70,11 @@ Future<bool> runDatabaseNewerRecovery({
 
   // Ο έλεγχος για νέα έκδοση της εκκίνησης τρέχει ΜΟΝΟ όταν η βάση ανοίξει —
   // εδώ δεν έχει τρέξει ποτέ, οπότε ρωτάμε τώρα τον φάκελο ενημερώσεων.
-  final upgradeOffer = await _probeAppUpgradeOffer(
+  final upgradeProbe = await _probeAppUpgrade(
     context,
     fileSchemaVersion: versions.fileVersion,
   );
+  final upgradeOffer = upgradeProbe.offer;
   if (!context.mounted) return false;
 
   final choice = await showDatabaseNewerVersionChoiceDialog(
@@ -83,6 +85,7 @@ Future<bool> runDatabaseNewerRecovery({
     assessment: assessment,
     newerInstance: newerInstance,
     upgradeOffer: upgradeOffer,
+    upgradeUnavailableReason: upgradeProbe.unavailableReason,
   );
   if (!context.mounted) return false;
 
@@ -172,27 +175,27 @@ Future<bool> runDatabaseNewerRecovery({
 
 /// Ρωτά τον φάκελο ενημερώσεων αν υπάρχει πακέτο που ξεμπλοκάρει τη βάση.
 ///
-/// Σιωπηλή αποτυχία: άφταστος φάκελος δικτύου, build ανάπτυξης ή χαλασμένο
-/// `version.json` σημαίνουν απλώς «καμία προσφορά» — ο διάλογος κρατά τις
-/// υπόλοιπες διεξόδους του και δεν μολύνεται από σφάλμα ενημερώσεων.
-Future<AppUpgradeOffer?> _probeAppUpgradeOffer(
+/// Όποια κι αν είναι η έκβαση, ο διάλογος κρατά τις υπόλοιπες διεξόδους του·
+/// όταν δεν υπάρχει προσφορά, ο χρήστης μαθαίνει **γιατί** — άφταστος
+/// φάκελος, δοκιμαστική έκδοση ή πακέτο που δεν βοηθά δεν είναι το ίδιο.
+Future<AppUpgradeProbe> _probeAppUpgrade(
   BuildContext context, {
   required int fileSchemaVersion,
 }) async {
   try {
     final container = ProviderScope.containerOf(context);
     final check = await container.read(updateServiceProvider).checkForUpdate();
-    final current = check.currentVersion;
-    final build = check.currentBuild;
-    if (current == null || build == null) return null;
-    return evaluateAppUpgradeOffer(
-      manifest: check.manifest,
-      currentVersion: current,
-      currentBuild: build,
+    return appUpgradeProbeFromCheck(
+      check,
       fileSchemaVersion: fileSchemaVersion,
     );
   } catch (_) {
-    return null;
+    // Ο ίδιος ο έλεγχος δεν πετά ποτέ (επιστρέφει την αιτία)· εδώ φτάνει μόνο
+    // σφάλμα πριν από αυτόν, και λέγεται ως «απρόσμενο».
+    return appUpgradeProbeFromCheck(
+      const UpdateCheckResult.failed(UpdateCheckFailure.unexpected),
+      fileSchemaVersion: fileSchemaVersion,
+    );
   }
 }
 
@@ -245,6 +248,7 @@ Future<DatabaseNewerVersionChoice> showDatabaseNewerVersionChoiceDialog({
   required SchemaDowngradeAssessment? assessment,
   required AppInstanceRecord? newerInstance,
   AppUpgradeOffer? upgradeOffer,
+  String? upgradeUnavailableReason,
 }) async {
   final choice = await showDialog<DatabaseNewerVersionChoice>(
     context: context,
@@ -265,7 +269,10 @@ Future<DatabaseNewerVersionChoice> showDatabaseNewerVersionChoiceDialog({
                 style: Theme.of(ctx).textTheme.bodyMedium,
               ),
               const SizedBox(height: 16),
-              _UpgradeAppSection(offer: upgradeOffer),
+              _UpgradeAppSection(
+                offer: upgradeOffer,
+                unavailableReason: upgradeUnavailableReason,
+              ),
               const _SectionGap(),
               _LaunchNewerSection(
                 newerInstance: newerInstance,
@@ -321,9 +328,10 @@ class _SectionTitle extends StatelessWidget {
 
 /// Η προτιμώμενη διέξοδος: εγκατάσταση της νεότερης έκδοσης εδώ και τώρα.
 class _UpgradeAppSection extends StatelessWidget {
-  const _UpgradeAppSection({required this.offer});
+  const _UpgradeAppSection({required this.offer, this.unavailableReason});
 
   final AppUpgradeOffer? offer;
+  final String? unavailableReason;
 
   @override
   Widget build(BuildContext context) {
@@ -338,9 +346,9 @@ class _UpgradeAppSection extends StatelessWidget {
           const _SectionTitle('Αναβάθμιση της εφαρμογής'),
           const SizedBox(height: 6),
           Text(
-            'Δεν βρέθηκε νεότερο πακέτο εγκατάστασης στον φάκελο '
-            'ενημερώσεων. Αν ο φάκελος δεν είναι προσβάσιμος τώρα '
-            '(π.χ. εκτός δικτύου), δοκιμάστε ξανά όταν συνδεθείτε.',
+            unavailableReason ??
+                'Δεν βρέθηκε νεότερο πακέτο εγκατάστασης στον φάκελο '
+                    'ενημερώσεων.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

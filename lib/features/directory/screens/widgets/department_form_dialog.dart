@@ -31,6 +31,7 @@ import '../../../../core/database/building_map_repository.dart';
 import '../../../../core/database/directory_support.dart';
 import '../../../../core/widgets/dialog_scrollable_content.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
+import '../../../../core/utils/display_text_sort.dart';
 import '../../../../core/utils/search_text_normalizer.dart';
 import '../../../../core/widgets/lexicon_spell_text_form_field.dart';
 import '../../../../core/widgets/resizable_text_area.dart';
@@ -776,7 +777,7 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
             .map((d) => d.name.trim())
             .where((n) => n.isNotEmpty)
             .toList()
-          ..sort((a, b) => a.compareTo(b));
+          ..sort((a, b) => compareDisplayText(a, b));
     return names;
   }
 

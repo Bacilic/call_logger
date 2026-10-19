@@ -47,7 +47,7 @@ void main() {
           .toList()
         ..sort();
 
-  void appendToShared(LogRecord record) => CrashLogService(
+  Future<bool> appendToShared(LogRecord record) => CrashLogService(
     logsDirectory: sharedLogs.path,
     now: () => fixedNow,
   ).appendRecord(record);
@@ -157,36 +157,6 @@ void main() {
       expect(namesIn(sharedLogs), hasLength(1));
     });
 
-    test(
-      'μετακομίζει μία τελευταία φορά ό,τι έμεινε στην παλιά θέση',
-      () async {
-        // Το ίχνος της προηγούμενης έκδοσης ζούσε στον κοινό φάκελο, με όνομα
-        // χωρίς την ταυτότητα της εκτέλεσης. Δεν επιτρέπεται να μείνει εκεί
-        // αδιάβαστο για πάντα.
-        final legacy = File(
-          '${sharedLogs.path}${Platform.pathSeparator}'
-          '${ShutdownTraceService.legacySharedWorkingFileName}',
-        );
-        await legacy.writeAsString(
-          '[2026-09-21 08:38:10] step=3 "Αντίγραφο ασφαλείας εξόδου" START\n',
-        );
-
-        final promoted = await ShutdownTraceService.promoteOrphanedTrace(
-          workingDirectory: localWork.path,
-          legacySharedDirectory: sharedLogs.path,
-          appendRecord: appendToShared,
-          now: () => fixedNow,
-        );
-
-        expect(promoted, isTrue);
-        expect(
-          legacy.existsSync(),
-          isFalse,
-          reason: greekExpectMsg('Η παλιά θέση καθαρίζει μόλις διαβαστεί'),
-        );
-      },
-    );
-
     test('το ζωντανό ίχνος άλλου υπολογιστή δεν αγγίζεται', () async {
       final other = File(
         '${sharedLogs.path}${Platform.pathSeparator}'
@@ -196,7 +166,6 @@ void main() {
 
       final promoted = await ShutdownTraceService.promoteOrphanedTrace(
         workingDirectory: localWork.path,
-        legacySharedDirectory: sharedLogs.path,
         appendRecord: appendToShared,
         now: () => fixedNow,
       );
@@ -214,7 +183,6 @@ void main() {
     test('καθαρά και τα δύο: η προαγωγή δεν βρίσκει τίποτα', () async {
       final promoted = await ShutdownTraceService.promoteOrphanedTrace(
         workingDirectory: localWork.path,
-        legacySharedDirectory: sharedLogs.path,
         appendRecord: appendToShared,
         now: () => fixedNow,
       );
@@ -228,10 +196,6 @@ void main() {
     // Τώρα που ο φάκελος είναι τοπικός, η κανονική και η δοκιμαστική έκδοση
     // του ίδιου υπολογιστή θα μοιραζόταν ένα αρχείο χωρίς την ταυτότητα της
     // εκτέλεσης στο όνομα.
-    expect(
-      ShutdownTraceService.workingFileName,
-      isNot(ShutdownTraceService.legacySharedWorkingFileName),
-    );
     expect(ShutdownTraceService.workingFileName, contains(thisStation));
   });
 }

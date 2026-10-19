@@ -103,10 +103,16 @@ class TasksAnalyticsRepository {
       "AND $_completionMoment >= ? AND $_completionMoment < ?",
       [startIso, endExclusiveIso],
     );
+    // Κάθε ακυρωμένη εκκρεμότητα μετρά ΜΙΑ φορά, τη μέρα της πρώτης της
+    // διαγραφής — όπως και στο ποσοστό ακύρωσης πιο κάτω. Μετρώντας εγγραφές
+    // Ιστορικού, μια εκκρεμότητα που αναστήθηκε και ξαναδιαγράφηκε μετρούσε
+    // δύο φορές.
     final cancelledInRangeCount = await countByQuery(
-      "SELECT COUNT(*) AS count FROM audit_log "
-      "WHERE entity_type = ? AND action = ? "
-      "AND timestamp >= ? AND timestamp < ?",
+      "SELECT COUNT(*) AS count "
+      "FROM (SELECT a.entity_id, MIN(a.timestamp) AS ts FROM audit_log a "
+      "JOIN tasks t ON t.id = a.entity_id AND COALESCE(t.is_deleted, 0) = 1 "
+      "WHERE a.entity_type = ? AND a.action = ? GROUP BY a.entity_id) "
+      "WHERE ts >= ? AND ts < ?",
       [
         AuditEntityTypes.task,
         DatabaseHelper.auditActionDelete,
@@ -409,11 +415,12 @@ class TasksAnalyticsRepository {
       [startIso, endExclusiveIso],
     );
     final cancelledRows = await db.rawQuery(
-      "SELECT SUBSTR(timestamp, 1, 10) AS day, COUNT(*) AS count "
-      "FROM audit_log "
-      "WHERE entity_type = ? AND action = ? "
-      "AND timestamp >= ? AND timestamp < ? "
-      "GROUP BY SUBSTR(timestamp, 1, 10)",
+      "SELECT SUBSTR(ts, 1, 10) AS day, COUNT(*) AS count "
+      "FROM (SELECT a.entity_id, MIN(a.timestamp) AS ts FROM audit_log a "
+      "JOIN tasks t ON t.id = a.entity_id AND COALESCE(t.is_deleted, 0) = 1 "
+      "WHERE a.entity_type = ? AND a.action = ? GROUP BY a.entity_id) "
+      "WHERE ts >= ? AND ts < ? "
+      "GROUP BY SUBSTR(ts, 1, 10)",
       [
         AuditEntityTypes.task,
         DatabaseHelper.auditActionDelete,

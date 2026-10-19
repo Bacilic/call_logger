@@ -8,17 +8,17 @@ import '../../../core/services/shutdown_trace_incident.dart';
 /// στραβά. Στη φυσιολογική ζωή της εφαρμογής η ενότητα «Καταγραφή σφαλμάτων»
 /// δεν δείχνει τίποτα εδώ.
 ///
-/// Οι λεπτομέρειες δεν ανοίγουν ως ωμό αρχείο: τα ημερήσια αρχεία γράφονται
-/// για να τα διαβάζει η εξαγωγή, όχι το μάτι.
+/// Οι λεπτομέρειες ανοίγουν σε παράθυρο με τα βήματα αυτού του κλεισίματος —
+/// όχι ως ωμό αρχείο, ούτε μέσα από την πλήρη εξαγωγή διαγνωστικών.
 class ShutdownIncidentNotice extends StatelessWidget {
   const ShutdownIncidentNotice({
     super.key,
     required this.incident,
-    required this.onExport,
+    required this.onShowDetails,
   });
 
   final ShutdownTraceIncident incident;
-  final VoidCallback onExport;
+  final VoidCallback onShowDetails;
 
   @override
   Widget build(BuildContext context) {
@@ -59,9 +59,9 @@ class ShutdownIncidentNotice extends StatelessWidget {
                       MouseRegion(
                         cursor: SystemMouseCursors.click,
                         child: GestureDetector(
-                          onTap: onExport,
+                          onTap: onShowDetails,
                           child: Text(
-                            'Εξαγωγή αυτού του περιστατικού',
+                            'Προβολή αυτού του κλεισίματος',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.primary,
                               decoration: TextDecoration.underline,

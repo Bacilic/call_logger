@@ -3,7 +3,9 @@
 //   flutter test test/features/directory/department_directory_refresh_test.dart
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/department_repository.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
 import 'package:call_logger/features/directory/providers/directory_provider.dart';
@@ -57,12 +59,19 @@ String? _orphanPhoneDeptLabel(ProviderContainer container, String number) {
   return null;
 }
 
-Future<void> _selectDepartment(
+/// Η διαγραφή όπως την κάνει η οθόνη: πρώτα η βάση, μετά ο κατάλογος.
+Future<void> _deleteDepartment(
   ProviderContainer container,
   int departmentId,
 ) async {
   final notifier = container.read(departmentDirectoryProvider.notifier);
-  notifier.toggleSelection(departmentId);
+  final dept = container
+      .read(departmentDirectoryProvider)
+      .allDepartments
+      .firstWhere((d) => d.id == departmentId);
+  final db = await DatabaseHelper.instance.database;
+  await DepartmentRepository(db).softDeleteDepartments([departmentId]);
+  await notifier.finalizeExternalDeletion([dept]);
 }
 
 void main() {
@@ -108,7 +117,7 @@ void main() {
     );
 
     test(
-      'deleteSelected — αφαίρεση ονόματος τμήματος από κοινόχρηστο τηλέφωνο',
+      'διαγραφή τμήματος — αφαίρεση ονόματος τμήματος από κοινόχρηστο τηλέφωνο',
       () async {
         final container = await _container();
         final deptId = await _seedDepartmentId();
@@ -122,17 +131,14 @@ void main() {
           contains(kTestDepartmentName),
         );
 
-        await _selectDepartment(container, deptId);
-        await container
-            .read(departmentDirectoryProvider.notifier)
-            .deleteSelected();
+        await _deleteDepartment(container, deptId);
 
         final label = _orphanPhoneDeptLabel(container, orphanPhone);
         expect(
           label == null || !label.contains(kTestDepartmentName),
           isTrue,
           reason:
-              'Μετά deleteSelected το κοινόχρηστο τηλέφωνο δεν πρέπει να δείχνει soft-deleted τμήμα (χωρίς loadUsers())',
+              'Μετά τη διαγραφή το κοινόχρηστο τηλέφωνο δεν πρέπει να δείχνει soft-deleted τμήμα (χωρίς loadUsers())',
         );
 
         container.dispose();
@@ -149,10 +155,7 @@ void main() {
         await _insertOrphanPhone(orphanPhone, deptId);
         await _preloadSiblingCatalogs(container);
 
-        await _selectDepartment(container, deptId);
-        await container
-            .read(departmentDirectoryProvider.notifier)
-            .deleteSelected();
+        await _deleteDepartment(container, deptId);
         expect(
           _orphanPhoneDeptLabel(container, orphanPhone) == null ||
               !_orphanPhoneDeptLabel(
@@ -260,6 +263,46 @@ void main() {
         );
 
         container.dispose();
+      },
+    );
+
+    // Νέα εξωτερική μονάδα γεννιέται με πλάτος/ύψος ετικέτας 150/50 στη βάση.
+    // Η αποθήκευσή της σβήνει τη θέση στον χάρτη — αλλά η αφετηρία της
+    // σύγκρισης είναι ό,τι διάβασε η φόρμα, όχι ό,τι πάει να γραφτεί· αλλιώς
+    // βγαίνει ψεύτικο «Κάποιος πρόλαβε» χωρίς να έχει αγγίξει κανείς την
+    // καρτέλα.
+    test(
+      'δεύτερη αποθήκευση εξωτερικής μονάδας δεν βγάζει ψεύτικη διένεξη',
+      () async {
+        final container = await _container();
+        addTearDown(container.dispose);
+        final db = await DatabaseHelper.instance.database;
+        final id = await db.insert('departments', {
+          'name': 'Κέντρο Υγείας Κορίνθου',
+          'name_key': 'κεντρο υγειας κορινθου',
+          'kind': DepartmentKind.externalUnit.dbValue,
+          'is_deleted': 0,
+        });
+        final notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        final asFormSawIt = container
+            .read(departmentDirectoryProvider)
+            .allDepartments
+            .firstWhere((d) => d.id == id);
+
+        await notifier.updateDepartment(
+          asFormSawIt.copyWith(notes: 'Τηλεφωνικό κέντρο'),
+          expected: asFormSawIt,
+          clearBuildingMapPlacement: true,
+        );
+
+        final row = (await db.query(
+          'departments',
+          where: 'id = ?',
+          whereArgs: [id],
+          limit: 1,
+        )).first;
+        expect(row['notes'], 'Τηλεφωνικό κέντρο');
       },
     );
 

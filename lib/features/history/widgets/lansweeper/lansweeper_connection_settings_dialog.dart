@@ -110,19 +110,11 @@ class _LansweeperConnectionSettingsDialogState
     );
   }
 
-  Widget _scrollableTab(Widget child) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 12, bottom: 4),
-      child: child,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final connectionStatus = ref.watch(lansweeperConnectionProbeProvider);
     final screenSize = MediaQuery.sizeOf(context);
     final contentWidth = math.min(920.0, screenSize.width - 120);
-    final contentHeight = math.min(600.0, screenSize.height - 240);
 
     return PopScope(
       canPop: false,
@@ -141,12 +133,16 @@ class _LansweeperConnectionSettingsDialogState
             const Text('Ρυθμίσεις Lansweeper'),
           ],
         ),
+        // Ύψος (απόφαση Διευθυντή 18/10/2026): όσο η πιο ψηλή καρτέλα, ώστε να
+        // φαίνονται όλα χωρίς κύλιση και το «Κλείσιμο» να μη μετακινείται
+        // στην αλλαγή καρτέλας· ποτέ πάνω από όσο χωρά το παράθυρο — τότε
+        // μόνο εμφανίζεται κύλιση.
         content: SizedBox(
           width: contentWidth,
-          height: contentHeight,
           child: DefaultTabController(
             length: 4,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TabBar(
@@ -160,47 +156,36 @@ class _LansweeperConnectionSettingsDialogState
                     ),
                   ],
                 ),
-                Expanded(
-                  child: TabBarView(
+                Flexible(
+                  child: _TallestTabBody(
                     children: [
-                      _scrollableTab(
-                        LansweeperSettingsApiTab(
-                          apiUrlController: widget.apiUrlController,
-                          apiKeyController: widget.apiKeyController,
-                          agentUsernameController:
-                              widget.agentUsernameController,
-                          onSettingsChanged: widget.onSettingsChanged,
-                          onLansweeperUrlChanged: widget.onLansweeperUrlChanged,
-                          onApiHelpLink: widget.onApiHelpLink,
-                        ),
+                      LansweeperSettingsApiTab(
+                        apiUrlController: widget.apiUrlController,
+                        apiKeyController: widget.apiKeyController,
+                        agentUsernameController: widget.agentUsernameController,
+                        onSettingsChanged: widget.onSettingsChanged,
+                        onLansweeperUrlChanged: widget.onLansweeperUrlChanged,
+                        onApiHelpLink: widget.onApiHelpLink,
                       ),
-                      _scrollableTab(
-                        LansweeperSettingsHelpdeskTab(
-                          ticketFormUrlController:
-                              widget.ticketFormUrlController,
-                          ticketViewUrlController:
-                              widget.ticketViewUrlController,
-                          onLansweeperUrlChanged: widget.onLansweeperUrlChanged,
-                          onTicketFormHelpLink: widget.onTicketFormHelpLink,
-                          onTicketViewHelpLink: widget.onTicketViewHelpLink,
-                        ),
+                      LansweeperSettingsHelpdeskTab(
+                        ticketFormUrlController: widget.ticketFormUrlController,
+                        ticketViewUrlController: widget.ticketViewUrlController,
+                        onLansweeperUrlChanged: widget.onLansweeperUrlChanged,
+                        onTicketFormHelpLink: widget.onTicketFormHelpLink,
+                        onTicketViewHelpLink: widget.onTicketViewHelpLink,
                       ),
-                      _scrollableTab(
-                        LansweeperSettingsAiTab(
-                          geminiApiKeyController: widget.geminiApiKeyController,
-                          geminiEndpointController:
-                              widget.geminiEndpointController,
-                          geminiPrimaryModelController:
-                              widget.geminiPrimaryModelController,
-                          geminiFallbackModelController:
-                              widget.geminiFallbackModelController,
-                          onSettingsChanged: widget.onSettingsChanged,
-                          onAiHelpLink: widget.onAiHelpLink,
-                        ),
+                      LansweeperSettingsAiTab(
+                        geminiApiKeyController: widget.geminiApiKeyController,
+                        geminiEndpointController:
+                            widget.geminiEndpointController,
+                        geminiPrimaryModelController:
+                            widget.geminiPrimaryModelController,
+                        geminiFallbackModelController:
+                            widget.geminiFallbackModelController,
+                        onSettingsChanged: widget.onSettingsChanged,
+                        onAiHelpLink: widget.onAiHelpLink,
                       ),
-                      _scrollableTab(
-                        const LansweeperTicketSubmitSettingsSection(),
-                      ),
+                      const LansweeperTicketSubmitSettingsSection(),
                     ],
                   ),
                 ),
@@ -217,6 +202,41 @@ class _LansweeperConnectionSettingsDialogState
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Το σώμα των καρτελών: παίρνει το ύψος της ΠΙΟ ΨΗΛΗΣ καρτέλας, όχι της
+/// τρέχουσας, ώστε ο διάλογος να μην αλλάζει μέγεθος στην αλλαγή καρτέλας. Αν
+/// δεν χωρά στο παράθυρο, κυλά.
+class _TallestTabBody extends StatelessWidget {
+  const _TallestTabBody({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = DefaultTabController.of(context);
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final current = controller.index;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.only(top: 12, bottom: 4),
+          child: IndexedStack(
+            index: current,
+            children: [
+              for (var i = 0; i < children.length; i++)
+                // Οι κρυφές καρτέλες μετρούν στο ύψος, αλλά δεν δέχονται
+                // εστίαση με Tab ούτε τρέχουν κινούμενα.
+                ExcludeFocus(
+                  excluding: i != current,
+                  child: TickerMode(enabled: i == current, child: children[i]),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

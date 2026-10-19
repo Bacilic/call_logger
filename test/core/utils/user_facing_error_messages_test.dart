@@ -69,6 +69,17 @@ void main() {
       expect(message, contains('xyz_unique_detail_token_for_support'));
     });
 
+    test('δικό μας ελληνικό μήνυμα περνά αυτούσιο, χωρίς πρόθεμα', () {
+      expect(
+        humanizeUserFacingError(Exception('Η λέξη υπάρχει ήδη στο λεξικό.')),
+        'Η λέξη υπάρχει ήδη στο λεξικό.',
+      );
+      expect(
+        humanizeUserFacingError(StateError('Η λέξη δεν βρέθηκε.')),
+        'Η λέξη δεν βρέθηκε.',
+      );
+    });
+
     group('φθορά περιεχομένου', () {
       // Το πραγματικό μήνυμα της οθόνης «Βάση Δεδομένων» (13/09): από πάνω
       // «η σύνδεση πέτυχε», από κάτω τρεις σειρές αγγλικού SQL.

@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../../core/services/building_map_storage.dart';
 import '../../models/department_model.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_sheet_painter.dart';
@@ -29,9 +28,14 @@ class BuildingMapFloorEditPreview extends StatefulWidget {
     required this.rotationDegrees,
     required this.showDepartments,
     required this.departments,
+    this.maxWidth,
   });
 
+  /// Τοπικό αρχείο εικόνας (απόλυτη διαδρομή)· κενό όταν δεν υπάρχει εικόνα.
   final String imagePath;
+
+  /// Ανώτατο πλάτος· χρειάζεται όταν δύο προεπισκοπήσεις μοιράζονται τη γραμμή.
+  final double? maxWidth;
   final int floorId;
   final double rotationDegrees;
   final bool showDepartments;
@@ -82,12 +86,7 @@ class _BuildingMapFloorEditPreviewState
     final trimmed = imagePath.trim();
     if (trimmed.isEmpty) return const _PreviewData.missing();
 
-    late final File file;
-    if (p.isAbsolute(trimmed)) {
-      file = File(p.normalize(trimmed));
-    } else {
-      file = await BuildingMapStorage.fileForStoredPath(trimmed);
-    }
+    final file = File(p.normalize(trimmed));
     if (!await file.exists()) return const _PreviewData.missing();
 
     try {
@@ -148,7 +147,7 @@ class _BuildingMapFloorEditPreviewState
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
-              'Δεν βρέθηκε εικόνα κάτοψης.',
+              'Η κάτοψη δεν έχει ανέβει ακόμη.',
               style: Theme.of(context).textTheme.bodySmall,
               textAlign: TextAlign.center,
             ),
@@ -160,7 +159,8 @@ class _BuildingMapFloorEditPreviewState
         final sheetStr = widget.floorId.toString();
 
         final screenW = MediaQuery.sizeOf(context).width;
-        final maxContentWidth = math.min(screenW - 80, 512).toDouble();
+        final maxContentWidth =
+            widget.maxWidth ?? math.min(screenW - 80, 512).toDouble();
         final displaySize = BuildingMapFloorEditPreview.previewDisplaySize(
           maxContentWidth: maxContentWidth,
           aspectRatio: aspect.toDouble(),

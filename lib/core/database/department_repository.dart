@@ -174,6 +174,29 @@ class DepartmentRepository {
     );
   }
 
+  /// Ποιος άγγιξε τελευταίος αυτό το τμήμα, και πότε — από το Ιστορικό.
+  ///
+  /// Ζητείται μόνο αφού διαπιστωθεί διένεξη. **Η αποτυχία είναι σιωπή:** η
+  /// ταυτότητα είναι συμπληρωματική, η διένεξη αναφέρεται κι έτσι.
+  Future<({String? who, DateTime? at})> lastActorFor(int departmentId) async {
+    try {
+      final rows = await db.query(
+        'audit_log',
+        columns: ['user_performing', 'timestamp'],
+        where: 'entity_type = ? AND entity_id = ?',
+        whereArgs: [AuditEntityTypes.department, departmentId],
+        orderBy: 'id DESC',
+        limit: 1,
+      );
+      if (rows.isEmpty) return (who: null, at: null);
+      final who = (rows.first['user_performing'] as String?)?.trim();
+      final at = DateTime.tryParse((rows.first['timestamp'] as String?) ?? '');
+      return (who: (who == null || who.isEmpty) ? null : who, at: at);
+    } catch (_) {
+      return (who: null, at: null);
+    }
+  }
+
   Future<Map<String, dynamic>?> getDepartmentRowById(int id) async {
     final rows = await db.query(
       'departments',

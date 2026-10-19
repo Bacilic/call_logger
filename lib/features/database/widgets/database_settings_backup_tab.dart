@@ -499,7 +499,6 @@ class _DatabaseSettingsBackupTabState
             availabilityFuture: _portableAvailability(
               lexiconLoaded: ref.watch(coreLexiconProvider).loaded,
             ),
-            onToggleMapImages: _notifier.setIncludeMapImagesInBackup,
             onToggleToolImages: _notifier.setIncludeToolImages,
             onToggleLexicon: _notifier.setIncludeLexicon,
             onToggleLampDb: _notifier.setIncludeLampDb,

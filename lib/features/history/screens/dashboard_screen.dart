@@ -122,56 +122,60 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final palette = ref.watch(dashboardPaletteProvider);
     final colors = DashboardPaletteColors.from(palette);
 
-    return Scaffold(
-      backgroundColor: colors.pageBg,
-      floatingActionButton: const QuickCallFloatingButton(
-        scope: QuickCallFabScope.overlayRoute,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [colors.pageGradientStart, colors.pageGradientEnd],
-          ),
+    return Theme(
+      data: colors.applyTo(Theme.of(context)),
+      child: Scaffold(
+        backgroundColor: colors.pageBg,
+        floatingActionButton: const QuickCallFloatingButton(
+          scope: QuickCallFabScope.overlayRoute,
         ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-            child: Column(
-              children: [
-                DashboardTopBar(
-                  colors: colors,
-                  palette: palette,
-                  filtersExpanded: _filtersExpanded,
-                  onBack: () => Navigator.of(context).maybePop(),
-                  onToggleFilters: () =>
-                      setState(() => _filtersExpanded = !_filtersExpanded),
-                  onExport: _export,
-                  onPaletteChanged: (value) =>
-                      ref.read(dashboardPaletteProvider.notifier).select(value),
-                ),
-                const SizedBox(height: 12),
-                DashboardFilterBar(
-                  colors: colors,
-                  filter: filter,
-                  activeDatePreset: activeDatePreset,
-                  controlsExpanded: _filtersExpanded,
-                  onPickDateRange: _pickDateRange,
-                  onSetDatePreset: (preset) => ref
-                      .read(dashboardFilterProvider.notifier)
-                      .setDatePreset(preset),
-                ),
-                const SizedBox(height: 16),
-                statsAsync.when(
-                  data: (data) => _content(data, colors),
-                  loading: () => LoadingDashboard(colors: colors),
-                  error: (e, _) => ErrorCard(
-                    message: 'Σφάλμα φόρτωσης: ${humanizeUserFacingError(e)}',
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [colors.pageGradientStart, colors.pageGradientEnd],
+            ),
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Column(
+                children: [
+                  DashboardTopBar(
                     colors: colors,
+                    palette: palette,
+                    filtersExpanded: _filtersExpanded,
+                    onBack: () => Navigator.of(context).maybePop(),
+                    onToggleFilters: () =>
+                        setState(() => _filtersExpanded = !_filtersExpanded),
+                    onExport: _export,
+                    onPaletteChanged: (value) => ref
+                        .read(dashboardPaletteProvider.notifier)
+                        .select(value),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  DashboardFilterBar(
+                    colors: colors,
+                    filter: filter,
+                    activeDatePreset: activeDatePreset,
+                    controlsExpanded: _filtersExpanded,
+                    onPickDateRange: _pickDateRange,
+                    onSetDatePreset: (preset) => ref
+                        .read(dashboardFilterProvider.notifier)
+                        .setDatePreset(preset),
+                  ),
+                  const SizedBox(height: 16),
+                  statsAsync.when(
+                    data: (data) => _content(data, colors),
+                    loading: () => LoadingDashboard(colors: colors),
+                    error: (e, _) => ErrorCard(
+                      message: 'Σφάλμα φόρτωσης: ${humanizeUserFacingError(e)}',
+                      colors: colors,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

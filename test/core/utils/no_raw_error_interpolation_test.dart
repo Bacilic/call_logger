@@ -32,6 +32,9 @@ const _guardedRelativePaths = <String>[
   'lib/features/database/screens/database_browser_screen.dart',
   'lib/features/database/widgets/database_rename_failure_dialog.dart',
   'lib/features/database/widgets/integrity_fix_dialogs.dart',
+  // Προστέθηκε 17/10/2026: ο χάρτης κτιρίου τύπωνε ωμό σφάλμα στην ενημέρωση
+  // κάτοψης και στη διαγραφή φύλλου.
+  'lib/features/directory/building_map/controllers/building_map_controller.dart',
 ];
 
 /// Ωμή παρεμβολή σφάλματος σε μήνυμα χρήστη.
@@ -41,8 +44,12 @@ const _guardedRelativePaths = <String>[
 /// 2. `${κάτι.error}` — το σφάλμα ενός `AsyncValue` ή `AsyncSnapshot`. Αυτή
 ///    ξέφευγε ως τις 14/09/2026, και μαζί της τρία σημεία της περιοχής
 ///    «Βάση Δεδομένων» που τύπωναν τρεις σειρές αγγλικού SQL.
+/// 3. `'$e'` ως ολόκληρη τιμή (π.χ. `_error = '$e'`) και `e.toString()` —
+///    ξέφευγαν ως τις 17/10/2026 από Λεξικό, Περιηγητή βάσης και διορθώσεις
+///    ακεραιότητας.
 final _rawErrorInterpolation = RegExp(
-  r": \$e'|\('\$e'\)|\$\{[A-Za-z_][A-Za-z0-9_.]*\.error[!]?\}",
+  r": \$e'|'\$e'|\be\.toString\(\)|"
+  r"\$\{[A-Za-z_][A-Za-z0-9_.]*\.error[!]?\}",
 );
 
 void main() {
@@ -55,6 +62,8 @@ void main() {
       "                  'Σφάλμα: \${snap.error}',",
       "      showSnack('Αποτυχία: \$e');",
       "      messenger.showSnackBar(SnackBar(content: Text('\$e')));",
+      "          _error = '\$e';",
+      "        final msg = e.toString().replaceFirst('Exception: ', '');",
     ];
     for (final line in caught) {
       expect(

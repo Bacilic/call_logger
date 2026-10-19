@@ -1,33 +1,17 @@
 /// Ο κατάλογος των πινάκων της βάσης όπως τον βλέπει ο χρήστης: ελληνικό
 /// όνομα για κάθε πίνακα, και η σειρά τους όπως η πλευρική μπάρα.
 ///
-/// Καθαρά δεδομένα — πίνακας που λείπει από εδώ εμφανίζεται με το αγγλικό του
-/// όνομα, μετά τους γνωστούς, αλφαβητικά.
+/// Πίνακας που λείπει από τη σειρά εμφανίζεται μετά τους γνωστούς,
+/// αλφαβητικά.
 library;
 
-/// Αγγλικά ονόματα πινάκων → φιλικά ελληνικά για το UI.
-const Map<String, String> _kTableDisplayNames = {
-  'app_settings': 'Ρυθμίσεις εφαρμογής',
-  'tasks': 'Εκκρεμότητες',
-  'calls': 'Κλήσεις',
-  'users': 'Χρήστες',
-  'equipment': 'Εξοπλισμός',
-  'departments': 'Τμήματα',
-  'categories': 'Κατηγορίες',
-  'audit_log': 'Αρχείο καταγραφής (audit)',
-  'phones': 'Τηλέφωνα',
-  'user_phones': 'Συσχέτιση χρήστη–τηλεφώνου',
-  'department_phones': 'Συσχέτιση τμήματος–τηλεφώνου',
-  'user_equipment': 'Συσχέτιση χρήστη–εξοπλισμού',
-  'knowledge_base': 'Βάση Γνώσης',
-  'remote_tools': 'Εργαλεία απομακρυσμένης επιφάνειας',
-  'remote_tool_args': 'Ορίσματα απομακρυσμένου εργαλείου',
-  'user_dictionary': 'Προσωπικό λεξικό',
-  'full_dictionary': 'Πλήρες λεξικό (συσσωρευτής)',
-};
+import '../../../core/database/database_table_labels.dart';
 
+/// Το ελληνικό όνομα έρχεται από το κοινό λεξιλόγιο της εφαρμογής, ώστε ο
+/// ίδιος πίνακας να λέγεται παντού το ίδιο (Βάση Δεδομένων, Έλεγχος
+/// Ακεραιότητας).
 String databaseTableDisplayName(String tableName) =>
-    _kTableDisplayNames[tableName] ?? tableName;
+    databaseTableLabelEl(tableName);
 
 /// Σειρά πινάκων όπως η πλευρική μπάρα της εφαρμογής: Κλήσεις → Εκκρεμότητες →
 /// Κατάλογος → (Ιστορικό: ίδια δεδομένα με `calls`) → ρυθμίσεις/εποπτεία.
@@ -35,8 +19,10 @@ const List<String> _kMenuTableOrder = [
   // Κλήσεις
   'calls',
   'categories',
+  'call_external_links',
   // Εκκρεμότητες
   'tasks',
+  'task_notifications',
   // Κατάλογος
   'users',
   'departments',
@@ -45,8 +31,14 @@ const List<String> _kMenuTableOrder = [
   'user_phones',
   'department_phones',
   'user_equipment',
+  'building_map_floors',
+  'building_map_floor_images',
   // Βάση Δεδομένων / λοιπά
   'app_settings',
+  'operators',
+  'operator_settings',
+  'operator_presence',
+  'servers',
   'audit_log',
   'knowledge_base',
   'remote_tools',

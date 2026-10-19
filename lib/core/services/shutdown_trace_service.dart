@@ -55,7 +55,7 @@ class ShutdownTraceService {
   /// Πού καταλήγει το ίχνος όταν αξίζει να κρατηθεί — το ημερήσιο αρχείο
   /// του [CrashLogService], που κατέχει τον φάκελο, τον φρουρό του δίσκου και
   /// τη σφραγίδα του σταθμού.
-  final FutureOr<void> Function(LogRecord record) appendRecord;
+  final Future<bool> Function(LogRecord record) appendRecord;
 
   /// Πάνω από αυτό το συνολικό όριο το κλείσιμο θεωρείται αργό.
   final Duration slowThreshold;
@@ -88,16 +88,6 @@ class ShutdownTraceService {
       '${CrashLogService.legacyShutdownTracePrefix}'
       '${StationName.fileSafe}_'
       '${CrashLogService.instanceSlug(OperatorPresenceHeartbeat.instanceId)}'
-      '${ShutdownTraceIncident.fileNameSuffix}';
-
-  /// Το όνομα της εποχής που το προσωρινό ίχνος ζούσε στον κοινό φάκελο.
-  ///
-  /// Δεν ψάχνεται παντού: **μόνο** στην παλιά του θέση, και μόνο για να
-  /// μετακομίσει μία τελευταία φορά. Φέρει τον σταθμό μας, οπότε δεν κινδυνεύει
-  /// να αρπάξει το ζωντανό ίχνος γείτονα που κλείνει αυτή τη στιγμή.
-  static String get legacySharedWorkingFileName =>
-      '${CrashLogService.legacyShutdownTracePrefix}'
-      '${StationName.fileSafe}'
       '${ShutdownTraceIncident.fileNameSuffix}';
 
   /// Ο τοπικός φάκελος του προσωρινού ίχνους: `%AppData%\…\shutdown`.
@@ -144,6 +134,10 @@ class ShutdownTraceService {
     try {
       await Directory(workingDirectory).create(recursive: true);
       final file = File(p.join(workingDirectory, workingFileName));
+      // Ίχνος που η εκκίνηση δεν πρόλαβε να γράψει (το ημερολόγιο σιωπούσε
+      // τότε) έχει τώρα μια δεύτερη ευκαιρία, πριν το νέο ίχνος πάρει τη θέση
+      // του.
+      await _promoteOne(file, appendRecord: appendRecord, clock: _now);
       if (await file.exists()) await file.delete();
       _file = file;
       _appendLine('=== shutdown trace start ===');
@@ -213,8 +207,7 @@ class ShutdownTraceService {
         if (await file.exists()) await file.delete();
         return;
       }
-      await _appendTraceToLog(file, _buildIncident());
-      _keptIncident = true;
+      _keptIncident = await _appendTraceToLog(file, _buildIncident());
     } catch (_) {}
   }
 
@@ -229,19 +222,34 @@ class ShutdownTraceService {
     );
   }
 
-  Future<void> _appendTraceToLog(
+  /// Στέλνει το ίχνος στο ημερολόγιο και σβήνει το τοπικό **μόνο** αν
+  /// γράφτηκε. Όταν το ημερολόγιο σιωπά (σβηστός διακομιστής), το ίχνος μένει
+  /// με τη σύνοψή του μέσα, για να το καταγράψει η επόμενη εκκίνηση ως αυτό
+  /// που ήταν — αργό ή αποτυχημένο κλείσιμο, όχι διακοπή.
+  Future<bool> _appendTraceToLog(
     File file,
     ShutdownTraceIncident summary,
   ) async {
-    await appendRecord(summary.toRecord(trace: await file.readAsString()));
+    final written = await appendRecord(
+      summary.toRecord(trace: await file.readAsString()),
+    );
+    if (!written) {
+      await file.writeAsString(
+        '$_pendingIncidentPrefix${jsonEncode(summary.toJson())}\n',
+        mode: FileMode.append,
+        flush: true,
+      );
+      return false;
+    }
     try {
       await file.delete();
     } catch (_) {}
+    return true;
   }
 
-  /// Η γραμμή σύνοψης που έγραφαν οι παλιές εκδόσεις μέσα στο προσωρινό
-  /// ίχνος. Αν βρεθεί σε ορφανό, το περιστατικό έχει ήδη καταγραφεί.
-  static const String _legacySummaryPrefix = 'SUMMARY=';
+  /// Σύνοψη περιστατικού που **δεν** γράφτηκε ακόμη στο ημερολόγιο: το
+  /// κλείσιμο ολοκληρώθηκε, αλλά το ημερολόγιο δεν απάντησε.
+  static const String _pendingIncidentPrefix = 'INCIDENT=';
 
   /// Προσωρινό αρχείο από προηγούμενη εκτέλεση = το κλείσιμο δεν ολοκληρώθηκε
   /// ποτέ (η διεργασία πέθανε στη μέση). Αυτό είναι από μόνο του περιστατικό:
@@ -256,62 +264,66 @@ class ShutdownTraceService {
   /// συνήθως δεν έχει δουλειά να κάνει.
   static Future<bool> promoteOrphanedTrace({
     required String workingDirectory,
-    required FutureOr<void> Function(LogRecord record) appendRecord,
-    String? legacySharedDirectory,
+    required Future<bool> Function(LogRecord record) appendRecord,
     DateTime Function()? now,
-  }) async {
-    final clock = now ?? DateTime.now;
-    var promoted = await _promoteOne(
+  }) {
+    return _promoteOne(
       File(p.join(workingDirectory, workingFileName)),
       appendRecord: appendRecord,
-      clock: clock,
+      clock: now ?? DateTime.now,
     );
-    // Η παλιά θέση σαρώνεται μετά, και μόνο μία φορά: ό,τι έμεινε εκεί από
-    // προηγούμενη έκδοση δεν επιτρέπεται να μείνει αδιάβαστο για πάντα.
-    if (legacySharedDirectory != null) {
-      final movedIn = await _promoteOne(
-        File(p.join(legacySharedDirectory, legacySharedWorkingFileName)),
-        appendRecord: appendRecord,
-        clock: clock,
-      );
-      promoted = promoted || movedIn;
-    }
-    return promoted;
   }
 
   static Future<bool> _promoteOne(
     File orphan, {
-    required FutureOr<void> Function(LogRecord record) appendRecord,
+    required Future<bool> Function(LogRecord record) appendRecord,
     required DateTime Function() clock,
   }) async {
     if (!await orphan.exists()) return false;
     try {
       final content = await orphan.readAsString();
       final lines = const LineSplitter().convert(content);
-      // Αν έχει ήδη σύνοψη, κάποιος το άφησε μισοτελειωμένο — δεν το
-      // ξαναγράφουμε, απλώς φεύγει από τη μέση.
-      final alreadySummarised = lines.any(
-        (line) => line.trim().startsWith(_legacySummaryPrefix),
-      );
-      if (!alreadySummarised) {
-        final summary = ShutdownTraceIncident(
-          occurredAt: _lastTimestampIn(lines) ?? clock(),
-          totalMs: 0,
-          slowestStepLabel: _lastStartedStepIn(lines),
-          slowestStepMs: 0,
-          hadFailure: false,
-          wasInterrupted: true,
-        );
-        await appendRecord(summary.toRecord(trace: content));
-      }
+      final summary =
+          _pendingIncidentIn(lines) ??
+          ShutdownTraceIncident(
+            occurredAt: _lastTimestampIn(lines) ?? clock(),
+            totalMs: 0,
+            slowestStepLabel: _lastStartedStepIn(lines),
+            slowestStepMs: 0,
+            hadFailure: false,
+            wasInterrupted: true,
+          );
+      final trace = lines
+          .where((line) => !line.startsWith(_pendingIncidentPrefix))
+          .join('\n');
+      // Ημερολόγιο που σιωπά: το ίχνος μένει για την επόμενη εκκίνηση.
+      final written = await appendRecord(summary.toRecord(trace: trace));
+      if (!written) return false;
       await orphan.delete();
-      return !alreadySummarised;
+      return true;
     } catch (_) {
       try {
         await orphan.delete();
       } catch (_) {}
       return false;
     }
+  }
+
+  /// Η σύνοψη που άφησε κλείσιμο του οποίου το ημερολόγιο δεν απάντησε.
+  static ShutdownTraceIncident? _pendingIncidentIn(List<String> lines) {
+    for (final line in lines.reversed) {
+      if (!line.startsWith(_pendingIncidentPrefix)) continue;
+      try {
+        final data = jsonDecode(line.substring(_pendingIncidentPrefix.length));
+        if (data is Map<String, Object?>) {
+          return ShutdownTraceIncident.fromJson(
+            data,
+            fallbackTime: DateTime.now(),
+          );
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 
   /// Το τελευταίο βήμα που ξεκίνησε μέσα σε ορφανό αρχείο — εκεί κόλλησε.

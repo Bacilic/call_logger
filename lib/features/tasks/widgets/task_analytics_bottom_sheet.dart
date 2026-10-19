@@ -8,10 +8,9 @@
 // έτοιμα από τα δεδομένα των εκκρεμοτήτων (με δικά τους τεστ). Το αρχείο είναι
 // ήδη χωρισμένο σε μικρά, αυτοτελή κομμάτια οθόνης, ένα ανά κάρτα/διάγραμμα.
 //
-// Τι θα το άλλαζε: οι τρεις συναρτήσεις κειμένου (μορφή διάρκειας, ετικέτες
-// προέλευσης, κείμενο συμπεράσματος) είναι υπολογισμός μέσα σε οθόνη. Μόλις
-// χρειαστούν τεστ — π.χ. με τη διόρθωση του «αυξήθηκε κατά 0» — βγαίνουν σε
-// δικό τους αρχείο. Το ίδιο αν μπει εδώ ερώτημα βάσης ή υπολογισμός δεικτών.
+// Τι θα το άλλαζε: ερώτημα βάσης ή υπολογισμός δεικτών μέσα στην οθόνη. Τα
+// τρία κείμενα (διάρκεια, προέλευση, συμπέρασμα) ζουν ήδη έξω, στο
+// `task_analytics_texts.dart`, με δικά τους τεστ.
 
 import 'dart:math' as math;
 import 'dart:ui';
@@ -27,6 +26,8 @@ import '../models/task_analytics_date_preset.dart';
 import '../models/task_analytics_summary.dart';
 import '../providers/task_analytics_date_provider.dart';
 import '../providers/task_analytics_provider.dart';
+import '../utils/task_analytics_texts.dart';
+import 'equal_height_card_grid.dart';
 
 class TaskAnalyticsBottomSheet extends ConsumerWidget {
   const TaskAnalyticsBottomSheet({super.key});
@@ -254,61 +255,55 @@ class _TaskAnalyticsBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
+              // Όλες οι κάρτες με το ύψος της ψηλότερης, σε κάθε διάταξη.
+              EqualHeightCardGrid(
+                columns: layout.kpiColumns,
                 children: [
-                  for (final card in <Widget>[
-                    _KpiCard(
-                      title: 'Ανοικτές τώρα',
-                      value: '${summary.activeNowCount}',
-                      subtitle:
-                          'Ανοικτές στο εύρος: ${summary.activeCreatedInRangeCount}',
-                      color: _palette.indigo,
-                      icon: Icons.inventory_2_outlined,
-                      sparkline: summary.sparklineActive,
-                    ),
-                    _KpiCard(
-                      title: 'Ολοκληρωμένες',
-                      value: '${summary.closedInRangeCount}',
-                      subtitle:
-                          'Ποσοστό ολοκλήρωσης: ${summary.completionRateInRange.toStringAsFixed(1)}%',
-                      color: _palette.emerald,
-                      icon: Icons.task_alt_outlined,
-                      sparkline: summary.sparklineClosed,
-                    ),
-                    _KpiCard(
-                      title: 'Ακυρωμένες',
-                      value: '${summary.cancelledInRangeCount}',
-                      subtitle:
-                          'Ποσοστό ακύρωσης: ${summary.cancellationRateInRange.toStringAsFixed(1)}%',
-                      color: _palette.criticalRed,
-                      icon: Icons.cancel_outlined,
-                      sparkline: summary.sparklineCancelled,
-                    ),
-                    _KpiCard(
-                      title: 'Ποσοστό καθυστερήσεων',
-                      value: '${summary.overdueRateActive.toStringAsFixed(1)}%',
-                      subtitle:
-                          'Ενεργές: ${summary.overdueRateActive.toStringAsFixed(1)}% | Εύρος: ${summary.overdueRateRange.toStringAsFixed(1)}%',
-                      color: _palette.criticalRed,
-                      icon: Icons.warning_amber_rounded,
-                      sparkline: summary.sparklineOverdue,
-                    ),
-                    _KpiCard(
-                      title: 'Δείκτης αναβολών',
-                      value: summary.avgSnoozesPerTask.toStringAsFixed(2),
-                      subtitle:
-                          'Μ. χρόνος ολοκλήρωσης: ${_formatDuration(summary.avgCompletionSeconds)}',
-                      color: _palette.softAmber,
-                      icon: Icons.snooze_outlined,
-                      sparkline: summary.sparklineSnoozes,
-                    ),
-                  ])
-                    SizedBox(
-                      width: layout.kpiCardWidth(constraints.maxWidth),
-                      child: card,
-                    ),
+                  _KpiCard(
+                    title: 'Ανοικτές τώρα',
+                    value: '${summary.activeNowCount}',
+                    subtitle:
+                        'Ανοικτές στο εύρος: ${summary.activeCreatedInRangeCount}',
+                    color: _palette.indigo,
+                    icon: Icons.inventory_2_outlined,
+                    sparkline: summary.sparklineActive,
+                  ),
+                  _KpiCard(
+                    title: 'Ολοκληρωμένες',
+                    value: '${summary.closedInRangeCount}',
+                    subtitle:
+                        'Ποσοστό ολοκλήρωσης: ${summary.completionRateInRange.toStringAsFixed(1)}%',
+                    color: _palette.emerald,
+                    icon: Icons.task_alt_outlined,
+                    sparkline: summary.sparklineClosed,
+                  ),
+                  _KpiCard(
+                    title: 'Ακυρωμένες',
+                    value: '${summary.cancelledInRangeCount}',
+                    subtitle:
+                        'Ποσοστό ακύρωσης: ${summary.cancellationRateInRange.toStringAsFixed(1)}%',
+                    color: _palette.criticalRed,
+                    icon: Icons.cancel_outlined,
+                    sparkline: summary.sparklineCancelled,
+                  ),
+                  _KpiCard(
+                    title: 'Ποσοστό καθυστερήσεων',
+                    value: '${summary.overdueRateActive.toStringAsFixed(1)}%',
+                    subtitle:
+                        'Ενεργές: ${summary.overdueRateActive.toStringAsFixed(1)}% | Εύρος: ${summary.overdueRateRange.toStringAsFixed(1)}%',
+                    color: _palette.criticalRed,
+                    icon: Icons.warning_amber_rounded,
+                    sparkline: summary.sparklineOverdue,
+                  ),
+                  _KpiCard(
+                    title: 'Δείκτης αναβολών',
+                    value: summary.avgSnoozesPerTask.toStringAsFixed(2),
+                    subtitle:
+                        'Μ. χρόνος ολοκλήρωσης: ${formatTaskAnalyticsDuration(summary.avgCompletionSeconds)}',
+                    color: _palette.softAmber,
+                    icon: Icons.snooze_outlined,
+                    sparkline: summary.sparklineSnoozes,
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -347,47 +342,20 @@ class _TaskAnalyticsBody extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 10),
-              _InsightsCard(text: _buildInsightText(summary, dominantOrigin)),
+              _InsightsCard(
+                text: buildTaskAnalyticsInsight(
+                  backlogLastDelta: summary.backlogGrowth.isEmpty
+                      ? 0
+                      : summary.backlogGrowth.last.delta,
+                  overdueRateActive: summary.overdueRateActive,
+                  dominantOrigin: dominantOrigin,
+                ),
+              ),
             ],
           ),
         );
       },
     );
-  }
-
-  static String _formatDuration(double seconds) {
-    final sec = seconds.isNaN ? 0 : seconds.round().clamp(0, 31536000);
-    final h = sec ~/ 3600;
-    final m = (sec % 3600) ~/ 60;
-    if (h > 0) return '$h ώρ. $m λ.';
-    return '${m.clamp(0, 59)} λ.';
-  }
-
-  static String _buildInsightText(
-    TaskAnalyticsSummary summary,
-    TaskAnalyticsOriginSlice? dominantOrigin,
-  ) {
-    final backlogLast = summary.backlogGrowth.isEmpty
-        ? 0
-        : summary.backlogGrowth.last.delta;
-    final trendWord = backlogLast >= 0 ? 'αυξήθηκε' : 'μειώθηκε';
-    final trendAbs = backlogLast.abs();
-    final originText = dominantOrigin == null
-        ? 'δεν υπάρχει κυρίαρχο κανάλι προέλευσης'
-        : 'κυρίαρχη προέλευση: ${_localizedOriginLabel(dominantOrigin.origin)} (${dominantOrigin.percent.toStringAsFixed(1)}%)';
-    return 'Το υπόλοιπο εκκρεμοτήτων $trendWord κατά $trendAbs στην τελευταία ημέρα του εύρους. '
-        'Ο δείκτης καθυστερήσεων στις ενεργές εκκρεμότητες είναι '
-        '${summary.overdueRateActive.toStringAsFixed(1)}%, ενώ $originText.';
-  }
-
-  static String _localizedOriginLabel(String origin) {
-    return switch (origin) {
-      'call_linked' => 'Από κλήση',
-      'manual_fab' => 'Χειροκίνητη',
-      'quick_add' => 'Γρήγορη προσθήκη',
-      'legacy' => 'Παλαιές εγγραφές',
-      _ => 'Άγνωστη προέλευση',
-    };
   }
 }
 
@@ -510,6 +478,9 @@ class _KpiCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
+          // Οι κάρτες έχουν όλες το ύψος της ψηλότερης· το γράφημα κάθεται
+          // στο κάτω μέρος, ώστε να ευθυγραμμίζεται με των διπλανών.
+          const Spacer(),
           SizedBox(
             height: 34,
             child: _SparklineMini(points: sparkline, color: color),
@@ -738,9 +709,7 @@ class _OriginDonutChart extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          _TaskAnalyticsBody._localizedOriginLabel(
-                            dominant.origin,
-                          ),
+                          taskAnalyticsOriginLabel(dominant.origin),
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(fontWeight: FontWeight.w700),
@@ -778,9 +747,7 @@ class _OriginDonutChart extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _TaskAnalyticsBody._localizedOriginLabel(
-                            slice.origin,
-                          ),
+                          taskAnalyticsOriginLabel(slice.origin),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -810,16 +777,20 @@ class _OriginDonutChart extends StatelessWidget {
   }
 }
 
+/// Πλήθος των καρτών δεικτών στην κορυφή των αναφορών.
+const int _kKpiCardCount = 5;
+
 class _TaskAnalyticsBreakpoints {
   const _TaskAnalyticsBreakpoints._();
 
-  // Πλήρες desktop (desktop): 4 KPI σε μία σειρά + οριζόντια κύρια ζώνη.
+  // Πλήρες desktop (desktop): όλοι οι δείκτες σε μία σειρά + οριζόντια κύρια ζώνη.
   static const double desktop = 960;
 
-  // Tablet landscape (tablet): 2x2 KPI και οριζόντια κύρια ζώνη charts.
+  // Tablet landscape (tablet): 3 + 2 δείκτες και οριζόντια κύρια ζώνη charts.
   static const double tablet = 760;
 
-  // Compact tablet / μεγάλα κινητά (compact): 2x2 KPI και κάθετη κύρια ζώνη.
+  // Compact tablet / μεγάλα κινητά (compact): δύο δείκτες ανά σειρά και κάθετη
+  // κύρια ζώνη.
   static const double compact = 560;
 }
 
@@ -839,7 +810,7 @@ class _TaskAnalyticsLayout {
   static _TaskAnalyticsLayout fromWidth(double width) {
     if (width >= _TaskAnalyticsBreakpoints.desktop) {
       return const _TaskAnalyticsLayout(
-        kpiColumns: 4,
+        kpiColumns: _kKpiCardCount,
         isMainRowHorizontal: true,
         backlogFlex: 7,
         originFlex: 5,
@@ -847,7 +818,7 @@ class _TaskAnalyticsLayout {
     }
     if (width >= _TaskAnalyticsBreakpoints.tablet) {
       return const _TaskAnalyticsLayout(
-        kpiColumns: 2,
+        kpiColumns: 3,
         isMainRowHorizontal: true,
         backlogFlex: 6,
         originFlex: 4,
@@ -867,12 +838,6 @@ class _TaskAnalyticsLayout {
       backlogFlex: 1,
       originFlex: 1,
     );
-  }
-
-  double kpiCardWidth(double availableWidth) {
-    const spacing = 10.0;
-    final totalSpacing = spacing * (kpiColumns - 1);
-    return (availableWidth - totalSpacing) / kpiColumns;
   }
 }
 

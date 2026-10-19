@@ -123,7 +123,7 @@ void main() {
           context,
           floor: _floor(),
           previewDepartments: const [],
-          initialPreviewImageAvailable: false,
+          currentImagePath: '',
           pickImagePath: () async => null,
         );
       });
@@ -164,7 +164,7 @@ void main() {
           context,
           floor: _floor(),
           previewDepartments: const [],
-          initialPreviewImageAvailable: false,
+          currentImagePath: '',
           pickImagePath: () async {
             pickerCalls++;
             return imageFile.path;
@@ -210,7 +210,7 @@ void main() {
           context,
           floor: _floor(),
           previewDepartments: const [],
-          initialPreviewImageAvailable: false,
+          currentImagePath: '',
           pickImagePath: () async {
             pickerCalls++;
             return null;

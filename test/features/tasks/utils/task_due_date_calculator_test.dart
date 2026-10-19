@@ -1,9 +1,6 @@
 // Η προτεινόμενη προθεσμία εκκρεμότητας: «σε 1 ώρα», «μέσα στο ωράριο»,
 // «επόμενη εργάσιμη», με ή χωρίς παράλειψη Σαββατοκύριακου.
 //
-// ΦΩΤΟΓΡΑΦΙΑ της σημερινής συμπεριφοράς: οι τιμές βγήκαν από εκτέλεση, όχι
-// από κρίση για το τι είναι σωστό.
-//
 //   flutter test test/features/tasks/utils/task_due_date_calculator_test.dart
 
 import 'package:call_logger/features/tasks/models/task_settings_config.dart';
@@ -76,20 +73,40 @@ void main() {
       expect(dayEnd(DateTime(2026, 10, 13, 8)), DateTime(2026, 10, 13, 9));
     });
 
-    test('στη λήξη του ωραρίου: +1 ώρα', () {
-      expect(dayEnd(DateTime(2026, 10, 13, 13)), DateTime(2026, 10, 13, 14));
+    test('στη λήξη του ωραρίου: η ώρα περνά στην επόμενη εργάσιμη', () {
+      expect(dayEnd(DateTime(2026, 10, 13, 13)), DateTime(2026, 10, 14, 9));
     });
 
-    test('μετά το ωράριο: η επόμενη εργάσιμη στην έναρξη', () {
-      expect(dayEnd(DateTime(2026, 10, 13, 15)), DateTime(2026, 10, 14, 8));
+    test('λίγο πριν τη λήξη: ό,τι περισσεύει συνεχίζει αύριο', () {
+      expect(
+        dayEnd(DateTime(2026, 10, 13, 12, 30)),
+        DateTime(2026, 10, 14, 8, 30),
+      );
     });
 
-    test('πριν το ωράριο: η επόμενη ημέρα στην έναρξη', () {
-      expect(dayEnd(DateTime(2026, 10, 13, 7)), DateTime(2026, 10, 14, 8));
+    test('μετά το ωράριο: επόμενη εργάσιμη, έναρξη +1 ώρα', () {
+      expect(dayEnd(DateTime(2026, 10, 13, 15)), DateTime(2026, 10, 14, 9));
     });
 
-    test('Παρασκευή απόγευμα: Δευτέρα πρωί', () {
-      expect(dayEnd(DateTime(2026, 10, 16, 15)), DateTime(2026, 10, 19, 8));
+    test('πριν το ωράριο: σήμερα, έναρξη +1 ώρα', () {
+      expect(dayEnd(DateTime(2026, 10, 13, 7)), DateTime(2026, 10, 13, 9));
+    });
+
+    test('Παρασκευή, τελευταία μισή ώρα: Δευτέρα πρωί', () {
+      expect(
+        dayEnd(DateTime(2026, 10, 16, 12, 30)),
+        DateTime(2026, 10, 19, 8, 30),
+      );
+    });
+
+    test('το Σαββατοκύριακο μένει πάντα εκτός, και χωρίς παράλειψη', () {
+      expect(
+        dayEnd(
+          DateTime(2026, 10, 17, 10),
+          config: _config(skipWeekends: false),
+        ),
+        DateTime(2026, 10, 19, 9),
+      );
     });
 
     test('ωράριο που λήγει πριν αρχίσει: +1 ώρα', () {
@@ -108,7 +125,7 @@ void main() {
           _config(defaultOption: TaskSettingsConfig.kDayEnd),
           DateTime(2026, 10, 13, 15),
         ),
-        DateTime(2026, 10, 14, 8),
+        DateTime(2026, 10, 14, 9),
       );
     });
   });

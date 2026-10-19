@@ -19,7 +19,6 @@ class DiagnosticsExportDialog extends StatefulWidget {
     required this.thisStation,
     required this.oldestDay,
     required this.today,
-    this.initial,
   });
 
   /// Οι υπολογιστές που βρέθηκαν στα αρχεία.
@@ -33,9 +32,6 @@ class DiagnosticsExportDialog extends StatefulWidget {
 
   final DateTime today;
 
-  /// Προσυμπληρωμένα φίλτρα (π.χ. «αυτό το περιστατικό»).
-  final DiagnosticsExportOptions? initial;
-
   static const int defaultDays = 7;
 
   static Future<DiagnosticsExportOptions?> show(
@@ -44,7 +40,6 @@ class DiagnosticsExportDialog extends StatefulWidget {
     required String thisStation,
     required DateTime? oldestDay,
     required DateTime today,
-    DiagnosticsExportOptions? initial,
   }) {
     return showDialog<DiagnosticsExportOptions>(
       context: context,
@@ -53,7 +48,6 @@ class DiagnosticsExportDialog extends StatefulWidget {
         thisStation: thisStation,
         oldestDay: oldestDay,
         today: today,
-        initial: initial,
       ),
     );
   }
@@ -86,35 +80,20 @@ class _DiagnosticsExportDialogState extends State<DiagnosticsExportDialog> {
   @override
   void initState() {
     super.initState();
-    final initial = widget.initial;
     _daysController = TextEditingController(
       text: '${DiagnosticsExportDialog.defaultDays}',
     );
     _windowsDaysController = TextEditingController(
       text: '${WindowsEventsOptions.defaultOwnDays}',
     );
-    if (initial != null) {
-      _mode = _PeriodMode.range;
-      _range = DateTimeRange(start: initial.from, end: initial.to);
-      _stations = {...initial.stations};
-      _contents = {...initial.contents};
-      final windows = initial.windows;
-      _includeWindows = windows != null;
-      if (windows != null) {
-        _windowsLevels
-          ..clear()
-          ..addAll(windows.levels);
-      }
-    } else {
-      _mode = _PeriodMode.lastDays;
-      final (from, to) = DiagnosticsExportOptions.lastDays(
-        DiagnosticsExportDialog.defaultDays,
-        widget.today,
-      );
-      _range = DateTimeRange(start: from, end: to);
-      _stations = {widget.thisStation};
-      _contents = {...DiagnosticsContent.values};
-    }
+    _mode = _PeriodMode.lastDays;
+    final (from, to) = DiagnosticsExportOptions.lastDays(
+      DiagnosticsExportDialog.defaultDays,
+      widget.today,
+    );
+    _range = DateTimeRange(start: from, end: to);
+    _stations = {widget.thisStation};
+    _contents = {...DiagnosticsContent.values};
   }
 
   @override

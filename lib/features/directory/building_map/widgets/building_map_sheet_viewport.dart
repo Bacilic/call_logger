@@ -17,7 +17,6 @@ import '../building_map_label_layout.dart';
 import '../building_map_sheet_export_key.dart';
 import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
-import '../services/building_map_placement_replacement.dart';
 import 'building_map_fill_color_dialog.dart';
 import 'building_map_sheet_painter.dart';
 
@@ -31,6 +30,7 @@ class BuildingMapSheetViewport extends ConsumerStatefulWidget {
     required this.imgPath,
     required this.imgFile,
     required this.imgExists,
+    required this.imageUploaded,
     required this.decodedSize,
     required this.activeDepartments,
     required this.floors,
@@ -49,6 +49,9 @@ class BuildingMapSheetViewport extends ConsumerStatefulWidget {
   /// Ο καμβάς ξαναχτίζεται σε κάθε σύρσιμο του ποντικιού· ένας έλεγχος δίσκου
   /// εδώ σήμαινε ερώτημα στο αρχείο σύστημα δεκάδες φορές το δευτερόλεπτο.
   final bool imgExists;
+
+  /// Η κάτοψη του ορόφου έχει ανέβει στη βάση (ακόμη κι αν δεν κατέβηκε εδώ).
+  final bool imageUploaded;
 
   final Size? decodedSize;
   final List<DepartmentModel> activeDepartments;
@@ -301,30 +304,28 @@ class _BuildingMapSheetViewportState
     _labelDoubleTapPosCanvas = null;
   }
 
-  bool _hasDraftChanges(DepartmentModel dept, DraftDepartmentShape draft) {
-    if (draftShapeDiffersFromSaved(
+  bool _hasDraftChanges(DepartmentModel? dept, DraftDepartmentShape draft) {
+    return draftHasChangesToSave(
       dept: dept,
       draft: draft,
       sheetStr: widget.sheetStr,
-    )) {
-      return true;
-    }
-    String? edited;
+      editedMapName: dept?.id == null ? null : _editedMapNameFor(dept!.id!),
+    );
+  }
+
+  /// Η επωνυμία χάρτη που έγραψε ο χρήστης για το τμήμα και δεν έχει
+  /// αποθηκευτεί ακόμη — από το ανοιχτό πεδίο ή από το κλεισμένο. `null`
+  /// όταν δεν την άγγιξε.
+  String? _editedMapNameFor(int departmentId) {
     if (_mapDisplayNameEditing &&
-        _mapDisplayNameDeptId == dept.id &&
+        _mapDisplayNameDeptId == departmentId &&
         _mapDisplayNameCtrl != null) {
-      edited = _mapDisplayNameCtrl!.text;
-    } else if (_pendingMapDisplayNameDeptId == dept.id) {
-      edited = _pendingMapDisplayNameText;
+      return _mapDisplayNameCtrl!.text;
     }
-
-    if (edited != null &&
-        edited != (dept.mapCustomName ?? dept.name) &&
-        edited != dept.name) {
-      return true;
+    if (_pendingMapDisplayNameDeptId == departmentId) {
+      return _pendingMapDisplayNameText;
     }
-
-    return false;
+    return null;
   }
 
   bool _detectLabelDoubleTap(Offset tapPosPx) {
@@ -433,32 +434,29 @@ class _BuildingMapSheetViewportState
     if (mounted) setState(() {});
   }
 
-  /// Αποθήκευση επωνυμίας χάρτη στη βάση — καλείται μόνο από Επιβεβαίωση draft (✓).
-  Future<void> _persistMapDisplayNameForDraftDepartment(
-    int departmentId,
-  ) async {
-    final dept = _departmentById(widget.activeDepartments, departmentId);
-    if (dept == null) return;
-    final canonical = dept.name;
-    String? edited;
-    if (_mapDisplayNameEditing &&
-        _mapDisplayNameDeptId == departmentId &&
-        _mapDisplayNameCtrl != null) {
-      edited = _mapDisplayNameCtrl!.text;
-    } else if (_pendingMapDisplayNameDeptId == departmentId) {
-      edited = _pendingMapDisplayNameText;
-    }
-    if (edited == null) {
-      return;
-    }
-    await ref
+  /// Το ✓: η αποθήκευση και το μήνυμα ζουν στον ελεγκτή· εδώ μένει μόνο να
+  /// καθαρίσει η τοπική, ανεπίσημη επωνυμία όταν γράφτηκε.
+  Future<void> _confirmDraft({
+    required DepartmentModel dept,
+    required DraftDepartmentShape draft,
+    required int floorId,
+    required List<BuildingMapFloor> floors,
+  }) async {
+    final nameSaved = await ref
         .read(buildingMapControllerProvider)
-        .saveDepartmentMapDisplayName(
+        .confirmDraft(
           context: context,
-          departmentId: departmentId,
-          canonicalDepartmentName: canonical,
-          editedText: edited,
+          draft: draft,
+          dept: dept,
+          floorId: floorId,
+          floors: floors,
+          editedMapName: _editedMapNameFor(dept.id!),
         );
+    if (nameSaved != null) _clearLocalMapDisplayName(dept.id!);
+    if (mounted) setState(() {});
+  }
+
+  void _clearLocalMapDisplayName(int departmentId) {
     _pendingMapDisplayNameDeptId = null;
     _pendingMapDisplayNameText = null;
     if (_mapDisplayNameEditing && _mapDisplayNameDeptId == departmentId) {
@@ -470,7 +468,6 @@ class _BuildingMapSheetViewportState
       _mapDisplayNameEditing = false;
       _scheduleDisposeMapNameField(c, f);
     }
-    if (mounted) setState(() {});
   }
 
   Future<void> _changeMapFillColorForDepartment(DepartmentModel dept) async {
@@ -797,6 +794,7 @@ class _BuildingMapSheetViewportState
     final w = widget;
 
     if (!w.imgExists) {
+      final controller = ref.read(buildingMapControllerProvider);
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -806,22 +804,27 @@ class _BuildingMapSheetViewportState
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
-                'Η εικόνα κάτοψης δεν βρέθηκε.',
+                w.imageUploaded
+                    ? 'Η κάτοψη δεν φορτώθηκε από τη βάση.'
+                    : 'Η κάτοψη δεν έχει ανέβει ακόμη.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-            if (w.currentSheetId != null) ...[
+            if (w.currentSheetId != null &&
+                !w.imageUploaded &&
+                controller.canManageFloorPlans) ...[
               const SizedBox(height: 12),
               TextButton.icon(
                 onPressed: () async {
-                  await ref
-                      .read(buildingMapControllerProvider)
-                      .replaceFloorSheetImageById(context, w.currentSheetId!);
+                  await controller.editFloorSheetById(
+                    context,
+                    w.currentSheetId!,
+                  );
                   w.onFloorsChanged();
                 },
                 icon: const Icon(Icons.image_outlined),
-                label: const Text('Επανεπιλογή εικόνας'),
+                label: const Text('Επιλογή εικόνας κάτοψης'),
               ),
             ],
           ],
@@ -829,11 +832,10 @@ class _BuildingMapSheetViewportState
       );
     }
 
+    // Το μέγεθος το μετρά η λίστα ορόφων μόλις φτάσει η εικόνα· ως τότε, και
+    // όσο η εικόνα του νέου ορόφου έρχεται ακόμη, «φόρτωση».
     final sz = w.decodedSize;
-    if (sz == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(buildingMapControllerProvider).decodeImageForPath(w.imgPath);
-      });
+    if (sz == null || w.imgPath.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -1251,9 +1253,10 @@ class _BuildingMapSheetViewportState
                                 break;
                               }
                             }
-                            final bool hasChanges = selectedDept != null
-                                ? _hasDraftChanges(selectedDept, draftShape)
-                                : true;
+                            final bool hasChanges = _hasDraftChanges(
+                              selectedDept,
+                              draftShape,
+                            );
 
                             return Positioned(
                               left: toolbarLeft,
@@ -1356,16 +1359,10 @@ class _BuildingMapSheetViewportState
                                         },
                                       ),
                                       IconButton(
-                                        tooltip:
-                                            selectedDept != null &&
-                                                resolveBuildingMapPlacementReplacement(
-                                                  department: selectedDept,
-                                                  targetSheetId:
-                                                      w.currentSheetId ?? -1,
-                                                ).replacesPlacementOnThisSheet
-                                            ? 'Αποθήκευση — αντικαθιστά την '
-                                                  'αποθηκευμένη θέση σε αυτό το φύλλο'
-                                            : 'Επιβεβαίωση draft',
+                                        tooltip: selectedDept == null
+                                            ? 'Το τμήμα δεν είναι πια διαθέσιμο '
+                                                  'στον χάρτη'
+                                            : 'Αποθήκευση αλλαγών',
                                         visualDensity: VisualDensity.compact,
                                         icon: const Icon(Icons.check),
                                         onPressed: !hasChanges
@@ -1376,25 +1373,12 @@ class _BuildingMapSheetViewportState
                                                 if (selectedDept?.id == null) {
                                                   return;
                                                 }
-                                                await _persistMapDisplayNameForDraftDepartment(
-                                                  selectedDept!.id!,
+                                                await _confirmDraft(
+                                                  dept: selectedDept!,
+                                                  draft: draftShape,
+                                                  floorId: w.currentSheetId!,
+                                                  floors: w.floors,
                                                 );
-                                                if (!context.mounted) return;
-                                                await ref
-                                                    .read(
-                                                      buildingMapControllerProvider,
-                                                    )
-                                                    .commitDraftToDatabase(
-                                                      context: context,
-                                                      draft: draftShape,
-                                                      dept: selectedDept!,
-                                                      floorId:
-                                                          w.currentSheetId!,
-                                                      floors: w.floors,
-                                                    );
-                                                if (context.mounted) {
-                                                  setState(() {});
-                                                }
                                               },
                                       ),
                                       Builder(
