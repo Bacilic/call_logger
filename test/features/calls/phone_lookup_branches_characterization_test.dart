@@ -35,16 +35,20 @@ final _shiftA = _u(2, 'Βάσω', 'Αλεξίου', '2400', _kPathology);
 final _shiftB = _u(3, 'Γιώτα', 'Βλάχου', '2400', _kPathology);
 final _mixedA = _u(4, 'Δήμος', 'Γκίκας', '2500', _kRadiology);
 final _mixedB = _u(5, 'Ελένη', 'Δούκα', '2500', _kPathology);
+// Στο τμήμα της βάρδιας χωρίς το τηλέφωνό της — και αλφαβητικά πρώτη, ώστε
+// η σειρά «κάτοχοι πρώτοι» να φαίνεται.
+final _pathologyOther = _u(6, 'Άρης', 'Ζαφείρης', '2777', _kPathology);
+final _pathology = DepartmentModel(id: _kPathology, name: 'Παθολογική');
 
 Future<ProviderContainer> _container() async {
   final svc = LookupService.instance;
   svc.resetForReload();
   svc.injectInMemoryCatalogForTests(
-    users: [_psarra, _shiftA, _shiftB, _mixedA, _mixedB],
+    users: [_psarra, _shiftA, _shiftB, _mixedA, _mixedB, _pathologyOther],
     equipment: [EquipmentModel(id: 100, code: 'PC-100', type: 'PC')],
     departmentRows: [
       DepartmentModel(id: _kRadiology, name: 'Ακτινολογικό'),
-      DepartmentModel(id: _kPathology, name: 'Παθολογική'),
+      _pathology,
     ],
     userToEquipmentIds: {
       1: [100],
@@ -181,6 +185,50 @@ void main() {
       expect(s.callerNoMatch, isFalse);
       expect(s.departmentText, 'Παθολογική');
       expect(s.selectedDepartmentId, _kPathology);
+    });
+  });
+
+  group('Κοινό τηλέφωνο και τμήμα που διάλεξε ο χρήστης', () {
+    test(
+      'τηλέφωνο και μετά τμήμα: κάτοχοι πρώτοι, μετά οι υπόλοιποι του τμήματος',
+      () async {
+        final c = await _container();
+        addTearDown(c.dispose);
+
+        _lookup(c, '2400');
+        c.read(callSmartEntityProvider.notifier).selectDepartment(_pathology);
+        final s = c.read(callSmartEntityProvider);
+
+        expect(s.callerCandidates.map((u) => u.id).toList(), [2, 3, 6, 5]);
+        expect(s.selectedCaller, isNull);
+      },
+    );
+
+    test('τμήμα και μετά τηλέφωνο: η ίδια λίστα', () async {
+      final c = await _container();
+      addTearDown(c.dispose);
+
+      c.read(callSmartEntityProvider.notifier).selectDepartment(_pathology);
+      final s = _lookup(c, '2400');
+
+      expect(s.callerCandidates.map((u) => u.id).toList(), [2, 3, 6, 5]);
+      expect(s.selectedCaller, isNull);
+      expect(s.isPhoneAmbiguous, isTrue);
+    });
+
+    test('άδειασμα του καλούντα: η λίστα ξαναγυρίζει με τους κατόχους πρώτους',
+        () async {
+      final c = await _container();
+      addTearDown(c.dispose);
+      final n = c.read(callSmartEntityProvider.notifier);
+      n.selectDepartment(_pathology);
+      _lookup(c, '2400');
+
+      n.updateSelectedCaller(_shiftB);
+      n.clearCaller();
+      final s = c.read(callSmartEntityProvider);
+
+      expect(s.callerCandidates.map((u) => u.id).toList(), [2, 3, 6, 5]);
     });
   });
 }

@@ -141,9 +141,9 @@ class LansweeperReportBrowser {
               ? null
               : LansweeperSyncService.callTitleToPersist(
                   title: title,
-                  autoTitle: LansweeperSyncService.autoTicketTitle(
-                    category: selected.first.call.category ?? '',
-                    id: selected.first.call.id,
+                  autoTitle: LansweeperSyncService.combinedTicketTitle(
+                    LansweeperReportItemMapper.titleEntries(selected),
+                    useStoredTitles: false,
                   ),
                 ),
           source: LansweeperAiPresenter.refinedSource(

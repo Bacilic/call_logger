@@ -215,7 +215,6 @@ class TasksAnalyticsRepository {
       final percent = originTotal == 0 ? 0.0 : (count / originTotal) * 100;
       return TaskAnalyticsOriginSlice(
         origin: normalizedOrigin,
-        label: _originLabel(normalizedOrigin),
         count: count,
         percent: percent,
       );
@@ -379,15 +378,6 @@ class TasksAnalyticsRepository {
     } catch (_) {
       return 0;
     }
-  }
-
-  String _originLabel(String origin) {
-    return switch (origin) {
-      Task.originManualFab => 'Χειροκίνητη',
-      Task.originCallLinked => 'Από κλήση',
-      Task.originQuickAdd => 'Quick add',
-      _ => 'Legacy',
-    };
   }
 
   Future<

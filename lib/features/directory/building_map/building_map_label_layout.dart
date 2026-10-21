@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/text_layout_utils.dart';
 import '../models/department_model.dart';
 import 'building_map_effective_shape.dart';
 import 'providers/building_map_providers.dart';
@@ -32,15 +33,8 @@ TextStyle _mapLabelTextStyle(double fontSize) => TextStyle(
   height: 1.15,
 );
 
-double _measureMapLabelLineWidth(String text, TextStyle style) {
-  if (text.isEmpty) return 0;
-  final tp = TextPainter(
-    text: TextSpan(text: text, style: style),
-    textDirection: TextDirection.ltr,
-    maxLines: 1,
-  )..layout();
-  return tp.width;
-}
+double _measureMapLabelLineWidth(String text, TextStyle style) =>
+    singleLineTextWidth(text: text, style: style);
 
 /// Ελάχιστο πλάτος πλαισίου ώστε η μεγαλύτερη λέξη να χωρά σε μία γραμμή στο min font.
 double computeMinMapLabelBoxWidthForText(String text) {
@@ -175,6 +169,9 @@ double stepMapLabelFontScale(double current, {required bool increase}) {
 }
 
 /// Αποτέλεσμα διάταξης κειμένου εντός πλαισίου ετικέτας.
+///
+/// Κρατά μια μέτρηση κειμένου έτοιμη για ζωγραφική: όποιος το ζητά το
+/// αποδεσμεύει με [dispose] μόλις τελειώσει.
 class MapLabelTextLayout {
   MapLabelTextLayout({
     required this.textPainter,
@@ -185,6 +182,8 @@ class MapLabelTextLayout {
   final TextPainter textPainter;
   final double fontSize;
   final Offset textTopLeft;
+
+  void dispose() => textPainter.dispose();
 }
 
 /// Βρίσκει το μέγιστο fontSize (δυαδική αναζήτηση) που χωρά αυστηρά στο πλαίσιο,
@@ -227,17 +226,22 @@ MapLabelTextLayout layoutMapLabelTextInBox({
         !tp.didExceedMaxLines &&
         tp.height <= innerH + 0.5 &&
         tp.width <= innerW + 0.5;
+    // Κάθε δοκιμή που δεν μένει αποδεσμεύεται αμέσως: η αναζήτηση τρέχει σε
+    // κάθε καρέ του χάρτη, για κάθε ετικέτα.
     if (fits) {
       lo = mid;
+      bestPainter?.dispose();
       bestPainter = tp;
       bestSize = mid;
       bestWrapped = wrapped;
     } else {
+      tp.dispose();
       hi = mid;
     }
   }
 
   if (bestPainter == null || bestWrapped == null) {
+    bestPainter?.dispose();
     final style = _mapLabelTextStyle(kBuildingMapLabelMinFontSize);
     bestWrapped = wrapMapLabelTextAtWordBoundaries(
       text: text,
@@ -392,16 +396,20 @@ MapLabelLayout? computeMapLabelLayout({
   );
 
   final textTopLeft = labelBoxRect.topLeft + textLayout.textTopLeft;
+  // Εδώ χρειάζεται μόνο το μέγεθος, όχι η ζωγραφική.
+  final textPainterSize = Size(
+    textLayout.textPainter.width,
+    textLayout.textPainter.height,
+  );
+  final fontSize = textLayout.fontSize;
+  textLayout.dispose();
 
   return MapLabelLayout(
     labelCenter: labelCenter,
     labelBoxRect: labelBoxRect,
     textTopLeft: textTopLeft,
-    textPainterSize: Size(
-      textLayout.textPainter.width,
-      textLayout.textPainter.height,
-    ),
-    fontSize: textLayout.fontSize,
+    textPainterSize: textPainterSize,
+    fontSize: fontSize,
     labelWidth: effectiveLabelWidth,
     labelHeight: effectiveLabelHeight,
   );

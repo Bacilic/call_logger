@@ -41,3 +41,32 @@ Future<LansweeperAssetTarget?> resolveLansweeperAssetTarget({
 
   return lansweeperAssetTargetFor(equipmentCode: text);
 }
+
+/// Οι εξοπλισμοί **όλων** των εγγραφών που ενώνονται σε ένα αίτημα, όπως θα
+/// σταλούν (`AddAsset` για τον καθένα) — η μοναδική υλοποίηση, κοινή για την
+/// προεπισκόπηση της φόρμας και την αποστολή.
+///
+/// Ως τώρα έφευγε μόνο ο εξοπλισμός της πρώτης κλήσης· οι υπόλοιποι χάνονταν
+/// σιωπηλά, ενώ η περιγραφή του αιτήματος μιλούσε και γι' αυτούς.
+///
+/// Σειρά των [equipment] (πρώτη εμφάνιση κερδίζει). Το ίδιο μηχάνημα από δύο
+/// κλήσεις μπαίνει **μία** φορά· εγγραφή χωρίς εξοπλισμό δεν προσθέτει τίποτα.
+Future<List<LansweeperAssetTarget>> resolveLansweeperAssetTargets({
+  required EquipmentRepository repository,
+  required List<({int? equipmentId, String? equipmentText})> equipment,
+}) async {
+  final targets = <LansweeperAssetTarget>[];
+  final seen = <String>{};
+  for (final entry in equipment) {
+    final target = await resolveLansweeperAssetTarget(
+      repository: repository,
+      equipmentId: entry.equipmentId,
+      equipmentText: entry.equipmentText,
+    );
+    if (target == null) continue;
+    if (seen.add('${target.kind.name}|${target.value.toLowerCase()}')) {
+      targets.add(target);
+    }
+  }
+  return targets;
+}

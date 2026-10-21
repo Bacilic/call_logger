@@ -50,17 +50,16 @@ class LansweeperReportCallSave {
 
   /// Ο τίτλος που θα κρατήσει η κλήση· `null` όταν δεν αξίζει να κρατηθεί.
   ///
-  /// Ο αυτόματος τίτλος υπολογίζεται από την **πρώτη** επιλεγμένη κλήση, όπως
-  /// και η προσυμπλήρωση του πεδίου: είναι το μέτρο σύγκρισης για το «έγραψε ο
-  /// χρήστης δικό του τίτλο;».
+  /// Ο αυτόματος τίτλος υπολογίζεται από **όλες** τις επιλεγμένες κλήσεις, με
+  /// τον κανόνα της προσυμπλήρωσης του πεδίου: είναι το μέτρο σύγκρισης για
+  /// το «έγραψε ο χρήστης δικό του τίτλο;».
   String? _titleFor(List<ReportCallItem> selected) {
     if (selected.isEmpty) return null;
-    final primary = selected.first.call;
     return LansweeperSyncService.callTitleToPersist(
       title: host.titleController.text,
-      autoTitle: LansweeperSyncService.autoTicketTitle(
-        category: primary.category ?? '',
-        id: primary.id,
+      autoTitle: LansweeperSyncService.combinedTicketTitle(
+        LansweeperReportItemMapper.titleEntries(selected),
+        useStoredTitles: false,
       ),
     );
   }

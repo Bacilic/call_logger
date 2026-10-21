@@ -3,7 +3,6 @@ import 'package:call_logger/features/directory/building_map/widgets/building_map
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leak_tracker_flutter_testing/leak_tracker_flutter_testing.dart';
 
 /*
  * «Ένα ψηφίο πίσω» στην έξυπνη αναζήτηση του χάρτη.
@@ -101,7 +100,7 @@ void main() {
       reason: 'η λίστα έμενε στα αποτελέσματα του προηγούμενου ερωτήματος',
     );
     expect(find.text('Νακαστσή 2916'), findsNothing);
-  }, experimentalLeakTesting: LeakTesting.settings.withIgnoredAll());
+  });
 
   testWidgets('κενό στο τέλος δεν αλλάζει το αποτέλεσμα', (tester) async {
     await pumpField(tester);
@@ -115,7 +114,7 @@ void main() {
       reason: 'Το κείμενο κανονικοποιείται — το κενό δεν είναι νέο ερώτημα',
     );
     expect(find.text('Ψαρρά 2915'), findsNothing);
-  }, experimentalLeakTesting: LeakTesting.settings.withIgnoredAll());
+  });
 
   testWidgets('καθαρισμός πεδίου κλείνει τη λίστα', (tester) async {
     await pumpField(tester);
@@ -125,5 +124,5 @@ void main() {
 
     await typeAndSettle(tester, '');
     expect(find.text('Ψαρρά 2915'), findsNothing);
-  }, experimentalLeakTesting: LeakTesting.settings.withIgnoredAll());
+  });
 }

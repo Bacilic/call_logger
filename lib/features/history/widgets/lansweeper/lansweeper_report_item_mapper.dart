@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/services/lansweeper_text_format.dart';
 import '../../../calls/models/call_model.dart';
+import '../../models/lansweeper_report_grouping.dart';
 import '../../models/lansweeper_sync_state.dart';
 import 'lansweeper_call_summary.dart';
 import 'lansweeper_report_call_list.dart';
@@ -43,6 +44,20 @@ abstract final class LansweeperReportItemMapper {
   /// Το κενό μένει κενό αντί για παύλα: εδώ σημαίνει «εκκρεμεί», και μια σειρά
   /// από παύλες θα γέμιζε τη λίστα με θόρυβο αντί να ξεχωρίζει τι έχει λυθεί.
   static String solutionSnippet(CallModel call) => (call.solution ?? '').trim();
+
+  /// Ό,τι χρειάζεται ο τίτλος του αιτήματος από κάθε επιλεγμένη κλήση, με τη
+  /// σειρά της επιλογής — για τον κοινό κανόνα
+  /// [LansweeperSyncService.combinedTicketTitle].
+  static List<({String? storedTitle, String category, int? id})> titleEntries(
+    List<ReportCallItem> selected,
+  ) => [
+    for (final item in selected)
+      (
+        storedTitle: item.call.title,
+        category: item.call.category ?? '',
+        id: item.call.id,
+      ),
+  ];
 
   static String selectedKeysSignature(List<ReportCallItem> selected) {
     final keys = selected.map((e) => e.key).toList()..sort();
@@ -190,13 +205,73 @@ abstract final class LansweeperReportItemMapper {
     return grouped;
   }
 
-  static LansweeperReportCallRowData toRowData(ReportCallItem item) {
+  static const List<String> _weekdays = [
+    'Δευτέρα',
+    'Τρίτη',
+    'Τετάρτη',
+    'Πέμπτη',
+    'Παρασκευή',
+    'Σάββατο',
+    'Κυριακή',
+  ];
+
+  /// Η επικεφαλίδα μιας ημέρας: «Σήμερα · Τετάρτη 21/10», «Χθες · Τρίτη
+  /// 20/10», αλλιώς «Παρασκευή 17/10». Με το έτος μόνο όταν δεν είναι το
+  /// τρέχον — στο «Όλο το ιστορικό» δύο 21/10 διαφορετικών ετών αλλιώς θα
+  /// έμοιαζαν ίδια.
+  static String dayLabel(DateTime day, {required DateTime now}) {
+    final date = DateTime(day.year, day.month, day.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final pattern = date.year == today.year ? 'dd/MM' : 'dd/MM/yyyy';
+    final base =
+        '${_weekdays[date.weekday - 1]} '
+        '${DateFormat(pattern).format(date)}';
+    if (date == today) return 'Σήμερα · $base';
+    if (date == today.subtract(const Duration(days: 1))) return 'Χθες · $base';
+    return base;
+  }
+
+  /// Ομάδες ανά ημέρα: η πιο πρόσφατη ημέρα πρώτη, και μέσα σε κάθε ημέρα η
+  /// πιο πρόσφατη κλήση πρώτη — ανεξάρτητα από τη σειρά των [items].
+  static Map<String, List<ReportCallItem>> groupByDay(
+    List<ReportCallItem> items, {
+    required DateTime now,
+  }) {
+    final sorted = [...items]
+      ..sort((a, b) => _callDateTime(b.call).compareTo(_callDateTime(a.call)));
+    final grouped = <String, List<ReportCallItem>>{};
+    for (final item in sorted) {
+      final label = dayLabel(_callDateTime(item.call), now: now);
+      grouped.putIfAbsent(label, () => <ReportCallItem>[]).add(item);
+    }
+    return grouped;
+  }
+
+  /// Η γραμμή ώρας μιας κάρτας στην προβολή ανά ημέρα: η ημέρα λέγεται ήδη
+  /// στην επικεφαλίδα, οπότε η κάρτα κρατά την ώρα — και τον καλούντα με το
+  /// τηλέφωνό του, που εδώ δεν τα λέει καμία επικεφαλίδα.
+  static String dayRowLabel(ReportCallItem item) {
+    final parts = <String>[
+      DateFormat('HH:mm').format(_callDateTime(item.call)),
+      item.caller,
+    ];
+    final phone = (item.call.phoneText ?? '').trim();
+    if (phone.isNotEmpty) parts.add(phone);
+    return parts.join(' · ');
+  }
+
+  static LansweeperReportCallRowData toRowData(
+    ReportCallItem item, {
+    LansweeperReportGrouping grouping = LansweeperReportGrouping.byCaller,
+  }) {
     final state = (item.call.lansweeperState ?? LansweeperSyncState.unsent)
         .trim();
     return LansweeperReportCallRowData(
       key: item.key,
       call: item.call,
-      dateLabel: LansweeperCallSummary.shortDateLabel(item.call),
+      dateLabel: grouping == LansweeperReportGrouping.byDay
+          ? dayRowLabel(item)
+          : LansweeperCallSummary.shortDateLabel(item.call),
       tooltip: LansweeperCallSummary.callTooltip(item.call),
       durationLabel: durationLabel(item.durationSeconds),
       lansweeperState: state,
@@ -208,11 +283,13 @@ abstract final class LansweeperReportItemMapper {
   }
 
   static Map<String, List<LansweeperReportCallRowData>> groupedRowData(
-    Map<String, List<ReportCallItem>> grouped,
-  ) {
+    Map<String, List<ReportCallItem>> grouped, {
+    LansweeperReportGrouping grouping = LansweeperReportGrouping.byCaller,
+  }) {
     return grouped.map(
-      (caller, callerItems) =>
-          MapEntry(caller, callerItems.map(toRowData).toList()),
+      (label, groupItems) => MapEntry(label, [
+        for (final item in groupItems) toRowData(item, grouping: grouping),
+      ]),
     );
   }
 

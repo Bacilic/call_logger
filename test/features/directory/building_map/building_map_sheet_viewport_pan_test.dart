@@ -14,7 +14,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:leak_tracker_flutter_testing/leak_tracker_flutter_testing.dart';
 
 /// Ελάχιστο έγκυρο PNG 1×1 pixel (base64).
 const String _kTinyPngBase64 =
@@ -138,7 +137,6 @@ void main() {
         await _disposePumpedWidget(tester);
       },
       semanticsEnabled: false,
-      experimentalLeakTesting: LeakTesting.settings.withIgnoredAll(),
     );
 
     testWidgets(
@@ -168,7 +166,6 @@ void main() {
         await _disposePumpedWidget(tester);
       },
       semanticsEnabled: false,
-      experimentalLeakTesting: LeakTesting.settings.withIgnoredAll(),
     );
 
     testWidgets(
@@ -196,7 +193,6 @@ void main() {
         await _disposePumpedWidget(tester);
       },
       semanticsEnabled: false,
-      experimentalLeakTesting: LeakTesting.settings.withIgnoredAll(),
     );
 
     testWidgets(
@@ -214,7 +210,6 @@ void main() {
         await _disposePumpedWidget(tester);
       },
       semanticsEnabled: false,
-      experimentalLeakTesting: LeakTesting.settings.withIgnoredAll(),
     );
 
     testWidgets(
@@ -234,7 +229,6 @@ void main() {
         await _disposePumpedWidget(tester);
       },
       semanticsEnabled: false,
-      experimentalLeakTesting: LeakTesting.settings.withIgnoredAll(),
     );
   });
 }

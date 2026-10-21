@@ -19,9 +19,11 @@ CallModel _call({
   String? time,
   int? duration,
   String? lansweeperState,
+  String? phoneText,
 }) {
   return CallModel(
     id: id,
+    phoneText: phoneText,
     callerText: callerText,
     issue: issue,
     solution: solution,
@@ -125,6 +127,98 @@ void main() {
       expect(grouped.keys, containsAll(<String>['Γιάννης', 'Μαρία']));
       expect(grouped['Γιάννης'], hasLength(2));
       expect(grouped['Μαρία'], hasLength(1));
+    });
+  });
+
+  group('LansweeperReportItemMapper.groupByDay', () {
+    final now = DateTime(2026, 10, 21, 15);
+
+    test(
+      'η πιο πρόσφατη ημέρα πρώτη, και μέσα στην ημέρα η πιο πρόσφατη κλήση πρώτη',
+      () {
+        final items = <ReportCallItem>[
+          _item(
+            key: 'tue',
+            call: _call(date: '2026-10-20', time: '09:00'),
+          ),
+          _item(
+            key: 'wedEarly',
+            call: _call(date: '2026-10-21', time: '08:00'),
+          ),
+          _item(
+            key: 'sat',
+            call: _call(date: '2026-10-17', time: '10:00'),
+          ),
+          _item(
+            key: 'wedLate',
+            call: _call(date: '2026-10-21', time: '11:00'),
+          ),
+          _item(
+            key: 'lastYear',
+            call: _call(date: '2025-10-21', time: '10:00'),
+          ),
+        ];
+
+        final grouped = LansweeperReportItemMapper.groupByDay(items, now: now);
+
+        expect(grouped.keys.toList(), [
+          'Σήμερα · Τετάρτη 21/10',
+          'Χθες · Τρίτη 20/10',
+          'Σάββατο 17/10',
+          'Τρίτη 21/10/2025',
+        ]);
+        expect(grouped['Σήμερα · Τετάρτη 21/10']!.map((e) => e.key).toList(), [
+          'wedLate',
+          'wedEarly',
+        ]);
+      },
+    );
+
+    test(
+      'η κάρτα λέει ώρα, καλούντα και τηλέφωνο — η ημέρα είναι στην επικεφαλίδα',
+      () {
+        final item = _item(
+          key: 'a',
+          caller: 'Ειρήνη Καρυώτη',
+          call: _call(date: '2026-10-21', time: '11:42', phoneText: '2835'),
+        );
+
+        expect(
+          LansweeperReportItemMapper.dayRowLabel(item),
+          '11:42 · Ειρήνη Καρυώτη · 2835',
+        );
+      },
+    );
+
+    test('οι δύο προβολές δείχνουν ακριβώς τις ίδιες κλήσεις', () {
+      final items = <ReportCallItem>[
+        _item(
+          key: 'a',
+          caller: 'Α',
+          call: _call(date: '2026-10-21', time: '10:00'),
+        ),
+        _item(
+          key: 'b',
+          caller: 'Β',
+          call: _call(date: '2026-10-20', time: '10:00'),
+        ),
+        _item(
+          key: 'c',
+          caller: 'Α',
+          call: _call(date: '2026-10-19', time: '10:00'),
+        ),
+      ];
+      Set<String> keysOf(Map<String, List<ReportCallItem>> grouped) => {
+        for (final group in grouped.values) ...group.map((e) => e.key),
+      };
+
+      expect(
+        keysOf(LansweeperReportItemMapper.groupByDay(items, now: now)),
+        keysOf(LansweeperReportItemMapper.groupByCaller(items)),
+        reason:
+            'Η αλλαγή προβολής δεν κρύβει ούτε προσθέτει κλήσεις — οι '
+            'επιλεγμένες μένουν όλες ορατές',
+      );
     });
   });
 

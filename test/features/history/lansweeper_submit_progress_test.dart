@@ -32,7 +32,7 @@ LansweeperWorkflowRequest _request({
     targetState: targetState,
     existingTicketId: existingTicketId,
     requesterUsername: requesterUsername,
-    assetTarget: assetTarget,
+    assetTargets: [?assetTarget],
   );
 }
 

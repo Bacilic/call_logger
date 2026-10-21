@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/text_layout_utils.dart';
 import '../services/database_stats_service.dart';
 
 /// Πλέγμα προεπισκόπησης πίνακα (Excel-like) με εικονικοποίηση: χτίζονται ΜΟΝΟ
@@ -113,17 +114,8 @@ class _TablePreviewGridState extends State<TablePreviewGrid> {
     _widthsInitialized = true;
   }
 
-  double _textWidth(String text, TextStyle style) {
-    if (text.isEmpty) return 0;
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout(minWidth: 0, maxWidth: double.infinity);
-    final width = painter.width;
-    painter.dispose();
-    return width;
-  }
+  double _textWidth(String text, TextStyle style) =>
+      singleLineTextWidth(text: text, style: style);
 
   String _cellText(dynamic value) {
     if (value == null) return '';

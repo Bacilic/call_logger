@@ -181,7 +181,7 @@ class TaskLansweeperSubmitNotifier extends AsyncNotifier<void> {
         targetState: targetState,
         existingTicketId: existingTicketId,
         requesterUsername: requesterUsername,
-        assetTarget: assetTarget,
+        assetTargets: [?assetTarget],
       );
 
       progress.begin(

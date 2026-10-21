@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/services/ai_ticket_suggestion_service.dart';
+import '../../../core/services/lansweeper_sync_service.dart';
 import '../../../core/utils/run_after_next_frame.dart';
 import '../../knowledge/providers/knowledge_provider.dart';
 import '../../knowledge/services/knowledge_prompt_context.dart';
@@ -37,12 +38,10 @@ class LansweeperReportAi {
     if (host.lastPrefilledKey == signature) return;
     host.lastPrefilledKey = signature;
 
-    // Ο τίτλος έρχεται από την πρώτη κλήση, όχι συνδυασμένος: το αίτημα έχει
-    // έναν τίτλο, και η πρώτη κλήση είναι αυτή που το ονοματίζει.
-    final title = LansweeperAiPresenter.prefillTitle(
-      storedTitle: primary.call.title,
-      category: (primary.call.category ?? '').trim(),
-      id: primary.call.id,
+    // Ο τίτλος ενώνει τους τίτλους όλων των επιλεγμένων κλήσεων, όπως
+    // ενώνονται και η περιγραφή και η λύση.
+    final title = LansweeperSyncService.combinedTicketTitle(
+      LansweeperReportItemMapper.titleEntries(selected),
     );
     final notes = LansweeperReportItemMapper.combinedSelectedNotes(selected);
     // Η λύση φορτώνεται από τις ίδιες τις κλήσεις, όπως η περιγραφή: από τη

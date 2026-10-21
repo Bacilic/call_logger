@@ -313,7 +313,7 @@ class SmartEntitySelectorLookups {
     final deptId = state.selectedDepartmentId;
     if (lookup == null || deptId == null) return;
     if (state.callerDisplayText.trim().isNotEmpty) return;
-    final users = lookup.getUsersByDepartment(deptId);
+    final users = departmentCallersWithPhoneOwnersFirst(lookup, deptId);
     if (users.isEmpty) return;
     state = state.copyWith(
       callerCandidates: users,
@@ -321,6 +321,36 @@ class SmartEntitySelectorLookups {
       callerNoMatch: false,
     );
   }
+
+  /// **Μοναδικό** σημείο της ένωσης «τηλέφωνο + τμήμα» στη λίστα του
+  /// Καλούντα: όλοι οι υπάλληλοι του τμήματος [departmentId], με πρώτους όσους
+  /// έχουν το τηλέφωνο της φόρμας. Χωρίς τέτοιον κάτοχο, το τμήμα όπως είναι.
+  ///
+  /// Η σειρά δεν εξαρτάται από το ποιο πεδίο συμπληρώθηκε πρώτο: τηλέφωνο και
+  /// μετά τμήμα, ή τμήμα και μετά τηλέφωνο, δίνουν την ίδια λίστα.
+  List<UserModel> departmentCallersWithPhoneOwnersFirst(
+    LookupService lookup,
+    int departmentId,
+  ) {
+    final departmentUsers = lookup.getUsersByDepartment(departmentId);
+    final owners = lookup
+        .findUsersByPhone(state.selectedPhone ?? '')
+        .where((u) => u.departmentId == departmentId)
+        .toList();
+    if (owners.isEmpty) return departmentUsers;
+    final ownerIds = {for (final u in owners) u.id};
+    return [
+      ...owners,
+      ...departmentUsers.where((u) => !ownerIds.contains(u.id)),
+    ];
+  }
+
+  /// Το τμήμα της φόρμας το διάλεξε ή το επικύρωσε **ο χρήστης** — δεν το
+  /// έγραψε μόνη της η εφαρμογή από το τηλέφωνο. Μόνο τότε το κοινό
+  /// τηλέφωνο φέρνει όλο το τμήμα· αλλιώς φέρνει μόνο τους κατόχους του.
+  bool get _departmentChosenByUser =>
+      state.selectedDepartmentId != null &&
+      state.identificationOrder.contains(SelectorField.department);
 
   /// Μετά καθαρισμό εξοπλισμού, επαναφέρει τους υποψήφιους εξοπλισμούς του τμήματος.
   void restoreDepartmentEquipmentCandidatesIfNeeded(LookupService? lookup) {
@@ -543,8 +573,10 @@ class SmartEntitySelectorLookups {
     }
   }
 
-  /// Κοινό τηλέφωνο πολλών κατόχων: η λίστα τους γίνεται υποψήφιοι καλούντες.
-  /// Το τμήμα συμπληρώνεται μόνο όταν όλοι ανήκουν στο ίδιο.
+  /// Κοινό τηλέφωνο πολλών κατόχων: η λίστα τους γίνεται υποψήφιοι καλούντες
+  /// — και όταν το τμήμα το έχει διαλέξει ο χρήστης, ακολουθούν οι υπόλοιποι
+  /// υπάλληλοι του τμήματος. Το τμήμα συμπληρώνεται μόνο όταν όλοι ανήκουν
+  /// στο ίδιο, και αυτή η συμπλήρωση δεν φέρνει την ένωση.
   void _applySharedPhoneOwners(List<UserModel> users, LookupService lookup) {
     _autofillSharedDepartmentIfEmpty(users, lookup);
 
@@ -563,9 +595,13 @@ class SmartEntitySelectorLookups {
       return;
     }
 
+    final departmentId = state.selectedDepartmentId;
+    final candidates = _departmentChosenByUser && departmentId != null
+        ? departmentCallersWithPhoneOwnersFirst(lookup, departmentId)
+        : users;
     state = state.copyWith(
       clearPhoneCandidates: true,
-      callerCandidates: users,
+      callerCandidates: candidates,
       clearSelectedCaller: true,
       equipmentCandidates: [],
       clearSelectedEquipment: !hasManualEquipmentSelection,

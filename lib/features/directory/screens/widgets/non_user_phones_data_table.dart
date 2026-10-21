@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/utils/text_layout_utils.dart';
 import '../../models/non_user_phone_entry.dart';
 
 /// Πίνακας τηλεφώνων χωρίς σύνδεση χρήστη· διπλό κλικ / Enter → επεξεργασία τμήματος.
@@ -63,20 +64,8 @@ class _NonUserPhonesDataTableState extends State<NonUserPhonesDataTable> {
   Color? get _focusHighlight =>
       Theme.of(context).colorScheme.surfaceContainerHighest;
 
-  double _textWidth(String text, TextStyle style) {
-    if (text.isEmpty) return 0;
-    final tp = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    );
-    try {
-      tp.layout();
-      return tp.width;
-    } finally {
-      tp.dispose();
-    }
-  }
+  double _textWidth(String text, TextStyle style) =>
+      singleLineTextWidth(text: text, style: style);
 
   /// Ευρύτερη γραμμή για πεδία που ενδέχεται να σπάσουν σε 2 γραμμές στην εμφάνιση.
   double _widestLineWidth(String text, TextStyle style) {

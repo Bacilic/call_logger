@@ -54,6 +54,7 @@ import 'department_form_shared_links.dart';
 import 'department_palette_actions.dart';
 import 'department_palette_host.dart';
 import 'department_palette_store.dart';
+import 'form_single_save.dart';
 
 /// Διάλογος προσθήκης / επεξεργασίας / αντιγράφου τμήματος.
 class DepartmentFormDialog extends ConsumerStatefulWidget {
@@ -79,7 +80,8 @@ class DepartmentFormDialog extends ConsumerStatefulWidget {
 
 /// Δημόσιο State: τα πεδία της φόρμας είναι ορατά στους συνεργάτες της
 /// (φρουρός κλεισίματος, κοινόχρηστα στοιχεία, αποθήκευση).
-class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
+class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog>
+    with FormSingleSave<DepartmentFormDialog> {
   /// Φρουρός κλεισίματος (dirty έλεγχος + διάλογος αλλαγών).
   late final DepartmentFormDismissGuard dismissGuard =
       DepartmentFormDismissGuard(this);
@@ -800,7 +802,9 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
+        // Όσο γράφεται η αποθήκευση, η φόρμα δεν κλείνει — κλείνει μόνη της
+        // μόλις τελειώσει.
+        if (didPop || saveInProgress) return;
         await dismissGuard.requestClose();
       },
       child: DraggableDialogShell(
@@ -1388,14 +1392,15 @@ class DepartmentFormDialogState extends ConsumerState<DepartmentFormDialog> {
           ),
           actions: [
             TextButton(
-              onPressed: dismissGuard.cancelAndClose,
+              onPressed: saveInProgress ? null : dismissGuard.cancelAndClose,
               child: const Text('Ακύρωση'),
             ),
-            FilledButton(
+            FormSaveButton(
+              label: isEdit ? 'Αποθήκευση' : 'Προσθήκη',
+              saving: saveInProgress,
               onPressed: (isEdit && !dismissGuard.isDirty)
                   ? null
                   : saveFlow.save,
-              child: Text(isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
             ),
           ],
         ),

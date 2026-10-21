@@ -574,7 +574,7 @@ void main() {
         'avg ${s.avgCompletionSeconds.toStringAsFixed(1)} '
             '${s.avgSnoozesPerTask.toStringAsFixed(3)}',
         for (final o in s.originDistribution)
-          'origin ${o.origin} ${o.label} ${o.count} '
+          'origin ${o.origin} ${o.count} '
               '${o.percent.toStringAsFixed(3)}',
         for (final b in s.backlogGrowth)
           'backlog ${b.date.day} ${b.createdCount} ${b.closedCount} '
@@ -593,10 +593,10 @@ void main() {
         'overdue 3 3 75.000 75.000',
         'rates 20.000 20.000',
         'avg 973800.0 0.750',
-        'origin call_linked Από κλήση 1 25.000',
-        'origin legacy Legacy 1 25.000',
-        'origin manual_fab Χειροκίνητη 1 25.000',
-        'origin quick_add Quick add 1 25.000',
+        'origin call_linked 1 25.000',
+        'origin legacy 1 25.000',
+        'origin manual_fab 1 25.000',
+        'origin quick_add 1 25.000',
         'backlog 1 1 0 1 1',
         'backlog 2 1 1 0 1',
         'backlog 3 0 1 -1 0',

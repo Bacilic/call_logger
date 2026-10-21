@@ -19,6 +19,7 @@ import '../../../core/services/lookup_service.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/widgets/spell_check_controller.dart';
 import '../models/lansweeper_connection_status.dart';
+import '../models/lansweeper_report_grouping.dart';
 import '../models/lansweeper_report_scope.dart';
 import '../models/lansweeper_sync_state.dart';
 import '../providers/dashboard_provider.dart';
@@ -27,6 +28,7 @@ import '../providers/lansweeper_connection_probe_provider.dart';
 import '../../../core/models/owner_filter.dart';
 import '../../../core/widgets/owner_filter_chip.dart';
 import '../providers/call_owner_filter_providers.dart';
+import '../providers/lansweeper_report_grouping_provider.dart';
 import '../providers/lansweeper_report_scope_provider.dart';
 import '../providers/lansweeper_settings_provider.dart';
 import '../providers/lansweeper_submit_progress_provider.dart';
@@ -777,7 +779,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
     );
   }
 
-  /// Η αριστερή στήλη: οι κλήσεις του διαστήματος, ανά καλούντα.
+  /// Η αριστερή στήλη: οι κλήσεις του διαστήματος, ανά καλούντα ή ανά ημέρα.
   ///
   /// Ό,τι χρειάζεται το ξαναρωτά με `ref.watch` — καλείται μέσα στην ίδια
   /// ζωγραφική με το `build`, οπότε η παρακολούθηση είναι η ίδια.
@@ -787,6 +789,34 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Η αλλαγή προβολής αλλάζει μόνο τη σειρά της λίστας: οι επιλεγμένες
+          // κλήσεις και ό,τι γράφτηκε στη φόρμα μένουν όπως ήταν.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<LansweeperReportGrouping>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: const [
+                ButtonSegment(
+                  value: LansweeperReportGrouping.byCaller,
+                  icon: Icon(Icons.people_outline),
+                  label: Text('Ανά υπάλληλο'),
+                ),
+                ButtonSegment(
+                  value: LansweeperReportGrouping.byDay,
+                  icon: Icon(Icons.calendar_today_outlined),
+                  label: Text('Ανά ημέρα'),
+                ),
+              ],
+              selected: {data.grouping},
+              onSelectionChanged: (selection) => unawaited(
+                ref
+                    .read(lansweeperReportGroupingProvider.notifier)
+                    .select(selection.single),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Text(
             'Επιλεγμένες: ${data.selected.length} | '
             'Σύνολο διάρκειας: '
@@ -797,6 +827,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
           Expanded(
             child: LansweeperReportCallList(
               grouped: data.groupedRows,
+              grouping: data.grouping,
               selectedKeys: selectedKeys,
               totalDurationLabel: LansweeperReportItemMapper.totalDurationLabel,
               ticketViewUrlTemplate: data.ticketViewUrl,
@@ -974,8 +1005,16 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
 
     final allItems = LansweeperReportItemMapper.toItems(calls);
     final items = selectionFlow.filterReportItems(allItems);
-    final grouped = LansweeperReportItemMapper.groupByCaller(items);
-    final groupedRows = LansweeperReportItemMapper.groupedRowData(grouped);
+    final grouping =
+        ref.watch(lansweeperReportGroupingProvider).value ??
+        LansweeperReportGrouping.byCaller;
+    final grouped = grouping == LansweeperReportGrouping.byDay
+        ? LansweeperReportItemMapper.groupByDay(items, now: DateTime.now())
+        : LansweeperReportItemMapper.groupByCaller(items);
+    final groupedRows = LansweeperReportItemMapper.groupedRowData(
+      grouped,
+      grouping: grouping,
+    );
     final itemByKey = {for (final item in items) item.key: item};
     final selected = items.where((e) => selectedKeys.contains(e.key)).toList();
     final primarySelected = selectionFlow.primarySelectedItem(items);
@@ -1079,6 +1118,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
 
     final data = _ReportViewData(
       groupedRows: groupedRows,
+      grouping: grouping,
       itemByKey: itemByKey,
       selected: selected,
       primarySelected: primarySelected,
@@ -1326,6 +1366,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
 class _ReportViewData {
   const _ReportViewData({
     required this.groupedRows,
+    required this.grouping,
     required this.itemByKey,
     required this.selected,
     required this.primarySelected,
@@ -1358,6 +1399,7 @@ class _ReportViewData {
 
   // ── Οι κλήσεις και η επιλογή ───────────────────────────────────────────────
   final Map<String, List<LansweeperReportCallRowData>> groupedRows;
+  final LansweeperReportGrouping grouping;
   final Map<String, ReportCallItem> itemByKey;
   final List<ReportCallItem> selected;
   final ReportCallItem? primarySelected;

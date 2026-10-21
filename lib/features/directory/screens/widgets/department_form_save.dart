@@ -32,7 +32,11 @@ class DepartmentFormSave {
   /// δημιουργία, η καθεμιά με τις δικές της ερωτήσεις πριν από τις εγγραφές)
   /// → μήνυμα επιβεβαίωσης. Κάθε ακύρωση στη διαδρομή αφήνει τη φόρμα
   /// ανοιχτή.
-  Future<void> save() async {
+  ///
+  /// Μία τη φορά: πάτημα όσο τρέχει ήδη μια αποθήκευση δεν κάνει τίποτα.
+  Future<void> save() => host.runSingleSave(_save);
+
+  Future<void> _save() async {
     if (!(host.formKey.currentState?.validate() ?? false)) return;
     final input = _readForm();
     if (input == null) return;

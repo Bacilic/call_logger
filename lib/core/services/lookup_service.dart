@@ -235,9 +235,7 @@ class LookupService {
     if (digits.length < 3) return null;
     for (final u in _users) {
       if (u.isDeleted) continue;
-      final phoneDigits = _digitsOnly(_userPhonesDigitPool(u));
-      if (phoneDigits.isEmpty) continue;
-      if (phoneDigits.contains(digits) || phoneDigits.startsWith(digits)) {
+      if (userHasPhone(u, digits)) {
         final equipment = (_equipmentByUserId[u.id] ?? [])
             .where((e) => !e.isDeleted)
             .toList();
@@ -318,14 +316,23 @@ class LookupService {
   List<UserModel> findUsersByPhone(String phone) {
     final digits = _digitsOnly(phone);
     if (digits.length < 3) return [];
-    final list = _users.where((u) {
-      if (u.isDeleted) return false;
-      final phoneDigits = _digitsOnly(_userPhonesDigitPool(u));
-      return phoneDigits.isNotEmpty &&
-          (phoneDigits.contains(digits) || phoneDigits.startsWith(digits));
-    }).toList();
+    final list = _users
+        .where((u) => !u.isDeleted && userHasPhone(u, digits))
+        .toList();
     list.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
     return list;
+  }
+
+  /// Έχει ο [user] τηλέφωνο που ταιριάζει με τα ψηφία του [phone] (≥3);
+  /// Ο **ένας** κανόνας «κάτοχος τηλεφώνου» — τον ίδιο ρωτούν η αναζήτηση
+  /// ([search], [findUsersByPhone]) και η σήμανση των κατόχων στη λίστα του
+  /// Καλούντα, ώστε ό,τι φέρνει το τηλέφωνο να είναι ό,τι σημαδεύεται.
+  static bool userHasPhone(UserModel user, String phone) {
+    final digits = _digitsOnly(phone);
+    if (digits.length < 3) return false;
+    final phoneDigits = _digitsOnly(_userPhonesDigitPool(user));
+    return phoneDigits.isNotEmpty &&
+        (phoneDigits.contains(digits) || phoneDigits.startsWith(digits));
   }
 
   /// Εξοπλισμός που συνδέεται με τον χρήστη (πίνακας `user_equipment`).

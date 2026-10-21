@@ -10,6 +10,7 @@ import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector
 import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_department_field.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -205,6 +206,155 @@ void main() {
       },
       semanticsEnabled: false,
     );
+
+    // Η λίστα που φαίνεται και η λίστα που διαβάζουν τα βελάκια ήταν κάποτε
+    // δύο αντίγραφα· αν απέκλιναν, το Enter θα διάλεγε άλλον υπάλληλο από
+    // αυτόν που φαινόταν επισημασμένος.
+    testWidgets(
+      'βελάκι και Enter → επιλέγεται ακριβώς η γραμμή που φαίνεται επισημασμένη',
+      (tester) async {
+        _configureDesktopViewport(tester);
+        await _pumpCallLoggerApp(tester);
+
+        await tester.tap(_callerTextField());
+        await pumpUntilSettled(tester);
+        await tester.enterText(_callerTextField(), kTestUserFirstName);
+        await tester.pump();
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+
+        final highlighted = find.byWidgetPredicate(
+          (w) => w is ListTile && w.selected,
+        );
+        expect(
+          highlighted,
+          findsOneWidget,
+          reason: greekExpectMsg('Το βελάκι επισημαίνει μία πρόταση'),
+        );
+        final highlightedLabel =
+            (tester.widget<ListTile>(highlighted).title! as Text).data;
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+
+        final header = await _readHeader(tester);
+        expect(
+          header.selectedCaller?.fullNameWithDepartment,
+          highlightedLabel,
+          reason: greekExpectMsg(
+            'Το Enter διαλέγει τον υπάλληλο της επισημασμένης γραμμής',
+          ),
+        );
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      },
+      semanticsEnabled: false,
+    );
+
+    // Φωτογραφία της σημερινής συμπεριφοράς των πλήκτρων, πριν μαζευτεί ο
+    // χειρισμός τους σε ένα σημείο: τι γράφει το πεδίο σε κάθε βελάκι και τι
+    // επιλέγει το Enter, στη μικρή λίστα και στις προτάσεις.
+    group('πλήκτρα', () {
+      Future<void> openSmallListWithCandidate(WidgetTester tester) async {
+        await tester.tap(_callerTextField());
+        await pumpUntilSettled(tester);
+        // Υποψήφιοι χωρίς να γραφτεί τίποτα στο πεδίο: έτσι φαίνεται η
+        // μικρή λίστα «υποψήφιοι + Άγνωστος».
+        await tester.runAsync(() async {
+          ProviderScope.containerOf(tester.element(find.byType(MaterialApp)))
+              .read(callHeaderProvider.notifier)
+              .performCallerLookup(kTestUserFirstName);
+        });
+        await tester.pump();
+        await tester.pump();
+      }
+
+      String fieldText(WidgetTester tester) =>
+          tester.widget<TextField>(_callerTextField()).controller!.text;
+
+      testWidgets(
+        'μικρή λίστα: ↓ γράφει μόνο το όνομα, και τα βελάκια μένουν εκεί',
+        (tester) async {
+          _configureDesktopViewport(tester);
+          await _pumpCallLoggerApp(tester);
+          await openSmallListWithCandidate(tester);
+          expect((await _readHeader(tester)).callerCandidates, hasLength(1));
+          expect(find.text('Άγνωστος'), findsOneWidget);
+
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pump();
+          expect(fieldText(tester), _kFullCallerName);
+
+          // Σημερινή συμπεριφορά (καταγραμμένη στο roadmap ως σφάλμα): με
+          // γεμάτο πεδίο η γραμμή «Άγνωστος» φεύγει, οπότε το βελάκι δεν
+          // φτάνει ποτέ εκεί και μένει στον υποψήφιο.
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pump();
+          expect(fieldText(tester), _kFullCallerName);
+          expect(find.text('Άγνωστος'), findsNothing);
+
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+          await tester.pump();
+          expect(fieldText(tester), _kFullCallerName);
+
+          await flushCallLoggerSqfliteLockTimers(tester);
+        },
+        semanticsEnabled: false,
+      );
+
+      testWidgets('μικρή λίστα: Enter στον υποψήφιο → επιλέγεται', (
+        tester,
+      ) async {
+        _configureDesktopViewport(tester);
+        await _pumpCallLoggerApp(tester);
+        await openSmallListWithCandidate(tester);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+
+        final header = await _readHeader(tester);
+        expect(header.selectedCaller?.name, _kFullCallerName);
+        expect(fieldText(tester), _kFullCallerName);
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      }, semanticsEnabled: false);
+
+      testWidgets(
+        'προτάσεις: ↓ γράφει όνομα και τμήμα, το Enter αφήνει μόνο το όνομα',
+        (tester) async {
+          _configureDesktopViewport(tester);
+          await _pumpCallLoggerApp(tester);
+
+          await tester.tap(_callerTextField());
+          await pumpUntilSettled(tester);
+          await tester.enterText(_callerTextField(), kTestUserFirstName);
+          await tester.pump();
+
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pump();
+          expect(fieldText(tester), '$_kFullCallerName ($kTestDepartmentName)');
+
+          // Ένα στοιχείο: ↑ μένει εκεί.
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+          await tester.pump();
+          expect(fieldText(tester), '$_kFullCallerName ($kTestDepartmentName)');
+
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          await tester.pump();
+          expect(fieldText(tester), _kFullCallerName);
+          expect(
+            (await _readHeader(tester)).selectedCaller?.name,
+            _kFullCallerName,
+          );
+
+          await flushCallLoggerSqfliteLockTimers(tester);
+        },
+        semanticsEnabled: false,
+      );
+    });
 
     // Ένα μόνο σβησμένο γράμμα και έξοδος: παλιότερα το λύσιμο άδειαζε το
     // κείμενο της φόρμας, και στην έξοδο το πεδίο άδειαζε κι αυτό.

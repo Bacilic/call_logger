@@ -368,6 +368,8 @@ class BuildingMapSheetPainter extends CustomPainter {
         ..strokeWidth = 1.35;
       canvas.drawLine(underlineStart, underlineEnd, annotationStroke);
       canvas.drawLine(anchorPoint, leaderTarget, annotationStroke);
+      // Η μέτρηση ξαναφτιάχνεται στο επόμενο καρέ· αυτή δεν χρειάζεται πια.
+      textLayout.dispose();
     }
 
     if (draftShape != null) {

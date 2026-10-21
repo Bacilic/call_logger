@@ -37,60 +37,6 @@ class EquipmentRepository {
     return int.tryParse('$raw') ?? 0;
   }
 
-  Future<Set<int>> _equipmentIdsForUser(DatabaseExecutor e, int userId) async {
-    final rows = await e.query(
-      'user_equipment',
-      columns: ['equipment_id'],
-      where: 'user_id = ?',
-      whereArgs: [userId],
-    );
-    return rows.map((r) => r['equipment_id'] as int?).whereType<int>().toSet();
-  }
-
-  Future<List<Map<String, dynamic>>> _linkedEquipmentSnapshotsForUser(
-    DatabaseExecutor e,
-    int userId,
-  ) async {
-    final rows = await e.rawQuery(
-      '''
-      SELECT e.id AS id, e.code_equipment AS code
-      FROM user_equipment ue
-      JOIN equipment e ON e.id = ue.equipment_id
-      WHERE ue.user_id = ? AND COALESCE(e.is_deleted, 0) = 0
-      ORDER BY e.code_equipment COLLATE NOCASE ASC
-      ''',
-      [userId],
-    );
-    return rows
-        .map((r) => <String, dynamic>{'id': r['id'], 'code': r['code']})
-        .toList();
-  }
-
-  Future<List<Map<String, dynamic>>> _linkedUserSnapshotsForEquipment(
-    DatabaseExecutor e,
-    int equipmentId,
-  ) async {
-    final rows = await e.rawQuery(
-      '''
-      SELECT u.id AS id, u.first_name AS first_name, u.last_name AS last_name
-      FROM user_equipment ue
-      JOIN users u ON u.id = ue.user_id
-      WHERE ue.equipment_id = ? AND COALESCE(u.is_deleted, 0) = 0
-      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
-      ''',
-      [equipmentId],
-    );
-    return rows
-        .map(
-          (r) => <String, dynamic>{
-            'id': r['id'],
-            'first_name': r['first_name'],
-            'last_name': r['last_name'],
-          },
-        )
-        .toList();
-  }
-
   Future<int?> getEquipmentIdByCode(
     String code, {
     DatabaseExecutor? executor,
@@ -507,7 +453,7 @@ class EquipmentRepository {
     if (rows.isEmpty) return;
     final eid = rows.first['id'] as int?;
     if (eid == null) return;
-    final oldUsers = await _linkedUserSnapshotsForEquipment(txn, eid);
+    final oldUsers = await _support.linkedUserSnapshotsForEquipment(txn, eid);
     if (oldUsers.isEmpty) return;
     await txn.delete(
       'user_equipment',
@@ -529,7 +475,7 @@ class EquipmentRepository {
     for (final u in oldUsers) {
       final uid = u['id'] as int?;
       if (uid == null) continue;
-      final uSnap = await _linkedEquipmentSnapshotsForUser(txn, uid);
+      final uSnap = await _support.linkedEquipmentSnapshotsForUser(txn, uid);
       final uRow = await _support.userRowById(txn, uid);
       await AuditService.log(
         txn,
@@ -604,8 +550,11 @@ class EquipmentRepository {
       whereArgs: [userId, equipmentId],
     );
     final ap = _support.auditPerformingUser();
-    final uSnap = await _linkedEquipmentSnapshotsForUser(txn, userId);
-    final eSnap = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
+    final uSnap = await _support.linkedEquipmentSnapshotsForUser(txn, userId);
+    final eSnap = await _support.linkedUserSnapshotsForEquipment(
+      txn,
+      equipmentId,
+    );
     final uRow = await _support.userRowById(txn, userId);
     final eRows = await txn.query(
       'equipment',
@@ -678,8 +627,11 @@ class EquipmentRepository {
     );
     if (post.isEmpty) return;
     final ap = _support.auditPerformingUser();
-    final uSnap = await _linkedEquipmentSnapshotsForUser(txn, userId);
-    final eSnap = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
+    final uSnap = await _support.linkedEquipmentSnapshotsForUser(txn, userId);
+    final eSnap = await _support.linkedUserSnapshotsForEquipment(
+      txn,
+      equipmentId,
+    );
     final uRow = await _support.userRowById(txn, userId);
     final eRows = await txn.query(
       'equipment',
@@ -740,7 +692,7 @@ class EquipmentRepository {
         whereArgs: [fromUserId],
       );
       if (rows.isEmpty) return;
-      final beforeEq = await _equipmentIdsForUser(txn, toUserId);
+      final beforeEq = await _support.equipmentIdsForUser(txn, toUserId);
       for (final r in rows) {
         final eid = r['equipment_id'] as int?;
         if (eid == null) continue;
@@ -749,11 +701,14 @@ class EquipmentRepository {
           'equipment_id': eid,
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
-      final afterEq = await _equipmentIdsForUser(txn, toUserId);
+      final afterEq = await _support.equipmentIdsForUser(txn, toUserId);
       final added = afterEq.difference(beforeEq);
       if (added.isEmpty) return;
       final ap = _support.auditPerformingUser();
-      final uSnap = await _linkedEquipmentSnapshotsForUser(txn, toUserId);
+      final uSnap = await _support.linkedEquipmentSnapshotsForUser(
+        txn,
+        toUserId,
+      );
       final uRow = await _support.userRowById(txn, toUserId);
       await AuditService.log(
         txn,
@@ -768,7 +723,7 @@ class EquipmentRepository {
         newValues: {'linked_equipment': uSnap},
       );
       for (final eid in added) {
-        final eSnap = await _linkedUserSnapshotsForEquipment(txn, eid);
+        final eSnap = await _support.linkedUserSnapshotsForEquipment(txn, eid);
         final eRows = await txn.query(
           'equipment',
           columns: ['code_equipment'],
@@ -799,7 +754,10 @@ class EquipmentRepository {
     List<int> userIds,
   ) async {
     final unique = userIds.toSet().toList();
-    final oldU = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
+    final oldU = await _support.linkedUserSnapshotsForEquipment(
+      txn,
+      equipmentId,
+    );
     await txn.delete(
       'user_equipment',
       where: 'equipment_id = ?',
@@ -811,7 +769,10 @@ class EquipmentRepository {
         'equipment_id': equipmentId,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
-    final newU = await _linkedUserSnapshotsForEquipment(txn, equipmentId);
+    final newU = await _support.linkedUserSnapshotsForEquipment(
+      txn,
+      equipmentId,
+    );
     if (jsonEncode(oldU) == jsonEncode(newU)) return;
     final ap = _support.auditPerformingUser();
     final eRows = await txn.query(
@@ -838,7 +799,7 @@ class EquipmentRepository {
     final oldIds = oldU.map((m) => m['id'] as int?).whereType<int>().toSet();
     final newIds = newU.map((m) => m['id'] as int?).whereType<int>().toSet();
     for (final uid in oldIds.union(newIds)) {
-      final uSnap = await _linkedEquipmentSnapshotsForUser(txn, uid);
+      final uSnap = await _support.linkedEquipmentSnapshotsForUser(txn, uid);
       final uRow = await _support.userRowById(txn, uid);
       await AuditService.log(
         txn,

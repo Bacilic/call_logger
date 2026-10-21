@@ -38,6 +38,7 @@ import 'full_location_line.dart';
 import 'location_field_help_icon.dart';
 import 'equipment_form_dismiss_guard.dart';
 import 'equipment_form_remote_params.dart';
+import 'form_single_save.dart';
 
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο εξοπλισμού.
 class EquipmentFormDialog extends ConsumerStatefulWidget {
@@ -70,7 +71,8 @@ class EquipmentFormDialog extends ConsumerStatefulWidget {
 ///
 /// Διαβάζει providers με το δικό του `ref` — ποτέ με του καλούντος, που
 /// μπορεί να πάψει να υπάρχει όσο τρέχει μια αποθήκευση.
-class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
+class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
+    with FormSingleSave<EquipmentFormDialog> {
   /// Κλείνει **αυτή** τη φόρμα — ποτέ ό,τι τυχαίνει να είναι από πάνω της.
   ///
   /// Το `Navigator.pop()` κλείνει την **κορυφαία** διαδρομή, όχι τη δική μας.
@@ -608,7 +610,11 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
   String? _requiredValidator(String? v) =>
       (v?.trim().isEmpty ?? true) ? 'Υποχρεωτικό' : null;
 
-  Future<void> save() async {
+  /// Η «Αποθήκευση» της φόρμας — μία τη φορά: πάτημα όσο τρέχει ήδη μια
+  /// αποθήκευση δεν κάνει τίποτα.
+  Future<void> save() => runSingleSave(_save);
+
+  Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     for (final k in expandedRemoteKeys.toList()) {
       remoteParams.syncValueFromController(k);
@@ -890,7 +896,9 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
+        // Όσο γράφεται η αποθήκευση, η φόρμα δεν κλείνει — κλείνει μόνη της
+        // μόλις τελειώσει.
+        if (didPop || saveInProgress) return;
         await dismissGuard.requestClose();
       },
       child: DraggableDialogShell(
@@ -1376,12 +1384,13 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog> {
           ),
           actions: [
             TextButton(
-              onPressed: dismissGuard.cancelAndClose,
+              onPressed: saveInProgress ? null : dismissGuard.cancelAndClose,
               child: const Text('Ακύρωση'),
             ),
-            FilledButton(
+            FormSaveButton(
+              label: isEdit ? 'Αποθήκευση' : 'Προσθήκη',
+              saving: saveInProgress,
               onPressed: _canSubmitSave ? save : null,
-              child: Text(isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
             ),
           ],
         ),

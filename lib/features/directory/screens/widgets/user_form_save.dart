@@ -74,7 +74,11 @@ class UserFormSave {
     return dir.getOrCreateDepartmentIdByName(typed);
   }
 
-  Future<void> save() async {
+  /// Η «Αποθήκευση» της φόρμας — μία τη φορά: πάτημα όσο τρέχει ήδη μια
+  /// αποθήκευση δεν κάνει τίποτα.
+  Future<void> save() => host.runSingleSave(_save);
+
+  Future<void> _save() async {
     if (!(host.formKey.currentState?.validate() ?? false)) return;
     if (!host.dismissGuard.isDirty) return;
 

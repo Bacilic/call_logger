@@ -1,13 +1,16 @@
+/// Ένα κομμάτι της πίτας «προέλευση εκκρεμοτήτων».
+///
+/// Δεν κρατά ετικέτα: η ελληνική ονομασία κάθε προέλευσης έχει μία πηγή,
+/// το `taskAnalyticsOriginLabel`. Μια δεύτερη ετικέτα εδώ είχε ήδη αποκλίνει
+/// («Quick add», «Legacy»).
 class TaskAnalyticsOriginSlice {
   const TaskAnalyticsOriginSlice({
     required this.origin,
-    required this.label,
     required this.count,
     required this.percent,
   });
 
   final String origin;
-  final String label;
   final int count;
   final double percent;
 }

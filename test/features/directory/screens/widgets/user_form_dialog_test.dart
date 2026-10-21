@@ -350,6 +350,97 @@ void main() {
       },
     );
 
+    // Στη δικτυακή βάση η εγγραφή κρατά δευτερόλεπτα. Με ενεργή την
+    // «Αποθήκευση» στο μεταξύ, ένα δεύτερο πάτημα ξεκινούσε δεύτερη
+    // αποθήκευση πάνω στην πρώτη: η φόρμα δεν έκλεινε ποτέ και η δεύτερη
+    // ανακοίνωνε «Κάποιος πρόλαβε» για τη δουλειά του ίδιου του χρήστη.
+    testWidgets(
+      'επεξεργασία: όσο γράφεται η αποθήκευση, Αποθήκευση και Ακύρωση δεν πατιούνται',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DirectoryNotifier notifier;
+        late UserModel initial;
+        await tester.runAsync(() async {
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(directoryProvider.notifier);
+          await notifier.loadUsers();
+          initial = _findSeededTestUser(notifier);
+          await _openUserFormInDialog(
+            tester,
+            container,
+            initialUser: initial,
+            notifier: notifier,
+          );
+        });
+
+        await tester.enterText(_notesField(), 'Μία αποθήκευση');
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+        // Ένα μόνο καρέ: η εγγραφή στη βάση δεν έχει προλάβει να τελειώσει.
+        await tester.pump();
+
+        final busyButton = find.ancestor(
+          of: find.text('Αποθηκεύεται…'),
+          matching: find.byType(FilledButton),
+        );
+        expect(
+          busyButton,
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Όσο γράφεται, το κουμπί δείχνει ότι η αποθήκευση τρέχει',
+          ),
+        );
+        expect(
+          tester.widget<FilledButton>(busyButton).onPressed,
+          isNull,
+          reason: greekExpectMsg(
+            'Όσο γράφεται, δεύτερο πάτημα στην Αποθήκευση δεν γίνεται δεκτό',
+          ),
+        );
+        expect(
+          tester
+              .widget<TextButton>(find.widgetWithText(TextButton, 'Ακύρωση'))
+              .onPressed,
+          isNull,
+          reason: greekExpectMsg(
+            'Όσο γράφεται, η Ακύρωση δεν πατιέται — η εγγραφή δεν σταματά',
+          ),
+        );
+
+        await _pumpUntilUserSaveCompletes(tester);
+
+        expect(find.text('Κάποιος πρόλαβε'), findsNothing);
+        final notes = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'users',
+            columns: ['notes'],
+            where: 'id = ?',
+            whereArgs: [initial.id],
+            limit: 1,
+          );
+          return rows.first['notes'] as String?;
+        });
+        expect(
+          notes,
+          'Μία αποθήκευση',
+          reason: greekExpectMsg('Η αποθήκευση γράφτηκε μία φορά, κανονικά'),
+        );
+      },
+    );
+
     testWidgets(
       'επεξεργασία: αλλαγή εμφανίζει διάλογο επιβεβαίωσης, χωρίς αλλαγές όχι',
       (tester) async {

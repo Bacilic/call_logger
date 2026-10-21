@@ -148,6 +148,23 @@ void main() {
     );
   });
 
+  test(
+    'πολλές κλήσεις: κάθε διαφορετικός εξοπλισμός μία φορά, με τη σειρά τους· χωρίς εξοπλισμό δεν προσθέτει',
+    () async {
+      final targets = await resolveLansweeperAssetTargets(
+        repository: repo,
+        equipment: [
+          (equipmentId: null, equipmentText: '3430'),
+          (equipmentId: null, equipmentText: null),
+          (equipmentId: null, equipmentText: '3530'),
+          (equipmentId: null, equipmentText: '3430'),
+        ],
+      );
+
+      expect(targets.map((t) => t.value).toList(), ['PC3430', 'PC3530']);
+    },
+  );
+
   test('IPv4 στο κείμενο μένει IPv4', () async {
     final target = await resolveLansweeperAssetTarget(
       repository: repo,

@@ -62,7 +62,7 @@ class LansweeperWorkflowRequest {
     this.targetState,
     this.existingTicketId,
     this.requesterUsername,
-    this.assetTarget,
+    this.assetTargets = const [],
   });
 
   /// Το θέμα που παίρνει το αίτημα όταν ο χρήστης δεν έγραψε δικό του [title].
@@ -94,8 +94,9 @@ class LansweeperWorkflowRequest {
   /// Κενή/null = ο αιτών μένει ο πράκτορας, όπως πριν.
   final String? requesterUsername;
 
-  /// Στόχος `AddAsset` για τον εξοπλισμό της κλήσης. Null = χωρίς σύνδεση.
-  final LansweeperAssetTarget? assetTarget;
+  /// Στόχοι `AddAsset` — ένας για κάθε διαφορετικό εξοπλισμό των εγγραφών
+  /// που ενώνονται στο αίτημα. Κενή = χωρίς σύνδεση εξοπλισμού.
+  final List<LansweeperAssetTarget> assetTargets;
 }
 
 class LansweeperWorkflowResult {
@@ -198,7 +199,7 @@ class LansweeperSyncService {
       if ((request.requesterUsername?.trim() ?? '').isNotEmpty)
         LansweeperSubmitStepKeys.requester,
       if (creatingTicket) LansweeperSubmitStepKeys.ticket,
-      if (creatingTicket && request.assetTarget != null)
+      if (creatingTicket && request.assetTargets.isNotEmpty)
         LansweeperSubmitStepKeys.asset,
       if (config.enableAddNoteStep && request.solution.trim().isNotEmpty)
         LansweeperSubmitStepKeys.note,
@@ -328,16 +329,21 @@ class LansweeperSyncService {
 
       completedSteps.add('AddTicket');
 
-      final assetTarget = request.assetTarget;
-      if (assetTarget != null) {
+      // Ένα βήμα στην οθόνη για όλους τους εξοπλισμούς· ο καθένας συνδέεται
+      // χωριστά, και όποιος αποτύχει γίνεται προειδοποίηση χωρίς να
+      // σταματήσει τους υπόλοιπους.
+      final assetTargets = request.assetTargets;
+      if (assetTargets.isNotEmpty) {
         onStep?.call(LansweeperSubmitStepKeys.asset);
-        await _attachAssetStep(
-          ticketId: ticketId,
-          target: assetTarget,
-          completedSteps: completedSteps,
-          warnings: warnings,
-          rawPayloads: rawPayloads,
-        );
+        for (final target in assetTargets) {
+          await _attachAssetStep(
+            ticketId: ticketId,
+            target: target,
+            completedSteps: completedSteps,
+            warnings: warnings,
+            rawPayloads: rawPayloads,
+          );
+        }
       }
     }
 
@@ -478,9 +484,16 @@ class LansweeperSyncService {
     };
     try {
       final result = await _postAction('AddAsset', fields);
-      rawPayloads['AddAsset'] = result.rawPayload;
+      // Ένα κλειδί ανά εξοπλισμό: με δεύτερο μηχάνημα, κοινό κλειδί θα έσβηνε
+      // την απάντηση του πρώτου από το διαγνωστικό.
+      final payloadKey = rawPayloads.containsKey('AddAsset')
+          ? 'AddAsset(${target.value})'
+          : 'AddAsset';
+      rawPayloads[payloadKey] = result.rawPayload;
       if (result.success) {
-        completedSteps.add('AddAsset');
+        if (!completedSteps.contains('AddAsset')) {
+          completedSteps.add('AddAsset');
+        }
       } else {
         warnings.add(
           'Ο εξοπλισμός «${target.value}» δεν συνδέθηκε στο αίτημα: '
@@ -743,6 +756,52 @@ class LansweeperSyncService {
     final trimmed = category.trim();
     final suffix = id != null ? ' #$id' : '';
     return trimmed.isEmpty ? 'Κλήση$suffix' : '[$trimmed]$suffix';
+  }
+
+  /// Ο τίτλος ενός αιτήματος που ενώνει τις εγγραφές [entries] — η μοναδική
+  /// υλοποίηση, για την προσυμπλήρωση της φόρμας **και** για το μέτρο «έγραψε
+  /// ο χρήστης δικό του τίτλο;» ([callTitleToPersist]).
+  ///
+  /// Με [useStoredTitles] μπαίνει ο αποθηκευμένος τίτλος κάθε εγγραφής· χωρίς
+  /// αυτό ο τίτλος είναι ο καθαρά αυτόματος, το μέτρο σύγκρισης.
+  ///
+  /// Μία εγγραφή: ο τίτλος της, αλλιώς [autoTicketTitle], όπως πάντα.
+  ///
+  /// Πολλές εγγραφές: οι τίτλοι τους ενώνονται με « · », με τη σειρά των
+  /// [entries]. Όπου λείπει τίτλος μπαίνει μόνο η κατηγορία, χωρίς αριθμό: το
+  /// «[Εκτυπωτές] #412 · [Δίκτυο] #415» επαναλαμβάνει αριθμούς που το αίτημα
+  /// δεν χρειάζεται. Ίδιοι τίτλοι μπαίνουν μία φορά — έτσι και ένας τίτλος που
+  /// γράφτηκε ήδη ενωμένος σε όλες τις κλήσεις δεν διπλασιάζεται στην επόμενη
+  /// ένωση. Χωρίς τίτλο και κατηγορία πουθενά: ο αυτόματος της πρώτης.
+  static String combinedTicketTitle(
+    List<({String? storedTitle, String category, int? id})> entries, {
+    bool useStoredTitles = true,
+  }) {
+    if (entries.isEmpty) return '';
+    if (entries.length == 1) {
+      final only = entries.single;
+      final stored = useStoredTitles ? (only.storedTitle?.trim() ?? '') : '';
+      if (stored.isNotEmpty) return stored;
+      return autoTicketTitle(category: only.category, id: only.id);
+    }
+    final parts = <String>[];
+    final seen = <String>{};
+    for (final entry in entries) {
+      final stored = useStoredTitles ? (entry.storedTitle?.trim() ?? '') : '';
+      final category = entry.category.trim();
+      final part = stored.isNotEmpty
+          ? stored
+          : category.isNotEmpty
+          ? '[$category]'
+          : '';
+      if (part.isEmpty) continue;
+      if (seen.add(part.toLowerCase())) parts.add(part);
+    }
+    if (parts.isEmpty) {
+      final first = entries.first;
+      return autoTicketTitle(category: first.category, id: first.id);
+    }
+    return parts.join(' · ');
   }
 
   /// Ο τίτλος που αξίζει να κρατήσει η **κλήση**· `null` όταν δεν υπάρχει.

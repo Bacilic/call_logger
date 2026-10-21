@@ -6,11 +6,8 @@ import '../../../core/database/calls_repository.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/utils/run_after_next_frame.dart';
 import '../../calls/models/call_model.dart';
+import '../../calls/provider/call_mutation_refresh.dart';
 import '../../calls/services/call_save_conflict.dart';
-import '../../calls/provider/calls_dashboard_providers.dart';
-import '../../tasks/providers/tasks_provider.dart';
-import '../providers/dashboard_provider.dart';
-import '../providers/history_provider.dart';
 
 class HistoryCallActionsService {
   HistoryCallActionsService(this.ref);
@@ -109,26 +106,28 @@ class HistoryCallActionsService {
     return newCallId;
   }
 
+  /// Ανανέωση των οθονών μετά από αλλαγή κλήσης από το Ιστορικό.
+  ///
+  /// Περνά από τους **κοινούς** καταλόγους — των κλήσεων και των εκκρεμοτήτων —
+  /// και όχι από δικό του αντίγραφο. Το αντίγραφο που ζούσε εδώ είχε αποκλίνει:
+  /// η διαγραφή άφηνε μπαγιάτικα το συνολικό πλήθος κλήσεων, την Αναφορά
+  /// Lansweeper, τον μετρητή των εκκρεμοτήτων και τις «κλήσεις χωρίς
+  /// εκκρεμότητα». Οι εκκρεμότητες ανανεώνονται σε κάθε αλλαγή, γιατί η
+  /// διαγραφή κλήσης μπορεί να σβήσει και τις δικές της.
+  ///
+  /// Μετά το επόμενο καρέ: η ακύρωση μέσα σε φάση build ρίχνει την εφαρμογή.
   Future<void> refreshAfterMutation({
     int? callerId,
     String? equipmentCode,
   }) async {
     if (!ref.mounted) return;
     return runAfterNextFrame(() {
-      if (!ref.mounted) return;
-      ref.invalidate(historyCallsProvider);
-      ref.invalidate(historyCategoryDateCallCountProvider);
-      ref.invalidate(globalRecentCallsProvider);
-      ref.invalidate(dashboardStatsProvider);
-      ref.invalidate(tasksProvider);
-
-      if (callerId != null) {
-        ref.invalidate(recentCallsProvider(callerId));
-      }
-      final code = equipmentCode?.trim();
-      if (code != null && code.isNotEmpty) {
-        ref.invalidate(recentCallsByEquipmentProvider(code));
-      }
+      refreshAfterCallMutation(
+        ref,
+        callerId: callerId,
+        equipmentCode: equipmentCode,
+      );
+      invalidateTaskListProviders(ref);
     });
   }
 }

@@ -126,9 +126,9 @@ class LansweeperAiPresenter {
     required String category,
     required int? id,
   }) {
-    final stored = storedTitle?.trim() ?? '';
-    if (stored.isNotEmpty) return stored;
-    return LansweeperSyncService.autoTicketTitle(category: category, id: id);
+    return LansweeperSyncService.combinedTicketTitle([
+      (storedTitle: storedTitle, category: category, id: id),
+    ]);
   }
 
   /// Πώς προέκυψε το κείμενο που φεύγει τώρα προς το Lansweeper.

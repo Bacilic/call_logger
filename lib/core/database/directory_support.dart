@@ -147,6 +147,69 @@ class DirectorySupport {
     return rows.map((r) => r['phone_id'] as int).toSet();
   }
 
+  // ── Συνδέσεις υπαλλήλου ↔ εξοπλισμού ─────────────────────────────────────
+  //
+  // Μία φορά εδώ, για τον Εξοπλισμό και τους Υπαλλήλους: τα στιγμιότυπα γράφονται
+  // στο Ιστορικό ως «πριν» και «μετά» κάθε σύνδεσης, και δύο αντίγραφα θα
+  // κατέγραφαν την ίδια σύνδεση διαφορετικά ανάλογα με τη φόρμα.
+
+  /// Ποιον εξοπλισμό κρατά ο υπάλληλος (ids), μαζί με τον διαγραμμένο.
+  Future<Set<int>> equipmentIdsForUser(DatabaseExecutor e, int userId) async {
+    final rows = await e.query(
+      'user_equipment',
+      columns: ['equipment_id'],
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+    return rows.map((r) => r['equipment_id'] as int?).whereType<int>().toSet();
+  }
+
+  /// Ο ενεργός εξοπλισμός του υπαλλήλου, όπως γράφεται στο Ιστορικό.
+  Future<List<Map<String, dynamic>>> linkedEquipmentSnapshotsForUser(
+    DatabaseExecutor e,
+    int userId,
+  ) async {
+    final rows = await e.rawQuery(
+      '''
+      SELECT e.id AS id, e.code_equipment AS code
+      FROM user_equipment ue
+      JOIN equipment e ON e.id = ue.equipment_id
+      WHERE ue.user_id = ? AND COALESCE(e.is_deleted, 0) = 0
+      ORDER BY e.code_equipment COLLATE NOCASE ASC
+      ''',
+      [userId],
+    );
+    return rows
+        .map((r) => <String, dynamic>{'id': r['id'], 'code': r['code']})
+        .toList();
+  }
+
+  /// Οι ενεργοί κάτοχοι του εξοπλισμού, όπως γράφονται στο Ιστορικό.
+  Future<List<Map<String, dynamic>>> linkedUserSnapshotsForEquipment(
+    DatabaseExecutor e,
+    int equipmentId,
+  ) async {
+    final rows = await e.rawQuery(
+      '''
+      SELECT u.id AS id, u.first_name AS first_name, u.last_name AS last_name
+      FROM user_equipment ue
+      JOIN users u ON u.id = ue.user_id
+      WHERE ue.equipment_id = ? AND COALESCE(u.is_deleted, 0) = 0
+      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
+      ''',
+      [equipmentId],
+    );
+    return rows
+        .map(
+          (r) => <String, dynamic>{
+            'id': r['id'],
+            'first_name': r['first_name'],
+            'last_name': r['last_name'],
+          },
+        )
+        .toList();
+  }
+
   Future<Map<int, String>> idLabelMap(
     DatabaseExecutor e,
     String table,

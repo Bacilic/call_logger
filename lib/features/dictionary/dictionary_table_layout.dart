@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/database/dictionary_repository.dart';
+import '../../core/utils/text_layout_utils.dart';
 import 'widgets/dictionary_grid_row.dart';
 
 const kLexiconWordColumnMin = 88.0;
@@ -90,14 +91,10 @@ class DictionaryTableLayout {
       actionsWidth;
 }
 
-double dictionaryMeasureTextWidth(String text, TextStyle style) {
-  final tp = TextPainter(
-    text: TextSpan(text: text, style: style),
-    maxLines: 1,
-    textDirection: TextDirection.ltr,
-  )..layout(minWidth: 0, maxWidth: double.infinity);
-  return tp.width;
-}
+/// Μέσα από το κοινό εργαλείο μέτρησης, που αποδεσμεύει τη μέτρηση μόλις
+/// διαβαστεί το πλάτος — ο πίνακας μετρά κάθε λέξη σε κάθε ανανέωση.
+double dictionaryMeasureTextWidth(String text, TextStyle style) =>
+    singleLineTextWidth(text: text, style: style);
 
 /// Μόνο πλάτος στήλης «Λέξη» από τις δοσμένες γραμμές (επικεφαλίδα + περιεχόμενο).
 double computeLexiconWordColumnWidth({

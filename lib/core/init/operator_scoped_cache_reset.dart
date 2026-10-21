@@ -15,6 +15,7 @@ import '../../features/directory/providers/equipment_directory_provider.dart';
 import '../../features/history/providers/dashboard_provider.dart';
 import '../../features/history/providers/gemini_settings_provider.dart';
 import '../../features/history/providers/history_application_audit_view_provider.dart';
+import '../../features/history/providers/lansweeper_report_grouping_provider.dart';
 import '../../features/history/providers/lansweeper_report_scope_provider.dart';
 import '../../features/tasks/providers/task_analytics_date_provider.dart';
 import '../../features/tasks/providers/task_notifications_provider.dart';
@@ -152,6 +153,7 @@ void invalidateOperatorScopedCaches(
     ref.invalidate(remoteToolsCatalogProvider);
     ref.invalidate(geminiPromptTemplateProvider);
     ref.invalidate(lansweeperReportScopeProvider);
+    ref.invalidate(lansweeperReportGroupingProvider);
 
     // Το «δέμα» των αντιγράφων ακούει ήδη μόνο του την αλλαγή ταυτότητας, αλλά
     // η ακύρωση εδώ κρατά την εικόνα ενιαία: ένα σημείο απαντά «τι ανανεώνεται

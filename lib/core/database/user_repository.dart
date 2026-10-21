@@ -205,62 +205,8 @@ class UserRepository {
     PhoneDepartmentPolicy.assertNoUnresolvedConflicts(conflicts);
   }
 
-  Future<Set<int>> _equipmentIdsForUser(DatabaseExecutor e, int userId) async {
-    final rows = await e.query(
-      'user_equipment',
-      columns: ['equipment_id'],
-      where: 'user_id = ?',
-      whereArgs: [userId],
-    );
-    return rows.map((r) => r['equipment_id'] as int?).whereType<int>().toSet();
-  }
-
   Future<Set<int>> equipmentIdsForUser(int userId) =>
-      _equipmentIdsForUser(db, userId);
-
-  Future<List<Map<String, dynamic>>> _linkedEquipmentSnapshotsForUser(
-    DatabaseExecutor e,
-    int userId,
-  ) async {
-    final rows = await e.rawQuery(
-      '''
-      SELECT e.id AS id, e.code_equipment AS code
-      FROM user_equipment ue
-      JOIN equipment e ON e.id = ue.equipment_id
-      WHERE ue.user_id = ? AND COALESCE(e.is_deleted, 0) = 0
-      ORDER BY e.code_equipment COLLATE NOCASE ASC
-      ''',
-      [userId],
-    );
-    return rows
-        .map((r) => <String, dynamic>{'id': r['id'], 'code': r['code']})
-        .toList();
-  }
-
-  Future<List<Map<String, dynamic>>> _linkedUserSnapshotsForEquipment(
-    DatabaseExecutor e,
-    int equipmentId,
-  ) async {
-    final rows = await e.rawQuery(
-      '''
-      SELECT u.id AS id, u.first_name AS first_name, u.last_name AS last_name
-      FROM user_equipment ue
-      JOIN users u ON u.id = ue.user_id
-      WHERE ue.equipment_id = ? AND COALESCE(u.is_deleted, 0) = 0
-      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
-      ''',
-      [equipmentId],
-    );
-    return rows
-        .map(
-          (r) => <String, dynamic>{
-            'id': r['id'],
-            'first_name': r['first_name'],
-            'last_name': r['last_name'],
-          },
-        )
-        .toList();
-  }
+      _support.equipmentIdsForUser(db, userId);
 
   Future<int> _insertUserFromMapInTxn(
     DatabaseExecutor txn,
@@ -279,7 +225,7 @@ class UserRepository {
     final nv = _userRowAuditValues(rowSnap ?? {});
     final nums = await _userPhoneNumbersOrdered(txn, id);
     nv['linked_phone_numbers'] = nums;
-    final linkedEq = await _linkedEquipmentSnapshotsForUser(txn, id);
+    final linkedEq = await _support.linkedEquipmentSnapshotsForUser(txn, id);
     nv['linked_equipment'] = linkedEq;
     await _support.applyDepartmentAuditText(txn, nv);
     final phoneLinkDetails = await _support.auditPhoneUserLinkDeltaInTxn(
@@ -396,7 +342,7 @@ class UserRepository {
   Future<List<Map<String, dynamic>>> getEquipmentOwnerSnapshots(
     int equipmentId,
   ) async {
-    return _linkedUserSnapshotsForEquipment(db, equipmentId);
+    return _support.linkedUserSnapshotsForEquipment(db, equipmentId);
   }
 
   /// Η λίστα τηλεφώνων της καρτέλας, καθαρή — μία διατύπωση για όλους.
@@ -531,10 +477,8 @@ class UserRepository {
     oldAudit['linked_phone_numbers'] = oldPhoneList;
     newAudit['linked_phone_numbers'] = await _userPhoneNumbersOrdered(txn, id);
     oldAudit['linked_equipment'] = oldEq;
-    newAudit['linked_equipment'] = await _linkedEquipmentSnapshotsForUser(
-      txn,
-      id,
-    );
+    newAudit['linked_equipment'] = await _support
+        .linkedEquipmentSnapshotsForUser(txn, id);
     await _support.applyDepartmentAuditText(txn, oldAudit);
     await _support.applyDepartmentAuditText(txn, newAudit);
 
@@ -612,7 +556,7 @@ class UserRepository {
     final oldRow = await _support.userRowById(e, id);
     final beforePhoneIds = await _support.userPhoneIds(e, id);
     final oldPhoneList = await _userPhoneNumbersOrdered(e, id);
-    final oldEq = await _linkedEquipmentSnapshotsForUser(e, id);
+    final oldEq = await _support.linkedEquipmentSnapshotsForUser(e, id);
     if (phonesRaw != null) {
       final phones = _phoneListOf(phonesRaw);
       final targetDepartmentId =
@@ -884,7 +828,7 @@ class UserRepository {
     final equipmentIdsByUser = <int, Set<int>>{};
     for (final uid in ids) {
       phoneIdsByUser[uid] = await _support.userPhoneIds(txn, uid);
-      equipmentIdsByUser[uid] = await _equipmentIdsForUser(txn, uid);
+      equipmentIdsByUser[uid] = await _support.equipmentIdsForUser(txn, uid);
     }
 
     for (final id in ids) {
@@ -979,7 +923,10 @@ class UserRepository {
           .map((r) => (r['number'] as String?)?.trim() ?? '')
           .where((n) => n.isNotEmpty)
           .toList();
-      final equipmentIds = (await _equipmentIdsForUser(txn, id)).toList();
+      final equipmentIds = (await _support.equipmentIdsForUser(
+        txn,
+        id,
+      )).toList();
       result[id] = (phoneNumbers: phoneNumbers, equipmentIds: equipmentIds);
     }
     await _deleteUsersOn(txn, ids);

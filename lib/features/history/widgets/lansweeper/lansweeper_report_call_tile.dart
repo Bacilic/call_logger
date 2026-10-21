@@ -22,8 +22,14 @@ class LansweeperReportCallTile extends StatelessWidget {
     required this.onBadgePressed,
     this.ticketLinkEnabled = true,
     this.bodyHeight,
+    this.timestampFlex = 1,
     super.key,
   });
+
+  /// Πόσο από το πλάτος της πρώτης γραμμής παίρνει η χρονοσφραγίδα απέναντι
+  /// στα μεταδεδομένα. Στην προβολή ανά ημέρα η χρονοσφραγίδα κρατά και τον
+  /// καλούντα, που με ίσο μοίρασμα κοβόταν μετά από τρία γράμματα.
+  final int timestampFlex;
 
   final bool checked;
   final ValueChanged<bool?> onCheckedChanged;
@@ -135,7 +141,7 @@ class LansweeperReportCallTile extends StatelessWidget {
                     // περισσεύει ώστε η κατάσταση να μένει δεξιά. Σταθερό
                     // πλάτος εδώ σημαίνει σφάλμα διάταξης μόλις στενέψει η
                     // λίστα — ό,τι κόβεται το λέει ούτως ή άλλως η υπόδειξη.
-                    Flexible(child: timestamp),
+                    Flexible(flex: timestampFlex, child: timestamp),
                     if (inlineMeta != null) ...[
                       const SizedBox(width: 8),
                       Icon(

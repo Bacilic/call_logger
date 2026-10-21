@@ -217,6 +217,14 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       // Ό,τι έδειχνε η φόρμα κερδίζει: εκεί ο χρήστης μπορεί να διάλεξε
       // λογαριασμό τμήματος ή ρητά «χωρίς αιτούντα», και η επιλογή του δεν
       // επιτρέπεται να παρακαμφθεί από την αυτόματη ιεραρχία.
+      // Όλες οι κλήσεις που ενώνονται στο αίτημα, με πρώτη την κύρια — η ίδια
+      // σειρά με την προεπισκόπηση της φόρμας.
+      final companions = <CallModel>[call];
+      for (final id in companionCallIds) {
+        if (id == callId) continue;
+        final companion = await repo.getCallById(id);
+        if (companion != null) companions.add(companion);
+      }
       final String? requesterUsername;
       final formChoice = input.requesterUsername;
       if (formChoice != null) {
@@ -227,12 +235,6 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         // η φόρμα — προσωπικό αναγνωριστικό του καλούντα, αλλιώς λογαριασμός
         // του τμήματός του. Χωρίς αυτό, κλήση «Άγνωστου» έφευγε χωρίς αιτούντα
         // ενώ η γραμμή «Στο ticket» υποσχόταν τον λογαριασμό του τμήματος.
-        final companions = <CallModel>[call];
-        for (final id in companionCallIds) {
-          if (id == callId) continue;
-          final companion = await repo.getCallById(id);
-          if (companion != null) companions.add(companion);
-        }
         final resolved = await resolveLansweeperRequesterForCalls(
           userRepository: UserRepository(db),
           lookup: LookupService.instance,
@@ -240,18 +242,24 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         );
         requesterUsername = resolved.selectedUsername;
       }
-      final assetTarget = await resolveLansweeperAssetTarget(
+      final assetTargets = await resolveLansweeperAssetTargets(
         repository: EquipmentRepository(db),
-        equipmentId: call.equipmentId,
-        equipmentText: call.equipmentText,
+        equipment: [
+          for (final c in companions)
+            (equipmentId: c.equipmentId, equipmentText: c.equipmentText),
+        ],
       );
+
+      // Ο αυτόματος τίτλος όλων των κλήσεων του αιτήματος — ο ίδιος κανόνας με
+      // την προσυμπλήρωση της φόρμας.
+      final autoTitle = LansweeperSyncService.combinedTicketTitle([
+        for (final c in companions)
+          (storedTitle: c.title, category: c.category ?? '', id: c.id),
+      ], useStoredTitles: false);
 
       final service = ref.read(lansweeperSyncServiceProvider);
       final request = LansweeperWorkflowRequest(
-        autoSubject: LansweeperSyncService.autoTicketTitle(
-          category: call.category ?? '',
-          id: call.id,
-        ),
+        autoSubject: autoTitle,
         title: input.title,
         problem: input.notes,
         solution: input.solution,
@@ -266,7 +274,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
         targetState: targetState,
         existingTicketId: existingTicketId,
         requesterUsername: requesterUsername,
-        assetTarget: assetTarget,
+        assetTargets: assetTargets,
       );
       // Η εγγραφή στη βάση μπαίνει στο πλάνο μαζί με τα βήματα του API: για
       // τον χρήστη είναι κι αυτή αναμονή, και μάλιστα η πιο αθέατη — τρέχει
@@ -307,10 +315,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           // η περίληψη που θα δείξει το πρόσφατο ιστορικό.
           title: LansweeperSyncService.callTitleToPersist(
             title: input.title,
-            autoTitle: LansweeperSyncService.autoTicketTitle(
-              category: call.category ?? '',
-              id: call.id,
-            ),
+            autoTitle: autoTitle,
           ),
           source: input.refinedSource,
         );
@@ -742,14 +747,16 @@ class LansweeperTicketParties {
 
   final LansweeperRequesterOptions requester;
 
-  /// Το όνομα asset που θα συνδεθεί· `null` = χωρίς εξοπλισμό.
+  /// Τα ονόματα asset που θα συνδεθούν, χωρισμένα με κόμμα· `null` = χωρίς
+  /// εξοπλισμό.
   final String? asset;
 }
 
 /// Τα «πρόσωπα» του ticket για τις δοσμένες κλήσεις.
 ///
 /// Κλειδί: τα ids χωρισμένα με κόμμα — **η σειρά μετράει**, η πρώτη κλήση
-/// είναι η κύρια και δίνει τον εξοπλισμό. Ο αιτών προκύπτει από τον καλούντα
+/// είναι η κύρια. Ο εξοπλισμός έρχεται από **όλες** τις κλήσεις, με τη
+/// συνάρτηση που χρησιμοποιεί και η αποστολή. Ο αιτών προκύπτει από τον καλούντα
 /// της κύριας και, όταν εκείνος δεν έχει αναγνωριστικό, από τα τμήματα **όλων**
 /// των κλήσεων του ticket.
 final lansweeperTicketPartiesProvider = FutureProvider.autoDispose
@@ -770,13 +777,16 @@ final lansweeperTicketPartiesProvider = FutureProvider.autoDispose
       }
       if (calls.isEmpty) return LansweeperTicketParties.empty;
 
-      final primary = calls.first;
-
-      final asset = (await resolveLansweeperAssetTarget(
+      final assets = await resolveLansweeperAssetTargets(
         repository: EquipmentRepository(db),
-        equipmentId: primary.equipmentId,
-        equipmentText: primary.equipmentText,
-      ))?.value;
+        equipment: [
+          for (final c in calls)
+            (equipmentId: c.equipmentId, equipmentText: c.equipmentText),
+        ],
+      );
+      final asset = assets.isEmpty
+          ? null
+          : assets.map((target) => target.value).join(', ');
 
       return LansweeperTicketParties(
         requester: await resolveLansweeperRequesterForCalls(

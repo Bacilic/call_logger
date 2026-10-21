@@ -28,6 +28,7 @@ import 'full_location_line.dart';
 import 'location_field_help_icon.dart';
 import '../../providers/catalog_validation_provider.dart';
 import 'catalog_validation_hint_text.dart';
+import 'form_single_save.dart';
 import 'user_form_dismiss_guard.dart';
 import 'user_form_equipment_chips.dart';
 import 'user_form_equipment_link.dart';
@@ -60,7 +61,8 @@ class UserFormDialog extends ConsumerStatefulWidget {
 
 /// Δημόσιο State: τα πεδία/στιγμιότυπα της φόρμας είναι ορατά στους
 /// συνεργάτες της (φρουρός κλεισίματος, πολιτική τηλεφώνων, αποθήκευση).
-class UserFormDialogState extends ConsumerState<UserFormDialog> {
+class UserFormDialogState extends ConsumerState<UserFormDialog>
+    with FormSingleSave<UserFormDialog> {
   /// Κλείνει **αυτή** τη φόρμα — ποτέ ό,τι τυχαίνει να είναι από πάνω της.
   ///
   /// Το `Navigator.pop()` κλείνει την **κορυφαία** διαδρομή, όχι τη δική μας.
@@ -568,7 +570,9 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
+        // Όσο γράφεται η αποθήκευση, η φόρμα δεν κλείνει — κλείνει μόνη της
+        // μόλις τελειώσει.
+        if (didPop || saveInProgress) return;
         await dismissGuard.requestClose();
       },
       child: DraggableDialogShell(
@@ -915,12 +919,13 @@ class UserFormDialogState extends ConsumerState<UserFormDialog> {
           ),
           actions: [
             TextButton(
-              onPressed: dismissGuard.cancelAndClose,
+              onPressed: saveInProgress ? null : dismissGuard.cancelAndClose,
               child: const Text('Ακύρωση'),
             ),
-            FilledButton(
+            FormSaveButton(
+              label: isEdit ? 'Αποθήκευση' : 'Προσθήκη',
+              saving: saveInProgress,
               onPressed: dismissGuard.isDirty ? saveFlow.save : null,
-              child: Text(isEdit ? 'Αποθήκευση' : 'Προσθήκη'),
             ),
           ],
         ),

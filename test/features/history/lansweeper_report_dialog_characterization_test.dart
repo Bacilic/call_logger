@@ -294,6 +294,85 @@ void main() {
       await tester.pump(const Duration(seconds: 11));
     }, semanticsEnabled: false);
 
+    testWidgets(
+      'αλλαγή προβολής: οι επιλεγμένες κλήσεις και ο γραμμένος τίτλος μένουν',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final reportCalls =
+            await tester.runAsync(_seedRenderCalls) ?? <CallModel>[];
+        expect(reportCalls, hasLength(2));
+
+        final container = ProviderContainer(
+          overrides: _lansweeperCharacterizationOverrides(
+            reportCalls: reportCalls,
+          ),
+        );
+        addTearDown(container.dispose);
+
+        await _pumpLansweeperReportDialog(tester, container);
+
+        final itemBoxes = _itemCheckboxes();
+        expect(itemBoxes, findsNWidgets(2));
+        await tester.tap(itemBoxes.at(0));
+        await pumpUntilSettled(tester);
+        await tester.tap(itemBoxes.at(1));
+        await pumpUntilSettled(tester);
+        expect(find.textContaining('Επιλεγμένες: 2'), findsOneWidget);
+
+        final titleField = find.byWidgetPredicate(
+          (w) => w is TextField && w.decoration?.labelText == 'Τίτλος',
+        );
+        await tester.enterText(titleField, 'Δικός μου τίτλος');
+        await pumpUntilSettled(tester);
+
+        await tester.tap(find.text('Ανά ημέρα'));
+        await pumpUntilSettled(tester);
+
+        expect(
+          find.textContaining('Επιλεγμένες: 2'),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Η αλλαγή προβολής δεν αλλάζει ποιες κλήσεις είναι επιλεγμένες',
+          ),
+        );
+        expect(
+          tester
+              .widgetList<Checkbox>(_itemCheckboxes())
+              .where((box) => box.value == true),
+          hasLength(2),
+        );
+        expect(
+          find.byWidgetPredicate(
+            (widget) => widget is Checkbox && widget.tristate == true,
+          ),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Η ημέρα δεν έχει τικ που επιλέγει όλη την ομάδα',
+          ),
+        );
+        expect(
+          tester.widget<TextField>(titleField).controller?.text,
+          'Δικός μου τίτλος',
+          reason: greekExpectMsg(
+            'Η αλλαγή προβολής δεν ξαναγεμίζει τη φόρμα — μένει ό,τι γράφτηκε',
+          ),
+        );
+
+        // Η επιλογή προβολής είναι προσωπική ρύθμιση: επιστροφή στην
+        // αφετηρία, για να μην αλλάξει την αφετηρία του επόμενου τεστ.
+        await tester.tap(find.text('Ανά υπάλληλο'));
+        await pumpUntilSettled(tester);
+        await tester.pump(const Duration(seconds: 11));
+      },
+      semanticsEnabled: false,
+    );
+
     testWidgets('η αναφορά δείχνει την ουρά, όχι τις τακτοποιημένες', (
       tester,
     ) async {

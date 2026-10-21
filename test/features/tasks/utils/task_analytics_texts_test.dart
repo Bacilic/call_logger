@@ -2,6 +2,7 @@
 //
 //   flutter test test/features/tasks/utils/task_analytics_texts_test.dart
 
+import 'package:call_logger/features/tasks/models/task.dart';
 import 'package:call_logger/features/tasks/models/task_analytics_summary.dart';
 import 'package:call_logger/features/tasks/utils/task_analytics_texts.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,12 +31,19 @@ void main() {
       overdueRateActive: 0,
       dominantOrigin: const TaskAnalyticsOriginSlice(
         origin: 'call_linked',
-        label: 'call_linked',
         count: 7,
         percent: 70,
       ),
     );
     expect(text, endsWith('κυρίαρχη προέλευση: Από κλήση (70.0%).'));
+  });
+
+  test('κάθε προέλευση έχει ελληνική ετικέτα — η μία πηγή τους', () {
+    expect(taskAnalyticsOriginLabel(Task.originCallLinked), 'Από κλήση');
+    expect(taskAnalyticsOriginLabel(Task.originManualFab), 'Χειροκίνητη');
+    expect(taskAnalyticsOriginLabel(Task.originQuickAdd), 'Γρήγορη προσθήκη');
+    expect(taskAnalyticsOriginLabel(Task.originLegacy), 'Παλαιές εγγραφές');
+    expect(taskAnalyticsOriginLabel('κάτι άλλο'), 'Άγνωστη προέλευση');
   });
 
   test('διάρκεια: ώρες και λεπτά, ή μόνο λεπτά', () {

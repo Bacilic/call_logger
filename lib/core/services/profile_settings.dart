@@ -374,6 +374,16 @@ abstract final class ProfileSettingKeys {
     legacySource: ProfileSettingLegacySource.bornPersonal,
   );
 
+  /// Πώς ομαδοποιεί τις κλήσεις η Αναφορά Lansweeper: ανά υπάλληλο ή ανά
+  /// ημέρα.
+  ///
+  /// **Προσωπική εξαρχής**: τρόπος δουλειάς του ανθρώπου, δεν υπήρχε πριν ως
+  /// ρύθμιση, οπότε δεν έχει τι να κληρονομήσει.
+  static const ProfileSettingKey lansweeperReportGrouping = ProfileSettingKey(
+    'lansweeper_report_grouping_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
   static const List<ProfileSettingKey> all = [
     showActiveTimer,
     showTasksBadge,
@@ -429,6 +439,7 @@ abstract final class ProfileSettingKeys {
     tasksOwnerFilter,
     historyOwnerFilter,
     lansweeperReportOwnerFilter,
+    lansweeperReportGrouping,
     dashboardPalette,
   ];
 }

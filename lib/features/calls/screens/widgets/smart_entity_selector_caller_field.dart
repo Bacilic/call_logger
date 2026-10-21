@@ -1,19 +1,22 @@
-// ΑΞΙΟΛΟΓΗΘΗΚΕ ΓΙΑ ΔΙΑΣΠΑΣΗ — ΜΕΝΕΙ ΩΣ ΕΧΕΙ (11/10/2026).
+// ΔΙΑΣΠΑΣΤΗΚΕ ΜΕΡΙΚΩΣ (21/10/2026) — ό,τι έμεινε, μένει επίτηδες.
 //
-// Ρόλος: ένας — το πεδίο «Καλούντας» της φόρμας κλήσης με όλη του τη
-// συμπεριφορά: προτάσεις καθώς γράφεις, η μικρή λίστα «υποψήφιοι + Άγνωστος»,
-// βελάκια/Enter με προεπισκόπηση, επιλογή, αναζήτηση στο φευγιό της εστίασης.
+// Ρόλος: ένας — το πεδίο «Καλούντας» της φόρμας κλήσης: ζωγραφική, ποια
+// λίστα φαίνεται, βελάκια/Enter με προεπισκόπηση, επιλογή, αναζήτηση στο
+// φευγιό της εστίασης.
 //
-// Γιατί δεν διασπάστηκε: βελάκια, προεπισκόπηση, «τι έγραψε πραγματικά ο
-// χρήστης» και ορατότητα λιστών είναι μία κατάσταση που την αγγίζει κάθε
-// πλήκτρο. Η μικρή λίστα υποψηφίων μένει ΕΔΩ επίτηδες: η σειρά των γραμμών της
-// πρέπει να ταυτίζεται με τη σειρά που διαβάζουν τα βελάκια — χωρισμένες θα
-// απέκλιναν ευκολότερα. Τα βοηθητικά (υπόδειξη ονόματος, σήμανση σύγκρουσης,
-// πλαίσιο άγκυρας, αναδυόμενη λίστα) ζουν ήδη χωριστά.
+// Τι βγήκε: οι λίστες (μικρή λίστα, προτάσεις) και ο κανόνας «ποιος υπάλληλος
+// είναι αυτή η επιλογή» ζουν στο `caller_field_options.dart`, ως καθαρή λογική
+// κοινή για ζωγραφική και πληκτρολόγιο. Τα βοηθητικά (υπόδειξη ονόματος,
+// σήμανση σύγκρουσης, πλαίσιο άγκυρας, αναδυόμενη λίστα) ζουν χωριστά.
 //
-// Τι θα το άλλαζε: ερώτημα βάσης ή κανόνας ταύτισης καλούντα γραμμένος εδώ
-// (αντί στον notifier/LookupService), ή δεύτερο πεδίο/διάλογος με δική του
-// κατάσταση — τότε ξαναξετάζεται από την αρχή.
+// Γιατί δεν βγήκε ο χειρισμός πλήκτρων: βελάκια, προεπισκόπηση, «τι έγραψε
+// πραγματικά ο χρήστης» και ορατότητα λιστών είναι μία κατάσταση που την
+// αγγίζει κάθε πλήκτρο· σε άλλη κλάση θα χρειαζόταν όλη αυτή την κατάσταση.
+// Γι' αυτό μένει εδώ, σε ένα σημείο για τις δύο λίστες.
+//
+// Τι θα το άλλαζε: κανόνας λιστών ή ταύτισης γραμμένος ξανά εδώ (αντί στο
+// `caller_field_options.dart`), ερώτημα βάσης, ή δεύτερο πεδίο/διάλογος με
+// δική του κατάσταση — τότε ξαναξετάζεται από την αρχή.
 
 import 'dart:async';
 
@@ -23,10 +26,9 @@ import 'package:flutter/services.dart';
 import '../../../../core/services/lookup_service.dart';
 import '../../../../core/utils/autocomplete_highlight_scroll.dart';
 import '../../../../core/utils/spell_check.dart';
-import '../../../../core/utils/name_parser.dart';
-import '../../../../core/utils/search_text_normalizer.dart';
 import '../../models/user_model.dart';
 import '../../provider/smart_entity_selector_provider.dart';
+import '../../utils/caller_field_options.dart';
 import 'smart_entity_selector_anchor_frame.dart';
 import 'smart_entity_selector_caller_presentational.dart' as caller_ui;
 import 'smart_entity_selector_conflict_badge.dart';
@@ -80,44 +82,20 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
 
   void _performLookup() {
     final query = widget.controller.text.trim();
-    if (query.isEmpty || query == 'Άγνωστος') return;
+    if (query.isEmpty || query == kCallerUnknownOption) return;
     widget.notifier.performCallerLookup(query);
   }
 
-  String _extractDisplayName(String selection) {
-    if (selection == 'Άγνωστος') return selection;
-    return NameParserUtility.stripDisplayDecorations(selection);
+  /// Η αναζήτηση στον κατάλογο για τον κανόνα ταύτισης· `null` χωρίς κατάλογο.
+  List<UserModel> Function(String query)? get _catalogSearch {
+    return widget.lookupService?.searchUsersByQuery;
   }
 
-  UserModel? _resolveSelectedUser(
-    String selection,
-    SmartEntitySelectorState header,
-    LookupService? lookupService,
-  ) {
-    for (final user in header.callerCandidates) {
-      if (user.fullNameWithDepartment == selection || user.name == selection) {
-        return user;
-      }
-    }
-    if (lookupService == null) {
-      return null;
-    }
-    final displayName = _extractDisplayName(selection);
-    final matches = lookupService.searchUsersByQuery(displayName).where((user) {
-      return user.fullNameWithDepartment == selection ||
-          user.name == displayName;
-    }).toList();
-    if (matches.isEmpty) {
-      return null;
-    }
-    final exactFullName = matches.where((user) {
-      return user.fullNameWithDepartment == selection;
-    }).toList();
-    if (exactFullName.isNotEmpty) {
-      return exactFullName.first;
-    }
-    return matches.first;
-  }
+  UserModel? _resolveSelectedUser(String selection) => resolveCallerSelection(
+    selection,
+    candidates: widget.header.callerCandidates,
+    searchUsers: _catalogSearch,
+  );
 
   @override
   void initState() {
@@ -197,76 +175,40 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
     setState(() => _showSuggestionList = false);
   }
 
+  /// Ό,τι διαλέγουν βελάκια και Enter στη μικρή λίστα — οι ίδιες γραμμές που
+  /// ζωγραφίζει η [SmartEntityCallerSuggestionList].
   List<String> _callerOverlayKeyboardOptions(
     SmartEntitySelectorState header, {
     required bool showUnknownOption,
   }) {
-    final callerDisplayName =
-        header.selectedCaller?.name ??
-        header.selectedCaller?.fullNameWithDepartment ??
-        '';
-    final options = <String>[];
-    for (final user in header.callerCandidates) {
-      final candidateName = (user.name ?? user.fullNameWithDepartment).trim();
-      if (candidateName.isNotEmpty && candidateName != callerDisplayName) {
-        options.add(user.fullNameWithDepartment);
-      }
-    }
-    if (callerDisplayName.isNotEmpty) {
-      options.add(callerDisplayName);
-    }
-    if (showUnknownOption) {
-      options.add('Άγνωστος');
-    }
-    return options;
+    return [
+      for (final row in callerOverlayRows(
+        selectedCaller: header.selectedCaller,
+        candidates: header.callerCandidates,
+        showUnknownOption: showUnknownOption,
+      ))
+        row.label,
+    ];
   }
 
-  String _callerPreviewTextForSelection(
-    String selection,
-    SmartEntitySelectorState header,
-    LookupService? lookupService,
-  ) {
-    if (selection == 'Άγνωστος') return selection;
-    final foundUser = _resolveSelectedUser(selection, header, lookupService);
-    if (foundUser != null && foundUser.name?.trim().isNotEmpty == true) {
-      return foundUser.name!.trim();
-    }
-    return _extractDisplayName(selection);
-  }
+  /// Το κείμενο με το οποίο ψάχνουν οι προτάσεις — **το ίδιο** για την ορατή
+  /// λίστα και για τα βελάκια. Όσο τα βελάκια δείχνουν μια πρόταση μέσα στο
+  /// πεδίο, μετρά ό,τι είχε πληκτρολογηθεί· αλλιώς ό,τι γράφει το πεδίο.
+  String get _effectiveQuery =>
+      _isKeyboardPreview ? _typedQuery : widget.controller.text;
 
+  /// Οι προτάσεις καθώς γράφεις — οι ίδιες για την ορατή λίστα και για τα
+  /// βελάκια, με το ίδιο κείμενο αναζήτησης ([_effectiveQuery]).
   List<String> _callerAutocompleteOptions(
-    String rawQuery,
     SmartEntitySelectorState header,
     LookupService? lookupService,
   ) {
-    final q = SearchTextNormalizer.normalizeForSearch(rawQuery);
-    final options = <String>[];
-    if (header.callerCandidates.isNotEmpty) {
-      if (q.isEmpty) {
-        for (final u in header.callerCandidates) {
-          options.add(u.fullNameWithDepartment);
-        }
-      } else {
-        for (final u in header.callerCandidates) {
-          if (SearchTextNormalizer.matchesNormalizedQuery(
-            u.fullNameWithDepartment,
-            q,
-          )) {
-            options.add(u.fullNameWithDepartment);
-          }
-        }
-      }
-    } else {
-      final users = q.isEmpty
-          ? <UserModel>[]
-          : (lookupService?.searchUsersByQuery(rawQuery.trim()) ?? []);
-      for (final u in users) {
-        options.add(u.fullNameWithDepartment);
-      }
-    }
-    return options.where((option) {
-      return SearchTextNormalizer.matchesNormalizedQuery(option, q);
-    }).toList();
+    return callerAutocompleteOptions(
+      query: _effectiveQuery,
+      candidates: header.callerCandidates,
+      searchUsers: (query) =>
+          lookupService?.searchUsersByQuery(query) ?? const <UserModel>[],
+    );
   }
 
   void _setControllerText(TextEditingController controller, String value) {
@@ -276,28 +218,24 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
     );
   }
 
-  void _commitCallerSelection({
-    required String selection,
-    required TextEditingController controller,
-    required FocusNode nextFocusNode,
-    required SmartEntitySelectorState header,
-    required LookupService? lookupService,
-    required SmartEntitySelectorNotifier notifier,
-    required String Function() getPhoneFieldDigits,
-  }) {
+  /// Η επιλογή μιας γραμμής από το πληκτρολόγιο ή από τις προτάσεις: δένει
+  /// τον καλούντα, γράφει το όνομά του στο πεδίο και περνά στο επόμενο πεδίο.
+  void _commitCallerSelection(String selection) {
+    final controller = widget.controller;
+    final notifier = widget.notifier;
     _keyboardOptionIndex = -1;
     _lastAutoScrollIndex = -1;
     _isKeyboardPreview = false;
-    if (selection == 'Άγνωστος') {
+    if (selection == kCallerUnknownOption) {
       notifier.updateSelectedCaller(null);
-      notifier.updateCallerDisplayText('Άγνωστος');
-      _setControllerText(controller, 'Άγνωστος');
+      notifier.updateCallerDisplayText(kCallerUnknownOption);
+      _setControllerText(controller, kCallerUnknownOption);
       _onSuggestionSelected();
     } else {
-      final foundUser = _resolveSelectedUser(selection, header, lookupService);
+      final foundUser = _resolveSelectedUser(selection);
       final displayName = foundUser?.name?.trim().isNotEmpty == true
           ? foundUser!.name!.trim()
-          : _extractDisplayName(selection);
+          : callerSelectionDisplayName(selection);
       if (foundUser != null) {
         notifier.updateSelectedCaller(foundUser);
       } else {
@@ -307,12 +245,81 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
       _setControllerText(controller, displayName);
       notifier.performCallerLookup(
         displayName,
-        phoneFieldDigits: getPhoneFieldDigits(),
+        phoneFieldDigits: widget.getPhoneFieldDigits(),
       );
       _onSuggestionSelected();
     }
     widget.onContentChecked();
-    nextFocusNode.requestFocus();
+    widget.nextFocusNode.requestFocus();
+  }
+
+  /// Τα βελάκια και το Enter του πεδίου — **ένας** χειρισμός για τις δύο
+  /// λίστες. Ποια λίστα διαβάζεται το κρίνει το τι φαίνεται: η μικρή λίστα
+  /// όσο είναι ανοιχτή, αλλιώς οι προτάσεις καθώς γράφεις.
+  KeyEventResult _onCallerKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final header = widget.header;
+    final key = event.logicalKey;
+    final fieldIsEmpty = widget.controller.text.trim().isEmpty;
+    final smallListVisible =
+        header.callerCandidates.isNotEmpty &&
+        _showSuggestionList &&
+        (fieldIsEmpty || _isKeyboardPreview);
+    if (smallListVisible) {
+      return _navigateOptions(
+        key,
+        _callerOverlayKeyboardOptions(header, showUnknownOption: fieldIsEmpty),
+        // Στη μικρή λίστα το πεδίο δείχνει μόνο το όνομα, όχι το τμήμα.
+        previewText: (option) => callerPreviewText(
+          option,
+          candidates: header.callerCandidates,
+          searchUsers: _catalogSearch,
+        ),
+      );
+    }
+    final options = _callerAutocompleteOptions(header, widget.lookupService);
+    final isNavigationKey =
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.enter;
+    // Με προτάσεις στη σειρά, η μικρή λίστα κλείνει για να μη μιλούν δύο.
+    if (_showSuggestionList && isNavigationKey && options.isNotEmpty) {
+      setState(() => _showSuggestionList = false);
+    }
+    // Στις προτάσεις το πεδίο δείχνει ολόκληρη τη γραμμή, με το τμήμα.
+    return _navigateOptions(key, options, previewText: (option) => option);
+  }
+
+  /// ↓ και ↑ μετακινούν την επισήμανση χωρίς να τυλίγονται στα άκρα και
+  /// γράφουν την προεπισκόπηση στο πεδίο· το Enter επιλέγει την επισημασμένη.
+  KeyEventResult _navigateOptions(
+    LogicalKeyboardKey key,
+    List<String> options, {
+    required String Function(String option) previewText,
+  }) {
+    if (key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowUp) {
+      if (options.isEmpty) return KeyEventResult.ignored;
+      setState(() {
+        _keyboardOptionIndex = key == LogicalKeyboardKey.arrowDown
+            ? (_keyboardOptionIndex + 1).clamp(0, options.length - 1)
+            : (_keyboardOptionIndex <= 0 ? 0 : _keyboardOptionIndex - 1);
+      });
+      _isKeyboardPreview = true;
+      _setControllerText(
+        widget.controller,
+        previewText(options[_keyboardOptionIndex]),
+      );
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter &&
+        options.isNotEmpty &&
+        _keyboardOptionIndex >= 0 &&
+        _keyboardOptionIndex < options.length) {
+      _commitCallerSelection(options[_keyboardOptionIndex]);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -438,49 +445,10 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                     displayStringForOption: (String option) => option,
                     focusNode: focusNode,
                     textEditingController: controller,
-                    optionsBuilder: (TextEditingValue textEditingValue) {
-                      final effectiveText = _isKeyboardPreview
-                          ? _typedQuery
-                          : textEditingValue.text;
-                      final q = SearchTextNormalizer.normalizeForSearch(
-                        effectiveText,
-                      );
-                      final options = <String>[];
-                      if (header.callerCandidates.isNotEmpty) {
-                        // Σε κατάσταση πολλαπλών candidate από lookup (κενό query),
-                        // χρησιμοποιούμε μόνο την inline λίστα για αποφυγή διπλού μηχανισμού λίστας.
-                        if (q.isEmpty) {
-                          return const <String>[];
-                        }
-                        for (final u in header.callerCandidates) {
-                          if (SearchTextNormalizer.matchesNormalizedQuery(
-                            u.fullNameWithDepartment,
-                            q,
-                          )) {
-                            options.add(u.fullNameWithDepartment);
-                          }
-                        }
-                      } else {
-                        final users = q.isEmpty
-                            ? <UserModel>[]
-                            : (lookupService?.searchUsersByQuery(
-                                    effectiveText.trim(),
-                                  ) ??
-                                  []);
-                        for (final u in users) {
-                          options.add(u.fullNameWithDepartment);
-                        }
-                      }
-                      return options
-                          .where(
-                            (option) =>
-                                SearchTextNormalizer.matchesNormalizedQuery(
-                                  option,
-                                  q,
-                                ),
-                          )
-                          .toList();
-                    },
+                    // Το πεδίο έχει ήδη το νέο κείμενο όταν καλείται αυτό: το
+                    // Autocomplete ακούει τον ίδιο controller.
+                    optionsBuilder: (_) =>
+                        _callerAutocompleteOptions(header, lookupService),
                     optionsViewBuilder: (context, onSelected, options) {
                       final optionsList = options.toList();
                       final theme = Theme.of(context);
@@ -534,17 +502,7 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                         ),
                       );
                     },
-                    onSelected: (String selection) {
-                      _commitCallerSelection(
-                        selection: selection,
-                        controller: controller,
-                        nextFocusNode: nextFocusNode,
-                        header: header,
-                        lookupService: lookupService,
-                        notifier: notifier,
-                        getPhoneFieldDigits: widget.getPhoneFieldDigits,
-                      );
-                    },
+                    onSelected: _commitCallerSelection,
                     fieldViewBuilder:
                         (
                           context,
@@ -563,157 +521,8 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                                 textDirection: textDirection,
                               );
                           final field = Focus(
-                            onKeyEvent: (node, event) {
-                              if (event is! KeyDownEvent) {
-                                return KeyEventResult.ignored;
-                              }
-                              final showUnknownOption = controller.text
-                                  .trim()
-                                  .isEmpty;
-                              final callerOverlayVisible =
-                                  header.callerCandidates.isNotEmpty &&
-                                  _showSuggestionList &&
-                                  (controller.text.trim().isEmpty ||
-                                      _isKeyboardPreview);
-                              if (callerOverlayVisible) {
-                                final overlayOptions =
-                                    _callerOverlayKeyboardOptions(
-                                      header,
-                                      showUnknownOption: showUnknownOption,
-                                    );
-                                if (event.logicalKey ==
-                                    LogicalKeyboardKey.arrowDown) {
-                                  if (overlayOptions.isEmpty) {
-                                    return KeyEventResult.ignored;
-                                  }
-                                  setState(() {
-                                    _keyboardOptionIndex =
-                                        (_keyboardOptionIndex + 1).clamp(
-                                          0,
-                                          overlayOptions.length - 1,
-                                        );
-                                  });
-                                  _isKeyboardPreview = true;
-                                  _setControllerText(
-                                    textController,
-                                    _callerPreviewTextForSelection(
-                                      overlayOptions[_keyboardOptionIndex],
-                                      header,
-                                      lookupService,
-                                    ),
-                                  );
-                                  return KeyEventResult.handled;
-                                }
-                                if (event.logicalKey ==
-                                    LogicalKeyboardKey.arrowUp) {
-                                  if (overlayOptions.isEmpty) {
-                                    return KeyEventResult.ignored;
-                                  }
-                                  setState(() {
-                                    _keyboardOptionIndex =
-                                        _keyboardOptionIndex <= 0
-                                        ? 0
-                                        : _keyboardOptionIndex - 1;
-                                  });
-                                  _isKeyboardPreview = true;
-                                  _setControllerText(
-                                    textController,
-                                    _callerPreviewTextForSelection(
-                                      overlayOptions[_keyboardOptionIndex],
-                                      header,
-                                      lookupService,
-                                    ),
-                                  );
-                                  return KeyEventResult.handled;
-                                }
-                                if (event.logicalKey ==
-                                        LogicalKeyboardKey.enter &&
-                                    overlayOptions.isNotEmpty &&
-                                    _keyboardOptionIndex >= 0 &&
-                                    _keyboardOptionIndex <
-                                        overlayOptions.length) {
-                                  _commitCallerSelection(
-                                    selection:
-                                        overlayOptions[_keyboardOptionIndex],
-                                    controller: textController,
-                                    nextFocusNode: nextFocusNode,
-                                    header: header,
-                                    lookupService: lookupService,
-                                    notifier: notifier,
-                                    getPhoneFieldDigits:
-                                        widget.getPhoneFieldDigits,
-                                  );
-                                  return KeyEventResult.handled;
-                                }
-                                return KeyEventResult.ignored;
-                              }
-                              final options = _callerAutocompleteOptions(
-                                _typedQuery,
-                                header,
-                                lookupService,
-                              );
-                              final shouldHideInlineSuggestions =
-                                  event.logicalKey ==
-                                      LogicalKeyboardKey.arrowDown ||
-                                  event.logicalKey ==
-                                      LogicalKeyboardKey.arrowUp ||
-                                  event.logicalKey == LogicalKeyboardKey.enter;
-                              if (_showSuggestionList &&
-                                  shouldHideInlineSuggestions &&
-                                  options.isNotEmpty) {
-                                setState(() => _showSuggestionList = false);
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowDown) {
-                                if (options.isEmpty) {
-                                  return KeyEventResult.ignored;
-                                }
-                                _keyboardOptionIndex =
-                                    (_keyboardOptionIndex + 1).clamp(
-                                      0,
-                                      options.length - 1,
-                                    );
-                                _isKeyboardPreview = true;
-                                _setControllerText(
-                                  textController,
-                                  options[_keyboardOptionIndex],
-                                );
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                  LogicalKeyboardKey.arrowUp) {
-                                if (options.isEmpty) {
-                                  return KeyEventResult.ignored;
-                                }
-                                _keyboardOptionIndex = _keyboardOptionIndex <= 0
-                                    ? 0
-                                    : _keyboardOptionIndex - 1;
-                                _isKeyboardPreview = true;
-                                _setControllerText(
-                                  textController,
-                                  options[_keyboardOptionIndex],
-                                );
-                                return KeyEventResult.handled;
-                              }
-                              if (event.logicalKey ==
-                                      LogicalKeyboardKey.enter &&
-                                  options.isNotEmpty &&
-                                  _keyboardOptionIndex >= 0 &&
-                                  _keyboardOptionIndex < options.length) {
-                                _commitCallerSelection(
-                                  selection: options[_keyboardOptionIndex],
-                                  controller: textController,
-                                  nextFocusNode: nextFocusNode,
-                                  header: header,
-                                  lookupService: lookupService,
-                                  notifier: notifier,
-                                  getPhoneFieldDigits:
-                                      widget.getPhoneFieldDigits,
-                                );
-                                return KeyEventResult.handled;
-                              }
-                              return KeyEventResult.ignored;
-                            },
+                            onKeyEvent: (node, event) =>
+                                _onCallerKeyEvent(event),
                             child: TextField(
                               controller: textController,
                               focusNode: focusNodeParam,
@@ -764,7 +573,6 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                               },
                               onSubmitted: (_) {
                                 final options = _callerAutocompleteOptions(
-                                  _typedQuery,
                                   header,
                                   lookupService,
                                 );
@@ -772,14 +580,7 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                                     _keyboardOptionIndex >= 0 &&
                                     _keyboardOptionIndex < options.length) {
                                   _commitCallerSelection(
-                                    selection: options[_keyboardOptionIndex],
-                                    controller: textController,
-                                    nextFocusNode: nextFocusNode,
-                                    header: header,
-                                    lookupService: lookupService,
-                                    notifier: notifier,
-                                    getPhoneFieldDigits:
-                                        widget.getPhoneFieldDigits,
+                                    options[_keyboardOptionIndex],
                                   );
                                   return;
                                 }
@@ -841,97 +642,94 @@ class SmartEntityCallerSuggestionList extends StatelessWidget {
   final int highlightedIndex;
   final VoidCallback? onSelectionCommitted;
 
+  static const double _phoneOwnerIconSize = 18;
+
   @override
   Widget build(BuildContext context) {
-    // Για εμφάνιση στο πεδίο: μόνο ονοματεπόνυμο (name), fallback fullNameWithDepartment.
-    final callerDisplayName =
-        header.selectedCaller?.name ??
-        header.selectedCaller?.fullNameWithDepartment ??
-        '';
-    final filteredCandidates = header.callerCandidates.where((u) {
-      final candidateName = (u.name ?? u.fullNameWithDepartment).trim();
-      return candidateName.isNotEmpty && candidateName != callerDisplayName;
-    }).toList();
-    final tiles = <Widget>[];
-    var index = 0;
-    for (final user in filteredCandidates) {
-      final tileIndex = index++;
-      tiles.add(
-        ListTile(
-          dense: true,
-          selected: highlightedIndex == tileIndex,
-          selectedTileColor: theme.colorScheme.primary.withValues(alpha: 0.12),
-          title: Text(user.fullNameWithDepartment),
-          onTap: () {
-            final displayName = user.name ?? user.fullNameWithDepartment;
-            controller.value = TextEditingValue(
-              text: displayName,
-              selection: TextSelection.collapsed(offset: displayName.length),
-            );
-            notifier.updateSelectedCaller(user);
-            notifier.updateCallerDisplayText(displayName);
-            notifier.performCallerLookup(
-              displayName,
-              phoneFieldDigits: getPhoneFieldDigits(),
-            );
-            onSelectionCommitted?.call();
-          },
-        ),
-      );
-    }
-    if (callerDisplayName.isNotEmpty) {
-      final tileIndex = index++;
-      tiles.add(
-        ListTile(
-          dense: true,
-          selected: highlightedIndex == tileIndex,
-          selectedTileColor: theme.colorScheme.primary.withValues(alpha: 0.12),
-          title: Text(callerDisplayName),
-          onTap: () {
-            // Στο πεδίο μόνο ονοματεπόνυμο.
-            controller.value = TextEditingValue(
-              text: callerDisplayName,
-              selection: TextSelection.collapsed(
-                offset: callerDisplayName.length,
-              ),
-            );
-            notifier.updateCallerDisplayText(callerDisplayName);
-            onSelectionCommitted?.call();
-          },
-        ),
-      );
-    }
-    if (showUnknownOption) {
-      final tileIndex = index++;
-      tiles.add(
-        ListTile(
-          dense: true,
-          selected: highlightedIndex == tileIndex,
-          selectedTileColor: theme.colorScheme.primary.withValues(alpha: 0.12),
-          title: Text(
-            'Άγνωστος',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontStyle: FontStyle.italic,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-            ),
-          ),
-          onTap: () {
-            notifier.updateSelectedCaller(null);
-            notifier.updateCallerDisplayText('Άγνωστος');
-            controller.value = const TextEditingValue(
-              text: 'Άγνωστος',
-              selection: TextSelection.collapsed(offset: 9),
-            );
-            onSelectionCommitted?.call();
-          },
-        ),
-      );
-    }
+    // Οι ίδιες γραμμές, με την ίδια σειρά, που διαλέγουν βελάκια και Enter:
+    // ο αριθμός της επισημασμένης γραμμής δείχνει την ίδια επιλογή και στα δύο.
+    final rows = callerOverlayRows(
+      selectedCaller: header.selectedCaller,
+      candidates: header.callerCandidates,
+      showUnknownOption: showUnknownOption,
+      phone: header.selectedPhone,
+    );
+    // Τα ονόματα μένουν στοιχισμένα: όταν σημαδεύεται έστω ένας κάτοχος, οι
+    // υπόλοιπες γραμμές κρατούν κενή θέση στο ίδιο πλάτος.
+    final anyPhoneOwner = rows.any((row) => row.isPhoneOwner);
     return Material(
       color: theme.colorScheme.surfaceContainerLow,
       elevation: 1,
       borderRadius: BorderRadius.circular(4),
-      child: Column(mainAxisSize: MainAxisSize.min, children: tiles),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (index, row) in rows.indexed)
+            ListTile(
+              dense: true,
+              selected: highlightedIndex == index,
+              selectedTileColor: theme.colorScheme.primary.withValues(
+                alpha: 0.12,
+              ),
+              minLeadingWidth: _phoneOwnerIconSize,
+              horizontalTitleGap: 8,
+              leading: !anyPhoneOwner
+                  ? null
+                  : row.isPhoneOwner
+                  ? Icon(
+                      Icons.call,
+                      key: const ValueKey('caller-row-phone-owner'),
+                      size: _phoneOwnerIconSize,
+                      color: theme.colorScheme.primary,
+                      semanticLabel: 'Κάτοχος του τηλεφώνου',
+                    )
+                  : const SizedBox(width: _phoneOwnerIconSize),
+              title: row.kind == CallerOverlayRowKind.unknown
+                  ? Text(
+                      row.label,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontStyle: FontStyle.italic,
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.8,
+                        ),
+                      ),
+                    )
+                  : Text(row.label),
+              onTap: () => _onRowTap(row),
+            ),
+        ],
+      ),
     );
+  }
+
+  void _setFieldText(String text) {
+    controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  void _onRowTap(CallerOverlayRow row) {
+    switch (row.kind) {
+      case CallerOverlayRowKind.candidate:
+        final user = row.user!;
+        // Στο πεδίο μόνο ονοματεπώνυμο, όχι και το τμήμα της γραμμής.
+        final displayName = user.name ?? user.fullNameWithDepartment;
+        _setFieldText(displayName);
+        notifier.updateSelectedCaller(user);
+        notifier.updateCallerDisplayText(displayName);
+        notifier.performCallerLookup(
+          displayName,
+          phoneFieldDigits: getPhoneFieldDigits(),
+        );
+      case CallerOverlayRowKind.selected:
+        _setFieldText(row.label);
+        notifier.updateCallerDisplayText(row.label);
+      case CallerOverlayRowKind.unknown:
+        notifier.updateSelectedCaller(null);
+        notifier.updateCallerDisplayText(kCallerUnknownOption);
+        _setFieldText(kCallerUnknownOption);
+    }
+    onSelectionCommitted?.call();
   }
 }

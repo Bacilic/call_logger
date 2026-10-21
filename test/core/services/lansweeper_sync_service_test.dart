@@ -60,6 +60,7 @@ LansweeperWorkflowRequest _workflowRequest({
   String? existingTicketId,
   String? requesterUsername,
   LansweeperAssetTarget? assetTarget,
+  List<LansweeperAssetTarget> assetTargets = const [],
 }) {
   return LansweeperWorkflowRequest(
     autoSubject: '[IT] #42',
@@ -78,7 +79,7 @@ LansweeperWorkflowRequest _workflowRequest({
     targetState: targetState,
     existingTicketId: existingTicketId,
     requesterUsername: requesterUsername,
-    assetTarget: assetTarget,
+    assetTargets: [?assetTarget, ...assetTargets],
   );
 }
 
@@ -110,6 +111,77 @@ void _registerTestLansweeperSettings() {
 }
 
 void main() {
+  group('LansweeperSyncService.combinedTicketTitle', () {
+    test('μία κλήση: ο τίτλος της, αλλιώς ο αυτόματος με αριθμό', () {
+      expect(
+        LansweeperSyncService.combinedTicketTitle([
+          (storedTitle: 'Χαλασμένο ποντίκι', category: 'Υλικό', id: 7),
+        ]),
+        'Χαλασμένο ποντίκι',
+      );
+      expect(
+        LansweeperSyncService.combinedTicketTitle([
+          (storedTitle: null, category: 'Υλικό', id: 7),
+        ]),
+        '[Υλικό] #7',
+      );
+    });
+
+    test(
+      'πολλές κλήσεις: οι τίτλοι ενώνονται, όπου λείπει μπαίνει η κατηγορία χωρίς αριθμό',
+      () {
+        expect(
+          LansweeperSyncService.combinedTicketTitle([
+            (storedTitle: 'Δεν εκτυπώνει', category: 'Εκτυπωτές', id: 1),
+            (storedTitle: '', category: 'Δίκτυο', id: 2),
+            (storedTitle: null, category: '', id: 3),
+          ]),
+          'Δεν εκτυπώνει · [Δίκτυο]',
+        );
+      },
+    );
+
+    test(
+      'ίδιοι τίτλοι μπαίνουν μία φορά — και ο ήδη ενωμένος δεν διπλασιάζεται',
+      () {
+        expect(
+          LansweeperSyncService.combinedTicketTitle([
+            (storedTitle: null, category: 'Δίκτυο', id: 1),
+            (storedTitle: null, category: 'δίκτυο', id: 2),
+          ]),
+          '[Δίκτυο]',
+        );
+        expect(
+          LansweeperSyncService.combinedTicketTitle([
+            (storedTitle: 'Α · Β', category: 'Υλικό', id: 1),
+            (storedTitle: 'Α · Β', category: 'Υλικό', id: 2),
+          ]),
+          'Α · Β',
+        );
+      },
+    );
+
+    test('χωρίς τίτλο και κατηγορία πουθενά: ο αυτόματος της πρώτης', () {
+      expect(
+        LansweeperSyncService.combinedTicketTitle([
+          (storedTitle: null, category: '', id: 5),
+          (storedTitle: null, category: '', id: 6),
+        ]),
+        'Κλήση #5',
+      );
+    });
+
+    test('το μέτρο σύγκρισης αγνοεί τους αποθηκευμένους τίτλους', () {
+      expect(
+        LansweeperSyncService.combinedTicketTitle([
+          (storedTitle: 'Δεν εκτυπώνει', category: 'Εκτυπωτές', id: 1),
+          (storedTitle: 'Αργό δίκτυο', category: 'Δίκτυο', id: 2),
+        ], useStoredTitles: false),
+        '[Εκτυπωτές] · [Δίκτυο]',
+      );
+    });
+  });
+
   group('LansweeperSyncService.buildTicketDescription', () {
     test('προσθέτει διάρκεια στο τέλος', () {
       final description = LansweeperSyncService.buildTicketDescription(
@@ -722,6 +794,51 @@ void main() {
         expect(result.warnings.any((w) => w.contains('PC9999')), isTrue);
         // Τα υπόλοιπα βήματα έτρεξαν κανονικά.
         expect(result.completedSteps, contains('AddNote'));
+      },
+    );
+
+    test(
+      'δύο εξοπλισμοί: ένα AddAsset για τον καθένα, και η αποτυχία του πρώτου δεν σταματά τον δεύτερο',
+      () async {
+        final fakePoster = _RecordingFakePoster(
+          responses: const [
+            successWithTicketId,
+            failure,
+            successOnly,
+            successOnly,
+            successOnly,
+          ],
+        );
+        final service = LansweeperSyncService(poster: fakePoster.call);
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(
+            assetTargets: const [
+              LansweeperAssetTarget(
+                value: 'PC3430',
+                kind: LansweeperAssetTargetKind.assetName,
+              ),
+              LansweeperAssetTarget(
+                value: 'PC3530',
+                kind: LansweeperAssetTargetKind.assetName,
+              ),
+            ],
+          ),
+        );
+
+        expect(result.success, isTrue);
+        expect(
+          _fieldsForAction(fakePoster, 'AddAsset')!['AssetName'],
+          'PC3430',
+        );
+        expect(
+          _fieldsForAction(fakePoster, 'AddAsset', occurrence: 1)!['AssetName'],
+          'PC3530',
+          reason: 'Ο δεύτερος εξοπλισμός συνδέεται κι αυτός',
+        );
+        expect(result.completedSteps, contains('AddAsset'));
+        expect(result.warnings.any((w) => w.contains('PC3430')), isTrue);
+        expect(result.warnings.any((w) => w.contains('PC3530')), isFalse);
       },
     );
 

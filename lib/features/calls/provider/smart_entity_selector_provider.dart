@@ -798,7 +798,10 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       // Αν ο καλών είναι ήδη ορισμένος/ορατός, δεν τον πειράζουμε στην αλλαγή τμήματος.
       // Prefill λίστας caller μόνο όταν το πεδίο είναι πραγματικά κενό.
       if (!keepCallerUntouched) {
-        callerCandidates = lookup.getUsersByDepartment(departmentId);
+        callerCandidates = lookups.departmentCallersWithPhoneOwnersFirst(
+          lookup,
+          departmentId,
+        );
       }
       if (!hasEquipmentInput) {
         equipmentCandidates = lookup.getAllEquipmentByDepartment(departmentId);

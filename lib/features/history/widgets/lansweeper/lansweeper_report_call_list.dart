@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../calls/models/call_model.dart';
+import '../../models/lansweeper_report_grouping.dart';
 import 'lansweeper_call_summary.dart';
 import 'lansweeper_report_call_tile.dart';
 import 'lansweeper_report_row_metrics.dart';
@@ -54,9 +55,15 @@ final class _GroupHeaderEntry extends _LansweeperReportListEntry {
     required this.phone,
     required this.groupItems,
     required this.subtitleLabel,
+    required this.selectable,
   }) : super(_kGroupHeaderExtent);
 
+  /// Το όνομα της ομάδας: ο καλών, ή η ημέρα στην προβολή ανά ημέρα.
   final String caller;
+
+  /// Έχει τικ που επιλέγει όλη την ομάδα. Η ημέρα δεν έχει: τις κλήσεις μιας
+  /// ημέρας δεν τις ενώνει τίποτα κοινό που να αξίζει ένα αίτημα.
+  final bool selectable;
 
   /// Το τηλέφωνο, όταν είναι κοινό σε όλες τις κλήσεις της ομάδας.
   final String? phone;
@@ -94,12 +101,15 @@ final class _CallEntry extends _LansweeperReportListEntry {
 String _flattenCacheKey(
   Map<String, List<LansweeperReportCallRowData>> grouped,
   double width,
+  LansweeperReportGrouping grouping,
 ) {
   final buffer = StringBuffer()
     // Το πλάτος καθορίζει σε πόσες γραμμές τυλίγεται κάθε κείμενο, άρα και το
     // ύψος κάθε κάρτας: αλλάζοντας μέγεθος το παράθυρο, οι μετρήσεις πρέπει να
     // ξαναγίνουν.
     ..write(width.round())
+    ..write('#')
+    ..write(grouping.name)
     ..write('#');
   for (final entry in grouped.entries) {
     buffer.write(entry.key);
@@ -161,7 +171,9 @@ List<_LansweeperReportListEntry> _flattenGroupedCalls(
   double textWidth,
   TextStyle bodyStyle,
   TextScaler textScaler,
+  LansweeperReportGrouping grouping,
 ) {
+  final byDay = grouping == LansweeperReportGrouping.byDay;
   final entries = <_LansweeperReportListEntry>[];
   var groupIndex = 0;
   for (final entry in grouped.entries) {
@@ -174,14 +186,17 @@ List<_LansweeperReportListEntry> _flattenGroupedCalls(
       (sum, item) => sum + item.durationSeconds,
     );
     final calls = groupItems.map((row) => row.call);
-    final phone = LansweeperCallSummary.sharedValue(
-      calls,
-      (call) => call.phoneText,
-    );
-    final department = LansweeperCallSummary.sharedValue(
-      calls,
-      (call) => call.departmentText,
-    );
+    // Στην ημέρα, τηλέφωνο και τμήμα ανήκουν στον καλούντα κάθε κάρτας, όχι
+    // στην ομάδα: δεν ανεβαίνουν στην κεφαλίδα ακόμη κι όταν συμπίπτουν.
+    final phone = byDay
+        ? null
+        : LansweeperCallSummary.sharedValue(calls, (call) => call.phoneText);
+    final department = byDay
+        ? null
+        : LansweeperCallSummary.sharedValue(
+            calls,
+            (call) => call.departmentText,
+          );
     final countLabel =
         '${groupItems.length} κλήσεις • ${totalDurationLabel(groupSeconds)}';
     entries.add(
@@ -192,6 +207,7 @@ List<_LansweeperReportListEntry> _flattenGroupedCalls(
         subtitleLabel: department == null
             ? countLabel
             : '$department · $countLabel',
+        selectable: !byDay,
       ),
     );
     entries.add(const _GroupDividerEntry());
@@ -210,10 +226,12 @@ List<_LansweeperReportListEntry> _flattenGroupedCalls(
           item: row,
           isLastInGroup: isLast,
           // Το τμήμα κατεβαίνει στην κάρτα μόνο όταν η ομάδα δεν έχει κοινό —
-          // αλλιώς θα λεγόταν δύο φορές, δύο γραμμές πιο κάτω.
+          // αλλιώς θα λεγόταν δύο φορές, δύο γραμμές πιο κάτω. Στην ημέρα δεν
+          // κατεβαίνει ποτέ: η ίδια γραμμή κρατά εκεί τον καλούντα, που κοβόταν
+          // στη στενή στήλη· το τμήμα μένει στην υπόδειξη της κάρτας.
           inlineMeta: _inlineMetaFor(
             row.call,
-            includeDepartment: department == null,
+            includeDepartment: !byDay && department == null,
           ),
           bodyHeight: bodyHeight,
           extent: LansweeperReportRowMetrics.rowExtent(
@@ -228,10 +246,12 @@ List<_LansweeperReportListEntry> _flattenGroupedCalls(
   return entries;
 }
 
-/// Εικονικοποιημένη λίστα κλήσεων αναφοράς Lansweeper (ομαδοποίηση ανά καλούντα).
+/// Εικονικοποιημένη λίστα κλήσεων αναφοράς Lansweeper, ομαδοποιημένη ανά
+/// καλούντα ή ανά ημέρα ([grouping]).
 class LansweeperReportCallList extends StatefulWidget {
   const LansweeperReportCallList({
     required this.grouped,
+    this.grouping = LansweeperReportGrouping.byCaller,
     required this.selectedKeys,
     required this.totalDurationLabel,
     required this.ticketViewUrlTemplate,
@@ -244,6 +264,7 @@ class LansweeperReportCallList extends StatefulWidget {
   });
 
   final Map<String, List<LansweeperReportCallRowData>> grouped;
+  final LansweeperReportGrouping grouping;
   final Set<String> selectedKeys;
   final String Function(int totalSeconds) totalDurationLabel;
   final String ticketViewUrlTemplate;
@@ -278,7 +299,11 @@ class _LansweeperReportCallListState extends State<LansweeperReportCallList> {
     BuildContext context,
     double listWidth,
   ) {
-    final cacheKey = _flattenCacheKey(widget.grouped, listWidth);
+    final cacheKey = _flattenCacheKey(
+      widget.grouped,
+      listWidth,
+      widget.grouping,
+    );
     if (_cachedFlatKey == cacheKey && _cachedFlatEntries != null) {
       return _cachedFlatEntries!;
     }
@@ -293,6 +318,7 @@ class _LansweeperReportCallListState extends State<LansweeperReportCallList> {
       _textWidthFor(listWidth),
       bodyStyle,
       MediaQuery.textScalerOf(context),
+      widget.grouping,
     );
     _cachedFlatKey = cacheKey;
     _cachedFlatEntries = entries;
@@ -332,6 +358,40 @@ class _LansweeperReportCallListState extends State<LansweeperReportCallList> {
     final theme = Theme.of(context);
     return switch (entry) {
       _GroupGapEntry() => const SizedBox.shrink(),
+      _GroupHeaderEntry(
+        :final caller,
+        :final subtitleLabel,
+        selectable: false,
+      ) =>
+        _groupSurface(
+          theme: theme,
+          top: true,
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: ListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              leading: Icon(
+                Icons.calendar_today_outlined,
+                size: 18,
+                color: theme.textTheme.bodySmall?.color,
+              ),
+              minLeadingWidth: 0,
+              title: Text(
+                caller,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                subtitleLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
       _GroupHeaderEntry(
         :final caller,
         :final phone,
@@ -417,6 +477,9 @@ class _LansweeperReportCallListState extends State<LansweeperReportCallList> {
                 isSyncLoading: widget.isSyncLoading,
                 ticketLinkEnabled: widget.ticketLinkEnabled,
                 bodyHeight: bodyHeight,
+                timestampFlex: widget.grouping == LansweeperReportGrouping.byDay
+                    ? 3
+                    : 1,
                 onBadgePressed: () => widget.onBadgePressed(item),
               ),
             ),
