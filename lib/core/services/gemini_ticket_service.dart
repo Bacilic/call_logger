@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import 'ai_prompt_template_syntax.dart';
+import 'lansweeper_text_format.dart';
 
 export 'ai_prompt_template_syntax.dart'
     show
@@ -983,7 +984,7 @@ abstract final class GeminiTicketService {
     return (
       title: parsed.title.trim(),
       description: normalized.description,
-      solution: normalized.solution,
+      solution: formatInlineSolutionSteps(normalized.solution),
     );
   }
 

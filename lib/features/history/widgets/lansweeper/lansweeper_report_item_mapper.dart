@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 
+import '../../../../core/services/lansweeper_text_format.dart';
 import '../../../calls/models/call_model.dart';
 import '../../models/lansweeper_sync_state.dart';
 import 'lansweeper_call_summary.dart';
@@ -71,7 +72,7 @@ abstract final class LansweeperReportItemMapper {
   static String combinedSelectedSolutions(List<ReportCallItem> selected) {
     if (selected.isEmpty) return '';
     if (selected.length == 1) {
-      return (selected.first.call.solution ?? '').trim();
+      return formatInlineSolutionSteps(selected.first.call.solution ?? '');
     }
     final parts = <String>[];
     for (final item in selected) {

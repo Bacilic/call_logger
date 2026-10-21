@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:call_logger/core/services/lansweeper_asset_target.dart';
 import 'package:call_logger/core/services/lansweeper_sync_service.dart';
+import 'package:call_logger/core/services/lansweeper_text_format.dart';
 import 'package:call_logger/core/services/lansweeper_ticket_submit_config.dart';
 import 'package:call_logger/core/services/settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -240,13 +241,13 @@ void main() {
     );
 
     test(
-      'AddNote: Text == "Λύση δοκιμής.\\n\\nΧρόνος: 05:00" και Type == config.noteType (Internal)',
+      'AddNote: Text == "Λύση δοκιμής.<br><br>Χρόνος: 05:00" και Type == config.noteType (Internal)',
       () async {
         await service.submitTicketWorkflow(_workflowRequest());
 
         final fields = _fieldsForAction(fakePoster, 'AddNote');
         expect(fields, isNotNull);
-        expect(fields!['Text'], 'Λύση δοκιμής.\n\nΧρόνος: 05:00');
+        expect(fields!['Text'], 'Λύση δοκιμής.<br><br>Χρόνος: 05:00');
         expect(fields['Type'], 'Internal');
         expect(fields['TicketID'], '17476');
       },
@@ -298,10 +299,12 @@ void main() {
         expect(fallbackFields, isNotNull);
         expect(
           fallbackFields!['Description'],
-          LansweeperSyncService.buildTicketDescription(
-            notes: 'Πρόβλημα δοκιμής',
-            solution: 'Λύση δοκιμής.',
-            durationSeconds: 300,
+          lansweeperHtmlText(
+            LansweeperSyncService.buildTicketDescription(
+              notes: 'Πρόβλημα δοκιμής',
+              solution: 'Λύση δοκιμής.',
+              durationSeconds: 300,
+            ),
           ),
         );
         expect(result.success, isTrue);

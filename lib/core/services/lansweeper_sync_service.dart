@@ -5,6 +5,7 @@ import 'dart:io';
 import '../../features/history/models/lansweeper_submit_progress.dart';
 import 'lansweeper_api_uri.dart';
 import 'lansweeper_asset_target.dart';
+import 'lansweeper_text_format.dart';
 import 'lansweeper_ticket_requester_fields.dart';
 import 'lansweeper_ticket_submit_config.dart';
 import 'settings_service.dart';
@@ -258,7 +259,7 @@ class LansweeperSyncService {
         'Subject': request.title.trim().isNotEmpty
             ? request.title.trim()
             : request.autoSubject.trim(),
-        'Description': request.problem.trim(),
+        'Description': lansweeperHtmlText(request.problem.trim()),
         if (config.ticketType.trim().isNotEmpty)
           'Type': config.ticketType.trim(),
         if (config.priority.trim().isNotEmpty)
@@ -345,10 +346,12 @@ class LansweeperSyncService {
     if (config.enableAddNoteStep && request.solution.trim().isNotEmpty) {
       final noteFields = <String, String>{
         'TicketID': resolvedTicketId,
-        'Text': _buildNoteText(
-          request.solution,
-          durationSeconds,
-          includeTime: config.includeNoteTime,
+        'Text': lansweeperHtmlText(
+          _buildNoteText(
+            request.solution,
+            durationSeconds,
+            includeTime: config.includeNoteTime,
+          ),
         ),
         'Type': config.noteType,
         ..._requesterFields(request.agentUsername),
@@ -377,10 +380,12 @@ class LansweeperSyncService {
       } else {
         final fallbackFields = <String, String>{
           'TicketID': resolvedTicketId,
-          'Description': buildTicketDescription(
-            notes: request.problem,
-            solution: request.solution,
-            durationSeconds: durationSeconds,
+          'Description': lansweeperHtmlText(
+            buildTicketDescription(
+              notes: request.problem,
+              solution: request.solution,
+              durationSeconds: durationSeconds,
+            ),
           ),
           ..._followUpIdentityFields(
             requester: requester,

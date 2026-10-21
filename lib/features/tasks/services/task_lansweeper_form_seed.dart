@@ -1,3 +1,4 @@
+import '../../../core/services/lansweeper_text_format.dart';
 import '../models/task.dart';
 
 /// Με τι ανοίγει η φόρμα αποστολής όταν τη γεννά μια εκκρεμότητα.
@@ -37,6 +38,6 @@ TaskLansweeperFormSeed seedLansweeperFormFromTask(Task task) {
   return TaskLansweeperFormSeed(
     title: title.isEmpty ? 'Εκκρεμότητα #${task.id}' : title,
     problem: (task.description ?? '').trim(),
-    solution: (task.solutionNotes ?? '').trim(),
+    solution: formatInlineSolutionSteps(task.solutionNotes ?? ''),
   );
 }
