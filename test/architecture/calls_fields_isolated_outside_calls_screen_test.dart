@@ -26,7 +26,14 @@ const String _definitionFile = 'smart_entity_selector_widget.dart';
 const String _theCallsScreenItself = 'call_header_form.dart';
 
 final _hostPattern = RegExp(r'\bSmartEntitySelectorWidget\s*\(');
-final _isolationPattern = RegExp(r'\bIsolatedCallsScreenState\b');
+
+/// Δύο τρόποι απομόνωσης: το περιτύλιγμα, ή η συνεδρία της γρήγορης
+/// καταγραφής, που κρατά τους ίδιους κρίκους στα δικά της providers ώστε να
+/// επιβιώνουν της ελαχιστοποίησης (το αποδεικνύει το
+/// `quick_call_session_provider_test.dart`).
+final _isolationPattern = RegExp(
+  r'\b(IsolatedCallsScreenState|quickCallSessionProvider)\b',
+);
 
 Iterable<File> _dartFiles(Directory root) sync* {
   for (final entity in root.listSync(recursive: true, followLinks: false)) {

@@ -325,26 +325,26 @@ Future<void> _bootstrapAndRunApp() async {
       appVersion: appVersion,
       retentionCount: await settings.catalogs.getCrashLogRetentionCount(),
     );
-    // Το σημάδι ζωής ξεκινά ρητά, εδώ και πουθενά αλλού: όσο τρέχει, η
-    // απώλειά του λέει πόσο έζησε η εκτέλεση που χάθηκε.
-    CrashLogService.instanceOrNull?.startLivenessHeartbeat();
     logStep.ok();
   } catch (e, st) {
     logStep.warn(e.toString());
     recordStartupNotice('Ημερολόγιο καταρρεύσεων', e, st);
   }
+  // Το σημάδι ζωής ξεκινά ρητά, εδώ και πουθενά αλλού: όσο τρέχει, η απώλειά
+  // του λέει πόσο έζησε η εκτέλεση που χάθηκε. Ξεκινά **και** όταν ο φάκελος
+  // δεν απάντησε: η εκκίνηση συχνά συνεχίζει σε άλλη βάση που απαντά, και
+  // χωρίς παλμό οι συνάδελφοι δεν θα έβλεπαν ότι η εφαρμογή ζει.
+  CrashLogService.instanceOrNull?.startLivenessHeartbeat();
 
   // Το ίχνος ενός κλεισίματος που δεν πρόλαβε να τελειώσει ανήκει χρονικά
   // ΠΡΙΝ από τη σημερινή εκκίνηση — και μόνο εδώ προλαβαίνει να το δει η
   // ένδειξη των Ρυθμίσεων, που ρωτά μία φορά όταν ανοίγει η οθόνη.
-  await runStartupHousekeeping('Έλεγχος προηγούμενου κλεισίματος', () async {
-    final log = CrashLogService.instanceOrNull;
-    if (log == null || !log.isDiskAvailable) return false;
-    return ShutdownTraceService.promoteOrphanedTrace(
-      workingDirectory: await ShutdownTraceService.localWorkingDirectory(),
-      appendRecord: log.appendRecord,
-    );
-  });
+  await runStartupHousekeeping(
+    'Έλεγχος προηγούμενου κλεισίματος',
+    () => ShutdownTraceService.promoteOrphanIfLogKeepsRecords(
+      CrashLogService.instanceOrNull,
+    ),
+  );
 
   // Από εδώ και πέρα τα βήματα γράφονται και σε αρχείο. Όσα προηγήθηκαν
   // υπάρχουν ήδη ολόκληρα στη μνήμη και γράφονται αναδρομικά — δεν είχαν πού

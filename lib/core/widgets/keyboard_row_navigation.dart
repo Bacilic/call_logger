@@ -11,6 +11,12 @@ import 'package:flutter/services.dart';
 import '../utils/run_after_next_frame.dart';
 import 'row_navigation_logic.dart';
 
+/// Το χρώμα της γραμμής που ακούει τα πλήκτρα — το ίδιο σε κάθε πίνακα. Ξεχωρίζει
+/// από το τικ επιλογής: το τικ βάφει με το «πρωτεύον κοντέινερ», η εστίαση με
+/// πιο έντονο πρωτεύον.
+Color keyboardFocusedRowColor(BuildContext context) =>
+    Theme.of(context).colorScheme.primary.withValues(alpha: 0.14);
+
 /// Τυλίγει έναν πίνακα και του δίνει πλήκτρα.
 ///
 /// **Πότε παίρνει ο πίνακας τα πλήκτρα:**

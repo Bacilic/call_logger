@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/draggable_dialog_shell.dart';
+import 'mass_deletion_warning.dart';
+import '../../services/mass_deletion_guard.dart';
 import '../../services/user_deletion_messages.dart';
 import '../../services/user_deletion_zones.dart';
 
@@ -17,18 +19,27 @@ const double _kMaxListHeight = 380;
 Future<UserDeletionPreviewResult?> showUserDeletionPreviewDialog({
   required BuildContext context,
   required List<UserDeletionInventory> inventories,
+  MassDeletionContext? massDeletion,
 }) {
   return showDialog<UserDeletionPreviewResult>(
     context: context,
-    builder: (ctx) =>
-        _UserDeletionPreviewDialog(initialInventories: inventories),
+    builder: (ctx) => _UserDeletionPreviewDialog(
+      initialInventories: inventories,
+      massDeletion: massDeletion,
+    ),
   );
 }
 
 class _UserDeletionPreviewDialog extends StatefulWidget {
-  const _UserDeletionPreviewDialog({required this.initialInventories});
+  const _UserDeletionPreviewDialog({
+    required this.initialInventories,
+    this.massDeletion,
+  });
 
   final List<UserDeletionInventory> initialInventories;
+
+  /// Χωρίς αυτό ο διάλογος δεν προειδοποιεί για το μέγεθος της διαγραφής.
+  final MassDeletionContext? massDeletion;
 
   @override
   State<_UserDeletionPreviewDialog> createState() =>
@@ -38,6 +49,9 @@ class _UserDeletionPreviewDialog extends StatefulWidget {
 class _UserDeletionPreviewDialogState
     extends State<_UserDeletionPreviewDialog> {
   late List<UserDeletionInventory> _kept;
+
+  /// Ό,τι έχει γραφτεί στο πεδίο της λέξης — μόνο για ολόκληρο κατάλογο.
+  String _typedWord = '';
 
   @override
   void initState() {
@@ -76,6 +90,11 @@ class _UserDeletionPreviewDialogState
       exclusiveEquipmentCount: _sumEquipment(_kept),
       initiallySelected: widget.initialInventories.length,
     );
+    final massDeletion = widget.massDeletion;
+    final confirmAllowed = massDeletionConfirmAllowed(
+      massDeletion?.levelFor(_kept.length) ?? MassDeletionLevel.none,
+      _typedWord,
+    );
 
     return DraggableDialogShell(
       title: Text(userDeletionConfirmTitle(_kept.length)),
@@ -87,6 +106,12 @@ class _UserDeletionPreviewDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (massDeletion != null)
+                MassDeletionWarning(
+                  massDeletion: massDeletion,
+                  deleting: _kept.length,
+                  onTypedWordChanged: (v) => setState(() => _typedWord = v),
+                ),
               // Με έναν υπάλληλο, ή όταν κανείς δεν έχει στοιχεία, η σύνοψη θα
               // επαναλάμβανε ό,τι λέει ήδη η λίστα από κάτω.
               if (_kept.length > 1 && hasAnyAssets) ...[
@@ -121,7 +146,9 @@ class _UserDeletionPreviewDialogState
             child: const Text('Ακύρωση'),
           ),
           FilledButton(
-            onPressed: _kept.isEmpty ? null : () => _pop(true),
+            onPressed: _kept.isEmpty || !confirmAllowed
+                ? null
+                : () => _pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: theme.colorScheme.error,
               foregroundColor: theme.colorScheme.onError,

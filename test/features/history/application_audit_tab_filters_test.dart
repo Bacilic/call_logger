@@ -452,6 +452,52 @@ void main() {
         await finishInteraction(tester);
       },
     );
+
+    testWidgets(
+      'τα βελάκια αλλάζουν την επιλεγμένη εγγραφή και το Space βάζει τικ',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await pumpAuditTab(tester);
+
+        await tester.tap(find.byType(ListTile).first);
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+
+        final tiles = tester.widgetList<ListTile>(find.byType(ListTile));
+        expect(
+          [for (final t in tiles) t.selected],
+          [false, true, false, false],
+          reason: 'Το ↓ από την πρώτη εγγραφή επιλέγει τη δεύτερη.',
+        );
+        expect(
+          find.byType(AuditEntitySidePanel),
+          findsOneWidget,
+          reason: 'Το ανοιχτό πάνελ ακολουθεί την επιλογή.',
+        );
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.pumpAndSettle();
+        final ticks = tester
+            .widgetList<Checkbox>(
+              find.descendant(
+                of: find.byType(ListTile),
+                matching: find.byType(Checkbox),
+              ),
+            )
+            .map((c) => c.value)
+            .toList();
+        expect(ticks, [false, true, false, false]);
+
+        await finishInteraction(tester);
+      },
+    );
   });
 
   group('Υπόδειξη «μήπως ψάχνετε χειριστή;»', () {

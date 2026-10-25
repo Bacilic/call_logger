@@ -83,9 +83,7 @@ AppUpgradeProbe appUpgradeProbeFromCheck(
 }) {
   final failure = check.failure;
   if (failure != null) {
-    return AppUpgradeProbe.unavailable(
-      'Δεν είναι δυνατός ο έλεγχος νέας έκδοσης, επειδή ${failure.reason}.',
-    );
+    return AppUpgradeProbe.unavailable(failure.message);
   }
   final manifest = check.manifest;
   final current = check.currentVersion;

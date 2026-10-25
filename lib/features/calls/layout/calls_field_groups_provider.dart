@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 import '../provider/call_header_provider.dart';
 import '../provider/lookup_provider.dart';
@@ -77,18 +78,23 @@ class IsolatedCallsScreenState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ProviderScope(
-      overrides: [
-        callsFieldConfirmationsProvider.overrideWith(
-          CallsFieldConfirmationsNotifier.new,
-        ),
-        callsScreenExpandedLatchProvider.overrideWith(
-          CallsScreenExpandedLatchNotifier.new,
-        ),
-      ],
+      overrides: isolatedCallsScreenStateOverrides(),
       child: child,
     );
   }
 }
+
+/// Η λίστα των κρίκων κατάστασης του [IsolatedCallsScreenState] — κοινή και
+/// για τη γρήγορη καταγραφή, που τους κρατά στη δική της συνεδρία ώστε να
+/// επιβιώνουν της ελαχιστοποίησης.
+List<Override> isolatedCallsScreenStateOverrides() => [
+  callsFieldConfirmationsProvider.overrideWith(
+    CallsFieldConfirmationsNotifier.new,
+  ),
+  callsScreenExpandedLatchProvider.overrideWith(
+    CallsScreenExpandedLatchNotifier.new,
+  ),
+];
 
 /// Derived expanded/compact screen mode (respects editing latch — red X never collapses).
 final callsScreenExpandedLatchProvider =

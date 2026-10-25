@@ -3,6 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'audit_service.dart';
 import 'database_helper.dart';
 import 'directory_support.dart';
+import '../utils/display_text_sort.dart';
 
 /// Callback από orchestrator: επαναδόμηση `search_index` στο ίδιο transaction.
 typedef RebuildCallSearchIndexForCategoryInTxn =
@@ -24,19 +25,19 @@ class CategoryRepository {
       whereArgs: [0],
       orderBy: 'name',
     );
-    return rows
-        .map((r) => r['name'] as String? ?? '')
-        .where((s) => s.isNotEmpty)
-        .toList();
+    return sortedForDisplay(
+      rows.map((r) => r['name'] as String? ?? '').where((s) => s.isNotEmpty),
+      (name) => [name],
+    );
   }
 
   Future<List<Map<String, dynamic>>> getActiveCategoryRows() async {
-    return db.query(
+    final rows = await db.query(
       'categories',
       columns: ['id', 'name'],
       where: DirectorySupport.notDeletedClause,
-      orderBy: 'name COLLATE NOCASE ASC',
     );
+    return sortedForDisplay(rows, (r) => [r['name'] as String?]);
   }
 
   Future<({int id, String name})?> findActiveCategoryByNormalizedName(

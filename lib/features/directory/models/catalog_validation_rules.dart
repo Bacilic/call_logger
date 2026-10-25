@@ -98,6 +98,7 @@ class CatalogValidationRules {
     this.companyInternalPhoneEnabled = true,
     this.duplicateRemoteTargetEnabled = true,
     this.nicknameInNameEnabled = true,
+    this.namingIrregularitiesEnabled = true,
   });
 
   /// Προεπιλεγμένες εξαιρέσεις: η ανοιχτή παρένθεση, γιατί το πεδίο «Όνομα»
@@ -235,6 +236,11 @@ class CatalogValidationRules {
   /// «(Γωγώ) Γεωργία» του ίδιου επωνύμου περνούν για δύο ανθρώπους.
   final bool nicknameInNameEnabled;
 
+  /// Παρατυπίες ονοματολογίας — **ένας** διακόπτης για μια οικογένεια μικρών
+  /// ελέγχων ονομάτων (απόφαση Διευθυντή 22/10/2026). Ποιοι έλεγχοι ανήκουν
+  /// εδώ το λέει η απογραφή τους, `NamingIrregularities.checks`.
+  final bool namingIrregularitiesEnabled;
+
   static final RegExp _letterOrDigit = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
   /// Οι εξαιρέσεις ως σύνολο χαρακτήρων.
@@ -357,6 +363,11 @@ class CatalogValidationRules {
       isOn: (r) => r.nicknameInNameEnabled,
       toggled: (r, v) => r.copyWith(nicknameInNameEnabled: v),
     ),
+    (
+      severity: CatalogRuleSeverity.inconsistency,
+      isOn: (r) => r.namingIrregularitiesEnabled,
+      toggled: (r, v) => r.copyWith(namingIrregularitiesEnabled: v),
+    ),
 
     // --- Κατάσταση, όχι λάθος.
     (
@@ -467,6 +478,7 @@ class CatalogValidationRules {
     bool? companyInternalPhoneEnabled,
     bool? duplicateRemoteTargetEnabled,
     bool? nicknameInNameEnabled,
+    bool? namingIrregularitiesEnabled,
   }) {
     return CatalogValidationRules(
       internalPhoneDigitsEnabled:
@@ -523,6 +535,8 @@ class CatalogValidationRules {
           duplicateRemoteTargetEnabled ?? this.duplicateRemoteTargetEnabled,
       nicknameInNameEnabled:
           nicknameInNameEnabled ?? this.nicknameInNameEnabled,
+      namingIrregularitiesEnabled:
+          namingIrregularitiesEnabled ?? this.namingIrregularitiesEnabled,
     );
   }
 
@@ -557,6 +571,7 @@ class CatalogValidationRules {
     'company_internal_phone_enabled': companyInternalPhoneEnabled,
     'duplicate_remote_target_enabled': duplicateRemoteTargetEnabled,
     'nickname_in_name_enabled': nicknameInNameEnabled,
+    'naming_irregularities_enabled': namingIrregularitiesEnabled,
   };
 
   String toRawJson() => jsonEncode(toJson());
@@ -730,6 +745,11 @@ class CatalogValidationRules {
         map,
         'nickname_in_name_enabled',
         d.nicknameInNameEnabled,
+      ),
+      namingIrregularitiesEnabled: _boolOf(
+        map,
+        'naming_irregularities_enabled',
+        d.namingIrregularitiesEnabled,
       ),
     );
   }

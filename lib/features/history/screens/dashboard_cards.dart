@@ -1044,36 +1044,34 @@ class MoreSection extends StatelessWidget {
                     ? LayoutBuilder(
                         builder: (context, constraints) {
                           final split = constraints.maxWidth >= 980;
+                          final hourlyCard = ChartCard(
+                            title: 'Κατανομή ανά ώρα',
+                            fill: colors.chartCardFill,
+                            border: colors.chartCardBorder,
+                            child: HourlyBarChart(
+                              buckets: data.hourlyDistribution,
+                              color: colors.actionBlue,
+                            ),
+                          );
+                          final trendCard = ChartCard(
+                            title: 'Τάση Κλήσεων (7 ημέρες)',
+                            fill: colors.chartCardFill,
+                            border: colors.chartCardBorder,
+                            child: TrendLineChart(
+                              trend: data.dailyTrend,
+                              color: colors.kpiGreen.sparkColor,
+                              gridLineColor: colors.chartGridLine,
+                            ),
+                          );
                           if (split) {
                             return Column(
                               children: [
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: ChartCard(
-                                        title: 'Κατανομή ανά ώρα',
-                                        fill: colors.chartCardFill,
-                                        border: colors.chartCardBorder,
-                                        child: HourlyBarChart(
-                                          buckets: data.hourlyDistribution,
-                                          color: colors.actionBlue,
-                                        ),
-                                      ),
-                                    ),
+                                    Expanded(child: hourlyCard),
                                     const SizedBox(width: 14),
-                                    Expanded(
-                                      child: ChartCard(
-                                        title: 'Τάση Κλήσεων (7 ημέρες)',
-                                        fill: colors.chartCardFill,
-                                        border: colors.chartCardBorder,
-                                        child: TrendLineChart(
-                                          trend: data.dailyTrend,
-                                          color: colors.kpiGreen.sparkColor,
-                                          gridLineColor: colors.chartGridLine,
-                                        ),
-                                      ),
-                                    ),
+                                    Expanded(child: trendCard),
                                   ],
                                 ),
                                 const SizedBox(height: 14),
@@ -1083,26 +1081,9 @@ class MoreSection extends StatelessWidget {
                           }
                           return Column(
                             children: [
-                              ChartCard(
-                                title: 'Κατανομή ανά ώρα',
-                                fill: colors.chartCardFill,
-                                border: colors.chartCardBorder,
-                                child: HourlyBarChart(
-                                  buckets: data.hourlyDistribution,
-                                  color: colors.actionBlue,
-                                ),
-                              ),
+                              hourlyCard,
                               const SizedBox(height: 14),
-                              ChartCard(
-                                title: 'Τάση Κλήσεων (7 ημέρες)',
-                                fill: colors.chartCardFill,
-                                border: colors.chartCardBorder,
-                                child: TrendLineChart(
-                                  trend: data.dailyTrend,
-                                  color: colors.kpiGreen.sparkColor,
-                                  gridLineColor: colors.chartGridLine,
-                                ),
-                              ),
+                              trendCard,
                               const SizedBox(height: 14),
                               _categoryDistributionCard(),
                             ],

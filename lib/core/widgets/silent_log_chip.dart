@@ -32,18 +32,26 @@ class SilentLogChip extends StatelessWidget {
       valueListenable: service.diskAvailability,
       builder: (context, available, _) => available
           ? const SizedBox.shrink()
-          : _buildIndicator(context, service.diskUnavailableReason),
+          : _buildIndicator(
+              context,
+              service.diskUnavailableReason,
+              keptLocally: service.hasLocalSpill,
+            ),
     );
   }
 
-  Widget _buildIndicator(BuildContext context, String? reason) {
+  Widget _buildIndicator(
+    BuildContext context,
+    String? reason, {
+    required bool keptLocally,
+  }) {
     final theme = Theme.of(context);
     final color = theme.colorScheme.tertiary;
 
     return CompactTooltip(
       message:
           'Ο φάκελος καταγραφής δεν απαντά, οπότε προς το παρόν:\n'
-          '• τα σφάλματα δεν καταγράφονται πουθενά\n'
+          '${keptLocally ? '• τα σφάλματα κρατιούνται σε αυτόν τον υπολογιστή και θα μεταφερθούν μόλις απαντήσει ο φάκελος\n' : '• τα σφάλματα δεν καταγράφονται πουθενά\n'}'
           '• οι συνάδελφοι δεν βλέπουν ότι δουλεύεις\n'
           '• ο έλεγχος «ποιος άλλος έχει τη βάση» δεν λειτουργεί'
           '${reason == null || reason.isEmpty ? '' : '\n\nΑιτία: $reason'}',

@@ -6,19 +6,37 @@ import 'ai_prompt_template_syntax.dart';
 ///
 /// Η επιλογή/composing (IME) χειρίζεται χωριστά ώστε να μην «σπάει» ο κέρσορας σε Windows.
 class AiPromptTemplateTextEditingController extends TextEditingController {
-  AiPromptTemplateTextEditingController({super.text});
+  AiPromptTemplateTextEditingController({
+    super.text,
+    this.profile = AiPromptProfile.lansweeper,
+  });
 
-  static List<InlineSpan> highlightedChildren(String text, TextStyle? style) {
+  /// Ποια σήματα χρωματίζονται ως γνωστά.
+  final AiPromptProfile profile;
+
+  static List<InlineSpan> highlightedChildren(
+    String text,
+    TextStyle? style, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
     if (text.isEmpty) return const <InlineSpan>[];
     final span = AiPromptTemplateSyntax.buildHighlightedTextSpan(
       template: text,
       baseStyle: style ?? const TextStyle(),
+      profile: profile,
     );
     return span.children ?? <InlineSpan>[TextSpan(text: text, style: style)];
   }
 
-  static TextSpan highlightedTextSpan(String text, TextStyle? style) {
-    return TextSpan(style: style, children: highlightedChildren(text, style));
+  static TextSpan highlightedTextSpan(
+    String text,
+    TextStyle? style, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
+    return TextSpan(
+      style: style,
+      children: highlightedChildren(text, style, profile: profile),
+    );
   }
 
   @override
@@ -35,7 +53,7 @@ class AiPromptTemplateTextEditingController extends TextEditingController {
     if (!withComposing ||
         !val.isComposingRangeValid ||
         val.composing.isCollapsed) {
-      return highlightedTextSpan(val.text, style);
+      return highlightedTextSpan(val.text, style, profile: profile);
     }
 
     final composingStyle =
@@ -53,9 +71,9 @@ class AiPromptTemplateTextEditingController extends TextEditingController {
     return TextSpan(
       style: style,
       children: <InlineSpan>[
-        ...highlightedChildren(before, style),
+        ...highlightedChildren(before, style, profile: profile),
         TextSpan(style: composingStyle, text: inside),
-        ...highlightedChildren(after, style),
+        ...highlightedChildren(after, style, profile: profile),
       ],
     );
   }

@@ -102,6 +102,28 @@ void main() {
       );
     });
 
+    test('το ελάχιστο των Ρυθμίσεων είναι ακριβώς το δάπεδο', () {
+      for (final (path, network) in [
+        (_localPath, false),
+        (_networkPath, true),
+      ]) {
+        final minimum = minimumDatabaseOpenTimeoutSeconds(network: network);
+
+        expect(
+          resolveDatabaseOpenTimeout(path, configuredSeconds: minimum),
+          Duration(seconds: minimum),
+          reason: 'Η μικρότερη τιμή που δέχεται η οθόνη ισχύει όπως γράφτηκε.',
+        );
+        expect(
+          resolveDatabaseOpenTimeout(path, configuredSeconds: minimum - 1),
+          Duration(seconds: minimum),
+          reason:
+              'Κάτω από το ελάχιστο η ρύθμιση δεν αλλάζει τίποτα — γι\' αυτό '
+              'η οθόνη δεν τη δέχεται.',
+        );
+      }
+    });
+
     test('η τοπική βάση δεν πληρώνει την αναμονή του δικτύου', () {
       expect(
         resolveDatabaseOpenTimeout(_localPath).inSeconds,
@@ -109,6 +131,29 @@ void main() {
         reason:
             'Η διαδρομή αποφασίζει: ένα τοπικό αρχείο δεν έχει λόγο να '
             'περιμένει όσο ένας κοινόχρηστος φάκελος.',
+      );
+    });
+  });
+
+  group('η ένδειξη των Ρυθμίσεων λέει την αναμονή που ισχύει', () {
+    test('βάση δικτύου με μικρότερη ρύθμιση: το ελάχιστο, με εξήγηση', () {
+      expect(
+        databaseOpenWaitLabel(_networkPath, configuredSeconds: 8),
+        'Αναμονή: 18 δευτ. (ελάχιστο δικτύου)',
+      );
+    });
+
+    test('βάση δικτύου με μεγαλύτερη ρύθμιση: σκέτος ο αριθμός', () {
+      expect(
+        databaseOpenWaitLabel(_networkPath, configuredSeconds: 30),
+        'Αναμονή: 30 δευτ.',
+      );
+    });
+
+    test('τοπική βάση: σκέτος ο αριθμός της ρύθμισης', () {
+      expect(
+        databaseOpenWaitLabel(_localPath, configuredSeconds: 8),
+        'Αναμονή: 8 δευτ.',
       );
     });
   });

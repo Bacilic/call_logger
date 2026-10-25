@@ -60,7 +60,7 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
   final ScrollController _scrollController = ScrollController();
   late final FocusNode _focusNode;
 
-  late final List<_PromptSuggestion> _allSuggestions;
+  late List<_PromptSuggestion> _allSuggestions;
 
   OverlayEntry? _overlayEntry;
 
@@ -86,8 +86,14 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
     _scrollController.addListener(_handleFieldScroll);
     _lastText = widget.controller.text;
     widget.controller.addListener(_onTextChanged);
-    _validation = AiPromptTemplateSyntax.validate(widget.controller.text);
+    _validation = _validate(widget.controller.text);
   }
+
+  /// Τα σήματα και η μορφή απάντησης ορίζονται από τον controller του πεδίου.
+  AiPromptProfile get _profile => widget.controller.profile;
+
+  AiPromptTemplateValidation _validate(String text) =>
+      AiPromptTemplateSyntax.validate(text, profile: _profile);
 
   @override
   void didUpdateWidget(covariant AiPromptTemplateField oldWidget) {
@@ -97,7 +103,8 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
       oldWidget.controller.removeListener(_onTextChanged);
       widget.controller.addListener(_onTextChanged);
       _lastText = widget.controller.text;
-      _validation = AiPromptTemplateSyntax.validate(widget.controller.text);
+      _allSuggestions = _buildAllSuggestions();
+      _validation = _validate(widget.controller.text);
     }
   }
 
@@ -112,9 +119,9 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
     super.dispose();
   }
 
-  static List<_PromptSuggestion> _buildAllSuggestions() {
+  List<_PromptSuggestion> _buildAllSuggestions() {
     return <_PromptSuggestion>[
-      for (final placeholder in kAiPromptPlaceholders)
+      for (final placeholder in _profile.placeholders)
         _PromptSuggestion(
           name: AiPromptTemplateSyntax.placeholderNameFromToken(
             placeholder.token,
@@ -122,7 +129,7 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
           label: placeholder.label,
           kind: _PromptSuggestionKind.placeholder,
         ),
-      for (final placeholder in kAiPromptPlaceholders)
+      for (final placeholder in _profile.placeholders)
         _PromptSuggestion(
           name: AiPromptTemplateSyntax.placeholderNameFromToken(
             placeholder.token,
@@ -135,7 +142,7 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
 
   void _onTextChanged() {
     final text = widget.controller.text;
-    final next = AiPromptTemplateSyntax.validate(text);
+    final next = _validate(text);
     if (next.isValid != _validation.isValid ||
         next.errors.join() != _validation.errors.join() ||
         next.warnings.join() != _validation.warnings.join()) {
@@ -463,7 +470,7 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
     final text = controller.text;
     final start = selection.start >= 0 ? selection.start : text.length;
     final end = selection.end >= 0 ? selection.end : text.length;
-    final insert = kAiJsonResponseBlueprint;
+    final insert = _profile.jsonResponseBlueprint;
     final newText = text.replaceRange(start, end, insert);
     controller.value = TextEditingValue(
       text: newText,
@@ -473,11 +480,26 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
   }
 
   Future<void> _showPromptHelpDialog() async {
+    final profile = _profile;
+    final examples = profile.placeholders
+        .take(2)
+        .map((p) => p.token)
+        .join(', ');
+    final keys = profile.jsonResponseKeys;
+    final formatBody = keys.isEmpty
+        ? 'Αυτή η προτροπή δεν ζητά απάντηση σε συγκεκριμένη μορφή: τη '
+              'διαβάζει η ΤΝ μαζί με τα στοιχεία που τη συνοδεύουν.'
+        : 'Η προτροπή πρέπει πάντα να ζητά από την ΤΝ απάντηση σε JSON με τα '
+              'πεδία ${keys.join(', ')} — π.χ.\n'
+              '${profile.jsonResponseBlueprint}\n'
+              'Χωρίς αυτό το αίτημα, η εφαρμογή δεν θα μπορέσει να διαβάσει την '
+              'απάντηση και να συμπληρώσει τη φόρμα. Η σειρά των πεδίων δεν '
+              'έχει σημασία· η παρουσία τους είναι το μόνο απαραίτητο.';
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Πώς λειτουργεί η προτροπή'),
-        content: const SingleChildScrollView(
+        content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -487,8 +509,8 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
                 body:
                     'Το κείμενο της προτροπής χρωματίζεται αυτόματα ώστε να '
                     'ξεχωρίζουν τα λειτουργικά τμήματά της:\n'
-                    '• Πράσινο — δεσμευτές θέσης (placeholders) όπως {Υπάλληλος}, '
-                    '{Τμήμα}: αντικαθίστανται με τα πραγματικά στοιχεία της κλήσης.\n'
+                    '• Πράσινο — δεσμευτές θέσης (placeholders) όπως $examples: '
+                    'αντικαθίστανται με τα πραγματικά στοιχεία.\n'
                     '• Μπλε — πεδία (blocks) {@Όνομα} … {@/Όνομα}: το περιεχόμενο '
                     'ανάμεσά τους εμφανίζεται στην ΤΝ μόνο όταν το αντίστοιχο '
                     'στοιχείο έχει τιμή· διαφορετικά αποσιωπάται εντελώς.\n'
@@ -504,20 +526,10 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
                     'φιλτράρισμα, πλοηγηθείτε με τα βέλη πάνω/κάτω και επιβεβαιώστε '
                     'με Enter ή με κλικ· το Escape κλείνει τη λίστα. Ένα πεδίο είναι '
                     'χρήσιμο όταν θέλετε μια ολόκληρη φράση να εμφανίζεται μόνο υπό '
-                    'προϋπόθεση — π.χ. να αναφέρεται ο εξοπλισμός μόνο αν η κλήση '
-                    'συνδέεται με συγκεκριμένο εξοπλισμό.',
+                    'προϋπόθεση — μόνο όταν το αντίστοιχο στοιχείο έχει τιμή.',
               ),
               Divider(height: 24),
-              _PromptHelpSection(
-                title: 'Μορφή απάντησης',
-                body:
-                    'Η προτροπή πρέπει πάντα να ζητά από την ΤΝ απάντηση σε JSON με τα '
-                    'τρία πεδία title, description, solution — π.χ.\n'
-                    '{"title":"…","description":"…","solution":"…"}\n'
-                    'Χωρίς αυτό το αίτημα, η εφαρμογή δεν θα μπορέσει να διαβάσει την '
-                    'απάντηση και να συμπληρώσει τη φόρμα. Η σειρά των τριών πεδίων δεν '
-                    'έχει σημασία· η παρουσία τους είναι το μόνο απαραίτητο.',
-              ),
+              _PromptHelpSection(title: 'Μορφή απάντησης', body: formatBody),
             ],
           ),
         ),
@@ -566,16 +578,19 @@ class _AiPromptTemplateFieldState extends State<AiPromptTemplateField> {
           ],
         ),
         const SizedBox(height: 6),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: ActionChip(
-            visualDensity: VisualDensity.compact,
-            avatar: const Icon(Icons.data_object_outlined, size: 16),
-            label: const Text('JSON απάντησης'),
-            onPressed: _insertJsonBlueprint,
+        // Προτροπή χωρίς απάντηση JSON δεν έχει τι να εισαγάγει εδώ.
+        if (_profile.jsonResponseKeys.isNotEmpty) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ActionChip(
+              visualDensity: VisualDensity.compact,
+              avatar: const Icon(Icons.data_object_outlined, size: 16),
+              label: const Text('JSON απάντησης'),
+              onPressed: _insertJsonBlueprint,
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
+          const SizedBox(height: 6),
+        ],
         CompositedTransformTarget(
           link: _layerLink,
           child: InputDecorator(

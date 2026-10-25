@@ -42,6 +42,38 @@ int? rowIndexAfterKey({
   return null;
 }
 
+/// Η θέση κύλισης που κάνει ολόκληρη ορατή τη γραμμή [index], σε λίστα όπου
+/// όλες οι γραμμές έχουν το ίδιο ύψος [rowExtent].
+///
+/// Κυλά το ελάχιστο: αν η γραμμή φαίνεται ήδη, η θέση [currentOffset] δεν
+/// αλλάζει. Έτσι δουλεύει και για γραμμές που η λίστα δεν έχει χτίσει ακόμη
+/// — η θέση τους βγαίνει από το νούμερο, χωρίς να χρειάζεται η ίδια η γραμμή.
+double scrollOffsetRevealingRow({
+  required int index,
+  required double rowExtent,
+  required double viewportExtent,
+  required double currentOffset,
+}) {
+  final top = index * rowExtent;
+  final bottom = top + rowExtent;
+  if (top < currentOffset) return top;
+  if (bottom > currentOffset + viewportExtent) {
+    return bottom - viewportExtent;
+  }
+  return currentOffset;
+}
+
+/// Πόσες γραμμές ύψους [rowExtent] χωρούν ολόκληρες σε [viewportExtent] — το
+/// βήμα του Page Up/Down σε λίστα χωρίς σελίδες. Τουλάχιστον μία.
+int rowsFittingViewport({
+  required double viewportExtent,
+  required double rowExtent,
+}) {
+  if (rowExtent <= 0) return 1;
+  final fitting = (viewportExtent / rowExtent).floor();
+  return fitting < 1 ? 1 : fitting;
+}
+
 /// Η πρώτη γραμμή της σελίδας που πρέπει να φαίνεται ώστε η [focusedRow] να
 /// είναι ορατή. Αν είναι ήδη μέσα στη σελίδα που αρχίζει από [currentStart],
 /// η σελίδα δεν αλλάζει.
@@ -54,4 +86,35 @@ int pageStartShowingRow({
     return currentStart;
   }
   return (focusedRow ~/ pageSize) * pageSize;
+}
+
+/// Η πρώτη γραμμή της τελευταίας σελίδας ([count] γραμμές, [pageSize] ανά
+/// σελίδα). Χωρίς γραμμές, `0`.
+int lastPageStart({required int count, required int pageSize}) {
+  if (count <= 0) return 0;
+  return ((count - 1) ~/ pageSize) * pageSize;
+}
+
+/// Η αρχή της προηγούμενης σελίδας από εκείνη που αρχίζει στο [start]· δεν
+/// πέφτει κάτω από την πρώτη ούτε πάνω από την τελευταία σελίδα.
+int previousPageStart({
+  required int start,
+  required int count,
+  required int pageSize,
+}) {
+  return (start - pageSize).clamp(
+    0,
+    lastPageStart(count: count, pageSize: pageSize),
+  );
+}
+
+/// Η αρχή της επόμενης σελίδας, ή `null` όταν η σελίδα στο [start] είναι η
+/// τελευταία.
+int? nextPageStart({
+  required int start,
+  required int count,
+  required int pageSize,
+}) {
+  final next = start + pageSize;
+  return next < count ? next : null;
 }

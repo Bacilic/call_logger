@@ -12,8 +12,6 @@ class KnowledgeArticle {
     this.categoryId,
     this.categoryName,
     this.sourceCallId,
-    this.timesUsed = 0,
-    this.lastUsedAt,
     this.createdAt,
     this.updatedAt,
   });
@@ -43,8 +41,6 @@ class KnowledgeArticle {
   /// Η κλήση από την οποία γεννήθηκε το άρθρο, αν γεννήθηκε από κλήση.
   final int? sourceCallId;
 
-  final int timesUsed;
-  final String? lastUsedAt;
   final String? createdAt;
   final String? updatedAt;
 
@@ -71,15 +67,13 @@ class KnowledgeArticle {
       categoryId: map['category_id'] as int?,
       categoryName: map['category_name'] as String?,
       sourceCallId: map['source_call_id'] as int?,
-      timesUsed: (map['times_used'] as int?) ?? 0,
-      lastUsedAt: map['last_used_at'] as String?,
       createdAt: map['created_at'] as String?,
       updatedAt: map['updated_at'] as String?,
     );
   }
 
-  /// Μόνο τα πεδία που κατέχει ο χρήστης· μετρητές και χρόνοι τα γράφει το
-  /// repository, ώστε ο καλών να μην μπορεί να τα αλλοιώσει κατά λάθος.
+  /// Μόνο τα πεδία που κατέχει ο χρήστης· τους χρόνους τους γράφει το
+  /// repository, ώστε ο καλών να μην μπορεί να τους αλλοιώσει κατά λάθος.
   Map<String, Object?> toWriteMap() {
     return <String, Object?>{
       'topic': title.trim(),
@@ -101,8 +95,6 @@ class KnowledgeArticle {
     bool clearCategory = false,
     String? categoryName,
     int? sourceCallId,
-    int? timesUsed,
-    String? lastUsedAt,
     String? createdAt,
     String? updatedAt,
   }) {
@@ -115,8 +107,6 @@ class KnowledgeArticle {
       categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
       categoryName: clearCategory ? null : (categoryName ?? this.categoryName),
       sourceCallId: sourceCallId ?? this.sourceCallId,
-      timesUsed: timesUsed ?? this.timesUsed,
-      lastUsedAt: lastUsedAt ?? this.lastUsedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

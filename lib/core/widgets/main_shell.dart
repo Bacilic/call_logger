@@ -28,7 +28,6 @@ import '../providers/settings_route_intent_provider.dart';
 import '../providers/shell_navigation_intent_provider.dart';
 import '../providers/spell_check_provider.dart';
 import '../providers/task_focus_intent_provider.dart';
-import '../providers/quick_call_providers.dart';
 import 'main_nav_destination.dart';
 import 'main_nav_rail_metrics.dart';
 import 'main_nav_rail_toggle_button.dart';
@@ -360,20 +359,15 @@ class MainShellState extends ConsumerState<MainShell> {
 
   Future<void> _openSettingsScreen({SettingsSection? initialSection}) async {
     if (!mounted) return;
-    ref.read(settingsRouteOpenForQuickCallProvider.notifier).setOpen(true);
-    try {
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (context) => SettingsScreen(
-            initialSection: initialSection,
-            onAfterDatabaseChanged:
-                widget.onDatabaseReopened ?? widget.onReturnFromSettings,
-          ),
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (context) => SettingsScreen(
+          initialSection: initialSection,
+          onAfterDatabaseChanged:
+              widget.onDatabaseReopened ?? widget.onReturnFromSettings,
         ),
-      );
-    } finally {
-      ref.read(settingsRouteOpenForQuickCallProvider.notifier).setOpen(false);
-    }
+      ),
+    );
     if (!mounted) return;
     await widget.onReturnFromSettings?.call();
     if (!mounted) return;
@@ -567,18 +561,6 @@ class MainShellState extends ConsumerState<MainShell> {
       textScaler: MediaQuery.textScalerOf(context),
     );
 
-    final currentNavForQuickCall = ref.watch(
-      mainShellEffectiveDestinationProvider,
-    );
-    if (currentNavForQuickCall != effectiveDestination) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        ref
-            .read(mainShellEffectiveDestinationProvider.notifier)
-            .setDestination(effectiveDestination);
-      });
-    }
-
     if (dictionaryImmersive || historyImmersive) {
       return Stack(
         children: [
@@ -606,6 +588,11 @@ class MainShellState extends ConsumerState<MainShell> {
     return Stack(
       children: [
         Scaffold(
+          // Οι κύριες οθόνες δεν έχουν κουμπί γρήγορης κλήσης (ανοίγει με τη
+          // συντόμευση)· εδώ φαίνεται μόνο το τηλέφωνο της ελαχιστοποιημένης.
+          floatingActionButton: const QuickCallFloatingButton(
+            showOpenButton: false,
+          ),
           appBar: showAppBar
               ? AppBar(
                   title: isLampDestination

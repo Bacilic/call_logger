@@ -14,6 +14,7 @@ import 'calls_search_index.dart';
 import 'directory_support.dart';
 import 'call_department_deleted_flag.dart';
 import 'sql_like.dart';
+import '../utils/display_text_sort.dart';
 
 /// Εγγραφές και αναγνώσεις του πίνακα `calls` (δημιουργία, ενημέρωση,
 /// κλωνοποίηση, ιστορικό, μετρήσεις).
@@ -612,10 +613,12 @@ class CallsRepository {
       WHERE COALESCE(calls.is_deleted, 0) = 0
       ORDER BY equipment_code COLLATE NOCASE
       ''');
-    return rows
-        .map((row) => (row['equipment_code'] as String?)?.trim() ?? '')
-        .where((code) => code.isNotEmpty && code != '-')
-        .toList();
+    return sortedForDisplay(
+      rows
+          .map((row) => (row['equipment_code'] as String?)?.trim() ?? '')
+          .where((code) => code.isNotEmpty && code != '-'),
+      (code) => [code],
+    );
   }
 
   /// True όταν υπάρχει έστω μία κλήση χωρίς καταγεγραμμένο χρήστη.

@@ -6,6 +6,7 @@ import 'package:call_logger/core/init/database_switch_guard.dart';
 import 'package:call_logger/core/providers/active_critical_operations_provider.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/calls/provider/call_entry_provider.dart';
+import 'package:call_logger/features/calls/provider/quick_call_session_provider.dart';
 import 'package:call_logger/features/calls/provider/smart_entity_selector_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -91,6 +92,53 @@ void main() {
 
     container.read(callEntryProvider.notifier).reset();
   });
+
+  testWidgets(
+    'ελαχιστοποιημένη γρήγορη καταγραφή → εμπόδιο openCallForm· η «Διακοπή '
+    'κλήσης» την τερματίζει',
+    (tester) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      bool? allowed;
+      final ref = await _pumpWidgetRef(
+        tester,
+        container,
+        home: (context, ref) => Scaffold(
+          body: TextButton(
+            onPressed: () async {
+              allowed = await ensureDatabaseSwitchAllowed(
+                context,
+                ref,
+                canObserveOtherStations: () => true,
+              );
+            },
+            child: const Text('trigger'),
+          ),
+        ),
+      );
+
+      final session = container.read(quickCallSessionProvider.notifier);
+      session.open();
+      session.minimize();
+
+      expect(
+        collectDatabaseSwitchBlockers(
+          ref,
+        ).any((b) => b.kind == DatabaseSwitchBlockerKind.openCallForm),
+        isTrue,
+        reason: 'η ελαχιστοποιημένη καταγραφή είναι ανοιχτή κλήση',
+      );
+
+      await tester.tap(find.text('trigger'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Διακοπή κλήσης'));
+      await tester.pumpAndSettle();
+
+      expect(allowed, isTrue);
+      expect(container.read(quickCallSessionProvider), QuickCallPhase.closed);
+    },
+  );
 
   testWidgets(
     'μητρώο lansweeperTicketSubmit → μη διακόψιμο εμπόδιο· end το αφαιρεί',

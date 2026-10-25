@@ -23,6 +23,7 @@ import '../../models/equipment_column.dart';
 import '../../../../core/widgets/keyboard_row_navigation.dart';
 import '../../../../core/widgets/row_navigation_logic.dart';
 import 'catalog_select_all_checkbox.dart';
+import 'catalog_table_chrome.dart';
 import 'catalog_table_support.dart';
 
 const _minColumnWidth = 40.0;
@@ -180,7 +181,7 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
       return;
     }
     if (_pagedFirstRowIndex >= n) {
-      _pagedFirstRowIndex = ((n - 1) ~/ _rowsPerPage) * _rowsPerPage;
+      _pagedFirstRowIndex = lastPageStart(count: n, pageSize: _rowsPerPage);
     }
   }
 
@@ -193,95 +194,6 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
     return base.copyWith(
       fontStyle: FontStyle.italic,
       color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
-    );
-  }
-
-  Widget _buildStickyHeader(
-    BuildContext context,
-    List<DataColumn> columns,
-    double headingHeight,
-    Color? headingColor,
-    TextStyle headingTextStyle,
-    Map<int, TableColumnWidth> columnWidths,
-  ) {
-    final sortedIndex = _sortedVisibleColumnIndex();
-    final asc = widget.sortAscending;
-    return Table(
-      columnWidths: columnWidths,
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      children: [
-        TableRow(
-          decoration: BoxDecoration(
-            color:
-                headingColor ??
-                Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
-          children: [
-            for (var i = 0; i < columns.length; i++)
-              TableCell(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Expanded(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: columns[i].onSort != null
-                              ? () => columns[i].onSort!(
-                                  0,
-                                  i == sortedIndex ? !asc : true,
-                                )
-                              : null,
-                          child: Container(
-                            height: headingHeight,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            alignment: Alignment.centerLeft,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Expanded(
-                                  child: DefaultTextStyle(
-                                    style: headingTextStyle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    child: columns[i].label,
-                                  ),
-                                ),
-                                if (i == sortedIndex) ...[
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    asc
-                                        ? Icons.arrow_drop_up
-                                        : Icons.arrow_drop_down,
-                                    size: 18,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    _TableResizeHandle(
-                      onResize: (delta) {
-                        _setColumnWidth(
-                          i,
-                          _widthForColumn(widget.visibleColumns[i]) + delta,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ],
     );
   }
 
@@ -319,13 +231,18 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildStickyHeader(
-                context,
-                columns,
-                headingHeight,
-                headingColor,
-                headingTextStyle,
-                columnWidths,
+              CatalogStickyHeader(
+                columns: columns,
+                headingHeight: headingHeight,
+                headingColor: headingColor,
+                headingTextStyle: headingTextStyle,
+                columnWidths: columnWidths,
+                sortedIndex: _sortedVisibleColumnIndex(),
+                sortAscending: widget.sortAscending,
+                onResizeColumn: (i, delta) => _setColumnWidth(
+                  i,
+                  _widthForColumn(widget.visibleColumns[i]) + delta,
+                ),
               ),
               Expanded(
                 child: SingleChildScrollView(
@@ -345,100 +262,6 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
                 ),
               ),
               ?bottomBar,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _equipmentPaginationBar(BuildContext context, ThemeData theme) {
-    final n = widget.items.length;
-    if (n == 0) {
-      return Material(
-        color: theme.colorScheme.surfaceContainerLowest,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Center(
-            child: Text(
-              '0 από 0',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium,
-            ),
-          ),
-        ),
-      );
-    }
-    final start = _pagedFirstRowIndex;
-    final end = (start + _rowsPerPage).clamp(0, n);
-    final lastPageStart = ((n - 1) ~/ _rowsPerPage) * _rowsPerPage;
-
-    void goFirst() => setState(() => _pagedFirstRowIndex = 0);
-    void goPrev() => setState(
-      () =>
-          _pagedFirstRowIndex = (start - _rowsPerPage).clamp(0, lastPageStart),
-    );
-    void goNext() => setState(() {
-      final next = start + _rowsPerPage;
-      if (next < n) _pagedFirstRowIndex = next;
-    });
-    void goLast() => setState(() => _pagedFirstRowIndex = lastPageStart);
-
-    return Theme(
-      data: theme.copyWith(
-        iconButtonTheme: IconButtonThemeData(
-          style: IconButton.styleFrom(
-            minimumSize: const Size(32, 32),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            padding: const EdgeInsets.all(4),
-            visualDensity: VisualDensity.compact,
-            iconSize: 20,
-          ),
-        ),
-      ),
-      child: Material(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.65,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Πρώτη σελίδα',
-                icon: const Icon(Icons.first_page),
-                onPressed: start > 0 ? goFirst : null,
-              ),
-              IconButton(
-                tooltip: 'Προηγούμενη',
-                icon: const Icon(Icons.chevron_left),
-                onPressed: start > 0 ? goPrev : null,
-              ),
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text(
-                      '${start + 1}–$end από $n',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Επόμενη',
-                icon: const Icon(Icons.chevron_right),
-                onPressed: end < n ? goNext : null,
-              ),
-              IconButton(
-                tooltip: 'Τελευταία σελίδα',
-                icon: const Icon(Icons.last_page),
-                onPressed: end < n ? goLast : null,
-              ),
             ],
           ),
         ),
@@ -580,59 +403,17 @@ class _EquipmentDataTableState extends State<EquipmentDataTable> {
               columnWidths: columnWidths,
               tableWidth: tableWidth,
               firstRowIndex: start,
-              bottomBar: _equipmentPaginationBar(context, theme),
+              bottomBar: CatalogPaginationBar(
+                rowCount: widget.items.length,
+                firstRowIndex: _pagedFirstRowIndex,
+                pageSize: _rowsPerPage,
+                onFirstRowIndexChanged: (start) =>
+                    setState(() => _pagedFirstRowIndex = start),
+              ),
             );
           }
           return tableContent;
         },
-      ),
-    );
-  }
-}
-
-class _TableResizeHandle extends StatefulWidget {
-  const _TableResizeHandle({required this.onResize});
-
-  final void Function(double delta) onResize;
-
-  @override
-  State<_TableResizeHandle> createState() => _TableResizeHandleState();
-}
-
-class _TableResizeHandleState extends State<_TableResizeHandle> {
-  bool _isHovered = false;
-  bool _isDragging = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final showActive = _isHovered || _isDragging;
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeColumn,
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragStart: (_) => setState(() => _isDragging = true),
-        onHorizontalDragEnd: (_) => setState(() => _isDragging = false),
-        onHorizontalDragCancel: () => setState(() => _isDragging = false),
-        onHorizontalDragUpdate: (details) => widget.onResize(details.delta.dx),
-        child: SizedBox(
-          width: 12,
-          child: Center(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              width: 2,
-              height: showActive ? 26 : 18,
-              decoration: BoxDecoration(
-                color: showActive
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

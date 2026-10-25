@@ -130,7 +130,6 @@ class KnowledgeBaseRepository {
       final id = article.id;
       if (id == null) {
         payload['created_at'] = nowIso;
-        payload['times_used'] = 0;
         final newId = await txn.insert('knowledge_base', payload);
         await AuditService.log(
           txn,
@@ -224,23 +223,6 @@ class KnowledgeBaseRepository {
         },
       );
     });
-  }
-
-  /// Σημειώνει ότι τα άρθρα χρησιμοποιήθηκαν σε πραγματικό περιστατικό.
-  ///
-  /// Ο μετρητής είναι το μόνο σήμα ποιότητας που δεν χρειάζεται να δηλώσει
-  /// κανείς: όσα άρθρα ξαναχρησιμοποιούνται ανεβαίνουν μόνα τους. Δεν περνά από
-  /// Ιστορικό — δεν είναι αλλαγή περιεχομένου, είναι στατιστικό.
-  Future<void> markUsed(List<int> articleIds) async {
-    final ids = articleIds.toSet().toList();
-    if (ids.isEmpty) return;
-    final nowIso = DateTime.now().toIso8601String();
-    final placeholders = List.filled(ids.length, '?').join(', ');
-    await db.rawUpdate(
-      'UPDATE knowledge_base SET times_used = times_used + 1, last_used_at = ? '
-      'WHERE id IN ($placeholders)',
-      <Object?>[nowIso, ...ids],
-    );
   }
 
   Future<int> countArticles() async {

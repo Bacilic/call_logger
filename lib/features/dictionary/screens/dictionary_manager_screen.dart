@@ -27,14 +27,21 @@ import '../dictionary_table_layout.dart';
 import '../providers/dictionary_layout_provider.dart';
 import '../models/lexicon_list_filters_model.dart';
 import '../models/lexicon_row_filter.dart';
+import '../models/lexicon_selection.dart';
 import '../services/lexicon_list_loader.dart';
 import '../services/lexicon_list_query.dart';
+import '../services/lexicon_row_writer.dart';
 import '../providers/lexicon_list_filters_provider.dart';
 import '../providers/lexicon_scroll_provider.dart';
+import '../providers/lexicon_selection_provider.dart';
 import '../providers/lexicon_spelling_panel_provider.dart';
+import '../services/lexicon_ai_prompt_store.dart';
 import '../widgets/dictionary_grid_row.dart';
 import 'dictionary_manager_actions.dart';
+import 'lexicon_ai_review_flow.dart';
+import '../../history/widgets/lansweeper/ai_prompt_template_editor_dialog.dart';
 import '../widgets/dictionary_settings_dialog.dart';
+import '../widgets/lexicon_selection_bar.dart';
 import '../widgets/lexicon_spelling_panel.dart';
 
 const _kLexiconLangAssetAll = 'assets/greek_english.png';
@@ -179,6 +186,12 @@ class DictionaryManagerScreenState
 
   Timer? _searchDebounce;
 
+  /// Η εστίαση της λίστας, για τα πλήκτρα της επιλογής (Ctrl + A, Esc).
+  final _tableFocus = FocusNode(debugLabel: 'lexicon-table');
+
+  /// Περιμένουμε την απάντηση της ΤΝ στον «Έλεγχο με ΤΝ».
+  bool _aiReviewing = false;
+
   double _tableViewportWidth = 0;
   double _tableViewportHeight = 0;
 
@@ -303,6 +316,7 @@ class DictionaryManagerScreenState
     _lettersFilterDebounce?.cancel();
     _searchCtrl.dispose();
     _lettersCountField.dispose();
+    _tableFocus.dispose();
     _verticalTableScroll.removeListener(_onVerticalLexiconScroll);
     _verticalTableScroll.dispose();
     _horizontalTableScroll.dispose();
@@ -444,11 +458,84 @@ class DictionaryManagerScreenState
     );
   }
 
-  String _lexiconRowWidgetKey(Map<String, dynamic> row) {
-    final entryId = row['entry_id'] as int?;
-    if (entryId != null) return 'lex_e_$entryId';
-    final normKey = row['norm_key'] as String? ?? '';
-    return 'lex_d_$normKey';
+  /// Κλικ στο κουτάκι μιας γραμμής: με Shift επιλέγει περιοχή.
+  void _onRowSelectTap(Map<String, dynamic> row) {
+    final selection = ref.read(lexiconSelectionProvider.notifier);
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      selection.selectRange(_rows, row);
+    } else {
+      selection.toggle(row);
+    }
+    // Η εστίαση φεύγει από το πεδίο της λέξης, ώστε Ctrl + A και Esc να
+    // μιλούν στην επιλογή και όχι στο κείμενο.
+    _tableFocus.requestFocus();
+  }
+
+  /// Ctrl + A: όλη η σελίδα· Esc: καθαρισμός. Όσο γράφει κανείς σε πεδίο,
+  /// τα πλήκτρα ανήκουν στο κείμενο.
+  KeyEventResult _onTableKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (focused?.findAncestorWidgetOfExactType<EditableText>() != null) {
+      return KeyEventResult.ignored;
+    }
+    final selection = ref.read(lexiconSelectionProvider.notifier);
+    if (event.logicalKey == LogicalKeyboardKey.keyA &&
+        HardwareKeyboard.instance.isControlPressed) {
+      selection.addAll(_rows);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape &&
+        !ref.read(lexiconSelectionProvider).isEmpty) {
+      selection.clear();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// «Όλες του φίλτρου»: κάθε λέξη που ταιριάζει, σε όλες τις σελίδες.
+  Future<void> _selectAllMatching() async {
+    try {
+      final query = LexiconListQuery.from(
+        ref.read(lexiconListFiltersProvider),
+        search: _searchCtrl.text,
+        lettersText: _lettersCountField.text,
+      );
+      final dict = DictionaryRepository(await DatabaseHelper.instance.database);
+      final total = await query.count(dict);
+      final rows = await query.page(dict, limit: total, offset: 0);
+      if (!mounted) return;
+      ref.read(lexiconSelectionProvider.notifier).addAll(rows);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(humanizeUserFacingError(e))));
+    }
+  }
+
+  Future<void> _runAiReview() async {
+    await runLexiconAiReviewFlow(
+      context: context,
+      ref: ref,
+      writer: _actions.writer,
+      refreshList: _refreshList,
+      onWaiting: (waiting) {
+        if (mounted) setState(() => _aiReviewing = waiting);
+      },
+    );
+    _refocusTable();
+  }
+
+  Future<void> _editReviewPrompt() async {
+    await openPersonalPromptEditor(context, LexiconPrompt.review);
+    _refocusTable();
+  }
+
+  /// Μετά από διάλογο η εστίαση γυρνά στη λίστα, ώστε Ctrl + A και Esc να
+  /// δουλεύουν χωρίς πρώτα ένα κλικ.
+  void _refocusTable() {
+    if (mounted) _tableFocus.requestFocus();
   }
 
   int _indexOfLexiconRow({required int? entryId, required String normKey}) {
@@ -472,10 +559,7 @@ class DictionaryManagerScreenState
     required String oldNormKey,
     required String displayWord,
     required String category,
-    bool promoteFromDraft = false,
-    int? promotedEntryId,
-    String? promotedSrc,
-    String? promotedLang,
+    required LexiconRowWriteResult written,
   }) {
     final index = _indexOfLexiconRow(entryId: entryId, normKey: oldNormKey);
     if (index < 0) return;
@@ -489,12 +573,11 @@ class DictionaryManagerScreenState
     updated['cat'] = category;
     updated['letters_count'] = metrics.lettersCount;
     updated['diacritic_mark_count'] = metrics.diacriticMarkCount;
-    if (promoteFromDraft && promotedEntryId != null) {
-      updated['entry_id'] = promotedEntryId;
-      updated['src'] = promotedSrc ?? 'user';
-      if (promotedLang != null && promotedLang.isNotEmpty) {
-        updated['lang'] = promotedLang;
-      }
+    if (written.entryId != null) {
+      updated['entry_id'] = written.entryId;
+      updated['src'] = written.src;
+      final lang = written.lang;
+      if (lang != null && lang.isNotEmpty) updated['lang'] = lang;
     }
 
     setState(() {
@@ -1597,201 +1680,257 @@ class DictionaryManagerScreenState
     final listFilters = vm.listFilters;
     final lexiconCategoryOptions = vm.categoryOptions;
     final lexiconContinuousScroll = vm.continuousScroll;
+    final selection = ref.watch(lexiconSelectionProvider);
+    final selectionNotifier = ref.read(lexiconSelectionProvider.notifier);
     return Expanded(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                _scheduleDictionaryLayoutSync(
-                  context,
-                  viewportWidth: constraints.maxWidth,
-                  viewportHeight: constraints.maxHeight,
-                  columnGroups: listFilters.columnGroups,
-                );
-                final tableLayout = ref.watch(dictionaryLayoutProvider);
-                final columnsCount = tableLayout.columnsCount;
-                final gridRowCount = tableLayout.gridRowCount;
-                final footerRows = lexiconContinuousScroll && _loadingMore
-                    ? 1
-                    : 0;
-                final listItemCount = gridRowCount + footerRows;
+            child: Focus(
+              focusNode: _tableFocus,
+              onKeyEvent: _onTableKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LexiconSelectionBar(
+                    selectedCount: selection.count,
+                    matchingCount: _totalCount,
+                    reviewing: _aiReviewing,
+                    onSelectAllMatching: () => unawaited(_selectAllMatching()),
+                    onClear: selectionNotifier.clear,
+                    onReview: () => unawaited(_runAiReview()),
+                    onEditPrompt: () => unawaited(_editReviewPrompt()),
+                  ),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        _scheduleDictionaryLayoutSync(
+                          context,
+                          viewportWidth: constraints.maxWidth,
+                          viewportHeight: constraints.maxHeight,
+                          columnGroups: listFilters.columnGroups,
+                        );
+                        final tableLayout = ref.watch(dictionaryLayoutProvider);
+                        final columnsCount = tableLayout.columnsCount;
+                        final gridRowCount = tableLayout.gridRowCount;
+                        final footerRows =
+                            lexiconContinuousScroll && _loadingMore ? 1 : 0;
+                        final listItemCount = gridRowCount + footerRows;
 
-                return AnimatedBuilder(
-                  animation: Listenable.merge(_lexiconWordWidthDuringDrag),
-                  builder: (context, _) {
-                    final liveDragWidths = _lexiconWordWidthDuringDrag
-                        .map((n) => n.value)
-                        .toList(growable: false);
-                    final groupLayouts = tableLayout.groupLayoutsWithLiveDrag(
-                      liveDragWidths,
-                    );
-                    final scrollW = tableLayout.effectiveScrollWidth(
-                      groupLayouts,
-                    );
+                        return AnimatedBuilder(
+                          animation: Listenable.merge(
+                            _lexiconWordWidthDuringDrag,
+                          ),
+                          builder: (context, _) {
+                            final liveDragWidths = _lexiconWordWidthDuringDrag
+                                .map((n) => n.value)
+                                .toList(growable: false);
+                            final groupLayouts = tableLayout
+                                .groupLayoutsWithLiveDrag(liveDragWidths);
+                            final scrollW = tableLayout.effectiveScrollWidth(
+                              groupLayouts,
+                            );
 
-                    return Scrollbar(
-                      controller: _horizontalTableScroll,
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        controller: _horizontalTableScroll,
-                        scrollDirection: Axis.horizontal,
-                        primary: false,
-                        child: SizedBox(
-                          width: scrollW,
-                          height: constraints.maxHeight,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: List.generate(columnsCount, (
-                                  groupIndex,
-                                ) {
-                                  final groupLayout = groupLayouts[groupIndex];
-                                  return _lexiconColumnGroupShell(
-                                    context: context,
-                                    groupIndex: groupIndex,
-                                    child: SizedBox(
-                                      width: groupLayout.baseTotal,
-                                      child: DictionaryLexiconHeaderRow(
-                                        wordWidth: groupLayout.wordWidth,
-                                        sourceWidth: groupLayout.sourceWidth,
-                                        categoryWidth:
-                                            groupLayout.categoryWidth,
-                                        onWordColumnResizeStart: () =>
-                                            _onLexiconWordColumnResizeStart(
-                                              groupIndex,
-                                              groupLayout.wordWidth,
-                                            ),
-                                        onWordColumnResizeUpdate: (delta) =>
-                                            _onLexiconWordColumnResizeUpdate(
-                                              groupIndex,
-                                              delta,
-                                            ),
-                                        onWordColumnResizeEnd: (delta) =>
-                                            _onLexiconWordColumnResizeEnd(
-                                              groupIndex,
-                                              delta,
-                                            ),
-                                        onWordColumnResizeCancel: () =>
-                                            _onLexiconWordColumnResizeCancel(
-                                              groupIndex,
-                                            ),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
-                              Expanded(
-                                child: _loading
-                                    ? const Center(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(24),
-                                          child: CircularProgressIndicator(),
-                                        ),
-                                      )
-                                    : Scrollbar(
-                                        controller: _verticalTableScroll,
-                                        thumbVisibility: true,
-                                        child: ListView.builder(
-                                          controller: _verticalTableScroll,
-                                          primary: false,
-                                          padding: EdgeInsets.zero,
-                                          itemExtent: kDictionaryGridRowExtent,
-                                          itemCount: listItemCount,
-                                          itemBuilder: (context, i) {
-                                            if (i >= gridRowCount) {
-                                              return SizedBox(
-                                                width: scrollW,
-                                                child: const Center(
-                                                  child: SizedBox(
-                                                    width: 28,
-                                                    height: 28,
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          strokeWidth: 2,
-                                                        ),
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                            return Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: List.generate(columnsCount, (
-                                                colIndex,
-                                              ) {
-                                                final groupLayout =
-                                                    groupLayouts[colIndex];
-                                                final rowIndex =
-                                                    i * columnsCount + colIndex;
-                                                if (rowIndex >= _rows.length) {
-                                                  return _lexiconColumnGroupShell(
-                                                    context: context,
-                                                    groupIndex: colIndex,
-                                                    child: SizedBox(
-                                                      width:
-                                                          groupLayout.baseTotal,
+                            return Scrollbar(
+                              controller: _horizontalTableScroll,
+                              thumbVisibility: true,
+                              child: SingleChildScrollView(
+                                controller: _horizontalTableScroll,
+                                scrollDirection: Axis.horizontal,
+                                primary: false,
+                                child: SizedBox(
+                                  width: scrollW,
+                                  height: constraints.maxHeight,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: List.generate(columnsCount, (
+                                          groupIndex,
+                                        ) {
+                                          final groupLayout =
+                                              groupLayouts[groupIndex];
+                                          return _lexiconColumnGroupShell(
+                                            context: context,
+                                            groupIndex: groupIndex,
+                                            child: SizedBox(
+                                              width: groupLayout.baseTotal,
+                                              child: DictionaryLexiconHeaderRow(
+                                                wordWidth:
+                                                    groupLayout.wordWidth,
+                                                sourceWidth:
+                                                    groupLayout.sourceWidth,
+                                                categoryWidth:
+                                                    groupLayout.categoryWidth,
+                                                pageSelected: selection
+                                                    .pageState(_rows),
+                                                onTogglePage: groupIndex == 0
+                                                    ? () => selectionNotifier
+                                                          .togglePage(_rows)
+                                                    : null,
+                                                onWordColumnResizeStart: () =>
+                                                    _onLexiconWordColumnResizeStart(
+                                                      groupIndex,
+                                                      groupLayout.wordWidth,
                                                     ),
-                                                  );
-                                                }
-                                                final r = _rows[rowIndex];
-                                                return _lexiconColumnGroupShell(
-                                                  context: context,
-                                                  groupIndex: colIndex,
-                                                  child: SizedBox(
-                                                    width:
-                                                        groupLayout.baseTotal,
-                                                    child: RepaintBoundary(
-                                                      child: DictionaryGridRow(
-                                                        key: ValueKey(
-                                                          _lexiconRowWidgetKey(
-                                                            r,
+                                                onWordColumnResizeUpdate: (delta) =>
+                                                    _onLexiconWordColumnResizeUpdate(
+                                                      groupIndex,
+                                                      delta,
+                                                    ),
+                                                onWordColumnResizeEnd: (delta) =>
+                                                    _onLexiconWordColumnResizeEnd(
+                                                      groupIndex,
+                                                      delta,
+                                                    ),
+                                                onWordColumnResizeCancel: () =>
+                                                    _onLexiconWordColumnResizeCancel(
+                                                      groupIndex,
+                                                    ),
+                                              ),
+                                            ),
+                                          );
+                                        }),
+                                      ),
+                                      Expanded(
+                                        child: _loading
+                                            ? const Center(
+                                                child: Padding(
+                                                  padding: EdgeInsets.all(24),
+                                                  child:
+                                                      CircularProgressIndicator(),
+                                                ),
+                                              )
+                                            : Scrollbar(
+                                                controller:
+                                                    _verticalTableScroll,
+                                                thumbVisibility: true,
+                                                child: ListView.builder(
+                                                  controller:
+                                                      _verticalTableScroll,
+                                                  primary: false,
+                                                  padding: EdgeInsets.zero,
+                                                  itemExtent:
+                                                      kDictionaryGridRowExtent,
+                                                  itemCount: listItemCount,
+                                                  itemBuilder: (context, i) {
+                                                    if (i >= gridRowCount) {
+                                                      return SizedBox(
+                                                        width: scrollW,
+                                                        child: const Center(
+                                                          child: SizedBox(
+                                                            width: 28,
+                                                            height: 28,
+                                                            child:
+                                                                CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2,
+                                                                ),
                                                           ),
                                                         ),
-                                                        row: r,
-                                                        layout: groupLayout,
-                                                        categoryOptions:
-                                                            lexiconCategoryOptions,
-                                                        onUpdate: (word, cat) =>
-                                                            _actions
-                                                                .updateLexiconRow(
-                                                                  _rows[rowIndex],
-                                                                  word,
-                                                                  cat,
+                                                      );
+                                                    }
+                                                    return Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: List.generate(columnsCount, (
+                                                        colIndex,
+                                                      ) {
+                                                        final groupLayout =
+                                                            groupLayouts[colIndex];
+                                                        final rowIndex =
+                                                            i * columnsCount +
+                                                            colIndex;
+                                                        if (rowIndex >=
+                                                            _rows.length) {
+                                                          return _lexiconColumnGroupShell(
+                                                            context: context,
+                                                            groupIndex:
+                                                                colIndex,
+                                                            child: SizedBox(
+                                                              width: groupLayout
+                                                                  .baseTotal,
+                                                            ),
+                                                          );
+                                                        }
+                                                        final r =
+                                                            _rows[rowIndex];
+                                                        return _lexiconColumnGroupShell(
+                                                          context: context,
+                                                          groupIndex: colIndex,
+                                                          child: SizedBox(
+                                                            width: groupLayout
+                                                                .baseTotal,
+                                                            child: RepaintBoundary(
+                                                              child: DictionaryGridRow(
+                                                                key: ValueKey(
+                                                                  lexiconRowKey(
+                                                                    r,
+                                                                  ),
                                                                 ),
-                                                        onDelete: () =>
-                                                            _actions.deleteRow(
-                                                              _rows[rowIndex],
+                                                                row: r,
+                                                                selected:
+                                                                    selection
+                                                                        .contains(
+                                                                          r,
+                                                                        ),
+                                                                onSelectTap: () =>
+                                                                    _onRowSelectTap(
+                                                                      _rows[rowIndex],
+                                                                    ),
+                                                                layout:
+                                                                    groupLayout,
+                                                                categoryOptions:
+                                                                    lexiconCategoryOptions,
+                                                                onUpdate:
+                                                                    (
+                                                                      word,
+                                                                      cat,
+                                                                    ) => _actions
+                                                                        .updateLexiconRow(
+                                                                          _rows[rowIndex],
+                                                                          word,
+                                                                          cat,
+                                                                        ),
+                                                                onDelete: () =>
+                                                                    _actions.deleteRow(
+                                                                      _rows[rowIndex],
+                                                                    ),
+                                                                onSpellingContextChanged:
+                                                                    (
+                                                                      word,
+                                                                    ) => _onSpellingContextFromRow(
+                                                                      _rows[rowIndex],
+                                                                      word,
+                                                                    ),
+                                                              ),
                                                             ),
-                                                        onSpellingContextChanged:
-                                                            (
-                                                              word,
-                                                            ) => _onSpellingContextFromRow(
-                                                              _rows[rowIndex],
-                                                              word,
-                                                            ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                );
-                                              }),
-                                            );
-                                          },
-                                        ),
+                                                          ),
+                                                        );
+                                                      }),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
                                       ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           if (ref.watch(lexiconSpellingPanelProvider).visible) ...[

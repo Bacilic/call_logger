@@ -364,6 +364,119 @@ void main() {
       expect(c.groups, isEmpty);
     });
 
+    test('ύπνος και αφύπνιση μπαίνουν πάντα, ξένα με ίδιο αριθμό όχι', () {
+      final c = collector();
+      for (final (provider, id) in [
+        ('Microsoft-Windows-Kernel-Power', 42),
+        ('Microsoft-Windows-Power-Troubleshooter', 1),
+        ('Microsoft-Windows-Kernel-Power', 506),
+        ('Microsoft-Windows-Kernel-Power', 507),
+        // Αλλαγή ώρας — ίδιος αριθμός με την αφύπνιση, άλλη πηγή.
+        ('Microsoft-Windows-Kernel-General', 1),
+        // Η αφύπνιση του πυρήνα επαναλαμβάνει την ίδια στιγμή.
+        ('Microsoft-Windows-Kernel-Power', 107),
+      ]) {
+        c.add(
+          raw(
+            log: 'System',
+            provider: provider,
+            id: id,
+            level: WindowsEventLevel.information,
+          ),
+          () => '$provider $id',
+        );
+      }
+
+      expect(c.sleepAndWake.map((e) => (e.provider, e.eventId)), [
+        ('Microsoft-Windows-Kernel-Power', 42),
+        ('Microsoft-Windows-Power-Troubleshooter', 1),
+        ('Microsoft-Windows-Kernel-Power', 506),
+        ('Microsoft-Windows-Kernel-Power', 507),
+      ]);
+      expect(c.groups, isEmpty);
+    });
+
+    test('η αφύπνιση φαίνεται στο χρονολόγιο πάνω από το σφάλμα της', () {
+      WindowsEventEntry power(
+        String provider,
+        int id,
+        DateTime time,
+      ) => WindowsEventEntry(
+        log: 'System',
+        provider: provider,
+        eventId: id,
+        level: WindowsEventLevel.information,
+        time: time,
+        message: id == 1
+            ? 'Έγινε επαναφορά του συστήματος από κατάσταση χαμηλής ενέργειας.'
+            : 'Το σύστημα μεταβαίνει στην κατάσταση αναστολής λειτουργίας.',
+      );
+      final report = buildDiagnosticsReport(
+        archive: LogArchive(
+          records: [
+            _record(
+              DateTime(2026, 10, 4, 9, 2),
+              'PICINIO',
+              LogKind.error,
+              severity: LogSeverity.nonCritical,
+              message: 'Η βάση δεδομένων δεν απάντησε μέσα σε 18 δευτερόλεπτα',
+            ),
+          ],
+          unreadableLines: 0,
+        ),
+        options: _options(),
+        context: _context,
+        windows: WindowsEventsReport(
+          station: 'PICINIO',
+          from: DateTime(2026, 8, 7),
+          to: DateTime(2026, 10, 5),
+          levels: const {},
+          appEvents: const [],
+          computerLifecycle: const [],
+          sleepAndWake: [
+            power('Microsoft-Windows-Kernel-Power', 42, DateTime(2026, 8, 20)),
+            power(
+              'Microsoft-Windows-Kernel-Power',
+              42,
+              DateTime(2026, 10, 4, 8, 40),
+            ),
+            power(
+              'Microsoft-Windows-Power-Troubleshooter',
+              1,
+              DateTime(2026, 10, 4, 9, 1),
+            ),
+          ],
+          groups: const [],
+          oldestByLog: const {},
+        ),
+      );
+
+      final timeline = report.substring(report.indexOf('## Χρονολόγιο'));
+      final wake = timeline.indexOf(
+        '- 04/10/2026 09:01:00 · WINDOWS · αφύπνιση',
+      );
+      final error = timeline.indexOf('- 04/10/2026 09:02:00 · PICINIO');
+      expect(wake, isNonNegative);
+      expect(
+        wake,
+        lessThan(error),
+        reason: greekExpectMsg(
+          'Το «η βάση δεν απάντησε» φαίνεται αμέσως κάτω από την αφύπνιση',
+        ),
+      );
+      expect(timeline, contains('04/10/2026 08:40:00 · WINDOWS · ύπνος'));
+      expect(
+        timeline,
+        isNot(contains('20/08/2026')),
+        reason: greekExpectMsg('Έξω από την περίοδο της εφαρμογής'),
+      );
+      expect(
+        report.substring(0, report.indexOf('## Χρονολόγιο')),
+        allOf(contains('### Ύπνος και αφύπνιση'), contains('20/08/2026')),
+        reason: greekExpectMsg('Στην ενότητα των Windows μπαίνουν όλα'),
+      );
+    });
+
     test('το ίδιο είδος γίνεται μία ομάδα, με ένα μόνο μήνυμα-δείγμα', () {
       final c = collector();
       var formatted = 0;

@@ -36,3 +36,25 @@ Offset rotateAroundCenter(Offset point, Offset center, double radians) {
     center.dy + (dx * s) + (dy * c),
   );
 }
+
+/// Σημείο στο περίγραμμα περιστραμμένου ορθογωνίου, στην κατεύθυνση του στόχου.
+Offset pointOnRotatedRectBoundaryToward({
+  required Rect rect,
+  required double rotation,
+  required Offset targetPoint,
+}) {
+  final center = rect.center;
+  final targetLocal = rotateAroundCenter(targetPoint, center, -rotation);
+  final vx = targetLocal.dx - center.dx;
+  final vy = targetLocal.dy - center.dy;
+  if (vx == 0 && vy == 0) {
+    return rotateAroundCenter(Offset(center.dx, rect.top), center, rotation);
+  }
+  final halfW = rect.width / 2;
+  final halfH = rect.height / 2;
+  final sx = vx == 0 ? double.infinity : (halfW / vx.abs());
+  final sy = vy == 0 ? double.infinity : (halfH / vy.abs());
+  final s = math.min(sx, sy);
+  final edgeLocal = Offset(center.dx + (vx * s), center.dy + (vy * s));
+  return rotateAroundCenter(edgeLocal, center, rotation);
+}

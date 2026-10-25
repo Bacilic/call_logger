@@ -49,6 +49,21 @@ void main() {
     expect(journal.visibleSteps, isEmpty);
   });
 
+  test('αποτυχημένος έλεγχος: προειδοποίηση που λέει την αιτία', () async {
+    await runStartupUpdateCheck(
+      () async =>
+          const UpdateCheckResult.failed(UpdateCheckFailure.folderUnreadable),
+      journal: journal,
+    );
+
+    expect(singleStep().status, StartupStepStatus.warning);
+    expect(
+      singleStep().label,
+      'Δεν είναι δυνατός ο έλεγχος νέας έκδοσης, επειδή ο φάκελος '
+      'ενημερώσεων δεν απαντά ή δεν περιέχει το version.json.',
+    );
+  });
+
   test('άφταστος φάκελος: κόβεται στο όριο, η εκκίνηση συνεχίζει', () async {
     final result = await runStartupUpdateCheck(
       () => Future.delayed(

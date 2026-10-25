@@ -5,8 +5,13 @@
 //   flutter test test/core/database/audit_entity_label_alignment_test.dart
 
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:call_logger/core/database/audit_action_labels.dart';
 import 'package:call_logger/core/database/audit_service.dart';
+import 'package:call_logger/core/database/calls_lansweeper_repository.dart';
+import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/directory_audit_helpers.dart';
 import 'package:call_logger/core/database/database_schema_migrations.dart';
 import 'package:call_logger/core/database/database_table_labels.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
@@ -76,7 +81,10 @@ void main() {
       );
       expect(
         databaseEntityTypeSearchLabelEl(AuditEntityTypes.bulkUsers),
-        contains('υπαλληλων'),
+        'υπαλληλοσ',
+        reason:
+            'Η μαζική ενημέρωση δεν είναι οντότητα: αφορά υπαλλήλους, και '
+            'λέγεται «Υπάλληλος - Μαζική ενημέρωση».',
       );
       expect(
         AuditActions.modifyUser,
@@ -146,18 +154,20 @@ void main() {
       return page.total;
     }
 
-    test('πριν την αναβάθμιση, το «υπάλληλος» δεν βρίσκει τίποτα', () async {
-      await insertLegacyUserRow();
+    test(
+      'πριν την αναβάθμιση, το ευρετήριο κρατά ακόμη το «χρήστης»',
+      () async {
+        await insertLegacyUserRow();
 
-      expect(await matchesFor('χρήστης'), 1);
-      expect(
-        await matchesFor('υπάλληλος'),
-        0,
-        reason:
-            'Η οθόνη λέει ήδη «Υπάλληλος», αλλά το αποθηκευμένο ευρετήριο '
-            'κρατά την παλιά λέξη — αυτό διορθώνει η v51.',
-      );
-    });
+        expect(
+          await matchesFor('χρήστης'),
+          1,
+          reason:
+              'Το αποθηκευμένο ευρετήριο κρατά την παλιά λέξη — αυτό '
+              'διορθώνει η v51.',
+        );
+      },
+    );
 
     test('μετά την αναβάθμιση, βρίσκεται με τη λέξη της οθόνης', () async {
       await insertLegacyUserRow();
@@ -232,4 +242,197 @@ void main() {
       expect(await matchesFor('Ακτινολογικό'), 1);
     });
   });
+
+  group('Ενέργεια ως «Οντότητα - Ενέργεια»', () {
+    test('καμία ενέργεια του κώδικα δεν φτάνει ωμή στην οθόνη', () {
+      // Κάθε ενέργεια που γράφει η εφαρμογή στο ιστορικό, μαζεμένη από τον
+      // κώδικα — ώστε μια νέα ενέργεια χωρίς ετικέτα να κοκκινίζει εδώ αντί
+      // να εμφανιστεί ως «Υπάλληλος - ΚΑΤΙ ΝΕΟ».
+      final written = <String>{
+        AuditActions.modifyUser,
+        AuditActions.createUser,
+        AuditActions.modifyDepartment,
+        AuditActions.modifyEquipment,
+        AuditActions.modifyPhone,
+        AuditActions.modifyCategory,
+        AuditActions.modifyCall,
+        AuditActions.modifyTask,
+        AuditActions.modifyOperator,
+        AuditActions.createOperator,
+        ...AuditActions.genericModifyActions,
+        DatabaseHelper.auditActionDelete,
+        DatabaseHelper.auditActionRestore,
+        DatabaseHelper.auditActionBulkDelete,
+        DatabaseHelper.auditActionIntegrityFix,
+        kAuditCallAssociationAction,
+        for (final state in ['sent', 'unsent', 'excluded', 'failed', '?'])
+          lansweeperAuditAction(state),
+      };
+      final literal = RegExp(r"action:\s*'([^']*[Α-Ωα-ω][^']*)'");
+      final backup = RegExp(r"'(ΑΝΤΙΓΡΑΦΟ ΑΣΦΑΛΕΙΑΣ [^']+)'");
+      for (final file in Directory('lib').listSync(recursive: true)) {
+        if (file is! File || !file.path.endsWith('.dart')) continue;
+        final source = file.readAsStringSync();
+        for (final m in literal.allMatches(source)) {
+          written.add(m.group(1)!);
+        }
+        for (final m in backup.allMatches(source)) {
+          written.add(m.group(1)!);
+        }
+      }
+
+      final unlabelled = written
+          .where((a) => !knownAuditActions.contains(a))
+          .toList();
+      expect(
+        unlabelled,
+        isEmpty,
+        reason:
+            'Οι ενέργειες αυτές θα εμφανίζονταν ωμές — λείπουν από τον '
+            'κατάλογο ετικετών.',
+      );
+    });
+
+    test('η ίδια ενέργεια ξεχωρίζει από τον τύπο της οντότητας', () {
+      expect(
+        auditActionLabelEl(
+          entityType: AuditEntityTypes.user,
+          action: 'ΔΙΑΓΡΑΦΗ',
+        ),
+        'Υπάλληλος - Διαγραφή',
+      );
+      expect(
+        auditActionLabelEl(
+          entityType: AuditEntityTypes.call,
+          action: 'ΔΙΑΓΡΑΦΗ',
+        ),
+        'Κλήση - Διαγραφή',
+      );
+    });
+
+    test('η μαζική ενημέρωση ανήκει στην οντότητα που αφορά', () {
+      expect(
+        auditActionLabelEl(
+          entityType: AuditEntityTypes.bulkUsers,
+          action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ',
+        ),
+        'Υπάλληλος - Μαζική ενημέρωση',
+      );
+    });
+
+    test('άγνωστη ενέργεια φαίνεται όπως γράφτηκε, όχι κενή', () {
+      expect(
+        auditActionLabelEl(
+          entityType: AuditEntityTypes.user,
+          action: 'ΚΑΤΙ ΝΕΟ',
+        ),
+        'Υπάλληλος - ΚΑΤΙ ΝΕΟ',
+      );
+    });
+  });
+
+  group('Φίλτρα και αναζήτηση με την ετικέτα της οθόνης', () {
+    late Database db;
+    late AuditService service;
+
+    setUp(() async {
+      initSqfliteFfiForTests();
+      db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
+      await db.execute(_auditLogTableSql);
+      service = AuditService(db);
+
+      Future<void> log(String type, String action, String name) =>
+          AuditService.log(
+            db,
+            action: action,
+            userPerforming: 'Βασίλης',
+            entityType: type,
+            entityId: 1,
+            entityName: name,
+          );
+      await log(AuditEntityTypes.user, 'ΔΙΑΓΡΑΦΗ', 'Δήμητρα Παπαδοπούλου');
+      await log(AuditEntityTypes.call, 'ΔΙΑΓΡΑΦΗ', 'Ακτινολογικό');
+      await log(AuditEntityTypes.user, 'ΤΡΟΠΟΠΟΙΗΣΗ ΥΠΑΛΛΗΛΟΥ', 'Νίκος Ρήγας');
+      // Παλιά εγγραφή με τη γενική λέξη: ίδια ετικέτα με την από πάνω.
+      await log(AuditEntityTypes.user, 'ΤΡΟΠΟΠΟΙΗΣΗ', 'Ελένη Μάρκου');
+      await AuditService.logBulk(
+        db,
+        action: 'ΜΑΖΙΚΗ ΕΝΗΜΕΡΩΣΗ',
+        userPerforming: 'Βασίλης',
+        entityType: AuditEntityTypes.bulkUsers,
+        affectedIds: const [1, 2],
+        appliedFields: const {'department_text': 'Φαρμακείο'},
+      );
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    Future<int> count({
+      String? action,
+      String? entityType,
+      String? keyword,
+    }) async {
+      final page = await service.queryPage(
+        offset: 0,
+        limit: 50,
+        action: action,
+        entityType: entityType,
+        keywordNormalized: keyword == null
+            ? null
+            : SearchTextNormalizer.normalizeForSearch(keyword),
+      );
+      return page.total;
+    }
+
+    test(
+      'το φίλτρο «Ενέργεια» δείχνει ετικέτες, μία φορά την καθεμιά',
+      () async {
+        final options = await service.queryDistinctActions();
+
+        expect(options, [
+          'Κλήση - Διαγραφή',
+          'Υπάλληλος - Διαγραφή',
+          'Υπάλληλος - Μαζική ενημέρωση',
+          'Υπάλληλος - Τροποποίηση',
+        ]);
+      },
+    );
+
+    test('η επιλογή ετικέτας φέρνει μόνο τη δική της οντότητα', () async {
+      expect(await count(action: 'Υπάλληλος - Διαγραφή'), 1);
+      expect(
+        await count(action: 'Υπάλληλος - Τροποποίηση'),
+        2,
+        reason: 'Η παλιά και η νέα γραφή της ενέργειας λένε το ίδιο.',
+      );
+    });
+
+    test('ο τύπος «Υπάλληλος» πιάνει και τις μαζικές ενημερώσεις', () async {
+      expect(await count(entityType: AuditEntityTypes.user), 4);
+    });
+
+    test('η αναζήτηση βρίσκει την ενέργεια με τη λέξη της οθόνης', () async {
+      expect(await count(keyword: 'διαγραφή'), 2);
+      expect(await count(keyword: 'υπάλληλος διαγραφή'), 1);
+      expect(await count(keyword: 'μαζική'), 1);
+    });
+  });
 }
+
+const String _auditLogTableSql = '''
+  CREATE TABLE audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT,
+    timestamp TEXT,
+    user_performing TEXT,
+    details TEXT,
+    entity_type TEXT,
+    entity_id INTEGER,
+    entity_name TEXT,
+    search_text TEXT,
+    old_values_json TEXT,
+    new_values_json TEXT
+  )
+''';

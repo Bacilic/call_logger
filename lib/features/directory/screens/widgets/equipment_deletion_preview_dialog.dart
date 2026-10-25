@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/draggable_dialog_shell.dart';
+import 'mass_deletion_warning.dart';
 import '../../services/equipment_deletion_summary.dart';
+import '../../services/mass_deletion_guard.dart';
 import '../../services/equipment_deletion_zones.dart';
 
 /// Τι αποφάσισε ο χρήστης **και** ποιον εξοπλισμό άφησε στη λίστα.
@@ -17,18 +19,27 @@ const double _kMaxListHeight = 380;
 Future<EquipmentDeletionPreviewResult?> showEquipmentDeletionPreviewDialog({
   required BuildContext context,
   required List<EquipmentDeletionSummary> summaries,
+  MassDeletionContext? massDeletion,
 }) {
   return showDialog<EquipmentDeletionPreviewResult>(
     context: context,
-    builder: (ctx) =>
-        _EquipmentDeletionPreviewDialog(initialSummaries: summaries),
+    builder: (ctx) => _EquipmentDeletionPreviewDialog(
+      initialSummaries: summaries,
+      massDeletion: massDeletion,
+    ),
   );
 }
 
 class _EquipmentDeletionPreviewDialog extends StatefulWidget {
-  const _EquipmentDeletionPreviewDialog({required this.initialSummaries});
+  const _EquipmentDeletionPreviewDialog({
+    required this.initialSummaries,
+    this.massDeletion,
+  });
 
   final List<EquipmentDeletionSummary> initialSummaries;
+
+  /// Χωρίς αυτό ο διάλογος δεν προειδοποιεί για το μέγεθος της διαγραφής.
+  final MassDeletionContext? massDeletion;
 
   @override
   State<_EquipmentDeletionPreviewDialog> createState() =>
@@ -38,6 +49,9 @@ class _EquipmentDeletionPreviewDialog extends StatefulWidget {
 class _EquipmentDeletionPreviewDialogState
     extends State<_EquipmentDeletionPreviewDialog> {
   late List<EquipmentDeletionSummary> _kept;
+
+  /// Ό,τι έχει γραφτεί στο πεδίο της λέξης — μόνο για ολόκληρο κατάλογο.
+  String _typedWord = '';
 
   @override
   void initState() {
@@ -66,6 +80,11 @@ class _EquipmentDeletionPreviewDialogState
     final rows = buildEquipmentDeletionPreviewRows(_kept);
     final canRemove = _kept.length > 1;
     final totals = EquipmentDeletionTotals.fromSummaries(_kept);
+    final massDeletion = widget.massDeletion;
+    final confirmAllowed = massDeletionConfirmAllowed(
+      massDeletion?.levelFor(_kept.length) ?? MassDeletionLevel.none,
+      _typedWord,
+    );
 
     return DraggableDialogShell(
       title: const Text('Διαγραφή εξοπλισμού'),
@@ -77,6 +96,12 @@ class _EquipmentDeletionPreviewDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (massDeletion != null)
+                MassDeletionWarning(
+                  massDeletion: massDeletion,
+                  deleting: _kept.length,
+                  onTypedWordChanged: (v) => setState(() => _typedWord = v),
+                ),
               // Με έναν εξοπλισμό, ή όταν κανείς δεν αφήνει ίχνη, η σύνοψη θα
               // επαναλάμβανε ό,τι λέει ήδη η λίστα από κάτω.
               if (_kept.length > 1 && zones.withTraces.isNotEmpty) ...[
@@ -111,7 +136,9 @@ class _EquipmentDeletionPreviewDialogState
             child: const Text('Ακύρωση'),
           ),
           FilledButton(
-            onPressed: _kept.isEmpty ? null : () => _pop(true),
+            onPressed: _kept.isEmpty || !confirmAllowed
+                ? null
+                : () => _pop(true),
             child: const Text('Διαγραφή'),
           ),
         ],

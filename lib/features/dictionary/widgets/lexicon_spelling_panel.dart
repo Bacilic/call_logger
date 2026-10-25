@@ -9,7 +9,9 @@ import '../../../core/services/ai_model_chain_runner.dart';
 import '../../../core/services/gemini_runtime_settings.dart';
 import '../../../core/services/spelling_lookup_ai_service.dart';
 import '../../../core/widgets/lexicon_spell_menu_helper.dart';
+import '../../history/widgets/lansweeper/ai_prompt_template_editor_dialog.dart';
 import '../providers/lexicon_spelling_panel_provider.dart';
+import '../services/lexicon_ai_prompt_store.dart';
 
 const double kLexiconSpellingPanelWidth = 300;
 
@@ -99,18 +101,33 @@ class LexiconSpellingPanel extends ConsumerWidget {
                 const SizedBox(height: 16),
                 _sectionTitle(context, 'Εξωτερική βοήθεια'),
                 const SizedBox(height: 6),
-                FilledButton.tonalIcon(
-                  onPressed: query.isEmpty || panel.geminiLoading
-                      ? null
-                      : () => _askGemini(ref, query),
-                  icon: panel.geminiLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('Ερώτηση ΤΝ'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: query.isEmpty || panel.geminiLoading
+                            ? null
+                            : () => _askGemini(ref, query),
+                        icon: panel.geminiLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.auto_awesome_outlined, size: 18),
+                        label: const Text('Ερώτηση ΤΝ'),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Προτροπή της «Ερώτησης ΤΝ»',
+                      icon: const Icon(Icons.edit_note),
+                      onPressed: () => unawaited(
+                        openPersonalPromptEditor(context, LexiconPrompt.word),
+                      ),
+                    ),
+                  ],
                 ),
                 if (panel.geminiError != null) ...[
                   const SizedBox(height: 8),
@@ -197,6 +214,7 @@ class LexiconSpellingPanel extends ConsumerWidget {
           word: query,
           settings: settings,
           registry: registry,
+          template: await LexiconPrompt.word.read(),
         ),
       );
     } on AiModelChainException catch (e) {

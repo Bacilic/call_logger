@@ -1,5 +1,10 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../features/calls/provider/quick_call_session_provider.dart';
+import '../../features/calls/screens/widgets/quick_call_dialog.dart';
 import 'draggable_dialog_shell.dart';
 import 'modal_route_tracker.dart';
 
@@ -12,12 +17,23 @@ import 'modal_route_tracker.dart';
 /// **Γιατί ερώτηση:** μέχρι 14/10/2026 το «Χ» έκλεινε την εφαρμογή με ανοιχτή
 /// «Επεξεργασία Υπαλλήλου» και ό,τι αποθηκευόταν στο μεταξύ γραφόταν κανονικά
 /// — μέσα στο κλείσιμο, χωρίς ο χρήστης να ξέρει τι θα μείνει.
+///
+/// Η ελαχιστοποιημένη γρήγορη καταγραφή μετρά όπως ο ανοιχτός διάλογος: είναι
+/// κλήση σε εξέλιξη. Με «Επιστροφή» ξανανοίγει, για να τη διευθετήσει ο χρήστης.
 Future<bool> confirmCloseWithOpenDialog(ModalRouteTracker tracker) async {
   final top = tracker.topDialog;
   final navigator = tracker.navigator;
-  if (top == null || navigator == null || !navigator.mounted) return true;
+  if (navigator == null || !navigator.mounted) return true;
+  final minimizedCall =
+      top == null &&
+      ProviderScope.containerOf(
+            navigator.context,
+            listen: false,
+          ).read(quickCallSessionProvider) ==
+          QuickCallPhase.minimized;
+  if (top == null && !minimizedCall) return true;
 
-  final title = openDialogTitle(top);
+  final title = top == null ? kQuickCallDialogTitle : openDialogTitle(top);
   final answer = await showDialog<bool>(
     context: navigator.context,
     barrierDismissible: false,
@@ -37,7 +53,11 @@ Future<bool> confirmCloseWithOpenDialog(ModalRouteTracker tracker) async {
       ],
     ),
   );
-  return answer ?? false;
+  final proceed = answer ?? false;
+  if (!proceed && minimizedCall && navigator.mounted) {
+    unawaited(showQuickCallDialog(navigator.context));
+  }
+  return proceed;
 }
 
 /// Το κείμενο της ερώτησης — με το όνομα του διαλόγου, όταν έχει.

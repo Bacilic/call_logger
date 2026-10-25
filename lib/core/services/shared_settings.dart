@@ -62,11 +62,23 @@ abstract final class SharedSettingKeys {
     migratesFromMachine: false,
   );
 
+  /// Από ποιο ποσοστό του καταλόγου και πάνω μια διαγραφή προειδοποιεί.
+  ///
+  /// **Γιατί κοινό:** ο κατάλογος είναι κοινός — η διαγραφή του μισού
+  /// κοστίζει το ίδιο σε όλους, όποιος κι αν πατήσει το κουμπί.
+  ///
+  /// Γεννιέται κοινό, οπότε δεν έχει τοπική τιμή να ανεβάσει.
+  static const SharedSettingKey massDeletionWarningPercent = SharedSettingKey(
+    'mass_deletion_warning_percent_v1',
+    migratesFromMachine: false,
+  );
+
   static const List<SharedSettingKey> all = [
     auditRetentionConfig,
     updateFolderPath,
     departmentPaletteSlots,
     databaseStalenessDays,
+    massDeletionWarningPercent,
   ];
 }
 

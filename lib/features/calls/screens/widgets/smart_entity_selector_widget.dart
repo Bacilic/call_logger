@@ -183,6 +183,15 @@ class SmartEntitySelectorWidgetState
 
   void requestPhoneFocus() => _phoneFocusNode.requestFocus();
 
+  /// Υπάρχει γραμμένο κείμενο σε κάποιο από τα τέσσερα πεδία — ό,τι βλέπει ο
+  /// χρήστης, ακόμη κι αν δεν έχει κλειδώσει ακόμη στη φόρμα.
+  bool get hasTypedText => [
+    _phoneController,
+    _callerController,
+    _departmentController,
+    _equipmentController,
+  ].any((controller) => controller.text.trim().isNotEmpty);
+
   FocusNode _focusNodeFor(SelectorField field) => switch (field) {
     SelectorField.phone => _phoneFocusNode,
     SelectorField.caller => _callerFocusNode,
@@ -203,14 +212,22 @@ class SmartEntitySelectorWidgetState
   /// μαζί της την εστίαση. Η νέα την παραλαμβάνει στο **ίδιο** πεδίο, ώστε ο
   /// κέρσορας να μη χάνεται κάτω από τα χέρια του χρήστη.
   ///
-  /// Αγνοεί εστίαση που δεν βρίσκεται σε άλλον επιλογέα του ίδιου provider.
+  /// Αγνοεί εστίαση που δεν βρίσκεται σε άλλον επιλογέα της ΙΔΙΑΣ φόρμας. Ο
+  /// ίδιος provider δεν αρκεί: η γρήγορη καταγραφή χρησιμοποιεί τον ίδιο, με
+  /// δική της κατάσταση, και ανοίγει πάνω από την οθόνη Κλήσεων. Χωρίς τον
+  /// έλεγχο του container, μια αλλαγή όψης της οθόνης πίσω από τον διάλογο
+  /// έκλεβε την εστίαση και τα πλήκτρα πήγαιναν στην κύρια φόρμα.
   void takeOverFocusFromOutgoingForm() {
     final focusedContext = FocusManager.instance.primaryFocus?.context;
     final outgoing = focusedContext
         ?.findAncestorStateOfType<SmartEntitySelectorWidgetState>();
     if (outgoing == null ||
         identical(outgoing, this) ||
-        outgoing.widget.provider != widget.provider) {
+        outgoing.widget.provider != widget.provider ||
+        !identical(
+          ProviderScope.containerOf(outgoing.context, listen: false),
+          ProviderScope.containerOf(context, listen: false),
+        )) {
       return;
     }
     final field = outgoing._focusedField;

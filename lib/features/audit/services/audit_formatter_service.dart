@@ -1,8 +1,8 @@
 import 'dart:convert';
 
+import '../../../core/database/audit_action_labels.dart';
 import '../../../core/database/audit_diff_helper.dart';
 import '../../../core/database/audit_service.dart';
-import '../../../core/database/database_helper.dart';
 import '../../../core/database/database_table_labels.dart';
 import '../../../core/database/directory_support.dart';
 import '../models/audit_log_model.dart';
@@ -69,10 +69,14 @@ class AuditFormatterService {
         : inferredName;
 
     if (type == 'call' && !technical) {
-      final action = _actionLabel(row.action ?? '', technical);
-      final dash = _callAuditDashContext(row);
-      final subject = dash != null && dash.isNotEmpty ? dash : 'Κλήση';
-      final main = action.isEmpty ? subject : '$action · $subject';
+      final action = _actionLabel(row.action ?? '', technical, type);
+      // Η ετικέτα λέει ήδη «Κλήση - …»· χωρίς στοιχεία καλούντα δεν
+      // ξαναγράφεται η ίδια λέξη.
+      final subject = _callAuditDashContext(row) ?? '';
+      final main = [
+        action,
+        subject,
+      ].where((e) => e.trim().isNotEmpty).join(' · ');
       final change = primaryChangeLine(
         row,
         technical: technical,
@@ -89,7 +93,7 @@ class AuditFormatterService {
       return '—';
     }
 
-    final action = _actionLabel(row.action ?? '', technical);
+    final action = _actionLabel(row.action ?? '', technical, type);
     final subject = type != null && type.isNotEmpty
         ? _entitySummarySubject(type, eid, effectiveName, technical: technical)
         : (detailsWithoutOrigin(row) ?? '');
@@ -200,18 +204,17 @@ class AuditFormatterService {
     }
   }
 
-  String _actionLabel(String action, bool technical) {
+  /// «Υπάλληλος - Διαγραφή» για την οθόνη· η ωμή ενέργεια για τα τεχνικά.
+  String _actionLabel(String action, bool technical, String? entityType) {
     if (technical) return action;
-    final a = action.trim();
-    if (a.isEmpty) return '';
-    if (a == DatabaseHelper.auditActionDelete) return 'Διαγραφή';
-    if (a == DatabaseHelper.auditActionRestore) return 'Επαναφορά';
-    if (a == DatabaseHelper.auditActionBulkDelete) return 'Μαζική διαγραφή';
-    if (a == 'ΤΡΟΠΟΠΟΙΗΣΗ') return 'Τροποποίηση';
-    return a;
+    return auditActionLabelEl(entityType: entityType, action: action);
   }
 
   /// Συντομευμένο subject για μία γραμμή σύνοψης.
+  ///
+  /// Χωρίς όνομα, η οντότητα δεν ξαναγράφεται: την έχει ήδη πει η ετικέτα
+  /// της ενέργειας («Αντίγραφο ασφαλείας - Αποτυχία», όχι «… - αντίγραφο
+  /// ασφαλείας»).
   String _entitySummarySubject(
     String type,
     int? id,
@@ -229,8 +232,8 @@ class AuditFormatterService {
     }
     final displayName = name?.trim();
     if (displayName != null && displayName.isNotEmpty) return displayName;
-    if (id != null) return '${_entityTypeGreek(t)} #$id';
-    return _entityTypeGreek(t);
+    if (id != null) return '#$id';
+    return '';
   }
 
   List<String> describeChanges(
@@ -565,7 +568,7 @@ class AuditFormatterService {
           )
         : const <String>[];
     final fieldStr = fieldNames.join(', ');
-    final action = _actionLabel(row.action ?? '', technical);
+    final action = _actionLabel(row.action ?? '', technical, row.entityType);
     final entity = _entityTypeGreekPlural(row.entityType ?? '');
     if (technical) {
       return '$action · $entity · ids=$n${fieldStr.isNotEmpty ? ' · {$fieldStr}' : ''}';
@@ -604,6 +607,7 @@ class AuditFormatterService {
     return out.toSet().toList();
   }
 
+  /// Αιτιατική, γιατί συμπληρώνει το «Επηρέασε 5 …».
   String _entityTypeGreekPlural(String type) {
     switch (type) {
       case 'call':
@@ -612,13 +616,13 @@ class AuditFormatterService {
         return 'εκκρεμότητες';
       case 'user':
       case 'bulk_users':
-        return 'χρήστες';
+        return 'υπαλλήλους';
       case 'department':
       case 'bulk_departments':
         return 'τμήματα';
       case 'equipment':
       case 'bulk_equipment':
-        return 'εξοπλισμοί';
+        return 'εξοπλισμούς';
       case 'phone':
         return 'τηλέφωνα';
       case 'category':

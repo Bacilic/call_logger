@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:call_logger/core/services/crash_log_service.dart';
+import 'package:call_logger/core/services/clean_exit_note.dart';
 import 'package:call_logger/core/services/log_record.dart';
+import 'package:call_logger/core/services/session_liveness_mark.dart';
+import 'package:call_logger/core/services/log_spill_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -248,12 +251,285 @@ void main() {
       expect(silent.isDiskAvailable, isFalse);
     });
   });
+
+  /// Η εφαρμογή στον PICINIO δουλεύει στη βάση του POPINIO. Ο POPINIO σβήνει,
+  /// και μετά ο χρήστης κλείνει κανονικά την εφαρμογή.
+  group('κανονικό κλείσιμο με σιωπηλό φάκελο', () {
+    late String sharedLogs;
+    late String noteDir;
+    final start = DateTime(2026, 10, 22, 20, 54);
+    final nextStart = DateTime(2026, 10, 22, 21, 4);
+
+    setUp(() {
+      sharedLogs = p.join(temp.path, 'shared', 'logs');
+      noteDir = p.join(temp.path, 'session');
+    });
+
+    CrashLogService run(DateTime now) => CrashLogService(
+      logsDirectory: sharedLogs,
+      now: () => now,
+      instanceId: 'dev',
+      cleanExitNote: CleanExitNote(noteDir),
+    );
+
+    Iterable<LogRecord> lostRunsReportedAt(DateTime day) {
+      final file = File(
+        p.join(sharedLogs, CrashLogService.dailyLogFileName(day)),
+      );
+      if (!file.existsSync()) return const [];
+      return file
+          .readAsLinesSync()
+          .map(LogRecord.tryParse)
+          .whereType<LogRecord>()
+          .where(
+            (r) =>
+                r.kind == LogKind.abnormalEnd && r.time.isAtSameMomentAs(day),
+          );
+    }
+
+    test('η επόμενη εκκίνηση δεν το αναφέρει ως κατάρρευση', () async {
+      final first = run(start);
+      await first.onStartup(retentionCount: 5);
+      first.disableDiskForTest('ο POPINIO δεν απαντά');
+      await first.onShutdown();
+
+      final second = run(nextStart);
+      await second.onStartup(retentionCount: 5);
+
+      expect(
+        lostRunsReportedAt(nextStart),
+        isEmpty,
+        reason:
+            'η εφαρμογή έκλεισε κανονικά — απλώς ο διακομιστής ήταν σβηστός',
+      );
+    });
+
+    test('πραγματικό απρόσμενο τέλος αναφέρεται κανονικά', () async {
+      final first = run(start);
+      await first.onStartup(retentionCount: 5);
+      // Χωρίς onShutdown: η διεργασία τερματίστηκε απότομα.
+
+      final second = run(nextStart);
+      await second.onStartup(retentionCount: 5);
+
+      expect(lostRunsReportedAt(nextStart), hasLength(1));
+    });
+
+    test(
+      'σημείωμα παλιότερου κλεισίματος δεν σκεπάζει νεότερη κατάρρευση',
+      () async {
+        final first = run(start);
+        await first.onStartup(retentionCount: 5);
+        first.disableDiskForTest('ο POPINIO δεν απαντά');
+        await first.onShutdown();
+
+        // Ο POPINIO ξανανάβει, αλλά ο νέος κάτοχος του ίχνους καταρρέει.
+        final crashed = run(DateTime(2026, 10, 22, 20, 58));
+        await crashed.onStartup(retentionCount: 5);
+        // Το σημείωμα καταναλώθηκε από την εκκίνηση των 20:58· ξαναγράφεται
+        // επίτηδες ως αν είχε μείνει, για να δούμε ότι η ώρα το κρατά έξω.
+        await CleanExitNote(noteDir).write(
+          CrashLogService.instanceSlug('dev'),
+          SessionLivenessMark(
+            station: '',
+            version: '',
+            startedAt: start,
+            lastSeen: start,
+          ),
+        );
+
+        final third = run(nextStart);
+        await third.onStartup(retentionCount: 5);
+
+        expect(lostRunsReportedAt(nextStart), hasLength(1));
+      },
+    );
+
+    test('ο παλμός ξεκινά και όταν η εκκίνηση βρήκε σιωπηλό φάκελο', () async {
+      final service = CrashLogService(
+        logsDirectory: p.join(temp.path, 'άφταστος', 'logs'),
+      );
+      addTearDown(service.dispose);
+      await expectLater(
+        service.onStartup(
+          retentionCount: 5,
+          timeout: const Duration(milliseconds: 100),
+          createDirectory: (_) => Completer<void>().future,
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+
+      service.startLivenessHeartbeat();
+
+      expect(
+        service.isLivenessHeartbeatRunning,
+        isTrue,
+        reason:
+            'αλλιώς, μετά τη μετάβαση σε βάση που απαντά, οι συνάδελφοι δεν '
+            'βλέπουν ότι η εφαρμογή ζει',
+      );
+    });
+  });
+
+  /// Όσο ο κοινός φάκελος σιωπά, οι εγγραφές περιμένουν σε φάκελο του
+  /// υπολογιστή και φτάνουν στον δικό τους φάκελο μόλις εκείνος απαντήσει.
+  group('τοπική αναμονή', () {
+    late _Folder folder;
+    late String spillDir;
+    late String sharedLogs;
+    final errorTime = DateTime(2026, 10, 14, 17, 46);
+    const limit = Duration(milliseconds: 100);
+
+    setUp(() {
+      folder = _Folder();
+      spillDir = p.join(temp.path, 'pending');
+      sharedLogs = p.join(temp.path, 'shared', 'logs');
+    });
+
+    CrashLogService station({String? logs, DateTime? now, _Folder? writer}) =>
+        CrashLogService(
+          logsDirectory: logs ?? sharedLogs,
+          now: () => now ?? errorTime,
+          writeFile: (writer ?? folder).write,
+          writeTimeout: limit,
+          spill: LogSpillStore(spillDir),
+        );
+
+    List<LogRecord> recordsIn(String logs, DateTime day) {
+      final file = File(p.join(logs, CrashLogService.dailyLogFileName(day)));
+      if (!file.existsSync()) return const [];
+      return file
+          .readAsLinesSync()
+          .map(LogRecord.tryParse)
+          .whereType<LogRecord>()
+          .toList();
+    }
+
+    File spillFile() => File(p.join(spillDir, LogSpillStore.fileName));
+
+    /// Ο ΠΟΠΙΝΙΟ σβήνει, και η εγγραφή που το διαπιστώνει είναι ένα σφάλμα.
+    Future<CrashLogService> silencedWithError() async {
+      final service = station();
+      await service.onStartup(retentionCount: 5);
+      folder.answers = false;
+      service.logError(
+        StateError('σφάλμα της πτώσης'),
+        StackTrace.current,
+        fatal: true,
+      );
+      await service.pendingWrites;
+      expect(service.isDiskAvailable, isFalse);
+      return service;
+    }
+
+    test(
+      'η εγγραφή της πτώσης κρατιέται τοπικά και φτάνει μόλις ο φάκελος γυρίσει',
+      () async {
+        final service = await silencedWithError();
+        expect(
+          spillFile().existsSync(),
+          isTrue,
+          reason: 'το σφάλμα δεν πετάχτηκε',
+        );
+
+        folder.answers = true;
+        await service.pulseForTest();
+        await service.pendingWrites;
+        await service.pendingDrain;
+
+        final error = recordsIn(
+          sharedLogs,
+          errorTime,
+        ).where((r) => r.message.contains('σφάλμα της πτώσης'));
+        expect(error, hasLength(1));
+        expect(error.single.time, errorTime, reason: 'με την αρχική του ώρα');
+        expect(spillFile().existsSync(), isFalse);
+      },
+    );
+
+    test('η επόμενη εκκίνηση μεταφέρει ό,τι περίμενε', () async {
+      await silencedWithError();
+
+      folder.answers = true;
+      final nextDay = station(now: DateTime(2026, 10, 15, 8));
+      await nextDay.onStartup(retentionCount: 5);
+      await nextDay.pendingDrain;
+
+      expect(
+        recordsIn(
+          sharedLogs,
+          errorTime,
+        ).where((r) => r.message.contains('σφάλμα της πτώσης')),
+        hasLength(1),
+      );
+      expect(spillFile().existsSync(), isFalse);
+    });
+
+    test('εκκίνηση πάνω σε άλλη βάση δεν παίρνει τις ξένες εγγραφές', () async {
+      await silencedWithError();
+
+      folder.answers = true;
+      final localLogs = p.join(temp.path, 'local', 'logs');
+      final local = station(logs: localLogs);
+      await local.onStartup(retentionCount: 5);
+      await local.pendingDrain;
+
+      expect(
+        recordsIn(
+          localLogs,
+          errorTime,
+        ).where((r) => r.message.contains('σφάλμα της πτώσης')),
+        isEmpty,
+      );
+      expect(
+        spillFile().existsSync(),
+        isTrue,
+        reason: 'περιμένει τον δικό του',
+      );
+    });
+
+    test('αποτυχημένη μεταφορά δεν σβήνει τις τοπικές εγγραφές', () async {
+      await silencedWithError();
+
+      final failing = _Folder()..refuseContaining = 'σφάλμα της πτώσης';
+      final next = station(writer: failing);
+      await next.onStartup(retentionCount: 5);
+      await next.pendingDrain;
+
+      expect(spillFile().readAsStringSync(), contains('σφάλμα της πτώσης'));
+    });
+
+    test(
+      'εγγραφές παλαιότερες από όσα κρατά το ημερολόγιο σβήνονται',
+      () async {
+        await silencedWithError();
+
+        folder.answers = true;
+        final muchLater = station(now: DateTime(2026, 11, 30));
+        await muchLater.onStartup(retentionCount: 5);
+        await muchLater.pendingDrain;
+
+        expect(
+          recordsIn(
+            sharedLogs,
+            errorTime,
+          ).where((r) => r.message.contains('σφάλμα της πτώσης')),
+          isEmpty,
+        );
+        expect(spillFile().existsSync(), isFalse);
+      },
+    );
+  });
 }
 
 /// Ένας φάκελος που απαντά ή σωπαίνει κατά παραγγελία.
 class _Folder {
   bool answers = true;
   int attempts = 0;
+
+  /// Αρνείται μόνο τις εγγραφές που περιέχουν αυτό το κείμενο — ο φάκελος
+  /// απαντά, αλλά η συγκεκριμένη μεταφορά αποτυγχάνει.
+  String? refuseContaining;
 
   /// Ο αργός αλλά ζωντανός φάκελος: η επόμενη εγγραφή τελειώνει όταν το πει
   /// το τεστ.
@@ -267,6 +543,10 @@ class _Folder {
     attempts++;
     // Ο σβηστός διακομιστής: η εγγραφή δεν τελειώνει ποτέ.
     if (!answers) return Completer<void>().future;
+    final refused = refuseContaining;
+    if (refused != null && content.contains(refused)) {
+      throw const FileSystemException('άρνηση εγγραφής');
+    }
     final slow = slowNext;
     if (slow != null) {
       slowNext = null;

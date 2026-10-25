@@ -1482,39 +1482,6 @@ class BuildingMapController {
     );
   }
 
-  Future<void> jumpToDepartmentFromSearch({
-    required String rawQuery,
-    required List<BuildingMapFloor> floors,
-    required List<DepartmentModel> departments,
-  }) async {
-    final qq = rawQuery.trim().toLowerCase();
-    if (qq.isEmpty) return;
-    for (final d in departments) {
-      if (!d.name.toLowerCase().contains(qq)) continue;
-      final mf = d.mapFloor;
-      if (mf == null || mf.isEmpty) continue;
-      final targetId = int.tryParse(mf);
-      if (targetId == null) continue;
-      final deptId = d.id;
-      if (deptId == null) continue;
-      await selectFloorFromList(
-        targetId,
-        floors,
-        clearSelectedDepartment: false,
-      );
-      _ref
-          .read(buildingMapSelectedDepartmentIdToMapProvider.notifier)
-          .setDept(deptId);
-      syncDraftWithSelectedDepartment(
-        departments: departments,
-        departmentId: deptId,
-        floorId: targetId,
-      );
-      _ref.read(buildingMapViewportCenterRequestSeqProvider.notifier).bump();
-      break;
-    }
-  }
-
   /// Μετάβαση στο φύλλο/τμήμα όταν είναι ήδη γνωστό το [DepartmentModel] (π.χ. από autocomplete).
   Future<void> jumpToMappedDepartment({
     required DepartmentModel department,

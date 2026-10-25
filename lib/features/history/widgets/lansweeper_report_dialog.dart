@@ -1346,11 +1346,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
           Positioned(
             right: 20,
             bottom: 20,
-            child: SafeArea(
-              child: QuickCallFloatingButton(
-                scope: QuickCallFabScope.overlayRoute,
-              ),
-            ),
+            child: SafeArea(child: QuickCallFloatingButton()),
           ),
         ],
       ),

@@ -34,6 +34,8 @@ import 'catalog_tab_lookup_reload_mixin.dart';
 import 'catalog_search_field_sync.dart';
 import 'equipment_settings_dialog.dart';
 import 'bulk_equipment_action_call_guard.dart';
+import '../../services/mass_deletion_guard.dart';
+import '../../services/mass_deletion_settings.dart';
 
 /// Καρτέλα εξοπλισμού: mirror του UsersTab – αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη, μαζική επεξεργασία.
 class EquipmentTab extends ConsumerStatefulWidget {
@@ -394,9 +396,16 @@ class _EquipmentTabState extends ConsumerState<EquipmentTab>
     final summaries = await deletionSummaries(db, ids);
     if (!context.mounted) return;
 
+    final massDeletion = await loadMassDeletionContext(
+      catalog: MassDeletionCatalog.equipment,
+      catalogTotal: state.allItems.where((r) => !r.$1.isDeleted).length,
+    );
+    if (!context.mounted) return;
+
     final preview = await showEquipmentDeletionPreviewDialog(
       context: context,
       summaries: summaries,
+      massDeletion: massDeletion,
     );
     if (preview == null || !preview.confirmed || !context.mounted) return;
     final keptIds = preview.keptEquipmentIds.toSet();

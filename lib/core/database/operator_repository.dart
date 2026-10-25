@@ -3,6 +3,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import '../../features/operators/services/operator_save_conflict.dart';
 import '../models/operator.dart';
 import '../utils/search_text_normalizer.dart';
+import '../utils/display_text_sort.dart';
 
 /// Persistence των χρηστών της εφαρμογής (πίνακας `operators`).
 ///
@@ -17,11 +18,18 @@ class OperatorRepository {
 
   /// Όλα τα προφίλ, με τους διαχειριστές πρώτους και μετά αλφαβητικά.
   Future<List<Operator>> getAll() async {
-    final rows = await db.query(
-      tableName,
-      orderBy: 'is_admin DESC, display_name COLLATE NOCASE ASC',
-    );
-    return [for (final row in rows) Operator.fromMap(row)];
+    final rows = await db.query(tableName);
+    final operators = [for (final row in rows) Operator.fromMap(row)];
+    return [
+      ...sortedForDisplay(
+        operators.where((o) => o.isAdmin),
+        (o) => [o.displayName],
+      ),
+      ...sortedForDisplay(
+        operators.where((o) => !o.isAdmin),
+        (o) => [o.displayName],
+      ),
+    ];
   }
 
   /// Το προφίλ που ταυτίζεται με λογαριασμό Windows· `null` όταν δεν υπάρχει.

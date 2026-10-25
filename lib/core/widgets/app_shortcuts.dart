@@ -22,6 +22,7 @@ import '../database/database_init_result.dart';
 import '../database/database_init_runner.dart';
 import '../providers/core_lexicon_provider.dart';
 import '../providers/quick_call_providers.dart';
+import '../../features/calls/provider/quick_call_session_provider.dart';
 import '../../features/calls/screens/widgets/quick_call_dialog.dart';
 import '../../features/history/widgets/lansweeper/lansweeper_report_launcher.dart';
 import 'app_keyboard_shortcuts.dart';
@@ -174,8 +175,15 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
     );
   }
 
+  /// Ανοίγει τη γρήγορη καταγραφή — ή επαναφέρει την ελαχιστοποιημένη, ακόμη
+  /// κι αν το κουμπί της είναι κρυμμένο από τις Ρυθμίσεις.
   void _invokeQuickCapture() {
-    if (!isQuickCallCaptureAvailable(ref)) return;
+    final minimized =
+        ref.read(quickCallSessionProvider) == QuickCallPhase.minimized;
+    final allowed = minimized
+        ? !isQuickCallOverlayBlocked(ref)
+        : isQuickCallCaptureAvailable(ref);
+    if (!allowed) return;
     unawaited(showQuickCallDialog(context));
   }
 
@@ -208,7 +216,7 @@ class _AppShortcutsState extends ConsumerState<AppShortcuts>
       case QuickCaptureIntent():
         // Το `true` και όταν η καταγραφή δεν είναι διαθέσιμη: η συντόμευση
         // αναγνωρίστηκε, δεν πρέπει να πέσει σε άλλον χειριστή.
-        if (isQuickCallCaptureAvailable(ref)) _invokeQuickCapture();
+        _invokeQuickCapture();
         return true;
       case LansweeperReportIntent():
         _invokeLansweeperReport();

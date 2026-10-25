@@ -11,8 +11,10 @@ import 'package:call_logger/core/widgets/app_closing_shield.dart';
 import 'package:call_logger/core/widgets/close_with_open_dialog_question.dart';
 import 'package:call_logger/core/widgets/draggable_dialog_shell.dart';
 import 'package:call_logger/core/widgets/modal_route_tracker.dart';
+import 'package:call_logger/features/calls/provider/quick_call_session_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Harness {
@@ -20,34 +22,42 @@ class _Harness {
     controller = AppCloseController(runShutdown: () async => shutdownRuns++);
     controller.confirmUserClose = () => confirmCloseWithOpenDialog(tracker);
     addTearDown(controller.dispose);
+    addTearDown(container.dispose);
   }
 
   final tracker = ModalRouteTracker();
+  final container = ProviderContainer();
   late final AppCloseController controller;
   int shutdownRuns = 0;
   int saves = 0;
 
-  Widget app() => MaterialApp(
-    navigatorObservers: [tracker],
-    builder: (context, child) =>
-        AppClosingShield(controllerForTest: controller, child: child!),
-    home: Builder(
-      builder: (context) => Scaffold(
-        body: TextButton(
-          onPressed: () => showDialog<void>(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('Επεξεργασία Υπαλλήλου'),
-              content: TextField(autofocus: true, onSubmitted: (_) => saves++),
-              actions: [
-                FilledButton(
-                  onPressed: () => saves++,
-                  child: const Text('Αποθήκευση'),
+  Widget app() => UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      navigatorObservers: [tracker],
+      builder: (context, child) =>
+          AppClosingShield(controllerForTest: controller, child: child!),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => AlertDialog(
+                title: const Text('Επεξεργασία Υπαλλήλου'),
+                content: TextField(
+                  autofocus: true,
+                  onSubmitted: (_) => saves++,
                 ),
-              ],
+                actions: [
+                  FilledButton(
+                    onPressed: () => saves++,
+                    child: const Text('Αποθήκευση'),
+                  ),
+                ],
+              ),
             ),
+            child: const Text('Άνοιγμα'),
           ),
-          child: const Text('Άνοιγμα'),
         ),
       ),
     ),
@@ -94,6 +104,33 @@ void main() {
     expect(h.shutdownRuns, 1);
     expect(find.text('Κλείσιμο εφαρμογής'), findsNothing);
   });
+
+  testWidgets(
+    'ελαχιστοποιημένη γρήγορη καταγραφή: το «Χ» ρωτά όπως με ανοιχτό διάλογο',
+    (tester) async {
+      final h = _Harness();
+      await tester.pumpWidget(h.app());
+      final session = h.container.read(quickCallSessionProvider.notifier);
+      session.open();
+      session.minimize();
+
+      final asking = h.controller.handleUserCloseRequest();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Υπάρχει ανοιχτό ζήτημα «Γρήγορη καταγραφή κλήσης», '
+          'θέλετε να το διευθετήσετε;',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Κλείσιμο'));
+      await tester.pumpAndSettle();
+      await asking;
+
+      expect(h.shutdownRuns, 1);
+    },
+  );
 
   testWidgets('μετά το «Κλείσιμο» ούτε κλικ ούτε Enter φτάνουν στον διάλογο', (
     tester,

@@ -122,6 +122,12 @@ Future<DatabaseSnapshot> takeDatabaseSnapshot(
   int chunkSize = kDatabaseSnapshotChunkBytes,
   DateTime Function() now = DateTime.now,
   @visibleForTesting Future<void> Function()? whileLocked,
+
+  /// Πού φτιάχνεται ο φάκελος του στιγμιότυπου· στην εφαρμογή πάντα ο
+  /// προσωρινός φάκελος του συστήματος. Τα τεστ δίνουν δικό τους, ώστε να
+  /// ελέγχουν ότι δεν έμεινε τίποτα χωρίς να τα μπερδεύουν φάκελοι άλλων
+  /// τεστ που τρέχουν παράλληλα.
+  @visibleForTesting Directory? tempRoot,
 }) async {
   void checkDeadline() {
     if (deadline != null && now().isAfter(deadline)) {
@@ -150,7 +156,9 @@ Future<DatabaseSnapshot> takeDatabaseSnapshot(
     checkDeadline();
     await whileLocked?.call();
 
-    directory = await Directory.systemTemp.createTemp('call_logger_snapshot_');
+    directory = await (tempRoot ?? Directory.systemTemp).createTemp(
+      'call_logger_snapshot_',
+    );
     final localPath = p.join(directory.path, 'snapshot.db');
     final bytes = await _copyInChunks(
       dbPath,

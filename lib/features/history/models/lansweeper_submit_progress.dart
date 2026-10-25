@@ -144,27 +144,35 @@ class LansweeperSubmitProgress {
 
   /// Αφορά η εικόνα αυτή την [callId];
   ///
-  /// Χωρίς επιλεγμένη κλήση (`null`) η απάντηση είναι ναι: αμέσως μετά από
-  /// επιτυχή καταχώρηση οι κλήσεις αποεπιλέγονται μόνες τους, και το
-  /// αποτέλεσμα πρέπει να προλάβει να διαβαστεί.
+  /// Χωρίς επιλεγμένη κλήση (`null`) η απάντηση είναι ναι **μόνο για την
+  /// επιτυχία**: αμέσως μετά από επιτυχή καταχώρηση οι κλήσεις αποεπιλέγονται
+  /// μόνες τους, και το αποτέλεσμα πρέπει να προλάβει να διαβαστεί. Μετά από
+  /// αποτυχία την αποεπιλογή την κάνει ο χρήστης για να φύγει — και η αποτυχία
+  /// φαίνεται έτσι κι αλλιώς πάνω στην ίδια την κλήση, ως «Αποτυχημένη».
   bool concernsCall(int? callId) {
     // Αποστολή εκκρεμότητας: δεν ανήκει σε καμία κλήση, όσο κενή κι αν είναι η
     // λίστα των κλήσεων. Χωρίς αυτόν τον έλεγχο το κενό `callIds` θα σήμαινε
     // «αφορά τους πάντες» και το αποτέλεσμα θα διέρρεε στην Αναφορά.
     if (taskIds.isNotEmpty) return false;
-    if (callId == null || callIds.isEmpty) return true;
+    if (callId == null) return _lingersWithoutSelection;
+    if (callIds.isEmpty) return true;
     return callIds.contains(callId);
   }
 
   /// Αφορά η εικόνα αυτή την [taskId];
   ///
   /// Το κάτοπτρο του [concernsCall]: αποστολή κλήσης δεν εμφανίζεται ποτέ πάνω
-  /// σε εκκρεμότητα.
+  /// σε εκκρεμότητα, και χωρίς επιλογή μένει μόνο η επιτυχία.
   bool concernsTask(int? taskId) {
     if (taskIds.isEmpty) return false;
-    if (taskId == null) return true;
+    if (taskId == null) return _lingersWithoutSelection;
     return taskIds.contains(taskId);
   }
+
+  /// Το αποτέλεσμα που επιτρέπεται να μείνει στην οθόνη όταν δεν είναι
+  /// επιλεγμένο τίποτα: όλα εκτός από την αποτυχία.
+  bool get _lingersWithoutSelection =>
+      outcome != LansweeperSubmitOutcome.failure;
 
   /// Το βήμα που εκτελείται τώρα· `null` όταν δεν τρέχει κανένα.
   LansweeperSubmitStep? get currentStep {

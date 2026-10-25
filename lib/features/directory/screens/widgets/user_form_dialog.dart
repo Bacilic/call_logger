@@ -630,7 +630,10 @@ class UserFormDialogState extends ConsumerState<UserFormDialog>
                     },
                   ),
                   CatalogValidationHintText(
-                    hint: validation?.personNameHint(lastNameController.text),
+                    hint: validation?.lastNameHint(
+                      lastName: lastNameController.text,
+                      firstName: firstNameController.text,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   // Όνομα και ψευδώνυμο στην ίδια γραμμή: ανήκουν στο ίδιο
@@ -706,15 +709,27 @@ class UserFormDialogState extends ConsumerState<UserFormDialog>
                       const SizedBox(width: 8),
                       Expanded(
                         flex: 4,
-                        child: TextField(
-                          controller: nicknameController,
-                          focusNode: _nicknameFocusNode,
-                          decoration: const InputDecoration(
-                            labelText: 'Ψευδώνυμο',
-                            border: OutlineInputBorder(),
-                          ),
-                          textCapitalization: TextCapitalization.words,
-                          onChanged: (_) => _onFieldChanged(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: nicknameController,
+                              focusNode: _nicknameFocusNode,
+                              decoration: const InputDecoration(
+                                labelText: 'Ψευδώνυμο',
+                                border: OutlineInputBorder(),
+                              ),
+                              textCapitalization: TextCapitalization.words,
+                              onChanged: (_) => _onFieldChanged(),
+                            ),
+                            CatalogValidationHintText(
+                              hint: validation?.nicknameHint(
+                                nickname: nicknameController.text,
+                                firstName: firstNameController.text,
+                                lastName: lastNameController.text,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -863,17 +878,32 @@ class UserFormDialogState extends ConsumerState<UserFormDialog>
                   const SizedBox(height: 12),
                   Builder(
                     builder: (context) {
+                      final department = LookupService.instance
+                          .findDepartmentByName(departmentController.text);
+                      // Εταιρεία ή εξωτερική μονάδα: η τιμή δεν διαβάζεται από
+                      // κανέναν, οπότε το πεδίο κρύβεται — αλλά ο controller
+                      // κρατά την τιμή και η αποθήκευση τη γράφει ανέγγιχτη.
+                      // Άγνωστο τμήμα διαβάζεται ως νοσοκομείο: όσο
+                      // πληκτρολογείτε, το πεδίο δεν αναβοσβήνει.
+                      if (!(department?.kind.participatesInLansweeper ??
+                          true)) {
+                        final note = lansweeperIdentityHiddenNote(
+                          lansweeperUsernameController.text,
+                        );
+                        if (note == null) return const SizedBox.shrink();
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            note,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        );
+                      }
                       // Προειδοποίηση, ποτέ απαγόρευση: ο κατάλογος έχει πάντα
                       // την εξαίρεση που κανένας κανόνας δεν προέβλεψε. Ποιο
                       // μήνυμα κερδίζει το κρίνει ΜΙΑ καθαρή συνάρτηση — εδώ
                       // μένει μόνο το χρώμα.
-                      final department = LookupService.instance
-                          .findDepartmentByName(departmentController.text);
                       final hint = lansweeperIdentityFieldHint(
-                        // Άγνωστο τμήμα διαβάζεται ως νοσοκομείο: όσο
-                        // πληκτρολογείτε, το υπόμνημα δεν αναβοσβήνει.
-                        participatesInLansweeper:
-                            department?.kind.participatesInLansweeper ?? true,
                         identity: lansweeperUsernameController.text,
                         referenceDomain: lansweeperReferenceDomain(
                           agent: _lansweeperAgentIdentity,

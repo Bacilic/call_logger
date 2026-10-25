@@ -7,6 +7,7 @@ import '../database/equipment_repository.dart';
 import '../database/phone_repository.dart';
 import '../database/user_repository.dart';
 import '../utils/department_display_utils.dart';
+import '../utils/display_text_sort.dart';
 import '../utils/search_text_normalizer.dart';
 import '../../features/calls/models/equipment_model.dart';
 import '../../features/calls/models/user_model.dart';
@@ -173,6 +174,7 @@ class LookupService {
             : dep.name;
       }
     }
+    _sortDepartmentsForDisplay();
     final floors = await BuildingMapRepository(db).listBuildingMapFloors();
     floorLabelById = {
       for (final f in floors)
@@ -180,6 +182,12 @@ class LookupService {
     };
     _loadedDepartments = true;
   }
+
+  /// Η λίστα τμημάτων είναι λίστα επιλογής: κρατιέται στη μία σειρά κειμένου
+  /// της εφαρμογής, όχι στη σειρά της βάσης, που βάζει πρώτα τα τονισμένα
+  /// κεφαλαία («Έκτακτα» πριν από το «Αιματολογικό»).
+  void _sortDepartmentsForDisplay() =>
+      departments.sort((a, b) => compareDisplayText(a.name, b.name));
 
   String? getDepartmentName(int? id) =>
       id == null ? null : departmentIdToName[id] ?? '';
@@ -319,7 +327,7 @@ class LookupService {
     final list = _users
         .where((u) => !u.isDeleted && userHasPhone(u, digits))
         .toList();
-    list.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
+    list.sort((a, b) => compareDisplayText(a.name, b.name));
     return list;
   }
 
@@ -399,13 +407,9 @@ class LookupService {
     }
 
     int compareByCodeThenLabel(EquipmentModel a, EquipmentModel b) {
-      final ac = (a.code ?? '').toLowerCase();
-      final bc = (b.code ?? '').toLowerCase();
-      final byCode = ac.compareTo(bc);
+      final byCode = compareDisplayText(a.code, b.code);
       if (byCode != 0) return byCode;
-      return a.displayLabel.toLowerCase().compareTo(
-        b.displayLabel.toLowerCase(),
-      );
+      return compareDisplayText(a.displayLabel, b.displayLabel);
     }
 
     exact.sort(compareByCodeThenLabel);
@@ -478,7 +482,7 @@ class LookupService {
     final result = _users
         .where((u) => !u.isDeleted && u.departmentId == departmentId)
         .toList();
-    result.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
+    result.sort((a, b) => compareDisplayText(a.name, b.name));
     return result;
   }
 
@@ -532,7 +536,7 @@ class LookupService {
     }
 
     final merged = <EquipmentModel>[...byId.values, ...byCodeFallback.values];
-    merged.sort((a, b) => a.displayLabel.compareTo(b.displayLabel));
+    merged.sort((a, b) => compareDisplayText(a.displayLabel, b.displayLabel));
     return merged;
   }
 
@@ -558,7 +562,7 @@ class LookupService {
         phones.add(trimmed);
       }
     }
-    phones.sort((a, b) => a.compareTo(b));
+    phones.sort(compareDisplayText);
     return phones;
   }
 
@@ -581,7 +585,7 @@ class LookupService {
         if (seen.add(t)) out.add(t);
       }
     }
-    out.sort((a, b) => a.compareTo(b));
+    out.sort(compareDisplayText);
     return out;
   }
 
@@ -595,7 +599,7 @@ class LookupService {
       if (code.isEmpty) continue;
       if (seen.add(code)) out.add(code);
     }
-    out.sort((a, b) => a.compareTo(b));
+    out.sort(compareDisplayText);
     return out;
   }
 
@@ -613,10 +617,8 @@ class LookupService {
         if (!list.contains(owner)) list.add(owner);
       }
     }
-    final sortedKeys = out.keys.toList()..sort((a, b) => a.compareTo(b));
-    return {
-      for (final k in sortedKeys) k: (out[k]!..sort((a, b) => a.compareTo(b))),
-    };
+    final sortedKeys = out.keys.toList()..sort(compareDisplayText);
+    return {for (final k in sortedKeys) k: (out[k]!..sort(compareDisplayText))};
   }
 
   /// Εξοπλισμός που ανήκει σε καλούντες του τμήματος:
@@ -636,10 +638,8 @@ class LookupService {
         if (!list.contains(owner)) list.add(owner);
       }
     }
-    final sortedKeys = out.keys.toList()..sort((a, b) => a.compareTo(b));
-    return {
-      for (final k in sortedKeys) k: (out[k]!..sort((a, b) => a.compareTo(b))),
-    };
+    final sortedKeys = out.keys.toList()..sort(compareDisplayText);
+    return {for (final k in sortedKeys) k: (out[k]!..sort(compareDisplayText))};
   }
 
   /// Κοινόχρηστα (απευθείας στο τμήμα) τηλέφωνα, ταξινομημένα.
@@ -649,7 +649,7 @@ class LookupService {
             _departmentDirectPhones[departmentId] ?? const <String>[],
           )
           ..removeWhere((p) => p.trim().isEmpty)
-          ..sort((a, b) => a.compareTo(b));
+          ..sort(compareDisplayText);
     return list;
   }
 
@@ -663,7 +663,7 @@ class LookupService {
       if (code.isEmpty) continue;
       if (seen.add(code)) out.add(code);
     }
-    out.sort((a, b) => a.compareTo(b));
+    out.sort(compareDisplayText);
     return out;
   }
 
@@ -839,6 +839,7 @@ class LookupService {
     departments
       ..clear()
       ..addAll(departmentRows);
+    _sortDepartmentsForDisplay();
     departmentIdToName.clear();
     for (final d in departments) {
       if (d.id != null) {

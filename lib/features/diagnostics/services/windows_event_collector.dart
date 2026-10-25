@@ -11,7 +11,9 @@ import '../models/windows_events.dart';
 /// 2. **Κύκλος ζωής του υπολογιστή** (κλείσιμο, επανεκκίνηση, διακοπή
 ///    ρεύματος): μπαίνουν όλα, γιατί εξηγούν το «η εφαρμογή δεν τερμάτισε
 ///    ομαλά» χωρίς κατάρρευση.
-/// 3. **Όλα τα υπόλοιπα των επιλεγμένων επιπέδων**: ομαδοποιούνται ανά είδος.
+/// 3. **Ύπνος και αφύπνιση** του υπολογιστή: μπαίνουν όλα, γιατί εξηγούν το
+///    πάγωμα της εφαρμογής μετά από αδράνεια.
+/// 4. **Όλα τα υπόλοιπα των επιλεγμένων επιπέδων**: ομαδοποιούνται ανά είδος.
 ///    Σε 60 ημέρες ήταν 1.682 συμβάντα αλλά μόνο 24 είδη.
 ///
 /// Το μήνυμα ζητείται ([add]) μόνο όταν χρειάζεται — η μορφοποίησή του από τα
@@ -26,6 +28,7 @@ class WindowsEventCollector {
 
   final List<WindowsEventEntry> appEvents = [];
   final List<WindowsEventEntry> computerLifecycle = [];
+  final List<WindowsEventEntry> sleepAndWake = [];
   final Map<String, WindowsEventGroup> _groups = {};
 
   List<WindowsEventGroup> get groups =>
@@ -38,6 +41,10 @@ class WindowsEventCollector {
     }
     if (isComputerLifecycle(event)) {
       computerLifecycle.add(_entry(event, message()));
+      return;
+    }
+    if (isSleepOrWake(event)) {
+      sleepAndWake.add(_entry(event, message()));
       return;
     }
     if (!levels.contains(event.level)) return;
@@ -82,6 +89,33 @@ class WindowsEventCollector {
   static bool isComputerLifecycle(RawWindowsEvent event) =>
       event.log == 'System' &&
       (lifecycleEvents[event.provider]?.contains(event.eventId) ?? false);
+
+  /// Πότε ο υπολογιστής κοιμήθηκε και πότε ξύπνησε. Ζητούνται κι αυτά ρητά
+  /// στο ερώτημα προς τα Windows.
+  ///
+  /// Ένα πάγωμα της εφαρμογής μετά από ώρα αδράνειας εξηγείται συχνά από τον
+  /// ύπνο: η κάρτα δικτύου ξυπνά αργότερα από τον υπολογιστή, και η βάση στο
+  /// δίκτυο δεν απαντά στο μεταξύ (PC3569, 02/10 και 06/10/2026).
+  ///
+  /// Μπαίνει ύπνος (42) και αφύπνιση (Power-Troubleshooter 1 — το μήνυμά της
+  /// λέει πόσο κράτησε ο ύπνος και τι τον ξύπνησε), και τα δύο αντίστοιχα της
+  /// «σύγχρονης αναμονής» (506/507) των νεότερων υπολογιστών. Η αφύπνιση του
+  /// πυρήνα (Kernel-Power 107) επαναλαμβάνει την ίδια στιγμή και μένει έξω.
+  static const Map<String, Set<int>> sleepWakeEvents = {
+    'Microsoft-Windows-Kernel-Power': {42, 506, 507},
+    'Microsoft-Windows-Power-Troubleshooter': {1},
+  };
+
+  static bool isSleepOrWake(RawWindowsEvent event) =>
+      event.log == 'System' &&
+      (sleepWakeEvents[event.provider]?.contains(event.eventId) ?? false);
+
+  /// Ύπνος ή αφύπνιση; Για την ετικέτα της ενότητας και του χρονολογίου.
+  static bool isWake(WindowsEventEntry event) =>
+      (event.provider == 'Microsoft-Windows-Power-Troubleshooter' &&
+          event.eventId == 1) ||
+      (event.provider == 'Microsoft-Windows-Kernel-Power' &&
+          event.eventId == 507);
 
   static WindowsEventEntry _entry(RawWindowsEvent event, String message) =>
       WindowsEventEntry(

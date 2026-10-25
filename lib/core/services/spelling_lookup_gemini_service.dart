@@ -1,10 +1,8 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'ai_prompt_template_syntax.dart';
+import 'gemini_json_request.dart';
 import 'gemini_ticket_service.dart';
 
 /// Αποτέλεσμα ερώτησης ΤΝ για ορθογραφία λέξης.
@@ -15,9 +13,9 @@ class SpellingLookupGeminiResult {
   final String? note;
 }
 
-/// Κλήση Gemini για προτάσεις ορθογραφίας (μόνο κατόπιν αιτήματος χρήστη).
-abstract final class SpellingLookupGeminiService {
-  static const String _promptTemplate = '''
+/// Η εργοστασιακή προτροπή της «Ερώτησης ΤΝ» — ό,τι έστελνε η εφαρμογή πριν
+/// γίνει επεξεργάσιμη, αυτούσιο (απόφαση Διευθυντή 24/10/2026).
+const String kDefaultSpellingLookupPrompt = '''
 Είσαι βοηθός ορθογραφίας ελληνικών (και όπου χρειάζεται αγγλικών) λέξεων.
 Ο χρήστης δίνει μια λέξη ή τμήμα λέξης που δεν είναι σίγουρος για την ορθογραφία της.
 
@@ -35,10 +33,30 @@ abstract final class SpellingLookupGeminiService {
 - Το πεδίο note είναι προαιρετικό (μία σύντομη πρόταση στα ελληνικά).
 ''';
 
+/// Η «Ερώτηση ΤΝ»: μία λέξη μέσα, προτάσεις και σημείωση πίσω.
+const AiPromptProfile kSpellingLookupProfile = AiPromptProfile(
+  placeholders: [(token: '{Λέξη}', label: 'Λέξη')],
+  jsonResponseKeys: ['suggestions', 'note'],
+  jsonKeyLabels: {'suggestions': 'προτάσεις', 'note': 'σημείωση'},
+  responseBlueprint: '{"suggestions":["..."],"note":"..."}',
+  defaultTemplate: kDefaultSpellingLookupPrompt,
+);
+
+/// Κλήση Gemini για προτάσεις ορθογραφίας (μόνο κατόπιν αιτήματος χρήστη).
+abstract final class SpellingLookupGeminiService {
+  /// Η προτροπή για τη [word]· κενό [template] σημαίνει την εργοστασιακή.
+  static String buildPrompt({required String template, required String word}) {
+    final source = template.trim().isEmpty
+        ? kSpellingLookupProfile.defaultTemplate
+        : template;
+    return source.replaceAll('{Λέξη}', word.trim());
+  }
+
   static Future<SpellingLookupGeminiResult> suggest({
     required String word,
     required String apiKey,
     required String endpoint,
+    String template = '',
     String? primaryModel,
     http.Client? client,
   }) async {
@@ -47,98 +65,14 @@ abstract final class SpellingLookupGeminiService {
       throw const GeminiException('Δεν δόθηκε λέξη προς έλεγχο.');
     }
 
-    final key = apiKey.trim();
-    if (key.isEmpty) {
-      throw const GeminiException(
-        'Δεν έχει οριστεί Gemini API key.',
-        scope: GeminiFailureScope.infrastructure,
-      );
-    }
-
-    final target = GeminiTicketService.resolveCallTarget(
+    final text = await GeminiJsonRequest.send(
+      prompt: buildPrompt(template: template, word: trimmed),
+      apiKey: apiKey,
       endpoint: endpoint,
-      apiKey: key,
-      primaryModel: primaryModel,
+      model: primaryModel,
+      client: client,
+      timeout: const Duration(seconds: 30),
     );
-    final uri = target.uri;
-    if (!uri.hasScheme || uri.host.isEmpty) {
-      throw const GeminiException(
-        'Μη έγκυρο URL endpoint Gemini.',
-        scope: GeminiFailureScope.infrastructure,
-      );
-    }
-
-    final prompt = _promptTemplate.replaceAll('{Λέξη}', trimmed);
-
-    final httpClient = client ?? http.Client();
-    final http.Response response;
-    try {
-      // Κάθε αποτυχία βγαίνει ως GeminiException με αιτία: έτσι όποιος εκτελεί
-      // την αλυσίδα μοντέλων ξέρει αν αξίζει να δοκιμάσει το επόμενο, και ο
-      // χρήστης δεν βλέπει ποτέ ωμό κείμενο μηχανής.
-      try {
-        response = await httpClient
-            .post(
-              uri,
-              headers: target.headers,
-              body: jsonEncode(<String, dynamic>{
-                'contents': [
-                  <String, dynamic>{
-                    'parts': [
-                      <String, String>{'text': prompt},
-                    ],
-                  },
-                ],
-                'generationConfig': <String, String>{
-                  'responseMimeType': 'application/json',
-                },
-              }),
-            )
-            .timeout(const Duration(seconds: 30));
-      } on TimeoutException {
-        throw const GeminiException(
-          'Η κλήση Gemini έληξε (timeout).',
-          scope: GeminiFailureScope.model,
-        );
-      } on SocketException catch (e) {
-        throw GeminiException(
-          e.message,
-          scope: GeminiFailureScope.infrastructure,
-        );
-      } on http.ClientException catch (e) {
-        throw GeminiException(
-          e.message,
-          scope: GeminiFailureScope.infrastructure,
-        );
-      }
-    } finally {
-      if (client == null) httpClient.close();
-    }
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final apiMessage = _extractApiErrorMessage(response.body);
-      throw GeminiException(
-        apiMessage == null
-            ? 'Αποτυχία HTTP (${response.statusCode}) κατά την κλήση Gemini.'
-            : 'Αποτυχία Gemini (${response.statusCode}): $apiMessage',
-        statusCode: response.statusCode,
-        scope: GeminiException.classifyFailureScope(
-          statusCode: response.statusCode,
-          message: apiMessage,
-        ),
-        retryAfter: GeminiException.extractRetryAfterFromErrorBody(
-          response.body,
-        ),
-      );
-    }
-
-    final text = _extractResponseText(response.body);
-    if (text == null || text.trim().isEmpty) {
-      throw const GeminiException(
-        'Η απάντηση Gemini ήταν κενή.',
-        scope: GeminiFailureScope.model,
-      );
-    }
 
     final parsed = _parseSpellingJson(text);
     if (parsed == null) {
@@ -151,70 +85,25 @@ abstract final class SpellingLookupGeminiService {
     return parsed;
   }
 
-  static String? _extractApiErrorMessage(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map) {
-        final error = decoded['error'];
-        if (error is Map) {
-          final message = error['message']?.toString().trim();
-          if (message != null && message.isNotEmpty) return message;
-        }
-      }
-    } catch (_) {}
-    final trimmed = body.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
-  static String? _extractResponseText(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is! Map) return null;
-      final candidates = decoded['candidates'];
-      if (candidates is! List || candidates.isEmpty) return null;
-      final first = candidates.first;
-      if (first is! Map) return null;
-      final content = first['content'];
-      if (content is! Map) return null;
-      final parts = content['parts'];
-      if (parts is! List || parts.isEmpty) return null;
-      final part = parts.first;
-      if (part is! Map) return null;
-      return part['text']?.toString();
-    } catch (_) {
-      return null;
-    }
-  }
-
   static SpellingLookupGeminiResult? _parseSpellingJson(String text) {
-    try {
-      var payload = text.trim();
-      if (payload.startsWith('```')) {
-        payload = payload
-            .replaceFirst(RegExp(r'^```(?:json)?\s*'), '')
-            .replaceFirst(RegExp(r'\s*```$'), '');
-      }
-      final decoded = jsonDecode(payload);
-      if (decoded is! Map) return null;
-      final rawList = decoded['suggestions'];
-      final suggestions = <String>[];
-      if (rawList is List) {
-        for (final item in rawList) {
-          final s = item?.toString().trim() ?? '';
-          if (s.isNotEmpty && !suggestions.contains(s)) {
-            suggestions.add(s);
-          }
+    final decoded = GeminiJsonRequest.decodeObject(text);
+    if (decoded == null) return null;
+    final rawList = decoded['suggestions'];
+    final suggestions = <String>[];
+    if (rawList is List) {
+      for (final item in rawList) {
+        final s = item?.toString().trim() ?? '';
+        if (s.isNotEmpty && !suggestions.contains(s)) {
+          suggestions.add(s);
         }
       }
-      final note = decoded['note']?.toString().trim();
-      if (suggestions.isEmpty && (note == null || note.isEmpty)) return null;
-      return SpellingLookupGeminiResult(
-        suggestions: suggestions,
-        note: note == null || note.isEmpty ? null : note,
-      );
-    } catch (_) {
-      return null;
     }
+    final note = decoded['note']?.toString().trim();
+    if (suggestions.isEmpty && (note == null || note.isEmpty)) return null;
+    return SpellingLookupGeminiResult(
+      suggestions: suggestions,
+      note: note == null || note.isEmpty ? null : note,
+    );
   }
 
   /// Για unit tests χωρίς HTTP.

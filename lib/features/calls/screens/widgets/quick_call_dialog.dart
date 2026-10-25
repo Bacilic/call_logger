@@ -1,4 +1,5 @@
 import '../../../../core/widgets/dialog_snackbar_scope.dart';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -9,9 +10,9 @@ import '../../../../core/errors/task_save_exception.dart';
 import '../../../../core/models/remote_tool.dart';
 import '../../../../core/widgets/compact_tooltip.dart';
 import '../../../../core/widgets/dialog_outside_tap_hint.dart';
-import '../../layout/calls_field_groups_provider.dart';
 import '../../provider/call_entry_provider.dart';
 import '../../provider/call_header_provider.dart';
+import '../../provider/quick_call_session_provider.dart';
 import '../../provider/remote_paths_provider.dart';
 import 'call_entry_selector_hooks.dart';
 import 'call_status_bar.dart';
@@ -20,27 +21,51 @@ import 'notes_sticky_field.dart';
 import 'remote_connection_buttons.dart';
 import 'smart_entity_selector_widget.dart';
 
-/// Πλήθος ζωντανών QuickCallDialog — δεμένο με τον κύκλο ζωής του State ώστε
-/// να αυτοθεραπεύεται ακόμη κι αν η διαδρομή δεν κλείσει ποτέ κανονικά.
-int _openQuickCallDialogCount = 0;
+/// Ο τίτλος της γρήγορης καταγραφής — και στην ερώτηση κλεισίματος της
+/// εφαρμογής, όταν είναι ελαχιστοποιημένη.
+const String kQuickCallDialogTitle = 'Γρήγορη καταγραφή κλήσης';
 
-/// Εμφανίζει modal διάλογο γρήγορης καταγραφής με ανεξάρτητο provider scope.
-/// Δεύτερη κλήση όσο ο διάλογος είναι ανοιχτός δεν στοιβάζει δεύτερο.
-Future<void> showQuickCallDialog(BuildContext context) {
-  if (_openQuickCallDialogCount > 0) return Future<void>.value();
-  return showDialogWithOutsideTapHint<void>(
+/// Πώς έκλεισε ένα άνοιγμα του διαλόγου.
+enum _QuickCallExit {
+  /// Ελαχιστοποίηση: η καταγραφή συνεχίζει.
+  minimized,
+
+  /// Καταχώρηση ή ρητό κλείσιμο: η καταγραφή τελειώνει.
+  finished,
+}
+
+/// Ανοίγει τη γρήγορη καταγραφή — καινούρια, ή την ελαχιστοποιημένη όπως την
+/// άφησε ο χρήστης. Όσο ο διάλογος είναι ανοιχτός, δεύτερη κλήση δεν κάνει
+/// τίποτα: υπάρχει μία μόνο γρήγορη καταγραφή.
+Future<void> showQuickCallDialog(BuildContext context) async {
+  final root = ProviderScope.containerOf(context, listen: false);
+  if (root.read(quickCallSessionProvider) == QuickCallPhase.open) return;
+  final session = root.read(quickCallSessionProvider.notifier);
+  final container = session.open();
+
+  final exit = await showDialogWithOutsideTapHint<_QuickCallExit>(
     context: context,
-    builder: (dialogContext) => ProviderScope(
-      overrides: [
-        callSmartEntityProvider.overrideWith(SmartEntitySelectorNotifier.new),
-        callEntryProvider.overrideWith(CallEntryNotifier.new),
-      ],
-      child: const IsolatedCallsScreenState(child: QuickCallDialog()),
+    builder: (dialogContext) => UncontrolledProviderScope(
+      container: container,
+      child: const QuickCallDialog(),
     ),
   );
+
+  // Ελαχιστοποίηση, «Χ» και καταχώρηση ενημερώνουν τη συνεδρία μόνα τους.
+  // Μένει το κλείσιμο απ' έξω (π.χ. ένα «επιστροφή στην αρχή» άλλης ροής):
+  // ό,τι έχει γραφτεί δεν χάνεται σιωπηλά, ελαχιστοποιείται.
+  if (exit != null) return;
+  if (session.hasContent) {
+    session.minimize();
+  } else {
+    session.end();
+  }
 }
 
 /// Modal γρήγορης καταγραφής — ξεχωριστό scope, χωρίς επαφή με την κύρια φόρμα.
+///
+/// Τα providers της φόρμας τα δίνει ο [quickCallSessionProvider]· ο διάλογος
+/// είναι μόνο η όψη τους, γι' αυτό η ελαχιστοποίηση δεν χάνει τίποτα.
 class QuickCallDialog extends ConsumerStatefulWidget {
   const QuickCallDialog({super.key});
 
@@ -62,10 +87,12 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
   static const double _kRatioSum =
       _kPhoneRatio + _kCallerRatio + _kDeptRatio + _kEquipmentRatio;
 
+  late final QuickCallSessionNotifier _session;
+
   @override
   void initState() {
     super.initState();
-    _openQuickCallDialogCount++;
+    _session = ref.read(quickCallSessionProvider.notifier)..attachView();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _selectorKey.currentState?.requestPhoneFocus();
     });
@@ -73,8 +100,55 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
 
   @override
   void dispose() {
-    _openQuickCallDialogCount--;
+    _session.detachView();
     super.dispose();
+  }
+
+  void _minimize() {
+    _session.minimize();
+    Navigator.of(context).pop(_QuickCallExit.minimized);
+  }
+
+  /// «Ό,τι γράψατε», όπως το λέει η ερώτηση: όσα φαίνονται γραμμένα στα
+  /// πεδία, στην περιγραφή και στην κατηγορία. Όχι εσωτερικές ενδείξεις
+  /// (χρονόμετρο, λίστες προτάσεων), που μένουν αναμμένες και σε φόρμα που ο
+  /// χρήστης βλέπει άδεια.
+  bool get _hasWrittenContent {
+    final entry = ref.read(callEntryProvider);
+    return (_selectorKey.currentState?.hasTypedText ?? false) ||
+        entry.notes.trim().isNotEmpty ||
+        entry.category.trim().isNotEmpty;
+  }
+
+  /// Το «Χ»: ό,τι έχει γραφτεί δεν σβήνει χωρίς ερώτηση.
+  Future<void> _requestClose() async {
+    if (_hasWrittenContent && !await _confirmDiscard()) return;
+    if (!mounted) return;
+    Navigator.of(context).pop(_QuickCallExit.finished);
+    _session.end();
+  }
+
+  Future<bool> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Κλείσιμο γρήγορης καταγραφής'),
+        content: const Text('Ό,τι γράψατε θα χαθεί.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Κλείσιμο'),
+          ),
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Επιστροφή'),
+          ),
+        ],
+      ),
+    );
+    return discard ?? false;
   }
 
   ({double w1, double w2, double wDept, double w3}) _fieldWidths(double total) {
@@ -97,7 +171,9 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
           const SnackBar(
             content: Text('Κλήση αποθηκεύτηκε (γρήγορη καταγραφή)'),
           ),
+          result: _QuickCallExit.finished,
         );
+        _session.end();
       } else {
         showDialogSnackBar(
           const SnackBar(content: Text('Αποτυχία αποθήκευσης')),
@@ -124,132 +200,149 @@ class _QuickCallDialogState extends ConsumerState<QuickCallDialog>
     );
     final theme = Theme.of(context);
 
-    return DialogSnackbarScope(
-      messengerKey: dialogMessengerKey,
-      child: Dialog(
-        key: const ValueKey('quick_call_dialog'),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _kDialogMaxWidth),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.flash_on, color: theme.colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Γρήγορη καταγραφή κλήσης',
-                        style: theme.textTheme.titleLarge,
+    return PopScope<_QuickCallExit>(
+      // Κάθε «πίσω» περνά από το ίδιο «Χ» και την ερώτησή του.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_requestClose());
+      },
+      child: DialogSnackbarScope(
+        messengerKey: dialogMessengerKey,
+        child: Dialog(
+          key: const ValueKey('quick_call_dialog'),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _kDialogMaxWidth),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.flash_on, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          kQuickCallDialogTitle,
+                          style: theme.textTheme.titleLarge,
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'Κλείσιμο',
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final widths = _fieldWidths(constraints.maxWidth);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SmartEntitySelectorWidget(
-                              key: _selectorKey,
-                              provider: callSmartEntityProvider,
-                              w1: widths.w1,
-                              w2: widths.w2,
-                              wDept: widths.wDept,
-                              w3: widths.w3,
-                              callEntryHooks: callEntrySelectorHooks(ref),
-                              trailingRowChildren: const [],
+                      IconButton(
+                        key: const ValueKey('quick_call_minimize'),
+                        tooltip: 'Ελαχιστοποίηση',
+                        onPressed: _minimize,
+                        icon: const Icon(Icons.vertical_align_bottom),
+                      ),
+                      IconButton(
+                        key: const ValueKey('quick_call_close'),
+                        tooltip: 'Κλείσιμο',
+                        onPressed: _requestClose,
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final widths = _fieldWidths(constraints.maxWidth);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: SmartEntitySelectorWidget(
+                                key: _selectorKey,
+                                provider: callSmartEntityProvider,
+                                w1: widths.w1,
+                                w2: widths.w2,
+                                wDept: widths.wDept,
+                                w3: widths.w3,
+                                callEntryHooks: callEntrySelectorHooks(ref),
+                                trailingRowChildren: const [],
+                              ),
                             ),
-                          ),
-                          if (showRemoteButtons) ...[
-                            const SizedBox(height: 12),
-                            RemoteConnectionButtons(
-                              header: header,
-                              tools: tools,
-                            ),
-                          ],
-                          const SizedBox(height: 12),
-                          const NotesStickyField(),
-                          const SizedBox(height: 12),
-                          LayoutBuilder(
-                            builder: (context, rowConstraints) {
-                              final categoryField = CategoryAutocompleteField(
-                                onCategoryChanged: (text, categoryId) {
-                                  ref
-                                      .read(callEntryProvider.notifier)
-                                      .setCategory(
-                                        text,
-                                        categoryId: categoryId,
-                                      );
-                                },
-                              );
-                              final submitButton = _SubmitButton(
+                            if (showRemoteButtons) ...[
+                              const SizedBox(height: 12),
+                              RemoteConnectionButtons(
                                 header: header,
-                                isSubmitting: isSubmitting,
-                                onSubmit: _submit,
-                              );
-                              if (rowConstraints.maxWidth < 520) {
-                                return Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
+                                tools: tools,
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            const NotesStickyField(),
+                            const SizedBox(height: 12),
+                            LayoutBuilder(
+                              builder: (context, rowConstraints) {
+                                final categoryField = CategoryAutocompleteField(
+                                  onCategoryChanged: (text, categoryId) {
+                                    ref
+                                        .read(callEntryProvider.notifier)
+                                        .setCategory(
+                                          text,
+                                          categoryId: categoryId,
+                                        );
+                                  },
+                                );
+                                final submitButton = _SubmitButton(
+                                  header: header,
+                                  isSubmitting: isSubmitting,
+                                  onSubmit: _submit,
+                                );
+                                if (rowConstraints.maxWidth < 520) {
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      // Η Εκκρεμότητα ζει μέσα στο χαρτί σημειώσεων
+                                      // (βλ. NotesStickyField) — εδώ μόνο χρονόμετρο.
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
+                                        children: [
+                                          Expanded(child: categoryField),
+                                          const SizedBox(width: 8),
+                                          const CallStatusBar(
+                                            axis: CallStatusBarAxis.horizontal,
+                                            showPendingToggle: false,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: submitButton,
+                                      ),
+                                    ],
+                                  );
+                                }
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    // Η Εκκρεμότητα ζει μέσα στο χαρτί σημειώσεων
-                                    // (βλ. NotesStickyField) — εδώ μόνο χρονόμετρο.
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      children: [
-                                        Expanded(child: categoryField),
-                                        const SizedBox(width: 8),
-                                        const CallStatusBar(
-                                          axis: CallStatusBarAxis.horizontal,
-                                          showPendingToggle: false,
-                                        ),
-                                      ],
+                                    Expanded(child: categoryField),
+                                    const SizedBox(width: 12),
+                                    const CallStatusBar(
+                                      axis: CallStatusBarAxis.horizontal,
+                                      showPendingToggle: false,
                                     ),
-                                    const SizedBox(height: 8),
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: submitButton,
-                                    ),
+                                    const SizedBox(width: 8),
+                                    submitButton,
                                   ],
                                 );
-                              }
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Expanded(child: categoryField),
-                                  const SizedBox(width: 12),
-                                  const CallStatusBar(
-                                    axis: CallStatusBarAxis.horizontal,
-                                    showPendingToggle: false,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  submitButton,
-                                ],
-                              );
-                            },
-                          ),
-                        ],
-                      );
-                    },
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

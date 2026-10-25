@@ -166,8 +166,6 @@ abstract final class KnowledgeMatcher {
     scored.sort((a, b) {
       final byScore = b.score.compareTo(a.score);
       if (byScore != 0) return byScore;
-      final byUsage = b.article.timesUsed.compareTo(a.article.timesUsed);
-      if (byUsage != 0) return byUsage;
       return (a.article.id ?? 0).compareTo(b.article.id ?? 0);
     });
     return scored.length <= limit ? scored : scored.sublist(0, limit);

@@ -17,7 +17,6 @@ const _vnc = KnowledgeArticle(
       'και η προβολή αποκαθίσταται.',
   tags: 'VNC, μαύρη οθόνη',
   categoryId: 7,
-  timesUsed: 4,
 );
 
 const _bigov = KnowledgeArticle(
@@ -27,7 +26,6 @@ const _bigov = KnowledgeArticle(
   solution: 'Εξαγωγή του πίνακα σε Excel και εκτύπωση από εκεί.',
   tags: 'bi.gov, εξαγωγή',
   categoryId: 3,
-  timesUsed: 1,
 );
 
 const _printer = KnowledgeArticle(
@@ -36,7 +34,6 @@ const _printer = KnowledgeArticle(
   symptom: 'Δεν εκτυπωνει',
   solution: 'Επανεκκίνηση ουράς εκτύπωσης.',
   tags: 'εκτυπωτής',
-  timesUsed: 9,
 );
 
 void main() {
@@ -103,7 +100,7 @@ void main() {
   });
 
   group('rank', () {
-    test('πρώτο έρχεται το πιο σχετικό, όχι το πιο χρησιμοποιημένο', () {
+    test('πρώτο έρχεται το πιο σχετικό', () {
       final ranked = KnowledgeMatcher.rank(
         articles: const [_printer, _bigov, _vnc],
         query: 'Βλεπει μαυρη οθονη απο το πρωι',
@@ -111,24 +108,22 @@ void main() {
       expect(ranked.first.article.id, _vnc.id);
     });
 
-    test('σε ισοβαθμία κερδίζει όσο έχει λύσει περισσότερα', () {
+    test('σε ισοβαθμία κερδίζει το παλαιότερο άρθρο', () {
       const a = KnowledgeArticle(
         id: 10,
         symptom: 'δεν ανοιγει το προγραμμα',
         solution: 'επανεκκίνηση',
-        timesUsed: 1,
       );
       const b = KnowledgeArticle(
         id: 11,
         symptom: 'δεν ανοιγει το προγραμμα',
         solution: 'επανεγκατάσταση',
-        timesUsed: 12,
       );
       final ranked = KnowledgeMatcher.rank(
-        articles: const [a, b],
+        articles: const [b, a],
         query: 'δεν ανοιγει το προγραμμα',
       );
-      expect(ranked.first.article.id, 11);
+      expect(ranked.first.article.id, 10);
     });
 
     test('τηρεί το όριο πλήθους', () {

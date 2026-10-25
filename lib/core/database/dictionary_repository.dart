@@ -288,6 +288,8 @@ class DictionaryRepository {
     return rows.isEmpty ? null : rows.first;
   }
 
+  /// Νέα κατηγορία και, προαιρετικά, νέα γραφή. Η διόρθωση της γραφής είναι
+  /// έλεγχος από άνθρωπο: η λέξη γίνεται «Χρήστης», όποια κι αν ήταν η πηγή.
   Future<void> upsertFullDictionaryCategory({
     required int id,
     required String category,
@@ -297,6 +299,7 @@ class DictionaryRepository {
     if (newDisplayWord != null && newDisplayWord.trim().isNotEmpty) {
       final w = newDisplayWord.trim();
       row['word'] = w;
+      row['source'] = 'user';
       row['normalized_word'] = DictionaryService.canonicalLexiconKey(w);
       final m = LexiconWordMetrics.compute(w);
       row['letters_count'] = m.lettersCount;
@@ -306,6 +309,17 @@ class DictionaryRepository {
     await db.update(
       AppConfig.fullDictionaryTable,
       row,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Η λέξη ελέγχθηκε και είναι σωστή: γίνεται «Χρήστης» και φεύγει από την
+  /// ουρά της Εισαγωγής.
+  Future<void> markFullDictionaryEntryAsUser(int id) async {
+    await db.update(
+      AppConfig.fullDictionaryTable,
+      {'source': 'user'},
       where: 'id = ?',
       whereArgs: [id],
     );

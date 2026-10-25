@@ -6,7 +6,9 @@ import '../config/app_config.dart';
 import '../utils/homoglyph_text_normalizer.dart';
 import 'shared_settings.dart';
 import '../config/audit_retention_config.dart';
+import '../config/mass_deletion_percent.dart';
 import '../../features/database/debug/publish_cli.dart';
+import '../database/database_busy_timeout.dart';
 import '../database/database_staleness.dart';
 import 'settings_list_conflict.dart';
 import 'profile_settings.dart';
@@ -65,13 +67,18 @@ class SettingsServiceCatalogs {
       SettingsService.appSettingReader;
 
   /// Timeout ανοίγματος βάσης σε δευτερόλεπτα. Προεπιλογή: [AppConfig.databaseOpenTimeoutSeconds].
+  ///
+  /// Τιμή κάτω από το ελάχιστο (αποθηκευμένη πριν οι Ρυθμίσεις αρχίσουν να
+  /// την αρνούνται) διαβάζεται ως το ελάχιστο: αυτό εφαρμόζεται ούτως ή άλλως,
+  /// και η ένδειξη δεν επιτρέπεται να λέει «5» όταν η εφαρμογή περιμένει 8.
   Future<int> getDatabaseOpenTimeoutSeconds() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.getInt(_prefKey(_keyDatabaseOpenTimeoutSeconds));
     if (value == null || value <= 0) {
       return AppConfig.databaseOpenTimeoutSeconds;
     }
-    return value;
+    final minimum = minimumDatabaseOpenTimeoutSeconds(network: false);
+    return value < minimum ? minimum : value;
   }
 
   Future<void> setDatabaseOpenTimeoutSeconds(int value) async {
@@ -164,6 +171,22 @@ class SettingsServiceCatalogs {
     await SharedSettings.write(
       SharedSettingKeys.databaseStalenessDays,
       '${normalizeDatabaseStalenessDays(days)}',
+    );
+  }
+
+  /// Από ποιο ποσοστό του καταλόγου και πάνω μια διαγραφή προειδοποιεί —
+  /// **κοινό** για όλους τους σταθμούς.
+  Future<int> getMassDeletionWarningPercent() async {
+    final raw = await SharedSettings.read(
+      SharedSettingKeys.massDeletionWarningPercent,
+    );
+    return normalizeMassDeletionPercent(int.tryParse(raw?.trim() ?? ''));
+  }
+
+  Future<void> setMassDeletionWarningPercent(int percent) async {
+    await SharedSettings.write(
+      SharedSettingKeys.massDeletionWarningPercent,
+      '${normalizeMassDeletionPercent(percent)}',
     );
   }
 

@@ -9,6 +9,7 @@ import 'package:sqflite_common/sqflite.dart';
 
 import '../../features/directory/services/equipment_deletion_summary.dart';
 import 'directory_support.dart';
+import '../utils/display_text_sort.dart';
 
 /// Μέγιστα ids ανά ερώτημα `IN (...)`.
 ///
@@ -88,9 +89,12 @@ Future<List<EquipmentDeletionSummary>> deletionSummaries(
       FROM user_equipment ue
       JOIN users u ON u.id = ue.user_id AND COALESCE(u.is_deleted, 0) = 0
       WHERE ue.equipment_id IN ($marks)
-      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
       ''', chunk);
-    for (final row in ownerRows) {
+    final sortedOwnerRows = sortedForDisplay(
+      ownerRows,
+      (r) => [r['last_name'] as String?, r['first_name'] as String?],
+    );
+    for (final row in sortedOwnerRows) {
       final eid = row['eid'] as int?;
       if (eid == null || ownerByEquipment.containsKey(eid)) continue;
       ownerByEquipment[eid] = row;
@@ -179,9 +183,12 @@ Future<List<EquipmentDeletionSummary>> deletionSummaries(
       FROM user_phones up
       JOIN phones p ON p.id = up.phone_id
       WHERE up.user_id IN (${_placeholders(chunk.length)})
-      ORDER BY p.number COLLATE NOCASE ASC
       ''', chunk);
-    for (final row in phoneRows) {
+    final sortedPhoneRows = sortedForDisplay(
+      phoneRows,
+      (r) => [r['number'] as String?],
+    );
+    for (final row in sortedPhoneRows) {
       final uid = row['uid'] as int?;
       if (uid == null || phoneByOwner.containsKey(uid)) continue;
       final number = (row['number'] as String?)?.trim() ?? '';

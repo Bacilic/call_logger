@@ -13,6 +13,7 @@ import 'database_helper.dart';
 import 'directory_audit_helpers.dart';
 import 'department_repository.dart';
 import 'directory_support.dart';
+import '../utils/display_text_sort.dart';
 
 /// Persistence χρηστών (`users`, `user_phones`, `user_equipment`).
 ///
@@ -734,7 +735,7 @@ class UserRepository {
         ),
       );
     }
-    return out;
+    return sortedForDisplay(out, (p) => [p.number]);
   }
 
   /// Εξοπλισμός σε κίνδυνο ορφανοποίησης τμήματος κατά τη διαγραφή χρηστών.
@@ -794,7 +795,7 @@ class UserRepository {
         ),
       );
     }
-    return out;
+    return sortedForDisplay(out, (e) => [e.codeEquipment]);
   }
 
   Future<void> _unlinkUserFromPhoneInTxn(

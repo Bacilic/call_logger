@@ -10,6 +10,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../models/catalog_validation_rules.dart';
+import '../../../services/naming_irregularities.dart';
 import 'validation_rule_field_controllers.dart';
 import 'validation_rule_widgets.dart';
 
@@ -55,6 +56,8 @@ class ValidationRuleCards extends StatelessWidget {
         _departmentCard(),
         const SizedBox(height: 12),
         _userCard(),
+        const SizedBox(height: 12),
+        _namingCard(),
         const SizedBox(height: 12),
         _lansweeperCard(),
         const SizedBox(height: 12),
@@ -130,8 +133,7 @@ class ValidationRuleCards extends StatelessWidget {
             currentFrom: rules.internalPrefixFrom,
             currentTo: rules.internalPrefixTo,
             onCommitted: (from, to) => onApply(
-              (c) =>
-                  c.copyWith(internalPrefixFrom: from, internalPrefixTo: to),
+              (c) => c.copyWith(internalPrefixFrom: from, internalPrefixTo: to),
             ),
           ),
         ),
@@ -161,7 +163,8 @@ class ValidationRuleCards extends StatelessWidget {
       children: [
         RuleRow(
           enabled: rules.equipmentDigitsEnabled,
-          onToggle: (v) => _toggle((c) => c.copyWith(equipmentDigitsEnabled: v)),
+          onToggle: (v) =>
+              _toggle((c) => c.copyWith(equipmentDigitsEnabled: v)),
           example:
               'Παράδειγμα υπόδειξης: «Το 25067 έχει 5 ψηφία — '
               'αναμένονται ${rules.equipmentMinDigits} έως '
@@ -205,7 +208,9 @@ class ValidationRuleCards extends StatelessWidget {
           example:
               'Παράδειγμα υπόδειξης: «Το «AnyDesk» δείχνει την ίδια '
               'τιμή «123456789» σε 2 μηχανήματα»',
-          child: const RuleLabel('Ίδιος στόχος απομακρυσμένης σε δύο μηχανήματα'),
+          child: const RuleLabel(
+            'Ίδιος στόχος απομακρυσμένης σε δύο μηχανήματα',
+          ),
         ),
         RuleRow(
           enabled: rules.equipmentForeignCodeEnabled,
@@ -236,9 +241,34 @@ class ValidationRuleCards extends StatelessWidget {
           example:
               'Παράδειγμα υπόδειξης: «Το 2545 μοιάζει με τηλέφωνο, '
               'όχι με όνομα τμήματος»',
-          child: const RuleLabel(
-            'Το όνομα να μη μοιάζει με αριθμό ή τηλέφωνο',
-          ),
+          child: const RuleLabel('Το όνομα να μη μοιάζει με αριθμό ή τηλέφωνο'),
+        ),
+      ],
+    );
+  }
+
+  // ---- Ονοματολογία.
+
+  /// Ένας διακόπτης για πολλούς μικρούς ελέγχους ονομάτων. Η λίστα τους
+  /// γράφεται από την απογραφή [NamingIrregularities.checks], ώστε η εξήγηση
+  /// να λέει πάντα ακριβώς ό,τι ελέγχεται.
+  Widget _namingCard() {
+    return RuleCard(
+      icon: Icons.spellcheck,
+      title: 'Ονοματολογία',
+      children: [
+        RuleRow(
+          enabled: rules.namingIrregularitiesEnabled,
+          onToggle: (v) =>
+              _toggle((c) => c.copyWith(namingIrregularitiesEnabled: v)),
+          note: [
+            'Ένας διακόπτης για όλους τους παρακάτω ελέγχους:',
+            for (final check in NamingIrregularities.checks) '• $check',
+          ].join('\n'),
+          example:
+              'Παράδειγμα υπόδειξης: «Η λέξη «Υλικού» υπάρχει δύο φορές '
+              'στο όνομα»',
+          child: const RuleLabel('Παρατυπίες ονοματολογίας'),
         ),
       ],
     );
@@ -334,7 +364,8 @@ class ValidationRuleCards extends StatelessWidget {
       children: [
         RuleRow(
           enabled: rules.emptyDepartmentEnabled,
-          onToggle: (v) => _toggle((c) => c.copyWith(emptyDepartmentEnabled: v)),
+          onToggle: (v) =>
+              _toggle((c) => c.copyWith(emptyDepartmentEnabled: v)),
           note:
               'Δεν είναι σφάλμα — ένα τμήμα μπορεί να αδειάσει '
               'θεμιτά· η υπόδειξη θυμίζει να αποφασίσετε τι το κάνετε',
@@ -356,7 +387,8 @@ class ValidationRuleCards extends StatelessWidget {
         ),
         RuleRow(
           enabled: rules.departmentGroupEnabled,
-          onToggle: (v) => _toggle((c) => c.copyWith(departmentGroupEnabled: v)),
+          onToggle: (v) =>
+              _toggle((c) => c.copyWith(departmentGroupEnabled: v)),
           note:
               'Η ομάδα οργανώνει τον επιλογέα του χάρτη: χωρίς '
               'αυτήν το τμήμα πέφτει στα «Λοιπά». Εταιρείες και '

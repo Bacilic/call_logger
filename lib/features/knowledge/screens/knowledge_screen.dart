@@ -6,7 +6,10 @@ import '../../history/providers/history_provider.dart';
 import '../models/knowledge_article.dart';
 import '../providers/knowledge_provider.dart';
 import '../widgets/knowledge_article_card.dart';
+import '../services/knowledge_ai_prompt_store.dart';
 import '../widgets/knowledge_article_dialog.dart';
+import '../widgets/knowledge_export_flow.dart';
+import '../../history/widgets/lansweeper/ai_prompt_template_editor_dialog.dart';
 
 /// Η οθόνη της Βάσης Γνώσης: οι συνταγές που έχετε κρατήσει από τις κλήσεις.
 class KnowledgeScreen extends ConsumerStatefulWidget {
@@ -75,6 +78,13 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
         ),
       );
     }
+  }
+
+  /// Όλα τα άρθρα — όχι μόνο όσα δείχνουν τα φίλτρα — σε ένα αρχείο για ΤΝ.
+  Future<void> _exportForAi() async {
+    final repository = await ref.read(knowledgeRepositoryProvider.future);
+    if (!mounted) return;
+    await runKnowledgeExport(context: context, repository: repository);
   }
 
   @override
@@ -161,6 +171,18 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
                     loading: () => const SizedBox.shrink(),
                     error: (_, _) => const SizedBox.shrink(),
                   ),
+                ),
+                const SizedBox(width: 12),
+                FilledButton.tonalIcon(
+                  onPressed: _exportForAi,
+                  icon: const Icon(Icons.file_download_outlined),
+                  label: const Text('Εξαγωγή για ΤΝ'),
+                ),
+                IconButton(
+                  tooltip: 'Οδηγία της εξαγωγής για ΤΝ',
+                  icon: const Icon(Icons.edit_note),
+                  onPressed: () =>
+                      openPersonalPromptEditor(context, KnowledgePrompt.export),
                 ),
               ],
             ),

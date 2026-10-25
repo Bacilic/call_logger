@@ -42,6 +42,63 @@ const String kDefaultAiPromptTemplate =
 Στη λύση γράψε κάθε αριθμημένο βήμα σε δική του γραμμή (\\n) και το αποτέλεσμα σε ξεχωριστή παράγραφο (\\n\\n).
 Απάντησε ΜΟΝΟ σε JSON χωρίς markdown: {"title":"...","description":"...","solution":"..."}''';
 
+/// Ποια σήματα ξέρει μια προτροπή και σε ποια μορφή JSON περιμένει απάντηση.
+///
+/// Ο επεξεργαστής προτροπών είναι ένας για όλη την εφαρμογή· το προφίλ λέει
+/// τι ισχύει για κάθε χρήση (Αναφορά Lansweeper, Βάση Γνώσης…). Χωρίς προφίλ
+/// ισχύει το [lansweeper] — η πρώτη και αρχική χρήση.
+class AiPromptProfile {
+  const AiPromptProfile({
+    required this.placeholders,
+    required this.jsonResponseKeys,
+    required this.defaultTemplate,
+    this.jsonKeyLabels = const <String, String>{},
+    this.responseBlueprint,
+  });
+
+  final List<AiPromptPlaceholder> placeholders;
+
+  /// Η υπόδειξη μορφής όταν η απάντηση δεν είναι επίπεδο αντικείμενο (π.χ.
+  /// λίστα αποτελεσμάτων)· χωρίς αυτήν φτιάχνεται από τα [jsonResponseKeys].
+  final String? responseBlueprint;
+
+  /// Τα πεδία της απάντησης JSON. Κενό: η προτροπή δεν ζητά JSON (π.χ.
+  /// οδηγία που διαβάζει άνθρωπος σε εξωτερική ΤΝ).
+  final List<String> jsonResponseKeys;
+
+  /// Πώς λέγεται κάθε πεδίο στα μηνύματα ελέγχου («η απάντηση δεν θα
+  /// περιέχει τίτλο»).
+  final Map<String, String> jsonKeyLabels;
+
+  /// Η εργοστασιακή προτροπή — ό,τι φέρνει πίσω η «Επαναφορά».
+  final String defaultTemplate;
+
+  /// `{"title":"...","solution":"..."}` — η υπόδειξη μορφής που εισάγεται.
+  String get jsonResponseBlueprint =>
+      responseBlueprint ??
+      (jsonResponseKeys.isEmpty
+          ? ''
+          : '{${jsonResponseKeys.map((k) => '"$k":"..."').join(',')}}');
+
+  Set<String> get placeholderTokens => {for (final p in placeholders) p.token};
+
+  Set<String> get placeholderNames => {
+    for (final p in placeholders)
+      AiPromptTemplateSyntax.placeholderNameFromToken(p.token),
+  };
+
+  static const AiPromptProfile lansweeper = AiPromptProfile(
+    placeholders: kAiPromptPlaceholders,
+    jsonResponseKeys: ['title', 'description', 'solution'],
+    jsonKeyLabels: {
+      'title': 'τίτλο',
+      'description': 'περιγραφή/πρόβλημα',
+      'solution': 'λύση',
+    },
+    defaultTemplate: kDefaultAiPromptTemplate,
+  );
+}
+
 /// Είδος token προτροπής για χρωματισμό / έλεγχο.
 enum AiPromptTokenKind {
   plain,
@@ -91,19 +148,11 @@ class AiPromptTemplateValidation {
 abstract final class AiPromptTemplateSyntax {
   static final RegExp _braceTokenPattern = RegExp(r'\{[^}]+\}');
 
-  static const List<String> _jsonResponseKeys = [
-    'title',
-    'description',
-    'solution',
-  ];
+  static Set<String> get knownPlaceholderTokens =>
+      AiPromptProfile.lansweeper.placeholderTokens;
 
-  static Set<String> get knownPlaceholderTokens => {
-    for (final p in kAiPromptPlaceholders) p.token,
-  };
-
-  static Set<String> get knownPlaceholderNames => {
-    for (final p in kAiPromptPlaceholders) placeholderNameFromToken(p.token),
-  };
+  static Set<String> get knownPlaceholderNames =>
+      AiPromptProfile.lansweeper.placeholderNames;
 
   static String placeholderNameFromToken(String token) {
     if (token.length < 3 || !token.startsWith('{') || !token.endsWith('}')) {
@@ -117,9 +166,12 @@ abstract final class AiPromptTemplateSyntax {
   static String blockCloseTag(String name) => '{@/$name}';
 
   /// Αφαιρεί τα tags `{@Όνομα}` / `{@/Όνομα}`, κρατώντας το εσωτερικό κείμενο.
-  static String stripBlockMarkers(String template) {
+  static String stripBlockMarkers(
+    String template, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
     var result = template;
-    for (final name in knownPlaceholderNames) {
+    for (final name in profile.placeholderNames) {
       result = result.replaceAll(blockOpenTag(name), '');
       result = result.replaceAll(blockCloseTag(name), '');
     }
@@ -156,10 +208,13 @@ abstract final class AiPromptTemplateSyntax {
   }
 
   /// Αν το token είναι το block οδηγίας JSON απάντησης (όχι placeholder).
-  static bool isJsonResponseInstructionToken(String token) {
+  static bool isJsonResponseInstructionToken(
+    String token, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
     if (!token.startsWith('{') || !token.endsWith('}')) return false;
     final inner = token.substring(1, token.length - 1);
-    for (final key in _jsonResponseKeys) {
+    for (final key in profile.jsonResponseKeys) {
       if (inner.contains('"$key"')) return true;
     }
     return false;
@@ -169,69 +224,83 @@ abstract final class AiPromptTemplateSyntax {
     return template.contains('"$key"');
   }
 
-  static List<String> missingJsonResponseKeys(String template) {
+  static List<String> missingJsonResponseKeys(
+    String template, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
     return <String>[
-      for (final key in _jsonResponseKeys)
+      for (final key in profile.jsonResponseKeys)
         if (!templateContainsJsonResponseKey(template, key)) key,
     ];
   }
 
-  static List<String> validateJsonResponseKeys(String template) {
-    final missing = missingJsonResponseKeys(template);
-    if (missing.length == _jsonResponseKeys.length) {
+  static List<String> validateJsonResponseKeys(
+    String template, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
+    // Προτροπή που δεν ζητά JSON δεν έχει μορφή να ελεγχθεί.
+    if (profile.jsonResponseKeys.isEmpty) return const <String>[];
+    final missing = missingJsonResponseKeys(template, profile: profile);
+    if (missing.length == profile.jsonResponseKeys.length) {
       return <String>[
         'Η προτροπή δεν περιλαμβάνει οδηγίες μορφής JSON απάντησης '
-            '($kAiJsonResponseBlueprint) — η ΤΝ δεν θα γνωρίζει σε ποια μορφή να απαντήσει.',
+            '(${profile.jsonResponseBlueprint}) — η ΤΝ δεν θα γνωρίζει σε ποια μορφή να απαντήσει.',
       ];
     }
     if (missing.isEmpty) return const <String>[];
     return <String>[
       for (final key in missing)
         'Λείπει το πεδίο `$key` από το αναμενόμενο JSON αποτέλεσμα — '
-            'η απάντηση της ΤΝ δεν θα περιέχει ${_jsonKeyLabel(key)}.',
+            'η απάντηση της ΤΝ δεν θα περιέχει ${profile.jsonKeyLabels[key] ?? key}.',
     ];
   }
 
-  /// Μετρά `{…}` tokens που περιέχουν και τα τρία κλειδιά JSON απάντησης.
-  static int countJsonResponseInstructionBlocks(String template) {
+  /// Μετρά `{…}` tokens που περιέχουν κλειδί της JSON απάντησης.
+  static int countJsonResponseInstructionBlocks(
+    String template, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
     var count = 0;
     for (final match in _braceTokenPattern.allMatches(template)) {
-      if (isJsonResponseInstructionToken(match.group(0)!)) {
+      if (isJsonResponseInstructionToken(match.group(0)!, profile: profile)) {
         count++;
       }
     }
     return count;
   }
 
-  static List<String> validateDuplicateJsonResponseBlocks(String template) {
-    if (countJsonResponseInstructionBlocks(template) <= 1) {
+  static List<String> validateDuplicateJsonResponseBlocks(
+    String template, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
+    if (countJsonResponseInstructionBlocks(template, profile: profile) <= 1) {
       return const <String>[];
     }
     return <String>[
       'Η προτροπή περιλαμβάνει περισσότερες από μία οδηγίες μορφής JSON '
-          '($kAiJsonResponseBlueprint) — η ΤΝ μπορεί να μπερδευτεί. '
+          '(${profile.jsonResponseBlueprint}) — η ΤΝ μπορεί να μπερδευτεί. '
           'Κρατήστε μόνο μία υπόδειξη απάντησης σε JSON.',
     ];
   }
 
-  static String _jsonKeyLabel(String key) => switch (key) {
-    'title' => 'τίτλο',
-    'description' => 'περιγραφή/πρόβλημα',
-    'solution' => 'λύση',
-    _ => key,
-  };
-
-  static AiPromptTemplateValidation validate(String template) {
+  static AiPromptTemplateValidation validate(
+    String template, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
     final errors = <String>[];
     final warnings = <String>[];
     final stack = <String>[];
+    final knownPlaceholderNames = profile.placeholderNames;
+    final knownPlaceholderTokens = profile.placeholderTokens;
 
-    errors.addAll(validateJsonResponseKeys(template));
-    errors.addAll(validateDuplicateJsonResponseBlocks(template));
+    errors.addAll(validateJsonResponseKeys(template, profile: profile));
+    errors.addAll(
+      validateDuplicateJsonResponseBlocks(template, profile: profile),
+    );
 
     for (final match in _braceTokenPattern.allMatches(template)) {
       final token = match.group(0)!;
-      if (isJsonResponseInstructionToken(token)) {
+      if (isJsonResponseInstructionToken(token, profile: profile)) {
         continue;
       }
       if (token.startsWith('{@/')) {
@@ -287,7 +356,7 @@ abstract final class AiPromptTemplateSyntax {
       }
 
       if (!knownPlaceholderTokens.contains(token)) {
-        final suggestion = _suggestPlaceholder(token);
+        final suggestion = _suggestPlaceholder(token, profile);
         if (suggestion != null) {
           errors.add('Άγνωστο placeholder: `$token` — εννοείτε `$suggestion`;');
         } else {
@@ -310,11 +379,11 @@ abstract final class AiPromptTemplateSyntax {
     );
   }
 
-  static String? _suggestPlaceholder(String token) {
+  static String? _suggestPlaceholder(String token, AiPromptProfile profile) {
     final inner = placeholderNameFromToken(token);
     String? best;
     var bestDistance = 999;
-    for (final known in knownPlaceholderNames) {
+    for (final known in profile.placeholderNames) {
       final distance = _levenshtein(inner, known);
       if (distance < bestDistance) {
         bestDistance = distance;
@@ -349,7 +418,10 @@ abstract final class AiPromptTemplateSyntax {
     return rows[b.length];
   }
 
-  static List<AiPromptTokenSpan> tokenize(String template) {
+  static List<AiPromptTokenSpan> tokenize(
+    String template, {
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
+  }) {
     final spans = <AiPromptTokenSpan>[];
     var index = 0;
     for (final match in _braceTokenPattern.allMatches(template)) {
@@ -362,7 +434,7 @@ abstract final class AiPromptTemplateSyntax {
         );
       }
       final token = match.group(0)!;
-      spans.add(_classifyToken(token));
+      spans.add(_classifyToken(token, profile));
       index = match.end;
     }
     if (index < template.length) {
@@ -376,7 +448,12 @@ abstract final class AiPromptTemplateSyntax {
     return spans;
   }
 
-  static AiPromptTokenSpan _classifyToken(String token) {
+  static AiPromptTokenSpan _classifyToken(
+    String token,
+    AiPromptProfile profile,
+  ) {
+    final knownPlaceholderNames = profile.placeholderNames;
+    final knownPlaceholderTokens = profile.placeholderTokens;
     if (token.startsWith('{@/')) {
       final name = token.substring(3, token.length - 1);
       return AiPromptTokenSpan(
@@ -404,7 +481,7 @@ abstract final class AiPromptTemplateSyntax {
         placeholderName: placeholderNameFromToken(token),
       );
     }
-    if (isJsonResponseInstructionToken(token)) {
+    if (isJsonResponseInstructionToken(token, profile: profile)) {
       return AiPromptTokenSpan(
         text: token,
         kind: AiPromptTokenKind.jsonResponseInstruction,
@@ -423,13 +500,14 @@ abstract final class AiPromptTemplateSyntax {
     Color? placeholderColor,
     Color? blockColor,
     Color? errorColor,
+    AiPromptProfile profile = AiPromptProfile.lansweeper,
   }) {
     final placeholder = placeholderColor ?? const Color(0xFF16A34A);
     final block = blockColor ?? const Color(0xFF2563EB);
     final error = errorColor ?? const Color(0xFFDC2626);
 
     final children = <InlineSpan>[];
-    for (final span in tokenize(template)) {
+    for (final span in tokenize(template, profile: profile)) {
       final style = switch (span.kind) {
         AiPromptTokenKind.plain => baseStyle,
         AiPromptTokenKind.knownPlaceholder => baseStyle.copyWith(

@@ -4,6 +4,7 @@
 //   flutter test test/features/directory/screens/widgets/user_deletion_preview_dialog_test.dart
 
 import 'package:call_logger/features/directory/screens/widgets/user_deletion_preview_dialog.dart';
+import 'package:call_logger/features/directory/services/mass_deletion_guard.dart';
 import 'package:call_logger/features/directory/services/user_deletion_zones.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,8 +30,9 @@ void main() {
 
   Future<void> openWith(
     WidgetTester tester,
-    List<UserDeletionInventory> inventories,
-  ) async {
+    List<UserDeletionInventory> inventories, {
+    MassDeletionContext? massDeletion,
+  }) async {
     captured = null;
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -48,6 +50,7 @@ void main() {
                 captured = await showUserDeletionPreviewDialog(
                   context: ctx,
                   inventories: inventories,
+                  massDeletion: massDeletion,
                 );
               },
               child: const Text('άνοιγμα'),
@@ -288,5 +291,56 @@ void main() {
     await openWith(tester, [_inv('Μοναδικός', phones: 1)]);
 
     expect(find.byIcon(Icons.close), findsNothing);
+  });
+
+  testWidgets(
+    'ολόκληρος ο κατάλογος: η διαγραφή ανοίγει μόνο με τη λέξη «ΔΙΑΓΡΑΦΗ»',
+    (tester) async {
+      await openWith(
+        tester,
+        [_inv('Σοφία (Αιμοδοσία)'), _inv('Νίκος (Φαρμακείο)')],
+        massDeletion: const MassDeletionContext(
+          catalog: MassDeletionCatalog.users,
+          catalogTotal: 2,
+          thresholdPercent: 50,
+        ),
+      );
+
+      final deleteButton = find.widgetWithText(FilledButton, 'Διαγραφή');
+      expect(find.textContaining('ολόκληρος ο κατάλογος'), findsOneWidget);
+      expect(tester.widget<FilledButton>(deleteButton).onPressed, isNull);
+
+      final wordField = find.byKey(
+        const ValueKey('mass-deletion-confirm-word'),
+      );
+      await tester.enterText(wordField, 'ΔΙΑΓΡΑΦ');
+      await tester.pump();
+      expect(tester.widget<FilledButton>(deleteButton).onPressed, isNull);
+
+      await tester.enterText(wordField, 'διαγραφή');
+      await tester.pump();
+      await tester.tap(deleteButton);
+      await tester.pumpAndSettle();
+
+      expect(captured?.confirmed, isTrue);
+    },
+  );
+
+  testWidgets('μικρή διαγραφή από μεγάλο κατάλογο: καμία προειδοποίηση', (
+    tester,
+  ) async {
+    await openWith(
+      tester,
+      [_inv('Σοφία (Αιμοδοσία)'), _inv('Νίκος (Φαρμακείο)')],
+      massDeletion: const MassDeletionContext(
+        catalog: MassDeletionCatalog.users,
+        catalogTotal: 115,
+        thresholdPercent: 50,
+      ),
+    );
+
+    expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+    final deleteButton = find.widgetWithText(FilledButton, 'Διαγραφή');
+    expect(tester.widget<FilledButton>(deleteButton).onPressed, isNotNull);
   });
 }

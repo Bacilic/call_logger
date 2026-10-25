@@ -5,9 +5,13 @@
 
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/database_init_result.dart';
+import 'package:call_logger/features/dictionary/providers/lexicon_ai_review_provider.dart';
 import 'package:call_logger/features/dictionary/screens/dictionary_manager_screen.dart';
+import 'package:call_logger/features/dictionary/services/lexicon_ai_prompts.dart';
+import 'package:call_logger/features/dictionary/services/lexicon_ai_review_service.dart';
 import 'package:call_logger/features/dictionary/widgets/dictionary_grid_row.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -49,7 +53,10 @@ Future<void> _settle(WidgetTester tester) async {
   await tester.pump();
 }
 
-Future<void> _pumpScreen(WidgetTester tester) async {
+Future<void> _pumpScreen(
+  WidgetTester tester, {
+  LexiconAiReviewRunner? aiReview,
+}) async {
   tester.view.physicalSize = const Size(1600, 900);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
@@ -59,7 +66,11 @@ Future<void> _pumpScreen(WidgetTester tester) async {
   await tester.runAsync(_seed);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: callLoggerTestProviderOverrides(),
+      overrides: [
+        ...callLoggerTestProviderOverrides(),
+        if (aiReview != null)
+          lexiconAiReviewRunnerProvider.overrideWithValue(aiReview),
+      ],
       child: MaterialApp(
         home: Scaffold(
           body: DictionaryManagerScreen(
@@ -114,6 +125,9 @@ Future<Map<String, Object?>?> _fullEntry(String normalized) async {
   );
   return rows.isEmpty ? null : rows.single;
 }
+
+Finder _selectBoxOf(String word) =>
+    find.descendant(of: _rowOf(word), matching: find.byType(Checkbox));
 
 Future<void> _finish(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
@@ -184,6 +198,11 @@ void main() {
       return db.query('full_dictionary', where: "word = 'Ωμέγα'");
     });
     expect(renamed, hasLength(1));
+    expect(
+      renamed!.single['source'],
+      'user',
+      reason: 'η διόρθωση με το χέρι είναι έλεγχος από άνθρωπο',
+    );
     expect(await tester.runAsync(() => _fullEntry('αλφα')), isNull);
     expect(_words(tester), isEmpty);
     expect(find.text('Σύνολο: 0'), findsOneWidget);
@@ -300,6 +319,98 @@ void main() {
     expect(added?['word'], 'Έψιλον');
     expect(_words(tester), containsAll(<String>['Έψιλον', 'Ζήτα']));
     expect(find.text('Σύνολο: 6'), findsOneWidget);
+    await _finish(tester);
+  });
+
+  testWidgets('κουτάκι για μία λέξη, Shift + κλικ για περιοχή', (tester) async {
+    await _pumpScreen(tester);
+
+    await tester.tap(_selectBoxOf('Αλφα'));
+    await tester.pump();
+    expect(find.text('Επιλεγμένες: 1'), findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.tap(_selectBoxOf('Γάμμα'));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(find.text('Επιλεγμένες: 3'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.textContaining('Καμία επιλεγμένη λέξη'), findsOneWidget);
+    await _finish(tester);
+  });
+
+  testWidgets(
+    'Έλεγχος με ΤΝ: γράφονται μόνο τα τσεκαρισμένα, οι σωστές γίνονται «Χρήστης»',
+    (tester) async {
+      List<String>? sent;
+      await _pumpScreen(
+        tester,
+        aiReview: (words) async {
+          sent = words;
+          return const LexiconAiReviewed({
+            1: LexiconAiVerdict(
+              kind: LexiconAiVerdictKind.fix,
+              suggestion: 'Άλφα',
+              sure: true,
+            ),
+            2: LexiconAiVerdict(kind: LexiconAiVerdictKind.delete, sure: true),
+            3: LexiconAiVerdict(kind: LexiconAiVerdictKind.correct, sure: true),
+            // Αβέβαιη: μένει ατσεκάριστη, άρα ανέγγιχτη.
+            4: LexiconAiVerdict(kind: LexiconAiVerdictKind.delete, sure: false),
+          });
+        },
+      );
+
+      await tester.tap(find.byTooltip('Επιλογή όλης της σελίδας'));
+      await tester.pump();
+      await tester.tap(find.text('Έλεγχος με ΤΝ'));
+      await _settle(tester);
+
+      expect(sent, ['Αλφα', 'Βήτα', 'Γάμμα', 'Δέλτα']);
+      expect(find.text('Εφαρμογή 3 επιλεγμένων'), findsOneWidget);
+      await tester.tap(find.text('Εφαρμογή 3 επιλεγμένων'));
+      await _settle(tester);
+      await _settle(tester);
+
+      final fixed = await tester.runAsync(() => _fullEntry('αλφα'));
+      expect(fixed?['word'], 'Άλφα');
+      expect(fixed?['source'], 'user');
+      expect(await tester.runAsync(() => _fullEntry('βητα')), isNull);
+      expect(
+        (await tester.runAsync(() => _fullEntry('γαμμα')))?['source'],
+        'user',
+      );
+      expect(_words(tester), contains('Δέλτα'));
+      expect(find.textContaining('Καμία επιλεγμένη λέξη'), findsOneWidget);
+      expect(
+        find.textContaining('Διορθώθηκαν 1 · διαγράφηκαν 1'),
+        findsOneWidget,
+      );
+      await _finish(tester);
+    },
+  );
+
+  testWidgets('Άκυρο στο παράθυρο ελέγχου: τίποτα δεν γράφεται', (
+    tester,
+  ) async {
+    await _pumpScreen(
+      tester,
+      aiReview: (words) async => const LexiconAiReviewed({
+        1: LexiconAiVerdict(kind: LexiconAiVerdictKind.delete, sure: true),
+      }),
+    );
+
+    await tester.tap(_selectBoxOf('Αλφα'));
+    await tester.pump();
+    await tester.tap(find.text('Έλεγχος με ΤΝ'));
+    await _settle(tester);
+    await tester.tap(find.text('Άκυρο'));
+    await _settle(tester);
+
+    expect(await tester.runAsync(() => _fullEntry('αλφα')), isNotNull);
+    expect(find.text('Επιλεγμένες: 1'), findsOneWidget);
     await _finish(tester);
   });
 }

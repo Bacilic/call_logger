@@ -1,4 +1,6 @@
+import 'package:call_logger/core/services/ai_prompt_template_syntax.dart';
 import 'package:call_logger/core/services/gemini_ticket_service.dart';
+import 'package:call_logger/features/knowledge/services/knowledge_ai_prompts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 //   flutter test test/core/services/ai_prompt_template_syntax_test.dart
@@ -280,4 +282,48 @@ void main() {
       expect(prompt, contains('Πρόβλημα: Βλέπει μαυρη οθόνη από το πρωί'));
     });
   });
+
+  group(
+    'Προφίλ προτροπής — ο ίδιος επεξεργαστής για Lansweeper και Βάση Γνώσης',
+    () {
+      test('το Lansweeper μένει ακριβώς όπως ήταν', () {
+        expect(
+          AiPromptProfile.lansweeper.jsonResponseBlueprint,
+          kAiJsonResponseBlueprint,
+        );
+        expect(
+          AiPromptTemplateSyntax.validate(kDefaultAiPromptTemplate).isValid,
+          isTrue,
+        );
+      });
+
+      test('η εργοστασιακή προτροπή «Βελτίωση με ΤΝ» είναι έγκυρη', () {
+        final validation = AiPromptTemplateSyntax.validate(
+          kDefaultKnowledgeImprovePrompt,
+          profile: kKnowledgeImproveProfile,
+        );
+        expect(validation.errors, isEmpty);
+      });
+
+      test('σήμα του Lansweeper είναι άγνωστο στη Βάση Γνώσης', () {
+        final validation = AiPromptTemplateSyntax.validate(
+          '{Υπάλληλος} {"title":"","symptom":"","solution":"","tags":""}',
+          profile: kKnowledgeImproveProfile,
+        );
+        expect(validation.isValid, isFalse);
+        expect(validation.errors.single, contains('{Υπάλληλος}'));
+      });
+
+      test(
+        'η οδηγία εξαγωγής δεν ζητά JSON — ελεύθερο κείμενο είναι έγκυρο',
+        () {
+          final validation = AiPromptTemplateSyntax.validate(
+            kDefaultKnowledgeExportPrompt,
+            profile: kKnowledgeExportProfile,
+          );
+          expect(validation.isValid, isTrue);
+        },
+      );
+    },
+  );
 }

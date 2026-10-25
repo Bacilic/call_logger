@@ -27,9 +27,16 @@ Future<UpdateCheckResult?> runStartupUpdateCheck(
   );
   try {
     final result = await check().timeout(timeout);
+    final failure = result.failure;
+    if (failure != null) {
+      // Επιχειρήθηκε και δεν ολοκληρώθηκε: λέγεται με την αιτία του, όπως στο
+      // Ιστορικό Αλλαγών — αλλιώς στο ημερολόγιο μοιάζει με σκόπιμη παράλειψη.
+      step.warn(failure.name, failure.message);
+      return result;
+    }
     if (result.checkedAt == null) {
-      // Ο έλεγχος δεν έγινε πραγματικά (build ανάπτυξης, χωρίς ρυθμισμένο
-      // φάκελο). Δεν το ανακοινώνουμε ως κάτι που συνέβη.
+      // Ο έλεγχος σκόπιμα δεν έγινε (build ανάπτυξης). Δεν το ανακοινώνουμε ως
+      // κάτι που συνέβη.
       step.skip();
       return result;
     }

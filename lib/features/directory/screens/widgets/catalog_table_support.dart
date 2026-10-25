@@ -7,10 +7,11 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-/// Το χρώμα της γραμμής με εστίαση. Ξεχωρίζει από το τικ επιλογής: το τικ
-/// βάφει με το «πρωτεύον κοντέινερ», η εστίαση με πιο έντονο πρωτεύον.
+import '../../../../core/widgets/keyboard_row_navigation.dart';
+
+/// Το χρώμα της γραμμής με εστίαση — το κοινό όλων των πινάκων.
 Color catalogFocusedRowColor(BuildContext context) =>
-    Theme.of(context).colorScheme.primary.withValues(alpha: 0.14);
+    keyboardFocusedRowColor(context);
 
 /// Μετατρέπει μια [DataRow] σε γραμμή του απλού `Table` των πινάκων καταλόγου.
 ///

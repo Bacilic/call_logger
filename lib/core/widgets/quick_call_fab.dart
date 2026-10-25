@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/quick_call_providers.dart';
 
+import '../../features/calls/provider/quick_call_session_provider.dart';
 import '../../features/calls/screens/widgets/quick_call_dialog.dart';
 
 import 'app_asset_image.dart';
@@ -16,36 +19,34 @@ abstract final class QuickCallTrigger {
   static const String tooltipMessage = 'Γρήγορη Κλήση (Ctrl+Shift+N)';
 
   static const Key triggerKey = ValueKey('quick_call_trigger');
-}
 
-enum QuickCallFabScope {
-  /// Λεξικό/Ιστορικό immersive — κανόνες κελύφους.
-  shell,
+  static const String minimizedTooltip = 'Επαναφορά γρήγορης καταγραφής';
 
-  /// Routes πάνω από το κέλυφος (Ρυθμίσεις, Στατιστικά, προβολή χάρτη).
-  overlayRoute,
+  static const Key minimizedKey = ValueKey('quick_call_minimized_phone');
 }
 
 /// Υπτάμενο κουμπί γρήγορης καταγραφής (FAB με εικονίδιο PNG).
-
+///
+/// Με ελαχιστοποιημένη γρήγορη καταγραφή γίνεται τηλέφωνο που χτυπά και την
+/// επαναφέρει. Το τηλέφωνο φαίνεται ακόμη κι αν ο χρήστης έχει κρύψει το
+/// κουμπί από τις Ρυθμίσεις: δεν είναι κουμπί, είναι κλήση σε εξέλιξη.
 class QuickCallFloatingButton extends ConsumerWidget {
-  const QuickCallFloatingButton({
-    super.key,
+  const QuickCallFloatingButton({super.key, this.showOpenButton = true});
 
-    this.scope = QuickCallFabScope.shell,
-  });
-
-  final QuickCallFabScope scope;
+  /// `false` όπου δεν υπάρχει κουμπί ανοίγματος (κύριες οθόνες): εκεί
+  /// εμφανίζεται μόνο το τηλέφωνο της ελαχιστοποιημένης καταγραφής.
+  final bool showOpenButton;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final available = switch (scope) {
-      QuickCallFabScope.shell => isQuickCallCaptureAvailable(ref),
+    final minimized =
+        ref.watch(quickCallSessionProvider) == QuickCallPhase.minimized;
+    if (minimized) {
+      if (isQuickCallOverlayBlocked(ref)) return const SizedBox.shrink();
+      return const _RingingPhoneButton();
+    }
 
-      QuickCallFabScope.overlayRoute => isQuickCallOverlayFabAvailable(ref),
-    };
-
-    if (!available) {
+    if (!showOpenButton || !isQuickCallCaptureAvailable(ref)) {
       return const SizedBox.shrink();
     }
 
@@ -179,6 +180,61 @@ class _QuickCallIcon extends StatelessWidget {
       fit: BoxFit.contain,
       filterQuality: FilterQuality.medium,
       fallbackIcon: Icons.call,
+    );
+  }
+}
+
+/// Η ελαχιστοποιημένη γρήγορη καταγραφή: τηλέφωνο που χτυπά, ώστε ο χρήστης
+/// να βλέπει πάντα ότι υπάρχει κλήση σε εξέλιξη. Ένα κλικ την επαναφέρει.
+class _RingingPhoneButton extends StatefulWidget {
+  const _RingingPhoneButton();
+
+  @override
+  State<_RingingPhoneButton> createState() => _RingingPhoneButtonState();
+}
+
+class _RingingPhoneButtonState extends State<_RingingPhoneButton>
+    with SingleTickerProviderStateMixin {
+  /// Ένας κύκλος: κουδούνισμα στο πρώτο τρίτο, ησυχία στο υπόλοιπο — όπως
+  /// χτυπά ένα τηλέφωνο.
+  late final AnimationController _ring = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1500),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _ring.dispose();
+    super.dispose();
+  }
+
+  /// Γωνία κλίσης για τη θέση [t] (0–1) του κύκλου.
+  static double _tilt(double t) {
+    const ringPart = 1 / 3;
+    if (t >= ringPart) return 0;
+    final progress = t / ringPart;
+    // Έξι γρήγορες ταλαντώσεις που σβήνουν προς το τέλος του κουδουνίσματος.
+    return math.sin(progress * math.pi * 12) * 0.35 * (1 - progress);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: QuickCallTrigger.minimizedTooltip,
+      child: FloatingActionButton(
+        key: QuickCallTrigger.minimizedKey,
+        heroTag: null,
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        onPressed: () => showQuickCallDialog(context),
+        child: AnimatedBuilder(
+          animation: _ring,
+          builder: (context, child) =>
+              Transform.rotate(angle: _tilt(_ring.value), child: child),
+          child: const Icon(Icons.ring_volume),
+        ),
+      ),
     );
   }
 }

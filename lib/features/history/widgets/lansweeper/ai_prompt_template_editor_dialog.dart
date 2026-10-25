@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/dialog_snackbar_scope.dart';
 import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../../../core/services/ai_prompt_template_controller.dart';
-import '../../../../core/services/gemini_ticket_service.dart';
+import '../../../../core/services/ai_prompt_template_syntax.dart';
+import '../../../../core/services/personal_ai_prompt.dart';
 import '../../providers/gemini_settings_provider.dart';
 import 'ai_prompt_template_field.dart';
 
@@ -17,8 +18,26 @@ class AiPromptTemplateEditorDialog extends ConsumerStatefulWidget {
   const AiPromptTemplateEditorDialog({
     required this.savedTemplate,
     required this.onSave,
+    this.profile = AiPromptProfile.lansweeper,
+    this.title = 'Πρότυπο προτροπής Τεχνητής Νοημοσύνης',
+    this.description =
+        'Ορίζει πώς η ΤΝ προτείνει τίτλο, περιγραφή και λύση για μετατροπη της κλήσης σε ticket στο Lansweeper. ',
+    this.personalDefault = true,
     super.key,
   });
+
+  /// Ποια σήματα ισχύουν και ποια είναι η εργοστασιακή προτροπή.
+  final AiPromptProfile profile;
+
+  final String title;
+
+  /// Τι ορίζει η προτροπή — η πρώτη πρόταση της περιγραφής του διαλόγου.
+  final String description;
+
+  /// «Ορισμός ως Προεπιλογή»: προσωπική προεπιλογή — υπάρχει μόνο για την
+  /// προτροπή της Αναφοράς Lansweeper. Χωρίς αυτήν, η «Επαναφορά» φέρνει
+  /// πάντα την εργοστασιακή.
+  final bool personalDefault;
 
   /// Τελευταία αποθηκευμένη τιμή (στιγμιότυπο dirty-state).
   final String savedTemplate;
@@ -45,6 +64,7 @@ class _AiPromptTemplateEditorDialogState
     _savedSnapshot = widget.savedTemplate;
     _draftController = AiPromptTemplateTextEditingController(
       text: _savedSnapshot,
+      profile: widget.profile,
     );
     _draftController.addListener(_onDraftChanged);
   }
@@ -68,7 +88,10 @@ class _AiPromptTemplateEditorDialogState
   }
 
   Future<bool> _confirmInvalidSave() async {
-    final validation = AiPromptTemplateSyntax.validate(_draftController.text);
+    final validation = AiPromptTemplateSyntax.validate(
+      _draftController.text,
+      profile: widget.profile,
+    );
     if (validation.isValid) return true;
 
     final proceed = await showDialog<bool>(
@@ -200,7 +223,9 @@ class _AiPromptTemplateEditorDialogState
   }
 
   Future<void> _restoreDefault() async {
-    final userDefault = ref.read(geminiPromptTemplateUserDefaultProvider);
+    final userDefault = widget.personalDefault
+        ? ref.read(geminiPromptTemplateUserDefaultProvider)
+        : null;
     final hasUserDefault = userDefault != null && userDefault.trim().isNotEmpty;
 
     if (!hasUserDefault) {
@@ -225,7 +250,7 @@ class _AiPromptTemplateEditorDialogState
         ),
       );
       if (confirmed != true || !mounted) return;
-      _draftController.text = kDefaultAiPromptTemplate;
+      _draftController.text = widget.profile.defaultTemplate;
       return;
     }
 
@@ -259,7 +284,7 @@ class _AiPromptTemplateEditorDialogState
       return;
     }
     _draftController.text = switch (choice) {
-      _RestoreDefaultChoice.factory => kDefaultAiPromptTemplate,
+      _RestoreDefaultChoice.factory => widget.profile.defaultTemplate,
       _RestoreDefaultChoice.personal => userDefault,
       _RestoreDefaultChoice.cancel => _draftController.text,
     };
@@ -281,7 +306,7 @@ class _AiPromptTemplateEditorDialogState
           unawaited(_requestClose());
         },
         child: AlertDialog(
-          title: const Text('Πρότυπο προτροπής Τεχνητής Νοημοσύνης'),
+          title: Text(widget.title),
           content: SizedBox(
             width: 520,
             child: Scrollbar(
@@ -295,7 +320,7 @@ class _AiPromptTemplateEditorDialogState
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Ορίζει πώς η ΤΝ προτείνει τίτλο, περιγραφή και λύση για μετατροπη της κλήσης σε ticket στο Lansweeper. '
+                      '${widget.description}'
                       'Ο επεξεργαστής προτροπής υποστηρίζει αυτόματες προτάσεις όταν πληκτρολογήσετε \'{\'',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
@@ -308,14 +333,15 @@ class _AiPromptTemplateEditorDialogState
                       spacing: 8,
                       runSpacing: 4,
                       children: [
-                        TextButton(
-                          style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            textStyle: subtleStyle,
+                        if (widget.personalDefault)
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              textStyle: subtleStyle,
+                            ),
+                            onPressed: _setUserDefault,
+                            child: const Text('Ορισμός ως Προεπιλογή'),
                           ),
-                          onPressed: _setUserDefault,
-                          child: const Text('Ορισμός ως Προεπιλογή'),
-                        ),
                         TextButton(
                           style: TextButton.styleFrom(
                             visualDensity: VisualDensity.compact,
@@ -358,3 +384,25 @@ class _AiPromptTemplateEditorDialogState
 }
 
 enum _RestoreDefaultChoice { cancel, factory, personal }
+
+/// Ανοίγει τον επεξεργαστή μιας προσωπικής προτροπής — τον ίδιο με της
+/// Αναφοράς Lansweeper, με τα σήματα και την εργοστασιακή της προτροπής.
+Future<void> openPersonalPromptEditor(
+  BuildContext context,
+  PersonalAiPrompt prompt,
+) async {
+  final saved = await prompt.read();
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => AiPromptTemplateEditorDialog(
+      savedTemplate: saved,
+      onSave: prompt.write,
+      profile: prompt.profile,
+      title: prompt.title,
+      description: prompt.description,
+      personalDefault: false,
+    ),
+  );
+}

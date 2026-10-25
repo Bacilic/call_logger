@@ -4,6 +4,7 @@ import '../utils/asset_history_labels.dart';
 import 'audit_service.dart';
 import 'database_helper.dart';
 import 'directory_support.dart';
+import '../utils/display_text_sort.dart';
 
 /// Persistence τηλεφώνων (`phones`, `department_phones`, σχετικά junctions).
 class PhoneRepository {
@@ -194,11 +195,13 @@ class PhoneRepository {
       FROM user_phones up
       JOIN users u ON u.id = up.user_id
       WHERE up.phone_id = ?
-      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
       ''',
       [phoneId],
     );
-    for (final r in ownerRows) {
+    for (final r in sortedForDisplay(
+      ownerRows,
+      (r) => [r['last_name'] as String?, r['first_name'] as String?],
+    )) {
       final name = _personDisplayName(r);
       if (name != null) out.add(name);
     }
@@ -209,11 +212,10 @@ class PhoneRepository {
       FROM department_phones dp
       JOIN departments d ON d.id = dp.department_id
       WHERE dp.phone_id = ?
-      ORDER BY d.name COLLATE NOCASE ASC
       ''',
       [phoneId],
     );
-    for (final r in deptRows) {
+    for (final r in sortedForDisplay(deptRows, (r) => [r['name'] as String?])) {
       final name = (r['name'] as String?)?.trim() ?? '';
       if (name.isNotEmpty) out.add(name);
     }

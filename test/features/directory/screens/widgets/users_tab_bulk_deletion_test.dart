@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../../test_setup.dart';
+import '../../../../helpers/mass_deletion_confirm.dart';
 
 class _FakeDirectoryNotifier extends DirectoryNotifier {
   _FakeDirectoryNotifier(this._initialState);
@@ -186,6 +187,7 @@ void main() {
 
     await tester.tap(find.text('Διαγραφή'));
     await _pumpUntil(tester, find.byType(AlertDialog));
+    await typeWholeCatalogConfirmWord(tester);
 
     await tester.tap(
       find.descendant(

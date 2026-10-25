@@ -40,3 +40,24 @@ int _compareFilled(String a, String b) {
   if (byKey != 0) return byKey;
   return a.compareTo(b);
 }
+
+/// Ίδια σειρά για εγγραφές με περισσότερα από ένα κλειδιά (π.χ. επώνυμο,
+/// μετά όνομα): αποφασίζει το πρώτο κλειδί που διαφέρει.
+///
+/// Για τις λίστες που έρχονται από τη βάση: το `COLLATE NOCASE` εξομοιώνει
+/// μόνο τα λατινικά και βάζει τα τονισμένα κεφαλαία πριν από το Α, οπότε η
+/// σειρά που βλέπει ο χρήστης δίνεται πάντα από εδώ, όχι από το ερώτημα.
+List<T> sortedForDisplay<T>(
+  Iterable<T> items,
+  List<String?> Function(T item) keys,
+) {
+  return items.toList()..sort((a, b) {
+    final ka = keys(a);
+    final kb = keys(b);
+    for (var i = 0; i < ka.length && i < kb.length; i++) {
+      final c = compareDisplayText(ka[i], kb[i]);
+      if (c != 0) return c;
+    }
+    return 0;
+  });
+}

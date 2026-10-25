@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,8 +8,11 @@ import '../providers/main_nav_request_provider.dart';
 import '../providers/pending_deferred_actions_provider.dart';
 import '../widgets/main_nav_destination.dart';
 import '../../features/calls/layout/call_form_clear.dart';
+import '../../features/calls/layout/call_form_content.dart';
 import '../../features/calls/provider/call_entry_provider.dart';
+import '../../features/calls/provider/quick_call_session_provider.dart';
 import '../../features/calls/provider/smart_entity_selector_provider.dart';
+import '../../features/calls/screens/widgets/quick_call_dialog.dart';
 import '../../features/database/providers/backup_scheduler_provider.dart';
 import '../../features/database/widgets/other_sessions_gate.dart';
 
@@ -37,14 +42,14 @@ class DatabaseSwitchBlocker {
 List<DatabaseSwitchBlocker> collectDatabaseSwitchBlockers(WidgetRef ref) {
   final blockers = <DatabaseSwitchBlocker>[];
 
-  final smart = ref.read(callSmartEntityProvider);
-  final entry = ref.read(callEntryProvider);
+  // Η ελαχιστοποιημένη γρήγορη καταγραφή είναι κι αυτή ανοιχτή κλήση: κρατά
+  // καλούντες και τμήματα της τρέχουσας βάσης.
   final hasOpenCallForm =
-      smart.hasAnyContent ||
-      entry.isCallTimerRunning ||
-      entry.durationSeconds > 0 ||
-      entry.notes.trim().isNotEmpty ||
-      entry.category.trim().isNotEmpty;
+      callFormHasContent(
+        ref.read(callSmartEntityProvider),
+        ref.read(callEntryProvider),
+      ) ||
+      ref.read(quickCallSessionProvider) == QuickCallPhase.minimized;
   if (hasOpenCallForm) {
     blockers.add(
       const DatabaseSwitchBlocker(
@@ -242,6 +247,7 @@ Future<bool> ensureDatabaseSwitchAllowed(
       // η οθόνη κλήσεων ΔΕΝ είναι προσαρτημένη, οπότε τα σκέτα clearAll/reset θα
       // άφηναν κολλημένες επιβεβαιώσεις/μάνταλο και «dirty» providers.
       clearCallFormCompletely(ref);
+      ref.read(quickCallSessionProvider.notifier).end();
       if (!context.mounted) {
         await ref.read(pendingDeferredActionsProvider.notifier).settleAll();
         return true;
@@ -254,6 +260,12 @@ Future<bool> ensureDatabaseSwitchAllowed(
         canObserveOtherStations: canObserveOtherStations,
       );
     case _OpenCallFormGuardChoice.goToCall:
+      // Η ελαχιστοποιημένη γρήγορη καταγραφή επανέρχεται εκεί που βρίσκεται ο
+      // χρήστης· αλλιώς η κλήση είναι η κύρια φόρμα.
+      if (ref.read(quickCallSessionProvider) == QuickCallPhase.minimized) {
+        if (context.mounted) unawaited(showQuickCallDialog(context));
+        return false;
+      }
       if (context.mounted) {
         Navigator.of(
           context,

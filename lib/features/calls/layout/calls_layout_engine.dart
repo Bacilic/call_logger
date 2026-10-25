@@ -71,6 +71,23 @@ class CallsLayoutEngine {
     CallsLayoutVisibility visibility,
   ) => groups.isEquipmentGroupActive && !visibility.hasEquipmentHistoryData;
 
+  /// ΓΕΓΟΝΟΣ, ΟΧΙ ΕΙΚΑΣΙΑ: «έχει ιστορικό» σημαίνει «υπάρχουν κλήσεις», όχι
+  /// «βρέθηκε στον κατάλογο». Ένας καταχωρημένος εξοπλισμός με μηδέν κλήσεις
+  /// άφηνε κενή στήλη — η κάρτα εξαφανιζόταν μόνη της, αφού είχε ήδη
+  /// δεσμευτεί η θέση. Τώρα τη θέση την παίρνει η εφεδρική κάρτα ενεργειών.
+  ///
+  /// [callsFound] `null` = η ερώτηση στη βάση τρέχει ακόμα: κρατάμε τη θέση
+  /// του ιστορικού με το σπινάκι του, γιατί μια κάρτα που εμφανίζεται και
+  /// αντικαθίσταται μετά από ms αναβοσβήνει.
+  static bool hasEquipmentHistoryData({
+    required CallsFieldGroups groups,
+    required String equipmentCode,
+    required bool? callsFound,
+  }) =>
+      equipmentCode.isNotEmpty &&
+      groups.equipmentTier == EquipmentGroupTier.matchedRecord &&
+      (callsFound ?? true);
+
   /// Η στήλη εξοπλισμού μιας γραμμής: ιστορικό ή, εφεδρικά, ενέργειες.
   static List<CallsLayoutColumn> _equipmentPanelColumns(
     CallsFieldGroups groups,
@@ -108,7 +125,7 @@ class CallsLayoutEngine {
     return _templateAFull(groups, v);
   }
 
-  /// Πρότυπο Α #1 — μόνο τηλέφωνο (`1- τηλέφωνο.png`).
+  /// Πρότυπο Α #1 — μόνο τηλέφωνο (`UI layout mockup/Διάταξη Οθόνης Κλήσεων.html`).
   static CallsLayoutPlan _templateAPhoneOnly(
     CallsFieldGroups groups,
     CallsLayoutVisibility v,

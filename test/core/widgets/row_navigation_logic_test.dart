@@ -79,4 +79,76 @@ void main() {
       );
     });
   });
+
+  group('κουμπιά σελίδων (42 γραμμές, 15 ανά σελίδα)', () {
+    test('η τελευταία σελίδα αρχίζει στη γραμμή 30· χωρίς γραμμές, στην 0', () {
+      expect(lastPageStart(count: 42, pageSize: 15), 30);
+      expect(lastPageStart(count: 45, pageSize: 15), 30);
+      expect(lastPageStart(count: 0, pageSize: 15), 0);
+    });
+
+    test('«Προηγούμενη» πάει μία σελίδα πίσω και σταματά στην πρώτη', () {
+      expect(previousPageStart(start: 30, count: 42, pageSize: 15), 15);
+      expect(previousPageStart(start: 15, count: 42, pageSize: 15), 0);
+      expect(previousPageStart(start: 0, count: 42, pageSize: 15), 0);
+    });
+
+    test('«Προηγούμενη» από σελίδα πέρα από το τέλος γυρνά στην τελευταία', () {
+      expect(previousPageStart(start: 60, count: 42, pageSize: 15), 30);
+    });
+
+    test(
+      '«Επόμενη» πάει μία σελίδα μπροστά, και στην τελευταία δεν πάει πουθενά',
+      () {
+        expect(nextPageStart(start: 0, count: 42, pageSize: 15), 15);
+        expect(nextPageStart(start: 15, count: 42, pageSize: 15), 30);
+        expect(nextPageStart(start: 30, count: 42, pageSize: 15), isNull);
+      },
+    );
+  });
+
+  group('κύλιση σε λίστα με ίσες γραμμές (48 pixel, οθόνη 480)', () {
+    test('γραμμή που φαίνεται ήδη δεν κουνά τη λίστα', () {
+      expect(
+        scrollOffsetRevealingRow(
+          index: 3,
+          rowExtent: 48,
+          viewportExtent: 480,
+          currentOffset: 0,
+        ),
+        0,
+      );
+    });
+
+    test('γραμμή κάτω από την οθόνη έρχεται στο κάτω άκρο της', () {
+      // Η γραμμή 20 τελειώνει στα 1008· για να φανεί, η λίστα κυλά στα 528.
+      expect(
+        scrollOffsetRevealingRow(
+          index: 20,
+          rowExtent: 48,
+          viewportExtent: 480,
+          currentOffset: 0,
+        ),
+        528,
+      );
+    });
+
+    test('γραμμή πάνω από την οθόνη έρχεται στο πάνω άκρο της', () {
+      expect(
+        scrollOffsetRevealingRow(
+          index: 2,
+          rowExtent: 48,
+          viewportExtent: 480,
+          currentOffset: 500,
+        ),
+        96,
+      );
+    });
+
+    test('το Page Down διανύει όσες γραμμές χωρούν, τουλάχιστον μία', () {
+      expect(rowsFittingViewport(viewportExtent: 480, rowExtent: 48), 10);
+      expect(rowsFittingViewport(viewportExtent: 500, rowExtent: 48), 10);
+      expect(rowsFittingViewport(viewportExtent: 20, rowExtent: 48), 1);
+    });
+  });
 }

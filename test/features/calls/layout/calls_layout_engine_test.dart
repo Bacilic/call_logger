@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:call_logger/core/models/calls_screen_cards_visibility.dart';
 import 'package:call_logger/features/calls/layout/calls_field_groups.dart';
 import 'package:call_logger/features/calls/layout/calls_layout_engine.dart';
 import 'package:call_logger/features/calls/layout/calls_layout_plan.dart';
@@ -380,4 +384,113 @@ void main() {
       }
     });
   });
+
+  group('Σελίδα «Διάταξη Οθόνης Κλήσεων»', () {
+    // Η σελίδα δείχνει «όπως είναι σήμερα» από τους ίδιους κανόνες που τρέχει
+    // η οθόνη. Όταν αλλάξει κανόνας, ξαναπαράγεται με:
+    //   flutter test test/features/calls/layout/calls_layout_engine_test.dart --update-goldens
+    final page = File('UI layout mockup/Διάταξη Οθόνης Κλήσεων.html');
+
+    test('η σημερινή διάταξη της σελίδας ταυτίζεται με τους κανόνες', () {
+      final html = page.readAsStringSync();
+      final block = _jsonBlock(html, 'today-data');
+      final expected = _todayLayoutJson();
+      if (autoUpdateGoldenFiles) {
+        final newline = html.contains('\r\n') ? '\r\n' : '\n';
+        page.writeAsStringSync(
+          html.replaceRange(
+            block.start,
+            block.end,
+            '$newline${expected.replaceAll('\n', newline)}$newline',
+          ),
+        );
+        return;
+      }
+      expect(
+        block.text.replaceAll('\r\n', '\n').trim(),
+        expected,
+        reason:
+            'Η σελίδα έμεινε πίσω από τους κανόνες. Ξαναπαράγεται με '
+            '--update-goldens.',
+      );
+    });
+
+    test('κάθε συνδυασμός πεδίων έχει σχέδιο-στόχο', () {
+      final vision =
+          jsonDecode(_jsonBlock(page.readAsStringSync(), 'vision-data').text)
+              as Map<String, dynamic>;
+      expect(vision.keys.toSet(), _scenarioFlags().toSet());
+    });
+  });
+}
+
+/// Οι 15 συνδυασμοί ως σημαίες «ΟΕ ΟΚ ΟΞ ΧΑ» (π.χ. `1010`).
+List<String> _scenarioFlags() => [
+  for (var mask = 1; mask < 16; mask++)
+    [for (var bit = 3; bit >= 0; bit--) (mask >> bit) & 1].join(),
+];
+
+({int start, int end, String text}) _jsonBlock(String html, String id) {
+  final open = '<script id="$id" type="application/json">';
+  final start = html.indexOf(open);
+  expect(start, isNot(-1), reason: 'Λείπει το μπλοκ $id από τη σελίδα.');
+  final contentStart = start + open.length;
+  final end = html.indexOf('</script>', contentStart);
+  return (
+    start: contentStart,
+    end: end,
+    text: html.substring(contentStart, end),
+  );
+}
+
+/// Όλες οι παραλλαγές των διακοπτών της σελίδας × οι 15 συνδυασμοί.
+String _todayLayoutJson() {
+  final lines = <String>[];
+  for (final history in [true, false]) {
+    for (final inCatalog in [true, false]) {
+      for (final globalRecent in [true, false]) {
+        final variant =
+            'h${history ? 1 : 0}c${inCatalog ? 1 : 0}t${globalRecent ? 1 : 0}';
+        final scenarios = <String>[];
+        for (final flags in _scenarioFlags()) {
+          final hasEquipment = flags[2] == '1';
+          final groups = _groups(
+            phone: flags[0] == '1',
+            caller: flags[1] == '1',
+            equipment: !hasEquipment
+                ? EquipmentGroupTier.none
+                : inCatalog
+                ? EquipmentGroupTier.matchedRecord
+                : EquipmentGroupTier.freeTextOnly,
+            map: flags[3] == '1',
+          );
+          final visibility = CallsLayoutVisibility.from(
+            cards: CallsScreenCardsVisibility.defaults,
+            groups: groups,
+            showRemoteTools: groups.isEquipmentGroupActive,
+            hasCallerHistoryData: groups.isCallerGroupActive,
+            hasEquipmentHistoryData: CallsLayoutEngine.hasEquipmentHistoryData(
+              groups: groups,
+              equipmentCode: hasEquipment ? 'PC-0001' : '',
+              callsFound: history,
+            ),
+            showGlobalRecentCard: globalRecent,
+          );
+          final plan = CallsLayoutEngine.build(groups, visibility);
+          final rows = [
+            for (final row in plan.rows)
+              [
+                for (final column in row.columns)
+                  [for (final slot in column.slots) slot.name],
+              ],
+          ];
+          scenarios.add(
+            '    "$flags": ${jsonEncode({'template': plan.template.name, 'rows': rows})}',
+          );
+        }
+        lines.add('  "$variant": {\n${scenarios.join(',\n')}\n  }');
+      }
+    }
+  }
+  return '{"variants": {\n${lines.join(',\n')}\n}}';
 }

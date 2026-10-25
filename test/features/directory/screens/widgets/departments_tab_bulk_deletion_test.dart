@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../../test_setup.dart';
+import '../../../../helpers/mass_deletion_confirm.dart';
 
 class _FakeDepartmentDirectoryNotifier extends DepartmentDirectoryNotifier {
   _FakeDepartmentDirectoryNotifier(this._initialState);
@@ -238,6 +239,7 @@ void main() {
 
       await tester.tap(find.text('Διαγραφή'));
       await _pumpUntil(tester, find.byType(AlertDialog));
+      await typeWholeCatalogConfirmWord(tester);
 
       await tester.tap(find.text('Αναλυτικά (ανά οντότητα)'));
       await _pumpUntil(tester, find.text('Ακύρωση'));

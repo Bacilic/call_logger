@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../models/knowledge_article.dart';
 
@@ -19,14 +18,6 @@ class KnowledgeArticleCard extends StatelessWidget {
   final KnowledgeArticle article;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
-
-  static String usageLabel(int timesUsed, String? lastUsedAt) {
-    if (timesUsed <= 0) return 'δεν έχει χρησιμοποιηθεί ακόμη';
-    final stamp = DateTime.tryParse((lastUsedAt ?? '').trim());
-    final times = timesUsed == 1 ? '1 φορά' : '$timesUsed φορές';
-    if (stamp == null) return 'χρησιμοποιήθηκε $times';
-    return 'χρησιμοποιήθηκε $times · τελευταία ${DateFormat('dd/MM/yyyy').format(stamp)}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,13 +94,6 @@ class KnowledgeArticleCard extends StatelessWidget {
                 ],
               ),
             ],
-            const SizedBox(height: 8),
-            Text(
-              usageLabel(article.timesUsed, article.lastUsedAt),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
           ],
         ),
       ),

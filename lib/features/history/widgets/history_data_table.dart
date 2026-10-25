@@ -9,6 +9,8 @@ import '../../../core/utils/call_duration_format.dart';
 import '../../../core/utils/history_entity_display_utils.dart';
 import '../../../core/widgets/compact_tooltip.dart';
 import '../../../core/widgets/ellipsis_tooltip_text.dart';
+import '../../../core/widgets/keyboard_row_navigation.dart';
+import '../../../core/widgets/row_navigation_logic.dart';
 import '../../calls/models/call_refined_source.dart';
 import '../models/lansweeper_sync_state.dart';
 import '../providers/history_provider.dart';
@@ -67,6 +69,10 @@ class _HistoryDataTableState extends ConsumerState<HistoryDataTable> {
   late final ScrollController _verticalScrollController;
   int? _hoveredRowIndex;
 
+  /// Η κλήση που ακούει τα πλήκτρα. Κρατιέται ως id και όχι ως θέση, ώστε να
+  /// μένει στην ίδια κλήση όταν αλλάζει η ταξινόμηση ή ανανεώνεται η λίστα.
+  int? _focusedCallId;
+
   int? _rowId(Map<String, dynamic> row) => row['id'] as int?;
 
   void _toggleSelection(int callId, bool selected) {
@@ -78,6 +84,41 @@ class _HistoryDataTableState extends ConsumerState<HistoryDataTable> {
       next.remove(callId);
     }
     ref.read(historySelectedCallIdsProvider.notifier).setAll(next);
+  }
+
+  /// Φέρνει τη γραμμή [index] στο ορατό τμήμα. Οι γραμμές έχουν όλες το ίδιο
+  /// ύψος, άρα η θέση τους υπολογίζεται χωρίς να είναι χτισμένες.
+  void _revealRow(int index, double rowExtent) {
+    if (!_verticalScrollController.hasClients) return;
+    final position = _verticalScrollController.position;
+    final target = scrollOffsetRevealingRow(
+      index: index,
+      rowExtent: rowExtent,
+      viewportExtent: position.viewportDimension,
+      currentOffset: position.pixels,
+    ).clamp(position.minScrollExtent, position.maxScrollExtent);
+    if (target != position.pixels) _verticalScrollController.jumpTo(target);
+  }
+
+  /// Delete: με τικ, η μαζική διαγραφή των τσεκαρισμένων· χωρίς τικ, ο
+  /// διάλογος διαγραφής της γραμμής που ακούει τα πλήκτρα. Επιβεβαίωση πάντα,
+  /// όπως με τα κουμπιά.
+  void _deleteFromKeyboard(
+    Map<String, dynamic>? focusedRow,
+    Set<int> visibleSelectedIds,
+  ) {
+    if (visibleSelectedIds.isNotEmpty) {
+      showCallBulkDeleteDialog(context, callIds: visibleSelectedIds.toList());
+      return;
+    }
+    final callId = focusedRow == null ? null : _rowId(focusedRow);
+    if (focusedRow == null || callId == null) return;
+    showCallDeleteDialog(
+      context,
+      callId: callId,
+      callerId: focusedRow['caller_id'] as int?,
+      equipmentCode: historyRowText(focusedRow['equipment_code']),
+    );
   }
 
   @override
@@ -263,9 +304,12 @@ class _HistoryDataTableState extends ConsumerState<HistoryDataTable> {
     final callId = _rowId(row);
     final isSelected = callId != null && selectedCallIds.contains(callId);
     final isHovered = _hoveredRowIndex == rowIndex;
+    final isFocused = callId != null && callId == _focusedCallId;
 
     Color? rowColor;
-    if (isSelected) {
+    if (isFocused) {
+      rowColor = keyboardFocusedRowColor(context);
+    } else if (isSelected) {
       rowColor = theme.colorScheme.primaryContainer.withValues(alpha: 0.35);
     } else if (isHovered) {
       rowColor = theme.colorScheme.surfaceContainerHighest.withValues(
@@ -300,166 +344,185 @@ class _HistoryDataTableState extends ConsumerState<HistoryDataTable> {
           setState(() => _hoveredRowIndex = null);
         }
       },
-      child: Container(
-        height: dataRowHeight,
-        decoration: BoxDecoration(
-          color: rowColor,
-          border: Border(
-            bottom: BorderSide(
-              color: theme.dividerColor.withValues(alpha: 0.35),
+      child: GestureDetector(
+        // Ένα κλικ στη γραμμή τη δίνει στα πλήκτρα· τα τικ και τα κουμπιά της
+        // κρατούν τη δική τους δουλειά.
+        onTap: callId == null
+            ? null
+            : () => setState(() => _focusedCallId = callId),
+        child: Container(
+          height: dataRowHeight,
+          decoration: BoxDecoration(
+            color: rowColor,
+            border: Border(
+              bottom: BorderSide(
+                color: theme.dividerColor.withValues(alpha: 0.35),
+              ),
             ),
           ),
-        ),
-        child: Row(
-          children: [
-            _dataCell(
-              width: columnWidths[0],
-              horizontalPadding: horizontalPadding,
-              child: Transform.scale(
-                scale: zoomLevel.clamp(0.85, 1.4),
-                child: Checkbox(
-                  value: isSelected,
-                  onChanged: callId == null
-                      ? null
-                      : (value) => _toggleSelection(callId, value == true),
+          // Η λωρίδα της εστίασης ζωγραφίζεται από πάνω: ως περίγραμμα θα
+          // έτρωγε πλάτος από τις στήλες, που έχουν σταθερό φάρδος.
+          foregroundDecoration: isFocused
+              ? BoxDecoration(
+                  border: Border(
+                    left: BorderSide(
+                      color: theme.colorScheme.primary,
+                      width: 3,
+                    ),
+                  ),
+                )
+              : null,
+          child: Row(
+            children: [
+              _dataCell(
+                width: columnWidths[0],
+                horizontalPadding: horizontalPadding,
+                child: Transform.scale(
+                  scale: zoomLevel.clamp(0.85, 1.4),
+                  child: Checkbox(
+                    value: isSelected,
+                    onChanged: callId == null
+                        ? null
+                        : (value) => _toggleSelection(callId, value == true),
+                  ),
                 ),
               ),
-            ),
-            _dataCell(
-              width: columnWidths[1],
-              horizontalPadding: horizontalPadding,
-              child: Text(dateTime, style: bodyStyle),
-            ),
-            _dataCell(
-              width: columnWidths[2],
-              horizontalPadding: horizontalPadding,
-              child: HistoryDeletedEntityText(
-                text: user,
-                isDeleted: callerDeleted && user != '—',
-                style: bodyStyle,
+              _dataCell(
+                width: columnWidths[1],
+                horizontalPadding: horizontalPadding,
+                child: Text(dateTime, style: bodyStyle),
               ),
-            ),
-            _dataCell(
-              width: columnWidths[3],
-              horizontalPadding: horizontalPadding,
-              child: Text(phone.isEmpty ? '—' : phone, style: bodyStyle),
-            ),
-            _dataCell(
-              width: columnWidths[4],
-              horizontalPadding: horizontalPadding,
-              child: EllipsisTooltipText(
-                text: department.isEmpty ? '—' : department,
-                style: bodyStyle,
+              _dataCell(
+                width: columnWidths[2],
+                horizontalPadding: horizontalPadding,
+                child: HistoryDeletedEntityText(
+                  text: user,
+                  isDeleted: callerDeleted && user != '—',
+                  style: bodyStyle,
+                ),
               ),
-            ),
-            _dataCell(
-              width: columnWidths[5],
-              horizontalPadding: horizontalPadding,
-              child: HistoryDeletedEntityText(
-                text: equipment.isEmpty ? '—' : equipment,
-                isDeleted: equipmentDeleted && equipment.isNotEmpty,
-                style: bodyStyle,
+              _dataCell(
+                width: columnWidths[3],
+                horizontalPadding: horizontalPadding,
+                child: Text(phone.isEmpty ? '—' : phone, style: bodyStyle),
               ),
-            ),
-            _dataCell(
-              width: columnWidths[6],
-              horizontalPadding: horizontalPadding,
-              child: HistoryDeletedEntityText(
-                text: category.isEmpty ? '—' : category,
-                isDeleted: categoryDeleted && category.isNotEmpty,
-                style: bodyStyle,
+              _dataCell(
+                width: columnWidths[4],
+                horizontalPadding: horizontalPadding,
+                child: EllipsisTooltipText(
+                  text: department.isEmpty ? '—' : department,
+                  style: bodyStyle,
+                ),
               ),
-            ),
-            _dataCell(
-              width: columnWidths[7],
-              horizontalPadding: horizontalPadding,
-              // Το σχήμα του εικονιδίου λέει ποιανού είναι τα λόγια —
-              // χειρόγραφο, από ΤΝ, ή από ΤΝ και πειραγμένο — και το tooltip
-              // τα ίδια με λόγια, μαζί με το πότε.
-              child: provenance.isEmpty
-                  ? EllipsisTooltipText(
-                      text: issue.isEmpty ? '—' : issue,
-                      style: bodyStyle,
-                    )
-                  : Row(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Tooltip(
-                            message: provenance,
-                            child: CallProvenanceIcon(
-                              source: row['refined_source'] as String?,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: EllipsisTooltipText(
-                            text: issue.isEmpty ? '—' : issue,
-                            style: bodyStyle,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-            _dataCell(
-              width: columnWidths[8],
-              horizontalPadding: horizontalPadding,
-              child: Text(durationStr, style: bodyStyle),
-            ),
-            _dataCell(
-              width: columnWidths[9],
-              horizontalPadding: horizontalPadding,
-              child: _CallLinkBadges(
-                hasTask: historyFlagIsSet(row['has_open_task']),
-                lansweeperState: historyRowText(row['lansweeper_state']),
-                ticketId: historyRowText(row['lansweeper_ticket_id']),
+              _dataCell(
+                width: columnWidths[5],
+                horizontalPadding: horizontalPadding,
+                child: HistoryDeletedEntityText(
+                  text: equipment.isEmpty ? '—' : equipment,
+                  isDeleted: equipmentDeleted && equipment.isNotEmpty,
+                  style: bodyStyle,
+                ),
               ),
-            ),
-            _dataCell(
-              width: columnWidths[_actionsColumnIndex],
-              horizontalPadding: horizontalPadding,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _LansweeperRowMenu(
-                      callId: callId,
-                      currentState: historyRowText(row['lansweeper_state']),
-                      ticketId: historyRowText(row['lansweeper_ticket_id']),
-                    ),
-                    IconButton(
-                      tooltip: 'Επεξεργασία',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: callId == null
-                          ? null
-                          : () => showCallEditDialog(context, callId: callId),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                    IconButton(
-                      tooltip: 'Διαγραφή',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: callId == null
-                          ? null
-                          : () => showCallDeleteDialog(
-                              context,
-                              callId: callId,
-                              callerId: row['caller_id'] as int?,
-                              equipmentCode: historyRowText(
-                                row['equipment_code'],
+              _dataCell(
+                width: columnWidths[6],
+                horizontalPadding: horizontalPadding,
+                child: HistoryDeletedEntityText(
+                  text: category.isEmpty ? '—' : category,
+                  isDeleted: categoryDeleted && category.isNotEmpty,
+                  style: bodyStyle,
+                ),
+              ),
+              _dataCell(
+                width: columnWidths[7],
+                horizontalPadding: horizontalPadding,
+                // Το σχήμα του εικονιδίου λέει ποιανού είναι τα λόγια —
+                // χειρόγραφο, από ΤΝ, ή από ΤΝ και πειραγμένο — και το tooltip
+                // τα ίδια με λόγια, μαζί με το πότε.
+                child: provenance.isEmpty
+                    ? EllipsisTooltipText(
+                        text: issue.isEmpty ? '—' : issue,
+                        style: bodyStyle,
+                      )
+                    : Row(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: Tooltip(
+                              message: provenance,
+                              child: CallProvenanceIcon(
+                                source: row['refined_source'] as String?,
                               ),
                             ),
-                      icon: Icon(
-                        Icons.delete_outline,
-                        color: theme.colorScheme.error,
+                          ),
+                          Expanded(
+                            child: EllipsisTooltipText(
+                              text: issue.isEmpty ? '—' : issue,
+                              style: bodyStyle,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+              ),
+              _dataCell(
+                width: columnWidths[8],
+                horizontalPadding: horizontalPadding,
+                child: Text(durationStr, style: bodyStyle),
+              ),
+              _dataCell(
+                width: columnWidths[9],
+                horizontalPadding: horizontalPadding,
+                child: _CallLinkBadges(
+                  hasTask: historyFlagIsSet(row['has_open_task']),
+                  lansweeperState: historyRowText(row['lansweeper_state']),
+                  ticketId: historyRowText(row['lansweeper_ticket_id']),
                 ),
               ),
-            ),
-          ],
+              _dataCell(
+                width: columnWidths[_actionsColumnIndex],
+                horizontalPadding: horizontalPadding,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _LansweeperRowMenu(
+                        callId: callId,
+                        currentState: historyRowText(row['lansweeper_state']),
+                        ticketId: historyRowText(row['lansweeper_ticket_id']),
+                      ),
+                      IconButton(
+                        tooltip: 'Επεξεργασία',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: callId == null
+                            ? null
+                            : () => showCallEditDialog(context, callId: callId),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                      IconButton(
+                        tooltip: 'Διαγραφή',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: callId == null
+                            ? null
+                            : () => showCallDeleteDialog(
+                                context,
+                                callId: callId,
+                                callerId: row['caller_id'] as int?,
+                                equipmentCode: historyRowText(
+                                  row['equipment_code'],
+                                ),
+                              ),
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -484,6 +547,68 @@ class _HistoryDataTableState extends ConsumerState<HistoryDataTable> {
     final dataRowHeight = 48.0 * zoomLevel;
     final horizontalPadding = 12.0 * zoomLevel;
 
+    final focusedIndex = rowsToShow.indexWhere(
+      (row) => _focusedCallId != null && _rowId(row) == _focusedCallId,
+    );
+    final focusedRow = focusedIndex < 0 ? null : rowsToShow[focusedIndex];
+    final visibleSelectedIds = selectedCallIds
+        .where(visibleIds.contains)
+        .toSet();
+
+    return LayoutBuilder(
+      builder: (context, constraints) => KeyboardRowNavigation(
+        rowCount: rowsToShow.length,
+        focusedRowIndex: focusedIndex < 0 ? null : focusedIndex,
+        onFocusRow: (i) =>
+            setState(() => _focusedCallId = _rowId(rowsToShow[i])),
+        pageStep: rowsFittingViewport(
+          viewportExtent: constraints.maxHeight - headingRowHeight,
+          rowExtent: dataRowHeight,
+        ),
+        onRevealRow: (i, {required movingDown}) => _revealRow(i, dataRowHeight),
+        onOpen: (_) {
+          final callId = focusedRow == null ? null : _rowId(focusedRow);
+          if (callId != null) showCallEditDialog(context, callId: callId);
+        },
+        onToggleRow: (i) {
+          final callId = _rowId(rowsToShow[i]);
+          if (callId != null) {
+            _toggleSelection(callId, !selectedCallIds.contains(callId));
+          }
+        },
+        onDelete: (_) => _deleteFromKeyboard(focusedRow, visibleSelectedIds),
+        child: _buildTable(
+          theme: theme,
+          zoomLevel: zoomLevel,
+          rowsToShow: rowsToShow,
+          columnWidths: columnWidths,
+          tableWidth: tableWidth,
+          headingRowHeight: headingRowHeight,
+          dataRowHeight: dataRowHeight,
+          horizontalPadding: horizontalPadding,
+          allVisibleSelected: allVisibleSelected,
+          visibleIds: visibleIds,
+          selectedCallIds: selectedCallIds,
+          sort: sort,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTable({
+    required ThemeData theme,
+    required double zoomLevel,
+    required List<Map<String, dynamic>> rowsToShow,
+    required List<double> columnWidths,
+    required double tableWidth,
+    required double headingRowHeight,
+    required double dataRowHeight,
+    required double horizontalPadding,
+    required bool allVisibleSelected,
+    required Set<int> visibleIds,
+    required Set<int> selectedCallIds,
+    required HistorySortModel sort,
+  }) {
     return Scrollbar(
       controller: _horizontalScrollController,
       thumbVisibility: true,

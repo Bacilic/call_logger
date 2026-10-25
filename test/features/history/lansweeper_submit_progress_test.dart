@@ -222,5 +222,46 @@ void main() {
 
       expect(progress.concernsTask(8), isFalse);
     });
+
+    test('η επιτυχία μένει ορατή όταν δεν είναι επιλεγμένη καμία κλήση', () {
+      const progress = LansweeperSubmitProgress(
+        callIds: <int>[836],
+        outcome: LansweeperSubmitOutcome.success,
+      );
+
+      expect(
+        progress.concernsCall(null),
+        isTrue,
+        reason:
+            'μετά από επιτυχή καταχώρηση οι κλήσεις αποεπιλέγονται μόνες '
+            'τους· το «Καταχωρήθηκε» πρέπει να προλάβει να διαβαστεί',
+      );
+    });
+
+    test('η αποτυχία φεύγει όταν ο χρήστης ξετσεκάρει την κλήση', () {
+      const progress = LansweeperSubmitProgress(
+        callIds: <int>[836],
+        outcome: LansweeperSubmitOutcome.failure,
+      );
+
+      expect(progress.concernsCall(836), isTrue);
+      expect(
+        progress.concernsCall(null),
+        isFalse,
+        reason:
+            'την αποεπιλογή μετά από αποτυχία την κάνει ο χρήστης για να '
+            'φύγει· η αποτυχία φαίνεται ήδη πάνω στην κλήση ως «Αποτυχημένη»',
+      );
+    });
+
+    test('η αποτυχία εκκρεμότητας δεν μένει χωρίς επιλεγμένη εκκρεμότητα', () {
+      const progress = LansweeperSubmitProgress(
+        taskIds: <int>[7],
+        outcome: LansweeperSubmitOutcome.failure,
+      );
+
+      expect(progress.concernsTask(7), isTrue);
+      expect(progress.concernsTask(null), isFalse);
+    });
   });
 }

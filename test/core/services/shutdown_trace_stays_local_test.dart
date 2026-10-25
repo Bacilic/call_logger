@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:call_logger/core/services/crash_log_service.dart';
 import 'package:call_logger/core/services/log_record.dart';
+import 'package:call_logger/core/services/log_spill_store.dart';
 import 'package:call_logger/core/services/shutdown_coordinator.dart';
 import 'package:call_logger/core/services/shutdown_trace_service.dart';
 import 'package:call_logger/core/services/station_name.dart';
@@ -189,6 +190,80 @@ void main() {
 
       expect(promoted, isFalse);
       expect(namesIn(sharedLogs), isEmpty);
+    });
+  });
+
+  /// Ο POPINIO σβήνει πριν κλείσει ο χρήστης την εφαρμογή: ο κοινός φάκελος
+  /// σιωπά, αλλά οι εγγραφές κρατιούνται στην τοπική αναμονή.
+  group('σιωπηλός κοινός φάκελος', () {
+    late CrashLogService silentLog;
+
+    setUp(() {
+      silentLog = CrashLogService(
+        logsDirectory: sharedLogs.path,
+        now: () => fixedNow,
+        spill: LogSpillStore(
+          '${tempRoot.path}${Platform.pathSeparator}pending',
+        ),
+      )..disableDiskForTest('ο POPINIO δεν απαντά');
+    });
+
+    test('το κλείσιμο κρατά ίχνος, γραμμένο μόνο τοπικά', () async {
+      final trace = await ShutdownTraceService.forCrashLog(
+        service: silentLog,
+        localDirectory: () async => localWork.path,
+      );
+
+      expect(
+        trace,
+        isNotNull,
+        reason: greekExpectMsg(
+          'Αργό ή κολλημένο κλείσιμο με σιωπηλό φάκελο δεν μένει χωρίς ίχνος',
+        ),
+      );
+      expect(trace!.workingDirectory, localWork.path);
+    });
+
+    test('χωρίς τοπικό φάκελο δεν γράφει ποτέ στον φάκελο που σιωπά', () async {
+      final trace = await ShutdownTraceService.forCrashLog(
+        service: silentLog,
+        localDirectory: () async => throw const FileSystemException('όχι'),
+      );
+
+      expect(
+        trace,
+        isNull,
+        reason: greekExpectMsg(
+          'Κάθε γραμμή του ίχνους περιμένει τον δίσκο — σε σβηστό διακομιστή '
+          'θα πάγωνε το κλείσιμο',
+        ),
+      );
+    });
+
+    test('το διακοπέν κλείσιμο ανακοινώνεται και με σιωπηλό φάκελο', () async {
+      final trace = serviceUnderTest();
+      await trace.beginSession();
+      trace.recordEvent(
+        const ShutdownStepEvent(
+          stepIndex: 2,
+          label: 'Συγχώνευση αρχείων βάσης',
+          phase: ShutdownStepPhase.started,
+        ),
+      );
+      // Χωρίς endSession: το κλείσιμο κόλλησε και η εφαρμογή τερματίστηκε.
+
+      final promoted =
+          await ShutdownTraceService.promoteOrphanIfLogKeepsRecords(
+            silentLog,
+            workingDirectory: localWork.path,
+          );
+
+      expect(promoted, isTrue);
+      expect(
+        namesIn(localWork),
+        isEmpty,
+        reason: greekExpectMsg('Το ίχνος πέρασε στην τοπική αναμονή'),
+      );
     });
   });
 

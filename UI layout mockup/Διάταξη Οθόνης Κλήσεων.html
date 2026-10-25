@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Διάταξη Οθόνης Κλήσεων</title>
+<!--
+  ΠΗΓΗ ΑΛΗΘΕΙΑΣ για τη διάταξη της οθόνης Κλήσεων (αντικατέστησε το
+  «docs/Σχέδιο Διάταξης Οθόνης Κλήσεων.md»).
+
+  Δύο μπλοκ δεδομένων:
+  - «vision-data»: ο ΣΤΟΧΟΣ του Διευθυντή. Γράφεται με το χέρι και αλλάζει
+    μόνο με απόφασή του.
+  - «today-data»: η ΣΗΜΕΡΙΝΗ διάταξη. ΠΟΤΕ με το χέρι — παράγεται από τους
+    κανόνες της εφαρμογής:
+      flutter test test/features/calls/layout/calls_layout_engine_test.dart --update-goldens
+    Ο ίδιος έλεγχος, χωρίς τη σημαία, αποτυγχάνει όταν η σελίδα μείνει πίσω.
+-->
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677;
+  --line: #d9dde5; --field: #eef1f5;
+  --oe: #dbe8ff; --oe-b: #3d6fd6;
+  --ok: #dcf3e3; --ok-b: #2e8b57;
+  --ox: #fdebd3; --ox-b: #c77712;
+  --xa: #ece2fb; --xa-b: #7a4bc4;
+  --tk: #e8eaee; --tk-b: #6b7280;
+  --diff: #d93a3a; --diff-bg: #fde8e8; --same: #2e8b57;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171d; --panel: #1d222b; --text: #e6e9ef; --muted: #9aa3b2;
+    --line: #333a46; --field: #262c37;
+    --oe: #1f3157; --oe-b: #7aa2f7;
+    --ok: #193a28; --ok-b: #6fcf97;
+    --ox: #3d2c12; --ox-b: #f0a848;
+    --xa: #2f2346; --xa-b: #b48df0;
+    --tk: #2a2f38; --tk-b: #a0a7b4;
+    --diff: #ff6b6b; --diff-bg: #3a1c1c; --same: #6fcf97;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171d; --panel: #1d222b; --text: #e6e9ef; --muted: #9aa3b2;
+  --line: #333a46; --field: #262c37;
+  --oe: #1f3157; --oe-b: #7aa2f7;
+  --ok: #193a28; --ok-b: #6fcf97;
+  --ox: #3d2c12; --ox-b: #f0a848;
+  --xa: #2f2346; --xa-b: #b48df0;
+  --tk: #2a2f38; --tk-b: #a0a7b4;
+  --diff: #ff6b6b; --diff-bg: #3a1c1c; --same: #6fcf97;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+}
+main { max-width: 1280px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 20px; margin: 40px 0 12px; }
+h3 { font-size: 16px; margin: 24px 0 8px; }
+p, li { max-width: 80ch; }
+.muted { color: var(--muted); }
+.bar {
+  position: sticky; top: 0; z-index: 5; background: var(--bg);
+  border-bottom: 1px solid var(--line); padding: 12px 0; margin: 16px 0 8px;
+  display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center;
+}
+.bar label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.summary { font-weight: 600; margin-left: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; }
+.legend span::before {
+  content: ""; display: inline-block; width: 12px; height: 12px;
+  border-radius: 3px; margin-right: 6px; vertical-align: -1px;
+  background: var(--c); border: 1px solid var(--b);
+}
+.scenario {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px; margin: 16px 0;
+}
+.scenario.hidden { display: none; }
+.scenario header { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.scenario header h3 { margin: 0; }
+.badge { font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+.badge.same { color: var(--same); border: 1px solid var(--same); }
+.badge.diff { color: var(--diff); border: 1px solid var(--diff); background: var(--diff-bg); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+@media (max-width: 860px) { .pair { grid-template-columns: 1fr; } }
+.side h4 { margin: 0 0 6px; font-size: 14px; }
+.fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+.fields div {
+  font-size: 12px; padding: 4px 6px; border-radius: 4px; text-align: center;
+  background: var(--field); color: var(--muted); border: 1px dashed var(--line);
+}
+.fields div.on { color: var(--text); border-style: solid; font-weight: 600; }
+.row { display: flex; gap: 6px; align-items: flex-start; margin-bottom: 6px; }
+.col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.card {
+  border-radius: 6px; padding: 6px 8px; font-size: 13px; line-height: 1.3;
+  background: var(--c); border: 1px solid var(--b); overflow-wrap: anywhere;
+}
+.card.diff { outline: 3px solid var(--diff); outline-offset: 1px; }
+.card .why { display: block; font-size: 11px; color: var(--diff); font-weight: 600; margin-top: 2px; }
+.empty { font-size: 13px; color: var(--muted); font-style: italic; }
+.note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+table { border-collapse: collapse; margin: 8px 0; font-size: 14px; }
+th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: var(--field); }
+.today-fact {
+  display: block; margin-top: 4px; font-size: 13px; color: var(--ox-b);
+}
+.tablewrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+<h1>Διάταξη Οθόνης Κλήσεων</h1>
+<p class="muted">Για κάθε συνδυασμό πεδίων: αριστερά ο <b>στόχος</b> (όπως τον όρισε ο Διευθυντής), δεξιά η <b>σημερινή</b> οθόνη (όπως τη χτίζει η εφαρμογή). Οι κάρτες με κόκκινο περίγραμμα βρίσκονται σε άλλη θέση — ή υπάρχουν μόνο στη μία πλευρά.</p>
+<p class="muted">Τα ορθογώνια είναι σχηματικά: δείχνουν <b>ποια κάρτα πάει σε ποια γραμμή και στήλη</b>. Πλάτη και ύψη είναι κατά προσέγγιση.</p>
+
+<div class="bar">
+  <label><input type="checkbox" id="opt-hist" checked> Με ιστορικό κλήσεων</label>
+  <label><input type="checkbox" id="opt-cat" checked> Εξοπλισμός στον κατάλογο</label>
+  <label><input type="checkbox" id="opt-tk" checked> «Τελευταίες Κλήσεις» ανοιχτές</label>
+  <label><input type="checkbox" id="opt-only"> Μόνο όσα αποκλίνουν</label>
+  <span class="summary" id="summary"></span>
+</div>
+<div class="legend">
+  <span style="--c:var(--oe);--b:var(--oe-b)">Ομάδα Ελέγχου (Τηλέφωνο)</span>
+  <span style="--c:var(--ok);--b:var(--ok-b)">Ομάδα Καλούντα</span>
+  <span style="--c:var(--ox);--b:var(--ox-b)">Ομάδα Εξοπλισμού</span>
+  <span style="--c:var(--xa);--b:var(--xa-b)">Χάρτης</span>
+  <span style="--c:var(--tk);--b:var(--tk-b)">Τελευταίες Κλήσεις</span>
+</div>
+<p class="note" id="variant-note"></p>
+
+<div id="scenarios"></div>
+
+<h2>Κανόνες του σχεδίου</h2>
+<p class="muted">Ό,τι ακολουθεί είναι το κείμενο του αρχικού σχεδίου (ενότητες 1–9). Όπου η εφαρμογή κάνει σήμερα κάτι διαφορετικό, σημειώνεται με «Σήμερα:».</p>
+
+<h3>1 · Καταστάσεις οθόνης</h3>
+<div class="tablewrap"><table>
+<tr><th>Κατάσταση</th><th>Περιγραφή</th></tr>
+<tr><td><b>Συμπτυγμένη (compact)</b></td><td>Μόνο τα 4 πεδία «Τηλέφωνο – Καλών – Τμήμα – Εξοπλισμός», κεντραρισμένα. Χωρίς τίτλο (κενό). Χωρίς κάρτες. Μόνο ο διακόπτης ΤΚ (Τελευταίες Κλήσεις) κάτω δεξιά — είναι <b>μεμονωμένος διακόπτης</b>, και γίνεται κάρτα/γραμμή αν τον ανοίξει ο χρήστης.</td></tr>
+<tr><td><b>Αναπτυγμένη (expanded)</b></td><td>Η γραμμή των 4 πεδίων μεταφέρεται στο πάνω μέρος (μία φορά, με ομαλή κίνηση μετάβασης). Από κάτω εμφανίζονται δυναμικά οι γραμμές γραφικών στοιχείων, σύμφωνα με το πρότυπο διάταξης (ενότητα 8).</td></tr>
+</table></div>
+<p><b>Μετάβαση compact → expanded:</b> μία φορά, με την πρώτη επιβεβαίωση οποιουδήποτε πεδίου (onSubmitted, onSelected, ή απώλεια εστίασης με καταχωρημένη τιμή). Κάθε επόμενη επιβεβαίωση δεν ξανατρέχει το εφέ μετάβασης — μόνο αναδιατάσσει το περιεχόμενο από κάτω.</p>
+<p><b>Μετάβαση expanded → compact:</b> αποκλειστικά με το κουμπί <b>«Εκκαθάριση»</b> (ενότητα 3). Καμία άλλη ενέργεια δεν επαναφέρει τη συμπτυγμένη όψη.</p>
+
+<h3>2 · Τίτλος πάνω αριστερά</h3>
+<div class="tablewrap"><table>
+<tr><th>Συνθήκη</th><th>Τίτλος</th></tr>
+<tr><td>Όλα τα πεδία άδεια (συμπτυγμένη κατάσταση)</td><td>(κενό)</td></tr>
+<tr><td>Τηλέφωνο άδειο, υπάρχει τιμή σε άλλο πεδίο</td><td>«Πληροφορίες»</td></tr>
+<tr><td>Τηλέφωνο καταχωρημένο (ανεξάρτητα από τα άλλα πεδία)</td><td>«Νέα Κλήση»</td></tr>
+</table></div>
+<p>Ανεξάρτητο από το κουμπί ενέργειας. Ενημερώνεται σε κάθε μεταβολή — π.χ. σβήσιμο του Τηλεφώνου με υπόλοιπα πεδία γεμάτα → «Πληροφορίες», χωρίς να αλλάξει η κατάσταση οθόνης.</p>
+
+<h3>3 · Κουμπί ενέργειας «Εκκαθάριση» (πρώην «Νέα Κλήση»)</h3>
+<ul>
+  <li>Καθαρίζει όλα τα πεδία <b>και</b> επαναφέρει τη συμπτυγμένη κατάσταση.</li>
+  <li>Μοναδική ενέργεια που προκαλεί expanded → compact.</li>
+  <li>Βρίσκεται κάτω δεξιά στην αναπτυγμένη όψη, <b>έξω από τις κάρτες</b> — δεν παίρνει θέση στις γραμμές και στις στήλες της διάταξης.</li>
+</ul>
+
+<h3>4 · Κόκκινο Χ και διαγραφή με πληκτρολόγιο — δεν συμπτύσσουν</h3>
+<p>Η διαγραφή τιμής σε πεδίο (κόκκινο Χ ή backspace/delete), ακόμη και αν αδειάσουν όλα τα πεδία, <b>δεν</b> επαναφέρει τη συμπτυγμένη όψη. Η οθόνη παραμένει expanded (αίσθηση επεξεργασίας). Μόνο το «Εκκαθάριση» συμπτύσσει.</p>
+
+<h3>5 · Σχέσεις πεδίο → γραφικά στοιχεία</h3>
+<div class="tablewrap"><table>
+<tr><th>Πεδίο</th><th>Στοιχεία που ενεργοποιεί</th></tr>
+<tr><td>Τηλέφωνο</td><td>Σημειώσεις (με το τικ «Εκκρεμότητα» μέσα τους), Κατηγορία · Χρονόμετρο · Καταγραφή (μία ενιαία ομάδα) — <b>Ομάδα Ελέγχου (ΟΕ)</b></td></tr>
+<tr><td>Καλών</td><td>Κάρτα Υπαλλήλου, Ιστορικό Υπαλλήλου, Χάρτης — <b>Ομάδα Καλούντα (ΟΚ)</b></td></tr>
+<tr><td>Τμήμα</td><td>Χάρτης</td></tr>
+<tr><td>Εξοπλισμός</td><td>Εργαλεία Απομακρυσμένης, Ιστορικό Εξοπλισμού, Χάρτης — <b>Ομάδα Εξοπλισμού (ΟΞ)</b></td></tr>
+</table></div>
+<p>Κάρτα Υπαλλήλου, Ιστορικό Υπαλλήλου, Ιστορικό Εξοπλισμού εμφανίζονται μόνο όταν υπάρχουν εγγραφές/δεδομένα. <b>ΤΚ (Τελευταίες Κλήσεις)</b> είναι ανεξάρτητο από τα πεδία — ελέγχεται αποκλειστικά από τις ρυθμίσεις ορατότητας. Όλα σέβονται τις ρυθμίσεις Ορατότητας Καρτών.
+<span class="today-fact">Σήμερα: το Ιστορικό Υπαλλήλου κρατά τη θέση του όποτε υπάρχει καλών, ακόμη κι αν δεν έχει κλήσεις. Όταν ο εξοπλισμός δεν έχει κλήσεις (ή είναι εκτός καταλόγου), τη θέση του Ιστορικού Εξοπλισμού την παίρνει η κάρτα «Ενέργειες υπολογιστή».</span></p>
+
+<h3>6 · Φόρτωση δεδομένων ανά σενάριο</h3>
+<p>Η αναμονή δεδομένων γίνεται <b>ανά ομάδα πεδίου</b>: όταν επιβεβαιώνεται π.χ. το Τμήμα, η οθόνη περιμένει μόνο τα δεδομένα του Τμήματος πριν εισάγει τα αντίστοιχα στοιχεία. Οι ήδη επιλυμένες ομάδες δεν ξαναπεριμένουν και δεν αναδιατάσσονται. Κάθε νέα επιβεβαίωση πεδίου = ένα μοναδικό, ολοκληρωμένο βήμα αναδιάταξης.</p>
+
+<h3>7 · Κανόνας Χάρτη (ΧΑ)</h3>
+<ul>
+  <li>Η κάρτα Χάρτη είναι <b>«ενεργή»</b> (καταλαμβάνει θέση στη διάταξη) όσο <b>υπάρχει στη βάση</b> τουλάχιστον μία από τις σχετικές οντότητες (Τμήμα, Εξοπλισμός, Καλών) — <b>ανεξάρτητα</b> από το αν έχει πραγματική τοποθέτηση στον χάρτη. Η απουσία τοποθέτησης εμφανίζεται ως <b>εσωτερικό μήνυμα</b> της κάρτας, όχι ως απουσία της κάρτας από τη διάταξη.</li>
+  <li><b>Σειρά προτεραιότητας πηγής:</b> η πιο άμεση αναφορά υπερισχύει → <b>Τμήμα → Εξοπλισμός → Καλών</b>. Το tooltip της κάρτας εξηγεί πάντα ποια οντότητα απεικονίζεται.</li>
+</ul>
+
+<h3>8 · Αλγόριθμος αναδιάταξης — λογική γραμμών</h3>
+<p>Η διάταξη οργανώνεται σε <b>γραμμές</b>, καθεμία με 1 έως 3 στήλες. Δεν υπάρχει καθολικό πλέγμα στηλών — κάθε γραμμή ορίζει τις δικές της στήλες.</p>
+<p><b>Σημαντική σύζευξη:</b> τα Εργαλεία Απομακρυσμένης (ΟΞ) δεν εμφανίζονται πάντα μαζί με το Ιστορικό Εξοπλισμού. Όταν υπάρχει ΟΕ, τα Εργαλεία παίρνουν δική τους στήλη, ανάμεσα στη στήλη «Σημειώσεις / Κατηγορία · Χρονόμετρο · Καταγραφή» και στο Ιστορικό Εξοπλισμού. Όταν απουσιάζει η ΟΕ <b>και</b> εφαρμόζεται το <b>Πρότυπο Β</b>, τα Εργαλεία γίνονται ανεξάρτητη γραμμή πλήρους πλάτους· στο <b>Πρότυπο Δ</b> μένουν δίπλα στο Ιστορικό Εξοπλισμού.</p>
+<p><b>Η ομάδα «Κατηγορία · Χρονόμετρο · Καταγραφή»</b> δεν χωρίζεται ποτέ. Στο Πρότυπο Α κάθεται κάτω από τις Σημειώσεις, στην ίδια στήλη· όταν υπάρχει μόνο Τηλέφωνο (με ή χωρίς Χάρτη), οι Σημειώσεις παίρνουν δική τους γραμμή και η ομάδα μπαίνει στην αμέσως επόμενη.</p>
+<p>Στο <b>Πρότυπο Α</b> το Ιστορικό Εξοπλισμού (3η στήλη της 2ης γραμμής) έχει ύψος ≈ ύψος των στηλών 1 και 2 μαζί, ευθυγραμμισμένο με το πεδίο «Εξοπλισμός». Στο <b>Πρότυπο Δ</b> η γραμμή των Εργαλείων και του Ιστορικού στοιχίζεται δεξιά, κάτω από Τμήμα/Εξοπλισμό.</p>
+
+<h3>8.6 · Καθοριστικός κανόνας επιλογής προτύπου</h3>
+<div class="tablewrap"><table>
+<tr><th>Συνθήκη</th><th>Πρότυπο</th></tr>
+<tr><td>Τηλέφωνο επιβεβαιωμένο (ΟΕ)</td><td><b>Α</b></td></tr>
+<tr><td>Χωρίς ΟΕ: ΟΚ + ΟΞ (με ή χωρίς ΧΑ)</td><td><b>Β</b></td></tr>
+<tr><td>Χωρίς ΟΕ: μόνο ΟΚ (με ή χωρίς ΧΑ)</td><td><b>Γ</b></td></tr>
+<tr><td>Χωρίς ΟΕ: μόνο ΟΞ (με ή χωρίς ΧΑ)</td><td><b>Δ</b></td></tr>
+<tr><td>Χωρίς ΟΕ: μόνο ΧΑ</td><td><b>Β</b> με υποβάθμιση Κ1–Κ2 (μόνο ο Χάρτης)</td></tr>
+</table></div>
+<p>Τα πρότυπα δεν είναι παραλλαγές του ίδιου πλέγματος — έχουν διαφορετική ομαδοποίηση γραμμών (π.χ. στο <b>Α</b> η Κάρτα και το Ιστορικό Υπαλλήλου είναι μαζί στη 3η γραμμή· στο <b>Γ</b> στοιβάζονται στην ίδια στήλη· στο <b>Β</b> χωρίζονται σε 2η και 4η γραμμή).</p>
+
+<h3>8.7 · Κανόνες υποβάθμισης (όταν λείπει μια ομάδα ή κάρτα)</h3>
+<ul>
+  <li><b>Κ1 — Λείπει στήλη μέσα σε γραμμή:</b> οι υπόλοιπες στήλες της ίδιας γραμμής μοιράζονται εξίσου το διαθέσιμο πλάτος. Καμία λευκή «τρύπα» στο πλάτος.
+    <span class="today-fact">Σήμερα: οι στήλες μαζεύονται αριστερά, η καθεμία με όριο πλάτους, και ο ελεύθερος χώρος μένει δεξιά.</span></li>
+  <li><b>Κ2 — Λείπουν όλες οι στήλες μιας γραμμής:</b> η γραμμή αφαιρείται εντελώς, οι επόμενες γραμμές ανεβαίνουν.</li>
+  <li><b>Κ3 — Εσωτερική στοίβα (πάνω/κάτω) μέσα σε μια στήλη:</b> τα στοιχεία στοιβάζονται συμπαγώς από πάνω προς τα κάτω. Αν λείπει ένα ενδιάμεσο/πρώτο στοιχείο, το επόμενο ανεβαίνει — χωρίς κενό ανάμεσά τους.</li>
+  <li><b>Κ4 — Ανισοϋψείς γειτονικές στήλες:</b> η κοντύτερη στήλη παραμένει στοιχισμένη επάνω, χωρίς κατακόρυφο τέντωμα. <i>(Προσωρινά αποδεκτό — εκκρεμεί οπτική επιβεβαίωση, ενότητα 9.)</i>
+    <span class="today-fact">Σήμερα: η εφαρμογή στοιχίζει πράγματι επάνω, χωρίς τέντωμα. Τα σχηματικά ορθογώνια αυτής της σελίδας δεν δείχνουν πραγματικά ύψη, οπότε η οπτική επιβεβαίωση γίνεται μόνο στην εφαρμογή.</span></li>
+  <li><b>Κ5 — ΤΚ ποτέ σε αποκλειστική γραμμή στην αναπτυγμένη κατάσταση:</b> μπαίνει πάντα ως στήλη μέσα σε μια ήδη υπάρχουσα γραμμή με άλλες κάρτες (τελευταία διαθέσιμη θέση). Αν δεν υπάρχει καμία γραμμή με ελεύθερη θέση, δημιουργεί δική του γραμμή μόνο σε αυτή την έσχατη περίπτωση.</li>
+  <li><b>Κ6 — Αλλαγή προτύπου (Α / Β / Γ / Δ) δεν είναι αφαίρεση στήλης, είναι αλλαγή δομής:</b> εφαρμόζεται ολόκληρο το αντίστοιχο πρότυπο σύμφωνα με την κατάσταση των ομάδων, και μετά εφαρμόζονται τα Κ1–Κ5 μέσα σ' αυτό.</li>
+</ul>
+<p class="note">Στις παραλλαγές των διακοπτών, ο στόχος βγαίνει από τα 15 βασικά σχέδια αφαιρώντας τις κάρτες που λείπουν (Κ1–Κ3)· η μετακίνηση του ΤΚ κατά Κ5 δεν εφαρμόζεται αυτόματα.</p>
+
+<h3>Στενό παράθυρο</h3>
+<p><span class="today-fact" style="display:inline">Σήμερα:</span> όταν ο χώρος της οθόνης είναι στενότερος από 980 σημεία — ή δεν χωρούν οι στήλες μιας γραμμής δίπλα-δίπλα — οι στήλες της γραμμής μπαίνουν η μία κάτω από την άλλη, με την ίδια σειρά. Το σχέδιο δεν ορίζει αυτή την περίπτωση.</p>
+
+<h3>9 · Ανοιχτά σημεία προς επιβεβαίωση</h3>
+<ol>
+  <li><b>Κ4 (λευκό κενό ανισόμηκων στηλών):</b> προσωρινά αποδεκτό όπως είναι, αλλά χρειάζεται οπτικό σχέδιο/στιγμιότυπο μίας τέτοιας περίπτωσης (π.χ. συνδυασμός 2 ή 9) πριν θεωρηθεί οριστικό.</li>
+  <li><b>Οι 4 «παραγόμενοι» συνδυασμοί</b> (4, 6, 7, 12) δεν είχαν ξεχωριστό σχέδιο αναφοράς· τώρα ζωγραφίζονται σε αυτή τη σελίδα από τους κανόνες. Εγκρίθηκαν από τον Διευθυντή στις 24/10/2026.</li>
+</ol>
+</main>
+
+<script id="vision-data" type="application/json">
+{
+  "1000": {"no": 1, "template": "Α", "rows": [[["notes"]], [["categoryPending"]], [["globalRecent"]]]},
+  "1100": {"no": 2, "template": "Α", "rows": [[["notes", "categoryPending"]], [["callerCard", "callerHistory"], ["globalRecent"]]]},
+  "1010": {"no": 3, "template": "Α", "rows": [[["notes", "categoryPending"], ["remoteTools"], ["equipmentHistory"]], [["globalRecent"]]]},
+  "1001": {"no": 4, "template": "Α", "rows": [[["notes"]], [["categoryPending"]], [["map"], ["globalRecent"]]]},
+  "1110": {"no": 5, "template": "Α", "rows": [[["notes", "categoryPending"], ["remoteTools"], ["equipmentHistory"]], [["callerCard", "callerHistory"], ["globalRecent"]]]},
+  "1101": {"no": 6, "template": "Α", "rows": [[["notes", "categoryPending"]], [["callerCard", "callerHistory"], ["map"], ["globalRecent"]]]},
+  "1011": {"no": 7, "template": "Α", "rows": [[["notes", "categoryPending"], ["remoteTools"], ["equipmentHistory"]], [["map"], ["globalRecent"]]]},
+  "1111": {"no": 8, "template": "Α", "rows": [[["notes", "categoryPending"], ["remoteTools"], ["equipmentHistory"]], [["callerCard", "callerHistory"], ["map"], ["globalRecent"]]]},
+  "0100": {"no": 9, "template": "Γ", "rows": [[["callerCard", "callerHistory"], ["globalRecent"]]]},
+  "0010": {"no": 10, "template": "Δ", "rows": [[["remoteTools"], ["equipmentHistory"]], [["globalRecent"]]]},
+  "0001": {"no": 11, "template": "Β", "rows": [[["map"]], [["globalRecent"]]]},
+  "0110": {"no": 12, "template": "Β", "rows": [[["callerCard"], ["equipmentHistory"]], [["remoteTools"]], [["callerHistory"], ["globalRecent"]]]},
+  "0101": {"no": 13, "template": "Γ", "rows": [[["callerCard", "callerHistory"], ["map"], ["globalRecent"]]]},
+  "0011": {"no": 14, "template": "Δ", "rows": [[["remoteTools"], ["equipmentHistory"]], [["map"], ["globalRecent"]]]},
+  "0111": {"no": 15, "template": "Β", "rows": [[["callerCard"], ["map"], ["equipmentHistory"]], [["remoteTools"]], [["callerHistory"], ["globalRecent"]]]}
+}
+</script>
+
+<script id="today-data" type="application/json">
+{"variants": {
+  "h1c1t1": {
+    "0001": {"template":"b","rows":[[["map"]],[["globalRecent"]]]},
+    "0010": {"template":"d","rows":[[["remoteTools"],["equipmentHistory"]],[["globalRecent"]]]},
+    "0011": {"template":"d","rows":[[["remoteTools"],["map"],["equipmentHistory"]],[["globalRecent"]]]},
+    "0100": {"template":"c","rows":[[["callerCard","callerHistory"],["globalRecent"]]]},
+    "0101": {"template":"c","rows":[[["callerCard","callerHistory"],["map"],["globalRecent"]]]},
+    "0110": {"template":"b","rows":[[["remoteTools"],["callerCard"]],[["equipmentHistory"],["callerHistory"],["globalRecent"]]]},
+    "0111": {"template":"b","rows":[[["remoteTools"],["map"],["callerCard"]],[["equipmentHistory"],["callerHistory"],["globalRecent"]]]},
+    "1000": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["globalRecent"]]]},
+    "1001": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["map"],["globalRecent"]]]},
+    "1010": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentHistory"]],[["globalRecent"]]]},
+    "1011": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentHistory"]],[["map"],["globalRecent"]]]},
+    "1100": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["globalRecent"]]]},
+    "1101": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["map"],["globalRecent"]]]},
+    "1110": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentHistory"]],[["callerCard","callerHistory"],["globalRecent"]]]},
+    "1111": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentHistory"]],[["callerCard","callerHistory"],["map"],["globalRecent"]]]}
+  },
+  "h1c1t0": {
+    "0001": {"template":"b","rows":[[["map"]]]},
+    "0010": {"template":"d","rows":[[["remoteTools"],["equipmentHistory"]]]},
+    "0011": {"template":"d","rows":[[["remoteTools"],["map"],["equipmentHistory"]]]},
+    "0100": {"template":"c","rows":[[["callerCard","callerHistory"]]]},
+    "0101": {"template":"c","rows":[[["callerCard","callerHistory"],["map"]]]},
+    "0110": {"template":"b","rows":[[["remoteTools"],["callerCard"]],[["equipmentHistory"],["callerHistory"]]]},
+    "0111": {"template":"b","rows":[[["remoteTools"],["map"],["callerCard"]],[["equipmentHistory"],["callerHistory"]]]},
+    "1000": {"template":"a","rows":[[["notes"]],[["categoryPending"]]]},
+    "1001": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["map"]]]},
+    "1010": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentHistory"]]]},
+    "1011": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentHistory"]],[["map"]]]},
+    "1100": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"]]]},
+    "1101": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["map"]]]},
+    "1110": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentHistory"]],[["callerCard","callerHistory"]]]},
+    "1111": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentHistory"]],[["callerCard","callerHistory"],["map"]]]}
+  },
+  "h1c0t1": {
+    "0001": {"template":"b","rows":[[["map"]],[["globalRecent"]]]},
+    "0010": {"template":"d","rows":[[["remoteTools"],["equipmentActions"]],[["globalRecent"]]]},
+    "0011": {"template":"d","rows":[[["remoteTools"],["map"],["equipmentActions"]],[["globalRecent"]]]},
+    "0100": {"template":"c","rows":[[["callerCard","callerHistory"],["globalRecent"]]]},
+    "0101": {"template":"c","rows":[[["callerCard","callerHistory"],["map"],["globalRecent"]]]},
+    "0110": {"template":"b","rows":[[["remoteTools"],["callerCard"]],[["equipmentActions"],["callerHistory"],["globalRecent"]]]},
+    "0111": {"template":"b","rows":[[["remoteTools"],["map"],["callerCard"]],[["equipmentActions"],["callerHistory"],["globalRecent"]]]},
+    "1000": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["globalRecent"]]]},
+    "1001": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["map"],["globalRecent"]]]},
+    "1010": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["globalRecent"]]]},
+    "1011": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["map"],["globalRecent"]]]},
+    "1100": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["globalRecent"]]]},
+    "1101": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["map"],["globalRecent"]]]},
+    "1110": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"],["globalRecent"]]]},
+    "1111": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"],["map"],["globalRecent"]]]}
+  },
+  "h1c0t0": {
+    "0001": {"template":"b","rows":[[["map"]]]},
+    "0010": {"template":"d","rows":[[["remoteTools"],["equipmentActions"]]]},
+    "0011": {"template":"d","rows":[[["remoteTools"],["map"],["equipmentActions"]]]},
+    "0100": {"template":"c","rows":[[["callerCard","callerHistory"]]]},
+    "0101": {"template":"c","rows":[[["callerCard","callerHistory"],["map"]]]},
+    "0110": {"template":"b","rows":[[["remoteTools"],["callerCard"]],[["equipmentActions"],["callerHistory"]]]},
+    "0111": {"template":"b","rows":[[["remoteTools"],["map"],["callerCard"]],[["equipmentActions"],["callerHistory"]]]},
+    "1000": {"template":"a","rows":[[["notes"]],[["categoryPending"]]]},
+    "1001": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["map"]]]},
+    "1010": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]]]},
+    "1011": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["map"]]]},
+    "1100": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"]]]},
+    "1101": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["map"]]]},
+    "1110": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"]]]},
+    "1111": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"],["map"]]]}
+  },
+  "h0c1t1": {
+    "0001": {"template":"b","rows":[[["map"]],[["globalRecent"]]]},
+    "0010": {"template":"d","rows":[[["remoteTools"],["equipmentActions"]],[["globalRecent"]]]},
+    "0011": {"template":"d","rows":[[["remoteTools"],["map"],["equipmentActions"]],[["globalRecent"]]]},
+    "0100": {"template":"c","rows":[[["callerCard","callerHistory"],["globalRecent"]]]},
+    "0101": {"template":"c","rows":[[["callerCard","callerHistory"],["map"],["globalRecent"]]]},
+    "0110": {"template":"b","rows":[[["remoteTools"],["callerCard"]],[["equipmentActions"],["callerHistory"],["globalRecent"]]]},
+    "0111": {"template":"b","rows":[[["remoteTools"],["map"],["callerCard"]],[["equipmentActions"],["callerHistory"],["globalRecent"]]]},
+    "1000": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["globalRecent"]]]},
+    "1001": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["map"],["globalRecent"]]]},
+    "1010": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["globalRecent"]]]},
+    "1011": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["map"],["globalRecent"]]]},
+    "1100": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["globalRecent"]]]},
+    "1101": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["map"],["globalRecent"]]]},
+    "1110": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"],["globalRecent"]]]},
+    "1111": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"],["map"],["globalRecent"]]]}
+  },
+  "h0c1t0": {
+    "0001": {"template":"b","rows":[[["map"]]]},
+    "0010": {"template":"d","rows":[[["remoteTools"],["equipmentActions"]]]},
+    "0011": {"template":"d","rows":[[["remoteTools"],["map"],["equipmentActions"]]]},
+    "0100": {"template":"c","rows":[[["callerCard","callerHistory"]]]},
+    "0101": {"template":"c","rows":[[["callerCard","callerHistory"],["map"]]]},
+    "0110": {"template":"b","rows":[[["remoteTools"],["callerCard"]],[["equipmentActions"],["callerHistory"]]]},
+    "0111": {"template":"b","rows":[[["remoteTools"],["map"],["callerCard"]],[["equipmentActions"],["callerHistory"]]]},
+    "1000": {"template":"a","rows":[[["notes"]],[["categoryPending"]]]},
+    "1001": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["map"]]]},
+    "1010": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]]]},
+    "1011": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["map"]]]},
+    "1100": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"]]]},
+    "1101": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["map"]]]},
+    "1110": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"]]]},
+    "1111": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"],["map"]]]}
+  },
+  "h0c0t1": {
+    "0001": {"template":"b","rows":[[["map"]],[["globalRecent"]]]},
+    "0010": {"template":"d","rows":[[["remoteTools"],["equipmentActions"]],[["globalRecent"]]]},
+    "0011": {"template":"d","rows":[[["remoteTools"],["map"],["equipmentActions"]],[["globalRecent"]]]},
+    "0100": {"template":"c","rows":[[["callerCard","callerHistory"],["globalRecent"]]]},
+    "0101": {"template":"c","rows":[[["callerCard","callerHistory"],["map"],["globalRecent"]]]},
+    "0110": {"template":"b","rows":[[["remoteTools"],["callerCard"]],[["equipmentActions"],["callerHistory"],["globalRecent"]]]},
+    "0111": {"template":"b","rows":[[["remoteTools"],["map"],["callerCard"]],[["equipmentActions"],["callerHistory"],["globalRecent"]]]},
+    "1000": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["globalRecent"]]]},
+    "1001": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["map"],["globalRecent"]]]},
+    "1010": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["globalRecent"]]]},
+    "1011": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["map"],["globalRecent"]]]},
+    "1100": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["globalRecent"]]]},
+    "1101": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["map"],["globalRecent"]]]},
+    "1110": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"],["globalRecent"]]]},
+    "1111": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"],["map"],["globalRecent"]]]}
+  },
+  "h0c0t0": {
+    "0001": {"template":"b","rows":[[["map"]]]},
+    "0010": {"template":"d","rows":[[["remoteTools"],["equipmentActions"]]]},
+    "0011": {"template":"d","rows":[[["remoteTools"],["map"],["equipmentActions"]]]},
+    "0100": {"template":"c","rows":[[["callerCard","callerHistory"]]]},
+    "0101": {"template":"c","rows":[[["callerCard","callerHistory"],["map"]]]},
+    "0110": {"template":"b","rows":[[["remoteTools"],["callerCard"]],[["equipmentActions"],["callerHistory"]]]},
+    "0111": {"template":"b","rows":[[["remoteTools"],["map"],["callerCard"]],[["equipmentActions"],["callerHistory"]]]},
+    "1000": {"template":"a","rows":[[["notes"]],[["categoryPending"]]]},
+    "1001": {"template":"a","rows":[[["notes"]],[["categoryPending"]],[["map"]]]},
+    "1010": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]]]},
+    "1011": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["map"]]]},
+    "1100": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"]]]},
+    "1101": {"template":"a","rows":[[["notes","categoryPending"]],[["callerCard","callerHistory"],["map"]]]},
+    "1110": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"]]]},
+    "1111": {"template":"a","rows":[[["notes","categoryPending"],["remoteTools"],["equipmentActions"]],[["callerCard","callerHistory"],["map"]]]}
+  }
+}}
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  var CARDS = {
+    notes: ["Σημειώσεις", "oe"],
+    categoryPending: ["Κατηγορία · Χρονόμετρο · Καταγραφή", "oe"],
+    remoteTools: ["Εργαλεία Απομακρυσμένης", "ox"],
+    equipmentHistory: ["Ιστορικό Εξοπλισμού", "ox"],
+    equipmentActions: ["Ενέργειες υπολογιστή", "ox"],
+    callerCard: ["Κάρτα Υπαλλήλου", "ok"],
+    callerHistory: ["Ιστορικό Υπαλλήλου", "ok"],
+    map: ["Χάρτης", "xa"],
+    globalRecent: ["Τελευταίες Κλήσεις", "tk"]
+  };
+  var TEMPLATE_LETTER = { a: "Α", b: "Β", c: "Γ", d: "Δ" };
+  var FIELDS = ["Τηλέφωνο", "Καλών", "Τμήμα / Χάρτης", "Εξοπλισμός"];
+  var FLAG_INDEX = [0, 1, 3, 2]; // σειρά πεδίων ↔ σειρά σημαιών ΟΕ ΟΚ ΟΞ ΧΑ
+
+  var vision = JSON.parse(document.getElementById("vision-data").textContent);
+  var today = JSON.parse(document.getElementById("today-data").textContent);
+
+  function keysOf(slot) { return [slot]; }
+
+  function clean(rows, removed) {
+    return rows
+      .map(function (row) {
+        return row
+          .map(function (col) { return col.filter(function (s) { return removed.indexOf(s) < 0; }); })
+          .filter(function (col) { return col.length > 0; });
+      })
+      .filter(function (row) { return row.length > 0; });
+  }
+
+  function positions(rows) {
+    var pos = {};
+    rows.forEach(function (row, r) {
+      row.forEach(function (col, c) {
+        col.forEach(function (slot, s) {
+          keysOf(slot).forEach(function (k) { pos[k] = r + "." + c + "." + s; });
+        });
+      });
+    });
+    return pos;
+  }
+
+  function diffKeys(a, b) {
+    var out = {};
+    Object.keys(a).concat(Object.keys(b)).forEach(function (k) {
+      if (a[k] !== b[k]) out[k] = !(k in a) ? "only-b" : !(k in b) ? "only-a" : "moved";
+    });
+    return out;
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function drawSide(title, flags, rows, diffs, side) {
+    var box = el("div", "side");
+    box.appendChild(el("h4", null, title));
+    var fields = el("div", "fields");
+    FIELDS.forEach(function (name, i) {
+      fields.appendChild(el("div", flags[FLAG_INDEX[i]] === "1" ? "on" : "", name));
+    });
+    box.appendChild(fields);
+    if (!rows || rows.length === 0) {
+      box.appendChild(el("div", "empty", "Καμία κάρτα"));
+      return box;
+    }
+    rows.forEach(function (row) {
+      var r = el("div", "row");
+      row.forEach(function (col) {
+        var c = el("div", "col");
+        col.forEach(function (slot) {
+          var info = CARDS[slot] || [slot, "tk"];
+          var card = el("div", "card", info[0]);
+          card.style.setProperty("--c", "var(--" + info[1] + ")");
+          card.style.setProperty("--b", "var(--" + info[1] + "-b)");
+          var why = null;
+          keysOf(slot).forEach(function (k) {
+            var d = diffs[k];
+            if (!d) return;
+            if (d === "moved") why = why || "άλλη θέση";
+            else if ((d === "only-a") === (side === "a")) why = side === "a" ? "λείπει σήμερα" : "δεν υπάρχει στο σχέδιο";
+            else why = why || "άλλη θέση";
+          });
+          if (why) {
+            card.classList.add("diff");
+            card.appendChild(el("span", "why", why));
+          }
+          c.appendChild(card);
+        });
+        r.appendChild(c);
+      });
+      box.appendChild(r);
+    });
+    return box;
+  }
+
+  function scenarioName(flags) {
+    var parts = [];
+    if (flags[0] === "1") parts.push("Τηλέφωνο");
+    if (flags[1] === "1") parts.push("Καλών");
+    if (flags[2] === "1") parts.push("Εξοπλισμός");
+    if (flags[3] === "1") parts.push("Χάρτης");
+    return parts.join(" + ");
+  }
+
+  function load(key, fallback) {
+    try { var v = localStorage.getItem("calls-layout-" + key); return v == null ? fallback : v === "1"; }
+    catch (e) { return fallback; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem("calls-layout-" + key, value ? "1" : "0"); } catch (e) { /* χωρίς αποθήκευση */ }
+  }
+
+  var opts = {
+    hist: document.getElementById("opt-hist"),
+    cat: document.getElementById("opt-cat"),
+    tk: document.getElementById("opt-tk"),
+    only: document.getElementById("opt-only")
+  };
+  Object.keys(opts).forEach(function (k) {
+    opts[k].checked = load(k, opts[k].checked);
+    opts[k].addEventListener("change", function () { save(k, opts[k].checked); render(); });
+  });
+
+  function render() {
+    var variant = "h" + (opts.hist.checked ? 1 : 0) + "c" + (opts.cat.checked ? 1 : 0) + "t" + (opts.tk.checked ? 1 : 0);
+    var todayVariant = (today.variants || {})[variant] || {};
+    var removed = [];
+    if (!opts.hist.checked) removed.push("callerHistory", "equipmentHistory");
+    if (!opts.tk.checked) removed.push("globalRecent");
+
+    var notes = [];
+    if (!opts.cat.checked) notes.push("Ο εξοπλισμός εκτός καταλόγου: το σχέδιο δεν ορίζει αυτή την περίπτωση· ο στόχος δείχνεται όπως για εξοπλισμό του καταλόγου.");
+    if (!opts.hist.checked) notes.push("Χωρίς ιστορικό: η εφαρμογή κρατά πάντα τη θέση του Ιστορικού Υπαλλήλου όποτε υπάρχει καλών· το σχέδιο το θέλει μόνο όταν έχει εγγραφές.");
+    document.getElementById("variant-note").textContent = notes.join(" ");
+
+    var host = document.getElementById("scenarios");
+    host.textContent = "";
+    var flagsList = Object.keys(vision).sort(function (a, b) { return vision[a].no - vision[b].no; });
+    var differing = 0;
+    flagsList.forEach(function (flags) {
+      var v = vision[flags];
+      var vRows = clean(v.rows, removed);
+      var t = todayVariant[flags];
+      var tRows = t ? t.rows : null;
+      var diffs = tRows ? diffKeys(positions(vRows), positions(tRows)) : {};
+      var count = Object.keys(diffs).length;
+      if (count > 0 || !tRows) differing++;
+
+      var sec = el("section", "scenario");
+      if (opts.only.checked && count === 0 && tRows) sec.classList.add("hidden");
+      var head = el("header");
+      head.appendChild(el("h3", null, "#" + v.no + " — " + scenarioName(flags)));
+      var tLetter = t ? TEMPLATE_LETTER[t.template] : "?";
+      head.appendChild(el("span", "muted", "Πρότυπο " + v.template + (tLetter !== v.template ? " (σήμερα " + tLetter + ")" : "")));
+      head.appendChild(!tRows
+        ? el("span", "badge diff", "λείπει η σημερινή διάταξη")
+        : count === 0
+          ? el("span", "badge same", "ίδιο με τον στόχο")
+          : el("span", "badge diff", "διαφέρει σε " + count + (count === 1 ? " κάρτα" : " κάρτες")));
+      sec.appendChild(head);
+      var pair = el("div", "pair");
+      pair.appendChild(drawSide("Όπως το θέλω", flags, vRows, diffs, "a"));
+      pair.appendChild(drawSide("Όπως είναι σήμερα", flags, tRows, diffs, "b"));
+      sec.appendChild(pair);
+      host.appendChild(sec);
+    });
+    document.getElementById("summary").textContent =
+      "Αποκλίνουν " + differing + " από " + flagsList.length;
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

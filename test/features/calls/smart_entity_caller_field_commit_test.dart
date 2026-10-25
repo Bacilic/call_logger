@@ -8,6 +8,7 @@ import 'package:call_logger/features/calls/provider/call_header_provider.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_caller_field.dart';
 import 'package:call_logger/features/calls/screens/widgets/smart_entity_selector_department_field.dart';
+import 'package:call_logger/features/calls/utils/caller_field_options.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -274,25 +275,23 @@ void main() {
           tester.widget<TextField>(_callerTextField()).controller!.text;
 
       testWidgets(
-        'μικρή λίστα: ↓ γράφει μόνο το όνομα, και τα βελάκια μένουν εκεί',
+        'μικρή λίστα: ↓ γράφει μόνο το όνομα, και ο δεύτερος ↓ φτάνει στο «Άγνωστος»',
         (tester) async {
           _configureDesktopViewport(tester);
           await _pumpCallLoggerApp(tester);
           await openSmallListWithCandidate(tester);
           expect((await _readHeader(tester)).callerCandidates, hasLength(1));
-          expect(find.text('Άγνωστος'), findsOneWidget);
+          expect(find.text(kCallerUnknownOption), findsOneWidget);
 
           await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
           await tester.pump();
           expect(fieldText(tester), _kFullCallerName);
 
-          // Σημερινή συμπεριφορά (καταγραμμένη στο roadmap ως σφάλμα): με
-          // γεμάτο πεδίο η γραμμή «Άγνωστος» φεύγει, οπότε το βελάκι δεν
-          // φτάνει ποτέ εκεί και μένει στον υποψήφιο.
+          // Η προεπισκόπηση γέμισε το πεδίο, αλλά ο χρήστης δεν έγραψε
+          // τίποτα: το «Άγνωστος» μένει στη λίστα και φτάνεται.
           await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
           await tester.pump();
-          expect(fieldText(tester), _kFullCallerName);
-          expect(find.text('Άγνωστος'), findsNothing);
+          expect(fieldText(tester), kCallerUnknownOption);
 
           await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
           await tester.pump();
@@ -302,6 +301,28 @@ void main() {
         },
         semanticsEnabled: false,
       );
+
+      testWidgets('μικρή λίστα: ↓ ↓ Enter → επιλέγεται το «Άγνωστος»', (
+        tester,
+      ) async {
+        _configureDesktopViewport(tester);
+        await _pumpCallLoggerApp(tester);
+        await openSmallListWithCandidate(tester);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+
+        final header = await _readHeader(tester);
+        expect(header.selectedCaller, isNull);
+        expect(header.callerDisplayText, kCallerUnknownOption);
+        expect(fieldText(tester), kCallerUnknownOption);
+
+        await flushCallLoggerSqfliteLockTimers(tester);
+      }, semanticsEnabled: false);
 
       testWidgets('μικρή λίστα: Enter στον υποψήφιο → επιλέγεται', (
         tester,

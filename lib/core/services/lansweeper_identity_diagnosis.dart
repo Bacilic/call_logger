@@ -337,28 +337,15 @@ enum LansweeperIdentityHintTone {
 
 /// Τι λέει το υπόμνημα του πεδίου, και με τι τόνο.
 ///
-/// Η **σειρά** είναι η ουσία εδώ. Όταν το τμήμα δεν συμμετέχει στο Lansweeper,
-/// η τιμή δεν διαβάζεται από κανέναν — οπότε κάθε άλλη συμβουλή είναι χαμένος
-/// κόπος: το «το έγραψες λάθος, μήπως εννοούσες Χ;» στέλνει τον χρήστη να
-/// διορθώσει κάτι που δεν πρόκειται να χρησιμοποιηθεί. Γι' αυτό το «δεν θα
-/// χρησιμοποιηθεί» προηγείται και της διάγνωσης και της υποψίας τομέα.
+/// Μόνο για υπάλληλο του νοσοκομείου: σε όποιον δεν συμμετέχει στο Lansweeper
+/// το πεδίο δεν εμφανίζεται καθόλου — δες [lansweeperIdentityHiddenNote].
 ///
 /// Ζει εδώ και όχι μέσα στη φόρμα: είναι κρίση, όχι διάταξη — και ελέγχεται
 /// χωρίς να στηθεί οθόνη.
 ({String text, LansweeperIdentityHintTone tone}) lansweeperIdentityFieldHint({
-  required bool participatesInLansweeper,
   required String identity,
   required String? referenceDomain,
 }) {
-  if (!participatesInLansweeper) {
-    return (
-      text:
-          'Το Lansweeper αναγνωρίζει μόνο τμήματα του νοσοκομείου — το '
-          'αναγνωριστικό δεν θα χρησιμοποιηθεί.',
-      tone: LansweeperIdentityHintTone.neutral,
-    );
-  }
-
   final value = identity.trim();
   final diagnosis = diagnoseLansweeperIdentity(value);
   if (value.isNotEmpty && !diagnosis.isValid) {
@@ -384,4 +371,17 @@ enum LansweeperIdentityHintTone {
         'στο ticket του Lansweeper.',
     tone: LansweeperIdentityHintTone.neutral,
   );
+}
+
+/// Η σημείωση που παίρνει τη θέση του πεδίου όταν ο υπάλληλος ανήκει σε
+/// εταιρεία ή εξωτερική μονάδα.
+///
+/// Το πεδίο κρύβεται γιατί η τιμή δεν διαβάζεται από κανέναν όσο ο υπάλληλος
+/// είναι εκεί· το αναγνωριστικό όμως **μένει φυλαγμένο** και ξαναζωντανεύει
+/// αν επιστρέψει στο νοσοκομείο. Η σημείωση το λέει, ώστε ο χρήστης να μη
+/// νομίσει ότι χάθηκε. Χωρίς αναγνωριστικό δεν υπάρχει τίποτα να ειπωθεί.
+String? lansweeperIdentityHiddenNote(String identity) {
+  final value = identity.trim();
+  if (value.isEmpty) return null;
+  return 'Ο υπάλληλος έχει αναγνωριστικό στο νοσοκομείο $value';
 }

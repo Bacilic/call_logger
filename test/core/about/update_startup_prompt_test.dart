@@ -3,12 +3,41 @@
 //   flutter test test/core/about/update_startup_prompt_test.dart
 
 import 'package:call_logger/core/updates/update_check_result.dart';
+import 'package:call_logger/core/updates/update_installer_service.dart';
 import 'package:call_logger/core/updates/update_manifest.dart';
 import 'package:call_logger/core/updates/update_providers.dart';
 import 'package:call_logger/core/updates/update_startup_prompt.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Προετοιμάζει αμέσως με επιτυχία και μετρά τις επανεκκινήσεις.
+class _RecordingInstaller extends UpdateInstallerService {
+  _RecordingInstaller()
+    : super(
+        installDirectory: '.',
+        resolveUpdateFolder: () async => null,
+        launchDetached: (exe, args, {workingDirectory}) async {},
+        terminateApp: () async {},
+        isDevelopmentBuild: () => false,
+      );
+
+  int restarts = 0;
+
+  @override
+  Future<UpdateInstallResult> prepareUpdate(
+    UpdateManifest manifest, {
+    void Function(String message)? onProgressOverride,
+  }) async {
+    return const UpdateInstallResult(status: UpdateInstallStatus.success);
+  }
+
+  @override
+  Future<UpdateInstallResult> launchPendingUpdate() async {
+    restarts++;
+    return const UpdateInstallResult(status: UpdateInstallStatus.success);
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -99,6 +128,82 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Νέο επίπεδο!'), findsNothing);
+    },
+  );
+
+  Future<ProviderContainer> pumpWithInstaller(
+    WidgetTester tester, {
+    required List<UpdateCheckResult> checks,
+    required _RecordingInstaller installer,
+  }) async {
+    var calls = 0;
+    final container = ProviderContainer(
+      overrides: [
+        updateCheckProvider.overrideWith(
+          (ref) async => checks[(calls++).clamp(0, checks.length - 1)],
+        ),
+        updateInstallerServiceProvider.overrideWithValue(installer),
+        pendingUpdateProvider.overrideWith((ref) async => false),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: UpdateStartupPromptListener(
+              getShowUpdateOnStartup: () async => true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return container;
+  }
+
+  testWidgets(
+    'στην εκκίνηση η «Ενημέρωση και επανεκκίνηση» επανεκκινεί χωρίς δεύτερη '
+    'ερώτηση',
+    (tester) async {
+      final installer = _RecordingInstaller();
+      await pumpWithInstaller(
+        tester,
+        checks: [available],
+        installer: installer,
+      );
+
+      await tester.tap(find.text('Ενημέρωση και επανεκκίνηση'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Η ενημέρωση είναι έτοιμη'), findsNothing);
+      expect(installer.restarts, 1);
+    },
+  );
+
+  testWidgets(
+    'μήνυμα από μεταγενέστερο έλεγχο (μέσα στη μέρα) κρατά την ερώτηση '
+    'επανεκκίνησης',
+    (tester) async {
+      final installer = _RecordingInstaller();
+      final container = await pumpWithInstaller(
+        tester,
+        checks: [const UpdateCheckResult(updateAvailable: false), available],
+        installer: installer,
+      );
+      expect(find.text('Νέο επίπεδο!'), findsNothing);
+
+      container.invalidate(updateCheckProvider);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ενημέρωση και επανεκκίνηση'), findsNothing);
+      await tester.tap(find.text('Ενημέρωση'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Η ενημέρωση είναι έτοιμη'), findsOneWidget);
+      expect(installer.restarts, 0);
     },
   );
 }

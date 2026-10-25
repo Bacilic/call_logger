@@ -101,6 +101,7 @@ class WindowsEventsReport {
     required this.levels,
     required this.appEvents,
     required this.computerLifecycle,
+    this.sleepAndWake = const [],
     required this.groups,
     required this.oldestByLog,
     this.failure,
@@ -116,6 +117,9 @@ class WindowsEventsReport {
 
   /// Κλεισίματα, εκκινήσεις και διακοπές ρεύματος του υπολογιστή.
   final List<WindowsEventEntry> computerLifecycle;
+
+  /// Πότε ο υπολογιστής κοιμήθηκε και πότε ξύπνησε.
+  final List<WindowsEventEntry> sleepAndWake;
 
   /// Τα υπόλοιπα συμβάντα των επιλεγμένων επιπέδων, ομαδοποιημένα.
   final List<WindowsEventGroup> groups;

@@ -84,6 +84,7 @@ class DictionaryTableLayout {
   final double actionsWidth;
 
   double get baseTotal =>
+      kDictionarySelectColumnWidth +
       wordWidth +
       kDictionaryWordColumnResizeHandleWidth +
       sourceWidth +

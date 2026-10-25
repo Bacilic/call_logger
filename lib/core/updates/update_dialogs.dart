@@ -17,10 +17,15 @@ import 'update_providers.dart';
 /// Όταν ο αριθμός έκδοσης δεν ανεβαίνει (ίδιος ή μικρότερος), η εικόνα μοιάζει
 /// παράλογη — μόνο τότε προστίθεται επεξήγηση, με τους αριθμούς κτισίματος και
 /// τις ημερομηνίες τους. Σε κανονική αναβάθμιση δεν εμφανίζεται τίποτα.
+///
+/// Με [atStartup] ο χρήστης δεν έχει αρχίσει ακόμη δουλειά: το «ναι» του
+/// εδώ αρκεί, και η ενημέρωση καταλήγει σε επανεκκίνηση χωρίς δεύτερη
+/// ερώτηση — γι' αυτό και το κουμπί λέει τη συνέπεια.
 Future<void> showUpdateAvailableDialog(
   BuildContext context,
-  UpdateCheckResult result,
-) async {
+  UpdateCheckResult result, {
+  bool atStartup = false,
+}) async {
   final manifest = result.manifest;
   if (manifest == null) return;
 
@@ -75,26 +80,29 @@ Future<void> showUpdateAvailableDialog(
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Ενημέρωση'),
+          child: Text(atStartup ? 'Ενημέρωση και επανεκκίνηση' : 'Ενημέρωση'),
         ),
       ],
     ),
   );
 
   if (choice != true || !context.mounted) return;
-  await runUpdatePrepareFlow(context, manifest);
+  await runUpdatePrepareFlow(context, manifest, askBeforeRestart: !atStartup);
 }
 
 /// Προετοιμάζει την ενημέρωση (χωρίς κλείσιμο) και μετά ρωτά για επανεκκίνηση:
 /// «Τώρα» → άμεση εφαρμογή· «Αργότερα» → εφαρμογή στο επόμενο άνοιγμα.
+/// Με [askBeforeRestart] = false η ερώτηση παραλείπεται και η επανεκκίνηση
+/// γίνεται αμέσως.
 ///
 /// Χρησιμοποιεί [ProviderScope.containerOf] αντί για [WidgetRef], ώστε η ροή
 /// να παραμένει ασφαλής ακόμα κι αν ο διάλογος που την ξεκίνησε έχει ήδη
 /// κλείσει (π.χ. Ιστορικό Αλλαγών → pop → prepare).
 Future<void> runUpdatePrepareFlow(
   BuildContext context,
-  UpdateManifest manifest,
-) async {
+  UpdateManifest manifest, {
+  bool askBeforeRestart = true,
+}) async {
   // Ένα σημείο για όλες τις πόρτες: εκκίνηση, Ιστορικό Αλλαγών, οθόνη
   // σφάλματος βάσης. Όποια πόρτα προστεθεί αργότερα κληρονομεί τον φρουρό
   // χωρίς να τον ξαναγράψει.
@@ -153,6 +161,11 @@ Future<void> runUpdatePrepareFlow(
 
   // Το UI (π.χ. κουμπί Ιστορικού) ενημερώνεται ότι υπάρχει εκκρεμότητα.
   container.invalidate(pendingUpdateProvider);
+
+  if (!askBeforeRestart) {
+    await launchPendingUpdateNow(context);
+    return;
+  }
 
   final restartNow = await showDialog<bool>(
     context: context,

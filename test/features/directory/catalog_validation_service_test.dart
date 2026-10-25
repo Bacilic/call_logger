@@ -428,6 +428,152 @@ void main() {
     });
   });
 
+  group('Παρατυπίες ονοματολογίας — ένας διακόπτης, τρεις έλεγχοι', () {
+    const off = CatalogValidationService(
+      CatalogValidationRules(namingIrregularitiesEnabled: false),
+    );
+
+    test('επώνυμο ίδιο με το όνομα, χωρίς τόνους και κεφαλαία', () {
+      expect(
+        service.lastNameHint(lastName: 'ΓΙΩΡΓΟΣ', firstName: 'Γιώργος'),
+        'Το επώνυμο είναι ίδιο με το όνομα',
+      );
+      expect(
+        service.lastNameHint(lastName: 'Ψαρρά', firstName: 'Σοφία'),
+        isNull,
+      );
+    });
+
+    test('ο κανόνας του πρώτου χαρακτήρα προηγείται', () {
+      expect(
+        service.lastNameHint(lastName: '3π', firstName: '3π'),
+        startsWith('Ξεκινά από ψηφίο ή σύμβολο'),
+      );
+    });
+
+    test('ψευδώνυμο ίδιο με το όνομα ή με το επώνυμο', () {
+      expect(
+        service.nicknameHint(
+          nickname: 'γεωργια',
+          firstName: 'Γεωργία',
+          lastName: 'Παπά',
+        ),
+        'Το ψευδώνυμο είναι ίδιο με το όνομα',
+      );
+      expect(
+        service.nicknameHint(
+          nickname: 'Παπά',
+          firstName: 'Γεωργία',
+          lastName: 'ΠΑΠΑ',
+        ),
+        'Το ψευδώνυμο είναι ίδιο με το επώνυμο',
+      );
+      expect(
+        service.nicknameHint(
+          nickname: 'Γωγώ',
+          firstName: 'Γεωργία',
+          lastName: 'Παπά',
+        ),
+        isNull,
+      );
+    });
+
+    test('η ίδια λέξη δύο φορές οπουδήποτε στο όνομα τμήματος', () {
+      expect(
+        service.departmentNameHint('Γραφείο Υλικού Υλικού'),
+        'Η λέξη «Υλικού» υπάρχει δύο φορές στο όνομα',
+      );
+      expect(
+        service.departmentNameHint('Γραμματεία ΤΕΠ Ορθοπεδικό ΤΕΠ'),
+        'Η λέξη «ΤΕΠ» υπάρχει δύο φορές στο όνομα',
+        reason: 'μετρά οπουδήποτε, όχι μόνο σε διαδοχικές λέξεις',
+      );
+    });
+
+    test('συνδετικές λέξεις και μονά γράμματα δεν μετρούν', () {
+      expect(
+        service.departmentNameHint('Γραφείο του Διευθυντή του Νοσοκομείου'),
+        isNull,
+      );
+      expect(service.departmentNameHint('Κλινική Α και Β και Γ'), isNull);
+      expect(service.departmentNameHint('Γραφείο Α Α'), isNull);
+    });
+
+    test('ο κλειστός διακόπτης σωπαίνει και τους τρεις', () {
+      expect(
+        off.lastNameHint(lastName: 'Γιώργος', firstName: 'Γιώργος'),
+        isNull,
+      );
+      expect(
+        off.nicknameHint(
+          nickname: 'Γεωργία',
+          firstName: 'Γεωργία',
+          lastName: 'Χ',
+        ),
+        isNull,
+      );
+      expect(off.departmentNameHint('Γραφείο Υλικού Υλικού'), isNull);
+    });
+
+    test('η γρήγορη καταχώρηση ελέγχει το όνομα τμήματος', () {
+      expect(service.quickAddHints(departmentName: 'Γραφείο Υλικού Υλικού'), [
+        'Τμήμα — Η λέξη «Υλικού» υπάρχει δύο φορές στο όνομα',
+      ]);
+    });
+
+    test('ο Έλεγχος δεδομένων βρίσκει και τους τρεις', () {
+      final findings =
+          const CatalogValidationService(
+            CatalogValidationRules(
+              emptyDepartmentEnabled: false,
+              departmentBuildingEnabled: false,
+              departmentGroupEnabled: false,
+              userWithoutDepartmentEnabled: false,
+              duplicateNamesEnabled: false,
+            ),
+          ).scan(
+            users: [
+              UserModel(id: 1, lastName: 'Νικολάου', firstName: 'ΝΙΚΟΛΑΟΥ'),
+              UserModel(
+                id: 2,
+                lastName: 'Παπά',
+                firstName: 'Γεωργία',
+                nickname: 'Γεωργία',
+              ),
+            ],
+            departments: [
+              DepartmentModel(id: 10, name: 'Γραφείο Υλικού Υλικού'),
+            ],
+            equipment: const [],
+          );
+
+      expect(
+        findings.map((f) => (f.fieldLabel, f.message)),
+        containsAll([
+          ('Επώνυμο', 'Το επώνυμο είναι ίδιο με το όνομα'),
+          ('Ψευδώνυμο', 'Το ψευδώνυμο είναι ίδιο με το όνομα'),
+          ('Όνομα', 'Η λέξη «Υλικού» υπάρχει δύο φορές στο όνομα'),
+        ]),
+      );
+    });
+
+    test('πιθανό λάθος: ανάβει στο «Μεσαίο», σβήνει στο «Ελάχιστοι»', () {
+      const rules = CatalogValidationRules();
+      expect(
+        rules
+            .withStrictness(CatalogStrictnessLevel.medium)
+            .namingIrregularitiesEnabled,
+        isTrue,
+      );
+      expect(
+        rules
+            .withStrictness(CatalogStrictnessLevel.minimal)
+            .namingIrregularitiesEnabled,
+        isFalse,
+      );
+    });
+  });
+
   group('scan — σάρωση υπαρχόντων δεδομένων', () {
     // Ο κανόνας των κενών τμημάτων ελέγχεται στο δικό του group· εδώ θα ήταν
     // θόρυβος, γιατί τα τεστ στήνουν τμήματα χωρίς εξαρτήματα επίτηδες.
@@ -1084,7 +1230,13 @@ void main() {
           departments: const [],
           equipment: const [],
         );
-        expect(findings, isEmpty);
+        // Οι «Παρατυπίες ονοματολογίας» τον σημειώνουν θεμιτά, ως πεδίο· εδώ
+        // φυλάγεται μόνο ότι οι διασταυρώσεις δεν τον ζευγαρώνουν με τον εαυτό
+        // του.
+        expect(
+          findings.where((f) => f.type != CatalogFindingType.fieldHint),
+          isEmpty,
+        );
       });
 
       test('δύο ολόιδιες εγγραφές: ΜΙΑ κάρτα διπλοτύπου', () {
@@ -1642,14 +1794,14 @@ void main() {
         users: [
           UserModel(
             id: 1,
-            lastName: 'Α',
-            firstName: 'Α',
+            lastName: 'Αλφάς',
+            firstName: 'Άννα',
             lansweeperUsername: r'gnk\a',
           ),
           UserModel(
             id: 2,
-            lastName: 'Β',
-            firstName: 'Β',
+            lastName: 'Βήτας',
+            firstName: 'Βάσω',
             lansweeperUsername: r'gnk\b',
           ),
         ],

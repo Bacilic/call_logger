@@ -44,7 +44,6 @@ import '../screens/widgets/user_info_card.dart';
 import '../../../core/errors/call_save_exception.dart';
 import '../../../core/errors/task_save_exception.dart';
 import 'call_form_clear.dart';
-import 'calls_field_groups.dart';
 import 'calls_field_groups_provider.dart';
 import 'calls_layout_engine.dart';
 import 'calls_layout_plan.dart';
@@ -342,25 +341,20 @@ class _ExpandedPlanBody extends ConsumerWidget {
     final callerId = header.selectedCaller?.id;
     final hasCallerHistory = callerId != null;
 
-    // ΓΕΓΟΝΟΣ, ΟΧΙ ΕΙΚΑΣΙΑ: «έχει ιστορικό» σημαίνει «υπάρχουν κλήσεις», όχι
-    // «βρέθηκε στον κατάλογο». Ένας καταχωρημένος εξοπλισμός με μηδέν κλήσεις
-    // άφηνε κενή στήλη — η κάρτα εξαφανιζόταν μόνη της, αφού είχε ήδη
-    // δεσμευτεί η θέση. Τώρα τη θέση την παίρνει η εφεδρική κάρτα ενεργειών.
     final equipmentCalls = ref.watch(
       recentCallsByEquipmentProvider(selectedEquipmentCode),
     );
-    final hasEquipmentHistory =
-        selectedEquipmentCode.isNotEmpty &&
-        groups.equipmentTier == EquipmentGroupTier.matchedRecord &&
-        equipmentCalls.when(
-          data: (calls) => calls.isNotEmpty,
-          // Όσο ρωτάμε, κρατάμε τη θέση του ιστορικού με το σπινάκι του: μια
-          // κάρτα που εμφανίζεται και αντικαθίσταται μετά από ms αναβοσβήνει.
-          loading: () => true,
-          // Σε σφάλμα η κάρτα ιστορικού δεν θα δείξει τίποτα· καλύτερα οι
-          // ενέργειες παρά κενό.
-          error: (_, _) => false,
-        );
+    final hasEquipmentHistory = CallsLayoutEngine.hasEquipmentHistoryData(
+      groups: groups,
+      equipmentCode: selectedEquipmentCode,
+      callsFound: equipmentCalls.when(
+        data: (calls) => calls.isNotEmpty,
+        loading: () => null,
+        // Σε σφάλμα η κάρτα ιστορικού δεν θα δείξει τίποτα· καλύτερα οι
+        // ενέργειες παρά κενό.
+        error: (_, _) => false,
+      ),
+    );
 
     final tkOpenInGrid = ref.watch(showGlobalCallsToggleProvider);
 

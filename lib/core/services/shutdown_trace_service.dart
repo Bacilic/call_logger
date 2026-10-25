@@ -98,24 +98,47 @@ class ShutdownTraceService {
 
   /// Στήνει τον ιχνηλάτη πάνω στο ημερολόγιο που ήδη κατέχει τον φάκελο.
   ///
-  /// `null` όταν δεν υπάρχει ημερολόγιο ή ο φάκελος δεν απαντά: χωρίς δίσκο
-  /// δεν υπάρχει τίποτα να ιχνηλατηθεί, και η αναμονή σε φάκελο που σιωπά
-  /// είναι ακριβώς αυτό που δεν αντέχει η ώρα του κλεισίματος.
-  static Future<ShutdownTraceService?> forCrashLog([
+  /// Το ερώτημα είναι «κρατιούνται οι εγγραφές κάπου;», όχι «απαντά ο
+  /// φάκελος;»: με σιωπηλό φάκελο το τελικό ίχνος πηγαίνει στην τοπική αναμονή
+  /// του ημερολογίου, χωρίς να περιμένει τίποτα. `null` μόνο όταν δεν υπάρχει
+  /// ημερολόγιο ή οι εγγραφές δεν έχουν πού να πάνε.
+  static Future<ShutdownTraceService?> forCrashLog({
     CrashLogService? service,
-  ]) async {
+    Future<String> Function()? localDirectory,
+  }) async {
     final log = service ?? CrashLogService.instanceOrNull;
-    if (log == null || !log.isDiskAvailable) return null;
-    // Αν ο τοπικός φάκελος δεν απαντήσει, το ίχνος γράφεται όπου έγραφε πάντα:
-    // αργά, αλλά καλύτερα από καθόλου ίχνος.
+    if (log == null || !log.keepsRecords) return null;
     String working;
     try {
-      working = await localWorkingDirectory();
+      working = await (localDirectory ?? localWorkingDirectory)();
     } catch (_) {
+      // Χωρίς τοπικό φάκελο, το προσωρινό γράφεται όπου έγραφε πάντα — αργά,
+      // αλλά καλύτερα από καθόλου ίχνος. Ποτέ όμως σε φάκελο που σιωπά: κάθε
+      // γραμμή περιμένει τον δίσκο, και σε σβηστό διακομιστή θα πάγωνε το
+      // κλείσιμο.
+      if (!log.isDiskAvailable) return null;
       working = log.logsDirectory;
     }
     return ShutdownTraceService(
       workingDirectory: working,
+      appendRecord: log.appendRecord,
+    );
+  }
+
+  /// Ανακοινώνει στην εκκίνηση το κλείσιμο που έμεινε στη μέση — δες
+  /// [promoteOrphanedTrace].
+  ///
+  /// Ίδιο ερώτημα με τον [forCrashLog]: αρκεί οι εγγραφές να κρατιούνται
+  /// κάπου. Με σιωπηλό φάκελο το ίχνος πάει στην τοπική αναμονή, και η ένδειξη
+  /// των Ρυθμίσεων μαθαίνει **τώρα** ότι η εφαρμογή σκοτώθηκε — όχι στην
+  /// επόμενη εκκίνηση που θα βρει τον διακομιστή ανοιχτό.
+  static Future<bool> promoteOrphanIfLogKeepsRecords(
+    CrashLogService? log, {
+    String? workingDirectory,
+  }) async {
+    if (log == null || !log.keepsRecords) return false;
+    return promoteOrphanedTrace(
+      workingDirectory: workingDirectory ?? await localWorkingDirectory(),
       appendRecord: log.appendRecord,
     );
   }

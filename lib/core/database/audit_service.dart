@@ -2,12 +2,14 @@ import 'dart:convert';
 
 import 'package:sqflite_common/sqlite_api.dart';
 
+import 'audit_action_labels.dart';
 import 'audit_diff_helper.dart';
 import 'database_table_labels.dart';
 import '../services/current_operator.dart';
 import '../config/audit_retention_class.dart';
 import '../utils/search_text_normalizer.dart';
 import 'sql_like.dart';
+import '../utils/display_text_sort.dart';
 
 /// Κεντρική εγγραφή στον πίνακα `audit_log` (μόνο από εδώ).
 class AuditService {
@@ -438,6 +440,7 @@ class AuditService {
     List<String> where,
     List<Object?> args,
     String token,
+    List<_AuditActionPair> actionPairs,
   ) {
     final normalizedToken = token.trim();
     if (normalizedToken.isEmpty) return;
@@ -448,9 +451,11 @@ class AuditService {
     final isGenitiveLikeEnding =
         (normalizedToken.endsWith('ς') || normalizedToken.endsWith('σ')) &&
         normalizedToken.length >= 5;
+    final stem = isGenitiveLikeEnding
+        ? normalizedToken.substring(0, normalizedToken.length - 1)
+        : normalizedToken;
 
     if (isGenitiveLikeEnding) {
-      final stem = normalizedToken.substring(0, normalizedToken.length - 1);
       // Η πλήρης λέξη του χρήστη ταιριάζει ΠΑΝΤΑ (π.χ. «θεσησ» μέσα στο
       // «αλλαγη θεσησ x») — η ρίζα είναι μόνο επιπλέον ανοχή πτώσης.
       clauses.add("COALESCE(search_text, '') ${SqlLike.op}");
@@ -472,6 +477,19 @@ class AuditService {
       }
     }
 
+    // Η ενέργεια δεν γράφεται στο ευρετήριο: η ετικέτα της βγαίνει την ώρα
+    // της ανάγνωσης, ώστε παλιές και νέες εγγραφές να βρίσκονται με την ίδια
+    // λέξη που δείχνει η οθόνη, χωρίς αναβάθμιση της βάσης.
+    for (final pair in actionPairs) {
+      final label = pair.searchLabel;
+      if (!label.contains(normalizedToken) &&
+          !(stem.length >= 4 && label.contains(stem))) {
+        continue;
+      }
+      clauses.add(_AuditActionPair.sqlMatch);
+      clauseArgs.addAll(pair.sqlArgs);
+    }
+
     where.add('(${clauses.join(' OR ')})');
     args.addAll(clauseArgs);
   }
@@ -480,6 +498,7 @@ class AuditService {
     List<String> where,
     List<Object?> args,
     String? keywordNormalized,
+    List<_AuditActionPair> actionPairs,
   ) {
     if (keywordNormalized == null || keywordNormalized.trim().isEmpty) {
       return;
@@ -491,35 +510,114 @@ class AuditService {
         .where((token) => token.isNotEmpty)
         .toList();
     for (final token in tokens) {
-      _appendSearchTextKeywordClause(where, args, token);
+      _appendSearchTextKeywordClause(where, args, token, actionPairs);
     }
+  }
+
+  /// Κάθε συνδυασμός τύπου και ενέργειας που υπάρχει στο ιστορικό.
+  ///
+  /// Λίγες δεκάδες γραμμές: η ετικέτα «Οντότητα - Ενέργεια» βγαίνει από αυτές
+  /// στη Dart, γιατί η SQL δεν την ξέρει.
+  Future<List<_AuditActionPair>> _distinctActionPairs({
+    String whereSql = '',
+    List<Object?> args = const [],
+  }) async {
+    final rows = await _db.rawQuery(
+      'SELECT DISTINCT entity_type, action FROM audit_log $whereSql',
+      args,
+    );
+    return [
+      for (final row in rows)
+        if (row['action'] case final String action
+            when action.trim().isNotEmpty)
+          _AuditActionPair((row['entity_type'] as String?) ?? '', action),
+    ];
+  }
+
+  /// Ό,τι χρειάζονται από τις ενέργειες τα φίλτρα και η λέξη-κλειδί.
+  ///
+  /// [actionFilter]: τα ζεύγη που δείχνει η οθόνη με την επιλεγμένη ετικέτα —
+  /// null όταν δεν έχει επιλεγεί ενέργεια. Μία ετικέτα μπορεί να καλύπτει
+  /// πολλά ζεύγη («ΤΡΟΠΟΠΟΙΗΣΗ» και «ΤΡΟΠΟΠΟΙΗΣΗ ΥΠΑΛΛΗΛΟΥ» λένε και τα δύο
+  /// «Υπάλληλος - Τροποποίηση»). Η βάση ρωτιέται μόνο όταν χρειάζεται.
+  Future<
+    ({List<_AuditActionPair>? actionFilter, List<_AuditActionPair> forKeyword})
+  >
+  _resolveActionTerms({String? actionLabel, String? keywordNormalized}) async {
+    final label = actionLabel?.trim() ?? '';
+    final hasKeyword = keywordNormalized?.trim().isNotEmpty ?? false;
+    if (label.isEmpty && !hasKeyword) {
+      return (actionFilter: null, forKeyword: const <_AuditActionPair>[]);
+    }
+    final pairs = await _distinctActionPairs();
+    return (
+      actionFilter: label.isEmpty
+          ? null
+          : [
+              for (final pair in pairs)
+                if (pair.label == label) pair,
+            ],
+      forKeyword: hasKeyword ? pairs : const <_AuditActionPair>[],
+    );
   }
 
   /// Οι όροι που στενεύουν τη λίστα, γραμμένοι ΜΙΑ φορά.
   ///
-  /// Τρία ερωτήματα ρωτούν το ίδιο πράγμα με διαφορετική αφορμή: η σελίδα, τα
-  /// ids της «επιλογής όλων» και οι διαθέσιμες ενέργειες του φίλτρου. Όσο το
-  /// καθένα έχτιζε τους δικούς του όρους, μια νέα στήλη φίλτρου έμπαινε στα
-  /// δύο και το τρίτο συνέχιζε σιωπηλά να μετρά με τα παλιά κριτήρια.
-  static void _appendScopeFilters(
-    List<String> where,
-    List<Object?> args, {
+  /// Τέσσερα ερωτήματα ρωτούν το ίδιο πράγμα με διαφορετική αφορμή: η σελίδα,
+  /// τα ids της «επιλογής όλων», οι διαθέσιμες ενέργειες και οι διαθέσιμοι
+  /// χειριστές του φίλτρου. Όσο το καθένα έχτιζε τους δικούς του όρους, μια
+  /// νέα στήλη φίλτρου έμπαινε στα δύο και το τρίτο συνέχιζε σιωπηλά να μετρά
+  /// με τα παλιά κριτήρια.
+  ///
+  /// Το [action] είναι η ετικέτα της οθόνης («Υπάλληλος - Διαγραφή»), όχι η
+  /// ωμή ενέργεια της βάσης· ο [entityType] πιάνει και τις μαζικές
+  /// ενημερώσεις της ίδιας οντότητας ([auditEntityTypeFamily]).
+  Future<({String whereSql, List<Object?> args})> _scopeWhere({
+    String? keywordNormalized,
     String? action,
     String? entityType,
     String? userPerforming,
     String? dateFromInclusiveIso,
     String? dateToExclusiveIso,
-  }) {
-    void equals(String column, String? value) {
-      final text = value?.trim() ?? '';
-      if (text.isEmpty) return;
-      where.add('$column = ?');
-      args.add(text);
+    List<String> extraConditions = const [],
+  }) async {
+    final terms = await _resolveActionTerms(
+      actionLabel: action,
+      keywordNormalized: keywordNormalized,
+    );
+    final where = <String>[];
+    final args = <Object?>[];
+
+    final actionPairs = terms.actionFilter;
+    if (actionPairs != null) {
+      if (actionPairs.isEmpty) {
+        // Ετικέτα που δεν αντιστοιχεί πια σε καμία εγγραφή: καμία γραμμή,
+        // όχι όλες.
+        where.add('0');
+      } else {
+        where.add(
+          '(${List.filled(actionPairs.length, _AuditActionPair.sqlMatch).join(' OR ')})',
+        );
+        for (final pair in actionPairs) {
+          args.addAll(pair.sqlArgs);
+        }
+      }
     }
 
-    equals('action', action);
-    equals('entity_type', entityType);
-    equals('user_performing', userPerforming);
+    final type = entityType?.trim() ?? '';
+    if (type.isNotEmpty) {
+      final family = auditEntityTypeFamily(type);
+      where.add(
+        'entity_type IN (${List.filled(family.length, '?').join(', ')})',
+      );
+      args.addAll(family);
+    }
+
+    final performing = userPerforming?.trim() ?? '';
+    if (performing.isNotEmpty) {
+      where.add('user_performing = ?');
+      args.add(performing);
+    }
 
     final from = dateFromInclusiveIso?.trim() ?? '';
     if (from.isNotEmpty) {
@@ -531,6 +629,19 @@ class AuditService {
       where.add('timestamp < ?');
       args.add(to);
     }
+
+    _appendKeywordNormalizedClauses(
+      where,
+      args,
+      keywordNormalized,
+      terms.forKeyword,
+    );
+    where.addAll(extraConditions);
+
+    return (
+      whereSql: where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}',
+      args: args,
+    );
   }
 
   /// Σελιδοποιημένη λίστα + συνολικό πλήθος (για φίλτρα UI).
@@ -544,21 +655,14 @@ class AuditService {
     String? dateFromInclusiveIso,
     String? dateToExclusiveIso,
   }) async {
-    final where = <String>[];
-    final args = <Object?>[];
-
-    _appendScopeFilters(
-      where,
-      args,
+    final (:whereSql, :args) = await _scopeWhere(
+      keywordNormalized: keywordNormalized,
       action: action,
       entityType: entityType,
       userPerforming: userPerforming,
       dateFromInclusiveIso: dateFromInclusiveIso,
       dateToExclusiveIso: dateToExclusiveIso,
     );
-    _appendKeywordNormalizedClauses(where, args, keywordNormalized);
-
-    final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
 
     final countRows = await _db.rawQuery(
       'SELECT COUNT(*) AS c FROM audit_log $whereSql',
@@ -587,21 +691,14 @@ class AuditService {
     String? dateFromInclusiveIso,
     String? dateToExclusiveIso,
   }) async {
-    final where = <String>[];
-    final args = <Object?>[];
-
-    _appendScopeFilters(
-      where,
-      args,
+    final (:whereSql, :args) = await _scopeWhere(
+      keywordNormalized: keywordNormalized,
       action: action,
       entityType: entityType,
       userPerforming: userPerforming,
       dateFromInclusiveIso: dateFromInclusiveIso,
       dateToExclusiveIso: dateToExclusiveIso,
     );
-    _appendKeywordNormalizedClauses(where, args, keywordNormalized);
-
-    final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
     final rows = await _db.rawQuery(
       'SELECT id FROM audit_log $whereSql ORDER BY timestamp DESC, id DESC',
       args,
@@ -642,39 +739,34 @@ class AuditService {
     });
   }
 
-  /// Διαθέσιμες ενέργειες (μοναδικές τιμές `action`) για το τρέχον φίλτρο.
+  /// Οι ετικέτες «Οντότητα - Ενέργεια» του φίλτρου «Ενέργεια», για το τρέχον
+  /// φίλτρο — μία φορά η καθεμιά, ταξινομημένες ώστε να μαζεύονται ανά
+  /// οντότητα.
   Future<List<String>> queryDistinctActions({
     String? entityType,
     String? userPerforming,
     String? dateFromInclusiveIso,
     String? dateToExclusiveIso,
   }) async {
-    final where = <String>[];
-    final args = <Object?>[];
-
-    _appendScopeFilters(
-      where,
-      args,
+    final (:whereSql, :args) = await _scopeWhere(
       entityType: entityType,
       userPerforming: userPerforming,
       dateFromInclusiveIso: dateFromInclusiveIso,
       dateToExclusiveIso: dateToExclusiveIso,
     );
+    final pairs = await _distinctActionPairs(whereSql: whereSql, args: args);
 
-    where.add('action IS NOT NULL');
-    where.add('TRIM(action) <> \'\'');
-    final whereSql = 'WHERE ${where.join(' AND ')}';
-    final rows = await _db.rawQuery(
-      'SELECT DISTINCT action FROM audit_log $whereSql '
-      'ORDER BY action COLLATE NOCASE ASC',
-      args,
-    );
-
-    return rows
-        .map((row) => (row['action'] as String?)?.trim())
-        .whereType<String>()
-        .where((value) => value.isNotEmpty)
-        .toList();
+    final labels = {
+      for (final pair in pairs)
+        if (pair.label.trim().isNotEmpty) pair.label,
+    }.toList();
+    labels.sort((a, b) {
+      final byText = SearchTextNormalizer.normalizeForSearch(
+        a,
+      ).compareTo(SearchTextNormalizer.normalizeForSearch(b));
+      return byText != 0 ? byText : a.compareTo(b);
+    });
+    return labels;
   }
 
   /// Τα ονόματα που έχουν σφραγίσει εγγραφές — για το φίλτρο «Χειριστής».
@@ -689,32 +781,29 @@ class AuditService {
     String? dateFromInclusiveIso,
     String? dateToExclusiveIso,
   }) async {
-    final where = <String>[];
-    final args = <Object?>[];
-
-    _appendScopeFilters(
-      where,
-      args,
+    final (:whereSql, :args) = await _scopeWhere(
       action: action,
       entityType: entityType,
       dateFromInclusiveIso: dateFromInclusiveIso,
       dateToExclusiveIso: dateToExclusiveIso,
+      extraConditions: const [
+        'user_performing IS NOT NULL',
+        "TRIM(user_performing) <> ''",
+      ],
     );
-
-    where.add('user_performing IS NOT NULL');
-    where.add("TRIM(user_performing) <> ''");
-    final whereSql = 'WHERE ${where.join(' AND ')}';
     final rows = await _db.rawQuery(
       'SELECT DISTINCT user_performing FROM audit_log $whereSql '
       'ORDER BY user_performing COLLATE NOCASE ASC',
       args,
     );
 
-    return rows
-        .map((row) => (row['user_performing'] as String?)?.trim())
-        .whereType<String>()
-        .where((value) => value.isNotEmpty)
-        .toList();
+    return sortedForDisplay(
+      rows
+          .map((row) => (row['user_performing'] as String?)?.trim())
+          .whereType<String>()
+          .where((value) => value.isNotEmpty),
+      (name) => [name],
+    );
   }
 
   /// Διαγραφή παλαιότερων από [cutoff] (ISO timestamp σύγκριση).
@@ -938,4 +1027,26 @@ abstract final class AuditActions {
         return null;
     }
   }
+}
+
+/// Ένας συνδυασμός τύπου οντότητας και ωμής ενέργειας, όπως είναι στη βάση,
+/// μαζί με την ετικέτα που βλέπει γι' αυτόν ο χρήστης.
+class _AuditActionPair {
+  _AuditActionPair(this.entityType, this.action)
+    : label = auditActionLabelEl(entityType: entityType, action: action);
+
+  /// Κενό όταν η εγγραφή δεν έχει τύπο.
+  final String entityType;
+  final String action;
+  final String label;
+
+  late final String searchLabel = SearchTextNormalizer.normalizeForSearch(
+    label,
+  );
+
+  /// Ο όρος που ξεχωρίζει τις εγγραφές του ζεύγους — με τα [sqlArgs].
+  static const String sqlMatch =
+      "(COALESCE(entity_type, '') = ? AND action = ?)";
+
+  List<Object?> get sqlArgs => [entityType, action];
 }

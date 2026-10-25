@@ -42,14 +42,13 @@ void main() {
     await releaseCallLoggerTestDatabase();
   });
 
-  test('νέο άρθρο αποθηκεύεται με χρόνους και μηδενικό μετρητή', () async {
+  test('νέο άρθρο αποθηκεύεται με χρόνους', () async {
     final id = await repo.saveArticle(_vncArticle);
 
     final saved = await repo.getById(id);
     expect(saved, isNotNull);
     expect(saved!.title, 'Μαύρη οθόνη λόγω VNC');
     expect(saved.symptom, 'Βλέπει μαυρη οθόνη από το πρωί');
-    expect(saved.timesUsed, 0);
     expect(saved.createdAt, isNotNull);
     expect(saved.updatedAt, isNotNull);
   });
@@ -98,30 +97,6 @@ void main() {
       ),
       isEmpty,
     );
-  });
-
-  test('markUsed αυξάνει τον μετρητή και γράφει τη στιγμή', () async {
-    final id = await repo.saveArticle(_vncArticle);
-
-    await repo.markUsed([id]);
-    await repo.markUsed([id]);
-
-    final saved = await repo.getById(id);
-    expect(saved!.timesUsed, 2);
-    expect(saved.lastUsedAt, isNotNull);
-  });
-
-  test('η ενημέρωση κρατά τον μετρητή χρήσης', () async {
-    final id = await repo.saveArticle(_vncArticle);
-    await repo.markUsed([id]);
-
-    await repo.saveArticle(
-      _vncArticle.copyWith(id: id, solution: 'Νέα διατύπωση λύσης.'),
-    );
-
-    final saved = await repo.getById(id);
-    expect(saved!.solution, 'Νέα διατύπωση λύσης.');
-    expect(saved.timesUsed, 1);
   });
 
   test('δημιουργία και τροποποίηση καταγράφονται ξεχωριστά', () async {

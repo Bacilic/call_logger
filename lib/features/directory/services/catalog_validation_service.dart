@@ -31,6 +31,7 @@ import '../models/catalog_validation_finding.dart';
 import '../models/catalog_validation_rules.dart';
 import '../models/department_kind.dart';
 import '../models/department_model.dart';
+import 'naming_irregularities.dart';
 
 /// Πόσο ύποπτη είναι μια μεμονωμένη τιμή — η κλίμακα που χρωματίζει τα chips.
 ///
@@ -212,13 +213,47 @@ class CatalogValidationService {
     );
   }
 
-  /// Υπόδειξη για όνομα τμήματος: να περιέχει τουλάχιστον ένα γράμμα,
-  /// αλλιώς μοιάζει με αριθμό/τηλέφωνο (το ιστορικό λάθος του πεδίου).
+  /// Υπόδειξη για όνομα τμήματος — η **μία** πόρτα του πεδίου: τη ρωτούν η
+  /// φόρμα τμήματος, η γρήγορη καταχώρηση και ο «Έλεγχος δεδομένων».
+  ///
+  /// 1. Να περιέχει τουλάχιστον ένα γράμμα, αλλιώς μοιάζει με αριθμό ή
+  ///    τηλέφωνο (το ιστορικό λάθος του πεδίου).
+  /// 2. Παρατυπίες ονοματολογίας — η ίδια λέξη δύο φορές.
   String? departmentNameHint(String value) {
-    if (!rules.departmentNameEnabled) return null;
     final s = value.trim();
-    if (s.isEmpty || _anyLetter.hasMatch(s)) return null;
-    return 'Το «$s» μοιάζει με αριθμό ή τηλέφωνο, όχι με όνομα τμήματος';
+    if (s.isEmpty) return null;
+    if (rules.departmentNameEnabled && !_anyLetter.hasMatch(s)) {
+      return 'Το «$s» μοιάζει με αριθμό ή τηλέφωνο, όχι με όνομα τμήματος';
+    }
+    if (!rules.namingIrregularitiesEnabled) return null;
+    return NamingIrregularities.repeatedWordInDepartmentName(s);
+  }
+
+  /// Υπόδειξη για το επώνυμο υπαλλήλου — η μία πόρτα της φόρμας και του
+  /// «Ελέγχου δεδομένων»: πρώτα ο κανόνας του πρώτου χαρακτήρα, μετά οι
+  /// παρατυπίες ονοματολογίας (επώνυμο ίδιο με το όνομα).
+  String? lastNameHint({required String lastName, required String firstName}) {
+    final shape = personNameHint(lastName);
+    if (shape != null || !rules.namingIrregularitiesEnabled) return shape;
+    return NamingIrregularities.sameLastAndFirstName(
+      lastName: lastName,
+      firstName: firstName,
+    );
+  }
+
+  /// Υπόδειξη για το ψευδώνυμο υπαλλήλου: παρατυπίες ονοματολογίας
+  /// (ψευδώνυμο ίδιο με το όνομα ή με το επώνυμο).
+  String? nicknameHint({
+    required String nickname,
+    required String firstName,
+    required String lastName,
+  }) {
+    if (!rules.namingIrregularitiesEnabled) return null;
+    return NamingIrregularities.nicknameRepeatsName(
+      nickname: nickname,
+      firstName: firstName,
+      lastName: lastName,
+    );
   }
 
   /// Υπόδειξη για όνομα/επώνυμο υπαλλήλου: να ξεκινά από γράμμα.
@@ -566,7 +601,10 @@ class CatalogValidationService {
     for (final user in users) {
       final label = _userLabel(user);
 
-      final lastNameHint = personNameHint(user.lastName ?? '');
+      final lastNameHint = this.lastNameHint(
+        lastName: user.lastName ?? '',
+        firstName: user.firstName ?? '',
+      );
       if (lastNameHint != null) {
         add(
           kind: CatalogEntityKind.user,
@@ -590,6 +628,22 @@ class CatalogValidationService {
             label: label,
             fieldLabel: 'Ψευδώνυμο',
             message: nicknameHint,
+            focusedField: 'nickname',
+          );
+        }
+      } else {
+        final repeated = nicknameHint(
+          nickname: user.nickname ?? '',
+          firstName: user.firstName ?? '',
+          lastName: user.lastName ?? '',
+        );
+        if (repeated != null) {
+          add(
+            kind: CatalogEntityKind.user,
+            entityId: user.id!,
+            label: label,
+            fieldLabel: 'Ψευδώνυμο',
+            message: repeated,
             focusedField: 'nickname',
           );
         }

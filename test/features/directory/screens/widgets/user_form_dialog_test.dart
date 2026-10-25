@@ -10,6 +10,7 @@ import 'package:call_logger/core/utils/phone_list_parser.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:call_logger/features/calls/models/user_model.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:call_logger/features/directory/providers/catalog_validation_provider.dart';
 import 'package:call_logger/features/directory/providers/directory_provider.dart';
 import 'package:call_logger/features/directory/screens/widgets/user_form_dialog.dart';
@@ -345,6 +346,110 @@ void main() {
           isEmpty,
           reason: greekExpectMsg(
             'Το άδειασμα της Τοποθεσίας γράφεται στη βάση',
+          ),
+        );
+      },
+    );
+
+    testWidgets(
+      'υπάλληλος εταιρείας: το αναγνωριστικό Lansweeper κρύβεται, αναφέρεται και μένει φυλαγμένο',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+
+        late DirectoryNotifier notifier;
+        late UserModel initial;
+        late int dataMedId;
+        await tester.runAsync(() async {
+          // Ο Δαμωράκης μεταφέρθηκε στη DataMed κρατώντας το αναγνωριστικό
+          // που είχε στο νοσοκομείο. Η βάση στήνεται πριν φορτωθούν τα τμήματα
+          // στη μνήμη, ώστε η φόρμα να ξέρει ότι η DataMed είναι εταιρεία.
+          // Δικός του υπάλληλος, όχι ο κοινός: σε αυτό το αρχείο η βάση δεν
+          // ξαναστήνεται ανάμεσα στα τεστ.
+          final db = await DatabaseHelper.instance.database;
+          dataMedId = await db.insert('departments', {
+            'name': 'DataMed',
+            'name_key': SearchTextNormalizer.normalizeForSearch('DataMed'),
+            'kind': DepartmentKind.company.dbValue,
+            'is_deleted': 0,
+          });
+          await db.insert('users', {
+            'first_name': 'Γιώργος',
+            'last_name': 'Δαμωράκης',
+            'department_id': dataMedId,
+            'lansweeper_username': r'gnk\g.damorakis',
+            'is_deleted': 0,
+          });
+          await container.read(lookupServiceProvider.future);
+          notifier = container.read(directoryProvider.notifier);
+          await notifier.loadUsers();
+          initial = notifier.allUsersForUi.firstWhere(
+            (u) => u.lastName == 'Δαμωράκης',
+          );
+          await _openUserFormInDialog(
+            tester,
+            container,
+            initialUser: initial,
+            notifier: notifier,
+          );
+        });
+
+        expect(
+          _fieldByLabel('Αναγνωριστικό Lansweeper'),
+          findsNothing,
+          reason: greekExpectMsg(
+            'Σε υπάλληλο εταιρείας το πεδίο δεν εμφανίζεται',
+          ),
+        );
+        expect(
+          find.text(
+            r'Ο υπάλληλος έχει αναγνωριστικό στο νοσοκομείο gnk\g.damorakis',
+          ),
+          findsOneWidget,
+          reason: greekExpectMsg(
+            'Το φυλαγμένο αναγνωριστικό αναφέρεται στη θέση του πεδίου',
+          ),
+        );
+
+        await tester.enterText(_notesField(), 'Συνεργάτης DataMed');
+        await pumpUntilSettled(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Αποθήκευση'));
+        await pumpUntilSettled(tester);
+        await _pumpUntilUserSaveCompletes(tester);
+
+        final stored = await tester.runAsync(() async {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            'users',
+            columns: ['lansweeper_username', 'notes'],
+            where: 'id = ?',
+            whereArgs: [initial.id],
+            limit: 1,
+          );
+          final row = rows.first;
+          await db.delete('users', where: 'id = ?', whereArgs: [initial.id]);
+          await db.delete(
+            'departments',
+            where: 'id = ?',
+            whereArgs: [dataMedId],
+          );
+          return row;
+        });
+        expect(stored!['notes'], 'Συνεργάτης DataMed');
+        expect(
+          stored['lansweeper_username'],
+          r'gnk\g.damorakis',
+          reason: greekExpectMsg(
+            'Η αποθήκευση δεν σβήνει το κρυμμένο αναγνωριστικό',
           ),
         );
       },

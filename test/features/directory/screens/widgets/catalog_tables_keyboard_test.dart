@@ -15,6 +15,7 @@ import 'package:call_logger/features/directory/models/department_directory_colum
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/models/equipment_column.dart';
 import 'package:call_logger/features/directory/models/user_directory_column.dart';
+import 'package:call_logger/features/directory/screens/widgets/catalog_table_chrome.dart';
 import 'package:call_logger/features/directory/screens/widgets/categories_data_table.dart';
 import 'package:call_logger/features/directory/screens/widgets/departments_data_table.dart';
 import 'package:call_logger/features/directory/screens/widgets/equipment_data_table.dart';
@@ -383,6 +384,41 @@ void main() {
 
         expect(h.selected, {2});
         expect(h.log, ['delete']);
+      });
+
+      if (kind.hasPages) {
+        testWidgets('τα κουμπιά σελίδων πηγαίνουν μπρος, στο τέλος και πίσω', (
+          t,
+        ) async {
+          await _pump(t, kind, continuous: false);
+
+          Future<void> tapPager(String tooltip) async {
+            await t.tap(find.byTooltip(tooltip));
+            await t.pumpAndSettle();
+          }
+
+          await tapPager('Επόμενη');
+          expect(find.text('16–30 από $_rows'), findsOneWidget);
+          await tapPager('Τελευταία σελίδα');
+          expect(find.text('31–40 από $_rows'), findsOneWidget);
+          await tapPager('Προηγούμενη');
+          expect(find.text('16–30 από $_rows'), findsOneWidget);
+          await tapPager('Πρώτη σελίδα');
+          expect(find.text('1–15 από $_rows'), findsOneWidget);
+        });
+      }
+
+      testWidgets('το τράβηγμα της λαβής φαρδαίνει τη στήλη', (t) async {
+        await _pump(t, kind, continuous: true);
+        // Τραβάμε την προτελευταία λαβή· η τελευταία πρέπει να πάει δεξιά.
+        final handles = find.byType(CatalogColumnResizeHandle);
+        final count = handles.evaluate().length;
+        final before = t.getCenter(handles.at(count - 1)).dx;
+
+        await t.drag(handles.at(count - 2), const Offset(60, 0));
+        await t.pumpAndSettle();
+
+        expect(t.getCenter(handles.at(count - 1)).dx, greaterThan(before + 10));
       });
 
       testWidgets('το Backspace δεν διαγράφει τίποτα', (t) async {

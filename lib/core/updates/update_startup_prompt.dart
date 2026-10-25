@@ -11,9 +11,15 @@ import 'update_providers.dart';
 /// Μία εμφάνιση popup ενημέρωσης ανά συνεδρία εφαρμογής.
 bool _updateStartupPromptShownThisSession = false;
 
+/// Το πρώτο αποτέλεσμα ελέγχου της συνεδρίας — αυτό της εκκίνησης. Ό,τι έρθει
+/// μετά (ωριαίος έλεγχος, «Έλεγχος ξανά») βρίσκει τον χρήστη στη μέση της
+/// δουλειάς, όπου η ερώτηση επανεκκίνησης μένει.
+UpdateCheckResult? _startupCheckResult;
+
 @visibleForTesting
 void resetUpdateStartupPromptSessionForTests() {
   _updateStartupPromptShownThisSession = false;
+  _startupCheckResult = null;
 }
 
 /// Ακούει τον [updateCheckProvider] και εμφανίζει το μήνυμα ενημέρωσης στην εκκίνηση.
@@ -43,6 +49,8 @@ class _UpdateStartupPromptListenerState
   }
 
   Future<void> _maybeShow(UpdateCheckResult result) async {
+    _startupCheckResult ??= result;
+    final atStartup = identical(result, _startupCheckResult);
     if (_updateStartupPromptShownThisSession) return;
     if (!result.updateAvailable || result.manifest == null) return;
 
@@ -53,7 +61,7 @@ class _UpdateStartupPromptListenerState
     if (_updateStartupPromptShownThisSession) return;
 
     _updateStartupPromptShownThisSession = true;
-    await showUpdateAvailableDialog(context, result);
+    await showUpdateAvailableDialog(context, result, atStartup: atStartup);
   }
 
   @override

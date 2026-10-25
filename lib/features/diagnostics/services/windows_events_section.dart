@@ -1,5 +1,6 @@
 import '../models/windows_events.dart';
 import 'report_format.dart';
+import 'windows_event_collector.dart';
 
 /// Η ενότητα «Συμβάντα Windows» του αρχείου διαγνωστικών.
 ///
@@ -98,6 +99,24 @@ void writeWindowsEventsSection(
   }
   out.writeln();
 
+  final sleeps = report.sleepAndWake
+      .where((e) => !WindowsEventCollector.isWake(e))
+      .length;
+  out
+    ..writeln('### Ύπνος και αφύπνιση')
+    ..writeln()
+    ..writeln(
+      '- **Στην περίοδο:** $sleeps ${sleeps == 1 ? 'φορά' : 'φορές'} ύπνος, '
+      '${report.sleepAndWake.length - sleeps} αφυπνίσεις.',
+    );
+  for (final event in report.sleepAndWake) {
+    out.writeln(
+      '- ${reportMoment(event.time)} · ${_sleepWakeLabel(event)} · '
+      '${oneLine(event.message)}',
+    );
+  }
+  out.writeln();
+
   out
     ..writeln('### Υπόλοιπα συμβάντα, ομαδοποιημένα ανά είδος')
     ..writeln();
@@ -127,6 +146,10 @@ void writeWindowsEventsSection(
 /// Τα κανονικά ανοίγματα και κλεισίματα του υπολογιστή είναι ρουτίνα· στο
 /// χρονολόγιο μπαίνουν μόνο όταν πέφτουν μέσα σε κάποιο από τα [appGaps]
 /// — τότε εξηγούν ένα απότομο τέλος της εφαρμογής.
+///
+/// Ο ύπνος και η αφύπνιση μπαίνουν **όλα** (απόφαση 22/10/2026): ένα πάγωμα
+/// μετά από αδράνεια συχνά δεν αφήνει καν σφάλμα, οπότε ένα φίλτρο «μόνο
+/// κοντά σε σφάλματα» θα έκρυβε ακριβώς τις περιπτώσεις που ψάχνουμε.
 List<(DateTime, String)> windowsTimelineEntries(
   WindowsEventsReport report, {
   required bool Function(DateTime moment) include,
@@ -143,7 +166,17 @@ List<(DateTime, String)> windowsTimelineEntries(
     if (include(event.time) &&
         (!_isRoutine(event) || _insideAnyGap(event.time, appGaps)))
       (event.time, 'WINDOWS · ${_lifecycleLabel(event)}'),
+  for (final event in report.sleepAndWake)
+    if (include(event.time))
+      (
+        event.time,
+        'WINDOWS · ${_sleepWakeLabel(event)}'
+            '${WindowsEventCollector.isWake(event) ? ' — ${oneLine(event.message, max: 160)}' : ''}',
+      ),
 ];
+
+String _sleepWakeLabel(WindowsEventEntry event) =>
+    WindowsEventCollector.isWake(event) ? 'αφύπνιση' : 'ύπνος';
 
 /// Κανονικό άνοιγμα ή κλείσιμο του υπολογιστή — συμβαίνει καθημερινά.
 bool _isRoutine(WindowsEventEntry event) =>

@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
+import '../../../core/providers/ai_model_health_provider.dart';
 import '../../../core/database/knowledge_base_repository.dart';
 import '../models/knowledge_article.dart';
+import '../services/knowledge_improve_runner.dart';
 
 /// Το κείμενο αναζήτησης της οθόνης Βάσης Γνώσης.
 class KnowledgeSearchNotifier extends Notifier<String> {
@@ -101,16 +103,22 @@ class KnowledgeActionsNotifier extends Notifier<void> {
     await (await _repo).deleteArticle(id);
     _bumpRevision();
   }
-
-  /// Σημειώνει ότι τα άρθρα βοήθησαν σε πραγματικό περιστατικό.
-  Future<void> markUsed(List<int> articleIds) async {
-    if (articleIds.isEmpty) return;
-    await (await _repo).markUsed(articleIds);
-    _bumpRevision();
-  }
 }
 
 final knowledgeActionsProvider =
     NotifierProvider<KnowledgeActionsNotifier, void>(
       KnowledgeActionsNotifier.new,
     );
+
+/// Η «Βελτίωση με ΤΝ» όπως την καλεί η φόρμα άρθρου — αντικαθίσταται στα
+/// τεστ, ώστε η φόρμα να δοκιμάζεται χωρίς δίκτυο.
+typedef KnowledgeImproveRunner =
+    Future<KnowledgeImproveOutcome> Function(KnowledgeImproveInput input);
+
+final knowledgeImproveRunnerProvider = Provider<KnowledgeImproveRunner>(
+  (ref) =>
+      (input) => runKnowledgeImprove(
+        input,
+        registry: ref.read(aiModelCooldownRegistryProvider),
+      ),
+);

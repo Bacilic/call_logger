@@ -10,6 +10,9 @@ class AuditFilterModel {
   });
 
   final String keyword;
+
+  /// Η ετικέτα της οθόνης («Υπάλληλος - Διαγραφή»), όχι η ωμή ενέργεια της
+  /// βάσης: η ίδια λέξη «ΔΙΑΓΡΑΦΗ» αφορά πολλές οντότητες.
   final String? action;
   final String? entityType;
 

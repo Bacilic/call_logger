@@ -1,9 +1,9 @@
 import 'calls_field_groups.dart';
 
-/// Layout templates from design doc section 8 (Α/Β/Γ/Δ).
+/// Layout templates Α/Β/Γ/Δ of `UI layout mockup/Διάταξη Οθόνης Κλήσεων.html`.
 enum CallsLayoutTemplate { a, b, c, d }
 
-/// Selects template from active groups (design doc 8.6).
+/// Selects template from active groups (section 8.6 of the same page).
 class CallsLayoutTemplateSelector {
   const CallsLayoutTemplateSelector._();
 

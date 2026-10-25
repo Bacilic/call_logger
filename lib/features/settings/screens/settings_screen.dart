@@ -9,12 +9,14 @@ import '../../../core/models/app_permission.dart';
 import '../../../core/models/calls_screen_cards_visibility.dart';
 import '../../../core/models/window_placement_mode.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/database/database_busy_timeout.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/providers/settings_route_intent_provider.dart';
 import '../../../core/services/crash_log_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/shutdown_trace_incident.dart';
 import '../../../core/services/station_name.dart';
+import '../../../core/widgets/info_hint_icon.dart';
 import '../../../core/widgets/quick_call_fab.dart';
 import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/services/settings_service.dart';
@@ -28,6 +30,17 @@ import '../widgets/shutdown_incident_dialog.dart';
 import '../widgets/shutdown_incident_notice.dart';
 import '../widgets/start_from_beginning_flow.dart';
 import '../widgets/update_folder_setting_field.dart';
+
+/// Η επεξήγηση (i) της ενότητας «Αναμονή βάσης δεδομένων».
+const String _databaseWaitExplanation =
+    'Όταν η εφαρμογή ανοίγει τη βάση δεδομένων και τη βρίσκει πιασμένη '
+    '(π.χ. την κρατά συνάδελφος που αποθηκεύει εκείνη τη στιγμή), περιμένει '
+    'να ελευθερωθεί αντί να τα παρατήσει.\n'
+    'Αναμονή: πόσα δευτερόλεπτα περιμένει σε κάθε προσπάθεια.\n'
+    'Προσπάθειες: πόσες φορές ξαναδοκιμάζει πριν δείξει μήνυμα σφάλματος.\n'
+    'Μεγαλύτερες τιμές βοηθούν σε αργό δίκτυο ή όταν πολλοί σταθμοί δουλεύουν '
+    'μαζί· μικρότερες δείχνουν νωρίτερα το σφάλμα όταν η βάση πραγματικά δεν '
+    'απαντά.';
 
 /// Οθόνη ρυθμίσεων: γενικές επιλογές εφαρμογής (η διαδρομή βάσης είναι στον περιηγητή βάσης).
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -279,13 +292,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     String? timeoutError;
     String? attemptsError;
+    final minTimeout = minimumDatabaseOpenTimeoutSeconds(network: false);
+    final minNetworkTimeout = minimumDatabaseOpenTimeoutSeconds(network: true);
 
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setLocalState) => AlertDialog(
-            title: const Text('Άνοιγμα βάσης δεδομένων'),
+            title: const Text('Αναμονή βάσης δεδομένων'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -294,11 +309,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   controller: timeoutController,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: 'Timeout (δευτερόλεπτα)',
+                    labelText: 'Αναμονή σε δευτερόλεπτα',
                     helperText:
-                        'Εύρος: 3-60. Προεπιλογή: ${AppConfig.databaseOpenTimeoutSeconds}. '
-                        'Σε βάση δικτύου ισχύει μεγαλύτερο ελάχιστο, ώστε να προλαβαίνει '
-                        'η αναμονή όταν τη βάση την κρατά συνάδελφος.',
+                        'Εύρος: $minTimeout-60. Προεπιλογή: ${AppConfig.databaseOpenTimeoutSeconds}. '
+                        'Σε βάση δικτύου η αναμονή είναι τουλάχιστον '
+                        '$minNetworkTimeout δευτερόλεπτα, ώστε να προλαβαίνει '
+                        'όταν τη βάση την κρατά συνάδελφος.',
+                    helperMaxLines: 4,
                     errorText: timeoutError,
                   ),
                 ),
@@ -346,8 +363,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   final attempts = int.tryParse(attemptsController.text.trim());
                   String? timeoutValidation;
                   String? attemptsValidation;
-                  if (timeout == null || timeout < 3 || timeout > 60) {
-                    timeoutValidation = 'Δώστε έγκυρη τιμή 3-60 δευτερόλεπτα.';
+                  if (timeout == null || timeout < minTimeout || timeout > 60) {
+                    timeoutValidation =
+                        'Δώστε έγκυρη τιμή $minTimeout-60 δευτερόλεπτα.';
                   }
                   if (attempts == null || attempts < 1 || attempts > 5) {
                     attemptsValidation = 'Δώστε έγκυρο πλήθος 1-5.';
@@ -496,19 +514,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ρυθμίσεις')),
-      floatingActionButton: const QuickCallFloatingButton(
-        scope: QuickCallFabScope.overlayRoute,
-      ),
+      floatingActionButton: const QuickCallFloatingButton(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Αναμονή βάσης δεδομένων',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+            Row(
+              children: [
+                Text(
+                  'Αναμονή βάσης δεδομένων',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const InfoHintIcon(message: _databaseWaitExplanation),
+              ],
             ),
             const SizedBox(height: 8),
             ListTile(
@@ -519,7 +541,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               title: const Text('Αναμονή και Προσπάθειες'),
               subtitle: Text(
-                'Αναμονή: $_databaseOpenTimeoutSeconds δευτ. • Προσπάθειες: $_databaseOpenMaxAttempts',
+                '${databaseOpenWaitLabel(_databasePath, configuredSeconds: _databaseOpenTimeoutSeconds)} '
+                '• Προσπάθειες: $_databaseOpenMaxAttempts',
               ),
               trailing: const Icon(Icons.edit_outlined),
               onTap: _editDatabaseOpenSettings,

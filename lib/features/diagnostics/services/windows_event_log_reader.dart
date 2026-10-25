@@ -100,6 +100,7 @@ WindowsEventsReport readWindowsEventsSync(WindowsEventsRequest request) {
     levels: request.levels,
     appEvents: collector.appEvents,
     computerLifecycle: collector.computerLifecycle,
+    sleepAndWake: collector.sleepAndWake,
     groups: collector.groups,
     oldestByLog: oldest,
     failure: problems.isEmpty ? null : problems.join(' · '),
@@ -116,11 +117,16 @@ String _query(String log, WindowsEventsRequest request) {
     if (log == 'Application')
       "Provider[@Name='Application Error' or @Name='Application Hang' or "
           "@Name='Windows Error Reporting']",
+    // Κάθε αριθμός μόνο στη δική του πηγή: το «EventID=1» σκέτο θα έφερνε
+    // και κάθε αλλαγή ώρας του συστήματος, που απλώς θα πετιόταν.
     if (log == 'System')
-      [
-        for (final ids in WindowsEventCollector.lifecycleEvents.values)
-          for (final id in ids) 'EventID=$id',
-      ].join(' or '),
+      for (final events in [
+        WindowsEventCollector.lifecycleEvents,
+        WindowsEventCollector.sleepWakeEvents,
+      ])
+        for (final MapEntry(key: provider, value: ids) in events.entries)
+          "(Provider[@Name='$provider'] and "
+              "(${ids.map((id) => 'EventID=$id').join(' or ')}))",
   ];
   return "*[System[(${wanted.join(' or ')}) and "
       "TimeCreated[@SystemTime>='$from' and @SystemTime<'$to']]]";

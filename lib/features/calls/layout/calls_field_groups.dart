@@ -105,7 +105,7 @@ class CallsFieldGroupsResolver {
   }
 }
 
-/// Screen title per design doc section 2 — independent from group gates.
+/// Screen title per section 2 of `UI layout mockup/Διάταξη Οθόνης Κλήσεων.html` — independent from group gates.
 class CallsScreenTitleResolver {
   const CallsScreenTitleResolver._();
 

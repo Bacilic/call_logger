@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/utils/text_layout_utils.dart';
 import '../models/department_model.dart';
 import 'building_map_effective_shape.dart';
+import 'building_map_geometry.dart';
 import 'providers/building_map_providers.dart';
 
 /// Μέγιστες γραμμές ετικέτας χάρτη (συμπ. ρητές αλλαγές γραμμής με Shift+Enter).
@@ -319,17 +320,6 @@ class MapLabelLayout {
   ];
 }
 
-Offset _rotateAroundCenter(Offset p, Offset center, double radians) {
-  final dx = p.dx - center.dx;
-  final dy = p.dy - center.dy;
-  final c = math.cos(radians);
-  final s = math.sin(radians);
-  return Offset(
-    center.dx + (dx * c) - (dy * s),
-    center.dy + (dx * s) + (dy * c),
-  );
-}
-
 /// Επιστρέφει null αν το τμήμα δεν σχεδιάζεται σε αυτό το φύλλο ή λείπει γεωμετρία.
 MapLabelLayout? computeMapLabelLayout({
   required DepartmentModel dep,
@@ -369,7 +359,7 @@ MapLabelLayout? computeMapLabelLayout({
     r.center.dy + ((effectiveLabelOffsetY ?? 0.0) * canvasSize.height),
   );
   final canvasCenter = Offset(canvasSize.width / 2, canvasSize.height / 2);
-  final labelCenter = _rotateAroundCenter(
+  final labelCenter = rotateAroundCenter(
     labelCenterBeforeSheetRotation,
     canvasCenter,
     sheetRotationRadians,

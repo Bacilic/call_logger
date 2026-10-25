@@ -90,6 +90,16 @@ enum AppPermission {
     allowedByDefault: true,
     enforced: true,
   ),
+
+  /// Κλειστό από προεπιλογή (απόφαση Διευθυντή 23/10/2026): το ποσοστό το
+  /// ορίζει ο διαχειριστής για όλους. Όποιος το ανεβάζει στο 90% αφαιρεί τη
+  /// ζώνη ασφαλείας από τις μαζικές διαγραφές κάθε σταθμού.
+  manageMassDeletionWarning(
+    key: 'manage_mass_deletion_warning',
+    label: 'Όριο προειδοποίησης μαζικής διαγραφής',
+    allowedByDefault: false,
+    enforced: true,
+  ),
   manageAuditRetention(
     key: 'manage_audit_retention',
     label: 'Πολιτική εκκαθάρισης Ιστορικού',

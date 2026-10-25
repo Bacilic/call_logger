@@ -135,12 +135,16 @@ void main() {
         _host(
           const LansweeperSubmitStatusBar(
             connection: LansweeperConnectionAvailable(),
+            selectedCallId: 836,
           ),
         ),
       );
       final notifier = _notifier(tester);
 
-      notifier.begin(const [LansweeperSubmitStepKeys.ticket]);
+      notifier.begin(
+        const [LansweeperSubmitStepKeys.ticket],
+        callIds: const [836],
+      );
       notifier.stepStarted(LansweeperSubmitStepKeys.ticket);
       notifier.finish(
         success: false,

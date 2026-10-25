@@ -3,6 +3,7 @@
 //   flutter test test/core/services/settings_service_split_characterization_test.dart
 
 import 'package:call_logger/core/config/app_config.dart';
+import 'package:call_logger/core/database/database_busy_timeout.dart';
 import 'package:call_logger/core/services/settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -81,6 +82,22 @@ void main() {
       await settings.catalogs.setDatabaseOpenTimeoutSeconds(15);
       expect(await settings.catalogs.getDatabaseOpenTimeoutSeconds(), 15);
     });
+
+    test(
+      'catalogs: παλιά αποθηκευμένη αναμονή κάτω από το ελάχιστο διαβάζεται ως το ελάχιστο',
+      () async {
+        final settings = SettingsService();
+        await settings.catalogs.setDatabaseOpenTimeoutSeconds(5);
+
+        expect(
+          await settings.catalogs.getDatabaseOpenTimeoutSeconds(),
+          minimumDatabaseOpenTimeoutSeconds(network: false),
+          reason:
+              'η εφαρμογή περιμένει έτσι κι αλλιώς τουλάχιστον τόσο· η '
+              'ένδειξη στις Ρυθμίσεις δεν επιτρέπεται να λέει λιγότερο',
+        );
+      },
+    );
 
     test(
       'clearAllPreferencesForCurrentProfile: διατηρεί ξένα profile_ κλειδιά χωρίς ενεργό προφίλ',

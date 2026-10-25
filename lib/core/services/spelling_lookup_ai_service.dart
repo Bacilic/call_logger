@@ -18,6 +18,7 @@ abstract final class SpellingLookupAiService {
     required String word,
     required GeminiRuntimeSettings settings,
     required AiModelCooldownRegistry registry,
+    String template = '',
     http.Client? client,
   }) {
     return AiModelChainRunner(
@@ -29,6 +30,7 @@ abstract final class SpellingLookupAiService {
         word: word,
         apiKey: settings.apiKey,
         endpoint: settings.endpoint,
+        template: template,
         primaryModel: model,
         client: client,
       ),

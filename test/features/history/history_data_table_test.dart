@@ -5,6 +5,7 @@
 import 'package:call_logger/features/history/providers/history_provider.dart';
 import 'package:call_logger/features/history/widgets/history_data_table.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -112,4 +113,28 @@ void main() {
     await tester.pump();
     expect(container.read(historySelectedCallIdsProvider), isEmpty);
   });
+
+  testWidgets(
+    'κλικ σε γραμμή δίνει τα πλήκτρα· ↓ πάει στην επόμενη και Space βάζει τικ',
+    (tester) async {
+      final container = await _pump(tester);
+
+      await tester.tap(find.text('Δεν τυπώνει'));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+
+      expect(
+        container.read(historySelectedCallIdsProvider),
+        {2},
+        reason: 'Το ↓ από την κλήση 1 πάει στην 2, και το Space την τσεκάρει.',
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      expect(container.read(historySelectedCallIdsProvider), isEmpty);
+    },
+  );
 }

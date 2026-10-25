@@ -230,7 +230,7 @@ class _UpdateCheckStatusLabel extends StatelessWidget {
       final failure = result?.failure;
       if (failure != null) {
         return Text(
-          'Δεν είναι δυνατός ο έλεγχος νέας έκδοσης, επειδή ${failure.reason}',
+          failure.message,
           key: const Key('changelog_update_check_status'),
           style: style?.copyWith(color: Theme.of(context).colorScheme.error),
           maxLines: 2,

@@ -38,8 +38,15 @@ class SessionLivenessKeeper {
       );
       // Ίχνος που δεν διαβάζεται (αλλοιωμένο, ή γραμμένο από έκδοση που δεν
       // κρατούσε τίποτα) εξακολουθεί να είναι είδηση: κάτι χάθηκε. Λέμε ό,τι
-      // ξέρουμε, χωρίς να εφευρίσκουμε λεπτομέρειες.
-      await host.recordLostRun(previous);
+      // ξέρουμε, χωρίς να εφευρίσκουμε λεπτομέρειες — εκτός αν η ίδια εκείνη
+      // εκτέλεση άφησε τοπικά ότι έκλεισε κανονικά, με σβηστό διακομιστή.
+      final closedCleanly =
+          await host.cleanExitNote?.consumeMatches(_runSlug, previous) ?? false;
+      if (!closedCleanly) await host.recordLostRun(previous);
+    } else {
+      // Σημείωμα χωρίς ίχνος: ο φάκελος γύρισε και το ίχνος σβήστηκε αλλιώς.
+      // Φεύγει, ώστε να μη σκεπάσει ποτέ μελλοντική κατάρρευση.
+      await host.cleanExitNote?.consumeMatches(_runSlug, null);
     }
     await _retireMarkFromPreviousNamingScheme(timeout);
     _currentMark = SessionLivenessMark(
@@ -97,9 +104,13 @@ class SessionLivenessKeeper {
   /// συνεχώς, και ένας χρονιστής που ξεκινά μόνος του θα κρεμούσε ελέγχους με
   /// πλαστό ρολόι ή θα διέρρεε πέρα από το τέλος τους. Στην εφαρμογή καλείται
   /// μία φορά, αμέσως μετά το άνοιγμα του ημερολογίου.
+  ///
+  /// **Ξεκινά και με σιωπηλό φάκελο.** Όσο η σιωπή κρατά από την εκκίνηση, ο
+  /// παλμός δεν κάνει τίποτα ([pulse]). Η εκκίνηση όμως συχνά καταλήγει σε
+  /// άλλη βάση που απαντά ([CrashLogService.retargetTo]), και χωρίς παλμό η
+  /// εφαρμογή θα έμενε αόρατη στους συναδέλφους για όλη τη συνεδρία.
   void start() {
     stop();
-    if (!host.isDiskAvailable) return;
     _livenessTimer = Timer.periodic(
       CrashLogService.livenessInterval,
       (_) => unawaited(pulse()),
@@ -110,6 +121,8 @@ class SessionLivenessKeeper {
     _livenessTimer?.cancel();
     _livenessTimer = null;
   }
+
+  bool get isRunning => _livenessTimer != null;
 
   /// Τι κάνει η εφαρμογή όταν κάποιος της ζητά να κλείσει.
   ///
@@ -232,6 +245,20 @@ class SessionLivenessKeeper {
     _currentMark = mark;
     await host.writeLivenessMark(_sessionLockFile().path, mark.encode());
   }
+
+  /// Το ομαλό κλείσιμο δεν μπόρεσε να σβήσει το ίχνος: το λέει τοπικά στην
+  /// επόμενη εκκίνηση — δες [CleanExitNote].
+  Future<void> noteCleanExit() async {
+    final mark = _currentMark;
+    final note = host.cleanExitNote;
+    if (mark == null || note == null) return;
+    await note.write(_runSlug, mark);
+  }
+
+  /// Ποια εκτέλεση — ίδιο κλειδί με το όνομα του ίχνους.
+  String get _runSlug => host.instanceId.isEmpty
+      ? StationName.fileSafe
+      : CrashLogService.instanceSlug(host.instanceId);
 
   /// Σβήνει το ίχνος — στο ομαλό κλείσιμο και πριν από κάθε μετακόμιση.
   Future<void> remove() async {

@@ -4,6 +4,8 @@ import '../../../../core/widgets/compact_tooltip.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../services/department_deletion_inventory.dart';
 import '../../services/department_deletion_messages.dart';
+import '../../services/mass_deletion_guard.dart';
+import 'mass_deletion_warning.dart';
 
 /// Επιλογή μετά την προεπισκόπηση διαγραφής τμήματος.
 enum DepartmentDeletionChoice { cancel, detailed, quickAll }
@@ -33,18 +35,27 @@ const Duration _kTooltipDuration = Duration(seconds: 10);
 Future<DepartmentDeletionPreviewResult?> showDepartmentDeletionPreviewDialog({
   required BuildContext context,
   required List<DepartmentDeletionInventory> inventories,
+  MassDeletionContext? massDeletion,
 }) {
   return showDialog<DepartmentDeletionPreviewResult>(
     context: context,
-    builder: (ctx) =>
-        _DepartmentDeletionPreviewDialog(initialInventories: inventories),
+    builder: (ctx) => _DepartmentDeletionPreviewDialog(
+      initialInventories: inventories,
+      massDeletion: massDeletion,
+    ),
   );
 }
 
 class _DepartmentDeletionPreviewDialog extends StatefulWidget {
-  const _DepartmentDeletionPreviewDialog({required this.initialInventories});
+  const _DepartmentDeletionPreviewDialog({
+    required this.initialInventories,
+    this.massDeletion,
+  });
 
   final List<DepartmentDeletionInventory> initialInventories;
+
+  /// Χωρίς αυτό ο διάλογος δεν προειδοποιεί για το μέγεθος της διαγραφής.
+  final MassDeletionContext? massDeletion;
 
   @override
   State<_DepartmentDeletionPreviewDialog> createState() =>
@@ -54,6 +65,9 @@ class _DepartmentDeletionPreviewDialog extends StatefulWidget {
 class _DepartmentDeletionPreviewDialogState
     extends State<_DepartmentDeletionPreviewDialog> {
   late List<DepartmentDeletionInventory> _kept;
+
+  /// Ό,τι έχει γραφτεί στο πεδίο της λέξης — μόνο για ολόκληρο κατάλογο.
+  String _typedWord = '';
 
   @override
   void initState() {
@@ -88,6 +102,12 @@ class _DepartmentDeletionPreviewDialogState
         totals.sharedPhoneCount + totals.sharedEquipmentCount;
     final rows = buildDepartmentDeletionPreviewRows(_kept);
     final canRemove = _kept.length > 1;
+    final massDeletion = widget.massDeletion;
+    // Και τα τρία κουμπιά οδηγούν σε διαγραφή — η λέξη τα κλειδώνει όλα.
+    final confirmAllowed = massDeletionConfirmAllowed(
+      massDeletion?.levelFor(_kept.length) ?? MassDeletionLevel.none,
+      _typedWord,
+    );
 
     return DraggableDialogShell(
       title: const Text('Τι θα συμβεί'),
@@ -99,6 +119,12 @@ class _DepartmentDeletionPreviewDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (massDeletion != null)
+                MassDeletionWarning(
+                  massDeletion: massDeletion,
+                  deleting: _kept.length,
+                  onTypedWordChanged: (v) => setState(() => _typedWord = v),
+                ),
               // Σύνοψη και προειδοποίηση μένουν σταθερές: με πολλά τμήματα ο
               // χρήστης πρέπει να ξέρει το μέγεθος της πράξης χωρίς να κυλήσει.
               //
@@ -152,7 +178,9 @@ class _DepartmentDeletionPreviewDialogState
               waitDuration: _kTooltipDelay,
               showDuration: _kTooltipDuration,
               child: TextButton(
-                onPressed: () => _pop(DepartmentDeletionChoice.detailed),
+                onPressed: confirmAllowed
+                    ? () => _pop(DepartmentDeletionChoice.detailed)
+                    : null,
                 child: const Text('Αναλυτικά (ανά οντότητα)'),
               ),
             ),
@@ -163,7 +191,9 @@ class _DepartmentDeletionPreviewDialogState
               waitDuration: _kTooltipDelay,
               showDuration: _kTooltipDuration,
               child: FilledButton(
-                onPressed: () => _pop(DepartmentDeletionChoice.quickAll),
+                onPressed: confirmAllowed
+                    ? () => _pop(DepartmentDeletionChoice.quickAll)
+                    : null,
                 child: const Text('Μεταφορά όλων σε ένα τμήμα…'),
               ),
             ),
@@ -175,7 +205,9 @@ class _DepartmentDeletionPreviewDialogState
               waitDuration: _kTooltipDelay,
               showDuration: _kTooltipDuration,
               child: FilledButton(
-                onPressed: () => _pop(DepartmentDeletionChoice.detailed),
+                onPressed: confirmAllowed
+                    ? () => _pop(DepartmentDeletionChoice.detailed)
+                    : null,
                 child: const Text('Διαγραφή'),
               ),
             ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/audit_action_labels.dart';
 import '../../../core/database/audit_service.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../audit/models/audit_log_model.dart';
@@ -137,9 +138,12 @@ class AuditEntitySidePanel extends ConsumerWidget {
             : AuditEntityTypes.maintenance,
         showPreviewTitle: false,
         preview: AuditEntityPreview(
-          title:
-              entry.action ??
-              (isBackup ? 'Αντίγραφο ασφαλείας' : 'Συντήρηση βάσης'),
+          title: auditActionLabelEl(
+            entityType: isBackup
+                ? AuditEntityTypes.backup
+                : AuditEntityTypes.maintenance,
+            action: entry.action,
+          ),
           lines: previewLines,
         ),
       );

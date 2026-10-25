@@ -104,10 +104,6 @@ class LansweeperReportKnowledge {
     }
 
     if (!host.mounted) return;
-    final id = await showKnowledgeArticleDialog(host.context, article: draft);
-    if (id == null || !host.mounted) return;
-    // Το άρθρο γεννήθηκε από πραγματικό περιστατικό — μετράει ως χρήση από την
-    // πρώτη στιγμή, αλλιώς η νέα γνώση φαίνεται για πάντα αδοκίμαστη.
-    await host.ref.read(knowledgeActionsProvider.notifier).markUsed(<int>[id]);
+    await showKnowledgeArticleDialog(host.context, article: draft);
   }
 }

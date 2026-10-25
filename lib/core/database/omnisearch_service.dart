@@ -4,6 +4,7 @@ import '../models/building_map_floor.dart';
 import '../utils/search_text_normalizer.dart';
 import 'building_map_repository.dart';
 import 'directory_support.dart';
+import '../utils/display_text_sort.dart';
 
 enum BuildingMapOmnisearchEntityKind { department, user, equipment }
 
@@ -147,7 +148,8 @@ class OmnisearchService {
     final floorById = {for (final f in floors) f.id: f};
     final floorIds = floorById.keys.toSet();
 
-    final deptRows = await db.rawQuery('''
+    final deptRows = sortedForDisplay(
+      await db.rawQuery('''
       SELECT
         id,
         name,
@@ -160,14 +162,16 @@ class OmnisearchService {
         map_height
       FROM departments
       WHERE ${DirectorySupport.notDeletedClause}
-      ORDER BY name COLLATE NOCASE ASC
-    ''');
+    '''),
+      (r) => [r['name'] as String?],
+    );
     final deptById = <int, Map<String, dynamic>>{
       for (final row in deptRows)
         if (row['id'] is int) row['id'] as int: row,
     };
 
-    final userRows = await db.rawQuery('''
+    final userRows = sortedForDisplay(
+      await db.rawQuery('''
       SELECT
         u.id AS id,
         u.first_name AS first_name,
@@ -181,8 +185,9 @@ class OmnisearchService {
       LEFT JOIN phones p ON p.id = up.phone_id
       WHERE COALESCE(u.is_deleted, 0) = 0
       GROUP BY u.id, u.first_name, u.last_name, u.department_id, d.name
-      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
-    ''');
+    '''),
+      (r) => [r['last_name'] as String?, r['first_name'] as String?],
+    );
 
     final userPhoneDeptRows = await db.rawQuery('''
       WITH phone_dept AS (
@@ -203,7 +208,8 @@ class OmnisearchService {
       ORDER BY up.user_id ASC, pd.department_id ASC
     ''');
 
-    final equipmentRows = await db.rawQuery('''
+    final equipmentRows = sortedForDisplay(
+      await db.rawQuery('''
       SELECT
         e.id AS id,
         e.code_equipment AS code_equipment,
@@ -214,12 +220,14 @@ class OmnisearchService {
       FROM equipment e
       LEFT JOIN departments d ON d.id = e.department_id
       WHERE COALESCE(e.is_deleted, 0) = 0
-      ORDER BY e.code_equipment COLLATE NOCASE ASC, e.type COLLATE NOCASE ASC
-    ''');
+    '''),
+      (r) => [r['code_equipment'] as String?, r['type'] as String?],
+    );
 
     // Κάτοχοι εξοπλισμού (M2M) με το τμήμα τους: «ποιος και πού» για τον χάρτη,
     // αφού ο εξοπλισμός συνήθως δένεται με τμήμα μέσω του κατόχου του.
-    final equipmentOwnerRows = await db.rawQuery('''
+    final equipmentOwnerRows = sortedForDisplay(
+      await db.rawQuery('''
       SELECT
         ue.equipment_id AS equipment_id,
         u.first_name AS first_name,
@@ -230,8 +238,9 @@ class OmnisearchService {
       JOIN users u ON u.id = ue.user_id AND COALESCE(u.is_deleted, 0) = 0
       LEFT JOIN departments d
         ON d.id = u.department_id AND COALESCE(d.is_deleted, 0) = 0
-      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
-    ''');
+    '''),
+      (r) => [r['last_name'] as String?, r['first_name'] as String?],
+    );
 
     final userPhoneDepartmentIds = <int, Set<int>>{};
     for (final row in userPhoneDeptRows) {

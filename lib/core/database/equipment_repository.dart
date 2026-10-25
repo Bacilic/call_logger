@@ -8,6 +8,7 @@ import 'audit_service.dart';
 import 'calls_search_index.dart';
 import 'database_helper.dart';
 import 'directory_support.dart';
+import '../utils/display_text_sort.dart';
 
 /// Persistence εξοπλισμού (`equipment`, `user_equipment`).
 ///
@@ -158,11 +159,13 @@ class EquipmentRepository {
       FROM user_equipment ue
       JOIN users u ON u.id = ue.user_id
       WHERE ue.equipment_id = ?
-      ORDER BY u.last_name COLLATE NOCASE ASC, u.first_name COLLATE NOCASE ASC
       ''',
       [equipmentId],
     );
-    for (final r in ownerRows) {
+    for (final r in sortedForDisplay(
+      ownerRows,
+      (r) => [r['last_name'] as String?, r['first_name'] as String?],
+    )) {
       final first = (r['first_name'] as String?)?.trim() ?? '';
       final last = (r['last_name'] as String?)?.trim() ?? '';
       final name = '$first $last'.trim();

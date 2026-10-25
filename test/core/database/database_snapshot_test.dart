@@ -96,12 +96,12 @@ void main() {
   test('όριο που λήγει ΜΕΣΑ στην αντιγραφή: σταματά, αφήνει το κλείδωμα, '
       'σβήνει το μισό αρχείο', () async {
     final path = await _createDb(tempDir, 'orio.db');
-    final before = _snapshotDirs();
     var clockReads = 0;
 
     await expectLater(
       takeDatabaseSnapshot(
         path,
+        tempRoot: tempDir,
         chunkSize: 4096,
         deadline: DateTime(2000, 6),
         // Πρώτη ανάγνωση (πριν από την αντιγραφή): εντός ορίου. Μετά το
@@ -114,7 +114,7 @@ void main() {
     expect(clockReads, 2, reason: 'πρέπει να σταμάτησε μετά το 1ο κομμάτι');
 
     expect(await _canWriteImmediately(path), isTrue);
-    expect(_snapshotDirs().difference(before), isEmpty);
+    expect(_snapshotDirs(tempDir), isEmpty);
   });
 
   test('βάση σε WAL: δεν αντιγράφεται, και το κλείδωμα αφήνεται', () async {
@@ -133,19 +133,21 @@ void main() {
     () async {
       final path = p.join(tempDir.path, 'Hospital.db');
       await File(path).writeAsString('Αυτό είναι απλό κείμενο.\n' * 500);
-      final before = _snapshotDirs();
 
       await expectLater(
-        takeDatabaseSnapshot(path),
+        takeDatabaseSnapshot(path, tempRoot: tempDir),
         throwsA(isA<DatabaseException>()),
       );
 
-      expect(_snapshotDirs().difference(before), isEmpty);
+      expect(_snapshotDirs(tempDir), isEmpty);
     },
   );
 }
 
-Set<String> _snapshotDirs() => Directory.systemTemp
+/// Οι φάκελοι στιγμιότυπου μέσα στον **δικό** φάκελο του τεστ — όχι στον
+/// κοινό προσωρινό φάκελο, όπου στην πλήρη σουίτα φτιάχνουν τέτοιους και
+/// άλλα τεστ την ίδια στιγμή.
+Set<String> _snapshotDirs(Directory root) => root
     .listSync()
     .whereType<Directory>()
     .map((d) => d.path)

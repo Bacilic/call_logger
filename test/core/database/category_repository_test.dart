@@ -55,6 +55,23 @@ void main() {
     );
 
     test(
+      'getCategoryNames / getActiveCategoryRows: τονισμένο κεφαλαίο και πεζά στη θέση τους',
+      () async {
+        await db.insert('categories', {'name': 'Ήχος', 'is_deleted': 0});
+        await db.insert('categories', {'name': 'email', 'is_deleted': 0});
+        await db.insert('categories', {'name': 'Αναβάθμιση', 'is_deleted': 0});
+        await db.insert('categories', {'name': 'Zebra', 'is_deleted': 0});
+
+        const expected = ['email', 'Zebra', 'Αναβάθμιση', 'Ήχος'];
+        expect(await repo.getCategoryNames(), expected);
+        expect(
+          (await repo.getActiveCategoryRows()).map((r) => r['name']),
+          expected,
+        );
+      },
+    );
+
+    test(
       'findActiveCategoryByNormalizedName: κανονικοποίηση ονόματος',
       () async {
         final id = await db.insert('categories', {

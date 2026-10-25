@@ -37,6 +37,8 @@ import 'catalog_search_field_sync.dart';
 import 'users_data_table.dart';
 import '../../../../core/widgets/compact_tooltip.dart';
 import 'bulk_user_action_call_guard.dart';
+import '../../services/mass_deletion_guard.dart';
+import '../../services/mass_deletion_settings.dart';
 
 /// Καρτέλα χρηστών: αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη.
 class UsersTab extends ConsumerStatefulWidget {
@@ -338,9 +340,20 @@ class _UsersTabState extends ConsumerState<UsersTab>
           ),
     ];
 
+    final massDeletion = await loadMassDeletionContext(
+      catalog: MassDeletionCatalog.users,
+      catalogTotal: ref
+          .read(directoryProvider)
+          .allUsers
+          .where((u) => !u.isDeleted)
+          .length,
+    );
+    if (!context.mounted) return;
+
     final preview = await showUserDeletionPreviewDialog(
       context: context,
       inventories: inventories,
+      massDeletion: massDeletion,
     );
     if (preview == null || !preview.confirmed || !context.mounted) return;
 

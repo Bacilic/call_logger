@@ -9,7 +9,9 @@ import '../../../core/config/app_config.dart';
 import '../../../core/database/active_database_generation.dart';
 import '../../../core/database/database_file_bundle.dart';
 import '../../../core/database/database_path_pick_flow.dart';
+import '../../../core/models/app_permission.dart';
 import '../../../core/init/database_switch_guard.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/greek_date_format.dart';
@@ -24,6 +26,7 @@ import '../../../core/utils/background_task.dart';
 import 'database_rename_notice_text.dart';
 import 'database_settings_switch_flows.dart';
 import 'database_staleness_setting_section.dart';
+import 'mass_deletion_setting_section.dart';
 
 /// Καρτέλα «Βάση»: διαδρομή αρχείου βάσης και δημιουργία νέου `.db`.
 class DatabaseSettingsFileTab extends ConsumerStatefulWidget {
@@ -316,6 +319,13 @@ class _DatabaseSettingsFileTabState
         const SizedBox(height: 16),
         const DatabaseStalenessSettingSection(),
         const SizedBox(height: 16),
+        // Κρύβεται, δεν γκριζάρει: το όριο το ορίζει ο διαχειριστής για όλους.
+        if (PermissionService.instance.can(
+          AppPermission.manageMassDeletionWarning,
+        )) ...[
+          const MassDeletionSettingSection(),
+          const SizedBox(height: 16),
+        ],
         Text(
           'Δημιουργία νέου αρχείου βάσης',
           style: theme.textTheme.titleSmall?.copyWith(

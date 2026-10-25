@@ -197,6 +197,12 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
   String get _effectiveQuery =>
       _isKeyboardPreview ? _typedQuery : widget.controller.text;
 
+  /// Ο χρήστης δεν έχει γράψει τίποτα — κρίνεται από ό,τι **έγραψε**, όχι από
+  /// την προεπισκόπηση των βελακιών, που γεμίζει το πεδίο. Από αυτό εξαρτάται
+  /// η γραμμή «Άγνωστος»: ένα σημείο για τη λίστα που φαίνεται και για τα
+  /// βελάκια, ώστε η γραμμή να μη χάνεται στη μέση της κατάβασης.
+  bool get _nothingTyped => _effectiveQuery.trim().isEmpty;
+
   /// Οι προτάσεις καθώς γράφεις — οι ίδιες για την ορατή λίστα και για τα
   /// βελάκια, με το ίδιο κείμενο αναζήτησης ([_effectiveQuery]).
   List<String> _callerAutocompleteOptions(
@@ -260,15 +266,15 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final header = widget.header;
     final key = event.logicalKey;
-    final fieldIsEmpty = widget.controller.text.trim().isEmpty;
+    final nothingTyped = _nothingTyped;
     final smallListVisible =
         header.callerCandidates.isNotEmpty &&
         _showSuggestionList &&
-        (fieldIsEmpty || _isKeyboardPreview);
+        (nothingTyped || _isKeyboardPreview);
     if (smallListVisible) {
       return _navigateOptions(
         key,
-        _callerOverlayKeyboardOptions(header, showUnknownOption: fieldIsEmpty),
+        _callerOverlayKeyboardOptions(header, showUnknownOption: nothingTyped),
         // Στη μικρή λίστα το πεδίο δείχνει μόνο το όνομα, όχι το τμήμα.
         previewText: (option) => callerPreviewText(
           option,
@@ -430,7 +436,7 @@ class SmartEntityCallerFieldState extends State<SmartEntityCallerField> {
                           notifier: notifier,
                           controller: controller,
                           theme: theme,
-                          showUnknownOption: controller.text.trim().isEmpty,
+                          showUnknownOption: _nothingTyped,
                           getPhoneFieldDigits: widget.getPhoneFieldDigits,
                           highlightedIndex: _keyboardOptionIndex,
                           onSelectionCommitted: _onSuggestionSelected,

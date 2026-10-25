@@ -4,10 +4,10 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 
 import '../../core/services/crash_log_service.dart';
 import '../../core/services/station_name.dart';
+import '../../core/utils/desktop_directory.dart';
 import '../../core/utils/file_picker_session.dart';
 import '../../core/utils/user_facing_error_messages.dart';
 import 'models/windows_events.dart';
@@ -38,19 +38,6 @@ Future<String?> _pickWithSystemDialog(
     ),
   )).value;
   return uri?.toFilePath();
-}
-
-/// Η Επιφάνεια εργασίας του χρήστη, αν υπάρχει εκεί που την περιμένουμε.
-String? _desktopDirectory() {
-  final profile = Platform.environment['USERPROFILE'];
-  if (profile == null || profile.isEmpty) return null;
-  for (final candidate in [
-    p.join(profile, 'Desktop'),
-    p.join(profile, 'OneDrive', 'Desktop'),
-  ]) {
-    if (Directory(candidate).existsSync()) return candidate;
-  }
-  return null;
 }
 
 /// «Εξαγωγή διαγνωστικών»: διαβάζει τα αρχεία, ρωτά φίλτρα και θέση, γράφει
@@ -104,7 +91,7 @@ Future<void> runDiagnosticsExport({
   try {
     path = await pickSavePath(
       'Διαγνωστικά_${who}_$stamp.md',
-      _desktopDirectory(),
+      desktopDirectory(),
     );
   } on Exception catch (error) {
     say(

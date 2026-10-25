@@ -131,13 +131,16 @@ void main() {
       await seedThreePerformers();
 
       expect(
-        await countWith(performer: 'Βασίλης', action: 'ΔΗΜΙΟΥΡΓΙΑ ΚΛΗΣΗΣ'),
+        await countWith(performer: 'Βασίλης', action: 'Κλήση - Δημιουργία'),
         1,
         reason:
             'Ο Βασίλης έχει 2 εγγραφές και η ενέργεια 3· η τομή τους είναι μία.',
       );
       expect(
-        await countWith(performer: 'v.drosos', action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΥΠΑΛΛΗΛΟΥ'),
+        await countWith(
+          performer: 'v.drosos',
+          action: 'Υπάλληλος - Τροποποίηση',
+        ),
         0,
       );
     });
@@ -180,7 +183,7 @@ void main() {
       await seedThreePerformers();
 
       final names = await service.queryDistinctPerformingUsers(
-        action: 'ΤΡΟΠΟΠΟΙΗΣΗ ΥΠΑΛΛΗΛΟΥ',
+        action: 'Υπάλληλος - Τροποποίηση',
       );
 
       expect(names, ['Βασίλης']);

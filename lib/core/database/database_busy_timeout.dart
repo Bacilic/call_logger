@@ -37,6 +37,17 @@ Duration minimumWaitBudget(String dbPath) => Duration(
   milliseconds: resolveDatabaseBusyTimeoutMs(dbPath) + kLockWaitHeadroomMs,
 );
 
+/// Η μικρότερη «Αναμονή» των Ρυθμίσεων που έχει αποτέλεσμα, σε δευτερόλεπτα.
+///
+/// Κάτω από αυτήν το [resolveDatabaseOpenTimeout] ανεβάζει την τιμή στο δάπεδο,
+/// οπότε η οθόνη δεν δέχεται μικρότερη — αλλιώς θα έδειχνε 5 ενώ ισχύουν 8.
+int minimumDatabaseOpenTimeoutSeconds({required bool network}) {
+  final busyMs = network
+      ? AppConfig.databaseBusyTimeoutNetworkMs
+      : AppConfig.databaseBusyTimeoutLocalMs;
+  return ((busyMs + kLockWaitHeadroomMs) / 1000).ceil();
+}
+
 /// Πόσο περιμένει το άνοιγμα της βάσης σε αυτή τη διαδρομή.
 ///
 /// Το [configuredSeconds] είναι η ρύθμιση του χρήστη από τις Επιλογές. Γίνεται σεβαστή
@@ -50,6 +61,23 @@ Duration resolveDatabaseOpenTimeout(String dbPath, {int? configuredSeconds}) {
         : AppConfig.databaseOpenTimeoutSeconds,
   );
   return requested > floor ? requested : floor;
+}
+
+/// Η ένδειξη της αναμονής στις Ρυθμίσεις: η τιμή που **ισχύει** για τη βάση
+/// [dbPath], όχι η αποθηκευμένη.
+///
+/// Σε βάση δικτύου μια ρύθμιση κάτω από το δάπεδο ανεβαίνει στο δάπεδο — και
+/// η ένδειξη λέει γιατί, ώστε όποιος έγραψε 8 να μη βλέπει ανεξήγητο 18.
+String databaseOpenWaitLabel(String dbPath, {required int configuredSeconds}) {
+  final effective = resolveDatabaseOpenTimeout(
+    dbPath,
+    configuredSeconds: configuredSeconds,
+  ).inSeconds;
+  final raisedOnNetwork =
+      effective > configuredSeconds && AppConfig.isUncDatabasePath(dbPath);
+  return raisedOnNetwork
+      ? 'Αναμονή: $effective δευτ. (ελάχιστο δικτύου)'
+      : 'Αναμονή: $effective δευτ.';
 }
 
 /// Δίνει στη σύνδεση [db] την αναμονή που ταιριάζει στη διαδρομή [dbPath].

@@ -280,6 +280,28 @@ abstract final class ProfileSettingKeys {
         'gemini_prompt_template_user_default',
         legacySource: ProfileSettingLegacySource.sharedForAdmin,
       );
+
+  /// Οι προτροπές της Βάσης Γνώσης — προσωπικές, όπως της Αναφοράς
+  /// Lansweeper: ο καθένας προσαρμόζεται στη δική του ΤΝ.
+  static const ProfileSettingKey knowledgeImprovePrompt = ProfileSettingKey(
+    'knowledge_improve_prompt',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+  static const ProfileSettingKey knowledgeExportPrompt = ProfileSettingKey(
+    'knowledge_export_prompt',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
+  /// Οι προτροπές της ΤΝ στο Λεξικό: η «Ερώτηση ΤΝ» μίας λέξης και ο μαζικός
+  /// έλεγχος λέξεων — προσωπικές, όπως όλες οι προτροπές.
+  static const ProfileSettingKey lexiconWordPrompt = ProfileSettingKey(
+    'lexicon_word_prompt',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+  static const ProfileSettingKey lexiconReviewPrompt = ProfileSettingKey(
+    'lexicon_review_prompt',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
   static const ProfileSettingKey geminiAutoResubmit = ProfileSettingKey(
     'gemini_auto_resubmit',
     legacySource: ProfileSettingLegacySource.sharedForAdmin,
@@ -421,6 +443,10 @@ abstract final class ProfileSettingKeys {
     lansweeperTicketSubmitFormPrefs,
     geminiPromptTemplate,
     geminiPromptTemplateUserDefault,
+    knowledgeImprovePrompt,
+    knowledgeExportPrompt,
+    lexiconWordPrompt,
+    lexiconReviewPrompt,
     geminiAutoResubmit,
     catalogUsersVisibleColumns,
     catalogDepartmentsVisibleColumns,

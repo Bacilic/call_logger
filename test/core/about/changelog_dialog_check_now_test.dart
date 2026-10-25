@@ -147,7 +147,7 @@ void main() {
         'Με νεκρή σύνδεση βάσης το «Έλεγχος τώρα» έμενε βουβό — έμοιαζε χαλασμένο',
       ),
     );
-    expect(status.data, endsWith(UpdateCheckFailure.settingsUnreadable.reason));
+    expect(status.data, UpdateCheckFailure.settingsUnreadable.message);
     expect(status.data, isNot(contains('Είστε ενημερωμένοι')));
   });
 }

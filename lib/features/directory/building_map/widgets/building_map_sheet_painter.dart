@@ -1,11 +1,11 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../building_map_effective_shape.dart';
+import '../building_map_geometry.dart';
 import '../building_map_label_layout.dart';
 import '../providers/building_map_providers.dart';
 import '../../models/department_model.dart';
+import '../../screens/widgets/department_color_palette.dart';
 
 /// Σχεδίαση χρωματισμένων περιοχών τμημάτων σε normalized συντεταγμένες στο [size].
 class BuildingMapSheetPainter extends CustomPainter {
@@ -85,60 +85,6 @@ class BuildingMapSheetPainter extends CustomPainter {
 
   static const Offset _kHoverLiftOffset = Offset(0, -3);
 
-  /// RGB χωρίς διαφάνεια — η διαφάνεια εφαρμόζεται στο [Paint].
-  static Color _parseOpaqueFillColor(String? hex, Color fallback) {
-    if (hex == null || hex.trim().isEmpty) return fallback;
-    var h = hex.trim();
-    if (h.startsWith('#')) h = h.substring(1);
-    if (h.length == 6) {
-      final v = int.tryParse(h, radix: 16);
-      if (v != null) {
-        return Color(0xFF000000 | v);
-      }
-    }
-    return fallback;
-  }
-
-  static Offset _rotateAroundCenter(Offset p, Offset center, double radians) {
-    final dx = p.dx - center.dx;
-    final dy = p.dy - center.dy;
-    final c = math.cos(radians);
-    final s = math.sin(radians);
-    return Offset(
-      center.dx + (dx * c) - (dy * s),
-      center.dy + (dx * s) + (dy * c),
-    );
-  }
-
-  static Offset _pointOnRotatedRectBoundaryToward(
-    Rect rect,
-    double rotationRadians,
-    Offset targetPoint,
-  ) {
-    final center = rect.center;
-    final targetLocal = _rotateAroundCenter(
-      targetPoint,
-      center,
-      -rotationRadians,
-    );
-    final vx = targetLocal.dx - center.dx;
-    final vy = targetLocal.dy - center.dy;
-    if (vx == 0 && vy == 0) {
-      return _rotateAroundCenter(
-        Offset(center.dx, rect.top),
-        center,
-        rotationRadians,
-      );
-    }
-    final halfW = rect.width / 2;
-    final halfH = rect.height / 2;
-    final sx = vx == 0 ? double.infinity : (halfW / vx.abs());
-    final sy = vy == 0 ? double.infinity : (halfH / vy.abs());
-    final s = math.min(sx, sy);
-    final edgeLocal = Offset(center.dx + (vx * s), center.dy + (vy * s));
-    return _rotateAroundCenter(edgeLocal, center, rotationRadians);
-  }
-
   void _drawRotatedRect({
     required Canvas canvas,
     required Rect rect,
@@ -216,10 +162,8 @@ class BuildingMapSheetPainter extends CustomPainter {
       );
       final isHovered =
           toolMode == MapToolMode.select && hoveredDepartmentId == d.id;
-      final opaqueFill = _parseOpaqueFillColor(
-        d.color,
-        const Color(0xFF1976D2),
-      );
+      final opaqueFill =
+          tryParseDepartmentHex(d.color) ?? const Color(0xFF1976D2);
       final fillOpacity = isHovered
           ? _kMapFillOpacityHovered
           : _kMapFillOpacity;
@@ -277,10 +221,10 @@ class BuildingMapSheetPainter extends CustomPainter {
                 r.center.dx + (effectiveAnchorOffsetX * size.width),
                 r.center.dy + (effectiveAnchorOffsetY * size.height),
               )
-            : _pointOnRotatedRectBoundaryToward(
-                r,
-                effectiveRotation,
-                labelCenter,
+            : pointOnRotatedRectBoundaryToward(
+                rect: r,
+                rotation: effectiveRotation,
+                targetPoint: labelCenter,
               );
         labelsToPaint.add((
           text: override,
@@ -298,12 +242,12 @@ class BuildingMapSheetPainter extends CustomPainter {
     canvas.restore();
 
     for (final label in labelsToPaint) {
-      final labelCenter = _rotateAroundCenter(
+      final labelCenter = rotateAroundCenter(
         label.labelCenter,
         sheetCenter,
         rotationRadians,
       );
-      final anchorPoint = _rotateAroundCenter(
+      final anchorPoint = rotateAroundCenter(
         label.anchorPoint,
         sheetCenter,
         rotationRadians,
@@ -405,7 +349,7 @@ class BuildingMapSheetPainter extends CustomPainter {
           dr.topRight,
           dr.bottomLeft,
           dr.bottomRight,
-        ].map((p) => _rotateAroundCenter(p, center, draftShape!.rotation));
+        ].map((p) => rotateAroundCenter(p, center, draftShape!.rotation));
         final handlesPaint = Paint()
           ..color = Colors.orange
           ..style = PaintingStyle.fill;
@@ -419,12 +363,12 @@ class BuildingMapSheetPainter extends CustomPainter {
         }
 
         final topCenter = Offset(dr.center.dx, dr.top);
-        final rotatedTopCenter = _rotateAroundCenter(
+        final rotatedTopCenter = rotateAroundCenter(
           topCenter,
           center,
           draftShape!.rotation,
         );
-        final rotateAnchor = _rotateAroundCenter(
+        final rotateAnchor = rotateAroundCenter(
           Offset(dr.center.dx, dr.top - 24),
           center,
           draftShape!.rotation,
@@ -448,10 +392,10 @@ class BuildingMapSheetPainter extends CustomPainter {
                 dr.center.dx + (draftShape!.anchorOffsetX! * size.width),
                 dr.center.dy + (draftShape!.anchorOffsetY! * size.height),
               )
-            : _pointOnRotatedRectBoundaryToward(
-                dr,
-                draftShape!.rotation,
-                labelCenter,
+            : pointOnRotatedRectBoundaryToward(
+                rect: dr,
+                rotation: draftShape!.rotation,
+                targetPoint: labelCenter,
               );
         final labelHandlePaint = Paint()
           ..color = Colors.deepPurple

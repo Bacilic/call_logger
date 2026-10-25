@@ -40,6 +40,8 @@ import '../../building_map/screens/building_map_dialog.dart';
 import 'catalog_tab_lookup_reload_mixin.dart';
 import 'catalog_search_field_sync.dart';
 import 'bulk_department_action_call_guard.dart';
+import '../../services/mass_deletion_guard.dart';
+import '../../services/mass_deletion_settings.dart';
 
 /// Καρτέλα τμημάτων: αναζήτηση, πίνακας, επιλογή, διαγραφή με undo, προσθήκη.
 class DepartmentsTab extends ConsumerStatefulWidget {
@@ -308,9 +310,16 @@ class _DepartmentsTabState extends ConsumerState<DepartmentsTab>
       for (final d in selected)
         DepartmentDeletionInventory.fromLookup(d.id!, d.name),
     ];
+    final massDeletion = await loadMassDeletionContext(
+      catalog: MassDeletionCatalog.departments,
+      catalogTotal: state.allDepartments.where((d) => !d.isDeleted).length,
+    );
+    if (!context.mounted) return false;
+
     final preview = await showDepartmentDeletionPreviewDialog(
       context: context,
       inventories: inventories,
+      massDeletion: massDeletion,
     );
     if (preview == null ||
         preview.choice == DepartmentDeletionChoice.cancel ||

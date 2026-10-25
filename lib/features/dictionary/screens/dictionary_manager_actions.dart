@@ -13,12 +13,12 @@ import '../../../core/providers/core_lexicon_provider.dart';
 import '../../../core/providers/lexicon_categories_provider.dart';
 import '../../../core/providers/lexicon_language_recalc_provider.dart';
 import '../../../core/providers/spell_check_provider.dart';
-import '../../../core/services/dictionary_service.dart';
 import '../../../core/services/master_dictionary_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/picker_location_memory.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
+import '../services/lexicon_row_writer.dart';
 import '../widgets/add_custom_words_dialog.dart';
 import 'dictionary_manager_screen.dart';
 
@@ -38,6 +38,9 @@ class DictionaryManagerActions {
   WidgetRef get ref => host.ref;
 
   MasterDictionaryService get _master => host.master;
+
+  /// Ο ένας δρόμος εγγραφής λέξεων — κοινός με τον μαζικό έλεγχο με ΤΝ.
+  late final LexiconRowWriter writer = LexiconRowWriter(_master);
 
   String _addCustomWordErrorMessage(Object e) => humanizeUserFacingError(e);
 
@@ -203,72 +206,15 @@ class DictionaryManagerActions {
     String displayWord,
     String category,
   ) async {
-    final entryId = row['entry_id'] as int?;
-    final normKey = row['norm_key'] as String? ?? '';
-    final display = row['display_word'] as String? ?? '';
-    final src = row['src'] as String? ?? '';
-    final isDraft =
-        entryId == null || src == DictionaryRepository.kLexiconSourceDraft;
-    final lang = row['lang'] as String? ?? 'el';
-    final prevCat = row['cat'] as String? ?? 'Γενική';
-
-    if (displayWord == display && category == prevCat) return;
-
     try {
-      if (isDraft) {
-        await _master.microMergeUserDraft(
-          normalizedKey: normKey,
-          displayWord: displayWord,
-          category: category,
-          language: lang,
-        );
-      } else {
-        final newWord = displayWord;
-        final dictUp = DictionaryRepository(
-          await DatabaseHelper.instance.database,
-        );
-        await dictUp.upsertFullDictionaryCategory(
-          id: entryId,
-          category: category,
-          newDisplayWord: newWord != display ? newWord : null,
-        );
-        if ((row['pending_user'] as int? ?? 0) == 1 && newWord != display) {
-          final newKey = DictionaryService.canonicalLexiconKey(newWord);
-          if (newKey != normKey) {
-            await dictUp.updateUserDictionaryWordKey(
-              normKey,
-              newKey,
-              displayWord: newWord,
-            );
-          }
-        }
-      }
-
-      final newKey = DictionaryService.canonicalLexiconKey(displayWord);
-      int? promotedEntryId;
-      String? promotedSrc;
-      String? promotedLang;
-      if (isDraft) {
-        final promoted = await DictionaryRepository(
-          await DatabaseHelper.instance.database,
-        ).findFullDictionaryEntryByNormalizedWord(newKey);
-        if (promoted != null) {
-          promotedEntryId = promoted['id'] as int?;
-          promotedSrc = promoted['source'] as String? ?? 'user';
-          promotedLang = promoted['language'] as String?;
-        }
-      }
-
-      if (!context.mounted) return;
+      final written = await writer.update(row, displayWord, category);
+      if (written == null || !context.mounted) return;
       host.patchLexiconRowLocally(
-        entryId: entryId,
-        oldNormKey: normKey,
+        entryId: row['entry_id'] as int?,
+        oldNormKey: row['norm_key'] as String? ?? '',
         displayWord: displayWord,
         category: category,
-        promoteFromDraft: isDraft,
-        promotedEntryId: promotedEntryId,
-        promotedSrc: promotedSrc,
-        promotedLang: promotedLang,
+        written: written,
       );
     } catch (e) {
       if (context.mounted) {
@@ -285,9 +231,6 @@ class DictionaryManagerActions {
   Future<void> deleteRow(Map<String, dynamic> row) async {
     final entryId = row['entry_id'] as int?;
     final normKey = row['norm_key'] as String? ?? '';
-    final src = row['src'] as String? ?? '';
-    final isDraft =
-        entryId == null || src == DictionaryRepository.kLexiconSourceDraft;
 
     final ok = await showDialog<bool>(
       context: context,
@@ -309,15 +252,7 @@ class DictionaryManagerActions {
     if (ok != true) return;
 
     try {
-      final dictDel = DictionaryRepository(
-        await DatabaseHelper.instance.database,
-      );
-      if (isDraft) {
-        await dictDel.deleteUserDictionaryWord(normKey);
-      } else {
-        await dictDel.hardDeleteFullDictionaryById(entryId);
-        await dictDel.deleteUserDictionaryWord(normKey);
-      }
+      await writer.delete(row);
       if (!context.mounted) return;
       host.removeLexiconRowLocally(entryId: entryId, normKey: normKey);
     } catch (e) {

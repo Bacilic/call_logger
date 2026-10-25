@@ -7,6 +7,8 @@ import 'package:path/path.dart' as p;
 import 'log_file_names.dart';
 import 'log_record.dart';
 import 'log_retention.dart';
+import 'clean_exit_note.dart';
+import 'log_spill_store.dart';
 import 'operator_presence_heartbeat.dart';
 import 'session_liveness_keeper.dart';
 import 'session_liveness_mark.dart';
@@ -29,7 +31,8 @@ import 'station_shutdown_request.dart';
 ///
 /// Γι' αυτό κάθε πράξη έχει όριο χρόνου, και η αποτυχία δεν είναι μοιραία:
 /// η υπηρεσία περνά σε λειτουργία **χωρίς δίσκο** ([isDiskAvailable] false)
-/// και δεν ξαναγγίζει τη διαδρομή.
+/// και δεν ξαναγγίζει τη διαδρομή. Οι εγγραφές του μεσοδιαστήματος περιμένουν
+/// στην τοπική αναμονή ([LogSpillStore]) και φτάνουν μόλις ο φάκελος απαντήσει.
 ///
 /// **Καμία εγγραφή δεν γίνεται στο νήμα της οθόνης.** Όλες περνούν από μία
 /// ουρά ([_enqueueWrite]): μία-μία, στο παρασκήνιο, με όριο χρόνου. Μετρημένο
@@ -53,6 +56,8 @@ class CrashLogService {
     this._repeatSummaryInterval = 100,
     LogFileWriter? writeFile,
     this._writeTimeout = backgroundWriteTimeout,
+    this._spill,
+    this.cleanExitNote,
   }) : _now = now ?? DateTime.now,
        _writeFile = writeFile ?? _writeToDisk,
        databaseFileName = databaseFileName?.trim(),
@@ -170,6 +175,26 @@ class CrashLogService {
   final LogFileWriter _writeFile;
   final Duration _writeTimeout;
 
+  /// Όπου περιμένουν οι εγγραφές όσο ο φάκελος σιωπά — δες [LogSpillStore].
+  /// `null` μόνο αν ο τοπικός φάκελος δεν βρέθηκε: τότε η σιωπή χάνει ό,τι
+  /// καταγράφεται, όπως πριν υπάρξει η αναμονή.
+  final LogSpillStore? _spill;
+
+  /// Ό,τι καταγράφεται κρατιέται κάπου — στον φάκελο ή στην τοπική αναμονή;
+  bool get keepsRecords => _diskAvailable || _spill != null;
+
+  /// Υπάρχει τοπική αναμονή για όσο ο φάκελος σιωπά;
+  bool get hasLocalSpill => _spill != null;
+
+  /// Όπου το ομαλό κλείσιμο αφήνει «έκλεισα κανονικά» όταν δεν μπορεί να
+  /// σβήσει το ίχνος «τρέχω τώρα» — δες [CleanExitNote]. `null` = όπως πριν:
+  /// ίχνος που έμεινε αναφέρεται πάντα ως κατάρρευση.
+  final CleanExitNote? cleanExitNote;
+
+  /// Το όριο του ημερολογίου, για να ξέρει η αναμονή τι δεν αξίζει πια να
+  /// σταλεί. Το ορίζει η εκκίνηση· ως τότε δεν σβήνεται τίποτα.
+  int? _retentionCount;
+
   /// Η ουρά των εγγραφών: η επόμενη ξεκινά όταν τελειώσει η προηγούμενη.
   Future<void> _queue = Future<void>.value();
 
@@ -177,8 +202,9 @@ class CrashLogService {
   /// αργότερα δεν σιγεί τον καινούργιο.
   int _generation = 0;
 
-  /// Ολοκληρώνεται όταν γραφτεί ό,τι έχει ήδη μπει στην ουρά.
-  Future<void> get pendingWrites => _queue;
+  /// Ολοκληρώνεται όταν γραφτεί ό,τι έχει ήδη μπει στην ουρά — και όσα δεν
+  /// έφτασαν στον φάκελο έχουν μπει στην τοπική αναμονή.
+  Future<void> get pendingWrites => Future.wait<Object?>([_queue, _lastKept]);
 
   /// Γιατί σίγησε το ημερολόγιο — για την αναφορά της εκκίνησης.
   String? get diskUnavailableReason => _diskUnavailableReason;
@@ -237,10 +263,20 @@ class CrashLogService {
     // πρωτογενή αιτία (π.χ. logs φάκελος/δικαιώματα). Η υπηρεσία όμως έχει
     // ήδη περάσει σε λειτουργία χωρίς δίσκο, ώστε η εκκίνηση να συνεχίσει.
     final logsDir = logsDirectoryForDatabasePath(databasePath);
+    LogSpillStore? spill;
+    CleanExitNote? cleanExit;
+    try {
+      spill = LogSpillStore(await LogSpillStore.defaultDirectory());
+      cleanExit = CleanExitNote(await CleanExitNote.defaultDirectory());
+    } catch (_) {
+      // Χωρίς τοπικό φάκελο η καταγραφή δουλεύει όπως πριν την αναμονή.
+    }
     final service = CrashLogService(
       logsDirectory: logsDir,
       appVersion: appVersion,
       databaseFileName: p.basename(p.normalize(databasePath)),
+      spill: spill,
+      cleanExitNote: cleanExit,
     );
     _instance = service;
     await service.onStartup(
@@ -339,6 +375,7 @@ class CrashLogService {
     // ημερολόγιο, οι σημειώσεις εκκίνησης πρέπει να μείνουν διαθέσιμες.
     // Πριν ξαναπεταχτούν όμως, σβήνει ο δίσκος: ό,τι ακολουθεί σε αυτή τη
     // συνεδρία δεν έχει λόγο να ξαναπεριμένει την ίδια διαδρομή.
+    _retentionCount = retentionCount;
     final create =
         createDirectory ??
         (String directory) => Directory(directory).create(recursive: true);
@@ -354,12 +391,57 @@ class CrashLogService {
       _disableDisk(error);
       rethrow;
     }
+    // Στο παρασκήνιο: μια μεγάλη αναμονή δεν καθυστερεί το πρώτο παράθυρο.
+    _startDrain();
+  }
+
+  Future<int> _lastDrain = Future<int>.value(0);
+
+  /// Ολοκληρώνεται όταν τελειώσει η τελευταία μεταφορά της αναμονής.
+  @visibleForTesting
+  Future<int> get pendingDrain => _lastDrain;
+
+  void _startDrain() {
+    _lastDrain = drainLocalSpill();
+    unawaited(_lastDrain);
+  }
+
+  /// Στέλνει στον φάκελο ό,τι περίμενε τοπικά γι' αυτόν.
+  ///
+  /// Τρέχει στην εκκίνηση και μόλις ο φάκελος ξαναπαντήσει στη μέση της
+  /// συνεδρίας. Περνά από την ίδια ουρά με κάθε άλλη εγγραφή, αλλά **χωρίς**
+  /// επιστροφή στην αναμονή όταν αποτύχει: η αναμονή κρατά ήδη τις γραμμές, και
+  /// τις σβήνει μόνο όσες έφτασαν.
+  Future<int> drainLocalSpill() async {
+    final spill = _spill;
+    if (spill == null || !_diskAvailable) return 0;
+    final today = _now();
+    final retention = _retentionCount;
+    try {
+      return await spill.drainTo(
+        logsDirectory: logsDirectory,
+        oldestKept: retention == null
+            ? DateTime(0)
+            : DateTime(
+                today.year,
+                today.month,
+                today.day,
+              ).subtract(Duration(days: retention - 1)),
+        write: (path, content) => _enqueueWrite(path, content, append: true),
+      );
+    } catch (_) {
+      return 0;
+    }
   }
 
   /// Ξεκινά το περιοδικό σημάδι ζωής — δες [SessionLivenessKeeper.start].
   void startLivenessHeartbeat() => _liveness.start();
 
   void stopLivenessHeartbeat() => _liveness.stop();
+
+  /// Τρέχει ο παλμός του λεπτού;
+  @visibleForTesting
+  bool get isLivenessHeartbeatRunning => _liveness.isRunning;
 
   /// Τι κάνει η εφαρμογή όταν κάποιος της ζητά να κλείσει — δες
   /// [SessionLivenessKeeper.onShutdownRequested].
@@ -409,15 +491,23 @@ class CrashLogService {
   /// σειρά της: μια μετακόμιση στο μεταξύ δεν τη στέλνει σε άλλον φάκελο.
   ///
   /// Δεν πετά ποτέ· η αποτυχία της σιγεί το ημερολόγιο ([_suspendDisk]).
-  /// Επιστρέφει αν η εγγραφή έφτασε πράγματι στον δίσκο.
+  /// Επιστρέφει αν η εγγραφή κρατήθηκε — στον φάκελο ή, με [spillOnFailure],
+  /// στην τοπική αναμονή.
+  ///
+  /// Το [spillOnFailure] αφορά μόνο γραμμές του ημερήσιου αρχείου: το ίχνος
+  /// «τρέχω τώρα» έχει νόημα μόνο στον κοινό φάκελο, και η ίδια η μεταφορά της
+  /// αναμονής δεν ξαναγυρίζει σε αυτήν.
   Future<bool> _enqueueWrite(
     String path,
     String content, {
     required bool append,
+    bool spillOnFailure = false,
   }) {
-    if (!_diskAvailable) return Future<bool>.value(false);
+    if (!_diskAvailable) {
+      return spillOnFailure ? _spillLine(path, content) : Future.value(false);
+    }
     final generation = _generation;
-    final next = _queue.then((_) async {
+    final written = _queue.then((_) async {
       if (!_diskAvailable && generation == _generation) return false;
       Future<void>? write;
       try {
@@ -433,8 +523,32 @@ class CrashLogService {
         return false;
       }
     });
-    _queue = next;
-    return next;
+    _queue = written;
+    if (!spillOnFailure) return written;
+    // Η αναμονή γεμίζει ΕΞΩ από την ουρά: μια μεταφορά της αναμονής που τρέχει
+    // την ίδια ώρα γράφει μέσα από την ουρά, και αν η ουρά περίμενε την
+    // αναμονή, θα περίμεναν η μία την άλλη για πάντα. Μέσα στην αναμονή μπαίνει
+    // και η εγγραφή που έκανε τον φάκελο να σιγήσει — συχνά η πιο σημαντική.
+    final kept = written.then<bool>(
+      (ok) => ok ? true : _spillLine(path, content),
+    );
+    _lastKept = kept;
+    return kept;
+  }
+
+  /// Η τελευταία εγγραφή γραμμής ημερήσιου αρχείου, μαζί με την πιθανή
+  /// προσθήκη της στην αναμονή — δες [pendingWrites].
+  Future<bool> _lastKept = Future<bool>.value(true);
+
+  /// Μια γραμμή του ημερήσιου αρχείου περιμένει τοπικά για τον φάκελό της.
+  Future<bool> _spillLine(String path, String content) {
+    final spill = _spill;
+    if (spill == null) return Future<bool>.value(false);
+    return spill.add(
+      logsDirectory: p.dirname(path),
+      dailyFileName: p.basename(path),
+      content: content,
+    );
   }
 
   /// Μια εγγραφή που απλώς άργησε δεν σημαίνει χαμένο φάκελο: αν τελικά
@@ -480,10 +594,13 @@ class CrashLogService {
     return true;
   }
 
-  /// Η καταγραφή συνεχίζει, και το ημερολόγιο λέει από πότε σιωπούσε.
+  /// Η καταγραφή συνεχίζει, και το ημερολόγιο λέει από πότε σιωπούσε. Όσα
+  /// περίμεναν τοπικά στο μεταξύ φεύγουν αμέσως, χωρίς να περιμένουν την
+  /// επόμενη εκκίνηση.
   void _resume() {
     final silentSince = _silentSince;
     _setDiskAvailable();
+    _startDrain();
     unawaited(
       appendRecord(
         _sessionRecord(
@@ -505,13 +622,21 @@ class CrashLogService {
 
   Future<void> onShutdown() async {
     stopLivenessHeartbeat();
-    if (!_diskAvailable) return;
-    _flushPendingRepeatSummaries();
-    await pendingWrites;
-    if (!_diskAvailable) return;
-    try {
-      await _liveness.remove();
-    } catch (_) {}
+    if (keepsRecords) {
+      // Οι συνόψεις γράφονται και με σιωπηλό φάκελο — πάνε στην τοπική αναμονή.
+      _flushPendingRepeatSummaries();
+      await pendingWrites;
+    }
+    var removed = false;
+    if (_diskAvailable) {
+      try {
+        await _liveness.remove();
+        removed = true;
+      } catch (_) {}
+    }
+    // Το ίχνος έμεινε στον φάκελο που σιωπά: χωρίς σημείωμα, η επόμενη
+    // εκκίνηση θα το έπαιρνε για κατάρρευση.
+    if (!removed) await _liveness.noteCleanExit();
   }
 
   /// Καταγράφει ένα σφάλμα.
@@ -537,9 +662,10 @@ class CrashLogService {
     required bool fatal,
     String? diagnostics,
   }) {
-    // Χωρίς δίσκο ούτε μετριούνται οι επαναλήψεις: η σύνοψή τους θα έλεγε
-    // «επαναλήφθηκε» για εγγραφές που δεν γράφτηκαν ποτέ.
-    if (!_diskAvailable) return;
+    // Χωρίς δίσκο και χωρίς τοπική αναμονή ούτε μετριούνται οι επαναλήψεις:
+    // η σύνοψή τους θα έλεγε «επαναλήφθηκε» για εγγραφές που δεν γράφτηκαν
+    // ποτέ.
+    if (!keepsRecords) return;
     final key = _dedupKey(error, stack);
     final state = _dedupStates.putIfAbsent(key, _DedupState.new);
 
@@ -639,6 +765,7 @@ class CrashLogService {
       p.join(logsDirectory, dailyLogFileName(stamped.time)),
       '${stamped.toJsonLine()}\n',
       append: true,
+      spillOnFailure: true,
     );
   }
 
@@ -669,11 +796,12 @@ class CrashLogService {
   ///
   /// Η αποτυχία δεν πετιέται: ο καταγραφέας δεν ρίχνει ποτέ αυτό που
   /// καταγράφει — ούτε την εκκίνηση, ούτε το κλείσιμο. Επιστρέφει όμως **αν η
-  /// εγγραφή γράφτηκε**: όποιος σβήνει την πηγή της αφού την καταγράψει (το
-  /// ίχνος κλεισίματος) οφείλει να ξέρει ότι έφτασε — αλλιώς ένα ημερολόγιο
-  /// που σιωπά παίρνει μαζί του και το μόνο αντίγραφο.
+  /// εγγραφή κρατήθηκε** — στον φάκελο ή στην τοπική αναμονή, που τη στέλνει
+  /// αργότερα: όποιος σβήνει την πηγή της αφού την καταγράψει (το ίχνος
+  /// κλεισίματος) οφείλει να ξέρει ότι δεν χάθηκε — αλλιώς ένα ημερολόγιο που
+  /// σιωπά παίρνει μαζί του και το μόνο αντίγραφο.
   Future<bool> appendRecord(LogRecord record) {
-    if (!_diskAvailable) return Future<bool>.value(false);
+    if (!keepsRecords) return Future<bool>.value(false);
     try {
       return _appendToDailyLog(record);
     } catch (_) {

@@ -7,6 +7,9 @@ import '../dictionary_table_layout.dart';
 
 const double kDictionaryGridActionsWidth = 108;
 
+/// Η στήλη του κουτιού επιλογής, στην αρχή κάθε γραμμής.
+const double kDictionarySelectColumnWidth = 40;
+
 /// Σταθερό ύψος γραμμής πίνακα λεξικού (για [ListView.itemExtent]).
 const double kDictionaryGridRowExtent = 48.0;
 
@@ -51,6 +54,8 @@ class DictionaryLexiconHeaderRow extends StatelessWidget {
     required this.wordWidth,
     required this.sourceWidth,
     required this.categoryWidth,
+    this.pageSelected = false,
+    this.onTogglePage,
     this.onWordColumnResizeStart,
     this.onWordColumnResizeUpdate,
     this.onWordColumnResizeEnd,
@@ -60,6 +65,13 @@ class DictionaryLexiconHeaderRow extends StatelessWidget {
   final double wordWidth;
   final double sourceWidth;
   final double categoryWidth;
+
+  /// Πόσες λέξεις της σελίδας είναι επιλεγμένες: όλες, καμία, ή μερικές (`null`).
+  final bool? pageSelected;
+
+  /// Το κουτάκι της επικεφαλίδας: επιλέγει ή αφήνει όλη τη σελίδα. Μόνο η
+  /// πρώτη ομάδα στηλών το δείχνει — η σελίδα είναι μία.
+  final VoidCallback? onTogglePage;
 
   /// Έναρξη σύρσιμου λαβής (αποθήκευση βάσης πλάτους).
   final VoidCallback? onWordColumnResizeStart;
@@ -86,6 +98,20 @@ class DictionaryLexiconHeaderRow extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            SizedBox(
+              width: kDictionarySelectColumnWidth,
+              child: onTogglePage == null
+                  ? null
+                  : Tooltip(
+                      message: 'Επιλογή όλης της σελίδας',
+                      child: Checkbox(
+                        tristate: true,
+                        value: pageSelected,
+                        visualDensity: VisualDensity.compact,
+                        onChanged: (_) => onTogglePage!(),
+                      ),
+                    ),
+            ),
             SizedBox(
               width: wordWidth,
               child: Padding(
@@ -315,9 +341,17 @@ class DictionaryGridRow extends StatefulWidget {
     required this.onUpdate,
     required this.onDelete,
     this.onSpellingContextChanged,
+    this.selected = false,
+    this.onSelectTap,
   });
 
   final Map<String, dynamic> row;
+
+  /// Η λέξη είναι στην επιλογή για «Έλεγχο με ΤΝ».
+  final bool selected;
+
+  /// Κλικ στο κουτάκι — ο καλών ξέρει αν κρατιέται το Shift.
+  final VoidCallback? onSelectTap;
   final DictionaryTableLayout layout;
 
   /// Επιλογές dropdown (από ρυθμίσεις λεξικού).
@@ -561,6 +595,9 @@ class _DictionaryGridRowState extends State<DictionaryGridRow> {
 
     return DecoratedBox(
       decoration: BoxDecoration(
+        color: widget.selected
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.35)
+            : null,
         border: Border(
           bottom: BorderSide(color: theme.dividerColor.withValues(alpha: 0.5)),
         ),
@@ -571,6 +608,16 @@ class _DictionaryGridRowState extends State<DictionaryGridRow> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            SizedBox(
+              width: kDictionarySelectColumnWidth,
+              child: Checkbox(
+                value: widget.selected,
+                visualDensity: VisualDensity.compact,
+                onChanged: widget.onSelectTap == null
+                    ? null
+                    : (_) => widget.onSelectTap!(),
+              ),
+            ),
             SizedBox(
               width: widget.wordWidth,
               child: TextField(

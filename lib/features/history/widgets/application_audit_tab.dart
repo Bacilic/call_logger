@@ -18,6 +18,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -31,6 +32,7 @@ import '../../../core/utils/search_text_normalizer.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../directory/screens/directory_screen.dart';
 import '../../../core/widgets/calendar_range_picker.dart';
+import '../../../core/widgets/keyboard_row_navigation.dart';
 import '../../audit/constants/audit_ui_mappings.dart';
 import '../../audit/models/audit_filter_model.dart';
 import '../../audit/models/audit_log_model.dart';
@@ -130,6 +132,10 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
   final Set<int> _selectedAuditIds = <int>{};
   bool _isSelectingAll = false;
   bool _deleteCountdownActive = false;
+
+  /// Κλειδιά γραμμών, για να κυλά η λίστα ώστε να φαίνεται η γραμμή που
+  /// ακούει τα πλήκτρα.
+  final RowKeys _rowKeys = RowKeys();
 
   @override
   void initState() {
@@ -235,6 +241,19 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
     setState(() {
       _selectedAuditIds.clear();
     });
+  }
+
+  /// Delete: με τικ, η μόνιμη διαγραφή των τσεκαρισμένων· χωρίς τικ, τικ στη
+  /// γραμμή που ακούει τα πλήκτρα και η ίδια διαγραφή. Περνά από τον ίδιο
+  /// διάλογο επιβεβαίωσης και την ίδια αναίρεση με το κουμπί, και σέβεται τις
+  /// ίδιες απαγορεύσεις (επιλογή όλων σε εξέλιξη, αντίστροφη μέτρηση).
+  void _deleteFromKeyboard(int? focusedId) {
+    if (_isSelectingAll || _deleteCountdownActive) return;
+    if (_selectedAuditIds.isEmpty) {
+      if (focusedId == null) return;
+      _toggleRowSelection(focusedId, true);
+    }
+    _confirmAndDeleteSelection();
   }
 
   void _toggleRowSelection(int id, bool? checked) {
@@ -789,78 +808,120 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
                         ),
                       );
                     }
-                    return ListView.separated(
-                      controller: _listScrollController,
-                      itemCount: r.items.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final row = r.items[index];
-                        final style = auditStyleForAction(
-                          row.action,
-                          theme.colorScheme,
-                        );
-                        final selected = row.id == selectedId;
-                        final checked = _selectedAuditIds.contains(row.id);
-                        final subtitleParts = <String>[
-                          formatter.formatAuditTimestamp(row.timestamp),
-                        ];
-                        if (row.hasMeaningfulPerformingUser) {
-                          subtitleParts.add(row.userPerforming!.trim());
-                        }
-                        final navRequest = mainNavRequestForAuditEntry(row);
-                        return ListTile(
-                          selected: selected,
-                          // Ορατό υπόστρωμα επιλογής: τίτλος/υπότιτλος/εικονίδιο
-                          // έχουν δικά τους χρώματα, οπότε το selected μόνο του
-                          // δεν αποδίδει καμία ορατή διαφορά.
-                          selectedTileColor: theme.colorScheme.primaryContainer,
-                          leading: SizedBox(
-                            width: 72,
-                            child: Row(
-                              children: [
-                                Checkbox(
-                                  value: checked,
-                                  onChanged: _deleteCountdownActive
-                                      ? null
-                                      : (v) => _toggleRowSelection(row.id, v),
-                                ),
-                                Icon(style.icon, color: style.color),
-                              ],
-                            ),
-                          ),
-                          title: AuditSummaryRichText(
-                            text: formatter.summaryLine(
-                              row,
-                              labels: referenceLabels,
-                            ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            subtitleParts.join(' · '),
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          trailing: navRequest == null
-                              ? null
-                              : TextButton(
-                                  onPressed: () {
-                                    ref
-                                        .read(mainNavRequestProvider.notifier)
-                                        .request(navRequest);
-                                  },
-                                  child: const Text('Μετάβαση'),
-                                ),
-                          onTap: () {
-                            ref
-                                .read(selectedAuditEntryIdProvider.notifier)
-                                .select(row.id);
-                            ref
-                                .read(auditSidePanelOpenProvider.notifier)
-                                .setOpen(true);
-                          },
-                        );
+                    _rowKeys.retainFirst(r.items.length);
+                    final focusedIndex = r.items.indexWhere(
+                      (row) => row.id == selectedId,
+                    );
+                    int? focusedId() =>
+                        focusedIndex < 0 ? null : r.items[focusedIndex].id;
+                    return KeyboardRowNavigation(
+                      rowCount: r.items.length,
+                      focusedRowIndex: focusedIndex < 0 ? null : focusedIndex,
+                      // Η γραμμή με τα πλήκτρα είναι η επιλεγμένη εγγραφή: αν
+                      // το πάνελ λεπτομερειών είναι ανοιχτό, την ακολουθεί.
+                      onFocusRow: (i) => ref
+                          .read(selectedAuditEntryIdProvider.notifier)
+                          .select(r.items[i].id),
+                      onRevealRow: (i, {required movingDown}) =>
+                          _rowKeys.reveal(i, movingDown: movingDown),
+                      onOpen: (_) {
+                        if (focusedId() == null) return;
+                        ref
+                            .read(auditSidePanelOpenProvider.notifier)
+                            .setOpen(true);
                       },
+                      onToggleRow: _deleteCountdownActive
+                          ? null
+                          : (i) {
+                              final id = r.items[i].id;
+                              _toggleRowSelection(
+                                id,
+                                !_selectedAuditIds.contains(id),
+                              );
+                            },
+                      onDelete: (_) => _deleteFromKeyboard(focusedId()),
+                      child: ListView.separated(
+                        controller: _listScrollController,
+                        // Μία σελίδα έχει το πολύ λίγες δεκάδες εγγραφές: χτίζονται
+                        // όλες, ώστε τα πλήκτρα να φτάνουν και σε γραμμή εκτός
+                        // οθόνης (οι γραμμές έχουν διαφορετικό ύψος, και η θέση
+                        // τους δεν υπολογίζεται χωρίς να υπάρχουν).
+                        scrollCacheExtent: const ScrollCacheExtent.pixels(
+                          100000,
+                        ),
+                        itemCount: r.items.length,
+                        separatorBuilder: (context, index) =>
+                            const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final row = r.items[index];
+                          final style = auditStyleForAction(
+                            row.action,
+                            theme.colorScheme,
+                          );
+                          final selected = row.id == selectedId;
+                          final checked = _selectedAuditIds.contains(row.id);
+                          final subtitleParts = <String>[
+                            formatter.formatAuditTimestamp(row.timestamp),
+                          ];
+                          if (row.hasMeaningfulPerformingUser) {
+                            subtitleParts.add(row.userPerforming!.trim());
+                          }
+                          final navRequest = mainNavRequestForAuditEntry(row);
+                          return ListTile(
+                            key: _rowKeys.keyFor(index),
+                            selected: selected,
+                            // Ορατό υπόστρωμα επιλογής: τίτλος/υπότιτλος/εικονίδιο
+                            // έχουν δικά τους χρώματα, οπότε το selected μόνο του
+                            // δεν αποδίδει καμία ορατή διαφορά.
+                            selectedTileColor:
+                                theme.colorScheme.primaryContainer,
+                            leading: SizedBox(
+                              width: 72,
+                              child: Row(
+                                children: [
+                                  Checkbox(
+                                    value: checked,
+                                    onChanged: _deleteCountdownActive
+                                        ? null
+                                        : (v) => _toggleRowSelection(row.id, v),
+                                  ),
+                                  Icon(style.icon, color: style.color),
+                                ],
+                              ),
+                            ),
+                            title: AuditSummaryRichText(
+                              text: formatter.summaryLine(
+                                row,
+                                labels: referenceLabels,
+                              ),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              subtitleParts.join(' · '),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            trailing: navRequest == null
+                                ? null
+                                : TextButton(
+                                    onPressed: () {
+                                      ref
+                                          .read(mainNavRequestProvider.notifier)
+                                          .request(navRequest);
+                                    },
+                                    child: const Text('Μετάβαση'),
+                                  ),
+                            onTap: () {
+                              ref
+                                  .read(selectedAuditEntryIdProvider.notifier)
+                                  .select(row.id);
+                              ref
+                                  .read(auditSidePanelOpenProvider.notifier)
+                                  .setOpen(true);
+                            },
+                          );
+                        },
+                      ),
                     );
                   },
                 ),
@@ -908,13 +969,13 @@ class _ApplicationAuditTabState extends ConsumerState<ApplicationAuditTab> {
       AuditEntityTypes.category,
       AuditEntityTypes.task,
       AuditEntityTypes.call,
-      AuditEntityTypes.bulkUsers,
-      AuditEntityTypes.bulkDepartments,
-      AuditEntityTypes.bulkEquipment,
-      AuditEntityTypes.importData,
+      AuditEntityTypes.knowledge,
       AuditEntityTypes.maintenance,
       AuditEntityTypes.backup,
     ];
+    // Οι μαζικές ενημερώσεις δεν είναι οντότητα: τις πιάνει το φίλτρο του
+    // υπαλλήλου, του τμήματος ή του εξοπλισμού. Τα «Δεδομένα εισαγωγής» δεν
+    // τα γράφει πια καμία λειτουργία.
     // Οι ετικέτες έρχονται από την ίδια πηγή με τη γραμμή του ιστορικού: όσο
     // ζούσε δεύτερος κατάλογος εδώ, το φίλτρο έλεγε «Χρήστης» και η γραμμή
     // «Υπάλληλος» για την ίδια εγγραφή.

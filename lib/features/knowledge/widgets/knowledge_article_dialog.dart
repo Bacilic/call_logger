@@ -9,6 +9,9 @@ import '../../../core/widgets/spell_check_controller.dart';
 import '../../history/providers/history_provider.dart';
 import '../models/knowledge_article.dart';
 import '../providers/knowledge_provider.dart';
+import '../services/knowledge_ai_prompt_store.dart';
+import '../services/knowledge_improve_runner.dart';
+import '../../history/widgets/lansweeper/ai_prompt_template_editor_dialog.dart';
 
 /// Ανοίγει τη φόρμα άρθρου Βάσης Γνώσης· επιστρέφει το id αν αποθηκεύτηκε.
 ///
@@ -45,6 +48,11 @@ class _KnowledgeArticleDialogState
   late final TextEditingController _tagsController;
   int? _categoryId;
   bool _saving = false;
+  bool _improving = false;
+
+  /// Τα πεδία όπως ήταν πριν από την πρώτη «Βελτίωση με ΤΝ» — ό,τι φέρνει
+  /// πίσω η «Επαναφορά». `null`: η ΤΝ δεν έχει αγγίξει ακόμη τη φόρμα.
+  KnowledgeImproveInput? _beforeAi;
 
   bool get _isNew => widget.article.id == null;
 
@@ -68,8 +76,91 @@ class _KnowledgeArticleDialogState
     super.dispose();
   }
 
+  KnowledgeImproveInput get _currentFields => (
+    title: _titleController.text,
+    symptom: _symptomController.text,
+    solution: _solutionController.text,
+    tags: _tagsController.text,
+  );
+
+  void _fill(KnowledgeImproveInput fields) {
+    _titleController.text = fields.title;
+    _symptomController.text = fields.symptom;
+    _solutionController.text = fields.solution;
+    _tagsController.text = fields.tags;
+  }
+
+  /// Η ΤΝ προτείνει· η φόρμα δείχνει. Τίποτα δεν γράφεται στη βάση πριν από
+  /// την «Αποθήκευση».
+  Future<void> _improveWithAi() async {
+    if (_improving || _saving) return;
+    final before = _currentFields;
+    if (before.title.trim().isEmpty &&
+        before.symptom.trim().isEmpty &&
+        before.solution.trim().isEmpty) {
+      showDialogSnackBar(
+        const SnackBar(
+          content: Text(
+            'Γράψτε πρώτα το άρθρο — δεν υπάρχει κείμενο για βελτίωση.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _improving = true);
+    final outcome = await ref.read(knowledgeImproveRunnerProvider)(before);
+    if (!mounted) return;
+    setState(() => _improving = false);
+
+    switch (outcome) {
+      case KnowledgeImproved(:final suggestion):
+        setState(() {
+          // Μετά από δεύτερη βελτίωση, η «Επαναφορά» γυρίζει στο κείμενο του
+          // χρήστη — όχι στην πρώτη πρόταση της ΤΝ.
+          _beforeAi ??= before;
+          _fill((
+            title: suggestion.title ?? before.title,
+            symptom: suggestion.symptom ?? before.symptom,
+            solution: suggestion.solution ?? before.solution,
+            tags: suggestion.tags ?? before.tags,
+          ));
+        });
+        showDialogSnackBar(
+          const SnackBar(
+            content: Text(
+              'Η ΤΝ συμπλήρωσε τα πεδία. Ελέγξτε τα και πατήστε «Αποθήκευση» '
+              '— ή «Επαναφορά» για το αρχικό κείμενο.',
+            ),
+          ),
+        );
+      case KnowledgeImproveCopied():
+        showDialogSnackBar(
+          const SnackBar(
+            content: Text(
+              'Δεν έχει οριστεί κλειδί ΤΝ. Το άρθρο μαζί με την προτροπή '
+              'αντιγράφηκε — επικολλήστε το σε όποια ΤΝ θέλετε.',
+            ),
+          ),
+        );
+      case KnowledgeImproveFailed(:final message):
+        showDialogSnackBar(
+          SnackBar(content: Text('Η βελτίωση δεν έγινε: $message')),
+        );
+    }
+  }
+
+  void _restoreBeforeAi() {
+    final before = _beforeAi;
+    if (before == null) return;
+    setState(() {
+      _fill(before);
+      _beforeAi = null;
+    });
+  }
+
   Future<void> _save() async {
-    if (_saving) return;
+    if (_saving || _improving) return;
     final symptom = _symptomController.text.trim();
     final solution = _solutionController.text.trim();
     if (symptom.isEmpty || solution.isEmpty) {
@@ -129,7 +220,40 @@ class _KnowledgeArticleDialogState
       messengerKey: dialogMessengerKey,
       child: Center(
         child: AlertDialog(
-          title: Text(_isNew ? 'Νέο άρθρο γνώσης' : 'Επεξεργασία άρθρου'),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(_isNew ? 'Νέο άρθρο γνώσης' : 'Επεξεργασία άρθρου'),
+              ),
+              if (_beforeAi != null)
+                TextButton.icon(
+                  onPressed: _improving ? null : _restoreBeforeAi,
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Επαναφορά'),
+                ),
+              IconButton(
+                tooltip: 'Προτροπή της «Βελτίωσης με ΤΝ»',
+                icon: const Icon(Icons.edit_note),
+                onPressed: _improving
+                    ? null
+                    : () => openPersonalPromptEditor(
+                        context,
+                        KnowledgePrompt.improve,
+                      ),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: _improving || _saving ? null : _improveWithAi,
+                icon: _improving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_awesome),
+                label: const Text('Βελτίωση με ΤΝ'),
+              ),
+            ],
+          ),
           contentPadding: const EdgeInsets.fromLTRB(0, 20, 0, 24),
           content: SizedBox(
             width: 760,
@@ -229,7 +353,7 @@ class _KnowledgeArticleDialogState
               child: const Text('Ακύρωση'),
             ),
             FilledButton.icon(
-              onPressed: _saving ? null : _save,
+              onPressed: _saving || _improving ? null : _save,
               icon: _saving
                   ? const SizedBox(
                       width: 16,
