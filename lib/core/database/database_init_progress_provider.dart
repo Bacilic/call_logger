@@ -126,6 +126,18 @@ class DatabaseInitProgressNotifier extends Notifier<DatabaseInitProgressState> {
     _openStep?.relabel('$step — ${detail.trim()}');
   }
 
+  /// Κλείνει την ανοιχτή γραμμή του ημερολογίου ως **προειδοποίηση**, με τον
+  /// λόγο γραμμένο στην ίδια τη γραμμή — π.χ. «Έλεγχος τύπου αρχείου βάσης —
+  /// αδυναμία ανάγνωσης: …». Χωρίς αυτό, η επόμενη επανάληψη του ίδιου βήματος
+  /// έμοιαζε με διπλή εγγραφή, και ο λόγος της ζούσε μόνο στα τεχνικά στοιχεία.
+  void warnStep(String reason) {
+    final step = state.currentStep;
+    final text = reason.trim();
+    if (step.isEmpty || text.isEmpty) return;
+    _openStep?.warn(text, '$step — $text');
+    _openStep = null;
+  }
+
   void setDiagnostic(String? diagnosticInfo) {
     if (diagnosticInfo == null || diagnosticInfo.trim().isEmpty) return;
     state = state.copyWith(diagnosticInfo: diagnosticInfo.trim());

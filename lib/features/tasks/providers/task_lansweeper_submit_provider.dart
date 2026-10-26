@@ -200,13 +200,15 @@ class TaskLansweeperSubmitNotifier extends AsyncNotifier<void> {
       // ΦΡΕΣΚΟ handle βάσης μετά από μακρύ await: το `db` παραπάνω δεσμεύτηκε
       // πριν την αποστολή, και αν η βάση εναλλάχθηκε στο μεταξύ θα γράφαμε σε
       // λάθος στόχο — με το αίτημα ΗΔΗ ανοιγμένο στο Lansweeper.
-      progress.stepStarted(LansweeperSubmitStepKeys.save);
       final writeRepo = TasksLansweeperRepository(
         await DatabaseHelper.instance.database,
       );
 
       final ticketId = result.ticketId?.trim() ?? '';
       if (result.success && ticketId.isNotEmpty) {
+        // Μόνο μετά από επιτυχία: σε αποτυχία το ✗ ανήκει στο βήμα του
+        // Lansweeper που έσπασε, όχι στην αποθήκευση.
+        progress.stepStarted(LansweeperSubmitStepKeys.save);
         await writeRepo.markSubmitted(taskId: taskId, ticketId: ticketId);
         progressSucceeded = true;
         progressSummary = 'Καταχωρήθηκε · αίτημα $ticketId';

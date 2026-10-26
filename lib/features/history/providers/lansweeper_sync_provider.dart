@@ -14,6 +14,7 @@ import '../../../core/services/lansweeper_call_requester_resolution.dart';
 import '../../../core/services/lansweeper_requester_resolution.dart';
 import '../../../core/services/lansweeper_sync_service.dart';
 import '../../../core/services/lansweeper_ticket_submit_config.dart';
+import '../../../core/services/lansweeper_ticket_texts.dart';
 import '../../../core/services/lookup_service.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../calls/models/call_model.dart';
@@ -23,6 +24,7 @@ import '../models/lansweeper_sync_state.dart';
 import 'lansweeper_submit_progress_provider.dart';
 import '../services/lansweeper_registration_conflict.dart';
 import '../services/lansweeper_write_failure.dart';
+import '../widgets/lansweeper/lansweeper_report_item_mapper.dart';
 
 final lansweeperSyncServiceProvider = Provider<LansweeperSyncService>(
   (ref) => LansweeperSyncService(),
@@ -257,8 +259,18 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
           (storedTitle: c.title, category: c.category ?? '', id: c.id),
       ], useStoredTitles: false);
 
+      final lastSentTexts = existingTicketId == null
+          ? null
+          : await _lastSentTicketTexts(
+              repo: CallsLansweeperRepository(db),
+              call: call,
+              companions: companions,
+              ticketId: existingTicketId,
+            );
+
       final service = ref.read(lansweeperSyncServiceProvider);
       final request = LansweeperWorkflowRequest(
+        lastSentTexts: lastSentTexts,
         autoSubject: autoTitle,
         title: input.title,
         problem: input.notes,
@@ -299,11 +311,14 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       // με το εισιτήριο ΗΔΗ δημιουργημένο στο Lansweeper, δηλαδή κίνδυνος διπλής
       // αποστολής. (Ο φρουρός εναλλαγής μπλοκάρει ήδη το σενάριο· αυτό εδώ κλείνει
       // τη ρίζα, ώστε να μην εξαρτάται η ορθότητα από τον φρουρό.)
-      progress.stepStarted(LansweeperSubmitStepKeys.save);
       final writeDb = await DatabaseHelper.instance.database;
       final writeRepo = CallsLansweeperRepository(writeDb);
 
       if (result.success && (result.ticketId?.trim().isNotEmpty ?? false)) {
+        // Η αποθήκευση ξεκινά μόνο μετά από επιτυχία: σε αποτυχία το βήμα του
+        // Lansweeper που έσπασε πρέπει να μείνει «τρέχον», ώστε το ✗ να πέσει
+        // εκεί και όχι στην αποθήκευση που δεν δοκιμάστηκε ποτέ.
+        progress.stepStarted(LansweeperSubmitStepKeys.save);
         final ticketId = result.ticketId!.trim();
         // Πριν από κάθε άλλη εγγραφή: το κείμενο μόλις έφυγε στο ticket στην πιο
         // έγκυρη μορφή του — περασμένο από την ΤΝ και από το μάτι του χρήστη.
@@ -330,6 +345,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
             'warnings': result.warnings,
             'failedStep': result.failedStep,
             'payload': result.rawPayloads,
+            ...?result.ticketTexts?.toMetadata(),
           },
         );
         for (final companionId in companionCallIds) {
@@ -345,6 +361,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
               'warnings': result.warnings,
               'failedStep': result.failedStep,
               'payload': result.rawPayloads,
+              ...?result.ticketTexts?.toMetadata(),
               'primaryCallId': callId,
             },
           );
@@ -383,6 +400,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
             'warnings': result.warnings,
             'failedStep': result.failedStep,
             'payload': result.rawPayloads,
+            ...?result.ticketTexts?.toMetadata(),
           },
         );
       }
@@ -667,6 +685,41 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       'stack:',
       '$stack',
     ].join('\n');
+  }
+
+  /// Τι έστειλε η εφαρμογή την τελευταία φορά στο αίτημα [ticketId] από αυτή
+  /// την κλήση — το μέτρο του «άλλαξε ο τίτλος ή το πρόβλημα;».
+  ///
+  /// Πρώτα ό,τι κατέγραψε μια προηγούμενη αποστολή. Αιτήματα που στάλθηκαν
+  /// πριν υπάρξει αυτή η καταγραφή συγκρίνονται με τα κείμενα της κλήσης όπως
+  /// τα προσυμπληρώνει η φόρμα — **μόνο** όταν το αίτημα είναι το δικό της και
+  /// η κλήση στέλνεται μόνη. Σε κάθε άλλη περίπτωση (αίτημα εκκρεμότητας,
+  /// πολλές κλήσεις μαζί) η απάντηση είναι «δεν ξέρουμε», και τίτλος και
+  /// πρόβλημα δεν στέλνονται: η περιγραφή ενός ξένου αιτήματος δεν
+  /// αντικαθίσταται από τα κείμενα μιας κλήσης.
+  Future<LansweeperTicketTexts?> _lastSentTicketTexts({
+    required CallsLansweeperRepository repo,
+    required CallModel call,
+    required List<CallModel> companions,
+    required String ticketId,
+  }) async {
+    final callId = call.id;
+    if (callId == null) return null;
+    final links = await repo.getCallExternalLinks(
+      callId,
+      provider: 'lansweeper',
+    );
+    final recorded = LansweeperTicketTexts.latestFromLinks(links, ticketId);
+    if (recorded != null) return recorded;
+
+    final ownTicket = (call.lansweeperMainTicketId ?? '').trim() == ticketId;
+    if (!ownTicket || companions.length != 1) return null;
+    return LansweeperTicketTexts(
+      subject: LansweeperSyncService.combinedTicketTitle([
+        (storedTitle: call.title, category: call.category ?? '', id: callId),
+      ]),
+      problem: LansweeperReportItemMapper.notes(call),
+    );
   }
 
   void _refreshAfterLansweeperMutation() {

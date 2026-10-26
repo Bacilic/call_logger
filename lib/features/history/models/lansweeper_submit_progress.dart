@@ -29,6 +29,10 @@ class LansweeperSubmitStepKeys {
   /// Συνδέεται ο εξοπλισμός της κλήσης.
   static const String asset = 'asset';
 
+  /// Ενημερώνονται τίτλος/περιγραφή αιτήματος που υπάρχει ήδη — μόνο όσα
+  /// άλλαξαν από την προηγούμενη αποστολή.
+  static const String details = 'details';
+
   /// Γράφεται η λύση ως σημείωση.
   static const String note = 'note';
 
@@ -50,6 +54,7 @@ String lansweeperSubmitStepLabel(String key, {bool creating = true}) {
     LansweeperSubmitStepKeys.ticket =>
       creating ? 'Δημιουργία αιτήματος' : 'Ενημέρωση αιτήματος',
     LansweeperSubmitStepKeys.asset => 'Σύνδεση εξοπλισμού',
+    LansweeperSubmitStepKeys.details => 'Ενημέρωση τίτλου και περιγραφής',
     LansweeperSubmitStepKeys.note => 'Καταγραφή λύσης',
     LansweeperSubmitStepKeys.state => 'Ενημέρωση κατάστασης',
     LansweeperSubmitStepKeys.save => 'Αποθήκευση στη βάση',

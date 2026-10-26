@@ -10,7 +10,9 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/services/lansweeper_sync_service.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/calls/models/call_refined_source.dart';
+import 'package:call_logger/features/history/models/lansweeper_submit_progress.dart';
 import 'package:call_logger/features/history/models/lansweeper_sync_state.dart';
+import 'package:call_logger/features/history/providers/lansweeper_submit_progress_provider.dart';
 import 'package:call_logger/features/history/providers/lansweeper_sync_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,6 +52,23 @@ class _TicketGoneOncePoster extends _RecordingPoster {
       return const LansweeperRawResponse(
         200,
         '{"Success":false,"Message":"No ticket found. The creation was unsuccessful"}',
+      );
+    }
+    return super.call(action, fields);
+  }
+}
+
+class _StateStepFailsPoster extends _RecordingPoster {
+  @override
+  Future<LansweeperRawResponse> call(
+    String action,
+    Map<String, String> fields,
+  ) async {
+    if (action == 'EditTicket') {
+      calls.add((action: action, fields: Map<String, String>.from(fields)));
+      return const LansweeperRawResponse(
+        200,
+        '{"Success":false,"Message":"αποτυχία"}',
       );
     }
     return super.call(action, fields);
@@ -236,8 +255,9 @@ void main() {
         expect(result.success, isTrue);
         expect(result.ticketId, _kExistingTicketId);
         expect(poster.calls, isNotEmpty);
-        expect(poster.calls.first.action, 'AddNote');
-        expect(poster.calls.first.fields['TicketID'], _kExistingTicketId);
+        expect(poster.calls.map((call) => call.fields['TicketID']).toSet(), {
+          _kExistingTicketId,
+        });
         expect(poster.calls.any((call) => call.action == 'AddTicket'), isFalse);
 
         final db = await DatabaseHelper.instance.database;
@@ -287,6 +307,148 @@ void main() {
         expect(
           history.map((row) => row['external_id']),
           containsAll(<String>[_kExistingTicketId, _kFakeTicketId]),
+        );
+      },
+    );
+
+    test(
+      'αποτυχία στην αλλαγή κατάστασης: η πορεία σημειώνει ✗ στην κατάσταση, και η αποθήκευση δεν ξεκινά καν',
+      () async {
+        final callId = await _seedWorkflowCall(
+          lansweeperMainTicketId: _kExistingTicketId,
+        );
+        final container = _workflowTestContainer(_StateStepFailsPoster());
+        addTearDown(container.dispose);
+        container.listen(lansweeperSyncProvider, (_, _) {});
+
+        final result = await container
+            .read(lansweeperSyncProvider.notifier)
+            .submitCall(callId: callId, input: _kDefaultSubmitInput);
+        expect(result.success, isFalse);
+
+        final steps = {
+          for (final step
+              in container.read(lansweeperSubmitProgressProvider).steps)
+            step.key: step.status,
+        };
+        expect(
+          steps[LansweeperSubmitStepKeys.note],
+          LansweeperSubmitStepStatus.done,
+        );
+        expect(
+          steps[LansweeperSubmitStepKeys.state],
+          LansweeperSubmitStepStatus.failed,
+        );
+        expect(
+          steps[LansweeperSubmitStepKeys.save],
+          LansweeperSubmitStepStatus.pending,
+        );
+      },
+    );
+
+    test(
+      'δεύτερη αποστολή στο ίδιο αίτημα: φεύγει μόνο ο τίτλος που άλλαξε στη φόρμα',
+      () async {
+        final callId = await _seedWorkflowCall();
+        final container = _workflowTestContainer(poster);
+        addTearDown(container.dispose);
+        container.listen(lansweeperSyncProvider, (_, _) {});
+        final notifier = container.read(lansweeperSyncProvider.notifier);
+
+        await notifier.submitCall(callId: callId, input: _kDefaultSubmitInput);
+        poster.calls.clear();
+        final result = await notifier.submitCall(
+          callId: callId,
+          input: const LansweeperSubmitInput(
+            title: 'Αλλαγμένος τίτλος',
+            notes: 'Πρόβλημα δοκιμής',
+            solution: 'Λύση δοκιμής.',
+            refinedSource: CallRefinedSource.ai,
+            agentUsername: r'CORP\agent',
+          ),
+        );
+
+        expect(result.success, isTrue);
+        final details = poster.calls.first;
+        expect(details.action, 'EditTicket');
+        expect(details.fields['TicketID'], _kFakeTicketId);
+        expect(details.fields['Subject'], 'Αλλαγμένος τίτλος');
+        expect(details.fields.containsKey('Description'), isFalse);
+      },
+    );
+
+    test(
+      'παλιό αίτημα χωρίς καταγραφή: συγκρίνεται με τα κείμενα της κλήσης — αμετάβλητα δεν στέλνονται, αλλαγμένο πρόβλημα στέλνεται',
+      () async {
+        final callId = await _seedWorkflowCall(
+          lansweeperMainTicketId: _kExistingTicketId,
+        );
+        final container = _workflowTestContainer(poster);
+        addTearDown(container.dispose);
+        container.listen(lansweeperSyncProvider, (_, _) {});
+        final notifier = container.read(lansweeperSyncProvider.notifier);
+
+        // Η φόρμα όπως την προσυμπληρώνει η κλήση: αυτόματος τίτλος και το
+        // πρόβλημά της.
+        await notifier.submitCall(
+          callId: callId,
+          input: const LansweeperSubmitInput(
+            title: '',
+            notes: _kWorkflowTestMarker,
+            solution: 'Λύση δοκιμής.',
+            refinedSource: CallRefinedSource.ai,
+            agentUsername: r'CORP\agent',
+          ),
+        );
+        expect(poster.calls.map((c) => c.action), ['AddNote', 'EditTicket']);
+        expect(poster.calls.last.fields.containsKey('Description'), isFalse);
+
+        poster.calls.clear();
+        await notifier.submitCall(
+          callId: callId,
+          input: const LansweeperSubmitInput(
+            title: '',
+            notes: 'Νέο πρόβλημα',
+            solution: 'Λύση δοκιμής.',
+            refinedSource: CallRefinedSource.ai,
+            agentUsername: r'CORP\agent',
+          ),
+        );
+        final details = poster.calls.first;
+        expect(details.action, 'EditTicket');
+        expect(details.fields['Description'], 'Νέο πρόβλημα');
+        expect(details.fields.containsKey('Subject'), isFalse);
+      },
+    );
+
+    test(
+      'αίτημα που δεν είναι της κλήσης (π.χ. εκκρεμότητας): τίτλος και πρόβλημα δεν στέλνονται ποτέ',
+      () async {
+        final callId = await _seedWorkflowCall(
+          lansweeperMainTicketId: _kExistingTicketId,
+        );
+        final container = _workflowTestContainer(poster);
+        addTearDown(container.dispose);
+        container.listen(lansweeperSyncProvider, (_, _) {});
+
+        await container
+            .read(lansweeperSyncProvider.notifier)
+            .submitCall(
+              callId: callId,
+              input: const LansweeperSubmitInput(
+                title: 'Νέος τίτλος',
+                notes: 'Νέο πρόβλημα',
+                solution: 'Λύση δοκιμής.',
+                refinedSource: CallRefinedSource.ai,
+                agentUsername: r'CORP\agent',
+                attachToTicketId: '777',
+              ),
+            );
+
+        expect(poster.calls.map((c) => c.action), ['AddNote', 'EditTicket']);
+        expect(
+          poster.calls.any((c) => c.fields.containsKey('Subject')),
+          isFalse,
         );
       },
     );

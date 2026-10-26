@@ -8,6 +8,7 @@ import 'lansweeper_asset_target.dart';
 import 'lansweeper_text_format.dart';
 import 'lansweeper_ticket_requester_fields.dart';
 import 'lansweeper_ticket_submit_config.dart';
+import 'lansweeper_ticket_texts.dart';
 import 'settings_service.dart';
 
 typedef LansweeperRawPoster =
@@ -63,7 +64,13 @@ class LansweeperWorkflowRequest {
     this.existingTicketId,
     this.requesterUsername,
     this.assetTargets = const [],
+    this.lastSentTexts,
   });
+
+  /// Τίτλος/πρόβλημα που έστειλε η εφαρμογή την τελευταία φορά στο
+  /// [existingTicketId]. Σε υπάρχον αίτημα ξαναστέλνονται μόνο όσα διαφέρουν
+  /// από αυτά· `null` = «δεν ξέρουμε», και τότε δεν στέλνεται κανένα.
+  final LansweeperTicketTexts? lastSentTexts;
 
   /// Το θέμα που παίρνει το αίτημα όταν ο χρήστης δεν έγραψε δικό του [title].
   ///
@@ -110,9 +117,15 @@ class LansweeperWorkflowResult {
     this.failedStep,
     this.rawPayloads,
     this.ticketNotFound = false,
+    this.ticketTexts,
   });
 
   final bool success;
+
+  /// Τι γράφει πια το αίτημα στον τίτλο και στην περιγραφή, όσο το ξέρει η
+  /// ροή: ό,τι στάλθηκε τώρα, αλλιώς ό,τι είχε σταλεί πριν. `null` = άγνωστο.
+  /// Ο καλών το καταγράφει, ώστε η επόμενη αποστολή να ξέρει τι άλλαξε.
+  final LansweeperTicketTexts? ticketTexts;
   final String? ticketId;
 
   /// `true` όταν η ροή πήγε να συνεχίσει σε αίτημα που **προϋπήρχε** και το
@@ -201,11 +214,42 @@ class LansweeperSyncService {
       if (creatingTicket) LansweeperSubmitStepKeys.ticket,
       if (creatingTicket && request.assetTargets.isNotEmpty)
         LansweeperSubmitStepKeys.asset,
+      if (changedTicketTexts(request).any) LansweeperSubmitStepKeys.details,
       if (config.enableAddNoteStep && request.solution.trim().isNotEmpty)
         LansweeperSubmitStepKeys.note,
       if (config.enableStateUpdateStep && targetState.isNotEmpty)
         LansweeperSubmitStepKeys.state,
     ];
+  }
+
+  /// Τίτλος και πρόβλημα όπως θα γραφτούν στο αίτημα από αυτό το [request].
+  static LansweeperTicketTexts ticketTextsOf(
+    LansweeperWorkflowRequest request,
+  ) {
+    final title = request.title.trim();
+    return LansweeperTicketTexts(
+      subject: title.isNotEmpty ? title : request.autoSubject.trim(),
+      problem: request.problem.trim(),
+    );
+  }
+
+  /// Ποια από τα κείμενα ενός **υπάρχοντος** αιτήματος άλλαξαν από την
+  /// προηγούμενη αποστολή.
+  ///
+  /// Μία πηγή για το πλάνο της οθόνης και για τη ροή που στέλνει: αν
+  /// απέκλιναν, η πορεία θα έδειχνε βήμα που δεν έτρεξε ή θα έκρυβε βήμα που
+  /// έτρεξε. Νέο αίτημα ή άγνωστη προηγούμενη αποστολή: τίποτα.
+  static ({bool subject, bool problem, bool any}) changedTicketTexts(
+    LansweeperWorkflowRequest request,
+  ) {
+    const none = (subject: false, problem: false, any: false);
+    final existing = request.existingTicketId?.trim() ?? '';
+    final previous = request.lastSentTexts;
+    if (existing.isEmpty || previous == null) return none;
+    final current = ticketTextsOf(request);
+    final subject = current.subject != previous.subject.trim();
+    final problem = current.problem != previous.problem.trim();
+    return (subject: subject, problem: problem, any: subject || problem);
   }
 
   /// [onStep] ανακοινώνει το βήμα που **ξεκινά** — τα κλειδιά είναι αυτά του
@@ -349,6 +393,60 @@ class LansweeperSyncService {
 
     final resolvedTicketId = ticketId;
 
+    // Τι γράφει το αίτημα μετά από αυτή τη ροή, όσο το ξέρουμε. Αίτημα που
+    // γεννήθηκε τώρα έχει τα κείμενα της φόρμας· σε υπάρχον ισχύει ό,τι
+    // είχε σταλεί πριν, μέχρι να ενημερωθεί παρακάτω.
+    var knownTexts = ticketCreatedHere
+        ? ticketTextsOf(request)
+        : request.lastSentTexts;
+
+    final changed = changedTicketTexts(request);
+    if (changed.any) {
+      final current = ticketTextsOf(request);
+      final detailsFields = <String, String>{
+        'TicketID': resolvedTicketId,
+        if (changed.subject) 'Subject': current.subject,
+        if (changed.problem) 'Description': lansweeperHtmlText(current.problem),
+        ..._followUpIdentityFields(
+          requester: requester,
+          agent: agent,
+          ticketCreatedHere: ticketCreatedHere,
+        ),
+      };
+
+      onStep?.call(LansweeperSubmitStepKeys.details);
+      final detailsResult = await _postAction('EditTicket', detailsFields);
+      rawPayloads['EditTicket(details)'] = detailsResult.rawPayload;
+
+      if (detailsResult.success ||
+          _isNothingUpdatedMessage(detailsResult.message)) {
+        // «Nothing has been updated»: το αίτημα γράφει ήδη αυτά τα κείμενα —
+        // π.χ. τα διόρθωσε κάποιος με τον ίδιο τρόπο μέσα στο Lansweeper.
+        completedSteps.add('EditTicket(details)');
+        knownTexts = current;
+      } else if (isTicketNotFoundMessage(detailsResult.message)) {
+        return LansweeperWorkflowResult(
+          success: false,
+          message: detailsResult.message,
+          ticketId: resolvedTicketId,
+          completedSteps: completedSteps,
+          warnings: warnings,
+          failedStep: 'EditTicket',
+          rawPayloads: rawPayloads,
+          ticketNotFound: true,
+          ticketTexts: knownTexts,
+        );
+      } else {
+        // Η λύση και η κατάσταση αξίζουν περισσότερο από τον τίτλο: η ροή
+        // συνεχίζει, και τα κείμενα μένουν «αστάλτα» ώστε η επόμενη
+        // αποστολή να τα ξαναδοκιμάσει.
+        warnings.add(
+          'Ο τίτλος/η περιγραφή του αιτήματος δεν ενημερώθηκαν: '
+          '${detailsResult.message}',
+        );
+      }
+    }
+
     if (config.enableAddNoteStep && request.solution.trim().isNotEmpty) {
       final noteFields = <String, String>{
         'TicketID': resolvedTicketId,
@@ -382,17 +480,17 @@ class LansweeperSyncService {
           failedStep: 'AddNote',
           rawPayloads: rawPayloads,
           ticketNotFound: true,
+          ticketTexts: knownTexts,
         );
       } else {
+        final fallbackDescription = buildTicketDescription(
+          notes: request.problem,
+          solution: request.solution,
+          durationSeconds: durationSeconds,
+        );
         final fallbackFields = <String, String>{
           'TicketID': resolvedTicketId,
-          'Description': lansweeperHtmlText(
-            buildTicketDescription(
-              notes: request.problem,
-              solution: request.solution,
-              durationSeconds: durationSeconds,
-            ),
-          ),
+          'Description': lansweeperHtmlText(fallbackDescription),
           ..._followUpIdentityFields(
             requester: requester,
             agent: agent,
@@ -404,6 +502,15 @@ class LansweeperSyncService {
 
         if (fallbackResult.success) {
           completedSteps.add('EditTicket(fallback)');
+          // Η περιγραφή γράφει πια πρόβλημα ΚΑΙ λύση· αυτό είναι το μέτρο
+          // της επόμενης σύγκρισης, όχι το σκέτο πρόβλημα.
+          final subject = knownTexts?.subject;
+          if (subject != null) {
+            knownTexts = LansweeperTicketTexts(
+              subject: subject,
+              problem: fallbackDescription.trim(),
+            );
+          }
           warnings.add(
             'Η σημείωση απέτυχε· η λύση καταχωρήθηκε στην περιγραφή του ticket.',
           );
@@ -416,6 +523,7 @@ class LansweeperSyncService {
             warnings: warnings,
             failedStep: 'AddNote',
             rawPayloads: rawPayloads,
+            ticketTexts: knownTexts,
           );
         }
       }
@@ -437,7 +545,10 @@ class LansweeperSyncService {
       final stateResult = await _postAction('EditTicket', stateFields);
       rawPayloads['EditTicket(state)'] = stateResult.rawPayload;
 
-      if (stateResult.success) {
+      // Αίτημα ήδη στην κατάσταση που ζητήθηκε: το Lansweeper απαντά
+      // Success=false, αλλά ο σκοπός του βήματος έχει επιτευχθεί.
+      if (stateResult.success ||
+          isAlreadyInStateResponse(stateResult.rawPayload, targetState)) {
         completedSteps.add('EditTicket(state)');
       } else {
         return LansweeperWorkflowResult(
@@ -451,6 +562,7 @@ class LansweeperSyncService {
           ticketNotFound:
               !ticketCreatedHere &&
               isTicketNotFoundMessage(stateResult.message),
+          ticketTexts: knownTexts,
         );
       }
     }
@@ -463,6 +575,7 @@ class LansweeperSyncService {
       completedSteps: completedSteps,
       warnings: warnings,
       rawPayloads: rawPayloads,
+      ticketTexts: knownTexts,
     );
   }
 
@@ -744,6 +857,30 @@ class LansweeperSyncService {
   /// κοινή αρχή, χωρίς διάκριση πεζών-κεφαλαίων.
   static bool isTicketNotFoundMessage(String? message) =>
       (message ?? '').toLowerCase().contains('no ticket found');
+
+  /// Λέει η απάντηση του `EditTicket` ότι το αίτημα είναι ΗΔΗ στην
+  /// [targetState];
+  ///
+  /// Το Lansweeper απαντά «Nothing has been updated.» με Success=false όταν
+  /// δεν βρίσκει τίποτα να αλλάξει (αίτημα 18308, 23/10/2026). Το μήνυμα μόνο
+  /// του δεν αρκεί — θα μπορούσε να αγνοήθηκε η κατάσταση για άλλο λόγο· γι'
+  /// αυτό επιβεβαιώνεται και η `State` που επιστρέφει το σώμα.
+  static bool isAlreadyInStateResponse(
+    Map<String, dynamic>? payload,
+    String targetState,
+  ) {
+    final message = payload?['Message'];
+    if (message is! String || !_isNothingUpdatedMessage(message)) {
+      return false;
+    }
+    final state = payload?['State'];
+    return state is String &&
+        state.trim().toLowerCase() == targetState.trim().toLowerCase();
+  }
+
+  /// Η απάντηση του `EditTicket` όταν δεν βρήκε τίποτα να αλλάξει.
+  static bool _isNothingUpdatedMessage(String message) =>
+      message.toLowerCase().contains('nothing has been updated');
 
   /// Ο τίτλος που γεννά μόνη της η εφαρμογή όταν κανείς δεν έγραψε δικό του.
   ///

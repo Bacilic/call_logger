@@ -267,6 +267,14 @@ Future<ResolvedDatabasePath> resolveEffectiveDatabasePath(
   return resolved;
 }
 
+/// Θα απαντηθεί η [configuredPath] από τη μνήμη του τρέχοντος σκοπού, χωρίς
+/// να ρωτηθεί ξανά το δίκτυο;
+///
+/// Για την οθόνη εκκίνησης: το βήμα «Έλεγχος διαδρομής» ανακοινώνεται μόνο
+/// όταν ο έλεγχος γίνεται πράγματι — αλλιώς εμφανιζόταν δύο φορές για ένα.
+bool isDatabasePathResolutionRemembered(String configuredPath) =>
+    _rememberedResolutionFor(configuredPath) != null;
+
 /// Το αποτέλεσμα του τρέχοντος σκοπού, μόνο αν αφορά αυτή τη διαδρομή.
 ResolvedDatabasePath? _rememberedResolutionFor(String configuredPath) {
   if (_resolutionScopeDepth == 0) return null;

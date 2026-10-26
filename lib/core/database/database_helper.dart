@@ -537,8 +537,12 @@ class DatabaseHelper {
       );
     }
 
-    progressNotifier?.setStep('Έλεγχος διαδρομής');
     final configured = await SettingsService().getDatabasePath();
+    // Μέσα στους ελέγχους εκκίνησης η διαδρομή έχει ήδη ελεγχθεί και
+    // ανακοινωθεί· εδώ απλώς διαβάζεται η απάντηση.
+    if (!isDatabasePathResolutionRemembered(configured)) {
+      progressNotifier?.setStep('Έλεγχος διαδρομής');
+    }
     final resolved = await resolveEffectiveDatabasePath(configured);
     if (resolved.outcome == DatabasePathResolution.networkUnreachable) {
       // Δεν αποφασίζουμε εμείς. Παλιότερα εδώ γινόταν σιωπηλή μετάπτωση στην
@@ -600,6 +604,7 @@ class DatabaseHelper {
       classificationKind = await _ensureCompatibleDatabaseFile(
         dbPath,
         progressNotifier: progressNotifier,
+        isRetry: true,
       );
       await _requireSchemaVersionCompatibility(dbPath);
     }
@@ -902,8 +907,13 @@ class DatabaseHelper {
   Future<DatabaseFileKind> _ensureCompatibleDatabaseFile(
     String dbPath, {
     DatabaseInitProgressNotifier? progressNotifier,
+    bool isRetry = false,
   }) async {
-    progressNotifier?.setStep('Έλεγχος τύπου αρχείου βάσης');
+    progressNotifier?.setStep(
+      isRetry
+          ? 'Έλεγχος τύπου αρχείου βάσης — δεύτερη προσπάθεια'
+          : 'Έλεγχος τύπου αρχείου βάσης',
+    );
     final profile = await profileDatabaseFile(dbPath);
     _lastDatabaseProfile = profile;
     final snapshot = profile.integritySnapshot;
@@ -920,6 +930,13 @@ class DatabaseHelper {
           'Ταξινόμηση αρχείου βάσης: αδυναμία ανάγνωσης — $reason',
         );
       }
+      // Ο λόγος φαίνεται στο ίδιο το βήμα: αλλιώς η δεύτερη προσπάθεια που
+      // ακολουθεί έμοιαζε με διπλή εγγραφή χωρίς εξήγηση.
+      progressNotifier?.warnStep(
+        reason != null && reason.isNotEmpty
+            ? 'αδυναμία ανάγνωσης: $reason'
+            : 'αδυναμία ανάγνωσης',
+      );
       return kind;
     }
 

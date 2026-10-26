@@ -10,11 +10,14 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/database_init_progress_provider.dart';
 import 'package:call_logger/core/database/database_init_runner.dart';
 import 'package:call_logger/core/database/database_path_resolution.dart';
 import 'package:call_logger/core/init/startup_engine_failure.dart';
+import 'package:call_logger/core/init/startup_journal.dart';
 import 'package:call_logger/core/services/settings_service.dart';
 import 'package:call_logger/core/services/startup_asset_integrity_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -94,6 +97,25 @@ void main() {
       debugDatabasePathResolutionCount,
       1,
       reason: 'ο έλεγχος και το άνοιγμα μοιράζονται την ίδια επίλυση',
+    );
+  });
+
+  test('η οθόνη εκκίνησης δείχνει τον «Έλεγχο διαδρομής» ΜΙΑ φορά', () async {
+    final journal = StartupJournal.instance..reset();
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final runner = await runDatabaseInitChecks(
+      progressNotifier: container.read(databaseInitProgressProvider.notifier),
+      assetIntegrity: StartupAssetIntegrityService(
+        flutterAssetsDirectory: assetsPath,
+      ),
+    );
+
+    expect(runner.result.isSuccess, isTrue, reason: runner.result.message);
+    expect(
+      journal.steps.value.where((s) => s.label == 'Έλεγχος διαδρομής'),
+      hasLength(1),
     );
   });
 

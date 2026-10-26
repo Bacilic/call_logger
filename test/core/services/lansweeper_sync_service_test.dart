@@ -4,7 +4,9 @@ import 'package:call_logger/core/services/lansweeper_asset_target.dart';
 import 'package:call_logger/core/services/lansweeper_sync_service.dart';
 import 'package:call_logger/core/services/lansweeper_text_format.dart';
 import 'package:call_logger/core/services/lansweeper_ticket_submit_config.dart';
+import 'package:call_logger/core/services/lansweeper_ticket_texts.dart';
 import 'package:call_logger/core/services/settings_service.dart';
+import 'package:call_logger/features/history/models/lansweeper_submit_progress.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _kTestApiUrl = 'http://10.10.201.22:81/api.aspx';
@@ -81,6 +83,25 @@ LansweeperWorkflowRequest _workflowRequest({
     requesterUsername: requesterUsername,
     assetTargets: [?assetTarget, ...assetTargets],
   );
+}
+
+extension on LansweeperWorkflowRequest {
+  LansweeperWorkflowRequest withLastSent(LansweeperTicketTexts texts) =>
+      LansweeperWorkflowRequest(
+        autoSubject: autoSubject,
+        title: title,
+        problem: problem,
+        solution: solution,
+        agentUsername: agentUsername,
+        durationSeconds: durationSeconds,
+        config: config,
+        customFieldValues: customFieldValues,
+        targetState: targetState,
+        existingTicketId: existingTicketId,
+        requesterUsername: requesterUsername,
+        assetTargets: assetTargets,
+        lastSentTexts: texts,
+      );
 }
 
 Map<String, String>? _fieldsForAction(
@@ -454,6 +475,169 @@ void main() {
         expect(result.ticketNotFound, isTrue);
       },
     );
+
+    // Απάντηση του πραγματικού API όταν το αίτημα είναι ήδη στην κατάσταση που
+    // ζητήθηκε (αίτημα 18308, 23/10/2026): Success=false, αλλά το σώμα δείχνει
+    // την κατάσταση που ισχύει.
+    const stateAlreadyClosed = LansweeperRawResponse(
+      200,
+      '{"TicketID":18308,"State":"Closed",'
+      '"Success":false,"Message":"Nothing has been updated."}',
+    );
+
+    test(
+      'υπάρχον αίτημα ήδη κλειστό: το «Nothing has been updated» στην αλλαγή κατάστασης είναι επιτυχία',
+      () async {
+        fakePoster = _RecordingFakePoster(
+          responses: const [successOnly, stateAlreadyClosed],
+        );
+        service = LansweeperSyncService(poster: fakePoster.call);
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(existingTicketId: '18308'),
+        );
+
+        expect(result.success, isTrue);
+        expect(result.ticketId, '18308');
+        expect(result.failedStep, isNull);
+        expect(result.completedSteps, contains('AddNote'));
+      },
+    );
+
+    test(
+      '«Nothing has been updated» με ΑΛΛΗ κατάσταση από τη ζητούμενη μένει αποτυχία',
+      () async {
+        fakePoster = _RecordingFakePoster(
+          responses: const [
+            successOnly,
+            LansweeperRawResponse(
+              200,
+              '{"TicketID":18308,"State":"Open",'
+              '"Success":false,"Message":"Nothing has been updated."}',
+            ),
+          ],
+        );
+        service = LansweeperSyncService(poster: fakePoster.call);
+
+        final result = await service.submitTicketWorkflow(
+          _workflowRequest(existingTicketId: '18308'),
+        );
+
+        expect(result.success, isFalse);
+        expect(result.failedStep, 'EditTicket');
+      },
+    );
+
+    group('υπάρχον αίτημα: τίτλος και πρόβλημα μόνο όταν άλλαξαν', () {
+      const sentBefore = LansweeperTicketTexts(
+        subject: 'Τίτλος δοκιμής',
+        problem: 'Πρόβλημα δοκιμής',
+      );
+
+      test(
+        'άλλαξε μόνο ο τίτλος: στέλνεται μόνο το Subject, πριν από τη λύση, χωρίς αιτούντα',
+        () async {
+          fakePoster = _RecordingFakePoster(responses: const []);
+          service = LansweeperSyncService(poster: fakePoster.call);
+          final request = _workflowRequest(
+            existingTicketId: '18308',
+            title: 'Νέος τίτλος',
+          ).withLastSent(sentBefore);
+
+          expect(
+            LansweeperSyncService.plannedStepKeys(request),
+            contains(LansweeperSubmitStepKeys.details),
+          );
+          final result = await service.submitTicketWorkflow(request);
+
+          expect(fakePoster.calls.map((c) => c.action), [
+            'EditTicket',
+            'AddNote',
+            'EditTicket',
+          ]);
+          final details = fakePoster.calls.first.fields;
+          expect(details['Subject'], 'Νέος τίτλος');
+          expect(details.containsKey('Description'), isFalse);
+          expect(details.containsKey('Username'), isFalse);
+          expect(result.success, isTrue);
+          expect(result.ticketTexts?.subject, 'Νέος τίτλος');
+          expect(result.ticketTexts?.problem, 'Πρόβλημα δοκιμής');
+        },
+      );
+
+      test(
+        'τίποτα δεν άλλαξε: δεν στέλνεται ούτε τίτλος ούτε πρόβλημα',
+        () async {
+          fakePoster = _RecordingFakePoster(responses: const []);
+          service = LansweeperSyncService(poster: fakePoster.call);
+          final request = _workflowRequest(
+            existingTicketId: '18308',
+          ).withLastSent(sentBefore);
+
+          final result = await service.submitTicketWorkflow(request);
+
+          expect(fakePoster.calls.map((c) => c.action), [
+            'AddNote',
+            'EditTicket',
+          ]);
+          expect(
+            LansweeperSyncService.plannedStepKeys(request),
+            isNot(contains(LansweeperSubmitStepKeys.details)),
+          );
+          expect(result.ticketTexts?.subject, 'Τίτλος δοκιμής');
+        },
+      );
+
+      test(
+        'άγνωστο τι στάλθηκε πριν: δεν στέλνεται τίποτα, όσο κι αν διαφέρει η φόρμα',
+        () async {
+          fakePoster = _RecordingFakePoster(responses: const []);
+          service = LansweeperSyncService(poster: fakePoster.call);
+
+          final result = await service.submitTicketWorkflow(
+            _workflowRequest(existingTicketId: '18308', title: 'Νέος τίτλος'),
+          );
+
+          expect(fakePoster.calls.map((c) => c.action), [
+            'AddNote',
+            'EditTicket',
+          ]);
+          expect(result.ticketTexts, isNull);
+        },
+      );
+
+      test(
+        'η ενημέρωση τίτλου αποτυγχάνει: η αποστολή πετυχαίνει με προειδοποίηση και τα κείμενα μένουν τα παλιά',
+        () async {
+          fakePoster = _RecordingFakePoster(responses: const [failure]);
+          service = LansweeperSyncService(poster: fakePoster.call);
+
+          final result = await service.submitTicketWorkflow(
+            _workflowRequest(
+              existingTicketId: '18308',
+              problem: 'Νέο πρόβλημα',
+            ).withLastSent(sentBefore),
+          );
+
+          expect(result.success, isTrue);
+          expect(
+            result.warnings,
+            contains(startsWith('Ο τίτλος/η περιγραφή του αιτήματος')),
+          );
+          expect(result.ticketTexts?.problem, 'Πρόβλημα δοκιμής');
+        },
+      );
+
+      test(
+        'νέο αίτημα: τα κείμενα της φόρμας είναι πια τα κείμενα του αιτήματος',
+        () async {
+          final result = await service.submitTicketWorkflow(_workflowRequest());
+
+          expect(result.ticketTexts?.subject, 'Τίτλος δοκιμής');
+          expect(result.ticketTexts?.problem, 'Πρόβλημα δοκιμής');
+        },
+      );
+    });
 
     test(
       'υπάρχον αίτημα, άλλη αποτυχία σημείωσης: η εφεδρεία μένει όπως ήταν και δεν δηλώνεται «δεν βρέθηκε»',
