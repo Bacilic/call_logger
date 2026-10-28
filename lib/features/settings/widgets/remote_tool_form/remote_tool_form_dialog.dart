@@ -216,6 +216,17 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
+      // Η «Αποθήκευση» λέει πάντα τι έγινε: το πεδίο με το λάθος μπορεί να
+      // βρίσκεται έξω από την οθόνη, και ένα κουμπί που δεν αντιδρά μοιάζει
+      // χαλασμένο (σημείωση Διευθυντή 26/10/2026).
+      showDialogSnackBar(
+        SnackBar(
+          content: const Text(
+            'Η αποθήκευση δεν έγινε — διορθώστε το πεδίο με κόκκινο.',
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
       return;
     }
     final repo = ref.read(remoteToolsRepositoryProvider);
@@ -564,20 +575,18 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
                                   if (!_ctrl.saving) _ctrl.applyRolePreset(r);
                                 },
                                 itemBuilder: (ctx) => [
-                                  const PopupMenuItem(
-                                    value: ToolRole.vnc,
-                                    child: Text(
-                                      'VNC: -host=PC{EQUIPMENT_CODE}',
+                                  for (final (role, label) in const [
+                                    (ToolRole.vnc, 'VNC'),
+                                    (ToolRole.rdp, 'RDP'),
+                                    (ToolRole.anydesk, 'AnyDesk'),
+                                  ])
+                                    PopupMenuItem(
+                                      value: role,
+                                      child: Text(
+                                        '$label: '
+                                        '${RemoteTool.rolePresetArgument(role)}',
+                                      ),
                                     ),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: ToolRole.rdp,
-                                    child: Text('RDP: /v:{TARGET}'),
-                                  ),
-                                  const PopupMenuItem(
-                                    value: ToolRole.anydesk,
-                                    child: Text('AnyDesk: -id {TARGET}'),
-                                  ),
                                 ],
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(

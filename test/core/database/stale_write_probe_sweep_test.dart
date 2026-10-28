@@ -125,6 +125,61 @@ void main() {
     expect(findings.single.message, contains('4'));
   });
 
+  test('καθαρισμός που δεν προλαβαίνει το λέει, αντί να σωπαίνει', () async {
+    // Περιστατικό 27/10/2026: στο δίκτυο του νοσοκομείου η πρώτη ανάγνωση του
+    // φακέλου χρειάστηκε 1,4″ με όριο 0,4″. Ο καθαρισμός αποτύγχανε χωρίς ίχνος
+    // και τα υπολείμματα μαζεύονταν.
+    await write(
+      '.__probe_1786340057335_5301.tmp',
+      age: const Duration(days: 2),
+    );
+
+    final findings = await const DatabaseAccessProbe(
+      sweepTimeout: Duration.zero,
+    ).sweepStaleWriteProbes(dbPath());
+
+    expect(findings.single.code, 'stale_write_probes_sweep_timeout');
+    expect(findings.single.severity, ProbeSeverity.warning);
+  });
+
+  test('το δοκιμαστικό αρχείο έχει σταθερό όνομα ανά εφαρμογή', () {
+    // Νέο όνομα σε κάθε εκκίνηση σήμαινε ένα ακόμη υπόλειμμα κάθε φορά που η
+    // διαγραφή χανόταν· με σταθερό όνομα μένει το πολύ ένα.
+    final first = DatabaseAccessProbe.writeProbeFileName(
+      station: 'PC922',
+      instance: r'C:\app.exe',
+    );
+
+    expect(
+      DatabaseAccessProbe.writeProbeFileName(
+        station: 'pc922',
+        instance: r'C:\app.exe',
+      ),
+      first,
+    );
+    expect(
+      DatabaseAccessProbe.writeProbeFileName(
+        station: 'PC3569',
+        instance: r'C:\app.exe',
+      ),
+      isNot(first),
+    );
+  });
+
+  test('το σταθερό όνομα το αναγνωρίζει ο καθαρισμός', () async {
+    final leftover = await write(
+      DatabaseAccessProbe.writeProbeFileName(
+        station: 'PC922',
+        instance: r'C:\app.exe',
+      ),
+      age: const Duration(days: 2),
+    );
+
+    await const DatabaseAccessProbe().sweepStaleWriteProbes(dbPath());
+
+    expect(await leftover.exists(), isFalse);
+  });
+
   test('ανύπαρκτος φάκελος δεν ρίχνει σφάλμα', () async {
     final missing =
         '${dir.path}${Platform.pathSeparator}δεν-υπάρχει${Platform.pathSeparator}x.db';

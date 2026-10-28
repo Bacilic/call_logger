@@ -92,10 +92,50 @@ String? _defaultLogsDirectory() {
   return log.logsDirectory;
 }
 
-/// «POPINIO · έκδοση 4.1 · πριν από 2΄» — μία γραμμή ανά σταθμό.
+/// Από πότε σωπαίνει η εκτέλεση [mark] απέναντι στη βάση — αν σωπαίνει.
 ///
-/// Χωρίς ονόματα ανθρώπων: τα ίχνη δεν ξέρουν ποιος κάθεται στον σταθμό, και το
-/// όνομα του υπολογιστή αρκεί για να ξέρει κανείς **πού** να τηλεφωνήσει.
+/// Η εφαρμογή που δουλεύει μιλά με τη βάση κάθε λεπτό (ο παλμός παρουσίας),
+/// οπότε μερικά λεπτά σιωπής ενώ το ίχνος ανανεώνεται σημαίνουν εφαρμογή που
+/// τρέχει χωρίς να φτάνει τη βάση. `null` όταν η επαφή είναι πρόσφατη ή
+/// άγνωστη — ίχνος παλαιότερης έκδοσης, ή εφαρμογή που δεν έχει ακόμη
+/// συνδεδεμένο χρήστη. Η άγνοια δεν κατηγορεί κανέναν.
+DateTime? databaseSilentSince(
+  SessionLivenessMark mark, {
+  required DateTime now,
+  Duration after = kDatabaseSilenceWorthMentioning,
+}) {
+  final contact = mark.lastDatabaseContact;
+  if (contact == null) return null;
+  return now.difference(contact) >= after ? contact : null;
+}
+
+/// Πόση σιωπή απέναντι στη βάση αξίζει να ειπωθεί: πέντε χαμένοι παλμοί.
+const Duration kDatabaseSilenceWorthMentioning = Duration(minutes: 5);
+
+/// Κρατά πιθανότατα η εκτέλεση [mark] τη βάση κλειδωμένη;
+///
+/// **Μόνο όταν το λέει η ίδια.** Ο φύλακας κάθε εφαρμογής ξεχωρίζει τη νεκρή
+/// σύνδεση (δική της βλάβη) από την πιασμένη βάση (βλάβη κάποιου άλλου), και η
+/// κρίση του ταξιδεύει στο ίχνος. Η σιωπή μόνη της δεν αρκεί: όσο ένας σταθμός
+/// κρατά τη βάση, σωπαίνουν και όλοι όσοι περιμένουν πίσω του — και θα
+/// κατηγορούνταν μαζί του.
+bool isSuspectedDatabaseHolder(SessionLivenessMark mark) =>
+    mark.databaseConnectionDead;
+
+/// Οι πιθανοί υπαίτιοι πρώτοι, οι υπόλοιποι με τη σειρά τους.
+List<SessionLivenessMark> suspectsFirst(List<SessionLivenessMark> holders) => [
+  ...holders.where(isSuspectedDatabaseHolder),
+  ...holders.where((h) => !isSuspectedDatabaseHolder(h)),
+];
+
+/// «POPINIO (Βασίλης) · έκδοση 4.1 · πριν από 2΄» — μία γραμμή ανά σταθμό.
+///
+/// Το όνομα του υπολογιστή λέει **πού** να τηλεφωνήσει κανείς, το όνομα του
+/// χρήστη **ποιον**. Το δεύτερο λείπει από ίχνη παλαιότερων εκδόσεων και από
+/// εφαρμογές που δεν έχουν ακόμη συνδεδεμένο χρήστη.
+///
+/// Η σιωπή απέναντι στη βάση γράφεται όπου υπάρχει: «χωρίς επαφή με τη βάση
+/// από 27/10/2026 15:02» είναι η πληροφορία που έλειπε επί 17 ώρες.
 String describeStationsHoldingDatabase(
   List<SessionLivenessMark> marks, {
   required DateTime now,
@@ -105,7 +145,9 @@ String describeStationsHoldingDatabase(
   final lines = <String>[];
   for (final mark in marks) {
     final station = mark.station.trim();
-    final parts = <String>[station.isEmpty ? 'άγνωστος σταθμός' : station];
+    final who = mark.operatorName?.trim() ?? '';
+    final where = station.isEmpty ? 'άγνωστος σταθμός' : station;
+    final parts = <String>[who.isEmpty ? where : '$where ($who)'];
     // Ίδιο όνομα υπολογιστή με τον δικό μας σημαίνει δεύτερο αντίγραφο της
     // εφαρμογής εδώ. Χωρίς αυτή τη λέξη ο χρήστης διαβάζει το όνομα του ίδιου
     // του του υπολογιστή και ψάχνει συνάδελφο που δεν υπάρχει.
@@ -115,6 +157,13 @@ String describeStationsHoldingDatabase(
     final version = mark.version.trim();
     if (version.isNotEmpty) parts.add('έκδοση $version');
     parts.add(_describeSince(now, mark.lastSeen));
+    final silentSince = databaseSilentSince(mark, now: now);
+    if (silentSince != null) {
+      parts.add(
+        'χωρίς επαφή με τη βάση από '
+        '${SessionLivenessMark.formatMoment(silentSince)}',
+      );
+    }
     lines.add('• ${parts.join(' · ')}');
   }
   return lines.join('\n');

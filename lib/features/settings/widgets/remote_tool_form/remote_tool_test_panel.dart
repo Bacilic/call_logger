@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/models/remote_tool_role.dart';
 import '../../../../features/calls/utils/remote_param_validator.dart';
 import '../../../../features/calls/utils/vnc_remote_target.dart';
 import 'remote_tool_form_controller.dart';
@@ -17,6 +18,9 @@ class RemoteToolTestPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Ο στόχος δοκιμής ακολουθεί τον ρόλο: ο αριθμός AnyDesk δεν είναι IP, και
+    // μια ετικέτα «IP / Hostname» θα έλεγε στον χρήστη να γράψει λάθος πράγμα.
+    final isAnyDesk = controller.role == ToolRole.anydesk;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -24,22 +28,25 @@ class RemoteToolTestPanel extends StatelessWidget {
         TextFormField(
           controller: controller.testIpC,
           autovalidateMode: AutovalidateMode.onUserInteraction,
-          validator: (value) {
-            final trimmed = (value ?? '').trim();
-            if (trimmed.isEmpty) return null;
-            return RemoteParamValidator.validateHostAddress(trimmed);
-          },
-          inputFormatters: [CommaToDotDecimalSeparatorFormatter()],
+          validator: (value) => RemoteParamValidator.validateTestTarget(
+            controller.role,
+            value ?? '',
+          ),
+          inputFormatters: [
+            if (!isAnyDesk) CommaToDotDecimalSeparatorFormatter(),
+          ],
           keyboardType: const TextInputType.numberWithOptions(
             decimal: true,
             signed: false,
           ),
-          decoration: const InputDecoration(
-            labelText: 'Δοκιμαστική IP / Hostname (για δοκιμή)',
+          decoration: InputDecoration(
+            labelText: isAnyDesk
+                ? 'Δοκιμαστικός αριθμός AnyDesk (για δοκιμή)'
+                : 'Δοκιμαστική IP / Hostname (για δοκιμή)',
             helperText:
                 'Απαιτείται για δοκιμή· τροφοδοτεί {TARGET} και {EQUIPMENT_CODE}.',
-            hintText: 'π.χ. 922 ή 192.168.1.100',
-            border: OutlineInputBorder(),
+            hintText: isAnyDesk ? 'π.χ. 418272958' : 'π.χ. 922 ή 192.168.1.100',
+            border: const OutlineInputBorder(),
           ),
         ),
         const SizedBox(height: 12),

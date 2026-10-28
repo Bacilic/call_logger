@@ -42,6 +42,25 @@ abstract final class RemoteParamValidator {
     }
   }
 
+  /// Επικύρωση του στόχου δοκιμής στη φόρμα **εργαλείου**, ανά ρόλο.
+  ///
+  /// Ο ίδιος κανόνας με τη φόρμα εξοπλισμού: ο αριθμός AnyDesk δεν είναι
+  /// διεύθυνση IP. Ως 26/10/2026 το πεδίο ελεγχόταν πάντα ως IP, οπότε ο
+  /// έγκυρος 418272958 κοκκίνιζε και η αποθήκευση του εργαλείου μπλόκαρε.
+  /// Στο RDP ο στόχος δοκιμής είναι πάντα υπολογιστής — το αρχείο `.rdp` της
+  /// δοκιμής το δίνει η εφαρμογή. Κενή τιμή → null (προαιρετικό πεδίο).
+  static String? validateTestTarget(ToolRole role, String value) {
+    if (value.trim().isEmpty) return null;
+    return switch (role) {
+      ToolRole.anydesk =>
+        RemoteTargetRules.isValidAnyDeskTarget(value)
+            ? null
+            : _invalidAnyDeskMessage,
+      ToolRole.rdp || ToolRole.vnc => _validateHostAddress(value),
+      ToolRole.generic => _validateHostAddress(value),
+    };
+  }
+
   /// Επικύρωση host (VNC/RDP χωρίς αρχείο) — κοινή για φόρμα εξοπλισμού και πίνακα δοκιμής.
   static String? validateHostAddress(String value) =>
       _validateHostAddress(value);

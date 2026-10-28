@@ -13,6 +13,7 @@ import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/core/services/operator_identity.dart';
 import 'package:call_logger/core/services/operator_presence_heartbeat.dart';
 import 'package:call_logger/core/services/workstation_operators.dart';
+import 'package:call_logger/core/database/database_unique_id.dart';
 import 'package:call_logger/features/operators/services/selectable_profiles.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -465,10 +466,13 @@ void main() {
       await db.execute(kCreateAuditLogTable);
       repository = OperatorRepository(db);
       CurrentOperator.reset();
+      // Όπως στην εφαρμογή: η μνήμη του σταθμού αφορά την ανοιχτή βάση.
+      await WorkstationOperators.useDatabase(await ensureDatabaseIdentity(db));
     });
 
     tearDown(() async {
       CurrentOperator.reset();
+      WorkstationOperators.resetForTest();
       await db.close();
     });
 
@@ -578,6 +582,74 @@ void main() {
       );
     });
 
+    test(
+      'βάση που ανοίγει πρώτη φορά εδώ: ρωτά, ακόμη και για γνωστό όνομα',
+      () async {
+        // Περιστατικό 28/10/2026: η βάση του νοσοκομείου, ανοιγμένη πρώτη φορά
+        // στο σπίτι, βρήκε το «Βασίλης» στη μνήμη του υπολογιστή — γραμμένο από
+        // τη βάση του σπιτιού — και μπήκε σιωπηλά. Ίδιο όνομα σε δύο βάσεις δεν
+        // σημαίνει πάντα ίδιος άνθρωπος.
+        await seedTwoProfiles();
+        final vasilis = (await repository.getAll()).firstWhere(
+          (operator) => operator.displayName == 'Βασίλης',
+        );
+        await OperatorIdentity.chooseForSession(vasilis);
+
+        final otherDb = await openDatabase(
+          inMemoryDatabasePath,
+          singleInstance: false,
+        );
+        addTearDown(otherDb.close);
+        await onDatabaseUpgradeSquashed(otherDb, 46, 47);
+        await otherDb.execute(kCreateAuditLogTable);
+        await OperatorRepository(otherDb).insert(
+          Operator(
+            displayName: 'Βασίλης',
+            windowsAccount: 'v.drosos',
+            createdAt: DateTime(2026, 8, 20),
+          ),
+        );
+
+        expect(
+          await OperatorIdentity.resolveAndActivate(
+            otherDb,
+            windowsAccount: 'tpo.koino',
+          ),
+          isNull,
+          reason: 'Η άλλη βάση δεν έχει δουλευτεί ποτέ εδώ — ρωτά τον άνθρωπο.',
+        );
+
+        // Επιστροφή στην πρώτη βάση: εκεί ο σταθμός τον θυμάται ακόμη.
+        expect(
+          (await OperatorIdentity.resolveAndActivate(
+            db,
+            windowsAccount: 'tpo.koino',
+          ))?.displayName,
+          'Βασίλης',
+        );
+      },
+    );
+
+    test('η παλιά κοινή μνήμη περνά στη βάση που ανοίγει πρώτη', () async {
+      // Η αναβάθμιση δεν επιτρέπεται να ρωτήσει κανέναν χωρίς λόγο: ό,τι
+      // θυμόταν ο σταθμός αφορούσε τη βάση που χρησιμοποιούσε ως τότε.
+      WorkstationOperators.resetForTest();
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        WorkstationOperators.legacyStorageKey: <String>['Βασίλης'],
+      });
+      await seedTwoProfiles();
+
+      expect(
+        (await OperatorIdentity.resolveAndActivate(
+          db,
+          windowsAccount: 'tpo.koino',
+        ))?.displayName,
+        'Βασίλης',
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey(WorkstationOperators.legacyStorageKey), isFalse);
+    });
+
     test('η αυτόματη αναγνώριση δεν γεμίζει τη μνήμη του σταθμού', () async {
       // Αλλιώς ο πρώτος που αναγνωρίστηκε αυτόματα θα έμενε για πάντα στη
       // λίστα και ο σταθμός θα ρωτούσε αιώνια μετά την πρώτη αλλαγή χρήστη.
@@ -606,6 +678,7 @@ void main() {
       await db.execute(kCreateOperatorPresenceTable);
       OperatorPresenceHeartbeat.instanceIdReader = () => myInstance;
       CurrentOperator.reset();
+      await WorkstationOperators.useDatabase(await ensureDatabaseIdentity(db));
     });
 
     tearDown(() async {

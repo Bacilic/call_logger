@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/widgets/modal_route_tracker.dart';
 
 /// Τι έγινε στο «Ανέβασμα κατόψεων στη βάση», όροφο-όροφο.
 ///
@@ -13,6 +14,7 @@ Future<void> showFloorPlanUploadReportDialog(
 }) {
   return showDialog<void>(
     context: context,
+    routeSettings: readOnlyRouteSettings,
     builder: (dialogContext) => AlertDialog(
       title: const Text('Ανέβασμα κατόψεων στη βάση'),
       content: SingleChildScrollView(

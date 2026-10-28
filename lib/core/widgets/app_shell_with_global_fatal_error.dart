@@ -9,6 +9,8 @@ import '../../features/database/widgets/backup_failed_dialog.dart';
 import '../../features/database/widgets/backup_folder_missing_dialog.dart';
 import '../errors/fatal_error_routing.dart';
 import '../init/app_init_retry_runner.dart';
+import '../services/main_screen_announcements.dart';
+import '../utils/run_after_next_frame.dart';
 import '../services/settings_service.dart';
 import 'database_error_screen.dart';
 import 'fatal_error_screen.dart';
@@ -65,7 +67,7 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
         return;
       }
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      void show() {
         if (!context.mounted) return;
         if (st == BackupScheduleStatus.folderMissing) {
           final dest = ref
@@ -81,7 +83,15 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
           return;
         }
         unawaited(showBackupFailedDialog(context: context, ref: ref));
-      });
+      }
+
+      // Περιμένει την κύρια οθόνη: ο έλεγχος τρέχει από την αρχή της
+      // εκκίνησης, και ο διάλογος δεν επιτρέπεται να ανοίξει πάνω από την
+      // επιλογή χρήστη ή την κάρτα εκκίνησης. Και τότε, μετά το καρέ: ένας
+      // διάλογος δεν ανοίγει μέσα στο χτίσιμο.
+      MainScreenAnnouncements.announce(
+        () => unawaited(runAfterNextFrame(show)),
+      );
     });
 
     return ValueListenableBuilder<FatalErrorState?>(

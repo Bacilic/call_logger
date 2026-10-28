@@ -65,9 +65,15 @@ class _SentRequest {
 /// **Τα κουμπιά ζουν ΜΟΝΟ εδώ.** Ένα γενικό «κλείσε την εφαρμογή του άλλου»,
 /// διαθέσιμο κάθε στιγμή, θα ήταν εργαλείο ζημιάς. Εδώ έχει νόημα επειδή ο
 /// φρουρός έχει ήδη αποδείξει ότι η αναβάθμιση δεν μπορεί να προχωρήσει.
-class SchemaUpgradeWaitingPanel extends StatefulWidget {
-  const SchemaUpgradeWaitingPanel({
+///
+/// **Και όταν η βάση δεν ανοίγει επειδή είναι πιασμένη** ([lockedDatabase]) —
+/// περιστατικό 26–27/10/2026, όπου η εφαρμογή του PC922 με νεκρή σύνδεση
+/// κράτησε τους συναδέλφους έξω για ώρες. Τότε ο πιθανός υπαίτιος ανεβαίνει
+/// πρώτος, και τα κουμπιά στοχεύουν εκείνον, όχι όλο το δίκτυο.
+class StationsHoldingDatabasePanel extends StatefulWidget {
+  const StationsHoldingDatabasePanel({
     super.key,
+    this.lockedDatabase = false,
     this.refreshInterval = const Duration(seconds: 5),
     this.loadHolders,
     this.sendRequest,
@@ -96,9 +102,12 @@ class SchemaUpgradeWaitingPanel extends StatefulWidget {
   final DateTime Function()? now;
   final String? myStation;
 
+  /// Η βάση δεν ανοίγει επειδή κάποιος την κρατά — όχι μπλόκο αναβάθμισης.
+  final bool lockedDatabase;
+
   @override
-  State<SchemaUpgradeWaitingPanel> createState() =>
-      _SchemaUpgradeWaitingPanelState();
+  State<StationsHoldingDatabasePanel> createState() =>
+      _StationsHoldingDatabasePanelState();
 }
 
 /// **Η εικόνα βγαίνει από τον φάκελο, όχι από τη μνήμη της οθόνης.**
@@ -108,7 +117,8 @@ class SchemaUpgradeWaitingPanel extends StatefulWidget {
 /// δύο ψέματα — χανόταν όταν ο αιτών ξανάνοιγε την εφαρμογή του (ενώ το
 /// σημείωμα περίμενε ακόμη), και «θυμόταν» αίτημα προς έναν συνάδελφο που είχε
 /// ήδη κλείσει και ξανανοίξει.
-class _SchemaUpgradeWaitingPanelState extends State<SchemaUpgradeWaitingPanel> {
+class _StationsHoldingDatabasePanelState
+    extends State<StationsHoldingDatabasePanel> {
   List<SessionLivenessMark> _holders = const [];
   bool _loadedOnce = false;
   bool _refreshing = false;
@@ -197,7 +207,7 @@ class _SchemaUpgradeWaitingPanelState extends State<SchemaUpgradeWaitingPanel> {
       }
       if (!mounted) return;
       setState(() {
-        _holders = holders;
+        _holders = widget.lockedDatabase ? suspectsFirst(holders) : holders;
         _pending
           ..clear()
           ..addAll(pending);
@@ -319,8 +329,17 @@ class _SchemaUpgradeWaitingPanelState extends State<SchemaUpgradeWaitingPanel> {
     );
   }
 
-  Iterable<SessionLivenessMark> get _listeners =>
-      _holders.where((h) => h.listensForShutdownRequests);
+  /// Σε ποιους πηγαίνουν τα αιτήματα κλεισίματος.
+  ///
+  /// Στην κλειδωμένη βάση, όταν υπάρχει πιθανός υπαίτιος που ακούει, μόνο
+  /// εκείνος: ο συνάδελφος που απλώς περιμένει πίσω του δεν φταίει, και ένα
+  /// κλείσιμο της εφαρμογής του θα του έκοβε τη δουλειά χωρίς όφελος.
+  Iterable<SessionLivenessMark> get _listeners {
+    final listening = _holders.where((h) => h.listensForShutdownRequests);
+    if (!widget.lockedDatabase) return listening;
+    final suspects = listening.where(isSuspectedDatabaseHolder);
+    return suspects.isEmpty ? listening : suspects;
+  }
 
   bool _isStillStarting(SessionLivenessMark holder) =>
       _now.difference(holder.startedAt) < _kStillStarting;
@@ -349,7 +368,9 @@ class _SchemaUpgradeWaitingPanelState extends State<SchemaUpgradeWaitingPanel> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Ανοιχτές εφαρμογές αυτή τη στιγμή',
+                widget.lockedDatabase
+                    ? 'Ποιος κρατά τη βάση'
+                    : 'Ανοιχτές εφαρμογές αυτή τη στιγμή',
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: theme.colorScheme.onSurface,
                   fontWeight: FontWeight.w700,
@@ -362,13 +383,29 @@ class _SchemaUpgradeWaitingPanelState extends State<SchemaUpgradeWaitingPanel> {
             Text('Ρωτάω…', style: theme.textTheme.bodyMedium)
           else if (_holders.isEmpty)
             Text(
-              'Κανείς άλλος δεν κρατά πια τη βάση. Πατήστε «Επαναδοκιμή».',
+              widget.lockedDatabase
+                  ? 'Καμία άλλη ανοιχτή εφαρμογή δεν φαίνεται να κρατά τη '
+                        'βάση. Αν το πρόβλημα επιμένει, ίσως την κλειδώνει κάτι '
+                        'εκτός εφαρμογής, π.χ. αντίγραφο ασφαλείας.'
+                  : 'Κανείς άλλος δεν κρατά πια τη βάση. Πατήστε «Επαναδοκιμή».',
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: theme.colorScheme.onSurface,
                 fontWeight: FontWeight.w600,
               ),
             )
-          else
+          else ...[
+            if (widget.lockedDatabase &&
+                !_holders.any(isSuspectedDatabaseHolder))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'Καμία από αυτές δεν δηλώνει κολλημένη σύνδεση. Ίσως κλειδώνει '
+                  'κάτι εκτός εφαρμογής, π.χ. αντίγραφο ασφαλείας.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
             for (final holder in _holders)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
@@ -380,8 +417,12 @@ class _SchemaUpgradeWaitingPanelState extends State<SchemaUpgradeWaitingPanel> {
                   stillStarting: _isStillStarting(holder),
                   now: _now,
                   myStation: _myStation,
+                  suspected:
+                      widget.lockedDatabase &&
+                      isSuspectedDatabaseHolder(holder),
                 ),
               ),
+          ],
           if (_holders.isNotEmpty) ...[
             const SizedBox(height: 14),
             _buildActions(theme),
@@ -452,9 +493,13 @@ class _StationLine extends StatelessWidget {
     required this.stillStarting,
     required this.now,
     required this.myStation,
+    this.suspected = false,
   });
 
   final SessionLivenessMark holder;
+
+  /// Η εφαρμογή του σταθμού δηλώνει νεκρή σύνδεση με τη βάση.
+  final bool suspected;
   final ShutdownRequestStage stage;
   final bool immediate;
   final String? failure;
@@ -468,6 +513,15 @@ class _StationLine extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (suspected)
+          Text(
+            'Πιθανότατα κρατά τη βάση — η εφαρμογή του τρέχει, αλλά η σύνδεσή '
+            'της με τη βάση έχει πεθάνει:',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.error,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         Text(
           '• ${describeStationsHoldingDatabase([holder], now: now, myStation: myStation).replaceFirst('• ', '')}',
           style: theme.textTheme.bodyLarge?.copyWith(

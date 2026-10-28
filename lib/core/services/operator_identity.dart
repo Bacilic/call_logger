@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../features/operators/avatars/operator_avatar_assignment.dart';
+import '../database/database_unique_id.dart';
 import '../database/operator_audit.dart';
 import '../database/operator_presence_repository.dart';
 import '../database/operator_repository.dart';
@@ -62,6 +63,9 @@ class OperatorIdentity {
     DateTime? now,
   }) async {
     CurrentOperator.reset();
+    // Η μνήμη του σταθμού είναι ανά βάση: πρώτα ποια βάση άνοιξε, μετά ποιους
+    // θυμάται ο σταθμός γι' αυτήν.
+    await WorkstationOperators.useDatabase(await ensureDatabaseIdentity(db));
 
     final repository = OperatorRepository(db);
     final rawAccount = windowsAccount ?? currentWindowsAccount;

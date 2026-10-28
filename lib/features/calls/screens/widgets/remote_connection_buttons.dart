@@ -11,9 +11,11 @@ import '../../../../core/models/remote_tool_role.dart';
 import '../../../../core/services/remote_launcher_service.dart';
 import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../provider/call_header_provider.dart';
+import '../../provider/lookup_provider.dart';
 import '../../provider/remote_connect_cooldown_provider.dart';
 import '../../provider/remote_paths_provider.dart';
 import '../../utils/call_remote_targets.dart';
+import '../../utils/equipment_remote_param_key.dart';
 
 /// Κουμπιά απομακρυσμένης σύνδεσης: κύριο εργαλείο + overflow, εικονίδια launcher.
 class RemoteConnectionButtons extends ConsumerStatefulWidget {
@@ -75,11 +77,18 @@ class _RemoteConnectionButtonsState
     }
   }
 
-  Widget _buildExclusiveToolsBanner(ThemeData theme) {
+  /// Η ένδειξη όταν ο εξοπλισμός έχει ορισμένο **ένα μόνο** εργαλείο.
+  ///
+  /// Λέει ποιο ορίστηκε, με το όνομά του. Ως 28/10/2026 έγραφε «Εμφανίζονται
+  /// μόνο τα κύρια εργαλεία» — αλλά η ρύθμιση του εξοπλισμού λέει «Μόνο:
+  /// AnyDesk», και «κύρια» στον πληθυντικό αντιφάσκει με το «μόνο».
+  Widget _buildExclusiveToolsBanner(ThemeData theme, String exclusiveName) {
     final message = _showAll
         ? 'Εμφανίζονται όλα τα εργαλεία'
-        : 'Εμφανίζονται μόνο τα κύρια εργαλεία';
-    final actionLabel = _showAll ? 'Μόνο τα κύρια' : 'Εμφάνιση όλων';
+        : 'Για αυτόν τον εξοπλισμό ορίστηκε μόνο το $exclusiveName';
+    final actionLabel = _showAll
+        ? 'Μόνο το $exclusiveName'
+        : 'Εμφάνιση και των υπολοίπων';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -196,15 +205,30 @@ class _RemoteConnectionButtonsState
     final pathsAsync = ref.watch(validRemoteToolPathsByIdProvider);
     final uiConfig = ref.watch(callsRemoteUiConfigProvider);
     final launcherService = ref.read(remoteLauncherServiceProvider);
+    // Το είδος του τμήματος του μηχανήματος: σε εξωτερική μονάδα το VNC δεν
+    // προτείνεται αυτόματα. Χωρίς κατάλογο ακόμη, `null` = όπως πάντα.
+    final equipmentDepartmentKind = ref
+        .watch(lookupServiceProvider)
+        .value
+        ?.service
+        .departmentKindById(widget.header.selectedEquipment?.departmentId);
     final visible = CallRemoteTargets.visibleRemoteToolsForCallState(
       widget.header,
       widget.tools,
       applyExclusive: !_showAll,
+      equipmentDepartmentKind: equipmentDepartmentKind,
     );
     final exclusiveHides = CallRemoteTargets.exclusiveHidesTools(
       widget.header,
       widget.tools,
+      equipmentDepartmentKind: equipmentDepartmentKind,
     );
+    final exclusiveId = EquipmentRemoteParamKey.exclusiveToolIdFrom(
+      widget.header.selectedEquipment?.remoteParams ?? const {},
+    );
+    final exclusiveName =
+        widget.tools.where((t) => t.id == exclusiveId).firstOrNull?.name ??
+        'ένα εργαλείο';
     final toolsForTargets = widget.tools.isEmpty
         ? <RemoteTool>[]
         : widget.tools;
@@ -263,7 +287,8 @@ class _RemoteConnectionButtonsState
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (exclusiveHides) _buildExclusiveToolsBanner(theme),
+                          if (exclusiveHides)
+                            _buildExclusiveToolsBanner(theme, exclusiveName),
                           Wrap(
                             spacing: 12,
                             runSpacing: 8,

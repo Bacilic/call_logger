@@ -323,17 +323,8 @@ class RemoteToolFormController extends ChangeNotifier {
 
   void applyRolePreset(ToolRole presetRole) {
     if (saving) return;
-    final String line;
-    switch (presetRole) {
-      case ToolRole.vnc:
-        line = '-host=PC{EQUIPMENT_CODE}';
-      case ToolRole.rdp:
-        line = '/v:{TARGET}';
-      case ToolRole.anydesk:
-        line = '-id {TARGET}';
-      case ToolRole.generic:
-        return;
-    }
+    final line = RemoteTool.rolePresetArgument(presetRole);
+    if (line == null) return;
     if (argRows.any((r) => r.valueC.text.trim() == line)) return;
     argRows.add(createArgRow(stableId: nextArgId++, value: line));
     notifyListeners();

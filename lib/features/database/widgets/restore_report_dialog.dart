@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/restore_report.dart';
+import '../../../core/widgets/modal_route_tracker.dart';
 
 /// Παράθυρο «Επαναφορά ολοκληρώθηκε»: μία γραμμή ανά στοιχείο με εικονίδιο
 /// και χρώμα κατάστασης (πράσινο = επαναφέρθηκε, πορτοκαλί = δεν βρέθηκε στο
@@ -14,6 +15,7 @@ Future<void> showRestoreReportDialog({
 }) {
   return showDialog<void>(
     context: context,
+    routeSettings: readOnlyRouteSettings,
     builder: (ctx) {
       final theme = Theme.of(ctx);
       final preserved = preRestoreBackupPath?.trim() ?? '';

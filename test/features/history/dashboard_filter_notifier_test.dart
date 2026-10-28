@@ -82,8 +82,11 @@ void main() {
     });
 
     test(
-      'clearAllFilters καθαρίζει τα υπόλοιπα φίλτρα αλλά διατηρεί preset ημερομηνίας',
+      'clearAllFilters καθαρίζει όλα τα φίλτρα — και το εύρος ημερομηνιών',
       () async {
+        // Απόφαση Διευθυντή 27/10/2026: ο «Καθαρισμός όλων» άφηνε το εύρος, και
+        // με μόνο ενεργό φίλτρο τις «Τελευταίες 30 ημέρες» το κουμπί δεν έκανε
+        // τίποτα ορατό. Το εύρος γίνεται «Όλα», όπως με το × της μάρκας του.
         final container = _testContainer();
         addTearDown(container.dispose);
 
@@ -101,16 +104,16 @@ void main() {
           ),
         );
 
-        notifier.clearAllFilters();
+        await notifier.clearAllFilters();
 
-        expect(notifier.activeDatePreset, DashboardDatePreset.custom);
+        expect(notifier.activeDatePreset, DashboardDatePreset.all);
         final filter = container.read(dashboardFilterProvider);
         expect(filter.keyword, isEmpty);
         expect(filter.department, isNull);
         expect(filter.userName, isNull);
         expect(filter.equipmentCode, isNull);
-        expect(filter.dateFrom, DashboardFilterModel.dayOnly(customFrom));
-        expect(filter.dateTo, DashboardFilterModel.dayOnly(customTo));
+        expect(filter.dateFrom, isNull);
+        expect(filter.dateTo, isNull);
       },
     );
   });

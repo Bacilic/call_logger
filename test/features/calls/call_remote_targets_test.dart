@@ -5,6 +5,7 @@ import 'package:call_logger/features/calls/models/equipment_model.dart';
 import 'package:call_logger/features/calls/provider/smart_entity_selector_provider.dart';
 import 'package:call_logger/features/calls/utils/call_remote_targets.dart';
 import 'package:call_logger/features/calls/utils/equipment_remote_param_key.dart';
+import 'package:call_logger/features/directory/models/department_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 RemoteTool _tool({
@@ -75,6 +76,67 @@ void main() {
         expect(vis.map((t) => t.id).toList(), [2]);
       },
     );
+
+    group('εξοπλισμός εξωτερικής μονάδας', () {
+      // Απόφαση Διευθυντή 28/10/2026: το VNC προτεινόταν αυτόματα σε κάθε
+      // υπολογιστή, με στόχο το όνομά του — και στο PC1 του Κέντρου Υγείας
+      // Κορίνθου, που είναι εκτός τοπικού δικτύου και δεν θα συνδεόταν ποτέ.
+      final vnc = _tool(id: 1, role: ToolRole.vnc);
+      final anyDesk = _tool(id: 2, role: ToolRole.anydesk);
+
+      test('το VNC δεν προτείνεται αυτόματα', () {
+        final s = SmartEntitySelectorState(
+          selectedEquipment: EquipmentModel(
+            code: 'PC1',
+            remoteParams: const {'2': '418272958'},
+          ),
+        );
+
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [
+          vnc,
+          anyDesk,
+        ], equipmentDepartmentKind: DepartmentKind.externalUnit);
+
+        expect(vis, [anyDesk]);
+        expect(
+          CallRemoteTargets.exclusiveHidesTools(s, [
+            vnc,
+            anyDesk,
+          ], equipmentDepartmentKind: DepartmentKind.externalUnit),
+          isFalse,
+          reason: 'Τίποτα δεν κρύφτηκε, άρα καμία ένδειξη «μόνο τα κύρια».',
+        );
+      });
+
+      test('VNC που ορίστηκε ρητά στο μηχάνημα εμφανίζεται κανονικά', () {
+        // Μονάδα συνδεδεμένη μέσω VPN: εκεί το VNC δουλεύει, και ο χρήστης το
+        // ορίζει ο ίδιος στο μηχάνημα.
+        final s = SmartEntitySelectorState(
+          selectedEquipment: EquipmentModel(
+            code: 'PC1',
+            remoteParams: const {'1': '10.20.30.40'},
+          ),
+        );
+
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [
+          vnc,
+        ], equipmentDepartmentKind: DepartmentKind.externalUnit);
+
+        expect(vis, [vnc]);
+      });
+
+      test('στο νοσοκομείο το VNC προτείνεται αυτόματα όπως πάντα', () {
+        final s = SmartEntitySelectorState(
+          selectedEquipment: EquipmentModel(code: '922'),
+        );
+
+        final vis = CallRemoteTargets.visibleRemoteToolsForCallState(s, [
+          vnc,
+        ], equipmentDepartmentKind: DepartmentKind.hospital);
+
+        expect(vis, [vnc]);
+      });
+    });
 
     test('visibleRemoteToolsForCallState: ελεύθερο κείμενο AnyDesk', () {
       final s = SmartEntitySelectorState(equipmentText: '123456789');

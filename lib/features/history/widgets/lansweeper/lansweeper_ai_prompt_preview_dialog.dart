@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/widgets/dialog_snackbar_scope.dart';
+import '../../../../core/widgets/modal_route_tracker.dart';
 
 /// Διάλογος προεπισκόπησης της τελικής προτροπής Gemini (μετά αντικατάσταση placeholders).
 Future<void> showLansweeperAiPromptPreviewDialog(
@@ -10,6 +11,7 @@ Future<void> showLansweeperAiPromptPreviewDialog(
 }) {
   return showDialog<void>(
     context: context,
+    routeSettings: readOnlyRouteSettings,
     // Σημερινή συμπεριφορά, δηλωμένη: το κλικ έξω δεν κλείνει.
     barrierDismissible: false,
     builder: (dialogContext) =>

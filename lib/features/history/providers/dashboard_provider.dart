@@ -37,10 +37,6 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
 
   DashboardDatePreset _activePreset = DashboardDatePreset.defaultPreset;
 
-  DateTime? _storedCustomFrom;
-
-  DateTime? _storedCustomTo;
-
   DashboardDatePreset get activeDatePreset => _activePreset;
 
   @override
@@ -81,10 +77,6 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
 
         return;
       }
-
-      _storedCustomFrom = customFrom;
-
-      _storedCustomTo = customTo;
     }
 
     if (!ref.mounted) return;
@@ -128,12 +120,6 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
     bool persist = true,
   }) async {
     _activePreset = preset;
-
-    if (preset == DashboardDatePreset.custom) {
-      _storedCustomFrom = customFrom;
-
-      _storedCustomTo = customTo;
-    }
 
     state = DashboardDatePreset.applyToFilter(
       state,
@@ -188,22 +174,15 @@ class DashboardFilterNotifier extends Notifier<DashboardFilterModel> {
     await _applyPreset(DashboardDatePreset.all);
   }
 
+  /// Σβήνει **όλα** τα φίλτρα — και το εύρος ημερομηνιών, που γίνεται «Όλα».
+  ///
+  /// Απόφαση Διευθυντή 27/10/2026. Ως τότε το εύρος έμενε, ενώ το × της μάρκας
+  /// του το καθάριζε: δύο δρόμοι για το ίδιο φίλτρο έλεγαν διαφορετικά
+  /// πράγματα, και με μόνο ενεργό φίλτρο τις «Τελευταίες 30 ημέρες» το κουμπί
+  /// δεν έκανε τίποτα ορατό. Η επιλογή αποθηκεύεται όπως με το ×.
   Future<void> clearAllFilters() async {
-    final preset = _activePreset;
-
-    final customFrom = _storedCustomFrom;
-
-    final customTo = _storedCustomTo;
-
-    state = DashboardDatePreset.applyToFilter(
-      const DashboardFilterModel(),
-
-      preset,
-
-      customFrom: customFrom,
-
-      customTo: customTo,
-    );
+    state = const DashboardFilterModel();
+    await clearDateRange();
   }
 
   /// Σβήνει **ένα** φίλτρο — η μάρκα του στη λωρίδα των ενεργών.

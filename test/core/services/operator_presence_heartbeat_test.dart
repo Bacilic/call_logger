@@ -5,6 +5,7 @@
 import 'dart:io';
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/database_reachability.dart';
 import 'package:call_logger/core/database/operator_presence_repository.dart';
 import 'package:call_logger/core/models/operator.dart';
 import 'package:call_logger/core/services/current_operator.dart';
@@ -41,6 +42,7 @@ void main() {
     });
 
     tearDown(() {
+      DatabaseReachabilitySignal.resetForTest();
       heartbeat.stop();
       CurrentOperator.reset();
     });
@@ -186,6 +188,42 @@ void main() {
       final mark = (await repository.getAll()).single;
       expect(mark.instance, isNull);
       expect(mark.isOnlineAt(DateTime.now()), isFalse);
+    });
+
+    test('με νεκρή σύνδεση ο χτύπος δεν αγγίζει τη βάση', () async {
+      // Περιστατικό 26–27/10/2026: ο PC922 έχασε τη σύνδεση και ο χτύπος
+      // ξαναδοκίμαζε κάθε λεπτό επί 17 ώρες. Κάθε απόπειρα εγγραφής σε κοινή
+      // βάση κλειδώνει τους συναδέλφους — και μια σύνδεση που ο φύλακας έχει
+      // κρίνει νεκρή δεν πρόκειται να ζωντανέψει.
+      CurrentOperator.activate(_operator(7));
+      DatabaseReachabilitySignal.publish(DatabaseReachability.staleConnection);
+
+      await heartbeat.beatOnce();
+
+      expect(await repository.getAll(), isEmpty);
+    });
+
+    test('όταν η βάση επιστρέψει, ο χτύπος ξαναγράφει μόνος του', () async {
+      CurrentOperator.activate(_operator(7));
+      DatabaseReachabilitySignal.publish(DatabaseReachability.lost);
+      await heartbeat.beatOnce();
+
+      DatabaseReachabilitySignal.publish(DatabaseReachability.ok);
+      await heartbeat.beatOnce();
+
+      expect((await repository.getAll()).single.operatorId, 7);
+    });
+
+    test('με νεκρή σύνδεση το κλείσιμο δεν περιμένει τη βάση', () async {
+      // Στο περιστατικό η παράδοση του ίχνους έφαγε ολόκληρο το όριο του
+      // κλεισίματος, και η συγχώνευση των αρχείων της βάσης δεν πρόλαβε.
+      CurrentOperator.activate(_operator(7));
+      await heartbeat.beatOnce();
+      DatabaseReachabilitySignal.publish(DatabaseReachability.staleConnection);
+
+      await heartbeat.releaseAndStop();
+
+      expect((await repository.getAll()).single.instance, isNotNull);
     });
 
     test('η έκδοση διαβάζεται μία φορά, όχι σε κάθε χτύπο', () async {

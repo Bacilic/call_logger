@@ -27,6 +27,9 @@ class SessionLivenessMark {
     this.database,
     this.instance,
     this.listensForShutdownRequests = false,
+    this.operatorName,
+    this.lastDatabaseContact,
+    this.databaseConnectionDead = false,
   });
 
   final String station;
@@ -67,14 +70,65 @@ class SessionLivenessMark {
   /// οπότε το `false` λέει ακριβώς την αλήθεια γι' αυτές — θέλουν τηλέφωνο.
   final bool listensForShutdownRequests;
 
-  SessionLivenessMark seenAt(DateTime now) => SessionLivenessMark(
+  /// Ποιος είναι συνδεδεμένος σε αυτή την εκτέλεση — το όνομα εμφάνισης.
+  ///
+  /// Όταν η βάση δεν ανοίγει, ο συνάδελφος χρειάζεται να ξέρει **ποιον** να
+  /// πάρει τηλέφωνο, όχι μόνο ποιον υπολογιστή. `null` πριν από την επιλογή
+  /// χρήστη και σε ίχνος παλαιότερης έκδοσης.
+  final String? operatorName;
+
+  /// Πότε αυτή η εκτέλεση μίλησε τελευταία φορά **με επιτυχία** με τη βάση.
+  ///
+  /// Το [lastSeen] λέει μόνο ότι η εφαρμογή τρέχει. Στο περιστατικό της
+  /// 26–27/10/2026 το ίχνος του PC922 ανανεωνόταν κανονικά επί 17 ώρες, ενώ η
+  /// σύνδεσή του με τη βάση ήταν νεκρή και κρατούσε τους συναδέλφους απέξω.
+  /// Η απόσταση ανάμεσα στα δύο είναι ακριβώς αυτό που ξεχωρίζει το «δουλεύει»
+  /// από το «κολλημένο».
+  ///
+  /// `null` όσο δεν έχει γίνει καμία επαφή ακόμη, και σε ίχνος παλαιότερης
+  /// έκδοσης — και στις δύο περιπτώσεις δεν κατηγορεί κανέναν.
+  final DateTime? lastDatabaseContact;
+
+  /// Έχει κρίνει **η ίδια** η εκτέλεση ότι η σύνδεσή της με τη βάση πέθανε;
+  ///
+  /// Η σιωπή μόνη της δεν αρκεί για να κατηγορηθεί κανείς: όσο ένας σταθμός
+  /// κρατά τη βάση, και οι συνάδελφοι που περιμένουν πίσω του σωπαίνουν. Η
+  /// διαφορά φαίνεται μόνο από μέσα — ο φύλακας του κολλημένου σταθμού βλέπει
+  /// νεκρή σύνδεση, ενώ των υπολοίπων βλέπει πιασμένη βάση.
+  final bool databaseConnectionDead;
+
+  /// Το ίδιο ίχνος, ανανεωμένο τη στιγμή [now] με ό,τι ισχύει τώρα.
+  SessionLivenessMark seenAt(
+    DateTime now, {
+    String? operatorName,
+    DateTime? lastDatabaseContact,
+    bool? databaseConnectionDead,
+  }) => copyWith(
+    lastSeen: now,
+    operatorName: operatorName ?? this.operatorName,
+    lastDatabaseContact: lastDatabaseContact ?? this.lastDatabaseContact,
+    databaseConnectionDead: databaseConnectionDead,
+  );
+
+  SessionLivenessMark copyWith({
+    DateTime? lastSeen,
+    bool? listensForShutdownRequests,
+    String? operatorName,
+    DateTime? lastDatabaseContact,
+    bool? databaseConnectionDead,
+  }) => SessionLivenessMark(
     station: station,
     version: version,
     startedAt: startedAt,
-    lastSeen: now,
+    lastSeen: lastSeen ?? this.lastSeen,
     database: database,
     instance: instance,
-    listensForShutdownRequests: listensForShutdownRequests,
+    listensForShutdownRequests:
+        listensForShutdownRequests ?? this.listensForShutdownRequests,
+    operatorName: operatorName ?? this.operatorName,
+    lastDatabaseContact: lastDatabaseContact ?? this.lastDatabaseContact,
+    databaseConnectionDead:
+        databaseConnectionDead ?? this.databaseConnectionDead,
   );
 
   String encode() => jsonEncode({
@@ -85,6 +139,10 @@ class SessionLivenessMark {
     if (database != null) 'database': database,
     if (instance != null) 'instance': instance,
     if (listensForShutdownRequests) 'listensForShutdownRequests': true,
+    if (operatorName != null) 'operatorName': operatorName,
+    if (lastDatabaseContact != null)
+      'lastDatabaseContact': lastDatabaseContact!.toIso8601String(),
+    if (databaseConnectionDead) 'databaseConnectionDead': true,
   });
 
   /// Διαβάζει ίχνος. `null` όταν λείπει, είναι αλλοιωμένο, ή γράφτηκε από
@@ -111,6 +169,11 @@ class SessionLivenessMark {
         instance: _nonEmpty(decoded['instance']),
         listensForShutdownRequests:
             decoded['listensForShutdownRequests'] == true,
+        operatorName: _nonEmpty(decoded['operatorName']),
+        lastDatabaseContact: DateTime.tryParse(
+          decoded['lastDatabaseContact']?.toString() ?? '',
+        ),
+        databaseConnectionDead: decoded['databaseConnectionDead'] == true,
       );
     } on FormatException {
       return null;

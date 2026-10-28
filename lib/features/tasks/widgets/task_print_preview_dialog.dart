@@ -6,6 +6,7 @@ import '../../../core/widgets/draggable_dialog_shell.dart';
 import '../models/task.dart';
 import '../services/task_print_launcher.dart';
 import '../services/task_print_document.dart';
+import '../../../core/widgets/modal_route_tracker.dart';
 
 /// Δείχνει το φύλλο πριν τυπωθεί, και τυπώνει από εκεί.
 ///
@@ -24,6 +25,7 @@ Future<void> showTaskPrintPreviewDialog(
 }) {
   return showDialog<void>(
     context: context,
+    routeSettings: readOnlyRouteSettings,
     builder: (context) => TaskPrintPreviewDialog(task: task),
   );
 }

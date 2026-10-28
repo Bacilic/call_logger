@@ -233,4 +233,26 @@ void main() {
       );
     });
   });
+
+  group('Πλήθος στοιχείων λίστας', () {
+    // Εύρημα 23/10/2026: η αφαίρεση ενός τηλεφώνου της Νικολέτας
+    // Παπανδρέαδη γράφτηκε «Αφαίρεση τηλεφώνων 1 στοιχεία».
+    test('ένα στοιχείο γράφεται στον ενικό', () {
+      expect(
+        AuditDiffHelper.humanizeFieldValue('phones', ['2541']),
+        '1 στοιχείο',
+      );
+      expect(
+        AuditDiffHelper.humanizeFieldValue('phones', ['2541'], forSearch: true),
+        '1 στοιχειο',
+      );
+    });
+
+    test('πολλά στοιχεία μένουν στον πληθυντικό', () {
+      expect(
+        AuditDiffHelper.humanizeFieldValue('phones', ['2541', '2542']),
+        '2 στοιχεία',
+      );
+    });
+  });
 }

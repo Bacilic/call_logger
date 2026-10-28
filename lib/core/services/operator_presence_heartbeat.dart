@@ -5,10 +5,12 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../config/app_config.dart';
 import '../database/database_helper.dart';
+import '../database/database_reachability.dart';
 import '../database/operator_presence_repository.dart';
 import '../models/operator_presence.dart';
 import 'crash_log_service.dart';
 import 'current_operator.dart';
+import 'database_contact.dart';
 import 'station_name.dart';
 
 /// Αφήνει το ίχνος «είμαι εδώ» για τον συνδεδεμένο χρήστη, από αυτόν τον σταθμό.
@@ -156,26 +158,38 @@ class OperatorPresenceHeartbeat {
   /// **Ποτέ μοιραίο.** Η βάση ζει σε δικτυακό φάκελο που μπορεί να πέσει· ένα
   /// ίχνος που δεν γράφτηκε δεν επιτρέπεται να χαλάσει τη δουλειά κανενός. Το
   /// σφάλμα αφήνει ίχνος στο ημερολόγιο και η επόμενη προσπάθεια ξαναδοκιμάζει.
+  ///
+  /// **Εκτός αν ο φύλακας έχει ήδη κρίνει τη βάση χαμένη.** Περιστατικό
+  /// 26–27/10/2026: μια σύνδεση πάγωσε και ο χτύπος ξαναδοκίμαζε κάθε λεπτό
+  /// επί 17 ώρες. Κάθε απόπειρα εγγραφής σε κοινή βάση πιάνει κλείδωμα που
+  /// κρατά τους συναδέλφους απέξω — για μια σύνδεση που δεν πρόκειται να
+  /// ζωντανέψει. Όσο ο φύλακας λέει «χάθηκε», ο χτύπος σωπαίνει· μόλις πει
+  /// «επέστρεψε», ο επόμενος χτύπος γράφει κανονικά.
   Future<void> beatOnce() async {
     final operatorId = CurrentOperator.active?.id;
     if (operatorId == null) return;
     final station = stationName;
     if (station.isEmpty) return;
+    if (DatabaseReachabilitySignal.isLost) return;
 
     final db = DatabaseHelper.instance.openDatabaseOrNull;
     if (db == null) return;
 
     final handOver = _handoverPending;
     try {
+      final at = DateTime.now();
       await OperatorPresenceRepository(db).touch(
         operatorId: operatorId,
         station: station,
         instance: instanceId,
         appVersion: await _appVersion(),
-        at: DateTime.now(),
+        at: at,
         handOverOtherOperators: handOver,
       );
       if (handOver) _handoverPending = false;
+      // Η εγγραφή πέρασε: η σύνδεση ζει. Το σημάδι ζωής στον κοινό φάκελο το
+      // μεταφέρει στους άλλους σταθμούς.
+      DatabaseContact.note(at);
     } catch (e, stack) {
       CrashLogService.instanceOrNull?.logError(e, stack, fatal: false);
     }
@@ -189,9 +203,13 @@ class OperatorPresenceHeartbeat {
   /// βλέπει φάντασμα ακριβώς τη στιγμή που περιμένει να αδειάσει το πεδίο.
   ///
   /// **Ποτέ μοιραίο**, για τον ίδιο λόγο με τον χτύπο: το κλείσιμο δεν
-  /// σταματά επειδή το δίκτυο δεν απάντησε.
+  /// σταματά επειδή το δίκτυο δεν απάντησε. Με χαμένη βάση δεν δοκιμάζεται
+  /// καν: η απόπειρα θα έτρωγε ολόκληρο το όριο του κλεισίματος, και τα
+  /// επόμενα βήματα (η συγχώνευση των αρχείων της βάσης) δεν θα πρόφταιναν.
+  /// Το ίχνος σβήνει μόνο του όταν λήξει το παράθυρο φρεσκάδας.
   Future<void> releaseAndStop() async {
     stop();
+    if (DatabaseReachabilitySignal.isLost) return;
     final holder = instanceId;
     if (holder.isEmpty) return;
     final db = DatabaseHelper.instance.openDatabaseOrNull;

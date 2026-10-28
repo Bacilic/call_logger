@@ -27,6 +27,7 @@ import '../../features/lamp/screens/lamp_screen.dart';
 import '../../features/tasks/screens/tasks_screen.dart';
 import '../utils/background_task.dart';
 import 'local_database_banner.dart';
+import 'stale_connection_banner.dart';
 import 'main_nav_destination.dart';
 import 'main_shell.dart';
 
@@ -369,42 +370,8 @@ class MainShellDestinationContent {
               ),
             ),
           ),
-        // Δική της λωρίδα, και όχι η κόκκινη του χαμένου φακέλου: εκεί η
-        // αναμονή έχει νόημα, εδώ ΟΧΙ. Η σύνδεση που κράτησε η εφαρμογή δεν
-        // ζωντανεύει ποτέ — μετρήθηκε πάνω από είκοσι λεπτά — οπότε ένα
-        // «περίμενε να επανέλθει το δίκτυο» θα ήταν υπόσχεση που δεν
-        // πρόκειται να τηρηθεί. Η μόνη διέξοδος λέγεται ρητά.
         if (topBanner == TopDatabaseBanner.staleConnection)
-          Material(
-            color: Colors.deepOrange.shade300,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.link_off_outlined,
-                    size: 20,
-                    color: Colors.black87,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Η σύνδεση με τη βάση χάθηκε μετά από διακοπή του '
-                      'δικτύου και ΔΕΝ επανέρχεται μόνη της. Ο φάκελος απαντά '
-                      'κανονικά — φταίει η σύνδεση αυτής της εφαρμογής. '
-                      'Κλείστε την και ξανανοίξτε την· ό,τι γράψατε στο '
-                      'μεταξύ μπορεί να μην αποθηκεύτηκε.',
-                      key: const ValueKey('database_stale_connection_banner'),
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          const StaleConnectionBanner(),
         // Όπως η κόκκινη, δεν κλείνει με κουμπί: φεύγει μόνη της μόλις η
         // βάση ελευθερωθεί. Δεν υπόσχεται ότι οι αποθηκεύσεις «θα γίνουν» —
         // μια εγγραφή που περιμένει πάνω από το όριο αποτυγχάνει, και ο

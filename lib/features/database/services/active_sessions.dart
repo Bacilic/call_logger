@@ -18,7 +18,14 @@ class ActiveSession {
     this.operatorName,
     this.appVersion,
     this.schemaCeiling,
+    this.databaseConnectionDead = false,
   });
+
+  /// Η εφαρμογή τρέχει, αλλά η ίδια έχει κρίνει ότι η σύνδεσή της με τη βάση
+  /// πέθανε — πιθανότατα κρατά τη βάση κλειδωμένη για τους υπόλοιπους. Το
+  /// ξέρουν μόνο τα ίχνη του φακέλου `logs`· η βάση δεν το μαθαίνει ποτέ,
+  /// αφού ακριβώς αυτή η σύνδεση δεν τη φτάνει.
+  final bool databaseConnectionDead;
 
   /// Το όνομα του υπολογιστή.
   final String station;
@@ -97,7 +104,8 @@ List<ActiveSession> activeSessions({
 /// όταν η βάση **δεν** είναι ανοιχτή (π.χ. αναβάθμιση σχήματος στην εκκίνηση).
 ///
 /// Φτωχότερη από τη βάση, αλλά αρκετή για τον φρουρό: σταθμός, έκδοση, πόσο
-/// πρόσφατα. Δεν ξέρει **ποιος** κάθεται στον σταθμό.
+/// πρόσφατα, και — από τις νεότερες εκδόσεις — ποιος κάθεται εκεί και αν η
+/// σύνδεσή του με τη βάση ζει.
 ///
 /// **Μόνο όσοι κρατούν ΤΗ ΔΙΚΗ ΜΑΣ βάση.** Ο φάκελος `logs` είναι ένας για όλες
 /// τις βάσεις του ίδιου καταλόγου, οπότε χωρίς αυτό το φίλτρο ο συνάδελφος που
@@ -130,6 +138,8 @@ List<ActiveSession> activeSessionsFromLivenessMarks({
     out.add(
       ActiveSession(
         station: station.isEmpty ? 'άγνωστος σταθμός' : station,
+        operatorName: mark.operatorName,
+        databaseConnectionDead: mark.databaseConnectionDead,
         lastSeenAt: mark.lastSeen,
         appVersion: version.isEmpty ? null : version,
         schemaCeiling: schemaCeilingOf?.call(version.isEmpty ? null : version),
@@ -218,6 +228,10 @@ String describeActiveSession(
       parts.add('έκδοση $version');
     }
     parts.add('δεν θα μπορεί να ξανανοίξει τη βάση');
+  }
+
+  if (session.databaseConnectionDead && !session.isMine) {
+    parts.add('χωρίς σύνδεση με τη βάση — πιθανότατα την κρατά κλειδωμένη');
   }
 
   return parts.join(' · ');

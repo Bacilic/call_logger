@@ -619,9 +619,12 @@ abstract final class AuditDiffHelper {
     }
 
     if (value is List) {
+      // «1 στοιχείο», όχι «1 στοιχεία» (εύρημα 23/10/2026). Ίδιος κανόνας και
+      // για το ευρετήριο αναζήτησης, που χτίζεται από εδώ.
+      final one = value.length == 1;
       return forSearch
-          ? '${value.length} στοιχεια'
-          : '${value.length} στοιχεία';
+          ? '${value.length} ${one ? 'στοιχειο' : 'στοιχεια'}'
+          : '${value.length} ${one ? 'στοιχείο' : 'στοιχεία'}';
     }
     if (value is Map) {
       return forSearch ? 'δομημενα δεδομενα' : 'δομημένα δεδομένα';

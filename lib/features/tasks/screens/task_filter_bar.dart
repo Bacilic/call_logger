@@ -15,6 +15,7 @@ import '../providers/task_owner_filter_provider.dart';
 import '../widgets/tasks_refresh_button.dart';
 import '../providers/tasks_provider.dart';
 import '../widgets/task_analytics_bottom_sheet.dart';
+import '../../../core/widgets/modal_route_tracker.dart';
 
 /// Μπάρα αναζήτησης και φίλτρων: κείμενο (debounce 300ms), status chips, εύρος ημερομηνιών.
 class TaskFilterBar extends ConsumerStatefulWidget {
@@ -228,6 +229,8 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                       ? () {
                           showModalBottomSheet<void>(
                             context: context,
+                            // Μόνο δείχνει στοιχεία: το κλείσιμο της εφαρμογής δεν ρωτά.
+                            routeSettings: readOnlyRouteSettings,
                             isScrollControlled: true,
                             useSafeArea: true,
                             backgroundColor: Colors.transparent,

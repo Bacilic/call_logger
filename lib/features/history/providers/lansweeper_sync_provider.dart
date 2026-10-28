@@ -24,7 +24,6 @@ import '../models/lansweeper_sync_state.dart';
 import 'lansweeper_submit_progress_provider.dart';
 import '../services/lansweeper_registration_conflict.dart';
 import '../services/lansweeper_write_failure.dart';
-import '../widgets/lansweeper/lansweeper_report_item_mapper.dart';
 
 final lansweeperSyncServiceProvider = Provider<LansweeperSyncService>(
   (ref) => LansweeperSyncService(),
@@ -718,7 +717,7 @@ class LansweeperSyncNotifier extends AsyncNotifier<void> {
       subject: LansweeperSyncService.combinedTicketTitle([
         (storedTitle: call.title, category: call.category ?? '', id: callId),
       ]),
-      problem: LansweeperReportItemMapper.notes(call),
+      problem: LansweeperTicketTexts.problemFromIssue(call.issue),
     );
   }
 

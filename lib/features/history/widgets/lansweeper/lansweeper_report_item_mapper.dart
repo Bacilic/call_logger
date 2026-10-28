@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 
 import '../../../../core/services/lansweeper_text_format.dart';
+import '../../../../core/services/lansweeper_ticket_texts.dart';
 import '../../../calls/models/call_model.dart';
 import '../../models/lansweeper_report_grouping.dart';
 import '../../models/lansweeper_sync_state.dart';
@@ -33,11 +34,10 @@ abstract final class LansweeperReportItemMapper {
     return value.isEmpty ? '-' : value;
   }
 
-  static String notes(CallModel call) {
-    final issue = (call.issue ?? '').trim();
-    if (issue.isNotEmpty) return issue;
-    return '-';
-  }
+  /// Το πρόβλημα της κλήσης στη φόρμα — ο κανόνας ζει στις υπηρεσίες, ώστε
+  /// η αποστολή να τον διαβάζει από το ίδιο σημείο.
+  static String notes(CallModel call) =>
+      LansweeperTicketTexts.problemFromIssue(call.issue);
 
   /// Η Λύση όπως εμφανίζεται στη λίστα — κενή όταν δεν έχει γραφτεί ακόμη.
   ///

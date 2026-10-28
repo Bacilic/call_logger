@@ -231,6 +231,61 @@ void main() {
       expect(saved, isTrue);
     });
 
+    testWidgets('AnyDesk: ο αριθμός 418272958 περνά και αποθηκεύεται', (
+      tester,
+    ) async {
+      // Περιστατικό 26/10/2026: το πεδίο δοκιμής ελεγχόταν πάντα ως IP, οπότε
+      // ο έγκυρος αριθμός AnyDesk κοκκίνιζε και η αποθήκευση μπλόκαρε σιωπηλά.
+      final controller = RemoteToolFormController()..role = ToolRole.anydesk;
+      addTearDown(controller.dispose);
+      final formKey = GlobalKey<FormState>();
+      var saved = false;
+
+      await tester.pumpWidget(
+        _testPanelHost(
+          controller: controller,
+          formKey: formKey,
+          onSave: () {
+            if (formKey.currentState?.validate() ?? false) saved = true;
+          },
+        ),
+      );
+
+      await tester.enterText(find.byType(EditableText).first, '418272958');
+      await tester.pump();
+      await tester.tap(find.text('Αποθήκευση'));
+      await tester.pump();
+
+      expect(find.textContaining('Μη έγκυρη διεύθυνση'), findsNothing);
+      expect(saved, isTrue);
+    });
+
+    testWidgets('AnyDesk: το πεδίο δοκιμής ζητά αριθμό AnyDesk, όχι IP', (
+      tester,
+    ) async {
+      final controller = RemoteToolFormController()..role = ToolRole.anydesk;
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        _testPanelHost(controller: controller, formKey: GlobalKey<FormState>()),
+      );
+
+      expect(
+        find.textContaining('Δοκιμαστικός αριθμός AnyDesk'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Δοκιμαστική IP'), findsNothing);
+    });
+
+    test('η προεπιλογή ρόλου AnyDesk βάζει σκέτο {TARGET}', () {
+      final controller = RemoteToolFormController();
+      addTearDown(controller.dispose);
+
+      controller.applyRolePreset(ToolRole.anydesk);
+
+      expect(controller.argRows.single.valueC.text, '{TARGET}');
+    });
+
     test(
       'η φόρμα εργαλείου δείχνει καθαρό κωδικό ενώ η σύνοψη λίστας τον κρύβει',
       () {

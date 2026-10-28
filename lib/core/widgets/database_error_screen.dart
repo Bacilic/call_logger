@@ -24,7 +24,7 @@ import 'compact_tooltip.dart';
 import '../../features/database/widgets/database_newer_recovery_dialog.dart';
 import '../../features/database/widgets/database_recovery_switch_flows.dart';
 import '../../features/database/widgets/schema_upgrade_consent_dialog.dart';
-import '../../features/database/widgets/schema_upgrade_waiting_panel.dart';
+import '../../features/database/widgets/stations_holding_database_panel.dart';
 import '../../features/settings/widgets/create_new_database_dialog.dart';
 import '../utils/background_task.dart';
 
@@ -228,6 +228,24 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
   bool get _shouldOfferRestart =>
       _effectiveRecoveryKind == DatabaseInitRecoveryKind.timeout ||
       _isMissingApplicationFile;
+
+  /// Η βάση ίσως δεν άνοιξε επειδή την κρατά άλλος σταθμός.
+  ///
+  /// Τρεις μορφές της ίδιας κατάστασης: η βάση βρέθηκε κλειδωμένη, δεν
+  /// απάντησε εγκαίρως, ή ο χρήστης κουράστηκε να περιμένει και πάτησε
+  /// ακύρωση — το τελευταίο έζησε ο Διευθυντής επί δύο ώρες στις 26–27/10/2026,
+  /// χωρίς η οθόνη να του πει ποιον να αναζητήσει.
+  bool get _mayBeHeldByAnotherStation {
+    final kind = _effectiveRecoveryKind;
+    if (kind == DatabaseInitRecoveryKind.locked ||
+        kind == DatabaseInitRecoveryKind.timeout) {
+      return true;
+    }
+    final aborted = const DatabaseOpeningAbortedException().message;
+    return (widget.result.message ?? '').contains(aborted) ||
+        (widget.result.originalExceptionText ?? '').contains(aborted) ||
+        (widget.result.details ?? '').contains(aborted);
+  }
 
   bool get _isFileNotFound =>
       widget.result.status == DatabaseStatus.fileNotFound;
@@ -1025,16 +1043,27 @@ class _DatabaseErrorScreenState extends ConsumerState<DatabaseErrorScreen>
                         // φαίνεται το πεδίο να αδειάζει χωρίς «Επαναδοκιμή».
                         if (_isSchemaUpgradeBlocked) ...[
                           const SizedBox(height: 16),
-                          const SchemaUpgradeWaitingPanel(),
-                        ] else if (details.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          SelectableText(
-                            details,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              height: 1.4,
+                          const StationsHoldingDatabasePanel(),
+                        ] else ...[
+                          // Η βάση μπορεί να την κρατά άλλος σταθμός: το
+                          // ερώτημα του χρήστη είναι «ποιος», και η απάντηση
+                          // μπαίνει πάνω από τις τεχνικές λεπτομέρειες.
+                          if (_mayBeHeldByAnotherStation) ...[
+                            const SizedBox(height: 16),
+                            const StationsHoldingDatabasePanel(
+                              lockedDatabase: true,
                             ),
-                          ),
+                          ],
+                          if (details.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            SelectableText(
+                              details,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
                         ],
                         if (diagnostics.isNotEmpty) ...[
                           const SizedBox(height: 16),

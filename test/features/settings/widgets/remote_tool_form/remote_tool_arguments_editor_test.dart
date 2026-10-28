@@ -14,6 +14,8 @@ const _kWarningDuplicates = 'Υπάρχουν διπλότυπα ορίσματ�
 const _kWarningRdpTargetSyntax =
     'Για RDP ο στόχος γράφεται /v:{TARGET} — κολλητά, χωρίς κενό. Σκέτο {TARGET} ή "/v: {TARGET}" ερμηνεύεται από το mstsc ως αρχείο σύνδεσης.';
 
+const _kWarningAnyDeskIdFlag = 'Το AnyDesk δεν έχει επιλογή -id';
+
 void main() {
   group('RemoteToolArgumentsEditor — lock πριν εξαγωγή', () {
     late RemoteToolFormController controller;
@@ -257,6 +259,28 @@ void main() {
       await setRoleAndArgs(tester, ToolRole.rdp, ['/v:{TARGET}']);
 
       expect(find.textContaining(_kWarningRdpTargetSyntax), findsNothing);
+      await finishTest(tester);
+    });
+
+    testWidgets('anydesk: -id {TARGET} → προειδοποίηση ότι δεν συνδέεται', (
+      tester,
+    ) async {
+      // Περιστατικό 26/10/2026 (PC1, AnyDesk 418272958): το AnyDesk δεν έχει
+      // επιλογή -id, και με αυτό το όρισμα ανοίγει χωρίς να συνδεθεί.
+      await pumpEditor(tester);
+      await setRoleAndArgs(tester, ToolRole.anydesk, ['-id {TARGET}']);
+
+      expect(find.textContaining(_kWarningAnyDeskIdFlag), findsOneWidget);
+      await finishTest(tester);
+    });
+
+    testWidgets('anydesk: σκέτο {TARGET} → χωρίς προειδοποίηση', (
+      tester,
+    ) async {
+      await pumpEditor(tester);
+      await setRoleAndArgs(tester, ToolRole.anydesk, ['{TARGET}']);
+
+      expect(find.textContaining(_kWarningAnyDeskIdFlag), findsNothing);
       await finishTest(tester);
     });
 

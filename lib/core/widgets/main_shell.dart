@@ -35,6 +35,8 @@ import 'main_shell_destination_content.dart';
 import 'main_shell_nav_icons.dart';
 import 'quick_call_fab.dart';
 import '../services/current_operator.dart';
+import '../services/main_screen_announcements.dart';
+import '../utils/run_after_next_frame.dart';
 import '../services/settings_service.dart';
 import 'silent_log_chip.dart';
 import '../about/widgets/version_chip.dart';
@@ -101,10 +103,13 @@ class MainShellState extends ConsumerState<MainShell> {
     // ακροατή, μετά την «Αλλαγή χρήστη» η μπάρα θα κρατούσε την επιλογή του
     // προηγούμενου μέχρι την επόμενη εκκίνηση.
     CurrentOperator.listenable.addListener(_loadNavRailShowLabels);
+    // Μετά το πρώτο καρέ: ένας διάλογος δεν ανοίγει μέσα στο χτίσιμο.
+    unawaited(runAfterNextFrame(MainScreenAnnouncements.open));
   }
 
   @override
   void dispose() {
+    MainScreenAnnouncements.close();
     CurrentOperator.listenable.removeListener(_loadNavRailShowLabels);
     super.dispose();
   }

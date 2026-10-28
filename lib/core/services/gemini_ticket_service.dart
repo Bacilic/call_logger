@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'ai_prompt_template_syntax.dart';
 import 'lansweeper_text_format.dart';
+import 'gemini_json_request.dart';
 
 export 'ai_prompt_template_syntax.dart'
     show
@@ -572,7 +573,7 @@ abstract final class GeminiTicketService {
             .get(target.uri, headers: target.headers)
             .timeout(const Duration(seconds: 20));
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          final apiMessage = _extractApiErrorMessage(response.body);
+          final apiMessage = GeminiJsonRequest.apiErrorMessage(response.body);
           throw GeminiException(
             apiMessage == null
                 ? 'Αποτυχία HTTP (${response.statusCode}) κατά τη λίστα μοντέλων.'
@@ -866,27 +867,6 @@ abstract final class GeminiTicketService {
     required String solutionText,
     http.Client? client,
   }) async {
-    final key = apiKey.trim();
-    if (key.isEmpty) {
-      throw const GeminiException(
-        'Δεν έχει οριστεί Gemini API key.',
-        scope: GeminiFailureScope.infrastructure,
-      );
-    }
-
-    final target = resolveCallTarget(
-      endpoint: endpoint,
-      apiKey: key,
-      primaryModel: modelFromEndpoint(endpoint),
-    );
-    final uri = target.uri;
-    if (!uri.hasScheme || uri.host.isEmpty) {
-      throw const GeminiException(
-        'Μη έγκυρο URL endpoint Gemini.',
-        scope: GeminiFailureScope.infrastructure,
-      );
-    }
-
     final prompt = buildPrompt(
       promptTemplate: promptTemplate,
       callerText: callerText,
@@ -899,74 +879,18 @@ abstract final class GeminiTicketService {
       solutionText: solutionText,
     );
 
-    final httpClient = client ?? http.Client();
-    final http.Response response;
-    try {
-      try {
-        response = await httpClient
-            .post(
-              uri,
-              headers: target.headers,
-              body: jsonEncode(<String, dynamic>{
-                'contents': [
-                  <String, dynamic>{
-                    'parts': [
-                      <String, String>{'text': prompt},
-                    ],
-                  },
-                ],
-                'generationConfig': <String, String>{
-                  'responseMimeType': 'application/json',
-                },
-              }),
-            )
-            .timeout(const Duration(seconds: 30));
-      } on TimeoutException {
-        throw const GeminiException(
-          'Η κλήση Gemini έληξε (timeout).',
-          scope: GeminiFailureScope.model,
-        );
-      } on SocketException catch (e) {
-        throw GeminiException(
-          e.message,
-          scope: GeminiFailureScope.infrastructure,
-        );
-      } on http.ClientException catch (e) {
-        throw GeminiException(
-          e.message,
-          scope: GeminiFailureScope.infrastructure,
-        );
-      }
-    } finally {
-      if (client == null) httpClient.close();
-    }
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      final apiMessage = _extractApiErrorMessage(response.body);
-      final scope = GeminiException.classifyFailureScope(
-        statusCode: response.statusCode,
-        message: apiMessage,
-      );
-      final retryAfter = GeminiException.extractRetryAfterFromErrorBody(
-        response.body,
-      );
-      throw GeminiException(
-        apiMessage == null
-            ? 'Αποτυχία HTTP (${response.statusCode}) κατά την κλήση Gemini.'
-            : 'Αποτυχία Gemini (${response.statusCode}): $apiMessage',
-        statusCode: response.statusCode,
-        scope: scope,
-        retryAfter: retryAfter,
-      );
-    }
-
-    final text = _extractResponseText(response.body);
-    if (text == null || text.trim().isEmpty) {
-      throw const GeminiException(
-        'Η απάντηση Gemini ήταν κενή.',
-        scope: GeminiFailureScope.model,
-      );
-    }
+    // Η αποστολή, τα λάθη δικτύου και χρόνου και η ανάγνωση της απάντησης
+    // ζουν σε ένα σημείο για όλες τις χρήσεις της ΤΝ: μια διόρθωση εκεί (π.χ.
+    // νέα μορφή σφάλματος της Google) φτάνει και εδώ. Το όριο των 30″ μένει
+    // της Αναφοράς, όπως ήταν πάντα.
+    final text = await GeminiJsonRequest.send(
+      prompt: prompt,
+      apiKey: apiKey,
+      endpoint: endpoint,
+      model: modelFromEndpoint(endpoint),
+      client: client,
+      timeout: const Duration(seconds: 30),
+    );
 
     final parsed = parseSuggestionJson(text);
     if (parsed == null) {
@@ -1010,61 +934,16 @@ abstract final class GeminiTicketService {
     return (description: problem, solution: embedded);
   }
 
-  static String? _extractApiErrorMessage(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map) {
-        final error = decoded['error'];
-        if (error is Map) {
-          final message = error['message']?.toString().trim();
-          if (message != null && message.isNotEmpty) return message;
-        }
-      }
-    } catch (_) {}
-    final trimmed = body.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
-  static String? _extractResponseText(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is! Map) return null;
-      final candidates = decoded['candidates'];
-      if (candidates is! List || candidates.isEmpty) return null;
-      final first = candidates.first;
-      if (first is! Map) return null;
-      final content = first['content'];
-      if (content is! Map) return null;
-      final parts = content['parts'];
-      if (parts is! List || parts.isEmpty) return null;
-      final part = parts.first;
-      if (part is! Map) return null;
-      return part['text']?.toString();
-    } catch (_) {
-      return null;
-    }
-  }
-
   static ({String title, String description, String solution})?
   parseSuggestionJson(String text) {
-    try {
-      var payload = text.trim();
-      if (payload.startsWith('```')) {
-        payload = payload
-            .replaceFirst(RegExp(r'^```(?:json)?\s*'), '')
-            .replaceFirst(RegExp(r'\s*```$'), '');
-      }
-      final decoded = jsonDecode(payload);
-      if (decoded is! Map) return null;
-      final title = decoded['title']?.toString().trim() ?? '';
-      final description = decoded['description']?.toString().trim() ?? '';
-      final solution = decoded['solution']?.toString().trim() ?? '';
-      if (title.isEmpty && description.isEmpty && solution.isEmpty) {
-        return null;
-      }
-      return (title: title, description: description, solution: solution);
-    } catch (_) {
+    final decoded = GeminiJsonRequest.decodeObject(text);
+    if (decoded == null) return null;
+    final title = decoded['title']?.toString().trim() ?? '';
+    final description = decoded['description']?.toString().trim() ?? '';
+    final solution = decoded['solution']?.toString().trim() ?? '';
+    if (title.isEmpty && description.isEmpty && solution.isEmpty) {
       return null;
     }
+    return (title: title, description: description, solution: solution);
   }
 }

@@ -23,6 +23,7 @@ import '../../features/operators/screens/admin_setup_screen.dart';
 import '../../features/operators/services/admin_presence_gate.dart';
 import '../../features/operators/services/selectable_profiles.dart';
 import '../../features/operators/widgets/refreshing_operator_picker.dart';
+import '../../features/database/widgets/stations_holding_database_panel.dart';
 import '../../features/settings/widgets/pending_reset_database_screen.dart';
 import 'app_shortcuts.dart';
 import 'database_error_screen.dart';
@@ -381,6 +382,55 @@ class _AppInitWrapperState extends ConsumerState<AppInitWrapper> {
   }
 }
 
+/// «Ποιος κρατά τη βάση» — μόνο όταν η αναμονή κρατά.
+///
+/// Στο περιστατικό της 26–27/10/2026 ο Διευθυντής περίμενε σε αυτή την
+/// οθόνη, έκανε επανεκκινήσεις και άλλαξε ακόμη και καλώδιο δικτύου, ενώ η
+/// βάση την κρατούσε η εφαρμογή ενός συναδέλφου με νεκρή σύνδεση. Η απάντηση
+/// υπήρχε στον κοινό φάκελο· απλώς δεν τη ρωτούσε κανείς.
+///
+/// Εμφανίζεται μετά από λίγα δευτερόλεπτα: ένα κανονικό άνοιγμα τελειώνει
+/// πριν από αυτά, και ένα πλαίσιο που αναβοσβήνει σε κάθε εκκίνηση θα έκανε
+/// κάθε άνοιγμα να μοιάζει με πρόβλημα.
+class _WhoHoldsTheDatabaseWhileWaiting extends StatefulWidget {
+  const _WhoHoldsTheDatabaseWhileWaiting();
+
+  static const Duration revealAfter = Duration(seconds: 8);
+
+  @override
+  State<_WhoHoldsTheDatabaseWhileWaiting> createState() =>
+      _WhoHoldsTheDatabaseWhileWaitingState();
+}
+
+class _WhoHoldsTheDatabaseWhileWaitingState
+    extends State<_WhoHoldsTheDatabaseWhileWaiting> {
+  Timer? _timer;
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(_WhoHoldsTheDatabaseWhileWaiting.revealAfter, () {
+      if (mounted) setState(() => _visible = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_visible) return const SizedBox.shrink();
+    return const Padding(
+      padding: EdgeInsets.only(top: 20),
+      child: StationsHoldingDatabasePanel(lockedDatabase: true),
+    );
+  }
+}
+
 /// Η οθόνη που βλέπει ο χειριστής όσο ανοίγει η βάση.
 ///
 /// Δημόσια ώστε να μπορεί να ελεγχθεί μόνη της: το σφάλμα που τη γέννησε ήταν
@@ -429,6 +479,7 @@ class InitLoadingScreen extends ConsumerWidget {
                     icon: const Icon(Icons.stop_circle_outlined),
                     label: const Text('Διακοπή τώρα'),
                   ),
+                  const _WhoHoldsTheDatabaseWhileWaiting(),
                 ],
                 if (progress.diagnosticInfo != null &&
                     progress.diagnosticInfo!.trim().isNotEmpty) ...[

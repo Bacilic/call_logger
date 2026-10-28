@@ -31,6 +31,32 @@ void main() {
       expect(restored.lastSeen, DateTime(2026, 9, 4, 18, 39));
     });
 
+    test('ποιος είναι συνδεδεμένος και η υγεία της σύνδεσης ταξιδεύουν', () {
+      // Χωρίς αυτά, στο περιστατικό της 26–27/10/2026 το ίχνος του PC922 έλεγε
+      // «ζωντανός» επί 17 ώρες, ενώ η σύνδεσή του με τη βάση ήταν νεκρή.
+      final original = mark().seenAt(
+        DateTime(2026, 10, 27, 7, 50),
+        operatorName: 'Βλάσης',
+        lastDatabaseContact: DateTime(2026, 10, 26, 15, 2),
+        databaseConnectionDead: true,
+      );
+      final restored = SessionLivenessMark.decode(original.encode())!;
+
+      expect(restored.operatorName, 'Βλάσης');
+      expect(restored.lastDatabaseContact, DateTime(2026, 10, 26, 15, 2));
+      expect(restored.databaseConnectionDead, isTrue);
+    });
+
+    test('ίχνος παλαιότερης έκδοσης δεν δηλώνει νεκρή σύνδεση', () {
+      // Η άγνοια δεν κατηγορεί κανέναν: ο συνάδελφος με την παλιά εφαρμογή
+      // δεν γράφει τα νέα στοιχεία, και δεν επιτρέπεται να φανεί ύποπτος.
+      final restored = SessionLivenessMark.decode(mark().encode())!;
+
+      expect(restored.operatorName, isNull);
+      expect(restored.lastDatabaseContact, isNull);
+      expect(restored.databaseConnectionDead, isFalse);
+    });
+
     test('το σημάδι ζωής μετακινεί μόνο το «μέχρι πότε»', () {
       final beat = mark().seenAt(DateTime(2026, 9, 4, 20, 5));
 

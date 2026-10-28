@@ -17,6 +17,18 @@ class LansweeperTicketTexts {
   /// Το πρόβλημα όπως γράφτηκε στο `Description`, πριν τη μορφοποίηση HTML.
   final String problem;
 
+  /// Τι γράφει μια κλήση ως πρόβλημα του αιτήματος: το «Πρόβλημα» της, ή
+  /// «-» όταν είναι κενό.
+  ///
+  /// Ένας κανόνας για δύο σημεία: η φόρμα της Αναφοράς Lansweeper το δείχνει,
+  /// και η αποστολή το συγκρίνει με ό,τι έχει ήδη το αίτημα. Αν απέκλιναν, η
+  /// εφαρμογή θα ξανάστελνε πρόβλημα που δεν άλλαξε — ή δεν θα έστελνε ένα που
+  /// άλλαξε.
+  static String problemFromIssue(String? issue) {
+    final value = (issue ?? '').trim();
+    return value.isEmpty ? '-' : value;
+  }
+
   static const String _subjectKey = 'ticketSubject';
   static const String _problemKey = 'ticketProblem';
 

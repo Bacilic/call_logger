@@ -1,5 +1,6 @@
 import '../../../core/models/remote_tool.dart';
 import '../../../core/models/remote_tool_role.dart';
+import '../../directory/models/department_kind.dart';
 import '../models/equipment_model.dart';
 import '../provider/smart_entity_selector_provider.dart';
 import 'equipment_remote_param_key.dart';
@@ -208,17 +209,31 @@ abstract final class CallRemoteTargets {
   ///
   /// Με εξοπλισμό από βάση: VNC με έγκυρο στόχο + εργαλεία με παράμετρο τιμής.
   /// Με ελεύθερο κείμενο: όσα ενεργά εργαλεία [toolMatchesFreeEquipmentText] επιστρέφει true.
+  ///
+  /// **Το VNC προτείνεται αυτόματα μόνο σε εξοπλισμό του νοσοκομείου**
+  /// ([equipmentDepartmentKind]). Ο αυτόματος στόχος του είναι το όνομα του
+  /// υπολογιστή, που απαντά μόνο μέσα στο τοπικό δίκτυο· σε μηχάνημα
+  /// εξωτερικής μονάδας (π.χ. Κέντρο Υγείας) το κουμπί δεν θα συνδεόταν ποτέ —
+  /// απόφαση Διευθυντή 28/10/2026. Ούτε απαγόρευση ούτε προειδοποίηση: όποιο
+  /// εργαλείο ορίστηκε **ρητά** στο μηχάνημα (π.χ. μονάδα μέσω VPN) εμφανίζεται
+  /// κανονικά. Άγνωστο είδος (`null`) = συμπεριφορά νοσοκομείου, όπως πάντα.
   static List<RemoteTool> visibleRemoteToolsForCallState(
     SmartEntitySelectorState s,
     List<RemoteTool> catalog, {
     bool applyExclusive = true,
+    DepartmentKind? equipmentDepartmentKind,
   }) {
     if (catalog.isEmpty) return [];
+    final autoVnc =
+        equipmentDepartmentKind == null ||
+        equipmentDepartmentKind.belongsToHospital;
     final candidates = <RemoteTool>[];
     if (s.selectedEquipment != null) {
       final eq = s.selectedEquipment!;
       for (final t in catalog) {
-        if (t.role == ToolRole.vnc && canConnectForTool(s, t, catalog)) {
+        if (autoVnc &&
+            t.role == ToolRole.vnc &&
+            canConnectForTool(s, t, catalog)) {
           candidates.add(t);
           continue;
         }
@@ -271,17 +286,20 @@ abstract final class CallRemoteTargets {
   /// True όταν η per-equipment αποκλειστικότητα κρύβει τουλάχιστον ένα έγκυρο εργαλείο.
   static bool exclusiveHidesTools(
     SmartEntitySelectorState s,
-    List<RemoteTool> catalog,
-  ) {
+    List<RemoteTool> catalog, {
+    DepartmentKind? equipmentDepartmentKind,
+  }) {
     final withExclusive = visibleRemoteToolsForCallState(
       s,
       catalog,
       applyExclusive: true,
+      equipmentDepartmentKind: equipmentDepartmentKind,
     );
     final withoutExclusive = visibleRemoteToolsForCallState(
       s,
       catalog,
       applyExclusive: false,
+      equipmentDepartmentKind: equipmentDepartmentKind,
     );
     return withExclusive.length < withoutExclusive.length;
   }

@@ -23,6 +23,19 @@ class ModalRouteTracker extends NavigatorObserver {
   /// Ο διάλογος στην κορυφή, `null` όταν δεν υπάρχει κανένας.
   Route<dynamic>? get topDialog => _open.isEmpty ? null : _open.last;
 
+  /// Ο ψηλότερος ανοιχτός διάλογος που **αξίζει ερώτηση** στο κλείσιμο.
+  ///
+  /// Παραλείπει όσους μόνο δείχνουν στοιχεία ([readOnlyRouteSettings]): εκεί
+  /// δεν υπάρχει τίποτα να χαθεί. Απόφαση Διευθυντή 24/10/2026, μετά από
+  /// ερώτηση «ανοιχτό ζήτημα» πάνω από τις «Αναφορές Εκκρεμοτήτων». Μια φόρμα
+  /// κάτω ή πάνω από τέτοιο παράθυρο ρωτά κανονικά.
+  Route<dynamic>? get topDialogNeedingAttention {
+    for (final route in _open.reversed) {
+      if (route.settings.name != readOnlyRouteSettings.name) return route;
+    }
+    return null;
+  }
+
   /// Καλείται όταν κλείσει ο **τελευταίος** ανοιχτός διάλογος.
   ///
   /// Έτσι μια κρατημένη ανανέωση εκτελείται με το που ελευθερώνεται ο χρήστης,
@@ -88,6 +101,14 @@ class ModalRouteTracker extends NavigatorObserver {
     if (newRoute != null && _counts(newRoute)) _open.add(newRoute);
   }
 }
+
+/// Η σήμανση των παραθύρων που **μόνο δείχνουν** στοιχεία — στατιστικά,
+/// αναφορές αποτελεσμάτων, προεπισκοπήσεις.
+///
+/// Δηλώνεται στο σημείο που ανοίγει το παράθυρο (`routeSettings:`), ώστε η
+/// απόφαση να ζει δίπλα σε αυτόν που ξέρει τι κάνει το παράθυρο. Το κλείσιμο
+/// της εφαρμογής δεν ρωτά γι' αυτά — δες [ModalRouteTracker.topDialogNeedingAttention].
+const RouteSettings readOnlyRouteSettings = RouteSettings(name: 'read-only');
 
 /// Ο παρατηρητής της τρέχουσας συνεδρίας.
 ///

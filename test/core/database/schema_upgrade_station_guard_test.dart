@@ -92,6 +92,66 @@ void main() {
     });
   });
 
+  group('ποιος πιθανότατα κρατά τη βάση', () {
+    // Περιστατικό 26–27/10/2026: η εφαρμογή του PC922 έτρεχε όλη τη νύχτα με
+    // νεκρή σύνδεση και κρατούσε τη βάση· οι συνάδελφοι έμεναν απέξω χωρίς να
+    // ξέρουν ποιον να αναζητήσουν.
+    SessionLivenessMark station(
+      String name, {
+      String? operator,
+      DateTime? contact,
+      bool dead = false,
+    }) => _mark(name, ago: const Duration(seconds: 20)).seenAt(
+      now.subtract(const Duration(seconds: 20)),
+      operatorName: operator,
+      lastDatabaseContact: contact,
+      databaseConnectionDead: dead,
+    );
+
+    test('ύποπτος είναι όποιος δηλώνει ο ίδιος νεκρή σύνδεση', () {
+      final stuck = station('PC922', dead: true);
+      final waiting = station(
+        'PC3569',
+        contact: now.subtract(const Duration(hours: 2)),
+      );
+
+      expect(isSuspectedDatabaseHolder(stuck), isTrue);
+      expect(
+        isSuspectedDatabaseHolder(waiting),
+        isFalse,
+        reason:
+            'Ο συνάδελφος που περιμένει πίσω από το κλείδωμα σωπαίνει κι '
+            'εκείνος — η σιωπή μόνη της δεν κατηγορεί.',
+      );
+      expect(suspectsFirst([waiting, stuck]).first.station, 'PC922');
+    });
+
+    test('η γραμμή λέει ποιον να αναζητήσει και από πότε σωπαίνει', () {
+      final text = describeStationsHoldingDatabase([
+        station(
+          'PC922',
+          operator: 'Βλάσης',
+          contact: DateTime(2026, 9, 25, 7, 2),
+          dead: true,
+        ),
+      ], now: now);
+
+      expect(text, contains('PC922 (Βλάσης)'));
+      expect(text, contains('χωρίς επαφή με τη βάση από 25/09/2026 07:02'));
+    });
+
+    test('πρόσφατη ή άγνωστη επαφή δεν αναφέρεται', () {
+      expect(
+        databaseSilentSince(
+          station('PC1', contact: now.subtract(const Duration(minutes: 1))),
+          now: now,
+        ),
+        isNull,
+      );
+      expect(databaseSilentSince(station('PC2'), now: now), isNull);
+    });
+  });
+
   group('η αναβάθμιση της καθημερινής βάσης', () {
     late Directory tempDir;
 

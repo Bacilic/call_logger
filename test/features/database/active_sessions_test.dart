@@ -262,4 +262,22 @@ void main() {
       );
     });
   });
+
+  test('σταθμός με νεκρή σύνδεση το λέει στη γραμμή του', () {
+    // Περιστατικό 26–27/10/2026: η εφαρμογή του PC922 φαινόταν ζωντανή ενώ η
+    // σύνδεσή της με τη βάση είχε πεθάνει και κρατούσε τους υπόλοιπους έξω.
+    final line = describeActiveSession(
+      ActiveSession(
+        station: 'PC922',
+        operatorName: 'Βλάσης',
+        lastSeenAt: _now,
+        isMine: false,
+        databaseConnectionDead: true,
+      ),
+      now: _now,
+    );
+
+    expect(line, contains('PC922 · Βλάσης'));
+    expect(line, contains('πιθανότατα την κρατά κλειδωμένη'));
+  });
 }

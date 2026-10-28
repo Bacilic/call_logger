@@ -20,8 +20,10 @@ import 'modal_route_tracker.dart';
 ///
 /// Η ελαχιστοποιημένη γρήγορη καταγραφή μετρά όπως ο ανοιχτός διάλογος: είναι
 /// κλήση σε εξέλιξη. Με «Επιστροφή» ξανανοίγει, για να τη διευθετήσει ο χρήστης.
+///
+/// Παράθυρα που μόνο δείχνουν στοιχεία δεν μετρούν (απόφαση 24/10/2026).
 Future<bool> confirmCloseWithOpenDialog(ModalRouteTracker tracker) async {
-  final top = tracker.topDialog;
+  final top = tracker.topDialogNeedingAttention;
   final navigator = tracker.navigator;
   if (navigator == null || !navigator.mounted) return true;
   final minimizedCall =

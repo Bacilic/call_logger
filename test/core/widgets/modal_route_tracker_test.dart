@@ -14,11 +14,16 @@ import 'package:flutter_test/flutter_test.dart';
 /// με MaterialLocalizations, ενώ ο παρατηρητής κοιτά μόνο τον τύπο διαδρομής.
 Route<void> _modal() => _TestPopupRoute();
 
+/// Διάλογος που μόνο δείχνει στοιχεία — στατιστικά, προεπισκοπήσεις.
+Route<void> _readOnly() => _TestPopupRoute(settings: readOnlyRouteSettings);
+
 /// Κανονική οθόνη — η πλοήγηση ανάμεσα σε οθόνες δεν είναι απασχόληση.
 Route<void> _page() =>
     MaterialPageRoute<void>(builder: (_) => const SizedBox.shrink());
 
 class _TestPopupRoute extends PopupRoute<void> {
+  _TestPopupRoute({super.settings});
+
   @override
   Color? get barrierColor => null;
 
@@ -125,6 +130,31 @@ void main() {
 
         tracker.didPop(confirm, queue);
         expect(tracker.isUserBusy, isFalse);
+      });
+    });
+
+    group('οθόνες μόνο-ανάγνωσης στο κλείσιμο', () {
+      // Απόφαση Διευθυντή 24/10/2026: ανοιχτές «Αναφορές Εκκρεμοτήτων» και
+      // «Χ» → η εφαρμογή ρωτούσε για «ανοιχτό ζήτημα», ενώ δεν υπήρχε τίποτα
+      // να χαθεί.
+      test('μόνη της, δεν ζητά ερώτηση', () {
+        tracker.didPush(_readOnly(), null);
+        expect(tracker.topDialogNeedingAttention, isNull);
+      });
+
+      test('πάνω από φόρμα, η φόρμα εξακολουθεί να ρωτά', () {
+        final form = _modal();
+        tracker.didPush(form, null);
+        tracker.didPush(_readOnly(), form);
+        expect(tracker.topDialogNeedingAttention, same(form));
+      });
+
+      test('φόρμα πάνω της ρωτά κανονικά', () {
+        final report = _readOnly();
+        final form = _modal();
+        tracker.didPush(report, null);
+        tracker.didPush(form, report);
+        expect(tracker.topDialogNeedingAttention, same(form));
       });
     });
   });

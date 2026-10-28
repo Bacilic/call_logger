@@ -24,33 +24,78 @@ const int maxRememberedWorkstationOperators = 10;
 /// τον διάλογο «Αλλαγή χρήστη». Η αυτόματη αναγνώριση από τον λογαριασμό
 /// Windows δεν αφήνει ίχνος: αλλιώς ο πρώτος που αναγνωρίστηκε αυτόματα θα
 /// έμενε για πάντα στη λίστα και ο σταθμός θα ρωτούσε αιώνια.
+///
+/// **Μία μνήμη ανά βάση (απόφαση 28/10/2026).** Η ερώτηση είναι «ποιος έχει
+/// δουλέψει εδώ **με αυτή τη βάση**». Με μία κοινή μνήμη, η βάση του
+/// νοσοκομείου, ανοιγμένη πρώτη φορά στο σπίτι, βρήκε ένα όνομα που ο
+/// υπολογιστής θυμόταν από τη βάση του σπιτιού και μπήκε σιωπηλά. Ίδιο όνομα
+/// σε δύο βάσεις δεν σημαίνει πάντα ίδιος άνθρωπος. Η βάση αναγνωρίζεται από
+/// την ταυτότητα που κουβαλά μέσα της (`ensureDatabaseIdentity`), όχι από το
+/// όνομα του αρχείου της.
 class WorkstationOperators {
   const WorkstationOperators._();
 
-  static const String storageKey = 'workstation_operator_names_v1';
+  /// Η παλιά, κοινή για όλες τις βάσεις μνήμη. Διαβάζεται μία φορά, στην
+  /// πρώτη βάση που ανοίγει μετά την αναβάθμιση, και μετά σβήνεται.
+  static const String legacyStorageKey = 'workstation_operator_names_v1';
 
-  /// Τα ονόματα που θυμάται ο σταθμός, με τον τελευταίο πρώτο.
+  static const String _storagePrefix = 'workstation_operator_names_v2::';
+
+  static String? _database;
+
+  /// Ποια βάση είναι ανοιχτή. Το ορίζει η αναγνώριση ταυτότητας σε κάθε
+  /// άνοιγμα ή αλλαγή βάσης, πριν από οποιαδήποτε ανάγνωση της μνήμης.
+  ///
+  /// Χωρίς γνωστή ταυτότητα (η βάση δεν τη δέχτηκε) ο σταθμός δεν θυμάται
+  /// κανέναν, και η αναγνώριση πέφτει στον λογαριασμό Windows ή ρωτά —
+  /// η άγνοια πέφτει στην πλευρά της ερώτησης, όχι της εικασίας.
+  static Future<void> useDatabase(String? identity) async {
+    final id = identity?.trim() ?? '';
+    _database = id.isEmpty ? null : id;
+    if (_database == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final legacy = prefs.getStringList(legacyStorageKey);
+      if (legacy == null) return;
+      // Ό,τι θυμόταν ο σταθμός ως τώρα αφορούσε τη βάση που χρησιμοποιούσε:
+      // περνά σε εκείνη, ώστε η αναβάθμιση να μη ρωτήσει κανέναν χωρίς λόγο.
+      // Οι βάσεις που θα ανοίξουν αργότερα ξεκινούν χωρίς μνήμη.
+      if (!prefs.containsKey(_key)) {
+        await prefs.setStringList(_key, legacy);
+      }
+      await prefs.remove(legacyStorageKey);
+    } catch (_) {
+      // Η μνήμη είναι ευκολία: αν οι τοπικές ρυθμίσεις δεν απαντούν, η
+      // αναγνώριση συνεχίζει με τον λογαριασμό Windows.
+    }
+  }
+
+  /// Μηδενισμός για τα τεστ — η ανοιχτή βάση είναι καθολική κατάσταση.
+  static void resetForTest() => _database = null;
+
+  static String get _key => '$_storagePrefix$_database';
+
+  /// Τα ονόματα που θυμάται ο σταθμός για την ανοιχτή βάση, τελευταίος πρώτος.
   ///
   /// Η μνήμη του σταθμού είναι ευκολία, όχι προϋπόθεση: αν οι τοπικές
   /// ρυθμίσεις δεν διαβάζονται, η αναγνώριση συνεχίζει με τον λογαριασμό
   /// Windows αντί να σταματήσει η εκκίνηση.
   static Future<List<String>> names() async {
+    if (_database == null) return const <String>[];
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getStringList(storageKey) ?? const <String>[];
+      return prefs.getStringList(_key) ?? const <String>[];
     } catch (_) {
       return const <String>[];
     }
   }
 
-  /// Σημειώνει ότι αυτό το πρόσωπο διάλεξε ταυτότητα εδώ.
+  /// Σημειώνει ότι αυτό το πρόσωπο διάλεξε ταυτότητα εδώ, με αυτή τη βάση.
   static Future<void> remember(String displayName) async {
+    if (_database == null) return;
     final prefs = await SharedPreferences.getInstance();
-    final current = prefs.getStringList(storageKey) ?? const <String>[];
-    await prefs.setStringList(
-      storageKey,
-      rememberedAfterPick(current, displayName),
-    );
+    final current = prefs.getStringList(_key) ?? const <String>[];
+    await prefs.setStringList(_key, rememberedAfterPick(current, displayName));
   }
 
   /// «Εδώ κάθομαι μόνο εγώ» — σβήνει όλους τους άλλους από τη μνήμη.
@@ -58,18 +103,21 @@ class WorkstationOperators {
   /// Ο συνάδελφος που κάθισε μια φορά για δέκα λεπτά δεν πρέπει να κάνει τον
   /// σταθμό να ρωτά για έναν μήνα.
   static Future<void> keepOnly(String displayName) async {
+    if (_database == null) return;
     final prefs = await SharedPreferences.getInstance();
     final name = displayName.trim();
     await prefs.setStringList(
-      storageKey,
+      _key,
       name.isEmpty ? const <String>[] : <String>[name],
     );
   }
 
-  /// Ξεχνά τα πάντα — ο σταθμός επιστρέφει στην αναγνώριση από τον λογαριασμό.
+  /// Ξεχνά τα πάντα για την ανοιχτή βάση — ο σταθμός επιστρέφει στην
+  /// αναγνώριση από τον λογαριασμό.
   static Future<void> forgetAll() async {
+    if (_database == null) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(storageKey);
+    await prefs.remove(_key);
   }
 }
 

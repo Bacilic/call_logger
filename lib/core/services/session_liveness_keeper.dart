@@ -3,7 +3,10 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../database/database_reachability.dart';
 import 'crash_log_service.dart';
+import 'current_operator.dart';
+import 'database_contact.dart';
 import 'log_file_names.dart';
 import 'session_liveness_mark.dart';
 import 'station_name.dart';
@@ -151,15 +154,7 @@ class SessionLivenessKeeper {
     if (!changed) return;
     final mark = _currentMark;
     if (mark == null) return;
-    _currentMark = SessionLivenessMark(
-      station: mark.station,
-      version: mark.version,
-      startedAt: mark.startedAt,
-      lastSeen: mark.lastSeen,
-      database: mark.database,
-      instance: mark.instance,
-      listensForShutdownRequests: handler != null,
-    );
+    _currentMark = mark.copyWith(listensForShutdownRequests: handler != null);
     unawaited(_markAlive());
   }
 
@@ -183,8 +178,20 @@ class SessionLivenessKeeper {
     await _checkForShutdownRequest();
   }
 
+  /// Το ίχνος ανανεωμένο τώρα — μαζί με το ποιος είναι συνδεδεμένος και πότε
+  /// μίλησε τελευταία η εφαρμογή με τη βάση. Ένα σημείο, ώστε κανένα γράψιμο
+  /// του ίχνους να μην ξεχνά τα δύο στοιχεία που κρίνουν το «κολλημένο».
+  SessionLivenessMark? _freshMark() => _currentMark?.seenAt(
+    host.clock(),
+    operatorName: CurrentOperator.active?.displayName,
+    lastDatabaseContact: DatabaseContact.last,
+    databaseConnectionDead:
+        DatabaseReachabilitySignal.state ==
+        DatabaseReachability.staleConnection,
+  );
+
   Future<bool> _tryResume() async {
-    final mark = _currentMark?.seenAt(host.clock());
+    final mark = _freshMark();
     if (mark == null) return false;
     final resumed = await host.tryResumeDisk(
       _sessionLockFile().path,
@@ -240,7 +247,7 @@ class SessionLivenessKeeper {
   /// οθόνη. Αν ο φάκελος δεν απαντήσει, σιγεί όλο το ημερολόγιο.
   Future<void> _markAlive() async {
     if (!host.isDiskAvailable) return;
-    final mark = _currentMark?.seenAt(host.clock());
+    final mark = _freshMark();
     if (mark == null) return;
     _currentMark = mark;
     await host.writeLivenessMark(_sessionLockFile().path, mark.encode());

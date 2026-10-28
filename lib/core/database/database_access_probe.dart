@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import '../config/app_config.dart';
+import '../init/startup_journal.dart';
 import '../services/crash_log_service.dart';
+import '../services/station_name.dart';
+import '../utils/background_task.dart';
 import 'database_file_bundle.dart';
 import 'database_file_identity.dart';
 import 'database_init_result.dart';
@@ -26,6 +28,32 @@ void _archiveIntegrityReportToCrashLog(String report) {
     fatal: false,
     diagnostics: report,
   );
+}
+
+/// Πού πηγαίνει το αποτέλεσμα του καθαρισμού δοκιμαστικών αρχείων.
+///
+/// Ο καθαρισμός τρέχει στο παρασκήνιο και τελειώνει όποτε τελειώσει — συχνά
+/// αφού η εκκίνηση έχει κλείσει την αναφορά της. Γι' αυτό το αποτέλεσμά του
+/// γράφεται στο ημερολόγιο εκκίνησης, και η αποτυχία και στο ημερολόγιο
+/// σφαλμάτων: ως 28/10/2026 αποτύγχανε χωρίς ίχνος, και τα υπολείμματα
+/// συσσωρεύονταν στον κοινό φάκελο χωρίς να το ξέρει κανείς.
+void _reportSweepToJournal(List<ProbeFinding> findings) {
+  for (final finding in findings) {
+    final failed = finding.severity != ProbeSeverity.info;
+    StartupJournal.instance.note(
+      finding.message,
+      status: failed ? StartupStepStatus.warning : StartupStepStatus.ok,
+      detail: finding.hint,
+    );
+    if (failed) {
+      CrashLogService.instanceOrNull?.logError(
+        finding.message,
+        StackTrace.empty,
+        fatal: false,
+        diagnostics: finding.hint,
+      );
+    }
+  }
 }
 
 enum ProbeSeverity { info, warning, error }
@@ -79,7 +107,21 @@ class DatabaseAccessProbe {
   const DatabaseAccessProbe({
     this.totalTimeout = _kProbeTotalTimeout,
     this.archiveFullReport = _archiveIntegrityReportToCrashLog,
+    this.sweepTimeout = _kSweepTimeout,
+    this.reportSweep = _reportSweepToJournal,
   });
+
+  /// Πόσο περιμένει ο καθαρισμός να απαντήσει ο φάκελος.
+  ///
+  /// Γενναιόδωρο επίτηδες: ο καθαρισμός τρέχει στο παρασκήνιο και δεν
+  /// καθυστερεί κανέναν. Ως 28/10/2026 ήταν 0,4″ και μετρούσε μέσα στην
+  /// εκκίνηση· στο δίκτυο του νοσοκομείου η πρώτη ανάγνωση του φακέλου
+  /// χρειάστηκε 1,4″, οπότε ο καθαρισμός αποτύγχανε ακριβώς όταν υπήρχαν
+  /// υπολείμματα να μαζέψει.
+  final Duration sweepTimeout;
+
+  /// Πού γράφεται το αποτέλεσμα του καθαρισμού — δες [_reportSweepToJournal].
+  final void Function(List<ProbeFinding> findings) reportSweep;
 
   /// Πού πάει το πλήρες κείμενο του ελέγχου ακεραιότητας, όταν δεν χωρά στην
   /// οθόνη. Ρητή εξάρτηση και όχι σιωπηλό singleton, ώστε τα τεστ να μπορούν
@@ -97,7 +139,7 @@ class DatabaseAccessProbe {
 
   static const Duration _kProbeTotalTimeout = Duration(milliseconds: 1000);
   static const Duration _kShortStepTimeout = Duration(milliseconds: 250);
-  static const Duration _kSweepTimeout = Duration(milliseconds: 400);
+  static const Duration _kSweepTimeout = Duration(seconds: 5);
   static const String _kSqliteHeader = 'SQLite format 3\x00';
   static const int _kLargeWalThresholdBytes = 4 * 1024 * 1024;
   static const int _kLowDiskSpaceThresholdBytes = 50 * 1024 * 1024;
@@ -142,9 +184,9 @@ class DatabaseAccessProbe {
       if (integrity != null) extra.add(integrity);
     }
 
-    // Έξω από το χρονικό όριο των διαγνωστικών: ο καθαρισμός δεν είναι
-    // διάγνωση και δεν επιτρέπεται να τρώει από τον χρόνο της.
-    extra.addAll(await sweepStaleWriteProbes(dbPath));
+    // Στο παρασκήνιο: ο καθαρισμός δεν είναι διάγνωση, και η εκκίνηση δεν
+    // έχει λόγο να τον περιμένει. Το αποτέλεσμά του αναφέρεται μόνο του.
+    runBackgroundTask(sweepStaleWriteProbes(dbPath).then(reportSweep));
     if (extra.isEmpty) return report;
     return DatabaseAccessProbeReport(
       findings: <ProbeFinding>[...report.findings, ...extra],
@@ -165,7 +207,7 @@ class DatabaseAccessProbe {
   Future<List<ProbeFinding>> sweepStaleWriteProbes(String dbPath) async {
     try {
       final parent = File(dbPath).parent;
-      if (!await parent.exists().timeout(_kSweepTimeout)) {
+      if (!await parent.exists().timeout(sweepTimeout)) {
         return const <ProbeFinding>[];
       }
 
@@ -177,7 +219,7 @@ class DatabaseAccessProbe {
           .list(followLinks: false)
           .where((entity) => entity is File)
           .toList()
-          .timeout(_kSweepTimeout);
+          .timeout(sweepTimeout);
 
       for (final entity in entries) {
         final name = entity.uri.pathSegments.last;
@@ -207,9 +249,52 @@ class DatabaseAccessProbe {
               : '$failed δεν σβήστηκαν (πιθανόν κρατούνται) — θα ξαναδοκιμαστούν.',
         ),
       ];
-    } catch (_) {
-      return const <ProbeFinding>[];
+    } on TimeoutException {
+      return <ProbeFinding>[
+        ProbeFinding(
+          severity: ProbeSeverity.warning,
+          code: 'stale_write_probes_sweep_timeout',
+          message:
+              'Ο καθαρισμός δοκιμαστικών αρχείων δεν πρόλαβε: ο φάκελος της '
+              'βάσης δεν απάντησε σε ${sweepTimeout.inSeconds}″.',
+          hint: 'Θα ξαναδοκιμαστεί στην επόμενη εκκίνηση.',
+        ),
+      ];
+    } catch (e) {
+      return <ProbeFinding>[
+        ProbeFinding(
+          severity: ProbeSeverity.warning,
+          code: 'stale_write_probes_sweep_failed',
+          message: 'Ο καθαρισμός δοκιμαστικών αρχείων απέτυχε.',
+          hint: '$e',
+        ),
+      ];
     }
+  }
+
+  /// Το όνομα του δοκιμαστικού αρχείου εγγραφής — **σταθερό ανά εφαρμογή**.
+  ///
+  /// Ως 28/10/2026 κάθε εκκίνηση έγραφε αρχείο με νέο όνομα, οπότε κάθε
+  /// διαγραφή που χανόταν σε αργό δίκτυο άφηνε ένα ακόμη υπόλειμμα: έξι μέσα σε
+  /// μιάμιση μέρα στον κοινό φάκελο του νοσοκομείου. Με σταθερό όνομα, η
+  /// επόμενη εκκίνηση ξαναγράφει το **ίδιο** αρχείο, και ό,τι κι αν συμβεί
+  /// μένει το πολύ ένα ανά υπολογιστή και αντίγραφο της εφαρμογής.
+  ///
+  /// Η ταυτότητα (σταθμός και αντίγραφο) γίνεται αριθμός, ώστε το όνομα να
+  /// ταιριάζει στο αυστηρό μοτίβο του καθαρισμού χωρίς να το χαλαρώσει: ο ίδιος
+  /// φάκελος έχει αρχεία του χρήστη που ο καθαρισμός δεν επιτρέπεται να αγγίξει.
+  static String writeProbeFileName({
+    required String station,
+    required String instance,
+  }) {
+    // FNV-1a: ίδιο αποτέλεσμα σε κάθε εκτέλεση και σε κάθε υπολογιστή — το
+    // hashCode της Dart δεν το εγγυάται.
+    var hash = 0x811c9dc5;
+    for (final unit in '${station.toLowerCase()}|$instance'.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return '.__probe_0_$hash.tmp';
   }
 
   Future<DatabaseAccessProbeReport> _runProbe(String dbPath) async {
@@ -603,8 +688,10 @@ class DatabaseAccessProbe {
       );
     }
 
-    final probeName =
-        '.__probe_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(10000)}.tmp';
+    final probeName = writeProbeFileName(
+      station: StationName.current,
+      instance: CrashLogService.instanceOrNull?.instanceId ?? '',
+    );
     final probeFile = File('${parent.path}${Platform.pathSeparator}$probeName');
 
     try {

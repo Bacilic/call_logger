@@ -215,6 +215,38 @@ class RemoteTool {
     return null;
   }
 
+  /// Προειδοποίηση Δ: `-id` σε εργαλείο AnyDesk.
+  ///
+  /// Το AnyDesk δέχεται τον αριθμό σκέτο (`AnyDesk.exe 418272958`) και **δεν**
+  /// έχει επιλογή `-id`· με αυτήν ανοίγει το κεντρικό του παράθυρο με κενή
+  /// διεύθυνση, χωρίς να συνδεθεί (περιστατικό 26/10/2026, PC1). Το όρισμα
+  /// στέλνεται όπως είναι γραμμένο — απόφαση Διευθυντή 28/10/2026: μια σιωπηλή
+  /// διόρθωση θα έκανε τη ρύθμιση να φαίνεται σωστή ενώ δεν είναι.
+  static String? warningAnyDeskIdFlag({
+    required ToolRole role,
+    required List<RemoteToolArgument> arguments,
+  }) {
+    if (role != ToolRole.anydesk) return null;
+    for (final a in arguments) {
+      if (!a.isActive) continue;
+      if (a.value.trim().toLowerCase().startsWith('-id')) {
+        return 'Το AnyDesk δεν έχει επιλογή -id: με αυτήν ανοίγει χωρίς να '
+            'συνδεθεί. Ο αριθμός γράφεται σκέτος, {TARGET}.';
+      }
+    }
+    return null;
+  }
+
+  /// Το όρισμα που βάζουν οι «Προεπιλογές ρόλου» — μία πηγή για το μενού και
+  /// για τη φόρμα, ώστε να μη λένε ποτέ διαφορετικά πράγματα. `null` όταν ο
+  /// ρόλος δεν έχει προεπιλογή.
+  static String? rolePresetArgument(ToolRole role) => switch (role) {
+    ToolRole.vnc => '-host=PC{EQUIPMENT_CODE}',
+    ToolRole.rdp => '/v:{TARGET}',
+    ToolRole.anydesk => '{TARGET}',
+    ToolRole.generic => null,
+  };
+
   /// Ζωντανές προειδοποιήσεις φόρμας εργαλείου (μία γραμμή ανά εύρημα).
   static List<String> collectArgumentsEditorWarnings({
     required ToolRole role,
@@ -224,6 +256,7 @@ class RemoteTool {
       ?warningFileTargetConflict(arguments),
       ?warningDuplicateActiveArguments(arguments),
       ?warningRdpTargetSyntax(role: role, arguments: arguments),
+      ?warningAnyDeskIdFlag(role: role, arguments: arguments),
     ];
   }
 

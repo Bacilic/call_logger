@@ -1,6 +1,6 @@
 import 'package:call_logger/core/services/session_liveness_mark.dart';
 import 'package:call_logger/core/services/station_shutdown_request.dart';
-import 'package:call_logger/features/database/widgets/schema_upgrade_waiting_panel.dart';
+import 'package:call_logger/features/database/widgets/stations_holding_database_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,6 +17,8 @@ void main() {
     bool listens = true,
     DateTime? startedAt,
     DateTime? lastSeen,
+    bool dead = false,
+    String? operator,
   }) => SessionLivenessMark(
     station: station,
     version: '0.58.0',
@@ -24,6 +26,8 @@ void main() {
     lastSeen: lastSeen ?? DateTime(2026, 9, 28, 10),
     instance: instance,
     listensForShutdownRequests: listens,
+    databaseConnectionDead: dead,
+    operatorName: operator,
   );
 
   late Map<String, StationShutdownRequest> folder;
@@ -43,11 +47,13 @@ void main() {
     String? Function(SessionLivenessMark, bool)? failSend,
     Future<StationShutdownReply?> Function(SessionLivenessMark)? takeDenial,
     Duration refreshInterval = const Duration(seconds: 5),
+    bool lockedDatabase = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: SchemaUpgradeWaitingPanel(
+          body: StationsHoldingDatabasePanel(
+            lockedDatabase: lockedDatabase,
             loadHolders: () async => holders,
             sendRequest: (h, immediate) async {
               final failure = failSend?.call(h, immediate);
@@ -89,6 +95,52 @@ void main() {
     await pump(tester);
 
     expect(find.textContaining('PC922'), findsWidgets);
+  });
+
+  group('κλειδωμένη βάση', () {
+    // Περιστατικό 26–27/10/2026: η εφαρμογή του PC922 με νεκρή σύνδεση κράτησε
+    // τη βάση όλη τη νύχτα, και ο συνάδελφος δεν ήξερε ποιον να αναζητήσει.
+    testWidgets('ο πιθανός υπαίτιος ξεχωρίζει, με το όνομα του χρήστη', (
+      tester,
+    ) async {
+      holders = [
+        holder(station: 'PC3569', instance: 'run-b'),
+        holder(dead: true, operator: 'Βλάσης'),
+      ];
+      await pump(tester, lockedDatabase: true);
+
+      expect(find.textContaining('Πιθανότατα κρατά τη βάση'), findsOneWidget);
+      expect(find.textContaining('PC922 (Βλάσης)'), findsOneWidget);
+    });
+
+    testWidgets('το αίτημα κλεισίματος πηγαίνει μόνο στον ύποπτο', (
+      tester,
+    ) async {
+      holders = [
+        holder(station: 'PC3569', instance: 'run-b'),
+        holder(dead: true),
+      ];
+      await pump(tester, lockedDatabase: true);
+
+      await tester.tap(find.text('Αίτημα κλεισίματος'));
+      await tester.pump();
+
+      expect(sentTo, [
+        'PC922|false',
+      ], reason: 'Ο συνάδελφος που απλώς περιμένει δεν φταίει.');
+    });
+
+    testWidgets('χωρίς ύποπτο, το λέει αντί να δείξει λάθος υπολογιστή', (
+      tester,
+    ) async {
+      await pump(tester, lockedDatabase: true);
+
+      expect(find.textContaining('Πιθανότατα'), findsNothing);
+      expect(
+        find.textContaining('Καμία από αυτές δεν δηλώνει κολλημένη σύνδεση'),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('το αίτημα φτάνει στον σταθμό που ακούει', (tester) async {
