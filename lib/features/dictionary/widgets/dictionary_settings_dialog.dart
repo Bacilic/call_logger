@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../../../core/widgets/dialog_snackbar_scope.dart';
 import '../../../core/widgets/settings_list_conflict_dialog.dart';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -346,8 +347,6 @@ class _DictionarySettingsDialogState
         dialogTitle: 'Αρχείο εξαγωγής Compile (TXT)',
         fileName: fileName,
         initialDirectory: await _exportPickerInitialDirectory(),
-        type: FileType.custom,
-        allowedExtensions: const ['txt'],
         bytes: Uint8List(0),
       ),
     )).value?.toFilePath();
@@ -502,8 +501,7 @@ class _DictionarySettingsDialogState
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Κατηγορίες λεξικού (dropdown)',
-                      hintText:
-                          'Διαχωρίστε με κόμμα, π.χ. Γενική, Τεχνικός Όρος, Όνομα',
+                      hintText: 'Διαχωρίστε με κόμμα, π.χ. Γενική, Τεχνικός Όρος, Όνομα',
                       border: OutlineInputBorder(),
                     ),
                   ),

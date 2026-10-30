@@ -1,4 +1,5 @@
 import '../../../../core/widgets/dialog_snackbar_scope.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +8,7 @@ import '../../models/department_model.dart';
 import '../../providers/department_directory_provider.dart';
 import '../../screens/widgets/department_color_palette.dart';
 import '../controllers/building_map_controller.dart';
+import '../plan/providers/floor_plan_providers.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_fill_color_dialog.dart';
 import '../../../../core/widgets/compact_tooltip.dart';
@@ -53,10 +55,19 @@ class BuildingMapFloorDepartmentsButton extends ConsumerWidget {
     final deptState = ref.watch(departmentDirectoryProvider);
     int hiddenCount = 0;
     int totalOnSheet = 0;
+    // Όροφος στον νέο χάρτη: μετρούν οι χώροι του, όχι τα παλιά κουτάκια —
+    // και «κρυμμένο» δεν υπάρχει εκεί.
+    final newMapIds = sheetId == null
+        ? null
+        : newMapDepartmentIdsOnFloor(ref, sheetId);
     if (sheetId != null) {
       final sheetStr = sheetId.toString();
       for (final d in deptState.allDepartments) {
         if (d.isDeleted) continue;
+        if (newMapIds != null) {
+          if (newMapIds.contains(d.id)) totalOnSheet++;
+          continue;
+        }
         if ((d.mapFloor ?? '') != sheetStr) continue;
         totalOnSheet++;
         if (d.isHiddenOnMap) hiddenCount++;
@@ -141,6 +152,15 @@ class _BuildingMapFloorDepartmentsDialogState
 
   bool get _isEdit => widget.mode == BuildingMapFloorDepartmentsDialogMode.edit;
 
+  /// Τα τμήματα με χώρο στον νέο χάρτη· `null` όταν ο όροφος δεν έχει
+  /// ενεργοποιηθεί. Ενημερώνεται σε κάθε χτίσιμο.
+  Set<int>? _newMapIds;
+
+  /// Ο όροφος είναι στον νέο χάρτη: απόκρυψη, επωνυμία και αφαίρεση αφορούν
+  /// μόνο τα κουτάκια του παλιού χάρτη και δεν εμφανίζονται· μένει το χρώμα,
+  /// που το παίρνουν και οι χώροι του νέου.
+  bool get _isNewMap => _newMapIds != null;
+
   @override
   void initState() {
     super.initState();
@@ -159,13 +179,16 @@ class _BuildingMapFloorDepartmentsDialogState
   List<DepartmentModel> _departmentsForSheet() {
     final all = ref.watch(departmentDirectoryProvider).allDepartments;
     final sheetStr = widget.currentSheetId.toString();
+    final newMapIds = _newMapIds;
     final list =
         all
             .where(
               (d) =>
                   !d.isDeleted &&
-                  (d.mapFloor ?? '') == sheetStr &&
-                  d.id != null,
+                  d.id != null &&
+                  (newMapIds != null
+                      ? newMapIds.contains(d.id)
+                      : (d.mapFloor ?? '') == sheetStr),
             )
             .toList()
           ..sort(
@@ -346,7 +369,7 @@ class _BuildingMapFloorDepartmentsDialogState
       );
     }
 
-    final selectable = _isEdit && !isRenaming;
+    final selectable = _isEdit && !isRenaming && !_isNewMap;
     final checked = _selected.contains(d.id);
 
     return Container(
@@ -375,21 +398,24 @@ class _BuildingMapFloorDepartmentsDialogState
             )
           else
             const SizedBox(width: 40),
-          IconButton(
-            tooltip: hidden ? 'Εμφάνιση στον χάρτη' : 'Απόκρυψη από τον χάρτη',
-            visualDensity: VisualDensity.compact,
-            icon: Icon(
-              hidden
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
-              color: hidden
-                  ? theme.colorScheme.onSurfaceVariant
-                  : theme.colorScheme.primary,
+          if (!_isNewMap)
+            IconButton(
+              tooltip: hidden
+                  ? 'Εμφάνιση στον χάρτη'
+                  : 'Απόκρυψη από τον χάρτη',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                hidden
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: hidden
+                    ? theme.colorScheme.onSurfaceVariant
+                    : theme.colorScheme.primary,
+              ),
+              onPressed: () => _setHidden(d, !hidden),
             ),
-            onPressed: () => _setHidden(d, !hidden),
-          ),
           Expanded(child: nameWidget),
-          if (_isEdit && !isRenaming)
+          if (_isEdit && !isRenaming && !_isNewMap)
             IconButton(
               tooltip: 'Μετονομασία επωνυμίας χάρτη',
               visualDensity: VisualDensity.compact,
@@ -446,6 +472,7 @@ class _BuildingMapFloorDepartmentsDialogState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    _newMapIds = newMapDepartmentIdsOnFloor(ref, widget.currentSheetId);
     final all = _departmentsForSheet();
     final hiddenCount = all.where((d) => d.isHiddenOnMap).length;
 
@@ -519,7 +546,7 @@ class _BuildingMapFloorDepartmentsDialogState
                     ],
                     Row(
                       children: [
-                        if (_isEdit)
+                        if (_isEdit && !_isNewMap)
                           CompactTooltip(
                             message: filteredIds.isEmpty
                                 ? 'Επιλογή τμημάτων'
@@ -547,39 +574,42 @@ class _BuildingMapFloorDepartmentsDialogState
                                     },
                             ),
                           ),
-                        Tooltip(
-                          message: allVisible
-                              ? 'Απόκρυψη όλων από τον χάρτη'
-                              : 'Εμφάνιση όλων στον χάρτη',
-                          child: IconButton(
-                            visualDensity: VisualDensity.compact,
-                            onPressed: all.isEmpty
-                                ? null
-                                : () async {
-                                    final targetHidden = allVisible;
-                                    await _setHiddenBulk(
-                                      all.map((d) => d.id!),
-                                      targetHidden,
-                                    );
-                                  },
-                            icon: Icon(
-                              allVisible
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              color: all.isEmpty
-                                  ? theme.colorScheme.onSurfaceVariant
-                                  : theme.colorScheme.primary,
+                        if (!_isNewMap)
+                          Tooltip(
+                            message: allVisible
+                                ? 'Απόκρυψη όλων από τον χάρτη'
+                                : 'Εμφάνιση όλων στον χάρτη',
+                            child: IconButton(
+                              visualDensity: VisualDensity.compact,
+                              onPressed: all.isEmpty
+                                  ? null
+                                  : () async {
+                                      final targetHidden = allVisible;
+                                      await _setHiddenBulk(
+                                        all.map((d) => d.id!),
+                                        targetHidden,
+                                      );
+                                    },
+                              icon: Icon(
+                                allVisible
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                color: all.isEmpty
+                                    ? theme.colorScheme.onSurfaceVariant
+                                    : theme.colorScheme.primary,
+                              ),
                             ),
                           ),
-                        ),
                         Text(
                           all.isEmpty
                               ? 'Κανένα τμήμα στο φύλλο'
+                              : _isNewMap
+                              ? '${all.length} τμήματα με χώρο στον νέο χάρτη'
                               : '${all.length} τμήματα · $hiddenCount κρυμμένα',
                           style: theme.textTheme.bodySmall,
                         ),
                         const Spacer(),
-                        if (_isEdit)
+                        if (_isEdit && !_isNewMap)
                           TextButton.icon(
                             onPressed: _selected.isEmpty
                                 ? null
@@ -604,7 +634,9 @@ class _BuildingMapFloorDepartmentsDialogState
                           ? Center(
                               child: Text(
                                 all.isEmpty
-                                    ? 'Δεν υπάρχουν τμήματα χαρτογραφημένα σε αυτό το φύλλο.'
+                                    ? (_isNewMap
+                                          ? 'Κανένα τμήμα δεν έχει ακόμη χώρο στον νέο χάρτη του ορόφου.'
+                                          : 'Δεν υπάρχουν τμήματα χαρτογραφημένα σε αυτό το φύλλο.')
                                     : 'Κανένα αποτέλεσμα για την αναζήτηση.',
                                 style: theme.textTheme.bodyMedium,
                               ),

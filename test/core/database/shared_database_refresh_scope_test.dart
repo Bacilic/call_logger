@@ -9,7 +9,12 @@
 
 import 'package:call_logger/core/database/calls_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/knowledge_base_repository.dart';
 import 'package:call_logger/core/database/shared_database_refresh.dart';
+import 'package:call_logger/core/providers/servers_provider.dart';
+import 'package:call_logger/features/calls/provider/remote_paths_provider.dart';
+import 'package:call_logger/features/knowledge/models/knowledge_article.dart';
+import 'package:call_logger/features/knowledge/providers/knowledge_provider.dart';
 import 'package:call_logger/features/calls/models/call_model.dart';
 import 'package:call_logger/features/history/providers/history_provider.dart';
 import 'package:call_logger/core/database/department_repository.dart';
@@ -49,50 +54,47 @@ void main() {
       );
     });
 
-    test(
-      'φτάνει στο Ιστορικό, στους μετρητές και στην ουρά της Αναφοράς',
-      () async {
-        final container = ProviderContainer(
-          overrides: callLoggerTestProviderOverrides(),
-        );
-        addTearDown(container.dispose);
-        container.read(_refCaptureProvider);
+    test('φτάνει στο Ιστορικό, στους μετρητές και στην ουρά της Αναφοράς', () async {
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+      container.read(_refCaptureProvider);
 
-        container.listen(historyCallsProvider, (_, _) {});
-        container.listen(totalCallsCountProvider, (_, _) {});
-        container.listen(lansweeperReportCallsProvider, (_, _) {});
+      container.listen(historyCallsProvider, (_, _) {});
+      container.listen(totalCallsCountProvider, (_, _) {});
+      container.listen(lansweeperReportCallsProvider, (_, _) {});
 
-        await container.read(historyCallsProvider.future);
-        await container.read(totalCallsCountProvider.future);
-        await container.read(lansweeperReportCallsProvider.future);
+      await container.read(historyCallsProvider.future);
+      await container.read(totalCallsCountProvider.future);
+      await container.read(lansweeperReportCallsProvider.future);
 
-        expect(
-          container.read(historyCallsProvider).hasValue,
-          isTrue,
-          reason: 'προϋπόθεση: οι οθόνες έχουν φορτώσει πριν την ξένη εγγραφή',
-        );
+      expect(
+        container.read(historyCallsProvider).hasValue,
+        isTrue,
+        reason: 'προϋπόθεση: οι οθόνες έχουν φορτώσει πριν την ξένη εγγραφή',
+      );
 
-        await refreshSharedDatabaseViews(_capturedRef!);
+      await refreshSharedDatabaseViews(_capturedRef!);
 
-        expect(
-          container.read(historyCallsProvider).isLoading,
-          isTrue,
-          reason: 'το Ιστορικό πρέπει να ξαναρωτά μετά από ξένη εγγραφή',
-        );
-        expect(
-          container.read(totalCallsCountProvider).isLoading,
-          isTrue,
-          reason: 'οι μετρητές των Στατιστικών το ίδιο',
-        );
-        expect(
-          container.read(lansweeperReportCallsProvider).isLoading,
-          isTrue,
-          reason:
-              'η ουρά της Αναφοράς είναι το πιεστικό: δύο άνθρωποι τη δουλεύουν '
-              'ταυτόχρονα κάθε μεσημέρι',
-        );
-      },
-    );
+      expect(
+        container.read(historyCallsProvider).isLoading,
+        isTrue,
+        reason: 'το Ιστορικό πρέπει να ξαναρωτά μετά από ξένη εγγραφή',
+      );
+      expect(
+        container.read(totalCallsCountProvider).isLoading,
+        isTrue,
+        reason: 'οι μετρητές των Στατιστικών το ίδιο',
+      );
+      expect(
+        container.read(lansweeperReportCallsProvider).isLoading,
+        isTrue,
+        reason:
+            'η ουρά της Αναφοράς είναι το πιεστικό: δύο άνθρωποι τη δουλεύουν '
+            'ταυτόχρονα κάθε μεσημέρι',
+      );
+    });
 
     test('φτάνει και στα τμήματα, που τροφοδοτούν τον χάρτη κτιρίου', () async {
       final container = ProviderContainer(
@@ -112,9 +114,8 @@ void main() {
 
       // Το άλλο μηχάνημα τοποθετεί νέο τμήμα στον χάρτη.
       final db = await DatabaseHelper.instance.database;
-      await DepartmentRepository(
-        db,
-      ).getOrCreateDepartmentIdByName('Ακτινολογικό');
+      await DepartmentRepository(db)
+          .getOrCreateDepartmentIdByName('Ακτινολογικό');
 
       await refreshSharedDatabaseViews(_capturedRef!);
 
@@ -225,5 +226,64 @@ void main() {
             'αλλιώς η καρτέλα ανοίγει με αφετηρία που δεν ισχύει πια',
       );
     });
+
+    test(
+      'φτάνει και σε Βάση Γνώσης, διακομιστές και εργαλεία σύνδεσης',
+      () async {
+        final container = ProviderContainer(
+          overrides: callLoggerTestProviderOverrides(),
+        );
+        addTearDown(container.dispose);
+        container.read(_refCaptureProvider);
+
+        container.listen(knowledgeArticlesProvider, (_, _) {});
+        container.listen(serversListProvider, (_, _) {});
+        // Στα τεστ ο κατάλογος εργαλείων είναι σταθερός (override)· μετριέται
+        // ότι ξαναδιαβάζεται, όχι τι περιέχει.
+        var toolReloads = 0;
+        container.listen(
+          remoteToolsAllCatalogProvider,
+          (_, _) => toolReloads++,
+        );
+        final articlesBefore = (await container.read(
+          knowledgeArticlesProvider.future,
+        )).length;
+        final serversBefore = (await container.read(serversListProvider.future))
+            .length;
+        await container.read(remoteToolsAllCatalogProvider.future);
+        final reloadsBefore = toolReloads;
+
+        // Το άλλο μηχάνημα προσθέτει άρθρο και διακομιστή.
+        final db = await DatabaseHelper.instance.database;
+        await KnowledgeBaseRepository(db).saveArticle(
+          const KnowledgeArticle(
+            title: 'Άρθρο συναδέλφου',
+            symptom: 'Σύμπτωμα',
+            solution: 'Λύση',
+          ),
+        );
+        await db.insert('servers', {
+          'name': 'Διακομιστής συναδέλφου',
+          'host': '10.0.0.9',
+          'admin_user': '',
+          'admin_password': '',
+          'is_default': 0,
+          'sort_order': 99,
+        });
+
+        await refreshSharedDatabaseViews(_capturedRef!);
+
+        expect(
+          (await container.read(knowledgeArticlesProvider.future)).length,
+          articlesBefore + 1,
+        );
+        expect(
+          (await container.read(serversListProvider.future)).length,
+          serversBefore + 1,
+        );
+        await container.read(remoteToolsAllCatalogProvider.future);
+        expect(toolReloads, greaterThan(reloadsBefore));
+      },
+    );
   });
 }

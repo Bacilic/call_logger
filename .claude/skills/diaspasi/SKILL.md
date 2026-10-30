@@ -27,7 +27,7 @@ description: >-
 
 **Πρωτότυπες πηγές** (διάβασέ τες αν χρειαστείς λεπτομέρεια — νικούν αυτή την περίληψη σε διαφωνία): στη μνήμη `god-file-split-evaluation-criteria`, `characterization-snapshot-before-split`, `god-file-split-progress`· στο roadmap η ενότητα «Διάσπαση αρχείων».
 
-Εξαιρούνται και δεν αγγίζονται ποτέ: `database_v1_schema.dart`, `old_database/*`, `lamp_migration_service.dart`, καθώς και `database_schema_migrations.dart` και `database_helper.dart` — αυτά τα δύο ξαναγράφονται στον «Μηδενισμό έκδοσης βάσης» μετά την έκδοση 1 (ως τότε, όχι διάσπαση).
+Εξαιρούνται και δεν αγγίζονται ποτέ: `database_v1_schema.dart`, `old_database/*`, καθώς και `database_schema_migrations.dart` και `database_helper.dart` — αυτά τα δύο ξαναγράφονται στον «Μηδενισμό έκδοσης βάσης» μετά την έκδοση 1 (ως τότε, όχι διάσπαση).
 
 ---
 

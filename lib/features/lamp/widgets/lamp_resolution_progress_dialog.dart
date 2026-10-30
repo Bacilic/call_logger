@@ -348,8 +348,6 @@ class _LampResolutionProgressDialogState
         () async => FilePicker.saveFile(
           dialogTitle: 'Εξαγωγή αναφοράς επίλυσης',
           fileName: 'resolution_log_${_timestampForFileName()}.txt',
-          type: FileType.custom,
-          allowedExtensions: const <String>['txt'],
           initialDirectory: await memory.initialDirectory(),
           bytes: Uint8List(0),
         ),

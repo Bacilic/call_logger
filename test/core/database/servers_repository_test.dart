@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/servers_repository.dart';
 import 'package:call_logger/core/models/managed_server.dart';
+import 'package:call_logger/features/directory/services/directory_save_conflict.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -123,6 +124,62 @@ void main() {
       final id = await add('Χωρίς', '10.0.0.7', password: '');
 
       expect((await repo.getById(id))!.hasCredentials, isFalse);
+    });
+
+    group('κάποιος πρόλαβε', () {
+      test('η αλλαγή του συναδέλφου δεν σβήνεται σιωπηλά', () async {
+        final id = await add('Κεντρικός', '10.0.0.1', password: 'παλιός');
+        final atOpen = (await repo.getById(id))!;
+        await repo.update(atOpen.copyWith(adminPassword: 'νέος'));
+
+        await expectLater(
+          repo.update(atOpen.copyWith(notes: 'σημείωση'), expected: atOpen),
+          throwsA(isA<DirectoryStaleException>()),
+        );
+        final now = (await repo.getById(id))!;
+        expect(now.adminPassword, 'νέος');
+        expect(now.notes, isNull);
+      });
+
+      test('διακομιστής που διαγράφηκε στο μεταξύ δεν επανέρχεται', () async {
+        final id = await add('Κεντρικός', '10.0.0.1');
+        final atOpen = (await repo.getById(id))!;
+        await repo.softDelete(id);
+
+        await expectLater(
+          repo.update(atOpen.copyWith(notes: 'σημείωση'), expected: atOpen),
+          throwsA(isA<DirectoryStaleException>()),
+        );
+        final row = (await db.query(
+          'servers',
+          where: 'id = ?',
+          whereArgs: [id],
+        )).single;
+        expect(row['deleted_at'], isNotNull);
+      });
+
+      test('χωρίς ξένη αλλαγή η αποθήκευση περνά', () async {
+        final id = await add('Κεντρικός', '10.0.0.1');
+        final atOpen = (await repo.getById(id))!;
+
+        await repo.update(atOpen.copyWith(notes: 'σημείωση'), expected: atOpen);
+        expect((await repo.getById(id))!.notes, 'σημείωση');
+      });
+
+      test('με «Κράτα τη δική μου» γράφεται από πάνω', () async {
+        final id = await add('Κεντρικός', '10.0.0.1', password: 'παλιός');
+        final atOpen = (await repo.getById(id))!;
+        await repo.update(atOpen.copyWith(adminPassword: 'νέος'));
+
+        await repo.update(
+          atOpen.copyWith(notes: 'σημείωση'),
+          expected: atOpen,
+          force: true,
+        );
+        final now = (await repo.getById(id))!;
+        expect(now.notes, 'σημείωση');
+        expect(now.adminPassword, 'παλιός');
+      });
     });
   });
 }

@@ -59,8 +59,6 @@ Future<String?> exportDashboardStatistics({
       () async => FilePicker.saveFile(
         dialogTitle: 'Εξαγωγή στατιστικών κλήσεων',
         fileName: suggestedName,
-        type: FileType.custom,
-        allowedExtensions: [extension],
         bytes: Uint8List(0),
       ),
     )).value;
@@ -81,9 +79,9 @@ Future<String?> exportDashboardStatistics({
       DashboardExportFormat.excel => buildDashboardExcel(document),
       DashboardExportFormat.pdf => await buildDashboardPdf(
         document,
-        fontData: (await (bundle ?? rootBundle).load(
-          kDashboardPdfFontAsset,
-        )).buffer.asUint8List(),
+        fontData: (await (bundle ?? rootBundle).load(kDashboardPdfFontAsset))
+            .buffer
+            .asUint8List(),
       ),
     };
     await File(path).writeAsBytes(bytes, flush: true);

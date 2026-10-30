@@ -6,6 +6,7 @@ import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/dialog_snackbar_scope.dart';
 import '../../../core/widgets/resizable_text_area.dart';
 import '../../../core/widgets/spell_check_controller.dart';
+import '../../directory/screens/widgets/directory_conflict_dialog.dart';
 import '../../history/providers/history_provider.dart';
 import '../models/knowledge_article.dart';
 import '../providers/knowledge_provider.dart';
@@ -188,10 +189,23 @@ class _KnowledgeArticleDialogState
 
     setState(() => _saving = true);
     try {
-      final id = await ref
-          .read(knowledgeActionsProvider.notifier)
-          .save(updated);
+      final actions = ref.read(knowledgeActionsProvider.notifier);
+      var id = 0;
+      final saved = await saveDirectoryRecordWithConflictPrompt(
+        context,
+        save: ({required bool force}) async {
+          id = await actions.save(
+            updated,
+            expected: _isNew ? null : widget.article,
+            force: force,
+          );
+        },
+      );
       if (!mounted) return;
+      if (!saved) {
+        setState(() => _saving = false);
+        return;
+      }
       closeDialogWithSnackBar(
         SnackBar(
           content: Text(
@@ -268,8 +282,7 @@ class _KnowledgeArticleDialogState
                     autoGrowMaxLines: 2,
                     decoration: const InputDecoration(
                       labelText: 'Τίτλος',
-                      helperText:
-                          'Πώς θα το αναγνωρίσετε σε λίστα. Κενό σημαίνει «όσο λέει το σύμπτωμα».',
+                      helperText: 'Πώς θα το αναγνωρίσετε σε λίστα. Κενό σημαίνει «όσο λέει το σύμπτωμα».',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -279,8 +292,7 @@ class _KnowledgeArticleDialogState
                     minLines: 2,
                     decoration: const InputDecoration(
                       labelText: 'Σύμπτωμα — όπως το λέει ο χρήστης',
-                      helperText:
-                          'Τηλεγραφικά, με τα λόγια του καλούντα. Έτσι θα το βρει η εφαρμογή την επόμενη φορά.',
+                      helperText: 'Τηλεγραφικά, με τα λόγια του καλούντα. Έτσι θα το βρει η εφαρμογή την επόμενη φορά.',
                       border: OutlineInputBorder(),
                       alignLabelWithHint: true,
                     ),
@@ -300,8 +312,7 @@ class _KnowledgeArticleDialogState
                     controller: _tagsController,
                     decoration: const InputDecoration(
                       labelText: 'Λέξεις-κλειδιά',
-                      helperText:
-                          'Χωρισμένες με κόμμα, π.χ. VNC, μαύρη οθόνη, απομακρυσμένη',
+                      helperText: 'Χωρισμένες με κόμμα, π.χ. VNC, μαύρη οθόνη, απομακρυσμένη',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),

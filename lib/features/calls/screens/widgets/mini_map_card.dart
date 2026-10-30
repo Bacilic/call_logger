@@ -11,6 +11,7 @@ import '../../../../core/models/building_map_floor.dart';
 import '../../../directory/building_map/services/floor_plan_image_cache.dart';
 import '../../../../core/widgets/app_asset_image.dart';
 import '../../../directory/building_map/models/building_map_jump_target.dart';
+import '../../../directory/building_map/plan/widgets/floor_plan_map_view.dart';
 import '../../../directory/building_map/screens/building_map_dialog.dart';
 import '../../../directory/models/department_floor_display_extension.dart';
 import '../../../directory/models/department_model.dart';
@@ -243,6 +244,29 @@ class _MiniMapCardState extends ConsumerState<MiniMapCard> {
   ) {
     final deptId = target.departmentId;
     final dept = deptId == null ? null : data.departmentsById[deptId];
+    // Όροφος του νέου χάρτη: ο σχεδιασμένος όροφος με φωτισμένο τον χώρο του
+    // τμήματος. Όταν ο υπάλληλος ή ο εξοπλισμός της κλήσης έχει θέση, ο
+    // χάρτης τον εντοπίζει — στον όροφο του τμήματος αν είναι εκεί, αλλιώς
+    // στον όροφο όπου βρίσκεται.
+    final departmentFloor = deptId == null
+        ? null
+        : data.newMapByDepartment[deptId];
+    final newFloor = departmentFloor?.callItems.isNotEmpty == true
+        ? departmentFloor
+        : data.callFloors.firstOrNull ?? departmentFloor;
+    if (newFloor != null) {
+      return FloorPlanMapView(
+        elements: newFloor.elements,
+        departments: data.departmentsById,
+        rotationDegrees: newFloor.floor.rotationDegrees,
+        highlightDepartmentId: deptId,
+        margin: 8,
+        objects: [...newFloor.objects, ...newFloor.callItems],
+        focusItems: {
+          for (final v in newFloor.callItems) (source: v.source, id: v.id),
+        },
+      );
+    }
     if (dept == null) {
       return _placeholder(context, 'Δεν βρέθηκε τμήμα για προεπισκόπηση.');
     }

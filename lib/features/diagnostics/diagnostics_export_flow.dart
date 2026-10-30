@@ -17,11 +17,10 @@ import 'services/windows_event_log_reader.dart';
 import 'widgets/diagnostics_export_dialog.dart';
 
 /// Επιλογή θέσης αποθήκευσης — αντικαθίσταται στα τεστ.
-typedef DiagnosticsSavePathPicker =
-    Future<String?> Function(
-      String suggestedFileName,
-      String? initialDirectory,
-    );
+typedef DiagnosticsSavePathPicker = Future<String?> Function(
+  String suggestedFileName,
+  String? initialDirectory,
+);
 
 Future<String?> _pickWithSystemDialog(
   String suggestedFileName,
@@ -32,8 +31,6 @@ Future<String?> _pickWithSystemDialog(
       dialogTitle: 'Εξαγωγή διαγνωστικών',
       fileName: suggestedFileName,
       initialDirectory: initialDirectory,
-      type: FileType.custom,
-      allowedExtensions: const ['md'],
       bytes: Uint8List(0),
     ),
   )).value;

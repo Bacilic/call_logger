@@ -30,9 +30,8 @@ const String kTaskPdfFontAsset = 'assets/fonts/Inter-Regular.ttf';
 
 /// Τα bytes του φύλλου — το ένα σημείο απ' όπου περνούν και οι δύο έξοδοι.
 Future<Uint8List> buildTaskSheetBytes(Task task, {AssetBundle? bundle}) async {
-  final fontData = (await (bundle ?? rootBundle).load(
-    kTaskPdfFontAsset,
-  )).buffer.asUint8List();
+  final fontData = (await (bundle ?? rootBundle).load(kTaskPdfFontAsset)).buffer
+      .asUint8List();
   return buildTaskPdf(buildTaskPrintDocument(task), fontData: fontData);
 }
 
@@ -80,8 +79,6 @@ Future<String?> saveTaskSheetAsPdf({
       () async => FilePicker.saveFile(
         dialogTitle: 'Αποθήκευση εκκρεμότητας ως PDF',
         fileName: taskPrintFileName(task),
-        type: FileType.custom,
-        allowedExtensions: const ['pdf'],
         bytes: Uint8List(0),
       ),
     )).value;

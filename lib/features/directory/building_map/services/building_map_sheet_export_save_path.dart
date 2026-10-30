@@ -59,10 +59,6 @@ Future<String?> promptBuildingMapExportSavePath({
       dialogTitle: 'Εξαγωγή χάρτη ορόφου',
       fileName: suggested,
       initialDirectory: initialDir,
-      type: FileType.custom,
-      allowedExtensions: kind == _ExportKind.png
-          ? const ['png']
-          : const ['jpg'],
       bytes: Uint8List(0),
     ),
   );

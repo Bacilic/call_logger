@@ -5,6 +5,7 @@ import '../../../../core/models/managed_server.dart';
 import '../../../../core/providers/servers_provider.dart';
 import '../../../../core/services/server_sessions/server_connection_check.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
+import 'directory_conflict_dialog.dart';
 
 /// Φόρμα προσθήκης/επεξεργασίας διακομιστή.
 ///
@@ -140,7 +141,15 @@ class _ServerFormDialogState extends ConsumerState<_ServerFormDialog> {
       if (_isNew) {
         await repo.insert(draft);
       } else {
-        await repo.update(draft);
+        final saved = await saveDirectoryRecordWithConflictPrompt(
+          context,
+          save: ({required bool force}) =>
+              repo.update(draft, expected: widget.server, force: force),
+        );
+        if (!saved) {
+          if (mounted) setState(() => _saving = false);
+          return;
+        }
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);

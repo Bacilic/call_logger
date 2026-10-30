@@ -1,4 +1,5 @@
 import 'package:call_logger/core/database/audit_diff_helper.dart';
+import 'package:call_logger/core/database/audit_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Τα κλειδιά που γράφονται όντως στο `old/new_values_json` του audit.
@@ -179,6 +180,23 @@ void main() {
         expect(capitalized, isEmpty);
       },
     );
+
+    test('το «ενεργό» του εργαλείου δεν διαβάζεται «ενεργό προφίλ»', () {
+      expect(
+        AuditDiffHelper.fieldTitleLabel(
+          AuditEntityTypes.remoteTool,
+          'is_active',
+        ),
+        'ενεργό εργαλείο',
+      );
+      expect(
+        AuditDiffHelper.fieldTitleLabel(
+          AuditEntityTypes.operatorProfile,
+          'is_active',
+        ),
+        'ενεργό προφίλ',
+      );
+    });
 
     test(
       'το κλειδί που γράφει το audit για τον κωδικό είναι το equipment_code',

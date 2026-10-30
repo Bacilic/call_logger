@@ -93,8 +93,19 @@ class KnowledgeActionsNotifier extends Notifier<void> {
   void _bumpRevision() => ref.read(knowledgeRevisionProvider.notifier).bump();
 
   /// Δημιουργεί ή ενημερώνει άρθρο· επιστρέφει το id του.
-  Future<int> save(KnowledgeArticle article) async {
-    final id = await (await _repo).saveArticle(article);
+  ///
+  /// [expected]: το άρθρο όπως άνοιξε η φόρμα, για τον φύλακα «κάποιος
+  /// πρόλαβε»· [force] γράφει από πάνω όταν ο χρήστης επιμείνει.
+  Future<int> save(
+    KnowledgeArticle article, {
+    KnowledgeArticle? expected,
+    bool force = false,
+  }) async {
+    final id = await (await _repo).saveArticle(
+      article,
+      expected: expected,
+      force: force,
+    );
     _bumpRevision();
     return id;
   }
@@ -112,8 +123,9 @@ final knowledgeActionsProvider =
 
 /// Η «Βελτίωση με ΤΝ» όπως την καλεί η φόρμα άρθρου — αντικαθίσταται στα
 /// τεστ, ώστε η φόρμα να δοκιμάζεται χωρίς δίκτυο.
-typedef KnowledgeImproveRunner =
-    Future<KnowledgeImproveOutcome> Function(KnowledgeImproveInput input);
+typedef KnowledgeImproveRunner = Future<KnowledgeImproveOutcome> Function(
+  KnowledgeImproveInput input,
+);
 
 final knowledgeImproveRunnerProvider = Provider<KnowledgeImproveRunner>(
   (ref) =>

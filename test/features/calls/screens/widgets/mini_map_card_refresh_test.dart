@@ -1,15 +1,21 @@
 // Ο μικρός χάρτης της κλήσης ξαναφορτώνει όταν αλλάζει η χαρτογράφηση τμήματος
 // από άλλη ροή (π.χ. ο πλήρης χάρτης που ανοίγει η ίδια η κάρτα), όχι μόνο όταν
-// αλλάζουν τα πεδία της φόρμας.
+// αλλάζουν τα πεδία της φόρμας. Και ποιον όροφο δείχνει σε όροφο του νέου
+// χάρτη: τον χώρο του τμήματος, ή τη θέση του υπαλλήλου της κλήσης.
 //
 //   flutter test test/features/calls/screens/widgets/mini_map_card_refresh_test.dart
 
 import 'dart:async';
 
+import 'package:call_logger/core/models/building_map_floor.dart';
+import 'package:call_logger/core/models/floor_plan_element.dart';
+import 'package:call_logger/core/models/floor_plan_placement.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
 import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/screens/widgets/mini_map_card.dart';
 import 'package:call_logger/features/calls/services/mini_map_data_loader.dart';
+import 'package:call_logger/features/directory/building_map/plan/floor_plan_objects.dart';
+import 'package:call_logger/features/directory/building_map/plan/widgets/floor_plan_map_view.dart';
 import 'package:call_logger/features/directory/building_map/providers/building_map_providers.dart';
 import 'package:call_logger/features/directory/models/department_model.dart';
 import 'package:call_logger/features/directory/providers/department_directory_provider.dart';
@@ -51,12 +57,89 @@ MiniMapCardData _data({required bool mapped}) {
 /// Μιμείται τη βάση: το «τι λέει η βάση τώρα» αλλάζει ανάμεσα στις φορτώσεις.
 class _FakeMapSource {
   bool mapped = false;
+
+  /// Το τμήμα έχει χώρο σε όροφο του νέου χάρτη.
+  bool onNewMap = false;
+
+  /// Ο υπάλληλος της κλήσης έχει θέση σε **άλλον** όροφο του νέου χάρτη.
+  bool callerOnOtherFloor = false;
   int loadCount = 0;
 
   Future<MiniMapCardData> load(MiniMapRequest request) async {
     loadCount++;
-    return _data(mapped: mapped);
+    final data = _data(mapped: mapped);
+    if (callerOnOtherFloor) return _withCallerOnOtherFloor(data);
+    if (!onNewMap) return data;
+    final floor = BuildingMapFloor(
+      id: 1,
+      sortOrder: 0,
+      label: 'Ισόγειο',
+      imagePath: '',
+      rotationDegrees: 0,
+    );
+    return MiniMapCardData(
+      floors: [floor],
+      departmentsById: data.departmentsById,
+      selection: data.selection,
+      equipmentEntity: null,
+      candidates: data.candidates,
+      newMapByDepartment: {
+        _kDeptId: MiniMapNewFloor(
+          floor: floor,
+          elements: const [
+            FloorPlanElement(
+              id: 1,
+              floorId: 1,
+              kind: FloorPlanElementKind.room,
+              points: [Offset(0, 0), Offset(400, 0), Offset(400, 300)],
+              departmentId: _kDeptId,
+            ),
+          ],
+        ),
+      },
+    );
   }
+}
+
+const _kCallerPlacementId = 5;
+
+/// Το τμήμα έχει χώρο στο Ισόγειο, ο υπάλληλος κάθεται στον 1ο.
+MiniMapCardData _withCallerOnOtherFloor(MiniMapCardData data) {
+  BuildingMapFloor floor(int id, String label) => BuildingMapFloor(
+    id: id,
+    sortOrder: id,
+    label: label,
+    imagePath: '',
+    rotationDegrees: 0,
+  );
+  const placement = FloorPlanPlacement(
+    id: _kCallerPlacementId,
+    type: FloorPlanPlacementType.user,
+    entityId: 10,
+    floorId: 2,
+    center: Offset(2000, 1500),
+  );
+  const entry = FloorPlanCatalogEntry(
+    type: FloorPlanPlacementType.user,
+    entityId: 10,
+    label: 'Παπαδόπουλος Γιώργος',
+  );
+  final upstairs = MiniMapNewFloor(
+    floor: floor(2, '1ος'),
+    elements: const [],
+    callItems: buildFloorPlanPlacementViews([placement], {entry.key: entry}),
+  );
+  return MiniMapCardData(
+    floors: [floor(1, 'Ισόγειο'), upstairs.floor],
+    departmentsById: data.departmentsById,
+    selection: data.selection,
+    equipmentEntity: null,
+    candidates: data.candidates,
+    newMapByDepartment: {
+      _kDeptId: MiniMapNewFloor(floor: floor(1, 'Ισόγειο'), elements: const []),
+    },
+    callFloors: [upstairs],
+  );
 }
 
 Future<void> _pumpCard(WidgetTester tester, _FakeMapSource source) async {
@@ -257,4 +340,42 @@ void main() {
     },
     semanticsEnabled: false,
   );
+
+  testWidgets('τμήμα σε όροφο του νέου χάρτη: δείχνεται ο σχεδιασμένος '
+      'όροφος, όχι «δεν υπάρχει»', (tester) async {
+    final source = _FakeMapSource()..onNewMap = true;
+    await _pumpCard(tester, source);
+
+    expect(find.byType(FloorPlanMapView), findsOneWidget);
+    expect(find.text(_kNotOnMapMessage), findsNothing);
+  }, semanticsEnabled: false);
+
+  testWidgets('υπάλληλος με θέση σε άλλον όροφο από τον χώρο του τμήματος: ο '
+      'μικρός χάρτης δείχνει εκείνον τον όροφο και τον φωτίζει', (
+    tester,
+  ) async {
+    final source = _FakeMapSource()..callerOnOtherFloor = true;
+    await _pumpCard(tester, source);
+
+    final map = tester.widget<FloorPlanMapView>(find.byType(FloorPlanMapView));
+    expect(map.focusItems, {
+      (source: FloorPlanItemSource.placement, id: _kCallerPlacementId),
+    });
+    expect(
+      map.objects.map((v) => v.id),
+      contains(_kCallerPlacementId),
+      reason: 'Το σύμβολο του υπαλλήλου ζωγραφίζεται στον μικρό χάρτη.',
+    );
+  }, semanticsEnabled: false);
+
+  testWidgets('χωρίς θέση του υπαλλήλου: ο χώρος του τμήματος, όπως πριν', (
+    tester,
+  ) async {
+    final source = _FakeMapSource()..onNewMap = true;
+    await _pumpCard(tester, source);
+
+    final map = tester.widget<FloorPlanMapView>(find.byType(FloorPlanMapView));
+    expect(map.focusItems, isEmpty);
+    expect(map.highlightDepartmentId, _kDeptId);
+  }, semanticsEnabled: false);
 }

@@ -27,7 +27,15 @@ class RemoteToolFormSaver {
     return newId;
   }
 
-  Future<void> commitEdit({required RemoteTool toolFromForm}) async {
+  /// [expected]: το εργαλείο όπως άνοιξε η φόρμα — αφετηρία του φύλακα
+  /// «κάποιος πρόλαβε». Η σειρά διαβάζεται φρέσκια και μπαίνει **και** στην
+  /// αφετηρία: η αναδιάταξη από συνάδελφο δεν είναι διένεξη, αφού δεν τη
+  /// σβήνουμε.
+  Future<void> commitEdit({
+    required RemoteTool toolFromForm,
+    RemoteTool? expected,
+    bool force = false,
+  }) async {
     final fresh = await _repo.getAllNonDeletedTools();
     final id = toolFromForm.id;
     var currentSort = toolFromForm.sortOrder;
@@ -38,7 +46,11 @@ class RemoteToolFormSaver {
       }
     }
     final updated = toolFromForm.copyWith(sortOrder: currentSort);
-    await _repo.updateTool(updated);
+    await _repo.updateTool(
+      updated,
+      expected: expected?.copyWith(sortOrder: currentSort),
+      force: force,
+    );
   }
 
   Future<void> commitRestoreSoftDeleted({

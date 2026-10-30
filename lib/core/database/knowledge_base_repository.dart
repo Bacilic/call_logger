@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../features/directory/services/directory_save_conflict.dart';
 import '../../features/knowledge/models/knowledge_article.dart';
 import '../../features/knowledge/services/knowledge_matcher.dart';
 import '../utils/search_text_normalizer.dart';
@@ -116,8 +117,42 @@ class KnowledgeBaseRepository {
     );
   }
 
+  /// Ποιος άγγιξε τελευταίος το άρθρο, και πότε — από το Ιστορικό.
+  ///
+  /// Ζητείται μόνο αφού διαπιστωθεί διένεξη. **Η αποτυχία είναι σιωπή:** η
+  /// ταυτότητα είναι συμπληρωματική, η διένεξη αναφέρεται κι έτσι.
+  Future<({String? who, DateTime? at})> _lastActor(
+    DatabaseExecutor e,
+    int articleId,
+  ) async {
+    try {
+      final rows = await e.query(
+        'audit_log',
+        columns: ['user_performing', 'timestamp'],
+        where: 'entity_type = ? AND entity_id = ?',
+        whereArgs: [AuditEntityTypes.knowledge, articleId],
+        orderBy: 'id DESC',
+        limit: 1,
+      );
+      if (rows.isEmpty) return (who: null, at: null);
+      final who = (rows.first['user_performing'] as String?)?.trim();
+      final at = DateTime.tryParse((rows.first['timestamp'] as String?) ?? '');
+      return (who: (who == null || who.isEmpty) ? null : who, at: at);
+    } catch (_) {
+      return (who: null, at: null);
+    }
+  }
+
   /// Δημιουργεί ή ενημερώνει άρθρο και επιστρέφει το id του.
-  Future<int> saveArticle(KnowledgeArticle article) async {
+  ///
+  /// Στην ενημέρωση, με [expected] (το άρθρο όπως άνοιξε η φόρμα) σταματά με
+  /// [DirectoryStaleException] **πριν γράψει**, αν κάποιος άλλος άλλαξε στο
+  /// μεταξύ πεδίο που θα ξαναγραφτεί. Το [force] γράφει από πάνω.
+  Future<int> saveArticle(
+    KnowledgeArticle article, {
+    KnowledgeArticle? expected,
+    bool force = false,
+  }) async {
     final nowIso = DateTime.now().toIso8601String();
     final payload = <String, Object?>{
       ...article.toWriteMap(),
@@ -157,6 +192,20 @@ class KnowledgeBaseRepository {
       );
       if (oldRows.isEmpty) return id;
       final oldRow = oldRows.first;
+      if (!force && expected != null) {
+        final conflict = DirectorySaveConflict.between(
+          entityType: AuditEntityTypes.knowledge,
+          expected: expected.toWriteMap(),
+          fresh: oldRow,
+          attempted: payload,
+        );
+        if (conflict != null) {
+          final actor = await _lastActor(txn, id);
+          throw DirectoryStaleException(
+            conflict.describedBy(who: actor.who, at: actor.at),
+          );
+        }
+      }
 
       await txn.update(
         'knowledge_base',

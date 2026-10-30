@@ -12,7 +12,6 @@ import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/features/calls/screens/calls_screen.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -26,7 +25,6 @@ void main() {
 
   group('Έλεγχοι Εγκυρότητας Φόρμας Κλήσεων (Unhappy Paths)', () {
     setUpAll(() async {
-      GoogleFonts.config.allowRuntimeFetching = false;
       await seedTestCallRowForHistorySearch();
     });
 
@@ -50,7 +48,6 @@ void main() {
           );
           await tester.pump();
           await pumpUntilSettledLong(tester);
-          await GoogleFonts.pendingFonts();
           final container = ProviderScope.containerOf(
             tester.element(find.byType(MaterialApp)),
           );

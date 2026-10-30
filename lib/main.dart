@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -370,7 +369,10 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = GoogleFonts.interTextTheme().apply(
+    // Η Inter έρχεται από τα αρχεία της εφαρμογής (pubspec, `fonts:`), όχι από
+    // το διαδίκτυο: η εφαρμογή δεν κατεβάζει τίποτα για να δείξει κείμενο.
+    final textTheme = ThemeData.light().textTheme.apply(
+      fontFamily: 'Inter',
       fontFamilyFallback: const ['Segoe UI'],
     );
     final colorScheme = ColorScheme.fromSeed(seedColor: Colors.deepPurple);

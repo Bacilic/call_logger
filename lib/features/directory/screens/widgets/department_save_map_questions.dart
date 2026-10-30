@@ -1,3 +1,5 @@
+import '../../../../core/database/database_helper.dart';
+import '../../../../core/database/floor_plan_repository.dart';
 import '../../models/department_model.dart';
 import '../../services/building_map_placement_loss.dart';
 import '../../services/department_floor_change_outcome.dart';
@@ -54,6 +56,12 @@ class DepartmentMapPlacementDecision {
 ///    που ο χρήστης δεν είδε ποτέ. Όταν ο όροφος γίνεται «— χωρίς —», η
 ///    ερώτηση στενεύει σε επιβεβαίωση: δεν υπάρχει πού να ταξιδέψει.
 ///
+/// 3. **«Ο χώρος στον νέο χάρτη μένει πίσω»** — όταν ο όροφος αλλάζει ενώ το
+///    τμήμα έχει σχεδιασμένο χώρο στον νέο χάρτη άλλου ορόφου. Ο χώρος δεν
+///    μετακινείται μόνος του (ζει στο σχέδιο ενός ορόφου)· ο χρήστης μαθαίνει
+///    ότι Κατάλογος και χάρτης θα διαφωνούν και αποφασίζει «Συνέχεια» ή
+///    «Ακύρωση» (απόφαση Διευθυντή 29/10/2026).
+///
 /// **Καμία εγγραφή δεν γίνεται εδώ.** Η συνάρτηση μόνο ρωτά και επιστρέφει την
 /// απόφαση· έτσι κάθε «Άκυρο» αφήνει τη βάση ανέπαφη εξ ορισμού, αντί να
 /// εξαρτάται από το αν ο καλών θυμήθηκε να σταματήσει.
@@ -64,6 +72,7 @@ Future<DepartmentMapPlacementDecision> askDepartmentMapPlacement(
   required String group,
   required DepartmentModel? initial,
   required String? Function(int? floorId) floorLabel,
+  Future<Set<int>> Function(int departmentId)? roomFloorsOf,
 }) async {
   final leavesTheBuildingMap = !host.selectedKind.belongsOnBuildingMap;
   final placementLoss = judgeBuildingMapPlacementLoss(
@@ -138,6 +147,38 @@ Future<DepartmentMapPlacementDecision> askDepartmentMapPlacement(
     movesPlacementToNewFloor = !clearPlacement;
   }
 
+  final departmentId = initial?.id;
+  if (host.isEdit &&
+      departmentId != null &&
+      effectiveFloorId != initial?.floorId) {
+    final roomFloors = await (roomFloorsOf ?? _roomFloorsInDatabase)(
+      departmentId,
+    );
+    final leftBehind = [
+      for (final f in roomFloors)
+        if (f != effectiveFloorId) f,
+    ];
+    if (!host.mounted) return const DepartmentMapPlacementDecision.cancelled();
+    if (leftBehind.isNotEmpty) {
+      final floors = [
+        for (final f in leftBehind) '«${floorLabel(f) ?? 'άγνωστος'}»',
+      ].join(', ');
+      final approved = await showBulkConfirmDialog(
+        host.context,
+        title: 'Ο χώρος στον νέο χάρτη μένει πίσω',
+        message:
+            'Το τμήμα «$name» έχει σχεδιασμένο χώρο στον νέο χάρτη του '
+            'ορόφου $floors. Ο χώρος μένει εκεί: ο Κατάλογος και ο χάρτης δεν '
+            'θα συμφωνούν, ώσπου να τον σχεδιάσετε στον νέο όροφο ή να τον '
+            'σβήσετε από τη σχεδίαση του χάρτη.',
+        confirmLabel: 'Συνέχεια',
+      );
+      if (!approved || !host.mounted) {
+        return const DepartmentMapPlacementDecision.cancelled();
+      }
+    }
+  }
+
   return DepartmentMapPlacementDecision(
     cancelled: false,
     leavesTheBuildingMap: leavesTheBuildingMap,
@@ -146,4 +187,9 @@ Future<DepartmentMapPlacementDecision> askDepartmentMapPlacement(
     effectiveFloorId: effectiveFloorId,
     placementFloorId: placementFloorId,
   );
+}
+
+Future<Set<int>> _roomFloorsInDatabase(int departmentId) async {
+  final db = await DatabaseHelper.instance.database;
+  return FloorPlanRepository(db).floorsWithRoomOfDepartment(departmentId);
 }

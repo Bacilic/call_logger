@@ -406,6 +406,42 @@ abstract final class ProfileSettingKeys {
     legacySource: ProfileSettingLegacySource.bornPersonal,
   );
 
+  /// Οι στρώσεις του νέου χάρτη που ο χρήστης έχει **κρύψει** (υπάλληλοι,
+  /// τηλέφωνα, εξοπλισμός, κάθε είδος αντικειμένου). Κρατιούνται οι κρυμμένες
+  /// και όχι οι ορατές, ώστε ένα νέο είδος να φαίνεται από την αρχή.
+  ///
+  /// **Προσωπική εξαρχής**: ο καθένας βλέπει στον χάρτη ό,τι χρειάζεται η
+  /// δική του δουλειά, και η επιλογή τον ακολουθεί σε όποιον υπολογιστή.
+  static const ProfileSettingKey floorPlanHiddenLayers = ProfileSettingKey(
+    'floor_plan_hidden_layers_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
+  /// Ο όροφος που είδε τελευταίο ο χρήστης στον χάρτη κτιρίου — εκεί ανοίγει
+  /// ο χάρτης και μετά από επανεκκίνηση (απόφαση 30/10/2026).
+  ///
+  /// **Προσωπική εξαρχής**: ο καθένας δουλεύει σε άλλο κτίριο ή όροφο.
+  static const ProfileSettingKey buildingMapLastFloor = ProfileSettingKey(
+    'building_map_last_floor_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
+  /// Θέση και μέγεθος του πάνελ της καμπίνας στον χάρτη, και πόσο ύψος
+  /// παίρνουν οι προσόψεις (απόφαση 30/10/2026: τα θυμάται και μετά το
+  /// κλείσιμο).
+  static const ProfileSettingKey floorPlanCabinetPanelLayout =
+      ProfileSettingKey(
+        'floor_plan_cabinet_panel_layout_v1',
+        legacySource: ProfileSettingLegacySource.bornPersonal,
+      );
+
+  /// Ποιες συσκευές κάθε καμπίνας έχει επιλέξει ο χρήστης για να δει την
+  /// πρόσοψή τους. Από προεπιλογή καμία.
+  static const ProfileSettingKey floorPlanCabinetSelection = ProfileSettingKey(
+    'floor_plan_cabinet_selection_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
   static const List<ProfileSettingKey> all = [
     showActiveTimer,
     showTasksBadge,
@@ -467,6 +503,10 @@ abstract final class ProfileSettingKeys {
     lansweeperReportOwnerFilter,
     lansweeperReportGrouping,
     dashboardPalette,
+    floorPlanHiddenLayers,
+    buildingMapLastFloor,
+    floorPlanCabinetPanelLayout,
+    floorPlanCabinetSelection,
   ];
 }
 
@@ -508,9 +548,8 @@ class ProfileSettings {
       return _readLegacy(setting);
     }
 
-    final own = await OperatorSettingsRepository(
-      db,
-    ).getValue(op!.id!, setting.key);
+    final own = await OperatorSettingsRepository(db)
+        .getValue(op!.id!, setting.key);
     if (own != null) return own;
 
     return _seedFromLegacy(op, setting);

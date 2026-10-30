@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../utils/search_text_normalizer.dart';
 import 'remote_tool_role.dart';
 
 /// Ένα όρισμα γραμμής εντολών για εργαλείο απομακρυσμένης σύνδεσης (αποθηκεύεται ως JSON).
@@ -304,6 +305,13 @@ class RemoteTool {
       return const [];
     }
   }
+
+  /// Το κλειδί με το οποίο δύο ονόματα εργαλείων θεωρούνται **ίδια**:
+  /// χωρίς διάκριση πεζών/κεφαλαίων, τόνων και κενών στις άκρες. Κάθε
+  /// έλεγχος διπλότυπου ονόματος περνά από εδώ, ώστε το «Σύνδεση» και το
+  /// «ΣΥΝΔΕΣΗ» να μη γίνουν δύο εργαλεία.
+  static String nameKey(String name) =>
+      SearchTextNormalizer.normalizeForSearch(name.trim());
 
   factory RemoteTool.fromMap(Map<String, dynamic> map) {
     return RemoteTool(

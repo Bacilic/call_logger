@@ -46,6 +46,7 @@ class BuildingMapEditLayout extends ConsumerWidget {
     super.key,
     required this.floors,
     required this.hasActiveCanvas,
+    this.isNewMapFloor = false,
     required this.activeDepartments,
     required this.currentSheetId,
     required this.onFloorsChanged,
@@ -53,6 +54,10 @@ class BuildingMapEditLayout extends ConsumerWidget {
 
   final List<BuildingMapFloor> floors;
   final bool hasActiveCanvas;
+
+  /// Ο όροφος έχει περάσει στον νέο χάρτη: η εξαγωγή του δουλεύει χωρίς
+  /// εικόνα κάτοψης.
+  final bool isNewMapFloor;
   final List<DepartmentModel> activeDepartments;
   final int? currentSheetId;
   final VoidCallback onFloorsChanged;
@@ -76,6 +81,7 @@ class BuildingMapEditLayout extends ConsumerWidget {
           child: BuildingMapEditToolbar(
             floors: floors,
             hasActiveCanvas: hasActiveCanvas,
+            isNewMapFloor: isNewMapFloor,
             onFloorsChanged: onFloorsChanged,
           ),
         ),

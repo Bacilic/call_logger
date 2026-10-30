@@ -8,6 +8,7 @@ import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/database_schema_migrations.dart';
 import 'package:call_logger/core/database/knowledge_base_repository.dart';
 import 'package:call_logger/features/knowledge/models/knowledge_article.dart';
+import 'package:call_logger/features/directory/services/directory_save_conflict.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -182,5 +183,61 @@ void main() {
     final names = info.map((r) => r['name'] as String).toSet();
     expect(names, contains('symptom'));
     expect(names, contains('times_used'));
+  });
+
+  group('κάποιος πρόλαβε', () {
+    test('η αλλαγή του συναδέλφου δεν σβήνεται σιωπηλά', () async {
+      final id = await repo.saveArticle(_vncArticle);
+      final atOpen = (await repo.getById(id))!;
+      await repo.saveArticle(atOpen.copyWith(solution: 'Λύση συναδέλφου.'));
+
+      await expectLater(
+        repo.saveArticle(atOpen.copyWith(tags: 'VNC'), expected: atOpen),
+        throwsA(isA<DirectoryStaleException>()),
+      );
+      final now = (await repo.getById(id))!;
+      expect(now.solution, 'Λύση συναδέλφου.');
+      expect(now.tagList, <String>['VNC', 'μαύρη οθόνη']);
+    });
+
+    test('η διένεξη λέει ποιος άλλαξε το άρθρο και πότε', () async {
+      final id = await repo.saveArticle(_vncArticle);
+      final atOpen = (await repo.getById(id))!;
+      await repo.saveArticle(atOpen.copyWith(solution: 'Λύση συναδέλφου.'));
+      await db.update(
+        'audit_log',
+        {'user_performing': 'Βασίλης'},
+        where: 'entity_type = ? AND entity_id = ?',
+        whereArgs: ['knowledge', id],
+      );
+
+      final error = await repo
+          .saveArticle(atOpen.copyWith(tags: 'VNC'), expected: atOpen)
+          .then<Object?>((_) => null, onError: (Object e) => e);
+      final conflict = (error as DirectoryStaleException).conflict;
+      expect(conflict.changedBy, 'Βασίλης');
+      expect(conflict.changedAt, isNotNull);
+    });
+
+    test('χωρίς ξένη αλλαγή η αποθήκευση περνά', () async {
+      final id = await repo.saveArticle(_vncArticle);
+      final atOpen = (await repo.getById(id))!;
+
+      await repo.saveArticle(atOpen.copyWith(tags: 'VNC'), expected: atOpen);
+      expect((await repo.getById(id))!.tagList, <String>['VNC']);
+    });
+
+    test('με «Κράτα τη δική μου» γράφεται από πάνω', () async {
+      final id = await repo.saveArticle(_vncArticle);
+      final atOpen = (await repo.getById(id))!;
+      await repo.saveArticle(atOpen.copyWith(solution: 'Λύση συναδέλφου.'));
+
+      await repo.saveArticle(
+        atOpen.copyWith(tags: 'VNC'),
+        expected: atOpen,
+        force: true,
+      );
+      expect((await repo.getById(id))!.solution, _vncArticle.solution);
+    });
   });
 }

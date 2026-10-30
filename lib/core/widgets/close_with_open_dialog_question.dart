@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/calls/provider/quick_call_session_provider.dart';
+import '../services/main_screen_announcements.dart';
 import '../../features/calls/screens/widgets/quick_call_dialog.dart';
 import 'draggable_dialog_shell.dart';
 import 'modal_route_tracker.dart';
@@ -36,25 +37,34 @@ Future<bool> confirmCloseWithOpenDialog(ModalRouteTracker tracker) async {
   if (top == null && !minimizedCall) return true;
 
   final title = top == null ? kQuickCallDialogTitle : openDialogTitle(top);
-  final answer = await showDialog<bool>(
-    context: navigator.context,
-    barrierDismissible: false,
-    builder: (context) => AlertDialog(
-      title: const Text('Κλείσιμο εφαρμογής'),
-      content: Text(closeWithOpenDialogMessage(title)),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Κλείσιμο'),
-        ),
-        FilledButton(
-          autofocus: true,
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Επιστροφή'),
-        ),
-      ],
-    ),
-  );
+  // Όσο ο χρήστης αποφασίζει, καμία ειδοποίηση (π.χ. φάκελος αντιγράφων)
+  // δεν ανοίγει πάνω από την ερώτηση.
+  MainScreenAnnouncements.hold();
+  bool? answer;
+  try {
+    answer = await showDialog<bool>(
+      context: navigator.context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Κλείσιμο εφαρμογής'),
+        content: Text(closeWithOpenDialogMessage(title)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Κλείσιμο'),
+          ),
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Επιστροφή'),
+          ),
+        ],
+      ),
+    );
+  } finally {
+    // Με «Κλείσιμο» η εφαρμογή κλείνει: ό,τι περίμενε δεν χρειάζεται πια.
+    if (!(answer ?? false)) MainScreenAnnouncements.release();
+  }
   final proceed = answer ?? false;
   if (!proceed && minimizedCall && navigator.mounted) {
     unawaited(showQuickCallDialog(navigator.context));

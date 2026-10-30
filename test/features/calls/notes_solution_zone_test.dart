@@ -16,7 +16,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../test_reporter.dart';
 import '../../test_setup.dart';
@@ -29,7 +28,6 @@ void main() {
 
   group('Ζώνη «Λύση» στο χαρτί σημειώσεων', () {
     setUpAll(() async {
-      GoogleFonts.config.allowRuntimeFetching = false;
       await seedTestCallRowForHistorySearch();
     });
 
@@ -50,7 +48,6 @@ void main() {
         );
         await tester.pump();
         await pumpUntilSettledLong(tester);
-        await GoogleFonts.pendingFonts();
         container = ProviderScope.containerOf(
           tester.element(find.byType(MaterialApp)),
         );

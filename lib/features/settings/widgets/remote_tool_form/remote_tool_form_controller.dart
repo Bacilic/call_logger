@@ -274,11 +274,11 @@ class RemoteToolFormController extends ChangeNotifier {
     String name,
     int? excludeId,
   ) {
-    final n = name.trim().toLowerCase();
+    final n = RemoteTool.nameKey(name);
     if (n.isEmpty) return false;
     for (final t in nonDeleted) {
       if (excludeId != null && t.id == excludeId) continue;
-      if (t.name.trim().toLowerCase() == n) return true;
+      if (RemoteTool.nameKey(t.name) == n) return true;
     }
     return false;
   }

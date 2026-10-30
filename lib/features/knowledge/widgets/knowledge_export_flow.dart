@@ -13,11 +13,10 @@ import '../services/knowledge_ai_prompt_store.dart';
 import '../services/knowledge_export_markdown.dart';
 
 /// Επιλογή θέσης αποθήκευσης — αντικαθίσταται στα τεστ.
-typedef KnowledgeExportSavePathPicker =
-    Future<String?> Function(
-      String suggestedFileName,
-      String? initialDirectory,
-    );
+typedef KnowledgeExportSavePathPicker = Future<String?> Function(
+  String suggestedFileName,
+  String? initialDirectory,
+);
 
 Future<String?> _pickWithSystemDialog(
   String suggestedFileName,
@@ -28,8 +27,6 @@ Future<String?> _pickWithSystemDialog(
       dialogTitle: 'Εξαγωγή Βάσης Γνώσης για ΤΝ',
       fileName: suggestedFileName,
       initialDirectory: initialDirectory,
-      type: FileType.custom,
-      allowedExtensions: const ['md'],
       bytes: Uint8List(0),
     ),
   )).value;

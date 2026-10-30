@@ -1,7 +1,9 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
+import '../../features/directory/services/directory_save_conflict.dart';
 import '../models/remote_tool.dart';
 import '../models/remote_tool_role.dart';
+import 'audit_service.dart';
 import 'database_helper.dart';
 
 /// Ονόματα όλων των εργαλείων ανά id — και των διαγραμμένων: οι εγγραφές audit
@@ -230,13 +232,40 @@ class RemoteToolsRepository {
     return (await _database).insert('remote_tools', tool.toInsertMap());
   }
 
-  Future<void> updateTool(RemoteTool tool) async {
-    await (await _database).update(
-      'remote_tools',
-      tool.toInsertMap(),
-      where: 'id = ?',
-      whereArgs: [tool.id],
-    );
+  /// Γράφει ολόκληρο το εργαλείο. Με [expected] (η εικόνα που άνοιξε η
+  /// φόρμα) σταματά με [DirectoryStaleException] **πριν γράψει**, αν κάποιος
+  /// άλλος άλλαξε στο μεταξύ πεδίο που θα ξαναγραφτεί — και το «διαγραμμένο
+  /// στις», ώστε ένα εργαλείο που αφαιρέθηκε να μην επανέρχεται σιωπηλά.
+  /// Το [force] γράφει από πάνω, όταν ο χρήστης επιμείνει.
+  Future<void> updateTool(
+    RemoteTool tool, {
+    RemoteTool? expected,
+    bool force = false,
+  }) async {
+    final attempted = tool.toInsertMap();
+    await (await _database).transaction((txn) async {
+      if (!force && expected != null) {
+        final rows = await txn.query(
+          'remote_tools',
+          where: 'id = ?',
+          whereArgs: [tool.id],
+          limit: 1,
+        );
+        final conflict = DirectorySaveConflict.between(
+          entityType: AuditEntityTypes.remoteTool,
+          expected: expected.toInsertMap(),
+          fresh: rows.isEmpty ? null : rows.first,
+          attempted: attempted,
+        );
+        if (conflict != null) throw DirectoryStaleException(conflict);
+      }
+      await txn.update(
+        'remote_tools',
+        attempted,
+        where: 'id = ?',
+        whereArgs: [tool.id],
+      );
+    });
   }
 
   /// Soft delete: το εξάρτημα παραμένει στη βάση για επιλύσεις id σε εξοπλισμό/κλήσεις.
@@ -324,7 +353,7 @@ class RemoteToolsRepository {
     String name, {
     int? excludeToolId,
   }) async {
-    final n = name.trim().toLowerCase();
+    final n = RemoteTool.nameKey(name);
     if (n.isEmpty) return null;
     final rows = await (await _database).query(
       'remote_tools',
@@ -333,7 +362,7 @@ class RemoteToolsRepository {
     for (final row in rows) {
       final t = RemoteTool.fromMap(row);
       if (excludeToolId != null && t.id == excludeToolId) continue;
-      if (t.name.trim().toLowerCase() == n) return t;
+      if (RemoteTool.nameKey(t.name) == n) return t;
     }
     return null;
   }

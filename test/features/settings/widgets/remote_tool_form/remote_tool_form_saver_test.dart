@@ -7,6 +7,7 @@ import 'package:call_logger/core/models/remote_tool.dart';
 import 'package:call_logger/core/models/remote_tool_role.dart';
 import 'package:call_logger/features/settings/widgets/remote_tool_form/remote_tool_form_saver.dart';
 import 'package:call_logger/features/settings/widgets/remote_tool_form/remote_tool_form_sort.dart';
+import 'package:call_logger/features/directory/services/directory_save_conflict.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -210,5 +211,70 @@ void main() {
         expect(renamed.name, contains('#$idDeleted'));
       },
     );
+
+    test(
+      'διαγραμμένο εργαλείο βρίσκεται και με άλλους τόνους/κεφαλαία',
+      () async {
+        await seedTool(
+          name: 'Σύνδεση',
+          sortOrder: 1,
+          deletedAt: DateTime.now().toIso8601String(),
+        );
+
+        final found = await saver.findSoftDeletedConflict('ΣΥΝΔΕΣΗ');
+        expect(found?.name, 'Σύνδεση');
+      },
+    );
+
+    group('κάποιος πρόλαβε', () {
+      test('η αλλαγή του συναδέλφου δεν σβήνεται σιωπηλά', () async {
+        final id = await seedTool(name: 'VNC', sortOrder: 1);
+        final atOpen = (await repo.getById(id))!;
+        await repo.updateTool(
+          atOpen.copyWith(executablePath: r'C:\tools\colleague_iewer.exe'),
+        );
+
+        await expectLater(
+          saver.commitEdit(
+            toolFromForm: atOpen.copyWith(name: 'VNC Viewer'),
+            expected: atOpen,
+          ),
+          throwsA(isA<DirectoryStaleException>()),
+        );
+        final now = (await repo.getById(id))!;
+        expect(now.executablePath, r'C:\tools\colleague_iewer.exe');
+        expect(now.name, 'VNC');
+      });
+
+      test('εργαλείο που διαγράφηκε στο μεταξύ δεν επανέρχεται', () async {
+        final id = await seedTool(name: 'VNC', sortOrder: 1);
+        final atOpen = (await repo.getById(id))!;
+        await repo.deleteTool(id);
+
+        await expectLater(
+          saver.commitEdit(
+            toolFromForm: atOpen.copyWith(name: 'VNC Viewer'),
+            expected: atOpen,
+          ),
+          throwsA(isA<DirectoryStaleException>()),
+        );
+        expect((await repo.getById(id))!.deletedAt, isNotNull);
+      });
+
+      test('η αλλαγή σειράς από συνάδελφο δεν είναι διένεξη', () async {
+        final first = await seedTool(name: 'VNC', sortOrder: 1);
+        await seedTool(name: 'AnyDesk', sortOrder: 2);
+        final atOpen = (await repo.getById(first))!;
+        await repo.reorderToolToPosition(toolId: first, positionOneBased: 2);
+
+        await saver.commitEdit(
+          toolFromForm: atOpen.copyWith(name: 'VNC Viewer'),
+          expected: atOpen,
+        );
+        final now = (await repo.getById(first))!;
+        expect(now.name, 'VNC Viewer');
+        expect(now.sortOrder, 2);
+      });
+    });
   });
 }

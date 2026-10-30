@@ -52,4 +52,32 @@ void main() {
     MainScreenAnnouncements.open();
     expect(shown, 1);
   });
+
+  group('όσο ρωτά το κλείσιμο της εφαρμογής', () {
+    // Περιστατικό 30/10/2026: ο διάλογος του φακέλου αντιγράφων άνοιγε πάνω
+    // από την ερώτηση «Κλείσιμο εφαρμογής».
+    test('η ειδοποίηση σωπαίνει, και βγαίνει με την «Επιστροφή»', () {
+      var shown = 0;
+      MainScreenAnnouncements.open();
+      MainScreenAnnouncements.hold();
+
+      MainScreenAnnouncements.announce(() => shown++);
+      expect(shown, 0);
+
+      MainScreenAnnouncements.release();
+      expect(shown, 1);
+    });
+
+    test('η «Επιστροφή» πριν από την κύρια οθόνη δεν τη βγάζει νωρίς', () {
+      var shown = 0;
+      MainScreenAnnouncements.hold();
+      MainScreenAnnouncements.announce(() => shown++);
+
+      MainScreenAnnouncements.release();
+      expect(shown, 0);
+
+      MainScreenAnnouncements.open();
+      expect(shown, 1);
+    });
+  });
 }

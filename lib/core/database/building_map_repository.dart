@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/building_map_floor.dart';
 import 'directory_support.dart';
+import 'floor_plan_repository.dart';
 
 /// Persistence χάρτη κτιρίου (`building_map_floors` + σχετικές τοποθετήσεις τμημάτων).
 class BuildingMapRepository {
@@ -177,6 +178,16 @@ class BuildingMapRepository {
     return changed > 0;
   }
 
+  /// Σβήνει την εικόνα κάτοψης του ορόφου — και την προηγούμενη. Ο όροφος
+  /// που πέρασε στον νέο χάρτη δεν τη χρειάζεται πια.
+  Future<void> deleteFloorImage(int floorId) async {
+    await db.delete(
+      'building_map_floor_images',
+      where: 'floor_id = ?',
+      whereArgs: [floorId],
+    );
+  }
+
   Future<int> insertBuildingMapFloor({
     required String label,
     String? floorGroup,
@@ -219,6 +230,17 @@ class BuildingMapRepository {
     }
     if (m.isEmpty) return;
     await db.update('building_map_floors', m, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Τα τμήματα που έχουν κουτάκι στον παλιό χάρτη του ορόφου.
+  Future<List<int>> departmentIdsDrawnOnOldFloor(int floorId) async {
+    final rows = await db.query(
+      'departments',
+      columns: ['id'],
+      where: 'map_floor = ?',
+      whereArgs: ['$floorId'],
+    );
+    return [for (final r in rows) r['id'] as int];
   }
 
   Future<int> countDepartmentsReferencingMapFloor(int floorId) async {
@@ -273,6 +295,9 @@ class BuildingMapRepository {
       where: 'floor_id = ?',
       whereArgs: [id],
     );
+    // Ο νέος, σχεδιασμένος χάρτης του ορόφου φεύγει μαζί του — χωρίς δεσμούς
+    // ξένου κλειδιού, κανείς άλλος δεν θα τον έσβηνε.
+    await FloorPlanRepository(db).deleteFloorPlan(db, id);
     await db.delete('building_map_floors', where: 'id = ?', whereArgs: [id]);
   }
 }

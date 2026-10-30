@@ -18,7 +18,6 @@ import 'package:call_logger/features/calls/screens/widgets/notes_sticky_field.da
 import 'package:call_logger/features/calls/screens/widgets/global_recent_calls_list.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,7 +30,6 @@ void main() {
 
   group('Ροή φόρμας κλήσεων (widget)', () {
     setUpAll(() async {
-      GoogleFonts.config.allowRuntimeFetching = false;
       await seedTestCallRowForHistorySearch();
       // Επιβολή ανανέωσης της in-memory cache μετά το seeding
       LookupService.instance.resetForReload();
@@ -65,7 +63,6 @@ void main() {
           );
           await tester.pump();
           await pumpUntilSettledLong(tester);
-          await GoogleFonts.pendingFonts();
           // Το Future του καταλόγου τρέχει πραγματικό async· τα pump μόνα τους δεν
           // ολοκληρώνουν το await loadFromDatabase() πριν βγούμε από το runAsync.
           final container = ProviderScope.containerOf(
@@ -244,7 +241,6 @@ void main() {
           );
           await tester.pump();
           await pumpUntilSettledLong(tester);
-          await GoogleFonts.pendingFonts();
           final container = ProviderScope.containerOf(
             tester.element(find.byType(MaterialApp)),
           );
@@ -332,7 +328,6 @@ void main() {
           );
           await tester.pump();
           await pumpUntilSettledLong(tester);
-          await GoogleFonts.pendingFonts();
           final container = ProviderScope.containerOf(
             tester.element(find.byType(MaterialApp)),
           );
@@ -402,7 +397,6 @@ void main() {
           );
           await tester.pump();
           await pumpUntilSettledLong(tester);
-          await GoogleFonts.pendingFonts();
           final container = ProviderScope.containerOf(
             tester.element(find.byType(MaterialApp)),
           );
@@ -449,7 +443,6 @@ void main() {
           );
           await tester.pump();
           await pumpUntilSettledLong(tester);
-          await GoogleFonts.pendingFonts();
           final container = ProviderScope.containerOf(
             tester.element(find.byType(MaterialApp)),
           );

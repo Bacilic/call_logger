@@ -29,7 +29,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../test_reporter.dart';
 import '../../test_setup.dart';
@@ -438,7 +437,6 @@ Future<void> _loadCallFormApp(WidgetTester tester) async {
     );
     await tester.pump();
     await pumpUntilSettledLong(tester);
-    await GoogleFonts.pendingFonts();
     final container = ProviderScope.containerOf(
       tester.element(find.byType(MaterialApp)),
     );
@@ -672,176 +670,183 @@ void main() {
 
     // Σενάριο: επιλογή τμήματος → λίστα εξοπλισμού → tap τηλεφώνου → λίστα αριθμών.
     //   flutter test test/features/calls/call_form_department_assets_test.dart --plain-name "επιλογή τμήματος"
-    testWidgets('επιλογή τμήματος: εμφανίζονται εξοπλισμός και τηλέφωνα στη φόρμα κλήσης', (
-      tester,
-    ) async {
-      _configureDesktopViewport(tester);
+    testWidgets(
+      'επιλογή τμήματος: εμφανίζονται εξοπλισμός και τηλέφωνα στη φόρμα κλήσης',
+      (tester) async {
+        _configureDesktopViewport(tester);
 
-      final reporter = GreekTestReportCollector();
+        final reporter = GreekTestReportCollector();
 
-      // —— Setup: φόρτωση εφαρμογής ——
-      reporter.logProgress('Φόρτωση οθόνης «Νέα Κλήση» με απομονωμένη βάση');
-      await _loadCallFormApp(tester);
-      expect(
-        find.byType(NavigationRail),
-        findsOneWidget,
-        reason: greekExpectMsg('Κύριο κέλυφος — οθόνη Κλήσεων'),
-      );
-      reporter.logStepDone('Εφαρμογή φορτώθηκε');
-
-      // —— Αλληλεπίδραση: επιλογή τμήματος ——
-      reporter.logProgress('Επιλογή τμήματος «$_kFantasmaDepartmentName»');
-      await _selectDepartmentFromAutocomplete(tester, _kFantasmaDepartmentName);
-
-      final headerAfterDept = await _readCallHeaderState(tester);
-      expect(
-        headerAfterDept.departmentText,
-        _kFantasmaDepartmentName,
-        reason: greekExpectMsg(
-          'Το πεδίο τμήματος συμπληρώνεται μετά την επιλογή',
-        ),
-      );
-      expect(
-        headerAfterDept.selectedDepartmentId,
-        deptId,
-        reason: greekExpectMsg('Το id τμήματος συγχρονίζεται στο state'),
-      );
-      expect(
-        tester
-            .widget<EditableText>(
-              find.descendant(
-                of: find.byType(SmartEntityEquipmentField),
-                matching: find.byType(EditableText),
-              ),
-            )
-            .focusNode
-            .hasFocus,
-        isTrue,
-        reason: greekExpectMsg(
-          'Μετά την επιλογή από τη λίστα ο κέρσορας είναι στον Εξοπλισμό, '
-          'και μένει εκεί όταν η φόρμα ανεβαίνει στην κορυφή',
-        ),
-      );
-      reporter.logStepDone('Τμήμα επιλέχθηκε — state ενημερώθηκε');
-
-      // —— Έλεγχος: λίστα εξοπλισμού ——
-      reporter.logProgress(
-        'Έλεγχος λίστας εξοπλισμού (κοινόχρηστος + ιδιωτικός)',
-      );
-
-      final expectedEquipmentCodes = [
-        ..._kSharedEquipmentCodes,
-        _kUserEquipmentCode,
-      ];
-      expect(
-        headerAfterDept.equipmentCandidates
-            .map((EquipmentModel e) => e.code?.trim())
-            .whereType<String>()
-            .toSet(),
-        expectedEquipmentCodes.toSet(),
-        reason: greekExpectMsg(
-          'Οι υποψήφιοι εξοπλισμοί στο state περιλαμβάνουν κοινόχρηστο και ιδιωτικό',
-        ),
-      );
-
-      // Μετά την επιλογή τμήματος η εστίαση πηγαίνει στο πεδίο εξοπλισμού·
-      // επιβεβαιώνουμε ότι το overlay εμφανίζει τους κωδικούς.
-      await tester.tap(_callLoggerEquipmentTextField());
-      await pumpUntilSettled(tester);
-
-      for (final code in expectedEquipmentCodes) {
-        final codeFinder = _equipmentCodeInListFinder(code);
-        await _pumpUntilFinderVisible(
-          tester,
-          codeFinder,
-          failDescription:
-              'Ο κωδικός εξοπλισμού $code δεν εμφανίστηκε εγκαίρως στη λίστα UI',
-        );
+        // —— Setup: φόρτωση εφαρμογής ——
+        reporter.logProgress('Φόρτωση οθόνης «Νέα Κλήση» με απομονωμένη βάση');
+        await _loadCallFormApp(tester);
         expect(
-          codeFinder,
-          findsWidgets,
+          find.byType(NavigationRail),
+          findsOneWidget,
+          reason: greekExpectMsg('Κύριο κέλυφος — οθόνη Κλήσεων'),
+        );
+        reporter.logStepDone('Εφαρμογή φορτώθηκε');
+
+        // —— Αλληλεπίδραση: επιλογή τμήματος ——
+        reporter.logProgress('Επιλογή τμήματος «$_kFantasmaDepartmentName»');
+        await _selectDepartmentFromAutocomplete(
+          tester,
+          _kFantasmaDepartmentName,
+        );
+
+        final headerAfterDept = await _readCallHeaderState(tester);
+        expect(
+          headerAfterDept.departmentText,
+          _kFantasmaDepartmentName,
           reason: greekExpectMsg(
-            'Ο κωδικός εξοπλισμού $code εμφανίζεται στη λίστα UI',
+            'Το πεδίο τμήματος συμπληρώνεται μετά την επιλογή',
           ),
         );
-      }
-      reporter.logStepDone(
-        'Λίστα εξοπλισμού: ${expectedEquipmentCodes.join(', ')}',
-      );
-
-      // —— Αλληλεπίδραση + έλεγχος: λίστα τηλεφώνων ——
-      reporter.logProgress('Tap στο πεδίο τηλεφώνου — λίστα αριθμών τμήματος');
-
-      final expectedPhones = [_kSharedPhone, _kUserOnlyPhone];
-      expect(
-        headerAfterDept.phoneCandidates.toSet(),
-        expectedPhones.toSet(),
-        reason: greekExpectMsg(
-          'Οι υποψήφιοι αριθμοί στο state περιλαμβάνουν κοινόχρηστο και ιδιωτικό',
-        ),
-      );
-
-      await tester.tap(callLoggerPhoneTextField());
-      await pumpUntilSettled(tester);
-
-      for (final phone in expectedPhones) {
-        final phoneFinder = find.widgetWithText(ListTile, phone);
-        await _pumpUntilFinderVisible(
-          tester,
-          phoneFinder,
-          failDescription:
-              'Ο αριθμός $phone δεν εμφανίστηκε εγκαίρως στη λίστα τηλεφώνων',
+        expect(
+          headerAfterDept.selectedDepartmentId,
+          deptId,
+          reason: greekExpectMsg('Το id τμήματος συγχρονίζεται στο state'),
         );
         expect(
-          phoneFinder,
-          findsWidgets,
+          tester
+              .widget<EditableText>(
+                find.descendant(
+                  of: find.byType(SmartEntityEquipmentField),
+                  matching: find.byType(EditableText),
+                ),
+              )
+              .focusNode
+              .hasFocus,
+          isTrue,
           reason: greekExpectMsg(
-            'Ο αριθμός $phone εμφανίζεται στη λίστα τηλεφώνων',
+            'Μετά την επιλογή από τη λίστα ο κέρσορας είναι στον Εξοπλισμό, '
+            'και μένει εκεί όταν η φόρμα ανεβαίνει στην κορυφή',
           ),
         );
-      }
+        reporter.logStepDone('Τμήμα επιλέχθηκε — state ενημερώθηκε');
 
-      // Επιλογή κοινόχρηστου τηλεφώνου από τη λίστα — δεν πρέπει να αποτυγχάνει σιωπηλά.
-      final sharedPhoneTile = find.descendant(
-        of: find.byType(Material),
-        matching: find.widgetWithText(ListTile, _kSharedPhone),
-      );
-      expect(
-        sharedPhoneTile,
-        findsWidgets,
-        reason: greekExpectMsg(
-          'Κλικ σε κοινόχρηστο τηλέφωνο — διαθέσιμο ListTile',
-        ),
-      );
-      await tester.tap(sharedPhoneTile.first);
-      await pumpUntilSettled(tester);
+        // —— Έλεγχος: λίστα εξοπλισμού ——
+        reporter.logProgress(
+          'Έλεγχος λίστας εξοπλισμού (κοινόχρηστος + ιδιωτικός)',
+        );
 
-      final headerAfterPhone = await _readCallHeaderState(tester);
-      expect(
-        headerAfterPhone.selectedPhone,
-        _kSharedPhone,
-        reason: greekExpectMsg(
-          'Μετά την επιλογή από τη λίστα ορισμός selectedPhone',
-        ),
-      );
-      expect(
-        headerAfterPhone.phoneCandidates,
-        isEmpty,
-        reason: greekExpectMsg(
-          'Μετά την επιλογή αδειάζει η λίστα υποψηφίων τηλεφώνων',
-        ),
-      );
+        final expectedEquipmentCodes = [
+          ..._kSharedEquipmentCodes,
+          _kUserEquipmentCode,
+        ];
+        expect(
+          headerAfterDept.equipmentCandidates
+              .map((EquipmentModel e) => e.code?.trim())
+              .whereType<String>()
+              .toSet(),
+          expectedEquipmentCodes.toSet(),
+          reason: greekExpectMsg(
+            'Οι υποψήφιοι εξοπλισμοί στο state περιλαμβάνουν κοινόχρηστο και ιδιωτικό',
+          ),
+        );
 
-      reporter.logStepDone(
-        'Λίστα τηλεφώνων: ${expectedPhones.join(', ')} — επιλογή $_kSharedPhone OK',
-      );
+        // Μετά την επιλογή τμήματος η εστίαση πηγαίνει στο πεδίο εξοπλισμού·
+        // επιβεβαιώνουμε ότι το overlay εμφανίζει τους κωδικούς.
+        await tester.tap(_callLoggerEquipmentTextField());
+        await pumpUntilSettled(tester);
 
-      await _finishCallFormWidgetTest(tester);
+        for (final code in expectedEquipmentCodes) {
+          final codeFinder = _equipmentCodeInListFinder(code);
+          await _pumpUntilFinderVisible(
+            tester,
+            codeFinder,
+            failDescription:
+                'Ο κωδικός εξοπλισμού $code δεν εμφανίστηκε εγκαίρως στη λίστα UI',
+          );
+          expect(
+            codeFinder,
+            findsWidgets,
+            reason: greekExpectMsg(
+              'Ο κωδικός εξοπλισμού $code εμφανίζεται στη λίστα UI',
+            ),
+          );
+        }
+        reporter.logStepDone(
+          'Λίστα εξοπλισμού: ${expectedEquipmentCodes.join(', ')}',
+        );
 
-      reporter.recordPass(
-        'Επιλογή τμήματος — εξοπλισμός και τηλέφωνα εμφανίζονται σωστά στη φόρμα',
-      );
-    }, semanticsEnabled: false);
+        // —— Αλληλεπίδραση + έλεγχος: λίστα τηλεφώνων ——
+        reporter.logProgress(
+          'Tap στο πεδίο τηλεφώνου — λίστα αριθμών τμήματος',
+        );
+
+        final expectedPhones = [_kSharedPhone, _kUserOnlyPhone];
+        expect(
+          headerAfterDept.phoneCandidates.toSet(),
+          expectedPhones.toSet(),
+          reason: greekExpectMsg(
+            'Οι υποψήφιοι αριθμοί στο state περιλαμβάνουν κοινόχρηστο και ιδιωτικό',
+          ),
+        );
+
+        await tester.tap(callLoggerPhoneTextField());
+        await pumpUntilSettled(tester);
+
+        for (final phone in expectedPhones) {
+          final phoneFinder = find.widgetWithText(ListTile, phone);
+          await _pumpUntilFinderVisible(
+            tester,
+            phoneFinder,
+            failDescription:
+                'Ο αριθμός $phone δεν εμφανίστηκε εγκαίρως στη λίστα τηλεφώνων',
+          );
+          expect(
+            phoneFinder,
+            findsWidgets,
+            reason: greekExpectMsg(
+              'Ο αριθμός $phone εμφανίζεται στη λίστα τηλεφώνων',
+            ),
+          );
+        }
+
+        // Επιλογή κοινόχρηστου τηλεφώνου από τη λίστα — δεν πρέπει να αποτυγχάνει σιωπηλά.
+        final sharedPhoneTile = find.descendant(
+          of: find.byType(Material),
+          matching: find.widgetWithText(ListTile, _kSharedPhone),
+        );
+        expect(
+          sharedPhoneTile,
+          findsWidgets,
+          reason: greekExpectMsg(
+            'Κλικ σε κοινόχρηστο τηλέφωνο — διαθέσιμο ListTile',
+          ),
+        );
+        await tester.tap(sharedPhoneTile.first);
+        await pumpUntilSettled(tester);
+
+        final headerAfterPhone = await _readCallHeaderState(tester);
+        expect(
+          headerAfterPhone.selectedPhone,
+          _kSharedPhone,
+          reason: greekExpectMsg(
+            'Μετά την επιλογή από τη λίστα ορισμός selectedPhone',
+          ),
+        );
+        expect(
+          headerAfterPhone.phoneCandidates,
+          isEmpty,
+          reason: greekExpectMsg(
+            'Μετά την επιλογή αδειάζει η λίστα υποψηφίων τηλεφώνων',
+          ),
+        );
+
+        reporter.logStepDone(
+          'Λίστα τηλεφώνων: ${expectedPhones.join(', ')} — επιλογή $_kSharedPhone OK',
+        );
+
+        await _finishCallFormWidgetTest(tester);
+
+        reporter.recordPass(
+          'Επιλογή τμήματος — εξοπλισμός και τηλέφωνα εμφανίζονται σωστά στη φόρμα',
+        );
+      },
+      semanticsEnabled: false,
+    );
 
     // Σενάριο: ολόκληρο το όνομα του τμήματος + Enter, χωρίς επιλογή από τη
     // λίστα — ίδιο αποτέλεσμα με το κλικ στη λίστα.

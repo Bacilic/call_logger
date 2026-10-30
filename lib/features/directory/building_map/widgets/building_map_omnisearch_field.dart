@@ -68,6 +68,7 @@ class _BuildingMapOmnisearchFieldState
     if (widget.controller.text.trim().isNotEmpty) return;
     ref.read(buildingMapSearchRevealedDepartmentIdProvider.notifier).clear();
     ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
+    ref.read(buildingMapSearchFocusProvider.notifier).clear();
   }
 
   Future<Iterable<BuildingMapOmnisearchHit>> _optionsFor(String text) async {
@@ -100,8 +101,12 @@ class _BuildingMapOmnisearchFieldState
         return Icons.apartment;
       case BuildingMapOmnisearchEntityKind.user:
         return Icons.person;
+      case BuildingMapOmnisearchEntityKind.phone:
+        return Icons.phone;
       case BuildingMapOmnisearchEntityKind.equipment:
         return Icons.computer;
+      case BuildingMapOmnisearchEntityKind.mapObject:
+        return Icons.place_outlined;
     }
   }
 
@@ -111,8 +116,12 @@ class _BuildingMapOmnisearchFieldState
         return 'Τμήμα';
       case BuildingMapOmnisearchEntityKind.user:
         return 'Υπάλληλος';
+      case BuildingMapOmnisearchEntityKind.phone:
+        return 'Τηλέφωνο';
       case BuildingMapOmnisearchEntityKind.equipment:
         return 'Εξοπλισμός';
+      case BuildingMapOmnisearchEntityKind.mapObject:
+        return 'Αντικείμενο χάρτη';
     }
   }
 
@@ -133,7 +142,9 @@ class _BuildingMapOmnisearchFieldState
           enabled: widget.enabled,
           onSubmitted: (value) => _searchImmediate(value, onSubmit),
           decoration: InputDecoration(
-            labelText: 'Έξυπνη αναζήτηση (Τμήμα/Υπάλληλος/Εξοπλισμός)',
+            labelText:
+                'Έξυπνη αναζήτηση (Τμήμα/Υπάλληλος/Τηλέφωνο/Εξοπλισμός/'
+                'Αντικείμενο/IP)',
             border: const OutlineInputBorder(),
             prefixIcon: const Icon(Icons.travel_explore),
             suffixIcon: ValueListenableBuilder<bool>(
@@ -180,60 +191,68 @@ class _BuildingMapOmnisearchFieldState
                   final hit = list[index];
                   final theme = Theme.of(context);
                   final mapLabel = hit.mapDisplayLabel;
-                  return ListTile(
-                    dense: true,
-                    leading: Icon(_iconForHit(hit), size: 18),
-                    title: Text(
-                      hit.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (hit.subtitle != null)
-                          Text(
-                            hit.subtitle!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        if (mapLabel != null)
-                          Padding(
-                            padding: EdgeInsets.only(
-                              top: hit.subtitle != null ? 2 : 0,
+                  // Χωρίς θέση στον χάρτη: αχνό, για να μη φαίνεται ότι δεν
+                  // υπάρχει.
+                  return Opacity(
+                    opacity: hit.unplaced ? 0.55 : 1,
+                    child: ListTile(
+                      dense: true,
+                      leading: Icon(_iconForHit(hit), size: 18),
+                      title: Text(
+                        hit.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (hit.subtitle != null)
+                            Text(
+                              hit.subtitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.map_outlined,
-                                  size: 14,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    'Στον χάρτη: $mapLabel',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                      fontStyle: FontStyle.italic,
+                          if (mapLabel != null)
+                            Padding(
+                              padding: EdgeInsets.only(
+                                top: hit.subtitle != null ? 2 : 0,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.map_outlined,
+                                    size: 14,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      'Στον χάρτη: $mapLabel',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                            fontStyle: FontStyle.italic,
+                                          ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        if (hit.subtitle == null && mapLabel == null)
-                          Text(
-                            _kindLabel(hit),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
+                          if (hit.subtitle == null && mapLabel == null)
+                            Text(
+                              _kindLabel(hit),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                      onTap: () => onSelected(hit),
                     ),
-                    onTap: () => onSelected(hit),
                   );
                 },
               ),

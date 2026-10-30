@@ -32,6 +32,7 @@ import '../../../../core/utils/department_floor_sync.dart';
 import '../../../../core/utils/file_picker_session.dart';
 import '../../../../core/utils/picker_location_memory.dart';
 import '../../../../core/database/building_map_repository.dart';
+import '../../../../core/database/floor_plan_repository.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/database/omnisearch_service.dart';
 import '../../../../core/models/app_permission.dart';
@@ -63,6 +64,7 @@ import '../services/building_map_floor_ordering.dart';
 import '../services/floor_plan_image_cache.dart';
 import '../services/floor_plan_image_encoder.dart';
 import '../services/building_map_jump_fallback.dart';
+import '../services/building_map_last_floor_preference.dart';
 import '../widgets/building_map_floor_sheet_add_dialog.dart';
 import '../widgets/building_map_floor_sheet_edit_dialog.dart';
 import '../widgets/building_map_jump_pick_dialogs.dart';
@@ -84,6 +86,7 @@ class BuildingMapController {
 
   void resetSession() {
     appliedInitialFloorSync = false;
+    _sessionPickSeq = _floorPickSeq;
     _decodeKey = null;
   }
 
@@ -137,13 +140,74 @@ class BuildingMapController {
     await decodeImageFile(file?.path);
   }
 
-  Future<void> syncSheetSelection(List<BuildingMapFloor> floors) async {
+  /// Οι όροφοι που πέρασαν στον νέο χάρτη· κενό όταν η βάση δεν απαντά.
+  Future<Set<int>> _activeNewMapFloorIds() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      return await FloorPlanRepository(db).activeFloorIds();
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// Αυξάνει με κάθε όροφο που διαλέγει ο χρήστης (ή μια μετάβαση της
+  /// αναζήτησης) — ώστε η αρχική επιλογή να μην πατήσει πάνω σε δική του.
+  int _floorPickSeq = 0;
+
+  /// Η τιμή του [_floorPickSeq] όταν άνοιξε ο χάρτης: διαφορά σημαίνει ότι σε
+  /// αυτό το άνοιγμα έχει ήδη διαλεχτεί όροφος.
+  int _sessionPickSeq = 0;
+
+  /// Από πού διαβάζει η αρχική επιλογή: ο τελευταίος όροφος του χρήστη, οι
+  /// όροφοι του τμήματος πληροφορικής και του νέου χάρτη. Αλλάζει στα τεστ.
+  @visibleForTesting
+  late Future<
+    ({int? rememberedId, Set<int> itFloorIds, Set<int> newMapFloorIds})
+  >
+  Function(List<BuildingMapFloor> floors)
+  initialFloorInputs = _readInitialFloorInputs;
+
+  /// Πού γράφεται ο όροφος που διάλεξε ο χρήστης. Αλλάζει στα τεστ.
+  @visibleForTesting
+  Future<void> Function(int floorId) rememberFloor =
+      BuildingMapLastFloorPreference.write;
+
+  Future<({int? rememberedId, Set<int> itFloorIds, Set<int> newMapFloorIds})>
+  _readInitialFloorInputs(List<BuildingMapFloor> floors) async => (
+    rememberedId: await BuildingMapLastFloorPreference.read(),
+    itFloorIds: {
+      for (final d in _ref.read(departmentDirectoryProvider).allDepartments)
+        if (d.floorId != null && isItDepartmentName(d.name)) d.floorId!,
+    },
+    newMapFloorIds: await _activeNewMapFloorIds(),
+  );
+
+  /// Με [initial] (ο χάρτης μόλις άνοιξε): ο όροφος που πρέπει να ανοίξει,
+  /// **όποιος κι αν είναι επιλεγμένος τώρα** — η οθόνη βάζει προσωρινά τον
+  /// πρώτο της βάσης πριν φτάσει εδώ, και αυτός δεν είναι επιλογή του
+  /// χρήστη (περιστατικό 30/10/2026). Μόνο όροφος που διαλέχτηκε σε αυτό το
+  /// άνοιγμα μένει. Χωρίς [initial]: διορθώνεται μόνο επιλογή που δεν ισχύει.
+  Future<void> syncSheetSelection(
+    List<BuildingMapFloor> floors, {
+    bool initial = false,
+  }) async {
     if (floors.isEmpty) return;
     final sel = _ref.read(buildingMapSelectedSheetIdProvider);
-    if (sel == null || !floors.any((f) => f.id == sel)) {
+    final invalid = sel == null || !floors.any((f) => f.id == sel);
+    final pickedThisSession = _floorPickSeq != _sessionPickSeq;
+    if (invalid || (initial && !pickedThisSession)) {
+      final pickSeq = _floorPickSeq;
+      final inputs = await initialFloorInputs(floors);
+      final chosen = chooseInitialBuildingMapFloor(
+        floors: floors,
+        rememberedId: inputs.rememberedId,
+        itFloorIds: inputs.itFloorIds,
+        newMapFloorIds: inputs.newMapFloorIds,
+      );
+      if (pickSeq != _floorPickSeq) return;
       _ref
           .read(buildingMapSelectedSheetIdProvider.notifier)
-          .setSheet(floors.first.id);
+          .setSheet(chosen ?? floors.first.id);
     }
     final sid = _ref.read(buildingMapSelectedSheetIdProvider);
     final sheet = floors.cast<BuildingMapFloor?>().firstWhere(
@@ -158,12 +222,16 @@ class BuildingMapController {
     List<BuildingMapFloor> floors, {
     bool clearSelectedDepartment = true,
   }) async {
+    _floorPickSeq++;
     _ref.read(buildingMapSelectedSheetIdProvider.notifier).setSheet(floorId);
+    // Εκεί θα ξανανοίξει ο χάρτης, και μετά από επανεκκίνηση.
+    unawaited(rememberFloor(floorId));
     if (clearSelectedDepartment) {
       _ref
           .read(buildingMapSelectedDepartmentIdToMapProvider.notifier)
           .setDept(null);
       _ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
+      _ref.read(buildingMapSearchFocusProvider.notifier).clear();
     }
     _ref.read(buildingMapDraftShapeProvider.notifier).clear();
     _ref.read(buildingMapEditFromSelectionTapProvider.notifier).clear();
@@ -245,9 +313,8 @@ class BuildingMapController {
       return;
     }
     final db = await DatabaseHelper.instance.database;
-    await DepartmentRepository(
-      db,
-    ).updateDepartment(dept.id!, {'color': hex}, expected: null);
+    await DepartmentRepository(db)
+        .updateDepartment(dept.id!, {'color': hex}, expected: null);
     FloorColorAssignmentService.instance.overrideColor(
       floorId,
       newColor,
@@ -669,9 +736,8 @@ class BuildingMapController {
     if (!await _beforeMapWrite(context, [dept.id!], cleared.keys)) return;
     final db = await DatabaseHelper.instance.database;
     final removedColor = tryParseDepartmentHex(dept.color);
-    await DepartmentRepository(
-      db,
-    ).updateDepartment(dept.id!, cleared, expected: null);
+    await DepartmentRepository(db)
+        .updateDepartment(dept.id!, cleared, expected: null);
     final fid = int.tryParse(sheetStr);
     if (fid != null && removedColor != null) {
       FloorColorAssignmentService.instance.removeColorFromFloor(
@@ -852,7 +918,7 @@ class BuildingMapController {
     }
   }
 
-  /// Έχει ο χρήστης το δικαίωμα «Διαχείριση κατόψεων»;
+  /// Έχει ο χρήστης το δικαίωμα «Σχεδίαση χάρτη»;
   ///
   /// Ρωτιέται σε **κάθε** ενέργεια και όχι μία φορά: η «Αλλαγή χρήστη» αλλάζει
   /// την απάντηση ζωντανά. Οι οθόνες κρύβουν τα κουμπιά με την ίδια ερώτηση·
@@ -929,6 +995,10 @@ class BuildingMapController {
       rotationDegrees: 0,
     );
     await maps.saveFloorImage(id, image);
+    // Ο νέος όροφος είναι επιλογή του χρήστη: η επαναφόρτωση της λίστας δεν
+    // τον αντικαθιστά με τον τελευταίο που θυμόταν.
+    _floorPickSeq++;
+    unawaited(rememberFloor(id));
     _ref.read(buildingMapSelectedSheetIdProvider.notifier).setSheet(id);
     final floors = await maps.listBuildingMapFloors();
     if (!context.mounted) return;
@@ -1006,9 +1076,8 @@ class BuildingMapController {
   ) async {
     if (!canManageFloorPlans) return;
     final db = await DatabaseHelper.instance.database;
-    final swapped = await BuildingMapRepository(
-      db,
-    ).swapFloorImageWithPrevious(floor.id);
+    final swapped = await BuildingMapRepository(db)
+        .swapFloorImageWithPrevious(floor.id);
     _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
     if (!context.mounted) return;
     _showMapSnack(
@@ -1111,9 +1180,8 @@ class BuildingMapController {
   Future<void> applySheetRotation(int sheetId, double degrees) async {
     if (!canManageFloorPlans) return;
     final db = await DatabaseHelper.instance.database;
-    await BuildingMapRepository(
-      db,
-    ).updateBuildingMapFloor(sheetId, rotationDegrees: degrees);
+    await BuildingMapRepository(db)
+        .updateBuildingMapFloor(sheetId, rotationDegrees: degrees);
     _ref.read(buildingMapFloorReloadSeqProvider.notifier).bump();
   }
 
@@ -1236,17 +1304,15 @@ class BuildingMapController {
     _ref.read(buildingMapUndoProvider.notifier).clear();
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Αναίρεση εφαρμόστηκε.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Αναίρεση εφαρμόστηκε.')));
     }
   }
 
   void _showMapSnack(BuildContext context, String message) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<List<int>> _departmentIdsForUserId(int userId) async {
@@ -1256,9 +1322,8 @@ class BuildingMapController {
 
   Future<List<int>> _departmentIdsForPhone(String phoneText) async {
     final db = await DatabaseHelper.instance.database;
-    return DepartmentRepository(
-      db,
-    ).resolveActiveDepartmentIdsForPhone(phoneText);
+    return DepartmentRepository(db)
+        .resolveActiveDepartmentIdsForPhone(phoneText);
   }
 
   Future<UserModel?> _pickUserForEquipment(
@@ -1329,6 +1394,31 @@ class BuildingMapController {
       orElse: () => null,
     );
     if (department == null) return;
+
+    // Νέος χάρτης: το τμήμα έχει χώρο σε όροφο που ενεργοποιήθηκε — εκεί
+    // πηγαίνει, προτιμώντας τον όροφο που γράφει ο Κατάλογος.
+    final db = await DatabaseHelper.instance.database;
+    final roomFloors = (await FloorPlanRepository(db)
+        .activeFloorsWithRoomsOf({departmentId}))[departmentId];
+    if (roomFloors != null && roomFloors.isNotEmpty) {
+      final catalogFloor = department.floorId;
+      final target = catalogFloor != null && roomFloors.contains(catalogFloor)
+          ? catalogFloor
+          : roomFloors.first;
+      if (floors.any((f) => f.id == target)) {
+        _ref.read(buildingMapSearchUnresolvedNoticeProvider.notifier).clear();
+        await selectFloorFromList(
+          target,
+          floors,
+          clearSelectedDepartment: false,
+        );
+        _ref
+            .read(buildingMapSelectedDepartmentIdToMapProvider.notifier)
+            .setDept(departmentId);
+        _ref.read(buildingMapViewportCenterRequestSeqProvider.notifier).bump();
+        return;
+      }
+    }
 
     final outcome = resolveBuildingMapJumpFallback(
       department: department,
@@ -1405,6 +1495,11 @@ class BuildingMapController {
         return hit.departmentIds.isNotEmpty
             ? hit.departmentIds
             : _departmentIdsForUserId(hit.entityId);
+      // Τηλέφωνο χωρίς θέση: τα τμήματα που το έχουν. Αντικείμενο του
+      // χάρτη έχει πάντα θέση, άρα δεν φτάνει ως εδώ.
+      case BuildingMapOmnisearchEntityKind.phone:
+      case BuildingMapOmnisearchEntityKind.mapObject:
+        return hit.departmentIds;
       case BuildingMapOmnisearchEntityKind.equipment:
         if (hit.departmentIds.isNotEmpty) return hit.departmentIds;
         final lookup = LookupService.instance;
@@ -1435,6 +1530,18 @@ class BuildingMapController {
       _showMapSnack(context, 'Δεν υπάρχουν διαθέσιμα φύλλα χάρτη.');
       return;
     }
+
+    // Αποτέλεσμα με θέση στον νέο χάρτη: πηγαίνει στο ίδιο το σύμβολο.
+    if (target case BuildingMapSearchHitJump(:final hit)) {
+      final spot = hit.spot;
+      if (spot != null && floors.any((f) => f.id == spot.floorId)) {
+        await selectFloorFromList(spot.floorId, floors);
+        _ref.read(buildingMapSearchFocusProvider.notifier).set(spot);
+        _ref.read(buildingMapViewportCenterRequestSeqProvider.notifier).bump();
+        return;
+      }
+    }
+    _ref.read(buildingMapSearchFocusProvider.notifier).clear();
 
     await _ref.read(departmentDirectoryProvider.notifier).loadDepartments();
     if (!context.mounted) return;

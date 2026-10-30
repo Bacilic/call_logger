@@ -6,6 +6,8 @@
 //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "μικτή σύγκρουση"
 
 import 'package:call_logger/core/database/database_helper.dart';
+import 'package:call_logger/core/database/floor_plan_repository.dart';
+import 'package:call_logger/core/models/floor_plan_element.dart';
 import 'package:call_logger/core/database/settings_repository.dart';
 import 'package:call_logger/core/services/lansweeper_department_accounts.dart';
 import 'package:call_logger/core/services/lookup_service.dart';
@@ -1183,6 +1185,138 @@ void main() {
       },
     );
   });
+
+  // Τμήμα με χώρο στον νέο χάρτη: η αλλαγή ορόφου από την καρτέλα ρωτά,
+  // γιατί ο χώρος μένει στο σχέδιο του παλιού ορόφου.
+  //   flutter test test/features/directory/screens/widgets/department_form_dialog_test.dart --plain-name "μένει πίσω"
+  testWidgets(
+    'αλλαγή ορόφου τμήματος με χώρο στον νέο χάρτη: ο χώρος μένει πίσω — '
+    'η Ακύρωση δεν γράφει τίποτα',
+    (tester) async {
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      const deptName = 'RoomLeftBehindDept';
+      const otherFloorLabel = 'RoomLeftBehindOtherFloor';
+
+      final container = ProviderContainer(
+        overrides: callLoggerTestProviderOverrides(),
+      );
+      addTearDown(container.dispose);
+
+      late int homeFloor;
+      late int deptId;
+      late DepartmentDirectoryNotifier notifier;
+      await tester.runAsync(() async {
+        await seedIsolatedTestDatabase();
+        final db = await DatabaseHelper.instance.database;
+        homeFloor = await db.insert('building_map_floors', {
+          'label': 'RoomLeftBehindHomeFloor',
+          'image_path': '',
+        });
+        await db.insert('building_map_floors', {
+          'label': otherFloorLabel,
+          'image_path': '',
+        });
+        deptId = await db.insert('departments', {
+          'name': deptName,
+          'name_key': SearchTextNormalizer.normalizeForSearch(deptName),
+          'floor_id': homeFloor,
+          'is_deleted': 0,
+        });
+        await FloorPlanRepository(db).insertElement(
+          FloorPlanElement(
+            id: 0,
+            floorId: homeFloor,
+            kind: FloorPlanElementKind.room,
+            points: const [Offset(0, 0), Offset(400, 0), Offset(400, 300)],
+            departmentId: deptId,
+          ),
+        );
+        LookupService.instance.resetForReload();
+        await LookupService.instance.loadFromDatabase();
+        await container.read(lookupServiceProvider.future);
+        notifier = container.read(departmentDirectoryProvider.notifier);
+        await notifier.loadDepartments();
+        await _warmBuildingCatalog(container);
+        await _openDepartmentFormInDialog(
+          tester,
+          container,
+          initialDepartment: DepartmentModel(
+            id: deptId,
+            name: deptName,
+            floorId: homeFloor,
+          ),
+          notifier: notifier,
+        );
+      });
+      await tester.runAsync(() async {
+        for (var i = 0; i < 30; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      });
+      await pumpUntilSettledLong(tester);
+
+      final floorDropdownFinder = find.byWidgetPredicate(
+        (w) => w is DropdownButtonFormField<int?>,
+      );
+      await tester.ensureVisible(floorDropdownFinder);
+      await pumpUntilSettled(tester);
+      await tester.tap(floorDropdownFinder);
+      await pumpUntilSettled(tester);
+      await tester.tap(find.text(otherFloorLabel).last);
+      await pumpUntilSettled(tester);
+
+      const warningTitle = 'Ο χώρος στον νέο χάρτη μένει πίσω';
+      final saveButton = find.widgetWithText(FilledButton, 'Αποθήκευση');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton);
+      await tester.runAsync(() async {
+        for (var i = 0; i < 60; i++) {
+          final warned = find.text(warningTitle).evaluate().isNotEmpty;
+          final formOpen = find
+              .text(_kDepartmentFormTitle)
+              .evaluate()
+              .isNotEmpty;
+          if (warned || !formOpen) return;
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+      });
+      await tester.pump();
+
+      expect(find.text(warningTitle), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text(warningTitle),
+            matching: find.byType(AlertDialog),
+          ),
+          matching: find.widgetWithText(TextButton, 'Ακύρωση'),
+        ),
+      );
+      await pumpUntilSettled(tester);
+
+      expect(find.text(warningTitle), findsNothing);
+      expect(find.text(_kDepartmentFormTitle), findsOneWidget);
+      final row = await tester.runAsync(() async {
+        final db = await DatabaseHelper.instance.database;
+        return (await db.query(
+          'departments',
+          where: 'id = ?',
+          whereArgs: [deptId],
+        )).first;
+      });
+      expect(row?['floor_id'], homeFloor);
+
+      await flushCallLoggerSqfliteLockTimers(tester);
+    },
+  );
 
   group('Φόρμα τμήματος — άδειασμα πεδίων', () {
     late int deptId;

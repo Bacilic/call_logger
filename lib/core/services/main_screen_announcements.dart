@@ -11,18 +11,28 @@
 /// χάνεται, απλώς περιμένει. Κάθε οθόνη πριν από την κύρια (κάρτα εκκίνησης,
 /// επιλογή χρήστη, ορισμός διαχειριστή, οθόνη σφάλματος) καλύπτεται χωρίς να
 /// χρειάζεται να το ξέρει.
+///
+/// **Και όσο ρωτά το κλείσιμο** («Κλείσιμο εφαρμογής» — [hold]/[release],
+/// περιστατικό 30/10/2026): ο χρήστης αποφασίζει αν φεύγει, και μια
+/// ειδοποίηση από πάνω θα του έκλεβε την ερώτηση. Με «Επιστροφή» βγαίνει· με
+/// «Κλείσιμο» η εφαρμογή κλείνει χωρίς αυτήν.
 class MainScreenAnnouncements {
   MainScreenAnnouncements._();
 
   static bool _open = false;
+  static bool _held = false;
   static final List<void Function()> _pending = [];
 
   /// Είναι η κύρια οθόνη μπροστά στον χειριστή;
   static bool get isOpen => _open;
 
-  /// Εμφανίζει τώρα, αν η κύρια οθόνη υπάρχει· αλλιώς μόλις εμφανιστεί.
+  /// Περιμένει τώρα κάθε ειδοποίηση — π.χ. ρωτά το κλείσιμο της εφαρμογής.
+  static bool get isHeld => _held;
+
+  /// Εμφανίζει τώρα, αν η κύρια οθόνη υπάρχει και τίποτα δεν την κρατά·
+  /// αλλιώς μόλις γίνει.
   static void announce(void Function() show) {
-    if (_open) {
+    if (_open && !_held) {
       show();
       return;
     }
@@ -32,6 +42,21 @@ class MainScreenAnnouncements {
   /// Η κύρια οθόνη εμφανίστηκε: ό,τι περίμενε, βγαίνει με τη σειρά του.
   static void open() {
     _open = true;
+    _flush();
+  }
+
+  /// Η ερώτηση κλεισίματος είναι μπροστά: ό,τι ζητηθεί περιμένει.
+  static void hold() => _held = true;
+
+  /// Ο χρήστης επέστρεψε στην εφαρμογή: ό,τι περίμενε βγαίνει, αν η κύρια
+  /// οθόνη είναι μπροστά.
+  static void release() {
+    _held = false;
+    _flush();
+  }
+
+  static void _flush() {
+    if (!_open || _held) return;
     final waiting = List.of(_pending);
     _pending.clear();
     for (final show in waiting) {
@@ -46,6 +71,7 @@ class MainScreenAnnouncements {
   /// Μηδενισμός για τα τεστ — η κατάσταση είναι καθολική.
   static void resetForTest() {
     _open = false;
+    _held = false;
     _pending.clear();
   }
 }

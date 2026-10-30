@@ -133,6 +133,20 @@ abstract final class AuditDiffHelper {
     'table': 'πίνακας',
     'affected_ids': 'επηρεαζόμενες εγγραφές',
     'fields': 'πεδία',
+    'host': 'διεύθυνση',
+    'admin_user': 'χρήστης διαχειριστή',
+    'admin_password': 'κωδικός διαχειριστή',
+    'is_default': 'προεπιλογή',
+    'sort_order': 'σειρά',
+    'deleted_at': 'διαγραφή',
+    'executable_path': 'εκτελέσιμο',
+    'arguments_json': 'παράμετροι',
+    'role': 'ρόλος',
+    'is_exclusive': 'αποκλειστική χρήση',
+    'connect_wait_seconds': 'αναμονή σύνδεσης',
+    'icon_asset_key': 'εικονίδιο',
+    'test_target_ip': 'δοκιμαστικός στόχος',
+    'suggested_values': 'προτεινόμενες τιμές',
   };
 
   /// Γενικές ετικέtes πεδίων (γενική πτώση — «Αλλαγή … από»).
@@ -244,6 +258,20 @@ abstract final class AuditDiffHelper {
     'table': 'πίνακα',
     'affected_ids': 'επηρεαζόμενων εγγραφών',
     'fields': 'πεδίων',
+    'host': 'διεύθυνσης',
+    'admin_user': 'χρήστη διαχειριστή',
+    'admin_password': 'κωδικού διαχειριστή',
+    'is_default': 'προεπιλογής',
+    'sort_order': 'σειράς',
+    'deleted_at': 'διαγραφής',
+    'executable_path': 'εκτελέσιμου',
+    'arguments_json': 'παραμέτρων',
+    'role': 'ρόλου',
+    'is_exclusive': 'αποκλειστικής χρήσης',
+    'connect_wait_seconds': 'αναμονής σύνδεσης',
+    'icon_asset_key': 'εικονιδίου',
+    'test_target_ip': 'δοκιμαστικού στόχου',
+    'suggested_values': 'προτεινόμενων τιμών',
   };
 
   /// Ετικέτες για search_text (χωρίς τόνους).
@@ -351,6 +379,20 @@ abstract final class AuditDiffHelper {
     'affected_ids': 'επηρεαζομενες εγγραφες',
     'fields': 'πεδια',
     'trigger': 'εναυσμα',
+    'host': 'διευθυνση',
+    'admin_user': 'χρηστησ διαχειριστη',
+    'admin_password': 'κωδικος διαχειριστη',
+    'is_default': 'προεπιλογη',
+    'sort_order': 'σειρα',
+    'deleted_at': 'διαγραφη',
+    'executable_path': 'εκτελεσιμο',
+    'arguments_json': 'παραμετροι',
+    'role': 'ρολος',
+    'is_exclusive': 'αποκλειστικη χρηση',
+    'connect_wait_seconds': 'αναμονη συνδεσησ',
+    'icon_asset_key': 'εικονιδιο',
+    'test_target_ip': 'δοκιμαστικοσ στοχοσ',
+    'suggested_values': 'προτεινομενεσ τιμεσ',
   };
 
   /// Παράγωγα πεδία που κρύβονται όταν υπάρχει κύριο πεδίο.
@@ -451,11 +493,18 @@ abstract final class AuditDiffHelper {
     return AppPermission.byKey(field.substring(prefix.length))?.label;
   }
 
+  /// Ετικέτες που αλλάζουν ανά οντότητα: το ίδιο κλειδί σημαίνει άλλο πράγμα
+  /// σε άλλο πίνακα (το `is_active` του προφίλ δεν είναι το `is_active` του
+  /// εργαλείου).
+  static const Map<String, Map<String, String>> _entityTitleLabels = {
+    AuditEntityTypes.remoteTool: {'is_active': 'ενεργό εργαλείο'},
+  };
+
   /// Ετικέτα πεδίου για σύνοψη «N αλλαγές: …» (ονομαστική).
   static String fieldTitleLabel(String entityType, String field) {
     final permission = _permissionLabel(field);
     if (permission != null) return 'δικαίωμα «$permission»';
-    final label = _titleLabels[field];
+    final label = _entityTitleLabels[entityType]?[field] ?? _titleLabels[field];
     if (label != null) return label;
     return humanizeFieldKey(field);
   }

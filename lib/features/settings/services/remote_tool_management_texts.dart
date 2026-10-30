@@ -54,20 +54,20 @@ String remoteToolUsageTooltip(int defaultUsageCount) {
 
 /// Μοναδικό όνομα «… (αντίγραφο)» ή «… (αντίγραφο 2)» κ.ο.κ.
 ///
-/// Η σύγκριση αγνοεί πεζά/κεφαλαία και κενά στις άκρες, ώστε το «VNC» και το
-/// «vnc » να μη θεωρηθούν διαφορετικά ονόματα.
+/// Η σύγκριση γίνεται με [RemoteTool.nameKey], ώστε το «VNC» και το «vnc »
+/// να μη θεωρηθούν διαφορετικά ονόματα.
 String uniqueRemoteToolCloneName(
   String baseName,
   List<RemoteTool> existingTools,
 ) {
-  final taken = existingTools.map((e) => e.name.trim().toLowerCase()).toSet();
+  final taken = existingTools.map((e) => RemoteTool.nameKey(e.name)).toSet();
   final trimmed = baseName.trim();
   var candidate = '$trimmed$kRemoteToolCloneSuffix';
-  if (!taken.contains(candidate.toLowerCase())) return candidate;
+  if (!taken.contains(RemoteTool.nameKey(candidate))) return candidate;
   var i = 2;
   while (true) {
     candidate = '$trimmed$kRemoteToolCloneSuffix $i';
-    if (!taken.contains(candidate.toLowerCase())) return candidate;
+    if (!taken.contains(RemoteTool.nameKey(candidate))) return candidate;
     i++;
   }
 }

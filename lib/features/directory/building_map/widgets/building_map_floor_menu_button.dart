@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/models/building_map_floor.dart';
+import '../../providers/department_directory_provider.dart';
 import '../controllers/building_map_controller.dart';
+import '../plan/providers/floor_plan_providers.dart';
+import '../plan/screens/floor_plan_editor_screen.dart';
 import '../services/building_map_floor_ordering.dart';
 
 /// Μενού επιλογής / προσθήκης / επεξεργασίας / διαγραφής κατοψών (λειτουργία επεξεργασίας).
@@ -57,6 +60,20 @@ class BuildingMapFloorsMenuButton extends ConsumerWidget {
         switch (cmd) {
           case 'pick':
             await selectFloor(id);
+          case 'plan':
+            if (controller.canManageFloorPlans) {
+              await openFloorPlanEditor(
+                context,
+                floor,
+                afterDepartmentChange: () => ref
+                    .read(departmentDirectoryProvider.notifier)
+                    .loadDepartments(),
+                onActivated: () =>
+                    ref.read(floorPlanRevisionProvider.notifier).bump(),
+              );
+              ref.read(floorPlanRevisionProvider.notifier).bump();
+              onFloorsChanged();
+            }
           case 'edit':
             await controller.editFloorSheet(context, floor);
             onFloorsChanged();
@@ -73,7 +90,12 @@ class BuildingMapFloorsMenuButton extends ConsumerWidget {
         // απάντηση ζωντανά. Χωρίς το δικαίωμα το μενού μένει μόνο επιλογέας
         // ορόφου — τα κουμπιά κρύβονται, δεν γκριζάρουν.
         final canManage = controller.canManageFloorPlans;
-        final anyNotUploaded = floors.any((f) => !f.hasImage);
+        // Όροφος στον νέο χάρτη δεν έχει πια εικόνα κάτοψης — και δεν θέλει.
+        final newMapFloors =
+            ref.read(activeFloorPlanIdsProvider).value ?? const <int>{};
+        final anyNotUploaded = floors.any(
+          (f) => !f.hasImage && !newMapFloors.contains(f.id),
+        );
         return [
           if (canManage)
             _actionItem(
@@ -137,6 +159,11 @@ class BuildingMapFloorsMenuButton extends ConsumerWidget {
               ),
             ),
             if (canManage) ...[
+              IconButton(
+                tooltip: 'Σχεδίαση νέου χάρτη',
+                icon: const Icon(Icons.architecture, size: 20),
+                onPressed: () => Navigator.pop(ctx, 'plan:${f.id}'),
+              ),
               IconButton(
                 tooltip: 'Επεξεργασία',
                 icon: const Icon(Icons.edit_outlined, size: 20),

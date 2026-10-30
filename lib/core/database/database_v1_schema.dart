@@ -1,6 +1,7 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:sqflite_common/sqlite_api.dart';
+
 import '../utils/search_text_normalizer.dart';
 import 'database_foreign_keys.dart';
 import 'database_schema_version.dart';
@@ -106,6 +107,29 @@ import 'database_schema_version.dart';
 /// v68: `building_map_floor_images` — η εικόνα κάθε κάτοψης ζει πια μέσα στη
 /// βάση, ώστε όλοι οι σταθμοί να βλέπουν την ίδια. Νέος πίνακας, άδειος: τις
 /// σημερινές εικόνες τις ανεβάζει ρητά ο διαχειριστής.
+/// v69: `building_map_plan_elements` και `building_map_floor_state` — ο νέος,
+/// σχεδιασμένος χάρτης (τοίχοι, ανοίγματα, και ό,τι ακολουθήσει) και η
+/// κατάσταση κάθε ορόφου (πατρόν, βαθμονόμηση, ενεργός ή όχι). Νέοι πίνακες,
+/// άδειοι, χωρίς δεσμούς: ο παλιός χάρτης συνεχίζει όπως ήταν.
+/// v70: `building_map_plan_elements.label_dx` / `label_dy` — το όνομα ενός
+/// χώρου μετακινείται από το κέντρο του. Καθαρές προσθήκες· κενό = στο κέντρο,
+/// όπως ήταν ως τώρα.
+/// v71: `building_map_object_kinds`, `building_map_objects` και
+/// `building_map_placements` — τα αντικείμενα του νέου χάρτη (εκτυπωτές,
+/// έπιπλα…), τα είδη τους, και οι θέσεις υπαλλήλων, τηλεφώνων και εξοπλισμού
+/// του Καταλόγου. Νέοι πίνακες, άδειοι, χωρίς δεσμούς· οι πίνακες του
+/// Καταλόγου δεν αποκτούν καμία στήλη.
+/// v72: `building_map_placements.rotation_degrees` — και τα σύμβολα του
+/// Καταλόγου (υπολογιστής, τηλέφωνο, άνθρωπος) γυρίζουν στον χάρτη. Καθαρή
+/// προσθήκη· κενό = όρθιο, όπως ως τώρα.
+/// v73: `building_map_object_kinds.show_info` — κάθε είδος ορίζει αν δείχνει
+/// πληροφορίες με το ποντίκι (π.χ. τα έπιπλα όχι, για να μην κάνουν θόρυβο).
+/// Καθαρή προσθήκη· προεπιλογή «ναι», όπως ως τώρα.
+/// v74: το δίκτυο του νέου χάρτη — `building_map_objects.rack_u` /
+/// `rack_units` / `stack_id` / `stack_unit` (θέση και ύψος σε U μέσα σε
+/// καμπίνα, μονάδα stack), και οι πίνακες `building_map_ports`,
+/// `building_map_cables`, `building_map_cable_ends`. Καθαρές προσθήκες, νέοι
+/// πίνακες άδειοι· οι πίνακες του Καταλόγου δεν αποκτούν καμία στήλη.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Η εικόνα κάθε κάτοψης ορόφου — **μία και κοινή για όλους τους σταθμούς**.
@@ -130,6 +154,247 @@ const String kCreateBuildingMapFloorImagesTable = '''
         previous_image_hash TEXT
       )
     ''';
+
+/// Τα στοιχεία του **νέου, σχεδιασμένου** χάρτη: κάθε τοίχος, άνοιγμα (και
+/// από τα επόμενα βήματα χώρος, κείμενο, διάσταση) είναι μία γραμμή.
+///
+/// Τα σημεία (`points_json`) είναι σε **εκατοστά πραγματικού χώρου**, όχι σε
+/// pixel εικόνας: έτσι το πατρόν αλλάζει χωρίς να μετακινηθεί τίποτα. Το
+/// άνοιγμα κρατά τον τοίχο του στο `parent_id` και τα σημεία του ως αποστάσεις
+/// από την αρχή του τοίχου.
+///
+/// **Χωρίς δεσμούς ξένου κλειδιού**, όπως οι άλλες προσθήκες: παλαιότερη
+/// έκδοση της εφαρμογής αγνοεί τον πίνακα, και η διαγραφή ορόφου σβήνει ρητά
+/// και τα στοιχεία του.
+const String kCreateBuildingMapPlanElementsTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_plan_elements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        floor_id INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        points_json TEXT NOT NULL,
+        parent_id INTEGER,
+        name TEXT,
+        department_id INTEGER,
+        font_size REAL,
+        rotation_degrees REAL NOT NULL DEFAULT 0,
+        label_dx REAL,
+        label_dy REAL
+      )
+    ''';
+
+const String kCreateBuildingMapPlanElementsFloorIndex = '''
+      CREATE INDEX IF NOT EXISTS idx_building_map_plan_elements_floor
+      ON building_map_plan_elements(floor_id)
+    ''';
+
+/// Η κατάσταση του νέου χάρτη **ανά όροφο**: αν είναι ενεργός, πότε άλλαξε
+/// τελευταία, και το πατρόν με τη βαθμονόμηση και τη θέση του.
+///
+/// Η εικόνα του πατρόν ζει εδώ (αντίγραφο της κάτοψης ή νέο αρχείο) και όχι
+/// στον πίνακα εικόνων κάτοψης: εκείνη τη βλέπουν οι συνάδελφοι στον παλιό
+/// χάρτη, και ένα νέο αρχείο εκεί θα μετακινούσε τα κουτάκια τους. Γι' αυτό
+/// κάθε ανάγνωση της κατάστασης γράφει ρητά τις στήλες της, χωρίς την εικόνα.
+const String kCreateBuildingMapFloorStateTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_floor_state (
+        floor_id INTEGER PRIMARY KEY,
+        is_active INTEGER NOT NULL DEFAULT 0,
+        changed_at TEXT,
+        pattern_image BLOB,
+        pattern_hash TEXT,
+        pattern_cm_per_px REAL NOT NULL DEFAULT 1,
+        pattern_center_x REAL NOT NULL DEFAULT 0,
+        pattern_center_y REAL NOT NULL DEFAULT 0,
+        pattern_rotation_degrees REAL NOT NULL DEFAULT 0,
+        pattern_opacity REAL NOT NULL DEFAULT 0.5,
+        pattern_hidden INTEGER NOT NULL DEFAULT 0,
+        pattern_calibrated INTEGER NOT NULL DEFAULT 0
+      )
+    ''';
+
+/// Τα **είδη** των αντικειμένων του νέου χάρτη (εκτυπωτής, γραφείο…), όπως τα
+/// ορίζει όποιος σχεδιάζει. Η εφαρμογή δεν φέρνει κανένα έτοιμο είδος.
+///
+/// Το `symbol` είναι το κλειδί ενός από τα έτοιμα σύμβολα· το `name_key` είναι
+/// το όνομα χωρίς τόνους και κεφαλαία, ώστε «ΕΚΤΥΠΩΤΗΣ» και «Εκτυπωτής» να μην
+/// γίνουν δύο είδη.
+const String kCreateBuildingMapObjectKindsTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_object_kinds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        name_key TEXT NOT NULL UNIQUE,
+        symbol TEXT NOT NULL,
+        has_ports INTEGER NOT NULL DEFAULT 0,
+        show_info INTEGER NOT NULL DEFAULT 1
+      )
+    ''';
+
+/// Τα **αντικείμενα** του νέου χάρτη — ό,τι ζει μόνο στον χάρτη και όχι στον
+/// Κατάλογο (εκτυπωτές, έπιπλα…).
+///
+/// Θέση (`x`, `y`, το κέντρο) και μέγεθος (`width`, `height`, μόνο για όσα
+/// σχεδιάζονται ως παραλληλόγραμμο) σε **εκατοστά πραγματικού χώρου**, όπως τα
+/// στοιχεία σχεδίου.
+///
+/// Μέσα σε καμπίνα (v74): `cabinet_id` η καμπίνα, `rack_u` η πρώτη θέση U
+/// από πάνω, `rack_units` πόσα U πιάνει (κενό = 1). Για την ίδια την καμπίνα
+/// το `rack_units` είναι πόσα U έχει. Ό,τι είναι μέσα δεν ζωγραφίζεται στον
+/// χάρτη· τα `x`, `y` του δεν διαβάζονται. `stack_id` / `stack_unit`: σε ποιο
+/// stack ανήκει ένα switch και ποια μονάδα του είναι.
+///
+/// **Χωρίς δεσμούς ξένου κλειδιού**, όπως οι άλλοι πίνακες του νέου χάρτη: η
+/// διαγραφή ορόφου σβήνει ρητά και τα αντικείμενά του.
+const String kCreateBuildingMapObjectsTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_objects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        floor_id INTEGER NOT NULL,
+        kind_id INTEGER NOT NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        width REAL,
+        height REAL,
+        rotation_degrees REAL NOT NULL DEFAULT 0,
+        name TEXT,
+        ip TEXT,
+        lansweeper_name TEXT,
+        notes TEXT,
+        cabinet_id INTEGER,
+        rack_u INTEGER,
+        rack_units INTEGER,
+        stack_id INTEGER,
+        stack_unit INTEGER
+      )
+    ''';
+
+/// Οι στήλες που πρόσθεσε η v74 στα αντικείμενα — για την αναβάθμιση.
+const List<String> kBuildingMapObjectsRackColumns = [
+  'rack_u',
+  'rack_units',
+  'stack_id',
+  'stack_unit',
+];
+
+const String kCreateBuildingMapObjectsCabinetIndex = '''
+      CREATE INDEX IF NOT EXISTS idx_building_map_objects_cabinet
+      ON building_map_objects(cabinet_id)
+      WHERE cabinet_id IS NOT NULL
+    ''';
+
+/// Οι **θύρες** των αντικειμένων του χάρτη (patch panel, switch, πρίζα…):
+/// μία γραμμή ανά θύρα, με αριθμό μέσα στο αντικείμενο.
+///
+/// Το `written_name` είναι ό,τι γράφει πραγματικά η ετικέτα. Το αυτόματο
+/// όνομα («RC6.F17») **δεν αποθηκεύεται**· συντίθεται κάθε φορά, ώστε να μη
+/// μένει μπαγιάτικο όταν μετονομάζεται η καμπίνα. Για τις θύρες πρίζας, τι
+/// είναι συνδεδεμένο: εξοπλισμός του Καταλόγου, αντικείμενο του χάρτη, ή
+/// ελεύθερο κείμενο.
+const String kCreateBuildingMapPortsTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_ports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        object_id INTEGER NOT NULL,
+        number INTEGER NOT NULL,
+        written_name TEXT,
+        connected_equipment_id INTEGER,
+        connected_object_id INTEGER,
+        connected_text TEXT
+      )
+    ''';
+
+const String kCreateBuildingMapPortsObjectIndex = '''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_building_map_ports_object_number
+      ON building_map_ports(object_id, number)
+    ''';
+
+/// Τα **καλώδια**: ένα καλώδιο είναι μία γραμμή εδώ και δύο άκρα στο
+/// `building_map_cable_ends`.
+const String kCreateBuildingMapCablesTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_cables (
+        id INTEGER PRIMARY KEY AUTOINCREMENT
+      )
+    ''';
+
+/// Τα δύο άκρα κάθε καλωδίου. Η θύρα του patch panel έχει δύο πλευρές:
+/// `back` (το μόνιμο καλώδιο προς την πρίζα) και `front` (προς το switch)·
+/// οι υπόλοιπες θύρες μία. **Κάθε πλευρά δέχεται ένα καλώδιο** — το φυλά το
+/// μοναδικό ευρετήριο, όχι μόνο η οθόνη.
+const String kCreateBuildingMapCableEndsTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_cable_ends (
+        cable_id INTEGER NOT NULL,
+        port_id INTEGER NOT NULL,
+        side TEXT NOT NULL DEFAULT 'front'
+      )
+    ''';
+
+const String kCreateBuildingMapCableEndsPortIndex = '''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_building_map_cable_ends_port_side
+      ON building_map_cable_ends(port_id, side)
+    ''';
+
+const String kCreateBuildingMapCableEndsCableIndex = '''
+      CREATE INDEX IF NOT EXISTS idx_building_map_cable_ends_cable
+      ON building_map_cable_ends(cable_id)
+    ''';
+
+/// Οι πίνακες και τα ευρετήρια του δικτύου του νέου χάρτη (v74).
+const List<String> kBuildingMapNetworkSchema = [
+  kCreateBuildingMapObjectsCabinetIndex,
+  kCreateBuildingMapPortsTable,
+  kCreateBuildingMapPortsObjectIndex,
+  kCreateBuildingMapCablesTable,
+  kCreateBuildingMapCableEndsTable,
+  kCreateBuildingMapCableEndsPortIndex,
+  kCreateBuildingMapCableEndsCableIndex,
+];
+
+const String kCreateBuildingMapObjectsFloorIndex = '''
+      CREATE INDEX IF NOT EXISTS idx_building_map_objects_floor
+      ON building_map_objects(floor_id)
+    ''';
+
+const String kCreateBuildingMapObjectsKindIndex = '''
+      CREATE INDEX IF NOT EXISTS idx_building_map_objects_kind
+      ON building_map_objects(kind_id)
+    ''';
+
+/// Οι **θέσεις** στον χάρτη υπαλλήλων, τηλεφώνων και εξοπλισμού του
+/// Καταλόγου. Ο χάρτης κρατά μόνο τη θέση· όνομα, αριθμός και κωδικός
+/// διαβάζονται πάντα από τον Κατάλογο.
+///
+/// `entity_type` = `user`, `phone` ή `equipment`. Ο υπάλληλος μπορεί να έχει
+/// πολλές γραμμές (δουλεύει σε δύο γραφεία)· τηλέφωνο και εξοπλισμός **το πολύ
+/// μία** — το φυλά το μοναδικό ευρετήριο, όχι μόνο η οθόνη.
+const String kCreateBuildingMapPlacementsTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_placements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        floor_id INTEGER NOT NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL,
+        rotation_degrees REAL NOT NULL DEFAULT 0
+      )
+    ''';
+
+const String kCreateBuildingMapPlacementsFloorIndex = '''
+      CREATE INDEX IF NOT EXISTS idx_building_map_placements_floor
+      ON building_map_placements(floor_id)
+    ''';
+
+const String kCreateBuildingMapPlacementsSingleIndex = '''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_building_map_placements_single
+      ON building_map_placements(entity_type, entity_id)
+      WHERE entity_type IN ('phone', 'equipment')
+    ''';
+
+/// Όλοι οι πίνακες και τα ευρετήρια των αντικειμένων του νέου χάρτη (v71).
+const List<String> kBuildingMapObjectsSchema = [
+  kCreateBuildingMapObjectKindsTable,
+  kCreateBuildingMapObjectsTable,
+  kCreateBuildingMapObjectsFloorIndex,
+  kCreateBuildingMapObjectsKindIndex,
+  kCreateBuildingMapPlacementsTable,
+  kCreateBuildingMapPlacementsFloorIndex,
+  kCreateBuildingMapPlacementsSingleIndex,
+];
 
 /// Οι χρήστες της εφαρμογής — αυτοί που κάθονται μπροστά στην οθόνη.
 ///
@@ -333,6 +598,15 @@ Future<void> applyDatabaseV1Schema(Database db) async {
     ''');
 
   await db.execute(kCreateBuildingMapFloorImagesTable);
+  await db.execute(kCreateBuildingMapPlanElementsTable);
+  await db.execute(kCreateBuildingMapPlanElementsFloorIndex);
+  await db.execute(kCreateBuildingMapFloorStateTable);
+  for (final statement in kBuildingMapObjectsSchema) {
+    await db.execute(statement);
+  }
+  for (final statement in kBuildingMapNetworkSchema) {
+    await db.execute(statement);
+  }
 
   await db.execute('''
       CREATE TABLE categories (

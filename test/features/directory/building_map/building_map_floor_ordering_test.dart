@@ -110,4 +110,71 @@ void main() {
       );
     });
   });
+
+  group('Σε ποιον όροφο ανοίγει ο χάρτης', () {
+    // Περιστατικό 30/10/2026: μετά από επανεκκίνηση άνοιγε πάντα ο «2ος»,
+    // γιατί ήταν πρώτος στην ωμή σειρά της βάσης.
+    final floors = [
+      _floor(1, '2ος - Καρδιολογική', sort: 0),
+      _floor(2, '-1 - Υπόγειο', sort: 1),
+      _floor(3, '0 - Ισόγειο', sort: 2),
+    ];
+    BuildingMapFloor withImage(BuildingMapFloor f) => BuildingMapFloor(
+      id: f.id,
+      sortOrder: f.sortOrder,
+      label: f.label,
+      imagePath: '',
+      rotationDegrees: 0,
+      imageHash: 'abc',
+    );
+
+    test('ο τελευταίος που είδε ο χρήστης κερδίζει τα πάντα', () {
+      expect(
+        chooseInitialBuildingMapFloor(
+          floors: floors,
+          rememberedId: 3,
+          itFloorIds: {1},
+        ),
+        3,
+      );
+    });
+
+    test('όροφος που σβήστηκε στο μεταξύ δεν θυμάται τίποτα', () {
+      expect(
+        chooseInitialBuildingMapFloor(
+          floors: floors,
+          rememberedId: 99,
+          itFloorIds: {3},
+        ),
+        3,
+      );
+    });
+
+    test('την πρώτη φορά: ο όροφος του τμήματος πληροφορικής', () {
+      expect(chooseInitialBuildingMapFloor(floors: floors, itFloorIds: {3}), 3);
+    });
+
+    test('χωρίς πληροφορική: όροφος με κάτοψη ή νέο χάρτη', () {
+      expect(
+        chooseInitialBuildingMapFloor(
+          floors: [floors[0], floors[1], withImage(floors[2])],
+        ),
+        3,
+      );
+      expect(
+        chooseInitialBuildingMapFloor(floors: floors, newMapFloorIds: {1}),
+        1,
+      );
+    });
+
+    test('χωρίς τίποτα: ο πρώτος όπως φαίνεται στη λίστα, όχι στη βάση', () {
+      expect(chooseInitialBuildingMapFloor(floors: floors), 2);
+    });
+
+    test('το τμήμα πληροφορικής αναγνωρίζεται από το όνομα', () {
+      expect(isItDepartmentName('Τμήμα Πληροφορικής'), isTrue);
+      expect(isItDepartmentName('ΠΛΗΡΟΦΟΡΙΚΗ'), isTrue);
+      expect(isItDepartmentName('Καρδιολογική'), isFalse);
+    });
+  });
 }

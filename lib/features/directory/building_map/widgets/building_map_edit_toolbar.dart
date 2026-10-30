@@ -8,6 +8,7 @@ import '../../providers/department_directory_provider.dart';
 import '../building_map_label_layout.dart';
 import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
+import '../plan/services/floor_plan_export.dart';
 import '../services/building_map_sheet_export.dart';
 import 'building_map_floor_departments_dialog.dart';
 import '../services/building_map_floor_ordering.dart';
@@ -21,11 +22,13 @@ class BuildingMapEditToolbar extends ConsumerWidget {
     super.key,
     required this.floors,
     required this.hasActiveCanvas,
+    this.isNewMapFloor = false,
     required this.onFloorsChanged,
   });
 
   final List<BuildingMapFloor> floors;
   final bool hasActiveCanvas;
+  final bool isNewMapFloor;
   final VoidCallback onFloorsChanged;
 
   @override
@@ -99,8 +102,7 @@ class BuildingMapEditToolbar extends ConsumerWidget {
       },
       children: [
         CompactTooltip(
-          message:
-              'Μετακίνηση και εστίαση στον χάρτη. Το hover πάνω από την ετικέτα ονόματος επισημαίνει το τμήμα όπως πάνω από την περιοχή του. Κλικ σε χαρτογραφημένο τμήμα για επεξεργασία περιοχής (λαβές, περιστροφή).',
+          message: 'Μετακίνηση και εστίαση στον χάρτη. Το hover πάνω από την ετικέτα ονόματος επισημαίνει το τμήμα όπως πάνω από την περιοχή του. Κλικ σε χαρτογραφημένο τμήμα για επεξεργασία περιοχής (λαβές, περιστροφή).',
           child: const Padding(
             padding: EdgeInsets.symmetric(horizontal: 12),
             child: Row(
@@ -113,8 +115,7 @@ class BuildingMapEditToolbar extends ConsumerWidget {
           ),
         ),
         CompactTooltip(
-          message:
-              'Σύρετε για νέο περίγραμμα τμήματος (χρειάζεται επιλεγμένο τμήμα). Αν δεν έχει επιλεγεί τμήμα, ανοίγει η λίστα επιλογής. Μετά το σχέδιο χρησιμοποιήστε τις λαβές για μέγεθος και περιστροφή.',
+          message: 'Σύρετε για νέο περίγραμμα τμήματος (χρειάζεται επιλεγμένο τμήμα). Αν δεν έχει επιλεγεί τμήμα, ανοίγει η λίστα επιλογής. Μετά το σχέδιο χρησιμοποιήστε τις λαβές για μέγεθος και περιστροφή.',
           child: const Padding(
             padding: EdgeInsets.symmetric(horizontal: 12),
             child: Row(
@@ -211,9 +212,17 @@ class BuildingMapEditToolbar extends ConsumerWidget {
           const Spacer(),
           IconButton(
             tooltip: 'Εξαγωγή χάρτη (PNG ή JPG)',
-            onPressed: !hasActiveCanvas || sheetId == null
+            onPressed: sheetId == null || !(hasActiveCanvas || isNewMapFloor)
                 ? null
                 : () async {
+                    if (isNewMapFloor) {
+                      await exportFloorPlanToImageFile(
+                        context: context,
+                        floorId: sheetId,
+                        defaultFloorBaseName: currentFloorLabel ?? 'Όροφος',
+                      );
+                      return;
+                    }
                     await exportBuildingMapSheetToImageFile(
                       context: context,
                       defaultFloorBaseName: currentFloorLabel ?? 'Όροφος',

@@ -50,6 +50,11 @@ Future<void> showBuildingMapDialog(
       context: context,
       barrierDismissible: false,
       useSafeArea: false,
+      // Στην «Προβολή» ο χάρτης μόνο δείχνει: το κλείσιμο της εφαρμογής δεν
+      // ρωτά για «ανοιχτό ζήτημα». Στην «Επεξεργασία» ρωτά.
+      routeSettings: readOnlyRouteSettingsWhile(
+        () => !ref.read(buildingMapUiEditModeProvider),
+      ),
       builder: (ctx) => const Dialog.fullscreen(child: BuildingMapDialog()),
     );
   } finally {

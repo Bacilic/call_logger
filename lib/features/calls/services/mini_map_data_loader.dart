@@ -3,8 +3,15 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/department_repository.dart';
 import '../../../core/database/directory_support.dart';
 import '../../../core/database/equipment_repository.dart';
+import '../../../core/database/floor_plan_objects_repository.dart';
+import '../../../core/database/floor_plan_placements_repository.dart';
+import '../../../core/database/floor_plan_repository.dart';
 import '../../../core/models/building_map_floor.dart';
+import '../../../core/models/floor_plan_element.dart';
+import '../../../core/models/floor_plan_object_kind.dart';
+import '../../../core/models/floor_plan_placement.dart';
 import '../../../core/services/lookup_service.dart';
+import '../../directory/building_map/plan/floor_plan_objects.dart';
 import '../../directory/models/department_model.dart';
 import '../models/equipment_model.dart';
 import '../models/user_model.dart';
@@ -104,6 +111,27 @@ MiniMapSelection resolveMiniMapSelection(MiniMapCandidateDepartments c) {
   );
 }
 
+/// Ο σχεδιασμένος όροφος όπου ένα τμήμα έχει χώρο, για τον μικρό χάρτη.
+class MiniMapNewFloor {
+  const MiniMapNewFloor({
+    required this.floor,
+    required this.elements,
+    this.objects = const [],
+    this.callItems = const [],
+  });
+
+  final BuildingMapFloor floor;
+  final List<FloorPlanElement> elements;
+
+  /// Μόνο τα έπιπλα: δίνουν τον χώρο με μια ματιά. Τα σύμβολα του ορόφου
+  /// (εκτυπωτές…) δεν μπαίνουν — ο μικρός χάρτης δείχνει ό,τι αφορά την κλήση.
+  final List<FloorPlanObjectView> objects;
+
+  /// Οι θέσεις του υπαλλήλου και του εξοπλισμού της κλήσης σε αυτόν τον
+  /// όροφο: ο μικρός χάρτης κεντράρει εκεί και τις φωτίζει.
+  final List<FloorPlanObjectView> callItems;
+}
+
 /// Έτοιμα δεδομένα προβολής για τον μικρό χάρτη.
 class MiniMapCardData {
   const MiniMapCardData({
@@ -112,7 +140,18 @@ class MiniMapCardData {
     required this.selection,
     required this.equipmentEntity,
     required this.candidates,
+    this.newMapByDepartment = const {},
+    this.callFloors = const [],
   });
+
+  /// Για κάθε υποψήφιο τμήμα που έχει χώρο σε όροφο του **νέου** χάρτη, ο
+  /// όροφος αυτός με το σχέδιό του. Τα υπόλοιπα δείχνονται όπως πάντα.
+  final Map<int, MiniMapNewFloor> newMapByDepartment;
+
+  /// Οι ενεργοποιημένοι όροφοι όπου ο υπάλληλος ή ο εξοπλισμός της κλήσης
+  /// έχει θέση — ο μικρός χάρτης τον εντοπίζει εκεί, ακόμη κι αν ο χώρος του
+  /// τμήματος είναι σε άλλον όροφο. Κενό = όπως στη Φάση 1.
+  final List<MiniMapNewFloor> callFloors;
 
   final List<BuildingMapFloor> floors;
   final Map<int, DepartmentModel> departmentsById;
@@ -173,13 +212,116 @@ class MiniMapDataLoader {
       userDepartmentId: request.user?.departmentId,
     );
 
+    final callItems = await _callItems(
+      FloorPlanPlacementsRepository(db),
+      request.user,
+      equipment,
+    );
+    final plans = FloorPlanRepository(db);
+    final objectsRepo = FloorPlanObjectsRepository(db);
+    final floorCache = <int, Future<MiniMapNewFloor?>>{};
+    Map<int, FloorPlanObjectKind>? kinds;
+    // Κάθε όροφος διαβάζεται μία φορά, όσα τμήματα κι αν δείχνουν σε αυτόν.
+    Future<MiniMapNewFloor?> floorOf(int floorId) =>
+        floorCache[floorId] ??= () async {
+          final floor = floors.where((f) => f.id == floorId).firstOrNull;
+          if (floor == null) return null;
+          kinds ??= await objectsRepo.kinds();
+          return MiniMapNewFloor(
+            floor: floor,
+            elements: await plans.listElements(floorId),
+            objects: [
+              for (final view in buildFloorPlanObjectViews(
+                await objectsRepo.listObjects(floorId),
+                kinds!,
+              ))
+                if (view.isVolume) view,
+            ],
+            callItems: callItems[floorId] ?? const [],
+          );
+        }();
+
     return MiniMapCardData(
       floors: floors,
       departmentsById: departmentsById,
       selection: resolveMiniMapSelection(candidates),
       equipmentEntity: equipment,
       candidates: candidates,
+      newMapByDepartment: await _newMapFloors(
+        plans,
+        candidates,
+        departmentsById,
+        floorOf,
+      ),
+      callFloors: [
+        for (final floorId in callItems.keys) ?await floorOf(floorId),
+      ],
     );
+  }
+
+  /// Οι θέσεις του υπαλλήλου και του εξοπλισμού της κλήσης σε ενεργοποιημένους
+  /// ορόφους, ανά όροφο — πρώτα ο υπάλληλος. Υπάλληλος με δύο θέσεις δίνει
+  /// και τις δύο.
+  Future<Map<int, List<FloorPlanObjectView>>> _callItems(
+    FloorPlanPlacementsRepository placements,
+    UserModel? user,
+    EquipmentModel? equipment,
+  ) async {
+    final entries = [
+      if (user?.id case final id?)
+        FloorPlanCatalogEntry(
+          type: FloorPlanPlacementType.user,
+          entityId: id,
+          label: '${user!.lastName ?? ''} ${user.firstName ?? ''}'.trim(),
+        ),
+      if (equipment?.id case final id?)
+        FloorPlanCatalogEntry(
+          type: FloorPlanPlacementType.equipment,
+          entityId: id,
+          label: equipment!.code?.trim().isNotEmpty == true
+              ? equipment.code!.trim()
+              : 'Εξοπλισμός $id',
+        ),
+    ];
+    final result = <int, List<FloorPlanObjectView>>{};
+    for (final entry in entries) {
+      for (final p in await placements.activePlacementsOf(
+        entry.type,
+        entry.entityId,
+      )) {
+        (result[p.floorId] ??= []).addAll(
+          buildFloorPlanPlacementViews([p], {entry.key: entry}),
+        );
+      }
+    }
+    return result;
+  }
+
+  /// Ο σχεδιασμένος όροφος κάθε υποψήφιου τμήματος — ο όροφος του Καταλόγου
+  /// όταν έχει χώρο εκεί, αλλιώς ο πρώτος όπου έχει.
+  Future<Map<int, MiniMapNewFloor>> _newMapFloors(
+    FloorPlanRepository plans,
+    MiniMapCandidateDepartments candidates,
+    Map<int, DepartmentModel> departmentsById,
+    Future<MiniMapNewFloor?> Function(int floorId) floorOf,
+  ) async {
+    final ids = {
+      ?candidates.headerDepartmentId,
+      ?candidates.equipmentDepartmentId,
+      ?candidates.phoneDepartmentId,
+      ?candidates.userDepartmentId,
+    };
+    final roomFloors = await plans.activeFloorsWithRoomsOf(ids);
+    final result = <int, MiniMapNewFloor>{};
+    for (final entry in roomFloors.entries) {
+      final catalogFloor = departmentsById[entry.key]?.floorId;
+      final floorId = entry.value.contains(catalogFloor)
+          ? catalogFloor!
+          : entry.value.first;
+      final floor = await floorOf(floorId);
+      if (floor != null) result[entry.key] = floor;
+    }
+    return result;
   }
 
   Future<EquipmentModel?> _resolveEquipment(MiniMapRequest request) async {

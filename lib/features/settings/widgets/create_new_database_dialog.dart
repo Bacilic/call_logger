@@ -86,8 +86,6 @@ Future<String?> _pickSqliteDatabaseSavePathImpl({
       dialogTitle: dialogTitle,
       fileName: suggested,
       initialDirectory: initialDir,
-      type: FileType.custom,
-      allowedExtensions: const ['db'],
       bytes: Uint8List(0),
     ))?.toFilePath();
   }

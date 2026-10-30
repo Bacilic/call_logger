@@ -1,6 +1,8 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
+import '../../features/directory/services/directory_save_conflict.dart';
 import '../models/managed_server.dart';
+import 'audit_service.dart';
 import 'database_helper.dart';
 
 /// Ανάγνωση/εγγραφή του πίνακα `servers`.
@@ -58,13 +60,40 @@ class ServersRepository {
     return id;
   }
 
-  Future<void> update(ManagedServer server) async {
-    await (await _database).update(
-      'servers',
-      server.toInsertMap(),
-      where: 'id = ?',
-      whereArgs: [server.id],
-    );
+  /// Γράφει ολόκληρη την καρτέλα. Με [expected] (η εικόνα που άνοιξε η
+  /// φόρμα) σταματά με [DirectoryStaleException] **πριν γράψει**, αν κάποιος
+  /// άλλος άλλαξε στο μεταξύ πεδίο που θα ξαναγραφτεί — και το «διαγραμμένο
+  /// στις», ώστε ένας διακομιστής που αφαιρέθηκε να μην επανέρχεται σιωπηλά.
+  /// Το [force] γράφει από πάνω, όταν ο χρήστης επιμείνει.
+  Future<void> update(
+    ManagedServer server, {
+    ManagedServer? expected,
+    bool force = false,
+  }) async {
+    final attempted = server.toInsertMap();
+    await (await _database).transaction((txn) async {
+      if (!force && expected != null) {
+        final rows = await txn.query(
+          'servers',
+          where: 'id = ?',
+          whereArgs: [server.id],
+          limit: 1,
+        );
+        final conflict = DirectorySaveConflict.between(
+          entityType: AuditEntityTypes.server,
+          expected: expected.toInsertMap(),
+          fresh: rows.isEmpty ? null : rows.first,
+          attempted: attempted,
+        );
+        if (conflict != null) throw DirectoryStaleException(conflict);
+      }
+      await txn.update(
+        'servers',
+        attempted,
+        where: 'id = ?',
+        whereArgs: [server.id],
+      );
+    });
     if (server.isDefault) await setDefault(server.id);
   }
 

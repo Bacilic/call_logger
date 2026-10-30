@@ -69,6 +69,11 @@ class AppShellWithGlobalFatalError extends ConsumerWidget {
 
       void show() {
         if (!context.mounted) return;
+        // Η ερώτηση κλεισίματος άνοιξε στο καρέ που μεσολάβησε: περιμένει.
+        if (MainScreenAnnouncements.isHeld) {
+          MainScreenAnnouncements.announce(show);
+          return;
+        }
         if (st == BackupScheduleStatus.folderMissing) {
           final dest = ref
               .read(databaseBackupSettingsProvider)

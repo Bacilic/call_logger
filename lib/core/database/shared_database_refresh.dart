@@ -1,4 +1,5 @@
 import '../utils/background_task.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -6,6 +7,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/calls/provider/call_mutation_refresh.dart';
+import '../../features/calls/provider/remote_paths_provider.dart';
+import '../../features/knowledge/providers/knowledge_provider.dart';
+import '../providers/servers_provider.dart';
 import '../../features/directory/providers/category_directory_provider.dart';
 import '../../features/directory/providers/department_directory_provider.dart';
 import '../../features/database/providers/active_sessions_provider.dart';
@@ -75,6 +79,15 @@ Future<void> refreshSharedDatabaseViews(Ref ref) async {
   if (!ref.mounted) return;
   await ref.read(categoryDirectoryProvider.notifier).loadCategories();
   if (!ref.mounted) return;
+  // Βάση Γνώσης, διακομιστές και εργαλεία σύνδεσης γράφονται κι αυτά
+  // ΟΛΟΚΛΗΡΑ, με αφετηρία την εικόνα της λίστας: μια λίστα που δεν βλέπει
+  // την αλλαγή του συναδέλφου βγάζει «Κάποιος πρόλαβε» για κάτι που υπάρχει
+  // ήδη στη βάση και απλώς δεν δείχτηκε. Ακύρωση — όποια δεν κοιτάζει κανείς
+  // ξαναδιαβάζεται μόνο όταν τη ζητήσει.
+  ref.invalidate(knowledgeArticlesProvider);
+  ref.invalidate(serversListProvider);
+  ref.invalidate(remoteToolsAllCatalogProvider);
+  ref.invalidate(remoteToolsCatalogProvider);
   // Ιστορικό, Στατιστικά, ουρά Αναφοράς Lansweeper και πρόσφατες κλήσεις μαζί.
   refreshAfterCallMutation(ref);
   refreshSharedDatabaseIdentityViews(ref);

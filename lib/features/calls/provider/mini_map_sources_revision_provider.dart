@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../directory/building_map/plan/providers/floor_plan_providers.dart';
 import '../../directory/building_map/providers/building_map_providers.dart';
 import '../../directory/models/department_model.dart';
 import '../../directory/providers/department_directory_provider.dart';
@@ -15,6 +16,7 @@ import 'lookup_provider.dart';
 /// 2. **Φύλλα κάτοψης** — προσθήκη, αντικατάσταση εικόνας ή περιστροφή.
 /// 3. **Συσχετίσεις καταλόγου** — ποιος εξοπλισμός/τηλέφωνο/υπάλληλος ανήκει
 ///    σε ποιο τμήμα (το τμήμα-στόχος προκύπτει από αυτές).
+/// 4. **Νέος χάρτης** — σχεδίαση ή ενεργοποίηση ορόφου.
 final miniMapSourcesRevisionProvider =
     NotifierProvider<MiniMapSourcesRevisionNotifier, int>(
       MiniMapSourcesRevisionNotifier.new,
@@ -28,6 +30,7 @@ class MiniMapSourcesRevisionNotifier extends Notifier<int> {
       _bumpOnChange,
     );
     ref.listen<int>(buildingMapFloorReloadSeqProvider, _bumpOnChange);
+    ref.listen<int>(floorPlanRevisionProvider, _bumpOnChange);
     // Μόνο ολοκληρωμένες φορτώσεις: η ενδιάμεση «φορτώνει ακόμη» δεν είναι
     // αλλαγή δεδομένων και θα προκαλούσε διπλή ανανέωση σε κάθε mutation.
     ref.listen<LookupLoadResult?>(

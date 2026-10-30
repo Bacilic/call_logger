@@ -13,7 +13,6 @@ import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../test_reporter.dart';
 import '../../test_setup.dart';
@@ -44,7 +43,6 @@ Finder _equipmentTextField() {
 }
 
 Future<void> _pumpCallLoggerApp(WidgetTester tester) async {
-  GoogleFonts.config.allowRuntimeFetching = false;
   await tester.runAsync(() async {
     await tester.pumpWidget(
       ProviderScope(
@@ -54,7 +52,6 @@ Future<void> _pumpCallLoggerApp(WidgetTester tester) async {
     );
     await tester.pump();
     await pumpUntilSettledLong(tester);
-    await GoogleFonts.pendingFonts();
     final container = ProviderScope.containerOf(
       tester.element(find.byType(MaterialApp)),
     );

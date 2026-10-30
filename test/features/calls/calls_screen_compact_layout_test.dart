@@ -14,7 +14,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../test_reporter.dart';
 import '../../test_setup.dart';
@@ -217,7 +216,6 @@ Future<void> _pumpCallsApp(WidgetTester tester) async {
     );
     await tester.pump();
     await pumpUntilSettledLong(tester);
-    await GoogleFonts.pendingFonts();
     final container = ProviderScope.containerOf(
       tester.element(find.byType(MaterialApp)),
     );
@@ -265,7 +263,6 @@ void main() {
 
   group('Οθόνη Κλήσεων — θέση Τελευταίες Κλήσεις', () {
     setUpAll(() async {
-      GoogleFonts.config.allowRuntimeFetching = false;
       await seedTestCallRowForHistorySearch();
     });
 

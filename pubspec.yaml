@@ -18,7 +18,11 @@ publish_to: 'none' # Αφαιρέστε αυτή τη γραμμή αν θέλε
 # των εκδόσεων προϊόντος και αρχείου, ενώ το build-number για το επίθημα κατασκευής.
 version: 0.66.0+94
 environment:
-  sdk: ^3.12.0
+  sdk: ^3.13.7
+  # Ελάχιστη έκδοση Flutter: κρατά σπίτι και νοσοκομείο στην ίδια έκδοση. Ένα
+  # μηχάνημα με παλιότερο Flutter αρνείται να τρέξει το έργο και ζητά
+  # `flutter upgrade`. Ανεβαίνει σε κάθε αναβάθμιση του SDK.
+  flutter: ">=3.47.8"
 
 # Οι εξαρτήσεις (dependencies) ορίζουν τα πακέτα που χρειάζεται το δικό σας πακέτο για να λειτουργήσει.
 # Για αυτόματη αναβάθμιση στις πιο πρόσφατες εκδόσεις τρέξτε
@@ -32,14 +36,13 @@ dependencies:
 
   # Προσθέτει τη γραμματοσειρά Cupertino Icons στην εφαρμογή.
   # Χρήση με την κλάση CupertinoIcons για εικονίδια σε στυλ iOS.
-  cupertino_icons: ^1.0.9
+  cupertino_icons: ^2.0.0
   flutter_riverpod: ^3.3.1
   sqflite_common: ^2.5.11
   sqflite_common_ffi: ^2.4.2
   sqlite3_flutter_libs: ^0.6.0+eol
   path_provider: ^2.1.2
   path: ^1.9.0
-  google_fonts: ^8.1.0
   intl: ^0.20.2
   characters: ^1.4.0
   window_manager: ^0.5.1
@@ -48,7 +51,7 @@ dependencies:
   url_launcher: ^6.3.2
   http: ^1.2.0
   justkawal_excel_updated: ^5.0.0
-  file_picker: ^12.0.0-beta.4
+  file_picker: ^13.3.0
   fl_chart: ^1.2.0
   archive: ^4.0.9
   crypto: ^3.0.7
@@ -95,6 +98,10 @@ flutter:
   # περιλαμβάνεται στην εφαρμογή ώστε να χρησιμοποιείτε τα εικονίδια
   # της κλάσης Icons (Material Design).
   uses-material-design: true
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
 
   assets:
     - assets/

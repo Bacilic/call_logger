@@ -761,9 +761,8 @@ class AuditService {
         if (pair.label.trim().isNotEmpty) pair.label,
     }.toList();
     labels.sort((a, b) {
-      final byText = SearchTextNormalizer.normalizeForSearch(
-        a,
-      ).compareTo(SearchTextNormalizer.normalizeForSearch(b));
+      final byText = SearchTextNormalizer.normalizeForSearch(a)
+          .compareTo(SearchTextNormalizer.normalizeForSearch(b));
       return byText != 0 ? byText : a.compareTo(b);
     });
     return labels;
@@ -961,6 +960,14 @@ abstract final class AuditEntityTypes {
 
   /// Άρθρο Βάσης Γνώσης (entity_id = `knowledge_base.id`).
   static const String knowledge = 'knowledge';
+
+  /// Διακομιστής της «Αποσύνδεσης χρήστη» (πίνακας `servers`). Δεν γράφει
+  /// Ιστορικό· χρειάζεται μόνο για τον φύλακα «κάποιος πρόλαβε».
+  static const String server = 'server';
+
+  /// Εργαλείο απομακρυσμένης σύνδεσης (πίνακας `remote_tools`). Όπως ο
+  /// [server]: μόνο για τον φύλακα «κάποιος πρόλαβε».
+  static const String remoteTool = 'remote_tool';
 
   /// Προφίλ χειριστή της εφαρμογής — πίνακας `operators`, όχι `users`.
   ///

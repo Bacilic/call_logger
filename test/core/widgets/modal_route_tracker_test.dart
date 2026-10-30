@@ -156,6 +156,21 @@ void main() {
         tracker.didPush(form, report);
         expect(tracker.topDialogNeedingAttention, same(form));
       });
+
+      // Ο χάρτης κτιρίου είναι ένα παράθυρο με δύο καταστάσεις: στην
+      // «Προβολή» μόνο δείχνει, στην «Επεξεργασία» δουλεύει ο χρήστης.
+      test('παράθυρο που μόνο δείχνει υπό συνθήκη: η συνθήκη ρωτιέται τη '
+          'στιγμή του κλεισίματος', () {
+        var editing = false;
+        final map = _TestPopupRoute(
+          settings: readOnlyRouteSettingsWhile(() => !editing),
+        );
+        tracker.didPush(map, null);
+        expect(tracker.topDialogNeedingAttention, isNull);
+
+        editing = true;
+        expect(tracker.topDialogNeedingAttention, same(map));
+      });
     });
   });
 }

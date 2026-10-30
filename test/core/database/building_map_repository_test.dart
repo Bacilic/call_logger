@@ -5,6 +5,9 @@ import 'package:call_logger/core/database/building_map_repository.dart';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/department_repository.dart';
 import 'package:call_logger/core/database/directory_support.dart';
+import 'package:call_logger/core/database/floor_plan_repository.dart';
+import 'package:call_logger/core/models/floor_plan_element.dart';
+import 'package:call_logger/core/models/floor_plan_state.dart';
 import 'package:call_logger/core/utils/search_text_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -34,6 +37,8 @@ void main() {
       await db.delete('departments');
       await db.delete('building_map_floors');
       await db.delete('building_map_floor_images');
+      await db.delete('building_map_plan_elements');
+      await db.delete('building_map_floor_state');
       departments = DepartmentRepository(db);
       repo = BuildingMapRepository(db, DirectorySupport(db));
       repo.bindUpdateDepartment((deptId, fields) async {
@@ -136,77 +141,74 @@ void main() {
       expect(await repo.countDepartmentsReferencingMapFloor(floorId), 1);
     });
 
-    test(
-      'deleteBuildingMapFloorClearingDepartmentMaps: διαγραφή floor + καθαρισμός placement',
-      () async {
-        final floorId = await db.insert('building_map_floors', {
-          'sort_order': 0,
-          'label': 'Προς Διαγραφή',
-          'image_path': 'del.png',
-          'rotation_degrees': 0.0,
-        });
-        final idStr = floorId.toString();
+    test('deleteBuildingMapFloorClearingDepartmentMaps: διαγραφή floor + καθαρισμός placement', () async {
+      final floorId = await db.insert('building_map_floors', {
+        'sort_order': 0,
+        'label': 'Προς Διαγραφή',
+        'image_path': 'del.png',
+        'rotation_degrees': 0.0,
+      });
+      final idStr = floorId.toString();
 
-        final deptId = await db.insert('departments', {
-          'name': 'Τμήμα Με Χάρτη',
-          'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα Με Χάρτη'),
-          'is_deleted': 0,
-          'map_floor': idStr,
-          'floor_id': floorId,
-          'map_x': 10.0,
-          'map_y': 20.0,
-          'map_width': 100.0,
-          'map_height': 50.0,
-          'map_rotation': 15.0,
-          'map_label_offset_x': 1.0,
-          'map_label_offset_y': 2.0,
-          'map_anchor_offset_x': 3.0,
-          'map_anchor_offset_y': 4.0,
-          'map_custom_name': 'Ετικέτα',
-          'map_label_font_scale': 1.2,
-          'map_label_width': 80.0,
-          'map_label_height': 30.0,
-          'map_hidden': 1,
-          'color': '#FF0000',
-        });
+      final deptId = await db.insert('departments', {
+        'name': 'Τμήμα Με Χάρτη',
+        'name_key': SearchTextNormalizer.normalizeForSearch('Τμήμα Με Χάρτη'),
+        'is_deleted': 0,
+        'map_floor': idStr,
+        'floor_id': floorId,
+        'map_x': 10.0,
+        'map_y': 20.0,
+        'map_width': 100.0,
+        'map_height': 50.0,
+        'map_rotation': 15.0,
+        'map_label_offset_x': 1.0,
+        'map_label_offset_y': 2.0,
+        'map_anchor_offset_x': 3.0,
+        'map_anchor_offset_y': 4.0,
+        'map_custom_name': 'Ετικέτα',
+        'map_label_font_scale': 1.2,
+        'map_label_width': 80.0,
+        'map_label_height': 30.0,
+        'map_hidden': 1,
+        'color': '#FF0000',
+      });
 
-        await repo.deleteBuildingMapFloorClearingDepartmentMaps(floorId);
+      await repo.deleteBuildingMapFloorClearingDepartmentMaps(floorId);
 
-        expect(
-          await db.query(
-            'building_map_floors',
-            where: 'id = ?',
-            whereArgs: [floorId],
-          ),
-          isEmpty,
-        );
-
-        final dept = (await db.query(
-          'departments',
+      expect(
+        await db.query(
+          'building_map_floors',
           where: 'id = ?',
-          whereArgs: [deptId],
-        )).single;
+          whereArgs: [floorId],
+        ),
+        isEmpty,
+      );
 
-        expect(dept['map_floor'], isNull);
-        expect(dept['floor_id'], isNull);
-        expect(dept['map_x'], 0.0);
-        expect(dept['map_y'], 0.0);
-        expect(dept['map_width'], 0.0);
-        expect(dept['map_height'], 0.0);
-        expect(dept['map_rotation'], 0.0);
-        expect(dept['map_label_offset_x'], isNull);
-        expect(dept['map_label_offset_y'], isNull);
-        expect(dept['map_anchor_offset_x'], isNull);
-        expect(dept['map_anchor_offset_y'], isNull);
-        expect(dept['map_custom_name'], isNull);
-        expect(dept['map_label_font_scale'], isNull);
-        expect(dept['map_label_width'], isNull);
-        expect(dept['map_label_height'], isNull);
-        // Η υπάρχουσα λογική δεν αγγίζει map_hidden / color στο delete floor.
-        expect(dept['map_hidden'], 1);
-        expect(dept['color'], '#FF0000');
-      },
-    );
+      final dept = (await db.query(
+        'departments',
+        where: 'id = ?',
+        whereArgs: [deptId],
+      )).single;
+
+      expect(dept['map_floor'], isNull);
+      expect(dept['floor_id'], isNull);
+      expect(dept['map_x'], 0.0);
+      expect(dept['map_y'], 0.0);
+      expect(dept['map_width'], 0.0);
+      expect(dept['map_height'], 0.0);
+      expect(dept['map_rotation'], 0.0);
+      expect(dept['map_label_offset_x'], isNull);
+      expect(dept['map_label_offset_y'], isNull);
+      expect(dept['map_anchor_offset_x'], isNull);
+      expect(dept['map_anchor_offset_y'], isNull);
+      expect(dept['map_custom_name'], isNull);
+      expect(dept['map_label_font_scale'], isNull);
+      expect(dept['map_label_width'], isNull);
+      expect(dept['map_label_height'], isNull);
+      // Η υπάρχουσα λογική δεν αγγίζει map_hidden / color στο delete floor.
+      expect(dept['map_hidden'], 1);
+      expect(dept['color'], '#FF0000');
+    });
 
     group('η εικόνα της κάτοψης ζει στη βάση', () {
       final first = Uint8List.fromList([1, 2, 3]);
@@ -279,48 +281,68 @@ void main() {
         expect(await repo.readFloorImage(id), isNull);
         expect(await db.query('building_map_floor_images'), isEmpty);
       });
+
+      test('η διαγραφή ορόφου παίρνει μαζί και τον νέο χάρτη του', () async {
+        final id = await floor();
+        final other = await floor();
+        final plans = FloorPlanRepository(db);
+        Future<void> wall(int floorId) => plans.insertElement(
+          FloorPlanElement(
+            id: 0,
+            floorId: floorId,
+            kind: FloorPlanElementKind.wall,
+            points: const [Offset(0, 0), Offset(100, 0)],
+          ),
+        );
+        await wall(id);
+        await wall(other);
+        await plans.setPattern(id, first, FloorPlanState(floorId: id));
+
+        await repo.deleteBuildingMapFloorClearingDepartmentMaps(id);
+
+        expect(await plans.listElements(id), isEmpty);
+        expect((await plans.readState(id)).hasPattern, isFalse);
+        expect(await plans.listElements(other), hasLength(1));
+      });
     });
 
-    test(
-      'static clearedBuildingMapPlacementColumns / buildingMapPlacementColumnNames',
-      () async {
-        final defaults =
-            BuildingMapRepository.clearedBuildingMapPlacementColumns();
-        expect(defaults['map_floor'], isNull);
-        expect(defaults['map_x'], 0.0);
-        expect(defaults['map_y'], 0.0);
-        expect(defaults['map_width'], 0.0);
-        expect(defaults['map_height'], 0.0);
-        expect(defaults['map_rotation'], 0.0);
-        expect(defaults['map_hidden'], 0);
-        expect(defaults.containsKey('floor_id'), isFalse);
-        expect(defaults.containsKey('color'), isFalse);
+    test('static clearedBuildingMapPlacementColumns / buildingMapPlacementColumnNames', () async {
+      final defaults =
+          BuildingMapRepository.clearedBuildingMapPlacementColumns();
+      expect(defaults['map_floor'], isNull);
+      expect(defaults['map_x'], 0.0);
+      expect(defaults['map_y'], 0.0);
+      expect(defaults['map_width'], 0.0);
+      expect(defaults['map_height'], 0.0);
+      expect(defaults['map_rotation'], 0.0);
+      expect(defaults['map_hidden'], 0);
+      expect(defaults.containsKey('floor_id'), isFalse);
+      expect(defaults.containsKey('color'), isFalse);
 
-        final withExtras =
-            BuildingMapRepository.clearedBuildingMapPlacementColumns(
-              clearFloorId: true,
-              clearDepartmentHex: true,
-            );
-        expect(withExtras['floor_id'], isNull);
-        expect(withExtras['color'], isNull);
-        expect(withExtras['map_hidden'], 0);
+      final withExtras =
+          BuildingMapRepository.clearedBuildingMapPlacementColumns(
+            clearFloorId: true,
+            clearDepartmentHex: true,
+          );
+      expect(withExtras['floor_id'], isNull);
+      expect(withExtras['color'], isNull);
+      expect(withExtras['map_hidden'], 0);
 
-        final names = BuildingMapRepository.buildingMapPlacementColumnNames
-            .toList();
-        expect(
-          names,
-          containsAll([
-            'map_floor',
-            'map_x',
-            'map_y',
-            'map_width',
-            'map_height',
-            'map_rotation',
-            'map_hidden',
-          ]),
-        );
-        expect(names, hasLength(defaults.keys.length));
-      },
-    );
+      final names = BuildingMapRepository.buildingMapPlacementColumnNames
+          .toList();
+      expect(
+        names,
+        containsAll([
+          'map_floor',
+          'map_x',
+          'map_y',
+          'map_width',
+          'map_height',
+          'map_rotation',
+          'map_hidden',
+        ]),
+      );
+      expect(names, hasLength(defaults.keys.length));
+    });
   });
 }

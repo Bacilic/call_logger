@@ -12,16 +12,15 @@ import '../../../core/utils/json_document.dart';
 import '../../../core/utils/file_picker_session.dart';
 
 /// Επιλογή θέσης αποθήκευσης — αντικαθίσταται στα τεστ.
-typedef ProfileExportSavePathPicker =
-    Future<String?> Function(String suggestedFileName);
+typedef ProfileExportSavePathPicker = Future<String?> Function(
+  String suggestedFileName,
+);
 
 Future<String?> _pickSavePathWithSystemDialog(String suggestedFileName) async {
   final uri = (await FilePickerSession.run(
     () async => FilePicker.saveFile(
       dialogTitle: 'Αντίγραφο των ρυθμίσεών μου',
       fileName: suggestedFileName,
-      type: FileType.custom,
-      allowedExtensions: const ['json'],
       bytes: Uint8List(0),
     ),
   )).value;
@@ -63,9 +62,8 @@ Future<ProfileSettingsExportResult> exportActiveOperatorSettings({
 
   try {
     final db = await DatabaseHelper.instance.database;
-    final settings = await OperatorSettingsRepository(
-      db,
-    ).getAllForOperator(operator!.id!);
+    final settings = await OperatorSettingsRepository(db)
+        .getAllForOperator(operator!.id!);
 
     final safeName = operator.displayName.trim().replaceAll(
       RegExp(r'[<>:"/\\|?*]'),

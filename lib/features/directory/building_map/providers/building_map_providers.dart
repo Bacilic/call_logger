@@ -404,6 +404,29 @@ class BuildingMapSearchRevealedDeptNotifier extends Notifier<int?> {
   }
 }
 
+/// Το σύμβολο του νέου χάρτη που βρήκε η αναζήτηση: ο χάρτης του ορόφου του
+/// κεντράρει εκεί και το φωτίζει. Καθαρίζεται όταν αδειάσει το πεδίο
+/// αναζήτησης ή όταν η αναζήτηση πάει σε τμήμα.
+final buildingMapSearchFocusProvider =
+    NotifierProvider<
+      BuildingMapSearchFocusNotifier,
+      BuildingMapOmnisearchSpot?
+    >(BuildingMapSearchFocusNotifier.new);
+
+class BuildingMapSearchFocusNotifier
+    extends Notifier<BuildingMapOmnisearchSpot?> {
+  @override
+  BuildingMapOmnisearchSpot? build() => null;
+
+  void set(BuildingMapOmnisearchSpot spot) {
+    state = spot;
+  }
+
+  void clear() {
+    state = null;
+  }
+}
+
 /// Ενημερωτικό μήνυμα όταν η αναζήτηση χάρτη βρίσκει τμήμα χωρίς σχεδιασμένη περιοχή.
 @immutable
 class BuildingMapSearchUnresolvedNotice {

@@ -31,7 +31,7 @@ class ModalRouteTracker extends NavigatorObserver {
   /// κάτω ή πάνω από τέτοιο παράθυρο ρωτά κανονικά.
   Route<dynamic>? get topDialogNeedingAttention {
     for (final route in _open.reversed) {
-      if (route.settings.name != readOnlyRouteSettings.name) return route;
+      if (!_isReadOnly(route.settings)) return route;
     }
     return null;
   }
@@ -109,6 +109,24 @@ class ModalRouteTracker extends NavigatorObserver {
 /// απόφαση να ζει δίπλα σε αυτόν που ξέρει τι κάνει το παράθυρο. Το κλείσιμο
 /// της εφαρμογής δεν ρωτά γι' αυτά — δες [ModalRouteTracker.topDialogNeedingAttention].
 const RouteSettings readOnlyRouteSettings = RouteSettings(name: 'read-only');
+
+/// Η ίδια σήμανση για παράθυρο που **μόνο δείχνει όσο** ισχύει το
+/// [whileTrue] — π.χ. ο χάρτης κτιρίου στην «Προβολή», όχι στην
+/// «Επεξεργασία». Η συνθήκη ρωτιέται τη στιγμή του κλεισίματος, όχι όταν
+/// ανοίγει το παράθυρο.
+RouteSettings readOnlyRouteSettingsWhile(bool Function() whileTrue) =>
+    RouteSettings(name: _readOnlyWhileName, arguments: whileTrue);
+
+const String _readOnlyWhileName = 'read-only-while';
+
+bool _isReadOnly(RouteSettings settings) => switch (settings.name) {
+  'read-only' => true,
+  _readOnlyWhileName => switch (settings.arguments) {
+    final bool Function() whileTrue => whileTrue(),
+    _ => false,
+  },
+  _ => false,
+};
 
 /// Ο παρατηρητής της τρέχουσας συνεδρίας.
 ///

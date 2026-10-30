@@ -8,8 +8,11 @@ import '../../../../core/models/building_map_floor.dart';
 import '../../providers/department_directory_provider.dart';
 import '../controllers/building_map_controller.dart';
 import '../models/building_map_jump_target.dart';
+import '../plan/floor_plan_item_info.dart';
+import '../plan/providers/floor_plan_providers.dart';
 import '../providers/building_map_providers.dart';
 import 'building_map_empty_canvas_message.dart';
+import 'building_map_new_floor_canvas.dart';
 import '../services/building_map_department_eligibility.dart';
 import '../services/building_map_floor_ordering.dart';
 import '../services/floor_plan_image_cache.dart';
@@ -109,6 +112,8 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
     final decodedSize = ref.watch(buildingMapDecodedImageSizeProvider);
     final deptState = ref.watch(departmentDirectoryProvider);
     final sheetId = ref.watch(buildingMapSelectedSheetIdProvider);
+    final newMapFloorIds =
+        ref.watch(activeFloorPlanIdsProvider).value ?? const <int>{};
 
     final activeDepartments = departmentsEligibleForBuildingMap(
       deptState.allDepartments,
@@ -137,7 +142,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
         } else if (!controller.appliedInitialFloorSync) {
           controller.appliedInitialFloorSync = true;
           Future.microtask(() async {
-            await controller.syncSheetSelection(floors);
+            await controller.syncSheetSelection(floors, initial: true);
             if (mounted) setState(() {});
           });
         }
@@ -162,6 +167,8 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
           });
         }
 
+        // Ο όροφος έχει περάσει στον νέο, σχεδιασμένο χάρτη.
+        final isNewMap = current != null && newMapFloorIds.contains(current.id);
         final sheetStr = currentSheetId?.toString() ?? '';
         final rotRad = (current?.rotationDegrees ?? 0) * math.pi / 180;
         _scheduleResolveForFloor(current);
@@ -213,7 +220,10 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
 
         final globalSearchField = BuildingMapOmnisearchField(
           enabled: floors.isNotEmpty,
-          search: widget.repo.search.searchBuildingMapOmnisearch,
+          search: (query) => widget.repo.search.searchBuildingMapOmnisearch(
+            query,
+            roomLookup: floorPlanRoomLookup,
+          ),
           controller: _globalSearchController,
           focusNode: _globalSearchFocusNode,
           onResolveEntity: (hit) => controller.resolveAndJumpToEntity(
@@ -233,6 +243,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
               BuildingMapEditLayout(
                 floors: floors,
                 hasActiveCanvas: hasActiveCanvas,
+                isNewMapFloor: isNewMap,
                 activeDepartments: activeDepartments,
                 currentSheetId: currentSheetId,
                 onFloorsChanged: onFloorsMutated,
@@ -252,20 +263,27 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                       clipBehavior: Clip.hardEdge,
                       fit: StackFit.expand,
                       children: [
-                        BuildingMapSheetViewport(
-                          designModeActive: editMode,
-                          sheetStr: sheetStr,
-                          rotRad: rotRad,
-                          imgPath: imgPath,
-                          imgFile: imgFile,
-                          imgExists: imgExists,
-                          imageUploaded: current?.hasImage ?? false,
-                          decodedSize: decodedSize,
-                          activeDepartments: activeDepartments,
-                          floors: floors,
-                          currentSheetId: currentSheetId,
-                          onFloorsChanged: onFloorsMutated,
-                        ),
+                        const FloorPlanLiveRefresh(),
+                        if (isNewMap)
+                          BuildingMapNewFloorCanvas(
+                            floor: current,
+                            editMode: editMode,
+                          )
+                        else
+                          BuildingMapSheetViewport(
+                            designModeActive: editMode,
+                            sheetStr: sheetStr,
+                            rotRad: rotRad,
+                            imgPath: imgPath,
+                            imgFile: imgFile,
+                            imgExists: imgExists,
+                            imageUploaded: current?.hasImage ?? false,
+                            decodedSize: decodedSize,
+                            activeDepartments: activeDepartments,
+                            floors: floors,
+                            currentSheetId: currentSheetId,
+                            onFloorsChanged: onFloorsMutated,
+                          ),
                         const BuildingMapSearchUnresolvedBanner(),
                         if (editMode &&
                             currentSheetId != null &&
@@ -282,7 +300,7 @@ class _BuildingMapFloorsBodyState extends ConsumerState<BuildingMapFloorsBody> {
                                   rotationDegrees:
                                       dragRotation ?? current!.rotationDegrees,
                                   enabled:
-                                      hasActiveCanvas &&
+                                      (hasActiveCanvas || isNewMap) &&
                                       controller.canManageFloorPlans,
                                   onRotationChanged: (v) {
                                     ref

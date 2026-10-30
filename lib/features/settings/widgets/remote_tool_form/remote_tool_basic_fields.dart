@@ -77,10 +77,10 @@ class NameAutocompleteField extends StatelessWidget {
               validator: (v) {
                 final name = v?.trim() ?? '';
                 if (name.isEmpty) return 'Υποχρεωτικό όνομα εργαλείου.';
-                final n = name.toLowerCase();
+                final n = RemoteTool.nameKey(name);
                 for (final t in nonDeleted) {
                   if (excludeId != null && t.id == excludeId) continue;
-                  if (t.name.trim().toLowerCase() == n) {
+                  if (RemoteTool.nameKey(t.name) == n) {
                     return 'Υπάρχει ήδη εργαλείο με αυτό το όνομα.';
                   }
                 }

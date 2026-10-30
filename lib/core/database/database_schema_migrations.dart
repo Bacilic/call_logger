@@ -315,6 +315,137 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 68 && newVersion >= 68) {
     await migrateDatabaseToV68(db);
   }
+  if (oldVersion < 69 && newVersion >= 69) {
+    await migrateDatabaseToV69(db);
+  }
+  if (oldVersion < 70 && newVersion >= 70) {
+    await migrateDatabaseToV70(db);
+  }
+  if (oldVersion < 71 && newVersion >= 71) {
+    await migrateDatabaseToV71(db);
+  }
+  if (oldVersion < 72 && newVersion >= 72) {
+    await migrateDatabaseToV72(db);
+  }
+  if (oldVersion < 73 && newVersion >= 73) {
+    await migrateDatabaseToV73(db);
+  }
+  if (oldVersion < 74 && newVersion >= 74) {
+    await migrateDatabaseToV74(db);
+  }
+}
+
+/// v74: το δίκτυο του νέου χάρτη — όλη η Φάση 3 σε μία αναβάθμιση.
+///
+/// Τα αντικείμενα αποκτούν θέση και ύψος σε U μέσα σε καμπίνα, και μονάδα
+/// stack· μπαίνουν οι πίνακες θυρών και καλωδίων, άδειοι. Οι πίνακες του
+/// Καταλόγου δεν αποκτούν καμία στήλη· παλαιότερη έκδοση της εφαρμογής
+/// αγνοεί ό,τι δεν ξέρει.
+///
+/// Idempotent: οι στήλες μπαίνουν μόνο αν λείπουν — μια βάση που
+/// δημιουργήθηκε στη v74 τις έχει ήδη από τη δημιουργία του πίνακα.
+Future<void> migrateDatabaseToV74(Database db) async {
+  await migrateDatabaseToV73(db);
+  final info = await db.rawQuery('PRAGMA table_info(building_map_objects)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  for (final column in kBuildingMapObjectsRackColumns) {
+    if (!columns.contains(column)) {
+      await db.execute(
+        'ALTER TABLE building_map_objects ADD COLUMN $column INTEGER',
+      );
+    }
+  }
+  for (final statement in kBuildingMapNetworkSchema) {
+    await db.execute(statement);
+  }
+}
+
+/// v73: κάθε είδος αντικειμένων ορίζει αν δείχνει πληροφορίες με το ποντίκι
+/// (απόφαση 30/10/2026: τα έπιπλα έκαναν θόρυβο).
+///
+/// Μία στήλη με προεπιλογή «ναι»: τα είδη που υπάρχουν συνεχίζουν όπως ως
+/// τώρα.
+///
+/// Idempotent: η στήλη μπαίνει μόνο αν λείπει.
+Future<void> migrateDatabaseToV73(Database db) async {
+  await migrateDatabaseToV72(db);
+  final info = await db.rawQuery(
+    'PRAGMA table_info(building_map_object_kinds)',
+  );
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('show_info')) {
+    await db.execute(
+      'ALTER TABLE building_map_object_kinds '
+      'ADD COLUMN show_info INTEGER NOT NULL DEFAULT 1',
+    );
+  }
+}
+
+/// v72: οι θέσεις του Καταλόγου στον χάρτη αποκτούν κλίση — υπολογιστής,
+/// τηλέφωνο και άνθρωπος γυρίζουν όπως τα αντικείμενα (απόφαση 29/10/2026).
+///
+/// Μία στήλη με προεπιλογή 0: ό,τι τοποθετήθηκε ως τώρα μένει όρθιο.
+///
+/// Idempotent: η στήλη μπαίνει μόνο αν λείπει — μια βάση που δημιουργήθηκε
+/// στη v71 την έχει ήδη από τη δημιουργία του πίνακα.
+Future<void> migrateDatabaseToV72(Database db) async {
+  await migrateDatabaseToV71(db);
+  final info = await db.rawQuery('PRAGMA table_info(building_map_placements)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('rotation_degrees')) {
+    await db.execute(
+      'ALTER TABLE building_map_placements '
+      'ADD COLUMN rotation_degrees REAL NOT NULL DEFAULT 0',
+    );
+  }
+}
+
+/// v71: ο νέος χάρτης αποκτά αντικείμενα — τα είδη τους, τα ίδια τα
+/// αντικείμενα, και τις θέσεις υπαλλήλων, τηλεφώνων και εξοπλισμού.
+///
+/// **Μόνο νέοι πίνακες, άδειοι.** Οι πίνακες του Καταλόγου δεν αποκτούν καμία
+/// στήλη· παλαιότερη έκδοση της εφαρμογής αγνοεί τους νέους.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες.
+Future<void> migrateDatabaseToV71(Database db) async {
+  for (final statement in kBuildingMapObjectsSchema) {
+    await db.execute(statement);
+  }
+}
+
+/// v70: το όνομα ενός χώρου του νέου χάρτη μετακινείται από το κέντρο του.
+///
+/// Δύο στήλες με κενή προεπιλογή: κενό σημαίνει «στο κέντρο», δηλαδή ό,τι
+/// ίσχυε ως τώρα για κάθε χώρο. Παλαιότερη έκδοση της εφαρμογής τις αγνοεί.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες — οι στήλες μπαίνουν μόνο αν
+/// λείπουν.
+Future<void> migrateDatabaseToV70(Database db) async {
+  await migrateDatabaseToV69(db);
+  final info = await db.rawQuery(
+    'PRAGMA table_info(building_map_plan_elements)',
+  );
+  final columns = info.map((r) => r['name'] as String).toSet();
+  for (final column in const ['label_dx', 'label_dy']) {
+    if (!columns.contains(column)) {
+      await db.execute(
+        'ALTER TABLE building_map_plan_elements ADD COLUMN $column REAL',
+      );
+    }
+  }
+}
+
+/// v69: ο νέος, σχεδιασμένος χάρτης αποκτά τους δύο πίνακές του.
+///
+/// **Μόνο προσθήκες.** Ο παλιός χάρτης (κουτάκια τμημάτων πάνω σε εικόνα)
+/// συνεχίζει ανέγγιχτος σε κάθε όροφο ώσπου ο ίδιος ο όροφος να ενεργοποιηθεί
+/// στον νέο· παλαιότερη έκδοση της εφαρμογής αγνοεί τους νέους πίνακες.
+///
+/// Idempotent: ξανατρέχει χωρίς παρενέργειες.
+Future<void> migrateDatabaseToV69(Database db) async {
+  await db.execute(kCreateBuildingMapPlanElementsTable);
+  await db.execute(kCreateBuildingMapPlanElementsFloorIndex);
+  await db.execute(kCreateBuildingMapFloorStateTable);
 }
 
 /// v68: η εικόνα κάθε κάτοψης μπαίνει μέσα στη βάση.

@@ -14,7 +14,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../test_setup.dart';
 
@@ -30,7 +29,6 @@ Future<void> _loadCallsScreen(WidgetTester tester) async {
     );
     await tester.pump();
     await pumpUntilSettledLong(tester);
-    await GoogleFonts.pendingFonts();
     final container = ProviderScope.containerOf(
       tester.element(find.byType(MaterialApp)),
     );
@@ -123,7 +121,6 @@ void main() {
 
   group('Διπλή υποβολή κλήσης (τεστ-φρουρός)', () {
     setUpAll(() async {
-      GoogleFonts.config.allowRuntimeFetching = false;
       LookupService.instance.resetForReload();
       await LookupService.instance.loadFromDatabase();
     });

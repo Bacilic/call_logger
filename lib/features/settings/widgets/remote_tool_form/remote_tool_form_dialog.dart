@@ -21,6 +21,7 @@ import 'remote_tool_form_sort.dart';
 import 'remote_tool_test_panel.dart';
 import '../../../../core/services/portable_tool_image_storage.dart';
 import '../../../calls/provider/remote_paths_provider.dart';
+import '../../../directory/screens/widgets/directory_conflict_dialog.dart';
 import '../../../../core/utils/file_picker_session.dart';
 
 enum _SoftDeletedNameChoice { restore, keepSameName }
@@ -284,7 +285,16 @@ class _RemoteToolFormDialogState extends ConsumerState<RemoteToolFormDialog>
     try {
       if (_ctrl.isEdit) {
         final tool = _ctrl.toRemoteTool(id: widget.initialTool!.id);
-        await saver.commitEdit(toolFromForm: tool);
+        if (!mounted) return;
+        final saved = await saveDirectoryRecordWithConflictPrompt(
+          context,
+          save: ({required bool force}) => saver.commitEdit(
+            toolFromForm: tool,
+            expected: widget.initialTool,
+            force: force,
+          ),
+        );
+        if (!saved) return;
         // Οι τοπικές παρακάμψεις γράφονται στην ίδια κίνηση με τον κοινό
         // ορισμό — αλλιώς το ίδιο κουμπί θα σήμαινε δύο πράγματα.
         final localChanges = _ctrl.localOverrideChangeLines();
