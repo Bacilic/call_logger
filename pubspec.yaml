@@ -16,13 +16,13 @@ publish_to: 'none' # Αφαιρέστε αυτή τη γραμμή αν θέλε
 # Δείτε: https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # Στο Windows, το build-name χρησιμοποιείται για τα τμήματα major, minor και patch
 # των εκδόσεων προϊόντος και αρχείου, ενώ το build-number για το επίθημα κατασκευής.
-version: 0.66.0+94
+version: 0.67.0+95
 environment:
   sdk: ^3.13.7
   # Ελάχιστη έκδοση Flutter: κρατά σπίτι και νοσοκομείο στην ίδια έκδοση. Ένα
   # μηχάνημα με παλιότερο Flutter αρνείται να τρέξει το έργο και ζητά
   # `flutter upgrade`. Ανεβαίνει σε κάθε αναβάθμιση του SDK.
-  flutter: ">=3.47.8"
+  flutter: ">=3.47.9"
 
 # Οι εξαρτήσεις (dependencies) ορίζουν τα πακέτα που χρειάζεται το δικό σας πακέτο για να λειτουργήσει.
 # Για αυτόματη αναβάθμιση στις πιο πρόσφατες εκδόσεις τρέξτε
