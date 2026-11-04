@@ -20,6 +20,7 @@ import 'package:call_logger/core/services/permission_service.dart';
 import 'package:call_logger/features/database/models/database_backup_settings.dart';
 import 'package:call_logger/features/database/providers/database_backup_settings_provider.dart';
 import 'package:call_logger/features/database/services/active_backup_settings.dart';
+import 'package:call_logger/features/database/services/database_backup_service.dart';
 import 'package:call_logger/features/database/services/database_maintenance_service.dart';
 import 'package:call_logger/features/database/services/database_stats_service.dart';
 import 'package:call_logger/features/operators/services/profile_settings_export.dart';
@@ -71,6 +72,50 @@ void main() {
 
   tearDown(CurrentOperator.reset);
 
+  group('Αντίγραφο από διάλογο: τι σημειώνεται', () {
+    const fingerprint = 'αποτύπωμα-φορητών';
+
+    test('πλήρες: κρατά το αποτύπωμα, ώστε το επόμενο να βγει γρήγορο, και την '
+        'ώρα του πλήρους', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await container
+          .read(databaseBackupSettingsProvider.notifier)
+          .recordBackupResult(
+            const DatabaseBackupResult(
+              success: true,
+              isFullBackup: true,
+              portableFingerprint: fingerprint,
+            ),
+          );
+
+      final saved = await ActiveBackupSettings.read();
+      expect(saved.lastFullBackupFingerprint, fingerprint);
+      expect(saved.lastFullBackupAt, isNotNull);
+    });
+
+    test('γρήγορο: δεν αλλάζει ό,τι ξέρουμε για το τελευταίο πλήρες', () async {
+      final fullAt = DateTime(2026, 11, 1, 9);
+      await ActiveBackupSettings.update(
+        (current) => current.copyWith(
+          lastFullBackupFingerprint: fingerprint,
+          lastFullBackupAt: fullAt,
+        ),
+      );
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      await container
+          .read(databaseBackupSettingsProvider.notifier)
+          .recordBackupResult(const DatabaseBackupResult(success: true));
+
+      final saved = await ActiveBackupSettings.read();
+      expect(saved.lastFullBackupFingerprint, fingerprint);
+      expect(saved.lastFullBackupAt, fullAt);
+    });
+  });
+
   group('Το δέμα είναι κοινό (Φάση 2)', () {
     test(
       'το κλειδί παραμένει το ιστορικό κοινό — παλιές εκδόσεις το διαβάζουν',
@@ -114,14 +159,12 @@ void main() {
         ),
       );
 
-      final raw = await SettingsRepository(
-        db,
-      ).getSetting(DatabaseBackupSettings.appSettingsKey);
+      final raw = await SettingsRepository(db)
+          .getSetting(DatabaseBackupSettings.appSettingsKey);
       expect(raw, contains('apo_thn_pylh'));
       expect(
-        await OperatorSettingsRepository(
-          db,
-        ).getValue(903, DatabaseBackupSettings.appSettingsKey),
+        await OperatorSettingsRepository(db)
+            .getValue(903, DatabaseBackupSettings.appSettingsKey),
         isNull,
         reason: 'Καμία προσωπική εγγραφή — το κλειδί δεν είναι πια προσωπικό.',
       );
@@ -158,9 +201,8 @@ void main() {
         final settings = await ActiveBackupSettings.read();
 
         expect(settings.destinationDirectory, r'D:\freskos_tou_diaxeiristi');
-        final shared = await SettingsRepository(
-          db,
-        ).getSetting(DatabaseBackupSettings.appSettingsKey);
+        final shared = await SettingsRepository(db)
+            .getSetting(DatabaseBackupSettings.appSettingsKey);
         expect(shared, contains('freskos_tou_diaxeiristi'));
         expect(
           await opSettings.getValuesForKey(
@@ -170,9 +212,8 @@ void main() {
           reason: 'Τα προσωπικά αντίτυπα καθαρίζονται — νεκρό βάρος.',
         );
         expect(
-          await SettingsRepository(
-            db,
-          ).getSetting(ActiveBackupSettings.migrationMarkerKey),
+          await SettingsRepository(db)
+              .getSetting(ActiveBackupSettings.migrationMarkerKey),
           isNotNull,
         );
       },
@@ -306,9 +347,8 @@ void main() {
       const legacyRaw =
           '{"destinationDirectory":"D:\\\\palia","backupOnExit":true,'
           '"backupDays":[6],"backupTime":"18:42","interval":1}';
-      await SettingsRepository(
-        db,
-      ).saveSetting(DatabaseBackupSettings.appSettingsKey, legacyRaw);
+      await SettingsRepository(db)
+          .saveSetting(DatabaseBackupSettings.appSettingsKey, legacyRaw);
 
       final gate = await ActiveBackupSettings.readWithRaw();
       expect(gate.raw, legacyRaw);
@@ -413,9 +453,8 @@ void main() {
         final dest = await makeDest('stats_shared_');
         final db = await DatabaseHelper.instance.database;
         final baseName = p.basenameWithoutExtension(db.path);
-        File(
-          p.join(dest, '2026-08-20_10-00_$baseName.db'),
-        ).writeAsStringSync('x');
+        File(p.join(dest, '2026-08-20_10-00_$baseName.db'))
+            .writeAsStringSync('x');
 
         await SettingsRepository(db).saveSetting(
           DatabaseBackupSettings.appSettingsKey,
@@ -528,9 +567,8 @@ void main() {
 
       expect(result.restoredCount, 1);
       expect(
-        await OperatorSettingsRepository(
-          db,
-        ).getValue(953, 'task_print_preview'),
+        await OperatorSettingsRepository(db)
+            .getValue(953, 'task_print_preview'),
         'false',
         reason: 'Ως τώρα προσπερνιόταν σιωπηλά ως «άγνωστο» κλειδί.',
       );
@@ -552,9 +590,8 @@ void main() {
 
       expect(result.restoredCount, 1, reason: 'Μόνο το γνωστό κλειδί.');
       expect(
-        await OperatorSettingsRepository(
-          db,
-        ).getValue(952, 'kleidi_apo_allh_ekdosh'),
+        await OperatorSettingsRepository(db)
+            .getValue(952, 'kleidi_apo_allh_ekdosh'),
         isNull,
       );
     });
@@ -577,9 +614,8 @@ void main() {
 
       expect(result.restoredCount, 0);
       expect(
-        await OperatorSettingsRepository(
-          db,
-        ).getValue(953, DatabaseBackupSettings.appSettingsKey),
+        await OperatorSettingsRepository(db)
+            .getValue(953, DatabaseBackupSettings.appSettingsKey),
         isNull,
       );
     });

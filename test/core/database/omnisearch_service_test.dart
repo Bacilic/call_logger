@@ -524,5 +524,143 @@ void main() {
         expect(hit.spot?.isPlacement, isFalse);
       },
     );
+
+    test('χώρος με δικό του όνομα: βρίσκεται και πηγαίνει στον όροφό του· '
+        'όχι σε όροφο που δεν ενεργοποιήθηκε', () async {
+      final floor = await activeFloor('Ισόγειο');
+      final draft = await insertFloor(label: 'Υπόγειο');
+      final plans = FloorPlanRepository(db);
+      Future<int> room(int floorId, String name) => plans.insertElement(
+        FloorPlanElement(
+          id: 0,
+          floorId: floorId,
+          kind: FloorPlanElementKind.room,
+          points: const [Offset(0, 0), Offset(100, 0), Offset(100, 100)],
+          name: name,
+        ),
+      );
+      final shown = await room(floor, 'Λεβητοστάσιο');
+      await room(draft, 'Λεβητοστάσιο υπογείου');
+
+      final hit = (await repo.searchBuildingMapOmnisearch('λεβητο')).single;
+
+      expect(hit.kind, BuildingMapOmnisearchEntityKind.mapRoom);
+      expect(hit.title, 'Λεβητοστάσιο');
+      expect(hit.spot?.isRoom, isTrue);
+      expect(hit.spot?.itemId, shown);
+      expect(hit.spot?.floorId, floor);
+    });
+
+    group('Θύρες', () {
+      late int floor;
+      late int cabinet;
+      late int outlet;
+      late int patchPort;
+      late int switchPort;
+      late int sw;
+
+      Future<int> kind(String name, FloorPlanSymbol symbol) async {
+        final objects = FloorPlanObjectsRepository(db);
+        await objects.addKind(name: name, symbol: symbol, hasPorts: true);
+        return (await objects.kinds()).values
+            .firstWhere((k) => k.name == name)
+            .id;
+      }
+
+      Future<int> object(int kindId, {String? name, int? cabinetId}) =>
+          db.insert('building_map_objects', {
+            'floor_id': floor,
+            'kind_id': kindId,
+            'x': 10.0,
+            'y': 20.0,
+            'name': name,
+            'cabinet_id': cabinetId,
+          });
+
+      Future<int> port(int objectId, int number, {String? written}) =>
+          db.insert('building_map_ports', {
+            'object_id': objectId,
+            'number': number,
+            'written_name': written,
+          });
+
+      setUp(() async {
+        floor = await activeFloor('Ισόγειο');
+        cabinet = await object(
+          await kind('Καμπίνα', FloorPlanSymbol.cabinet),
+          name: 'RC6',
+        );
+        final panel = await object(
+          await kind('Patch', FloorPlanSymbol.patchPanel),
+          name: 'F',
+          cabinetId: cabinet,
+        );
+        patchPort = await port(panel, 17);
+        sw = await object(
+          await kind('Switch', FloorPlanSymbol.networkSwitch),
+          name: 'SW-2',
+          cabinetId: cabinet,
+        );
+        switchPort = await port(sw, 14, written: 'Κάμερα 7');
+        outlet = await object(await kind('Πρίζα', FloorPlanSymbol.outlet));
+        final outletPort = await port(outlet, 1);
+        final cable = await db.insert('building_map_cables', {'id': null});
+        await db.insert('building_map_cable_ends', {
+          'cable_id': cable,
+          'port_id': outletPort,
+          'side': 'front',
+        });
+        await db.insert('building_map_cable_ends', {
+          'cable_id': cable,
+          'port_id': patchPort,
+          'side': 'back',
+        });
+      });
+
+      test('το αυτόματο όνομα βρίσκει και την πρίζα και τη θύρα του patch '
+          'panel', () async {
+        final hits = await repo.searchBuildingMapOmnisearch('rc6.f17');
+
+        expect(hits, hasLength(2));
+        final toOutlet = hits.firstWhere((h) => h.spot!.itemId == outlet);
+        expect(toOutlet.title, 'RC6.F17');
+        expect(toOutlet.spot!.opensDetails, isTrue);
+        expect(toOutlet.spot!.portId, isNull);
+        final toPanel = hits.firstWhere((h) => h.spot!.itemId == cabinet);
+        expect(toPanel.spot!.portId, patchPort);
+      });
+
+      test('το όνομα Cisco βρίσκει τη θύρα του switch: ανοίγει την καμπίνα με '
+          'την πρόσοψη και τη θύρα σημειωμένη', () async {
+        final hit = (await repo.searchBuildingMapOmnisearch('gi1/0/14')).single;
+
+        expect(hit.kind, BuildingMapOmnisearchEntityKind.mapPort);
+        expect(hit.title, 'SW-2 Gi1/0/14');
+        expect(hit.spot!.itemId, cabinet);
+        expect(hit.spot!.deviceId, sw);
+        expect(hit.spot!.portId, switchPort);
+      });
+
+      test('το γραμμένο όνομα βρίσκει τη θύρα', () async {
+        final hit = (await repo.searchBuildingMapOmnisearch('καμερα 7')).single;
+
+        expect(hit.spot!.portId, switchPort);
+        expect(hit.subtitle, contains('«Κάμερα 7»'));
+      });
+
+      test(
+        'το όνομα του switch ανοίγει την καμπίνα του, με την πρόσοψή του',
+        () async {
+          final hits = await repo.searchBuildingMapOmnisearch('sw-2');
+
+          final toSwitch = hits.firstWhere(
+            (h) => h.kind == BuildingMapOmnisearchEntityKind.mapObject,
+          );
+          expect(toSwitch.spot!.itemId, cabinet);
+          expect(toSwitch.spot!.deviceId, sw);
+          expect(toSwitch.spot!.opensDetails, isTrue);
+        },
+      );
+    });
   });
 }

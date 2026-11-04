@@ -21,6 +21,10 @@ enum ManualBackupOutcome {
   /// κανείς, ενώ εδώ η απόφαση είναι δική του.
   verificationFailed,
 
+  /// Τρέχει ήδη αντίγραφο και αυτό δεν ξεκίνησε — δείξε το μήνυμα, όχι ως
+  /// σφάλμα.
+  alreadyRunning,
+
   /// Απέτυχε για άλλο λόγο — δείξε το μήνυμα ως σφάλμα.
   failure,
 }
@@ -71,6 +75,12 @@ Future<ManualBackupResult> runManualBackup({
   );
 
   if (!result.success) {
+    if (result.wasAlreadyRunning) {
+      return ManualBackupResult(
+        ManualBackupOutcome.alreadyRunning,
+        message: result.message,
+      );
+    }
     if (result.failureCode == DatabaseBackupFailureCode.folderMissing &&
         destination.isNotEmpty) {
       return const ManualBackupResult(ManualBackupOutcome.folderMissing);

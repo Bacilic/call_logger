@@ -248,7 +248,7 @@ abstract final class BackupScheduleStatusFormatter {
     var imminent = false;
 
     if (backupJobRunning) {
-      nextText = 'Επόμενο αυτόματο αντίγραφο: σε εξέλιξη τώρα…';
+      nextText = 'Αντίγραφο σε εξέλιξη τώρα…';
     } else {
       final decision = BackupTriggerDecision.evaluate(
         settings: settings,
@@ -290,12 +290,10 @@ abstract final class BackupScheduleStatusFormatter {
     var hintWarning = false;
     final st = BackupScheduleStatus.normalize(settings.lastBackupStatus);
     if (st == BackupScheduleStatus.folderMissing) {
-      hintText =
-          'Ο φάκελος προορισμού δεν βρέθηκε· τα αρχεία αντιγράφου μπορεί να λείπουν.';
+      hintText = 'Ο φάκελος προορισμού δεν βρέθηκε· τα αρχεία αντιγράφου μπορεί να λείπουν.';
       hintWarning = true;
     } else if (st == BackupScheduleStatus.failed) {
-      hintText =
-          'Το τελευταίο αυτόματο αντίγραφο απέτυχε· ελέγξτε φάκελο και δικαιώματα.';
+      hintText = 'Το τελευταίο αυτόματο αντίγραφο απέτυχε· ελέγξτε φάκελο και δικαιώματα.';
       hintWarning = true;
     }
 

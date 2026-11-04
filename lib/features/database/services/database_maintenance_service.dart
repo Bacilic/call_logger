@@ -9,6 +9,7 @@ import '../../../core/database/audit_service.dart';
 import '../../../core/services/settings_service.dart';
 import '../../tasks/models/task.dart';
 import 'active_backup_settings.dart';
+import 'backup_run_gate.dart';
 import 'database_backup_audit.dart';
 import 'database_backup_service.dart';
 import '../../../core/utils/file_path_identity.dart';
@@ -50,8 +51,7 @@ class ReplaceDatabaseResult {
          renameFailedFilePath: filePath,
          renameFailedFolder: folderPath,
          sourceDbPathForLockDiagnostic: sourceDbPathForLockDiagnostic,
-         errorMessage:
-             'Δεν ήταν δυνατή η μετονομασία του τρέχοντος αρχείου (π.χ. κλειδωμένο από άλλη διεργασία).',
+         errorMessage: 'Δεν ήταν δυνατή η μετονομασία του τρέχοντος αρχείου (π.χ. κλειδωμένο από άλλη διεργασία).',
        );
 
   final bool success;
@@ -105,6 +105,9 @@ class DatabaseMaintenanceService {
         );
         return (kind: MaintenanceBackupPrecheck.notConfigured, message: null);
       }
+      // Η συντήρηση θέλει δικό της φρέσκο αντίγραφο, όχι όποιο έτρεχε ήδη και
+      // μπορεί να μην έχει τις τελευταίες αλλαγές.
+      await BackupRunGate.whenIdle();
       final r = await DatabaseBackupService.runBackup(
         settings,
         auditTrigger: BackupAuditTrigger.maintenance,
@@ -183,9 +186,8 @@ class DatabaseMaintenanceService {
     }
     final db = await DatabaseHelper.instance.database;
     final iso = cutoff.toIso8601String();
-    final n = await DatabaseMaintenanceRepository(
-      db,
-    ).deleteAuditLogRowsBefore(iso);
+    final n = await DatabaseMaintenanceRepository(db)
+        .deleteAuditLogRowsBefore(iso);
     try {
       final user = AuditService.performingUser();
       await AuditService.log(
@@ -208,9 +210,8 @@ class DatabaseMaintenanceService {
     final db = await DatabaseHelper.instance.database;
     final closed = TaskStatus.closed.toDbValue;
     final iso = cutoff.toIso8601String();
-    final n = await DatabaseMaintenanceRepository(
-      db,
-    ).deleteClosedTasksBefore(closedStatus: closed, isoCutoff: iso);
+    final n = await DatabaseMaintenanceRepository(db)
+        .deleteClosedTasksBefore(closedStatus: closed, isoCutoff: iso);
     if (n > 0) {
       try {
         final user = AuditService.performingUser();

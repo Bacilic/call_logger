@@ -10,6 +10,7 @@ import 'building_map_repository.dart';
 import 'directory_support.dart';
 import 'floor_plan_objects_repository.dart';
 import 'floor_plan_placements_repository.dart';
+import 'floor_plan_ports_repository.dart';
 import 'floor_plan_repository.dart';
 import '../utils/display_text_sort.dart';
 
@@ -21,6 +22,12 @@ enum BuildingMapOmnisearchEntityKind {
 
   /// Αντικείμενο του νέου χάρτη (εκτυπωτής, έπιπλο…).
   mapObject,
+
+  /// Θύρα του νέου χάρτη: πρίζα, patch panel, switch, router, POE.
+  mapPort,
+
+  /// Χώρος του νέου χάρτη με δικό του όνομα (διάδρομος, αποθήκη…).
+  mapRoom,
 }
 
 /// «Ποιος χώρος είναι εδώ;» για τα στοιχεία ενός ορόφου του νέου χάρτη: το
@@ -41,7 +48,24 @@ class BuildingMapOmnisearchSpot {
     required this.isPlacement,
     required this.itemId,
     this.roomName,
+    this.opensDetails = false,
+    this.deviceId,
+    this.portId,
+    this.isRoom = false,
   });
+
+  /// Το [itemId] είναι χώρος του σχεδίου, όχι σύμβολο: φωτίζεται ο χώρος.
+  final bool isRoom;
+
+  /// Με τη μετάβαση ανοίγουν και τα στοιχεία του: η διαδρομή της πρίζας, το
+  /// πάνελ της καμπίνας.
+  final bool opensDetails;
+
+  /// Η συσκευή της οποίας η πρόσοψη πρέπει να φανεί.
+  final int? deviceId;
+
+  /// Η θύρα που σημειώνεται στην πρόσοψη.
+  final int? portId;
 
   final int floorId;
   final String floorLabel;
@@ -267,6 +291,9 @@ class OmnisearchService {
       required Offset center,
       required bool isPlacement,
       required int itemId,
+      bool opensDetails = false,
+      int? deviceId,
+      int? portId,
     }) async {
       String? roomName;
       if (roomLookup != null) {
@@ -289,6 +316,9 @@ class OmnisearchService {
         isPlacement: isPlacement,
         itemId: itemId,
         roomName: roomName,
+        opensDetails: opensDetails,
+        deviceId: deviceId,
+        portId: portId,
       );
     }
 
@@ -693,6 +723,11 @@ class OmnisearchService {
         center: (cabinet ?? object).center,
         isPlacement: false,
         itemId: (cabinet ?? object).id,
+        // Καμπίνα ή ό,τι είναι μέσα της: ανοίγει το πάνελ, με την πρόσοψή του.
+        opensDetails:
+            cabinet != null ||
+            (kinds[object.kindId]?.symbol?.isCabinet ?? false),
+        deviceId: cabinet == null ? null : object.id,
       );
       final cabinetName = cabinet?.name?.trim() ?? '';
       hits.add((
@@ -708,6 +743,97 @@ class OmnisearchService {
             if (ip.isNotEmpty) ip,
             if (cabinet != null)
               cabinetName.isEmpty ? 'σε καμπίνα' : 'στην καμπίνα $cabinetName',
+            spot.label,
+          ].join(' • '),
+          departmentIds: const [],
+          spot: spot,
+        ),
+      ));
+    }
+
+    // Οι χώροι με δικό τους όνομα. Τμήμα που βρίσκεται ήδη με το όνομά του δεν
+    // δίνει δεύτερη γραμμή για το ίδιο πράγμα.
+    for (final floorId in activeFloors) {
+      for (final room in await plans.listElements(floorId)) {
+        if (room.kind != FloorPlanElementKind.room) continue;
+        final name = room.name?.trim() ?? '';
+        if (name.isEmpty ||
+            !SearchTextNormalizer.matchesNormalizedQuery(name, normalized)) {
+          continue;
+        }
+        final departmentName =
+            (deptById[room.departmentId]?['name'] as String?)?.trim() ?? '';
+        if (departmentName == name) continue;
+        final floorLabel = _buildingMapFloorDisplayLabel(floorById[floorId]!);
+        hits.add((
+          _omnisearchRank(query: normalized, fields: [name]),
+          6,
+          '${name.toLowerCase()} ${floorLabel.toLowerCase()}',
+          BuildingMapOmnisearchHit(
+            kind: BuildingMapOmnisearchEntityKind.mapRoom,
+            entityId: room.id,
+            title: name,
+            subtitle: [
+              'Χώρος',
+              if (departmentName.isNotEmpty) departmentName,
+              floorLabel,
+            ].join(' • '),
+            departmentIds: const [],
+            spot: BuildingMapOmnisearchSpot(
+              floorId: floorId,
+              floorLabel: floorLabel,
+              center: room.points.isEmpty ? Offset.zero : room.points.first,
+              isPlacement: false,
+              itemId: room.id,
+              isRoom: true,
+            ),
+          ),
+        ));
+      }
+    }
+
+    // Οι θύρες, με το αυτόματο και το γραμμένο όνομα. Το αυτόματο συντίθεται
+    // εδώ, γιατί δεν αποθηκεύεται πουθενά.
+    final portsRepo = FloorPlanPortsRepository(db);
+    final portObjects = <int, Map<int, Offset>>{};
+    for (final port in await portsRepo.searchablePorts(activeFloors)) {
+      final autoName = port.autoName ?? '';
+      final written = port.writtenName?.trim() ?? '';
+      if (!SearchTextNormalizer.matchesNormalizedQuery(
+        '$autoName $written',
+        normalized,
+      )) {
+        continue;
+      }
+      final isOutlet = port.symbol?.isOutlet ?? false;
+      final targetId = port.cabinetId ?? port.objectId;
+      final centers = portObjects[port.floorId] ??= {
+        for (final o in await objectsRepo.listObjects(port.floorId))
+          o.id: o.center,
+      };
+      final spot = await spotOf(
+        floorId: port.floorId,
+        center: centers[targetId] ?? Offset.zero,
+        isPlacement: false,
+        itemId: targetId,
+        opensDetails: true,
+        deviceId: port.cabinetId == null ? null : port.objectId,
+        portId: isOutlet ? null : port.portId,
+      );
+      final title = autoName.isEmpty ? written : autoName;
+      final cabinetName = port.cabinetName?.trim() ?? '';
+      hits.add((
+        _omnisearchRank(query: normalized, fields: [autoName, written]),
+        5,
+        '${title.toLowerCase()} ${spot.label.toLowerCase()}',
+        BuildingMapOmnisearchHit(
+          kind: BuildingMapOmnisearchEntityKind.mapPort,
+          entityId: port.portId,
+          title: title,
+          subtitle: [
+            isOutlet ? 'Πρίζα' : 'Θύρα ${port.kindName ?? ''}'.trim(),
+            if (written.isNotEmpty && written != title) '«$written»',
+            if (cabinetName.isNotEmpty) 'στην καμπίνα $cabinetName',
             spot.label,
           ].join(' • '),
           departmentIds: const [],

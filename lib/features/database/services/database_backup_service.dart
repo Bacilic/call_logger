@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
+
 import '../../../core/database/database_maintenance_repository.dart';
 import '../../../core/database/sqlite_types.dart';
 
@@ -21,7 +22,9 @@ import 'backup_artifact_naming.dart';
 import 'backup_completion_message.dart';
 import 'backup_portable_bundle.dart';
 import 'backup_retention.dart';
+import 'backup_run_gate.dart';
 import 'backup_verification.dart';
+import 'backup_work_folder.dart';
 import 'database_backup_audit.dart';
 import 'portable_content_fingerprint.dart';
 import 'restore_selection.dart';
@@ -30,6 +33,9 @@ import 'restore_report.dart';
 /// Κωδικοί αποτυχίας backup (για UI / scheduler).
 abstract final class DatabaseBackupFailureCode {
   static const String folderMissing = 'folder_missing';
+
+  /// Τρέχει ήδη άλλο αντίγραφο, και αυτό δεν ξεκίνησε καθόλου.
+  static const String alreadyRunning = 'already_running';
 }
 
 /// Συντόμευση για χρήση μέσα στο αρχείο, ώστε οι κλήσεις να μένουν σε μία
@@ -47,6 +53,18 @@ class DatabaseBackupResult {
     this.portableFingerprint,
     this.brokenArtifactPath,
   });
+
+  /// Το αίτημα απορρίφθηκε επειδή τρέχει ήδη αντίγραφο.
+  static const DatabaseBackupResult alreadyRunning = DatabaseBackupResult(
+    success: false,
+    message: 'Τρέχει ήδη αντίγραφο ασφαλείας. Δοκιμάστε ξανά όταν ολοκληρωθεί.',
+    failureCode: DatabaseBackupFailureCode.alreadyRunning,
+  );
+
+  /// Δεν είναι αποτυχία: δεν έγινε τίποτα, και το άλλο αντίγραφο συνεχίζει.
+  /// Ο καλών δεν αλλάζει την κατάσταση «τελευταίο αντίγραφο» εξαιτίας του.
+  bool get wasAlreadyRunning =>
+      failureCode == DatabaseBackupFailureCode.alreadyRunning;
 
   final bool success;
   final String? outputPath;
@@ -122,10 +140,35 @@ class DatabaseBackupService {
     return abs.replaceAll('\\', '/');
   }
 
+  /// Μήνυμα όταν δεν γράφτηκε αντίγραφο. Η τεχνική αιτία μένει στο Ιστορικό.
+  static const String _copyFailedMessage =
+      'Το αντίγραφο δεν δημιουργήθηκε. Ελέγξτε ότι ο φάκελος προορισμού είναι '
+      'διαθέσιμος και ότι ο δίσκος έχει ελεύθερο χώρο, και δοκιμάστε ξανά.';
+
+  static String _withTechnicalDetail(String message, Object error) =>
+      '$message Τεχνικές λεπτομέρειες: $error';
+
+  /// Παίρνει αντίγραφο, εκτός αν τρέχει ήδη άλλο — τότε επιστρέφει
+  /// [DatabaseBackupResult.alreadyRunning] χωρίς καταγραφή στο Ιστορικό, γιατί
+  /// δεν έγινε τίποτα.
   static Future<DatabaseBackupResult> runBackup(
     DatabaseBackupSettings settings, {
     bool requireDestination = true,
     BackupAuditTrigger auditTrigger = BackupAuditTrigger.manual,
+  }) async =>
+      await BackupRunGate.tryRun(
+        () => _runBackup(
+          settings,
+          requireDestination: requireDestination,
+          auditTrigger: auditTrigger,
+        ),
+      ) ??
+      DatabaseBackupResult.alreadyRunning;
+
+  static Future<DatabaseBackupResult> _runBackup(
+    DatabaseBackupSettings settings, {
+    required bool requireDestination,
+    required BackupAuditTrigger auditTrigger,
   }) async {
     Future<void> auditFailure(String message, {String? outputPath}) =>
         DatabaseBackupAudit.logRunResult(
@@ -186,6 +229,20 @@ class DatabaseBackupService {
     DatabaseBackupSettings settings, {
     bool requireDestination = true,
     BackupAuditTrigger auditTrigger = BackupAuditTrigger.manual,
+  }) async =>
+      await BackupRunGate.tryRun(
+        () => _runBackupCreatingFolderIfNeeded(
+          settings,
+          requireDestination: requireDestination,
+          auditTrigger: auditTrigger,
+        ),
+      ) ??
+      DatabaseBackupResult.alreadyRunning;
+
+  static Future<DatabaseBackupResult> _runBackupCreatingFolderIfNeeded(
+    DatabaseBackupSettings settings, {
+    required bool requireDestination,
+    required BackupAuditTrigger auditTrigger,
   }) async {
     // Το ημερολόγιο κρατά το μήνυμα, που ήδη λέει τι απέτυχε· ο κωδικός
     // αποτυχίας ταξιδεύει στο αποτέλεσμα, για τον καλούντα.
@@ -257,13 +314,61 @@ class DatabaseBackupService {
   /// 3. **απόφαση πλήρες/γρήγορο** από το αποτύπωμα των φορητών,
   /// 4. **συμπίεση** μαζί με τα φορητά, όταν το αντίγραφο βγαίνει πλήρες,
   /// 5. **επαλήθευση** — και σήμανση του αρχείου αν δεν περάσει,
-  /// 6. **εκκαθάριση** παλαιών αντιγράφων,
-  /// 7. **μήνυμα** από ό,τι πράγματι έγινε.
+  /// 6. **κανονικό όνομα**, μόνο αν το αρχείο πέρασε τον έλεγχο,
+  /// 7. **εκκαθάριση** παλαιών αντιγράφων,
+  /// 8. **μήνυμα** από ό,τι πράγματι έγινε.
+  ///
+  /// Τα βήματα 2–5 γίνονται σε [BackupWorkFolder]: ό,τι αποτύχει εκεί δεν
+  /// φαίνεται στον φάκελο αντιγράφων και δεν σβήνει προηγούμενο αρχείο.
   ///
   /// Η **επαλήθευση πριν από την εκκαθάριση** δεν είναι προτίμηση ύφους: ένα
   /// χαλασμένο αντίγραφο που μετρά ως έγκυρο σπρώχνει παλαιότερα υγιή έξω από
   /// τα όρια διατήρησης, και η ζημιά γίνεται διπλή.
   static Future<DatabaseBackupResult> _executeBackup({
+    required DatabaseBackupSettings settings,
+    required String dest,
+    required BackupAuditTrigger auditTrigger,
+    required Database db,
+    required String baseName,
+  }) async {
+    await BackupWorkFolder.removeAbandoned(dest);
+
+    final BackupWorkFolder work;
+    try {
+      work = await BackupWorkFolder.create(dest);
+    } catch (e) {
+      await DatabaseBackupAudit.logRunResult(
+        trigger: auditTrigger,
+        success: false,
+        message: _withTechnicalDetail(_copyFailedMessage, e),
+        destination: dest,
+      );
+      return const DatabaseBackupResult(
+        success: false,
+        message: _copyFailedMessage,
+      );
+    }
+
+    DatabaseBackupResult? result;
+    try {
+      result = await _buildAndPublish(
+        work: work,
+        settings: settings,
+        dest: dest,
+        auditTrigger: auditTrigger,
+        db: db,
+        baseName: baseName,
+      );
+      return result;
+    } finally {
+      // Το αποτέλεσμα μπορεί να δείχνει αρχείο που δεν βγήκε από τον φάκελο,
+      // και τότε ο φάκελος μένει για να μη χαθεί αυτό που έχει υποσχεθεί.
+      if (!work.holds(result?.outputPath)) await work.dispose();
+    }
+  }
+
+  static Future<DatabaseBackupResult> _buildAndPublish({
+    required BackupWorkFolder work,
     required DatabaseBackupSettings settings,
     required String dest,
     required BackupAuditTrigger auditTrigger,
@@ -286,33 +391,19 @@ class DatabaseBackupService {
       namingFormat: settings.namingFormat,
       now: DateTime.now(),
     );
-    final outDbFile = File(paths.databasePath);
+    final workDbPath = work.pathFor(paths.databasePath);
 
     // ── 2. Αντιγραφή της βάσης ──────────────────────────────────────────
-    try {
-      if (await outDbFile.exists()) {
-        await outDbFile.delete();
-      }
-    } catch (e) {
-      final message = 'Δεν ήταν δυνατή η διαγραφή υπάρχοντος αρχείου: $e';
-      await auditFailure(message);
-      return DatabaseBackupResult(success: false, message: message);
-    }
-
     DatabaseSnapshotStats? snapshotStats;
     try {
-      snapshotStats = await DatabaseBackupRepository(
-        db,
-      ).vacuumInto(_sqlitePathLiteral(paths.databasePath));
+      snapshotStats = await DatabaseBackupRepository(db)
+          .vacuumInto(_sqlitePathLiteral(workDbPath));
     } catch (e) {
-      try {
-        if (await outDbFile.exists()) await outDbFile.delete();
-      } catch (_) {
-        // Το μισογραμμένο αρχείο δεν εμποδίζει την αναφορά της αποτυχίας.
-      }
-      final message = 'Το VACUUM INTO απέτυχε: $e';
-      await auditFailure(message);
-      return DatabaseBackupResult(success: false, message: message);
+      await auditFailure(_withTechnicalDetail(_copyFailedMessage, e));
+      return const DatabaseBackupResult(
+        success: false,
+        message: _copyFailedMessage,
+      );
     }
 
     // ── 3. Πλήρες ή γρήγορο; ────────────────────────────────────────────
@@ -337,60 +428,80 @@ class DatabaseBackupService {
     }
 
     // ── 4. Συμπίεση με τα φορητά ────────────────────────────────────────
-    var finalPath = paths.databasePath;
+    final finalPath = isFull ? paths.archivePath : paths.databasePath;
+    final workFinalPath = work.pathFor(finalPath);
     var includedParts = const <String>[];
     final missingParts = <String>[];
 
     if (isFull) {
       try {
         final bundle = await writeFullBackupArchive(
-          archivePath: paths.archivePath,
-          databaseFilePath: paths.databasePath,
+          archivePath: workFinalPath,
+          databaseFilePath: workDbPath,
           sourceDatabasePath: db.path,
           settings: settings,
           availability: portableAvailability,
         );
         includedParts = bundle.includedParts;
         missingParts.addAll(bundle.missingParts);
-
-        try {
-          await outDbFile.delete();
-        } catch (_) {
-          // Το ενδιάμεσο .db δίπλα στο .zip είναι ακαταστασία, όχι βλάβη.
-        }
-        finalPath = paths.archivePath;
       } catch (e) {
-        // Το ενδιάμεσο `.db` **δεν** σβήνεται: είναι πλήρες αντίγραφο της
-        // βάσης και ο χειριστής πρέπει να ξέρει ότι το έχει.
-        final message = 'Η συμπίεση zip (βάση + φορητά αρχεία) απέτυχε: $e';
-        await auditFailure(message, outputPath: paths.databasePath);
+        // Το ενδιάμεσο `.db` **δεν** χάνεται: είναι πλήρες αντίγραφο της
+        // βάσης και ο χειριστής πρέπει να ξέρει ότι το έχει. Το μισό `.zip`
+        // μένει στον προσωρινό φάκελο και σβήνεται μαζί του.
+        var keptDbPath = paths.databasePath;
+        try {
+          await work.publish(paths.databasePath);
+        } catch (_) {
+          keptDbPath = workDbPath;
+        }
+        final message =
+            'Το πλήρες αντίγραφο δεν ολοκληρώθηκε, αλλά η βάση φυλάχτηκε στο '
+            'αρχείο «$keptDbPath». Ελέγξτε ότι ο δίσκος έχει ελεύθερο χώρο.';
+        await auditFailure(
+          _withTechnicalDetail(message, e),
+          outputPath: keptDbPath,
+        );
         return DatabaseBackupResult(
           success: false,
           message: message,
-          outputPath: paths.databasePath,
+          outputPath: keptDbPath,
         );
       }
     }
 
     // ── 5. Επαλήθευση ───────────────────────────────────────────────────
-    final verification = await verifyBackupArtifact(finalPath);
+    final verification = await verifyBackupArtifact(workFinalPath);
     if (verification.isBroken) {
-      final markedPath = await markBackupArtifactAsBroken(finalPath);
+      final markedPath = await markBackupArtifactAsBroken(
+        workFinalPath,
+        intoDirectory: dest,
+      );
       final message = buildBrokenBackupMessage(
         reason: verification.message,
         wasMarked: markedPath != null,
         rawDetail: verification.rawDetail,
       );
-      await auditFailure(message, outputPath: markedPath ?? finalPath);
+      await auditFailure(message, outputPath: markedPath ?? workFinalPath);
       return DatabaseBackupResult(
         success: false,
         message: message,
-        outputPath: markedPath ?? finalPath,
+        outputPath: markedPath ?? workFinalPath,
         brokenArtifactPath: markedPath,
       );
     }
 
-    // ── 6. Εκκαθάριση παλαιών ───────────────────────────────────────────
+    // ── 6. Κανονικό όνομα ───────────────────────────────────────────────
+    try {
+      await work.publish(finalPath);
+    } catch (e) {
+      await auditFailure(_withTechnicalDetail(_copyFailedMessage, e));
+      return const DatabaseBackupResult(
+        success: false,
+        message: _copyFailedMessage,
+      );
+    }
+
+    // ── 7. Εκκαθάριση παλαιών ───────────────────────────────────────────
     try {
       await BackupRetention.apply(
         destDir: Directory(dest),
@@ -404,7 +515,7 @@ class DatabaseBackupService {
       missingParts.add('εκκαθάριση παλαιών αντιγράφων ($e)');
     }
 
-    // ── 7. Μήνυμα ───────────────────────────────────────────────────────
+    // ── 8. Μήνυμα ───────────────────────────────────────────────────────
     final message = buildBackupCompletionMessage(
       isFull: isFull,
       wantsBundle: wantBundle,

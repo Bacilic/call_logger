@@ -333,6 +333,26 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 74 && newVersion >= 74) {
     await migrateDatabaseToV74(db);
   }
+  if (oldVersion < 75 && newVersion >= 75) {
+    await migrateDatabaseToV75(db);
+  }
+}
+
+/// v75: το πρόθεμα των θυρών ενός switch στο πρότυπο Cisco (Fa, Gi, Te).
+///
+/// Μία στήλη στον πίνακα των αντικειμένων του χάρτη· κενό = Gi. Παλαιότερη
+/// έκδοση της εφαρμογής αγνοεί ό,τι δεν ξέρει.
+///
+/// Idempotent: η στήλη μπαίνει μόνο αν λείπει.
+Future<void> migrateDatabaseToV75(Database db) async {
+  await migrateDatabaseToV74(db);
+  final info = await db.rawQuery('PRAGMA table_info(building_map_objects)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('port_type')) {
+    await db.execute(
+      'ALTER TABLE building_map_objects ADD COLUMN port_type TEXT',
+    );
+  }
 }
 
 /// v74: το δίκτυο του νέου χάρτη — όλη η Φάση 3 σε μία αναβάθμιση.

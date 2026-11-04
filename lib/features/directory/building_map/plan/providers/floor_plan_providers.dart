@@ -56,6 +56,8 @@ class FloorPlanFloorItems {
     required this.catalog,
     this.ports = const [],
     this.occupiedPortIds = const {},
+    this.portLinks = const [],
+    this.cableLines = const [],
   });
 
   final List<FloorPlanObject> objects;
@@ -66,6 +68,12 @@ class FloorPlanFloorItems {
   /// Οι θύρες των αντικειμένων, και ποιες έχουν καλώδιο.
   final List<FloorPlanPort> ports;
   final Set<int> occupiedPortIds;
+
+  /// Οι συνδέσεις πρίζας — patch panel που αγγίζουν τον όροφο.
+  final List<FloorPlanPortLink> portLinks;
+
+  /// Τα καλώδια που αγγίζουν τον όροφο.
+  final List<FloorPlanCableLine> cableLines;
 
   /// Όλα έτοιμα για σχεδίαση: τα έπιπλα πρώτα, οι θέσεις τελευταίες.
   List<FloorPlanObjectView> get views => [
@@ -87,6 +95,8 @@ final floorPlanFloorItemsProvider =
         occupiedPortIds: await portsRepo.occupiedPortIds([
           for (final p in ports) p.id,
         ]),
+        portLinks: await portsRepo.linksForFloor(floorId),
+        cableLines: await portsRepo.cableLinesForFloor(floorId),
         objects: await repo.listObjects(floorId),
         kinds: await repo.kinds(),
         placements: await placements.listPlacements(floorId),

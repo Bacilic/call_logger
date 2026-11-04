@@ -8,7 +8,6 @@ import '../../providers/department_directory_provider.dart';
 import '../building_map_label_layout.dart';
 import '../controllers/building_map_controller.dart';
 import '../providers/building_map_providers.dart';
-import '../plan/services/floor_plan_export.dart';
 import '../services/building_map_sheet_export.dart';
 import 'building_map_floor_departments_dialog.dart';
 import '../services/building_map_floor_ordering.dart';
@@ -210,26 +209,18 @@ class BuildingMapEditToolbar extends ConsumerWidget {
             floorTitle: currentFloorLabel,
           ),
           const Spacer(),
-          IconButton(
-            tooltip: 'Εξαγωγή χάρτη (PNG ή JPG)',
-            onPressed: sheetId == null || !(hasActiveCanvas || isNewMapFloor)
-                ? null
-                : () async {
-                    if (isNewMapFloor) {
-                      await exportFloorPlanToImageFile(
-                        context: context,
-                        floorId: sheetId,
-                        defaultFloorBaseName: currentFloorLabel ?? 'Όροφος',
-                      );
-                      return;
-                    }
-                    await exportBuildingMapSheetToImageFile(
+          // Ο νέος χάρτης έχει το κουμπί πάνω στον καμβά του, για όλους.
+          if (!isNewMapFloor)
+            IconButton(
+              tooltip: 'Εξαγωγή χάρτη (PNG ή JPG)',
+              onPressed: sheetId == null || !hasActiveCanvas
+                  ? null
+                  : () => exportBuildingMapSheetToImageFile(
                       context: context,
                       defaultFloorBaseName: currentFloorLabel ?? 'Όροφος',
-                    );
-                  },
-            icon: const Icon(Icons.download_outlined),
-          ),
+                    ),
+              icon: const Icon(Icons.download_outlined),
+            ),
         ],
       ),
     );

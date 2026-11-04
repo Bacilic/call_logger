@@ -14,8 +14,10 @@ import 'package:call_logger/core/models/floor_plan_element.dart';
 import 'package:call_logger/core/models/floor_plan_object.dart';
 import 'package:call_logger/core/models/floor_plan_object_kind.dart';
 import 'package:call_logger/core/models/floor_plan_placement.dart';
+import 'package:call_logger/core/models/floor_plan_port.dart';
 import 'package:flutter/painting.dart' show Size;
 import 'package:call_logger/features/directory/building_map/plan/floor_plan_editor_controller.dart';
+import 'package:call_logger/features/directory/building_map/plan/floor_plan_ports.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -837,6 +839,487 @@ void main() {
 
       await editor.setPortCount(sw.id, 2);
       expect(await db.query('building_map_cable_ends'), isEmpty);
+    });
+  });
+
+  group('Stack και άλλος όροφος', () {
+    late FloorPlanObjectsRepository objects;
+    late FloorPlanPortsRepository ports;
+    late FloorPlanEditorController editor;
+    late int switchKind;
+    late int outletKind;
+    late int panelKind;
+
+    setUp(() async {
+      await migrateDatabaseToV75(db);
+      objects = FloorPlanObjectsRepository(db);
+      ports = FloorPlanPortsRepository(db);
+      Future<int> kind(String name, FloorPlanSymbol symbol) async {
+        await objects.addKind(name: name, symbol: symbol, hasPorts: true);
+        return (await objects.kinds()).values
+            .firstWhere((k) => k.name == name)
+            .id;
+      }
+
+      switchKind = await kind('Switch', FloorPlanSymbol.networkSwitch);
+      outletKind = await kind('Πρίζα', FloorPlanSymbol.outlet);
+      panelKind = await kind('Patch', FloorPlanSymbol.patchPanel);
+      editor = FloorPlanEditorController(
+        floorId: 1,
+        repository: repo,
+        objectsRepository: objects,
+        portsRepository: ports,
+        onError: errors.add,
+      );
+      await editor.load();
+    });
+
+    tearDown(() => editor.dispose());
+
+    Future<int> aSwitch(String name) async {
+      final sw = await editor.addObject(switchKind, Offset.zero);
+      await editor.updateObjectDetails(sw!.id, name: name);
+      await editor.setPortCount(sw.id, 4);
+      return sw.id;
+    }
+
+    test(
+      'ένωση σε stack: οι θύρες του δεύτερου παίρνουν το όνομα και το μέλος, '
+      'και η αναίρεση τα γυρίζει',
+      () async {
+        final a = await aSwitch('SW-2');
+        final b = await aSwitch('SW-3');
+
+        await editor.joinStack(b, a);
+        final port = editor.portsOf(b).firstWhere((p) => p.number == 3);
+        expect(editor.portName(port), 'SW-2 Gi2/0/3');
+
+        await editor.undo();
+        expect(editor.portName(port), 'SW-3 Gi1/0/3');
+      },
+    );
+
+    test(
+      'το πρόθεμα γράφεται στη βάση και αλλάζει το όνομα, το Gi όχι',
+      () async {
+        final a = await aSwitch('SW-2');
+        final port = editor.portsOf(a).first;
+
+        await editor.updateObjectDetails(a, name: 'SW-2', portType: 'Te');
+        expect(editor.portName(port), 'SW-2 Te1/0/1');
+
+        await editor.updateObjectDetails(a, name: 'SW-2', portType: 'Gi');
+        expect(editor.objectById(a)!.portType, isNull);
+      },
+    );
+
+    test('το καλώδιο δείχνει το όνομα Cisco και από την άλλη άκρη', () async {
+      final a = await aSwitch('SW-2');
+      final b = await aSwitch('SW-3');
+      await editor.joinStack(b, a);
+      final from = editor.portsOf(a).first.id;
+      final to = editor.portsOf(b).last.id;
+
+      await editor.addCable(from, to);
+
+      final other = editor.portCables.otherEnd(from, kFloorPlanCableFront)!;
+      expect(floorPlanCableEndName(other), 'SW-2 Gi2/0/4');
+    });
+
+    test(
+      'πρίζα δεμένη σε patch panel άλλου ορόφου: η διαδρομή το ξέρει',
+      () async {
+        final panel = await editor.addObject(panelKind, Offset.zero);
+        await editor.setPortCount(panel!.id, 2);
+        final patch = editor.portsOf(panel.id).first.id;
+        final basement = FloorPlanEditorController(
+          floorId: 2,
+          repository: repo,
+          objectsRepository: objects,
+          portsRepository: ports,
+          onError: errors.add,
+        );
+        addTearDown(basement.dispose);
+        await basement.load();
+        final outlet = await basement.addObject(outletKind, Offset.zero);
+        await basement.saveOutlet(outlet!.id, [
+          FloorPlanOutletPortDraft(number: 1, patchPortId: patch),
+          const FloorPlanOutletPortDraft(number: 2),
+        ]);
+
+        expect(basement.portLinks.single.panelFloorId, 1);
+        expect(basement.portLinks.single.outletFloorId, 2);
+      },
+    );
+  });
+
+  group('Καλώδια', () {
+    late FloorPlanObjectsRepository objects;
+    late FloorPlanPortsRepository ports;
+    late FloorPlanEditorController editor;
+    late int switchKind;
+    late int printerKind;
+
+    setUp(() async {
+      await migrateDatabaseToV74(db);
+      objects = FloorPlanObjectsRepository(db);
+      ports = FloorPlanPortsRepository(db);
+      Future<int> kind(String name, FloorPlanSymbol symbol) async {
+        await objects.addKind(name: name, symbol: symbol, hasPorts: true);
+        return (await objects.kinds()).values
+            .firstWhere((k) => k.name == name)
+            .id;
+      }
+
+      switchKind = await kind('Switch', FloorPlanSymbol.networkSwitch);
+      printerKind = await kind('Εκτυπωτής', FloorPlanSymbol.printer);
+      editor = FloorPlanEditorController(
+        floorId: 1,
+        repository: repo,
+        objectsRepository: objects,
+        portsRepository: ports,
+        onError: errors.add,
+      );
+      await editor.load();
+    });
+
+    tearDown(() => editor.dispose());
+
+    Future<int> aSwitch(int count) async {
+      final sw = await editor.addObject(switchKind, Offset.zero);
+      await editor.setPortCount(sw!.id, count);
+      return sw.id;
+    }
+
+    int portOf(int objectId, int number) =>
+        editor.portsOf(objectId).firstWhere((p) => p.number == number).id;
+
+    test(
+      'καλώδιο: οι δύο θύρες πιάνονται, η αναίρεση τις ελευθερώνει',
+      () async {
+        final a = await aSwitch(4);
+        final b = await aSwitch(4);
+        final from = portOf(a, 1);
+        final to = portOf(b, 2);
+
+        expect(await editor.addCable(from, to), isTrue);
+        expect(editor.occupiedPortIds, {from, to});
+
+        await editor.undo();
+        expect(editor.occupiedPortIds, isEmpty);
+        expect(await db.query('building_map_cables'), isEmpty);
+
+        await editor.redo();
+        expect(editor.occupiedPortIds, {from, to});
+      },
+    );
+
+    test(
+      'πιασμένη θύρα αρνείται, με μήνυμα, και δεν γράφεται τίποτα',
+      () async {
+        final a = await aSwitch(2);
+        final b = await aSwitch(2);
+        await editor.addCable(portOf(a, 1), portOf(b, 1));
+
+        expect(await editor.addCable(portOf(a, 2), portOf(b, 1)), isFalse);
+
+        expect(errors.single, contains('έχει ήδη καλώδιο'));
+        expect(await db.query('building_map_cables'), hasLength(1));
+      },
+    );
+
+    test('αφαίρεση καλωδίου: και αναιρείται', () async {
+      final a = await aSwitch(2);
+      final b = await aSwitch(2);
+      final from = portOf(a, 1);
+      await editor.addCable(from, portOf(b, 1));
+      final cable = editor.portCables.cableIdAt(from, kFloorPlanCableFront)!;
+
+      await editor.removeCable(cable);
+      expect(editor.occupiedPortIds, isEmpty);
+
+      await editor.undo();
+      expect(editor.occupiedPortIds, hasLength(2));
+    });
+
+    test('νέο αντικείμενο με «έχει θύρες» γεννιέται με μία θύρα', () async {
+      final printer = await editor.addObject(printerKind, Offset.zero);
+      expect(editor.portsOf(printer!.id), hasLength(1));
+    });
+
+    test('παλιό αντικείμενο χωρίς θύρα: την αποκτά με το καλώδιο, και η '
+        'αναίρεση τα παίρνει και τα δύο', () async {
+      final a = await aSwitch(2);
+      final old = await objects.insertObject(
+        FloorPlanObject(
+          id: 0,
+          floorId: 1,
+          kindId: printerKind,
+          center: const Offset(5, 5),
+        ),
+      );
+      await editor.load();
+      expect(editor.portsOf(old), isEmpty);
+
+      expect(await editor.addCableToObject(portOf(a, 1), old), isTrue);
+      expect(editor.portsOf(old), hasLength(1));
+      expect(editor.occupiedPortIds, contains(editor.portsOf(old).single.id));
+
+      await editor.undo();
+      expect(editor.portsOf(old), isEmpty);
+      expect(await db.query('building_map_cables'), isEmpty);
+    });
+
+    test('σβησμένο switch: η αναίρεση φέρνει πίσω και το καλώδιο', () async {
+      final a = await aSwitch(2);
+      final b = await aSwitch(2);
+      await editor.addCable(portOf(a, 1), portOf(b, 1));
+
+      await editor.deleteObjects({a});
+      expect(await db.query('building_map_cables'), isEmpty);
+
+      await editor.undo();
+      expect(await db.query('building_map_cables'), hasLength(1));
+      expect(editor.occupiedPortIds, hasLength(2));
+    });
+  });
+
+  group('Πρίζες', () {
+    late FloorPlanObjectsRepository objects;
+    late FloorPlanPortsRepository ports;
+    late FloorPlanEditorController editor;
+    late int outletKind;
+    late int panelKind;
+    late int cabinetKind;
+
+    setUp(() async {
+      await migrateDatabaseToV74(db);
+      objects = FloorPlanObjectsRepository(db);
+      ports = FloorPlanPortsRepository(db);
+      Future<int> kind(String name, FloorPlanSymbol symbol) async {
+        await objects.addKind(name: name, symbol: symbol, hasPorts: true);
+        return (await objects.kinds()).values
+            .firstWhere((k) => k.name == name)
+            .id;
+      }
+
+      outletKind = await kind('Πρίζα', FloorPlanSymbol.outlet);
+      panelKind = await kind('Patch', FloorPlanSymbol.patchPanel);
+      cabinetKind = await kind('Καμπίνα', FloorPlanSymbol.cabinet);
+      editor = FloorPlanEditorController(
+        floorId: 1,
+        repository: repo,
+        objectsRepository: objects,
+        portsRepository: ports,
+        onError: errors.add,
+      );
+      await editor.load();
+    });
+
+    tearDown(() => editor.dispose());
+
+    /// Patch panel «F» στην καμπίνα «RC6», με 24 θύρες.
+    Future<int> panelF() async {
+      final cabinet = await editor.addObject(
+        cabinetKind,
+        const Offset(500, 500),
+        size: const Size(60, 60),
+      );
+      await editor.updateObjectDetails(cabinet!.id, name: 'RC6');
+      final panel = await editor.addToCabinet(cabinet.id, panelKind);
+      await editor.updateObjectDetails(panel!.id, name: 'F');
+      await editor.setPortCount(panel.id, 24);
+      return panel.id;
+    }
+
+    int portOf(int objectId, int number) =>
+        editor.portsOf(objectId).firstWhere((p) => p.number == number).id;
+
+    test('νέα πρίζα: δύο θύρες, μία αναίρεση τα παίρνει όλα', () async {
+      final outlet = await editor.addObject(outletKind, Offset.zero);
+      expect([for (final p in editor.portsOf(outlet!.id)) p.number], [1, 2]);
+
+      await editor.undo();
+      expect(editor.objects, isEmpty);
+      expect(await ports.listForFloor(1), isEmpty);
+    });
+
+    test(
+      'κουμπώνει σε τοίχο κοντά της, αλλιώς μένει εκεί που αφέθηκε',
+      () async {
+        await editor.addWall(Offset.zero, const Offset(1000, 0));
+
+        final near = await editor.addObject(outletKind, const Offset(300, 40));
+        expect(near!.center, const Offset(300, 0));
+
+        final far = await editor.addObject(outletKind, const Offset(300, 400));
+        expect(far!.center, const Offset(300, 400));
+      },
+    );
+
+    test('σύρσιμο κοντά σε τοίχο: κουμπώνει όταν αφεθεί', () async {
+      await editor.addWall(Offset.zero, const Offset(1000, 0));
+      final outlet = await editor.addObject(outletKind, const Offset(300, 400));
+
+      editor.setTool(FloorPlanTool.select);
+      editor.selectObject(outlet!.id);
+      editor.previewMove(const Offset(0, -350));
+      await editor.commitPreview(dropIntoCabinets: true);
+
+      expect(editor.objectById(outlet.id)!.center, const Offset(300, 0));
+    });
+
+    test(
+      'δένεται με patch panel: όνομα «RC6.F17», και η θύρα 17 πιάνεται',
+      () async {
+        final panel = await panelF();
+        final outlet = await editor.addObject(outletKind, Offset.zero);
+        final patch = portOf(panel, 17);
+
+        await editor.saveOutlet(outlet!.id, [
+          FloorPlanOutletPortDraft(number: 1, patchPortId: patch),
+          const FloorPlanOutletPortDraft(number: 2),
+        ]);
+
+        expect(floorPlanLinkName(editor.portLinks.single), 'RC6.F17');
+        expect(editor.occupiedPortIds, contains(patch));
+        expect(editor.occupiedPortIds, contains(portOf(outlet.id, 1)));
+        expect(editor.occupiedPortIds, isNot(contains(portOf(outlet.id, 2))));
+      },
+    );
+
+    test('όλη η αποθήκευση του πλαισίου είναι μία αναίρεση', () async {
+      final panel = await panelF();
+      final outlet = await editor.addObject(outletKind, Offset.zero);
+
+      await editor.saveOutlet(outlet!.id, [
+        FloorPlanOutletPortDraft(
+          number: 1,
+          writtenName: 'Κάμερα 7',
+          patchPortId: portOf(panel, 17),
+          connection: FloorPlanPortConnection.freeText('αναλυτής'),
+        ),
+      ]);
+      expect(editor.portsOf(outlet.id), hasLength(1));
+
+      await editor.undo();
+
+      expect(editor.portsOf(outlet.id), hasLength(2));
+      expect(editor.portLinks, isEmpty);
+      final first = editor.portsOf(outlet.id).first;
+      expect(first.writtenName, isNull);
+      expect(first.connection.isEmpty, isTrue);
+
+      await editor.redo();
+      expect(editor.portsOf(outlet.id).single.connectedText, 'αναλυτής');
+      expect(editor.portLinks, hasLength(1));
+    });
+
+    test('σβησμένη πρίζα: η αναίρεση τη φέρνει πίσω δεμένη', () async {
+      final panel = await panelF();
+      final outlet = await editor.addObject(outletKind, Offset.zero);
+      await editor.saveOutlet(outlet!.id, [
+        FloorPlanOutletPortDraft(number: 1, patchPortId: portOf(panel, 17)),
+        const FloorPlanOutletPortDraft(number: 2),
+      ]);
+
+      await editor.deleteObjects({outlet.id});
+      expect(editor.portLinks, isEmpty);
+      expect(await db.query('building_map_cables'), isEmpty);
+      expect(await db.query('building_map_cable_ends'), isEmpty);
+
+      await editor.undo();
+      expect(floorPlanLinkName(editor.portLinks.single), 'RC6.F17');
+
+      await editor.redo();
+      expect(editor.portLinks, isEmpty);
+    });
+
+    test('σβησμένο patch panel: η πρίζα μένει χωρίς σύνδεση, η αναίρεση την '
+        'ξαναδένει', () async {
+      final panel = await panelF();
+      final outlet = await editor.addObject(outletKind, Offset.zero);
+      await editor.saveOutlet(outlet!.id, [
+        FloorPlanOutletPortDraft(number: 1, patchPortId: portOf(panel, 3)),
+        const FloorPlanOutletPortDraft(number: 2),
+      ]);
+
+      await editor.deleteObjects({panel});
+      expect(editor.portLinks, isEmpty);
+      expect(editor.portsOf(outlet.id), hasLength(2));
+
+      await editor.undo();
+      expect(editor.portLinks, hasLength(1));
+    });
+
+    test('από τη δεύτερη πρίζα η πιασμένη θύρα αρνείται, με μήνυμα', () async {
+      final panel = await panelF();
+      final first = await editor.addObject(outletKind, Offset.zero);
+      final second = await editor.addObject(outletKind, const Offset(9, 9));
+      final patch = portOf(panel, 5);
+      await editor.saveOutlet(first!.id, [
+        FloorPlanOutletPortDraft(number: 1, patchPortId: patch),
+        const FloorPlanOutletPortDraft(number: 2),
+      ]);
+
+      await editor.saveOutlet(second!.id, [
+        FloorPlanOutletPortDraft(number: 1, patchPortId: patch),
+        const FloorPlanOutletPortDraft(number: 2),
+      ]);
+
+      expect(errors.single, contains('πιάστηκε'));
+      expect(editor.portLinks.single.outletPortId, portOf(first.id, 1));
+    });
+
+    test('patch panel σε άλλον όροφο: η πρίζα παίρνει κανονικά το όνομά του, '
+        'και ο άλλος όροφος βλέπει τη συσκευή', () async {
+      final panel = await panelF();
+      final patch = portOf(panel, 17);
+      final otherFloor = FloorPlanEditorController(
+        floorId: 2,
+        repository: repo,
+        objectsRepository: objects,
+        portsRepository: ports,
+        onError: errors.add,
+      );
+      addTearDown(otherFloor.dispose);
+      await otherFloor.load();
+      final outlet = await otherFloor.addObject(outletKind, Offset.zero);
+
+      final options = await otherFloor.patchPortOptions();
+      expect(options.map((o) => o.portId), contains(patch));
+
+      await otherFloor.saveOutlet(outlet!.id, [
+        FloorPlanOutletPortDraft(
+          number: 1,
+          patchPortId: patch,
+          connection: FloorPlanPortConnection.freeText('αναλυτής'),
+        ),
+        const FloorPlanOutletPortDraft(number: 2),
+      ]);
+
+      expect(floorPlanLinkName(otherFloor.portLinks.single), 'RC6.F17');
+      await editor.load();
+      expect(editor.occupiedPortIds, contains(patch));
+      expect(editor.portLinks.single.connection.text, 'αναλυτής');
+    });
+
+    test('η επικόλληση πρίζας δεν αντιγράφει τη σύνδεση', () async {
+      final panel = await panelF();
+      final outlet = await editor.addObject(outletKind, Offset.zero);
+      await editor.saveOutlet(outlet!.id, [
+        FloorPlanOutletPortDraft(number: 1, patchPortId: portOf(panel, 1)),
+        const FloorPlanOutletPortDraft(number: 2),
+      ]);
+      editor.setTool(FloorPlanTool.select);
+      editor.selectObject(outlet.id);
+      editor.copySelected();
+
+      await editor.paste();
+
+      expect(editor.portLinks, hasLength(1));
+      final copy = editor.selectedObjectIds.single;
+      expect(editor.portsOf(copy), hasLength(2));
     });
   });
 }

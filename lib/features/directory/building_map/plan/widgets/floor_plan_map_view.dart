@@ -24,7 +24,9 @@ import '../floor_plan_ports.dart';
 import 'floor_plan_cabinet_panel.dart';
 import 'floor_plan_cabinet_window.dart';
 import 'floor_plan_port_facade.dart';
+import 'floor_plan_other_floor_badge.dart';
 import 'floor_plan_room_views.dart';
+import 'floor_plan_route_painter.dart';
 
 /// Ο σχεδιασμένος χάρτης ενός ενεργοποιημένου ορόφου, **μόνο για προβολή**:
 /// χώροι με τα ονόματά τους, τοίχοι, κείμενα, διαστάσεις, αντικείμενα.
@@ -54,7 +56,23 @@ class FloorPlanMapView extends StatefulWidget {
     this.infoSources,
     this.onOpenCard,
     this.focusItems = const {},
+    this.onOpenOtherFloor,
+    this.focusOpening,
+    this.focusRoomId,
+    this.snapshotKey,
   });
+
+  /// Από εδώ βγαίνει το στιγμιότυπο: μόνο ο χάρτης, χωρίς υποδείξεις και πάνελ.
+  final GlobalKey? snapshotKey;
+
+  /// Ο χώρος που βρήκε η αναζήτηση: φωτίζεται και η προβολή κεντράρει εκεί.
+  final int? focusRoomId;
+
+  /// Μαζί με τη μετάβαση ανοίγουν και τα στοιχεία του συμβόλου.
+  final FloorPlanFocusOpening? focusOpening;
+
+  /// Κλικ στο σήμα διαδρομής προς άλλον όροφο.
+  final void Function(FloorPlanOtherFloorTarget target)? onOpenOtherFloor;
 
   final List<FloorPlanElement> elements;
 
@@ -91,7 +109,53 @@ class FloorPlanMapView extends StatefulWidget {
   State<FloorPlanMapView> createState() => _FloorPlanMapViewState();
 }
 
+/// Τι ανοίγει η αναζήτηση όταν πάει σε ένα σύμβολο: τα στοιχεία του, και στην
+/// πρόσοψη τη συσκευή [deviceId] με τη θύρα [portId] σημειωμένη. Κάθε [token]
+/// ανοίγει μία φορά, ώστε ό,τι έκλεισε ο χρήστης να μένει κλειστό.
+class FloorPlanFocusOpening {
+  const FloorPlanFocusOpening({
+    required this.token,
+    required this.itemId,
+    this.deviceId,
+    this.portId,
+  });
+
+  final Object token;
+  final int itemId;
+  final int? deviceId;
+  final int? portId;
+}
+
 class _FloorPlanMapViewState extends State<FloorPlanMapView> {
+  /// Το τελευταίο άνοιγμα που εφαρμόστηκε.
+  Object? _openedToken;
+
+  /// Η συσκευή και η θύρα που έδειξε η αναζήτηση· σβήνουν με το επόμενο κλικ.
+  int? _revealDeviceId;
+  int? _revealPortId;
+
+  /// Περιμένει και τα αντικείμενα να φορτώσουν: η μετάβαση σε άλλον όροφο
+  /// φτάνει πριν από αυτά.
+  void _applyFocusOpening() {
+    final opening = widget.focusOpening;
+    if (opening == null || identical(opening.token, _openedToken)) return;
+    for (final v in widget.objects) {
+      if (v.source == FloorPlanItemSource.object && v.id == opening.itemId) {
+        _openedToken = opening.token;
+        _details = v;
+        _revealDeviceId = opening.deviceId;
+        _revealPortId = opening.portId;
+        return;
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _applyFocusOpening();
+  }
+
   FloorPlanViewTransform? _view;
   Size _size = Size.zero;
   Offset? _lastPan;
@@ -133,12 +197,11 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
     FloorPlanObject object,
     FloorPlanPort port,
   ) {
-    final cabinetId = object.cabinetId;
-    return floorPlanPortAutoName(
+    return floorPlanObjectPortName(
+      object: object,
+      port: port,
       symbol: sources.kinds[object.kindId]?.symbol,
-      objectName: object.name,
-      cabinetName: cabinetId == null ? null : sources.objects[cabinetId]?.name,
-      number: port.number,
+      objects: sources.objects,
     );
   }
 
@@ -161,6 +224,53 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
       ]..sort((a, b) => a.number.compareTo(b.number)),
       occupied: sources.occupiedPortIds,
       autoName: (p) => _portName(sources, object, p),
+      detailOf: sources.portDetails(),
+      backOccupied: FloorPlanPortCables(sources.cableLines).back,
+      frontOccupied: FloorPlanPortCables(sources.cableLines).front,
+      pendingPortId: _revealPortId,
+    );
+  }
+
+  /// Η διαδρομή της πρίζας που φαίνονται τα στοιχεία της.
+  FloorPlanOutletRoute _route() {
+    final details = _details;
+    final sources = widget.infoSources;
+    if (details == null ||
+        sources == null ||
+        details.source != FloorPlanItemSource.object ||
+        !(details.symbol?.isOutlet ?? false)) {
+      return const FloorPlanOutletRoute();
+    }
+    return sources.outletRoute(details.id);
+  }
+
+  /// «Δείξε την καμπίνα»: ο χάρτης πηγαίνει εκεί και ανοίγει το πάνελ της.
+  Widget? _showCabinetButton(FloorPlanOutletRoute route) {
+    if (route.targets.isEmpty) return null;
+    final target = route.targets.first;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FilledButton.tonalIcon(
+        onPressed: () {
+          FloorPlanObjectView? view;
+          for (final v in widget.objects) {
+            if (v.source == FloorPlanItemSource.object && v.id == target.id) {
+              view = v;
+            }
+          }
+          setState(() {
+            final current = _view;
+            if (current != null) {
+              _view = current.panBy(
+                _size.center(Offset.zero) - current.toScreen(target.center),
+              );
+            }
+            _details = view;
+          });
+        },
+        icon: const Icon(Icons.dns_outlined),
+        label: const Text('Δείξε την καμπίνα'),
+      ),
     );
   }
 
@@ -191,6 +301,11 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
         ports: sources.ports,
         occupiedPortIds: sources.occupiedPortIds,
         portAutoName: (o, p) => _portName(sources, o, p),
+        portDetail: sources.portDetails(),
+        backOccupied: FloorPlanPortCables(sources.cableLines).back,
+        frontOccupied: FloorPlanPortCables(sources.cableLines).front,
+        revealDeviceId: _revealDeviceId,
+        revealPortId: _revealPortId,
         onClose: () => setState(() => _details = null),
       ),
     );
@@ -247,7 +362,9 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
   @override
   void didUpdateWidget(covariant FloorPlanMapView old) {
     super.didUpdateWidget(old);
+    _applyFocusOpening();
     if (old.highlightDepartmentId != widget.highlightDepartmentId ||
+        old.focusRoomId != widget.focusRoomId ||
         old.centerRequest != widget.centerRequest ||
         old.rotationDegrees != widget.rotationDegrees ||
         !setEquals(old.focusItems, widget.focusItems)) {
@@ -263,8 +380,10 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
   Set<int> get _highlightedRoomIds => {
     for (final e in widget.elements)
       if (e.kind == FloorPlanElementKind.room &&
-          widget.highlightDepartmentId != null &&
-          e.departmentId == widget.highlightDepartmentId)
+          (e.id == widget.focusRoomId ||
+              (widget.focusRoomId == null &&
+                  widget.highlightDepartmentId != null &&
+                  e.departmentId == widget.highlightDepartmentId)))
         e.id,
   };
 
@@ -355,7 +474,21 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
     final detailsInfo = details == null || cabinetPanel != null
         ? null
         : _infoOf(details);
-    if (hoverInfo == null && detailsInfo == null && cabinetPanel == null) {
+    final route = _route();
+    final view = _view;
+    final anchor = route.badgeAnchor;
+    final badges = view == null
+        ? const <Widget>[]
+        : floorPlanOtherFloorBadges(
+            targets: route.otherFloors,
+            anchor: anchor == null ? null : view.toScreen(anchor),
+            bounds: size,
+            onOpen: widget.onOpenOtherFloor,
+          );
+    if (hoverInfo == null &&
+        detailsInfo == null &&
+        cabinetPanel == null &&
+        badges.isEmpty) {
       return map;
     }
     final openCard = details == null ? null : widget.onOpenCard?.call(details);
@@ -363,6 +496,7 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
       fit: StackFit.expand,
       children: [
         map,
+        ...badges,
         if (hoverInfo != null)
           Positioned(
             left: (_hoverScreen.dx + 16).clamp(
@@ -384,7 +518,9 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
               info: detailsInfo,
               onClose: () => setState(() => _details = null),
               onOpenCard: openCard,
-              footer: details == null ? null : _facadeOf(details),
+              footer: details == null
+                  ? null
+                  : _facadeOf(details) ?? _showCabinetButton(_route()),
             ),
           ),
       ],
@@ -421,6 +557,8 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
         }
         final measuring = widget.measuring;
         final hover = _hoverWorld;
+        final route = measuring ? const FloorPlanOutletRoute() : _route();
+        final colors = Theme.of(context).colorScheme;
         final canvas = CustomPaint(
           size: size,
           foregroundPainter: measuring
@@ -431,7 +569,13 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
                       ? null
                       : _snapped(hover, view),
                 )
-              : null,
+              : route.isEmpty
+              ? null
+              : FloorPlanRoutePainter(
+                  view: view,
+                  route: route,
+                  color: colors.primary,
+                ),
           painter: FloorPlanPainter(
             view: view,
             walls: walls,
@@ -454,11 +598,12 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
             selectedIds: _highlightedRoomIds,
             openingSegments: _openings,
             overlay: const FloorPlanOverlay(),
-            colors: Theme.of(context).colorScheme,
+            colors: colors,
             objects: widget.objects,
             selectedObjectIds: {
               for (final f in widget.focusItems)
                 if (f.source == FloorPlanItemSource.object) f.id,
+              for (final t in route.targets) t.id,
             },
             selectedPlacementIds: {
               for (final f in widget.focusItems)
@@ -511,7 +656,11 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
               if (item != null || _details != null) {
                 // Κλικ σε σύμβολο ανοίγει τα στοιχεία του· κλικ αλλού τα
                 // κλείνει. Δεν μετρά ως μισό διπλό κλικ.
-                setState(() => _details = item);
+                setState(() {
+                  _details = item;
+                  _revealDeviceId = null;
+                  _revealPortId = null;
+                });
                 _lastClickAt = null;
                 return;
               }
@@ -546,7 +695,7 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
                 });
               }
             },
-            child: canvas,
+            child: RepaintBoundary(key: widget.snapshotKey, child: canvas),
           ),
         );
         if (!measuring) return _withItemOverlays(map, size);

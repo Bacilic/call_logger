@@ -7,9 +7,9 @@ import '../floor_plan_ports.dart';
 /// Η **πρόσοψη** ενός patch panel, switch, router ή POE: κάθε θύρα στη θέση
 /// της, γεμάτη όταν έχει καλώδιο, άδεια όταν είναι ελεύθερη.
 ///
-/// Πέρασμα του ποντικιού: όνομα, γραμμένο όνομα, σύνδεση. Με
-/// [onEditWrittenName] (σχεδίαση) το κλικ σε θύρα ανοίγει το «Γραμμένο
-/// όνομα…».
+/// Πέρασμα του ποντικιού: όνομα, γραμμένο όνομα, σύνδεση. Στη σχεδίαση το κλικ
+/// σε θύρα φτιάχνει ή αφαιρεί καλώδιο ([onPortTap]), το δεξί κλικ ανοίγει το
+/// «Γραμμένο όνομα…» ([onEditWrittenName]).
 class FloorPlanPortFacade extends StatelessWidget {
   const FloorPlanPortFacade({
     super.key,
@@ -19,6 +19,11 @@ class FloorPlanPortFacade extends StatelessWidget {
     required this.occupied,
     required this.autoName,
     this.onEditWrittenName,
+    this.detailOf,
+    this.onPortTap,
+    this.pendingPortId,
+    this.backOccupied = const {},
+    this.frontOccupied = const {},
   });
 
   /// Π.χ. «Switch SW-2».
@@ -28,6 +33,31 @@ class FloorPlanPortFacade extends StatelessWidget {
   final Set<int> occupied;
   final String Function(FloorPlanPort port) autoName;
   final void Function(FloorPlanPort port)? onEditWrittenName;
+
+  /// Με τι συνδέεται η θύρα, για την υπόδειξη.
+  final String? Function(FloorPlanPort port)? detailOf;
+
+  /// Κλικ σε θύρα (σχεδίαση), με το σημείο της οθόνης όπου έγινε.
+  final void Function(FloorPlanPort port, Offset globalPosition)? onPortTap;
+
+  /// Η θύρα απ' όπου ξεκίνησε το καλώδιο που φτιάχνεται τώρα.
+  final int? pendingPortId;
+
+  /// Οι δύο πλευρές της θύρας patch panel: το κάτω μισό γεμίζει με καλώδιο
+  /// πίσω, το πάνω με καλώδιο μπροστά.
+  final Set<int> backOccupied;
+  final Set<int> frontOccupied;
+
+  _PortFill _fillOf(FloorPlanPort port) {
+    if (symbol != FloorPlanSymbol.patchPanel) {
+      return occupied.contains(port.id) ? _PortFill.full : _PortFill.none;
+    }
+    final back = backOccupied.contains(port.id);
+    final front = frontOccupied.contains(port.id);
+    if (back && front) return _PortFill.full;
+    if (back) return _PortFill.lowerHalf;
+    return front ? _PortFill.upperHalf : _PortFill.none;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,11 +114,25 @@ class FloorPlanPortFacade extends StatelessWidget {
                                     ? null
                                     : _PortBox(
                                         port: byNumber[n]!,
-                                        occupied: occupied.contains(
-                                          byNumber[n]!.id,
-                                        ),
+                                        fill: _fillOf(byNumber[n]!),
                                         name: autoName(byNumber[n]!),
-                                        onTap: onEditWrittenName == null
+                                        detail: detailOf?.call(byNumber[n]!),
+                                        pending:
+                                            pendingPortId == byNumber[n]!.id,
+                                        hasFrontCable:
+                                            symbol == FloorPlanSymbol.patchPanel
+                                            ? frontOccupied.contains(
+                                                byNumber[n]!.id,
+                                              )
+                                            : occupied.contains(
+                                                byNumber[n]!.id,
+                                              ),
+                                        onTap: onPortTap == null
+                                            ? null
+                                            : (at) =>
+                                                  onPortTap!(byNumber[n]!, at),
+                                        onSecondaryTap:
+                                            onEditWrittenName == null
                                             ? null
                                             : () => onEditWrittenName!(
                                                 byNumber[n]!,
@@ -110,18 +154,30 @@ class FloorPlanPortFacade extends StatelessWidget {
   }
 }
 
+/// Πόσο γεμάτη είναι μια θύρα. Μισή μόνο η θύρα patch panel, που έχει δύο
+/// πλευρές.
+enum _PortFill { none, lowerHalf, upperHalf, full }
+
 class _PortBox extends StatelessWidget {
   const _PortBox({
     required this.port,
-    required this.occupied,
+    required this.fill,
     required this.name,
+    required this.pending,
+    required this.hasFrontCable,
+    this.detail,
     this.onTap,
+    this.onSecondaryTap,
   });
 
   final FloorPlanPort port;
-  final bool occupied;
+  final _PortFill fill;
   final String name;
-  final VoidCallback? onTap;
+  final bool pending;
+  final bool hasFrontCable;
+  final String? detail;
+  final void Function(Offset globalPosition)? onTap;
+  final VoidCallback? onSecondaryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -131,28 +187,46 @@ class _PortBox extends StatelessWidget {
     final tooltip = [
       name,
       if (written != null) 'Γραμμένο: $written',
-      occupied ? 'Κατειλημμένη' : 'Ελεύθερη',
-      if (onTap != null) 'Κλικ: «Γραμμένο όνομα…»',
+      fill == _PortFill.none ? 'Ελεύθερη' : 'Κατειλημμένη',
+      ?detail,
+      if (onTap != null)
+        hasFrontCable ? 'Κλικ: αφαίρεση καλωδίου' : 'Κλικ: νέο καλώδιο',
+      if (onSecondaryTap != null) 'Δεξί κλικ: «Γραμμένο όνομα…»',
     ].join('\n');
+    final full = fill == _PortFill.full;
     final box = Container(
       alignment: Alignment.center,
       decoration: BoxDecoration(
         // Γεμάτη = κατειλημμένη, άδεια = ελεύθερη — μόνο αυτό σημαίνει το
         // γέμισμα.
-        color: occupied ? ink.withValues(alpha: 0.85) : null,
-        border: Border.all(color: ink),
+        color: full ? ink.withValues(alpha: 0.85) : null,
+        border: Border.all(
+          color: pending ? theme.colorScheme.primary : ink,
+          width: pending ? 2.5 : 1,
+        ),
         borderRadius: BorderRadius.circular(2),
       ),
       child: Stack(
         fit: StackFit.expand,
         children: [
+          // Η μισή θύρα είναι πιο ανοιχτή, ώστε ο αριθμός να διαβάζεται και
+          // όταν το γέμισμα τον κόβει στη μέση.
+          if (fill == _PortFill.lowerHalf || fill == _PortFill.upperHalf)
+            FractionallySizedBox(
+              alignment: fill == _PortFill.lowerHalf
+                  ? Alignment.bottomCenter
+                  : Alignment.topCenter,
+              heightFactor: 0.5,
+              widthFactor: 1,
+              child: ColoredBox(color: ink.withValues(alpha: 0.35)),
+            ),
           Center(
             child: Text(
               '${port.number}',
               maxLines: 1,
               style: TextStyle(
                 fontSize: 9,
-                color: occupied ? theme.colorScheme.surface : ink,
+                color: full ? theme.colorScheme.surface : ink,
               ),
             ),
           ),
@@ -172,11 +246,17 @@ class _PortBox extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 300),
-      child: onTap == null
+      child: onTap == null && onSecondaryTap == null
           ? box
           : MouseRegion(
               cursor: SystemMouseCursors.click,
-              child: GestureDetector(onTap: onTap, child: box),
+              child: GestureDetector(
+                onTapUp: onTap == null
+                    ? null
+                    : (details) => onTap!(details.globalPosition),
+                onSecondaryTap: onSecondaryTap,
+                child: box,
+              ),
             ),
     );
   }

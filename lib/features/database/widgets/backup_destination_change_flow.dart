@@ -2,14 +2,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/database/backup_pending_changes.dart';
-import '../../../core/database/database_helper.dart';
 import '../../../core/utils/file_picker_initial_directory.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../providers/database_backup_settings_provider.dart';
 import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
-import '../utils/backup_schedule_utils.dart';
 import 'broken_backup_dialog.dart';
 
 /// Η κοινή ροή «άλλαξε φάκελο προορισμού και πάρε αντίγραφο τώρα».
@@ -77,19 +74,18 @@ Future<void> runBackupAndReport({
           auditTrigger: auditTrigger,
         );
 
-  final notifier = ref.read(databaseBackupSettingsProvider.notifier);
-  if (result.success) {
-    final db = await DatabaseHelper.instance.database;
-    final markId = await BackupPendingChangesRepository(db).latestAuditId();
-    await notifier.markBackupTaken(auditId: markId, at: DateTime.now());
-  } else {
-    await notifier.setLastBackupAttempt(DateTime.now());
-    await notifier.setLastBackupStatus(
-      result.failureCode == DatabaseBackupFailureCode.folderMissing
-          ? BackupScheduleStatus.folderMissing
-          : BackupScheduleStatus.failed,
-    );
+  // Τρέχει άλλο αντίγραφο: τίποτα δεν απέτυχε, οπότε ούτε η κατάσταση αλλάζει
+  // ούτε το μήνυμα εμφανίζεται ως σφάλμα.
+  if (result.wasAlreadyRunning) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message!)));
+    return;
   }
+
+  await ref
+      .read(databaseBackupSettingsProvider.notifier)
+      .recordBackupResult(result);
 
   if (!context.mounted) return;
 

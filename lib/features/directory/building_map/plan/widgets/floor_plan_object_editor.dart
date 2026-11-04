@@ -12,6 +12,9 @@ typedef FloorPlanObjectDetails = ({
 
   /// Πλήθος θυρών όπως γράφτηκε· κενό όταν το είδος δεν έχει θύρες.
   String portCount,
+
+  /// Το πρόθεμα των θυρών ενός switch· `null` για όλα τα άλλα.
+  String? portType,
 });
 
 /// Πόσο πλατύ είναι το πλαίσιο — για να το τοποθετήσει η οθόνη.
@@ -34,6 +37,7 @@ class FloorPlanObjectEditor extends StatefulWidget {
     required this.onCommit,
     required this.onCancel,
     this.portCount = false,
+    this.portTypes = const {},
     this.footer,
   });
 
@@ -46,6 +50,10 @@ class FloorPlanObjectEditor extends StatefulWidget {
 
   /// Δείχνει το πεδίο «Θύρες» (patch panel, switch, router, POE).
   final bool portCount;
+
+  /// Τα προθέματα που διαλέγονται στο «Τύπος θυρών» (switch), με την υπόδειξη
+  /// που εξηγεί το καθένα· κενό = κανένα.
+  final Map<String, String> portTypes;
 
   /// Κάτω από τα πεδία — π.χ. η πρόσοψη με τις θύρες.
   final Widget? footer;
@@ -62,6 +70,7 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
   );
   late final _notes = TextEditingController(text: widget.initial.notes);
   late final _ports = TextEditingController(text: widget.initial.portCount);
+  late String? _portType = widget.initial.portType;
 
   /// Το «Όνομα» ζητά ρητά την εστίαση: ο καμβάς την κρατά όταν ανοίγει το
   /// πλαίσιο, και το σκέτο `autofocus` δεν την παίρνει από κάτι που ήδη την
@@ -83,6 +92,7 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
     lansweeperName: _lansweeper.text,
     notes: _notes.text,
     portCount: _ports.text,
+    portType: _portType,
   );
 
   @override
@@ -183,6 +193,40 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
                       ],
                       if (widget.portCount)
                         _field(_ports, 'Θύρες (πλήθος)', digits: true),
+                      if (widget.portTypes.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            children: [
+                              Text(
+                                'Τύπος θυρών',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: SegmentedButton<String>(
+                                  showSelectedIcon: false,
+                                  segments: [
+                                    for (final MapEntry(key: t, value: help)
+                                        in widget.portTypes.entries)
+                                      ButtonSegment(
+                                        value: t,
+                                        label: Text(t),
+                                        tooltip: help,
+                                      ),
+                                  ],
+                                  selected: {?_portType},
+                                  emptySelectionAllowed: true,
+                                  onSelectionChanged: (s) {
+                                    if (s.isNotEmpty) {
+                                      setState(() => _portType = s.first);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       _field(_notes, 'Σημειώσεις', multiline: true),
                       if (widget.footer case final footer?) ...[
                         const SizedBox(height: 12),

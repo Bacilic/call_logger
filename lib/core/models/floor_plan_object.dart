@@ -27,6 +27,7 @@ class FloorPlanObject {
     this.rackUnits,
     this.stackId,
     this.stackUnit,
+    this.portType,
   });
 
   final int id;
@@ -44,6 +45,9 @@ class FloorPlanObject {
   final int? rackUnits;
   final int? stackId;
   final int? stackUnit;
+
+  /// Το πρόθεμα των θυρών ενός switch (Fa, Gi, Te)· κενό = Gi.
+  final String? portType;
 
   /// Είναι μέσα σε καμπίνα — άρα όχι στον χάρτη.
   bool get inCabinet => cabinetId != null;
@@ -69,6 +73,7 @@ class FloorPlanObject {
     'rack_units',
     'stack_id',
     'stack_unit',
+    'port_type',
   ];
 
   factory FloorPlanObject.fromMap(Map<String, Object?> row) {
@@ -93,6 +98,7 @@ class FloorPlanObject {
       rackUnits: row['rack_units'] as int?,
       stackId: row['stack_id'] as int?,
       stackUnit: row['stack_unit'] as int?,
+      portType: row['port_type'] as String?,
     );
   }
 
@@ -113,6 +119,7 @@ class FloorPlanObject {
     'rack_units': rackUnits,
     'stack_id': stackId,
     'stack_unit': stackUnit,
+    'port_type': portType,
   };
 
   FloorPlanObject copyWith({
@@ -136,6 +143,7 @@ class FloorPlanObject {
     rackUnits: rackUnits,
     stackId: stackId,
     stackUnit: stackUnit,
+    portType: portType,
   );
 
   /// Ίδιο αντικείμενο σε άλλη θέση καμπίνας. Όλα ρητά, ώστε `null` να
@@ -161,6 +169,7 @@ class FloorPlanObject {
     rackUnits: rackUnits,
     stackId: stackId,
     stackUnit: stackUnit,
+    portType: portType,
   );
 
   /// Ίδιο αντικείμενο με άλλα στοιχεία. Κενό κείμενο γίνεται `null`.
@@ -185,6 +194,49 @@ class FloorPlanObject {
     rackUnits: rackUnits,
     stackId: stackId,
     stackUnit: stackUnit,
+    portType: portType,
+  );
+
+  /// Ίδιο αντικείμενο σε άλλο stack. Και τα δύο ρητά, ώστε `null` να σημαίνει
+  /// «όχι σε stack» και όχι «όπως ήταν».
+  FloorPlanObject withStack({required int? stackId, required int? stackUnit}) =>
+      FloorPlanObject(
+        id: id,
+        floorId: floorId,
+        kindId: kindId,
+        center: center,
+        size: size,
+        rotationDegrees: rotationDegrees,
+        name: name,
+        ip: ip,
+        lansweeperName: lansweeperName,
+        notes: notes,
+        cabinetId: cabinetId,
+        rackU: rackU,
+        rackUnits: rackUnits,
+        stackId: stackId,
+        stackUnit: stackUnit,
+        portType: portType,
+      );
+
+  /// Ίδιο αντικείμενο με άλλο πρόθεμα θυρών.
+  FloorPlanObject withPortType(String? portType) => FloorPlanObject(
+    id: id,
+    floorId: floorId,
+    kindId: kindId,
+    center: center,
+    size: size,
+    rotationDegrees: rotationDegrees,
+    name: name,
+    ip: ip,
+    lansweeperName: lansweeperName,
+    notes: notes,
+    cabinetId: cabinetId,
+    rackU: rackU,
+    rackUnits: rackUnits,
+    stackId: stackId,
+    stackUnit: stackUnit,
+    portType: portType,
   );
 
   /// Ίδια θέση, μέγεθος και κλίση με το [other] — και ίδια θέση καμπίνας.

@@ -27,7 +27,10 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     // η ένδειξη στη μπάρα να παρακολουθεί ζωντανά την «Αλλαγή χρήστη».
     // `ValueNotifier<AppClosingState>`: η κατάσταση κλεισίματος της διεργασίας
     // (`lib/core/services/app_close_controller.dart`) — ζει όσο η εφαρμογή.
+    // `BackupRunningNotifier`: «τρέχει αντίγραφο;»
+    // (`lib/features/database/services/backup_run_gate.dart`) — ζει όσο η εφαρμογή.
     notDisposed: {
+      'BackupRunningNotifier': null,
       'ValueNotifier<FatalErrorState?>': null,
       'ValueNotifier<AppClosingState>': null,
       'ValueNotifier<Operator?>': null,

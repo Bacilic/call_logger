@@ -7,10 +7,57 @@ import 'package:call_logger/core/models/floor_plan_object.dart';
 import 'package:call_logger/core/models/floor_plan_object_kind.dart';
 import 'package:call_logger/core/models/floor_plan_port.dart';
 import 'package:call_logger/features/directory/building_map/plan/widgets/floor_plan_cabinet_panel.dart';
+import 'package:call_logger/features/directory/building_map/plan/widgets/floor_plan_port_facade.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+void _noop() {}
+
 void main() {
+  testWidgets('η αναζήτηση δείχνει την πρόσοψη της συσκευής, χωρίς να πειράξει '
+      'τις αποθηκευμένες επιλογές', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 500,
+            height: 700,
+            child: FloorPlanCabinetPanel(
+              title: 'RC6',
+              units: 42,
+              contents: [
+                FloorPlanObject(
+                  id: 7,
+                  floorId: 1,
+                  kindId: 1,
+                  center: Offset.zero,
+                  name: 'SW-2',
+                  cabinetId: 9,
+                  rackU: 1,
+                ),
+              ],
+              kinds: {
+                1: FloorPlanObjectKind(
+                  id: 1,
+                  name: 'Switch',
+                  symbol: FloorPlanSymbol.networkSwitch,
+                ),
+              },
+              ports: [FloorPlanPort(id: 2, objectId: 7, number: 1)],
+              onClose: _noop,
+              revealDeviceId: 7,
+              revealPortId: 2,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(FloorPlanPortFacade), findsOne);
+    expect(find.text('Κλικ σε συσκευή της καμπίνας'), findsNothing);
+  });
+
   const kinds = {
     1: FloorPlanObjectKind(
       id: 1,

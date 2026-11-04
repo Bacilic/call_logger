@@ -39,6 +39,8 @@ void paintFloorPlanSymbol(Canvas canvas, FloorPlanSymbol? symbol, Rect rect) {
       _poe(canvas);
     case FloorPlanSymbol.ups:
       _ups(canvas);
+    case FloorPlanSymbol.riser:
+      _riser(canvas);
     case null:
       _unknown(canvas);
   }
@@ -300,6 +302,23 @@ void _switch(Canvas canvas) {
   canvas.drawCircle(const Offset(77, 44.8), 2.3, _fill(_ready));
   canvas.drawCircle(const Offset(85.5, 44.8), 2.3, _fill(_ready));
   canvas.drawCircle(const Offset(77, 54.2), 2.3, _fill(_amberLine));
+}
+
+/// Σκάλα ή αγωγός: σκαλοπάτια που κατεβαίνουν (εγκρίθηκε 04/11/2026).
+void _riser(Canvas canvas) {
+  _rrect(canvas, const Rect.fromLTRB(8, 8, 92, 92), 6.5, _paper, _grayLine);
+  canvas.drawPath(
+    Path()
+      ..moveTo(18, 26)
+      ..lineTo(38, 26)
+      ..lineTo(38, 44)
+      ..lineTo(58, 44)
+      ..lineTo(58, 62)
+      ..lineTo(82, 62)
+      ..moveTo(82, 62)
+      ..lineTo(82, 80),
+    _stroke(_ink, 3.5),
+  );
 }
 
 /// Πρίζα: πλάκα στον τοίχο με δύο θύρες.

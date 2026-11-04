@@ -107,6 +107,10 @@ class _BuildingMapOmnisearchFieldState
         return Icons.computer;
       case BuildingMapOmnisearchEntityKind.mapObject:
         return Icons.place_outlined;
+      case BuildingMapOmnisearchEntityKind.mapPort:
+        return Icons.settings_ethernet;
+      case BuildingMapOmnisearchEntityKind.mapRoom:
+        return Icons.meeting_room_outlined;
     }
   }
 
@@ -122,6 +126,10 @@ class _BuildingMapOmnisearchFieldState
         return 'Εξοπλισμός';
       case BuildingMapOmnisearchEntityKind.mapObject:
         return 'Αντικείμενο χάρτη';
+      case BuildingMapOmnisearchEntityKind.mapPort:
+        return 'Θύρα';
+      case BuildingMapOmnisearchEntityKind.mapRoom:
+        return 'Χώρος';
     }
   }
 
@@ -143,8 +151,8 @@ class _BuildingMapOmnisearchFieldState
           onSubmitted: (value) => _searchImmediate(value, onSubmit),
           decoration: InputDecoration(
             labelText:
-                'Έξυπνη αναζήτηση (Τμήμα/Υπάλληλος/Τηλέφωνο/Εξοπλισμός/'
-                'Αντικείμενο/IP)',
+                'Έξυπνη αναζήτηση (Τμήμα/Χώρος/Υπάλληλος/Τηλέφωνο/Εξοπλισμός/'
+                'Αντικείμενο/IP/Θύρα)',
             border: const OutlineInputBorder(),
             prefixIcon: const Icon(Icons.travel_explore),
             suffixIcon: ValueListenableBuilder<bool>(

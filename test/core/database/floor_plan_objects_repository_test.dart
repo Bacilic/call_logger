@@ -369,14 +369,16 @@ void main() {
   });
 
   group('Δίκτυο (v74)', () {
-    test('αναβάθμιση v74: τα υπάρχοντα αντικείμενα μένουν εκτός καμπίνας, '
-        'και ξανατρέχει χωρίς παρενέργειες', () async {
-      final old = await openDatabase(
-        inMemoryDatabasePath,
-        singleInstance: false,
-      );
-      addTearDown(old.close);
-      await old.execute('''
+    test(
+      'αναβάθμιση ως τη v75: τα υπάρχοντα αντικείμενα μένουν εκτός καμπίνας, '
+      'και ξανατρέχει χωρίς παρενέργειες',
+      () async {
+        final old = await openDatabase(
+          inMemoryDatabasePath,
+          singleInstance: false,
+        );
+        addTearDown(old.close);
+        await old.execute('''
         CREATE TABLE building_map_objects (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           floor_id INTEGER NOT NULL,
@@ -393,22 +395,23 @@ void main() {
           cabinet_id INTEGER
         )
       ''');
-      await old.insert('building_map_objects', {
-        'floor_id': 1,
-        'kind_id': 1,
-        'x': 10,
-        'y': 20,
-        'name': 'ΕΚΤ-01',
-      });
+        await old.insert('building_map_objects', {
+          'floor_id': 1,
+          'kind_id': 1,
+          'x': 10,
+          'y': 20,
+          'name': 'ΕΚΤ-01',
+        });
 
-      await migrateDatabaseToV74(old);
-      await migrateDatabaseToV74(old);
+        await migrateDatabaseToV75(old);
+        await migrateDatabaseToV75(old);
 
-      final object = (await FloorPlanObjectsRepository(old).listObjects(1))
-          .single;
-      expect(object.name, 'ΕΚΤ-01');
-      expect((object.inCabinet, object.rackU), (false, null));
-    });
+        final object = (await FloorPlanObjectsRepository(old).listObjects(1))
+            .single;
+        expect(object.name, 'ΕΚΤ-01');
+        expect((object.inCabinet, object.rackU), (false, null));
+      },
+    );
 
     test('κάθε πλευρά θύρας δέχεται ένα μόνο καλώδιο', () async {
       await migrateDatabaseToV74(db);

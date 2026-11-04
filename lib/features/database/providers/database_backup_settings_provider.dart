@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/backup_pending_changes.dart';
+import '../../../core/database/database_helper.dart';
 import '../../../core/services/current_operator.dart';
 import '../models/database_backup_settings.dart';
 import '../services/active_backup_settings.dart';
+import '../services/database_backup_service.dart';
 import '../utils/backup_schedule_utils.dart';
 
 /// Φόρτωση και αποθήκευση [DatabaseBackupSettings] — **μία κοινή ρύθμιση της
@@ -134,6 +137,32 @@ class DatabaseBackupSettingsNotifier extends Notifier<DatabaseBackupSettings> {
         lastFullBackupAt: fullAt,
         lastBackupStatus: BackupScheduleStatus.success,
       ),
+    );
+  }
+
+  /// Σημειώνει το αποτέλεσμα ενός αντιγράφου που ζήτησε ο χρήστης από διάλογο.
+  ///
+  /// Το σημάδι των αλλαγών παίρνεται εδώ, αφού έχει γραφτεί στο Ιστορικό η
+  /// εγγραφή του αντιγράφου, ώστε η ίδια να μη μετρά ως αφύλακτη αλλαγή.
+  Future<void> recordBackupResult(DatabaseBackupResult result) async {
+    if (result.wasAlreadyRunning) return;
+    final now = DateTime.now();
+    if (result.success) {
+      final db = await DatabaseHelper.instance.database;
+      final markId = await BackupPendingChangesRepository(db).latestAuditId();
+      await markBackupTaken(
+        auditId: markId,
+        at: now,
+        fullFingerprint: result.portableFingerprint,
+        fullAt: result.isFullBackup ? now : null,
+      );
+      return;
+    }
+    await setLastBackupAttempt(now);
+    await setLastBackupStatus(
+      result.failureCode == DatabaseBackupFailureCode.folderMissing
+          ? BackupScheduleStatus.folderMissing
+          : BackupScheduleStatus.failed,
     );
   }
 

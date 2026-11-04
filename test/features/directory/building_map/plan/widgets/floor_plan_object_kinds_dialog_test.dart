@@ -45,6 +45,12 @@ void main() {
   }
 
   Future<void> pumpDialog(WidgetTester tester) async {
+    // Το χαμηλότερο παράθυρο που επιτρέπει η εφαρμογή: το προεπιλεγμένο των
+    // τεστ (600 ύψος) είναι κάτω από αυτό.
+    tester.view.physicalSize = const Size(1280, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(

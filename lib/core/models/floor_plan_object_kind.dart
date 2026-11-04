@@ -2,6 +2,9 @@
 ///
 /// Η τιμή [key] είναι αυτή που γράφεται στη βάση· δεν αλλάζει ποτέ, ακόμη κι
 /// αν αλλάξει το όνομα της τιμής στον κώδικα.
+///
+/// Για κάμερες δεν υπάρχει σύμβολο, επίτηδες: δεν ανήκουν στο τμήμα
+/// πληροφορικής (απόφαση Διευθυντή, 30/10/2026).
 enum FloorPlanSymbol {
   /// Υπάλληλος του Καταλόγου.
   person('person', 'Άνθρωπος'),
@@ -35,7 +38,10 @@ enum FloorPlanSymbol {
   poe('poe', 'POE'),
 
   /// Χωρίς θύρες· πιάνει θέσεις U στην καμπίνα.
-  ups('ups', 'UPS');
+  ups('ups', 'UPS'),
+
+  /// Σκάλα ή κατακόρυφος αγωγός: από εκεί περνά η διαδρομή προς άλλον όροφο.
+  riser('riser', 'Σκάλα / αγωγός');
 
   const FloorPlanSymbol(this.key, this.label);
 
@@ -54,12 +60,15 @@ enum FloorPlanSymbol {
     router,
     poe,
     ups,
+    riser,
   ];
 
   /// Σχεδιάζεται ως παραλληλόγραμμο με μέγεθος, όχι ως εικονίδιο.
   bool get isVolume => this == furniture || this == cabinet;
 
   bool get isCabinet => this == cabinet;
+
+  bool get isOutlet => this == outlet;
 
   /// Δηλώνεται με **πλήθος θυρών** και έχει πρόσοψη (αποφάσεις 30/10/2026:
   /// patch panel, switch, router και POE).
@@ -69,9 +78,10 @@ enum FloorPlanSymbol {
       this == router ||
       this == poe;
 
-  /// Μπαίνει μέσα σε καμπίνα. Κάθε είδος μπορεί (ενότητα 5 του σχεδίου),
-  /// εκτός από όσα έχουν δικό τους όγκο: έπιπλο και άλλη καμπίνα.
-  bool get fitsInCabinet => !isVolume;
+  /// Μπαίνει μέσα σε καμπίνα. Κάθε είδος μπορεί (απόφαση Διευθυντή),
+  /// εκτός από όσα έχουν δικό τους όγκο (έπιπλο, άλλη καμπίνα) και τη σκάλα ή
+  /// τον αγωγό, που είναι μέρος του κτιρίου.
+  bool get fitsInCabinet => !isVolume && this != riser;
 
   static FloorPlanSymbol? fromKey(String? key) {
     for (final symbol in values) {

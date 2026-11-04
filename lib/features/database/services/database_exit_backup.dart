@@ -7,6 +7,7 @@ import '../utils/backup_schedule_utils.dart';
 import '../utils/backup_trigger_decision.dart';
 import 'active_backup_settings.dart';
 import 'backup_responsibility.dart';
+import 'backup_run_gate.dart';
 import 'database_backup_audit.dart';
 import 'database_backup_service.dart';
 
@@ -26,6 +27,11 @@ class DatabaseExitBackup {
     if (_runInProgress) return;
     _runInProgress = true;
     try {
+      // Το αντίγραφο που τρέχει ήδη προλαβαίνει να τελειώσει πριν κλείσει η
+      // σύνδεση. Οι αφύλακτες αλλαγές μετρώνται μετά, οπότε ό,τι φύλαξε εκείνο
+      // δεν ξαναπαίρνεται εδώ.
+      await BackupRunGate.whenIdle();
+
       // Ίδιο σημείο ελέγχου με τον χρονιστή: χωρίς το δικαίωμα, το κλείσιμο
       // του συναδέλφου δεν επιτρέπεται να πάρει το αντίγραφο που η οθόνη του
       // λέει ότι «το χειρίζεται ο διαχειριστής».
@@ -70,6 +76,7 @@ class DatabaseExitBackup {
         requireDestination: true,
         auditTrigger: BackupAuditTrigger.onExit,
       );
+      if (result.wasAlreadyRunning) return;
 
       // Στοχευμένη εγγραφή, όχι ολόκληρο το δεσμευμένο δέμα: όσο έτρεχε το
       // αντίγραφο, ο διαχειριστής στο άλλο μηχάνημα μπορεί να άλλαξε επιλογή.

@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import '../../../../../core/models/floor_plan_object.dart';
 import '../../../../../core/models/floor_plan_object_kind.dart';
 import '../floor_plan_cabinet.dart';
+import '../floor_plan_stack.dart';
 import '../../../../../core/models/floor_plan_port.dart';
+import '../../../../../core/utils/run_after_next_frame.dart';
 import '../../../../../core/widgets/compact_tooltip.dart';
 import '../services/floor_plan_cabinet_preferences.dart';
 import 'floor_plan_port_facade.dart';
@@ -27,6 +29,11 @@ class FloorPlanCabinetActions {
     required this.onDelete,
     required this.onSetUnits,
     this.onEditWrittenName,
+    this.onPortTap,
+    this.pendingPortId,
+    this.onJoinStack,
+    this.onLeaveStack,
+    this.onSetStackUnit,
   });
 
   /// Τα είδη που μπαίνουν σε καμπίνα, αλφαβητικά.
@@ -39,9 +46,25 @@ class FloorPlanCabinetActions {
   final void Function(int objectId) onDelete;
   final void Function(int units) onSetUnits;
 
-  /// Κλικ σε θύρα της πρόσοψης: «Γραμμένο όνομα…».
+  /// Δεξί κλικ σε θύρα της πρόσοψης: «Γραμμένο όνομα…».
   final void Function(FloorPlanObject object, FloorPlanPort port)?
   onEditWrittenName;
+
+  /// Κλικ σε θύρα της πρόσοψης: νέο καλώδιο ή αφαίρεση.
+  final void Function(
+    FloorPlanObject object,
+    FloorPlanPort port,
+    Offset globalPosition,
+  )?
+  onPortTap;
+
+  /// Η θύρα απ' όπου ξεκίνησε το καλώδιο που φτιάχνεται τώρα.
+  final int? pendingPortId;
+
+  /// Stack: ένωση με άλλο switch, αποχώρηση, αλλαγή αριθμού μέλους.
+  final void Function(int objectId, int otherId)? onJoinStack;
+  final void Function(int objectId)? onLeaveStack;
+  final void Function(int objectId, int unit)? onSetStackUnit;
 }
 
 /// Το πάνελ της καμπίνας: η **πιστή όψη** της, από το U1 (πάνω) ως το
@@ -67,6 +90,11 @@ class FloorPlanCabinetPanel extends StatefulWidget {
     this.ports = const [],
     this.occupiedPortIds = const {},
     this.portAutoName,
+    this.portDetail,
+    this.backOccupied = const {},
+    this.frontOccupied = const {},
+    this.revealDeviceId,
+    this.revealPortId,
     this.where,
     this.actions,
     this.cabinetId,
@@ -95,6 +123,18 @@ class FloorPlanCabinetPanel extends StatefulWidget {
   /// Το αυτόματο όνομα μιας θύρας («RC6.F17»).
   final String Function(FloorPlanObject object, FloorPlanPort port)?
   portAutoName;
+
+  /// Με τι συνδέεται μια θύρα, για την υπόδειξη της πρόσοψης.
+  final String? Function(FloorPlanPort port)? portDetail;
+
+  /// Οι δύο πλευρές των θυρών patch panel.
+  final Set<int> backOccupied;
+  final Set<int> frontOccupied;
+
+  /// Ό,τι ζήτησε η αναζήτηση: η συσκευή της οποίας η πρόσοψη πρέπει να φανεί,
+  /// και η θύρα που σημειώνεται. Δεν αλλάζει τις αποθηκευμένες επιλογές.
+  final int? revealDeviceId;
+  final int? revealPortId;
   final FloorPlanCabinetActions? actions;
 
   /// Η καμπίνα, για να διαβαστούν και να γραφτούν οι επιλεγμένες συσκευές
@@ -128,9 +168,13 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
   /// Το προηγούμενο κλικ, για το διπλό κλικ χωρίς καθυστέρηση στο μονό.
   ({int id, DateTime at})? _lastTap;
 
+  /// Στην πρόσοψη της συσκευής που ζήτησε η αναζήτηση κυλά η ζώνη.
+  final GlobalKey _revealKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
+    _addRevealed();
     _loadSelection();
   }
 
@@ -139,8 +183,25 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
     super.didUpdateWidget(old);
     if (old.cabinetId != widget.cabinetId) {
       _selected = {...widget.initialSelection};
+      _addRevealed();
       _loadSelection();
+    } else if (old.revealDeviceId != widget.revealDeviceId) {
+      _addRevealed();
     }
+  }
+
+  /// Η συσκευή της αναζήτησης φαίνεται, χωρίς να γραφτεί στις επιλογές.
+  void _addRevealed() {
+    final deviceId = widget.revealDeviceId;
+    final device = deviceId == null ? null : _byId(deviceId);
+    if (device == null) return;
+    _selected.addAll(_withStackMates(device).map((o) => o.id));
+    runAfterNextFrame(_scrollToRevealed);
+  }
+
+  void _scrollToRevealed() {
+    final target = _revealKey.currentContext;
+    if (mounted && target != null) Scrollable.ensureVisible(target);
   }
 
   Future<void> _loadSelection() async {
@@ -149,12 +210,26 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
     final stored = await FloorPlanCabinetPreferences.readSelection(id);
     if (!mounted || widget.cabinetId != id) return;
     setState(() => _selected = stored);
+    _addRevealed();
+  }
+
+  /// Το stack φαίνεται ως ένα: το κλικ σε ένα μέλος δείχνει ή κρύβει όλα.
+  List<FloorPlanObject> _withStackMates(FloorPlanObject o) {
+    final stackId = o.stackId;
+    return stackId == null
+        ? [o]
+        : floorPlanStackMembers(stackId, widget.contents);
   }
 
   void _toggle(FloorPlanObject o) {
     if (!_hasPorts(o)) return;
+    final members = _withStackMates(o);
     setState(() {
-      if (!_selected.remove(o.id)) _selected.add(o.id);
+      if (members.any((m) => _selected.contains(m.id))) {
+        _selected.removeAll(members.map((m) => m.id));
+      } else {
+        _selected.addAll(members.map((m) => m.id));
+      }
     });
     final id = widget.cabinetId;
     if (id != null) {
@@ -221,8 +296,8 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
     final rows = floorPlanRackRows(widget.units, widget.contents);
     final subtitle = [?widget.where, '${widget.units}U'].join(' · ');
     final shown = [
-      for (final o in widget.contents)
-        if (_hasPorts(o) && _selected.contains(o.id)) o,
+      for (final group in floorPlanStackGroups(widget.contents))
+        if (group.any((o) => _hasPorts(o) && _selected.contains(o.id))) group,
     ];
     return Material(
       elevation: 4,
@@ -312,24 +387,8 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                       children: [
-                        for (final o in shown)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: FloorPlanPortFacade(
-                              title: _label(o),
-                              symbol: widget.kinds[o.kindId]?.symbol,
-                              ports: _portsOf(o.id),
-                              occupied: widget.occupiedPortIds,
-                              autoName: (port) =>
-                                  widget.portAutoName?.call(o, port) ??
-                                  'Θύρα ${port.number}',
-                              onEditWrittenName:
-                                  actions?.onEditWrittenName == null
-                                  ? null
-                                  : (port) =>
-                                        actions!.onEditWrittenName!(o, port),
-                            ),
-                          ),
+                        for (final group in shown)
+                          _facadeGroup(theme, group, actions),
                       ],
                     ),
                   ),
@@ -354,6 +413,61 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Η πρόσοψη μιας συσκευής· ενός stack, όλα τα μέλη του ως ένα switch, το ένα
+  /// κάτω από το άλλο.
+  Widget _facadeGroup(
+    ThemeData theme,
+    List<FloorPlanObject> group,
+    FloorPlanCabinetActions? actions,
+  ) {
+    Widget facade(FloorPlanObject o, String title) => FloorPlanPortFacade(
+      key: o.id == widget.revealDeviceId ? _revealKey : null,
+      title: title,
+      symbol: widget.kinds[o.kindId]?.symbol,
+      ports: _portsOf(o.id),
+      occupied: widget.occupiedPortIds,
+      autoName: (port) =>
+          widget.portAutoName?.call(o, port) ?? 'Θύρα ${port.number}',
+      detailOf: widget.portDetail,
+      backOccupied: widget.backOccupied,
+      frontOccupied: widget.frontOccupied,
+      pendingPortId: actions?.pendingPortId ?? widget.revealPortId,
+      onPortTap: actions?.onPortTap == null
+          ? null
+          : (port, at) => actions!.onPortTap!(o, port, at),
+      onEditWrittenName: actions?.onEditWrittenName == null
+          ? null
+          : (port) => actions!.onEditWrittenName!(o, port),
+    );
+    if (group.length < 2) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: facade(group.single, _label(group.single)),
+      );
+    }
+    final portCount = group.fold(0, (sum, o) => sum + _portsOf(o.id).length);
+    final name = group.first.name?.trim() ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${name.isEmpty ? 'Stack' : 'Stack $name'} '
+            '(${group.length} μονάδες · $portCount θύρες)',
+            style: theme.textTheme.labelLarge,
+          ),
+          const SizedBox(height: 4),
+          for (final o in group)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: facade(o, 'Μέλος ${o.stackUnit ?? 1} · U${o.rackU ?? 1}'),
+            ),
         ],
       ),
     );
@@ -552,6 +666,7 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
             child: Text(
               [
                 heightU > 1 ? '${_label(object)} ($heightU U)' : _label(object),
+                if (object.stackId != null) 'μέλος ${object.stackUnit ?? 1}',
                 ?_portSummary(object),
               ].join(' · '),
               style: theme.textTheme.bodySmall?.copyWith(color: Colors.black87),
@@ -564,7 +679,43 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
     );
   }
 
+  /// Τα άλλα switches της καμπίνας, με τα οποία μπορεί να ενωθεί το [object].
+  List<FloorPlanObject> _stackCandidates(FloorPlanObject object) => [
+    for (final o in widget.contents)
+      if (o.id != object.id &&
+          widget.kinds[o.kindId]?.symbol == FloorPlanSymbol.networkSwitch &&
+          (o.stackId == null || o.stackId != object.stackId))
+        o,
+  ];
+
+  Future<void> _askJoinStack(
+    FloorPlanObject object,
+    FloorPlanCabinetActions actions,
+  ) async {
+    final other = await showDialog<FloorPlanObject>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Ενοποίηση σε stack με…'),
+        children: [
+          for (final o in _stackCandidates(object))
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(o),
+              child: Text('${_label(o)} · U${o.rackU ?? 1}'),
+            ),
+        ],
+      ),
+    );
+    if (other != null) actions.onJoinStack?.call(object.id, other.id);
+  }
+
   Widget _menu(FloorPlanObject object, FloorPlanCabinetActions actions) {
+    final isSwitch =
+        widget.kinds[object.kindId]?.symbol == FloorPlanSymbol.networkSwitch;
+    final canJoin =
+        isSwitch &&
+        actions.onJoinStack != null &&
+        _stackCandidates(object).isNotEmpty;
+    final inStack = object.stackId != null;
     return PopupMenuButton<String>(
       tooltip: 'Ενέργειες',
       padding: EdgeInsets.zero,
@@ -583,17 +734,36 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
               max: widget.units,
             );
             if (height != null) actions.onSetHeight(object.id, height);
+          case 'join':
+            await _askJoinStack(object, actions);
+          case 'unit':
+            final unit = await _askNumber(
+              context,
+              title: 'Μέλος του stack',
+              label: 'Αριθμός μέλους',
+              initial: object.stackUnit ?? 1,
+              max: kFloorPlanMaxStackUnit,
+            );
+            if (unit != null) actions.onSetStackUnit?.call(object.id, unit);
+          case 'leave':
+            actions.onLeaveStack?.call(object.id);
           case 'out':
             actions.onTakeOut(object.id);
           case 'delete':
             actions.onDelete(object.id);
         }
       },
-      itemBuilder: (context) => const [
-        PopupMenuItem(value: 'edit', child: Text('Στοιχεία…')),
-        PopupMenuItem(value: 'height', child: Text('Ύψος σε U…')),
-        PopupMenuItem(value: 'out', child: Text('Βγάλε από την καμπίνα')),
-        PopupMenuItem(value: 'delete', child: Text('Διαγραφή')),
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'edit', child: Text('Στοιχεία…')),
+        const PopupMenuItem(value: 'height', child: Text('Ύψος σε U…')),
+        if (canJoin)
+          const PopupMenuItem(value: 'join', child: Text('Ενοποίηση με…')),
+        if (inStack) ...const [
+          PopupMenuItem(value: 'unit', child: Text('Μέλος του stack…')),
+          PopupMenuItem(value: 'leave', child: Text('Έξοδος από το stack')),
+        ],
+        const PopupMenuItem(value: 'out', child: Text('Βγάλε από την καμπίνα')),
+        const PopupMenuItem(value: 'delete', child: Text('Διαγραφή')),
       ],
     );
   }

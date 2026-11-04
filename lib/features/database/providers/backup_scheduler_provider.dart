@@ -15,6 +15,7 @@ import '../../../core/utils/background_task.dart';
 import '../models/database_backup_settings.dart';
 import '../services/active_backup_settings.dart';
 import '../services/backup_responsibility.dart';
+import '../services/backup_run_gate.dart';
 import '../services/database_backup_audit.dart';
 import '../services/database_backup_service.dart';
 import '../utils/backup_destination_folder_validator.dart';
@@ -38,8 +39,9 @@ class BackupSchedulerNotifier extends Notifier<int> {
   bool _runLock = false;
   String? _skipAuditLoggedKey;
 
-  /// True όσο τρέχει αυτόματο αντίγραφο ασφαλείας.
-  bool get isBackupJobRunning => _runLock;
+  /// True όσο τρέχει οποιοδήποτε αντίγραφο ασφαλείας, όχι μόνο το αυτόματο:
+  /// σε αυτό στηρίζονται οι φρουροί της αλλαγής βάσης.
+  bool get isBackupJobRunning => _runLock || BackupRunGate.isRunning;
 
   @override
   int build() {
@@ -179,7 +181,7 @@ class BackupSchedulerNotifier extends Notifier<int> {
       return;
     }
 
-    if (_runLock) {
+    if (isBackupJobRunning) {
       _maybeLogScheduledSkip(settings, BackupAuditSkipReason.jobRunning);
       return;
     }
@@ -225,6 +227,13 @@ class BackupSchedulerNotifier extends Notifier<int> {
         claimed,
         auditTrigger: BackupAuditTrigger.scheduled,
       );
+
+      // Ξεκίνησε άλλο αντίγραφο μετά τον έλεγχο παραπάνω. Δεν είναι αποτυχία,
+      // και το επόμενο τικ θα κρίνει ξανά.
+      if (result.wasAlreadyRunning) {
+        _maybeLogScheduledSkip(settings, BackupAuditSkipReason.jobRunning);
+        return;
+      }
 
       // Η σφραγίδα γράφεται ΠΑΝΩ ΣΤΗ ΦΡΕΣΚΙΑ τιμή, όχι πάνω στη δεσμευμένη:
       // το αντίγραφο κρατά δευτερόλεπτα έως λεπτά, και στο μεταξύ ο

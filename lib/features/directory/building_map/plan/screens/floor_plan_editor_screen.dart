@@ -47,6 +47,7 @@ import '../floor_plan_geometry.dart';
 import '../floor_plan_measure.dart';
 import '../../../../../core/models/floor_plan_element.dart';
 import '../../../../../core/models/floor_plan_object.dart';
+import '../../../../../core/models/floor_plan_object_kind.dart';
 import '../../../../../core/models/floor_plan_placement.dart';
 import '../../../../../core/models/floor_plan_port.dart';
 import '../floor_plan_item_info.dart';
@@ -68,6 +69,10 @@ import '../widgets/floor_plan_layers_button.dart';
 import '../widgets/floor_plan_measure_painter.dart';
 import '../widgets/floor_plan_object_editor.dart';
 import '../widgets/floor_plan_object_kinds_dialog.dart';
+import '../widgets/floor_plan_outlet_dialogs.dart';
+import '../widgets/floor_plan_other_floor_badge.dart';
+import '../widgets/floor_plan_outlet_editor.dart';
+import '../../services/building_map_floor_ordering.dart';
 import '../widgets/floor_plan_placement_panel.dart';
 import '../widgets/floor_plan_painter.dart';
 import '../widgets/floor_plan_pattern_panel.dart';
@@ -75,6 +80,7 @@ import '../widgets/floor_plan_calibration_dialog.dart';
 import '../widgets/floor_plan_room_flow.dart';
 import '../widgets/floor_plan_room_label_bar.dart';
 import '../widgets/floor_plan_room_views.dart';
+import '../widgets/floor_plan_route_painter.dart';
 import '../widgets/floor_plan_text_editor.dart';
 import '../widgets/floor_plan_tool_rail.dart';
 
@@ -221,6 +227,7 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
   /// Το αντικείμενο του οποίου τα στοιχεία γράφονται τώρα στο πλαίσιο.
   int? _objectDraftId;
   final GlobalKey<FloorPlanObjectEditorState> _objectEditorKey = GlobalKey();
+  final GlobalKey<FloorPlanOutletEditorState> _outletEditorKey = GlobalKey();
 
   late final FloorPlanSelectInteraction _select = FloorPlanSelectInteraction(
     _controller,
@@ -313,6 +320,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
   /// Τα ονόματα των ορόφων, για το «έχει ήδη θέση στο …».
   Map<int, String> _floorLabels = const {};
 
+  /// Πού βρίσκεται κάθε όροφος σε σχέση με τους άλλους — για το βέλος στο σήμα
+  /// διαδρομής προς άλλον όροφο.
+  Map<int, int> _floorLevels = const {};
+
   /// Η εγγραφή του Καταλόγου που περιμένει κλικ στον χάρτη.
   FloorPlanCatalogEntry? _armedEntry;
 
@@ -320,7 +331,12 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     try {
       final floors = await widget.catalog.floors();
       if (!mounted) return;
-      setState(() => _floorLabels = {for (final f in floors) f.id: f.label});
+      setState(() {
+        _floorLabels = {for (final f in floors) f.id: f.label};
+        _floorLevels = {
+          for (final f in floors) f.id: buildingMapFloorNumericSortKey(f),
+        };
+      });
     } catch (_) {
       // Χωρίς ονόματα ορόφων το πάνελ γράφει «άλλος όροφος» — δεν σταματά.
     }
@@ -380,6 +396,13 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     final objectDraft = _objectDraftId;
     if (objectDraft != null && _controller.objectById(objectDraft) == null) {
       _objectDraftId = null;
+    }
+    // Καλώδιο στον αέρα από θύρα που δεν υπάρχει πια, ή με άλλο εργαλείο.
+    final cableFrom = _cableFrom;
+    if (cableFrom != null &&
+        (_controller.tool != FloorPlanTool.select ||
+            !_controller.ports.any((p) => p.id == cableFrom.id))) {
+      _cableFrom = null;
     }
     setState(() {});
   }
@@ -499,6 +522,11 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     if (_textDraft != null) {
       _swallowClick = true;
       _commitTextFromOutside();
+      return;
+    }
+    if (_cableFrom != null) {
+      _swallowClick = true;
+      _finishCableOnMap(view.toWorld(event.localPosition), view);
       return;
     }
     if (_objectDraftId != null) {
@@ -920,6 +948,7 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
       ip: details.ip,
       lansweeperName: details.lansweeperName,
       notes: details.notes,
+      portType: details.portType,
     );
     await _commitPortCount(id, details.portCount);
   }
@@ -964,17 +993,8 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
   }
 
   /// Το αυτόματο όνομα της θύρας [port] του [object] («RC6.F17»).
-  String _portName(FloorPlanObject object, FloorPlanPort port) {
-    final cabinetId = object.cabinetId;
-    return floorPlanPortAutoName(
-      symbol: _controller.kinds[object.kindId]?.symbol,
-      objectName: object.name,
-      cabinetName: cabinetId == null
-          ? null
-          : _controller.objectById(cabinetId)?.name,
-      number: port.number,
-    );
-  }
+  String _portName(FloorPlanObject object, FloorPlanPort port) =>
+      _controller.portName(port);
 
   Future<void> _editWrittenName(
     FloorPlanObject object,
@@ -991,6 +1011,11 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
   }
 
   void _commitObjectFromOutside() {
+    final outlet = _outletEditorKey.currentState?.current;
+    if (outlet != null) {
+      _commitOutlet(outlet);
+      return;
+    }
     final current = _objectEditorKey.currentState?.current;
     if (current == null) {
       setState(() => _objectDraftId = null);
@@ -1002,6 +1027,355 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
   void _cancelObject() {
     setState(() => _objectDraftId = null);
     _canvasFocus.requestFocus();
+  }
+
+  // ── Καλώδια ───────────────────────────────────────────────────────────
+
+  /// Η θύρα απ' όπου ξεκίνησε το καλώδιο που φτιάχνεται τώρα.
+  FloorPlanPort? _cableFrom;
+
+  void _cancelCable() {
+    if (_cableFrom != null) setState(() => _cableFrom = null);
+  }
+
+  /// Κλικ σε θύρα της πρόσοψης. Με καλώδιο στον αέρα το τελειώνει· σε θύρα που
+  /// έχει ήδη καλώδιο μπροστά δίνει «Αφαίρεση καλωδίου»· αλλιώς ξεκινά νέο.
+  Future<void> _onPortTap(
+    FloorPlanObject object,
+    FloorPlanPort port,
+    Offset at,
+  ) async {
+    final from = _cableFrom;
+    if (from != null) {
+      if (from.id == port.id) {
+        _cancelCable();
+        return;
+      }
+      final done = await _controller.addCable(from.id, port.id);
+      if (done && mounted) _cancelCable();
+      return;
+    }
+    final cables = _controller.portCables;
+    final other = cables.otherEnd(port.id, kFloorPlanCableFront);
+    if (other == null) {
+      // Το πλαίσιο στοιχείων κρατά την πρόσοψη του switch έξω από καμπίνα:
+      // κλείνει, για να φανεί ο χάρτης όπου καταλήγει το καλώδιο.
+      if (_objectDraftId != null) _commitObjectFromOutside();
+      _canvasFocus.requestFocus();
+      setState(() => _cableFrom = port);
+      return;
+    }
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: [
+        PopupMenuItem(
+          value: 'remove',
+          child: Text('Αφαίρεση καλωδίου προς ${floorPlanCableEndName(other)}'),
+        ),
+      ],
+    );
+    if (choice != 'remove' || !mounted) return;
+    final cableId = cables.cableIdAt(port.id, kFloorPlanCableFront);
+    if (cableId != null) await _controller.removeCable(cableId);
+  }
+
+  /// Κλικ στον χάρτη με καλώδιο στον αέρα: στο κενό το ακυρώνει, σε συσκευή
+  /// το τελειώνει εκεί. Όταν υπάρχουν πολλές θύρες, ρωτά ποια.
+  Future<void> _finishCableOnMap(
+    Offset world,
+    FloorPlanViewTransform view,
+  ) async {
+    final from = _cableFrom;
+    if (from == null) return;
+    final hit = hitTestFloorPlanObject(
+      world,
+      floorPlanObjectsAtZoom(_controller.objectViews, view.pixelsPerCm),
+    );
+    if (hit == null) {
+      _cancelCable();
+      return;
+    }
+    if (hit.source != FloorPlanItemSource.object) {
+      _showMessage(
+        'Υπάλληλοι, τηλέφωνα και υπολογιστές δένονται μέσω πρίζας, από το '
+        'πλαίσιό της.',
+      );
+      return;
+    }
+    final target = _controller.objectById(hit.id);
+    if (target == null) return;
+    final symbol = _controller.kinds[target.kindId]?.symbol;
+    if (symbol?.isOutlet ?? false) {
+      _showMessage(
+        'Η πρίζα δένεται με patch panel από το πλαίσιό της, με διπλό κλικ.',
+      );
+      return;
+    }
+    final candidates = (symbol?.isCabinet ?? false)
+        ? _controller.cabinetContents(target.id)
+        : [target];
+    final groups = _cableTargetGroups(candidates, from);
+    if (groups.isEmpty) {
+      _showMessage(
+        '«${_objectName(target)}» δεν έχει ελεύθερη θύρα. Δηλώστε θύρες, ή '
+        'ενεργοποιήστε το «Έχει θύρες» στο είδος του.',
+      );
+      return;
+    }
+    ({int objectId, int? portId})? picked;
+    if (groups.length == 1 && groups.single.ports.isEmpty) {
+      picked = (objectId: groups.single.objectId, portId: null);
+    } else if (groups.length == 1 && groups.single.ports.length == 1) {
+      picked = (
+        objectId: groups.single.objectId,
+        portId: groups.single.ports.single.id,
+      );
+    } else {
+      picked = await showFloorPlanCableTargetDialog(
+        context,
+        fromName: _controller.portName(from),
+        groups: groups,
+      );
+      if (!mounted) return;
+      _canvasFocus.requestFocus();
+    }
+    if (picked == null) return;
+    final portId = picked.portId;
+    final done = portId == null
+        ? await _controller.addCableToObject(from.id, picked.objectId)
+        : await _controller.addCable(from.id, portId);
+    if (done && mounted) _cancelCable();
+  }
+
+  String _objectName(FloorPlanObject o) {
+    final name = o.name?.trim() ?? '';
+    return name.isEmpty ? (_controller.kinds[o.kindId]?.name ?? '') : name;
+  }
+
+  /// Οι συσκευές που δέχονται το καλώδιο, με τις ελεύθερες θύρες τους. Η
+  /// συσκευή με μία θύρα που δεν την έχει ακόμη, τη δημιουργεί όταν διαλεχτεί.
+  List<FloorPlanCableTargetGroup> _cableTargetGroups(
+    List<FloorPlanObject> candidates,
+    FloorPlanPort from,
+  ) {
+    final taken = _controller.portCables.front;
+    final groups = <FloorPlanCableTargetGroup>[];
+    for (final o in candidates) {
+      if (o.id == from.objectId) continue;
+      final kind = _controller.kinds[o.kindId];
+      if (kind == null) continue;
+      final ports = _controller.portsOf(o.id);
+      final free = [
+        for (final p in ports)
+          if (!taken.contains(p.id)) p,
+      ];
+      final single = floorPlanHasSinglePort(kind);
+      if (!(kind.symbol?.hasPortCount ?? false) && !single) continue;
+      if (single && ports.isEmpty) {
+        groups.add((objectId: o.id, title: _objectName(o), ports: const []));
+      } else if (free.isNotEmpty) {
+        groups.add((objectId: o.id, title: _objectName(o), ports: free));
+      }
+    }
+    return groups;
+  }
+
+  // ── Διαδρομή πρίζας ───────────────────────────────────────────────────
+
+  /// Η πρίζα που είναι η μόνη επιλογή — τότε φαίνεται η διαδρομή της.
+  FloorPlanObject? _selectedOutlet() {
+    if (_controller.tool != FloorPlanTool.select ||
+        _objectDraftId != null ||
+        _controller.selectedIds.isNotEmpty ||
+        _controller.selectedPlacementIds.isNotEmpty ||
+        _controller.selectedObjectIds.length != 1) {
+      return null;
+    }
+    final object = _controller.objectById(_controller.selectedObjectIds.single);
+    if (object == null) return null;
+    final symbol = _controller.kinds[object.kindId]?.symbol;
+    return (symbol?.isOutlet ?? false) ? object : null;
+  }
+
+  FloorPlanOutletRoute _selectedRoute() {
+    final outlet = _selectedOutlet();
+    return outlet == null
+        ? const FloorPlanOutletRoute()
+        : _infoSources().outletRoute(outlet.id);
+  }
+
+  /// Τα σήματα προς άλλον όροφο της επιλεγμένης πρίζας. Στη σχεδίαση απλώς
+  /// λένε πού συνεχίζει: το άνοιγμα του άλλου ορόφου γίνεται από την Προβολή.
+  List<Widget> _otherFloorBadges() {
+    final view = _view;
+    final route = _selectedRoute();
+    final anchor = route.badgeAnchor;
+    if (view == null || anchor == null) return const [];
+    return floorPlanOtherFloorBadges(
+      targets: route.otherFloors,
+      anchor: view.toScreen(anchor),
+      bounds: _canvasSize,
+    );
+  }
+
+  /// Το πάνελ με τη διαδρομή της επιλεγμένης πρίζας, στα δεξιά.
+  Widget? _outletRoutePanel() {
+    final outlet = _selectedOutlet();
+    if (outlet == null) return null;
+    final sources = _infoSources();
+    final views = _controller.objectViews;
+    FloorPlanObjectView? view;
+    for (final v in views) {
+      if (v.source == FloorPlanItemSource.object && v.id == outlet.id) view = v;
+    }
+    final info = view == null ? null : floorPlanItemInfo(view, sources);
+    if (info == null) return null;
+    final route = sources.outletRoute(outlet.id);
+    return Positioned(
+      top: 8,
+      right: 8,
+      child: FloorPlanItemDetailsPanel(
+        info: info,
+        onClose: () => _controller.select(null),
+        footer: route.targets.isEmpty
+            ? null
+            : Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.tonalIcon(
+                  onPressed: () {
+                    final target = route.targets.first;
+                    final current = _view;
+                    setState(() {
+                      if (current != null) {
+                        _view = current.panBy(
+                          _canvasSize.center(Offset.zero) -
+                              current.toScreen(target.center),
+                        );
+                      }
+                    });
+                    _controller.selectObject(target.id);
+                  },
+                  icon: const Icon(Icons.dns_outlined),
+                  label: const Text('Δείξε την καμπίνα'),
+                ),
+              ),
+      ),
+    );
+  }
+
+  // ── Πρίζες ────────────────────────────────────────────────────────────
+
+  Future<void> _commitOutlet(List<FloorPlanOutletPortDraft> ports) async {
+    final id = _objectDraftId;
+    if (id == null) return;
+    setState(() => _objectDraftId = null);
+    _canvasFocus.requestFocus();
+    await _controller.saveOutlet(id, ports);
+  }
+
+  String? _connectionLabelOf(FloorPlanPortConnection connection) =>
+      _infoSources().connectionLabel(connection);
+
+  /// Οι θύρες της πρίζας όπως τις δείχνει το πλαίσιό της.
+  List<FloorPlanOutletPortDraft> _outletDrafts(FloorPlanObject outlet) => [
+    for (final port in _controller.portsOf(outlet.id))
+      () {
+        FloorPlanPortLink? link;
+        for (final l in _controller.portLinks) {
+          if (l.outletPortId == port.id) link = l;
+        }
+        return FloorPlanOutletPortDraft(
+          number: port.number,
+          writtenName: port.writtenName,
+          patchPortId: link?.patchPortId,
+          patchPortName: link == null ? null : floorPlanLinkName(link),
+          connection: port.connection,
+          connectionLabel: _connectionLabelOf(port.connection),
+        );
+      }(),
+  ];
+
+  Future<({int? id, String? name})?> _pickPatchPort(
+    FloorPlanOutletPortDraft port,
+    Set<int> others,
+  ) async {
+    final options = await _controller.patchPortOptions();
+    if (!mounted) return null;
+    final current = port.patchPortId;
+    return showFloorPlanPatchPortDialog(
+      context,
+      portTitle: 'Θύρα ${port.number}',
+      groups: floorPlanPatchPanelGroups(
+        options,
+        currentFloorId: widget.floor.id,
+        keep: {?current},
+        exclude: others,
+      ),
+      floorLabel: _floorLabel,
+      canDisconnect: current != null,
+      currentPortId: current,
+    );
+  }
+
+  /// Ο εξοπλισμός του Καταλόγου και τα αντικείμενα του ορόφου που μπορούν να
+  /// είναι σε πρίζα — όσα είναι στον ίδιο χώρο με αυτήν πρώτα.
+  Future<FloorPlanOutletPortDraft?> _pickConnection(
+    FloorPlanObject outlet,
+    FloorPlanOutletPortDraft port,
+  ) async {
+    final room = _roomAt(outlet.center)?.id;
+    bool sameRoom(Offset at) => room != null && _roomAt(at)?.id == room;
+    final placedAt = {
+      for (final p in _controller.placements)
+        if (p.type == FloorPlanPlacementType.equipment) p.entityId: p.center,
+    };
+    List<FloorPlanConnectionChoice> ordered(
+      List<FloorPlanConnectionChoice> choices,
+    ) => choices
+      ..sort((a, b) {
+        if (a.nearby != b.nearby) return a.nearby ? -1 : 1;
+        return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+      });
+    final picked = await showFloorPlanConnectionDialog(
+      context,
+      portTitle: 'Θύρα ${port.number}',
+      current: port.connection,
+      equipment: ordered([
+        for (final e in _controller.catalog.values)
+          if (e.type == FloorPlanPlacementType.equipment)
+            (
+              id: e.entityId,
+              label: e.label,
+              detail: e.holders.isEmpty ? null : e.holders.join(', '),
+              nearby: switch (placedAt[e.entityId]) {
+                final at? => sameRoom(at),
+                null => false,
+              },
+            ),
+      ]),
+      objects: ordered([
+        for (final o in _controller.objects)
+          if (_connectableKind(o))
+            (
+              id: o.id,
+              label: _connectionLabelOf(FloorPlanPortConnection.object(o.id))!,
+              detail: _controller.kinds[o.kindId]?.name,
+              nearby: !o.inCabinet && sameRoom(o.center),
+            ),
+      ]),
+    );
+    if (picked == null) return null;
+    return port.copyWith(connection: picked);
+  }
+
+  /// Σε πρίζα δεν μπαίνει έπιπλο, καμπίνα, patch panel ή άλλη πρίζα.
+  bool _connectableKind(FloorPlanObject o) {
+    final symbol = _controller.kinds[o.kindId]?.symbol;
+    if (symbol == null) return false;
+    return !symbol.isVolume &&
+        !symbol.isOutlet &&
+        symbol != FloorPlanSymbol.patchPanel;
   }
 
   /// Το πλαίσιο στοιχείων του αντικειμένου, δίπλα του στην οθόνη.
@@ -1022,6 +1396,24 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
         ? Offset(panel.left - kFloorPlanObjectEditorWidth - 32, panel.top + 40)
         : Offset(panel.right - 16, panel.top + 40);
     final at = object.inCabinet ? besidePanel : view.toScreen(object.center);
+    if (kind?.symbol?.isOutlet ?? false) {
+      return Positioned(
+        left: (at.dx + 24).clamp(
+          0,
+          math.max(0, _canvasSize.width - kFloorPlanOutletEditorWidth),
+        ),
+        top: (at.dy - 40).clamp(0, math.max(0, _canvasSize.height - 420)),
+        child: FloorPlanOutletEditor(
+          key: _outletEditorKey,
+          title: kind?.name ?? 'Πρίζα',
+          initial: _outletDrafts(object),
+          onCommit: _commitOutlet,
+          onCancel: _cancelObject,
+          onPickPatchPort: _pickPatchPort,
+          onPickConnection: (port) => _pickConnection(object, port),
+        ),
+      );
+    }
     return Positioned(
       left: (at.dx + 24).clamp(
         0,
@@ -1036,6 +1428,9 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
         onCommit: _commitObject,
         onCancel: _cancelObject,
         portCount: kind?.symbol?.hasPortCount ?? false,
+        portTypes: kind?.symbol == FloorPlanSymbol.networkSwitch
+            ? kFloorPlanPortTypes
+            : const {},
         // Ό,τι είναι σε καμπίνα δείχνει την πρόσοψή του στο πάνελ της.
         footer: (kind?.symbol?.hasPortCount ?? false) && !object.inCabinet
             ? FloorPlanPortFacade(
@@ -1045,6 +1440,11 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
                 occupied: _controller.occupiedPortIds,
                 autoName: (port) => _portName(object, port),
                 onEditWrittenName: (port) => _editWrittenName(object, port),
+                detailOf: _infoSources().portDetails(),
+                backOccupied: _controller.portCables.back,
+                frontOccupied: _controller.portCables.front,
+                pendingPortId: _cableFrom?.id,
+                onPortTap: (port, at) => _onPortTap(object, port, at),
               )
             : null,
       ),
@@ -1099,6 +1499,9 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
         ports: _controller.ports,
         occupiedPortIds: _controller.occupiedPortIds,
         portAutoName: _portName,
+        portDetail: _infoSources().portDetails(),
+        backOccupied: _controller.portCables.back,
+        frontOccupied: _controller.portCables.front,
         onClose: () => _controller.select(null),
         actions: FloorPlanCabinetActions(
           addableKinds: addable,
@@ -1113,6 +1516,11 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
           onDelete: (id) => _controller.deleteObjects({id}),
           onSetUnits: (units) => _controller.setCabinetUnits(cabinet.id, units),
           onEditWrittenName: _editWrittenName,
+          onPortTap: _onPortTap,
+          pendingPortId: _cableFrom?.id,
+          onJoinStack: _controller.joinStack,
+          onLeaveStack: _controller.leaveStack,
+          onSetStackUnit: _controller.setStackUnit,
         ),
       ),
     );
@@ -1131,6 +1539,7 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
       for (final c in cabinets) ..._controller.cabinetContents(c.id),
     ];
     if (inside.isNotEmpty) {
+      final cables = _controller.cableCountOf(inside);
       final what = cabinets.length == 1
           ? 'Η καμπίνα έχει'
           : 'Οι καμπίνες έχουν';
@@ -1142,7 +1551,9 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
         builder: (context) => AlertDialog(
           title: Text(cut ? 'Αποκοπή καμπίνας' : 'Διαγραφή καμπίνας'),
           content: Text(
-            '$what $count μέσα· να σβηστούν όλα μαζί;'
+            '$what $count μέσα'
+            '${cables == 0 ? '' : ' και ${cables == 1 ? '1 καλώδιο' : '$cables καλώδια'}'}'
+            '· να σβηστούν όλα μαζί;'
             '${cut ? ' Η επικόλληση φέρνει μόνο την καμπίνα, άδεια.' : ''}',
           ),
           actions: [
@@ -1175,6 +1586,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
       lansweeperName: o.lansweeperName ?? '',
       notes: o.notes ?? '',
       portCount: ports == 0 ? '' : '$ports',
+      portType:
+          _controller.kinds[o.kindId]?.symbol == FloorPlanSymbol.networkSwitch
+          ? (o.portType ?? kFloorPlanDefaultPortType)
+          : null,
     );
   }
 
@@ -1441,6 +1856,25 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
   Offset _hoverScreen = Offset.zero;
 
   /// Η υπόδειξη του συμβόλου κάτω από τον δείκτη· `null` όταν δεν υπάρχει.
+  /// Όσα χρειάζονται υπόδειξη και προσόψεις για να περιγράψουν ό,τι δείχνουν.
+  FloorPlanInfoSources _infoSources() {
+    final maps = _controller.infoMaps;
+    return FloorPlanInfoSources(
+      objects: maps.objects,
+      kinds: _controller.kinds,
+      catalog: _controller.catalog,
+      placements: maps.placements,
+      departmentName: (id) => _departments[id]?.name,
+      roomAt: floorPlanRoomLookup(_controller.elements),
+      ports: _controller.ports,
+      occupiedPortIds: _controller.occupiedPortIds,
+      portLinks: _controller.portLinks,
+      cableLines: _controller.portCables.lines,
+      floorLabel: (id) => _floorLabels[id],
+      floorLevel: (id) => _floorLevels[id],
+    );
+  }
+
   Widget? _hoverTooltip() {
     final item = _hoveredItem;
     if (item == null ||
@@ -1448,18 +1882,7 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
         _controller.tool != FloorPlanTool.select) {
       return null;
     }
-    final maps = _controller.infoMaps;
-    final info = floorPlanItemInfo(
-      item,
-      FloorPlanInfoSources(
-        objects: maps.objects,
-        kinds: _controller.kinds,
-        catalog: _controller.catalog,
-        placements: maps.placements,
-        departmentName: (id) => _departments[id]?.name,
-        roomAt: floorPlanRoomLookup(_controller.elements),
-      ),
-    );
+    final info = floorPlanItemInfo(item, _infoSources());
     if (info == null) return null;
     return Positioned(
       left: (_hoverScreen.dx + 16).clamp(
@@ -1509,6 +1932,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.escape) {
+      if (_cableFrom != null) {
+        _cancelCable();
+        return KeyEventResult.handled;
+      }
       if (_wallStart == null &&
           _measure.isEmpty &&
           _measureStart == null &&
@@ -1852,7 +2279,12 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
         // Πάντα Stack, με ή χωρίς πάνελ: αν άλλαζε η δομή, ο καμβάς θα
         // ξαναστηνόταν και θα έπαιρνε την εστίαση από το πλαίσιο στοιχείων.
         return Stack(
-          children: [_canvasLayers(context, constraints), ?_cabinetPanel()],
+          children: [
+            _canvasLayers(context, constraints),
+            ..._otherFloorBadges(),
+            ?_cabinetPanel(),
+            ?_outletRoutePanel(),
+          ],
         );
       },
     );
@@ -1862,6 +2294,7 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     _canvasSize = constraints.biggest;
     final view = _ensureView(_canvasSize);
     final draft = _textDraft;
+    final route = _selectedRoute();
     final canvas = Focus(
       focusNode: _canvasFocus,
       autofocus: true,
@@ -1888,7 +2321,13 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
                       measure: _measure,
                       hover: _measureHover(),
                     )
-                  : null,
+                  : route.isEmpty
+                  ? null
+                  : FloorPlanRoutePainter(
+                      view: view,
+                      route: route,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
               painter: FloorPlanPainter(
                 view: view,
                 walls: _controller.wallSegments,
@@ -1907,7 +2346,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
                 overlay: _overlay(),
                 colors: Theme.of(context).colorScheme,
                 objects: _controller.objectViews,
-                selectedObjectIds: _controller.selectedObjectIds,
+                selectedObjectIds: {
+                  ..._controller.selectedObjectIds,
+                  for (final t in route.targets) t.id,
+                },
                 selectedPlacementIds: _controller.selectedPlacementIds,
                 labelCache: _labelCache,
               ),
@@ -2113,6 +2555,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
   }
 
   String _statusText() {
+    if (_cableFrom case final from?) {
+      return 'Καλώδιο από ${_controller.portName(from)}: κλικ στη θύρα όπου '
+          'καταλήγει, ή σε αντικείμενο του χάρτη · κλικ στο κενό ή Esc: ακύρωση.';
+    }
     switch (_controller.tool) {
       case FloorPlanTool.wall:
         if (_wallStart == null) {

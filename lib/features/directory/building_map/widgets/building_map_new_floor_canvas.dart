@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/database/omnisearch_service.dart';
 import '../../../../core/models/building_map_floor.dart';
 import '../../../../core/models/floor_plan_placement.dart';
 import '../../models/department_model.dart';
@@ -12,13 +13,18 @@ import '../controllers/building_map_controller.dart';
 import '../plan/floor_plan_item_info.dart';
 import '../plan/floor_plan_layers.dart';
 import '../plan/floor_plan_objects.dart';
+import '../plan/floor_plan_output.dart';
+import '../plan/services/floor_plan_export.dart';
+import '../plan/services/floor_plan_print.dart';
 import '../plan/services/floor_plan_layers_preference.dart';
 import '../plan/widgets/floor_plan_layers_button.dart';
 import '../plan/providers/floor_plan_providers.dart';
 import '../plan/screens/floor_plan_editor_screen.dart';
 import '../plan/widgets/floor_plan_map_view.dart';
+import '../plan/widgets/floor_plan_output_dialog.dart';
 import '../providers/building_map_providers.dart';
 import '../services/building_map_department_eligibility.dart';
+import '../services/building_map_floor_ordering.dart';
 
 /// Ο καμβάς του κεντρικού χάρτη για όροφο που **πέρασε στον νέο χάρτη**: ο
 /// σχεδιασμένος όροφος, με φωτισμένο το τμήμα που βρήκε η αναζήτηση.
@@ -52,6 +58,8 @@ class _BuildingMapNewFloorCanvasState
   /// Οι στρώσεις που ο χρήστης έχει κρύψει.
   Set<String> _hidden = const {};
 
+  final GlobalKey _snapshotKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +71,48 @@ class _BuildingMapNewFloorCanvasState
   void _setHidden(Set<String> hidden) {
     setState(() => _hidden = hidden);
     FloorPlanLayersPreference.write(hidden);
+  }
+
+  Future<void> _print(FloorPlanFloorItems? items) async {
+    final scope = await showFloorPlanOutputDialog(
+      context: context,
+      title: 'Εκτύπωση χάρτη',
+      confirmLabel: 'Εκτύπωση…',
+      hiddenLayerNames: floorPlanHiddenLayerNames(
+        _hidden,
+        items?.kinds.values ?? const [],
+      ),
+    );
+    if (scope == null || !mounted) return;
+    await printFloorPlan(
+      context: context,
+      floorId: widget.floor.id,
+      floorLabel: buildingMapFloorDisplayLabel(widget.floor),
+      scope: scope,
+      snapshotKey: _snapshotKey,
+      hiddenLayers: _hidden,
+    );
+  }
+
+  Future<void> _export(FloorPlanFloorItems? items) async {
+    final scope = await showFloorPlanOutputDialog(
+      context: context,
+      title: 'Εξαγωγή χάρτη',
+      confirmLabel: 'Εξαγωγή…',
+      hiddenLayerNames: floorPlanHiddenLayerNames(
+        _hidden,
+        items?.kinds.values ?? const [],
+      ),
+    );
+    if (scope == null || !mounted) return;
+    await exportFloorPlanToImageFile(
+      context: context,
+      floorId: widget.floor.id,
+      floorLabel: buildingMapFloorDisplayLabel(widget.floor),
+      scope: scope,
+      snapshotKey: _snapshotKey,
+      hiddenLayers: _hidden,
+    );
   }
 
   /// «Άνοιγμα καρτέλας»: ο υπάλληλος και ο εξοπλισμός έχουν καρτέλα στον
@@ -128,8 +178,17 @@ class _BuildingMapNewFloorCanvasState
       buildingMapViewportCenterRequestSeqProvider,
     );
     final controller = ref.read(buildingMapControllerProvider);
+    final floorsById = {
+      for (final f
+          in ref.watch(buildingMapFloorsCatalogProvider).value ??
+              const <BuildingMapFloor>[])
+        f.id: f,
+    };
     final spot = ref.watch(buildingMapSearchFocusProvider);
-    final focusItem = spot == null || spot.floorId != floor.id
+    final focusRoomId = spot != null && spot.floorId == floor.id && spot.isRoom
+        ? spot.itemId
+        : null;
+    final focusItem = spot == null || spot.floorId != floor.id || spot.isRoom
         ? null
         : (
             source: spot.isPlacement
@@ -152,6 +211,16 @@ class _BuildingMapNewFloorCanvasState
             ? const []
             : visibleFloorPlanLayers(items.views, _hidden, keep: focusItem),
         focusItems: {?focusItem},
+        focusRoomId: focusRoomId,
+        snapshotKey: _snapshotKey,
+        focusOpening: spot == null || !spot.opensDetails || focusItem == null
+            ? null
+            : FloorPlanFocusOpening(
+                token: spot,
+                itemId: spot.itemId,
+                deviceId: spot.deviceId,
+                portId: spot.portId,
+              ),
         infoSources: items == null
             ? null
             : FloorPlanInfoSources(
@@ -163,8 +232,32 @@ class _BuildingMapNewFloorCanvasState
                 roomAt: floorPlanRoomLookup(list),
                 ports: items.ports,
                 occupiedPortIds: items.occupiedPortIds,
+                portLinks: items.portLinks,
+                cableLines: items.cableLines,
+                floorLabel: (id) => floorsById[id]?.label,
+                floorLevel: (id) => switch (floorsById[id]) {
+                  final f? => buildingMapFloorNumericSortKey(f),
+                  null => null,
+                },
               ),
         onOpenCard: items == null ? null : (view) => _cardOpener(view, items),
+        onOpenOtherFloor: (target) async {
+          final floors = floorsById.values.toList();
+          await controller.selectFloorFromList(target.floorId, floors);
+          ref
+              .read(buildingMapSearchFocusProvider.notifier)
+              .set(
+                BuildingMapOmnisearchSpot(
+                  floorId: target.floorId,
+                  floorLabel: floorsById[target.floorId]?.label ?? '',
+                  // Ο χάρτης βρίσκει το σύμβολο από το id του.
+                  center: Offset.zero,
+                  itemId: target.objectId,
+                  isPlacement: false,
+                ),
+              );
+          ref.read(buildingMapViewportCenterRequestSeqProvider.notifier).bump();
+        },
       ),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Ο χάρτης δεν διαβάστηκε: $e')),
@@ -201,6 +294,26 @@ class _BuildingMapNewFloorCanvasState
                   kinds: items?.kinds.values.toList() ?? const [],
                   hidden: _hidden,
                   onChanged: _setHidden,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Material(
+                shape: const CircleBorder(),
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                child: IconButton(
+                  tooltip: 'Εξαγωγή χάρτη (PNG ή JPG)',
+                  onPressed: () => _export(items),
+                  icon: const Icon(Icons.download_outlined),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Material(
+                shape: const CircleBorder(),
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                child: IconButton(
+                  tooltip: 'Εκτύπωση χάρτη',
+                  onPressed: () => _print(items),
+                  icon: const Icon(Icons.print_outlined),
                 ),
               ),
               if (canDraw) ...[

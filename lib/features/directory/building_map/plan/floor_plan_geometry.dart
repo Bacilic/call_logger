@@ -301,6 +301,17 @@ FloorPlanSegment? nearestWall(
   return best;
 }
 
+/// Το σημείο πάνω στον πλησιέστερο τοίχο, εντός [toleranceCm]· αν δεν υπάρχει
+/// τοίχος τόσο κοντά, το ίδιο το [p].
+Offset snapToNearestWall(
+  Offset p,
+  Iterable<FloorPlanSegment> walls,
+  double toleranceCm,
+) {
+  final wall = nearestWall(p, walls, toleranceCm);
+  return wall == null ? p : projectOntoSegment(p, wall.a, wall.b).point;
+}
+
 /// Η νέα κλίμακα του πατρόν μετά από βαθμονόμηση: μια γραμμή που με την
 /// τρέχουσα κλίμακα μετρά [measuredCm] είναι στην πραγματικότητα [realCm].
 double calibratedCmPerPixel({

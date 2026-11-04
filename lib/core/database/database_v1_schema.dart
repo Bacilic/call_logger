@@ -130,6 +130,8 @@ import 'database_schema_version.dart';
 /// καμπίνα, μονάδα stack), και οι πίνακες `building_map_ports`,
 /// `building_map_cables`, `building_map_cable_ends`. Καθαρές προσθήκες, νέοι
 /// πίνακες άδειοι· οι πίνακες του Καταλόγου δεν αποκτούν καμία στήλη.
+/// v75: `building_map_objects.port_type` — το πρόθεμα των θυρών ενός switch
+/// στο πρότυπο Cisco (Fa, Gi, Te). Καθαρή προσθήκη· κενό = Gi.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Η εικόνα κάθε κάτοψης ορόφου — **μία και κοινή για όλους τους σταθμούς**.
@@ -261,7 +263,8 @@ const String kCreateBuildingMapObjectsTable = '''
         rack_u INTEGER,
         rack_units INTEGER,
         stack_id INTEGER,
-        stack_unit INTEGER
+        stack_unit INTEGER,
+        port_type TEXT
       )
     ''';
 

@@ -5,8 +5,10 @@
 //   flutter test test/features/directory/building_map/plan/widgets/floor_plan_map_view_test.dart
 
 import 'package:call_logger/core/models/floor_plan_element.dart';
+import 'package:call_logger/core/models/floor_plan_object.dart';
 import 'package:call_logger/core/models/floor_plan_object_kind.dart';
 import 'package:call_logger/core/models/floor_plan_placement.dart';
+import 'package:call_logger/core/models/floor_plan_port.dart';
 import 'package:call_logger/features/directory/building_map/plan/floor_plan_item_info.dart';
 import 'package:call_logger/features/directory/building_map/plan/floor_plan_objects.dart';
 import 'package:call_logger/features/directory/building_map/plan/floor_plan_measure.dart';
@@ -239,6 +241,60 @@ void main() {
         lessThan(1),
       );
       expect(floorPlanSymbolsVisible(view(tester).pixelsPerCm), isTrue);
+    });
+
+    testWidgets('η αναζήτηση ανοίγει τα στοιχεία της πρίζας μία φορά: ό,τι '
+        'έκλεισε ο χρήστης μένει κλειστό', (tester) async {
+      const outlet = FloorPlanObject(
+        id: 5,
+        floorId: 1,
+        kindId: 6,
+        center: Offset(200, 150),
+      );
+      const kinds = {
+        6: FloorPlanObjectKind(
+          id: 6,
+          name: 'Πρίζα',
+          symbol: FloorPlanSymbol.outlet,
+        ),
+      };
+      final token = Object();
+      Future<void> pump() => tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 800,
+              height: 600,
+              child: FloorPlanMapView(
+                elements: elements,
+                departments: const {},
+                rotationDegrees: 0,
+                objects: buildFloorPlanObjectViews(const [outlet], kinds),
+                infoSources: FloorPlanInfoSources(
+                  objects: const {5: outlet},
+                  kinds: kinds,
+                  catalog: const {},
+                  placements: const {},
+                  departmentName: (_) => null,
+                  roomAt: floorPlanRoomLookup(elements),
+                  ports: const [FloorPlanPort(id: 1, objectId: 5, number: 1)],
+                ),
+                focusOpening: FloorPlanFocusOpening(token: token, itemId: 5),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await pump();
+      expect(find.textContaining('χωρίς σύνδεση'), findsOne);
+
+      await tester.tap(find.byTooltip('Κλείσιμο'));
+      await tester.pump();
+      expect(find.textContaining('χωρίς σύνδεση'), findsNothing);
+
+      await pump();
+      expect(find.textContaining('χωρίς σύνδεση'), findsNothing);
     });
   });
 }

@@ -18,6 +18,7 @@ import '../models/database_backup_settings.dart';
 import '../providers/backup_scheduler_provider.dart';
 import '../providers/database_backup_settings_provider.dart';
 import '../services/backup_destination_resolver.dart';
+import '../services/backup_run_gate.dart';
 import '../services/database_backup_audit.dart';
 import '../services/manual_backup_runner.dart';
 import '../utils/backup_destination_folder_validator.dart';
@@ -387,6 +388,8 @@ class _DatabaseSettingsBackupTabState
           reason: result.message ?? 'Το αντίγραφο δεν άνοιξε για έλεγχο.',
         );
         if (mounted) setState(_reloadDestinationContentFuture);
+      case ManualBackupOutcome.alreadyRunning:
+        messenger.showSnackBar(SnackBar(content: Text(result.message!)));
       case ManualBackupOutcome.failure:
         messenger.showSnackBar(
           SnackBar(
@@ -560,12 +563,19 @@ class _DatabaseSettingsBackupTabState
             onToggleFullMaxCopies: _notifier.setRetentionFullMaxCopiesEnabled,
           ),
           const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: settings.destinationDirectory.trim().isEmpty
-                ? null
-                : _runBackupNow,
-            icon: const Icon(Icons.save_alt_outlined),
-            label: const Text('Δημιουργία αντιγράφου τώρα'),
+          ValueListenableBuilder<bool>(
+            valueListenable: BackupRunGate.running,
+            builder: (context, running, _) => FilledButton.icon(
+              onPressed: running || settings.destinationDirectory.trim().isEmpty
+                  ? null
+                  : _runBackupNow,
+              icon: const Icon(Icons.save_alt_outlined),
+              label: Text(
+                running
+                    ? 'Αντίγραφο σε εξέλιξη…'
+                    : 'Δημιουργία αντιγράφου τώρα',
+              ),
+            ),
           ),
         ],
       ],
@@ -628,19 +638,21 @@ class _DatabaseSettingsBackupTabState
 
   Widget _buildScheduleStatus(DatabaseBackupSettings settings) {
     ref.watch(backupSchedulerProvider);
-    final jobRunning = ref
-        .read(backupSchedulerProvider.notifier)
-        .isBackupJobRunning;
-    return FutureBuilder<int>(
-      future: _pendingChangesFuture,
-      builder: (context, snapshot) => BackupTabScheduleStatus(
-        settings: settings,
-        pendingChanges: snapshot.data ?? 0,
-        jobRunning: jobRunning,
-        destinationContentFuture: _destinationContentFuture,
-        databaseBaseName: _currentDbPath.trim().isEmpty
-            ? null
-            : p.basenameWithoutExtension(_currentDbPath),
+    return ValueListenableBuilder<bool>(
+      valueListenable: BackupRunGate.running,
+      builder: (context, _, _) => FutureBuilder<int>(
+        future: _pendingChangesFuture,
+        builder: (context, snapshot) => BackupTabScheduleStatus(
+          settings: settings,
+          pendingChanges: snapshot.data ?? 0,
+          jobRunning: ref
+              .read(backupSchedulerProvider.notifier)
+              .isBackupJobRunning,
+          destinationContentFuture: _destinationContentFuture,
+          databaseBaseName: _currentDbPath.trim().isEmpty
+              ? null
+              : p.basenameWithoutExtension(_currentDbPath),
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@
 //
 //   flutter test test/features/database/providers/backup_scheduler_tick_test.dart
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:call_logger/core/database/backup_pending_changes.dart';
@@ -13,6 +14,7 @@ import 'package:call_logger/core/services/current_operator.dart';
 import 'package:call_logger/features/database/models/database_backup_settings.dart';
 import 'package:call_logger/features/database/providers/backup_scheduler_provider.dart';
 import 'package:call_logger/features/database/services/active_backup_settings.dart';
+import 'package:call_logger/features/database/services/backup_run_gate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -124,9 +126,8 @@ void main() {
     final db = await DatabaseHelper.instance.database;
     final saved = await ActiveBackupSettings.read();
     expect(
-      await BackupPendingChangesRepository(
-        db,
-      ).countPendingSince(saved.lastBackupAuditId),
+      await BackupPendingChangesRepository(db)
+          .countPendingSince(saved.lastBackupAuditId),
       0,
       reason: 'Το σημάδι καλύπτει τις αλλαγές ΚΑΙ την audit εγγραφή του.',
     );
@@ -137,6 +138,32 @@ void main() {
       hasLength(1),
       reason: 'Χωρίς νέες αλλαγές, το επόμενο τικ δεν παίρνει τίποτα.',
     );
+  });
+
+  test('όσο τρέχει χειροκίνητο αντίγραφο: το τικ παραλείπεται, και οι φρουροί '
+      'της αλλαγής βάσης το βλέπουν', () async {
+    await _saveSharedBundle(enabledBundle());
+    await _seedPendingChange();
+    await _insertOperatorRow(71, isAdmin: true);
+    CurrentOperator.activate(_operator(71, isAdmin: true));
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final scheduler = container.read(backupSchedulerProvider.notifier);
+
+    final release = Completer<void>();
+    final holding = BackupRunGate.tryRun<Object>(() async {
+      await release.future;
+      return 'τέλος';
+    });
+
+    expect(scheduler.isBackupJobRunning, isTrue);
+    await scheduler.debugRunTick();
+    expect(await _backupFilesIn(destDir.path), isEmpty);
+
+    release.complete();
+    await holding;
+    expect(scheduler.isBackupJobRunning, isFalse);
   });
 
   test(

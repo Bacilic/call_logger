@@ -106,9 +106,15 @@ Future<BackupVerificationResult> verifyBackupArtifact(
 ///
 /// Επιστρέφει τη νέα διαδρομή, ή `null` αν η μετονομασία δεν έγινε — οπότε ο
 /// καλών κρατά την παλιά και το λέει στο ημερολόγιο.
-Future<String?> markBackupArtifactAsBroken(String artifactPath) async {
+///
+/// Με [intoDirectory] το αρχείο μεταφέρεται εκεί: ένα αντίγραφο που κρίθηκε
+/// μέσα σε προσωρινό φάκελο πρέπει να φανεί στον φάκελο των αντιγράφων.
+Future<String?> markBackupArtifactAsBroken(
+  String artifactPath, {
+  String? intoDirectory,
+}) async {
   final file = File(artifactPath);
-  final dir = p.dirname(artifactPath);
+  final dir = intoDirectory ?? p.dirname(artifactPath);
   final ext = p.extension(artifactPath);
   final stem = p.basenameWithoutExtension(artifactPath);
 

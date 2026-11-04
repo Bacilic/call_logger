@@ -1499,6 +1499,8 @@ class BuildingMapController {
       // χάρτη έχει πάντα θέση, άρα δεν φτάνει ως εδώ.
       case BuildingMapOmnisearchEntityKind.phone:
       case BuildingMapOmnisearchEntityKind.mapObject:
+      case BuildingMapOmnisearchEntityKind.mapPort:
+      case BuildingMapOmnisearchEntityKind.mapRoom:
         return hit.departmentIds;
       case BuildingMapOmnisearchEntityKind.equipment:
         if (hit.departmentIds.isNotEmpty) return hit.departmentIds;
