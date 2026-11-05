@@ -4,6 +4,10 @@
 //
 //   flutter test test/features/directory/building_map/plan/floor_plan_editor_controller_test.dart
 
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:call_logger/features/directory/building_map/plan/services/floor_plan_pattern_cache.dart';
 import 'package:call_logger/core/database/database_foreign_keys.dart';
 import 'package:call_logger/core/database/database_schema_migrations.dart';
 import 'package:call_logger/core/database/floor_plan_objects_repository.dart';
@@ -1322,4 +1326,105 @@ void main() {
       expect(editor.portsOf(copy), hasLength(2));
     });
   });
+  group('Η εικόνα πατρόν δεν ξανακατεβαίνει όσο δεν άλλαξε', () {
+    // Η κάτοψη ζει ως εικόνα μέσα στη βάση, και η βάση σε δικτυακό φάκελο:
+    // κάθε περιττό κατέβασμα είναι MB πάνω από τη γραμμή του νοσοκομείου.
+    //
+    // Αυτό που μετριέται είναι **πόσες φορές ζητήθηκε η εικόνα από τη βάση**.
+    // Η αποκωδικοποίηση της εικόνας δεν τρέχει σε αυτό το περιβάλλον ελέγχου
+    // (ο codec του flutter_test δεν παράγει εικόνα), αλλά γίνεται **μετά** την
+    // απόφαση του κατεβάσματος, οπότε η απόφαση ελέγχεται πλήρως. Το ότι η
+    // κάτοψη φαίνεται στην οθόνη είναι δουλειά του Flutter και επαληθεύεται
+    // με τα μάτια.
+    late _CountingPatternRepository counting;
+    late FloorPlanPatternCache cache;
+
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8'
+      'DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+    );
+
+    FloorPlanEditorController controllerFor() => FloorPlanEditorController(
+      floorId: 1,
+      repository: counting,
+      onError: errors.add,
+      patternCache: cache,
+    );
+
+    /// Ό,τι δεν είναι η αδυναμία του codec σε αυτό το περιβάλλον.
+    List<String> realErrors() =>
+        errors.where((e) => !e.contains('Codec failed')).toList();
+
+    setUp(() {
+      counting = _CountingPatternRepository(db);
+      cache = FloorPlanPatternCache();
+    });
+
+    test('το δεύτερο άνοιγμα του ίδιου ορόφου δεν ρωτά το δίκτυο', () async {
+      final first = controllerFor();
+      await first.load();
+      await first.setPatternImage(png, center: Offset.zero);
+      // Η φόρτωση έχει τα bytes στο χέρι — δεν τα ξανακατεβάζει.
+      expect(counting.patternReads, 0);
+      first.dispose();
+
+      // Νέο άνοιγμα της οθόνης: ο ελεγκτής φτιάχνεται από την αρχή, οπότε μια
+      // μνήμη μέσα του δεν θα γλίτωνε τίποτα.
+      final second = controllerFor();
+      await second.load();
+
+      expect(counting.patternReads, 0, reason: 'απάντησε η μνήμη');
+      expect(realErrors(), isEmpty);
+      second.dispose();
+    });
+
+    test('αλλαγμένη κάτοψη από άλλον σταθμό κατεβαίνει κανονικά', () async {
+      final mine = controllerFor();
+      await mine.load();
+      await mine.setPatternImage(png, center: Offset.zero);
+      mine.dispose();
+
+      // Ο συνάδελφος φόρτωσε άλλη κάτοψη: άλλα bytes, άλλο αποτύπωμα. Κανείς
+      // δεν «θυμήθηκε» να ακυρώσει τη μνήμη — η ακύρωση είναι το κλειδί της.
+      final plain = FloorPlanRepository(db);
+      final other = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk'
+        'YPjPAAAAyAEBvbIuqwAAAABJRU5ErkJggg==',
+      );
+      await plain.setPattern(1, other, await plain.readState(1));
+
+      final next = controllerFor();
+      await next.load();
+
+      expect(counting.patternReads, 1, reason: 'το νέο αποτύπωμα κατέβηκε');
+      next.dispose();
+    });
+
+    test('η σβησμένη κάτοψη δεν ξαναζωντανεύει από τη μνήμη', () async {
+      final mine = controllerFor();
+      await mine.load();
+      await mine.setPatternImage(png, center: Offset.zero);
+      await mine.removePattern();
+      mine.dispose();
+
+      final next = controllerFor();
+      await next.load();
+
+      expect(next.patternImage, isNull);
+      expect(counting.patternReads, 0, reason: 'δεν υπάρχει τι να κατέβει');
+      next.dispose();
+    });
+  });
+}
+
+class _CountingPatternRepository extends FloorPlanRepository {
+  _CountingPatternRepository(super.db);
+
+  int patternReads = 0;
+
+  @override
+  Future<Uint8List?> readPatternImage(int floorId) {
+    patternReads++;
+    return super.readPatternImage(floorId);
+  }
 }

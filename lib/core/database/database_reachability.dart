@@ -11,14 +11,19 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common/sqflite.dart';
 
+import 'database_file_probe.dart';
 import 'database_helper.dart';
 import 'database_stall.dart';
+
+/// Η ερώτηση «αποκρίνεται η βάση;» ζει πλέον σε δικό της αρχείο, αλλά
+/// εξακολουθεί να απαντιέται και από εδώ: ο φύλακας είναι ο φυσικός της
+/// τόπος για όποιον τη ζητά μαζί με την παρακολούθηση.
+export 'database_file_probe.dart' show probeDatabaseFile;
 
 /// Η κατάσταση όπως τη βλέπει ο χειριστής.
 enum DatabaseReachability {
@@ -260,31 +265,6 @@ class DatabaseReachabilityTracker {
         }
     }
     return state;
-  }
-}
-
-/// Ρωτά το αρχείο της βάσης αν είναι ακόμη εκεί — **χωρίς να κρεμάσει**.
-///
-/// Δύο προφυλάξεις, και οι δύο απαραίτητες:
-///  * **Όριο χρόνου:** μια δικτυακή διαδρομή που δεν αποκρίνεται μπορεί να
-///    αργήσει δεκάδες δευτερόλεπτα λόγω SMB. Ο φύλακας δεν επιτρέπεται να
-///    κολλήσει εκεί που κόλλησε η εφαρμογή.
-///  * **try/catch:** σε άφταστη διαδρομή δικτύου τα Windows **πετούν**
-///    εξαίρεση αντί να απαντήσουν «δεν υπάρχει».
-///
-/// Ρωτά για το **μέγεθος** και όχι για την ύπαρξη: το μέγεθος απαιτεί
-/// πραγματικό άνοιγμα, ενώ η ύπαρξη μπορεί να απαντηθεί από μνήμη του
-/// συστήματος και να πει «όλα καλά» για αρχείο που δεν διαβάζεται πια.
-Future<bool> probeDatabaseFile(
-  String path, {
-  Duration timeout = const Duration(seconds: 5),
-}) async {
-  if (path.trim().isEmpty) return true;
-  try {
-    await File(path).length().timeout(timeout);
-    return true;
-  } catch (_) {
-    return false;
   }
 }
 

@@ -81,6 +81,51 @@ void main() {
       expect(await repository.count(), 1);
     });
 
+    test('λογαριασμός αποθηκευμένος με τομέα και κεφαλαία αναγνωρίζεται', () async {
+      // Τιμή γραμμένη από παλαιότερη έκδοση ή με το χέρι. Η καρτέλα τη δείχνει
+      // σωστά, γιατί η ανάγνωση την κανονικοποιεί — αν όμως η αναγνώριση
+      // συγκρίνει την ωμή τιμή, ο Βασίλης βλέπει κάθε πρωί την οθόνη «Ποιος
+      // είστε;» παρότι έχει προφίλ δεμένο στον λογαριασμό του.
+      final created = await repository.insert(
+        Operator(
+          displayName: 'Βασίλης',
+          windowsAccount: r'GNK\Drosos',
+          createdAt: DateTime(2026, 8, 20),
+        ),
+      );
+
+      final resolved = await OperatorIdentity.resolveAndActivate(
+        db,
+        windowsAccount: 'drosos',
+        workstationNames: const <String>[],
+      );
+
+      expect(resolved?.id, created.id);
+      expect(CurrentOperator.active?.id, created.id);
+    });
+
+    test('η ταύτιση λογαριασμού περνά και τις δύο πλευρές από τον ίδιο κανόνα', () async {
+      // Το ίδιο ερώτημα απαντά και στον φρουρό «ανήκει ήδη σε κάποιον αυτός ο
+      // λογαριασμός;» της φόρμας Χρηστών. Αν απαντήσει «ελεύθερος» για τιμή που
+      // υπάρχει, ο ίδιος λογαριασμός δίνεται σε δεύτερο προφίλ και η αναγνώριση
+      // διαλέγει τυχαία ανάμεσα στους δύο.
+      final created = await repository.insert(
+        Operator(
+          displayName: 'Βασίλης',
+          windowsAccount: r'GNK\Drosos',
+          createdAt: DateTime(2026, 8, 20),
+        ),
+      );
+
+      expect((await repository.findByWindowsAccount('drosos'))?.id, created.id);
+      expect((await repository.findByWindowsAccount('DROSOS'))?.id, created.id);
+      expect(
+        (await repository.findByWindowsAccount(r'OTHER\drosos'))?.id,
+        created.id,
+      );
+      expect(await repository.findByWindowsAccount('panagiotis'), isNull);
+    });
+
     test(
       'απενεργοποιημένο προφίλ δεν αναγνωρίζεται από τον λογαριασμό',
       () async {

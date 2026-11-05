@@ -21,6 +21,7 @@ import 'floor_plan_ports.dart';
 import 'floor_plan_rooms.dart' show polygonContains;
 import 'floor_plan_selection.dart';
 import 'floor_plan_stack.dart';
+import 'services/floor_plan_pattern_cache.dart';
 
 /// Τα εργαλεία της οθόνης σχεδίασης.
 enum FloorPlanTool {
@@ -121,13 +122,22 @@ class FloorPlanEditorController extends ChangeNotifier {
     FloorPlanObjectsRepository? objectsRepository,
     FloorPlanPlacementsRepository? placementsRepository,
     FloorPlanPortsRepository? portsRepository,
+    FloorPlanPatternCache? patternCache,
   }) : _repo = repository,
        _objectsRepo = objectsRepository,
        _placementsRepo = placementsRepository,
-       _portsRepo = portsRepository;
+       _portsRepo = portsRepository,
+       _patternCache = patternCache ?? FloorPlanPatternCache.instance;
 
   final int floorId;
   final FloorPlanRepository _repo;
+
+  /// Η εικόνα πατρόν που δεν ξανακατεβαίνει όσο δεν άλλαξε.
+  ///
+  /// Κοινή για όλη την εφαρμογή επειδή ο ελεγκτής φτιάχνεται από την αρχή σε
+  /// κάθε άνοιγμα ορόφου· ρητή εξάρτηση ώστε τα τεστ να μπορούν να **δουν** τι
+  /// ζητήθηκε από το δίκτυο και τι όχι.
+  final FloorPlanPatternCache _patternCache;
 
   /// Τα αντικείμενα του χάρτη· χωρίς αυτό η σχεδίαση δεν έχει αντικείμενα.
   final FloorPlanObjectsRepository? _objectsRepo;
@@ -368,8 +378,17 @@ class FloorPlanEditorController extends ChangeNotifier {
     _patternImage?.dispose();
     _patternImage = null;
     if (!_state.hasPattern) return;
-    final bytes = await _repo.readPatternImage(floorId);
-    if (bytes == null) return;
+    // Το αποτύπωμα της εικόνας έχει ήδη έρθει με την κατάσταση του ορόφου, και
+    // απαντά «είναι η ίδια εικόνα που κατέβασα την προηγούμενη φορά;». Όσο
+    // είναι ίδιο, η κάτοψη δεν ξανακατεβαίνει από το δίκτυο — και όταν ο
+    // συνάδελφος φορτώσει άλλη, το αποτύπωμα αλλάζει και η μνήμη δεν απαντά.
+    final hash = _state.patternHash;
+    var bytes = _patternCache.get(hash);
+    if (bytes == null) {
+      bytes = await _repo.readPatternImage(floorId);
+      if (bytes == null) return;
+      _patternCache.put(hash, bytes);
+    }
     _patternImage = await _decode(bytes);
   }
 
@@ -1863,6 +1882,9 @@ class FloorPlanEditorController extends ChangeNotifier {
       );
       await _repo.setPattern(floorId, bytes, placement);
       _state = await _repo.readState(floorId);
+      // Τα bytes είναι ήδη εδώ — μόλις τα γράψαμε. Χωρίς αυτό, η φόρτωση
+      // κάτοψης θα κατέβαζε αμέσως από το δίκτυο ό,τι μόλις ανέβασε.
+      _patternCache.put(_state.patternHash, bytes);
       await _reloadPatternImage();
     });
   }

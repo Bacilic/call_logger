@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../config/app_config.dart';
 import '../services/settings_service.dart';
+import 'database_file_probe.dart';
 
 /// Η τύχη μιας δικτυακής διαδρομής που δεν απάντησε.
 enum DatabasePathResolution {
@@ -185,19 +186,6 @@ Future<DateTime?> _lastModifiedOrNull(String path) async {
   }
 }
 
-/// Έλεγχος ύπαρξης αρχείου με σύντομο timeout (χρήσιμο για αργά δίκτυα).
-Future<bool> databaseFileExistsQuick(String dbPath) async {
-  try {
-    return await File(
-      dbPath,
-    ).exists().timeout(const Duration(seconds: 2), onTimeout: () => false);
-  } on TimeoutException {
-    return false;
-  } catch (_) {
-    return false;
-  }
-}
-
 /// Πόσοι «σκοποί επίλυσης» είναι ανοιχτοί αυτή τη στιγμή.
 ///
 /// Μετρητής και όχι σημαία, ώστε να αντέχει φώλιασμα: η εκκίνηση ανοίγει έναν
@@ -215,8 +203,8 @@ ResolvedDatabasePath? _scopedResolution;
 ///
 /// **Το πρόβλημα που λύνει:** μία εκκίνηση ρωτούσε δύο και τρεις φορές το ίδιο
 /// πράγμα — ο έλεγχος εκκίνησης, το άνοιγμα της βάσης και, σε αποτυχία, το
-/// διαγνωστικό κλειδώματος. Η ερώτηση «υπάρχει το αρχείο;» έχει όριο δύο
-/// δευτερολέπτων σε δικτυακή διαδρομή που δεν απαντά, οπότε η επανάληψη
+/// διαγνωστικό κλειδώματος. Η ερώτηση «αποκρίνεται η βάση;» περιμένει έως
+/// πέντε δευτερόλεπτα σε δικτυακή διαδρομή που δεν απαντά, οπότε η επανάληψη
 /// μεταφραζόταν κατευθείαν σε αναμονή του χρήστη.
 ///
 /// **Δεν είναι cache με χρονόμετρο.** Η μνήμη ζει όσο ο σκοπός και ούτε
@@ -314,7 +302,11 @@ Future<ResolvedDatabasePath> _resolveEffectiveDatabasePathUncached(
     return ResolvedDatabasePath(path: accepted, usedUncFallback: true);
   }
 
-  if (await databaseFileExistsQuick(p)) {
+  // Η **μία** ερώτηση «αποκρίνεται η βάση;», η ίδια που ρωτούν ο φύλακας
+  // προσβασιμότητας και ο φρουρός επιστροφής στη δικτυακή. Ο παλιός έλεγχος
+  // ύπαρξης με όριο δύο δευτερολέπτων δήλωνε «δεν αποκρίνεται» ένα
+  // δευτερόλεπτο πριν ξυπνήσει η σύνδεση SMB.
+  if (await probeDatabaseFile(p)) {
     return ResolvedDatabasePath(path: p, usedUncFallback: false);
   }
 
