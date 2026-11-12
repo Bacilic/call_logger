@@ -6,7 +6,15 @@ import '../../../../core/services/shared_settings.dart';
 import '../../../../core/config/app_config.dart';
 import 'department_color_palette.dart';
 
-/// Οκτώ θέσεις προσαρμοσμένων χρωμάτων (μετά το λευκό στην παλέτα), τοπική αποθήκευση.
+/// Οκτώ θέσεις προσαρμοσμένων χρωμάτων (μετά το λευκό στην παλέτα), **κοινές**
+/// για όλους τους σταθμούς.
+///
+/// Η εικόνα στη μνήμη διαβάζεται μία φορά ανά εκκίνηση· ο συνάδελφος όμως
+/// μπορεί να αλλάξει μια θέση στο μεταξύ. Γι' αυτό:
+/// - πριν από κάθε απόφαση («ποια θέση είναι κενή;») ο καλών ζητά
+///   [refresh], και
+/// - κάθε αλλαγή γράφει **μόνο τη δική της θέση** πάνω στη φρέσκια τιμή —
+///   ποτέ και τις οκτώ από την εικόνα της μνήμης.
 class DepartmentPaletteStore extends ChangeNotifier {
   DepartmentPaletteStore._();
 
@@ -30,6 +38,17 @@ class DepartmentPaletteStore extends ChangeNotifier {
     return _loading!;
   }
 
+  /// Ξαναδιαβάζει τις θέσεις από τα κοινά — πριν από κάθε ενέργεια στην
+  /// παλέτα, ώστε η απόφαση να μη στηρίζεται σε εικόνα του πρωινού.
+  Future<void> refresh() async {
+    await ensureLoaded();
+    final shared = await SharedSettings.read(
+      SharedSettingKeys.departmentPaletteSlots,
+    );
+    if (shared == null || shared.isEmpty) return;
+    _adopt(SharedSettings.decodeList(shared));
+  }
+
   /// Μετά από rollback επαναφοράς ρυθμίσεων εφαρμογής.
   Future<void> reloadFromPreferences() async {
     _loading = null;
@@ -50,6 +69,10 @@ class DepartmentPaletteStore extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       raw = await _migrateFromLegacy(prefs);
     }
+    _adopt(raw);
+  }
+
+  void _adopt(List<String> raw) {
     final slots = List<Color?>.filled(customSlotCount, null);
     for (var i = 0; i < customSlotCount; i++) {
       if (i < raw.length) {
@@ -73,13 +96,28 @@ class DepartmentPaletteStore extends ChangeNotifier {
     return slots;
   }
 
-  Future<void> _persist() async {
-    await SharedSettings.write(
+  /// Γράφει **μόνο** τη θέση [index] πάνω στην τρέχουσα αποθηκευμένη λίστα,
+  /// και υιοθετεί ό,τι αποθηκεύτηκε — μαζί με τις θέσεις του συναδέλφου.
+  Future<void> _writeSlot(int index, Color? color) async {
+    final hex = color == null ? '' : colorToDepartmentHex(color);
+    final stored = await SharedSettings.update(
       SharedSettingKeys.departmentPaletteSlots,
-      SharedSettings.encodeList([
-        for (final c in _slots) c == null ? '' : colorToDepartmentHex(c),
-      ]),
+      (current) {
+        final list = List<String>.filled(customSlotCount, '');
+        final existing = SharedSettings.decodeList(current);
+        for (var i = 0; i < customSlotCount && i < existing.length; i++) {
+          list[i] = existing[i];
+        }
+        list[index] = hex;
+        return SharedSettings.encodeList(list);
+      },
     );
+    if (stored != null) {
+      _adopt(SharedSettings.decodeList(stored));
+    } else {
+      _slots = List<Color?>.from(_slots)..[index] = color;
+      notifyListeners();
+    }
   }
 
   /// Πρώτη κενή θέση (0–7) ή null αν η παλέτα είναι πλήρη.
@@ -120,9 +158,7 @@ class DepartmentPaletteStore extends ChangeNotifier {
   Future<void> setCustomSlot(int index, Color color) async {
     assert(index >= 0 && index < customSlotCount);
     await ensureLoaded();
-    _slots = List<Color?>.from(_slots)..[index] = color;
-    await _persist();
-    notifyListeners();
+    await _writeSlot(index, color);
   }
 
   /// Καθαρισμός θέσης.
@@ -130,8 +166,6 @@ class DepartmentPaletteStore extends ChangeNotifier {
     assert(index >= 0 && index < customSlotCount);
     await ensureLoaded();
     if (_slots[index] == null) return;
-    _slots = List<Color?>.from(_slots)..[index] = null;
-    await _persist();
-    notifyListeners();
+    await _writeSlot(index, null);
   }
 }

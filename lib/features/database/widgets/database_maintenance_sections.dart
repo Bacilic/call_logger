@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/audit_retention_config.dart';
@@ -48,6 +49,10 @@ class _DatabaseMaintenanceSectionsState
 
   AuditRetentionConfig _retentionCfg = const AuditRetentionConfig();
 
+  /// Ό,τι διάβασε η οθόνη από τη βάση — η αποθήκευση γράφει μόνο τις
+  /// διαφορές από αυτό, ώστε να μη σβήνει την αλλαγή του συναδέλφου.
+  AuditRetentionConfig _retentionBaseline = const AuditRetentionConfig();
+
   /// Επίπεδο 1 — μετά από πόσες μέρες πετιέται το βοηθητικό κείμενο.
   final TextEditingController _compactDaysController = TextEditingController();
 
@@ -79,8 +84,14 @@ class _DatabaseMaintenanceSectionsState
   Future<void> _loadRetentionConfig() async {
     final c = await SettingsService().catalogs.getAuditRetentionConfig();
     if (!mounted) return;
+    _showRetentionConfig(c);
+  }
+
+  /// Γεμίζει τη φόρμα και κρατά την αφετηρία των αλλαγών του χρήστη.
+  void _showRetentionConfig(AuditRetentionConfig c) {
     setState(() {
       _retentionCfg = c;
+      _retentionBaseline = c;
       _compactDaysController.text = c.compactSearchTextAfterDays != null
           ? '${c.compactSearchTextAfterDays}'
           : '';
@@ -118,10 +129,12 @@ class _DatabaseMaintenanceSectionsState
     final next = _retentionFromForm();
     await _runGuarded(() async {
       try {
-        await SettingsService().catalogs.setAuditRetentionConfig(next);
-        if (mounted) {
-          setState(() => _retentionCfg = next);
-        }
+        final saved = await SettingsService().catalogs
+            .saveAuditRetentionChanges(
+              edited: next,
+              baseline: _retentionBaseline,
+            );
+        if (mounted) _showRetentionConfig(saved);
         _showBanner('Οι ρυθμίσεις retention audit αποθηκεύτηκαν.');
       } catch (e) {
         _showBanner(
@@ -333,8 +346,7 @@ class _DatabaseMaintenanceSectionsState
     final ok = await _doubleConfirm(
       context,
       title: 'VACUUM',
-      body:
-          'Θα εκτελεστεί VACUUM στην ενεργή βάση. Μεγάλα αρχεία μπορεί να καθυστερήσουν.',
+      body: 'Θα εκτελεστεί VACUUM στην ενεργή βάση. Μεγάλα αρχεία μπορεί να καθυστερήσουν.',
     );
     if (!ok || !context.mounted) return;
     await _runGuarded(() async {
@@ -453,8 +465,7 @@ class _DatabaseMaintenanceSectionsState
     final ok = await _doubleConfirm(
       context,
       title: 'Κλειστές εκκρεμότητες',
-      body:
-          'Θα διαγραφούν μόνο ολοκληρωμένες εκκρεμότητες με τελευταία ενημέρωση παλαιότερη των 6 μηνών.',
+      body: 'Θα διαγραφούν μόνο ολοκληρωμένες εκκρεμότητες με τελευταία ενημέρωση παλαιότερη των 6 μηνών.',
     );
     if (!ok || !context.mounted) return;
     await _runGuarded(() async {
@@ -565,16 +576,11 @@ class _DatabaseMaintenanceSectionsState
                       'του χώρου. Οι παλιές εγγραφές γίνονται πιο δύσκολα '
                       'αναζητήσιμες, και το κείμενο ξαναφτιάχνεται όποτε '
                       'θέλετε.',
-                  child: TextField(
+                  child: RetentionLimitField(
                     controller: _compactDaysController,
                     enabled: !_busy,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Μετά από (ημέρες)',
-                      hintText: 'Κενό = ποτέ',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
+                    label: 'Μετά από (ημέρες)',
+                    hint: 'Κενό = ποτέ',
                   ),
                 ),
 
@@ -590,45 +596,29 @@ class _DatabaseMaintenanceSectionsState
                       'υπόλοιπα.',
                   child: Column(
                     children: [
-                      TextField(
+                      RetentionLimitField(
                         controller: _volatileDaysController,
                         enabled: !_busy,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText:
-                              'Κλήσεις, εκκρεμότητες, αντίγραφα (ημέρες)',
-                          hintText:
-                              'Κενό = χωρίς όριο · οι ίδιες οι κλήσεις μένουν '
-                              'άθικτες',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
+                        label: 'Κλήσεις, εκκρεμότητες, αντίγραφα (ημέρες)',
+                        hint:
+                            'Κενό = χωρίς όριο · οι ίδιες οι κλήσεις μένουν '
+                            'άθικτες',
                       ),
                       const SizedBox(height: 8),
-                      TextField(
+                      RetentionLimitField(
                         controller: _operationalDaysController,
                         enabled: !_busy,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Αλλαγές σε καρτέλες (ημέρες)',
-                          hintText:
-                              'Κενό = χωρίς όριο · η σημερινή μορφή της '
-                              'καρτέλας μένει',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
+                        label: 'Αλλαγές σε καρτέλες (ημέρες)',
+                        hint:
+                            'Κενό = χωρίς όριο · η σημερινή μορφή της '
+                            'καρτέλας μένει',
                       ),
                       const SizedBox(height: 8),
-                      TextField(
+                      RetentionLimitField(
                         controller: _retentionRowsController,
                         enabled: !_busy,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Μέγιστο συνολικό πλήθος γραμμών',
-                          hintText: 'Κενό = χωρίς όριο πλήθους',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
+                        label: 'Μέγιστο συνολικό πλήθος γραμμών',
+                        hint: 'Κενό = χωρίς όριο πλήθους',
                       ),
                     ],
                   ),
@@ -877,6 +867,43 @@ class _DatabaseMaintenanceSectionsState
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Ένα όριο της εκκαθάρισης Ιστορικού: **μόνο ψηφία**, όπως τα υπόλοιπα
+/// αριθμητικά πεδία των Ρυθμίσεων Βάσης.
+///
+/// Χωρίς το φίλτρο, «30,5» ή «abc» γραφόταν στο πεδίο, η αποθήκευση έλεγε
+/// «αποθηκεύτηκαν», και ίσχυε σιωπηλά το παλιό όριο. Κενό πεδίο σημαίνει
+/// «χωρίς όριο».
+class RetentionLimitField extends StatelessWidget {
+  const RetentionLimitField({
+    super.key,
+    required this.controller,
+    required this.enabled,
+    required this.label,
+    required this.hint,
+  });
+
+  final TextEditingController controller;
+  final bool enabled;
+  final String label;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        border: const OutlineInputBorder(),
+        isDense: true,
       ),
     );
   }

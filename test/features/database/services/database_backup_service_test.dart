@@ -71,6 +71,69 @@ void main() {
         }) async => onMarked(),
       );
 
+  test('ρολόι μπροστά: το αντίγραφο πετυχαίνει, τα παλιά μένουν, και το μήνυμα '
+      'και το Ιστορικό το λένε', () async {
+    final first = await DatabaseBackupService.runBackup(settings());
+    final name = first.outputPath!.split(RegExp(r'[\\/]')).last;
+    final stamp = RegExp(r'\d{4}-\d{2}-\d{2}_\d{2}-\d{2}');
+    for (var day = 1; day <= 3; day++) {
+      final oldName = name
+          .replaceFirst(stamp, '2025-01-0${day}_10-00')
+          .replaceFirst(RegExp(r'\.(db|zip)$'), '.db');
+      final old = File('${destDir.path}${Platform.pathSeparator}$oldName');
+      old.writeAsStringSync('x');
+      old.setLastModifiedSync(
+        DateTime.now().subtract(const Duration(days: 365)),
+      );
+    }
+
+    final second = await DatabaseBackupService.runBackup(settings());
+
+    expect(second.success, isTrue);
+    expect(_backupFilesIn(destDir), hasLength(4));
+    expect(second.message, contains('3 από τα 3'));
+
+    final db = await DatabaseHelper.instance.database;
+    final details = await db.query(
+      'audit_log',
+      columns: ['details'],
+      orderBy: 'id DESC',
+      limit: 1,
+    );
+    expect(details.single['details'], contains('3 από τα 3'));
+  });
+
+  test('το κουμπί «Δημιουργία αντιγράφου τώρα» λέει και τι έγινε με τα παλιά, '
+      'και ζητά να διαβαστεί', () async {
+    final first = await DatabaseBackupService.runBackup(settings());
+    final name = first.outputPath!.split(RegExp(r'[\\/]')).last;
+    final stamp = RegExp(r'\d{4}-\d{2}-\d{2}_\d{2}-\d{2}');
+    for (var day = 1; day <= 3; day++) {
+      final oldName = name
+          .replaceFirst(stamp, '2025-01-0${day}_10-00')
+          .replaceFirst(RegExp(r'\.(db|zip)$'), '.db');
+      final old = File('${destDir.path}${Platform.pathSeparator}$oldName');
+      old.writeAsStringSync('x');
+      old.setLastModifiedSync(
+        DateTime.now().subtract(const Duration(days: 365)),
+      );
+    }
+
+    final result = await runManual(onMarked: () {});
+
+    expect(result.message, contains('Αντίγραφο: '));
+    expect(result.message, contains('3 από τα 3'));
+    expect(result.needsReading, isTrue);
+  });
+
+  test('κανονικό χειροκίνητο αντίγραφο: σκέτη διαδρομή, χωρίς να ζητά '
+      'προσοχή', () async {
+    final result = await runManual(onMarked: () {});
+
+    expect(result.message, startsWith('Αντίγραφο: '));
+    expect(result.needsReading, isFalse);
+  });
+
   test('διπλό πάτημα: μένει αρχείο στον δίσκο, και σημειώνεται μία φορά '
       'ότι πάρθηκε αντίγραφο', () async {
     var marks = 0;

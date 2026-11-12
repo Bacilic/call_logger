@@ -417,6 +417,17 @@ abstract final class ProfileSettingKeys {
     legacySource: ProfileSettingLegacySource.bornPersonal,
   );
 
+  /// Οι βοήθειες της σχεδίασης χάρτη που ο χρήστης έχει **κλείσει** από το
+  /// γρανάζι (γραμμές-οδηγοί, μοίρες τομής). Κρατιούνται οι κλειστές, ώστε
+  /// μια βοήθεια που θα προστεθεί αργότερα να ξεκινά ανοιχτή.
+  ///
+  /// **Προσωπική εξαρχής**: ο καθένας σχεδιάζει με τις βοήθειες που τον
+  /// εξυπηρετούν.
+  static const ProfileSettingKey floorPlanDrawingAidsOff = ProfileSettingKey(
+    'floor_plan_drawing_aids_off_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
   /// Ο όροφος που είδε τελευταίο ο χρήστης στον χάρτη κτιρίου — εκεί ανοίγει
   /// ο χάρτης και μετά από επανεκκίνηση (απόφαση 30/10/2026).
   ///
@@ -504,6 +515,7 @@ abstract final class ProfileSettingKeys {
     lansweeperReportGrouping,
     dashboardPalette,
     floorPlanHiddenLayers,
+    floorPlanDrawingAidsOff,
     buildingMapLastFloor,
     floorPlanCabinetPanelLayout,
     floorPlanCabinetSelection,

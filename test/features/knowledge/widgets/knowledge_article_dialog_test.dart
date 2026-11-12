@@ -130,4 +130,76 @@ void main() {
     expect(find.textContaining('αντιγράφηκε'), findsOneWidget);
     expect(textOf(tester, 'Τίτλος'), 'Docutrak');
   });
+
+  testWidgets('άρθρο που διαγράφηκε στο μεταξύ: δεν λέει «ενημερώθηκε», '
+      'και η διόρθωση σώζεται ως νέο άρθρο', (tester) async {
+    final saves = <KnowledgeArticle>[];
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          historyCategoryEntriesProvider.overrideWith((ref) async => const []),
+          knowledgeActionsProvider.overrideWith(
+            () => _ArticleGoneActions(saves),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () =>
+                    showKnowledgeArticleDialog(context, article: _article),
+                child: const Text('άνοιγμα'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('άνοιγμα'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Αποθήκευση'));
+    // Όσο ρωτά, το κουμπί δείχνει ένδειξη αναμονής που δεν σταματά —
+    // pumpAndSettle δεν θα τελείωνε ποτέ.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Το άρθρο διαγράφηκε'), findsOneWidget);
+    expect(find.textContaining('«Βασίλης»'), findsOneWidget);
+    expect(find.text('Το άρθρο ενημερώθηκε.'), findsNothing);
+
+    await tester.tap(find.text('Αποθήκευση ως νέο άρθρο'));
+    await tester.pumpAndSettle();
+
+    expect(saves.last.id, isNull, reason: 'Δημιουργείται νέο άρθρο.');
+    expect(saves.last.solution, _article.solution);
+    expect(
+      find.text('Το άρθρο αποθηκεύτηκε ως νέο στη Βάση Γνώσης.'),
+      findsOneWidget,
+    );
+  });
+}
+
+/// Ο συνάδελφος έχει ήδη διαγράψει το άρθρο: η ενημέρωση αποτυγχάνει, η
+/// δημιουργία νέου πετυχαίνει.
+class _ArticleGoneActions extends KnowledgeActionsNotifier {
+  _ArticleGoneActions(this.saves);
+
+  final List<KnowledgeArticle> saves;
+
+  @override
+  Future<int> save(
+    KnowledgeArticle article, {
+    KnowledgeArticle? expected,
+    bool force = false,
+  }) async {
+    saves.add(article);
+    if (article.id != null) {
+      throw const KnowledgeArticleDeletedException(deletedBy: 'Βασίλης');
+    }
+    return 42;
+  }
 }

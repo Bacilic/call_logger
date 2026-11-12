@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
+
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../database/database_helper.dart';
@@ -109,6 +110,28 @@ abstract final class SharedSettings {
 
   static Future<void> write(SharedSettingKey setting, String value) =>
       _writeShared(setting.key, value);
+
+  /// **Στοχευμένη αλλαγή** κοινής ρύθμισης που στοιβάζει πολλές επιλογές σε
+  /// ΜΙΑ τιμή: η [change] παίρνει την **τρέχουσα αποθηκευμένη** τιμή (`null`
+  /// = καμία) και επιστρέφει τη νέα. Η [write] γράφει ολόκληρη την εικόνα της
+  /// οθόνης και σβήνει ό,τι άλλαξε στο μεταξύ ο συνάδελφος.
+  ///
+  /// Η εγγραφή είναι ατομική και η [change] μπορεί να ξανατρέξει, άρα οφείλει
+  /// να είναι καθαρή. Επιστρέφει ό,τι αποθηκεύτηκε — `null` χωρίς ανοιχτή
+  /// βάση.
+  static Future<String?> update(
+    SharedSettingKey setting,
+    String Function(String? current) change,
+  ) async {
+    // Η πρώτη ανάγνωση ανεβάζει, αν χρειάζεται, την τοπική τιμή στα κοινά —
+    // αλλιώς η αλλαγή θα εφαρμοζόταν πάνω στο «τίποτα».
+    await read(setting);
+    final updater = SettingsService.appSettingUpdater;
+    if (updater != null) return updater(setting.key, change);
+    final db = _database();
+    if (db == null) return null;
+    return SettingsRepository(db).updateSetting(setting.key, change);
+  }
 
   /// Το ανέβασμα της τοπικής τιμής στα κοινά — μία φορά, στην πρώτη ανάγνωση
   /// μετά την αναβάθμιση. Η τοπική τιμή **δεν** σβήνεται: παλαιότερη έκδοση

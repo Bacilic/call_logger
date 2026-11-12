@@ -64,25 +64,25 @@ void main() {
 
         expect(decision.allowed, isTrue);
         expect(decision.destinationExists, isTrue);
-        expect(decision.destinationIsConfiguredOutput, isFalse);
+        expect(decision.destinationIsCurrentLampDb, isFalse);
         expect(decision.rejectionMessage, isNull);
       },
     );
 
     test(
-      'ο προορισμός είναι η ρυθμισμένη βάση εξόδου → σημαιοδοτείται',
+      'ο προορισμός είναι η βάση που διαβάζει τώρα η Λάμπα → σημαιοδοτείται',
       () async {
         final decision = await decideLampDbAdoption(
           pickedPath: r'C:\Incoming\old_equipment 2.db',
           destinationPath: r'D:\Portable\Data Base\old_equipment 2.db',
-          configuredOutputPath: r'D:\Portable\Data Base\old_equipment 2.db',
+          currentLampDbPath: r'D:\Portable\Data Base\old_equipment 2.db',
           classify: (_) async => DatabaseFileKind.lamp,
           fileExists: (_) async => true,
         );
 
         expect(decision.allowed, isTrue);
         expect(decision.destinationExists, isTrue);
-        expect(decision.destinationIsConfiguredOutput, isTrue);
+        expect(decision.destinationIsCurrentLampDb, isTrue);
       },
     );
 
@@ -92,13 +92,13 @@ void main() {
         final decision = await decideLampDbAdoption(
           pickedPath: r'C:\Incoming\old_equipment 2.db',
           destinationPath: r'D:\Portable\Data Base\old_equipment 2.db',
-          configuredOutputPath: r'D:\Portable\Data Base\alli_vasi.db',
+          currentLampDbPath: r'D:\Portable\Data Base\alli_vasi.db',
           classify: (_) async => DatabaseFileKind.lamp,
           fileExists: (_) async => true,
         );
 
         expect(decision.destinationExists, isTrue);
-        expect(decision.destinationIsConfiguredOutput, isFalse);
+        expect(decision.destinationIsCurrentLampDb, isFalse);
       },
     );
 

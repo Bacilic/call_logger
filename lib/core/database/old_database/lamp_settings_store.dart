@@ -10,9 +10,13 @@ import '../../services/scoped_settings.dart';
 ///
 /// Δεν χρησιμοποιεί την κεντρική οθόνη ρυθμίσεων της εφαρμογής.
 class LampSettingsStore {
-  static const String _excelPathKey = 'lamp_excel_path';
   static const String _readPathKey = 'lamp_old_db_read_path';
-  static const String _outputPathKey = 'lamp_old_db_output_path';
+
+  /// Κλειδιά της καταργημένης «Δημιουργίας βάσης από Excel» (12/11/2026):
+  /// διαβάζονται μόνο μία φορά, από τη μετάβαση, και μετά σβήνονται.
+  static const String _retiredExcelPathKey = 'lamp_excel_path';
+  static const String _retiredOutputPathKey = 'lamp_old_db_output_path';
+  static const String _excelImportRetiredKey = 'lamp_excel_import_retired_v1';
   static const String _integrityStepDurationsMsKey =
       'lamp_integrity_step_durations_ms';
 
@@ -42,33 +46,11 @@ class LampSettingsStore {
     );
   }
 
-  /// Παλιό κλειδί: μονή διαδρομή. Μεταφέρεται αυτόματα σε [read] και [output].
+  /// Παλιό κλειδί: μονή διαδρομή. Μεταφέρεται αυτόματα στη διαδρομή ανάγνωσης.
   static const String _legacyDatabasePathKey = 'lamp_database_path';
 
-  Future<String?> getExcelPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_prefKey(_excelPathKey))?.trim();
-    return value == null || value.isEmpty ? null : value;
-  }
-
-  Future<void> setExcelPath(String path) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefKey(_excelPathKey), path.trim());
-  }
-
-  /// Διαδρομή .db **για αναζήτηση, ETL issues** κ.λπ.
+  /// Η βάση που διαβάζει η Λάμπα (αναζήτηση, πίνακες, έλεγχος προβλημάτων).
   Future<String?> getReadPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    await _migrateIfNeeded(prefs);
-    var value = prefs.getString(_prefKey(_readPathKey))?.trim();
-    if (value == null || value.isEmpty) {
-      value = prefs.getString(_prefKey(_outputPathKey))?.trim();
-    }
-    return value == null || value.isEmpty ? null : value;
-  }
-
-  /// Αποθηκευμένη διαδρομή ανάγνωσης (χωρίς fallback) — χρήση μόνο για UI.
-  Future<String?> getReadPathRaw() async {
     final prefs = await SharedPreferences.getInstance();
     await _migrateIfNeeded(prefs);
     final value = prefs.getString(_prefKey(_readPathKey))?.trim();
@@ -79,40 +61,6 @@ class LampSettingsStore {
     final prefs = await SharedPreferences.getInstance();
     await _migrateIfNeeded(prefs);
     await prefs.setString(_prefKey(_readPathKey), path.trim());
-  }
-
-  /// Διαδρομή .db **όπου γράφει το import/ενημέρωση από Excel**.
-  Future<String?> getOutputPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    await _migrateIfNeeded(prefs);
-    var value = prefs.getString(_prefKey(_outputPathKey))?.trim();
-    if (value == null || value.isEmpty) {
-      value = prefs.getString(_prefKey(_readPathKey))?.trim();
-    }
-    return value == null || value.isEmpty ? null : value;
-  }
-
-  Future<String?> getOutputPathRaw() async {
-    final prefs = await SharedPreferences.getInstance();
-    await _migrateIfNeeded(prefs);
-    final value = prefs.getString(_prefKey(_outputPathKey))?.trim();
-    return value == null || value.isEmpty ? null : value;
-  }
-
-  Future<void> setOutputPath(String path) async {
-    final prefs = await SharedPreferences.getInstance();
-    await _migrateIfNeeded(prefs);
-    await prefs.setString(_prefKey(_outputPathKey), path.trim());
-  }
-
-  /// Μετά από επιτυχημένη δημιουργία: και τα δύο ίδια. Ο τεχνικός αλλάζει
-  /// ξεχωριστά το [read] για δοκιμές.
-  Future<void> setOutputAndReadFromImportResult(String newOutputPath) async {
-    final p = newOutputPath.trim();
-    final prefs = await SharedPreferences.getInstance();
-    await _migrateIfNeeded(prefs);
-    await prefs.setString(_prefKey(_outputPathKey), p);
-    await prefs.setString(_prefKey(_readPathKey), p);
   }
 
   /// Αποθηκευμένο πλάτος λίστας πινάκων (σε px) για την καρτέλα «Πίνακες».
@@ -174,38 +122,35 @@ class LampSettingsStore {
     );
   }
 
-  /// [Deprecated] Χρήση μόνο εσωτερική για migration.
-  Future<String?> getDatabasePath() async {
-    return getReadPath();
-  }
-
-  /// [Deprecated] Χρήση [setReadPath] / [setOutputPath].
-  Future<void> setDatabasePath(String path) async {
-    await setOutputPath(path);
-    final read = await getReadPathRaw();
-    if (read == null || read.isEmpty) {
-      await setReadPath(path);
-    }
-  }
-
   Future<void> _migrateIfNeeded(SharedPreferences prefs) async {
-    if (prefs.getBool(_prefKey(_migratedKey)) == true) return;
-
-    String? r = _nonEmpty(prefs.getString(_prefKey(_readPathKey)));
-    String? o = _nonEmpty(prefs.getString(_prefKey(_outputPathKey)));
-    final String? legacy = _nonEmpty(
-      prefs.getString(_prefKey(_legacyDatabasePathKey)),
-    );
-
-    if (legacy != null) {
-      r ??= legacy;
-      o ??= legacy;
+    if (prefs.getBool(_prefKey(_migratedKey)) != true) {
+      final read = _nonEmpty(prefs.getString(_prefKey(_readPathKey)));
+      final legacy = _nonEmpty(
+        prefs.getString(_prefKey(_legacyDatabasePathKey)),
+      );
+      final resolved = read ?? legacy;
+      if (resolved != null) {
+        await prefs.setString(_prefKey(_readPathKey), resolved);
+      }
+      await prefs.setBool(_prefKey(_migratedKey), true);
     }
-    if (r == null && o != null) r = o;
-    if (o == null && r != null) o = r;
-    if (r != null) await prefs.setString(_prefKey(_readPathKey), r);
-    if (o != null) await prefs.setString(_prefKey(_outputPathKey), o);
-    await prefs.setBool(_prefKey(_migratedKey), true);
+    await _retireExcelImportSettings(prefs);
+  }
+
+  /// Η «Δημιουργία βάσης από Excel» καταργήθηκε. Ως τότε, όταν η βάση της
+  /// Λάμπας ήταν κενή, διαβαζόταν σιωπηλά η βάση που δημιουργούσε το Excel —
+  /// αυτή περνά τώρα μία φορά στη βάση της Λάμπας, ώστε κανένας σταθμός να
+  /// μη χάσει τη Λάμπα του. Μετά σβήνονται οι δύο ρυθμίσεις του Excel.
+  Future<void> _retireExcelImportSettings(SharedPreferences prefs) async {
+    if (prefs.getBool(_prefKey(_excelImportRetiredKey)) == true) return;
+    final read = _nonEmpty(prefs.getString(_prefKey(_readPathKey)));
+    final output = _nonEmpty(prefs.getString(_prefKey(_retiredOutputPathKey)));
+    if (read == null && output != null) {
+      await prefs.setString(_prefKey(_readPathKey), output);
+    }
+    await prefs.remove(_prefKey(_retiredOutputPathKey));
+    await prefs.remove(_prefKey(_retiredExcelPathKey));
+    await prefs.setBool(_prefKey(_excelImportRetiredKey), true);
   }
 
   String? _nonEmpty(String? s) {

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../features/lamp/controllers/lamp_search_query_parser.dart';
@@ -8,12 +6,11 @@ import '../../utils/search_text_normalizer.dart';
 import '../../utils/user_identity_normalizer.dart';
 import 'lamp_database_provider.dart';
 import 'lamp_data_issue_type_labels.dart';
-import 'lamp_db_comparison.dart';
 import 'lamp_excel_parse_int.dart';
 import 'lamp_legacy_issue_type_normalizer.dart';
 import '../../utils/mixed_script_detector.dart';
 import 'lamp_scientific_serial.dart';
-import 'lamp_network_sheet_importer.dart';
+import 'lamp_network_hostname.dart';
 import 'lamp_search_filter_selection.dart';
 import 'lamp_unlinked_entities.dart';
 import 'old_database_schema.dart';
@@ -259,8 +256,9 @@ class OldIntegrityScanProgress {
       .length;
 }
 
-typedef OldIntegrityProgressCallback =
-    void Function(OldIntegrityScanProgress progress);
+typedef OldIntegrityProgressCallback = void Function(
+  OldIntegrityScanProgress progress,
+);
 
 typedef OldIntegrityStepErrorHandler =
     Future<OldIntegrityStepErrorDecision> Function(
@@ -326,45 +324,6 @@ class OldEquipmentRepository {
     if (path.isEmpty) return;
     final cache = await _buildCache(path);
     _cacheByPath[_cacheKey(path)] = cache;
-  }
-
-  /// Στατιστικά αρχείου βάσης για σύγκριση ανάγνωσης/εξόδου (read-only).
-  Future<LampDbSnapshot> collectDbSnapshot(String databasePath) async {
-    final path = databasePath.trim();
-    if (path.isEmpty) {
-      return const LampDbSnapshot(exists: false);
-    }
-    final file = File(path);
-    if (!await file.exists()) {
-      return const LampDbSnapshot(exists: false);
-    }
-    final stat = await file.stat();
-    try {
-      final db = await openDatabase(
-        path,
-        readOnly: true,
-        singleInstance: false,
-      );
-      try {
-        final equipmentCount = await _countTable(db, 'equipment');
-        final issuesCount = await _countTable(db, 'data_issues');
-        return LampDbSnapshot(
-          exists: true,
-          modified: stat.modified,
-          sizeBytes: stat.size,
-          equipmentCount: equipmentCount,
-          issuesCount: issuesCount,
-        );
-      } finally {
-        await db.close();
-      }
-    } catch (_) {
-      return LampDbSnapshot(
-        exists: true,
-        modified: stat.modified,
-        sizeBytes: stat.size,
-      );
-    }
   }
 
   Future<OldEquipmentSearchResult> searchByFields(
@@ -1121,8 +1080,7 @@ class OldEquipmentRepository {
     return <_IntegrityScanStepSpec>[
       _IntegrityScanStepSpec(
         id: 'import_parity_fk_raw',
-        label:
-            'Έλεγχος μη αριθμητικών / ασύμβατων κλειδιών (ίδιο με εισαγωγή Excel)',
+        label: 'Έλεγχος μη αριθμητικών / ασύμβατων κλειδιών (ίδιο με εισαγωγή Excel)',
         weight: 2,
         // ΚΕΝΟ, και όχι από παράλειψη: αυτό το βήμα ομαδοποιεί ανά κακή τιμή
         // και εξαιρεί ρητά ό,τι έχει ήδη καταγραφεί (`existingFkFingerprints`).
@@ -1311,7 +1269,8 @@ class OldEquipmentRepository {
     return result;
   }
 
-  /// Ίδια λογική με [OldExcelImporter] για FK από κείμενο στήλης / *_original_text.
+  /// FK από κείμενο στήλης / *_original_text — ο κανόνας με τον οποίο
+  /// χτίστηκε αρχικά η βάση της Λάμπας από το Excel.
   Future<List<Map<String, Object?>>> _scanImportParityForeignKeys(
     Database db,
     String createdAt,
@@ -3034,12 +2993,11 @@ class OldEquipmentRepository {
   };
 }
 
-typedef _IntegrityScanRunner =
-    Future<List<Map<String, Object?>>> Function(
-      Database db,
-      String createdAt,
-      OldIntegrityCancellationToken token,
-    );
+typedef _IntegrityScanRunner = Future<List<Map<String, Object?>>> Function(
+  Database db,
+  String createdAt,
+  OldIntegrityCancellationToken token,
+);
 
 class _IntegrityScanStepSpec {
   const _IntegrityScanStepSpec({

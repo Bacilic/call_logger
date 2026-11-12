@@ -94,10 +94,8 @@ Future<void> _seedBuildingCatalog(List<String> buildings) async {
     (key, value) => SettingsRepository(db).saveSetting(key, value),
     (key, change) => SettingsRepository(db).updateSetting(key, change),
   );
-  await SettingsService().catalogs.setBuildingCatalog(
-    buildings.join(', '),
-    expected: null,
-  );
+  await SettingsRepository(db)
+      .saveSetting('building_catalog', buildings.join(', '));
 }
 
 /// Φορτώνει τον κατάλογο **πριν** χτιστεί η φόρμα.

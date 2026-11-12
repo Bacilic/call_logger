@@ -17,31 +17,15 @@ class LampReadPathHealthNotifier extends AsyncNotifier<LampOldDbCheckResult?> {
   @override
   Future<LampOldDbCheckResult?> build() async {
     final path = await _settings.getReadPath();
-    final outputPath = await _settings.getOutputPath();
-    final excelPath = await _settings.getExcelPath();
-    return _validator.validateReadPath(
-      path,
-      outputPath: outputPath,
-      excelPath: excelPath,
-    );
+    return _validator.validateReadPath(path);
   }
 
   /// Επανελέγχει από αποθηκευμένες ρυθμίσεις ή από overrides (π.χ. πεδία dialog).
-  Future<void> refresh({
-    String? pathOverride,
-    String? outputPathOverride,
-    String? excelPathOverride,
-  }) async {
+  Future<void> refresh({String? pathOverride}) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       final readPath = pathOverride ?? await _settings.getReadPath();
-      final outputPath = outputPathOverride ?? await _settings.getOutputPath();
-      final excelPath = excelPathOverride ?? await _settings.getExcelPath();
-      return _validator.validateReadPath(
-        readPath,
-        outputPath: outputPath,
-        excelPath: excelPath,
-      );
+      return _validator.validateReadPath(readPath);
     });
   }
 }
@@ -49,32 +33,6 @@ class LampReadPathHealthNotifier extends AsyncNotifier<LampOldDbCheckResult?> {
 final lampReadPathHealthProvider =
     AsyncNotifierProvider<LampReadPathHealthNotifier, LampOldDbCheckResult?>(
       LampReadPathHealthNotifier.new,
-    );
-
-/// Έλεγχος διαδρομής .db εξόδου (import Excel) — ίδιο μοτίβο με ανάγνωση.
-class LampOutputPathHealthNotifier
-    extends AsyncNotifier<LampOldDbCheckResult?> {
-  static final LampSettingsStore _settings = LampSettingsStore();
-  static final LampOldDbValidator _validator = LampOldDbValidator();
-
-  @override
-  Future<LampOldDbCheckResult?> build() async {
-    final path = await _settings.getOutputPath();
-    return _validator.validateOutputPath(path);
-  }
-
-  Future<void> refresh({String? pathOverride}) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      final outputPath = pathOverride ?? await _settings.getOutputPath();
-      return _validator.validateOutputPath(outputPath);
-    });
-  }
-}
-
-final lampOutputPathHealthProvider =
-    AsyncNotifierProvider<LampOutputPathHealthNotifier, LampOldDbCheckResult?>(
-      LampOutputPathHealthNotifier.new,
     );
 
 final lampShowNavWarningProvider = Provider<bool>((ref) {

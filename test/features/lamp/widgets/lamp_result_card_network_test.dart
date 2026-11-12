@@ -155,7 +155,7 @@ void main() {
         '  F maintenance_contract=Συντήρηση|Συντήρηση|text|1|false|null',
         '  F receiving_date=2021-03-15|Παραλαβή|date|1|false|null',
         '  F end_of_guarantee_date=2024-03-15T10:00:00|Εγγύηση|date|1|false|null',
-        '  F cost=1.234,50|Κόστος|text|1|false|null',
+        '  F cost=1.234,50|Κόστος|money|1|false|null',
         '  F owner_id=7|Κωδ. κατόχου|code|1|false|null',
         '  F owner_original_text=Παπαδόπουλος Γ.|Κάτοχος (αρχικός)|text|1|false|null',
         '  F office_id=3|Κωδ. γραφείου|code|1|false|null',
@@ -249,7 +249,7 @@ void main() {
         '  F contract_end_date=2025-12-31|Λήξη|date|1|false|null',
         '  F contract_declaration=ΔΙΑΚ-1|Διακήρυξη|text|1|false|null',
         '  F contract_award=ΑΝΑΘ-1|Ανάθεση|text|1|false|null',
-        '  F contract_cost=5000|Κόστος|text|1|false|null',
+        '  F contract_cost=5.000,00|Κόστος|money|1|false|null',
         '  F contract_committee=Επιτροπή Α|Επιτροπή|text|1|false|null',
         '  F contract_comments=Ετήσια|Σχόλια|text|3|false|null',
       ]);
@@ -278,7 +278,7 @@ void main() {
         '  F maintenance_contract=null|Συντήρηση|text|1|false|null',
         '  F receiving_date=15/03/2021|Παραλαβή|date|1|false|null',
         '  F end_of_guarantee_date=null|Εγγύηση|date|1|false|null',
-        '  F cost=123.45|Κόστος|text|1|false|null',
+        '  F cost=123,45|Κόστος|money|1|false|null',
         '  F owner_id=null|Κωδ. κατόχου|code|1|false|null',
         '  F owner_original_text=Κάτοχος από κείμενο|Κάτοχος (αρχικός)|text|1|false|null',
         '  F office_id=null|Κωδ. γραφείου|code|1|false|null',
@@ -340,49 +340,56 @@ void main() {
         '  F contract_end_date=null|Λήξη|date|1|false|null',
         '  F contract_declaration=null|Διακήρυξη|text|1|false|null',
         '  F contract_award=null|Ανάθεση|text|1|false|null',
-        '  F contract_cost=null|Κόστος|text|1|false|null',
+        '  F contract_cost=null|Κόστος|money|1|false|null',
         '  F contract_committee=null|Επιτροπή|text|1|false|null',
         '  F contract_comments=null|Σχόλια|text|3|false|null',
       ]);
     });
 
-    test('η ενημέρωση πεδίων ξαναχτίζει τις ενότητες από την ενωμένη γραμμή', () {
-      final vm = EquipmentViewModel.fromRow(
-        _fallbackRow,
-      ).copyWithUpdatedFields({'serial_no': 'SN-NEW', 'cost': null});
-      expect(_dumpSections(vm).takeWhile((l) => l != 'S model null false').toList(), [
-        'S equipment 2002 true',
-        '  I Κωδικός=2002|1|null',
-        '  I Serial No=SN-NEW|1|null',
-        '  I Παραλαβή=15/03/2021|1|null',
-        '  F code=2002|Κωδικός|code|1|false|null',
-        '  F description=null|Περιγραφή|text|3|true|null',
-        '  F model_id=null|Κωδ. μοντέλου|code|1|false|null',
-        '  F model_original_text=Μοντέλο χωρίς κωδικό|Μοντέλο (αρχικό)|text|1|false|null',
-        '  F serial_no=SN-NEW|Serial No|text|1|false|null',
-        '  F asset_no=null|Αρ. Παγίου|text|1|false|null',
-        '  F state_id=null|Κωδ. κατάστασης|code|1|false|null',
-        '  F state_name=null|Κατάσταση|text|1|false|null',
-        '  F state_original_text=null|Κατάσταση (αρχική)|text|1|false|null',
-        '  F set_master=2002|Συνδεδεμένο σε|code|1|false|null',
-        '  F set_master_original_text=null|Σύνδεση (αρχική)|text|1|false|null',
-        '  F contract_id=null|Κωδ. σύμβασης|code|1|false|null',
-        '  F contract_original_text=Παλιά σύμβαση|Σύμβαση (αρχική)|text|1|false|null',
-        '  F maintenance_contract=null|Συντήρηση|text|1|false|null',
-        '  F receiving_date=15/03/2021|Παραλαβή|date|1|false|null',
-        '  F end_of_guarantee_date=null|Εγγύηση|date|1|false|null',
-        '  F cost=null|Κόστος|text|1|false|null',
-        '  F owner_id=null|Κωδ. κατόχου|code|1|false|null',
-        '  F owner_original_text=Κάτοχος από κείμενο|Κάτοχος (αρχικός)|text|1|false|null',
-        '  F office_id=null|Κωδ. γραφείου|code|1|false|null',
-        '  F office_original_text=Γραφείο από κείμενο|Γραφείο (αρχικό)|text|1|false|null',
-        '  F equipment_attributes=null|Χαρακτ. εξοπλ.|text|3|false|null',
-        '  F equipment_comments=null|Σχόλια|text|3|false|null',
-      ]);
-      expect(vm.sourceRow['serial_no'], 'SN-NEW');
-      expect(vm.sourceRow.containsKey('cost'), isTrue);
-      expect(vm.sourceRow['cost'], isNull);
-    });
+    test(
+      'η ενημέρωση πεδίων ξαναχτίζει τις ενότητες από την ενωμένη γραμμή',
+      () {
+        final vm = EquipmentViewModel.fromRow(_fallbackRow)
+            .copyWithUpdatedFields({'serial_no': 'SN-NEW', 'cost': null});
+        expect(
+          _dumpSections(vm)
+              .takeWhile((l) => l != 'S model null false')
+              .toList(),
+          [
+            'S equipment 2002 true',
+            '  I Κωδικός=2002|1|null',
+            '  I Serial No=SN-NEW|1|null',
+            '  I Παραλαβή=15/03/2021|1|null',
+            '  F code=2002|Κωδικός|code|1|false|null',
+            '  F description=null|Περιγραφή|text|3|true|null',
+            '  F model_id=null|Κωδ. μοντέλου|code|1|false|null',
+            '  F model_original_text=Μοντέλο χωρίς κωδικό|Μοντέλο (αρχικό)|text|1|false|null',
+            '  F serial_no=SN-NEW|Serial No|text|1|false|null',
+            '  F asset_no=null|Αρ. Παγίου|text|1|false|null',
+            '  F state_id=null|Κωδ. κατάστασης|code|1|false|null',
+            '  F state_name=null|Κατάσταση|text|1|false|null',
+            '  F state_original_text=null|Κατάσταση (αρχική)|text|1|false|null',
+            '  F set_master=2002|Συνδεδεμένο σε|code|1|false|null',
+            '  F set_master_original_text=null|Σύνδεση (αρχική)|text|1|false|null',
+            '  F contract_id=null|Κωδ. σύμβασης|code|1|false|null',
+            '  F contract_original_text=Παλιά σύμβαση|Σύμβαση (αρχική)|text|1|false|null',
+            '  F maintenance_contract=null|Συντήρηση|text|1|false|null',
+            '  F receiving_date=15/03/2021|Παραλαβή|date|1|false|null',
+            '  F end_of_guarantee_date=null|Εγγύηση|date|1|false|null',
+            '  F cost=null|Κόστος|money|1|false|null',
+            '  F owner_id=null|Κωδ. κατόχου|code|1|false|null',
+            '  F owner_original_text=Κάτοχος από κείμενο|Κάτοχος (αρχικός)|text|1|false|null',
+            '  F office_id=null|Κωδ. γραφείου|code|1|false|null',
+            '  F office_original_text=Γραφείο από κείμενο|Γραφείο (αρχικό)|text|1|false|null',
+            '  F equipment_attributes=null|Χαρακτ. εξοπλ.|text|3|false|null',
+            '  F equipment_comments=null|Σχόλια|text|3|false|null',
+          ],
+        );
+        expect(vm.sourceRow['serial_no'], 'SN-NEW');
+        expect(vm.sourceRow.containsKey('cost'), isTrue);
+        expect(vm.sourceRow['cost'], isNull);
+      },
+    );
   });
 }
 

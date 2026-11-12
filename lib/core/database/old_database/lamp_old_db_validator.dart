@@ -6,15 +6,9 @@ import 'package:sqflite_common/sqflite.dart';
 import '../database_file_classifier.dart';
 import 'lamp_database_provider.dart';
 
-/// Κουμπί import Excel στη Λάμπα — κοινό κείμενο σε μηνύματα pending creation.
-const String kLampExcelImportButtonLabel = 'Δημιουργία βάσης από Excel';
-
 /// Αποτέλεσμα ελέγχου αρχείου .db «Λάμπα» για ανάγνωση (read path).
 enum LampOldDbStatus {
   pathEmpty,
-
-  /// Η διαδρομή ανάγνωσης ταυτίζεται με εξόδου· το .db θα δημιουργηθεί από Excel.
-  pendingCreation,
 
   /// Διαδρομή χωρίς κατάληξη .db ή άλλο σφάλμα μορφής (π.χ. επικόλληση φακέλου).
   invalidPathFormat,
@@ -25,37 +19,20 @@ enum LampOldDbStatus {
   notOldEquipmentDb,
   ok,
 
-  /// Διαδρομή εξόδου χωρίς υπάρχον αρχείο — θα δημιουργηθεί από import.
-  outputPendingCreation,
-
-  /// Έγκυρη βάση Λάμπας στη διαδρομή εξόδου — θα ξαναδημιουργηθεί από import.
-  outputWillUpdate,
-
   /// Το αρχείο είναι βάση της Καταγραφής Κλήσεων, όχι της Λάμπας.
   isCallLoggerDb,
 }
 
 class LampOldDbCheckResult {
-  const LampOldDbCheckResult(
-    this.status, {
-    this.technicalDetail,
-    this.pendingDbFileName,
-    this.pendingFolderPath,
-    this.pendingExcelFileName,
-  });
+  const LampOldDbCheckResult(this.status, {this.technicalDetail});
 
   final LampOldDbStatus status;
   final String? technicalDetail;
-  final String? pendingDbFileName;
-  final String? pendingFolderPath;
-  final String? pendingExcelFileName;
 
   String get userMessageGreek {
     switch (status) {
       case LampOldDbStatus.pathEmpty:
         return 'Δεν έχει οριστεί διαδρομή βάσης προς ανάγνωση.';
-      case LampOldDbStatus.pendingCreation:
-        return _pendingCreationMessageGreek();
       case LampOldDbStatus.invalidPathFormat:
         return technicalDetail ??
             'Η διαδρομή πρέπει να δείχνει σε αρχείο με κατάληξη .db';
@@ -71,56 +48,18 @@ class LampOldDbCheckResult {
       case LampOldDbStatus.notOldEquipmentDb:
         if (technicalDetail != null && technicalDetail!.isNotEmpty) {
           return 'Η βάση ανοίγει αλλά η δομή του πίνακα equipment δεν ταιριάζει με βάση Λάμπας '
-              '($technicalDetail). Βεβαιωθείτε ότι είναι εξαγόμενη από import Excel της Λάμπας.';
+              '($technicalDetail). Βεβαιωθείτε ότι είναι η βάση της Λάμπας.';
         }
         return 'Η βάση ανοίγει αλλά δεν φαίνεται «παλιά βάση εξοπλισμού Λάμπα» (λείπει αναμενόμενος πίνακας ή στήλες). '
-            'Βεβαιωθείτε ότι είναι εξαγόμενη από import Excel της Λάμπας.';
+            'Βεβαιωθείτε ότι είναι η βάση της Λάμπας.';
       case LampOldDbStatus.ok:
         return 'Η βάση προς ανάγνωση είναι προσπελάσιμη και έγκυρη.';
-      case LampOldDbStatus.outputPendingCreation:
-        return 'Το αρχείο δεν υπάρχει ακόμα — θα δημιουργηθεί από το import.';
-      case LampOldDbStatus.outputWillUpdate:
-        return 'Η βάση είναι έγκυρη — θα διαγραφεί και θα ξαναδημιουργηθεί από το import.';
       case LampOldDbStatus.isCallLoggerDb:
         final name = (technicalDetail != null && technicalDetail!.isNotEmpty)
             ? technicalDetail!
             : '…';
         return 'Το αρχείο «$name» είναι η βάση της Καταγραφής Κλήσεων, όχι της Λάμπας.';
     }
-  }
-
-  String _pendingCreationMessageGreek() {
-    final dbName = pendingDbFileName ?? '…';
-    final folder = pendingFolderPath ?? '…';
-    final excel = pendingExcelFileName?.trim();
-    if (excel != null && excel.isNotEmpty) {
-      return 'Το αρχείο [$dbName] θα δημιουργηθεί στον φάκελο [$folder] '
-          'μετά την επιτυχή εισαγωγή του Excel [$excel] '
-          '(κουμπί: $kLampExcelImportButtonLabel).';
-    }
-    return 'Το αρχείο [$dbName] θα δημιουργηθεί στον φάκελο [$folder] '
-        'όταν οριστεί αρχείο Excel και εκτελεστεί επιτυχώς η εισαγωγή '
-        '(κουμπί: $kLampExcelImportButtonLabel).';
-  }
-}
-
-/// True όταν ο έλεγχος εξόδου μπλοκάρει το κουμπί import Excel.
-bool lampOutputPathBlocksImport(LampOldDbCheckResult result) {
-  switch (result.status) {
-    case LampOldDbStatus.pathEmpty:
-    case LampOldDbStatus.outputPendingCreation:
-    case LampOldDbStatus.outputWillUpdate:
-      return false;
-    case LampOldDbStatus.pendingCreation:
-    case LampOldDbStatus.invalidPathFormat:
-    case LampOldDbStatus.fileMissing:
-    case LampOldDbStatus.notAFile:
-    case LampOldDbStatus.emptyFile:
-    case LampOldDbStatus.openFailed:
-    case LampOldDbStatus.notOldEquipmentDb:
-    case LampOldDbStatus.isCallLoggerDb:
-    case LampOldDbStatus.ok:
-      return true;
   }
 }
 
@@ -179,14 +118,7 @@ class LampOldDbValidator {
 
   /// Κλείνει τυχόν ανοιχτό handle της [LampDatabaseProvider] μετά τον έλεγχο
   /// ώστε αναζητήσεις να ξανα-ανοίγουν καθαρά.
-  ///
-  /// [outputPath] και [excelPath] χρησιμοποιούνται για ενημερωτικό μήνυμα όταν
-  /// η ανάγνωση δείχνει στο μέλλον .db εξόδου που δεν έχει δημιουργηθεί ακόμα.
-  Future<LampOldDbCheckResult> validateReadPath(
-    String? rawPath, {
-    String? outputPath,
-    String? excelPath,
-  }) async {
+  Future<LampOldDbCheckResult> validateReadPath(String? rawPath) async {
     final dbPath = rawPath?.trim() ?? '';
     if (dbPath.isEmpty) {
       return const LampOldDbCheckResult(LampOldDbStatus.pathEmpty);
@@ -203,17 +135,6 @@ class LampOldDbValidator {
     final file = File(dbPath);
     try {
       if (!await file.exists()) {
-        if (pathsReferToSameFile(dbPath, outputPath)) {
-          final excelName = excelPath?.trim();
-          return LampOldDbCheckResult(
-            LampOldDbStatus.pendingCreation,
-            pendingDbFileName: path.basename(dbPath),
-            pendingFolderPath: path.dirname(dbPath),
-            pendingExcelFileName: excelName == null || excelName.isEmpty
-                ? null
-                : path.basename(excelName),
-          );
-        }
         return const LampOldDbCheckResult(LampOldDbStatus.fileMissing);
       }
     } on FileSystemException catch (e) {
@@ -248,66 +169,6 @@ class LampOldDbValidator {
     }
 
     return _openAndValidateLampEquipmentDb(dbPath);
-  }
-
-  /// Έλεγχος διαδρομής εξόδου (.db) για import Excel.
-  Future<LampOldDbCheckResult> validateOutputPath(String? rawPath) async {
-    final dbPath = rawPath?.trim() ?? '';
-    if (dbPath.isEmpty) {
-      return const LampOldDbCheckResult(LampOldDbStatus.pathEmpty);
-    }
-
-    final formatError = validateDbPathFormat(dbPath);
-    if (formatError != null) {
-      return LampOldDbCheckResult(
-        LampOldDbStatus.invalidPathFormat,
-        technicalDetail: formatError,
-      );
-    }
-
-    final file = File(dbPath);
-    try {
-      if (!await file.exists()) {
-        return const LampOldDbCheckResult(
-          LampOldDbStatus.outputPendingCreation,
-        );
-      }
-    } on FileSystemException catch (e) {
-      return LampOldDbCheckResult(
-        LampOldDbStatus.openFailed,
-        technicalDetail: e.message,
-      );
-    }
-
-    try {
-      final type = (await file.stat()).type;
-      if (type != FileSystemEntityType.file) {
-        return const LampOldDbCheckResult(LampOldDbStatus.notAFile);
-      }
-    } on FileSystemException catch (e) {
-      return LampOldDbCheckResult(
-        LampOldDbStatus.openFailed,
-        technicalDetail: e.message,
-      );
-    }
-
-    try {
-      final size = await file.length();
-      if (size == 0) {
-        return const LampOldDbCheckResult(LampOldDbStatus.emptyFile);
-      }
-    } on FileSystemException catch (e) {
-      return LampOldDbCheckResult(
-        LampOldDbStatus.openFailed,
-        technicalDetail: e.message,
-      );
-    }
-
-    final result = await _openAndValidateLampEquipmentDb(dbPath);
-    if (result.status == LampOldDbStatus.ok) {
-      return const LampOldDbCheckResult(LampOldDbStatus.outputWillUpdate);
-    }
-    return result;
   }
 
   Future<LampOldDbCheckResult> _openAndValidateLampEquipmentDb(

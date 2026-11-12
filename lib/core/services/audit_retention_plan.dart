@@ -53,6 +53,7 @@ class AuditRetentionPlan {
     required this.compactCutoff,
     required this.totalRowsBefore,
     required this.trimRows,
+    required this.rowsPastAgeLimits,
     this.limitReason = AuditRetentionLimitReason.none,
   });
 
@@ -62,7 +63,24 @@ class AuditRetentionPlan {
     compactCutoff: null,
     totalRowsBefore: 0,
     trimRows: 0,
+    rowsPastAgeLimits: 0,
   );
+
+  /// Πόσες γραμμές ξεπερνούν τα όρια ηλικίας, **πριν** τις κρατήσει το πάτωμα.
+  final int rowsPastAgeLimits;
+
+  /// Πόσες γραμμές ανήκουν σε κλάσεις με όριο ηλικίας.
+  int get rowsUnderAgeLimits => classPlans
+      .where((p) => p.cutoff != null)
+      .fold<int>(0, (sum, p) => sum + p.totalRows);
+
+  /// Τα όρια ηλικίας πιάνουν μονομιάς πάνω από τα μισά.
+  ///
+  /// Στην κανονική χρήση φεύγει λίγο κάθε φορά. Κάτι τέτοιο σημαίνει λάθος
+  /// ρολόι ή μια πρώτη μεγάλη εκκαθάριση: και τα δύο θέλουν άνθρωπο, όχι
+  /// αυτόματο τρέξιμο στην εκκίνηση.
+  bool get ageLimitsTakeMostOfHistory =>
+      rowsPastAgeLimits * 2 > rowsUnderAgeLimits;
 
   final List<AuditRetentionClassPlan> classPlans;
 

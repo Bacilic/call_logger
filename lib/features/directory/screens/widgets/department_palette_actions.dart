@@ -52,7 +52,7 @@ class DepartmentPaletteActions {
     int? exceptSlotForDuplicate,
   }) async {
     final store = DepartmentPaletteStore.instance;
-    await store.ensureLoaded();
+    await store.refresh();
     if (store.colorExistsInPalette(
       color,
       exceptSlotIndex: exceptSlotForDuplicate,
@@ -72,7 +72,7 @@ class DepartmentPaletteActions {
     DepartmentPaletteHost? host,
   }) async {
     final store = DepartmentPaletteStore.instance;
-    await store.ensureLoaded();
+    await store.refresh();
 
     final existingSlot = store.indexOfCustomColor(previousColor);
     if (existingSlot != null) {
@@ -110,7 +110,22 @@ class DepartmentPaletteActions {
     int slotIndex,
     Color picked,
   ) async {
-    return assignToSlot(context, slotIndex, picked);
+    final store = DepartmentPaletteStore.instance;
+    await store.refresh();
+    if (!context.mounted) return false;
+    if (store.customSlots[slotIndex] == null) {
+      return assignToSlot(context, slotIndex, picked);
+    }
+
+    // Ο συνάδελφος γέμισε στο μεταξύ αυτό το τετράγωνο: το χρώμα πάει στην
+    // επόμενη κενή θέση — ποτέ πάνω στο δικό του.
+    final empty = store.firstEmptySlotIndex;
+    if (empty != null) return assignToSlot(context, empty, picked);
+    if (store.colorExistsInPalette(picked)) {
+      showDuplicateSnackBar(context, picked);
+      return false;
+    }
+    return await _resolveWhenPaletteFull(context, picked: picked) != null;
   }
 
   /// Καθαρισμός γεμάτης θέσης (παρατεταμένο πάτημα).
@@ -120,7 +135,7 @@ class DepartmentPaletteActions {
     DepartmentPaletteHost? host,
   }) async {
     final store = DepartmentPaletteStore.instance;
-    await store.ensureLoaded();
+    await store.refresh();
     final slotColor = store.customSlots[slotIndex];
     if (slotColor == null) return;
 
@@ -261,7 +276,7 @@ class DepartmentPaletteActions {
     required Color picked,
   }) async {
     final store = DepartmentPaletteStore.instance;
-    await store.ensureLoaded();
+    await store.refresh();
     if (!context.mounted) return null;
     final slots = store.customSlots;
 

@@ -27,7 +27,8 @@ class KnowledgeBaseRepository {
   ];
 
   static const String _selectWithCategory = '''
-    SELECT kb.*, cat.name AS category_name
+    SELECT kb.*, cat.name AS category_name,
+           COALESCE(cat.is_deleted, 0) AS category_is_deleted
     FROM knowledge_base kb
     LEFT JOIN categories cat ON cat.id = kb.category_id
   ''';
@@ -190,7 +191,16 @@ class KnowledgeBaseRepository {
         whereArgs: [id],
         limit: 1,
       );
-      if (oldRows.isEmpty) return id;
+      if (oldRows.isEmpty) {
+        // Η διαγραφή άρθρου είναι οριστική: δεν υπάρχει γραμμή να
+        // ενημερωθεί. Σιωπηλό «πέτυχε» εδώ έλεγε «Το άρθρο ενημερώθηκε» ενώ η
+        // διόρθωση είχε χαθεί.
+        final actor = await _lastActor(txn, id);
+        throw KnowledgeArticleDeletedException(
+          deletedBy: actor.who,
+          deletedAt: actor.at,
+        );
+      }
       final oldRow = oldRows.first;
       if (!force && expected != null) {
         final conflict = DirectorySaveConflict.between(

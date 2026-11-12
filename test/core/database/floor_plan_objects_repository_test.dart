@@ -22,8 +22,9 @@ void main() {
     initSqfliteFfiForTests();
     db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
     await migrateDatabaseToV69(db);
-    // Η τρέχουσα μορφή: η διαγραφή ορόφου αγγίζει και τους πίνακες δικτύου.
-    await migrateDatabaseToV74(db);
+    // Η τρέχουσα μορφή: η διαγραφή ορόφου αγγίζει και τους πίνακες δικτύου και
+    // τις εικόνες πατρόν.
+    await migrateDatabaseToV77(db);
     repo = FloorPlanObjectsRepository(db);
   });
 

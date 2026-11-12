@@ -403,7 +403,7 @@ class FloorPlanEditorController extends ChangeNotifier {
   List<FloorPlanSegment> get wallSegments => [
     for (final e in elements)
       if (e.kind == FloorPlanElementKind.wall && e.points.length >= 2)
-        FloorPlanSegment(e.points[0], e.points[1], id: e.id),
+        FloorPlanSegment.ofWall(e),
   ];
 
   /// Τα ανοίγματα κάθε τοίχου, ως αποστάσεις από την αρχή του.
@@ -518,8 +518,46 @@ class FloorPlanEditorController extends ChangeNotifier {
         floorId: floorId,
         kind: FloorPlanElementKind.wall,
         points: [a, b],
+        // Το συνηθισμένο πάχος δεν γράφεται: κενό σημαίνει «όπως όλοι».
+        thicknessCm: _nextWallThicknessCm == kFloorPlanDefaultWallThicknessCm
+            ? null
+            : _nextWallThicknessCm,
       ),
     ]);
+  }
+
+  double _nextWallThicknessCm = kFloorPlanDefaultWallThicknessCm;
+
+  /// Το πάχος που θα πάρει ο επόμενος τοίχος που θα σχεδιαστεί: το τελευταίο
+  /// που ορίστηκε σε αυτό το άνοιγμα της σχεδίασης.
+  double get nextWallThicknessCm => _nextWallThicknessCm;
+
+  /// Οι επιλεγμένοι τοίχοι.
+  List<FloorPlanElement> get selectedWalls => [
+    for (final e in elements)
+      if (e.kind == FloorPlanElementKind.wall && _selected.contains(e.id)) e,
+  ];
+
+  /// Δίνει πάχος [cm] σε όλους τους επιλεγμένους τοίχους — μία κίνηση
+  /// αναίρεσης. Ο τοίχος παχαίνει ισόποσα και προς τις δύο πλευρές της
+  /// γραμμής του, οπότε χώροι, πόρτες και πρίζες δεν μετακινούνται. Το ίδιο
+  /// πάχος παίρνει και ο επόμενος τοίχος που θα σχεδιαστεί.
+  Future<void> setSelectedWallThickness(double cm) async {
+    final thickness = cm
+        .clamp(kFloorPlanWallThicknessMinCm, kFloorPlanWallThicknessMaxCm)
+        .roundToDouble();
+    final changed = [
+      for (final e in _elements)
+        if (e.kind == FloorPlanElementKind.wall &&
+            _selected.contains(e.id) &&
+            e.wallThicknessCm != thickness)
+          thickness == kFloorPlanDefaultWallThicknessCm
+              ? e.copyWith(defaultThickness: true)
+              : e.copyWith(thicknessCm: thickness),
+    ];
+    if (changed.isEmpty) return;
+    _nextWallThicknessCm = thickness;
+    await _replace(changed);
   }
 
   Future<void> addOpening(int wallId, double start, double end) async {
@@ -1376,6 +1414,44 @@ class FloorPlanEditorController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Μετακινεί την επιλογή κατά [delta], κουμπώνοντας τις άκρες των
+  /// επιλεγμένων τοίχων στους άλλους τοίχους και στους οδηγούς τους — όπως
+  /// η σχεδίαση και οι λαβές. Με [magnetOff] (Shift) η μετακίνηση μένει
+  /// ελεύθερη. Επιστρέφει πού κούμπωσε, για να ζωγραφιστεί.
+  WallMoveSnap previewMoveSnapped(
+    Offset delta, {
+    required double toleranceCm,
+    bool magnetOff = false,
+    bool Function(Offset end)? guideEndVisible,
+  }) {
+    final movingEnds = [
+      for (final e in _elements)
+        if (e.kind == FloorPlanElementKind.wall &&
+            _selected.contains(e.id) &&
+            e.points.length >= 2) ...[
+          e.points[0],
+          e.points[1],
+        ],
+    ];
+    final result = magnetOff || movingEnds.isEmpty
+        ? WallMoveSnap(delta)
+        : snapWallMove(
+            movingEnds: movingEnds,
+            delta: delta,
+            others: [
+              for (final e in _elements)
+                if (e.kind == FloorPlanElementKind.wall &&
+                    !_selected.contains(e.id) &&
+                    e.points.length >= 2)
+                  FloorPlanSegment.ofWall(e),
+            ],
+            toleranceCm: toleranceCm,
+            guideEndVisible: guideEndVisible,
+          );
+    previewMove(result.delta);
+    return result;
+  }
+
   /// Γυρίζει την επιλογή κατά [radians] γύρω από το [center], μόνο στην
   /// οθόνη.
   void previewRotate(Offset center, double radians) {
@@ -1404,6 +1480,43 @@ class FloorPlanEditorController extends ChangeNotifier {
     final size = floorPlanObjectSize(object, _kinds[object.kindId]?.symbol);
     _objectPreview = {id: resizeFloorPlanVolume(object, size, corner, to)};
     notifyListeners();
+  }
+
+  /// Αλλάζει το μήκος του τοίχου [id] σέρνοντας την άκρη [end] (0 = αρχή,
+  /// 1 = τέλος) προς το [to], μόνο στην οθόνη· γράφεται με το
+  /// [commitPreview]. Επιστρέφει πού κατέληξε η άκρη και αν κούμπωσε.
+  WallEndResize? previewWallEnd(
+    int id,
+    int end,
+    Offset to, {
+    required double toleranceCm,
+    bool magnetOff = false,
+    bool free = false,
+    bool Function(Offset end)? guideEndVisible,
+  }) {
+    final wall = elementById(id);
+    if (wall == null) return null;
+    final result = resizeWallEnd(
+      wall: wall,
+      end: end,
+      to: to,
+      openings: _elements,
+      others: [
+        for (final e in _elements)
+          if (e.kind == FloorPlanElementKind.wall &&
+              e.id != id &&
+              e.points.length >= 2)
+            FloorPlanSegment(e.points[0], e.points[1], id: e.id),
+      ],
+      toleranceCm: toleranceCm,
+      magnetOff: magnetOff,
+      free: free,
+      guideEndVisible: guideEndVisible,
+    );
+    if (result == null) return null;
+    _preview = {id: result.wall, for (final o in result.openings) o.id: o};
+    notifyListeners();
+    return result;
   }
 
   /// Σέρνει το όνομα του χώρου [id] στη θέση [offset] από το κέντρο του,

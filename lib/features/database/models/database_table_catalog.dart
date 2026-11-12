@@ -35,6 +35,7 @@ const List<String> _kMenuTableOrder = [
   'building_map_floor_images',
   'building_map_plan_elements',
   'building_map_floor_state',
+  'building_map_floor_patterns',
   'building_map_object_kinds',
   'building_map_objects',
   'building_map_placements',

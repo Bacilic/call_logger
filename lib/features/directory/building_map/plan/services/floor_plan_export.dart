@@ -231,7 +231,7 @@ Future<ui.Image> renderFloorPlanImage({
   final walls = [
     for (final e in elements)
       if (e.kind == FloorPlanElementKind.wall && e.points.length >= 2)
-        FloorPlanSegment(e.points[0], e.points[1], id: e.id),
+        FloorPlanSegment.ofWall(e),
   ];
   final openingsByWall = <int, List<({double start, double end})>>{};
   for (final e in elements) {

@@ -76,6 +76,7 @@ void main() {
       destDir: dir,
       baseName: _base,
       settings: settingsWith(quickCountOn: true, quickCount: 2),
+      justCreatedPath: p.join(dir.path, '2026-08-23_10-00_$_base.db'),
       now: now,
     );
 
@@ -111,16 +112,23 @@ void main() {
         'zip',
         modified: now.subtract(const Duration(days: 54)),
       );
+      final fresh = await _makeBackupFile(
+        dir,
+        '2026-08-24_12-00',
+        'db',
+        modified: now,
+      );
 
       await BackupRetention.apply(
         destDir: dir,
         baseName: _base,
         settings: settingsWith(quickAgeOn: true, quickAgeDays: 7),
+        justCreatedPath: fresh.path,
         now: now,
       );
 
       final names = _names(dir);
-      expect(names, hasLength(2));
+      expect(names, hasLength(3));
       expect(names, contains('2026-08-23_10-00_$_base.db'));
       expect(names, contains('2026-07-01_10-00_$_base.zip'));
     },
@@ -140,6 +148,7 @@ void main() {
       destDir: dir,
       baseName: _base,
       settings: settingsWith(fullCountOn: true, fullCount: 2),
+      justCreatedPath: p.join(dir.path, '2026-08-23_11-00_$_base.zip'),
       now: now,
     );
     expect(_names(dir).where((n) => n.endsWith('.zip')), hasLength(2));
@@ -150,6 +159,7 @@ void main() {
       destDir: dir,
       baseName: _base,
       settings: settingsWith(fullCountOn: true, fullCount: 0),
+      justCreatedPath: p.join(dir.path, '2026-08-23_11-00_$_base.zip'),
       now: now,
     );
     expect(
@@ -178,6 +188,7 @@ void main() {
       destDir: dir,
       baseName: _base,
       settings: settingsWith(),
+      justCreatedPath: p.join(dir.path, '2026-08-02_10-00_$_base.zip'),
       now: now,
     );
     expect(_names(dir), hasLength(2));
@@ -201,8 +212,183 @@ void main() {
         fullCountOn: true,
         fullCount: 1,
       ),
+      justCreatedPath: p.join(dir.path, '2026-08-24_12-00_$_base.db'),
       now: now,
     );
     expect(_names(dir), hasLength(2));
+  });
+
+  group('Ρολόι λάθος', () {
+    Future<void> makeQuickCopies(int count, {int firstDay = 1}) async {
+      for (var i = 0; i < count; i++) {
+        final day = firstDay + i;
+        await _makeBackupFile(
+          dir,
+          '2026-08-${day.toString().padLeft(2, '0')}_10-00',
+          'db',
+          modified: DateTime(2026, 8, day, 10),
+        );
+      }
+    }
+
+    test(
+      'ρολόι ένα χρόνο μπροστά: τα παλιά γρήγορα μένουν, και το λέει',
+      () async {
+        await makeQuickCopies(10);
+        final wrongNow = DateTime(2027, 8, 24, 12);
+        final fresh = await _makeBackupFile(
+          dir,
+          '2027-08-24_12-00',
+          'db',
+          modified: wrongNow,
+        );
+
+        final outcome = await BackupRetention.apply(
+          destDir: dir,
+          baseName: _base,
+          settings: settingsWith(quickAgeOn: true, quickAgeDays: 7),
+          justCreatedPath: fresh.path,
+          now: wrongNow,
+        );
+
+        expect(_names(dir), hasLength(11));
+        expect(outcome.heldBackByAge, 10);
+        expect(outcome.notes.single, contains('10 από τα 10'));
+      },
+    );
+
+    test('ρολόι μπροστά και στο δεύτερο αντίγραφο: τα παλιά εξακολουθούν να '
+        'μένουν', () async {
+      await makeQuickCopies(10);
+      final wrongNow = DateTime(2027, 8, 24, 12);
+      await _makeBackupFile(dir, '2027-08-24_10-00', 'db', modified: wrongNow);
+      final fresh = await _makeBackupFile(
+        dir,
+        '2027-08-24_12-00',
+        'db',
+        modified: wrongNow,
+      );
+
+      await BackupRetention.apply(
+        destDir: dir,
+        baseName: _base,
+        settings: settingsWith(quickAgeOn: true, quickAgeDays: 7),
+        justCreatedPath: fresh.path,
+        now: wrongNow,
+      );
+
+      expect(_names(dir), hasLength(12));
+    });
+
+    test(
+      'το όριο ηλικίας σβήνει κανονικά όταν φτάνει ακριβώς τα μισά',
+      () async {
+        await makeQuickCopies(2);
+        await makeQuickCopies(2, firstDay: 20);
+        final fresh = await _makeBackupFile(
+          dir,
+          '2026-08-24_12-00',
+          'db',
+          modified: now,
+        );
+
+        final outcome = await BackupRetention.apply(
+          destDir: dir,
+          baseName: _base,
+          settings: settingsWith(quickAgeOn: true, quickAgeDays: 7),
+          justCreatedPath: fresh.path,
+          now: now,
+        );
+
+        expect(_names(dir), hasLength(3));
+        expect(outcome.notes, isEmpty);
+      },
+    );
+
+    test('ρολόι πίσω: το όριο πλήθους δεν σβήνει το γρήγορο που μόλις έγινε, '
+        'ούτε τα πιο πρόσφατα', () async {
+      await makeQuickCopies(3, firstDay: 20);
+      final wrongNow = DateTime(2025, 8, 24, 12);
+      final fresh = await _makeBackupFile(
+        dir,
+        '2025-08-24_12-00',
+        'db',
+        modified: wrongNow,
+      );
+
+      await BackupRetention.apply(
+        destDir: dir,
+        baseName: _base,
+        settings: settingsWith(quickCountOn: true, quickCount: 3),
+        justCreatedPath: fresh.path,
+        now: wrongNow,
+      );
+
+      expect(_names(dir), hasLength(4));
+      expect(await fresh.exists(), isTrue);
+    });
+
+    test('ρολόι πίσω: το πλήρες που μόλις έγινε μένει, μαζί με το πιο πρόσφατο '
+        'κατά την ώρα του αρχείου', () async {
+      final newest = await _makeBackupFile(
+        dir,
+        '2026-08-20_10-00',
+        'zip',
+        modified: DateTime(2026, 8, 20, 10),
+      );
+      final wrongNow = DateTime(2025, 8, 24, 12);
+      final fresh = await _makeBackupFile(
+        dir,
+        '2025-08-24_12-00',
+        'zip',
+        modified: wrongNow,
+      );
+
+      await BackupRetention.apply(
+        destDir: dir,
+        baseName: _base,
+        settings: settingsWith(fullCountOn: true, fullCount: 1),
+        justCreatedPath: fresh.path,
+        now: wrongNow,
+      );
+
+      expect(await fresh.exists(), isTrue);
+      expect(await newest.exists(), isTrue);
+    });
+  });
+
+  test('αντίγραφο που δεν σβήνεται: το αποτέλεσμα το ονομάζει', () async {
+    final locked = await _makeBackupFile(
+      dir,
+      '2026-08-01_10-00',
+      'db',
+      modified: DateTime(2026, 8, 1, 10),
+    );
+    Process.runSync('attrib', ['+r', locked.path]);
+    addTearDown(() => Process.runSync('attrib', ['-r', locked.path]));
+    await _makeBackupFile(
+      dir,
+      '2026-08-20_10-00',
+      'db',
+      modified: DateTime(2026, 8, 20, 10),
+    );
+    final fresh = await _makeBackupFile(
+      dir,
+      '2026-08-24_12-00',
+      'db',
+      modified: now,
+    );
+
+    final outcome = await BackupRetention.apply(
+      destDir: dir,
+      baseName: _base,
+      settings: settingsWith(quickAgeOn: true, quickAgeDays: 7),
+      justCreatedPath: fresh.path,
+      now: now,
+    );
+
+    expect(await locked.exists(), isTrue);
+    expect(outcome.notDeleted, [p.basename(locked.path)]);
+    expect(outcome.notes.single, contains(p.basename(locked.path)));
   });
 }

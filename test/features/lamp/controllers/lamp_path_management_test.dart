@@ -1,110 +1,67 @@
-import 'package:call_logger/core/database/old_database/lamp_old_db_validator.dart';
+import 'package:call_logger/core/config/app_config.dart';
 import 'package:call_logger/core/database/old_database/lamp_settings_store.dart';
-import 'package:call_logger/features/lamp/controllers/lamp_path_management.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Οι ρυθμίσεις διαδρομής της Λάμπας μετά την κατάργηση της «Δημιουργίας
+/// βάσης από Excel»: μένει μόνο η βάση που διαβάζει η Λάμπα, και κανένας
+/// σταθμός δεν τη χάνει στη μετάβαση.
 void main() {
-  setUp(() {
+  String key(String base) => AppConfig.prefixedPreferencesKey(base);
+
+  const readKey = 'lamp_old_db_read_path';
+  const outputKey = 'lamp_old_db_output_path';
+  const excelKey = 'lamp_excel_path';
+
+  test('η διαδρομή της βάσης γράφεται και διαβάζεται ίδια', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    final settings = LampSettingsStore();
+    await settings.setReadPath('C:/read/lamp_read.db');
+
+    expect(await settings.getReadPath(), 'C:/read/lamp_read.db');
   });
 
-  group('shouldSyncReadPathOnOutputPick', () {
-    test('sync only when read path is empty', () {
-      expect(shouldSyncReadPathOnOutputPick(''), isTrue);
-      expect(shouldSyncReadPathOnOutputPick('   '), isTrue);
-      expect(
-        shouldSyncReadPathOnOutputPick(r'C:\Data\old_equipment.db'),
-        isFalse,
-      );
+  test('σταθμός με κενή βάση Λάμπας κρατά τη βάση που δημιουργούσε το Excel '
+      'και οι ρυθμίσεις του Excel σβήνονται', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      key(outputKey): 'C:/out/lamp_out.db',
+      key(excelKey): 'C:/import/lamp.xlsx',
     });
 
-    test(
-      'does not sync when read matched previous output but read is not empty',
-      () {
-        const oldOutput = r'C:\Data\old_equipment.db';
-        const readPath = oldOutput;
-        const newOutput = r'C:\Data\old_equipment 2.db';
+    expect(await LampSettingsStore().getReadPath(), 'C:/out/lamp_out.db');
 
-        expect(shouldSyncReadPathOnOutputPick(readPath), isFalse);
-        expect(readPath, oldOutput);
-        expect(newOutput, isNot(oldOutput));
-      },
-    );
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(key(readKey)), 'C:/out/lamp_out.db');
+    expect(prefs.containsKey(key(outputKey)), isFalse);
+    expect(prefs.containsKey(key(excelKey)), isFalse);
   });
 
-  group('computeMatchReadToOutputButtonState', () {
-    test('disabled when output path is empty', () {
-      final state = computeMatchReadToOutputButtonState(
-        outputPath: '',
-        readPath: r'C:\read.db',
-      );
-      expect(state.enabled, isFalse);
-      expect(state.tooltip, 'Η διαδρομή της βάσης εξόδου είναι κενή');
-    });
+  test(
+    'σταθμός με δική του βάση Λάμπας δεν την αλλάζει στη μετάβαση',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        key(readKey): 'C:/read/experiment.db',
+        key(outputKey): 'C:/out/fresh_import.db',
+      });
 
-    test('disabled when paths already match', () {
-      final state = computeMatchReadToOutputButtonState(
-        outputPath: r'C:\Data\lamp.db',
-        readPath: r'c:\data\lamp.db',
-      );
-      expect(state.enabled, isFalse);
-      expect(
-        state.tooltip,
-        'Η διαδρομή της βάσης εξόδου είναι ίδια με τη βάση ανάγνωσης',
-      );
-    });
+      expect(await LampSettingsStore().getReadPath(), 'C:/read/experiment.db');
 
-    test('disabled when output path format is invalid', () {
-      final state = computeMatchReadToOutputButtonState(
-        outputPath: r'C:\Data\old_base_test',
-        readPath: r'C:\Data\read.db',
-      );
-      expect(state.enabled, isFalse);
-      expect(
-        state.tooltip,
-        'Η διαδρομή της βάσης εξόδου δεν είναι έγκυρη (αρχείο .db)',
-      );
-    });
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey(key(outputKey)), isFalse);
+    },
+  );
 
-    test('enabled when output is valid and differs from read', () {
-      final state = computeMatchReadToOutputButtonState(
-        outputPath: r'C:\Data\output.db',
-        readPath: r'C:\Data\read.db',
-      );
-      expect(state.enabled, isTrue);
-      expect(state.tooltip, 'Ίδια διαδρομή με τη βάση εξόδου');
-    });
-  });
-
-  group('LampPathController path persistence contract', () {
-    test('settings store round-trips typed read and output paths', () async {
+  test(
+    'η μετάβαση γίνεται μία φορά: βάση που άδειασε αργότερα δεν ξαναγεμίζει',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        key(readKey): 'C:/read/lamp.db',
+      });
       final settings = LampSettingsStore();
-      await settings.setReadPath(r'C:\read\lamp_read.db');
-      await settings.setOutputPath(r'C:\out\lamp_out.db');
+      await settings.getReadPath();
+      await settings.setReadPath('');
 
-      expect(await settings.getReadPathRaw(), r'C:\read\lamp_read.db');
-      expect(await settings.getOutputPathRaw(), r'C:\out\lamp_out.db');
-    });
-
-    test('effective read path falls back to output when read is empty', () {
-      final output = r'C:\out\lamp_out.db';
-      expect(LampOldDbValidator.pathsReferToSameFile('', output), isFalse);
-      expect(LampOldDbValidator.pathsReferToSameFile(output, output), isTrue);
-    });
-
-    test(
-      'ξεχωριστή ανάγνωση παραμένει στο store όταν ενημερώνεται μόνο η έξοδος',
-      () async {
-        final settings = LampSettingsStore();
-        const readPath = r'C:\read\experiment.db';
-        const outputPath = r'C:\out\fresh_import.db';
-        await settings.setReadPath(readPath);
-        await settings.setOutputPath(outputPath);
-
-        expect(await settings.getReadPathRaw(), readPath);
-        expect(await settings.getOutputPathRaw(), outputPath);
-      },
-    );
-  });
+      expect(await settings.getReadPath(), isNull);
+    },
+  );
 }

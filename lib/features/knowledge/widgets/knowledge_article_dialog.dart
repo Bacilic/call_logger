@@ -160,6 +160,31 @@ class _KnowledgeArticleDialogState
     });
   }
 
+  /// Ο συνάδελφος διέγραψε το άρθρο όσο ήταν ανοιχτό: τίποτα δεν γράφτηκε.
+  /// `true` = ο χρήστης θέλει να κρατήσει τη διόρθωση ως νέο άρθρο.
+  Future<bool> _askSaveDeletedAsNew(
+    KnowledgeArticleDeletedException gone,
+  ) async {
+    final asNew = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Το άρθρο διαγράφηκε'),
+        content: Text(gone.describe(now: DateTime.now())),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Άκυρο'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Αποθήκευση ως νέο άρθρο'),
+          ),
+        ],
+      ),
+    );
+    return asNew ?? false;
+  }
+
   Future<void> _save() async {
     if (_saving || _improving) return;
     final symptom = _symptomController.text.trim();
@@ -191,16 +216,27 @@ class _KnowledgeArticleDialogState
     try {
       final actions = ref.read(knowledgeActionsProvider.notifier);
       var id = 0;
-      final saved = await saveDirectoryRecordWithConflictPrompt(
-        context,
-        save: ({required bool force}) async {
-          id = await actions.save(
-            updated,
-            expected: _isNew ? null : widget.article,
-            force: force,
-          );
-        },
-      );
+      bool saved;
+      var savedAsNew = false;
+      try {
+        saved = await saveDirectoryRecordWithConflictPrompt(
+          context,
+          save: ({required bool force}) async {
+            id = await actions.save(
+              updated,
+              expected: _isNew ? null : widget.article,
+              force: force,
+            );
+          },
+        );
+      } on KnowledgeArticleDeletedException catch (gone) {
+        if (!mounted) return;
+        saved = await _askSaveDeletedAsNew(gone);
+        if (saved) {
+          id = await actions.save(updated.asNewArticle());
+          savedAsNew = true;
+        }
+      }
       if (!mounted) return;
       if (!saved) {
         setState(() => _saving = false);
@@ -209,7 +245,9 @@ class _KnowledgeArticleDialogState
       closeDialogWithSnackBar(
         SnackBar(
           content: Text(
-            _isNew
+            savedAsNew
+                ? 'Το άρθρο αποθηκεύτηκε ως νέο στη Βάση Γνώσης.'
+                : _isNew
                 ? 'Το άρθρο προστέθηκε στη Βάση Γνώσης.'
                 : 'Το άρθρο ενημερώθηκε.',
           ),

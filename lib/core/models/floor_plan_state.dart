@@ -36,8 +36,8 @@ class FloorPlanState {
 
   bool get hasPattern => patternHash != null;
 
-  /// Οι στήλες που διαβάζονται — ρητά, ώστε η εικόνα να μην ταξιδεύει ποτέ
-  /// μαζί με την κατάσταση.
+  /// Οι στήλες που διαβάζονται. Η εικόνα ζει σε άλλον πίνακα
+  /// (`building_map_floor_patterns`), οπότε δεν ταξιδεύει μαζί με την κατάσταση.
   static const List<String> columns = [
     'floor_id',
     'is_active',

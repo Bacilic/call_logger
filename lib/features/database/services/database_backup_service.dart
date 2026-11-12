@@ -52,7 +52,12 @@ class DatabaseBackupResult {
     this.isFullBackup = false,
     this.portableFingerprint,
     this.brokenArtifactPath,
+    this.retentionNotes = const [],
   });
+
+  /// Όσα πρέπει να μάθει ο χρήστης για τα **παλιά** αντίγραφα. Περιέχονται και
+  /// στο [message]· χωριστά για όποια οθόνη δείχνει δικό της κείμενο.
+  final List<String> retentionNotes;
 
   /// Το αίτημα απορρίφθηκε επειδή τρέχει ήδη αντίγραφο.
   static const DatabaseBackupResult alreadyRunning = DatabaseBackupResult(
@@ -502,17 +507,20 @@ class DatabaseBackupService {
     }
 
     // ── 7. Εκκαθάριση παλαιών ───────────────────────────────────────────
+    var retentionNotes = const <String>[];
     try {
-      await BackupRetention.apply(
+      final retention = await BackupRetention.apply(
         destDir: Directory(dest),
         baseName: baseName,
         settings: settings,
+        justCreatedPath: finalPath,
       );
+      retentionNotes = retention.notes;
     } catch (e) {
       // Η εκκαθάριση δεν ρίχνει το αντίγραφο — αυτό έχει ήδη γραφτεί και
       // επαληθευτεί. Σιωπηλή όμως δεν μένει: ένας φάκελος που δεν αδειάζει
       // ποτέ γεμίζει τον δίσκο χωρίς καμία ένδειξη.
-      missingParts.add('εκκαθάριση παλαιών αντιγράφων ($e)');
+      retentionNotes = ['Τα παλιά αντίγραφα δεν καθαρίστηκαν ($e).'];
     }
 
     // ── 8. Μήνυμα ───────────────────────────────────────────────────────
@@ -521,6 +529,7 @@ class DatabaseBackupService {
       wantsBundle: wantBundle,
       includedParts: includedParts,
       missingParts: missingParts,
+      retentionNotes: retentionNotes,
     );
     // Το Ιστορικό κρατά και πόσο κράτησε το κλείδωμα των συναδέλφων — η
     // μόνη μέτρηση που λέει, σε κάθε μηχάνημα και δίκτυο, αν το αντίγραφο
@@ -540,6 +549,7 @@ class DatabaseBackupService {
       message: message,
       isFullBackup: isFull,
       portableFingerprint: isFull ? currentFingerprint : null,
+      retentionNotes: retentionNotes,
     );
   }
 
@@ -735,14 +745,10 @@ class DatabaseBackupService {
     if (portable.restoredLampDbPath != null) {
       try {
         final lampStore = LampSettingsStore();
-        final read = await lampStore.getReadPathRaw();
-        final output = await lampStore.getOutputPathRaw();
+        final read = await lampStore.getReadPath();
         final restoredBase = p.basename(portable.restoredLampDbPath!);
         if (read != null && p.basename(read) == restoredBase) {
           await lampStore.setReadPath(portable.restoredLampDbPath!);
-        }
-        if (output != null && p.basename(output) == restoredBase) {
-          await lampStore.setOutputPath(portable.restoredLampDbPath!);
         }
       } catch (e) {
         warnings.add(

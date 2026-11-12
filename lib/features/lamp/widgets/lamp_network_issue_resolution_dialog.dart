@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../core/database/old_database/lamp_data_issue_type_labels.dart';
 import '../../../core/database/old_database/lamp_issue_resolution_models.dart';
 import '../../../core/database/old_database/lamp_network_issue_resolution_service.dart';
-import '../../../core/database/old_database/lamp_network_sheet_importer.dart';
+import '../../../core/database/old_database/lamp_network_hostname.dart';
 import 'lamp_entity_code_autocomplete.dart';
 
 const _scanBasedNetworkIssueTypes = <String>{
@@ -550,9 +550,9 @@ class _LampNetworkIssueResolutionDialogState
         TextButton(
           onPressed: _busy
               ? null
-              : () => Navigator.of(
-                  context,
-                ).pop(LampNetworkIssueDialogOutcome.cancelled),
+              : () =>
+                    Navigator.of(context)
+                        .pop(LampNetworkIssueDialogOutcome.cancelled),
           child: const Text('Ακύρωση όλων'),
         ),
         TextButton.icon(

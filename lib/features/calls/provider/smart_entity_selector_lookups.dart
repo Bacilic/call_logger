@@ -464,22 +464,159 @@ class SmartEntitySelectorLookups {
   /// έναν κάτοχο μέσα στο τμήμα είναι η περίπτωση του ενός κατόχου.
   void _applyPhoneLookupWithCatalog(String digits, LookupService lookup) {
     host.runExclusiveLookup(SelectorField.phone, () {
-      final allOwners = lookup.findUsersByPhone(digits);
-      final users = _withinLockedDepartment(allOwners);
-      if (allOwners.isEmpty) {
-        _applyPhoneWithoutOwner(digits, lookup);
-      } else if (users.isEmpty) {
-        _applyPhoneWithoutOwner(
-          digits,
-          lookup,
-          ownedOutsideLockedDepartment: true,
-        );
-      } else if (users.length == 1) {
-        _applySinglePhoneOwner(digits, users.first);
-      } else {
-        _applySharedPhoneOwners(users, lookup);
-      }
+      dropStaleAutofills(phone: digits);
+      final before = state;
+      _dispatchPhoneLookup(digits, lookup);
+      recordAutofill(SelectorField.phone, before, sourceText: digits);
     });
+  }
+
+  static String _digitsOf(String? phone) =>
+      (phone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+
+  /// Η σημερινή τιμή του πεδίου-πηγής [field], στη μορφή που καταγράφεται
+  /// στο [FieldAutofill.sourceText]. Οι [phone]/[caller]/[equipment]
+  /// προλαβαίνουν τιμή που μόλις αλλάζει και δεν έχει γραφτεί ακόμη.
+  String _sourceValue(
+    SelectorField field, {
+    String? phone,
+    String? caller,
+    String? equipment,
+  }) => switch (field) {
+    SelectorField.phone => _digitsOf(phone ?? state.selectedPhone),
+    SelectorField.caller => (caller ?? state.callerDisplayText).trim(),
+    SelectorField.equipment => (equipment ?? state.equipmentText).trim(),
+    SelectorField.department => state.departmentText.trim(),
+  };
+
+  /// **Μοναδικό σημείο** του κανόνα «ό,τι έγραψε η εφαρμογή επειδή το
+  /// υπέδειξε μια πηγή φεύγει μόλις η πηγή πάρει **άλλη** τιμή»: φεύγει ό,τι
+  /// είναι ακόμη ακριβώς όπως το έγραψε η εφαρμογή. Ό,τι άλλαξε ο χρήστης
+  /// στο μεταξύ μένει, και το σκέτο άδειασμα της πηγής δεν σβήνει τίποτα.
+  ///
+  /// Το καλούν κάθε αλλαγή πεδίου-πηγής (πληκτρολόγηση, επιλογή, καθαρισμός)
+  /// και κάθε αναζήτηση — όποια διαδρομή κι αν άλλαξε την τιμή. Οι
+  /// [phone]/[caller]/[equipment] δίνουν την τιμή που μόλις αλλάζει.
+  void dropStaleAutofills({String? phone, String? caller, String? equipment}) {
+    if (state.autofills.isEmpty) return;
+    final kept = <SelectorField, FieldAutofill>{};
+    var clearPhone = false;
+    var clearCaller = false;
+    var clearDepartment = false;
+    var clearEquipment = false;
+    for (final entry in state.autofills.entries) {
+      final source = _sourceValue(
+        entry.key,
+        phone: phone,
+        caller: caller,
+        equipment: equipment,
+      );
+      final autofill = entry.value;
+      // Άδειο πεδίο-πηγή δεν είναι νέα τιμή: τα υπόλοιπα μένουν ως πλαίσιο
+      // (π.χ. το τμήμα, που ξαναδείχνει τους υπαλλήλους του). Φεύγουν μόλις
+      // γραφτεί στην πηγή κάτι **άλλο**.
+      if (source.isEmpty || source == autofill.sourceText) {
+        kept[entry.key] = autofill;
+        continue;
+      }
+      clearPhone |=
+          autofill.phoneText != null &&
+          _digitsOf(state.selectedPhone) == autofill.phoneText;
+      clearCaller |=
+          autofill.callerText != null &&
+          state.callerDisplayText == autofill.callerText;
+      clearDepartment |=
+          autofill.departmentText != null &&
+          state.departmentText == autofill.departmentText;
+      clearEquipment |=
+          autofill.equipmentText != null &&
+          state.equipmentText == autofill.equipmentText;
+    }
+    if (kept.length == state.autofills.length) return;
+    state = state.copyWith(
+      autofills: kept,
+      clearSelectedPhone: clearPhone,
+      callerDisplayText: clearCaller ? '' : null,
+      clearSelectedCaller: clearCaller,
+      departmentText: clearDepartment ? '' : null,
+      clearSelectedDepartmentId: clearDepartment,
+      equipmentText: clearEquipment ? '' : null,
+      clearSelectedEquipment: clearEquipment,
+    );
+  }
+
+  /// Καταγράφει ποια **κενά** πεδία γέμισε η πηγή [source] από την
+  /// κατάσταση [before] ως τώρα — αυτά τα έγραψε η εφαρμογή. Όσα είχε ήδη
+  /// γράψει η ίδια πηγή με την ίδια τιμή και μένουν ανέγγιχτα, κρατούνται.
+  void recordAutofill(
+    SelectorField source,
+    SmartEntitySelectorState before, {
+    String? sourceText,
+  }) {
+    String? written(String was, String now) =>
+        was.trim().isEmpty && now.trim().isNotEmpty ? now : null;
+    String? kept(String? recorded, String now) =>
+        recorded != null && recorded == now ? recorded : null;
+    String? field(SelectorField f, String was, String now, String? recorded) =>
+        f == source ? null : written(was, now) ?? kept(recorded, now);
+
+    final recordedSource = sourceText ?? _sourceValue(source);
+    final previousEntry = before.autofills[source];
+    final previous = previousEntry?.sourceText == recordedSource
+        ? previousEntry
+        : null;
+    final next = FieldAutofill(
+      sourceText: recordedSource,
+      phoneText: field(
+        SelectorField.phone,
+        _digitsOf(before.selectedPhone),
+        _digitsOf(state.selectedPhone),
+        previous?.phoneText,
+      ),
+      callerText: field(
+        SelectorField.caller,
+        before.callerDisplayText,
+        state.callerDisplayText,
+        previous?.callerText,
+      ),
+      departmentText: field(
+        SelectorField.department,
+        before.departmentText,
+        state.departmentText,
+        previous?.departmentText,
+      ),
+      equipmentText: field(
+        SelectorField.equipment,
+        before.equipmentText,
+        state.equipmentText,
+        previous?.equipmentText,
+      ),
+    );
+    final autofills = Map<SelectorField, FieldAutofill>.of(state.autofills);
+    if (next.isEmpty || recordedSource.isEmpty) {
+      autofills.remove(source);
+    } else {
+      autofills[source] = next;
+    }
+    state = state.copyWith(autofills: autofills);
+  }
+
+  void _dispatchPhoneLookup(String digits, LookupService lookup) {
+    final allOwners = lookup.findUsersByPhone(digits);
+    final users = _withinLockedDepartment(allOwners);
+    if (allOwners.isEmpty) {
+      _applyPhoneWithoutOwner(digits, lookup);
+    } else if (users.isEmpty) {
+      _applyPhoneWithoutOwner(
+        digits,
+        lookup,
+        ownedOutsideLockedDepartment: true,
+      );
+    } else if (users.length == 1) {
+      _applySinglePhoneOwner(digits, users.first);
+    } else {
+      _applySharedPhoneOwners(users, lookup);
+    }
   }
 
   /// Τηλέφωνο που δεν δίνει κάτοχο σε αυτή τη φόρμα: ίσως τηλέφωνο τμήματος,
@@ -499,26 +636,12 @@ class SmartEntitySelectorLookups {
     final canAutofillDepartment =
         state.departmentText.trim().isEmpty &&
         state.selectedDepartmentId == null;
-    // Γράφοντας ψηφίο-ψηφίο, ένα ενδιάμεσο τηλέφωνο («224») μπορεί να έχει
-    // ήδη δέσει κάτοχο· το τελικό («2244») δεν είναι δικό του. Το όνομα που
-    // έγραψε ΜΟΝΗ της η εφαρμογή είναι πλέον μπαγιάτικο: αν μείνει, δείχνει
-    // υπαρκτό υπάλληλο χωρίς δεσμό — η κλήση φεύγει με ελεύθερο κείμενο και
-    // ο κανόνας του τμήματος δεν προλαβαίνει καν να τρέξει, γιατί βλέπει
-    // γεμάτο πεδίο. Ό,τι πληκτρολόγησε ο χρήστης δεν αγγίζεται.
-    final previous = state.selectedCaller;
-    final autofilledName = previous == null
-        ? ''
-        : (previous.name ?? previous.fullNameWithDepartment).trim();
-    final callerTextIsStaleAutofill =
-        autofilledName.isNotEmpty &&
-        state.callerDisplayText.trim() == autofilledName;
+    // Το όνομα που είχε γράψει ένα προηγούμενο τηλέφωνο έχει ήδη φύγει
+    // ([dropStaleAutofills]). Ό,τι έμεινε το έγραψε ο χρήστης.
     state = state.copyWith(
       clearPhoneCandidates: true,
       callerCandidates: [],
       clearSelectedCaller: true,
-      callerDisplayText: callerTextIsStaleAutofill
-          ? ''
-          : state.callerDisplayText,
       equipmentCandidates: [],
       clearSelectedEquipment: !hasManualEquipmentSelection,
       isPhoneAmbiguous: false,
@@ -715,213 +838,96 @@ class SmartEntitySelectorLookups {
 
   void performCallerLookup(String nameOrQuery, {String? phoneFieldDigits}) {
     host.runExclusiveLookup(SelectorField.caller, () {
-      final query = nameOrQuery.trim();
-      if (query.isEmpty || query == 'Άγνωστος') return;
-      final asyncLookup = ref.read(lookupServiceProvider);
-      final lookup = asyncLookup.value?.service;
-      if (lookup == null) return;
-      final users = lookup.searchUsersByQuery(query);
-      if (users.isEmpty) {
-        state = state.copyWith(
-          callerCandidates: [],
-          clearSelectedCaller: true,
-          callerNoMatch: true,
-          isPhoneAmbiguous: false,
-          clearPhoneCandidates: true,
-          equipmentNoMatch: false,
-        );
-        return;
-      }
-      if (users.length > 1) {
-        state = state.copyWith(
-          callerCandidates: users,
-          clearSelectedCaller: true,
-          callerNoMatch: false,
-          clearPhoneCandidates: true,
-          isPhoneAmbiguous: false,
-        );
-        return;
-      }
-
-      final user = users.first;
-      if (!_isExactCallerNameMatch(query, user)) {
-        state = state.copyWith(
-          callerCandidates: users,
-          clearSelectedCaller: true,
-          callerNoMatch: false,
-          clearPhoneCandidates: true,
-          isPhoneAmbiguous: false,
-        );
-        return;
-      }
-
-      final displayName = user.name ?? user.fullNameWithDepartment;
-      final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
-      state = state.copyWith(
-        selectedCaller: user,
-        clearPhoneCandidates: true,
-        callerCandidates: [],
-        callerNoMatch: false,
-        isPhoneAmbiguous: false,
-        callerDisplayText: displayName,
-        departmentText: shouldAutofillDepartment
-            ? departmentTextForUser(user)
-            : state.departmentText,
-        selectedDepartmentId: shouldAutofillDepartment
-            ? user.departmentId
-            : state.selectedDepartmentId,
-      );
-      final snap =
-          phoneFieldDigits?.replaceAll(RegExp(r'[^0-9]'), '').trim() ?? '';
-      if (snap.isNotEmpty &&
-          (state.selectedPhone == null ||
-              state.selectedPhone!.trim().isEmpty)) {
-        state = state.copyWith(
-          selectedPhone: snap,
-          clearSelectedPhone: false,
-          clearPhoneError: true,
-        );
-      }
-      _autofillPhoneForCommittedUser(user, lookup);
-
-      final canAutofillEquipment = state.equipmentText.trim().isEmpty;
-      if (user.id != null && canAutofillEquipment) {
-        _performEquipmentLookupForUser(user.id!);
-      }
+      dropStaleAutofills();
+      final before = state;
+      _performCallerLookupBody(nameOrQuery, phoneFieldDigits);
+      recordAutofill(SelectorField.caller, before);
     });
+  }
+
+  void _performCallerLookupBody(String nameOrQuery, String? phoneFieldDigits) {
+    final query = nameOrQuery.trim();
+    if (query.isEmpty || query == 'Άγνωστος') return;
+    final asyncLookup = ref.read(lookupServiceProvider);
+    final lookup = asyncLookup.value?.service;
+    if (lookup == null) return;
+    final users = lookup.searchUsersByQuery(query);
+    if (users.isEmpty) {
+      state = state.copyWith(
+        callerCandidates: [],
+        clearSelectedCaller: true,
+        callerNoMatch: true,
+        isPhoneAmbiguous: false,
+        clearPhoneCandidates: true,
+        equipmentNoMatch: false,
+      );
+      return;
+    }
+    if (users.length > 1) {
+      state = state.copyWith(
+        callerCandidates: users,
+        clearSelectedCaller: true,
+        callerNoMatch: false,
+        clearPhoneCandidates: true,
+        isPhoneAmbiguous: false,
+      );
+      return;
+    }
+
+    final user = users.first;
+    if (!_isExactCallerNameMatch(query, user)) {
+      state = state.copyWith(
+        callerCandidates: users,
+        clearSelectedCaller: true,
+        callerNoMatch: false,
+        clearPhoneCandidates: true,
+        isPhoneAmbiguous: false,
+      );
+      return;
+    }
+
+    final displayName = user.name ?? user.fullNameWithDepartment;
+    final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
+    state = state.copyWith(
+      selectedCaller: user,
+      clearPhoneCandidates: true,
+      callerCandidates: [],
+      callerNoMatch: false,
+      isPhoneAmbiguous: false,
+      callerDisplayText: displayName,
+      departmentText: shouldAutofillDepartment
+          ? departmentTextForUser(user)
+          : state.departmentText,
+      selectedDepartmentId: shouldAutofillDepartment
+          ? user.departmentId
+          : state.selectedDepartmentId,
+    );
+    final snap =
+        phoneFieldDigits?.replaceAll(RegExp(r'[^0-9]'), '').trim() ?? '';
+    if (snap.isNotEmpty &&
+        (state.selectedPhone == null || state.selectedPhone!.trim().isEmpty)) {
+      state = state.copyWith(
+        selectedPhone: snap,
+        clearSelectedPhone: false,
+        clearPhoneError: true,
+      );
+    }
+    _autofillPhoneForCommittedUser(user, lookup);
+
+    final canAutofillEquipment = state.equipmentText.trim().isEmpty;
+    if (user.id != null && canAutofillEquipment) {
+      _performEquipmentLookupForUser(user.id!);
+    }
   }
 
   void performEquipmentLookupByCode(String code) {
     host.runExclusiveLookup(
       SelectorField.equipment,
       () {
-        final query = code.trim();
-        if (query.isEmpty) return;
-        final asyncLookup = ref.read(lookupServiceProvider);
-        final lookup = asyncLookup.value?.service;
-        if (lookup == null) return;
-        final list = lookup.findEquipmentsByCode(query);
-        if (list.isEmpty) {
-          // Το ίδιο το πεδίο εξοπλισμού δεν ταιριάζει σε καμία οντότητα: η τυχόν
-          // προηγούμενη επιλογή είναι άκυρη και καθαρίζεται.
-          state = state.copyWith(
-            equipmentCandidates: [],
-            clearSelectedEquipment: true,
-            isEquipmentAmbiguous: false,
-            equipmentNoMatch: true,
-          );
-          return;
-        }
-
-        // Ακριβής κωδικός (π.χ. «506») υπερισχύει των μερικών ταιριασμάτων
-        // (5067, 5068, …) κατά την κατοχύρωση — όχι κατά τις προτάσεις πληκτρολόγησης.
-        final queryNorm = SearchTextNormalizer.normalizeForSearch(query);
-        final exactMatches = list
-            .where(
-              (e) =>
-                  SearchTextNormalizer.normalizeForSearch(e.code ?? '') ==
-                  queryNorm,
-            )
-            .toList();
-        final resolved = exactMatches.length == 1 ? exactMatches : list;
-
-        if (resolved.length > 1) {
-          state = state.copyWith(
-            equipmentCandidates: resolved,
-            clearSelectedEquipment: true,
-            isEquipmentAmbiguous: true,
-            equipmentNoMatch: false,
-          );
-          return;
-        }
-
-        final equipment = resolved.first;
-        final resolvedText = equipment.code?.trim().isNotEmpty == true
-            ? equipment.code!.trim()
-            : query;
-        state = state.copyWith(
-          selectedEquipment: equipment,
-          equipmentText: resolvedText,
-          equipmentCandidates: [],
-          isEquipmentAmbiguous: false,
-          equipmentNoMatch: false,
-        );
-
-        final allOwners = equipment.id != null
-            ? lookup.findUsersForEquipment(equipment.id!)
-            : <UserModel>[];
-        final owners = _withinLockedDepartment(allOwners);
-
-        // Όλοι οι κάτοχοι ανήκουν σε άλλο τμήμα από το κλειδωμένο: κανένας
-        // δεν συμπληρώνεται ούτε προτείνεται, ούτε το τηλέφωνό τους.
-        if (owners.isEmpty && allOwners.isNotEmpty) {
-          restoreDepartmentCallerCandidatesIfNeeded(lookup);
-          return;
-        }
-
-        // Πολλαπλοί κάτοχοι → λίστα candidates, ποτέ αυτόματη επιλογή
-        // του πρώτου. Ό,τι όμως μοιράζονται ΟΛΟΙ δεν είναι ασαφές: το κοινό
-        // τμήμα και το κοινό τηλέφωνο συμπληρώνονται σε κενά πεδία, όπως με
-        // έναν κάτοχο.
-        if (owners.length > 1) {
-          if (state.callerDisplayText.trim().isEmpty) {
-            state = state.copyWith(
-              callerCandidates: owners,
-              clearSelectedCaller: true,
-              callerNoMatch: false,
-              isPhoneAmbiguous: false,
-            );
-          }
-          _autofillSharedDepartmentIfEmpty(owners, lookup);
-          _autofillPhoneForSharedOwners(owners, lookup);
-          return;
-        }
-
-        final user = owners.isNotEmpty ? owners.first : null;
-        if (user == null) {
-          if (equipment.departmentId != null &&
-              state.departmentText.trim().isEmpty &&
-              state.selectedDepartmentId == null) {
-            state = state.copyWith(
-              departmentText:
-                  lookup.departmentIdToName[equipment.departmentId] ?? '',
-              selectedDepartmentId: equipment.departmentId,
-            );
-          }
-          // Εξοπλισμός χωρίς κάτοχο: η υπόδειξη τηλεφώνου έρχεται από το τμήμα.
-          // Γίνεται εδώ, όπου ο χρήστης μόλις κατοχύρωσε κωδικό — όχι στην
-          // επαναφορά υποψηφίων, που δεν έχει δικαίωμα να γράψει τιμή.
-          final departmentId = state.selectedDepartmentId;
-          if (departmentId != null) {
-            _autofillDepartmentPhoneIfEmpty(lookup, departmentId);
-          }
-          return;
-        }
-
-        // Ένας κάτοχος (ή ο μόνος του κλειδωμένου τμήματος): αυτός είναι ο
-        // καλών — αλλά μόνο σε κενά πεδία.
-        final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
-        if (state.callerDisplayText.trim().isEmpty) {
-          state = state.copyWith(
-            selectedCaller: user,
-            callerCandidates: [],
-            isPhoneAmbiguous: false,
-            callerNoMatch: false,
-            callerDisplayText: user.name ?? user.fullNameWithDepartment,
-            departmentText: shouldAutofillDepartment
-                ? departmentTextForUser(user)
-                : state.departmentText,
-            selectedDepartmentId: shouldAutofillDepartment
-                ? user.departmentId
-                : state.selectedDepartmentId,
-          );
-        } else if (shouldAutofillDepartment) {
-          state = state.copyWith(
-            departmentText: departmentTextForUser(user),
-            selectedDepartmentId: user.departmentId,
-          );
-        }
-        _autofillPhoneForCommittedUser(user, lookup);
+        dropStaleAutofills();
+        final before = state;
+        _performEquipmentLookupBody(code);
+        recordAutofill(SelectorField.equipment, before);
       },
       onBeforeRecompute: () {
         final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
@@ -930,5 +936,135 @@ class SmartEntitySelectorLookups {
         }
       },
     );
+  }
+
+  void _performEquipmentLookupBody(String code) {
+    final query = code.trim();
+    if (query.isEmpty) return;
+    final asyncLookup = ref.read(lookupServiceProvider);
+    final lookup = asyncLookup.value?.service;
+    if (lookup == null) return;
+    final list = lookup.findEquipmentsByCode(query);
+    if (list.isEmpty) {
+      // Το ίδιο το πεδίο εξοπλισμού δεν ταιριάζει σε καμία οντότητα: η τυχόν
+      // προηγούμενη επιλογή είναι άκυρη και καθαρίζεται.
+      state = state.copyWith(
+        equipmentCandidates: [],
+        clearSelectedEquipment: true,
+        isEquipmentAmbiguous: false,
+        equipmentNoMatch: true,
+      );
+      return;
+    }
+
+    // Ακριβής κωδικός (π.χ. «506») υπερισχύει των μερικών ταιριασμάτων
+    // (5067, 5068, …) κατά την κατοχύρωση — όχι κατά τις προτάσεις πληκτρολόγησης.
+    final queryNorm = SearchTextNormalizer.normalizeForSearch(query);
+    final exactMatches = list
+        .where(
+          (e) =>
+              SearchTextNormalizer.normalizeForSearch(e.code ?? '') ==
+              queryNorm,
+        )
+        .toList();
+    final resolved = exactMatches.length == 1 ? exactMatches : list;
+
+    if (resolved.length > 1) {
+      state = state.copyWith(
+        equipmentCandidates: resolved,
+        clearSelectedEquipment: true,
+        isEquipmentAmbiguous: true,
+        equipmentNoMatch: false,
+      );
+      return;
+    }
+
+    final equipment = resolved.first;
+    final resolvedText = equipment.code?.trim().isNotEmpty == true
+        ? equipment.code!.trim()
+        : query;
+    state = state.copyWith(
+      selectedEquipment: equipment,
+      equipmentText: resolvedText,
+      equipmentCandidates: [],
+      isEquipmentAmbiguous: false,
+      equipmentNoMatch: false,
+    );
+
+    final allOwners = equipment.id != null
+        ? lookup.findUsersForEquipment(equipment.id!)
+        : <UserModel>[];
+    final owners = _withinLockedDepartment(allOwners);
+
+    // Όλοι οι κάτοχοι ανήκουν σε άλλο τμήμα από το κλειδωμένο: κανένας
+    // δεν συμπληρώνεται ούτε προτείνεται, ούτε το τηλέφωνό τους.
+    if (owners.isEmpty && allOwners.isNotEmpty) {
+      restoreDepartmentCallerCandidatesIfNeeded(lookup);
+      return;
+    }
+
+    // Πολλαπλοί κάτοχοι → λίστα candidates, ποτέ αυτόματη επιλογή
+    // του πρώτου. Ό,τι όμως μοιράζονται ΟΛΟΙ δεν είναι ασαφές: το κοινό
+    // τμήμα και το κοινό τηλέφωνο συμπληρώνονται σε κενά πεδία, όπως με
+    // έναν κάτοχο.
+    if (owners.length > 1) {
+      if (state.callerDisplayText.trim().isEmpty) {
+        state = state.copyWith(
+          callerCandidates: owners,
+          clearSelectedCaller: true,
+          callerNoMatch: false,
+          isPhoneAmbiguous: false,
+        );
+      }
+      _autofillSharedDepartmentIfEmpty(owners, lookup);
+      _autofillPhoneForSharedOwners(owners, lookup);
+      return;
+    }
+
+    final user = owners.isNotEmpty ? owners.first : null;
+    if (user == null) {
+      if (equipment.departmentId != null &&
+          state.departmentText.trim().isEmpty &&
+          state.selectedDepartmentId == null) {
+        state = state.copyWith(
+          departmentText:
+              lookup.departmentIdToName[equipment.departmentId] ?? '',
+          selectedDepartmentId: equipment.departmentId,
+        );
+      }
+      // Εξοπλισμός χωρίς κάτοχο: η υπόδειξη τηλεφώνου έρχεται από το τμήμα.
+      // Γίνεται εδώ, όπου ο χρήστης μόλις κατοχύρωσε κωδικό — όχι στην
+      // επαναφορά υποψηφίων, που δεν έχει δικαίωμα να γράψει τιμή.
+      final departmentId = state.selectedDepartmentId;
+      if (departmentId != null) {
+        _autofillDepartmentPhoneIfEmpty(lookup, departmentId);
+      }
+      return;
+    }
+
+    // Ένας κάτοχος (ή ο μόνος του κλειδωμένου τμήματος): αυτός είναι ο
+    // καλών — αλλά μόνο σε κενά πεδία.
+    final shouldAutofillDepartment = _canAutofillDepartmentForUser(user);
+    if (state.callerDisplayText.trim().isEmpty) {
+      state = state.copyWith(
+        selectedCaller: user,
+        callerCandidates: [],
+        isPhoneAmbiguous: false,
+        callerNoMatch: false,
+        callerDisplayText: user.name ?? user.fullNameWithDepartment,
+        departmentText: shouldAutofillDepartment
+            ? departmentTextForUser(user)
+            : state.departmentText,
+        selectedDepartmentId: shouldAutofillDepartment
+            ? user.departmentId
+            : state.selectedDepartmentId,
+      );
+    } else if (shouldAutofillDepartment) {
+      state = state.copyWith(
+        departmentText: departmentTextForUser(user),
+        selectedDepartmentId: user.departmentId,
+      );
+    }
+    _autofillPhoneForCommittedUser(user, lookup);
   }
 }

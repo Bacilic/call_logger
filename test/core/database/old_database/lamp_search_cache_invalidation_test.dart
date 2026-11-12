@@ -18,7 +18,6 @@ import 'package:call_logger/core/database/old_database/old_database_schema.dart'
 import 'package:call_logger/core/database/lamp_migration_service.dart';
 import 'package:call_logger/core/database/old_database/lamp_network_issue_resolution_service.dart';
 import 'package:call_logger/core/database/old_database/lamp_settings_store.dart';
-import 'package:call_logger/core/database/old_database/old_excel_importer.dart';
 import 'package:call_logger/core/database/old_database/old_equipment_repository.dart';
 import 'package:call_logger/features/lamp/controllers/lamp_screen_host.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -126,7 +125,6 @@ void main() {
       issueResolutionService: issues,
       networkIssueResolutionService: network,
       migrationService: LampMigrationService(),
-      importer: OldExcelImporter(),
     );
 
     expect(issues.onDatabaseChanged, isNotNull);
@@ -151,7 +149,6 @@ void main() {
       issueResolutionService: service,
       networkIssueResolutionService: LampNetworkIssueResolutionService(),
       migrationService: LampMigrationService(),
-      importer: OldExcelImporter(),
     );
 
     expect(await searchAssetHits(repository), 2);

@@ -30,7 +30,7 @@ String buildKnowledgeExportMarkdown({
     line('Σύμπτωμα', article.symptom);
     line('Λύση', article.solution);
     line('Λέξεις-κλειδιά', article.tags);
-    line('Κατηγορία', article.categoryName);
+    line('Κατηγορία', article.categoryDisplayName);
   }
   return out.toString();
 }

@@ -11,7 +11,7 @@ class LampDbAdoptionDecision {
   const LampDbAdoptionDecision({
     required this.allowed,
     required this.destinationExists,
-    this.destinationIsConfiguredOutput = false,
+    this.destinationIsCurrentLampDb = false,
     this.rejectionMessage,
   });
 
@@ -20,9 +20,10 @@ class LampDbAdoptionDecision {
   /// True όταν στον προορισμό υπάρχει ήδη **άλλο** αρχείο με το ίδιο όνομα.
   final bool destinationExists;
 
-  /// True όταν το αρχείο στον προορισμό είναι η ρυθμισμένη βάση εξόδου —
-  /// η αντικατάσταση θα κατέστρεφε αρχείο που χρησιμοποιεί η ίδια η εφαρμογή.
-  final bool destinationIsConfiguredOutput;
+  /// True όταν το αρχείο στον προορισμό είναι η βάση που διαβάζει τώρα η
+  /// Λάμπα — η αντικατάσταση θα κατέστρεφε αρχείο που χρησιμοποιεί η ίδια η
+  /// εφαρμογή.
+  final bool destinationIsCurrentLampDb;
 
   final String? rejectionMessage;
 }
@@ -32,14 +33,14 @@ bool _isCallLoggerFamily(DatabaseFileKind kind) =>
 
 /// Κρίνει αν επιτρέπεται η αντιγραφή του [pickedPath] στον [destinationPath].
 ///
-/// Το [configuredOutputPath] (βάση που δημιουργεί το Excel) δηλώνεται ώστε η
+/// Το [currentLampDbPath] (η βάση που διαβάζει τώρα η Λάμπα) δηλώνεται ώστε η
 /// σύγκρουση ονόματος να μπορεί να ονομάσει τι ακριβώς κινδυνεύει.
 ///
 /// Οι [classify] και [fileExists] είναι injectable για τεστ χωρίς πραγματικά αρχεία.
 Future<LampDbAdoptionDecision> decideLampDbAdoption({
   required String pickedPath,
   required String destinationPath,
-  String? configuredOutputPath,
+  String? currentLampDbPath,
   Future<DatabaseFileKind> Function(String path)? classify,
   Future<bool> Function(String path)? fileExists,
 }) async {
@@ -82,15 +83,15 @@ Future<LampDbAdoptionDecision> decideLampDbAdoption({
     );
   }
 
-  final outputPath = configuredOutputPath?.trim() ?? '';
-  final destinationIsOutput =
-      outputPath.isNotEmpty &&
-      LampOldDbValidator.pathsReferToSameFile(destinationPath, outputPath);
+  final currentPath = currentLampDbPath?.trim() ?? '';
+  final destinationIsCurrent =
+      currentPath.isNotEmpty &&
+      LampOldDbValidator.pathsReferToSameFile(destinationPath, currentPath);
 
   return LampDbAdoptionDecision(
     allowed: true,
     destinationExists: true,
-    destinationIsConfiguredOutput: destinationIsOutput,
+    destinationIsCurrentLampDb: destinationIsCurrent,
   );
 }
 

@@ -115,7 +115,12 @@ FloorPlanElement? hitTestElement(
   var wallDist = toleranceCm;
   for (final e in walls.values) {
     if (e.points.length < 2) continue;
-    final d = projectOntoSegment(p, e.points[0], e.points[1]).distance;
+    // Ο παχύς τοίχος πιάνεται και από την επιφάνειά του.
+    final d = math.max(
+      0.0,
+      projectOntoSegment(p, e.points[0], e.points[1]).distance -
+          FloorPlanSegment.ofWall(e).extraReach,
+    );
     if (d <= wallDist) {
       wallDist = d;
       wall = e;
@@ -213,6 +218,225 @@ FloorPlanElement rotateElement(
   );
 }
 
+/// Ο τοίχος μετά το σύρσιμο μιας άκρης του, μαζί με τα ανοίγματά του.
+class WallEndResize {
+  const WallEndResize({
+    required this.wall,
+    required this.openings,
+    required this.movedEnd,
+    required this.snapKind,
+    this.guides = const [],
+  });
+
+  final FloorPlanElement wall;
+
+  /// Τα ανοίγματα του τοίχου, στη **ίδια θέση του σχεδίου** όπου ήταν.
+  final List<FloorPlanElement> openings;
+
+  /// Πού κατέληξε η άκρη που σύρθηκε.
+  final Offset movedEnd;
+
+  /// Αν η άκρη κούμπωσε σε άλλον τοίχο.
+  final FloorPlanSnapKind snapKind;
+
+  /// Οι γραμμές-οδηγοί πάνω στις οποίες κούμπωσε η άκρη.
+  final List<FloorPlanGuide> guides;
+}
+
+/// Αλλάζει το **μήκος** του [wall] σέρνοντας την άκρη [end] (0 = αρχή,
+/// 1 = τέλος) προς το [to]. Η άλλη άκρη μένει ακίνητη και η κλίση δεν αλλάζει:
+/// η άκρη κινείται μόνο πάνω στην ευθεία του τοίχου.
+///
+/// Με [free] (Ctrl) η άκρη πηγαίνει **όπου δείχνει ο δείκτης** και ο τοίχος
+/// αλλάζει και κλίση, με τους μαγνήτες της σχεδίασης: άκρη ή σώμα άλλου
+/// τοίχου, γραμμές-οδηγοί, γωνία ανά 15° από τη σταθερή άκρη.
+///
+/// - Η άκρη κουμπώνει και εκεί όπου η ευθεία του τοίχου συναντά γραμμή-οδηγό
+///   από άκρη άλλου τοίχου· με [guideEndVisible] μετρούν μόνο οι άκρες που
+///   φαίνονται στην οθόνη.
+/// - Με μαγνήτη, η άκρη κουμπώνει εκεί όπου η ευθεία συναντά άλλον τοίχο από
+///   τους [others] (εντός [toleranceCm])· αλλιώς το μήκος στρογγυλεύει ανά
+///   [kFloorPlanLengthStepCm]. Με [magnetOff] μένει όπου δείχνει ο δείκτης.
+/// - Ο τοίχος **δεν κονταίνει μέσα σε άνοιγμά του**: σταματά στην άκρη της
+///   πόρτας.
+/// - Τα ανοίγματα μετρώνται από την αρχή του τοίχου· όταν σύρεται η αρχή,
+///   οι αποστάσεις τους διορθώνονται ώστε κάθε πόρτα να μείνει όπου ήταν.
+///
+/// `null` όταν το [wall] δεν είναι τοίχος με μήκος.
+WallEndResize? resizeWallEnd({
+  required FloorPlanElement wall,
+  required int end,
+  required Offset to,
+  required Iterable<FloorPlanElement> openings,
+  required Iterable<FloorPlanSegment> others,
+  required double toleranceCm,
+  bool magnetOff = false,
+  bool free = false,
+  bool Function(Offset end)? guideEndVisible,
+}) {
+  if (wall.kind != FloorPlanElementKind.wall || wall.points.length < 2) {
+    return null;
+  }
+  final a = wall.points[0];
+  final b = wall.points[1];
+  final oldLength = (b - a).distance;
+  if (oldLength == 0) return null;
+  final movesStart = end == 0;
+  final fixed = movesStart ? b : a;
+  final dir = (movesStart ? a - b : b - a) / oldLength;
+
+  // Ως πού φτάνει το πιο μακρινό άνοιγμα, μετρημένο από τη σταθερή άκρη.
+  var minLength = kFloorPlanLengthStepCm;
+  final own = [
+    for (final o in openings)
+      if (o.kind == FloorPlanElementKind.opening &&
+          o.parentId == wall.id &&
+          o.points.length >= 2)
+        o,
+  ];
+  for (final o in own) {
+    final start = math.min(o.points[0].dx, o.points[1].dx).clamp(0, oldLength);
+    final finish = math.max(o.points[0].dx, o.points[1].dx).clamp(0, oldLength);
+    final reach = movesStart ? oldLength - start : finish;
+    if (reach > minLength) minLength = reach.toDouble();
+  }
+
+  final otherWalls = [
+    for (final other in others)
+      if (other.id == null || other.id != wall.id) other,
+  ];
+
+  WallEndResize result(
+    Offset moved,
+    FloorPlanSnapKind kind,
+    List<FloorPlanGuide> guides,
+  ) {
+    // Οι πόρτες κρατούν την απόστασή τους από τη σταθερή άκρη.
+    final shift = movesStart ? oldLength - (moved - fixed).distance : 0.0;
+    return WallEndResize(
+      wall: wall.copyWith(points: movesStart ? [moved, b] : [a, moved]),
+      openings: [
+        for (final o in own)
+          shift == 0
+              ? o
+              : o.copyWith(
+                  points: [
+                    for (final p in o.points) Offset(p.dx - shift, p.dy),
+                  ],
+                ),
+      ],
+      movedEnd: moved,
+      snapKind: kind,
+      guides: guides,
+    );
+  }
+
+  if (free) {
+    final snap = snapWallPoint(
+      raw: to,
+      walls: otherWalls,
+      toleranceCm: toleranceCm,
+      from: fixed,
+      magnetOff: magnetOff,
+      guideEndVisible: guideEndVisible,
+    );
+    final span = snap.point - fixed;
+    if (span.distance >= minLength) {
+      return result(snap.point, snap.kind, snap.guides);
+    }
+    // Πολύ κοντός για τις πόρτες του: κρατά την κατεύθυνση του δείκτη και
+    // το μικρότερο μήκος που τις χωρά.
+    final toward = span.distance == 0 ? dir : span / span.distance;
+    return result(fixed + toward * minLength, FloorPlanSnapKind.none, const []);
+  }
+
+  final raw = (to.dx - fixed.dx) * dir.dx + (to.dy - fixed.dy) * dir.dy;
+  var length = raw;
+  var kind = FloorPlanSnapKind.none;
+  var usedGuides = const <FloorPlanGuide>[];
+  if (!magnetOff) {
+    double? best;
+    var bestDistance = toleranceCm;
+    void consider(double along) {
+      if (along < minLength) return;
+      final distance = (along - raw).abs();
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        best = along;
+      }
+    }
+
+    for (final other in otherWalls) {
+      final hit = _lineMeetsSegment(fixed, dir, other);
+      if (hit != null) consider(hit);
+    }
+    // Γραμμές-οδηγοί από τις άκρες των άλλων τοίχων, όταν δεν υπάρχει
+    // τοίχος να σταματήσει την άκρη.
+    FloorPlanGuide? guide;
+    double? onGuide;
+    if (best == null) {
+      var gap = toleranceCm * kFloorPlanGuideToleranceFactor;
+      for (final g in wallEndGuides(otherWalls, visible: guideEndVisible)) {
+        final along = lineMeetsGuide(fixed, dir, g);
+        if (along == null || along < minLength) continue;
+        if ((along - raw).abs() <= gap) {
+          gap = (along - raw).abs();
+          guide = g;
+          onGuide = along;
+        }
+      }
+    }
+    if (best != null) {
+      length = best!;
+      kind = FloorPlanSnapKind.wallBody;
+    } else if (guide != null && onGuide != null) {
+      length = onGuide;
+      kind = FloorPlanSnapKind.guide;
+      usedGuides = [guide];
+    } else {
+      length =
+          (raw / kFloorPlanLengthStepCm).roundToDouble() *
+          kFloorPlanLengthStepCm;
+      kind = FloorPlanSnapKind.angle;
+    }
+  }
+  if (length < minLength) {
+    length = minLength;
+    kind = FloorPlanSnapKind.none;
+    usedGuides = const [];
+  }
+
+  return result(fixed + dir * length, kind, usedGuides);
+}
+
+/// Σε ποια απόσταση από το [origin], προς το [dir], η ευθεία συναντά το
+/// [segment]· `null` όταν δεν το συναντά μπροστά της. Παράλληλο τμήμα πάνω
+/// στην ίδια ευθεία δίνει την πλησιέστερη άκρη του.
+double? _lineMeetsSegment(Offset origin, Offset dir, FloorPlanSegment segment) {
+  const slackCm = 0.5;
+  final s = segment.b - segment.a;
+  final cross = dir.dx * s.dy - dir.dy * s.dx;
+  final rel = segment.a - origin;
+  if (cross.abs() < 1e-9) {
+    // Παράλληλα: μετρά μόνο όταν είναι πάνω στην ίδια ευθεία.
+    final off = (rel.dx * dir.dy - rel.dy * dir.dx).abs();
+    if (off > slackCm) return null;
+    double? nearest;
+    for (final p in [segment.a, segment.b]) {
+      final along = (p.dx - origin.dx) * dir.dx + (p.dy - origin.dy) * dir.dy;
+      if (along > 0 && (nearest == null || along < nearest)) nearest = along;
+    }
+    return nearest;
+  }
+  final along = (rel.dx * s.dy - rel.dy * s.dx) / cross;
+  final onSegment = (rel.dx * dir.dy - rel.dy * dir.dx) / cross;
+  final length = segment.length;
+  if (length == 0 || along <= 0) return null;
+  final slack = slackCm / length;
+  if (onSegment < -slack || onSegment > 1 + slack) return null;
+  return along;
+}
+
 /// Η γωνία κουμπωμένη ανά [stepDegrees].
 double snapRadians(double radians, {double stepDegrees = 15}) {
   final step = stepDegrees * math.pi / 180;
@@ -237,4 +461,62 @@ List<FloorPlanElement> withOwnedOpenings(
           (e.kind == FloorPlanElementKind.opening && ids.contains(e.parentId)))
         e,
   ];
+}
+
+/// Πού καταλήγει μια μετακίνηση τοίχων: η μετατόπιση μετά το κούμπωμα, και
+/// σε ποιο σημείο (και πάνω σε ποιους οδηγούς) κούμπωσε — `null` όταν έμεινε
+/// ελεύθερη.
+class WallMoveSnap {
+  const WallMoveSnap(this.delta, [this.snap]);
+
+  final Offset delta;
+  final FloorPlanSnap? snap;
+}
+
+/// Κουμπώνει τη μετατόπιση [delta] τοίχων των οποίων οι άκρες είναι τώρα στα
+/// [movingEnds], με τους ίδιους μαγνήτες και οδηγούς της σχεδίασης: άκρη ή
+/// σώμα άλλου τοίχου πρώτα, μετά οι γραμμές-οδηγοί από τις άκρες των
+/// [others]. Από όλες τις άκρες που κουμπώνουν κερδίζει το ισχυρότερο
+/// κούμπωμα (άκρη, σώμα, οδηγός) και, σε ισοπαλία, η μικρότερη διόρθωση· η
+/// υπόλοιπη επιλογή ακολουθεί. Οι [others] είναι μόνο
+/// οι τοίχοι που **δεν** μετακινούνται — αλλιώς ο τοίχος θα κούμπωνε στον
+/// εαυτό του.
+WallMoveSnap snapWallMove({
+  required Iterable<Offset> movingEnds,
+  required Offset delta,
+  required List<FloorPlanSegment> others,
+  required double toleranceCm,
+  bool Function(Offset end)? guideEndVisible,
+}) {
+  // Άκρη σε άκρη κερδίζει το σώμα, και το σώμα τον οδηγό: μια άκρη που
+  // γλιστρά πάνω σε κάθετο τοίχο «κουμπώνει» συνέχεια με μηδενική διόρθωση,
+  // και δεν πρέπει να εμποδίζει την άλλη άκρη να βρει γωνία.
+  int rank(FloorPlanSnapKind kind) => switch (kind) {
+    FloorPlanSnapKind.endpoint => 0,
+    FloorPlanSnapKind.guide => 2,
+    _ => 1,
+  };
+  FloorPlanSnap? best;
+  Offset? bestFix;
+  for (final end in movingEnds) {
+    final raw = end + delta;
+    final snap = snapWallPoint(
+      raw: raw,
+      walls: others,
+      toleranceCm: toleranceCm,
+      guides: guideEndVisible != null,
+      guideEndVisible: guideEndVisible,
+    );
+    if (snap.kind == FloorPlanSnapKind.none) continue;
+    final fix = snap.point - raw;
+    if (best == null ||
+        rank(snap.kind) < rank(best.kind) ||
+        (rank(snap.kind) == rank(best.kind) &&
+            fix.distance < bestFix!.distance)) {
+      best = snap;
+      bestFix = fix;
+    }
+  }
+  if (best == null) return WallMoveSnap(delta);
+  return WallMoveSnap(delta + bestFix!, best);
 }

@@ -39,6 +39,7 @@ void main() {
       await db.delete('building_map_floor_images');
       await db.delete('building_map_plan_elements');
       await db.delete('building_map_floor_state');
+      await db.delete('building_map_floor_patterns');
       departments = DepartmentRepository(db);
       repo = BuildingMapRepository(db, DirectorySupport(db));
       repo.bindUpdateDepartment((deptId, fields) async {

@@ -22,6 +22,7 @@ void main() {
     initSqfliteFfiForTests();
     db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
     await migrateDatabaseToV69(db);
+    await migrateDatabaseToV77(db);
     repo = FloorPlanRepository(db);
   });
 
@@ -74,6 +75,8 @@ void main() {
 
       await migrateDatabaseToV70(old);
       await migrateDatabaseToV70(old);
+      // Η ανάγνωση ζητά τις σημερινές στήλες του πίνακα.
+      await migrateDatabaseToV77(old);
 
       final oldRepo = FloorPlanRepository(old);
       final room = (await oldRepo.listElements(1)).single;
@@ -210,6 +213,135 @@ void main() {
       expect(after.cmPerPixel, 2.5);
       expect(after.patternCalibrated, isTrue);
       expect(after.patternCenter, const Offset(40, -60));
+    });
+
+    // Η βάση περνά μέσα από όσα βρίσκονται πριν από τη στήλη που ζητήθηκε, και
+    // κάθε αλλαγή ξαναδιαβάζει όλη τη γραμμή. Αν τα bytes της εικόνας ζουν σε
+    // αυτή τη γραμμή, κάθε άνοιγμα ορόφου και κάθε αλλαγή στον χάρτη τα
+    // κατεβάζει από το δίκτυο, όποιες στήλες κι αν ζητήσει ο κώδικας.
+    test('η γραμμή κατάστασης δεν κρατά τα bytes της εικόνας', () async {
+      await repo.setPattern(3, image, const FloorPlanState(floorId: 3));
+
+      final row = (await db.query(
+        'building_map_floor_state',
+        where: 'floor_id = 3',
+      )).single;
+
+      expect(row.values.whereType<Uint8List>(), isEmpty);
+      expect((await repo.readState(3)).hasPattern, isTrue);
+    });
+
+    test('νέα εικόνα αντικαθιστά την παλιά του ίδιου ορόφου', () async {
+      final other = Uint8List.fromList(List.generate(64, (i) => 200 - i));
+      await repo.setPattern(3, image, const FloorPlanState(floorId: 3));
+      final before = (await repo.readState(3)).patternHash;
+
+      await repo.setPattern(3, other, const FloorPlanState(floorId: 3));
+
+      expect(await repo.readPatternImage(3), other);
+      expect((await repo.readState(3)).patternHash, isNot(before));
+      expect(await db.query('building_map_floor_patterns'), hasLength(1));
+    });
+
+    test('η αφαίρεση του πατρόν και η διαγραφή ορόφου σβήνουν την εικόνα, '
+        'χωρίς να αγγίζουν άλλον όροφο', () async {
+      await repo.setPattern(3, image, const FloorPlanState(floorId: 3));
+      await repo.setPattern(4, image, const FloorPlanState(floorId: 4));
+      await repo.setPattern(5, image, const FloorPlanState(floorId: 5));
+
+      await repo.clearPattern(3);
+      await repo.deleteFloorPlan(db, 4);
+
+      final left = await db.query('building_map_floor_patterns');
+      expect(left.map((r) => r['floor_id']), [5]);
+    });
+  });
+
+  group('Αναβάθμιση v76', () {
+    test('οι εικόνες μεταφέρονται αυτούσιες, οι ρυθμίσεις μένουν, η παλιά '
+        'στήλη φεύγει, και ξανατρέχει χωρίς παρενέργειες', () async {
+      final old = await openDatabase(
+        inMemoryDatabasePath,
+        singleInstance: false,
+      );
+      addTearDown(old.close);
+      await old.execute('''
+        CREATE TABLE building_map_floor_state (
+          floor_id INTEGER PRIMARY KEY,
+          is_active INTEGER NOT NULL DEFAULT 0,
+          changed_at TEXT,
+          pattern_image BLOB,
+          pattern_hash TEXT,
+          pattern_cm_per_px REAL NOT NULL DEFAULT 1,
+          pattern_center_x REAL NOT NULL DEFAULT 0,
+          pattern_center_y REAL NOT NULL DEFAULT 0,
+          pattern_rotation_degrees REAL NOT NULL DEFAULT 0,
+          pattern_opacity REAL NOT NULL DEFAULT 0.5,
+          pattern_hidden INTEGER NOT NULL DEFAULT 0,
+          pattern_calibrated INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+      final image = Uint8List.fromList(List.generate(64, (i) => i));
+      await old.insert('building_map_floor_state', {
+        'floor_id': 1,
+        'is_active': 1,
+        'changed_at': '2026-11-04T10:00:00.000Z',
+        'pattern_image': image,
+        'pattern_hash': 'αποτύπωμα',
+        'pattern_cm_per_px': 2.5,
+        'pattern_opacity': 0.7,
+        'pattern_calibrated': 1,
+      });
+      await old.insert('building_map_floor_state', {'floor_id': 2});
+
+      await migrateDatabaseToV76(old);
+      await migrateDatabaseToV76(old);
+
+      final migrated = FloorPlanRepository(old);
+      expect(await migrated.readPatternImage(1), image);
+      expect(await migrated.readPatternImage(2), isNull);
+
+      final state = await migrated.readState(1);
+      expect(state.isActive, isTrue);
+      expect(state.patternHash, 'αποτύπωμα');
+      expect(state.cmPerPixel, 2.5);
+      expect(state.patternOpacity, 0.7);
+      expect(state.patternCalibrated, isTrue);
+      expect((await migrated.readState(2)).hasPattern, isFalse);
+
+      final columns = await old.rawQuery(
+        'PRAGMA table_info(building_map_floor_state)',
+      );
+      expect(columns.map((c) => c['name']), isNot(contains('pattern_image')));
+    });
+  });
+
+  group('Αναβάθμιση v77', () {
+    test('τοίχος που σχεδιάστηκε πριν μένει με το συνηθισμένο πάχος, ο νέος '
+        'κρατά το δικό του, και ξανατρέχει χωρίς παρενέργειες', () async {
+      final old = await openDatabase(
+        inMemoryDatabasePath,
+        singleInstance: false,
+      );
+      addTearDown(old.close);
+      await migrateDatabaseToV69(old);
+      await migrateDatabaseToV76(old);
+      await old.insert('building_map_plan_elements', {
+        'floor_id': 1,
+        'kind': 'wall',
+        'points_json': '[[0,0],[400,0]]',
+      });
+
+      await migrateDatabaseToV77(old);
+      await migrateDatabaseToV77(old);
+
+      final migrated = FloorPlanRepository(old);
+      final before = (await migrated.listElements(1)).single;
+      expect(before.thicknessCm, isNull);
+      expect(before.wallThicknessCm, kFloorPlanDefaultWallThicknessCm);
+
+      await migrated.restoreElements([before.copyWith(thicknessCm: 45)]);
+      expect((await migrated.listElements(1)).single.wallThicknessCm, 45);
     });
   });
 

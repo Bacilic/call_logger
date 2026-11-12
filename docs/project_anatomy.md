@@ -196,7 +196,7 @@ lib/
 │   │   ├── screens/  dashboard_screen, history_screen + dashboard_cards/charts/filter_pane
 │   │   └── widgets/  call_edit_dialog, lansweeper/*, audit_entity_previews/*
 │   ├── lamp/
-│   │   ├── controllers/  lamp_import_controller, lamp_issue_resolution_controller κ.λπ.
+│   │   ├── controllers/  lamp_integrity_controller, lamp_issue_resolution_controller κ.λπ.
 │   │   ├── screens/lamp_screen.dart
 │   │   ├── services/  lamp_migration_service, lamp_transfer_preview
 │   │   └── widgets/  lamp_transfer_wizard_dialog, lamp_resolution_progress_dialog κ.λπ.

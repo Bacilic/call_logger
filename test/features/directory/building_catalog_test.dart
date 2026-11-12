@@ -9,8 +9,8 @@ import 'dart:io';
 import 'package:call_logger/core/database/database_helper.dart';
 import 'package:call_logger/core/database/department_repository.dart';
 import 'package:call_logger/core/database/settings_repository.dart';
+import 'package:call_logger/core/services/catalog_list_change.dart';
 import 'package:call_logger/core/services/settings_service.dart';
-import 'package:call_logger/core/services/settings_list_conflict.dart';
 import 'package:call_logger/features/directory/providers/building_catalog_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -61,11 +61,9 @@ void main() {
       expect(await settings.catalogs.getBuildingCatalogList(), isEmpty);
     });
 
-    test('γράφεται και διαβάζεται χωρίς κενά και διπλότυπα', () async {
-      await settings.catalogs.setBuildingCatalog(
-        ' Καινούριο ,, Παλιό , καινουριο ',
-        expected: null,
-      );
+    test('διαβάζεται χωρίς κενά και διπλότυπα', () async {
+      await SettingsRepository(db)
+          .saveSetting('building_catalog', ' Καινούριο ,, Παλιό , καινουριο ');
 
       expect(
         await settings.catalogs.getBuildingCatalogList(),
@@ -75,32 +73,113 @@ void main() {
       );
     });
 
-    test('ο φρουρός σταματά την εγγραφή πάνω σε ξένη αλλαγή', () async {
-      const asScreenSawIt = 'Καινούριο, Παλιό';
-      await settings.catalogs.setBuildingCatalog(asScreenSawIt, expected: null);
-      await settings.catalogs.setBuildingCatalog(
-        'Καινούριο, Παλιό, Πτέρυγα Γ',
-        expected: asScreenSawIt,
+    test('η αλλαγή εφαρμόζεται πάνω σε ό,τι έγραψε στο μεταξύ άλλος', () async {
+      await SettingsRepository(db)
+          .saveSetting('building_catalog', 'Καινούριο, Παλιό, Πτέρυγα Γ');
+
+      await settings.catalogs.changeBuildingCatalog(
+        const CatalogListChange.add('Κτίριο Β'),
+        whenUnset: const [],
       );
 
+      expect(await settings.catalogs.getBuildingCatalogList(), [
+        'Καινούριο',
+        'Παλιό',
+        'Πτέρυγα Γ',
+        'Κτίριο Β',
+      ]);
+    });
+
+    test('αλλαγή που δεν στέκει πια δεν γράφει τίποτα', () async {
+      await SettingsRepository(db)
+          .saveSetting('building_catalog', 'Καινούριο, Πτέρυγα Γ');
+
       await expectLater(
-        () => settings.catalogs.setBuildingCatalog(
-          'Καινούριο',
-          expected: asScreenSawIt,
+        () => settings.catalogs.changeBuildingCatalog(
+          const CatalogListChange.remove('Παλιό'),
+          whenUnset: const [],
         ),
-        throwsA(isA<SettingsListStaleException>()),
+        throwsA(isA<CatalogListChangedException>()),
       );
 
       expect(
         await settings.catalogs.getBuildingCatalogRaw(),
-        'Καινούριο, Παλιό, Πτέρυγα Γ',
+        'Καινούριο, Πτέρυγα Γ',
       );
     });
 
-    test('σε νέα βάση η πρώτη αποθήκευση δεν φαίνεται ξένη αλλαγή', () async {
-      final shown = await settings.catalogs.getBuildingCatalogRaw();
-      await settings.catalogs.setBuildingCatalog('Καινούριο', expected: shown);
-      expect(await settings.catalogs.getBuildingCatalogRaw(), 'Καινούριο');
+    test('χωρίς ορισμένο κατάλογο, η πρώτη αλλαγή κρατά τα κτίρια των '
+        'τμημάτων', () async {
+      await settings.catalogs.changeBuildingCatalog(
+        const CatalogListChange.add('Κτίριο Β'),
+        whenUnset: const ['Καινούριο', 'Παλιό'],
+      );
+
+      expect(await settings.catalogs.getBuildingCatalogList(), [
+        'Καινούριο',
+        'Παλιό',
+        'Κτίριο Β',
+      ]);
+    });
+  });
+
+  group('Αλλαγή ενός στοιχείου πάνω στη φρέσκια λίστα', () {
+    const fresh = ['Καινούριο', 'Β', 'Πτέρυγα Γ'];
+
+    Matcher blockedBy(CatalogListChangeBlock block) => throwsA(
+      isA<CatalogListChangedException>().having((e) => e.block, 'block', block),
+    );
+
+    test('μετονομασία αλλάζει μόνο το δικό της στοιχείο', () {
+      expect(
+        const CatalogListChange.rename(
+          from: 'Β',
+          to: 'Κτίριο Β',
+        ).applyTo(fresh),
+        ['Καινούριο', 'Κτίριο Β', 'Πτέρυγα Γ'],
+      );
+    });
+
+    test('μετονομασία που διορθώνει μόνο τον τόνο του ίδιου περνά', () {
+      expect(
+        const CatalogListChange.rename(
+          from: 'Καινούριο',
+          to: 'Καινουριο',
+        ).applyTo(fresh),
+        ['Καινουριο', 'Β', 'Πτέρυγα Γ'],
+      );
+    });
+
+    test('προσθήκη ονόματος που μπήκε στο μεταξύ σταματά', () {
+      expect(
+        () => const CatalogListChange.add('B').applyTo(fresh),
+        blockedBy(CatalogListChangeBlock.nameTaken),
+        reason: 'το λατινικό «B» είναι το ίδιο κτίριο με το ελληνικό «Β»',
+      );
+    });
+
+    test('μετονομασία σε όνομα που μπήκε στο μεταξύ σταματά', () {
+      expect(
+        () => const CatalogListChange.rename(
+          from: 'Β',
+          to: 'πτερυγα γ',
+        ).applyTo(fresh),
+        blockedBy(CatalogListChangeBlock.nameTaken),
+      );
+    });
+
+    test('μετονομασία ή διαγραφή στοιχείου που δεν υπάρχει πια σταματά', () {
+      expect(
+        () => const CatalogListChange.rename(
+          from: 'Παλιό',
+          to: 'Νέο',
+        ).applyTo(fresh),
+        blockedBy(CatalogListChangeBlock.targetGone),
+      );
+      expect(
+        () => const CatalogListChange.remove('Παλιό').applyTo(fresh),
+        blockedBy(CatalogListChangeBlock.targetGone),
+      );
     });
   });
 

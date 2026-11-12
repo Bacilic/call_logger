@@ -50,10 +50,14 @@ Future<void> showBuildingMapDialog(
       context: context,
       barrierDismissible: false,
       useSafeArea: false,
-      // Στην «Προβολή» ο χάρτης μόνο δείχνει: το κλείσιμο της εφαρμογής δεν
-      // ρωτά για «ανοιχτό ζήτημα». Στην «Επεξεργασία» ρωτά.
+      // Το κλείσιμο της εφαρμογής ρωτά για «ανοιχτό ζήτημα» μόνο όταν στην
+      // «Επεξεργασία» υπάρχει σχήμα τμήματος που περιμένει το ✓. Ό,τι άλλο
+      // αλλάζει στον χάρτη (και στη Σχεδίαση χάρτη από πάνω του) γράφεται
+      // αμέσως — δεν υπάρχει τίποτα να χαθεί.
       routeSettings: readOnlyRouteSettingsWhile(
-        () => !ref.read(buildingMapUiEditModeProvider),
+        () =>
+            !ref.read(buildingMapUiEditModeProvider) ||
+            !BuildingMapUnsavedDraft.exists,
       ),
       builder: (ctx) => const Dialog.fullscreen(child: BuildingMapDialog()),
     );

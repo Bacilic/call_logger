@@ -166,6 +166,109 @@ void main() {
     });
   });
 
+  group('Ρολόι λάθος: η ώρα του τελευταίου αντιγράφου είναι στο μέλλον', () {
+    // Ένας σταθμός με ρολόι μπροστά γράφει στις ΚΟΙΝΕΣ ρυθμίσεις ώρα που δεν
+    // έχει έρθει ακόμη. Οι άλλοι σταθμοί μετρούν τότε με το δικό τους
+    // χρονόμετρο, από τη στιγμή που πρωτοείδαν εκείνο το αντίγραφο.
+    final future = now.add(const Duration(days: 3));
+
+    test(
+      'η ελάχιστη απόσταση μετρά από την πρώτη ματιά, όχι από το μέλλον',
+      () {
+        final reference = BackupElapsedReference();
+        final settings = settingsWith(lastBackupAt: future);
+
+        final atFirstSight = BackupTriggerDecision.evaluate(
+          settings: settings,
+          pendingChanges: 900,
+          now: now,
+          reference: reference,
+        );
+        expect(atFirstSight.reason, BackupTriggerReason.spacingNotElapsed);
+
+        final later = BackupTriggerDecision.evaluate(
+          settings: settings,
+          pendingChanges: 900,
+          now: now.add(const Duration(minutes: 16)),
+          reference: reference,
+        );
+        expect(
+          later.due,
+          isTrue,
+          reason:
+              'Πριν από τη διόρθωση κανένας σταθμός δεν έπαιρνε αντίγραφο '
+              'ώσπου να φτάσει εκείνη η ώρα, όσες αλλαγές κι αν μαζεύονταν.',
+        );
+        expect(later.reason, BackupTriggerReason.dueThreshold);
+      },
+    );
+
+    test('και η μέγιστη αναμονή δουλεύει με λίγες αλλαγές', () {
+      final reference = BackupElapsedReference();
+      final settings = settingsWith(lastBackupAt: future);
+
+      BackupTriggerDecision.evaluate(
+        settings: settings,
+        pendingChanges: 1,
+        now: now,
+        reference: reference,
+      );
+      final d = BackupTriggerDecision.evaluate(
+        settings: settings,
+        pendingChanges: 1,
+        now: now.add(const Duration(minutes: 241)),
+        reference: reference,
+      );
+      expect(d.due, isTrue);
+      expect(d.reason, BackupTriggerReason.dueMaxWait);
+    });
+
+    test('νέο αντίγραφο με μελλοντική ώρα ξαναξεκινά τη μέτρηση', () {
+      final reference = BackupElapsedReference();
+      BackupTriggerDecision.evaluate(
+        settings: settingsWith(lastBackupAt: future),
+        pendingChanges: 900,
+        now: now,
+        reference: reference,
+      );
+      final d = BackupTriggerDecision.evaluate(
+        settings: settingsWith(
+          lastBackupAt: future.add(const Duration(hours: 1)),
+        ),
+        pendingChanges: 900,
+        now: now.add(const Duration(minutes: 30)),
+        reference: reference,
+      );
+      expect(d.reason, BackupTriggerReason.spacingNotElapsed);
+    });
+
+    test('μελλοντικό χειροκίνητο, κατοπινό αυτόματο με σωστή ώρα: η '
+        'απόσταση μετρά από το αυτόματο', () {
+      final reference = BackupElapsedReference();
+      BackupTriggerDecision.evaluate(
+        settings: settingsWith(lastManualAt: future),
+        pendingChanges: 900,
+        now: now,
+        reference: reference,
+      );
+      final justBackedUp = now.add(const Duration(minutes: 30));
+      final d = BackupTriggerDecision.evaluate(
+        settings: settingsWith(
+          lastManualAt: future,
+          lastBackupAt: justBackedUp,
+        ),
+        pendingChanges: 900,
+        now: justBackedUp.add(const Duration(minutes: 5)),
+        reference: reference,
+      );
+      expect(
+        d.reason,
+        BackupTriggerReason.spacingNotElapsed,
+        reason: 'Το αντίγραφο πάρθηκε πριν από 5΄· η ελάχιστη απόσταση ισχύει.',
+      );
+    });
+  });
+
   group('BackupTriggerDecision.shouldRunOnClose', () {
     test('αφύλακτες αλλαγές στο κλείσιμο → αντίγραφο, χωρίς κατώφλι', () {
       expect(

@@ -126,7 +126,7 @@ Future<LampDbConflictChoice> askLampDbCopyConflict(
   required String sourcePath,
   required String destinationPath,
   required String keepBothPath,
-  required bool destinationIsConfiguredOutput,
+  required bool destinationIsCurrentLampDb,
 }) async {
   final choice = await showDialog<LampDbConflictChoice>(
     context: context,
@@ -146,12 +146,12 @@ Future<LampDbConflictChoice> askLampDbCopyConflict(
                 children: [
                   _PathBlock(label: 'Αντιγραφή από:', path: sourcePath),
                   _PathBlock(label: 'Υπάρχον αρχείο:', path: destinationPath),
-                  if (destinationIsConfiguredOutput)
+                  if (destinationIsCurrentLampDb)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(
                         'Προσοχή: το υπάρχον αρχείο είναι η βάση που '
-                        'δημιουργεί το Excel. Η αντικατάσταση θα το σβήσει.',
+                        'διαβάζει τώρα η Λάμπα. Η αντικατάσταση θα το σβήσει.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.error,
                           fontWeight: FontWeight.w600,

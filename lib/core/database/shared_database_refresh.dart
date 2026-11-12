@@ -10,6 +10,7 @@ import '../../features/calls/provider/call_mutation_refresh.dart';
 import '../../features/calls/provider/remote_paths_provider.dart';
 import '../../features/knowledge/providers/knowledge_provider.dart';
 import '../providers/servers_provider.dart';
+import '../../features/directory/providers/building_catalog_provider.dart';
 import '../../features/directory/providers/category_directory_provider.dart';
 import '../../features/directory/providers/department_directory_provider.dart';
 import '../../features/database/providers/active_sessions_provider.dart';
@@ -79,6 +80,15 @@ Future<void> refreshSharedDatabaseViews(Ref ref) async {
   if (!ref.mounted) return;
   await ref.read(categoryDirectoryProvider.notifier).loadCategories();
   if (!ref.mounted) return;
+  // Οι κατάλογοι κτιρίων και ομάδων: η οθόνη διαχείρισής τους και τα πεδία
+  // «Κτίριο»/«Ομάδα» της φόρμας τμήματος έδειχναν τη λίστα όπως ήταν όταν
+  // πρωτοδιαβάστηκε, ώσπου να αλλάξει κάτι ο ίδιος ο χρήστης. Ακύρωση — όποια
+  // δεν κοιτάζει κανείς ξαναδιαβάζεται μόνο όταν τη ζητήσει. Η χρήση ανά
+  // κτίριο/ομάδα πάει μαζί: αλλάζει όποτε ο συνάδελφος αγγίξει ένα τμήμα.
+  ref.invalidate(buildingUsageProvider);
+  ref.invalidate(buildingCatalogProvider);
+  ref.invalidate(departmentGroupUsageProvider);
+  ref.invalidate(departmentGroupCatalogProvider);
   // Βάση Γνώσης, διακομιστές και εργαλεία σύνδεσης γράφονται κι αυτά
   // ΟΛΟΚΛΗΡΑ, με αφετηρία την εικόνα της λίστας: μια λίστα που δεν βλέπει
   // την αλλαγή του συναδέλφου βγάζει «Κάποιος πρόλαβε» για κάτι που υπάρχει

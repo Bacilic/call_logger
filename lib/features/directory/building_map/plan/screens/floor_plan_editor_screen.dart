@@ -59,12 +59,14 @@ import '../floor_plan_selection.dart';
 import '../floor_plan_view_transform.dart';
 import '../services/floor_plan_catalog.dart';
 import '../widgets/floor_plan_activation_dialog.dart';
+import '../services/floor_plan_drawing_preferences.dart';
 import '../services/floor_plan_layers_preference.dart';
 import '../widgets/floor_plan_cabinet_panel.dart';
 import '../widgets/floor_plan_cabinet_window.dart';
 import '../services/floor_plan_cabinet_preferences.dart';
 import '../widgets/floor_plan_port_facade.dart';
 import '../widgets/floor_plan_item_card.dart';
+import '../widgets/floor_plan_drawing_settings_button.dart';
 import '../widgets/floor_plan_layers_button.dart';
 import '../widgets/floor_plan_measure_painter.dart';
 import '../widgets/floor_plan_object_editor.dart';
@@ -83,6 +85,7 @@ import '../widgets/floor_plan_room_views.dart';
 import '../widgets/floor_plan_route_painter.dart';
 import '../widgets/floor_plan_text_editor.dart';
 import '../widgets/floor_plan_tool_rail.dart';
+import '../widgets/floor_plan_wall_thickness_bar.dart';
 
 /// Ανοίγει την οθόνη σχεδίασης του νέου χάρτη για τον [floor].
 ///
@@ -189,8 +192,21 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
   /// Η αρχή του τοίχου που σχεδιάζεται τώρα· `null` όταν δεν σχεδιάζεται.
   Offset? _wallStart;
 
+  /// Οι οδηγοί πάνω στους οποίους κούμπωσε η αρχή του τοίχου — για τις
+  /// μοίρες τομής προς νοητή προέκταση.
+  List<FloorPlanGuide> _wallStartGuides = const [];
+
   /// Ό,τι έχει πληκτρολογηθεί ως μήκος (σε μέτρα) για τον επόμενο τοίχο.
   String _typedLength = '';
+
+  /// Οι βοήθειες σχεδίασης του χρήστη, από το γρανάζι.
+  FloorPlanDrawingAids _aids = const FloorPlanDrawingAids();
+
+  void _setAids(FloorPlanDrawingAids next) {
+    setState(() => _aids = next);
+    // Αν η ρύθμιση δεν αποθηκευτεί, ισχύει τουλάχιστον ως το κλείσιμο.
+    FloorPlanDrawingPreferences.write(next).catchError((_) {});
+  }
 
   // Κατάσταση ενός πατήματος ποντικιού.
   Offset? _downScreen;
@@ -286,6 +302,31 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     }
   }
 
+  /// Το πάχος τοίχου που ζητήθηκε από την μπάρα και δεν έχει γραφτεί ακόμη·
+  /// όπως το μέγεθος ονόματος, γράφεται πάντα το τελευταίο που ζητήθηκε.
+  double? _thicknessPending;
+  bool _thicknessWriting = false;
+
+  Future<void> _setWallThickness(double cm) async {
+    setState(() => _thicknessPending = cm);
+    if (_thicknessWriting) return;
+    _thicknessWriting = true;
+    try {
+      while (mounted) {
+        final want = _thicknessPending;
+        if (want == null) break;
+        await _controller.setSelectedWallThickness(want);
+        if (_thicknessPending == want) {
+          _thicknessPending = null;
+          break;
+        }
+      }
+    } finally {
+      _thicknessWriting = false;
+      if (mounted) setState(() {});
+    }
+  }
+
   /// Το κλικ που έκλεισε το πλαίσιο κειμένου δεν κάνει τίποτε άλλο.
   bool _swallowClick = false;
 
@@ -314,6 +355,9 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     _loadFloorLabels();
     FloorPlanLayersPreference.read().then((hidden) {
       if (mounted) _controller.setHiddenLayers(hidden);
+    });
+    FloorPlanDrawingPreferences.read().then((aids) {
+      if (mounted) setState(() => _aids = aids);
     });
   }
 
@@ -498,7 +542,9 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
 
   bool get _magnetOff => HardwareKeyboard.instance.isShiftPressed;
 
-  FloorPlanSnap _snap(Offset world, {Offset? from}) {
+  /// Το [world] με τους μαγνήτες της σχεδίασης. Οι γραμμές-οδηγοί ισχύουν
+  /// για τοίχους, γωνίες χώρου και μέτρηση· με [guides] `false` σβήνουν.
+  FloorPlanSnap _snap(Offset world, {Offset? from, bool guides = true}) {
     final view = _view!;
     return snapWallPoint(
       raw: world,
@@ -506,8 +552,85 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
       toleranceCm: view.screenToCm(_pickPixels),
       from: from,
       magnetOff: _magnetOff,
+      guides: guides && _aids.guides,
+      guideEndVisible: _onScreen,
     );
   }
+
+  /// Οι άκρες που δίνουν οδηγό στις λαβές: καμία όταν οι οδηγοί είναι
+  /// κλειστοί από το γρανάζι.
+  bool _guideEndVisible(Offset world) => _aids.guides && _onScreen(world);
+
+  /// Οι μοίρες τομής του τοίχου [a]–[b] με όσους τοίχους (ή οδηγούς)
+  /// συναντά στα δύο άκρα του· κενό όταν είναι κλειστές από το γρανάζι.
+  List<FloorPlanAngleMark> _angleMarks(
+    Offset a,
+    Offset b, {
+    required double thicknessCm,
+    int? exceptWallId,
+    List<FloorPlanGuide> guidesAtA = const [],
+    List<FloorPlanGuide> guidesAtB = const [],
+  }) {
+    if (!_aids.angles) return const [];
+    final walls = _controller.wallSegments;
+    return [
+      ...wallJunctionAngles(
+        vertex: a,
+        otherEnd: b,
+        walls: walls,
+        thicknessCm: thicknessCm,
+        exceptWallId: exceptWallId,
+        guides: guidesAtA,
+      ),
+      ...wallJunctionAngles(
+        vertex: b,
+        otherEnd: a,
+        walls: walls,
+        thicknessCm: thicknessCm,
+        exceptWallId: exceptWallId,
+        guides: guidesAtB,
+      ),
+    ];
+  }
+
+  /// Οι μοίρες τομής του μόνου επιλεγμένου τοίχου — και όσο σύρεται η άκρη
+  /// του.
+  List<FloorPlanAngleMark> _selectedWallAngles() {
+    if (_controller.selectedIds.length != 1 ||
+        _controller.selectedObjectIds.isNotEmpty ||
+        _controller.selectedPlacementIds.isNotEmpty) {
+      return const [];
+    }
+    final walls = _controller.selectedWalls;
+    if (walls.length != 1 || walls.single.points.length < 2) return const [];
+    final wall = walls.single;
+    final a = wall.points[0];
+    final b = wall.points[1];
+    final drag = _select.wallEndDrag;
+    final dragGuides = drag?.guides ?? const <FloorPlanGuide>[];
+    final movedIsA = drag != null && (drag.movedEnd - a).distance < 0.01;
+    return _angleMarks(
+      a,
+      b,
+      thicknessCm: wall.wallThicknessCm,
+      exceptWallId: wall.id,
+      guidesAtA: movedIsA ? dragGuides : const [],
+      guidesAtB: drag != null && !movedIsA ? dragGuides : const [],
+    );
+  }
+
+  /// Το σημείο [world] φαίνεται τώρα στον καμβά — οδηγούς δίνουν μόνο οι
+  /// άκρες τοίχων που βλέπει ο χρήστης.
+  bool _onScreen(Offset world) {
+    final view = _view;
+    if (view == null) return false;
+    return (Offset.zero & _canvasSize).contains(view.toScreen(world));
+  }
+
+  static List<(Offset, Offset)> _guideLinesOf(
+    List<FloorPlanGuide> guides,
+    Offset point,
+  ) => [for (final g in guides) (g.origin, point)];
 
   void _onPointerSignal(PointerSignalEvent event) {
     final view = _view;
@@ -626,12 +749,14 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
           view,
           dragged: _dragged,
           freeAngle: _magnetOff,
+          freeEnd: HardwareKeyboard.instance.isControlPressed,
+          onScreen: _guideEndVisible,
         );
         setState(() {});
       case FloorPlanTool.object when _placingVolume:
         // Σύρσιμο από γωνία σε γωνία: η πρώτη γωνία είναι εκεί που πατήθηκε.
         if (_dragged && _volumeStart == null) {
-          _volumeStart = _snap(view.toWorld(down)).point;
+          _volumeStart = _snap(view.toWorld(down), guides: false).point;
         }
         setState(() {});
       case FloorPlanTool.wall:
@@ -731,12 +856,16 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     }
 
     final start = _wallStart;
-    final point = _snap(world, from: start).point;
+    final snap = _snap(world, from: start);
+    final point = snap.point;
     if (start == null) {
-      setState(() => _wallStart = point);
+      setState(() {
+        _wallStart = point;
+        _wallStartGuides = snap.guides;
+      });
       return;
     }
-    await _commitWall(start, point);
+    await _commitWall(start, point, endGuides: snap.guides);
   }
 
   // ── Χώροι ─────────────────────────────────────────────────────────────
@@ -891,7 +1020,7 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     }
     // Χωρίς μαγνήτη γωνίας: η διαγώνιος ενός γραφείου δεν κουμπώνει ανά 15°.
     final start = _volumeStart;
-    final point = _snap(world).point;
+    final point = _snap(world, guides: false).point;
     if (start == null) {
       setState(() => _volumeStart = point);
       return;
@@ -926,7 +1055,7 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     if (start == null || hover == null) return const [];
     final volume = floorPlanVolumeToward(
       start,
-      _snap(hover).point,
+      _snap(hover, guides: false).point,
       parseVolumeSizeMeters(_typedVolume),
     );
     return rotatedRectCorners(volume.center, volume.size, 0);
@@ -1813,7 +1942,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     if (points.length < 2) {
       final from = points.isEmpty ? null : points.first;
       setState(
-        () => _dimensionPoints = [...points, _snap(world, from: from).point],
+        () => _dimensionPoints = [
+          ...points,
+          _snap(world, from: from, guides: false).point,
+        ],
       );
       return;
     }
@@ -1821,10 +1953,15 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     await _controller.addDimension(points[0], points[1], world);
   }
 
-  Future<void> _commitWall(Offset start, Offset end) async {
+  Future<void> _commitWall(
+    Offset start,
+    Offset end, {
+    List<FloorPlanGuide> endGuides = const [],
+  }) async {
     if ((end - start).distance < 1) return;
     setState(() {
       _wallStart = end;
+      _wallStartGuides = endGuides;
       _typedLength = '';
     });
     await _controller.addWall(start, end);
@@ -2228,6 +2365,7 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
                 setState(() => _patternPanelOpen = !_patternPanelOpen),
             icon: const Icon(Icons.wallpaper_outlined),
           ),
+          FloorPlanDrawingSettingsButton(aids: _aids, onChanged: _setAids),
           if (!_controller.state.isActive) ...[
             const SizedBox(width: 8),
             FilledButton.icon(
@@ -2364,10 +2502,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     }
     final tooltip = draft == null ? _hoverTooltip() : null;
     if (tooltip != null) {
-      final bar = _roomLabelBar(view);
+      final bar = _selectionBar(view);
       return Stack(children: [canvas, ?bar, tooltip]);
     }
-    final labelBar = draft == null ? _roomLabelBar(view) : null;
+    final labelBar = draft == null ? _selectionBar(view) : null;
     // Πάντα μέσα σε Stack και πρώτος: αν ο καμβάς άλλαζε θέση στο δέντρο
     // όταν ανοίγει ένα πλαίσιο, θα ξαναστηνόταν και θα έπαιρνε πίσω την
     // εστίαση — το «Όνομα» του νέου αντικειμένου δεν θα δεχόταν γράμματα.
@@ -2396,6 +2534,42 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Η μπάρα της επιλογής: του ονόματος όταν είναι επιλεγμένος ένας χώρος,
+  /// του πάχους όταν είναι επιλεγμένοι τοίχοι.
+  Widget? _selectionBar(FloorPlanViewTransform view) =>
+      _roomLabelBar(view) ?? _wallThicknessBar(view);
+
+  /// Η μπάρα «Πάχος» κάτω από τους επιλεγμένους τοίχους, με την «Επιλογή»·
+  /// `null` όταν δεν είναι επιλεγμένος κανένας τοίχος ή όσο σύρεται κάτι.
+  Widget? _wallThicknessBar(FloorPlanViewTransform view) {
+    if (_controller.tool != FloorPlanTool.select ||
+        _controller.locked ||
+        _downScreen != null) {
+      return null;
+    }
+    final walls = _controller.selectedWalls;
+    final frame = _select.selectionFrame(view);
+    if (walls.isEmpty || frame == null) return null;
+    final first = walls.first.wallThicknessCm;
+    final common = walls.every((w) => w.wallThicknessCm == first)
+        ? first
+        : null;
+    // Κάτω από τη λαβή μήκους, που κάθεται λίγο έξω από το άκρο του τοίχου.
+    final top = frame.bottom + 22;
+    return Positioned(
+      left: (frame.center.dx - 110).clamp(
+        0,
+        math.max(0, _canvasSize.width - 230),
+      ),
+      top: top.clamp(0, math.max(0, _canvasSize.height - 50)),
+      child: FloorPlanWallThicknessBar(
+        thicknessCm: _thicknessPending ?? common,
+        onChanged: _setWallThickness,
+        onDone: _canvasFocus.requestFocus,
+      ),
     );
   }
 
@@ -2477,8 +2651,22 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
         return FloorPlanOverlay(
           rubberStart: start,
           rubberEnd: start == null ? null : end,
+          rubberThickness: _controller.nextWallThicknessCm,
           snapPoint: snap.point,
           snapKind: snap.kind,
+          // Με πληκτρολογημένο μήκος η άκρη δεν είναι πια πάνω στον οδηγό.
+          guideLines: start != null && typed != null
+              ? const []
+              : _guideLinesOf(snap.guides, snap.point),
+          angleMarks: start == null
+              ? const []
+              : _angleMarks(
+                  start,
+                  end,
+                  thicknessCm: _controller.nextWallThicknessCm,
+                  guidesAtA: _wallStartGuides,
+                  guidesAtB: typed != null ? const [] : snap.guides,
+                ),
         );
       case FloorPlanTool.opening:
         return FloorPlanOverlay(
@@ -2498,13 +2686,14 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
           roomCorners: _roomCorners,
           snapPoint: snap.point,
           snapKind: snap.kind,
+          guideLines: _guideLinesOf(snap.guides, snap.point),
         );
       case FloorPlanTool.dimension:
         final points = _dimensionPoints;
         if (hover == null) return const FloorPlanOverlay();
         final from = points.isEmpty ? null : points.first;
         final snap = points.length < 2
-            ? _snap(hover, from: from)
+            ? _snap(hover, from: from, guides: false)
             : FloorPlanSnap(hover, FloorPlanSnapKind.none);
         return FloorPlanOverlay(
           dimensionDraft: points.isEmpty ? null : [...points, snap.point],
@@ -2512,17 +2701,39 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
           snapKind: snap.kind,
         );
       case FloorPlanTool.select:
+        final wallDrag = _select.wallEndDrag;
+        final moveSnap = _select.moveSnap;
+        final dragKind = wallDrag?.snapKind ?? FloorPlanSnapKind.none;
+        final snapped =
+            dragKind != FloorPlanSnapKind.none &&
+            dragKind != FloorPlanSnapKind.angle;
         return FloorPlanOverlay(
           selectionRectScreen: _select.selectionRectScreen,
           selectionFrameScreen: _select.selectionFrame(view),
           rotationHandleScreen: _select.rotationHandle(view),
-          resizeHandlesScreen: _select.resizeHandles(view),
+          resizeHandlesScreen: [
+            ..._select.resizeHandles(view),
+            ..._select.wallEndHandles(view),
+          ],
+          lengthStart: wallDrag?.wall.points[0],
+          lengthEnd: wallDrag?.wall.points[1],
+          // Κούμπωμα της άκρης που σύρεται, ή της επιλογής που μετακινείται.
+          snapPoint: snapped ? wallDrag?.movedEnd : moveSnap?.point,
+          snapKind: snapped
+              ? dragKind
+              : moveSnap?.kind ?? FloorPlanSnapKind.none,
+          guideLines: wallDrag != null
+              ? _guideLinesOf(wallDrag.guides, wallDrag.movedEnd)
+              : moveSnap != null
+              ? _guideLinesOf(moveSnap.guides, moveSnap.point)
+              : const [],
+          angleMarks: _selectedWallAngles(),
         );
       case FloorPlanTool.place:
         return const FloorPlanOverlay();
       case FloorPlanTool.object:
         if (!_placingVolume || hover == null) return const FloorPlanOverlay();
-        final snap = _snap(hover);
+        final snap = _snap(hover, guides: false);
         return FloorPlanOverlay(
           volumeDraft: _volumeDraftCorners(),
           snapPoint: snap.point,
@@ -2532,7 +2743,11 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
         if (hover == null || _measure.finished) return const FloorPlanOverlay();
         final from = _measure.isEmpty ? null : _measure.points.last;
         final snap = _snap(hover, from: from);
-        return FloorPlanOverlay(snapPoint: snap.point, snapKind: snap.kind);
+        return FloorPlanOverlay(
+          snapPoint: snap.point,
+          snapKind: snap.kind,
+          guideLines: _guideLinesOf(snap.guides, snap.point),
+        );
       case FloorPlanTool.text:
       case FloorPlanTool.movePattern:
         return const FloorPlanOverlay();
@@ -2550,7 +2765,13 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
       for (final e in elements)
         if (e.kind == FloorPlanElementKind.opening)
           if (elementWorldPoints(e, walls) case [final a, final b])
-            e.id: FloorPlanSegment(a, b),
+            e.id: FloorPlanSegment(
+              a,
+              b,
+              thickness:
+                  walls[e.parentId]?.wallThicknessCm ??
+                  kFloorPlanWallThicknessCm,
+            ),
     };
   }
 
@@ -2562,7 +2783,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     switch (_controller.tool) {
       case FloorPlanTool.wall:
         if (_wallStart == null) {
-          return 'Τοίχος: κλικ στην αρχή. Shift = χωρίς μαγνήτη.';
+          final thickness = _controller.nextWallThicknessCm.round();
+          return 'Τοίχος: κλικ στην αρχή. Οι μοβ γραμμές δείχνουν την '
+              'προέκταση ή την κάθετη από άκρη άλλου τοίχου. Shift = χωρίς '
+              'μαγνήτη. Πάχος $thickness εκ. — αλλάζει από την «Επιλογή».';
         }
         final typed = _typedLength.isEmpty
             ? ''
@@ -2624,8 +2848,16 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
           return 'Το σχέδιο είναι κλειδωμένο: πιάνονται μόνο τα αντικείμενα. '
               'Ξεκλειδώστε το από το λουκέτο επάνω δεξιά.';
         }
+        if (_select.wallEndDrag case final drag?) {
+          final length = (drag.wall.points[1] - drag.wall.points[0]).distance;
+          return 'Μήκος τοίχου: ${formatCmAsMeters(length)} · κουμπώνει όπου '
+              'συναντά άλλον τοίχο ή μοβ οδηγό · Ctrl = η άκρη πηγαίνει '
+              'ελεύθερα · Shift = χωρίς μαγνήτη · σταματά στην άκρη πόρτας.';
+        }
         return 'Επιλογή: κλικ ή ορθογώνιο · Ctrl+κλικ προσθέτει · σύρσιμο '
-            'μετακινεί · η λαβή επάνω γυρίζει (Shift: ελεύθερα) · διπλό κλικ '
+            'μετακινεί · η λαβή επάνω γυρίζει (Shift: ελεύθερα) · οι λαβές '
+            'στις άκρες ενός τοίχου αλλάζουν το μήκος του (με Ctrl και την '
+            'κλίση), η μπάρα από κάτω το πάχος · διπλό κλικ '
             'αλλάζει χώρο, κείμενο ή αντικείμενο · Ctrl+C/X/V · Delete · '
             'μεσαίο κουμπί μετακινεί τον καμβά.';
     }

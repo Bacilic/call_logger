@@ -39,6 +39,39 @@ class FieldConflict {
   final bool isTrailing;
 }
 
+/// Ό,τι έγραψε μόνη της η εφαρμογή σε **κενά** πεδία επειδή το υπέδειξε
+/// μια πηγή — τηλέφωνο, καλών ή εξοπλισμός. Μόλις αλλάξει η τιμή της πηγής,
+/// φεύγει ό,τι είναι ακόμη ακριβώς όπως γράφτηκε· ό,τι άλλαξε ο χρήστης στο
+/// μεταξύ μένει.
+///
+/// Ζει χωριστά από τους δεσμούς με οντότητες: ο δεσμός με τον καλούντα, π.χ.,
+/// λύνεται στο πρώτο πλήκτρο του τηλεφώνου, πριν τρέξει ο έλεγχος που θα τον
+/// χρειαζόταν.
+class FieldAutofill {
+  const FieldAutofill({
+    required this.sourceText,
+    this.phoneText,
+    this.callerText,
+    this.departmentText,
+    this.equipmentText,
+  });
+
+  /// Η τιμή της πηγής τη στιγμή που υπέδειξε τα υπόλοιπα (για τηλέφωνο: μόνο
+  /// τα ψηφία).
+  final String sourceText;
+
+  final String? phoneText;
+  final String? callerText;
+  final String? departmentText;
+  final String? equipmentText;
+
+  bool get isEmpty =>
+      phoneText == null &&
+      callerText == null &&
+      departmentText == null &&
+      equipmentText == null;
+}
+
 /// Κατάσταση έξυπνου επιλογέα οντοτήτων (τηλέφωνο, καλών, εξοπλισμός, τμήμα).
 /// FocusNodes ΔΕΝ αποθηκεύονται εδώ — ζουν στο widget State.
 class SmartEntitySelectorState {
@@ -62,7 +95,9 @@ class SmartEntitySelectorState {
     this.selectedDepartmentId,
     Map<SelectorField, List<FieldConflict>>? conflicts,
     List<SelectorField>? identificationOrder,
-  }) : recentPhones = recentPhones ?? [],
+    Map<SelectorField, FieldAutofill>? autofills,
+  }) : autofills = autofills ?? const {},
+       recentPhones = recentPhones ?? [],
        phoneCandidates = phoneCandidates ?? [],
        callerCandidates = callerCandidates ?? [],
        equipmentCandidates = equipmentCandidates ?? [],
@@ -117,6 +152,9 @@ class SmartEntitySelectorState {
   /// είναι εξίσου έγκυρη αφετηρία. Πεδία που γέμισαν με autofill, και φόρμες
   /// που φορτώθηκαν έτοιμες (Ιστορικό/Εκκρεμότητες), δεν καταχωρούνται εδώ.
   final List<SelectorField> identificationOrder;
+
+  /// Ό,τι συμπλήρωσε κάθε πηγή — δες [FieldAutofill].
+  final Map<SelectorField, FieldAutofill> autofills;
 
   /// Το πεδίο-αφετηρία της αναζήτησης — «εδώ ξεκίνησες».
   SelectorField? get anchorField => identificationOrder.firstOrNull;
@@ -595,6 +633,7 @@ class SmartEntitySelectorState {
     bool clearConflicts = false,
     List<SelectorField>? identificationOrder,
     bool clearIdentificationOrder = false,
+    Map<SelectorField, FieldAutofill>? autofills,
   }) {
     return SmartEntitySelectorState(
       selectedPhone: clearSelectedPhone
@@ -632,6 +671,7 @@ class SmartEntitySelectorState {
       identificationOrder: clearIdentificationOrder
           ? const []
           : (identificationOrder ?? this.identificationOrder),
+      autofills: autofills ?? this.autofills,
     );
   }
 
@@ -655,6 +695,7 @@ class SmartEntitySelectorState {
       clearSelectedDepartmentId: true,
       clearConflicts: true,
       clearIdentificationOrder: true,
+      autofills: const {},
     );
   }
 }

@@ -185,6 +185,42 @@ void main() {
     expect(names, contains('times_used'));
   });
 
+  test('διαγραμμένη κατηγορία δείχνεται «(διαγραμμένο)», όχι σκέτη', () async {
+    final catId = await db.insert('categories', {
+      'name': 'Δίκτυο Κτιρίου',
+      'is_deleted': 0,
+    });
+    final id = await repo.saveArticle(_vncArticle.copyWith(categoryId: catId));
+    await db.update(
+      'categories',
+      {'is_deleted': 1},
+      where: 'id = ?',
+      whereArgs: [catId],
+    );
+
+    final article = (await repo.getById(id))!;
+    expect(
+      article.categoryDisplayName,
+      'Δίκτυο Κτιρίου (διαγραμμένο)',
+      reason:
+          'Όπως στις κλήσεις και στις εκκρεμότητες: ο χρήστης μαθαίνει '
+          'ότι η κατηγορία δεν υπάρχει πια στον Κατάλογο.',
+    );
+    expect(
+      (await repo.listArticles()).single.categoryDisplayName,
+      'Δίκτυο Κτιρίου (διαγραμμένο)',
+    );
+  });
+
+  test('ενεργή κατηγορία δείχνεται σκέτη', () async {
+    final catId = await db.insert('categories', {
+      'name': 'Εκτυπωτές',
+      'is_deleted': 0,
+    });
+    final id = await repo.saveArticle(_vncArticle.copyWith(categoryId: catId));
+    expect((await repo.getById(id))!.categoryDisplayName, 'Εκτυπωτές');
+  });
+
   group('κάποιος πρόλαβε', () {
     test('η αλλαγή του συναδέλφου δεν σβήνεται σιωπηλά', () async {
       final id = await repo.saveArticle(_vncArticle);
@@ -225,6 +261,48 @@ void main() {
 
       await repo.saveArticle(atOpen.copyWith(tags: 'VNC'), expected: atOpen);
       expect((await repo.getById(id))!.tagList, <String>['VNC']);
+    });
+
+    test('άρθρο που διαγράφηκε στο μεταξύ: η αποθήκευση δεν προσποιείται '
+        'επιτυχία', () async {
+      final id = await repo.saveArticle(_vncArticle);
+      final atOpen = (await repo.getById(id))!;
+      await repo.deleteArticle(id);
+      await db.update(
+        'audit_log',
+        {'user_performing': 'Βασίλης'},
+        where: 'entity_type = ? AND entity_id = ?',
+        whereArgs: ['knowledge', id],
+      );
+
+      final error = await repo
+          .saveArticle(atOpen.copyWith(tags: 'VNC'), expected: atOpen)
+          .then<Object?>((_) => null, onError: (Object e) => e);
+
+      expect(
+        error,
+        isA<KnowledgeArticleDeletedException>(),
+        reason:
+            'Πριν: επέστρεφε σαν να πέτυχε, και η οθόνη έλεγε «Το άρθρο '
+            'ενημερώθηκε» ενώ δεν γράφτηκε τίποτα.',
+      );
+      expect((error as KnowledgeArticleDeletedException).deletedBy, 'Βασίλης');
+      expect(await db.query('knowledge_base'), isEmpty);
+    });
+
+    test('η διόρθωση άρθρου που διαγράφηκε σώζεται ως νέο άρθρο', () async {
+      final id = await repo.saveArticle(_vncArticle);
+      final atOpen = (await repo.getById(id))!;
+      await repo.deleteArticle(id);
+
+      final newId = await repo.saveArticle(
+        atOpen.copyWith(tags: 'VNC').asNewArticle(),
+      );
+
+      expect(newId, isNot(id));
+      final saved = (await repo.getById(newId))!;
+      expect(saved.solution, _vncArticle.solution);
+      expect(saved.tagList, <String>['VNC']);
     });
 
     test('με «Κράτα τη δική μου» γράφεται από πάνω', () async {

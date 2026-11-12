@@ -3,22 +3,21 @@ import 'package:intl/intl.dart';
 
 import '../../../core/database/old_database/old_equipment_repository.dart'
     show lampAcceptedNoteKey;
+import 'lamp_field_input.dart';
 
 // Η «μετάφραση» μιας γραμμής της Λάμπας σε ενότητες καρτών: ποια πεδία
 // εμφανίζονται, με ποια ετικέτα και μορφή, και ποια επεξεργάζονται. Καθαρά
 // δεδομένα — η κάρτα και ο διάλογος επεξεργασίας μόνο τα εμφανίζουν.
 
-typedef SaveEquipmentSection =
-    Future<EquipmentSectionSaveResult> Function({
-      required int id,
-      required InfoSectionType sectionType,
-      required Map<String, Object?> updatedFields,
-    });
-typedef TransferSectionRequest =
-    Future<void> Function({
-      required InfoSectionType sectionType,
-      required Map<String, Object?> sourceRow,
-    });
+typedef SaveEquipmentSection = Future<EquipmentSectionSaveResult> Function({
+  required int id,
+  required InfoSectionType sectionType,
+  required Map<String, Object?> updatedFields,
+});
+typedef TransferSectionRequest = Future<void> Function({
+  required InfoSectionType sectionType,
+  required Map<String, Object?> sourceRow,
+});
 
 class EquipmentSectionSaveResult {
   const EquipmentSectionSaveResult({required this.success, this.message});
@@ -159,7 +158,10 @@ class EquipmentViewModel {
         EditableInfoField(
           label: 'Κόστος',
           fieldKey: 'cost',
-          value: _text(row['cost']),
+          // Αποθηκευμένο «1537.5000», στο πεδίο «1.537,50»: ο χρήστης
+          // γράφει ελληνικά, και ένα άνοιγμα χωρίς αλλαγή δεν ξαναγράφει.
+          value: LampFieldInput.moneyForEdit(_text(row['cost'])),
+          type: EditableFieldType.money,
         ),
         EditableInfoField(
           label: 'Κωδ. κατόχου',
@@ -482,7 +484,8 @@ class EquipmentViewModel {
         EditableInfoField(
           label: 'Κόστος',
           fieldKey: 'contract_cost',
-          value: _text(row['contract_cost']),
+          value: LampFieldInput.moneyForEdit(_text(row['contract_cost'])),
+          type: EditableFieldType.money,
         ),
         EditableInfoField(
           label: 'Επιτροπή',
@@ -802,7 +805,9 @@ class EquipmentViewModel {
   /// διορθώνονται με το χέρι μπορεί να γραφτούν ελληνικά («1.537,50»). Με
   /// κόμμα η γραφή είναι ελληνική· χωρίς κόμμα, μία τελεία είναι υποδιαστολή
   /// και πολλές τελείες είναι χιλιάδες.
-  @visibleForTesting
+  ///
+  /// Είναι η **ανάγνωση** του αποθηκευμένου· ό,τι γράφει ο χρήστης περνά από
+  /// το αυστηρό `LampFieldInput.parseGreekMoney`.
   static num? parseLampMoney(String text) {
     var t = text.replaceAll('€', '').replaceAll(' ', '').trim();
     if (t.contains(',')) {
@@ -846,7 +851,8 @@ class InfoItem {
   final String? note;
 }
 
-enum EditableFieldType { text, email, date, number, phone, code }
+/// [number]: ακέραιος (ο όροφος). [money]: ποσό σε ελληνική γραφή.
+enum EditableFieldType { text, email, date, number, money, phone, code }
 
 class EditableInfoField {
   const EditableInfoField({

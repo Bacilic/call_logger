@@ -132,6 +132,12 @@ import 'database_schema_version.dart';
 /// πίνακες άδειοι· οι πίνακες του Καταλόγου δεν αποκτούν καμία στήλη.
 /// v75: `building_map_objects.port_type` — το πρόθεμα των θυρών ενός switch
 /// στο πρότυπο Cisco (Fa, Gi, Te). Καθαρή προσθήκη· κενό = Gi.
+/// v76: `building_map_floor_patterns` — η εικόνα πατρόν φεύγει από τη γραμμή
+/// κατάστασης του ορόφου σε δικό της πίνακα, ώστε ούτε η ανάγνωση της
+/// κατάστασης ούτε οι αλλαγές στον χάρτη να την κατεβάζουν από το δίκτυο.
+/// v77: `building_map_plan_elements.thickness_cm` — κάθε τοίχος του νέου χάρτη
+/// έχει δικό του πάχος. Καθαρή προσθήκη· κενό = το πάχος που είχαν όλοι ως
+/// τώρα.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Η εικόνα κάθε κάτοψης ορόφου — **μία και κοινή για όλους τους σταθμούς**.
@@ -180,7 +186,8 @@ const String kCreateBuildingMapPlanElementsTable = '''
         font_size REAL,
         rotation_degrees REAL NOT NULL DEFAULT 0,
         label_dx REAL,
-        label_dy REAL
+        label_dy REAL,
+        thickness_cm REAL
       )
     ''';
 
@@ -192,16 +199,14 @@ const String kCreateBuildingMapPlanElementsFloorIndex = '''
 /// Η κατάσταση του νέου χάρτη **ανά όροφο**: αν είναι ενεργός, πότε άλλαξε
 /// τελευταία, και το πατρόν με τη βαθμονόμηση και τη θέση του.
 ///
-/// Η εικόνα του πατρόν ζει εδώ (αντίγραφο της κάτοψης ή νέο αρχείο) και όχι
-/// στον πίνακα εικόνων κάτοψης: εκείνη τη βλέπουν οι συνάδελφοι στον παλιό
-/// χάρτη, και ένα νέο αρχείο εκεί θα μετακινούσε τα κουτάκια τους. Γι' αυτό
-/// κάθε ανάγνωση της κατάστασης γράφει ρητά τις στήλες της, χωρίς την εικόνα.
+/// Τα bytes της εικόνας **δεν** ζουν εδώ, αλλά στο
+/// `building_map_floor_patterns`· εδώ μένει το αποτύπωμά της. Η γραμμή αυτή
+/// διαβάζεται σε κάθε άνοιγμα ορόφου και γράφεται σε κάθε αλλαγή στον χάρτη.
 const String kCreateBuildingMapFloorStateTable = '''
       CREATE TABLE IF NOT EXISTS building_map_floor_state (
         floor_id INTEGER PRIMARY KEY,
         is_active INTEGER NOT NULL DEFAULT 0,
         changed_at TEXT,
-        pattern_image BLOB,
         pattern_hash TEXT,
         pattern_cm_per_px REAL NOT NULL DEFAULT 1,
         pattern_center_x REAL NOT NULL DEFAULT 0,
@@ -210,6 +215,26 @@ const String kCreateBuildingMapFloorStateTable = '''
         pattern_opacity REAL NOT NULL DEFAULT 0.5,
         pattern_hidden INTEGER NOT NULL DEFAULT 0,
         pattern_calibrated INTEGER NOT NULL DEFAULT 0
+      )
+    ''';
+
+/// Η εικόνα πατρόν κάθε ορόφου (αντίγραφο της κάτοψης ή νέο αρχείο).
+///
+/// **Χωριστός πίνακας, επίτηδες, και όχι στήλη της κατάστασης.** Η βάση
+/// φτάνει σε μια στήλη περνώντας από όσες προηγούνται, και για να αλλάξει
+/// έστω έναν αριθμό ξαναδιαβάζει όλη τη γραμμή. Μετρημένο με εικόνα 5 MB:
+/// στην ίδια γραμμή, η κατάσταση διάβαζε 5 MB και κάθε αλλαγή στον χάρτη 10 MB,
+/// πάνω από το δίκτυο. Οι ρητές στήλες στο ερώτημα δεν το αποτρέπουν.
+///
+/// Και όχι ο πίνακας εικόνων κάτοψης: εκείνη τη βλέπουν οι συνάδελφοι στον
+/// παλιό χάρτη, και ένα νέο αρχείο εκεί θα μετακινούσε τα κουτάκια τους.
+///
+/// **Χωρίς δεσμό ξένου κλειδιού**, όπως οι άλλες προσθήκες: η διαγραφή ορόφου
+/// σβήνει ρητά και την εικόνα του.
+const String kCreateBuildingMapFloorPatternsTable = '''
+      CREATE TABLE IF NOT EXISTS building_map_floor_patterns (
+        floor_id INTEGER PRIMARY KEY,
+        image_data BLOB NOT NULL
       )
     ''';
 
@@ -604,6 +629,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   await db.execute(kCreateBuildingMapPlanElementsTable);
   await db.execute(kCreateBuildingMapPlanElementsFloorIndex);
   await db.execute(kCreateBuildingMapFloorStateTable);
+  await db.execute(kCreateBuildingMapFloorPatternsTable);
   for (final statement in kBuildingMapObjectsSchema) {
     await db.execute(statement);
   }

@@ -1,3 +1,7 @@
+import '../../../core/services/current_operator.dart';
+import '../../../core/utils/conflict_actor_text.dart';
+import '../../../core/utils/history_entity_display_utils.dart';
+
 /// Μία «συνταγή» της Βάσης Γνώσης (πίνακας `knowledge_base`).
 ///
 /// Δεν είναι αντίγραφο κλήσης: η κλήση κρατά το δικό της περιστατικό, το άρθρο
@@ -11,6 +15,7 @@ class KnowledgeArticle {
     this.tags = '',
     this.categoryId,
     this.categoryName,
+    this.categoryIsDeleted = false,
     this.sourceCallId,
     this.createdAt,
     this.updatedAt,
@@ -37,6 +42,23 @@ class KnowledgeArticle {
 
   /// Το όνομα κατηγορίας από το JOIN — δεν αποθηκεύεται στο άρθρο.
   final String? categoryName;
+
+  /// Η κατηγορία έχει διαγραφεί από τον Κατάλογο — από το JOIN, δεν
+  /// αποθηκεύεται στο άρθρο.
+  final bool categoryIsDeleted;
+
+  /// Το όνομα κατηγορίας όπως το βλέπει ο χρήστης: με «(διαγραμμένο)» όταν
+  /// δεν υπάρχει πια στον Κατάλογο, όπως στις κλήσεις και τις εκκρεμότητες.
+  /// `null` όταν το άρθρο δεν έχει κατηγορία.
+  String? get categoryDisplayName {
+    final name = categoryName?.trim() ?? '';
+    if (name.isEmpty) return null;
+    return historyDeletedDisplayLabel(
+      name,
+      isDeleted: categoryIsDeleted,
+      deletedSuffix: kCatalogEntityDeletedSuffix,
+    );
+  }
 
   /// Η κλήση από την οποία γεννήθηκε το άρθρο, αν γεννήθηκε από κλήση.
   final int? sourceCallId;
@@ -66,6 +88,7 @@ class KnowledgeArticle {
       tags: (map['tags'] as String?) ?? '',
       categoryId: map['category_id'] as int?,
       categoryName: map['category_name'] as String?,
+      categoryIsDeleted: historyEntityIsDeleted(map['category_is_deleted']),
       sourceCallId: map['source_call_id'] as int?,
       createdAt: map['created_at'] as String?,
       updatedAt: map['updated_at'] as String?,
@@ -84,6 +107,19 @@ class KnowledgeArticle {
       'source_call_id': sourceCallId,
     };
   }
+
+  /// Το ίδιο περιεχόμενο ως **νέο** άρθρο: χωρίς id και χρόνους, ώστε η
+  /// αποθήκευση να το δημιουργήσει αντί να ψάξει γραμμή που δεν υπάρχει.
+  KnowledgeArticle asNewArticle() => KnowledgeArticle(
+    title: title,
+    symptom: symptom,
+    solution: solution,
+    tags: tags,
+    categoryId: categoryId,
+    categoryName: categoryName,
+    categoryIsDeleted: categoryIsDeleted,
+    sourceCallId: sourceCallId,
+  );
 
   KnowledgeArticle copyWith({
     int? id,
@@ -106,9 +142,35 @@ class KnowledgeArticle {
       tags: tags ?? this.tags,
       categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
       categoryName: clearCategory ? null : (categoryName ?? this.categoryName),
+      categoryIsDeleted: clearCategory ? false : categoryIsDeleted,
       sourceCallId: sourceCallId ?? this.sourceCallId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+}
+
+/// Το άρθρο διαγράφηκε από άλλον όσο ήταν ανοιχτό για διόρθωση — δεν γράφτηκε
+/// τίποτα. Η φόρμα προσφέρει να αποθηκευτεί η διόρθωση ως νέο άρθρο.
+class KnowledgeArticleDeletedException implements Exception {
+  const KnowledgeArticleDeletedException({this.deletedBy, this.deletedAt});
+
+  /// Ποιος το διέγραψε, όπως το γράφει το Ιστορικό — `null` αν δεν φαίνεται.
+  final String? deletedBy;
+  final DateTime? deletedAt;
+
+  /// Το κείμενο του παραθύρου: ποιος και πότε, όσο το ξέρουμε.
+  String describe({required DateTime now}) {
+    final who = (deletedBy ?? '').trim();
+    final byWhom = who.isEmpty || who == CurrentOperator.unknownAuditName
+        ? ''
+        : ' από τον χρήστη «$who»';
+    return 'Όσο το διορθώνατε, το άρθρο διαγράφηκε$byWhom'
+        '${conflictMomentSuffix(deletedAt, now: now)}. '
+        'Η διόρθωσή σας δεν έχει αποθηκευτεί.';
+  }
+
+  @override
+  String toString() =>
+      'Το άρθρο διαγράφηκε από άλλον χρήστη όσο ήταν ανοιχτό για διόρθωση.';
 }

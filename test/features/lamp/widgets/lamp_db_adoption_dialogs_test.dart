@@ -48,7 +48,7 @@ Future<_Captured<LampDbPlacementChoice>> _openPlacement(
 
 Future<_Captured<LampDbConflictChoice>> _openConflict(
   WidgetTester tester, {
-  required bool isConfiguredOutput,
+  required bool isCurrentLampDb,
 }) async {
   final captured = _Captured<LampDbConflictChoice>();
   await tester.pumpWidget(
@@ -62,7 +62,7 @@ Future<_Captured<LampDbConflictChoice>> _openConflict(
                 sourcePath: _picked,
                 destinationPath: _destination,
                 keepBothPath: _keepBoth,
-                destinationIsConfiguredOutput: isConfiguredOutput,
+                destinationIsCurrentLampDb: isCurrentLampDb,
               );
             },
             child: const Text('open'),
@@ -126,7 +126,7 @@ void main() {
     testWidgets('δείχνει πηγή, προορισμό και το όνομα διατήρησης', (
       tester,
     ) async {
-      await _openConflict(tester, isConfiguredOutput: false);
+      await _openConflict(tester, isCurrentLampDb: false);
 
       expect(find.text(_picked), findsOneWidget);
       expect(find.text(_destination), findsOneWidget);
@@ -137,7 +137,7 @@ void main() {
     });
 
     testWidgets('«Διατήρηση και των δύο» → keepBoth', (tester) async {
-      final captured = await _openConflict(tester, isConfiguredOutput: false);
+      final captured = await _openConflict(tester, isCurrentLampDb: false);
       await tester.tap(find.text('Διατήρηση και των δύο'));
       await tester.pumpAndSettle();
 
@@ -145,37 +145,39 @@ void main() {
     });
 
     testWidgets('«Αντικατάσταση» → replace', (tester) async {
-      final captured = await _openConflict(tester, isConfiguredOutput: false);
+      final captured = await _openConflict(tester, isCurrentLampDb: false);
       await tester.tap(find.text('Αντικατάσταση'));
       await tester.pumpAndSettle();
 
       expect(captured.value, LampDbConflictChoice.replace);
     });
 
-    testWidgets('προειδοποιεί όταν ο προορισμός είναι η βάση εξόδου', (
-      tester,
-    ) async {
-      await _openConflict(tester, isConfiguredOutput: true);
+    testWidgets(
+      'προειδοποιεί όταν ο προορισμός είναι η βάση που διαβάζει η Λάμπα',
+      (tester) async {
+        await _openConflict(tester, isCurrentLampDb: true);
 
-      expect(find.textContaining('δημιουργεί το Excel'), findsOneWidget);
+        expect(find.textContaining('διαβάζει τώρα η Λάμπα'), findsOneWidget);
 
-      await tester.tap(find.text('Ακύρωση'));
-      await tester.pumpAndSettle();
-    });
+        await tester.tap(find.text('Ακύρωση'));
+        await tester.pumpAndSettle();
+      },
+    );
 
-    testWidgets('χωρίς βάση εξόδου δεν εμφανίζεται προειδοποίηση', (
-      tester,
-    ) async {
-      await _openConflict(tester, isConfiguredOutput: false);
+    testWidgets(
+      'όταν δεν είναι η βάση της Λάμπας δεν εμφανίζεται προειδοποίηση',
+      (tester) async {
+        await _openConflict(tester, isCurrentLampDb: false);
 
-      expect(find.textContaining('δημιουργεί το Excel'), findsNothing);
+        expect(find.textContaining('διαβάζει τώρα η Λάμπα'), findsNothing);
 
-      await tester.tap(find.text('Ακύρωση'));
-      await tester.pumpAndSettle();
-    });
+        await tester.tap(find.text('Ακύρωση'));
+        await tester.pumpAndSettle();
+      },
+    );
 
     testWidgets('«Ακύρωση» → cancel', (tester) async {
-      final captured = await _openConflict(tester, isConfiguredOutput: false);
+      final captured = await _openConflict(tester, isCurrentLampDb: false);
       await tester.tap(find.text('Ακύρωση'));
       await tester.pumpAndSettle();
 
@@ -183,7 +185,7 @@ void main() {
     });
 
     testWidgets('είναι μετακινήσιμος', (tester) async {
-      await _openConflict(tester, isConfiguredOutput: false);
+      await _openConflict(tester, isCurrentLampDb: false);
 
       expect(find.byType(DraggableDialogShell), findsOneWidget);
 

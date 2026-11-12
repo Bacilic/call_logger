@@ -7,7 +7,6 @@ import '../../../core/database/old_database/lamp_old_db_validator.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
 import '../../../core/database/old_database/lamp_network_issue_resolution_service.dart';
-import '../../../core/database/old_database/old_excel_importer.dart';
 import '../services/lamp_migration_service.dart';
 import '../models/lamp_equipment_view_model.dart';
 
@@ -19,7 +18,6 @@ class LampScreenShared {
     required this.issueResolutionService,
     required this.networkIssueResolutionService,
     required this.migrationService,
-    required this.importer,
   }) {
     // Η αναζήτηση δουλεύει πάνω σε αντίγραφο της βάσης στη μνήμη. Η σύνδεση
     // γίνεται **εδώ**, όπου συναντιούνται τα δύο αντικείμενα, και όχι σε κάθε
@@ -36,7 +34,6 @@ class LampScreenShared {
   final LampIssueResolutionService issueResolutionService;
   final LampNetworkIssueResolutionService networkIssueResolutionService;
   final LampMigrationService migrationService;
-  final OldExcelImporter importer;
 }
 
 /// Διεπαφή πρόσβασης στην οθόνη για callbacks UI (snackbar, dialogs, setState).

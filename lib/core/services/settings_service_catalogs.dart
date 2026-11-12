@@ -10,6 +10,7 @@ import '../config/mass_deletion_percent.dart';
 import '../../features/database/debug/publish_cli.dart';
 import '../database/database_busy_timeout.dart';
 import '../database/database_staleness.dart';
+import 'catalog_list_change.dart';
 import 'settings_list_conflict.dart';
 import 'profile_settings.dart';
 import 'scoped_settings.dart';
@@ -157,6 +158,29 @@ class SettingsServiceCatalogs {
       SharedSettingKeys.auditRetentionConfig,
       jsonEncode(config.toJson()),
     );
+  }
+
+  /// Αποθήκευση από την οθόνη Συντήρησης: γράφει **μόνο** ό,τι άλλαξε ο
+  /// χρήστης από τη [baseline] που είχε φορτώσει, πάνω στη φρέσκια τιμή.
+  ///
+  /// Επιστρέφει την πολιτική που ισχύει πια — μαζί με τις αλλαγές του
+  /// συναδέλφου — ώστε η οθόνη να δείχνει την αλήθεια.
+  Future<AuditRetentionConfig> saveAuditRetentionChanges({
+    required AuditRetentionConfig edited,
+    required AuditRetentionConfig baseline,
+  }) async {
+    final stored = await SharedSettings.update(
+      SharedSettingKeys.auditRetentionConfig,
+      (current) => jsonEncode(
+        edited
+            .changesSince(
+              baseline,
+              appliedTo: AuditRetentionConfig.fromJsonString(current),
+            )
+            .toJson(),
+      ),
+    );
+    return AuditRetentionConfig.fromJsonString(stored);
   }
 
   /// Πόσες μέρες χωρίς καμία εγγραφή κάνουν τη βάση «παλιά».
@@ -426,21 +450,43 @@ class SettingsServiceCatalogs {
     return effectiveBuildingCatalog(value);
   }
 
-  /// Αποθηκεύει τον κατάλογο κτιρίων (comma-separated).
+  /// Εφαρμόζει **μία αλλαγή** στον κατάλογο κτιρίων, πάνω στην τιμή που ισχύει
+  /// τη στιγμή της εγγραφής.
   ///
-  /// Το [expected] παίζει τον ίδιο ρόλο με της [setEquipmentTypes]: αν κάποιος
-  /// άλλος πρόλαβε να αλλάξει τη λίστα, αποφασίζει ο άνθρωπος αντί να σβηστεί
-  /// σιωπηλά η δουλειά του.
-  Future<void> setBuildingCatalog(
-    String value, {
-    required String? expected,
+  /// Σε αντίθεση με τους τύπους εξοπλισμού (ελεύθερο κείμενο, όπου αποφασίζει
+  /// ο άνθρωπος), εδώ ξέρουμε ακριβώς τι έκανε ο χρήστης: ό,τι πρόσθεσε στο
+  /// μεταξύ ο συνάδελφος μένει, χωρίς ερώτηση. Αν ο συνάδελφος άγγιξε το ίδιο
+  /// στοιχείο, πετιέται [CatalogListChangedException] και δεν γράφεται τίποτα.
+  ///
+  /// Το [whenUnset] είναι η λίστα που δείχνει η οθόνη όσο δεν έχει οριστεί
+  /// κατάλογος (τα κτίρια που ήδη χρησιμοποιούν τα τμήματα): χωρίς αυτήν η
+  /// πρώτη αλλαγή θα έγραφε κατάλογο με ένα μόνο στοιχείο.
+  Future<void> changeBuildingCatalog(
+    CatalogListChange change, {
+    required List<String> whenUnset,
+  }) => _changeManagedList(
+    key: _keyBuildingCatalog,
+    split: splitBuildingCatalog,
+    change: change,
+    whenUnset: whenUnset,
+  );
+
+  /// Η κοινή εγγραφή των διαχειριζόμενων καταλόγων (κτίρια, ομάδες): η αλλαγή
+  /// εφαρμόζεται **μέσα** στην ατομική δέσμευση, άρα πάνω στην ίδια τιμή που
+  /// θα αντικατασταθεί — δεν υπάρχει δεύτερη εικόνα για να διαφωνήσει.
+  Future<void> _changeManagedList({
+    required String key,
+    required List<String> Function(String? csv) split,
+    required CatalogListChange change,
+    required List<String> whenUnset,
   }) async {
-    await _writeGuardedList(
-      key: _keyBuildingCatalog,
-      next: _joinBuildingCatalog(splitBuildingCatalog(value)),
-      expected: expected,
-      effective: effectiveBuildingCatalog,
-    );
+    final update = SettingsService.appSettingUpdater;
+    if (update == null) return;
+    await update(key, (current) {
+      final stored = split(current);
+      final base = stored.isEmpty ? split(whenUnset.join(',')) : stored;
+      return change.applyTo(base).join(', ');
+    });
   }
 
   /// Λίστα κτιρίων όπως είναι αποθηκευμένη. Κενή = δεν έχει οριστεί κατάλογος.
@@ -468,9 +514,6 @@ class SettingsServiceCatalogs {
     return out;
   }
 
-  static String _joinBuildingCatalog(List<String> buildings) =>
-      buildings.join(', ');
-
   // --- Κατάλογος ομάδων τμημάτων (app_settings, comma-separated) ---
   //
   // Ίδια μηχανική με τα κτίρια, και για τον ίδιο λόγο: οι ομάδες είναι δεδομένο
@@ -489,18 +532,17 @@ class SettingsServiceCatalogs {
     return effectiveDepartmentGroupCatalog(value);
   }
 
-  /// Αποθηκεύει τον κατάλογο ομάδων (comma-separated).
-  Future<void> setDepartmentGroupCatalog(
-    String value, {
-    required String? expected,
-  }) async {
-    await _writeGuardedList(
-      key: _keyDepartmentGroupCatalog,
-      next: _joinDepartmentGroupCatalog(splitDepartmentGroupCatalog(value)),
-      expected: expected,
-      effective: effectiveDepartmentGroupCatalog,
-    );
-  }
+  /// Εφαρμόζει **μία αλλαγή** στον κατάλογο ομάδων — ίδιος κανόνας με την
+  /// [changeBuildingCatalog].
+  Future<void> changeDepartmentGroupCatalog(
+    CatalogListChange change, {
+    required List<String> whenUnset,
+  }) => _changeManagedList(
+    key: _keyDepartmentGroupCatalog,
+    split: splitDepartmentGroupCatalog,
+    change: change,
+    whenUnset: whenUnset,
+  );
 
   /// Λίστα ομάδων όπως είναι αποθηκευμένη. Κενή = δεν έχει οριστεί κατάλογος.
   Future<List<String>> getDepartmentGroupCatalogList() async =>
@@ -522,9 +564,6 @@ class SettingsServiceCatalogs {
     }
     return out;
   }
-
-  static String _joinDepartmentGroupCatalog(List<String> groups) =>
-      groups.join(', ');
 
   // --- Κατηγορίες λεξικού (app_settings, comma-separated) ---
 

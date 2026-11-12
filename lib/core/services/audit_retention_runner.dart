@@ -10,6 +10,23 @@ import '../database/database_helper.dart';
 import 'audit_retention_plan.dart';
 import 'settings_service.dart';
 
+/// Η αυτόματη εκκαθάριση δεν έτρεξε, γιατί θα έσβηνε μονομιάς πάνω από τα μισά.
+///
+/// Σφάλμα και όχι σιωπή: η εκκίνηση δείχνει τα σφάλματα των βημάτων της ως
+/// γραμμή προειδοποίησης στον χρήστη και τα κρατά στην τεχνική αναφορά.
+class AuditRetentionHeldBack implements Exception {
+  const AuditRetentionHeldBack({required this.rows, required this.ofRows});
+
+  final int rows;
+  final int ofRows;
+
+  @override
+  String toString() =>
+      'Η αυτόματη εκκαθάριση δεν έτρεξε, γιατί θα έσβηνε μονομιάς $rows από '
+      'τις $ofRows εγγραφές. Ελέγξτε ότι η ώρα του υπολογιστή είναι σωστή, ή '
+      'τρέξτε την εκκαθάριση χειροκίνητα από τη Συντήρηση.';
+}
+
 /// Εφαρμογή της πολιτικής εκκαθάρισης του Ιστορικού.
 ///
 /// **Δύο βήματα, πάντα με αυτή τη σειρά:** πρώτα χτίζεται το σχέδιο
@@ -107,6 +124,7 @@ class AuditRetentionRunner {
           compactCutoff: compactCutoff,
           totalRowsBefore: totalBefore,
           trimRows: 0,
+          rowsPastAgeLimits: plannedDeletes,
           limitReason: reason,
         );
       }
@@ -119,6 +137,7 @@ class AuditRetentionRunner {
       compactCutoff: compactCutoff,
       totalRowsBefore: totalBefore,
       trimRows: trim,
+      rowsPastAgeLimits: plannedDeletes,
       limitReason: reason,
     );
   }
@@ -209,6 +228,12 @@ class AuditRetentionRunner {
   static Future<({int deleted, int compacted, String? exportPath})>
   applyWithConfig(AuditRetentionConfig config, {DateTime? now}) async {
     final plan = await buildPlan(config, now: now);
+    if (plan.ageLimitsTakeMostOfHistory) {
+      throw AuditRetentionHeldBack(
+        rows: plan.rowsPastAgeLimits,
+        ofRows: plan.rowsUnderAgeLimits,
+      );
+    }
     return executePlan(plan, config);
   }
 

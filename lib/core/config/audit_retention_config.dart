@@ -106,6 +106,25 @@ class AuditRetentionConfig {
     );
   }
 
+  /// Οι επιλογές που άλλαξε ο χρήστης από τη [baseline] (ό,τι διάβασε η
+  /// οθόνη του), εφαρμοσμένες πάνω στη [current] (ό,τι ισχύει τώρα στη βάση).
+  ///
+  /// Η πολιτική είναι κοινή και γράφεται σε ΕΝΑ κλειδί: χωρίς αυτό, η οθόνη
+  /// που άνοιξε το πρωί επανέφερε σιωπηλά ό,τι άλλαξε στο μεταξύ ο
+  /// συνάδελφος, μόνο και μόνο επειδή το κουβαλούσε η εικόνα της.
+  AuditRetentionConfig changesSince(
+    AuditRetentionConfig baseline, {
+    required AuditRetentionConfig appliedTo,
+  }) {
+    final mine = toJson();
+    final before = baseline.toJson();
+    final merged = appliedTo.toJson();
+    for (final key in mine.keys) {
+      if (mine[key] != before[key]) merged[key] = mine[key];
+    }
+    return AuditRetentionConfig.fromJson(merged);
+  }
+
   Map<String, dynamic> toJson() => {
     'max_rows': maxRows,
     'purge_on_app_start': purgeOnAppStart,

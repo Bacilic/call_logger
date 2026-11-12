@@ -3,11 +3,21 @@ import 'dart:ui' show Offset, Rect;
 
 import '../../../../core/models/floor_plan_element.dart';
 import 'floor_plan_editor_controller.dart';
+import 'floor_plan_geometry.dart';
 import 'floor_plan_objects.dart';
 import 'floor_plan_selection.dart';
 import 'floor_plan_view_transform.dart';
 
-enum _SelectMode { none, rect, move, moveObject, rotate, label, resize }
+enum _SelectMode {
+  none,
+  rect,
+  move,
+  moveObject,
+  rotate,
+  label,
+  resize,
+  wallEnd,
+}
 
 /// Η συμπεριφορά του εργαλείου «Επιλογή» με το ποντίκι:
 ///
@@ -20,7 +30,10 @@ enum _SelectMode { none, rect, move, moveObject, rotate, label, resize }
 /// - σύρσιμο του ονόματος ενός χώρου → μετακίνηση μόνο του ονόματος· ο χώρος
 ///   μένει όπου ήταν·
 /// - σύρσιμο μιας γωνίας του μόνου επιλεγμένου επίπλου → αλλαγή μεγέθους, με
-///   την απέναντι γωνία ακίνητη.
+///   την απέναντι γωνία ακίνητη·
+/// - σύρσιμο μιας άκρης του μόνου επιλεγμένου τοίχου → αλλαγή μήκους, με την
+///   άλλη άκρη ακίνητη και την ίδια κλίση (Shift: χωρίς μαγνήτη)· με Ctrl η
+///   άκρη πηγαίνει ελεύθερα και ο τοίχος αλλάζει και κλίση.
 ///
 /// Τα αντικείμενα πιάνονται πρώτα, πριν από τα στοιχεία του σχεδίου, και
 /// πιάνονται **και με κλειδωμένο σχέδιο**.
@@ -46,12 +59,22 @@ class FloorPlanSelectInteraction {
   FloorPlanElement? _hit;
   FloorPlanObjectView? _hitObject;
   int _resizeCorner = 0;
+  int _wallEnd = 0;
+  WallEndResize? _wallEndResult;
+  FloorPlanSnap? _moveSnap;
   Rect? _rectScreen;
   Offset? _rotateCenterWorld;
   Offset? _rotateCenterScreen;
 
   /// Το ορθογώνιο που σύρεται, για να ζωγραφιστεί.
   Rect? get selectionRectScreen => _rectScreen;
+
+  /// Πού κούμπωσε η επιλογή που μετακινείται τώρα (άκρη τοίχου σε άλλον
+  /// τοίχο ή σε οδηγό)· `null` όταν δεν σύρεται ή έμεινε ελεύθερη.
+  FloorPlanSnap? get moveSnap =>
+      _mode == _SelectMode.move || _mode == _SelectMode.moveObject
+      ? _moveSnap
+      : null;
 
   /// Το στοιχείο που πατήθηκε τελευταίο — για το διπλό κλικ.
   FloorPlanElement? get lastHit => _hit;
@@ -76,6 +99,16 @@ class FloorPlanSelectInteraction {
 
     for (final e in controller.elements) {
       if (!ids.contains(e.id)) continue;
+      if (e.kind == FloorPlanElementKind.wall && e.points.length >= 2) {
+        // Ο τοίχος όπως φαίνεται, με το πάχος του: αλλιώς η λαβή
+        // περιστροφής πέφτει πάνω στον παχύ τοίχο και στη λαβή μήκους του.
+        wallOutlineCorners(
+          e.points[0],
+          e.points[1],
+          e.wallThicknessCm,
+        ).forEach(include);
+        continue;
+      }
       elementWorldPoints(e, walls).forEach(include);
     }
     for (final o in controller.objectViews) {
@@ -83,6 +116,55 @@ class FloorPlanSelectInteraction {
     }
     return frame;
   }
+
+  /// Ο τοίχος που αλλάζει μήκος από τις άκρες του: μόνο όταν είναι το μόνο
+  /// επιλεγμένο.
+  FloorPlanElement? _resizableWall() {
+    if (controller.selectedIds.length != 1 ||
+        controller.selectedObjectIds.isNotEmpty ||
+        controller.selectedPlacementIds.isNotEmpty) {
+      return null;
+    }
+    final id = controller.selectedIds.single;
+    for (final e in controller.elements) {
+      if (e.id != id) continue;
+      return e.kind == FloorPlanElementKind.wall && e.points.length >= 2
+          ? e
+          : null;
+    }
+    return null;
+  }
+
+  /// Πόσο έξω από το ορατό άκρο του τοίχου κάθεται η λαβή, σε pixel.
+  static const double wallHandleGapPixels = 8;
+
+  /// Πόσο πέρα από την άκρη του τοίχου [wall] κάθεται η λαβή του, σε
+  /// εκατοστά: μισό πάχος (εκεί τελειώνει ο τοίχος στο μάτι) και ένα μικρό
+  /// κενό.
+  double _wallHandleReachCm(
+    FloorPlanElement wall,
+    FloorPlanViewTransform view,
+  ) => wall.wallThicknessCm / 2 + view.screenToCm(wallHandleGapPixels);
+
+  /// Οι λαβές μήκους, λίγο έξω από τις δύο άκρες του τοίχου, σε pixel
+  /// οθόνης· κενό όταν η επιλογή δεν είναι ένας τοίχος.
+  List<Offset> wallEndHandles(FloorPlanViewTransform view) {
+    final wall = _resizableWall();
+    if (wall == null) return const [];
+    return [
+      for (final p in wallEndHandlePoints(
+        wall.points[0],
+        wall.points[1],
+        _wallHandleReachCm(wall, view),
+      ))
+        view.toScreen(p),
+    ];
+  }
+
+  /// Ο τοίχος του οποίου το μήκος αλλάζει τώρα, όπως φαίνεται «στον αέρα»,
+  /// και αν η άκρη του κούμπωσε· `null` όταν δεν σύρεται άκρη.
+  WallEndResize? get wallEndDrag =>
+      _mode == _SelectMode.wallEnd ? _wallEndResult : null;
 
   /// Το έπιπλο που αλλάζει μέγεθος από τις γωνίες του: μόνο όταν είναι το
   /// μόνο επιλεγμένο.
@@ -142,6 +224,17 @@ class FloorPlanSelectInteraction {
       }
     }
 
+    final ends = wallEndHandles(view);
+    for (var i = 0; i < ends.length; i++) {
+      if ((ends[i] - screen).distance <= handleRadiusPixels) {
+        _mode = _SelectMode.wallEnd;
+        _wallEnd = i;
+        _wallEndResult = null;
+        _hit = _resizableWall();
+        return;
+      }
+    }
+
     final labelRoom = controller.locked
         ? null
         : roomLabelAt?.call(screen, view);
@@ -181,6 +274,8 @@ class FloorPlanSelectInteraction {
     FloorPlanViewTransform view, {
     required bool dragged,
     required bool freeAngle,
+    bool freeEnd = false,
+    bool Function(Offset world)? onScreen,
   }) {
     if (!dragged) return;
     switch (_mode) {
@@ -192,11 +287,11 @@ class FloorPlanSelectInteraction {
         if (!controller.selectedIds.contains(hit.id)) {
           controller.select(hit.id);
         }
-        controller.previewMove(view.toWorld(screen) - _downWorld!);
+        _previewMove(screen, view, freeAngle: freeAngle, onScreen: onScreen);
       case _SelectMode.moveObject:
         final hit = _hitObject!;
         if (!controller.isItemSelected(hit)) controller.selectItem(hit);
-        controller.previewMove(view.toWorld(screen) - _downWorld!);
+        _previewMove(screen, view, freeAngle: freeAngle, onScreen: onScreen);
       case _SelectMode.resize:
         final volume = _hitObject;
         if (volume != null) {
@@ -204,6 +299,24 @@ class FloorPlanSelectInteraction {
             volume.id,
             _resizeCorner,
             view.toWorld(screen),
+          );
+        }
+      case _SelectMode.wallEnd:
+        final wall = _hit;
+        if (wall != null) {
+          // Η λαβή κάθεται έξω από το άκρο: η άκρη είναι τόσο πιο μέσα.
+          _wallEndResult = controller.previewWallEnd(
+            wall.id,
+            _wallEnd,
+            wallEndFromHandle(
+              view.toWorld(screen),
+              wall.points[1 - _wallEnd],
+              _wallHandleReachCm(wall, view),
+            ),
+            toleranceCm: view.screenToCm(pickPixels),
+            magnetOff: freeAngle,
+            free: freeEnd,
+            guideEndVisible: onScreen,
           );
         }
       case _SelectMode.label:
@@ -223,6 +336,24 @@ class FloorPlanSelectInteraction {
     }
   }
 
+  /// Μετακίνηση της επιλογής ως τον δείκτη: οι επιλεγμένοι τοίχοι κουμπώνουν
+  /// όπως στη σχεδίαση (Shift: ελεύθερα).
+  void _previewMove(
+    Offset screen,
+    FloorPlanViewTransform view, {
+    required bool freeAngle,
+    bool Function(Offset world)? onScreen,
+  }) {
+    _moveSnap = controller
+        .previewMoveSnapped(
+          view.toWorld(screen) - _downWorld!,
+          toleranceCm: view.screenToCm(pickPixels),
+          magnetOff: freeAngle,
+          guideEndVisible: onScreen,
+        )
+        .snap;
+  }
+
   Future<void> up(
     Offset screen,
     FloorPlanViewTransform view, {
@@ -231,6 +362,7 @@ class FloorPlanSelectInteraction {
   }) async {
     final mode = _mode;
     _mode = _SelectMode.none;
+    _moveSnap = null;
     final rect = _rectScreen;
     _rectScreen = null;
     switch (mode) {
@@ -288,6 +420,8 @@ class FloorPlanSelectInteraction {
         controller.select(_hit!.id);
       case _SelectMode.rotate:
       case _SelectMode.resize:
+      case _SelectMode.wallEnd:
+        _wallEndResult = null;
         if (dragged) await controller.commitPreview();
       case _SelectMode.none:
         break;
@@ -297,6 +431,8 @@ class FloorPlanSelectInteraction {
   void cancel() {
     _mode = _SelectMode.none;
     _rectScreen = null;
+    _wallEndResult = null;
+    _moveSnap = null;
     controller.cancelPreview();
   }
 }

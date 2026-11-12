@@ -4,11 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/database/department_repository.dart';
 import '../../../../core/models/app_permission.dart';
+import '../../../../core/services/catalog_list_change.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/utils/user_facing_error_messages.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
 import '../../../../core/widgets/section_card.dart';
-import '../../../../core/widgets/settings_list_conflict_dialog.dart';
 import '../../providers/building_catalog_provider.dart';
 import '../../providers/department_directory_provider.dart';
 import 'catalog_entry_row.dart';
@@ -35,49 +35,35 @@ class _DepartmentsSettingsViewState
   bool get _canManage =>
       PermissionService.instance.can(AppPermission.manageBuildingCatalog);
 
-  /// Κάθε αλλαγή του καταλόγου περνά από εδώ: διαβάζει την αφετηρία μόλις πριν
-  /// γράψει (ώστε ο φρουρός να κρίνει φρέσκα δεδομένα), γράφει, και ξεπλένει
-  /// τα caches που δείχνουν κτίρια.
+  /// Κάθε αλλαγή και των δύο καταλόγων περνά από εδώ.
+  ///
+  /// Το [write] εφαρμόζει **την αλλαγή**, όχι έτοιμη λίστα: η οθόνη μπορεί να
+  /// δείχνει εικόνα που γέρασε, και ό,τι πρόσθεσε στο μεταξύ ο συνάδελφος
+  /// πρέπει να μείνει. Αν εκείνος άγγιξε το ίδιο στοιχείο, η αλλαγή δεν
+  /// γίνεται καθόλου — ο χρήστης βλέπει τη φρέσκια λίστα και ξαναποφασίζει.
   ///
   /// Το [afterSave] τρέχει **μόνο** αν η εγγραφή του καταλόγου πέτυχε: εκεί
   /// ζει η ενημέρωση των τμημάτων, ώστε να μη γίνει ποτέ ενώ ο κατάλογος
   /// έμεινε ανέγγιχτος.
-  Future<void> _mutate(
-    List<String> Function(List<String> current) change, {
+  Future<void> _applyChange({
+    required Future<void> Function() write,
+    required VoidCallback refresh,
     Future<String?> Function()? afterSave,
     String? successMessage,
   }) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final storedRaw = await readBuildingCatalogRaw();
-      final current = await ref.read(buildingCatalogProvider.future);
-      final next = sortBuildings(change(List<String>.from(current)));
-      if (!mounted) return;
-
-      final saved = await saveSettingsListWithConflictPrompt(
-        context,
-        listLabel: 'λίστα κτιρίων',
-        save: ({required force}) => writeBuildingCatalog(
-          next,
-          expected: force ? null : effectiveBuildingCatalogText(storedRaw),
-        ),
-      );
-      if (!saved) {
-        _refresh();
-        if (!mounted) return;
-        _say(
-          'Η αποθήκευση ακυρώθηκε — η λίστα ανανεώθηκε με τα τρέχοντα '
-          'κτίρια. Ελέγξτε τα και δοκιμάστε ξανά.',
-        );
-        return;
-      }
-
+      await write();
       final extra = afterSave == null ? null : await afterSave();
-      _refresh();
+      refresh();
       if (!mounted) return;
       final message = [?successMessage, ?extra].join(' ');
       if (message.isNotEmpty) _say(message);
+    } on CatalogListChangedException catch (changed) {
+      refresh();
+      if (!mounted) return;
+      _say(changed.userMessage);
     } catch (e) {
       if (!mounted) return;
       _say('Αποτυχία: ${humanizeUserFacingError(e)}', error: true);
@@ -85,6 +71,17 @@ class _DepartmentsSettingsViewState
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  Future<void> _mutate(
+    CatalogListChange change, {
+    Future<String?> Function()? afterSave,
+    String? successMessage,
+  }) => _applyChange(
+    write: () => changeBuildingCatalog(ref, change),
+    refresh: _refresh,
+    afterSave: afterSave,
+    successMessage: successMessage,
+  );
 
   void _refresh() {
     ref.invalidate(buildingUsageProvider);
@@ -111,7 +108,7 @@ class _DepartmentsSettingsViewState
     );
     if (name == null) return;
     await _mutate(
-      (current) => [...current, name],
+      CatalogListChange.add(name),
       successMessage: 'Προστέθηκε το κτίριο «$name».',
     );
   }
@@ -128,15 +125,11 @@ class _DepartmentsSettingsViewState
     );
     if (name == null || name == building) return;
     await _mutate(
-      (current) => [
-        for (final b in current)
-          if (b == building) name else b,
-      ],
+      CatalogListChange.rename(from: building, to: name),
       afterSave: () async {
         final db = await DatabaseHelper.instance.database;
-        final touched = await DepartmentRepository(
-          db,
-        ).renameBuildingInDepartments(from: building, to: name);
+        final touched = await DepartmentRepository(db)
+            .renameBuildingInDepartments(from: building, to: name);
         return touched == 0
             ? null
             : 'Ενημερώθηκαν $touched ${touched == 1 ? 'τμήμα' : 'τμήματα'}.';
@@ -182,15 +175,11 @@ class _DepartmentsSettingsViewState
     if (confirmed != true) return;
 
     await _mutate(
-      (current) => [
-        for (final b in current)
-          if (b != building) b,
-      ],
+      CatalogListChange.remove(building),
       afterSave: () async {
         final db = await DatabaseHelper.instance.database;
-        final cleared = await DepartmentRepository(
-          db,
-        ).clearBuildingFromDepartments(building);
+        final cleared = await DepartmentRepository(db)
+            .clearBuildingFromDepartments(building);
         return cleared == 0
             ? null
             : '$cleared ${cleared == 1 ? 'τμήμα έμεινε' : 'τμήματα έμειναν'} '
@@ -228,40 +217,15 @@ class _DepartmentsSettingsViewState
   // οθόνη από κάτω ξαναχτιζόταν.
 
   Future<void> _mutateGroups(
-    List<String> Function(List<String> current) change, {
+    CatalogListChange change, {
     Future<String?> Function()? afterSave,
     String? successMessage,
-  }) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      final storedRaw = await readDepartmentGroupCatalogRaw();
-      final current = await ref.read(departmentGroupCatalogProvider.future);
-      final next = sortDepartmentGroups(change(List<String>.from(current)));
-      if (!mounted) return;
-
-      final saved = await saveSettingsListWithConflictPrompt(
-        context,
-        listLabel: 'λίστα ομάδων',
-        save: ({required force}) => writeDepartmentGroupCatalog(
-          next,
-          expected: force ? null : storedRaw,
-        ),
-      );
-      if (!saved) return;
-
-      final extra = afterSave == null ? null : await afterSave();
-      _refreshGroups();
-      if (!mounted) return;
-      final message = [?successMessage, ?extra].join(' ');
-      if (message.isNotEmpty) _say(message);
-    } catch (e) {
-      if (!mounted) return;
-      _say('Αποτυχία: ${humanizeUserFacingError(e)}', error: true);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+  }) => _applyChange(
+    write: () => changeDepartmentGroupCatalog(ref, change),
+    refresh: _refreshGroups,
+    afterSave: afterSave,
+    successMessage: successMessage,
+  );
 
   void _refreshGroups() {
     ref.invalidate(departmentGroupUsageProvider);
@@ -299,7 +263,7 @@ class _DepartmentsSettingsViewState
     );
     if (name == null) return;
     await _mutateGroups(
-      (current) => [...current, name],
+      CatalogListChange.add(name),
       successMessage: 'Προστέθηκε η ομάδα «$name».',
     );
   }
@@ -316,15 +280,11 @@ class _DepartmentsSettingsViewState
     );
     if (name == null || name == group) return;
     await _mutateGroups(
-      (current) => [
-        for (final g in current)
-          if (g == group) name else g,
-      ],
+      CatalogListChange.rename(from: group, to: name),
       afterSave: () async {
         final db = await DatabaseHelper.instance.database;
-        final touched = await DepartmentRepository(
-          db,
-        ).renameGroupInDepartments(from: group, to: name);
+        final touched = await DepartmentRepository(db)
+            .renameGroupInDepartments(from: group, to: name);
         return touched == 0
             ? null
             : 'Ενημερώθηκαν $touched ${touched == 1 ? 'τμήμα' : 'τμήματα'}.';
@@ -369,15 +329,11 @@ class _DepartmentsSettingsViewState
     if (confirmed != true) return;
 
     await _mutateGroups(
-      (current) => [
-        for (final g in current)
-          if (g != group) g,
-      ],
+      CatalogListChange.remove(group),
       afterSave: () async {
         final db = await DatabaseHelper.instance.database;
-        final cleared = await DepartmentRepository(
-          db,
-        ).clearGroupFromDepartments(group);
+        final cleared = await DepartmentRepository(db)
+            .clearGroupFromDepartments(group);
         return cleared == 0
             ? null
             : 'Έμειναν χωρίς ομάδα $cleared '

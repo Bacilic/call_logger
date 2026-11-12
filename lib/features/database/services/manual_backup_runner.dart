@@ -31,10 +31,18 @@ enum ManualBackupOutcome {
 
 /// Το αποτέλεσμα, χωρίς καμία γνώση διεπαφής.
 class ManualBackupResult {
-  const ManualBackupResult(this.outcome, {this.message, this.brokenFilePath});
+  const ManualBackupResult(
+    this.outcome, {
+    this.message,
+    this.brokenFilePath,
+    this.needsReading = false,
+  });
 
   final ManualBackupOutcome outcome;
   final String? message;
+
+  /// Το μήνυμα λέει κάτι που πρέπει να προλάβει να διαβαστεί.
+  final bool needsReading;
 
   /// Πού κατέληξε το σημαδεμένο αρχείο, όταν η έκβαση είναι
   /// [ManualBackupOutcome.verificationFailed].
@@ -111,7 +119,11 @@ Future<ManualBackupResult> runManualBackup({
   return ManualBackupResult(
     ManualBackupOutcome.success,
     message: result.outputPath != null
-        ? 'Αντίγραφο: ${result.outputPath}'
+        ? [
+            'Αντίγραφο: ${result.outputPath}.',
+            ...result.retentionNotes,
+          ].join(' ')
         : (result.message ?? 'Επιτυχία'),
+    needsReading: result.retentionNotes.isNotEmpty,
   );
 }

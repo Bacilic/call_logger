@@ -83,11 +83,14 @@ String _unreadPhrase(int count) =>
 ///   εξηγηθεί γιατί ένα γρήγορο αντίγραφο ήταν σωστή απόφαση και όχι παράλειψη.
 /// - [includedParts]: ό,τι μπήκε πράγματι μέσα, με τα λόγια του χρήστη.
 /// - [missingParts]: ό,τι ζητήθηκε αλλά δεν μπήκε, με την αιτία μαζί.
+/// - [retentionNotes]: όσα πρέπει να μάθει ο χρήστης για τα **παλιά** αντίγραφα,
+///   ολόκληρες προτάσεις. Το αντίγραφο μετρά ως επιτυχημένο ούτως ή άλλως.
 String buildBackupCompletionMessage({
   required bool isFull,
   required bool wantsBundle,
   required List<String> includedParts,
   required List<String> missingParts,
+  List<String> retentionNotes = const [],
 }) {
   final tail = includedParts.isEmpty ? '' : ' (${includedParts.join(', ')})';
 
@@ -98,8 +101,11 @@ String buildBackupCompletionMessage({
                   'έχουν αλλάξει από το τελευταίο πλήρες.'
             : 'Το αντίγραφο ολοκληρώθηκε.');
 
-  if (missingParts.isEmpty) return headline;
-  return '$headline Δεν μπήκε: ${missingParts.join('· ')}.';
+  return [
+    headline,
+    if (missingParts.isNotEmpty) 'Δεν μπήκε: ${missingParts.join('· ')}.',
+    ...retentionNotes,
+  ].join(' ');
 }
 
 /// Το μήνυμα ενός αντιγράφου που γράφτηκε αλλά δεν πέρασε τον έλεγχο.

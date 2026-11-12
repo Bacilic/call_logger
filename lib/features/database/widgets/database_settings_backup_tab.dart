@@ -376,7 +376,14 @@ class _DatabaseSettingsBackupTabState
           _reloadPendingChangesFuture();
         });
         ref.invalidate(backupRestoreTooltipProvider);
-        messenger.showSnackBar(SnackBar(content: Text(result.message!)));
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(result.message!),
+            duration: result.needsReading
+                ? const Duration(seconds: 15)
+                : const Duration(seconds: 4),
+          ),
+        );
       case ManualBackupOutcome.verificationFailed:
         // Ο φάκελος ξαναδιαβάζεται ούτως ή άλλως: το αρχείο άλλαξε όνομα, και
         // η λίστα αντιγράφων δείχνει ακόμη το παλιό.

@@ -126,6 +126,7 @@ class _BuildingMapSheetViewportState
 
   @override
   void dispose() {
+    _unregisterUnsavedDraft();
     HardwareKeyboard.instance.removeHandler(_handleGlobalSpaceKey);
     _mapDisplayNameCtrl?.dispose();
     _mapDisplayNameFocus?.dispose();
@@ -138,6 +139,24 @@ class _BuildingMapSheetViewportState
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleGlobalSpaceKey);
     unawaited(_preloadNativeToolCursors());
+    _unregisterUnsavedDraft = BuildingMapUnsavedDraft.register(
+      _hasUnsavedDraft,
+    );
+  }
+
+  late final VoidCallback _unregisterUnsavedDraft;
+
+  /// Υπάρχει σχήμα ή επωνυμία τμήματος που περιμένει το ✓ — ο ίδιος
+  /// έλεγχος που ανάβει το κουμπί «Αποθήκευση αλλαγών».
+  bool _hasUnsavedDraft() {
+    if (!mounted) return false;
+    final draft = ref.read(buildingMapDraftShapeProvider);
+    if (draft == null) return false;
+    final dept = _departmentById(
+      widget.activeDepartments,
+      ref.read(buildingMapSelectedDepartmentIdToMapProvider),
+    );
+    return _hasDraftChanges(dept, draft);
   }
 
   /// True όταν το πληκτρολόγιο «ανήκει» σε πεδίο κειμένου (π.χ. αναζήτηση, επωνυμία χάρτη)
@@ -1117,8 +1136,7 @@ class _BuildingMapSheetViewportState
                                     width: pencilRect.width,
                                     height: pencilRect.height,
                                     child: Tooltip(
-                                      message:
-                                          'Επωνυμία χάρτη (ή διπλό κλικ στην ετικέτα)',
+                                      message: 'Επωνυμία χάρτη (ή διπλό κλικ στην ετικέτα)',
                                       child: IconButton(
                                         padding: EdgeInsets.zero,
                                         visualDensity: VisualDensity.compact,
@@ -1129,9 +1147,9 @@ class _BuildingMapSheetViewportState
                                         icon: Icon(
                                           Icons.edit_outlined,
                                           size: 20,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                         onPressed: () {
                                           _beginMapDisplayNameEditing(
@@ -1191,12 +1209,11 @@ class _BuildingMapSheetViewportState
                                     ),
                                     decoration: InputDecoration(
                                       isDense: true,
-                                      hintText:
-                                          'Enter: τέλος · Shift+Enter: νέα γραμμή · ✓ για αποθήκευση',
+                                      hintText: 'Enter: τέλος · Shift+Enter: νέα γραμμή · ✓ για αποθήκευση',
                                       filled: true,
-                                      fillColor: Theme.of(
-                                        context,
-                                      ).colorScheme.surface,
+                                      fillColor: Theme.of(context)
+                                          .colorScheme
+                                          .surface,
                                       contentPadding:
                                           const EdgeInsets.symmetric(
                                             horizontal: 10,
@@ -1264,9 +1281,9 @@ class _BuildingMapSheetViewportState
                               child: Material(
                                 elevation: 4,
                                 borderRadius: BorderRadius.circular(10),
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainerHigh,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHigh,
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
@@ -1294,9 +1311,9 @@ class _BuildingMapSheetViewportState
                                             child: Icon(
                                               Icons.drag_indicator,
                                               size: 20,
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.onSurfaceVariant,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
                                             ),
                                           ),
                                         ),

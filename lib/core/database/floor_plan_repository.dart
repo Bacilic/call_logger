@@ -19,6 +19,7 @@ class FloorPlanRepository {
 
   static const String _elements = 'building_map_plan_elements';
   static const String _state = 'building_map_floor_state';
+  static const String _patterns = 'building_map_floor_patterns';
 
   Future<List<FloorPlanElement>> listElements(int floorId) async {
     final rows = await db.query(
@@ -174,14 +175,14 @@ class FloorPlanRepository {
 
   Future<Uint8List?> readPatternImage(int floorId) async {
     final rows = await db.query(
-      _state,
-      columns: ['pattern_image'],
+      _patterns,
+      columns: ['image_data'],
       where: 'floor_id = ?',
       whereArgs: [floorId],
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    final data = rows.first['pattern_image'];
+    final data = rows.first['image_data'];
     return data is Uint8List ? data : null;
   }
 
@@ -193,10 +194,13 @@ class FloorPlanRepository {
   ) async {
     await db.transaction((txn) async {
       await _ensureRow(txn, floorId);
+      await txn.insert(_patterns, {
+        'floor_id': floorId,
+        'image_data': bytes,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       await txn.update(
         _state,
         {
-          'pattern_image': bytes,
           'pattern_hash': floorImageHash(bytes),
           ...placement.patternPlacementMap(),
           'changed_at': _now(),
@@ -223,12 +227,15 @@ class FloorPlanRepository {
   /// Αφαιρεί την εικόνα του πατρόν. Η βαθμονόμηση μένει: ένα νέο πατρόν του
   /// ίδιου ορόφου μάλλον έχει την ίδια κλίμακα.
   Future<void> clearPattern(int floorId) async {
-    await db.update(
-      _state,
-      {'pattern_image': null, 'pattern_hash': null, 'changed_at': _now()},
-      where: 'floor_id = ?',
-      whereArgs: [floorId],
-    );
+    await db.transaction((txn) async {
+      await txn.delete(_patterns, where: 'floor_id = ?', whereArgs: [floorId]);
+      await txn.update(
+        _state,
+        {'pattern_hash': null, 'changed_at': _now()},
+        where: 'floor_id = ?',
+        whereArgs: [floorId],
+      );
+    });
   }
 
   /// Σβήνει ολόκληρο τον νέο χάρτη του ορόφου, με τα αντικείμενα και τις
@@ -240,6 +247,11 @@ class FloorPlanRepository {
       whereArgs: [floorId],
     );
     await executor.delete(_state, where: 'floor_id = ?', whereArgs: [floorId]);
+    await executor.delete(
+      _patterns,
+      where: 'floor_id = ?',
+      whereArgs: [floorId],
+    );
     // Πρώτα το δίκτυο, όσο ξέρουμε ακόμη ποια αντικείμενα ήταν του ορόφου.
     // Καλώδιο προς άλλον όροφο φεύγει ολόκληρο: χωρίς το ένα άκρο δεν
     // είναι καλώδιο.

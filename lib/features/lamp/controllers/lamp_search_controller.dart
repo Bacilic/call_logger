@@ -417,15 +417,13 @@ class LampSearchController {
   }
 
   bool readPathCheckIsErrorForSnack(LampOldDbStatus? status) {
-    return status != LampOldDbStatus.pathEmpty &&
-        status != LampOldDbStatus.pendingCreation;
+    return status != LampOldDbStatus.pathEmpty;
   }
 
   Future<void> fieldSearch({bool showProgressSnack = true}) async {
     if (!readPathReadyForQuery) {
       host.showSnack(
-        host.readPathCheck?.userMessageGreek ??
-            'Η βάση προς ανάγνωση δεν είναι έτοιμη. Ανοίξτε «Ρυθμίσεις διαδρομών».',
+        host.readPathCheck?.userMessageGreek ?? 'Η βάση προς ανάγνωση δεν είναι έτοιμη. Ανοίξτε «Ρυθμίσεις διαδρομών».',
         isError: readPathCheckIsErrorForSnack(host.readPathCheck?.status),
       );
       return;

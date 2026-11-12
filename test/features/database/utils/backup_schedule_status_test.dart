@@ -8,6 +8,7 @@ import 'package:call_logger/features/database/models/database_backup_settings.da
 import 'package:call_logger/features/database/utils/backup_destination_folder_validator.dart';
 import 'package:call_logger/features/database/utils/backup_schedule_status.dart';
 import 'package:call_logger/features/database/utils/backup_schedule_utils.dart';
+import 'package:call_logger/features/database/utils/backup_trigger_decision.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 DatabaseBackupSettings _settings({
@@ -304,6 +305,62 @@ void main() {
         now: now,
       );
       expect(h.isWarning, isFalse);
+    });
+  });
+
+  group('Ρολόι λάθος: ώρα τελευταίου αντιγράφου στο μέλλον', () {
+    final future = DateTime(2026, 8, 27, 9, 40);
+
+    test('η καρτέλα Αντιγράφων προειδοποιεί και λέει την ώρα', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(lastAttempt: future),
+        pendingChanges: 50,
+        now: now,
+        reference: BackupElapsedReference(),
+      );
+      expect(info.hintIsWarning, isTrue);
+      expect(info.hintText, contains('ώρα στο μέλλον'));
+      expect(info.hintText, contains('27-08-2026 09:40'));
+      expect(info.hintText, contains('λάθος ρολόι'));
+    });
+
+    test(
+      'η πρόβλεψη «επόμενο» μετρά από την πρώτη ματιά, όχι από το μέλλον',
+      () {
+        final info = BackupScheduleStatusFormatter.build(
+          settings: _settings(lastAttempt: future),
+          pendingChanges: 50,
+          now: now,
+          reference: BackupElapsedReference(),
+        );
+        expect(info.nextBackupText, contains('12:15'));
+      },
+    );
+
+    test(
+      'η γραμμή υγείας των Στατιστικών προειδοποιεί, και για τον συνάδελφο',
+      () {
+        final h = BackupScheduleStatusFormatter.statsBackupHealth(
+          settings: _settings(lastAttempt: future),
+          pendingChanges: 5000,
+          canManageBackups: false,
+          now: now,
+          reference: BackupElapsedReference(),
+        );
+        expect(h.isWarning, isTrue);
+        expect(h.text, contains('λάθος ρολόι'));
+        expect(h.text, contains('5000'));
+      },
+    );
+
+    test('διαφορά λίγων λεπτών ανάμεσα σε σταθμούς δεν είναι συναγερμός', () {
+      final info = BackupScheduleStatusFormatter.build(
+        settings: _settings(lastAttempt: now.add(const Duration(minutes: 2))),
+        pendingChanges: 50,
+        now: now,
+        reference: BackupElapsedReference(),
+      );
+      expect(info.hintText, isNull);
     });
   });
 

@@ -34,6 +34,7 @@ String databaseTableLabelEl(String? tableName) {
     'building_map_floor_images' => 'Εικόνες κατόψεων',
     'building_map_plan_elements' => 'Στοιχεία σχεδίου χάρτη',
     'building_map_floor_state' => 'Κατάσταση ορόφων χάρτη',
+    'building_map_floor_patterns' => 'Εικόνες πατρόν ορόφων',
     'building_map_object_kinds' => 'Είδη αντικειμένων χάρτη',
     'building_map_objects' => 'Αντικείμενα χάρτη',
     'building_map_placements' => 'Θέσεις στον χάρτη',

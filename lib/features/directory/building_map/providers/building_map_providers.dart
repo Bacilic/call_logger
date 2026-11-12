@@ -309,6 +309,27 @@ class BuildingMapEditFromSelectionTapNotifier extends Notifier<bool> {
   }
 }
 
+/// «Υπάρχει σχήμα τμήματος που δεν αποθηκεύτηκε με το ✓;» — όπως το
+/// απαντά ο καμβάς του χάρτη που είναι ανοιχτός. Το ρωτά το κλείσιμο της
+/// εφαρμογής: η «Επεξεργασία» μόνη της δεν έχει τίποτα να χάσει, γιατί ό,τι
+/// άλλο αλλάζει εκεί γράφεται αμέσως (απόφαση Διευθυντή 12/11/2026).
+///
+/// Ο καμβάς δηλώνει τον έλεγχό του με [register] και τον αποσύρει με τη
+/// συνάρτηση που του επιστρέφεται· ένας καμβάς που κλείνει δεν σβήνει τον
+/// έλεγχο ενός νεότερου.
+abstract final class BuildingMapUnsavedDraft {
+  static bool Function()? _check;
+
+  static VoidCallback register(bool Function() check) {
+    _check = check;
+    return () {
+      if (identical(_check, check)) _check = null;
+    };
+  }
+
+  static bool get exists => _check?.call() ?? false;
+}
+
 /// Προβολή (`false`) vs επεξεργασία χάρτη (`true`) στο fullscreen dialog.
 final buildingMapUiEditModeProvider =
     NotifierProvider<BuildingMapUiEditModeNotifier, bool>(

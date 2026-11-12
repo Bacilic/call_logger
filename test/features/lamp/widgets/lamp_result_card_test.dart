@@ -199,12 +199,11 @@ void main() {
         tester,
         width: 300,
         row: _fullRow,
-        onSaveSection:
-            ({
-              required id,
-              required sectionType,
-              required updatedFields,
-            }) async => const EquipmentSectionSaveResult(success: true),
+        onSaveSection: ({
+          required id,
+          required sectionType,
+          required updatedFields,
+        }) async => const EquipmentSectionSaveResult(success: true),
       );
 
       await tester.ensureVisible(find.byTooltip('Επεξεργασία ΙΔΙΟΚΤΗΤΗΣ'));
@@ -278,7 +277,8 @@ void main() {
           'maintenance_contract': 'αύριο',
           'receiving_date': '2024-03-05',
           'end_of_guarantee_date': '2026-03-31',
-          'cost': '12',
+          // Το κόστος στη μορφή των υπόλοιπων κοστών της Λάμπας.
+          'cost': '12.0000',
         },
       ]);
       expect(find.byType(AlertDialog), findsNothing);

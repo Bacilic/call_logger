@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/department_repository.dart';
-import '../../../core/services/settings_service_catalogs.dart';
+import '../../../core/services/catalog_list_change.dart';
 import '../../../core/services/settings_service.dart';
 import '../../../core/utils/homoglyph_text_normalizer.dart';
 
@@ -57,9 +57,9 @@ final departmentGroupUsageProvider = FutureProvider<DepartmentGroupUsage>((
 List<String> sortDepartmentGroups(Iterable<String> groups) {
   final out = groups.map((g) => g.trim()).where((g) => g.isNotEmpty).toList()
     ..sort(
-      (a, b) => HomoglyphTextNormalizer.normalizeForComparison(
-        a,
-      ).compareTo(HomoglyphTextNormalizer.normalizeForComparison(b)),
+      (a, b) =>
+          HomoglyphTextNormalizer.normalizeForComparison(a)
+              .compareTo(HomoglyphTextNormalizer.normalizeForComparison(b)),
     );
   return out;
 }
@@ -92,46 +92,33 @@ String? matchBuildingInCatalog(String? candidate, List<String> catalog) {
   return null;
 }
 
-/// Γράφει τον κατάλογο και επιστρέφει `false` όταν ο χρήστης ακύρωσε επειδή
-/// κάποιος άλλος πρόλαβε — ο καλών ξαναδιαβάζει και ρωτά ξανά.
+/// Εφαρμόζει μία αλλαγή στον κατάλογο κτιρίων, πάνω στη λίστα που ισχύει τη
+/// στιγμή της εγγραφής — όχι πάνω σε ό,τι έδειχνε η οθόνη.
 ///
-/// Ζει εδώ ώστε η οθόνη διαχείρισης και κάθε μελλοντικός καλών να γράφουν από
-/// το ίδιο σημείο, με την ίδια μορφοποίηση.
-Future<void> writeBuildingCatalog(
-  List<String> buildings, {
-  required String? expected,
-}) async {
-  await SettingsService().catalogs.setBuildingCatalog(
-    buildings.join(', '),
-    expected: expected,
+/// Η χρήση των τμημάτων ξαναδιαβάζεται, γιατί είναι ο κατάλογος όσο δεν έχει
+/// οριστεί άλλος: μια παλιά εικόνα της θα έγραφε λειψή την πρώτη λίστα.
+///
+/// Πετά [CatalogListChangedException] όταν κάποιος άλλος άγγιξε το ίδιο
+/// στοιχείο στο μεταξύ· τότε δεν γράφεται τίποτα.
+Future<void> changeBuildingCatalog(
+  WidgetRef ref,
+  CatalogListChange change,
+) async {
+  final usage = await ref.refresh(buildingUsageProvider.future);
+  await SettingsService().catalogs.changeBuildingCatalog(
+    change,
+    whenUnset: sortBuildings(usage.perBuilding.keys),
   );
 }
 
-/// Το ακατέργαστο κείμενο του καταλόγου — η αφετηρία που κρατά η οθόνη για
-/// τον φρουρό διένεξης.
-Future<String> readBuildingCatalogRaw() =>
-    SettingsService().catalogs.getBuildingCatalogRaw();
-
-/// Τι θα έδειχνε η οθόνη για μια αποθηκευμένη τιμή — ο φρουρός συγκρίνει με
-/// αυτό, όχι με το ωμό κείμενο.
-String effectiveBuildingCatalogText(String? stored) =>
-    SettingsServiceCatalogs.effectiveBuildingCatalog(stored);
-
-// --- Οι ίδιοι τρεις βοηθοί για τις ομάδες, ώστε η οθόνη διαχείρισης να
-// --- δουλεύει και τους δύο καταλόγους από το ίδιο σχήμα.
-
-Future<void> writeDepartmentGroupCatalog(
-  List<String> groups, {
-  required String? expected,
-}) async {
-  await SettingsService().catalogs.setDepartmentGroupCatalog(
-    groups.join(', '),
-    expected: expected,
+/// Το ίδιο για τον κατάλογο ομάδων.
+Future<void> changeDepartmentGroupCatalog(
+  WidgetRef ref,
+  CatalogListChange change,
+) async {
+  final usage = await ref.refresh(departmentGroupUsageProvider.future);
+  await SettingsService().catalogs.changeDepartmentGroupCatalog(
+    change,
+    whenUnset: sortDepartmentGroups(usage.perGroup.keys),
   );
 }
-
-Future<String> readDepartmentGroupCatalogRaw() =>
-    SettingsService().catalogs.getDepartmentGroupCatalogRaw();
-
-String effectiveDepartmentGroupCatalogText(String? stored) =>
-    SettingsServiceCatalogs.effectiveDepartmentGroupCatalog(stored);

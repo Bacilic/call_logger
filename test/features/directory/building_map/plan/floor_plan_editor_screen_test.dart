@@ -75,6 +75,7 @@ void main() {
     initSqfliteFfiForTests();
     db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
     await migrateDatabaseToV69(db);
+    await migrateDatabaseToV77(db);
     repo = FloorPlanRepository(db);
     catalog = _FakeCatalog([
       DepartmentModel(id: 10, name: 'Ακτινολογικό', floorId: 1),
@@ -541,6 +542,90 @@ void main() {
     final top = (await tester.runAsync(() => repo.listElements(1)))!.first;
     expect(top.points.first.dy, closeTo(-100, 2));
     expect(top.points.last.dy, closeTo(-100, 2));
+  });
+
+  testWidgets('τοίχος που σύρεται κοντά σε άλλον κουμπώνει ακριβώς πάνω του, '
+      'και γράφεται έτσι στη βάση', (tester) async {
+    await tester.runAsync(seedBox);
+    await pumpEditor(tester);
+    await tester.tap(find.byTooltip('Επιλογή'));
+    await tester.pump();
+
+    // Ο πάνω τοίχος αφήνεται λίγο πριν και λίγο δίπλα από τον κάτω: οι
+    // άκρες του κουμπώνουν στις άκρες εκείνου.
+    await drag(
+      tester,
+      screenOf(tester, const Offset(200, 0)),
+      screenOf(tester, const Offset(201, 298)),
+    );
+
+    final top = (await tester.runAsync(() => repo.listElements(1)))!.first;
+    expect(top.points.first, const Offset(0, 300));
+    expect(top.points.last, const Offset(400, 300));
+  });
+
+  testWidgets('σύρσιμο της άκρης ενός επιλεγμένου τοίχου αλλάζει το μήκος '
+      'του, και γράφεται στη βάση', (tester) async {
+    await tester.runAsync(seedBox);
+    await pumpEditor(tester);
+    await tester.tap(find.byTooltip('Επιλογή'));
+    await tester.pump();
+
+    // Ο πάνω τοίχος πάει από το 0 ως τα 400 εκ.· η δεξιά του άκρη 1 μ. πίσω.
+    // Η λαβή κάθεται έξω από το ορατό άκρο: μισό πάχος και 8 pixel πέρα.
+    await click(tester, screenOf(tester, const Offset(200, 0)));
+    await drag(
+      tester,
+      screenOf(tester, const Offset(407.5, 0)) + const Offset(8, 0),
+      screenOf(tester, const Offset(307.5, 0)) + const Offset(8, 0),
+    );
+
+    final top = (await tester.runAsync(() => repo.listElements(1)))!.first;
+    expect(top.points.first, Offset.zero);
+    expect(top.points.last.dx, closeTo(300, 5));
+    expect(top.points.last.dy, 0);
+  });
+
+  testWidgets('σύρσιμο της άκρης με πατημένο Ctrl: η άκρη πηγαίνει ελεύθερα '
+      'και ο τοίχος αλλάζει κλίση', (tester) async {
+    await tester.runAsync(seedBox);
+    await pumpEditor(tester);
+    await tester.tap(find.byTooltip('Επιλογή'));
+    await tester.pump();
+
+    // Ο πάνω τοίχος (0,0)–(400,0): η δεξιά του άκρη 1,5 μ. προς τα πάνω.
+    await click(tester, screenOf(tester, const Offset(200, 0)));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await drag(
+      tester,
+      screenOf(tester, const Offset(407.5, 0)) + const Offset(8, 0),
+      screenOf(tester, const Offset(407.5, -150)) + const Offset(8, 0),
+    );
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+    final top = (await tester.runAsync(() => repo.listElements(1)))!.first;
+    expect(top.points.first, Offset.zero);
+    expect(top.points.last.dy, lessThan(-100));
+  });
+
+  testWidgets('επιλεγμένος τοίχος: το «+» της μπάρας «Πάχος» τον παχαίνει, '
+      'και γράφεται στη βάση', (tester) async {
+    await tester.runAsync(seedBox);
+    await pumpEditor(tester);
+    await tester.tap(find.byTooltip('Επιλογή'));
+    await tester.pump();
+    expect(find.byTooltip('Παχύτερος τοίχος'), findsNothing);
+
+    await click(tester, screenOf(tester, const Offset(200, 0)));
+    await tester.runAsync(() async {
+      await tester.tap(find.byTooltip('Παχύτερος τοίχος'));
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+    });
+    await tester.pump();
+
+    final walls = (await tester.runAsync(() => repo.listElements(1)))!;
+    expect(walls.first.wallThicknessCm, 20);
+    expect(walls[1].wallThicknessCm, kFloorPlanDefaultWallThicknessCm);
   });
 
   testWidgets('«Ενεργοποίηση νέου χάρτη» δείχνει ποιο τμήμα λείπει, και με '

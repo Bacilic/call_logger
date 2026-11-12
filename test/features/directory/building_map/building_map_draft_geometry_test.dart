@@ -412,4 +412,28 @@ void main() {
       );
     });
   });
+  group('Πρόχειρο που περιμένει το ✓, για το κλείσιμο της εφαρμογής', () {
+    test('χωρίς ανοιχτό καμβά δεν υπάρχει πρόχειρο', () {
+      expect(BuildingMapUnsavedDraft.exists, isFalse);
+    });
+
+    test('απαντά ο καμβάς που δηλώθηκε, και σωπαίνει όταν αποσυρθεί', () {
+      var unsaved = true;
+      final unregister = BuildingMapUnsavedDraft.register(() => unsaved);
+      expect(BuildingMapUnsavedDraft.exists, isTrue);
+      unsaved = false;
+      expect(BuildingMapUnsavedDraft.exists, isFalse);
+      unregister();
+      unsaved = true;
+      expect(BuildingMapUnsavedDraft.exists, isFalse);
+    });
+
+    test('ο παλιός καμβάς που κλείνει δεν σβήνει τον νεότερο', () {
+      final unregisterOld = BuildingMapUnsavedDraft.register(() => false);
+      final unregisterNew = BuildingMapUnsavedDraft.register(() => true);
+      unregisterOld();
+      expect(BuildingMapUnsavedDraft.exists, isTrue);
+      unregisterNew();
+    });
+  });
 }

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/utils/date_parser_util.dart';
 import '../models/lamp_equipment_view_model.dart';
+import '../models/lamp_field_input.dart';
 
 // Ο διάλογος «Επεξεργασία …» μιας ενότητας της κάρτας Λάμπας: παραλαμβάνει
 // την ενότητα, επιστρέφει μόνο τα αλλαγμένα πεδία, έτοιμα για αποθήκευση.
@@ -207,8 +208,10 @@ class _EditSectionDialogState<T> extends State<EditSectionDialog<T>> {
     if (text.isEmpty) return null;
     return switch (field.type) {
       EditableFieldType.code => int.tryParse(text),
-      EditableFieldType.number when field.fieldKey == 'level' => int.tryParse(
-        text,
+      // Ο έλεγχος έχει ήδη αποκλείσει ό,τι δεν είναι ακέραιος ή ποσό.
+      EditableFieldType.number => int.tryParse(text),
+      EditableFieldType.money => LampFieldInput.moneyForStorage(
+        LampFieldInput.parseGreekMoney(text)!,
       ),
       // Ο έλεγχος έχει ήδη αποκλείσει ό,τι δεν είναι ημερομηνία.
       EditableFieldType.date =>
@@ -237,7 +240,11 @@ class _EditSectionDialogState<T> extends State<EditSectionDialog<T>> {
         }
         return null;
       case EditableFieldType.number:
-        return null;
+        return LampFieldInput.floorError(text);
+      case EditableFieldType.money:
+        return LampFieldInput.parseGreekMoney(text) == null
+            ? LampFieldInput.moneyFormatError
+            : null;
       case EditableFieldType.phone:
         return null;
       case EditableFieldType.code:
@@ -305,6 +312,7 @@ class _EditField extends StatelessWidget {
           labelText: field.label,
           helperText: field.note,
           helperMaxLines: 3,
+          errorMaxLines: 3,
           border: const OutlineInputBorder(),
           suffixIcon: onPickDate == null
               ? null
@@ -323,6 +331,7 @@ class _EditField extends StatelessWidget {
       EditableFieldType.email => TextInputType.emailAddress,
       EditableFieldType.date => TextInputType.datetime,
       EditableFieldType.number => TextInputType.number,
+      EditableFieldType.money => TextInputType.number,
       EditableFieldType.phone => TextInputType.phone,
       EditableFieldType.code => TextInputType.number,
       EditableFieldType.text => TextInputType.text,

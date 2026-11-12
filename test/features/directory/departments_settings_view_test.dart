@@ -9,6 +9,8 @@
 import 'dart:async';
 
 import 'package:call_logger/core/database/department_repository.dart';
+import 'package:call_logger/core/services/settings_service.dart';
+import 'package:call_logger/core/services/settings_service_catalogs.dart';
 import 'package:call_logger/features/directory/providers/building_catalog_provider.dart';
 import 'package:call_logger/features/directory/screens/widgets/departments_settings_view.dart';
 import 'package:flutter/material.dart';
@@ -125,5 +127,123 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  // Η λίστα της οθόνης διαβάστηκε ΠΡΙΝ προσθέσει κάτι ο συνάδελφος. Η δική μου
+  // αλλαγή δεν επιτρέπεται να σβήσει τη δική του — ούτε σιωπηλά, ούτε καθόλου.
+  group('αλλαγή πάνω σε λίστα που πρόλαβε να αλλάξει ο συνάδελφος', () {
+    late Map<String, String> stored;
+
+    setUp(() {
+      stored = <String, String>{};
+      SettingsService.registerAppSettingsProvider(
+        (key) async => stored[key],
+        (key, value) async => stored[key] = value,
+        (key, change) async => stored[key] = change(stored[key]),
+      );
+    });
+
+    Future<void> pumpLiveView(WidgetTester tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            buildingUsageProvider.overrideWith((ref) => BuildingUsage.empty),
+            departmentGroupUsageProvider.overrideWith(
+              (ref) async => DepartmentGroupUsage.empty,
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(child: DepartmentsSettingsView()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> addThroughDialog(
+      WidgetTester tester, {
+      required Finder addButton,
+      required String name,
+    }) async {
+      await tester.tap(addButton);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), name);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('προσθήκη κτιρίου κρατά το κτίριο του συναδέλφου', (
+      tester,
+    ) async {
+      stored['building_catalog'] = 'Κτίριο Α';
+      await pumpLiveView(tester);
+      expect(find.text('Κτίριο Α'), findsOneWidget);
+
+      stored['building_catalog'] = 'Κτίριο Α, Νέα Πτέρυγα';
+
+      await addThroughDialog(
+        tester,
+        addButton: find.text('Προσθήκη').first,
+        name: 'Κτίριο Β',
+      );
+
+      expect(
+        SettingsServiceCatalogs.splitBuildingCatalog(
+          stored['building_catalog'],
+        ),
+        unorderedEquals(['Κτίριο Α', 'Κτίριο Β', 'Νέα Πτέρυγα']),
+      );
+      expect(find.text('Νέα Πτέρυγα'), findsOneWidget);
+    });
+
+    testWidgets('προσθήκη ομάδας κρατά την ομάδα του συναδέλφου', (
+      tester,
+    ) async {
+      stored['department_group_catalog'] = 'Εργαστήρια';
+      await pumpLiveView(tester);
+      expect(find.text('Εργαστήρια'), findsOneWidget);
+
+      stored['department_group_catalog'] = 'Εργαστήρια, Κλινικές';
+
+      await addThroughDialog(
+        tester,
+        addButton: find.text('Προσθήκη').last,
+        name: 'Διοίκηση',
+      );
+
+      expect(
+        SettingsServiceCatalogs.splitDepartmentGroupCatalog(
+          stored['department_group_catalog'],
+        ),
+        unorderedEquals(['Διοίκηση', 'Εργαστήρια', 'Κλινικές']),
+      );
+      expect(find.text('Κλινικές'), findsOneWidget);
+    });
+
+    // Ο συνάδελφος έσβησε το ίδιο κτίριο που πάω να σβήσω: η λίστα του μένει
+    // όπως την άφησε, και η οθόνη το λέει αντί να δηλώσει «Διαγράφηκε».
+    testWidgets('διαγραφή κτιρίου που έσβησε ήδη ο συνάδελφος δεν γράφει '
+        'τίποτα και το λέει', (tester) async {
+      stored['building_catalog'] = 'Κτίριο Α, Κτίριο Β';
+      await pumpLiveView(tester);
+
+      stored['building_catalog'] = 'Κτίριο Β, Νέα Πτέρυγα';
+
+      await tester.tap(find.byTooltip('Διαγραφή').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Διαγραφή'));
+      await tester.pumpAndSettle();
+
+      expect(stored['building_catalog'], 'Κτίριο Β, Νέα Πτέρυγα');
+      expect(find.textContaining('δεν υπάρχει πια'), findsOneWidget);
+      expect(find.textContaining('Διαγράφηκε'), findsNothing);
+      expect(
+        find.text('Νέα Πτέρυγα'),
+        findsOneWidget,
+        reason: 'η οθόνη δείχνει πλέον τη λίστα όπως είναι στη βάση',
+      );
+    });
   });
 }

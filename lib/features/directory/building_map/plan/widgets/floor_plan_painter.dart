@@ -65,10 +65,25 @@ class FloorPlanOverlay {
     this.selectionFrameScreen,
     this.resizeHandlesScreen = const [],
     this.volumeDraft = const [],
+    this.lengthStart,
+    this.lengthEnd,
+    this.rubberThickness = kFloorPlanWallThicknessCm,
+    this.guideLines = const [],
+    this.angleMarks = const [],
   });
 
   final Offset? rubberStart;
   final Offset? rubberEnd;
+
+  /// Το πάχος του τοίχου που σχεδιάζεται τώρα.
+  final double rubberThickness;
+
+  /// Οι γραμμές-οδηγοί πάνω στις οποίες κούμπωσε το σημείο: από την άκρη
+  /// του τοίχου που τις δίνει ως το σημείο.
+  final List<(Offset, Offset)> guideLines;
+
+  /// Οι μοίρες τομής του τοίχου που σχεδιάζεται ή είναι επιλεγμένος.
+  final List<FloorPlanAngleMark> angleMarks;
   final Offset? snapPoint;
   final FloorPlanSnapKind snapKind;
   final FloorPlanSegment? openingWall;
@@ -96,6 +111,11 @@ class FloorPlanOverlay {
 
   /// Οι γωνίες του επίπλου που σχεδιάζεται τώρα, σε συντεταγμένες σχεδίου.
   final List<Offset> volumeDraft;
+
+  /// Τα άκρα του τοίχου του οποίου το μήκος αλλάζει τώρα — για να φαίνεται
+  /// το μήκος του όσο σύρεται η άκρη.
+  final Offset? lengthStart;
+  final Offset? lengthEnd;
 }
 
 /// Οι ετικέτες των αντικειμένων, μορφοποιημένες **μία φορά** σε σταθερό
@@ -262,6 +282,8 @@ class FloorPlanPainter extends CustomPainter {
     _paintOpeningDraft(canvas, pixel);
     _paintRubberBand(canvas, pixel);
     _paintMeasure(canvas, pixel);
+    _paintGuides(canvas, pixel);
+    _paintAngleArcs(canvas, pixel);
     _paintSnap(canvas, pixel);
     canvas.restore();
 
@@ -269,6 +291,7 @@ class FloorPlanPainter extends CustomPainter {
     _paintObjectLabels(canvas);
     _paintDimensionLabels(canvas);
     _paintRubberLength(canvas);
+    _paintAngleLabels(canvas);
     _paintSelectionChrome(canvas);
     canvas.restore();
   }
@@ -412,11 +435,11 @@ class FloorPlanPainter extends CustomPainter {
   }
 
   void _paintSelectedOpenings(Canvas canvas, double pixel) {
-    final paint = Paint()
-      ..color = colors.primary.withValues(alpha: 0.7)
-      ..strokeWidth = kFloorPlanWallThicknessCm + 6 * pixel;
     for (final entry in openingSegments.entries) {
       if (!selectedIds.contains(entry.key)) continue;
+      final paint = Paint()
+        ..color = colors.primary.withValues(alpha: 0.7)
+        ..strokeWidth = entry.value.thickness + 6 * pixel;
       canvas.drawLine(entry.value.a, entry.value.b, paint);
     }
   }
@@ -733,33 +756,43 @@ class FloorPlanPainter extends CustomPainter {
 
   void _paintWalls(Canvas canvas, double pixel) {
     // Ένα ευδιάκριτο ελάχιστο πάχος και στο πιο μακρινό ζουμ.
-    final thickness = math.max(kFloorPlanWallThicknessCm, 2.5 * pixel);
-    final pieces = <FloorPlanSegment>[
-      for (final w in walls)
-        ...wallPiecesWithOpenings(w, openingsByWall[w.id] ?? const []),
-    ];
-    final wallPaint = Paint()
-      ..color = const Color(0xFF37474F)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = thickness
-      ..strokeJoin = StrokeJoin.miter
-      ..strokeCap = StrokeCap.square;
-    for (final chain in chainSegments(pieces)) {
-      final path = Path()..moveTo(chain.first.dx, chain.first.dy);
-      for (final p in chain.skip(1)) {
-        path.lineTo(p.dx, p.dy);
+    double shown(double thickness) => math.max(thickness, 2.5 * pixel);
+    // Οι τοίχοι ενώνονται σε συνεχείς γραμμές ανά πάχος: μια γραμμή
+    // ζωγραφίζεται με ένα μόνο πάχος.
+    final piecesByThickness = <double, List<FloorPlanSegment>>{};
+    for (final w in walls) {
+      (piecesByThickness[w.thickness] ??= []).addAll(
+        wallPiecesWithOpenings(w, openingsByWall[w.id] ?? const []),
+      );
+    }
+    for (final entry in piecesByThickness.entries) {
+      final wallPaint = Paint()
+        ..color = const Color(0xFF37474F)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = shown(entry.key)
+        ..strokeJoin = StrokeJoin.miter
+        ..strokeCap = StrokeCap.square;
+      for (final chain in chainSegments(entry.value)) {
+        final path = Path()..moveTo(chain.first.dx, chain.first.dy);
+        for (final p in chain.skip(1)) {
+          path.lineTo(p.dx, p.dy);
+        }
+        canvas.drawPath(path, wallPaint);
       }
-      canvas.drawPath(path, wallPaint);
     }
 
     if (selectedIds.isEmpty) return;
-    final highlight = Paint()
-      ..color = colors.primary.withValues(alpha: 0.55)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = thickness + 6 * pixel
-      ..strokeCap = StrokeCap.square;
     for (final w in walls) {
-      if (selectedIds.contains(w.id)) canvas.drawLine(w.a, w.b, highlight);
+      if (!selectedIds.contains(w.id)) continue;
+      canvas.drawLine(
+        w.a,
+        w.b,
+        Paint()
+          ..color = colors.primary.withValues(alpha: 0.55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = shown(w.thickness) + 6 * pixel
+          ..strokeCap = StrokeCap.square,
+      );
     }
   }
 
@@ -770,7 +803,7 @@ class FloorPlanPainter extends CustomPainter {
     final dir = (wall.b - wall.a) / wall.length;
     final paint = Paint()
       ..color = colors.tertiary.withValues(alpha: 0.7)
-      ..strokeWidth = kFloorPlanWallThicknessCm + 8 * pixel
+      ..strokeWidth = wall.thickness + 8 * pixel
       ..strokeCap = StrokeCap.butt;
     canvas.drawLine(
       wall.a + dir * range.start,
@@ -785,7 +818,7 @@ class FloorPlanPainter extends CustomPainter {
     if (a == null || b == null) return;
     final paint = Paint()
       ..color = const Color(0xA037474F)
-      ..strokeWidth = math.max(kFloorPlanWallThicknessCm, 2.5 * pixel)
+      ..strokeWidth = math.max(overlay.rubberThickness, 2.5 * pixel)
       ..strokeCap = StrokeCap.square;
     canvas.drawLine(a, b, paint);
   }
@@ -803,26 +836,168 @@ class FloorPlanPainter extends CustomPainter {
     }
   }
 
+  /// Οι γραμμές-οδηγοί: λεπτές μοβ διακεκομμένες, από την άκρη του τοίχου
+  /// ως το σημείο που κούμπωσε — και λίγο πιο πέρα, για να φαίνεται η ευθεία.
+  void _paintGuides(Canvas canvas, double pixel) {
+    if (overlay.guideLines.isEmpty) return;
+    final paint = Paint()
+      ..color = const Color(0xFFAA00FF)
+      ..strokeWidth = 1.6 * pixel;
+    final dash = 6 * pixel;
+    final gap = 4 * pixel;
+    for (final (from, to) in overlay.guideLines) {
+      final d = to - from;
+      final length = d.distance;
+      if (length == 0) continue;
+      final dir = d / length;
+      final total = length + 24 * pixel;
+      for (var at = 0.0; at < total; at += dash + gap) {
+        canvas.drawLine(
+          from + dir * at,
+          from + dir * math.min(at + dash, total),
+          paint,
+        );
+      }
+      canvas.drawCircle(from, 3 * pixel, paint);
+    }
+  }
+
+  static const Color _guideColor = Color(0xFFAA00FF);
+  static const Color _angleColor = Color(0xFF263238);
+
+  /// Το τόξο κάθε γωνίας τομής· η ορθή σημειώνεται με τετραγωνάκι.
+  void _paintAngleArcs(Canvas canvas, double pixel) {
+    for (final mark in overlay.angleMarks) {
+      final paint = Paint()
+        ..color = mark.toGuide ? _guideColor : _angleColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6 * pixel;
+      // Σε παχύ τοίχο το σημάδι μεγαλώνει ώσπου να βγει από το σώμα του —
+      // αλλιώς το σκεπάζει ο τοίχος.
+      final body = mark.bodyHalfWidthCm;
+      if (mark.isRight) {
+        final side = math.max(12 * pixel, body + 6 * pixel);
+        canvas.drawPath(
+          Path()
+            ..moveTo(
+              mark.vertex.dx + mark.armA.dx * side,
+              mark.vertex.dy + mark.armA.dy * side,
+            )
+            ..lineTo(
+              mark.vertex.dx + (mark.armA.dx + mark.armB.dx) * side,
+              mark.vertex.dy + (mark.armA.dy + mark.armB.dy) * side,
+            )
+            ..lineTo(
+              mark.vertex.dx + mark.armB.dx * side,
+              mark.vertex.dy + mark.armB.dy * side,
+            ),
+          paint,
+        );
+        continue;
+      }
+      final start = math.atan2(mark.armA.dy, mark.armA.dx);
+      var sweep = math.atan2(mark.armB.dy, mark.armB.dx) - start;
+      if (sweep > math.pi) sweep -= 2 * math.pi;
+      if (sweep < -math.pi) sweep += 2 * math.pi;
+      final radius = math.max(
+        20 * pixel,
+        mark.clearanceAlongBisector(body) + 6 * pixel,
+      );
+      canvas.drawArc(
+        Rect.fromCircle(center: mark.vertex, radius: radius),
+        start,
+        sweep,
+        false,
+        paint,
+      );
+    }
+  }
+
+  /// Ο αριθμός κάθε γωνίας, όρθιος στην οθόνη, μέσα στο άνοιγμά της.
+  void _paintAngleLabels(Canvas canvas) {
+    for (final mark in overlay.angleMarks) {
+      final vertex = view.toScreen(mark.vertex);
+      Offset screenDir(Offset arm) {
+        final d = view.toScreen(mark.vertex + arm * 100) - vertex;
+        return d.distance == 0 ? Offset.zero : d / d.distance;
+      }
+
+      final a = screenDir(mark.armA);
+      final b = screenDir(mark.armB);
+      var bisector = a + b;
+      // Σε ευθεία (180°) οι δύο κατευθύνσεις αλληλοαναιρούνται: ο αριθμός
+      // μπαίνει κάθετα.
+      bisector = bisector.distance < 1e-6
+          ? Offset(-a.dy, a.dx)
+          : bisector / bisector.distance;
+      final text = TextPainter(
+        text: TextSpan(
+          text: formatAngleDegrees(mark.degrees),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: mark.toGuide ? _guideColor : _angleColor,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      // Έξω από το σώμα των τοίχων, και πέρα από το τόξο.
+      final bodyPx = mark.bodyHalfWidthCm * view.pixelsPerCm;
+      final reach = math.max(
+        38.0,
+        mark.clearanceAlongBisector(bodyPx) + 6 + text.height,
+      );
+      final box = Rect.fromCenter(
+        center: vertex + bisector * reach,
+        width: text.width + 8,
+        height: text.height + 2,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(box, const Radius.circular(4)),
+        Paint()..color = const Color(0xEEFFFFFF),
+      );
+      text
+        ..paint(canvas, box.topLeft + const Offset(4, 1))
+        ..dispose();
+    }
+  }
+
   void _paintSnap(Canvas canvas, double pixel) {
     final p = overlay.snapPoint;
     if (p == null) return;
     final color = switch (overlay.snapKind) {
       FloorPlanSnapKind.endpoint => Colors.green.shade700,
       FloorPlanSnapKind.wallBody => Colors.orange.shade800,
+      FloorPlanSnapKind.midpoint => Colors.teal.shade700,
+      FloorPlanSnapKind.guide => const Color(0xFFAA00FF),
       _ => colors.primary,
     };
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2 * pixel;
+    if (overlay.snapKind == FloorPlanSnapKind.midpoint) {
+      // Η μέση τοίχου σημειώνεται με τρίγωνο, για να ξεχωρίζει από το απλό
+      // «πάνω στον τοίχο».
+      final r = 8 * pixel;
+      canvas.drawPath(
+        Path()
+          ..moveTo(p.dx, p.dy - r)
+          ..lineTo(p.dx + r, p.dy + r * 0.8)
+          ..lineTo(p.dx - r, p.dy + r * 0.8)
+          ..close(),
+        paint,
+      );
+      return;
+    }
     canvas.drawCircle(p, 6 * pixel, paint);
   }
 
-  /// Το μήκος του τοίχου που σχεδιάζεται, σε οθόνη — όρθιο, όπως κι αν έχει
-  /// γυρίσει ο όροφος.
+  /// Το μήκος του τοίχου που σχεδιάζεται ή αλλάζει μήκος, σε οθόνη — όρθιο,
+  /// όπως κι αν έχει γυρίσει ο όροφος.
   void _paintRubberLength(Canvas canvas) {
-    final a = overlay.rubberStart;
-    final b = overlay.rubberEnd;
+    final a = overlay.rubberStart ?? overlay.lengthStart;
+    final b = overlay.rubberEnd ?? overlay.lengthEnd;
     if (a == null || b == null) return;
     final length = (b - a).distance;
     if (length < 1) return;

@@ -456,7 +456,13 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
       for (final e in widget.elements)
         if (e.kind == FloorPlanElementKind.opening)
           if (elementWorldPoints(e, walls) case [final a, final b])
-            e.id: FloorPlanSegment(a, b),
+            e.id: FloorPlanSegment(
+              a,
+              b,
+              thickness:
+                  walls[e.parentId]?.wallThicknessCm ??
+                  kFloorPlanWallThicknessCm,
+            ),
     };
   }
 
@@ -541,7 +547,7 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
         final walls = _walls = [
           for (final e in elements)
             if (e.kind == FloorPlanElementKind.wall && e.points.length >= 2)
-              FloorPlanSegment(e.points[0], e.points[1], id: e.id),
+              FloorPlanSegment.ofWall(e),
         ];
         final openingsByWall = <int, List<({double start, double end})>>{};
         for (final e in elements) {

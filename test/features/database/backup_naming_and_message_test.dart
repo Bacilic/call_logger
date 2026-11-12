@@ -213,6 +213,21 @@ void main() {
 
       expect(message, contains('βάση Λάμπας (α)· εκκαθάριση παλαιών (β).'));
     });
+
+    test('όσα αφορούν τα παλιά αντίγραφα δεν λέγονται «Δεν μπήκε»', () {
+      final message = buildBackupCompletionMessage(
+        isFull: false,
+        wantsBundle: false,
+        includedParts: const [],
+        missingParts: const [],
+        retentionNotes: const ['Τα παλιά αντίγραφα δεν σβήστηκαν.'],
+      );
+
+      expect(
+        message,
+        'Το αντίγραφο ολοκληρώθηκε. Τα παλιά αντίγραφα δεν σβήστηκαν.',
+      );
+    });
   });
 
   group('μήνυμα χαλασμένου αντιγράφου', () {

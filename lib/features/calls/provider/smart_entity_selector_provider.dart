@@ -496,6 +496,9 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       callerAwaitingPhoneAssociation = false;
       return;
     }
+    // Ό,τι είχε συμπληρώσει ο προηγούμενος αριθμός φεύγει με το πρώτο
+    // πλήκτρο — πριν λυθεί ο δεσμός με τον καλούντα παρακάτω.
+    lookups.dropStaleAutofills(phone: value ?? '');
     final preserveEquipment = lookups.hasManualEquipmentSelection;
     state = state.copyWith(
       selectedPhone: value,
@@ -611,6 +614,12 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
   }
 
   void setCaller(UserModel? value) {
+    // Ό,τι είχε συμπληρώσει ο προηγούμενος καλών φεύγει πριν κριθεί αν
+    // υπάρχει κενό πεδίο για τον νέο.
+    lookups.dropStaleAutofills(
+      caller: value == null ? '' : (value.name ?? value.fullNameWithDepartment),
+    );
+    final before = state;
     final departmentAlreadyFilled = state.departmentText.trim().isNotEmpty;
     final shouldAutofillDepartment = !departmentAlreadyFilled && value != null;
 
@@ -646,6 +655,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
           PhoneListParser.splitPhones(sp).length > 1) {
         state = state.copyWith(clearSelectedPhone: true, clearPhoneError: true);
       }
+      lookups.recordAutofill(SelectorField.caller, before);
     }
     // Επανυπολογισμός και στην αφαίρεση καλούντα — αλλιώς μένουν
     // μπαγιάτικοι δείκτες για οντότητα που δεν υπάρχει πια στη φόρμα.
@@ -682,6 +692,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
     }
     // Πέρα από το λύσιμο, η πληκτρολόγηση δεν αγγίζει δείκτες — μόνο η επικύρωση.
     state = state.copyWith(callerDisplayText: text);
+    lookups.dropStaleAutofills();
     if (text.trim().isEmpty) {
       // Άδειασμα με backspace: ίδια συμπεριφορά με το κουμπί «×».
       lookups.restoreDepartmentCallerCandidatesIfNeeded(
@@ -705,6 +716,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       isPhoneAmbiguous: false,
       callerDisplayText: '',
     );
+    lookups.dropStaleAutofills();
     // Με συμπληρωμένο τμήμα, το άδειο πεδίο ξαναδείχνει τους υπαλλήλους του —
     // όπως ήδη κάνουν το τηλέφωνο και ο εξοπλισμός στον δικό τους καθαρισμό.
     // Επαναφέρεται και η λίστα τηλεφώνων που καθαρίστηκε παραπάνω (ο βοηθός
@@ -849,6 +861,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       isEquipmentAmbiguous: false,
       equipmentNoMatch: false,
     );
+    lookups.dropStaleAutofills();
   }
 
   /// Η πληκτρολόγηση στο πεδίο Εξοπλισμού: άδειο πεδίο καθαρίζει, κείμενο που
@@ -863,6 +876,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       clearEquipment();
     }
     checkContent(equipmentText: text);
+    lookups.dropStaleAutofills(equipment: text);
   }
 
   void clearEquipment() {
@@ -874,6 +888,7 @@ class SmartEntitySelectorNotifier extends Notifier<SmartEntitySelectorState> {
       equipmentText: '',
       hasAnyContent: computeHasAnyContent(equipmentText: ''),
     );
+    lookups.dropStaleAutofills();
     final lookupForRestore = ref.read(lookupServiceProvider).value?.service;
     lookups.restoreDepartmentEquipmentCandidatesIfNeeded(lookupForRestore);
     if (state.selectedPhone?.trim().isEmpty ?? true) {

@@ -10,11 +10,9 @@ import '../../../core/database/old_database/lamp_network_issue_resolution_servic
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
 import '../../../core/database/old_database/lamp_settings_store.dart';
 import '../../../core/database/old_database/old_equipment_repository.dart';
-import '../../../core/database/old_database/old_excel_importer.dart';
 import '../../../core/providers/lamp_open_settings_intent_provider.dart';
 import '../../../core/providers/lamp_read_path_health_provider.dart';
 import '../../calls/provider/lookup_provider.dart';
-import '../controllers/lamp_import_controller.dart';
 import '../controllers/lamp_integrity_controller.dart';
 import '../controllers/lamp_issue_resolution_controller.dart';
 import '../controllers/lamp_path_management.dart';
@@ -43,7 +41,6 @@ class _LampScreenState extends ConsumerState<LampScreen>
   late final LampScreenShared _shared;
   late final LampPathController _path;
   late final LampSearchController _search;
-  late final LampImportController _import;
   late final LampIntegrityController _integrity;
   late final LampIssuesController _issues;
   late final LampIssueResolutionController _resolution;
@@ -64,9 +61,6 @@ class _LampScreenState extends ConsumerState<LampScreen>
   @override
   LampOldDbCheckResult? get readPathCheck =>
       ref.watch(lampReadPathHealthProvider).value;
-
-  LampOldDbCheckResult? get outputPathCheck =>
-      ref.watch(lampOutputPathHealthProvider).value;
 
   @override
   bool get lampSettingsDialogOpen => _lampSettingsDialogOpen;
@@ -133,11 +127,9 @@ class _LampScreenState extends ConsumerState<LampScreen>
       issueResolutionService: LampIssueResolutionService(),
       networkIssueResolutionService: LampNetworkIssueResolutionService(),
       migrationService: LampMigrationService(),
-      importer: OldExcelImporter(),
     );
     _path = LampPathController(host: this);
     _search = LampSearchController(host: this, path: _path);
-    _import = LampImportController(host: this, path: _path);
     _integrity = LampIntegrityController(host: this, path: _path);
     _issues = LampIssuesController(host: this, path: _path, search: _search);
     _resolution = LampIssueResolutionController(
@@ -279,47 +271,6 @@ class _LampScreenState extends ConsumerState<LampScreen>
     );
   }
 
-  Future<void> _runImport() async {
-    final result = await _import.runImport(
-      onImportStart: () {
-        _search.clearResults();
-        _search.message = null;
-        _issues.clearIssues();
-        notifyState();
-      },
-      onImportSuccess: (message) {
-        _search.message = message;
-        notifyState();
-      },
-      afterImportValidate: () => _path.applyPersistedReadAndValidate(
-        announce: true,
-        source: 'μετά import',
-        onDbOk: _onReadPathOk,
-        onDbNotOk: _onReadPathNotOk,
-      ),
-      onImportFailureReload: () async {
-        await ref
-            .read(lampReadPathHealthProvider.notifier)
-            .refresh(
-              pathOverride: _path.readDbController.text.trim(),
-              outputPathOverride: _path.outputDbController.text.trim(),
-              excelPathOverride: _path.excelController.text.trim(),
-            );
-        await _issues.loadIssues();
-      },
-    );
-    if (!mounted) return;
-    if (result.failureMessage != null) {
-      setState(() => _search.message = result.failureMessage);
-    }
-    if (result.successMessage != null) {
-      await _integrity.runIntegrityCheck(
-        reloadIssues: _issues.loadIssues,
-        autoPersist: true,
-      );
-    }
-  }
-
   Future<EquipmentSectionSaveResult> _saveEquipmentSection({
     required int id,
     required InfoSectionType sectionType,
@@ -412,7 +363,6 @@ class _LampScreenState extends ConsumerState<LampScreen>
   }
 
   Future<void> _closeLampSettingsDialog(void Function() pop) async {
-    if (_import.importing) return;
     pop();
     _lampSettingsDialogOpen = false;
     _lampSettingsDialogSetState = null;
@@ -445,33 +395,20 @@ class _LampScreenState extends ConsumerState<LampScreen>
     final settingsController = LampSettingsDialogController(
       path: _path,
       search: _search,
-      importController: _import,
       integrityController: _integrity,
       getReadPathCheck: () => readPathCheck,
-      getOutputPathCheck: () => outputPathCheck,
       getDialogFeedback: () => _lampDialogFeedback,
       getDialogFeedbackIsError: () => _lampDialogFeedbackIsError,
       onClearDialogFeedback: clearLampDialogFeedback,
       onCopyDialogFeedback: (message) =>
           Clipboard.setData(ClipboardData(text: message)),
-      onPickExcel: _path.pickExcel,
       onPickReadDatabase: () => _path.pickReadDatabase(
         onPathChanged: ({required source}) =>
             _refreshDataAfterReadPathChange(source: source),
       ),
-      onPickDatabaseOutput: () => _path.pickDatabaseOutput(
-        onReadSynced: ({required source}) =>
-            _refreshDataAfterReadPathChange(source: source),
-      ),
-      onMatchReadToOutput: () => _path.matchReadToOutput(
-        onDbOk: _onReadPathOk,
-        onDbNotOk: _onReadPathNotOk,
-      ),
       onRunIntegrityCheck: () =>
           _integrity.runIntegrityCheck(reloadIssues: _issues.loadIssues),
-      onRunImport: _runImport,
       onClose: _closeLampSettingsDialog,
-      isImporting: () => _import.importing,
       isIntegrityChecking: () => _integrity.integrityChecking,
     );
     openLampSettingsDialog(
@@ -642,9 +579,8 @@ class _LampScreenState extends ConsumerState<LampScreen>
               _search.message!,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.primary),
             ),
           ),
         Expanded(child: _resultsList(context)),

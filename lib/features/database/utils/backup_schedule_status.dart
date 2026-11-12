@@ -140,6 +140,12 @@ abstract final class BackupScheduleStatusFormatter {
     return 'Τα αυτόματα αντίγραφα είναι απενεργοποιημένα$forBase — $reason';
   }
 
+  /// Η προειδοποίηση όταν η ώρα του τελευταίου αντιγράφου είναι στο μέλλον.
+  static String futureBackupStampWarning(DateTime stamp) =>
+      'Το τελευταίο αντίγραφο γράφει ώρα στο μέλλον '
+      '(${formatLocalDateTime(stamp.toLocal())}) — κάποιος υπολογιστής έχει '
+      'λάθος ρολόι. Ελέγξτε την ώρα των σταθμών.';
+
   /// Πόσα λεπτά ανοχής πριν το «καθυστερεί»: σε κανονική λειτουργία το
   /// οφειλόμενο αντίγραφο παίρνεται μέσα σε ένα λεπτό από τη μέγιστη αναμονή —
   /// κόκκινο νωρίτερα θα αναβόσβηνε σε κάθε φυσιολογικό κύκλο.
@@ -155,8 +161,13 @@ abstract final class BackupScheduleStatusFormatter {
     String? databaseName,
     bool isSharedDatabase = false,
     DateTime? now,
+    BackupElapsedReference? reference,
   }) {
     final current = (now ?? DateTime.now()).toLocal();
+    final clock = (reference ?? BackupElapsedReference.instance).readFor(
+      settings,
+      current,
+    );
 
     if (!settings.backupOnExit) {
       return (
@@ -167,6 +178,16 @@ abstract final class BackupScheduleStatusFormatter {
         isWarning: true,
       );
     }
+    final futureStamp = clock.futureStamp;
+    if (futureStamp != null) {
+      final warning = futureBackupStampWarning(futureStamp);
+      return (
+        text: pendingChanges > 0
+            ? 'Αφύλακτες αλλαγές: $pendingChanges. $warning'
+            : warning,
+        isWarning: true,
+      );
+    }
     if (pendingChanges <= 0) {
       return (
         text: 'Αφύλακτες αλλαγές: καμία — όλα φυλαγμένα.',
@@ -174,7 +195,7 @@ abstract final class BackupScheduleStatusFormatter {
       );
     }
 
-    final last = settings.lastAnyBackupAt;
+    final last = clock.measureFrom;
     final overdue =
         last != null &&
         current.difference(last).inMinutes >
@@ -227,8 +248,13 @@ abstract final class BackupScheduleStatusFormatter {
     DateTime? now,
     bool backupJobRunning = false,
     String? dbBaseName,
+    BackupElapsedReference? reference,
   }) {
     final current = (now ?? DateTime.now()).toLocal();
+    final clock = (reference ?? BackupElapsedReference.instance).readFor(
+      settings,
+      current,
+    );
 
     if (!settings.backupOnExit) {
       return const BackupScheduleStatusInfo(
@@ -254,6 +280,7 @@ abstract final class BackupScheduleStatusFormatter {
         settings: settings,
         pendingChanges: pendingChanges,
         now: current,
+        reference: reference,
       );
       if (decision.due) {
         imminent = true;
@@ -265,7 +292,7 @@ abstract final class BackupScheduleStatusFormatter {
           case BackupTriggerReason.noPendingChanges:
             nextText = 'Επόμενο αυτόματο αντίγραφο: όταν υπάρξουν αλλαγές.';
           case BackupTriggerReason.spacingNotElapsed:
-            final availableAt = settings.lastAnyBackupAt!.add(
+            final availableAt = clock.measureFrom!.add(
               Duration(minutes: settings.minSpacingMinutes),
             );
             nextText =
@@ -273,7 +300,7 @@ abstract final class BackupScheduleStatusFormatter {
                 '${formatLocalTimeHm(availableAt)} (ελάχιστη απόσταση '
                 '${settings.minSpacingMinutes}΄).';
           case BackupTriggerReason.belowThreshold:
-            final deadline = settings.lastAnyBackupAt!.add(
+            final deadline = clock.measureFrom!.add(
               Duration(minutes: settings.effectiveMaxWaitMinutes),
             );
             nextText =
@@ -294,6 +321,9 @@ abstract final class BackupScheduleStatusFormatter {
       hintWarning = true;
     } else if (st == BackupScheduleStatus.failed) {
       hintText = 'Το τελευταίο αυτόματο αντίγραφο απέτυχε· ελέγξτε φάκελο και δικαιώματα.';
+      hintWarning = true;
+    } else if (clock.futureStamp != null) {
+      hintText = futureBackupStampWarning(clock.futureStamp!);
       hintWarning = true;
     }
 

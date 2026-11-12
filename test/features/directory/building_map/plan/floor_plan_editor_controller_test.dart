@@ -37,6 +37,7 @@ void main() {
     initSqfliteFfiForTests();
     db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
     await migrateDatabaseToV69(db);
+    await migrateDatabaseToV77(db);
     repo = FloorPlanRepository(db);
     errors = [];
     controller = FloorPlanEditorController(
@@ -243,6 +244,67 @@ void main() {
     stored = (await repo.listElements(1)).single;
     expect((stored.fontSize, stored.labelOffset), (45, null));
   });
+
+  test('αλλαγή μήκους τοίχου από την αρχή του: τοίχος και πόρτα γράφονται ως '
+      'μία κίνηση, και η αναίρεση τα φέρνει πίσω και τα δύο', () async {
+    await controller.addWall(Offset.zero, const Offset(500, 0));
+    final wall = controller.elements.single;
+    await controller.addOpening(wall.id, 100, 190);
+
+    controller.previewWallEnd(wall.id, 0, const Offset(60, 0), toleranceCm: 10);
+    await controller.commitPreview();
+
+    Future<(double, double)> startAndDoor() async {
+      final stored = await repo.listElements(1);
+      final w = stored.firstWhere((e) => e.kind == FloorPlanElementKind.wall);
+      final d = stored.firstWhere(
+        (e) => e.kind == FloorPlanElementKind.opening,
+      );
+      return (w.points[0].dx, d.points[0].dx);
+    }
+
+    // Η αρχή πήγε στα 60 εκ.· η πόρτα απέχει πια 40 από αυτήν, άρα μένει στα
+    // 100 εκ. του σχεδίου.
+    expect(await startAndDoor(), (60.0, 40.0));
+    await controller.undo();
+    expect(await startAndDoor(), (0.0, 100.0));
+    expect(errors, isEmpty);
+  });
+
+  test('πάχος σε δύο επιλεγμένους τοίχους: μία κίνηση, μία αναίρεση, και ο '
+      'επόμενος τοίχος παίρνει το ίδιο πάχος', () async {
+    await controller.addWall(Offset.zero, const Offset(400, 0));
+    await controller.addWall(const Offset(400, 0), const Offset(400, 300));
+    controller.selectMany({for (final e in controller.elements) e.id});
+
+    await controller.setSelectedWallThickness(40);
+    Future<List<double?>> thicknesses() async => [
+      for (final e in await repo.listElements(1)) e.thicknessCm,
+    ];
+    expect(await thicknesses(), [40, 40]);
+
+    await controller.addWall(const Offset(400, 300), const Offset(0, 300));
+    expect(await thicknesses(), [40, 40, 40]);
+
+    await controller.undo();
+    await controller.undo();
+    expect(await thicknesses(), [null, null]);
+    expect(errors, isEmpty);
+  });
+
+  test(
+    'το πάχος μένει μέσα στα όρια, και το συνηθισμένο δεν γράφεται',
+    () async {
+      await controller.addWall(Offset.zero, const Offset(400, 0));
+      final id = controller.elements.single.id;
+      controller.select(id);
+
+      await controller.setSelectedWallThickness(500);
+      expect((await repo.listElements(1)).single.thicknessCm, 100);
+      await controller.setSelectedWallThickness(15);
+      expect((await repo.listElements(1)).single.thicknessCm, isNull);
+    },
+  );
 
   test('νέα κίνηση μετά από αναίρεση σβήνει την επανάληψη', () async {
     await controller.addWall(Offset.zero, const Offset(400, 0));

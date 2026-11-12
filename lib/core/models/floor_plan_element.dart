@@ -35,6 +35,15 @@ enum FloorPlanElementKind {
   }
 }
 
+/// Το πάχος ενός τοίχου που δεν έχει δικό του, σε εκατοστά πραγματικού χώρου
+/// — αυτό που είχαν όλοι οι τοίχοι πριν αποκτήσει ο καθένας το δικό του.
+const double kFloorPlanDefaultWallThicknessCm = 15;
+
+/// Τα όρια του πάχους ενός τοίχου, και το βήμα των κουμπιών − / +.
+const double kFloorPlanWallThicknessMinCm = 5;
+const double kFloorPlanWallThicknessMaxCm = 100;
+const double kFloorPlanWallThicknessStepCm = 5;
+
 /// Το μέγεθος γραμμάτων ενός νέου κειμένου, σε εκατοστά πραγματικού χώρου.
 const double kFloorPlanDefaultTextSizeCm = 40;
 
@@ -59,6 +68,7 @@ class FloorPlanElement {
     this.fontSize,
     this.rotationDegrees = 0,
     this.labelOffset,
+    this.thicknessCm,
   });
 
   final int id;
@@ -85,6 +95,13 @@ class FloorPlanElement {
   /// τον χώρο όταν μετακινείται.
   final Offset? labelOffset;
 
+  /// Τοίχος: το πάχος του σε εκατοστά· `null` = το συνηθισμένο
+  /// ([kFloorPlanDefaultWallThicknessCm]).
+  final double? thicknessCm;
+
+  /// Το πάχος με το οποίο σχεδιάζεται ο τοίχος.
+  double get wallThicknessCm => thicknessCm ?? kFloorPlanDefaultWallThicknessCm;
+
   /// `null` όταν η γραμμή είναι είδους που δεν ξέρει αυτή η έκδοση — ένα
   /// επόμενο βήμα του χάρτη μπορεί να έχει γράψει ήδη αντικείμενα.
   static FloorPlanElement? fromMap(Map<String, Object?> row) {
@@ -103,6 +120,7 @@ class FloorPlanElement {
       fontSize: (row['font_size'] as num?)?.toDouble(),
       rotationDegrees: (row['rotation_degrees'] as num?)?.toDouble() ?? 0,
       labelOffset: _offsetOrNull(row['label_dx'], row['label_dy']),
+      thicknessCm: (row['thickness_cm'] as num?)?.toDouble(),
     );
   }
 
@@ -122,6 +140,7 @@ class FloorPlanElement {
     'rotation_degrees',
     'label_dx',
     'label_dy',
+    'thickness_cm',
   ];
 
   Map<String, Object?> toInsertMap() => {
@@ -135,6 +154,7 @@ class FloorPlanElement {
     'rotation_degrees': rotationDegrees,
     'label_dx': labelOffset == null ? null : _round(labelOffset!.dx),
     'label_dy': labelOffset == null ? null : _round(labelOffset!.dy),
+    'thickness_cm': thicknessCm,
   };
 
   FloorPlanElement copyWith({
@@ -146,6 +166,8 @@ class FloorPlanElement {
     double? rotationDegrees,
     Offset? labelOffset,
     bool labelToCenter = false,
+    double? thicknessCm,
+    bool defaultThickness = false,
   }) => FloorPlanElement(
     id: id ?? this.id,
     floorId: floorId,
@@ -157,6 +179,7 @@ class FloorPlanElement {
     fontSize: fontSize ?? this.fontSize,
     rotationDegrees: rotationDegrees ?? this.rotationDegrees,
     labelOffset: labelToCenter ? null : labelOffset ?? this.labelOffset,
+    thicknessCm: defaultThickness ? null : thicknessCm ?? this.thicknessCm,
   );
 
   /// Ίδιος χώρος με άλλη ταυτότητα: τμήμα **ή** ελεύθερο όνομα, ποτέ και τα δύο.
@@ -172,6 +195,7 @@ class FloorPlanElement {
         fontSize: fontSize,
         rotationDegrees: rotationDegrees,
         labelOffset: labelOffset,
+        thicknessCm: thicknessCm,
       );
 }
 

@@ -336,6 +336,59 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 75 && newVersion >= 75) {
     await migrateDatabaseToV75(db);
   }
+  if (oldVersion < 76 && newVersion >= 76) {
+    await migrateDatabaseToV76(db);
+  }
+  if (oldVersion < 77 && newVersion >= 77) {
+    await migrateDatabaseToV77(db);
+  }
+}
+
+/// v77: κάθε τοίχος του νέου χάρτη αποκτά δικό του πάχος.
+///
+/// Μία στήλη με κενή προεπιλογή: κενό σημαίνει το πάχος που είχαν όλοι οι
+/// τοίχοι ως τώρα, οπότε ό,τι έχει ήδη σχεδιαστεί δεν αλλάζει όψη.
+///
+/// Idempotent: η στήλη μπαίνει μόνο αν λείπει.
+Future<void> migrateDatabaseToV77(Database db) async {
+  await migrateDatabaseToV76(db);
+  // Η αλυσίδα των προηγούμενων βημάτων δεν περνά από τον πίνακα του σχεδίου·
+  // εδώ χρειάζεται να υπάρχει, με όλες τις ως τώρα στήλες του.
+  await migrateDatabaseToV70(db);
+  final info = await db.rawQuery(
+    'PRAGMA table_info(building_map_plan_elements)',
+  );
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('thickness_cm')) {
+    await db.execute(
+      'ALTER TABLE building_map_plan_elements ADD COLUMN thickness_cm REAL',
+    );
+  }
+}
+
+/// v76: η εικόνα πατρόν φεύγει από τη γραμμή κατάστασης του ορόφου σε δικό της
+/// πίνακα — γιατί, το εξηγεί ο `kCreateBuildingMapFloorPatternsTable`.
+///
+/// Οι εικόνες που υπάρχουν μεταφέρονται αυτούσιες, οπότε το αποτύπωμα της
+/// κατάστασης μένει σωστό και οι σταθμοί δεν ξανακατεβάζουν τίποτα χωρίς λόγο.
+/// Η σβησμένη στήλη δεν αφήνει υπόλοιπο: μια αναβαθμισμένη βάση έχει το ίδιο
+/// σχήμα με μια καινούρια.
+///
+/// Idempotent: η μεταφορά γίνεται μόνο όσο υπάρχει η παλιά στήλη.
+Future<void> migrateDatabaseToV76(Database db) async {
+  await migrateDatabaseToV75(db);
+  await db.execute(kCreateBuildingMapFloorPatternsTable);
+  final info = await db.rawQuery('PRAGMA table_info(building_map_floor_state)');
+  final columns = info.map((r) => r['name'] as String).toSet();
+  if (!columns.contains('pattern_image')) return;
+  await db.execute('''
+    INSERT OR REPLACE INTO building_map_floor_patterns (floor_id, image_data)
+    SELECT floor_id, pattern_image FROM building_map_floor_state
+    WHERE pattern_image IS NOT NULL
+  ''');
+  await db.execute(
+    'ALTER TABLE building_map_floor_state DROP COLUMN pattern_image',
+  );
 }
 
 /// v75: το πρόθεμα των θυρών ενός switch στο πρότυπο Cisco (Fa, Gi, Te).

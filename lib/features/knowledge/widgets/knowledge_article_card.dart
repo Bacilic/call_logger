@@ -40,12 +40,16 @@ class KnowledgeArticleCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (article.categoryName != null &&
-                    article.categoryName!.trim().isNotEmpty)
+                if (article.categoryDisplayName != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 8),
                     child: Chip(
-                      label: Text(article.categoryName!),
+                      label: Text(
+                        article.categoryDisplayName!,
+                        style: article.categoryIsDeleted
+                            ? const TextStyle(fontStyle: FontStyle.italic)
+                            : null,
+                      ),
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                     ),

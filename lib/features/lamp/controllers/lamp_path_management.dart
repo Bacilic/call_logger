@@ -1,4 +1,4 @@
-// Διαχείριση διαδρομών Excel/DB, επικύρωση και συγχρονισμός read/output.
+// Διαχείριση της διαδρομής της βάσης Λάμπας: επιλογή, τοποθέτηση, επικύρωση.
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -9,94 +9,30 @@ import 'package:path/path.dart' as p;
 import '../../../core/config/app_config.dart';
 import '../../../core/utils/picker_location_memory.dart';
 import '../../../core/database/old_database/lamp_database_provider.dart';
-import '../../../core/database/old_database/lamp_excel_validator.dart';
 import '../../../core/database/old_database/lamp_old_db_validator.dart';
-import '../../../core/providers/lamp_db_comparison_provider.dart';
-import '../../../core/providers/lamp_excel_path_health_provider.dart';
 import '../../../core/providers/lamp_open_settings_intent_provider.dart';
 import '../../../core/providers/lamp_read_path_health_provider.dart';
 import '../../../core/services/portable_lamp_storage.dart';
 import '../../../core/utils/file_picker_session.dart';
 import '../../../core/utils/user_facing_error_messages.dart';
 import '../../../core/widgets/compact_tooltip.dart';
-import '../../settings/widgets/create_new_database_dialog.dart';
 import '../services/lamp_db_adoption_guard.dart';
 import '../widgets/lamp_db_adoption_dialogs.dart';
 import 'lamp_screen_host.dart';
-
-/// Κατάσταση κουμπιού «ίδια διαδρομή εξόδου» (βελάκι) στον διάλογο ρυθμίσεων.
-class LampMatchReadToOutputButtonState {
-  const LampMatchReadToOutputButtonState({
-    required this.enabled,
-    required this.tooltip,
-  });
-
-  final bool enabled;
-  final String tooltip;
-}
-
-/// Αν η διαδρομή ανάγνωσης είναι κενή, η επιλογή εξόδου την ευθυγραμμίζει.
-bool shouldSyncReadPathOnOutputPick(String readPath) => readPath.trim().isEmpty;
-
-LampMatchReadToOutputButtonState computeMatchReadToOutputButtonState({
-  required String outputPath,
-  required String readPath,
-}) {
-  final output = outputPath.trim();
-  final read = readPath.trim();
-  if (output.isEmpty) {
-    return const LampMatchReadToOutputButtonState(
-      enabled: false,
-      tooltip: 'Η διαδρομή της βάσης εξόδου είναι κενή',
-    );
-  }
-  if (LampOldDbValidator.pathsReferToSameFile(output, read)) {
-    return const LampMatchReadToOutputButtonState(
-      enabled: false,
-      tooltip: 'Η διαδρομή της βάσης εξόδου είναι ίδια με τη βάση ανάγνωσης',
-    );
-  }
-  if (LampOldDbValidator.validateDbPathFormat(output) != null) {
-    return const LampMatchReadToOutputButtonState(
-      enabled: false,
-      tooltip: 'Η διαδρομή της βάσης εξόδου δεν είναι έγκυρη (αρχείο .db)',
-    );
-  }
-  return const LampMatchReadToOutputButtonState(
-    enabled: true,
-    tooltip: 'Ίδια διαδρομή με τη βάση εξόδου',
-  );
-}
 
 class LampPathController {
   LampPathController({required this.host});
 
   final LampScreenHost host;
 
-  final excelController = TextEditingController();
   final readDbController = TextEditingController();
-  final outputDbController = TextEditingController();
 
   Timer? pathValidationDebounce;
 
   void dispose() {
     pathValidationDebounce?.cancel();
-    excelController.dispose();
     readDbController.dispose();
-    outputDbController.dispose();
   }
-
-  String effectiveReadPathForValidation() {
-    var read = readDbController.text.trim();
-    final output = outputDbController.text.trim();
-    if (read.isEmpty && output.isNotEmpty) {
-      read = output;
-    }
-    return read;
-  }
-
-  String? outputPathFormatWarning() =>
-      LampOldDbValidator.validateDbPathFormat(outputDbController.text);
 
   String? readPathFormatWarning() =>
       LampOldDbValidator.validateDbPathFormat(readDbController.text);
@@ -111,27 +47,10 @@ class LampPathController {
 
   Future<void> _persistPathsAndRefreshHealth() async {
     final read = readDbController.text.trim();
-    final output = outputDbController.text.trim();
-    final excel = excelController.text.trim();
-    final settings = host.shared.settings;
-    await settings.setReadPath(read);
-    await settings.setOutputPath(output);
+    await host.shared.settings.setReadPath(read);
     await host.ref
         .read(lampReadPathHealthProvider.notifier)
-        .refresh(
-          pathOverride: effectiveReadPathForValidation(),
-          outputPathOverride: output,
-          excelPathOverride: excel,
-        );
-    await host.ref
-        .read(lampOutputPathHealthProvider.notifier)
-        .refresh(pathOverride: output);
-    await host.ref
-        .read(lampExcelPathHealthProvider.notifier)
-        .refresh(pathOverride: excel);
-    await host.ref
-        .read(lampDbComparisonProvider.notifier)
-        .refresh(readPathOverride: read, outputPathOverride: output);
+        .refresh(pathOverride: read);
     if (host.mounted) {
       host.lampSettingsDialogSetState?.call(() {});
     }
@@ -143,22 +62,12 @@ class LampPathController {
     host.lampSettingsDialogSetState?.call(() {});
   }
 
-  /// Φορτώνει μόνο τα πεδία διαδρομών από τις ρυθμίσεις — κανένας έλεγχος
-  /// αρχείων εδώ (Δ17): Excel/έξοδος/σύγκριση τροφοδοτούν μόνο τον διάλογο
-  /// ρυθμίσεων και ελέγχονται όταν ανοίξει.
+  /// Φορτώνει μόνο το πεδίο της διαδρομής από τις ρυθμίσεις — κανένας
+  /// έλεγχος αρχείου εδώ.
   Future<void> loadPathsFromSettings() async {
-    final settings = host.shared.settings;
-    final excelPath = await settings.getExcelPath();
-    final readRaw = await settings.getReadPathRaw();
-    final outRaw = await settings.getOutputPathRaw();
+    final read = await host.shared.settings.getReadPath();
     if (!host.mounted) return;
-    excelController.text = excelPath ?? '';
-    if (readRaw != null && readRaw.isNotEmpty) {
-      readDbController.text = readRaw;
-    } else {
-      readDbController.text = outRaw ?? '';
-    }
-    outputDbController.text = outRaw ?? '';
+    readDbController.text = read ?? '';
   }
 
   Future<void> applyPersistedReadAndValidate({
@@ -167,36 +76,11 @@ class LampPathController {
     required Future<void> Function() onDbOk,
     required void Function() onDbNotOk,
   }) async {
-    var read = readDbController.text.trim();
-    final output = outputDbController.text.trim();
-    if (read.isEmpty && output.isNotEmpty) {
-      read = output;
-      readDbController.text = output;
-    }
-    final settings = host.shared.settings;
-    await settings.setReadPath(read);
-    await settings.setOutputPath(output);
+    final read = readDbController.text.trim();
+    await host.shared.settings.setReadPath(read);
     await host.ref
         .read(lampReadPathHealthProvider.notifier)
-        .refresh(
-          pathOverride: read,
-          outputPathOverride: output,
-          excelPathOverride: excelController.text.trim(),
-        );
-    // Έξοδος/Excel/σύγκριση τροφοδοτούν μόνο τον διάλογο ρυθμίσεων — ο έλεγχος
-    // αρχείων τους γίνεται μόνο όταν είναι ανοιχτός, όχι στο άνοιγμα της Λάμπας
-    // (Δ17: κάθε άνοιγμα αρχείου κοστίζει, ειδικά με antivirus).
-    if (host.lampSettingsDialogOpen) {
-      await host.ref
-          .read(lampOutputPathHealthProvider.notifier)
-          .refresh(pathOverride: output);
-      await host.ref
-          .read(lampExcelPathHealthProvider.notifier)
-          .refresh(pathOverride: excelController.text.trim());
-      await host.ref
-          .read(lampDbComparisonProvider.notifier)
-          .refresh(readPathOverride: read, outputPathOverride: output);
-    }
+        .refresh(pathOverride: read);
     if (!host.mounted) return;
     final result = host.readPathCheck;
     if (result == null) return;
@@ -214,10 +98,7 @@ class LampPathController {
   }
 
   void announceCheck(LampOldDbCheckResult result, {required String source}) {
-    if (result.status == LampOldDbStatus.ok ||
-        result.status == LampOldDbStatus.pendingCreation) {
-      return;
-    }
+    if (result.status == LampOldDbStatus.ok) return;
     final prefix = source == 'έναρξη' ? 'Λάμπα: ' : 'Έλεγχος βάσης ($source): ';
     final message = host.lampSettingsDialogOpen
         ? result.userMessageGreek
@@ -243,35 +124,6 @@ class LampPathController {
       onDbOk: onDbOk,
       onDbNotOk: onDbNotOk,
     );
-  }
-
-  Future<void> pickExcel() async {
-    const memory = PickerLocationMemory('lamp_excel');
-    final session = await FilePickerSession.run(() async {
-      final result = await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions: const <String>['xlsx', 'xls'],
-        initialDirectory: await memory.initialDirectory(
-          pathHint: excelController.text,
-        ),
-      );
-      final picked = result?.path;
-      if (picked != null) await memory.remember(picked);
-      return picked;
-    });
-    if (session.refocusedExisting) return;
-    final path = session.value;
-    // Ακύρωση επιλογέα = έγκυρη πράξη· κανένα μήνυμα.
-    if (path == null) return;
-    excelController.text = path;
-    await host.shared.settings.setExcelPath(path);
-    await host.ref
-        .read(lampExcelPathHealthProvider.notifier)
-        .refresh(pathOverride: path);
-    if (host.mounted) {
-      host.lampSettingsDialogSetState?.call(() {});
-      host.showSnack('Ορίστηκε αρχείο Excel: ${p.basename(path)}');
-    }
   }
 
   /// Αποτέλεσμα τοποθέτησης: διαδρομή που θα χρησιμοποιηθεί + αν έγινε αντιγραφή.
@@ -314,7 +166,7 @@ class LampPathController {
     final decision = await decideLampDbAdoption(
       pickedPath: pickedPath,
       destinationPath: destinationPath,
-      configuredOutputPath: outputDbController.text,
+      currentLampDbPath: readDbController.text,
     );
     if (!decision.allowed) {
       if (host.mounted) {
@@ -341,7 +193,7 @@ class LampPathController {
         sourcePath: p.normalize(p.absolute(pickedPath.trim())),
         destinationPath: destinationPath,
         keepBothPath: p.join(AppConfig.portableDataBaseDirectory, keepBothName),
-        destinationIsConfiguredOutput: decision.destinationIsConfiguredOutput,
+        destinationIsCurrentLampDb: decision.destinationIsCurrentLampDb,
       );
       switch (choice) {
         case LampDbConflictChoice.cancel:
@@ -414,111 +266,6 @@ class LampPathController {
     );
     await onPathChanged(source: 'επιλογή αρχείου ανάγνωσης');
   }
-
-  Future<void> pickDatabaseOutput({
-    required Future<void> Function({required String source}) onReadSynced,
-  }) async {
-    final oldOut = outputDbController.text.trim();
-    final path = await pickSqliteDatabaseSavePath(
-      initialPathHint: oldOut.isNotEmpty ? oldOut : null,
-      dialogTitle: 'Θέση και όνομα βάσης εξόδου (.db) για import Excel',
-      defaultSuggestedFileName: 'old_equipment.db',
-    );
-    if (FilePickerSession.takeLastRefocusedExisting()) return;
-    // Ακύρωση επιλογέα = έγκυρη πράξη· κανένα μήνυμα.
-    if (path == null) return;
-    final validationError = validateNewDatabaseSavePath(path);
-    if (validationError != null) {
-      if (host.mounted) {
-        host.showSnack(validationError, isError: true);
-      }
-      return;
-    }
-    // Στόχος αποθήκευσης: δεν ρωτάμε «πού θα ζει» — αν όμως γίνει αντιγραφή
-    // (επιλογή υπαρκτού αρχείου), το μήνυμα το λέει με πλήρη διαδρομή.
-    final placed = await _placePickedLampDb(path, askWhereToPlace: false);
-    final portablePath = placed.path;
-    if (portablePath == null) return;
-    outputDbController.text = portablePath;
-    await host.shared.settings.setOutputPath(portablePath);
-    final readT = readDbController.text.trim();
-    if (shouldSyncReadPathOnOutputPick(readT)) {
-      readDbController.text = portablePath;
-      await host.shared.settings.setReadPath(portablePath);
-      if (host.mounted) {
-        host.showSnack(
-          'Η διαδρομή εξόδου ορίστηκε σε: $portablePath\n'
-          'Η «ανάγνωση» συγχρονίστηκε (ίδιο αρχείο).',
-        );
-        host.lampSettingsDialogSetState?.call(() {});
-      }
-      await onReadSynced(source: 'αλλαγή αρχείου εξόδου');
-    } else {
-      await host.ref
-          .read(lampOutputPathHealthProvider.notifier)
-          .refresh(pathOverride: portablePath);
-      await host.ref
-          .read(lampDbComparisonProvider.notifier)
-          .refresh(readPathOverride: readT, outputPathOverride: portablePath);
-      if (host.mounted) {
-        host.showSnack(
-          'Η διαδρομή εξόδου (δημιουργίας) ορίστηκε σε: $portablePath\n'
-          'Η βάση προς «ανάγνωση» παρέμεινε ξεχωριστή.',
-        );
-        host.lampSettingsDialogSetState?.call(() {});
-      }
-    }
-  }
-
-  Future<void> matchReadToOutput({
-    required Future<void> Function() onDbOk,
-    required void Function() onDbNotOk,
-  }) async {
-    final output = outputDbController.text.trim();
-    final read = readDbController.text.trim();
-    if (output.isEmpty) return;
-
-    if (read.isNotEmpty &&
-        !LampOldDbValidator.pathsReferToSameFile(read, output)) {
-      final confirmed = await showDialog<bool>(
-        context: host.context,
-        builder: (ctx) {
-          return AlertDialog(
-            title: const Text('Αντικατάσταση διαδρομής ανάγνωσης'),
-            content: Text(
-              'Η βάση ανάγνωσης δείχνει σε διαφορετικό αρχείο '
-              '(${p.basename(read)}). Θέλετε να αντικατασταθεί με τη διαδρομή '
-              'εξόδου (${p.basename(output)});',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Ακύρωση'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Αντικατάσταση'),
-              ),
-            ],
-          );
-        },
-      );
-      if (confirmed != true) return;
-    }
-
-    readDbController.text = output;
-    if (!host.mounted) return;
-    host.lampSettingsDialogSetState?.call(() {});
-    await applyPersistedReadAndValidate(
-      announce: false,
-      source: 'ευθυγράμμιση ανάγνωσης',
-      onDbOk: onDbOk,
-      onDbNotOk: onDbNotOk,
-    );
-    if (host.mounted) {
-      host.showSnack('Η βάση ανάγνωσης ευθυγραμμίστηκε με τη διαδρομή εξόδου.');
-    }
-  }
 }
 
 class LampPathFormatWarningBanner extends StatelessWidget {
@@ -546,53 +293,8 @@ class LampPathFormatWarningBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 message,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: scheme.onErrorContainer),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Πορτοκαλί πλαίσιο ειδοποιήσεων σύγκρισης ανάγνωσης/εξόδου.
-class LampDbComparisonBanner extends StatelessWidget {
-  const LampDbComparisonBanner({super.key, required this.messages});
-
-  final List<String> messages;
-
-  @override
-  Widget build(BuildContext context) {
-    if (messages.isEmpty) return const SizedBox.shrink();
-    const orange = Color(0xFFE65100);
-    const orangeBg = Color(0xFFFFF3E0);
-    return Material(
-      color: orangeBg,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.info_outline, size: 20, color: orange),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < messages.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 6),
-                    Text(
-                      messages[i],
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: orange),
-                    ),
-                  ],
-                ],
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: scheme.onErrorContainer),
               ),
             ),
           ],
@@ -610,7 +312,6 @@ class LampPathRow extends StatelessWidget {
     required this.onPick,
     this.onChanged,
     this.infoTooltip,
-    this.trailing,
   });
 
   final TextEditingController controller;
@@ -618,7 +319,6 @@ class LampPathRow extends StatelessWidget {
   final VoidCallback onPick;
   final VoidCallback? onChanged;
   final String? infoTooltip;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -647,12 +347,10 @@ class LampPathRow extends StatelessWidget {
             decoration: InputDecoration(
               labelText: label,
               border: const OutlineInputBorder(),
-              hintText:
-                  'Μπορείτε και επικόλληση (paste) — ο έλεγχος γίνεται αυτόματα',
+              hintText: 'Μπορείτε και επικόλληση (paste) — ο έλεγχος γίνεται αυτόματα',
             ),
           ),
         ),
-        if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         const SizedBox(width: 12),
         OutlinedButton.icon(
           onPressed: onPick,
@@ -670,8 +368,7 @@ class LampPathCheckPanel extends StatelessWidget {
     required this.pathCheck,
     required this.pathController,
     this.pendingMessage,
-    this.emptyMessage =
-        'Δεν έχει τρέξει ακόμη έλεγχος — γίνεται αυτόματα μόλις οριστεί διαδρομή.',
+    this.emptyMessage = 'Δεν έχει τρέξει ακόμη έλεγχος — γίνεται αυτόματα μόλις οριστεί διαδρομή.',
   });
 
   final LampOldDbCheckResult? pathCheck;
@@ -685,21 +382,17 @@ class LampPathCheckPanel extends StatelessWidget {
     if (r == null) {
       return Text(
         emptyMessage,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+        style: Theme.of(context).textTheme.labelSmall
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
       );
     }
     final scheme = Theme.of(context).colorScheme;
     final Color? bg;
     final IconData icon;
-    if (r.status == LampOldDbStatus.ok ||
-        r.status == LampOldDbStatus.outputWillUpdate) {
+    if (r.status == LampOldDbStatus.ok) {
       bg = scheme.primaryContainer.withValues(alpha: 0.45);
       icon = Icons.check_circle_outline;
-    } else if (r.status == LampOldDbStatus.pathEmpty ||
-        r.status == LampOldDbStatus.pendingCreation ||
-        r.status == LampOldDbStatus.outputPendingCreation) {
+    } else if (r.status == LampOldDbStatus.pathEmpty) {
       bg = scheme.surfaceContainerHighest;
       icon = Icons.info_outline;
     } else {
@@ -727,85 +420,10 @@ class LampPathCheckPanel extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   if (showMessage) ...[
-                    if (pathController.text.isNotEmpty &&
-                        r.status != LampOldDbStatus.pendingCreation &&
-                        r.status != LampOldDbStatus.outputPendingCreation)
+                    if (pathController.text.isNotEmpty)
                       const SizedBox(height: 4),
                     Text(
                       pendingMessage ?? r.userMessageGreek,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Πίνακας ελέγχου διαδρομής Excel (πηγή εισαγωγής).
-class LampExcelPathCheckPanel extends StatelessWidget {
-  const LampExcelPathCheckPanel({
-    super.key,
-    required this.excelPathCheck,
-    required this.excelController,
-  });
-
-  final LampExcelCheckResult? excelPathCheck;
-  final TextEditingController excelController;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = excelPathCheck;
-    if (r == null) {
-      return Text(
-        'Δεν έχει τρέξει ακόμη έλεγχος — γίνεται αυτόματα μόλις οριστεί διαδρομή.',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      );
-    }
-    final scheme = Theme.of(context).colorScheme;
-    final Color? bg;
-    final IconData icon;
-    if (r.status == LampExcelStatus.ok) {
-      bg = scheme.primaryContainer.withValues(alpha: 0.45);
-      icon = Icons.check_circle_outline;
-    } else if (r.status == LampExcelStatus.pathEmpty) {
-      bg = scheme.surfaceContainerHighest;
-      icon = Icons.info_outline;
-    } else {
-      bg = scheme.errorContainer.withValues(alpha: 0.55);
-      icon = Icons.error_outline;
-    }
-    final showMessage = r.status != LampExcelStatus.ok;
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 20, color: scheme.onSurface),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (excelController.text.isNotEmpty)
-                    Text(
-                      p.basename(excelController.text),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  if (showMessage) ...[
-                    if (excelController.text.isNotEmpty)
-                      const SizedBox(height: 4),
-                    Text(
-                      r.userMessageGreek,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -849,17 +467,14 @@ class LampSearchTabReadPathBanner extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final Color bg;
     final IconData icon;
-    if (check!.status == LampOldDbStatus.pathEmpty ||
-        check.status == LampOldDbStatus.pendingCreation) {
+    if (check!.status == LampOldDbStatus.pathEmpty) {
       bg = scheme.surfaceContainerHighest;
       icon = Icons.info_outline;
     } else {
       bg = scheme.errorContainer.withValues(alpha: 0.55);
       icon = Icons.error_outline;
     }
-    final bannerTitle = check.status == LampOldDbStatus.pendingCreation
-        ? 'Η βάση δεν έχει δημιουργηθεί ακόμα'
-        : 'Η παλιά βάση δεν είναι έτοιμη για αναζήτηση';
+    const bannerTitle = 'Η παλιά βάση δεν είναι έτοιμη για αναζήτηση';
     return Material(
       color: bg,
       child: Padding(
