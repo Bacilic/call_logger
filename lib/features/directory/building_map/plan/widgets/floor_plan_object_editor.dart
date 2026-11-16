@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../../core/services/lansweeper_asset_page.dart';
 import '../../../../../core/utils/run_after_next_frame.dart';
 import '../../../../../core/widgets/compact_tooltip.dart';
 import '../../../../calls/utils/vnc_remote_target.dart';
+import '../../../screens/widgets/lansweeper_asset_page_button.dart';
 import '../floor_plan_object_fields.dart';
 import '../floor_plan_ports.dart';
 
 /// Τα στοιχεία ενός αντικειμένου όπως τα γράφει το πλαίσιο.
 typedef FloorPlanObjectDetails = ({
   String name,
+
+  /// Το μοντέλο της συσκευής (π.χ. NWA130BE).
+  String model,
   String ip,
   String lansweeperName,
+
+  /// Ο αριθμός της σελίδας στο Lansweeper, ή ολόκληρη η διεύθυνσή της, όπως
+  /// γράφτηκε — δες `parseLansweeperAssetId`.
+  String lansweeperAssetId,
   String notes,
 
   /// Οι ομάδες θυρών όπως γράφτηκαν· κενό όταν το είδος δεν δηλώνει
@@ -29,8 +38,8 @@ typedef FloorPlanObjectDetails = ({
 /// Πόσο πλατύ είναι το πλαίσιο — για να το τοποθετήσει η οθόνη.
 const double kFloorPlanObjectEditorWidth = 300;
 
-/// Πλαίσιο στοιχείων αντικειμένου πάνω στον χάρτη: όνομα, IP, όνομα
-/// Lansweeper, θύρες, σημειώσεις — με ✕ / ✓ στη μικρή μπάρα από πάνω, όπως το
+/// Πλαίσιο στοιχείων αντικειμένου πάνω στον χάρτη: όνομα, μοντέλο, IP,
+/// όνομα και σελίδα Lansweeper, θύρες, σημειώσεις — με ✕ / ✓ στη μικρή μπάρα από πάνω, όπως το
 /// πλαίσιο κειμένου.
 ///
 /// Enter σε μονογραμμικό πεδίο ή Ctrl+Enter αποθηκεύει· Esc ή ✕ ακυρώνει. Το
@@ -61,8 +70,12 @@ class FloorPlanObjectEditor extends StatefulWidget {
   final void Function(FloorPlanObjectDetails details) onCommit;
   final VoidCallback onCancel;
 
-  /// Δείχνει IP και όνομα Lansweeper — το ορίζει το είδος.
+  /// Δείχνει IP, όνομα και σελίδα Lansweeper — το ορίζει το είδος.
   final bool network;
+
+  /// Δείχνει το «Μοντέλο»: μόνο στις συσκευές (με δίκτυο ή θύρες), όχι στα
+  /// έπιπλα και τα σύμβολα.
+  bool get _isDevice => network || portCount;
 
   /// Δείχνει το πεδίο «Θύρες» (patch panel, switch, router, POE).
   final bool portCount;
@@ -94,9 +107,13 @@ class FloorPlanObjectEditor extends StatefulWidget {
 
 class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
   late final _name = TextEditingController(text: widget.initial.name);
+  late final _model = TextEditingController(text: widget.initial.model);
   late final _ip = TextEditingController(text: widget.initial.ip);
   late final _lansweeper = TextEditingController(
     text: widget.initial.lansweeperName,
+  );
+  late final _assetId = TextEditingController(
+    text: widget.initial.lansweeperAssetId,
   );
   late final _notes = TextEditingController(text: widget.initial.notes);
   late final List<_PortGroupFields> _groups = [
@@ -134,8 +151,10 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
   /// Ό,τι γράφει αυτή τη στιγμή το πλαίσιο — για αποθήκευση από έξω.
   FloorPlanObjectDetails get current => (
     name: _name.text,
+    model: _model.text,
     ip: widget.network ? floorPlanNormalizedIp(_ip.text) : _ip.text,
     lansweeperName: _lansweeper.text,
+    lansweeperAssetId: _assetId.text,
     notes: _notes.text,
     portGroups: widget.portCount
         ? [for (final g in _groups) g.draft]
@@ -147,6 +166,9 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
   );
 
   String? get _ipError => widget.network ? floorPlanIpError(_ip.text) : null;
+
+  String? get _assetIdError =>
+      widget.network ? parseLansweeperAssetId(_assetId.text).error : null;
 
   bool get _portsOk =>
       !widget.portCount ||
@@ -160,7 +182,11 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
   /// Στέκουν όλα τα πεδία; Αν όχι, δείχνει τα μηνύματα και το πλαίσιο μένει
   /// ανοιχτό — το ρωτά και η οθόνη πριν αποθηκεύσει με κλικ έξω.
   bool validate() {
-    final ok = _ipError == null && _portsOk && _heightError == null;
+    final ok =
+        _ipError == null &&
+        _assetIdError == null &&
+        _portsOk &&
+        _heightError == null;
     if (!ok) setState(() => _showErrors = true);
     return ok;
   }
@@ -168,8 +194,10 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
   @override
   void dispose() {
     _name.dispose();
+    _model.dispose();
     _ip.dispose();
     _lansweeper.dispose();
+    _assetId.dispose();
     _notes.dispose();
     for (final g in _groups) {
       g.dispose();
@@ -204,6 +232,7 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
     List<TextInputFormatter>? inputFormatters,
     String? error,
     String? helper,
+    Widget? suffix,
     ValueChanged<String>? onChanged,
   }) {
     return Padding(
@@ -229,6 +258,7 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
           errorMaxLines: 2,
           helperText: helper,
           helperMaxLines: 2,
+          suffixIcon: suffix,
         ),
         onChanged: (value) {
           onChanged?.call(value);
@@ -237,6 +267,21 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
         },
         onSubmitted: multiline ? null : (_) => _commit(),
       ),
+    );
+  }
+
+  /// Η σελίδα στο Lansweeper: δέχεται τον αριθμό ή ολόκληρη τη διεύθυνση, και
+  /// μόλις βγει αριθμός δείχνει το κουμπί που την ανοίγει.
+  Widget _assetIdField() {
+    final id = parseLansweeperAssetId(_assetId.text).id;
+    return _field(
+      _assetId,
+      'Σελίδα Lansweeper (AssetID)',
+      helper: id == null ? 'Επικολλήστε τη διεύθυνση της σελίδας' : null,
+      error: _assetIdError,
+      suffix: id == null ? null : LansweeperAssetPageButton(assetId: id),
+      // Το κουμπί εμφανίζεται με το πρώτο έγκυρο γράμμα.
+      onChanged: (_) => setState(() {}),
     );
   }
 
@@ -438,6 +483,7 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
                         focusNode: _nameFocus,
                         onChanged: _onNameChanged,
                       ),
+                      if (widget._isDevice) _field(_model, 'Μοντέλο'),
                       if (widget.portSeparator) _separatorField(),
                       if (widget.network) ...[
                         _field(
@@ -454,6 +500,7 @@ class FloorPlanObjectEditorState extends State<FloorPlanObjectEditor> {
                           error: _ipError,
                         ),
                         _field(_lansweeper, 'Όνομα Lansweeper'),
+                        _assetIdField(),
                       ],
                       if (widget.portCount) ..._portGroupsSection(theme),
                       if (widget.cabinetUnits != null)

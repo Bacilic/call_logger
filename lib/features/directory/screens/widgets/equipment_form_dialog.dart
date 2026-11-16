@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'directory_conflict_dialog.dart';
 
 import '../../../../core/database/database_helper.dart';
@@ -7,6 +8,7 @@ import '../../../../core/database/department_repository.dart';
 import '../../../../core/widgets/database_persistence_error_snackbar.dart';
 import '../../../../core/widgets/dialog_scrollable_content.dart';
 import '../../../../core/widgets/draggable_dialog_shell.dart';
+import '../../../../core/services/lansweeper_asset_page.dart';
 import '../../../../core/services/lansweeper_asset_target.dart';
 import '../../../../core/services/lookup_service.dart';
 import 'bulk_user_action_pickers.dart';
@@ -39,6 +41,7 @@ import 'location_field_help_icon.dart';
 import 'equipment_form_dismiss_guard.dart';
 import 'equipment_form_remote_params.dart';
 import 'form_single_save.dart';
+import 'lansweeper_asset_page_button.dart';
 
 /// Διάλογος φόρμας για δημιουργία/επεξεργασία/αντίγραφο εξοπλισμού.
 class EquipmentFormDialog extends ConsumerStatefulWidget {
@@ -117,6 +120,10 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
   /// Όνομα asset στο Lansweeper. Κενό = ισχύει ο κοινός κανόνας του VNC
   /// («PC + κωδικός»), που φαίνεται αχνά μέσα στο πεδίο.
   late final TextEditingController lansweeperAssetNameController;
+
+  /// Η σελίδα του μηχανήματος στο Lansweeper: ο αριθμός ή ολόκληρη η
+  /// διεύθυνση — κρατιέται μόνο ο αριθμός (δες `parseLansweeperAssetId`).
+  late final TextEditingController lansweeperAssetIdController;
   late final TextEditingController ownerController;
   late final FocusNode _ownerFocusNode;
   bool ownerTextInitialized = false;
@@ -224,6 +231,9 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
     lansweeperAssetNameController = TextEditingController(
       text: e?.lansweeperAssetName ?? '',
     );
+    lansweeperAssetIdController = TextEditingController(
+      text: e?.lansweeperAssetId?.toString() ?? '',
+    );
     ownerController = TextEditingController();
     _ownerFocusNode = FocusNode();
     departmentController = TextEditingController();
@@ -259,6 +269,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
     for (final c in [
       codeController,
       lansweeperAssetNameController,
+      lansweeperAssetIdController,
       ownerController,
       departmentController,
       locationController,
@@ -317,6 +328,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
     for (final c in [
       codeController,
       lansweeperAssetNameController,
+      lansweeperAssetIdController,
       ownerController,
       departmentController,
       locationController,
@@ -326,6 +338,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
     notesController.removeListener(markFormChanged);
     codeController.dispose();
     lansweeperAssetNameController.dispose();
+    lansweeperAssetIdController.dispose();
     notesController.dispose();
     for (final c in remoteParamControllers.values) {
       c.dispose();
@@ -614,6 +627,26 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
   /// αποθήκευση δεν κάνει τίποτα.
   Future<void> save() => runSingleSave(_save);
 
+  /// Η σελίδα στο Lansweeper: με έγκυρο αριθμό εμφανίζεται το κουμπί που την
+  /// ανοίγει· λάθος κείμενο κρατά τη φόρμα ανοιχτή, με το μήνυμα.
+  Widget _lansweeperAssetIdField() {
+    final id = parseLansweeperAssetId(lansweeperAssetIdController.text).id;
+    return TextFormField(
+      controller: lansweeperAssetIdController,
+      decoration: InputDecoration(
+        labelText: 'Σελίδα Lansweeper (AssetID)',
+        helperText: id == null
+            ? 'Επικολλήστε τη διεύθυνση της σελίδας του μηχανήματος.'
+            : null,
+        errorMaxLines: 2,
+        border: const OutlineInputBorder(),
+        suffixIcon: id == null ? null : LansweeperAssetPageButton(assetId: id),
+      ),
+      validator: (text) => parseLansweeperAssetId(text ?? '').error,
+      onChanged: (_) => setState(() {}),
+    );
+  }
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     for (final k in expandedRemoteKeys.toList()) {
@@ -650,9 +683,9 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
         .toList();
     if (elsewhere.isEmpty) return false;
 
-    final names = [
-      for (final u in elsewhere) (u.name ?? '').trim(),
-    ].where((n) => n.isNotEmpty).join(', ');
+    final names = [for (final u in elsewhere) (u.name ?? '').trim()]
+        .where((n) => n.isNotEmpty)
+        .join(', ');
     final targetName =
         lookup.getDepartmentName(targetDepartmentId)?.trim() ?? '';
     if (!mounted) return null;
@@ -740,9 +773,8 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
       equipmentDepartmentId = null;
     } else {
       final dbDept = await DatabaseHelper.instance.database;
-      equipmentDepartmentId = await DepartmentRepository(
-        dbDept,
-      ).getOrCreateDepartmentIdByName(deptText);
+      equipmentDepartmentId = await DepartmentRepository(dbDept)
+          .getOrCreateDepartmentIdByName(deptText);
     }
     // Χωρίς κάτοχο δεν υπάρχει τι να ακολουθήσει: ισχύει ό,τι γράφτηκε.
     final locTrim = userId == null
@@ -765,6 +797,9 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
       lansweeperAssetName: lansweeperAssetNameController.text.trim().isEmpty
           ? null
           : lansweeperAssetNameController.text.trim(),
+      lansweeperAssetId: parseLansweeperAssetId(
+        lansweeperAssetIdController.text,
+      ).id,
     );
     if (isEdit) {
       // Η διένεξη ρωτήθηκε ήδη πριν από τις εγγραφές. Ο φρουρός εδώ πιάνει
@@ -976,6 +1011,8 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
                     onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 12),
+                  _lansweeperAssetIdField(),
+                  const SizedBox(height: 12),
                   Consumer(
                     builder: (context, ref, _) {
                       final pairsAsync = ref.watch(remoteToolFormPairsProvider);
@@ -1148,9 +1185,8 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
                                   style:
                                       holderLocksDeptLoc && locationFollowsOwner
                                       ? TextStyle(
-                                          color: Theme.of(
-                                            context,
-                                          ).disabledColor,
+                                          color: Theme.of(context)
+                                              .disabledColor,
                                         )
                                       : null,
                                   decoration: InputDecoration(
@@ -1293,8 +1329,7 @@ class EquipmentFormDialogState extends ConsumerState<EquipmentFormDialog>
                                     focusNode: focusNode,
                                     decoration: InputDecoration(
                                       labelText: 'Κάτοχος',
-                                      hintText:
-                                          'Επίλεξε υπάλληλο από τη λίστα ή άφησε κενό (Άγνωστος κάτοχος)',
+                                      hintText: 'Επίλεξε υπάλληλο από τη λίστα ή άφησε κενό (Άγνωστος κάτοχος)',
                                       hintStyle: theme.textTheme.bodyMedium
                                           ?.copyWith(
                                             color: theme

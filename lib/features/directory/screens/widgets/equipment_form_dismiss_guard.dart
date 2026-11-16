@@ -45,7 +45,9 @@ class EquipmentFormDismissGuard {
       ..write('\u001e')
       ..write(host.lansweeperAssetNameController.text)
       ..write('\u001e')
-      ..write(host.defaultRemoteToolId ?? '');
+      ..write(host.defaultRemoteToolId ?? '')
+      ..write('\u001e')
+      ..write(host.lansweeperAssetIdController.text);
     final remoteKeys = <String>{
       ...host.expandedRemoteKeys,
       ...host.remoteParamValues.keys,
@@ -67,11 +69,11 @@ class EquipmentFormDismissGuard {
   }
 
   String _signatureExclusiveSegment(List<String> parts) =>
-      parts.length > 9 ? parts.last : '';
+      parts.length > 10 ? parts.last : '';
 
   String _signatureRemoteTail(List<String> parts) {
-    if (parts.length <= 10) return '';
-    return parts.sublist(9, parts.length - 1).join('\u001e');
+    if (parts.length <= 11) return '';
+    return parts.sublist(10, parts.length - 1).join('\u001e');
   }
 
   void tryCaptureFormBaseline() {
@@ -107,6 +109,9 @@ class EquipmentFormDismissGuard {
     }
     if ('${host.defaultRemoteToolId ?? ''}' != initAt(8)) {
       labels.add('Προεπιλεγμένο εργαλείο');
+    }
+    if (host.lansweeperAssetIdController.text != initAt(9)) {
+      labels.add('Σελίδα Lansweeper');
     }
     final curParts = formStateSignature().split('\u001e');
     if (_signatureExclusiveSegment(init) !=

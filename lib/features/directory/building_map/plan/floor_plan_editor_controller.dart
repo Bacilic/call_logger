@@ -731,13 +731,15 @@ class FloorPlanEditorController extends ChangeNotifier {
     ]);
   }
 
-  /// Αλλάζει όνομα, IP, όνομα Lansweeper και σημειώσεις — μία κίνηση
-  /// αναίρεσης. Τίποτα δεν γράφεται όταν τίποτα δεν άλλαξε.
+  /// Αλλάζει όνομα, μοντέλο, IP, στοιχεία Lansweeper και σημειώσεις — μία
+  /// κίνηση αναίρεσης. Τίποτα δεν γράφεται όταν τίποτα δεν άλλαξε.
   Future<void> updateObjectDetails(
     int id, {
     String? name,
+    String? model,
     String? ip,
     String? lansweeperName,
+    int? lansweeperAssetId,
     String? notes,
     String? portSeparator,
   }) async {
@@ -748,6 +750,8 @@ class FloorPlanEditorController extends ChangeNotifier {
           name: name,
           ip: ip,
           lansweeperName: lansweeperName,
+          lansweeperAssetId: lansweeperAssetId,
+          model: model,
           notes: notes,
         )
         // `null` = αυτόματο· κενό = χωρίς διαχωριστικό. Γράφεται όπως ήρθε.
@@ -755,6 +759,8 @@ class FloorPlanEditorController extends ChangeNotifier {
     if (next.name == old.name &&
         next.ip == old.ip &&
         next.lansweeperName == old.lansweeperName &&
+        next.lansweeperAssetId == old.lansweeperAssetId &&
+        next.model == old.model &&
         next.notes == old.notes &&
         next.portSeparator == old.portSeparator) {
       return;
@@ -1922,10 +1928,11 @@ class FloorPlanEditorController extends ChangeNotifier {
       if (objectsRepo != null) {
         for (final o in objectSource) {
           // Χωρίς stack: το αντίγραφο είναι άλλο μηχάνημα, όχι δεύτερο μέλος
-          // με τον ίδιο αριθμό.
+          // με τον ίδιο αριθμό. Κρατά μοντέλο και σημειώσεις· όνομα, IP και
+          // σελίδα Lansweeper ανήκουν στο πρωτότυπο.
           final copy = translateFloorPlanObject(
             o
-                .withDetails(notes: o.notes)
+                .withDetails(notes: o.notes, model: o.model)
                 .withStack(stackId: null, stackUnit: null),
             delta,
           );

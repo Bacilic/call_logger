@@ -46,6 +46,7 @@ class FloorPlanItemInfo {
     this.rows = const [],
     this.warning,
     this.notes,
+    this.lansweeperAssetId,
   });
 
   /// Όνομα, αριθμός ή κωδικός.
@@ -62,6 +63,10 @@ class FloorPlanItemInfo {
 
   /// Σημειώσεις αντικειμένου χάρτη — μόνο στα πλήρη στοιχεία.
   final String? notes;
+
+  /// Ο αριθμός της σελίδας στο Lansweeper — στα πλήρη στοιχεία γίνεται
+  /// κουμπί «Άνοιγμα στο Lansweeper».
+  final int? lansweeperAssetId;
 }
 
 /// Όσα χρειάζεται ο χάρτης για να περιγράψει ένα σύμβολο.
@@ -373,6 +378,7 @@ FloorPlanItemInfo? floorPlanItemInfo(
         add('Καλώδιο', other == null ? null : floorPlanCableEndName(other));
       }
     }
+    add('Μοντέλο', object.model);
     add('IP', object.ip);
     add('Lansweeper', object.lansweeperName);
     // Τα αντικείμενα του χάρτη δεν έχουν κάτοχο στον Κατάλογο· κάτοχος
@@ -385,6 +391,7 @@ FloorPlanItemInfo? floorPlanItemInfo(
       kindLabel: kind?.name ?? 'Αντικείμενο',
       rows: rows,
       notes: object.notes,
+      lansweeperAssetId: object.lansweeperAssetId,
     );
   }
 
@@ -421,5 +428,6 @@ FloorPlanItemInfo? floorPlanItemInfo(
     warning: mismatch
         ? 'Ο χώρος είναι του «${roomDepartmentName ?? 'άλλου τμήματος'}».'
         : null,
+    lansweeperAssetId: entry.lansweeperAssetId,
   );
 }

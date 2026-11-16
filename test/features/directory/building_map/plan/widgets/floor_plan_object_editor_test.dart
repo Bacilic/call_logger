@@ -6,12 +6,15 @@
 
 import 'package:call_logger/features/directory/building_map/plan/widgets/floor_plan_object_editor.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const FloorPlanObjectDetails _empty = (
   name: '',
+  model: '',
   ip: '',
   lansweeperName: '',
+  lansweeperAssetId: '',
   notes: '',
   portGroups: [],
   portSeparator: null,
@@ -32,19 +35,21 @@ void main() {
     int? cabinetUnits,
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: FloorPlanObjectEditor(
-            title: 'Patch panel',
-            initial: initial,
-            network: network,
-            portSeparator: portSeparator,
-            portCount: true,
-            portGroups: portGroups,
-            cabinetName: 'MC.2.S',
-            cabinetUnits: cabinetUnits,
-            onCommit: saved.add,
-            onCancel: () {},
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: FloorPlanObjectEditor(
+              title: 'Patch panel',
+              initial: initial,
+              network: network,
+              portSeparator: portSeparator,
+              portCount: true,
+              portGroups: portGroups,
+              cabinetName: 'MC.2.S',
+              cabinetUnits: cabinetUnits,
+              onCommit: saved.add,
+              onCancel: () {},
+            ),
           ),
         ),
       ),
@@ -119,6 +124,32 @@ void main() {
     expect(saved, isEmpty);
   });
 
+  testWidgets(
+    'σελίδα Lansweeper: η επικολλημένη διεύθυνση περνά, το λάθος κείμενο όχι',
+    (tester) async {
+      await pumpEditor(tester);
+
+      await tester.enterText(field('Σελίδα Lansweeper (AssetID)'), 'AP5087');
+      await tester.pump();
+      await tester.tap(find.byTooltip('Αποθήκευση (Enter)'));
+      await tester.pump();
+      expect(saved, isEmpty);
+
+      await tester.enterText(
+        field('Σελίδα Lansweeper (AssetID)'),
+        'http://10.10.201.22:81/asset.aspx?AssetID=1084',
+      );
+      await tester.enterText(field('Μοντέλο'), 'NWA130BE');
+      await tester.pump();
+      expect(find.byIcon(Icons.open_in_new), findsOneWidget);
+      await tester.tap(find.byTooltip('Αποθήκευση (Enter)'));
+      await tester.pump();
+
+      expect(saved.single.lansweeperAssetId, contains('1084'));
+      expect(saved.single.model, 'NWA130BE');
+    },
+  );
+
   testWidgets('το ύψος σε U φαίνεται μόνο μέσα σε καμπίνα', (tester) async {
     await pumpEditor(tester);
     expect(field('Ύψος (U)'), findsNothing);
@@ -127,8 +158,10 @@ void main() {
       tester,
       initial: (
         name: '',
+        model: '',
         ip: '',
         lansweeperName: '',
+        lansweeperAssetId: '',
         notes: '',
         portGroups: [],
         portSeparator: null,

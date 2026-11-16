@@ -39,7 +39,7 @@ void main() {
     initSqfliteFfiForTests();
     db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
     await migrateDatabaseToV69(db);
-    await migrateDatabaseToV81(db);
+    await migrateDatabaseToV82(db);
     // Ο πίνακας των ορόφων υπάρχει πάντα στην πραγματική βάση (v20)· εδώ
     // χρειάζεται για το «πού βρίσκεται» των γραμμένων ονομάτων θυρών.
     await db.execute(
@@ -1093,6 +1093,28 @@ void main() {
       final copy = editor.objects.firstWhere((o) => o.id != sw.id);
       expect(editor.portsOf(copy.id), hasLength(8));
     });
+
+    test(
+      'αντίγραφο συσκευής κρατά το μοντέλο, όχι τη σελίδα Lansweeper',
+      () async {
+        final sw = await editor.addObject(switchKind, Offset.zero);
+        await editor.updateObjectDetails(
+          sw!.id,
+          name: 'SW-2',
+          model: 'C9200-24P',
+          lansweeperAssetId: 603,
+        );
+        editor.selectObject(sw.id);
+        editor.copySelected();
+
+        await editor.paste();
+
+        final copy = editor.objects.firstWhere((o) => o.id != sw.id);
+        expect(copy.model, 'C9200-24P');
+        expect(copy.lansweeperAssetId, isNull);
+        expect(copy.name, isNull);
+      },
+    );
 
     test('θύρα με καλώδιο είναι κατειλημμένη, και η μείωση το ξέρει', () async {
       final sw = await editor.addObject(switchKind, Offset.zero);

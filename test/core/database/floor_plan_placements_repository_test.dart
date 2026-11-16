@@ -33,7 +33,7 @@ void main() {
       await db.execute(table);
     }
     await migrateDatabaseToV69(db);
-    await migrateDatabaseToV81(db);
+    await migrateDatabaseToV82(db);
     repo = FloorPlanPlacementsRepository(db);
 
     await db.insert('departments', {
@@ -180,6 +180,7 @@ void main() {
       await db.insert('user_equipment', {'user_id': 10, 'equipment_id': 30});
       await db.update('equipment', {
         'lansweeper_asset_name': 'PC0412',
+        'lansweeper_asset_id': 603,
       }, where: 'id = 30');
 
       final entries = await repo.catalogEntries();
@@ -195,6 +196,7 @@ void main() {
         'Παπαδόπουλος Γιώργος',
       ]);
       expect(of(FloorPlanPlacementType.equipment).lansweeperName, 'PC0412');
+      expect(of(FloorPlanPlacementType.equipment).lansweeperAssetId, 603);
     });
 
     test('διαγραμμένος υπάλληλος δεν εμφανίζεται ως κάτοχος', () async {

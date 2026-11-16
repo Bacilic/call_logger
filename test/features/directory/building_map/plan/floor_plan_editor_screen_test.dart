@@ -75,7 +75,7 @@ void main() {
     initSqfliteFfiForTests();
     db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
     await migrateDatabaseToV69(db);
-    await migrateDatabaseToV81(db);
+    await migrateDatabaseToV82(db);
     repo = FloorPlanRepository(db);
     catalog = _FakeCatalog([
       DepartmentModel(id: 10, name: 'Ακτινολογικό', floorId: 1),

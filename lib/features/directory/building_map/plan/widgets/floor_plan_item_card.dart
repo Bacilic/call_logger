@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../screens/widgets/lansweeper_asset_page_button.dart';
 import '../floor_plan_item_info.dart';
 
 /// Η υπόδειξη με το πέρασμα του ποντικιού πάνω από ένα σύμβολο του χάρτη:
@@ -29,7 +30,8 @@ class FloorPlanItemTooltip extends StatelessWidget {
 }
 
 /// Τα πλήρη στοιχεία ενός συμβόλου, με κλικ: ό,τι λέει η υπόδειξη, οι
-/// σημειώσεις, και για τις εγγραφές του Καταλόγου «Άνοιγμα καρτέλας».
+/// σημειώσεις, «Άνοιγμα στο Lansweeper» όταν η συσκευή έχει σελίδα εκεί, και
+/// για τις εγγραφές του Καταλόγου «Άνοιγμα καρτέλας».
 class FloorPlanItemDetailsPanel extends StatelessWidget {
   const FloorPlanItemDetailsPanel({
     super.key,
@@ -79,6 +81,16 @@ class FloorPlanItemDetailsPanel extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: footer,
+                ),
+              ],
+              if (info.lansweeperAssetId case final assetId?) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: LansweeperAssetPageButton(
+                    assetId: assetId,
+                    withLabel: true,
+                  ),
                 ),
               ],
               if (onOpenCard != null) ...[

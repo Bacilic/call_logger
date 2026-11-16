@@ -146,7 +146,8 @@ class FloorPlanPlacementsRepository {
       'SELECT phone_id, department_id FROM department_phones',
     );
     final equipment = await db.rawQuery('''
-      SELECT id, code_equipment, department_id, lansweeper_asset_name
+      SELECT id, code_equipment, department_id, lansweeper_asset_name,
+             lansweeper_asset_id
       FROM equipment
       WHERE COALESCE(is_deleted, 0) = 0
       ORDER BY code_equipment COLLATE NOCASE
@@ -234,6 +235,7 @@ class FloorPlanPlacementsRepository {
           departmentIds: one(r['department_id']),
           holders: sorted(holdersOfEquipment[r['id'] as int]),
           lansweeperName: (r['lansweeper_asset_name'] as String?)?.trim(),
+          lansweeperAssetId: r['lansweeper_asset_id'] as int?,
         ),
     ];
   }

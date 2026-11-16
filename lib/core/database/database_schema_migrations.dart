@@ -354,6 +354,43 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 81 && newVersion >= 81) {
     await migrateDatabaseToV81(db);
   }
+  if (oldVersion < 82 && newVersion >= 82) {
+    await migrateDatabaseToV82(db);
+  }
+}
+
+/// v82: ο αριθμός της σελίδας μιας συσκευής στο Lansweeper και το μοντέλο
+/// κάθε συσκευής του χάρτη.
+///
+/// - `building_map_objects.lansweeper_asset_id`, `equipment.lansweeper_asset_id`:
+///   ο αριθμός μετά το `AssetID=` της σελίδας του μηχανήματος.
+/// - `building_map_objects.model`: το μοντέλο της συσκευής (π.χ. NWA130BE).
+///
+/// Όλα ξεκινούν κενά. Idempotent: κάθε στήλη μπαίνει μόνο αν λείπει.
+Future<void> migrateDatabaseToV82(Database db) async {
+  await migrateDatabaseToV81(db);
+  Future<Set<String>> columnsOf(String table) async =>
+      (await db.rawQuery('PRAGMA table_info($table)'))
+          .map((r) => r['name'] as String)
+          .toSet();
+  final objectColumns = await columnsOf('building_map_objects');
+  if (!objectColumns.contains('lansweeper_asset_id')) {
+    await db.execute(
+      'ALTER TABLE building_map_objects ADD COLUMN lansweeper_asset_id INTEGER',
+    );
+  }
+  if (!objectColumns.contains('model')) {
+    await db.execute('ALTER TABLE building_map_objects ADD COLUMN model TEXT');
+  }
+  // Κενό σύνολο = ο πίνακας δεν υπάρχει (βάση μόνο με τον χάρτη, π.χ. σε
+  // τεστ): δεν υπάρχει τι να αναβαθμιστεί.
+  final equipmentColumns = await columnsOf('equipment');
+  if (equipmentColumns.isNotEmpty &&
+      !equipmentColumns.contains('lansweeper_asset_id')) {
+    await db.execute(
+      'ALTER TABLE equipment ADD COLUMN lansweeper_asset_id INTEGER',
+    );
+  }
 }
 
 /// v81: ο τύπος καλωδίου — `building_map_cables.cable_type`.

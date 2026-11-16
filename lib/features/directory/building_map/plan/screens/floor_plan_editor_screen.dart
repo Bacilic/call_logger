@@ -32,6 +32,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../core/database/building_map_repository.dart';
 import '../../../../../core/providers/quick_call_providers.dart';
+import '../../../../../core/services/lansweeper_asset_page.dart';
 import '../../../../../core/widgets/quick_call_fab.dart';
 import '../../../../../core/database/database_helper.dart';
 import '../../../../../core/database/department_repository.dart';
@@ -1139,8 +1140,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     await _controller.updateObjectDetails(
       id,
       name: details.name,
+      model: details.model,
       ip: details.ip,
       lansweeperName: details.lansweeperName,
+      lansweeperAssetId: parseLansweeperAssetId(details.lansweeperAssetId).id,
       notes: details.notes,
       portSeparator: details.portSeparator,
     );
@@ -1840,8 +1843,10 @@ class _FloorPlanEditorScreenState extends State<FloorPlanEditorScreen> {
     final symbol = _controller.kinds[o.kindId]?.symbol;
     return (
       name: o.name ?? '',
+      model: o.model ?? '',
       ip: o.ip ?? '',
       lansweeperName: o.lansweeperName ?? '',
+      lansweeperAssetId: o.lansweeperAssetId?.toString() ?? '',
       notes: o.notes ?? '',
       portGroups: (symbol?.hasPortCount ?? false)
           ? floorPlanPortGroupDrafts(

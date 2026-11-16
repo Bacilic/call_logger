@@ -20,6 +20,7 @@ class EquipmentModel {
     this.departmentId,
     this.location,
     this.lansweeperAssetName,
+    this.lansweeperAssetId,
     this.isDeleted = false,
   }) : remoteParams = Map<String, String>.unmodifiable(
          Map<String, String>.from(remoteParams),
@@ -48,6 +49,10 @@ class EquipmentModel {
   /// Κενό = ισχύει ο κοινός κανόνας του VNC («PC + κωδικός», IP μένει IP) —
   /// βλ. [lansweeperAssetTargetResolved].
   final String? lansweeperAssetName;
+
+  /// Ο αριθμός της σελίδας του μηχανήματος στο Lansweeper
+  /// (`equipment.lansweeper_asset_id`, το `AssetID=` της διεύθυνσης).
+  final int? lansweeperAssetId;
   final bool isDeleted;
 
   /// Στόχος `AddAsset` για ticket Lansweeper: η αποθηκευμένη τιμή αν υπάρχει,
@@ -206,6 +211,7 @@ class EquipmentModel {
       departmentId: map['department_id'] as int?,
       location: map['location'] as String?,
       lansweeperAssetName: map['lansweeper_asset_name'] as String?,
+      lansweeperAssetId: map['lansweeper_asset_id'] as int?,
       isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
@@ -220,6 +226,7 @@ class EquipmentModel {
       'department_id': departmentId,
       'location': location,
       'lansweeper_asset_name': lansweeperAssetName,
+      'lansweeper_asset_id': lansweeperAssetId,
       'is_deleted': isDeleted ? 1 : 0,
       'remote_params': remoteParams.isEmpty ? null : jsonEncode(remoteParams),
     };
@@ -240,6 +247,7 @@ class EquipmentModel {
     int? departmentId,
     String? location,
     String? lansweeperAssetName,
+    int? lansweeperAssetId,
     bool? isDeleted,
   }) {
     final nextRemote = remoteParams ?? this.remoteParams;
@@ -253,6 +261,7 @@ class EquipmentModel {
       departmentId: departmentId ?? this.departmentId,
       location: location ?? this.location,
       lansweeperAssetName: lansweeperAssetName ?? this.lansweeperAssetName,
+      lansweeperAssetId: lansweeperAssetId ?? this.lansweeperAssetId,
       isDeleted: isDeleted ?? this.isDeleted,
     );
   }

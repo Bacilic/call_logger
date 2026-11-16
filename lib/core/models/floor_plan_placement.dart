@@ -111,6 +111,7 @@ class FloorPlanCatalogEntry {
     this.equipment = const [],
     this.holders = const [],
     this.lansweeperName,
+    this.lansweeperAssetId,
   });
 
   final FloorPlanPlacementType type;
@@ -133,6 +134,9 @@ class FloorPlanCatalogEntry {
 
   /// Εξοπλισμός: το όνομά του στο Lansweeper.
   final String? lansweeperName;
+
+  /// Εξοπλισμός: ο αριθμός της σελίδας του στο Lansweeper.
+  final int? lansweeperAssetId;
 
   (FloorPlanPlacementType, int) get key => (type, entityId);
 }

@@ -152,6 +152,10 @@ import 'database_schema_version.dart';
 /// ονόματα.
 /// v81: `building_map_cables.cable_type` — Cat 5e, Cat 6, Cat 6A, Cat 7. Κενό
 /// = Cat 5e, η προεπιλογή· τα υπάρχοντα καλώδια μένουν κενά.
+/// v82: ο αριθμός της σελίδας μιας συσκευής στο Lansweeper (`AssetID`) —
+/// `building_map_objects.lansweeper_asset_id` και `equipment.lansweeper_asset_id`
+/// — και το μοντέλο κάθε συσκευής του χάρτη (`building_map_objects.model`).
+/// Όλα κενά στα υπάρχοντα.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Η εικόνα κάθε κάτοψης ορόφου — **μία και κοινή για όλους τους σταθμούς**.
@@ -298,6 +302,8 @@ const String kCreateBuildingMapObjectsTable = '''
         name TEXT,
         ip TEXT,
         lansweeper_name TEXT,
+        lansweeper_asset_id INTEGER,
+        model TEXT,
         notes TEXT,
         cabinet_id INTEGER,
         rack_u INTEGER,

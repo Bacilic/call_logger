@@ -24,7 +24,7 @@ void main() {
     await migrateDatabaseToV69(db);
     // Η τρέχουσα μορφή: η διαγραφή ορόφου αγγίζει και τους πίνακες δικτύου και
     // τις εικόνες πατρόν.
-    await migrateDatabaseToV81(db);
+    await migrateDatabaseToV82(db);
     repo = FloorPlanObjectsRepository(db);
   });
 
@@ -316,6 +316,22 @@ void main() {
       expect(object.name, isNull);
       expect(object.ip, '10.0.0.9');
     });
+
+    test(
+      'μοντέλο και σελίδα Lansweeper γράφονται και ξαναδιαβάζονται',
+      () async {
+        await repo.insertObject(
+          printer(
+            1,
+            Offset.zero,
+          ).withDetails(model: ' NWA130BE ', lansweeperAssetId: 1084),
+        );
+
+        final stored = (await repo.listObjects(1)).single;
+        expect(stored.model, 'NWA130BE');
+        expect(stored.lansweeperAssetId, 1084);
+      },
+    );
   });
 
   group('Πληροφορίες ανά είδος', () {
@@ -469,8 +485,8 @@ void main() {
         'ip': '10.10.1.5',
       });
 
-      await migrateDatabaseToV81(db);
-      await migrateDatabaseToV81(db);
+      await migrateDatabaseToV82(db);
+      await migrateDatabaseToV82(db);
 
       final kinds = await repo.kinds();
       expect(kinds[empty]!.hasNetwork, isFalse);
@@ -483,6 +499,9 @@ void main() {
       expect(object.portSeparator, isNull);
       // v79: ό,τι υπήρχε κρατά την αρίθμηση από πάνω.
       expect(object.rackFromBottom, isFalse);
+      // v82: μοντέλο και σελίδα Lansweeper ξεκινούν κενά.
+      expect(object.model, isNull);
+      expect(object.lansweeperAssetId, isNull);
     });
   });
 
@@ -524,7 +543,7 @@ void main() {
         await migrateDatabaseToV75(old);
         await migrateDatabaseToV75(old);
         // Η ανάγνωση ζητά τις σημερινές στήλες του πίνακα.
-        await migrateDatabaseToV80(old);
+        await migrateDatabaseToV82(old);
 
         final object = (await FloorPlanObjectsRepository(old).listObjects(1))
             .single;
@@ -578,8 +597,8 @@ void main() {
         await migrateDatabaseToV80(old);
         await old.insert('building_map_cables', {'id': 3});
 
-        await migrateDatabaseToV81(old);
-        await migrateDatabaseToV81(old);
+        await migrateDatabaseToV82(old);
+        await migrateDatabaseToV82(old);
 
         final cable = (await old.query('building_map_cables')).single;
         expect(cable['cable_type'], isNull);

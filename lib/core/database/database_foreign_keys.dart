@@ -99,6 +99,7 @@ CREATE TABLE equipment (
   department_id INTEGER,
   location TEXT,
   lansweeper_asset_name TEXT,
+  lansweeper_asset_id INTEGER,
   is_deleted INTEGER DEFAULT 0,
   FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL
 )

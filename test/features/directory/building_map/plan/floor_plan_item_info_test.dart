@@ -44,7 +44,9 @@ void main() {
             kindId: 5,
             center: Offset.zero,
             name: 'ΕΚΤ-ΥΛ-01',
+            model: 'M404dn',
             ip: '10.1.2.33',
+            lansweeperAssetId: 1084,
             notes: 'δίπλα στο παράθυρο',
           ),
         },
@@ -424,7 +426,8 @@ void main() {
     expect(info.warning, isNull);
   });
 
-  test('αντικείμενο χάρτη: είδος, IP, και τμήμα του χώρου ως κάτοχος', () {
+  test('αντικείμενο χάρτη: είδος, μοντέλο, IP, σελίδα Lansweeper, και τμήμα '
+      'του χώρου ως κάτοχος', () {
     const view = FloorPlanObjectView(
       id: 7,
       center: Offset.zero,
@@ -436,7 +439,12 @@ void main() {
     final info = floorPlanItemInfo(view, sources(roomDepartment: 1))!;
     expect(info.title, 'ΕΚΤ-ΥΛ-01');
     expect(info.kindLabel, 'Εκτυπωτής');
-    expect(info.rows, [('IP', '10.1.2.33'), ('Τμήμα', 'Υλικού')]);
+    expect(info.rows, [
+      ('Μοντέλο', 'M404dn'),
+      ('IP', '10.1.2.33'),
+      ('Τμήμα', 'Υλικού'),
+    ]);
+    expect(info.lansweeperAssetId, 1084);
     expect(info.notes, 'δίπλα στο παράθυρο');
   });
 

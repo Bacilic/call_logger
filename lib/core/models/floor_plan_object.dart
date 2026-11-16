@@ -24,6 +24,8 @@ class FloorPlanObject {
     this.name,
     this.ip,
     this.lansweeperName,
+    this.lansweeperAssetId,
+    this.model,
     this.notes,
     this.cabinetId,
     this.rackU,
@@ -45,6 +47,12 @@ class FloorPlanObject {
   final String? name;
   final String? ip;
   final String? lansweeperName;
+
+  /// Ο αριθμός της σελίδας της συσκευής στο Lansweeper (`asset.aspx?AssetID=`).
+  final int? lansweeperAssetId;
+
+  /// Το μοντέλο της συσκευής (π.χ. NWA130BE).
+  final String? model;
   final String? notes;
   final int? cabinetId;
   final int? rackU;
@@ -91,6 +99,8 @@ class FloorPlanObject {
     'name',
     'ip',
     'lansweeper_name',
+    'lansweeper_asset_id',
+    'model',
     'notes',
     'cabinet_id',
     'rack_u',
@@ -119,6 +129,8 @@ class FloorPlanObject {
       name: row['name'] as String?,
       ip: row['ip'] as String?,
       lansweeperName: row['lansweeper_name'] as String?,
+      lansweeperAssetId: row['lansweeper_asset_id'] as int?,
+      model: row['model'] as String?,
       notes: row['notes'] as String?,
       cabinetId: row['cabinet_id'] as int?,
       rackU: row['rack_u'] as int?,
@@ -143,6 +155,8 @@ class FloorPlanObject {
     'name': name,
     'ip': ip,
     'lansweeper_name': lansweeperName,
+    'lansweeper_asset_id': lansweeperAssetId,
+    'model': model,
     'notes': notes,
     'cabinet_id': cabinetId,
     'rack_u': rackU,
@@ -170,6 +184,8 @@ class FloorPlanObject {
     name: name,
     ip: ip,
     lansweeperName: lansweeperName,
+    lansweeperAssetId: lansweeperAssetId,
+    model: model,
     notes: notes,
     cabinetId: cabinetId,
     rackU: rackU,
@@ -199,6 +215,8 @@ class FloorPlanObject {
     name: name,
     ip: ip,
     lansweeperName: lansweeperName,
+    lansweeperAssetId: lansweeperAssetId,
+    model: model,
     notes: notes,
     cabinetId: cabinetId,
     rackU: rackU,
@@ -216,6 +234,8 @@ class FloorPlanObject {
     String? name,
     String? ip,
     String? lansweeperName,
+    int? lansweeperAssetId,
+    String? model,
     String? notes,
   }) => FloorPlanObject(
     id: id,
@@ -227,6 +247,8 @@ class FloorPlanObject {
     name: _blankToNull(name),
     ip: _blankToNull(ip),
     lansweeperName: _blankToNull(lansweeperName),
+    lansweeperAssetId: lansweeperAssetId,
+    model: _blankToNull(model),
     notes: _blankToNull(notes),
     cabinetId: cabinetId,
     rackU: rackU,
@@ -252,6 +274,8 @@ class FloorPlanObject {
         name: name,
         ip: ip,
         lansweeperName: lansweeperName,
+        lansweeperAssetId: lansweeperAssetId,
+        model: model,
         notes: notes,
         cabinetId: cabinetId,
         rackU: rackU,
@@ -277,6 +301,8 @@ class FloorPlanObject {
         name: name,
         ip: ip,
         lansweeperName: lansweeperName,
+        lansweeperAssetId: lansweeperAssetId,
+        model: model,
         notes: notes,
         cabinetId: cabinetId,
         rackU: rackU,
@@ -300,6 +326,8 @@ class FloorPlanObject {
     name: name,
     ip: ip,
     lansweeperName: lansweeperName,
+    lansweeperAssetId: lansweeperAssetId,
+    model: model,
     notes: notes,
     cabinetId: cabinetId,
     rackU: rackU,
@@ -323,6 +351,8 @@ class FloorPlanObject {
     name: name,
     ip: ip,
     lansweeperName: lansweeperName,
+    lansweeperAssetId: lansweeperAssetId,
+    model: model,
     notes: notes,
     cabinetId: cabinetId,
     rackU: rackU,
