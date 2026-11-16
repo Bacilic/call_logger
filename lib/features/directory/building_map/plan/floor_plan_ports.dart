@@ -1,10 +1,53 @@
 import '../../../../core/models/floor_plan_object.dart';
 import '../../../../core/models/floor_plan_object_kind.dart';
 import '../../../../core/models/floor_plan_port.dart';
+import '../../../../core/utils/search_text_normalizer.dart';
 import 'floor_plan_stack.dart';
 
 export '../../../../core/models/floor_plan_port.dart'
-    show floorPlanPortAutoName, kFloorPlanDefaultPortType;
+    show
+        floorPlanPortAutoName,
+        floorPlanComparePorts,
+        floorPlanDefaultPortSeparator,
+        FloorPlanPortGroup,
+        kFloorPlanDefaultPortType,
+        kFloorPlanCableTypes,
+        kFloorPlanDefaultCableType,
+        floorPlanCableTypeLabel,
+        kFloorPlanPortSeparatorMaxLength,
+        FloorPlanWrittenPortName;
+
+/// Η θύρα του κτιρίου που έχει ήδη το γραμμένο όνομα [name] — χωρίς διάκριση
+/// κεφαλαίων και τόνων· `null` όταν κανένα. Οι [exceptPortIds] (π.χ. η ίδια η
+/// θύρα που γράφεται) δεν μετρούν. Μόνο για προειδοποίηση: το ίδιο όνομα
+/// επιτρέπεται (απόφαση 13/11/2026, ώσπου να φανεί στην πράξη αν χρειάζεται
+/// απαγόρευση).
+FloorPlanWrittenPortName? floorPlanWrittenNameClash(
+  String name,
+  Iterable<FloorPlanWrittenPortName> names, {
+  Set<int> exceptPortIds = const {},
+}) {
+  if (name.trim().isEmpty) return null;
+  for (final n in names) {
+    if (exceptPortIds.contains(n.portId)) continue;
+    if (floorPlanSameWrittenName(n.name, name)) return n;
+  }
+  return null;
+}
+
+/// Δύο γραμμένα ονόματα είναι «ίδια» χωρίς διάκριση κεφαλαίων, τόνων και
+/// κενών στις άκρες· τα κενά ονόματα δεν είναι ποτέ ίδια.
+bool floorPlanSameWrittenName(String a, String b) {
+  final key = SearchTextNormalizer.normalizeForSearch(a.trim());
+  return key.isNotEmpty &&
+      key == SearchTextNormalizer.normalizeForSearch(b.trim());
+}
+
+/// Το μήνυμα της προειδοποίησης για το [name] που έχει ήδη η [clash].
+String floorPlanWrittenNameWarning(
+  String name,
+  FloorPlanWrittenPortName clash,
+) => 'Το «${name.trim()}» το έχει ήδη η ${clash.where}.';
 
 /// Καθαρή λογική των θυρών: πώς λέγονται, πώς στοιχίζονται στην πρόσοψη, και
 /// τι αλλάζει όταν αλλάζει το πλήθος τους.
@@ -35,7 +78,9 @@ String floorPlanObjectPortName({
     cabinetName: cabinetId == null ? null : objects[cabinetId]?.name,
     number: port.number,
     stackUnit: object.stackUnit,
-    portType: object.portType,
+    groups: object.portGroups,
+    group: port.groupIndex,
+    portSeparator: object.portSeparator,
   );
 }
 
@@ -45,6 +90,7 @@ String floorPlanLinkName(FloorPlanPortLink link) => floorPlanPortAutoName(
   objectName: link.panelName,
   cabinetName: link.cabinetName,
   number: link.patchNumber,
+  portSeparator: link.panelSeparator,
 );
 
 /// Το ίδιο, για μια θύρα της λίστας επιλογής.
@@ -54,6 +100,7 @@ String floorPlanPatchOptionName(FloorPlanPatchPortOption option) =>
       objectName: option.panelName,
       cabinetName: option.cabinetName,
       number: option.number,
+      portSeparator: option.panelSeparator,
     );
 
 /// Η ένδειξη θύρας πρίζας που δεν έχει δεθεί ακόμη.
@@ -139,7 +186,9 @@ String floorPlanCableEndName(FloorPlanCableEnd end) {
     cabinetName: end.cabinetName,
     number: end.number,
     stackUnit: end.stackUnit,
-    portType: end.portType,
+    groups: end.portGroups,
+    group: end.groupIndex,
+    portSeparator: end.portSeparator,
   );
 }
 
@@ -185,12 +234,28 @@ class FloorPlanPortCables {
   final Set<int> front = {};
 
   final Map<(int, String), (int, FloorPlanCableEnd)> _other = {};
+  late final Map<int, FloorPlanCableLine> _byCable = {
+    for (final l in lines) l.cableId: l,
+  };
 
   /// Το άλλο άκρο του καλωδίου της θύρας [portId], από την πλευρά [side].
   FloorPlanCableEnd? otherEnd(int portId, String side) =>
       _other[(portId, side)]?.$2;
 
   int? cableIdAt(int portId, String side) => _other[(portId, side)]?.$1;
+
+  /// Το καλώδιο της θύρας [portId] από την πλευρά [side], με τον τύπο του.
+  FloorPlanCableLine? lineAt(int portId, String side) {
+    final id = cableIdAt(portId, side);
+    return id == null ? null : _byCable[id];
+  }
+
+  /// Ο τύπος του καλωδίου της θύρας [portId] από την πλευρά [side], όπως
+  /// φαίνεται («Cat 5e» όταν δεν ορίστηκε)· `null` χωρίς καλώδιο.
+  String? typeAt(int portId, String side) {
+    final line = lineAt(portId, side);
+    return line == null ? null : floorPlanCableTypeLabel(line.type);
+  }
 
   /// Πόσα διαφορετικά καλώδια αγγίζουν τα αντικείμενα [objectIds]: ένα καλώδιο
   /// ανάμεσα σε δύο συσκευές της ίδιας καμπίνας μετρά μία φορά.
@@ -234,10 +299,14 @@ class FloorPlanOutletPortDraft {
     this.patchPortName,
     this.connection = FloorPlanPortConnection.none,
     this.connectionLabel,
+    this.cableType,
   });
 
   final int number;
   final String? writtenName;
+
+  /// Ο τύπος του καλωδίου προς το patch panel· `null` = Cat 5e.
+  final String? cableType;
 
   /// Η θύρα του patch panel όπου δένεται· `null` = χωρίς σύνδεση.
   final int? patchPortId;
@@ -251,8 +320,10 @@ class FloorPlanOutletPortDraft {
     String? Function()? writtenName,
     ({int? id, String? name})? patchPort,
     ({FloorPlanPortConnection value, String? label})? connection,
+    String? Function()? cableType,
   }) => FloorPlanOutletPortDraft(
     number: number,
+    cableType: cableType == null ? this.cableType : cableType(),
     writtenName: writtenName == null ? this.writtenName : writtenName(),
     patchPortId: patchPort == null ? patchPortId : patchPort.id,
     patchPortName: patchPort == null ? patchPortName : patchPort.name,
@@ -269,6 +340,7 @@ class FloorPlanOutletChange {
     this.update = const [],
     this.disconnect = const [],
     this.connect = const [],
+    this.retype = const [],
   });
 
   /// Νέες θύρες (χωρίς id ακόμη).
@@ -283,15 +355,20 @@ class FloorPlanOutletChange {
   /// Θύρες που μένουν αλλά χάνουν το καλώδιό τους προς το patch panel.
   final List<int> disconnect;
 
-  /// Ποια θύρα της πλάκας (κατά αριθμό) δένεται με ποια θύρα patch panel.
-  final List<({int number, int patchPortId})> connect;
+  /// Ποια θύρα της πλάκας (κατά αριθμό) δένεται με ποια θύρα patch panel, και
+  /// με τι καλώδιο.
+  final List<({int number, int patchPortId, String? type})> connect;
+
+  /// Θύρες που μένουν δεμένες στο ίδιο patch panel με άλλο τύπο καλωδίου.
+  final List<({int outletPortId, String? type})> retype;
 
   bool get isEmpty =>
       insert.isEmpty &&
       remove.isEmpty &&
       update.isEmpty &&
       disconnect.isEmpty &&
-      connect.isEmpty;
+      connect.isEmpty &&
+      retype.isEmpty;
 }
 
 /// Συγκρίνει τις θύρες της πρίζας [objectId] με το [drafts] και λέει τι
@@ -301,13 +378,16 @@ FloorPlanOutletChange floorPlanOutletChange({
   required List<FloorPlanPort> existing,
   required Map<int, int> patchPortOfOutletPort,
   required List<FloorPlanOutletPortDraft> drafts,
+  Map<int, String?> cableTypeOfOutletPort = const {},
 }) {
   final byNumber = {for (final p in existing) p.number: p};
   final wanted = {for (final d in drafts) d.number};
   final insert = <FloorPlanPort>[];
   final update = <FloorPlanPort>[];
   final disconnect = <int>[];
-  final connect = <({int number, int patchPortId})>[];
+  final connect = <({int number, int patchPortId, String? type})>[];
+  final retype = <({int outletPortId, String? type})>[];
+  String type(String? t) => floorPlanCableTypeLabel(t);
   for (final d in drafts) {
     final patch = d.patchPortId;
     final old = byNumber[d.number];
@@ -319,7 +399,9 @@ FloorPlanOutletChange floorPlanOutletChange({
           number: d.number,
         ).withWrittenName(d.writtenName).withConnection(d.connection),
       );
-      if (patch != null) connect.add((number: d.number, patchPortId: patch));
+      if (patch != null) {
+        connect.add((number: d.number, patchPortId: patch, type: d.cableType));
+      }
       continue;
     }
     final next = old
@@ -332,7 +414,12 @@ FloorPlanOutletChange floorPlanOutletChange({
     final oldPatch = patchPortOfOutletPort[old.id];
     if (oldPatch != patch) {
       if (oldPatch != null) disconnect.add(old.id);
-      if (patch != null) connect.add((number: d.number, patchPortId: patch));
+      if (patch != null) {
+        connect.add((number: d.number, patchPortId: patch, type: d.cableType));
+      }
+    } else if (patch != null &&
+        type(cableTypeOfOutletPort[old.id]) != type(d.cableType)) {
+      retype.add((outletPortId: old.id, type: d.cableType));
     }
   }
   return FloorPlanOutletChange(
@@ -344,6 +431,7 @@ FloorPlanOutletChange floorPlanOutletChange({
     update: update,
     disconnect: disconnect,
     connect: connect,
+    retype: retype,
   );
 }
 
@@ -445,22 +533,108 @@ int floorPlanFacadeColumns(double width, {double minBox = 16, double gap = 2}) {
   return fit.clamp(1, kFloorPlanFacadeMaxColumns);
 }
 
-/// Τι γίνεται όταν το πλήθος θυρών αλλάζει σε [count]: ποιοι αριθμοί
-/// προστίθενται, και ποιες θύρες φεύγουν (οι μεγαλύτεροι αριθμοί). Οι
-/// υπόλοιπες μένουν ανέγγιχτες, με το γραμμένο τους όνομα.
-({List<int> add, List<FloorPlanPort> remove}) floorPlanPortCountChange(
-  List<FloorPlanPort> existing,
+/// Το μεγαλύτερο πλήθος ομάδων θυρών σε μία συσκευή — ο Catalyst 9300 του
+/// data room έχει τρεις· περιθώριο, χωρίς να γεμίζει η φόρμα.
+const int kFloorPlanMaxPortGroups = 4;
+
+/// Μία ομάδα θυρών όπως τη ζητά η φόρμα της συσκευής: από ποια υπάρχουσα
+/// ομάδα έρχεται ([source], `null` = νέα), πόσες θύρες θέλει, και τα
+/// στοιχεία της.
+typedef FloorPlanPortGroupSpec = ({
+  int? source,
   int count,
-) {
-  final have = {for (final p in existing) p.number};
-  return (
-    add: [
-      for (var n = 1; n <= count; n++)
-        if (!have.contains(n)) n,
-    ],
-    remove: [
-      for (final p in existing)
-        if (p.number > count) p,
-    ],
-  );
+  FloorPlanPortGroup group,
+});
+
+/// Οι ομάδες όπως είναι σήμερα: κάθε μία από τον εαυτό της, με τις θύρες της.
+List<FloorPlanPortGroupSpec> floorPlanCurrentPortGroups(
+  List<FloorPlanPortGroup> groups,
+  List<FloorPlanPort> ports,
+) => [
+  for (final (i, g) in groups.indexed)
+    (source: i, count: ports.where((p) => p.groupIndex == i).length, group: g),
+];
+
+/// Τι αλλάζει στις θύρες όταν οι ομάδες της συσκευής γίνουν [specs]: ποιες
+/// θύρες μπαίνουν, ποιες φεύγουν (με τα καλώδιά τους), και ποιες αλλάζουν
+/// ομάδα ή αριθμό — **κρατώντας το id τους**, άρα το καλώδιο και το γραμμένο
+/// όνομα.
+///
+/// - Κάθε ομάδα αριθμεί από το 1· όσες «συνεχίζουν» ξεκινούν μετά την
+///   τελευταία θύρα της προηγούμενης.
+/// - Μέσα σε μια ομάδα φεύγουν οι μεγαλύτεροι αριθμοί, όπως πάντα.
+/// - Όταν αλλάζει η αφετηρία μιας ομάδας (η προηγούμενη άλλαξε πλήθος, ή
+///   άλλαξε το «συνεχίζει»), οι θύρες της μετακινούνται όλες μαζί.
+/// - Ομάδα που δεν ζητείται πια φεύγει ολόκληρη.
+({
+  List<FloorPlanPort> add,
+  List<FloorPlanPort> remove,
+  List<FloorPlanPort> update,
+})
+floorPlanPortGroupsChange({
+  required int objectId,
+  required List<FloorPlanPort> existing,
+  required List<FloorPlanPortGroup> oldGroups,
+  required List<FloorPlanPortGroupSpec> specs,
+}) {
+  final bySource = <int, List<FloorPlanPort>>{};
+  for (final p in existing) {
+    (bySource[p.groupIndex] ??= []).add(p);
+  }
+  for (final list in bySource.values) {
+    list.sort(floorPlanComparePorts);
+  }
+  // Η αφετηρία κάθε παλιάς ομάδας, όπως την έδινε η παλιά διάταξη.
+  int oldStart(int group) {
+    if (group <= 0 ||
+        group >= oldGroups.length ||
+        !oldGroups[group].continues) {
+      return 1;
+    }
+    final before = bySource[group - 1];
+    return before == null || before.isEmpty
+        ? oldStart(group - 1)
+        : before.last.number + 1;
+  }
+
+  final add = <FloorPlanPort>[];
+  final remove = <FloorPlanPort>[];
+  final update = <FloorPlanPort>[];
+  final used = <int>{};
+  var previousEnd = 0;
+  for (final (i, spec) in specs.indexed) {
+    final count = spec.count < 0 ? 0 : spec.count;
+    final start = i > 0 && spec.group.continues ? previousEnd + 1 : 1;
+    final end = start + count - 1;
+    final source = spec.source;
+    final olds = source == null || used.contains(source)
+        ? const <FloorPlanPort>[]
+        : (bySource[source] ?? const <FloorPlanPort>[]);
+    if (source != null) used.add(source);
+    final shift = source == null ? 0 : start - oldStart(source);
+    final have = <int>{};
+    for (final p in olds) {
+      final number = p.number + shift;
+      if (number < start || number > end) {
+        remove.add(p);
+        continue;
+      }
+      have.add(number);
+      if (number != p.number || i != p.groupIndex) {
+        update.add(p.copyWith(groupIndex: i, number: number));
+      }
+    }
+    for (var n = start; n <= end; n++) {
+      if (!have.contains(n)) {
+        add.add(
+          FloorPlanPort(id: 0, objectId: objectId, groupIndex: i, number: n),
+        );
+      }
+    }
+    previousEnd = end;
+  }
+  for (final MapEntry(key: group, value: ports) in bySource.entries) {
+    if (!used.contains(group)) remove.addAll(ports);
+  }
+  return (add: add, remove: remove, update: update);
 }

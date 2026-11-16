@@ -221,7 +221,8 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
       ports: [
         for (final p in sources.ports)
           if (p.objectId == object.id) p,
-      ]..sort((a, b) => a.number.compareTo(b.number)),
+      ]..sort(floorPlanComparePorts),
+      groups: object.portGroups,
       occupied: sources.occupiedPortIds,
       autoName: (p) => _portName(sources, object, p),
       detailOf: sources.portDetails(),
@@ -296,6 +297,7 @@ class _FloorPlanMapViewState extends State<FloorPlanMapView> {
             ? room?.name
             : sources.departmentName(department),
         units: floorPlanCabinetUnits(object),
+        rackFromBottom: object.rackFromBottom,
         contents: floorPlanCabinetContents(object.id, sources.objects.values),
         kinds: sources.kinds,
         ports: sources.ports,

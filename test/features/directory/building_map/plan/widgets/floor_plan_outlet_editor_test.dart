@@ -61,6 +61,24 @@ void main() {
     expect(ports.last.patchPortId, isNull);
   });
 
+  testWidgets('δεμένη θύρα: ο τύπος καλωδίου διαλέγεται και δίνεται με το ✓', (
+    tester,
+  ) async {
+    await pump(tester);
+    // Χωρίς σύνδεση δεν υπάρχει καλώδιο, άρα ούτε τύπος.
+    expect(find.byTooltip('Τύπος καλωδίου'), findsNothing);
+
+    await tester.tap(find.text(kFloorPlanOutletUnlinked).first);
+    await tester.pump();
+    await tester.tap(find.byTooltip('Τύπος καλωδίου'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cat 6A').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Αποθήκευση (Enter)'));
+
+    expect(saved.single.first.cableType, 'Cat 6A');
+  });
+
   testWidgets('Esc ακυρώνει χωρίς να δώσει τίποτα', (tester) async {
     await pump(tester);
 

@@ -420,7 +420,27 @@ class FloorPlanEditorController extends ChangeNotifier {
 
   // ── Εργαλεία ──────────────────────────────────────────────────────────
 
+  /// Ο χρήστης διάλεξε ήδη εργαλείο: το [restoreTool] δεν τον διορθώνει.
+  bool _toolChosen = false;
+
+  /// Ξανανοίγει με το εργαλείο που θυμάται ο χρήστης — εκτός αν πρόλαβε να
+  /// διαλέξει άλλο όσο φόρτωνε η σχεδίαση. Είδος αντικειμένου που δεν
+  /// υπάρχει πια δίνει «Επιλογή». Καλείται μετά το [load].
+  void restoreTool(FloorPlanTool tool, {int? objectKindId}) {
+    if (_toolChosen) return;
+    if (tool == FloorPlanTool.object) {
+      if (objectKindId == null || !_kinds.containsKey(objectKindId)) {
+        tool = FloorPlanTool.select;
+      } else {
+        _objectKindId = objectKindId;
+      }
+    }
+    _tool = tool;
+    notifyListeners();
+  }
+
   void setTool(FloorPlanTool tool) {
+    _toolChosen = true;
     if (_tool == tool) return;
     _tool = tool;
     if (tool != FloorPlanTool.select) {
@@ -434,6 +454,7 @@ class FloorPlanEditorController extends ChangeNotifier {
   /// Το εργαλείο «Αντικείμενο» με το είδος [kindId].
   void setObjectTool(int kindId) {
     if (!_kinds.containsKey(kindId)) return;
+    _toolChosen = true;
     _objectKindId = kindId;
     _tool = FloorPlanTool.object;
     _selected = const {};
@@ -683,6 +704,9 @@ class FloorPlanEditorController extends ChangeNotifier {
       rackUnits: (_kinds[kindId]?.symbol?.isCabinet ?? false)
           ? kFloorPlanDefaultCabinetUnits
           : null,
+      // Οι νέες καμπίνες αριθμούν από κάτω, όπως του νοσοκομείου (απόφαση
+      // 13/11/2026)· οι παλιές κρατούν την αρίθμηση που είχαν.
+      rackFromBottom: _kinds[kindId]?.symbol?.isCabinet ?? false,
     );
     FloorPlanObject? stored;
     await _run(() async {
@@ -715,7 +739,7 @@ class FloorPlanEditorController extends ChangeNotifier {
     String? ip,
     String? lansweeperName,
     String? notes,
-    String? portType,
+    String? portSeparator,
   }) async {
     final old = objectById(id);
     if (old == null) return;
@@ -726,13 +750,13 @@ class FloorPlanEditorController extends ChangeNotifier {
           lansweeperName: lansweeperName,
           notes: notes,
         )
-        // Το Gi είναι η προεπιλογή: δεν γράφεται, ώστε να μη μοιάζει με αλλαγή.
-        .withPortType(portType == kFloorPlanDefaultPortType ? null : portType);
+        // `null` = αυτόματο· κενό = χωρίς διαχωριστικό. Γράφεται όπως ήρθε.
+        .withPortSeparator(portSeparator);
     if (next.name == old.name &&
         next.ip == old.ip &&
         next.lansweeperName == old.lansweeperName &&
         next.notes == old.notes &&
-        next.portType == old.portType) {
+        next.portSeparator == old.portSeparator) {
       return;
     }
     await _replaceObjects([next]);
@@ -757,14 +781,37 @@ class FloorPlanEditorController extends ChangeNotifier {
   /// Νέο αντικείμενο του είδους [kindId] μέσα στην καμπίνα [cabinetId], στο
   /// πρώτο ελεύθερο U από πάνω. Χωρίς ελεύθερο U δεν μπαίνει τίποτα και ο
   /// χρήστης το μαθαίνει.
-  Future<FloorPlanObject?> addToCabinet(int cabinetId, int kindId) async {
+  Future<FloorPlanObject?> addToCabinet(
+    int cabinetId,
+    int kindId, {
+    int? atU,
+  }) async {
     final repo = _objectsRepo;
     final cabinet = objectById(cabinetId);
     if (repo == null || cabinet == null) return null;
-    final u = floorPlanFirstFreeRackU(
-      units: floorPlanCabinetUnits(cabinet),
-      contents: cabinetContents(cabinetId),
-    );
+    final units = floorPlanCabinetUnits(cabinet);
+    final contents = cabinetContents(cabinetId);
+    final int? u;
+    if (atU == null) {
+      u = floorPlanFirstFreeRackU(units: units, contents: contents);
+    } else {
+      // Ζητήθηκε συγκεκριμένο U: μπαίνει μόνο αν είναι ακόμη ελεύθερο —
+      // κατειλημμένη θέση δεν σπρώχνει ό,τι υπάρχει εκεί.
+      final fits = floorPlanRackFits(
+        units: units,
+        contents: contents,
+        u: atU,
+        height: 1,
+      );
+      if (!fits) {
+        onError(
+          'Το ${floorPlanCabinetRackLabel(cabinet, atU)} δεν είναι πια '
+          'ελεύθερο.',
+        );
+        return null;
+      }
+      u = atU;
+    }
     if (u == null) {
       onError('Η καμπίνα «${_objectLabel(cabinet)}» δεν έχει ελεύθερο U.');
       return null;
@@ -805,7 +852,8 @@ class FloorPlanEditorController extends ChangeNotifier {
     );
     if (!fits) {
       onError(
-        '«${_objectLabel(object)}» δεν χωρά στο U$u: πιάνεται ή ξεπερνά '
+        '«${_objectLabel(object)}» δεν χωρά στο '
+        '${floorPlanCabinetRackLabel(cabinet, u)}: πιάνεται ή ξεπερνά '
         'το κάτω μέρος της καμπίνας.',
       );
       return false;
@@ -840,7 +888,7 @@ class FloorPlanEditorController extends ChangeNotifier {
       onError(
         u + height - 1 > units
             ? '«${_objectLabel(object)}» με $height U ξεπερνά το κάτω μέρος '
-                  'της καμπίνας (U$units).'
+                  'της καμπίνας (${floorPlanCabinetRackLabel(cabinet, units)}).'
             : '«${_objectLabel(object)}» με $height U πατά πάνω σε άλλο '
                   'αντικείμενο.',
       );
@@ -893,17 +941,31 @@ class FloorPlanEditorController extends ChangeNotifier {
       onError('Η καμπίνα δέχεται από 1 ως $kFloorPlanMaxCabinetUnits U.');
       return false;
     }
-    if (cabinet.rackUnits == units) return true;
-    final blocking = floorPlanContentsBeyond(units, cabinetContents(cabinetId));
+    final oldUnits = floorPlanCabinetUnits(cabinet);
+    if (oldUnits == units) return true;
+    final contents = cabinetContents(cabinetId);
+    // Ό,τι αριθμεί από κάτω κρατά τους αριθμούς του: τα U μπαίνουν ή φεύγουν
+    // από την κορυφή, άρα οι θέσεις (που μετρούν από πάνω) μετατοπίζονται.
+    // Ό,τι αριθμεί από πάνω αλλάζει στη βάση, και οι θέσεις μένουν.
+    final shift = cabinet.rackFromBottom ? units - oldUnits : 0;
+    final blocking = cabinet.rackFromBottom
+        ? [
+            for (final o in contents)
+              if ((o.rackU ?? 1) + shift < 1) o,
+          ]
+        : floorPlanContentsBeyond(units, contents);
     if (blocking.isNotEmpty) {
       final names = [
         for (final o in blocking)
-          '«${_objectLabel(o)}» (U${o.rackU ?? 1}'
-              '${o.heightU > 1 ? '–U${(o.rackU ?? 1) + o.heightU - 1}' : ''})',
+          '«${_objectLabel(o)}» '
+              '(${floorPlanCabinetRackLabel(cabinet, o.rackU ?? 1, height: o.heightU)})',
       ].join(', ');
       onError(
-        'Η καμπίνα δεν μικραίνει σε $units U: πιο κάτω βρίσκονται $names. '
-        'Μετακινήστε τα πρώτα πιο πάνω.',
+        cabinet.rackFromBottom
+            ? 'Η καμπίνα δεν μικραίνει σε $units U: πιο πάνω βρίσκονται '
+                  '$names. Μετακινήστε τα πρώτα πιο κάτω.'
+            : 'Η καμπίνα δεν μικραίνει σε $units U: πιο κάτω βρίσκονται '
+                  '$names. Μετακινήστε τα πρώτα πιο πάνω.',
       );
       return false;
     }
@@ -913,8 +975,23 @@ class FloorPlanEditorController extends ChangeNotifier {
         rackU: cabinet.rackU,
         rackUnits: units,
       ),
+      if (shift != 0)
+        for (final o in contents)
+          o.withRack(
+            cabinetId: o.cabinetId,
+            rackU: (o.rackU ?? 1) + shift,
+            rackUnits: o.rackUnits,
+          ),
     ]);
     return true;
+  }
+
+  /// Η καμπίνα [cabinetId] αριθμεί τα U της από κάτω ([fromBottom]) ή από
+  /// πάνω. Καμία συσκευή δεν μετακινείται· αλλάζουν μόνο οι αριθμοί.
+  Future<void> setCabinetRackFromBottom(int cabinetId, bool fromBottom) async {
+    final cabinet = objectById(cabinetId);
+    if (cabinet == null || cabinet.rackFromBottom == fromBottom) return;
+    await _replaceObjects([cabinet.withRackFromBottom(fromBottom)]);
   }
 
   /// Σβήνει τα αντικείμενα [ids] (π.χ. από τη λίστα της καμπίνας) — μία
@@ -1174,6 +1251,25 @@ class FloorPlanEditorController extends ChangeNotifier {
     return connected;
   }
 
+  /// Ο τύπος του καλωδίου [cableId] γίνεται [type] (Cat 5e, Cat 6…) — μία
+  /// κίνηση αναίρεσης. Τίποτα δεν γράφεται όταν δεν αλλάζει.
+  Future<void> setCableType(int cableId, String? type) async {
+    final portsRepo = _portsRepo;
+    FloorPlanCableLine? line;
+    for (final l in _portCables.lines) {
+      if (l.cableId == cableId) line = l;
+    }
+    if (portsRepo == null || line == null) return;
+    final old = line.cable;
+    final next = old.withType(type);
+    if (next.type == old.type) return;
+    await _run(() async {
+      await portsRepo.restoreCables([next]);
+      _record(_PlanChange(cablesBefore: [old], cablesAfter: [next]));
+      await _reloadPorts();
+    });
+  }
+
   /// Αφαιρεί το καλώδιο [cableId] — μία κίνηση αναίρεσης.
   Future<void> removeCable(int cableId) async {
     final portsRepo = _portsRepo;
@@ -1203,6 +1299,10 @@ class FloorPlanEditorController extends ChangeNotifier {
         for (final l in _portLinks) l.outletPortId: l.patchPortId,
       },
       drafts: drafts,
+      cableTypeOfOutletPort: {
+        for (final p in existing)
+          p.id: _portCables.lineAt(p.id, kFloorPlanCableFront)?.type,
+      },
     );
     if (change.isEmpty) return;
     await _run(() async {
@@ -1223,6 +1323,7 @@ class FloorPlanEditorController extends ChangeNotifier {
         final cable = await portsRepo.connectOutletPort(
           idOfNumber[c.number]!,
           c.patchPortId,
+          type: c.type,
         );
         if (cable == null) {
           taken.add(c.number);
@@ -1230,6 +1331,15 @@ class FloorPlanEditorController extends ChangeNotifier {
           connected.add(cable);
         }
       }
+      final retypedBefore = <FloorPlanCable>[];
+      final retypedAfter = <FloorPlanCable>[];
+      for (final r in change.retype) {
+        final old = _portCables.lineAt(r.outletPortId, kFloorPlanCableFront);
+        if (old == null) continue;
+        retypedBefore.add(old.cable);
+        retypedAfter.add(old.cable.withType(r.type));
+      }
+      await portsRepo.restoreCables(retypedAfter);
       final updatedIds = {for (final p in change.update) p.id};
       _record(
         _PlanChange(
@@ -1239,8 +1349,8 @@ class FloorPlanEditorController extends ChangeNotifier {
               if (updatedIds.contains(p.id)) p,
           ],
           portsAfter: [...inserted, ...change.update],
-          cablesBefore: [...disconnected, ...removal.cables],
-          cablesAfter: connected,
+          cablesBefore: [...disconnected, ...removal.cables, ...retypedBefore],
+          cablesAfter: [...connected, ...retypedAfter],
         ),
       );
       await _reloadPorts();
@@ -1253,46 +1363,139 @@ class FloorPlanEditorController extends ChangeNotifier {
     });
   }
 
-  /// Οι θύρες που θα έφευγαν αν το [objectId] γινόταν [count] θυρών και
+  /// Οι ομάδες θυρών του [objectId] όπως είναι τώρα, με το πλήθος της
+  /// καθεμιάς — η αφετηρία της φόρμας.
+  List<FloorPlanPortGroupSpec> portGroupsOf(int objectId) {
+    final object = objectById(objectId);
+    if (object == null) return const [];
+    return floorPlanCurrentPortGroups(object.portGroups, portsOf(objectId));
+  }
+
+  ({
+    List<FloorPlanPort> add,
+    List<FloorPlanPort> remove,
+    List<FloorPlanPort> update,
+  })?
+  _portGroupsChange(int objectId, List<FloorPlanPortGroupSpec> specs) {
+    final object = objectById(objectId);
+    if (object == null) return null;
+    return floorPlanPortGroupsChange(
+      objectId: objectId,
+      existing: portsOf(objectId),
+      oldGroups: object.portGroups,
+      specs: specs,
+    );
+  }
+
+  /// Οι θύρες που θα έφευγαν αν οι ομάδες του [objectId] γίνονταν [specs] και
   /// έχουν καλώδιο — γι' αυτές ρωτά η οθόνη πριν.
-  List<FloorPlanPort> cabledPortsBeyond(int objectId, int count) => [
-    for (final p in floorPlanPortCountChange(portsOf(objectId), count).remove)
+  List<FloorPlanPort> cabledPortsRemovedBy(
+    int objectId,
+    List<FloorPlanPortGroupSpec> specs,
+  ) => [
+    for (final p in _portGroupsChange(objectId, specs)?.remove ?? const [])
       if (_occupiedPorts.contains(p.id)) p,
   ];
 
-  /// Το [objectId] αποκτά [count] θύρες: οι νέες αριθμούνται συνέχεια, όσες
-  /// περισσεύουν φεύγουν με τα καλώδιά τους. Μία κίνηση αναίρεσης.
-  Future<void> setPortCount(int objectId, int count) async {
+  /// Οι ομάδες θυρών του [objectId] γίνονται [specs]: στοιχεία ομάδων, νέες
+  /// θύρες, όσες περισσεύουν φεύγουν με τα καλώδιά τους, και όσες αλλάζουν
+  /// αριθμό κρατούν καλώδιο και γραμμένο όνομα. **Μία** κίνηση αναίρεσης.
+  Future<void> setPortGroups(
+    int objectId,
+    List<FloorPlanPortGroupSpec> specs,
+  ) async {
     final portsRepo = _portsRepo;
-    if (portsRepo == null || objectById(objectId) == null) return;
-    if (count < 0 || count > kFloorPlanMaxPorts) {
-      onError('Οι θύρες είναι από 0 ως $kFloorPlanMaxPorts.');
+    final objectsRepo = _objectsRepo;
+    final object = objectById(objectId);
+    if (portsRepo == null || objectsRepo == null || object == null) return;
+    if (specs.isEmpty || specs.length > kFloorPlanMaxPortGroups) {
+      onError('Οι ομάδες θυρών είναι από 1 ως $kFloorPlanMaxPortGroups.');
       return;
     }
-    final change = floorPlanPortCountChange(portsOf(objectId), count);
-    if (change.add.isEmpty && change.remove.isEmpty) return;
+    if (specs.any((g) => g.count < 0 || g.count > kFloorPlanMaxPorts)) {
+      onError('Οι θύρες κάθε ομάδας είναι από 0 ως $kFloorPlanMaxPorts.');
+      return;
+    }
+    final isSwitch =
+        _kinds[object.kindId]?.symbol == FloorPlanSymbol.networkSwitch;
+    final groups = [
+      for (final (i, spec) in specs.indexed)
+        // Το Gi της πρώτης ομάδας ενός switch είναι η προεπιλογή: δεν
+        // γράφεται, ώστε να μη μοιάζει με αλλαγή.
+        i == 0 && isSwitch && spec.group.prefix == kFloorPlanDefaultPortType
+            ? FloorPlanPortGroup(speed: spec.group.speed)
+            : spec.group,
+    ];
+    final next = object.withPortGroups(groups);
+    final objectChanged =
+        next.portType != object.portType ||
+        next.portGroupsData != object.portGroupsData;
+    final change = _portGroupsChange(objectId, specs)!;
+    if (!objectChanged &&
+        change.add.isEmpty &&
+        change.remove.isEmpty &&
+        change.update.isEmpty) {
+      return;
+    }
+    final updatedIds = {for (final p in change.update) p.id};
+    final oldOfUpdated = [
+      for (final p in portsOf(objectId))
+        if (updatedIds.contains(p.id)) p,
+    ];
     await _run(() async {
+      if (objectChanged) await objectsRepo.restoreObjects([next]);
       final removed = await portsRepo.deletePorts([
         for (final p in change.remove) p.id,
       ]);
-      final added = await portsRepo.insertPorts([
-        for (final n in change.add)
-          FloorPlanPort(id: 0, objectId: objectId, number: n),
-      ]);
+      await portsRepo.restorePorts(change.update);
+      final added = await portsRepo.insertPorts(change.add);
       _record(
         _PlanChange(
-          portsBefore: removed.ports,
-          portsAfter: added,
+          objectsBefore: [if (objectChanged) object],
+          objectsAfter: [if (objectChanged) next],
+          portsBefore: [...removed.ports, ...oldOfUpdated],
+          portsAfter: [...added, ...change.update],
           cablesBefore: removed.cables,
         ),
       );
-      await _reloadPorts();
+      await _refreshElements();
     });
   }
 
+  /// Το [objectId] αποκτά [count] θύρες στην πρώτη του ομάδα — οι υπόλοιπες
+  /// ομάδες μένουν ως έχουν. Για τα patch panel, που έχουν πάντα μία.
+  Future<void> setPortCount(int objectId, int count) async {
+    final groups = portGroupsOf(objectId);
+    if (groups.isEmpty) return;
+    await setPortGroups(objectId, [
+      (source: 0, count: count, group: groups.first.group),
+      ...groups.skip(1),
+    ]);
+  }
+
+  /// Τα γραμμένα ονόματα θυρών όλου του κτιρίου.
+  List<FloorPlanWrittenPortName> _writtenNames = const [];
+
+  /// Η θύρα του κτιρίου που έχει ήδη το γραμμένο όνομα [name], εκτός από τις
+  /// [exceptPortIds]· `null` όταν καμία. Μόνο για προειδοποίηση.
+  FloorPlanWrittenPortName? writtenNameClash(
+    String name, {
+    Set<int> exceptPortIds = const {},
+  }) => floorPlanWrittenNameClash(
+    name,
+    _writtenNames,
+    exceptPortIds: exceptPortIds,
+  );
+
   /// Το γραμμένο όνομα της θύρας [portId] — ό,τι γράφει πραγματικά η
-  /// ετικέτα. Κενό το σβήνει. Μία κίνηση αναίρεσης.
-  Future<void> setPortWrittenName(int portId, String? name) async {
+  /// ετικέτα. Κενό το σβήνει. Με [continuePattern] οι επόμενες θύρες της
+  /// ίδιας συσκευής που δεν έχουν όνομα το παίρνουν από το μοτίβο
+  /// («MC.2.N01» → «MC.2.N02» …). Όλα μία κίνηση αναίρεσης.
+  Future<void> setPortWrittenName(
+    int portId,
+    String? name, {
+    bool continuePattern = false,
+  }) async {
     final portsRepo = _portsRepo;
     FloorPlanPort? old;
     for (final p in _ports) {
@@ -1300,11 +1503,24 @@ class FloorPlanEditorController extends ChangeNotifier {
     }
     if (portsRepo == null || old == null) return;
     final next = old.withWrittenName(name);
-    if (next.writtenName == old.writtenName) return;
-    final before = old;
+    final before = <FloorPlanPort>[];
+    final after = <FloorPlanPort>[];
+    if (next.writtenName != old.writtenName) {
+      before.add(old);
+      after.add(next);
+    }
+    final seed = next.writtenName;
+    if (continuePattern && seed != null) {
+      final plan = floorPlanPatternFill(seed: seed, from: old, ports: _ports);
+      for (final f in plan.fill) {
+        before.add(f.port);
+        after.add(f.port.withWrittenName(f.name));
+      }
+    }
+    if (after.isEmpty) return;
     await _run(() async {
-      await portsRepo.restorePorts([next]);
-      _record(_PlanChange(portsBefore: [before], portsAfter: [next]));
+      await portsRepo.restorePorts(after);
+      _record(_PlanChange(portsBefore: before, portsAfter: after));
       await _reloadPorts();
     });
   }
@@ -1715,13 +1931,19 @@ class FloorPlanEditorController extends ChangeNotifier {
           );
           final id = await objectsRepo.insertObject(copy);
           storedObjects.add(copy.copyWith(id: id));
-          // Ίδιο πλήθος θυρών, χωρίς γραμμένα ονόματα: είναι άλλη συσκευή.
-          final count = portsOf(o.id).length;
-          if (count > 0 && _portsRepo != null) {
+          // Ίδιες ομάδες και αριθμοί θυρών, χωρίς γραμμένα ονόματα: είναι
+          // άλλη συσκευή.
+          final ports = portsOf(o.id);
+          if (ports.isNotEmpty && _portsRepo != null) {
             storedPorts.addAll(
               await _portsRepo.insertPorts([
-                for (var n = 1; n <= count; n++)
-                  FloorPlanPort(id: 0, objectId: id, number: n),
+                for (final p in ports)
+                  FloorPlanPort(
+                    id: 0,
+                    objectId: id,
+                    groupIndex: p.groupIndex,
+                    number: p.number,
+                  ),
               ]),
             );
           }
@@ -1935,6 +2157,7 @@ class FloorPlanEditorController extends ChangeNotifier {
     final portsRepo = _portsRepo;
     if (portsRepo == null) return;
     _ports = await portsRepo.listForFloor(floorId);
+    _writtenNames = await portsRepo.writtenNames();
     _occupiedPorts = await portsRepo.occupiedPortIds([
       for (final p in _ports) p.id,
     ]);

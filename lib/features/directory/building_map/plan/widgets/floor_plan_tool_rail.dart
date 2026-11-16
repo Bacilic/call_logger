@@ -72,6 +72,10 @@ class FloorPlanToolRail extends StatelessWidget {
             : 'Αντικείμενο',
         position: PopupMenuPosition.over,
         offset: const Offset(56, 0),
+        // Τα ονόματα ειδών είναι συχνά μεγάλα («Πίνακας Κατανομής Οπτικών
+        // Ινών»): πλατύτερο από το προεπιλεγμένο μενού, και ό,τι δεν χωρά
+        // σπάει σε δεύτερη γραμμή.
+        constraints: const BoxConstraints(minWidth: 200, maxWidth: 420),
         onSelected: controller.setObjectTool,
         itemBuilder: (_) => kinds.isEmpty
             ? const [
@@ -91,7 +95,7 @@ class FloorPlanToolRail extends StatelessWidget {
                       children: [
                         FloorPlanSymbolIcon(kind.symbol, size: 24),
                         const SizedBox(width: 12),
-                        Text(kind.name),
+                        Flexible(child: Text(kind.name)),
                       ],
                     ),
                   ),

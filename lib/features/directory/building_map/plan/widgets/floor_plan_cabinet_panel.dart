@@ -24,7 +24,6 @@ class FloorPlanCabinetActions {
     required this.onAdd,
     required this.onMove,
     required this.onEdit,
-    required this.onSetHeight,
     required this.onTakeOut,
     required this.onDelete,
     required this.onSetUnits,
@@ -34,17 +33,22 @@ class FloorPlanCabinetActions {
     this.onJoinStack,
     this.onLeaveStack,
     this.onSetStackUnit,
+    this.onSetRackFromBottom,
   });
 
   /// Τα είδη που μπαίνουν σε καμπίνα, αλφαβητικά.
   final List<FloorPlanObjectKind> addableKinds;
-  final void Function(int kindId) onAdd;
+
+  /// Νέο αντικείμενο του είδους [kindId] στο ελεύθερο U [u].
+  final void Function(int kindId, int u) onAdd;
   final void Function(int objectId, int u) onMove;
   final void Function(int objectId) onEdit;
-  final void Function(int objectId, int height) onSetHeight;
   final void Function(int objectId) onTakeOut;
   final void Function(int objectId) onDelete;
   final void Function(int units) onSetUnits;
+
+  /// Αρίθμηση των U από κάτω (`true`) ή από πάνω.
+  final void Function(bool fromBottom)? onSetRackFromBottom;
 
   /// Δεξί κλικ σε θύρα της πρόσοψης: «Γραμμένο όνομα…».
   final void Function(FloorPlanObject object, FloorPlanPort port)?
@@ -78,7 +82,9 @@ class FloorPlanCabinetActions {
 ///
 /// Στη σχεδίαση ([actions]): σύρσιμο σε άλλο U μετακινεί το αντικείμενο,
 /// διπλό κλικ ανοίγει τα στοιχεία του, το μενού του αλλάζει ύψος, το βγάζει
-/// από την καμπίνα ή το σβήνει, «Προσθήκη» βάζει νέο στο πρώτο ελεύθερο U.
+/// από την καμπίνα ή το σβήνει. Νέο αντικείμενο μπαίνει με κλικ σε κενό U, ή
+/// με «Προσθήκη», που προτείνει τα ελεύθερα U με πρώτο το πρώτο ελεύθερο.
+/// Κατειλημμένο U δεν προτείνεται ποτέ.
 class FloorPlanCabinetPanel extends StatefulWidget {
   const FloorPlanCabinetPanel({
     super.key,
@@ -103,6 +109,7 @@ class FloorPlanCabinetPanel extends StatefulWidget {
     this.onFacadeResize,
     this.onLayoutDone,
     this.onTitleDrag,
+    this.rackFromBottom = false,
   });
 
   /// Το όνομα της καμπίνας· `null` όταν δεν έχει δοθεί ακόμη.
@@ -152,6 +159,10 @@ class FloorPlanCabinetPanel extends StatefulWidget {
   /// Σύρσιμο από τη μπάρα τίτλου: μετακίνηση του πάνελ.
   final ValueChanged<Offset>? onTitleDrag;
 
+  /// Η καμπίνα αριθμεί τα U της από κάτω. Αλλάζει μόνο τους αριθμούς που
+  /// γράφονται· οι θέσεις μετρούν πάντα από πάνω.
+  final bool rackFromBottom;
+
   @override
   State<FloorPlanCabinetPanel> createState() => _FloorPlanCabinetPanelState();
 }
@@ -161,6 +172,13 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
 
   /// Πού θα έπεφτε αυτό που σύρεται: πρώτο U και ύψος.
   ({int u, int height})? _dropAt;
+
+  /// Το κενό U κάτω από το ποντίκι, όπου ένα κλικ προσθέτει συσκευή.
+  int? _hoverU;
+
+  void _setHoverU(int? u) {
+    if (u != _hoverU) setState(() => _hoverU = u);
+  }
 
   /// Οι συσκευές που δείχνουν την πρόσοψή τους.
   late Set<int> _selected = {...widget.initialSelection};
@@ -255,7 +273,7 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
   List<FloorPlanPort> _portsOf(int objectId) => [
     for (final p in widget.ports)
       if (p.objectId == objectId) p,
-  ]..sort((a, b) => a.number.compareTo(b.number));
+  ]..sort(floorPlanComparePorts);
 
   bool _hasPorts(FloorPlanObject o) =>
       widget.kinds[o.kindId]?.symbol?.hasPortCount ?? false;
@@ -274,6 +292,14 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
     final kind = widget.kinds[o.kindId]?.name ?? 'Αντικείμενο';
     return name.isEmpty ? kind : '$kind $name';
   }
+
+  /// Ο αριθμός U που γράφεται για τη θέση [position] (και [height] θέσεις).
+  String _u(int position, [int height = 1]) => floorPlanRackLabel(
+    units: widget.units,
+    fromBottom: widget.rackFromBottom,
+    position: position,
+    height: height,
+  );
 
   int? _uUnder(Offset global) {
     final box = _rackKey.currentContext?.findRenderObject() as RenderBox?;
@@ -430,6 +456,7 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
       title: title,
       symbol: widget.kinds[o.kindId]?.symbol,
       ports: _portsOf(o.id),
+      groups: o.portGroups,
       occupied: widget.occupiedPortIds,
       autoName: (port) =>
           widget.portAutoName?.call(o, port) ?? 'Θύρα ${port.number}',
@@ -466,7 +493,10 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
           for (final o in group)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: facade(o, 'Μέλος ${o.stackUnit ?? 1} · U${o.rackU ?? 1}'),
+              child: facade(
+                o,
+                'Μέλος ${o.stackUnit ?? 1} · ${_u(o.rackU ?? 1)}',
+              ),
             ),
         ],
       ),
@@ -566,21 +596,54 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
     final labelStyle = theme.textTheme.labelSmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
+    final object = row.object;
+    final canAdd =
+        object == null && actions != null && actions.addableKinds.isNotEmpty;
+    final hover = _hoverU;
+    final hoverInRow =
+        canAdd && hover != null && hover >= row.fromU && hover <= row.toU;
+    final hoverTop = hoverInRow ? (hover - row.fromU) * _kSlot : 0.0;
     final uLabels = SizedBox(
       width: 44,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Text('U${row.fromU}', style: labelStyle),
-          if (row.heightU > 1) Text('U${row.toU}', style: labelStyle),
+          Positioned(
+            top: 0,
+            left: 0,
+            child: Text(_u(row.fromU), style: labelStyle),
+          ),
+          if (row.heightU > 1)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              child: Text(_u(row.toU), style: labelStyle),
+            ),
+          if (hoverInRow)
+            Positioned(
+              top: hoverTop,
+              left: 0,
+              right: 0,
+              height: _kSlot,
+              child: ColoredBox(
+                color: theme.colorScheme.surface,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Text(
+                    _u(hover),
+                    style: labelStyle?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
-    final object = row.object;
     final Widget body;
     if (object == null) {
-      body = Container(
+      final empty = Container(
         margin: const EdgeInsets.symmetric(vertical: 1.5),
         decoration: BoxDecoration(
           border: Border.all(color: theme.colorScheme.outlineVariant),
@@ -588,10 +651,39 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
         ),
         alignment: Alignment.center,
         child: Text(
-          row.heightU == 1 ? 'κενό' : 'κενό U${row.fromU}–U${row.toU}',
+          row.heightU == 1 ? 'κενό' : 'κενό ${_u(row.fromU, row.heightU)}',
           style: labelStyle,
         ),
       );
+      body = !hoverInRow
+          ? empty
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                empty,
+                Positioned(
+                  top: hoverTop + 1.5,
+                  left: 0,
+                  right: 0,
+                  height: _kSlot - 3,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      border: Border.all(color: theme.colorScheme.primary),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '+ Προσθήκη στο ${_u(hover)}',
+                        style: labelStyle?.copyWith(
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
     } else {
       final block = _block(theme, object, row.heightU, actions);
       final tappable = GestureDetector(
@@ -622,7 +714,7 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
               child: tappable,
             );
     }
-    return SizedBox(
+    final line = SizedBox(
       height: row.heightU * _kSlot,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -632,6 +724,60 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
         ],
       ),
     );
+    if (!canAdd) return line;
+    // Κενό U: το ποντίκι δείχνει ποιο U είναι από κάτω, το κλικ το γεμίζει.
+    int uAt(Offset local) =>
+        row.fromU + (local.dy ~/ _kSlot).clamp(0, row.heightU - 1);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onHover: (event) => _setHoverU(uAt(event.localPosition)),
+      onExit: (_) => _setHoverU(null),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapUp: (details) => _pickKindAt(
+          actions,
+          uAt(details.localPosition),
+          details.globalPosition,
+        ),
+        child: line,
+      ),
+    );
+  }
+
+  /// Κλικ σε κενό U: το μενού των ειδών, και το είδος που διαλέγεται μπαίνει
+  /// σε εκείνο το U.
+  Future<void> _pickKindAt(
+    FloorPlanCabinetActions actions,
+    int u,
+    Offset globalPosition,
+  ) async {
+    final kindId = await showMenu<int>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        globalPosition.dx,
+        globalPosition.dy,
+      ),
+      items: [
+        PopupMenuItem<int>(
+          enabled: false,
+          child: Text('Προσθήκη στο ${_u(u)}'),
+        ),
+        for (final kind in actions.addableKinds)
+          PopupMenuItem<int>(
+            value: kind.id,
+            child: Row(
+              children: [
+                FloorPlanSymbolIcon(kind.symbol, size: 20),
+                const SizedBox(width: 12),
+                Flexible(child: Text(kind.name)),
+              ],
+            ),
+          ),
+      ],
+    );
+    if (kindId != null && mounted) actions.onAdd(kindId, u);
   }
 
   Widget _block(
@@ -700,7 +846,7 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
           for (final o in _stackCandidates(object))
             SimpleDialogOption(
               onPressed: () => Navigator.of(context).pop(o),
-              child: Text('${_label(o)} · U${o.rackU ?? 1}'),
+              child: Text('${_label(o)} · ${_u(o.rackU ?? 1)}'),
             ),
         ],
       ),
@@ -725,15 +871,6 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
         switch (value) {
           case 'edit':
             actions.onEdit(object.id);
-          case 'height':
-            final height = await _askNumber(
-              context,
-              title: 'Ύψος σε U',
-              label: 'Πόσα U πιάνει',
-              initial: object.heightU,
-              max: widget.units,
-            );
-            if (height != null) actions.onSetHeight(object.id, height);
           case 'join':
             await _askJoinStack(object, actions);
           case 'unit':
@@ -755,7 +892,6 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
       },
       itemBuilder: (context) => [
         const PopupMenuItem(value: 'edit', child: Text('Στοιχεία…')),
-        const PopupMenuItem(value: 'height', child: Text('Ύψος σε U…')),
         if (canJoin)
           const PopupMenuItem(value: 'join', child: Text('Ενοποίηση με…')),
         if (inStack) ...const [
@@ -777,12 +913,22 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
         child: OutlinedButton(onPressed: null, child: Text('+ Προσθήκη')),
       );
     }
+    final free = floorPlanFreeRackUs(
+      units: widget.units,
+      contents: widget.contents,
+    );
+    if (free.isEmpty) {
+      return const CompactTooltip(
+        message: 'Η καμπίνα δεν έχει ελεύθερο U.',
+        child: OutlinedButton(onPressed: null, child: Text('+ Προσθήκη')),
+      );
+    }
     return MenuAnchor(
       menuChildren: [
         for (final kind in kinds)
           MenuItemButton(
             leadingIcon: FloorPlanSymbolIcon(kind.symbol, size: 20),
-            onPressed: () => actions.onAdd(kind.id),
+            onPressed: () => _askFreeU(actions, kind, free),
             child: Text(kind.name),
           ),
       ],
@@ -795,18 +941,40 @@ class _FloorPlanCabinetPanelState extends State<FloorPlanCabinetPanel> {
     );
   }
 
+  /// «Προσθήκη»: σε ποιο από τα ελεύθερα U, με πρώτο το πρώτο ελεύθερο.
+  Future<void> _askFreeU(
+    FloorPlanCabinetActions actions,
+    FloorPlanObjectKind kind,
+    List<int> free,
+  ) async {
+    final u = await showDialog<int>(
+      context: context,
+      builder: (_) => _FreeUDialog(
+        kindName: kind.name,
+        free: free,
+        label: (position) => _u(position),
+      ),
+    );
+    if (u != null && mounted) actions.onAdd(kind.id, u);
+  }
+
   Future<void> _askUnits(
     BuildContext context,
     FloorPlanCabinetActions actions,
   ) async {
-    final units = await _askNumber(
-      context,
-      title: 'Θέσεις καμπίνας',
-      label: 'Πόσα U έχει η καμπίνα',
-      initial: widget.units,
-      max: kFloorPlanMaxCabinetUnits,
+    final result = await showDialog<({int units, bool fromBottom})>(
+      context: context,
+      builder: (_) => _CabinetSlotsDialog(
+        units: widget.units,
+        fromBottom: widget.rackFromBottom,
+        canNumber: actions.onSetRackFromBottom != null,
+      ),
     );
-    if (units != null) actions.onSetUnits(units);
+    if (result == null) return;
+    if (result.fromBottom != widget.rackFromBottom) {
+      actions.onSetRackFromBottom?.call(result.fromBottom);
+    }
+    if (result.units != widget.units) actions.onSetUnits(result.units);
   }
 }
 
@@ -823,6 +991,167 @@ Future<int?> _askNumber(
     builder: (context) =>
         _NumberDialog(title: title, label: label, initial: initial, max: max),
   );
+}
+
+/// Η επιλογή U για νέα συσκευή: μόνο τα ελεύθερα, με πρώτο το πρώτο
+/// ελεύθερο.
+class _FreeUDialog extends StatefulWidget {
+  const _FreeUDialog({
+    required this.kindName,
+    required this.free,
+    required this.label,
+  });
+
+  final String kindName;
+
+  /// Οι ελεύθερες θέσεις, από πάνω προς τα κάτω — όπως είναι στην καμπίνα.
+  final List<int> free;
+
+  /// Ο αριθμός U που γράφεται για κάθε θέση.
+  final String Function(int position) label;
+
+  @override
+  State<_FreeUDialog> createState() => _FreeUDialogState();
+}
+
+class _FreeUDialogState extends State<_FreeUDialog> {
+  late int _u = widget.free.first;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Προσθήκη: ${widget.kindName}'),
+      content: SizedBox(
+        width: 280,
+        child: DropdownButtonFormField<int>(
+          initialValue: _u,
+          decoration: const InputDecoration(
+            labelText: 'Ελεύθερη θέση',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            for (final u in widget.free)
+              DropdownMenuItem(value: u, child: Text(widget.label(u))),
+          ],
+          onChanged: (u) {
+            if (u != null) setState(() => _u = u);
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Άκυρο'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_u),
+          child: const Text('Προσθήκη'),
+        ),
+      ],
+    );
+  }
+}
+
+/// «Θέσεις U…»: πόσα U έχει η καμπίνα και από πού ξεκινά η αρίθμησή τους.
+class _CabinetSlotsDialog extends StatefulWidget {
+  const _CabinetSlotsDialog({
+    required this.units,
+    required this.fromBottom,
+    required this.canNumber,
+  });
+
+  final int units;
+  final bool fromBottom;
+  final bool canNumber;
+
+  @override
+  State<_CabinetSlotsDialog> createState() => _CabinetSlotsDialogState();
+}
+
+class _CabinetSlotsDialogState extends State<_CabinetSlotsDialog> {
+  late final _text = TextEditingController(text: '${widget.units}')
+    ..selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: '${widget.units}'.length,
+    );
+  late bool _fromBottom = widget.fromBottom;
+  String? _error;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = int.tryParse(_text.text.trim());
+    if (value == null || value < 1 || value > kFloorPlanMaxCabinetUnits) {
+      setState(() => _error = 'Από 1 ως $kFloorPlanMaxCabinetUnits.');
+      return;
+    }
+    Navigator.of(context).pop((units: value, fromBottom: _fromBottom));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Θέσεις καμπίνας'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _text,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: 'Πόσα U έχει η καμπίνα',
+                errorText: _error,
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            if (widget.canNumber) ...[
+              const SizedBox(height: 16),
+              Text('Αρίθμηση', style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 6),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: true,
+                    label: Text('Από κάτω'),
+                    tooltip: 'Το U1 είναι η βάση της καμπίνας',
+                  ),
+                  ButtonSegment(
+                    value: false,
+                    label: Text('Από πάνω'),
+                    tooltip: 'Το U1 είναι η κορυφή της καμπίνας',
+                  ),
+                ],
+                selected: {_fromBottom},
+                onSelectionChanged: (s) =>
+                    setState(() => _fromBottom = s.first),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Οι συσκευές μένουν στη θέση τους· αλλάζουν μόνο οι αριθμοί.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Ακύρωση'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Αποθήκευση')),
+      ],
+    );
+  }
 }
 
 class _NumberDialog extends StatefulWidget {

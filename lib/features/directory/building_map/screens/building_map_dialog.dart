@@ -137,7 +137,9 @@ class BuildingMapDialog extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: editMode ? null : const QuickCallFloatingButton(),
+      floatingActionButton: editMode
+          ? null
+          : const QuickCallFloatingButton(place: QuickCallFabPlace.mapView),
       body: floorsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Σφάλμα: $e')),

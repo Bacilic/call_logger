@@ -24,7 +24,7 @@ void main() {
     await migrateDatabaseToV69(db);
     // Η τρέχουσα μορφή: η διαγραφή ορόφου αγγίζει και τους πίνακες δικτύου και
     // τις εικόνες πατρόν.
-    await migrateDatabaseToV77(db);
+    await migrateDatabaseToV81(db);
     repo = FloorPlanObjectsRepository(db);
   });
 
@@ -364,8 +364,125 @@ void main() {
       await migrateDatabaseToV73(old);
       await migrateDatabaseToV73(old);
 
-      final kinds = await FloorPlanObjectsRepository(old).kinds();
-      expect(kinds.values.single.showInfo, isTrue);
+      // Σκέτη ανάγνωση: το αποθετήριο ζητά και τις στήλες νεότερων εκδόσεων.
+      final kinds = await old.query('building_map_object_kinds');
+      expect(kinds.single['show_info'], 1);
+    });
+  });
+
+  group('Τα σύμβολα της καμπίνας διακομιστών (13/11)', () {
+    test('firewall, διακομιστής, αποθήκευση και NVR έχουν θύρες και IP· ο '
+        'οργανωτής καλωδίων μόνο πιάνει U', () {
+      for (final symbol in [
+        FloorPlanSymbol.firewall,
+        FloorPlanSymbol.server,
+        FloorPlanSymbol.storage,
+        FloorPlanSymbol.nvr,
+      ]) {
+        expect(symbol.hasPortCount, isTrue, reason: symbol.key);
+        expect(symbol.defaultHasNetwork, isTrue, reason: symbol.key);
+        expect(symbol.fitsInCabinet, isTrue, reason: symbol.key);
+        expect(FloorPlanSymbol.forKinds, contains(symbol));
+      }
+      const organizer = FloorPlanSymbol.cableManager;
+      expect(organizer.fitsInCabinet, isTrue);
+      expect(organizer.hasCableSettings, isFalse);
+      expect(organizer.canHaveNetwork, isFalse);
+      expect(FloorPlanSymbol.forKinds, contains(organizer));
+    });
+
+    test('είδος με νέο σύμβολο γράφεται και ξαναδιαβάζεται', () async {
+      await repo.addKind(
+        name: 'HPE ProLiant DL360',
+        symbol: FloorPlanSymbol.server,
+        hasPorts: true,
+      );
+      await repo.addKind(
+        name: 'Οργανωτής 1U',
+        symbol: FloorPlanSymbol.cableManager,
+        hasPorts: false,
+      );
+      final kinds = {for (final k in (await repo.kinds()).values) k.name: k};
+      expect(kinds['HPE ProLiant DL360']!.symbol, FloorPlanSymbol.server);
+      expect(kinds['HPE ProLiant DL360']!.hasNetwork, isTrue);
+      expect(kinds['Οργανωτής 1U']!.symbol, FloorPlanSymbol.cableManager);
+      expect(kinds['Οργανωτής 1U']!.hasNetwork, isFalse);
+    });
+  });
+
+  group('IP και Lansweeper ανά είδος (v78)', () {
+    test(
+      'νέο είδος: η πρόταση ακολουθεί το σύμβολο, εκτός αν οριστεί ρητά',
+      () async {
+        await repo.addKind(
+          name: 'Patch',
+          symbol: FloorPlanSymbol.patchPanel,
+          hasPorts: true,
+        );
+        await repo.addKind(
+          name: 'Switch',
+          symbol: FloorPlanSymbol.networkSwitch,
+          hasPorts: true,
+        );
+        await repo.addKind(
+          name: 'UPS δικτύου',
+          symbol: FloorPlanSymbol.ups,
+          hasPorts: false,
+          hasNetwork: true,
+        );
+
+        final kinds = {for (final k in (await repo.kinds()).values) k.name: k};
+        expect(kinds['Patch']!.hasNetwork, isFalse);
+        expect(kinds['Switch']!.hasNetwork, isTrue);
+        expect(kinds['UPS δικτύου']!.hasNetwork, isTrue);
+      },
+    );
+
+    test('αναβάθμιση: τα παθητικά είδη χάνουν τα πεδία, εκτός αν κάποια '
+        'συσκευή τους έχει ήδη γραμμένη IP', () async {
+      // Η βάση όπως ήταν πριν από τη v78.
+      await db.execute(
+        'ALTER TABLE building_map_object_kinds DROP COLUMN has_network',
+      );
+      await db.execute(
+        'ALTER TABLE building_map_objects DROP COLUMN port_separator',
+      );
+      Future<int> kind(String name, String symbol) => db.insert(
+        'building_map_object_kinds',
+        {'name': name, 'name_key': name, 'symbol': symbol},
+      );
+      final empty = await kind('Patch', 'patch_panel');
+      final withIp = await kind('Patch με IP', 'patch_panel');
+      final sw = await kind('Switch', 'switch');
+      await db.update(
+        'building_map_object_kinds',
+        {'has_ports': 1},
+        where: 'id = ?',
+        whereArgs: [sw],
+      );
+      final printer = await kind('Εκτυπωτής', 'printer');
+      await db.insert('building_map_objects', {
+        'kind_id': withIp,
+        'floor_id': 1,
+        'x': 0,
+        'y': 0,
+        'ip': '10.10.1.5',
+      });
+
+      await migrateDatabaseToV81(db);
+      await migrateDatabaseToV81(db);
+
+      final kinds = await repo.kinds();
+      expect(kinds[empty]!.hasNetwork, isFalse);
+      expect(kinds[withIp]!.hasNetwork, isTrue);
+      expect(kinds[sw]!.hasNetwork, isTrue);
+      // Χωρίς θύρες και χωρίς γραμμένη IP: «καμία σύνδεση», όχι «ασύρματο».
+      expect(kinds[printer]!.hasNetwork, isFalse);
+      // Το διαχωριστικό ξεκινά κενό: η εφαρμογή διαλέγει μόνη της.
+      final object = (await repo.listObjects(1)).single;
+      expect(object.portSeparator, isNull);
+      // v79: ό,τι υπήρχε κρατά την αρίθμηση από πάνω.
+      expect(object.rackFromBottom, isFalse);
     });
   });
 
@@ -406,11 +523,66 @@ void main() {
 
         await migrateDatabaseToV75(old);
         await migrateDatabaseToV75(old);
+        // Η ανάγνωση ζητά τις σημερινές στήλες του πίνακα.
+        await migrateDatabaseToV80(old);
 
         final object = (await FloorPlanObjectsRepository(old).listObjects(1))
             .single;
         expect(object.name, 'ΕΚΤ-01');
         expect((object.inCabinet, object.rackU), (false, null));
+      },
+    );
+
+    test('αναβάθμιση v80: οι υπάρχουσες θύρες μένουν στην πρώτη ομάδα, και ο '
+        'αριθμός γίνεται μοναδικός μέσα στην ομάδα', () async {
+      final old = await openDatabase(
+        inMemoryDatabasePath,
+        singleInstance: false,
+      );
+      addTearDown(old.close);
+      await migrateDatabaseToV69(old);
+      await migrateDatabaseToV79(old);
+      await old.insert('building_map_ports', {'object_id': 7, 'number': 1});
+
+      await migrateDatabaseToV80(old);
+      await migrateDatabaseToV80(old);
+
+      final port = (await old.query('building_map_ports')).single;
+      expect(port['group_index'], 0);
+      // Η ομάδα των uplink ξαναμετρά από το 1…
+      await old.insert('building_map_ports', {
+        'object_id': 7,
+        'group_index': 1,
+        'number': 1,
+      });
+      // …αλλά μέσα στην ίδια ομάδα ο αριθμός μένει μοναδικός.
+      expect(
+        () => old.insert('building_map_ports', {
+          'object_id': 7,
+          'group_index': 0,
+          'number': 1,
+        }),
+        throwsA(isA<DatabaseException>()),
+      );
+    });
+
+    test(
+      'αναβάθμιση v81: τα υπάρχοντα καλώδια μένουν χωρίς τύπο, δηλαδή Cat 5e',
+      () async {
+        final old = await openDatabase(
+          inMemoryDatabasePath,
+          singleInstance: false,
+        );
+        addTearDown(old.close);
+        await migrateDatabaseToV69(old);
+        await migrateDatabaseToV80(old);
+        await old.insert('building_map_cables', {'id': 3});
+
+        await migrateDatabaseToV81(old);
+        await migrateDatabaseToV81(old);
+
+        final cable = (await old.query('building_map_cables')).single;
+        expect(cable['cable_type'], isNull);
       },
     );
 

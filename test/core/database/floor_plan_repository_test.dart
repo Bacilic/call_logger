@@ -22,7 +22,7 @@ void main() {
     initSqfliteFfiForTests();
     db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
     await migrateDatabaseToV69(db);
-    await migrateDatabaseToV77(db);
+    await migrateDatabaseToV81(db);
     repo = FloorPlanRepository(db);
   });
 

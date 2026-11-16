@@ -1,5 +1,8 @@
 import 'dart:ui' show Offset, Size;
 
+import 'floor_plan_port.dart'
+    show FloorPlanPortGroup, floorPlanPortGroupsFrom, floorPlanPortGroupsData;
+
 /// Ένα αντικείμενο του νέου χάρτη (εκτυπωτής, γραφείο…), όπως ζει στη βάση.
 ///
 /// Θέση ([center]) και μέγεθος ([size]) σε **εκατοστά πραγματικού χώρου**,
@@ -28,6 +31,9 @@ class FloorPlanObject {
     this.stackId,
     this.stackUnit,
     this.portType,
+    this.portSeparator,
+    this.portGroupsData,
+    this.rackFromBottom = false,
   });
 
   final int id;
@@ -48,6 +54,24 @@ class FloorPlanObject {
 
   /// Το πρόθεμα των θυρών ενός switch (Fa, Gi, Te)· κενό = Gi.
   final String? portType;
+
+  /// Ό,τι μπαίνει ανάμεσα στο όνομα ενός patch panel και στον αριθμό της
+  /// θύρας του. `null` = δεν ορίστηκε ποτέ (η εφαρμογή διαλέγει μόνη της —
+  /// δες `floorPlanDefaultPortSeparator`)· κενό = χωρίς διαχωριστικό.
+  final String? portSeparator;
+
+  /// Οι ομάδες θυρών όπως γράφονται στη βάση (`port_groups`)· `null` = μία
+  /// ομάδα χωρίς ταχύτητα. Διαβάζεται μέσω του [portGroups].
+  final String? portGroupsData;
+
+  /// Οι ομάδες θυρών της συσκευής — πάντα τουλάχιστον μία. Το πρόθεμα της
+  /// πρώτης είναι το [portType].
+  List<FloorPlanPortGroup> get portGroups =>
+      floorPlanPortGroupsFrom(portType, portGroupsData);
+
+  /// Μόνο για καμπίνα: οι αριθμοί U ξεκινούν από κάτω (U1 η βάση). Αλλάζει
+  /// μόνο το πώς γράφονται οι θέσεις — το [rackU] μετρά πάντα από πάνω.
+  final bool rackFromBottom;
 
   /// Είναι μέσα σε καμπίνα — άρα όχι στον χάρτη.
   bool get inCabinet => cabinetId != null;
@@ -74,6 +98,9 @@ class FloorPlanObject {
     'stack_id',
     'stack_unit',
     'port_type',
+    'port_separator',
+    'port_groups',
+    'rack_from_bottom',
   ];
 
   factory FloorPlanObject.fromMap(Map<String, Object?> row) {
@@ -99,6 +126,9 @@ class FloorPlanObject {
       stackId: row['stack_id'] as int?,
       stackUnit: row['stack_unit'] as int?,
       portType: row['port_type'] as String?,
+      portSeparator: row['port_separator'] as String?,
+      portGroupsData: row['port_groups'] as String?,
+      rackFromBottom: (row['rack_from_bottom'] as int? ?? 0) == 1,
     );
   }
 
@@ -120,6 +150,9 @@ class FloorPlanObject {
     'stack_id': stackId,
     'stack_unit': stackUnit,
     'port_type': portType,
+    'port_separator': portSeparator,
+    'port_groups': portGroupsData,
+    'rack_from_bottom': rackFromBottom ? 1 : 0,
   };
 
   FloorPlanObject copyWith({
@@ -144,6 +177,9 @@ class FloorPlanObject {
     stackId: stackId,
     stackUnit: stackUnit,
     portType: portType,
+    portSeparator: portSeparator,
+    portGroupsData: portGroupsData,
+    rackFromBottom: rackFromBottom,
   );
 
   /// Ίδιο αντικείμενο σε άλλη θέση καμπίνας. Όλα ρητά, ώστε `null` να
@@ -170,6 +206,9 @@ class FloorPlanObject {
     stackId: stackId,
     stackUnit: stackUnit,
     portType: portType,
+    portSeparator: portSeparator,
+    portGroupsData: portGroupsData,
+    rackFromBottom: rackFromBottom,
   );
 
   /// Ίδιο αντικείμενο με άλλα στοιχεία. Κενό κείμενο γίνεται `null`.
@@ -195,6 +234,9 @@ class FloorPlanObject {
     stackId: stackId,
     stackUnit: stackUnit,
     portType: portType,
+    portSeparator: portSeparator,
+    portGroupsData: portGroupsData,
+    rackFromBottom: rackFromBottom,
   );
 
   /// Ίδιο αντικείμενο σε άλλο stack. Και τα δύο ρητά, ώστε `null` να σημαίνει
@@ -217,10 +259,38 @@ class FloorPlanObject {
         stackId: stackId,
         stackUnit: stackUnit,
         portType: portType,
+        portSeparator: portSeparator,
+        portGroupsData: portGroupsData,
+        rackFromBottom: rackFromBottom,
       );
 
-  /// Ίδιο αντικείμενο με άλλο πρόθεμα θυρών.
-  FloorPlanObject withPortType(String? portType) => FloorPlanObject(
+  /// Ίδιο αντικείμενο με άλλες ομάδες θυρών (τουλάχιστον μία). Το πρόθεμα
+  /// της πρώτης γράφεται στο [portType], τα υπόλοιπα στο [portGroupsData].
+  FloorPlanObject withPortGroups(List<FloorPlanPortGroup> groups) =>
+      FloorPlanObject(
+        id: id,
+        floorId: floorId,
+        kindId: kindId,
+        center: center,
+        size: size,
+        rotationDegrees: rotationDegrees,
+        name: name,
+        ip: ip,
+        lansweeperName: lansweeperName,
+        notes: notes,
+        cabinetId: cabinetId,
+        rackU: rackU,
+        rackUnits: rackUnits,
+        stackId: stackId,
+        stackUnit: stackUnit,
+        portType: groups.isEmpty ? null : groups.first.prefix,
+        portSeparator: portSeparator,
+        portGroupsData: floorPlanPortGroupsData(groups),
+        rackFromBottom: rackFromBottom,
+      );
+
+  /// Ίδιο αντικείμενο με άλλο διαχωριστικό θυρών (`null` = αυτόματο).
+  FloorPlanObject withPortSeparator(String? portSeparator) => FloorPlanObject(
     id: id,
     floorId: floorId,
     kindId: kindId,
@@ -237,6 +307,32 @@ class FloorPlanObject {
     stackId: stackId,
     stackUnit: stackUnit,
     portType: portType,
+    portSeparator: portSeparator,
+    portGroupsData: portGroupsData,
+    rackFromBottom: rackFromBottom,
+  );
+
+  /// Ίδια καμπίνα με άλλη αρίθμηση U.
+  FloorPlanObject withRackFromBottom(bool fromBottom) => FloorPlanObject(
+    id: id,
+    floorId: floorId,
+    kindId: kindId,
+    center: center,
+    size: size,
+    rotationDegrees: rotationDegrees,
+    name: name,
+    ip: ip,
+    lansweeperName: lansweeperName,
+    notes: notes,
+    cabinetId: cabinetId,
+    rackU: rackU,
+    rackUnits: rackUnits,
+    stackId: stackId,
+    stackUnit: stackUnit,
+    portType: portType,
+    portSeparator: portSeparator,
+    portGroupsData: portGroupsData,
+    rackFromBottom: fromBottom,
   );
 
   /// Ίδια θέση, μέγεθος και κλίση με το [other] — και ίδια θέση καμπίνας.

@@ -258,8 +258,7 @@ class MainShellState extends ConsumerState<MainShell> {
           icon: CompactTooltip(
             waitDuration: const Duration(milliseconds: 600),
             showDuration: const Duration(seconds: 4),
-            message:
-                'Διαχείριση χρηστών και εξοπλισμού\nΠροσθήκη / διόρθωση ονομάτων, τμημάτων, υπολογιστών',
+            message: 'Διαχείριση χρηστών και εξοπλισμού\nΠροσθήκη / διόρθωση ονομάτων, τμημάτων, υπολογιστών',
             child: const Icon(
               Icons.contacts,
               key: ValueKey('nav_rail_directory'),
@@ -272,8 +271,7 @@ class MainShellState extends ConsumerState<MainShell> {
           icon: CompactTooltip(
             waitDuration: const Duration(milliseconds: 600),
             showDuration: const Duration(seconds: 4),
-            message:
-                'Προηγούμενες κλήσεις & αναζήτηση\nΕμφάνιση, τροποποίηση ή διαγραφή παλιών καταγραφών',
+            message: 'Προηγούμενες κλήσεις & αναζήτηση\nΕμφάνιση, τροποποίηση ή διαγραφή παλιών καταγραφών',
             child: const Icon(Icons.history, key: ValueKey('nav_rail_history')),
           ),
           label: Text(dest.label),
@@ -283,8 +281,7 @@ class MainShellState extends ConsumerState<MainShell> {
           icon: CompactTooltip(
             waitDuration: const Duration(milliseconds: 600),
             showDuration: const Duration(seconds: 4),
-            message:
-                'Οι λύσεις που έχετε κρατήσει από τις κλήσεις\nΣύμπτωμα και αντιμετώπιση, με αναζήτηση',
+            message: 'Οι λύσεις που έχετε κρατήσει από τις κλήσεις\nΣύμπτωμα και αντιμετώπιση, με αναζήτηση',
             // Όχι βιβλίο: το Λεξικό κρατά ήδη το βιβλίο, και δύο βιβλία στην
             // ίδια μπάρα ξεχωρίζουν μόνο σε γεμάτο/περίγραμμα — αδιόρατο στα
             // 24px. Το τσιρότο λέει «λύση», όχι «ανάγνωσμα».
@@ -300,8 +297,7 @@ class MainShellState extends ConsumerState<MainShell> {
           icon: CompactTooltip(
             waitDuration: const Duration(milliseconds: 600),
             showDuration: const Duration(seconds: 4),
-            message:
-                'Εργαλεία διαχείρισης & εποπτείας βάσης\nΡυθμίσεις βάσης, αντίγραφα ασφαλείας, προβολή πινάκων',
+            message: 'Εργαλεία διαχείρισης & εποπτείας βάσης\nΡυθμίσεις βάσης, αντίγραφα ασφαλείας, προβολή πινάκων',
             child: const Icon(
               Icons.storage,
               key: ValueKey('nav_rail_database'),
@@ -380,7 +376,7 @@ class MainShellState extends ConsumerState<MainShell> {
     ref.invalidate(showDatabaseNavProvider);
     ref.invalidate(showDictionaryNavProvider);
     ref.invalidate(showKnowledgeNavProvider);
-    ref.invalidate(showQuickCallFabProvider);
+    ref.invalidate(quickCallFabPlacesProvider);
     ref.invalidate(coreLexiconProvider);
     // Ο ορθογράφος και το λεξικό-πυρήνας παρακολουθούν τον πυρήνα με watch:
     // χωρίς άμεσο ξέπλυμα, οι κρίκοι με συνδρομές σε παύση μένουν «dirty»
@@ -571,7 +567,11 @@ class MainShellState extends ConsumerState<MainShell> {
         children: [
           Scaffold(
             appBar: null,
-            floatingActionButton: const QuickCallFloatingButton(),
+            floatingActionButton: QuickCallFloatingButton(
+              place: dictionaryImmersive
+                  ? QuickCallFabPlace.dictionary
+                  : QuickCallFabPlace.historyAudit,
+            ),
             body: SafeArea(
               child: destinationContent.destinationContentColumn(
                 dictionaryImmersive
@@ -595,9 +595,7 @@ class MainShellState extends ConsumerState<MainShell> {
         Scaffold(
           // Οι κύριες οθόνες δεν έχουν κουμπί γρήγορης κλήσης (ανοίγει με τη
           // συντόμευση)· εδώ φαίνεται μόνο το τηλέφωνο της ελαχιστοποιημένης.
-          floatingActionButton: const QuickCallFloatingButton(
-            showOpenButton: false,
-          ),
+          floatingActionButton: const QuickCallFloatingButton(place: null),
           appBar: showAppBar
               ? AppBar(
                   title: isLampDestination

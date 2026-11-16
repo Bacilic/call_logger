@@ -340,7 +340,12 @@ void main() {
       departmentName: (_) => null,
       roomAt: (_) => null,
       cableLines: const [
-        FloorPlanCableLine(cableId: 1, a: panelPort, b: switchPort),
+        FloorPlanCableLine(
+          cableId: 1,
+          a: panelPort,
+          b: switchPort,
+          type: 'Cat 6',
+        ),
       ],
       portLinks: const [
         FloorPlanPortLink(
@@ -358,11 +363,11 @@ void main() {
     final details = info.portDetails();
     expect(
       details(const FloorPlanPort(id: 60, objectId: 4, number: 3)),
-      '→ RC6.F12 (PR3918)',
+      '→ RC6.F12 (PR3918) · Cat 6',
     );
     expect(
       details(const FloorPlanPort(id: 50, objectId: 3, number: 12)),
-      'Πίσω: πρίζα → PR3918\nΜπροστά: SW-2 Gi1/0/3',
+      'Πίσω: πρίζα → PR3918\nΜπροστά: SW-2 Gi1/0/3 · Cat 6',
     );
     expect(
       details(const FloorPlanPort(id: 61, objectId: 4, number: 4)),

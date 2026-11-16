@@ -155,6 +155,13 @@ abstract final class ProfileSettingKeys {
     'show_quick_call_fab',
     legacySource: ProfileSettingLegacySource.machine,
   );
+
+  /// Σε ποιες οθόνες φαίνεται το κουμπί γρήγορης κλήσης. Χωρίς δική του
+  /// τιμή κληρονομεί το [showQuickCallFab] του ίδιου προφίλ.
+  static const ProfileSettingKey quickCallFabPlaces = ProfileSettingKey(
+    'quick_call_fab_places_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
   static const ProfileSettingKey callsScreenCardsVisibility = ProfileSettingKey(
     'calls_screen_cards_visibility_v1',
     legacySource: ProfileSettingLegacySource.machine,
@@ -428,6 +435,13 @@ abstract final class ProfileSettingKeys {
     legacySource: ProfileSettingLegacySource.bornPersonal,
   );
 
+  /// Το τελευταίο μόνιμο εργαλείο της σχεδίασης χάρτη — ένα για όλους τους
+  /// ορόφους. **Προσωπικό εξαρχής**.
+  static const ProfileSettingKey floorPlanLastTool = ProfileSettingKey(
+    'floor_plan_last_tool_v1',
+    legacySource: ProfileSettingLegacySource.bornPersonal,
+  );
+
   /// Ο όροφος που είδε τελευταίο ο χρήστης στον χάρτη κτιρίου — εκεί ανοίγει
   /// ο χάρτης και μετά από επανεκκίνηση (απόφαση 30/10/2026).
   ///
@@ -465,6 +479,7 @@ abstract final class ProfileSettingKeys {
     showDictionaryNav,
     showKnowledgeNav,
     showQuickCallFab,
+    quickCallFabPlaces,
     callsScreenCardsVisibility,
     databaseBrowserStatsCardExpanded,
     equipmentLocationShowBuilding,
@@ -516,6 +531,7 @@ abstract final class ProfileSettingKeys {
     dashboardPalette,
     floorPlanHiddenLayers,
     floorPlanDrawingAidsOff,
+    floorPlanLastTool,
     buildingMapLastFloor,
     floorPlanCabinetPanelLayout,
     floorPlanCabinetSelection,

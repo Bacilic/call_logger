@@ -126,7 +126,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       data: colors.applyTo(Theme.of(context)),
       child: Scaffold(
         backgroundColor: colors.pageBg,
-        floatingActionButton: const QuickCallFloatingButton(),
+        floatingActionButton: const QuickCallFloatingButton(
+          place: QuickCallFabPlace.statistics,
+        ),
         body: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(

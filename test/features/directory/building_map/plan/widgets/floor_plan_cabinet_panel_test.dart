@@ -100,10 +100,9 @@ void main() {
       tester,
       FloorPlanCabinetActions(
         addableKinds: [kinds[1]!],
-        onAdd: (_) {},
+        onAdd: (_, _) {},
         onMove: (id, u) => moves.add((id, u)),
         onEdit: (_) {},
-        onSetHeight: (_, _) {},
         onTakeOut: (_) {},
         onDelete: (_) {},
         onSetUnits: (_) {},
@@ -116,6 +115,80 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(moves, [(7, 5)]);
+  });
+
+  FloorPlanCabinetActions adding(List<(int, int)> adds) =>
+      FloorPlanCabinetActions(
+        addableKinds: [kinds[1]!],
+        onAdd: (kind, u) => adds.add((kind, u)),
+        onMove: (_, _) {},
+        onEdit: (_) {},
+        onTakeOut: (_) {},
+        onDelete: (_) {},
+        onSetUnits: (_) {},
+      );
+
+  testWidgets('κλικ σε κενό U και είδος βάζει συσκευή σε εκείνο το U', (
+    tester,
+  ) async {
+    final adds = <(int, int)>[];
+    await pump(tester, adding(adds));
+
+    // Το κενό ξεκινά από το U2· τρία U πιο κάτω = U5.
+    final empty = tester.getTopLeft(find.text('κενό U2–U12'));
+    final top = tester.getTopLeft(find.text('U2'));
+    await tester.tapAt(Offset(empty.dx, top.dy + 3 * 24 + 6));
+    await tester.pumpAndSettle();
+    expect(find.text('Προσθήκη στο U5'), findsOne);
+
+    await tester.tap(find.text('Switch').last);
+    await tester.pumpAndSettle();
+    expect(adds, [(1, 5)]);
+  });
+
+  testWidgets('«Προσθήκη» προτείνει μόνο ελεύθερα U, με πρώτο το πρώτο '
+      'ελεύθερο', (tester) async {
+    final adds = <(int, int)>[];
+    await pump(tester, adding(adds));
+
+    await tester.tap(find.text('Προσθήκη'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Switch').last);
+    await tester.pumpAndSettle();
+    expect(find.text('U2'), findsWidgets);
+
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    expect(find.text('U1').hitTestable(), findsNothing);
+    await tester.tap(find.text('U4').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Προσθήκη'));
+    await tester.pumpAndSettle();
+    expect(adds, [(1, 4)]);
+  });
+
+  testWidgets('αρίθμηση από κάτω: η κορυφή γράφει U12 και το κενό U1–U11', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: FloorPlanCabinetPanel(
+              title: 'RC6',
+              units: 12,
+              rackFromBottom: true,
+              contents: const [sw],
+              kinds: kinds,
+              onClose: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('U12'), findsOne);
+    expect(find.text('κενό U1–U11'), findsOne);
   });
 
   testWidgets('στην προβολή δεν υπάρχει «Προσθήκη» ούτε μενού', (tester) async {
@@ -184,10 +257,9 @@ void main() {
               ports: ports,
               actions: FloorPlanCabinetActions(
                 addableKinds: const [],
-                onAdd: (_) {},
+                onAdd: (_, _) {},
                 onMove: (_, _) {},
                 onEdit: edits.add,
-                onSetHeight: (_, _) {},
                 onTakeOut: (_) {},
                 onDelete: (_) {},
                 onSetUnits: (_) {},

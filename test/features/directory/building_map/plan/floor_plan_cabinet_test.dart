@@ -54,6 +54,28 @@ void main() {
     expect(floorPlanFirstFreeRackU(units: 2, contents: [_at(1, 1, 2)]), isNull);
   });
 
+  test('αρίθμηση από κάτω: η βάση είναι U1, και το εύρος γράφεται από τον '
+      'μικρότερο αριθμό', () {
+    String label(int position, {int height = 1, bool fromBottom = true}) =>
+        floorPlanRackLabel(
+          units: 42,
+          fromBottom: fromBottom,
+          position: position,
+          height: height,
+        );
+    expect(label(1), 'U42');
+    expect(label(42), 'U1');
+    expect(label(31, height: 2), 'U11–U12');
+    expect(label(31, height: 2, fromBottom: false), 'U31–U32');
+    expect(label(5, fromBottom: false), 'U5');
+  });
+
+  test('οι ελεύθερες θέσεις παραλείπουν όσα U είναι πιασμένα', () {
+    final contents = [_at(1, 1), _at(2, 3, 2)];
+    expect(floorPlanFreeRackUs(units: 6, contents: contents), [2, 5, 6]);
+    expect(floorPlanFreeRackUs(units: 2, contents: [_at(1, 1, 2)]), isEmpty);
+  });
+
   test('το μίκρεμα το εμποδίζει μόνο ό,τι θα έβγαινε έξω', () {
     final contents = [_at(1, 1), _at(2, 40, 3)];
     expect(floorPlanContentsBeyond(42, contents), isEmpty);

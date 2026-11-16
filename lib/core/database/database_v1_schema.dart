@@ -138,6 +138,20 @@ import 'database_schema_version.dart';
 /// v77: `building_map_plan_elements.thickness_cm` — κάθε τοίχος του νέου χάρτη
 /// έχει δικό του πάχος. Καθαρή προσθήκη· κενό = το πάχος που είχαν όλοι ως
 /// τώρα.
+/// v78: `building_map_objects.port_separator` — το διαχωριστικό ανάμεσα στο
+/// όνομα ενός patch panel και στον αριθμό της θύρας (κενό = αυτόματο), και
+/// `building_map_object_kinds.has_network` — αν οι συσκευές του είδους έχουν
+/// IP και όνομα Lansweeper.
+/// v79: `building_map_objects.rack_from_bottom` — η καμπίνα αριθμεί τα U της
+/// από κάτω (1) ή από πάνω (0). Οι υπάρχουσες μένουν από πάνω· οι νέες
+/// γεννιούνται από κάτω. Η θέση `rack_u` μετρά πάντα από πάνω.
+/// v80: ομάδες θυρών σε μία συσκευή (24 × 1G + 4 × 10G) —
+/// `building_map_objects.port_groups` (JSON: πρόθεμα, ταχύτητα, «συνεχίζει»)
+/// και `building_map_ports.group_index`· ο αριθμός θύρας γίνεται μοναδικός
+/// μέσα στην ομάδα. Οι υπάρχουσες θύρες μένουν στην πρώτη ομάδα, με τα ίδια
+/// ονόματα.
+/// v81: `building_map_cables.cable_type` — Cat 5e, Cat 6, Cat 6A, Cat 7. Κενό
+/// = Cat 5e, η προεπιλογή· τα υπάρχοντα καλώδια μένουν κενά.
 const int databaseSchemaVersionV1 = kDatabaseSchemaVersion;
 
 /// Η εικόνα κάθε κάτοψης ορόφου — **μία και κοινή για όλους τους σταθμούς**.
@@ -251,7 +265,8 @@ const String kCreateBuildingMapObjectKindsTable = '''
         name_key TEXT NOT NULL UNIQUE,
         symbol TEXT NOT NULL,
         has_ports INTEGER NOT NULL DEFAULT 0,
-        show_info INTEGER NOT NULL DEFAULT 1
+        show_info INTEGER NOT NULL DEFAULT 1,
+        has_network INTEGER NOT NULL DEFAULT 1
       )
     ''';
 
@@ -289,7 +304,10 @@ const String kCreateBuildingMapObjectsTable = '''
         rack_units INTEGER,
         stack_id INTEGER,
         stack_unit INTEGER,
-        port_type TEXT
+        port_type TEXT,
+        port_separator TEXT,
+        port_groups TEXT,
+        rack_from_bottom INTEGER NOT NULL DEFAULT 0
       )
     ''';
 
@@ -319,6 +337,7 @@ const String kCreateBuildingMapPortsTable = '''
       CREATE TABLE IF NOT EXISTS building_map_ports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         object_id INTEGER NOT NULL,
+        group_index INTEGER NOT NULL DEFAULT 0,
         number INTEGER NOT NULL,
         written_name TEXT,
         connected_equipment_id INTEGER,
@@ -327,16 +346,25 @@ const String kCreateBuildingMapPortsTable = '''
       )
     ''';
 
-const String kCreateBuildingMapPortsObjectIndex = '''
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_building_map_ports_object_number
-      ON building_map_ports(object_id, number)
+/// Ο αριθμός θύρας είναι μοναδικός **μέσα στην ομάδα** (v80): η ομάδα των
+/// uplink ξαναμετρά από το 1. Δεν ανήκει στο [kBuildingMapNetworkSchema],
+/// γιατί η αναβάθμιση v74 τρέχει και σε βάσεις όπου ο πίνακας θυρών
+/// υπάρχει ήδη χωρίς τη στήλη `group_index`· τη βάζει η v80.
+const String kCreateBuildingMapPortsGroupIndex = '''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_building_map_ports_object_group_number
+      ON building_map_ports(object_id, group_index, number)
     ''';
+
+/// Το ευρετήριο των v74–v79, που σβήνει η v80.
+const String kBuildingMapPortsLegacyIndexName =
+    'idx_building_map_ports_object_number';
 
 /// Τα **καλώδια**: ένα καλώδιο είναι μία γραμμή εδώ και δύο άκρα στο
 /// `building_map_cable_ends`.
 const String kCreateBuildingMapCablesTable = '''
       CREATE TABLE IF NOT EXISTS building_map_cables (
-        id INTEGER PRIMARY KEY AUTOINCREMENT
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cable_type TEXT
       )
     ''';
 
@@ -366,7 +394,6 @@ const String kCreateBuildingMapCableEndsCableIndex = '''
 const List<String> kBuildingMapNetworkSchema = [
   kCreateBuildingMapObjectsCabinetIndex,
   kCreateBuildingMapPortsTable,
-  kCreateBuildingMapPortsObjectIndex,
   kCreateBuildingMapCablesTable,
   kCreateBuildingMapCableEndsTable,
   kCreateBuildingMapCableEndsPortIndex,
@@ -636,6 +663,7 @@ Future<void> applyDatabaseV1Schema(Database db) async {
   for (final statement in kBuildingMapNetworkSchema) {
     await db.execute(statement);
   }
+  await db.execute(kCreateBuildingMapPortsGroupIndex);
 
   await db.execute('''
       CREATE TABLE categories (

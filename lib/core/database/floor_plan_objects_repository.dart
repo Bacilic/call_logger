@@ -69,6 +69,7 @@ class FloorPlanObjectsRepository {
     required FloorPlanSymbol symbol,
     required bool hasPorts,
     bool showInfo = true,
+    bool? hasNetwork,
   }) async {
     final key = nameKey(name);
     return db.transaction((txn) async {
@@ -81,6 +82,7 @@ class FloorPlanObjectsRepository {
         'symbol': symbol.key,
         'has_ports': hasPorts ? 1 : 0,
         'show_info': showInfo ? 1 : 0,
+        'has_network': (hasNetwork ?? symbol.defaultHasNetwork) ? 1 : 0,
       });
       return FloorPlanKindSaveOutcome.saved;
     });
@@ -94,6 +96,7 @@ class FloorPlanObjectsRepository {
     required FloorPlanSymbol symbol,
     required bool hasPorts,
     bool showInfo = true,
+    bool hasNetwork = true,
   }) async {
     final key = nameKey(name);
     return db.transaction((txn) async {
@@ -108,6 +111,7 @@ class FloorPlanObjectsRepository {
           'symbol': symbol.key,
           'has_ports': hasPorts ? 1 : 0,
           'show_info': showInfo ? 1 : 0,
+          'has_network': hasNetwork ? 1 : 0,
         },
         where: 'id = ?',
         whereArgs: [id],

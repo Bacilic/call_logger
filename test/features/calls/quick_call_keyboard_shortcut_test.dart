@@ -11,6 +11,7 @@ import 'package:call_logger/features/calls/provider/lookup_provider.dart';
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:call_logger/core/models/quick_call_fab_places.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,7 +25,9 @@ Future<void> _pumpCallLoggerApp(WidgetTester tester) async {
       ProviderScope(
         overrides: [
           ...callLoggerTestProviderOverrides(),
-          showQuickCallFabProvider.overrideWith((ref) async => true),
+          quickCallFabPlacesProvider.overrideWith(
+            (ref) async => QuickCallFabPlaces.all,
+          ),
         ],
         child: const MyApp(showStartupScreens: false),
       ),

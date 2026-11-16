@@ -39,13 +39,43 @@ class FloorPlanPortsRepository {
       '(SELECT s.name FROM $_objects s WHERE s.stack_id = $alias.stack_id '
       'ORDER BY s.stack_unit LIMIT 1) END';
 
+  /// Όλα τα γραμμένα ονόματα θυρών του κτιρίου (όλων των ορόφων), με το πού
+  /// βρίσκεται η καθεμιά — για την προειδοποίηση για ίδιο όνομα.
+  Future<List<FloorPlanWrittenPortName>> writtenNames() async {
+    final rows = await db.rawQuery(
+      'SELECT p.id, p.number, p.written_name, o.name, k.name AS kind_name, '
+      'c.name AS cabinet_name, f.label AS floor_label '
+      'FROM $_ports p '
+      'JOIN $_objects o ON o.id = p.object_id '
+      'LEFT JOIN $_kinds k ON k.id = o.kind_id '
+      'LEFT JOIN $_objects c ON c.id = o.cabinet_id '
+      'LEFT JOIN building_map_floors f ON f.id = o.floor_id '
+      "WHERE TRIM(COALESCE(p.written_name, '')) <> ''",
+    );
+    return [
+      for (final r in rows)
+        FloorPlanWrittenPortName(
+          portId: r['id'] as int,
+          number: r['number'] as int,
+          name: (r['written_name'] as String).trim(),
+          objectLabel: switch ((r['name'] as String?)?.trim()) {
+            final String n when n.isNotEmpty => n,
+            _ => (r['kind_name'] as String?) ?? 'Αντικείμενο',
+          },
+          cabinetName: r['cabinet_name'] as String?,
+          floorLabel: r['floor_label'] as String?,
+        ),
+    ];
+  }
+
   /// Οι θύρες των αντικειμένων του ορόφου [floorId], κατά αντικείμενο και
   /// αριθμό.
   Future<List<FloorPlanPort>> listForFloor(int floorId) async {
     final rows = await db.rawQuery(
       'SELECT ${[for (final c in FloorPlanPort.columns) 'p.$c'].join(', ')} '
       'FROM $_ports p JOIN $_objects o ON o.id = p.object_id '
-      'WHERE o.floor_id = ? ORDER BY p.object_id ASC, p.number ASC',
+      'WHERE o.floor_id = ? '
+      'ORDER BY p.object_id ASC, p.group_index ASC, p.number ASC',
       [floorId],
     );
     return [for (final row in rows) FloorPlanPort.fromMap(row)];
@@ -76,9 +106,26 @@ class FloorPlanPortsRepository {
 
   /// Γράφει θύρες **με τα δικά τους id** — νέες, αλλαγμένες, ή αναίρεση
   /// διαγραφής. Ασφαλές επειδή ο πίνακας είναι AUTOINCREMENT.
+  ///
+  /// Δέχεται και **αναρίθμηση** (η ομάδα πριν από μια ομάδα που «συνεχίζει»
+  /// άλλαξε πλήθος): οι θύρες που ήδη υπάρχουν παίρνουν πρώτα προσωρινό
+  /// αρνητικό αριθμό, ώστε καμία να μη συγκρουστεί στο μοναδικό ευρετήριο
+  /// με τον παλιό αριθμό μιας άλλης — η σύγκρουση θα την έσβηνε σιωπηλά.
   Future<void> restorePorts(List<FloorPlanPort> ports) async {
     if (ports.isEmpty) return;
     await db.transaction((txn) async {
+      final ids = [for (final p in ports) p.id];
+      for (var i = 0; i < ids.length; i += 500) {
+        final chunk = ids.sublist(
+          i,
+          i + 500 > ids.length ? ids.length : i + 500,
+        );
+        await txn.rawUpdate(
+          'UPDATE $_ports SET number = -id '
+          'WHERE id IN (${_marks(chunk.length)})',
+          chunk,
+        );
+      }
       for (final p in ports) {
         await txn.insert(_ports, {
           'id': p.id,
@@ -123,7 +170,7 @@ class FloorPlanPortsRepository {
         columns: FloorPlanPort.columns,
         where: '$column IN (${_marks(ids.length)})',
         whereArgs: ids,
-        orderBy: 'object_id ASC, number ASC',
+        orderBy: 'object_id ASC, group_index ASC, number ASC',
       );
       final removed = [for (final r in rows) FloorPlanPort.fromMap(r)];
       if (removed.isEmpty) return (ports: removed, cables: <FloorPlanCable>[]);
@@ -149,7 +196,8 @@ class FloorPlanPortsRepository {
       'SELECT oe.port_id AS outlet_port_id, oo.floor_id AS outlet_floor_id, '
       'pe.port_id AS patch_port_id, pp.number AS patch_number, '
       'pp.written_name AS patch_written_name, po.id AS panel_id, '
-      'po.name AS panel_name, po.floor_id AS panel_floor_id, '
+      'po.name AS panel_name, po.port_separator AS panel_separator, '
+      'po.floor_id AS panel_floor_id, '
       'po.cabinet_id AS cabinet_id, c.name AS cabinet_name, '
       'op.connected_equipment_id, '
       'op.connected_object_id, op.connected_text, '
@@ -176,6 +224,7 @@ class FloorPlanPortsRepository {
           patchWrittenName: r['patch_written_name'] as String?,
           panelId: r['panel_id'] as int,
           panelName: r['panel_name'] as String?,
+          panelSeparator: r['panel_separator'] as String?,
           panelFloorId: r['panel_floor_id'] as int,
           cabinetId: r['cabinet_id'] as int?,
           cabinetName: r['cabinet_name'] as String?,
@@ -199,6 +248,8 @@ class FloorPlanPortsRepository {
         '$o.floor_id AS ${e}_floor, $c.name AS ${e}_cabinet, '
         '$k.symbol AS ${e}_symbol, $k.name AS ${e}_kind, '
         '$o.stack_unit AS ${e}_unit, $o.port_type AS ${e}_type, '
+        '$o.port_groups AS ${e}_groups, $p.group_index AS ${e}_group, '
+        '$o.port_separator AS ${e}_separator, '
         '${_stackNameOf(o)} AS ${e}_stack';
     String joins(String e, String p, String o, String c, String k) =>
         'JOIN $_ports $p ON $p.id = $e.port_id '
@@ -206,9 +257,11 @@ class FloorPlanPortsRepository {
         'LEFT JOIN $_objects $c ON $c.id = $o.cabinet_id '
         'LEFT JOIN $_kinds $k ON $k.id = $o.kind_id ';
     final rows = await db.rawQuery(
-      'SELECT a.cable_id, ${end('a', 'pa', 'oa', 'ca', 'ka')}, '
+      'SELECT a.cable_id, cb_.cable_type, '
+      '${end('a', 'pa', 'oa', 'ca', 'ka')}, '
       '${end('b', 'pb', 'ob', 'cb', 'kb')} '
       'FROM $_ends a '
+      'JOIN $_cables cb_ ON cb_.id = a.cable_id '
       'JOIN $_ends b ON b.cable_id = a.cable_id AND a.port_id < b.port_id '
       '${joins('a', 'pa', 'oa', 'ca', 'ka')}'
       '${joins('b', 'pb', 'ob', 'cb', 'kb')}'
@@ -229,7 +282,12 @@ class FloorPlanPortsRepository {
           kindName: r['${e}_kind'] as String?,
           stackName: r['${e}_stack'] as String?,
           stackUnit: r['${e}_unit'] as int?,
-          portType: r['${e}_type'] as String?,
+          groupIndex: r['${e}_group'] as int? ?? 0,
+          portGroups: floorPlanPortGroupsFrom(
+            r['${e}_type'] as String?,
+            r['${e}_groups'] as String?,
+          ),
+          portSeparator: r['${e}_separator'] as String?,
         );
     return [
       for (final r in rows)
@@ -237,6 +295,7 @@ class FloorPlanPortsRepository {
           cableId: r['cable_id'] as int,
           a: read(r, 'a'),
           b: read(r, 'b'),
+          type: r['cable_type'] as String?,
         ),
     ];
   }
@@ -257,11 +316,14 @@ class FloorPlanPortsRepository {
       FloorPlanSymbol.poe,
     ];
     final rows = await db.rawQuery(
-      'SELECT p.id, p.number, p.written_name, o.id AS object_id, o.name, '
-      'o.floor_id, o.stack_unit, o.port_type, k.symbol, k.name AS kind_name, '
+      'SELECT p.id, p.number, p.group_index, p.written_name, '
+      'o.id AS object_id, o.name, '
+      'o.floor_id, o.stack_unit, o.port_type, o.port_groups, o.port_separator, '
+      'k.symbol, k.name AS kind_name, '
       'c.id AS cabinet_id, c.name AS cabinet_name, '
       '${_stackNameOf('o')} AS stack_name, '
       'lp.number AS linked_number, lo.name AS linked_panel, '
+      'lo.port_separator AS linked_separator, '
       'lc.name AS linked_cabinet '
       'FROM $_ports p '
       'JOIN $_objects o ON o.id = p.object_id '
@@ -291,7 +353,12 @@ class FloorPlanPortsRepository {
           objectName: (r['stack_name'] ?? r['name']) as String?,
           floorId: r['floor_id'] as int,
           stackUnit: r['stack_unit'] as int?,
-          portType: r['port_type'] as String?,
+          groupIndex: r['group_index'] as int? ?? 0,
+          portGroups: floorPlanPortGroupsFrom(
+            r['port_type'] as String?,
+            r['port_groups'] as String?,
+          ),
+          portSeparator: r['port_separator'] as String?,
           symbol: FloorPlanSymbol.fromKey(r['symbol'] as String?),
           kindName: r['kind_name'] as String?,
           cabinetId: r['cabinet_id'] as int?,
@@ -299,6 +366,7 @@ class FloorPlanPortsRepository {
           linkedNumber: r['linked_number'] as int?,
           linkedPanelName: r['linked_panel'] as String?,
           linkedCabinetName: r['linked_cabinet'] as String?,
+          linkedSeparator: r['linked_separator'] as String?,
         ),
     ];
   }
@@ -308,7 +376,8 @@ class FloorPlanPortsRepository {
   Future<List<FloorPlanPatchPortOption>> patchPortOptions() async {
     final rows = await db.rawQuery(
       'SELECT p.id, p.number, p.written_name, o.id AS panel_id, '
-      'o.name AS panel_name, o.floor_id, c.name AS cabinet_name, '
+      'o.name AS panel_name, o.port_separator AS panel_separator, '
+      'o.floor_id, c.name AS cabinet_name, '
       'e.port_id AS taken_port '
       'FROM $_ports p '
       'JOIN $_objects o ON o.id = p.object_id '
@@ -327,6 +396,7 @@ class FloorPlanPortsRepository {
           writtenName: r['written_name'] as String?,
           panelId: r['panel_id'] as int,
           panelName: r['panel_name'] as String?,
+          panelSeparator: r['panel_separator'] as String?,
           floorId: r['floor_id'] as int,
           cabinetName: r['cabinet_name'] as String?,
           taken: r['taken_port'] != null,
@@ -339,12 +409,14 @@ class FloorPlanPortsRepository {
   /// σταθμό): κάθε πλευρά δέχεται ένα καλώδιο.
   Future<FloorPlanCable?> connectOutletPort(
     int outletPortId,
-    int patchPortId,
-  ) => connectPorts(
+    int patchPortId, {
+    String? type,
+  }) => connectPorts(
     outletPortId,
     kFloorPlanCableFront,
     patchPortId,
     kFloorPlanCableBack,
+    type: type,
   );
 
   /// Νέο καλώδιο ανάμεσα σε δύο θύρες· `null` όταν κάποια πλευρά έχει ήδη
@@ -353,8 +425,9 @@ class FloorPlanPortsRepository {
     int portA,
     String sideA,
     int portB,
-    String sideB,
-  ) async {
+    String sideB, {
+    String? type,
+  }) async {
     return db.transaction((txn) async {
       for (final (port, side) in [(portA, sideA), (portB, sideB)]) {
         final taken = await txn.query(
@@ -365,17 +438,28 @@ class FloorPlanPortsRepository {
         );
         if (taken.isNotEmpty) return null;
       }
-      final id = await txn.insert(_cables, {'id': null});
       final cable = FloorPlanCable(
+        id: 0,
+        portA: portA,
+        sideA: sideA,
+        portB: portB,
+        sideB: sideB,
+      ).withType(type);
+      final id = await txn.insert(_cables, {
+        'id': null,
+        'cable_type': cable.type,
+      });
+      final stored = FloorPlanCable(
         id: id,
         portA: portA,
         sideA: sideA,
         portB: portB,
         sideB: sideB,
+        type: cable.type,
       );
-      await _insertEnds(txn, cable);
-      await _touchFloorsOfPorts(txn, _cablePorts([cable]));
-      return cable;
+      await _insertEnds(txn, stored);
+      await _touchFloorsOfPorts(txn, _cablePorts([stored]));
+      return stored;
     });
   }
 
@@ -396,12 +480,12 @@ class FloorPlanPortsRepository {
     final list = ids.toSet().toList();
     if (list.isEmpty) return Future.value(const []);
     return db.transaction((txn) async {
-      final rows = await txn.query(
-        _ends,
-        columns: ['cable_id', 'port_id', 'side'],
-        where: 'cable_id IN (${_marks(list.length)})',
-        whereArgs: list,
-        orderBy: 'cable_id ASC, port_id ASC',
+      final rows = await txn.rawQuery(
+        'SELECT e.cable_id, e.port_id, e.side, c.cable_type '
+        'FROM $_ends e LEFT JOIN $_cables c ON c.id = e.cable_id '
+        'WHERE e.cable_id IN (${_marks(list.length)}) '
+        'ORDER BY e.cable_id ASC, e.port_id ASC',
+        list,
       );
       final cables = _cablesFromEnds(rows);
       await _deleteCableRows(txn, list);
@@ -425,6 +509,7 @@ class FloorPlanPortsRepository {
         }
         await txn.insert(_cables, {
           'id': c.id,
+          'cable_type': c.type,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
         await txn.delete(_ends, where: 'cable_id = ?', whereArgs: [c.id]);
         await _insertEnds(txn, c);
@@ -474,10 +559,11 @@ class FloorPlanPortsRepository {
     List<int> portIds,
   ) async {
     final rows = await txn.rawQuery(
-      'SELECT cable_id, port_id, side FROM $_ends WHERE cable_id IN '
-      '(SELECT cable_id FROM $_ends '
+      'SELECT e.cable_id, e.port_id, e.side, c.cable_type '
+      'FROM $_ends e LEFT JOIN $_cables c ON c.id = e.cable_id '
+      'WHERE e.cable_id IN (SELECT cable_id FROM $_ends '
       'WHERE port_id IN (${_marks(portIds.length)})) '
-      'ORDER BY cable_id ASC, port_id ASC',
+      'ORDER BY e.cable_id ASC, e.port_id ASC',
       portIds,
     );
     return _cablesFromEnds(rows);
@@ -499,6 +585,7 @@ class FloorPlanPortsRepository {
             sideA: ends[0]['side'] as String,
             portB: ends[1]['port_id'] as int,
             sideB: ends[1]['side'] as String,
+            type: ends[0]['cable_type'] as String?,
           ),
     ];
   }

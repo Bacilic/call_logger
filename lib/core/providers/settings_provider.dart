@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/app_permission.dart';
 import '../models/calls_screen_cards_visibility.dart';
+import '../models/quick_call_fab_places.dart';
 import '../services/permission_service.dart';
 import '../services/settings_service.dart';
 
@@ -79,9 +80,10 @@ final callsScreenCardsVisibilityProvider =
       (ref) => SettingsService().windowUi.getCallsScreenCardsVisibility(),
     );
 
-/// Εμφάνιση ιπτάμενου κουμπιού γρήγορης καταγραφής. Invalidate μετά από Ρυθμίσεις.
-final showQuickCallFabProvider = FutureProvider<bool>(
-  (ref) => SettingsService().windowUi.getShowQuickCallFab(),
+/// Σε ποιες οθόνες φαίνεται το κουμπί γρήγορης κλήσης. Invalidate μετά από
+/// Ρυθμίσεις.
+final quickCallFabPlacesProvider = FutureProvider<QuickCallFabPlaces>(
+  (ref) => SettingsService().windowUi.getQuickCallFabPlaces(),
 );
 
 // Πρότυπο/προεπιλογή προτροπής Gemini (SQLite app_settings): βλ. gemini_settings_provider —

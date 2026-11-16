@@ -342,6 +342,144 @@ Future<void> onDatabaseUpgradeSquashed(
   if (oldVersion < 77 && newVersion >= 77) {
     await migrateDatabaseToV77(db);
   }
+  if (oldVersion < 78 && newVersion >= 78) {
+    await migrateDatabaseToV78(db);
+  }
+  if (oldVersion < 79 && newVersion >= 79) {
+    await migrateDatabaseToV79(db);
+  }
+  if (oldVersion < 80 && newVersion >= 80) {
+    await migrateDatabaseToV80(db);
+  }
+  if (oldVersion < 81 && newVersion >= 81) {
+    await migrateDatabaseToV81(db);
+  }
+}
+
+/// v81: ο τύπος καλωδίου — `building_map_cables.cable_type`.
+///
+/// Κενό = Cat 5e, η προεπιλογή (απόφαση 14/11/2026): τα υπάρχοντα καλώδια δεν
+/// χρειάζονται καμία ενέργεια.
+///
+/// Idempotent: η στήλη μπαίνει μόνο αν λείπει.
+Future<void> migrateDatabaseToV81(Database db) async {
+  await migrateDatabaseToV80(db);
+  final columns = (await db.rawQuery('PRAGMA table_info(building_map_cables)'))
+      .map((r) => r['name'] as String)
+      .toSet();
+  if (!columns.contains('cable_type')) {
+    await db.execute(
+      'ALTER TABLE building_map_cables ADD COLUMN cable_type TEXT',
+    );
+  }
+}
+
+/// v80: ομάδες θυρών σε μία συσκευή.
+///
+/// - `building_map_objects.port_groups`: κενό = μία ομάδα, όπως ως τώρα.
+/// - `building_map_ports.group_index`: 0 για όλες τις υπάρχουσες θύρες — όλες
+///   μένουν στην πρώτη ομάδα, με τα ίδια ονόματα και τα καλώδιά τους.
+/// - Το μοναδικό ευρετήριο (συσκευή, αριθμός) γίνεται (συσκευή, ομάδα,
+///   αριθμός): η ομάδα των uplink ξαναμετρά από το 1.
+///
+/// Idempotent: οι στήλες μπαίνουν μόνο αν λείπουν, το παλιό ευρετήριο σβήνεται
+/// μόνο αν υπάρχει.
+Future<void> migrateDatabaseToV80(Database db) async {
+  await migrateDatabaseToV79(db);
+  final objectColumns = (await db.rawQuery(
+    'PRAGMA table_info(building_map_objects)',
+  )).map((r) => r['name'] as String).toSet();
+  if (!objectColumns.contains('port_groups')) {
+    await db.execute(
+      'ALTER TABLE building_map_objects ADD COLUMN port_groups TEXT',
+    );
+  }
+  final portColumns = (await db.rawQuery(
+    'PRAGMA table_info(building_map_ports)',
+  )).map((r) => r['name'] as String).toSet();
+  if (!portColumns.contains('group_index')) {
+    await db.execute(
+      'ALTER TABLE building_map_ports '
+      'ADD COLUMN group_index INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+  await db.execute('DROP INDEX IF EXISTS $kBuildingMapPortsLegacyIndexName');
+  await db.execute(kCreateBuildingMapPortsGroupIndex);
+}
+
+/// v79: η αρίθμηση των U κάθε καμπίνας — `building_map_objects.rack_from_bottom`.
+///
+/// Προεπιλογή 0 (από πάνω): οι καμπίνες που υπάρχουν ήδη κρατούν τους αριθμούς
+/// που έχουν (απόφαση 13/11/2026)· τις νέες τις γράφει «από κάτω» η εφαρμογή.
+/// Καμία θέση δεν μετακινείται — το `rack_u` μετρά πάντα από πάνω.
+///
+/// Idempotent: η στήλη μπαίνει μόνο αν λείπει.
+Future<void> migrateDatabaseToV79(Database db) async {
+  await migrateDatabaseToV78(db);
+  final columns = (await db.rawQuery('PRAGMA table_info(building_map_objects)'))
+      .map((r) => r['name'] as String)
+      .toSet();
+  if (!columns.contains('rack_from_bottom')) {
+    await db.execute(
+      'ALTER TABLE building_map_objects '
+      'ADD COLUMN rack_from_bottom INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+}
+
+/// Τα σύμβολα που **δεν** έχουν IP ούτε όνομα Lansweeper από προεπιλογή —
+/// ίδιος κανόνας με το `FloorPlanSymbol.defaultHasNetwork`. Γραμμένος εδώ ως
+/// κλειδιά της βάσης, γιατί η αναβάθμιση δεν εξαρτάται από τα μοντέλα.
+const List<String> kV78PassiveSymbolKeys = [
+  'furniture',
+  'cabinet',
+  'riser',
+  'patch_panel',
+  'outlet',
+  'ups',
+];
+
+/// v78: το διαχωριστικό θυρών του patch panel και το «έχει IP / Lansweeper»
+/// κάθε είδους.
+///
+/// - `building_map_objects.port_separator`: κενό = η εφαρμογή διαλέγει μόνη
+///   της, οπότε ό,τι υπάρχει ήδη δεν χρειάζεται καμία ενέργεια.
+/// - `building_map_object_kinds.has_network`: «ναι» για όλα, εκτός από τα
+///   παθητικά σύμβολα και όσα είδη δεν έχουν θύρες (αλλιώς θα έμοιαζαν
+///   «ασύρματα») — **εκτός αν** κάποια συσκευή του είδους έχει ήδη γραμμένη
+///   IP ή όνομα Lansweeper. Ό,τι έχει γραφτεί δεν κρύβεται.
+///
+/// Idempotent: οι στήλες μπαίνουν μόνο αν λείπουν, και οι προεπιλογές
+/// γράφονται μόνο τη φορά που μπαίνει η στήλη.
+Future<void> migrateDatabaseToV78(Database db) async {
+  await migrateDatabaseToV77(db);
+  final objectColumns = (await db.rawQuery(
+    'PRAGMA table_info(building_map_objects)',
+  )).map((r) => r['name'] as String).toSet();
+  if (!objectColumns.contains('port_separator')) {
+    await db.execute(
+      'ALTER TABLE building_map_objects ADD COLUMN port_separator TEXT',
+    );
+  }
+  final kindColumns = (await db.rawQuery(
+    'PRAGMA table_info(building_map_object_kinds)',
+  )).map((r) => r['name'] as String).toSet();
+  if (!kindColumns.contains('has_network')) {
+    await db.execute(
+      'ALTER TABLE building_map_object_kinds '
+      'ADD COLUMN has_network INTEGER NOT NULL DEFAULT 1',
+    );
+    final marks = List.filled(kV78PassiveSymbolKeys.length, '?').join(', ');
+    await db.rawUpdate(
+      'UPDATE building_map_object_kinds SET has_network = 0 '
+      'WHERE (symbol IN ($marks) OR has_ports = 0) AND NOT EXISTS ('
+      'SELECT 1 FROM building_map_objects o '
+      'WHERE o.kind_id = building_map_object_kinds.id AND ('
+      "TRIM(COALESCE(o.ip, '')) <> '' OR "
+      "TRIM(COALESCE(o.lansweeper_name, '')) <> ''))",
+      kV78PassiveSymbolKeys,
+    );
+  }
 }
 
 /// v77: κάθε τοίχος του νέου χάρτη αποκτά δικό του πάχος.

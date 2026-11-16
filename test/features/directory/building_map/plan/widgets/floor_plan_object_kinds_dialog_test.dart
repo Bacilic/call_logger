@@ -20,7 +20,7 @@ void main() {
   setUp(() async {
     initSqfliteFfiForTests();
     db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
-    await migrateDatabaseToV71(db);
+    await migrateDatabaseToV81(db);
     repo = FloorPlanObjectsRepository(db);
   });
 
@@ -86,8 +86,8 @@ void main() {
       find.widgetWithText(TextField, 'Όνομα'),
       'Εκτυπωτής δικτύου',
     );
+    // Ο εκτυπωτής συνδέεται με καλώδιο: θύρες και IP προεπιλεγμένα.
     await tester.tap(find.widgetWithText(ChoiceChip, 'Εκτυπωτής'));
-    await tester.tap(find.text('Έχει θύρες (συνδέεται με καλώδιο)'));
     await tester.pump();
     await tester.tap(find.text('Αποθήκευση'));
     await settle(tester, until: find.text('Εκτυπωτής δικτύου'));
@@ -96,6 +96,67 @@ void main() {
     final kinds = await tester.runAsync(repo.listKinds);
     expect(kinds!.single.kind.symbol, FloorPlanSymbol.printer);
     expect(kinds.single.kind.hasPorts, isTrue);
+    expect(kinds.single.kind.hasNetwork, isTrue);
+  });
+
+  testWidgets('οι επιλογές καλωδίου ακολουθούν το σύμβολο, και το «έχει '
+      'θύρες» φέρνει μαζί του την IP', (tester) async {
+    await pumpDialog(tester);
+    await tester.tap(find.text('Νέο είδος'));
+    await tester.pumpAndSettle();
+    const ports = 'Έχει θύρες (συνδέεται με καλώδιο)';
+    const ip = 'Έχει IP και όνομα Lansweeper';
+    // Το παράθυρο του τεστ είναι χαμηλό: κύλιση ως το κουτάκι πριν το κλικ.
+    Future<void> tapScrolled(String label) async {
+      await tester.scrollUntilVisible(
+        find.text(label),
+        80,
+        scrollable: find
+            .descendant(
+              of: find.byType(AlertDialog).last,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+      await tester.pump();
+    }
+
+    bool? ticked(String label) => tester
+        .widget<CheckboxListTile>(find.widgetWithText(CheckboxListTile, label))
+        .value;
+
+    // Μέρος του χώρου: καμία επιλογή καλωδίου.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Έπιπλο'));
+    await tester.pump();
+    expect(find.text(ports), findsNothing);
+    expect(find.text(ip), findsNothing);
+
+    // Παθητικό: θύρες ναι, και καμία επιλογή IP.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Patch panel'));
+    await tester.pump();
+    expect(ticked(ports), isTrue);
+    expect(find.text(ip), findsNothing);
+
+    // Συσκευή δικτύου: η σύνδεση αποφασίζει την IP. Καλώδιο → IP που
+    // διαλέγεται· ασύρματη → πάντα IP· καμία → ποτέ.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Switch'));
+    await tester.pump();
+    expect(find.text(ports), findsNothing);
+    expect(ticked(ip), isTrue);
+
+    await tapScrolled('Καμία');
+    expect(ticked(ip), isFalse);
+    await tapScrolled(ip);
+    expect(ticked(ip), isFalse);
+
+    await tapScrolled('Ασύρματη');
+    expect(ticked(ip), isTrue);
+
+    await tapScrolled('Καλώδιο');
+    await tapScrolled(ip);
+    expect(ticked(ip), isFalse);
   });
 
   testWidgets('χωρίς σύμβολο η φόρμα δεν αποθηκεύει', (tester) async {
@@ -168,6 +229,38 @@ void main() {
     expect(await tester.runAsync(repo.listKinds), isEmpty);
   });
 
+  testWidgets('ασύρματο είδος: γράφεται χωρίς θύρες, με IP', (tester) async {
+    await pumpDialog(tester);
+    await tester.tap(find.text('Νέο είδος'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Όνομα'),
+      'Εκτυπωτής Wi-Fi',
+    );
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Εκτυπωτής'));
+    await tester.pump();
+    // Με όλα τα σύμβολα το παράθυρο κυλά ως την επιλογή σύνδεσης.
+    await tester.scrollUntilVisible(
+      find.text('Ασύρματη'),
+      80,
+      scrollable: find
+          .descendant(
+            of: find.byType(AlertDialog).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ασύρματη'));
+    await tester.pump();
+    await tester.tap(find.text('Αποθήκευση'));
+    await settle(tester, until: find.text('Εκτυπωτής Wi-Fi'));
+
+    expect(find.textContaining('ασύρματο'), findsOne);
+    final kind = (await tester.runAsync(repo.listKinds))!.single.kind;
+    expect((kind.hasPorts, kind.hasNetwork), (false, true));
+  });
+
   testWidgets('«Δείχνει πληροφορίες» κλειστό: το είδος γράφεται χωρίς '
       'πληροφορίες', (tester) async {
     await pumpDialog(tester);
@@ -176,7 +269,17 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, 'Όνομα'), 'Γραφείο');
     await tester.tap(find.widgetWithText(ChoiceChip, 'Έπιπλο'));
     // Με όλα τα σύμβολα το παράθυρο κυλά ως το κουτάκι.
-    await tester.ensureVisible(find.text('Δείχνει πληροφορίες με το ποντίκι'));
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.text('Δείχνει πληροφορίες με το ποντίκι'),
+      80,
+      scrollable: find
+          .descendant(
+            of: find.byType(AlertDialog).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Δείχνει πληροφορίες με το ποντίκι'));
     await tester.pump();

@@ -52,7 +52,13 @@ class FloorPlanMeasurePainter extends CustomPainter {
     for (var i = 0; i < lengths.length; i++) {
       final mid = (screen[i] + screen[i + 1]) / 2;
       if ((screen[i + 1] - screen[i]).distance < 60) continue;
-      _label(canvas, formatCmAsMeters(lengths[i]), mid, small: true);
+      _label(
+        canvas,
+        formatCmAsMeters(lengths[i]),
+        mid,
+        small: true,
+        beside: (screen[i], screen[i + 1]),
+      );
     }
 
     var total = measure.totalLength;
@@ -81,7 +87,15 @@ class FloorPlanMeasurePainter extends CustomPainter {
     }
   }
 
-  void _label(Canvas canvas, String text, Offset at, {required bool small}) {
+  /// Με [beside], η ετικέτα μπαίνει δίπλα σε εκείνο το κομμάτι αντί για το
+  /// [at] — ώστε να μη σκεπάζει τη γραμμή ούτε ό,τι γράφει ο χάρτης κάτω της.
+  void _label(
+    Canvas canvas,
+    String text,
+    Offset at, {
+    required bool small,
+    (Offset, Offset)? beside,
+  }) {
     final painter = TextPainter(
       text: TextSpan(
         text: text,
@@ -93,10 +107,13 @@ class FloorPlanMeasurePainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
+    final boxSize = Size(painter.width + 10, painter.height + 4);
     final box = Rect.fromCenter(
-      center: at,
-      width: painter.width + 10,
-      height: painter.height + 4,
+      center: beside == null
+          ? at
+          : floorPlanMeasureLabelCenter(beside.$1, beside.$2, boxSize),
+      width: boxSize.width,
+      height: boxSize.height,
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(box, const Radius.circular(4)),

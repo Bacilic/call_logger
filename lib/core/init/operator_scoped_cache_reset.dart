@@ -103,7 +103,7 @@ void invalidateOperatorScopedCaches(
     ref.invalidate(showDictionaryNavProvider);
     ref.invalidate(showKnowledgeNavProvider);
     ref.invalidate(callsScreenCardsVisibilityProvider);
-    ref.invalidate(showQuickCallFabProvider);
+    ref.invalidate(quickCallFabPlacesProvider);
     ref.invalidate(showGlobalCallsToggleProvider);
 
     // Κατάλογος: ορατές στήλες και σειρά ανά καρτέλα.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../core/models/floor_plan_port.dart';
+import '../../../../../core/utils/search_text_normalizer.dart';
 import '../floor_plan_ports.dart';
 
 /// Ζητά θύρα patch panel: πρώτα ο όροφος της πρίζας, και σε κάθε patch panel
@@ -190,6 +191,23 @@ typedef FloorPlanConnectionChoice = ({
   bool nearby,
 });
 
+/// Όσες από τις [choices] ταιριάζουν στο [query], στο όνομα ή στη δεύτερη
+/// γραμμή τους — με την κοινή κανονικοποίηση της εφαρμογής, ώστε «πριζα»,
+/// «ΠΡΙΖΑ» και «Πρίζα» να βρίσκουν το ίδιο. Κενό [query]: όλες.
+List<FloorPlanConnectionChoice> floorPlanConnectionMatches(
+  List<FloorPlanConnectionChoice> choices,
+  String query,
+) {
+  final q = SearchTextNormalizer.normalizeForSearch(query.trim());
+  if (q.isEmpty) return choices;
+  bool matches(String? text) =>
+      text != null && SearchTextNormalizer.normalizeForSearch(text).contains(q);
+  return [
+    for (final c in choices)
+      if (matches(c.label) || matches(c.detail)) c,
+  ];
+}
+
 enum _ConnectionTab { equipment, object, text }
 
 /// Ζητά τι είναι συνδεδεμένο σε θύρα πρίζας: εξοπλισμός του Καταλόγου,
@@ -258,23 +276,26 @@ class _ConnectionDialogState extends State<_ConnectionDialog> {
     FloorPlanPortConnection Function(int id) toConnection,
     String emptyText,
   ) {
-    final query = _search.text.trim().toLowerCase();
-    final shown = [
-      for (final c in choices)
-        if (query.isEmpty ||
-            c.label.toLowerCase().contains(query) ||
-            (c.detail?.toLowerCase().contains(query) ?? false))
-          c,
-    ];
+    final shown = floorPlanConnectionMatches(choices, _search.text);
     return Column(
       children: [
         TextField(
           controller: _search,
           autofocus: true,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Αναζήτηση',
             isDense: true,
-            prefixIcon: Icon(Icons.search),
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _search.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Καθαρισμός αναζήτησης',
+                    icon: Icon(
+                      Icons.clear,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed: () => setState(_search.clear),
+                  ),
           ),
           onChanged: (_) => setState(() {}),
         ),

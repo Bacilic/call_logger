@@ -22,10 +22,15 @@ class FloorPlanOutletEditor extends StatefulWidget {
     required this.onCancel,
     required this.onPickPatchPort,
     required this.onPickConnection,
+    this.clashOf,
   });
 
   /// Το είδος του αντικειμένου, π.χ. «Πρίζα».
   final String title;
+
+  /// Ποια άλλη θύρα του κτιρίου έχει ήδη ένα όνομα — για προειδοποίηση κάτω
+  /// από το πεδίο· δεν εμποδίζει την αποθήκευση.
+  final FloorPlanWrittenPortName? Function(String name)? clashOf;
 
   /// Οι θύρες όπως είναι τώρα, με τη σειρά των αριθμών τους.
   final List<FloorPlanOutletPortDraft> initial;
@@ -59,8 +64,24 @@ class FloorPlanOutletEditorState extends State<FloorPlanOutletEditor> {
   };
   late final Map<int, TextEditingController> _written = {
     for (final MapEntry(:key, :value) in _ports.entries)
-      key: TextEditingController(text: value.writtenName ?? ''),
+      key: TextEditingController(text: value.writtenName ?? '')
+        ..addListener(() => setState(() {})),
   };
+
+  /// Η προειδοποίηση για το όνομα της θύρας [number]: το έχει ήδη άλλη θύρα
+  /// του κτιρίου, ή η άλλη θύρα της ίδιας πρίζας.
+  String? _clashText(int number) {
+    final name = _written[number]!.text.trim();
+    if (name.isEmpty) return null;
+    for (var n = 1; n <= _count; n++) {
+      if (n != number && floorPlanSameWrittenName(name, _written[n]!.text)) {
+        return 'Ίδιο όνομα με τη θύρα $n αυτής της πρίζας.';
+      }
+    }
+    final clash = widget.clashOf?.call(name);
+    return clash == null ? null : floorPlanWrittenNameWarning(name, clash);
+  }
+
   late int _count = widget.initial.length;
 
   /// Ο καμβάς κρατά την εστίαση όταν ανοίγει το πλαίσιο· χωρίς ρητό αίτημα το
@@ -135,16 +156,42 @@ class FloorPlanOutletEditorState extends State<FloorPlanOutletEditor> {
                   ),
                 ),
               ),
+              // Ο τύπος του καλωδίου προς το patch panel — μόνο όταν υπάρχει.
+              if (port.patchPortId != null)
+                PopupMenuButton<String>(
+                  tooltip: 'Τύπος καλωδίου',
+                  initialValue: floorPlanCableTypeLabel(port.cableType),
+                  onSelected: (type) => setState(() {
+                    _ports[number] = port.copyWith(cableType: () => type);
+                  }),
+                  itemBuilder: (context) => [
+                    for (final type in kFloorPlanCableTypes)
+                      PopupMenuItem(value: type, child: Text(type)),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    child: Text(
+                      floorPlanCableTypeLabel(port.cableType),
+                      style: theme.textTheme.labelMedium,
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 4),
           TextField(
             controller: _written[number],
             focusNode: number == 1 ? _firstField : null,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Γραμμένο όνομα',
               isDense: true,
-              border: OutlineInputBorder(),
+              border: const OutlineInputBorder(),
+              helperText: _clashText(number),
+              helperMaxLines: 3,
+              helperStyle: TextStyle(color: Colors.orange.shade800),
             ),
             onSubmitted: (_) => _commit(),
           ),

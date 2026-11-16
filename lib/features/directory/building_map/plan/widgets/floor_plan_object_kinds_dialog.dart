@@ -67,12 +67,14 @@ class _FloorPlanObjectKindsDialogState
     final saved = await _showKindForm(
       context,
       title: 'Νέο είδος',
-      save: (name, symbol, hasPorts, showInfo) => widget.repository.addKind(
-        name: name,
-        symbol: symbol,
-        hasPorts: hasPorts,
-        showInfo: showInfo,
-      ),
+      save: (name, symbol, hasPorts, showInfo, hasNetwork) =>
+          widget.repository.addKind(
+            name: name,
+            symbol: symbol,
+            hasPorts: hasPorts,
+            showInfo: showInfo,
+            hasNetwork: hasNetwork,
+          ),
     );
     if (saved) await _reload();
   }
@@ -82,13 +84,15 @@ class _FloorPlanObjectKindsDialogState
       context,
       title: 'Αλλαγή είδους',
       initial: kind,
-      save: (name, symbol, hasPorts, showInfo) => widget.repository.updateKind(
-        id: kind.id,
-        name: name,
-        symbol: symbol,
-        hasPorts: hasPorts,
-        showInfo: showInfo,
-      ),
+      save: (name, symbol, hasPorts, showInfo, hasNetwork) =>
+          widget.repository.updateKind(
+            id: kind.id,
+            name: name,
+            symbol: symbol,
+            hasPorts: hasPorts,
+            showInfo: showInfo,
+            hasNetwork: hasNetwork,
+          ),
     );
     if (saved) await _reload();
   }
@@ -184,6 +188,8 @@ class _FloorPlanObjectKindsDialogState
     final details = [
       kind.symbol?.label ?? 'Σύμβολο νεότερης έκδοσης',
       if (kind.hasPorts) 'έχει θύρες',
+      if (!kind.hasPorts && kind.hasNetwork) 'ασύρματο',
+      if (kind.hasNetwork) 'IP / Lansweeper',
       if (!kind.showInfo) 'χωρίς πληροφορίες',
       usage.inUse ? _objectsText(usage) : 'κανένα αντικείμενο',
     ];
@@ -210,11 +216,25 @@ class _FloorPlanObjectKindsDialogState
   }
 }
 
+/// Πώς συνδέεται στο δίκτυο μια συσκευή του είδους. Δεν αποθηκεύεται ως
+/// τέτοια: είναι ο συνδυασμός «έχει θύρες» και «έχει IP» (ασύρματη = χωρίς
+/// θύρες, με IP).
+enum _Connection {
+  cable('Καλώδιο'),
+  wireless('Ασύρματη'),
+  none('Καμία');
+
+  const _Connection(this.label);
+
+  final String label;
+}
+
 typedef _SaveKind = Future<FloorPlanKindSaveOutcome> Function(
   String name,
   FloorPlanSymbol symbol,
   bool hasPorts,
   bool showInfo,
+  bool hasNetwork,
 );
 
 /// Η φόρμα ενός είδους. `true` όταν γράφτηκε κάτι στη βάση.
@@ -245,8 +265,63 @@ class _KindForm extends StatefulWidget {
 class _KindFormState extends State<_KindForm> {
   late final _name = TextEditingController(text: widget.initial?.name ?? '');
   late FloorPlanSymbol? _symbol = widget.initial?.symbol;
-  late bool _hasPorts = widget.initial?.hasPorts ?? false;
+  late bool _hasPorts =
+      widget.initial?.hasPorts ?? (_symbol?.defaultHasPorts ?? false);
   late bool _showInfo = widget.initial?.showInfo ?? true;
+
+  /// Νέο είδος: θύρες και IP ακολουθούν την πρόταση του συμβόλου ώσπου ο
+  /// χρήστης να αγγίξει κάποιο από τα δύο. Υπάρχον είδος: όπως είναι.
+  late bool _hasNetwork =
+      widget.initial?.hasNetwork ?? (_symbol?.defaultHasNetwork ?? true);
+  late bool _cableTouched = widget.initial != null;
+
+  /// Το σύμβολο δείχνει τις επιλογές καλωδίου· χωρίς σύμβολο ακόμη, ναι.
+  bool get _cableSettings => _symbol?.hasCableSettings ?? true;
+
+  /// Το σύμβολο μπορεί να έχει IP· χωρίς σύμβολο ακόμη, ναι.
+  bool get _networkSettings => _symbol?.canHaveNetwork ?? true;
+
+  void _setHasPorts(bool value) => setState(() {
+    _cableTouched = true;
+    _hasPorts = value;
+  });
+
+  _Connection get _connection => _hasPorts
+      ? _Connection.cable
+      : (_hasNetwork ? _Connection.wireless : _Connection.none);
+
+  /// Καλώδιο και ασύρματη φέρνουν IP· καμία σύνδεση, καμία διεύθυνση.
+  void _setConnection(_Connection connection) => setState(() {
+    _cableTouched = true;
+    _hasPorts = connection == _Connection.cable;
+    _hasNetwork = connection != _Connection.none;
+  });
+
+  Widget _networkTile() {
+    final connection = _connection;
+    return CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      value: _hasNetwork,
+      // Μόνο με καλώδιο διαλέγεται: η ασύρματη έχει πάντα IP, η «καμία»
+      // ποτέ.
+      onChanged: connection == _Connection.cable
+          ? (v) => setState(() {
+              _hasNetwork = v ?? true;
+              _cableTouched = true;
+            })
+          : null,
+      title: const Text('Έχει IP και όνομα Lansweeper'),
+      subtitle: Text(switch (connection) {
+        _Connection.cable =>
+          'Κλειστό για συσκευή χωρίς δική της διεύθυνση, '
+              'π.χ. switch χωρίς διαχείριση.',
+        _Connection.wireless => 'Η ασύρματη σύνδεση έχει πάντα IP.',
+        _Connection.none => 'Θέλει σύνδεση, με καλώδιο ή ασύρματη.',
+      }),
+    );
+  }
+
   String? _nameError;
   String? _symbolError;
   bool _saving = false;
@@ -267,7 +342,16 @@ class _KindFormState extends State<_KindForm> {
     });
     if (name.isEmpty || symbol == null) return;
     setState(() => _saving = true);
-    final outcome = await widget.save(name, symbol, _hasPorts, _showInfo);
+    // Έπιπλο, καμπίνα, σκάλα: ποτέ καλώδιο, ποτέ IP. Patch panel, πρίζα:
+    // ποτέ IP. Χωρίς καλώδιο: ποτέ IP.
+    final ports = symbol.hasCableSettings && _hasPorts;
+    final outcome = await widget.save(
+      name,
+      symbol,
+      ports,
+      _showInfo,
+      symbol.canHaveNetwork && _hasNetwork,
+    );
     if (!mounted) return;
     switch (outcome) {
       case FloorPlanKindSaveOutcome.saved:
@@ -328,6 +412,10 @@ class _KindFormState extends State<_KindForm> {
                     onSelected: (_) => setState(() {
                       _symbol = symbol;
                       _symbolError = null;
+                      if (!_cableTouched) {
+                        _hasPorts = symbol.defaultHasPorts;
+                        _hasNetwork = symbol.defaultHasNetwork;
+                      }
                     }),
                   ),
               ],
@@ -342,13 +430,27 @@ class _KindFormState extends State<_KindForm> {
               ),
             ],
             const SizedBox(height: 12),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              value: _hasPorts,
-              onChanged: (v) => setState(() => _hasPorts = v ?? false),
-              title: const Text('Έχει θύρες (συνδέεται με καλώδιο)'),
-            ),
+            if (_networkSettings) ...[
+              Text('Σύνδεση', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 8),
+              SegmentedButton<_Connection>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final c in _Connection.values)
+                    ButtonSegment(value: c, label: Text(c.label)),
+                ],
+                selected: {_connection},
+                onSelectionChanged: (s) => _setConnection(s.single),
+              ),
+              _networkTile(),
+            ] else if (_cableSettings)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _hasPorts,
+                onChanged: (v) => _setHasPorts(v ?? false),
+                title: const Text('Έχει θύρες (συνδέεται με καλώδιο)'),
+              ),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,

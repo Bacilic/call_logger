@@ -148,20 +148,26 @@ class FloorPlanInfoSources {
       final link = byPatchPort[port.id];
       if (other == null && link == null) return null;
       final otherName = other == null ? null : floorPlanCableEndName(other);
+      final frontType = cables.typeAt(port.id, kFloorPlanCableFront);
       if (isPanel || otherName == null) {
+        final backType = cables.typeAt(port.id, kFloorPlanCableBack);
         return [
           if (link != null)
-            floorPlanPatchPortBehind(
-              device(link),
-              otherFloor: link.outletFloorId == link.panelFloorId
-                  ? null
-                  : _floorName(link.outletFloorId),
-            ),
-          if (otherName != null) 'Μπροστά: $otherName',
+            [
+              floorPlanPatchPortBehind(
+                device(link),
+                otherFloor: link.outletFloorId == link.panelFloorId
+                    ? null
+                    : _floorName(link.outletFloorId),
+              ),
+              ?backType,
+            ].join(' · '),
+          if (otherName != null) 'Μπροστά: $otherName · $frontType',
         ].join('\n');
       }
       final behind = device(other == null ? null : byPatchPort[other.portId]);
-      return behind == null ? '→ $otherName' : '→ $otherName ($behind)';
+      final to = behind == null ? '→ $otherName' : '→ $otherName ($behind)';
+      return '$to · $frontType';
     };
   }
 
@@ -314,7 +320,7 @@ FloorPlanItemInfo? floorPlanItemInfo(
     final ports = [
       for (final p in sources.ports)
         if (p.objectId == object.id) p,
-    ]..sort((a, b) => a.number.compareTo(b.number));
+    ]..sort(floorPlanComparePorts);
     final cables = FloorPlanPortCables(sources.cableLines);
     if (kind?.symbol?.isOutlet ?? false) {
       for (final port in ports) {

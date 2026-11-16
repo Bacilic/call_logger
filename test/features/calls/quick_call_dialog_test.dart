@@ -13,6 +13,7 @@ import 'package:call_logger/features/calls/provider/quick_call_session_provider.
 import 'package:call_logger/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:call_logger/core/models/quick_call_fab_places.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,7 +26,9 @@ Future<void> _pumpCallLoggerApp(WidgetTester tester) async {
       ProviderScope(
         overrides: [
           ...callLoggerTestProviderOverrides(),
-          showQuickCallFabProvider.overrideWith((ref) async => true),
+          quickCallFabPlacesProvider.overrideWith(
+            (ref) async => QuickCallFabPlaces.all,
+          ),
           enableSpellCheckProvider.overrideWith((ref) async => true),
         ],
         child: const MyApp(showStartupScreens: false),

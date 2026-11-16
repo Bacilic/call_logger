@@ -39,6 +39,16 @@ void paintFloorPlanSymbol(Canvas canvas, FloorPlanSymbol? symbol, Rect rect) {
       _poe(canvas);
     case FloorPlanSymbol.ups:
       _ups(canvas);
+    case FloorPlanSymbol.firewall:
+      _firewall(canvas);
+    case FloorPlanSymbol.server:
+      _server(canvas);
+    case FloorPlanSymbol.storage:
+      _storage(canvas);
+    case FloorPlanSymbol.nvr:
+      _nvr(canvas);
+    case FloorPlanSymbol.cableManager:
+      _cableManager(canvas);
     case FloorPlanSymbol.riser:
       _riser(canvas);
     case null:
@@ -57,7 +67,8 @@ void paintFloorPlanSymbol(Canvas canvas, FloorPlanSymbol? symbol, Rect rect) {
       FloorPlanSymbol.computer ||
       FloorPlanSymbol.networkSwitch => (fill: _purpleFill, line: _purpleLine),
       FloorPlanSymbol.furniture => (fill: _amberFill, line: _amberLine),
-      FloorPlanSymbol.phone => (fill: _coralFill, line: _coralLine),
+      FloorPlanSymbol.phone ||
+      FloorPlanSymbol.firewall => (fill: _coralFill, line: _coralLine),
       _ => (fill: _grayFill, line: _grayLine),
     };
 
@@ -393,6 +404,89 @@ void _ups(Canvas canvas) {
   canvas.drawCircle(const Offset(78.5, 40.5), 6.6, power);
   canvas.drawLine(const Offset(78.5, 35.5), const Offset(78.5, 41.5), power);
   _dashed(canvas, const Offset(14, 63.5), 72, _ink);
+}
+
+/// Firewall: σώμα με τοιχάκι από τούβλα, λυχνία και δύο θύρες.
+void _firewall(Canvas canvas) {
+  _rrect(canvas, const Rect.fromLTRB(4, 32, 96, 68), 3, _coralFill, _coralLine);
+  final brick = _stroke(_coralLine, 1.4);
+  // Τρεις σειρές τούβλων, με τους αρμούς εναλλάξ.
+  for (final y in const [44.0, 56.0]) {
+    canvas.drawLine(Offset(10, y), Offset(58, y), brick);
+  }
+  for (var row = 0; row < 3; row++) {
+    final top = 37.0 + row * 12;
+    final shift = row.isOdd ? 6.0 : 0.0;
+    for (var x = 18.0 + shift; x < 58; x += 12) {
+      canvas.drawLine(Offset(x, top), Offset(x, top + 7), brick);
+    }
+  }
+  canvas.drawCircle(const Offset(68, 43), 2.4, _fill(_ready));
+  _ports(canvas, 66, 52, 2, 11.5, 8, 7);
+}
+
+/// Διακομιστής: σασί 1U με σειρά θέσεων δίσκων και λυχνία.
+void _server(Canvas canvas) {
+  _rrect(canvas, const Rect.fromLTRB(4, 34, 96, 66), 2, _grayFill, _grayLine);
+  final bay = _stroke(_ink, 1.2);
+  for (var i = 0; i < 8; i++) {
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(10 + i * 8.2, 40, 6, 20),
+        const Radius.circular(1),
+      ),
+      bay,
+    );
+  }
+  canvas.drawCircle(const Offset(84, 44), 2.4, _fill(_ready));
+  canvas.drawCircle(const Offset(84, 55), 3.4, _stroke(_ink, 1.4));
+}
+
+/// Αποθήκευση: συστοιχία 2U με δύο σειρές δίσκων.
+void _storage(Canvas canvas) {
+  _rrect(canvas, const Rect.fromLTRB(4, 22, 96, 78), 3, _grayFill, _grayLine);
+  final disk = _stroke(_ink, 1.2);
+  for (var row = 0; row < 2; row++) {
+    for (var col = 0; col < 4; col++) {
+      final r = Rect.fromLTWH(10 + col * 17, 29 + row * 23, 14, 18);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(r, const Radius.circular(1.5)),
+        disk,
+      );
+      canvas.drawLine(
+        Offset(r.left + 3, r.bottom - 4),
+        Offset(r.right - 3, r.bottom - 4),
+        disk,
+      );
+    }
+  }
+  canvas.drawCircle(const Offset(86, 34), 2.4, _fill(_ready));
+  canvas.drawCircle(const Offset(86, 44), 2.4, _fill(_ready));
+}
+
+/// NVR: καταγραφικό με τον φακό της κάμερας και τη λυχνία εγγραφής.
+void _nvr(Canvas canvas) {
+  _rrect(canvas, const Rect.fromLTRB(4, 32, 96, 68), 3, _grayFill, _grayLine);
+  canvas.drawCircle(const Offset(26, 50), 11, _fill(_paper));
+  canvas.drawCircle(const Offset(26, 50), 11, _stroke(_ink, 1.6));
+  canvas.drawCircle(const Offset(26, 50), 5, _fill(_ink));
+  canvas.drawCircle(const Offset(48, 42), 3, _fill(_coralLine));
+  _ports(canvas, 60, 46, 3, 10.5, 7, 7);
+}
+
+/// Οργανωτής καλωδίων: λωρίδα 1U με σειρά από δαχτυλίδια.
+void _cableManager(Canvas canvas) {
+  _rrect(canvas, const Rect.fromLTRB(4, 38, 96, 62), 2, _paper, _grayLine);
+  final ring = _stroke(_ink, 1.6);
+  for (var i = 0; i < 6; i++) {
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(11 + i * 14.4, 43, 9, 14),
+        const Radius.circular(4),
+      ),
+      ring,
+    );
+  }
 }
 
 /// Διακεκομμένη οριζόντια γραμμή μήκους [length] από το [start].

@@ -285,3 +285,13 @@ Offset? _intersection(
   }
   return null;
 }
+
+/// Η μπάρα A− / A+ / «στο κέντρο» πάει **κάτω** από το όνομα του χώρου όταν
+/// το όνομα είναι έξω ([outside]) και ο χώρος ([roomPoint]) πάνω του: εκεί
+/// ανεβαίνει η γραμμή-οδηγός, και η μπάρα από πάνω θα την σκέπαζε.
+/// Συντεταγμένες οθόνης.
+bool floorPlanRoomLabelBarBelow({
+  required Offset labelCenter,
+  required Offset roomPoint,
+  required bool outside,
+}) => outside && roomPoint.dy < labelCenter.dy;

@@ -75,7 +75,7 @@ void main() {
     initSqfliteFfiForTests();
     db = await openDatabase(inMemoryDatabasePath, singleInstance: false);
     await migrateDatabaseToV69(db);
-    await migrateDatabaseToV77(db);
+    await migrateDatabaseToV81(db);
     repo = FloorPlanRepository(db);
     catalog = _FakeCatalog([
       DepartmentModel(id: 10, name: 'Ακτινολογικό', floorId: 1),
@@ -91,6 +91,7 @@ void main() {
     WidgetTester tester, {
     FloorPlanObjectsRepository? objects,
     FloorPlanPlacementsRepository? placements,
+    String? floorImageHash,
   }) async {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1;
@@ -105,6 +106,7 @@ void main() {
               label: '2ος',
               imagePath: '',
               rotationDegrees: 0,
+              imageHash: floorImageHash,
             ),
             repository: repo,
             objectsRepository: objects,
@@ -671,6 +673,68 @@ void main() {
     await tester.tap(find.byIcon(Icons.wallpaper_outlined));
     await tester.pump();
     expect(find.text('Από αρχείο εικόνας…'), findsNothing);
+  });
+
+  testWidgets('η ένδειξη μαγνήτη σβήνει όταν ο δείκτης βγει από τον καμβά', (
+    tester,
+  ) async {
+    await pumpEditor(tester);
+    FloorPlanOverlay overlay() =>
+        (tester
+                    .widget<CustomPaint>(
+                      find.byWidgetPredicate(
+                        (w) =>
+                            w is CustomPaint && w.painter is FloorPlanPainter,
+                      ),
+                    )
+                    .painter!
+                as FloorPlanPainter)
+            .overlay;
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: canvasPoint(tester, 0.5, 0.5));
+    await mouse.moveTo(canvasPoint(tester, 0.4, 0.5));
+    await tester.pump();
+    expect(overlay().snapPoint, isNotNull);
+
+    // Έξω από τον καμβά, π.χ. στη γραμμή εργαλείων.
+    await mouse.moveTo(const Offset(5, 5));
+    await tester.pump();
+    expect(overlay().snapPoint, isNull);
+  });
+
+  group('«Από την κάτοψη του ορόφου»', () {
+    const button = 'Από την κάτοψη του ορόφου';
+
+    Future<void> openPatternPanel(WidgetTester tester) async {
+      await tester.tap(find.byIcon(Icons.wallpaper_outlined));
+      await tester.pump();
+    }
+
+    testWidgets('φαίνεται όσο ο όροφος έχει κάτοψη στη βάση', (tester) async {
+      await pumpEditor(tester, floorImageHash: 'abc');
+      await openPatternPanel(tester);
+
+      expect(find.text(button), findsOneWidget);
+    });
+
+    testWidgets('δεν φαίνεται σε ενεργοποιημένο όροφο: η κάτοψή του έχει '
+        'σβηστεί', (tester) async {
+      await tester.runAsync(() => repo.setActive(1));
+      await pumpEditor(tester, floorImageHash: 'abc');
+      await openPatternPanel(tester);
+
+      expect(find.text(button), findsNothing);
+      expect(find.text('Από αρχείο εικόνας…'), findsOneWidget);
+    });
+
+    testWidgets('δεν φαίνεται σε όροφο χωρίς κάτοψη', (tester) async {
+      await pumpEditor(tester);
+      await openPatternPanel(tester);
+
+      expect(find.text(button), findsNothing);
+    });
   });
 
   testWidgets('«Άκυρο» στην ενεργοποίηση: τίποτα δεν αλλάζει', (tester) async {

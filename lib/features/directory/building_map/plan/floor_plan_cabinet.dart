@@ -4,8 +4,9 @@ import 'dart:ui' show Offset, Size;
 import '../../../../core/models/floor_plan_object.dart';
 
 /// Καθαρή λογική της καμπίνας: πόσα U έχει, τι χωρά πού, και πώς φαίνεται
-/// με τα κενά της. Οι θέσεις U μετρούν **από πάνω** (U1 η πρώτη), όπως στο
-/// εγκεκριμένο σκαρίφημα.
+/// με τα κενά της. Οι **θέσεις** μετρούν πάντα **από πάνω** (1 η πρώτη),
+/// όπως στο εγκεκριμένο σκαρίφημα· ο **αριθμός U** που βλέπει ο χρήστης
+/// ακολουθεί την αρίθμηση της καμπίνας ([floorPlanRackLabel]).
 
 /// Πόσα U έχει μια νέα καμπίνα ώσπου να αλλάξει (απόφαση 30/10/2026).
 const int kFloorPlanDefaultCabinetUnits = 42;
@@ -18,6 +19,42 @@ const int kFloorPlanMaxCabinetUnits = 200;
 /// Πόσα U έχει η [cabinet].
 int floorPlanCabinetUnits(FloorPlanObject cabinet) =>
     cabinet.rackUnits ?? kFloorPlanDefaultCabinetUnits;
+
+/// Ο αριθμός U της θέσης [position] (που μετρά από πάνω), σε καμπίνα [units]
+/// U που αριθμεί από κάτω ([fromBottom]) ή από πάνω.
+int floorPlanRackNumber({
+  required int units,
+  required bool fromBottom,
+  required int position,
+}) => fromBottom ? units - position + 1 : position;
+
+/// Ό,τι γράφεται για [height] θέσεις από τη [position]: «U5», ή «U5–U6» με
+/// τον μικρότερο αριθμό πρώτο, όποια κι αν είναι η αρίθμηση.
+String floorPlanRackLabel({
+  required int units,
+  required bool fromBottom,
+  required int position,
+  int height = 1,
+}) {
+  int number(int p) =>
+      floorPlanRackNumber(units: units, fromBottom: fromBottom, position: p);
+  final a = number(position);
+  if (height <= 1) return 'U$a';
+  final b = number(position + height - 1);
+  return 'U${math.min(a, b)}–U${math.max(a, b)}';
+}
+
+/// Το [floorPlanRackLabel] για θέση της [cabinet].
+String floorPlanCabinetRackLabel(
+  FloorPlanObject cabinet,
+  int position, {
+  int height = 1,
+}) => floorPlanRackLabel(
+  units: floorPlanCabinetUnits(cabinet),
+  fromBottom: cabinet.rackFromBottom,
+  position: position,
+  height: height,
+);
 
 /// Ό,τι είναι μέσα στην καμπίνα [cabinetId], από πάνω προς τα κάτω.
 List<FloorPlanObject> floorPlanCabinetContents(
@@ -77,6 +114,23 @@ int? floorPlanFirstFreeRackU({
   }
   return null;
 }
+
+/// Οι ελεύθερες θέσεις της καμπίνας, από πάνω προς τα κάτω: όσες χωρούν
+/// αντικείμενο ύψους [height] χωρίς να πατούν σε άλλο.
+List<int> floorPlanFreeRackUs({
+  required int units,
+  required List<FloorPlanObject> contents,
+  int height = 1,
+}) => [
+  for (var u = 1; u + height - 1 <= units; u++)
+    if (floorPlanRackFits(
+      units: units,
+      contents: contents,
+      u: u,
+      height: height,
+    ))
+      u,
+];
 
 /// Όσα από τα [contents] δεν θα χωρούσαν σε καμπίνα [units] U — αυτά
 /// εμποδίζουν το μίκρεμά της.

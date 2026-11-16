@@ -9,6 +9,55 @@ import 'package:call_logger/features/directory/building_map/plan/floor_plan_port
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('ίδιο όνομα θύρας: χωρίς κεφαλαία και τόνους, όχι με τον εαυτό της', () {
+    const names = [
+      FloorPlanWrittenPortName(
+        portId: 1,
+        number: 5,
+        name: 'Κάμερα Είσοδος',
+        objectLabel: 'Patch A',
+        cabinetName: 'MC.2.S',
+        floorLabel: 'Ισόγειο',
+      ),
+    ];
+    final clash = floorPlanWrittenNameClash(' ΚΑΜΕΡΑ ΕΙΣΟΔΟΣ', names);
+    expect(clash?.where, 'θύρα 5 · Patch A · καμπίνα MC.2.S · Ισόγειο');
+    expect(
+      floorPlanWrittenNameClash('Κάμερα Είσοδος', names, exceptPortIds: {1}),
+      isNull,
+    );
+    expect(floorPlanWrittenNameClash('Κάμερα Έξοδος', names), isNull);
+    expect(floorPlanWrittenNameClash('  ', names), isNull);
+  });
+
+  test('το μοτίβο συνεχίζει τον αριθμό με το ίδιο πλάτος', () {
+    expect(floorPlanPatternName('MC.2.N01', 1), 'MC.2.N02');
+    expect(floorPlanPatternName('MC.2.N09', 1), 'MC.2.N10');
+    expect(floorPlanPatternName('A-9', 1), 'A-10');
+    expect(floorPlanPatternName('001', 23), '024');
+    expect(floorPlanPatternName('Κάμερα', 1), isNull);
+  });
+
+  test('η συμπλήρωση μοτίβου γεμίζει μόνο τις επόμενες κενές θύρες', () {
+    const ports = [
+      FloorPlanPort(id: 1, objectId: 9, number: 1),
+      FloorPlanPort(id: 2, objectId: 9, number: 2),
+      FloorPlanPort(id: 3, objectId: 9, number: 3, writtenName: 'ΧΕΙΡΟΓΡΑΦΟ'),
+      FloorPlanPort(id: 4, objectId: 9, number: 4),
+      FloorPlanPort(id: 5, objectId: 8, number: 2),
+    ];
+    final plan = floorPlanPatternFill(
+      seed: 'MC.2.N01',
+      from: ports.first,
+      ports: ports,
+    );
+    expect(
+      [for (final f in plan.fill) (f.port.id, f.name)],
+      [(2, 'MC.2.N02'), (4, 'MC.2.N04')],
+    );
+    expect(plan.kept, 1);
+  });
+
   group('Αυτόματο όνομα', () {
     test('θύρα patch panel σε καμπίνα: καμπίνα.patch panel + αριθμός', () {
       expect(
@@ -19,6 +68,48 @@ void main() {
           number: 17,
         ),
         'RC6.F17',
+      );
+    });
+
+    test('patch panel με όνομα που τελειώνει σε ψηφίο: τελεία από μόνη της, '
+        'όχι «Molex 11»', () {
+      expect(
+        floorPlanPortAutoName(
+          symbol: FloorPlanSymbol.patchPanel,
+          objectName: 'Molex 1',
+          cabinetName: 'MC.2.S',
+          number: 1,
+        ),
+        'MC.2.S.Molex 1.1',
+      );
+    });
+
+    test('το διαχωριστικό της συσκευής νικά την πρόταση — και το κενό '
+        'σημαίνει «χωρίς διαχωριστικό»', () {
+      String name(String? separator, {String panel = 'Molex 1'}) =>
+          floorPlanPortAutoName(
+            symbol: FloorPlanSymbol.patchPanel,
+            objectName: panel,
+            cabinetName: null,
+            number: 12,
+            portSeparator: separator,
+          );
+
+      expect(name('-'), 'Molex 1-12');
+      expect(name(''), 'Molex 112');
+      expect(name('Θ', panel: 'Α'), 'ΑΘ12');
+    });
+
+    test('το διαχωριστικό αφορά μόνο το patch panel', () {
+      expect(
+        floorPlanPortAutoName(
+          symbol: FloorPlanSymbol.poe,
+          objectName: 'POE-1',
+          cabinetName: null,
+          number: 3,
+          portSeparator: '.',
+        ),
+        'POE-1 / 3',
       );
     });
 
@@ -42,7 +133,7 @@ void main() {
           cabinetName: null,
           number: 14,
           stackUnit: 2,
-          portType: 'Te',
+          groups: const [FloorPlanPortGroup(prefix: 'Te')],
         ),
         'SW-2 Te2/0/14',
       );
@@ -136,20 +227,165 @@ void main() {
     });
   });
 
-  group('Αλλαγή πλήθους', () {
-    FloorPlanPort port(int n) =>
-        FloorPlanPort(id: 100 + n, objectId: 1, number: n);
+  group('Ομάδες θυρών · ονόματα', () {
+    String name(
+      FloorPlanSymbol symbol,
+      List<FloorPlanPortGroup> groups,
+      int group,
+      int number, {
+      String objectName = 'SW-2',
+    }) => floorPlanPortAutoName(
+      symbol: symbol,
+      objectName: objectName,
+      cabinetName: null,
+      number: number,
+      groups: groups,
+      group: group,
+    );
+
+    test('9300L: 24 × 1G και uplink 4 × 10G που ξαναμετρούν', () {
+      const groups = [
+        FloorPlanPortGroup(),
+        FloorPlanPortGroup(prefix: 'Te', speed: '10G SFP+'),
+      ];
+      expect(
+        name(FloorPlanSymbol.networkSwitch, groups, 0, 24),
+        'SW-2 Gi1/0/24',
+      );
+      expect(name(FloorPlanSymbol.networkSwitch, groups, 1, 3), 'SW-2 Te1/1/3');
+    });
+
+    test('9300 mGig: η δεύτερη ομάδα συνεχίζει, η τρίτη ξαναμετρά', () {
+      const groups = [
+        FloorPlanPortGroup(prefix: 'Te'),
+        FloorPlanPortGroup(prefix: 'Gi', continues: true),
+        FloorPlanPortGroup(prefix: 'Te'),
+      ];
+      expect(name(FloorPlanSymbol.networkSwitch, groups, 0, 8), 'SW-2 Te1/0/8');
+      expect(name(FloorPlanSymbol.networkSwitch, groups, 1, 9), 'SW-2 Gi1/0/9');
+      expect(name(FloorPlanSymbol.networkSwitch, groups, 2, 1), 'SW-2 Te1/1/1');
+    });
+
+    test('POE 8 + 2: η πρώτη ομάδα όπως πριν, η δεύτερη με πρόθεμα', () {
+      const groups = [FloorPlanPortGroup(), FloorPlanPortGroup(prefix: 'SFP')];
+      expect(
+        name(FloorPlanSymbol.poe, groups, 0, 2, objectName: 'POE-1'),
+        'POE-1 / 2',
+      );
+      expect(
+        name(FloorPlanSymbol.poe, groups, 1, 2, objectName: 'POE-1'),
+        'POE-1 / SFP2',
+      );
+    });
+  });
+
+  group('Ομάδες θυρών · αποθήκευση', () {
+    test('μία ομάδα χωρίς ταχύτητα δεν γράφει τίποτα, όπως πριν', () {
+      expect(floorPlanPortGroupsData(const [FloorPlanPortGroup()]), isNull);
+      expect(floorPlanPortGroupsFrom('Te', null), const [
+        FloorPlanPortGroup(prefix: 'Te'),
+      ]);
+    });
+
+    test('ό,τι γράφεται διαβάζεται ίδιο, με το πρόθεμα της πρώτης χωριστά', () {
+      const groups = [
+        FloorPlanPortGroup(prefix: 'Te', speed: 'mGig'),
+        FloorPlanPortGroup(prefix: 'Gi', continues: true),
+        FloorPlanPortGroup(prefix: 'Te', speed: '10G SFP+'),
+      ];
+      final data = floorPlanPortGroupsData(groups);
+      expect(floorPlanPortGroupsFrom('Te', data), groups);
+    });
+
+    test('χαλασμένη εγγραφή διαβάζεται ως μία ομάδα', () {
+      expect(floorPlanPortGroupsFrom('Gi', '{oops'), const [
+        FloorPlanPortGroup(prefix: 'Gi'),
+      ]);
+    });
+  });
+
+  group('Ομάδες θυρών · αλλαγές', () {
+    FloorPlanPort port(int id, int group, int number) =>
+        FloorPlanPort(id: id, objectId: 1, groupIndex: group, number: number);
+    FloorPlanPortGroupSpec spec(
+      int? source,
+      int count, {
+      bool continues = false,
+    }) => (
+      source: source,
+      count: count,
+      group: FloorPlanPortGroup(continues: continues),
+    );
 
     test('μεγαλώνοντας προστίθενται οι επόμενοι αριθμοί', () {
-      final change = floorPlanPortCountChange([port(1), port(2)], 4);
-      expect(change.add, [3, 4]);
+      final change = floorPlanPortGroupsChange(
+        objectId: 1,
+        existing: [port(1, 0, 1), port(2, 0, 2)],
+        oldGroups: const [FloorPlanPortGroup()],
+        specs: [spec(0, 4)],
+      );
+      expect([for (final p in change.add) p.number], [3, 4]);
       expect(change.remove, isEmpty);
+      expect(change.update, isEmpty);
     });
 
     test('μικραίνοντας φεύγουν οι μεγαλύτεροι αριθμοί, οι άλλοι μένουν', () {
-      final change = floorPlanPortCountChange([port(1), port(2), port(3)], 1);
+      final change = floorPlanPortGroupsChange(
+        objectId: 1,
+        existing: [port(1, 0, 1), port(2, 0, 2), port(3, 0, 3)],
+        oldGroups: const [FloorPlanPortGroup()],
+        specs: [spec(0, 1)],
+      );
       expect(change.add, isEmpty);
       expect([for (final p in change.remove) p.number], [2, 3]);
+    });
+
+    test('νέα ομάδα: ξεκινά από το 1, στη δική της ομάδα', () {
+      final change = floorPlanPortGroupsChange(
+        objectId: 1,
+        existing: [port(1, 0, 1), port(2, 0, 2)],
+        oldGroups: const [FloorPlanPortGroup()],
+        specs: [spec(0, 2), spec(null, 2)],
+      );
+      expect(
+        [for (final p in change.add) (p.groupIndex, p.number)],
+        [(1, 1), (1, 2)],
+      );
+    });
+
+    test('η προηγούμενη μεγαλώνει: η ομάδα που συνεχίζει μετακινείται '
+        'κρατώντας τις θύρες της', () {
+      final change = floorPlanPortGroupsChange(
+        objectId: 1,
+        existing: [port(1, 0, 1), port(2, 0, 2), port(3, 1, 3), port(4, 1, 4)],
+        oldGroups: const [
+          FloorPlanPortGroup(),
+          FloorPlanPortGroup(continues: true),
+        ],
+        specs: [spec(0, 3), spec(1, 2, continues: true)],
+      );
+      expect([for (final p in change.add) (p.groupIndex, p.number)], [(0, 3)]);
+      expect(change.remove, isEmpty);
+      expect(
+        [for (final p in change.update) (p.id, p.number)],
+        [(3, 4), (4, 5)],
+      );
+    });
+
+    test('αφαίρεση ενδιάμεσης ομάδας: η επόμενη ανεβαίνει μία θέση', () {
+      final change = floorPlanPortGroupsChange(
+        objectId: 1,
+        existing: [port(1, 0, 1), port(2, 1, 1), port(3, 2, 1)],
+        oldGroups: const [
+          FloorPlanPortGroup(),
+          FloorPlanPortGroup(),
+          FloorPlanPortGroup(),
+        ],
+        specs: [spec(0, 1), spec(2, 1)],
+      );
+      expect([for (final p in change.remove) p.id], [2]);
+      expect([for (final p in change.update) (p.id, p.groupIndex)], [(3, 1)]);
+      expect(change.add, isEmpty);
     });
   });
 
@@ -166,12 +402,61 @@ void main() {
       List<FloorPlanPort> existing,
       List<FloorPlanOutletPortDraft> drafts, {
       Map<int, int> links = const {},
+      Map<int, String?> types = const {},
     }) => floorPlanOutletChange(
       objectId: 1,
       existing: existing,
       patchPortOfOutletPort: links,
       drafts: drafts,
+      cableTypeOfOutletPort: types,
     );
+
+    test('ίδιο patch panel με άλλο τύπο: αλλάζει μόνο ο τύπος', () {
+      final result = change(
+        [port(1)],
+        [
+          const FloorPlanOutletPortDraft(
+            number: 1,
+            patchPortId: 60,
+            cableType: 'Cat 6',
+          ),
+        ],
+        links: {101: 60},
+      );
+      expect(result.disconnect, isEmpty);
+      expect(result.connect, isEmpty);
+      expect(result.retype.single, (outletPortId: 101, type: 'Cat 6'));
+    });
+
+    test('Cat 5e γραμμένο ή κενό είναι το ίδιο: καμία αλλαγή', () {
+      final result = change(
+        [port(1)],
+        [
+          const FloorPlanOutletPortDraft(
+            number: 1,
+            patchPortId: 60,
+            cableType: 'Cat 5e',
+          ),
+        ],
+        links: {101: 60},
+        types: {101: null},
+      );
+      expect(result.isEmpty, isTrue);
+    });
+
+    test('νέα σύνδεση: γίνεται με τον τύπο που διαλέχτηκε', () {
+      final result = change(
+        [port(1)],
+        [
+          const FloorPlanOutletPortDraft(
+            number: 1,
+            patchPortId: 60,
+            cableType: 'Cat 7',
+          ),
+        ],
+      );
+      expect(result.connect.single.type, 'Cat 7');
+    });
 
     test('ό,τι έμεινε ίδιο δεν αγγίζεται', () {
       final result = change(

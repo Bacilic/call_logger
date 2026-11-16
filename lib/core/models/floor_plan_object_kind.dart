@@ -4,7 +4,8 @@
 /// αν αλλάξει το όνομα της τιμής στον κώδικα.
 ///
 /// Για κάμερες δεν υπάρχει σύμβολο, επίτηδες: δεν ανήκουν στο τμήμα
-/// πληροφορικής (απόφαση Διευθυντή, 30/10/2026).
+/// πληροφορικής (απόφαση Διευθυντή, 30/10/2026). Το καταγραφικό τους (NVR)
+/// όμως έχει, γιατί πιάνει θέση σε καμπίνα (απόφαση 13/11/2026).
 enum FloorPlanSymbol {
   /// Υπάλληλος του Καταλόγου.
   person('person', 'Άνθρωπος'),
@@ -40,6 +41,17 @@ enum FloorPlanSymbol {
   /// Χωρίς θύρες· πιάνει θέσεις U στην καμπίνα.
   ups('ups', 'UPS'),
 
+  /// Τα είδη της καμπίνας διακομιστών και του δικτύου (απόφαση 13/11/2026):
+  /// συσκευές με θύρες και IP.
+  firewall('firewall', 'Firewall'),
+  server('server', 'Διακομιστής'),
+  storage('storage', 'Αποθήκευση (NAS / SAN)'),
+  nvr('nvr', 'NVR (καταγραφικό καμερών)'),
+
+  /// Οργανωτής καλωδίων: πιάνει U ανάμεσα στα patch panel, χωρίς θύρες και
+  /// IP — υπάρχει για να μη φαίνεται «ελεύθερο» ένα πιασμένο U.
+  cableManager('cable_manager', 'Οργανωτής καλωδίων'),
+
   /// Σκάλα ή κατακόρυφος αγωγός: από εκεί περνά η διαδρομή προς άλλον όροφο.
   riser('riser', 'Σκάλα / αγωγός');
 
@@ -60,6 +72,11 @@ enum FloorPlanSymbol {
     router,
     poe,
     ups,
+    firewall,
+    server,
+    storage,
+    nvr,
+    cableManager,
     riser,
   ];
 
@@ -71,17 +88,47 @@ enum FloorPlanSymbol {
   bool get isOutlet => this == outlet;
 
   /// Δηλώνεται με **πλήθος θυρών** και έχει πρόσοψη (αποφάσεις 30/10/2026:
-  /// patch panel, switch, router και POE).
+  /// patch panel, switch, router και POE· 13/11/2026: firewall, διακομιστής,
+  /// αποθήκευση και NVR).
   bool get hasPortCount =>
       this == patchPanel ||
       this == networkSwitch ||
       this == router ||
-      this == poe;
+      this == poe ||
+      this == firewall ||
+      this == server ||
+      this == storage ||
+      this == nvr;
 
   /// Μπαίνει μέσα σε καμπίνα. Κάθε είδος μπορεί (απόφαση Διευθυντή),
   /// εκτός από όσα έχουν δικό τους όγκο (έπιπλο, άλλη καμπίνα) και τη σκάλα ή
   /// τον αγωγό, που είναι μέρος του κτιρίου.
   bool get fitsInCabinet => !isVolume && this != riser;
+
+  /// Ό,τι είναι μέρος του χώρου (έπιπλο, καμπίνα, σκάλα / αγωγός) ή απλό
+  /// εξάρτημα της καμπίνας (οργανωτής καλωδίων) δεν συνδέεται ποτέ με
+  /// καλώδιο: το παράθυρο των ειδών δεν δείχνει καν τις επιλογές θυρών και
+  /// IP (αποφάσεις 13/11/2026).
+  bool get hasCableSettings =>
+      !isVolume && this != riser && this != cableManager;
+
+  /// Αν ένα νέο είδος με αυτό το σύμβολο ξεκινά με θύρες: όλα όσα συνδέονται
+  /// με καλώδιο (απόφαση 13/11/2026).
+  bool get defaultHasPorts => hasCableSettings;
+
+  /// Αν ένα νέο είδος με αυτό το σύμβολο ξεκινά με IP και όνομα Lansweeper
+  /// (αποφάσεις 13/11/2026). Όχι: ό,τι δεν είναι συσκευή δικτύου (έπιπλο,
+  /// καμπίνα, σκάλα), ό,τι είναι παθητικό (patch panel, πρίζα) και ό,τι δεν
+  /// συνδέεται με καλώδιο (UPS). Ο χρήστης το αλλάζει ανά είδος.
+  ///
+  /// Ο ίδιος κανόνας, ως κλειδιά της βάσης, στην αναβάθμιση v78.
+  bool get defaultHasNetwork => canHaveNetwork && this != ups;
+
+  /// Μπορεί να έχει IP και όνομα Lansweeper. Όχι ό,τι δεν συνδέεται με
+  /// καλώδιο, και όχι τα παθητικά (patch panel, πρίζα): περνά καλώδιο, αλλά
+  /// δεν έχουν δική τους διεύθυνση (απόφαση 13/11/2026).
+  bool get canHaveNetwork =>
+      hasCableSettings && this != patchPanel && this != outlet;
 
   static FloorPlanSymbol? fromKey(String? key) {
     for (final symbol in values) {
@@ -99,6 +146,7 @@ class FloorPlanObjectKind {
     required this.symbol,
     this.hasPorts = false,
     this.showInfo = true,
+    this.hasNetwork = true,
   });
 
   final int id;
@@ -114,12 +162,17 @@ class FloorPlanObjectKind {
   /// είναι μέρος του χώρου, και οι καρτέλες τους θα ήταν θόρυβος.
   final bool showInfo;
 
+  /// Οι συσκευές του έχουν IP και όνομα Lansweeper — αλλιώς τα πεδία δεν
+  /// φαίνονται στα στοιχεία τους.
+  final bool hasNetwork;
+
   static const List<String> columns = [
     'id',
     'name',
     'symbol',
     'has_ports',
     'show_info',
+    'has_network',
   ];
 
   factory FloorPlanObjectKind.fromMap(Map<String, Object?> map) {
@@ -129,6 +182,7 @@ class FloorPlanObjectKind {
       symbol: FloorPlanSymbol.fromKey(map['symbol'] as String?),
       hasPorts: (map['has_ports'] as int? ?? 0) != 0,
       showInfo: (map['show_info'] as int? ?? 1) != 0,
+      hasNetwork: (map['has_network'] as int? ?? 1) != 0,
     );
   }
 }

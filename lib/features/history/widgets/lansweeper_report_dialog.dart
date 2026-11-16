@@ -593,9 +593,9 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
                                   builder: (context, elapsed) =>
                                       LansweeperElapsedText(
                                         milliseconds: elapsed,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodyMedium,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium,
                                       ),
                                 ),
                               ],
@@ -758,8 +758,7 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
       children: [
         Expanded(child: titleHandle),
         CompactTooltip(
-          message:
-              'Ρυθμίσεις Lansweeper (API, φόρμα, πράκτορας, αυτόματη σύνδεση Help Desk)',
+          message: 'Ρυθμίσεις Lansweeper (API, φόρμα, πράκτορας, αυτόματη σύνδεση Help Desk)',
           child: IconButton(
             padding: const EdgeInsets.all(4),
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
@@ -1103,9 +1102,8 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         for (final user in LookupService.instance.users)
           user.lansweeperUsername ?? '',
         for (final department in LookupService.instance.departments)
-          ...decodeLansweeperAccounts(
-            department.lansweeperUsernames,
-          ).map((account) => account.username),
+          ...decodeLansweeperAccounts(department.lansweeperUsernames)
+              .map((account) => account.username),
       ],
     );
 
@@ -1166,9 +1164,8 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
         child: Text(
           'Δεν υπάρχουν κλήσεις στην επιλεγμένη κατηγορία Lansweeper.\n'
           'Δοκιμάστε άλλο φίλτρο (π.χ. «Όλες»).',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+          style: Theme.of(context).textTheme.bodyLarge
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
       ),
@@ -1346,7 +1343,11 @@ class LansweeperReportDialogState extends ConsumerState<LansweeperReportDialog>
           Positioned(
             right: 20,
             bottom: 20,
-            child: SafeArea(child: QuickCallFloatingButton()),
+            child: SafeArea(
+              child: QuickCallFloatingButton(
+                place: QuickCallFabPlace.lansweeperReport,
+              ),
+            ),
           ),
         ],
       ),

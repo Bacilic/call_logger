@@ -1,4 +1,4 @@
-import 'dart:ui' show Offset;
+import 'dart:ui' show Offset, Size;
 
 /// Μια μέτρηση απόστασης πάνω στον χάρτη, όπως στο Google Maps: σημεία με
 /// τη σειρά που μπήκαν, και τα μήκη ανάμεσά τους σε εκατοστά.
@@ -43,4 +43,21 @@ class FloorPlanMeasure {
   /// Το συνολικό μήκος της διαδρομής.
   double get totalLength =>
       segmentLengths.fold(0, (sum, length) => sum + length);
+}
+
+/// Πού μπαίνει η ετικέτα μήκους ([size], σε pixel) ενός κομματιού από [a] ως
+/// [b] στην οθόνη: δίπλα στη γραμμή, στην πάνω μεριά της, και τόσο μακριά
+/// ώστε να μην την αγγίζει — ώστε να μη σκεπάζει ούτε τη γραμμή ούτε ό,τι
+/// γράφει ο χάρτης ακριβώς από κάτω της.
+Offset floorPlanMeasureLabelCenter(Offset a, Offset b, Size size) {
+  final mid = (a + b) / 2;
+  final d = b - a;
+  final length = d.distance;
+  if (length == 0) return mid;
+  // Η κάθετη στη γραμμή, γυρισμένη προς τα πάνω (ή αριστερά, αν είναι κάθετη).
+  var n = Offset(-d.dy, d.dx) / length;
+  if (n.dy > 0 || (n.dy == 0 && n.dx > 0)) n = -n;
+  const gap = 4.0;
+  final reach = n.dx.abs() * size.width / 2 + n.dy.abs() * size.height / 2;
+  return mid + n * (reach + gap);
 }

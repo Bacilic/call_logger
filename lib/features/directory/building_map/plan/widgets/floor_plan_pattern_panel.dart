@@ -11,10 +11,15 @@ class FloorPlanPatternPanel extends StatelessWidget {
     required this.controller,
     required this.onLoadFromFloorPlan,
     required this.onLoadFromFile,
+    this.floorPlanAvailable = true,
   });
 
   final FloorPlanEditorController controller;
   final VoidCallback onLoadFromFloorPlan;
+
+  /// Ο όροφος έχει κάτοψη στη βάση· αλλιώς το «Από την κάτοψη του ορόφου»
+  /// δεν φαίνεται, γιατί θα έδινε μόνο «δεν υπάρχει κάτοψη».
+  final bool floorPlanAvailable;
   final VoidCallback onLoadFromFile;
 
   @override
@@ -34,12 +39,14 @@ class FloorPlanPatternPanel extends StatelessWidget {
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: onLoadFromFloorPlan,
-          icon: const Icon(Icons.map_outlined),
-          label: const Text('Από την κάτοψη του ορόφου'),
-        ),
-        const SizedBox(height: 8),
+        if (floorPlanAvailable) ...[
+          OutlinedButton.icon(
+            onPressed: onLoadFromFloorPlan,
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('Από την κάτοψη του ορόφου'),
+          ),
+          const SizedBox(height: 8),
+        ],
         OutlinedButton.icon(
           onPressed: onLoadFromFile,
           icon: const Icon(Icons.folder_open_outlined),

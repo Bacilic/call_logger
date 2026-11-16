@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import '../models/calls_screen_cards_visibility.dart';
+import '../models/quick_call_fab_places.dart';
 import '../models/window_placement_mode.dart';
 import 'profile_settings.dart';
 import 'scoped_settings.dart';
@@ -291,13 +292,27 @@ class SettingsServiceWindowUi {
     );
   }
 
-  /// Εμφάνιση ιπτάμενου κουμπιού γρήγορης καταγραφής κλήσης. Προεπιλογή: true.
-  Future<bool> getShowQuickCallFab() async {
-    return await ScopedSettings.getBool(ProfileSettingKeys.showQuickCallFab) ??
-        true;
+  /// Σε ποιες οθόνες φαίνεται το κουμπί γρήγορης κλήσης. Προεπιλογή: παντού,
+  /// εκτός αν ο παλιός ενιαίος διακόπτης ήταν κλειστός.
+  Future<QuickCallFabPlaces> getQuickCallFabPlaces() async {
+    final raw = await ScopedSettings.getString(
+      ProfileSettingKeys.quickCallFabPlaces,
+    );
+    if (raw != null && raw.trim().isNotEmpty) {
+      return QuickCallFabPlaces.fromStorage(raw);
+    }
+    return QuickCallFabPlaces.fromStorage(
+      null,
+      legacyShow: await ScopedSettings.getBool(
+        ProfileSettingKeys.showQuickCallFab,
+      ),
+    );
   }
 
-  Future<void> setShowQuickCallFab(bool value) async {
-    await ScopedSettings.setBool(ProfileSettingKeys.showQuickCallFab, value);
+  Future<void> setQuickCallFabPlaces(QuickCallFabPlaces value) async {
+    await ScopedSettings.setString(
+      ProfileSettingKeys.quickCallFabPlaces,
+      value.toJsonString(),
+    );
   }
 }

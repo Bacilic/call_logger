@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/app_permission.dart';
 import '../../../core/models/calls_screen_cards_visibility.dart';
+import '../../../core/models/quick_call_fab_places.dart';
 import '../../../core/models/window_placement_mode.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/database/database_busy_timeout.dart';
@@ -26,6 +27,7 @@ import '../../database/services/database_maintenance_service.dart';
 import '../../diagnostics/diagnostics_export_flow.dart';
 import '../../calls/provider/remote_paths_provider.dart';
 import '../widgets/create_new_database_dialog.dart';
+import '../widgets/quick_call_fab_places_dialog.dart';
 import '../widgets/shutdown_incident_dialog.dart';
 import '../widgets/shutdown_incident_notice.dart';
 import '../widgets/start_from_beginning_flow.dart';
@@ -84,7 +86,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _showLampNav = true;
   bool _showDictionaryNav = true;
   bool _showKnowledgeNav = true;
-  bool _showQuickCallFab = true;
+  QuickCallFabPlaces _quickCallFabPlaces = QuickCallFabPlaces.all;
   bool _spellCheckFlashHighlight = false;
   bool _spellCheckFlashPlaying = false;
   int _databaseOpenTimeoutSeconds = AppConfig.databaseOpenTimeoutSeconds;
@@ -173,7 +175,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final showLampNav = await _settings.windowUi.getShowLampNav();
       final showDictionaryNav = await _settings.windowUi.getShowDictionaryNav();
       final showKnowledgeNav = await _settings.windowUi.getShowKnowledgeNav();
-      final showQuickCallFab = await _settings.windowUi.getShowQuickCallFab();
+      final quickCallFabPlaces = await _settings.windowUi
+          .getQuickCallFabPlaces();
       final dbOpenTimeout = await _settings.catalogs
           .getDatabaseOpenTimeoutSeconds();
       final dbOpenMaxAttempts = await _settings.catalogs
@@ -216,7 +219,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _showLampNav = showLampNav;
           _showDictionaryNav = dictionaryNavVisible;
           _showKnowledgeNav = showKnowledgeNav;
-          _showQuickCallFab = showQuickCallFab;
+          _quickCallFabPlaces = quickCallFabPlaces;
           _databaseOpenTimeoutSeconds = dbOpenTimeout;
           _databaseOpenMaxAttempts = dbOpenMaxAttempts;
           _callsCardsVisibility = callsCardsVisibility;
@@ -431,6 +434,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     unawaited(_setWindowPlacementMode(value));
   }
 
+  Future<void> _openQuickCallFabPlacesEditor() async {
+    final result = await showQuickCallFabPlacesDialog(
+      context,
+      initial: _quickCallFabPlaces,
+    );
+    if (result == null || !mounted) return;
+    await _settings.windowUi.setQuickCallFabPlaces(result);
+    if (!mounted) return;
+    setState(() => _quickCallFabPlaces = result);
+    ref.invalidate(quickCallFabPlacesProvider);
+  }
+
   Future<void> _openCallsCardsVisibilityEditor() async {
     final result = await showDialog<CallsScreenCardsVisibility>(
       context: context,
@@ -514,7 +529,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Ρυθμίσεις')),
-      floatingActionButton: const QuickCallFloatingButton(),
+      floatingActionButton: const QuickCallFloatingButton(
+        place: QuickCallFabPlace.settings,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -788,25 +805,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _openCallsCardsVisibilityEditor(),
             ),
-            SwitchListTile(
-              value: _showQuickCallFab,
-              secondary: Icon(
+            ListTile(
+              enabled: !_isLoadingSettings,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
                 Icons.add_ic_call_outlined,
                 color: theme.colorScheme.primary,
               ),
-              onChanged: _isLoadingSettings
-                  ? null
-                  : (value) async {
-                      await _settings.windowUi.setShowQuickCallFab(value);
-                      if (mounted) setState(() => _showQuickCallFab = value);
-                      ref.invalidate(showQuickCallFabProvider);
-                    },
               title: const Text(
                 'Υπτάμενο κουμπί γρήγορης κλήσης (Ctrl+Shift+N)',
               ),
-              subtitle: const Text(
-                'Εμφάνιση FAB γρήγορης καταγραφής σε λεξικό, στατιστικά, ρυθμίσεις και προβολή χάρτη.',
+              subtitle: Text(
+                quickCallFabPlacesSubtitle(_quickCallFabPlaces),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _openQuickCallFabPlacesEditor,
             ),
             SwitchListTile(
               value: _showActiveTimer,

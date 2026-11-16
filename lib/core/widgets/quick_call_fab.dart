@@ -4,12 +4,15 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/quick_call_fab_places.dart';
 import '../providers/quick_call_providers.dart';
 
 import '../../features/calls/provider/quick_call_session_provider.dart';
 import '../../features/calls/screens/widgets/quick_call_dialog.dart';
 
 import 'app_asset_image.dart';
+
+export '../models/quick_call_fab_places.dart' show QuickCallFabPlace;
 
 /// Διαδρομή asset και tooltip γρήγορης καταγραφής.
 
@@ -31,11 +34,12 @@ abstract final class QuickCallTrigger {
 /// επαναφέρει. Το τηλέφωνο φαίνεται ακόμη κι αν ο χρήστης έχει κρύψει το
 /// κουμπί από τις Ρυθμίσεις: δεν είναι κουμπί, είναι κλήση σε εξέλιξη.
 class QuickCallFloatingButton extends ConsumerWidget {
-  const QuickCallFloatingButton({super.key, this.showOpenButton = true});
+  const QuickCallFloatingButton({super.key, required this.place});
 
-  /// `false` όπου δεν υπάρχει κουμπί ανοίγματος (κύριες οθόνες): εκεί
-  /// εμφανίζεται μόνο το τηλέφωνο της ελαχιστοποιημένης καταγραφής.
-  final bool showOpenButton;
+  /// Η οθόνη του κουμπιού· οι Ρυθμίσεις λένε αν εκεί φαίνεται. `null` όπου
+  /// δεν υπάρχει κουμπί ανοίγματος (κύριες οθόνες): εκεί εμφανίζεται μόνο
+  /// το τηλέφωνο της ελαχιστοποιημένης καταγραφής.
+  final QuickCallFabPlace? place;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -46,7 +50,10 @@ class QuickCallFloatingButton extends ConsumerWidget {
       return const _RingingPhoneButton();
     }
 
-    if (!showOpenButton || !isQuickCallCaptureAvailable(ref)) {
+    final place = this.place;
+    if (place == null ||
+        !isQuickCallFabShownAt(ref, place) ||
+        !isQuickCallCaptureAvailable(ref)) {
       return const SizedBox.shrink();
     }
 

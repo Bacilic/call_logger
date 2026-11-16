@@ -33,7 +33,7 @@ void main() {
       await db.execute(table);
     }
     await migrateDatabaseToV69(db);
-    await migrateDatabaseToV71(db);
+    await migrateDatabaseToV81(db);
     repo = FloorPlanPlacementsRepository(db);
 
     await db.insert('departments', {

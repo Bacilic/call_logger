@@ -76,4 +76,34 @@ void main() {
     ];
     expect(polygonContains(l, polygonLabelPoint(l)), isTrue);
   });
+
+  test('η μπάρα του ονόματος πάει κάτω όταν ο χώρος είναι από πάνω — αλλιώς '
+      'θα σκέπαζε τη γραμμή-οδηγό', () {
+    const room = Offset(100, 100);
+    expect(
+      floorPlanRoomLabelBarBelow(
+        labelCenter: const Offset(100, 300),
+        roomPoint: room,
+        outside: true,
+      ),
+      isTrue,
+    );
+    expect(
+      floorPlanRoomLabelBarBelow(
+        labelCenter: const Offset(100, -100),
+        roomPoint: room,
+        outside: true,
+      ),
+      isFalse,
+    );
+    // Μέσα στον χώρο δεν υπάρχει γραμμή-οδηγός: η μπάρα μένει από πάνω.
+    expect(
+      floorPlanRoomLabelBarBelow(
+        labelCenter: const Offset(100, 120),
+        roomPoint: room,
+        outside: false,
+      ),
+      isFalse,
+    );
+  });
 }

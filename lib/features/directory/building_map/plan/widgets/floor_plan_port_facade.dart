@@ -16,6 +16,7 @@ class FloorPlanPortFacade extends StatelessWidget {
     required this.title,
     required this.symbol,
     required this.ports,
+    this.groups = const [],
     required this.occupied,
     required this.autoName,
     this.onEditWrittenName,
@@ -30,6 +31,10 @@ class FloorPlanPortFacade extends StatelessWidget {
   final String title;
   final FloorPlanSymbol? symbol;
   final List<FloorPlanPort> ports;
+
+  /// Οι ομάδες θυρών της συσκευής: κάθε μία σχεδιάζεται ως χωριστό μπλοκ, με
+  /// την ταχύτητά της από πάνω (απόφαση 14/11/2026).
+  final List<FloorPlanPortGroup> groups;
   final Set<int> occupied;
   final String Function(FloorPlanPort port) autoName;
   final void Function(FloorPlanPort port)? onEditWrittenName;
@@ -62,11 +67,15 @@ class FloorPlanPortFacade extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final byNumber = {for (final p in ports) p.number: p};
     final free = ports.where((p) => !occupied.contains(p.id)).length;
     final caption = ports.isEmpty
         ? '$title · δεν έχουν δηλωθεί θύρες'
         : '$title · ${ports.length} θύρες · $free ελεύθερες';
+    final blocks = <int, List<FloorPlanPort>>{};
+    for (final p in [...ports]..sort(floorPlanComparePorts)) {
+      (blocks[p.groupIndex] ??= []).add(p);
+    }
+    final order = blocks.keys.toList()..sort();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -80,78 +89,110 @@ class FloorPlanPortFacade extends StatelessWidget {
               border: Border.all(color: theme.colorScheme.outline),
               borderRadius: BorderRadius.circular(4),
             ),
-            // Όλες οι θύρες ορατές χωρίς κύλιση: ως 24 ανά σειρά, και οι
-            // θύρες μεγαλώνουν ή μικραίνουν με το πλάτος. Ό,τι δεν χωρά πάει
-            // σε επόμενη σειρά.
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                const gap = 2.0;
-                final columns = floorPlanFacadeColumns(
-                  constraints.maxWidth,
-                  gap: gap,
-                );
-                final box =
-                    (constraints.maxWidth - gap * (columns - 1)) / columns;
-                final highest = byNumber.keys.fold(0, (a, b) => a > b ? a : b);
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final row in floorPlanFacadeRows(
-                      symbol,
-                      highest,
-                      columns: columns,
-                    ))
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1.5),
-                        child: Row(
-                          children: [
-                            for (final (i, n) in row.indexed) ...[
-                              if (i > 0) const SizedBox(width: gap),
-                              SizedBox(
-                                width: box,
-                                height: 20,
-                                child: byNumber[n] == null
-                                    ? null
-                                    : _PortBox(
-                                        port: byNumber[n]!,
-                                        fill: _fillOf(byNumber[n]!),
-                                        name: autoName(byNumber[n]!),
-                                        detail: detailOf?.call(byNumber[n]!),
-                                        pending:
-                                            pendingPortId == byNumber[n]!.id,
-                                        hasFrontCable:
-                                            symbol == FloorPlanSymbol.patchPanel
-                                            ? frontOccupied.contains(
-                                                byNumber[n]!.id,
-                                              )
-                                            : occupied.contains(
-                                                byNumber[n]!.id,
-                                              ),
-                                        onTap: onPortTap == null
-                                            ? null
-                                            : (at) =>
-                                                  onPortTap!(byNumber[n]!, at),
-                                        onSecondaryTap:
-                                            onEditWrittenName == null
-                                            ? null
-                                            : () => onEditWrittenName!(
-                                                byNumber[n]!,
-                                              ),
-                                      ),
+            child: order.length == 1 && _speedOf(order.single) == null
+                ? _block(blocks[order.single]!)
+                // Μία ομάδα = ένα μπλοκ· κάθε μπλοκ πλατύ όσο οι στήλες του,
+                // με κενό ανάμεσα, όπως τα uplink στο πλάι του switch.
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final (i, g) in order.indexed) ...[
+                        if (i > 0) const SizedBox(width: 10),
+                        Flexible(
+                          flex: _columnsWanted(blocks[g]!.length),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _speedOf(g) ?? '',
+                                style: theme.textTheme.labelSmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
+                              _block(blocks[g]!, fit: true),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                  ],
-                );
-              },
-            ),
+                      ],
+                    ],
+                  ),
           ),
         ],
       ],
     );
   }
+
+  String? _speedOf(int group) {
+    if (group >= groups.length) return null;
+    final speed = groups[group].speed?.trim() ?? '';
+    return speed.isEmpty ? null : speed;
+  }
+
+  /// Πόσες στήλες θα ήθελε ένα μπλοκ [count] θυρών χωρίς στένεμα.
+  int _columnsWanted(int count) {
+    final columns = symbol == FloorPlanSymbol.patchPanel
+        ? count
+        : (count + 1) ~/ 2;
+    return columns.clamp(1, kFloorPlanFacadeMaxColumns);
+  }
+
+  /// Οι θύρες μιας ομάδας στις θέσεις τους. Όλες ορατές χωρίς κύλιση: ως 24
+  /// ανά σειρά, και οι θύρες μεγαλώνουν ή μικραίνουν με το πλάτος· ό,τι δεν
+  /// χωρά πάει σε επόμενη σειρά.
+  ///
+  /// Με [fit] το μπλοκ δεν απλώνει πέρα από όσες στήλες χρειάζεται, ώστε τα
+  /// μπλοκ πλάι-πλάι να έχουν ίδιο μέγεθος θύρας.
+  Widget _block(List<FloorPlanPort> group, {bool fit = false}) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 2.0;
+        final fitting = floorPlanFacadeColumns(constraints.maxWidth, gap: gap);
+        final wanted = _columnsWanted(group.length);
+        final columns = fit && wanted < fitting ? wanted : fitting;
+        final box = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final row in floorPlanFacadeRows(
+              symbol,
+              group.length,
+              columns: columns,
+            ))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1.5),
+                child: Row(
+                  children: [
+                    for (final (i, position) in row.indexed) ...[
+                      if (i > 0) const SizedBox(width: gap),
+                      SizedBox(
+                        width: box,
+                        height: 20,
+                        child: _portBox(group[position - 1]),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _portBox(FloorPlanPort port) => _PortBox(
+    port: port,
+    fill: _fillOf(port),
+    name: autoName(port),
+    detail: detailOf?.call(port),
+    pending: pendingPortId == port.id,
+    hasFrontCable: symbol == FloorPlanSymbol.patchPanel
+        ? frontOccupied.contains(port.id)
+        : occupied.contains(port.id),
+    onTap: onPortTap == null ? null : (at) => onPortTap!(port, at),
+    onSecondaryTap: onEditWrittenName == null
+        ? null
+        : () => onEditWrittenName!(port),
+  );
 }
 
 /// Πόσο γεμάτη είναι μια θύρα. Μισή μόνο η θύρα patch panel, που έχει δύο
@@ -283,30 +324,52 @@ class _CornerPainter extends CustomPainter {
   bool shouldRepaint(_CornerPainter old) => old.color != color;
 }
 
-/// Ζητά το γραμμένο όνομα της θύρας· `null` όταν ακυρωθεί, κενό = καμία
-/// ετικέτα.
-Future<String?> showFloorPlanWrittenNameDialog(
+/// Ζητά το γραμμένο όνομα της θύρας [port]· `null` όταν ακυρωθεί, κενό =
+/// καμία ετικέτα. Όταν το όνομα τελειώνει σε αριθμό, προσφέρει να συνεχίσει
+/// το μοτίβο στις επόμενες κενές θύρες της συσκευής ([ports]).
+///
+/// Το [clashOf] βρίσκει ποια άλλη θύρα του κτιρίου έχει ήδη ένα όνομα: τότε
+/// εμφανίζεται προειδοποίηση, χωρίς να εμποδίζει την αποθήκευση.
+Future<({String name, bool continuePattern})?> showFloorPlanWrittenNameDialog(
   BuildContext context, {
   required String portName,
-  String? current,
-}) => showDialog<String>(
+  required FloorPlanPort port,
+  required List<FloorPlanPort> ports,
+  FloorPlanWrittenPortName? Function(String name)? clashOf,
+}) => showDialog<({String name, bool continuePattern})>(
   context: context,
-  builder: (context) =>
-      _WrittenNameDialog(portName: portName, current: current),
+  builder: (context) => _WrittenNameDialog(
+    portName: portName,
+    port: port,
+    ports: ports,
+    clashOf: clashOf,
+  ),
 );
 
 class _WrittenNameDialog extends StatefulWidget {
-  const _WrittenNameDialog({required this.portName, this.current});
+  const _WrittenNameDialog({
+    required this.portName,
+    required this.port,
+    required this.ports,
+    this.clashOf,
+  });
 
   final String portName;
-  final String? current;
+  final FloorPlanPort port;
+  final List<FloorPlanPort> ports;
+  final FloorPlanWrittenPortName? Function(String name)? clashOf;
 
   @override
   State<_WrittenNameDialog> createState() => _WrittenNameDialogState();
 }
 
 class _WrittenNameDialogState extends State<_WrittenNameDialog> {
-  late final _text = TextEditingController(text: widget.current ?? '');
+  late final _text = TextEditingController(text: widget.port.writtenName ?? '')
+    ..addListener(() => setState(() {}));
+  bool _continue = false;
+
+  void _submit() =>
+      Navigator.of(context).pop((name: _text.text, continuePattern: _continue));
 
   @override
   void dispose() {
@@ -332,8 +395,10 @@ class _WrittenNameDialogState extends State<_WrittenNameDialog> {
               decoration: const InputDecoration(
                 labelText: 'Ό,τι γράφει η ετικέτα (π.χ. «Κάμερα 7»)',
               ),
-              onSubmitted: (v) => Navigator.of(context).pop(v),
+              onSubmitted: (_) => _submit(),
             ),
+            ?_clashWarning(context),
+            ..._pattern(context),
           ],
         ),
       ),
@@ -342,11 +407,97 @@ class _WrittenNameDialogState extends State<_WrittenNameDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Ακύρωση'),
         ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_text.text),
-          child: const Text('Αποθήκευση'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('Αποθήκευση')),
       ],
+    );
+  }
+
+  /// Η προειδοποίηση όταν το όνομα το έχει ήδη άλλη θύρα του κτιρίου.
+  Widget? _clashWarning(BuildContext context) {
+    final name = _text.text.trim();
+    final clash = name.isEmpty ? null : widget.clashOf?.call(name);
+    if (clash == null) return null;
+    return _Warning(floorPlanWrittenNameWarning(name, clash));
+  }
+
+  /// Το κουτάκι «Συνέχεια στις επόμενες θύρες», μόνο όταν υπάρχει μοτίβο και
+  /// θύρες μετά από αυτήν.
+  List<Widget> _pattern(BuildContext context) {
+    final seed = _text.text.trim();
+    if (floorPlanPatternName(seed, 1) == null) return const [];
+    final plan = floorPlanPatternFill(
+      seed: seed,
+      from: widget.port,
+      ports: widget.ports,
+    );
+    if (plan.fill.isEmpty && plan.kept == 0) return const [];
+    final first = plan.fill.isEmpty ? null : plan.fill.first;
+    final last = plan.fill.isEmpty ? null : plan.fill.last;
+    final summary = first == null
+        ? 'Όλες οι επόμενες θύρες έχουν ήδη όνομα.'
+        : [
+            first == last
+                ? 'Θύρα ${first.port.number}: ${first.name}'
+                : 'Θύρες ${first.port.number}–${last!.port.number}: '
+                      '${first.name} … ${last.name}',
+            if (plan.kept > 0)
+              plan.kept == 1
+                  ? '1 έχει ήδη όνομα και μένει όπως είναι'
+                  : '${plan.kept} έχουν ήδη όνομα και μένουν όπως είναι',
+          ].join(' · ');
+    final clashing = [
+      for (final f in plan.fill)
+        if (widget.clashOf?.call(f.name) != null) f.name,
+    ];
+    return [
+      const SizedBox(height: 8),
+      CheckboxListTile(
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: const Text('Συνέχεια στις επόμενες θύρες'),
+        subtitle: Text(summary),
+        value: _continue && first != null,
+        onChanged: first == null
+            ? null
+            : (v) => setState(() => _continue = v ?? false),
+      ),
+      if (clashing.isNotEmpty)
+        _Warning(
+          clashing.length == 1
+              ? 'Το νέο όνομα «${clashing.single}» υπάρχει ήδη αλλού.'
+              : '${clashing.length} από τα νέα ονόματα υπάρχουν ήδη αλλού: '
+                    '${clashing.take(5).join(', ')}'
+                    '${clashing.length > 5 ? ' …' : ''}.',
+        ),
+    ];
+  }
+}
+
+/// Προειδοποίηση κάτω από ένα πεδίο: δεν εμποδίζει, μόνο ενημερώνει.
+class _Warning extends StatelessWidget {
+  const _Warning(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Colors.orange.shade800;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 18, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
